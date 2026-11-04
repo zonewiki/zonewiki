@@ -38,6 +38,7 @@ func pageRoutes(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("GET /api/pages-list", apiPagesList)
 	mux.HandleFunc("GET /tasks", tasksPage)
+	mux.HandleFunc("POST /tasks/rename", writesPages(renameTagRoute))
 	mux.HandleFunc("GET /api/search", apiSearch)
 	mux.HandleFunc("GET /search", searchPage)
 	mux.HandleFunc("POST /api/toggle-checkbox/{slug...}", writesPages(apiToggleCheckbox))
@@ -888,18 +889,48 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	for i := range places {
 		places[i].Current = places[i].Key == place
 	}
+	q := r.URL.Query()
 	page(w, rq, http.StatusOK, "tasks_page.html", title, shell{wide: sections != nil}, &tasksPageView{Heading: heading, ListName: list,
+		RenameName: firstNonEmpty(q.Get("rename_name"), list), RenameError: q.Get("rename_error"), RenameMerge: q.Get("rename_merge") != "",
 		Home: home, Places: places, TasksHTML: htmlOf(tasksHTML), LinkSections: sections,
 		BreadcrumbHTML: breadcrumb(rq, crumbs, key, true, title, chip)})
+}
+
+// renameTagRoute: the Rename… dialog of /tasks?list=<name>. A refusal goes
+// back to the dialog with the message; a new name in use, there with the
+// offer to merge.
+func renameTagRoute(w http.ResponseWriter, r *http.Request) {
+	tag, name := r.PostFormValue("tag"), strings.TrimSpace(r.PostFormValue("new_name"))
+	back := "/tasks?list=" + url.QueryEscape(cleanList(tag))
+	_, err := renameTagOp(userOf(r), tag, name, r.PostFormValue("merge") != "", "")
+	if err != nil {
+		pe, ok := refusalOf(err)
+		switch {
+		case !ok:
+			serverError(w, r, err)
+		case pe.kind == refusedUnchanged:
+			http.Redirect(w, r, back, http.StatusFound)
+		default:
+			back += "&rename_name=" + url.QueryEscape(name) + "&rename_error=" + url.QueryEscape(pe.msg)
+			if pe.kind == refusedExists {
+				back += "&rename_merge=1"
+			}
+			http.Redirect(w, r, back, http.StatusFound)
+		}
+		return
+	}
+	http.Redirect(w, r, "/tasks?list="+url.QueryEscape(cleanList(name)), http.StatusFound)
 }
 
 // tasksPageView: /tasks (tasks_page.html); Home: the page declaring the
 // list, nil for all tasks, the pinned lists or an undeclared list; Places: the
 // list switcher; LinkSections: a list's Backlinks (with them the page has a
-// page view's columns).
+// page view's columns); Rename…: its dialog back from a refusal.
 type tasksPageView struct {
 	view
 	Heading, ListName         string
+	RenameName, RenameError   string
+	RenameMerge               bool
 	Home                      *TasksHome
 	Places                    []TaskPlace
 	LinkSections              []M

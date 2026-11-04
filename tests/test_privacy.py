@@ -578,6 +578,8 @@ WRITES = [
     ("POST /api/save/{slug...}", "POST", f"/api/save/{DIARY}", {"data": {"content": "# Bob was here\n"}}),
     ("POST /new", "POST", "/new", {"data": {"slug": "private/alice/bobs"}}),
     ("POST /rename/{slug...}", "POST", f"/rename/{DIARY}", {"data": {"new_name": "stolen"}}),
+    ("POST /tasks/rename", "POST", "/tasks/rename", {"data": {"tag": "secretlist", "new_name": "stolen"}}),
+    ("POST /tasks/rename", "POST", "/tasks/rename", {"data": {"tag": f"{QUERY}-{SECRET}", "new_name": "stolen"}}),
     ("POST /rename/{slug...}", "POST", "/rename/plans", {"data": {"new_name": "private/alice/plans"}}),
     ("POST /delete/{slug...}", "POST", f"/delete/{DIARY}", {}),
     ("POST /restore/{rest...}", "POST", "/restore/private/alice/old/{old}", {}),
@@ -661,6 +663,7 @@ MCP_WRITES = [
     ("edit_page", {"slug": SNEAK, "old_string": QUERY, "new_string": "bob"}),
     ("append_to_page", {"slug": SNEAK, "content": "Bob was here"}),
     ("delete_page", {"slug": SNEAK}),
+    ("rename_task_tag", {"tag": "secretlist", "new_tag": "stolen"}),
     ("rename_page", {"slug": SNEAK, "new_slug": "stolen"}),
     ("file_note", {"slug": "{bobs}", "page": SNEAK}),
     ("append_to_page", {"slug": DIARY, "content": "Bob was here"}),
@@ -695,6 +698,40 @@ def test_bobs_assistant_changes_nothing_of_alices(client, wiki, tool, args):
     for commit in git(wiki, "log", "--format=%H", f"{log.split()[0]}..HEAD").split():
         assert "private/alice" not in git(wiki, "show", "--stat", "--format=", commit)
     assert SECRET not in text
+
+
+def _private_tags(wiki, owner="alice"):
+    return json.loads((wiki / f"private/{owner}/_tasks/tasks.json").read_text())[0]["tags"]
+
+
+def test_a_shared_tags_rename_reaches_private_files_and_tells_nothing(bob, wiki):
+    """secretlist on a shared task too is one tag for all: bob's rename goes on in
+    alice's private tasks and embeds, but he is told only of what he sees."""
+    assert bob.post("/api/tasks", json={"title": "Shared", "tags": ["secretlist"]}, headers=HOST).status_code < 300
+    out = mcp(bob, "rename_task_tag", tag="secretlist", new_tag="renamed")
+    assert out == "Renamed tag #secretlist to #renamed, in one commit: 1 task."
+    assert "renamed" in _private_tags(wiki) and "secretlist" not in _private_tags(wiki)
+    assert "list=renamed" in (wiki / "private/alice/deck.md").read_text()
+
+
+def test_a_tag_only_she_sees_stays_hers(alice, wiki):
+    """A tag on nothing shared is hers: bob's private tag of that name is another tag,
+    and nothing about it shows in the history bob reads."""
+    bobs = wiki / "private/bob/_tasks"
+    bobs.mkdir(parents=True)
+    (bobs / "tasks.json").write_text(json.dumps([{**private_task(TASK_ID[:-1] + "9", "Bob's"), "tags": ["secretlist"]}]))
+    out = mcp(alice, "rename_task_tag", token="alice-token", tag="secretlist", new_tag="lumenword")
+    assert "Renamed tag" in out and "private/alice/deck" in out, out
+    assert "lumenword" in _private_tags(wiki)
+    assert _private_tags(wiki, "bob") == ["secretlist"]
+    assert "lumenword" not in mcp(alice, "history", token="bob-token")
+
+
+def test_a_name_she_uses_is_not_taken_for_bob(bob, wiki):
+    """Renaming to a name only alice uses is no merge for bob: the refusal would tell him it exists."""
+    bob.post("/api/tasks", json={"title": "Bob's", "tags": ["errands"]}, headers=HOST)
+    out = mcp(bob, "rename_task_tag", tag="errands", new_tag="secretlist")
+    assert "Renamed tag" in out, out
 
 
 def test_a_path_through_his_own_folder_stays_in_it(bob, wiki):

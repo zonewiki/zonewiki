@@ -4,6 +4,7 @@ package main
 
 import (
 	"math"
+	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -87,6 +88,93 @@ func parseTasksParams(raw string) TasksParams {
 		p.m[k] = strings.TrimSpace(v)
 	}
 	return p
+}
+
+var (
+	filterWordRE = regexp.MustCompile(`[^,|]+`)
+	embedWordRE  = regexp.MustCompile(mdtext.NonSpaceClass + `+`)
+	// A link to /tasks with a query, as a page or a task writes it: on its
+	// own or after this wiki's address.
+	tasksURLRE = regexp.MustCompile(`(^|[\s(<"'\[]|https?://[^\s/)]+)/tasks\?([^\s)"'\]<>#]*)`)
+)
+
+// renameInFilter: a tag= or new= value with the tag old (lowercase) renamed;
+// a word keeps its "-" or "#", the commas and pipes stay.
+func renameInFilter(raw, old, name string) string {
+	return filterWordRE.ReplaceAllStringFunc(raw, func(word string) string {
+		bare := strings.TrimLeft(word, "-#")
+		if strings.ToLower(bare) == old {
+			return word[:len(word)-len(bare)] + name
+		}
+		return word
+	})
+}
+
+// embedUsesTag: an embed names the tag old (lowercase) in list=, tag= or new=.
+func embedUsesTag(p TasksParams, old string) bool {
+	return cleanList(p.Get("list")) == old || renameInFilter(p.Get("tag"), old, "\x00") != p.Get("tag") ||
+		renameInFilter(p.Get("new"), old, "\x00") != p.Get("new")
+}
+
+// renameInEmbed: an embed's params with the tag old (lowercase) renamed, the
+// other params and the spacing as written.
+func renameInEmbed(args, old, name string) string {
+	return embedWordRE.ReplaceAllStringFunc(args, func(word string) string {
+		k, v, ok := strings.Cut(word, "=")
+		switch key := strings.ToLower(k); {
+		case !ok:
+		case key == "list" && cleanList(v) == old:
+			return k + "=" + cleanList(name)
+		case key == "tag" || key == "new":
+			return k + "=" + renameInFilter(v, old, name)
+		}
+		return word
+	})
+}
+
+// renameInTasksURL: a link's query with the tag old (lowercase) renamed in
+// list= and tag=; the other params as written.
+func renameInTasksURL(query, old, name string) string {
+	parts := strings.Split(query, "&")
+	for i, part := range parts {
+		k, v, _ := strings.Cut(part, "=")
+		value, err := url.QueryUnescape(v)
+		if err != nil {
+			continue
+		}
+		renamed := value
+		switch {
+		case k == "list" && cleanList(value) == old:
+			renamed = cleanList(name)
+		case k == "tag":
+			renamed = renameInFilter(value, old, name)
+		}
+		if renamed != value {
+			parts[i] = k + "=" + url.QueryEscape(renamed)
+		}
+	}
+	return strings.Join(parts, "&")
+}
+
+// renameTagInText: page or task text with the tag old (lowercase) renamed
+// in its [[tasks: …]] embeds and its links to /tasks; code stays as written,
+// as it does for a page's links.
+func renameTagInText(text, old, name string) string {
+	masked, stash := mdtext.MaskCode(text)
+	masked = tasksRE.ReplaceAllStringFunc(masked, func(m string) string {
+		at := tasksRE.FindStringSubmatchIndex(m)
+		for _, group := range []int{2, 4} { // the args of [[tasks: …]], of [[deck …]]
+			if at[group] >= 0 {
+				return m[:at[group]] + renameInEmbed(m[at[group]:at[group+1]], old, name) + m[at[group+1]:]
+			}
+		}
+		return m
+	})
+	masked = tasksURLRE.ReplaceAllStringFunc(masked, func(m string) string {
+		at := strings.Index(m, "/tasks?") + len("/tasks?")
+		return m[:at] + renameInTasksURL(m[at:], old, name)
+	})
+	return mdtext.UnmaskCode(masked, stash)
 }
 
 // The tasks' views, by the names [[tasks: view=…]] and ?view= use.

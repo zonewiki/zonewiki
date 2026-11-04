@@ -193,3 +193,33 @@ function promotedSlug(folder, name, date) {
     }
   }
 }());
+
+// /tasks?list=<name>: Rename…, the list's tag everywhere (POST /tasks/rename).
+// A refusal comes back with the error in the dialog; a name in use, offering
+// to merge, until the name is edited.
+(function () {
+  const dialog = document.getElementById('list-rename-dialog');
+  if (!dialog) return;
+  const input = document.getElementById('list-rename-input');
+  const open = () => {
+    dialog.showModal();
+    input.focus();
+    input.select();
+  };
+  document.getElementById('list-rename-btn').addEventListener('click', open);
+  document.getElementById('list-rename-cancel').addEventListener('click', () => dialog.close());
+  closeOnBackdropClick(dialog);
+  const merge = dialog.querySelector('input[name="merge"]');
+  if (merge) {
+    input.addEventListener('input', () => {
+      merge.disabled = true;
+      document.getElementById('list-rename-submit').textContent = 'Rename';
+    });
+  }
+  if (dialog.hasAttribute('data-open')) {
+    open();
+    const url = new URL(location.href);
+    for (const name of ['rename_error', 'rename_name', 'rename_merge']) url.searchParams.delete(name);
+    history.replaceState(null, '', url);
+  }
+}());

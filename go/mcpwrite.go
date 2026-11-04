@@ -445,6 +445,46 @@ func renameFolder(folder string, args jsonObj, base, user string) (string, error
 	return strings.Join(out, "\n") + pendingPagesNote(kept, folder+"/") + left, nil
 }
 
+// renameTaskTag: the Rename… of /tasks?list=<name>, a list or a plain tag.
+func renameTaskTag(args jsonObj, base, user string) (string, error) {
+	tag, err := strArg(args, "tag", true)
+	if err != nil {
+		return "", err
+	}
+	name, err := strArg(args, "new_tag", true)
+	if err != nil {
+		return "", err
+	}
+	merge, err := boolArg(args, "merge")
+	if err != nil {
+		return "", err
+	}
+	plan, err := tasksWrite(checkTagRename(user, tag, name, merge))
+	if err != nil {
+		return "", toolRefusal(err)
+	}
+	if err := checkGuides(args, plan.visibleSlugs(user), user); err != nil {
+		return "", err
+	}
+	suffix, err := msgSuffix(args)
+	if err != nil {
+		return "", err
+	}
+	done, err := tasksWrite(renameTagOp(user, tag, name, merge, suffix))
+	if err != nil {
+		return "", toolRefusal(err)
+	}
+	verb := "Renamed tag #" + plan.old + " to #" + done.Name
+	if done.Merged {
+		verb = "Merged tag #" + plan.old + " into #" + done.Name
+	}
+	out := fmt.Sprintf("%s, in one commit: %d %s", verb, done.Tasks, plural(done.Tasks, "task"))
+	if len(done.Pages) > 0 {
+		out += fmt.Sprintf(", %d %s (%s)", len(done.Pages), plural(len(done.Pages), "page"), strings.Join(done.Pages, ", "))
+	}
+	return out + ".", nil
+}
+
 func renamePageTool(args jsonObj, base, user string) (string, error) {
 	raw, err := strArg(args, "slug", true)
 	if err != nil {

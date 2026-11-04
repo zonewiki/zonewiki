@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -356,6 +357,221 @@ func moveFolderOp(user, folder, newFolder, suffix string) (moves [][2]string, ch
 	}
 	moves, changed, err = moveFolder(user, folder, newFolder, "Move "+folder+"/ to "+newFolder+"/"+suffix)
 	return moves, changed, kept, err
+}
+
+// tagPlan: what renaming a tag would change.
+type tagPlan struct {
+	old, name string // old lowercase, name as it will be written
+	merges    bool   // the new name is in use (the two become one)
+	owners    []string
+	pages     []tagPage
+}
+
+// tagPage: a page whose text the rename changes.
+type tagPage struct {
+	PageFile
+	text string
+}
+
+// visibleSlugs: the pages of the plan user may see.
+func (p *tagPlan) visibleSlugs(user string) []string {
+	var out []string
+	for _, page := range p.pages {
+		if canSee(user, page.Slug) {
+			out = append(out, page.Slug)
+		}
+	}
+	return out
+}
+
+// tagChange: a task's tags, title and description with the tag renamed;
+// changed: any differs.
+func tagChange(t *Task, old, name string) (changed bool) {
+	tags, tagged := renamedTags(t.Tags, old, name)
+	t.Tags, changed = tags, tagged
+	for _, field := range []*string{&t.Title, &t.Description} {
+		if n := renameTagInText(*field, old, name); n != *field {
+			*field, changed = n, true
+		}
+	}
+	return changed
+}
+
+// checkTagRename: why user can't rename the tag, if not; else what it changes.
+// A tag on anything shared (a task, an embed on a page) is one name for all,
+// so the rename reaches every user's private tasks and pages too, as a page
+// rename's links do. A tag only user sees stays theirs: another user's
+// private tag of that name is another tag. A tag user doesn't see at all is
+// refused as one that doesn't exist, and what user is told counts only what
+// they see, so it says nothing about another user's private files.
+func checkTagRename(user, tag, newName string, merge bool) (*tagPlan, error) {
+	olds, names := cleanTags([]string{tag}), cleanTags([]string{newName})
+	if len(olds) == 0 {
+		return nil, refuse("Which tag? The name is empty")
+	}
+	if len(names) == 0 {
+		return nil, refuse("The new name is empty")
+	}
+	if strings.ContainsAny(names[0], "[],|=") {
+		return nil, refuse(strconv.Quote(names[0]) + ": a tag's name can't contain [ ] , | or =")
+	}
+	old, name := strings.ToLower(olds[0]), names[0]
+	notFound := refuseAs(refusedNotFound, "No tag or list #"+old)
+	type fileTasks struct {
+		owner string
+		tasks []*Task
+	}
+	var files []fileTasks
+	tasksMu.Lock()
+	for _, f := range taskFilesOf(everyOwner()) {
+		tasks, err := readListStrict(f.path)
+		if err != nil {
+			tasksMu.Unlock()
+			return nil, err
+		}
+		files = append(files, fileTasks{f.owner, tasks})
+	}
+	tasksMu.Unlock()
+	seen, shared, taken := false, false, false
+	for _, f := range files {
+		visible := f.owner == "" || f.owner == user
+		for _, t := range f.tasks {
+			tags := taskTagsLower(t)
+			seen = seen || visible && tags[old]
+			shared = shared || f.owner == "" && tags[old]
+			taken = taken || visible && tags[strings.ToLower(name)]
+		}
+	}
+	pages := iterPages()
+	texts := make([]string, len(pages))
+	for i, p := range pages {
+		text, err := readText(p.Path)
+		if err != nil {
+			logf("rename of tag #%s: %v", old, err)
+			return nil, refuse("Nothing was renamed: a page can't be read (Zone's log says which)")
+		}
+		texts[i] = text
+		_, private := pageOwner(p.Slug)
+		for _, params := range pageTasksEmbeds(text) {
+			if embedUsesTag(params, old) {
+				seen = seen || canSee(user, p.Slug)
+				shared = shared || !private
+			}
+			taken = taken || canSee(user, p.Slug) && cleanList(params.Get("list")) == strings.ToLower(name)
+		}
+	}
+	if !seen {
+		return nil, notFound
+	}
+	plan := &tagPlan{old: old, name: name, owners: []string{""}}
+	if privateFolder(user) != "" {
+		plan.owners = []string{user}
+	}
+	if shared {
+		plan.owners = everyOwner()
+	}
+	plan.merges = taken && strings.ToLower(name) != old
+	if plan.merges && !merge {
+		return nil, refuseAs(refusedExists, "#"+name+" is already in use. Renaming #"+old+" to it merges the two: their tasks become one list.")
+	}
+	for i, p := range pages {
+		if shared || ownPrivate(user, p.Slug) {
+			if n := renameTagInText(texts[i], old, name); n != texts[i] {
+				plan.pages = append(plan.pages, tagPage{p, n})
+			}
+		}
+	}
+	changes := len(plan.pages) > 0
+	for _, f := range files {
+		if slices.Contains(plan.owners, f.owner) {
+			for _, t := range f.tasks {
+				changes = tagChange(t, old, name) || changes
+			}
+		}
+	}
+	if !changes {
+		return nil, refuseAs(refusedUnchanged, "The tag is already called #"+name)
+	}
+	return plan, nil
+}
+
+// tagRename: what a rename did, as far as its user may see: the tasks
+// changed and the pages' slugs.
+type tagRename struct {
+	Name   string
+	Merged bool
+	Tasks  int
+	Pages  []string
+}
+
+// renameTagOp renames a tag, and so a list, which is a tag a page declares:
+// on tasks (open, completed, archived), in [[tasks: …]] embeds (list=, tag=,
+// new=) and in links to /tasks (?list=, ?tag=), in one commit. merge: go on
+// when the new name is in use. Every tasks file is read before anything is
+// written, so one that can't be read changes nothing; text not yet in git is
+// committed first. Not the tags in pages' frontmatter: those sort pages.
+func renameTagOp(user, tag, newName string, merge bool, suffix string) (*tagRename, error) {
+	plan, err := checkTagRename(user, tag, newName, merge)
+	if err != nil {
+		return nil, err
+	}
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
+	done := &tagRename{Name: plan.name, Merged: plan.merges, Pages: plan.visibleSlugs(user)}
+	type taskWrite struct {
+		path  string
+		tasks []*Task
+	}
+	var writes []taskWrite
+	for _, f := range taskFilesOf(plan.owners) {
+		tasks, err := readListStrict(f.path)
+		if err != nil {
+			return nil, err
+		}
+		n := 0
+		for _, t := range tasks {
+			if tagChange(t, plan.old, plan.name) {
+				n++
+			}
+		}
+		if n > 0 {
+			writes = append(writes, taskWrite{f.path, tasks})
+			if f.owner == "" || f.owner == user {
+				done.Tasks += n
+			}
+		}
+	}
+	paths := make([]string, len(plan.pages))
+	for i, p := range plan.pages {
+		paths[i] = p.Path
+	}
+	if _, err := keepPendingPages(paths, "pages before renaming #"+plan.old); err != nil {
+		return nil, err
+	}
+	var written []string
+	var failed error
+	for _, p := range plan.pages {
+		if failed = writeText(p.Path, p.text); failed != nil {
+			break
+		}
+		written = append(written, p.Path)
+	}
+	for _, w := range writes {
+		if failed != nil {
+			break
+		}
+		if failed = writeTasks(w.path, w.tasks); failed == nil {
+			written = append(written, w.path)
+		}
+	}
+	msg := "Rename tag #" + plan.old + " to #" + plan.name + suffix
+	if plan.merges {
+		msg = "Merge tag #" + plan.old + " into #" + plan.name + suffix
+	}
+	if len(written) > 0 {
+		failed = errors.Join(failed, notCommitted(gitCommit(user, msg, written...)))
+	}
+	return done, failed
 }
 
 // keepPending: before a write that replaces or removes the page at path,

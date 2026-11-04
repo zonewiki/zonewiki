@@ -907,6 +907,33 @@ func uncompleteTask(user string, t *Task, active []*Task, protect map[string]boo
 	return active
 }
 
+// taskFile: a tasks file and whose it is ("" the shared ones).
+type taskFile struct{ path, owner string }
+
+// taskFilesOf: every tasks file of owners: open, completed, archives.
+func taskFilesOf(owners []string) []taskFile {
+	var out []taskFile
+	for _, o := range owners {
+		for _, p := range append([]string{tasksFile(o), completedPath(o)}, archiveGlob(o)...) {
+			out = append(out, taskFile{p, o})
+		}
+	}
+	return out
+}
+
+// renamedTags: tags with old (lowercase) as name, first spelling kept if the
+// task has both; changed: they differ from tags.
+func renamedTags(tags []string, old, name string) (out []string, changed bool) {
+	out = slices.Clone(tags)
+	for i, t := range out {
+		if strings.ToLower(t) == old {
+			out[i] = name
+		}
+	}
+	out = cleanTags(out)
+	return out, !slices.Equal(out, tags)
+}
+
 // renamePageRefs follows a page rename in the tasks: links in task titles
 // and descriptions rewritten (by rewrite, given the files' owner: "" the
 // shared ones), every owner's tasks. Writes the files that changed, doesn't
@@ -914,15 +941,8 @@ func uncompleteTask(user string, t *Task, active []*Task, protect map[string]boo
 func renamePageRefs(rewrite func(owner, text string) string) ([]string, error) {
 	tasksMu.Lock()
 	defer tasksMu.Unlock()
-	type file struct{ path, owner string }
-	var paths []file
 	var changed []string
-	for _, o := range everyOwner() {
-		for _, p := range append([]string{tasksFile(o), completedPath(o)}, archiveGlob(o)...) {
-			paths = append(paths, file{p, o})
-		}
-	}
-	for _, f := range paths {
+	for _, f := range taskFilesOf(everyOwner()) {
 		p := f.path
 		tasks, err := readListStrict(p)
 		if err != nil {

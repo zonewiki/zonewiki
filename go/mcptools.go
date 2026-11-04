@@ -2029,7 +2029,7 @@ var mcpToolFuncs = map[string]func(args jsonObj, base, user string) (string, err
 	"zone_help": zoneHelp, "read_guides": readGuides,
 	"write_page": writePage, "edit_page": editPageTool, "replace_in_pages": replaceInPages,
 	"append_to_page": appendToPage, "file_note": fileNote, "rename_page": renamePageTool,
-	"delete_page": deletePageTool, "restore_page": restorePage, "create_task": createTaskTool,
+	"delete_page": deletePageTool, "restore_page": restorePage, "rename_task_tag": renameTaskTag, "create_task": createTaskTool,
 	"update_task": updateTaskTool,
 }
 
@@ -2065,7 +2065,8 @@ func callMCPTool(r *http.Request, name string, args jsonObj) (string, error) {
 // pageTools: the tools that write pages, each run under pagesMu (as the
 // routes that do are, writesPages).
 var pageTools = map[string]bool{"write_page": true, "edit_page": true, "replace_in_pages": true,
-	"append_to_page": true, "file_note": true, "rename_page": true, "delete_page": true, "restore_page": true}
+	"append_to_page": true, "file_note": true, "rename_page": true, "delete_page": true, "restore_page": true,
+	"rename_task_tag": true}
 
 func joinIDs(hits []idScore) string {
 	ids := make([]string, len(hits))

@@ -3468,3 +3468,33 @@ def test_what_the_browser_kept_under_the_old_names_carries_over(page, wiki):
     expect(page.locator("select.tasks-sort")).to_have_value("created")
     keys = page.evaluate("() => Object.keys(localStorage).filter(k => k.includes('-sort')).sort()")
     assert keys == ["zone-search-sort", "zone-tasks-sort:/page/shop|shop||0", "zone-tasks-sort:/tasks|||0"]
+
+
+def test_rename_list_dialog(page, wiki):
+    """Rename… on a list: its name everywhere; a name in use offers the merge, until edited."""
+    wiki.write("shop", "# Shop\n\n[[tasks: list=shop]]\n")
+    page.request.post("/api/tasks", data={"title": "Milk", "tags": ["shop"]})
+    page.request.post("/api/tasks", data={"title": "Nails", "tags": ["hardware"]})
+    page.goto("/tasks?list=shop")
+    dialog = page.locator("#list-rename-dialog")
+    expect(dialog).to_be_hidden()
+    page.locator("#list-rename-btn").click()
+    expect(dialog).to_be_visible()
+    expect(page.locator("#list-rename-input")).to_have_value("shop")
+
+    page.locator("#list-rename-input").fill("hardware")
+    page.locator("#list-rename-submit").click()
+    expect(dialog).to_be_visible()   # back, asking
+    expect(dialog).to_contain_text("already in use")
+    expect(page.locator("#list-rename-submit")).to_have_text("Merge")
+    assert "rename_error" not in page.url
+    page.locator("#list-rename-input").fill("food")
+    expect(page.locator("#list-rename-submit")).to_have_text("Rename")   # another name: no merge
+
+    page.locator("#list-rename-submit").click()
+    page.wait_for_url("**/tasks?list=food")
+    expect(page.locator(".page-header h1")).to_have_text("List: food")
+    open_tab(page, "open")
+    expect(card(page, "Milk")).to_be_visible()
+    assert "list=food" in (wiki.root / "shop.md").read_text()
+

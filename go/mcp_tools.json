@@ -700,6 +700,45 @@
   }
  },
  {
+  "name": "rename_task_tag",
+  "title": "Rename a task tag or list",
+  "description": "Rename a task tag, or a list (a tag a page declares): on all tasks, done ones too, and in embeds and /tasks links on pages, in one commit. Not pages' frontmatter tags.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "tag": {
+     "type": "string"
+    },
+    "new_tag": {
+     "type": "string"
+    },
+    "merge": {
+     "type": "boolean",
+     "description": "new_tag may be in use: the two merge."
+    },
+    "summary": {
+     "type": "string"
+    },
+    "guides": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    }
+   },
+   "required": [
+    "tag",
+    "new_tag"
+   ]
+  },
+  "annotations": {
+   "readOnlyHint": false,
+   "destructiveHint": true,
+   "idempotentHint": false,
+   "openWorldHint": false
+  }
+ },
+ {
   "name": "create_task",
   "title": "Create a task",
   "description": "Add a task to the user's tasks. Returns it with its id, and the tags of similar tasks: offer the fitting ones to the user (update_task's add_tags adds them).",

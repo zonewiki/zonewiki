@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -228,5 +229,49 @@ func TestRetag(t *testing.T) {
 	}
 	if got := retag(nil, nil, nil); got == nil || len(got) != 0 {
 		t.Errorf("retag of nothing: %#v", got)
+	}
+}
+
+func TestRenameTagInText(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"[[tasks: list=shop keep=1]]", "[[tasks: list=food keep=1]]"},
+		{"[[tasks:  LIST=Shop   view=open]]", "[[tasks:  LIST=food   view=open]]"},
+		{"[[deck list=shop]]", "[[deck list=food]]"},
+		{"[[tasks: tag=work,-shop]]", "[[tasks: tag=work,-food]]"},
+		{"[[tasks: tag=#shop|home new=shop,x]]", "[[tasks: tag=#food|home new=food,x]]"},
+		{"[[tasks: list=shopping tag=workshop labels=shop,b]]", "[[tasks: list=shopping tag=workshop labels=shop,b]]"},
+		{"[go](/tasks?list=shop)", "[go](/tasks?list=food)"},
+		{"[go](/tasks?view=open&tag=shop#x)", "[go](/tasks?view=open&tag=food#x)"},
+		{"http://wiki.lan/tasks?list=shop and /tasks?tag=a%7Cshop", "http://wiki.lan/tasks?list=food and /tasks?tag=a%7Cfood"},
+		{"[go](/tasks?list=other&view=shop)", "[go](/tasks?list=other&view=shop)"},
+		{"/mytasks?list=shop", "/mytasks?list=shop"},
+		{"#shop and shop stay, [[shop]] too", "#shop and shop stay, [[shop]] too"},
+		{"`[[tasks: list=shop]]` and `/tasks?list=shop`", "`[[tasks: list=shop]]` and `/tasks?list=shop`"},
+		{"```\n[[tasks: list=shop]]\n```\n", "```\n[[tasks: list=shop]]\n```\n"},
+	} {
+		if got := renameTagInText(c.in, "shop", "food"); got != c.want {
+			t.Errorf("%q: got %q, want %q", c.in, got, c.want)
+		}
+	}
+	if got := renameTagInText("[[tasks: list=shop tag=shop]]", "shop", "Food"); got != "[[tasks: list=food tag=Food]]" {
+		t.Errorf("a list's name is lowercase, a tag keeps its spelling: %q", got)
+	}
+}
+
+func TestRenamedTags(t *testing.T) {
+	for _, c := range []struct {
+		in, want []string
+		changed  bool
+	}{
+		{[]string{"a", "Shop", "b"}, []string{"a", "food", "b"}, true},
+		{[]string{"food", "shop"}, []string{"food"}, true},
+		{[]string{"Food", "shop"}, []string{"Food"}, true},
+		{[]string{"a"}, []string{"a"}, false},
+		{[]string{}, []string{}, false},
+	} {
+		got, changed := renamedTags(c.in, "shop", "food")
+		if !slices.Equal(got, c.want) || changed != c.changed {
+			t.Errorf("%q: got %q %v", c.in, got, changed)
+		}
 	}
 }

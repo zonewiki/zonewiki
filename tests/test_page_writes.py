@@ -2,6 +2,7 @@
 tool, on the same wiki: the same checks and the same care for text not
 yet in git, whichever door it came through (go/pageops.go)."""
 
+import json
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 
@@ -422,3 +423,141 @@ class TestCommits:
         client.post("/login", data={"username": "alice", "password": "alice-pw"}, headers=HOST)
         assert client.post("/delete/p", headers=HOST).status_code == 302
         assert git(wiki, "log", "-2", "--format=%an %s").splitlines() == ["alice Delete p", "bob Save p"]
+
+
+# ── Renaming a tag or list ──────────────────────────────────────
+
+def tasks_file(wiki, name="tasks.json"):
+    return json.loads((wiki / "_tasks" / name).read_text())
+
+
+def stored_task(title, tags, completed_at=None):
+    return {"id": f"{abs(hash(title)):032x}"[:32], "title": title, "description": "", "tags": tags,
+            "start_date": None, "due_date": None, "created_at": "2001-01-01T10:00:00",
+            "completed_at": completed_at, "wont_do": False, "keep": False, "last_done": None,
+            "sort_order": None, "recurrence": None, "spawned_from": None, "history": [], "comments": []}
+
+
+def rename_tag(client, door, tag, new, merge=False):
+    """True when done, False when refused; the browser's refusal is a redirect to the dialog."""
+    if door == "browser":
+        data = {"tag": tag, "new_name": new, **({"merge": "1"} if merge else {})}
+        resp = client.post("/tasks/rename", data=data, headers=HOST)
+        assert resp.status_code == 302
+        return "rename_error" not in resp.headers["Location"]
+    return not mcp(client, "rename_task_tag", tag=tag, new_tag=new, merge=merge)[1]
+
+
+@pytest.fixture()
+def shop(client, wiki):
+    """A list #shop: declared, linked to, on open, completed and archived tasks."""
+    (wiki / "_tasks/tasks.json").write_text(json.dumps([
+        stored_task("Milk", ["shop", "weekly"]),
+        {**stored_task("See list", ["other"]), "description": "On [the list](/tasks?list=shop)."}]))
+    (wiki / "_tasks/completed.json").write_text(json.dumps([stored_task("Eggs", ["Shop"], "2099-01-01T10:00:00")]))
+    (wiki / "_tasks/completed-2001.json").write_text(json.dumps([stored_task("Old", ["shop"], "2001-01-01T10:00:00")]))
+    commit(wiki, "lists", "# Lists\n\n[[tasks: list=shop keep=1 pin=1]]\n\n[[tasks: tag=shop,-x new=shop]]\n\n"
+                          "[Go](/tasks?list=shop), #shop\n\n`[[tasks: list=shop]]`\n")
+    return wiki
+
+
+@pytest.mark.parametrize("door", DOORS)
+def test_rename_tag_changes_it_everywhere_in_one_commit(client, shop, door):
+    before = git(shop, "rev-parse", "HEAD").strip()
+    assert rename_tag(client, door, "shop", "food")
+    assert tasks_file(shop)[0]["tags"] == ["food", "weekly"]
+    assert "/tasks?list=food" in tasks_file(shop)[1]["description"]
+    assert tasks_file(shop, "completed.json")[0]["tags"] == ["food"]
+    assert tasks_file(shop, "completed-2001.json")[0]["tags"] == ["food"]
+    text = (shop / "lists.md").read_text()
+    assert "[[tasks: list=food keep=1 pin=1]]" in text and "[[tasks: tag=food,-x new=food]]" in text
+    assert "(/tasks?list=food), #shop" in text and "`[[tasks: list=shop]]`" in text   # prose and code stay
+    assert len(git(shop, "log", "--format=%H", f"{before}..HEAD").split()) == 1
+    assert git(shop, "status", "--porcelain", "--", "lists.md", "_tasks").strip() == ""
+    page = client.get("/tasks?list=food", headers=HOST).get_data(as_text=True)
+    assert "List: food" in page
+    assert 'data-place="list:shop"' not in page and 'data-place="list:food"' in page
+
+
+@pytest.mark.parametrize("door", DOORS)
+def test_rename_tag_refuses_a_tag_no_one_has(client, shop, door):
+    assert not rename_tag(client, door, "nosuch", "food")
+    assert not rename_tag(client, door, "shop", "")
+    assert not rename_tag(client, door, "shop", "a,b")
+    assert "[[tasks: list=shop" in (shop / "lists.md").read_text()
+
+
+@pytest.mark.parametrize("door", DOORS)
+def test_rename_tag_onto_a_name_in_use_merges_only_when_asked(client, shop, door):
+    assert not rename_tag(client, door, "shop", "weekly")
+    assert tasks_file(shop)[0]["tags"] == ["shop", "weekly"]
+    assert rename_tag(client, door, "shop", "weekly", merge=True)
+    assert tasks_file(shop)[0]["tags"] == ["weekly"]
+    assert tasks_file(shop, "completed.json")[0]["tags"] == ["weekly"]
+    assert "Merge tag #shop into #weekly" in git(shop, "log", "-1", "--format=%s")
+
+
+@pytest.mark.parametrize("door", DOORS)
+def test_rename_tag_keeps_text_not_yet_in_git(client, shop, door):
+    (shop / "lists.md").write_text((shop / "lists.md").read_text() + "\nA draft line\n")
+    assert rename_tag(client, door, "shop", "food")
+    text = (shop / "lists.md").read_text()
+    assert "A draft line" in text and "list=food" in text
+    assert git(shop, "status", "--porcelain", "--", "lists.md").strip() == ""
+    subjects = git(shop, "log", "-2", "--format=%s", "--", "lists.md").split("\n")
+    assert subjects[0].startswith("Rename tag") and subjects[1].startswith("Save ")
+    assert "A draft line" in git(shop, "show", "HEAD~1:lists.md")
+
+
+@pytest.mark.parametrize("door", DOORS)
+def test_a_corrupt_tasks_file_stops_a_tag_rename_with_nothing_written(client, shop, door):
+    (shop / "_tasks/completed.json").write_text("{not json")
+    before = (shop / "lists.md").read_text(), (shop / "_tasks/tasks.json").read_text()
+    if door == "browser":
+        assert client.post("/tasks/rename", data={"tag": "shop", "new_name": "food"}, headers=HOST).status_code == 500
+    else:
+        assert rename_tag(client, door, "shop", "food") is False
+    assert ((shop / "lists.md").read_text(), (shop / "_tasks/tasks.json").read_text()) == before
+
+
+def test_rename_tag_changing_only_the_case_is_no_merge(client, shop):
+    assert rename_tag(client, "mcp", "weekly", "Weekly")
+    assert tasks_file(shop)[0]["tags"] == ["shop", "Weekly"]
+    assert not rename_tag(client, "mcp", "Weekly", "Weekly")
+
+
+def test_rename_tag_works_on_a_plain_tag(client, shop):
+    assert rename_tag(client, "browser", "weekly", "every-week")
+    assert tasks_file(shop)[0]["tags"] == ["shop", "every-week"]
+
+
+def test_rename_tag_to_its_own_name_changes_nothing(client, shop):
+    head = git(shop, "rev-parse", "HEAD")
+    resp = client.post("/tasks/rename", data={"tag": "weekly", "new_name": "#weekly"}, headers=HOST)
+    assert resp.status_code == 302 and "rename_error" not in resp.headers["Location"]
+    assert git(shop, "rev-parse", "HEAD") == head
+
+
+def test_rename_tag_to_its_own_name_evens_out_the_spelling(client, shop):
+    assert rename_tag(client, "browser", "shop", "shop")
+    assert tasks_file(shop, "completed.json")[0]["tags"] == ["shop"]   # it was #Shop
+
+
+def test_rename_tag_dialog_comes_back_offering_the_merge(client, shop):
+    resp = client.post("/tasks/rename", data={"tag": "shop", "new_name": "weekly"}, headers=HOST)
+    assert "rename_merge=1" in resp.headers["Location"]
+    page = client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True)
+    assert 'id="list-rename-dialog" class="modal" data-open' in page
+    assert 'name="merge"' in page and "already in use" in page and 'value="weekly"' in page
+
+
+def test_the_rename_button_is_a_lists_alone(client, shop):
+    assert "list-rename-btn" in client.get("/tasks?list=shop", headers=HOST).get_data(as_text=True)
+    assert "list-rename-btn" not in client.get("/tasks", headers=HOST).get_data(as_text=True)
+
+
+def test_rename_tag_under_a_guide_needs_its_id(client, shop):
+    commit(shop, "wiki-guide", "# Guide\n\nWrite well.\n")
+    text, err = mcp(client, "rename_task_tag", tag="shop", new_tag="food")
+    assert err and text.startswith("Nothing was written") and tasks_file(shop)[0]["tags"][0] == "shop"
+
