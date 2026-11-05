@@ -20,11 +20,15 @@ def task_by_title(page, title: str) -> dict:
 
 
 def wait_for_field(page, title: str, field: str, expected, timeout_ms: int = 5000):
-    """Poll the API until the task's field reaches the expected value."""
+    """Poll the API until the task exists and its field reaches the expected
+    value: a dialog's submit returns before its request is through, so a new
+    task may not be there yet."""
     for _ in range(timeout_ms // 100):
-        if task_by_title(page, title)[field] == expected:
+        task = next((t for t in page.request.get("/api/tasks").json() if t["title"] == title), None)
+        if task and task[field] == expected:
             return
         page.wait_for_timeout(100)
+    assert task, f"no task titled {title!r}"
     assert task_by_title(page, title)[field] == expected
 
 
