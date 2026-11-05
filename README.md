@@ -464,8 +464,11 @@ change gets in.
 
 ## License
 
-[AGPL-3.0-or-later](LICENSE). The vendored [highlight.js](https://highlightjs.org) in
-`public/vendor/highlight/` is under its own BSD-3-Clause license; the
-emoji names in `public/vendor/gemoji/` (GitHub's [gemoji](https://github.com/github/gemoji)),
-[KaTeX](https://katex.org) in `public/vendor/katex/` and
-[Mermaid](https://mermaid.js.org) in `public/vendor/mermaid/` under MIT.
+[AGPL-3.0-or-later](LICENSE). What Zone ships from others stays under its own license:
+[THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES) has Go, the Go modules and the
+embedding model, and each library in `public/vendor/` has its license next to it:
+[highlight.js](https://highlightjs.org) under BSD-3-Clause, and the emoji names
+(GitHub's [gemoji](https://github.com/github/gemoji)), [KaTeX](https://katex.org)
+and [Mermaid](https://mermaid.js.org) under MIT. Mermaid's file bundles other
+packages, listed in `public/vendor/mermaid/THIRD_PARTY_LICENSES`, among them
+[elkjs](https://github.com/kieler/elkjs) under EPL-2.0.

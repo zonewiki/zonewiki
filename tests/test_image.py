@@ -1,6 +1,7 @@
 """The Containerfiles: pins that must agree with each other and with the
 code, and the layering that keeps a code change from refetching the model."""
 
+import hashlib
 import re
 
 from tests.settings import REPO
@@ -44,6 +45,41 @@ def test_the_image_ships_the_docs_and_the_browser_code():
     final = CONTAINERFILE[CONTAINERFILE.rindex("\nFROM "):]
     for line in ("COPY public/ public/", "COPY README.md ./", "COPY docs/spec/ docs/spec/"):
         assert line in final
+
+
+def test_the_image_ships_the_licenses():
+    final = CONTAINERFILE[CONTAINERFILE.rindex("\nFROM "):]
+    assert "COPY LICENSE THIRD_PARTY_LICENSES ./" in final
+    assert "COPY --from=semantic /opt/onnxruntime-licenses/ licenses/onnxruntime/" in final
+    assert '-C /opt/onnxruntime-licenses --strip-components=1 --wildcards "*/LICENSE" "*/ThirdPartyNotices.txt"' in stage("semantic")
+
+
+def test_the_notices_name_what_is_pinned():
+    # Raising a pin without its license fails here.
+    notices = (REPO / "THIRD_PARTY_LICENSES").read_text(encoding="utf-8")
+    gomod = (REPO / "go" / "go.mod").read_text(encoding="utf-8")
+    modules = re.findall(r"^\t(\S+) (v\S+)", gomod, re.M)
+    assert modules
+    for module, version in modules:
+        assert f"{module} {version}\n" in notices
+    assert f"Go {args(TOOLS)['GO_VERSION']} " in notices
+    assert args(stage("semantic"))["MODEL_REVISION"] in notices
+
+
+def test_every_vendored_library_has_its_license():
+    folders = [p for p in (REPO / "public" / "vendor").iterdir() if p.is_dir()]
+    assert folders
+    for folder in folders:
+        assert (folder / "LICENSE").is_file(), folder.name
+
+
+def test_mermaids_notices_are_for_the_vendored_bundle():
+    # Updating mermaid.min.js without docs/licenses/mermaid_notices.py fails here.
+    folder = REPO / "public" / "vendor" / "mermaid"
+    notices = (folder / "THIRD_PARTY_LICENSES").read_text(encoding="utf-8")
+    assert hashlib.sha256((folder / "mermaid.min.js").read_bytes()).hexdigest() in notices
+    # EPL-2.0 asks for a way to get the source of what is distributed compiled.
+    assert "https://github.com/kieler/elkjs" in notices
 
 
 def test_the_binary_is_zonewiki_and_still_answers_as_leaf():

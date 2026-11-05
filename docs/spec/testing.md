@@ -20,7 +20,7 @@ How the suite is set up and what each module covers. The rules (run it, add test
 
 `go/eval_test.go` covers `zonewiki eval`: a page target matching any section and a section target only its own, ranks by keywords on a temp wiki, targets naming nothing (page, section, task), the report's numbers per mode, the questions file's format (questions without targets skipped and counted), `--new`'s stubs from the query logs (known and repeated queries left out, newest first), and that the semantic index it builds never writes the wiki's cache.
 
-`tests/test_image.py` checks the Containerfiles: the model's revision and hashes are the ones `go/embed.go` checks, the semantic layer copies nothing from the repo (a code change mustn't download the model again), both images build with the same Go, and the image ships the browser code and the docs.
+`tests/test_image.py` checks the Containerfiles: the model's revision and hashes are the ones `go/embed.go` checks, the semantic layer copies nothing from the repo (a code change mustn't download the model again), both images build with the same Go, and the image ships the browser code, the docs and the licenses. It also keeps the notices current: `THIRD_PARTY_LICENSES` names the pinned Go, Go modules and model, every library in `public/vendor/` has a `LICENSE`, and Mermaid's notices record the hash of the vendored `mermaid.min.js`.
 
 `tests/test_env_example.py` checks `.env.example` against the settings the source, `run.sh` and `compose.yaml` read (none missing, none unknown; the variables of settings that moved into the settings file, which the code names only to refuse and import them, don't count).
 

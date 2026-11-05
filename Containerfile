@@ -54,7 +54,7 @@ ARG MODEL=jinaai/jina-embeddings-v2-base-de
 ARG MODEL_REVISION=3f9eede875721714945b6a99a3198299243cf2be
 ARG MODEL_ONNX_SHA256=51654b7441fbfcfef6598b01cbd1ea925ca0f0cad81202fcd36fee325783f1b0
 ARG MODEL_VOCAB_SHA256=376c53a06d6911569afc19f584002a11dbcd6b871afb6d96b8600eb3c4e7e7a7
-RUN mkdir -p /opt/onnxruntime /opt/zonewiki-model \
+RUN mkdir -p /opt/onnxruntime /opt/onnxruntime-licenses /opt/zonewiki-model \
  && case "$(echo "$ZONE_SEMANTIC_SEARCH" | tr '[:upper:]' '[:lower:]' | tr -d ' ')" in \
       ""|0|off|false|no) exit 0 ;; \
       1|on|true|yes) ;; \
@@ -71,6 +71,7 @@ RUN mkdir -p /opt/onnxruntime /opt/zonewiki-model \
       "https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-linux-${arch}-${ORT_VERSION}.tgz" \
  && echo "$sum  /tmp/ort.tgz" | sha256sum -c - \
  && tar -xzf /tmp/ort.tgz -C /opt/onnxruntime --strip-components=2 --wildcards "*/lib/libonnxruntime.so*" \
+ && tar -xzf /tmp/ort.tgz -C /opt/onnxruntime-licenses --strip-components=1 --wildcards "*/LICENSE" "*/ThirdPartyNotices.txt" \
  && base="https://huggingface.co/${MODEL}/resolve/${MODEL_REVISION}" \
  && mkdir -p /opt/zonewiki-model/onnx \
  && curl -sSfL -o /opt/zonewiki-model/onnx/model.onnx "$base/onnx/model.onnx" \
@@ -102,6 +103,9 @@ COPY public/ public/
 # Zone's documentation, for the MCP tool zone_help (found next to public/).
 COPY README.md ./
 COPY docs/spec/ docs/spec/
+# The licenses of what the image holds (public/vendor/ has the rest).
+COPY LICENSE THIRD_PARTY_LICENSES ./
+COPY --from=semantic /opt/onnxruntime-licenses/ licenses/onnxruntime/
 COPY --from=build /zonewiki ./zonewiki
 # The binary was called leaf before the rename: compose files and healthchecks
 # from then still call /app/leaf, for one release.
