@@ -23,6 +23,10 @@ const legacyAppName = "Leaf"
 // Zone's version (semver), bumped by hand when a change is worth a number.
 const version = "1.2.0"
 
+// Where this version's source is, linked from the shortcuts dialog. The AGPL has
+// whoever runs a changed Zone for others offer them its source: a fork changes this.
+const sourceURL = "https://github.com/gklingler/zonewiki"
+
 // environ: the environment Zone reads its deployment settings from, with
 // the names from before Leaf was called Zone (zoneEnv).
 var environ = zoneEnv(os.Getenv, logf)

@@ -282,7 +282,7 @@ type pageShell struct {
 	Sharing, Users     bool
 	Semantic           string // semanticStatus
 	AppName, Version   string
-	Build              string
+	Build, SourceURL   string
 	Commit             string // the build's commit, "" when unknown
 	Dirty, AllowRemote bool
 	Locale, DateFormat string
@@ -316,7 +316,7 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 	sh := &pageShell{
 		Title: title, Editor: o.editor, Wide: o.wide, ShowActions: !o.noActions && !o.editor,
 		BadgeInForm: o.badgeInForm, Sharing: rq.sharing, Semantic: semanticStatus(),
-		AppName: appName, Version: version, Build: cfg.Build, AllowRemote: cfg.AllowRemote,
+		AppName: appName, Version: version, Build: cfg.Build, SourceURL: sourceURL, AllowRemote: cfg.AllowRemote,
 		Locale: s.Locale, DateFormat: s.DateFormat,
 		// Only signed in: the login page has no one to sign out.
 		SignOut: s.authOn() && isSignedIn(rq.r), User: rq.user, Users: s.Users != nil,

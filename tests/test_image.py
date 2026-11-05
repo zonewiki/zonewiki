@@ -54,6 +54,11 @@ def test_the_image_ships_the_licenses():
     assert '-C /opt/onnxruntime-licenses --strip-components=1 --wildcards "*/LICENSE" "*/ThirdPartyNotices.txt"' in stage("semantic")
 
 
+def test_zones_license_is_the_agpl():
+    assert (REPO / "LICENSE").read_text(encoding="utf-8").lstrip().startswith("GNU AFFERO GENERAL PUBLIC LICENSE")
+    assert "org.opencontainers.image.licenses=AGPL-3.0-or-later" in (REPO / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+
 def test_the_notices_name_what_is_pinned():
     # Raising a pin without its license fails here.
     notices = (REPO / "THIRD_PARTY_LICENSES").read_text(encoding="utf-8")

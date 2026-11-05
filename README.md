@@ -464,7 +464,14 @@ change gets in.
 
 ## License
 
-[AGPL-3.0-or-later](LICENSE). What Zone ships from others stays under its own license:
+Copyright (C) 2026 Gernot Klingler. Zone is free software under the
+[GNU Affero General Public License](LICENSE), version 3 or (at your option) any
+later version (`AGPL-3.0-or-later`). Using it, also in a company, asks nothing of
+you. If you change it and others use your version over a network, offer them its
+source: point `sourceURL` in `go/config.go` at your copy, and the link in the
+shortcuts dialog (`?`) does that.
+
+What Zone ships from others stays under its own license:
 [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES) has Go, the Go modules and the
 embedding model, and each library in `public/vendor/` has its license next to it:
 [highlight.js](https://highlightjs.org) under BSD-3-Clause, and the emoji names

@@ -85,6 +85,8 @@ Set `ZONE_ALLOW_REMOTE=1` in `.env` (and restart with `./run.sh up`) to bind on 
 
 ## Version
 
+The shortcuts modal (`?`) also links to Zone's source (`sourceURL` in `go/config.go`) and names its license, AGPL-3.0-or-later: whoever runs a changed Zone for others over a network has to offer them its source, so a fork points that constant at its own copy.
+
 Zone's version is a semver constant, `version` in `go/config.go`, bumped by hand. Next to it the build is shown: the commit it was built from plus that commit's date, e.g. `c28ec9e 2026-09-26 19:22`, with ` +dirty` when `go/` or `public/` had uncommitted changes (a commit can't contain its own hash, so this part can't be a committed constant). The shortcuts modal (`?`) shows both (`Zone 1.0.0 · c28ec9e 2026-09-26 19:22`), every page's bottom-left corner the version and short hash (`Zone 1.0.0 · c28ec9e`, `+dirty` when so, the full build on hover; `.zone-build` in `layout.html`, faint, only from 1140px wide where the margin beside the text column has room, not in the editor), the `<meta name="generator">` tag the version, and `/api/version` returns `{ version, build }`. The image has no `.git`, so `run.sh` computes the build string and passes it as the `ZONE_BUILD` build arg (the `Containerfile` sets it as an env var in its last layer, so a new commit only rebuilds that layer). Without the container, the binary has the same string from what `go build` recorded of the checkout (`sourceBuild()`: the commit, its time, whether the tree had changes); `$ZONE_BUILD` wins when set, and with neither the modal shows the version alone.
 
 ## Home-screen app

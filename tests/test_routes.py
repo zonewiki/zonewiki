@@ -2325,6 +2325,13 @@ class TestVersion:
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
         assert f'<p class="zone-version">Zone {v}</p>' in body
 
+    def test_shortcuts_link_to_the_source(self, client, wiki_dir):
+        # The AGPL's offer of the source to everyone using Zone over a network.
+        for path in ("/page/index", "/tasks", "/edit/index"):
+            body = client.get(path, headers=HOST).get_data(as_text=True)
+            assert ('<p class="zone-version"><a href="https://github.com/gklingler/zonewiki">Get the source code</a>'
+                    ' · AGPL-3.0-or-later</p>') in body, path
+
     def test_bottom_left_shows_version_and_short_hash(self, client, wiki_dir, monkeypatch):
         v = client.get("/api/version", headers=HOST).get_json()["version"]
         monkeypatch.setattr(settings, "ZONE_BUILD", "abc1234 2026-09-26 12:00")
