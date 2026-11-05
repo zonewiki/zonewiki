@@ -471,4 +471,4 @@ embedding model, and each library in `public/vendor/` has its license next to it
 (GitHub's [gemoji](https://github.com/github/gemoji)), [KaTeX](https://katex.org)
 and [Mermaid](https://mermaid.js.org) under MIT. Mermaid's file bundles other
 packages, listed in `public/vendor/mermaid/THIRD_PARTY_LICENSES`, among them
-[elkjs](https://github.com/kieler/elkjs) under EPL-2.0.
+[elkjs](https://github.com/kieler/elkjs) under GPL-3.0-or-later (it also offers EPL-2.0).

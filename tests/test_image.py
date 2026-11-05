@@ -78,8 +78,11 @@ def test_mermaids_notices_are_for_the_vendored_bundle():
     folder = REPO / "public" / "vendor" / "mermaid"
     notices = (folder / "THIRD_PARTY_LICENSES").read_text(encoding="utf-8")
     assert hashlib.sha256((folder / "mermaid.min.js").read_bytes()).hexdigest() in notices
-    # EPL-2.0 asks for a way to get the source of what is distributed compiled.
+    # elkjs is the one copyleft package in the bundle: its GPL option is what lets
+    # Zone ship it under the AGPL, and both licenses ask for a way to get the source.
+    assert "License: EPL-2.0 OR GPL-3.0-or-later" in notices
     assert "https://github.com/kieler/elkjs" in notices
+    assert "GNU GENERAL PUBLIC LICENSE" in (folder / "COPYING.GPL-3.0").read_text(encoding="utf-8")
 
 
 def test_the_binary_is_zonewiki_and_still_answers_as_leaf():

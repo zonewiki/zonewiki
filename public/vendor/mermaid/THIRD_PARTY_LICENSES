@@ -1,8 +1,8 @@
-The packages compiled into mermaid.min.js (Mermaid 12.2.0), whose own license
+The packages compiled into mermaid.min.js (Mermaid 12.3.0), whose own license
 is LICENSE next to this file, with their licenses. Each stays under its own.
 Written by docs/licenses/mermaid_notices.py from the bundle's source map.
 
-mermaid.min.js sha256: a8a6a6f805b074a8261a2825c86f99c8054acb3b35f50bb7e24a4f9f2c3c3b9f
+mermaid.min.js sha256: 336df803d87a38b70a01e736e666c8f7601d2ce42f5e47c8fafe5d721074b9a3
 
 ==============================================================================
 @braintree/sanitize-url 7.1.2
@@ -2163,7 +2163,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ==============================================================================
-dompurify 3.4.12
+dompurify 3.4.17
 License: (MPL-2.0 OR Apache-2.0)
 Repository: git://github.com/cure53/DOMPurify.git
 ==============================================================================
@@ -2745,11 +2745,12 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
   defined by the Mozilla Public License, v. 2.0.
 
 ==============================================================================
-elkjs 0.9.3
-License: EPL-2.0
+elkjs 0.12.0
+License: EPL-2.0 OR GPL-3.0-or-later
 Repository: git+https://github.com/kieler/elkjs.git
-Distributed here in compiled form. Its source: https://github.com/kieler/elkjs
-(tag 0.9.3), and the Eclipse Layout Kernel it is compiled from:
+Zone distributes it under GPL-3.0-or-later (see COPYING.GPL-3.0 next to this
+file), in compiled form. Its source: https://github.com/kieler/elkjs
+(tag 0.12.0), and the Eclipse Layout Kernel it is compiled from:
 https://github.com/eclipse/elk
 ==============================================================================
 
@@ -3005,8 +3006,7 @@ No third-party beneficiary rights are created under this Agreement.
 
 “This Source Code may also be made available under the following
 Secondary Licenses when the conditions for such availability set forth
-in the Eclipse Public License, v. 2.0 are satisfied: {name license(s),
-version(s), and exceptions or additional permissions here}.”
+in the Eclipse Public License, v. 2.0 are satisfied: GNU General Public License v3.0 or later”
 
 > Simply including a copy of this Agreement, including this Exhibit A is
 > not sufficient to license the Source Code under Secondary Licenses.
@@ -3087,7 +3087,7 @@ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 THIS SOFTWARE.
 
 ==============================================================================
-js-yaml 4.3.0
+js-yaml 4.3.2
 License: MIT
 Repository: git+https://github.com/nodeca/js-yaml.git
 ==============================================================================
@@ -3414,19 +3414,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-==============================================================================
-uuid 14.0.0
-License: MIT
-Repository: git+https://github.com/uuidjs/uuid.git
-==============================================================================
-
-The MIT License (MIT)
-
-Copyright (c) 2010-2020 Robert Kieffer and other contributors
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
