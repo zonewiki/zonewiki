@@ -902,7 +902,7 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 		for w := range want {
 			all = all && have[w]
 		}
-		if all && passes(q, d, nil) {
+		if all && (!q.HasFilters() || q.Accepts(d.text(), d.Tags, d.date()) && !q.HoldsExcluded(d.Tokens())) {
 			docs = append(docs, d)
 		}
 	}

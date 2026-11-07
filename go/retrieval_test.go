@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"zonewiki/internal/textsearch"
 )
 
 // Search and retrieval (retrieval.go): what the API tests can't reach.
@@ -78,8 +79,8 @@ func TestSplitLong(t *testing.T) {
 func TestIndexCacheFollowsTheUsers(t *testing.T) {
 	testWiki(t, nil)
 	docs := []*SearchDoc{
-		{Slug: "plans", Tokens: []string{"plans", "quokkaflute"}},
-		{Slug: "private/alice/diary", Tokens: []string{"diary", "secretword"}},
+		{Slug: "plans", Tokens: fixedTokens("plans", "quokkaflute")},
+		{Slug: "private/alice/diary", Tokens: fixedTokens("diary", "secretword")},
 	}
 	var c indexCache
 	bob := &Req{user: "bob"}
@@ -120,18 +121,18 @@ func TestIndexCacheStaysAsIfBuiltAfresh(t *testing.T) {
 		serial++
 		switch r.Intn(6) {
 		case 0:
-			return &SearchDoc{Slug: fmt.Sprintf("private/alice/a%d", serial), Tokens: tokens()}
+			return &SearchDoc{Slug: fmt.Sprintf("private/alice/a%d", serial), Tokens: fixedTokens(tokens()...)}
 		case 1:
-			return &SearchDoc{Slug: fmt.Sprintf("private/bob/b%d", serial), Tokens: tokens()}
+			return &SearchDoc{Slug: fmt.Sprintf("private/bob/b%d", serial), Tokens: fixedTokens(tokens()...)}
 		case 2:
 			owner := []string{"", "alice", "bob"}[r.Intn(3)]
-			return &SearchDoc{Slug: tasksDirName, TaskID: fmt.Sprintf("t%d", serial), Task: &Task{ID: fmt.Sprintf("t%d", serial), Owner: owner}, Tokens: tokens()}
+			return &SearchDoc{Slug: tasksDirName, TaskID: fmt.Sprintf("t%d", serial), Task: &Task{ID: fmt.Sprintf("t%d", serial), Owner: owner}, Tokens: fixedTokens(tokens()...)}
 		}
-		return &SearchDoc{Slug: fmt.Sprintf("p%d", serial), Tokens: tokens()}
+		return &SearchDoc{Slug: fmt.Sprintf("p%d", serial), Tokens: fixedTokens(tokens()...)}
 	}
 	label := func(d *SearchDoc) string { return d.Slug + "/" + d.TaskID }
 	edited := func(d *SearchDoc) *SearchDoc { // the doc as a changed file would give it: new
-		return &SearchDoc{Slug: d.Slug, TaskID: d.TaskID, Task: d.Task, Tokens: tokens()}
+		return &SearchDoc{Slug: d.Slug, TaskID: d.TaskID, Task: d.Task, Tokens: fixedTokens(tokens()...)}
 	}
 	var docs []*SearchDoc
 	for i := 0; i < 240; i++ {
@@ -207,12 +208,12 @@ func TestUsersWithNothingPrivateShareAnIndex(t *testing.T) {
 	testWiki(t, nil)
 	withUsers(t, "alice", "bob", "carol")
 	docs := []*SearchDoc{
-		{Slug: "p1", Tokens: []string{"apple"}}, {Slug: "p2", Tokens: []string{"pear"}},
-		{Slug: "private/alice/a", Tokens: []string{"fig"}},
+		{Slug: "p1", Tokens: fixedTokens("apple")}, {Slug: "p2", Tokens: fixedTokens("pear")},
+		{Slug: "private/alice/a", Tokens: fixedTokens("fig")},
 	}
 	var c indexCache
 	c.get(&Req{user: "bob"}, docs)
-	docs[1] = &SearchDoc{Slug: "p2", Tokens: []string{"pear", "plum"}} // an edit: the base now has changes
+	docs[1] = &SearchDoc{Slug: "p2", Tokens: fixedTokens("pear", "plum")} // an edit: the base now has changes
 	bob, carol, alice := c.get(&Req{user: "bob"}, docs), c.get(&Req{user: "carol"}, docs), c.get(&Req{user: "alice"}, docs)
 	if len(c.dead)+len(c.delta) == 0 {
 		t.Fatal("the base should have changes")
@@ -222,5 +223,31 @@ func TestUsersWithNothingPrivateShareAnIndex(t *testing.T) {
 	}
 	if alice == bob || len(alice.docs) != 3 || len(bob.docs) != 2 {
 		t.Errorf("alice has a private page: her index is her own (%d docs), bob's has %d", len(alice.docs), len(bob.docs))
+	}
+}
+
+// fixedTokens: a doc's tokens, as the doc asks for them.
+func fixedTokens(w ...string) func() []string { return func() []string { return w } }
+
+// A -word goes by the index, so it has to see what the tokens would have: the
+// title and the slug, and a page edited since the index was built.
+func TestExcludedWordsComeFromTheIndex(t *testing.T) {
+	testWiki(t, nil)
+	docs := []*SearchDoc{
+		{Slug: "a", Tokens: fixedTokens("apple", "spam")},
+		{Slug: "b", Tokens: fixedTokens("apple")},
+		{Slug: "c", Tokens: fixedTokens("apple", "spam")},
+	}
+	var c indexCache
+	c.get(nil, docs)
+	docs[1] = &SearchDoc{Slug: "b", Tokens: fixedTokens("apple", "spam")} // an edit: now it holds it
+	docs[2] = &SearchDoc{Slug: "c", Tokens: fixedTokens("apple")}         // and this one doesn't
+	x := c.get(nil, docs)
+	var got []string
+	for _, d := range bm25(x, textsearch.ParseQuery("apple -spam"), 10, nil) {
+		got = append(got, d.Slug)
+	}
+	if !slices.Equal(got, []string{"c"}) {
+		t.Errorf("found %v, want only c", got)
 	}
 }

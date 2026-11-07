@@ -5,6 +5,7 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -325,13 +326,14 @@ func TestQuerySyntax(t *testing.T) {
 		t.Error("a lone - or # is text")
 	}
 	q = ParseQuery(`"Hello  World" -spam #a -#b`)
-	toks := Tokenize("hello world eggs")
-	if !q.Accepts("Héllo world, eggs", toks, []string{"A"}, "") ||
-		q.Accepts("hello there world", toks, []string{"a"}, "") || // no phrase
-		q.Accepts("hello world", Tokenize("hello world spams"), []string{"a"}, "") || // excluded stem
-		q.Accepts("hello world", toks, nil, "") || // tag missing
-		q.Accepts("hello world", toks, []string{"a", "B"}, "") { // excluded tag
+	if !q.Accepts("Héllo world, eggs", []string{"A"}, "") ||
+		q.Accepts("hello there world", []string{"a"}, "") || // no phrase
+		q.Accepts("hello world", nil, "") || // tag missing
+		q.Accepts("hello world", []string{"a", "B"}, "") { // excluded tag
 		t.Error("Accepts")
+	}
+	if q.HoldsExcluded(Tokenize("hello world eggs")) || !q.HoldsExcluded(Tokenize("hello world spams")) {
+		t.Error("HoldsExcluded")
 	}
 }
 
@@ -347,7 +349,7 @@ func TestDateFilters(t *testing.T) {
 	if q := ParseQuery("edited:soon after:26-9"); q.Dates != nil || q.Text != "edited:soon after:26-9" {
 		t.Errorf("invalid dates: %+v", q)
 	}
-	ok := func(query, day string) bool { return ParseQuery(query).Accepts("", nil, nil, day) }
+	ok := func(query, day string) bool { return ParseQuery(query).Accepts("", nil, day) }
 	for _, c := range []struct {
 		query, day string
 		want       bool
@@ -395,6 +397,16 @@ func TestWithExtraIsAsIfBuiltOverAll(t *testing.T) {
 	sameHits(t, "base after", base.Search("apple pie", 10), before)
 	if hits := base.Search("quokkaflute", 10); hits != nil {
 		t.Errorf("the base index found %v", hits)
+	}
+}
+
+func TestDocsWith(t *testing.T) {
+	ix := NewIndex([][]string{{"apple"}, {"pear"}, {"apple", "apple"}}).With(map[int]bool{0: true}, [][]string{{"apple", "fig"}}, nil)
+	if got := ix.DocsWith("apple"); !slices.Equal(got, []int{0, 2, 3}) {
+		t.Errorf("apple: %v", got)
+	}
+	if got := ix.DocsWith("kiwi"); got != nil {
+		t.Errorf("kiwi: %v", got)
 	}
 }
 
@@ -462,15 +474,15 @@ func TestWithChangesIsAsIfBuiltOverWhatIsLeft(t *testing.T) {
 				base[i] = base[i-1] // equal scores: the order has to decide
 			}
 		}
-		dead := map[int][]string{}
+		dead := map[int]bool{}
 		for i := range base {
 			if r.Intn(4) == 0 {
-				dead[i] = base[i]
+				dead[i] = true
 			}
 		}
 		if round%10 == 0 { // every document holding a term dead
 			for i := range base {
-				dead[i] = base[i]
+				dead[i] = true
 			}
 		}
 		extra := make([][]string, r.Intn(15))

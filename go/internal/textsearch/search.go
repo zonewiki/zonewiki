@@ -262,7 +262,7 @@ func (q *Query) RankingText() string {
 
 // Accepts: whether a document passes the filters (its text, tokens, tags,
 // date "YYYY-MM-DD"; partial dates compare as prefixes).
-func (q *Query) Accepts(text string, tokens []string, docTags []string, date string) bool {
+func (q *Query) Accepts(text string, docTags []string, date string) bool {
 	for _, d := range q.Dates {
 		if date == "" {
 			return false
@@ -289,17 +289,6 @@ func (q *Query) Accepts(text string, tokens []string, docTags []string, date str
 			return false
 		}
 	}
-	if len(q.ExcludeStems) > 0 {
-		excl := map[string]bool{}
-		for _, t := range q.ExcludeStems {
-			excl[t] = true
-		}
-		for _, t := range tokens {
-			if excl[t] {
-				return false
-			}
-		}
-	}
 	if len(q.Phrases)+len(q.ExcludePhrases) > 0 {
 		s := Squash(text)
 		for _, p := range q.Phrases {
@@ -314,6 +303,17 @@ func (q *Query) Accepts(text string, tokens []string, docTags []string, date str
 		}
 	}
 	return true
+}
+
+// HoldsExcluded: tokens hold a word the query excludes (-word). Apart from
+// Accepts, since an index can answer it without the tokens (DocsWith).
+func (q *Query) HoldsExcluded(tokens []string) bool {
+	for _, t := range tokens {
+		if slices.Contains(q.ExcludeStems, t) {
+			return true
+		}
+	}
+	return false
 }
 
 // ---- BM25 ----
@@ -354,10 +354,17 @@ type overlay struct {
 }
 
 func NewIndex(tokens [][]string) *Index {
-	ix := &Index{n: len(tokens), postings: map[string][]posting{}, idf: map[string]float64{}}
+	return NewIndexOf(len(tokens), func(i int) []string { return tokens[i] })
+}
+
+// NewIndexOf: the index of n documents, asking for each one's tokens in turn
+// and keeping none of them: they'd be many times what the index holds.
+func NewIndexOf(n int, tokensOf func(i int) []string) *Index {
+	ix := &Index{n: n, postings: map[string][]posting{}, idf: map[string]float64{}}
 	df := map[string]int{}
 	total := 0
-	for i, toks := range tokens {
+	for i := range n {
+		toks := tokensOf(i)
 		tf, order := map[string]int{}, []string{}
 		for _, t := range toks {
 			if tf[t] == 0 {
@@ -393,7 +400,7 @@ func (ix *Index) WithExtra(tokens [][]string) *Index { return ix.With(nil, token
 // document's place among them (by number, the extra ones after ix's), which
 // equal scores are ordered by; nil: the number. ix is not changed; what the
 // result shares with it is only read.
-func (ix *Index) With(dead map[int][]string, extra [][]string, pos []int32) *Index {
+func (ix *Index) With(dead map[int]bool, extra [][]string, pos []int32) *Index {
 	if len(dead) == 0 && len(extra) == 0 && pos == nil {
 		return ix
 	}
@@ -415,20 +422,24 @@ func (ix *Index) With(dead map[int][]string, extra [][]string, pos []int32) *Ind
 	}
 	if len(dead) > 0 {
 		o.dead, o.deadDF, o.gone = make([]bool, ix.n), map[string]int{}, map[string]bool{}
-		for id, toks := range dead {
+		for id := range dead {
 			o.dead[id] = true
-			o.total -= len(toks)
-			seen := map[string]bool{}
-			for _, t := range toks {
-				if !seen[t] {
-					seen[t] = true
-					o.deadDF[t]++
+			o.total -= ix.lens[id]
+		}
+		// What they held, from the postings: the tokens aren't kept. One pass
+		// over all of them, once per change, not per search.
+		for t, ps := range ix.postings {
+			n := 0
+			for _, p := range ps {
+				if o.dead[p.doc] {
+					n++
 				}
 			}
-		}
-		for t, n := range o.deadDF {
-			if n == len(ix.postings[t]) {
-				o.gone[t] = true
+			if n > 0 {
+				o.deadDF[t] = n
+				if n == len(ps) {
+					o.gone[t] = true
+				}
 			}
 		}
 	}
@@ -447,6 +458,21 @@ func (ix *Index) With(dead map[int][]string, extra [][]string, pos []int32) *Ind
 	cp.over = o
 	cp.avgdl = o.avgdl
 	return &cp
+}
+
+// DocsWith: the documents holding the term, those With left out too, which no
+// search reaches.
+func (ix *Index) DocsWith(t string) []int {
+	var docs []int
+	for _, p := range ix.postings[t] {
+		docs = append(docs, p.doc)
+	}
+	if ix.over != nil {
+		for _, p := range ix.over.postings[t] {
+			docs = append(docs, p.doc)
+		}
+	}
+	return docs
 }
 
 // df: how many documents hold the term.

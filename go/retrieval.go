@@ -22,11 +22,11 @@ import (
 // SearchDoc is a page, a page's section or a task as BM25 indexes it.
 type SearchDoc struct {
 	Slug, Title string
-	Mtime       time.Time // a page's or section's file
-	Tags        []string  // for #tag queries
-	Tokens      []string
-	ExcerptText string // a page's or task's searchable text
-	TaskRefs    bool   // a page with [[task:…]], indexed with the task app's titles
+	Mtime       time.Time       // a page's or section's file
+	Tags        []string        // for #tag queries
+	Tokens      func() []string // worked out when asked for: kept, they're most of a big wiki's memory
+	ExcerptText string          // a page's or task's searchable text
+	TaskRefs    bool            // a page with [[task:…]], indexed with the task app's titles
 
 	// A section (the section index): the key is the one its vector has in
 	// the semantic index.
@@ -161,9 +161,10 @@ func repeatTokens(text string, times int) []string {
 func pageSearchDoc(slug, content string, mtime time.Time) *SearchDoc {
 	title := mdtext.PageTitle(content, slug)
 	text := textsearch.StripLinkTargets(taskRefsAsTitles(slug, content))
-	tokens := append(textsearch.Tokenize(text), repeatTokens(title, textsearch.TitleWeight)...)
 	return &SearchDoc{Slug: slug, Title: title, Mtime: mtime, TaskRefs: taskRefRE.MatchString(content),
-		Tags: mdtext.PageTags(content), ExcerptText: text, Tokens: append(tokens, textsearch.Tokenize(slug)...)}
+		Tags: mdtext.PageTags(content), ExcerptText: text, Tokens: func() []string {
+			return slices.Concat(textsearch.Tokenize(text), repeatTokens(title, textsearch.TitleWeight), textsearch.Tokenize(slug))
+		}}
 }
 
 var searchDocCache pageCache[*SearchDoc]
@@ -237,8 +238,10 @@ func taskSearchDocs() []*SearchDoc {
 		text := textsearch.StripLinkTargets(strings.TrimSpace(title + " " + t.Description + " " +
 			strings.Join(comments, " ") + " " + strings.Join(tags, " ")))
 		d := &SearchDoc{Slug: tasksDirName, Title: "[Task] " + mdtext.PlainTaskTitle(title), ExcerptText: text,
-			Tokens: append(textsearch.Tokenize(text), repeatTokens(mdtext.PlainTaskTitle(title), textsearch.TitleWeight)...),
-			Task:   t, TaskID: t.ID, Status: "open", Tags: lowTags, Edited: lastActivity(t)}
+			Tokens: func() []string {
+				return slices.Concat(textsearch.Tokenize(text), repeatTokens(mdtext.PlainTaskTitle(title), textsearch.TitleWeight))
+			},
+			Task: t, TaskID: t.ID, Status: "open", Tags: lowTags, Edited: lastActivity(t)}
 		if !t.isOpen() {
 			d.Status, d.Year = "done", pastYear(t)
 		}
@@ -257,11 +260,7 @@ type docIndex struct {
 }
 
 func newDocIndex(docs []*SearchDoc) *docIndex {
-	tokens := make([][]string, len(docs))
-	for i, d := range docs {
-		tokens[i] = d.Tokens
-	}
-	return &docIndex{docs, docs, textsearch.NewIndex(tokens)}
+	return &docIndex{docs, docs, textsearch.NewIndexOf(len(docs), func(i int) []string { return docs[i].Tokens() })}
 }
 
 // search: the best `limit` docs for the query text.
@@ -295,7 +294,8 @@ func (x *docIndex) searchWhere(text string, limit int, accept func(*SearchDoc) b
 // made at the last rebuild (base), leaves out the docs that are gone from it
 // (dead) and adds the new ones (delta), searched with the statistics of what
 // is left, exactly as an index built over that would. Only when the changes
-// pass a few percent of the docs (maxChanges) is it built again.
+// pass a few percent of the docs (maxChanges) is it built again. Docs don't
+// keep their tokens, so a change and a rebuild work out the ones they need.
 //
 // The doc caches hand back the same docs until their file changes, so the
 // docs' pointers are the key.
@@ -441,11 +441,11 @@ func (c *indexCache) view(own []*SearchDoc) *docIndex {
 	tokens := make([][]string, len(extra))
 	for i, d := range extra {
 		extraID[d] = n + i
-		tokens[i] = d.Tokens
+		tokens[i] = d.Tokens()
 	}
-	dead := make(map[int][]string, len(c.dead))
+	dead := make(map[int]bool, len(c.dead))
 	for _, id := range c.dead {
-		dead[id] = c.base.byID[id].Tokens
+		dead[id] = true
 	}
 	pos := make([]int32, n+len(extra))
 	live := make([]*SearchDoc, 0, n-len(dead)+len(extra))
@@ -501,10 +501,20 @@ func semanticText(content, slug string) (string, string) {
 // fuseDepth: how deep each ranking goes into the fusion (semantic search).
 const fuseDepth = 30
 
-// passes: whether a doc takes part in a search, it passes keep (when
-// given) and the query's filters.
-func passes(q *textsearch.Query, d *SearchDoc, keep func(*SearchDoc) bool) bool {
-	return (keep == nil || keep(d)) && (!q.HasFilters() || q.Accepts(d.text(), d.Tokens, d.Tags, d.date()))
+// filter: whether a doc takes part in a search, it passes keep (when given)
+// and the query's filters. The docs a -word excludes come from the index, so
+// a filter is made once per search, not per doc.
+func (x *docIndex) filter(q *textsearch.Query, keep func(*SearchDoc) bool) func(*SearchDoc) bool {
+	excluded := map[*SearchDoc]bool{}
+	for _, stem := range q.ExcludeStems {
+		for _, id := range x.ix.DocsWith(stem) {
+			excluded[x.byID[id]] = true
+		}
+	}
+	filtered := q.HasFilters()
+	return func(d *SearchDoc) bool {
+		return (keep == nil || keep(d)) && !excluded[d] && (!filtered || q.Accepts(d.text(), d.Tags, d.date()))
+	}
 }
 
 // phraseFirst: ranked with the docs containing the query as a phrase moved
@@ -517,8 +527,9 @@ func phraseFirst(ranked []*SearchDoc, q *textsearch.Query, x *docIndex, keep fun
 	}
 	var hits []*SearchDoc
 	first := map[*SearchDoc]bool{}
+	passes := x.filter(q, keep)
 	for _, d := range x.searchWhere(q.RankingText(), len(x.docs), func(d *SearchDoc) bool {
-		return passes(q, d, keep) && d.hasPhrase(phrase)
+		return passes(d) && d.hasPhrase(phrase)
 	}) {
 		hits = append(hits, d)
 		first[d] = true
@@ -541,7 +552,7 @@ func bm25(x *docIndex, q *textsearch.Query, depth int, keep func(*SearchDoc) boo
 	if !q.HasFilters() && keep == nil {
 		return x.search(text, depth)
 	}
-	return x.searchWhere(text, depth, func(d *SearchDoc) bool { return passes(q, d, keep) })
+	return x.searchWhere(text, depth, x.filter(q, keep))
 }
 
 func firstN(docs []*SearchDoc, n int) []*SearchDoc { return docs[:min(n, len(docs))] }
@@ -556,8 +567,9 @@ func rankedDocs(q *textsearch.Query, x *docIndex, keep func(*SearchDoc) bool, li
 		// Only date filters ("edited:2026-09"): everything that passes,
 		// newest first. There are no words to rank by.
 		var docs []*SearchDoc
+		passes := x.filter(q, keep)
 		for _, d := range x.docs {
-			if passes(q, d, keep) {
+			if passes(d) {
 				docs = append(docs, d)
 			}
 		}
@@ -575,8 +587,9 @@ func rankedDocs(q *textsearch.Query, x *docIndex, keep func(*SearchDoc) bool, li
 	}
 	semantic.poke()
 	pages, tasks := map[string]*SearchDoc{}, map[string]*SearchDoc{}
+	passes := x.filter(q, keep)
 	for _, d := range x.docs {
-		if !passes(q, d, keep) {
+		if !passes(d) {
 			continue
 		}
 		if d.isTask() {
@@ -812,12 +825,12 @@ func pageChunks(slug, content string, mtime time.Time) []*SearchDoc {
 		sections = []chunkSection{{}}
 	}
 	var chunks []*SearchDoc
-	titleTokens, slugTokens := repeatTokens(title, textsearch.TitleWeight), textsearch.Tokenize(slug)
 	for _, s := range sections {
-		tokens := append(textsearch.Tokenize(s.Heading+"\n"+s.Body), titleTokens...)
 		chunks = append(chunks, &SearchDoc{Slug: slug, Title: title, Section: true, Heading: s.Heading,
 			Path: s.Path, Text: s.Body, Anchor: sectionAnchorOf(s.Heading, s.Level), Tags: tags, Mtime: mtime,
-			Key: chunkKey(title, chunkText(s.Path, s.Body)), Tokens: append(tokens, slugTokens...)})
+			Key: chunkKey(title, chunkText(s.Path, s.Body)), Tokens: func() []string {
+				return slices.Concat(textsearch.Tokenize(s.Heading+"\n"+s.Body), repeatTokens(title, textsearch.TitleWeight), textsearch.Tokenize(slug))
+			}})
 	}
 	return chunks
 }
@@ -867,9 +880,10 @@ func retrieve(rq *Req, raw string, limit int, under string, quicknote bool) []*S
 		semantic.poke()
 		text := q.RankingText()
 		byKey, slugs, tasks := map[string]*SearchDoc{}, map[string]bool{}, map[string]*SearchDoc{}
+		passes := x.filter(q, nil)
 		for _, d := range x.docs {
 			switch {
-			case !passes(q, d, nil):
+			case !passes(d):
 			case !d.isTask() && pageOK(d.Slug):
 				byKey[d.Key], slugs[d.Slug] = d, true
 			case d.isTask() && !pagesOnly && !hiddenDoc(rq, d):
