@@ -570,7 +570,8 @@ func pageMetaEntryOf(p, slug string) pageMetaEntry {
 		return pageMetaEntry{title: mdtext.SlugDisplayName(slug), targets: map[string]bool{}}
 	}
 	content := newlines(strings.ToValidUTF8(string(b), "�"))
-	entry := pageMetaEntry{st.ModTime(), mdtext.PageTitle(content, slug), pageLinkTargets(content, slug), pageTasksEmbeds(content)}
+	// A clone: the title is a piece of content, and would keep the whole file in memory.
+	entry := pageMetaEntry{st.ModTime(), strings.Clone(mdtext.PageTitle(content, slug)), pageLinkTargets(content, slug), pageTasksEmbeds(content)}
 	metaMu.Lock()
 	metaCache[slug] = entry
 	metaMu.Unlock()

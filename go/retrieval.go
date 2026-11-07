@@ -159,10 +159,16 @@ func repeatTokens(text string, times int) []string {
 // found by its file and folder names too without those outranking what the
 // page says.
 func pageSearchDoc(slug, content string, mtime time.Time) *SearchDoc {
-	title := mdtext.PageTitle(content, slug)
+	// Clones: the title and tags are pieces of content, and would keep the whole
+	// file in memory for as long as the doc lives; text is a copy already.
+	title := strings.Clone(mdtext.PageTitle(content, slug))
+	tags := mdtext.PageTags(content)
+	for i, tag := range tags {
+		tags[i] = strings.Clone(tag)
+	}
 	text := textsearch.StripLinkTargets(taskRefsAsTitles(slug, content))
 	return &SearchDoc{Slug: slug, Title: title, Mtime: mtime, TaskRefs: taskRefRE.MatchString(content),
-		Tags: mdtext.PageTags(content), ExcerptText: text, Tokens: func() []string {
+		Tags: tags, ExcerptText: text, Tokens: func() []string {
 			return slices.Concat(textsearch.Tokenize(text), repeatTokens(title, textsearch.TitleWeight), textsearch.Tokenize(slug))
 		}}
 }
