@@ -824,14 +824,22 @@ func sectionAnchorOf(heading string, level int) string {
 
 // pageChunks: a page's sections (chunkSections) as BM25 documents.
 func pageChunks(slug, content string, mtime time.Time) []*SearchDoc {
+	// Clones, as in pageSearchDoc: the title, tags, headings and paths are
+	// pieces of content, and would keep the whole file in memory for as long
+	// as the sections live; a section's body is a copy already (splitLong).
 	title, body := semanticText(content, slug)
+	title = strings.Clone(title)
 	tags := mdtext.PageTags(content)
+	for i, tag := range tags {
+		tags[i] = strings.Clone(tag)
+	}
 	sections := chunkSections(body, maxChunkChars)
 	if len(sections) == 0 {
 		sections = []chunkSection{{}}
 	}
 	var chunks []*SearchDoc
 	for _, s := range sections {
+		s.Heading, s.Path = strings.Clone(s.Heading), strings.Clone(s.Path)
 		chunks = append(chunks, &SearchDoc{Slug: slug, Title: title, Section: true, Heading: s.Heading,
 			Path: s.Path, Text: s.Body, Anchor: sectionAnchorOf(s.Heading, s.Level), Tags: tags, Mtime: mtime,
 			Key: chunkKey(title, chunkText(s.Path, s.Body)), Tokens: func() []string {
