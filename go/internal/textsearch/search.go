@@ -318,7 +318,8 @@ func (q *Query) HoldsExcluded(tokens []string) bool {
 
 // ---- BM25 ----
 
-type posting struct{ doc, tf int }
+// posting: 32 bits are plenty, and a big wiki holds millions of these.
+type posting struct{ doc, tf int32 }
 
 // Index is search.SearchIndex over documents' tokens.
 type Index struct {
@@ -376,7 +377,7 @@ func NewIndexOf(n int, tokensOf func(i int) []string) *Index {
 		total += len(toks)
 		for _, t := range order {
 			df[t]++
-			ix.postings[t] = append(ix.postings[t], posting{i, tf[t]})
+			ix.postings[t] = append(ix.postings[t], posting{int32(i), int32(tf[t])})
 		}
 	}
 	ix.total = total
@@ -417,7 +418,7 @@ func (ix *Index) With(dead map[int]bool, extra [][]string, pos []int32) *Index {
 		o.lens = append(o.lens, len(toks))
 		o.total += len(toks)
 		for _, t := range order {
-			o.postings[t] = append(o.postings[t], posting{ix.n + i, tf[t]})
+			o.postings[t] = append(o.postings[t], posting{int32(ix.n + i), int32(tf[t])})
 		}
 	}
 	if len(dead) > 0 {
@@ -465,11 +466,11 @@ func (ix *Index) With(dead map[int]bool, extra [][]string, pos []int32) *Index {
 func (ix *Index) DocsWith(t string) []int {
 	var docs []int
 	for _, p := range ix.postings[t] {
-		docs = append(docs, p.doc)
+		docs = append(docs, int(p.doc))
 	}
 	if ix.over != nil {
 		for _, p := range ix.over.postings[t] {
-			docs = append(docs, p.doc)
+			docs = append(docs, int(p.doc))
 		}
 	}
 	return docs
@@ -643,23 +644,24 @@ func (ix *Index) SearchWhere(query string, limit int, accept func(doc int) bool)
 		idf := ix.idfOf(tw.term)
 		score := func(postings []posting) {
 			for _, p := range postings {
-				if ix.over != nil && p.doc < ix.n && ix.over.dead != nil && ix.over.dead[p.doc] {
+				doc := int(p.doc)
+				if ix.over != nil && doc < ix.n && ix.over.dead != nil && ix.over.dead[doc] {
 					continue
 				}
 				if accept != nil {
-					if asked[p.doc] == 0 {
-						asked[p.doc] = 2
-						if accept(p.doc) {
-							asked[p.doc] = 1
+					if asked[doc] == 0 {
+						asked[doc] = 2
+						if accept(doc) {
+							asked[doc] = 1
 						}
 					}
-					if asked[p.doc] == 2 {
+					if asked[doc] == 2 {
 						continue
 					}
 				}
 				f := float64(p.tf)
-				denom := f + bm25K1*(1-bm25B+bm25B*float64(ix.docLen(p.doc))/ix.avgdl)
-				scores[p.doc] += tw.weight * idf * (f * (bm25K1 + 1) / denom)
+				denom := f + bm25K1*(1-bm25B+bm25B*float64(ix.docLen(doc))/ix.avgdl)
+				scores[doc] += tw.weight * idf * (f * (bm25K1 + 1) / denom)
 			}
 		}
 		score(ix.postings[tw.term])
