@@ -39,3 +39,36 @@ func TestPageViewWalksOnce(t *testing.T) {
 		t.Errorf("%d walks for one page view", n)
 	}
 }
+
+// A search walks the wiki's folders once, though both its indexes (pages,
+// sections) and its results' task lists list the pages: the browser's and
+// search_wiki's alike.
+func TestSearchWalksOnce(t *testing.T) {
+	testWiki(t, map[string]string{
+		"index": "# Home\n", "a": "# A\n\nApples here.\n\n## More\n\nApples there.\n\n[[tasks: list=work]]\n",
+		"b": "# B\n\nPears and apples.\n",
+	})
+	srv := httptest.NewServer(newHandler())
+	defer srv.Close()
+	before := pageWalks.Load()
+	req, _ := http.NewRequest("GET", srv.URL+"/api/search?q=apples", nil)
+	req.Host = "localhost:5000" // the Host check's
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+	if n := pageWalks.Load() - before; n != 1 {
+		t.Errorf("%d walks for one search", n)
+	}
+	before = pageWalks.Load()
+	if hits := retrieve(&Req{}, "apples", 8, "", false); len(hits) == 0 {
+		t.Error("search_wiki found nothing")
+	}
+	if n := pageWalks.Load() - before; n != 1 {
+		t.Errorf("%d walks for one search_wiki", n)
+	}
+}

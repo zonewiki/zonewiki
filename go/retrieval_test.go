@@ -27,7 +27,7 @@ func TestUnreadablePagesAreSkipped(t *testing.T) {
 		t.Fatal(err)
 	}
 	var slugs []string
-	for _, d := range pageSearchDocs() {
+	for _, d := range pageSearchDocs(nil) {
 		slugs = append(slugs, d.Slug)
 	}
 	if len(slugs) != 1 || slugs[0] != "fine" {
@@ -350,7 +350,7 @@ func TestExcludedWordsComeFromTheIndex(t *testing.T) {
 func TestDocsReadTheirTextAgain(t *testing.T) {
 	page := "# Gärten  ÜBER\n\nIntro with a [link](http://example.com/zzqtarget).\n\n## Roses\n\nRed zzqrose here.\n\n## Tulips\n\nYellow   Straße zzqtulip.\n"
 	testWiki(t, map[string]string{"garden": page})
-	docs := pageSearchDocs()
+	docs := pageSearchDocs(nil)
 	if len(docs) != 1 {
 		t.Fatalf("%d docs", len(docs))
 	}
@@ -363,7 +363,7 @@ func TestDocsReadTheirTextAgain(t *testing.T) {
 		t.Errorf("tokens %v", d.Tokens())
 	}
 	var tulips *SearchDoc
-	for _, chunks := range perPage(&chunkDocCache, pageChunks, "", nil) {
+	for _, chunks := range perPage(&chunkDocCache, (*Req)(nil).pageStats(), pageChunks, "", nil) {
 		for _, c := range chunks {
 			if c.Heading == "Tulips" {
 				tulips = c
@@ -425,7 +425,7 @@ func TestPhrasesInTheFileAsInMemory(t *testing.T) {
 	queries := []string{`"quick brown fox"`, `fox "brown and lazy"`, `fox -"quick brown"`, `quick brown`, `"the quick" fox`, `-"fox" quick`}
 	same := func(label string, c *indexCache) {
 		t.Helper()
-		docs := pageSearchDocs()
+		docs := pageSearchDocs(nil)
 		got, want := c.get(nil, docs), newDocIndex(docs)
 		if got.ix.Keys() == nil {
 			t.Fatalf("%s: the index isn't from a file", label)

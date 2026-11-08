@@ -260,11 +260,12 @@ type pageCached[T any] struct {
 	key   string
 }
 
-// perPage: build(slug, content, mtime) for every page, from the cache
-// where it is fresh. Entries of pages that are gone are dropped. One bad
-// file must not fail every search: a page deleted meanwhile is skipped, one
-// that isn't UTF-8 is read with stand-ins for the undecodable bytes.
-func perPage[T any](c *pageCache[T], build func(slug, path, content string, mtime time.Time) T,
+// perPage: build(slug, content, mtime) for every page of pages (listed with
+// their mtimes, rq.pageStats), from the cache where it is fresh. Entries of
+// pages that are gone are dropped. One bad file must not fail every search:
+// a page deleted meanwhile is skipped, one that isn't UTF-8 is read with
+// stand-ins for the undecodable bytes.
+func perPage[T any](c *pageCache[T], pages []pageStat, build func(slug, path, content string, mtime time.Time) T,
 	key string, fresh func(T, string) bool) []T {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -273,12 +274,8 @@ func perPage[T any](c *pageCache[T], build func(slug, path, content string, mtim
 	}
 	var out []T
 	seen := map[string]bool{}
-	for _, p := range iterPages() {
-		st, err := os.Stat(p.Path)
-		if err != nil {
-			continue
-		}
-		mtime := st.ModTime()
+	for _, p := range pages {
+		mtime := p.Mtime
 		cached := c.m[p.Slug]
 		if cached == nil || !cached.mtime.Equal(mtime) || fresh != nil && !fresh(cached.value, cached.key) {
 			content, err := readText(p.Path)
@@ -340,9 +337,9 @@ var searchDocCache pageCache[*SearchDoc]
 
 // pageSearchDocs: every page as a BM25 document. A page with [[task:…]] is
 // indexed with the task app's titles, so it is stale when the tasks changes too.
-func pageSearchDocs() []*SearchDoc {
+func pageSearchDocs(rq *Req) []*SearchDoc {
 	tasksKey := tasksMtimes()
-	return perPage(&searchDocCache, pageSearchDoc, tasksKey,
+	return perPage(&searchDocCache, rq.pageStats(), pageSearchDoc, tasksKey,
 		func(d *SearchDoc, key string) bool { return !d.TaskRefs || key == tasksKey })
 }
 
@@ -773,7 +770,7 @@ var (
 
 // searchIndex: the index rq searches (nil: Zone itself, over everything).
 func searchIndex(rq *Req) *docIndex {
-	return searchIndexCache.get(rq, append(pageSearchDocs(), taskSearchDocs()...))
+	return searchIndexCache.get(rq, append(pageSearchDocs(rq), taskSearchDocs()...))
 }
 
 // semanticText: a page as (title, body) for embedding and the section
@@ -1178,7 +1175,7 @@ func pageChunks(slug, path, content string, mtime time.Time) []*SearchDoc {
 // together.
 func chunkIndex(rq *Req) *docIndex {
 	var docs []*SearchDoc
-	for _, chunks := range perPage(&chunkDocCache, pageChunks, "", nil) {
+	for _, chunks := range perPage(&chunkDocCache, rq.pageStats(), pageChunks, "", nil) {
 		docs = append(docs, chunks...)
 	}
 	return chunkIndexCache.get(rq, append(docs, taskSearchDocs()...))

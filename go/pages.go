@@ -33,6 +33,7 @@ type Req struct {
 	pinned     []TasksHome // the pinned lists (lookupPinnedIn), once
 	counts     *TaskCounts
 	files      []PageFile // iterPages, once
+	stats      []pageStat // the same with their mtimes, once
 	sorted     []PageFile // the same, by slug
 	slugs      map[string]bool
 	lists      map[string]TasksHome
@@ -50,6 +51,32 @@ func (rq *Req) pageFiles() []PageFile {
 		}
 	}
 	return rq.files
+}
+
+// pageStat: a page's file and its mtime when the page was listed.
+type pageStat struct {
+	PageFile
+	Mtime time.Time
+}
+
+// pageStats: every page with its file's mtime, once per request (rq nil:
+// now), so that a search's indexes look at each file once between them. A
+// page whose file is gone meanwhile is left out.
+func (rq *Req) pageStats() []pageStat {
+	if rq != nil && rq.stats != nil {
+		return rq.stats
+	}
+	files := rq.pageFiles()
+	out := make([]pageStat, 0, len(files))
+	for _, p := range files {
+		if st, err := os.Stat(p.Path); err == nil {
+			out = append(out, pageStat{p, st.ModTime()})
+		}
+	}
+	if rq != nil {
+		rq.stats = out
+	}
+	return out
 }
 
 // sortedPageFiles: sortedPages, once per request.
