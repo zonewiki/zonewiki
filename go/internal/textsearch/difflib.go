@@ -1,6 +1,8 @@
 package textsearch
 
 import (
+	"iter"
+	"slices"
 	"sort"
 	"unicode/utf8"
 )
@@ -13,6 +15,12 @@ import (
 // quick_ratio, upper bounds of it, are below the cutoff: the same matches,
 // found without the expensive part for nearly all of a large vocabulary.
 func CloseMatches(word string, possibilities []string, n int, cutoff float64) []string {
+	return closeMatchesIn(word, slices.Values(possibilities), n, cutoff)
+}
+
+// closeMatchesIn: CloseMatches over possibilities given one at a time, as an
+// index on disk hands its terms over without a slice of all of them.
+func closeMatchesIn(word string, possibilities iter.Seq[string], n int, cutoff float64) []string {
 	type scored struct {
 		score float64
 		s     string
@@ -25,7 +33,7 @@ func CloseMatches(word string, possibilities []string, n int, cutoff float64) []
 	}
 	used := map[rune]int{}
 	var result []scored
-	for _, x := range possibilities {
+	for x := range possibilities {
 		if la := utf8.RuneCountInString(x); la+len(b) > 0 && 2.0*float64(min(la, len(b)))/float64(la+len(b)) < cutoff {
 			continue // real_quick_ratio
 		}

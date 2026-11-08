@@ -9,6 +9,7 @@ package textsearch
 
 import (
 	"html"
+	"iter"
 	"maps"
 	"math"
 	"regexp"
@@ -321,16 +322,53 @@ func (q *Query) HoldsExcluded(tokens []string) bool {
 // posting: 32 bits are plenty, and a big wiki holds millions of these.
 type posting struct{ doc, tf int32 }
 
+// store: the documents an Index was built over, as the Index reads them:
+// maps in memory (NewIndexOf) or a file (OpenIndex). Only read, by any number
+// of searches at once.
+type store interface {
+	docCount() int
+	tokenCount() int
+	docLen(doc int) int
+	df(t string) int                    // how many documents hold t (0: none)
+	postings(t string) []posting        // the documents holding t, in order; not to be changed
+	terms(from string) iter.Seq[string] // the terms from `from` on, sorted
+	all() iter.Seq2[string, []posting]  // every term and its postings, not to be kept past the next
+}
+
+// mapStore: a store in memory.
+type mapStore struct {
+	total  int
+	lens   []int
+	byTerm map[string][]posting
+	vocab  []string // sorted
+}
+
+func (m *mapStore) docCount() int               { return len(m.lens) }
+func (m *mapStore) tokenCount() int             { return m.total }
+func (m *mapStore) docLen(doc int) int          { return m.lens[doc] }
+func (m *mapStore) df(t string) int             { return len(m.byTerm[t]) }
+func (m *mapStore) postings(t string) []posting { return m.byTerm[t] }
+
+func (m *mapStore) terms(from string) iter.Seq[string] {
+	return slices.Values(m.vocab[sort.SearchStrings(m.vocab, from):])
+}
+
+func (m *mapStore) all() iter.Seq2[string, []posting] {
+	return func(yield func(string, []posting) bool) {
+		for _, t := range m.vocab {
+			if !yield(t, m.byTerm[t]) {
+				return
+			}
+		}
+	}
+}
+
 // Index is search.SearchIndex over documents' tokens.
 type Index struct {
-	n        int
-	total    int // tokens in all documents
-	avgdl    float64
-	lens     []int
-	postings map[string][]posting
-	idf      map[string]float64
-	vocab    []string
-	over     *overlay // changes to the documents, searched along with them (With)
+	base  store
+	n     int // the base's documents
+	avgdl float64
+	over  *overlay // changes to the documents, searched along with them (With)
 }
 
 // overlay: changes to an Index's documents that leave it as it is (With):
@@ -349,9 +387,19 @@ type overlay struct {
 	n, total int                  // the documents left, their tokens
 	avgdl    float64
 	pos      []int32 // each document's place in the order ties go by (nil: its number)
+}
 
-	fuzzyOnce sync.Once
-	fuzzy     []string // the terms typo matching looks through
+// idf: a term's weight, from how many of n documents hold it.
+func idf(n, df int) float64 {
+	return math.Log(1 + (float64(n)-float64(df)+0.5)/(float64(df)+0.5))
+}
+
+func newIndex(s store) *Index {
+	ix := &Index{base: s, n: s.docCount()}
+	if ix.n > 0 {
+		ix.avgdl = float64(s.tokenCount()) / float64(ix.n)
+	}
+	return ix
 }
 
 func NewIndex(tokens [][]string) *Index {
@@ -361,9 +409,7 @@ func NewIndex(tokens [][]string) *Index {
 // NewIndexOf: the index of n documents, asking for each one's tokens in turn
 // and keeping none of them: they'd be many times what the index holds.
 func NewIndexOf(n int, tokensOf func(i int) []string) *Index {
-	ix := &Index{n: n, postings: map[string][]posting{}, idf: map[string]float64{}}
-	df := map[string]int{}
-	total := 0
+	m := &mapStore{byTerm: map[string][]posting{}, lens: make([]int, 0, n)}
 	for i := range n {
 		toks := tokensOf(i)
 		tf, order := map[string]int{}, []string{}
@@ -373,23 +419,14 @@ func NewIndexOf(n int, tokensOf func(i int) []string) *Index {
 			}
 			tf[t]++
 		}
-		ix.lens = append(ix.lens, len(toks))
-		total += len(toks)
+		m.lens = append(m.lens, len(toks))
+		m.total += len(toks)
 		for _, t := range order {
-			df[t]++
-			ix.postings[t] = append(ix.postings[t], posting{int32(i), int32(tf[t])})
+			m.byTerm[t] = append(m.byTerm[t], posting{int32(i), int32(tf[t])})
 		}
 	}
-	ix.total = total
-	if ix.n > 0 {
-		ix.avgdl = float64(total) / float64(ix.n)
-	}
-	for t, n := range df {
-		ix.idf[t] = math.Log(1 + (float64(ix.n)-float64(n)+0.5)/(float64(n)+0.5))
-		ix.vocab = append(ix.vocab, t)
-	}
-	sort.Strings(ix.vocab)
-	return ix
+	m.vocab = slices.Sorted(maps.Keys(m.byTerm))
+	return newIndex(m)
 }
 
 // WithExtra: ix with more documents, numbered after its own.
@@ -406,7 +443,7 @@ func (ix *Index) With(dead map[int]bool, extra [][]string, pos []int32) *Index {
 		return ix
 	}
 	o := &overlay{postings: map[string][]posting{}, pos: pos}
-	o.n, o.total = ix.n+len(extra)-len(dead), ix.total
+	o.n, o.total = ix.n+len(extra)-len(dead), ix.base.tokenCount()
 	for i, toks := range extra {
 		tf, order := map[string]int{}, []string{}
 		for _, t := range toks {
@@ -425,11 +462,11 @@ func (ix *Index) With(dead map[int]bool, extra [][]string, pos []int32) *Index {
 		o.dead, o.deadDF, o.gone = make([]bool, ix.n), map[string]int{}, map[string]bool{}
 		for id := range dead {
 			o.dead[id] = true
-			o.total -= ix.lens[id]
+			o.total -= ix.base.docLen(id)
 		}
 		// What they held, from the postings: the tokens aren't kept. One pass
 		// over all of them, once per change, not per search.
-		for t, ps := range ix.postings {
+		for t, ps := range ix.base.all() {
 			n := 0
 			for _, p := range ps {
 				if o.dead[p.doc] {
@@ -446,7 +483,7 @@ func (ix *Index) With(dead map[int]bool, extra [][]string, pos []int32) *Index {
 	}
 	for t := range o.postings {
 		o.vocab = append(o.vocab, t)
-		if _, ok := ix.idf[t]; !ok || o.gone[t] { // not in ix's terms to look through
+		if ix.base.df(t) == 0 || o.gone[t] { // not in ix's terms to look through
 			o.newVocab = append(o.newVocab, t)
 		}
 	}
@@ -465,7 +502,7 @@ func (ix *Index) With(dead map[int]bool, extra [][]string, pos []int32) *Index {
 // search reaches.
 func (ix *Index) DocsWith(t string) []int {
 	var docs []int
-	for _, p := range ix.postings[t] {
+	for _, p := range ix.base.postings(t) {
 		docs = append(docs, int(p.doc))
 	}
 	if ix.over != nil {
@@ -479,32 +516,25 @@ func (ix *Index) DocsWith(t string) []int {
 // df: how many documents hold the term.
 func (ix *Index) df(t string) int {
 	if ix.over == nil {
-		return len(ix.postings[t])
+		return ix.base.df(t)
 	}
-	return len(ix.postings[t]) - ix.over.deadDF[t] + len(ix.over.postings[t])
+	return ix.base.df(t) - ix.over.deadDF[t] + len(ix.over.postings[t])
 }
 
 // idfOf: a term's weight, from its document frequency among the documents
 // the search is over.
 func (ix *Index) idfOf(t string) float64 {
 	if ix.over == nil {
-		return ix.idf[t]
+		return idf(ix.n, ix.base.df(t))
 	}
-	n, df := ix.over.n, ix.df(t)
-	return math.Log(1 + (float64(n)-float64(df)+0.5)/(float64(df)+0.5))
+	return idf(ix.over.n, ix.df(t))
 }
 
-func (ix *Index) hasTerm(t string) bool {
-	if ix.over == nil {
-		_, ok := ix.idf[t]
-		return ok
-	}
-	return ix.df(t) > 0
-}
+func (ix *Index) hasTerm(t string) bool { return ix.df(t) > 0 }
 
 func (ix *Index) docLen(doc int) int {
 	if doc < ix.n {
-		return ix.lens[doc]
+		return ix.base.docLen(doc)
 	}
 	return ix.over.lens[doc-ix.n]
 }
@@ -526,30 +556,24 @@ type weighted struct {
 	weight float64
 }
 
-// vocabs: the sorted vocabularies to look terms up in.
-func (ix *Index) vocabs() [][]string {
-	if ix.over == nil {
-		return [][]string{ix.vocab}
-	}
-	return [][]string{ix.vocab, ix.over.vocab}
-}
-
-// fuzzyVocab: every term a document left holds, each once, for typo matching.
-func (ix *Index) fuzzyVocab() []string {
+// fuzzyTerms: every term a document left holds, each once, for typo matching.
+func (ix *Index) fuzzyTerms() iter.Seq[string] {
 	o := ix.over
 	if o == nil {
-		return ix.vocab
+		return ix.base.terms("")
 	}
-	o.fuzzyOnce.Do(func() {
-		o.fuzzy = make([]string, 0, len(ix.vocab)+len(o.newVocab))
-		for _, t := range ix.vocab {
-			if !o.gone[t] {
-				o.fuzzy = append(o.fuzzy, t)
+	return func(yield func(string) bool) {
+		for t := range ix.base.terms("") {
+			if !o.gone[t] && !yield(t) {
+				return
 			}
 		}
-		o.fuzzy = append(o.fuzzy, o.newVocab...)
-	})
-	return o.fuzzy
+		for _, t := range o.newVocab {
+			if !yield(t) {
+				return
+			}
+		}
+	}
 }
 
 // expand: query tokens as (term, weight): exact 1.0, prefix 0.8, and when
@@ -575,17 +599,24 @@ func (ix *Index) expand(qTokens []string) []weighted {
 			matched = true
 		}
 		if RuneLen(t) >= 3 {
-			for _, vocab := range ix.vocabs() {
-				for i := sort.SearchStrings(vocab, t); i < len(vocab) && strings.HasPrefix(vocab[i], t); i++ {
-					if vocab[i] != t && ix.hasTerm(vocab[i]) {
-						bump(vocab[i], prefixWeight)
+			prefixed := func(terms iter.Seq[string]) {
+				for v := range terms {
+					if !strings.HasPrefix(v, t) {
+						return
+					}
+					if v != t && ix.hasTerm(v) {
+						bump(v, prefixWeight)
 						matched = true
 					}
 				}
 			}
+			prefixed(ix.base.terms(t))
+			if ix.over != nil {
+				prefixed(slices.Values(ix.over.vocab[sort.SearchStrings(ix.over.vocab, t):]))
+			}
 		}
 		if !matched && RuneLen(t) >= 4 {
-			for _, c := range CloseMatches(t, ix.fuzzyVocab(), 3, 0.8) {
+			for _, c := range closeMatchesIn(t, ix.fuzzyTerms(), 3, 0.8) {
 				bump(c, fuzzyWeight)
 			}
 		}
@@ -664,7 +695,7 @@ func (ix *Index) SearchWhere(query string, limit int, accept func(doc int) bool)
 				scores[doc] += tw.weight * idf * (f * (bm25K1 + 1) / denom)
 			}
 		}
-		score(ix.postings[tw.term])
+		score(ix.base.postings(tw.term))
 		if ix.over != nil {
 			score(ix.over.postings[tw.term])
 		}
