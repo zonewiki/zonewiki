@@ -139,6 +139,17 @@ func Tokenize(text string) []string {
 	return ws
 }
 
+// TokensAndSquash: Tokenize(text) and Squash(text), folding the text once
+// for both.
+func TokensAndSquash(text string) ([]string, string) {
+	f := fold(text)
+	ws, _ := words(f)
+	for i, w := range ws {
+		ws[i] = stem(w)
+	}
+	return ws, strings.Join(strings.Fields(f), " ")
+}
+
 var stopwords = map[string]bool{}
 
 func init() {
@@ -264,6 +275,18 @@ func (q *Query) RankingText() string {
 // Accepts: whether a document passes the filters (its text, tokens, tags,
 // date "YYYY-MM-DD"; partial dates compare as prefixes).
 func (q *Query) Accepts(text string, docTags []string, date string) bool {
+	squashed := ""
+	return q.AcceptsWith(func(phrase string) bool {
+		if squashed == "" {
+			squashed = Squash(text)
+		}
+		return strings.Contains(squashed, phrase)
+	}, docTags, date)
+}
+
+// AcceptsWith: Accepts with has telling whether the text, squashed (Squash),
+// holds a phrase; asked only for the query's phrase filters.
+func (q *Query) AcceptsWith(has func(phrase string) bool, docTags []string, date string) bool {
 	for _, d := range q.Dates {
 		if date == "" {
 			return false
@@ -290,17 +313,14 @@ func (q *Query) Accepts(text string, docTags []string, date string) bool {
 			return false
 		}
 	}
-	if len(q.Phrases)+len(q.ExcludePhrases) > 0 {
-		s := Squash(text)
-		for _, p := range q.Phrases {
-			if !strings.Contains(s, p) {
-				return false
-			}
+	for _, p := range q.Phrases {
+		if !has(p) {
+			return false
 		}
-		for _, p := range q.ExcludePhrases {
-			if strings.Contains(s, p) {
-				return false
-			}
+	}
+	for _, p := range q.ExcludePhrases {
+		if has(p) {
+			return false
 		}
 	}
 	return true

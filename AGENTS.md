@@ -113,7 +113,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── tasksyntax.go       # The page syntax of tasks: [[tasks: …]] params, [[task:…]], tag rules, date words
 │   ├── task.go             # A task (Task): its fields, read leniently from a file, written in a fixed key order
 │   ├── jsonobj.go          # JSON objects read a member at a time (jsonObj): task requests, MCP messages and arguments, task files
-│   ├── internal/textsearch/  # Package textsearch, no globals: BM25 ranking (stemming, fuzzy, excerpts), the query syntax, rank fusion, difflib's ratio (search.go, difflib.go)
+│   ├── internal/textsearch/  # Package textsearch, no globals: BM25 ranking (stemming, fuzzy, excerpts), the query syntax, rank fusion, difflib's ratio (search.go, difflib.go); the index in a file, mapped (indexfile.go, mmap_unix.go, mmap_other.go)
 │   ├── internal/mdtext/    # Package mdtext, no globals: markdown source text (frontmatter, fences, code and math masking, headings and anchors, wikilink syntax, the splice of a section's text, checkboxes, slugs)
 │   ├── internal/settingsfile/  # Package settingsfile: the settings file's format (the strict parser, line edits keeping comments, the owner-only write); what its keys mean stays in configfile.go
 │   ├── internal/tokenizer/ # Package tokenizer: the embedding model's tokenizer (byte-level BPE from its tokenizer.json)
@@ -162,7 +162,7 @@ Page content does not live in the repo tree. It lives in the host directory poin
 ./run.sh config check|set|unset|passwd|token|import  # the wiki's settings file: check it, set a key, password and MCP token without users, import an older .env
 ```
 
-Zone is at **http://localhost:5000**. The deployment's settings are in `.env` (gitignored; `ZONE_DATA`, `ZONE_ALLOW_REMOTE`, `TZ` …, read once into `cfg`); the wiki's own (users, password, MCP token, hosts, locale …) are in the wiki's settings file `.zone/config`, committed with the wiki and reloaded when it changes (`settings()`; one left in `.env` stops Zone). The wiki lives outside the repo, in `ZONE_DATA` (default `~/zonewiki`), which must exist: pages at its root and in folders, uploads in `_assets/`, tasks in `_tasks/`, the settings file, the semantic cache and session key in `.zone/`. Details: `docs/spec/deployment.md`.
+Zone is at **http://localhost:5000**. The deployment's settings are in `.env` (gitignored; `ZONE_DATA`, `ZONE_ALLOW_REMOTE`, `TZ` …, read once into `cfg`); the wiki's own (users, password, MCP token, hosts, locale …) are in the wiki's settings file `.zone/config`, committed with the wiki and reloaded when it changes (`settings()`; one left in `.env` stops Zone). The wiki lives outside the repo, in `ZONE_DATA` (default `~/zonewiki`), which must exist: pages at its root and in folders, uploads in `_assets/`, tasks in `_tasks/`, the settings file, the search index files, the semantic cache and session key in `.zone/`. Details: `docs/spec/deployment.md`.
 
 Without the container (Go 1.27 and a C compiler; `CGO_ENABLED=0` builds one without semantic search):
 

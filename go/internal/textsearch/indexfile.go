@@ -5,8 +5,12 @@
 // The format, version 1, little-endian:
 //
 //	header    64 bytes: magic, version, a CRC32 (IEEE) of everything after
-//	          it, then the number of docs, tokens and terms, the length of
-//	          the terms' bytes and of the postings, 8 bytes kept at 0
+//	          the header and then of the header's own fields, then the number
+//	          of docs, tokens and terms, the length of the terms' bytes, of
+//	          the postings and of the texts
+//	texts     per doc a text the writer gives (TextHas), one after the other
+//	text ends per doc where its text starts, and one more: where the last
+//	          ends, uint64
 //	lengths   per doc its number of tokens, uint32
 //	keys      per doc a DocKey, given by the writer (what the doc was)
 //	terms     per term, sorted, and one more at the end: where its bytes
@@ -16,14 +20,19 @@
 //	postings  per term, per doc holding it in order: the gap to the doc
 //	          before (the first: its number) and the term's count, uvarints
 //
+// The texts come first so that the writer can pass them on as it is given
+// them, holding none; the checksum is of the header's fields last for the
+// same reason.
+//
 // A mapped file is never written to: a new one is written beside it and
 // renamed into its place, so a search reading the old one keeps reading it
 // until it lets go. Nothing that points into the mapping leaves this file:
-// terms, postings and keys are handed out as copies, and the mapping is
-// undone only once nothing holds its store.
+// terms, postings and keys are handed out as copies, texts are only
+// searched, and the mapping is undone only once nothing holds its store.
 package textsearch
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -50,6 +59,14 @@ const (
 // still has.
 type DocKey [16]byte
 
+// IndexDoc: a document as WriteIndex asks for it: its tokens, its key, and
+// a text to keep for TextHas (Zone: its text squashed, for phrases).
+type IndexDoc struct {
+	Tokens []string
+	Key    DocKey
+	Text   string
+}
+
 // ErrBadIndex: a file that isn't an index this version reads: another
 // format or version, cut short or damaged. Build it again.
 var ErrBadIndex = errors.New("not a usable index file")
@@ -61,77 +78,78 @@ type termBuf struct {
 	buf  []byte
 }
 
-// WriteIndex writes the index of n documents to path, asking for each one's
-// tokens and key in turn and keeping neither: what it holds meanwhile is the
-// coded postings, a few bytes each. The file appears whole or not at all.
-func WriteIndex(path string, n int, tokensOf func(i int) []string, keyOf func(i int) DocKey) error {
+// WriteIndex writes the index of n documents to path, asking for each one in
+// turn and keeping none: what it holds meanwhile is the coded postings, a few
+// bytes each, and the texts go to the file as they come. The file appears
+// whole or not at all.
+func WriteIndex(path string, n int, docOf func(i int) IndexDoc) error {
 	if n > math.MaxInt32 {
 		return fmt.Errorf("index of %d documents: too many", n)
 	}
-	lens := make([]uint32, n)
-	keys := make([]DocKey, n)
-	byTerm := map[string]*termBuf{}
-	tf := map[string]uint64{}
-	var order []string
-	total := 0
-	for i := range n {
-		toks := tokensOf(i)
-		keys[i] = keyOf(i)
-		clear(tf)
-		order = order[:0]
-		for _, t := range toks {
-			if tf[t] == 0 {
-				order = append(order, t)
-			}
-			tf[t]++
-		}
-		lens[i] = uint32(len(toks))
-		total += len(toks)
-		for _, t := range order {
-			tb := byTerm[t]
-			if tb == nil {
-				tb = &termBuf{}
-				byTerm[t] = tb
-			}
-			tb.buf = binary.AppendUvarint(tb.buf, uint64(i-tb.last))
-			tb.buf = binary.AppendUvarint(tb.buf, tf[t])
-			tb.last = i
-			tb.df++
-		}
-	}
-	terms := slices.Sorted(func(yield func(string) bool) {
-		for t := range byTerm {
-			if !yield(t) {
-				return
-			}
-		}
-	})
-	var strsLen, postsLen uint64
-	for _, t := range terms {
-		strsLen += uint64(len(t))
-		postsLen += uint64(len(byTerm[t].buf))
-	}
-	if strsLen > math.MaxUint32 {
-		return fmt.Errorf("index with %d bytes of terms: too many", strsLen)
-	}
-
-	header := make([]byte, headerSize)
-	copy(header, fileMagic)
-	binary.LittleEndian.PutUint32(header[8:], fileVersion)
-	binary.LittleEndian.PutUint64(header[16:], uint64(n))
-	binary.LittleEndian.PutUint64(header[24:], uint64(total))
-	binary.LittleEndian.PutUint64(header[32:], uint64(len(terms)))
-	binary.LittleEndian.PutUint64(header[40:], strsLen)
-	binary.LittleEndian.PutUint64(header[48:], postsLen)
-
 	return writeAtomically(path, func(f *os.File) error {
+		header := make([]byte, headerSize)
 		if _, err := f.Write(header); err != nil {
 			return err
 		}
 		sum := crc32.NewIEEE()
-		sum.Write(header[16:])
 		w := newBufWriter(io.MultiWriter(f, sum))
+
+		textAt := make([]uint64, 0, n+1)
+		lens := make([]uint32, n)
+		keys := make([]DocKey, n)
+		byTerm := map[string]*termBuf{}
+		tf := map[string]uint64{}
+		var order []string
+		var total, textsLen uint64
+		for i := range n {
+			doc := docOf(i)
+			textAt = append(textAt, textsLen)
+			w.write([]byte(doc.Text))
+			textsLen += uint64(len(doc.Text))
+			keys[i] = doc.Key
+			clear(tf)
+			order = order[:0]
+			for _, t := range doc.Tokens {
+				if tf[t] == 0 {
+					order = append(order, t)
+				}
+				tf[t]++
+			}
+			lens[i] = uint32(len(doc.Tokens))
+			total += uint64(len(doc.Tokens))
+			for _, t := range order {
+				tb := byTerm[t]
+				if tb == nil {
+					tb = &termBuf{}
+					byTerm[t] = tb
+				}
+				tb.buf = binary.AppendUvarint(tb.buf, uint64(i-tb.last))
+				tb.buf = binary.AppendUvarint(tb.buf, tf[t])
+				tb.last = i
+				tb.df++
+			}
+		}
+		textAt = append(textAt, textsLen)
+		terms := slices.Sorted(func(yield func(string) bool) {
+			for t := range byTerm {
+				if !yield(t) {
+					return
+				}
+			}
+		})
+		var strsLen, postsLen uint64
+		for _, t := range terms {
+			strsLen += uint64(len(t))
+			postsLen += uint64(len(byTerm[t].buf))
+		}
+		if strsLen > math.MaxUint32 {
+			return fmt.Errorf("index with %d bytes of terms: too many", strsLen)
+		}
+
 		var b [termRecSize]byte
+		for _, at := range textAt {
+			w.write(binary.LittleEndian.AppendUint64(b[:0], at))
+		}
 		for _, l := range lens {
 			w.write(binary.LittleEndian.AppendUint32(b[:0], l))
 		}
@@ -161,8 +179,18 @@ func WriteIndex(path string, n int, tokensOf func(i int) []string, keyOf func(i 
 		if err := w.flush(); err != nil {
 			return err
 		}
+
+		copy(header, fileMagic)
+		binary.LittleEndian.PutUint32(header[8:], fileVersion)
+		binary.LittleEndian.PutUint64(header[16:], uint64(n))
+		binary.LittleEndian.PutUint64(header[24:], total)
+		binary.LittleEndian.PutUint64(header[32:], uint64(len(terms)))
+		binary.LittleEndian.PutUint64(header[40:], strsLen)
+		binary.LittleEndian.PutUint64(header[48:], postsLen)
+		binary.LittleEndian.PutUint64(header[56:], textsLen)
+		sum.Write(header[16:])
 		binary.LittleEndian.PutUint32(header[12:], sum.Sum32())
-		_, err := f.WriteAt(header[8:16], 8)
+		_, err := f.WriteAt(header, 0)
 		return err
 	})
 }
@@ -237,9 +265,9 @@ func writeAtomically(path string, write func(*os.File) error) (err error) {
 // mapping, so every method keeps the store alive until it is done with them
 // (runtime.KeepAlive): the mapping goes when the store does.
 type fileStore struct {
-	data                   []byte
 	nDocs, nTokens, nTerms int
-	lens, keys, recs, strs []byte
+	texts, textAt, lens    []byte
+	keys, recs, strs       []byte
 	posts                  []byte
 }
 
@@ -290,30 +318,36 @@ func parseStore(data []byte) (*fileStore, error) {
 		return nil, fmt.Errorf("%w: version %d, not %d", ErrBadIndex, v, fileVersion)
 	}
 	docs, tokens, terms := le.Uint64(data[16:]), le.Uint64(data[24:]), le.Uint64(data[32:])
-	strsLen, postsLen := le.Uint64(data[40:]), le.Uint64(data[48:])
-	size := uint64(len(data))
-	// Each part must fit in what is left, checked before multiplying.
-	rest := size - headerSize
-	if docs > math.MaxInt32 || terms > math.MaxInt32 || docs*(4+16) > rest ||
-		(terms+1)*termRecSize > rest-docs*(4+16) || strsLen > rest || postsLen > rest ||
-		headerSize+docs*(4+16)+(terms+1)*termRecSize+strsLen+postsLen != size {
+	strsLen, postsLen, textsLen := le.Uint64(data[40:]), le.Uint64(data[48:]), le.Uint64(data[56:])
+	// Each part fits in what is left, so their sum can't overflow.
+	rest := uint64(len(data)) - headerSize
+	if docs > math.MaxInt32 || terms > math.MaxInt32 || strsLen > rest || postsLen > rest || textsLen > rest ||
+		textsLen+(docs+1)*8+docs*(4+16)+(terms+1)*termRecSize+strsLen+postsLen != rest {
 		return nil, fmt.Errorf("%w: its parts don't add up to its size", ErrBadIndex)
 	}
-	if crc32.ChecksumIEEE(data[16:]) != le.Uint32(data[12:]) {
+	sum := crc32.Update(crc32.ChecksumIEEE(data[headerSize:]), crc32.IEEETable, data[16:headerSize])
+	if sum != le.Uint32(data[12:]) {
 		return nil, fmt.Errorf("%w: damaged (checksum)", ErrBadIndex)
 	}
-	s := &fileStore{data: data, nDocs: int(docs), nTokens: int(tokens), nTerms: int(terms)}
+	s := &fileStore{nDocs: int(docs), nTokens: int(tokens), nTerms: int(terms)}
 	at := uint64(headerSize)
 	part := func(n uint64) []byte {
 		p := data[at : at+n : at+n]
 		at += n
 		return p
 	}
+	s.texts = part(textsLen)
+	s.textAt = part((docs + 1) * 8)
 	s.lens = part(docs * 4)
 	s.keys = part(docs * 16)
 	s.recs = part((terms + 1) * termRecSize)
 	s.strs = part(strsLen)
 	s.posts = part(postsLen)
+	for i := range docs + 1 { // where the texts start: in order, inside them
+		if t := le.Uint64(s.textAt[i*8:]); t > textsLen || i > 0 && t < le.Uint64(s.textAt[(i-1)*8:]) {
+			return nil, fmt.Errorf("%w: its texts are out of order", ErrBadIndex)
+		}
+	}
 	return s, nil
 }
 
@@ -415,4 +449,18 @@ func (ix *Index) Keys() []DocKey {
 		copy(keys[i][:], s.keys[i*16:])
 	}
 	return keys
+}
+
+// TextHas: whether doc's text in the file holds sub; known is false where
+// there is no such text: a doc not in the file (added by With), an index not
+// read from one.
+func (ix *Index) TextHas(doc int, sub string) (has, known bool) {
+	s, ok := ix.base.(*fileStore)
+	if !ok || doc < 0 || doc >= ix.n {
+		return false, false
+	}
+	defer runtime.KeepAlive(s)
+	le := binary.LittleEndian
+	text := s.texts[le.Uint64(s.textAt[doc*8:]):le.Uint64(s.textAt[(doc+1)*8:])]
+	return bytes.Contains(text, []byte(sub)), true
 }

@@ -21,19 +21,24 @@ import (
 	"zonewiki/internal/textsearch"
 )
 
-// SearchDoc is a page, a page's section or a task as BM25 indexes it.
+// SearchDoc is a page, a page's section or a task as BM25 indexes it. A
+// page's or section's text isn't kept, nor its tokens: they were most of a
+// big wiki's memory. They are read from its file again when asked for
+// (body, Tokens).
 type SearchDoc struct {
 	Slug, Title string
 	Mtime       time.Time       // a page's or section's file
 	Tags        []string        // for #tag queries
-	Tokens      func() []string // worked out when asked for: kept, they're most of a big wiki's memory
-	ExcerptText string          // a page's or task's searchable text
+	Tokens      func() []string // worked out when asked for
+	ExcerptText string          // a task's searchable text
 	TaskRefs    bool            // a page with [[task:…]], indexed with the task app's titles
+	file        *pageFile       // a page's or section's file
 
 	// A section (the section index): the key is the one its vector has in
-	// the semantic index.
-	Section                          bool
-	Heading, Path, Text, Anchor, Key string
+	// the semantic index; nth: which of its page's sections it is.
+	Section                    bool
+	Heading, Path, Anchor, Key string
+	nth                        int
 
 	// A task: the whole task (the MCP tools' dates and tags), its status
 	// ("open", "done"), the year of its archive, its last activity (dates).
@@ -41,20 +46,55 @@ type SearchDoc struct {
 	TaskID, Status, Year, Edited string
 
 	key textsearch.DocKey // what its tokens are made from, hashed (docKey)
-
-	squashOnce sync.Once
-	squashed   string
 }
 
 func (d *SearchDoc) isTask() bool { return d.Task != nil }
 
+// body: a page's text as search sees it, a section's own text, a task's
+// text. False when the page is gone; a page changed since the doc was made
+// gives its text now (the next search makes its doc anew).
+func (d *SearchDoc) body() (string, bool) {
+	if d.file == nil {
+		return d.ExcerptText, true
+	}
+	texts, ok := docTexts.of(d.file, d.Section)
+	switch {
+	case !ok:
+		return "", false
+	case d.nth < len(texts):
+		return texts[d.nth], true
+	}
+	return "", true
+}
+
 // text: the searchable text.
 func (d *SearchDoc) text() string {
+	body, _ := d.body()
 	if d.Section {
-		return d.Title + "\n" + d.Heading + "\n" + d.Text
+		return d.Title + "\n" + d.Heading + "\n" + body
 	}
-	return d.ExcerptText
+	return body
 }
+
+// indexed: a page's or section's tokens and its searchable text squashed,
+// from its file, folded once for both (Squash and fold work rune by rune,
+// so a section's text squashed is its title's and its own, one after the
+// other).
+func (d *SearchDoc) indexed() ([]string, string) {
+	body, _ := d.body()
+	own := body
+	if d.Section {
+		own = d.Heading + "\n" + body
+	}
+	toks, squashed := textsearch.TokensAndSquash(own)
+	if title := textsearch.Squash(d.Title); d.Section && title != "" {
+		squashed = strings.TrimSuffix(title+" "+squashed, " ")
+	}
+	return slices.Concat(toks, repeatTokens(d.Title, textsearch.TitleWeight), textsearch.Tokenize(d.Slug)), squashed
+}
+
+// squashed: the searchable text squashed, for phrases.
+func (d *SearchDoc) squashed() string { return docTexts.squashed(d) }
 
 // date: the day for the date filters, a page's (or section's) last edit, a
 // task's last activity.
@@ -65,11 +105,81 @@ func (d *SearchDoc) date() string {
 	return fmtDate(d.Mtime)
 }
 
-// hasPhrase: the squashed text, cached on the doc (which lives until its
-// file changes), has the phrase.
-func (d *SearchDoc) hasPhrase(phrase string) bool {
-	d.squashOnce.Do(func() { d.squashed = textsearch.Squash(d.text()) })
-	return strings.Contains(d.squashed, phrase)
+// hasPhrase: the squashed text has the phrase.
+func (d *SearchDoc) hasPhrase(phrase string) bool { return strings.Contains(d.squashed(), phrase) }
+
+// pageFile: the file a page's docs were made from, which their texts are
+// read from again; the page doc has one, and its sections share another.
+type pageFile struct{ slug, path string }
+
+// docTextsMax: how many bytes of texts read again docTexts keeps. Past it,
+// it starts over: a search reads the texts of the docs it shows and of those
+// it checks for a phrase, and the next search mostly the same ones.
+const docTextsMax = 16 << 20
+
+// docTexts: the texts of pages and sections read again from their files,
+// and the docs' texts squashed.
+var docTexts textCache
+
+type textCache struct {
+	mu       sync.Mutex
+	files    map[*pageFile][]string // a page doc's: its text; a section's: each section's text
+	squashes map[*SearchDoc]string
+	bytes    int
+}
+
+// keep: room for n more bytes, starting over when they don't fit.
+func (c *textCache) keep(n int) {
+	if c.files == nil || c.bytes+n > docTextsMax {
+		c.files, c.squashes, c.bytes = map[*pageFile][]string{}, map[*SearchDoc]string{}, 0
+	}
+	c.bytes += n
+}
+
+// of: the texts of f (sections: its sections'), read from its file when not
+// kept; false when it can't be read.
+func (c *textCache) of(f *pageFile, sections bool) ([]string, bool) {
+	c.mu.Lock()
+	texts, ok := c.files[f]
+	c.mu.Unlock()
+	if ok {
+		return texts, texts != nil
+	}
+	content, err := readText(f.path)
+	if err == nil {
+		content = strings.ToValidUTF8(content, "�")
+		if sections {
+			for _, s := range searchSections(f.slug, content) {
+				texts = append(texts, s.Body)
+			}
+		} else {
+			texts = []string{searchText(f.slug, content)}
+		}
+	}
+	n := 0
+	for _, t := range texts {
+		n += len(t)
+	}
+	c.mu.Lock()
+	c.keep(n)
+	c.files[f] = texts
+	c.mu.Unlock()
+	return texts, texts != nil
+}
+
+func (c *textCache) squashed(d *SearchDoc) string {
+	c.mu.Lock()
+	sq, ok := c.squashes[d]
+	c.mu.Unlock()
+	if ok {
+		return sq
+	}
+	sq = textsearch.Squash(d.text())
+	c.mu.Lock()
+	c.keep(len(sq))
+	c.squashes[d] = sq
+	c.mu.Unlock()
+	return sq
 }
 
 // taskRefsAsTitles: the text of the page slug with each [[task:…]]
@@ -132,7 +242,7 @@ type pageCached[T any] struct {
 // where it is fresh. Entries of pages that are gone are dropped. One bad
 // file must not fail every search: a page deleted meanwhile is skipped, one
 // that isn't UTF-8 is read with stand-ins for the undecodable bytes.
-func perPage[T any](c *pageCache[T], build func(slug, content string, mtime time.Time) T,
+func perPage[T any](c *pageCache[T], build func(slug, path, content string, mtime time.Time) T,
 	key string, fresh func(T, string) bool) []T {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -154,7 +264,7 @@ func perPage[T any](c *pageCache[T], build func(slug, content string, mtime time
 				continue
 			}
 			content = strings.ToValidUTF8(content, "�")
-			cached = &pageCached[T]{mtime, build(p.Slug, content, mtime), key}
+			cached = &pageCached[T]{mtime, build(p.Slug, p.Path, content, mtime), key}
 			c.m[p.Slug] = cached
 		}
 		seen[p.Slug] = true
@@ -177,23 +287,31 @@ func repeatTokens(text string, times int) []string {
 	return out
 }
 
+// searchText: a page's text as search sees it: [[task:…]] as the tasks'
+// titles, without link targets.
+func searchText(slug, content string) string {
+	return textsearch.StripLinkTargets(taskRefsAsTitles(slug, content))
+}
+
 // pageSearchDoc: a page as a BM25 document, its text, its title
 // (titleWeight extra times) and the words of its slug once, so a page is
 // found by its file and folder names too without those outranking what the
-// page says.
-func pageSearchDoc(slug, content string, mtime time.Time) *SearchDoc {
+// page says. Its text and tokens are read from the file again when asked for.
+func pageSearchDoc(slug, path, content string, mtime time.Time) *SearchDoc {
 	// Clones: the title and tags are pieces of content, and would keep the whole
-	// file in memory for as long as the doc lives; text is a copy already.
+	// file in memory for as long as the doc lives.
 	title := strings.Clone(mdtext.PageTitle(content, slug))
 	tags := mdtext.PageTags(content)
 	for i, tag := range tags {
 		tags[i] = strings.Clone(tag)
 	}
-	text := textsearch.StripLinkTargets(taskRefsAsTitles(slug, content))
-	return &SearchDoc{Slug: slug, Title: title, Mtime: mtime, TaskRefs: taskRefRE.MatchString(content),
-		Tags: tags, ExcerptText: text, key: docKey("page", slug, title, text), Tokens: func() []string {
-			return slices.Concat(textsearch.Tokenize(text), repeatTokens(title, textsearch.TitleWeight), textsearch.Tokenize(slug))
-		}}
+	d := &SearchDoc{Slug: slug, Title: title, Mtime: mtime, TaskRefs: taskRefRE.MatchString(content),
+		Tags: tags, file: &pageFile{slug, path}, key: docKey("page", slug, title, searchText(slug, content))}
+	d.Tokens = func() []string {
+		toks, _ := d.indexed()
+		return toks
+	}
+	return d
 }
 
 var searchDocCache pageCache[*SearchDoc]
@@ -300,9 +418,17 @@ func (x *docIndex) search(text string, limit int) []*SearchDoc {
 
 // searchWhere: search among the docs accept is true for (nil: all).
 func (x *docIndex) searchWhere(text string, limit int, accept func(*SearchDoc) bool) []*SearchDoc {
+	if accept == nil {
+		return x.searchWhereID(text, limit, nil)
+	}
+	return x.searchWhereID(text, limit, func(_ int, d *SearchDoc) bool { return accept(d) })
+}
+
+// searchWhereID: searchWhere, accept told each doc's number in the index too.
+func (x *docIndex) searchWhereID(text string, limit int, accept func(id int, d *SearchDoc) bool) []*SearchDoc {
 	var ok func(int) bool
 	if accept != nil {
-		ok = func(i int) bool { return accept(x.byID[i]) }
+		ok = func(i int) bool { return accept(i, x.byID[i]) }
 	}
 	hits := x.ix.SearchWhere(text, limit, ok)
 	out := make([]*SearchDoc, len(hits))
@@ -534,8 +660,14 @@ func (c *indexCache) build() {
 	docs := c.shared
 	var ix *textsearch.Index
 	if path := c.indexPath(); path != "" && writeIndexFiles {
-		err := textsearch.WriteIndex(path, len(docs), func(i int) []string { return docs[i].Tokens() },
-			func(i int) textsearch.DocKey { return docs[i].key })
+		err := textsearch.WriteIndex(path, len(docs), func(i int) textsearch.IndexDoc {
+			d := docs[i]
+			if d.file != nil {
+				toks, squashed := d.indexed()
+				return textsearch.IndexDoc{Tokens: toks, Key: d.key, Text: squashed}
+			}
+			return textsearch.IndexDoc{Tokens: d.Tokens(), Key: d.key, Text: textsearch.Squash(d.text())}
+		})
 		if err == nil {
 			ix, err = textsearch.OpenIndex(path)
 		}
@@ -627,10 +759,20 @@ func semanticText(content, slug string) (string, string) {
 // fuseDepth: how deep each ranking goes into the fusion (semantic search).
 const fuseDepth = 30
 
-// filter: whether a doc takes part in a search, it passes keep (when given)
-// and the query's filters. The docs a -word excludes come from the index, so
-// a filter is made once per search, not per doc.
-func (x *docIndex) filter(q *textsearch.Query, keep func(*SearchDoc) bool) func(*SearchDoc) bool {
+// hasPhrase: d, number id in x (-1: not known), has the phrase in its text
+// squashed: the copy in the index file when there is one, else its own.
+func (x *docIndex) hasPhrase(id int, d *SearchDoc, phrase string) bool {
+	if has, known := x.ix.TextHas(id, phrase); known {
+		return has
+	}
+	return d.hasPhrase(phrase)
+}
+
+// filter: whether a doc (with its number in x; -1: not known) takes part in
+// a search, it passes keep (when given) and the query's filters. The docs a
+// -word excludes come from the index, so a filter is made once per search,
+// not per doc.
+func (x *docIndex) filter(q *textsearch.Query, keep func(*SearchDoc) bool) func(int, *SearchDoc) bool {
 	excluded := map[*SearchDoc]bool{}
 	for _, stem := range q.ExcludeStems {
 		for _, id := range x.ix.DocsWith(stem) {
@@ -638,8 +780,9 @@ func (x *docIndex) filter(q *textsearch.Query, keep func(*SearchDoc) bool) func(
 		}
 	}
 	filtered := q.HasFilters()
-	return func(d *SearchDoc) bool {
-		return (keep == nil || keep(d)) && !excluded[d] && (!filtered || q.Accepts(d.text(), d.Tags, d.date()))
+	return func(id int, d *SearchDoc) bool {
+		return (keep == nil || keep(d)) && !excluded[d] &&
+			(!filtered || q.AcceptsWith(func(p string) bool { return x.hasPhrase(id, d, p) }, d.Tags, d.date()))
 	}
 }
 
@@ -654,8 +797,8 @@ func phraseFirst(ranked []*SearchDoc, q *textsearch.Query, x *docIndex, keep fun
 	var hits []*SearchDoc
 	first := map[*SearchDoc]bool{}
 	passes := x.filter(q, keep)
-	for _, d := range x.searchWhere(q.RankingText(), len(x.docs), func(d *SearchDoc) bool {
-		return passes(d) && d.hasPhrase(phrase)
+	for _, d := range x.searchWhereID(q.RankingText(), len(x.docs), func(id int, d *SearchDoc) bool {
+		return passes(id, d) && x.hasPhrase(id, d, phrase)
 	}) {
 		hits = append(hits, d)
 		first[d] = true
@@ -678,7 +821,7 @@ func bm25(x *docIndex, q *textsearch.Query, depth int, keep func(*SearchDoc) boo
 	if !q.HasFilters() && keep == nil {
 		return x.search(text, depth)
 	}
-	return x.searchWhere(text, depth, x.filter(q, keep))
+	return x.searchWhereID(text, depth, x.filter(q, keep))
 }
 
 func firstN(docs []*SearchDoc, n int) []*SearchDoc { return docs[:min(n, len(docs))] }
@@ -695,7 +838,7 @@ func rankedDocs(q *textsearch.Query, x *docIndex, keep func(*SearchDoc) bool, li
 		var docs []*SearchDoc
 		passes := x.filter(q, keep)
 		for _, d := range x.docs {
-			if passes(d) {
+			if passes(-1, d) {
 				docs = append(docs, d)
 			}
 		}
@@ -715,7 +858,7 @@ func rankedDocs(q *textsearch.Query, x *docIndex, keep func(*SearchDoc) bool, li
 	pages, tasks := map[string]*SearchDoc{}, map[string]*SearchDoc{}
 	passes := x.filter(q, keep)
 	for _, d := range x.docs {
-		if !passes(d) {
+		if !passes(-1, d) {
 			continue
 		}
 		if d.isTask() {
@@ -748,15 +891,19 @@ func bestSections(rq *Req, q *textsearch.Query, slugs map[string]bool) map[strin
 	x := chunkIndex(rq)
 	ranked := x.searchWhere(text, len(x.docs), func(d *SearchDoc) bool { return !d.isTask() && slugs[d.Slug] })
 	best := map[string]*SearchDoc{}
+	own := func(d *SearchDoc) string { // the section's own text
+		body, _ := d.body()
+		return d.Heading + "\n" + body
+	}
 	if phrase := q.Phrase(); phrase != "" {
 		for _, d := range ranked {
-			if best[d.Slug] == nil && strings.Contains(textsearch.Squash(d.Heading+"\n"+d.Text), phrase) {
+			if best[d.Slug] == nil && strings.Contains(textsearch.Squash(own(d)), phrase) {
 				best[d.Slug] = d
 			}
 		}
 	}
 	for _, d := range ranked {
-		if best[d.Slug] == nil && textsearch.Matches(d.Heading+"\n"+d.Text, text) {
+		if best[d.Slug] == nil && textsearch.Matches(own(d), text) {
 			best[d.Slug] = d
 		}
 	}
@@ -883,10 +1030,15 @@ func doSearch(rq *Req, raw string, unlinked bool, limit int, quicknote bool) []M
 	names := rq.taskLists()
 	for _, d := range docs {
 		var section *SearchDoc
-		excerptOf := d.ExcerptText
+		body, ok := d.body()
+		if !ok {
+			continue // the page is gone
+		}
+		excerptOf := body
 		if !d.isTask() {
 			if section = sections[d.Slug]; section != nil {
-				excerptOf = strings.TrimSpace(section.Heading + "\n" + section.Text)
+				sectionBody, _ := section.body()
+				excerptOf = strings.TrimSpace(section.Heading + "\n" + sectionBody)
 			}
 		}
 		r := M{"slug": d.Slug, "title": d.Title, "excerpt": htmlOf(textsearch.Excerpt(excerptOf, text)),
@@ -908,7 +1060,7 @@ func doSearch(rq *Req, raw string, unlinked bool, limit int, quicknote bool) []M
 		} else {
 			href := pathURL("page", d.Slug)
 			// The page highlights what matched (js/search.js); before the #anchor.
-			if words := textsearch.MatchedWords(d.ExcerptText, text, 10); len(words) > 0 {
+			if words := textsearch.MatchedWords(body, text, 10); len(words) > 0 {
 				hl := make([]string, len(words))
 				for i, w := range words {
 					hl[i] = "hl=" + url.QueryEscape(w)
@@ -942,30 +1094,41 @@ func sectionAnchorOf(heading string, level int) string {
 	return "#" + mdtext.HeadingID(mdtext.PlainHeading(heading))
 }
 
-// pageChunks: a page's sections (chunkSections) as BM25 documents.
-func pageChunks(slug, content string, mtime time.Time) []*SearchDoc {
+// searchSections: a page's sections as the section index has them
+// (chunkSections of semanticText), at least one.
+func searchSections(slug, content string) []chunkSection {
+	_, body := semanticText(content, slug)
+	sections := chunkSections(body, maxChunkChars)
+	if len(sections) == 0 {
+		sections = []chunkSection{{}}
+	}
+	return sections
+}
+
+// pageChunks: a page's sections (pageSections) as BM25 documents. Their
+// text and tokens are read from the file again when asked for.
+func pageChunks(slug, path, content string, mtime time.Time) []*SearchDoc {
 	// Clones, as in pageSearchDoc: the title, tags, headings and paths are
 	// pieces of content, and would keep the whole file in memory for as long
-	// as the sections live; a section's body is a copy already (splitLong).
-	title, body := semanticText(content, slug)
+	// as the sections live.
+	title, _ := semanticText(content, slug)
 	title = strings.Clone(title)
 	tags := mdtext.PageTags(content)
 	for i, tag := range tags {
 		tags[i] = strings.Clone(tag)
 	}
-	sections := chunkSections(body, maxChunkChars)
-	if len(sections) == 0 {
-		sections = []chunkSection{{}}
-	}
+	file := &pageFile{slug, path}
 	var chunks []*SearchDoc
-	for _, s := range sections {
-		s.Heading, s.Path = strings.Clone(s.Heading), strings.Clone(s.Path)
-		chunks = append(chunks, &SearchDoc{Slug: slug, Title: title, Section: true, Heading: s.Heading,
-			Path: s.Path, Text: s.Body, Anchor: sectionAnchorOf(s.Heading, s.Level), Tags: tags, Mtime: mtime,
+	for i, s := range searchSections(slug, content) {
+		d := &SearchDoc{Slug: slug, Title: title, Section: true, Heading: strings.Clone(s.Heading),
+			Path: strings.Clone(s.Path), Anchor: sectionAnchorOf(s.Heading, s.Level), Tags: tags, Mtime: mtime,
 			Key: chunkKey(title, chunkText(s.Path, s.Body)), key: docKey("section", slug, title, s.Heading, s.Body),
-			Tokens: func() []string {
-				return slices.Concat(textsearch.Tokenize(s.Heading+"\n"+s.Body), repeatTokens(title, textsearch.TitleWeight), textsearch.Tokenize(slug))
-			}})
+			file: file, nth: i}
+		d.Tokens = func() []string {
+			toks, _ := d.indexed()
+			return toks
+		}
+		chunks = append(chunks, d)
 	}
 	return chunks
 }
@@ -1018,7 +1181,7 @@ func retrieve(rq *Req, raw string, limit int, under string, quicknote bool) []*S
 		passes := x.filter(q, nil)
 		for _, d := range x.docs {
 			switch {
-			case !passes(d):
+			case !passes(-1, d):
 			case !d.isTask() && pageOK(d.Slug):
 				byKey[d.Key], slugs[d.Slug] = d, true
 			case d.isTask() && !pagesOnly && !hiddenDoc(rq, d):

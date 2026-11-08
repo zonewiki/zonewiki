@@ -321,3 +321,57 @@ func TestExcludedWordsComeFromTheIndex(t *testing.T) {
 		t.Errorf("found %v, want only c", got)
 	}
 }
+
+// Page and section docs keep no text: they read it from their file again,
+// their tokens too, and a page gone since gives none.
+func TestDocsReadTheirTextAgain(t *testing.T) {
+	page := "# Gärten  ÜBER\n\nIntro with a [link](http://example.com/zzqtarget).\n\n## Roses\n\nRed zzqrose here.\n\n## Tulips\n\nYellow   Straße zzqtulip.\n"
+	testWiki(t, map[string]string{"garden": page})
+	docs := pageSearchDocs()
+	if len(docs) != 1 {
+		t.Fatalf("%d docs", len(docs))
+	}
+	d := docs[0]
+	body, ok := d.body()
+	if !ok || body != searchText("garden", page) || strings.Contains(body, "zzqtarget") {
+		t.Errorf("the page's text: %v %q", ok, body)
+	}
+	if !slices.Contains(d.Tokens(), "zzqrose") || !d.hasPhrase("red zzqrose here") {
+		t.Errorf("tokens %v", d.Tokens())
+	}
+	var tulips *SearchDoc
+	for _, chunks := range perPage(&chunkDocCache, pageChunks, "", nil) {
+		for _, c := range chunks {
+			if c.Heading == "Tulips" {
+				tulips = c
+			}
+		}
+	}
+	if tulips == nil {
+		t.Fatal("no Tulips section")
+	}
+	if body, ok := tulips.body(); !ok || body != "Yellow   Straße zzqtulip." || !strings.HasSuffix(tulips.text(), "Tulips\nYellow   Straße zzqtulip.") {
+		t.Errorf("the section's text: %v %q / %q", ok, body, tulips.text())
+	}
+	if toks := tulips.Tokens(); !slices.Contains(toks, "zzqtulip") || slices.Contains(toks, "zzqrose") {
+		t.Errorf("the section's tokens: %v", toks)
+	}
+	// What goes into the index file: the same tokens, the text squashed.
+	for _, doc := range []*SearchDoc{d, tulips} {
+		toks, squashed := doc.indexed()
+		if !slices.Equal(toks, doc.Tokens()) || squashed != textsearch.Squash(doc.text()) {
+			t.Errorf("%s %q: indexed %q, want %q", doc.Slug, doc.Heading, squashed, textsearch.Squash(doc.text()))
+		}
+	}
+
+	docTexts = textCache{} // as after the cache started over
+	if err := os.Remove(filepath.Join(cfg.Data, "garden.md")); err != nil {
+		t.Fatal(err)
+	}
+	if body, ok := d.body(); ok || body != "" {
+		t.Errorf("a page gone: %v %q", ok, body)
+	}
+	if _, ok := tulips.body(); ok {
+		t.Error("a page gone: its section still has text")
+	}
+}

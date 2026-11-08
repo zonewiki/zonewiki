@@ -2002,12 +2002,16 @@ func searchWiki(args jsonObj, base, user string) (string, error) {
 			out = append(out, fmt.Sprintf("[%d] ", i+1)+mcpTaskText(d.Task, base, user))
 			continue
 		}
+		body, ok := d.body()
+		if !ok {
+			continue // the page is gone
+		}
 		where := d.Title
 		if d.Path != "" {
 			where += " › " + d.Path
 		}
 		out = append(out, fmt.Sprintf("[%d] %s\nslug: %s\nedited: %s\nurl: %s%s%s\nfile: %s\n\n%s", i+1, where, d.Slug,
-			fmtDate(d.Mtime), base, pathURL("page", d.Slug), d.Anchor, hostFile(d.Slug), d.Text))
+			fmtDate(d.Mtime), base, pathURL("page", d.Slug), d.Anchor, hostFile(d.Slug), body))
 	}
 	return strings.Join(out, "\n\n---\n\n"), nil
 }

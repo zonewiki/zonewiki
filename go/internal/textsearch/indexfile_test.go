@@ -35,9 +35,12 @@ func keyOf(i int) DocKey {
 	return k
 }
 
+// textOf: a doc's text in the file, its words with a space between.
+func textOf(doc []string) string { return strings.Join(doc, " ") }
+
 func writeOpen(t *testing.T, path string, docs [][]string) *Index {
 	t.Helper()
-	if err := WriteIndex(path, len(docs), func(i int) []string { return docs[i] }, keyOf); err != nil {
+	if err := WriteIndex(path, len(docs), func(i int) IndexDoc { return IndexDoc{docs[i], keyOf(i), textOf(docs[i])} }); err != nil {
 		t.Fatal(err)
 	}
 	ix, err := OpenIndex(path)
@@ -96,6 +99,19 @@ func TestFileIndexIsTheMaps(t *testing.T) {
 				}
 			}
 		}
+		for i, doc := range docs { // the texts, and none for a doc added after
+			for _, sub := range []string{"apple", "pear plum", "e p", textOf(doc), "zz"} {
+				if has, known := file.TextHas(i, sub); !known || has != strings.Contains(textOf(doc), sub) {
+					t.Fatalf("round %d: doc %d has %q: %v %v", round, i, sub, has, known)
+				}
+			}
+		}
+		if _, known := file.WithExtra(extra).TextHas(len(docs), "apple"); known {
+			t.Fatalf("round %d: an added doc has a text in the file", round)
+		}
+		if _, known := maps.TextHas(0, "apple"); known {
+			t.Fatalf("round %d: an index in memory has texts", round)
+		}
 		keys := file.Keys()
 		if len(keys) != len(docs) {
 			t.Fatalf("round %d: %d keys for %d docs", round, len(keys), len(docs))
@@ -132,6 +148,14 @@ func TestFileIndexRefusesBadFiles(t *testing.T) {
 		},
 		"a count changed": func(b []byte) []byte {
 			b[32]++ // terms
+			return b
+		},
+		"a count in the checksum": func(b []byte) []byte {
+			b[24]++ // tokens: no size depends on it
+			return b
+		},
+		"a text changed": func(b []byte) []byte {
+			b[headerSize] ^= 1
 			return b
 		},
 		"older version": func(b []byte) []byte {
