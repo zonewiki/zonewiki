@@ -46,6 +46,9 @@ func evalMain(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	k := fs.Int("k", 8, "`N` results per question, as search_wiki gives")
 	newOnly := fs.Bool("new", false, "list logged search_wiki queries not in the file yet, as stubs to paste")
+	// The wiki stays as it is (Read-only, docs/spec/search.md).
+	defer func(was bool) { writeIndexFiles = was }(writeIndexFiles)
+	writeIndexFiles = false
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: zonewiki eval [--k N] [--new] QUESTIONS.json")
 		printFlags(fs)

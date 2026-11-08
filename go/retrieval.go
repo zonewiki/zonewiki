@@ -4,6 +4,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"errors"
 	"fmt"
 	"maps"
 	"net/url"
@@ -37,6 +39,8 @@ type SearchDoc struct {
 	// ("open", "done"), the year of its archive, its last activity (dates).
 	Task                         *Task
 	TaskID, Status, Year, Edited string
+
+	key textsearch.DocKey // what its tokens are made from, hashed (docKey)
 
 	squashOnce sync.Once
 	squashed   string
@@ -90,6 +94,25 @@ func taskRefsAsTitles(slug, content string) string {
 		}
 		return ""
 	})
+}
+
+// indexKeyVersion: changes when what a doc's tokens are made of, or how
+// they are made (textsearch.Tokenize), changes, so that no index file on disk
+// is taken for docs it no longer fits.
+const indexKeyVersion = "1"
+
+// docKey: a doc's key in an index file, a hash of its kind and of what its
+// tokens are made from: equal keys, equal tokens.
+func docKey(kind string, parts ...string) textsearch.DocKey {
+	h := sha256.New()
+	h.Write([]byte(indexKeyVersion + "\x00" + kind))
+	for _, p := range parts {
+		h.Write([]byte{0})
+		h.Write([]byte(p))
+	}
+	var k textsearch.DocKey
+	copy(k[:], h.Sum(nil))
+	return k
 }
 
 // pageCache keeps a value per page until its file changes (by mtime, so
@@ -168,7 +191,7 @@ func pageSearchDoc(slug, content string, mtime time.Time) *SearchDoc {
 	}
 	text := textsearch.StripLinkTargets(taskRefsAsTitles(slug, content))
 	return &SearchDoc{Slug: slug, Title: title, Mtime: mtime, TaskRefs: taskRefRE.MatchString(content),
-		Tags: tags, ExcerptText: text, Tokens: func() []string {
+		Tags: tags, ExcerptText: text, key: docKey("page", slug, title, text), Tokens: func() []string {
 			return slices.Concat(textsearch.Tokenize(text), repeatTokens(title, textsearch.TitleWeight), textsearch.Tokenize(slug))
 		}}
 }
@@ -247,7 +270,8 @@ func taskSearchDocs() []*SearchDoc {
 			Tokens: func() []string {
 				return slices.Concat(textsearch.Tokenize(text), repeatTokens(mdtext.PlainTaskTitle(title), textsearch.TitleWeight))
 			},
-			Task: t, TaskID: t.ID, Status: "open", Tags: lowTags, Edited: lastActivity(t)}
+			Task: t, TaskID: t.ID, Status: "open", Tags: lowTags, Edited: lastActivity(t),
+			key: docKey("task", t.ID, mdtext.PlainTaskTitle(title), text)}
 		if !t.isOpen() {
 			d.Status, d.Year = "done", pastYear(t)
 		}
@@ -303,9 +327,16 @@ func (x *docIndex) searchWhere(text string, limit int, accept func(*SearchDoc) b
 // pass a few percent of the docs (maxChanges) is it built again. Docs don't
 // keep their tokens, so a change and a rebuild work out the ones they need.
 //
+// The base is a file in .zone/index/ (file), mapped into memory rather than
+// read into Go's heap, and written anew by a rebuild. A start finds it there:
+// the docs whose key (docKey) it has get their numbers back, and the others
+// are changes, as after an edit. Where no file can be written, the base is
+// kept in memory.
+//
 // The doc caches hand back the same docs until their file changes, so the
 // docs' pointers are the key.
 type indexCache struct {
+	file      string // in .zone/index/
 	mu        sync.Mutex
 	users     string // who the docs were split for (usersKey)
 	all       []*SearchDoc
@@ -405,8 +436,12 @@ func (c *indexCache) get(rq *Req, docs []*SearchDoc) *docIndex {
 }
 
 // update: the shared docs are c.shared now. Finds what differs from the base,
-// or builds it again (rebuild, or when that is more than maxChanges).
+// or builds it again (rebuild, or when that is more than maxChanges). Without
+// a base yet, it is the file's, when there is one.
 func (c *indexCache) update(rebuild bool) {
+	if c.base == nil {
+		rebuild = !c.load()
+	}
 	if !rebuild {
 		inShared := make(map[*SearchDoc]bool, len(c.shared))
 		for _, d := range c.shared {
@@ -429,9 +464,91 @@ func (c *indexCache) update(rebuild bool) {
 			return
 		}
 	}
-	c.base = newDocIndex(c.shared)
-	c.baseID = make(map[*SearchDoc]int, len(c.shared))
-	for id, d := range c.shared {
+	c.build()
+}
+
+// indexPath: where the base's file is ("": nowhere, no wiki).
+func (c *indexCache) indexPath() string {
+	if cfg.Data == "" || c.file == "" {
+		return ""
+	}
+	return statePath("index", c.file)
+}
+
+// writeIndexFiles: false where the wiki is only read (zonewiki eval): a
+// file there is read, but a rebuild stays in memory.
+var writeIndexFiles = true
+
+// goneDoc stands in the base for a doc of its file that is no longer there:
+// it is in no shared docs, so it is left out (dead).
+var goneDoc = &SearchDoc{}
+
+// load: the base from its file, the docs it still has numbered as there.
+// False when there is none to use: then it is built.
+func (c *indexCache) load() bool {
+	path := c.indexPath()
+	if path == "" {
+		return false
+	}
+	ix, err := textsearch.OpenIndex(path)
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			logf("search index: %v; building it again", err)
+		}
+		return false
+	}
+	keys := ix.Keys()
+	ids := make(map[textsearch.DocKey][]int, len(keys))
+	for id, k := range keys {
+		ids[k] = append(ids[k], id)
+	}
+	docs := make([]*SearchDoc, len(keys))
+	baseID := make(map[*SearchDoc]int, len(c.shared))
+	last := -1
+	for _, d := range c.shared {
+		same := ids[d.key]
+		if len(same) == 0 {
+			continue
+		}
+		id := same[0]
+		ids[d.key] = same[1:]
+		if id < last {
+			// In another order than now: equal scores would rank
+			// otherwise than in an index built anew.
+			return false
+		}
+		last, docs[id], baseID[d] = id, d, id
+	}
+	for id, d := range docs {
+		if d == nil {
+			docs[id] = goneDoc
+		}
+	}
+	c.base, c.baseID, c.dead, c.delta = &docIndex{docs, docs, ix}, baseID, nil, nil
+	return true
+}
+
+// build: the base anew over the shared docs, written to its file and mapped,
+// or kept in memory when that fails.
+func (c *indexCache) build() {
+	docs := c.shared
+	var ix *textsearch.Index
+	if path := c.indexPath(); path != "" && writeIndexFiles {
+		err := textsearch.WriteIndex(path, len(docs), func(i int) []string { return docs[i].Tokens() },
+			func(i int) textsearch.DocKey { return docs[i].key })
+		if err == nil {
+			ix, err = textsearch.OpenIndex(path)
+		}
+		if err != nil {
+			logf("search index: %v; kept in memory", err)
+		}
+	}
+	if ix == nil {
+		ix = textsearch.NewIndexOf(len(docs), func(i int) []string { return docs[i].Tokens() })
+	}
+	c.base = &docIndex{docs, docs, ix}
+	c.baseID = make(map[*SearchDoc]int, len(docs))
+	for id, d := range docs {
 		c.baseID[d] = id
 	}
 	c.dead, c.delta = nil, nil
@@ -477,7 +594,10 @@ func docVisible(user string, d *SearchDoc) bool {
 	return canSee(user, d.Slug)
 }
 
-var searchIndexCache, chunkIndexCache indexCache
+var (
+	searchIndexCache = indexCache{file: "pages.idx"}
+	chunkIndexCache  = indexCache{file: "sections.idx"}
+)
 
 // searchIndex: the index rq searches (nil: Zone itself, over everything).
 func searchIndex(rq *Req) *docIndex {
@@ -842,7 +962,8 @@ func pageChunks(slug, content string, mtime time.Time) []*SearchDoc {
 		s.Heading, s.Path = strings.Clone(s.Heading), strings.Clone(s.Path)
 		chunks = append(chunks, &SearchDoc{Slug: slug, Title: title, Section: true, Heading: s.Heading,
 			Path: s.Path, Text: s.Body, Anchor: sectionAnchorOf(s.Heading, s.Level), Tags: tags, Mtime: mtime,
-			Key: chunkKey(title, chunkText(s.Path, s.Body)), Tokens: func() []string {
+			Key: chunkKey(title, chunkText(s.Path, s.Body)), key: docKey("section", slug, title, s.Heading, s.Body),
+			Tokens: func() []string {
 				return slices.Concat(textsearch.Tokenize(s.Heading+"\n"+s.Body), repeatTokens(title, textsearch.TitleWeight), textsearch.Tokenize(slug))
 			}})
 	}

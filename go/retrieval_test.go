@@ -103,8 +103,15 @@ func TestIndexCacheFollowsTheUsers(t *testing.T) {
 // Edits, deletions and new pages and tasks, round after round: every
 // viewer's index answers as one built afresh over what they may see, in the
 // same order, whether the cache kept its base and corrected it or built it
-// again.
+// again. With the base in a file, Zone starts again now and then, and finds
+// it there.
 func TestIndexCacheStaysAsIfBuiltAfresh(t *testing.T) {
+	for _, file := range []string{"", "test.idx"} {
+		t.Run("file "+file, func(t *testing.T) { indexCacheStaysAsIfBuiltAfresh(t, file) })
+	}
+}
+
+func indexCacheStaysAsIfBuiltAfresh(t *testing.T, file string) {
 	testWiki(t, nil)
 	withUsers(t, "alice", "bob")
 	r := rand.New(rand.NewSource(5))
@@ -131,8 +138,9 @@ func TestIndexCacheStaysAsIfBuiltAfresh(t *testing.T) {
 		return &SearchDoc{Slug: fmt.Sprintf("p%d", serial), Tokens: fixedTokens(tokens()...)}
 	}
 	label := func(d *SearchDoc) string { return d.Slug + "/" + d.TaskID }
+	keyed := func(d *SearchDoc) *SearchDoc { d.key = testKey(d); return d }
 	edited := func(d *SearchDoc) *SearchDoc { // the doc as a changed file would give it: new
-		return &SearchDoc{Slug: d.Slug, TaskID: d.TaskID, Task: d.Task, Tokens: fixedTokens(tokens()...)}
+		return keyed(&SearchDoc{Slug: d.Slug, TaskID: d.TaskID, Task: d.Task, Tokens: fixedTokens(tokens()...)})
 	}
 	var docs []*SearchDoc
 	for i := 0; i < 240; i++ {
@@ -140,13 +148,18 @@ func TestIndexCacheStaysAsIfBuiltAfresh(t *testing.T) {
 		if i > 0 && r.Intn(6) == 0 { // the same words: equal scores, the order decides
 			docs[i].Tokens = docs[i-1].Tokens
 		}
+		keyed(docs[i])
 	}
 	queries := []string{"apple", "banana cherry", "grap", "aple", "bananna", "pech", "zzzz", "kiwi lemon lime", "nectar orange papaya"}
 	viewers := map[string]*Req{"alice": {user: "alice"}, "bob": {user: "bob"}, "leaf": nil}
-	var c indexCache
-	rebuilds, corrected := 0, 0
+	c := &indexCache{file: file}
+	rebuilds, corrected, starts := 0, 0, 0
 	var lastBase *docIndex
 	for round := 0; round < 60; round++ {
+		if file != "" && round%7 == 3 { // Zone starts again
+			c, lastBase = &indexCache{file: file}, nil
+			starts++
+		}
 		if round > 0 {
 			for k := r.Intn(8); k >= 0; k-- { // a few edits, deletions, additions
 				switch i := r.Intn(len(docs)); r.Intn(3) {
@@ -155,7 +168,7 @@ func TestIndexCacheStaysAsIfBuiltAfresh(t *testing.T) {
 				case 1:
 					docs = slices.Delete(docs, i, i+1)
 				default:
-					docs = slices.Insert(docs, i, newDoc())
+					docs = slices.Insert(docs, i, keyed(newDoc()))
 				}
 			}
 			if round%20 == 0 { // many at once: more than the base is kept for
@@ -190,15 +203,72 @@ func TestIndexCacheStaysAsIfBuiltAfresh(t *testing.T) {
 				t.Fatalf("round %d %s: the docs differ from what the viewer may see", round, name)
 			}
 		}
-		if c.base != lastBase {
+		if c.base != lastBase && lastBase != nil {
 			rebuilds++
 		} else if len(c.dead)+len(c.delta) > 0 {
 			corrected++
 		}
 		lastBase = c.base
 	}
-	if rebuilds < 3 || corrected < 10 {
-		t.Errorf("the test should use both ways: %d rebuilds, %d rounds with a corrected base", rebuilds, corrected)
+	if rebuilds < 3 || corrected < 10 || file != "" && starts < 5 {
+		t.Errorf("the test should use every way: %d rebuilds, %d rounds with a corrected base, %d starts", rebuilds, corrected, starts)
+	}
+}
+
+// testKey: a test doc's key, from what it is and its tokens.
+func testKey(d *SearchDoc) textsearch.DocKey {
+	return docKey("test", d.Slug, d.TaskID, strings.Join(d.Tokens(), " "))
+}
+
+// A start finds the base in its file and doesn't build it: no doc's tokens
+// are asked for, only those of a doc that changed meanwhile. A damaged file
+// is built again.
+func TestStartFindsTheIndexFile(t *testing.T) {
+	testWiki(t, nil)
+	asked := 0
+	doc := func(slug string, words ...string) *SearchDoc {
+		d := &SearchDoc{Slug: slug, Tokens: func() []string { asked++; return words }}
+		d.key = docKey("test", slug, strings.Join(words, " "))
+		return d
+	}
+	var docs []*SearchDoc
+	for i := range 100 {
+		docs = append(docs, doc(fmt.Sprintf("p%d", i), "apple", fmt.Sprintf("w%d", i%7)))
+	}
+	search := func(c *indexCache) []*SearchDoc { return c.get(nil, docs).search("apple w3", 1000) }
+	want := search(&indexCache{file: "pages.idx"})
+	if asked != len(docs) {
+		t.Fatalf("the first build asked for %d docs' tokens", asked)
+	}
+	path := statePath("index", "pages.idx")
+	if _, err := os.Stat(path); err != nil {
+		t.Fatal(err)
+	}
+
+	asked = 0
+	if got := search(&indexCache{file: "pages.idx"}); !slices.Equal(got, want) || asked != 0 {
+		t.Errorf("a start: %d docs' tokens asked for, the same hits: %v", asked, slices.Equal(got, want))
+	}
+
+	docs[5] = doc("p5", "apple", "w3", "w3") // changed while Zone was down
+	asked = 0
+	c := &indexCache{file: "pages.idx"}
+	got := search(c)
+	if asked != 1 || len(c.dead) != 1 || len(c.delta) != 1 {
+		t.Errorf("a start after an edit: %d docs' tokens asked for, %d dead, %d new", asked, len(c.dead), len(c.delta))
+	}
+	if fresh := newDocIndex(docs).search("apple w3", 1000); !slices.Equal(got, fresh) {
+		t.Errorf("after an edit: not as if built afresh")
+	}
+
+	b, _ := os.ReadFile(path)
+	b[len(b)-1] ^= 1
+	if err := os.WriteFile(path, b, 0o666); err != nil {
+		t.Fatal(err)
+	}
+	asked = 0
+	if got := search(&indexCache{file: "pages.idx"}); !slices.Equal(got, newDocIndex(docs).search("apple w3", 1000)) || asked != 2*len(docs) {
+		t.Errorf("a damaged file: %d docs' tokens asked for (built, and the check against a fresh one)", asked)
 	}
 }
 
