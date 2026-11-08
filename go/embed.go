@@ -482,10 +482,11 @@ type semHit struct {
 }
 
 // idScore is a section (by its key), a task (by its id) or a page (by its
-// slug) and its similarity.
+// slug) and its similarity; a section's page too (Slug).
 type idScore struct {
 	ID    string
 	Score float64
+	Slug  string
 }
 
 // semanticIndex holds the section vectors of every page, kept fresh by a
@@ -1000,7 +1001,7 @@ func (x *semanticIndex) searchTasks(query string, known map[string]bool, limit i
 	var hits []idScore
 	for i, r := range rows {
 		if scores[i] >= x.taskMinScore && (known == nil || known[r.id]) {
-			hits = append(hits, idScore{r.id, scores[i]})
+			hits = append(hits, idScore{ID: r.id, Score: scores[i]})
 		}
 	}
 	sort.SliceStable(hits, func(i, j int) bool { return hits[i].Score > hits[j].Score })
@@ -1015,7 +1016,7 @@ func (x *semanticIndex) searchChunks(query string, known map[string]bool, limit 
 	sort.SliceStable(hits, func(i, j int) bool { return hits[i].score > hits[j].score })
 	out := make([]idScore, min(limit, len(hits)))
 	for i := range out {
-		out[i] = idScore{hits[i].row.hash, hits[i].score}
+		out[i] = idScore{hits[i].row.hash, hits[i].score, hits[i].row.slug}
 	}
 	return out
 }
@@ -1102,7 +1103,7 @@ func (x *semanticIndex) nearest(me []float32, pages map[string]*semPage, pageVec
 			continue
 		}
 		if s := dot(me, pageVecs[other]); s >= x.relatedMinScore {
-			scored = append(scored, idScore{other, s})
+			scored = append(scored, idScore{ID: other, Score: s})
 		}
 	}
 	sort.SliceStable(scored, func(i, j int) bool { return scored[i].Score > scored[j].Score })
@@ -1121,7 +1122,7 @@ func semanticTasks() []semTask {
 	docs := taskSearchDocs()
 	out := make([]semTask, len(docs))
 	for i, d := range docs {
-		out[i] = semTask{d.TaskID, d.ExcerptText}
+		out[i] = semTask{d.taskID(), d.tk.text}
 	}
 	return out
 }

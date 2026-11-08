@@ -22,33 +22,56 @@ import (
 )
 
 // SearchDoc is a page, a page's section or a task as BM25 indexes it. A
-// page's or section's text isn't kept, nor its tokens: they were most of a
-// big wiki's memory. They are read from its file again when asked for
-// (body, Tokens).
+// page's or section's text isn't kept, nor its tokens, nor what a section
+// shows (its heading, path, anchor, semantic key): a big wiki has hundreds
+// of thousands of sections, and they were most of its memory. They are read
+// from its file again when asked for (body, tokens, section), which a search
+// does only for the docs it shows.
 type SearchDoc struct {
 	Slug, Title string
 	Mtime       time.Time       // a page's or section's file
 	Tags        []string        // for #tag queries
-	Tokens      func() []string // worked out when asked for
-	ExcerptText string          // a task's searchable text
+	Tokens      func() []string // a task's tokens (and a test doc's); a page's and a section's come from its file (tokens)
 	TaskRefs    bool            // a page with [[task:…]], indexed with the task app's titles
+	Section     bool            // a section (the section index)
+	nth         int32           // a section: which of its page's sections it is
 	file        *pageFile       // a page's or section's file
 
-	// A section (the section index): the key is the one its vector has in
-	// the semantic index; nth: which of its page's sections it is.
-	Section                    bool
-	Heading, Path, Anchor, Key string
-	nth                        int
-
-	// A task: the whole task (the MCP tools' dates and tags), its status
-	// ("open", "done"), the year of its archive, its last activity (dates).
-	Task                         *Task
-	TaskID, Status, Year, Edited string
+	// A task: the whole task (the MCP tools' dates and tags), and what its
+	// doc adds (tk).
+	Task *Task
+	tk   *taskDocInfo
 
 	key textsearch.DocKey // what its tokens are made from, hashed (docKey)
 }
 
+// taskDocInfo: what a task's doc holds beside the task: its searchable text,
+// its status ("open", "done"), the year of its archive, its last activity
+// (dates).
+type taskDocInfo struct{ text, status, year, edited string }
+
 func (d *SearchDoc) isTask() bool { return d.Task != nil }
+
+// taskID: a task's id, "" for a page or section.
+func (d *SearchDoc) taskID() string {
+	if d.Task == nil {
+		return ""
+	}
+	return d.Task.ID
+}
+
+// tokens: what BM25 indexes the doc by: a page's or section's from its file
+// (indexed), a task's from its text.
+func (d *SearchDoc) tokens() []string {
+	if d.Tokens != nil {
+		return d.Tokens()
+	}
+	if d.file != nil {
+		toks, _, _ := d.indexed()
+		return toks
+	}
+	return nil
+}
 
 // body: a page's text as search sees it, a section's own text, a task's
 // text. False when the page is gone; a page changed since the doc was made
@@ -62,23 +85,58 @@ func (d *SearchDoc) body() (string, bool) {
 // the file changed since).
 func (d *SearchDoc) bodyNow() (body string, same, ok bool) {
 	if d.file == nil {
-		return d.ExcerptText, true, true
+		if d.tk != nil {
+			return d.tk.text, true, true
+		}
+		return "", true, true
 	}
 	t, ok := docTexts.of(d.file, d.Section)
 	switch {
 	case !ok:
 		return "", false, false
-	case d.nth < len(t.texts):
+	case int(d.nth) < len(t.texts):
 		return t.texts[d.nth], t.same, true
 	}
 	return "", false, true
+}
+
+// section: a section's place in its page as its file has it now (its
+// heading, path, level, text); none for a page or task, or a page gone.
+func (d *SearchDoc) section() chunkSection {
+	if !d.Section || d.file == nil {
+		return chunkSection{}
+	}
+	t, ok := docTexts.of(d.file, true)
+	if !ok || int(d.nth) >= len(t.secs) {
+		return chunkSection{}
+	}
+	return t.secs[d.nth]
+}
+
+// heading, path, anchor: a section's heading, its path of headings, the
+// #anchor it opens at (sectionAnchorOf); "" for a page or task.
+func (d *SearchDoc) heading() string { return d.section().Heading }
+func (d *SearchDoc) path() string    { return d.section().Path }
+func (d *SearchDoc) anchor() string {
+	if !d.Section {
+		return ""
+	}
+	s := d.section()
+	return sectionAnchorOf(s.Heading, s.Level)
+}
+
+// semKey: a section's key in the semantic index, the hash its vector has
+// (chunkKey).
+func (d *SearchDoc) semKey() string {
+	s := d.section()
+	return chunkKey(d.Title, chunkText(s.Path, s.Body))
 }
 
 // text: the searchable text.
 func (d *SearchDoc) text() string {
 	body, _ := d.body()
 	if d.Section {
-		return d.Title + "\n" + d.Heading + "\n" + body
+		return d.Title + "\n" + d.heading() + "\n" + body
 	}
 	return body
 }
@@ -92,7 +150,7 @@ func (d *SearchDoc) indexed() (toks []string, squashed string, same bool) {
 	body, same, _ := d.bodyNow()
 	own := body
 	if d.Section {
-		own = d.Heading + "\n" + body
+		own = d.heading() + "\n" + body
 	}
 	toks, squashed = textsearch.TokensAndSquash(own)
 	if title := textsearch.Squash(d.Title); d.Section && title != "" {
@@ -108,7 +166,7 @@ func (d *SearchDoc) squashed() string { return docTexts.squashed(d) }
 // task's last activity.
 func (d *SearchDoc) date() string {
 	if d.isTask() {
-		return d.Edited
+		return d.tk.edited
 	}
 	return fmtDate(d.Mtime)
 }
@@ -144,6 +202,7 @@ type textCache struct {
 // can't be read); same: the file still had the mtime its docs were made at.
 type fileTexts struct {
 	texts []string
+	secs  []chunkSection // a section's file: its sections (texts: their bodies)
 	same  bool
 }
 
@@ -171,7 +230,8 @@ func (c *textCache) of(f *pageFile, sections bool) (fileTexts, bool) {
 		t.same = err == nil && st.ModTime().Equal(f.mtime)
 		content = strings.ToValidUTF8(content, "�")
 		if sections {
-			for _, s := range searchSections(f.slug, content) {
+			t.secs = searchSections(f.slug, content)
+			for _, s := range t.secs {
 				t.texts = append(t.texts, s.Body)
 			}
 		} else {
@@ -181,6 +241,9 @@ func (c *textCache) of(f *pageFile, sections bool) (fileTexts, bool) {
 	n := 0
 	for _, s := range t.texts {
 		n += len(s)
+	}
+	for _, s := range t.secs {
+		n += len(s.Heading) + len(s.Path)
 	}
 	c.mu.Lock()
 	c.keep(n)
@@ -324,13 +387,8 @@ func pageSearchDoc(slug, path, content string, mtime time.Time) *SearchDoc {
 	for i, tag := range tags {
 		tags[i] = strings.Clone(tag)
 	}
-	d := &SearchDoc{Slug: slug, Title: title, Mtime: mtime, TaskRefs: taskRefRE.MatchString(content),
+	return &SearchDoc{Slug: slug, Title: title, Mtime: mtime, TaskRefs: taskRefRE.MatchString(content),
 		Tags: tags, file: &pageFile{slug, path, mtime}, key: docKey("page", slug, title, searchText(slug, content))}
-	d.Tokens = func() []string {
-		toks, _, _ := d.indexed()
-		return toks
-	}
-	return d
 }
 
 var searchDocCache pageCache[*SearchDoc]
@@ -403,14 +461,14 @@ func taskSearchDocs() []*SearchDoc {
 		}
 		text := textsearch.StripLinkTargets(strings.TrimSpace(title + " " + t.Description + " " +
 			strings.Join(comments, " ") + " " + strings.Join(tags, " ")))
-		d := &SearchDoc{Slug: tasksDirName, Title: "[Task] " + mdtext.PlainTaskTitle(title), ExcerptText: text,
+		d := &SearchDoc{Slug: tasksDirName, Title: "[Task] " + mdtext.PlainTaskTitle(title),
 			Tokens: func() []string {
 				return slices.Concat(textsearch.Tokenize(text), repeatTokens(mdtext.PlainTaskTitle(title), textsearch.TitleWeight))
 			},
-			Task: t, TaskID: t.ID, Status: "open", Tags: lowTags, Edited: lastActivity(t),
+			Task: t, tk: &taskDocInfo{text: text, status: "open", edited: lastActivity(t)}, Tags: lowTags,
 			key: docKey("task", t.ID, mdtext.PlainTaskTitle(title), text)}
 		if !t.isOpen() {
-			d.Status, d.Year = "done", pastYear(t)
+			d.tk.status, d.tk.year = "done", pastYear(t)
 		}
 		taskDocs.byID[t.ID] = d
 		docs = append(docs, d)
@@ -428,7 +486,7 @@ type docIndex struct {
 }
 
 func newDocIndex(docs []*SearchDoc) *docIndex {
-	return &docIndex{docs: docs, byID: docs, ix: textsearch.NewIndexOf(len(docs), func(i int) []string { return docs[i].Tokens() })}
+	return &docIndex{docs: docs, byID: docs, ix: textsearch.NewIndexOf(len(docs), func(i int) []string { return docs[i].tokens() })}
 }
 
 // idAt: the number in ix of docs[i].
@@ -701,7 +759,7 @@ func (c *indexCache) build() {
 				}
 				return textsearch.IndexDoc{Tokens: toks, Key: key, Text: squashed}
 			}
-			return textsearch.IndexDoc{Tokens: d.Tokens(), Key: d.key, Text: textsearch.Squash(d.text())}
+			return textsearch.IndexDoc{Tokens: d.tokens(), Key: d.key, Text: textsearch.Squash(d.text())}
 		})
 		if err == nil {
 			ix, err = textsearch.OpenIndex(path)
@@ -711,7 +769,7 @@ func (c *indexCache) build() {
 		}
 	}
 	if ix == nil {
-		ix = textsearch.NewIndexOf(len(docs), func(i int) []string { return docs[i].Tokens() })
+		ix = textsearch.NewIndexOf(len(docs), func(i int) []string { return docs[i].tokens() })
 	}
 	c.base, c.reordered = &docIndex{docs: docs, byID: docs, ix: ix}, false
 	c.baseID = make(map[*SearchDoc]int, len(docs))
@@ -731,7 +789,7 @@ func (c *indexCache) view(own []*SearchDoc) *docIndex {
 	tokens := make([][]string, len(extra))
 	for i, d := range extra {
 		extraID[d] = n + i
-		tokens[i] = d.Tokens()
+		tokens[i] = d.tokens()
 	}
 	dead := make(map[int]bool, len(c.dead))
 	for _, id := range c.dead {
@@ -899,7 +957,7 @@ func rankedDocs(q *textsearch.Query, x *docIndex, keep func(*SearchDoc) bool, li
 			continue
 		}
 		if d.isTask() {
-			tasks[d.TaskID] = d
+			tasks[d.taskID()] = d
 		} else {
 			pages[d.Slug] = d
 		}
@@ -930,7 +988,7 @@ func bestSections(rq *Req, q *textsearch.Query, slugs map[string]bool) map[strin
 	best := map[string]*SearchDoc{}
 	own := func(d *SearchDoc) string { // the section's own text
 		body, _ := d.body()
-		return d.Heading + "\n" + body
+		return d.heading() + "\n" + body
 	}
 	if phrase := q.Phrase(); phrase != "" {
 		for _, d := range ranked {
@@ -954,7 +1012,7 @@ func bestSections(rq *Req, q *textsearch.Query, slugs map[string]bool) map[strin
 		byKey := map[string]*SearchDoc{}
 		for _, d := range x.docs {
 			if !d.isTask() && rest[d.Slug] {
-				byKey[d.Key] = d
+				byKey[d.semKey()] = d
 			}
 		}
 		for _, h := range semantic.searchChunks(text, rest, max(len(byKey), 1)) {
@@ -1075,25 +1133,25 @@ func doSearch(rq *Req, raw string, unlinked bool, limit int, quicknote bool) []M
 		if !d.isTask() {
 			if section = sections[d.Slug]; section != nil {
 				sectionBody, _ := section.body()
-				excerptOf = strings.TrimSpace(section.Heading + "\n" + sectionBody)
+				excerptOf = strings.TrimSpace(section.heading() + "\n" + sectionBody)
 			}
 		}
 		r := M{"slug": d.Slug, "title": d.Title, "excerpt": htmlOf(textsearch.Excerpt(excerptOf, text)),
 			"meta": resultMeta(d, names)}
 		if d.isTask() {
-			r["type"], r["task_id"], r["status"] = "task", d.TaskID, d.Status
-			if d.Year != "" {
-				r["year"] = d.Year
+			r["type"], r["task_id"], r["status"] = "task", d.taskID(), d.tk.status
+			if d.tk.year != "" {
+				r["year"] = d.tk.year
 			}
 			tab := "open"
-			if d.Status == "done" {
+			if d.tk.status == "done" {
 				tab = "completed"
 			}
 			list := taskList(d.Task, names)
 			if list != "" {
 				r["list"] = list
 			}
-			r["href"] = taskHref(d.TaskID, tab, list, d.Year)
+			r["href"] = taskHref(d.taskID(), tab, list, d.tk.year)
 		} else {
 			href := pathURL("page", d.Slug)
 			// The page highlights what matched (js/search.js); before the #anchor.
@@ -1105,7 +1163,7 @@ func doSearch(rq *Req, raw string, unlinked bool, limit int, quicknote bool) []M
 				href += "?" + strings.Join(hl, "&")
 			}
 			if section != nil {
-				href += section.Anchor
+				href += section.anchor()
 			}
 			r["href"] = href
 		}
@@ -1142,12 +1200,14 @@ func searchSections(slug, content string) []chunkSection {
 	return sections
 }
 
-// pageChunks: a page's sections (pageSections) as BM25 documents. Their
-// text and tokens are read from the file again when asked for.
+// pageChunks: a page's sections (searchSections) as BM25 documents. Their
+// text and tokens, and their headings, paths, anchors and semantic keys, are
+// read from the file again when asked for (section): a doc holds only
+// what all of its page's share and which section it is.
 func pageChunks(slug, path, content string, mtime time.Time) []*SearchDoc {
-	// Clones, as in pageSearchDoc: the title, tags, headings and paths are
-	// pieces of content, and would keep the whole file in memory for as long
-	// as the sections live.
+	// Clones, as in pageSearchDoc: the title and tags are pieces of content,
+	// and would keep the whole file in memory for as long as the sections
+	// live.
 	title, _ := semanticText(content, slug)
 	title = strings.Clone(title)
 	tags := mdtext.PageTags(content)
@@ -1157,15 +1217,8 @@ func pageChunks(slug, path, content string, mtime time.Time) []*SearchDoc {
 	file := &pageFile{slug, path, mtime}
 	var chunks []*SearchDoc
 	for i, s := range searchSections(slug, content) {
-		d := &SearchDoc{Slug: slug, Title: title, Section: true, Heading: strings.Clone(s.Heading),
-			Path: strings.Clone(s.Path), Anchor: sectionAnchorOf(s.Heading, s.Level), Tags: tags, Mtime: mtime,
-			Key: chunkKey(title, chunkText(s.Path, s.Body)), key: docKey("section", slug, title, s.Heading, s.Body),
-			file: file, nth: i}
-		d.Tokens = func() []string {
-			toks, _, _ := d.indexed()
-			return toks
-		}
-		chunks = append(chunks, d)
+		chunks = append(chunks, &SearchDoc{Slug: slug, Title: title, Section: true, Tags: tags, Mtime: mtime,
+			key: docKey("section", slug, title, s.Heading, s.Body), file: file, nth: int32(i)})
 	}
 	return chunks
 }
@@ -1214,19 +1267,30 @@ func retrieve(rq *Req, raw string, limit int, under string, quicknote bool) []*S
 	if semantic != nil {
 		semantic.poke()
 		text := q.RankingText()
-		byKey, slugs, tasks := map[string]*SearchDoc{}, map[string]bool{}, map[string]*SearchDoc{}
+		bySlug, slugs, tasks := map[string][]*SearchDoc{}, map[string]bool{}, map[string]*SearchDoc{}
 		passes := x.filter(q, nil)
 		for i, d := range x.docs {
 			switch {
 			case !passes(x.idAt(i), d):
 			case !d.isTask() && pageOK(d.Slug):
-				byKey[d.Key], slugs[d.Slug] = d, true
+				bySlug[d.Slug], slugs[d.Slug] = append(bySlug[d.Slug], d), true
 			case d.isTask() && !pagesOnly && !hiddenDoc(rq, d):
-				tasks[d.TaskID] = d
+				tasks[d.taskID()] = d
 			}
 		}
+		// A hit names its section by its key, which a doc works out from
+		// its page (semKey): only for the pages hit.
 		var hits, tHits []docScore
+		keyed := map[string]map[string]*SearchDoc{}
 		for _, h := range semantic.searchChunks(text, slugs, fuseDepth) {
+			byKey := keyed[h.Slug]
+			if byKey == nil {
+				byKey = map[string]*SearchDoc{}
+				for _, d := range bySlug[h.Slug] {
+					byKey[d.semKey()] = d
+				}
+				keyed[h.Slug] = byKey
+			}
 			if d := byKey[h.ID]; d != nil {
 				hits = append(hits, docScore{d, h.Score})
 			}
@@ -1255,9 +1319,9 @@ func queryLogPath() string { return statePath("queries.jsonl") }
 // task:<id>.
 func resultTarget(d *SearchDoc) string {
 	if d.isTask() {
-		return "task:" + d.TaskID
+		return "task:" + d.taskID()
 	}
-	return d.Slug + d.Anchor
+	return d.Slug + d.anchor()
 }
 
 // queryLogEntry: a line of the query log.

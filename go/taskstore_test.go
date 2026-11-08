@@ -359,7 +359,7 @@ func TestEveryUsersFiles(t *testing.T) {
 	}
 	found := false
 	for _, d := range taskSearchDocs() {
-		found = found || d.TaskID == mine.ID && d.Task.Owner == "alice"
+		found = found || d.taskID() == mine.ID && d.Task.Owner == "alice"
 	}
 	if !found {
 		t.Error("the search index lacks alice's task")

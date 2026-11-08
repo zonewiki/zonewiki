@@ -902,7 +902,7 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 		for w := range want {
 			all = all && have[w]
 		}
-		if all && (!q.HasFilters() || q.Accepts(d.text(), d.Tags, d.date()) && !q.HoldsExcluded(d.Tokens())) {
+		if all && (!q.HasFilters() || q.Accepts(d.text(), d.Tags, d.date()) && !q.HoldsExcluded(d.tokens())) {
 			docs = append(docs, d)
 		}
 	}
@@ -912,7 +912,7 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 			semantic.poke()
 			byID := map[string]*SearchDoc{}
 			for _, d := range docs {
-				byID[d.TaskID] = d
+				byID[d.taskID()] = d
 			}
 			ranked = textsearch.Fuse([][]*SearchDoc{ranked, bySimilarity(taskHits(q.Text, byID, max(len(byID), 1)))})
 		}
@@ -1123,7 +1123,7 @@ const (
 func tagHints(task *Task, user string) string {
 	var others []*SearchDoc
 	for _, d := range taskSearchDocs() {
-		if d.TaskID != task.ID && canSeeTask(user, d.Task) {
+		if d.taskID() != task.ID && canSeeTask(user, d.Task) {
 			others = append(others, d)
 		}
 	}
@@ -2007,11 +2007,11 @@ func searchWiki(args jsonObj, base, user string) (string, error) {
 			continue // the page is gone
 		}
 		where := d.Title
-		if d.Path != "" {
-			where += " › " + d.Path
+		if path := d.path(); path != "" {
+			where += " › " + path
 		}
 		out = append(out, fmt.Sprintf("[%d] %s\nslug: %s\nedited: %s\nurl: %s%s%s\nfile: %s\n\n%s", i+1, where, d.Slug,
-			fmtDate(d.Mtime), base, pathURL("page", d.Slug), d.Anchor, hostFile(d.Slug), body))
+			fmtDate(d.Mtime), base, pathURL("page", d.Slug), d.anchor(), hostFile(d.Slug), body))
 	}
 	return strings.Join(out, "\n\n---\n\n"), nil
 }

@@ -231,10 +231,10 @@ func newQueries(path string, logs []string) ([]queryStub, error) {
 // section of the page.
 func matchesTarget(d *SearchDoc, target string) bool {
 	if id, ok := strings.CutPrefix(target, "task:"); ok {
-		return d.isTask() && d.TaskID == id
+		return d.isTask() && d.taskID() == id
 	}
 	slug, anchor, _ := strings.Cut(target, "#")
-	return !d.isTask() && d.Slug == slug && (anchor == "" || d.Anchor == "#"+anchor)
+	return !d.isTask() && d.Slug == slug && (anchor == "" || d.anchor() == "#"+anchor)
 }
 
 // rankOf: the 1-based rank of the first result matching a target, 0 if none does.
@@ -255,9 +255,9 @@ func unknownTargets(questions []question) []string {
 	sections, slugs, tasks := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, d := range chunkIndex(nil).docs {
 		if d.isTask() {
-			tasks[d.TaskID] = true
+			tasks[d.taskID()] = true
 		} else {
-			sections[d.Slug+"#"+strings.TrimPrefix(d.Anchor, "#")] = true
+			sections[d.Slug+"#"+strings.TrimPrefix(d.anchor(), "#")] = true
 			slugs[d.Slug] = true
 		}
 	}

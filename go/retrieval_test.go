@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 	"zonewiki/internal/textsearch"
 )
 
@@ -134,14 +135,14 @@ func indexCacheStaysAsIfBuiltAfresh(t *testing.T, file string) {
 			return &SearchDoc{Slug: fmt.Sprintf("private/bob/b%d", serial), Tokens: fixedTokens(tokens()...)}
 		case 2:
 			owner := []string{"", "alice", "bob"}[r.Intn(3)]
-			return &SearchDoc{Slug: tasksDirName, TaskID: fmt.Sprintf("t%d", serial), Task: &Task{ID: fmt.Sprintf("t%d", serial), Owner: owner}, Tokens: fixedTokens(tokens()...)}
+			return &SearchDoc{Slug: tasksDirName, Task: &Task{ID: fmt.Sprintf("t%d", serial), Owner: owner}, Tokens: fixedTokens(tokens()...)}
 		}
 		return &SearchDoc{Slug: fmt.Sprintf("p%d", serial), Tokens: fixedTokens(tokens()...)}
 	}
-	label := func(d *SearchDoc) string { return d.Slug + "/" + d.TaskID }
+	label := func(d *SearchDoc) string { return d.Slug + "/" + d.taskID() }
 	keyed := func(d *SearchDoc) *SearchDoc { d.key = testKey(d); return d }
 	edited := func(d *SearchDoc) *SearchDoc { // the doc as a changed file would give it: new
-		return keyed(&SearchDoc{Slug: d.Slug, TaskID: d.TaskID, Task: d.Task, Tokens: fixedTokens(tokens()...)})
+		return keyed(&SearchDoc{Slug: d.Slug, Task: d.Task, Tokens: fixedTokens(tokens()...)})
 	}
 	var docs []*SearchDoc
 	for i := 0; i < 240; i++ {
@@ -223,7 +224,7 @@ func indexCacheStaysAsIfBuiltAfresh(t *testing.T, file string) {
 
 // testKey: a test doc's key, from what it is and its tokens.
 func testKey(d *SearchDoc) textsearch.DocKey {
-	return docKey("test", d.Slug, d.TaskID, strings.Join(d.Tokens(), " "))
+	return docKey("test", d.Slug, d.taskID(), strings.Join(d.tokens(), " "))
 }
 
 // A start finds the base in its file and doesn't build it: no doc's tokens
@@ -359,13 +360,13 @@ func TestDocsReadTheirTextAgain(t *testing.T) {
 	if !ok || body != searchText("garden", page) || strings.Contains(body, "zzqtarget") {
 		t.Errorf("the page's text: %v %q", ok, body)
 	}
-	if !slices.Contains(d.Tokens(), "zzqrose") || !d.hasPhrase("red zzqrose here") {
-		t.Errorf("tokens %v", d.Tokens())
+	if !slices.Contains(d.tokens(), "zzqrose") || !d.hasPhrase("red zzqrose here") {
+		t.Errorf("tokens %v", d.tokens())
 	}
 	var tulips *SearchDoc
 	for _, chunks := range perPage(&chunkDocCache, (*Req)(nil).pageStats(), pageChunks, "", nil) {
 		for _, c := range chunks {
-			if c.Heading == "Tulips" {
+			if c.heading() == "Tulips" {
 				tulips = c
 			}
 		}
@@ -376,14 +377,14 @@ func TestDocsReadTheirTextAgain(t *testing.T) {
 	if body, ok := tulips.body(); !ok || body != "Yellow   Straße zzqtulip." || !strings.HasSuffix(tulips.text(), "Tulips\nYellow   Straße zzqtulip.") {
 		t.Errorf("the section's text: %v %q / %q", ok, body, tulips.text())
 	}
-	if toks := tulips.Tokens(); !slices.Contains(toks, "zzqtulip") || slices.Contains(toks, "zzqrose") {
+	if toks := tulips.tokens(); !slices.Contains(toks, "zzqtulip") || slices.Contains(toks, "zzqrose") {
 		t.Errorf("the section's tokens: %v", toks)
 	}
 	// What goes into the index file: the same tokens, the text squashed.
 	for _, doc := range []*SearchDoc{d, tulips} {
 		toks, squashed, same := doc.indexed()
-		if !slices.Equal(toks, doc.Tokens()) || squashed != textsearch.Squash(doc.text()) || !same {
-			t.Errorf("%s %q: indexed %q (same file %v), want %q", doc.Slug, doc.Heading, squashed, same, textsearch.Squash(doc.text()))
+		if !slices.Equal(toks, doc.tokens()) || squashed != textsearch.Squash(doc.text()) || !same {
+			t.Errorf("%s %q: indexed %q (same file %v), want %q", doc.Slug, doc.heading(), squashed, same, textsearch.Squash(doc.text()))
 		}
 	}
 
@@ -396,7 +397,7 @@ func TestDocsReadTheirTextAgain(t *testing.T) {
 	}
 	for _, doc := range []*SearchDoc{d, tulips} {
 		if _, _, same := doc.indexed(); same {
-			t.Errorf("%s %q: a changed file read as the same", doc.Slug, doc.Heading)
+			t.Errorf("%s %q: a changed file read as the same", doc.Slug, doc.heading())
 		}
 	}
 
@@ -451,4 +452,62 @@ func TestPhrasesInTheFileAsInMemory(t *testing.T) {
 	}
 	same("a page changed", c)
 	same("a start", &indexCache{file: "pages.idx"})
+}
+
+// A section doc keeps only what its page's sections share and which one it
+// is: its heading, path, anchor and semantic key come from its page split
+// again, and are what the split gives, a long section's parts too.
+func TestSectionDocsReadWhatTheyShow(t *testing.T) {
+	long := strings.Repeat("Many words in a long section. ", maxChunkChars/20)
+	page := "# Garden\n\nIntro.\n\n## Roses\n\nRed.\n\n### Pruning\n\nIn March.\n\n#### Tools\n\nShears.\n\n## Long\n\n" + long + "\n"
+	testWiki(t, map[string]string{"garden": page})
+	title, body := semanticText(page, "garden")
+	want := chunkSections(body, maxChunkChars)
+	var docs []*SearchDoc
+	for _, d := range chunkIndex(nil).docs {
+		if d.Slug == "garden" {
+			docs = append(docs, d)
+		}
+	}
+	if len(docs) != len(want) || len(want) < 6 {
+		t.Fatalf("%d section docs, the split has %d", len(docs), len(want))
+	}
+	for i, s := range want {
+		d := docs[i]
+		if d.heading() != s.Heading || d.path() != s.Path || d.anchor() != sectionAnchorOf(s.Heading, s.Level) ||
+			d.semKey() != chunkKey(title, chunkText(s.Path, s.Body)) {
+			t.Errorf("section %d: %q %q %q, want %+v", i, d.heading(), d.path(), d.anchor(), s)
+		}
+	}
+	if d := pageSearchDocs(nil)[0]; d.heading() != "" || d.anchor() != "" || d.path() != "" {
+		t.Errorf("a page doc has a section's: %q %q %q", d.heading(), d.anchor(), d.path())
+	}
+}
+
+// What every page and section costs while it is indexed: a doc of a few
+// words (8 bytes each), not its text, headings or keys. A field added to
+// SearchDoc is one more for each of hundreds of thousands of sections.
+func TestSearchDocStaysSmall(t *testing.T) {
+	if n := unsafe.Sizeof(SearchDoc{}); n > 144 {
+		t.Errorf("a SearchDoc is %d bytes", n)
+	}
+}
+
+// search_wiki (retrieve) fuses keywords with meaning: a section found only
+// by meaning is matched to its doc by its key, worked out only for the
+// pages hit.
+func TestRetrieveFindsSectionsByMeaning(t *testing.T) {
+	testWiki(t, semanticPages)
+	x := testIndex(newRecorder(), nil)
+	x.sync()
+	old := semantic
+	semantic = x
+	t.Cleanup(func() { semantic = old })
+	var got []string
+	for _, d := range retrieve(&Req{}, "car repair", 8, "", false) {
+		got = append(got, resultTarget(d))
+	}
+	if len(got) == 0 || got[0] != "golf#werkstatt" {
+		t.Errorf("car repair: %v, want golf#werkstatt first", got)
+	}
 }

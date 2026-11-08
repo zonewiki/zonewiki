@@ -209,7 +209,7 @@ func TestSemanticCacheOfAnOlderChunking(t *testing.T) {
 	}
 	keys := map[string]bool{}
 	for _, d := range chunkIndex(nil).docs {
-		keys[d.Key] = true
+		keys[d.semKey()] = true
 	}
 	hits := fresh.searchChunks("car repair", nil, 30)
 	if len(hits) == 0 || !keys[hits[0].ID] {

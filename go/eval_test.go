@@ -24,7 +24,17 @@ func evalWiki(t *testing.T) {
 
 // A page target matches any of its sections, a section target only its own.
 func TestEvalRank(t *testing.T) {
-	results := []*SearchDoc{{Slug: "golf", Anchor: "#reifen"}, {Slug: "golf", Anchor: "#werkstatt"}}
+	evalWiki(t)
+	byHeading := map[string]*SearchDoc{}
+	for _, d := range chunkIndex(nil).docs {
+		if d.Slug == "golf" {
+			byHeading[d.heading()] = d
+		}
+	}
+	results := []*SearchDoc{byHeading["Reifen"], byHeading["Werkstatt"]}
+	if results[0] == nil || results[1] == nil || results[0].anchor() != "#reifen" {
+		t.Fatalf("golf's sections: %v", byHeading)
+	}
 	for _, c := range []struct {
 		expect []string
 		want   int
@@ -33,7 +43,7 @@ func TestEvalRank(t *testing.T) {
 			t.Errorf("%q: rank %d, want %d", c.expect, got, c.want)
 		}
 	}
-	task := &SearchDoc{Slug: "_tasks", Task: &Task{ID: "t1"}, TaskID: "t1"}
+	task := &SearchDoc{Slug: "_tasks", Task: &Task{ID: "t1"}}
 	if rankOf([]*SearchDoc{task}, []string{"task:t1"}) != 1 {
 		t.Error("task target")
 	}
