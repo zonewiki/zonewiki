@@ -1,6 +1,7 @@
 package textsearch
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -42,7 +43,9 @@ func textOf(doc []string) string { return strings.Join(doc, " ") }
 
 func writeOpen(t *testing.T, path string, docs [][]string) *Index {
 	t.Helper()
-	if err := WriteIndex(path, len(docs), func(i int) IndexDoc { return IndexDoc{docs[i], keyOf(i), textOf(docs[i])} }); err != nil {
+	if err := WriteIndex(path, len(docs), func(i int) IndexDoc {
+		return IndexDoc{Tokens: docs[i], Key: keyOf(i), Text: textOf(docs[i]), Meta: []byte(fmt.Sprintf("meta %d", i))}
+	}); err != nil {
 		t.Fatal(err)
 	}
 	ix, err := OpenIndex(path)
@@ -122,6 +125,15 @@ func TestFileIndexIsTheMaps(t *testing.T) {
 			if k != keyOf(i) {
 				t.Fatalf("round %d: key %d is %q", round, i, k)
 			}
+			if m, ok := file.Meta(i); !ok || string(m) != fmt.Sprintf("meta %d", i) {
+				t.Fatalf("round %d: meta %d is %q", round, i, m)
+			}
+			if has, _ := file.TextHas(i, "meta"); has {
+				t.Fatalf("round %d: doc %d's text runs into its meta", round, i)
+			}
+		}
+		if _, ok := file.Meta(len(docs)); ok {
+			t.Fatalf("round %d: a meta past the docs", round)
 		}
 	}
 	if NewIndex(nil).Keys() != nil {
@@ -295,5 +307,71 @@ func TestEmptyFileIndex(t *testing.T) {
 	}
 	if hits := ix.WithExtra([][]string{{"quokkaflute"}}).Search("quokkaflute", 5); len(hits) != 1 {
 		t.Errorf("with extra: %v", hits)
+	}
+}
+
+// A merged file (MergeIndex: the docs kept from an old file, new ones from
+// their tokens) is the very file WriteIndex writes over the same docs: the
+// docs left out, kept in another order, all of them new or none.
+func TestMergeIndexIsWriteIndex(t *testing.T) {
+	dir := t.TempDir()
+	r := rand.New(rand.NewSource(7))
+	meta := func(i int) []byte { return []byte(fmt.Sprintf("meta %d", i)) }
+	for round := range 40 {
+		oldDocs := randomDocs(r, r.Intn(60))
+		oldPath := filepath.Join(dir, "old.idx")
+		old := writeOpen(t, oldPath, oldDocs)
+		// The new docs: some of old's (by number), in order or not, and new ones (-1 - j).
+		var picks []int
+		for o := range oldDocs {
+			if r.Intn(4) > 0 || round%10 == 9 {
+				picks = append(picks, o)
+			}
+		}
+		if round%10 == 8 {
+			picks = nil // all new
+		}
+		if round%3 == 1 && len(picks) > 2 {
+			i, j := r.Intn(len(picks)), r.Intn(len(picks))
+			picks[i], picks[j] = picks[j], picks[i]
+		}
+		newDocs := randomDocs(r, r.Intn(20))
+		if round%10 == 9 {
+			newDocs = nil // none new
+		}
+		for j := range newDocs {
+			at := r.Intn(len(picks) + 1)
+			picks = slices.Insert(picks, at, -1-j)
+		}
+		docOf := func(i int) IndexDoc {
+			if p := picks[i]; p >= 0 {
+				return IndexDoc{Tokens: oldDocs[p], Key: keyOf(p), Text: textOf(oldDocs[p]), Meta: meta(p)}
+			}
+			j := -1 - picks[i]
+			return IndexDoc{Tokens: newDocs[j], Key: keyOf(1000 + j), Text: textOf(newDocs[j]), Meta: meta(1000 + j)}
+		}
+		wrote, merged := filepath.Join(dir, "wrote.idx"), filepath.Join(dir, "merged.idx")
+		if err := WriteIndex(wrote, len(picks), docOf); err != nil {
+			t.Fatal(err)
+		}
+		if err := MergeIndex(merged, old, len(picks), func(i int) MergeDoc {
+			if p := picks[i]; p >= 0 {
+				return MergeDoc{Old: p}
+			}
+			return MergeDoc{Old: -1, Doc: docOf(i)}
+		}); err != nil {
+			t.Fatal(err)
+		}
+		a, _ := os.ReadFile(wrote)
+		b, _ := os.ReadFile(merged)
+		if !bytes.Equal(a, b) {
+			t.Fatalf("round %d (%d old, %d picked): the merged file differs from the one written", round, len(oldDocs), len(picks))
+		}
+		if _, err := OpenIndex(merged); err != nil {
+			t.Fatalf("round %d: %v", round, err)
+		}
+	}
+	if err := MergeIndex(filepath.Join(dir, "x.idx"), NewIndex(nil), 0, nil); err == nil {
+		t.Error("merged from an index in memory")
 	}
 }

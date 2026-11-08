@@ -511,3 +511,157 @@ func TestRetrieveFindsSectionsByMeaning(t *testing.T) {
 		t.Errorf("car repair: %v, want golf#werkstatt first", got)
 	}
 }
+
+// restartSearch: search's caches as a start finds them, empty, but for the
+// index files in .zone/index.
+func restartSearch() {
+	searchDocCache = pageCache[*SearchDoc]{}
+	chunkDocCache = pageCache[[]*SearchDoc]{}
+	searchIndexCache = indexCache{file: "pages.idx"}
+	chunkIndexCache = indexCache{file: "sections.idx"}
+	docTexts = textCache{}
+}
+
+// A start makes the docs from the index files' metas, not from the pages:
+// its first search reads no page that hasn't changed since (a page with
+// [[task:…]] is read, its doc depends on the tasks), and answers as an index
+// built anew. A page changed while Zone was down is read, and only it.
+func TestStartReadsNoPages(t *testing.T) {
+	pages := map[string]string{
+		"tasky": "# Tasky\n\nSee [[task:a1b2c3]] about apples.\n",
+	}
+	for i := range 30 {
+		pages[fmt.Sprintf("notes/p%02d", i)] = fmt.Sprintf("# Page %d\n\ntags: [fruit]\n\nApples %d.\n\n## Pears\n\nPears and apples, %d.\n\n### Über\n\nPlums.\n", i, i%5, i%3)
+	}
+	testWiki(t, pages)
+	restartSearch()
+	t.Cleanup(restartSearch)
+	targets := func(docs []*SearchDoc) []string {
+		var out []string
+		for _, d := range docs {
+			out = append(out, resultTarget(d))
+		}
+		return out
+	}
+	queries := []string{"apples", "pears plums", "uber", "apples 3", "tasky"}
+	same := func(label string) {
+		t.Helper()
+		pages, chunks := searchIndex(nil), chunkIndex(nil)
+		for _, q := range queries {
+			for _, x := range []*docIndex{pages, chunks} {
+				fresh := newDocIndex(x.docs)
+				if a, b := targets(x.search(q, 100)), targets(fresh.search(q, 100)); !slices.Equal(a, b) {
+					t.Errorf("%s %q: %v, want %v", label, q, a, b)
+				}
+			}
+		}
+	}
+	same("built")
+	for _, f := range []string{"pages.idx", "sections.idx"} {
+		if _, err := os.Stat(statePath("index", f)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	restartSearch()
+	before := pageReads.Load()
+	pagesIx, chunksIx := searchIndex(nil), chunkIndex(nil)
+	if n := pageReads.Load() - before; n != 1 {
+		t.Errorf("a start read %d pages, want 1 (the one with [[task:…]])", n)
+	}
+	if len(pagesIx.docs) != len(pages) || len(chunksIx.docs) < 3*30 {
+		t.Fatalf("%d page docs, %d section docs", len(pagesIx.docs), len(chunksIx.docs))
+	}
+	for _, d := range chunksIx.docs {
+		if d.Slug == "notes/p07" && d.heading() == "Über" {
+			if body, ok := d.body(); !ok || body != "Plums." || d.anchor() != "#über" || d.path() != "Page 7 › Pears › Über" && d.path() != "Pears › Über" {
+				t.Errorf("a section from the file: %q %v %q %q", body, ok, d.anchor(), d.path())
+			}
+		}
+	}
+	same("a start")
+
+	path := filepath.Join(cfg.Data, "notes", "p03.md")
+	if err := os.WriteFile(path, []byte("# Page 3\n\nNow about quinces.\n"), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	later := time.Now().Add(time.Hour)
+	if err := os.Chtimes(path, later, later); err != nil {
+		t.Fatal(err)
+	}
+	restartSearch()
+	before = pageReads.Load()
+	searchIndex(nil)
+	chunkIndex(nil)
+	// tasky; p03 for its page doc and its sections; p03's tokens for each
+	// index's changes.
+	if n := pageReads.Load() - before; n > 5 {
+		t.Errorf("a start after an edit read %d pages", n)
+	}
+	queries = append(queries, "quinces")
+	same("a start after an edit")
+}
+
+// A doc's meta in the index file makes the doc again; one that isn't a
+// doc's (a task's, cut short, another version) makes none.
+func TestDocMeta(t *testing.T) {
+	testWiki(t, nil)
+	mtime := time.Date(2026, 11, 8, 15, 4, 5, 123456789, time.UTC)
+	key := textsearch.DocKey{1, 2, 3}
+	for _, d := range []*SearchDoc{
+		{Slug: "notes/über", Title: "Über alles", Mtime: mtime, Tags: []string{"a", "b c"}, TaskRefs: true, file: &pageFile{}},
+		{Slug: "x", Title: "", Mtime: mtime, Section: true, nth: 300, file: &pageFile{}},
+	} {
+		got, ok := docFromMeta(docMeta(d), key)
+		if !ok || got.Slug != d.Slug || got.Title != d.Title || !got.Mtime.Equal(d.Mtime) || !slices.Equal(got.Tags, d.Tags) ||
+			got.Section != d.Section || got.TaskRefs != d.TaskRefs || got.nth != d.nth || got.key != key ||
+			got.file == nil || got.file.path != filepath.Join(cfg.Data, filepath.FromSlash(d.Slug)+".md") {
+			t.Errorf("%q: %+v", d.Slug, got)
+		}
+		m := docMeta(d)
+		for cut := range len(m) {
+			if _, ok := docFromMeta(m[:cut], key); ok {
+				t.Errorf("%q cut at %d: a doc", d.Slug, cut)
+			}
+		}
+	}
+	if docMeta(&SearchDoc{Task: &Task{ID: "t"}}) != nil {
+		t.Error("a task has a meta")
+	}
+	if _, ok := docFromMeta([]byte{metaVersion + 1, 0, 0, 0, 0}, key); ok {
+		t.Error("another version's meta made a doc")
+	}
+}
+
+// A rebuild with its base in a file merges from it: only the docs changed
+// since are asked for their tokens, and it answers as one built anew.
+func TestRebuildReadsOnlyChanges(t *testing.T) {
+	testWiki(t, nil)
+	asked := 0
+	doc := func(slug string, words ...string) *SearchDoc {
+		d := &SearchDoc{Slug: slug, Tokens: func() []string { asked++; return words }}
+		d.key = docKey("test", slug, strings.Join(words, " "))
+		return d
+	}
+	var docs []*SearchDoc
+	for i := range 100 {
+		docs = append(docs, doc(fmt.Sprintf("p%d", i), "apple", fmt.Sprintf("w%d", i%7)))
+	}
+	c := &indexCache{file: "pages.idx"}
+	c.get(nil, docs)
+	first := c.base
+	for i := 0; i < 40; i++ { // past maxChanges: built again
+		docs[i*2] = doc(fmt.Sprintf("p%d", i*2), "apple", "pear", fmt.Sprintf("w%d", i%5))
+	}
+	asked = 0
+	got := c.get(nil, docs).search("apple pear w3", 1000)
+	if c.base == first {
+		t.Fatal("not built again")
+	}
+	if asked != 40 {
+		t.Errorf("the rebuild asked %d docs for their tokens, want the 40 changed", asked)
+	}
+	if fresh := newDocIndex(docs).search("apple pear w3", 1000); !slices.Equal(got, fresh) {
+		t.Error("not as if built afresh")
+	}
+}

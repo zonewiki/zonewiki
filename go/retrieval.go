@@ -5,9 +5,11 @@ package main
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"maps"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -16,6 +18,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"zonewiki/internal/mdtext"
 	"zonewiki/internal/textsearch"
@@ -223,6 +226,7 @@ func (c *textCache) of(f *pageFile, sections bool) (fileTexts, bool) {
 	if ok {
 		return t, t.texts != nil
 	}
+	pageReads.Add(1)
 	content, err := readText(f.path)
 	if err == nil {
 		// Its mtime after the read: if it's the docs', so is what was read.
@@ -341,6 +345,7 @@ func perPage[T any](c *pageCache[T], pages []pageStat, build func(slug, path, co
 		mtime := p.Mtime
 		cached := c.m[p.Slug]
 		if cached == nil || !cached.mtime.Equal(mtime) || fresh != nil && !fresh(cached.value, cached.key) {
+			pageReads.Add(1)
 			content, err := readText(p.Path)
 			if err != nil {
 				continue
@@ -396,6 +401,7 @@ var searchDocCache pageCache[*SearchDoc]
 // pageSearchDocs: every page as a BM25 document. A page with [[task:…]] is
 // indexed with the task app's titles, so it is stale when the tasks changes too.
 func pageSearchDocs(rq *Req) []*SearchDoc {
+	seedPageDocs()
 	tasksKey := tasksMtimes()
 	return perPage(&searchDocCache, rq.pageStats(), pageSearchDoc, tasksKey,
 		func(d *SearchDoc, key string) bool { return !d.TaskRefs || key == tasksKey })
@@ -550,7 +556,9 @@ func (x *docIndex) searchWhereID(text string, limit int, accept func(id int, d *
 type indexCache struct {
 	file      string // in .zone/index/
 	mu        sync.Mutex
-	users     string // who the docs were split for (usersKey)
+	started   bool              // startFile was asked
+	opened    *textsearch.Index // the base's file as a start found it, for load
+	users     string            // who the docs were split for (usersKey)
 	all       []*SearchDoc
 	shared    []*SearchDoc // the shared docs now
 	private   []*SearchDoc
@@ -703,7 +711,11 @@ func (c *indexCache) load() bool {
 	if path == "" {
 		return false
 	}
-	ix, err := textsearch.OpenIndex(path)
+	ix, err := c.opened, error(nil)
+	c.opened = nil
+	if ix == nil {
+		ix, err = textsearch.OpenIndex(path)
+	}
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			logf("search index: %v; building it again", err)
@@ -741,13 +753,14 @@ func (c *indexCache) load() bool {
 }
 
 // build: the base anew over the shared docs, written to its file and mapped,
-// or kept in memory when that fails.
+// or kept in memory when that fails. With a base from a file, the new file
+// is merged from it (MergeIndex): only the docs it doesn't have are read
+// and tokenized.
 func (c *indexCache) build() {
 	docs := c.shared
 	var ix *textsearch.Index
 	if path := c.indexPath(); path != "" && writeIndexFiles {
-		err := textsearch.WriteIndex(path, len(docs), func(i int) textsearch.IndexDoc {
-			d := docs[i]
+		indexDoc := func(d *SearchDoc) textsearch.IndexDoc {
 			if d.file != nil {
 				toks, squashed, same := d.indexed()
 				key := d.key
@@ -757,10 +770,25 @@ func (c *indexCache) build() {
 					// its key names (no doc has the zero key).
 					key = textsearch.DocKey{}
 				}
-				return textsearch.IndexDoc{Tokens: toks, Key: key, Text: squashed}
+				return textsearch.IndexDoc{Tokens: toks, Key: key, Text: squashed, Meta: docMeta(d)}
 			}
 			return textsearch.IndexDoc{Tokens: d.tokens(), Key: d.key, Text: textsearch.Squash(d.text())}
-		})
+		}
+		err := errors.New("no file to merge with")
+		if c.base != nil && c.base.ix.Keys() != nil {
+			// The docs the file has already come from it: only the others
+			// are read and tokenized.
+			old := c.base
+			err = textsearch.MergeIndex(path, old.ix, len(docs), func(i int) textsearch.MergeDoc {
+				if id, ok := c.baseID[docs[i]]; ok {
+					return textsearch.MergeDoc{Old: id}
+				}
+				return textsearch.MergeDoc{Old: -1, Doc: indexDoc(docs[i])}
+			})
+		}
+		if err != nil {
+			err = textsearch.WriteIndex(path, len(docs), func(i int) textsearch.IndexDoc { return indexDoc(docs[i]) })
+		}
 		if err == nil {
 			ix, err = textsearch.OpenIndex(path)
 		}
@@ -1227,6 +1255,7 @@ func pageChunks(slug, path, content string, mtime time.Time) []*SearchDoc {
 // result, like a section), as the browser search ranks pages and tasks
 // together.
 func chunkIndex(rq *Req) *docIndex {
+	seedChunkDocs()
 	var docs []*SearchDoc
 	for _, chunks := range perPage(&chunkDocCache, rq.pageStats(), pageChunks, "", nil) {
 		docs = append(docs, chunks...)
@@ -1425,4 +1454,165 @@ func taskHits(q string, tasks map[string]*SearchDoc, limit int) []docScore {
 		hits = append(hits, docScore{tasks[h.ID], h.Score})
 	}
 	return hits
+}
+
+// pageReads counts the pages read from their files for search's docs and
+// their texts (a test's measure).
+var pageReads atomic.Int64
+
+// startFile: the base's file as a start finds it, opened once, so that its
+// docs' metas make the docs (seedPageDocs, seedChunkDocs) and load takes it
+// from there without opening it again. Nil when there is none to read.
+func (c *indexCache) startFile() *textsearch.Index {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.started {
+		return c.opened
+	}
+	c.started = true
+	if path := c.indexPath(); path != "" && c.base == nil {
+		c.opened, _ = textsearch.OpenIndex(path) // load says what's wrong with it
+	}
+	return c.opened
+}
+
+// metaVersion: changes when docMeta does, so an older file's metas are
+// read as none (the docs are made from the pages then).
+const metaVersion = 1
+
+// docMeta: what makes a page's or section's doc again without reading its
+// file (docFromMeta), kept with it in the index file; nil for a task, whose
+// doc comes from the tasks' files anyway.
+func docMeta(d *SearchDoc) []byte {
+	if d.file == nil {
+		return nil
+	}
+	b := []byte{metaVersion, 0}
+	if d.Section {
+		b[1] |= 1
+	}
+	if d.TaskRefs {
+		b[1] |= 2
+	}
+	b = binary.AppendUvarint(b, uint64(d.nth))
+	b = binary.AppendVarint(b, d.Mtime.UnixNano())
+	b = binary.AppendUvarint(b, uint64(len(d.Tags)))
+	for _, s := range append([]string{d.Slug, d.Title}, d.Tags...) {
+		b = binary.AppendUvarint(b, uint64(len(s)))
+		b = append(b, s...)
+	}
+	return b
+}
+
+// docFromMeta: the doc docMeta describes, with the key the file has for
+// it; false for a meta that isn't one (a task's, another version's, cut).
+func docFromMeta(b []byte, key textsearch.DocKey) (*SearchDoc, bool) {
+	if len(b) < 2 || b[0] != metaVersion {
+		return nil, false
+	}
+	flags, b := b[1], b[2:]
+	num := func() (uint64, bool) {
+		v, n := binary.Uvarint(b)
+		if n <= 0 {
+			return 0, false
+		}
+		b = b[n:]
+		return v, true
+	}
+	nth, ok1 := num()
+	mtime, n := binary.Varint(b)
+	if !ok1 || n <= 0 || nth > math.MaxInt32 {
+		return nil, false
+	}
+	b = b[n:]
+	ntags, ok := num()
+	if !ok || ntags > uint64(len(b)) {
+		return nil, false
+	}
+	strs := make([]string, 2+ntags)
+	for i := range strs {
+		l, ok := num()
+		if !ok || l > uint64(len(b)) {
+			return nil, false
+		}
+		strs[i], b = string(b[:l]), b[l:]
+	}
+	d := &SearchDoc{Slug: strs[0], Title: strs[1], Mtime: time.Unix(0, mtime), Section: flags&1 != 0,
+		TaskRefs: flags&2 != 0, nth: int32(nth), key: key}
+	if ntags > 0 {
+		d.Tags = strs[2:]
+	}
+	d.file = &pageFile{d.Slug, filepath.Join(cfg.Data, filepath.FromSlash(d.Slug)+".md"), d.Mtime}
+	return d, true
+}
+
+// seedPageDocs: at a start, the page docs from the pages index's file
+// instead of from the pages, for each page it names (perPage keeps them
+// while the page's mtime is the one they were made at), so the first search
+// reads no page that hasn't changed since. A page with [[task:…]] isn't
+// taken from the file: its doc depends on the tasks too.
+func seedPageDocs() {
+	searchDocCache.mu.Lock()
+	defer searchDocCache.mu.Unlock()
+	if searchDocCache.m != nil {
+		return
+	}
+	searchDocCache.m = map[string]*pageCached[*SearchDoc]{}
+	ix := searchIndexCache.startFile()
+	if ix == nil {
+		return
+	}
+	for id, key := range ix.Keys() {
+		meta, _ := ix.Meta(id)
+		if d, ok := docFromMeta(meta, key); ok && !d.Section && !d.TaskRefs && key != (textsearch.DocKey{}) {
+			searchDocCache.m[d.Slug] = &pageCached[*SearchDoc]{d.Mtime, d, ""}
+		}
+	}
+}
+
+// seedChunkDocs: seedPageDocs for the sections index: each page's sections,
+// one after the other in the file, become its docs, sharing its file, title
+// and tags as pageChunks' do.
+func seedChunkDocs() {
+	chunkDocCache.mu.Lock()
+	defer chunkDocCache.mu.Unlock()
+	if chunkDocCache.m != nil {
+		return
+	}
+	chunkDocCache.m = map[string]*pageCached[[]*SearchDoc]{}
+	ix := chunkIndexCache.startFile()
+	if ix == nil {
+		return
+	}
+	var page []*SearchDoc
+	whole := true
+	flush := func() {
+		if len(page) > 0 && whole {
+			chunkDocCache.m[page[0].Slug] = &pageCached[[]*SearchDoc]{page[0].Mtime, page, ""}
+		}
+		page, whole = nil, true
+	}
+	for id, key := range ix.Keys() {
+		meta, _ := ix.Meta(id)
+		d, ok := docFromMeta(meta, key)
+		if !ok || !d.Section {
+			flush()
+			continue
+		}
+		if len(page) > 0 && d.Slug != page[0].Slug {
+			flush()
+		}
+		if int(d.nth) != len(page) || key == (textsearch.DocKey{}) {
+			whole = false
+		}
+		if len(page) > 0 { // what a page's sections share, once
+			first := page[0]
+			if !d.Mtime.Equal(first.Mtime) {
+				whole = false
+			}
+			d.Slug, d.Title, d.Tags, d.file = first.Slug, first.Title, first.Tags, first.file
+		}
+		page = append(page, d)
+	}
+	flush()
 }
