@@ -54,17 +54,24 @@ func (d *SearchDoc) isTask() bool { return d.Task != nil }
 // text. False when the page is gone; a page changed since the doc was made
 // gives its text now (the next search makes its doc anew).
 func (d *SearchDoc) body() (string, bool) {
+	body, _, ok := d.bodyNow()
+	return body, ok
+}
+
+// bodyNow: body, and whether it is still what the doc was made from (false:
+// the file changed since).
+func (d *SearchDoc) bodyNow() (body string, same, ok bool) {
 	if d.file == nil {
-		return d.ExcerptText, true
+		return d.ExcerptText, true, true
 	}
-	texts, ok := docTexts.of(d.file, d.Section)
+	t, ok := docTexts.of(d.file, d.Section)
 	switch {
 	case !ok:
-		return "", false
-	case d.nth < len(texts):
-		return texts[d.nth], true
+		return "", false, false
+	case d.nth < len(t.texts):
+		return t.texts[d.nth], t.same, true
 	}
-	return "", true
+	return "", false, true
 }
 
 // text: the searchable text.
@@ -79,18 +86,19 @@ func (d *SearchDoc) text() string {
 // indexed: a page's or section's tokens and its searchable text squashed,
 // from its file, folded once for both (Squash and fold work rune by rune,
 // so a section's text squashed is its title's and its own, one after the
-// other).
-func (d *SearchDoc) indexed() ([]string, string) {
-	body, _ := d.body()
+// other). same: false when its file changed since the doc was made, so they
+// are no longer what its key says.
+func (d *SearchDoc) indexed() (toks []string, squashed string, same bool) {
+	body, same, _ := d.bodyNow()
 	own := body
 	if d.Section {
 		own = d.Heading + "\n" + body
 	}
-	toks, squashed := textsearch.TokensAndSquash(own)
+	toks, squashed = textsearch.TokensAndSquash(own)
 	if title := textsearch.Squash(d.Title); d.Section && title != "" {
 		squashed = strings.TrimSuffix(title+" "+squashed, " ")
 	}
-	return slices.Concat(toks, repeatTokens(d.Title, textsearch.TitleWeight), textsearch.Tokenize(d.Slug)), squashed
+	return slices.Concat(toks, repeatTokens(d.Title, textsearch.TitleWeight), textsearch.Tokenize(d.Slug)), squashed, same
 }
 
 // squashed: the searchable text squashed, for phrases.
@@ -110,7 +118,11 @@ func (d *SearchDoc) hasPhrase(phrase string) bool { return strings.Contains(d.sq
 
 // pageFile: the file a page's docs were made from, which their texts are
 // read from again; the page doc has one, and its sections share another.
-type pageFile struct{ slug, path string }
+// mtime: the file's when the docs were made.
+type pageFile struct {
+	slug, path string
+	mtime      time.Time
+}
 
 // docTextsMax: how many bytes of texts read again docTexts keeps. Past it,
 // it starts over: a search reads the texts of the docs it shows and of those
@@ -123,48 +135,58 @@ var docTexts textCache
 
 type textCache struct {
 	mu       sync.Mutex
-	files    map[*pageFile][]string // a page doc's: its text; a section's: each section's text
+	files    map[*pageFile]fileTexts
 	squashes map[*SearchDoc]string
 	bytes    int
+}
+
+// fileTexts: a page doc's text, or each of its sections' (nil: the file
+// can't be read); same: the file still had the mtime its docs were made at.
+type fileTexts struct {
+	texts []string
+	same  bool
 }
 
 // keep: room for n more bytes, starting over when they don't fit.
 func (c *textCache) keep(n int) {
 	if c.files == nil || c.bytes+n > docTextsMax {
-		c.files, c.squashes, c.bytes = map[*pageFile][]string{}, map[*SearchDoc]string{}, 0
+		c.files, c.squashes, c.bytes = map[*pageFile]fileTexts{}, map[*SearchDoc]string{}, 0
 	}
 	c.bytes += n
 }
 
 // of: the texts of f (sections: its sections'), read from its file when not
 // kept; false when it can't be read.
-func (c *textCache) of(f *pageFile, sections bool) ([]string, bool) {
+func (c *textCache) of(f *pageFile, sections bool) (fileTexts, bool) {
 	c.mu.Lock()
-	texts, ok := c.files[f]
+	t, ok := c.files[f]
 	c.mu.Unlock()
 	if ok {
-		return texts, texts != nil
+		return t, t.texts != nil
 	}
 	content, err := readText(f.path)
 	if err == nil {
+		// Its mtime after the read: if it's the docs', so is what was read.
+		st, err := os.Stat(f.path)
+		t.same = err == nil && st.ModTime().Equal(f.mtime)
 		content = strings.ToValidUTF8(content, "�")
 		if sections {
 			for _, s := range searchSections(f.slug, content) {
-				texts = append(texts, s.Body)
+				t.texts = append(t.texts, s.Body)
 			}
 		} else {
-			texts = []string{searchText(f.slug, content)}
+			t.texts = []string{searchText(f.slug, content)}
 		}
 	}
 	n := 0
-	for _, t := range texts {
-		n += len(t)
+	for _, s := range t.texts {
+		n += len(s)
 	}
 	c.mu.Lock()
 	c.keep(n)
-	c.files[f] = texts
+	c.files[f] = t
 	c.mu.Unlock()
-	return texts, texts != nil
+	return t, t.texts != nil
 }
 
 func (c *textCache) squashed(d *SearchDoc) string {
@@ -306,9 +328,9 @@ func pageSearchDoc(slug, path, content string, mtime time.Time) *SearchDoc {
 		tags[i] = strings.Clone(tag)
 	}
 	d := &SearchDoc{Slug: slug, Title: title, Mtime: mtime, TaskRefs: taskRefRE.MatchString(content),
-		Tags: tags, file: &pageFile{slug, path}, key: docKey("page", slug, title, searchText(slug, content))}
+		Tags: tags, file: &pageFile{slug, path, mtime}, key: docKey("page", slug, title, searchText(slug, content))}
 	d.Tokens = func() []string {
-		toks, _ := d.indexed()
+		toks, _, _ := d.indexed()
 		return toks
 	}
 	return d
@@ -404,11 +426,20 @@ func taskSearchDocs() []*SearchDoc {
 type docIndex struct {
 	docs []*SearchDoc // the docs it is over, in order
 	byID []*SearchDoc // by the number the index gives them (docs, but for an index with changes)
+	ids  []int        // each of docs' number in ix (nil: its place in docs)
 	ix   *textsearch.Index
 }
 
 func newDocIndex(docs []*SearchDoc) *docIndex {
-	return &docIndex{docs, docs, textsearch.NewIndexOf(len(docs), func(i int) []string { return docs[i].Tokens() })}
+	return &docIndex{docs: docs, byID: docs, ix: textsearch.NewIndexOf(len(docs), func(i int) []string { return docs[i].Tokens() })}
+}
+
+// idAt: the number in ix of docs[i].
+func (x *docIndex) idAt(i int) int {
+	if x.ids == nil {
+		return i
+	}
+	return x.ids[i]
 }
 
 // search: the best `limit` docs for the query text.
@@ -471,6 +502,7 @@ type indexCache struct {
 	sharedGen int       // counts the changes to shared
 	base      *docIndex // over the shared docs as they were at the last rebuild
 	baseID    map[*SearchDoc]int
+	reordered bool         // base's docs (from its file) are in another order than now: ties go by the view's
 	dead      []int        // base docs no longer shared docs, by number
 	delta     []*SearchDoc // shared docs that are not in base, in order
 	views     map[string]*indexView
@@ -541,7 +573,7 @@ func (c *indexCache) get(rq *Req, docs []*SearchDoc) *docIndex {
 			own = append(own, d)
 		}
 	}
-	if len(own) == 0 && len(c.dead) == 0 && len(c.delta) == 0 {
+	if len(own) == 0 && len(c.dead) == 0 && len(c.delta) == 0 && !c.reordered {
 		return c.base
 	}
 	viewKey := "user:" + user
@@ -630,7 +662,7 @@ func (c *indexCache) load() bool {
 	}
 	docs := make([]*SearchDoc, len(keys))
 	baseID := make(map[*SearchDoc]int, len(c.shared))
-	last := -1
+	last, reordered := -1, false
 	for _, d := range c.shared {
 		same := ids[d.key]
 		if len(same) == 0 {
@@ -638,11 +670,9 @@ func (c *indexCache) load() bool {
 		}
 		id := same[0]
 		ids[d.key] = same[1:]
-		if id < last {
-			// In another order than now: equal scores would rank
-			// otherwise than in an index built anew.
-			return false
-		}
+		// In another order than now (a task moved in its list, say): equal
+		// scores go by the order now, as in an index built anew (view).
+		reordered = reordered || id < last
 		last, docs[id], baseID[d] = id, d, id
 	}
 	for id, d := range docs {
@@ -650,7 +680,8 @@ func (c *indexCache) load() bool {
 			docs[id] = goneDoc
 		}
 	}
-	c.base, c.baseID, c.dead, c.delta = &docIndex{docs, docs, ix}, baseID, nil, nil
+	c.base, c.baseID, c.dead, c.delta = &docIndex{docs: docs, byID: docs, ix: ix}, baseID, nil, nil
+	c.reordered = reordered
 	return true
 }
 
@@ -663,8 +694,15 @@ func (c *indexCache) build() {
 		err := textsearch.WriteIndex(path, len(docs), func(i int) textsearch.IndexDoc {
 			d := docs[i]
 			if d.file != nil {
-				toks, squashed := d.indexed()
-				return textsearch.IndexDoc{Tokens: toks, Key: d.key, Text: squashed}
+				toks, squashed, same := d.indexed()
+				key := d.key
+				if !same {
+					// Its file changed since the doc was made: the next search
+					// makes it anew; a start must not take these for the doc
+					// its key names (no doc has the zero key).
+					key = textsearch.DocKey{}
+				}
+				return textsearch.IndexDoc{Tokens: toks, Key: key, Text: squashed}
 			}
 			return textsearch.IndexDoc{Tokens: d.Tokens(), Key: d.key, Text: textsearch.Squash(d.text())}
 		})
@@ -678,7 +716,7 @@ func (c *indexCache) build() {
 	if ix == nil {
 		ix = textsearch.NewIndexOf(len(docs), func(i int) []string { return docs[i].Tokens() })
 	}
-	c.base = &docIndex{docs, docs, ix}
+	c.base, c.reordered = &docIndex{docs: docs, byID: docs, ix: ix}, false
 	c.baseID = make(map[*SearchDoc]int, len(docs))
 	for id, d := range docs {
 		c.baseID[d] = id
@@ -704,6 +742,7 @@ func (c *indexCache) view(own []*SearchDoc) *docIndex {
 	}
 	pos := make([]int32, n+len(extra))
 	live := make([]*SearchDoc, 0, n-len(dead)+len(extra))
+	ids := make([]int, 0, cap(live))
 	for _, d := range c.all {
 		id, ok := c.baseID[d]
 		if !ok {
@@ -714,8 +753,9 @@ func (c *indexCache) view(own []*SearchDoc) *docIndex {
 		}
 		pos[id] = int32(len(live))
 		live = append(live, d)
+		ids = append(ids, id)
 	}
-	return &docIndex{live, slices.Concat(c.base.byID, extra), c.base.ix.With(dead, tokens, pos)}
+	return &docIndex{docs: live, byID: slices.Concat(c.base.byID, extra), ids: ids, ix: c.base.ix.With(dead, tokens, pos)}
 }
 
 // docVisible: user may see the search doc d (a page's, or a task's).
@@ -837,8 +877,8 @@ func rankedDocs(q *textsearch.Query, x *docIndex, keep func(*SearchDoc) bool, li
 		// newest first. There are no words to rank by.
 		var docs []*SearchDoc
 		passes := x.filter(q, keep)
-		for _, d := range x.docs {
-			if passes(-1, d) {
+		for i, d := range x.docs {
+			if passes(x.idAt(i), d) {
 				docs = append(docs, d)
 			}
 		}
@@ -857,8 +897,8 @@ func rankedDocs(q *textsearch.Query, x *docIndex, keep func(*SearchDoc) bool, li
 	semantic.poke()
 	pages, tasks := map[string]*SearchDoc{}, map[string]*SearchDoc{}
 	passes := x.filter(q, keep)
-	for _, d := range x.docs {
-		if !passes(-1, d) {
+	for i, d := range x.docs {
+		if !passes(x.idAt(i), d) {
 			continue
 		}
 		if d.isTask() {
@@ -1117,7 +1157,7 @@ func pageChunks(slug, path, content string, mtime time.Time) []*SearchDoc {
 	for i, tag := range tags {
 		tags[i] = strings.Clone(tag)
 	}
-	file := &pageFile{slug, path}
+	file := &pageFile{slug, path, mtime}
 	var chunks []*SearchDoc
 	for i, s := range searchSections(slug, content) {
 		d := &SearchDoc{Slug: slug, Title: title, Section: true, Heading: strings.Clone(s.Heading),
@@ -1125,7 +1165,7 @@ func pageChunks(slug, path, content string, mtime time.Time) []*SearchDoc {
 			Key: chunkKey(title, chunkText(s.Path, s.Body)), key: docKey("section", slug, title, s.Heading, s.Body),
 			file: file, nth: i}
 		d.Tokens = func() []string {
-			toks, _ := d.indexed()
+			toks, _, _ := d.indexed()
 			return toks
 		}
 		chunks = append(chunks, d)
@@ -1179,9 +1219,9 @@ func retrieve(rq *Req, raw string, limit int, under string, quicknote bool) []*S
 		text := q.RankingText()
 		byKey, slugs, tasks := map[string]*SearchDoc{}, map[string]bool{}, map[string]*SearchDoc{}
 		passes := x.filter(q, nil)
-		for _, d := range x.docs {
+		for i, d := range x.docs {
 			switch {
-			case !passes(-1, d):
+			case !passes(x.idAt(i), d):
 			case !d.isTask() && pageOK(d.Slug):
 				byKey[d.Key], slugs[d.Slug] = d, true
 			case d.isTask() && !pagesOnly && !hiddenDoc(rq, d):

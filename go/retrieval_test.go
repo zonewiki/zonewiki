@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 	"zonewiki/internal/textsearch"
 )
 
@@ -202,6 +203,11 @@ func indexCacheStaysAsIfBuiltAfresh(t *testing.T, file string) {
 			if !slices.Equal(got.docs, visible) {
 				t.Fatalf("round %d %s: the docs differ from what the viewer may see", round, name)
 			}
+			for i, d := range got.docs {
+				if got.byID[got.idAt(i)] != d {
+					t.Fatalf("round %d %s: doc %d has another's number in the index", round, name, i)
+				}
+			}
 		}
 		if c.base != lastBase && lastBase != nil {
 			rebuilds++
@@ -250,10 +256,27 @@ func TestStartFindsTheIndexFile(t *testing.T) {
 		t.Errorf("a start: %d docs' tokens asked for, the same hits: %v", asked, slices.Equal(got, want))
 	}
 
+	// Docs in another order than the file's, nothing else changed (a task
+	// moved in its list): the file is used still, and equal scores go by the
+	// order now.
+	inOrder := slices.Clone(docs)
+	p3 := docs[3] // has "w3": tied with p10, p17 …
+	docs = append(slices.Delete(docs, 3, 4), p3)
+	asked = 0
+	rc := &indexCache{file: "pages.idx"}
+	got := search(rc)
+	if !rc.reordered || asked != 0 {
+		t.Errorf("a start, the docs reordered: reordered %v, %d docs' tokens asked for", rc.reordered, asked)
+	}
+	if fresh := newDocIndex(docs).search("apple w3", 1000); !slices.Equal(got, fresh) || slices.Equal(got, want) {
+		t.Errorf("reordered: not as if built afresh")
+	}
+	docs = inOrder
+
 	docs[5] = doc("p5", "apple", "w3", "w3") // changed while Zone was down
 	asked = 0
 	c := &indexCache{file: "pages.idx"}
-	got := search(c)
+	got = search(c)
 	if asked != 1 || len(c.dead) != 1 || len(c.delta) != 1 {
 		t.Errorf("a start after an edit: %d docs' tokens asked for, %d dead, %d new", asked, len(c.dead), len(c.delta))
 	}
@@ -358,9 +381,22 @@ func TestDocsReadTheirTextAgain(t *testing.T) {
 	}
 	// What goes into the index file: the same tokens, the text squashed.
 	for _, doc := range []*SearchDoc{d, tulips} {
-		toks, squashed := doc.indexed()
-		if !slices.Equal(toks, doc.Tokens()) || squashed != textsearch.Squash(doc.text()) {
-			t.Errorf("%s %q: indexed %q, want %q", doc.Slug, doc.Heading, squashed, textsearch.Squash(doc.text()))
+		toks, squashed, same := doc.indexed()
+		if !slices.Equal(toks, doc.Tokens()) || squashed != textsearch.Squash(doc.text()) || !same {
+			t.Errorf("%s %q: indexed %q (same file %v), want %q", doc.Slug, doc.Heading, squashed, same, textsearch.Squash(doc.text()))
+		}
+	}
+
+	// The file changed since the docs were made: what is read is no longer
+	// what their keys say (build stores them under no key).
+	docTexts = textCache{}
+	later := d.Mtime.Add(time.Hour)
+	if err := os.Chtimes(filepath.Join(cfg.Data, "garden.md"), later, later); err != nil {
+		t.Fatal(err)
+	}
+	for _, doc := range []*SearchDoc{d, tulips} {
+		if _, _, same := doc.indexed(); same {
+			t.Errorf("%s %q: a changed file read as the same", doc.Slug, doc.Heading)
 		}
 	}
 
@@ -374,4 +410,45 @@ func TestDocsReadTheirTextAgain(t *testing.T) {
 	if _, ok := tulips.body(); ok {
 		t.Error("a page gone: its section still has text")
 	}
+}
+
+// Phrases (phraseFirst, a quoted query's filters) checked in the index file
+// (TextHas) find what the docs' own texts find in an index built in memory,
+// also for a page changed since (not in the file) and after a start.
+func TestPhrasesInTheFileAsInMemory(t *testing.T) {
+	testWiki(t, map[string]string{
+		"alpha": "# Alpha\n\nThe quick brown fox jumps.\n",
+		"beta":  "# Beta\n\nA quick fox, brown and lazy.\n",
+		"gamma": "# Gamma\n\nbrown quick fox\n\n## Fox notes\n\nThe   QUICK Brown fox again.\n",
+		"delta": "# Delta\n\nNothing about foxes here, quick or brown.\n",
+	})
+	queries := []string{`"quick brown fox"`, `fox "brown and lazy"`, `fox -"quick brown"`, `quick brown`, `"the quick" fox`, `-"fox" quick`}
+	same := func(label string, c *indexCache) {
+		t.Helper()
+		docs := pageSearchDocs()
+		got, want := c.get(nil, docs), newDocIndex(docs)
+		if got.ix.Keys() == nil {
+			t.Fatalf("%s: the index isn't from a file", label)
+		}
+		for _, raw := range queries {
+			q := textsearch.ParseQuery(raw)
+			a, b := rankedDocs(q, got, nil, 100), rankedDocs(q, want, nil, 100)
+			if !slices.Equal(a, b) {
+				t.Errorf("%s %s: %d hits, want %d", label, raw, len(a), len(b))
+			}
+		}
+	}
+	c := &indexCache{file: "pages.idx"}
+	same("built", c)
+
+	path := filepath.Join(cfg.Data, "delta.md")
+	if err := os.WriteFile(path, []byte("# Delta\n\nNow the quick brown fox, and brown and lazy too.\n"), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	later := time.Now().Add(time.Hour)
+	if err := os.Chtimes(path, later, later); err != nil {
+		t.Fatal(err)
+	}
+	same("a page changed", c)
+	same("a start", &indexCache{file: "pages.idx"})
 }

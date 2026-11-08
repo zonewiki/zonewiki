@@ -348,7 +348,60 @@ func parseStore(data []byte) (*fileStore, error) {
 			return nil, fmt.Errorf("%w: its texts are out of order", ErrBadIndex)
 		}
 	}
+	if err := s.check(); err != nil {
+		return nil, err
+	}
 	return s, nil
+}
+
+// check: the terms and postings are as the writer makes them, so that no
+// search reads past them or gets a doc that isn't there; the checksum only
+// catches damage, not a file wrong from the start. One pass, as the
+// checksum's.
+func (s *fileStore) check() error {
+	le := binary.LittleEndian
+	rec := func(i int) (str uint32, df uint32, post uint64) {
+		r := s.recs[i*termRecSize:]
+		return le.Uint32(r), le.Uint32(r[4:]), le.Uint64(r[8:])
+	}
+	str0, _, post0 := rec(0)
+	strEnd, _, postEnd := rec(s.nTerms)
+	if str0 != 0 || post0 != 0 || uint64(strEnd) != uint64(len(s.strs)) || postEnd != uint64(len(s.posts)) {
+		return fmt.Errorf("%w: its terms don't span their parts", ErrBadIndex)
+	}
+	for i := range s.nTerms { // first all of them, so that each term's parts are inside the file
+		str, df, post := rec(i)
+		nextStr, _, nextPost := rec(i + 1)
+		if nextStr < str || nextPost < post || df == 0 || int(df) > s.nDocs {
+			return fmt.Errorf("%w: term %d is out of place", ErrBadIndex, i)
+		}
+	}
+	for i := range s.nTerms {
+		_, df, post := rec(i)
+		_, _, nextPost := rec(i + 1)
+		if i > 0 && string(s.term(i-1)) >= string(s.term(i)) {
+			return fmt.Errorf("%w: its terms are out of order", ErrBadIndex)
+		}
+		p, doc := s.posts[post:nextPost], 0
+		for k := range df {
+			gap, n := binary.Uvarint(p)
+			if n <= 0 {
+				return fmt.Errorf("%w: term %d's postings are cut", ErrBadIndex, i)
+			}
+			tf, m := binary.Uvarint(p[n:])
+			if m <= 0 || tf == 0 || tf > math.MaxInt32 || k > 0 && gap == 0 || gap >= uint64(s.nDocs) {
+				return fmt.Errorf("%w: term %d's postings are wrong", ErrBadIndex, i)
+			}
+			p = p[n+m:]
+			if doc += int(gap); doc >= s.nDocs { // as decode: the first gap is the doc's number
+				return fmt.Errorf("%w: term %d names a doc that isn't there", ErrBadIndex, i)
+			}
+		}
+		if len(p) != 0 {
+			return fmt.Errorf("%w: term %d's postings are too long", ErrBadIndex, i)
+		}
+	}
+	return nil
 }
 
 func (s *fileStore) docCount() int   { return s.nDocs }

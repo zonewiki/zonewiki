@@ -1,8 +1,10 @@
 package textsearch
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"hash/crc32"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -178,6 +180,47 @@ func TestFileIndexRefusesBadFiles(t *testing.T) {
 	}
 	if _, err := OpenIndex(filepath.Join(dir, "missing.idx")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("missing: %v", err)
+	}
+}
+
+// A file whose checksum is right but whose terms or postings aren't as the
+// writer makes them (a bug, not damage) is refused too, rather than making
+// a search read past them or score a doc that isn't there.
+func TestFileIndexRefusesWrongFilesWithTheirChecksum(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "good.idx")
+	writeOpen(t, path, randomDocs(rand.New(rand.NewSource(1)), 50))
+	good, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := parseStore(good)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recsAt := headerSize + len(s.texts) + len(s.textAt) + len(s.lens) + len(s.keys)
+	lastTermAt := recsAt + len(s.recs) + int(binary.LittleEndian.Uint32(s.recs[(s.nTerms-1)*termRecSize:]))
+	postsAt := len(good) - len(s.posts)
+	cases := map[string]func([]byte){
+		"a document frequency past the docs": func(b []byte) { binary.LittleEndian.PutUint32(b[recsAt+4:], 51) },
+		"a term starting past the next":      func(b []byte) { binary.LittleEndian.PutUint32(b[recsAt+termRecSize:], 1<<20) },
+		"terms out of order":                 func(b []byte) { b[lastTermAt] = 0 }, // the last term first
+		"a posting past the docs":            func(b []byte) { b[postsAt] = 0x7f }, // the first doc: 127 of 50
+		"a posting cut":                      func(b []byte) { b[len(b)-1] = 0x80 },
+		"a count of nought":                  func(b []byte) { b[len(b)-1] = 0 },
+	}
+	for name, wrong := range cases {
+		b := slices.Clone(good)
+		wrong(b)
+		sum := crc32.Update(crc32.ChecksumIEEE(b[headerSize:]), crc32.IEEETable, b[16:headerSize])
+		binary.LittleEndian.PutUint32(b[12:], sum)
+		bad := filepath.Join(dir, "bad.idx")
+		if err := os.WriteFile(bad, b, 0o666); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := OpenIndex(bad); !errors.Is(err, ErrBadIndex) {
+			t.Errorf("%s: %v, want ErrBadIndex", name, err)
+		}
 	}
 }
 
