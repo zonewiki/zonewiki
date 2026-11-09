@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strings"
 	"zonewiki/internal/mdtext"
 )
@@ -352,6 +353,20 @@ func visibleUncommitted(rq *Req, files []UncommittedFile) []UncommittedFile {
 	return out
 }
 
+// committable: the uncommitted files user may commit: those they see, but
+// a viewer only their own (a commit of a shared file is a change to the
+// history everyone shares).
+func committable(user string, files []UncommittedFile) []UncommittedFile {
+	out := visibleUncommitted(&Req{user: user}, files)
+	if settings().isViewer(user) {
+		out = slices.DeleteFunc(out, func(f UncommittedFile) bool {
+			owner, _ := ownerIn(privateDir, f.Filepath)
+			return owner != user
+		})
+	}
+	return out
+}
+
 // apiCommitAll commits every uncommitted file the user may see, one commit
 // each.
 func apiCommitAll(w http.ResponseWriter, r *http.Request) {
@@ -360,7 +375,7 @@ func apiCommitAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	committed := []string{}
-	for _, f := range visibleUncommitted(&Req{user: userOf(r)}, gitUncommittedFiles()) {
+	for _, f := range committable(userOf(r), gitUncommittedFiles()) {
 		path := filepath.Join(cfg.Data, f.Filepath)
 		if err := gitCommit(commitAuthorOf(path, userOf(r)), commitMessage(f.Filepath), path); err != nil {
 			writeJSON(w, http.StatusInternalServerError, M{"error": err.Error(), "committed": len(committed), "files": committed})
@@ -385,7 +400,7 @@ func apiCommitFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	found := false
-	for _, f := range visibleUncommitted(&Req{user: userOf(r)}, gitUncommittedFiles()) {
+	for _, f := range committable(userOf(r), gitUncommittedFiles()) {
 		if f.Filepath == fp {
 			found = true
 		}

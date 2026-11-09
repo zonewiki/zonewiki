@@ -3312,3 +3312,7 @@ mark.search-hl.current {
 
 /* The welcome page (an invite or reset link; welcome.html), in the login's form. */
 .welcome-note { margin: 0; font-size: .9rem; color: var(--muted); }
+
+/* A viewer's view of a shared page (view.html .read-only): nothing to edit or tick. */
+.read-only .section-edit-btn { display: none; }
+.read-only .page-content input[type="checkbox"] { pointer-events: none; }

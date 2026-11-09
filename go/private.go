@@ -90,7 +90,7 @@ func sharedMove(user, slug string) (target string, ok bool) {
 		return "", false
 	}
 	rest := strings.TrimPrefix(slug, folder+"/")
-	return rest, rest != slug && rest != ""
+	return rest, rest != slug && rest != "" && canWrite(user, rest) // not a viewer's
 }
 
 // sharedNewOffer: a new page opened from a link on one of the user's private

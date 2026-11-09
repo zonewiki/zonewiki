@@ -212,7 +212,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 	}
 	_, private := pageOwner(slug)
 	page(w, rq, http.StatusOK, "view.html", title, shell{wide: true}, &pageView{Title: title, Slug: slug,
-		FromUncommitted: fromUncommitted, Private: private, TaskKeys: strings.Join(mdtext.TaskLineKeys(content), ","),
+		FromUncommitted: fromUncommitted, Private: private, ReadOnly: readOnly(rq.user, slug), TaskKeys: strings.Join(mdtext.TaskLineKeys(content), ","),
 		BreadcrumbHTML: bc, DeleteDialogHTML: buildDeleteDialog(slug, title), RailTocHTML: railTocItems(string(article)),
 		MetaRowHTML: metaRow, ArticleHTML: article, LinkSections: sections, Outlinks: outlinks(rq, slug, path), Menu: menu})
 }
@@ -223,6 +223,7 @@ type pageView struct {
 	Title, Slug                                                             string
 	FromUncommitted                                                         bool   // opened from the uncommitted list: Commit instead of Edit
 	Private                                                                 bool   // in a private folder (the lock)
+	ReadOnly                                                                bool   // a viewer's view of a shared page: no Edit, ✎ or ticks
 	TaskKeys                                                                string // a key per checkbox line (mdtext.TaskLineKeys), comma-separated
 	BreadcrumbHTML, DeleteDialogHTML, RailTocHTML, MetaRowHTML, ArticleHTML template.HTML
 	LinkSections                                                            []M // Backlinks, Linked tasks, Related (linkSections)
@@ -284,8 +285,8 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 		badRequestPage(w)
 		return
 	}
-	if refusePage(w, r, rq, slug) {
-		return
+	if refusePage(w, r, rq, slug) || refuseWrite(w, r, slug) {
+		return // a viewer's editor on a shared page: 403 before anything is typed
 	}
 	var content, title string
 	isNew := !exists(path)
@@ -774,6 +775,10 @@ func appendPage(w http.ResponseWriter, r *http.Request) {
 	if target != "" && canWrite(userOf(r), target) {
 		targetPath = safePath(target)
 	}
+	if target != "" && readOnly(userOf(r), target) {
+		http.Redirect(w, r, back+quote(readOnlyMsg), http.StatusFound)
+		return
+	}
 	if raw != "" && (targetPath == "" || !exists(targetPath)) {
 		http.Redirect(w, r, back+quote("There is no page “"+raw+"”"), http.StatusFound)
 		return
@@ -939,8 +944,10 @@ type tasksPageView struct {
 
 func apiToggleCheckbox(w http.ResponseWriter, r *http.Request) {
 	path := safePath(r.PathValue("slug"))
-	if path == "" || !exists(path) || !canWrite(userOf(r), r.PathValue("slug")) {
-		http.NotFound(w, r)
+	if path == "" || !exists(path) || refuseWrite(w, r, r.PathValue("slug")) {
+		if path == "" || !exists(path) {
+			http.NotFound(w, r)
+		}
 		return
 	}
 	idx, ok := formInt(r, "idx")

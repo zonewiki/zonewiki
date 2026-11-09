@@ -153,7 +153,11 @@ Done tasks go to a yearly archive. Beyond that:
   name and password, their changes are committed in their name, and each has
   a private folder (`private/<name>/`), private notes, private tasks
   (a **Private** box on the task, 🔒 on its card) and their own pinned lists.
-  Everything else is shared. See [`docs/spec/users.md`](docs/spec/users.md).
+  Everything else is shared. Each has a role: **admin** (the first user;
+  manages the others on the **Users** page: invite links, roles, disable,
+  remove, password reset links), **editor** (the default) or **viewer** (reads
+  what is shared, changes only their own folder).
+  See [`docs/spec/users.md`](docs/spec/users.md).
 - **Keyboard shortcuts** for everything; `?` lists them.
 - **Sharing mode** for screen sharing: hides the trail of visited pages,
   backlinks and counts, and pages you've marked as not for sharing.
@@ -234,7 +238,7 @@ away, which Zone takes only at one). Set them with `run.sh`, or edit the file:
 ./run.sh config passwd                # a login: one password …
 ./run.sh user add alice               # … or users, each with their own (replaces the password)
 ./run.sh user add bob --mcp-token     # and an MCP token for his assistant
-./run.sh user passwd alice            # also: user token, user remove, user list
+./run.sh user passwd alice            # also: user token, role, disable, invite, reset, remove, list
 ./run.sh config set locale de-AT      # any setting below; config unset KEY for its default
 ./run.sh config check                 # what's in effect, and where it comes from
 ```
@@ -242,7 +246,7 @@ away, which Zone takes only at one). Set them with `run.sh`, or edit the file:
 | Setting | Does |
 |---------|------|
 | `password` | A login gate (`./run.sh config passwd`). Sessions survive restarts: Zone keeps its own key in `.zone/` (never in git) |
-| `[user NAME]` | Several users instead of one password, each with a `password` and maybe an `mcp-token` (`./run.sh user …`); changes are committed in their name (see [`docs/spec/users.md`](docs/spec/users.md)) |
+| `[user NAME]` | Several users instead of one password, each with a `password`, maybe an `mcp-token`, a `role` (admin, editor, viewer) and `disabled` (`./run.sh user …`, or an admin's Users page); changes are committed in their name (see [`docs/spec/users.md`](docs/spec/users.md)) |
 | `mcp-token` | Turns on `/mcp` (`./run.sh config token`; see [Connect an AI assistant](#connect-an-ai-assistant)) |
 | `hosts` | Names Zone may be reached by besides localhost, e.g. `wiki.example.org` behind a reverse proxy (see Security) |
 | `base-url` | Zone's address as your browser knows it, for links handed to AI clients |
@@ -377,9 +381,9 @@ Also know this:
 
 - **No login by default.** Anyone who can reach the port can read, change and
   delete everything. With `ZONE_ALLOW_REMOTE=1` that is your whole network: set
-  a password (`./run.sh config passwd`), or add users (`./run.sh user add NAME`). Every user can read and change
-  everything except other users' private pages and tasks, so give access to
-  no one you wouldn't hand the shared files to.
+  a password (`./run.sh config passwd`), or add users (`./run.sh user add NAME`). Every user can read
+  everything except other users' private pages and tasks (and all but viewers
+  can change it), so give access to no one you wouldn't hand the shared files to.
 - **Private means private inside Zone.** Another user's private pages and
   tasks are hidden from you and your assistant, but not encrypted: whoever
   has the wiki folder, its git history or its git remote reads them all.

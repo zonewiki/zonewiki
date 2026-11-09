@@ -68,7 +68,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 ├── LICENSE                 # AGPL-3.0-or-later
 ├── THIRD_PARTY_LICENSES    # Licenses of Go, the Go modules and the embedding model (the vendored libraries' are next to them)
 ├── docs/spec/              # The feature spec, one file per area (see Spec)
-├── docs/plans/             # Working plans for changes in progress, deleted when done (`rename-to-zone.md`, `user-admin.md`)
+├── docs/plans/             # Working plans for changes in progress, deleted when done (`rename-to-zone.md`)
 ├── docs/licenses/mermaid_notices.py  # Writes public/vendor/mermaid/THIRD_PARTY_LICENSES from the bundle's source map
 ├── docs/screenshots/       # The README's screenshots + make_screenshots.py (./run.sh screenshots)
 ├── Containerfile           # The image: a Go build stage, onnxruntime + the model (opt-in), an Ubuntu 26.04 LTS runtime (also ships README.md and docs/spec/ for zone_help)
@@ -236,6 +236,7 @@ Use the fixtures and helpers in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`,
   - `password` in `.zone/config` (a hash) turns on a login gate; the session key is one Zone keeps in `.zone/secret_key` (0600, excluded from git).
   - Users instead (`[user …]` in `.zone/config`): a login per user, passwords only as hashes (`docs/spec/users.md`); the session names its user, `userOf(r)` / `rq.user` give it, and a write passes it to `gitCommit(user, …)` as the commit's author.
   - **Private pages and tasks** (`private/<user>/`, tasks in `private/<user>/_tasks/`, with users): every route and tool that shows, lists or changes a page asks `go/access.go` (`canSee`, `canWrite`, `canSeePath`; `hiddenPage`/`refusePage` in the routes); every read of tasks takes the user (`readTasks(user)` …, shared + their own files), and what holds every user's tasks (the search index) filters with `canSeeTask`. A new route gets a probe in `tests/test_privacy.py`, which fails until it has one.
+  - **Viewers** (`role = viewer`) change only their own folder: `canWrite` in `go/access.go` says so for pages, `keepsSharedTasks` checks every task write, and `viewerGate` refuses a viewer's write to any route not in `viewerWrites`. A new write route gets a probe in `tests/test_roles.py`, which fails until it has one.
   - `/mcp` requires an MCP token (`mcp-token`, kept as its hash; with users, a user's own): without one it is off (403), password or not. Don't make it open again.
   - **The settings file** `.zone/config` holds password hashes and tokens: it is committed (tokens only as hashes; the rest of `.zone/` stays out of git) but never shown (`canSeePath`, `safePath`), the commands write it 0600, and a reload with an error (or a removed file) keeps the settings from before, so a broken edit never opens the wiki.
   - The Host check (`hostAllowed`) validates the `Host` header (localhost, plus `hosts` from the settings file) against DNS rebinding; `ZONE_ALLOW_REMOTE=1` without `hosts` skips it.

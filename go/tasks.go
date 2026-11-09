@@ -30,7 +30,8 @@ func badRequest(msg string) error { return &apiError{http.StatusBadRequest, msg}
 
 var errNotFound = &apiError{http.StatusNotFound, "Not Found"}
 
-// tasksRoute answers a task list API request: a refusal as {"error": …} (400),
+// tasksRoute answers a task list API request: a refusal as {"error": …} (400,
+// 403 for a viewer's change to a shared task),
 // 404, or 503 when a task list file is unreadable (the client retries).
 func tasksRoute(h func(w http.ResponseWriter, r *http.Request) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -40,8 +41,9 @@ func tasksRoute(h func(w http.ResponseWriter, r *http.Request) error) http.Handl
 		case err == nil:
 		case errors.Is(err, errTasksCorrupt):
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
-		case errors.As(err, &ae) && ae.status == http.StatusBadRequest:
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": ae.msg})
+		case errors.As(err, &ae) && (ae.status == http.StatusBadRequest || ae.status == http.StatusForbidden):
+			// tasks.js shows the error (a viewer's: readOnlyMsg).
+			writeJSON(w, ae.status, map[string]string{"error": ae.msg})
 		case errors.As(err, &ae):
 			http.Error(w, ae.msg, ae.status)
 		default:
@@ -586,6 +588,9 @@ func createTask(user string, data jsonObj, message string) (*Task, error) {
 	t := newTask()
 	if err := applyTaskFields(user, t, data, true); err != nil {
 		return nil, err
+	}
+	if settings().isViewer(user) {
+		t.Owner = user // a viewer's tasks are their own: they change nothing shared
 	}
 	t.History = []HistoryEntry{} // its first dates are not changes
 	logEvent(t, user, "created", "", "")

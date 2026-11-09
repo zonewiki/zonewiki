@@ -10,7 +10,7 @@ Users are `[user NAME]` sections of the wiki's settings file, `.zone/config` (be
 
 Three rules; the rest of this file is how they are kept.
 
-1. **Your folder is yours.** `private/<you>/` holds your private pages, your uploads (`_assets/`) and your private tasks (`_tasks/`). No one else sees it in Zone, in search, in history, or through their assistant. Everything outside it is shared, and every user may change it. (Hidden inside Zone, not encrypted: whoever has the wiki's folder or git repository has it all.)
+1. **Your folder is yours.** `private/<you>/` holds your private pages, your uploads (`_assets/`) and your private tasks (`_tasks/`). No one else sees it in Zone, in search, in history, or through their assistant. Everything outside it is shared, and every user may change it, but a viewer (Roles, below). (Hidden inside Zone, not encrypted: whoever has the wiki's folder or git repository has it all.)
 2. **Where something is kept is who sees it.** Not its tags, not its links, not its name. A new page or task starts where it is made: from a link to `private/<you>/…`, an embed on a private page, your private pinned list or list.
 3. **Private can be shared; shared stays shared.** A private page goes public by Make shared (a rename out of the folder), a private task by unticking its Private box. Never the other way: others have seen a shared page or task, link to it and have comments on it, so Zone refuses to take one into a private folder or tasks (the error says to make a new private one and copy the text). Making a page shared takes the uploads it shows with it. Nothing else moves anything.
 
@@ -106,11 +106,22 @@ Each user has a role, `role` in their section (`roles`, `User.Role` in `go/users
 |------|-----|
 | `admin` | everything an editor can, and manage the users (`zonewiki user`, on the host) |
 | `editor` | change everything shared, as every user could before roles: the default, so a section without `role` is an editor's |
-| `viewer` | read what is shared; change only their own private folder. **Not enforced yet**: for now a viewer changes what an editor does (`docs/plans/user-admin.md`, phase 4) |
+| `viewer` | read what is shared; change only their own private folder (Viewers, below) |
 
 - **The first user is an admin**: `user add` on a wiki without users writes `role = admin` and says so, unless `--role` says otherwise. So one person running their own wiki is its admin without doing anything. Every other user is an editor unless `--role` says otherwise. A wiki from before roles has no admin until `zonewiki user role NAME admin` makes one; nothing else changes for it.
 - **An admin isn't a superuser**: no admin sees another user's private pages, tasks or notes, or knows their password. Rule 1 above holds for everyone.
 - **Disabled** (`disabled = yes`, `zonewiki user disable NAME`): the user can't sign in (with the right password the login says "Your account is disabled. Ask an admin of this wiki.", with a wrong one the usual "Incorrect user name or password.", and both count as a wrong try for the throttle), their sessions stop working at their next request (`signedIn`), and their MCP token is refused (401; `mcpAuthorized`; a disabled user's token alone doesn't turn `/mcp` on). Their pages, tasks and private folder stay as they are. Enabled again, they sign in as before, and a session from before not yet expired works again: disabling isn't how to end a stolen session, a new password is (Signing in, below). A disabled admin counts as no admin.
+
+### Viewers
+
+A viewer reads everything shared (pages, tasks, history, search) and has a private folder like every user: private pages, notes, uploads and tasks, which they change as anyone does. They change nothing shared: no page, upload, checkbox or task outside their folder, no tag rename, no Commit of a shared file, no Make shared, and no sharing of a private task.
+
+- **The rule** is in `go/access.go`: `canWrite(user, slug)` is "may see it, and isn't a viewer unless it's in their own folder", so every page write (the operations in `go/pageops.go`, the MCP tools, renames, folder moves, Move to wiki and Append to page targets, `replace_in_pages`, which skips the pages it can't change) refuses a viewer outside their folder. `readOnly(user, slug)` (sees it, can't change it) makes the refusal say so: **403** "You can read this wiki but not change it: you are a viewer. Ask an admin." (`readOnlyMsg`, `refusedReadOnly`), not the 404 of a page they can't see; another user's folder stays a 404. Uploads to `_assets/` (shared), tag renames (`renameTagOp`) and commits of shared files (`committable`: Commit all commits only their own) are refused the same way.
+- **Tasks**: every task write passes `keepsSharedTasks` (in `writeOpenLocked` and `writeBothLocked`): for a viewer the shared task files must come out exactly as they are on disk (the open tasks in order, the completed ones by id), else the write is refused (403, the same message, as JSON so the task app shows it). So no route or tool can change a shared task for a viewer, whatever it does. A viewer's new task is always private (`createTask`), even one asked for as shared; `canWriteTask` says what they may change.
+- **The gate** (`viewerGate` in `go/server.go`): a viewer's POST, PUT, PATCH or DELETE to a route not listed in `viewerWrites` is refused (403) before the route runs. The listed ones check what they change themselves (above). A new write route is so closed to viewers until it is checked and listed.
+- **MCP**: a viewer's token works, with every tool; a write to something shared answers with the same message as the tool's error (`callMCPTool`, `newSlug`).
+- **The interface**: on a shared page a viewer gets no Edit, no ✎s, no Rename or Delete in the ⋯ menu, and checkboxes that don't tick (`pageView.ReadOnly`, `.read-only` in `style.css`); the editor of a shared page, or of a new one outside their folder, is a 403 before anything is typed. Make shared isn't offered (`sharedMove`). The task app still offers its buttons on shared tasks: a change there comes back with the message.
+- **One thing a viewer's change touches outside their folder**: renaming their own private page re-points the links to it everywhere, as every rename does (`rewriteMovedLinks`), shared pages included, so the links keep working.
 
 ## Managing users
 

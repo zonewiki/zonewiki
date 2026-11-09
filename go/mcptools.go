@@ -227,6 +227,9 @@ func newSlug(raw, user string) (string, error) {
 	if safePath(slug) == "" {
 		return "", toolErr(strconv.Quote(slug) + ": pages can't go in folders starting with '_' or '.'")
 	}
+	if readOnly(user, slug) {
+		return "", toolErr(readOnlyMsg)
+	}
 	if !canWrite(user, slug) {
 		return "", toolErr(notYours(slug, user))
 	}
@@ -2063,7 +2066,13 @@ func callMCPTool(r *http.Request, name string, args jsonObj) (string, error) {
 		pagesMu.Lock()
 		defer pagesMu.Unlock()
 	}
-	return f(args, base, userOf(r))
+	out, err := f(args, base, userOf(r))
+	// A viewer's change to something shared, from wherever it was refused,
+	// as the tool's error.
+	if pe, ok := refusalOf(err); ok && pe.kind == refusedReadOnly || errors.Is(err, errReadOnly) {
+		err = toolErr(readOnlyMsg)
+	}
+	return out, err
 }
 
 // pageTools: the tools that write pages, each run under pagesMu (as the

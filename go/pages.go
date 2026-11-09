@@ -398,9 +398,14 @@ func refusePage(w http.ResponseWriter, r *http.Request, rq *Req, slug string) bo
 }
 
 // refuseWrite answers a change to a page the user may not change: 404, as
-// refusePage. False: go ahead.
+// refusePage, but 403 for a viewer's change to a shared page (readOnly).
+// False: go ahead.
 func refuseWrite(w http.ResponseWriter, r *http.Request, slug string) bool {
-	if !canWrite(userOf(r), slug) {
+	switch {
+	case readOnly(userOf(r), slug):
+		http.Error(w, readOnlyMsg, http.StatusForbidden)
+		return true
+	case !canWrite(userOf(r), slug):
 		http.NotFound(w, r)
 		return true
 	}
