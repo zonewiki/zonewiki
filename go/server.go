@@ -130,7 +130,7 @@ func main() {
 	sessionKey = secretKey(cfg.Data)
 	gitSetup()
 	excludeState(cfg.Data) // the secret key, the caches; not the settings file
-	commitSettings("Change settings")
+	commitSettings("", "Change settings")
 	migrateNames() // before anything reads the tasks
 	ensureHomePage()
 	cleanLeftDrafts()
@@ -258,6 +258,7 @@ func newHandler() http.Handler {
 	pageRoutes(mux)
 	historyRoutes(mux)
 	tasksRoutes(mux)
+	adminRoutes(mux)
 	oldNameRoutes(mux)
 	return checks(mux)
 }
@@ -353,13 +354,15 @@ func dotSegments(p string) bool {
 }
 
 // authExempt: what needs no login. /mcp checks its own bearer token (an
-// MCP client can't log in); the browser code and the home-screen app's
+// MCP client can't log in), a welcome link its own token; the browser code and the home-screen app's
 // files may be fetched without the session cookie, and the healthcheck
 // asks without one.
 func authExempt(r *http.Request) bool {
 	switch p := r.URL.Path; {
 	case p == "/login", p == "/logout", p == "/mcp", p == "/api/health":
 		return true
+	case strings.HasPrefix(p, "/welcome/"):
+		return true // an invite or reset link: the person has no password yet (links.go)
 	case strings.HasPrefix(p, "/public/"):
 		return r.Method == "GET" || r.Method == "HEAD"
 	}

@@ -1,0 +1,85 @@
+{{- /* /users: the Users page, for admins (admin.go, docs/spec/users.md).
+    Plain forms, no JavaScript: each change is a POST, and the page comes
+    back saying what it did or why it didn't. Remove asks first, in a
+    <details>. */ -}}
+{{define "body"}}
+<h1>Users</h1>
+{{- with .Done}}
+<p class="users-done" role="status">{{.}}</p>
+{{- end}}
+{{- with .Error}}
+<p class="users-error" role="alert">{{.}}</p>
+{{- end}}
+{{- with .Link}}
+<div class="users-done" role="status">
+  <p>{{if eq $.LinkKind "reset"}}A link for {{$.LinkUser}} to set a new password, for 24 hours{{else}}An invite for {{$.LinkUser}}, for 7 days{{end}}. Copy it and send it to them: it is shown only now, and works once.</p>
+  <code class="users-link">{{.}}</code>
+</div>
+{{- end}}
+<table class="users-table">
+  <thead><tr><th>Name</th><th>Role</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+  {{- range .Users}}
+  <tr{{if .Disabled}} class="user-disabled"{{end}}>
+    <td class="user-name">{{.Name}}{{if .Me}} <span class="user-you">(you)</span>{{end}}{{if .Token}} <span class="user-fact" title="Has an MCP token: an assistant can act as them">MCP</span>{{end}}</td>
+    <td>
+      <form method="post" action="/users/{{.Name}}/role" class="user-role-form">
+        <select name="role" aria-label="Role of {{.Name}}">
+          {{- $role := .Role}}
+          {{- range $.Roles}}
+          <option value="{{.}}"{{if eq . $role}} selected{{end}}>{{.}}</option>
+          {{- end}}
+        </select>
+        <button type="submit" class="btn">Change</button>
+      </form>
+    </td>
+    <td>{{if .Disabled}}Disabled{{else}}Active{{end}}</td>
+    <td><div class="user-actions">
+      {{- if .Disabled}}
+      <form method="post" action="/users/{{.Name}}/enable"><button type="submit" class="btn">Enable</button></form>
+      {{- else}}
+      <form method="post" action="/users/{{.Name}}/disable"><button type="submit" class="btn" title="They can't sign in, their MCP token stops working; their files stay">Disable</button></form>
+      {{- end}}
+      <form method="post" action="/users/{{.Name}}/reset"><button type="submit" class="btn" title="A link for {{.Name}} to set a new password">Reset password</button></form>
+      <details class="user-remove">
+        <summary class="btn">Remove…</summary>
+        <div class="user-remove-body">
+          <p>Remove {{.Name}} from this wiki? They can't sign in any more.{{if .Private}} Their private pages, notes and tasks stay in the wiki, in <code>private/{{.Name}}/</code>, seen by no one; someone added again as {{.Name}} gets them back.{{end}}</p>
+          <form method="post" action="/users/{{.Name}}/remove"><button type="submit" class="btn btn-danger">Remove {{.Name}}</button></form>
+        </div>
+      </details>
+    </div></td>
+  </tr>
+  {{- end}}
+  </tbody>
+</table>
+<h2>Invite someone</h2>
+<form method="post" action="/users/invite" class="users-invite">
+  <input type="text" name="name" placeholder="User name" required pattern="[a-z0-9]+(-[a-z0-9]+)*" title="Lowercase letters, digits and hyphens" autocapitalize="none" autocorrect="off" spellcheck="false" aria-label="User name">
+  <select name="role" aria-label="Role">
+    {{- range .Roles}}
+    <option value="{{.}}"{{if eq . "editor"}} selected{{end}}>{{.}}</option>
+    {{- end}}
+  </select>
+  <button type="submit" class="btn btn-primary">Make an invite link</button>
+</form>
+<p class="users-help">You get a link to send them any way you like: with it they choose their password, once, within 7 days.</p>
+{{- with .Links}}
+<h2>Open links</h2>
+<table class="users-table">
+  <thead><tr><th>For</th><th>What</th><th>Works until</th><th></th></tr></thead>
+  <tbody>
+  {{- range .}}
+  <tr>
+    <td class="user-name">{{.User}}</td>
+    <td>{{if eq .Kind "reset"}}New password{{else}}Invite, as {{.Role}}{{end}} <span class="user-you">by {{.By}}</span></td>
+    <td>{{.Expires}}</td>
+    <td><form method="post" action="/users/{{.User}}/revoke"><button type="submit" class="btn">Revoke</button></form></td>
+  </tr>
+  {{- end}}
+  </tbody>
+</table>
+{{- end}}
+<h2>Roles</h2>
+<p class="users-help"><strong>admin</strong>: manages the users, and changes everything shared. <strong>editor</strong>: changes everything shared. <strong>viewer</strong>: reads what is shared, and changes only their own private pages, notes and tasks. No one, an admin neither, sees another user's private pages or knows their password.</p>
+{{end}}

@@ -468,7 +468,11 @@ func betweenRequests(s *Settings) {
 func tookSettings(old, s *Settings) {
 	logf("reloaded %s", configName())
 	applySettings(old, s)
-	commitSettings(settingsChange(old, s))
+	author := ""
+	if a := settingsAuthor.Swap(nil); a != nil {
+		author = *a // a change on the Users page (changeSettings)
+	}
+	commitSettings(author, settingsChange(old, s))
 }
 
 // latestSettings: the settings in effect, or the change waiting for the
@@ -529,10 +533,11 @@ func takeSettings() (s *Settings) {
 
 // commitSettings commits the settings file, if it is there and changed:
 // at start and at each reload, by Zone, so a change made by hand or with
-// zonewiki user (another process, which leaves git to Zone) is in the history.
-func commitSettings(message string) {
+// zonewiki user (another process, which leaves git to Zone) is in the history;
+// one on the Users page names its admin as the author.
+func commitSettings(author, message string) {
 	if settingsError() == "" && exists(configPath()) {
-		gitCommit("", message, configPath())
+		gitCommit(author, message, configPath())
 	}
 }
 

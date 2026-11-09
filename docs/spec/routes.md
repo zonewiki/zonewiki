@@ -15,6 +15,9 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 | GET    | `/new`                | A form for a new page's name (without JavaScript; pages are made from links to them) |
 | POST   | `/new`                | Create `<slug>.md` and redirect to it; `private=1` (with users): in your private folder |
 | GET    | `/private`            | With users: your private home `private/<you>/index` (made on the first visit); 404 without users |
+| GET    | `/users`              | The Users page, for admins (Managing users in `docs/spec/users.md`); 404 for everyone else |
+| POST   | `/users/<name>/role`, `/disable`, `/enable`, `/remove`, `/reset`, `/revoke`; `/users/invite` | The Users page's changes, admins only (404 for anyone else) |
+| GET/POST | `/welcome/<token>`  | An invite or reset link's page: choose a password, once (no login needed) |
 | GET    | `/search?q=...`       | Full-text search results page (up to 50, with a count; `&unlinked=1` as for the API) |
 | GET    | `/api/search?q=...`   | JSON search results (used by the search UI); `&unlinked=1`: only pages nothing links to, no tasks; `&notes=1` (or `&scratch=1`, from before the rename): only notes (Notes page's filter; then `limit` goes up to 1000); `&limit=N` (default 15, max 100) |
 | GET    | `/api/page-preview/<slug>` | `{ title, html }`: a page rendered for the search modal's preview pane (heading ids as `data-pid`, no task list embeds) |

@@ -103,7 +103,7 @@
       <span id="uncommitted-count">0</span>
     </a>
     {{- if .Shell.SignOut}}
-    <form method="post" action="/logout" class="signout-form{{if .Shell.User}} signout-user-menu{{end}}">{{with .Shell.User}}<span class="signout-user" title="Signed in as {{.}}">{{.}}</span>{{end}}<button class="btn" type="submit">Sign out</button></form>
+    <form method="post" action="/logout" class="signout-form{{if .Shell.User}} signout-user-menu{{end}}">{{with .Shell.User}}<span class="signout-user" title="Signed in as {{.}}">{{.}}</span>{{end}}{{if .Shell.Admin}}<a class="btn signout-users" href="/users">Users</a>{{end}}<button class="btn" type="submit">Sign out</button></form>
     {{- end}}
   </div>
   {{- if .Shell.ShowActions}}{{template "top_actions" .Shell}}{{end}}

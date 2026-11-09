@@ -471,6 +471,63 @@ func TestUserRoles(t *testing.T) {
 	}
 }
 
+func TestUserLinks(t *testing.T) {
+	wiki := t.TempDir()
+	env := map[string]string{"ZONE_DATA": wiki}
+	getenv := func(k string) string { return env[k] }
+	run := func(input string, args ...string) (int, string, string) {
+		t.Helper()
+		var out, errs bytes.Buffer
+		code := userMain(args, getenv, strings.NewReader(input), &out, &errs)
+		return code, out.String(), errs.String()
+	}
+	if code, _, errs := run("", "invite", "dave"); code == 0 || !strings.Contains(errs, "no users") {
+		t.Errorf("invite without users: %d %q", code, errs)
+	}
+	run("pw\npw\n", "add", "alice")
+	code, out, errs := run("", "invite", "dave", "--role", "viewer")
+	if code != 0 || !strings.Contains(out, "as a viewer") || !strings.Contains(out, "/welcome/") ||
+		!strings.Contains(out, "base-url") {
+		t.Fatalf("invite: %d %q %q", code, out, errs)
+	}
+	token := strings.TrimPrefix(strings.Fields(strings.Split(out, "\n")[1])[0], "/welcome/")
+	links, err := readLinks()
+	if err != nil || len(links) != 1 || links[0].User != "dave" || links[0].Role != roleViewer ||
+		links[0].Hash != hashToken(token) || links[0].Kind != "invite" {
+		t.Fatalf("links: %+v %v", links, err)
+	}
+	if st, _ := os.Stat(filepath.Join(wiki, ".zone", "links")); st.Mode().Perm() != 0o600 {
+		t.Errorf("mode %o", st.Mode().Perm())
+	}
+	// The name is taken while the invite is open.
+	if code, _, errs := run("pw\npw\n", "add", "dave"); code == 0 || !strings.Contains(errs, "open invite") {
+		t.Errorf("add over an invite: %d %q", code, errs)
+	}
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"invite", "alice"}, "is a user already"},
+		{[]string{"reset", "zed"}, "there is no user zed"},
+		{[]string{"invite", "x", "--role", "boss"}, "isn't a role"},
+	} {
+		if code, _, errs := run("", c.args...); code == 0 || !strings.Contains(errs, c.want) {
+			t.Errorf("%v: %d %q", c.args, code, errs)
+		}
+	}
+	// A reset, with base-url: the whole address; it replaces nothing of dave's.
+	f, _ := readConfigFile(filepath.Join(wiki, ".zone", "config"))
+	f.Set("", "base-url", "https://wiki.example.org/")
+	_ = settingsfile.Write(filepath.Join(wiki, ".zone", "config"), f.Text())
+	if code, out, _ := run("", "reset", "alice"); code != 0 || !strings.Contains(out, "https://wiki.example.org/welcome/") ||
+		strings.Contains(out, "base-url") {
+		t.Errorf("reset: %d %q", code, out)
+	}
+	if links, _ := readLinks(); len(links) != 2 {
+		t.Errorf("two links: %+v", links)
+	}
+}
+
 func TestRolesInTheFile(t *testing.T) {
 	hash := hashPassword("p")
 	f, err := parseConfig("[user a]\npassword = " + hash + "\nrole = Admin\n\n[user b]\npassword = " + hash +

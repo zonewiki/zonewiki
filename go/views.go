@@ -68,7 +68,7 @@ func init() {
 	for _, name := range []string{"login.html", "view.html", "edit.html", "new.html", "notes.html",
 		"hidden.html", "deleted_page.html", "tasks_page.html", "search.html", "history/deleted.html",
 		"history/diff.html", "history/diff_uncommitted.html", "history/history.html",
-		"history/revision.html", "history/uncommitted.html"} {
+		"history/revision.html", "history/uncommitted.html", "users.html", "welcome.html"} {
 		views[name] = template.Must(template.Must(partials.Clone()).ParseFS(templateFS, "templates/"+name))
 	}
 }
@@ -288,6 +288,7 @@ type pageShell struct {
 	Locale, DateFormat string
 	SignOut            bool   // signed in, so Sign out is offered
 	User               string // who is signed in, with users
+	Admin              bool   // they are an admin: the user menu offers Users
 }
 
 // tasksNew: how a new task from any page (c t, New task) starts, as the
@@ -319,7 +320,7 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 		AppName: appName, Version: version, Build: cfg.Build, SourceURL: sourceURL, AllowRemote: cfg.AllowRemote,
 		Locale: s.Locale, DateFormat: s.DateFormat,
 		// Only signed in: the login page has no one to sign out.
-		SignOut: s.authOn() && isSignedIn(rq.r), User: rq.user, Users: s.Users != nil,
+		SignOut: s.authOn() && isSignedIn(rq.r), User: rq.user, Users: s.Users != nil, Admin: s.isAdmin(rq.user),
 	}
 	if !o.editor {
 		sh.Module = currentModule(rq)

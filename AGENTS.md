@@ -91,9 +91,11 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── config.go           # What is fixed for the process, from the environment (read once into cfg)
 │   ├── configfile.go       # The settings file .zone/config: its keys, Settings (settings(), reloaded when the file changes), the line edits
 │   ├── storage.go          # upload-max and storage-max: sizes (25MB), what the wiki holds (not .git/, .zone/), checkRoom
-│   ├── commands.go         # zonewiki user (add, passwd, token, remove, list) and zonewiki config (check, set, unset, passwd, token, import), which edit the settings file (filelock_*.go: one at a time)
+│   ├── commands.go         # zonewiki user (add, passwd, token, role, disable, enable, invite, reset, remove, list) and zonewiki config (check, set, unset, passwd, token, import), which edit the settings file (filelock_*.go: one at a time)
 │   ├── security.go         # Host and Origin checks, the page policy, login, signed session (and its user), throttles
-│   ├── users.go            # Users: password hashes, sign-in, the password prompt
+│   ├── users.go            # Users: roles, password hashes, sign-in, the password prompt
+│   ├── admin.go            # The Users page (/users, admins): roles, disable, remove, writing the settings file as the commands do
+│   ├── links.go            # Invite and reset links: .zone/links, /welcome/<token>
 │   ├── access.go           # Who may see and change what: private/<user>/ (canSee, canWrite, canSeePath)
 │   ├── private.go          # The private home private/<user>/index: /private, its template, its protection
 │   ├── routes.go           # The wiki's routes: pages, the editor, notes, search, previews, uploads

@@ -29,6 +29,9 @@ const userUsage = `Usage: zonewiki user COMMAND
   token NAME              give a user a new MCP token (the old one stops working)
   role NAME ROLE          change a user's role: admin, editor or viewer
   disable NAME            stop a user signing in (their files stay); enable NAME undoes it
+  invite NAME             a link for a new user to choose their password, for 7 days (shown once)
+    [--role ROLE]         their role: admin, editor (the default) or viewer
+  reset NAME              a link for a user to set a new password, for 24 hours (shown once)
   remove NAME             remove a user (their private pages and tasks stay); the last one only
     [--password|--open]   with the wiki's password instead (asks for it), or with no login
   list                    the users, their roles, and whether each has an MCP token`
@@ -147,8 +150,9 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 	case "role":
 		wantArgs = 2
 	}
-	if !slices.Contains([]string{"add", "passwd", "token", "role", "disable", "enable", "remove", "list"}, cmd) ||
-		len(args) != wantArgs || tokenFlag && cmd != "add" || roleFlag && cmd != "add" ||
+	if !slices.Contains([]string{"add", "passwd", "token", "role", "disable", "enable", "invite", "reset",
+		"remove", "list"}, cmd) ||
+		len(args) != wantArgs || tokenFlag && cmd != "add" || roleFlag && cmd != "add" && cmd != "invite" ||
 		(passwordFlag || openFlag) && cmd != "remove" || passwordFlag && openFlag ||
 		slices.ContainsFunc(args, func(a string) bool { return strings.HasPrefix(a, "-") }) {
 		fmt.Fprintln(stderr, userUsage)
@@ -183,6 +187,32 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 		return fail("%q isn't a user name. Use lowercase letters, digits and hyphens (e.g. alice, mary-ann).", name)
 	}
 	exists := f.User(name) != nil
+	if cmd == "invite" || cmd == "reset" {
+		kind := cmd
+		if role == "" {
+			role = roleEditor
+		}
+		token, err := makeLink(settingsOf(f.Read), kind, name, role, "")
+		if err != nil {
+			return fail("%v", err)
+		}
+		if kind == "invite" {
+			fmt.Fprintf(stdout, "An invite for %s, as %s, for 7 days. Send them this link (shown only now; "+
+				"it works once):\n", name, withArticle(role))
+		} else {
+			fmt.Fprintf(stdout, "A link for %s to set a new password, for 24 hours. Send them this link "+
+				"(shown only now; it works once):\n", name)
+		}
+		base := settingsOf(f.Read).BaseURL
+		fmt.Fprintln(stdout, linkURL(base, nil, token))
+		if base == "" {
+			fmt.Fprintln(stdout, "Put Zone's address in front of it (or set base-url: zonewiki config set base-url https://…).")
+		}
+		return 0
+	}
+	if links, _ := readLinks(); cmd == "add" && linkFor(links, name) != nil && linkFor(links, name).Kind == "invite" {
+		return fail("%s has an open invite. Wait for it, or revoke it on the Users page.", name)
+	}
 	switch {
 	case cmd == "add" && exists:
 		return fail("%s is a user already. Change the password with: zonewiki user passwd %s", name, name)
