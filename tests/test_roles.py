@@ -1,9 +1,9 @@
-"""Viewers (role = viewer, docs/spec/users.md, Roles): carol reads
-everything shared but changes only her own private folder. Every write
-route and MCP write tool is probed as carol against a shared page and
-shared tasks: nothing outside private/carol/ may change, nor any commit
-touch it (test_every_write_route_is_probed fails for a new write route
-without a probe, as test_privacy.py does for reads)."""
+"""Viewers (role = viewer, docs/spec/users.md, Viewers): carol reads
+everything shared and changes nothing, not even a private page or note of
+her own. Every write route and MCP write tool is probed as carol: no file
+may change, nor any commit be made (test_every_write_route_is_probed fails
+for a new write route without a probe, as test_privacy.py does for
+reads)."""
 
 import json
 import re
@@ -42,10 +42,10 @@ def git(wiki, *args):
 @pytest.fixture()
 def wiki(client, git_wiki_dir, monkeypatch):
     """A shared page with a checkbox, an uncommitted shared change, shared
-    tasks (open with a comment, completed), a note of carol's; signed in as
-    carol, a viewer."""
+    tasks (open with a comment, completed), a note and a private task of
+    carol's from when she was an editor; signed in as carol, a viewer."""
     monkeypatch.setattr(settings, "LEAF_USERS", dict(USERS))
-    monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}, "carol": {"role": "viewer"}})
+    monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}})
     wiki = git_wiki_dir
     (wiki / "plans.md").write_text("# Plans\n\n- [ ] one\n\nshared words\n")
     (wiki / "folder").mkdir()
@@ -61,16 +61,19 @@ def wiki(client, git_wiki_dir, monkeypatch):
     comment = next(t for t in comment if t["id"] == task["id"])["comments"][0]["id"]
     login(client, "carol")
     note = client.post("/api/notes", data={"title": "Carols"}, headers=HOST).get_json()["slug"]
+    mine = client.post("/api/tasks", json={"title": "Mine", "private": True}, headers=HOST).get_json()
+    monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}, "carol": {"role": "viewer"}})
+    login(client, "carol")
     (wiki / "plans.md").write_text("# Plans\n\n- [ ] one\n\nshared words, uncommitted\n")
     IDS.clear()
-    IDS.update({"task": task["id"], "done": done["id"], "comment": comment, "note": note})
+    IDS.update({"task": task["id"], "done": done["id"], "comment": comment, "note": note, "mine": mine["id"]})
     return wiki
 
 
 def shared_state(wiki):
-    """Every file but carol's own, Zone's state and git's."""
+    """Every file of the wiki, hers too, but Zone's state and git's."""
     return {p.relative_to(wiki).as_posix(): p.read_bytes() for p in wiki.rglob("*")
-            if p.is_file() and not p.relative_to(wiki).as_posix().startswith((".git/", ".zone/", "private/carol/"))}
+            if p.is_file() and not p.relative_to(wiki).as_posix().startswith((".git/", ".zone/"))}
 
 
 def fill(value, wiki):
@@ -116,6 +119,15 @@ WRITES = [
     ("POST /api/tasks/batch-update", "POST", "/api/tasks/batch-update", {"json": {"tasks": [{"id": "{task}", "title": "C"}]}}),
     ("POST /api/tasks/reorder", "POST", "/api/tasks/reorder", {"json": {"order": ["{task}"], "updates": [{"id": "{task}", "sort_order": 9}]}}),
     ("POST /api/tasks/restore", "POST", "/api/tasks/restore", {"json": {"tasks": [{"id": "new-id-1", "title": "Restored"}]}}),
+    # Her own things, from when she was an editor, and new ones: refused too.
+    ("POST /api/notes", "POST", "/api/notes", {"data": {"title": "New note"}}),
+    ("POST /api/scratch", "POST", "/api/scratch", {"data": {"title": "New note"}}),
+    ("POST /new", "POST", "/new", {"data": {"slug": "diary", "private": "1"}}),
+    ("POST /api/save/{slug...}", "POST", "/api/save/{note}", {"data": {"content": "# Mine\n"}}),
+    ("POST /delete/{slug...}", "POST", "/delete/{note}", {}),
+    ("POST /api/tasks", "POST", "/api/tasks", {"json": {"title": "Mine too", "private": True}}),
+    ("PUT /api/tasks/{id}", "PUT", "/api/tasks/{mine}", {"json": {"completed": True}}),
+    ("POST /api/upload", "POST", "/api/upload", {"data": lambda: {"file": (BytesIO(b"c"), "c.png"), "page": "{note}"}}),
     ("/api/deck", "POST", "/api/deck", {"json": {"title": "Carol's", "private": False}}),
     ("/api/deck/{rest...}", "PUT", "/api/deck/{task}", {"json": {"title": "Carol was here"}}),
     ("POST /users/{name}/role", "POST", "/users/carol/role", {"data": {"role": "admin"}}),
@@ -127,7 +139,6 @@ EXEMPT = {
     "/mcp",                                             # its tools: MCP_WRITES
     "POST /login", "POST /logout", "POST /welcome/{token}",
     "POST /api/preview", "POST /api/render-notes",      # render only
-    "POST /api/notes", "POST /api/scratch",             # a note in her own folder (TestOwnFolder)
     # admins only (test_admin.py); two are probed above
     "POST /users/{name}/disable", "POST /users/{name}/enable", "POST /users/{name}/remove",
     "POST /users/{name}/reset", "POST /users/{name}/revoke",
@@ -140,12 +151,9 @@ def test_a_viewer_changes_nothing_shared(client, wiki, route, method, path, kwar
     kwargs = {k: (v() if callable(v) else fill(v, wiki)) for k, v in kwargs.items()}
     before, head = shared_state(wiki), git(wiki, "rev-parse", "HEAD").strip()
     resp = client.open(fill(path, wiki), method=method, headers=HOST, **kwargs)
-    # Refused (403 mostly), or done on her own things only (a new task is
-    # hers; Commit all commits only her files): either way nothing shared.
+    assert resp.status_code in (403, 404), resp.data.decode()[:300]
     assert shared_state(wiki) == before, resp.data.decode()[:300]
-    for commit in git(wiki, "rev-list", f"{head}..HEAD").split():
-        files = git(wiki, "show", "--name-only", "--format=", commit).split()
-        assert all(f.startswith("private/carol/") for f in files), (commit, files)
+    assert git(wiki, "rev-parse", "HEAD").strip() == head
 
 
 MCP_WRITES = [
@@ -166,6 +174,10 @@ MCP_WRITES = [
     ("update_task", {"id": "{task}", "status": "deleted"}),
     ("update_task", {"id": "{done}", "status": "open", "comment": "Carol's"}),
     ("update_task", {"ids": ["{task}"], "add_tags": ["c"]}),
+    ("write_page", {"slug": "private/carol/x", "content": "# X\n"}),
+    ("write_page", {"note": True, "slug": "Mine", "content": "Mine\n"}),
+    ("create_task", {"title": "Mine", "private": True}),
+    ("update_task", {"id": "{mine}", "status": "done"}),
 ]
 
 
@@ -173,7 +185,7 @@ MCP_WRITES = [
 def test_a_viewers_assistant_changes_nothing_shared(client, wiki, tool, args):
     before = shared_state(wiki)
     text = mcp(client, tool, **fill(args, wiki))
-    assert shared_state(wiki) == before, text
+    assert READ_ONLY in text and shared_state(wiki) == before, text
 
 
 def test_every_write_route_is_probed():
@@ -207,8 +219,12 @@ class TestWhatTheyAreTold:
         assert READ_ONLY in mcp(client, "write_page", slug="plans", content="# C\n", overwrite=True)
         assert READ_ONLY in mcp(client, "update_task", id=IDS["task"], title="C")
 
-    def test_another_users_folder_stays_a_404(self, client, wiki):
-        assert client.post("/api/save/private/alice/x", data={"content": "# C\n"}, headers=HOST).status_code == 404
+    def test_the_refusal_tells_nothing_of_another_users_folder(self, client, wiki):
+        """The gate refuses before the route looks: alice's folder answers as anywhere."""
+        a = client.post("/api/save/private/alice/x", data={"content": "# C\n"}, headers=HOST)
+        b = client.post("/api/save/nothing-here", data={"content": "# C\n"}, headers=HOST)
+        assert (a.status_code, a.data) == (b.status_code, b.data) == (403, b.data)
+        assert client.get("/page/private/alice/x", headers=HOST).status_code == 404
 
     def test_she_reads_everything_shared(self, client, wiki):
         assert "shared words" in client.get("/page/plans", headers=HOST).data.decode()
@@ -217,56 +233,27 @@ class TestWhatTheyAreTold:
 
 class TestTheInterface:
 
-    def test_a_shared_page_offers_nothing_to_change(self, client, wiki):
+    def test_a_page_offers_nothing_to_change(self, client, wiki):
         body = client.get("/page/plans", headers=HOST).data.decode()
         assert 'class="page-col read-only"' in body and 'href="/edit/plans"' not in body
         assert 'data-action="rename"' not in body and 'data-action="delete"' not in body
         assert client.get("/edit/plans", headers=HOST).status_code == 403
-        assert client.get("/edit/new-shared-page", headers=HOST).status_code == 403
+        assert client.get("/edit/new-page", headers=HOST).status_code == 403
 
-    def test_her_own_page_offers_everything_but_make_shared(self, client, wiki):
-        client.post("/new", data={"slug": "diary", "private": "1"}, headers=HOST)
-        body = client.get("/page/private/carol/diary", headers=HOST).data.decode()
-        assert "read-only" not in body and 'href="/edit/private/carol/diary"' in body
-        assert 'data-action="rename"' in body and 'data-action="privacy"' not in body
+    def test_nothing_to_make(self, client, wiki):
+        body = client.get("/page/plans", headers=HOST).data.decode()
+        assert 'data-viewer="1"' in body
+        assert 'data-module="private"' not in body and 'data-module="notes"' not in body
+        assert client.get("/private", headers=HOST).status_code == 404
+
+    def test_her_assistant_isnt_offered_the_writing_tools(self, client, wiki):
+        resp = client.post("/mcp", headers={**HOST, "Authorization": "Bearer carol-token"},
+                           json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+        names = {t["name"] for t in resp.get_json()["result"]["tools"]}
+        assert "read_page" in names and "search_wiki" in names
+        assert not names & {"write_page", "edit_page", "create_task", "update_task", "file_note"}
 
     def test_an_editor_sees_it_all(self, client, wiki):
         login(client, "alice")
         body = client.get("/page/plans", headers=HOST).data.decode()
-        assert "read-only" not in body and 'href="/edit/plans"' in body
-
-
-class TestOwnFolder:
-    """What is hers, she changes as anyone."""
-
-    def test_her_own_pages(self, client, wiki):
-        assert client.post("/new", data={"slug": "diary", "private": "1"}, headers=HOST).status_code in (302, 303)
-        assert client.post("/api/save/private/carol/diary", data={"content": "# Diary\n"},
-                           headers=HOST).status_code == 200
-        assert (wiki / "private/carol/diary.md").read_text() == "# Diary\n"
-        assert client.post("/rename/private/carol/diary", data={"new_name": "private/carol/journal"},
-                           headers=HOST).status_code in (302, 303)
-        assert (wiki / "private/carol/journal.md").exists()
-
-    def test_her_tasks_are_private(self, client, wiki):
-        t = client.post("/api/tasks", json={"title": "Mine"}, headers=HOST)
-        assert t.status_code == 201 and t.get_json()["private"]
-        assert client.put(f"/api/tasks/{t.get_json()['id']}", json={"completed": True},
-                          headers=HOST).status_code == 200
-        assert "Mine" in (wiki / "private/carol/_tasks/completed.json").read_text()
-        assert "Mine" not in (wiki / "_tasks/tasks.json").read_text()
-
-    def test_a_private_task_cant_be_shared(self, client, wiki):
-        t = client.post("/api/tasks", json={"title": "Mine"}, headers=HOST).get_json()
-        resp = client.put(f"/api/tasks/{t['id']}", json={"private": False}, headers=HOST)
-        assert resp.status_code == 403 and "Mine" not in (wiki / "_tasks/tasks.json").read_text()
-
-    def test_her_assistant(self, client, wiki):
-        assert "Created" in mcp(client, "write_page", slug="private/carol/x", content="# X\n")
-        assert "Created" in mcp(client, "create_task", title="Assistant's")
-        assert "Assistant's" in (wiki / "private/carol/_tasks/tasks.json").read_text()
-
-    def test_her_uploads(self, client, wiki):
-        resp = client.post("/api/upload", data={"file": (BytesIO(b"c"), "c.png"), "page": "private/carol/x"},
-                           headers=HOST)
-        assert resp.status_code == 200 and (wiki / "private/carol/_assets/c.png").exists()
+        assert "read-only" not in body and 'href="/edit/plans"' in body and "data-viewer" not in body

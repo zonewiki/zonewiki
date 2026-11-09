@@ -580,9 +580,13 @@ func guidedFolders(user string) [][2]string {
 // folders that have guides, so the model knows to read one before drafting
 // for it.
 func toolList(user string) []map[string]any {
+	all := mcpTools
+	if settings().isViewer(user) {
+		all = slices.DeleteFunc(slices.Clone(all), func(t map[string]any) bool { return writeTool(t["name"].(string)) })
+	}
 	folders := guidedFolders(user)
 	if len(folders) == 0 {
-		return mcpTools
+		return all
 	}
 	var lines []string
 	for _, f := range folders[:min(len(folders), guidedShown)] {
@@ -595,8 +599,8 @@ func toolList(user string) []map[string]any {
 	if len(folders) > guidedShown {
 		lines = append(lines, fmt.Sprintf("- … and %d more folders", len(folders)-guidedShown))
 	}
-	tools := make([]map[string]any, len(mcpTools))
-	for i, t := range mcpTools {
+	tools := make([]map[string]any, len(all))
+	for i, t := range all {
 		if t["name"] == "read_guides" {
 			t = maps.Clone(t)
 			t["description"] = t["description"].(string) + " Guides in this wiki:\n" + strings.Join(lines, "\n")
@@ -2066,6 +2070,9 @@ func callMCPTool(r *http.Request, name string, args jsonObj) (string, error) {
 		pagesMu.Lock()
 		defer pagesMu.Unlock()
 	}
+	if writeTool(name) && settings().isViewer(userOf(r)) {
+		return "", toolErr(readOnlyMsg)
+	}
 	out, err := f(args, base, userOf(r))
 	// A viewer's change to something shared, from wherever it was refused,
 	// as the tool's error.
@@ -2077,6 +2084,12 @@ func callMCPTool(r *http.Request, name string, args jsonObj) (string, error) {
 
 // pageTools: the tools that write pages, each run under pagesMu (as the
 // routes that do are, writesPages).
+// writeTool: the tool changes the wiki (pages, notes, tasks): none for a
+// viewer, who isn't offered them either (toolList).
+func writeTool(name string) bool {
+	return pageTools[name] || name == "create_task" || name == "update_task"
+}
+
 var pageTools = map[string]bool{"write_page": true, "edit_page": true, "replace_in_pages": true,
 	"append_to_page": true, "file_note": true, "rename_page": true, "delete_page": true, "restore_page": true,
 	"rename_task_tag": true}

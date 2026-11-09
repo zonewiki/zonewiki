@@ -527,7 +527,6 @@ type tagRename struct {
 // committed first. Not the tags in pages' frontmatter: those sort pages.
 func renameTagOp(user, tag, newName string, merge bool, suffix string) (*tagRename, error) {
 	if settings().isViewer(user) {
-		// It rewrites shared pages and tasks.
 		return nil, refuseAs(refusedReadOnly, readOnlyMsg)
 	}
 	plan, err := checkTagRename(user, tag, newName, merge)

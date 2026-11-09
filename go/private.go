@@ -57,6 +57,10 @@ func ensurePrivateHome(user string) (string, error) {
 // the home takes pagesMu, as a page write: the others don't wait for one.
 func privateRoute(w http.ResponseWriter, r *http.Request) {
 	user := userOf(r)
+	if settings().isViewer(user) {
+		http.NotFound(w, r) // a viewer makes nothing, so has no private home
+		return
+	}
 	if slug := privateHomeSlug(user); slug != "" && safePath(slug) != "" && exists(safePath(slug)) {
 		http.Redirect(w, r, pathURL("page", slug), http.StatusFound)
 		return

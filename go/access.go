@@ -12,7 +12,6 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strings"
 )
 
@@ -54,19 +53,19 @@ func canSee(user, slug string) bool {
 
 // canWrite: user may change (create, edit, rename, delete) the page slug:
 // the pages they may see, since everything shared is editable, but for a
-// viewer (users.go: roleViewer), who changes only their own folder.
+// viewer (users.go: roleViewer), who changes nothing.
 func canWrite(user, slug string) bool {
-	return canSee(user, slug) && (!settings().isViewer(user) || ownPrivate(user, slug))
+	return canSee(user, slug) && !settings().isViewer(user)
 }
 
-// readOnly: user sees the page slug but may not change it: a viewer and a
-// shared page. Refusals then say so (403, readOnlyMsg), as the page is
-// there for them; one they can't see stays a 404.
+// readOnly: user sees the page slug but may not change it: a viewer.
+// Refusals then say so (403, readOnlyMsg), as the page is there for them;
+// one they can't see stays a 404.
 func readOnly(user, slug string) bool { return canSee(user, slug) && !canWrite(user, slug) }
 
 // readOnlyMsg: what a viewer is told when they try to change something
 // shared.
-const readOnlyMsg = "You can read this wiki but not change it: you are a viewer. Ask an admin."
+const readOnlyMsg = "You can read this wiki but not change it: you are a viewer. Ask an admin of this wiki."
 
 // errReadOnly: a viewer's change to something shared, refused.
 var errReadOnly = &apiError{http.StatusForbidden, readOnlyMsg}
@@ -75,45 +74,12 @@ var errReadOnly = &apiError{http.StatusForbidden, readOnlyMsg}
 // private ones.
 func canSeeTask(user string, t *Task) bool { return t.Owner == "" || t.Owner == user }
 
-// canWriteTask: user may change the task t: one they see, but a viewer
-// only their own private ones.
-func canWriteTask(user string, t *Task) bool {
-	return canSeeTask(user, t) && (!settings().isViewer(user) || t.Owner == user)
-}
-
-// keepsSharedTasks: a write of the tasks by user leaves the shared ones as
-// they are on disk, if user is a viewer (the check every task write passes,
-// writeOpenLocked and writeBothLocked: so no route or tool can change a
-// shared task for a viewer, whatever it does). active in order (the order
-// is a change too); completed by id, nil: not part of the write.
-func keepsSharedTasks(user string, active, completed []*Task) error {
-	if !settings().isViewer(user) {
-		return nil
-	}
-	diskActive, diskCompleted, err := readOwnerStrict("")
-	if err != nil {
-		return err
-	}
-	encode := func(tasks []*Task, owner string) []string {
-		var out []string
-		for _, t := range tasks {
-			if t.Owner == owner {
-				b, _ := encodeTasks([]*Task{t})
-				out = append(out, b)
-			}
-		}
-		return out
-	}
-	if !slices.Equal(encode(active, ""), encode(diskActive, "")) {
+// mayWriteTasks: user may write the task files: anyone but a viewer. Every
+// task write passes it (writeOpenLocked, writeBothLocked), so no route or
+// tool changes a task for a viewer, whatever it does.
+func mayWriteTasks(user string) error {
+	if settings().isViewer(user) {
 		return errReadOnly
-	}
-	if completed != nil {
-		a, b := encode(completed, ""), encode(diskCompleted, "")
-		slices.Sort(a)
-		slices.Sort(b)
-		if !slices.Equal(a, b) {
-			return errReadOnly
-		}
 	}
 	return nil
 }

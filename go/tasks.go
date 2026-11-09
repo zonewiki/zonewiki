@@ -589,9 +589,6 @@ func createTask(user string, data jsonObj, message string) (*Task, error) {
 	if err := applyTaskFields(user, t, data, true); err != nil {
 		return nil, err
 	}
-	if settings().isViewer(user) {
-		t.Owner = user // a viewer's tasks are their own: they change nothing shared
-	}
 	t.History = []HistoryEntry{} // its first dates are not changes
 	logEvent(t, user, "created", "", "")
 	active, err := readTasksStrict(user)

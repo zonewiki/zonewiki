@@ -32,7 +32,7 @@ type User struct {
 
 // The roles (docs/spec/users.md): an admin manages the users and does what
 // an editor does; an editor changes everything shared (every user before
-// roles); a viewer reads what is shared and changes only their own folder.
+// roles); a viewer reads what is shared and changes nothing.
 const (
 	roleAdmin  = "admin"
 	roleEditor = "editor"
@@ -47,7 +47,7 @@ func (s *Settings) isAdmin(name string) bool {
 	return u != nil && !u.Disabled && u.Role == roleAdmin
 }
 
-// isViewer: name is a viewer (changes only their own folder).
+// isViewer: name is a viewer (changes nothing).
 func (s *Settings) isViewer(name string) bool {
 	u := s.Users[name]
 	return u != nil && u.Role == roleViewer

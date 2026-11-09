@@ -3313,6 +3313,8 @@ mark.search-hl.current {
 /* The welcome page (an invite or reset link; welcome.html), in the login's form. */
 .welcome-note { margin: 0; font-size: .9rem; color: var(--muted); }
 
-/* A viewer's view of a shared page (view.html .read-only): nothing to edit or tick. */
+/* A viewer (body[data-viewer]; view.html .read-only): nothing to make, edit or tick. */
+body[data-viewer] :is(.top-new-note, .top-task, .action-new-note, .action-task, [id^="task-add-btn"], .task-comment-add) { display: none; }
+body[data-viewer] .action-sep:has(+ .action-new-note) { display: none; }
 .read-only .section-edit-btn { display: none; }
 .read-only .page-content input[type="checkbox"] { pointer-events: none; }

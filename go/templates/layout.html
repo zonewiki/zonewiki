@@ -28,6 +28,8 @@
       settings file; tasks-core.js). */}}
   {{- /* With users, private/ holds their private pages (js/completion.js). */}}
   {{- if .Shell.Users}} data-users="1"{{end}}
+  {{- /* A viewer makes nothing: no New note or New task (style.css, js/shortcuts.js). */}}
+  {{- if .Shell.Viewer}} data-viewer="1"{{end}}
   {{- if .Shell.Locale}} data-locale="{{.Shell.Locale}}"{{end}}
   {{- if .Shell.DateFormat}} data-date-format="{{.Shell.DateFormat}}"{{end}}
   {{- /* New tasks from any page (c t, the New task button) get the tags the

@@ -174,10 +174,11 @@ func (rq *Req) tasksLinkHref() string {
 func moduleLinks(rq *Req) []M {
 	current := currentModule(rq)
 	users := privateFolder(rq.who()) != ""
+	viewer := settings().isViewer(rq.who())
 	var out []M
 	for _, m := range modules {
-		if m[0] == "private" && !users {
-			continue
+		if m[0] == "private" && !users || viewer && (m[0] == "private" || m[0] == "notes") {
+			continue // a viewer makes nothing: no private pages, no notes
 		}
 		group := 0
 		if users && (m[0] == "tasks" || m[0] == "notes") {
@@ -289,6 +290,7 @@ type pageShell struct {
 	SignOut            bool   // signed in, so Sign out is offered
 	User               string // who is signed in, with users
 	Admin              bool   // they are an admin: the user menu offers Users
+	Viewer             bool   // they are a viewer: nothing to make (no New note, New task)
 }
 
 // tasksNew: how a new task from any page (c t, New task) starts, as the
@@ -321,6 +323,7 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 		Locale: s.Locale, DateFormat: s.DateFormat,
 		// Only signed in: the login page has no one to sign out.
 		SignOut: s.authOn() && isSignedIn(rq.r), User: rq.user, Users: s.Users != nil, Admin: s.isAdmin(rq.user),
+		Viewer: s.isViewer(rq.user),
 	}
 	if !o.editor {
 		sh.Module = currentModule(rq)

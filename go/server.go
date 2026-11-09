@@ -263,26 +263,15 @@ func newHandler() http.Handler {
 	return checks(viewerGate(mux))
 }
 
-// viewerWrites: the routes that write which a viewer may use, as each
-// checks what it changes itself (canWrite, canWriteTask, keepsSharedTasks,
-// committable…): a viewer changes only their own folder there. Every
-// other write is refused to a viewer before it runs (viewerGate), so a
-// new route is closed to them until it is checked and listed here
-// (tests/test_roles.py probes each).
+// viewerWrites: the routes taking a POST (or another write method) that a
+// viewer may use: none of them changes the wiki. Every other write is
+// refused to a viewer before it runs (viewerGate), so a new route is
+// closed to them until it is listed here (tests/test_roles.py probes each).
+// /mcp refuses a viewer's writing tools itself (callMCPTool).
 var viewerWrites = map[string]bool{
 	"POST /login": true, "POST /logout": true, "POST /welcome/{token}": true, "/mcp": true,
 	"POST /api/preview": true, "POST /api/render-notes": true, // render only
-	"POST /api/notes": true, "POST /api/scratch": true, // a note in their own folder
-	"POST /edit/{slug...}": true, "POST /api/save/{slug...}": true, "POST /new": true,
-	"POST /rename/{slug...}": true, "POST /promote/{slug...}": true, "POST /append/{slug...}": true,
-	"POST /delete/{slug...}": true, "POST /restore/{rest...}": true, "POST /api/toggle-checkbox/{slug...}": true,
-	"POST /api/upload": true, "POST /api/commit-all": true, "POST /api/commit-file": true,
-	"POST /api/tasks": true, "PUT /api/tasks/{id}": true, "DELETE /api/tasks/{id}": true,
-	"POST /api/tasks/{id}/toggle-check": true, "POST /api/tasks/{id}/comments": true,
-	"PUT /api/tasks/{id}/comments/{cid}": true, "DELETE /api/tasks/{id}/comments/{cid}": true,
-	"POST /api/tasks/batch-delete": true, "POST /api/tasks/restore": true, "POST /api/tasks/batch-complete": true,
-	"POST /api/tasks/reorder": true, "POST /api/tasks/batch-tag": true, "POST /api/tasks/batch-update": true,
-	"/api/deck": true, "/api/deck/{rest...}": true, // the tasks API's old name
+	"/api/deck": true, "/api/deck/{rest...}": true, // the tasks API's old name: its reads; its writes are refused (mayWriteTasks)
 }
 
 // viewerGate refuses a viewer's write (POST, PUT, PATCH, DELETE) to a
@@ -769,8 +758,8 @@ func apiUpload(w http.ResponseWriter, r *http.Request) {
 	if o, private := pageOwner(r.FormValue("page")); private && o != "" && o == userOf(r) {
 		owner = o
 	}
-	if owner == "" && settings().isViewer(userOf(r)) {
-		http.Error(w, readOnlyMsg, http.StatusForbidden) // _assets/ is shared
+	if settings().isViewer(userOf(r)) {
+		http.Error(w, readOnlyMsg, http.StatusForbidden)
 		return
 	}
 	// unique=1: a random file name (clipboard screenshots).

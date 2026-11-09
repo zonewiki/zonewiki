@@ -156,7 +156,7 @@ Done tasks go to a yearly archive. Beyond that:
   Everything else is shared. Each has a role: **admin** (the first user;
   manages the others on the **Users** page: invite links, roles, disable,
   remove, password reset links), **editor** (the default) or **viewer** (reads
-  what is shared, changes only their own folder).
+  what is shared, changes nothing).
   See [`docs/spec/users.md`](docs/spec/users.md).
 - **Keyboard shortcuts** for everything; `?` lists them.
 - **Sharing mode** for screen sharing: hides the trail of visited pages,

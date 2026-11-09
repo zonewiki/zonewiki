@@ -520,7 +520,7 @@ func byOwner(user string, tasks []*Task) (map[string][]*Task, error) {
 // whose tasks changed (and the shared one when it is missing); returns
 // their paths.
 func writeOpenLocked(user string, tasks []*Task) ([]string, error) {
-	if err := keepsSharedTasks(user, tasks, nil); err != nil {
+	if err := mayWriteTasks(user); err != nil {
 		return nil, err
 	}
 	split, err := byOwner(user, tasks)
@@ -563,10 +563,7 @@ func writeTasksLocked(user string, tasks []*Task, message string) error {
 // writeBothLocked writes the open tasks and every completed task (filed by
 // owner and year) in one commit, by user.
 func writeBothLocked(user string, active, completed []*Task, message string) error {
-	if completed == nil {
-		completed = []*Task{}
-	}
-	if err := keepsSharedTasks(user, active, completed); err != nil {
+	if err := mayWriteTasks(user); err != nil {
 		return err
 	}
 	changed, err := writeOpenLocked(user, active)
