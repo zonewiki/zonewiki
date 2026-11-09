@@ -235,29 +235,19 @@ func TestReloadBetweenRequests(t *testing.T) {
 
 // A reload's commit waits for the other commits (commitMu), and the other
 // requests don't wait for it: reloadMu is free while it runs.
-func TestReloadCommitsOutsideItsLock(t *testing.T) {
+func TestReloadDoesNotCommit(t *testing.T) {
 	path := configWiki(t, "locale = de\n")
 	cfg.GitEnabled = true
-	commitMu.Lock()
+	commitMu.Lock() // a reload needs no git: the file isn't in it
+	defer commitMu.Unlock()
 	rewrite(t, path, "locale = fr\n")
 	done := make(chan bool)
 	go func() { reloadSettings(); close(done) }()
-	deadline := time.Now().Add(5 * time.Second)
-	for settings().Locale != "fr" && time.Now().Before(deadline) {
-		time.Sleep(time.Millisecond)
-	}
-	if !reloadMu.TryLock() {
-		t.Error("reloadMu held while the reload commits")
-	} else {
-		reloadMu.Unlock()
-	}
 	select {
 	case <-done:
-		t.Error("committed past commitMu")
-	case <-time.After(50 * time.Millisecond):
+	case <-time.After(5 * time.Second):
+		t.Fatal("the reload waited for git")
 	}
-	commitMu.Unlock()
-	<-done
 	if settings().Locale != "fr" {
 		t.Error("not taken")
 	}

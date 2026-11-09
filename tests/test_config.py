@@ -169,20 +169,19 @@ def git(wiki, *args):
                           env=settings.GIT_ENV).stdout
 
 
-def test_the_file_is_committed_but_never_shown(client, git_wiki_dir, monkeypatch):
-    """Zone commits the file at start and at each reload (saying what
-    changed), and only it of .zone/; no page route serves it, and Zone's
-    history leaves it out."""
+def test_the_file_is_kept_out_of_git_and_never_shown(client, git_wiki_dir, monkeypatch):
+    """Zone keeps all of .zone/ out of git, the settings file too (account data
+    stays out of git); a change goes to the log, names and keys only; no page
+    route serves it, and Zone's history leaves it out."""
     monkeypatch.setattr(settings, "LEAF_USERS", dict(USERS))
     login(client, "alice", "alice-pw")
     config = git_wiki_dir / ".zone" / "config"
-    assert git(git_wiki_dir, "log", "-1", "--format=%an %s", "--", ".zone/config").strip() == "Zone Change settings"
     files = git(git_wiki_dir, "ls-files")
-    assert ".zone/config" in files and "secret_key" not in files
-    assert "alice-token" not in git(git_wiki_dir, "show", "HEAD:.zone/config")   # only its hash
+    assert ".zone" not in files and git(git_wiki_dir, "log", "--all", "--format=%H", "--", ".zone/config") == ""
     write(config, config.read_text() + user("carol", "carol-pw", "carol-token"))
     client.get("/page/index", headers=HOST)
-    assert git(git_wiki_dir, "log", "-1", "--format=%s").strip() == "Change settings: add user carol"
+    assert until(lambda: "Change settings: add user carol" in client.live.log.read_text())
+    assert "carol-pw" not in client.live.log.read_text() and "pbkdf2" not in client.live.log.read_text()
     assert git(git_wiki_dir, "status", "--porcelain").strip() == ""
     for path in ("/page/.zone/config", "/api/page-preview/.zone/config", "/edit/.zone/config",
                  "/_assets/../.zone/config", "/page/.leaf/config", "/_assets/../.leaf/config"):
@@ -190,24 +189,55 @@ def test_the_file_is_committed_but_never_shown(client, git_wiki_dir, monkeypatch
         assert resp.status_code in (400, 404) and b"pbkdf2" not in resp.data, path
     for path in ("/uncommitted", "/api/uncommitted"):
         body = client.get(path, headers=HOST).data.decode()
-        assert ".zone" not in body and "Change settings" not in body, path
-    text = client.post("/mcp", headers={**HOST, "Authorization": "Bearer alice-token"}, json={
-        "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "history", "arguments": {}}},
-    ).get_json()["result"]["content"][0]["text"]
-    assert ".zone" not in text and "Change settings" not in text
+        assert ".zone" not in body, path
 
 
-@pytest.mark.parametrize("line,kept", [("/.leaf/\n", ""), ("*.tmp\n/.leaf/", "*.tmp\n"), (".leaf\n", "")])
-def test_an_older_wikis_exclude_lets_the_file_in(client, git_wiki_dir, monkeypatch, line, kept):
-    """A wiki an older Zone set up excluded all of .leaf/ (also as written
-    by hand: without the slashes, or a newline at the end): the line goes."""
+@pytest.mark.parametrize("line,kept", [("/.leaf/\n", ""), ("*.tmp\n/.leaf/", "*.tmp\n"), (".leaf\n", ""),
+                                       ("/.zone/*\n!/.zone/config\n", "")])
+def test_an_older_wikis_exclude_lines_go(client, git_wiki_dir, monkeypatch, line, kept):
+    """A wiki an older Zone set up excluded all of .leaf/ (also as written by
+    hand), or all of .zone/ but the settings file: those lines go."""
     exclude = git_wiki_dir / ".git" / "info" / "exclude"
-    assert "/.zone/*\n!/.zone/config\n" in exclude.read_text()
+    assert exclude.read_text().endswith("/.zone/*\n") and "!/.zone/config" not in exclude.read_text()
     exclude.write_text(line)
     monkeypatch.setattr(settings, "CONFIG_FILE", "locale = de-AT\n")
     client.get("/page/index", headers=HOST)
-    assert exclude.read_text() == kept + "/.zone/*\n!/.zone/config\n"
-    assert ".zone/config" in git(git_wiki_dir, "ls-files")
+    assert exclude.read_text() == kept + "/.zone/*\n"
+    assert ".zone" not in git(git_wiki_dir, "ls-files")
+
+
+def test_an_older_wikis_settings_file_leaves_git_in_one_commit(client, git_wiki_dir, monkeypatch):
+    """Zone committed the file until 2026-11: at start it takes it out, the
+    file staying on disk."""
+    monkeypatch.setattr(settings, "LEAF_USERS", dict(USERS))
+    client.get("/page/index", headers=HOST)
+    client.live.stop()
+    git(git_wiki_dir, "add", "-f", ".zone/config")
+    git(git_wiki_dir, "commit", "-qm", "As an older Zone did")
+    client.get("/page/index", headers=HOST)
+    assert ".zone" not in git(git_wiki_dir, "ls-files")
+    assert git(git_wiki_dir, "log", "-1", "--format=%s").strip() == \
+        "Keep the settings file out of git: it holds the users and their password hashes"
+    assert (git_wiki_dir / ".zone" / "config").exists()
+    assert "change the passwords" in client.live.log.read_text()
+
+
+def test_a_clone_without_its_users_doesnt_start_open(client, git_wiki_dir, monkeypatch):
+    """A wiki whose history has users' commits but no settings file (a clone
+    of its git remote) won't start without a login; an empty file says so on
+    purpose."""
+    monkeypatch.setattr(settings, "LEAF_USERS", dict(USERS))
+    login(client, "alice", "alice-pw")
+    client.post("/api/notes", data={"title": "Alices"}, headers=HOST)   # a commit by alice
+    monkeypatch.setattr(settings, "LEAF_USERS", {})
+    with pytest.raises(RuntimeError, match="didn't start"):
+        client.get("/page/index", headers=HOST)
+    log = client.live.log.read_text()
+    assert "this wiki had users (alice made changes" in log and "create an empty .zone/config" in log
+    client.live.stop()
+    (git_wiki_dir / ".zone" / "config").write_text("")
+    monkeypatch.setattr(settings, "CONFIG_FILE", "# no login, on purpose\n")
+    assert client.get("/page/index", headers=HOST).status_code == 200
 
 
 def test_a_new_wikis_first_commit_has_no_secret_key(client, wiki_dir, monkeypatch):
@@ -215,4 +245,4 @@ def test_a_new_wikis_first_commit_has_no_secret_key(client, wiki_dir, monkeypatc
     monkeypatch.setattr(settings, "CONFIG_FILE", "locale = de-AT\n")
     client.get("/page/index", headers=HOST)
     files = git(wiki_dir, "ls-files")
-    assert "index.md" in files and ".zone/config" in files and "secret_key" not in files
+    assert "index.md" in files and ".zone" not in files

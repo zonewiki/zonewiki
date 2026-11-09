@@ -600,18 +600,19 @@ func TestExcludeFromGit(t *testing.T) {
 	if b, _ := os.ReadFile(filepath.Join(info, "exclude")); string(b) != "# *~\n/.leaf/\n" {
 		t.Errorf("exclude %q", b)
 	}
-	// .zone/ but the settings file: an older Zone's line for .leaf/ goes,
-	// and with no .leaf/ there, its other lines too.
-	_ = os.WriteFile(filepath.Join(info, "exclude"), []byte("# *~\n/.leaf/\n/.leaf/*\n!/.leaf/config\n"), 0o666)
+	// All of .zone/, the settings file too: an older Zone's lines go, the
+	// exceptions that kept the settings file in, and with no .leaf/ there,
+	// its line too.
+	_ = os.WriteFile(filepath.Join(info, "exclude"), []byte("# *~\n/.leaf/\n/.leaf/*\n!/.leaf/config\n/.zone/*\n!/.zone/config\n"), 0o666)
 	excludeState(dir)
 	excludeState(dir)
-	if b, _ := os.ReadFile(filepath.Join(info, "exclude")); string(b) != "# *~\n/.zone/*\n!/.zone/config\n" {
+	if b, _ := os.ReadFile(filepath.Join(info, "exclude")); string(b) != "# *~\n/.zone/*\n" {
 		t.Errorf("exclude %q", b)
 	}
-	// While .leaf/ is there (not moved yet), both folders' lines.
+	// While .leaf/ is there (not moved yet), both folders.
 	_ = os.Mkdir(filepath.Join(dir, ".leaf"), 0o777)
 	excludeState(dir)
-	if b, _ := os.ReadFile(filepath.Join(info, "exclude")); string(b) != "# *~\n/.zone/*\n!/.zone/config\n/.leaf/*\n!/.leaf/config\n" {
+	if b, _ := os.ReadFile(filepath.Join(info, "exclude")); string(b) != "# *~\n/.zone/*\n/.leaf/*\n" {
 		t.Errorf("exclude %q", b)
 	}
 }

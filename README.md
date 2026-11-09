@@ -229,8 +229,10 @@ default while there is no `~/zonewiki`.
 
 ### The settings file
 
-The wiki's own settings and its users are in the wiki, in `.zone/config`,
-committed with it (passwords and MCP tokens only as hashes). Zone reloads it
+The wiki's own settings and its users are in the wiki, in `.zone/config`
+(passwords and MCP tokens only as hashes), kept out of git: the history
+never holds account data. Back it up with the wiki folder; a clone of the
+git remote doesn't have it. Zone reloads it
 when it changes, so none of them needs a restart (but for taking the login
 away, which Zone takes only at one). Set them with `run.sh`, or edit the file:
 
@@ -404,7 +406,11 @@ Also know this:
 - **Git is the undo.** Every change made through Zone, by you or an assistant,
   is a commit (an assistant's are marked `(MCP)`); history, restore and
   Deleted Pages bring things back. Set `git-remote` and push now and then, so a
-  copy lives elsewhere too.
+  copy lives elsewhere too. The remote has everything but `.zone/config`
+  (the users and settings): keep a copy of that file as well.
+- **Treat the wiki folder, its git history and remote, and any backup as
+  confidential.** They hold everything, every user's private pages included,
+  and a backup of the folder holds the password hashes too.
 - **Pages may contain HTML**, which is rendered as is. Don't paste markup you
   don't trust, and keep in mind that anyone who can write to the wiki (including
   an MCP client) can add script to a page.

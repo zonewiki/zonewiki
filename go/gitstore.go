@@ -52,10 +52,15 @@ func runGitFor(timeout time.Duration, args ...string) gitResult {
 func runGitInput(input string, args ...string) gitResult { return runGitIn(gitTimeout, input, args...) }
 
 func runGitIn(timeout time.Duration, input string, args ...string) gitResult {
+	return runGitEnv(timeout, input, nil, args...)
+}
+
+// runGitEnv: runGitIn with more of git's environment (GIT_INDEX_FILE=…).
+func runGitEnv(timeout time.Duration, input string, env []string, args ...string) gitResult {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir, cmd.Env = cfg.Data, gitEnv
+	cmd.Dir, cmd.Env = cfg.Data, append(slices.Clone(gitEnv), env...)
 	if input != "" {
 		cmd.Stdin = strings.NewReader(input)
 	}
@@ -243,21 +248,23 @@ func gitCommit(user, message string, paths ...string) error {
 	return nil
 }
 
-// excludeState keeps Zone's folder .zone/ out of git (the session key, the
-// caches, the query log), but for the settings file, which is the wiki's and
-// is committed (its tokens are only hashes). .leaf/, an older Zone's folder,
-// likewise while it is there, and its lines go once it is moved. An older
-// Zone excluded all of .leaf/ ("/.leaf/", a folder git then never looks
-// into): that line goes, as does one written otherwise ("/.leaf", ".leaf/",
-// without a newline at the end of the file).
+// excludeState keeps Zone's folder .zone/ out of git, all of it: the
+// session key, the caches, the query log, and the settings file, which
+// holds the users and their password hashes (docs/spec/users.md: account
+// data stays out of git; untrackSettings takes it out of a wiki that kept
+// it). .leaf/, an older Zone's folder, likewise while it is there, and its
+// lines go once it is moved. Lines an older Zone wrote go: the exceptions
+// that kept the settings file in ("!/.zone/config", "!/.leaf/config"), and
+// "/.leaf/" written any way ("/.leaf", ".leaf/", without a newline at the
+// end of the file).
 func excludeState(wiki string) {
 	oldThere := exists(filepath.Join(wiki, legacyStateDirName))
 	stale := func(l string) bool {
 		l = strings.TrimSpace(l)
-		if slices.Contains([]string{"/.leaf/", "/.leaf", ".leaf/", ".leaf"}, l) {
+		if slices.Contains([]string{"/.leaf/", "/.leaf", ".leaf/", ".leaf", "!/.leaf/config", "!/" + stateDirName + "/config"}, l) {
 			return true
 		}
-		return !oldThere && (l == "/.leaf/*" || l == "!/.leaf/config")
+		return !oldThere && l == "/.leaf/*"
 	}
 	exclude := filepath.Join(wiki, ".git", "info", "exclude")
 	if b, err := os.ReadFile(exclude); err == nil && slices.ContainsFunc(strings.Split(string(b), "\n"), stale) {
@@ -267,11 +274,94 @@ func excludeState(wiki string) {
 		}
 	}
 	excludeFromGit(wiki, "/"+stateDirName+"/*")
-	excludeFromGit(wiki, "!/"+stateDirName+"/config")
 	if oldThere {
 		excludeFromGit(wiki, "/.leaf/*")
-		excludeFromGit(wiki, "!/.leaf/config")
 	}
+}
+
+// untrackSettings takes the settings file out of a wiki whose git kept it
+// (Zone committed it until 2026-11), in one commit by Zone; the file stays
+// on disk. It commits from an index of its own, so what someone staged by
+// hand stays staged and out of it. The history before keeps the file as
+// it was: its password hashes too (docs/spec/users.md).
+func untrackSettings() {
+	if !cfg.GitEnabled {
+		return
+	}
+	var files []string
+	for _, name := range []string{stateDirName + "/config", legacyStateDirName + "/config"} {
+		if runGit("ls-files", "--", name).Stdout != "" {
+			files = append(files, name)
+		}
+	}
+	if len(files) == 0 {
+		return
+	}
+	commitMu.Lock()
+	defer commitMu.Unlock()
+	index, err := os.CreateTemp("", "zone-index-*")
+	if err != nil {
+		logf("could not take the settings file out of git: %v", err)
+		return
+	}
+	index.Close()
+	defer os.Remove(index.Name())
+	env := []string{"GIT_INDEX_FILE=" + index.Name()}
+	git := func(args ...string) gitResult { return runGitEnv(gitTimeout, "", env, args...) }
+	r := git("read-tree", "HEAD")
+	if r.Code == 0 {
+		r = git(append([]string{"rm", "-q", "--cached", "--"}, files...)...)
+	}
+	var tree gitResult
+	if r.Code == 0 {
+		tree = git("write-tree")
+		r = tree
+	}
+	if r.Code == 0 {
+		r = runGit("commit-tree", strings.TrimSpace(tree.Stdout), "-p", "HEAD", "-m",
+			"Keep the settings file out of git: it holds the users and their password hashes")
+	}
+	if r.Code == 0 {
+		r = runGit("update-ref", "HEAD", strings.TrimSpace(r.Stdout))
+	}
+	if r.Code == 0 {
+		r = runGit(append([]string{"rm", "-q", "--cached", "--"}, files...)...)
+	}
+	if r.Code != 0 {
+		logf("could not take the settings file out of git: %s", strings.TrimSpace(r.Stderr))
+		return
+	}
+	logf("took %s out of git: Zone no longer keeps it there (it holds the users and their password hashes). "+
+		"The history before still has it: if the wiki was pushed where others can read it, change the passwords.",
+		strings.Join(files, ", "))
+}
+
+// usersInHistory: a user who made a commit in the wiki's history (Zone
+// commits as "name <name@zone>" for a user: gitCommit), "" if none did.
+// A wiki with such commits but no settings file lost its users (a clone
+// of its git remote, which holds no settings file): missingUsers.
+func usersInHistory() string {
+	if !cfg.GitEnabled || !isDir(filepath.Join(cfg.Data, ".git")) {
+		return ""
+	}
+	return strings.TrimSpace(runGit("log", "-1", "--author=@zone>", "--format=%an").Stdout)
+}
+
+// missingUsers: why Zone won't start, if its wiki had users but its
+// settings file is gone: else it would run without a login. An empty file
+// says no login on purpose.
+func missingUsers() error {
+	if exists(configPath()) {
+		return nil
+	}
+	if user := usersInHistory(); user != "" {
+		return fmt.Errorf("this wiki had users (%s made changes in its history), but its settings file %s, "+
+			"which holds them, isn't there: Zone doesn't keep it in git, so a clone of the git remote has none. "+
+			"Restore %s from a backup, or add the users again (zonewiki user add NAME). "+
+			"To run this wiki without a login on purpose, create an empty %s.",
+			user, configName(), configName(), configName())
+	}
+	return nil
 }
 
 // excludeFromGit lists entry (e.g. /.zone/*: cache, secret key) in

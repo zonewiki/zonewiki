@@ -14,8 +14,9 @@
 // The environment (.env) holds only what the deployment needs (ZONE_DATA,
 // ZONE_ALLOW_REMOTE …: Config, config.go); a wiki setting left there stops
 // Zone, pointing to zonewiki config import. The file is in .zone/, out of
-// safePath's reach; it is committed (the rest of .zone/ isn't), so its MCP
-// tokens are kept only as hashes, passwords as PBKDF2 hashes.
+// safePath's reach and, like all of .zone/, out of git: it holds the
+// users (account data stays out of git), its MCP tokens only as hashes,
+// passwords as PBKDF2 hashes.
 package main
 
 import (
@@ -323,9 +324,9 @@ func fileUsers(f *settingsfile.File) (map[string]*User, error) {
 	return users, nil
 }
 
-// MCP tokens: in the settings file (committed) only as "sha256:" and the
-// token's SHA-256 in hex. A token is 32 random bytes,
-// so its hash tells whoever has the repository nothing.
+// MCP tokens: in the settings file only as "sha256:" and the token's
+// SHA-256 in hex. A token is 32 random bytes, so its hash tells whoever
+// has the file (a backup, an export) nothing.
 const tokenHashPrefix = "sha256:"
 
 func hashToken(token string) string {
@@ -464,15 +465,17 @@ func betweenRequests(s *Settings) {
 }
 
 // tookSettings: what a change in effect does besides (the remote, the
-// noshare cache), and its commit.
+// noshare cache), and its line in the log.
 func tookSettings(old, s *Settings) {
 	logf("reloaded %s", configName())
 	applySettings(old, s)
-	author := ""
-	if a := settingsAuthor.Swap(nil); a != nil {
-		author = *a // a change on the Users tab (changeSettings)
+	by := ""
+	if a := settingsAuthor.Swap(nil); a != nil && *a != "" {
+		by = " (by " + *a + ")" // a change on the Users tab (changeSettings)
 	}
-	commitSettings(author, settingsChange(old, s))
+	// The file isn't in git (excludeState): the log is its history, names
+	// and keys only, never a value.
+	logf("%s%s", settingsChange(old, s), by)
 }
 
 // latestSettings: the settings in effect, or the change waiting for the
@@ -531,18 +534,8 @@ func takeSettings() (s *Settings) {
 	return s
 }
 
-// commitSettings commits the settings file, if it is there and changed:
-// at start and at each reload, by Zone, so a change made by hand or with
-// zonewiki user (another process, which leaves git to Zone) is in the history;
-// one on the Users tab names its admin as the author.
-func commitSettings(author, message string) {
-	if settingsError() == "" && exists(configPath()) {
-		gitCommit(author, message, configPath())
-	}
-}
-
-// settingsChange: a commit message saying what changed ("Change settings:
-// add user carol, alice's password, locale"), names and keys only.
+// settingsChange: what changed, for the log ("Change settings: add user
+// carol, alice's password, locale"), names and keys only.
 func settingsChange(old, s *Settings) string {
 	var changes []string
 	for _, name := range sortedKeys(old.Users) {

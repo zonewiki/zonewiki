@@ -108,16 +108,15 @@ class TestChanges:
         assert "Removed carol." in body and "private/carol/" in body
         assert (git_wiki_dir / "private" / "carol" / "x.md").exists()
 
-    def test_the_change_is_committed_by_the_admin(self, admin, git_wiki_dir):
+    def test_the_change_is_logged_with_the_admin_and_not_committed(self, admin, client, git_wiki_dir):
         post(admin, "/admin/users/bob/role", role="viewer")
-        # The reload's commit runs once the request has ended.
-        for _ in range(50):
-            log = subprocess.run(["git", "log", "-1", "--format=%an|%s", "--", ".zone/config"], cwd=git_wiki_dir,
-                                 capture_output=True, text=True, env=settings.GIT_ENV).stdout.strip()
-            if log != "Zone|Change settings":
+        for _ in range(50):   # the reload's line comes once the request has ended
+            if "Change settings: bob's role (by alice)" in client.live.log.read_text():
                 break
             time.sleep(.05)
-        assert log == "alice|Change settings: bob's role"
+        assert "Change settings: bob's role (by alice)" in client.live.log.read_text()
+        assert ".zone" not in subprocess.run(["git", "ls-files"], cwd=git_wiki_dir, capture_output=True,
+                                             text=True, env=settings.GIT_ENV).stdout
 
     def test_the_change_applies_at_once(self, admin, client, git_wiki_dir):
         post(admin, "/admin/users/carol/role", role="admin")
