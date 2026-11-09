@@ -130,8 +130,8 @@ WRITES = [
     ("POST /api/upload", "POST", "/api/upload", {"data": lambda: {"file": (BytesIO(b"c"), "c.png"), "page": "{note}"}}),
     ("/api/deck", "POST", "/api/deck", {"json": {"title": "Carol's", "private": False}}),
     ("/api/deck/{rest...}", "PUT", "/api/deck/{task}", {"json": {"title": "Carol was here"}}),
-    ("POST /users/{name}/role", "POST", "/users/carol/role", {"data": {"role": "admin"}}),
-    ("POST /users/invite", "POST", "/users/invite", {"data": {"name": "dave", "role": "admin"}}),
+    ("POST /admin/users/{name}/role", "POST", "/admin/users/carol/role", {"data": {"role": "admin"}}),
+    ("POST /admin/users/invite", "POST", "/admin/users/invite", {"data": {"name": "dave", "role": "admin"}}),
 ]
 
 # Writes that change nothing shared, or are someone else's to check.
@@ -140,8 +140,8 @@ EXEMPT = {
     "POST /login", "POST /logout", "POST /welcome/{token}",
     "POST /api/preview", "POST /api/render-notes",      # render only
     # admins only (test_admin.py); two are probed above
-    "POST /users/{name}/disable", "POST /users/{name}/enable", "POST /users/{name}/remove",
-    "POST /users/{name}/reset", "POST /users/{name}/revoke",
+    "POST /admin/users/{name}/disable", "POST /admin/users/{name}/enable", "POST /admin/users/{name}/remove",
+    "POST /admin/users/{name}/reset", "POST /admin/users/{name}/revoke",
 }
 
 

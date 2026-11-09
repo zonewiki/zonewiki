@@ -787,9 +787,9 @@ EXEMPT = {
     "GET /api/health",              # ok, or the settings file's error
     "POST /api/notes", "POST /api/scratch",   # makes bob's own note
     "GET /private",                 # redirects to the caller's own private home (test_users.py)
-    # The Users page: admins only, names and roles, no page (test_admin.py)
-    "GET /users", "POST /users/{name}/role", "POST /users/{name}/disable", "POST /users/{name}/enable",
-    "POST /users/{name}/remove", "POST /users/invite", "POST /users/{name}/reset", "POST /users/{name}/revoke",
+    # The admin page: admins only, names and roles, no page (test_admin.py)
+    "GET /admin", "GET /admin/users", "POST /admin/users/{name}/role", "POST /admin/users/{name}/disable", "POST /admin/users/{name}/enable",
+    "POST /admin/users/{name}/remove", "POST /admin/users/invite", "POST /admin/users/{name}/reset", "POST /admin/users/{name}/revoke",
     "GET /welcome/{token}", "POST /welcome/{token}",   # a link's own page: sets one password (test_admin.py)
 }
 

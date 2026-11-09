@@ -154,7 +154,7 @@ Done tasks go to a yearly archive. Beyond that:
   a private folder (`private/<name>/`), private notes, private tasks
   (a **Private** box on the task, 🔒 on its card) and their own pinned lists.
   Everything else is shared. Each has a role: **admin** (the first user;
-  manages the others on the **Users** page: invite links, roles, disable,
+  manages the others under **Admin**, on its Users tab: invite links, roles, disable,
   remove, password reset links), **editor** (the default) or **viewer** (reads
   what is shared, changes nothing).
   See [`docs/spec/users.md`](docs/spec/users.md).
@@ -246,7 +246,7 @@ away, which Zone takes only at one). Set them with `run.sh`, or edit the file:
 | Setting | Does |
 |---------|------|
 | `password` | A login gate (`./run.sh config passwd`). Sessions survive restarts: Zone keeps its own key in `.zone/` (never in git) |
-| `[user NAME]` | Several users instead of one password, each with a `password`, maybe an `mcp-token`, a `role` (admin, editor, viewer) and `disabled` (`./run.sh user …`, or an admin's Users page); changes are committed in their name (see [`docs/spec/users.md`](docs/spec/users.md)) |
+| `[user NAME]` | Several users instead of one password, each with a `password`, maybe an `mcp-token`, a `role` (admin, editor, viewer) and `disabled` (`./run.sh user …`, or the admin page); changes are committed in their name (see [`docs/spec/users.md`](docs/spec/users.md)) |
 | `mcp-token` | Turns on `/mcp` (`./run.sh config token`; see [Connect an AI assistant](#connect-an-ai-assistant)) |
 | `hosts` | Names Zone may be reached by besides localhost, e.g. `wiki.example.org` behind a reverse proxy (see Security) |
 | `base-url` | Zone's address as your browser knows it, for links handed to AI clients |

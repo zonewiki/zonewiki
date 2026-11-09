@@ -1,5 +1,6 @@
-// The Users page (docs/spec/users.md, Managing users): an admin sees the
-// wiki's users and changes their roles, disables, enables and removes them
+// The admin page (/admin, docs/spec/users.md, Managing users): its
+// section tabs, of which Users (/admin/users) is the one so far. There an
+// admin sees the wiki's users and changes their roles, disables, enables and removes them
 // in the browser, as zonewiki user does on the host. It changes the
 // settings file the way the commands do (saveConfig: checked, locked, only
 // onto the file as read), so the file stays the one place, and every rule
@@ -19,14 +20,17 @@ import (
 )
 
 func adminRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /users", usersPage)
-	mux.HandleFunc("POST /users/{name}/role", adminOnly(userRoleRoute))
-	mux.HandleFunc("POST /users/{name}/disable", adminOnly(userDisableRoute))
-	mux.HandleFunc("POST /users/{name}/enable", adminOnly(userDisableRoute))
-	mux.HandleFunc("POST /users/{name}/remove", adminOnly(userRemoveRoute))
-	mux.HandleFunc("POST /users/invite", adminOnly(inviteRoute))
-	mux.HandleFunc("POST /users/{name}/reset", adminOnly(resetRoute))
-	mux.HandleFunc("POST /users/{name}/revoke", adminOnly(revokeRoute))
+	mux.HandleFunc("GET /admin", adminOnly(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, adminTabs[0].Href, http.StatusFound) // the first tab
+	}))
+	mux.HandleFunc("GET /admin/users", usersPage)
+	mux.HandleFunc("POST /admin/users/{name}/role", adminOnly(userRoleRoute))
+	mux.HandleFunc("POST /admin/users/{name}/disable", adminOnly(userDisableRoute))
+	mux.HandleFunc("POST /admin/users/{name}/enable", adminOnly(userDisableRoute))
+	mux.HandleFunc("POST /admin/users/{name}/remove", adminOnly(userRemoveRoute))
+	mux.HandleFunc("POST /admin/users/invite", adminOnly(inviteRoute))
+	mux.HandleFunc("POST /admin/users/{name}/reset", adminOnly(resetRoute))
+	mux.HandleFunc("POST /admin/users/{name}/revoke", adminOnly(revokeRoute))
 	mux.HandleFunc("GET /welcome/{token}", welcomeRoute)
 	mux.HandleFunc("POST /welcome/{token}", welcomeRoute)
 }
@@ -43,7 +47,7 @@ func adminOnly(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// usersView: the Users page (users.html).
+// usersView: the Users tab (users.html).
 type usersView struct {
 	view
 	Users []userRow
@@ -51,19 +55,27 @@ type usersView struct {
 	Done  string // what the last change did ("" none), said above the list
 	Error string // why the last change was refused
 	Roles []string
-	Links []linkRow // the open invite and reset links
+	Tabs  []adminTab // the admin page's section tabs
+	Tab   string     // the one shown
+	Links []linkRow  // the open invite and reset links
 	// A link just made, shown once: its address, for whom, which kind.
 	Link, LinkUser, LinkKind string
 }
 
-// userRow: a user as the Users page lists them.
+// userRow: a user as the Users tab lists them.
 type userRow struct {
 	Name, Role      string
 	Token, Disabled bool
 	Me, Private     bool // the admin themselves; has a private folder
 }
 
-// usersPage: GET /users, the list. ?done= says what the change before did,
+// adminTab: a section tab of the admin page.
+type adminTab struct{ Key, Label, Href string }
+
+// adminTabs: the admin page's sections, in order; /admin opens the first.
+var adminTabs = []adminTab{{"users", "Users", "/admin/users"}}
+
+// usersPage: GET /admin/users, the list. ?done= says what the change before did,
 // from a fixed set (a link can't make the page say anything else).
 func usersPage(w http.ResponseWriter, r *http.Request) {
 	if !settings().isAdmin(userOf(r)) {
@@ -92,19 +104,19 @@ func usersPage(w http.ResponseWriter, r *http.Request) {
 	showUsers(w, r, http.StatusOK, done, "")
 }
 
-// showUsers renders the Users page, with what was done or refused. It
+// showUsers renders the Users tab, with what was done or refused. It
 // lists the users as the latest settings have them: a change made by this
 // admin a moment ago may still wait for the requests running.
 func showUsers(w http.ResponseWriter, r *http.Request, status int, done, refused string) {
 	v := usersData(r)
 	v.Done, v.Error = done, refused
-	page(w, newReq(r), status, "users.html", "Users", shell{}, v)
+	page(w, newReq(r), status, "users.html", "Admin · Users", shell{}, v)
 }
 
-// usersData: what the Users page lists, the users and the open links.
+// usersData: what the Users tab lists, the users and the open links.
 func usersData(r *http.Request) *usersView {
 	s, me := latestSettings(), userOf(r)
-	v := &usersView{Me: me, Roles: roles, Links: openLinks()}
+	v := &usersView{Me: me, Roles: roles, Links: openLinks(), Tabs: adminTabs, Tab: "users"}
 	for _, name := range sortedKeys(s.Users) {
 		u := s.Users[name]
 		v.Users = append(v.Users, userRow{Name: name, Role: u.Role, Token: u.MCPToken != "", Disabled: u.Disabled,
@@ -143,7 +155,7 @@ func changeSettings(user string, edit func(f *settingsfile.File) error) error {
 	return nil
 }
 
-// targetUser: the user a POST /users/{name}/… names, nil if there is none
+// targetUser: the user a POST /admin/users/{name}/… names, nil if there is none
 // (the page answers 404, as for a page that isn't there).
 func targetUser(w http.ResponseWriter, r *http.Request) *User {
 	u := latestSettings().Users[r.PathValue("name")]
@@ -157,7 +169,7 @@ func targetUser(w http.ResponseWriter, r *http.Request) *User {
 // if the admin is an admin no longer (they demoted, disabled or removed
 // themselves), as the list is no longer theirs.
 func afterChange(w http.ResponseWriter, r *http.Request, done, name string) {
-	to := "/users?done=" + url.QueryEscape(done) + "&user=" + url.QueryEscape(name)
+	to := "/admin/users?done=" + url.QueryEscape(done) + "&user=" + url.QueryEscape(name)
 	if !latestSettings().isAdmin(userOf(r)) {
 		to = "/"
 	}
@@ -199,7 +211,7 @@ func userRoleRoute(w http.ResponseWriter, r *http.Request) {
 	afterChange(w, r, "role", u.Name)
 }
 
-// userDisableRoute: POST /users/{name}/disable or /enable.
+// userDisableRoute: POST /admin/users/{name}/disable or /enable.
 func userDisableRoute(w http.ResponseWriter, r *http.Request) {
 	u := targetUser(w, r)
 	if u == nil {

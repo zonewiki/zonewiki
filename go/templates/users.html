@@ -1,9 +1,14 @@
-{{- /* /users: the Users page, for admins (admin.go, docs/spec/users.md).
+{{- /* /admin/users: the admin page's Users tab (admin.go, docs/spec/users.md).
     Plain forms, no JavaScript: each change is a POST, and the page comes
     back saying what it did or why it didn't. Remove asks first, in a
     <details>. */ -}}
 {{define "body"}}
-<h1>Users</h1>
+<h1>Admin</h1>
+<nav class="admin-tabs" aria-label="Admin sections">
+  {{- range .Tabs}}
+  <a href="{{.Href}}"{{if eq .Key $.Tab}} aria-current="page"{{end}}>{{.Label}}</a>
+  {{- end}}
+</nav>
 {{- with .Done}}
 <p class="users-done" role="status">{{.}}</p>
 {{- end}}
@@ -23,7 +28,7 @@
   <tr{{if .Disabled}} class="user-disabled"{{end}}>
     <td class="user-name">{{.Name}}{{if .Me}} <span class="user-you">(you)</span>{{end}}{{if .Token}} <span class="user-fact" title="Has an MCP token: an assistant can act as them">MCP</span>{{end}}</td>
     <td>
-      <form method="post" action="/users/{{.Name}}/role" class="user-role-form">
+      <form method="post" action="/admin/users/{{.Name}}/role" class="user-role-form">
         <select name="role" aria-label="Role of {{.Name}}">
           {{- $role := .Role}}
           {{- range $.Roles}}
@@ -36,16 +41,16 @@
     <td>{{if .Disabled}}Disabled{{else}}Active{{end}}</td>
     <td><div class="user-actions">
       {{- if .Disabled}}
-      <form method="post" action="/users/{{.Name}}/enable"><button type="submit" class="btn">Enable</button></form>
+      <form method="post" action="/admin/users/{{.Name}}/enable"><button type="submit" class="btn">Enable</button></form>
       {{- else}}
-      <form method="post" action="/users/{{.Name}}/disable"><button type="submit" class="btn" title="They can't sign in, their MCP token stops working; their files stay">Disable</button></form>
+      <form method="post" action="/admin/users/{{.Name}}/disable"><button type="submit" class="btn" title="They can't sign in, their MCP token stops working; their files stay">Disable</button></form>
       {{- end}}
-      <form method="post" action="/users/{{.Name}}/reset"><button type="submit" class="btn" title="A link for {{.Name}} to set a new password">Reset password</button></form>
+      <form method="post" action="/admin/users/{{.Name}}/reset"><button type="submit" class="btn" title="A link for {{.Name}} to set a new password">Reset password</button></form>
       <details class="user-remove">
         <summary class="btn">Remove…</summary>
         <div class="user-remove-body">
           <p>Remove {{.Name}} from this wiki? They can't sign in any more.{{if .Private}} Their private pages, notes and tasks stay in the wiki, in <code>private/{{.Name}}/</code>, seen by no one; someone added again as {{.Name}} gets them back.{{end}}</p>
-          <form method="post" action="/users/{{.Name}}/remove"><button type="submit" class="btn btn-danger">Remove {{.Name}}</button></form>
+          <form method="post" action="/admin/users/{{.Name}}/remove"><button type="submit" class="btn btn-danger">Remove {{.Name}}</button></form>
         </div>
       </details>
     </div></td>
@@ -54,7 +59,7 @@
   </tbody>
 </table>
 <h2>Invite someone</h2>
-<form method="post" action="/users/invite" class="users-invite">
+<form method="post" action="/admin/users/invite" class="users-invite">
   <input type="text" name="name" placeholder="User name" required pattern="[a-z0-9]+(-[a-z0-9]+)*" title="Lowercase letters, digits and hyphens" autocapitalize="none" autocorrect="off" spellcheck="false" aria-label="User name">
   <select name="role" aria-label="Role">
     {{- range .Roles}}
@@ -74,7 +79,7 @@
     <td class="user-name">{{.User}}</td>
     <td>{{if eq .Kind "reset"}}New password{{else}}Invite, as {{.Role}}{{end}} <span class="user-you">by {{.By}}</span></td>
     <td>{{.Expires}}</td>
-    <td><form method="post" action="/users/{{.User}}/revoke"><button type="submit" class="btn">Revoke</button></form></td>
+    <td><form method="post" action="/admin/users/{{.User}}/revoke"><button type="submit" class="btn">Revoke</button></form></td>
   </tr>
   {{- end}}
   </tbody>

@@ -196,12 +196,12 @@ func mayMakeLink(admin string) bool {
 	return true
 }
 
-// linkRow: an open link as the Users page lists it.
+// linkRow: an open link as the Users tab lists it.
 type linkRow struct {
 	User, Kind, Role, By, Expires string
 }
 
-// openLinks: the open links, for the Users page, by name.
+// openLinks: the open links, for the Users tab, by name.
 func openLinks() []linkRow {
 	links, err := readLinks()
 	if err != nil {
@@ -216,15 +216,15 @@ func openLinks() []linkRow {
 	return rows
 }
 
-// The Users page's link routes (admins only: adminOnly).
+// The Users tab's link routes (admins only: adminOnly).
 
-// inviteRoute: POST /users/invite, name and role: the Users page with the
+// inviteRoute: POST /admin/users/invite, name and role: the Users tab with the
 // link, shown once.
 func inviteRoute(w http.ResponseWriter, r *http.Request) {
 	linkRoute(w, r, "invite", r.PostFormValue("name"), r.PostFormValue("role"))
 }
 
-// resetRoute: POST /users/{name}/reset.
+// resetRoute: POST /admin/users/{name}/reset.
 func resetRoute(w http.ResponseWriter, r *http.Request) {
 	if targetUser(w, r) == nil {
 		return
@@ -245,10 +245,10 @@ func linkRoute(w http.ResponseWriter, r *http.Request, kind, name, role string) 
 	}
 	v := usersData(r)
 	v.Link, v.LinkUser, v.LinkKind = linkURL(settings().BaseURL, r, token), name, kind
-	page(w, newReq(r), http.StatusOK, "users.html", "Users", shell{}, v)
+	page(w, newReq(r), http.StatusOK, "users.html", "Admin · Users", shell{}, v)
 }
 
-// revokeRoute: POST /users/{name}/revoke, name's open link.
+// revokeRoute: POST /admin/users/{name}/revoke, name's open link.
 func revokeRoute(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	found, err := revokeLink(name)
@@ -260,7 +260,7 @@ func revokeRoute(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	http.Redirect(w, r, "/users?done=revoke&user="+name, http.StatusSeeOther)
+	http.Redirect(w, r, "/admin/users?done=revoke&user="+name, http.StatusSeeOther)
 }
 
 // The welcome page: /welcome/<token>, signed out. Opening it changes

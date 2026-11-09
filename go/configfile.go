@@ -470,7 +470,7 @@ func tookSettings(old, s *Settings) {
 	applySettings(old, s)
 	author := ""
 	if a := settingsAuthor.Swap(nil); a != nil {
-		author = *a // a change on the Users page (changeSettings)
+		author = *a // a change on the Users tab (changeSettings)
 	}
 	commitSettings(author, settingsChange(old, s))
 }
@@ -534,7 +534,7 @@ func takeSettings() (s *Settings) {
 // commitSettings commits the settings file, if it is there and changed:
 // at start and at each reload, by Zone, so a change made by hand or with
 // zonewiki user (another process, which leaves git to Zone) is in the history;
-// one on the Users page names its admin as the author.
+// one on the Users tab names its admin as the author.
 func commitSettings(author, message string) {
 	if settingsError() == "" && exists(configPath()) {
 		gitCommit(author, message, configPath())

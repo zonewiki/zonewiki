@@ -94,7 +94,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── commands.go         # zonewiki user (add, passwd, token, role, disable, enable, invite, reset, remove, list) and zonewiki config (check, set, unset, passwd, token, import), which edit the settings file (filelock_*.go: one at a time)
 │   ├── security.go         # Host and Origin checks, the page policy, login, signed session (and its user), throttles
 │   ├── users.go            # Users: roles, password hashes, sign-in, the password prompt
-│   ├── admin.go            # The Users page (/users, admins): roles, disable, remove, writing the settings file as the commands do
+│   ├── admin.go            # The admin page (/admin, admins), its Users tab: roles, disable, remove, writing the settings file as the commands do
 │   ├── links.go            # Invite and reset links: .zone/links, /welcome/<token>
 │   ├── access.go           # Who may see and change what: private/<user>/ (canSee, canWrite, canSeePath)
 │   ├── private.go          # The private home private/<user>/index: /private, its template, its protection

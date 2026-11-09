@@ -289,7 +289,7 @@ type pageShell struct {
 	Locale, DateFormat string
 	SignOut            bool   // signed in, so Sign out is offered
 	User               string // who is signed in, with users
-	Admin              bool   // they are an admin: the user menu offers Users
+	Admin              bool   // they are an admin: the user menu offers Admin
 	Viewer             bool   // they are a viewer: nothing to make (no New note, New task)
 }
 
