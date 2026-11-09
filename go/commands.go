@@ -3,9 +3,8 @@
 // wiki's password and token, and moves settings out of the environment.
 // They edit .zone/config in the wiki ZONE_DATA names, keeping its comments,
 // and refuse a change that would leave settings Zone doesn't start with; a
-// running Zone takes the change within a second and commits it (else Zone
-// at its next start): git stays with the one process. New MCP tokens are
-// shown once and kept as hashes.
+// running Zone takes the change within a second and logs it (the file is
+// kept out of git). New MCP tokens are shown once and kept as hashes.
 package main
 
 import (

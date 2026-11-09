@@ -126,13 +126,14 @@ func usersData(r *http.Request) *usersView {
 }
 
 // settingsAuthor: who made the settings change being reloaded, so its
-// commit names them (tookSettings); "" for a change by hand or a command.
+// line in the log names them (tookSettings); "" for a change by hand or a
+// command.
 var settingsAuthor atomic.Pointer[string]
 
 // changeSettings applies edit to the settings file and saves it as the
 // commands do (saveConfig), then has Zone take it now instead of within
 // the second (it takes effect once the requests running end, this one
-// too). The commit names user as its author.
+// too). The log names user as who made it.
 func changeSettings(user string, edit func(f *settingsfile.File) error) error {
 	f, err := readConfigFile(configPath())
 	if err != nil {

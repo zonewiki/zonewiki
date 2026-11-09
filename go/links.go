@@ -322,7 +322,7 @@ func welcomeRoute(w http.ResponseWriter, r *http.Request) {
 }
 
 // useLink: the link's change (the user added, or their new password) in
-// the settings file, committed in the user's name (they chose it), and
+// the settings file (logged as the user's: they chose it), and
 // the link gone; the password's hash, for the session.
 func useLink(link *welcomeLink, password string) (string, error) {
 	hash := hashPassword(password)

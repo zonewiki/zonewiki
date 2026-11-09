@@ -129,9 +129,12 @@ func main() {
 	}
 	sessionKey = secretKey(cfg.Data)
 	gitSetup()
-	excludeState(cfg.Data) // the secret key, the caches; not the settings file
-	commitSettings("", "Change settings")
-	migrateNames() // before anything reads the tasks
+	if err := missingUsers(); err != nil {
+		fatal(err)
+	}
+	excludeState(cfg.Data) // .zone/: the settings file, the secret key, the caches
+	migrateNames()         // before anything reads the tasks
+	untrackSettings()
 	ensureHomePage()
 	cleanLeftDrafts()
 	initTasks()

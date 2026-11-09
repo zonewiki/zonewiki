@@ -228,6 +228,7 @@ class TestMakeShared:
             body = self.view(alice, slug)
             assert "Make shared" not in body, slug
         monkeypatch.setattr(settings, "LEAF_USERS", {})
+        monkeypatch.setattr(settings, "CONFIG_FILE", "# no login, on purpose\n")   # else: missingUsers
         assert "Make shared" not in self.view(client, "private/alice/index")
 
     def test_a_shared_page_cannot_be_renamed_into_the_folder(self, alice, git_wiki_dir):

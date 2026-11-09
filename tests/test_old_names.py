@@ -153,10 +153,11 @@ class TestStateFolderMove:
         assert (state / "drafts" / "_" / "plans.json").exists()
         [move] = git(git_wiki_dir, "log", "--format=%H", "--fixed-strings",
                      "--grep=Move .leaf/ to .zone/: Leaf is called Zone").split()
-        assert git(git_wiki_dir, "show", "--name-status", "--format=", move).strip() == \
-            "R100\t.leaf/config\t.zone/config"
+        # The settings file leaves git with the move: .zone/ is all out of it.
+        assert git(git_wiki_dir, "show", "--name-status", "--format=", move).strip() == "D\t.leaf/config"
+        assert git(git_wiki_dir, "ls-files", ".zone", ".leaf") == ""
         assert git(git_wiki_dir, "status", "--porcelain", "--untracked-files=all") == ""
-        assert (git_wiki_dir / ".git" / "info" / "exclude").read_text() == "/.zone/*\n!/.zone/config\n"
+        assert (git_wiki_dir / ".git" / "info" / "exclude").read_text() == "/.zone/*\n"
         assert "moved .leaf/ to .zone/" in client.live.log.read_text()
 
     def test_the_move_happens_once(self, git_wiki_dir, client):
@@ -179,7 +180,8 @@ class TestStateFolderMove:
         assert (git_wiki_dir / ".leaf" / "config").exists()
         assert ".leaf/ and .zone/ are both there" in client.live.log.read_text()
         exclude = (git_wiki_dir / ".git" / "info" / "exclude").read_text()
-        assert self.OLD_EXCLUDE in exclude and "/.zone/*\n" in exclude
+        assert "/.leaf/*\n" in exclude and "/.zone/*\n" in exclude and "!/.leaf/config" not in exclude
+        assert git(git_wiki_dir, "ls-files", ".leaf") == ""   # out of git, on disk
         assert git(git_wiki_dir, "status", "--porcelain", "--untracked-files=all") == ""
 
     def test_without_git_the_folder_moves_too(self, wiki_dir, client):
