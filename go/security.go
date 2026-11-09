@@ -156,8 +156,10 @@ func passwordStamp(user string) string {
 	if u := s.Users[user]; u != nil {
 		hash = u.PasswordHash
 	}
-	return sign("password:" + hash)[:16]
+	return stampOf(hash)
 }
+
+func stampOf(hash string) string { return sign("password:" + hash)[:16] }
 
 func sign(payload string) string {
 	m := hmac.New(sha256.New, sessionKey)
@@ -167,8 +169,8 @@ func sign(payload string) string {
 
 // signedIn: the request carries a valid session cookie, user is who it
 // belongs to; renew says it is old enough (a day) to be given a fresh one.
-// With users, the session must name one of them, so a user taken out of
-// the settings is signed out at once; without, it must name no one, so
+// With users, the session must name one of them, not disabled, so a user
+// taken out of the settings or disabled is signed out at once; without, it must name no one, so
 // switching between a password and users signs everyone out; a changed
 // password signs out the sessions of the old one.
 func signedIn(r *http.Request) (user string, ok, renew bool) {
@@ -186,7 +188,7 @@ func signedIn(r *http.Request) (user string, ok, renew bool) {
 		return "", false, false
 	}
 	users := settings().Users
-	if users != nil && users[s.User] == nil || users == nil && s.User != "" ||
+	if users != nil && (users[s.User] == nil || users[s.User].Disabled) || users == nil && s.User != "" ||
 		!hmac.Equal([]byte(s.Pw), []byte(passwordStamp(s.User))) {
 		return "", false, false
 	}
@@ -199,7 +201,18 @@ func signedIn(r *http.Request) (user string, ok, renew bool) {
 // http (localhost, the LAN) it still works. A client faking the header only
 // gets a cookie its own http requests leave out.
 func setSession(w http.ResponseWriter, r *http.Request, user string) {
-	raw, _ := json.Marshal(session{Auth: true, Issued: now().Unix(), User: user, Pw: passwordStamp(user)})
+	setSessionHash(w, r, user, "")
+}
+
+// setSessionHash: setSession with the password's hash given (a password
+// set by a welcome link, whose settings take effect only once the request
+// has ended); "": the user's hash as the settings have it.
+func setSessionHash(w http.ResponseWriter, r *http.Request, user, hash string) {
+	stamp := passwordStamp(user)
+	if hash != "" {
+		stamp = stampOf(hash)
+	}
+	raw, _ := json.Marshal(session{Auth: true, Issued: now().Unix(), User: user, Pw: stamp})
 	payload := base64.RawURLEncoding.EncodeToString(raw)
 	http.SetCookie(w, &http.Cookie{
 		Name: sessionCookie, Value: payload + "." + sign(payload), Path: "/",

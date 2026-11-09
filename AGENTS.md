@@ -91,9 +91,11 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── config.go           # What is fixed for the process, from the environment (read once into cfg)
 │   ├── configfile.go       # The settings file .zone/config: its keys, Settings (settings(), reloaded when the file changes), the line edits
 │   ├── storage.go          # upload-max and storage-max: sizes (25MB), what the wiki holds (not .git/, .zone/), checkRoom
-│   ├── commands.go         # zonewiki user (add, passwd, token, remove, list) and zonewiki config (check, set, unset, passwd, token, import), which edit the settings file (filelock_*.go: one at a time)
+│   ├── commands.go         # zonewiki user (add, passwd, token, role, disable, enable, invite, reset, remove, list) and zonewiki config (check, set, unset, passwd, token, import), which edit the settings file (filelock_*.go: one at a time)
 │   ├── security.go         # Host and Origin checks, the page policy, login, signed session (and its user), throttles
-│   ├── users.go            # Users: password hashes, sign-in, the password prompt
+│   ├── users.go            # Users: roles, password hashes, sign-in, the password prompt
+│   ├── admin.go            # The admin page (/admin, admins), its Users tab: roles, disable, remove, writing the settings file as the commands do
+│   ├── links.go            # Invite and reset links: .zone/links, /welcome/<token>
 │   ├── access.go           # Who may see and change what: private/<user>/ (canSee, canWrite, canSeePath)
 │   ├── private.go          # The private home private/<user>/index: /private, its template, its protection
 │   ├── routes.go           # The wiki's routes: pages, the editor, notes, search, previews, uploads
@@ -160,7 +162,7 @@ Page content does not live in the repo tree. It lives in the host directory poin
 ./run.sh leaks      # scan the git history for secrets (gitleaks, in the tools image)
 ./run.sh screenshots  # redo the README's screenshots from a sample wiki
 ./run.sh eval [FILE]  # measure retrieval on your wiki (questions in FILE, default _eval/retrieval.json in the wiki)
-./run.sh user add|passwd|token|remove NAME, user list  # the users in the wiki's settings file (.zone/config)
+./run.sh user add|passwd|token|role|disable|enable|remove NAME, user list  # the users in the wiki's settings file (.zone/config)
 ./run.sh config check|set|unset|passwd|token|import  # the wiki's settings file: check it, set a key, password and MCP token without users, import an older .env
 ```
 
@@ -234,6 +236,7 @@ Use the fixtures and helpers in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`,
   - `password` in `.zone/config` (a hash) turns on a login gate; the session key is one Zone keeps in `.zone/secret_key` (0600, excluded from git).
   - Users instead (`[user …]` in `.zone/config`): a login per user, passwords only as hashes (`docs/spec/users.md`); the session names its user, `userOf(r)` / `rq.user` give it, and a write passes it to `gitCommit(user, …)` as the commit's author.
   - **Private pages and tasks** (`private/<user>/`, tasks in `private/<user>/_tasks/`, with users): every route and tool that shows, lists or changes a page asks `go/access.go` (`canSee`, `canWrite`, `canSeePath`; `hiddenPage`/`refusePage` in the routes); every read of tasks takes the user (`readTasks(user)` …, shared + their own files), and what holds every user's tasks (the search index) filters with `canSeeTask`. A new route gets a probe in `tests/test_privacy.py`, which fails until it has one.
+  - **Viewers** (`role = viewer`) change nothing: `canWrite` in `go/access.go` is false for them, `mayWriteTasks` refuses every task write, `callMCPTool` the writing tools, and `viewerGate` a viewer's write to any route not in `viewerWrites`. A new write route gets a probe in `tests/test_roles.py`, which fails until it has one.
   - `/mcp` requires an MCP token (`mcp-token`, kept as its hash; with users, a user's own): without one it is off (403), password or not. Don't make it open again.
   - **The settings file** `.zone/config` holds password hashes and tokens: it is committed (tokens only as hashes; the rest of `.zone/` stays out of git) but never shown (`canSeePath`, `safePath`), the commands write it 0600, and a reload with an error (or a removed file) keeps the settings from before, so a broken edit never opens the wiki.
   - The Host check (`hostAllowed`) validates the `Host` header (localhost, plus `hosts` from the settings file) against DNS rebinding; `ZONE_ALLOW_REMOTE=1` without `hosts` skips it.

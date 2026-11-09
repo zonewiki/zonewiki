@@ -130,7 +130,7 @@ func main() {
 	sessionKey = secretKey(cfg.Data)
 	gitSetup()
 	excludeState(cfg.Data) // the secret key, the caches; not the settings file
-	commitSettings("Change settings")
+	commitSettings("", "Change settings")
 	migrateNames() // before anything reads the tasks
 	ensureHomePage()
 	cleanLeftDrafts()
@@ -258,8 +258,37 @@ func newHandler() http.Handler {
 	pageRoutes(mux)
 	historyRoutes(mux)
 	tasksRoutes(mux)
+	adminRoutes(mux)
 	oldNameRoutes(mux)
-	return checks(mux)
+	return checks(viewerGate(mux))
+}
+
+// viewerWrites: the routes taking a POST (or another write method) that a
+// viewer may use: none of them changes the wiki. Every other write is
+// refused to a viewer before it runs (viewerGate), so a new route is
+// closed to them until it is listed here (tests/test_roles.py probes each).
+// /mcp refuses a viewer's writing tools itself (callMCPTool).
+var viewerWrites = map[string]bool{
+	"POST /login": true, "POST /logout": true, "POST /welcome/{token}": true, "/mcp": true,
+	"POST /api/preview": true, "POST /api/render-notes": true, // render only
+	"/api/deck": true, "/api/deck/{rest...}": true, // the tasks API's old name: its reads; its writes are refused (mayWriteTasks)
+}
+
+// viewerGate refuses a viewer's write (POST, PUT, PATCH, DELETE) to a
+// route not in viewerWrites: 403, before the route runs.
+func viewerGate(mux *http.ServeMux) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case "POST", "PUT", "PATCH", "DELETE":
+			if settings().isViewer(userOf(r)) {
+				if _, pattern := mux.Handler(r); pattern != "" && !viewerWrites[pattern] {
+					http.Error(w, readOnlyMsg, http.StatusForbidden)
+					return
+				}
+			}
+		}
+		mux.ServeHTTP(w, r)
+	})
 }
 
 // apiHealth: Zone answers, and took its settings file's last change (503
@@ -353,13 +382,15 @@ func dotSegments(p string) bool {
 }
 
 // authExempt: what needs no login. /mcp checks its own bearer token (an
-// MCP client can't log in); the browser code and the home-screen app's
+// MCP client can't log in), a welcome link its own token; the browser code and the home-screen app's
 // files may be fetched without the session cookie, and the healthcheck
 // asks without one.
 func authExempt(r *http.Request) bool {
 	switch p := r.URL.Path; {
 	case p == "/login", p == "/logout", p == "/mcp", p == "/api/health":
 		return true
+	case strings.HasPrefix(p, "/welcome/"):
+		return true // an invite or reset link: the person has no password yet (links.go)
 	case strings.HasPrefix(p, "/public/"):
 		return r.Method == "GET" || r.Method == "HEAD"
 	}
@@ -435,6 +466,11 @@ func login(w http.ResponseWriter, r *http.Request) {
 			if s.Users != nil {
 				errorText = "Incorrect user name or password."
 			}
+			if s.Users != nil && disabledLogin(r) {
+				// Said only to whoever knows the password; still a failure,
+				// so it guesses no faster.
+				errorText = "Your account is disabled. Ask an admin of this wiki."
+			}
 		}
 	}
 	page(w, newReq(r), status, "login.html", "Sign in", shell{noActions: true, badgeInForm: true}, &loginView{
@@ -455,10 +491,16 @@ func checkLogin(r *http.Request) (user string, ok bool) {
 	if s.Users == nil {
 		return "", checkPassword(r.PostFormValue("password"), s.PasswordHash)
 	}
-	if u := authenticate(r.PostFormValue("username"), r.PostFormValue("password")); u != nil {
+	if u := authenticate(r.PostFormValue("username"), r.PostFormValue("password")); u != nil && !u.Disabled {
 		return u.Name, true
 	}
 	return "", false
+}
+
+// disabledLogin: the login form names a disabled user, with their password.
+func disabledLogin(r *http.Request) bool {
+	u := settings().Users[strings.ToLower(strings.TrimSpace(r.PostFormValue("username")))]
+	return u != nil && u.Disabled && checkPassword(r.PostFormValue("password"), u.PasswordHash)
 }
 
 func logout(w http.ResponseWriter, r *http.Request) {
@@ -715,6 +757,10 @@ func apiUpload(w http.ResponseWriter, r *http.Request) {
 	owner := ""
 	if o, private := pageOwner(r.FormValue("page")); private && o != "" && o == userOf(r) {
 		owner = o
+	}
+	if settings().isViewer(userOf(r)) {
+		http.Error(w, readOnlyMsg, http.StatusForbidden)
+		return
 	}
 	// unique=1: a random file name (clipboard screenshots).
 	if r.FormValue("unique") == "1" {

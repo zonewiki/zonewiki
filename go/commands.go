@@ -23,12 +23,18 @@ import (
 
 const userUsage = `Usage: zonewiki user COMMAND
   add NAME [--mcp-token]  add a user (asks for the password; --mcp-token makes them a token);
-                          the first replaces the wiki's password and MCP token
+    [--role ROLE]         admin, editor (the default) or viewer; the first user is an admin.
+                          The first replaces the wiki's password and MCP token
   passwd NAME             set a user's password (asks for it)
   token NAME              give a user a new MCP token (the old one stops working)
+  role NAME ROLE          change a user's role: admin, editor or viewer
+  disable NAME            stop a user signing in (their files stay); enable NAME undoes it
+  invite NAME             a link for a new user to choose their password, for 7 days (shown once)
+    [--role ROLE]         their role: admin, editor (the default) or viewer
+  reset NAME              a link for a user to set a new password, for 24 hours (shown once)
   remove NAME             remove a user (their private pages and tasks stay); the last one only
     [--password|--open]   with the wiki's password instead (asks for it), or with no login
-  list                    the users, and whether each has an MCP token`
+  list                    the users, their roles, and whether each has an MCP token`
 
 const configUsage = `Usage: zonewiki config COMMAND
   check            check the settings and show those in effect
@@ -70,8 +76,12 @@ func saveConfig(f *settingsfile.File) error {
 		f.Lines = append(header, f.Lines...)
 	}
 	parsed, err := parseConfig(f.Text())
+	var s *Settings
 	if err == nil {
-		_, err = loadSettings(parsed)
+		s, err = loadSettings(parsed)
+	}
+	if err == nil {
+		err = keepsAdmin(settingsOf(f.Read), s)
 	}
 	if err != nil {
 		return fmt.Errorf("not changed: %w", err)
@@ -96,6 +106,17 @@ func saveConfig(f *settingsfile.File) error {
 	return settingsfile.Write(configPath(), f.Text())
 }
 
+// settingsOf: the settings text makes; empty ones if it has an error (a
+// file Zone doesn't start with has no admin to keep).
+func settingsOf(text string) *Settings {
+	if f, err := parseConfig(text); err == nil {
+		if s, err := loadSettings(f); err == nil {
+			return s
+		}
+	}
+	return &Settings{}
+}
+
 func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fail := func(format string, a ...any) int {
 		fmt.Fprintf(stderr, "zonewiki user: "+format+"\n", a...)
@@ -117,14 +138,31 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 		return found
 	}
 	tokenFlag, passwordFlag, openFlag := flag("--mcp-token"), flag("--password"), flag("--open")
-	wantArgs := 1
-	if cmd == "list" {
-		wantArgs = 0
+	role, roleFlag := "", false
+	if i := slices.IndexFunc(args, func(a string) bool { return a == "--role" || a == "-role" }); i >= 0 && i+1 < len(args) {
+		role, roleFlag = strings.ToLower(args[i+1]), true
+		args = slices.Delete(args, i, i+2)
 	}
-	if !slices.Contains([]string{"add", "passwd", "token", "remove", "list"}, cmd) || len(args) != wantArgs ||
-		tokenFlag && cmd != "add" || (passwordFlag || openFlag) && cmd != "remove" || passwordFlag && openFlag {
+	wantArgs := 1
+	switch cmd {
+	case "list":
+		wantArgs = 0
+	case "role":
+		wantArgs = 2
+	}
+	if !slices.Contains([]string{"add", "passwd", "token", "role", "disable", "enable", "invite", "reset",
+		"remove", "list"}, cmd) ||
+		len(args) != wantArgs || tokenFlag && cmd != "add" || roleFlag && cmd != "add" && cmd != "invite" ||
+		(passwordFlag || openFlag) && cmd != "remove" || passwordFlag && openFlag ||
+		slices.ContainsFunc(args, func(a string) bool { return strings.HasPrefix(a, "-") }) {
 		fmt.Fprintln(stderr, userUsage)
 		return 2
+	}
+	if cmd == "role" {
+		role, roleFlag = strings.ToLower(args[1]), true
+	}
+	if roleFlag && !slices.Contains(roles, role) {
+		return fail("%q isn't a role. Use admin, editor or viewer.", role)
 	}
 	f, err := openConfig(getenv)
 	if err != nil {
@@ -134,8 +172,13 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 		if len(f.Users) == 0 {
 			fmt.Fprintln(stdout, "No users. Add one with: zonewiki user add NAME")
 		}
+		s := settingsOf(f.Read)
 		for _, u := range f.Users {
-			fmt.Fprintln(stdout, userLine(u.Name, u.Values["mcp-token"].Value != ""))
+			if user := s.Users[u.Name]; user != nil {
+				fmt.Fprintln(stdout, userLine(user))
+			} else {
+				fmt.Fprintln(stdout, "  "+u.Name)
+			}
 		}
 		return 0
 	}
@@ -144,6 +187,32 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 		return fail("%q isn't a user name. Use lowercase letters, digits and hyphens (e.g. alice, mary-ann).", name)
 	}
 	exists := f.User(name) != nil
+	if cmd == "invite" || cmd == "reset" {
+		kind := cmd
+		if role == "" {
+			role = roleEditor
+		}
+		token, err := makeLink(settingsOf(f.Read), kind, name, role, "")
+		if err != nil {
+			return fail("%v", err)
+		}
+		if kind == "invite" {
+			fmt.Fprintf(stdout, "An invite for %s, as %s, for 7 days. Send them this link (shown only now; "+
+				"it works once):\n", name, withArticle(role))
+		} else {
+			fmt.Fprintf(stdout, "A link for %s to set a new password, for 24 hours. Send them this link "+
+				"(shown only now; it works once):\n", name)
+		}
+		base := settingsOf(f.Read).BaseURL
+		fmt.Fprintln(stdout, linkURL(base, nil, token))
+		if base == "" {
+			fmt.Fprintln(stdout, "Put Zone's address in front of it (or set base-url: zonewiki config set base-url https://…).")
+		}
+		return 0
+	}
+	if links, _ := readLinks(); cmd == "add" && linkFor(links, name) != nil && linkFor(links, name).Kind == "invite" {
+		return fail("%s has an open invite. Wait for it, or revoke it on the Users page.", name)
+	}
 	switch {
 	case cmd == "add" && exists:
 		return fail("%s is a user already. Change the password with: zonewiki user passwd %s", name, name)
@@ -157,6 +226,14 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 			return 1
 		}
 		f.Set(name, "password", hashPassword(password))
+		// The first user is an admin, unless told otherwise.
+		firstAdmin := cmd == "add" && len(f.Users) == 0 && !roleFlag
+		if firstAdmin {
+			role = roleAdmin
+		}
+		if cmd == "add" && role != "" && role != roleEditor {
+			f.Set(name, "role", role)
+		}
 		// The first user: the wiki's own password and token give way (with
 		// users each has their own).
 		var replaced []string
@@ -174,7 +251,9 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 		if err := saveConfig(f); err != nil {
 			return fail("%v", err)
 		}
-		if cmd == "add" {
+		if firstAdmin {
+			fmt.Fprintf(stdout, "Added %s to %s, as an admin: the first user manages the others.\n", name, configName())
+		} else if cmd == "add" {
 			fmt.Fprintf(stdout, "Added %s to %s.\n", name, configName())
 		} else {
 			fmt.Fprintf(stdout, "Changed %s's password.\n", name)
@@ -196,6 +275,31 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 			return fail("%v", err)
 		}
 		fmt.Fprintf(stdout, "%s's new MCP token (shown only now; the old one no longer works): %s\n", name, token)
+	case "role":
+		if role == roleEditor {
+			f.Unset(name, "role") // the default
+		} else {
+			f.Set(name, "role", role)
+		}
+		if err := saveConfig(f); err != nil {
+			return fail("%v", err)
+		}
+		fmt.Fprintf(stdout, "%s is %s now.\n", name, withArticle(role))
+	case "disable", "enable":
+		if cmd == "disable" {
+			f.Set(name, "disabled", "yes")
+		} else {
+			f.Unset(name, "disabled")
+		}
+		if err := saveConfig(f); err != nil {
+			return fail("%v", err)
+		}
+		if cmd == "disable" {
+			fmt.Fprintf(stdout, "Disabled %s: they can't sign in, and their MCP token no longer works. "+
+				"Their files stay. Undo it with: zonewiki user enable %s\n", name, name)
+		} else {
+			fmt.Fprintf(stdout, "Enabled %s: they can sign in again.\n", name)
+		}
 	case "remove":
 		last := len(f.Users) == 1
 		switch {
@@ -239,11 +343,31 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 	return 0
 }
 
-func userLine(name string, token bool) string {
-	if token {
-		return "  " + name + " (MCP token)"
+// userLine: a user as zonewiki user list shows them ("  alice (admin, MCP
+// token)"); an editor's role goes unsaid, as it is the default.
+func userLine(u *User) string {
+	var facts []string
+	if u.Role != roleEditor && u.Role != "" {
+		facts = append(facts, u.Role)
 	}
-	return "  " + name
+	if u.MCPToken != "" {
+		facts = append(facts, "MCP token")
+	}
+	if u.Disabled {
+		facts = append(facts, "disabled")
+	}
+	if len(facts) == 0 {
+		return "  " + u.Name
+	}
+	return "  " + u.Name + " (" + strings.Join(facts, ", ") + ")"
+}
+
+// withArticle: "an admin", "an editor", "a viewer".
+func withArticle(role string) string {
+	if role == roleViewer {
+		return "a " + role
+	}
+	return "an " + role
 }
 
 func configMain(args []string, getenv func(string) string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -447,7 +571,7 @@ func showSettings(w io.Writer, f *settingsfile.File, s *Settings) {
 	}
 	var names []string
 	for _, name := range sortedKeys(s.Users) {
-		names = append(names, strings.TrimSpace(userLine(name, s.Users[name].MCPToken != "")))
+		names = append(names, strings.TrimSpace(userLine(s.Users[name])))
 	}
 	fmt.Fprintf(w, "  %-18s %s\n", "users", strings.Join(names, ", "))
 }

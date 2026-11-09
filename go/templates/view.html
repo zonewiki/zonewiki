@@ -6,7 +6,7 @@
 {{.BreadcrumbHTML}}{{.DeleteDialogHTML}}
 <div class="page-grid">
 {{template "rail_toc" .RailTocHTML}}
-<div class="page-col">
+<div class="page-col{{if .ReadOnly}} read-only{{end}}">
 <header class="page-header">
   <h1>{{.Title}}{{if .Private}} <span class="lock" title="Private: only you see this page" aria-label="Private">🔒</span>{{end}}</h1>
   <div class="page-header-actions">
@@ -14,7 +14,9 @@
     {{template "commit_form" (dict "filepath" (print .Slug ".md") "title" .Title "on_success" "/uncommitted")}}
     <a href="/uncommitted" class="btn">← Uncommitted</a>
   {{- else}}
+    {{- if not .ReadOnly}}
     <a href="{{url "edit" .Slug}}" class="btn">Edit</a>
+    {{- end}}
     {{template "menu_button"}}
   {{- end}}
   </div>

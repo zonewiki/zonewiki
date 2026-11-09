@@ -64,6 +64,7 @@ const (
 	refusedProtected                // the home page: never deleted or renamed
 	refusedUnchanged                // the page already is what the write would make it
 	refusedFull                     // the wiki would hold more than storage-max: 507 (checkRoom)
+	refusedReadOnly                 // a viewer changing something shared: 403 (readOnlyMsg)
 )
 
 // pageError: an operation refused, with a message for the user.
@@ -95,6 +96,8 @@ func pageFailed(w http.ResponseWriter, r *http.Request, err error) {
 		http.NotFound(w, r)
 	case pe.kind == refusedFull:
 		http.Error(w, pe.msg, http.StatusInsufficientStorage)
+	case pe.kind == refusedReadOnly:
+		http.Error(w, pe.msg, http.StatusForbidden)
 	default:
 		badRequestPage(w)
 	}
@@ -108,9 +111,19 @@ func writablePage(user, slug string) (string, error) {
 		p = safePath(slug)
 	}
 	if p == "" || !exists(p) {
-		return "", refuseAs(refusedNotFound, "No page "+strconv.Quote(slug))
+		return "", notWritable(user, slug, "No page "+strconv.Quote(slug))
 	}
 	return p, nil
+}
+
+// notWritable: the refusal of a change to slug user may not make: a
+// viewer's to a shared page says so (refusedReadOnly), anything else
+// answers as missing, with msg.
+func notWritable(user, slug, msg string) error {
+	if readOnly(user, slug) && safePath(slug) != "" {
+		return refuseAs(refusedReadOnly, readOnlyMsg)
+	}
+	return refuseAs(refusedNotFound, msg)
 }
 
 // deletePageOp deletes the page, what it held uncommitted committed first
@@ -145,7 +158,7 @@ func restorePageOp(user, slug, sha, suffix string) (old *string, kept bool, err 
 		path = safePath(slug)
 	}
 	if path == "" {
-		return nil, false, refuseAs(refusedNotFound, "No page "+strconv.Quote(slug))
+		return nil, false, notWritable(user, slug, "No page "+strconv.Quote(slug))
 	}
 	short := runePrefix(sha, 7)
 	content, ok := gitShow(sha, versionPath(path, pageLog(user, path), sha))
@@ -177,7 +190,7 @@ func createPageOp(user, slug, content, suffix string) error {
 	case path == "":
 		return refuse("“" + slug + "”: pages can't go in folders starting with '_' or '.'")
 	case !canWrite(user, slug):
-		return refuseAs(refusedNotFound, "“"+slug+"”: that folder is another user's")
+		return notWritable(user, slug, "“"+slug+"”: that folder is another user's")
 	case exists(path):
 		return refuseAs(refusedExists, "A page named "+strconv.Quote(slug)+" already exists")
 	}
@@ -200,7 +213,7 @@ func createPageOp(user, slug, content, suffix string) error {
 // first save makes it, so it needs room (checkRoom); an edit never does.
 func writeDraft(user, slug, path string, current *string, text string, commit bool) error {
 	if !canWrite(user, slug) || safePath(slug) != path {
-		return refuseAs(refusedNotFound, "No page "+strconv.Quote(slug))
+		return notWritable(user, slug, "No page "+strconv.Quote(slug))
 	}
 	if current == nil {
 		if err := checkRoom(int64(len(text))); err != nil {
@@ -276,6 +289,8 @@ func checkTarget(user, slug, newSlug string) error {
 	switch {
 	case newPath == "":
 		return refuse("“" + newSlug + "”: pages can't go in folders starting with '_' or '.'")
+	case readOnly(user, newSlug):
+		return refuseAs(refusedReadOnly, readOnlyMsg)
 	case !canWrite(user, newSlug):
 		return refuse("“" + newSlug + "”: that folder is another user's")
 	case exists(newPath):
@@ -511,6 +526,9 @@ type tagRename struct {
 // written, so one that can't be read changes nothing; text not yet in git is
 // committed first. Not the tags in pages' frontmatter: those sort pages.
 func renameTagOp(user, tag, newName string, merge bool, suffix string) (*tagRename, error) {
+	if settings().isViewer(user) {
+		return nil, refuseAs(refusedReadOnly, readOnlyMsg)
+	}
 	plan, err := checkTagRename(user, tag, newName, merge)
 	if err != nil {
 		return nil, err

@@ -325,7 +325,7 @@ func TestUserCommands(t *testing.T) {
 		!checkPassword("new", read().User("alice").Values["password"].Value) {
 		t.Error("passwd")
 	}
-	if code, out, _ = run("", "list"); code != 0 || out != "  alice\n  bob (MCP token)\n" {
+	if code, out, _ = run("", "list"); code != 0 || out != "  alice (admin)\n  bob (MCP token)\n" {
 		t.Errorf("list: %q", out)
 	}
 	_ = os.MkdirAll(filepath.Join(wiki, "private", "bob"), 0o777)
@@ -391,6 +391,189 @@ func TestUserCommands(t *testing.T) {
 			t.Errorf("%v: %d", args, code)
 		}
 	}
+}
+
+func TestUserRoles(t *testing.T) {
+	wiki := t.TempDir()
+	env := map[string]string{"ZONE_DATA": wiki}
+	getenv := func(k string) string { return env[k] }
+	run := func(input string, args ...string) (int, string, string) {
+		t.Helper()
+		var out, errs bytes.Buffer
+		code := userMain(args, getenv, strings.NewReader(input), &out, &errs)
+		return code, out.String(), errs.String()
+	}
+	path := filepath.Join(wiki, ".zone", "config")
+	users := func() map[string]*User {
+		t.Helper()
+		return settingsOf(readFile(t, path)).Users
+	}
+	// The first user is an admin; the others editors unless told.
+	if code, out, _ := run("pw\npw\n", "add", "alice"); code != 0 || !strings.Contains(out, "as an admin") ||
+		users()["alice"].Role != roleAdmin || !strings.Contains(readFile(t, path), "role = admin") {
+		t.Fatalf("first: %d %q", code, out)
+	}
+	if code, _, _ := run("pw\npw\n", "add", "bob"); code != 0 || users()["bob"].Role != roleEditor ||
+		strings.Count(readFile(t, path), "role =") != 1 {
+		t.Fatalf("second: %d", code)
+	}
+	if code, _, errs := run("pw\npw\n", "add", "carol", "--role", "viewer"); code != 0 || users()["carol"].Role != roleViewer {
+		t.Fatalf("--role: %d %q", code, errs)
+	}
+	if code, _, errs := run("pw\npw\n", "add", "dave", "--role", "boss"); code == 0 || !strings.Contains(errs, "isn't a role") {
+		t.Errorf("a bad role: %d %q", code, errs)
+	}
+	// role: editor is the default, so its line goes.
+	if code, out, _ := run("", "role", "carol", "editor"); code != 0 || users()["carol"].Role != roleEditor ||
+		!strings.Contains(out, "carol is an editor now") {
+		t.Errorf("role editor: %d %q", code, out)
+	}
+	if code, _, _ := run("", "role", "carol", "viewer"); code != 0 || users()["carol"].Role != roleViewer {
+		t.Error("role viewer")
+	}
+	// disable and enable.
+	if code, out, _ := run("", "disable", "bob"); code != 0 || !users()["bob"].Disabled || !strings.Contains(out, "enable bob") {
+		t.Errorf("disable: %d %q", code, out)
+	}
+	if code, out, _ := run("", "list"); code != 0 || out != "  alice (admin)\n  bob (disabled)\n  carol (viewer)\n" {
+		t.Errorf("list: %q", out)
+	}
+	if code, _, _ := run("", "enable", "bob"); code != 0 || users()["bob"].Disabled || strings.Contains(readFile(t, path), "disabled") {
+		t.Error("enable")
+	}
+	// Never back to no admin: the last one can't be demoted, disabled or removed.
+	before := readFile(t, path)
+	for _, args := range [][]string{{"role", "alice", "editor"}, {"disable", "alice"}, {"remove", "alice"}} {
+		if code, _, errs := run("", args...); code == 0 || !strings.Contains(errs, "without an admin") {
+			t.Errorf("%v: %d %q", args, code, errs)
+		}
+	}
+	if readFile(t, path) != before {
+		t.Error("a refused change changed the file")
+	}
+	// With another admin, it can.
+	if code, _, _ := run("", "role", "bob", "admin"); code != 0 {
+		t.Fatal("bob admin")
+	}
+	if code, _, errs := run("", "role", "alice", "viewer"); code != 0 {
+		t.Errorf("demote with another admin: %q", errs)
+	}
+	// A wiki from before roles has no admin, and changes go through.
+	_ = settingsfile.Write(path, "[user x]\npassword = "+hashPassword("p")+"\n\n[user y]\npassword = "+hashPassword("p")+"\n")
+	if code, _, errs := run("", "remove", "y"); code != 0 {
+		t.Errorf("no admin before: %q", errs)
+	}
+	// Usage.
+	for _, args := range [][]string{{"role", "x"}, {"add", "z", "--role"}, {"passwd", "x", "--role", "admin"}, {"disable"}} {
+		if code, _, _ := run("", args...); code != 2 {
+			t.Errorf("%v: %d", args, code)
+		}
+	}
+}
+
+func TestUserLinks(t *testing.T) {
+	wiki := t.TempDir()
+	env := map[string]string{"ZONE_DATA": wiki}
+	getenv := func(k string) string { return env[k] }
+	run := func(input string, args ...string) (int, string, string) {
+		t.Helper()
+		var out, errs bytes.Buffer
+		code := userMain(args, getenv, strings.NewReader(input), &out, &errs)
+		return code, out.String(), errs.String()
+	}
+	if code, _, errs := run("", "invite", "dave"); code == 0 || !strings.Contains(errs, "no users") {
+		t.Errorf("invite without users: %d %q", code, errs)
+	}
+	run("pw\npw\n", "add", "alice")
+	code, out, errs := run("", "invite", "dave", "--role", "viewer")
+	if code != 0 || !strings.Contains(out, "as a viewer") || !strings.Contains(out, "/welcome/") ||
+		!strings.Contains(out, "base-url") {
+		t.Fatalf("invite: %d %q %q", code, out, errs)
+	}
+	token := strings.TrimPrefix(strings.Fields(strings.Split(out, "\n")[1])[0], "/welcome/")
+	links, err := readLinks()
+	if err != nil || len(links) != 1 || links[0].User != "dave" || links[0].Role != roleViewer ||
+		links[0].Hash != hashToken(token) || links[0].Kind != "invite" {
+		t.Fatalf("links: %+v %v", links, err)
+	}
+	if st, _ := os.Stat(filepath.Join(wiki, ".zone", "links")); st.Mode().Perm() != 0o600 {
+		t.Errorf("mode %o", st.Mode().Perm())
+	}
+	// The name is taken while the invite is open.
+	if code, _, errs := run("pw\npw\n", "add", "dave"); code == 0 || !strings.Contains(errs, "open invite") {
+		t.Errorf("add over an invite: %d %q", code, errs)
+	}
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"invite", "alice"}, "is a user already"},
+		{[]string{"reset", "zed"}, "there is no user zed"},
+		{[]string{"invite", "x", "--role", "boss"}, "isn't a role"},
+	} {
+		if code, _, errs := run("", c.args...); code == 0 || !strings.Contains(errs, c.want) {
+			t.Errorf("%v: %d %q", c.args, code, errs)
+		}
+	}
+	// A reset, with base-url: the whole address; it replaces nothing of dave's.
+	f, _ := readConfigFile(filepath.Join(wiki, ".zone", "config"))
+	f.Set("", "base-url", "https://wiki.example.org/")
+	_ = settingsfile.Write(filepath.Join(wiki, ".zone", "config"), f.Text())
+	if code, out, _ := run("", "reset", "alice"); code != 0 || !strings.Contains(out, "https://wiki.example.org/welcome/") ||
+		strings.Contains(out, "base-url") {
+		t.Errorf("reset: %d %q", code, out)
+	}
+	if links, _ := readLinks(); len(links) != 2 {
+		t.Errorf("two links: %+v", links)
+	}
+}
+
+func TestRolesInTheFile(t *testing.T) {
+	hash := hashPassword("p")
+	f, err := parseConfig("[user a]\npassword = " + hash + "\nrole = Admin\n\n[user b]\npassword = " + hash +
+		"\ndisabled = yes\n\n[user c]\npassword = " + hash + "\nrole = viewer\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := loadSettings(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.isAdmin("a") || s.isAdmin("b") || s.Users["b"].Role != roleEditor || !s.Users["b"].Disabled ||
+		!s.isViewer("c") || s.isViewer("a") || !s.hasAdmin() {
+		t.Errorf("%+v %+v %+v", s.Users["a"], s.Users["b"], s.Users["c"])
+	}
+	for text, want := range map[string]string{
+		"[user a]\npassword = " + hash + "\nrole = boss\n":      "line 3: a's role boss isn't one",
+		"[user a]\npassword = " + hash + "\ndisabled = maybe\n": "line 3: a's disabled = maybe isn't yes or no",
+		"role = admin\n": `"role" isn't a setting Zone knows`,
+	} {
+		f, err := parseConfig(text)
+		if err == nil {
+			_, err = loadSettings(f)
+		}
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: %v", text, err)
+		}
+	}
+	// A disabled admin is no admin: keepsAdmin counts the enabled ones.
+	old, _ := loadSettings(mustParse(t, "[user a]\npassword = "+hash+"\nrole = admin\n"))
+	now, _ := loadSettings(mustParse(t, "[user a]\npassword = "+hash+"\nrole = admin\ndisabled = yes\n"))
+	if keepsAdmin(old, now) == nil || keepsAdmin(old, &Settings{}) != nil {
+		t.Error("keepsAdmin")
+	}
+	if got := settingsChange(old, now); got != "Change settings: disable a" {
+		t.Errorf("change: %q", got)
+	}
+}
+
+func mustParse(t *testing.T, text string) *settingsfile.File {
+	t.Helper()
+	f, err := parseConfig(text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return f
 }
 
 func TestConfigCommands(t *testing.T) {

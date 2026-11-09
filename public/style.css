@@ -1396,6 +1396,42 @@ kbd {
 .signout-user { color: var(--muted); font-size: .85rem; }
 /* With users, desktop has the name and Sign out in the user menu instead. */
 @media (min-width: 641px) { .signout-form.signout-user-menu { display: none; } }
+.signout-admin { text-decoration: none; }
+
+/* ── The admin page (admins; users.html, its Users tab) ──────────────────────── */
+
+.admin-tabs { display: flex; gap: .25rem; border-bottom: 1px solid var(--border); margin: .5rem 0 1rem; }
+.admin-tabs a { padding: .4rem .8rem; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.admin-tabs a:hover { color: var(--fg); }
+.admin-tabs a[aria-current="page"] { color: var(--fg); border-bottom-color: var(--link); font-weight: 500; }
+
+.users-table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+.users-table th, .users-table td { text-align: left; padding: .45rem .5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+.users-table th { font-size: .8rem; font-weight: 500; color: var(--muted); }
+.users-table form { display: inline-flex; gap: .3rem; align-items: center; margin: 0; }
+.user-name { font-weight: 500; }
+.user-you, .users-help { color: var(--muted); font-weight: normal; }
+.user-fact { font-size: .7rem; padding: 0 .3rem; border: 1px solid var(--border); border-radius: 4px; color: var(--muted); font-weight: normal; }
+.user-disabled .user-name { color: var(--muted); text-decoration: line-through; }
+.user-actions { display: flex; flex-wrap: wrap; gap: .3rem; align-items: flex-start; }
+.user-remove > summary { list-style: none; display: inline-block; }
+.user-remove > summary::-webkit-details-marker { display: none; }
+.user-remove-body { margin-top: .4rem; max-width: 22rem; font-size: .9rem; }
+.users-done, .users-error { padding: .5rem .75rem; border-radius: 6px; }
+.users-done { background: var(--code-bg); }
+.users-error { background: #fee2e2; color: #991b1b; }
+@media (prefers-color-scheme: dark) { .users-error { background: #450a0a; color: #fecaca; } }
+.users-help { font-size: .85rem; }
+.users-link { display: block; padding: .5rem; background: var(--code-bg); border-radius: 6px; word-break: break-all; user-select: all; }
+.users-invite { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin: .5rem 0 0; }
+.users-invite input { font: inherit; font-size: .9rem; padding: .3rem .5rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); min-width: 12rem; }
+.users-table select, .users-invite select { font: inherit; font-size: .85rem; padding: .2rem; }
+@media (max-width: 640px) {
+  .users-table thead { display: none; }
+  .users-table, .users-table tbody, .users-table tr, .users-table td { display: block; width: 100%; }
+  .users-table tr { padding: .5rem 0; border-bottom: 1px solid var(--border); }
+  .users-table td { border: none; padding: .2rem 0; }
+}
 
 .top-badges {
   position: fixed;
@@ -1990,7 +2026,7 @@ body.editor-page main {
   .breadcrumb .module-link:not([data-module="wiki"]), .breadcrumb .module-label,
   .breadcrumb .module-group + .module-group,
   .breadcrumb .module-menu-btn { display: none; }
-  .module-menu :is(.menu-who, .menu-signout) { display: none; }
+  .module-menu :is(.menu-who, .menu-signout, .menu-admin) { display: none; }
   .module-menu-backdrop { background: rgba(0, 0, 0, .35); }
   /* Keep the end of the page and the toasts clear of the bar. */
   body:has(.action-buttons) main { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
@@ -3278,3 +3314,12 @@ mark.search-hl.current {
   .search-hl-bar { top: .5rem; bottom: auto; width: calc(100% - 1rem); max-width: none; }
 }
 
+
+/* The welcome page (an invite or reset link; welcome.html), in the login's form. */
+.welcome-note { margin: 0; font-size: .9rem; color: var(--muted); }
+
+/* A viewer (body[data-viewer]; view.html .read-only): nothing to make, edit or tick. */
+body[data-viewer] :is(.top-new-note, .top-task, .action-new-note, .action-task, [id^="task-add-btn"], .task-comment-add) { display: none; }
+body[data-viewer] .action-sep:has(+ .action-new-note) { display: none; }
+.read-only .section-edit-btn { display: none; }
+.read-only .page-content input[type="checkbox"] { pointer-events: none; }

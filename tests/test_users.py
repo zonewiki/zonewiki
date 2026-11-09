@@ -91,6 +91,34 @@ class TestLogin:
         assert "signout-form" in body and "signout-user" not in body
 
 
+class TestDisabled:
+    """disabled = yes in a user's section: no sign-in, sessions end, the MCP
+    token is refused; the files stay."""
+
+    def test_a_disabled_user_cannot_sign_in_and_is_told_so_only_with_the_password(self, client, users, monkeypatch):
+        monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"disabled": "yes"}})
+        body = login(client, "alice", "alice-pw").data.decode()
+        assert "Your account is disabled" in body
+        assert client.get("/page/index", headers=HOST).status_code == 302
+        body = login(client, "alice", "wrong").data.decode()
+        assert "Incorrect user name or password." in body and "disabled" not in body
+
+    def test_disabling_stops_the_session_and_enabling_lets_it_go_on(self, client, users, monkeypatch):
+        login(client, "alice", "alice-pw")
+        assert client.get("/page/index", headers=HOST).status_code == 200
+        monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"disabled": "yes"}})
+        assert client.get("/page/index", headers=HOST).status_code == 302
+        # Enabled again, a session not yet expired works again (a new
+        # password, not disabling, is what ends a stolen one).
+        monkeypatch.setattr(settings, "USER_SETTINGS", {})
+        assert client.get("/page/index", headers=HOST).status_code == 200
+
+    def test_a_disabled_users_token_is_refused(self, client, users, monkeypatch):
+        assert mcp(client, "alice-token").status_code == 200
+        monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"disabled": "yes"}})
+        assert mcp(client, "alice-token").status_code in (401, 403)
+
+
 class TestMCP:
 
     def test_each_user_has_their_own_token(self, client, users):

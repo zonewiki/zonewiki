@@ -60,7 +60,7 @@ var configKeys = []struct{ key, env string }{
 }
 
 // userKeys: the keys of a [user …] section.
-var userKeys = []string{"password", "mcp-token"}
+var userKeys = []string{"password", "mcp-token", "role", "disabled"}
 
 func knownKey(key string) bool {
 	for _, k := range configKeys {
@@ -306,7 +306,19 @@ func fileUsers(f *settingsfile.File) (map[string]*User, error) {
 				"own: zonewiki user token %s", u.Name, other, u.Name)
 		}
 		tokens[token.Value] = u.Name
-		users[u.Name] = &User{Name: u.Name, PasswordHash: hash.Value, MCPToken: token.Value}
+		role := roleEditor
+		if v, ok := u.Values["role"]; ok {
+			if role = strings.ToLower(v.Value); !slices.Contains(roles, role) {
+				return nil, lineError(v.Line, "%s's role %s isn't one Zone knows: admin, editor or viewer.",
+					u.Name, v.Value)
+			}
+		}
+		disabled := u.Values["disabled"]
+		if !slices.Contains([]string{"", "0", "false", "no", "1", "true", "yes"}, strings.ToLower(disabled.Value)) {
+			return nil, lineError(disabled.Line, "%s's disabled = %s isn't yes or no.", u.Name, disabled.Value)
+		}
+		users[u.Name] = &User{Name: u.Name, PasswordHash: hash.Value, MCPToken: token.Value, Role: role,
+			Disabled: truthy(disabled.Value)}
 	}
 	return users, nil
 }
@@ -456,7 +468,11 @@ func betweenRequests(s *Settings) {
 func tookSettings(old, s *Settings) {
 	logf("reloaded %s", configName())
 	applySettings(old, s)
-	commitSettings(settingsChange(old, s))
+	author := ""
+	if a := settingsAuthor.Swap(nil); a != nil {
+		author = *a // a change on the Users tab (changeSettings)
+	}
+	commitSettings(author, settingsChange(old, s))
 }
 
 // latestSettings: the settings in effect, or the change waiting for the
@@ -517,10 +533,11 @@ func takeSettings() (s *Settings) {
 
 // commitSettings commits the settings file, if it is there and changed:
 // at start and at each reload, by Zone, so a change made by hand or with
-// zonewiki user (another process, which leaves git to Zone) is in the history.
-func commitSettings(message string) {
+// zonewiki user (another process, which leaves git to Zone) is in the history;
+// one on the Users tab names its admin as the author.
+func commitSettings(author, message string) {
 	if settingsError() == "" && exists(configPath()) {
-		gitCommit("", message, configPath())
+		gitCommit(author, message, configPath())
 	}
 }
 
@@ -543,6 +560,16 @@ func settingsChange(old, s *Settings) string {
 		}
 		if was != nil && was.MCPToken != now.MCPToken {
 			changes = append(changes, name+"'s MCP token")
+		}
+		if was != nil && was.Role != now.Role {
+			changes = append(changes, name+"'s role")
+		}
+		if was != nil && was.Disabled != now.Disabled {
+			if now.Disabled {
+				changes = append(changes, "disable "+name)
+			} else {
+				changes = append(changes, "enable "+name)
+			}
 		}
 	}
 	for _, c := range []struct {

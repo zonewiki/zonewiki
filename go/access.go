@@ -7,6 +7,7 @@
 package main
 
 import (
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -50,13 +51,38 @@ func canSee(user, slug string) bool {
 	return !private || owner != "" && owner == user
 }
 
-// canWrite: user may change (create, edit, rename, delete) the page slug;
-// the same pages they may see, since everything shared is editable.
-func canWrite(user, slug string) bool { return canSee(user, slug) }
+// canWrite: user may change (create, edit, rename, delete) the page slug:
+// the pages they may see, since everything shared is editable, but for a
+// viewer (users.go: roleViewer), who changes nothing.
+func canWrite(user, slug string) bool {
+	return canSee(user, slug) && !settings().isViewer(user)
+}
 
-// canSeeTask: user may see (and change) the task t: a shared one, or one
-// of their own private ones.
+// readOnly: user sees the page slug but may not change it: a viewer.
+// Refusals then say so (403, readOnlyMsg), as the page is there for them;
+// one they can't see stays a 404.
+func readOnly(user, slug string) bool { return canSee(user, slug) && !canWrite(user, slug) }
+
+// readOnlyMsg: what a viewer is told when they try to change something
+// shared.
+const readOnlyMsg = "You can read this wiki but not change it: you are a viewer. Ask an admin of this wiki."
+
+// errReadOnly: a viewer's change to something shared, refused.
+var errReadOnly = &apiError{http.StatusForbidden, readOnlyMsg}
+
+// canSeeTask: user may see the task t: a shared one, or one of their own
+// private ones.
 func canSeeTask(user string, t *Task) bool { return t.Owner == "" || t.Owner == user }
+
+// mayWriteTasks: user may write the task files: anyone but a viewer. Every
+// task write passes it (writeOpenLocked, writeBothLocked), so no route or
+// tool changes a task for a viewer, whatever it does.
+func mayWriteTasks(user string) error {
+	if settings().isViewer(user) {
+		return errReadOnly
+	}
+	return nil
+}
 
 // ownPrivate: slug is a page in user's own private folder (where a new
 // task defaults to private).

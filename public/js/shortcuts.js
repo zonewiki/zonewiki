@@ -105,6 +105,7 @@ document.addEventListener('keydown', e => {
   // ct=task in the default list
   if (keyPrefix.key === 'c') {
     resetPrefix();
+    if (document.body.dataset.viewer) return;   // a viewer makes nothing
     if (e.key === 'n' || e.key === 's') { e.preventDefault(); openNewNote(); }
     else if (e.key === 't') { e.preventDefault(); openDefaultTask(); }
     return;

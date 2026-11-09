@@ -57,6 +57,10 @@ func ensurePrivateHome(user string) (string, error) {
 // the home takes pagesMu, as a page write: the others don't wait for one.
 func privateRoute(w http.ResponseWriter, r *http.Request) {
 	user := userOf(r)
+	if settings().isViewer(user) {
+		http.NotFound(w, r) // a viewer makes nothing, so has no private home
+		return
+	}
 	if slug := privateHomeSlug(user); slug != "" && safePath(slug) != "" && exists(safePath(slug)) {
 		http.Redirect(w, r, pathURL("page", slug), http.StatusFound)
 		return
@@ -90,7 +94,7 @@ func sharedMove(user, slug string) (target string, ok bool) {
 		return "", false
 	}
 	rest := strings.TrimPrefix(slug, folder+"/")
-	return rest, rest != slug && rest != ""
+	return rest, rest != slug && rest != "" && canWrite(user, rest) // not a viewer's
 }
 
 // sharedNewOffer: a new page opened from a link on one of the user's private

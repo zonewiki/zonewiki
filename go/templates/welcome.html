@@ -1,0 +1,29 @@
+{{- /* /welcome/<token>: an invite or reset link's page (links.go): the
+    person chooses their password, once. Opening it changes nothing. */ -}}
+{{define "body"}}
+<div class="login-wrap">
+  {{- if .Dead}}
+  <div class="login-form">
+    <h2>This link doesn't work</h2>
+    <p>{{with .Error}}{{.}}{{else}}It may have been used already, or expired, or been replaced by a newer one. Ask whoever sent it for a new one.{{end}}</p>
+  </div>
+  {{- else}}
+  <form class="login-form" method="post">
+    {{- if eq .Kind "reset"}}
+    <h2>A new password for {{.User}}</h2>
+    <p class="welcome-note">Choose your new password. It ends your sessions everywhere else.</p>
+    {{- else}}
+    <h2>Welcome to {{.Shell.AppName}}, {{.User}}</h2>
+    <p class="welcome-note">Choose a password. You sign in with your user name, <strong>{{.User}}</strong>, and this password.</p>
+    {{- end}}
+    <input type="text" name="username" value="{{.User}}" autocomplete="username" hidden>
+    <input type="password" name="password" placeholder="Password" autocomplete="new-password" autofocus required>
+    <input type="password" name="again" placeholder="Again" autocomplete="new-password" required>
+    {{- with .Error}}
+    <p class="login-error">{{.}}</p>
+    {{- end}}
+    <button type="submit" class="btn btn-primary">{{if eq .Kind "reset"}}Set the password{{else}}Join{{end}}</button>
+  </form>
+  {{- end}}
+</div>
+{{end}}
