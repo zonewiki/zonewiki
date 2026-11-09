@@ -68,7 +68,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 ├── LICENSE                 # AGPL-3.0-or-later
 ├── THIRD_PARTY_LICENSES    # Licenses of Go, the Go modules and the embedding model (the vendored libraries' are next to them)
 ├── docs/spec/              # The feature spec, one file per area (see Spec)
-├── docs/plans/             # Working plans for changes in progress, deleted when done (`rename-to-zone.md`)
+├── docs/plans/             # Working plans for changes in progress, deleted when done (`rename-to-zone.md`, `user-admin.md`)
 ├── docs/licenses/mermaid_notices.py  # Writes public/vendor/mermaid/THIRD_PARTY_LICENSES from the bundle's source map
 ├── docs/screenshots/       # The README's screenshots + make_screenshots.py (./run.sh screenshots)
 ├── Containerfile           # The image: a Go build stage, onnxruntime + the model (opt-in), an Ubuntu 26.04 LTS runtime (also ships README.md and docs/spec/ for zone_help)
@@ -160,7 +160,7 @@ Page content does not live in the repo tree. It lives in the host directory poin
 ./run.sh leaks      # scan the git history for secrets (gitleaks, in the tools image)
 ./run.sh screenshots  # redo the README's screenshots from a sample wiki
 ./run.sh eval [FILE]  # measure retrieval on your wiki (questions in FILE, default _eval/retrieval.json in the wiki)
-./run.sh user add|passwd|token|remove NAME, user list  # the users in the wiki's settings file (.zone/config)
+./run.sh user add|passwd|token|role|disable|enable|remove NAME, user list  # the users in the wiki's settings file (.zone/config)
 ./run.sh config check|set|unset|passwd|token|import  # the wiki's settings file: check it, set a key, password and MCP token without users, import an older .env
 ```
 

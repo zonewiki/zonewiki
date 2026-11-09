@@ -88,6 +88,8 @@ def config_text() -> str:
         text += f"\n[user {name}]\npassword = {password_hash(password)}\n"
         if token:
             text += f"mcp-token = {token_hash(token)}\n"
+        for key, value in settings.USER_SETTINGS.get(name, {}).items():
+            text += f"{key} = {value}\n"
     return text
 
 

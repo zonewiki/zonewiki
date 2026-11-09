@@ -22,9 +22,57 @@ import (
 )
 
 // User: one of the users, with the hash of their password and their MCP
-// token as kept (its hash, tokenMatches; "": none, /mcp refuses them).
+// token as kept (its hash, tokenMatches; "": none, /mcp refuses them), their
+// role and whether they are disabled (role, disabled in their section).
 type User struct {
 	Name, PasswordHash, MCPToken string
+	Role                         string // roleAdmin, roleEditor or roleViewer
+	Disabled                     bool   // can't sign in; sessions and token refused
+}
+
+// The roles (docs/spec/users.md): an admin manages the users and does what
+// an editor does; an editor changes everything shared (every user before
+// roles); a viewer reads what is shared and changes only their own folder.
+const (
+	roleAdmin  = "admin"
+	roleEditor = "editor"
+	roleViewer = "viewer"
+)
+
+var roles = []string{roleAdmin, roleEditor, roleViewer}
+
+// isAdmin: name is an admin, and not disabled.
+func (s *Settings) isAdmin(name string) bool {
+	u := s.Users[name]
+	return u != nil && !u.Disabled && u.Role == roleAdmin
+}
+
+// isViewer: name is a viewer (changes only their own folder).
+func (s *Settings) isViewer(name string) bool {
+	u := s.Users[name]
+	return u != nil && u.Role == roleViewer
+}
+
+// hasAdmin: some user is an admin, and not disabled.
+func (s *Settings) hasAdmin() bool {
+	for name := range s.Users {
+		if s.isAdmin(name) {
+			return true
+		}
+	}
+	return false
+}
+
+// keepsAdmin: the change from old to s doesn't leave a wiki that had an
+// admin without one (removing, demoting or disabling the last): nil, or
+// why not. Without users there is no one to manage, so taking the last
+// user out (with the wiki's password or none) is no such change.
+func keepsAdmin(old, s *Settings) error {
+	if old.hasAdmin() && s.Users != nil && !s.hasAdmin() {
+		return errors.New("that leaves the wiki without an admin. Make another user admin first " +
+			"(zonewiki user role NAME admin).")
+	}
+	return nil
 }
 
 // A user's name is a folder name (private/<name>/), so letters, digits and
@@ -77,7 +125,9 @@ func checkPassword(password, hash string) bool {
 // doesn't tell which names exist.
 var dummyHash = hashPassword("")
 
-// authenticate: the user name and password belong together; the user, or nil.
+// authenticate: the user name and password belong together; the user, or
+// nil. A disabled user is returned too: the login says they are disabled
+// (only to whoever knows their password).
 func authenticate(name, password string) *User {
 	u := settings().Users[strings.ToLower(strings.TrimSpace(name))]
 	if u == nil {

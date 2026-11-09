@@ -27,9 +27,11 @@ noshare = #noshare, people/
 [user alice]
 password = pbkdf2-sha256:600000:<salt>:<hash>
 mcp-token = sha256:<the token's SHA-256, hex>
+role = admin
 
 [user bob]
 password = pbkdf2-sha256:600000:<salt>:<hash>
+disabled = yes
 ```
 
 | Key | Does | Default |
@@ -48,7 +50,7 @@ password = pbkdf2-sha256:600000:<salt>:<hash>
 | `upload-max` | The biggest upload, a size (`25MB`; below) (`Settings.uploadMax`, `docs/spec/security.md`) | 100 MB |
 | `storage-max` | How much the wiki may hold, a size (`5GB`): past it, nothing new is made (Storage limit, below) | no limit |
 
-- **Format**: `key = value` (spaces optional), the wiki's settings before the first section, a `[user NAME]` section per user with `password` and `mcp-token` (`configKeys`, `userKeys`). `#` starts a comment only at the start of a line, so `noshare = #noshare` is a value.
+- **Format**: `key = value` (spaces optional), the wiki's settings before the first section, a `[user NAME]` section per user with `password`, `mcp-token`, `role` and `disabled` (`configKeys`, `userKeys`; Roles, below). `#` starts a comment only at the start of a line, so `noshare = #noshare` is a value.
 - **Sizes** (`upload-max`, `storage-max`; `parseSize` in `go/storage.go`): bytes (`300`), or a number with KB, MB, GB or TB, any case, a space optional, decimals too (`1.5GB`). They count by 1024, as Zone's caps always have (100 MB is 100 × 1024 × 1024 bytes). Empty is unset; 0, or a unit Zone doesn't know, is an error.
 - **Storage limit** (`storage-max`, `go/storage.go`): what counts is every file in the data directory but `.git/` and Zone's own `.zone/` (the settings file, the session key, the search cache): the user's pages, uploads (`_assets/`, `private/<user>/_assets/`), tasks and any other files there. Not the history: a deleted file still in git frees its space, and the history, mostly text, is the host's to plan for. Zone walks the directory only when a write asks for room, and then at most once a minute (`usedBytes`; a walk reads names and sizes, no contents: 20,000 files take about 10 ms); an upload or a new page adds its size at once (`added`), so uploads in a row can't slip past. A figure that says full is walked again first, but at most every 5 seconds (`usageRecheck`), so a client asking over and over in a full wiki doesn't make a walk each time: a file deleted on disk counts within seconds, a page deleted through Zone at once (`forgetUsage`). Refused once it would go past (`checkRoom`, `refusedFull`: 507 Insufficient Storage, "The wiki is full: 5.0 GB of 5 GB used. Delete pages or files to make room."; an MCP tool's error): an upload (its size, less the file's it replaces: a smaller file replacing one always fits), a new page (`/new`, the editor opened on a page that doesn't exist yet, its first save, `write_page`), a new note (`/api/notes`, `write_page` with `note`). Never refused: an edit to a page, even one that grows it (typed text is never turned away), a restore, a rename or move, a delete, Move to wiki and Append to page (a note's text moves), tasks (small, and capped per request). The browser shows the refusal of an upload or a new note (`alert`); the editor never opens on a new page, so nothing typed is refused.
 - **Errors name their line** (`.zone/config line 3: "pasword" isn't a setting Zone knows.`), and Zone won't start on one: a key it doesn't know (a typo shouldn't leave Zone on a default), a value that doesn't check (`localeRE`, `parseNoshare` …; `query-log` takes yes/no, 1/0, true/false), a section other than `[user NAME]`, a user's key outside a section or the wiki's inside one, a key or a section given twice, a line that isn't `key = value`, `password` or `mcp-token` of the wiki together with users (each has their own; a shared one would make the user unknown). Messages never repeat a password or token.
@@ -68,9 +70,12 @@ The file can be edited by hand, or with the commands; a running Zone takes each 
 ./run.sh user add bob --mcp-token      # also makes him an MCP token, shown once
 ./run.sh user passwd alice             # a new password
 ./run.sh user token bob                # a new token; the old one stops working at once
+./run.sh user add carol --role viewer   # admin, editor (the default) or viewer; the first user is an admin
+./run.sh user role carol editor        # change a role
+./run.sh user disable bob              # he can't sign in, his token stops; user enable bob undoes it
 ./run.sh user remove bob               # his private pages and tasks stay on disk
 ./run.sh user remove alice --password  # the last user: the wiki's password instead (or --open: no login)
-./run.sh user list                     # the users, and who has a token
+./run.sh user list                     # the users, their roles (but editor), who has a token, who is disabled
 ./run.sh config set hosts nas.local    # any other key of the table; config unset KEY for its default
 ./run.sh config unset password         # no login (a running Zone takes it only at a restart)
 ./run.sh config passwd                 # without users: the wiki's password
@@ -82,6 +87,7 @@ The file can be edited by hand, or with the commands; a running Zone takes each 
 - Without the container it is `zonewiki user …`, `zonewiki config …` with `ZONE_DATA` set (`go/commands.go`: `userMain`, `configMain`); on a NAS, through the container: `docker compose -f compose.nas.yaml run --rm zonewiki /app/zonewiki user add alice`. `run.sh` runs the binary in a one-off container of the app's image (`compose build -q leaf`, its output only on failure, then `compose run --rm --no-deps leaf /app/zonewiki …`), with `.env` and the wiki mounted as `up` has them, so the file is written as Zone's user and `config import` sees `.env`; the password prompt's echo is off (`echoOff`, the container has a terminal; `-T` when stdin isn't one).
 - They refuse a change Zone wouldn't start with ("not changed: …", the file as it was): a user who is there already (add) or isn't (the others), a value that doesn't check (or isn't one line), `config passwd`/`token` with users (each has their own), `config set password`/`mcp-token` (those have their commands; `config unset` takes them out: no login, `/mcp` off).
 - **Between a password and users**: the first `user add` replaces the wiki's `password` and `mcp-token` (with users each has their own) and says so; the last user goes only with `user remove NAME --password` (asks for the wiki's password, set in the same write) or `--open` (no login), else it is refused: without users private/ is an ordinary folder everyone sees, and without a password the wiki has no login.
+- **Never back to no admin**: once the wiki has an admin (not disabled), a change that would leave it without one is refused, whether it removes, demotes or disables the last ("that leaves the wiki without an admin. Make another user admin first": `keepsAdmin`, in `saveConfig`, so every command keeps to it). Taking the last user out (`--password`, `--open`) is no such change: without users there is no one to manage. An edit by hand isn't checked: it stays the way out.
 - `config check` lists each setting, its value (passwords and tokens only as `(set)`) and where it comes from (`[line 3]`, `[default]`), and the users; it fails on an error in the file and on settings left in the environment.
 - **Names**: lowercase letters, digits and inner hyphens (`userNameRE`), since a name becomes a folder name. A user's MCP token is optional: without one they have no MCP access.
 
@@ -90,7 +96,21 @@ The file can be edited by hand, or with the commands; a running Zone takes each 
 The request checks (`checks` in `go/server.go`) call `reloadSettings`, which looks at the file at most once a second (`reloadEvery`: its time, size and whether it is still the same file, as an editor may replace it); a change reads it again. No file watcher. The git work after a change (`applySettings`, `commitSettings`) runs outside the lock (`takeSettings`), so the other requests don't wait for git. The settings are held behind an atomic pointer (`settings()`, `Settings`); what is fixed for the process stays in `cfg`. **A change takes effect between requests**: the checks count the requests running (`beginRequest`, `endRequest`), and a change takes effect only while none is running (`betweenRequests`): at once when none is, else from a goroutine when the last one ends; until then requests go on with the settings before, so nothing waits for the change, and a newer change replaces one still waiting. So a request sees one set of settings from its session check to its answer: else one whose session was checked against the users before the change could be judged by the ones after (a switch from users to a password makes `private/` an ordinary folder, for a user who no longer has a login). A request still running after 10 s (`drainWait`: a slow download) doesn't hold the change up longer; the log says so.
 
 - **A file with an error** on reload: Zone keeps the settings it has, logs the error with its line, and `GET /api/health` answers 503 with it (without a session: only that there is one, see the log, as it may name users), so `zonewiki health` (the container's healthcheck) fails until the file is fixed. A broken edit never locks everyone out or opens the wiki. A file removed while Zone runs counts the same (taking the users away would open the wiki): Zone keeps its settings until the file is back, or a restart. So does a file that takes the login away, no users and no password where there were (by hand, `user remove --open` or `config unset password`): only a restart takes that, on purpose.
-- **What a reload changes**: a new user signs in at once; a removed user is signed out with their next request (the session must name a current user); a changed MCP token takes effect at once, the old one refused. A changed password ends the sessions signed in with the old one (`passwordStamp`, below), the user's own included. Users ↔ no users signs everyone out, as `signedIn` checks. A new `git-remote` re-points `origin` (`setGitRemote`); a new `noshare` clears its cache; the file is committed (above). Throttles, caches and the search index stay.
+- **What a reload changes**: a new user signs in at once; a removed or disabled user is signed out with their next request (the session must name a current user, not disabled); a new role applies from the user's next request; a changed MCP token takes effect at once, the old one refused. A changed password ends the sessions signed in with the old one (`passwordStamp`, below), the user's own included. Users ↔ no users signs everyone out, as `signedIn` checks. A new `git-remote` re-points `origin` (`setGitRemote`); a new `noshare` clears its cache; the file is committed (above). Throttles, caches and the search index stay.
+
+## Roles
+
+Each user has a role, `role` in their section (`roles`, `User.Role` in `go/users.go`):
+
+| Role | Can |
+|------|-----|
+| `admin` | everything an editor can, and manage the users (`zonewiki user`, on the host) |
+| `editor` | change everything shared, as every user could before roles: the default, so a section without `role` is an editor's |
+| `viewer` | read what is shared; change only their own private folder. **Not enforced yet**: for now a viewer changes what an editor does (`docs/plans/user-admin.md`, phase 4) |
+
+- **The first user is an admin**: `user add` on a wiki without users writes `role = admin` and says so, unless `--role` says otherwise. So one person running their own wiki is its admin without doing anything. Every other user is an editor unless `--role` says otherwise. A wiki from before roles has no admin until `zonewiki user role NAME admin` makes one; nothing else changes for it.
+- **An admin isn't a superuser**: no admin sees another user's private pages, tasks or notes, or knows their password. Rule 1 above holds for everyone.
+- **Disabled** (`disabled = yes`, `zonewiki user disable NAME`): the user can't sign in (with the right password the login says "Your account is disabled. Ask an admin of this wiki.", with a wrong one the usual "Incorrect user name or password.", and both count as a wrong try for the throttle), their sessions stop working at their next request (`signedIn`), and their MCP token is refused (401; `mcpAuthorized`; a disabled user's token alone doesn't turn `/mcp` on). Their pages, tasks and private folder stay as they are. Enabled again, they sign in as before, and a session from before not yet expired works again: disabling isn't how to end a stolen session, a new password is (Signing in, below). A disabled admin counts as no admin.
 
 ## Signing in
 

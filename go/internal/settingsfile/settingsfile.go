@@ -118,7 +118,7 @@ func Parse(name, text string, keys Keys) (*File, error) {
 		if !slices.Contains(known, key) {
 			if len(f.Users) > 0 {
 				return nil, lineError(n, "%q isn't a user's setting. A user has %s; the wiki's settings "+
-					"go before the first [user …].", key, strings.Join(keys.User, " and "))
+					"go before the first [user …].", key, strings.Join(keys.User, ", "))
 			}
 			return nil, lineError(n, "%q isn't a setting Zone knows.", key)
 		}

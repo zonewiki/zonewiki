@@ -25,7 +25,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 ./run.sh leaks      # scan the git history for secrets with gitleaks, in the tools image (extra args go to `gitleaks git`; a leak exits with 3)
 ./run.sh screenshots  # redo the README's screenshots (docs/screenshots/*.png) from a sample wiki, in the tools image; compressed with pngquant (the README shows phone.png at 640px)
 ./run.sh eval [FILE]  # measure retrieval on your wiki (see Measuring retrieval in search.md), in the app image, with semantic search as ZONE_SEMANTIC_SEARCH says
-./run.sh user add|passwd|token|remove NAME, user list  # the users in the wiki's settings file, zonewiki user in a one-off container (compose run; see users.md)
+./run.sh user add|passwd|token|role|disable|enable|remove NAME, user list  # the users in the wiki's settings file, zonewiki user in a one-off container (compose run; see users.md)
 ./run.sh config check|set|unset|passwd|token|import  # the wiki's settings file: check it, set a key, the password and MCP token without users, import an older .env (zonewiki config)
 ```
 

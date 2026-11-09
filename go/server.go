@@ -435,6 +435,11 @@ func login(w http.ResponseWriter, r *http.Request) {
 			if s.Users != nil {
 				errorText = "Incorrect user name or password."
 			}
+			if s.Users != nil && disabledLogin(r) {
+				// Said only to whoever knows the password; still a failure,
+				// so it guesses no faster.
+				errorText = "Your account is disabled. Ask an admin of this wiki."
+			}
 		}
 	}
 	page(w, newReq(r), status, "login.html", "Sign in", shell{noActions: true, badgeInForm: true}, &loginView{
@@ -455,10 +460,16 @@ func checkLogin(r *http.Request) (user string, ok bool) {
 	if s.Users == nil {
 		return "", checkPassword(r.PostFormValue("password"), s.PasswordHash)
 	}
-	if u := authenticate(r.PostFormValue("username"), r.PostFormValue("password")); u != nil {
+	if u := authenticate(r.PostFormValue("username"), r.PostFormValue("password")); u != nil && !u.Disabled {
 		return u.Name, true
 	}
 	return "", false
+}
+
+// disabledLogin: the login form names a disabled user, with their password.
+func disabledLogin(r *http.Request) bool {
+	u := settings().Users[strings.ToLower(strings.TrimSpace(r.PostFormValue("username")))]
+	return u != nil && u.Disabled && checkPassword(r.PostFormValue("password"), u.PasswordHash)
 }
 
 func logout(w http.ResponseWriter, r *http.Request) {

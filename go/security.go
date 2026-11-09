@@ -167,8 +167,8 @@ func sign(payload string) string {
 
 // signedIn: the request carries a valid session cookie, user is who it
 // belongs to; renew says it is old enough (a day) to be given a fresh one.
-// With users, the session must name one of them, so a user taken out of
-// the settings is signed out at once; without, it must name no one, so
+// With users, the session must name one of them, not disabled, so a user
+// taken out of the settings or disabled is signed out at once; without, it must name no one, so
 // switching between a password and users signs everyone out; a changed
 // password signs out the sessions of the old one.
 func signedIn(r *http.Request) (user string, ok, renew bool) {
@@ -186,7 +186,7 @@ func signedIn(r *http.Request) (user string, ok, renew bool) {
 		return "", false, false
 	}
 	users := settings().Users
-	if users != nil && users[s.User] == nil || users == nil && s.User != "" ||
+	if users != nil && (users[s.User] == nil || users[s.User].Disabled) || users == nil && s.User != "" ||
 		!hmac.Equal([]byte(s.Pw), []byte(passwordStamp(s.User))) {
 		return "", false, false
 	}

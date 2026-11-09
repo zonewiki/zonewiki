@@ -210,7 +210,7 @@ func mcpAuthorized(r *http.Request) (user string, ok bool) {
 		return "", tokenMatches(given, s.MCPToken)
 	}
 	for _, u := range s.Users {
-		if tokenMatches(given, u.MCPToken) {
+		if !u.Disabled && tokenMatches(given, u.MCPToken) {
 			return u.Name, true
 		}
 	}
@@ -224,7 +224,7 @@ func mcpOn() bool {
 		return s.MCPToken != ""
 	}
 	for _, u := range s.Users {
-		if u.MCPToken != "" {
+		if u.MCPToken != "" && !u.Disabled {
 			return true
 		}
 	}

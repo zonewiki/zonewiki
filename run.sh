@@ -281,7 +281,7 @@ case "${1:-up}" in
     echo "  leaks  - scan the git history for secrets (extra args go to gitleaks git)"
     echo "  screenshots - redo the README's screenshots (docs/screenshots/)"
     echo "  eval [FILE] - measure search on your wiki against questions in FILE (in the wiki)"
-    echo "  user add|passwd|token|remove NAME, user list - the users in the wiki's settings file"
+    echo "  user add|passwd|token|role|disable|enable|remove NAME, user list - the users in the wiki's settings file"
     echo "  config check|passwd|token|import - the wiki's settings file: check it, the password and MCP token"
     echo "                without users, or move the settings from an older .env into it"
     exit 1
