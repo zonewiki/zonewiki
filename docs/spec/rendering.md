@@ -15,7 +15,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 
 - **Bare URLs become links** (goldmark's linkify, with `urlRE`, which needs no dot in the host, so `http://localhost:5000/…` and `http://nas:5000` are links): `https://…`, `www.…` and email addresses, with trailing punctuation left outside the link. Code spans, fenced code and existing links are untouched. It covers text the editor's paste prompt never saw: files edited on disk, an unnamed paste, a URL inside pasted text.
 - **External links open in a new tab**: a link to another site (http/https, not the host the request came in on) gets `target="_blank" rel="noopener noreferrer"` (`zoneTransformer.external`, on the parsed document, so autolinks too); `tasks.js` does the same for links in task titles and notes (`extAttrs`). Zone's own links, `mailto:` and a full URL to Zone itself stay in the tab.
-- **Callouts** (GitHub/Obsidian syntax, `alertTransformer`): a blockquote starting with `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]` renders as `<div class="markdown-alert markdown-alert-<kind>">` with a title line. Styled in `style.css` (GitHub colours, a `--alert` variable per kind, dark variants). Custom titles (`> [!TIP] My title`) are not supported; that stays a plain quote.
+- **Callouts** (GitHub/Obsidian syntax, `alertTransformer`): a blockquote starting with `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]` renders as `<div class="markdown-alert markdown-alert-<kind>">` with a title line. Styled in `style.css`: GitHub's kinds in Zone's palette (slate, the accent green, plum, ochre, brick), a `--alert` variable per kind, dark variants. Custom titles (`> [!TIP] My title`) are not supported; that stays a plain quote.
 
 ### Sortable tables
 

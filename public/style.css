@@ -660,10 +660,12 @@ main {
   margin: 1rem 0;
 }
 
-/* Callouts: "> [!NOTE]" etc. (markdown-it alerts). Colours follow GitHub's;
-   each type sets --alert, which tints the bar, background and title. */
+/* Callouts: "> [!NOTE]" etc. GitHub's five kinds and meanings, in Zone's
+   palette: slate, the accent green, plum, ochre and brick (the warning and
+   danger colours of Zone CP's pages). Each type sets --alert, which tints
+   the bar, background and title. */
 .page-content .markdown-alert {
-  --alert: #0969da;
+  --alert: #3d6a8e;
   border-left: 3px solid var(--alert);
   background: color-mix(in srgb, var(--alert) 7%, transparent);
   border-radius: 0 6px 6px 0;
@@ -675,22 +677,22 @@ main {
   margin: 0 0 .3rem; font-weight: 600; color: var(--alert);
 }
 .page-content .markdown-alert-title::before { margin-right: .4rem; }
-.page-content .markdown-alert-note      { --alert: #0969da; }
-.page-content .markdown-alert-tip       { --alert: #1a7f37; }
-.page-content .markdown-alert-important { --alert: #8250df; }
-.page-content .markdown-alert-warning   { --alert: #9a6700; }
-.page-content .markdown-alert-caution   { --alert: #cf222e; }
+.page-content .markdown-alert-note      { --alert: #3d6a8e; }
+.page-content .markdown-alert-tip       { --alert: #2f5d50; }
+.page-content .markdown-alert-important { --alert: #7a4f86; }
+.page-content .markdown-alert-warning   { --alert: #8a5a00; }
+.page-content .markdown-alert-caution   { --alert: #a33232; }
 .page-content .markdown-alert-note      .markdown-alert-title::before { content: "ℹ"; }
 .page-content .markdown-alert-tip       .markdown-alert-title::before { content: "💡"; }
 .page-content .markdown-alert-important .markdown-alert-title::before { content: "❗"; }
 .page-content .markdown-alert-warning   .markdown-alert-title::before { content: "⚠"; }
 .page-content .markdown-alert-caution   .markdown-alert-title::before { content: "⛔"; }
 @media (prefers-color-scheme: dark) {
-  .page-content .markdown-alert-note      { --alert: #4493f8; }
-  .page-content .markdown-alert-tip       { --alert: #3fb950; }
-  .page-content .markdown-alert-important { --alert: #ab7df8; }
-  .page-content .markdown-alert-warning   { --alert: #d29922; }
-  .page-content .markdown-alert-caution   { --alert: #f85149; }
+  .page-content .markdown-alert-note      { --alert: #8fb3d1; }
+  .page-content .markdown-alert-tip       { --alert: #8cc7b4; }
+  .page-content .markdown-alert-important { --alert: #c3a1d0; }
+  .page-content .markdown-alert-warning   { --alert: #e3b866; }
+  .page-content .markdown-alert-caution   { --alert: #ec9a9a; }
 }
 
 .page-content hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
