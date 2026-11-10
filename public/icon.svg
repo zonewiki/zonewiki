@@ -3,6 +3,6 @@
        Android crops "maskable" icons, so the Z stays inside the central
        80% safe zone. The PNGs next to it are rendered from this file (see
        docs/spec/deployment.md, "Home-screen app"). -->
-  <rect width="512" height="512" fill="#2f5d50"/>
+  <rect width="512" height="512" fill="#3a7563"/>
   <path d="M164 178H348L164 334H348" fill="none" stroke="#fff" stroke-width="60" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

@@ -31,13 +31,13 @@
   --border:       #e2e0d8;
   --nav-bg:       #f6f4ee;
   --code-bg:      #edebe4;
-  --link:         #2f5d50;
+  --link:         #3a7563;
   --link-missing: #a33232;
   --btn-bg:       #ebe8e0;
   --btn-fg:       #34362f;
-  --btn-primary:  #2f5d50;
+  --btn-primary:  #3a7563;
   --btn-primary-fg: #ffffff;
-  --accent:       #2f5d50;
+  --accent:       #3a7563;
   --surface:      #ffffff;   /* fields, the editor, modals and menus: a sheet on the paper */
   --shadow:       0 1px 3px rgba(30,30,20,.08);
   --serif:        "Source Serif 4", Charter, "Bitstream Charter", Cambria, Georgia, serif;
@@ -676,7 +676,7 @@ main {
 }
 .page-content .markdown-alert-title::before { margin-right: .4rem; }
 .page-content .markdown-alert-note      { --alert: #3d6a8e; }
-.page-content .markdown-alert-tip       { --alert: #2f5d50; }
+.page-content .markdown-alert-tip       { --alert: #3a7563; }
 .page-content .markdown-alert-important { --alert: #7a4f86; }
 .page-content .markdown-alert-warning   { --alert: #8a5a00; }
 .page-content .markdown-alert-caution   { --alert: #a33232; }
