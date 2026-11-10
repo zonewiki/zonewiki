@@ -172,7 +172,7 @@ func TestReloadSettings(t *testing.T) {
 // A change takes effect between requests, so each sees one set of users
 // from its session check to its answer: while one runs, the reload returns
 // at once (nothing waits for it) and the change comes when the request
-// ends; a newer change replaces the one waiting; a request that doesn't
+// ends, before the next one begins; a newer change replaces the one waiting; a request that doesn't
 // end holds it up at most drainWait. The checks count every request.
 func TestReloadBetweenRequests(t *testing.T) {
 	path := configWiki(t, "locale = de\n")
@@ -201,9 +201,13 @@ func TestReloadBetweenRequests(t *testing.T) {
 	rewrite(t, path, "locale = pt-BR\n")
 	reloadSettings()
 	endRequest()
-	if !locale("pt-BR") {
-		t.Errorf("not taken after it: %s", settings().Locale)
+	// At once, before the next request begins: else that one would hold
+	// it up again (an admin's next page still saw them admin).
+	beginRequest()
+	if settings().Locale != "pt-BR" {
+		t.Errorf("not taken when it ended: %s", settings().Locale)
 	}
+	endRequest()
 
 	oldWait := drainWait
 	drainWait = 50 * time.Millisecond

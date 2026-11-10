@@ -405,6 +405,7 @@ var (
 	flightDone = sync.NewCond(&flightMu)
 	inFlight   int
 	waiting    *Settings // a change waiting for the requests running; the newest
+	waits      int       // the waits begun (betweenRequests): which one is current
 	drainWait  = 10 * time.Second
 )
 
@@ -414,19 +415,32 @@ func beginRequest() {
 	flightMu.Unlock()
 }
 
+// endRequest: the last request to end puts a change waiting in effect
+// itself, under flightMu, so no request begins in between: one that began
+// before a goroutine got to it would hold the change up again (an admin's
+// next page, right after the one that demoted them, still saw them admin).
 func endRequest() {
 	flightMu.Lock()
 	inFlight--
+	var old, s *Settings
 	if inFlight == 0 {
+		if waiting != nil {
+			s, waiting = waiting, nil
+			old = current.Swap(s)
+		}
 		flightDone.Broadcast()
 	}
 	flightMu.Unlock()
+	if s != nil {
+		tookSettings(old, s)
+	}
 }
 
 // betweenRequests puts s in effect once no request is running: now if
-// none is, else from a goroutine that waits (at most drainWait; a request
-// still running then sees the change, as the log says). A change while
-// one waits replaces it.
+// none is, else when the last one ends (endRequest). A goroutine sees to
+// it that a request that doesn't end holds it up at most drainWait (it
+// then sees the change, as the log says). A change while one waits
+// replaces it.
 func betweenRequests(s *Settings) {
 	flightMu.Lock()
 	if inFlight == 0 && waiting == nil {
@@ -437,6 +451,10 @@ func betweenRequests(s *Settings) {
 	}
 	already := waiting != nil
 	waiting = s
+	if !already {
+		waits++
+	}
+	wait := waits
 	flightMu.Unlock()
 	if already {
 		return
@@ -450,8 +468,14 @@ func betweenRequests(s *Settings) {
 		defer timer.Stop()
 		deadline := time.Now().Add(drainWait)
 		flightMu.Lock()
-		for inFlight > 0 && time.Now().Before(deadline) {
+		// Until endRequest took the change: then this wait is over, also
+		// when a later change already started a wait of its own.
+		for waiting != nil && waits == wait && inFlight > 0 && time.Now().Before(deadline) {
 			flightDone.Wait()
+		}
+		if waiting == nil || waits != wait {
+			flightMu.Unlock()
+			return
 		}
 		if inFlight > 0 {
 			logf("a request still running after %s sees the settings change", drainWait)
