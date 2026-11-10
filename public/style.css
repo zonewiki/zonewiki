@@ -311,7 +311,11 @@ main {
   }
   .page-grid {
     display: grid;
-    grid-template-columns: 14rem minmax(0, 60rem) 14rem;
+    /* The middle column is never narrower than its sheet needs for the
+       text's full width (46rem and the sheet's padding and border), as on
+       views without side columns; between 1320 and about 1600px wide the
+       side columns give way instead (down to 9rem). */
+    grid-template-columns: minmax(9rem, 14rem) minmax(calc(46rem + 2 * 2.25rem + 2px), 60rem) minmax(9rem, 14rem);
     column-gap: 3rem;
   }
   .rail {

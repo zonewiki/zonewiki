@@ -655,7 +655,9 @@ def test_tasks_quicknote_and_wiki_content_share_one_width(new_page, wiki):
     _side_wiki(wiki)
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     wiki.write("2026-10-01_09-00-00_note", "# Note\n")
-    for viewport in (BIG, {"width": 1100, "height": 900}):
+    # 1440: side columns, but less room than BIG; they used to squeeze the
+    # page's text there.
+    for viewport in (BIG, {"width": 1440, "height": 900}, {"width": 1100, "height": 900}):
         page = new_page(viewport=viewport)
         boxes = {}
         page.goto("/page/release")
