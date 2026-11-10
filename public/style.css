@@ -341,17 +341,18 @@ main {
 }
 
 /* ── The sheet ─────────────────────────────────────────────────────────────── */
-/* A page's own column (view.html .page-col) and the heading and content of
-   /tasks, Notes and the history views (an old version, what a save changed,
-   uncommitted and deleted pages: .sheet) sit on a sheet on the paper: white, in dark mode
-   a step lighter, the side columns, the list switcher and the top row on the
-   paper around it. Inside it the sheet is the page's background (--bg), so
+/* A page's own column (view.html .page-col; not when it holds a .sheet of
+   its own, as /tasks with side columns does) and the content of /tasks (its
+   list switcher, heading and list), Notes and the history views (an old
+   version, what a save changed, uncommitted and deleted pages: .sheet) sit
+   on a sheet on the paper: white, in dark mode a step lighter, the side
+   columns and the top row on the paper around it. Inside it the sheet is the page's background (--bg), so
    what paints itself in the page's colour (a folded section's label, …)
    matches. Task cards on a sheet are white too, set off by a firmer
    border and their shadow; the urgency tints mix with the card's colour. Phones keep the paper: the screen is the page there. The text
    keeps the width every view's content has. */
 @media (min-width: 641px) {
-  :is(.page-col:not(:has(> .tasks-places)), .sheet) {
+  :is(.page-col:not(:has(> .sheet)), .sheet) {
     --bg: var(--surface);
     background: var(--bg);
     border: 1px solid var(--border);
@@ -359,14 +360,14 @@ main {
     padding: 1.75rem 2.25rem 2.5rem;
     box-shadow: 0 1px 2px rgba(30, 30, 20, .04);
   }
-  :is(.page-col:not(:has(> .tasks-places)), .sheet) .tasks-app {
+  :is(.page-col:not(:has(> .sheet)), .sheet) .tasks-app {
     --border: #d9dad6;
     --section-bg: #f0f0ed;
     --card-bg: var(--surface);
   }
 }
 @media (min-width: 641px) and (prefers-color-scheme: dark) {
-  :is(.page-col:not(:has(> .tasks-places)), .sheet) .tasks-app {
+  :is(.page-col:not(:has(> .sheet)), .sheet) .tasks-app {
     --border: #45473f;
     --section-bg: #272922;
     --card-bg: #232520;
@@ -374,7 +375,7 @@ main {
 }
 @media (min-width: 641px) and (max-width: 1319px) {
   /* Without the side columns the sheet reaches into main's padding. */
-  :is(.page-col:not(:has(> .tasks-places)), .sheet) {
+  :is(.page-col:not(:has(> .sheet)), .sheet) {
     margin-inline: calc(-1 * var(--main-pad));
     padding-inline: calc(var(--main-pad) - 1px);   /* less its border */
   }
@@ -387,7 +388,7 @@ main {
   body:not(.editor-page) main:not(.wide) > .sheet { max-width: calc(46rem + 2 * 2.25rem + 2px); }
   /* /tasks with side columns: the sheet fills the middle column, its text
      at the reading width, as on a page. */
-  .page-col > .sheet > :is(.page-header, .page-content) { max-width: 46rem; margin-inline: auto; }
+  .page-col > .sheet > :is(.tasks-places, .page-header, .page-content) { max-width: 46rem; margin-inline: auto; }
 }
 
 /* ── Page header ───────────────────────────────────────────────────────────── */
@@ -2255,7 +2256,7 @@ body.editor-page main {
   }
 }
 
-/* The task list switcher (tasks_page.html .tasks-places): on /tasks, above
+/* The task list switcher (tasks_page.html .tasks-places): on /tasks, on the sheet above
    the heading, a row of pills, one per list (Pinned and the pinned lists
    first, the others A–Z, All), the current one shaded as in the module switcher;
    pinned lists with a pin, private ones with a lock. Wraps on a narrow screen. */
