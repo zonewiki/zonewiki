@@ -805,9 +805,12 @@ main {
 
 /* ── Search results page ───────────────────────────────────────────────────── */
 
-.search-results h1 { font-size: 1.5rem; margin-bottom: 1.5rem; }
+/* Its heading like a page's title; the results white cards on the paper. */
+.search-results h1, main > h1 { font-family: var(--serif); font-size: 2rem; font-weight: 500; line-height: 1.2; letter-spacing: -.01em; }
+.search-results h1 { margin-bottom: 1.5rem; }
 .search-result-card {
   padding: 1rem 1.125rem;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   margin-bottom: .625rem;
@@ -894,7 +897,7 @@ main {
 
 .rename-error {
   font-size: .8rem;
-  color: #ef4444;
+  color: var(--link-missing);
   margin-left: .5rem;
 }
 
@@ -1501,8 +1504,8 @@ kbd {
 .user-remove-body { margin-top: .4rem; max-width: 22rem; font-size: .9rem; }
 .users-done, .users-error { padding: .5rem .75rem; border-radius: 6px; }
 .users-done { background: var(--code-bg); }
-.users-error { background: #fee2e2; color: #991b1b; }
-@media (prefers-color-scheme: dark) { .users-error { background: #450a0a; color: #fecaca; } }
+.users-error { background: #fbeeee; color: #a33232; }   /* Zone CP's danger colours */
+@media (prefers-color-scheme: dark) { .users-error { background: #2f1c1c; color: #ec9a9a; } }
 .users-help { font-size: .85rem; }
 .users-link { display: block; padding: .5rem; background: var(--code-bg); border-radius: 6px; word-break: break-all; user-select: all; }
 .users-invite { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin: .5rem 0 0; }
@@ -1906,8 +1909,8 @@ body.editor-page main {
 .hist-when .hist-rel { margin-left: .6rem; }
 .hist-what { flex: 1; min-width: 0; font-size: .875rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hist-counts { white-space: nowrap; font-size: .8rem; font-variant-numeric: tabular-nums; }
-.hist-add { color: #1a7f37; }
-.hist-del { color: #cf222e; }
+.hist-add { color: #2e7048; }
+.hist-del { color: #a33232; }
 .hist-badge {
   padding: .05rem .45rem; border-radius: 99px; font-size: .72rem; font-weight: 600;
   color: var(--btn-primary-fg); background: var(--btn-primary);
@@ -1915,7 +1918,7 @@ body.editor-page main {
 .hist-current .hist-when { font-weight: 600; }
 .hist-changes { font-size: .8rem; color: var(--muted); white-space: nowrap; }
 .hist-changes:hover { color: var(--fg); }
-@media (prefers-color-scheme: dark) { .hist-add { color: #3fb950; } .hist-del { color: #f85149; } }
+@media (prefers-color-scheme: dark) { .hist-add { color: #8fcfa4; } .hist-del { color: #ec9a9a; } }
 @media (max-width: 640px) {
   .hist-main { flex-wrap: wrap; row-gap: .1rem; }
   .hist-what { flex-basis: 100%; order: 3; }
@@ -1924,15 +1927,16 @@ body.editor-page main {
 
 /* ── Diff view ───────────────────────────────────────────────────────────────── */
 
-.diff-view { font-size: .8rem; line-height: 1.5; overflow-x: auto; padding: 1rem; border: 1px solid var(--border); border-radius: 6px; }
+.diff-view { font-size: .8rem; line-height: 1.5; overflow-x: auto; padding: 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
 .diff-view span { display: block; white-space: pre; }
-.diff-add  { color: #22863a; background: #f0fff4; }
-.diff-del  { color: #b31d28; background: #ffeef0; }
+/* Put in green, taken out brick, in Zone's palette. */
+.diff-add  { color: #2e7048; background: #edf5ef; }
+.diff-del  { color: #a33232; background: #fbeeee; }
 .diff-hunk { color: var(--muted); font-weight: 600; }
 .diff-ctx  { color: var(--fg); }
 @media (prefers-color-scheme: dark) {
-  .diff-add { color: #7ee787; background: #0d1f17; }
-  .diff-del { color: #ffa198; background: #1f0d0d; }
+  .diff-add { color: #8fcfa4; background: #1b2a20; }
+  .diff-del { color: #ec9a9a; background: #2f1c1c; }
 }
 
 /* An old version, or what one save changed (/revision, /diff): where it
@@ -2917,7 +2921,7 @@ div.chip-input > input {
 .tasks-selbar .btn { white-space: nowrap; }
 .tasks-selbar .btn[hidden] { display: none; }
 .tasks-selbar .btn:disabled { opacity: .45; cursor: default; }
-.tasks-selbar .btn.danger { color: #dc2626; }
+.tasks-selbar .btn.danger { color: var(--link-missing); }
 .tasks-selbar-close { padding-inline: .6rem; }
 body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 /* Selection mode (.tasks-selecting): each card's checkbox becomes a round
@@ -3016,7 +3020,7 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 }
 .task-menu button:hover, .task-menu button:focus-visible,
 .page-menu button:hover, .page-menu button:focus-visible { background: var(--code-bg); outline: none; }
-.task-menu button.danger, .page-menu button.danger { color: #dc2626; }
+.task-menu button.danger, .page-menu button.danger { color: var(--link-missing); }
 
 /* Touch devices: no hover, fat fingers. The ⋯ menu carries won't-do/skip, so
    the small hover-era icons go; everything tappable gets a real target. */
@@ -3264,12 +3268,12 @@ ul.task-comment-list { list-style: none; margin: .3rem 0 0; padding: 0; font-siz
   padding: .75rem 0 1.5rem; background: var(--surface);
   border-top: 1px solid var(--border);
 }
-.task-edit-actions .btn-danger { margin-left: auto; background: #fecaca; color: #991b1b; border: none; }
-.task-edit-actions .btn-danger:hover { background: #fca5a5; }
+.task-edit-actions .btn-danger { margin-left: auto; background: #fbeeee; color: #a33232; border: none; }
+.task-edit-actions .btn-danger:hover { background: #f4dcdc; color: #a33232; }
 
 @media (prefers-color-scheme: dark) {
-  .task-edit-actions .btn-danger { background: #7f1d1d; color: #fecaca; }
-  .task-edit-actions .btn-danger:hover { background: #991b1b; }
+  .task-edit-actions .btn-danger { background: #2f1c1c; color: #ec9a9a; }
+  .task-edit-actions .btn-danger:hover { background: #3d2424; color: #ec9a9a; }
 }
 
 .task-delete-title {
