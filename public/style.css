@@ -94,21 +94,25 @@ body {
 
 /* ── Buttons ───────────────────────────────────────────────────────────────── */
 
+/* Secondary buttons outlined on white, as on zonewiki.com: quiet next to
+   the text, the accent on hover. Primary ones are filled (.btn-primary). */
 .btn {
   display: inline-block;
   padding: .3rem .8rem;
   border-radius: 6px;
   border: 1px solid var(--border);
-  background: var(--btn-bg);
+  background: var(--surface);
   color: var(--btn-fg);
   text-decoration: none;
   font-size: .8125rem;
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
-  transition: opacity .15s;
+  transition: opacity .15s, border-color .15s, color .15s;
 }
-.btn:hover { opacity: .8; }
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn-primary:hover { color: var(--btn-primary-fg); border-color: var(--btn-primary); opacity: .85; }
+.btn-danger:hover { color: var(--link-missing); border-color: var(--link-missing); opacity: .85; }
 .btn-sm { padding: .15rem .4rem; font-size: .75rem; line-height: 1; }
 .btn-primary {
   background: var(--btn-primary);
