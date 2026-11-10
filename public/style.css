@@ -2259,16 +2259,13 @@ body.editor-page main {
    the heading, a row of pills, one per list (Pinned and the pinned lists
    first, the others A–Z, All), the current one shaded as in the module switcher;
    pinned lists with a pin, private ones with a lock. Wraps on a narrow screen. */
-/* One group like the module switcher's: a white bordered pill holding the
-   lists, each the switcher's size and type (.8125rem, 1.5rem high). */
-.tasks-places {
-  display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0; margin: 0 0 1.1rem;
-  padding: 2px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface);
-}
+/* Separate white pills in the module switcher's type (.8125rem) and its
+   group's height (the 1.5rem pill, the group's padding and border). */
+.tasks-places { display: flex; flex-wrap: wrap; gap: .35rem; margin: 0 0 1.1rem; }
 .tasks-places .tasks-place {
   display: inline-flex; align-items: center; gap: .3rem;
-  height: 1.5rem; padding: 0 .65rem; border: 0; border-radius: 999px;
-  color: var(--muted); text-decoration: none; font-size: .8125rem; white-space: nowrap;
+  height: calc(1.5rem + 6px); padding: 0 .75rem; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--surface); color: var(--muted); text-decoration: none; font-size: .8125rem; white-space: nowrap;
   transition: background .15s, color .15s;
 }
 .tasks-places .tasks-place .tasks-place-label { text-box: trim-both cap alphabetic; }
