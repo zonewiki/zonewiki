@@ -347,8 +347,8 @@ main {
    a step lighter, the side columns, the list switcher and the top row on the
    paper around it. Inside it the sheet is the page's background (--bg), so
    what paints itself in the page's colour (a folded section's label, …)
-   matches. Task cards on a sheet take neutral greys, so they still stand out
-   on white. Phones keep the paper: the screen is the page there. The text
+   matches. Task cards on a sheet are white too, set off by a firmer
+   border and their shadow; the urgency tints mix with the card's colour. Phones keep the paper: the screen is the page there. The text
    keeps the width every view's content has. */
 @media (min-width: 641px) {
   :is(.page-col:not(:has(> .tasks-places)), .sheet) {
@@ -362,7 +362,7 @@ main {
   :is(.page-col:not(:has(> .tasks-places)), .sheet) .tasks-app {
     --border: #d9dad6;
     --section-bg: #f0f0ed;
-    --card-bg: #f8f8f6;
+    --card-bg: var(--surface);
   }
 }
 @media (min-width: 641px) and (prefers-color-scheme: dark) {
@@ -2227,7 +2227,7 @@ body.editor-page main {
 /* The tasks' own tones: its lines and frames a step darker than the wiki's
    (cards, section headers, labels, fields: all use --border), cards on a
    faint tint with a soft resting shadow, and section headers a shade deeper
-   than the cards (--section-bg; unsorted cards keep --code-bg), so a card stands out from the page and from its section.
+   than the cards (--section-bg; unsorted cards are hollow), so a card stands out from the page and from its section.
    Inside .tasks-app only; a card elsewhere falls back to the page's. */
 .tasks-app {
   --border: #d6d3ca;
@@ -2543,10 +2543,10 @@ div.chip-input > input {
    by the pointer: a line on that edge shows where. */
 .task-item.task-drop-before { box-shadow: 0 -3px 0 0 var(--btn-primary); }
 .task-item.task-drop-after { box-shadow: 0 3px 0 0 var(--btn-primary); }
-.task-item.task-urg-overdue  { background: color-mix(in srgb, #dc2626 8%, var(--bg)); border-color: color-mix(in srgb, #dc2626 40%, var(--border)); }
-.task-item.task-urg-today    { background: color-mix(in srgb, #f97316 7%, var(--bg)); border-color: color-mix(in srgb, #f97316 35%, var(--border)); }
-.task-item.task-urg-soon     { background: color-mix(in srgb, #eab308 5%, var(--bg)); border-color: color-mix(in srgb, #eab308 28%, var(--border)); }
-.task-item.task-urg-upcoming { background: color-mix(in srgb, #22c55e 4%, var(--bg)); border-color: color-mix(in srgb, #22c55e 22%, var(--border)); }
+.task-item.task-urg-overdue  { background: color-mix(in srgb, #dc2626 8%, var(--card-bg, var(--bg))); border-color: color-mix(in srgb, #dc2626 40%, var(--border)); }
+.task-item.task-urg-today    { background: color-mix(in srgb, #f97316 7%, var(--card-bg, var(--bg))); border-color: color-mix(in srgb, #f97316 35%, var(--border)); }
+.task-item.task-urg-soon     { background: color-mix(in srgb, #eab308 5%, var(--card-bg, var(--bg))); border-color: color-mix(in srgb, #eab308 28%, var(--border)); }
+.task-item.task-urg-upcoming { background: color-mix(in srgb, #22c55e 4%, var(--card-bg, var(--bg))); border-color: color-mix(in srgb, #22c55e 22%, var(--border)); }
 /* Selection = accent ring + halo + a hue-neutral background shift. The shift
    is an inset fg-tinted overlay, so every card visibly changes color when
    selected while keeping its own hue: overdue stays red (just deeper), plain
@@ -3150,12 +3150,16 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 
 
 
-/* Open's Unsorted cards: dashed. The grey background only without a deadline
-   colour, which must look the same on every tab (it used to paint over it). */
+/* Open's Unsorted cards: hollow, a dashed frame with no fill and no shadow,
+   so they read as not placed yet, on the sheet and on the paper alike (a
+   grey fill took the code blocks' beige, off next to the cards). Only
+   without a deadline colour, which must look the same on every tab (it used
+   to paint over it). */
 .task-item.task-inbox { border-style: dashed; }
 .task-item.task-inbox:not(.task-urg-overdue):not(.task-urg-today):not(.task-urg-soon):not(.task-urg-upcoming) {
-  background: var(--code-bg);
+  background: transparent; box-shadow: none;
 }
+.task-item.task-inbox:not(.task-urg-overdue):not(.task-urg-today):not(.task-urg-soon):not(.task-urg-upcoming):hover { box-shadow: var(--shadow); }
 
 .tasks-empty { text-align: center; color: var(--muted); padding: .6rem; font-style: italic; font-size: .85rem; }
 
