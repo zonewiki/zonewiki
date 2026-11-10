@@ -90,11 +90,11 @@ Defined in the `keydown` listener in `js/shortcuts.js`. Bare-key shortcuts are s
 ## Presentation Mode
 
 - **Present** is in the page's ⋯ menu (see Page header) whenever the page has a heading.
-- Choosing Present (or pressing **`p`**) opens a fullscreen dark overlay, splitting the article into slides at each `<h2>` boundary.
+- Choosing Present (or pressing **`p`**) opens a fullscreen overlay (a white sheet filling the screen, in dark mode the sheet's dark tone; larger type, serif headings with a short accent bar, the progress in the accent), splitting the article into slides at each `<h2>` boundary.
 - Content before the first `<h2>` (if any) becomes an intro slide.
 - Folded sections (Folding sections in `docs/spec/rendering.md`) show on their slides.
 - Navigation: **← →** arrow keys, or click "← Prev" / "Next →" buttons. **Esc** exits.
 - The slide counter (`1 / N`) is shown in the centre of the control bar.
-- Slide content re-uses `.page-content` CSS so typography, code blocks, and links render correctly inside the overlay. CSS custom properties are overridden to force dark colours.
+- Slide content re-uses `.page-content` CSS so typography, code blocks, and links render correctly inside the overlay; the overlay sets `--bg` to the sheet's `--surface`, so what paints itself in the page's colour matches.
 - Syntax highlighting is re-applied via `hljs.highlightElement` when each slide is shown.
 - The Present menu item is hidden (via JS, `syncPresentBtn`) on pages with no headings.
