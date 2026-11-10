@@ -54,6 +54,8 @@ class TestWhoSeesIt:
         body = admin.get("/admin/users", headers=HOST).data.decode()
         assert "<h1>Admin</h1>" in body and "bob" in body and "carol" in body
         assert '<a href="/admin/users" aria-current="page">Users</a>' in body
+        assert 'class="breadcrumb"' in body   # the module switcher, as on every view
+        assert not re.search(r'class="module-link"[^>]*aria-current', body)   # in no module
         assert 'href="/admin"' in admin.get("/page/index", headers=HOST).data.decode()
         resp = admin.get("/admin", headers=HOST)
         assert resp.status_code == 302 and resp.headers["Location"] == "/admin/users"
@@ -126,21 +128,39 @@ class TestChanges:
 
 class TestRefused:
 
-    def test_the_last_admin_cant_go(self, admin, git_wiki_dir):
+    def test_the_last_admin_cant_step_down(self, admin, git_wiki_dir):
         before = config(git_wiki_dir)
-        for path, data in [("/admin/users/alice/role", {"role": "editor"}), ("/admin/users/alice/disable", {}),
-                           ("/admin/users/alice/remove", {})]:
-            resp = post(admin, path, **data)
-            body = resp.data.decode()
-            assert resp.status_code == 409 and "without an admin" in body, path
+        resp = post(admin, "/admin/users/alice/role", role="editor")
+        assert resp.status_code == 409 and "without an admin" in resp.data.decode()
         assert config(git_wiki_dir) == before
+
+    @pytest.mark.parametrize("action", ["disable", "remove"])
+    def test_not_yourself_even_with_another_admin(self, admin, git_wiki_dir, action):
+        post(admin, "/admin/users/bob/role", role="admin")
+        before = config(git_wiki_dir)
+        resp = post(admin, f"/admin/users/alice/{action}")
+        body = resp.data.decode()
+        assert resp.status_code == 409 and f"you can&#39;t {action} yourself here" in body
+        assert config(git_wiki_dir) == before
+
+    def test_your_own_row_offers_no_disable_or_remove(self, admin):
+        body = admin.get("/admin/users", headers=HOST).data.decode()
+        assert 'action="/admin/users/alice/disable"' not in body and 'action="/admin/users/alice/remove"' not in body
+        assert 'action="/admin/users/alice/reset"' in body and 'action="/admin/users/alice/role"' in body
+        assert 'action="/admin/users/bob/disable"' in body and 'action="/admin/users/bob/remove"' in body
+
+    def test_another_admin_can_remove_you(self, admin, client, git_wiki_dir):
+        post(admin, "/admin/users/bob/role", role="admin")
+        login(client, "bob")
+        assert post(client, "/admin/users/alice/remove").status_code == 303
+        assert section(git_wiki_dir, "alice") is None
 
     def test_the_last_user_is_removed_only_on_the_host(self, client, monkeypatch, git_wiki_dir):
         monkeypatch.setattr(settings, "LEAF_USERS", {"alice": USERS["alice"]})
         monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}})
         login(client, "alice")
         resp = post(client, "/admin/users/alice/remove")
-        assert resp.status_code == 409 and "last user" in resp.data.decode()
+        assert resp.status_code == 409 and "zonewiki user remove alice" in resp.data.decode()
         assert section(git_wiki_dir, "alice") is not None
 
     def test_demoting_yourself_with_another_admin_leads_home(self, admin, git_wiki_dir):

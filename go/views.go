@@ -225,6 +225,9 @@ func currentModule(rq *Req) string {
 	case "/search", "/login":
 		return ""
 	}
+	if p == "/admin" || strings.HasPrefix(p, "/admin/") { // in no module
+		return ""
+	}
 	m := moduleViewRE.FindStringSubmatch(p)
 	if m != nil && isQuicknote(m[1]) {
 		return "notes"

@@ -3,6 +3,7 @@
     back saying what it did or why it didn't. Remove asks first, in a
     <details>. */ -}}
 {{define "body"}}
+{{.BreadcrumbHTML}}
 <h1>Admin</h1>
 <nav class="admin-tabs" aria-label="Admin sections">
   {{- range .Tabs}}
@@ -40,12 +41,14 @@
     </td>
     <td>{{if .Disabled}}Disabled{{else}}Active{{end}}</td>
     <td><div class="user-actions">
-      {{- if .Disabled}}
+      {{- if .Me}}{{/* not yourself: another admin can (admin.go) */}}
+      {{- else if .Disabled}}
       <form method="post" action="/admin/users/{{.Name}}/enable"><button type="submit" class="btn">Enable</button></form>
       {{- else}}
       <form method="post" action="/admin/users/{{.Name}}/disable"><button type="submit" class="btn" title="They can't sign in, their MCP token stops working; their files stay">Disable</button></form>
       {{- end}}
       <form method="post" action="/admin/users/{{.Name}}/reset"><button type="submit" class="btn" title="A link for {{.Name}} to set a new password">Reset password</button></form>
+      {{- if not .Me}}
       <details class="user-remove">
         <summary class="btn">Remove…</summary>
         <div class="user-remove-body">
@@ -53,6 +56,7 @@
           <form method="post" action="/admin/users/{{.Name}}/remove"><button type="submit" class="btn btn-danger">Remove {{.Name}}</button></form>
         </div>
       </details>
+      {{- end}}
     </div></td>
   </tr>
   {{- end}}
@@ -86,5 +90,5 @@
 </table>
 {{- end}}
 <h2>Roles</h2>
-<p class="users-help"><strong>admin</strong>: manages the users, and changes everything shared. <strong>editor</strong>: changes everything shared. <strong>viewer</strong>: reads what is shared, and changes nothing, not even private pages or notes of their own. No one, an admin neither, sees another user's private pages or knows their password.</p>
+<p class="users-help"><strong>admin</strong>: manages the users, and changes everything shared. <strong>editor</strong>: changes everything shared. <strong>viewer</strong>: reads what is shared, and changes nothing, not even private pages or notes of their own. No one, an admin neither, sees another user's private pages or knows their password. You can't disable or remove yourself here: another admin can.</p>
 {{end}}

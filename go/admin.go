@@ -1,7 +1,8 @@
 // The admin page (/admin, docs/spec/users.md, Managing users): its
 // section tabs, of which Users (/admin/users) is the one so far. There an
 // admin sees the wiki's users and changes their roles, disables, enables and removes them
-// in the browser, as zonewiki user does on the host. It changes the
+// in the browser, as zonewiki user does on the host (not themselves: an
+// admin can't disable or remove their own account here). It changes the
 // settings file the way the commands do (saveConfig: checked, locked, only
 // onto the file as read), so the file stays the one place, and every rule
 // of the commands holds here too (never back to no admin). An admin never
@@ -10,6 +11,7 @@
 package main
 
 import (
+	"html/template"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -57,7 +59,10 @@ type usersView struct {
 	Roles []string
 	Tabs  []adminTab // the admin page's section tabs
 	Tab   string     // the one shown
-	Links []linkRow  // the open invite and reset links
+	// The module switcher and Admin › Users, as on every view, so the top
+	// row stays put; not in the navigation trail.
+	BreadcrumbHTML template.HTML
+	Links          []linkRow // the open invite and reset links
 	// A link just made, shown once: its address, for whom, which kind.
 	Link, LinkUser, LinkKind string
 }
@@ -116,7 +121,8 @@ func showUsers(w http.ResponseWriter, r *http.Request, status int, done, refused
 // usersData: what the Users tab lists, the users and the open links.
 func usersData(r *http.Request) *usersView {
 	s, me := latestSettings(), userOf(r)
-	v := &usersView{Me: me, Roles: roles, Links: openLinks(), Tabs: adminTabs, Tab: "users"}
+	v := &usersView{Me: me, Roles: roles, Links: openLinks(), Tabs: adminTabs, Tab: "users",
+		BreadcrumbHTML: breadcrumb(newReq(r), []crumb{{"Admin", "/admin"}, {"Users", ""}}, "", false, "", "")}
 	for _, name := range sortedKeys(s.Users) {
 		u := s.Users[name]
 		v.Users = append(v.Users, userRow{Name: name, Role: u.Role, Token: u.MCPToken != "", Disabled: u.Disabled,
@@ -167,8 +173,8 @@ func targetUser(w http.ResponseWriter, r *http.Request) *User {
 }
 
 // afterChange: back to the list, saying what was done; to the wiki's home
-// if the admin is an admin no longer (they demoted, disabled or removed
-// themselves), as the list is no longer theirs.
+// if the admin is an admin no longer (they demoted themselves), as the
+// list is no longer theirs.
 func afterChange(w http.ResponseWriter, r *http.Request, done, name string) {
 	to := "/admin/users?done=" + url.QueryEscape(done) + "&user=" + url.QueryEscape(name)
 	if !latestSettings().isAdmin(userOf(r)) {
@@ -219,6 +225,10 @@ func userDisableRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	disable := filepath.Base(r.URL.Path) == "disable"
+	if disable && u.Name == userOf(r) {
+		refuseChange(w, r, &notChanged{"not changed: you can't disable yourself here. Another admin can."})
+		return
+	}
 	err := changeSettings(userOf(r), func(f *settingsfile.File) error {
 		if disable {
 			f.Set(u.Name, "disabled", "yes")
@@ -239,13 +249,16 @@ func userRemoveRoute(w http.ResponseWriter, r *http.Request) {
 	if u == nil {
 		return
 	}
+	if u.Name == userOf(r) {
+		// Not here: a slip would lock the admin out, and whenever it would
+		// be allowed (another admin left) that admin can do it. The last
+		// user is always the admin themselves, so this also keeps the wiki
+		// from going without a login, which is for the host on purpose.
+		refuseChange(w, r, &notChanged{"not changed: you can't remove yourself here. Another admin can, " +
+			"or it's done on the host: zonewiki user remove " + u.Name + "."})
+		return
+	}
 	err := changeSettings(userOf(r), func(f *settingsfile.File) error {
-		if len(f.Users) == 1 {
-			// Without users the wiki would have no login (or the wiki's
-			// one password): only on the host, on purpose.
-			return &notChanged{"not changed: " + u.Name + " is the last user. Without users the wiki has " +
-				"no login, so that's done on the host: zonewiki user remove " + u.Name + " --password (or --open)."}
-		}
 		f.RemoveUser(u.Name)
 		return nil
 	})
