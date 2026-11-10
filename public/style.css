@@ -343,8 +343,8 @@ main {
 /* ── The sheet ─────────────────────────────────────────────────────────────── */
 /* A page's own column (view.html .page-col; not when it holds a .sheet of
    its own, as /tasks with side columns does) and the content of /tasks (its
-   list switcher, heading and list), Notes and the history views (an old
-   version, what a save changed, uncommitted and deleted pages: .sheet) sit
+   list switcher, heading and list), Notes, Admin and the history views (an
+   old version, what a save changed, uncommitted and deleted pages: .sheet) sit
    on a sheet on the paper: white, in dark mode a step lighter, the side
    columns and the top row on the paper around it. Inside it the sheet is the page's background (--bg), so
    what paints itself in the page's colour (a folded section's label, …)
@@ -808,7 +808,9 @@ main {
 /* ── Search results page ───────────────────────────────────────────────────── */
 
 /* Its heading like a page's title; the results white cards on the paper. */
-.search-results h1, main > h1 { font-family: var(--serif); font-size: 2rem; font-weight: 500; line-height: 1.2; letter-spacing: -.01em; }
+.search-results h1, main > h1, main > .sheet > h1 { font-family: var(--serif); font-size: 2rem; font-weight: 500; line-height: 1.2; letter-spacing: -.01em; }
+/* Section headings on a view's sheet (Admin's Invite someone, Roles): as a page's h2. */
+main > .sheet > h2 { font-family: var(--serif); font-size: 1.45rem; font-weight: 500; margin: 2.25rem 0 .6rem; }
 .search-results h1 { margin-bottom: 1.5rem; }
 .search-result-card {
   padding: 1rem 1.125rem;

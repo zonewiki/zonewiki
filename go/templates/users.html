@@ -4,6 +4,8 @@
     (js/admin.js), or without JavaScript in its <details>. */ -}}
 {{define "body"}}
 {{.BreadcrumbHTML}}
+{{- /* On the sheet, as every page's content (style.css, The sheet). */}}
+<div class="sheet">
 <h1>Admin</h1>
 <nav class="admin-tabs" aria-label="Admin sections">
   {{- range .Tabs}}
@@ -96,4 +98,5 @@
 </dialog>
 <h2>Roles</h2>
 <p class="users-help"><strong>admin</strong>: manages the users, and changes everything shared. <strong>editor</strong>: changes everything shared. <strong>viewer</strong>: reads what is shared, and changes nothing, not even private pages or notes of their own. No one, an admin neither, sees another user's private pages or knows their password. You can't disable or remove yourself here: another admin can.</p>
+</div>
 {{end}}
