@@ -2312,20 +2312,8 @@ def test_due_colour_is_the_same_on_every_tab(page, wiki):
     today = date.today().isoformat()
     page.request.post("/api/tasks", data={"title": "Due now", "due_date": today, "start_date": today})
     page.goto("/tasks?view=open")
-    # An Unsorted card draws its frame (long dashes, --dash) over a
-    # transparent border: compare the colour the frame is drawn in.
-    looks = lambda: card(page, "Due now").evaluate("""el => {
-        const s = getComputedStyle(el);
-        let frame = s.borderTopColor;
-        if (frame === 'rgba(0, 0, 0, 0)') {
-            const probe = document.createElement('i');
-            probe.style.color = s.getPropertyValue('--dash');
-            el.appendChild(probe);
-            frame = getComputedStyle(probe).color;
-            probe.remove();
-        }
-        return [s.backgroundColor, frame];
-    }""")
+    looks = lambda: card(page, "Due now").evaluate(
+        "el => { const s = getComputedStyle(el); return [s.backgroundColor, s.borderTopColor]; }")
     expect(card(page, "Due now")).to_have_class(re.compile(r"\btask-inbox\b"))   # in Unsorted
     on_open = looks()
     for tab in ("focus", "plan"):

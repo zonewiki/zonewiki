@@ -3150,36 +3150,24 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 
 
 
-/* Open's Unsorted cards: a frame of long dashes (8px on, 5px off; a CSS
-   dashed border's short ones were noisy), drawn as four gradients over a
-   transparent border that keeps its room; a planned task's coloured left
-   edge stays a real border, over them. Without a deadline colour hollow (no
-   fill, no shadow: not placed yet, on the sheet and the paper alike; a grey
-   fill took the code blocks' beige, off next to the cards); with one, its
-   tint as on every tab (a fill used to paint over it) and dashes in its
-   border's colour. */
-.task-item.task-inbox {
-  --dash: color-mix(in srgb, var(--muted) 30%, var(--border));
-  background-image:
-    repeating-linear-gradient(90deg, var(--dash) 0 8px, transparent 8px 13px),
-    repeating-linear-gradient(90deg, var(--dash) 0 8px, transparent 8px 13px),
-    repeating-linear-gradient(180deg, var(--dash) 0 8px, transparent 8px 13px),
-    repeating-linear-gradient(180deg, var(--dash) 0 8px, transparent 8px 13px);
-  background-position: top, bottom, left, right;
-  background-size: 100% 1px, 100% 1px, 1px 100%, 1px 100%;
-  background-repeat: no-repeat;
-  background-origin: border-box;
-  border-top-color: transparent; border-right-color: transparent; border-bottom-color: transparent;
-}
-.task-item.task-inbox:not(.task-planned-now):not(.task-planned-later) { border-left-color: transparent; }
-.task-item.task-inbox.task-urg-overdue  { --dash: color-mix(in srgb, #dc2626 40%, var(--border)); }
-.task-item.task-inbox.task-urg-today    { --dash: color-mix(in srgb, #f97316 35%, var(--border)); }
-.task-item.task-inbox.task-urg-soon     { --dash: color-mix(in srgb, #eab308 28%, var(--border)); }
-.task-item.task-inbox.task-urg-upcoming { --dash: color-mix(in srgb, #22c55e 22%, var(--border)); }
+/* Open's Unsorted cards: hollow, a dashed frame with no fill and no shadow,
+   so they read as not placed yet, on the sheet and on the paper alike (a
+   grey fill took the code blocks' beige, off next to the cards). Only
+   without a deadline colour, which must look the same on every tab (it used
+   to paint over it). */
+.task-item.task-inbox { border-style: dashed; }
 .task-item.task-inbox:not(.task-urg-overdue):not(.task-urg-today):not(.task-urg-soon):not(.task-urg-upcoming) {
-  background-color: transparent; box-shadow: none;
+  background: transparent; box-shadow: none;
+  /* With no fill the frame is all there is: a firmer grey than a card's.
+     Not the left side, which may carry a planned task's coloured edge. */
+  border-top-color: color-mix(in srgb, var(--muted) 30%, var(--border));
+  border-right-color: color-mix(in srgb, var(--muted) 30%, var(--border));
+  border-bottom-color: color-mix(in srgb, var(--muted) 30%, var(--border));
 }
 .task-item.task-inbox:not(.task-urg-overdue):not(.task-urg-today):not(.task-urg-soon):not(.task-urg-upcoming):hover { box-shadow: var(--shadow); }
+.task-item.task-inbox:not(.task-urg-overdue):not(.task-urg-today):not(.task-urg-soon):not(.task-urg-upcoming):not(.task-planned-now):not(.task-planned-later) {
+  border-left-color: color-mix(in srgb, var(--muted) 30%, var(--border));
+}
 
 .tasks-empty { text-align: center; color: var(--muted); padding: .6rem; font-style: italic; font-size: .85rem; }
 
