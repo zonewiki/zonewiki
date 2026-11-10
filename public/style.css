@@ -1277,7 +1277,8 @@ main {
 .task-ref-due.overdue { color: #dc2626; font-weight: 600; }
 .task-ref-due.due-today { color: var(--btn-primary); font-weight: 600; }
 .task-ref-start.start-today { color: #d97706; }
-.task-ref-start.start-later { color: #3b82f6; }
+.task-ref-start.start-later { color: #4d7799; }   /* slate, as a later start on a card */
+@media (prefers-color-scheme: dark) { .task-ref-start.start-later { color: #8fb3d1; } }
 .task-ref-list { font-family: var(--mono); }
 .task-ref-done .task-ref-title,
 .task-ref-wontdo .task-ref-title { color: var(--muted); text-decoration: line-through; }
@@ -2214,10 +2215,11 @@ body.editor-page main {
   --card-shadow: 0 1px 2px rgba(30, 30, 20, .07);
   /* Date colours as text, readable on a card (the bright edge colours are
      only ~2:1 on one): amber for a start today or carried over (the amber
-     of the Focus limit warning, bold), blue for a later start, green for a
-     deadline today. */
+     of the Focus limit warning, bold), slate blue for a later start (the
+     note callout's: a calm blue in Zone's palette), green for a deadline
+     today. */
   --amber-text: #d97706;
-  --blue-text: #2563eb;
+  --blue-text: #3d6a8e;
   --green-text: #2b7a4b;
 }
 @media (prefers-color-scheme: dark) {
@@ -2227,7 +2229,7 @@ body.editor-page main {
     --card-bg: #1a1b18;
     --card-shadow: 0 1px 2px rgba(0, 0, 0, .4);
     --amber-text: #d97706;
-    --blue-text: #79b8ff;
+    --blue-text: #8fb3d1;
     --green-text: #56d364;
   }
 }
@@ -2877,12 +2879,12 @@ div.chip-input > input {
 .tasks-datepicker .dp-quick-btn:disabled { opacity: .3; cursor: default; }
 @media (pointer: coarse) { .tasks-datepicker .dp-quick-btn { padding: .55rem .1rem; font-size: .85rem; } }
 /* Planned tasks (tasks.js taskHTML): in Focus already (start today or
-   earlier) amber, planned later blue, the same on every tab. A due/overdue
+   earlier) amber, planned later slate blue, the same on every tab. A due/overdue
    urgency colour wins. */
 .task-item.task-planned-now:not(.task-urg-overdue):not(.task-urg-today)   { border-left: 3px solid #f59e0b; }
-.task-item.task-planned-later:not(.task-urg-overdue):not(.task-urg-today) { border-left: 3px solid #60a5fa; }
+.task-item.task-planned-later:not(.task-urg-overdue):not(.task-urg-today) { border-left: 3px solid #7d9fbd; }
 .task-focus-info.focus-now   { color: var(--amber-text, #d97706) !important; font-weight: 600; }
-.task-focus-info.focus-later { color: var(--blue-text, #2563eb) !important; }
+.task-focus-info.focus-later { color: var(--blue-text, #3d6a8e) !important; }
 
 
 .focus-stale-bar {
