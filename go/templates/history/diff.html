@@ -2,6 +2,7 @@
     not a version ("View this version" has it). */ -}}
 {{define "body"}}
 {{.BreadcrumbHTML}}
+<div class="sheet">
 <header class="page-header">
   <h1>Changes — {{.PageTitle}}</h1>
   <div class="page-header-actions">{{template "hist_back" (dict "slug" .Slug "page_exists" .PageExists)}}</div>
@@ -12,4 +13,5 @@
   {{- if .HasI}}{{template "version_nav" (dict "slug" .Slug "entries" .Entries "i" .I "current" false "kind" "diff")}}{{end}}
 </div>
 <pre class="diff-view">{{template "diff" .DiffLines}}</pre>
+</div>
 {{end}}

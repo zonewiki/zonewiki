@@ -1,6 +1,7 @@
 {{- /* A page's changes since its last commit, and Commit. */ -}}
 {{define "body"}}
 {{.BreadcrumbHTML}}
+<div class="sheet">
 <header class="page-header">
   <h1>Uncommitted Changes — {{.PageTitle}}</h1>
   <div class="page-header-actions">
@@ -9,4 +10,5 @@
   </div>
 </header>
 <div class="diff-view">{{template "diff" .DiffLines}}</div>
+</div>
 {{end}}

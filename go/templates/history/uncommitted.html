@@ -2,6 +2,7 @@
     View when it is a page; Commit All commits each file on its own. */ -}}
 {{define "body"}}
 {{.BreadcrumbHTML}}
+<div class="sheet">
 <header class="page-header">
   <h1>Uncommitted Changes</h1>
   <div class="page-header-actions">{{if .Files}}<button type="button" class="btn btn-primary" id="commit-all-btn">Commit All</button>{{end}}</div>
@@ -15,4 +16,5 @@
 {{- else}}
 <p class="hist-empty">No uncommitted changes</p>
 {{- end}}
+</div>
 {{end}}

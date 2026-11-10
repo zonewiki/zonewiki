@@ -1,6 +1,7 @@
 {{- /* Pages deleted in git history, newest deletion first, with Restore. */ -}}
 {{define "body"}}
 {{.BreadcrumbHTML}}
+<div class="sheet">
 <header class="page-header"><h1>Deleted Pages</h1></header>
 <article class="page-content">
 {{- if .Pages}}<ul class='notes-list'>
@@ -8,4 +9,5 @@
 </ul>
 {{- else}}<p>No deleted pages in history.</p>{{end -}}
 </article>
+</div>
 {{end}}

@@ -3,6 +3,7 @@
     "Changes" shows what that save changed. */ -}}
 {{define "body"}}
 {{.BreadcrumbHTML}}
+<div class="sheet">
 <header class="page-header">
   <h1>History — {{.PageTitle}}</h1>
   {{template "hist_back" (dict "slug" .Slug "page_exists" .PageExists "to" "page")}}
@@ -16,4 +17,5 @@
 {{- else}}
 <p class="hist-empty">No history yet — history is recorded from this point forward.</p>
 {{- end}}
+</div>
 {{end}}

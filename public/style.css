@@ -342,7 +342,8 @@ main {
 
 /* ── The sheet ─────────────────────────────────────────────────────────────── */
 /* A page's own column (view.html .page-col) and the heading and content of
-   /tasks and Notes (.sheet) sit on a sheet on the paper: white, in dark mode
+   /tasks, Notes and the history views (an old version, what a save changed,
+   uncommitted and deleted pages: .sheet) sit on a sheet on the paper: white, in dark mode
    a step lighter, the side columns, the list switcher and the top row on the
    paper around it. Inside it the sheet is the page's background (--bg), so
    what paints itself in the page's colour (a folded section's label, …)
