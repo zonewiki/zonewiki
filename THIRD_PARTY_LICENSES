@@ -9,6 +9,7 @@ Elsewhere, with their licenses next to them:
   public/vendor/katex/LICENSE                  KaTeX (MIT)
   public/vendor/gemoji/LICENSE                 gemoji (MIT)
   public/vendor/mermaid/LICENSE                Mermaid (MIT)
+  public/vendor/source-serif/LICENSE           Source Serif 4, the headings' font (OFL-1.1)
   public/vendor/mermaid/THIRD_PARTY_LICENSES   what mermaid.min.js bundles, including
                                                elkjs (EPL-2.0) and how to get its source
   licenses/onnxruntime/ (in the image)         onnxruntime (MIT) and its third-party

@@ -47,6 +47,7 @@ How each feature behaves, in detail, lives in `docs/spec/`. Read the file for th
 | HTML views          | Go `html/template` in `go/templates` (embedded in the binary), auto-escaped; what every page's layout shows is a typed `pageShell` (`.Shell`), a view's data a struct embedding `view` (`pageView`, `editView`, `historyListView` …; `page()` takes nothing else) |
 | Syntax highlight    | `highlight.js` (vendored in `public/vendor/`, no CDN) |
 | Math, diagrams      | KaTeX and Mermaid, vendored in `public/vendor/`, loaded by a page that has math or a diagram |
+| Fonts               | The system's sans for text; Source Serif 4 for headings, vendored in `public/vendor/source-serif/` (variable weight, Latin and Latin Extended) |
 | Styling             | Custom CSS (classless, semantic HTML); the look (warm paper and ink, a deep green accent, serif headings) is shared with zonewiki.com and Zone CP's pages: its tokens are the `:root` variables at the top of `public/style.css` |
 | In-browser editor   | Plain `<textarea>` with live preview         |
 | Search              | BM25 in `go/internal/textsearch`, optionally fused with semantic search (`go/embed.go`); search modal (Ctrl+P) and `/search` |
