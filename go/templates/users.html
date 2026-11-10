@@ -1,7 +1,7 @@
 {{- /* /admin/users: the admin page's Users tab (admin.go, docs/spec/users.md).
-    Plain forms, no JavaScript: each change is a POST, and the page comes
-    back saying what it did or why it didn't. Remove asks first, in a
-    <details>. */ -}}
+    Plain forms: each change is a POST, and the page comes back saying what
+    it did or why it didn't. Remove asks first: in the dialog at the end
+    (js/admin.js), or without JavaScript in its <details>. */ -}}
 {{define "body"}}
 {{.BreadcrumbHTML}}
 <h1>Admin</h1>
@@ -89,6 +89,11 @@
   </tbody>
 </table>
 {{- end}}
+<dialog id="user-remove-dialog" class="modal">
+  <p class="modal-label">Remove user</p>
+  <p class="modal-desc"></p>
+  <form method="post"><div class="modal-actions"><button type="button" class="btn" id="user-remove-cancel">Cancel</button><button type="submit" class="btn btn-danger">Remove</button></div></form>
+</dialog>
 <h2>Roles</h2>
 <p class="users-help"><strong>admin</strong>: manages the users, and changes everything shared. <strong>editor</strong>: changes everything shared. <strong>viewer</strong>: reads what is shared, and changes nothing, not even private pages or notes of their own. No one, an admin neither, sees another user's private pages or knows their password. You can't disable or remove yourself here: another admin can.</p>
 {{end}}

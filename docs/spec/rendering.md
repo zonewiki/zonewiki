@@ -59,6 +59,7 @@ No build step and no bundler: the browser loads ES modules as they are. Every pa
 | `js/figures.js` | `renderFigures`: math (KaTeX) and Mermaid diagrams, loading each library on first use (Math and diagrams) |
 | `js/fold.js` | Folding a page view's sections (`foldAll`, `revealElement`) |
 | `js/present.js` | Presentation mode |
+| `js/admin.js` | The admin page's Remove dialog (Managing users in `users.md`) |
 | `js/oldnames.js` | Imported first: moves what the browser kept under the names from before the renames (`leaf-deck-*`, also under the path `/deck`, `leaf_pres`, `leaf-search-sort`, `leafHistory`) to the new keys (`zone-tasks-*` under `/tasks`, `zone_pres` …), once |
 | `js/taskutil.js` | What `tasks.js`'s task apps use that holds no state of an app's own: date formatting and classes (`formatDate`, `shortDate`, `dueDateClass`, `urgencyClass`, `todayStr`), `DATES`/`LOCALE`, notices and the toast's place, `esc`, the tag autocomplete (`attachTagAc`) and `#` words at the caret, comment stamps |
 | `tasks.js`, `tasks-core.js` | The task app (exports `initTaskApps`, `openTasksEdit`): its state, the data it fetches and writes, tabs, filter, sorting, keyboard; and its pure logic (`TasksCore`, also run by the Node tests) |

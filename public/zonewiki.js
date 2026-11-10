@@ -14,4 +14,5 @@ import './js/editor.js';      // the editor
 import './js/page.js';        // the page view: checkboxes, task chips, tables, lightbox
 import './js/fold.js';        // folding sections
 import './js/present.js';     // presentation mode
+import './js/admin.js';       // the admin page: the Remove dialog
 import './tasks.js';           // tasks apps on the page
