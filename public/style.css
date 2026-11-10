@@ -3160,13 +3160,13 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
   background: transparent; box-shadow: none;
   /* With no fill the frame is all there is: a firmer grey than a card's.
      Not the left side, which may carry a planned task's coloured edge. */
-  border-top-color: color-mix(in srgb, var(--muted) 55%, var(--border));
-  border-right-color: color-mix(in srgb, var(--muted) 55%, var(--border));
-  border-bottom-color: color-mix(in srgb, var(--muted) 55%, var(--border));
+  border-top-color: color-mix(in srgb, var(--muted) 30%, var(--border));
+  border-right-color: color-mix(in srgb, var(--muted) 30%, var(--border));
+  border-bottom-color: color-mix(in srgb, var(--muted) 30%, var(--border));
 }
 .task-item.task-inbox:not(.task-urg-overdue):not(.task-urg-today):not(.task-urg-soon):not(.task-urg-upcoming):hover { box-shadow: var(--shadow); }
 .task-item.task-inbox:not(.task-urg-overdue):not(.task-urg-today):not(.task-urg-soon):not(.task-urg-upcoming):not(.task-planned-now):not(.task-planned-later) {
-  border-left-color: color-mix(in srgb, var(--muted) 55%, var(--border));
+  border-left-color: color-mix(in srgb, var(--muted) 30%, var(--border));
 }
 
 .tasks-empty { text-align: center; color: var(--muted); padding: .6rem; font-style: italic; font-size: .85rem; }
