@@ -182,8 +182,6 @@ export function toggleSharing() {
 sharingBtn?.addEventListener('click', toggleSharing);
 syncSharingButton();
 // The desktop's buttons at the top right (views.py top_actions_html).
-document.querySelector('.top-new-note')?.addEventListener('click', openNewNote);
-document.querySelector('.top-task')?.addEventListener('click', openDefaultTask);
 document.querySelector('.top-search')?.addEventListener('click', openSearchModal);
 // The search pill names its shortcut; on a Mac that is ⌘P.
 if (/Mac|iPhone|iPad/.test(navigator.platform)) {

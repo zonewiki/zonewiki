@@ -150,7 +150,7 @@ class TestViewPage:
         assert 'class="action-buttons"' not in client.get("/edit/my-page", headers=HOST).data.decode()
 
     def test_desktop_top_actions_on_views_not_in_editor(self, client, wiki_dir):
-        # New note, New task and Search, at the start of <main> so the
+        # Sharing mode and Search, at the start of <main> so the
         # CSS can put them at the top right, in line with the breadcrumb.
         write_page(wiki_dir, "my-page", "# My Page\n")
         for url in ("/page/my-page", "/tasks", "/notes"):
@@ -163,8 +163,6 @@ class TestViewPage:
             buttons = re.findall(r'<button type="button" class="top-([\w-]+)"(?: aria-pressed="false")? aria-label="([^"]+)" title="([^"]+)"',
                                  top[1].split("</div>", 1)[0])
             assert buttons == [("sharing", "Sharing mode", "Sharing mode: hide what is around the page (S)"),
-                               ("new-note", "New note", "New note (c n)"),
-                               ("task", "Add a task", "Add a task (c t)"),
                                ("search", "Search", "Search (Ctrl+P)")], url
         assert 'class="top-actions"' not in client.get("/edit/my-page", headers=HOST).data.decode()
 

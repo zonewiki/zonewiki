@@ -226,7 +226,7 @@ def main():
             settle(pg)
             shots.append(base64.b64encode(pg.screenshot()).decode())
         frame = page(PHONE_WIDTH, 600, scale=2)
-        frame.set_content(f"""<body style="margin:0;background:#e9ecef;display:flex;gap:32px;
+        frame.set_content(f"""<body style="margin:0;background:#e6e3da;display:flex;gap:32px;
             justify-content:center;align-items:center;height:100vh">
             {''.join(f'<img src="data:image/png;base64,{s}" style="width:260px;border-radius:20px;'
                      f'box-shadow:0 6px 24px rgba(0,0,0,.18)">' for s in shots)}</body>""")

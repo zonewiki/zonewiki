@@ -75,12 +75,9 @@ def test_phone_tab_bar_spans_the_bottom_edge(new_page, wiki):
     assert all(s["width"] <= 1.5 and s["height"] >= 20 for s in seps), seps
     assert boxes[2]["x"] + boxes[2]["width"] <= seps[0]["x"] <= boxes[3]["x"]
     assert boxes[4]["x"] + boxes[4]["width"] <= seps[1]["x"] <= boxes[5]["x"]
-    # The actions say what they make, with the desktop's icons.
+    # The actions say what they make.
     expect(bar.locator(".action-new-note")).to_have_attribute("aria-label", "New note")
     expect(bar.locator(".action-task")).to_have_attribute("aria-label", "New task")
-    for a in ("new-note", "task"):
-        assert (bar.locator(f".action-{a} svg").inner_html()
-                == phone.locator(f".top-{a} svg").inner_html())
     # The breadcrumb's switcher shrinks to the logo: the bar has the rest.
     expect(phone.locator(".breadcrumb .module-link[data-module=wiki] svg")).to_be_visible()
     expect(phone.locator(".breadcrumb .module-link[data-module=tasks]")).to_be_hidden()
@@ -261,34 +258,30 @@ def test_tab_bar_takes_taps_below_its_box(new_page, wiki):
 
 
 # ── Action buttons on desktop ────────────────────────────────────────────────
-# At the top right, in line with the breadcrumb: New note, Add a task
-# and Search, as icons. The bottom bar is the phone's.
+# At the top right, in line with the breadcrumb: Sharing mode and Search.
+# New notes and tasks come from the keyboard; the bottom bar is the phone's.
 
 def test_top_actions_on_desktop(page, wiki):
     page.goto("/page/index")
     expect(page.locator(".action-buttons")).to_be_hidden()
     buttons = page.locator(".top-actions button")
-    expect(buttons).to_have_count(4)
+    expect(buttons).to_have_count(2)
     names = [b.get_attribute("aria-label") for b in buttons.all()]
-    assert names == ["Sharing mode", "New note", "Add a task", "Search"]
+    assert names == ["Sharing mode", "Search"]
     boxes = [b.bounding_box() for b in buttons.all()]
     crumb = page.locator("main > .breadcrumb").bounding_box()
     vw = page.viewport_size["width"]
     main = page.locator("main").bounding_box()
     for b in boxes:
         assert abs((b["y"] + b["height"] / 2) - (crumb["y"] + crumb["height"] / 2)) < 2   # in line
-    for b in boxes[:3]:
-        assert 32 <= b["width"] <= 40 and b["width"] == b["height"]           # icon buttons, not tiny
+    assert 32 <= boxes[0]["width"] <= 40 and boxes[0]["width"] == boxes[0]["height"]   # an icon button, not tiny
     # Search, the one used most, is a labelled pill with its shortcut.
-    assert boxes[3]["width"] > 100
-    expect(buttons.nth(3)).to_contain_text("Search")
-    expect(buttons.nth(3).locator("kbd")).to_have_text("Ctrl P")
-    # Groups: the eye set apart by a divider; the two "new" buttons side by
-    # side; a wider gap before search.
+    assert boxes[1]["width"] > 100
+    expect(buttons.nth(1)).to_contain_text("Search")
+    expect(buttons.nth(1).locator("kbd")).to_have_text("Ctrl P")
+    # The eye set apart by a divider.
     sep = page.locator(".top-actions .top-sep").bounding_box()
     assert boxes[0]["x"] + boxes[0]["width"] < sep["x"] < boxes[1]["x"]
-    gap = lambda a, b: b["x"] - (a["x"] + a["width"])
-    assert gap(boxes[2], boxes[3]) > gap(boxes[1], boxes[2])
     assert all(a["x"] < b["x"] for a, b in zip(boxes, boxes[1:]))
     assert boxes[-1]["x"] + boxes[-1]["width"] > main["x"] + main["width"] - 40 and boxes[-1]["x"] < vw
     # The breadcrumb's own right end (the backlinks chip) keeps clear of them.
@@ -303,31 +296,37 @@ def test_top_actions_hidden_on_phones(new_page, wiki):
     expect(phone.locator(".action-buttons")).to_be_visible()
 
 
-def test_top_actions_open_quicknote_and_search(page, wiki):
+def test_top_search_and_the_new_note_key(page, wiki):
     page.goto("/page/index")
     page.locator(".top-search").click()
     expect(page.locator("#search-modal")).to_be_visible()
     page.keyboard.press("Escape")
     expect(page.locator("#search-modal")).to_be_hidden()
-    page.locator(".top-new-note").click()
+    page.keyboard.press("c")
+    page.keyboard.press("n")
     expect(page.locator("#modal")).to_be_visible()
 
 
 # ── New task: the Tasks home decides ────────────────────────────────────────
-# The New task button and c t give a new task the Tasks home's tags.
+# c t gives a new task the Tasks home's tags.
+
+def new_task(page):
+    page.keyboard.press("c")
+    page.keyboard.press("t")
+
 
 def _home(wiki, embed="[[tasks: list=task view=focus pin=1]]"):
     wiki.write("tasks", f"# My tasks\n\n{embed}\n")
     wiki.write("garden", "# Garden\n\nBeds.\n")
 
 
-def test_new_task_button_stays_on_the_page(page, wiki):
+def test_new_task_stays_on_the_page(page, wiki):
     # A page without a task list app loads a hidden one: the modal opens right
     # there, with the home's tags and start (Focus: today); a toast says
     # where the task went.
     _home(wiki)
     page.goto("/page/garden")
-    page.locator(".top-task").click()
+    new_task(page)
     modal = page.locator(".task-edit-modal[open]")
     expect(modal).to_be_visible()
     assert page.url.endswith("/page/garden")
@@ -348,7 +347,7 @@ def test_new_task_button_stays_on_the_page(page, wiki):
 def test_new_task_start_follows_the_homes_view(page, wiki):
     _home(wiki, "[[tasks: list=task view=open pin=1]]")
     page.goto("/page/garden")
-    page.locator(".top-task").click()
+    new_task(page)
     expect(page.locator(".task-edit-modal[open] [id^=task-edit-start]")).to_have_value("")
 
 
@@ -357,15 +356,15 @@ def test_new_task_falls_back_to_the_home_page(page, wiki):
     _home(wiki)
     page.route("**/api/tasks/headless", lambda route: route.fulfill(status=500, body="no"))
     page.goto("/page/garden")
-    page.locator(".top-task").click()
+    new_task(page)
     page.wait_for_url(re.compile(r"/tasks\?list=task&new=1$"))
     expect(page.locator(".task-edit-modal[open]")).to_be_visible()
 
 
-def test_new_task_button_on_the_home_page(page, wiki):
+def test_new_task_on_the_home_page(page, wiki):
     _home(wiki)
     page.goto("/page/tasks")
-    page.locator(".top-task").click()
+    new_task(page)
     modal = page.locator(".task-edit-modal[open]")
     expect(modal).to_be_visible()
     expect(modal.locator(".tag-chip", has_text="task")).to_have_count(1)
@@ -377,7 +376,7 @@ def test_new_task_on_another_tasks_gets_the_homes_tags(page, wiki):
     # there, but with the home's tags and keep, not that task list's filter.
     _home(wiki, "[[tasks: list=shop keep=1 pin=1]]")
     page.goto("/tasks?tag=garden")
-    page.locator(".top-task").click()
+    new_task(page)
     modal = page.locator(".task-edit-modal[open]")
     expect(modal).to_be_visible()
     expect(modal.locator(".tag-chip")).to_have_count(1)
@@ -547,7 +546,7 @@ def test_tasks_home_page_is_the_tasks_module(page, wiki):
     tasks.click()
     page.wait_for_url(re.compile(r"/tasks\?list=task$"))
     expect(tasks).to_have_attribute("aria-current", "page")
-    page.locator(".top-task").click()
+    new_task(page)
     modal = page.locator(".task-edit-modal[open]")
     expect(modal).to_be_visible()
     expect(modal.locator(".tag-chip", has_text="task")).to_have_count(1)

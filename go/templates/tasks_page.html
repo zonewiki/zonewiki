@@ -26,6 +26,8 @@
 {{- if .Pinned}}<span class="tasks-place-pin" aria-hidden="true">{{template "icon_pin"}}</span>{{end}}
 {{- if .Private}}<span class="tasks-place-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="tasks-place-label">{{.Label}}</span>{{template "module_counts" .Counts}}</a>
 {{- end}}</nav>{{end}}
+{{- /* The heading and the list on a sheet (style.css, The sheet); the switcher above it, on the paper. */}}
+<div class="sheet">
 <header class="page-header"><h1>{{.Heading}}</h1>
 {{- if .ListName}}<div class="page-header-actions"><button type="button" class="btn" id="list-rename-btn">Rename…</button></div>{{end}}</header>
 {{- /* Rename…: the list's tag, on its tasks and pages (js/pagemenu.js opens it). */}}
@@ -36,4 +38,5 @@
 {{- /* A list shows the list only: the pages that embed it are its Backlinks. */}}
 {{- if and .ListName (not .Home)}}<p class="tasks-list-home">No page declares <code>[[tasks: list={{.ListName}}]]</code>: these are the tasks tagged #{{.ListName}}.</p>{{end -}}
 {{.TasksHTML}}</article>
+</div>
 {{- end}}

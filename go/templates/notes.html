@@ -2,6 +2,7 @@
     (js/search.js initNotesFilter, /api/search?notes=1); ?q= keeps it. */ -}}
 {{define "body"}}
 {{.BreadcrumbHTML}}
+<div class="sheet">
 <header class="page-header"><h1>Notes{{if .Private}} <span class="lock" title="Private: only you see your notes" aria-label="Private">🔒</span>{{end}}</h1></header>
 <article class="page-content">
 {{- if .Notes}}<div class="notes-filter"><input type="search" id="notes-filter" value="{{.Q}}" placeholder="Filter notes…" title="Search syntax works: &quot;phrase&quot;, -word, #tag, edited:2026-09 …" aria-label="Filter notes" autocomplete="off" spellcheck="false"><span class="notes-filter-count" id="notes-filter-count" aria-live="polite"></span></div><ul class='notes-list'>
@@ -9,4 +10,5 @@
 </ul>
 {{- else}}<p>No entries yet.{{if .Private}} Notes are private: only you see them, until you move one to the wiki.{{end}}</p>{{end -}}
 </article>
+</div>
 {{end}}
