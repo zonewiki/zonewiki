@@ -177,6 +177,34 @@
   window.addEventListener('resize', () => rails.forEach(update));
 }());
 
+// A page's sheet is as wide as other views' (style.css, The sheet) unless
+// something on it needs more room: a table, code block or image wider than
+// the text. Then .sheet-wide gives the sheet the whole middle column, so the
+// wide thing stays on the white. Measured with the room it would have (the
+// class on, then off again if nothing needs it, before the browser paints),
+// again when the window or the page's content changes size (an image
+// loading, a section unfolding).
+(function () {
+  const col = document.querySelector('.page-grid > .page-col');
+  const text = col && col.querySelector(':scope > .page-content');
+  if (!text) return;
+  const big = matchMedia('(min-width: 1320px)');
+  let queued = false;
+  const update = () => {
+    queued = false;
+    if (!big.matches) { col.classList.remove('sheet-wide'); return; }
+    col.classList.add('sheet-wide');
+    const limit = text.clientWidth + 1;
+    const needs = [...text.querySelectorAll(':scope > :is(pre, table, p.img-block)')]
+      .some(el => el.offsetWidth > limit);
+    col.classList.toggle('sheet-wide', needs);
+  };
+  const queue = () => { if (!queued) { queued = true; requestAnimationFrame(update); } };
+  update();
+  big.addEventListener('change', queue);
+  new ResizeObserver(queue).observe(text);
+}());
+
 // ── Modules ─────────────────────────────────────────────────────────────────
 // The module switcher (breadcrumb) and the phone's bottom bar link to the
 // modules; the server marks the current one (aria-current). The Tasks

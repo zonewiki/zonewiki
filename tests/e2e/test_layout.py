@@ -453,6 +453,26 @@ def test_wide_code_and_tables_grow_short_ones_dont(new_page, wiki):
         assert box["width"] <= page.locator(".page-col").bounding_box()["width"] + 1
 
 
+def test_a_pages_sheet_is_as_wide_as_other_views_unless_it_needs_room(new_page, wiki):
+    # A page with only text: its sheet as wide as Notes'. One with a wide code
+    # block or table: the whole middle column, so they stay on the sheet.
+    _side_wiki(wiki)
+    wiki.write("plain", "# Plain\n\nJust text, and [[Release]].\n")
+    page = new_page(viewport=BIG)
+    page.goto("/notes")
+    notes = page.locator(".sheet").bounding_box()
+    page.goto("/page/plain")
+    plain = page.locator(".page-col").bounding_box()
+    assert abs(plain["width"] - notes["width"]) < 1 and abs(plain["x"] - notes["x"]) < 1
+    page.goto("/page/release")
+    expect(page.locator(".page-col")).to_have_class(re.compile(r"\bsheet-wide\b"))
+    wide = page.locator(".page-col").bounding_box()
+    assert wide["width"] > notes["width"] + 100
+    for el in page.locator(".page-content > :is(pre, table)").all():
+        box = el.bounding_box()
+        assert box["x"] >= wide["x"] and box["x"] + box["width"] <= wide["x"] + wide["width"]
+
+
 def test_no_side_columns_below_1320(new_page, wiki):
     _side_wiki(wiki)
     page = new_page(viewport={"width": 1280, "height": 900})

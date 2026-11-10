@@ -390,6 +390,14 @@ main {
   /* A view without side columns: the sheet is the text's width and its own
      padding (after the 46rem of main:not(.wide) > … above, same weight). */
   body:not(.editor-page) main:not(.wide) > .sheet { max-width: calc(46rem + 2 * 2.25rem + 2px); }
+  /* A page's sheet: as wide as other views' (the text and the sheet's
+     padding), centred in the middle column; the whole column only when the
+     page has something wider than the text (.sheet-wide, js/chrome.js), so
+     a wide table or code block stays on the white. */
+  .page-grid > .page-col:not(:has(> .sheet)) {
+    justify-self: center; width: 100%; max-width: calc(46rem + 2 * 2.25rem + 2px);
+  }
+  .page-grid > .page-col.sheet-wide { max-width: none; }
   /* /tasks with side columns: the sheet fills the middle column, its text
      at the reading width, as on a page. */
   .page-col > .sheet > :is(.tasks-places, .page-header, .page-content) { max-width: 46rem; margin-inline: auto; }
