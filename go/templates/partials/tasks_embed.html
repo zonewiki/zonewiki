@@ -206,8 +206,9 @@
         <a class="btn" id="task-settings-export{{.sfx}}" href="/api/tasks/export" download>Export</a>
         <button type="button" class="btn" id="task-settings-import{{.sfx}}">Import…</button>
         <input type="file" id="task-settings-import-file{{.sfx}}" accept=".json,application/json" hidden>
+        <input type="text" id="task-settings-import-tag{{.sfx}}" aria-label="Tag for the imported tasks" placeholder="tag for the imported tasks (optional)" autocomplete="off">
       </div>
-      <span class="field-hint">Export saves them as a file, completed ones too. Import adds a file's tasks to this list; those already here are skipped.</span>
+      <span class="field-hint">Export saves them as a file, completed ones too. Import adds a file's tasks to this list; those already here are skipped. A tag of your own finds them again later.</span>
     </div>
     <p class="task-settings-error" id="task-settings-error{{.sfx}}" role="alert" hidden></p>
     <div class="task-edit-actions">

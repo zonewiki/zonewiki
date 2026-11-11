@@ -3623,9 +3623,19 @@ def test_export_and_import_a_lists_tasks(page, wiki, tmp_path):
     page.goto("/page/food")
     expect(page.locator("#tasks-list .task-item")).to_have_count(0)
     page.locator("#task-settings-btn").click()
+    page.locator("#task-settings-import-tag").fill("from anna")
     page.locator("#task-settings-import-file").set_input_files(saved)
-    expect(page.locator(".task-undo-toast")).to_have_text("Imported 1 task.")
+    expect(page.locator(".task-undo-toast")).to_contain_text("Imported 1 task.")
     expect(page.locator("#task-settings-modal")).to_be_hidden()
+    expect(page.locator("#tasks-list .task-item")).to_have_count(1)
+    assert task_by_title(page, "Milk")["tags"] == ["food", "from-anna"]
+    # Undo takes the imported tasks out again; then without a tag of its own.
+    page.locator(".task-undo-btn").click()
+    expect(page.locator("#tasks-list .task-item")).to_have_count(0)
+    assert page.request.get("/api/tasks").json() == [t for t in page.request.get("/api/tasks").json() if t["title"] != "Milk"]
+    page.locator("#task-settings-btn").click()
+    expect(page.locator("#task-settings-import-tag")).to_have_value("")
+    page.locator("#task-settings-import-file").set_input_files(saved)
     expect(page.locator("#tasks-list .task-item")).to_have_count(1)
     assert task_by_title(page, "Milk")["tags"] == ["food"]
 

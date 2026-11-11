@@ -43,12 +43,12 @@ def test_import_brings_an_export_back_once(client, wiki_dir):
     client.put(f"/api/tasks/{done['id']}", json={"completed": True}, headers=HOST)
     file = export(client, list="shop").get_json()
     # Here already: nothing is added.
-    assert imp(client, file, list="shop").get_json() == {"added": 0, "skipped": 2}
+    assert imp(client, file, list="shop").get_json() == {"added": 0, "skipped": 2, "ids": []}
     ids = [t["id"] for t in file["tasks"]]
     client.post("/api/tasks/batch-delete", json={"ids": ids}, headers=HOST)
     assert titles(client) == []
-    assert imp(client, file, list="shop").get_json() == {"added": 2, "skipped": 0}
-    assert imp(client, file, list="shop").get_json() == {"added": 0, "skipped": 2}
+    assert imp(client, file, list="shop").get_json() == {"added": 2, "skipped": 0, "ids": ids}
+    assert imp(client, file, list="shop").get_json() == {"added": 0, "skipped": 2, "ids": []}
     back = client.get("/api/tasks", headers=HOST).get_json()
     assert [(t["id"], t["title"], t["description"], t["tags"]) for t in back] == [(ids[0], "Milk", "2 l", ["shop"])]
     completed = client.get("/api/tasks/completed", headers=HOST).get_json()
@@ -61,7 +61,8 @@ def test_import_into_another_list_changes_the_lists_tag(client, wiki_dir):
         {"id": "not an id", "title": "Bread", "tags": []},
         {"title": "Salt"},
     ]}
-    assert imp(client, file, list="groceries", tag="staples,-old").get_json() == {"added": 3, "skipped": 0}
+    out = imp(client, file, list="groceries", tag="staples,-old").get_json()
+    assert (out["added"], out["skipped"], len(out["ids"])) == (3, 0, 3)
     tasks = {t["title"]: t for t in client.get("/api/tasks", headers=HOST).get_json()}
     assert tasks["Milk"]["tags"] == ["weekly", "groceries", "staples"]
     assert tasks["Milk"]["id"] == "11111111-2222-4333-8444-555555555555"
@@ -72,6 +73,10 @@ def test_import_into_another_list_changes_the_lists_tag(client, wiki_dir):
     assert imp(client, [{"title": "Oil", "tags": ["x"]}]).get_json()["added"] == 1
     tasks = {t["title"]: t for t in client.get("/api/tasks", headers=HOST).get_json()}
     assert tasks["Pepper"]["tags"] == ["x", "pantry"] and tasks["Oil"]["tags"] == ["x"]
+    # also=: tags of the user's own for this import, on top of the list's.
+    assert imp(client, [{"title": "Rice", "tags": ["x"]}], list="groceries", also="#From Anna, x").get_json()["added"] == 1
+    tasks = {t["title"]: t for t in client.get("/api/tasks", headers=HOST).get_json()}
+    assert tasks["Rice"]["tags"] == ["x", "groceries", "From-Anna"]
 
 
 def test_import_refuses_what_is_no_export(client, wiki_dir):
@@ -79,4 +84,4 @@ def test_import_refuses_what_is_no_export(client, wiki_dir):
         resp = imp(client, file)
         assert resp.status_code == 400 and "exported from Zone" in resp.get_json()["error"], file
     assert titles(client) == []
-    assert imp(client, {"tasks": []}).get_json() == {"added": 0, "skipped": 0}
+    assert imp(client, {"tasks": []}).get_json() == {"added": 0, "skipped": 0, "ids": []}

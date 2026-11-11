@@ -1265,14 +1265,16 @@ func apiExport(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// apiImport adds an export's tasks: {file, list, tag, new, private}. file
+// apiImport adds an export's tasks: {file, list, tag, new, also, private}. file
 // is what apiExport wrote (or a bare list of tasks); list, tag and new are
 // the params of the list imported into, whose tags the tasks get as a new
 // task there would (newTaskTags, or new=), in place of the tag of the list
 // they were exported from; private: into the user's own tasks, where a
 // task exported private goes anyway. A task
 // keeps its id, and one whose id is here already is skipped, so the same
-// file imported twice adds nothing. Answers {added, skipped}.
+// file imported twice adds nothing. also: more tags for them, the user's
+// own for this import. Answers {added, skipped, ids}: ids, the added
+// tasks', for the notice's Undo (batch-delete).
 func apiImport(w http.ResponseWriter, r *http.Request) error {
 	data, err := jsonObject(r)
 	if err != nil {
@@ -1301,6 +1303,8 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 	if len(add) == 0 {
 		add = newTaskTags(parseTasksParams("list=" + cleanList(str("list")) + " tag=" + strings.Join(strings.Fields(str("tag")), "")))
 	}
+	// also: tags of the user's own for this import, to find its tasks by.
+	add = cleanTags(append(add, strings.Split(str("also"), ",")...))
 	var remove []string
 	if from != "" && !slices.ContainsFunc(add, func(t string) bool { return strings.EqualFold(t, from) }) {
 		remove = []string{from}
@@ -1312,7 +1316,7 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	existing := taskIDsLocked() // every owner's: ids stay unique across the files
-	added, skipped := 0, 0
+	skipped, ids := 0, []string{}
 	for _, s := range snaps {
 		snap, _ := as[jsonObj](s)
 		t := sanitizeSnapshot(snap)
@@ -1337,14 +1341,14 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 		} else {
 			completed = append(completed, t)
 		}
-		added++
+		ids = append(ids, t.ID)
 	}
-	if added > 0 {
-		if err := writeBothLocked(user, active, completed, "Import "+strconv.Itoa(added)+" tasks"); err != nil {
+	if len(ids) > 0 {
+		if err := writeBothLocked(user, active, completed, "Import "+strconv.Itoa(len(ids))+" tasks"); err != nil {
 			return err
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]int{"added": added, "skipped": skipped})
+	writeJSON(w, http.StatusOK, map[string]any{"added": len(ids), "skipped": skipped, "ids": ids})
 	return nil
 }
 

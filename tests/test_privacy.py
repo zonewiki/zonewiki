@@ -897,6 +897,6 @@ def test_an_exported_private_task_stays_private_when_imported(alice, wiki):
     alice.delete(f"/api/tasks/{TASK_ID}", headers=HOST)
     shared_before = (wiki / "_tasks/tasks.json").read_text() if (wiki / "_tasks/tasks.json").exists() else ""
     out = alice.post("/api/tasks/import", json={"file": {"tasks": mine}, "list": "shared"}, headers=HOST).get_json()
-    assert out == {"added": 1, "skipped": 0}
+    assert out == {"added": 1, "skipped": 0, "ids": [TASK_ID]}
     assert TASK_ID in (wiki / "private/alice/_tasks/tasks.json").read_text()
     assert ((wiki / "_tasks/tasks.json").read_text() if (wiki / "_tasks/tasks.json").exists() else "") == shared_before

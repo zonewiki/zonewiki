@@ -136,6 +136,7 @@ export function initTaskSettings(app) {
   const exportLink = document.getElementById('task-settings-export' + sfx);
   const importBtn = document.getElementById('task-settings-import' + sfx);
   const importFile = document.getElementById('task-settings-import-file' + sfx);
+  const importTag = document.getElementById('task-settings-import-tag' + sfx);
   const scope = { list: appEl.dataset.initList || '', tag: appEl.dataset.initTag || '' };
   exportLink.href = '/api/tasks/export?' + new URLSearchParams(scope);
   importBtn.addEventListener('click', () => importFile.click());
@@ -149,15 +150,26 @@ export function initTaskSettings(app) {
       message = 'The tasks couldn\u2019t be imported.';
       const res = await fetch('/api/tasks/import', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ file, ...scope, new: appEl.dataset.newTags || '', private: app.initPrivate }),
+        body: JSON.stringify({ file, ...scope, new: appEl.dataset.newTags || '', also: importTag.value, private: app.initPrivate }),
       });
       const out = await res.json();
       if (res.ok) {
         dialog.close();
         const n = count => `${count} task${count === 1 ? '' : 's'}`;
-        showNotice(out.added ? `Imported ${n(out.added)}${out.skipped ? `; ${out.skipped} already here` : ''}.`
-          : out.skipped ? 'Nothing imported: the tasks are already here.' : 'Nothing imported: the file has no tasks.');
-        if (out.added) { app.refresh(); app.refreshOtherInstances(app.instanceId); refreshDueBadge(); }
+        const reload = () => { app.refresh(); app.refreshOtherInstances(app.instanceId); refreshDueBadge(); };
+        if (!out.added) {
+          showNotice(out.skipped ? 'Nothing imported: the tasks are already here.' : 'Nothing imported: the file has no tasks.');
+          return;
+        }
+        importTag.value = '';
+        reload();
+        // Undo (the toast's button, Ctrl+Z): the imported tasks go again.
+        app.showUndo(`Imported ${n(out.added)}${out.skipped ? `; ${out.skipped} already here` : ''}.`, async () => {
+          const gone = await fetch('/api/tasks/batch-delete', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: out.ids }),
+          });
+          if (gone.ok) reload(); else showNotice('The import couldn\u2019t be undone.');
+        });
         return;
       }
       message = out.error || message;

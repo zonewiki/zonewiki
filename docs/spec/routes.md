@@ -48,7 +48,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 | GET    | `/api/tasks/due-count` | `{ count, overdue, today, focus }`: tasks due today + overdue, and tasks in Focus, of the pinned lists (their `list=`/`tag=`; a task in two once), else of every task (see Modules); `?places=1` adds `places`, the same counts of each place in the list switcher by its key (`list:<name>`, `all`, `pinned`: the pinned lists as one, or a single pin without a list; Separate lists in `docs/spec/tasks.md`) |
 | POST   | `/api/tasks/settings`  | The settings dialog's Save: `{page, index, was, set}` rewrites the params of a page's `[[tasks: …]]`, `{all: true, was, set}` the settings of All tasks; `{ok}` or `{error}` (400, 403, 404, 409: Settings in `docs/spec/tasks.md`) |
 | GET    | `/api/tasks/export`    | The tasks a list shows (`?list=`, `?tag=`; neither: all), open and completed, as a JSON file to save (Export and import in `docs/spec/tasks.md`) |
-| POST   | `/api/tasks/import`    | `{file, list, tag, new, private}`: adds an export's tasks to a list; `{added, skipped}` |
+| POST   | `/api/tasks/import`    | `{file, list, tag, new, also, private}`: adds an export's tasks to a list; `{added, skipped, ids}` |
 | GET    | `/api/tasks/headless`  | A hidden task app (the headless embed, without its `<script>` tags), for a page that needs the edit modal (`c t`, the New task button; see Modules). |
 | any    | `/api/deck`, `/api/deck/…` | The `/api/tasks` routes by their old path, for clients from before the rename: the request goes on to `/api/tasks/…` (same method, body and checks) |
 | GET    | `/api/tasks/completed` | Completed tasks of `?year=YYYY` (default this year; earlier years come from their archive file). |

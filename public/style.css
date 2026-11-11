@@ -3227,7 +3227,8 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 .task-settings-check { display: flex; align-items: center; gap: .5rem; font-size: .9rem; }
 .task-settings-where { margin: 0; }
 .task-settings-transfer { border-top: 1px solid var(--border); padding-top: .75rem; }
-.task-settings-transfer-btns { display: flex; gap: .5rem; }
+.task-settings-transfer-btns { display: flex; gap: .5rem; flex-wrap: wrap; }
+.task-settings-transfer-btns input[type="text"] { flex: 1 1 12rem; min-width: 0; }
 .task-settings-transfer-btns a.btn { text-decoration: none; color: inherit; }
 .task-settings-error { margin: 0; font-size: .85rem; color: #a33232; }
 .task-settings-error[hidden] { display: none; }
