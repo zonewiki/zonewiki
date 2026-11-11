@@ -223,11 +223,13 @@ function render() {
       const sub = (label, n) => `<li class="plan-subdivider" data-sub="${label.toLowerCase()}">` +
         `<span>${label}</span><span class="board-day-count">${n}</span></li>`;
       // A carried-over card's "since" badge is amber here (task-carried):
-      // on Today it is a slipped plan, not just an available task.
+      // on Today it is a slipped plan, not just an available task. Unsorted
+      // cards are hollow (task-inbox), as on Open and Focus.
       const body = isFolded ? '' : s.tasks.map((t, i) =>
         (unsorted && i === 0 ? sub('Unsorted', unsorted) : '') +
         (unsorted && i === unsorted ? sub('Sorted', s.tasks.length - unsorted) : '') +
-        taskHTML(t, true, 'board-item' + (TasksCore.isCarried(t, today) ? ' task-carried' : ''))).join('');
+        taskHTML(t, true, 'board-item' + (i < unsorted ? ' task-inbox' : '') +
+          (TasksCore.isCarried(t, today) ? ' task-carried' : ''))).join('');
       return header + body;
     }).join('');
     app.listEl.innerHTML = html;

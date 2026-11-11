@@ -1454,6 +1454,9 @@ def test_board_unplanned_shows_unsorted_apart_and_reorders(page, wiki):
     page.goto("/tasks?view=plan")
     expect(card(page, "Fresh")).to_be_visible()
     assert _unplanned_rows(page) == ["# Unsorted", "Fresh", "# Sorted", "Alpha", "Bravo"]
+    # Unsorted cards are hollow, as on Open and Focus; Sorted ones aren't.
+    expect(card(page, "Fresh")).to_have_class(re.compile(r"\btask-inbox\b"))
+    expect(card(page, "Alpha")).not_to_have_class(re.compile(r"\btask-inbox\b"))
     # A drop within Sorted reorders it.
     _drop(card(page, "Bravo"), card(page, "Alpha"), "before")
     wait_until(lambda: _unplanned_rows(page) == ["# Unsorted", "Fresh", "# Sorted", "Bravo", "Alpha"])
@@ -1464,6 +1467,7 @@ def test_board_unplanned_shows_unsorted_apart_and_reorders(page, wiki):
     page.reload()
     expect(card(page, "Fresh")).to_be_visible()
     assert _unplanned_rows(page) == ["Bravo", "Fresh", "Alpha"]
+    expect(card(page, "Fresh")).not_to_have_class(re.compile(r"\btask-inbox\b"))
     # Sorted by deadline (or creation), no labels and no reordering.
     page.locator("select.tasks-sort").select_option("due")
     expect(page.locator(".plan-subdivider")).to_have_count(0)
