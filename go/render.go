@@ -91,7 +91,7 @@ func renderMd(rq *Req, text string, o RenderOpts) string {
 	prefer = append(prefer, o.PreferLists...)
 	fmHTML := renderFrontmatterHTML(meta, !o.HideTags, !o.HideTldr)
 	text, stash := mdtext.MaskCode(text)
-	text, embeds := processTasksEmbeds(rq, text, o.Page)
+	text, embeds := processTasksEmbeds(rq, text, o.Page, o.EditSlug != "" && o.EditSlug == o.Page)
 	text, refs := maskTaskRefs(text)
 	text = mdtext.UnmaskCode(escapeWikilinkPipes(text), stash)
 	env := &Env{EditSlug: o.EditSlug, SectionKeys: o.SectionKeys, SectionChips: sectionTaskChips(rq, o.SectionTasks, prefer), Host: requestHost(rq),

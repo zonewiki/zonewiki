@@ -17,7 +17,7 @@ var sharing = &Req{sharing: true}
 // swapped for placeholders, wikilinks' pipes escaped, code back.
 func prepare(text string) (string, []tasksEmbed, []string) {
 	text, stash := mdtext.MaskCode(text)
-	text, embeds := processTasksEmbeds(nil, text, "")
+	text, embeds := processTasksEmbeds(nil, text, "", false)
 	text, refs := maskTaskRefs(text)
 	return mdtext.UnmaskCode(escapeWikilinkPipes(text), stash), embeds, refs
 }

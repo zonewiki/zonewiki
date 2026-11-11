@@ -561,8 +561,10 @@ type pageMetaEntry struct {
 func pageTasksEmbeds(content string) []TasksParams {
 	masked, _ := mdtext.MaskCode(content)
 	var out []TasksParams
-	for _, m := range tasksRE.FindAllStringSubmatch(masked, -1) {
-		out = append(out, parseTasksParams(embedArgs(m)))
+	for i, m := range tasksRE.FindAllStringSubmatch(masked, -1) {
+		p := parseTasksParams(embedArgs(m))
+		p.src = &embedSrc{i, embedArgs(m)}
+		out = append(out, p)
 	}
 	return out
 }

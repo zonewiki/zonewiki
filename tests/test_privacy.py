@@ -600,6 +600,9 @@ WRITES = [
     ("POST /api/upload", "POST", "/api/upload", {"data": lambda: {"file": (BytesIO(b"bob"), "x.png"),
                                                                   "filename": "../private/alice/photo.png",
                                                                   "overwrite": "1"}}),
+    # The settings dialog: the [[tasks: …]] on alice's page.
+    ("POST /api/tasks/settings", "POST", "/api/tasks/settings",
+     {"json": {"page": "private/alice/deck", "index": 0, "was": "pin=1 list=secretlist", "set": {"list": "stolen", "pin": ""}}}),
     # alice's tasks, by id; bob's own private task goes into his files.
     ("POST /api/tasks", "POST", "/api/tasks", {"json": {"title": "Bob's", "private": True}}),
     ("PUT /api/tasks/{id}", "PUT", f"/api/tasks/{TASK_ID}", {"json": {"title": "Bob was here"}}),

@@ -368,7 +368,7 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 		Git: cfg.GitEnabled, RenameError: q.Get("rename_error"), RenameName: q.Get("rename_name"), LeftDraft: left,
 		PrivateOffer: privateOffer, Paste: pasteHint(rq, q.Get("paste"), q.Get("copied") == "1"),
 		BreadcrumbHTML: buildBreadcrumb(rq, slug, title, "", "", extra),
-		TasksHTML:      htmlOf(buildTasksEmbed(rq, TasksParams{}, 0, true, ownPrivate(rq.user, slug)))})
+		TasksHTML:      htmlOf(buildTasksEmbed(rq, TasksParams{}, 0, true, ownPrivate(rq.user, slug), ""))})
 }
 
 // postedContent: the editor's text, the browser's CRLF line ends as LF.
@@ -874,7 +874,13 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	}
 	// A list declared in the user's private folder makes private tasks, as there.
 	private := home != nil && ownPrivate(rq.user, home.Slug)
-	tasksHTML := buildTasksEmbed(rq, params, 0, false, private)
+	at := ""
+	if home != nil {
+		at = home.Slug
+	} else if list == "" {
+		params = allTasksParams() // All tasks: its own settings
+	}
+	tasksHTML := buildTasksEmbed(rq, params, 0, false, private, at)
 	// The list switcher, this list (or All) current.
 	place := "all"
 	if list != "" {
@@ -888,7 +894,8 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		place, title, heading, crumbs, key = "pinned", "Pinned", "Pinned", []crumb{{"Tasks", "/tasks"}, {"Pinned", ""}}, "/tasks?pinned=1"
-		tasksHTML = buildTasksEmbed(rq, rq.pinnedView(), 0, false, rq.defaultPrivate())
+		// Its settings are the default list's, whose params it has.
+		tasksHTML = buildTasksEmbed(rq, rq.pinnedView(), 0, false, rq.defaultPrivate(), pinned[0].Slug)
 	}
 	places := rq.taskPlaces()
 	for i := range places {

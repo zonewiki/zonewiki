@@ -3506,3 +3506,94 @@ def test_rename_list_dialog(page, wiki):
     expect(card(page, "Milk")).to_be_visible()
     assert "list=food" in (wiki.root / "shop.md").read_text()
 
+
+
+def test_settings_dialog_changes_the_embeds_params(page, wiki):
+    """The gear beside the density button: what the list opens on, Plan, the
+    tabs' names, the limit and the tags, written into the page's [[tasks: …]]."""
+    page.request.post("/api/tasks", data={"title": "Milk", "tags": ["shop"]})
+    wiki.write("shopping", "# Shopping\n\nBefore.\n\n[[tasks: list=shop keep=1]]\n\nAfter.\n")
+    page.goto("/page/shopping")
+    expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Focus"])
+    page.locator("#task-settings-btn").click()
+    dialog = page.locator("#task-settings-modal")
+    expect(dialog).to_be_visible()
+    # It opens with what the page says.
+    expect(dialog.locator("[name=view]")).to_have_value("focus")
+    expect(dialog.locator("[name=plan]")).to_be_checked()
+    expect(dialog.locator("[name=list]")).to_have_value("shop")
+    expect(dialog.locator("[name=pin]")).to_have_value("")
+    # The app's shortcuts leave the dialog's typing alone.
+    dialog.locator("[name=label_open]").fill("To buy")
+    dialog.locator("[name=label_focus]").fill("Cart")
+    dialog.locator("[name=view]").select_option("open")
+    dialog.locator("[name=plan]").uncheck()
+    dialog.locator("[name=limit]").fill("6")
+    dialog.locator("[name=new]").fill("weekly, fresh")
+    with page.expect_navigation():
+        dialog.get_by_role("button", name="Save").click()
+    assert wiki.read("shopping") == ("# Shopping\n\nBefore.\n\n"
+                                     "[[tasks: list=shop keep=1 new=weekly,fresh view=open limit=6 labels=To_buy,Cart]]\n\nAfter.\n")
+    # The page opens as set: the Open tab, by its new name, as one list.
+    expect(page.locator("#tasks-tabs [role='tab']")).to_have_text(["To buy", "Cart"])
+    expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["To buy"])
+    expect(page.get_by_role("switch", name="Plan")).to_have_attribute("aria-checked", "false")
+
+    # Saving without a change writes nothing; one change leaves the rest.
+    page.locator("#task-settings-btn").click()
+    expect(dialog.locator("[name=view] option")).to_have_text(["To buy", "Cart"])
+    expect(dialog.locator("[name=label_open]")).to_have_value("To buy")
+    expect(dialog.locator("[name=limit]")).to_have_value("6")
+    dialog.get_by_role("button", name="Save").click()
+    expect(dialog).to_be_hidden()
+    page.locator("#task-settings-btn").click()
+    dialog.locator("[name=plan]").check()
+    dialog.locator("[name=pin]").select_option("default")
+    with page.expect_navigation():
+        dialog.get_by_role("button", name="Save").click()
+    assert "[[tasks: list=shop keep=1 new=weekly,fresh view=plan limit=6 labels=To_buy,Cart pin=default]]" in wiki.read("shopping")
+    expect(page.get_by_role("switch", name="Plan")).to_have_attribute("aria-checked", "true")
+
+    # The list on /tasks has the same gear, for the same line of the page.
+    page.goto("/tasks?list=shop")
+    page.locator("#task-settings-btn").click()
+    expect(dialog.locator(".task-settings-where")).to_contain_text("shopping")
+    dialog.locator("[name=view]").select_option("focus")
+    with page.expect_navigation():
+        dialog.get_by_role("button", name="Save").click()
+    assert "[[tasks: list=shop keep=1 new=weekly,fresh view=focus limit=6 labels=To_buy,Cart pin=default]]" in wiki.read("shopping")
+    expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Cart"])
+
+
+def test_plan_default_and_all_tasks_settings(page, wiki):
+    """plan=off: Open is one list on a fresh load; a flip of the switch lasts
+    for the browser tab. All tasks keeps its settings in _tasks/settings.json."""
+    page.request.post("/api/tasks", data={"title": "Some task"})
+    wiki.write("tasks", "# Tasks\n\n[[tasks: plan=off]]\n")
+    page.goto("/page/tasks")
+    plan = page.get_by_role("switch", name="Plan")
+    page.locator("#tasks-tabs [data-view='open']").click()
+    expect(plan).to_have_attribute("aria-checked", "false")
+    plan.click()
+    expect(plan).to_have_attribute("aria-checked", "true")
+    page.locator("#tasks-tabs [data-view='focus']").click()
+    page.locator("#tasks-tabs [data-view='open']").click()
+    expect(plan).to_have_attribute("aria-checked", "true")
+    # A new browser tab starts at the default again.
+    other = page.context.new_page()
+    other.goto("/page/tasks")
+    other.locator("#tasks-tabs [data-view='open']").click()
+    expect(other.get_by_role("switch", name="Plan")).to_have_attribute("aria-checked", "false")
+    other.close()
+
+    page.goto("/tasks")
+    page.locator("#task-settings-btn").click()
+    dialog = page.locator("#task-settings-modal")
+    expect(dialog.locator(".task-settings-embed")).to_be_hidden()
+    dialog.locator("[name=view]").select_option("open")
+    dialog.locator("[name=plan]").uncheck()
+    with page.expect_navigation():
+        dialog.get_by_role("button", name="Save").click()
+    assert '"view": "open"' in (wiki.root / "_tasks" / "settings.json").read_text()
+    expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Open"])
+    expect(plan).to_have_attribute("aria-checked", "false")

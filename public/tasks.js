@@ -17,6 +17,7 @@ import { initTaskSelect } from './js/taskselect.js';
 import { initTaskMenu } from './js/taskmenu.js';
 import { initTaskDnd } from './js/taskdnd.js';
 import { initTaskTouch } from './js/tasktouch.js';
+import { initTaskSettings } from './js/tasksettings.js';
 import { DATES, LOCALE, attachTagAc, commentStamp, commentWhen, dateOffset, dueDateClass, esc, formatDate, hashWordAtCaret, insertHashTag, isDueNow, noSpacesInTags, noticeFromResponse, placeToast, shortDate, showNotice, startsAfterDeadline, todayStr, urgencyClass } from './js/taskutil.js';
 
 // Pure task logic lives in tasks-core.js.
@@ -183,7 +184,7 @@ const app = {
   leftViewMessage, keepSnapshot, afterBatchWrite, chipField, createTask, filterDefaultTags,
   flashTask, highlightCode, textsOf, renderTexts, foldId, toggleDetails, beginComplete,
   cancelPendingComplete, sectionHTML, sortTasks, linkifyTitle, syncCompletedLink, switchTab,
-  userFiltering,
+  userFiltering, forgetSession,
   // what is set further down, or changes
   get activeTasksInstance() { return activeTasksInstance; },
   get sectionKey() { return sectionKey; },
@@ -488,13 +489,20 @@ sortSel?.addEventListener('change', () => setSort(sortSel.value));
 // Sorted, where the manual order is ranked across everything). Plan was a
 // tab of its own until 2026-10; the views keep their names, so `view=plan`
 // and `view=open` links still open the one they always did. The Plan
-// switch (d) toggles; the choice is remembered per task list in this browser,
-// and the Open tab opens it.
+// switch (d) toggles. The Open tab opens what plan= says (the settings
+// dialog's Plan; the board without it); a flip of the switch is remembered
+// for this browser tab only (sessionStorage), as the active tab is, so a
+// fresh load is back at the default.
 const isOpenTab = view => view === 'open' || view === 'plan';
 const groupKey = () => 'zone-tasks-group:' + [location.pathname, appEl?.dataset.initList || '',
   appEl?.dataset.initTag || '', instanceId].join('|');
+const initPlan = appEl?.dataset.initPlan || '';   // [[tasks: plan=on|off]]
 function openGroup() {
-  try { return localStorage.getItem(groupKey()) === 'list' ? 'open' : 'plan'; } catch (_) { return 'plan'; }
+  let stored = null;
+  try { stored = sessionStorage.getItem(groupKey()); } catch (_) {}
+  if (stored === 'list') return 'open';
+  if (stored === 'days') return 'plan';
+  return initPlan === 'off' ? 'open' : 'plan';
 }
 function applyGroup() {
   if (!planSwitch) return;
@@ -503,7 +511,7 @@ function applyGroup() {
 }
 function setGroup(group) {
   if (!isOpenTab(st.activeView)) return;
-  try { localStorage.setItem(groupKey(), group); } catch (_) {}
+  try { sessionStorage.setItem(groupKey(), group); } catch (_) {}
   switchTab(group === 'list' ? 'open' : 'plan');
 }
 planSwitch?.addEventListener('click', () => setGroup(st.activeView === 'plan' ? 'list' : 'days'));
@@ -656,6 +664,11 @@ st.completedYears = [];   // years Completed can show (/api/tasks/completed-year
 const tabStorageKey = `zone-tasks-tab:${location.pathname}#${instanceId}`;
 function saveActiveTab(f) { try { sessionStorage.setItem(tabStorageKey, f); } catch (_) {} }
 function loadActiveTab() { try { return sessionStorage.getItem(tabStorageKey); } catch (_) { return null; } }
+// The settings dialog saved: the tab and the Plan switch this browser tab
+// remembered give way to the new defaults.
+function forgetSession() {
+  try { sessionStorage.removeItem(tabStorageKey); sessionStorage.removeItem(groupKey()); } catch (_) {}
+}
 
 // ── Undo toast ────────────────────────────────────────────────────────────
 
@@ -1465,6 +1478,7 @@ function filterDefaultTags() {
 }
 
 Object.assign(app, initTaskModal(app));
+initTaskSettings(app);
 const { cleanTag, chipsOnSeparators, renderComments, openEditModal } = app;
 
 // ── Drag and Drop ──────────────────────────────────────────────────────────
@@ -1507,7 +1521,7 @@ document.addEventListener('keydown', async e => {
     return;
   }
 
-  if (modal.open || deleteModal.open || document.querySelector('dialog[open].modal')) return;
+  if (modal.open || deleteModal.open || document.querySelector('dialog[open].modal, dialog[open].task-settings-modal')) return;
   const focus = document.activeElement;
 
   // '/' focuses the filter field; '#' focuses it and starts a tag word

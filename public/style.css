@@ -2799,7 +2799,7 @@ div.chip-input > input {
   .tasks-app:not(.tasks-compact) .task-meta:has(.task-date-empty) { display: flex; }
 }
 
-.tasks-density-btn { display: inline-flex; align-items: center; justify-content: center; padding-inline: .45rem; color: var(--muted); }
+.tasks-density-btn, .tasks-settings-btn { display: inline-flex; align-items: center; justify-content: center; padding-inline: .45rem; color: var(--muted); }
 .tasks-density-btn[aria-pressed="true"] { color: var(--btn-primary); border-color: var(--btn-primary); }
 .tasks-toolbar select.tasks-sort { flex: none; }
 .tasks-sort[hidden] { display: none; }
@@ -3218,6 +3218,16 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 .task-edit-modal .wikilink-ac { position: absolute; }
 .task-edit-modal::backdrop { background: rgba(0,0,0,.4); }
 .task-edit-form { display: flex; flex-direction: column; gap: .75rem; }
+/* A task app's settings dialog (js/tasksettings.js) */
+.task-settings-modal { max-width: 30rem; }
+.task-settings-row { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+.task-settings-row .task-field { min-width: 0; }
+.task-settings-embed { display: flex; flex-direction: column; gap: .75rem; }
+.task-settings-embed[hidden] { display: none; }
+.task-settings-check { display: flex; align-items: center; gap: .5rem; font-size: .9rem; }
+.task-settings-where { margin: 0; }
+.task-settings-error { margin: 0; font-size: .85rem; color: #a33232; }
+.task-settings-error[hidden] { display: none; }
 .task-field { display: flex; flex-direction: column; gap: .25rem; }
 /* Notes: the label with Edit | Preview beside it, the editor's formatting
    bar, the textarea, or the preview in its place (tasks.js setNotesPreview). */

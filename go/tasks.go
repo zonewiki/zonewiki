@@ -10,6 +10,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -186,9 +188,26 @@ const tasksPlaceholder = "LEAFTASKSPLACEHOLDER"
 // buildTasksEmbed renders the task app for user on a page (instance numbers
 // a page's embeds); headless hides it but for its edit modal (the editor's
 // Make task, c t on any page), and tasks.js skips its shortcuts. private:
-// a new task here is private (a page in user's own folder).
-func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless, private bool) string {
+// a new task here is private (a page in user's own folder). page: the page
+// whose text holds the params (params.src), "" for none: with it, or with
+// the settings of All tasks, the embed has the settings dialog (the gear),
+// but for a viewer and in sharing mode.
+func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless, private bool, page string) string {
 	user := rq.who()
+	var settingsAt M
+	if src := params.src; src != nil && !headless && rq != nil && !rq.sharing && (src.index < 0 && page == "" && mayWriteTasks(user) == nil ||
+		src.index >= 0 && page != "" && canWrite(user, page)) {
+		settingsAt = M{"page": page, "index": src.index, "raw": src.raw}
+	}
+	// view= with plan=: the Open tab as plan= says, whichever of its two
+	// views view= names.
+	view, plan := embedView(params), embedPlan(params)
+	switch {
+	case plan != "" && (view == "open" || view == "plan"):
+		view = map[string]string{"on": "plan", "off": "open"}[plan]
+	case view == "open":
+		plan = "off" // view=open has always been the one list
+	}
 	// limit=N: the WIP limit (Focus warning, Plan day flags).
 	limit := ""
 	if n, err := strconv.Atoi(strings.TrimSpace(params.Get("limit"))); err == nil {
@@ -227,7 +246,7 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless, privat
 	}
 	var b bytes.Buffer
 	err := partials.ExecuteTemplate(&b, "tasks_embed", map[string]any{
-		"tag": params.Get("tag"), "list": cleanList(params.Get("list")), "view": embedView(params),
+		"tag": params.Get("tag"), "list": cleanList(params.Get("list")), "view": view, "plan": plan, "settings": settingsAt,
 		"limit": limit, "labels": labels, "instance_id": instance, "sfx": sfx, "headless": headless,
 		// keep=1: new tasks here are keep tasks; pin=1: a pinned list (its New
 		// is the one New task clicks on its page); new=: new tasks' tags.
@@ -243,19 +262,142 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless, privat
 	return b.String()
 }
 
+// ---- the settings dialog ----
+
+// allTasksFile: the settings of All tasks (/tasks), which no page's
+// [[tasks: …]] holds: {"all": {"view": "open", …}}, the params an embed
+// would have (allSettingKeys).
+func allTasksFile() string { return filepath.Join(tasksDir(""), "settings.json") }
+
+// allTasksParams: the params of All tasks, from allTasksFile; none when
+// there is no file or it can't be read.
+func allTasksParams() TasksParams {
+	var stored map[string]map[string]string
+	if raw, err := os.ReadFile(allTasksFile()); err == nil {
+		if err := json.Unmarshal(raw, &stored); err != nil {
+			logf("%s: %v", allTasksFile(), err)
+		}
+	}
+	set, err := checkEmbedSettings(stored["all"], allSettingKeys)
+	if err != nil {
+		logf("%s: %v", allTasksFile(), err)
+		set = nil
+	}
+	raw := setEmbedArgs("", set)
+	p := parseTasksParams(raw)
+	p.src = &embedSrc{-1, raw}
+	return p
+}
+
+// setAllTasksParams writes the settings of All tasks with those of set
+// changed, in a commit by user; was: the params as the dialog saw them.
+func setAllTasksParams(user, was string, set map[string]string) error {
+	if err := mayWriteTasks(user); err != nil {
+		return err
+	}
+	set, err := checkEmbedSettings(set, allSettingKeys)
+	if err != nil {
+		return err
+	}
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
+	if allTasksParams().src.raw != was {
+		return errEmbedChanged
+	}
+	p := parseTasksParams(setEmbedArgs(was, set))
+	text, err := json.MarshalIndent(map[string]map[string]string{"all": p.m}, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := atomicWrite(allTasksFile(), string(text)+"\n"); err != nil {
+		return err
+	}
+	commitTasks(user, "Change the settings of All tasks", []string{allTasksFile()})
+	return nil
+}
+
+// setEmbedParamsOp changes the params of the index-th [[tasks: …]] of the
+// page slug (setEmbedParams), in a commit by user.
+func setEmbedParamsOp(user, slug string, index int, was string, set map[string]string) error {
+	set, err := checkEmbedSettings(set, embedSettingKeys)
+	if err != nil {
+		return err
+	}
+	_, _, _, err = changePageOp(user, slug, "Change the task list's settings on", "", func(old string) (string, error) {
+		text, err := setEmbedParams(old, index, was, set)
+		if err == nil && text == old {
+			return "", refuseAs(refusedUnchanged, "Nothing to change")
+		}
+		return text, err
+	})
+	if pe, ok := refusalOf(err); ok && pe.kind == refusedUnchanged {
+		return nil
+	}
+	return err
+}
+
+// tasksSettingsRoute: the settings dialog's Save: {page, index, was, set}
+// for an embed on a page, {all: true, was, set} for All tasks; set: the
+// params to change, "" taking one out. Answers {ok} or {error}.
+func tasksSettingsRoute(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Page  string            `json:"page"`
+		Index int               `json:"index"`
+		All   bool              `json:"all"`
+		Was   string            `json:"was"`
+		Set   map[string]string `json:"set"`
+	}
+	raw, err := io.ReadAll(r.Body)
+	if err != nil || json.Unmarshal(raw, &body) != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Request body must be a JSON object"})
+		return
+	}
+	user := userOf(r)
+	if body.All {
+		err = setAllTasksParams(user, body.Was, body.Set)
+	} else {
+		err = setEmbedParamsOp(user, body.Page, body.Index, body.Was, body.Set)
+	}
+	var ae *apiError
+	pe, refused := refusalOf(err)
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	case errors.As(err, &ae):
+		writeJSON(w, ae.status, map[string]string{"error": ae.msg})
+	case refused && pe.kind == refusedReadOnly:
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": pe.msg})
+	case refused && pe.kind == refusedNotFound:
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": pe.msg})
+	case refused:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": pe.msg})
+	default:
+		// Written, but not committed (notCommitted): the page has the change.
+		logf("%s %s: %v", r.Method, r.URL.Path, err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "The settings couldn't be saved (Zone's log says why)"})
+	}
+}
+
 type tasksEmbed struct{ placeholder, html string }
 
 // processTasksEmbeds swaps each [[tasks: …]] for a placeholder; the embeds'
 // HTML replaces them after rendering (injectTasksEmbeds). page: the page
 // rendered ("" none); in rq's user's own folder its embeds make private
-// tasks.
-func processTasksEmbeds(rq *Req, text, page string) (string, []tasksEmbed) {
+// tasks. settings: text is that page's as its file has it (a page view,
+// not a preview or an old version), so the embeds get the settings dialog.
+func processTasksEmbeds(rq *Req, text, page string, settings bool) (string, []tasksEmbed) {
+	at := ""
+	if settings {
+		at = page
+	}
 	private := page != "" && ownPrivate(rq.who(), page)
 	var embeds []tasksEmbed
 	text = tasksRE.ReplaceAllStringFunc(text, func(m string) string {
 		g := tasksRE.FindStringSubmatch(m)
 		ph := tasksPlaceholder + "_" + strconv.Itoa(len(embeds))
-		embeds = append(embeds, tasksEmbed{ph, buildTasksEmbed(rq, parseTasksParams(embedArgs(g)), len(embeds), false, private)})
+		params := parseTasksParams(embedArgs(g))
+		params.src = &embedSrc{len(embeds), embedArgs(g)}
+		embeds = append(embeds, tasksEmbed{ph, buildTasksEmbed(rq, params, len(embeds), false, private, at)})
 		return ph
 	})
 	return text, embeds
@@ -420,8 +562,9 @@ func tasksRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/tasks/headless", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		rq := newReq(r)
-		_, _ = io.WriteString(w, buildTasksEmbed(rq, TasksParams{}, 0, true, rq.defaultPrivate()))
+		_, _ = io.WriteString(w, buildTasksEmbed(rq, TasksParams{}, 0, true, rq.defaultPrivate(), ""))
 	})
+	mux.HandleFunc("POST /api/tasks/settings", writesPages(tasksSettingsRoute))
 	mux.HandleFunc("GET /api/tasks/completed", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		year, err := yearArg(r)
 		if err != nil {

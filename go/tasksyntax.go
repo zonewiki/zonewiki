@@ -4,8 +4,10 @@ package main
 
 import (
 	"math"
+	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -47,10 +49,20 @@ var (
 	mdLinkRE  = regexp.MustCompile(`\[([^\]]*)\]\(/page/([^)]+)\)`)
 )
 
-// TasksParams are an embed's key=value pairs, in order.
+// TasksParams are an embed's key=value pairs, in order. src: where they are
+// written, for the settings dialog (nil: nowhere it can change).
 type TasksParams struct {
 	keys []string
 	m    map[string]string
+	src  *embedSrc
+}
+
+// embedSrc: where an embed's params are written: the index-th [[tasks: …]]
+// of a page, outside code (-1: the settings of All tasks, allTasksFile),
+// and the params as written there.
+type embedSrc struct {
+	index int
+	raw   string
 }
 
 func (p TasksParams) Get(k string) string { return p.m[k] }
@@ -59,7 +71,7 @@ func (p TasksParams) Has(k string) bool { _, ok := p.m[k]; return ok }
 
 // With is a copy with k set (last when new).
 func (p TasksParams) With(k, v string) TasksParams {
-	c := TasksParams{keys: append([]string(nil), p.keys...), m: map[string]string{}}
+	c := TasksParams{keys: append([]string(nil), p.keys...), m: map[string]string{}, src: p.src}
 	for key, val := range p.m {
 		c.m[key] = val
 	}
@@ -175,6 +187,128 @@ func renameTagInText(text, old, name string) string {
 		return m[:at] + renameInTasksURL(m[at:], old, name)
 	})
 	return mdtext.UnmaskCode(masked, stash)
+}
+
+// The params the settings dialog sets (js/tasksettings.js), in the order
+// new ones are written; those of All tasks, which has no filter and no pin.
+var (
+	embedSettingKeys = []string{"list", "tag", "new", "view", "plan", "limit", "labels", "pin"}
+	allSettingKeys   = []string{"new", "view", "plan", "limit", "labels"}
+	embedValueRE     = regexp.MustCompile(`^[^\[\]` + "`" + `]*$`)
+)
+
+// checkEmbedSettings: set as params the dialog may write, each value
+// trimmed; "" takes a param out. keys: those allowed.
+func checkEmbedSettings(set map[string]string, keys []string) (map[string]string, error) {
+	out := map[string]string{}
+	for k, v := range set {
+		v = strings.TrimSpace(v)
+		bad := func() error { return badRequest("Not a value for " + k + ": " + strconv.Quote(v)) }
+		if !slices.Contains(keys, k) {
+			return nil, badRequest("Not a setting: " + strconv.Quote(k))
+		}
+		if len(v) > 300 || !embedValueRE.MatchString(v) || len(strings.Fields(v)) > 1 {
+			return nil, bad()
+		}
+		if v != "" {
+			switch k {
+			case "view":
+				if v = strings.ToLower(v); !slices.Contains(tasksViews, v) {
+					return nil, bad()
+				}
+			case "plan":
+				if v = strings.ToLower(v); v != "on" && v != "off" {
+					return nil, bad()
+				}
+			case "limit":
+				if n, err := strconv.Atoi(v); err != nil || n < 1 || n > 99 {
+					return nil, badRequest("The limit is a number from 1 to 99")
+				}
+			case "pin":
+				if v = strings.ToLower(v); v != "1" && v != "default" {
+					return nil, bad()
+				}
+			case "list":
+				if v = cleanList(v); v == "" {
+					return nil, bad()
+				}
+			case "new":
+				v = strings.Join(cleanTags(strings.Split(v, ",")), ",")
+			}
+		}
+		out[k] = v
+	}
+	return out, nil
+}
+
+// setEmbedArgs: an embed's params as written with those of set changed: a
+// param keeps its place, a new one goes last (in embedSettingKeys' order),
+// one set to "" goes; the others stay as written. pin also replaces home,
+// its old name.
+func setEmbedArgs(args string, set map[string]string) string {
+	var out []string
+	done := map[string]bool{}
+	for _, word := range strings.Fields(args) {
+		k, _, ok := strings.Cut(word, "=")
+		key := strings.ToLower(k)
+		if _, pin := set["pin"]; ok && key == "home" && pin {
+			continue
+		}
+		v, changes := set[key]
+		switch {
+		case !ok || !changes:
+			out = append(out, word)
+		case !done[key] && v != "":
+			out = append(out, key+"="+v)
+		}
+		done[key] = done[key] || ok && changes
+	}
+	for _, k := range embedSettingKeys {
+		if v := set[k]; v != "" && !done[k] {
+			out = append(out, k+"="+v)
+		}
+	}
+	return strings.Join(out, " ")
+}
+
+// errEmbedChanged: the embed isn't written as the dialog saw it.
+var errEmbedChanged = &apiError{http.StatusConflict, "The page has changed since. Reload it and try again."}
+
+// setEmbedParams: text with the params of its n-th [[tasks: …]] outside
+// code changed (setEmbedArgs); was: the params as the caller saw them, and
+// anything else there is errEmbedChanged.
+func setEmbedParams(text string, n int, was string, set map[string]string) (string, error) {
+	masked, stash := mdtext.MaskCode(text)
+	all := tasksRE.FindAllStringSubmatchIndex(masked, -1)
+	if n < 0 || n >= len(all) {
+		return "", errEmbedChanged
+	}
+	at := all[n]
+	from, to := at[2], at[3] // the args of [[tasks: …]]
+	if from < 0 {
+		from, to = at[4], at[5] // of [[deck …]]
+		if from < 0 {
+			from, to = at[1]-2, at[1]-2 // [[deck]]
+		}
+	}
+	if masked[from:to] != was {
+		return "", errEmbedChanged
+	}
+	args := setEmbedArgs(was, set)
+	if args != "" {
+		args = " " + args
+	}
+	head := strings.TrimRight(masked[:from], " \t")
+	return mdtext.UnmaskCode(head+args+masked[to:], stash), nil
+}
+
+// embedPlan: an embed's plan=: "on" or "off" (the Open tab grouped by start
+// date, or one list), "" when it doesn't say.
+func embedPlan(p TasksParams) string {
+	if v := strings.ToLower(strings.TrimSpace(p.Get("plan"))); v == "on" || v == "off" {
+		return v
+	}
+	return ""
 }
 
 // The tasks' views, by the names [[tasks: view=…]] and ?view= use.

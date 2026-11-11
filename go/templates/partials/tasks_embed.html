@@ -3,7 +3,7 @@
     on any page). Its params reach tasks.js as data-init-* attributes; ids
     get a -<n> suffix (sfx) after a page's first embed. */ -}}
 {{define "tasks_embed" -}}
-<div class="tasks-app" id="tasks-app{{.sfx}}"{{if .headless}} data-headless="1" style="display:none"{{end}} data-init-tag="{{.tag}}" data-init-list="{{.list}}" data-lists="{{.lists_json}}" data-list-homes="{{.homes_json}}" data-init-view="{{.view}}" data-init-limit="{{.limit}}" data-init-keep="{{.keep}}"{{if .private}} data-init-private="1"{{end}}{{with .private_folder}} data-private-folder="{{.}}"{{end}} data-init-new="" data-instance="{{.instance_id}}"{{if .pinned}} data-pinned="1"{{end}}{{with .new_tags}} data-new-tags="{{.}}"{{end}}>
+<div class="tasks-app" id="tasks-app{{.sfx}}"{{if .headless}} data-headless="1" style="display:none"{{end}} data-init-tag="{{.tag}}" data-init-list="{{.list}}" data-lists="{{.lists_json}}" data-list-homes="{{.homes_json}}" data-init-view="{{.view}}" data-init-plan="{{.plan}}" data-init-limit="{{.limit}}" data-init-keep="{{.keep}}"{{if .private}} data-init-private="1"{{end}}{{with .private_folder}} data-private-folder="{{.}}"{{end}} data-init-new="" data-instance="{{.instance_id}}"{{if .pinned}} data-pinned="1"{{end}}{{with .new_tags}} data-new-tags="{{.}}"{{end}}{{with .settings}} data-settings-page="{{.page}}" data-settings-index="{{.index}}" data-settings-raw="{{.raw}}"{{end}}>
   <div class="tasks-header">
     <div class="view-tabs" id="tasks-tabs{{.sfx}}" role="tablist" aria-label="View">
       <button type="button" role="tab" data-view="open" aria-selected="false">{{index .labels 0}}</button>
@@ -16,6 +16,8 @@
       <input type="text" id="task-filter-search{{.sfx}}" placeholder="Search… #tag" title="Text searches title and notes · #tag filters by tag · #a #b = both tags · #a|b = either · -#tag = without" autocomplete="off">
       <select class="tasks-sort" id="task-sort{{.sfx}}" aria-label="Order" title="Order (o)" hidden><option value="manual">Manual</option><option value="due">Due date</option><option value="created">Created</option></select>
       <button type="button" class="btn tasks-density-btn" id="task-density-btn{{.sfx}}" aria-pressed="false" aria-label="One line per task" title="One line per task (v)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><line x1="2.5" y1="4" x2="13.5" y2="4"/><line x1="2.5" y1="8" x2="13.5" y2="8"/><line x1="2.5" y1="12" x2="13.5" y2="12"/></svg></button>
+      {{- /* The settings dialog (js/tasksettings.js): where this app's params can be changed. */}}
+      {{if .settings}}<button type="button" class="btn tasks-settings-btn" id="task-settings-btn{{.sfx}}" aria-label="List settings" title="List settings: what it opens on, its names, limit and tags"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>{{end}}
       <button class="btn btn-primary" id="task-add-btn{{.sfx}}" aria-label="New task" title="New task (n)">+<span class="task-add-label"> New</span></button>
     </div>
   </div>
@@ -155,4 +157,61 @@
     <button type="button" class="btn" id="task-deadline-cancel{{.sfx}}">Cancel</button>
   </div>
 </dialog>
+{{if .settings}}
+<dialog id="task-settings-modal{{.sfx}}" class="task-edit-modal task-settings-modal">
+  <form id="task-settings-form{{.sfx}}" class="task-edit-form">
+    <div class="modal-label">List settings</div>
+    <p class="field-hint task-settings-where" id="task-settings-where{{.sfx}}"></p>
+    <div class="task-settings-row">
+      <div class="task-field">
+        <label for="task-settings-view{{.sfx}}">Opens on</label>
+        <select id="task-settings-view{{.sfx}}" name="view"><option value="focus">Focus</option><option value="open">Open</option></select>
+      </div>
+      <div class="task-field">
+        <label for="task-settings-limit{{.sfx}}">WIP limit</label>
+        <input type="number" id="task-settings-limit{{.sfx}}" name="limit" min="1" max="99" placeholder="none" inputmode="numeric">
+      </div>
+    </div>
+    <label class="task-settings-check"><input type="checkbox" id="task-settings-plan{{.sfx}}" name="plan"> Plan: the Open tab grouped by start date</label>
+    <div class="task-settings-row">
+      <div class="task-field">
+        <label for="task-settings-label-open{{.sfx}}">Name of the Open tab</label>
+        <input type="text" id="task-settings-label-open{{.sfx}}" name="label_open" placeholder="Open" maxlength="30" autocomplete="off">
+      </div>
+      <div class="task-field">
+        <label for="task-settings-label-focus{{.sfx}}">Name of the Focus tab</label>
+        <input type="text" id="task-settings-label-focus{{.sfx}}" name="label_focus" placeholder="Focus" maxlength="30" autocomplete="off">
+      </div>
+    </div>
+    <div class="task-field">
+      <label for="task-settings-new{{.sfx}}">Tags of a new task</label>
+      <input type="text" id="task-settings-new{{.sfx}}" name="new" placeholder="those it shows" autocomplete="off">
+      <span class="field-hint">Comma-separated. Empty: the list's tag and the single tags it shows.</span>
+    </div>
+    <div class="task-settings-embed">
+      <div class="task-settings-row">
+        <div class="task-field">
+          <label for="task-settings-list{{.sfx}}">List</label>
+          <input type="text" id="task-settings-list{{.sfx}}" name="list" placeholder="none" autocomplete="off">
+        </div>
+        <div class="task-field">
+          <label for="task-settings-pin{{.sfx}}">Pinned</label>
+          <select id="task-settings-pin{{.sfx}}" name="pin"><option value="">No</option><option value="1">Pinned</option><option value="default">Pinned, the default list</option></select>
+        </div>
+      </div>
+      <span class="field-hint">A list is a tag with a place of its own: this shows the tasks with it. Another name here shows another list; Rename… on the list's page under Tasks renames one.</span>
+      <div class="task-field">
+        <label for="task-settings-tag{{.sfx}}">Shows only the tags</label>
+        <input type="text" id="task-settings-tag{{.sfx}}" name="tag" placeholder="every task" autocomplete="off">
+        <span class="field-hint"><code>a,b</code> both · <code>a|b</code> either · <code>-a</code> without</span>
+      </div>
+    </div>
+    <p class="task-settings-error" id="task-settings-error{{.sfx}}" role="alert" hidden></p>
+    <div class="task-edit-actions">
+      <button type="submit" class="btn btn-primary">Save</button>
+      <button type="button" class="btn" id="task-settings-cancel{{.sfx}}">Cancel</button>
+    </div>
+  </form>
+</dialog>
+{{end}}
 {{- end}}
