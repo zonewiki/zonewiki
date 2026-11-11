@@ -191,8 +191,10 @@ func renameTagInText(text, old, name string) string {
 
 // The params the settings dialog sets (js/tasksettings.js), in the order
 // new ones are written; those of All tasks, which has no filter and no pin.
+// Not list=: which list an embed shows is the page's to say, and a list is
+// renamed by renameTagOp.
 var (
-	embedSettingKeys = []string{"list", "tag", "new", "view", "plan", "limit", "labels", "pin"}
+	embedSettingKeys = []string{"tag", "new", "view", "plan", "limit", "labels", "pin"}
 	allSettingKeys   = []string{"new", "view", "plan", "limit", "labels"}
 	embedValueRE     = regexp.MustCompile(`^[^\[\]` + "`" + `]*$`)
 )
@@ -226,10 +228,6 @@ func checkEmbedSettings(set map[string]string, keys []string) (map[string]string
 				}
 			case "pin":
 				if v = strings.ToLower(v); v != "1" && v != "default" {
-					return nil, bad()
-				}
-			case "list":
-				if v = cleanList(v); v == "" {
 					return nil, bad()
 				}
 			case "new":

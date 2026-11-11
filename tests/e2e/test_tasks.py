@@ -3521,7 +3521,7 @@ def test_settings_dialog_changes_the_embeds_params(page, wiki):
     # It opens with what the page says.
     expect(dialog.locator("[name=view]")).to_have_value("focus")
     expect(dialog.locator("[name=plan]")).to_be_checked()
-    expect(dialog.locator("[name=list]")).to_have_value("shop")
+    expect(dialog.locator("[name=list]")).to_have_count(0)   # which list it shows is the page's to say
     expect(dialog.locator("[name=pin]")).to_have_value("")
     # The app's shortcuts leave the dialog's typing alone.
     dialog.locator("[name=label_open]").fill("To buy")

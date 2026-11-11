@@ -189,21 +189,14 @@
       <span class="field-hint">Comma-separated. Empty: the list's tag and the single tags it shows.</span>
     </div>
     <div class="task-settings-embed">
-      <div class="task-settings-row">
-        <div class="task-field">
-          <label for="task-settings-list{{.sfx}}">List</label>
-          <input type="text" id="task-settings-list{{.sfx}}" name="list" placeholder="none" autocomplete="off">
-        </div>
-        <div class="task-field">
-          <label for="task-settings-pin{{.sfx}}">Pinned</label>
-          <select id="task-settings-pin{{.sfx}}" name="pin"><option value="">No</option><option value="1">Pinned</option><option value="default">Pinned, the default list</option></select>
-        </div>
-      </div>
-      <span class="field-hint">A list is a tag with a place of its own: this shows the tasks with it. Another name here shows another list; Rename… on the list's page under Tasks renames one.</span>
       <div class="task-field">
         <label for="task-settings-tag{{.sfx}}">Shows only the tags</label>
         <input type="text" id="task-settings-tag{{.sfx}}" name="tag" placeholder="every task" autocomplete="off">
         <span class="field-hint"><code>a,b</code> both · <code>a|b</code> either · <code>-a</code> without</span>
+      </div>
+      <div class="task-field">
+        <label for="task-settings-pin{{.sfx}}">Pinned</label>
+        <select id="task-settings-pin{{.sfx}}" name="pin"><option value="">No</option><option value="1">Pinned</option><option value="default">Pinned, the default list</option></select>
       </div>
     </div>
     <p class="task-settings-error" id="task-settings-error{{.sfx}}" role="alert" hidden></p>

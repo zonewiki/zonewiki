@@ -74,7 +74,7 @@ class TestSave:
 
     def test_bad_values_and_pages(self, client, wiki_dir):
         path = write_page(wiki_dir, "lists", "[[tasks:]]\n")
-        for bad in ({"view": "week"}, {"limit": "0"}, {"tag": "a]] x"}, {"keep": "1"}, {"plan": "yes"}):
+        for bad in ({"view": "week"}, {"limit": "0"}, {"tag": "a]] x"}, {"keep": "1"}, {"list": "other"}, {"plan": "yes"}):
             resp = save(client, page="lists", index=0, was="", set=bad)
             assert resp.status_code == 400 and resp.get_json()["error"], bad
         assert save(client, page="nope", index=0, was="", set={"view": "open"}).status_code == 404

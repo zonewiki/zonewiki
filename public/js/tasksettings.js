@@ -36,7 +36,6 @@ function fieldsOf(p) {
     label_focus: name(1),
     limit: Number.isNaN(limit) ? '' : String(Math.max(1, Math.min(99, limit))),
     new: p.new || '',
-    list: p.list || '',
     tag: p.tag || '',
     pin: pin === 'default' ? 'default' : isTrue(pin) || isTrue(p.home) ? '1' : '',
   };
@@ -64,7 +63,7 @@ export function changedParams(was, now, p) {
     set.labels = b ? `${a},${b}` : a;
   }
   for (const k of ['limit', 'pin']) if (now[k] !== was[k]) set[k] = now[k];
-  for (const k of ['new', 'list', 'tag']) if (now[k] !== was[k]) set[k] = oneWord(now[k]);
+  for (const k of ['new', 'tag']) if (now[k] !== was[k]) set[k] = oneWord(now[k]);
   return set;
 }
 
@@ -86,7 +85,7 @@ export function initTaskSettings(app) {
   const read = () => ({
     view: f.view.value, plan: f.plan.checked,
     label_open: f.label_open.value.trim(), label_focus: f.label_focus.value.trim(),
-    limit: f.limit.value.trim(), new: f.new.value.trim(), list: f.list.value.trim(),
+    limit: f.limit.value.trim(), new: f.new.value.trim(),
     tag: f.tag.value.trim(), pin: f.pin.value,
   });
 
@@ -95,7 +94,7 @@ export function initTaskSettings(app) {
     // Opens on: the tabs by their names here; Completed only where a page says so.
     f.view.replaceChildren(...['open', 'focus', fields.view === 'completed' && 'completed'].filter(Boolean)
       .map(v => new Option(v === 'completed' ? 'Completed' : app.tabLabel(v), v)));
-    for (const k of ['view', 'label_open', 'label_focus', 'limit', 'new', 'list', 'tag', 'pin']) f[k].value = fields[k];
+    for (const k of ['view', 'label_open', 'label_focus', 'limit', 'new', 'tag', 'pin']) f[k].value = fields[k];
     f.plan.checked = fields.plan;
     form.querySelector('.task-settings-embed').hidden = all;
     // Where it is written: an embed's page says it itself.
@@ -119,14 +118,7 @@ export function initTaskSettings(app) {
       if (res.ok) {
         // The new defaults count from now: what this tab remembered goes.
         app.forgetSession();
-        // A list given another name is at another address.
-        const url = new URL(location.href);
-        if (set.list !== undefined && url.pathname === '/tasks' && url.searchParams.has('list')) {
-          if (set.list) url.searchParams.set('list', set.list.toLowerCase()); else url.searchParams.delete('list');
-          location.replace(url);
-        } else {
-          location.reload();
-        }
+        location.reload();
         return;
       }
       message = (await res.json()).error || message;
