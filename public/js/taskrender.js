@@ -264,8 +264,8 @@ function render() {
   // under a heading; newest first under one. Not drop targets: nothing
   // drags here.
   if (st.activeView === 'open' && app.activeSort()) {
-    const heading = (label, n) => n ? `<li class="board-day-divider sort-heading">` +
-      `<span class="board-day-label">${label}</span><span class="board-day-count">${n}</span></li>` : '';
+    const heading = (label, n) => n ? `<li class="plan-subdivider sort-heading">` +
+      `<span>${label}</span><span class="board-day-count">${n}</span></li>` : '';
     const group = (label, tasks) => heading(label, tasks.length) + tasks.map(t => taskHTML(t, false)).join('');
     html += app.activeSort() === 'due'
       ? group('By deadline', displayTasks.filter(t => t.due_date)) + group('No deadline', displayTasks.filter(t => !t.due_date))

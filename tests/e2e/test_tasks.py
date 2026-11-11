@@ -3379,7 +3379,7 @@ def _list_rows(page):
     """Headings and task titles on the list, top to bottom."""
     return page.evaluate("""() => [...document.querySelectorAll('.tasks-list > li')].map(li =>
         li.classList.contains('task-item') ? li.querySelector('.task-title').textContent.trim()
-        : '# ' + li.querySelector('.board-day-label')?.textContent.trim())""")
+        : '# ' + li.querySelector('span')?.textContent.trim())""")
 
 
 def test_open_sorts_by_deadline_then_created_and_remembers_it(page, wiki):

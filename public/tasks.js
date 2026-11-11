@@ -1165,19 +1165,14 @@ function sectionKeyMove(direction, list = sectionList(), s = SECTIONS[st.activeV
   applySectionList(rest, group, s);
 }
 
-// A section heading on Open and Focus. It looks like a Plan-board day
-// heading and, like one, takes drops: an empty section is only this row.
-// On Focus it is the light label of the Open tab's board sections
-// (.plan-subdivider), as Focus is a day's list, not a board; it still takes
-// drops.
+// A section heading on Open and Focus: the light label of a Plan section's
+// Unsorted / Sorted (.plan-subdivider), so the two tabs look the same and the
+// labels never read as a day heading. It takes drops: an empty section is
+// only this row.
 function sectionHTML(zone, label, count) {
   const empty = count ? '' : ' board-day--empty';
-  if (st.activeView === 'focus') {
-    return `<li class="plan-subdivider list-section${empty}" data-section="${zone}">` +
-      `<span>${label}</span><span class="board-day-count">${count}</span></li>`;
-  }
-  return `<li class="board-day-divider list-section${empty}" data-section="${zone}">` +
-    `<span class="board-day-label">${label}</span><span class="board-day-count">${count}</span></li>`;
+  return `<li class="plan-subdivider list-section${empty}" data-section="${zone}">` +
+    `<span>${label}</span><span class="board-day-count">${count}</span></li>`;
 }
 
 function sortTasks(tasksArr) {
