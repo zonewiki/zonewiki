@@ -3597,3 +3597,41 @@ def test_plan_default_and_all_tasks_settings(page, wiki):
     assert '"view": "open"' in (wiki.root / "_tasks" / "settings.json").read_text()
     expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Open"])
     expect(plan).to_have_attribute("aria-checked", "false")
+
+
+def test_export_and_import_a_lists_tasks(page, wiki, tmp_path):
+    """List settings: Export saves the list's tasks as a file, Import adds a
+    file's tasks to the list it is opened in."""
+    page.request.post("/api/tasks", data={"title": "Milk", "tags": ["shop"]})
+    page.request.post("/api/tasks", data={"title": "Report", "tags": ["work"]})
+    wiki.write("shopping", "# Shopping\n\n[[tasks: list=shop view=open]]\n")
+    wiki.write("food", "# Food\n\n[[tasks: list=food view=open]]\n")
+    page.goto("/page/shopping")
+    page.locator("#task-settings-btn").click()
+    with page.expect_download() as got:
+        page.locator("#task-settings-export").click()
+    assert re.fullmatch(r"zone-tasks-shop-\d{4}-\d\d-\d\d\.json", got.value.suggested_filename)
+    saved = tmp_path / "shop.json"
+    got.value.save_as(saved)
+    assert '"Milk"' in saved.read_text() and "Report" not in saved.read_text()
+
+    # Here already: nothing to import.
+    page.locator("#task-settings-import-file").set_input_files(saved)
+    expect(page.locator(".task-undo-toast")).to_have_text("Nothing imported: the tasks are already here.")
+    # Into another list, once the task is gone from this one: it gets that list's tag.
+    page.request.delete(f"/api/tasks/{task_by_title(page, 'Milk')['id']}")
+    page.goto("/page/food")
+    expect(page.locator("#tasks-list .task-item")).to_have_count(0)
+    page.locator("#task-settings-btn").click()
+    page.locator("#task-settings-import-file").set_input_files(saved)
+    expect(page.locator(".task-undo-toast")).to_have_text("Imported 1 task.")
+    expect(page.locator("#task-settings-modal")).to_be_hidden()
+    expect(page.locator("#tasks-list .task-item")).to_have_count(1)
+    assert task_by_title(page, "Milk")["tags"] == ["food"]
+
+    # A file that is no export says so in the dialog.
+    other = tmp_path / "notes.json"
+    other.write_text('{"pages": []}')
+    page.locator("#task-settings-btn").click()
+    page.locator("#task-settings-import-file").set_input_files(other)
+    expect(page.locator("#task-settings-error")).to_contain_text("exported from Zone")

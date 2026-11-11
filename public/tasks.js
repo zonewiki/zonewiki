@@ -184,7 +184,7 @@ const app = {
   leftViewMessage, keepSnapshot, afterBatchWrite, chipField, createTask, filterDefaultTags,
   flashTask, highlightCode, textsOf, renderTexts, foldId, toggleDetails, beginComplete,
   cancelPendingComplete, sectionHTML, sortTasks, linkifyTitle, syncCompletedLink, switchTab,
-  userFiltering, forgetSession,
+  userFiltering, forgetSession, refresh,
   // what is set further down, or changes
   get activeTasksInstance() { return activeTasksInstance; },
   get sectionKey() { return sectionKey; },

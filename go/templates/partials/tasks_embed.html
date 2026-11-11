@@ -199,6 +199,16 @@
         <select id="task-settings-pin{{.sfx}}" name="pin"><option value="">No</option><option value="1">Pinned</option><option value="default">Pinned, the default list</option></select>
       </div>
     </div>
+    {{- /* Not settings, but where a list's own actions are: its tasks as a file. */}}
+    <div class="task-field task-settings-transfer">
+      <label>The tasks shown here</label>
+      <div class="task-settings-transfer-btns">
+        <a class="btn" id="task-settings-export{{.sfx}}" href="/api/tasks/export" download>Export</a>
+        <button type="button" class="btn" id="task-settings-import{{.sfx}}">Import…</button>
+        <input type="file" id="task-settings-import-file{{.sfx}}" accept=".json,application/json" hidden>
+      </div>
+      <span class="field-hint">Export saves them as a file, completed ones too. Import adds a file's tasks to this list; those already here are skipped.</span>
+    </div>
     <p class="task-settings-error" id="task-settings-error{{.sfx}}" role="alert" hidden></p>
     <div class="task-edit-actions">
       <button type="submit" class="btn btn-primary">Save</button>

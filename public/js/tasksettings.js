@@ -5,7 +5,10 @@
 // names that place in data-settings-* (tasks.go buildTasksEmbed) and
 // rewrites it (POST /api/tasks/settings); without them there is no gear.
 // Only what was changed is sent, so the other params stay as written.
+// The dialog also has the list's tasks as a file: Export and Import.
 import { closeOnBackdropClick } from './util.js';
+import { showNotice } from './taskutil.js';
+import { refreshDueBadge } from './chrome.js';
 
 // The params as written: key=value words (tasksyntax.go parseTasksParams).
 function parseParams(raw) {
@@ -126,6 +129,42 @@ export function initTaskSettings(app) {
     errorEl.textContent = message;
     errorEl.hidden = false;
   }
+
+  // Export, Import: the tasks this app shows (its list= and tag=), as a file
+  // (tasks.go apiExport, apiImport). An imported task gets the tags a new
+  // task here would, and is private where a new one is.
+  const exportLink = document.getElementById('task-settings-export' + sfx);
+  const importBtn = document.getElementById('task-settings-import' + sfx);
+  const importFile = document.getElementById('task-settings-import-file' + sfx);
+  const scope = { list: appEl.dataset.initList || '', tag: appEl.dataset.initTag || '' };
+  exportLink.href = '/api/tasks/export?' + new URLSearchParams(scope);
+  importBtn.addEventListener('click', () => importFile.click());
+  importFile.addEventListener('change', async () => {
+    const picked = importFile.files[0];
+    importFile.value = '';   // the same file can be picked again
+    if (!picked) return;
+    let message = 'That isn\u2019t a file of tasks exported from Zone.';
+    try {
+      const file = JSON.parse(await picked.text());
+      message = 'The tasks couldn\u2019t be imported.';
+      const res = await fetch('/api/tasks/import', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file, ...scope, new: appEl.dataset.newTags || '', private: app.initPrivate }),
+      });
+      const out = await res.json();
+      if (res.ok) {
+        dialog.close();
+        const n = count => `${count} task${count === 1 ? '' : 's'}`;
+        showNotice(out.added ? `Imported ${n(out.added)}${out.skipped ? `; ${out.skipped} already here` : ''}.`
+          : out.skipped ? 'Nothing imported: the tasks are already here.' : 'Nothing imported: the file has no tasks.');
+        if (out.added) { app.refresh(); app.refreshOtherInstances(app.instanceId); refreshDueBadge(); }
+        return;
+      }
+      message = out.error || message;
+    } catch (_) {}
+    errorEl.textContent = message;
+    errorEl.hidden = false;
+  });
 
   btn.addEventListener('click', open);
   form.addEventListener('submit', e => { e.preventDefault(); save(); });

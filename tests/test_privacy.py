@@ -146,6 +146,8 @@ READS = [
     ("GET /tasks", "GET", "/tasks", {"query_string": {"list": "secretlist"}}),
     ("GET /api/tasks/due-count", "GET", "/api/tasks/due-count", {}),
     ("GET /api/tasks/headless", "GET", "/api/tasks/headless", {}),
+    ("GET /api/tasks/export", "GET", "/api/tasks/export", {}),
+    ("GET /api/tasks/export", "GET", "/api/tasks/export", {"query_string": {"list": "secretlist"}}),
     # The paths from before Deck was called Tasks.
     ("GET /deck", "GET", "/deck", {"query_string": {"list": "secretlist"}}),
     ("/api/deck", "GET", "/api/deck", {}),
@@ -621,6 +623,7 @@ WRITES = [
     ("POST /api/tasks/batch-update", "POST", "/api/tasks/batch-update", {"json": {"tasks": [{"id": TASK_ID, "title": "Bob"}]}}),
     ("POST /api/tasks/reorder", "POST", "/api/tasks/reorder", {"json": {"order": [TASK_ID], "updates": [{"id": TASK_ID, "sort_order": 1}]}}),
     ("POST /api/tasks/restore", "POST", "/api/tasks/restore", {"json": {"tasks": [{"id": TASK_ID, "title": "Bob's"}]}}),
+    ("POST /api/tasks/import", "POST", "/api/tasks/import", {"json": {"file": {"tasks": [{"id": TASK_ID, "title": "Bob's"}]}}}),
 ]
 
 
@@ -883,3 +886,17 @@ def test_many_unsaved_private_files_are_one_commit_of_theirs(bob, wiki):
     assert [a for a, s in log[:2]] == ["bob", "alice"] and len(log) == before + 2
     assert log[1][1].startswith("Save ") and "files in private/alice" in log[1][1]
     assert git(wiki, "status", "--porcelain", "--", "private/alice/wip-0.md") == ""
+
+
+def test_an_exported_private_task_stays_private_when_imported(alice, wiki):
+    """alice's export has her private tasks; imported again, on a shared
+    page too, they are hers alone."""
+    file = alice.get("/api/tasks/export", headers=HOST).get_json()
+    mine = [t for t in file["tasks"] if t["id"] == TASK_ID]
+    assert mine and mine[0]["private"] is True
+    alice.delete(f"/api/tasks/{TASK_ID}", headers=HOST)
+    shared_before = (wiki / "_tasks/tasks.json").read_text() if (wiki / "_tasks/tasks.json").exists() else ""
+    out = alice.post("/api/tasks/import", json={"file": {"tasks": mine}, "list": "shared"}, headers=HOST).get_json()
+    assert out == {"added": 1, "skipped": 0}
+    assert TASK_ID in (wiki / "private/alice/_tasks/tasks.json").read_text()
+    assert ((wiki / "_tasks/tasks.json").read_text() if (wiki / "_tasks/tasks.json").exists() else "") == shared_before

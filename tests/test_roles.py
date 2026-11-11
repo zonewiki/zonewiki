@@ -120,6 +120,7 @@ WRITES = [
     ("POST /api/tasks/batch-tag", "POST", "/api/tasks/batch-tag", {"json": {"ids": ["{task}"], "add": ["c"]}}),
     ("POST /api/tasks/batch-update", "POST", "/api/tasks/batch-update", {"json": {"tasks": [{"id": "{task}", "title": "C"}]}}),
     ("POST /api/tasks/reorder", "POST", "/api/tasks/reorder", {"json": {"order": ["{task}"], "updates": [{"id": "{task}", "sort_order": 9}]}}),
+    ("POST /api/tasks/import", "POST", "/api/tasks/import", {"json": {"file": {"tasks": [{"title": "Imported"}]}}}),
     ("POST /api/tasks/restore", "POST", "/api/tasks/restore", {"json": {"tasks": [{"id": "new-id-1", "title": "Restored"}]}}),
     # Her own things, from when she was an editor, and new ones: refused too.
     ("POST /api/notes", "POST", "/api/notes", {"data": {"title": "New note"}}),

@@ -667,6 +667,8 @@ func tasksRoutes(mux *http.ServeMux) {
 	}))
 	mux.HandleFunc("POST /api/tasks/batch-delete", tasksRoute(apiBatchDelete))
 	mux.HandleFunc("POST /api/tasks/restore", tasksRoute(apiRestore))
+	mux.HandleFunc("GET /api/tasks/export", tasksRoute(apiExport))
+	mux.HandleFunc("POST /api/tasks/import", tasksRoute(apiImport))
 	mux.HandleFunc("POST /api/tasks/batch-complete", tasksRoute(apiBatchComplete))
 	mux.HandleFunc("POST /api/tasks/reorder", tasksRoute(apiReorder))
 	mux.HandleFunc("POST /api/tasks/batch-tag", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
@@ -1228,6 +1230,121 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	writeJSON(w, http.StatusCreated, restored)
+	return nil
+}
+
+// ---- export and import ----
+
+// importMax: the most tasks one import takes.
+const importMax = 10000
+
+// importIDRE: an id an imported task may keep (a UUID, as Zone makes them).
+var importIDRE = regexp.MustCompile(`^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$`)
+
+// apiExport: the tasks a list shows (?list=, ?tag=, as an embed's params;
+// neither: every task the user sees), open and completed of every year,
+// as a file to save: {zone_tasks: 1, list, tag, exported_at, tasks}, each
+// task as the API shows it. apiImport reads it back.
+func apiExport(w http.ResponseWriter, r *http.Request) error {
+	list, tag := cleanList(r.URL.Query().Get("list")), strings.TrimSpace(r.URL.Query().Get("tag"))
+	tasksMu.Lock()
+	active, completed, err := readForWriteLocked(userOf(r))
+	tasksMu.Unlock()
+	if err != nil {
+		return err
+	}
+	tasks := []*Task{}
+	for _, t := range slices.Concat(active, completed) {
+		if inScope(t, list) && tagParamMatches(t, tag) {
+			tasks = append(tasks, t)
+		}
+	}
+	name := firstNonEmpty(list, "all")
+	w.Header().Set("Content-Disposition", `attachment; filename="zone-tasks-`+name+"-"+isoDay(today())+`.json"`)
+	writeJSON(w, http.StatusOK, map[string]any{"zone_tasks": 1, "list": list, "tag": tag, "exported_at": timestamp(), "tasks": tasks})
+	return nil
+}
+
+// apiImport adds an export's tasks: {file, list, tag, new, private}. file
+// is what apiExport wrote (or a bare list of tasks); list, tag and new are
+// the params of the list imported into, whose tags the tasks get as a new
+// task there would (newTaskTags, or new=), in place of the tag of the list
+// they were exported from; private: into the user's own tasks, where a
+// task exported private goes anyway. A task
+// keeps its id, and one whose id is here already is skipped, so the same
+// file imported twice adds nothing. Answers {added, skipped}.
+func apiImport(w http.ResponseWriter, r *http.Request) error {
+	data, err := jsonObject(r)
+	if err != nil {
+		return err
+	}
+	user := userOf(r)
+	if err := mayWriteTasks(user); err != nil {
+		return err
+	}
+	notExport := badRequest("Not a file of tasks exported from Zone")
+	snaps, ok := as[[]json.RawMessage](data["file"])
+	from := ""
+	if !ok {
+		file, isObj := as[jsonObj](data["file"])
+		if snaps, ok = as[[]json.RawMessage](file["tasks"]); !isObj || !ok {
+			return notExport
+		}
+		s, _ := as[string](file["list"])
+		from = cleanList(s)
+	}
+	if len(snaps) > importMax {
+		return badRequest("Too many tasks: at most " + strconv.Itoa(importMax) + " in one import")
+	}
+	str := func(k string) string { s, _ := as[string](data[k]); return s }
+	add := cleanTags(strings.Split(str("new"), ","))
+	if len(add) == 0 {
+		add = newTaskTags(parseTasksParams("list=" + cleanList(str("list")) + " tag=" + strings.Join(strings.Fields(str("tag")), "")))
+	}
+	var remove []string
+	if from != "" && !slices.ContainsFunc(add, func(t string) bool { return strings.EqualFold(t, from) }) {
+		remove = []string{from}
+	}
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
+	active, completed, err := readForWriteLocked(user)
+	if err != nil {
+		return err
+	}
+	existing := taskIDsLocked() // every owner's: ids stay unique across the files
+	added, skipped := 0, 0
+	for _, s := range snaps {
+		snap, _ := as[jsonObj](s)
+		t := sanitizeSnapshot(snap)
+		if t == nil {
+			return notExport
+		}
+		if id, _ := as[string](snap["id"]); !importIDRE.MatchString(id) {
+			t.ID = uuid4()
+		}
+		if existing[t.ID] {
+			skipped++
+			continue
+		}
+		existing[t.ID] = true
+		t.Tags = retag(t.Tags, add, remove)
+		// A task exported private stays private, wherever it is imported.
+		if (jsonTrue(data["private"]) || jsonTrue(snap["private"])) && privateFolder(user) != "" {
+			t.Owner = user
+		}
+		if t.isOpen() {
+			active = append(active, t)
+		} else {
+			completed = append(completed, t)
+		}
+		added++
+	}
+	if added > 0 {
+		if err := writeBothLocked(user, active, completed, "Import "+strconv.Itoa(added)+" tasks"); err != nil {
+			return err
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"added": added, "skipped": skipped})
 	return nil
 }
 
