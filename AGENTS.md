@@ -118,6 +118,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── merge.go            # Several editors on one page: drafts' authors, the bases, the three-way merge, texts left in conflict
 │   ├── tasks.go            # Tasks: the /api/tasks routes (their task writes as functions the MCP tools share), the [[tasks:]] embed
 │   ├── taskstore.go        # Tasks on disk: _tasks/ files (users' private ones in private/<user>/_tasks/), lock, recurrence, history, comments, backlinks, search docs
+│   ├── taskby.go           # Comments and history a client sends whole: nobody writes under another's name
 │   ├── tasksyntax.go       # The page syntax of tasks: [[tasks: …]] params, [[task:…]], tag rules, date words
 │   ├── task.go             # A task (Task): its fields, read leniently from a file, written in a fixed key order
 │   ├── jsonobj.go          # JSON objects read a member at a time (jsonObj): task requests, MCP messages and arguments, task files

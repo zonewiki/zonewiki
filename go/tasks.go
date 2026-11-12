@@ -814,6 +814,7 @@ func applyTaskFields(user string, t *Task, data jsonObj, fresh bool) error {
 			return badRequest("comments must be a list")
 		}
 		t.Comments = cleanComments(data["comments"])
+		checkBy(user, t)
 	}
 	if data.has("due_date") {
 		d, err := validateDate(data["due_date"])
@@ -1004,6 +1005,7 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 	if err != nil {
 		return nil, err
 	}
+	rememberBy(t) // an undo sends its comments and history back (taskby.go)
 	if err := applyTaskFields(user, t, data, false); err != nil {
 		return nil, err
 	}
@@ -1055,6 +1057,7 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 	// An undo sends the old history back with the old fields.
 	if data.has("history") {
 		t.History = cleanHistory(data["history"])
+		checkBy(user, t)
 	}
 	msg := "Update task"
 	switch {
@@ -1162,6 +1165,7 @@ func apiDeleteComment(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	rememberBy(t) // the undo sends it back
 	t.Comments = slices.Delete(t.Comments, i, i+1)
 	if err := writeBothLocked(userOf(r), active, completed, "Delete task comment"); err != nil {
 		return err
@@ -1181,10 +1185,12 @@ func deleteTasksLocked(user string, ids map[string]bool, message string) error {
 	if err != nil {
 		return err
 	}
-	if err := writeBothLocked(user, withoutIDs(active, ids), withoutIDs(completed, ids), message); err != nil {
-		return err
+	for _, t := range slices.Concat(active, completed) {
+		if ids[t.ID] {
+			rememberBy(t) // the undo restores it
+		}
 	}
-	return nil
+	return writeBothLocked(user, withoutIDs(active, ids), withoutIDs(completed, ids), message)
 }
 
 func idSet(ids []string) map[string]bool {
@@ -1245,6 +1251,7 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 		if t == nil || existing[t.ID] {
 			continue
 		}
+		checkBy(user, t)
 		if jsonTrue(snap["private"]) && privateFolder(user) != "" {
 			t.Owner = user
 		}
@@ -1361,6 +1368,11 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 		if existing[t.ID] {
 			skipped++
 			continue
+		}
+		// An admin's import keeps the file's names (a wiki moved, a
+		// backup put back); anyone else's only their own.
+		if !settings().isAdmin(user) {
+			checkBy(user, t)
 		}
 		existing[t.ID] = true
 		t.Tags = retag(t.Tags, add, remove)
@@ -1588,11 +1600,13 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 		if t == nil {
 			continue
 		}
+		rememberBy(t)
 		if err := applyTaskFields(userOf(r), t, change, false); err != nil {
 			return err
 		}
 		if change.has("history") {
 			t.History = cleanHistory(change["history"])
+			checkBy(userOf(r), t)
 		}
 		updated = append(updated, t)
 	}

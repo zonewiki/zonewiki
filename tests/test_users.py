@@ -697,6 +697,62 @@ class TestAuthors:
         [back] = [t for t in client.get("/api/tasks", headers=HOST).get_json() if t["id"] == task["id"]]
         assert [e.get("by") for e in back["history"]][:2] == ["alice", "alice"]
 
+    def test_nobody_writes_under_anothers_name(self, client, users):
+        # The lists a client sends whole (an undo, a restore, an import) may
+        # say anything: a name other than the sender's stays only on what
+        # Zone has seen under it (docs/spec/users.md, Who made a change).
+        login(client, "bob", "bob-pw")
+        forged_c = {"id": "c-forged", "at": "2026-01-02T10:00", "by": "alice", "text": "I approve"}
+        forged_h = {"at": "2026-01-02T10:00", "event": "done", "by": "alice"}
+        own_c = {"id": "c-own", "at": "2026-01-02T10:00", "by": "bob", "text": "Mine"}
+        task = client.post("/api/tasks", json={"title": "Budget"}, headers=HOST).get_json()
+        put = client.put(f"/api/tasks/{task['id']}", json={"comments": [forged_c, own_c], "history": [forged_h]},
+                         headers=HOST).get_json()
+        assert [(c["text"], c.get("by")) for c in put["comments"]] == [("I approve", None), ("Mine", "bob")]
+        assert [e.get("by") for e in put["history"]] == [None]
+        [batch] = client.post("/api/tasks/batch-update", json={"tasks": [{"id": task["id"], "history": [forged_h]}]},
+                             headers=HOST).get_json()
+        assert [e.get("by") for e in batch["history"]] == [None]
+        snap = {"id": "restored-1", "title": "Restored", "comments": [forged_c], "history": [forged_h]}
+        [restored] = client.post("/api/tasks/restore", json={"tasks": [snap]}, headers=HOST).get_json()
+        assert "by" not in restored["comments"][0] and "by" not in restored["history"][0]
+        client.post("/api/tasks/import", json={"file": [{**snap, "id": "00000000-0000-4000-8000-000000000001"}]},
+                    headers=HOST)
+        imported = [t for t in client.get("/api/tasks", headers=HOST).get_json() if t["title"] == "Restored"]
+        assert len(imported) == 2
+        assert all("by" not in t["comments"][0] and "by" not in t["history"][0] for t in imported)
+
+    def test_an_undo_keeps_the_names_zone_has_seen(self, client, users):
+        login(client, "alice", "alice-pw")
+        task = client.post("/api/tasks", json={"title": "Call Sam"}, headers=HOST).get_json()
+        task = client.post(f"/api/tasks/{task['id']}/comments", json={"text": "Left a message"}, headers=HOST).get_json()
+        [comment] = task["comments"]
+        client.post("/logout", headers=HOST)
+        login(client, "bob", "bob-pw")
+        # A comment's delete, undone with the whole list.
+        client.delete(f"/api/tasks/{task['id']}/comments/{comment['id']}", headers=HOST)
+        back = client.put(f"/api/tasks/{task['id']}", json={"comments": task["comments"]}, headers=HOST).get_json()
+        assert [(c["text"], c["by"]) for c in back["comments"]] == [("Left a message", "alice")]
+        # The task's delete, undone with its snapshot.
+        client.delete(f"/api/tasks/{task['id']}", headers=HOST)
+        [restored] = client.post("/api/tasks/restore", json={"tasks": [back]}, headers=HOST).get_json()
+        assert restored["comments"][0]["by"] == "alice"
+        assert [e["by"] for e in restored["history"]] == [e["by"] for e in back["history"]] == ["alice"]
+        # Seen as alice's is that comment, not another under its name.
+        other = {**comment, "id": "c-other"}
+        put = client.put(f"/api/tasks/{task['id']}", json={"comments": [other]}, headers=HOST).get_json()
+        assert "by" not in put["comments"][0]
+
+    def test_an_admins_import_keeps_the_files_names(self, client, users, monkeypatch):
+        # A wiki moved or a backup put back: the admin's to do.
+        monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}})
+        login(client, "alice", "alice-pw")
+        client.post("/api/tasks/import", json={"file": [{
+            "id": "00000000-0000-4000-8000-000000000002", "title": "Moved",
+            "comments": [{"id": "c1", "at": "2026-01-02T10:00", "by": "bob", "text": "hi"}]}]}, headers=HOST)
+        [moved] = [t for t in client.get("/api/tasks", headers=HOST).get_json() if t["title"] == "Moved"]
+        assert moved["comments"][0]["by"] == "bob"
+
     def test_without_users_comments_and_history_have_no_author(self, client, git_wiki_dir):
         task = client.post("/api/tasks", json={"title": "Call Sam"}, headers=HOST).get_json()
         client.post(f"/api/tasks/{task['id']}/comments", json={"text": "Left a message"}, headers=HOST)
