@@ -98,6 +98,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── admin.go            # The admin page (/admin, admins), its Users tab: roles, disable, remove, writing the settings file as the commands do
 │   ├── links.go            # Invite and reset links: .zone/links, /welcome/<token>
 │   ├── signout.go          # Sessions signed out: .zone/signed-out
+│   ├── stalls.go           # A request body or response that stands still for a minute fails (noStalls)
 │   ├── setup.go            # The first-run page: /setup, a first login for a wiki other devices reach
 │   ├── access.go           # Who may see and change what: private/<user>/ (canSee, canWrite, canSeePath)
 │   ├── private.go          # The private home private/<user>/index: /private, its template, its protection

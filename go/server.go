@@ -163,8 +163,10 @@ func main() {
 	}
 	srv := &http.Server{
 		Handler: newHandler(),
-		// A slow or idle client doesn't hold a connection for long.
-		ReadHeaderTimeout: 60 * time.Second,
+		// A slow or idle client doesn't hold a connection for long: the
+		// headers come in 10 s, and a body or a response that stands
+		// still for a minute fails (stalls.go).
+		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
 	fmt.Printf("Zone %s (%s) listening on %s\n", version, cfg.Build, ln.Addr())
@@ -271,7 +273,7 @@ func newHandler() http.Handler {
 	tasksRoutes(mux)
 	adminRoutes(mux)
 	oldNameRoutes(mux)
-	return checks(viewerGate(mux))
+	return noStalls(checks(viewerGate(mux)))
 }
 
 // viewerWrites: the routes taking a POST (or another write method) that a
