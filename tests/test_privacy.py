@@ -837,6 +837,7 @@ EXEMPT = {
     "GET /admin", "GET /admin/users", "POST /admin/users/{name}/role", "POST /admin/users/{name}/disable", "POST /admin/users/{name}/enable",
     "POST /admin/users/{name}/remove", "POST /admin/users/invite", "POST /admin/users/{name}/reset", "POST /admin/users/{name}/revoke",
     "GET /welcome/{token}", "POST /welcome/{token}",   # a link's own page: sets one password (test_admin.py)
+    "GET /setup", "POST /setup",    # the first-run page: only while the wiki has no login (test_setup.py)
 }
 
 

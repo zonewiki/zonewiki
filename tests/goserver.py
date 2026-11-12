@@ -83,6 +83,8 @@ def config_text() -> str:
     text = "".join(f"{key} = {value}\n" for key, value in values.items() if value)
     if noshare != ["#noshare"]:
         text += f"noshare = {', '.join(noshare)}\n"
+    if settings.NO_LOGIN and not settings.LEAF_PASSWORD and not settings.LEAF_USERS:
+        text += "no-login = yes\n"
     text += settings.CONFIG_FILE
     for name, (password, token) in settings.LEAF_USERS.items():
         text += f"\n[user {name}]\npassword = {password_hash(password)}\n"

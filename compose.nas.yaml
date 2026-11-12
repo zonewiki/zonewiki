@@ -14,10 +14,12 @@
 #
 # The wiki's own settings go in its settings file (.zone/config), through the
 # container; first of all the names you open Zone by (or ZONE_ALLOW_REMOTE=1
-# in .env), then a login:
+# in .env):
 #
 #   docker compose -f compose.nas.yaml run --rm zonewiki /app/zonewiki config set hosts nas.local
-#   docker compose -f compose.nas.yaml run --rm zonewiki /app/zonewiki user add alice
+#
+# Then open Zone in a browser: it asks for a password before it shows
+# anything (or set the login here: … /app/zonewiki user add alice).
 #   TZ=Europe/Vienna
 name: zonewiki
 
@@ -34,6 +36,9 @@ services:
     env_file: .env
     environment:
       ZONE_DATA: /wiki-data
+      # The port below is open to the LAN: a wiki without a login asks for a
+      # password in the browser first (First run, README).
+      ZONE_BIND: 0.0.0.0
       # The wiki's folder on the host, for the MCP tools' file: lines.
       ZONE_HOST_DATA: ${ZONE_DATA}
       TZ: ${TZ:-UTC}

@@ -230,6 +230,7 @@ def test_a_clone_without_its_users_doesnt_start_open(client, git_wiki_dir, monke
     login(client, "alice", "alice-pw")
     client.post("/api/notes", data={"title": "Alices"}, headers=HOST)   # a commit by alice
     monkeypatch.setattr(settings, "LEAF_USERS", {})
+    monkeypatch.setattr(settings, "NO_LOGIN", False)   # no settings file at all
     with pytest.raises(RuntimeError, match="didn't start"):
         client.get("/page/index", headers=HOST)
     log = client.live.log.read_text()
@@ -237,6 +238,9 @@ def test_a_clone_without_its_users_doesnt_start_open(client, git_wiki_dir, monke
     client.live.stop()
     (git_wiki_dir / ".zone" / "config").write_text("")
     monkeypatch.setattr(settings, "CONFIG_FILE", "# no login, on purpose\n")
+    # It starts; reached from other devices (as the tests do) it asks for a login first.
+    assert client.get("/page/index", headers=HOST).headers["Location"] == "/setup"
+    monkeypatch.setattr(settings, "CONFIG_FILE", "no-login = yes\n")
     assert client.get("/page/index", headers=HOST).status_code == 200
 
 

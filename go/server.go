@@ -46,6 +46,8 @@ Commands:
 Environment:
   ZONE_DATA                  the wiki's folder (required; it must exist)
   ZONE_ALLOW_REMOTE          1: answer to every host name, not only localhost (unless hosts is set)
+  ZONE_BIND                  the address the container's port is published on (compose sets it): not
+                             localhost's, and no login yet, Zone asks for a password in the browser first
   ZONE_HOST_DATA             the wiki's folder as the host sees it, for the MCP tools' file: lines
   ZONE_SEMANTIC_SEARCH       on: semantic search besides keywords (needs onnxruntime)
   ZONE_MODEL_DIR             where the semantic model's files are
@@ -122,6 +124,10 @@ func main() {
 	startSettings(s)
 	if publicDir = *public; publicDir == "" {
 		publicDir = findPublic()
+	}
+	if needsSetup() {
+		logf("other devices can reach this wiki and it has no login: Zone asks for a password in the browser " +
+			"before it shows anything (/setup). To run it without a login on purpose: zonewiki config set no-login yes")
 	}
 	for _, p := range strayPrivate() {
 		logf("%s is in %s/ but no user's folder there: no one sees it (a removed user's?). "+
@@ -249,6 +255,8 @@ func newHandler() http.Handler {
 	mux.HandleFunc("GET /login", login)
 	mux.HandleFunc("POST /login", login)
 	mux.HandleFunc("POST /logout", logout)
+	mux.HandleFunc("GET /setup", setupRoute)
+	mux.HandleFunc("POST /setup", setupRoute)
 	mux.HandleFunc("GET /api/version", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"version": version, "build": cfg.Build})
 	})
@@ -342,6 +350,16 @@ func checks(next http.Handler) http.Handler {
 			return
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, limit)
+		if needsSetup() && !setupExempt(r) {
+			// Reachable from other devices, and no login yet: nothing is
+			// shown or changed before one is set (setup.go).
+			if r.Method == "GET" && !strings.HasPrefix(r.URL.Path, "/api/") {
+				http.Redirect(w, r, "/setup", http.StatusFound)
+			} else {
+				http.Error(w, setupFirstMsg, http.StatusForbidden)
+			}
+			return
+		}
 		if settings().authOn() && !authExempt(r) {
 			user, ok, renew := signedIn(r)
 			if !ok {
@@ -390,7 +408,7 @@ func dotSegments(p string) bool {
 // asks without one.
 func authExempt(r *http.Request) bool {
 	switch p := r.URL.Path; {
-	case p == "/login", p == "/logout", p == "/mcp", p == "/api/health":
+	case p == "/login", p == "/logout", p == "/mcp", p == "/api/health", p == "/setup":
 		return true
 	case strings.HasPrefix(p, "/welcome/"):
 		return true // an invite or reset link: the person has no password yet (links.go)

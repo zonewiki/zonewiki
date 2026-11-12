@@ -68,7 +68,8 @@ func init() {
 	for _, name := range []string{"login.html", "view.html", "edit.html", "new.html", "notes.html",
 		"hidden.html", "deleted_page.html", "tasks_page.html", "search.html", "history/deleted.html",
 		"history/diff.html", "history/diff_uncommitted.html", "history/history.html",
-		"history/revision.html", "history/uncommitted.html", "users.html", "welcome.html"} {
+		"history/revision.html", "history/uncommitted.html", "users.html", "welcome.html",
+		"setup.html"} {
 		views[name] = template.Must(template.Must(partials.Clone()).ParseFS(templateFS, "templates/"+name))
 	}
 }

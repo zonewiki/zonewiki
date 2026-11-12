@@ -31,6 +31,10 @@ LEAF_QUERY_LOG = False
 LEAF_GIT_REMOTE = ""
 # No Host check against the test client's (a test of the check turns it on).
 ZONE_ALLOW_REMOTE = True
+# No login on purpose (no-login = yes in the settings file), as the tests
+# reach the server like another device would (ZONE_ALLOW_REMOTE): without
+# it, and without a password or users, Zone shows its first-run page.
+NO_LOGIN = True
 LEAF_HOSTS: frozenset[str] = frozenset()
 NOSHARE_TAGS: frozenset[str] = frozenset({"noshare"})
 NOSHARE_FOLDERS: tuple[str, ...] = ()

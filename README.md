@@ -189,7 +189,8 @@ it; Zone makes it a git repository (if it isn't one) and adds a home page.
 **On a NAS or server** (Synology, QNAP, a Raspberry Pi, …), you don't need
 the repository: `compose.nas.yaml` runs the prebuilt image
 `ghcr.io/gklingler/zonewiki` (amd64 and arm64). Put it next to a `.env` and run
-`docker compose -f compose.nas.yaml up -d`; Zone is then on port 5080. What
+`docker compose -f compose.nas.yaml up -d`; Zone is then on port 5080, and
+the first page it shows asks for a password. What
 `.env` needs, and a step-by-step for Synology's Container Manager: "On a NAS
 or server" in [`docs/spec/deployment.md`](docs/spec/deployment.md). Running
 it as Leaf (`ghcr.io/gklingler/leaf`)? That image is updated for one more
@@ -260,6 +261,7 @@ away, which Zone takes only at one). Set them with `run.sh`, or edit the file:
 | `semantic-min-score` | How similar a passage must be to count as a semantic match (e.g. `0.4`; the default suits the default model) |
 | `trusted-proxies` | Your reverse proxy's address (or network), when it doesn't connect from localhost (e.g. `172.17.0.1` for a proxy on the host of a container): Zone then tells its clients apart when it slows down wrong passwords |
 | `external-content` | Other sites a page may show images, video and frames from, e.g. `upload.wikimedia.org, *.example.org` (`*`: any). By default none: an image elsewhere shows as a link (see Security) |
+| `no-login` | `yes`: no login on purpose, though other devices can reach Zone; without it Zone then asks for a password before it shows anything |
 | `upload-max` | The biggest file an upload may be, e.g. `25MB` (default: `100MB`) |
 | `storage-max` | How much the wiki may hold, e.g. `5GB` (default: no limit). Counts your pages and files, not their git history; when full, new pages, notes and uploads are refused until you delete something, while edits to pages always save |
 
@@ -278,7 +280,7 @@ from `ZONE_ALLOW_REMOTE`. To run `docker compose up -d --build` directly, set in
 | Setting | Does |
 |---------|------|
 | `ZONE_DATA` | As an absolute path (no `~`) |
-| `ZONE_BIND=0.0.0.0` | Together with `ZONE_ALLOW_REMOTE=1`, for network access |
+| `ZONE_BIND=0.0.0.0` | Together with `ZONE_ALLOW_REMOTE=1`, for network access (Zone is told too: without a login it asks for a password first) |
 | `ZONE_UID`, `ZONE_GID` | Your user and group ID (`id -u`, `id -g`), if they aren't 1000 |
 | `TZ` | Your timezone; otherwise UTC |
 
@@ -384,9 +386,12 @@ public address.
 
 Also know this:
 
-- **No login by default.** Anyone who can reach the port can read, change and
-  delete everything. With `ZONE_ALLOW_REMOTE=1` that is your whole network: set
-  a password (`./run.sh config passwd`), or add users (`./run.sh user add NAME`). Every user can read
+- **No login on localhost.** There, anyone who can reach the port can read,
+  change and delete everything. Opened to the network (`ZONE_ALLOW_REMOTE=1`,
+  names in `hosts`, or `compose.nas.yaml`), Zone shows nothing until a login
+  is set: its first page asks for a password, or set one with
+  `./run.sh config passwd` or `./run.sh user add NAME`. For a wiki open to
+  your network on purpose: `./run.sh config set no-login yes`. Every user can read
   everything except other users' private pages and tasks (and all but viewers
   can change it), so give access to no one you wouldn't hand the shared files to.
 - **Private means private inside Zone.** Another user's private pages and

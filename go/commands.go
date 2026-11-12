@@ -317,6 +317,9 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 			}
 			f.Set("", "password", hashPassword(password))
 		}
+		if openFlag {
+			f.Set("", "no-login", "yes") // on purpose: no first-run page (setup.go)
+		}
 		if err := saveConfig(f); err != nil {
 			return fail("%v", err)
 		}

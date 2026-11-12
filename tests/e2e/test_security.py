@@ -2,6 +2,8 @@
 AI client may have written after a prompt injection) runs no script, while
 Zone's own scripts keep working."""
 
+import re
+
 from playwright.sync_api import expect
 
 ATTACKS = (
@@ -110,3 +112,22 @@ def test_a_page_asks_no_other_host_for_anything(page, wiki):
     # The harness's own script, run in the frame's blocked (empty) document.
     assert all("sessionStorage" in e for e in page.js_errors)
     page.js_errors.clear()
+
+
+def test_a_wiki_without_a_login_asks_for_one_first(page, wiki, monkeypatch):
+    # Reached from other devices (as the tests reach it) and no login, not
+    # on purpose: the first-run page, whichever page was asked for.
+    from tests import settings
+    monkeypatch.setattr(settings, "NO_LOGIN", False)
+    wiki.write("plans", "# Plans\n\nsecret words\n")
+    page.goto("/page/plans")
+    expect(page).to_have_url(re.compile(r"/setup$"))
+    expect(page.locator("form.login-form h2")).to_have_text("Set a password for Zone")
+    expect(page.locator("body")).not_to_contain_text("secret words")
+    page.fill("input[name=password]", "correct horse")
+    page.fill("input[name=again]", "correct horse")
+    page.locator("form.login-form button[type=submit]").click()
+    expect(page).to_have_url(re.compile(r"/page/index$"))
+    page.goto("/page/plans")
+    expect(page.locator("article.page-content")).to_contain_text("secret words")
+    expect(page.locator("#logout-form, .logout-btn, form[action='/logout']").first).to_be_attached()

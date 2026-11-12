@@ -5,6 +5,7 @@ package main
 
 import (
 	"fmt"
+	"net/netip"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -62,6 +63,7 @@ type Config struct {
 	Build       string
 	HostData    string // the wiki folder as the host sees it
 	AllowRemote bool   // listen on the LAN: no Host check unless Hosts is set
+	Published   bool   // the container's port is open to the network (ZONE_BIND, from compose)
 	Data        string // the wiki (ZONE_DATA)
 	Uploads     string // Data/_assets
 	GitEnabled  bool
@@ -166,6 +168,7 @@ func loadWiki(getenv func(string) string) (*Config, error) {
 		Build:       getenv("ZONE_BUILD"),
 		HostData:    strings.TrimRight(strings.TrimSpace(getenv("ZONE_HOST_DATA")), "/"),
 		AllowRemote: truthy(getenv("ZONE_ALLOW_REMOTE")),
+		Published:   published(getenv("ZONE_BIND")),
 	}
 	if c.Build == "" {
 		c.Build = sourceBuild()
@@ -188,6 +191,19 @@ func loadWiki(getenv func(string) string) (*Config, error) {
 	_, err := exec.LookPath("git")
 	c.GitEnabled = err == nil
 	return c, nil
+}
+
+// published: ZONE_BIND, the address compose publishes Zone's port on
+// (compose.yaml hands it in; compose.nas.yaml says 0.0.0.0), isn't this
+// machine alone: other devices reach Zone. Not set (Zone run by hand):
+// not known, so no.
+func published(bind string) bool {
+	bind = strings.Trim(strings.TrimSpace(bind), "[]")
+	if bind == "" || strings.EqualFold(bind, "localhost") {
+		return false
+	}
+	addr, err := netip.ParseAddr(bind)
+	return err != nil || !addr.IsLoopback()
 }
 
 // sourceBuild is the build Zone runs from, as "<short hash> <commit date>"

@@ -37,6 +37,9 @@ services:
     env_file: .env
     environment:
       ZONE_DATA: /wiki-data
+      # Where the port below is published: beyond localhost, a wiki without
+      # a login asks for a password in the browser first (First run, README).
+      ZONE_BIND: ${ZONE_BIND:-127.0.0.1}
       # The wiki's folder on the host, for the MCP tools' file: lines.
       ZONE_HOST_DATA: ${ZONE_DATA:-~/zonewiki}
       # The user's timezone, so "today" is their day; run.sh sets the host's.

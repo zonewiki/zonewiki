@@ -57,7 +57,7 @@ var configKeys = []struct{ key, env string }{
 	{"base-url", "LEAF_BASE_URL"}, {"git-remote", "LEAF_GIT_REMOTE"}, {"noshare", "LEAF_NOSHARE"},
 	{"locale", "LEAF_LOCALE"}, {"date-format", "LEAF_DATE_FORMAT"}, {"query-log", "LEAF_QUERY_LOG"},
 	{"semantic-min-score", "LEAF_SEMANTIC_MIN_SCORE"}, {"trusted-proxies", ""},
-	{"upload-max", ""}, {"storage-max", ""}, {"external-content", ""},
+	{"upload-max", ""}, {"storage-max", ""}, {"external-content", ""}, {"no-login", ""},
 }
 
 // userKeys: the keys of a [user …] section.
@@ -134,6 +134,7 @@ type Settings struct {
 	UploadMax        int64          // the biggest upload in bytes; 0: 100 MB (uploadMax)
 	StorageMax       int64          // what the wiki may hold in bytes (storage.go); 0: no limit
 	External         []string       // the hosts pages may load images, media and frames from (security.go: externalRE); "*": any
+	NoLogin          bool           // no login on purpose, though other devices reach Zone: no first-run page (setup.go)
 }
 
 // authOn: the wiki has a login gate, a password or users.
@@ -203,6 +204,11 @@ func loadSettings(f *settingsfile.File) (*Settings, error) {
 	s.QueryLog = truthy(queryLog)
 	if !s.QueryLog && !slices.Contains([]string{"", "0", "false", "no"}, strings.ToLower(queryLog)) {
 		return nil, fmt.Errorf("%s%s isn't yes or no.", where, queryLog)
+	}
+	noLogin, where, _ := get("no-login")
+	s.NoLogin = truthy(noLogin)
+	if !s.NoLogin && !slices.Contains([]string{"", "0", "false", "no"}, strings.ToLower(noLogin)) {
+		return nil, fmt.Errorf("%s%s isn't yes or no.", where, noLogin)
 	}
 	s.GitRemote, _, _ = get("git-remote")
 	hosts, _, _ := get("hosts")
@@ -616,6 +622,7 @@ func settingsChange(old, s *Settings) string {
 		{"trusted-proxies", !slices.Equal(old.TrustedProxies, s.TrustedProxies)},
 		{"upload-max", old.UploadMax != s.UploadMax}, {"storage-max", old.StorageMax != s.StorageMax},
 		{"external-content", !slices.Equal(old.External, s.External)},
+		{"no-login", old.NoLogin != s.NoLogin},
 	} {
 		if c.changed {
 			changes = append(changes, c.key)

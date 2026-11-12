@@ -49,7 +49,9 @@ docker compose -f compose.nas.yaml run --rm zonewiki /app/zonewiki config set ho
 docker compose -f compose.nas.yaml run --rm zonewiki /app/zonewiki user add alice     # or: config passwd, one password
 ```
 
-`hosts` are the names and addresses you open Zone by (the Host check, Security in `docs/spec/security.md`); without them only localhost gets in. `ZONE_ALLOW_REMOTE=1` in `.env` instead skips the check: quicker, but then any name reaches Zone, which DNS rebinding can exploit. A login is recommended as soon as more than you can reach the NAS; `config token` (or `user token NAME`) makes a token for AI clients.
+The login needs no command: opened in a browser, a wiki without one asks for a password first (First run in `docs/spec/security.md`; `compose.nas.yaml` tells Zone its port is on the LAN, `ZONE_BIND: 0.0.0.0`), and shows nothing before. The commands above set it just as well.
+
+`hosts` are the names and addresses you open Zone by (the Host check, Security in `docs/spec/security.md`); without them only localhost gets in. `ZONE_ALLOW_REMOTE=1` in `.env` instead skips the check: quicker, but then any name reaches Zone, which DNS rebinding can exploit. Until a login is set Zone shows only its first-run page (`no-login = yes` in the settings file turns that off, for a wiki open on purpose); `config token` (or `user token NAME`) makes a token for AI clients.
 
 Zone is then at `http://<nas>:5080`. Over the internet, put HTTPS in front (a reverse proxy, below); the session cookie is `Secure` when the proxy sends `X-Forwarded-Proto: https`.
 
@@ -59,7 +61,7 @@ With Container Manager (DSM 7.2 or newer; Docker on older DSM works the same ove
 
 1. **Folders**: in File Station, a folder for the project, e.g. `/volume1/docker/zonewiki`, and in it the wiki folder, e.g. `/volume1/docker/zonewiki/wiki`.
 2. **UID and GID**: the user who owns them. DSM doesn't show IDs; with SSH on (Control Panel → Terminal & SNMP), log in as that user and run `id`. The first admin user is usually `uid=1026`, and group `users` is `gid=100`.
-3. **Files**: put `compose.nas.yaml` into the project folder as `compose.yaml` (Container Manager looks for that name), and next to it a `.env` with at least `ZONE_DATA=/volume1/docker/zonewiki/wiki`, `ZONE_UID`, `ZONE_GID` and `TZ`; then, over SSH in the project folder, `hosts` (the NAS's name and LAN address) and a login with the commands above.
+3. **Files**: put `compose.nas.yaml` into the project folder as `compose.yaml` (Container Manager looks for that name), and next to it a `.env` with at least `ZONE_DATA=/volume1/docker/zonewiki/wiki`, `ZONE_UID`, `ZONE_GID` and `TZ`; then, over SSH in the project folder, `hosts` (the NAS's name and LAN address) with the command above; or, without SSH, `ZONE_ALLOW_REMOTE=1` in `.env`. The login is set in the browser, on the page Zone shows first.
 4. **Project**: Container Manager → Project → Create, name `leaf`, path the project folder; it finds `compose.yaml` there. Finish the wizard with the project set to start once created; the first start pulls the image (about 1.1 GB).
 5. **HTTPS** (optional): Control Panel → Login Portal → Advanced → Reverse Proxy: source `HTTPS`, your host name, port 443; destination `HTTP`, `localhost`, port 5080. Under Custom Header, add `X-Forwarded-Proto` = `$scheme` if DSM doesn't send it. Add the host name to `hosts` (`config set hosts …`), and a certificate for it (Control Panel → Security → Certificate). The proxy reaches the container through Docker's network, so Zone sees it as the network's gateway (`172.17.0.1` or another in `172.16.0.0/12`); Zone's log names it on the first proxied request ("requests from … carry X-Forwarded-For"), and `config set trusted-proxies <that address>` lets Zone tell the proxy's clients apart when it throttles wrong passwords (without it they count as one).
 

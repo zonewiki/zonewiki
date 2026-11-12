@@ -121,6 +121,11 @@ class TestTasksFolderMove:
 class TestStateFolderMove:
     OLD_EXCLUDE = "/.leaf/*\n!/.leaf/config\n"
 
+    @pytest.fixture(autouse=True)
+    def _own_settings_file(self, monkeypatch):
+        # These wikis bring their settings file (in .leaf/): none from the tests.
+        monkeypatch.setattr(settings, "NO_LOGIN", False)
+
     def _old_wiki(self, wiki, client, git_too=True):
         """A wiki as an older Zone left it: its folder .leaf/ (alice in the
         settings file, committed; the session key, a cache, a draft, not),
