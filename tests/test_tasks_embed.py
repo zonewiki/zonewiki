@@ -313,6 +313,9 @@ class TestListSwitcher:
         nav = html.split('<nav class="tasks-places"', 1)[1].split("</nav>", 1)[0]
         assert re.findall(r'data-place="([^"]+)"[^>]*>(?:<span class="tasks-place-pin")', nav) == ["pinned", "list:task", "list:shop"]
         assert "<h1>Pinned</h1>" in html and "<title>Pinned" in html
+        # Under the heading: the lists it shows, each a link to the list.
+        line = html.split('class="tasks-list-home tasks-pinned-lists">', 1)[1].split("</p>", 1)[0]
+        assert re.findall(r'<a href="([^"]+)">([^<]*)</a>', line) == [("/tasks?list=task", "#task"), ("/tasks?list=shop", "#shop")]
         # One task app: either list's tasks, the default list's view, its tags for new tasks.
         assert html.count('class="tasks-app"') == 1
         assert 'data-init-tag="task|shop" data-init-list=""' in html and 'data-init-view="focus"' in html
@@ -380,6 +383,25 @@ class TestListBacklinks:
         assert 'class="rail rail-context"' in html and 'data-id="backlinks"' in html
         assert '<a href="#backlinks" class="bl-count">← 2</a>' in html
         assert '<main class="wide">' in html
+
+    def test_pinned_has_the_pages_embedding_its_lists(self, client, wiki_dir):
+        # Pinned: the pages that embed any of the pinned lists, once each; a
+        # pin without a list is named by its page, which is a backlink too.
+        write_page(wiki_dir, "shop", "# Shopping\n\n[[tasks: list=shop pin=1]]\n")
+        write_page(wiki_dir, "kitchen", "# Kitchen\n\n[[tasks: list=shop view=open]]\n\n[[tasks: list=work]]\n")
+        write_page(wiki_dir, "office", "# Work\n\n[[tasks: list=work pin=default]]\n")
+        write_page(wiki_dir, "me", "# Mine\n\n[[tasks: tag=me pin=1]]\n")
+        write_page(wiki_dir, "gifts", "# Gifts\n\n[[tasks: list=gifts]]\n")
+        html = client.get("/tasks?pinned=1", headers=HOST).get_data(as_text=True)
+        line = html.split('class="tasks-list-home tasks-pinned-lists">', 1)[1].split("</p>", 1)[0]
+        assert re.findall(r'<a href="([^"]+)">([^<]*)</a>', line) == [
+            ("/tasks?list=work", "#work"), ("/page/me", "Mine"), ("/tasks?list=shop", "#shop")]
+        foot = html.split('<div class="page-foot">', 1)[1].split("</div>", 1)[0]
+        assert re.findall(r'<li><a href="([^"]+)">([^<]*)</a>', foot) == [
+            ("/page/kitchen", "Kitchen"), ("/page/me", "Mine"), ("/page/shop", "Shopping"), ("/page/office", "Work")]
+        assert '<a href="#backlinks" class="bl-count">← 4</a>' in html and '<main class="wide">' in html
+        # A list's own view names no lists.
+        assert "tasks-pinned-lists" not in client.get("/tasks?list=shop", headers=HOST).get_data(as_text=True)
 
     def test_no_list_no_backlinks(self, client, wiki_dir):
         write_page(wiki_dir, "shop", "# Shopping\n\n[[tasks: list=shop]]\n")

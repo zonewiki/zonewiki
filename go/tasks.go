@@ -455,6 +455,38 @@ func (rq *Req) pinnedView() TasksParams {
 	return def.With("list", "").With("tag", strings.Join(words, "|")).With("new", strings.Join(newTaskTags(def), ","))
 }
 
+// pinnedLink: one of the lists the Pinned view shows, under its heading: a
+// list at /tasks?list= ("#name"), a pin without a list its page, by its title.
+type pinnedLink struct{ Href, Label string }
+
+// pinnedSources: what the Pinned view (pinnedView) is made of: the pinned
+// lists in their order, and the pages that embed them (each list's
+// listPages, a list-less pin's own page), once each, A–Z by title.
+func (rq *Req) pinnedSources() ([]pinnedLink, []PageRef) {
+	var links []pinnedLink
+	var pages []PageRef
+	seen := map[string]bool{}
+	add := func(refs ...PageRef) {
+		for _, p := range refs {
+			if !seen[p.Slug] {
+				seen[p.Slug] = true
+				pages = append(pages, p)
+			}
+		}
+	}
+	for _, h := range rq.pinnedLists() {
+		if l := cleanList(h.Params.Get("list")); l != "" {
+			links = append(links, pinnedLink{"/tasks?list=" + url.QueryEscape(l), "#" + l})
+			add(rq.listPages(l)...)
+		} else if !hiddenPage(rq, h.Slug) {
+			links = append(links, pinnedLink{pathURL("page", h.Slug), h.Title})
+			add(PageRef{h.Slug, h.Title})
+		}
+	}
+	slices.SortStableFunc(pages, func(a, b PageRef) int { return strings.Compare(strings.ToLower(a.Title), strings.ToLower(b.Title)) })
+	return links, pages
+}
+
 // countTasks: taskCounts of the open tasks the views with params show
 // (any of them; none: every task).
 func countTasks(tasks []*Task, params ...TasksParams) TaskCounts {

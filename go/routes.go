@@ -848,6 +848,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	var home *TasksHome
 	var sections []M
 	var chip template.HTML
+	var pinnedLinks []pinnedLink
 	crumbs := []crumb{{"Tasks", ""}}
 	// The breadcrumb's key names the view for the navigation trail; no page has it.
 	key := "/tasks"
@@ -896,6 +897,13 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 		place, title, heading, crumbs, key = "pinned", "Pinned", "Pinned", []crumb{{"Tasks", "/tasks"}, {"Pinned", ""}}, "/tasks?pinned=1"
 		// Its settings are the default list's, whose params it has.
 		tasksHTML = buildTasksEmbed(rq, rq.pinnedView(), 0, false, rq.defaultPrivate(), pinned[0].Slug)
+		// Which lists it shows, and as its Backlinks the pages that embed them.
+		var pages []PageRef
+		pinnedLinks, pages = rq.pinnedSources()
+		if len(pages) > 0 {
+			sections = []M{{"id": "backlinks", "heading": "Backlinks", "links": pageLinks(pages)}}
+			chip = macro("backlinks_chip", pageLinks(pages))
+		}
 	}
 	places := rq.taskPlaces()
 	for i := range places {
@@ -904,7 +912,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	page(w, rq, http.StatusOK, "tasks_page.html", title, shell{wide: sections != nil}, &tasksPageView{Heading: heading, ListName: list,
 		RenameName: firstNonEmpty(q.Get("rename_name"), list), RenameError: q.Get("rename_error"), RenameMerge: q.Get("rename_merge") != "",
-		Home: home, Places: places, TasksHTML: htmlOf(tasksHTML), LinkSections: sections,
+		Home: home, Places: places, PinnedLists: pinnedLinks, TasksHTML: htmlOf(tasksHTML), LinkSections: sections,
 		BreadcrumbHTML: breadcrumb(rq, crumbs, key, true, title, chip)})
 }
 
@@ -936,8 +944,9 @@ func renameTagRoute(w http.ResponseWriter, r *http.Request) {
 
 // tasksPageView: /tasks (tasks_page.html); Home: the page declaring the
 // list, nil for all tasks, the pinned lists or an undeclared list; Places: the
-// list switcher; LinkSections: a list's Backlinks (with them the page has a
-// page view's columns); Rename…: its dialog back from a refusal.
+// list switcher; PinnedLists: what the Pinned view shows; LinkSections: a
+// list's Backlinks, the Pinned view's those of its lists (with them the page
+// has a page view's columns); Rename…: its dialog back from a refusal.
 type tasksPageView struct {
 	view
 	Heading, ListName         string
@@ -945,6 +954,7 @@ type tasksPageView struct {
 	RenameMerge               bool
 	Home                      *TasksHome
 	Places                    []TaskPlace
+	PinnedLists               []pinnedLink
 	LinkSections              []M
 	TasksHTML, BreadcrumbHTML template.HTML
 }

@@ -2,7 +2,8 @@
     the page that declares it (home; a pinned list as its pinned embed shows it). The
     list switcher first, above the heading: the places (taskPlaces), each
     with its counts (js/chrome.js refreshes them), pinned lists with a pin,
-    the current one aria-current. ?pinned=1: the pinned lists as one. A list's Backlinks (the pages that embed it) as on a page
+    the current one aria-current. ?pinned=1: the pinned lists as one, named under
+    the heading. A list's Backlinks (the pages that embed it; Pinned: its lists') as on a page
     view: at the end, on big screens in the right column. */ -}}
 {{define "body"}}
 {{.BreadcrumbHTML}}
@@ -37,6 +38,8 @@
 <article class="page-content">
 {{- /* A list shows the list only: the pages that embed it are its Backlinks. */}}
 {{- if and .ListName (not .Home)}}<p class="tasks-list-home">No page declares <code>[[tasks: list={{.ListName}}]]</code>: these are the tasks tagged #{{.ListName}}.</p>{{end -}}
+{{- /* Pinned: which lists these are (pinnedSources). */}}
+{{- with .PinnedLists}}<p class="tasks-list-home tasks-pinned-lists">Your pinned lists, as one: {{range $i, $l := .}}{{if $i}}, {{end}}<a href="{{$l.Href}}">{{$l.Label}}</a>{{end}}</p>{{end -}}
 {{.TasksHTML}}</article>
 </div>
 {{- end}}
