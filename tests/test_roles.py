@@ -260,3 +260,95 @@ class TestTheInterface:
         login(client, "alice")
         body = client.get("/page/plans", headers=HOST).data.decode()
         assert "read-only" not in body and 'href="/edit/plans"' in body and "data-viewer" not in body
+
+
+# ── Guides are an admin's to change ──────────────────────────────────────────
+
+ADMINS_ONLY = "Only an admin of this wiki can change this page"
+GUIDE_USERS = {"alice": ("alice-pw", "alice-token"), "bob": ("bob-pw", "bob-token")}
+GUIDES = ["wiki-guide", "tickets/AGENTS", "tickets/style", "tickets/deep/claude"]
+
+
+@pytest.fixture()
+def guides(client, git_wiki_dir, monkeypatch):
+    """The wiki's guide, a folder's (which pulls in a page there and one
+    not there yet), a deeper one, and one in bob's private folder; alice an
+    admin, bob an editor, signed in."""
+    monkeypatch.setattr(settings, "LEAF_USERS", dict(GUIDE_USERS))
+    monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}})
+    wiki = git_wiki_dir
+    for slug, text in {"wiki-guide": "# Guide\n\nkeep it short\n", "plans": "# Plans\n\nkeep it short\n",
+                       "tickets/AGENTS": "# Tickets\n\n@style.md\n@later.md\n\nkeep it short\n",
+                       "tickets/style": "# Style\n\nkeep it short\n", "tickets/t1": "# T1\n\nkeep it short\n",
+                       "tickets/deep/claude": "# Deep\n", "private/bob/AGENTS": "# Bob's own\n"}.items():
+        (wiki / f"{slug}.md").parent.mkdir(parents=True, exist_ok=True)
+        (wiki / f"{slug}.md").write_text(text)
+    git(wiki, "add", "-A")
+    git(wiki, "commit", "-qm", "Guides")
+    client.post("/login", data={"username": "bob", "password": "bob-pw"}, headers=HOST)
+    return wiki
+
+
+class TestGuidesAreAnAdmins:
+    """Every user's assistant follows the guides, so with users only an
+    admin writes them (adminsOnly in go/access.go)."""
+
+    @pytest.mark.parametrize("slug", GUIDES)
+    def test_an_editor_changes_no_guide(self, client, guides, slug):
+        before = shared_state(guides)
+        for path, data in [(f"/api/save/{slug}", {"content": "# Mine\n"}), (f"/edit/{slug}", {"content": "# Mine\n"}),
+                           (f"/delete/{slug}", {}), (f"/rename/{slug}", {"new_name": "elsewhere"}),
+                           (f"/api/toggle-checkbox/{slug}", {"idx": "0"})]:
+            resp = client.post(path, data=data, headers=HOST)
+            assert resp.status_code == 403 and ADMINS_ONLY in resp.data.decode(), path
+        assert client.get(f"/edit/{slug}", headers=HOST).status_code == 403
+        body = client.get(f"/page/{slug}", headers=HOST).data.decode()
+        assert 'class="page-col read-only"' in body and f'href="/edit/{slug}"' not in body
+        for tool, args in [("write_page", {"slug": slug, "content": "# Mine\n", "overwrite": True}),
+                           ("edit_page", {"slug": slug, "old_text": "keep it short", "new_text": "mine"}),
+                           ("append_to_page", {"slug": slug, "content": "mine"}), ("delete_page", {"slug": slug}),
+                           ("rename_page", {"slug": slug, "new_slug": "elsewhere"})]:
+            assert ADMINS_ONLY in mcp(client, tool, token="bob-token", **args), tool
+        assert shared_state(guides) == before
+
+    def test_an_editor_makes_no_guide(self, client, guides):
+        before = shared_state(guides)
+        for slug in ("notes/AGENTS", "notes/claude", "tickets/later"):   # later: a guide pulls it in
+            assert client.post(f"/api/save/{slug}", data={"content": "# Mine\n"}, headers=HOST).status_code == 403
+            assert client.get(f"/edit/{slug}", headers=HOST).status_code == 403
+            assert ADMINS_ONLY in mcp(client, "write_page", token="bob-token", slug=slug, content="# Mine\n")
+        resp = client.post("/rename/plans", data={"new_name": "notes/agents"}, headers=HOST)
+        assert resp.status_code == 403 and (guides / "plans.md").exists()
+        assert ADMINS_ONLY in mcp(client, "rename_page", token="bob-token", slug="tickets/t1", new_slug="tickets/claude")
+        # A folder with a guide in it moves with an admin only.
+        mcp(client, "rename_page", token="bob-token", slug="tickets/", new_slug="issues/")
+        assert shared_state(guides) == before
+
+    def test_a_replace_across_pages_leaves_the_guides(self, client, guides):
+        args = dict(token="bob-token", find="keep it short", replace="write a lot", dry_run=False)
+        refusal = mcp(client, "replace_in_pages", **args)   # the guides first: their ids
+        ids = json.loads(re.search(r"guides set to (\[.*?\])", refusal).group(1))
+        out = mcp(client, "replace_in_pages", guides=ids, **args)
+        assert "plans" in out and "tickets/t1" in out
+        for slug in GUIDES[:3]:
+            assert "keep it short" in (guides / f"{slug}.md").read_text(), slug
+        assert "write a lot" in (guides / "plans.md").read_text()
+
+    def test_an_editor_writes_the_other_pages_and_their_own_guide(self, client, guides):
+        assert client.post("/api/save/tickets/t1", data={"content": "# T1\n\nmine\n"}, headers=HOST).status_code == 200
+        assert client.post("/api/save/private/bob/AGENTS", data={"content": "# Mine\n"}, headers=HOST).status_code == 200
+        assert (guides / "private/bob/AGENTS.md").read_text() == "# Mine\n"
+
+    def test_an_admin_writes_them(self, client, guides):
+        login_as = lambda name: client.post("/login", data={"username": name, "password": f"{name}-pw"}, headers=HOST)
+        client.post("/logout", headers=HOST)
+        login_as("alice")
+        assert client.post("/api/save/wiki-guide", data={"content": "# Guide\n\nnew\n"}, headers=HOST).status_code == 200
+        assert client.post("/api/save/tickets/later", data={"content": "# Later\n"}, headers=HOST).status_code == 200
+        assert "read-only" not in client.get("/page/wiki-guide", headers=HOST).data.decode()
+        out = mcp(client, "edit_page", token="alice-token", slug="tickets/style", old_text="keep it short", new_text="x")
+        assert ADMINS_ONLY not in out
+
+    def test_without_users_the_guides_are_the_wikis(self, client, git_wiki_dir):
+        (git_wiki_dir / "wiki-guide.md").write_text("# Guide\n")
+        assert client.post("/api/save/wiki-guide", data={"content": "# Guide\n\nnew\n"}, headers=HOST).status_code == 200

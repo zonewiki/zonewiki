@@ -107,8 +107,8 @@ Each user has a role, `role` in their section (`roles`, `User.Role` in `go/users
 
 | Role | Can |
 |------|-----|
-| `admin` | everything an editor can, and manage the users (`zonewiki user`, on the host) |
-| `editor` | change everything shared, as every user could before roles: the default, so a section without `role` is an editor's |
+| `admin` | everything an editor can, and manage the users (`zonewiki user`, on the host) and write the guides (Guides, below) |
+| `editor` | change everything shared but the guides, as every user could before roles: the default, so a section without `role` is an editor's |
 | `viewer` | read what is shared; change nothing, not even private pages or notes of their own (Viewers, below) |
 
 - **The first user is an admin**: `user add` on a wiki without users writes `role = admin` and says so, unless `--role` says otherwise. So one person running their own wiki is its admin without doing anything. Every other user is an editor unless `--role` says otherwise. A wiki from before roles has no admin until `zonewiki user role NAME admin` makes one; nothing else changes for it.
@@ -124,6 +124,16 @@ A viewer reads everything shared (pages, tasks, history, search) and changes not
 - **The gate** (`viewerGate` in `go/server.go`): a viewer's POST, PUT, PATCH or DELETE to a route not listed in `viewerWrites` is refused (403) before the route runs, whatever it names (another user's folder answers as anywhere else). Listed are only those that change nothing (sign in and out, the previews) and `/mcp`. A new write route is so closed to viewers until it is listed.
 - **MCP**: a viewer's token works for reading: `tools/list` leaves out the tools that write (`writeTool`: those in `pageTools`, `create_task`, `update_task`), and calling one answers with the message (`callMCPTool`).
 - **The interface**: no Edit, ✎s, Rename or Delete on a page, checkboxes that don't tick (`pageView.ReadOnly`, `.read-only`); the editor is a 403 before anything is typed; no Private or Notes module, no New note or New task (at the top, in the tab bar, the task app's + New, a comment's field; `body[data-viewer]` in `style.css`), and `c n` / `c t` do nothing (`js/shortcuts.js`). The task modal still opens on a task: a change there comes back with the message.
+
+### Guides
+
+With users, only an admin changes a shared guide: the wiki's (`wiki-guide`), a folder's (`AGENTS.md`, `CLAUDE.md`, in any case), and a page one of them pulls in with a line `@other.md`, whether it is there yet or not (`guidePage`, `guideImports` in `go/access.go`; the pulled-in pages are looked up at most once a second).
+
+- **Why**: a guide is what every user's assistant is told to follow, the wiki's in its instructions "where it differs from the advice above, it wins", a folder's before a write there (Guides in `docs/spec/mcp.md`). Whoever writes one steers them all: an editor, or an editor's assistant that read a prompt injection in a mail, could have every other user's assistant copy their private pages into the open, and it would stay in every session. An admin already decides who is a user.
+- **The rule** is `adminsOnly(user, slug)` in `canWrite`: an editor can't edit, create, rename (from or to a guide's name), move (a folder with one in it), delete or restore a guide, nor tick a box on it, by any route or MCP tool. They read it as a viewer reads a page (`readOnly`: no Edit, the editor a 403), and the refusal says why: **403** "Only an admin of this wiki can change this page: it is a guide, which every user's assistant follows (or a page a guide pulls in). Ask an admin of this wiki." (`guideMsg`, `readOnlyWhy`). An MCP write is refused with it before the guides are asked for (`checkGuides`); `replace_in_pages` leaves the guides out.
+- **A guide in a user's private folder is theirs**: only their own assistant reads it. **Without users** there are no admins: the wiki's one user writes its guides. A wiki with users but no admin (from before roles) has no one who can, until `zonewiki user role NAME admin`.
+- **What still reaches a guide**: a page rename re-points the links in it, and a tag's rename the `[[tasks: …]]` on it, in the renamer's commit; neither writes words of the renamer's own choosing beyond the new name. An admin's assistant is an admin: if it reads a prompt injection, it can write a guide.
+- **Tests**: `TestGuidesAreAnAdmins` in `tests/test_roles.py`.
 
 ## Managing users
 

@@ -155,8 +155,8 @@ Done tasks go to a yearly archive. Beyond that:
   (a **Private** box on the task, 🔒 on its card) and their own pinned lists.
   Everything else is shared. Each has a role: **admin** (the first user;
   manages the others under **Admin**, on its Users tab: invite links, roles, disable,
-  remove, password reset links), **editor** (the default) or **viewer** (reads
-  what is shared, changes nothing).
+  remove, password reset links; writes the guides AI assistants follow),
+  **editor** (the default) or **viewer** (reads what is shared, changes nothing).
   See [`docs/spec/users.md`](docs/spec/users.md).
 - **Keyboard shortcuts** for everything; `?` lists them.
 - **Sharing mode** for screen sharing: hides the trail of visited pages,
@@ -330,7 +330,9 @@ them with `read_guides` before drafting anything for the wiki; reading a guide
 that way counts, so its write goes through at once. Either way, the guide's
 text is sent once per conversation. When you change a guide, the old id stops working, so
 the assistant sees the new version. `wiki-guide` counts as the guide for the
-whole wiki.
+whole wiki. With users, only an admin can change a guide (or a page it pulls
+in): every user's assistant follows it. A guide in your private folder is
+yours.
 
 Set `base-url` (`./run.sh config set base-url …`) to Zone's address as your browser knows it, so the links
 in the assistant's answers open (it matters when the client runs in a

@@ -7,12 +7,16 @@
 package main
 
 import (
+	"io/fs"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
+	"time"
+	"zonewiki/internal/mdtext"
 )
 
 // privateDir is the folder of the users' private folders.
@@ -55,10 +59,111 @@ func canSee(user, slug string) bool {
 // the pages they may see, since everything shared is editable, but for a
 // viewer (users.go: roleViewer), who changes nothing.
 func canWrite(user, slug string) bool {
-	return canSee(user, slug) && !settings().isViewer(user)
+	return canSee(user, slug) && !settings().isViewer(user) && !adminsOnly(user, slug)
 }
 
-// readOnly: user sees the page slug but may not change it: a viewer.
+// adminsOnly: slug is a shared guide (guidePage), which with users only an
+// admin changes, and user isn't one. A guide is what every user's assistant
+// is told to follow (mcptools.go: the wiki's guide in its instructions, a
+// folder's before a write there), so whoever writes it steers them all: an
+// editor, or an assistant that read a prompt injection, could have every
+// assistant copy private pages into the open. A guide in a user's own
+// private folder is theirs: only their assistant reads it. Without users
+// there are no admins, and the wiki's one user writes its guides.
+func adminsOnly(user, slug string) bool {
+	s := settings()
+	if s.Users == nil || s.isAdmin(user) {
+		return false
+	}
+	if _, private := pageOwner(slug); private {
+		return false
+	}
+	return guidePage(slug)
+}
+
+// guidePage: slug is a guide: the wiki's (wiki-guide), a folder's
+// (AGENTS.md, CLAUDE.md), or a page one of those pulls in with a line
+// "@other.md" (guideText), there or not yet.
+func guidePage(slug string) bool {
+	clean := path.Clean(slug)
+	if clean == guideSlug || guideFiles[strings.ToLower(path.Base(clean))+".md"] {
+		return true
+	}
+	p := safePath(slug)
+	return p != "" && guideImports()[p]
+}
+
+// imports: the files the shared guides pull in, looked up at most once a
+// second (a walk of the wiki's folders): canWrite asks for every page of a
+// list.
+var imports struct {
+	sync.Mutex
+	at    time.Time
+	files map[string]bool
+}
+
+func guideImports() map[string]bool {
+	imports.Lock()
+	defer imports.Unlock()
+	if imports.files != nil && time.Since(imports.at) < time.Second {
+		return imports.files
+	}
+	root := resolvePath(cfg.Data)
+	files := map[string]bool{}
+	var follow func(guide string, depth int)
+	follow = func(guide string, depth int) {
+		text, err := readText(guide)
+		if err != nil || depth >= importDepth {
+			return
+		}
+		for _, line := range mdtext.SplitLines(text) {
+			m := importRE.FindStringSubmatch(strings.TrimSpace(mdtext.LineBody(line)))
+			if m == nil {
+				continue
+			}
+			target := resolvePath(filepath.Join(filepath.Dir(guide), m[1]))
+			if _, ok := relInside(root, target); ok && !files[target] {
+				files[target] = true
+				follow(target, depth+1)
+			}
+		}
+	}
+	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			name := d.Name()
+			if p != root && (strings.HasPrefix(name, "_") || strings.HasPrefix(name, ".") ||
+				filepath.Dir(p) == root && strings.EqualFold(name, privateDir)) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if guideFiles[strings.ToLower(d.Name())] || filepath.Dir(p) == root && d.Name() == guideSlug+".md" {
+			follow(p, 0)
+		}
+		return nil
+	})
+	imports.files, imports.at = files, time.Now()
+	return files
+}
+
+// guideMsg: what an editor is told when they try to change a guide.
+const guideMsg = "Only an admin of this wiki can change this page: it is a guide, which every user's assistant " +
+	"follows (or a page a guide pulls in). Ask an admin of this wiki."
+
+// readOnlyWhy: why user, who sees slug, may not change it (readOnly): a
+// viewer changes nothing, anyone else no guide.
+func readOnlyWhy(user string) string {
+	if settings().isViewer(user) {
+		return readOnlyMsg
+	}
+	return guideMsg
+}
+
+// readOnly: user sees the page slug but may not change it: a viewer, or
+// anyone but an admin on a guide (adminsOnly; readOnlyWhy says which).
 // Refusals then say so (403, readOnlyMsg), as the page is there for them;
 // one they can't see stays a 404.
 func readOnly(user, slug string) bool { return canSee(user, slug) && !canWrite(user, slug) }

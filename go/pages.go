@@ -403,7 +403,7 @@ func refusePage(w http.ResponseWriter, r *http.Request, rq *Req, slug string) bo
 func refuseWrite(w http.ResponseWriter, r *http.Request, slug string) bool {
 	switch {
 	case readOnly(userOf(r), slug):
-		http.Error(w, readOnlyMsg, http.StatusForbidden)
+		http.Error(w, readOnlyWhy(userOf(r)), http.StatusForbidden)
 		return true
 	case !canWrite(userOf(r), slug):
 		http.NotFound(w, r)

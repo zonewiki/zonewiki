@@ -228,7 +228,7 @@ func newSlug(raw, user string) (string, error) {
 		return "", toolErr(strconv.Quote(slug) + ": pages can't go in folders starting with '_' or '.'")
 	}
 	if readOnly(user, slug) {
-		return "", toolErr(readOnlyMsg)
+		return "", toolErr(readOnlyWhy(user))
 	}
 	if !canWrite(user, slug) {
 		return "", toolErr(notYours(slug, user))
@@ -490,6 +490,14 @@ func cutGuide(g guide) string {
 // checkGuides refuses a write to these pages while a guide for them isn't
 // among the ids in args' guides: the error gives the missing guides' text.
 func checkGuides(args jsonObj, slugs []string, user string) error {
+	// A page user may read but not change (a viewer's, a guide for anyone
+	// but an admin) is refused here already: not after the guides were
+	// read and the call sent again.
+	for _, slug := range slugs {
+		if readOnly(user, slug) && safePath(slug) != "" {
+			return toolErr(readOnlyWhy(user))
+		}
+	}
 	given, err := idsArg(args, "guides", "guides must be a list of guide ids")
 	if err != nil {
 		return err
@@ -2076,7 +2084,9 @@ func callMCPTool(r *http.Request, name string, args jsonObj) (string, error) {
 	out, err := f(args, base, userOf(r))
 	// A viewer's change to something shared, from wherever it was refused,
 	// as the tool's error.
-	if pe, ok := refusalOf(err); ok && pe.kind == refusedReadOnly || errors.Is(err, errReadOnly) {
+	if pe, ok := refusalOf(err); ok && pe.kind == refusedReadOnly {
+		err = toolErr(pe.msg)
+	} else if errors.Is(err, errReadOnly) {
 		err = toolErr(readOnlyMsg)
 	}
 	return out, err

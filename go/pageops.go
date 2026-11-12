@@ -64,7 +64,7 @@ const (
 	refusedProtected                // the home page: never deleted or renamed
 	refusedUnchanged                // the page already is what the write would make it
 	refusedFull                     // the wiki would hold more than storage-max: 507 (checkRoom)
-	refusedReadOnly                 // a viewer changing something shared: 403 (readOnlyMsg)
+	refusedReadOnly                 // a viewer changing something shared, an editor a guide: 403 (readOnlyWhy)
 )
 
 // pageError: an operation refused, with a message for the user.
@@ -121,7 +121,7 @@ func writablePage(user, slug string) (string, error) {
 // answers as missing, with msg.
 func notWritable(user, slug, msg string) error {
 	if readOnly(user, slug) && safePath(slug) != "" {
-		return refuseAs(refusedReadOnly, readOnlyMsg)
+		return refuseAs(refusedReadOnly, readOnlyWhy(user))
 	}
 	return refuseAs(refusedNotFound, msg)
 }
@@ -290,7 +290,7 @@ func checkTarget(user, slug, newSlug string) error {
 	case newPath == "":
 		return refuse("“" + newSlug + "”: pages can't go in folders starting with '_' or '.'")
 	case readOnly(user, newSlug):
-		return refuseAs(refusedReadOnly, readOnlyMsg)
+		return refuseAs(refusedReadOnly, readOnlyWhy(user))
 	case !canWrite(user, newSlug):
 		return refuse("“" + newSlug + "”: that folder is another user's")
 	case exists(newPath):

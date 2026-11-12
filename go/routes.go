@@ -684,7 +684,7 @@ func renamePage(w http.ResponseWriter, r *http.Request) {
 	_, _, err := renamePageOp(userOf(r), slug, newSlug, "")
 	if _, err = partly(err); err != nil {
 		switch pe, ok := refusalOf(err); {
-		case !ok || pe.kind == refusedNotFound || pe.kind == refusedProtected:
+		case !ok || pe.kind == refusedNotFound || pe.kind == refusedProtected || pe.kind == refusedReadOnly:
 			pageFailed(w, r, err)
 		case pe.kind == refusedUnchanged:
 			http.Redirect(w, r, back, http.StatusFound)
@@ -776,7 +776,7 @@ func appendPage(w http.ResponseWriter, r *http.Request) {
 		targetPath = safePath(target)
 	}
 	if target != "" && readOnly(userOf(r), target) {
-		http.Redirect(w, r, back+quote(readOnlyMsg), http.StatusFound)
+		http.Redirect(w, r, back+quote(readOnlyWhy(userOf(r))), http.StatusFound)
 		return
 	}
 	if raw != "" && (targetPath == "" || !exists(targetPath)) {
