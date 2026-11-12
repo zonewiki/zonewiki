@@ -34,6 +34,24 @@ def test_the_semantic_layer_takes_nothing_from_the_repo():
     assert "COPY" not in stage("semantic")
 
 
+def test_base_images_and_ci_actions_are_pinned_by_hash():
+    # A tag can be moved to other content: what builds and publishes Zone
+    # names the exact image (its digest) and the exact commit of an action.
+    bases = dict(re.findall(r"^ARG (UBUNTU)=(\S+)", CONTAINERFILE, re.M))
+    froms = re.findall(r"^FROM (\S+)", CONTAINERFILE + TOOLS, re.M)
+    assert froms.count("${UBUNTU}") == 3 and len(froms) == 4
+    for image in [bases["UBUNTU"]] + [f for f in froms if f != "${UBUNTU}"]:
+        assert re.fullmatch(r"[\w./-]+:[\w.-]+@sha256:[0-9a-f]{64}", image), image
+    ci = "".join((REPO / d / "workflows" / "ci.yml").read_text(encoding="utf-8") for d in (".github", ".forgejo"))
+    for image in re.findall(r"^\s+image: (\S+)$", ci, re.M):   # a job's container (Forgejo)
+        assert re.fullmatch(r"[\w./-]+:[\w.-]+@sha256:[0-9a-f]{64}", image), image
+    uses = re.findall(r"uses: (\S+)(.*)", ci)
+    assert len(uses) > 8
+    for action, comment in uses:
+        assert re.fullmatch(r"[\w-]+/[\w-]+@[0-9a-f]{40}", action), action
+        assert re.fullmatch(r" # v\d+\.\d+\.\d+", comment), action   # the release it is
+
+
 def test_both_images_build_with_the_same_go():
     for key in ("GO_VERSION", "GO_SHA256_AMD64", "GO_SHA256_ARM64"):
         assert args(stage("build"))[key] == args(TOOLS)[key], key

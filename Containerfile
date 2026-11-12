@@ -3,10 +3,17 @@
 # search. Three stages, so a change to the code rebuilds neither the model
 # layer nor the toolchain's.
 
+# The base image, by digest (the tag's multi-arch index): a tag can be moved
+# to other content, a digest can't. It doesn't follow the tag's updates, so
+# bump it now and then, here and nowhere else:
+#   podman manifest inspect docker://ubuntu:26.04 >/dev/null; skopeo inspect docker://ubuntu:26.04 | grep Digest
+# or the Docker-Content-Digest header of the registry's manifest for the tag.
+ARG UBUNTU=ubuntu:26.04@sha256:065aa8626841f16057b78b027b464cd59c4fac36c204c72dcbf48d66f5fa8a96
+
 # ── Build: the server from go/ ───────────────────────────────────────────────
 # With cgo (a C compiler): semantic search loads onnxruntime with dlopen, so
 # the binary links only libc either way.
-FROM ubuntu:26.04 AS build
+FROM ${UBUNTU} AS build
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       ca-certificates curl gcc libc6-dev && \
@@ -44,7 +51,7 @@ RUN go build -trimpath -ldflags="-s -w" -o /zonewiki .
 # checked against their SHA-256: onnxruntime's GitHub release (the sums of
 # its files), the model's files at a fixed revision (go/embed.go has the
 # same names and sums; tests/test_image.py checks they agree).
-FROM ubuntu:26.04 AS semantic
+FROM ${UBUNTU} AS semantic
 ARG TARGETARCH=amd64
 ARG ZONE_SEMANTIC_SEARCH=
 ARG ORT_VERSION=1.31.0
@@ -82,7 +89,7 @@ RUN mkdir -p /opt/onnxruntime /opt/onnxruntime-licenses /opt/zonewiki-model \
  && rm -rf /tmp/ort.tgz /var/lib/apt/lists/*
 
 # ── The image ────────────────────────────────────────────────────────────────
-FROM ubuntu:26.04
+FROM ${UBUNTU}
 
 # git: the wiki's history. tzdata: TZ (compose.yaml, from the host or .env)
 # names the user's timezone. ca-certificates: a git-remote over https,

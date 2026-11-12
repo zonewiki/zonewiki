@@ -14,7 +14,8 @@
 # Keep the playwright pin (tests/requirements.txt) in lockstep with the image
 # tag: the Python package only works with the browser build that ships in
 # the matching image.
-FROM mcr.microsoft.com/playwright/python:v1.63.0-noble
+# By digest too (the tag's multi-arch index): change it with the tag.
+FROM mcr.microsoft.com/playwright/python:v1.63.0-noble@sha256:72bd171a9ffc2b4b59532aaa6210e21014d07093120dc25528870c0b840da1f0
 
 # Node runs tests/test_tasks_core.py (the pure tasks logic in tasks-core.js);
 # curl fetches gitleaks below; pngquant compresses the README's screenshots

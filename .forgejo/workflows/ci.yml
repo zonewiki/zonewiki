@@ -38,12 +38,12 @@ jobs:
     name: ${{ matrix.check }}
     runs-on: docker
     container:
-      image: docker:cli
+      image: docker:29.9.3-cli@sha256:2357639ad1ea7d0194134bf3292622fd4e562483966ed674e5d7c945b5f3b28d
     steps:
       - name: Install system packages
         # Alpine: nodejs runs actions/checkout, bash run.sh, git its build string.
         run: apk add --no-cache nodejs git bash
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           # leaks scans every commit; the others need only the last. Strings,
           # as a number 0 is falsy and `&& 0 || 1` would always give 1.
@@ -61,7 +61,7 @@ jobs:
     container:
       # The official docker CLI image; the build runs on the host's engine
       # through the mounted socket, so its layer cache survives between runs.
-      image: docker:cli
+      image: docker:29.9.3-cli@sha256:2357639ad1ea7d0194134bf3292622fd4e562483966ed674e5d7c945b5f3b28d
     defaults:
       run:
         shell: bash
@@ -70,7 +70,7 @@ jobs:
         # Alpine: nodejs runs actions/checkout, bash the steps below.
         shell: sh
         run: apk add --no-cache nodejs git bash
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Image name and tags
         id: meta
         env:
