@@ -367,7 +367,7 @@ func checks(next http.Handler) http.Handler {
 				return
 			}
 			if renew {
-				setSession(w, r, user)
+				renewSession(w, r)
 			}
 			r = withUser(r, user)
 		}
@@ -527,7 +527,14 @@ func disabledLogin(r *http.Request) bool {
 	return u != nil && u.Disabled && checkPassword(r.PostFormValue("password"), u.PasswordHash)
 }
 
+// logout ends the session, not only this browser's cookie of it: a copy
+// of the cookie taken before stops working too (signout.go).
 func logout(w http.ResponseWriter, r *http.Request) {
+	if s, ok := readSession(r); ok {
+		if err := signOut(s.ID); err != nil {
+			fmt.Fprintln(os.Stderr, "Zone: signing out:", err)
+		}
+	}
 	clearSession(w, r)
 	http.Redirect(w, r, "/login", http.StatusFound)
 }

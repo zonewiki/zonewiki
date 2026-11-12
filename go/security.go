@@ -186,7 +186,9 @@ func secretKey(dataDir string) []byte {
 // and renewed as it is used. It says who signed in: with users, their name;
 // with the wiki's one password, no one in particular (""). It carries a
 // stamp of the password it was signed in with (passwordStamp), so a new
-// password ends every session of the old one.
+// password ends every session of the old one, and an id that stays the same
+// as it is renewed, so signing out ends it wherever a copy of the cookie is
+// (signout.go).
 const (
 	sessionCookie   = "session"
 	sessionLifetime = 30 * 24 * time.Hour
@@ -199,6 +201,7 @@ type session struct {
 	Issued int64  `json:"iat"`
 	User   string `json:"user,omitempty"`
 	Pw     string `json:"pw"`
+	ID     string `json:"id,omitempty"`
 }
 
 // passwordStamp: what a session of user ("": the wiki's password) holds of
@@ -221,29 +224,43 @@ func sign(payload string) string {
 	return base64.RawURLEncoding.EncodeToString(m.Sum(nil))
 }
 
+// readSession: the session of the request's cookie, if Zone signed it. A
+// session from before sessions had ids has the start of its signature as
+// one, which a renewed copy of it keeps.
+func readSession(r *http.Request) (s session, ok bool) {
+	c, err := r.Cookie(sessionCookie)
+	if err != nil {
+		return s, false
+	}
+	payload, sig, found := strings.Cut(c.Value, ".")
+	if !found || !hmac.Equal([]byte(sig), []byte(sign(payload))) {
+		return s, false
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(payload)
+	if err != nil || json.Unmarshal(raw, &s) != nil || !s.Auth {
+		return s, false
+	}
+	if s.ID == "" {
+		s.ID = sig[:16]
+	}
+	return s, true
+}
+
 // signedIn: the request carries a valid session cookie, user is who it
 // belongs to; renew says it is old enough (a day) to be given a fresh one.
 // With users, the session must name one of them, not disabled, so a user
 // taken out of the settings or disabled is signed out at once; without, it must name no one, so
 // switching between a password and users signs everyone out; a changed
-// password signs out the sessions of the old one.
+// password signs out the sessions of the old one; and a session signed
+// out is over, whoever holds a copy of its cookie.
 func signedIn(r *http.Request) (user string, ok, renew bool) {
-	c, err := r.Cookie(sessionCookie)
-	if err != nil {
-		return "", false, false
-	}
-	payload, sig, found := strings.Cut(c.Value, ".")
-	if !found || !hmac.Equal([]byte(sig), []byte(sign(payload))) {
-		return "", false, false
-	}
-	raw, err := base64.RawURLEncoding.DecodeString(payload)
-	var s session
-	if err != nil || json.Unmarshal(raw, &s) != nil || !s.Auth {
+	s, ok := readSession(r)
+	if !ok {
 		return "", false, false
 	}
 	users := settings().Users
 	if users != nil && (users[s.User] == nil || users[s.User].Disabled) || users == nil && s.User != "" ||
-		!hmac.Equal([]byte(s.Pw), []byte(passwordStamp(s.User))) {
+		!hmac.Equal([]byte(s.Pw), []byte(passwordStamp(s.User))) || isSignedOut(s.ID) {
 		return "", false, false
 	}
 	age := now().Sub(time.Unix(s.Issued, 0))
@@ -266,7 +283,19 @@ func setSessionHash(w http.ResponseWriter, r *http.Request, user, hash string) {
 	if hash != "" {
 		stamp = stampOf(hash)
 	}
-	raw, _ := json.Marshal(session{Auth: true, Issued: now().Unix(), User: user, Pw: stamp})
+	writeSession(w, r, session{User: user, Pw: stamp, ID: newToken()[:16]})
+}
+
+// renewSession: the request's session with a new date, still the same one.
+func renewSession(w http.ResponseWriter, r *http.Request) {
+	if s, ok := readSession(r); ok {
+		writeSession(w, r, s)
+	}
+}
+
+func writeSession(w http.ResponseWriter, r *http.Request, s session) {
+	s.Auth, s.Issued = true, now().Unix()
+	raw, _ := json.Marshal(s)
 	payload := base64.RawURLEncoding.EncodeToString(raw)
 	http.SetCookie(w, &http.Cookie{
 		Name: sessionCookie, Value: payload + "." + sign(payload), Path: "/",

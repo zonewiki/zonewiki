@@ -198,22 +198,30 @@ class TestLinks:
         assert page.status_code == 200 and "Welcome to" in body and "dave" in body
         assert page.headers["Referrer-Policy"] == "no-referrer"
         assert section(git_wiki_dir, "dave") is None   # opening it changes nothing
-        resp = post(client, link, password="dave-pw", again="dave-pw")
+        resp = post(client, link, password="dave-password", again="dave-password")
         assert resp.status_code == 303
         assert "role = viewer" in section(git_wiki_dir, "dave")
         assert ">dave</span>" in client.get("/page/index", headers=HOST).data.decode()
         # Once only.
         client.post("/logout", headers=HOST)
         assert client.get(link, headers=HOST).status_code == 404
-        assert client.post("/login", data={"username": "dave", "password": "dave-pw"},
+        assert client.post("/login", data={"username": "dave", "password": "dave-password"},
                            headers=HOST).status_code == 302
 
     def test_the_passwords_must_agree(self, admin, client, git_wiki_dir):
         link = make_link(admin, "/admin/users/invite", name="dave", role="editor")
         client.post("/logout", headers=HOST)
-        assert "The passwords differ." in post(client, link, password="a", again="b").data.decode()
-        assert "Choose a password." in post(client, link, password="", again="").data.decode()
+        assert "The passwords differ." in post(client, link, password="one password", again="another one").data.decode()
         assert section(git_wiki_dir, "dave") is None
+
+    def test_a_password_has_at_least_8_characters(self, admin, client, git_wiki_dir):
+        # As on the first-run page: a link doesn't set a password of one letter.
+        link = make_link(admin, "/admin/users/invite", name="dave", role="editor")
+        client.post("/logout", headers=HOST)
+        for short in ["", "a", "1234567"]:
+            assert "at least 8 characters" in post(client, link, password=short, again=short).data.decode()
+        assert section(git_wiki_dir, "dave") is None
+        assert post(client, link, password="12345678", again="12345678").status_code == 303
 
     def test_a_reset_sets_a_new_password_and_ends_the_old_sessions(self, admin, client, git_wiki_dir):
         link = make_link(admin, "/admin/users/bob/reset")
@@ -222,7 +230,7 @@ class TestLinks:
         old_session = client.cookies["session"]
         before = section(git_wiki_dir, "bob")
         client.post("/logout", headers=HOST)
-        resp = post(client, link, password="new-pw", again="new-pw")
+        resp = post(client, link, password="new-password", again="new-password")
         assert resp.status_code == 303 and section(git_wiki_dir, "bob") != before
         assert ">bob</span>" in client.get("/page/index", headers=HOST).data.decode()   # signed in by the link
         client.set_cookie("session", old_session)

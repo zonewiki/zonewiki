@@ -97,6 +97,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── users.go            # Users: roles, password hashes, sign-in, the password prompt
 │   ├── admin.go            # The admin page (/admin, admins), its Users tab: roles, disable, remove, writing the settings file as the commands do
 │   ├── links.go            # Invite and reset links: .zone/links, /welcome/<token>
+│   ├── signout.go          # Sessions signed out: .zone/signed-out
 │   ├── setup.go            # The first-run page: /setup, a first login for a wiki other devices reach
 │   ├── access.go           # Who may see and change what: private/<user>/ (canSee, canWrite, canSeePath)
 │   ├── private.go          # The private home private/<user>/index: /private, its template, its protection
@@ -235,7 +236,7 @@ Use the fixtures and helpers in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`,
 - Do not use a database. Files are the only storage.
 - Do not add a build step or bundler for the browser code.
 - **Security** (details and reasons in `docs/spec/security.md`; don't weaken any of these):
-  - `password` in `.zone/config` (a hash) turns on a login gate; the session key is one Zone keeps in `.zone/secret_key` (0600, excluded from git).
+  - `password` in `.zone/config` (a hash) turns on a login gate; the session key is one Zone keeps in `.zone/secret_key` (0600, excluded from git). Signing out ends the session wherever a copy of its cookie is (`go/signout.go`: its id in `.zone/signed-out`); renew a session with `renewSession`, which keeps the id, never with `setSession`.
   - Users instead (`[user …]` in `.zone/config`): a login per user, passwords only as hashes (`docs/spec/users.md`); the session names its user, `userOf(r)` / `rq.user` give it, and a write passes it to `gitCommit(user, …)` as the commit's author.
   - **Private pages and tasks** (`private/<user>/`, tasks in `private/<user>/_tasks/`, with users): every route and tool that shows, lists or changes a page asks `go/access.go` (`canSee`, `canWrite`, `canSeePath`; `hiddenPage`/`refusePage` in the routes); every read of tasks takes the user (`readTasks(user)` …, shared + their own files), and what holds every user's tasks (the search index) filters with `canSeeTask`. A new route gets a probe in `tests/test_privacy.py`, which fails until it has one. A path handed to git names one file, never a pattern (`GIT_LITERAL_PATHSPECS` in `gitEnv`): don't turn that off for a call that takes a page's name.
   - **Guides are an admin's** (with users): `canWrite` is false for anyone else on `wiki-guide`, a folder's `AGENTS.md`/`CLAUDE.md` and the pages they pull in (`adminsOnly`, Guides in `docs/spec/users.md`): every user's assistant follows them.

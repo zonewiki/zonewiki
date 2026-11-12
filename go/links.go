@@ -18,6 +18,7 @@ import (
 	"sort"
 	"sync"
 	"time"
+	"unicode/utf8"
 	"zonewiki/internal/settingsfile"
 )
 
@@ -301,8 +302,8 @@ func welcomeRoute(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
 		password := r.PostFormValue("password")
 		switch {
-		case password == "":
-			v.Error = "Choose a password."
+		case utf8.RuneCountInString(password) < passwordMin:
+			v.Error = "Choose a password of at least 8 characters."
 		case password != r.PostFormValue("again"):
 			v.Error = "The passwords differ."
 		default:

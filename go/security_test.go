@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -179,6 +181,65 @@ func TestSecretKeyWithoutAWritableWiki(t *testing.T) {
 	first, second := secretKey(wiki), secretKey(wiki)
 	if len(first) != 64 || len(second) != 64 || string(first) == string(second) {
 		t.Fatal("works, not kept")
+	}
+}
+
+func TestSigningOut(t *testing.T) {
+	testWiki(t, nil)
+	sessionKey = []byte(strings.Repeat("k", 64))
+	at := clock(t, time.Unix(1_000_000, 0))
+	cookieOf := func(w *httptest.ResponseRecorder) string { return w.Result().Cookies()[0].Value }
+	w := httptest.NewRecorder()
+	setSession(w, httptest.NewRequest("GET", "/", nil), "")
+	first := cookieOf(w)
+	w = httptest.NewRecorder()
+	setSession(w, httptest.NewRequest("GET", "/", nil), "")
+	other := cookieOf(w)
+
+	// Renewed, it is still the same session: signing out the renewed
+	// cookie ends the old copy too, and the other session goes on.
+	*at = at.Add(2 * 24 * time.Hour)
+	w = httptest.NewRecorder()
+	renewSession(w, withCookie(first))
+	renewed := cookieOf(w)
+	if renewed == first {
+		t.Fatal("not renewed")
+	}
+	logout(httptest.NewRecorder(), withCookie(renewed))
+	for _, c := range []string{first, renewed} {
+		if _, ok, _ := signedIn(withCookie(c)); ok {
+			t.Fatal("a signed-out session passes")
+		}
+	}
+	if _, ok, _ := signedIn(withCookie(other)); !ok {
+		t.Fatal("another session was signed out with it")
+	}
+
+	// Read again from the file (a restart).
+	signedOut.until = nil
+	if _, ok, _ := signedIn(withCookie(first)); ok {
+		t.Fatal("forgotten with a restart")
+	}
+
+	// Kept until no cookie of the session can be valid, then dropped.
+	*at = at.Add(sessionLifetime + time.Hour)
+	logout(httptest.NewRecorder(), withCookie(other))
+	if len(signedOut.until) != 1 {
+		t.Fatalf("kept %d, want only the one just signed out", len(signedOut.until))
+	}
+
+	// A session from before sessions had ids: its signature's start is one.
+	raw, _ := json.Marshal(session{Auth: true, Issued: now().Unix(), Pw: passwordStamp("")})
+	payload := base64.RawURLEncoding.EncodeToString(raw)
+	old := payload + "." + sign(payload)
+	if _, ok, _ := signedIn(withCookie(old)); !ok {
+		t.Fatal("a session without an id doesn't pass")
+	}
+	w = httptest.NewRecorder()
+	renewSession(w, withCookie(old))
+	logout(httptest.NewRecorder(), withCookie(old))
+	if _, ok, _ := signedIn(withCookie(cookieOf(w))); ok {
+		t.Fatal("the renewed copy of a signed-out old session passes")
 	}
 }
 

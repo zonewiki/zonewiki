@@ -2,6 +2,7 @@
 naming its user, per-user MCP tokens, and commits authored by whoever made
 the change."""
 
+import json
 import re
 import subprocess
 from io import BytesIO
@@ -155,6 +156,52 @@ class TestMCP:
         monkeypatch.setattr(settings, "LEAF_USERS", {"bob": USERS["bob"]})
         resp = mcp(client, "x")
         assert resp.status_code == 403 and "./run.sh user token NAME" in resp.get_json()["error"]
+
+
+class TestSigningOut:
+    """Signing out ends the session, not only the browser's cookie of it
+    (docs/spec/security.md, Signing out): a copy of the cookie taken before
+    stops working, and Zone remembers that across a restart."""
+
+    def test_a_copy_of_the_cookie_stops_working(self, client, git_wiki_dir, users):
+        login(client, "alice", "alice-pw")
+        copy = client.cookies["session"]
+        assert client.get("/page/index", headers=HOST).status_code == 200
+        client.post("/logout", headers=HOST)
+        client.set_cookie("session", copy)
+        resp = client.get("/page/index", headers=HOST)
+        assert resp.status_code == 302 and "/login" in resp.headers["Location"]
+        # Kept as state beside the session key: the id and until when, not the cookie.
+        kept = json.loads((git_wiki_dir / ".zone" / "signed-out").read_text())
+        assert len(kept) == 1 and copy not in json.dumps(kept)
+        assert ".zone" not in subprocess.run(["git", "status", "--porcelain"], cwd=git_wiki_dir,
+                                             capture_output=True, text=True).stdout
+
+    def test_other_sessions_of_the_user_go_on(self, client, users):
+        login(client, "alice", "alice-pw")
+        phone = client.cookies["session"]
+        client.cookies.clear()
+        login(client, "alice", "alice-pw")
+        client.post("/logout", headers=HOST)
+        client.set_cookie("session", phone)
+        assert client.get("/page/index", headers=HOST).status_code == 200
+        # And signing in again works.
+        client.post("/logout", headers=HOST)
+        login(client, "alice", "alice-pw")
+        assert client.get("/page/index", headers=HOST).status_code == 200
+
+    def test_the_wikis_one_password_too(self, client, monkeypatch):
+        monkeypatch.setattr(settings, "LEAF_PASSWORD", "one password")
+        assert client.post("/login", data={"password": "one password"}, headers=HOST).status_code == 302
+        copy = client.cookies["session"]
+        client.post("/logout", headers=HOST)
+        client.set_cookie("session", copy)
+        assert client.get("/page/index", headers=HOST).status_code == 302
+
+    def test_a_cookie_zone_didnt_sign_signs_no_one_out(self, client, git_wiki_dir, users):
+        client.set_cookie("session", "eyJhdXRoIjp0cnVlfQ.forged")
+        client.post("/logout", headers=HOST)
+        assert not (git_wiki_dir / ".zone" / "signed-out").exists()
 
 
 class TestPrivateHome:
