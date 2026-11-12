@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
@@ -1299,7 +1300,10 @@ func apiExport(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	name := firstNonEmpty(list, "all")
-	w.Header().Set("Content-Disposition", `attachment; filename="zone-tasks-`+name+"-"+isoDay(today())+`.json"`)
+	// The list's name is the request's: as a quoted, escaped parameter, so
+	// a " in it can't end the file name and add one of its own.
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment",
+		map[string]string{"filename": "zone-tasks-" + name + "-" + isoDay(today()) + ".json"}))
 	writeJSON(w, http.StatusOK, map[string]any{"zone_tasks": 1, "list": list, "tag": tag, "exported_at": timestamp(), "tasks": tasks})
 	return nil
 }

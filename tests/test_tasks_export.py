@@ -1,6 +1,8 @@
 """A list's tasks as a file (docs/spec/tasks.md, Export and import):
 GET /api/tasks/export and POST /api/tasks/import."""
 
+import re
+
 from tests.conftest import HOST, create_task
 
 
@@ -23,7 +25,7 @@ def test_export_is_the_lists_tasks_open_and_completed(client, wiki_dir):
     create_task(client, title="Report", tags=["work"])
     resp = export(client, list="shop")
     assert resp.status_code == 200
-    assert 'attachment; filename="zone-tasks-shop-' in resp.headers["Content-Disposition"]
+    assert re.fullmatch(r'attachment; filename=zone-tasks-shop-\d{4}-\d{2}-\d{2}\.json', resp.headers["Content-Disposition"])
     file = resp.get_json()
     assert file["zone_tasks"] == 1 and file["list"] == "shop" and file["exported_at"]
     assert [t["title"] for t in file["tasks"]] == ["Milk", "Eggs"]
@@ -35,6 +37,13 @@ def test_export_is_the_lists_tasks_open_and_completed(client, wiki_dir):
     assert [t["title"] for t in export(client, tag="work|weekly").get_json()["tasks"]] == ["Milk", "Report"]
     everything = export(client)
     assert len(everything.get_json()["tasks"]) == 3 and "zone-tasks-all-" in everything.headers["Content-Disposition"]
+
+
+def test_the_lists_name_cant_add_to_the_download_header(client, wiki_dir):
+    # The name is the request's: quoted and escaped, it stays one file name
+    # (a bare " would end it, and what follows be a parameter of its own).
+    header = export(client, list='x" filename="evil.html').headers["Content-Disposition"]
+    assert re.fullmatch(r'attachment; filename="zone-tasks-x\\"-filename=\\"evil\.html-\d{4}-\d{2}-\d{2}\.json"', header), header
 
 
 def test_import_brings_an_export_back_once(client, wiki_dir):
