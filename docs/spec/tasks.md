@@ -114,12 +114,16 @@ A segmented control (`.view-tabs`, one `<button data-view>` each) in the order *
 | Field | Param | |
 |-------|-------|---|
 | Opens on | `view` | The Open or the Focus tab (by their names here); Completed is offered only where the page says `view=completed` |
-| Plan | `plan`, `view` | The Open tab grouped by start date, or one list |
 | WIP limit | `limit` | 1–99, empty for none |
-| Name of the Open tab, of the Focus tab | `labels` | Empty keeps Open and Focus |
-| Tags of a new task | `new` | Comma-separated; empty: the list's tag and the single tags it shows |
-| Shows only the tags | `tag` | The filter: `a,b` both, `a\|b` either, `-a` without |
+| Plan | `plan`, `view` | The Open tab grouped by start date, or one list |
 | Pinned | `pin` | No, Pinned, or Pinned as the default list |
+| Tab names (under More) | `labels` | The Open tab's and the Focus tab's; empty keeps Open and Focus |
+| Tags of a new task (under More) | `new` | Comma-separated; empty: the list's tag and the single tags it shows |
+| Shows only the tags (under More) | `tag` | The filter: `a,b` both, `a\|b` either, `-a` without |
+
+**On phones** (≤640px) the toolbar has no room for the gear: it isn't shown, and **List settings…** is the first item of the list's ⋯ menu (see Export and import).
+
+**More** (`<details class="task-settings-more">`) folds the three fields that are rarely changed; it is open when the dialog opens with one of them set. The line above Save says where the settings are written.
 
 **Where it writes** (`data-settings-page`, `-index`, `-raw` on `.tasks-app`, from `buildTasksEmbed`: the page, which of its `[[tasks: …]]` outside code, and the params as written there):
 
@@ -136,12 +140,12 @@ A segmented control (`.view-tabs`, one `<button data-view>` each) in the order *
 
 ### Export and import
 
-**A list's tasks as a file**, to keep a copy, move a list to another wiki or hand it to someone. Both are in the List settings dialog (the gear), under **The tasks shown here**.
+**A list's tasks as a file**, to keep a copy, move a list to another wiki or hand it to someone. **Export tasks** and **Import tasks…** are in the list's **⋯ menu** in the toolbar, beside the gear (`#task-more-btn`, `.tasks-more-btn`; the cards' menu, `showMenu` in `js/taskmenu.js`, a bottom sheet on phones; the code in `js/tasksettings.js`).
 
-- **Export** (`GET /api/tasks/export?list=&tag=`, `apiExport`): downloads `zone-tasks-<list>-<date>.json` (`all` for All tasks): the tasks the list shows (its `list=` and `tag=`, not what is typed in the search field), open and completed of every year, each as the API shows it, with its notes, dates, recurrence, comments and history: `{"zone_tasks": 1, "list": "shop", "tag": "", "exported_at": "…", "tasks": […]}`. With users it holds the shared tasks and your own private ones, marked `"private": true`.
-- **Import…** (`POST /api/tasks/import`, `apiImport`): pick such a file, and its tasks are added to the list the dialog was opened in. They get the tags a new task there would (the list's tag and the single tags it shows, or `new=`), in place of the tag of the list they were exported from, so a `shop` export imported into `groceries` shows up there; their other tags stay. On All tasks they keep their tags as they are. Completed tasks arrive completed. **A task keeps its id**, and one whose id is in the wiki already is skipped: importing the same file twice adds nothing, and a file exported here brings back only what was deleted since (an id that isn't a UUID is replaced). So a list can't be duplicated within one wiki this way. A task exported private stays private, wherever it is imported; on a list in your private folder every imported task is private, as a new one is. **A tag of your own** (the field beside Import…, optional; `also`): the imported tasks get it too, on top of the list's, to find the batch again later (`from-anna`); cleaned like any tag, several comma-separated. One commit, "Import N tasks". The notice says what happened ("Imported 12 tasks; 3 already here.") and has **Undo** (also Ctrl+Z, for the few seconds it shows; `showUndo`): the tasks just added are deleted again (`/api/tasks/batch-delete` with the `ids` the import answered). A file that isn't an export (no `tasks` list, or a task without a title) is refused whole, as is one with more than 10,000 tasks (`importMax`); a bare JSON list of tasks is taken too, so a file written by hand or by a script needs only `[{"title": "…"}]`. A viewer can't import (403).
+- **Export tasks** (`GET /api/tasks/export?list=&tag=`, `apiExport`): downloads `zone-tasks-<list>-<date>.json` (`all` for All tasks): the tasks the list shows (its `list=` and `tag=`, not what is typed in the search field), open and completed of every year, each as the API shows it, with its notes, dates, recurrence, comments and history: `{"zone_tasks": 1, "list": "shop", "tag": "", "exported_at": "…", "tasks": […]}`. With users it holds the shared tasks and your own private ones, marked `"private": true`.
+- **Import tasks…** (`POST /api/tasks/import`, `apiImport`): pick such a file, and a dialog (`#task-import-modal`) says what it holds ("Import 12 tasks from “shop.json”") and asks for a tag of your own; **Import** adds its tasks to the list the menu was opened in, Cancel nothing. A file that holds no list of tasks is refused at once, in a notice. They get the tags a new task there would (the list's tag and the single tags it shows, or `new=`), in place of the tag of the list they were exported from, so a `shop` export imported into `groceries` shows up there; their other tags stay. On All tasks they keep their tags as they are. Completed tasks arrive completed. **A task keeps its id**, and one whose id is in the wiki already is skipped: importing the same file twice adds nothing, and a file exported here brings back only what was deleted since (an id that isn't a UUID is replaced). So a list can't be duplicated within one wiki this way. A task exported private stays private, wherever it is imported; on a list in your private folder every imported task is private, as a new one is. **A tag of your own** (the dialog's field, optional; `also`): the imported tasks get it too, on top of the list's, to find the batch again later (`from-anna`); cleaned like any tag, several comma-separated. One commit, "Import N tasks". The notice says what happened ("Imported 12 tasks; 3 already here.") and has **Undo** (also Ctrl+Z, for the few seconds it shows; `showUndo`): the tasks just added are deleted again (`/api/tasks/batch-delete` with the `ids` the import answered). A file that isn't an export (no `tasks` list, or a task without a title) is refused whole (the server's reason shows in the dialog), as is one with more than 10,000 tasks (`importMax`); a bare JSON list of tasks is taken too, so a file written by hand or by a script needs only `[{"title": "…"}]`. A viewer can't import (403).
 
-They are where the gear is (see Settings: not for a viewer, nor a tag no page declares).
+The ⋯ menu is where the gear is (see Settings: not for a viewer, nor a tag no page declares).
 
 ### Look
 

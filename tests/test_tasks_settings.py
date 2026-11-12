@@ -18,10 +18,13 @@ class TestGear:
         assert 'data-settings-page="lists" data-settings-index="1" data-settings-raw="list=shop  view=open"' in html
         assert 'id="task-settings-btn"' in html and 'id="task-settings-btn-1"' in html
         assert 'id="task-settings-modal-1"' in html
+        # Beside it, the list's ⋯ menu (Export, Import…).
+        assert 'id="task-more-btn"' in html and 'id="task-import-modal-1"' in html
 
     def test_a_preview_has_none(self, client, wiki_dir):
         html = preview(client, "[[tasks: tag=a]]\n")
         assert "task-settings" not in html and "data-settings" not in html
+        assert "task-more-btn" not in html and "task-import" not in html
 
     def test_tasks_page_all_and_a_list(self, client, wiki_dir):
         write_page(wiki_dir, "shopping", "# Shopping\n\ntext\n\n[[tasks: tag=x]]\n\n[[tasks: list=shop keep=1]]\n")

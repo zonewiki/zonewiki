@@ -2799,7 +2799,7 @@ div.chip-input > input {
   .tasks-app:not(.tasks-compact) .task-meta:has(.task-date-empty) { display: flex; }
 }
 
-.tasks-density-btn, .tasks-settings-btn { display: inline-flex; align-items: center; justify-content: center; padding-inline: .45rem; color: var(--muted); }
+.tasks-density-btn, .tasks-settings-btn, .tasks-more-btn { display: inline-flex; align-items: center; justify-content: center; padding-inline: .45rem; color: var(--muted); }
 .tasks-density-btn[aria-pressed="true"] { color: var(--btn-primary); border-color: var(--btn-primary); }
 .tasks-toolbar select.tasks-sort { flex: none; }
 .tasks-sort[hidden] { display: none; }
@@ -3221,15 +3221,14 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 /* A task app's settings dialog (js/tasksettings.js) */
 .task-settings-modal { max-width: 30rem; }
 .task-settings-row { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
-.task-settings-row .task-field { min-width: 0; }
-.task-settings-embed { display: flex; flex-direction: column; gap: .75rem; }
+.task-settings-row :is(.task-field, input) { min-width: 0; }
 .task-settings-embed[hidden] { display: none; }
 .task-settings-check { display: flex; align-items: center; gap: .5rem; font-size: .9rem; }
+/* More: what is rarely changed, folded */
+.task-settings-more summary { width: fit-content; font-size: .8rem; font-weight: 500; color: var(--muted); cursor: pointer; }
+.task-settings-more summary:hover { color: var(--fg); }
+.task-settings-more-body { display: flex; flex-direction: column; gap: .75rem; padding-top: .6rem; }
 .task-settings-where { margin: 0; }
-.task-settings-transfer { border-top: 1px solid var(--border); padding-top: .75rem; }
-.task-settings-transfer-btns { display: flex; gap: .5rem; flex-wrap: wrap; }
-.task-settings-transfer-btns input[type="text"] { flex: 1 1 12rem; min-width: 0; }
-.task-settings-transfer-btns a.btn { text-decoration: none; color: inherit; }
 .task-settings-error { margin: 0; font-size: .85rem; color: #a33232; }
 .task-settings-error[hidden] { display: none; }
 .task-field { display: flex; flex-direction: column; gap: .25rem; }
@@ -3393,6 +3392,8 @@ ul.task-comment-list { list-style: none; margin: .3rem 0 0; padding: 0; font-siz
   .tasks-toolbar #task-filter-search { min-width: 0; }
   .tasks-toolbar select { padding-right: 1.4rem; background-position: right .4rem center; }
   .task-add-label { display: none; }
+  /* The gear's dialog is in the ⋯ menu here (tasksettings.js), for the search field's room. */
+  .tasks-settings-btn { display: none; }
   .tasks-header #task-add-btn { padding: .25rem .8rem; font-size: 1.1rem; line-height: 1; align-self: stretch; }
   /* Compact phone editor: small fields share a line instead of each taking a
      full-width row, and spacing is tighter. */

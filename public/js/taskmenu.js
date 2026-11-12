@@ -208,5 +208,5 @@ function confirmModal(dialog, okBtn, cancelBtn) {
   });
 }
 
-return { openTaskMenu, headerTasksMenu, postReorder, confirmDelete, confirmDeadlineMove };
+return { openTaskMenu, headerTasksMenu, showMenu, postReorder, confirmDelete, confirmDeadlineMove };
 }

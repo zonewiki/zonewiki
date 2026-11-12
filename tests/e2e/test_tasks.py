@@ -3523,6 +3523,10 @@ def test_settings_dialog_changes_the_embeds_params(page, wiki):
     expect(dialog.locator("[name=plan]")).to_be_checked()
     expect(dialog.locator("[name=list]")).to_have_count(0)   # which list it shows is the page's to say
     expect(dialog.locator("[name=pin]")).to_have_value("")
+    # What is rarely changed is folded under More, nothing of it being set.
+    expect(dialog.locator("[name=label_open]")).to_be_hidden()
+    expect(dialog.locator("[name=tag]")).to_be_hidden()
+    dialog.locator("summary").click()
     # The app's shortcuts leave the dialog's typing alone.
     dialog.locator("[name=label_open]").fill("To buy")
     dialog.locator("[name=label_focus]").fill("Cart")
@@ -3542,6 +3546,7 @@ def test_settings_dialog_changes_the_embeds_params(page, wiki):
     # Saving without a change writes nothing; one change leaves the rest.
     page.locator("#task-settings-btn").click()
     expect(dialog.locator("[name=view] option")).to_have_text(["To buy", "Cart"])
+    expect(dialog.locator("[name=label_open]")).to_be_visible()   # More is open: names are set
     expect(dialog.locator("[name=label_open]")).to_have_value("To buy")
     expect(dialog.locator("[name=limit]")).to_have_value("6")
     dialog.get_by_role("button", name="Save").click()
@@ -3589,7 +3594,11 @@ def test_plan_default_and_all_tasks_settings(page, wiki):
     page.goto("/tasks")
     page.locator("#task-settings-btn").click()
     dialog = page.locator("#task-settings-modal")
-    expect(dialog.locator(".task-settings-embed")).to_be_hidden()
+    # No Pinned and no filter there, also under More.
+    dialog.locator("summary").click()
+    expect(dialog.locator("[name=new]")).to_be_visible()
+    expect(dialog.locator("[name=pin]")).to_be_hidden()
+    expect(dialog.locator("[name=tag]")).to_be_hidden()
     dialog.locator("[name=view]").select_option("open")
     dialog.locator("[name=plan]").uncheck()
     with page.expect_navigation():
@@ -3599,49 +3608,97 @@ def test_plan_default_and_all_tasks_settings(page, wiki):
     expect(plan).to_have_attribute("aria-checked", "false")
 
 
+def test_settings_are_in_the_more_menu_on_a_phone(new_page, wiki):
+    """A phone's toolbar has no room for the gear: List settings… is the
+    first item of the ⋯ menu there."""
+    from conftest import TOUCH_PHONE
+    wiki.write("shopping", "# Shopping\n\n[[tasks: list=shop]]\n")
+    phone = new_page(**TOUCH_PHONE)
+    phone.goto("/page/shopping")
+    expect(phone.locator("#task-settings-btn")).to_be_hidden()
+    phone.locator("#task-more-btn").click()
+    expect(phone.get_by_role("menuitem")).to_have_text(["List settings…", "Export tasks", "Import tasks…"])
+    phone.get_by_role("menuitem", name="List settings…").click()
+    dialog = phone.locator("#task-settings-modal")
+    expect(dialog).to_be_visible()
+    dialog.locator("[name=limit]").fill("4")
+    with phone.expect_navigation():
+        dialog.get_by_role("button", name="Save").click()
+    assert "[[tasks: list=shop limit=4]]" in wiki.read("shopping")
+
+
 def test_export_and_import_a_lists_tasks(page, wiki, tmp_path):
-    """List settings: Export saves the list's tasks as a file, Import adds a
-    file's tasks to the list it is opened in."""
+    """The list's ⋯ menu, beside the gear: Export saves the list's tasks as a
+    file, Import… adds a file's tasks to the list it is opened in, asking for
+    a tag of your own once the file is picked."""
     page.request.post("/api/tasks", data={"title": "Milk", "tags": ["shop"]})
     page.request.post("/api/tasks", data={"title": "Report", "tags": ["work"]})
     wiki.write("shopping", "# Shopping\n\n[[tasks: list=shop view=open]]\n")
     wiki.write("food", "# Food\n\n[[tasks: list=food view=open]]\n")
     page.goto("/page/shopping")
-    page.locator("#task-settings-btn").click()
+    more = page.locator("#task-more-btn")
+    dialog = page.locator("#task-import-modal")
+
+    def pick(file):
+        more.click()
+        with page.expect_file_chooser() as chooser:
+            page.get_by_role("menuitem", name="Import tasks…").click()
+        chooser.value.set_files(file)
+
+    more.click()
+    expect(page.get_by_role("menuitem")).to_have_text(["Export tasks", "Import tasks…"])
     with page.expect_download() as got:
-        page.locator("#task-settings-export").click()
+        page.get_by_role("menuitem", name="Export tasks").click()
     assert re.fullmatch(r"zone-tasks-shop-\d{4}-\d\d-\d\d\.json", got.value.suggested_filename)
     saved = tmp_path / "shop.json"
     got.value.save_as(saved)
     assert '"Milk"' in saved.read_text() and "Report" not in saved.read_text()
+    # The settings dialog has none of it.
+    page.locator("#task-settings-btn").click()
+    expect(page.locator("#task-settings-modal")).not_to_contain_text("Export")
+    page.keyboard.press("Escape")
 
     # Here already: nothing to import.
-    page.locator("#task-settings-import-file").set_input_files(saved)
+    pick(saved)
+    expect(dialog).to_contain_text("Import 1 task from “shop.json”")
+    dialog.get_by_role("button", name="Import").click()
     expect(page.locator(".task-undo-toast")).to_have_text("Nothing imported: the tasks are already here.")
+    expect(dialog).to_be_hidden()
     # Into another list, once the task is gone from this one: it gets that list's tag.
     page.request.delete(f"/api/tasks/{task_by_title(page, 'Milk')['id']}")
     page.goto("/page/food")
     expect(page.locator("#tasks-list .task-item")).to_have_count(0)
-    page.locator("#task-settings-btn").click()
-    page.locator("#task-settings-import-tag").fill("from anna")
-    page.locator("#task-settings-import-file").set_input_files(saved)
+    pick(saved)
+    # Cancel imports nothing.
+    dialog.get_by_role("button", name="Cancel").click()
+    expect(dialog).to_be_hidden()
+    assert "Milk" not in [t["title"] for t in page.request.get("/api/tasks").json()]
+    pick(saved)
+    page.locator("#task-import-tag").fill("from anna")
+    page.keyboard.press("Enter")
     expect(page.locator(".task-undo-toast")).to_contain_text("Imported 1 task.")
-    expect(page.locator("#task-settings-modal")).to_be_hidden()
+    expect(dialog).to_be_hidden()
     expect(page.locator("#tasks-list .task-item")).to_have_count(1)
     assert task_by_title(page, "Milk")["tags"] == ["food", "from-anna"]
     # Undo takes the imported tasks out again; then without a tag of its own.
     page.locator(".task-undo-btn").click()
     expect(page.locator("#tasks-list .task-item")).to_have_count(0)
-    assert page.request.get("/api/tasks").json() == [t for t in page.request.get("/api/tasks").json() if t["title"] != "Milk"]
-    page.locator("#task-settings-btn").click()
-    expect(page.locator("#task-settings-import-tag")).to_have_value("")
-    page.locator("#task-settings-import-file").set_input_files(saved)
+    assert "Milk" not in [t["title"] for t in page.request.get("/api/tasks").json()]
+    pick(saved)
+    expect(page.locator("#task-import-tag")).to_have_value("")
+    dialog.get_by_role("button", name="Import").click()
     expect(page.locator("#tasks-list .task-item")).to_have_count(1)
     assert task_by_title(page, "Milk")["tags"] == ["food"]
 
-    # A file that is no export says so in the dialog.
+    # A file that is no export says so, without asking for a tag.
     other = tmp_path / "notes.json"
     other.write_text('{"pages": []}')
-    page.locator("#task-settings-btn").click()
-    page.locator("#task-settings-import-file").set_input_files(other)
-    expect(page.locator("#task-settings-error")).to_contain_text("exported from Zone")
+    pick(other)
+    expect(page.locator(".task-undo-toast").last).to_contain_text("exported from Zone")
+    expect(dialog).to_be_hidden()
+    # One the server refuses says why in the dialog.
+    other.write_text('[{"notes": "no title"}]')
+    pick(other)
+    dialog.get_by_role("button", name="Import").click()
+    expect(page.locator("#task-import-error")).to_be_visible()
+    expect(dialog).to_be_visible()
