@@ -252,6 +252,16 @@ class TestLinks:
         login(client, "alice")
         assert post(admin, "/admin/users/dave/revoke").status_code == 404
 
+    def test_the_page_says_a_reset_is_a_way_into_the_account(self, admin, client, git_wiki_dir):
+        # Zone sends no mail: the admin holds the link, and it sets the
+        # password for whoever opens it. The page doesn't claim otherwise.
+        help_text = admin.get("/admin/users", headers=HOST).data.decode()
+        assert "whoever opens that link signs in as them" in help_text
+        link = make_link(admin, "/admin/users/bob/reset")
+        client.post("/logout", headers=HOST)
+        post(client, link, password="the admin's own", again="the admin's own")
+        assert ">bob</span>" in client.get("/page/index", headers=HOST).data.decode()
+
     def test_a_new_link_replaces_the_old(self, admin, client):
         old = make_link(admin, "/admin/users/bob/reset")
         new = make_link(admin, "/admin/users/bob/reset")

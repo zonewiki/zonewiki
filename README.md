@@ -397,6 +397,9 @@ Also know this:
 - **Private means private inside Zone.** Another user's private pages and
   tasks are hidden from you and your assistant, but not encrypted: whoever
   has the wiki folder, its git history or its git remote reads them all.
+  An admin doesn't see them either, but can reset a user's password and
+  sign in as them with the link (the user notices: their old password
+  stops working). Make admin only whom you'd trust with everyone's pages.
 - **Plain `http://` is readable on the network.** The password when you sign
   in, the login cookie after it, the MCP token and your pages all travel
   unencrypted, so anyone on the same network (public Wi-Fi, a shared LAN)
