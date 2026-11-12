@@ -28,13 +28,15 @@
 </nav>
 {{- end}}
 
-{{- /* The user menu (with users, desktop): who is signed in, Admin for an
-    admin (the admin page), and Sign out (phones have Admin and Sign out in
+{{- /* The user menu (with users, desktop): who is signed in, Connect an
+    assistant (their MCP token, assistant.go), Admin for an admin (the admin
+    page), and Sign out (phones have Admin and Sign out in
     the page's top row), opened by the top right's user button (js/chrome.js). Outside the tab bar's nav: its touch handling
     picks a tab by position. */}}
 {{define "module_menu" -}}
 <div class="module-menu-backdrop" hidden></div><div class="module-menu page-menu" role="menu" aria-label="Account" hidden>
 {{- with .user}}<div class="menu-who">Signed in as <strong>{{.}}</strong></div>{{end -}}
+<a href="/assistant" role="menuitem" class="menu-assistant">Connect an assistant</a>
 {{- if .admin}}<a href="/admin" role="menuitem" class="menu-admin">Admin</a>{{end -}}
 {{- if .sign_out}}<form method="post" action="/logout" class="menu-signout"><button type="submit" role="menuitem">Sign out</button></form>{{end -}}
 </div>

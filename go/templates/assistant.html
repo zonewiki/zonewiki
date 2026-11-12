@@ -1,0 +1,46 @@
+{{- /* /assistant: Connect an assistant (assistant.go, docs/spec/mcp.md).
+    Whoever is signed in makes or revokes their MCP token. Plain forms: each
+    change is a POST; a new token is shown once, in the answer to the POST. */ -}}
+{{define "body"}}
+{{.BreadcrumbHTML}}
+<div class="sheet">
+<h1>Connect an assistant</h1>
+<p>An AI assistant (any MCP client) can search, read and write this wiki and its tasks{{if .User}} as you, <strong>{{.User}}</strong>: it sees and changes what you do, no more{{end}}. It connects to <code>{{.URL}}</code> with a token.{{if .Viewer}} You are a viewer: your assistant reads, and changes nothing.{{end}}</p>
+{{- with .Done}}
+<p class="users-done" role="status">{{.}}</p>
+{{- end}}
+{{- with .Error}}
+<p class="users-error" role="alert">{{.}}</p>
+{{- end}}
+{{- with .Token}}
+<div class="users-done assistant-token" role="status">
+  <p><strong>{{if $.User}}Your new token{{else}}The wiki's new token{{end}}</strong>, shown only now: copy it into your assistant's settings. {{$.Shell.AppName}} keeps only its hash.</p>
+  <code class="users-link" id="assistant-token">{{.}}</code>
+  <p>Claude Code, in a terminal:</p>
+  <code class="users-link">claude mcp add --transport http zone {{$.URL}} --header "Authorization: Bearer {{.}}"</code>
+  <p>Any other client: add an MCP server with the HTTP transport at <code>{{$.URL}}</code> and the header</p>
+  <code class="users-link">Authorization: Bearer {{.}}</code>
+</div>
+{{- end}}
+<h2>{{if .User}}Your token{{else}}The wiki's token{{end}}</h2>
+{{- if .Has}}
+<p>{{if .User}}You have a token{{else}}The wiki has a token{{end}}: an assistant that was given it can connect. {{.Shell.AppName}} can't show it again; lost, make a new one.</p>
+{{- else}}
+<p>{{if .User}}You have no token{{else}}The wiki has no token{{end}}: no assistant can connect{{if .User}} as you{{end}}.</p>
+{{- end}}
+<form method="post" action="/assistant/token" class="assistant-form">
+  {{- if .AskPassword}}
+  {{- with .User}}<input type="text" name="username" value="{{.}}" autocomplete="username" hidden>{{end}}
+  <input type="password" name="password" placeholder="{{if .User}}Your password{{else}}The wiki's password{{end}}" autocomplete="current-password" required aria-label="Password">
+  {{- end}}
+  <button type="submit" class="btn btn-primary">{{if .Has}}Make a new token{{else}}Make a token{{end}}</button>
+</form>
+{{- if .Has}}
+<p class="users-help">A new token replaces the old one, which stops working: an assistant using it has to be given the new one.</p>
+<form method="post" action="/assistant/revoke" class="assistant-form">
+  <button type="submit" class="btn">Revoke the token</button>
+</form>
+<p class="users-help">Without a token no assistant can connect{{if .User}} as you{{end}}.</p>
+{{- end}}
+</div>
+{{end}}

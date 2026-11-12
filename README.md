@@ -293,6 +293,11 @@ Zone's MCP server lets an AI assistant (any MCP client) search, read and write
 your wiki and tasks. It needs a token: create one, then register Zone with
 your client.
 
+In the browser, open **Connect an assistant** (`/assistant`; with users it is
+in the user menu at the top right, and each user makes their own token). It
+shows the new token once, with the line to paste for Claude Code. Or on the
+host:
+
 ```bash
 ./run.sh config token          # prints the token, once (with users: ./run.sh user token NAME)
 ```

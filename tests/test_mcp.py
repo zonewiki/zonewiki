@@ -129,7 +129,8 @@ class TestAuth:
         for headers in ({}, {"Authorization": "Bearer "}, AUTH):
             resp = rpc(client, "ping", headers=headers)
             assert resp.status_code == 403
-            assert "make a token with ./run.sh config token" in resp.get_json()["error"]
+            error = resp.get_json()["error"]
+            assert "make a token at /assistant in the browser" in error and "./run.sh config token" in error
         resp = client.post("/mcp", headers=HOST, json={
             "jsonrpc": "2.0", "id": 1, "method": "tools/call",
             "params": {"name": "write_page", "arguments": {"slug": "x", "content": "# X"}}})

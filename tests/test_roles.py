@@ -143,6 +143,7 @@ EXEMPT = {
     "POST /login", "POST /logout", "POST /welcome/{token}",
     "POST /setup",                                      # only while the wiki has no login (test_setup.py)
     "POST /api/preview", "POST /api/render-notes",      # render only
+    "POST /assistant/token", "POST /assistant/revoke",  # their own MCP token (test_assistant.py)
     # admins only (test_admin.py); two are probed above
     "POST /admin/users/{name}/disable", "POST /admin/users/{name}/enable", "POST /admin/users/{name}/remove",
     "POST /admin/users/{name}/reset", "POST /admin/users/{name}/revoke",

@@ -236,10 +236,10 @@ func mcpOn() bool {
 // a session) aren't offered: there are no notifications and no sessions.
 func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 	if !mcpOn() {
-		msg := "MCP is off: make a token with ./run.sh config token and send it as " +
+		msg := "MCP is off: make a token at /assistant in the browser (or with ./run.sh config token) and send it as " +
 			"'Authorization: Bearer <token>'"
 		if settings().Users != nil {
-			msg = "MCP is off: give a user a token with ./run.sh user token NAME and send it as " +
+			msg = "MCP is off: a user makes their token at /assistant in the browser (or ./run.sh user token NAME) and sends it as " +
 				"'Authorization: Bearer <token>'"
 		}
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": msg})

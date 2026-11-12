@@ -160,18 +160,7 @@ func findLink(token string) *welcomeLink {
 // setting), or the address the admin's request came in on (r nil: the
 // path alone).
 func linkURL(base string, r *http.Request, token string) string {
-	path := "/welcome/" + token
-	if base != "" {
-		return base + path
-	}
-	if r == nil {
-		return path
-	}
-	scheme := "http"
-	if isHTTPS(r) {
-		scheme = "https"
-	}
-	return scheme + "://" + r.Host + path
+	return siteURL(base, r, "/welcome/"+token)
 }
 
 // A stolen admin session could fill the list with links: at most

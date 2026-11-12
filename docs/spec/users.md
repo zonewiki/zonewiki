@@ -175,7 +175,7 @@ A link that lets one person set a password, once (`go/links.go`). Zone sends no 
 
 ## MCP
 
-With users, `/mcp` takes any user's token (`mcp-token` in their section) and the tools run as that user (`mcpAuthorized` returns the user, `callMCPTool` passes it to every tool). `/mcp` is off (403) while no user has a token; a wrong token is a 401 and throttled as before (`docs/spec/mcp.md`).
+With users, `/mcp` takes any user's token (`mcp-token` in their section) and the tools run as that user (`mcpAuthorized` returns the user, `callMCPTool` passes it to every tool). `/mcp` is off (403) while no user has a token; a wrong token is a 401 and throttled as before (`docs/spec/mcp.md`). A user makes and revokes their own token in the browser, on **Connect an assistant** in the user menu (`/assistant`, with their password; `docs/spec/mcp.md`); `zonewiki user token NAME` does it on the host, for any user.
 
 An assistant sees and changes what its user does in the browser, no more (`docs/spec/mcp.md` has the tools):
 

@@ -1524,6 +1524,11 @@ kbd {
 @media (prefers-color-scheme: dark) { .users-error { background: #2f1c1c; color: #ec9a9a; } }
 .users-help { font-size: .85rem; }
 .users-link { display: block; padding: .5rem; background: var(--code-bg); border-radius: 6px; word-break: break-all; user-select: all; }
+/* Connect an assistant (assistant.html): the token and what to give a client. */
+.assistant-token p { margin: .3rem 0; }
+.assistant-token .users-link { margin: .3rem 0 .8rem; }
+.assistant-form { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin: .5rem 0; }
+.assistant-form input { font: inherit; font-size: .9rem; padding: .3rem .5rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); min-width: 12rem; }
 .users-invite { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin: .5rem 0 0; }
 .users-invite input { font: inherit; font-size: .9rem; padding: .3rem .5rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); min-width: 12rem; }
 .users-table select, .users-invite select { font: inherit; font-size: .85rem; padding: .2rem; }
@@ -2137,7 +2142,7 @@ body.editor-page main {
   .breadcrumb .module-link:not([data-module="wiki"]), .breadcrumb .module-label,
   .breadcrumb .module-group + .module-group,
   .breadcrumb .module-menu-btn { display: none; }
-  .module-menu :is(.menu-who, .menu-signout, .menu-admin) { display: none; }
+  .module-menu :is(.menu-who, .menu-signout, .menu-admin, .menu-assistant) { display: none; }
   .module-menu-backdrop { background: rgba(0, 0, 0, .35); }
   /* Keep the end of the page and the toasts clear of the bar. */
   body:has(.action-buttons) main { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }

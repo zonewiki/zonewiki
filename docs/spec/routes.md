@@ -16,6 +16,8 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 | POST   | `/new`                | Create `<slug>.md` and redirect to it; `private=1` (with users): in your private folder |
 | GET    | `/private`            | With users: your private home `private/<you>/index` (made on the first visit); 404 without users |
 | GET    | `/admin`, `/admin/users`    | The admin page, for admins (Managing users in `docs/spec/users.md`): `/admin` opens its first tab, Users; 404 for everyone else |
+| GET    | `/assistant`                | Connect an assistant: the MCP token of whoever is signed in (without users, the wiki's), made and revoked in the browser (`docs/spec/mcp.md`) |
+| POST   | `/assistant/token`, `/assistant/revoke` | Make a new token (with the password again; shown once) or take it away |
 | POST   | `/admin/users/<name>/role`, `/disable`, `/enable`, `/remove`, `/reset`, `/revoke`; `/admin/users/invite` | The Users tab's changes, admins only (404 for anyone else) |
 | GET/POST | `/welcome/<token>`  | An invite or reset link's page: choose a password, once (no login needed) |
 | GET    | `/search?q=...`       | Full-text search results page (up to 50, with a count; `&unlinked=1` as for the API) |

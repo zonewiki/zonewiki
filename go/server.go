@@ -272,6 +272,7 @@ func newHandler() http.Handler {
 	historyRoutes(mux)
 	tasksRoutes(mux)
 	adminRoutes(mux)
+	assistantRoutes(mux)
 	oldNameRoutes(mux)
 	return noStalls(checks(viewerGate(mux)))
 }
@@ -284,6 +285,7 @@ func newHandler() http.Handler {
 var viewerWrites = map[string]bool{
 	"POST /login": true, "POST /logout": true, "POST /welcome/{token}": true, "/mcp": true,
 	"POST /api/preview": true, "POST /api/render-notes": true, // render only
+	"POST /assistant/token": true, "POST /assistant/revoke": true, // their own MCP token, whose writing tools are refused
 	"/api/deck": true, "/api/deck/{rest...}": true, // the tasks API's old name: its reads; its writes are refused (mayWriteTasks)
 }
 

@@ -30,7 +30,7 @@ def test_the_menu_opens_by_click_and_closes_on_escape(alice):
     btn.click()
     expect(menu).to_be_visible()
     expect(btn).to_have_attribute("aria-expanded", "true")
-    expect(menu.get_by_role("menuitem")).to_have_text(["Sign out"])
+    expect(menu.get_by_role("menuitem")).to_have_text(["Connect an assistant", "Sign out"])
     expect(menu.locator(".menu-who")).to_have_text("Signed in as alice")
     # The first item has the focus; it sits under the button.
     expect(menu.get_by_role("menuitem").first).to_be_focused()
@@ -55,10 +55,41 @@ def test_the_menu_works_from_the_keyboard_and_closes_on_a_click_elsewhere(alice)
     alice.keyboard.press("ArrowDown")
     expect(menu).to_be_visible()
     expect(menu.get_by_role("menuitem").first).to_be_focused()
-    alice.keyboard.press("ArrowDown")   # wraps: Sign out is the only item
+    alice.keyboard.press("ArrowDown")
+    expect(menu.get_by_role("menuitem", name="Sign out")).to_be_focused()
+    alice.keyboard.press("ArrowDown")   # wraps: Sign out is the last item
     expect(menu.get_by_role("menuitem").first).to_be_focused()
     alice.mouse.click(5, 400)
     expect(menu).to_be_hidden()
+
+
+def test_the_menu_leads_to_connect_an_assistant(alice, wiki):
+    """The token is made with the password, shown once, and revoked (/assistant)."""
+    alice.goto("/page/index")
+    alice.locator(".top-user").click()
+    alice.get_by_role("menuitem", name="Connect an assistant").click()
+    alice.wait_for_url("**/assistant")
+    expect(alice.locator("h1")).to_have_text("Connect an assistant")
+    expect(alice.get_by_role("button", name="Make a new token")).to_be_visible()   # she has one (t1)
+    alice.get_by_label("Password").fill("wrong")
+    alice.get_by_role("button", name="Make a new token").click()
+    expect(alice.get_by_role("alert")).to_have_text("Incorrect password: no token was made.")
+    alice.get_by_label("Password").fill("pw")
+    alice.get_by_role("button", name="Make a new token").click()
+    token = alice.locator("#assistant-token")
+    expect(token).to_have_text(re.compile(r"^[0-9a-f]{64}$"))
+    shown = token.inner_text()
+    resp = alice.request.post("/mcp", headers={"Authorization": f"Bearer {shown}"},
+                              data={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+    assert resp.status == 200
+    # The page fits a phone: nothing scrolls sideways, the long lines wrap.
+    alice.set_viewport_size({"width": 375, "height": 700})
+    assert alice.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+    alice.get_by_role("button", name="Revoke the token").click()
+    expect(alice.get_by_role("status")).to_contain_text("Revoked the token")
+    expect(alice.locator("#assistant-token")).to_have_count(0)
+    assert alice.request.post("/mcp", headers={"Authorization": f"Bearer {shown}"},
+                              data={"jsonrpc": "2.0", "id": 1, "method": "tools/list"}).status == 401
 
 
 def test_pages_and_tools_are_a_pill_each(alice):

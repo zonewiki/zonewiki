@@ -97,6 +97,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── users.go            # Users: roles, password hashes, sign-in, the password prompt
 │   ├── admin.go            # The admin page (/admin, admins), its Users tab: roles, disable, remove, writing the settings file as the commands do
 │   ├── links.go            # Invite and reset links: .zone/links, /welcome/<token>
+│   ├── assistant.go        # Connect an assistant (/assistant): your MCP token made and revoked in the browser, with your password again
 │   ├── signout.go          # Sessions signed out: .zone/signed-out
 │   ├── stalls.go           # A request body or response that stands still for a minute fails (noStalls)
 │   ├── setup.go            # The first-run page: /setup, a first login for a wiki other devices reach
@@ -245,7 +246,7 @@ Use the fixtures and helpers in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`,
   - **Guides are an admin's** (with users): `canWrite` is false for anyone else on `wiki-guide`, a folder's `AGENTS.md`/`CLAUDE.md` and the pages they pull in (`adminsOnly`, Guides in `docs/spec/users.md`): every user's assistant follows them.
   - **First run** (`go/setup.go`): a wiki other devices can reach (`ZONE_ALLOW_REMOTE`, `hosts`, `ZONE_BIND` beyond localhost) with no login answers only `/setup` until one is set, unless `no-login = yes`. A new route that must answer before that goes in `setupExempt`; the tests' server has `no-login = yes` (`settings.NO_LOGIN`).
   - **Viewers** (`role = viewer`) change nothing: `canWrite` in `go/access.go` is false for them, `mayWriteTasks` refuses every task write, `callMCPTool` the writing tools, and `viewerGate` a viewer's write to any route not in `viewerWrites`. A new write route gets a probe in `tests/test_roles.py`, which fails until it has one.
-  - `/mcp` requires an MCP token (`mcp-token`, kept as its hash; with users, a user's own): without one it is off (403), password or not. Don't make it open again.
+  - `/mcp` requires an MCP token (`mcp-token`, kept as its hash; with users, a user's own): without one it is off (403), password or not. Don't make it open again. In the browser a token is made only by whoever is signed in, for themselves, with their password again (`go/assistant.go`): don't drop that check.
   - **The settings file** `.zone/config` holds password hashes and tokens (only as hashes): it stays out of git with all of `.zone/` (account data never goes into git; `untrackSettings` takes it out of older wikis, `missingUsers` stops a clone without it from starting open) and is never shown (`canSeePath`, `safePath`), the commands write it 0600, and a reload with an error (or a removed file) keeps the settings from before, so a broken edit never opens the wiki.
   - The Host check (`hostAllowed`) validates the `Host` header (localhost, plus `hosts` from the settings file) against DNS rebinding; `ZONE_ALLOW_REMOTE=1` without `hosts` skips it.
   - The Origin check (`crossSite`) refuses cross-site writes (an `Origin` of another site, or `null`).
