@@ -91,12 +91,12 @@ function render() {
       : task.keep ? `<span class="task-recurring task-keep" title="Keep: back to ${esc(app.tabLabel('open'))} when ticked off">⟲</span>` : '';
     // A keep task's last completion, e.g. when the milk was last bought.
     const lastDoneDisplay = task.keep && task.last_done && !task.completed_at
-      ? `<span class="task-last-done" title="Last done">✓ ${shortDate(task.last_done)}</span>` : '';
+      ? `<span class="task-last-done" title="Last done">✓ ${esc(shortDate(task.last_done))}</span>` : '';
     // Comments: a count; hovering shows the latest, a click opens them.
     const comments = task.comments || [];
     const lastComment = comments[comments.length - 1];
     const commentsDisplay = lastComment
-      ? `<button type="button" class="task-comments-btn" data-id="${task.id}" title="${esc(commentStamp(lastComment) + ': ' + lastComment.text)}" aria-label="${comments.length} comment${comments.length === 1 ? '' : 's'}">💬 ${comments.length}</button>` : '';
+      ? `<button type="button" class="task-comments-btn" data-id="${esc(task.id)}" title="${esc(commentStamp(lastComment) + ': ' + lastComment.text)}" aria-label="${comments.length} comment${comments.length === 1 ? '' : 's'}">💬 ${comments.length}</button>` : '';
     // A planned task is either in Focus already (start today or earlier) or
     // planned for later; the card's left edge and its 📅 date say which, the
     // same on every tab.
@@ -108,28 +108,28 @@ function render() {
     const focusMetaClass = planned === 'later' ? 'focus-later'
       : planned && task.start_date === todayStr() ? 'focus-now' : '';
     const dueDisplay = !task.completed_at
-      ? `<span class="task-due task-clickable-date ${dueClass}${task.due_date ? '' : ' task-date-empty'}" data-id="${task.id}" data-field="due_date" title="${task.due_date ? 'Click to change due date' : 'Set due date'}">⏰${task.due_date ? ' ' + formatDate(task.due_date) : ''}</span>`
-      : (task.due_date ? `<span class="task-due ${dueClass}">⏰ ${formatDate(task.due_date)}</span>` : '');
+      ? `<span class="task-due task-clickable-date ${dueClass}${task.due_date ? '' : ' task-date-empty'}" data-id="${esc(task.id)}" data-field="due_date" title="${task.due_date ? 'Click to change due date' : 'Set due date'}">⏰${task.due_date ? ' ' + esc(formatDate(task.due_date)) : ''}</span>`
+      : (task.due_date ? `<span class="task-due ${dueClass}">⏰ ${esc(formatDate(task.due_date))}</span>` : '');
     // A past start date means "available since", not late — so it reads
     // "since Sep 21" with no warning styling.
     const focusLabel = !task.start_date ? ''
       : (!task.completed_at && task.start_date < todayStr())
         ? `since ${shortDate(task.start_date)}` : formatDate(task.start_date);
     const focusDisplay = !task.completed_at
-      ? `<span class="task-date-info task-focus-info task-clickable-date ${focusMetaClass}${task.start_date ? '' : ' task-date-empty'}" data-id="${task.id}" data-field="start_date" title="${task.start_date ? 'Click to change start date' : 'Set start date'}">📅${focusLabel ? ' ' + focusLabel : ''}</span>`
-      : (task.start_date ? `<span class="task-date-info task-focus-info ${focusMetaClass}">📅 ${formatDate(task.start_date)}</span>` : '');
+      ? `<span class="task-date-info task-focus-info task-clickable-date ${focusMetaClass}${task.start_date ? '' : ' task-date-empty'}" data-id="${esc(task.id)}" data-field="start_date" title="${task.start_date ? 'Click to change start date' : 'Set start date'}">📅${focusLabel ? ' ' + esc(focusLabel) : ''}</span>`
+      : (task.start_date ? `<span class="task-date-info task-focus-info ${focusMetaClass}">📅 ${esc(formatDate(task.start_date))}</span>` : '');
     const completedDisplay = task.completed_at
       ? (task.wont_do
           ? `<span class="task-date-info task-wontdo-badge">✗ won't do</span>`
-          : `<span class="task-date-info">done: ${task.completed_at.slice(0, 10)}</span>`)
+          : `<span class="task-date-info">done: ${esc(task.completed_at.slice(0, 10))}</span>`)
       : '';
 
     // Marks that there are notes, which a compact line hides; on every card
     // alike, so expanding a line changes nothing on it.
     const notesDisplay = task.description?.trim()
-      ? `<button type="button" class="task-has-notes" data-id="${task.id}" title="Has notes" aria-label="Has notes">📝</button>` : '';
+      ? `<button type="button" class="task-has-notes" data-id="${esc(task.id)}" title="Has notes" aria-label="Has notes">📝</button>` : '';
     const skipBtnHtml = (!task.completed_at && task.recurrence)
-      ? `<button class="task-skip-btn" data-id="${task.id}" title="Skip this occurrence (series continues)">⏭</button>`
+      ? `<button class="task-skip-btn" data-id="${esc(task.id)}" title="Skip this occurrence (series continues)">⏭</button>`
       : '';
     const tagsRight = tags ? `<span class="task-tags-right">${tags}</span>` : '';
     const privateDisplay = task.private
@@ -146,24 +146,24 @@ function render() {
     const commentsHtml = comments.length
       ? `<div class="task-card-comments">${comments.slice(-3).reverse().map(c =>
           `<p><span class="task-comment-when">${esc(commentStamp(c))}</span> ${htmlOf('comments', c.text)}</p>`).join('')}` +
-        (earlier > 0 ? `<button type="button" class="task-comments-more" data-id="${task.id}">${earlier} earlier…</button>` : '') + '</div>'
+        (earlier > 0 ? `<button type="button" class="task-comments-more" data-id="${esc(task.id)}">${earlier} earlier…</button>` : '') + '</div>'
       : '';
     const dragAttr = draggable ? 'draggable="true" data-drag' : '';
     // Compact lines with details get the expand button (CSS hides it on
     // full cards, which show them).
     const detailsShown = st.compact && task.id === st.expandedId && st.detailsOpen;
     const expandBtn = descHtml || commentsHtml
-      ? `<button type="button" class="task-expand-btn" data-id="${task.id}" aria-expanded="${detailsShown}" aria-label="Notes and comments" title="Notes and comments (l / h)">${app.EXPAND_ICON}</button>` : '';
+      ? `<button type="button" class="task-expand-btn" data-id="${esc(task.id)}" aria-expanded="${detailsShown}" aria-label="Notes and comments" title="Notes and comments (l / h)">${app.EXPAND_ICON}</button>` : '';
     return `
-      <li class="task-item ${completedClass} ${urgClass}${focusClass} ${extraClass}${st.compact && task.id === st.expandedId ? ' task-expanded' + (st.detailsOpen ? ' task-details' : '') : ''}" data-id="${task.id}" ${dragAttr}>
+      <li class="task-item ${completedClass} ${urgClass}${focusClass} ${extraClass}${st.compact && task.id === st.expandedId ? ' task-expanded' + (st.detailsOpen ? ' task-details' : '') : ''}" data-id="${esc(task.id)}" ${dragAttr}>
         <label class="task-checkbox">
-          <input type="checkbox" ${checked} data-id="${task.id}">
+          <input type="checkbox" ${checked} data-id="${esc(task.id)}">
         </label>
-        <div class="task-content" data-id="${task.id}">
-          <span class="task-title" data-id="${task.id}">${app.linkifyTitle(task.title)}</span>
+        <div class="task-content" data-id="${esc(task.id)}">
+          <span class="task-title" data-id="${esc(task.id)}">${app.linkifyTitle(task.title)}</span>
         </div>
         <div class="task-actions">
-          ${expandBtn}<button type="button" class="task-menu-btn" data-id="${task.id}" aria-label="More actions" aria-haspopup="menu" title="More actions">${app.MORE_ICON}</button>
+          ${expandBtn}<button type="button" class="task-menu-btn" data-id="${esc(task.id)}" aria-label="More actions" aria-haspopup="menu" title="More actions">${app.MORE_ICON}</button>
         </div>
         ${metaHtml}${descHtml}${commentsHtml}
       </li>`;

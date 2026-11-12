@@ -29,7 +29,16 @@ const gitTimeout = 60 * time.Second
 // orphan, so every commit left a zombie process behind until the PID limit
 // was reached and nothing could start any more. Not detached, git runs the
 // (usually trivial) maintenance itself and reaps its own children.
+//
+// Every path Zone hands git is a file's name, never a pattern: a page may be
+// called anything ("*", "p?", ":(glob)**/x"), and read as a pathspec such a
+// name would match other files, another user's private pages among them
+// (git show <sha> -- '*.md'). So git takes all pathspecs literally
+// (GIT_LITERAL_PATHSPECS, git's --literal-pathspecs for every call); the one
+// pattern Zone means as one, grepPages' "*.md", turns that off for its call
+// (and check-ignore, which takes names as they are and refuses the setting).
 var gitEnv = append(os.Environ(),
+	"GIT_LITERAL_PATHSPECS=1",
 	"GIT_CONFIG_COUNT=2",
 	"GIT_CONFIG_KEY_0=maintenance.autoDetach", "GIT_CONFIG_VALUE_0=false",
 	"GIT_CONFIG_KEY_1=gc.autoDetach", "GIT_CONFIG_VALUE_1=false",
@@ -208,7 +217,10 @@ func gitCommit(user, message string, paths ...string) error {
 	if len(candidates) > 0 {
 		// What .gitignore leaves out (and git doesn't track) stays out: git
 		// add would refuse it (exit 1, 0 when some are).
-		r := runGitInput(strings.Join(candidates, "\x00")+"\x00", "check-ignore", "-z", "--stdin")
+		// check-ignore takes names, not pathspecs, and refuses the literal
+		// kind (gitEnv).
+		r := runGitEnv(gitTimeout, strings.Join(candidates, "\x00")+"\x00", []string{"GIT_LITERAL_PATHSPECS=0"},
+			"check-ignore", "-z", "--stdin")
 		if r.Code > 1 {
 			return failed("check-ignore", r)
 		}
@@ -697,7 +709,8 @@ func grepPages(pattern string, ignoreCase bool, slugs map[string]bool) ([]GrepHi
 		if ignoreCase {
 			args = append(args, "-i")
 		}
-		r = runGitFor(grepTimeout, append(args, "-e", pattern, "--", "*.md")...)
+		// "*.md" is a pattern (gitEnv): git's, since Zone wrote it.
+		r = runGitEnv(grepTimeout, "", []string{"GIT_LITERAL_PATHSPECS=0"}, append(args, "-e", pattern, "--", "*.md")...)
 		if r.Code == 124 {
 			return nil, &grepError{fmt.Sprintf("the search took longer than %ds; try a simpler pattern", int(grepTimeout.Seconds()))}
 		}

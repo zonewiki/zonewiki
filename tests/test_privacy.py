@@ -337,6 +337,46 @@ def test_history_leaves_out_versions_from_before_a_page_was_shared(alice, wiki):
     assert bob.get(f"/revision/diary/{shas[1]}", headers=HOST).status_code == 404
 
 
+# Names git would read as patterns (its pathspecs: wildcards, ":(magic)")
+# that match alice's files.
+PATTERNS = ["*", "p*", "private*/diary", "*/alice/*", ":(glob)private/**/diary", ":(glob)**/*", ":/private/alice/diary"]
+
+
+@pytest.mark.parametrize("name", PATTERNS)
+def test_a_page_named_like_a_pattern_is_only_itself(bob, wiki, name):
+    # A page may be called anything, "*" too: its history, versions and
+    # changes are that file's, not those of every file the name matches.
+    diary = sha(wiki)
+    for path in (f"/diff/{name}/{diary}", f"/revision/{name}/{diary}", f"/history/{name}", f"/page/{name}",
+                 f"/diff-uncommitted/{name}"):
+        body = bob.get(path, headers=HOST).get_data(as_text=True)
+        assert SECRET not in body and "private/alice" not in unquote(body).replace(unquote(name), ""), path
+    assert SECRET not in mcp(bob, "history", slug=name, version=diary[:7])
+
+
+def test_a_page_named_star_shows_no_one_elses_uncommitted_text(bob, wiki):
+    # bob's page "*", committed; alice's diary edited since its commit.
+    (wiki / "*.md").write_text("# Star\n")
+    git(wiki, "add", "--", "*.md")
+    git(wiki, "commit", "-q", "-m", "Create *", "--", "*.md")
+    (wiki / f"{DIARY}.md").write_text(f"# Diary\n\nnot committed: {SECRET}\n")
+    resp = bob.get("/diff-uncommitted/*", headers=HOST)
+    assert resp.status_code == 200 and SECRET not in resp.get_data(as_text=True)
+    assert "no changes" in resp.get_data(as_text=True)
+    # The page itself still has its history and its changes.
+    assert "Created" in bob.get("/history/*", headers=HOST).get_data(as_text=True)
+    (wiki / "*.md").write_text("# Star\n\nbob's own line\n")
+    assert "bob&#39;s own line" in bob.get("/diff-uncommitted/*", headers=HOST).get_data(as_text=True)
+
+
+def test_a_pattern_tells_nothing_of_a_deleted_private_page(bob, wiki):
+    # private/alice/old was deleted: a name matching it is a page that
+    # isn't there (the editor for a new one), not a deleted page to restore.
+    for name in ("p*/alice/ol*", ":(glob)private/alice/*"):
+        resp = bob.get(f"/page/{name}", headers=HOST)
+        assert resp.status_code == 302 and "/edit/" in resp.headers["Location"], name
+
+
 def test_commit_all_commits_only_what_you_see(bob, wiki):
     (wiki / "notes.md").write_text("# Bob's\n")
     assert bob.post("/api/commit-all", headers=HOST).get_json()["files"] == ["notes.md"]

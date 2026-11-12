@@ -46,3 +46,35 @@ def test_uploaded_script_does_not_run(page, wiki):
     page.goto("/page/loader")
     page.wait_for_timeout(300)
     assert page.evaluate("window.pwned") is None
+
+
+def test_a_page_frames_no_form(page, wiki):
+    # An iframe's srcdoc would be a document of Zone's own origin, where a
+    # form posts to Zone like one of its own: however the attribute is
+    # written, the frame stays empty.
+    form = "&lt;form method=post action=/delete/index&gt;&lt;button id=go&gt;Go&lt;/button&gt;&lt;/form&gt;"
+    wiki.write("framed", "# Framed\n\n"
+               f'<iframe id="f1" srcdoc="{form}"></iframe>\n\n'
+               f"<iframe id=\"f2\" a=b' srcdoc=\"{form}\"></iframe>\n\n"
+               f'<!-- <a title=" --><iframe id="f3" srcdoc="{form}"></iframe><!-- " -->\n')
+    page.goto("/page/framed")
+    expect(page.locator("article.page-content iframe")).to_have_count(3)
+    for frame in ("f1", "f2", "f3"):
+        assert page.locator(f"#{frame}").get_attribute("srcdoc") is None
+        expect(page.frame_locator(f"#{frame}").locator("form")).to_have_count(0)
+
+
+def test_a_tasks_id_is_text_on_its_card(page, wiki):
+    # A tasks file written by hand (or by an older Zone) may hold any id:
+    # the card shows the task, and the id makes no element of its own.
+    import json
+    evil = 'x"></span><form id="evil" method="post" action="/delete/index"><button>ok</button></form><span data-x="'
+    (wiki.root / "_tasks").mkdir(exist_ok=True)
+    (wiki.root / "_tasks" / "tasks.json").write_text(json.dumps([{
+        "id": evil, "title": "Odd id", "created_at": "2026-01-01T10:00:00"}, {
+        "id": "done-1", "title": "Odd day", "created_at": "2026-01-01T10:00:00",
+        "due_date": "<i id=evil2>", "start_date": "<i id=evil3>"}]))
+    page.goto("/tasks?view=open")
+    expect(page.locator(".task-item")).to_have_count(2)
+    expect(page.locator("#evil, #evil2, #evil3")).to_have_count(0)
+    assert page.locator(".task-item").first.get_attribute("data-id") in (evil, "done-1")

@@ -469,20 +469,25 @@ func taskDates(s string) string {
 var defusedTagRE = regexp.MustCompile(`(?i)<(/?(?:form|input|button|select|textarea|option|optgroup|datalist|fieldset|keygen|isindex|meta|base)(?:[\s/>]|$))`)
 
 // htmlTagRE: a start tag, its quoted values whole (a ">" in one doesn't
-// end it); srcdocRE: a srcdoc attribute in one. An iframe's srcdoc is a
-// document of its own with the page's origin and policy, written with
-// entities (&lt;form …), which defusedTagRE can't see: it is renamed, so
-// the frame is empty.
+// end it), for wikilinksInHTML. srcdocRE: a srcdoc attribute with a value.
+// An iframe's srcdoc is a document of its own with the page's origin and
+// policy, written with entities (&lt;form …), which defusedTagRE can't see:
+// it is renamed, so the frame is empty. Wherever "srcdoc" is followed by
+// "=" (HTML's whitespace between them or not), not only inside what looks
+// like a tag: a browser's reading of where a tag ends differs from any
+// pattern's (<iframe a=b' srcdoc="…">: the quote is part of a's value, no
+// string's start), so no pattern decides it; and where the raw HTML ends
+// right after the name, as what is rendered next may start with the "="
+// (a list item's text after <pre></pre><iframe srcdoc). The word in a
+// sentence stays.
 var (
 	htmlTagRE = regexp.MustCompile(`<[A-Za-z](?:[^>"']|"[^"]*"|'[^']*')*`)
-	srcdocRE  = regexp.MustCompile(`(?i)([\s/"'])srcdoc\b`)
+	srcdocRE  = regexp.MustCompile(`(?i)srcdoc([\t\n\f\r ]*(?:=|$))`)
 )
 
 // defuseHTML: raw HTML with defusedTagRE's tags as text and no srcdoc.
 func defuseHTML(raw []byte) []byte {
-	raw = htmlTagRE.ReplaceAllFunc(raw, func(tag []byte) []byte {
-		return srcdocRE.ReplaceAll(tag, []byte("${1}data-defused-srcdoc"))
-	})
+	raw = srcdocRE.ReplaceAll(raw, []byte("data-defused-srcdoc$1"))
 	return defusedTagRE.ReplaceAll(raw, []byte("&lt;$1"))
 }
 

@@ -794,7 +794,7 @@ func cleanHistory(raw json.RawMessage) []HistoryEntry {
 			continue
 		}
 		by, _ := as[string](e["by"])
-		entry := HistoryEntry{At: runePrefix(at, 16), Event: event, By: by}
+		entry := HistoryEntry{At: runePrefix(at, 16), Event: event, By: byUser(by)}
 		if datedEvents[event] {
 			if s, ok := as[string](e["from"]); ok && isoDateRE.MatchString(s) {
 				entry.From = s
@@ -831,7 +831,10 @@ func cleanComments(raw json.RawMessage) []Comment {
 		}
 		id, _ := as[string](c["id"])
 		by, _ := as[string](c["by"])
-		cs = append(cs, Comment{ID: id, At: at, By: by, Text: text})
+		if !snapshotIDRE.MatchString(id) {
+			id = "" // a new one (cleanCommentList)
+		}
+		cs = append(cs, Comment{ID: id, At: at, By: byUser(by), Text: text})
 	}
 	return cleanCommentList(cs)
 }
@@ -1134,6 +1137,23 @@ func cleanRecurrence(raw json.RawMessage) *Recurrence {
 	return out
 }
 
+// What a snapshot's ids and times may be (sanitizeSnapshot): an id as Zone
+// makes them (a UUID) or as a file written by hand may have it (letters,
+// digits, - and _), a time as timestamp() writes it, or its day alone.
+var (
+	snapshotIDRE   = regexp.MustCompile(`^[0-9A-Za-z_-]{1,64}$`)
+	snapshotTimeRE = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?)?$`)
+)
+
+// byUser: who a snapshot's history entry or comment says it is by, if that
+// could be a user's name; else no one.
+func byUser(by string) string {
+	if userNameRE.MatchString(by) {
+		return by
+	}
+	return ""
+}
+
 // sanitizeSnapshot rebuilds a task from an untrusted snapshot (undo after
 // delete), known fields only; nil without a usable title. A bad optional
 // value falls back to its default.
@@ -1153,10 +1173,20 @@ func sanitizeSnapshot(snap jsonObj) *Task {
 			}
 		}
 	}
-	for f, field := range map[string]*string{"id": &t.ID, "created_at": &t.CreatedAt,
-		"completed_at": &t.CompletedAt, "spawned_from": &t.SpawnedFrom} {
-		if s, ok := as[string](snap[f]); ok && s != "" {
+	// Ids and times only as Zone writes them: the browser builds the cards
+	// from them, and a snapshot is whatever its sender made it. An id of
+	// another shape gets a new one (newTask's), a time that is none is now.
+	for f, field := range map[string]*string{"id": &t.ID, "spawned_from": &t.SpawnedFrom} {
+		if s, ok := as[string](snap[f]); ok && snapshotIDRE.MatchString(s) {
 			*field = s
+		}
+	}
+	if s, ok := as[string](snap["created_at"]); ok && snapshotTimeRE.MatchString(s) {
+		t.CreatedAt = s
+	}
+	if s, ok := as[string](snap["completed_at"]); ok && s != "" {
+		if t.CompletedAt = s; !snapshotTimeRE.MatchString(s) {
+			t.CompletedAt = timestamp()
 		}
 	}
 	if f, ok := as[float64](snap["sort_order"]); ok {

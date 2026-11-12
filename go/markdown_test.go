@@ -155,10 +155,20 @@ func TestRawHTMLDefused(t *testing.T) {
 		`<iframe/srcdoc="&lt;form&gt;"></iframe>`,
 		"<div>\n<iframe\nsrcdoc=\"&lt;form&gt;\"></iframe>\n</div>\n",
 		`text <iframe srcdoc="&lt;form&gt;"></iframe> inline`,
+		// A quote in an unquoted value is the value's, not a string's start.
+		`<iframe a=b' srcdoc="&lt;form method=post action=/delete/x&gt;&lt;button&gt;Go&lt;/button&gt;&lt;/form&gt;"></iframe>`,
+		`<iframe a=b" srcdoc='&lt;form&gt;'></iframe>`,
+		"<iframe a='x' b=c' srcdoc\t =\n\"&lt;form&gt;\"></iframe>",
+		// Out of a comment a pattern would take for a quoted value.
+		`<!-- <a title=" --><iframe srcdoc="&lt;form&gt;"></iframe><!-- " -->`,
+		// The name ends the raw HTML, the "=" is the text after it.
+		"- <pre></pre><iframe srcdoc\n  =&lt;form/action=/delete/x&gt;&lt;button&gt;Go&lt;/button&gt;\n",
 	} {
 		got := markdown(src, &Env{}, false)
-		// No tag with a srcdoc (goldmark may also show it as text).
-		if regexp.MustCompile(`(?i)<iframe[^>]*[\s/"']srcdoc`).MatchString(got) || !strings.Contains(got, "srcdoc") {
+		// No srcdoc left but the renamed one, unless goldmark shows the
+		// whole tag as text.
+		asText := !strings.Contains(got, "<iframe") && strings.Contains(got, "&lt;iframe")
+		if !asText && (regexp.MustCompile(`(?i)(^|[^-])srcdoc`).MatchString(got) || !strings.Contains(got, "data-defused-srcdoc")) {
 			t.Errorf("%s:\n%s", src, got)
 		}
 	}

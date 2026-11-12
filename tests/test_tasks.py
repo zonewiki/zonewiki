@@ -1491,6 +1491,32 @@ class TestRestore:
         restored = client.get("/api/tasks").get_json()[0]
         assert "evil" not in restored
 
+    def test_restore_takes_ids_and_times_only_as_zone_writes_them(self, client):
+        # The browser builds the cards from them: an id that could be
+        # markup gets a new one, a time that is none is now.
+        evil = 'x"><form method=post action=/delete/index><button>ok</button></form>'
+        resp = client.post("/api/tasks/restore", json={"tasks": [
+            {"title": "Open", "id": evil, "created_at": "<b>", "spawned_from": evil,
+             "history": [{"at": "2026-01-02T10:00", "event": "created", "by": "<i>"}],
+             "comments": [{"id": evil, "at": "2026-01-02T10:00", "by": "<i>", "text": "hi"}]},
+            {"title": "Done", "id": "<textarea>", "completed_at": "<textarea>"},
+            {"title": "By hand", "id": "old-1", "created_at": "2025-03-04",
+             "comments": [{"id": "c1", "at": "2026-01-02T10:00", "by": "alice", "text": "hi"}]}]})
+        assert resp.status_code == 201
+        stamp = re.compile(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d$")
+        uuid = re.compile(r"^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$")
+        opened, done, by_hand = resp.get_json()
+        assert "<" not in resp.get_data(as_text=True).replace("\\u003c", "<")
+        assert uuid.match(opened["id"]) and stamp.match(opened["created_at"])
+        assert opened["spawned_from"] is None
+        assert "by" not in opened["history"][0] and "by" not in opened["comments"][0]
+        assert re.match(r"^[0-9a-f]{8}$", opened["comments"][0]["id"])
+        assert uuid.match(done["id"]) and stamp.match(done["completed_at"])
+        assert client.get("/api/tasks/completed").get_json()[0]["id"] == done["id"]
+        # What a file written by hand may hold stays.
+        assert by_hand["id"] == "old-1" and by_hand["created_at"] == "2025-03-04"
+        assert by_hand["comments"][0]["id"] == "c1" and by_hand["comments"][0]["by"] == "alice"
+
     def test_restore_requires_tasks(self, client):
         assert client.post("/api/tasks/restore", json={"tasks": []}).status_code == 400
 
