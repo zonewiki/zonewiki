@@ -48,6 +48,7 @@ disabled = yes
 | `semantic-min-score` | How similar a passage must be to be a semantic hit, -1 to 1 (`searchFloor`, `docs/spec/search.md`) | the model's floor |
 | `trusted-proxies` | Reverse proxies whose `X-Forwarded-For` names the client, IP addresses or networks (`172.17.0.1, 10.0.0.0/8`), for the throttle on wrong passwords (`clientKey`, `docs/spec/security.md`); empty: none | loopback (`127.0.0.0/8, ::1`) |
 | `upload-max` | The biggest upload, a size (`25MB`; below) (`Settings.uploadMax`, `docs/spec/security.md`) | 100 MB |
+| `external-content` | Hosts a page may load images, media and frames from: `upload.wikimedia.org, *.example.org`; `*`: any (A page loads nothing from other hosts, `docs/spec/security.md`) | none: only Zone itself |
 | `storage-max` | How much the wiki may hold, a size (`5GB`): past it, nothing new is made (Storage limit, below) | no limit |
 
 - **Format**: `key = value` (spaces optional), the wiki's settings before the first section, a `[user NAME]` section per user with `password`, `mcp-token`, `role` and `disabled` (`configKeys`, `userKeys`; Roles, below). `#` starts a comment only at the start of a line, so `noshare = #noshare` is a value.

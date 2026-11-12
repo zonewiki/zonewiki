@@ -259,6 +259,7 @@ away, which Zone takes only at one). Set them with `run.sh`, or edit the file:
 | `query-log` | `yes`: keep the queries AI clients send to `search_wiki` in `.zone/queries.jsonl` (never in git), to turn into questions for `./run.sh eval` |
 | `semantic-min-score` | How similar a passage must be to count as a semantic match (e.g. `0.4`; the default suits the default model) |
 | `trusted-proxies` | Your reverse proxy's address (or network), when it doesn't connect from localhost (e.g. `172.17.0.1` for a proxy on the host of a container): Zone then tells its clients apart when it slows down wrong passwords |
+| `external-content` | Other sites a page may show images, video and frames from, e.g. `upload.wikimedia.org, *.example.org` (`*`: any). By default none: an image elsewhere shows as a link (see Security) |
 | `upload-max` | The biggest file an upload may be, e.g. `25MB` (default: `100MB`) |
 | `storage-max` | How much the wiki may hold, e.g. `5GB` (default: no limit). Counts your pages and files, not their git history; when full, new pages, notes and uploads are refused until you delete something, while edits to pages always save |
 
@@ -413,9 +414,11 @@ Also know this:
 - **Treat the wiki folder, its git history and remote, and any backup as
   confidential.** They hold everything, every user's private pages included,
   and a backup of the folder holds the password hashes too.
-- **Pages may contain HTML**, which is rendered as is. Don't paste markup you
-  don't trust, and keep in mind that anyone who can write to the wiki (including
-  an MCP client) can add script to a page.
+- **Pages may contain HTML**, which is rendered as is, but runs no script and
+  loads nothing from other sites: an image elsewhere shows as a link to it.
+  That keeps a page (one an assistant wrote after reading a malicious mail,
+  say) from sending your notes away in an image's address. To show images,
+  video or frames from sites you trust, name them in `external-content`.
 
 ## Your data
 

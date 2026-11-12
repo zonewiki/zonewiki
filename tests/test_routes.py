@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from tests import settings
-from tests.conftest import HOST, backlinks, content_hash, section_fields, task_backlinks, write_page
+from tests.conftest import HOST, backlinks, content_hash, preview, section_fields, task_backlinks, write_page
 from tests.goserver import binary
 
 
@@ -1882,10 +1882,44 @@ class TestProduction:
             resp = client.get(path, headers=HOST)
             csp = resp.headers["Content-Security-Policy"]
             assert csp == client.get("/page/index", headers=HOST).headers["Content-Security-Policy"], path
-            assert "script-src 'self'" in csp and "unsafe-inline" not in csp and "unsafe-eval" not in csp
+            rules = dict(rule.strip().split(" ", 1) for rule in csp.split(";"))
+            assert rules["script-src"] == "'self'" and "unsafe-eval" not in csp
             for rule in ("object-src 'none'", "base-uri 'self'", "form-action 'self'"):
                 assert rule in csp, (path, rule)
             assert resp.headers["X-Content-Type-Options"] == "nosniff", path
+
+    def test_a_page_loads_nothing_from_other_hosts(self, client, wiki_dir):
+        # An image or a frame elsewhere is a request the page's writer
+        # addresses: a way to send the wiki away without a script.
+        resp = client.get("/page/index", headers=HOST)
+        rules = dict(rule.strip().split(" ", 1) for rule in resp.headers["Content-Security-Policy"].split(";"))
+        assert rules["default-src"] == "'self'" and rules["connect-src"] == "'self'"
+        assert rules["img-src"] == rules["media-src"] == "'self' data: blob:"
+        assert rules["frame-src"] == "'self'" and rules["font-src"] == "'self' data:"
+        assert rules["style-src"] == "'self' 'unsafe-inline'"
+        assert resp.headers["Referrer-Policy"] == "same-origin"
+        # A markdown image elsewhere is a link to it; Zone's own and pasted ones stay images.
+        html = preview(client, "![A cat|200](https://elsewhere.example/cat.png?q=1) ![](//elsewhere.example/x.png) "
+                               "![mine](/_assets/x.png) ![rel](pic.png) ![pasted](data:image/png;base64,AA)")
+        assert '<a href="https://elsewhere.example/cat.png?q=1"' in html and 'class="external-image"' in html
+        assert ">A cat</a>" in html and ">//elsewhere.example/x.png</a>" in html
+        assert html.count("<img ") == 3 and "elsewhere.example" not in "".join(re.findall(r"<img [^>]*>", html))
+        # No <link> in a page: the browser would look its host up.
+        assert "&lt;link rel" in preview(client, '<link rel="dns-prefetch" href="//secret.elsewhere.example">')
+
+    def test_external_content_names_the_hosts_a_page_may_load_from(self, client, wiki_dir, monkeypatch):
+        monkeypatch.setattr(settings, "CONFIG_FILE", "external-content = upload.wikimedia.org, *.example.org\n")
+        csp = client.get("/page/index", headers=HOST).headers["Content-Security-Policy"]
+        rules = dict(rule.strip().split(" ", 1) for rule in csp.split(";"))
+        for rule in ("img-src", "media-src", "frame-src"):
+            assert rules[rule].endswith(" upload.wikimedia.org *.example.org"), rule
+        assert rules["script-src"] == "'self'" and rules["style-src"] == "'self' 'unsafe-inline'"
+        html = preview(client, "![a](https://upload.wikimedia.org/a.png) ![b](https://img.example.org/b.png) "
+                               "![c](https://example.org/c.png) ![d](https://elsewhere.example/d.png)")
+        assert html.count("<img ") == 2 and html.count('class="external-image"') == 2
+        monkeypatch.setattr(settings, "CONFIG_FILE", "external-content = *\n")
+        assert "<img " in preview(client, "![d](https://elsewhere.example/d.png)")
+        assert "img-src 'self' data: blob: *;" in client.get("/page/index", headers=HOST).headers["Content-Security-Policy"]
 
     def test_framing_rule_joins_an_existing_policy(self, client, wiki_dir):
         (wiki_dir / "_assets" / "x.svg").write_text("<svg xmlns='http://www.w3.org/2000/svg'/>")

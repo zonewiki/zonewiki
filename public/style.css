@@ -3475,3 +3475,6 @@ body[data-viewer] :is(.action-new-note, .action-task, [id^="task-add-btn"], .tas
 body[data-viewer] .action-sep:has(+ .action-new-note) { display: none; }
 .read-only .section-edit-btn { display: none; }
 .read-only .page-content input[type="checkbox"] { pointer-events: none; }
+
+/* An image on another site, not loaded (the page policy): a link to it. */
+a.external-image::before { content: "🖼 "; }

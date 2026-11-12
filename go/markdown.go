@@ -203,6 +203,28 @@ func (t *zoneTransformer) Transform(doc *ast.Document, reader text.Reader, pc pa
 	src := reader.Source()
 	slugs := map[string]bool{}
 	var unsafe []ast.Node
+	var blocked []*ast.Image
+	defer func() {
+		// An image the page may not load (blockedImage) is a link to it.
+		for _, img := range blocked {
+			link := ast.NewLink()
+			link.Destination = img.Destination
+			link.Title = []byte("An image on another site: not loaded (the external-content setting)")
+			link.SetAttributeString("class", "external-image")
+			link.SetAttributeString("target", "_blank")
+			link.SetAttributeString("rel", "noopener noreferrer")
+			for c := img.FirstChild(); c != nil; {
+				next := c.NextSibling()
+				link.AppendChild(link, c)
+				c = next
+			}
+			if link.ChildCount() == 0 {
+				link.AppendChild(link, ast.NewString(util.EscapeHTML(img.Destination)))
+			}
+			parent := img.Parent()
+			parent.ReplaceChild(parent, img, link)
+		}
+	}()
 	defer func() {
 		// Such a link is its text.
 		for _, n := range unsafe {
@@ -229,10 +251,13 @@ func (t *zoneTransformer) Transform(doc *ast.Document, reader text.Reader, pc pa
 			}
 		case *ast.Paragraph:
 			// An image alone in its paragraph may grow beyond the text width.
-			if n.ChildCount() == 1 && n.FirstChild().Kind() == ast.KindImage {
+			if img, ok := n.FirstChild().(*ast.Image); ok && n.ChildCount() == 1 && !t.blockedImage(img) {
 				n.SetAttributeString("class", "img-block")
 			}
 		case *ast.Image:
+			if t.blockedImage(n) {
+				blocked = append(blocked, n)
+			}
 			// ![alt|300](url): 300px wide, never wider than the text.
 			if last, ok := n.LastChild().(*ast.Text); ok {
 				if m := imgWidthRE.FindSubmatchIndex(last.Segment.Value(src)); m != nil {
@@ -273,6 +298,35 @@ func unsafeLink(href []byte) bool {
 		return true
 	}
 	return false
+}
+
+// blockedImage: an image on another site the page policy won't load
+// (pageCSP: only Zone's own, and the external-content setting's hosts). It
+// is shown as a link to it, not as a broken image.
+func (t *zoneTransformer) blockedImage(n *ast.Image) bool {
+	host, ok := urlHost(string(n.Destination))
+	return ok && !(t.env.Host != "" && strings.EqualFold(host, t.env.Host)) && !settings().loadsFrom(host)
+}
+
+// urlHost: the host of an http(s) or scheme-less ("//host/…") URL; false
+// for any other (a path of Zone's own, data:).
+func urlHost(href string) (string, bool) {
+	rest, ok := strings.CutPrefix(href, "//")
+	if !ok {
+		scheme, after, _ := strings.Cut(href, ":")
+		if !strings.EqualFold(scheme, "http") && !strings.EqualFold(scheme, "https") {
+			return "", false
+		}
+		rest = strings.TrimLeft(after, "/")
+	}
+	host := rest
+	for _, sep := range []string{"/", "?", "#", "\\"} {
+		host, _, _ = strings.Cut(host, sep)
+	}
+	if i := strings.LastIndex(host, "@"); i >= 0 {
+		host = host[i+1:]
+	}
+	return host, host != ""
 }
 
 // external: an http(s) link to another site opens in a new tab; one to the
@@ -457,8 +511,10 @@ func taskDates(s string) string {
 
 // defusedTagRE: the start of a tag that makes a form or submits one, or
 // that changes what the page is (a refresh to elsewhere, a base for its
-// links). A page's raw HTML is rendered as written, but these would work
-// as Zone's own: script-src keeps a page's scripts from running and
+// links), or that has the browser look another host up (<link
+// rel=dns-prefetch>, which no policy stops: the name asked for can carry
+// what the page's writer wants sent). A page's raw HTML is rendered as
+// written, but these would work as Zone's own: script-src keeps a page's scripts from running and
 // form-action keeps its forms from posting elsewhere, but a form posting to
 // Zone itself (<form method=post action="/delete/…">, a <button
 // formaction=…> or <button form=…> using one of Zone's own forms) is
@@ -466,7 +522,7 @@ func taskDates(s string) string {
 // another user (or an assistant that read a prompt injection) wrote would
 // delete or overwrite the viewer's pages. Their "<" is escaped, so they show
 // as text.
-var defusedTagRE = regexp.MustCompile(`(?i)<(/?(?:form|input|button|select|textarea|option|optgroup|datalist|fieldset|keygen|isindex|meta|base)(?:[\s/>]|$))`)
+var defusedTagRE = regexp.MustCompile(`(?i)<(/?(?:form|input|button|select|textarea|option|optgroup|datalist|fieldset|keygen|isindex|meta|base|link)(?:[\s/>]|$))`)
 
 // htmlTagRE: a start tag, its quoted values whole (a ">" in one doesn't
 // end it), for wikilinksInHTML. srcdocRE: a srcdoc attribute with a value.

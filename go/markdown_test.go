@@ -205,3 +205,27 @@ func TestConcurrentRendersKeepTheirEnv(t *testing.T) {
 		t.Error(e)
 	}
 }
+
+// An image on another site isn't loaded (the page policy): it is a link to
+// it, unless the external-content setting names its host.
+func TestExternalImages(t *testing.T) {
+	configWiki(t, "external-content = img.example.org, *.wikimedia.org\n")
+	html := render(t, "![cat|100](https://elsewhere.example/cat.png) ![](HTTP://user@Elsewhere.example:8080/x.png)\n\n"+
+		"![ok](https://img.example.org/a.png) ![ok](//upload.wikimedia.org/b.png) ![own](https://wiki.test/c.png) ![rel](d.png)\n",
+		Env{Host: "wiki.test"})
+	expectIn(t, html, `<a href="https://elsewhere.example/cat.png" title="An image on another site: not loaded (the external-content setting)" class="external-image" target="_blank" rel="noopener noreferrer">cat</a>`,
+		`>HTTP://user@Elsewhere.example:8080/x.png</a>`, `<img src="https://img.example.org/a.png"`,
+		`<img src="//upload.wikimedia.org/b.png"`, `<img src="https://wiki.test/c.png"`, `<img src="d.png"`)
+	expectNot(t, html, `<img src="https://elsewhere`, "img-block")
+	for host, want := range map[string]bool{"img.example.org": true, "IMG.example.org:443": true, "example.org": false,
+		"a.b.wikimedia.org": true, "wikimedia.org": false, "evilwikimedia.org": false, "elsewhere.example": false} {
+		if got := settings().loadsFrom(host); got != want {
+			t.Errorf("%s: %v", host, got)
+		}
+	}
+	for _, bad := range []string{"https://x.org", "x.org/path", "'unsafe-inline'", "data:", "x.org; script-src *", "*.*"} {
+		if _, err := loadSettings(mustParse(t, "external-content = "+bad+"\n")); err == nil {
+			t.Errorf("%q was taken", bad)
+		}
+	}
+}

