@@ -70,6 +70,31 @@ class TestLogin:
         resp = login(client, "alice", "alice-pw")
         assert resp.status_code == 429 and "Try again in" in resp.data.decode()
 
+    def test_logins_sent_at_once_are_counted_one_by_one(self, client, users):
+        # Not all let in before the first counts as a failure: five are
+        # checked, the rest wait.
+        import threading
+        client.get("/login", headers=HOST)   # the server with these users is up
+        statuses = []
+        def guess(i):
+            statuses.append(login(client, "alice", f"guess{i}").status_code)
+        threads = [threading.Thread(target=guess, args=(i,)) for i in range(15)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert sorted(statuses) == [200] * 5 + [429] * 10
+
+    def test_an_ipv6_network_is_one_client(self, client, users):
+        # A client has a whole /64 to take addresses from: they count together.
+        def guess(addr):
+            return client.post("/login", data={"username": "alice", "password": "guess"},
+                               headers={**HOST, "X-Forwarded-For": addr})
+        for i in range(5):
+            assert guess(f"2001:db8:0:1::{i + 1}").status_code == 200
+        assert guess("2001:db8:0:1:ffff::9").status_code == 429
+        assert guess("2001:db8:0:2::1").status_code == 200   # another network
+
     def test_a_removed_user_is_signed_out(self, client, users, monkeypatch):
         login(client, "alice", "alice-pw")
         assert client.get("/page/index", headers=HOST).status_code == 200

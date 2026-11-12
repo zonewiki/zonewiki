@@ -247,20 +247,21 @@ func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 	}
 	// Wrong tokens count against the client like wrong passwords (their own
 	// throttle: a client's MCP mistakes don't lock its browser out).
-	key := clientKey(r)
-	if wait := mcpThrottle.wait(key); wait > 0 {
+	user := ""
+	ok, wait := mcpThrottle.try(clientKey(r), func() (ok bool) {
+		user, ok = mcpAuthorized(r)
+		return ok
+	})
+	if wait > 0 {
 		w.Header().Set("Retry-After", itoa(int(wait.Seconds())+1))
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": waitMessage(wait)})
 		return
 	}
-	user, ok := mcpAuthorized(r)
 	if !ok {
-		mcpThrottle.failed(key)
 		w.Header().Set("WWW-Authenticate", "Bearer")
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized: wrong or missing bearer token"})
 		return
 	}
-	mcpThrottle.succeeded(key)
 	r = withUser(r, user)
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST")

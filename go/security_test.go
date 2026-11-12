@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 	"zonewiki/internal/settingsfile"
@@ -44,6 +46,48 @@ func TestWrongPasswordsSlowTheGuesserDown(t *testing.T) {
 	th.succeeded("x") // a success forgets the failures
 	if th.wait("x") != 0 {
 		t.Fatal("a success didn't clear")
+	}
+}
+
+// Tries sent at once are checked one by one: after five failures the rest
+// are refused unchecked, however many were on their way.
+func TestTriesAtOnceAreCountedOneByOne(t *testing.T) {
+	th := newThrottle()
+	var checked atomic.Int32
+	var wg sync.WaitGroup
+	for range 50 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			th.try("x", func() bool {
+				checked.Add(1)
+				time.Sleep(time.Millisecond)
+				return false
+			})
+		}()
+	}
+	wg.Wait()
+	if n := checked.Load(); n != 5 {
+		t.Fatalf("%d tries were checked, want 5", n)
+	}
+	if len(th.trying) != 0 {
+		t.Fatalf("locks left: %d", len(th.trying))
+	}
+	// Another client isn't held up, and a right try clears its failures.
+	th.failed("y")
+	if ok, wait := th.try("y", func() bool { return true }); !ok || wait != 0 || th.fails["y"].count != 0 {
+		t.Fatalf("y: %v %v %v", ok, wait, th.fails["y"])
+	}
+}
+
+func TestNetwork(t *testing.T) {
+	for in, want := range map[string]string{
+		"203.0.113.9": "203.0.113.9", "2001:db8:1:2:3:4:5:6": "2001:db8:1:2::/64", "2001:db8:1:2::1": "2001:db8:1:2::/64",
+		"::ffff:203.0.113.9": "::ffff:203.0.113.9", "fe80::1%eth0": "fe80::/64", "not an address": "not an address",
+	} {
+		if got := network(in); got != want {
+			t.Errorf("%s: %q, want %q", in, got, want)
+		}
 	}
 }
 

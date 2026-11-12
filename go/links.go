@@ -284,13 +284,16 @@ func welcomeRoute(w http.ResponseWriter, r *http.Request) {
 	dead := func(status int, msg string) {
 		page(w, rq, status, "welcome.html", "Link", shell{noActions: true}, &welcomeView{Dead: true, Error: msg})
 	}
-	if wait := welcomeThrottle.wait(key); wait > 0 {
+	var link *welcomeLink
+	ok, wait := welcomeThrottle.try(key, func() bool {
+		link = findLink(r.PathValue("token"))
+		return link != nil && settings().Users != nil
+	})
+	if wait > 0 {
 		dead(http.StatusTooManyRequests, waitMessage(wait))
 		return
 	}
-	link := findLink(r.PathValue("token"))
-	if link == nil || settings().Users == nil {
-		welcomeThrottle.failed(key)
+	if !ok {
 		dead(http.StatusNotFound, "")
 		return
 	}
@@ -308,7 +311,6 @@ func welcomeRoute(w http.ResponseWriter, r *http.Request) {
 				v.Error = err.Error()
 				break
 			}
-			welcomeThrottle.succeeded(key)
 			setSessionHash(w, r, link.User, hash)
 			http.Redirect(w, r, "/", http.StatusSeeOther)
 			return

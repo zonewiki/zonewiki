@@ -258,7 +258,22 @@ func sameSecret(given, secret string) bool {
 // which a proxy appended (entries before it are the client's to make up).
 // Anyone else's X-Forwarded-For is ignored: a client on the LAN could
 // otherwise send a new one with every guess and never be throttled.
-func clientKey(r *http.Request) string {
+func clientKey(r *http.Request) string { return network(clientAddr(r)) }
+
+// network: an address as the throttle counts it: an IPv6 address by its
+// /64, the network a client is given and may take any address of (each a
+// client of its own otherwise, with five more tries); anything else as it is.
+func network(key string) string {
+	if addr, err := netip.ParseAddr(key); err == nil && addr.Is6() && !addr.Is4In6() {
+		if p, err := addr.WithZone("").Prefix(64); err == nil {
+			return p.String()
+		}
+	}
+	return key
+}
+
+// clientAddr: the client's address (clientKey).
+func clientAddr(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		host = r.RemoteAddr
@@ -327,11 +342,59 @@ func untrustedForwarder(peer netip.Addr) {
 // then doubling up to an hour. A success clears the client; a client quiet
 // for a day is forgotten. Per client, so a guesser elsewhere doesn't lock
 // the owner out. In memory: a restart forgets.
+//
+// A try is checked through try, one at a time per client: tries sent at
+// once would otherwise all be let in before the first of them counts as a
+// failure (a hundred connections, a hundred guesses per wait).
 type Throttle struct {
 	free           int
 	first, longest time.Duration
 	mu             sync.Mutex
 	fails          map[string]failures
+	trying         map[string]*clientLock
+	swept          time.Time // when the quiet clients were last forgotten
+}
+
+// clientLock: one client's tries, one at a time; n: how many hold or wait
+// for it.
+type clientLock struct {
+	sync.Mutex
+	n int
+}
+
+// try checks one try of key's with check (is the password right?): refused
+// unchecked while key must wait (how long: wait), else counted as a
+// failure or, right, clearing key. key's tries run one after another.
+func (t *Throttle) try(key string, check func() bool) (ok bool, wait time.Duration) {
+	t.mu.Lock()
+	if t.trying == nil {
+		t.trying = map[string]*clientLock{}
+	}
+	l := t.trying[key]
+	if l == nil {
+		l = &clientLock{}
+		t.trying[key] = l
+	}
+	l.n++
+	t.mu.Unlock()
+	l.Lock()
+	defer func() {
+		l.Unlock()
+		t.mu.Lock()
+		if l.n--; l.n == 0 {
+			delete(t.trying, key)
+		}
+		t.mu.Unlock()
+	}()
+	if wait := t.wait(key); wait > 0 {
+		return false, wait
+	}
+	if check() {
+		t.succeeded(key)
+		return true, 0
+	}
+	t.failed(key)
+	return false, 0
 }
 
 type failures struct {
@@ -359,9 +422,14 @@ func (t *Throttle) failed(key string) {
 	n := now()
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	for k, f := range t.fails {
-		if n.Sub(f.last) >= 24*time.Hour {
-			delete(t.fails, k)
+	// Now and then, not at every failure: a guesser with many addresses
+	// would make each one walk them all.
+	if n.Sub(t.swept) >= time.Minute {
+		t.swept = n
+		for k, f := range t.fails {
+			if n.Sub(f.last) >= 24*time.Hour {
+				delete(t.fails, k)
+			}
 		}
 	}
 	t.fails[key] = failures{t.fails[key].count + 1, n}

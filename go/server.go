@@ -449,13 +449,17 @@ func login(w http.ResponseWriter, r *http.Request) {
 	}
 	errorText, status := "", http.StatusOK
 	if r.Method == "POST" {
-		key := clientKey(r)
-		if wait := loginThrottle.wait(key); wait > 0 {
-			// Refused unchecked, even the right password: guessing doesn't
-			// go on in the meantime.
+		// Refused unchecked while the client must wait, even the right
+		// password: guessing doesn't go on in the meantime.
+		user := ""
+		ok, wait := loginThrottle.try(clientKey(r), func() (ok bool) {
+			user, ok = checkLogin(r)
+			return ok
+		})
+		switch {
+		case wait > 0:
 			errorText, status = waitMessage(wait), http.StatusTooManyRequests
-		} else if user, ok := checkLogin(r); ok {
-			loginThrottle.succeeded(key)
+		case ok:
 			setSession(w, r, user)
 			next := r.URL.Query().Get("next")
 			if !r.URL.Query().Has("next") || !isLocalPath(next) {
@@ -463,8 +467,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 			}
 			http.Redirect(w, r, next, http.StatusFound)
 			return
-		} else {
-			loginThrottle.failed(key)
+		default:
 			errorText = "Incorrect password."
 			if s.Users != nil {
 				errorText = "Incorrect user name or password."
