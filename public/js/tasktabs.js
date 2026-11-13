@@ -94,6 +94,8 @@ app.closedLink?.addEventListener('click', () => {
 const embedFilterWords = [
   ...(app.initList ? ['#' + app.initList] : []),
   ...tagParamToQuery(app.appEl?.dataset.initTag || '').split(' ').filter(Boolean),
+  // [[tasks: assignee=…]] (with users): whose tasks the page shows.
+  ...tagParamToQuery(app.appEl?.dataset.initAssignee || '', '@').split(' ').filter(Boolean),
 ];
 // A chip that is just a separate list's tag (#groceries) is marked as a list.
 const filterChips = app.filterSearch && app.chipField(app.filterSearch, {

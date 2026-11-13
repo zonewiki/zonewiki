@@ -3,7 +3,7 @@
     on any page). Its params reach tasks.js as data-init-* attributes; ids
     get a -<n> suffix (sfx) after a page's first embed. */ -}}
 {{define "tasks_embed" -}}
-<div class="tasks-app" id="tasks-app{{.Sfx}}"{{if .Headless}} data-headless="1" style="display:none"{{end}} data-init-tag="{{.Tag}}" data-init-list="{{.List}}" data-lists="{{.ListsJSON}}" data-list-homes="{{.HomesJSON}}" data-init-view="{{.View}}" data-init-plan="{{.Plan}}" data-init-limit="{{.Limit}}" data-init-keep="{{.Keep}}"{{if .Private}} data-init-private="1"{{end}}{{with .PrivateFolder}} data-private-folder="{{.}}"{{end}} data-init-new="" data-instance="{{.InstanceID}}"{{if .Pinned}} data-pinned="1"{{end}}{{with .NewTags}} data-new-tags="{{.}}"{{end}}{{with .Settings}} data-settings-page="{{.Page}}" data-settings-index="{{.Index}}" data-settings-raw="{{.Raw}}"{{end}}>
+<div class="tasks-app" id="tasks-app{{.Sfx}}"{{if .Headless}} data-headless="1" style="display:none"{{end}} data-init-tag="{{.Tag}}"{{with .Assignee}} data-init-assignee="{{.}}"{{end}} data-init-list="{{.List}}" data-lists="{{.ListsJSON}}" data-list-homes="{{.HomesJSON}}" data-init-view="{{.View}}" data-init-plan="{{.Plan}}" data-init-limit="{{.Limit}}" data-init-keep="{{.Keep}}"{{if .Private}} data-init-private="1"{{end}}{{with .PrivateFolder}} data-private-folder="{{.}}"{{end}} data-init-new="" data-instance="{{.InstanceID}}"{{if .Pinned}} data-pinned="1"{{end}}{{with .NewTags}} data-new-tags="{{.}}"{{end}}{{with .Settings}} data-settings-page="{{.Page}}" data-settings-index="{{.Index}}" data-settings-raw="{{.Raw}}"{{end}}>
   <div class="tasks-header">
     <div class="view-tabs" id="tasks-tabs{{.Sfx}}" role="tablist" aria-label="View">
       <button type="button" role="tab" data-view="open" aria-selected="false">{{index .Labels 0}}</button>
@@ -209,7 +209,7 @@
   </div>
 </dialog>
 {{if .Settings}}
-{{template "task_settings_dialog" (dict "Sfx" .Sfx)}}
+{{template "task_settings_dialog" (dict "Sfx" .Sfx "CanAssign" .CanAssign)}}
 {{- /* Import… (the ⋯ menu): once a file is picked, a tag of your own for its tasks. */}}
 <input type="file" id="task-import-file{{.Sfx}}" accept=".json,application/json" hidden>
 <dialog id="task-import-modal{{.Sfx}}" class="task-edit-modal task-settings-modal">
@@ -284,6 +284,13 @@
           <input type="text" id="task-settings-tag{{.Sfx}}" name="tag" placeholder="every task" autocomplete="off">
           <span class="field-hint"><code>a,b</code> both · <code>a|b</code> either · <code>-a</code> without</span>
         </div>
+        {{- if .CanAssign}}
+        <div class="task-field task-settings-embed">
+          <label for="task-settings-assignee{{.Sfx}}">Shows only the tasks of</label>
+          <input type="text" id="task-settings-assignee{{.Sfx}}" name="assignee" placeholder="everyone" autocomplete="off">
+          <span class="field-hint"><code>me</code> whoever looks · a user's name · <code>a|b</code> either · <code>none</code> no one's · <code>-a</code> not theirs</span>
+        </div>
+        {{- end}}
       </div>
     </details>
     <p class="task-settings-error" id="task-settings-error{{.Sfx}}" role="alert" hidden></p>

@@ -322,8 +322,9 @@ type pageShell struct {
 
 // tasksNew: how a new task from any page (c t, New task) starts, as the
 // default list makes them.
+// Assignee: who the default list's assignee= gives a new task.
 type tasksNew struct {
-	Tags                 string
+	Tags, Assignee       string
 	Keep, Today, Private bool
 }
 
@@ -360,7 +361,7 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 			// Its "+ New" on Focus (its view, or the default) starts the task
 			// today; elsewhere a new task has no start date.
 			v := embedView(def.Params)
-			sh.TasksNew = &tasksNew{Tags: strings.Join(newTaskTags(def.Params), ","),
+			sh.TasksNew = &tasksNew{Tags: strings.Join(newTaskTags(def.Params), ","), Assignee: newTaskAssignee(def.Params, rq.user),
 				Keep: isTrue(def.Params.Get("keep")), Today: v == "" || v == "focus", Private: rq.defaultPrivate()}
 		}
 	}

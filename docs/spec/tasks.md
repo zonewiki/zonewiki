@@ -14,6 +14,7 @@ Case doesn't matter (`[[Tasks:]]`), nor a space after the colon (`[[tasks:list=s
 | Parameter | Values | Default | Description |
 |-----------|--------|---------|-------------|
 | `tag` | comma-separated tags | — | Pre-filters by tag. Comma = AND, pipe `a\|b` = OR, a leading `-` excludes (`tag=work,-mary`). The chips are locked (the page says what it shows); new tasks get the single tags, but a task's tags stay editable. |
+| `assignee` | `me`, a user's name, `none` | — | With users: shows only the tasks assigned to that user; `me` is whoever looks at the page, so one page shows each user their own, and `none` those no one has (Assigning tasks in `docs/spec/users.md`). Joined as `tag` is: `a\|b` either's, a leading `-` not theirs (`assignee=-anna`). The chip is locked, and a new task here is assigned to the one user it names. Without users it filters nothing. |
 | `view` | `focus`, `open`, `plan`, `closed` | Focus (or the tab remembered this session) | Opens on that tab whenever the page is opened; a URL `?view=` overrides it, and a reload stays on the tab it showed (see Views). Case doesn't matter; any other name (`views`) opens the default. |
 | `plan` | `on`, `off` | on | What the Open tab shows: on, the board by start date (Plan); off, one list. With `view=open` or `view=plan` it decides which of the two opens (`view=open` alone is the list, `view=plan` the board, as always). The Plan switch still flips it, for the browser tab (see Views). |
 | `limit` | integer 1–99 | none | WIP limit: Focus warns at this many tasks, and Plan day sections with at least this many are flagged amber. `?limit=N` works on `/tasks`. |
@@ -299,9 +300,10 @@ It changes the list's params where they are written, so the dialog and a hand ed
 | Tab names (under More) | `labels` | The Open tab's and the Focus tab's; empty keeps Open and Focus |
 | Tags of a new task (under More) | `new` | Comma-separated; empty: the list's tag and the single tags it shows |
 | Shows only the tags (under More) | `tag` | The filter: `a,b` both, `a\|b` either, `-a` without |
+| Shows only the tasks of (under More, with users) | `assignee` | `me` whoever looks, a user's name, `a\|b` either, `none` no one's, `-a` not theirs |
 
 
-**More** (`<details class="task-settings-more">`) folds the three fields that are rarely changed; it is open when the dialog opens with one of them set.
+**More** (`<details class="task-settings-more">`) folds the fields that are rarely changed; it is open when the dialog opens with one of them set.
 The line above Save says where the settings are written.
 
 **Where it writes** (`data-settings-page`, `-index`, `-raw` on `.tasks-app`, from `buildTasksEmbed`: the page, which of its `[[tasks: …]]` outside code, and the params as written there):
@@ -335,7 +337,7 @@ After a save the page reloads, and what the browser tab remembered (the active t
 **A list's tasks as a file**, to keep a copy, move a list to another wiki or hand it to someone.
 **Export tasks** and **Import tasks…** are in the list's **⋯ menu** in the toolbar, under List settings… (`#task-more-btn`, `.tasks-more-btn`; the cards' menu, `showMenu` in `js/taskmenu.js`, a bottom sheet on phones; the code in `js/tasksettings.js`).
 
-- **Export tasks** (`GET /api/tasks/export?list=&tag=`, `apiExport`): downloads `zone-tasks-<list>-<date>.json` (`all` for All tasks;
+- **Export tasks** (`GET /api/tasks/export?list=&tag=&assignee=`, `apiExport`): downloads `zone-tasks-<list>-<date>.json` (`all` for All tasks;
   the name goes into `Content-Disposition` quoted and escaped, `mime.FormatMediaType`, as the list's name is the request's): the tasks the list shows (its `list=` and `tag=`, not what is typed in the search field),
   open and closed of every year,
   each as the API shows it,

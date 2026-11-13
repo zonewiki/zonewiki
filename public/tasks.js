@@ -319,6 +319,9 @@ appEl.addEventListener('focusin', claimInstance);
 
 const urlParams = new URLSearchParams(window.location.search);
 const initTag = appEl?.dataset.initTag || urlParams.get('tag') || '';
+// [[tasks: assignee=…]] / ?assignee= (with users): whose tasks.
+const initAssignee = document.body.dataset.users === '1'
+  ? appEl?.dataset.initAssignee || urlParams.get('assignee') || '' : '';
 // WIP limit: Focus warns and Plan flags a day at >= LIMIT tasks. Off unless
 // set: [[tasks: limit=N]], or ?limit=N (the built-in /tasks page has no embed).
 const LIMIT = parseInt(appEl?.dataset.initLimit || urlParams.get('limit'), 10) || null;
@@ -476,7 +479,7 @@ openEdit = openEditModal;
 const initSearch = urlParams.get('search') || '';
 // ?tag= / [[tasks: tag=…]] arrive as chips, ?search= as text.
 if (filterSearch) {
-  filterChips.set(tagParamToQuery(initTag).split(' ').filter(Boolean), true);
+  filterChips.set([...tagParamToQuery(initTag).split(' '), ...tagParamToQuery(initAssignee, '@').split(' ')].filter(Boolean), true);
   filterSearch.value = initSearch || '';
 }
 // Precedence when a page is opened: URL ?view= > embed view > tab remembered

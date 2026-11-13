@@ -169,13 +169,15 @@ function tasksInView(tasks, f, view, today) {
 }
 
 // The [[tasks: tag=…]] / ?tag= form ("a,b" = all, "a|b" = any) as filter words.
-function tagParamToQuery(raw) {
+// sigil '@': the assignee= / ?assignee= form the same way (me, none, names).
+function tagParamToQuery(raw, sigil = '#') {
   raw = (raw || '').trim();
+  if (sigil === '@') raw = raw.toLowerCase().replace(/@/g, '');
   if (!raw) return '';
-  if (raw.includes('|')) return '#' + raw.split('|').map(s => s.trim()).filter(Boolean).join('|');
+  if (raw.includes('|')) return sigil + raw.split('|').map(s => s.trim()).filter(Boolean).join('|');
   // A leading '-' excludes the tag (`tag=work,-mary`).
   return raw.split(',').map(s => s.trim()).filter(Boolean)
-    .map(t => t.startsWith('-') ? '-#' + t.slice(1) : '#' + t).join(' ');
+    .map(t => t.startsWith('-') ? '-' + sigil + t.slice(1) : sigil + t).join(' ');
 }
 
 function tagMatchScore(q, tag) {

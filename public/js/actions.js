@@ -17,11 +17,11 @@ import { openSearchModal } from './search.js';
 export async function openDefaultTask() {
   const pinnedAdd = document.querySelector('.tasks-app[data-pinned]:not([data-headless]) [id^="task-add-btn"]');
   if (pinnedAdd) { pinnedAdd.click(); return; }
-  const { tasksTags = '', tasksKeep, tasksToday, tasksPrivate } = document.body.dataset;
+  const { tasksTags = '', tasksKeep, tasksToday, tasksPrivate, tasksAssignee = '' } = document.body.dataset;
   // The start date as the default list's "+ New" gives it (today on Focus);
   // without a pin, as /tasks's Focus does.
   const homeless = !('tasksTags' in document.body.dataset);
-  const opts = { tags: tasksTags, keep: tasksKeep === '1', private: tasksPrivate === '1',
+  const opts = { tags: tasksTags, keep: tasksKeep === '1', private: tasksPrivate === '1', assignee: tasksAssignee,
                  start_date: homeless || tasksToday === '1' ? localDate() : null };
   if (!document.querySelector('.tasks-app[data-ready]')) {
     try {

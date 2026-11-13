@@ -244,3 +244,52 @@ def test_without_users_there_is_no_assignee(page, wiki):
     page.locator("#task-add-btn").click()
     modal.locator("#task-edit-title").fill("Shop @me")
     expect(modal.locator("#task-edit-quick")).to_be_hidden()
+
+
+def test_one_page_shows_each_user_their_own_tasks(alice, wiki):
+    """[[tasks: assignee=me]]: a locked @me chip; a new task there is yours."""
+    new(alice, "Alice's", assignee="alice")
+    new(alice, "Bob's", assignee="bob")
+    new(alice, "No one's")
+    wiki.write("mine", "# Mine\n\n[[tasks: assignee=me view=open]]\n")
+    alice.goto("/page/mine")
+    expect(alice.locator(".task-item .task-title")).to_have_text(["Alice's"])
+    chip = alice.locator(".tasks-toolbar .tag-chip")
+    expect(chip.locator(".tag-chip-label")).to_have_text(["@me"])
+    expect(chip.locator(".tag-chip-x")).to_have_count(0)            # set by the page
+    alice.locator("#task-add-btn").click()
+    modal = alice.locator("#task-edit-modal")
+    expect(modal.locator(".task-field-assignee .tag-chip-label")).to_have_text(["@alice"])
+    modal.locator("#task-edit-title").fill("Another of mine")
+    modal.get_by_role("button", name="Save").click()
+    wait_for_assignee(alice, "Another of mine", "alice")
+    expect(alice.locator(".task-item")).to_have_count(2)
+    # Bob, on the same page.
+    alice.request.post("/logout")
+    alice.request.post("/login", form={"username": "bob", "password": "pw"})
+    alice.goto("/page/mine")
+    expect(alice.locator(".task-item .task-title")).to_have_text(["Bob's"])
+    # ?assignee= on /tasks gives an ordinary chip.
+    alice.goto("/tasks?view=open&assignee=none")
+    expect(alice.locator(".task-item .task-title")).to_have_text(["No one's"])
+    expect(alice.locator(".tasks-toolbar .tag-chip .tag-chip-x")).to_have_count(1)
+
+
+def test_the_settings_dialog_sets_whose_tasks_a_list_shows(alice, wiki):
+    new(alice, "Bob's", assignee="bob", tags=["work"])
+    new(alice, "Alice's", assignee="alice", tags=["work"])
+    wiki.write("work", "# Work\n\n[[tasks: tag=work view=open]]\n")
+    alice.goto("/page/work")
+    expect(alice.locator(".task-item")).to_have_count(2)
+    alice.locator("#task-more-btn").click()
+    alice.get_by_role("menuitem", name="List settings…").click()
+    dialog = alice.locator("#task-settings-modal")
+    dialog.locator("[name=assignee]").fill("@Bob")        # More is open: the list has a filter
+    with alice.expect_navigation():
+        dialog.get_by_role("button", name="Save").click()
+    assert wiki.read("work") == "# Work\n\n[[tasks: tag=work view=open assignee=bob]]\n"
+    expect(alice.locator(".task-item .task-title")).to_have_text(["Bob's"])
+    # It opens with what the page says, More open since it is set.
+    alice.locator("#task-more-btn").click()
+    alice.get_by_role("menuitem", name="List settings…").click()
+    expect(dialog.locator("[name=assignee]")).to_have_value("bob")

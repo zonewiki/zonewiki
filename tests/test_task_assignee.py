@@ -255,3 +255,81 @@ class TestNames:
         alice.post("/logout", headers=HOST)
         resp = alice.get("/api/tasks/assignable", headers=HOST)
         assert resp.status_code != 200 and b"alice" not in resp.data
+
+
+class TestEmbed:
+    """[[tasks: assignee=…]]: whose tasks an embed shows; the server's side is
+    the counts, the export, the settings and what a new task gets."""
+
+    @pytest.fixture()
+    def tasks(self, alice):
+        from datetime import date
+        today = date.today().isoformat()
+        for title, who in (("A1", "alice"), ("A2", "alice"), ("B1", "bob"), ("N1", None)):
+            new(alice, title=title, due_date=today, **({"assignee": who} if who else {}))
+        return alice
+
+    def today(self, client, wiki_dir, params):
+        """How many tasks due today the pinned list with these params counts."""
+        (wiki_dir / "team.md").write_text(f"# Team\n\n[[tasks: {params} pin=1]]\n")
+        return client.get("/api/tasks/due-count", headers=HOST).get_json()["today"]
+
+    def test_the_counts_are_each_users_own(self, tasks, wiki_dir):
+        assert self.today(tasks, wiki_dir, "assignee=me") == 2
+        login(tasks, "bob")
+        assert self.today(tasks, wiki_dir, "assignee=me") == 1
+        login(tasks, "carol")                       # a viewer has none
+        assert self.today(tasks, wiki_dir, "assignee=me") == 0
+
+    @pytest.mark.parametrize("params,count", [
+        ("assignee=bob", 1), ("assignee=@Bob", 1), ("assignee=alice|bob", 3), ("assignee=none", 1),
+        ("assignee=-alice", 2), ("assignee=-alice,-none", 1), ("assignee=me|none", 3), ("assignee=zed", 0),
+        ("tag=x assignee=me", 0), ("", 4),
+    ])
+    def test_the_param_is_read_as_the_filter_is(self, tasks, wiki_dir, params, count):
+        assert self.today(tasks, wiki_dir, params) == count
+
+    def test_a_former_assignees_tasks_count_as_no_ones(self, tasks, wiki_dir, monkeypatch):
+        monkeypatch.setattr(settings, "USER_SETTINGS", {**USER_SETTINGS, "bob": {"disabled": "yes"}})
+        assert self.today(tasks, wiki_dir, "assignee=none") == 2
+        assert self.today(tasks, wiki_dir, "assignee=bob") == 1
+
+    def test_without_users_the_param_filters_nothing(self, client, wiki_dir):
+        from datetime import date
+        new(client, title="One", due_date=date.today().isoformat())
+        assert self.today(client, wiki_dir, "assignee=me") == 1
+        assert "data-init-assignee" not in client.get("/page/team", headers=HOST).get_data(as_text=True)
+
+    def test_the_page_tells_the_browser(self, alice, wiki_dir):
+        (wiki_dir / "team.md").write_text("# Team\n\n[[tasks: assignee=@Me]]\n")
+        html = alice.get("/page/team", headers=HOST).get_data(as_text=True)
+        assert 'data-init-assignee="me"' in html
+        assert 'name="assignee"' in html.split('id="task-settings-modal', 1)[1]     # the settings dialog's row
+
+    def test_a_new_task_from_anywhere_gets_the_default_lists_assignee(self, alice, wiki_dir):
+        (wiki_dir / "team.md").write_text("# Team\n\n[[tasks: assignee=me pin=default]]\n")
+        assert 'data-tasks-assignee="alice"' in alice.get("/page/index", headers=HOST).get_data(as_text=True)
+        login(alice, "bob")
+        assert 'data-tasks-assignee="bob"' in alice.get("/page/index", headers=HOST).get_data(as_text=True)
+        for params in ("assignee=alice|bob", "assignee=none", "assignee=-bob", "assignee=carol", ""):
+            (wiki_dir / "team.md").write_text(f"# Team\n\n[[tasks: {params} pin=default]]\n")
+            assert "data-tasks-assignee" not in alice.get("/page/index", headers=HOST).get_data(as_text=True), params
+
+    def test_the_export_takes_it(self, tasks):
+        got = tasks.get("/api/tasks/export?assignee=me", headers=HOST).get_json()["tasks"]
+        assert sorted(t["title"] for t in got) == ["A1", "A2"]
+
+    def test_the_settings_dialog_writes_it(self, alice, wiki_dir):
+        path = wiki_dir / "team.md"
+        path.write_text("[[tasks: tag=a]]\n")
+        save = lambda was, **set: alice.post("/api/tasks/settings", headers=HOST,
+                                             json={"page": "team", "index": 0, "was": was, "set": set})
+        assert save("tag=a", assignee="Me|@Bob").status_code == 200
+        assert path.read_text() == "[[tasks: tag=a assignee=me|bob]]\n"
+        for bad in ("a b", "bob;", "|bob", "-", "bob,,"):
+            assert save("tag=a assignee=me|bob", assignee=bad).status_code == 400, bad
+        assert save("tag=a assignee=me|bob", assignee="").status_code == 200
+        assert path.read_text() == "[[tasks: tag=a]]\n"
+        # All tasks has no filter.
+        resp = alice.post("/api/tasks/settings", headers=HOST, json={"all": True, "was": "", "set": {"assignee": "me"}})
+        assert resp.status_code == 400

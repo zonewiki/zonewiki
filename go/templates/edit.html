@@ -76,7 +76,7 @@
     ⋯ menu shows it, with the fields that make a list. It writes the
     [[tasks: …]] into the text, or changes the one the cursor is on
     (js/tasklist.js). */}}
-{{template "task_settings_dialog" (dict "Sfx" "-editor" "Editor" true "Lists" .TaskLists)}}
+{{template "task_settings_dialog" (dict "Sfx" "-editor" "Editor" true "Lists" .TaskLists "CanAssign" .Shell.Users)}}
 {{- /* A hidden task app: Make task (js/editor.js) opens its edit modal, and
     uses the task app's quick-add parser (tasks-core.js) for several lines at once. */}}
 {{.TasksHTML}}

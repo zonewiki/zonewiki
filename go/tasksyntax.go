@@ -169,10 +169,14 @@ func renameTagInText(text, old, name string) string {
 // Not list=: which list an embed shows is the page's to say, and a list is
 // renamed by renameTagOp.
 var (
-	embedSettingKeys = []string{"tag", "new", "view", "plan", "limit", "labels", "pin"}
+	embedSettingKeys = []string{"tag", "assignee", "new", "view", "plan", "limit", "labels", "pin"}
 	allSettingKeys   = []string{"new", "view", "plan", "limit", "labels"}
 	embedValueRE     = regexp.MustCompile(`^[^\[\]` + "`" + `]*$`)
 )
+
+// assigneeParamRE: assignee= as the dialog may write it: names, me and
+// none, joined as tag= joins tags (a|b, a,-b).
+var assigneeParamRE = regexp.MustCompile(`^-?[a-z0-9]+(-[a-z0-9]+)*([|,]-?[a-z0-9]+(-[a-z0-9]+)*)*$`)
 
 // checkEmbedSettings: set as params the dialog may write, each value
 // trimmed; "" takes a param out. keys: those allowed.
@@ -207,6 +211,10 @@ func checkEmbedSettings(set map[string]string, keys []string) (map[string]string
 				}
 			case "new":
 				v = strings.Join(taskmodel.CleanTags(strings.Split(v, ",")), ",")
+			case "assignee":
+				if v = strings.ReplaceAll(strings.ToLower(v), "@", ""); !assigneeParamRE.MatchString(v) {
+					return nil, refuse("Not a value for assignee: user names, me or none, as a|b (either) or -a (not theirs)")
+				}
 			}
 		}
 		out[k] = v
@@ -353,6 +361,63 @@ func tagParamMatches(t *Task, raw string) bool {
 		}
 	}
 	return true
+}
+
+// assigneeIs: t's assignee is what word names, for user: a user's name,
+// "me" (user) or "none": no one, or someone who can no longer be given
+// tasks (TasksCore.assigneeIs).
+func assigneeIs(t *Task, word, user string) bool {
+	switch word {
+	case "none":
+		return t.Assignee == "" || !settings().assignable(t.Assignee)
+	case "me":
+		return user != "" && t.Assignee == user
+	}
+	return t.Assignee == word
+}
+
+// assigneeParamMatches: a task passes an embed's assignee= for user, read
+// as tag= is (tagParamMatches): `a|b` either's, else each word must hold,
+// `-a` not theirs. Without users every task passes.
+func assigneeParamMatches(t *Task, raw, user string) bool {
+	raw = strings.ToLower(strings.TrimSpace(raw))
+	if raw == "" || settings().Users == nil {
+		return true
+	}
+	word := func(x string) string { return strings.TrimPrefix(strings.TrimSpace(x), "@") }
+	if strings.Contains(raw, "|") {
+		for _, x := range strings.Split(raw, "|") {
+			if word(x) != "" && assigneeIs(t, word(x), user) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, x := range strings.Split(raw, ",") {
+		x = strings.TrimSpace(x)
+		if strings.HasPrefix(x, "-") {
+			if assigneeIs(t, word(x[1:]), user) {
+				return false
+			}
+		} else if word(x) != "" && !assigneeIs(t, word(x), user) {
+			return false
+		}
+	}
+	return true
+}
+
+// newTaskAssignee: who a new task is assigned to in an embed with these
+// params, for user: the one user assignee= names (me: user), if a task can
+// be assigned to them; "" for several (a|b), none or an exclusion.
+func newTaskAssignee(p TasksParams, user string) string {
+	name := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(p.Get("assignee"))), "@")
+	if name == "me" {
+		name = user
+	}
+	if !settings().assignable(name) {
+		return ""
+	}
+	return name
 }
 
 // newTaskTags: the tags a new task gets in an embed with these params: the

@@ -350,12 +350,13 @@ const importMax = 10000
 // importIDRE: an id an imported task may keep (a UUID, as Zone makes them).
 var importIDRE = regexp.MustCompile(`^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$`)
 
-// apiExport: the tasks a list shows (?list=, ?tag=, as an embed's params;
+// apiExport: the tasks a list shows (?list=, ?tag=, ?assignee=, as an embed's params;
 // neither: every task the user sees), open and closed of every year,
 // as a file to save: {zone_tasks: 1, list, tag, exported_at, tasks}, each
 // task as the API shows it. apiImport reads it back.
 func apiExport(w http.ResponseWriter, r *http.Request) error {
 	list, tag := cleanList(r.URL.Query().Get("list")), strings.TrimSpace(r.URL.Query().Get("tag"))
+	assignee := r.URL.Query().Get("assignee")
 	taskFiles.Lock()
 	active, closed, err := taskFiles.ReadForWriteLocked(userOf(r))
 	taskFiles.Unlock()
@@ -364,7 +365,7 @@ func apiExport(w http.ResponseWriter, r *http.Request) error {
 	}
 	tasks := []*Task{}
 	for _, t := range slices.Concat(active, closed) {
-		if inScope(t, list) && tagParamMatches(t, tag) {
+		if inScope(t, list) && tagParamMatches(t, tag) && assigneeParamMatches(t, assignee, userOf(r)) {
 			tasks = append(tasks, t)
 		}
 	}

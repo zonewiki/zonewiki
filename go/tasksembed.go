@@ -36,6 +36,7 @@ type tasksEmbedView struct {
 	NewTags         string   // new tasks' tags, comma-separated
 	CanPrivate      bool     // with users: the modal has the Private box
 	CanAssign       bool     // with users: the modal has the Assignee field
+	Assignee        string   // assignee=, with users: whose tasks it shows
 	Private         bool     // ticked for a new task here
 	PrivateFolder   string
 	ListsJSON       string           // the declared lists' names, as JSON
@@ -116,6 +117,7 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless, privat
 		Limit: limit, Labels: labels, InstanceID: instance, Sfx: sfx, Headless: headless,
 		Keep: keep, Pinned: pinnedParam(params), NewTags: strings.Join(taskmodel.CleanTags(strings.Split(params.Get("new"), ",")), ","),
 		CanAssign:  settings().Users != nil,
+		Assignee:   assigneeParam(params),
 		CanPrivate: privateFolder(user) != "", Private: private && privateFolder(user) != "",
 		PrivateFolder: privateFolder(user),
 		ListsJSON:     listsJSON, HomesJSON: homesJSON,
@@ -332,9 +334,9 @@ type TaskCounts struct {
 func taskCounts(rq *Req) TaskCounts {
 	tasks := rq.openTasks()
 	if len(rq.pinnedLists()) == 0 {
-		return countTasks(tasks)
+		return countTasks(rq.user, tasks)
 	}
-	return countTasks(tasks, rq.pinnedView())
+	return countTasks(rq.user, tasks, rq.pinnedView())
 }
 
 // pinnedView: the params of the view of the pinned lists: one list's own;
@@ -391,13 +393,23 @@ func (rq *Req) pinnedSources() ([]pinnedLink, []PageRef) {
 	return links, pages
 }
 
+// assigneeParam: an embed's assignee= as the browser gets it: lowercase,
+// without "@", and nothing without users (there '@' is no filter word).
+func assigneeParam(p TasksParams) string {
+	if settings().Users == nil {
+		return ""
+	}
+	return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(p.Get("assignee"))), "@", "")
+}
+
 // countTasks: taskCounts of the open tasks the views with params show
-// (any of them; none: every task).
-func countTasks(tasks []*Task, params ...TasksParams) TaskCounts {
+// user (any of them; none: every task).
+func countTasks(user string, tasks []*Task, params ...TasksParams) TaskCounts {
 	day := isoDay(today())
 	shows := func(t *Task) bool {
 		for _, p := range params {
-			if inScope(t, cleanList(p.Get("list"))) && tagParamMatches(t, p.Get("tag")) {
+			if inScope(t, cleanList(p.Get("list"))) && tagParamMatches(t, p.Get("tag")) &&
+				assigneeParamMatches(t, p.Get("assignee"), user) {
 				return true
 			}
 		}
@@ -448,7 +460,7 @@ func (rq *Req) taskPlaces() []TaskPlace {
 	tasks := rq.openTasks()
 	if len(pinned) > 1 {
 		out = append(out, TaskPlace{Key: "pinned", Label: "Pinned", Title: "Your pinned lists, as one", Href: "/tasks?pinned=1",
-			Pinned: true, Counts: countTasks(tasks, rq.pinnedView())})
+			Pinned: true, Counts: countTasks(user, tasks, rq.pinnedView())})
 	}
 	isPinned := map[string]bool{}
 	for _, h := range pinned {
@@ -457,10 +469,10 @@ func (rq *Req) taskPlaces() []TaskPlace {
 		case l != "":
 			isPinned[l] = true
 			out = append(out, TaskPlace{Key: "list:" + l, Label: l, Title: "Pinned list #" + l, Href: "/tasks?list=" + url.QueryEscape(l),
-				Pinned: true, Private: ownPrivate(user, h.Slug), Counts: countTasks(tasks, h.Params)})
+				Pinned: true, Private: ownPrivate(user, h.Slug), Counts: countTasks(user, tasks, h.Params)})
 		case len(pinned) == 1:
 			out = append(out, TaskPlace{Key: "pinned", Label: "Pinned", Title: "Your pinned tasks", Href: pathURL("page", h.Slug),
-				Pinned: true, Private: ownPrivate(user, h.Slug), Counts: countTasks(tasks, h.Params)})
+				Pinned: true, Private: ownPrivate(user, h.Slug), Counts: countTasks(user, tasks, h.Params)})
 		}
 	}
 	for _, name := range sortedKeys(lists) {
@@ -469,12 +481,12 @@ func (rq *Req) taskPlaces() []TaskPlace {
 			continue
 		}
 		out = append(out, TaskPlace{Key: "list:" + name, Label: name, Title: "List #" + name,
-			Href: "/tasks?list=" + url.QueryEscape(name), Private: ownPrivate(user, l.Slug), Counts: countTasks(tasks, l.Params.With("list", name))})
+			Href: "/tasks?list=" + url.QueryEscape(name), Private: ownPrivate(user, l.Slug), Counts: countTasks(user, tasks, l.Params.With("list", name))})
 	}
 	if len(out) == 0 {
 		return nil
 	}
-	return append(out, TaskPlace{Key: "all", Label: "All", Title: "Every task", Href: "/tasks", Counts: countTasks(tasks)})
+	return append(out, TaskPlace{Key: "all", Label: "All", Title: "Every task", Href: "/tasks", Counts: countTasks(user, tasks)})
 }
 
 // placeCounts: each place's counts by its key (GET /api/tasks/due-count?places=1).

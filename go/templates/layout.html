@@ -39,6 +39,7 @@
       today when its "+ New" would, and are private when it is in the
       user's private folder (js/actions.js openDefaultTask). */}}
   {{- with .Shell.TasksNew}} data-tasks-tags="{{.Tags}}"
+    {{- with .Assignee}} data-tasks-assignee="{{.}}"{{end}}
     {{- if .Keep}} data-tasks-keep="1"{{end}}
     {{- if .Today}} data-tasks-today="1"{{end}}
     {{- if .Private}} data-tasks-private="1"{{end}}

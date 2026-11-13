@@ -612,7 +612,8 @@ One, not several, so that "who has this?" has one answer; someone helping goes i
 It is information: it never changes who sees a task or who may change it, and anyone who may change tasks may assign any task to anyone, themselves included, or to no one.
 
 You assign a task in its dialog or by ending a new task's title with `@name`, see who has it on its card, and filter a list by it (`@anna`, `@me`, `@none`).
-`[[tasks: assignee=…]]` on a page, the MCP tools' parameters and assigning several tasks at once are not built yet (`docs/plans/task-assignee.md`).
+A page can show each user their own tasks with `[[tasks: assignee=me]]`.
+The MCP tools' parameters and assigning several tasks at once are not built yet (`docs/plans/task-assignee.md`).
 
 - **The field** is the task's `assignee`, a user's name, kept in its file after `tags` (`Task.Assignee` in `go/internal/taskmodel`; Task fields in `docs/spec/tasks.md`).
   A task without one has no such key.
@@ -650,6 +651,14 @@ You assign a task in its dialog or by ending a new task's title with `@name`, se
 - **In the filter** (`TasksCore.parseFilter`/`matchesFilter`, given `people`): `@anna`, `@anna|bob` (either), `-@anna` (not hers), `@me` (yours), `@none` (no one's, a former assignee's included).
   A completed word becomes a chip, as a tag does; the suggestions are `me`, `none` and the users who have tasks among those the other words leave visible.
   `@` on the list focuses the field and starts a name.
+- **On a page**: `[[tasks: assignee=me]]` shows whoever looks at the page their own tasks, `assignee=anna` hers, `assignee=none` those no one has (a former assignee's included); `a|b` either's, `-a` not theirs, and it joins `tag=` and `list=` (Task list embed in `docs/spec/tasks.md`).
+  The chip is locked there, as a `tag=`'s is.
+  A new task in such a list is assigned to the one user it names (`me`: whoever makes it), so it shows up where it was made; `a|b`, `none` and `-a` give it no one.
+  The same for **New task** from any page when the default list has `assignee=` (`newTaskAssignee`, `<body data-tasks-assignee>`).
+  List settings has it under More, "Shows only the tasks of".
+  `/tasks?assignee=…` filters the same way, with an ordinary chip.
+- **The counts** on the Tasks links and the list switcher count what each user's lists show them: `assignee=me` is whoever asks (`assigneeParamMatches` in `go/tasksyntax.go`, the server's mirror of the filter).
+  An export of such a list holds the tasks it shows (`/api/tasks/export?assignee=`).
 - **The History** reads "Assigned to bob (was anna)" and "Unassigned (was bob)".
 - **The names** come from `GET /api/tasks/assignable`, which the task app loads once per page with its tasks (`loadPeople` in `js/taskutil.js`; `people`): `{ "users": [...], "me": "<who asks>" }`, the users who can be assigned, A–Z, for anyone signed in (a viewer too: they see the names on the tasks anyway).
   In sharing mode `users` is empty.

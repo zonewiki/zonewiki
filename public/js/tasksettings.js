@@ -40,6 +40,7 @@ function fieldsOf(p) {
     limit: Number.isNaN(limit) ? '' : String(Math.max(1, Math.min(99, limit))),
     new: p.new || '',
     tag: p.tag || '',
+    assignee: p.assignee || '',
     pin: pin === 'default' ? 'default' : isTrue(pin) || isTrue(p.home) ? '1' : '',
     // Which list it is, and keep: only where the dialog makes the embed (the editor).
     list: p.list || '',
@@ -75,6 +76,7 @@ export function changedParams(was, now, p) {
   }
   for (const k of ['limit', 'pin']) if (now[k] !== was[k]) set[k] = now[k];
   for (const k of ['new', 'tag']) if (now[k] !== was[k]) set[k] = oneWord(now[k]);
+  if ('assignee' in now && now.assignee !== was.assignee) set.assignee = oneWord(now.assignee).toLowerCase().replace(/@/g, '');
   if ('keep' in now && now.keep !== was.keep) set.keep = now.keep ? '1' : '';
   return set;
 }
@@ -92,6 +94,7 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
     limit: f.limit.value.trim(), new: f.new.value.trim(),
     tag: f.tag.value.trim(), pin: f.pin.value,
     ...(f.list ? { list: cleanList(f.list.value), keep: f.keep.checked } : {}),
+    ...(f.assignee ? { assignee: f.assignee.value.trim() } : {}),   // with users
   });
   const fill = (params, all = false) => {
     const fields = fieldsOf(params);
@@ -101,10 +104,11 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
     for (const k of ['view', 'label_open', 'label_focus', 'limit', 'new', 'tag', 'pin']) f[k].value = fields[k];
     f.plan.checked = fields.plan;
     if (f.list) { f.list.value = fields.list; f.keep.checked = fields.keep; }
+    if (f.assignee) f.assignee.value = fields.assignee;
     for (const el of form.querySelectorAll('.task-settings-embed')) el.hidden = all;
     // More: closed, unless something in it is set.
     form.querySelector('.task-settings-more').open =
-      !!(fields.label_open || fields.label_focus || fields.new || (!all && fields.tag));
+      !!(fields.label_open || fields.label_focus || fields.new || (!all && (fields.tag || fields.assignee)));
     return read();
   };
   return { read, fill };
@@ -164,7 +168,8 @@ export function initTaskSettings(app) {
   const importTitle = document.getElementById('task-import-title' + sfx);
   const importTag = document.getElementById('task-import-tag' + sfx);
   const importError = document.getElementById('task-import-error' + sfx);
-  const scope = { list: appEl.dataset.initList || '', tag: appEl.dataset.initTag || '' };
+  const scope = { list: appEl.dataset.initList || '', tag: appEl.dataset.initTag || '',
+                  ...(appEl.dataset.initAssignee ? { assignee: appEl.dataset.initAssignee } : {}) };
   const n = count => `${count} task${count === 1 ? '' : 's'}`;
   let picked = null;   // the file's content, while the dialog asks for the tag
 
