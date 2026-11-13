@@ -832,6 +832,7 @@ EXEMPT = {
     "GET /welcome/{token}", "POST /welcome/{token}",   # a link's own page: sets one password (test_admin.py)
     "GET /signup", "POST /signup",  # asks for an account by mail, signed out (test_signup.py)
     "GET /assistant", "POST /assistant/token", "POST /assistant/revoke",   # the caller's own MCP token, no page (test_assistant.py)
+    "GET /password", "POST /password",   # the caller's own password, no page (test_password.py)
     "GET /setup", "POST /setup",    # the first-run page: only while the wiki has no login (test_setup.py)
 }
 

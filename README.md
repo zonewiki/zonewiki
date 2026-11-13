@@ -158,6 +158,7 @@ Done tasks go to a yearly archive. Beyond that:
   Optionally people sign up themselves with their mail address
   (`ZONE_SIGNUP=1` and a mail server in `.env`; as viewers by default, and an admin
   approves them if you want).
+  Everyone changes their own password in the browser (**Change password** in the user menu).
   See [`docs/spec/users.md`](docs/spec/users.md).
 - **Keyboard shortcuts** for everything; `?` lists them.
 - **Sharing mode** for screen sharing: hides the trail of visited pages,

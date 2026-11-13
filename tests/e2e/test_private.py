@@ -30,7 +30,7 @@ def test_the_menu_opens_by_click_and_closes_on_escape(alice):
     btn.click()
     expect(menu).to_be_visible()
     expect(btn).to_have_attribute("aria-expanded", "true")
-    expect(menu.get_by_role("menuitem")).to_have_text(["Connect an assistant", "Sign out"])
+    expect(menu.get_by_role("menuitem")).to_have_text(["Connect an assistant", "Change password", "Sign out"])
     expect(menu.locator(".menu-who")).to_have_text("Signed in as alice")
     # The first item has the focus; it sits under the button.
     expect(menu.get_by_role("menuitem").first).to_be_focused()
@@ -55,6 +55,8 @@ def test_the_menu_works_from_the_keyboard_and_closes_on_a_click_elsewhere(alice)
     alice.keyboard.press("ArrowDown")
     expect(menu).to_be_visible()
     expect(menu.get_by_role("menuitem").first).to_be_focused()
+    alice.keyboard.press("ArrowDown")
+    expect(menu.get_by_role("menuitem", name="Change password")).to_be_focused()
     alice.keyboard.press("ArrowDown")
     expect(menu.get_by_role("menuitem", name="Sign out")).to_be_focused()
     alice.keyboard.press("ArrowDown")   # wraps: Sign out is the last item
@@ -90,6 +92,30 @@ def test_the_menu_leads_to_connect_an_assistant(alice, wiki):
     expect(alice.locator("#assistant-token")).to_have_count(0)
     assert alice.request.post("/mcp", headers={"Authorization": f"Bearer {shown}"},
                               data={"jsonrpc": "2.0", "id": 1, "method": "tools/list"}).status == 401
+
+
+def test_the_menu_leads_to_change_password(alice, wiki):
+    """The password is changed with the one she has; she stays signed in (/password)."""
+    alice.goto("/page/index")
+    alice.locator(".top-user").click()
+    alice.get_by_role("menuitem", name="Change password").click()
+    alice.wait_for_url("**/password")
+    expect(alice.locator("h1")).to_have_text("Change your password")
+    alice.get_by_label("Your password now").fill("wrong")
+    alice.get_by_label("New password (at least 8 characters)").fill("a new password")
+    alice.get_by_label("New password, again").fill("a new password")
+    alice.get_by_role("button", name="Change password").click()
+    expect(alice.get_by_role("alert")).to_have_text("Incorrect password: nothing was changed.")
+    alice.get_by_label("Your password now").fill("pw")
+    alice.get_by_label("New password (at least 8 characters)").fill("a new password")
+    alice.get_by_label("New password, again").fill("a new password")
+    alice.get_by_role("button", name="Change password").click()
+    expect(alice.get_by_role("status")).to_contain_text("Your password is changed")
+    # The page fits a phone: nothing scrolls sideways.
+    alice.set_viewport_size({"width": 375, "height": 700})
+    assert alice.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+    alice.goto("/page/index")
+    expect(alice.locator(".top-user")).to_have_count(1)   # still signed in
 
 
 def test_pages_and_tools_are_a_pill_each(alice):

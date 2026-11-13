@@ -59,8 +59,9 @@ Tasks is in neither a shared nor a private group: it shows the shared tasks and 
 The groups were Wiki · Tasks and Private · Notes,
 by who sees them,
 until 2026-11. Who is signed in,
-**Connect an assistant** (your MCP token, `/assistant`, `docs/spec/mcp.md`) and Sign out are in the **user menu**,
-opened by the **user button** at the top right on desktop (phones have Sign out in the page's top row).
+**Connect an assistant** (your MCP token, `/assistant`, `docs/spec/mcp.md`),
+**Change password** (`/password`, Signing in in `docs/spec/users.md`) and Sign out are in the **user menu**,
+opened by the **user button** at the top right on desktop (phones have Sign out in the page's top row, and both pages' links in the shortcuts dialog).
 Without users there is one pill, Wiki · Tasks · Notes.
 The Tasks link goes to your **pinned lists**,
 the lists whose embeds say `pin=1` (your own tasks, e.g. `[[tasks: list=task view=focus pin=1]]`;

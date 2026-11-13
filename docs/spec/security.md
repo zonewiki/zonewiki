@@ -17,6 +17,7 @@ Each rule has tests in `tests/test_routes.py` or `tests/test_mcp.py`, and `go/se
   `POST /logout` puts the id of the cookie it was sent (only one Zone signed) into `.zone/signed-out` (0600, not in git, like the session key: the id and until when, never the cookie), and `signedIn` refuses a session whose id is there.
   An id is kept for a session's lifetime (30 days: by then every cookie of it has expired), then dropped at the next sign-out.
   The user's other sessions, on other devices, go on; a new password ends them all.
+  A new password is set on the host (`zonewiki user passwd`, `zonewiki config passwd`), by a reset link, or in the browser on Change password (`/password`, `go/password.go`), which takes the password one has, throttled as the login is: a stolen session alone doesn't take the account over (Signing in in `docs/spec/users.md`).
   A session from before ids has the start of its signature as its id.
   Tests: `TestSigningOut` in `go/security_test.go` and in `tests/test_users.py`.
 - **First run** (`go/setup.go`, `needsSetup`): a wiki that other devices can reach and that has no login shows and changes nothing until one is set: every page leads to `/setup` (302),

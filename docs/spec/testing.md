@@ -201,6 +201,15 @@ Make shared through the dialog,
 the locks in the search modal,
 `[[` completion's new private page, and a link from a private page to a new shared page (marked, the warning editor with its hint, Keep shared).
 
+`tests/test_password.py` covers Change password over HTTP (`/password`: a user changes their own password with the one they have, kept as its hash;
+the other sessions ended and this one going on as the same session;
+the MCP token left alone;
+a wrong current password, a short new one and two that differ refused, wrong ones throttled as at the login;
+a viewer's;
+signed out and cross-site refused;
+without users the wiki's password, and no page without a login).
+In the browser (`tests/e2e/test_private.py`): from the user menu to the page, a wrong password, the change, still signed in.
+
 `tests/test_assistant.py` covers Connect an assistant over HTTP (`/assistant`: a user makes their own token with their password, kept as its hash and shown once;
 a wrong password refused and throttled as at the login;
 a new token replacing the old one, revoking, the other users' tokens left alone;

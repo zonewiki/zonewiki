@@ -69,6 +69,7 @@ func init() {
 		"hidden.html", "deleted_page.html", "tasks_page.html", "search.html", "history/deleted.html",
 		"history/diff.html", "history/diff_uncommitted.html", "history/history.html",
 		"history/revision.html", "history/uncommitted.html", "users.html", "welcome.html", "signup.html", "assistant.html",
+		"password.html",
 		"setup.html"} {
 		views[name] = template.Must(template.Must(partials.Clone()).ParseFS(templateFS, "templates/"+name))
 	}
@@ -239,7 +240,7 @@ func currentModule(rq *Req) string {
 		return "tasks"
 	case "/notes":
 		return "notes"
-	case "/search", "/login", "/assistant":
+	case "/search", "/login", "/assistant", "/password":
 		return ""
 	}
 	if p == "/admin" || strings.HasPrefix(p, "/admin/") { // in no module

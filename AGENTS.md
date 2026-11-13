@@ -115,6 +115,7 @@ Auth is optional (a password, or users; see Key Constraints).
 │   ├── signup.go           # Sign-up: /signup, the mail with its link, the account a sign-up link makes
 │   ├── mail.go             # Mail through the deployment's SMTP server (ZONE_SMTP_*), for sign-up
 │   ├── assistant.go        # Connect an assistant (/assistant): your MCP token made and revoked in the browser, with your password again
+│   ├── password.go         # Change password (/password): your password changed in the browser, with the one you have
 │   ├── signout.go          # Sessions signed out: .zone/signed-out
 │   ├── stalls.go           # A request body or response that stands still for a minute fails (noStalls)
 │   ├── setup.go            # The first-run page: /setup, a first login for a wiki other devices reach
@@ -314,6 +315,7 @@ and commit the new pins.
   - `/mcp` requires an MCP token (`mcp-token`, kept as its hash; with users, a user's own): without one it is off (403), password or not.
     Don't make it open again.
     In the browser a token is made only by whoever is signed in, for themselves, with their password again (`go/assistant.go`): don't drop that check.
+    A password is changed in the browser the same way, only one's own and with the one they have (`go/password.go`).
   - **The settings file** `.zone/config` holds password hashes and tokens (only as hashes): it stays out of git with all of `.zone/` (account data never goes into git; `missingUsers` stops a clone without it from starting open) and is never shown (`canSeePath`, `safePath`),
     the commands write it 0600,
     and a reload with an error (or a removed file) keeps the settings from before,

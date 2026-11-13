@@ -402,6 +402,21 @@ signup-approval = yes                    # an admin approves each account; defau
   ends every session of the old one,
   so changing a password is how to sign out a stolen session.
   (Sessions from before the stamp count as the old password's: everyone signs in once.)
+- **Change password** (`GET`/`POST /password`, `go/password.go`, `password.html`): whoever is signed in sets a new password in the browser, without a shell on the host.
+  With users it is in the user menu ("Change password") and changes the password of whoever is signed in, never another user's (no field names one; an admin gives someone else a reset link);
+  without users, with the wiki's one password, it changes that, for everyone (as `zonewiki config passwd`).
+  The shortcuts dialog (`?`) links to it too, wherever there is a login, which is how a phone reaches it.
+  A wiki without a login has no such page (404).
+  A viewer may change theirs (`viewerWrites`).
+  - **The form** takes the password you have (`current`) and the new one twice (`password`, `again`; at least 8 characters, `passwordMin`).
+    The password you have is asked for because a session someone else got hold of (an unlocked laptop, a copied cookie) mustn't be enough to take the account over.
+    A wrong one changes nothing (**403** "Incorrect password: nothing was changed.") and counts against the client as a wrong login does (`loginThrottle`: **429** with the wait), so the page guesses a password no faster than the login page.
+    A new one too short or typed two ways is refused too (403).
+  - **What it does**: the new password's hash goes into the settings file the way the admin page writes it (`changeSettings`; logged with who changed it).
+    Every other session of the old password ends (the stamp above);
+    the session it was changed in goes on, as the same session with the new stamp (its id kept, so Sign out still ends it everywhere), and the page says "Your password is changed" (`303` to `/password?done`).
+    The MCP token is left as it is: an assistant connected with it stays connected (revoke it on Connect an assistant).
+  - Tests: `tests/test_password.py`, and from the menu in a browser in `tests/e2e/test_private.py`.
 - **The request knows its user**: the request checks (`checks` in `go/server.go`) put the session's user into the request's context (`withUser`), `userOf(r)` reads it, and `newReq` keeps it as `rq.user`. "" means no users (or no one signed in).
 - The user's name is shown beside Sign out (`.signout-user`, "Signed in as alice") on phones, in the page's top row.
   On desktop both are in the user menu (below): the form is hidden there (`.signout-user-menu`).

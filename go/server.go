@@ -277,6 +277,7 @@ func newHandler() http.Handler {
 	adminRoutes(mux)
 	signupRoutes(mux)
 	assistantRoutes(mux)
+	passwordRoutes(mux)
 	return noStalls(checks(viewerGate(mux)))
 }
 
@@ -289,6 +290,7 @@ var viewerWrites = map[string]bool{
 	"POST /login": true, "POST /logout": true, "POST /welcome/{token}": true, "/mcp": true,
 	"POST /api/preview": true, "POST /api/render-notes": true, // render only
 	"POST /assistant/token": true, "POST /assistant/revoke": true, // their own MCP token, whose writing tools are refused
+	"POST /password": true, // their own password
 }
 
 // viewerGate refuses a viewer's write (POST, PUT, PATCH, DELETE) to a
