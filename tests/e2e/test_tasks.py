@@ -1968,6 +1968,74 @@ def test_no_private_checkbox_without_users(page, wiki):
     expect(page.locator("#task-edit-private")).to_have_count(0)
 
 
+def test_subtasks_show_their_count_and_ask_before_done(page, wiki):
+    # Checklist items in the notes are the task's subtasks: the card says how
+    # many are done (a compact line too), and Done with one still open asks.
+    notes = "Before the trip:\n\n- [x] passport\n- [ ] tickets\n- [ ] hotel\n\n```\n- [ ] not one\n```"
+    page.request.post("/api/tasks", data={"title": "Plan trip", "description": notes})
+    page.request.post("/api/tasks", data={"title": "Only notes", "description": "no list here"})
+    page.request.post("/api/tasks", data={"title": "All ticked", "description": "- [x] one"})
+    page.goto("/tasks?view=open")
+    badge = card(page, "Plan trip").locator(".task-subtasks")
+    expect(badge).to_have_text("☑ 1/3")
+    expect(badge).to_have_attribute("title", "1 of 3 subtasks done")
+    expect(card(page, "Only notes").locator(".task-has-notes")).to_have_text("📝")
+    expect(card(page, "Only notes").locator(".task-subtasks")).to_have_count(0)
+    expect(card(page, "All ticked").locator(".task-subtasks-done")).to_have_text("☑ 1/1")
+    # Ticking a subtask counts at once.
+    card(page, "Plan trip").locator(".task-desc .task-list-item-checkbox").nth(1).click()
+    expect(badge).to_have_text("☑ 2/3")
+    # On a compact line it is what tells: the notes are hidden.
+    page.keyboard.press("v")
+    expect(card(page, "Plan trip").locator(".task-desc")).to_be_hidden()
+    expect(badge).to_be_visible()
+    page.keyboard.press("v")
+    # Done with a subtask open: asks, and Cancel leaves the task as it was.
+    dialog = page.locator("#task-subtasks-modal")
+    box = card(page, "Plan trip").locator(".task-checkbox input")
+    box.click()
+    expect(dialog).to_be_visible()
+    expect(dialog).to_contain_text("“Plan trip” has 1 open subtask.")
+    dialog.get_by_role("button", name="Cancel").click()
+    expect(dialog).to_be_hidden()
+    expect(box).not_to_be_checked()
+    expect(card(page, "Plan trip")).not_to_have_class(re.compile("task-completing"))
+    # Complete anyway: it completes as ever (its grace period, here cut short).
+    box.click()
+    dialog.get_by_role("button", name="Complete anyway").click()
+    expect(card(page, "Plan trip")).to_have_class(re.compile("task-completing"))
+    # No question without open subtasks.
+    card(page, "All ticked").locator(".task-checkbox input").click()
+    expect(dialog).to_be_hidden()
+    expect(card(page, "All ticked")).to_have_class(re.compile("task-completing"))
+
+
+def test_space_and_bulk_done_ask_about_open_subtasks(page, wiki):
+    page.request.post("/api/tasks", data={"title": "Plan trip", "description": "- [ ] tickets\n- [ ] hotel"})
+    page.request.post("/api/tasks", data={"title": "Water plants"})
+    page.goto("/tasks?view=open")
+    dialog = page.locator("#task-subtasks-modal")
+    card(page, "Plan trip").locator(".task-title").click()
+    page.keyboard.press("Space")
+    expect(dialog).to_contain_text("“Plan trip” has 2 open subtasks.")
+    page.keyboard.press("Escape")
+    expect(dialog).to_be_hidden()
+    expect(card(page, "Plan trip")).not_to_have_class(re.compile("task-completing"))
+    # Several selected: one question for them all; Cancel keeps the selection.
+    card(page, "Plan trip").locator(".task-title").click()
+    page.keyboard.press("Control+a")
+    page.keyboard.press("Space")
+    expect(dialog).to_be_visible()
+    expect(dialog).to_contain_text("1 of these 2 tasks have open subtasks.")
+    dialog.get_by_role("button", name="Cancel").click()
+    assert sorted(selected_titles(page)) == ["Plan trip", "Water plants"]
+    assert len(page.request.get("/api/tasks").json()) == 2
+    page.keyboard.press("Space")
+    dialog.get_by_role("button", name="Complete anyway").click()
+    expect(card(page, "Plan trip")).to_have_count(0)
+    expect(card(page, "Water plants")).to_have_count(0)
+
+
 def test_checkboxes_in_task_notes(page, wiki):
     # "- [ ] item" lines in the notes are real checkboxes, as on a page;
     # ticking one edits the notes (recording when, shown as a date chip),

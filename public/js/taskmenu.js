@@ -4,7 +4,7 @@
 // What it uses of the app comes in app (its state in app.st).
 import { copyText } from './util.js';
 import { openDatePicker } from './datepicker.js';
-import { dateOffset, esc, formatDate, plainTitle, shortDate, showNotice, todayStr } from './taskutil.js';
+import { dateOffset, esc, formatDate, plainTitle, shortDate, showNotice, subtaskCounts, todayStr } from './taskutil.js';
 
 export function initTaskMenu(app) {
 const { st } = app;
@@ -185,6 +185,22 @@ function confirmDeadlineMove(task, day) {
     document.getElementById('task-deadline-cancel' + app.sfx));
 }
 
+// Completing a task whose subtasks (checklist items in its notes) are not
+// all ticked: usually a slip, so it asks. True at once when none of `tasks`
+// (open ones count) has an open subtask.
+function confirmOpenSubtasks(tasks) {
+  const open = t => { const c = subtaskCounts(t.description); return c.total - c.done; };
+  const withOpen = tasks.filter(t => t && !t.completed_at && open(t) > 0);
+  if (!withOpen.length) return Promise.resolve(true);
+  const n = open(withOpen[0]);
+  document.getElementById('task-subtasks-text' + app.sfx).textContent = tasks.length === 1
+    ? `“${plainTitle(withOpen[0].title)}” has ${n} open subtask${n === 1 ? '' : 's'}.`
+    : `${withOpen.length} of these ${tasks.length} tasks have open subtasks.`;
+  return confirmModal(document.getElementById('task-subtasks-modal' + app.sfx),
+    document.getElementById('task-subtasks-confirm' + app.sfx),
+    document.getElementById('task-subtasks-cancel' + app.sfx));
+}
+
 // Show a confirmation <dialog>; resolves true for OK, false for Cancel/Esc.
 function confirmModal(dialog, okBtn, cancelBtn) {
   return new Promise(resolve => {
@@ -197,16 +213,22 @@ function confirmModal(dialog, okBtn, cancelBtn) {
       cancelBtn.removeEventListener('click', onCancel);
       dialog.removeEventListener('close', onClose);
       dialog.close();
+      // Focus left on a button of the closed dialog would swallow the task
+      // app's keys (Space, j/k …).
+      if (dialog.contains(document.activeElement)) document.activeElement.blur();
       resolve(ok);
     };
     const onOk     = () => finish(true);
     const onCancel = () => finish(false);
-    const onClose  = () => finish(false);
+    // Esc closed it. A close event comes after its close(), as a task of
+    // its own: the one of an earlier answer may arrive only now, with the
+    // dialog open again, and is not this question's.
+    const onClose  = () => { if (!dialog.open) finish(false); };
     okBtn.addEventListener('click', onOk);
     cancelBtn.addEventListener('click', onCancel);
-    dialog.addEventListener('close', onClose, { once: true });
+    dialog.addEventListener('close', onClose);
   });
 }
 
-return { openTaskMenu, headerTasksMenu, showMenu, postReorder, confirmDelete, confirmDeadlineMove };
+return { openTaskMenu, headerTasksMenu, showMenu, postReorder, confirmDelete, confirmDeadlineMove, confirmOpenSubtasks };
 }

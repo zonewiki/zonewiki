@@ -279,7 +279,9 @@ function runSelectionAction(action) {
     case 'clear':  exitSelectMode(); break;
     case 'tag':    if (ids.length) openBulkTagModal(ids); break;
     case 'today':  startToday(ids); break;
-    case 'done':   if (ids.length) { exitSelectMode(); completeMany(ids); } break;
+    case 'done':
+      if (ids.length) mayComplete(ids).then(ok => { if (ok) { exitSelectMode(); completeMany(ids); } });
+      break;
     case 'delete': if (ids.length) app.deleteWithUndo(ids, exitSelectMode); break;
   }
 }
@@ -327,6 +329,13 @@ async function startOn(ids, day) {
                                     recurrence: t.recurrence ?? null, history: t.history || [] }))));
   }
   for (const t of asks) await app.planOnDay(t.id, day);
+}
+
+// Before completeMany, and before the selection moves on: some of `ids`
+// have subtasks still open, so it asks (confirmOpenSubtasks; reopening
+// asks nothing). False when the user cancelled.
+function mayComplete(ids) {
+  return app.confirmOpenSubtasks(ids.map(id => st.tasks.find(t => t.id === id)));
 }
 
 // Complete the tasks `ids`, or reopen them if every one is completed, with
@@ -385,5 +394,5 @@ function visibleItems() {
   return Array.from(app.listEl.querySelectorAll('.task-item'));
 }
 
-return { openBulkTagModal, updateSelectionClasses, inSelection, toggleSelection, selectAllVisible, clearSelection, enterSelectMode, exitSelectMode, syncSelBar, runSelectionAction, startOn, completeMany, setSelected, extendSelection, visibleItems };
+return { openBulkTagModal, updateSelectionClasses, inSelection, toggleSelection, selectAllVisible, clearSelection, enterSelectMode, exitSelectMode, syncSelBar, mayComplete, runSelectionAction, startOn, completeMany, setSelected, extendSelection, visibleItems };
 }

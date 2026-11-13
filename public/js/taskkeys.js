@@ -175,6 +175,7 @@ document.addEventListener('keydown', async e => {
     if (st.selectedIds.size > 1) {
       // Bulk complete/uncomplete; the selection moves on to the next task.
       const ids = [...st.selectedIds];
+      if (!(await app.mayComplete(ids))) return;
       const next = items.find((el, i) => i > currentIdx && !st.selectedIds.has(el.dataset.id))
                 || items.find(el => !st.selectedIds.has(el.dataset.id));
       app.setSelected(next?.dataset.id || null);
@@ -187,8 +188,7 @@ document.addEventListener('keydown', async e => {
         if (app.pendingCompletions.has(task.id)) {
           app.cancelPendingComplete(task.id);
         } else {
-          const li = app.listEl.querySelector(`.task-item[data-id="${CSS.escape(task.id)}"]`);
-          app.beginComplete(task.id, li);
+          app.tickTask(task.id);
         }
       } else {
         app.updateTask(task.id, { completed: false });

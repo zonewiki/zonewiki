@@ -529,6 +529,9 @@ div.task-card-comment > .task-comment-when { display: block; }
   border-radius: 3px; cursor: pointer;
 }
 .task-has-notes:hover { background: var(--code-bg); }
+/* "☑ 1/3": the notes have subtasks, so many done; all done, in the accent. */
+.task-subtasks { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.task-subtasks-done { color: var(--btn-primary); }
 /* A finger-sized target without a taller line. */
 @media (pointer: coarse) { .tasks-app .task-has-notes { padding: .4rem .3rem; margin: -.4rem -.3rem; } }
 @media (pointer: coarse) { .tasks-app .task-item { --line: calc(2.75rem - .3rem - 2px); } }

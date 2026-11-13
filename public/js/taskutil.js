@@ -5,7 +5,7 @@
 // stamps. An ES module tasks.js imports.
 
 import TasksCore from '../tasks-core.js';
-import { wikilinkHref } from './mdtext.js';
+import { taskCheckboxOffsets, wikilinkHref } from './mdtext.js';
 
 const { dateToStr, sanitizeTagInput } = TasksCore;
 
@@ -232,6 +232,21 @@ export function commentWhen(at) {
 export function commentStamp(c) {
   return commentWhen(c.at) + (c.by ? ` · ${c.by}` : '');
 }
+// A task's subtasks: the checklist items in its notes (`- [ ] item`), as
+// the notes render them. { total, done }, kept per text: every draw asks.
+const subtasksOf = new Map();
+export function subtaskCounts(notes) {
+  if (!notes || !notes.includes('[')) return { total: 0, done: 0 };
+  let counts = subtasksOf.get(notes);
+  if (!counts) {
+    const at = taskCheckboxOffsets(notes, false);
+    counts = { total: at.length, done: at.filter(i => notes[i] !== ' ').length };
+    if (subtasksOf.size > 2000) subtasksOf.clear();
+    subtasksOf.set(notes, counts);
+  }
+  return counts;
+}
+
 // A comment on a card: one of a single paragraph goes on the line of its
 // time; any other (several paragraphs, a list, code …) under it, rendered
 // as the notes are.

@@ -159,6 +159,15 @@
     <button type="button" class="btn" id="task-delete-cancel{{.Sfx}}">Cancel</button>
   </div>
 </dialog>
+{{- /* Done with subtasks (checklist items in the notes) still open? (confirmOpenSubtasks, js/taskmenu.js) */}}
+<dialog id="task-subtasks-modal{{.Sfx}}" class="task-edit-modal modal">
+  <div class="modal-label">Open subtasks</div>
+  <div id="task-subtasks-text{{.Sfx}}" class="task-delete-title"></div>
+  <div class="task-edit-actions">
+    <button type="button" class="btn btn-primary" id="task-subtasks-confirm{{.Sfx}}">Complete anyway</button>
+    <button type="button" class="btn" id="task-subtasks-cancel{{.Sfx}}">Cancel</button>
+  </div>
+</dialog>
 <dialog id="task-deadline-modal{{.Sfx}}" class="task-edit-modal modal">
   <div class="modal-label">Move the deadline too?</div>
   <div id="task-deadline-text{{.Sfx}}" class="task-delete-title"></div>

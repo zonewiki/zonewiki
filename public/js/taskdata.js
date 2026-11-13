@@ -268,6 +268,16 @@ async function deleteTasks(ids) {
   }
 }
 
+// The task's box ticked (a click, Space): it completes after its grace
+// period, once the user has said so if subtasks are still open. False when
+// they cancelled.
+async function tickTask(id) {
+  const task = st.tasks.find(t => t.id === id);
+  if (task && !(await app.confirmOpenSubtasks([task]))) return false;
+  beginComplete(id, app.listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`));
+  return true;
+}
+
 function beginComplete(id, li) {
   const cb = li?.querySelector('.task-checkbox input');
   if (cb) cb.checked = true;
@@ -380,5 +390,5 @@ async function deleteWithUndo(ids, beforeDelete) {
   });
 }
 
-return { dismissUndo, showUndo, triggerUndo, fetchTasks, refresh, fetchCompleted, setCompletedYear, createTask, updateTask, leftViewMessage, beginComplete, cancelPendingComplete, keepSnapshot, completeTasks, afterBatchWrite, oldHistory, markWontDo, skipOccurrence, setStart, deleteWithUndo };
+return { dismissUndo, showUndo, triggerUndo, fetchTasks, refresh, fetchCompleted, setCompletedYear, createTask, updateTask, leftViewMessage, tickTask, cancelPendingComplete, keepSnapshot, completeTasks, afterBatchWrite, oldHistory, markWontDo, skipOccurrence, setStart, deleteWithUndo };
 }

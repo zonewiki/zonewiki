@@ -6,7 +6,7 @@
 import TasksCore from '../tasks-core.js';
 import { renderFigures } from './figures.js';
 import { openDatePicker } from './datepicker.js';
-import { commentCardHtml, commentStamp, dueDateClass, esc, formatDate, linkifyTitle, plainTitle, shortDate, startsAfterDeadline, todayStr, urgencyClass } from './taskutil.js';
+import { commentCardHtml, commentStamp, subtaskCounts, dueDateClass, esc, formatDate, linkifyTitle, plainTitle, shortDate, startsAfterDeadline, todayStr, urgencyClass } from './taskutil.js';
 import { plainHtml, renderedHtml, renderTexts } from './tasktexts.js';
 
 const { byOpenOrder, SORTS } = TasksCore;
@@ -125,7 +125,13 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
 
   // Marks that there are notes, which a compact line hides; on every card
   // alike, so expanding a line changes nothing on it.
-  const notesDisplay = task.description?.trim()
+  // A task with subtasks (checklist items in its notes) says how many are
+  // done instead: "☑ 1/3".
+  const subtasks = subtaskCounts(task.description);
+  const subtasksLabel = `${subtasks.done} of ${subtasks.total} subtask${subtasks.total === 1 ? '' : 's'} done`;
+  const notesDisplay = subtasks.total
+    ? `<button type="button" class="task-has-notes task-subtasks${subtasks.done === subtasks.total ? ' task-subtasks-done' : ''}" data-id="${esc(task.id)}" title="${subtasksLabel}" aria-label="${subtasksLabel}">☑ ${subtasks.done}/${subtasks.total}</button>`
+    : task.description?.trim()
     ? `<button type="button" class="task-has-notes" data-id="${esc(task.id)}" title="Has notes" aria-label="Has notes">📝</button>` : '';
   const skipBtnHtml = (!task.completed_at && task.recurrence)
     ? `<button class="task-skip-btn" data-id="${esc(task.id)}" title="Skip this occurrence (series continues)">⏭</button>`
@@ -333,7 +339,7 @@ function wireListHandlers() {
       const completed = e.target.checked;
       const task = st.tasks.find(t => t.id === id);
       if (completed) {
-        app.beginComplete(id, e.target.closest('.task-item'));
+        app.tickTask(id).then(ticked => { if (!ticked) e.target.checked = false; });
       } else if (!app.cancelPendingComplete(id)) {
         app.updateTask(id, { completed: false });
         if (task) app.showUndo('Task reopened', () => app.completeTasks([id], true));

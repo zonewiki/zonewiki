@@ -433,6 +433,10 @@ Each with a dark-mode value.
   An undo toast follows ("Checked “…” · Undo", undo is a second toggle); the toggles are chained (`toggleNoteCheck`), so an undo never overtakes the toggle it reverts.
   Each toggle is a change of the notes like any other (a commit).
   The task's own checkbox is `.task-checkbox input`, and a page's own checklist next to a task list is the page's (`js/page.js` leaves the task app's boxes alone), so they never mix.
+- **Subtasks**: the checklist items in a task's notes are its subtasks (`subtaskCounts` in `js/taskutil.js`, counted as the notes render them: not in code).
+  A card with subtasks says how many are done, "☑ 1/3" (`.task-subtasks`, in the accent once all are, `.task-subtasks-done`), where a card with other notes has 📝: on a compact line too, where the notes are hidden, and a click on it opens them as 📝 does.
+  Completing a task with a subtask still open asks first ("“Plan trip” has 2 open subtasks.", **Complete anyway** or Cancel; `confirmOpenSubtasks`, `#task-subtasks-modal`): from the task's checkbox and Space (`tickTask`), and once for several selected tasks (Space, the selection bar's Done; `mayComplete`), where Cancel keeps the selection.
+  Won't do, a task chip's checkbox on a page and an assistant (MCP) don't ask.
 - **Won't do** (⋯ menu; cards have no ✗ button any more) archives without spawning;
   **Skip** (⏭, recurring only) archives as won't-do and spawns the next instance, the first occurrence after today (`spawn_recurring(skip=True)`): a daily task three days overdue comes back tomorrow, not as a card for today, so a skipped backlog leaves Focus.
   Completing catches up to today instead.
