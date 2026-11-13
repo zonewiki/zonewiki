@@ -66,6 +66,16 @@ func tasksRoutes(mux *http.ServeMux) {
 		rq := newReq(r)
 		_, _ = io.WriteString(w, buildTasksEmbed(rq, TasksParams{}, 0, true, rq.defaultPrivate(), ""))
 	})
+	// Who a task can be assigned to, and who asks ("me"): for the
+	// browser's completion and its @me. No names in sharing mode.
+	mux.HandleFunc("GET /api/tasks/assignable", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
+		names := []string{}
+		if !sharingOn(r) {
+			names = settings().assignableUsers()
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"users": names, "me": userOf(r)})
+		return nil
+	}))
 	mux.HandleFunc("POST /api/tasks/settings", writesPages(tasksSettingsRoute))
 	mux.HandleFunc("GET /api/tasks/closed", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		year, err := yearArg(r)
@@ -319,7 +329,7 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 		}
 		checkBy(user, t)
 		if jsonobj.True(snap["private"]) && privateFolder(user) != "" {
-			t.Owner = user
+			t.Owner, t.Assignee = user, "" // a private task has no assignee
 		}
 		existing[t.ID] = true
 		if !t.IsOpen() {
@@ -445,7 +455,7 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 		t.Tags = retag(t.Tags, add, remove)
 		// A task exported private stays private, wherever it is imported.
 		if (jsonobj.True(data["private"]) || jsonobj.True(snap["private"])) && privateFolder(user) != "" {
-			t.Owner = user
+			t.Owner, t.Assignee = user, "" // a private task has no assignee
 		}
 		if t.IsOpen() {
 			active = append(active, t)

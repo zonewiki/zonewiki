@@ -151,6 +151,9 @@ delete,
 rename,
 Commit file/all or MCP write (`TestDrafts`).
 `TestDisabled` covers a disabled user (no sign-in, told only with the right password, the session stopped and going on once enabled, the token refused).
+`tests/test_task_assignee.py` covers a task's assignee: assigning, reassigning and unassigning through the API and `batch-update`, how a name and no one may be written, who can't be assigned and what the refusal says, private tasks and wikis without users, the reserved names `me` and `none`, a former assignee's name staying through edits, the history and its undo, a series' next occurrence, restored and imported tasks, and `GET /api/tasks/assignable`
+(`go/assignee_test.go`: `assignable`, the reserved names in `zonewiki user add` and an invite; the field in the file in `go/internal/taskmodel`).
+
 `tests/test_roles.py` covers viewers: every write route and MCP write tool is probed as a viewer on shared pages and tasks and on her own note and private task from before,
 and no file may change nor any commit be made (`test_every_write_route_is_probed` and `test_every_write_tool_is_probed` fail for a new one without a probe),
 with the message,

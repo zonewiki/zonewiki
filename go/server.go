@@ -122,6 +122,11 @@ func main() {
 	}
 	cfg = c
 	startSettings(s)
+	for name := range reservedNames {
+		if s.Users[name] != nil {
+			logf("The user %q can't be given tasks: the name is a word for a task's assignee (me: whoever is signed in, none: no one).", name)
+		}
+	}
 	if publicDir = *public; publicDir == "" {
 		publicDir = findPublic()
 	}

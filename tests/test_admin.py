@@ -238,7 +238,8 @@ class TestLinks:
 
     def test_invite_refuses_a_user_there_and_a_bad_name(self, admin):
         for data in [{"name": "bob", "role": "editor"}, {"name": "Bad Name", "role": "editor"},
-                     {"name": "dave", "role": "boss"}]:
+                     {"name": "dave", "role": "boss"}, {"name": "me", "role": "editor"},
+                     {"name": "none", "role": "editor"}]:
             resp = post(admin, "/admin/users/invite", **data)
             assert resp.status_code == 409 and "not made" in resp.data.decode()
 

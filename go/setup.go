@@ -69,6 +69,8 @@ func setupRoute(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case name != "" && !userNameRE.MatchString(name):
 			v.Error = "A user name has lowercase letters, digits and hyphens (alice, mary-ann)."
+		case reservedNames[name]:
+			v.Error = reservedNameMsg(name)
 		case utf8.RuneCountInString(password) < passwordMin:
 			v.Error = "Choose a password of at least 8 characters."
 		case password != r.PostFormValue("again"):

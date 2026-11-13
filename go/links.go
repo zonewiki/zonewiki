@@ -108,6 +108,8 @@ func makeLink(s *Settings, kind, name, role, by string) (string, error) {
 		return "", fmt.Errorf("%q isn't a user name. Use lowercase letters, digits and hyphens (e.g. alice, mary-ann).", name)
 	case s.Users == nil:
 		return "", errors.New("this wiki has no users: add the first one on the host (zonewiki user add NAME).")
+	case kind == "invite" && reservedNames[name]:
+		return "", errors.New(reservedNameMsg(name))
 	case kind == "invite" && s.Users[name] != nil:
 		return "", fmt.Errorf("%s is a user already. For a new password, make them a reset link.", name)
 	case kind == "invite" && !slices.Contains(roles, role):

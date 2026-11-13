@@ -171,6 +171,7 @@ func applyTaskFields(user string, t *Task, data jsonObj, fresh bool) error {
 		func() error { return applyDate(user, t, data, "due_date", "due", &t.DueDate) },
 		func() error { return applyOrder(t, data) },
 		func() error { return applyPrivate(user, t, data, fresh) },
+		func() error { return applyAssignee(user, t, data) }, // after private: a private task has none
 		func() error { return applyDate(user, t, data, "last_done", "", &t.LastDone) },
 		func() error { return applyDate(user, t, data, "start_date", "start", &t.StartDate) },
 		func() error { return applyRecurrence(t, data, oldDue, oldStart, oldRec) },
@@ -305,6 +306,46 @@ func applyPrivate(user string, t *Task, data jsonObj, fresh bool) error {
 	if t.Owner != was && !private {
 		logEvent(t, user, "shared", "", "")
 	}
+	return nil
+}
+
+// applyAssignee: a write's assignee: a user who can be assigned
+// (assignable), "me" for whoever writes, or none ("", null, "none"). Only a
+// change is checked, so a task keeps a name that no longer can be assigned
+// through every other edit; a private task has none.
+func applyAssignee(user string, t *Task, data jsonObj) error {
+	if !data.Has("assignee") {
+		return nil
+	}
+	name := ""
+	if !data.Null("assignee") {
+		s, err := asStr(data["assignee"], "assignee")
+		if err != nil {
+			return err
+		}
+		name = taskmodel.CleanAssignee(s)
+	}
+	switch {
+	case name == "none":
+		name = ""
+	case name == "me" && user != "":
+		name = user
+	}
+	if name == t.Assignee {
+		return nil
+	}
+	s := settings()
+	switch {
+	case name == "":
+	case s.Users == nil:
+		return refuse("This wiki has no users to assign a task to")
+	case t.Owner != "":
+		return refuse("A private task is yours alone. Share it to assign it")
+	case !s.assignable(name):
+		return refuse(s.notAssignable(name))
+	}
+	logEvent(t, user, "assigned", t.Assignee, name)
+	t.Assignee = name
 	return nil
 }
 

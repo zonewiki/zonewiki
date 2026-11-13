@@ -172,6 +172,7 @@ The file can be edited by hand, or with the commands; a running Zone takes each 
   An edit by hand isn't checked: it stays the way out.
 - `config check` lists each setting, its value (passwords and tokens only as `(set)`) and where it comes from (`[line 3]`, `[default]`), and the users; it fails on an error in the file and on settings left in the environment.
 - **Names**: lowercase letters, digits and inner hyphens (`userNameRE`), since a name becomes a folder name.
+  `me` and `none` are reserved (`reservedNames`): no new user gets one, from `user add`, an invite, sign-up or the first-run page (Assigning tasks, below).
   A user's MCP token is optional: without one they have no MCP access.
 
 ### Reloading
@@ -603,6 +604,40 @@ Everything else (shared tasks) is everyone's to see and change, as shared pages 
   A tag never moves a task: adding `#gifts` to a task, in the modal, a batch or `update_task`, leaves it where it is; creating one with the tag shared, shared.
   The tag of your private list on a shared task shows to others as a plain tag.
 - **History**: `private/<user>/_tasks/` files show only to that user in history views (`canSeePath`); the commit messages ("Update task") name no task.
+
+## Assigning tasks
+
+A shared task can be assigned to one user: who does it.
+One, not several, so that "who has this?" has one answer; someone helping goes in a comment or a tag.
+It is information: it never changes who sees a task or who may change it, and anyone who may change tasks may assign any task to anyone, themselves included, or to no one.
+
+This is the server's part (the field, its checks, the names' route).
+Typing `@name` in the browser, the filter, `[[tasks: assignee=…]]` and the MCP tools' parameters are not built yet (`docs/plans/task-assignee.md`).
+
+- **The field** is the task's `assignee`, a user's name, kept in its file after `tags` (`Task.Assignee` in `go/internal/taskmodel`; Task fields in `docs/spec/tasks.md`).
+  A task without one has no such key.
+- **Assigning** is a task write like any other: `assignee` in `POST /api/tasks`, `PUT /api/tasks/<id>` or `batch-update` (`applyAssignee` in `go/tasks.go`).
+  The value is a user's name, `me` for whoever writes, or `""`, `null` or `none` for no one; a leading `@` and the case don't matter (`taskmodel.CleanAssignee`).
+- **Who can be assigned** (`assignable` in `go/users.go`): a user who is not disabled, not waiting for approval and not a viewer (who couldn't complete the task or comment on it).
+  Any other name is refused with a 400 that says why (`notAssignable`: "… is not a user of this wiki", "…'s account is disabled", "… is a viewer, and a viewer can't change tasks"), and nothing of the write is kept.
+- **`me` and `none` are reserved names**, since they are the words for whoever is signed in and for no one.
+  No new user gets one (`zonewiki user add`, an invite, sign-up, the first-run page: "… can't be a user name").
+  A user who has such a name from before keeps their account (signing in, pages, private tasks) but can't be assigned, and Zone says so in its log at start.
+- **A private task has no assignee**: it is its owner's, and nobody else sees it.
+  `assignee` on a private task is a 400 ("A private task is yours alone. Share it to assign it"); a write that shares a task (`private: false`) can assign it at once.
+- **Only a change is checked.** A write that names the assignee the task already has changes nothing and is never refused.
+  So a task keeps the name of a user who was disabled, removed or made a viewer since, through every other edit: the name stays in the file and in the API's answer, can be taken off or replaced, and is not put back once it is off.
+  Nothing unassigns such tasks on its own: disabling is undone by enabling, and the settings file is also edited by hand, with no one to name as a rewrite's author.
+- **History**: a change is the event `assigned`, with `from` and `to` (the names, `null` no one) and `by` whoever did it (History in `docs/spec/tasks.md`).
+  A new task's first assignee is part of `created`, as its first dates are.
+  An undo that sends the task's old `history` leaves no trace, as for the dates.
+- **A series** carries its assignee on: a recurring task's next occurrence has the same one (`spawnRecurring`).
+- **Restored and imported tasks** (`POST /api/tasks/restore`, `/api/tasks/import`; `sanitizeSnapshot`) have an assignee only as a write would take it: a name that can be assigned here, on a task that isn't private.
+  So an export from another wiki doesn't bring its people along.
+- **The names** come from `GET /api/tasks/assignable`: `{ "users": [...], "me": "<who asks>" }`, the users who can be assigned, A–Z, for anyone signed in (a viewer too: they see the names on the tasks anyway).
+  In sharing mode `users` is empty.
+- **Without users** there is no one to assign: a write with an assignee is a 400 ("This wiki has no users to assign a task to"), the route's `users` is empty, and the API shows no `assignee`.
+  A file that has one (a wiki that had users) keeps it through reads and writes.
 
 ## Who made a change
 

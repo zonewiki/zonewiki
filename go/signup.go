@@ -249,6 +249,8 @@ func useSignup(link *welcomeLink, name, password string) (hash string, pending b
 	switch {
 	case !userNameRE.MatchString(name):
 		return "", false, refuse("Use lowercase letters, digits and hyphens for your user name (e.g. alice, mary-ann).")
+	case reservedNames[name]:
+		return "", false, refuse(reservedNameMsg(name))
 	case s.Users[name] != nil, linkFor(links, name) != nil:
 		return "", false, refuse("The user name " + name + " is taken: choose another.")
 	}

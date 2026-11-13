@@ -87,6 +87,8 @@ class TestSettingTheLogin:
         ({**FORM, "password": "short", "again": "short"}, "at least 8 characters"),
         ({**FORM, "again": "correct horses"}, "The passwords differ"),
         ({**FORM, "username": "Al ice!"}, "A user name has"),
+        ({**FORM, "username": "me"}, "be a user name"),
+        ({**FORM, "username": "None"}, "be a user name"),
         ({**FORM, "password": "", "again": ""}, "at least 8 characters"),
     ])
     def test_a_form_that_wont_do_sets_nothing(self, client, fresh, form, why):

@@ -137,6 +137,7 @@ func spawnRecurring(user string, task *Task, active []*Task, skip bool) *Task {
 	spawned.SortOrder, spawned.Importance = task.SortOrder, task.Importance
 	spawned.Recurrence, spawned.SpawnedFrom = nextRec, task.ID
 	spawned.Owner = task.Owner // a private series stays private
+	spawned.Assignee = task.Assignee
 	// The next occurrence carries the series' history and comments on.
 	spawned.History = append([]HistoryEntry{}, task.History...)
 	spawned.Comments = append([]Comment{}, task.Comments...)
@@ -166,15 +167,16 @@ func daysBetween(a, b time.Time) int {
 // sends the old history back with the old fields, so an undone change
 // leaves no trace.
 var historyEvents = map[string]bool{"created": true, "start": true, "due": true, "done": true,
-	"reopened": true, "wontdo": true, "skipped": true, "repeat": true, "private": true, "shared": true}
+	"reopened": true, "wontdo": true, "skipped": true, "repeat": true, "private": true, "shared": true, "assigned": true}
 
 const historyLimit = 30
 
 // logEvent adds an event to a task's history, by user ("" no one: Zone, or
-// no users); from and to are the days a dated event moved between ("" none).
+// no users); from and to are the days a dated event moved between, or the
+// users an assignment went from and to ("" none).
 func logEvent(t *Task, user, event, from, to string) {
 	entry := HistoryEntry{At: now().Format("2006-01-02T15:04"), Event: event, By: user}
-	if taskmodel.DatedEvents[event] {
+	if taskmodel.DatedEvents[event] || taskmodel.NamedEvents[event] {
 		entry.From, entry.To = from, to
 	}
 	h := t.History
@@ -202,6 +204,11 @@ func cleanHistory(raw json.RawMessage) []HistoryEntry {
 			if s, ok := jsonobj.As[string](e["to"]); ok && isoDateRE.MatchString(s) {
 				entry.To = s
 			}
+		}
+		if taskmodel.NamedEvents[event] {
+			from, _ := jsonobj.As[string](e["from"])
+			to, _ := jsonobj.As[string](e["to"])
+			entry.From, entry.To = byUser(from), byUser(to)
 		}
 		out = append(out, entry)
 	}
@@ -519,6 +526,11 @@ func sanitizeSnapshot(snap jsonObj) *Task {
 	t.Title = title
 	t.Description, _ = jsonobj.As[string](snap["description"])
 	t.Tags = taskmodel.CleanTags(jsonobj.TextList(snap["tags"]))
+	// An assignee only as a write would take it: a snapshot is whatever
+	// its sender made it, and an export may come from another wiki.
+	if s, ok := jsonobj.As[string](snap["assignee"]); ok && settings().assignable(taskmodel.CleanAssignee(s)) {
+		t.Assignee = taskmodel.CleanAssignee(s)
+	}
 	for f, field := range map[string]*string{"due_date": &t.DueDate, "start_date": &t.StartDate, "last_done": &t.LastDone} {
 		if s, ok := jsonobj.As[string](snap[f]); ok {
 			if _, ok := parseDay(s); ok {

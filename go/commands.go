@@ -151,6 +151,8 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 		return c.fail("%s has an open invite. Wait for it, or revoke it on the Users page.", c.name)
 	}
 	switch {
+	case c.cmd == "add" && reservedNames[c.name]:
+		return c.fail("%s", reservedNameMsg(c.name))
 	case c.cmd == "add" && exists:
 		return c.fail("%s is a user already. Change the password with: zonewiki user passwd %s", c.name, c.name)
 	case c.cmd != "add" && !exists:

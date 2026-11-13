@@ -6,6 +6,41 @@ import (
 	"zonewiki/internal/jsonobj"
 )
 
+// A task's assignee is kept after its tags, lowercase and without the "@"
+// it is typed with; a task without one has no key, in its file and in the
+// API's form.
+func TestAssigneeInTheFile(t *testing.T) {
+	tasks, ok := Parse([]byte(`[{"id": "a1", "title": "One", "assignee": " @Bob "}, {"id": "a2", "title": "Two", "assignee": ["x"]}]`))
+	if !ok || tasks[0].Assignee != "bob" || tasks[1].Assignee != "" {
+		t.Fatalf("read: %v %+v", ok, tasks)
+	}
+	got, err := Encode(tasks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "\"tags\": [],\n    \"assignee\": \"bob\",\n    \"start_date\"") {
+		t.Errorf("the key's place:\n%s", got)
+	}
+	if strings.Count(got, "assignee") != 1 {
+		t.Errorf("a task without one has no key:\n%s", got)
+	}
+	api, _ := tasks[1].JSON(true)
+	if strings.Contains(string(api), "assignee") {
+		t.Errorf("the API's form: %s", api)
+	}
+	if again, ok := Parse([]byte(got)); !ok || again[0].Assignee != "bob" || len(again[0].Extra) != 0 {
+		t.Errorf("read again: %+v", again[0])
+	}
+}
+
+// An assignment's history entry says from and to whom, null for no one.
+func TestAssignedEventNamesItsUsers(t *testing.T) {
+	b, err := HistoryEntry{At: "2026-01-02T10:00", Event: "assigned", By: "alice", To: "bob"}.MarshalJSON()
+	if want := `{"at":"2026-01-02T10:00","event":"assigned","by":"alice","from":null,"to":"bob"}`; err != nil || string(b) != want {
+		t.Errorf("%s %v", b, err)
+	}
+}
+
 // A task as the Python Zone wrote it (its key order, 1.0, a key it no
 // longer knows, a field missing) reads into a Task and is written in Zone's
 // order, the unknown keys last (A–Z) and kept; written again, nothing

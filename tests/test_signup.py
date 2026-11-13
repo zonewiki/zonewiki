@@ -162,6 +162,9 @@ class TestSignup:
         assert "The user name alice is taken" in resp.data.decode()
         resp = make(client, link, "Ann Smith")
         assert "lowercase letters" in resp.data.decode()
+        for reserved in ("me", "none"):     # the words for a task's assignee
+            assert "be a user name" in make(client, link, reserved).data.decode()
+            assert section(wiki_dir, reserved) is None
         resp = make(client, link, "ann", "short")
         assert "at least 8 characters" in resp.data.decode()
         resp = make(client, link, "ann", "secret-pw", "secret-px")

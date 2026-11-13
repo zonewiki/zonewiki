@@ -145,6 +145,7 @@ READS = [
     ("GET /tasks", "GET", "/tasks", {"query_string": {"list": "secretlist"}}),
     ("GET /api/tasks/due-count", "GET", "/api/tasks/due-count", {}),
     ("GET /api/tasks/headless", "GET", "/api/tasks/headless", {}),
+    ("GET /api/tasks/assignable", "GET", "/api/tasks/assignable", {}),
     ("GET /api/tasks/export", "GET", "/api/tasks/export", {}),
     ("GET /api/tasks/export", "GET", "/api/tasks/export", {"query_string": {"list": "secretlist"}}),
     ("POST /api/preview", "POST", "/api/preview", {"data": f"[[{DIARY}]] [[private/alice/old]] [[private/alice/draft]]"}),

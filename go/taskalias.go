@@ -14,10 +14,21 @@ type (
 )
 
 // apiTask: a task as the API and the browser get it: as in its file and,
-// with users, "private" (whether it is its user's own).
+// with users, "private" (whether it is its user's own). Without users it
+// has no assignee, whatever its file says.
 type apiTask struct{ *Task }
 
-func (a apiTask) MarshalJSON() ([]byte, error) { return a.JSON(settings().Users != nil) }
+func (a apiTask) MarshalJSON() ([]byte, error) {
+	if settings().Users != nil {
+		return a.JSON(true)
+	}
+	if a.Assignee == "" {
+		return a.JSON(false)
+	}
+	t := *a.Task
+	t.Assignee = ""
+	return t.JSON(false)
+}
 
 // apiTasks: tasks as the API answers them.
 func apiTasks(tasks []*Task) []apiTask {

@@ -22,6 +22,10 @@ type Task struct {
 	Title       string
 	Description string // the notes (markdown)
 	Tags        []string
+	// Assignee: the user the task is assigned to, "" no one (and no key in
+	// the file). A name, whether or not it still is a user who can be
+	// assigned: the server decides what a name that isn't counts as.
+	Assignee string
 	// Dates as YYYY-MM-DD, timestamps as YYYY-MM-DDTHH:MM:SS; "" is none
 	// (null in the file).
 	StartDate, DueDate  string
@@ -82,7 +86,7 @@ func CleanImportance(s string) string {
 // missing, never written (so not kept as an unknown key either).
 const oldClosedAtKey = "completed_at"
 
-var taskKeys = map[string]bool{oldClosedAtKey: true, "id": true, "title": true, "description": true, "tags": true,
+var taskKeys = map[string]bool{oldClosedAtKey: true, "id": true, "title": true, "description": true, "tags": true, "assignee": true,
 	"start_date": true, "due_date": true, "created_at": true, "closed_at": true, "wont_do": true,
 	"keep": true, "importance": true, "last_done": true, "sort_order": true, "recurrence": true, "spawned_from": true,
 	"history": true, "comments": true, "private": true}
@@ -101,6 +105,7 @@ func FromJSON(o jsonobj.Obj) *Task {
 		t.ClosedAt = o.Str(oldClosedAtKey) // a file from before the field was renamed
 	}
 	t.Tags = CleanTags(jsonobj.TextList(o["tags"])) // "local llm", "#work" from a file edited by hand
+	t.Assignee = CleanAssignee(o.Str("assignee"))
 	if f, ok := jsonobj.As[float64](o["sort_order"]); ok {
 		t.SortOrder = &f
 	}
@@ -159,10 +164,10 @@ func (r *Recurrence) MarshalJSON() ([]byte, error) {
 }
 
 // MarshalJSON: the dated events say from and to which day (null none),
-// the others neither; by only when someone is named, so a wiki without
+// the named ones from and to which user, the others neither; by only when someone is named, so a wiki without
 // users keeps its files as they were.
 func (e HistoryEntry) MarshalJSON() ([]byte, error) {
-	if !DatedEvents[e.Event] {
+	if !DatedEvents[e.Event] && !NamedEvents[e.Event] {
 		return jsonobj.MarshalText(struct {
 			At    string `json:"at"`
 			Event string `json:"event"`
@@ -219,6 +224,7 @@ func (t *Task) JSON(private bool) ([]byte, error) {
 		Title       string         `json:"title"`
 		Description string         `json:"description"`
 		Tags        []string       `json:"tags"`
+		Assignee    string         `json:"assignee,omitempty"`
 		StartDate   *string        `json:"start_date"`
 		DueDate     *string        `json:"due_date"`
 		CreatedAt   *string        `json:"created_at"`
@@ -232,7 +238,7 @@ func (t *Task) JSON(private bool) ([]byte, error) {
 		SpawnedFrom *string        `json:"spawned_from"`
 		History     []HistoryEntry `json:"history"`
 		Comments    []Comment      `json:"comments"`
-	}{t.ID, t.Title, t.Description, tags, jsonobj.Nullable(t.StartDate), jsonobj.Nullable(t.DueDate),
+	}{t.ID, t.Title, t.Description, tags, t.Assignee, jsonobj.Nullable(t.StartDate), jsonobj.Nullable(t.DueDate),
 		jsonobj.Nullable(t.CreatedAt), jsonobj.Nullable(t.ClosedAt), t.WontDo, t.Keep, t.Importance, jsonobj.Nullable(t.LastDone),
 		t.SortOrder, t.Recurrence, jsonobj.Nullable(t.SpawnedFrom), history, comments})
 	if err == nil && private {
@@ -305,3 +311,12 @@ func CleanTags(tags []string) []string {
 
 // DatedEvents: the history events that say from and to which day.
 var DatedEvents = map[string]bool{"start": true, "due": true, "repeat": true}
+
+// NamedEvents: the history events that say from and to which user.
+var NamedEvents = map[string]bool{"assigned": true}
+
+// CleanAssignee: an assignee as it is kept: a user's name is lowercase,
+// and a leading "@" is how it is typed, not part of it.
+func CleanAssignee(s string) string {
+	return strings.ToLower(strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(s), "@")))
+}

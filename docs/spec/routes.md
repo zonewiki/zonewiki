@@ -58,6 +58,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 | POST   | `/api/tasks/import`    | `{file, list, tag, new, also, private}`: adds an export's tasks to a list; `{added, skipped, ids}` |
 | GET    | `/api/tasks/headless`  | A hidden task app (the headless embed, without its `<script>` tags), for a page that needs the edit modal (`c t`, the New task button; see Modules). |
 | GET    | `/api/tasks/closed` | Closed tasks of `?year=YYYY` (default this year; earlier years come from their archive file). |
+| GET    | `/api/tasks/assignable` | `{ users, me }`: the users a task can be assigned to, A–Z, and who asks (Assigning tasks in `docs/spec/users.md`). `users` is empty without users and in sharing mode. |
 | GET    | `/api/tasks/closed-years` | `{ years }`: years with closed tasks, newest first, this year always included (Closed's year switcher). `?list=<name>` as for the count. |
 | GET    | `/api/tasks/closed-count` | `{ count }` of tasks in the Closed view (current year), for its link. `?list=<name>` counts that list's (tasks tagged with it); without it, every task's (a leftover `?all=1` changes nothing). |
 | POST   | `/api/notes`      | Create a new note (`<timestamp>_<slug>.md`); returns `{ slug }`. |

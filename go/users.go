@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -53,6 +54,53 @@ func (s *Settings) isAdmin(name string) bool {
 func (s *Settings) isViewer(name string) bool {
 	u := s.Users[name]
 	return u != nil && u.Role == roleViewer
+}
+
+// reservedNames: what no new user is called: where a task's assignee is
+// named, "me" is whoever is signed in and "none" no one (docs/spec/users.md,
+// Assigning tasks).
+var reservedNames = map[string]bool{"me": true, "none": true}
+
+// reservedNameMsg: why name can't be a new user's.
+func reservedNameMsg(name string) string {
+	return `"` + name + `" can't be a user name: for a task's assignee, "me" means whoever is signed in and "none" no one. Choose another.`
+}
+
+// assignable: a task can be assigned to name: a user who isn't disabled or
+// waiting for approval, isn't a viewer (who couldn't complete it), and
+// isn't called by a reserved name.
+func (s *Settings) assignable(name string) bool {
+	u := s.Users[name]
+	return u != nil && !u.Disabled && !u.Pending && u.Role != roleViewer && !reservedNames[name]
+}
+
+// notAssignable: why a task can't be assigned to name.
+func (s *Settings) notAssignable(name string) string {
+	u := s.Users[name]
+	switch {
+	case u == nil:
+		return `"` + name + `" is not a user of this wiki`
+	case reservedNames[name]:
+		return `The user "` + name + `" can't be given tasks: the name is the word for ` +
+			map[string]string{"me": "whoever is signed in", "none": "no one"}[name]
+	case u.Pending:
+		return name + "'s account is waiting for an admin's approval"
+	case u.Disabled:
+		return name + "'s account is disabled"
+	}
+	return name + " is a viewer, and a viewer can't change tasks"
+}
+
+// assignableUsers: the names of the users a task can be assigned to, A–Z.
+func (s *Settings) assignableUsers() []string {
+	names := []string{}
+	for name := range s.Users {
+		if s.assignable(name) {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+	return names
 }
 
 // hasAdmin: some user is an admin, and not disabled.
