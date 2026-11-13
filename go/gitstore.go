@@ -3,13 +3,10 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -17,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"zonewiki/internal/gitrepo"
 	"zonewiki/internal/mdtext"
 )
 
@@ -24,30 +22,11 @@ import (
 // forever: after this long it counts as failed, which every caller handles.
 const gitTimeout = 60 * time.Second
 
-// git (2.47+) starts its automatic maintenance after a commit as a detached
-// background process. In the container Zone is PID 1 and never reaps that
-// orphan, so every commit left a zombie process behind until the PID limit
-// was reached and nothing could start any more. Not detached, git runs the
-// (usually trivial) maintenance itself and reaps its own children.
-//
-// Every path Zone hands git is a file's name, never a pattern: a page may be
-// called anything ("*", "p?", ":(glob)**/x"), and read as a pathspec such a
-// name would match other files, another user's private pages among them
-// (git show <sha> -- '*.md'). So git takes all pathspecs literally
-// (GIT_LITERAL_PATHSPECS, git's --literal-pathspecs for every call); the one
-// pattern Zone means as one, grepPages' "*.md", turns that off for its call
-// (and check-ignore, which takes names as they are and refuses the setting).
-var gitEnv = append(os.Environ(),
-	"GIT_LITERAL_PATHSPECS=1",
-	"GIT_CONFIG_COUNT=2",
-	"GIT_CONFIG_KEY_0=maintenance.autoDetach", "GIT_CONFIG_VALUE_0=false",
-	"GIT_CONFIG_KEY_1=gc.autoDetach", "GIT_CONFIG_VALUE_1=false",
-)
+// gitResult: how a git call ended (gitrepo.Result; Code 124: timed out).
+type gitResult = gitrepo.Result
 
-type gitResult struct {
-	Code           int // 124: timed out
-	Stdout, Stderr string
-}
+// wikiRepo: the wiki as a git repository.
+func wikiRepo() gitrepo.Repo { return gitrepo.Repo{Dir: cfg.Data} }
 
 // runGit runs git in the wiki. A git that can't start or times out counts
 // as failed, like a git that exits non-zero.
@@ -65,31 +44,10 @@ func runGitIn(timeout time.Duration, input string, args ...string) gitResult {
 }
 
 // runGitEnv: runGitIn with more of git's environment (GIT_INDEX_FILE=…).
+// Not under a request's context: a write goes through to its commit
+// whether or not the client waits for the answer.
 func runGitEnv(timeout time.Duration, input string, env []string, args ...string) gitResult {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir, cmd.Env = cfg.Data, append(slices.Clone(gitEnv), env...)
-	if input != "" {
-		cmd.Stdin = strings.NewReader(input)
-	}
-	// A process git started (a hook, an alias) may hold its output open
-	// after git is killed: stop waiting for it soon after.
-	cmd.WaitDelay = time.Second
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	err := cmd.Run()
-	if ctx.Err() == context.DeadlineExceeded {
-		return gitResult{124, "", fmt.Sprintf("git timed out after %ds", int(timeout.Seconds()))}
-	}
-	code := 0
-	var exit *exec.ExitError
-	if errors.As(err, &exit) {
-		code = exit.ExitCode()
-	} else if err != nil {
-		return gitResult{1, "", err.Error()}
-	}
-	return gitResult{code, newlines(stdout.String()), newlines(stderr.String())}
+	return wikiRepo().Run(context.Background(), gitrepo.Call{Timeout: timeout, Input: input, Env: env}, args...)
 }
 
 // wikiRel: a file's path relative to the wiki, with "/" (as git names it).
@@ -218,7 +176,7 @@ func gitCommit(user, message string, paths ...string) error {
 		// What .gitignore leaves out (and git doesn't track) stays out: git
 		// add would refuse it (exit 1, 0 when some are).
 		// check-ignore takes names, not pathspecs, and refuses the literal
-		// kind (gitEnv).
+		// kind (package gitrepo's environment).
 		r := runGitEnv(gitTimeout, strings.Join(candidates, "\x00")+"\x00", []string{"GIT_LITERAL_PATHSPECS=0"},
 			"check-ignore", "-z", "--stdin")
 		if r.Code > 1 {
@@ -623,9 +581,9 @@ func grepPages(pattern string, ignoreCase bool, slugs map[string]bool) ([]GrepHi
 		if ignoreCase {
 			args = append(args, "-i")
 		}
-		// "*.md" is a pattern (gitEnv): git's, since Zone wrote it.
+		// "*.md" is a pattern (package gitrepo takes paths literally): git's, since Zone wrote it.
 		r = runGitEnv(grepTimeout, "", []string{"GIT_LITERAL_PATHSPECS=0"}, append(args, "-e", pattern, "--", "*.md")...)
-		if r.Code == 124 {
+		if r.Code == gitrepo.TimedOut {
 			return nil, refuse(fmt.Sprintf("the search took longer than %ds; try a simpler pattern", int(grepTimeout.Seconds())))
 		}
 		if perl && r.Code != 0 && r.Code != 1 && strings.Contains(r.Stderr, "PCRE") {
