@@ -96,11 +96,30 @@ async function renderMath(root, anchor) {
 const svgs = new Map();
 let diagrams = 0;
 
+// Paper is light: on a dark screen the page's diagrams are drawn again in
+// the light theme before it is printed (on), and in the screen's after (off).
+let forPaper = false;
+export async function diagramsForPaper(on) {
+  if (forPaper === on) return;
+  forPaper = on;
+  if (!matchMedia('(prefers-color-scheme: dark)').matches) return;
+  const drawn = [...document.querySelectorAll('.mermaid-diagram[data-source]')];
+  if (!drawn.length) return;
+  for (const div of drawn) {
+    const pre = document.createElement('pre'), code = document.createElement('code');
+    code.className = 'language-mermaid';
+    code.textContent = div.dataset.source;
+    pre.append(code);
+    div.replaceWith(pre);
+  }
+  await renderDiagrams(document, null);
+}
+
 async function renderDiagrams(root, anchor) {
   const codes = [...root.querySelectorAll('pre > code.language-mermaid')];
   if (!codes.length) return;
   try { await loadScript(MERMAID); } catch (_) { return; }
-  const theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default';
+  const theme = !forPaper && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default';
   // strict: no scripts or click handlers from a diagram's text.
   window.mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme, suppressErrorRendering: true });
   for (const code of codes) {

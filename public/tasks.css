@@ -25,7 +25,7 @@
   --blue-text: #3d6a8e;
   --green-text: #2b7a4b;
 }
-@media (prefers-color-scheme: dark) {
+@media screen and (prefers-color-scheme: dark) {
   .tasks-app {
     --border: #41433c;
     --section-bg: #22241f;
@@ -1109,7 +1109,7 @@ ul.task-comment-list { list-style: none; margin: .3rem 0 0; padding: 0; font-siz
 .task-edit-actions .btn-danger { margin-left: auto; background: #fbeeee; color: #a33232; border: none; }
 .task-edit-actions .btn-danger:hover { background: #f4dcdc; color: #a33232; }
 
-@media (prefers-color-scheme: dark) {
+@media screen and (prefers-color-scheme: dark) {
   .task-edit-actions .btn-danger { background: #2f1c1c; color: #ec9a9a; }
   .task-edit-actions .btn-danger:hover { background: #3d2424; color: #ec9a9a; }
 }

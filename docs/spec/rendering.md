@@ -131,11 +131,27 @@ Every rendered page displays a `<header class="page-header">` above the article 
 - An Edit button linking to `/edit/<slug>`
 - A **⋯ page menu** (`.page-menu-btn`, menu `#page-menu`, `page_menu` in `templates/partials/page.html`, its data from `pageMenu`; opening, keys and actions in `js/pagemenu.js`) with the rarer actions: **Present** (`#present-btn`, only on a page with headings, `p`),
   **History** (git only),
+  **Export as PDF…** (see Print and PDF),
   **Move to wiki…** and **Append to page…** (notes only, see Notes),
   **Rename…** (a dialog, `#page-rename-dialog`, see Rename) and **Delete…** (the `#page-delete-dialog` confirmation, also Ctrl+Delete);
   Rename… and Delete… not for `index`.
   One hidden menu element, positioned under the ⋯ button: a popover with ↑/↓, Esc (focus back to the ⋯), a bottom sheet at ≤640px, styled like the task app's ⋯ menu (`.task-menu` rules list `.page-menu` too).
   It sits outside `.page-grid`, since the middle column is a size container and would anchor `position: fixed`.
+
+### Print and PDF
+
+A page is exported as a PDF by the browser: **Export as PDF…** in the page's ⋯ menu opens the browser's print dialog, where "Save as PDF" (the destination, in Chrome, Edge, Firefox and Safari alike) makes the file; Ctrl+P does the same.
+Zone makes no PDF itself: no renderer on the server, and the file looks as the page does.
+
+- **What is on the paper** (`@media print` at the end of `style.css`): the page alone, its title, tags, "Last changed", the tldr (shown, not behind its switch) and the text, at the paper's width (`@page` margins 18mm and 16mm).
+  Not Zone around it: the breadcrumb, the top row and the phone's bar, the side columns, Edit and ⋯, the section ✎ and task chips, what links to the page, the build string; a task list embed shows its tasks without its tabs, toolbar and menus.
+  The sheet's border and padding go (the paper is the sheet).
+- **Always light**: the dark variables and dark rules are for screens (`@media screen and (prefers-color-scheme: dark)`), and code is highlighted with the light theme (`media="print, …"` on its stylesheet in `layout.html`), so a dark screen prints dark ink on white.
+- **Page breaks**: none right after a heading; code blocks, quotes, callouts, images, diagrams and table rows are kept whole where they fit; code wraps instead of being cut off where the screen would scroll.
+- **Folded sections** print unfolded (`beforeprint`, see Folding sections).
+- **Export as PDF…** (`exportPdf` in `js/pagemenu.js`) does two things Ctrl+P can't:
+  the tab's title is the page's title while the dialog is open, so the file is named "Garden plan.pdf", not "Garden plan — Zone.pdf";
+  and on a dark screen the Mermaid diagrams are drawn again in the light theme first (`diagramsForPaper` in `js/figures.js`), and in the dark one after (`afterprint`).
   Shortcut hints (`.menu-key`) hide on touch screens.
 
 **Copy link**: on a page view a link icon (`.heading-link`, added by `js/page.js`) sits by the title and by every heading with an anchor (`#`, `##`, `###` in the article; not a task list embed's), hidden until the heading is hovered (or the icon focused).

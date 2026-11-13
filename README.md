@@ -82,6 +82,8 @@ editor; a change on disk shows up immediately.
 - Every page's version history: what each save changed, any version, and
   one-click restore. Deleted pages can be brought back.
 - Present a page as slides, one per heading.
+- Export a page as a PDF (the browser's "Save as PDF", with a print layout
+  that shows the page alone, light even on a dark screen).
 
 ![The editor in dark mode: Markdown on the left, the live preview on the right](docs/screenshots/editor.png)
 

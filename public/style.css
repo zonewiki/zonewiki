@@ -45,7 +45,7 @@
   --mono:         "JetBrains Mono", "Fira Code", ui-monospace, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
+@media screen and (prefers-color-scheme: dark) {
   :root {
     --bg:           #141513;
     --fg:           #ebeae4;
@@ -225,7 +225,7 @@ html.sharing :is(
 .module-due { background: color-mix(in srgb, #f97316 18%, transparent); color: #c2540a; }
 .module-focus { background: color-mix(in srgb, var(--muted) 15%, transparent); color: var(--muted); }
 :is(.module-due, .module-focus)[hidden] { display: none; }
-@media (prefers-color-scheme: dark) {
+@media screen and (prefers-color-scheme: dark) {
   .module-due { background: color-mix(in srgb, #f97316 22%, transparent); color: #fb923c; }
   .module-focus { background: color-mix(in srgb, var(--muted) 25%, transparent); }
 }
@@ -370,7 +370,7 @@ main {
     --card-bg: var(--surface);
   }
 }
-@media (min-width: 641px) and (prefers-color-scheme: dark) {
+@media screen and (min-width: 641px) and (prefers-color-scheme: dark) {
   :is(.page-col:not(:has(> .sheet)), .sheet) .tasks-app {
     --border: #45473f;
     --section-bg: #272922;
@@ -699,7 +699,7 @@ main {
 .page-content .markdown-alert-important .markdown-alert-title::before { content: "❗"; }
 .page-content .markdown-alert-warning   .markdown-alert-title::before { content: "⚠"; }
 .page-content .markdown-alert-caution   .markdown-alert-title::before { content: "⛔"; }
-@media (prefers-color-scheme: dark) {
+@media screen and (prefers-color-scheme: dark) {
   .page-content .markdown-alert-note      { --alert: #8fb3d1; }
   .page-content .markdown-alert-tip       { --alert: #8cc7b4; }
   .page-content .markdown-alert-important { --alert: #c3a1d0; }
@@ -939,7 +939,7 @@ main > .sheet > h2 { font-family: var(--serif); font-size: 1.45rem; font-weight:
   font-size: .78rem;
   padding: .25rem .6rem;
 }
-@media (prefers-color-scheme: dark) {
+@media screen and (prefers-color-scheme: dark) {
   .conflict-banner { background: #451a03; color: #fbbf24; border-color: #b45309; }
 }
 
@@ -1301,7 +1301,7 @@ main > .sheet > h2 { font-family: var(--serif); font-size: 1.45rem; font-weight:
 .task-ref-due.due-today { color: var(--btn-primary); font-weight: 600; }
 .task-ref-start.start-today { color: #d97706; }
 .task-ref-start.start-later { color: #4d7799; }   /* slate, as a later start on a card */
-@media (prefers-color-scheme: dark) { .task-ref-start.start-later { color: #8fb3d1; } }
+@media screen and (prefers-color-scheme: dark) { .task-ref-start.start-later { color: #8fb3d1; } }
 .task-ref-list { font-family: var(--mono); }
 .task-ref-done .task-ref-title,
 .task-ref-wontdo .task-ref-title { color: var(--muted); text-decoration: line-through; }
@@ -1522,7 +1522,7 @@ kbd {
 .users-done, .users-error { padding: .5rem .75rem; border-radius: 6px; }
 .users-done { background: var(--code-bg); }
 .users-error { background: #fbeeee; color: #a33232; }   /* Zone CP's danger colours */
-@media (prefers-color-scheme: dark) { .users-error { background: #2f1c1c; color: #ec9a9a; } }
+@media screen and (prefers-color-scheme: dark) { .users-error { background: #2f1c1c; color: #ec9a9a; } }
 .users-help { font-size: .85rem; }
 .users-link { display: block; padding: .5rem; background: var(--code-bg); border-radius: 6px; word-break: break-all; user-select: all; }
 /* Change password (password.html): the three fields, one under the other. */
@@ -1622,7 +1622,7 @@ kbd {
   color: var(--fg);
 }
 
-@media (prefers-color-scheme: dark) {
+@media screen and (prefers-color-scheme: dark) {
   .uncommitted-badge {
     background: color-mix(in srgb, var(--muted) 20%, transparent);
   }
@@ -1951,7 +1951,7 @@ body.editor-page main {
 .hist-current .hist-when { font-weight: 600; }
 .hist-changes { font-size: .8rem; color: var(--muted); white-space: nowrap; }
 .hist-changes:hover { color: var(--fg); }
-@media (prefers-color-scheme: dark) { .hist-add { color: #8fcfa4; } .hist-del { color: #ec9a9a; } }
+@media screen and (prefers-color-scheme: dark) { .hist-add { color: #8fcfa4; } .hist-del { color: #ec9a9a; } }
 @media (max-width: 640px) {
   .hist-main { flex-wrap: wrap; row-gap: .1rem; }
   .hist-what { flex-basis: 100%; order: 3; }
@@ -1967,7 +1967,7 @@ body.editor-page main {
 .diff-del  { color: #a33232; background: #fbeeee; }
 .diff-hunk { color: var(--muted); font-weight: 600; }
 .diff-ctx  { color: var(--fg); }
-@media (prefers-color-scheme: dark) {
+@media screen and (prefers-color-scheme: dark) {
   .diff-add { color: #8fcfa4; background: #1b2a20; }
   .diff-del { color: #ec9a9a; background: #2f1c1c; }
 }
@@ -2323,3 +2323,40 @@ body[data-viewer] .action-sep:has(+ .action-new-note) { display: none; }
 
 /* An image on another site, not loaded (the page policy): a link to it. */
 a.external-image::before { content: "🖼 "; }
+
+/* ── Print ─────────────────────────────────────────────────────────────────── */
+/* A page on paper, and in the PDF the browser's print dialog saves (Export
+   as PDF… in the page's ⋯ menu): the page alone, its title, tags, date and
+   text, without Zone around it (the top row, the side columns, buttons,
+   what links to it). Always light: the dark variables are for screens. */
+@page { margin: 18mm 16mm; }
+@media print {
+  html, body { background: #fff; }
+  :root { --bg: #fff; --surface: #fff; }
+  /* A hair of room at the sides: a border on the sheet's very edge is cut off. */
+  main, main.wide { max-width: none; margin: 0; padding: 0 1px; }
+  .breadcrumb, .top-actions, .top-badges, .remote-badge, .action-buttons,
+  .rail, .page-foot, .page-header-actions, .page-menu, .page-menu-backdrop,
+  .commit-file-form, .section-edit-btn, .section-tasks, .raw-toast,
+  .paste-hint { display: none !important; }
+  .page-grid { display: block; }
+  .page-col { max-width: none; width: auto; }
+  /* No sheet on the paper: the paper is the sheet. */
+  :is(.page-col:not(:has(> .sheet)), .sheet) {
+    border: none; border-radius: 0; box-shadow: none; padding: 0; margin: 0; background: none;
+  }
+  .page-col > :is(.tasks-places, .page-header, .page-meta-wrapper, .page-tldr, .page-content) { max-width: none; }
+  .page-col .page-content > :is(pre, table, p.img-block) { width: auto; max-width: 100%; position: static; translate: none; }
+  /* The tldr is on the paper, not behind its switch. */
+  .tldr-label { display: none; }
+  .tldr-toggle ~ .page-tldr { display: block; margin: 0 0 1.5rem; }
+  /* A task list: its tasks, without what works them. */
+  .tasks-header, .tasks-footer, .tasks-selbar, .task-actions { display: none !important; }
+  .page-content { max-width: none; }
+  .page-content :is(h1, h2, h3, h4, h5, h6) { break-after: avoid; }
+  .page-content :is(pre, blockquote, img, figure, tr, .markdown-alert, .mermaid-diagram, .math-display) { break-inside: avoid; }
+  .page-content :is(p, li) { orphans: 3; widows: 3; }
+  /* What scrolls sideways on a screen is cut off on paper: code wraps. */
+  .page-content pre, .page-content pre code { white-space: pre-wrap; overflow-wrap: anywhere; overflow: visible; }
+  .page-content a { text-decoration: none; }
+}

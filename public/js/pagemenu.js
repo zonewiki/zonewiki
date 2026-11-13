@@ -1,5 +1,6 @@
 import { closeOnBackdropClick, copyText } from './util.js';
 import { toSlug } from './mdtext.js';
+import { diagramsForPaper } from './figures.js';
 
 // ── Page delete dialog ────────────────────────────────────────────────────────
 
@@ -7,6 +8,22 @@ document.getElementById('page-delete-cancel')?.addEventListener('click', () => {
   document.getElementById('page-delete-dialog').close();
 });
 closeOnBackdropClick(document.getElementById('page-delete-dialog'));
+
+// Export as PDF: the browser's print dialog, whose "Save as PDF" makes the
+// file from the page as the print styles lay it out (style.css, Print). The
+// file is named after the page (the tab's title has "— Zone" after it), and
+// on a dark screen the diagrams are drawn again for paper first.
+async function exportPdf() {
+  const tabTitle = document.title;
+  const title = document.querySelector('.page-header h1')?.firstChild?.textContent.trim();
+  if (title) document.title = title;
+  await diagramsForPaper(true);
+  window.addEventListener('afterprint', () => {
+    document.title = tabTitle;
+    diagramsForPaper(false);
+  }, { once: true });
+  window.print();
+}
 
 // mdtext.promoted_slug: where a note moved to the wiki goes.
 function promotedSlug(folder, name, date) {
@@ -94,6 +111,7 @@ function promotedSlug(folder, name, date) {
     else if (item.dataset.action === 'privacy') document.getElementById('page-privacy-dialog')?.showModal();
     else if (item.dataset.action === 'promote') openPromote();
     else if (item.dataset.action === 'append') openAppend();
+    else if (item.dataset.action === 'pdf') exportPdf();
   });
 
   // Move to wiki (notes): the slug the page will get, as the server
