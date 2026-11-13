@@ -5,7 +5,7 @@ from datetime import date, timedelta
 
 from playwright.sync_api import expect
 
-from conftest import TOUCH_PHONE
+from conftest import TOUCH_PHONE, wait_until
 
 
 def card(page, title):
@@ -18,14 +18,6 @@ def titles(page):
 
 def task(page, title):
     return next(t for t in page.request.get("/api/tasks").json() if t["title"] == title)
-
-
-def wait_until(page, predicate, timeout_ms=5000):
-    for _ in range(timeout_ms // 100):
-        if predicate():
-            return
-        page.wait_for_timeout(100)
-    assert predicate()
 
 
 def seed_tasks(page, wiki, embed="[[tasks:]]"):

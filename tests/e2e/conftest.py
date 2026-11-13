@@ -90,6 +90,18 @@ class Wiki:
         return self.git("rev-parse", "HEAD").strip()
 
 
+def wait_until(page, predicate, timeout_ms: int = 5000):
+    """Wait until predicate() holds, looking every 100 ms; fails when it
+    never does. For what expect() can't watch: the API's answer, a file on
+    disk, a request a route held back. It waits through the page, so the
+    page's routes and events go on meanwhile (time.sleep would stop them)."""
+    for _ in range(timeout_ms // 100):
+        if predicate():
+            return
+        page.wait_for_timeout(100)
+    assert predicate(), "condition not met in time"
+
+
 def open_tab(page, view: str):
     """Switch the tasks to a view by its name (open/plan/focus/completed).
     Completed has no tab; its link under the list opens it. Open and Plan

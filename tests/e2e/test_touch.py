@@ -6,7 +6,7 @@ from datetime import date, timedelta
 import pytest
 from playwright.sync_api import expect
 
-from conftest import TOUCH_PHONE, open_tab, pick_date
+from conftest import TOUCH_PHONE, open_tab, pick_date, wait_until
 
 
 def day(offset: int) -> str:
@@ -20,14 +20,6 @@ def pick_day(picker, d: str):
 
 def tasks_by_title(page) -> dict:
     return {t["title"]: t for t in page.request.get("/api/tasks").json()}
-
-
-def wait_until(page, predicate, timeout_ms=5000):
-    for _ in range(timeout_ms // 100):
-        if predicate():
-            return
-        page.wait_for_timeout(100)
-    assert predicate()
 
 
 def card(page, title):

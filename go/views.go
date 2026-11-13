@@ -172,11 +172,26 @@ func (rq *Req) tasksLinkHref() string {
 // it). With users Private follows Wiki, Tasks and Notes are a group of their
 // own, and the list ends with the user menu ("menu": who is signed in, Sign
 // out; the desktop's user button).
-func moduleLinks(rq *Req) []M {
+// moduleLink: a module's link in the breadcrumb's switcher and the phone's
+// tab bar. Counts: the Tasks link's (nil for the others); PinnedPages: the
+// pinned lists' pages, space-separated; Own: only the user sees what is
+// behind it (Private, Notes with users); Menu: not a link but the Account
+// entry that stands for the user menu (with users).
+type moduleLink struct {
+	Key, Label, Href string
+	Current          bool
+	Counts           *TaskCounts
+	Group            int
+	Own              bool
+	PinnedPages      string
+	Menu             bool
+}
+
+func moduleLinks(rq *Req) []moduleLink {
 	current := currentModule(rq)
 	users := privateFolder(rq.who()) != ""
 	viewer := settings().isViewer(rq.who())
-	var out []M
+	var out []moduleLink
 	for _, m := range modules {
 		if m[0] == "private" && !users || viewer && (m[0] == "private" || m[0] == "notes") {
 			continue // a viewer makes nothing: no private pages, no notes
@@ -190,20 +205,21 @@ func moduleLinks(rq *Req) []M {
 			href = rq.tasksLinkHref()
 		}
 		own := users && (m[0] == "private" || m[0] == "notes")
-		link := M{"key": m[0], "label": m[1], "href": href, "current": current == m[0], "counts": nil, "group": group, "own": own}
+		link := moduleLink{Key: m[0], Label: m[1], Href: href, Current: current == m[0], Group: group, Own: own}
 		if m[0] == "tasks" {
-			link["counts"] = rq.taskCounts()
+			counts := rq.taskCounts()
+			link.Counts = &counts
 			// The pinned lists' pages, no stops in the navigation trail (js/chrome.js).
 			var slugs []string
 			for _, h := range rq.pinnedLists() {
 				slugs = append(slugs, h.Slug)
 			}
-			link["pinned_pages"] = strings.Join(slugs, " ")
+			link.PinnedPages = strings.Join(slugs, " ")
 		}
 		out = append(out, link)
 	}
 	if users {
-		out = append(out, M{"key": "menu", "label": "Account", "menu": true})
+		out = append(out, moduleLink{Key: "menu", Label: "Account", Menu: true})
 	}
 	return out
 }
@@ -283,7 +299,7 @@ type pageShell struct {
 	BadgeInForm        bool   // the remote badge in the view's form (the login page), not the corner
 	Module             string // the module the page is in (currentModule); "" in the editor
 	TasksNew           *tasksNew
-	ModuleLinks        []M // the module switcher's and the action bar's links (moduleLinks)
+	ModuleLinks        []moduleLink // the module switcher's and the action bar's links (moduleLinks)
 	Sharing, Users     bool
 	Semantic           string // semanticStatus
 	AppName, Version   string
@@ -400,29 +416,41 @@ type hiddenView struct {
 }
 
 // pageLinks: pages as links.
-func pageLinks(pages []PageRef) []M {
-	out := []M{}
+func pageLinks(pages []PageRef) []pageLink {
+	out := []pageLink{}
 	for _, p := range pages {
-		out = append(out, M{"href": pathURL("page", p.Slug), "title": p.Title})
+		out = append(out, pageLink{Href: pathURL("page", p.Slug), Title: p.Title})
 	}
 	return out
 }
 
+// pageLink: a link in a page's link sections: to a page, or (Linked tasks)
+// to a task, with the section of the page it links to (Section as written,
+// Anchor its heading's id).
+type pageLink struct{ Href, Title, Section, Anchor string }
+
+// linkSection: Backlinks, Linked tasks or Related: a heading over links
+// (the link_section template).
+type linkSection struct {
+	ID, Heading string
+	Links       []pageLink
+}
+
 // linkSections: the sections at a page's end (and in the right column):
 // Backlinks and Linked tasks. prefer: the lists the page declares.
-func linkSections(rq *Req, backlinks []PageRef, tasks []TaskLink, prefer []string) []M {
-	var sections []M
+func linkSections(rq *Req, backlinks []PageRef, tasks []TaskLink, prefer []string) []linkSection {
+	var sections []linkSection
 	if len(backlinks) > 0 {
-		sections = append(sections, M{"id": "backlinks", "heading": "Backlinks", "links": pageLinks(backlinks)})
+		sections = append(sections, linkSection{ID: "backlinks", Heading: "Backlinks", Links: pageLinks(backlinks)})
 	}
 	if len(tasks) > 0 {
 		lists := rq.taskLists()
-		var links []M
+		var links []pageLink
 		for _, t := range tasks {
-			links = append(links, M{"href": taskHref(t.ID, "open", linkList(taskLinkObj(t), prefer, lists), ""),
-				"title": mdtext.PlainTaskTitle(t.Title), "section": t.Section, "anchor": t.Anchor})
+			links = append(links, pageLink{Href: taskHref(t.ID, "open", linkList(taskLinkObj(t), prefer, lists), ""),
+				Title: mdtext.PlainTaskTitle(t.Title), Section: t.Section, Anchor: t.Anchor})
 		}
-		sections = append(sections, M{"id": "task-backlinks", "heading": "Linked tasks", "links": links})
+		sections = append(sections, linkSection{ID: "task-backlinks", Heading: "Linked tasks", Links: links})
 	}
 	return sections
 }
@@ -467,7 +495,7 @@ func railTocItems(article string) template.HTML {
 
 // outlinks: the right column's "Links to": the existing pages this page
 // links to, A–Z by title.
-func outlinks(rq *Req, slug, path string) []M {
+func outlinks(rq *Req, slug, path string) []pageLink {
 	_, targets := pageMeta(path, slug)
 	var pages []PageRef
 	for t := range targets {

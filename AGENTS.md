@@ -155,7 +155,8 @@ Auth is optional (a password, or users; see Key Constraints).
 │   └── *_test.go, testdata/  # Go tests (go test ./...)
 ├── tests/                  # pytest over HTTP against the server (conftest.py, goserver.py, settings.py); e2e/ in a browser
 └── public/                 # The browser code, served as it is
-    ├── style.css           # All styling
+    ├── style.css           # The styling: the look's tokens (:root), pages, the editor, search, dialogs, phones
+    ├── tasks.css           # The task app's styling, loaded after style.css
     ├── zonewiki.js             # The entry ES module every page loads; imports the modules below
     ├── js/                 # ES modules: chrome, git, util, completion, search, actions, pagemenu,
     │                       #   shortcuts, mdedit, mdtext (the text functions shared with the server), editor, page, figures, fold, present; the task app's parts
@@ -216,7 +217,7 @@ Flags are written with two dashes everywhere (`--addr :8080`, `user add NAME --m
 - Light/dark mode via `prefers-color-scheme` media query.
 - No nav bar (keyboard shortcuts): the module switcher in the breadcrumb, New note / Add a task / Search icons at the top right on desktop, a bottom tab bar on phones (see Modules in `docs/spec/navigation.md`).
 - Big screens (≥1320px): page views get side columns, TOC left and links right (see Side columns in `docs/spec/routes.md`); the text keeps its width.
-- No external CSS frameworks — keep `style.css` self-contained.
+- No external CSS frameworks — keep `style.css` and `tasks.css` (the task app's) self-contained.
 - Mobile breakpoint at `640px`: page content readable, tables/pre scroll horizontally, larger touch targets.
   The editor is fully usable on phones (Mobile editor in `docs/spec/editor.md`).
 

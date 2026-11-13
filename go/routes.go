@@ -185,7 +185,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 	}
 	sections := linkSections(rq, backlinks, tasks, lists)
 	if rel := relatedSection(rq, slug, path, backlinks); rel != nil {
-		sections = append(sections, rel)
+		sections = append(sections, *rel)
 	}
 	chip := macro("backlinks_chip", pageLinks(backlinks))
 
@@ -227,9 +227,9 @@ type pageView struct {
 	ReadOnly                                                                bool   // a viewer's view of a shared page: no Edit, ✎ or ticks
 	TaskKeys                                                                string // a key per checkbox line (mdtext.TaskLineKeys), comma-separated
 	BreadcrumbHTML, DeleteDialogHTML, RailTocHTML, MetaRowHTML, ArticleHTML template.HTML
-	LinkSections                                                            []M // Backlinks, Linked tasks, Related (linkSections)
-	Outlinks                                                                []M // the right column's Links to
-	Menu                                                                    M   // the ⋯ menu (pageMenu); nil from the uncommitted list
+	LinkSections                                                            []linkSection // Backlinks, Linked tasks, Related (linkSections)
+	Outlinks                                                                []pageLink    // the right column's Links to
+	Menu                                                                    M             // the ⋯ menu (pageMenu); nil from the uncommitted list
 }
 
 // deletedPageView: a page deleted in git history, Sha the commit before
@@ -847,7 +847,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	list := cleanList(r.URL.Query().Get("list"))
 	params, title, heading := TasksParams{}, "Tasks", "All tasks"
 	var home *TasksHome
-	var sections []M
+	var sections []linkSection
 	var chip template.HTML
 	var pinnedLinks []pinnedLink
 	crumbs := []crumb{{"Tasks", ""}}
@@ -868,7 +868,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 		title, heading = "List: "+list, "List: "+list
 		// Backlinks: the pages that embed the list, as a page's are.
 		if pages := rq.listPages(list); len(pages) > 0 {
-			sections = []M{{"id": "backlinks", "heading": "Backlinks", "links": pageLinks(pages)}}
+			sections = []linkSection{{ID: "backlinks", Heading: "Backlinks", Links: pageLinks(pages)}}
 			chip = macro("backlinks_chip", pageLinks(pages))
 		}
 		crumbs = []crumb{{"Tasks", "/tasks"}, {list, ""}}
@@ -902,7 +902,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 		var pages []PageRef
 		pinnedLinks, pages = rq.pinnedSources()
 		if len(pages) > 0 {
-			sections = []M{{"id": "backlinks", "heading": "Backlinks", "links": pageLinks(pages)}}
+			sections = []linkSection{{ID: "backlinks", Heading: "Backlinks", Links: pageLinks(pages)}}
 			chip = macro("backlinks_chip", pageLinks(pages))
 		}
 	}
@@ -956,7 +956,7 @@ type tasksPageView struct {
 	Home                      *TasksHome
 	Places                    []TaskPlace
 	PinnedLists               []pinnedLink
-	LinkSections              []M
+	LinkSections              []linkSection
 	TasksHTML, BreadcrumbHTML template.HTML
 }
 

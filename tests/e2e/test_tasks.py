@@ -6,7 +6,7 @@ from datetime import date, timedelta
 import pytest
 from playwright.sync_api import expect
 
-from conftest import open_tab, pick_date, real_density
+from conftest import open_tab, pick_date, real_density, wait_until
 from tests import settings
 
 
@@ -23,13 +23,10 @@ def wait_for_field(page, title: str, field: str, expected, timeout_ms: int = 500
     """Poll the API until the task exists and its field reaches the expected
     value: a dialog's submit returns before its request is through, so a new
     task may not be there yet."""
-    for _ in range(timeout_ms // 100):
+    def there():
         task = next((t for t in page.request.get("/api/tasks").json() if t["title"] == title), None)
-        if task and task[field] == expected:
-            return
-        page.wait_for_timeout(100)
-    assert task, f"no task titled {title!r}"
-    assert task_by_title(page, title)[field] == expected
+        return task is not None and task[field] == expected
+    wait_until(page, there, timeout_ms)
 
 
 def open_board(page, wiki):
@@ -531,10 +528,7 @@ def test_undo_waits_for_the_write_it_belongs_to(page, wiki):
     held = []
     page.route("**/api/tasks/batch-update", lambda route: held.append(route))
     page.keyboard.press("0")
-    for _ in range(50):
-        if held:
-            break
-        page.wait_for_timeout(100)
+    wait_until(page, lambda: held)
     assert len(held) == 1
     page.keyboard.press("Control+z")
     page.wait_for_timeout(300)
@@ -1310,13 +1304,13 @@ def test_focus_drag_sorts_into_open_order(page, wiki):
     # before Bread, which Focus doesn't show.
     _drop(card(page, "Butter"), card(page, "Apples"), "after")
     expect(_focus_titles(page)).to_have_text(["Apples", "Butter", "Cheese", "Eggs"])
-    wait_until(lambda: _by_order(page, "sort_order") ==
+    wait_until(page, lambda: _by_order(page, "sort_order") ==
                ["Apples", "Butter", "Bread", "Cheese", "Dates", "Eggs"])
 
     # Moving to the top: Apples' upper half, right before it; hidden ones stay put.
     _drop(card(page, "Eggs"), card(page, "Apples"), "before")
     expect(_focus_titles(page)).to_have_text(["Eggs", "Apples", "Butter", "Cheese"])
-    wait_until(lambda: _by_order(page, "sort_order") ==
+    wait_until(page, lambda: _by_order(page, "sort_order") ==
                ["Eggs", "Apples", "Butter", "Bread", "Cheese", "Dates"])
 
     # Onto the Unsorted heading: out of the order again.
@@ -1354,20 +1348,20 @@ def test_board_reorders_a_day_in_open_order(page, wiki):
     assert _day_titles(page, today) == ["Newbie", "Alpha", "Bravo", "Charlie"]
 
     _drop(card(page, "Charlie"), card(page, "Alpha"), "before")
-    wait_until(lambda: _by_order(page, "sort_order") == ["Charlie", "Alpha", "Elsewhere", "Bravo"])
+    wait_until(page, lambda: _by_order(page, "sort_order") == ["Charlie", "Alpha", "Elsewhere", "Bravo"])
     assert _day_titles(page, today) == ["Newbie", "Charlie", "Alpha", "Bravo"]
     assert task_by_title(page, "Newbie")["sort_order"] is None   # above it: stays Unsorted
 
     # As on Open: dropped among the Unsorted tasks, a task leaves the order
     # (Unsorted is newest first), and no other task is ranked by it.
     _drop(card(page, "Bravo"), card(page, "Newbie"), "before")
-    wait_until(lambda: task_by_title(page, "Bravo")["sort_order"] is None)
+    wait_until(page, lambda: task_by_title(page, "Bravo")["sort_order"] is None)
     assert _by_order(page, "sort_order") == ["Charlie", "Alpha", "Elsewhere"]
     assert task_by_title(page, "Newbie")["sort_order"] is None
     assert _day_titles(page, today) == ["Newbie", "Bravo", "Charlie", "Alpha"]
     # Dropped on the Sorted label: first among the sorted ones.
     card(page, "Newbie").drag_to(page.locator(f'.board-day-divider[data-drop-day="{today}"] ~ .plan-subdivider[data-sub="sorted"]').first)
-    wait_until(lambda: _by_order(page, "sort_order") == ["Newbie", "Charlie", "Alpha", "Elsewhere"])
+    wait_until(page, lambda: _by_order(page, "sort_order") == ["Newbie", "Charlie", "Alpha", "Elsewhere"])
     assert _day_titles(page, today) == ["Bravo", "Newbie", "Charlie", "Alpha"]
 
 
@@ -1380,7 +1374,7 @@ def test_board_drop_on_a_card_of_another_day_starts_and_places_it(page, wiki):
     page.goto("/tasks?view=plan")
     _drop(card(page, "Mover"), card(page, "Bravo"), "before")
     wait_for_field(page, "Mover", "start_date", today)
-    wait_until(lambda: _by_order(page, "sort_order") == ["Alpha", "Mover", "Bravo"])
+    wait_until(page, lambda: _by_order(page, "sort_order") == ["Alpha", "Mover", "Bravo"])
     assert _day_titles(page, today) == ["Alpha", "Mover", "Bravo"]
 
 
@@ -1393,7 +1387,7 @@ def test_board_keyboard_reorders_within_a_day_only(page, wiki):
     page.goto("/tasks?view=plan")
     card(page, "Bravo").click()
     page.keyboard.press("Control+Shift+ArrowUp")
-    wait_until(lambda: _by_order(page, "sort_order") == ["Bravo", "Alpha", "Next"])
+    wait_until(page, lambda: _by_order(page, "sort_order") == ["Bravo", "Alpha", "Next"])
     # Last of its day: it doesn't leave it downwards.
     writes = []
     page.on("request", lambda r: writes.append(r.url) if r.method != "GET" else None)
@@ -1405,7 +1399,7 @@ def test_board_keyboard_reorders_within_a_day_only(page, wiki):
     # First of its day, up: into Unsorted, as on Open, still on its day.
     card(page, "Bravo").click()
     page.keyboard.press("Control+Shift+ArrowUp")
-    wait_until(lambda: task_by_title(page, "Bravo")["sort_order"] is None)
+    wait_until(page, lambda: task_by_title(page, "Bravo")["sort_order"] is None)
     assert task_by_title(page, "Bravo")["start_date"] == today
     assert _day_titles(page, today) == ["Bravo", "Alpha"]
 
@@ -1459,11 +1453,11 @@ def test_board_unplanned_shows_unsorted_apart_and_reorders(page, wiki):
     expect(card(page, "Alpha")).not_to_have_class(re.compile(r"\btask-inbox\b"))
     # A drop within Sorted reorders it.
     _drop(card(page, "Bravo"), card(page, "Alpha"), "before")
-    wait_until(lambda: _unplanned_rows(page) == ["# Unsorted", "Fresh", "# Sorted", "Bravo", "Alpha"])
+    wait_until(page, lambda: _unplanned_rows(page) == ["# Unsorted", "Fresh", "# Sorted", "Bravo", "Alpha"])
     # An Unsorted task dropped among the sorted ones is sorted there; no
     # Unsorted left, no labels.
     _drop(card(page, "Fresh"), card(page, "Bravo"), "after")
-    wait_until(lambda: _unplanned_rows(page) == ["Bravo", "Fresh", "Alpha"])
+    wait_until(page, lambda: _unplanned_rows(page) == ["Bravo", "Fresh", "Alpha"])
     page.reload()
     expect(card(page, "Fresh")).to_be_visible()
     assert _unplanned_rows(page) == ["Bravo", "Fresh", "Alpha"]
@@ -1526,13 +1520,13 @@ def test_focus_keyboard_crosses_the_sections(page, wiki):
     page.keyboard.press("Control+Shift+ArrowUp")
     expect(_focus_titles(page)).to_have_text(["Deadline", "Bravo", "Alpha"])
     page.keyboard.press("Control+Shift+ArrowDown")
-    wait_until(lambda: _by_order(page, "sort_order") == ["Deadline", "Bravo", "Hidden", "Alpha"])
+    wait_until(page, lambda: _by_order(page, "sort_order") == ["Deadline", "Bravo", "Hidden", "Alpha"])
     expect(_section(page, "unsorted")).to_have_class(re.compile(r"\bboard-day--empty\b"))
     # ↓ within Sorted: after Alpha, past the hidden task.
     card(page, "Bravo").click()
     page.keyboard.press("Control+Shift+ArrowDown")
     expect(_focus_titles(page)).to_have_text(["Deadline", "Alpha", "Bravo"])
-    wait_until(lambda: _by_order(page, "sort_order") == ["Deadline", "Hidden", "Alpha", "Bravo"])
+    wait_until(page, lambda: _by_order(page, "sort_order") == ["Deadline", "Hidden", "Alpha", "Bravo"])
     # ↑ on the first sorted task takes it back to Unsorted.
     card(page, "Deadline").click()
     page.keyboard.press("Control+Shift+ArrowUp")
@@ -1589,14 +1583,6 @@ def test_new_task_is_selected_and_scrolled_into_view(page, wiki):
     expect(new).to_have_class(re.compile(r"\btask-selected\b"))
     expect(new).to_be_in_viewport()
     expect(page.locator(".task-item.task-selected")).to_have_count(1)
-
-
-def wait_until(predicate, timeout_s=5):
-    import time
-    end = time.monotonic() + timeout_s
-    while not predicate():
-        assert time.monotonic() < end, "condition not met in time"
-        time.sleep(0.05)
 
 
 def _open_titles(page, zone):
@@ -1661,7 +1647,7 @@ def test_open_drag_between_unsorted_and_sorted(page, wiki):
     assert _open_titles(page, "unsorted") == ["Two", "One"]
     # Onto a sorted task: where the pointer is, here its lower half, so after it.
     _drop(card(page, "One"), card(page, "Alpha"), "after")
-    wait_until(lambda: _open_titles(page, "sorted") == ["Alpha", "One", "Bravo"])
+    wait_until(page, lambda: _open_titles(page, "sorted") == ["Alpha", "One", "Bravo"])
     wait_for_field(page, "One", "sort_order", 1)
     assert task_by_title(page, "Two")["sort_order"] is None
     # Onto the Sorted heading: first in Sorted.
@@ -1690,14 +1676,14 @@ def test_drop_lands_where_the_pointer_is_from_anywhere(page, wiki):
     page.request.post("/api/tasks", data={"title": "New"})
     page.goto("/tasks?view=open")
     _drop(card(page, "New"), card(page, "Bravo"), "before")          # from Unsorted
-    wait_until(lambda: _open_titles(page, "sorted") == ["Alpha", "New", "Bravo", "Charlie"])
+    wait_until(page, lambda: _open_titles(page, "sorted") == ["Alpha", "New", "Bravo", "Charlie"])
     _drop(card(page, "Charlie"), card(page, "Alpha"), "before")      # within Sorted, up
-    wait_until(lambda: _open_titles(page, "sorted") == ["Charlie", "Alpha", "New", "Bravo"])
+    wait_until(page, lambda: _open_titles(page, "sorted") == ["Charlie", "Alpha", "New", "Bravo"])
     _drop(card(page, "Charlie"), card(page, "New"), "after")         # within Sorted, down
-    wait_until(lambda: _open_titles(page, "sorted") == ["Alpha", "New", "Charlie", "Bravo"])
+    wait_until(page, lambda: _open_titles(page, "sorted") == ["Alpha", "New", "Charlie", "Bravo"])
     _drop(card(page, "Bravo"), card(page, "Alpha"), "after")         # within Sorted, up
-    wait_until(lambda: _open_titles(page, "sorted") == ["Alpha", "Bravo", "New", "Charlie"])
-    wait_until(lambda: _by_order(page, "sort_order") == ["Alpha", "Bravo", "New", "Charlie"])
+    wait_until(page, lambda: _open_titles(page, "sorted") == ["Alpha", "Bravo", "New", "Charlie"])
+    wait_until(page, lambda: _by_order(page, "sort_order") == ["Alpha", "Bravo", "New", "Charlie"])
 
 
 def test_open_keyboard_crosses_the_sections(page, wiki):
@@ -1727,9 +1713,9 @@ def test_open_reorder_under_a_filter_keeps_hidden_tasks_in_place(page, wiki):
     page.goto("/tasks?view=open&tag=a")
     assert _open_titles(page, "sorted") == ["A1", "A2"]
     card(page, "A2").drag_to(card(page, "A1"))
-    wait_until(lambda: _open_titles(page, "sorted") == ["A2", "A1"])
+    wait_until(page, lambda: _open_titles(page, "sorted") == ["A2", "A1"])
     # Only the dragged task moves (right before A1); A1 doesn't jump past B1.
-    wait_until(lambda: _by_order(page, "sort_order") == ["A2", "A1", "B1", "B2"])
+    wait_until(page, lambda: _by_order(page, "sort_order") == ["A2", "A1", "B1", "B2"])
 
 
 def test_completed_matches_survive_the_load_race(page, wiki):
@@ -1775,11 +1761,7 @@ def test_ticked_tasks_stay_ticked_when_the_first_one_goes(page, wiki):
     page.clock.run_for(3000)
     expect(card(page, "Beta")).to_have_count(0)
     expect(card(page, "Gamma")).to_be_visible()
-    for _ in range(50):
-        if [t["title"] for t in page.request.get("/api/tasks").json()] == ["Gamma"]:
-            break
-        page.wait_for_timeout(100)
-    assert [t["title"] for t in page.request.get("/api/tasks").json()] == ["Gamma"]
+    wait_until(page, lambda: [t["title"] for t in page.request.get("/api/tasks").json()] == ["Gamma"])
 
 
 def test_copy_link_to_a_task(page, wiki):
@@ -1999,13 +1981,8 @@ def test_checkboxes_in_task_notes(page, wiki):
     expect(card(page, "Bake").locator(".task-desc")).not_to_contain_text("[ ]")
 
     checks.nth(0).check()
-    for _ in range(50):
-        if re.fullmatch(r"Need:\n- \[x\] eggs <!--d:\S+-->\n- \[x\] flour",
-                        task_by_title(page, "Bake")["description"]):
-            break
-        page.wait_for_timeout(100)
-    assert re.fullmatch(r"Need:\n- \[x\] eggs <!--d:\S+-->\n- \[x\] flour",
-                        task_by_title(page, "Bake")["description"])
+    wait_until(page, lambda: re.fullmatch(r"Need:\n- \[x\] eggs <!--d:\S+-->\n- \[x\] flour",
+                                          task_by_title(page, "Bake")["description"]))
     expect(card(page, "Bake").locator(".task-desc .task-date-done")).to_have_text(date.today().isoformat())
     expect(page.locator("#task-edit-modal")).to_be_hidden()
     assert task_by_title(page, "Bake")["completed_at"] is None
@@ -2177,18 +2154,10 @@ def test_page_and_tasks_checkboxes_stay_apart(page, wiki):
     page.goto("/page/trip")
     tasks_box = card(page, "Pack").locator(".task-desc .task-list-item-checkbox")
     tasks_box.check()
-    for _ in range(50):
-        if task_by_title(page, "Pack")["description"].startswith("- [x] tent"):
-            break
-        page.wait_for_timeout(100)
-    assert task_by_title(page, "Pack")["description"].startswith("- [x] tent")
+    wait_until(page, lambda: task_by_title(page, "Pack")["description"].startswith("- [x] tent"))
     assert "- [ ] book train" in wiki.read("trip")
     page.locator("article > ul .task-list-item-checkbox").check()
-    for _ in range(50):
-        if "- [x] book train" in wiki.read("trip"):
-            break
-        page.wait_for_timeout(100)
-    assert "- [x] book train" in wiki.read("trip")
+    wait_until(page, lambda: "- [x] book train" in wiki.read("trip"))
     assert task_by_title(page, "Pack")["description"].startswith("- [x] tent")
 
 
@@ -2241,8 +2210,7 @@ def test_filter_excludes_tags(page, wiki):
 
     page.keyboard.type("#tags")
     page.keyboard.press("Escape")
-    page.wait_for_timeout(400)   # the filter is debounced
-    expect(card(page, "Untagged")).to_have_count(0)
+    expect(card(page, "Untagged")).to_have_count(0)   # once the debounced filter has run
     expect(card(page, "Plan trip")).to_be_visible()
 
 
@@ -3096,7 +3064,7 @@ def test_compact_double_click_below_expanded_opens_that_card(page, wiki):
         # The card closes with a 150ms height animation (finishCollapse): the
         # one below moves up as it runs, not with the class. Read at once,
         # under load, it hadn't moved yet.
-        wait_until(lambda: below.locator(".task-content").bounding_box()["y"] < top)
+        wait_until(page, lambda: below.locator(".task-content").bounding_box()["y"] < top)
         open_details(long_notes)
         page.wait_for_timeout(500)
     # A single click: the card stays put for the double-click window.

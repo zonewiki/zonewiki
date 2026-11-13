@@ -4,7 +4,7 @@ import re
 
 from playwright.sync_api import expect
 
-from conftest import TOUCH_PHONE
+from conftest import TOUCH_PHONE, wait_until
 
 
 def seed(wiki):
@@ -58,11 +58,7 @@ def test_clearing_the_filter_drops_a_pending_content_search(page, wiki):
     page.goto("/page/index")
     page.keyboard.press("Control+p")
     page.locator("#modal-filter").fill("tomatoes")
-    for _ in range(50):
-        if held:
-            break
-        page.wait_for_timeout(50)
-    assert held, "content search never started"
+    wait_until(page, lambda: held)   # the content search has started
     page.locator("#modal-filter").fill("")
     held[0].continue_()
     page.wait_for_load_state("networkidle")

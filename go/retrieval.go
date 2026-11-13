@@ -1399,7 +1399,7 @@ func logQuery(raw, under string, hits []*SearchDoc) {
 // relatedSection: the "Related" section, the pages most similar in
 // meaning (semantic search only). Pages already linked either way are left
 // out; the point is connections you haven't written down.
-func relatedSection(rq *Req, slug, path string, backlinks []PageRef) M {
+func relatedSection(rq *Req, slug, path string, backlinks []PageRef) *linkSection {
 	if semantic == nil {
 		return nil
 	}
@@ -1424,7 +1424,7 @@ func relatedSection(rq *Req, slug, path string, backlinks []PageRef) M {
 	if related == nil {
 		return nil
 	}
-	return M{"id": "related", "heading": "Related", "links": pageLinks(related)}
+	return &linkSection{ID: "related", Heading: "Related", Links: pageLinks(related)}
 }
 
 // bySimilarity: one semantic ranking from several (doc, similarity) lists,

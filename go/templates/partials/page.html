@@ -76,17 +76,17 @@
     task linking to a section names it (§ Section). */}}
 {{define "link_section" -}}
 <section class="backlinks" {{if .copy}}data-id{{else}}id{{end}}="{{.id}}"><h3>{{.heading}}</h3><ul>
-{{- range .links}}<li><a href="{{.href}}">{{.title}}</a>{{if .section}} <a class="task-bl-section" href="#{{.anchor}}">§ {{.section}}</a>{{end}}</li>{{end -}}
+{{- range .links}}<li><a href="{{.Href}}">{{.Title}}</a>{{if .Section}} <a class="task-bl-section" href="#{{.Anchor}}">§ {{.Section}}</a>{{end}}</li>{{end -}}
 </ul></section>
 {{- end}}
 
 {{define "link_sections" -}}
-{{range .sections}}{{template "link_section" (dict "id" .id "heading" .heading "links" .links "copy" $.copy)}}{{end}}
+{{range .sections}}{{template "link_section" (dict "id" .ID "heading" .Heading "links" .Links "copy" $.copy)}}{{end}}
 {{- end}}
 
 {{- /* The breadcrumb's ← N chip: hovering (or tapping) lists the pages. */}}
 {{define "backlinks_chip" -}}
-{{if .}}<a href="#backlinks" class="bl-count">← {{len .}}</a><div class="bl-tooltip">{{range .}}<a href="{{.href}}">{{.title}}</a>{{end}}</div>{{end}}
+{{if .}}<a href="#backlinks" class="bl-count">← {{len .}}</a><div class="bl-tooltip">{{range .}}<a href="{{.Href}}">{{.Title}}</a>{{end}}</div>{{end}}
 {{- end}}
 
 {{- /* The left column on big screens: "On this page" (the page's headings),

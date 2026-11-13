@@ -1,0 +1,1179 @@
+/* The task app's styles: the list and its cards, the Plan board, the tabs
+   and the filter, the edit modal, selection, menus, touch. Loaded after
+   style.css, whose variables (:root) and shared pieces (buttons, dialogs,
+   text inputs) it builds on. */
+
+/* ── Task App ────────────────────────────────────────────────────────────── */
+
+.tasks-app { margin: 1.25rem auto; }
+/* The tasks' own tones: its lines and frames a step darker than the wiki's
+   (cards, section headers, labels, fields: all use --border), cards on a
+   faint tint with a soft resting shadow, and section headers a shade deeper
+   than the cards (--section-bg; unsorted cards are hollow), so a card stands out from the page and from its section.
+   Inside .tasks-app only; a card elsewhere falls back to the page's. */
+.tasks-app {
+  --border: #d6d3ca;
+  --section-bg: #ebeae5;
+  --card-bg: #ffffff;
+  --card-shadow: 0 1px 2px rgba(30, 30, 20, .07);
+  /* Date colours as text, readable on a card (the bright edge colours are
+     only ~2:1 on one): amber for a start today or carried over (the amber
+     of the Focus limit warning, bold), slate blue for a later start (the
+     note callout's: a calm blue in Zone's palette), green for a deadline
+     today. */
+  --amber-text: #d97706;
+  --blue-text: #3d6a8e;
+  --green-text: #2b7a4b;
+}
+@media (prefers-color-scheme: dark) {
+  .tasks-app {
+    --border: #41433c;
+    --section-bg: #22241f;
+    --card-bg: #1a1b18;
+    --card-shadow: 0 1px 2px rgba(0, 0, 0, .4);
+    --amber-text: #d97706;
+    --blue-text: #8fb3d1;
+    --green-text: #56d364;
+  }
+}
+
+/* The task list switcher (tasks_page.html .tasks-places): on /tasks, on the sheet above
+   the heading, a row of pills, one per list (Pinned and the pinned lists
+   first, the others A–Z, All), the current one shaded as in the module switcher;
+   pinned lists with a pin, private ones with a lock. Wraps on a narrow screen. */
+/* Separate white pills in the module switcher's type (.8125rem) and its
+   group's height (the 1.5rem pill, the group's padding and border). */
+.tasks-places { display: flex; flex-wrap: wrap; gap: .35rem; margin: 0 0 1.1rem; }
+.tasks-places .tasks-place {
+  display: inline-flex; align-items: center; gap: .3rem;
+  height: calc(1.5rem + 6px); padding: 0 .75rem; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--surface); color: var(--muted); text-decoration: none; font-size: .8125rem; white-space: nowrap;
+  transition: background .15s, color .15s;
+}
+.tasks-places .tasks-place .tasks-place-label { text-box: trim-both cap alphabetic; }
+.tasks-places .tasks-place:hover { background: var(--btn-bg); color: var(--fg); text-decoration: none; }
+.tasks-places .tasks-place[aria-current] {
+  background: color-mix(in srgb, var(--fg) 8%, var(--btn-bg)); color: var(--fg); font-weight: 600;
+}
+.tasks-place .module-counts { margin-left: 0; }
+.tasks-place-lock, .tasks-place-pin { display: inline-flex; }
+@media (pointer: coarse) { .tasks-places .tasks-place { height: 2.25rem; } }
+
+/* Single compact header band: tabs on the left, filters + sort + New on the
+   right. Wraps to a second line only when the viewport can't fit both. */
+.tasks-header {
+  display: flex; align-items: center; gap: .4rem .6rem;
+  margin-bottom: .6rem; flex-wrap: wrap;
+  border-bottom: 1px solid var(--border); padding-bottom: .35rem;
+}
+.tasks-header .btn { padding: .25rem .7rem; }
+
+/* View selector — a segmented control: every view visible, one click to
+   switch, the current one filled with the primary colour. */
+.view-tabs {
+  display: inline-flex; flex: none;
+  border: 1px solid var(--btn-primary); border-radius: 4px; overflow: hidden;
+}
+.view-tabs button {
+  /* Flex-centre the label in a fixed-height box with line-height 1: the text
+     box is then centred by construction, whatever the font's ascent/descent
+     (a taller line-height put all the spare leading below the text). */
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 1.65rem; padding: 0 .75rem; border: none; margin: 0;
+  background: transparent; color: var(--fg);
+  font: inherit; font-size: .85rem; font-weight: 600; line-height: 1;
+  cursor: pointer; white-space: nowrap;
+}
+.view-tabs button + button { border-left: 1px solid var(--btn-primary); }
+.view-tabs button:hover { background: color-mix(in srgb, var(--btn-primary) 14%, transparent); }
+.view-tabs button.active { background: var(--btn-primary); color: var(--btn-primary-fg); }
+.view-tabs button:focus-visible { outline: 2px solid var(--link); outline-offset: -2px; }
+/* Native option menus ignore the page theme; give them the surface colour
+   instead of the browser default (near-black in dark mode). */
+.tasks-toolbar select option {
+  background: var(--nav-bg); color: var(--fg); font-weight: 400;
+}
+
+/* Filters/sort/New sit inline at the right end of the header band, on the
+   tabs' line. The 20rem basis (not the fields' natural width) is what keeps
+   them there: the band wraps under the tabs only when less than that is left. */
+.tasks-toolbar {
+  display: flex; gap: .4rem; flex: 1 1 20rem; min-width: 0;
+  align-items: center; justify-content: flex-end;
+}
+.tasks-toolbar select, .tasks-toolbar input {
+  padding: .25rem .5rem; border: 1px solid var(--border); border-radius: 4px;
+  background: var(--surface); color: var(--fg); font-size: .8rem;
+}
+.tasks-toolbar select {
+  appearance: none; -webkit-appearance: none;
+  padding-right: 1.8rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236b7280'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right .5rem center;
+}
+/* Search + tag inputs grow equally to fill the space up to the sort dropdown. */
+.tasks-toolbar input { flex: 1 1 0; min-width: 5rem; }
+/* A field with tag chips (chipField in tasks.js): the box looks like the
+   field, the input inside it has no frame of its own. Element-qualified to
+   outrank `.tasks-toolbar input` and `.task-field input`. */
+div.chip-input {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .2rem; min-width: 0;
+  padding: .15rem .3rem; border: 1px solid var(--border); border-radius: 4px;
+  background: var(--surface); cursor: text;
+}
+div.chip-input:focus-within { border-color: var(--link); }
+.tasks-toolbar div.chip-input { flex: 1 1 0; min-width: 5rem; }
+.task-field div.chip-input { padding: .3rem .4rem; min-height: 2.15rem; }   /* as tall as the fields around it */
+div.chip-input > input {
+  flex: 1 1 4rem; min-width: 3rem; border: none; outline: none; background: transparent;
+  padding: .1rem .2rem;
+}
+/* In a dialog the modal's text-field rule would draw a second box. */
+.modal div.chip-input > input[type="text"] { width: auto; padding: .1rem .2rem; border: none; }
+.tag-chip {
+  display: inline-flex; align-items: center; font-size: .75rem; line-height: 1.4;
+  padding: 0 0 0 .4rem; border-radius: 3px; background: var(--code-bg); color: var(--fg);
+  white-space: nowrap;
+}
+.tag-chip-x {
+  border: none; background: none; color: var(--muted); cursor: pointer;
+  font: inherit; font-size: .85rem; line-height: 1; padding: .1rem .3rem;
+}
+.tag-chip-x:hover { color: var(--fg); }
+/* Set by the embed (list= and tag= filter words): no ×. */
+.tag-chip-locked { padding-right: .4rem; }
+/* A separate list's tag (filter, edit modal, cards): first, with a list icon
+   and a tint, so a list never passes for an ordinary tag. */
+.tag-chip-list, .task-tag.task-tag-list {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--link) 7%, var(--code-bg));
+}
+/* The icon is a bulleted list drawn as an SVG mask, so it looks the same in
+   every font. Only the icon is in the accent colour. */
+.tag-chip-list::before, .task-tag.task-tag-list::before {
+  content: ""; display: inline-block; width: .8em; height: .8em;
+  margin-right: .25rem; vertical-align: -.05em; background: var(--link); opacity: .8;
+  -webkit-mask: var(--list-icon) center / contain no-repeat;
+  mask: var(--list-icon) center / contain no-repeat;
+}
+:root {
+  --list-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='2.5' cy='3.5' r='1.5'/%3E%3Ccircle cx='2.5' cy='8' r='1.5'/%3E%3Ccircle cx='2.5' cy='12.5' r='1.5'/%3E%3Crect x='6' y='2.5' width='9' height='2' rx='1'/%3E%3Crect x='6' y='7' width='9' height='2' rx='1'/%3E%3Crect x='6' y='11.5' width='9' height='2' rx='1'/%3E%3C/svg%3E");
+}
+@media (pointer: coarse) { .tag-chip-x { padding: .35rem .45rem; } }
+.tasks-toolbar .btn { flex: none; }
+
+/* Completed is not a tab (it is rarely needed): a quiet link under the list
+   opens it, and turns into "← Back to open tasks" there. */
+.tasks-footer { display: flex; justify-content: flex-end; margin-top: .4rem; }
+.tasks-completed-link {
+  background: none; border: none; padding: .3rem .2rem; margin: 0;
+  font: inherit; font-size: .8rem; color: var(--muted); cursor: pointer;
+}
+.tasks-completed-link:hover { color: var(--link); text-decoration: underline; }
+.tasks-completed-link.has-matches { font-weight: 600; }  /* muted like the plain link, just a touch heavier */
+/* /tasks?list=…: where the list comes from; Pinned: the lists it shows. */
+.tasks-list-home { margin: -.5rem 0 1rem; font-size: .85rem; color: var(--muted); }
+.task-quick-preview { margin-top: .25rem; font-size: .8rem; color: var(--link); }
+.task-quick-preview[hidden] { display: none; }
+/* A new task's list (and Private), under its title. */
+.task-edit-target { margin: .3rem 0 0; font-size: .8rem; color: var(--muted); }
+.task-edit-target[hidden] { display: none; }
+/* Start after Due in the edit modal (syncDateWarning in tasks.js). */
+.task-date-warning {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem;
+  margin: -.25rem 0 .75rem; font-size: .85rem; color: #b45309;
+}
+.task-date-warning[hidden] { display: none; }
+.task-date-warning .btn { padding: .2rem .55rem; font-size: .8rem; }
+/* Batch mode (Make task with several lines): the titles instead of the field. */
+.task-edit-batch-list { margin: .1rem 0 .35rem; padding-left: 1.2rem; max-height: 10rem; overflow-y: auto; }
+.task-edit-batch-list li { margin: .1rem 0; }
+.tasks-completed-link:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; border-radius: 3px; }
+@media (pointer: coarse) { .tasks-completed-link { padding: .6rem .4rem; } }
+
+/* .tasks-app wrapper raises specificity above `.page-content ul` (line ~213),
+   which would otherwise force a 1.5rem left margin and indent the list + its
+   bottom border. */
+.tasks-app .tasks-list {
+  list-style: none; margin: 0; padding: 0 0 .35rem;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Upcoming day board — one section per day; dividers are drag-to-plan targets. */
+.board-day-divider {
+  display: flex; align-items: center; gap: .5rem;
+  list-style: none; margin: 1.6rem 0 0; padding: .475rem .5rem .325rem;
+  /* Line height 1, and .075rem more padding above than below: capitals have
+     no descenders, so they sit above the line's middle (a taller line put
+     even more room below them), and the text looked high. */
+  font-size: .65rem; line-height: 1; font-weight: 700; text-transform: uppercase; letter-spacing: .1em;
+  /* A heading on a line, not a filled bar: lighter, so the cards and their
+     urgency colours stand out. */
+  color: var(--muted); background: none;
+  border: 0; border-bottom: 1px solid var(--border); border-radius: 0;
+}
+.board-day-divider:first-child { margin-top: 0; }
+.board-day-label { flex: 1; }
+/* The label folds its section (Plan): a chevron before it, the count stays. */
+.board-day-fold {
+  font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit;
+  background: none; border: 0; padding: 0; cursor: pointer;
+}
+/* Every label leaves the chevron's room, so labels line up with or without. */
+.board-day-label { position: relative; padding-left: 1.1rem; }
+.board-day-fold::before {
+  content: "▾"; position: absolute; left: 0; top: 50%; width: .9rem; margin-top: -.5em;
+  font-size: 1rem; line-height: 1; text-align: center; transition: transform .15s;
+}
+.board-day--folded .board-day-fold::before { transform: rotate(-90deg); }
+.board-day--foldable { cursor: pointer; user-select: none; }
+.board-day--foldable .board-day-fold::before { color: var(--fg); }
+.board-day--foldable:hover, .board-day-fold:focus-visible { color: var(--fg); }
+@media (prefers-reduced-motion: reduce) { .board-day-fold::before { transition: none; } }
+.board-day-count { font-weight: 700; color: var(--muted); }
+/* "N due": the deadlines on this day, wherever their cards sit (a button
+   listing them). Muted: it informs the plan, it isn't a warning. */
+.board-day-due {
+  font: inherit; letter-spacing: inherit; text-transform: inherit; font-weight: 600;
+  color: var(--muted); background: none; border: 0; padding: 0 .25rem; margin-left: .35rem; cursor: pointer;
+}
+.board-day-due::before { content: "· "; }
+.board-day-due:hover, .board-day-due:focus-visible { color: var(--fg); text-decoration: underline; }
+.board-day-due.board-day-overdue { color: #dc2626; }  /* Unplanned's overdue tasks, red as on the cards */
+@media (pointer: coarse) { .board-day-due { padding: .4rem .5rem; margin: -.4rem 0; } }
+.board-day--over .board-day-count { color: #d97706; }  /* over capacity */
+.board-day-over-icon { color: #d97706; font-size: .8rem; margin-right: .25rem; cursor: default; }
+/* Highlight the whole section while dragging a card over it. */
+.board-day-divider.board-drop-over {
+  border-color: var(--btn-primary);
+  color: var(--btn-primary); background: color-mix(in srgb, var(--btn-primary) 8%, transparent);
+}
+.board-item[data-drag] { cursor: grab; }
+/* An empty section is only its header row (no body), so a quiet week doesn't
+   push the tasks off screen. The row is the drop target, so it is tall
+   enough to hit; consecutive empty days stack tightly. */
+.board-day-divider.board-day--empty {
+  margin-top: .35rem; border-radius: 4px; min-height: 1.9rem; padding-block: .15rem 0;
+  border: 1px dashed var(--border);
+}
+.task-item + .board-day-divider.board-day--empty { margin-top: 1rem; }
+.board-day--empty .board-day-count { opacity: .5; }
+.board-day-divider.board-day--folded { border-radius: 4px; }
+@media (pointer: coarse) {
+  .board-day-divider.board-day--empty { min-height: 2.5rem; }
+  .board-day-fold { padding-block: .5rem; margin-block: -.5rem; }
+}
+
+.task-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas: "check title actions" ". meta meta" ". desc desc";
+  column-gap: .5rem;
+  padding: .4rem .65rem; border: 1px solid var(--border); border-radius: 6px;
+  margin-bottom: .3rem; background: var(--card-bg, var(--bg)); box-shadow: var(--card-shadow, none);
+  transition: box-shadow .15s, opacity .15s;
+}
+.task-item:hover { box-shadow: var(--shadow); }
+.task-item.task-completed { opacity: .6; }
+.task-item.task-completed .task-title { text-decoration: line-through; color: var(--muted); }
+.task-item.task-dragging { opacity: .4; }
+/* The task a ?task=<id> link points at, briefly. */
+.task-item.task-flash { animation: task-flash 2s ease-out; }
+@keyframes task-flash {
+  0%, 40% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--link) 55%, transparent); }
+  100% { box-shadow: 0 0 0 3px transparent; }
+}
+/* Touch swipe (tasks.js): the card follows the finger; the uncovered space
+   beside it says what releasing does, and the card takes that colour once
+   the swipe is far enough to count (.task-swipe-armed). */
+/* Clip, not hidden: no scroll container, so the page never scrolls sideways
+   while a card is pushed out, and position: sticky inside keeps working. */
+.tasks-list { overflow-x: clip; overflow-clip-margin: 6px; }
+.task-item[data-swipe] { position: relative; }
+.task-item[data-swipe]::after {
+  content: attr(data-swipe-label);
+  position: absolute; top: 50%; transform: translateY(-50%);
+  font-size: .8rem; font-weight: 600; color: var(--muted); white-space: nowrap;
+}
+/* The label sits in the space the card uncovers: left of it on a right swipe. */
+.task-item[data-swipe-side="right"]::after { right: calc(100% + .75rem); }
+.task-item[data-swipe-side="left"]::after { left: calc(100% + .75rem); }
+.task-item.task-swipe-armed[data-swipe="start"] {
+  border-color: var(--link); background: color-mix(in srgb, var(--link) 10%, var(--bg));
+}
+.task-item.task-swipe-armed[data-swipe="unplan"] {
+  border-color: #d97706; background: color-mix(in srgb, #d97706 10%, var(--bg));
+}
+.task-item.task-swipe-armed[data-swipe="start"]::after { color: var(--link); }
+.task-item.task-swipe-armed[data-swipe="unplan"]::after { color: #d97706; }
+/* Touch drag: the card the finger carries (a clone of the picked-up card). */
+.task-touch-ghost {
+  position: fixed; z-index: 1000; margin: 0; pointer-events: none; list-style: none;
+  background: var(--surface); box-shadow: 0 6px 20px rgba(0,0,0,.25); opacity: .95;
+  transform: scale(1.03);  /* lifted off the list */
+}
+/* It carries the selection ring (picking a card up selects it) plus the lift shadow. */
+.task-item.task-selected.task-touch-ghost {
+  box-shadow:
+    inset 0 0 0 999px color-mix(in srgb, var(--fg) 8%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--btn-primary) 25%, transparent),
+    0 6px 20px rgba(0,0,0,.25);
+}
+.task-item.task-drag-over { border-color: var(--btn-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--btn-primary) 25%, transparent); }
+/* In a sorted list (Open, Focus) the drop lands above or below the card,
+   by the pointer: a line on that edge shows where. */
+.task-item.task-drop-before { box-shadow: 0 -3px 0 0 var(--btn-primary); }
+.task-item.task-drop-after { box-shadow: 0 3px 0 0 var(--btn-primary); }
+.task-item.task-urg-overdue  { background: color-mix(in srgb, #dc2626 8%, var(--card-bg, var(--bg))); border-color: color-mix(in srgb, #dc2626 40%, var(--border)); }
+.task-item.task-urg-today    { background: color-mix(in srgb, #f97316 7%, var(--card-bg, var(--bg))); border-color: color-mix(in srgb, #f97316 35%, var(--border)); }
+.task-item.task-urg-soon     { background: color-mix(in srgb, #eab308 5%, var(--card-bg, var(--bg))); border-color: color-mix(in srgb, #eab308 28%, var(--border)); }
+.task-item.task-urg-upcoming { background: color-mix(in srgb, #22c55e 4%, var(--card-bg, var(--bg))); border-color: color-mix(in srgb, #22c55e 22%, var(--border)); }
+/* Selection = accent ring + halo + a hue-neutral background shift. The shift
+   is an inset fg-tinted overlay, so every card visibly changes color when
+   selected while keeping its own hue: overdue stays red (just deeper), plain
+   cards darken (lighten in dark mode) instead of turning green — green would
+   read as the "due this week" urgency tint. */
+.task-item.task-selected {
+  outline: 2px solid var(--btn-primary);
+  outline-offset: 1px;
+  box-shadow:
+    inset 0 0 0 999px color-mix(in srgb, var(--fg) 8%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--btn-primary) 25%, transparent);
+}
+/* The darker selected background washes out the light separator lines inside
+   the card — strengthen them by the same amount. The collapsed hover-only
+   meta keeps its transparent border; it only darkens while revealed. */
+.task-item.task-selected .task-meta:not(.task-meta--hover-only),
+.task-item.task-selected .task-desc,
+.task-item.task-selected:hover .task-meta--hover-only {
+  border-top-color: color-mix(in srgb, var(--fg) 16%, var(--border));
+}
+.task-item[data-drag] { cursor: grab; user-select: none; -webkit-user-select: none; }
+.task-item[data-drag]:active { cursor: grabbing; }
+.task-item[data-drag] .task-title,
+.task-item[data-drag] .task-content { cursor: grab; }
+
+.task-checkbox { grid-area: check; align-self: center; flex-shrink: 0; }
+.task-checkbox input { width: 1rem; height: 1rem; cursor: pointer; accent-color: var(--btn-primary); }
+
+.task-content { grid-area: title; min-width: 0; cursor: default; align-self: center; }
+.task-title { font-weight: 600; word-break: break-word; cursor: text; font-size: .9rem; line-height: 1.3; }
+.task-meta {
+  grid-area: meta;
+  display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .2rem; align-items: center;
+  padding-top: .2rem; opacity: .85;
+  /* Slightly stronger than --border: these lines divide areas inside a card,
+     not cards from each other, so they need to hold up against the card fill. */
+  border-top: 1px solid color-mix(in srgb, var(--fg) 10%, var(--border));
+}
+.task-meta--hover-only {
+  overflow: hidden; max-height: 0; margin-top: 0; padding-top: 0;
+  border-top-color: transparent; opacity: 0; pointer-events: none;
+  transition: max-height .15s, opacity .15s, margin-top .15s, padding-top .15s;
+}
+.task-item:hover .task-meta--hover-only {
+  max-height: 2rem; margin-top: .2rem; padding-top: .2rem;
+  border-top-color: color-mix(in srgb, var(--fg) 10%, var(--border));
+  opacity: .85; pointer-events: auto;
+}
+.task-desc {
+  grid-area: desc;
+  margin: .25rem 0 0; font-size: .85rem; color: var(--fg);
+  padding-top: .2rem; min-width: 0;
+  border-top: 1px dashed color-mix(in srgb, var(--fg) 10%, var(--border));
+}
+/* Notes render as a page's text (.page-content, render.render_notes), at
+   card scale: headings the size of the text, tighter spacing, wide tables
+   and code scroll. The modal's preview shows them the same. */
+:is(.task-desc, .task-notes-preview).page-content > :first-child { margin-top: 0; }
+:is(.task-desc, .task-notes-preview).page-content > :last-child { margin-bottom: 0; }
+:is(.task-desc, .task-notes-preview).page-content :is(p, pre, blockquote, dl) { margin: .25rem 0; }
+:is(.task-desc, .task-notes-preview).page-content .markdown-alert { margin: .25rem 0; }
+:is(.task-desc, .task-notes-preview).page-content :is(ul, ol) { margin: .25rem 0 .25rem 1.25rem; }
+/* A card is a list item itself: its notes' lists would get a nested list's ◦. */
+:is(.task-desc, .task-notes-preview).page-content li { margin-bottom: 0; }
+/* Bullets and checkboxes share one column, a box's width (--mark) left of
+   the text, both centred in it and on the first line: the bullets are drawn
+   here, since a list marker's place depends on the font. */
+:is(.task-desc, .task-notes-preview).page-content { --mark: 13px; }
+:is(.task-desc, .task-notes-preview).page-content ul > li { list-style: none; position: relative; }
+:is(.task-desc, .task-notes-preview).page-content ul > li:not(.task-list-item)::before {
+  content: "•"; position: absolute; left: -1.25rem; width: var(--mark); text-align: center;
+}
+:is(.task-desc, .task-notes-preview).page-content ul ul > li:not(.task-list-item)::before { content: "◦"; }
+:is(.task-desc, .task-notes-preview).page-content .task-list-item { margin-left: 0; position: relative; }
+:is(.task-desc, .task-notes-preview).page-content .task-list-item-checkbox {
+  position: absolute; left: -1.25rem; top: calc((1lh - var(--mark)) / 2 + .2em);   /* on the lowercase letters, as the bullet */
+  width: var(--mark); height: var(--mark); margin: 0;
+}
+:is(.task-desc, .task-notes-preview).page-content :is(h1, h2, h3, h4, h5, h6) {
+  font-size: 1em; font-weight: 600; margin: .4rem 0 .1rem; padding: 0; border: none; width: auto;
+}
+:is(.task-desc, .task-notes-preview).page-content table { display: block; overflow-x: auto; width: auto; margin: .3rem 0; font-size: inherit; }
+:is(.task-desc, .task-notes-preview).page-content :is(th, td) { padding: .2rem .5rem; }
+:is(.task-desc, .task-notes-preview).page-content pre { font-size: .8rem; padding: .4rem .6rem; }
+:is(.task-desc, .task-notes-preview).page-content hr { margin: .5rem 0; }
+:is(.task-desc, .task-notes-preview).page-content img { max-height: 16rem; width: auto; }
+
+.task-due { font-size: .75rem; color: var(--muted); }
+.task-date-info { font-size: .75rem; color: var(--muted); }
+.task-last-done { font-size: .75rem; color: var(--muted); }  /* keep task: "✓ Sep 21" */
+.task-comments-btn {   /* "💬 2": the task's comments, hover shows the latest */
+  border: none; background: none; padding: 0; cursor: pointer;
+  font: inherit; font-size: .75rem; color: var(--muted);
+}
+.task-comments-btn:hover { color: var(--fg); }
+.task-due.task-overdue { color: #dc2626; font-weight: 600; }
+.task-due.task-due-today { color: var(--green-text, var(--btn-primary)); font-weight: 600; }
+
+.task-recurring { font-size: .85rem; color: var(--muted); }
+.task-private { font-size: .75rem; opacity: .75; }
+
+.task-tag {
+  /* Plain muted words: a box per tag made every card busy. A list's tag
+     keeps its tint and icon (below). */
+  font-size: .75rem; padding: .1rem .2rem;
+  border-radius: 3px; color: var(--muted);
+}
+
+.task-tags-right { display: flex; flex-wrap: wrap; gap: .2rem; align-items: center; }
+
+/* Cards (tasks.js taskHTML): one layout for every card. The first line:
+   checkbox, title, the tags right after it, markers and dates at the right
+   end, the actions. Under it the notes, then the latest comments. Full
+   cards show all of it. Compact view (.tasks-compact, applyCompact)
+   collapses each card to its line (title cut off with …, notes and
+   comments hidden), except the expanded one (Enter, a tap), which looks
+   exactly like a full card; so does a card in full view.
+   Every tag always shows. The title and the tags share the line: each as
+   wide as it needs when both fit; short of room, both grow from their
+   minimum (6rem for the title, the widest tag for the tags) by the same
+   amount (the grid's "maximize tracks" step), so a long title can't push
+   the tags out and many tags can't squeeze the title away. The tags then
+   wrap onto more lines (the card gets taller), the title wraps (or, in a
+   compact line, is cut off with …); dates and markers are never cut. */
+.tasks-app .task-item {
+  grid-template-columns: auto minmax(6rem, max-content) minmax(min-content, max-content) minmax(0, 1fr) max-content auto;
+  grid-template-areas: "check title tags . dates actions" ". desc desc desc desc desc" ". comments comments comments comments comments";
+  /* The first line sits where a compact line has it (a 2.1rem row), so
+     expanding one moves nothing; one line's height for every item in it. */
+  align-items: start; padding-block: .15rem .4rem;
+  --line: calc(2.1rem - .3rem - 2px);
+}
+.tasks-app .task-item :is(.task-checkbox, .task-content, .task-meta, .task-actions) {
+  align-self: start; min-height: var(--line); display: flex; align-items: center;
+}
+.tasks-app .task-content { white-space: normal; overflow-wrap: anywhere; }
+.tasks-app .task-item .task-meta,
+.tasks-app .task-item .task-meta--hover-only,
+.tasks-app .task-item:hover .task-meta--hover-only {
+  margin: 0 0 0 .5rem; padding: 0; border: none; max-height: none; opacity: .85; pointer-events: auto;
+  flex-wrap: nowrap; min-width: 0; overflow: hidden;
+  /* No wrap inside "📅 Tomorrow": its column's minimum is the whole line. */
+  white-space: nowrap;
+}
+.tasks-app .task-meta-right { flex-wrap: nowrap; flex-shrink: 0; margin-left: auto; padding-left: .35rem; }
+/* Beside the title (phones put them on a line of their own, below): the
+   meta's two parts are the grid's, the tags in their column, wrapping
+   onto more lines under the first, the dates at the line's right end. */
+@media (min-width: 641px) {
+  .tasks-app .task-item .task-meta { display: contents; }
+  .tasks-app .task-meta > * { opacity: .85; align-self: start; }
+  .tasks-app .task-tags-right {
+    grid-area: tags; margin-left: .5rem; row-gap: .2rem; align-content: flex-start;
+    padding-block: calc((var(--line) - 1.5em) / 2);
+  }
+  .tasks-app .task-meta-right { grid-area: dates; min-height: var(--line); }
+}
+/* Empty date placeholders (⏰ 📅 to set one): on hover, full cards and
+   compact lines alike. */
+.tasks-app .task-date-empty { display: none; }
+.tasks-app .task-item:hover .task-date-empty { display: inline; }
+/* With a mouse their room is kept (invisible) while they're hidden, so
+   hovering a card that is short of room doesn't rewrap its tags. */
+@media (min-width: 641px) and (hover: hover) {
+  .tasks-app .task-date-empty { display: inline; visibility: hidden; }
+  .tasks-app .task-item:hover .task-date-empty { visibility: visible; }
+}
+/* Touch has no hover: there full cards always offer them. */
+@media (hover: none) { .tasks-app:not(.tasks-compact) .task-date-empty { display: inline; } }
+/* The latest comments, under the notes. */
+.task-card-comments {
+  grid-area: comments; margin-top: .3rem; padding-top: .25rem; font-size: .85rem;
+  border-top: 1px dashed color-mix(in srgb, var(--fg) 10%, var(--border));
+}
+.tasks-app .task-card-comments p { margin: .1rem 0; line-height: 1.45; overflow-wrap: anywhere; }
+.task-comment-when { color: var(--muted); font-size: .75rem; margin-right: .25rem; }
+.task-comments-more {
+  background: none; border: none; padding: 0; font: inherit; font-size: .75rem;
+  color: var(--link); cursor: pointer;
+}
+
+/* Compact: every card is its line. The expanded one (selected) shows its
+   whole title, wrapped; only one with its details open (.task-details: 📝,
+   💬 or →) shows notes and comments, as a full card. */
+.tasks-app.tasks-compact .task-item:not(.task-details) {
+  grid-template-areas: "check title tags . dates actions";
+  padding-block: .15rem; margin-bottom: .2rem;
+}
+.tasks-compact .task-item:not(.task-expanded) .task-content { display: block; line-height: var(--line); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tasks-compact .task-item:not(.task-details) :is(.task-desc, .task-card-comments) { display: none; }
+/* 📝: a task has notes (a compact line hides them; a click on it shows
+   them). Shown on every card, so opening a line changes nothing on it. */
+.task-has-notes {
+  font: inherit; font-size: .8rem; padding: 0; border: none; background: none;
+  border-radius: 3px; cursor: pointer;
+}
+.task-has-notes:hover { background: var(--code-bg); }
+/* A finger-sized target without a taller line. */
+@media (pointer: coarse) { .tasks-app .task-has-notes { padding: .4rem .3rem; margin: -.4rem -.3rem; } }
+@media (pointer: coarse) { .tasks-app .task-item { --line: calc(2.75rem - .3rem - 2px); } }
+/* A phone's line is too short for title and dates: the title gets the
+   first line to itself (beside the checkbox and ⋯), tags, markers and dates
+   go to a second line, which has the card's whole width; a card with none
+   of them stays one line. The same in compact view, so an expanded task
+   still looks like a full card. */
+@media (max-width: 640px) {
+  .tasks-app .task-item {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "check title actions" ". meta meta" ". desc desc" ". comments comments";
+  }
+  /* ⋯ stays finger-sized but takes only the title line's height: its
+     target reaches into the card's padding instead of making the line tall. */
+  .tasks-app .task-item :is(.task-menu-btn, .task-expand-btn) { margin-block: calc((var(--line) - 2.5rem) / 2); }
+  .tasks-app .task-item .task-meta,
+  .tasks-app .task-item .task-meta--hover-only,
+  .tasks-app .task-item:hover .task-meta--hover-only { margin: 0; min-height: 0; }
+  .tasks-app.tasks-compact .task-item:not(.task-details) {
+    grid-template-areas: "check title actions" ". meta meta";
+  }
+  /* Every tag shows: they wrap onto more lines rather than drop out; the
+     dates follow the last tag, at the right end, or take the next line. */
+  .tasks-app .task-item .task-meta { flex-wrap: wrap; gap: .2rem; }
+  /* The tags flow in the line itself, so the dates fit in after the last
+     one when there is room. */
+  .tasks-app .task-tags-right { display: contents; }
+  .tasks-app .task-tag { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  /* Two short lines instead of one tall one: the finger-sized minimum is
+     the row's, not each line's. */
+  .tasks-app .task-item { --line: 1.75rem; min-height: 2.75rem; padding-block: .3rem; }
+  .tasks-app .task-item .task-meta { line-height: 1.3; }
+  /* A line with nothing on it takes no room. */
+  .tasks-app .task-meta:not(:has(.task-tag, .task-recurring, .task-last-done, .task-comments-btn, .task-has-notes, .task-date-info:not(.task-date-empty), .task-due:not(.task-date-empty))) {
+    display: none;
+  }
+  .tasks-app:not(.tasks-compact) .task-meta:has(.task-date-empty) { display: flex; }
+}
+
+.tasks-density-btn, .tasks-settings-btn, .tasks-more-btn { display: inline-flex; align-items: center; justify-content: center; padding-inline: .45rem; color: var(--muted); }
+.tasks-density-btn[aria-pressed="true"] { color: var(--btn-primary); border-color: var(--btn-primary); }
+.tasks-toolbar select.tasks-sort { flex: none; }
+.tasks-sort[hidden] { display: none; }
+/* The Open tab's Plan switch: on, the board by start date; off, one list */
+.tasks-plan-switch {
+  flex: none; display: inline-flex; align-items: center; gap: .4rem;
+  padding: .2rem .35rem; border: none; background: none; cursor: pointer;
+  font: inherit; font-size: .8rem; color: var(--muted);
+}
+.tasks-plan-switch[hidden] { display: none; }
+.tasks-plan-track {
+  position: relative; width: 1.9rem; height: 1.05rem; border-radius: 999px;
+  background: var(--border); transition: background .15s;
+}
+.tasks-plan-track::after {
+  content: ''; position: absolute; top: .15rem; left: .15rem;
+  width: .75rem; height: .75rem; border-radius: 50%; background: var(--bg);
+  transition: transform .15s;
+}
+.tasks-plan-switch[aria-checked="true"] { color: var(--fg); }
+.tasks-plan-switch[aria-checked="true"] .tasks-plan-track { background: var(--btn-primary); }
+.tasks-plan-switch[aria-checked="true"] .tasks-plan-track::after { transform: translateX(.85rem); }
+.tasks-plan-switch:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; border-radius: 4px; }
+@media (pointer: coarse) { .tasks-plan-switch { min-height: 2.25rem; } }
+.task-meta-right { margin-left: auto; display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+
+.task-skip-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.6rem; height: 1.6rem; padding: 0;
+  background: none; border: none;
+  color: var(--muted); cursor: pointer; font-size: .8rem; line-height: 1;
+  border-radius: 3px; transition: color .15s, background .15s;
+}
+.task-skip-btn:hover { background: var(--code-bg); color: var(--fg); }
+
+.task-wontdo-badge { color: #dc2626 !important; }
+
+.task-actions {
+  grid-area: actions; align-self: center;
+  flex-shrink: 0; display: flex; align-items: center; gap: 0;
+}
+.task-clickable-date {
+  cursor: pointer; border-radius: 3px; transition: background .1s, color .1s;
+}
+.task-clickable-date:hover { background: var(--code-bg); color: var(--fg); }
+/* An unset date's button (shown on hover): faded, but clearly there; full on its own hover */
+.task-date-empty { opacity: .6; }
+.task-date-empty:hover { opacity: 1; }
+
+/* Custom calendar popup (tasks plan/due date picker) */
+.tasks-datepicker {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.18);
+  padding: .5rem;
+  width: 15rem;
+  font-size: .8rem;
+  color: var(--fg);
+  user-select: none;
+}
+.tasks-datepicker .dp-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: .4rem;
+}
+.tasks-datepicker .dp-title { font-weight: 600; }
+.tasks-datepicker .dp-nav {
+  background: var(--btn-bg); color: var(--btn-fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  width: 1.6rem; height: 1.6rem; line-height: 1; cursor: pointer;
+  font-size: 1rem; padding: 0;
+}
+.tasks-datepicker .dp-nav:hover { background: var(--code-bg); }
+.tasks-datepicker .dp-weekdays,
+.tasks-datepicker .dp-grid {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
+}
+.tasks-datepicker .dp-weekdays span {
+  text-align: center; color: var(--muted); font-size: .7rem; padding: .15rem 0;
+}
+.tasks-datepicker .dp-day {
+  aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+  border: none; background: none; color: var(--fg);
+  border-radius: 4px; cursor: pointer; font-size: .8rem; padding: 0;
+}
+.tasks-datepicker button.dp-day:hover { background: var(--code-bg); }
+.tasks-datepicker .dp-blank { visibility: hidden; }
+.tasks-datepicker .dp-today { outline: 1px solid var(--border); }
+.tasks-datepicker .dp-selected {
+  background: var(--btn-primary); color: var(--btn-primary-fg);
+}
+.tasks-datepicker .dp-selected:hover { background: var(--btn-primary); }
+.tasks-datepicker .dp-disabled { opacity: .3; cursor: default; }
+.tasks-datepicker .dp-foot {
+  display: flex; justify-content: flex-end; margin-top: .4rem;
+}
+.tasks-datepicker .dp-foot button {
+  background: var(--btn-bg); color: var(--btn-fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: .2rem .5rem; cursor: pointer; font-size: .75rem;
+}
+.tasks-datepicker .dp-foot button:hover { background: var(--code-bg); }
+/* Shortcuts above the month: Today, Tmrw, +2d, Mon, +1w. */
+.tasks-datepicker .dp-quick {
+  display: flex; gap: .25rem;
+  margin-bottom: .5rem; padding-bottom: .5rem; border-bottom: 1px solid var(--border);
+}
+.tasks-datepicker .dp-quick-btn {
+  background: var(--btn-bg); color: var(--btn-fg);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: .25rem .2rem; cursor: pointer; font-size: .75rem; white-space: nowrap;
+  flex: 1 1 auto; min-width: 0;
+}
+.tasks-datepicker .dp-quick-btn:hover { background: var(--code-bg); }
+.tasks-datepicker .dp-quick-btn.dp-selected { border-color: var(--btn-primary); }
+.tasks-datepicker .dp-quick-btn:disabled { opacity: .3; cursor: default; }
+@media (pointer: coarse) { .tasks-datepicker .dp-quick-btn { padding: .55rem .1rem; font-size: .85rem; } }
+/* Planned tasks (tasks.js taskHTML): in Focus already (start today or
+   earlier) amber, planned later slate blue, the same on every tab. A due/overdue
+   urgency colour wins. */
+.task-item.task-planned-now:not(.task-urg-overdue):not(.task-urg-today)   { border-left: 3px solid #f59e0b; }
+.task-item.task-planned-later:not(.task-urg-overdue):not(.task-urg-today) { border-left: 3px solid #7d9fbd; }
+/* A card without the coloured edge (unplanned, or due/overdue) makes up its
+   2px in padding, so checkbox and title line up on every card, every tab. */
+.task-item:not(.task-planned-now, .task-planned-later),
+.task-item:is(.task-urg-overdue, .task-urg-today) { padding-left: calc(.65rem + 2px); }
+.task-focus-info.focus-now   { color: var(--amber-text, #d97706) !important; font-weight: 600; }
+.task-focus-info.focus-later { color: var(--blue-text, #3d6a8e) !important; }
+
+
+.focus-stale-bar {
+  list-style: none;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: .5rem; margin: 0 0 .4rem; padding: .25rem .5rem;
+  font-size: .75rem; color: var(--muted);
+  background: var(--code-bg); border: 1px solid var(--border); border-radius: 4px;
+}
+.focus-over-limit { color: #d97706; }
+
+.tasks-empty .btn { margin-left: .5rem; }
+
+/* Selection bar (tasks.js syncSelBar): while several tasks are selected, at
+   the bottom of the window; toasts move up above it. */
+.tasks-selbar {
+  position: fixed; z-index: 900; left: 50%; bottom: 1.5rem; transform: translateX(-50%);
+  display: flex; align-items: center; gap: .4rem; max-width: calc(100vw - 2rem);
+  padding: .4rem .45rem .4rem .9rem;
+  background: var(--nav-bg); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .18); font-size: .9rem;
+}
+.tasks-selbar[hidden] { display: none; }
+.tasks-selbar-count { font-weight: 600; white-space: nowrap; margin-right: .2rem; }
+.tasks-selbar-actions { display: flex; gap: .4rem; }
+.tasks-selbar .btn { white-space: nowrap; }
+.tasks-selbar .btn[hidden] { display: none; }
+.tasks-selbar .btn:disabled { opacity: .45; cursor: default; }
+.tasks-selbar .btn.danger { color: var(--link-missing); }
+.tasks-selbar-close { padding-inline: .6rem; }
+body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
+/* Selection mode (.tasks-selecting): each card's checkbox becomes a round
+   mark, filled on the selected cards; a tap anywhere on a card toggles it. */
+.tasks-selecting .task-item { cursor: pointer; }
+.tasks-selecting :is(.task-menu-btn, .task-expand-btn) { visibility: hidden; }   /* a tap there would only toggle the card */
+.tasks-selecting .task-checkbox { position: relative; }
+.tasks-selecting .task-checkbox input { visibility: hidden; }
+.tasks-selecting .task-checkbox::before {
+  content: ""; position: absolute; inset: 0; margin: auto;
+  width: 1.15rem; height: 1.15rem; box-sizing: border-box;
+  border: 2px solid var(--muted); border-radius: 50%;
+}
+.tasks-selecting .task-item.task-selected .task-checkbox::before {
+  border-color: var(--btn-primary);
+  background: var(--btn-primary) no-repeat center / 70%
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2l2.3 2.3 4.7-5' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+@media (pointer: coarse) { .tasks-selecting .task-checkbox::before { width: 1.4rem; height: 1.4rem; } }
+/* Phones: the bar takes the bottom edge in place of the tab bar, the count,
+   All and ✕ on top, the actions in a row of equal buttons under them. */
+@media (max-width: 640px) {
+  .tasks-selbar {
+    left: 0; right: 0; bottom: 0; transform: none; max-width: none;
+    flex-wrap: wrap; gap: .4rem; border-radius: 12px 12px 0 0; border-bottom: none;
+    padding: .5rem .75rem calc(.6rem + env(safe-area-inset-bottom));
+  }
+  .tasks-selbar-count { flex: 1; }
+  .tasks-selbar-actions { order: 1; flex-basis: 100%; }
+  .tasks-selbar-actions .btn { flex: 1 1 0; }
+  .tasks-selbar .btn { min-height: 2.75rem; font-size: .9rem; }
+  body:has(.tasks-selbar:not([hidden])) .action-buttons { display: none; }
+  body:has(.tasks-selbar:not([hidden])) main { padding-bottom: calc(8.5rem + env(safe-area-inset-bottom)); }
+  body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: calc(8rem + env(safe-area-inset-bottom)); }
+}
+
+/* Bulk tag dialog (tasks.js openBulkTagModal): the selection's tags, each a
+   three-state box: on every task ✓, on some –, on none empty. */
+.bulk-tag-list {
+  list-style: none; margin: 0; padding: 0; max-height: 40vh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: .1rem;
+}
+.bulk-tag-row {
+  display: flex; align-items: center; gap: .6rem; width: 100%;
+  padding: .35rem .4rem; border: none; border-radius: 4px; margin: 0;
+  background: none; color: var(--fg); font: inherit; text-align: left; cursor: pointer;
+}
+.bulk-tag-row:hover, .bulk-tag-row:focus-visible { background: var(--code-bg); outline: none; }
+.bulk-tag-row .task-tag { font-size: .85rem; }
+.bulk-tag-box {
+  flex: none; width: 1rem; height: 1rem; border: 1.5px solid var(--muted); border-radius: 3px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: .75rem; font-weight: 700; line-height: 1; color: var(--bg);
+}
+.bulk-tag-row[aria-checked="true"] .bulk-tag-box { background: var(--btn-primary); border-color: var(--btn-primary); }
+.bulk-tag-row[aria-checked="true"] .bulk-tag-box::after { content: "✓"; }
+.bulk-tag-row[aria-checked="mixed"] .bulk-tag-box { border-color: var(--btn-primary); color: var(--btn-primary); }
+.bulk-tag-row[aria-checked="mixed"] .bulk-tag-box::after { content: "–"; }
+.bulk-tag-row[aria-checked="false"] .task-tag { text-decoration: line-through; opacity: .6; }
+.bulk-tag-count { margin-left: auto; font-size: .75rem; color: var(--muted); }
+@media (hover: none) { .bulk-tag-row { min-height: 44px; } }
+
+/* ⋯ per-card menu button + the menu itself. The expand button (a chevron)
+   left of ⋯ on a compact line with notes or comments opens and closes them,
+   turned up while open; full cards show them, so have none. Every compact
+   line keeps its room, so the dates end at the same place on lines with
+   and without one. */
+.task-menu-btn, .task-expand-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.6rem; height: 1.6rem; padding: 0; margin: 0;
+  background: none; border: none; border-radius: 3px;
+  color: var(--muted); cursor: pointer; font-size: 1rem; line-height: 1;
+}
+.task-menu-btn:hover, .task-expand-btn:hover { background: var(--code-bg); color: var(--fg); }
+.task-expand-btn svg { transition: transform .15s; }
+.task-expand-btn[aria-expanded="true"] svg { transform: rotate(180deg); }
+.tasks-app:not(.tasks-compact) .task-expand-btn { display: none; }
+.tasks-app.tasks-compact .task-actions { min-width: 3.2rem; justify-content: flex-end; }
+@media (prefers-reduced-motion: reduce) { .task-expand-btn svg { transition: none; } }
+.task-menu-backdrop, .page-menu-backdrop { position: fixed; inset: 0; z-index: 999; }
+.task-menu, .page-menu {
+  position: fixed; z-index: 1000; min-width: 12rem; max-width: 18rem;
+  display: flex; flex-direction: column; padding: .3rem;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
+}
+.task-menu-title {
+  padding: .3rem .6rem .4rem; font-size: .75rem; font-weight: 600; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  border-bottom: 1px solid var(--border); margin-bottom: .2rem;
+}
+.task-menu button, .page-menu button {
+  display: block; width: 100%; text-align: left;
+  padding: .4rem .6rem; border: none; border-radius: 4px; margin: 0;
+  background: none; color: var(--fg); font: inherit; font-size: .85rem; cursor: pointer;
+}
+.task-menu button:hover, .task-menu button:focus-visible,
+.page-menu button:hover, .page-menu button:focus-visible { background: var(--code-bg); outline: none; }
+.task-menu button.danger, .page-menu button.danger { color: var(--link-missing); }
+
+/* Touch devices: no hover, fat fingers. The ⋯ menu carries won't-do/skip, so
+   the small hover-era icons go; everything tappable gets a real target. */
+@media (hover: none) {
+  .task-skip-btn { display: none; }
+}
+/* ⋯ is always shown, at the card's right end; everything else that is
+   always shown ends left of it and stays put. What only a mouse's hover (or
+   the selected card, or focus inside) adds, ⏭ and the empty ⏰ 📅, appears
+   left of that, first in .task-meta-right, so nothing jumps. Touch has ⏭
+   in the ⋯ menu only. Right-click and the menu key open the menu too. */
+.tasks-app .task-meta-right .task-skip-btn { order: -2; }
+.tasks-app .task-meta-right .task-date-empty { order: -1; }
+@media (hover: hover) {
+  .tasks-app .task-item .task-skip-btn { display: none; }
+  .tasks-app .task-item:is(:hover, .task-selected, :focus-within) .task-skip-btn { display: inline-flex; }
+}
+/* Beside the title its room is kept, as the empty dates' is. */
+@media (hover: hover) and (min-width: 641px) {
+  .tasks-app .task-item .task-skip-btn { display: inline-flex; visibility: hidden; }
+  .tasks-app .task-item:is(:hover, .task-selected, :focus-within) .task-skip-btn { visibility: visible; }
+}
+@media (pointer: coarse) {
+  /* A long press picks a card up (touch drag), so it must not select text
+     or open the iOS callout instead. */
+  .task-item[data-drag] { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  /* Sideways moves on a card are swipes (tasks.js), not the browser's pan. */
+  .task-item { touch-action: pan-y; }
+  .task-menu-btn, .task-expand-btn { width: 2.5rem; height: 2.5rem; font-size: 1.25rem; }
+  .tasks-app.tasks-compact .task-actions { min-width: 5rem; }
+  .task-checkbox input { width: 1.35rem; height: 1.35rem; }
+  /* A finger-sized target: the label reaches into the card's padding and
+     the gap before the title, so a tap just beside the box ticks it rather
+     than selecting (and, compact, expanding) the card under it. */
+  .tasks-app .task-item .task-checkbox {
+    padding: .3rem .4rem .3rem .65rem; margin: -.3rem -.4rem -.3rem -.65rem; min-height: calc(var(--line) + .6rem);
+  }
+  .task-clickable-date { padding: .25rem .35rem; }
+  .tasks-empty .btn {
+    display: inline-flex; align-items: center; min-height: 2.25rem; padding: 0 .75rem; font-size: .8rem;
+  }
+  .task-menu button, .page-menu button, .page-menu a { padding: .7rem .8rem; font-size: 1rem; }
+  /* iOS Safari zooms the page on focusing a field under 16px */
+  /* (element-qualified so it outranks the later .task-field input rules) */
+  dialog.task-edit-modal :is(input, textarea, select, .date-trigger),
+  .tasks-toolbar input, .tasks-toolbar select { font-size: 16px; }
+}
+
+/* Plan: Today's carried-over tasks, their header count and "since" badge */
+.board-day-due.board-day-carried { color: var(--amber-text, #d97706); }
+.task-carried .task-focus-info { color: var(--amber-text, #d97706); }
+
+/* Unsorted / Sorted, the same light label in a Plan section, on the Open
+   list and on Focus (where it is also a drop target), and the Open list's
+   sort headings */
+.plan-subdivider {
+  list-style: none; display: flex; align-items: center; gap: .5rem;
+  margin: .7rem 0 .55rem; padding: 0 .25rem;
+  font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--muted);
+}
+.plan-subdivider::after { content: ''; flex: 1; border-top: 1px solid var(--border); order: 1; }
+.plan-subdivider .board-day-count { order: 2; font-weight: 400; letter-spacing: 0; }
+.plan-subdivider:first-child { margin-top: .2rem; }
+.plan-subdivider.task-drag-over, .plan-subdivider.board-drop-over { color: var(--link); }
+.plan-subdivider:is(.task-drag-over, .board-drop-over)::after { border-top: 2px solid var(--link); }
+/* Open and Focus: a label is also an empty section's drop target, so tall enough to hit */
+.plan-subdivider.list-section { min-height: 1.6rem; }
+@media (pointer: coarse) { .plan-subdivider.list-section { min-height: 2.5rem; } }
+
+.task-inbox-divider {
+  list-style: none;
+  position: relative;
+  height: 1.6rem; /* .6rem above line + 1rem below line */
+  margin: 0; padding: 0;
+}
+/* line sits .6rem from top; preceding task has margin-bottom .4rem → total above = 1rem = total below */
+.task-inbox-divider:not(.task-inbox-divider--only)::before {
+  content: ''; position: absolute;
+  left: 0; right: 0; top: .6rem;
+  border-top: 2px solid var(--border);
+}
+.task-inbox-divider--only {
+  height: auto; padding: .1rem .5rem .35rem;
+  font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em;
+  color: var(--muted); background: var(--section-bg, var(--code-bg));
+  border: 1px solid var(--border); border-radius: 4px 4px 0 0;
+  border-bottom: 1px solid var(--border);
+}
+.task-inbox-divider.task-drag-over::before { border-top-color: var(--link); }
+/* Completed's heading: the year switcher (earlier years are the archives) */
+.completed-heading { display: flex; align-items: center; gap: .5rem; }
+.completed-years { margin-left: auto; display: flex; gap: .15rem; }
+.completed-years button {
+  background: none; border: none; padding: .05rem .3rem; margin: 0; cursor: pointer;
+  font: inherit; color: var(--muted); border-radius: 3px;
+}
+.completed-years button:hover { color: var(--link); }
+.completed-years button[aria-pressed="true"] { color: var(--fg); text-decoration: underline; }
+@media (pointer: coarse) { .completed-years button { padding: .4rem .5rem; } }
+
+
+.task-item.task-completing {
+  opacity: .45;
+}
+.task-item.task-completing .task-title { text-decoration: line-through; color: var(--muted); }
+.task-item.task-completing-out {
+  animation: task-complete-out .4s ease forwards;
+}
+@keyframes task-complete-out {
+  0%   { opacity: .45; transform: none; }
+  100% { opacity: 0;   transform: translateX(10px); }
+}
+
+
+
+/* Open's Unsorted cards: hollow, a dashed frame with no fill and no shadow,
+   so they read as not placed yet, on the sheet and on the paper alike (a
+   grey fill took the code blocks' beige, off next to the cards). Only
+   without a deadline colour, which must look the same on every tab (it used
+   to paint over it). */
+.task-item.task-inbox { border-style: dashed; }
+.task-item.task-inbox:not(.task-urg-overdue):not(.task-urg-today):not(.task-urg-soon):not(.task-urg-upcoming) {
+  background: transparent; box-shadow: none;
+  /* With no fill the frame is all there is: a firmer grey than a card's.
+     Not the left side, which may carry a planned task's coloured edge. */
+  border-top-color: color-mix(in srgb, var(--muted) 30%, var(--border));
+  border-right-color: color-mix(in srgb, var(--muted) 30%, var(--border));
+  border-bottom-color: color-mix(in srgb, var(--muted) 30%, var(--border));
+}
+.task-item.task-inbox:not(.task-urg-overdue):not(.task-urg-today):not(.task-urg-soon):not(.task-urg-upcoming):hover { box-shadow: var(--shadow); }
+.task-item.task-inbox:not(.task-urg-overdue):not(.task-urg-today):not(.task-urg-soon):not(.task-urg-upcoming):not(.task-planned-now):not(.task-planned-later) {
+  border-left-color: color-mix(in srgb, var(--muted) 30%, var(--border));
+}
+
+.tasks-empty { text-align: center; color: var(--muted); padding: .6rem; font-style: italic; font-size: .85rem; }
+
+.tasks-show-more { text-align: center; padding: 1rem; }
+.tasks-show-more .btn { font-size: .8rem; }
+
+/* Checkbox fields (e.g. "From done"): reset the generic text-input styling and
+   center the box in a control-height band so it lines up with the inputs beside it. */
+.task-field input[type="checkbox"] {
+  width: 1.1rem; height: 1.1rem; padding: 0; border: none; cursor: pointer;
+  accent-color: var(--btn-primary);
+}
+.task-field-check .check-wrap { display: flex; align-items: center; justify-content: center; min-height: 2.15rem; }
+
+/* Task edit modal */
+/* Centred the native modal way (inset 0 + margin auto, no transform) and
+   scrollable when taller than the window. No transform matters: it would make
+   position:fixed popups inside (the date picker) resolve against the dialog
+   and get clipped by its scrolling. Bottom padding lives on the sticky action
+   bar so Save/Cancel stay on screen while the form scrolls. */
+.task-edit-modal {
+  border: none; border-radius: 8px; padding: 1.5rem 1.5rem 0; max-width: 600px; width: 90vw;
+  background: var(--surface); color: var(--fg); box-shadow: 0 8px 30px rgba(0,0,0,.15);
+  position: fixed; inset: 0; margin: auto; height: fit-content;
+  max-height: calc(100dvh - 2rem); overflow-y: auto; overscroll-behavior: contain;
+}
+.task-edit-modal .wikilink-ac { position: absolute; }
+.task-edit-modal::backdrop { background: rgba(0,0,0,.4); }
+.task-edit-form { display: flex; flex-direction: column; gap: .75rem; }
+/* A task app's settings dialog (js/tasksettings.js) */
+.task-settings-modal { max-width: 30rem; }
+.task-settings-row { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+.task-settings-row :is(.task-field, input) { min-width: 0; }
+.task-settings-embed[hidden] { display: none; }
+.task-settings-check { display: flex; align-items: center; gap: .5rem; font-size: .9rem; }
+/* More: what is rarely changed, folded */
+.task-settings-more summary { width: fit-content; font-size: .8rem; font-weight: 500; color: var(--muted); cursor: pointer; }
+.task-settings-more summary:hover { color: var(--fg); }
+.task-settings-more-body { display: flex; flex-direction: column; gap: .75rem; padding-top: .6rem; }
+.task-settings-where { margin: 0; }
+.task-settings-error { margin: 0; font-size: .85rem; color: #a33232; }
+.task-settings-error[hidden] { display: none; }
+.task-field { display: flex; flex-direction: column; gap: .25rem; }
+/* Notes: the label with Edit | Preview beside it, the editor's formatting
+   bar, the textarea, or the preview in its place (tasks.js setNotesPreview). */
+.task-notes-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.task-notes-mode { display: inline-flex; }
+.task-notes-mode .btn { padding: .1rem .6rem; font-size: .8rem; color: var(--muted); }
+.task-notes-mode .btn:first-child { border-radius: 6px 0 0 6px; }
+.task-notes-mode .btn:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
+.task-notes-mode .btn[aria-pressed="true"] { color: var(--btn-primary); border-color: var(--btn-primary); position: relative; }
+.task-edit-modal .format-bar[hidden], .task-edit-modal textarea[hidden] { display: none; }
+.task-notes-empty { color: var(--muted); font-style: italic; }
+.task-notes-preview:focus { outline: none; }
+/* The preview's checkboxes are the card's, not the modal's field boxes. */
+.task-field .task-notes-preview input.task-list-item-checkbox { width: var(--mark); height: var(--mark); accent-color: var(--link); }
+.task-edit-modal .format-bar { padding: 0; margin: 0 -.2rem; }
+/* Clearly not the text field: tinted, outlined in the accent colour, and
+   labelled "Preview" at the top, which stays put while it scrolls. */
+.task-notes-preview {
+  font-size: .9rem; padding: 0 .75rem .5rem; min-height: 6rem; overflow: auto; box-sizing: border-box;
+  background: color-mix(in srgb, var(--btn-primary) 5%, var(--bg));
+  border: 1px solid color-mix(in srgb, var(--btn-primary) 40%, var(--border)); border-radius: 6px;
+}
+.task-notes-preview::before {
+  content: "Preview"; display: block; position: sticky; top: 0; z-index: 1;
+  margin: 0 -.75rem .35rem; padding: .2rem .75rem;
+  font-size: .7rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--btn-primary); background: color-mix(in srgb, var(--btn-primary) 10%, var(--bg));
+  border-bottom: 1px solid color-mix(in srgb, var(--btn-primary) 25%, var(--border));
+}
+.task-notes-preview[hidden] { display: none; }
+.task-field label { font-size: .8rem; font-weight: 500; color: var(--muted); }
+.field-hint { font-weight: 400; font-size: .75rem; color: var(--muted); }
+.task-field input, .task-field textarea, .task-field select {
+  padding: .4rem .6rem; border: 1px solid var(--border); border-radius: 4px;
+  background: var(--surface); color: var(--fg); font-size: .9rem; font-family: inherit;
+}
+.task-field input:disabled, .task-field select:disabled {
+  opacity: .4; cursor: not-allowed;
+}
+.task-field textarea { resize: vertical; min-height: 60px; }
+/* Custom-calendar date field (replaces native <input type=date> in the modal) */
+.date-trigger {
+  padding: .4rem .6rem; border: 1px solid var(--border); border-radius: 4px;
+  background: var(--surface); color: var(--muted); font-size: .9rem; font-family: inherit;
+  text-align: left; cursor: pointer; width: 100%;
+}
+.date-trigger:hover { background: var(--code-bg); }
+.date-trigger.date-trigger--set { color: var(--fg); }
+.task-field-row { display: flex; gap: .75rem; flex-wrap: wrap; }
+/* "Keep after done": a checkbox line of its own, not a field. */
+.task-edit-keep {
+  display: flex; align-items: center; gap: .4rem; flex-wrap: wrap;
+  font-size: .8rem; font-weight: 500; color: var(--muted); cursor: pointer;
+}
+.task-edit-keep input { width: 1rem; height: 1rem; margin: 0; accent-color: var(--btn-primary); cursor: pointer; }
+/* History: collapsed; the summary shows the count. */
+.task-edit-links > summary { cursor: pointer; font-size: .8rem; font-weight: 500; color: var(--muted); }
+.task-edit-links[open] > summary { margin-bottom: .5rem; }
+.task-edit-links-summary { font-weight: 400; margin-left: .6rem; }
+.task-edit-extras { display: flex; flex-wrap: wrap; gap: .3rem 1.5rem; align-items: baseline; }
+/* History: the task's logged events, newest first. */
+.task-edit-history[hidden] { display: none; }
+.task-history { list-style: none; margin: 0; padding: 0; font-size: .8rem; max-height: 12rem; overflow-y: auto; }
+.task-history li { padding: .1rem 0; }
+.task-history-at { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: .4rem; }
+/* Comments: status lines, newest first; the field adds one at once. `ul.`
+   outranks .page-content ul (the tasks page is a page). */
+.task-comments[hidden] { display: none; }
+.task-comment-add { display: flex; gap: .4rem; }
+.task-comment-add input { flex: 1; min-width: 0; }
+ul.task-comment-list { list-style: none; margin: .3rem 0 0; padding: 0; font-size: .85rem; max-height: 10rem; overflow-y: auto; }
+.task-comment-list:empty { display: none; }
+.task-comment-list li { display: flex; align-items: baseline; gap: .2rem; padding: .15rem 0; margin: 0; }
+.task-comment-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.task-comment-edit { flex: 1; min-width: 0; font: inherit; }
+.task-comment-btn {
+  border: none; background: none; color: var(--muted); cursor: pointer;
+  font: inherit; padding: 0 .3rem; opacity: 0; flex: none;
+}
+.task-comment-list li:hover .task-comment-btn, .task-comment-btn:focus-visible { opacity: 1; }
+.task-comment-btn:hover { color: var(--fg); }
+@media (hover: none) { .task-comment-btn { opacity: 1; } }
+@media (pointer: coarse) { .task-comment-btn { padding: .3rem .5rem; } }
+/* min-width:0 lets fields shrink below their content's min-content width,
+   so the Due/Plan-for shortcut buttons can't force the row to wrap. */
+.task-field-row .task-field { flex: 1 1 7rem; min-width: 0; }
+/* Keep Repeat interval and the From-done checkbox compact. */
+.task-field-row .task-field:has(input[name="rec_interval"]) { flex: 0 1 5rem; }
+.task-field-row .task-field-check { flex: 0 0 auto; }
+/* Keep every label to one line so the controls below them line up. */
+.task-field-row .task-field > label {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.task-edit-actions {
+  display: flex; gap: .5rem; margin-top: .5rem;
+  position: sticky; bottom: 0; z-index: 1;
+  padding: .75rem 0 1.5rem; background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+.task-edit-actions .btn-danger { margin-left: auto; background: #fbeeee; color: #a33232; border: none; }
+.task-edit-actions .btn-danger:hover { background: #f4dcdc; color: #a33232; }
+
+@media (prefers-color-scheme: dark) {
+  .task-edit-actions .btn-danger { background: #2f1c1c; color: #ec9a9a; }
+  .task-edit-actions .btn-danger:hover { background: #3d2424; color: #ec9a9a; }
+}
+
+.task-delete-title {
+  font-weight: 600; font-size: .95rem; margin: .25rem 0 1rem;
+  color: var(--fg); word-break: break-word;
+}
+
+.tag-ac-dropdown {
+  position: absolute;
+  z-index: 300;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0,0,0,.15);
+  overflow-y: auto;
+  max-height: 220px;
+  font-size: .85rem;
+}
+.tag-ac-item {
+  padding: .35rem .7rem;
+  cursor: pointer;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tag-ac-item:hover, .tag-ac-item.selected {
+  background: var(--code-bg);
+  color: var(--link);
+}
+
+
+@media (max-width: 640px) {
+  /* The tabs fill their row, which the Plan switch shares when shown. */
+  .view-tabs { display: flex; flex: 1 1 0; min-width: 0; }
+  /* Task editor: full screen on phones (it is a whole form, not a popup). */
+  .task-edit-modal {
+    width: 100%; max-width: none; height: 100dvh; max-height: none;
+    border-radius: 0; padding: 1rem 1rem 0;
+  }
+  .task-edit-actions { padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
+  /* The ⋯ menu becomes a bottom sheet (inline top/left from JS are overridden) */
+  .task-menu-backdrop, .page-menu-backdrop { background: rgba(0, 0, 0, .35); }
+  .task-menu, .page-menu {
+    top: auto !important; left: 0 !important; right: 0; bottom: 0;
+    max-width: none; border-radius: 12px 12px 0 0;
+    padding: .4rem .5rem calc(.6rem + env(safe-area-inset-bottom));
+  }
+  .view-tabs button { flex: 1 1 0; height: 1.95rem; padding: 0 .25rem; }
+  /* Phones: tabs (and the Plan switch) on one line, then search · sort ·
+     toggle · "+" on the next.
+     The New button drops its label to leave the search field the room. */
+  .tasks-toolbar { flex-basis: 100%; }
+  .tasks-toolbar #task-filter-search { min-width: 0; }
+  .tasks-toolbar select { padding-right: 1.4rem; background-position: right .4rem center; }
+  .task-add-label { display: none; }
+  /* The gear's dialog is in the ⋯ menu here (tasksettings.js), for the search field's room. */
+  .tasks-settings-btn { display: none; }
+  .tasks-header #task-add-btn { padding: .25rem .8rem; font-size: 1.1rem; line-height: 1; align-self: stretch; }
+  /* Compact phone editor: small fields share a line instead of each taking a
+     full-width row, and spacing is tighter. */
+  /* The form fills the full-screen dialog so the action bar sits at the
+     bottom edge (thumb reach) even when the fields are short. */
+  .task-edit-form { gap: .55rem; min-height: 100%; }
+  .task-edit-form .task-edit-actions { margin-top: auto; }
+  .task-field { gap: .15rem; }
+  .task-edit-modal textarea[name="description"] { height: 9.6em; min-height: 3.2em; }
+  .task-field-row { display: grid; gap: .55rem .6rem; }
+  /* Due date | Start, then the days-before-due helper across the full width */
+  .task-row-dates { grid-template-columns: 1fr 1fr; align-items: start; }
+  .task-row-dates .task-field-lead { grid-column: 1 / -1; }
+  /* Repeat | Every N | From done */
+  .task-row-repeat { grid-template-columns: minmax(0, 1fr) 4.5rem auto; align-items: end; }
+}

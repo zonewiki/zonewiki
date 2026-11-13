@@ -480,7 +480,7 @@ Each with a dark-mode value.
 - **One undo at a time** (`showUndo`): only the latest action's undo is live,
   from its toast's Undo or Ctrl+Z. An action that saves first and arms its undo when the server answers (bulk start with **0**–**7**, Done/Reopen on a selection, bulk tags, Delete, Move deadline, completing a keep task, deleting a comment) drops the previous undo as it starts saving (`dismissUndo`),
   so a quick Ctrl+Z in between does nothing instead of undoing the action before.
-- **Cards** (`taskHTML`, style.css "Cards"): one layout for every card.
+- **Cards** (`taskHTML`, tasks.css "Cards"): one layout for every card.
   The first line: checkbox, title (as wide as it needs, at least 6rem, 4.5rem on phones; it wraps), the tags right after it (pills), markers and dates at the right end (`.task-meta` sits in the line), ⋯ last.
   **Nothing jumps on hover**: what is always shown (markers, 📝, 💬, dates, ⋯) ends at the right and stays put; what hover adds (⏭, the empty ⏰ 📅, at 60% opacity, full on their own hover: at 30% they were hard to see) appears left of it (first in `.task-meta-right`, CSS `order`).
   A task with notes shows 📝 (`.task-has-notes`) on every card, since a compact line hides the notes.

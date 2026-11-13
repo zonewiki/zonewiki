@@ -8,6 +8,7 @@ import re
 import pytest
 from playwright.sync_api import expect
 
+from conftest import wait_until
 from tests import settings
 
 PAGE = "# Plans\n\n## One\n\nFirst.\n\n## Two\n\nSecond.\n"
@@ -165,11 +166,8 @@ def test_changes_left_in_conflict_come_back_on_the_next_visit(editors, wiki):
     type_after(alice, " By Alice.", "First.")
     alice.goto("/page/index")                  # before her auto-save: the save on leaving
     kept = wiki.root / ".zone/drafts/alice/plans.json"
-    for _ in range(50):
-        if kept.exists():
-            break
-        alice.wait_for_timeout(100)
-    assert kept.exists() and "By Alice" not in wiki.read("plans")
+    wait_until(alice, kept.exists)
+    assert "By Alice" not in wiki.read("plans")
     alice.goto("/edit/plans")
     banner = alice.locator(".conflict-banner")
     expect(banner).to_contain_text("You left changes here")

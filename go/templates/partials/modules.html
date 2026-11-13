@@ -15,13 +15,13 @@
 <nav class="breadcrumb-home module-switch" aria-label="{{.app_name}}">
 {{- $open := -1 -}}
 {{- range .links -}}
-{{- if .menu -}}
+{{- if .Menu -}}
 {{- /* with users: the user button at the top right (top_actions) */ -}}
 {{- else -}}
-{{- if ne .group $open}}{{if ge $open 0}}</span>{{end}}<span class="module-group">{{$open = .group}}{{end -}}
-<a href="{{.href}}" class="module-link" data-module="{{.key}}"{{with .pinned_pages}} data-pinned-pages="{{.}}"{{end}}{{with .counts}} title="{{.Title}}"{{end}}{{if .own}} title="{{.label}}: only you see it"{{end}}{{if .current}} aria-current="page"{{end}}
-{{- if eq .key "wiki"}} aria-label="{{.label}} ({{$.app_name}} home)">{{template "icon_zone"}}{{else}}>{{end -}}
-{{if .own}}<span class="module-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="module-label">{{.label}}</span>{{with .counts}}{{template "module_counts" .}}{{end}}</a>
+{{- if ne .Group $open}}{{if ge $open 0}}</span>{{end}}<span class="module-group">{{$open = .Group}}{{end -}}
+<a href="{{.Href}}" class="module-link" data-module="{{.Key}}"{{with .PinnedPages}} data-pinned-pages="{{.}}"{{end}}{{with .Counts}} title="{{.Title}}"{{end}}{{if .Own}} title="{{.Label}}: only you see it"{{end}}{{if .Current}} aria-current="page"{{end}}
+{{- if eq .Key "wiki"}} aria-label="{{.Label}} ({{$.app_name}} home)">{{template "icon_zone"}}{{else}}>{{end -}}
+{{if .Own}}<span class="module-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="module-label">{{.Label}}</span>{{with .Counts}}{{template "module_counts" .}}{{end}}</a>
 {{- end -}}
 {{- end -}}
 {{- if ge $open 0}}</span>{{end -}}
@@ -49,11 +49,11 @@
 <nav class="action-buttons" aria-label="{{.AppName}}">
 {{- $group := 0 -}}
 {{- range .ModuleLinks -}}
-{{- if .menu -}}
+{{- if .Menu -}}
 {{- /* the user button is the desktop's (top_actions) */ -}}
 {{- else -}}
-{{- if ne .group $group}}<span class="action-sep" aria-hidden="true"></span>{{$group = .group}}{{end -}}
-<a href="{{.href}}" class="action-module module-link" data-module="{{.key}}"{{with .counts}} title="{{.Title}}"{{end}}{{if .current}} aria-current="page"{{end}}>{{template "icon_module" .key}}{{if and (eq .key "notes") .own}}<span class="action-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="action-label">{{.label}}</span>{{with .counts}}{{template "module_counts" .}}{{end}}</a>
+{{- if ne .Group $group}}<span class="action-sep" aria-hidden="true"></span>{{$group = .Group}}{{end -}}
+<a href="{{.Href}}" class="action-module module-link" data-module="{{.Key}}"{{with .Counts}} title="{{.Title}}"{{end}}{{if .Current}} aria-current="page"{{end}}>{{template "icon_module" .Key}}{{if and (eq .Key "notes") .Own}}<span class="action-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="action-label">{{.Label}}</span>{{with .Counts}}{{template "module_counts" .}}{{end}}</a>
 {{- end -}}
 {{- end -}}
 <span class="action-sep" aria-hidden="true"></span>
@@ -62,5 +62,5 @@
 <span class="action-sep" aria-hidden="true"></span>
 <button type="button" class="action-search" aria-label="Search" title="Search (Ctrl+P)">{{template "icon_search"}}<span class="action-label">Search</span></button>
 </nav>
-{{- range .ModuleLinks}}{{if .menu}}{{template "module_menu" (dict "link" . "user" $.User "sign_out" $.SignOut "admin" $.Admin)}}{{end}}{{end}}
+{{- range .ModuleLinks}}{{if .Menu}}{{template "module_menu" (dict "link" . "user" $.User "sign_out" $.SignOut "admin" $.Admin)}}{{end}}{{end}}
 {{- end}}
