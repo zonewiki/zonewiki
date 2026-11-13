@@ -347,6 +347,7 @@ After a save the page reloads, and what the browser tab remembered (the active t
   comments and history: `{"zone_tasks": 1, "list": "shop", "tag": "", "exported_at": "…", "tasks": […]}`.
   With users it holds the shared tasks and your own private ones, marked `"private": true`.
 - **Import tasks…** (`POST /api/tasks/import`, `apiImport`): pick such a file, and a dialog (`#task-import-modal`) says what it holds ("Import 12 tasks from “shop.json”") and asks for a tag of your own; **Import** adds its tasks to the list the menu was opened in, Cancel nothing.
+  With users, a task assigned to someone who can't be given tasks here comes in as no one's, and the toast says how many ("…; 2 were assigned to people who are not users of this wiki").
   A file that holds no list of tasks is refused at once, in a notice.
   They get the tags a new task there would (the list's tag and the single tags it shows, or `new=`), in place of the tag of the list they were exported from, so a `shop` export imported into `groceries` shows up there; their other tags stay.
   On All tasks they keep their tags as they are.

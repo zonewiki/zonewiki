@@ -40,6 +40,15 @@ func mcpTaskText(t *Task, base, user string) string {
 		}
 		facts = append(facts, "tags: "+strings.Join(tags, " "))
 	}
+	if s := settings(); t.Assignee != "" && s.Users != nil {
+		who := "assigned to: " + t.Assignee
+		if t.Assignee == user {
+			who += " (the user)"
+		} else if !s.assignable(t.Assignee) {
+			who += " (who can no longer be given tasks: it counts as no one's)"
+		}
+		facts = append(facts, who)
+	}
 	if t.Importance != "" {
 		facts = append(facts, "importance: "+t.Importance)
 	}
@@ -136,8 +145,12 @@ func mcpTaskRefs(content, base, user string) string {
 func searchTasks(args jsonObj, base, user string) (string, error) {
 	query, err1 := strArg(args, "query", false)
 	tag, err2 := strArg(args, "tag", false)
-	if err1 != nil || err2 != nil {
-		return "", toolErr("query and tag must be strings")
+	assignee, err3 := strArg(args, "assignee", false)
+	if err1 != nil || err2 != nil || err3 != nil {
+		return "", toolErr("query, tag and assignee must be strings")
+	}
+	if assignee != "" && settings().Users == nil {
+		return "", toolErr("This wiki has no users, so its tasks have no assignees")
 	}
 	status := "open"
 	if args.Has("status") {
@@ -174,7 +187,7 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 		for w := range want {
 			all = all && have[w]
 		}
-		if all && (!q.HasFilters() || q.Accepts(d.text(), d.Tags, d.date()) && !q.HoldsExcluded(d.tokens())) {
+		if all && assigneeParamMatches(d.Task, assignee, user) && (!q.HasFilters() || q.Accepts(d.text(), d.Tags, d.date()) && !q.HoldsExcluded(d.tokens())) {
 			docs = append(docs, d)
 		}
 	}
@@ -334,6 +347,14 @@ func taskFields(args jsonObj, task *Task) (jsonObj, error) {
 	}
 	if title, _ := jsonobj.As[string](data["title"]); data.Has("title") && title == "" {
 		return nil, toolErr("title must be a non-empty string")
+	}
+	// The API reads the name: a user's, "me", or none ("", "none").
+	if args.Has("assignee") {
+		s, err := strArg(args, "assignee", false)
+		if err != nil {
+			return nil, err
+		}
+		data.Set("assignee", s)
 	}
 	for _, f := range []string{"keep", "private"} {
 		if args.Has(f) {
@@ -512,8 +533,15 @@ func createTaskTool(args jsonObj, base, user string) (string, error) {
 	}
 	data["tags"] = homeTags(data["tags"], user)
 	// As c t in the browser: private when the user's default list is theirs alone.
-	if h := lookupDefaultList(user); !data.Has("private") && h != nil && ownPrivate(user, h.Slug) {
+	h := lookupDefaultList(user)
+	if !data.Has("private") && h != nil && ownPrivate(user, h.Slug) {
 		data.Set("private", true)
+	}
+	// And assigned as its "+ New" would: to the one user its assignee= names.
+	if private, _ := jsonobj.As[bool](data["private"]); h != nil && !private && !data.Has("assignee") {
+		if who := newTaskAssignee(h.Params, user); who != "" {
+			data.Set("assignee", who)
+		}
 	}
 	msg, err := commitMsg("Create task", args)
 	if err != nil {

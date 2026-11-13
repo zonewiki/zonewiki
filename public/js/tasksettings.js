@@ -225,7 +225,9 @@ export function initTaskSettings(app) {
         const reload = () => { app.refresh(); app.refreshOtherInstances(app.instanceId); refreshDueBadge(); };
         reload();
         // Undo (the toast's button, Ctrl+Z): the imported tasks go again.
-        app.showUndo(`Imported ${n(out.added)}${out.skipped ? `; ${out.skipped} already here` : ''}.`, async () => {
+        const lost = out.unassigned
+          ? `; ${out.unassigned === 1 ? '1 was' : `${out.unassigned} were`} assigned to people who are not users of this wiki` : '';
+        app.showUndo(`Imported ${n(out.added)}${out.skipped ? `; ${out.skipped} already here` : ''}${lost}.`, async () => {
           const gone = await fetch('/api/tasks/batch-delete', {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: out.ids }),
           });

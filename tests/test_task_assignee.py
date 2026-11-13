@@ -229,7 +229,8 @@ class TestSnapshots:
 
     def test_an_import_drops_other_wikis_people(self, alice):
         export = {"zone_tasks": 1, "tasks": [{"title": "Theirs", "assignee": "zed"}, {"title": "Ours", "assignee": "bob"}]}
-        assert alice.post("/api/tasks/import", json={"file": export}, headers=HOST).status_code == 200
+        resp = alice.post("/api/tasks/import", json={"file": export}, headers=HOST)
+        assert resp.status_code == 200 and resp.get_json()["unassigned"] == 1      # the toast says so
         got = {t["title"]: t.get("assignee") for t in alice.get("/api/tasks", headers=HOST).get_json()}
         assert got == {"Theirs": None, "Ours": "bob"}
 
@@ -333,3 +334,68 @@ class TestEmbed:
         # All tasks has no filter.
         resp = alice.post("/api/tasks/settings", headers=HOST, json={"all": True, "was": "", "set": {"assignee": "me"}})
         assert resp.status_code == 400
+
+
+class TestAssistant:
+    """The MCP tools: create_task and update_task take an assignee,
+    search_tasks filters by it, and a task's text names it."""
+
+    @pytest.fixture()
+    def mcp(self, client, wiki_dir, monkeypatch):
+        """Calls a tool as alice's assistant; returns the answer's text."""
+        monkeypatch.setattr(settings, "USERS", {**USERS, "alice": ("alice-pw", "alice-token")})
+        monkeypatch.setattr(settings, "USER_SETTINGS", dict(USER_SETTINGS))
+
+        def call(tool, **args):
+            resp = client.post("/mcp", headers={**HOST, "Authorization": "Bearer alice-token"}, json={
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": tool, "arguments": args}})
+            return "".join(c["text"] for c in resp.get_json()["result"]["content"])
+        return call
+
+    def test_create_and_update_assign(self, mcp):
+        text = mcp("create_task", title="Call Sam", assignee="bob")
+        assert "assigned to: bob" in text and "(the user)" not in text
+        task_id = text.split("id: ", 1)[1].split()[0]
+        assert "assigned to: alice (the user)" in mcp("update_task", id=task_id, assignee="me")
+        assert "assigned to" not in mcp("update_task", id=task_id, assignee="none")
+        assert "assigned to: bob" in mcp("update_task", id=task_id, assignee="@Bob")
+        assert "assigned to" not in mcp("update_task", id=task_id, assignee="")
+
+    @pytest.mark.parametrize("name,why", [("zed", "is not a user of this wiki"), ("carol", "is a viewer"),
+                                          ("dan", "account is disabled")])
+    def test_a_name_that_cant_be_assigned_is_a_tool_error(self, mcp, name, why):
+        assert why in mcp("create_task", title="No", assignee=name)
+        assert "Task: No" not in mcp("search_tasks")
+
+    def test_a_private_task_has_none(self, mcp):
+        assert "private task" in mcp("create_task", title="Mine", private=True, assignee="bob")
+
+    def test_search_filters_by_assignee(self, mcp):
+        mcp("create_task", title="Alices", assignee="me")
+        mcp("create_task", title="Bobs", assignee="bob")
+        mcp("create_task", title="Nobodys")
+        found = lambda **args: sorted(t for t in ("Alices", "Bobs", "Nobodys") if f"Task: {t}" in mcp("search_tasks", **args))
+        assert found(assignee="me") == ["Alices"]
+        assert found(assignee="bob") == ["Bobs"]
+        assert found(assignee="none") == ["Nobodys"]
+        assert found(assignee="me|bob") == ["Alices", "Bobs"]
+        assert found(assignee="-bob") == ["Alices", "Nobodys"]
+        assert found() == ["Alices", "Bobs", "Nobodys"]
+
+    def test_a_former_assignee_is_said_to_be_one(self, mcp, monkeypatch):
+        mcp("create_task", title="Bobs", assignee="bob")
+        monkeypatch.setattr(settings, "USER_SETTINGS", {**USER_SETTINGS, "bob": {"disabled": "yes"}})
+        assert "assigned to: bob (who can no longer be given tasks" in mcp("search_tasks", assignee="none")
+
+    def test_a_new_task_gets_the_default_lists_assignee(self, mcp, wiki_dir):
+        (wiki_dir / "team.md").write_text("# Team\n\n[[tasks: assignee=me pin=default]]\n")
+        assert "assigned to: alice (the user)" in mcp("create_task", title="Mine by default")
+        assert "assigned to: bob" in mcp("create_task", title="Said otherwise", assignee="bob")
+        assert "assigned to" not in mcp("create_task", title="No one", assignee="none")
+
+    def test_without_users_search_says_there_are_no_assignees(self, client, wiki_dir, monkeypatch):
+        monkeypatch.setattr(settings, "MCP_TOKEN", "tok")
+        resp = client.post("/mcp", headers={**HOST, "Authorization": "Bearer tok"}, json={
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": "search_tasks", "arguments": {"assignee": "me"}}})
+        assert "no users" in resp.get_json()["result"]["content"][0]["text"]

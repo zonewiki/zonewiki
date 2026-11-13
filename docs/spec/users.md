@@ -612,8 +612,8 @@ One, not several, so that "who has this?" has one answer; someone helping goes i
 It is information: it never changes who sees a task or who may change it, and anyone who may change tasks may assign any task to anyone, themselves included, or to no one.
 
 You assign a task in its dialog or by ending a new task's title with `@name`, see who has it on its card, and filter a list by it (`@anna`, `@me`, `@none`).
-A page can show each user their own tasks with `[[tasks: assignee=me]]`.
-The MCP tools' parameters and assigning several tasks at once are not built yet (`docs/plans/task-assignee.md`).
+A page can show each user their own tasks with `[[tasks: assignee=me]]`, and an assistant assigns and asks for "my tasks" through the MCP tools.
+Assigning several tasks at once is not built yet (`docs/plans/task-assignee.md`).
 
 - **The field** is the task's `assignee`, a user's name, kept in its file after `tags` (`Task.Assignee` in `go/internal/taskmodel`; Task fields in `docs/spec/tasks.md`).
   A task without one has no such key.
@@ -637,7 +637,8 @@ The MCP tools' parameters and assigning several tasks at once are not built yet 
   An undo that sends the task's old `history` leaves no trace, as for the dates.
 - **A series** carries its assignee on: a recurring task's next occurrence has the same one (`spawnRecurring`).
 - **Restored and imported tasks** (`POST /api/tasks/restore`, `/api/tasks/import`; `sanitizeSnapshot`) have an assignee only as a write would take it: a name that can be assigned here, on a task that isn't private.
-  So an export from another wiki doesn't bring its people along.
+  So an export from another wiki doesn't bring its people along; the import's toast says how many tasks were assigned to people who are not users here (`unassigned` in the route's answer).
+- **Assistants** (`docs/spec/mcp.md`): `create_task` and `update_task` take `assignee` (a user name, `me` for the assistant's user, `none`), `search_tasks` filters by it (`assignee=me`: "what do I have to do"), and a task's text says who it is assigned to.
 - **In the dialog** (`js/taskmodal.js`): the **Assignee** field, after Tags.
   Type `@` (everyone, yourself first) or the start of a name; Tab or Enter completes it to a chip, and another name replaces it; the chip's × or Backspace takes it off.
   `me` is yourself.

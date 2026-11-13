@@ -429,13 +429,17 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	existing := taskFiles.IDsLocked() // every owner's: ids stay unique across the files
-	skipped, ids := 0, []string{}
+	skipped, unassigned, ids := 0, 0, []string{}
 	for _, s := range snaps {
 		snap, _ := jsonobj.As[jsonObj](s)
 		t := sanitizeSnapshot(snap)
 		if t == nil {
 			return notExport
 		}
+		// Assigned to someone who can't be given tasks here (another
+		// wiki's user): imported as no one's, and said so.
+		who, _ := jsonobj.As[string](snap["assignee"])
+		lost := settings().Users != nil && taskmodel.CleanAssignee(who) != "" && t.Assignee == ""
 		if id, _ := jsonobj.As[string](snap["id"]); !importIDRE.MatchString(id) {
 			t.ID = uuid4()
 		}
@@ -449,6 +453,9 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 			checkBy(user, t)
 		}
 		existing[t.ID] = true
+		if lost {
+			unassigned++
+		}
 		t.Tags = retag(t.Tags, add, remove)
 		// A task exported private stays private, wherever it is imported.
 		if (jsonobj.True(data["private"]) || jsonobj.True(snap["private"])) && privateFolder(user) != "" {
@@ -466,7 +473,11 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"added": len(ids), "skipped": skipped, "ids": ids})
+	out := map[string]any{"added": len(ids), "skipped": skipped, "ids": ids}
+	if unassigned > 0 {
+		out["unassigned"] = unassigned
+	}
+	writeJSON(w, http.StatusOK, out)
 	return nil
 }
 
