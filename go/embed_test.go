@@ -53,7 +53,7 @@ func testIndex(emb embedder, tasks func() []semTask) *semanticIndex {
 }
 
 var semanticPages = map[string]string{
-	"git-remote": "# Git remote\n\nSet LEAF_GIT_REMOTE, then push to copy every commit.\n",
+	"git-remote": "# Git remote\n\nSet ZONE_GIT_REMOTE, then push to copy every commit.\n",
 	"golf":       "# Golf\n\n## Werkstatt\n\nTermin beim Mechaniker, Bremsen quietschen.\n",
 	"evening":    "# Evening routine\n\nNo screens late, bed by eleven.\n",
 	"money":      "# Budget\n\nRent and savings.\n",

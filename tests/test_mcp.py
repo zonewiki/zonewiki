@@ -23,8 +23,8 @@ AUTH = {"Authorization": f"Bearer {TOKEN}"}
 
 @pytest.fixture(autouse=True)
 def mcp_token(monkeypatch):
-    """/mcp is off without LEAF_MCP_TOKEN: every test here has one."""
-    monkeypatch.setattr(settings, "LEAF_MCP_TOKEN", TOKEN)
+    """/mcp is off without an MCP token: every test here has one."""
+    monkeypatch.setattr(settings, "MCP_TOKEN", TOKEN)
 
 
 def rpc(client, method, params=None, id_=1, headers=None):
@@ -125,7 +125,7 @@ class TestEndpoint:
 class TestAuth:
     def test_off_without_a_token(self, client, wiki_dir, monkeypatch):
         # The tools write, so /mcp is never open: not without a password either.
-        monkeypatch.setattr(settings, "LEAF_MCP_TOKEN", "")
+        monkeypatch.setattr(settings, "MCP_TOKEN", "")
         for headers in ({}, {"Authorization": "Bearer "}, AUTH):
             resp = rpc(client, "ping", headers=headers)
             assert resp.status_code == 403
@@ -144,7 +144,7 @@ class TestAuth:
         assert rpc(client, "ping").status_code == 200
 
     def test_token_works_with_password(self, client, monkeypatch):
-        monkeypatch.setattr(settings, "LEAF_PASSWORD", "pw")
+        monkeypatch.setattr(settings, "PASSWORD", "pw")
         assert rpc(client, "ping").status_code == 200
         # and the rest of the wiki still wants a login
         assert client.get("/page/index", headers=HOST).status_code == 302
@@ -165,7 +165,7 @@ class TestAuth:
 @pytest.fixture()
 def pages(wiki_dir):
     write_page(wiki_dir, "git-remote",
-               "# Git remote\n\n## Setup\n\nSet LEAF_GIT_REMOTE in .env.\n\n## Pushing\n\nRun git push to back up.\n")
+               "# Git remote\n\n## Setup\n\nSet ZONE_GIT_REMOTE in .env.\n\n## Pushing\n\nRun git push to back up.\n")
     write_page(wiki_dir, "golf", "# Golf\n\n## Werkstatt\n\nTermin beim Mechaniker, Bremsen quietschen.\n")
     return wiki_dir
 
@@ -191,7 +191,7 @@ class TestSearchWiki:
         log = pages / ".zone" / "queries.jsonl"
         call(client, "search_wiki", query="git push")
         assert not log.exists()
-        monkeypatch.setattr(settings, "LEAF_QUERY_LOG", True)
+        monkeypatch.setattr(settings, "QUERY_LOG", True)
         call(client, "search_wiki", query="git push")
         call(client, "search_wiki", query="Mechaniker", under="golf")
         first, second = [json.loads(l) for l in log.read_text(encoding="utf-8").splitlines()]
@@ -455,7 +455,7 @@ class TestSearchTasks:
 
 class TestBaseUrl:
     def test_links_use_request_address_by_default(self, client, pages, monkeypatch):
-        monkeypatch.setattr(settings, "LEAF_BASE_URL", "")
+        monkeypatch.setattr(settings, "BASE_URL", "")
         resp = client.post("/mcp", headers={"Host": "host.containers.internal:5000", **AUTH}, json={
             "jsonrpc": "2.0", "id": 1, "method": "tools/call",
             "params": {"name": "read_page", "arguments": {"slug": "golf"}}})
@@ -463,7 +463,7 @@ class TestBaseUrl:
             resp.get_json()["result"]["content"][0]["text"]
 
     def test_base_url_wins(self, client, pages, monkeypatch):
-        monkeypatch.setattr(settings, "LEAF_BASE_URL", "http://wiki.example.org:5000")
+        monkeypatch.setattr(settings, "BASE_URL", "http://wiki.example.org:5000")
         assert "url: http://wiki.example.org:5000/page/golf\n" in call(client, "read_page", slug="golf")[0]
         assert "url: http://wiki.example.org:5000/page/git-remote#pushing" in \
             call(client, "search_wiki", query="git push")[0]
@@ -1057,7 +1057,7 @@ class TestEditPage:
         assert (pages / "twice.md").read_text() == "# Twice\n\nbar and bar\n"
 
     def test_empty_new_string_deletes(self, client, pages):
-        _, err = call(client, "edit_page", slug="git-remote", old_string="## Setup\n\nSet LEAF_GIT_REMOTE in .env.\n\n",
+        _, err = call(client, "edit_page", slug="git-remote", old_string="## Setup\n\nSet ZONE_GIT_REMOTE in .env.\n\n",
                       new_string="")
         assert not err
         assert (pages / "git-remote.md").read_text() == "# Git remote\n\n## Pushing\n\nRun git push to back up.\n"
@@ -1084,7 +1084,7 @@ class TestEditPage:
     def test_crlf_in_arguments_matches_lf_files(self, client, pages):
         _, err = call(client, "edit_page", slug="git-remote", old_string="## Setup\r\n\r\nSet",
                       new_string="## Setup\r\n\r\nPut")
-        assert not err and "## Setup\n\nPut LEAF_GIT_REMOTE" in (pages / "git-remote.md").read_text()
+        assert not err and "## Setup\n\nPut ZONE_GIT_REMOTE" in (pages / "git-remote.md").read_text()
 
     def test_unknown_page_and_no_op(self, client, pages):
         text, err = call(client, "edit_page", slug="nope", old_string="a", new_string="b")
@@ -1110,7 +1110,7 @@ class TestAppendToPage:
                       under_heading="setup")
         assert not err
         assert (pages / "git-remote.md").read_text() == (
-            "# Git remote\n\n## Setup\n\nSet LEAF_GIT_REMOTE in .env.\n\n- also: git pull\n\n"
+            "# Git remote\n\n## Setup\n\nSet ZONE_GIT_REMOTE in .env.\n\n- also: git pull\n\n"
             "## Pushing\n\nRun git push to back up.\n")
 
     def test_subsections_belong_to_the_section(self, client, wiki_dir):
@@ -1767,7 +1767,7 @@ class TestCommentAndDeleteTask:
 
 # ── Zone's documentation ─────────────────────────────────────────────────────
 
-class TestLeafHelp:
+class TestZoneHelp:
     @pytest.fixture
     def docs(self, tmp_path, monkeypatch):
         """A docs root like the checkout's: README.md and docs/spec/."""

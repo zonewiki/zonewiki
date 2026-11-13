@@ -108,8 +108,8 @@
 }());
 
 // ── Side columns: the section being read ─────────────────────────────────────
-// On big screens a page's table of contents is the left column (views.py
-// rail_toc_items, templates/partials/page.html); it marks the section whose heading was scrolled past
+// On big screens a page's table of contents is the left column (railTocItems in
+// go/views.go, templates/partials/page.html); it marks the section whose heading was scrolled past
 // last, and at the end of the page the last one that came into view.
 
 (function () {
@@ -217,7 +217,7 @@
 const tasksLinks = document.querySelectorAll('.module-link[data-module="tasks"]');
 const places = document.querySelectorAll('.tasks-place[data-place]');
 
-// Same as views.py's _task_counts_title.
+// Same as taskCountsTitle in go/views.go.
 function taskCountsTitle({ focus, overdue, today }) {
   const parts = [];
   if (focus > 0) parts.push(`${focus} in Focus`);

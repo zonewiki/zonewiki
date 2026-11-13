@@ -1517,14 +1517,14 @@ class TestServeUpload:
             assert resp.status_code == 400, name
 
 # ===========================================================================
-# Authentication (LEAF_PASSWORD)
+# Authentication (the wiki's password)
 # ===========================================================================
 
 class TestAuth:
 
     @pytest.fixture()
     def auth_client(self, client, monkeypatch):
-        monkeypatch.setattr(settings, "LEAF_PASSWORD", "testpassword")
+        monkeypatch.setattr(settings, "PASSWORD", "testpassword")
         return client
 
     def test_login_page_has_no_action_buttons(self, auth_client):
@@ -1721,7 +1721,7 @@ class TestHostHeader:
 
 
     def test_leaf_hosts_names_who_may_come_in(self, client, monkeypatch):
-        monkeypatch.setattr(settings, "LEAF_HOSTS", frozenset({"wiki.example.org", "[::1]"}))
+        monkeypatch.setattr(settings, "HOSTS", frozenset({"wiki.example.org", "[::1]"}))
         for allow_remote in (False, True):   # set, the check stays on even with ZONE_ALLOW_REMOTE
             monkeypatch.setattr(settings, "ZONE_ALLOW_REMOTE", allow_remote)
             for host in ("wiki.example.org", "Wiki.Example.org:8443", "localhost:5000", "[::1]:5000"):
@@ -1929,7 +1929,7 @@ class TestHttpsAndThrottle:
 
     @pytest.fixture()
     def auth_client(self, client, monkeypatch):
-        monkeypatch.setattr(settings, "LEAF_PASSWORD", "pässwört")
+        monkeypatch.setattr(settings, "PASSWORD", "pässwört")
         return client
 
     def login(self, client, password, **headers):
@@ -2385,7 +2385,7 @@ class TestVersion:
     @staticmethod
     def _start(wiki: Path | str | None) -> subprocess.CompletedProcess:
         """Start Zone with ZONE_DATA=wiki (None: unset) until it listens."""
-        env = {k: v for k, v in os.environ.items() if not k.startswith("LEAF_")}
+        env = {k: v for k, v in os.environ.items() if not k.startswith("ZONE_")}
         if wiki is not None:
             env["ZONE_DATA"] = str(wiki)
         proc = subprocess.Popen([str(binary()), "--addr", "127.0.0.1:0"], env=env, text=True,
@@ -2424,7 +2424,7 @@ class TestUsage:
 
     @staticmethod
     def _run(*args: str) -> subprocess.CompletedProcess:
-        env = {k: v for k, v in os.environ.items() if not k.startswith(("LEAF_", "ZONE_"))}
+        env = {k: v for k, v in os.environ.items() if not k.startswith("ZONE_")}
         return subprocess.run([str(binary()), *args], env=env, capture_output=True, text=True,
                               timeout=60)
 
@@ -2451,20 +2451,20 @@ class TestUsage:
 
 
 class TestLocale:
-    """LEAF_LOCALE: a BCP 47 tag the browser formats dates with (data-locale)."""
+    """locale: a BCP 47 tag the browser formats dates with (data-locale)."""
 
     def test_on_the_body_when_set(self, client, monkeypatch):
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
         assert "data-locale" not in body and "data-date-format" not in body
-        monkeypatch.setattr(settings, "LEAF_LOCALE", "de-AT")
-        monkeypatch.setattr(settings, "LEAF_DATE_FORMAT", "iso")
+        monkeypatch.setattr(settings, "LOCALE", "de-AT")
+        monkeypatch.setattr(settings, "DATE_FORMAT", "iso")
         for url in ("/page/index", "/tasks", "/edit/index"):
             body = client.get(url, headers=HOST).get_data(as_text=True)
             assert 'data-locale="de-AT"' in body and 'data-date-format="iso"' in body, url
 
 
 class TestNoshare:
-    """Sharing mode leaves out the pages LEAF_NOSHARE names (#tags, folders/)."""
+    """Sharing mode leaves out the pages noshare names (#tags, folders/)."""
 
     @pytest.fixture(autouse=True)
     def _config(self, monkeypatch):

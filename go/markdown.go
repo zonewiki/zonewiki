@@ -376,7 +376,7 @@ func headingTitle(h ast.Node, src []byte) string {
 	return b.String()
 }
 
-// slugify is mdit_py_plugins.anchors', which mdtext.section_anchor mirrors
+// slugify is the one mdtext.SectionAnchor mirrors
 // for [[Page#Section]] (\w here: Unicode letters, digits and _).
 var slugStripRE = regexp.MustCompile(`[^\p{L}\p{N}_\x{4e00}-\x{9fff}\- ]`)
 

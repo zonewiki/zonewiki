@@ -16,7 +16,7 @@ TOKEN = re.compile(r'id="assistant-token">([0-9a-f]{64})<')
 
 @pytest.fixture()
 def users(monkeypatch):
-    monkeypatch.setattr(settings, "LEAF_USERS", dict(USERS))
+    monkeypatch.setattr(settings, "USERS", dict(USERS))
     monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}, "carol": {"role": "viewer"}})
 
 
@@ -166,7 +166,7 @@ class TestWithUsers:
 class TestWithoutUsers:
 
     def test_with_a_password_it_makes_the_wikis_token(self, client, wiki_dir, monkeypatch):
-        monkeypatch.setattr(settings, "LEAF_PASSWORD", "pw")
+        monkeypatch.setattr(settings, "PASSWORD", "pw")
         assert client.post("/login", data={"password": "pw"}, headers=HOST).status_code == 302
         body = client.get("/assistant", headers=HOST).data.decode()
         assert "The wiki has no token" in body and "as you" not in body and 'type="password"' in body
@@ -187,14 +187,14 @@ class TestWithoutUsers:
         assert "The wiki has a token" in client.get("/assistant", headers=HOST).data.decode()
 
     def test_a_new_one_replaces_the_one_from_the_host(self, client, wiki_dir, monkeypatch):
-        monkeypatch.setattr(settings, "LEAF_MCP_TOKEN", "from-the-host")
+        monkeypatch.setattr(settings, "MCP_TOKEN", "from-the-host")
         assert mcp(client, "from-the-host")[0] == 200
         _, token = make(client)
         assert mcp(client, "from-the-host")[0] == 401 and mcp(client, token)[0] == 200
         assert config(wiki_dir).count("mcp-token") == 1
 
     def test_the_address_is_the_base_urls(self, client, monkeypatch):
-        monkeypatch.setattr(settings, "LEAF_BASE_URL", "https://wiki.example.org")
+        monkeypatch.setattr(settings, "BASE_URL", "https://wiki.example.org")
         assert "<code>https://wiki.example.org/mcp</code>" in client.get("/assistant", headers=HOST).data.decode()
 
     def test_the_help_dialog_links_to_it(self, client):

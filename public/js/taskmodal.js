@@ -224,7 +224,7 @@ editTagsInput?.addEventListener('input', syncTarget);
 app.titleInput.addEventListener('input', syncQuickPreview);
 
 // The modal's History section: the task's logged events, newest first
-// (tasks.py _log), with its creation as the oldest. Closed on every open;
+// (logEvent in go/taskstore.go), with its creation as the oldest. Closed on every open;
 // hidden for a new task. Tasks from before the log existed get their
 // creation from created_at.
 const historyDetails = document.getElementById('task-edit-history' + app.sfx);

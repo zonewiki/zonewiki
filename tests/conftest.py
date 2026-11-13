@@ -36,7 +36,7 @@ def wiki_dir(tmp_path, monkeypatch):
 @pytest.fixture()
 def git_wiki_dir(wiki_dir, monkeypatch, tmp_path_factory):
     """wiki_dir as a git repository, as Zone sets one up when it starts."""
-    monkeypatch.setattr(settings, "LEAF_GIT_REMOTE", "")
+    monkeypatch.setattr(settings, "GIT_REMOTE", "")
     monkeypatch.setattr(settings, "GIT_ENABLED", True)
     git_setup(tmp_path_factory)
     return wiki_dir

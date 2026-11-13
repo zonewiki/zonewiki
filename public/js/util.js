@@ -97,12 +97,12 @@ export function toSlug(name) {
     .join('/');
 }
 
-// A heading's id as rendered (mdtext.py heading_id, mdit-py-plugins'
-// anchors slugify): no punctuation, lowercase, spaces → hyphens.
+// A heading's id as rendered (mdtext.HeadingID in
+// go/internal/mdtext): no punctuation, lowercase, spaces → hyphens.
 const headingId = text => text.replace(/[^\p{L}\p{N}\p{M}_\- ]+/gu, '').trim().toLowerCase().replace(/ /g, '-');
 
-// A wikilink's inside → { href, label }, as mdtext.py split_wikilink and
-// process_wikilinks: `Page`, `Page|Label`, `Page#Section` (that heading),
+// A wikilink's inside → { href, label }, as mdtext.SplitWikilink and
+// processWikilinks (go/render.go): `Page`, `Page|Label`, `Page#Section` (that heading),
 // `#Section` (a heading on this page).
 export function wikilinkHref(inner) {
   const bar = inner.indexOf('|');

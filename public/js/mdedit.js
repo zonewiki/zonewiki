@@ -482,7 +482,8 @@ export function opensCodeFence(t) {
 // ── Checkboxes in a preview ───────────────────────────────────────────────────
 
 // Character offsets of the mark inside each task-list checkbox ("[ ]"/"[x]"),
-// in rendered order. Mirrors mdtext.py's _task_item_lines/_TASK_ITEM_RE: only
+// in rendered order. Mirrors mdtext.TaskItemLines and taskItemRE
+// (go/internal/mdtext): only
 // list items whose text starts with the box produce a checkbox, fenced code,
 // display math and (in a page, `frontmatter`) a leading frontmatter block
 // are skipped — so the Nth rendered checkbox is the Nth offset here.

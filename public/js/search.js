@@ -202,7 +202,7 @@ function highlightIndices(str, indices) {
   return out;
 }
 
-// The words of a search query (search.Query in search.py): phrases lose their
+// The words of a search query (textsearch.ParseQuery in go/internal/textsearch): phrases lose their
 // quotes; -word, -"phrase", #tag, -#tag and the date filters (edited:,
 // after:, before:) are filters on content, which a title can't be checked
 // against, so the title filter leaves them out.
@@ -262,7 +262,7 @@ function titleMatch(q, p) {
 // for a name), then the shorter name, which the query covers more of. So
 // "alex" puts "Alex Morgan" before "Alex 1:1 Kickoff" (three folders
 // down) and the note "alex_prep".
-const QUICKNOTE_SLUG_RE = /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_/;  // mdtext.py QUICKNOTE_RE
+const QUICKNOTE_SLUG_RE = /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_/;  // quicknoteRE in go/quicknotes.go
 
 function tieBreak(p, field) {
   const name = p.slug.split('/').pop();
@@ -335,7 +335,7 @@ function applyModalControls() {
   }
 }
 
-const MODAL_RESULTS = 15;  // retrieval.py SEARCH_LIMIT
+const MODAL_RESULTS = 15;  // searchLimit in go/retrieval.go
 
 async function fetchModalContentMatches(q) {
   const seq = ++modalCMSeq;

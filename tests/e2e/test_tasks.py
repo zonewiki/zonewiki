@@ -1873,7 +1873,7 @@ def test_keep_checkbox_in_modal(page, wiki):
 def test_private_checkbox_in_modal(page, wiki, monkeypatch):
     # With users: an embed on a page in your private folder makes private
     # tasks (🔒 on the card, in your own tasks files); unticked, it is shared.
-    monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "token")})
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "token")})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
     wiki.write("private/alice/todo", "# Todo\n\n[[tasks: view=open]]\n")
     page.goto("/page/private/alice/todo")
@@ -1899,7 +1899,7 @@ def test_a_private_lists_tag_does_not_tick_private(page, wiki, monkeypatch):
     # gifts is declared in alice's folder, but tags don't decide where a
     # task is kept: the box is as the tasks opened it, and a shared task
     # keeps it disabled (shared stays shared).
-    monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "token")})
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "token")})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
     wiki.write("private/alice/gifts", "# Gifts\n\n[[tasks: list=gifts]]\n")
     page.request.post("/api/tasks", data={"title": "Scarf", "private": False})
@@ -1925,7 +1925,7 @@ def test_c_t_in_a_shared_home_starts_shared(page, wiki, monkeypatch):
     # The shared Tasks home is list=task, and alice declares task in her
     # folder too: c t starts with #task, but the Tasks home is a shared page
     # (location, not the tag), so Private is not ticked.
-    monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "token")})
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "token")})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
     wiki.write("team", "# Team\n\n[[tasks: list=task pin=1]]\n")
     wiki.write("private/alice/mine", "# Mine\n\n[[tasks: list=task]]\n")
@@ -1946,7 +1946,7 @@ def test_c_t_in_a_shared_home_starts_shared(page, wiki, monkeypatch):
 def test_private_box_of_a_shared_task_is_disabled(page, wiki, monkeypatch):
     # bob made it: it is shared for good. Alice's own private task can be
     # shared, and the modal says what that does.
-    monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "t1"), "bob": ("pw", "t2")})
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "t1"), "bob": ("pw", "t2")})
     page.request.post("/login", form={"username": "bob", "password": "pw"})
     page.request.post("/api/tasks", data={"title": "Bob's errand", "private": False})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
@@ -1966,7 +1966,7 @@ def test_private_box_of_a_shared_task_is_disabled(page, wiki, monkeypatch):
 
 
 def test_every_comment_can_be_edited(page, wiki, monkeypatch):
-    monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "t1"), "bob": ("pw", "t2")})
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "t1"), "bob": ("pw", "t2")})
     page.request.post("/login", form={"username": "bob", "password": "pw"})
     task = page.request.post("/api/tasks", data={"title": "Errand"}).json()
     page.request.post(f"/api/tasks/{task['id']}/comments", data={"text": "From Bob"})
@@ -2479,9 +2479,9 @@ GERMAN_MONTHS = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli",
 
 
 def test_locale_formats_dates_and_the_calendar(page, wiki, monkeypatch):
-    # LEAF_LOCALE: dates in German, a calendar with German heads from Monday,
+    # locale: dates in German, a calendar with German heads from Monday,
     # and the task chips the server writes in English rewritten in the page.
-    monkeypatch.setattr(settings, "LEAF_LOCALE", "de-DE")
+    monkeypatch.setattr(settings, "LOCALE", "de-DE")
     long_ago = date(date.today().year - 1, 3, 4)
     t = page.request.post("/api/tasks", data={"title": "Started last year", "start_date": long_ago.isoformat(),
                                               "due_date": (date.today() + timedelta(days=400)).isoformat()}).json()
@@ -2504,10 +2504,10 @@ def test_locale_formats_dates_and_the_calendar(page, wiki, monkeypatch):
 
 
 def test_iso_date_format(page, wiki, monkeypatch):
-    # LEAF_DATE_FORMAT=iso: YYYY-MM-DD on cards, the board and in chips; the
+    # date-format = iso: YYYY-MM-DD on cards, the board and in chips; the
     # locale still names the weekdays and starts the week.
-    monkeypatch.setattr(settings, "LEAF_LOCALE", "en-US")
-    monkeypatch.setattr(settings, "LEAF_DATE_FORMAT", "iso")
+    monkeypatch.setattr(settings, "LOCALE", "en-US")
+    monkeypatch.setattr(settings, "DATE_FORMAT", "iso")
     start = date.today() - timedelta(days=5)
     t = page.request.post("/api/tasks", data={"title": "Started", "start_date": start.isoformat(),
                                               "due_date": (date.today() + timedelta(days=40)).isoformat()}).json()

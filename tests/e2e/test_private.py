@@ -14,7 +14,7 @@ from tests import settings
 @pytest.fixture()
 def alice(page, wiki, monkeypatch):
     """The browser, signed in as alice (bob exists too)."""
-    monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "t1"), "bob": ("pw", "t2")})
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "t1"), "bob": ("pw", "t2")})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
     return page
 
@@ -143,7 +143,7 @@ def test_without_users_there_is_no_menu(page, wiki):
 
 
 def test_the_phone_has_private_and_quicknote_tabs(new_page, wiki, monkeypatch):
-    monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "t1")})
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "t1")})
     phone = new_page(**TOUCH_PHONE)
     phone.request.post("/login", form={"username": "alice", "password": "pw"})
     phone.goto("/page/index")

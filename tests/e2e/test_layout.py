@@ -890,7 +890,7 @@ def test_heading_links_copy_page_and_section_urls(page, wiki):
 
 def test_rename_into_private_is_refused(page, wiki, monkeypatch):
     # A shared page stays shared: the dialog comes back with the reason.
-    monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "token")})
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "token")})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
     wiki.write("ideas", "# Ideas\n")
     page.goto("/page/ideas")

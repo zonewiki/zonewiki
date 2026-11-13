@@ -63,8 +63,8 @@ func TestLastActivity(t *testing.T) {
 	}
 }
 
-// Dates as <time> elements the browser shows in LEAF_LOCALE (js/util.js
-// localizeDates); another year's with its year, LEAF_DATE_FORMAT=iso as ISO.
+// Dates as <time> elements the browser shows in the wiki's locale (js/util.js
+// localizeDates); another year's with its year, date-format = iso as ISO.
 func TestShortDate(t *testing.T) {
 	testWiki(t, nil)
 	for _, c := range [][3]string{

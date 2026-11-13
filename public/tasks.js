@@ -54,7 +54,7 @@ export function openTasksEdit(taskId, opts) {
 }
 
 // ── Notes and comments, rendered as pages are ─────────────────────────────
-// The server renders them (POST /api/render-notes, render.render_notes: the
+// The server renders them (POST /api/render-notes, renderNotes in go/render.go: the
 // page renderer, so headings, lists, tables, code, wikilinks and task chips
 // look as on a page). The HTML is kept per text for the page's life and
 // shared by every task list app on it, so each text is fetched once.
@@ -399,7 +399,8 @@ function listTooltip(name) {
   return home ? `List: ${home}` : 'List';
 }
 // The tabs' names: Open/Plan/Focus, or an embed's own (`labels=`, rendered
-// into the tab buttons by tasks.py, so they are read back from there).
+// into the tab buttons by templates/partials/tasks_embed.html, so they are
+// read back from there).
 const tabLabel = view => tabsEl.querySelector(`[data-view="${view === 'plan' ? 'open' : view}"]`)?.textContent.trim() || view;
 // [[tasks: keep=1]]: new tasks are keep tasks (a shopping list of staples).
 const initKeep = appEl?.dataset.initKeep === '1';
@@ -633,7 +634,7 @@ function cleanList(name) {
     .replace(/\s+/g, '-').replace(/^-+|-+$/g, '');
 }
 const lowerTags = t => (t.tags || []).map(x => x.toLowerCase());
-// The separate list a task belongs to (tasks.py task_list): the first A–Z
+// The separate list a task belongs to (taskList in go/pages.go): the first A–Z
 // of its tags that is a declared list.
 function taskList(t) { return lowerTags(t).filter(x => listSet.has(x)).sort()[0] || null; }
 function inScope(t) {
@@ -954,7 +955,7 @@ function cancelPendingComplete(id) {
   return true;
 }
 
-// What completing a keep task changes (mirrors _keep_done in tasks.py), so
+// What completing a keep task changes (mirrors keepDone in go/taskstore.go), so
 // undo can put it back.
 function keepSnapshot(t) {
   return { start_date: t.start_date || null, due_date: t.due_date || null,
@@ -1204,8 +1205,8 @@ function boardBuckets(list) {
 
 Object.assign(app, initTaskRender(app));
 const { htmlOf, render } = app;
-// A link to another site opens in a new tab (as render.py _is_external
-// marks them in pages); a full URL to Zone itself stays.
+// A link to another site opens in a new tab (as go/markdown.go's
+// external marks them in pages); a full URL to Zone itself stays.
 const extAttrs = href => {
   try {
     const u = new URL(href, location.href);

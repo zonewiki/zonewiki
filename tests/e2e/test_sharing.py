@@ -99,7 +99,7 @@ def test_sharing_mode_hides_the_backlinks_chip_and_page_end(new_page, wiki):
 
 
 def test_noshare_pages_hidden_in_sharing_mode(new_page, wiki):
-    # Pages tagged #noshare (LEAF_NOSHARE's default) are left out: their
+    # Pages tagged #noshare (noshare's default) are left out: their
     # page shows "Hidden page", links to them are plain words, search and
     # the editor's completion don't offer them.
     wiki.write("bob", "---\ntags: noshare\n---\n# Bob Private\n\nNotes about Bob.\n")

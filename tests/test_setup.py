@@ -130,11 +130,11 @@ class TestWhenThereIsNoPage:
 
     def test_names_in_hosts_count(self, client, fresh, monkeypatch):
         monkeypatch.setattr(settings, "ZONE_ALLOW_REMOTE", False)
-        monkeypatch.setattr(settings, "LEAF_HOSTS", frozenset({"wiki.example.org"}))
+        monkeypatch.setattr(settings, "HOSTS", frozenset({"wiki.example.org"}))
         assert client.get("/page/plans", headers={"Host": "wiki.example.org"}).headers["Location"] == "/setup"
 
     def test_a_wiki_with_a_login_has_none(self, client, fresh, monkeypatch):
-        monkeypatch.setattr(settings, "LEAF_PASSWORD", "wiki-pw")
+        monkeypatch.setattr(settings, "PASSWORD", "wiki-pw")
         assert client.get("/setup", headers=HOST).status_code == 302
         assert client.post("/setup", data=FORM, headers=HOST).status_code == 302
         assert client.post("/login", data={"password": "correct horse"}, headers=HOST).status_code == 200

@@ -15,7 +15,7 @@ import (
 func evalWiki(t *testing.T) {
 	testWiki(t, map[string]string{
 		"golf":       "# Golf\n\n## Werkstatt\n\nTermin beim Mechaniker, Bremsen quietschen.\n\n## Reifen\n\nWinterreifen im Keller.\n",
-		"git-remote": "# Git remote\n\nSet LEAF_GIT_REMOTE, then push to copy every commit.\n",
+		"git-remote": "# Git remote\n\nSet ZONE_GIT_REMOTE, then push to copy every commit.\n",
 	})
 	old := semantic
 	semantic = nil

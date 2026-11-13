@@ -19,7 +19,7 @@ USERS = {"alice": ("alice-pw", "alice-token")}
 @pytest.fixture()
 def config(wiki_dir, client, monkeypatch):
     """alice from the settings file, Zone running; returns the file."""
-    monkeypatch.setattr(settings, "LEAF_USERS", dict(USERS))
+    monkeypatch.setattr(settings, "USERS", dict(USERS))
     client.live.ensure()
     return wiki_dir / ".zone" / "config"
 
@@ -162,7 +162,7 @@ def test_the_file_is_kept_out_of_git_and_never_shown(client, git_wiki_dir, monke
     """Zone keeps all of .zone/ out of git, the settings file too (account data
     stays out of git); a change goes to the log, names and keys only; no page
     route serves it, and Zone's history leaves it out."""
-    monkeypatch.setattr(settings, "LEAF_USERS", dict(USERS))
+    monkeypatch.setattr(settings, "USERS", dict(USERS))
     login(client, "alice", "alice-pw")
     config = git_wiki_dir / ".zone" / "config"
     files = git(git_wiki_dir, "ls-files")
@@ -185,10 +185,10 @@ def test_a_clone_without_its_users_doesnt_start_open(client, git_wiki_dir, monke
     """A wiki whose history has users' commits but no settings file (a clone
     of its git remote) won't start without a login; an empty file says so on
     purpose."""
-    monkeypatch.setattr(settings, "LEAF_USERS", dict(USERS))
+    monkeypatch.setattr(settings, "USERS", dict(USERS))
     login(client, "alice", "alice-pw")
     client.post("/api/notes", data={"title": "Alices"}, headers=HOST)   # a commit by alice
-    monkeypatch.setattr(settings, "LEAF_USERS", {})
+    monkeypatch.setattr(settings, "USERS", {})
     monkeypatch.setattr(settings, "NO_LOGIN", False)   # no settings file at all
     with pytest.raises(RuntimeError, match="didn't start"):
         client.get("/page/index", headers=HOST)

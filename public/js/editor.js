@@ -538,7 +538,7 @@ function highlightPreviewBlock(force) {
   const lines = text.split('\n');
 
   // Walk lines up to cursor, counting rendered block elements.
-  // Rules that mirror how markdown-it produces block elements:
+  // Rules that mirror how the server's markdown (goldmark) produces block elements:
   //  - blank line ends the current block
   //  - ATX headings (# …) always occupy their own block, regardless of surrounding blank lines
   //  - fenced code blocks (``` / ~~~) are one block regardless of their interior content

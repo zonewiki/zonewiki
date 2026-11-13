@@ -5,7 +5,7 @@ GoClient takes the calls of Flask's test client, which the tests were
 written for (get/post/put/delete with headers, data, json, query_string,
 content_type, follow_redirects; set_cookie), and answers with werkzeug's
 TestResponse. The settings a test
-patches in tests/settings.py (a password, LEAF_HOSTS …) go to the server
+patches in tests/settings.py (a password, HOSTS …) go to the server
 as its environment (and settings file, .zone/config): when they change, the
 server restarts on the same wiki before the next request."""
 
@@ -71,22 +71,22 @@ def config_text() -> str:
     there is nothing to say (the wiki then has no file)."""
     noshare = [f"#{t}" for t in sorted(settings.NOSHARE_TAGS)] + list(settings.NOSHARE_FOLDERS)
     values = {
-        "password": password_hash(settings.LEAF_PASSWORD) if settings.LEAF_PASSWORD else "",
-        "mcp-token": token_hash(settings.LEAF_MCP_TOKEN) if settings.LEAF_MCP_TOKEN else "",
-        "base-url": settings.LEAF_BASE_URL,
-        "query-log": "yes" if settings.LEAF_QUERY_LOG else "",
-        "git-remote": settings.LEAF_GIT_REMOTE,
-        "hosts": ", ".join(sorted(settings.LEAF_HOSTS)),
-        "locale": settings.LEAF_LOCALE,
-        "date-format": settings.LEAF_DATE_FORMAT,
+        "password": password_hash(settings.PASSWORD) if settings.PASSWORD else "",
+        "mcp-token": token_hash(settings.MCP_TOKEN) if settings.MCP_TOKEN else "",
+        "base-url": settings.BASE_URL,
+        "query-log": "yes" if settings.QUERY_LOG else "",
+        "git-remote": settings.GIT_REMOTE,
+        "hosts": ", ".join(sorted(settings.HOSTS)),
+        "locale": settings.LOCALE,
+        "date-format": settings.DATE_FORMAT,
     }
     text = "".join(f"{key} = {value}\n" for key, value in values.items() if value)
     if noshare != ["#noshare"]:
         text += f"noshare = {', '.join(noshare)}\n"
-    if settings.NO_LOGIN and not settings.LEAF_PASSWORD and not settings.LEAF_USERS:
+    if settings.NO_LOGIN and not settings.PASSWORD and not settings.USERS:
         text += "no-login = yes\n"
     text += settings.CONFIG_FILE
-    for name, (password, token) in settings.LEAF_USERS.items():
+    for name, (password, token) in settings.USERS.items():
         text += f"\n[user {name}]\npassword = {password_hash(password)}\n"
         if token:
             text += f"mcp-token = {token_hash(token)}\n"
@@ -148,7 +148,7 @@ class GoServer:
         self.env, self.flags = env, list(flags)
         self.config = config_text() if config is None else config
         write_config(self.config)
-        base = {k: v for k, v in os.environ.items() if not k.startswith(("LEAF_", "ZONE_"))}
+        base = {k: v for k, v in os.environ.items() if not k.startswith("ZONE_")}
         self.binary = binary()   # built before PATH might lose go
         self.log = open(log, "ab")
         self.proc = subprocess.Popen(

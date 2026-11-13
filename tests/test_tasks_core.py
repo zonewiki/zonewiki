@@ -46,7 +46,7 @@ class TestDates:
 
 
 class TestLocale:
-    """Dates in LEAF_LOCALE; without one, US English with weeks from Monday."""
+    """Dates in the wiki's locale; without one, US English with weeks from Monday."""
 
     def test_settings_from_the_body(self):
         assert run_core("TasksCore.dateSettings({})") == {"locale": "", "iso": False}

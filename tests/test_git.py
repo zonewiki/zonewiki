@@ -84,10 +84,10 @@ class TestGitSetup:
         assert git(wiki_dir, "config", "user.name").strip() == "Zone"
 
     def test_git_remote_added_then_updated(self, wiki_dir, monkeypatch, tmp_path_factory):
-        monkeypatch.setattr(settings, "LEAF_GIT_REMOTE", "https://example.invalid/a.git")
+        monkeypatch.setattr(settings, "GIT_REMOTE", "https://example.invalid/a.git")
         git_setup(tmp_path_factory)
         assert git(wiki_dir, "remote", "get-url", "origin").strip() == "https://example.invalid/a.git"
-        monkeypatch.setattr(settings, "LEAF_GIT_REMOTE", "https://example.invalid/b.git")
+        monkeypatch.setattr(settings, "GIT_REMOTE", "https://example.invalid/b.git")
         git_setup(tmp_path_factory)
         assert git(wiki_dir, "remote", "get-url", "origin").strip() == "https://example.invalid/b.git"
 

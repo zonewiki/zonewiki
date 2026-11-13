@@ -8,7 +8,7 @@ from tests import settings
 
 @pytest.fixture()
 def admin(page, wiki, monkeypatch):
-    monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "t1"), "bob": ("pw", "t2")})
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "t1"), "bob": ("pw", "t2")})
     monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
     page.goto("/admin/users")

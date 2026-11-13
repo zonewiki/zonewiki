@@ -138,7 +138,7 @@ func TestPrepareMasksCode(t *testing.T) {
 func TestPreparePlaceholders(t *testing.T) {
 	testWiki(t, nil)
 	text, embeds, refs := prepare("[[tasks:]] [[TASKS: list=work]] [[task:ABCD-1234]]\u00a0[[tasks:\u00a0view=x]]")
-	if text != "LEAFTASKSPLACEHOLDER_0 LEAFTASKSPLACEHOLDER_1 \ue0020\ue003\u00a0LEAFTASKSPLACEHOLDER_2" {
+	if text != "ZONETASKSPLACEHOLDER_0 ZONETASKSPLACEHOLDER_1 \ue0020\ue003\u00a0ZONETASKSPLACEHOLDER_2" {
 		t.Errorf("text %q", text)
 	}
 	if len(embeds) != 3 || !strings.Contains(embeds[1].html, `data-init-list="work"`) ||

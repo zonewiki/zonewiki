@@ -184,7 +184,7 @@ func commentText(s string) (string, error) {
 
 // ---- the embed ----
 
-const tasksPlaceholder = "LEAFTASKSPLACEHOLDER"
+const tasksPlaceholder = "ZONETASKSPLACEHOLDER"
 
 // buildTasksEmbed renders the task app for user on a page (instance numbers
 // a page's embeds); headless hides it but for its edit modal (the editor's

@@ -17,7 +17,7 @@ USERS = {"alice": ("alice-pw", "alice-token"), "bob": ("bob-pw", "")}
 
 @pytest.fixture()
 def users(monkeypatch):
-    monkeypatch.setattr(settings, "LEAF_USERS", dict(USERS))
+    monkeypatch.setattr(settings, "USERS", dict(USERS))
 
 
 def login(client, name, password):
@@ -41,8 +41,8 @@ class TestLogin:
     def test_login_form_asks_for_the_user_only_with_users(self, client, users, monkeypatch):
         body = client.get("/login", headers=HOST).data.decode()
         assert 'name="username"' in body and 'autocomplete="username"' in body
-        monkeypatch.setattr(settings, "LEAF_USERS", {})
-        monkeypatch.setattr(settings, "LEAF_PASSWORD", "pw")
+        monkeypatch.setattr(settings, "USERS", {})
+        monkeypatch.setattr(settings, "PASSWORD", "pw")
         assert 'name="username"' not in client.get("/login", headers=HOST).data.decode()
 
     def test_each_user_signs_in_with_their_own_password(self, client, users):
@@ -99,19 +99,19 @@ class TestLogin:
     def test_a_removed_user_is_signed_out(self, client, users, monkeypatch):
         login(client, "alice", "alice-pw")
         assert client.get("/page/index", headers=HOST).status_code == 200
-        monkeypatch.setattr(settings, "LEAF_USERS", {"bob": USERS["bob"]})
+        monkeypatch.setattr(settings, "USERS", {"bob": USERS["bob"]})
         assert client.get("/page/index", headers=HOST).status_code == 302
 
     def test_switching_from_a_password_to_users_signs_out(self, client, monkeypatch):
-        monkeypatch.setattr(settings, "LEAF_PASSWORD", "pw")
+        monkeypatch.setattr(settings, "PASSWORD", "pw")
         client.post("/login", data={"password": "pw"}, headers=HOST)
         assert client.get("/page/index", headers=HOST).status_code == 200
-        monkeypatch.setattr(settings, "LEAF_PASSWORD", "")
-        monkeypatch.setattr(settings, "LEAF_USERS", dict(USERS))
+        monkeypatch.setattr(settings, "PASSWORD", "")
+        monkeypatch.setattr(settings, "USERS", dict(USERS))
         assert client.get("/page/index", headers=HOST).status_code == 302
 
     def test_no_name_without_users(self, client, monkeypatch):
-        monkeypatch.setattr(settings, "LEAF_PASSWORD", "pw")
+        monkeypatch.setattr(settings, "PASSWORD", "pw")
         client.post("/login", data={"password": "pw"}, headers=HOST)
         body = client.get("/page/index", headers=HOST).data.decode()
         assert "signout-form" in body and "signout-user" not in body
@@ -153,7 +153,7 @@ class TestMCP:
         assert mcp(client, "").status_code == 401   # bob has none: no empty token gets in
 
     def test_off_without_any_token(self, client, monkeypatch):
-        monkeypatch.setattr(settings, "LEAF_USERS", {"bob": USERS["bob"]})
+        monkeypatch.setattr(settings, "USERS", {"bob": USERS["bob"]})
         resp = mcp(client, "x")
         assert resp.status_code == 403 and "./run.sh user token NAME" in resp.get_json()["error"]
 
@@ -191,7 +191,7 @@ class TestSigningOut:
         assert client.get("/page/index", headers=HOST).status_code == 200
 
     def test_the_wikis_one_password_too(self, client, monkeypatch):
-        monkeypatch.setattr(settings, "LEAF_PASSWORD", "one password")
+        monkeypatch.setattr(settings, "PASSWORD", "one password")
         assert client.post("/login", data={"password": "one password"}, headers=HOST).status_code == 302
         copy = client.cookies["session"]
         client.post("/logout", headers=HOST)
@@ -299,7 +299,7 @@ class TestMakeShared:
         for slug in ("index", "private/alice/index", note):
             body = self.view(alice, slug)
             assert "Make shared" not in body, slug
-        monkeypatch.setattr(settings, "LEAF_USERS", {})
+        monkeypatch.setattr(settings, "USERS", {})
         monkeypatch.setattr(settings, "CONFIG_FILE", "# no login, on purpose\n")   # else: missingUsers
         assert "Make shared" not in self.view(client, "private/alice/index")
 

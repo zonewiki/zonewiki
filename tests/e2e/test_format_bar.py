@@ -249,7 +249,7 @@ def test_a_refused_upload_says_why(page, wiki, monkeypatch):
 
 
 def test_attach_to_a_private_page_keeps_the_file_private(page, wiki, monkeypatch):
-    monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "token")})
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "token")})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
     wiki.write("private/alice/fmt", "# Fmt\n\n")
     page.goto("/edit/private/alice/fmt")

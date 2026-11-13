@@ -18,7 +18,7 @@ USERS = {"alice": ("alice-pw", "alice-token"), "bob": ("bob-pw", ""), "carol": (
 
 @pytest.fixture()
 def users(monkeypatch):
-    monkeypatch.setattr(settings, "LEAF_USERS", dict(USERS))
+    monkeypatch.setattr(settings, "USERS", dict(USERS))
     monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}})
 
 
@@ -156,7 +156,7 @@ class TestRefused:
         assert section(git_wiki_dir, "alice") is None
 
     def test_the_last_user_is_removed_only_on_the_host(self, client, monkeypatch, git_wiki_dir):
-        monkeypatch.setattr(settings, "LEAF_USERS", {"alice": USERS["alice"]})
+        monkeypatch.setattr(settings, "USERS", {"alice": USERS["alice"]})
         monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}})
         login(client, "alice")
         resp = post(client, "/admin/users/alice/remove")

@@ -21,7 +21,7 @@ class TestTasksLinkRender:
         # Regression: placeholder _1 is a prefix of _10, so the 11th embed
         # was replaced by (part of) the 2nd one's HTML.
         html = preview(client, "\n\n".join(f"[[tasks: tag=t{i}]]" for i in range(11)) + "\n")
-        assert "LEAFTASKSPLACEHOLDER" not in html
+        assert "ZONETASKSPLACEHOLDER" not in html
         for i in range(11):
             sfx = f"-{i}" if i else ""
             assert html.count(f'id="tasks-app{sfx}"') == 1

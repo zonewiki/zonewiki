@@ -128,7 +128,7 @@ body {
 /* Shown only on small screens (see the 640px media query) */
 .mobile-only { display: none; }
 
-/* Action bar (action_bar_html in server.py): the phone's bottom tab bar
+/* Action bar (action_bar in templates/partials/modules.html): the phone's bottom tab bar
    (see the 640px media query). Desktop has the top actions instead. */
 .action-buttons {
   display: flex; gap: .5rem;
@@ -211,8 +211,8 @@ html.sharing :is(
   .module-counts, #uncommitted-badge             /* status counts */
 ) { display: none !important; }
 
-/* The Tasks links' counts (server.py _task_counts_html, kept current by
-   zonewiki.js): tasks due today or overdue (orange) and tasks in Focus (muted),
+/* The Tasks links' counts (module_counts in templates/partials/modules.html,
+   kept current by js/chrome.js): tasks due today or overdue (orange) and tasks in Focus (muted),
    each hidden at zero. */
 .module-counts { display: inline-flex; gap: .2rem; margin-left: .3rem; }
 .module-counts:not(:has(> :not([hidden]))) { display: none; }
@@ -1271,7 +1271,7 @@ main > .sheet > h2 { font-family: var(--serif); font-size: 1.45rem; font-weight:
 .task-list-item { list-style: none; margin-left: -1.25rem; }
 .task-list-item-checkbox { cursor: pointer; margin-right: .4rem; accent-color: var(--link); }
 
-/* ── Task references ([[task:…]], _task_ref_html in server.py) ───────────────── */
+/* ── Task references ([[task:…]], taskRefHTML in go/render.go) ─────────────────── */
 
 /* Inline: a small chip in the sentence. Alone in a list item: a checklist
    row (no box), so a list of references reads like a checklist. */
@@ -1715,7 +1715,7 @@ body.editor-page main {
 }
 .merge-note[hidden] { display: none; }
 
-/* Formatting bar (FORMAT_BAR in server.py, applyFormat in zonewiki.js): one
+/* Formatting bar (templates/partials/format_bar.html, applyFormat in js/mdedit.js): one
    line of quiet buttons above the textarea; on a narrow screen it scrolls
    sideways instead of wrapping. */
 .format-bar {

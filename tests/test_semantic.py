@@ -16,7 +16,7 @@ from tests.semantic import RELATED_MIN_CHARS, make_index
 
 @pytest.fixture()
 def semantic(wiki_dir, monkeypatch):
-    write_page(wiki_dir, "git-remote", "# Git remote\n\nSet LEAF_GIT_REMOTE, then push to copy every commit.\n")
+    write_page(wiki_dir, "git-remote", "# Git remote\n\nSet ZONE_GIT_REMOTE, then push to copy every commit.\n")
     write_page(wiki_dir, "golf", "# Golf\n\n## Werkstatt\n\nTermin beim Mechaniker, Bremsen quietschen.\n")
     write_page(wiki_dir, "evening", "# Evening routine\n\nNo screens late, bed by eleven.\n")
     write_page(wiki_dir, "money", "# Budget\n\nRent and savings.\n")
@@ -178,7 +178,7 @@ class TestRelatedWithUsers:
     def test_fills_the_five_with_pages_the_user_may_see(self, client, semantic, wiki_dir, monkeypatch):
         """Alice's private pages are closer to golf than the shared one, and more than five:
         bob still gets the shared page, since only what he may see is ranked."""
-        monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("alice-pw", "alice-token"), "bob": ("bob-pw", "bob-token")})
+        monkeypatch.setattr(settings, "USERS", {"alice": ("alice-pw", "alice-token"), "bob": ("bob-pw", "bob-token")})
         for i in range(6):
             write_page(wiki_dir, f"private/alice/brakes-{i}", "# Brakes\n\nBremsen beim Mechaniker, Werkstatt Termin.\n")
         write_page(wiki_dir, "brakes", "# Brakes\n\nBremsen beim Mechaniker. Rent and savings.\n")
@@ -197,7 +197,7 @@ class TestSearchWithUsers:
 
     @pytest.fixture()
     def alice_bob(self, client, semantic, wiki_dir, monkeypatch):
-        monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("alice-pw", "alice-token"), "bob": ("bob-pw", "bob-token")})
+        monkeypatch.setattr(settings, "USERS", {"alice": ("alice-pw", "alice-token"), "bob": ("bob-pw", "bob-token")})
         write_page(wiki_dir, "private/alice/policy",
                    "# Policy\n\nInsurance papers: the policy renewal is due, rent and savings stay.\n")
         semantic.sync()

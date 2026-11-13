@@ -44,7 +44,7 @@ def wiki(client, git_wiki_dir, monkeypatch):
     """A shared page with a checkbox, an uncommitted shared change, shared
     tasks (open with a comment, completed), a note and a private task of
     carol's from when she was an editor; signed in as carol, a viewer."""
-    monkeypatch.setattr(settings, "LEAF_USERS", dict(USERS))
+    monkeypatch.setattr(settings, "USERS", dict(USERS))
     monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}})
     wiki = git_wiki_dir
     (wiki / "plans.md").write_text("# Plans\n\n- [ ] one\n\nshared words\n")
@@ -273,7 +273,7 @@ def guides(client, git_wiki_dir, monkeypatch):
     """The wiki's guide, a folder's (which pulls in a page there and one
     not there yet), a deeper one, and one in bob's private folder; alice an
     admin, bob an editor, signed in."""
-    monkeypatch.setattr(settings, "LEAF_USERS", dict(GUIDE_USERS))
+    monkeypatch.setattr(settings, "USERS", dict(GUIDE_USERS))
     monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}})
     wiki = git_wiki_dir
     for slug, text in {"wiki-guide": "# Guide\n\nkeep it short\n", "plans": "# Plans\n\nkeep it short\n",

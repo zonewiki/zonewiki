@@ -60,7 +60,7 @@ def wiki(git_wiki_dir, monkeypatch):
     """alice's private pages, committed (the diary, a note; an old
     page, deleted) and not (a draft); a shared page linking to the diary,
     which links back."""
-    monkeypatch.setattr(settings, "LEAF_USERS", dict(USERS))
+    monkeypatch.setattr(settings, "USERS", dict(USERS))
     w = git_wiki_dir
     (w / "private" / "alice").mkdir(parents=True)
     (w / "private/alice/_assets").mkdir(parents=True)

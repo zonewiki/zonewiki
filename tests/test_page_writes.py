@@ -19,7 +19,7 @@ DOORS = ["browser", "mcp"]
 
 @pytest.fixture()
 def wiki(git_wiki_dir, monkeypatch):
-    monkeypatch.setattr(settings, "LEAF_MCP_TOKEN", TOKEN)
+    monkeypatch.setattr(settings, "MCP_TOKEN", TOKEN)
     return git_wiki_dir
 
 
@@ -190,8 +190,8 @@ class TestAnotherUsersPrivatePage:
 
     @pytest.fixture()
     def bobs(self, client, wiki, monkeypatch):
-        monkeypatch.setattr(settings, "LEAF_MCP_TOKEN", "")
-        monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("alice-pw", "alice-token"), "bob": ("bob-pw", "")})
+        monkeypatch.setattr(settings, "MCP_TOKEN", "")
+        monkeypatch.setattr(settings, "USERS", {"alice": ("alice-pw", "alice-token"), "bob": ("bob-pw", "")})
         client.post("/login", data={"username": "alice", "password": "alice-pw"}, headers=HOST)
         v1 = commit(wiki, "private/bob/diary", "# Diary\n\nv1\n")
         commit(wiki, "private/bob/diary", "# Diary\n\nv2\n")
@@ -409,8 +409,8 @@ class TestCommits:
     def test_drafts_keep_their_author_when_the_commit_fails(self, client, wiki, monkeypatch):
         """bob's auto-save, committed in his name before alice's write, even
         after a commit that failed in between."""
-        monkeypatch.setattr(settings, "LEAF_MCP_TOKEN", "")
-        monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("alice-pw", ""), "bob": ("bob-pw", "")})
+        monkeypatch.setattr(settings, "MCP_TOKEN", "")
+        monkeypatch.setattr(settings, "USERS", {"alice": ("alice-pw", ""), "bob": ("bob-pw", "")})
         commit(wiki, "p", "# P\n\nv1\n")
         client.post("/login", data={"username": "bob", "password": "bob-pw"}, headers=HOST)
         saved = client.post("/api/save/p", data={"content": "# P\n\nbob's\n"}, headers=HOST)

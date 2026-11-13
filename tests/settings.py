@@ -1,11 +1,10 @@
 """The settings the tests give Zone (tests/goserver.py): the deployment's
 as the server's environment and flags, the wiki's in its settings file
 (.zone/config). A test patches them here (monkeypatch.setattr(settings,
-"LEAF_PASSWORD", "pw")); the server restarts with them before its next
-request. The names are those of the variables Zone read until 2026-10, a
-few values typed as Zone parses them (LEAF_HOSTS a set of names,
-LEAF_NOSHARE as tags and folders); passwords and tokens plain, goserver.py
-writes their hashes."""
+"PASSWORD", "pw")); the server restarts with them before its next
+request. A few values are typed as Zone parses them (HOSTS a set of names,
+noshare as NOSHARE_TAGS and NOSHARE_FOLDERS); passwords and tokens plain,
+goserver.py writes their hashes."""
 
 import os
 import shutil
@@ -15,31 +14,31 @@ REPO = Path(__file__).resolve().parent.parent
 
 ZONE_DATA: Path = Path("/nonexistent")   # each test's wiki (conftest's wiki_dir)
 ZONE_BUILD = "test"
-LEAF_PASSWORD = ""
-LEAF_MCP_TOKEN = ""
+PASSWORD = ""
+MCP_TOKEN = ""
 # Users: name → (password, MCP token or ""); the settings file gets their
 # hashes (goserver.py).
-LEAF_USERS: dict[str, tuple[str, str]] = {}
+USERS: dict[str, tuple[str, str]] = {}
 # More of a user's settings (role, disabled): name → {key: value}.
 USER_SETTINGS: dict[str, dict[str, str]] = {}
 # More of the settings file's text (after the settings above, before the
 # users).
 CONFIG_FILE = ""
-LEAF_BASE_URL = ""
+BASE_URL = ""
 ZONE_HOST_DATA = ""
-LEAF_QUERY_LOG = False
-LEAF_GIT_REMOTE = ""
+QUERY_LOG = False
+GIT_REMOTE = ""
 # No Host check against the test client's (a test of the check turns it on).
 ZONE_ALLOW_REMOTE = True
 # No login on purpose (no-login = yes in the settings file), as the tests
 # reach the server like another device would (ZONE_ALLOW_REMOTE): without
 # it, and without a password or users, Zone shows its first-run page.
 NO_LOGIN = True
-LEAF_HOSTS: frozenset[str] = frozenset()
+HOSTS: frozenset[str] = frozenset()
 NOSHARE_TAGS: frozenset[str] = frozenset({"noshare"})
 NOSHARE_FOLDERS: tuple[str, ...] = ()
-LEAF_LOCALE = ""
-LEAF_DATE_FORMAT = ""
+LOCALE = ""
+DATE_FORMAT = ""
 # Whether the server finds git on its PATH.
 GIT_ENABLED = shutil.which("git") is not None
 # Zone's docs (README.md, docs/spec/) for zone_help; None: none there.

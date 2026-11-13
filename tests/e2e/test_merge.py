@@ -16,7 +16,7 @@ PAGE = "# Plans\n\n## One\n\nFirst.\n\n## Two\n\nSecond.\n"
 @pytest.fixture()
 def editors(page, new_page, wiki, monkeypatch):
     """alice's and bob's editors on plans, both loaded from the same text."""
-    monkeypatch.setattr(settings, "LEAF_USERS", {"alice": ("pw", "t1"), "bob": ("pw", "t2")})
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "t1"), "bob": ("pw", "t2")})
     wiki.write("plans", PAGE)
     wiki.git("add", "-A")
     wiki.git("commit", "-qm", "Plans")

@@ -551,7 +551,7 @@ def test_editor_breadcrumb_keeps_only_the_logo(page, wiki):
 
 
 def test_desktop_sign_out_clear_of_the_buttons(page, wiki, monkeypatch):
-    monkeypatch.setattr(settings, "LEAF_PASSWORD", "pw")
+    monkeypatch.setattr(settings, "PASSWORD", "pw")
     page.request.post("/login", form={"password": "pw"})
     page.goto("/page/index")
     signout = page.get_by_role("button", name="Sign out")
@@ -639,7 +639,7 @@ def test_sign_out_does_not_cover_the_phone_buttons(new_page, wiki, monkeypatch):
     # Regression: Sign out sat in the bottom-right corner, under the New note
     # and Search buttons. With the tab bar along the bottom edge it sits at
     # the top, in the row of status badges.
-    monkeypatch.setattr(settings, "LEAF_PASSWORD", "pw")
+    monkeypatch.setattr(settings, "PASSWORD", "pw")
     phone = new_page(**TOUCH_PHONE)
     phone.request.post("/login", form={"password": "pw"})
     phone.goto("/page/index")
