@@ -210,7 +210,7 @@ def _list_dialog(page):
 
 
 def test_task_list_asks_what_the_list_shows_and_writes_the_embed(page, wiki):
-    # The Task list button shows the dialog a list's gear shows, with List
+    # The Task list button shows the dialog a list's ⋯ menu shows, with List
     # and keep, and writes the line it makes.
     wiki.write("lists", "# Lists\n\n[[tasks: list=shop]]\n")
     textarea = _edit(page, wiki, "Shopping", 8)

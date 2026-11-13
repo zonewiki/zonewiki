@@ -584,7 +584,7 @@ div.task-card-comment > .task-comment-when { display: block; }
   .tasks-app:not(.tasks-compact) .task-meta:has(.task-date-empty) { display: flex; }
 }
 
-.tasks-settings-btn, .tasks-more-btn { display: inline-flex; align-items: center; justify-content: center; padding-inline: .45rem; color: var(--muted); }
+.tasks-more-btn { display: inline-flex; align-items: center; justify-content: center; padding-inline: .45rem; color: var(--muted); }
 .tasks-toolbar select.tasks-sort { flex: none; }
 .tasks-sort[hidden] { display: none; }
 /* The Open tab's Plan switch: on, the board by start date; off, one list */
@@ -1179,8 +1179,6 @@ ul.task-comment-list { list-style: none; margin: .3rem 0 0; padding: 0; font-siz
   .tasks-toolbar #task-filter-search { min-width: 0; }
   .tasks-toolbar select { padding-right: 1.4rem; background-position: right .4rem center; }
   .task-add-label { display: none; }
-  /* The gear's dialog is in the ⋯ menu here (tasksettings.js), for the search field's room. */
-  .tasks-settings-btn { display: none; }
   .tasks-header #task-add-btn { padding: .25rem .8rem; font-size: 1.1rem; line-height: 1; align-self: stretch; }
   /* Compact phone editor: small fields share a line instead of each taking a
      full-width row, and spacing is tighter. */

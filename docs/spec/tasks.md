@@ -34,7 +34,7 @@ Case doesn't matter (`[[Tasks:]]`), nor a space after the colon (`[[tasks:list=s
 [[tasks: tag=work plan=off]]
 ```
 
-The params can be changed without editing the page: the gear in the embed's toolbar (see Settings).
+The params can be changed without editing the page: List settings… in the ⋯ menu of the embed's toolbar (see Settings).
 In the editor, the formatting bar's Task list button shows the same dialog, with the list's name and keep, to write the embed or change the one the cursor is on (Task list dialog in `docs/spec/editor.md`).
 
 **Headless instance**: `build_tasks_embed(params, headless=True)` renders the app hidden, for pages that only need its edit modal (the editor's Make task, see Task references).
@@ -282,7 +282,7 @@ Dates decide where a task appears, never whether.
 
 ### Settings
 
-**The gear** in the toolbar (`#task-settings-btn`, `.tasks-settings-btn`), opens **List settings** (`#task-settings-modal`, `js/tasksettings.js`): what the list is and how it opens, without editing the page.
+**List settings…**, the first item of the list's **⋯ menu** in the toolbar (`#task-more-btn`; the toolbar has no button of its own for it), opens **List settings** (`#task-settings-modal`, `js/tasksettings.js`): what the list is and how it opens, without editing the page.
 It changes the list's params where they are written, so the dialog and a hand edit are the same thing:
 
 | Field | Param | |
@@ -295,7 +295,6 @@ It changes the list's params where they are written, so the dialog and a hand ed
 | Tags of a new task (under More) | `new` | Comma-separated; empty: the list's tag and the single tags it shows |
 | Shows only the tags (under More) | `tag` | The filter: `a,b` both, `a\|b` either, `-a` without |
 
-**On phones** (≤640px) the toolbar has no room for the gear: it isn't shown, and **List settings…** is the first item of the list's ⋯ menu (see Export and import).
 
 **More** (`<details class="task-settings-more">`) folds the three fields that are rarely changed; it is open when the dialog opens with one of them set.
 The line above Save says where the settings are written.
@@ -308,10 +307,10 @@ The line above Save says where the settings are written.
 - **All tasks** (`/tasks`): no page holds its params, so they are in `_tasks/settings.json`, `{"all": {"view": "open", "limit": "5"}}` (`allTasksFile`, `allTasksParams`), for everyone.
   It has no Pinned and no filter (the fields are hidden; `allSettingKeys`).
 
-**Not which list it shows**: `list=` isn't in the gear's dialog (it is in the editor's, where the dialog writes the embed: `.Editor` in `task_settings_dialog`).
+**Not which list it shows**: `list=` isn't in this dialog (it is in the editor's, where the dialog writes the embed: `.Editor` in `task_settings_dialog`).
 Another name there would show another list and leave the tasks behind, which reads like a rename and isn't one; a list is renamed by **Rename…** on `/tasks?list=<name>`, and an embed is made a list by editing the page.
 
-**No gear**: the editor's preview, an old version, a page from the uncommitted list (only a page view renders its own file: `RenderOpts.EditSlug`), a tag no page declares (`/tasks?list=<tag>`), the headless app, a viewer, a page you may not change, sharing mode.
+**No ⋯ menu, so no settings**: the editor's preview, an old version, a page from the uncommitted list (only a page view renders its own file: `RenderOpts.EditSlug`), a tag no page declares (`/tasks?list=<tag>`), the headless app, a viewer, a page you may not change, sharing mode.
 
 **Saving** (`POST /api/tasks/settings`, `tasksSettingsRoute`): the dialog sends only what was changed (`changedParams`), `{page, index, was, set}` or `{all: true, was, set}`: `set` maps a param to its new value, `""` taking it out; `was` is the params as the dialog saw them.
 So saving without a change writes nothing, and a param the dialog doesn't know (`keep`, anything else) stays as written.
@@ -329,7 +328,7 @@ After a save the page reloads, and what the browser tab remembered (the active t
 ### Export and import
 
 **A list's tasks as a file**, to keep a copy, move a list to another wiki or hand it to someone.
-**Export tasks** and **Import tasks…** are in the list's **⋯ menu** in the toolbar, beside the gear (`#task-more-btn`, `.tasks-more-btn`; the cards' menu, `showMenu` in `js/taskmenu.js`, a bottom sheet on phones; the code in `js/tasksettings.js`).
+**Export tasks** and **Import tasks…** are in the list's **⋯ menu** in the toolbar, under List settings… (`#task-more-btn`, `.tasks-more-btn`; the cards' menu, `showMenu` in `js/taskmenu.js`, a bottom sheet on phones; the code in `js/tasksettings.js`).
 
 - **Export tasks** (`GET /api/tasks/export?list=&tag=`, `apiExport`): downloads `zone-tasks-<list>-<date>.json` (`all` for All tasks;
   the name goes into `Content-Disposition` quoted and escaped, `mime.FormatMediaType`, as the list's name is the request's): the tasks the list shows (its `list=` and `tag=`, not what is typed in the search field),
@@ -354,7 +353,7 @@ After a save the page reloads, and what the browser tab remembered (the active t
   A file that isn't an export (no `tasks` list, or a task without a title) is refused whole (the server's reason shows in the dialog), as is one with more than 10,000 tasks (`importMax`); a bare JSON list of tasks is taken too, so a file written by hand or by a script needs only `[{"title": "…"}]`.
   A viewer can't import (403).
 
-The ⋯ menu is where the gear is (see Settings: not for a viewer, nor a tag no page declares).
+The ⋯ menu is there where a list has settings (see Settings: not for a viewer, nor a tag no page declares).
 
 ### Look
 

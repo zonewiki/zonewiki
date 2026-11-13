@@ -1070,6 +1070,12 @@ def test_a_reload_keeps_the_tab(page, wiki):
     expect(active).to_have_text(["Open"])
 
 
+def open_list_settings(page):
+    """List settings…, the first item of the toolbar's ⋯ menu."""
+    page.locator("#task-more-btn").click()
+    page.get_by_role("menuitem", name="List settings…").click()
+
+
 def seed_four(page):
     # Open shows them newest first: Saw, Glue, Nuts, Bolts.
     for title in ("Bolts", "Nuts", "Glue", "Saw"):
@@ -3940,13 +3946,13 @@ def test_rename_list_dialog(page, wiki):
 
 
 def test_settings_dialog_changes_the_embeds_params(page, wiki):
-    """The gear in the toolbar: what the list opens on, Plan, the
+    """List settings… in the toolbar's ⋯ menu: what the list opens on, Plan, the
     tabs' names, the limit and the tags, written into the page's [[tasks: …]]."""
     page.request.post("/api/tasks", data={"title": "Milk", "tags": ["shop"]})
     wiki.write("shopping", "# Shopping\n\nBefore.\n\n[[tasks: list=shop keep=1]]\n\nAfter.\n")
     page.goto("/page/shopping")
     expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Focus"])
-    page.locator("#task-settings-btn").click()
+    open_list_settings(page)
     dialog = page.locator("#task-settings-modal")
     expect(dialog).to_be_visible()
     # It opens with what the page says.
@@ -3975,14 +3981,14 @@ def test_settings_dialog_changes_the_embeds_params(page, wiki):
     expect(page.get_by_role("switch", name="Plan")).to_have_attribute("aria-checked", "false")
 
     # Saving without a change writes nothing; one change leaves the rest.
-    page.locator("#task-settings-btn").click()
+    open_list_settings(page)
     expect(dialog.locator("[name=view] option")).to_have_text(["To buy", "Cart"])
     expect(dialog.locator("[name=label_open]")).to_be_visible()   # More is open: names are set
     expect(dialog.locator("[name=label_open]")).to_have_value("To buy")
     expect(dialog.locator("[name=limit]")).to_have_value("6")
     dialog.get_by_role("button", name="Save").click()
     expect(dialog).to_be_hidden()
-    page.locator("#task-settings-btn").click()
+    open_list_settings(page)
     dialog.locator("[name=plan]").check()
     dialog.locator("[name=pin]").select_option("default")
     with page.expect_navigation():
@@ -3990,9 +3996,9 @@ def test_settings_dialog_changes_the_embeds_params(page, wiki):
     assert "[[tasks: list=shop keep=1 new=weekly,fresh view=plan limit=6 labels=To_buy,Cart pin=default]]" in wiki.read("shopping")
     expect(page.get_by_role("switch", name="Plan")).to_have_attribute("aria-checked", "true")
 
-    # The list on /tasks has the same gear, for the same line of the page.
+    # The list on /tasks has the same settings, for the same line of the page.
     page.goto("/tasks?list=shop")
-    page.locator("#task-settings-btn").click()
+    open_list_settings(page)
     expect(dialog.locator(".task-settings-where")).to_contain_text("shopping")
     dialog.locator("[name=view]").select_option("focus")
     with page.expect_navigation():
@@ -4023,7 +4029,7 @@ def test_plan_default_and_all_tasks_settings(page, wiki):
     other.close()
 
     page.goto("/tasks")
-    page.locator("#task-settings-btn").click()
+    open_list_settings(page)
     dialog = page.locator("#task-settings-modal")
     # No Pinned and no filter there, also under More.
     dialog.locator("summary").click()
@@ -4040,13 +4046,13 @@ def test_plan_default_and_all_tasks_settings(page, wiki):
 
 
 def test_settings_are_in_the_more_menu_on_a_phone(new_page, wiki):
-    """A phone's toolbar has no room for the gear: List settings… is the
-    first item of the ⋯ menu there."""
+    """List settings… is the first item of the ⋯ menu, on a phone as
+    anywhere: the toolbar has no button of its own for it."""
     from conftest import TOUCH_PHONE
     wiki.write("shopping", "# Shopping\n\n[[tasks: list=shop]]\n")
     phone = new_page(**TOUCH_PHONE)
     phone.goto("/page/shopping")
-    expect(phone.locator("#task-settings-btn")).to_be_hidden()
+    expect(phone.locator("#task-settings-btn")).to_have_count(0)
     phone.locator("#task-more-btn").click()
     expect(phone.get_by_role("menuitem")).to_have_text(["List settings…", "Export tasks", "Import tasks…"])
     phone.get_by_role("menuitem", name="List settings…").click()
@@ -4059,7 +4065,7 @@ def test_settings_are_in_the_more_menu_on_a_phone(new_page, wiki):
 
 
 def test_export_and_import_a_lists_tasks(page, wiki, tmp_path):
-    """The list's ⋯ menu, beside the gear: Export saves the list's tasks as a
+    """The list's ⋯ menu: Export saves the list's tasks as a
     file, Import… adds a file's tasks to the list it is opened in, asking for
     a tag of your own once the file is picked."""
     page.request.post("/api/tasks", data={"title": "Milk", "tags": ["shop"]})
@@ -4077,7 +4083,7 @@ def test_export_and_import_a_lists_tasks(page, wiki, tmp_path):
         chooser.value.set_files(file)
 
     more.click()
-    expect(page.get_by_role("menuitem")).to_have_text(["Export tasks", "Import tasks…"])
+    expect(page.get_by_role("menuitem")).to_have_text(["List settings…", "Export tasks", "Import tasks…"])
     with page.expect_download() as got:
         page.get_by_role("menuitem", name="Export tasks").click()
     assert re.fullmatch(r"zone-tasks-shop-\d{4}-\d\d-\d\d\.json", got.value.suggested_filename)
@@ -4085,7 +4091,7 @@ def test_export_and_import_a_lists_tasks(page, wiki, tmp_path):
     got.value.save_as(saved)
     assert '"Milk"' in saved.read_text() and "Report" not in saved.read_text()
     # The settings dialog has none of it.
-    page.locator("#task-settings-btn").click()
+    open_list_settings(page)
     expect(page.locator("#task-settings-modal")).not_to_contain_text("Export")
     page.keyboard.press("Escape")
 

@@ -1,5 +1,5 @@
 """The task app's settings dialog (docs/spec/tasks.md, Settings): where an
-embed has its gear, and POST /api/tasks/settings, which rewrites the page's
+embed has its settings, and POST /api/tasks/settings, which rewrites the page's
 [[tasks: …]] or the settings of All tasks."""
 
 import json
@@ -11,15 +11,15 @@ def save(client, **body):
     return client.post("/api/tasks/settings", json=body, headers=HOST)
 
 
-class TestGear:
-    def test_a_page_view_has_the_gear_and_names_where_its_params_are(self, client, wiki_dir):
+class TestListSettings:
+    def test_a_page_view_has_the_settings_and_names_where_its_params_are(self, client, wiki_dir):
         html = rendered(client, wiki_dir, "[[tasks: tag=a]]\n\n[[tasks: list=shop  view=open]]\n", slug="lists")
         assert 'data-settings-page="lists" data-settings-index="0" data-settings-raw="tag=a"' in html
         assert 'data-settings-page="lists" data-settings-index="1" data-settings-raw="list=shop  view=open"' in html
-        assert 'id="task-settings-btn"' in html and 'id="task-settings-btn-1"' in html
-        assert 'id="task-settings-modal-1"' in html
-        # Beside it, the list's ⋯ menu (Export, Import…).
-        assert 'id="task-more-btn"' in html and 'id="task-import-modal-1"' in html
+        assert 'id="task-settings-modal"' in html and 'id="task-settings-modal-1"' in html
+        # The list's ⋯ menu opens it (List settings…, then Export, Import…); the toolbar has no gear.
+        assert 'id="task-more-btn"' in html and 'id="task-more-btn-1"' in html and 'id="task-import-modal-1"' in html
+        assert "task-settings-btn" not in html
 
     def test_a_preview_has_none(self, client, wiki_dir):
         html = preview(client, "[[tasks: tag=a]]\n")

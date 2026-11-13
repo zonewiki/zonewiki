@@ -3,12 +3,12 @@ import { changedParams, settingsForm } from './tasksettings.js';
 
 // ── The editor's Task list button ────────────────────────────────────────────
 // The formatting bar's Task list shows the list settings dialog, the one a
-// list's gear shows (js/tasksettings.js; in the editor with List and keep,
+// list's ⋯ menu shows (js/tasksettings.js; in the editor with List and keep,
 // which make a list), and writes the `[[tasks: …]]` line it makes into the
 // text. With the cursor on a line that is one already it changes that one:
 // its params fill the fields, and only what was changed is written
-// (changedParams), so a param without a field stays as written. The gear
-// saves the same change to the page's file; here it goes into the text.
+// (changedParams), so a param without a field stays as written. The menu's
+// dialog saves the same change to the page's file; here it goes into the text.
 
 const EMBED_LINE = /^(\s*)\[\[tasks:\s*([^\]]*)\]\](\s*)$/i;
 const SFX = '-editor';
@@ -58,7 +58,7 @@ export function taskListDialog(textarea, { replaceRange, insertBlockAfterLine })
   el('save').textContent = existing ? 'Change' : 'Insert';
   el('error').hidden = true;
   const result = () => embedLine(params, changedParams(was, read(), written));
-  // In place of where the gear says it writes: the line this writes.
+  // In place of where the list's own dialog says it writes: the line this writes.
   const preview = () => { el('where').textContent = result(); };
   preview();
 

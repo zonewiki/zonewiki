@@ -1,11 +1,11 @@
-// A task app's settings dialog (tasks.js initTasksInstance): the gear in
-// the toolbar. It changes the app's params where they are written: the
+// A task app's settings dialog (tasks.js initTasksInstance): List settings…
+// in the list's ⋯ menu in the toolbar. It changes the app's params where they are written: the
 // [[tasks: …]] of a page (the app's own, a list's home on /tasks?list=, the
 // default list's on Pinned), or the settings of All tasks. The server
 // names that place in data-settings-* (tasksembed.go buildTasksEmbed) and
-// rewrites it (POST /api/tasks/settings); without them there is no gear.
+// rewrites it (POST /api/tasks/settings); without them there is no ⋯ menu.
 // Only what was changed is sent, so the other params stay as written.
-// Beside the gear, the list's ⋯ menu: its tasks as a file, Export and Import….
+// The menu's other items: the list's tasks as a file, Export and Import….
 import { closeOnBackdropClick } from './util.js';
 import { showNotice } from './taskutil.js';
 import { refreshDueBadge } from './chrome.js';
@@ -80,7 +80,7 @@ export function changedParams(was, now, p) {
 }
 
 // The dialog's form (partials/tasks_embed.html task_settings_dialog), for a
-// list's gear and for the editor's Task list button (js/tasklist.js), whose
+// list's ⋯ menu and for the editor's Task list button (js/tasklist.js), whose
 // form has List and keep too. fill(params, all): the fields as the params
 // have them (all: All tasks, which has no pin and no filter), More open
 // when something in it is set; returns what read() then gives.
@@ -112,10 +112,10 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
 
 export function initTaskSettings(app) {
   const { appEl, sfx } = app;
-  const btn = document.getElementById('task-settings-btn' + sfx);
+  const moreBtn = document.getElementById('task-more-btn' + sfx);
   const dialog = document.getElementById('task-settings-modal' + sfx);
   const form = document.getElementById('task-settings-form' + sfx);
-  if (!btn || !dialog || !form || appEl.dataset.settingsIndex === undefined) return {};
+  if (!moreBtn || !dialog || !form || appEl.dataset.settingsIndex === undefined) return {};
   const page = appEl.dataset.settingsPage || '';
   const index = parseInt(appEl.dataset.settingsIndex, 10);
   const raw = appEl.dataset.settingsRaw || '';
@@ -156,10 +156,9 @@ export function initTaskSettings(app) {
     errorEl.hidden = false;
   }
 
-  // The ⋯ menu. Export, Import…: the tasks this app shows (its list= and
+  // The ⋯ menu. List settings… opens the dialog. Export, Import…: the tasks this app shows (its list= and
   // tag=), as a file (tasksapi.go apiExport, apiImport). An imported task gets
   // the tags a new task here would, and is private where a new one is.
-  const moreBtn = document.getElementById('task-more-btn' + sfx);
   const importFile = document.getElementById('task-import-file' + sfx);
   const importDialog = document.getElementById('task-import-modal' + sfx);
   const importTitle = document.getElementById('task-import-title' + sfx);
@@ -169,12 +168,11 @@ export function initTaskSettings(app) {
   const n = count => `${count} task${count === 1 ? '' : 's'}`;
   let picked = null;   // the file's content, while the dialog asks for the tag
 
-  // On phones the gear isn't shown (style.css): its dialog is the menu's first item.
   moreBtn.addEventListener('click', () => app.showMenu('This list', [
-    !btn.offsetParent && ['settings', 'List settings…'],
+    ['settings', 'List settings…'],
     ['export', 'Export tasks'],
     ['import', 'Import tasks…'],
-  ].filter(Boolean), action => {
+  ], action => {
     if (action === 'settings') { open(); return; }
     if (action === 'import') { importFile.click(); return; }
     const a = document.createElement('a');
@@ -239,7 +237,6 @@ export function initTaskSettings(app) {
   document.getElementById('task-import-cancel' + sfx).addEventListener('click', () => importDialog.close());
   closeOnBackdropClick(importDialog);
 
-  btn.addEventListener('click', open);
   form.addEventListener('submit', e => { e.preventDefault(); save(); });
   document.getElementById('task-settings-cancel' + sfx).addEventListener('click', () => dialog.close());
   closeOnBackdropClick(dialog);
