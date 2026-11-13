@@ -46,6 +46,18 @@ func TestCheckboxes(t *testing.T) {
 	expectNot(t, html, "disabled")
 }
 
+// With LineBreaks (a task's comment) a line's end in a paragraph is a line
+// break; without, lines in a row join. Code keeps its lines either way.
+func TestLineBreaks(t *testing.T) {
+	src := "one\ntwo *three*\n\n- a\n  b\n\n```\nx\ny\n```\n"
+	html := render(t, src, Env{LineBreaks: true})
+	expectIn(t, html, "<p>one<br />\ntwo <em>three</em></p>", "<li>a<br />\nb</li>", "<code>x\ny\n</code>")
+	if n := strings.Count(html, "<br />"); n != 2 {
+		t.Errorf("%d line breaks, want 2:\n%s", n, html)
+	}
+	expectNot(t, render(t, src, Env{}), "<br />")
+}
+
 func TestAlerts(t *testing.T) {
 	html := render(t, "> [!NOTE]\n> Body *here*.\n\n> [!warning]\n> Lower case.\n\n> [!TIP] not alone\n\n> [!NOPE]\n> x\n", Env{})
 	expectIn(t, html,

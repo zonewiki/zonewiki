@@ -257,10 +257,10 @@ export function subtaskCounts(notes) {
   return counts;
 }
 
-// A comment on a card: one of a single paragraph goes on the line of its
-// time; any other (several paragraphs, a list, code …) under it, rendered
-// as the notes are.
-const ONE_PARAGRAPH = /^<p>((?:(?!<\/p>)[\s\S])*)<\/p>\s*$/;
+// A comment on a card: one of a single line goes on the line of its
+// time; any other (several lines or paragraphs, a list, code …) under it,
+// rendered as the notes are.
+const ONE_PARAGRAPH = /^<p>((?:(?!<\/p>|<br\b)[\s\S])*)<\/p>\s*$/;
 export function commentCardHtml(stamp, html) {
   const when = `<span class="task-comment-when">${esc(stamp)}</span>`;
   const one = ONE_PARAGRAPH.exec(html);

@@ -2280,6 +2280,19 @@ def test_notes_and_comments_render_as_on_a_page(page, wiki):
     expect(page.locator("#task-edit-comment-list strong")).to_have_text("primed")
 
 
+def test_a_comment_keeps_its_lines(page, wiki):
+    # A comment typed on several lines shows on several lines, on the card
+    # (under its time, not on the time's line) and in the dialog.
+    tid = page.request.post("/api/tasks", data={"title": "Fence"}).json()["id"]
+    page.request.post(f"/api/tasks/{tid}/comments", data={"text": "sanded\nprimed"})
+    page.goto("/tasks?view=open")
+    expect(card(page, "Fence").locator("div.task-card-comment .task-comment-body br")).to_have_count(1)
+    card(page, "Fence").dblclick()
+    body = page.locator("#task-edit-comment-list .task-comment-body")
+    expect(body.locator("br")).to_have_count(1)
+    assert body.inner_text().strip() == "sanded\nprimed"
+
+
 PASTE = """(url) => {
     const dt = new DataTransfer();
     dt.setData('text/plain', url);

@@ -1040,7 +1040,8 @@ func apiPreview(w http.ResponseWriter, r *http.Request) {
 }
 
 // apiRenderNotes: task notes and comments as HTML, as pages render:
-// {"notes": [text…], "comments": [text…]} → the same with HTML.
+// {"notes": [text…], "comments": [text…]} → the same with HTML. A comment
+// keeps its lines: a line's end is a line break.
 func apiRenderNotes(w http.ResponseWriter, r *http.Request) {
 	rq := newReq(r)
 	data, err := jsonObject(r)
@@ -1058,7 +1059,7 @@ func apiRenderNotes(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		out[key] = renderNotes(rq, texts)
+		out[key] = renderNotes(rq, texts, key == "comments")
 	}
 	writeJSON(w, http.StatusOK, out)
 }

@@ -2491,6 +2491,10 @@ class TestComments:
         assert "<p>Bought:</p>" in html and html.count("<li>") == 2
         edited = client.put(self._url(tid, c["id"]), json={"text": "one\r\ntwo"}).get_json()
         assert edited["comments"][0]["text"] == "one\ntwo"
+        # Lines in a row stay lines (a description joins them, as a page does).
+        out = client.post("/api/render-notes", json={"comments": ["one\ntwo"], "notes": ["one\ntwo"]}).get_json()
+        assert out["comments"][0].strip() == "<p>one<br />\ntwo</p>"
+        assert out["notes"][0].strip() == "<p>one\ntwo</p>"
 
     def test_on_a_completed_task(self, client):
         tid = create_task(client).get_json()["id"]

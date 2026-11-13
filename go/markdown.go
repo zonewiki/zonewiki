@@ -40,6 +40,9 @@ type Env struct {
 	// Wikilink: a [[link]]'s HTML around its label, inner what is between
 	// the brackets; nil: wikilinks stay text.
 	Wikilink func(inner string) (open, label, close string)
+	// LineBreaks: a line's end inside a paragraph is a line break (a task's
+	// comment); without it lines in a row join, as on a page.
+	LineBreaks bool
 }
 
 // headingIDs: how headings carry their ids: as id (a page), as data-pid
@@ -276,6 +279,10 @@ func (t *zoneTransformer) Transform(doc *ast.Document, reader text.Reader, pc pa
 		case *ast.Heading:
 			if n.Level <= 3 {
 				n.SetAttributeString("id", uniqueSlug(slugify(headingTitle(n, src)), slugs))
+			}
+		case *ast.Text:
+			if t.env.LineBreaks && n.SoftLineBreak() {
+				n.SetHardLineBreak(true)
 			}
 		}
 		return ast.WalkContinue, nil

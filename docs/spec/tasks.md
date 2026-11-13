@@ -574,7 +574,8 @@ A task's description is markdown, edited and rendered as a page's text.
   the bullets are drawn there (`li::before`), since a list marker's place depends on the font;
   text starts at the same place with a box or a bullet, and the first box at the description's edge);
   an image opens full size.
-  Comments render the same way, in the cards and the modal (`.task-comment-body`, at the description's scale).
+  Comments render the same way, in the cards and the modal (`.task-comment-body`, at the description's scale),
+  but keep their lines: a line's end is a line break (`Env.LineBreaks`), so a comment typed on three lines shows on three.
   In the modal a line separates each comment from the one before it; on a card each comment hangs on a bar of its own down its left (`border-left` of `.task-card-comment`), with a gap before the next, so the bar's end shows where a comment ends.
 - **Where the HTML comes from** (`renderTexts`, `renderedHtml` in `tasks.js`): the tasks asks the server for the texts it hasn't rendered yet, in one request (`{ notes: [...], comments: [...] }`), and keeps the HTML per text for the page's life, shared by every task list app on it.
   Loading tasks (`fetchTasks`, Closed) and each write wait for it before drawing, so cards never flash plain text; a text that arrives some other way shows as plain text until its HTML is there (`htmlOf`), and a failed request caches nothing.
@@ -615,7 +616,8 @@ There is no separate "Created:" line.
 ### Comments
 
 What happened on a task, dated: a quick status line ("called Bob, waiting", "Alex: 6 people") or several lines.
-A comment is markdown, rendered as the description is (see Description): paragraphs, lists, code, links, `[[task:…]]` chips; lines in a row make one paragraph, as on a page.
+A comment is markdown, rendered as the description is (see Description): paragraphs, lists, code, links, `[[task:…]]` chips.
+Unlike a description, a comment keeps its lines: Enter starts a new line and the comment shows it (a `<br>`), without the blank line a new paragraph takes.
 They are kept in `comments` (`[{ id, at, by, text }]`, oldest first;
 `id` 8 hex chars, `at` `YYYY-MM-DDTHH:MM`, text up to `commentMax` = 2000 chars;
 `by` the user who wrote it, written only when there is one (with users, `docs/spec/users.md`), so a wiki without users keeps its files as they were;
@@ -635,7 +637,7 @@ Not part of the History: they are never capped, undo of other changes never touc
   A comment still in its field is not lost: the modal's Save saves it with the task, and ✎ or × on another comment saves it first.
   The text comes back with a file's line ends (`commentText`: `\r\n` becomes `\n`).
 - **Cards**: a `💬 N` button (`.task-comments-btn`) in the meta row; its tooltip is the latest comment with its time.
-  The latest 3 are listed (`commentCardHtml`): a comment of one paragraph on the line of its time, as a status line reads; any other (several paragraphs, a list, code) under its time.
+  The latest 3 are listed (`commentCardHtml`): a comment of one line on the line of its time, as a status line reads; any other (several lines or paragraphs, a list, code) under its time.
   A click on it opens or closes the line's details, the latest 3 among them (see One line per task), whose "N earlier…" leads to the modal.
 - **Carried on**: a recurring task's next occurrence takes the series' comments with it, like the history.
 - **Search and MCP**: comment text is part of a task's search text (`taskSearchDocs`, so semantic search too), a comment counts as activity for `edited:`/`after:`/`before:` (`lastActivity`), and `mcpTaskText` lists them after the description under "Comments:" (`- YYYY-MM-DD HH:MM: text`, a comment's following lines indented under its first).
