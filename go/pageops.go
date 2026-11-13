@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"zonewiki/internal/taskmodel"
 )
 
 // pagesMu: one write to pages at a time, from the reads it decides on (does
@@ -389,7 +390,7 @@ func tagChange(t *Task, old, name string) (changed bool) {
 // refused as one that doesn't exist, and what user is told counts only what
 // they see, so it says nothing about another user's private files.
 func checkTagRename(user, tag, newName string, merge bool) (*tagPlan, error) {
-	olds, names := cleanTags([]string{tag}), cleanTags([]string{newName})
+	olds, names := taskmodel.CleanTags([]string{tag}), taskmodel.CleanTags([]string{newName})
 	if len(olds) == 0 {
 		return nil, refuse("Which tag? The name is empty")
 	}

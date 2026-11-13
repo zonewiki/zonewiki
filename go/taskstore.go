@@ -21,6 +21,7 @@ import (
 	"time"
 	"zonewiki/internal/jsonobj"
 	"zonewiki/internal/mdtext"
+	"zonewiki/internal/taskmodel"
 )
 
 // tasksMu serializes every read-modify-write of the task files: two
@@ -87,7 +88,7 @@ func initTasks() { archiveOldCompleted() }
 func timestamp() string { return now().Format("2006-01-02T15:04:05") }
 
 func writeTasks(path string, tasks []*Task) error {
-	text, err := encodeTasks(tasks)
+	text, err := taskmodel.Encode(tasks)
 	if err != nil {
 		return err
 	}
@@ -148,7 +149,7 @@ func readListStrict(path string) ([]*Task, error) {
 	if err != nil || strings.TrimSpace(string(raw)) == "" {
 		return nil, errTasksCorrupt
 	}
-	tasks, ok := parseTasks(raw)
+	tasks, ok := taskmodel.Parse(raw)
 	if !ok {
 		return nil, errTasksCorrupt
 	}
@@ -161,7 +162,7 @@ func readListLenient(path string) []*Task {
 	if err != nil {
 		return []*Task{}
 	}
-	tasks, ok := parseTasks(raw)
+	tasks, ok := taskmodel.Parse(raw)
 	if !ok {
 		return []*Task{}
 	}
@@ -170,19 +171,6 @@ func readListLenient(path string) []*Task {
 
 // parseTasks: the tasks of a file's text (taskFromJSON); ok false when it
 // isn't a JSON list. What isn't an object is no task.
-func parseTasks(raw []byte) ([]*Task, bool) {
-	var l []json.RawMessage
-	if json.Unmarshal(raw, &l) != nil || l == nil {
-		return nil, false
-	}
-	out := make([]*Task, 0, len(l))
-	for _, x := range l {
-		if o, ok := jsonobj.As[jsonObj](x); ok {
-			out = append(out, taskFromJSON(o))
-		}
-	}
-	return out, true
-}
 
 // readTasksStrict: the open tasks user sees, read for a write.
 func readTasksStrict(user string) ([]*Task, error) {
@@ -303,7 +291,7 @@ func writeCompleted(owner string, completed []*Task, reformat bool) ([]string, e
 		if errors.Is(err, os.ErrNotExist) && len(tasks) == 0 {
 			continue // no file for no tasks
 		}
-		text, encErr := encodeTasks(tasks)
+		text, encErr := taskmodel.Encode(tasks)
 		if encErr != nil {
 			return changed, encErr
 		}
@@ -320,11 +308,11 @@ func writeCompleted(owner string, completed []*Task, reformat bool) ([]string, e
 
 // sameTasks: a file holds the tasks text has, whatever its format.
 func sameTasks(raw []byte, text string) bool {
-	tasks, ok := parseTasks(raw)
+	tasks, ok := taskmodel.Parse(raw)
 	if !ok {
 		return false
 	}
-	have, err := encodeTasks(tasks)
+	have, err := taskmodel.Encode(tasks)
 	return err == nil && have == text
 }
 
@@ -407,7 +395,7 @@ func archiveOldCompleted() {
 			moved = moved || pastYear(t) != ""
 		}
 		if raw, err := os.ReadFile(tasksFile(o)); err == nil {
-			if text, err := encodeTasks(active); err == nil && string(raw) != text && atomicWrite(tasksFile(o), text) == nil {
+			if text, err := taskmodel.Encode(active); err == nil && string(raw) != text && atomicWrite(tasksFile(o), text) == nil {
 				changed = append(changed, tasksFile(o))
 			}
 		}
@@ -521,7 +509,7 @@ func writeOpenLocked(user string, tasks []*Task) ([]string, error) {
 	}
 	var changed []string
 	for _, o := range taskOwners(user) {
-		text, err := encodeTasks(split[o])
+		text, err := taskmodel.Encode(split[o])
 		if err != nil {
 			return changed, err
 		}
@@ -602,69 +590,6 @@ func newTask() *Task {
 
 // ---- recurrence ----
 
-func daysIn(year int, month time.Month) int {
-	return time.Date(year, month+1, 0, 0, 0, 0, 0, time.UTC).Day()
-}
-
-// addMonths adds months, clamping the day to the month's last (Jan 31 + 1
-// month = Feb 28/29); day (when > 0) is the wanted day of month, so a
-// series on the 31st returns to it after a shorter month.
-func addMonths(base time.Time, months, day int) time.Time {
-	m := int(base.Month()) - 1 + months
-	year := base.Year() + floorDiv(m, 12)
-	month := time.Month(m - floorDiv(m, 12)*12 + 1)
-	if day <= 0 {
-		day = base.Day()
-	}
-	return time.Date(year, month, min(day, daysIn(year, month)), 0, 0, 0, 0, time.Local)
-}
-
-func floorDiv(a, b int) int {
-	q := a / b
-	if a%b != 0 && (a < 0) != (b < 0) {
-		q--
-	}
-	return q
-}
-
-// recIntervalMax: the largest "every N", far beyond any real series and
-// small enough that stepping never leaves the calendar.
-const recIntervalMax = 999
-
-func recStep(base time.Time, rtype string, interval, day int) time.Time {
-	switch rtype {
-	case "weekly":
-		return base.AddDate(0, 0, 7*interval)
-	case "monthly":
-		return addMonths(base, interval, day)
-	case "yearly":
-		return addMonths(base, 12*interval, day) // Feb 29 → Feb 28
-	}
-	return base.AddDate(0, 0, interval) // daily (and any unknown type)
-}
-
-// nextOccurrence steps a recurrence from base and catches up to >= today
-// (> today with afterToday: a skipped occurrence isn't offered again).
-// Monthly and yearly series remember their day of month in rec.Day
-// (stepping from a clamped date would drift: Jan 31 → Feb 28 → Mar 28);
-// from the completion day there is no anchor. Returns the series as the
-// next occurrence carries it.
-func nextOccurrence(rec *Recurrence, base time.Time, anchored bool, today time.Time, afterToday bool) (time.Time, *Recurrence) {
-	next := *rec
-	day := 0
-	if (rec.Type == "monthly" || rec.Type == "yearly") && anchored {
-		if day = rec.Day; day == 0 {
-			day = base.Day()
-		}
-		next.Day = day
-	}
-	at := recStep(base, rec.Type, rec.Interval, day)
-	for at.Before(today) || afterToday && at.Equal(today) {
-		at = recStep(at, rec.Type, rec.Interval, day)
-	}
-	return at, &next
-}
-
 // spawnRecurring: the next instance of a recurring task, or nil (none, or
 // the one spawned before is still open in active: reopening kept it).
 //
@@ -680,7 +605,7 @@ func spawnRecurring(user string, task *Task, active []*Task, skip bool) *Task {
 		return nil
 	}
 	for _, t := range active {
-		if t.SpawnedFrom != "" && t.SpawnedFrom == task.ID && t.isOpen() {
+		if t.SpawnedFrom != "" && t.SpawnedFrom == task.ID && t.IsOpen() {
 			return nil
 		}
 	}
@@ -696,7 +621,7 @@ func spawnRecurring(user string, task *Task, active []*Task, skip bool) *Task {
 	if anchored {
 		base = primary
 	}
-	next, nextRec := nextOccurrence(rec, base, anchored, day0, skip)
+	next, nextRec := taskmodel.NextOccurrence(rec, base, anchored, day0, skip)
 	nextRec.Lead = nil
 	var newDue, newStart string
 	switch {
@@ -758,15 +683,13 @@ func daysBetween(a, b time.Time) int {
 var historyEvents = map[string]bool{"created": true, "start": true, "due": true, "done": true,
 	"reopened": true, "wontdo": true, "skipped": true, "repeat": true, "private": true, "shared": true}
 
-var datedEvents = map[string]bool{"start": true, "due": true, "repeat": true}
-
 const historyLimit = 30
 
 // logEvent adds an event to a task's history, by user ("" no one: Zone, or
 // no users); from and to are the days a dated event moved between ("" none).
 func logEvent(t *Task, user, event, from, to string) {
 	entry := HistoryEntry{At: now().Format("2006-01-02T15:04"), Event: event, By: user}
-	if datedEvents[event] {
+	if taskmodel.DatedEvents[event] {
 		entry.From, entry.To = from, to
 	}
 	h := t.History
@@ -779,7 +702,7 @@ func logEvent(t *Task, user, event, from, to string) {
 // cleanHistory validates a history list from a request or snapshot.
 func cleanHistory(raw json.RawMessage) []HistoryEntry {
 	out := []HistoryEntry{}
-	for _, e := range objList(raw) {
+	for _, e := range jsonobj.List(raw) {
 		at, isStr := jsonobj.As[string](e["at"])
 		event, isStrEvent := jsonobj.As[string](e["event"])
 		if !isStr || !isStrEvent || !historyEvents[event] {
@@ -787,7 +710,7 @@ func cleanHistory(raw json.RawMessage) []HistoryEntry {
 		}
 		by, _ := jsonobj.As[string](e["by"])
 		entry := HistoryEntry{At: runePrefix(at, 16), Event: event, By: byUser(by)}
-		if datedEvents[event] {
+		if taskmodel.DatedEvents[event] {
 			if s, ok := jsonobj.As[string](e["from"]); ok && isoDateRE.MatchString(s) {
 				entry.From = s
 			}
@@ -815,7 +738,7 @@ func newCommentID() string { return strings.ReplaceAll(uuid4(), "-", "")[:8] }
 // cleanComments validates a comment list from a request or snapshot.
 func cleanComments(raw json.RawMessage) []Comment {
 	var cs []Comment
-	for _, c := range objList(raw) {
+	for _, c := range jsonobj.List(raw) {
 		text, isText := jsonobj.As[string](c["text"])
 		at, isAt := jsonobj.As[string](c["at"])
 		if !isText || !isAt {
@@ -896,7 +819,7 @@ func uncompleteTask(user string, t *Task, active []*Task, protect map[string]boo
 	if t.Recurrence != nil {
 		kept := active[:0:0]
 		for _, a := range active {
-			if a.SpawnedFrom != "" && a.SpawnedFrom == t.ID && a.isOpen() && untouchedSpawn(a, t) && !protect[a.ID] {
+			if a.SpawnedFrom != "" && a.SpawnedFrom == t.ID && a.IsOpen() && untouchedSpawn(a, t) && !protect[a.ID] {
 				continue
 			}
 			kept = append(kept, a)
@@ -931,7 +854,7 @@ func renamedTags(tags []string, old, name string) (out []string, changed bool) {
 			out[i] = name
 		}
 	}
-	out = cleanTags(out)
+	out = taskmodel.CleanTags(out)
 	return out, !slices.Equal(out, tags)
 }
 
@@ -983,7 +906,7 @@ type TaskLink struct {
 func findTaskBacklinks(user, slug string) []TaskLink {
 	var out []TaskLink
 	for _, t := range readAll(user) {
-		if !t.isOpen() {
+		if !t.IsOpen() {
 			continue
 		}
 		text := t.Title + "\n" + t.Description
@@ -1049,7 +972,7 @@ func resolveTaskRefs(user string, refs []string) map[string]*Task {
 			}
 		}
 		seen := map[string]bool{}
-		for task != nil && !task.isOpen() && successor[task.ID] != nil && !seen[task.ID] {
+		for task != nil && !task.IsOpen() && successor[task.ID] != nil && !seen[task.ID] {
 			seen[task.ID] = true
 			task = successor[task.ID]
 		}
@@ -1100,35 +1023,6 @@ func lastActivity(t *Task) string {
 
 var ymdPrefixRE = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}`)
 
-// cleanRecurrence: a recurrence from a request (an undo), its fields
-// validated; nil when it names no repeat type.
-func cleanRecurrence(raw json.RawMessage) *Recurrence {
-	rec, ok := jsonobj.As[jsonObj](raw)
-	if !ok {
-		return nil
-	}
-	rtype, _ := jsonobj.As[string](rec["type"])
-	switch rtype {
-	case "daily", "weekly", "monthly", "yearly":
-	default:
-		return nil
-	}
-	out := &Recurrence{Type: rtype, Interval: 1, From: "due"}
-	if n, ok := jsonobj.As[int](rec["interval"]); ok && n >= 1 && n <= recIntervalMax {
-		out.Interval = n
-	}
-	if s, _ := jsonobj.As[string](rec["from"]); s == "completion" {
-		out.From = "completion"
-	}
-	if n, ok := jsonobj.As[int](rec["day"]); ok && n >= 1 && n <= 31 {
-		out.Day = n
-	}
-	if n, ok := jsonobj.As[int](rec["lead"]); ok && n >= 0 {
-		out.Lead = &n
-	}
-	return out
-}
-
 // What a snapshot's ids and times may be (sanitizeSnapshot): an id as Zone
 // makes them (a UUID) or as a file written by hand may have it (letters,
 // digits, - and _), a time as timestamp() writes it, or its day alone.
@@ -1157,7 +1051,7 @@ func sanitizeSnapshot(snap jsonObj) *Task {
 	t := newTask()
 	t.Title = title
 	t.Description, _ = jsonobj.As[string](snap["description"])
-	t.Tags = cleanTags(textList(snap["tags"]))
+	t.Tags = taskmodel.CleanTags(jsonobj.TextList(snap["tags"]))
 	for f, field := range map[string]*string{"due_date": &t.DueDate, "start_date": &t.StartDate, "last_done": &t.LastDone} {
 		if s, ok := jsonobj.As[string](snap[f]); ok {
 			if _, ok := parseDay(s); ok {
@@ -1188,7 +1082,7 @@ func sanitizeSnapshot(snap jsonObj) *Task {
 	t.History = cleanHistory(snap["history"])
 	t.Comments = cleanComments(snap["comments"])
 	if !t.Keep {
-		t.Recurrence = cleanRecurrence(snap["recurrence"])
+		t.Recurrence = taskmodel.CleanRecurrence(snap["recurrence"])
 	}
 	return t
 }

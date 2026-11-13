@@ -12,6 +12,7 @@ import (
 	"strings"
 	"zonewiki/internal/jsonobj"
 	"zonewiki/internal/mdtext"
+	"zonewiki/internal/taskmodel"
 	"zonewiki/internal/textsearch"
 )
 
@@ -154,7 +155,7 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 	q := textsearch.ParseQuery(query)
 	var docs []*SearchDoc
 	for _, d := range taskSearchDocs() {
-		if !canSeeTask(user, d.Task) || status != "all" && (status == "open") != d.Task.isOpen() {
+		if !canSeeTask(user, d.Task) || status != "all" && (status == "open") != d.Task.IsOpen() {
 			continue
 		}
 		have := taskTagsLower(d.Task)
@@ -180,7 +181,7 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 	} else {
 		var open, done []*SearchDoc
 		for _, d := range docs {
-			if d.Task.isOpen() {
+			if d.Task.IsOpen() {
 				open = append(open, d)
 			} else {
 				done = append(done, d)
@@ -292,7 +293,7 @@ func taskFields(args jsonObj, task *Task) (jsonObj, error) {
 			if err != nil {
 				return nil, err
 			}
-			data.Set(f[1], nullable(day))
+			data.Set(f[1], jsonobj.Nullable(day))
 		}
 	}
 	if title, _ := jsonobj.As[string](data["title"]); data.Has("title") && title == "" {
@@ -313,7 +314,7 @@ func taskFields(args jsonObj, task *Task) (jsonObj, error) {
 	if task != nil && (args.Has("add_tags") || args.Has("remove_tags")) {
 		tags := append([]string{}, task.Tags...)
 		if data.Has("tags") {
-			tags = textList(data["tags"])
+			tags = jsonobj.TextList(data["tags"])
 		}
 		add, err := tagListArg(args, "add_tags")
 		if err != nil {
@@ -454,7 +455,7 @@ func homeTags(tags json.RawMessage, user string) json.RawMessage {
 			return tags
 		}
 	}
-	b, _ := json.Marshal(cleanTags(append(newTaskTags(home.Params), l...)))
+	b, _ := json.Marshal(taskmodel.CleanTags(append(newTaskTags(home.Params), l...)))
 	return b
 }
 
@@ -580,7 +581,7 @@ func updateTaskTool(args jsonObj, base, user string) (string, error) {
 	out := head + "\n\n" + mcpTaskText(task, base, user)
 	if status == "done" || status == "skip" {
 		for _, t := range openTasks(user) {
-			if t.SpawnedFrom == task.ID && t.isOpen() {
+			if t.SpawnedFrom == task.ID && t.IsOpen() {
 				out += "\n\nNext occurrence:\n\n" + mcpTaskText(t, base, user)
 				break
 			}

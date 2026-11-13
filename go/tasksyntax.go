@@ -11,25 +11,10 @@ import (
 	"strings"
 	"time"
 	"zonewiki/internal/mdtext"
+	"zonewiki/internal/taskmodel"
 )
 
 var spaceRunRE = regexp.MustCompile(mdtext.SpaceClass + `+`)
-
-// cleanTags: tags as the filter can match them: one word each (whitespace
-// inside becomes "-"), no leading "#", no empties, no case-insensitive
-// duplicates (the first spelling wins).
-func cleanTags(tags []string) []string {
-	out := []string{}
-	seen := map[string]bool{}
-	for _, t := range tags {
-		tag := strings.Trim(spaceRunRE.ReplaceAllString(strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(t), "#")), "-"), "-")
-		if tag != "" && !seen[strings.ToLower(tag)] {
-			seen[strings.ToLower(tag)] = true
-			out = append(out, tag)
-		}
-	}
-	return out
-}
 
 // cleanList: a list name as stored and matched: trimmed, lowercase, one
 // word, no leading "#"; "" for no list.
@@ -221,7 +206,7 @@ func checkEmbedSettings(set map[string]string, keys []string) (map[string]string
 					return nil, bad()
 				}
 			case "new":
-				v = strings.Join(cleanTags(strings.Split(v, ",")), ",")
+				v = strings.Join(taskmodel.CleanTags(strings.Split(v, ",")), ",")
 			}
 		}
 		out[k] = v
@@ -381,7 +366,7 @@ func newTaskTags(p TasksParams) []string {
 			}
 		}
 	}
-	return cleanTags(tags)
+	return taskmodel.CleanTags(tags)
 }
 
 var (

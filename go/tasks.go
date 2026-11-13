@@ -12,6 +12,7 @@ import (
 	"time"
 	"zonewiki/internal/jsonobj"
 	"zonewiki/internal/mdtext"
+	"zonewiki/internal/taskmodel"
 )
 
 func asStr(raw json.RawMessage, name string) (string, error) {
@@ -112,7 +113,7 @@ func validateDate(raw json.RawMessage) (string, error) {
 	y, _ := strconv.Atoi(m[1])
 	mo, _ := strconv.Atoi(m[2])
 	d, _ := strconv.Atoi(strings.TrimSpace(m[3]))
-	if d > daysIn(y, time.Month(mo)) {
+	if d > taskmodel.DaysIn(y, time.Month(mo)) {
 		return "", bad
 	}
 	return s, nil
@@ -213,7 +214,7 @@ func applyText(user string, t *Task, data jsonObj) error {
 			if err != nil {
 				return err
 			}
-			t.Tags = cleanTags(tags)
+			t.Tags = taskmodel.CleanTags(tags)
 		}
 	}
 	if data.Has("comments") { // the whole list, for undoing a comment's delete or edit
@@ -311,8 +312,8 @@ func applyRecurrence(t *Task, data jsonObj, oldDue, oldStart string, oldRec *Rec
 				}
 			}
 			n = max(1, n)
-			if n > recIntervalMax {
-				return refuse("rec_interval must be at most " + strconv.Itoa(recIntervalMax))
+			if n > taskmodel.RecIntervalMax {
+				return refuse("rec_interval must be at most " + strconv.Itoa(taskmodel.RecIntervalMax))
 			}
 			from := "due"
 			if s, _ := jsonobj.As[string](data["rec_from"]); s == "completion" {
@@ -348,7 +349,7 @@ func applyRecurrence(t *Task, data jsonObj, oldDue, oldStart string, oldRec *Rec
 	}
 	// An undo sends the whole old recurrence, day and lead included.
 	if data.Has("recurrence") {
-		rec := cleanRecurrence(data["recurrence"])
+		rec := taskmodel.CleanRecurrence(data["recurrence"])
 		t.Recurrence = rec
 		if rec == nil && !data.Null("recurrence") {
 			return refuse("recurrence must be null or have a type")
@@ -418,7 +419,7 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 	if err := applyTaskFields(user, t, data, false); err != nil {
 		return nil, err
 	}
-	didSkip := skip && t.isOpen()
+	didSkip := skip && t.IsOpen()
 	switch {
 	case didSkip:
 		// Skip this occurrence: archived as won't-do, the next one spawned
@@ -433,14 +434,14 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 			active = append(active, spawned)
 		}
 	case data.Has("wont_do"):
-		if wontDo && t.isOpen() {
+		if wontDo && t.IsOpen() {
 			// Won't do: to completed, abandoned; no next occurrence.
 			t.CompletedAt = timestamp()
 			t.WontDo = true
 			logEvent(t, user, "wontdo", "", "")
 			active = without(active, id)
 			completed = append(completed, t)
-		} else if !wontDo && !t.isOpen() {
+		} else if !wontDo && !t.IsOpen() {
 			// Reopen (also takes away what a skip spawned).
 			active = uncompleteTask(user, t, active, nil)
 			completed = without(completed, id)
@@ -448,16 +449,16 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 		}
 	case data.Has("completed"):
 		switch {
-		case done && t.Keep && t.isOpen():
+		case done && t.Keep && t.IsOpen():
 			keepDone(user, t) // stays open, back in the pool
-		case done && t.isOpen():
+		case done && t.IsOpen():
 			spawned := completeTask(user, t, "", active)
 			active = without(active, id)
 			completed = append(completed, t)
 			if spawned != nil {
 				active = append(active, spawned)
 			}
-		case !done && !t.isOpen():
+		case !done && !t.IsOpen():
 			active = uncompleteTask(user, t, active, nil)
 			completed = without(completed, id)
 			active = append(active, t)
@@ -578,7 +579,7 @@ func selectTasks(tasks []*Task, keep func(*Task) bool) ([]*Task, map[string]bool
 // in one commit; the batch-tag route and the MCP tools share it.
 func tagTasks(user string, ids, add, remove []string, message string) ([]*Task, error) {
 	set := idSet(ids)
-	addTags, removeTags := cleanTags(add), cleanTags(remove)
+	addTags, removeTags := taskmodel.CleanTags(add), taskmodel.CleanTags(remove)
 	if len(set) == 0 || len(addTags) == 0 && len(removeTags) == 0 {
 		return nil, refuse("Give task ids and tags to add or remove")
 	}

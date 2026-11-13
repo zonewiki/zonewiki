@@ -78,6 +78,45 @@ func ScalarText(raw json.RawMessage) (string, bool) {
 	return "", false
 }
 
+// Str: member k as text (ScalarText), "" when it is anything else (a file
+// edited by hand).
+func (o Obj) Str(k string) string {
+	s, _ := ScalarText(o[k])
+	return s
+}
+
+// TextList: a list's items as text (ScalarText), the others left out.
+func TextList(raw json.RawMessage) []string {
+	l, _ := As[[]json.RawMessage](raw)
+	var out []string
+	for _, x := range l {
+		if s, ok := ScalarText(x); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// List: a list's objects, the other items left out.
+func List(raw json.RawMessage) []Obj {
+	l, _ := As[[]json.RawMessage](raw)
+	var out []Obj
+	for _, x := range l {
+		if o, ok := As[Obj](x); ok {
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
+// Nullable: "" as null.
+func Nullable(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
 // MarshalText is json.Marshal leaving <, > and & as they are: the encoder
 // that writes it out escapes them for HTML when it should (API answers),
 // a task list file keeps its text as written.

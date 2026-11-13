@@ -1,4 +1,4 @@
-package main
+package taskmodel
 
 import (
 	"strings"
@@ -29,11 +29,11 @@ func TestTaskFileRoundTrip(t *testing.T) {
     "history": [{"at": "2026-01-02T10:00", "event": "due", "from": null, "to": "2026-03-01"}, "junk"]
   }
 ]`
-	tasks, ok := parseTasks([]byte(old))
+	tasks, ok := Parse([]byte(old))
 	if !ok {
 		t.Fatal("not a task list")
 	}
-	got, err := encodeTasks(tasks)
+	got, err := Encode(tasks)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,8 +85,8 @@ func TestTaskFileRoundTrip(t *testing.T) {
 	if got != want {
 		t.Fatalf("got\n%s", got)
 	}
-	again, _ := parseTasks([]byte(got))
-	if again, _ := encodeTasks(again); again != got {
+	again, _ := Parse([]byte(got))
+	if again, _ := Encode(again); again != got {
 		t.Errorf("not stable:\n%s", again)
 	}
 }
@@ -96,12 +96,12 @@ func TestTaskFileRoundTrip(t *testing.T) {
 func TestTaskFromOddValues(t *testing.T) {
 	v, _ := jsonobj.Parse([]byte(`{"id": 7, "title": null, "description": true, "tags": "work", "sort_order": "x",
 		"recurrence": {"interval": "2"}, "keep": 1, "comments": [{"id": "c", "at": "2026-01-01T10:00", "text": "hi"}, 3]}`))
-	task := taskFromJSON(v)
+	task := FromJSON(v)
 	if task.ID != "7" || task.Title != "" || task.Description != "true" || len(task.Tags) != 0 || task.SortOrder != nil || task.Keep ||
 		task.Recurrence == nil || task.Recurrence.Type != "daily" || task.Recurrence.Interval != 1 || len(task.Comments) != 1 {
 		t.Errorf("%+v %+v", task, task.Recurrence)
 	}
-	if text, _ := encodeTasks([]*Task{task}); !strings.Contains(text, `"tags": []`) {
+	if text, _ := Encode([]*Task{task}); !strings.Contains(text, `"tags": []`) {
 		t.Errorf("no tags must be [], not null:\n%s", text)
 	}
 }

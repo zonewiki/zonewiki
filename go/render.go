@@ -235,7 +235,7 @@ func taskRefHTML(ref string, t *Task, day string, prefer []string, lists map[str
 		return `<span class="task-ref task-ref-missing" title="No task with id ` + html.EscapeString(ref) + `">task ` + html.EscapeString(ref) + `?</span>`
 	}
 	title := html.EscapeString(mdtext.PlainTaskTitle(t.Title))
-	done, wont := !t.isOpen(), t.WontDo
+	done, wont := !t.IsOpen(), t.WontDo
 	list := linkList(t, prefer, lists)
 	href := html.EscapeString(taskLink(t, list))
 	cls := "task-ref"
@@ -414,7 +414,7 @@ func taskHref(id, tab, list, year string) string {
 // taskLink: taskHref for a task as it is now: open on Open, done on
 // Completed (in its year's archive for an earlier year).
 func taskLink(t *Task, list string) string {
-	if t.isOpen() {
+	if t.IsOpen() {
 		return taskHref(t.ID, "open", list, "")
 	}
 	return taskHref(t.ID, "completed", list, pastYear(t))

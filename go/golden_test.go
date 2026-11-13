@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 	"zonewiki/internal/mdtext"
+	"zonewiki/internal/taskmodel"
 	"zonewiki/internal/textsearch"
 )
 
@@ -142,7 +143,7 @@ func TestGolden(t *testing.T) {
 		check("promoted_slug", text, mdtext.PromotedSlug("Folder X", text, "2026-01-02"), c["promoted_slug"])
 		check("page_wikilink", text, mdtext.PageWikilink("s", text), c["page_wikilink"])
 		check("is_note", text, isQuicknote(text), c["is_note"])
-		check("clean_tags", text, cleanTags([]string{text, "#" + text}), c["clean_tags"])
+		check("clean_tags", text, taskmodel.CleanTags([]string{text, "#" + text}), c["clean_tags"])
 		check("clean_list", text, nilIfEmpty(cleanList(text)), c["clean_list"])
 		check("parse_date_word", text, nilIfEmpty(parseDateWord(text, day)), c["parse_date_word"])
 		params := [][]string{}

@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"zonewiki/internal/jsonobj"
+	"zonewiki/internal/taskmodel"
 )
 
 // tasksRoute answers a task list API request: a refusal as {"error": …} (400,
@@ -54,7 +55,7 @@ func jsonObject(r *http.Request) (jsonObj, error) {
 
 func tasksRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/tasks", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
-		writeJSON(w, http.StatusOK, openTasks(userOf(r)))
+		writeJSON(w, http.StatusOK, apiTasks(openTasks(userOf(r))))
 		return nil
 	}))
 	// A hidden task app, for a page without one that wants its edit modal
@@ -70,7 +71,7 @@ func tasksRoutes(mux *http.ServeMux) {
 		if err != nil {
 			return err
 		}
-		writeJSON(w, http.StatusOK, completedInYear(userOf(r), year))
+		writeJSON(w, http.StatusOK, apiTasks(completedInYear(userOf(r), year)))
 		return nil
 	}))
 	mux.HandleFunc("GET /api/tasks/completed-years", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
@@ -106,7 +107,7 @@ func tasksRoutes(mux *http.ServeMux) {
 		if err != nil {
 			return err
 		}
-		writeJSON(w, http.StatusCreated, t)
+		writeJSON(w, http.StatusCreated, apiTask{t})
 		return nil
 	}))
 	mux.HandleFunc("PUT /api/tasks/{id}", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
@@ -118,7 +119,7 @@ func tasksRoutes(mux *http.ServeMux) {
 		if err != nil {
 			return err
 		}
-		writeJSON(w, http.StatusOK, t)
+		writeJSON(w, http.StatusOK, apiTask{t})
 		return nil
 	}))
 	mux.HandleFunc("POST /api/tasks/{id}/toggle-check", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
@@ -137,7 +138,7 @@ func tasksRoutes(mux *http.ServeMux) {
 		if err != nil {
 			return err
 		}
-		writeJSON(w, http.StatusOK, t)
+		writeJSON(w, http.StatusOK, apiTask{t})
 		return nil
 	}))
 	mux.HandleFunc("POST /api/tasks/{id}/comments", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
@@ -153,7 +154,7 @@ func tasksRoutes(mux *http.ServeMux) {
 		if err != nil {
 			return err
 		}
-		writeJSON(w, http.StatusCreated, t)
+		writeJSON(w, http.StatusCreated, apiTask{t})
 		return nil
 	}))
 	mux.HandleFunc("PUT /api/tasks/{id}/comments/{cid}", tasksRoute(apiEditComment))
@@ -195,7 +196,7 @@ func tasksRoutes(mux *http.ServeMux) {
 		if err != nil {
 			return err
 		}
-		writeJSON(w, http.StatusOK, tasks)
+		writeJSON(w, http.StatusOK, apiTasks(tasks))
 		return nil
 	}))
 	mux.HandleFunc("POST /api/tasks/batch-update", tasksRoute(apiBatchUpdate))
@@ -241,7 +242,7 @@ func apiEditComment(w http.ResponseWriter, r *http.Request) error {
 	if err := writeBothLocked(userOf(r), active, completed, "Edit task comment"); err != nil {
 		return err
 	}
-	writeJSON(w, http.StatusOK, t)
+	writeJSON(w, http.StatusOK, apiTask{t})
 	return nil
 }
 
@@ -261,7 +262,7 @@ func apiDeleteComment(w http.ResponseWriter, r *http.Request) error {
 	if err := writeBothLocked(userOf(r), active, completed, "Delete task comment"); err != nil {
 		return err
 	}
-	writeJSON(w, http.StatusOK, t)
+	writeJSON(w, http.StatusOK, apiTask{t})
 	return nil
 }
 
@@ -320,7 +321,7 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 			t.Owner = user
 		}
 		existing[t.ID] = true
-		if !t.isOpen() {
+		if !t.IsOpen() {
 			completed = append(completed, t)
 		} else {
 			active = append(active, t)
@@ -332,7 +333,7 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 	}
-	writeJSON(w, http.StatusCreated, restored)
+	writeJSON(w, http.StatusCreated, apiTasks(restored))
 	return nil
 }
 
@@ -365,7 +366,7 @@ func apiExport(w http.ResponseWriter, r *http.Request) error {
 	// a " in it can't end the file name and add one of its own.
 	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment",
 		map[string]string{"filename": "zone-tasks-" + name + "-" + isoDay(today()) + ".json"}))
-	writeJSON(w, http.StatusOK, map[string]any{"zone_tasks": 1, "list": list, "tag": tag, "exported_at": timestamp(), "tasks": tasks})
+	writeJSON(w, http.StatusOK, map[string]any{"zone_tasks": 1, "list": list, "tag": tag, "exported_at": timestamp(), "tasks": apiTasks(tasks)})
 	return nil
 }
 
@@ -403,12 +404,12 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 		return refuse("Too many tasks: at most " + strconv.Itoa(importMax) + " in one import")
 	}
 	str := func(k string) string { s, _ := jsonobj.As[string](data[k]); return s }
-	add := cleanTags(strings.Split(str("new"), ","))
+	add := taskmodel.CleanTags(strings.Split(str("new"), ","))
 	if len(add) == 0 {
 		add = newTaskTags(parseTasksParams("list=" + cleanList(str("list")) + " tag=" + strings.Join(strings.Fields(str("tag")), "")))
 	}
 	// also: tags of the user's own for this import, to find its tasks by.
-	add = cleanTags(append(add, strings.Split(str("also"), ",")...))
+	add = taskmodel.CleanTags(append(add, strings.Split(str("also"), ",")...))
 	var remove []string
 	if from != "" && !slices.ContainsFunc(add, func(t string) bool { return strings.EqualFold(t, from) }) {
 		remove = []string{from}
@@ -445,7 +446,7 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 		if (jsonobj.True(data["private"]) || jsonobj.True(snap["private"])) && privateFolder(user) != "" {
 			t.Owner = user
 		}
-		if t.isOpen() {
+		if t.IsOpen() {
 			active = append(active, t)
 		} else {
 			completed = append(completed, t)
@@ -490,12 +491,12 @@ func apiBatchComplete(w http.ResponseWriter, r *http.Request) error {
 	updated := []*Task{}
 	if markCompleted {
 		for _, t := range active {
-			if set[t.ID] && t.Keep && t.isOpen() {
+			if set[t.ID] && t.Keep && t.IsOpen() {
 				keepDone(userOf(r), t) // stays open, back in the pool
 				updated = append(updated, t)
 			}
 		}
-		moving, movingIDs := selectTasks(active, func(t *Task) bool { return set[t.ID] && t.isOpen() && !t.Keep })
+		moving, movingIDs := selectTasks(active, func(t *Task) bool { return set[t.ID] && t.IsOpen() && !t.Keep })
 		var spawned []*Task
 		for _, t := range moving {
 			if s := completeTask(userOf(r), t, stamp, active); s != nil {
@@ -506,7 +507,7 @@ func apiBatchComplete(w http.ResponseWriter, r *http.Request) error {
 		active = append(withoutIDs(active, movingIDs), spawned...)
 		completed = append(completed, moving...)
 	} else {
-		moving, movingIDs := selectTasks(completed, func(t *Task) bool { return set[t.ID] && !t.isOpen() })
+		moving, movingIDs := selectTasks(completed, func(t *Task) bool { return set[t.ID] && !t.IsOpen() })
 		for _, t := range moving {
 			active = uncompleteTask(userOf(r), t, active, set)
 			updated = append(updated, t)
@@ -521,7 +522,7 @@ func apiBatchComplete(w http.ResponseWriter, r *http.Request) error {
 	if err := writeBothLocked(userOf(r), active, completed, msg); err != nil {
 		return err
 	}
-	writeJSON(w, http.StatusOK, updated)
+	writeJSON(w, http.StatusOK, apiTasks(updated))
 	return nil
 }
 
@@ -641,6 +642,6 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 	}
-	writeJSON(w, http.StatusOK, updated)
+	writeJSON(w, http.StatusOK, apiTasks(updated))
 	return nil
 }

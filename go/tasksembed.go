@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"zonewiki/internal/jsonobj"
+	"zonewiki/internal/taskmodel"
 )
 
 const tasksPlaceholder = "ZONETASKSPLACEHOLDER"
@@ -84,7 +85,7 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless, privat
 		"limit": limit, "labels": labels, "instance_id": instance, "sfx": sfx, "headless": headless,
 		// keep=1: new tasks here are keep tasks; pin=1: a pinned list (its New
 		// is the one New task clicks on its page); new=: new tasks' tags.
-		"keep": keep, "pinned": pinnedParam(params), "new_tags": strings.Join(cleanTags(strings.Split(params.Get("new"), ",")), ","),
+		"keep": keep, "pinned": pinnedParam(params), "new_tags": strings.Join(taskmodel.CleanTags(strings.Split(params.Get("new"), ",")), ","),
 		// With users, the modal's Private box; ticked for a new task here.
 		"can_private": privateFolder(user) != "", "private": private && privateFolder(user) != "",
 		"private_folder": privateFolder(user),

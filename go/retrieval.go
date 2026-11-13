@@ -474,7 +474,7 @@ func taskSearchDocs() []*SearchDoc {
 			},
 			Task: t, tk: &taskDocInfo{text: text, status: "open", edited: lastActivity(t)}, Tags: lowTags,
 			key: docKey("task", t.ID, mdtext.PlainTaskTitle(title), text)}
-		if !t.isOpen() {
+		if !t.IsOpen() {
 			d.tk.status, d.tk.year = "done", pastYear(t)
 		}
 		taskDocs.byID[t.ID] = d
@@ -1065,7 +1065,7 @@ func hiddenDoc(rq *Req, d *SearchDoc) bool {
 // taskStatus: "open", "done" or "won't do".
 func taskStatus(t *Task) string {
 	switch {
-	case t.isOpen():
+	case t.IsOpen():
 		return "open"
 	case t.WontDo:
 		return "won't do"

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 	"zonewiki/internal/jsonobj"
+	"zonewiki/internal/taskmodel"
 )
 
 // A list is declared by a page's [[tasks: list=…]], outside code; the first
@@ -46,7 +47,7 @@ func TestTasksLists(t *testing.T) {
 // A task's last activity: its completion, history, comments, creation.
 func TestLastActivity(t *testing.T) {
 	// As a file has them: a junk history entry is no event.
-	task := func(s string) *Task { o, _ := jsonobj.Parse([]byte(s)); return taskFromJSON(o) }
+	task := func(s string) *Task { o, _ := jsonobj.Parse([]byte(s)); return taskmodel.FromJSON(o) }
 	for _, c := range []struct {
 		t    *Task
 		want string
@@ -162,7 +163,7 @@ func TestPrivateTasksInTheirUsersFiles(t *testing.T) {
 	if _, err := os.Stat(tasksFile("bob")); err == nil {
 		t.Error("bob got files of his own for no task")
 	}
-	b, _ := json.Marshal(mine)
+	b, _ := json.Marshal(apiTask{mine})
 	if !strings.Contains(string(b), `"private":true`) {
 		t.Errorf("API JSON %s", b)
 	}
@@ -276,7 +277,7 @@ func TestNoPrivateTasksWithoutUsers(t *testing.T) {
 		t.Error("a private task without users")
 	}
 	task := newTestTask(t, "", "y", false)
-	if b, _ := json.Marshal(task); strings.Contains(string(b), "private") {
+	if b, _ := json.Marshal(apiTask{task}); strings.Contains(string(b), "private") {
 		t.Errorf("JSON %s", b)
 	}
 }
