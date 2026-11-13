@@ -299,6 +299,13 @@ async function batchUpdate(changes) {
   return true;
 }
 
+// The importance of the tasks `ids`: 'high', 'normal' or 'low' (the ⋯ menu,
+// the i key).
+async function setImportance(ids, level) {
+  if (ids.length === 1) await app.updateTask(ids[0], { importance: level });
+  else if (ids.length) await batchUpdate(ids.map(id => ({ id, importance: level })));
+}
+
 // Start the open tasks among `ids` today (those not starting today
 // already), with one undo that puts back each one's start date and history.
 // Today is never after a deadline that hasn't passed, and an overdue task
@@ -394,5 +401,5 @@ function visibleItems() {
   return Array.from(app.listEl.querySelectorAll('.task-item'));
 }
 
-return { openBulkTagModal, updateSelectionClasses, inSelection, toggleSelection, selectAllVisible, clearSelection, enterSelectMode, exitSelectMode, syncSelBar, mayComplete, runSelectionAction, startOn, completeMany, setSelected, extendSelection, visibleItems };
+return { openBulkTagModal, updateSelectionClasses, inSelection, toggleSelection, selectAllVisible, clearSelection, enterSelectMode, exitSelectMode, syncSelBar, mayComplete, setImportance, runSelectionAction, startOn, completeMany, setSelected, extendSelection, visibleItems };
 }

@@ -91,6 +91,10 @@
       <label for="task-edit-tags{{.Sfx}}">Tags <span class="field-hint">(Tab completes; comma, space or Enter adds)</span></label>
       <input type="text" id="task-edit-tags{{.Sfx}}" name="tags" autocomplete="off">
     </div>
+    <div class="task-field task-field-importance">
+      <label for="task-edit-importance{{.Sfx}}">Importance</label>
+      <select id="task-edit-importance{{.Sfx}}" name="importance"><option value="high">High</option><option value="" selected>Normal</option><option value="low">Low</option></select>
+    </div>
     <div class="task-field-row task-row-dates">
       <div class="task-field">
         <label>Due date</label>

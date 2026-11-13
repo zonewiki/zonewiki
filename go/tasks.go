@@ -267,6 +267,17 @@ func applyOrder(t *Task, data jsonObj) error {
 		}
 		t.Keep = keep
 	}
+	if data.Null("importance") && data.Has("importance") {
+		t.Importance = "" // null: normal
+	} else if data.Has("importance") {
+		s, ok := jsonobj.As[string](data["importance"])
+		switch s = strings.ToLower(strings.TrimSpace(s)); {
+		case ok && (s == "high" || s == "low" || s == "normal" || s == ""):
+			t.Importance = taskmodel.CleanImportance(s)
+		default:
+			return refuse("importance must be high, normal or low")
+		}
+	}
 	return nil
 }
 

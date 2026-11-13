@@ -232,6 +232,16 @@ export function commentWhen(at) {
 export function commentStamp(c) {
   return commentWhen(c.at) + (c.by ? ` · ${c.by}` : '');
 }
+// A task's importance, before its title: "!" for high, "↓" for low; normal
+// (most tasks) shows nothing.
+export const IMPORTANCE = { high: ['!', 'High importance'], low: ['↓', 'Low importance'] };
+export function importanceMark(task) {
+  const mark = IMPORTANCE[task.importance];
+  return mark
+    ? `<span class="task-importance task-importance-${task.importance}" title="${mark[1]}" aria-label="${mark[1]}">${mark[0]}</span>`
+    : '';
+}
+
 // A task's subtasks: the checklist items in its notes (`- [ ] item`), as
 // the notes render them. { total, done }, kept per text: every draw asks.
 const subtasksOf = new Map();

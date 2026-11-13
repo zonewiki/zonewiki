@@ -71,7 +71,7 @@ class TestToolDefinitions:
         # Every session loads them all. Parameters many tools share keep
         # short descriptions; read_guides explains the gate once.
         tools = {t["name"]: t for t in self.tools(client)}
-        assert len(json.dumps(list(tools.values()))) < 27100
+        assert len(json.dumps(list(tools.values()))) < 27400
         props = tools["write_page"]["inputSchema"]["properties"]
         assert len(props["summary"]["description"]) < 100 and len(props["guides"]["description"]) < 100
         assert "refused until its id" in tools["read_guides"]["description"]
@@ -1770,6 +1770,20 @@ class TestCreateTask:
         text, err = call(client, "create_task", title="x", repeat="hourly")
         assert err and "repeat must be" in text
         assert call(client, "search_tasks", status="all")[0].endswith("No matching tasks.")
+
+
+class TestTaskImportance:
+    def test_set_shown_and_cleared(self, client):
+        text, err = call(client, "create_task", title="Tax return", importance="high")
+        assert not err and "status: open · importance: high" in text
+        tid = _task_id(text)
+        assert "importance: low" in call(client, "update_task", id=tid, importance="low")[0]
+        text, err = call(client, "update_task", id=tid, importance="normal")
+        assert not err and "importance" not in text
+        assert "importance" not in call(client, "create_task", title="Plain")[0]
+        text, err = call(client, "update_task", id=tid, importance="urgent")
+        assert err and text == "importance must be high, normal or low"
+        assert call(client, "create_task", title="X", importance=1)[1]
 
 
 class TestUpdateTask:

@@ -82,16 +82,19 @@ function placeInOrder(old, shown, moved) {
 // rest is a text search over title + description. Separate tag words must
 // all match (`#a #b`); a pipe inside one word means any of them (`#a|b`).
 // A word starting with '-#' excludes its tags (`-#mary`, `-#a|b`: neither).
-// Returns { text, tagGroups, excludeTags } — every group must have at least
-// one match, and no excluded tag may be present.
+// `!high` (or `!`) and `!low` filter by importance.
+// Returns { text, tagGroups, excludeTags, importance } — every group must
+// have at least one match, and no excluded tag may be present.
 function parseFilter(q) {
   const words = (q || '').trim().split(/\s+/).filter(Boolean);
   const tagGroups = [];
   const excludeTags = [];
   const text = [];
   const tagsOf = w => w.split('|').map(t => t.replace(/^#/, '').toLowerCase()).filter(Boolean);
+  let importance = '';
   for (const w of words) {
-    if (w.startsWith('-#')) excludeTags.push(...tagsOf(w.slice(1)));
+    if (importanceWord(w)) importance = importanceWord(w);
+    else if (w.startsWith('-#')) excludeTags.push(...tagsOf(w.slice(1)));
     else if (w.startsWith('#')) {
       const group = tagsOf(w);
       if (group.length) tagGroups.push(group);
@@ -99,10 +102,19 @@ function parseFilter(q) {
       text.push(w);
     }
   }
-  return { text: text.join(' ').toLowerCase(), tagGroups, excludeTags };
+  return { text: text.join(' ').toLowerCase(), tagGroups, excludeTags, importance };
+}
+
+// A task's importance: 'high', 'low', or '' for normal (what most are).
+// As a word, in the filter and at the end of a new task's title: `!` or
+// `!high`, `!low`.
+function importanceWord(w) {
+  const m = /^!(high|low)?$/i.exec(w);
+  return m ? (m[1] || 'high').toLowerCase() : '';
 }
 
 function matchesFilter(t, f) {
+  if (f.importance && (t.importance || '') !== f.importance) return false;
   if (f.text && !(t.title || '').toLowerCase().includes(f.text) &&
       !(t.description || '').toLowerCase().includes(f.text)) return false;
   const tags = (t.tags || []).map(tg => tg.toLowerCase());
@@ -115,7 +127,7 @@ function matchesFilter(t, f) {
 // Completed: the completed; Open and the Plan board: every open task (one
 // still waiting for a day is in the board's Unplanned section).
 function tasksInView(tasks, f, view, today) {
-  const filtering = f.text || f.tagGroups.length || f.excludeTags.length;
+  const filtering = f.text || f.tagGroups.length || f.excludeTags.length || f.importance;
   return tasks.filter(t => (!filtering || matchesFilter(t, f)) &&
     (view === 'completed' ? !!t.completed_at
       : view === 'focus' ? !t.completed_at && isFocus(t, today)
@@ -391,13 +403,15 @@ function parseDateWord(word, today) {
 // (or shorthand that would leave no title) comes back unchanged, found=false.
 function parseQuickAdd(input, today) {
   const words = (input || '').trim().split(/\s+/).filter(Boolean);
-  const out = { title: words.join(' '), start_date: null, due_date: null, tags: [], found: false };
+  const out = { title: words.join(' '), start_date: null, due_date: null, tags: [], importance: '', found: false };
   let end = words.length;
   while (end > 1) {
     const w = words[end - 1];
     if (/^#\p{L}[\p{L}\p{N}_-]*$/u.test(w)) {
       const tag = w.slice(1).toLowerCase();
       if (!out.tags.includes(tag)) out.tags.unshift(tag);
+    } else if (!out.importance && importanceWord(w)) {
+      out.importance = importanceWord(w);
     } else if (/^due:/i.test(w) && !out.due_date && parseDateWord(w.slice(4), today)) {
       out.due_date = parseDateWord(w.slice(4), today);
     } else if (!out.start_date && parseDateWord(w, today)) {
@@ -416,7 +430,7 @@ function parseQuickAdd(input, today) {
 const TasksCore = {
   dateToStr, addDays, isOverdue, isFocus, isCarried, byOpenOrder, byDeadline, byCreated, SORTS, placeInOrder, tagMatchScore, tagCounts, selectionTags, bulkTagChange,
   rankTags, sanitizeTagInput,
-  parseFilter, matchesFilter, tasksInView, tagParamToQuery,
+  parseFilter, matchesFilter, tasksInView, tagParamToQuery, importanceWord,
   bucketKey, fullDayLabel, boardBuckets, parseQuickAdd,
   dateSettings, localeDate, shortDate, longDayLabel, weekStart, weekdayNames, monthTitle,
 };

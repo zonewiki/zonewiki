@@ -2822,7 +2822,7 @@ def test_tab_in_the_task_dialog_goes_from_field_to_field(page, wiki):
     page.goto("/tasks?view=open")
     modal = open_edit(page, "Plan trip")
     expect(modal.locator("#task-edit-title")).to_be_focused()
-    fields = ["task-edit-title", "task-edit-desc", "task-edit-tags", "task-edit-due", "task-edit-start", "task-edit-lead",
+    fields = ["task-edit-title", "task-edit-desc", "task-edit-tags", "task-edit-importance", "task-edit-due", "task-edit-start", "task-edit-lead",
               "task-edit-rec-type", "task-edit-rec-from", "task-edit-keep", "Save", "task-edit-cancel", "task-edit-delete"]
     stops = _tab_stops(page, modal)
     # "Every N" and "From done" are off without a repeat: disabled fields are no stops either.
@@ -2856,6 +2856,79 @@ def test_tab_in_the_task_dialog_goes_from_field_to_field(page, wiki):
     assert stops == [f for f in fields if f not in off], stops
     page.keyboard.press("Alt+c")                                     # no comments on a task not yet made
     expect(comment).to_be_hidden()
+
+
+def test_importance_shows_before_the_title_and_is_set_four_ways(page, wiki):
+    page.request.post("/api/tasks", data={"title": "Tax return", "importance": "high"})
+    page.request.post("/api/tasks", data={"title": "Sort photos", "importance": "low"})
+    page.request.post("/api/tasks", data={"title": "Water plants"})
+    page.goto("/tasks?view=open")
+    mark = lambda title: card(page, title).locator(".task-importance")
+    expect(mark("Tax return")).to_have_text("!")
+    expect(mark("Tax return")).to_have_attribute("title", "High importance")
+    expect(mark("Sort photos")).to_have_text("↓")
+    expect(mark("Water plants")).to_have_count(0)                     # normal says nothing
+    # Before the title, on its line: also on a compact line.
+    box, title = mark("Tax return").bounding_box(), card(page, "Tax return").locator(".task-title").bounding_box()
+    assert box["x"] < title["x"] and abs(box["y"] - title["y"]) < 6
+    page.keyboard.press("v")
+    expect(mark("Tax return")).to_be_visible()
+    page.keyboard.press("v")
+    # The dialog's field.
+    modal = open_edit(page, "Water plants")
+    expect(modal.locator("#task-edit-importance")).to_have_value("")
+    modal.locator("#task-edit-importance").select_option("high")
+    modal.locator(".task-edit-actions").get_by_role("button", name="Save").click()
+    expect(mark("Water plants")).to_have_text("!")
+    modal = open_edit(page, "Tax return")
+    expect(modal.locator("#task-edit-importance")).to_have_value("high")
+    modal.locator("#task-edit-importance").select_option("")
+    modal.locator(".task-edit-actions").get_by_role("button", name="Save").click()
+    expect(mark("Tax return")).to_have_count(0)
+    assert "importance" not in task_by_title(page, "Tax return")
+    # The ⋯ menu: Importance…, then the level; the task's own is ticked.
+    card(page, "Sort photos").locator(".task-title").click(button="right")
+    page.get_by_role("menuitem", name="Importance…").click()
+    expect(page.locator(".task-menu").get_by_role("menuitem")).to_have_text(["High", "Normal", "Low ✓"])
+    page.get_by_role("menuitem", name="High").click()
+    expect(mark("Sort photos")).to_have_text("!")
+    # The key: i, in turn high, low, normal; several selected take the first one's next.
+    card(page, "Tax return").locator(".task-title").click()
+    page.keyboard.press("i")
+    expect(mark("Tax return")).to_have_text("!")
+    page.keyboard.press("i")
+    expect(mark("Tax return")).to_have_text("↓")
+    page.keyboard.press("i")
+    expect(mark("Tax return")).to_have_count(0)
+    page.keyboard.press("Control+a")
+    page.keyboard.press("i")
+    expect(page.locator(".task-importance-high")).to_have_count(3)
+    assert {t["title"]: t.get("importance") for t in page.request.get("/api/tasks").json()} == {
+        "Tax return": "high", "Sort photos": "high", "Water plants": "high"}
+
+
+def test_importance_in_quick_add_and_the_filter(page, wiki):
+    page.request.post("/api/tasks", data={"title": "Plain one"})
+    page.goto("/tasks?view=open")
+    page.locator(".tasks-app").get_by_role("button", name="New task").click()
+    modal = page.locator("#task-edit-modal")
+    modal.locator("#task-edit-title").fill("Call the bank ! #money")
+    expect(modal.locator("#task-edit-quick")).to_contain_text("high importance")
+    modal.locator("#task-edit-title").press("Enter")
+    expect(card(page, "Call the bank").locator(".task-importance-high")).to_have_count(1)
+    assert task_by_title(page, "Call the bank")["importance"] == "high"
+    page.locator(".tasks-app").get_by_role("button", name="New task").click()
+    modal.locator("#task-edit-title").fill("Tidy desk !low")
+    modal.locator("#task-edit-title").press("Enter")
+    expect(card(page, "Tidy desk").locator(".task-importance-low")).to_have_count(1)
+    # The filter field: !high (or !), !low.
+    search = page.locator("#task-filter-search")
+    search.fill("!high")
+    expect(page.locator(".task-item .task-title")).to_have_text(["Call the bank"])
+    search.fill("!low")
+    expect(page.locator(".task-item .task-title")).to_have_text(["Tidy desk"])
+    search.fill("")
+    expect(page.locator(".task-item")).to_have_count(3)
 
 
 def test_new_task_has_no_comments_field(page, wiki):

@@ -28,13 +28,16 @@ type Task struct {
 	CreatedAt, CompletedAt string
 	WontDo                 bool // completed as won't do
 	Keep                   bool // a keep task: done returns it to the pool
-	LastDone               string
-	SortOrder              *float64 // its place in the manual order; nil: none
-	Recurrence             *Recurrence
-	SpawnedFrom            string // the occurrence this one follows
-	History                []HistoryEntry
-	Comments               []Comment
-	Extra                  map[string]json.RawMessage // keys Zone doesn't know, as the file had them
+	// Importance: "high" or "low"; "" is normal, which the file doesn't
+	// say, so a wiki that sets none keeps its files as they were.
+	Importance  string
+	LastDone    string
+	SortOrder   *float64 // its place in the manual order; nil: none
+	Recurrence  *Recurrence
+	SpawnedFrom string // the occurrence this one follows
+	History     []HistoryEntry
+	Comments    []Comment
+	Extra       map[string]json.RawMessage // keys Zone doesn't know, as the file had them
 	// Owner: the user whose private task it is, "" a shared one. Not in
 	// the file: it is whose files the task was read from (tasksDir), and a
 	// write files it there; the API shows it as "private".
@@ -65,9 +68,19 @@ type Comment struct {
 	ID, At, By, Text string
 }
 
+// CleanImportance: a task's importance as it is kept: "high", "low", or ""
+// for normal (also for "normal" and anything else).
+func CleanImportance(s string) string {
+	switch s = strings.ToLower(strings.TrimSpace(s)); s {
+	case "high", "low":
+		return s
+	}
+	return ""
+}
+
 var taskKeys = map[string]bool{"id": true, "title": true, "description": true, "tags": true,
 	"start_date": true, "due_date": true, "created_at": true, "completed_at": true, "wont_do": true,
-	"keep": true, "last_done": true, "sort_order": true, "recurrence": true, "spawned_from": true,
+	"keep": true, "importance": true, "last_done": true, "sort_order": true, "recurrence": true, "spawned_from": true,
 	"history": true, "comments": true, "private": true}
 
 // FromJSON reads a task from a file's object, leniently: a value of the
@@ -78,6 +91,7 @@ func FromJSON(o jsonobj.Obj) *Task {
 		StartDate: o.Str("start_date"), DueDate: o.Str("due_date"),
 		CreatedAt: o.Str("created_at"), CompletedAt: o.Str("completed_at"),
 		WontDo: jsonobj.True(o["wont_do"]), Keep: jsonobj.True(o["keep"]), LastDone: o.Str("last_done"),
+		Importance:  CleanImportance(o.Str("importance")),
 		SpawnedFrom: o.Str("spawned_from"), History: []HistoryEntry{}, Comments: []Comment{}}
 	t.Tags = CleanTags(jsonobj.TextList(o["tags"])) // "local llm", "#work" from a file edited by hand
 	if f, ok := jsonobj.As[float64](o["sort_order"]); ok {
@@ -204,6 +218,7 @@ func (t *Task) JSON(private bool) ([]byte, error) {
 		CompletedAt *string        `json:"completed_at"`
 		WontDo      bool           `json:"wont_do"`
 		Keep        bool           `json:"keep"`
+		Importance  string         `json:"importance,omitempty"`
 		LastDone    *string        `json:"last_done"`
 		SortOrder   *float64       `json:"sort_order"`
 		Recurrence  *Recurrence    `json:"recurrence"`
@@ -211,7 +226,7 @@ func (t *Task) JSON(private bool) ([]byte, error) {
 		History     []HistoryEntry `json:"history"`
 		Comments    []Comment      `json:"comments"`
 	}{t.ID, t.Title, t.Description, tags, jsonobj.Nullable(t.StartDate), jsonobj.Nullable(t.DueDate),
-		jsonobj.Nullable(t.CreatedAt), jsonobj.Nullable(t.CompletedAt), t.WontDo, t.Keep, jsonobj.Nullable(t.LastDone),
+		jsonobj.Nullable(t.CreatedAt), jsonobj.Nullable(t.CompletedAt), t.WontDo, t.Keep, t.Importance, jsonobj.Nullable(t.LastDone),
 		t.SortOrder, t.Recurrence, jsonobj.Nullable(t.SpawnedFrom), history, comments})
 	if err == nil && private {
 		b = append(b[:len(b)-1], `,"private":`+strconv.FormatBool(t.Owner != "")+"}"...)

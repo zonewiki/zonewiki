@@ -2083,6 +2083,64 @@ class TestLists:
 # ---------- Keep tasks ----------
 
 
+class TestImportance:
+    """A task's importance: high or low; normal is what a task is when nothing says so."""
+
+    def _in_file(self, wiki_dir, title):
+        return next(t for t in json.loads((wiki_dir / "_tasks/tasks.json").read_text()) if t["title"] == title)
+
+    def test_set_changed_and_cleared(self, client, wiki_dir):
+        plain = create_task(client, title="Plain").get_json()
+        assert "importance" not in plain and "importance" not in self._in_file(wiki_dir, "Plain")   # files as they were
+        task = create_task(client, title="Tax return", importance="high").get_json()
+        assert task["importance"] == "high" and self._in_file(wiki_dir, "Tax return")["importance"] == "high"
+        # In the file it comes after keep, where the fields' order has it.
+        keys = list(self._in_file(wiki_dir, "Tax return"))
+        assert keys[keys.index("keep") + 1] == "importance"
+        low = client.put(f"/api/tasks/{task['id']}", json={"importance": " Low "}).get_json()
+        assert low["importance"] == "low"
+        for normal in ("normal", "", None):
+            client.put(f"/api/tasks/{task['id']}", json={"importance": "high"})
+            assert "importance" not in client.put(f"/api/tasks/{task['id']}", json={"importance": normal}).get_json()
+        assert "importance" not in self._in_file(wiki_dir, "Tax return")
+        # Another change leaves it alone.
+        client.put(f"/api/tasks/{task['id']}", json={"importance": "high"})
+        assert client.put(f"/api/tasks/{task['id']}", json={"title": "Taxes"}).get_json()["importance"] == "high"
+
+    def test_anything_else_is_refused(self, client):
+        task = create_task(client, title="Tax return").get_json()
+        for bad in ("urgent", 1, True, ["high"]):
+            resp = client.put(f"/api/tasks/{task['id']}", json={"importance": bad})
+            assert resp.status_code == 400 and "importance must be high, normal or low" in resp.get_data(as_text=True)
+        assert create_task(client, title="X", importance="urgent").status_code == 400
+
+    def test_a_file_edited_by_hand_reads(self, client, wiki_dir):
+        tasks = [{"id": f"0000000{i}-0000-4000-8000-000000000000", "title": f"T{i}", "importance": v}
+                 for i, v in enumerate(["HIGH", "low", "normal", "urgent", 3])]
+        (wiki_dir / "_tasks/tasks.json").write_text(json.dumps(tasks))
+        got = {t["title"]: t.get("importance") for t in client.get("/api/tasks").get_json()}
+        assert got == {"T0": "high", "T1": "low", "T2": None, "T3": None, "T4": None}
+
+    def test_the_next_occurrence_keeps_it(self, client):
+        task = create_task(client, title="Water plants", importance="high", due_date=_future(1),
+                           rec_type="weekly", rec_interval=1).get_json()
+        client.put(f"/api/tasks/{task['id']}", json={"completed": True})
+        [nxt] = [t for t in client.get("/api/tasks").get_json() if t["title"] == "Water plants"]
+        assert nxt["id"] != task["id"] and nxt["importance"] == "high"
+
+    def test_several_at_once_and_a_restored_task(self, client):
+        a, b = (create_task(client, title=t).get_json() for t in ("A", "B"))
+        resp = client.post("/api/tasks/batch-update", json={"tasks": [{"id": a["id"], "importance": "low"},
+                                                                      {"id": b["id"], "importance": "high"}]})
+        assert resp.status_code == 200
+        got = {t["title"]: t.get("importance") for t in client.get("/api/tasks").get_json()}
+        assert got == {"A": "low", "B": "high"}
+        snap = next(t for t in client.get("/api/tasks").get_json() if t["title"] == "B")
+        client.delete(f"/api/tasks/{b['id']}")
+        client.post("/api/tasks/restore", json={"tasks": [snap]})
+        assert next(t for t in client.get("/api/tasks").get_json() if t["title"] == "B")["importance"] == "high"
+
+
 class TestKeep:
     """A keep task is never archived: completing it sends it back to Open
     (no start date, no deadline) and records last_done."""

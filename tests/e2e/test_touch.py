@@ -102,7 +102,7 @@ def test_menu_is_a_bottom_sheet_with_context_items(phone):
     menu = open_menu(phone, "Weekly review")
     items = menu.get_by_role("menuitem")
     expect(items).to_have_text(["Edit…", "Start today", "Start tomorrow", "Pick start date…",
-                                "Skip this occurrence", "Won't do", "Copy link", "Select several", "Delete…"])
+                                "Skip this occurrence", "Importance…", "Won't do", "Copy link", "Select several", "Delete…"])
     box = menu.bounding_box()
     assert box["x"] == 0 and abs(box["y"] + box["height"] - 844) < 1, box
     assert box["width"] == 390

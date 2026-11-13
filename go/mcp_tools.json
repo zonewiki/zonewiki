@@ -820,6 +820,15 @@
      },
      "description": "The task's tags, without '#'. Replaces its tags; a list's name as a tag files it in that list."
     },
+    "importance": {
+     "type": "string",
+     "enum": [
+      "high",
+      "normal",
+      "low"
+     ],
+     "description": "Shown before the title; normal unless said."
+    },
     "due": {
      "type": "string",
      "description": "Deadline: YYYY-MM-DD, or today, tomorrow, a weekday (mon…sun: the next one) or +3d/+2w, which Zone resolves with its own date; empty to clear. A date the user gives the task ('tomorrow', 'by Friday', 'on the 3rd') goes here, not in start."
@@ -908,6 +917,14 @@
       "type": "string"
      },
      "description": "The task's tags, without '#'. Replaces its tags; a list's name as a tag files it in that list."
+    },
+    "importance": {
+     "type": "string",
+     "enum": [
+      "high",
+      "normal",
+      "low"
+     ]
     },
     "due": {
      "type": "string",

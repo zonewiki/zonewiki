@@ -529,6 +529,14 @@ div.task-card-comment > .task-comment-when { display: block; }
   border-radius: 3px; cursor: pointer;
 }
 .task-has-notes:hover { background: var(--code-bg); }
+/* Importance, before the title: "!" high, "↓" low; normal shows nothing.
+   A low task steps back a little. */
+.task-importance { font-weight: 700; margin-right: .3rem; cursor: default; }
+.task-importance-high { color: #c2410c; }
+.task-importance-low { color: color-mix(in srgb, var(--fg) 45%, transparent); font-weight: 500; }
+.task-item:has(.task-importance-low):not(.task-completed) .task-title { color: color-mix(in srgb, var(--fg) 62%, transparent); font-weight: 500; }
+@media screen and (prefers-color-scheme: dark) { .task-importance-high { color: #fb923c; } }
+.task-field-importance { max-width: 12rem; }
 /* "☑ 1/3": the notes have subtasks, so many done; all done, in the accent. */
 .task-subtasks { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .task-subtasks-done { color: var(--btn-primary); }

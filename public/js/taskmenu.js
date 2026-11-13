@@ -55,6 +55,7 @@ function openTaskMenu(id, anchor, at) {
     ['pick', 'Pick start date…'],
     task.start_date && ['unplan', 'Unplan'],
     task.recurrence && ['skip', 'Skip this occurrence'],
+    ['importance', 'Importance…'],
     ['wontdo', "Won't do"],
     ['copylink', 'Copy link'],
     ['select', 'Select several'],
@@ -130,6 +131,14 @@ function runTaskAction(task, action, anchor) {
       openDatePicker(task.start_date || '', d => d !== undefined && app.setStart(id, d), anchor, todayStr());
       break;
     case 'skip':     app.skipOccurrence(id); break;
+    case 'importance': {
+      // A second menu in the first one's place: the three levels, the task's own ticked.
+      const now = task.importance || 'normal';
+      showMenu('Importance', [['high', 'High'], ['normal', 'Normal'], ['low', 'Low']]
+        .map(([level, label]) => [level, label + (level === now ? ' ✓' : '')]),
+      level => app.setImportance([id], level), anchor);
+      break;
+    }
     case 'wontdo':   app.markWontDo(id); break;
     case 'reopen':
       app.updateTask(id, { completed: false });

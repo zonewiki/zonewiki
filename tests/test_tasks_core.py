@@ -292,17 +292,20 @@ class TestFilterField:
     """The tasks' single filter field: text plus #tag words."""
 
     @pytest.mark.parametrize("q,expected", [
-        ("", {"text": "", "tagGroups": [], "excludeTags": []}),
-        ("fix bug", {"text": "fix bug", "tagGroups": [], "excludeTags": []}),
-        ("#Work", {"text": "", "tagGroups": [["work"]], "excludeTags": []}),
-        ("fix  #work #home bug", {"text": "fix bug", "tagGroups": [["work"], ["home"]], "excludeTags": []}),
-        ("#a|b", {"text": "", "tagGroups": [["a", "b"]], "excludeTags": []}),
-        ("#a|#b", {"text": "", "tagGroups": [["a", "b"]], "excludeTags": []}),
-        ("#", {"text": "", "tagGroups": [], "excludeTags": []}),            # a bare '#' while typing
-        ("#work -#Mary", {"text": "", "tagGroups": [["work"]], "excludeTags": ["mary"]}),
-        ("-#a|b -#c", {"text": "", "tagGroups": [], "excludeTags": ["a", "b", "c"]}),
-        ("-#", {"text": "", "tagGroups": [], "excludeTags": []}),           # a bare '-#' while typing
-        ("pre-fix", {"text": "pre-fix", "tagGroups": [], "excludeTags": []}),
+        ("", {"text": "", "tagGroups": [], "excludeTags": [], "importance": ""}),
+        ("fix bug", {"text": "fix bug", "tagGroups": [], "excludeTags": [], "importance": ""}),
+        ("#Work", {"text": "", "tagGroups": [["work"]], "excludeTags": [], "importance": ""}),
+        ("fix  #work #home bug", {"text": "fix bug", "tagGroups": [["work"], ["home"]], "excludeTags": [], "importance": ""}),
+        ("#a|b", {"text": "", "tagGroups": [["a", "b"]], "excludeTags": [], "importance": ""}),
+        ("#a|#b", {"text": "", "tagGroups": [["a", "b"]], "excludeTags": [], "importance": ""}),
+        ("#", {"text": "", "tagGroups": [], "excludeTags": [], "importance": ""}),            # a bare '#' while typing
+        ("#work -#Mary", {"text": "", "tagGroups": [["work"]], "excludeTags": ["mary"], "importance": ""}),
+        ("-#a|b -#c", {"text": "", "tagGroups": [], "excludeTags": ["a", "b", "c"], "importance": ""}),
+        ("-#", {"text": "", "tagGroups": [], "excludeTags": [], "importance": ""}),           # a bare '-#' while typing
+        ("pre-fix", {"text": "pre-fix", "tagGroups": [], "excludeTags": [], "importance": ""}),
+        ("fix !high #work", {"text": "fix", "tagGroups": [["work"]], "excludeTags": [], "importance": "high"}),
+        ("! !low", {"text": "", "tagGroups": [], "excludeTags": [], "importance": "low"}),      # the last one counts
+        ("wow!", {"text": "wow!", "tagGroups": [], "excludeTags": [], "importance": ""}),
     ])
     def test_parse(self, q, expected):
         assert run_core(f"TasksCore.parseFilter({json.dumps(q)})") == expected
@@ -360,7 +363,17 @@ class TestQuickAdd:
     def test_full_example(self):
         q = quick("Call Bob tomorrow #work due:fri")
         assert q == {"title": "Call Bob", "start_date": "2026-07-27",
-                     "due_date": "2026-07-31", "tags": ["work"], "found": True}
+                     "due_date": "2026-07-31", "tags": ["work"], "importance": "", "found": True}
+
+    @pytest.mark.parametrize("title,importance,rest", [
+        ("Call Bob !", "high", "Call Bob"), ("Call Bob !high", "high", "Call Bob"), ("Call Bob !LOW", "low", "Call Bob"),
+        ("Call Bob ! tomorrow #work", "high", "Call Bob"), ("Call Bob tomorrow !low", "low", "Call Bob"),
+        ("Call Bob!", "", "Call Bob!"), ("Wow !!", "", "Wow !!"), ("Fix !important bug", "", "Fix !important bug"),
+        ("!", "", "!"),                        # a title is never only shorthand
+    ])
+    def test_importance(self, title, importance, rest):
+        q = quick(title)
+        assert (q["importance"], q["title"]) == (importance, rest)
 
     @pytest.mark.parametrize("word,expected", [
         ("today", "2026-07-26"), ("tomorrow", "2026-07-27"), ("tmrw", "2026-07-27"),
@@ -547,6 +560,14 @@ class TestTasksInView:
 
     def test_completed_shows_only_the_completed(self):
         assert self.ids("completed") == ["done"]
+
+    def test_the_filter_takes_an_importance(self):
+        tasks = [{"id": "a", "importance": "high"}, {"id": "b"}, {"id": "c", "importance": "low", "tags": ["work"]}]
+        ids = lambda q: run_core(f"TasksCore.tasksInView({json.dumps(tasks)}, TasksCore.parseFilter({json.dumps(q)}), "
+                                 f"'open', '{TODAY}').map(t => t.id)")
+        assert ids("!high") == ids("!") == ["a"] and ids("!low") == ["c"] and ids("") == ["a", "b", "c"]
+        assert ids("!low #work") == ["c"] and ids("!high #work") == []
+        assert ids("!x") == []                  # any other word is text to find
 
     def test_the_filter_narrows_every_tab(self):
         assert self.ids("open", "#work") == ["later", "due"]

@@ -6,7 +6,7 @@
 import TasksCore from '../tasks-core.js';
 import { renderFigures } from './figures.js';
 import { openDatePicker } from './datepicker.js';
-import { commentCardHtml, commentStamp, subtaskCounts, dueDateClass, esc, formatDate, linkifyTitle, plainTitle, shortDate, startsAfterDeadline, todayStr, urgencyClass } from './taskutil.js';
+import { commentCardHtml, commentStamp, importanceMark, subtaskCounts, dueDateClass, esc, formatDate, linkifyTitle, plainTitle, shortDate, startsAfterDeadline, todayStr, urgencyClass } from './taskutil.js';
 import { plainHtml, renderedHtml, renderTexts } from './tasktexts.js';
 
 const { byOpenOrder, SORTS } = TasksCore;
@@ -165,7 +165,7 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
         <input type="checkbox" ${checked} data-id="${esc(task.id)}">
       </label>
       <div class="task-content" data-id="${esc(task.id)}">
-        <span class="task-title" data-id="${esc(task.id)}">${linkifyTitle(task.title)}</span>
+        ${importanceMark(task)}<span class="task-title" data-id="${esc(task.id)}">${linkifyTitle(task.title)}</span>
       </div>
       <div class="task-actions">
         ${expandBtn}<button type="button" class="task-menu-btn" data-id="${esc(task.id)}" aria-label="More actions" aria-haspopup="menu" title="More actions">${app.MORE_ICON}</button>

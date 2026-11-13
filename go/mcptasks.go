@@ -40,6 +40,9 @@ func mcpTaskText(t *Task, base, user string) string {
 		}
 		facts = append(facts, "tags: "+strings.Join(tags, " "))
 	}
+	if t.Importance != "" {
+		facts = append(facts, "importance: "+t.Importance)
+	}
 	if t.StartDate != "" {
 		facts = append(facts, "start: "+t.StartDate)
 	}
@@ -339,6 +342,13 @@ func taskFields(args jsonObj, task *Task) (jsonObj, error) {
 			}
 			data.Set(f, b)
 		}
+	}
+	if args.Has("importance") {
+		s, ok := jsonobj.As[string](args["importance"])
+		if s = strings.ToLower(strings.TrimSpace(s)); !ok || s != "high" && s != "normal" && s != "low" {
+			return nil, toolErr("importance must be high, normal or low")
+		}
+		data.Set("importance", s)
 	}
 	if args.Has("tags") {
 		data["tags"] = args["tags"]

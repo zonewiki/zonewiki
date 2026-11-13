@@ -134,7 +134,7 @@ func spawnRecurring(user string, task *Task, active []*Task, skip bool) *Task {
 	spawned.Title, spawned.Description = task.Title, task.Description
 	spawned.Tags = append([]string{}, task.Tags...)
 	spawned.DueDate, spawned.StartDate = newDue, newStart
-	spawned.SortOrder = task.SortOrder
+	spawned.SortOrder, spawned.Importance = task.SortOrder, task.Importance
 	spawned.Recurrence, spawned.SpawnedFrom = nextRec, task.ID
 	spawned.Owner = task.Owner // a private series stays private
 	// The next occurrence carries the series' history and comments on.
@@ -286,7 +286,8 @@ func untouchedSpawn(spawn, task *Task) bool {
 	if len(h) == 0 || h[len(h)-1].Event != "repeat" || spawn.Keep {
 		return false
 	}
-	if spawn.Title != task.Title || spawn.Description != task.Description || !slices.Equal(spawn.Tags, task.Tags) {
+	if spawn.Title != task.Title || spawn.Description != task.Description || !slices.Equal(spawn.Tags, task.Tags) ||
+		spawn.Importance != task.Importance {
 		return false
 	}
 	for _, c := range spawn.Comments {
@@ -545,6 +546,8 @@ func sanitizeSnapshot(snap jsonObj) *Task {
 		t.SortOrder = &f
 	}
 	t.WontDo, t.Keep = jsonobj.True(snap["wont_do"]), jsonobj.True(snap["keep"])
+	importance, _ := jsonobj.As[string](snap["importance"])
+	t.Importance = taskmodel.CleanImportance(importance)
 	t.History = cleanHistory(snap["history"])
 	t.Comments = cleanComments(snap["comments"])
 	if !t.Keep {

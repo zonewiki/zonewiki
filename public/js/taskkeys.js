@@ -115,6 +115,16 @@ document.addEventListener('keydown', async e => {
     return;
   }
 
+  // 'i' — the importance of the selected tasks, in turn: high, low, normal
+  // (several: all get what follows the first one's)
+  if (e.key === 'i' && !e.ctrlKey && !e.metaKey && !e.altKey && st.selectedId) {
+    e.preventDefault();
+    const ids = st.selectedIds.size ? [...st.selectedIds] : [st.selectedId];
+    const first = st.tasks.find(t => t.id === st.selectedId);
+    if (first) app.setImportance(ids, { '': 'high', high: 'low', low: 'normal' }[first.importance || '']);
+    return;
+  }
+
   // 'f' / 'F' — start selected task today / tomorrow
   if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey && st.selectedId) {
     e.preventDefault();

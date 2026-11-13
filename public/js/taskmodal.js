@@ -9,7 +9,7 @@ import { markdownEditor } from './mdedit.js';
 import { toggleCheckboxText } from './mdtext.js';
 import { renderFigures } from './figures.js';
 import { openDatePicker } from './datepicker.js';
-import { attachTagAc, commentStamp, dateOffset, esc, formatDate, hashWordAtCaret, insertHashTag, noticeFromResponse, shortDate, todayStr } from './taskutil.js';
+import { IMPORTANCE, attachTagAc, commentStamp, dateOffset, esc, formatDate, hashWordAtCaret, insertHashTag, noticeFromResponse, shortDate, todayStr } from './taskutil.js';
 import { highlightCode, renderTexts, textsOf } from './tasktexts.js';
 
 const { addDays, tagCounts, rankTags, parseQuickAdd } = TasksCore;
@@ -76,6 +76,7 @@ if (app.descTextarea) {
                                  tabIndents: false, page: () => app.privateCb?.checked ? privateDir + '/task' : '' });
 }
 
+const importanceSelect = document.getElementById('task-edit-importance' + app.sfx);
 let privateWas = false;   // as the modal opened: was the task private
 
 // Edit modal Tags field: each tag is a chip; the input holds the one being
@@ -160,6 +161,7 @@ function quickText(q) {
   return [
     q.start_date && `📅 start ${formatDate(q.start_date)}`,
     q.due_date && `⏰ due ${formatDate(q.due_date)}`,
+    q.importance && IMPORTANCE[q.importance][1].toLowerCase(),
     ...q.tags.map(t => '#' + t),
   ].filter(Boolean).join(' · ');
 }
@@ -430,6 +432,7 @@ function openEditModal(taskId, opts) {
   renderComments(task);
   app.titleInput.placeholder = task ? '' : 'e.g. Call Bob tomorrow #work due:fri';
   syncQuickPreview();
+  importanceSelect.value = task?.importance || '';
   app.keepCb.checked = task ? !!task.keep : opts && 'keep' in opts ? !!opts.keep : app.initKeep;
   if (app.privateCb) {
     app.privateCb.checked = task ? !!task.private : opts && 'private' in opts ? !!opts.private : app.initPrivate;
@@ -599,6 +602,7 @@ app.form.addEventListener('submit', async e => {
     rec_interval: parseInt(document.getElementById('task-edit-rec-interval' + app.sfx).value) || 1,
     rec_from: document.getElementById('task-edit-rec-from' + app.sfx)?.checked ? 'completion' : 'due',
     keep: app.keepCb.checked,
+    importance: importanceSelect.value || 'normal',
     ...(app.privateCb ? { private: app.privateCb.checked } : {}),
   };
   if (batchTitles && !id) {
@@ -611,6 +615,7 @@ app.form.addEventListener('submit', async e => {
       const task = await app.createTask({
         ...data, title: q.title,
         start_date: q.start_date || data.start_date, due_date: q.due_date || data.due_date,
+        importance: q.importance || data.importance,
         tags: [...new Set([...data.tags, ...q.tags])],
       });
       made.push(task);
@@ -626,6 +631,7 @@ app.form.addEventListener('submit', async e => {
     if (quick.start_date) data.start_date = quick.start_date;
     if (quick.due_date) data.due_date = quick.due_date;
     data.tags = [...new Set([...data.tags, ...quick.tags])];
+    if (quick.importance) data.importance = quick.importance;
   }
   if (!data.title) { document.getElementById('task-edit-title' + app.sfx).focus(); return; }
   const created = onCreated;

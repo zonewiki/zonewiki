@@ -79,7 +79,7 @@ There is no polling.
 - The files are JSON (`go/internal/taskmodel`): a list of tasks,
   two spaces of indent,
   text as written (no `\u` escapes but those JSON needs),
-  each task's fields in one order (`id`, `title`, `description`, `tags`, `start_date`, `due_date`, `created_at`, `completed_at`, `wont_do`, `keep`, `last_done`, `sort_order`, `recurrence`, `spawned_from`, `history`, `comments`),
+  each task's fields in one order (`id`, `title`, `description`, `tags`, `start_date`, `due_date`, `created_at`, `completed_at`, `wont_do`, `keep`, `importance` (only when it isn't normal), `last_done`, `sort_order`, `recurrence`, `spawned_from`, `history`, `comments`),
   every field written,
   also when empty (`null`, `[]`, `false`),
   then any keys Zone doesn't know (from an older version or a hand edit),
@@ -151,6 +151,7 @@ Recurring instances keep the gap between the two dates, but a new instance's sta
 | `spawned_from` | string / `null` | Recurring instance: id of the completed task that spawned it, so undoing the completion removes exactly this instance |
 | `wont_do` | bool | Abandoned: archived like a completed task, shown with "✗ won't do", never spawns a recurring instance |
 | `keep` | bool | Keep task: completing it doesn't archive it (see Keep tasks) |
+| `importance` | `"high"`, `"low"` | How much the task matters (see Importance). Normal, what a task is unless said, is no key at all: in the file and in the API's answers, so a wiki that sets none keeps its files as they were |
 | `last_done` | `"YYYY-MM-DD"` / `null` | A keep task's last completion, shown on its card as "✓ Sep 21" |
 | `comments` | `[{ id, at, by, text }]` | The user's comments, oldest first, uncapped (see Comments); `by` only with users. |
 | `history` | `[{ at, event, by?, from?, to? }]` | What happened to the task, oldest first, capped at 30 (`historyLimit`): `created`, `start`/`due` (with `from`/`to` dates), `done`, `reopened`, `wontdo`, `skipped`, `repeat` (`to` = the next occurrence's date). `at` is `YYYY-MM-DDTHH:MM`; `by` the user who did it, only with users. See History. |
@@ -374,7 +375,7 @@ Each with a dark-mode value.
 
 ### Interaction
 
-- **Filter field** (`#task-filter-search`, `TasksCore.parseFilter`/`matchesFilter`): `#words` filter by tag (all must match; `#a|b` = any), `-#word` excludes a tag (`-#a|b`: neither), the rest searches title and notes.
+- **Filter field** (`#task-filter-search`, `TasksCore.parseFilter`/`matchesFilter`): `#words` filter by tag (all must match; `#a|b` = any), `-#word` excludes a tag (`-#a|b`: neither), `!high` (or `!`) and `!low` show the tasks of that importance, the rest searches title and notes.
   `/` focuses it, `#` focuses it and starts a tag.
   Typing a `#word` (or `-#word`) suggests tags of the tasks the other tag words leave visible (free text is ignored for this).
   Embed `tag=`/`?tag=` become a query via `TasksCore.tagParamToQuery`.
@@ -419,7 +420,7 @@ Each with a dark-mode value.
   The toast names the change ("#work added to 3 tasks", "#old removed from 2 tasks", else "Tags changed on N tasks"; counting only tasks whose tags changed), or where tasks went if the change took them out of the view; its Undo puts back each changed task's tags in one `batch-update`.
   On touch the field is not focused while there are rows to tick, so the keyboard waits until it is tapped.
 - **Quick-add** (new tasks only, `TasksCore.parseQuickAdd`): trailing shorthand like `Call Bob tomorrow #work due:fri`.
-  Start: `today`, `tomorrow`/`tmrw`, a weekday (next one, never today), `+3`/`+3d`/`+2w`, `YYYY-MM-DD`; due: `due:` + the same; tags: `#tag` starting with a letter.
+  Start: `today`, `tomorrow`/`tmrw`, a weekday (next one, never today), `+3`/`+3d`/`+2w`, `YYYY-MM-DD`; due: `due:` + the same; tags: `#tag` starting with a letter; importance: `!` (or `!high`) and `!low`, as words of their own ("Call Bob !", not "Call Bob!").
   Only trailing words count, and shorthand that would empty the title is ignored.
   `#task-edit-quick` previews the result; shorthand wins over the date fields.
 - **Completing**: the checkbox completes after a cancellable grace period (struck through meanwhile; several ticked in a row each keep their tick and strike while an earlier one leaves the list).
@@ -620,6 +621,21 @@ Not part of the History: they are never capped, undo of other changes never touc
 - **Carried on**: a recurring task's next occurrence takes the series' comments with it, like the history.
 - **Search and MCP**: comment text is part of a task's search text (`taskSearchDocs`, so semantic search too), a comment counts as activity for `edited:`/`after:`/`before:` (`lastActivity`), and `mcpTaskText` lists them after the notes under "Comments:" (`- YYYY-MM-DD HH:MM: text`, a comment's following lines indented under its first).
 
+### Importance
+
+A task is of **high**, **normal** or **low** importance (`importance`, Task fields); normal is what a task is unless something says otherwise, and says nothing anywhere.
+
+- **On a card**, before the title, on its line (so on a compact line too; `importanceMark` in `js/taskutil.js`, `.task-importance`): **!** in a warm red for high, **↓** in grey for low, whose title also steps back (lighter, not bold). Normal shows nothing.
+- **It marks, it doesn't sort**: no order changes with it. The manual order is where a task's rank is; importance says what must not be forgotten, or what may wait, wherever the task stands.
+- **Set** in the edit modal (Importance: High, Normal, Low, after Tags),
+  in a task's ⋯ menu (**Importance…**, which shows the three levels in the menu's place, the task's own ticked),
+  with **i** on the selected task or tasks (`setImportance` in `js/taskselect.js`: one task by `PUT`, several by `batch-update`),
+  and in a new task's title (`!`, `!low`: Quick-add).
+- **Filter**: `!high` (or `!`) and `!low` in the filter field.
+- **API**: `importance` in `POST`/`PUT /api/tasks` and `batch-update`: `"high"`, `"low"`, or `"normal"`, `""` or `null` for normal; anything else is 400 "importance must be high, normal or low". A file edited by hand is read leniently (`CleanImportance`: case and spaces aside, anything else is normal).
+- **Carried on**: a recurring task's next occurrence keeps it; so does a restored task (undo of a delete) and an export.
+- **Assistants** (MCP): `create_task` and `update_task` take `importance`, and a task's line of facts says "importance: high" (or low).
+
 ### Keep tasks
 
 A task with `keep: true` is never archived: ticking it off means "done for now, back to the pool".
@@ -768,6 +784,7 @@ A tag no page declares stays a filter.
 - **→** / **l**, **←** / **h** (compact): open / close the selected task's notes and comments; open, they stay open as j/k move on (see Compact)
 - **o** (the Open tab): the order: manual, by deadline, newest first (see Sorting)
 - **d** (the Open tab): Plan on / off, by start date or one list (see Views)
+- **i**: the importance of the selected task, in turn high, low, normal; several selected all get what follows the first one's (see Importance)
 - **Shift+F10** / menu key: the selected task's ⋯ menu (on several selected tasks, the selection's)
 - **Shift+click**, **Ctrl/Cmd+click**, **Shift+↑/↓**, **Ctrl/Cmd+A**: select several tasks (see Selection); **t** / **T**: their tags
 - **c t**: a new task in the default list, with its tags (from any page; see Modules → New task from anywhere).

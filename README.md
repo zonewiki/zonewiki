@@ -111,6 +111,8 @@ and its deadline. It has two views:
 Done tasks go to a yearly archive. Beyond that:
 
 - Quick-add shorthand: `Call Bob tomorrow #work due:fri`.
+- Importance (high, normal, low): a mark before the title, set with a key, the
+  menu or `!` in the title.
 - Repeating tasks (by due date or from when you finish them; skip one
   occurrence without ending the series), "keep" tasks that go back on the
   list when done (shopping staples), and "won't do".
