@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -142,16 +143,20 @@ func shareUploads(oldSlug, newSlug, newPath string) []string {
 		if sub[1] != owner {
 			return m
 		}
-		src := filepath.Join(uploadDir(owner), sub[2])
+		file, err := url.PathUnescape(sub[2]) // the link has the name percent-encoded (uploadURL)
+		if err != nil || strings.ContainsAny(file, `/\`) {
+			return m
+		}
+		src := filepath.Join(uploadDir(owner), file)
 		data, err := os.ReadFile(src)
 		if err != nil {
 			return m
 		}
-		name, ext := sub[2], ""
+		name, ext := file, ""
 		if i := strings.LastIndex(name, "."); i > 0 {
 			name, ext = name[:i], name[i:]
 		}
-		dest := filepath.Join(uploadDir(""), sub[2])
+		dest := filepath.Join(uploadDir(""), file)
 		for n := 2; ; n++ {
 			if have, err := os.ReadFile(dest); err != nil || bytes.Equal(have, data) {
 				break

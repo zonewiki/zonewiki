@@ -1438,6 +1438,44 @@ class TestApiUpload:
         assert url.startswith("/_assets/")
         assert (wiki_dir / "_assets" / "test.png").exists()
 
+    def test_a_name_with_spaces_gets_a_url_a_link_can_hold(self, client, wiki_dir):
+        # Regression: the URL had the name as it is, and "[Deck](/_assets/My Deck (v2).pdf)"
+        # is no link in markdown: a space ends its target.
+        from io import BytesIO
+        name = "My Deck (v2) für Jörg.pdf"
+        resp = client.post("/api/upload", data={"file": (BytesIO(b"%PDF-1.4"), name)},
+                           content_type="multipart/form-data", headers=HOST)
+        url = resp.get_json()["url"]
+        assert url == "/_assets/My%20Deck%20%28v2%29%20f%C3%BCr%20J%C3%B6rg.pdf"
+        assert (wiki_dir / "_assets" / name).read_bytes() == b"%PDF-1.4"      # the file keeps its name
+        got = client.get(url, headers=HOST)
+        assert got.status_code == 200 and got.get_data() == b"%PDF-1.4"
+        # As the editor writes it, it is a link that opens the file.
+        write_page(wiki_dir, "tel/promotions/journey", f"# Journey\n\n[the deck]({url})\n")
+        body = client.get("/page/tel/promotions/journey", headers=HOST).get_data(as_text=True)
+        assert f'<a href="{url}">the deck</a>' in body
+
+    def test_links_written_with_the_spaces_in_them_work_too(self, client, wiki_dir):
+        # What the editor wrote before: such pages needn't be edited.
+        (wiki_dir / "_assets" / "My Deck (v2).pdf").write_bytes(b"%PDF-1.4")
+        (wiki_dir / "_assets" / "plain.pdf").write_bytes(b"%PDF-1.4")
+        text = ("# Journey\n\n[the deck](/_assets/My Deck (v2).pdf) and ![shot](/_assets/My Shot 1.png), "
+                "[plain](/_assets/plain.pdf) (see b c.pdf), [half](/_assets/Half%20done file.pdf)\n\n"
+                "`[code](/_assets/My Deck (v2).pdf)`\n")
+        path = write_page(wiki_dir, "journey", text)
+        body = client.get("/page/journey", headers=HOST).get_data(as_text=True)
+        assert '<a href="/_assets/My%20Deck%20%28v2%29.pdf">the deck</a>' in body
+        assert client.get("/_assets/My%20Deck%20%28v2%29.pdf", headers=HOST).status_code == 200
+        assert 'src="/_assets/My%20Shot%201.png"' in body
+        assert '<a href="/_assets/plain.pdf">plain</a> (see b c.pdf)' in body
+        assert '<a href="/_assets/Half%20done%20file.pdf">half</a>' in body
+        assert "<code>[code](/_assets/My Deck (v2).pdf)</code>" in body      # code stays as written
+        assert path.read_text(encoding="utf-8") == text                        # and so does the file
+        # In a task's notes and comments too.
+        html = client.post("/api/render-notes", json={"notes": ["[d](/_assets/My Deck (v2).pdf)"]},
+                           headers=HOST).get_json()["notes"][0]
+        assert '<a href="/_assets/My%20Deck%20%28v2%29.pdf">d</a>' in html
+
     def test_upload_conflict_returns_409(self, client, wiki_dir):
         from io import BytesIO
         (wiki_dir / "_assets" / "existing.png").write_bytes(b"original")

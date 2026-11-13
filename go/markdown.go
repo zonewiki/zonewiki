@@ -69,7 +69,7 @@ func markdown(src string, env *Env, inline bool) string {
 	m.renderer.sections = 0
 	m.renderer.env, m.transformer.env = env, env
 	var buf bytes.Buffer
-	if err := m.md.Convert([]byte(src), &buf); err != nil {
+	if err := m.md.Convert([]byte(encodeUploadLinks(src)), &buf); err != nil {
 		logf("markdown: %v", err)
 	}
 	m.renderer.env, m.transformer.env = nil, nil

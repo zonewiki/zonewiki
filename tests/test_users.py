@@ -334,18 +334,21 @@ class TestMakeShared:
         mine.mkdir(parents=True)
         (mine / "a.png").write_bytes(b"A")
         (mine / "b.png").write_bytes(b"B")
+        (mine / "my map.png").write_bytes(b"M")
         (git_wiki_dir / "_assets").mkdir(exist_ok=True)
         (git_wiki_dir / "_assets/b.png").write_bytes(b"other b")        # a different file by that name
         (git_wiki_dir / "private/alice/trip.md").write_text(
             "# Trip\n\n![a](/private/alice/_assets/a.png) ![b](/private/alice/_assets/b.png)\n"
-            "`/private/alice/_assets/a.png`\n")
+            "`/private/alice/_assets/a.png`\n![m](/private/alice/_assets/my%20map.png)\n")
         (git_wiki_dir / "private/alice/other.md").write_text("# Other\n\n![a](/private/alice/_assets/a.png)\n")
         subprocess.run(["git", "add", "-A"], cwd=git_wiki_dir, check=True, env=settings.GIT_ENV)
         subprocess.run(["git", "commit", "-qm", "Her pages"], cwd=git_wiki_dir, check=True, env=settings.GIT_ENV)
         resp = alice.post("/rename/private/alice/trip", data={"from": "page", "new_name": "trip"}, headers=HOST)
         assert resp.headers["Location"] == "/page/trip"
         assert (git_wiki_dir / "trip.md").read_text() == (
-            "# Trip\n\n![a](/_assets/a.png) ![b](/_assets/b-2.png)\n`/private/alice/_assets/a.png`\n")
+            "# Trip\n\n![a](/_assets/a.png) ![b](/_assets/b-2.png)\n`/private/alice/_assets/a.png`\n"
+            "![m](/_assets/my%20map.png)\n")
+        assert (git_wiki_dir / "_assets/my map.png").read_bytes() == b"M"   # a name with a space, encoded in its link
         assert (git_wiki_dir / "_assets/a.png").read_bytes() == b"A"
         assert (git_wiki_dir / "_assets/b-2.png").read_bytes() == b"B"
         assert (git_wiki_dir / "_assets/b.png").read_bytes() == b"other b"

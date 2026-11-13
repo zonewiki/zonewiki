@@ -8,10 +8,13 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
+	"zonewiki/internal/mdtext"
 )
 
 // Uploads are shown inline only when the browser treats them as passive
@@ -32,12 +35,45 @@ func uploadDir(owner string) string {
 	return filepath.Join(cfg.Data, privateDir, owner, "_assets")
 }
 
-// uploadURL: the URL of file in owner's uploads.
+// uploadURL: the URL of file in owner's uploads, as a markdown link takes
+// it: percent-encoded (pathURL), since a space in a link's target ends the
+// link and a bracket may ("My Deck (v2).pdf").
 func uploadURL(owner, file string) string {
 	if owner == "" {
-		return "/_assets/" + file
+		return pathURL("_assets", file)
 	}
-	return "/" + privateDir + "/" + owner + "/_assets/" + file
+	return pathURL(privateDir, owner, "_assets", file)
+}
+
+// A link to an upload written with the file's name as it is, spaces and
+// all: `[Deck](/_assets/My Deck.pdf)`, which markdown reads as text, not a
+// link. The editor wrote such links for every attached file with a space in
+// its name, until uploadURL encoded them. Group 2 is the target, up to the
+// file's extension before the closing bracket.
+var spacedUploadRE = regexp.MustCompile(`(\]\()(/(?:` + privateDir + `/[a-z0-9-]+/)?_assets/[^\n<>"]*?\.[A-Za-z0-9]{1,8})(\))`)
+
+// encodeUploadLinks: text with such links' targets percent-encoded, so they
+// are links (code aside). The text on disk stays as written.
+func encodeUploadLinks(text string) string {
+	if !strings.Contains(text, "_assets/") {
+		return text
+	}
+	masked, stash := mdtext.MaskCode(text)
+	fixed := spacedUploadRE.ReplaceAllStringFunc(masked, func(m string) string {
+		g := spacedUploadRE.FindStringSubmatch(m)
+		if !strings.Contains(g[2], " ") {
+			return m
+		}
+		target, err := url.PathUnescape(g[2]) // what is encoded already stays so
+		if err != nil {
+			target = g[2]
+		}
+		return g[1] + pathURL(target)[1:] + g[3]
+	})
+	if fixed == masked {
+		return text
+	}
+	return mdtext.UnmaskCode(fixed, stash)
 }
 
 // serveUpload: a shared upload, a file straight in _assets/.

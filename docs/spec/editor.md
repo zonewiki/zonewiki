@@ -184,6 +184,8 @@ All file types are accepted.
 Images are inserted as `![name](url)`; other files as `[name](url)`.
 Multiple files dropped at once are uploaded sequentially.
 The upload route uses the original filename when available (falling back to MIME-type guessing).
+The file keeps its name; the URL the route answers with has it percent-encoded (`uploadURL`: all but letters, digits and `_.-~`), `/_assets/My%20Deck%20%28v2%29.pdf` for "My Deck (v2).pdf", because a space in a markdown link's target ends the link and a bracket may.
+Links written before that, with the name as it is (`[Deck](/_assets/My Deck (v2).pdf)`, which markdown reads as text), are links all the same: the renderer encodes the target of a link to `/_assets/…` or `/private/<user>/_assets/…` that has a space in it, up to the file's extension before the closing bracket (`encodeUploadLinks` in `go/uploads.go`, for pages, previews, task notes and comments; code aside; the file on disk stays as written).
 If a file with that name already exists in `_assets/`, a numeric suffix is appended (`file-2.pdf`, `file-3.pdf`, …).
 The editor sends the page's slug along (`page`): with users, a file for a page in your private folder is kept in `private/<you>/_assets/` and only you can open it (see `docs/spec/users.md`).
 A file over `upload-max` (413), or one the wiki has no room for under `storage-max` (507), is refused: the placeholder goes, and an alert shows the server's message (Storage limit in `docs/spec/users.md`).
