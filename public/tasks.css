@@ -383,6 +383,14 @@ div.chip-input > input {
   padding-top: .2rem; min-width: 0;
   border-top: 1px dashed color-mix(in srgb, var(--fg) 10%, var(--border));
 }
+/* An open task's description and comments hang on a bar down their left,
+   as a quote does, so they read as the task's and not as the next lines of
+   the list; the card ends with some room before the next task. */
+.tasks-app :is(.task-desc, .task-card-comments) {
+  border-top: none; padding: .1rem 0 .1rem .7rem;
+  border-left: 3px solid color-mix(in srgb, var(--fg) 22%, var(--border));
+}
+.tasks-app .task-item.task-details { padding-bottom: .65rem; margin-bottom: .8rem; }
 /* Notes render as a page's text (.page-content, render.render_notes), at
    card scale: headings the size of the text, tighter spacing, wide tables
    and code scroll. The modal's preview shows them the same. */
@@ -498,6 +506,12 @@ div.chip-input > input {
 .task-card-comments {
   grid-area: comments; margin-top: .3rem; padding-top: .25rem; font-size: .85rem;
   border-top: 1px dashed color-mix(in srgb, var(--fg) 10%, var(--border));
+}
+.tasks-app .task-desc + .task-card-comments { margin-top: .6rem; }
+/* "Comments", over them: where the description ends. */
+.task-card-comments-label {
+  font-size: .7rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: .15rem;
 }
 .tasks-app p.task-card-comment { margin: .1rem 0; line-height: 1.45; overflow-wrap: anywhere; }
 .task-comment-when { color: var(--muted); font-size: .75rem; margin-right: .25rem; }
@@ -1074,18 +1088,25 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 .task-history { list-style: none; margin: 0; padding: 0; font-size: .8rem; max-height: 12rem; overflow-y: auto; }
 .task-history li { padding: .1rem 0; }
 .task-history-at { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: .4rem; }
-/* Comments: newest first. Add comment shows the field (.task-comment-add),
-   which saves one at once; ✎ puts it in a comment's place
+/* Comments: the dialog's last section, under a line (they are saved at
+   once, not with Save), newest first. "Write a comment…" looks like a
+   one-line field; a click puts the real one (.task-comment-add) in its
+   place, which saves a comment at once; ✎ puts it in a comment's place
    (.task-comment-editing). `ul.` outranks .page-content ul (the tasks page
    is a page). */
 .task-comments[hidden], .task-comment-add[hidden], .task-comment-open[hidden] { display: none; }
-.task-comments-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; min-height: 1.8rem; }
-.task-comment-open { font-size: .8rem; padding: .15rem .6rem; }
+.task-comments { border-top: 1px solid var(--border); padding-top: .75rem; margin-top: .25rem; }
+.task-comment-open {
+  display: block; width: 100%; text-align: left; font: inherit; font-size: .9rem;
+  padding: .4rem .6rem; border: 1px solid var(--border); border-radius: 4px;
+  background: var(--bg); color: var(--muted); cursor: text;
+}
+.task-comment-open:hover { border-color: color-mix(in srgb, var(--fg) 30%, var(--border)); }
 .task-comment-add { display: flex; flex-direction: column; gap: .3rem; flex: 1; min-width: 0; }
 .task-comment-add textarea { min-height: 3.2rem; field-sizing: content; max-height: 14rem; }
 .task-comment-add-actions { display: flex; align-items: center; gap: .4rem; }
 .task-comment-add-actions .field-hint { margin-right: auto; }
-ul.task-comment-list { list-style: none; margin: .3rem 0 0; padding: 0; font-size: .85rem; max-height: 18rem; overflow-y: auto; }
+ul.task-comment-list { list-style: none; margin: .3rem 0 0; padding: 0; font-size: .85rem; }
 .task-comment-list:empty { display: none; }
 .task-comment-list > li { display: flex; align-items: baseline; gap: .2rem; padding: .15rem 0; margin: 0; }
 .task-comment-list > li + li { border-top: 1px solid var(--border); margin-top: .3rem; padding-top: .45rem; }

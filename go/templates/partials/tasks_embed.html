@@ -70,22 +70,6 @@
       <textarea id="task-edit-desc{{.Sfx}}" name="description" rows="8"></textarea>
       <div class="task-notes-preview page-content" id="task-edit-preview{{.Sfx}}" tabindex="-1" aria-label="Preview of the description" hidden></div>
     </div>
-    <div class="task-field task-comments" id="task-edit-comments{{.Sfx}}" hidden>
-      <div class="task-comments-head">
-        <label for="task-edit-comment{{.Sfx}}">Comments<span class="task-edit-links-summary" id="task-edit-comments-count{{.Sfx}}"></span></label>
-        <button type="button" class="btn task-comment-open" id="task-edit-comment-open{{.Sfx}}" aria-expanded="false" aria-controls="task-edit-comment-box{{.Sfx}}" tabindex="-1" title="Add a comment (Alt+C)">Add comment</button>
-      </div>
-      {{- /* The comment field: shown by Add comment, or in a comment's place by its ✎ (js/taskmodal.js). */}}
-      <div class="task-comment-add" id="task-edit-comment-box{{.Sfx}}" hidden>
-        <textarea id="task-edit-comment{{.Sfx}}" rows="3" placeholder="Write a comment" aria-label="Comment" autocomplete="off" maxlength="2000"></textarea>
-        <div class="task-comment-add-actions">
-          <span class="field-hint">Markdown · Ctrl+Enter saves it</span>
-          <button type="button" class="btn" id="task-edit-comment-cancel{{.Sfx}}" tabindex="-1" title="Put the comment away (Esc)">Cancel</button>
-          <button type="button" class="btn btn-primary" id="task-edit-comment-add{{.Sfx}}" tabindex="-1">Add</button>
-        </div>
-      </div>
-      <ul class="task-comment-list" id="task-edit-comment-list{{.Sfx}}"></ul>
-    </div>
     <div class="task-field">
       <label for="task-edit-tags{{.Sfx}}">Tags <span class="field-hint">(Tab completes; comma, space or Enter adds)</span></label>
       <input type="text" id="task-edit-tags{{.Sfx}}" name="tags" autocomplete="off">
@@ -149,6 +133,22 @@
       <summary tabindex="-1">History<span class="task-edit-links-summary" id="task-edit-history-count{{.Sfx}}"></span></summary>
       <ul class="task-history" id="task-edit-history-list{{.Sfx}}"></ul>
     </details>
+    </div>
+    {{- /* Comments come last, set apart by a line: they are saved at once, not with Save. */}}
+    <div class="task-field task-comments" id="task-edit-comments{{.Sfx}}" hidden>
+      <label for="task-edit-comment{{.Sfx}}">Comments<span class="task-edit-links-summary" id="task-edit-comments-count{{.Sfx}}"></span></label>
+      {{- /* Looks like a one-line field; a click puts the comment field in its place. */}}
+      <button type="button" class="task-comment-open" id="task-edit-comment-open{{.Sfx}}" aria-expanded="false" aria-controls="task-edit-comment-box{{.Sfx}}" tabindex="-1" title="Write a comment (Alt+C)">Write a comment…</button>
+      {{- /* The comment field: shown by a click on the line above, or in a comment's place by its ✎ (js/taskmodal.js). */}}
+      <div class="task-comment-add" id="task-edit-comment-box{{.Sfx}}" hidden>
+        <textarea id="task-edit-comment{{.Sfx}}" rows="3" placeholder="Write a comment" aria-label="Comment" autocomplete="off" maxlength="2000"></textarea>
+        <div class="task-comment-add-actions">
+          <span class="field-hint">Markdown · Ctrl+Enter saves it</span>
+          <button type="button" class="btn" id="task-edit-comment-cancel{{.Sfx}}" tabindex="-1" title="Put the comment away (Esc)">Cancel</button>
+          <button type="button" class="btn btn-primary" id="task-edit-comment-add{{.Sfx}}" tabindex="-1">Add</button>
+        </div>
+      </div>
+      <ul class="task-comment-list" id="task-edit-comment-list{{.Sfx}}"></ul>
     </div>
     <div class="task-edit-actions">
       <button type="submit" class="btn btn-primary">Save</button>

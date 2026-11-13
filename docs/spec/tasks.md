@@ -486,7 +486,7 @@ Each with a dark-mode value.
   Centred with `inset: 0; margin: auto` and **no transform** (a transform would clip `position: fixed` popups like the date picker), scrollable, sticky action bar.
   At ≤640px full screen with Due | Start and Repeat | Every | From done on shared rows (`.task-row-dates`, `.task-row-repeat`).
   **Tab goes from field to field**: Title, Description, the comment field while it is shown (and its Add once something is written), Tags, Due, Start, Days before due, the repeat fields, Keep, Private, then Save, Cancel, Won't do (a field that is off, like Every N without a repeat, is none).
-  What isn't a field of the task is no stop (`tabindex="-1"`) and has its own key or the mouse: Edit | Preview (F2), the formatting bar (Ctrl+B/I/K), Add comment (Alt+C) and the comment field's Cancel (Esc), a comment's ✎ and × and the links and boxes in comments, History.
+  What isn't a field of the task is no stop (`tabindex="-1"`) and has its own key or the mouse: Edit | Preview (F2), the formatting bar (Ctrl+B/I/K), Write a comment… (Alt+C) and the comment field's Cancel (Esc), a comment's ✎ and × and the links and boxes in comments, History.
   The List field sits in a closed `<details>`; saving a task into another list removes it from the view with a notice.
 - **Date picker** (`openDatePicker`): a row of shortcuts above the month,
   counted from today,
@@ -510,7 +510,8 @@ Each with a dark-mode value.
   The first line: checkbox, title (as wide as it needs, at least 6rem, 4.5rem on phones; cut off with …, whole and wrapped on the expanded card), the tags right after it (pills), markers and dates at the right end (`.task-meta` sits in the line), ⋯ last.
   **Nothing jumps on hover**: what is always shown (markers, 📝, 💬, dates, ⋯) ends at the right and stays put; what hover adds (⏭, the empty ⏰ 📅, at 60% opacity, full on their own hover: at 30% they were hard to see) appears left of it (first in `.task-meta-right`, CSS `order`).
   A task with a description shows 📝 (`.task-has-notes`) on every card, since its line hides the description.
-  Under the line of a card whose details are open (see One line per task): the description, then the latest 3 comments, newest first (`.task-card-comments`; "N earlier…" opens the modal at the comments).
+  Under the line of a card whose details are open (see One line per task): the description, then, under a small "Comments" heading (`.task-card-comments-label`) that says where the description ends, the latest 3 comments, newest first (`.task-card-comments`; "N earlier…" opens the modal at the comments).
+  Both hang on a bar down their left (`border-left`), as a quote does, so they read as the task's and not as the list's next lines, and the open card ends with room before the next task (`.task-details`: more padding and margin below).
   **Every card shows every tag**.
   The title and the tags share the line (desktop: `.task-meta` is `display: contents`, its tags and dates are grid columns of their own, `tags` and `dates`, with a `1fr` spacer between): each is as wide as it needs when both fit;
   short of room, both grow from their minimum (6rem for the title, the widest tag for the tags) by the same amount, so a long title can't push the tags out and many tags can't squeeze the title away.
@@ -624,8 +625,9 @@ Not part of the History: they are never capped, undo of other changes never touc
 
 - **Routes**: `POST /api/tasks/<id>/comments`, `PUT`/`DELETE …/comments/<cid>`, each returning the task, for open and closed tasks alike (`findForWriteLocked`).
   `PUT /api/tasks/<id>` with `comments` replaces the whole list, for undoing a delete; `cleanComments` validates it (and restore snapshots), dropping bad entries and renumbering duplicate ids.
-- **Edit modal** (`renderComments` in `js/taskmodal.js`): Comments under Description, hidden for a new task, with the list newest first.
-  The field to write one is not shown until it is asked for: **Add comment** (next to the heading) shows it, a text field of a few lines that grows with its text, focused.
+- **Edit modal** (`renderComments` in `js/taskmodal.js`): Comments are the dialog's last section, after every field of the task and History, set apart by a line: they are saved at once and not with Save, whose bar stays at the dialog's bottom edge.
+  Hidden for a new task; the list is newest first and as long as it is (the dialog scrolls, not the list).
+  Under the heading is a line that looks like an empty field, **Write a comment…** (`.task-comment-open`, a button): a click puts the real field in its place, a text field of a few lines that grows with its text, focused.
   Enter starts a new line; **Ctrl+Enter** (or Add) saves the comment at once, not with Save, so Cancel never loses one, and puts the field away; Esc (or the field's Cancel) puts it away without saving, and doesn't close the modal.
   The field has the description's markdown helpers (`markdownEditor`): lists go on, `[[` completes pages, Ctrl+B/I/K, a pasted URL asks for its name, a pasted or dropped file is uploaded.
   ✎ edits a comment in place: the same field takes the comment's place, with its text (Save or Ctrl+Enter saves, Esc cancels without closing the modal); × deletes it with an undo toast.

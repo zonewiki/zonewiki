@@ -258,7 +258,7 @@ function renderHistory(task) {
 
 // The modal's Comments: markdown, a line or several, newest first. They are
 // saved at once through their own routes (not with Save), so a comment is
-// never lost to Cancel. Hidden for a new task. Add comment shows the field
+// never lost to Cancel. Hidden for a new task. "Write a comment…" shows the field
 // (Ctrl+Enter or Add saves it, Esc or Cancel puts it away); ✎ puts the
 // field in a comment's place, with its text; × deletes one with undo.
 const commentsBox = document.getElementById('task-edit-comments' + app.sfx);
@@ -572,7 +572,7 @@ app.modal.addEventListener('keydown', e => {
   if (e.key === 'Enter' && e.target === commentInput) saveComment();
   else app.form.requestSubmit();
 }, true);
-// Alt+C: the comment field (Add comment is no stop for Tab).
+// Alt+C: the comment field ("Write a comment…" is no stop for Tab).
 app.modal.addEventListener('keydown', e => {
   if (e.code !== 'KeyC' || !e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
   if (!st.commentsTaskId) return;   // a new task has no comments yet

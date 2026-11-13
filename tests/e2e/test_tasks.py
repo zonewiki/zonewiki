@@ -2844,7 +2844,7 @@ def test_comment_paste_of_a_url_asks_for_its_name(page, wiki):
     page.goto("/tasks?view=open")
     modal = open_edit(page, "Link in comment")
     field = modal.locator("#task-edit-comment")
-    modal.get_by_role("button", name="Add comment").click()
+    modal.get_by_role("button", name="Write a comment…").click()
     field.press_sequentially("See ")
     page.evaluate(PASTE, "https://example.com/rfc")
     page.locator("#url-name-input").fill("the RFC")
@@ -2860,7 +2860,7 @@ def test_comments_in_edit_modal(page, wiki):
     page.goto("/tasks?view=open")
     modal = open_edit(page, "Plan on-call")
     field = modal.locator("#task-edit-comment")
-    add = modal.get_by_role("button", name="Add comment")
+    add = modal.get_by_role("button", name="Write a comment…")
     # The field shows only once it is asked for.
     expect(field).to_be_hidden()
     add.click()
@@ -2954,7 +2954,7 @@ def test_comment_of_several_lines(page, wiki):
     page.request.post("/api/tasks", data={"title": "Paint the fence"})
     page.goto("/tasks?view=open")
     modal = open_edit(page, "Paint the fence")
-    modal.get_by_role("button", name="Add comment").click()
+    modal.get_by_role("button", name="Write a comment…").click()
     field = modal.locator("#task-edit-comment")
     field.press_sequentially("Bought:")
     field.press("Enter")                       # a new line, not a save
@@ -2972,7 +2972,7 @@ def test_comment_of_several_lines(page, wiki):
     assert task_by_title(page, "Paint the fence")["comments"][0]["text"] == "Bought:\n\n- **two** brushes\n- primer"
     # The card: its time on a line, the text under it; a one-line comment
     # stays on the line of its time.
-    modal.get_by_role("button", name="Add comment").click()
+    modal.get_by_role("button", name="Write a comment…").click()
     field.fill("done")
     modal.get_by_role("button", name="Add", exact=True).click()
     expect(modal.locator(".task-comment-list > li")).to_have_count(2)
@@ -2998,7 +2998,7 @@ def test_comment_in_its_field_is_saved_with_the_task(page, wiki):
     page.request.post("/api/tasks", data={"title": "Call Bob"})
     page.goto("/tasks?view=open")
     modal = open_edit(page, "Call Bob")
-    modal.get_by_role("button", name="Add comment").click()
+    modal.get_by_role("button", name="Write a comment…").click()
     modal.locator("#task-edit-comment").fill("left a voicemail")
     modal.locator("#task-edit-title").fill("Call Bob again")
     modal.locator(".task-edit-actions").get_by_role("button", name="Save").click()
@@ -3025,7 +3025,7 @@ def _tab_stops(page, modal, limit=30):
 
 
 def test_tab_in_the_task_dialog_goes_from_field_to_field(page, wiki):
-    # Not through Edit | Preview, the formatting bar, Add comment, a
+    # Not through Edit | Preview, the formatting bar, Write a comment…, a
     # comment's ✎ and ×, links in comments, or History.
     tid = page.request.post("/api/tasks", data={"title": "Plan trip", "description": "notes",
                                                 "due_date": "2026-12-24"}).json()["id"]
@@ -3042,22 +3042,26 @@ def test_tab_in_the_task_dialog_goes_from_field_to_field(page, wiki):
     modal.locator("#task-edit-tags").focus()
     page.keyboard.press("Shift+Tab")
     expect(modal.locator("#task-edit-desc")).to_be_focused()
-    # The comment field, once asked for (Alt+C), is a field: after the description.
+    # The comment field, once asked for (Alt+C), is a field: the last one, before Save.
     modal.locator("#task-edit-desc").focus()
     page.keyboard.press("Alt+c")
     comment = modal.locator("#task-edit-comment")
+    save = modal.get_by_role("button", name="Save", exact=True)
     expect(comment).to_be_focused()
     page.keyboard.press("Tab")
-    expect(modal.locator("#task-edit-tags")).to_be_focused()         # nothing written: Add is no stop
+    expect(save).to_be_focused()                                     # nothing written: Add is no stop
     page.keyboard.press("Shift+Tab")
     expect(comment).to_be_focused()
+    page.keyboard.press("Shift+Tab")
+    expect(modal.locator("#task-edit-keep")).to_be_focused()
+    comment.focus()
     page.keyboard.type("called Bob")
     page.keyboard.press("Tab")
     expect(modal.locator("#task-edit-comment-add")).to_be_focused()  # with a comment to add, it is
     page.keyboard.press("Enter")
     expect(modal.locator(".task-comment-list > li")).to_have_count(2)
     page.keyboard.press("Tab")
-    expect(modal.locator("#task-edit-tags")).to_be_focused()
+    expect(save).to_be_focused()
     # A new task: the same, without Won't do.
     modal.locator("#task-edit-cancel").click()
     page.locator(".tasks-app").get_by_role("button", name="New task").click()
@@ -3731,6 +3735,60 @@ def test_expanded_task_keeps_its_line(page, wiki):
     assert desc["y"] > title.bounding_box()["y"] + title.bounding_box()["height"] - 1
 
 
+def test_open_task_sets_its_details_apart(page, wiki):
+    # An open task's description and comments hang on a bar down their left,
+    # "Comments" says where the description ends, and the card ends with room
+    # before the next task.
+    page.request.post("/api/tasks", data={"title": "Below"})          # the newest is on top
+    tid = page.request.post("/api/tasks", data={"title": "Renew passport", "description": "Photos first."}).json()["id"]
+    page.request.post(f"/api/tasks/{tid}/comments", data={"text": "Form printed"})
+    page.request.post("/api/tasks", data={"title": "Above"})
+    page.goto("/tasks?view=open")
+    passport, after = card(page, "Renew passport"), card(page, "Below")
+    gap = lambda: after.bounding_box()["y"] - (passport.bounding_box()["y"] + passport.bounding_box()["height"])
+    closed_gap = gap()
+    open_details(page, "Renew passport")
+    desc, comments = passport.locator(".task-desc"), passport.locator(".task-card-comments")
+    for part in (desc, comments):
+        expect(part).to_have_css("border-left-width", "3px")
+        expect(part).to_have_css("border-top-width", "0px")
+    label = comments.locator(".task-card-comments-label")
+    expect(label).to_have_text("Comments")
+    d, l, c = desc.bounding_box(), label.bounding_box(), comments.locator(".task-card-comment").bounding_box()
+    assert d["y"] + d["height"] < l["y"] < c["y"]
+    assert gap() >= closed_gap + 8
+
+
+def test_comments_are_the_edit_modals_last_section(page, wiki):
+    # After every field of the task, under a line; Save and Cancel stay at
+    # the dialog's bottom edge however many comments there are.
+    tid = page.request.post("/api/tasks", data={"title": "Renew passport", "description": "Photos first."}).json()["id"]
+    for i in range(30):
+        page.request.post(f"/api/tasks/{tid}/comments", data={"text": f"Step {i}"})
+    page.goto("/tasks?view=open")
+    modal = open_edit(page, "Renew passport")
+    order = modal.evaluate("""d => [...d.querySelectorAll('[name=description], [name=tags], [name=rec_type], [name=keep], .task-comments, .task-edit-actions')]
+        .map(el => el.name || el.className.split(' ').pop())""")
+    assert order == ["description", "tags", "rec_type", "keep", "task-comments", "task-edit-actions"]
+    section = modal.locator(".task-comments")
+    expect(section).to_have_css("border-top-width", "1px")
+    # The line to write one looks like a field and opens the real one.
+    line = modal.get_by_role("button", name="Write a comment…")
+    box, desc = line.bounding_box(), modal.locator("[name=description]").bounding_box()
+    assert abs(box["width"] - desc["width"]) < 2
+    line.click()
+    expect(modal.locator("#task-edit-comment")).to_be_focused()
+    modal.locator("#task-edit-comment").press("Escape")
+    # Every comment is in the dialog's own scroll, and Save stays in sight.
+    expect(modal.locator(".task-comment-list > li")).to_have_count(30)
+    assert modal.locator(".task-comment-list").evaluate("ul => ul.scrollHeight <= ul.clientHeight + 1")
+    modal.locator(".task-comment-list > li").last.scroll_into_view_if_needed()
+    save = modal.get_by_role("button", name="Save", exact=True)
+    expect(save).to_be_in_viewport()
+    modal.evaluate("d => d.scrollTo(0, 0)")
+    expect(save).to_be_in_viewport()
+
+
 def test_expanded_task_shows_its_latest_comments(page, wiki):
     tid = page.request.post("/api/tasks", data={"title": "Renew passport"}).json()["id"]
     for text in ("Photos done", "Form printed", "Appointment Tue", "Paid the fee"):
@@ -4084,3 +4142,4 @@ def test_export_and_import_a_lists_tasks(page, wiki, tmp_path):
     dialog.get_by_role("button", name="Import").click()
     expect(page.locator("#task-import-error")).to_be_visible()
     expect(dialog).to_be_visible()
+

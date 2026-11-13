@@ -149,7 +149,7 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
   // are open (the line has the 💬 count; the modal has them all).
   const earlier = comments.length - 3;
   const commentsHtml = comments.length
-    ? `<div class="task-card-comments">${comments.slice(-3).reverse().map(c =>
+    ? `<div class="task-card-comments"><div class="task-card-comments-label">Comments</div>${comments.slice(-3).reverse().map(c =>
         commentCardHtml(commentStamp(c), htmlOf('comments', c.text))).join('')}` +
       (earlier > 0 ? `<button type="button" class="task-comments-more" data-id="${esc(task.id)}">${earlier} earlier…</button>` : '') + '</div>'
     : '';
