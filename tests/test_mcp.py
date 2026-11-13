@@ -394,6 +394,21 @@ class TestSearchTasks:
         assert "3 matching tasks:" in text
         assert entries(text.split(":\n\n", 1)[1]) == ["Task: Soon", "Task: Later", "Task: Undated"]
 
+    def test_open_in_the_users_order(self, client, wiki_dir):
+        """order=manual: ranked tasks top to bottom, deadlines aside; the unranked after."""
+        task(client, title="Unranked", tags=["leaf"], due_date="2026-09-01")
+        task(client, title="Second", tags=["leaf"], sort_order=2, due_date="2026-10-01")
+        task(client, title="First", tags=["leaf"], sort_order=1.5)
+        task(client, title="Third", tags=["leaf"], sort_order=7)
+        done = task(client, title="Done", tags=["leaf"], sort_order=0)
+        close(client, done["id"], completed=True)
+        text, err = call(client, "search_tasks", tag="leaf", order="manual")
+        assert not err
+        assert entries(text.split(":\n\n", 1)[1]) == ["Task: First", "Task: Second", "Task: Third", "Task: Unranked"]
+        assert entries(call(client, "search_tasks", tag="leaf")[0].split(":\n\n", 1)[1])[0] == "Task: Unranked"
+        text, err = call(client, "search_tasks", order="priority")
+        assert err and "order must be deadline or manual" in text
+
     def test_several_tags_must_all_match(self, client, wiki_dir):
         task(client, title="A", tags=["leaf", "bug"])
         task(client, title="B", tags=["leaf"])

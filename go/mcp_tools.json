@@ -39,7 +39,7 @@
  {
   "name": "search_tasks",
   "title": "Search tasks",
-  "description": "List the user's tasks, filtered by tag and status, each with status, tags, start and due dates, repeat, notes and a link. Without a query, open tasks come by deadline, then start date; done ones newest first. With a query, by relevance. Starts with today's date.",
+  "description": "List the user's tasks, filtered by tag and status, each with its fields and a link. Without a query, open tasks come by deadline, then start date; done ones newest first. With a query, by relevance. Starts with today's date.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -60,6 +60,10 @@
     "query": {
      "type": "string",
      "description": "Words to look for in title, notes and tags; \"exact phrase\", -word and edited:/after:/before: (last activity, e.g. after:2026-09-01) work too."
+    },
+    "order": {
+     "type": "string",
+     "description": "deadline, or manual: the user's own order (priority)"
     },
     "limit": {
      "type": "integer",

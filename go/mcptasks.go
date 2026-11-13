@@ -146,6 +146,13 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	order := "deadline"
+	if args.Has("order") {
+		order, _ = jsonobj.As[string](args["order"])
+	}
+	if order != "deadline" && order != "manual" {
+		return "", toolErr("order must be deadline or manual")
+	}
 	want := map[string]bool{}
 	for _, t := range strings.Split(tag, ",") {
 		if t = strings.ToLower(strings.TrimLeft(strings.TrimSpace(t), "#")); t != "" {
@@ -188,16 +195,20 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 			}
 		}
 		or9 := func(s string) string { return firstNonEmpty(s, "9999") }
-		sort.SliceStable(open, func(i, j int) bool {
-			a, b := open[i].Task, open[j].Task
-			if x, y := or9(a.DueDate), or9(b.DueDate); x != y {
-				return x < y
-			}
-			if x, y := or9(a.StartDate), or9(b.StartDate); x != y {
-				return x < y
-			}
-			return strings.ToLower(a.Title) < strings.ToLower(b.Title)
-		})
+		if order == "manual" {
+			sort.SliceStable(open, func(i, j int) bool { return manualBefore(open[i].Task, open[j].Task) })
+		} else {
+			sort.SliceStable(open, func(i, j int) bool {
+				a, b := open[i].Task, open[j].Task
+				if x, y := or9(a.DueDate), or9(b.DueDate); x != y {
+					return x < y
+				}
+				if x, y := or9(a.StartDate), or9(b.StartDate); x != y {
+					return x < y
+				}
+				return strings.ToLower(a.Title) < strings.ToLower(b.Title)
+			})
+		}
 		sort.SliceStable(done, func(i, j int) bool {
 			return done[i].Task.CompletedAt > done[j].Task.CompletedAt
 		})
@@ -216,6 +227,21 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 		body = append(body, mcpTaskText(d.Task, base, user))
 	}
 	return "Today is " + day + ". " + count + ":\n\n" + strings.Join(body, "\n\n---\n\n"), nil
+}
+
+// manualBefore: a comes before b in search_tasks' manual order, the
+// user's priority: the tasks they ranked (sort_order) top to bottom, then
+// those not yet ranked, newest first. (The Open view shows the unranked
+// above, as new ones wait there to be ranked; for "what first" they come
+// after.)
+func manualBefore(a, b *Task) bool {
+	switch {
+	case a.SortOrder != nil && b.SortOrder != nil:
+		return *a.SortOrder < *b.SortOrder
+	case a.SortOrder != nil || b.SortOrder != nil:
+		return a.SortOrder != nil
+	}
+	return a.CreatedAt > b.CreatedAt
 }
 
 var (
