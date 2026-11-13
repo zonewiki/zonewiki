@@ -85,6 +85,38 @@
   });
   bc.appendChild(clr);
   if (rightEl) bc.appendChild(rightEl);
+
+  // The row has room for so many names: where the window is not wide (the
+  // top actions take their part of it), six pages would each be cut down to
+  // a letter or two. The oldest pages then leave the row (.trail-off, they
+  // stay in the list) until every name left shows whole or at least
+  // MIN_CRUMB wide; the page itself always stays. Again whenever the row's
+  // width changes.
+  const MIN_CRUMB = 72;
+  const links = [...bc.querySelectorAll('.trail-link')];
+  const crumbs = [...links, clr.previousElementSibling];
+  const cramped = () => crumbs.some(el => el.offsetParent && el.scrollWidth > el.clientWidth && el.clientWidth < MIN_CRUMB);
+  // With the separator after it: the first one is the switcher's divider.
+  const setOff = (a, off) => {
+    a.classList.toggle('trail-off', off);
+    a.nextElementSibling.classList.toggle('trail-off', off);
+  };
+  const fitTrail = () => {
+    links.forEach(a => setOff(a, false));
+    for (const a of links) {
+      if (!cramped()) break;
+      setOff(a, true);
+    }
+  };
+  fitTrail();
+  // The room is the row's content box: the window's width, and less of it
+  // once the uncommitted badge shows (the row keeps its place free).
+  let width = null;
+  new ResizeObserver(([entry]) => {
+    const now = entry.contentRect.width;
+    if (clr.isConnected && now !== width) fitTrail();
+    width = now;
+  }).observe(bc);
   ready();
 }());
 

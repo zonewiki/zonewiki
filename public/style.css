@@ -1208,6 +1208,9 @@ main > .sheet > h2 { font-family: var(--serif); font-size: 1.45rem; font-weight:
   white-space: nowrap;
 }
 .breadcrumb-home, .breadcrumb-sep, .breadcrumb-clear, .breadcrumb-right { flex-shrink: 0; }
+/* The oldest pages of the trail, where the row has no room for them all
+   (fitTrail in js/chrome.js). Sharing mode hides the trail its own way. */
+html:not(.sharing) .breadcrumb > .trail-off { display: none; }
 .breadcrumb-clear {
   margin-left: .25rem;
   padding: 0 .25rem;

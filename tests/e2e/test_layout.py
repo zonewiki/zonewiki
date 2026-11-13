@@ -316,8 +316,11 @@ def test_long_breadcrumb_trail_fits_on_phone(new_page, wiki):
     expect(crumbs).to_have_count(4)  # 3 pages, current
     expect(crumbs.nth(0)).to_contain_text("Troubleshooting2")
     assert horizontal_overflow(pg) <= 0
-    last = crumbs.nth(2)
-    assert last.evaluate("el => el.scrollWidth > el.clientWidth"), "long titles are cut off"
+    # Long titles are cut off, and no name is cut down to less than 72px of
+    # it: the oldest pages leave the row for that (fitTrail).
+    widths = crumbs.evaluate_all("els => els.filter(e => e.offsetParent).map(e => [e.clientWidth, e.scrollWidth])")
+    assert 1 <= len(widths) < 4 and all(sw <= cw or cw >= 72 for cw, sw in widths), widths
+    expect(crumbs.last).to_be_visible()             # the page itself stays
 
     water = pg.locator(".task-item").filter(has=pg.get_by_text("Water plants", exact=True)).locator(".task-content")
     water.tap()     # selects
@@ -355,6 +358,38 @@ def test_desktop_keeps_the_full_breadcrumb_trail(page, wiki):
         page.goto(f"/page/p{i}")
     page.goto("/tasks")
     expect(page.locator(".breadcrumb > a")).to_have_count(5)  # 5 pages (current is text)
+
+
+def test_trail_drops_its_oldest_pages_where_the_window_is_not_wide(new_page, wiki):
+    # Regression: below the side columns' width (1320px) the row has room
+    # for two or three names next to the switcher and the top actions, and a
+    # full trail was six names cut down to a letter each ("R… › M… › B…").
+    names = ["Garden plan", "Raised bed plan", "Meeting notes October", "Budget 2026",
+             "Tools to buy", "Seeds", "Compost heap"]
+    for n in names:
+        wiki.write(n.lower().replace(" ", "-"), f"# {n}\n\ntext\n")
+    pg = new_page(viewport={"width": 1000, "height": 600})
+    for n in names:
+        pg.goto("/page/" + n.lower().replace(" ", "-"))
+    shown = "els => els.filter(e => e.offsetParent).map(e => [e.textContent, e.clientWidth, e.scrollWidth])"
+    crumbs = pg.locator(".breadcrumb > .trail-link, .breadcrumb > span:not([class])")
+    expect(pg.locator(".breadcrumb.trail-ready")).to_have_count(1)
+    expect(pg.locator(".breadcrumb > .trail-link.trail-off").first).to_be_attached()
+    row = crumbs.evaluate_all(shown)
+    # The page itself and the latest before it, each readable: whole, or at least 72px of it.
+    assert [r[0] for r in row][-1] == "Compost heap" and 2 <= len(row) < 6, row
+    assert [r[0] for r in row] == names[-len(row):], row
+    assert all(sw <= cw or cw >= 72 for _, cw, sw in row), row
+    # The divider after the switcher stays, and one separator between the names.
+    assert pg.locator(".breadcrumb > .breadcrumb-sep:visible").count() == len(row)
+    assert horizontal_overflow(pg) <= 0
+    # A wider window has them all again; narrower, fewer.
+    pg.set_viewport_size({"width": 1600, "height": 600})
+    expect(pg.locator(".breadcrumb > .trail-link.trail-off")).to_have_count(0)
+    assert [r[0] for r in crumbs.evaluate_all(shown)] == names[1:]
+    pg.set_viewport_size({"width": 700, "height": 600})
+    expect(pg.locator(".breadcrumb > .trail-link:visible")).to_have_count(0, timeout=3000)
+    expect(pg.locator(".breadcrumb > span:not([class])")).to_have_text("Compost heap")
 
 
 def test_code_block_padding_survives_the_highlight_theme(page, wiki):
