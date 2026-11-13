@@ -561,6 +561,7 @@ A task's description is markdown, edited and rendered as a page's text.
   text starts at the same place with a box or a bullet, and the first box at the description's edge);
   an image opens full size.
   Comments render the same way, in the cards and the modal (`.task-comment-body`, at the description's scale).
+  A line separates each comment from the one before it, in both places, so it shows where the next one starts.
 - **Where the HTML comes from** (`renderTexts`, `renderedHtml` in `tasks.js`): the tasks asks the server for the texts it hasn't rendered yet, in one request (`{ notes: [...], comments: [...] }`), and keeps the HTML per text for the page's life, shared by every task list app on it.
   Loading tasks (`fetchTasks`, Completed) and each write wait for it before drawing, so cards never flash plain text; a text that arrives some other way shows as plain text until its HTML is there (`htmlOf`), and a failed request caches nothing.
   Code is highlighted once, when the HTML arrives.

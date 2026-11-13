@@ -508,6 +508,10 @@ div.chip-input > input {
 /* A comment of more than a paragraph: its time on a line, the text under it. */
 div.task-card-comment { margin: .25rem 0; line-height: 1.45; overflow-wrap: anywhere; }
 div.task-card-comment > .task-comment-when { display: block; }
+/* A line between two comments, so it shows where the next one starts. */
+.tasks-app .task-card-comment + .task-card-comment {
+  border-top: 1px solid var(--border); margin-top: .3rem; padding-top: .3rem;
+}
 .task-comments-more {
   background: none; border: none; padding: 0; font: inherit; font-size: .75rem;
   color: var(--link); cursor: pointer;
@@ -1091,6 +1095,7 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 ul.task-comment-list { list-style: none; margin: .3rem 0 0; padding: 0; font-size: .85rem; max-height: 18rem; overflow-y: auto; }
 .task-comment-list:empty { display: none; }
 .task-comment-list > li { display: flex; align-items: baseline; gap: .2rem; padding: .15rem 0; margin: 0; }
+.task-comment-list > li + li { border-top: 1px solid var(--border); margin-top: .3rem; padding-top: .45rem; }
 .task-comment-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .task-comment-editing > :is(.task-comment-text, .task-comment-btn) { display: none; }
 .task-comment-btn {
