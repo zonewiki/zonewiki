@@ -1,7 +1,7 @@
 // Package taskmodel is a task as Zone knows it: its fields, how a task list
 // file is read (leniently) and written (in a fixed key order), and a
 // series' dates. Nothing here knows the wiki, its users or the clock: the
-// files, the lock and the commits are the server's (go/taskstore.go).
+// files and their lock are package taskfiles', the commits the server's.
 package taskmodel
 
 import (

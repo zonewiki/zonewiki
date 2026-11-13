@@ -4,7 +4,8 @@ import "zonewiki/internal/taskmodel"
 
 // A task and its parts are package taskmodel's: its fields, its file's
 // format, a series' dates. What the server adds is here and in
-// taskstore.go: the files, the lock, the commits, who may see what.
+// tasklogic.go and package taskfiles: the files, the lock, the commits, who
+// may see what.
 type (
 	Task         = taskmodel.Task
 	Recurrence   = taskmodel.Recurrence

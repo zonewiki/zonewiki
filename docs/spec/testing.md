@@ -170,7 +170,7 @@ signed in or through his MCP token,
 may contain,
 and bob's writes must leave her files alone.
 It probes every route and MCP tool; `test_every_route_is_covered` and `test_every_tool_is_covered` fail for a route Zone registers, or a tool it offers, that is neither probed nor exempt: a new one gets a probe there.
-`go/access_test.go` covers the rules themselves (`canSee`, `canSeePath`, `hiddenPage` with sharing mode, `strayPrivate`), `go/taskstore_test.go` the per-user task files (`canSeeTask`, `mayMakePrivate`).
+`go/access_test.go` covers the rules themselves (`canSee`, `canSeePath`, `hiddenPage` with sharing mode, `strayPrivate`), `go/tasklogic_test.go` the per-user task files (`canSeeTask`, `mayMakePrivate`).
 `go/users_test.go` covers the hash format and `authenticate`; `go/security_test.go` the session's user.
 
 `go/sections_test.go` covers sections as the parser finds them: each ✎ opening its section (`TestEachPencilOpensItsSection`),
@@ -304,6 +304,9 @@ Without Playwright installed they skip, so plain `pytest tests/` is unaffected.
   The harness collects the violations Chromium reports on the console (`page.csp_violations`) and fails a test that has any, so new code can't bring in an inline script or handler unnoticed; a test that blocks one on purpose (`test_security.py`) clears the list.
   `test_security.py` also has what only a browser shows of the other rules: an iframe's `srcdoc` never frames a form, and a task's id is text on its card, not an element.
   Under that policy Playwright can't `eval` in the page: `page.wait_for_function` needs a function (`"() => scrollY > 0"`), as an expression string is evaluated with `eval`; `page.evaluate` works either way.
+
+`go/internal/taskfiles/taskfiles_test.go` covers the task files on a temp folder, without a wiki or a server: a write filed by owner and year in one commit and an unchanged one committing nothing, what each user reads, the Completed view by year and its years, a corrupt file refusing the write and staying as it is, who may write (`MayWrite`, a task of another user's refused), and the archive at start.
+`go/internal/atomicfile` has the atomic write's (a new file's mode, an old one's kept, a link written through).
 
 `tests/test_task_app_wiring.py` reads the task app's sources (`public/tasks.js`, `public/js/task*.js`): every `app.name` a part uses is one `tasks.js` puts on `app` or a part returns, and no name is put there twice; a misspelled or moved function is found there, not in a browser when its line runs.
 

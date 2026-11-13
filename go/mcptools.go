@@ -18,6 +18,7 @@ import (
 	"strings"
 	"zonewiki/internal/jsonobj"
 	"zonewiki/internal/mdtext"
+	"zonewiki/internal/taskfiles"
 	"zonewiki/internal/textsearch"
 )
 
@@ -292,7 +293,7 @@ func grepWiki(args jsonObj, base, user string) (string, error) {
 // fileLabel: a changed file as the model knows it, a page by its slug, the
 // task files as tasks.
 func fileLabel(fp string) string {
-	if strings.HasPrefix(fp, tasksDirName+"/") || strings.Contains(fp, "/"+tasksDirName+"/") {
+	if strings.HasPrefix(fp, taskfiles.DirName+"/") || strings.Contains(fp, "/"+taskfiles.DirName+"/") {
 		return "tasks"
 	}
 	return strings.TrimSuffix(fp, ".md")
@@ -460,7 +461,7 @@ func listTags(args jsonObj, base, user string) (string, error) {
 			}
 		}
 	}
-	for _, t := range allTasks(user) {
+	for _, t := range taskFiles.All(user) {
 		column := 2
 		if taskStatus(t) == "open" {
 			column = 1
@@ -705,7 +706,7 @@ func callMCPTool(r *http.Request, name string, args jsonObj) (string, error) {
 	// the tool's error, which the model can correct.
 	if rf, ok := refusalOf(err); ok {
 		err = toolErr(rf.msg)
-	} else if errors.Is(err, errTasksCorrupt) {
+	} else if errors.Is(err, taskfiles.ErrCorrupt) {
 		err = toolErr("The tasks' storage can't be read right now; try again")
 	}
 	return out, err

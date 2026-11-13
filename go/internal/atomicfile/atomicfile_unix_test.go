@@ -1,6 +1,6 @@
 //go:build unix
 
-package main
+package atomicfile
 
 import (
 	"os"
@@ -9,21 +9,21 @@ import (
 	"testing"
 )
 
-// atomicWrite: a new file's mode as os.WriteFile gives it (the umask's), an
+// Write: a new file's mode as os.WriteFile gives it (the umask's), an
 // old one's kept, a link written through.
 func TestAtomicWriteModesAndLinks(t *testing.T) {
 	dir := t.TempDir()
 	old := syscall.Umask(0o002)
 	defer syscall.Umask(old)
 	fresh := filepath.Join(dir, "new.md")
-	if err := atomicWrite(fresh, "# New\n"); err != nil {
+	if err := Write(fresh, "# New\n"); err != nil {
 		t.Fatal(err)
 	}
 	if st, _ := os.Stat(fresh); st.Mode().Perm() != 0o664 {
 		t.Errorf("new file: %o", st.Mode().Perm())
 	}
 	_ = os.Chmod(fresh, 0o600)
-	if err := atomicWrite(fresh, "# Again\n"); err != nil {
+	if err := Write(fresh, "# Again\n"); err != nil {
 		t.Fatal(err)
 	}
 	if st, _ := os.Stat(fresh); st.Mode().Perm() != 0o600 {
@@ -34,7 +34,7 @@ func TestAtomicWriteModesAndLinks(t *testing.T) {
 	if err := os.Symlink(target, link); err != nil {
 		t.Fatal(err)
 	}
-	if err := atomicWrite(link, "# Through\n"); err != nil {
+	if err := Write(link, "# Through\n"); err != nil {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(target)

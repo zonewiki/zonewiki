@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"zonewiki/internal/atomicfile"
 	"zonewiki/internal/jsonobj"
 	"zonewiki/internal/taskmodel"
 )
@@ -128,7 +129,7 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless, privat
 // allTasksFile: the settings of All tasks (/tasks), which no page's
 // [[tasks: …]] holds: {"all": {"view": "open", …}}, the params an embed
 // would have (allSettingKeys).
-func allTasksFile() string { return filepath.Join(tasksDir(""), "settings.json") }
+func allTasksFile() string { return filepath.Join(taskFiles.Dir(""), "settings.json") }
 
 // allTasksParams: the params of All tasks, from allTasksFile; none when
 // there is no file or it can't be read.
@@ -160,8 +161,8 @@ func setAllTasksParams(user, was string, set map[string]string) error {
 	if err != nil {
 		return err
 	}
-	tasksMu.Lock()
-	defer tasksMu.Unlock()
+	taskFiles.Lock()
+	defer taskFiles.Unlock()
 	if allTasksParams().src.raw != was {
 		return errEmbedChanged
 	}
@@ -170,10 +171,10 @@ func setAllTasksParams(user, was string, set map[string]string) error {
 	if err != nil {
 		return err
 	}
-	if err := atomicWrite(allTasksFile(), string(text)+"\n"); err != nil {
+	if err := atomicfile.Write(allTasksFile(), string(text)+"\n"); err != nil {
 		return err
 	}
-	commitTasks(user, "Change the settings of All tasks", []string{allTasksFile()})
+	taskFiles.CommitFiles(user, "Change the settings of All tasks", []string{allTasksFile()})
 	return nil
 }
 

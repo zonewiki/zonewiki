@@ -17,6 +17,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"zonewiki/internal/atomicfile"
 	"zonewiki/internal/mdtext"
 )
 
@@ -61,10 +62,10 @@ func (rq *Req) pageFiles() []PageFile {
 // reading and parsing the task files whole.
 func (rq *Req) openTasks() []*Task {
 	if rq == nil {
-		return openTasks("")
+		return taskFiles.Open("")
 	}
 	if !rq.openRead {
-		rq.open, rq.openRead = openTasks(rq.user), true
+		rq.open, rq.openRead = taskFiles.Open(rq.user), true
 	}
 	return rq.open
 }
@@ -236,9 +237,9 @@ func newlines(s string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\r", "\n")
 }
 
-// writeText writes a page (its folders made), atomically (atomicWrite):
+// writeText writes a page (its folders made), atomically (atomicfile.Write):
 // the search, the semantic index's worker and git never read half a page.
-func writeText(p, text string) error { return atomicWrite(p, text) }
+func writeText(p, text string) error { return atomicfile.Write(p, text) }
 
 // PageFile is a page's file and slug.
 type PageFile struct{ Path, Slug string }

@@ -238,7 +238,7 @@ They have no private folder in use (no Private, no Notes, `/private` is a 404); 
 - **The rule** is in `go/access.go`: `canWrite(user, slug)` is false for a viewer, so every page write (the operations in `go/pageops.go`, the MCP tools) refuses them;
   `readOnly(user, slug)` (sees it, can't change it) makes the refusal say so: **403** "You can read this wiki but not change it: you are a viewer.
   Ask an admin of this wiki." (`readOnlyMsg`, `refusedReadOnly`).
-  Every task write passes `mayWriteTasks` (in `writeOpenLocked` and `writeBothLocked`), which refuses a viewer the same way (as JSON, so the task app shows it): no route or tool can change a task for them, whatever it does.
+  Every task write passes `mayWriteTasks` (the store's `MayWrite`, asked in `WriteOpenLocked` and `WriteBothLocked` of `go/internal/taskfiles`), which refuses a viewer the same way (as JSON, so the task app shows it): no route or tool can change a task for them, whatever it does.
   Uploads and tag renames (`renameTagOp`) are refused too.
 - **The gate** (`viewerGate` in `go/server.go`): a viewer's POST, PUT, PATCH or DELETE to a route not listed in `viewerWrites` is refused (403) before the route runs, whatever it names (another user's folder answers as anywhere else).
   Listed are only those that change nothing (sign in and out, the previews) and `/mcp`.
@@ -493,7 +493,7 @@ A new page is made private from the start (below).
   and probes every route and MCP read tool as bob,
   and every write route and MCP write tool (her files and the commits must stay as they were);
   a route Zone registers, and an MCP tool, must be probed or listed as exempt there (`test_every_route_is_covered`, `test_every_tool_is_covered`).
-  Further tests there cover what alice does with her own (notes, uploads, a new private page, history, Commit all, private tasks and their defaults); the Go tests in `go/taskstore_test.go` the per-user task files.
+  Further tests there cover what alice does with her own (notes, uploads, a new private page, history, Commit all, private tasks and their defaults); the Go tests in `go/tasklogic_test.go` the per-user task files.
 
 ## Private tasks
 
@@ -507,15 +507,15 @@ from New task / `c t` when your default list is in your private folder.
 Cards of private tasks show 🔒 (`.task-private`).
 Everything else (shared tasks) is everyone's to see and change, as shared pages are.
 
-- **Storage**: shared tasks stay in `_tasks/tasks.json`, `completed.json`, `completed-YYYY.json`; a user's private ones are in the same three kinds of file in `private/<user>/_tasks/` (`tasksDir(owner)`), created on their first private task.
+- **Storage**: shared tasks stay in `_tasks/tasks.json`, `completed.json`, `completed-YYYY.json`; a user's private ones are in the same three kinds of file in `private/<user>/_tasks/` (`taskFiles.Dir(owner)`), created on their first private task.
   A task's file says whose it is: the task's `Owner` (`go/internal/taskmodel`) is not written into it, it is set from the folder a task was read from (`eachOwner`), and the API shows it as `"private": true|false` (only with users: without them the API's JSON is as before).
   Toggling Private (`private` in `POST`/`PUT /api/tasks`, `batch-update`) moves the task between the files in one commit.
-  Ids are random UUIDs, unique across all files; restoring a deleted task (undo) never takes an id another file has (`taskIDsLocked`) and keeps it private.
-- **Reading and writing** (`go/taskstore.go`): every reader takes the user and reads the shared files and theirs (`taskOwners(user)`: `readTasks`, `readCompleted`, `readAll`, `allTasks`, `readForWriteLocked`, `findTasks`, `resolveTaskRefs`, `findTaskBacklinks`, `completedInYear`, `completedYears`);
+  Ids are random UUIDs, unique across all files; restoring a deleted task (undo) never takes an id another file has (`taskFiles.IDsLocked`) and keeps it private.
+- **Reading and writing** (`go/internal/taskfiles`, the store `taskFiles` in `go/tasklogic.go`): every reader takes the user and reads the shared files and theirs (`Owners(user)`: `Open`, `All`, `Snapshot`, `ReadForWriteLocked`, `CompletedInYear`, `CompletedYears`, and on top of them `findTasks`, `resolveTaskRefs`, `findTaskBacklinks`);
   Zone itself (`""`) reads only the shared ones.
   A write splits the tasks by owner (`byOwner`) and writes the files that changed, all in one commit; a task can only be written by its own user, since another user's is never read for them.
-  One lock (`tasksMu`) for all files, taken by reads across them too (`openTasks` for `GET /api/tasks`, `readAll`, `allTasks`): a task made private or shared moves between two files, and a read between their writes would miss it.
-  What Zone does over every task list covers every user's files (`everyOwner`): the yearly archive at start (`archiveOldCompleted`), a rename's links in tasks (`renamePageRefs`), the search index (`everyTask`, filtered per user by `canSeeTask`, `hiddenDoc`).
+  One lock (`taskFiles.Lock`) for all files, taken by reads across them too (`Open` for `GET /api/tasks`, `All`, `Snapshot`): a task made private or shared moves between two files, and a read between their writes would miss it.
+  What Zone does over every task list covers every user's files (`EveryOwner`): the yearly archive at start (`ArchiveOldCompleted`), a rename's links in tasks (`renamePageRefs`), the search index (`Every`, filtered per user by `canSeeTask`, `hiddenDoc`).
   A series' next occurrence stays private (`spawnRecurring`).
   A private task's pasted files are private too (the notes' editor sends `private/<you>/…` as the upload's page).
 - **Another user's private task is no task**: by id the routes answer 404 as for an id no task has (`DELETE /api/tasks/<id>` of an unknown id stays a 204, as before);

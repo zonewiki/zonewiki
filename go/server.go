@@ -136,7 +136,7 @@ func main() {
 	excludeState(cfg.Data) // .zone/: the settings file, the secret key, the caches
 	ensureHomePage()
 	cleanLeftDrafts()
-	initTasks()
+	taskFiles.ArchiveOldCompleted()
 	// The semantic index's worker reads tasks: after the task files are set up.
 	if *semanticTest != "" {
 		if semantic, err = semanticForTest(*semanticTest); err != nil {

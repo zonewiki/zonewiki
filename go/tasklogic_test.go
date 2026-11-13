@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 	"zonewiki/internal/jsonobj"
+	"zonewiki/internal/taskfiles"
 	"zonewiki/internal/taskmodel"
 )
 
@@ -146,21 +147,21 @@ func TestPrivateTasksInTheirUsersFiles(t *testing.T) {
 	if mine.Owner != "alice" {
 		t.Fatalf("owner %q", mine.Owner)
 	}
-	if got := titles(readTasks("alice")); !reflect.DeepEqual(got, []string{"Alice's own", "Shared one"}) {
+	if got := titles(taskFiles.Open("alice")); !reflect.DeepEqual(got, []string{"Alice's own", "Shared one"}) {
 		t.Errorf("alice sees %v", got)
 	}
-	if got := titles(readTasks("bob")); !reflect.DeepEqual(got, []string{"Shared one"}) {
+	if got := titles(taskFiles.Open("bob")); !reflect.DeepEqual(got, []string{"Shared one"}) {
 		t.Errorf("bob sees %v", got)
 	}
-	if got := titles(readTasks("")); !reflect.DeepEqual(got, []string{"Shared one"}) {
+	if got := titles(taskFiles.Open("")); !reflect.DeepEqual(got, []string{"Shared one"}) {
 		t.Errorf("Zone sees %v", got)
 	}
-	shared, own := fileText(t, tasksFile("")), fileText(t, filepath.Join(cfg.Data, "private/alice/_tasks/tasks.json"))
+	shared, own := fileText(t, taskFiles.OpenPath("")), fileText(t, filepath.Join(cfg.Data, "private/alice/_tasks/tasks.json"))
 	if strings.Contains(shared, "Alice's own") || !strings.Contains(own, "Alice's own") ||
 		strings.Contains(own, "Shared one") || strings.Contains(own+shared, `"private"`) {
 		t.Errorf("files:\n%s\n%s", shared, own)
 	}
-	if _, err := os.Stat(tasksFile("bob")); err == nil {
+	if _, err := os.Stat(taskFiles.OpenPath("bob")); err == nil {
 		t.Error("bob got files of his own for no task")
 	}
 	b, _ := json.Marshal(apiTask{mine})
@@ -176,7 +177,7 @@ func TestPrivateTasksInTheirUsersFiles(t *testing.T) {
 			t.Errorf("bob's write: %v", err)
 		}
 	}
-	if err := deleteTask("bob", mine.ID, "d"); err != nil || len(readTasks("alice")) != 2 {
+	if err := deleteTask("bob", mine.ID, "d"); err != nil || len(taskFiles.Open("alice")) != 2 {
 		t.Errorf("bob's delete took alice's task: %v", err)
 	}
 	if len(findTasks("bob", strings.ToLower(mine.ID[:8]))) != 0 || len(findTasks("alice", mine.ID)) != 1 {
@@ -197,10 +198,10 @@ func TestPrivateTaskMovesAndCompletes(t *testing.T) {
 	testWiki(t, nil)
 	withUsers(t, "alice", "bob")
 	task := newTestTask(t, "alice", "Water plants", true, "due_date", isoDay(today()), "rec_type", "weekly")
-	if titles(readTasks("bob")); len(readTasks("bob")) != 0 || len(readTasks("alice")) != 1 {
-		t.Fatalf("after private: bob %v, alice %v", titles(readTasks("bob")), titles(readTasks("alice")))
+	if titles(taskFiles.Open("bob")); len(taskFiles.Open("bob")) != 0 || len(taskFiles.Open("alice")) != 1 {
+		t.Fatalf("after private: bob %v, alice %v", titles(taskFiles.Open("bob")), titles(taskFiles.Open("alice")))
 	}
-	if strings.Contains(fileText(t, tasksFile("")), "Water") {
+	if strings.Contains(fileText(t, taskFiles.OpenPath("")), "Water") {
 		t.Error("still in the shared file")
 	}
 	done := jsonObj{}
@@ -208,14 +209,14 @@ func TestPrivateTaskMovesAndCompletes(t *testing.T) {
 	if _, err := updateTask("alice", task.ID, done, ""); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(fileText(t, completedPath("alice")), task.ID) || strings.Contains(fileText(t, completedPath("")), "Water") {
+	if !strings.Contains(fileText(t, taskFiles.CompletedPath("alice")), task.ID) || strings.Contains(fileText(t, taskFiles.CompletedPath("")), "Water") {
 		t.Error("completed into the wrong file")
 	}
-	open := readTasks("alice")
-	if len(open) != 1 || open[0].SpawnedFrom != task.ID || open[0].Owner != "alice" || len(readTasks("bob")) != 0 {
+	open := taskFiles.Open("alice")
+	if len(open) != 1 || open[0].SpawnedFrom != task.ID || open[0].Owner != "alice" || len(taskFiles.Open("bob")) != 0 {
 		t.Errorf("next occurrence %+v", open)
 	}
-	if got := completedInYear("bob", currentYear()); len(got) != 0 {
+	if got := taskFiles.CompletedInYear("bob", taskFiles.CurrentYear()); len(got) != 0 {
 		t.Errorf("bob's Completed %v", titles(got))
 	}
 	shared := jsonObj{}
@@ -223,8 +224,8 @@ func TestPrivateTaskMovesAndCompletes(t *testing.T) {
 	if _, err := updateTask("alice", open[0].ID, shared, ""); err != nil {
 		t.Fatal(err)
 	}
-	if len(readTasks("bob")) != 1 || fileText(t, tasksFile("alice")) != "[]\n" {
-		t.Errorf("back to shared: bob %v, alice's file %q", titles(readTasks("bob")), fileText(t, tasksFile("alice")))
+	if len(taskFiles.Open("bob")) != 1 || fileText(t, taskFiles.OpenPath("alice")) != "[]\n" {
+		t.Errorf("back to shared: bob %v, alice's file %q", titles(taskFiles.Open("bob")), fileText(t, taskFiles.OpenPath("alice")))
 	}
 }
 
@@ -232,7 +233,7 @@ func TestPrivateTaskMovesAndCompletes(t *testing.T) {
 // from a read (GET /api/tasks, allTasks): the move writes two files.
 func TestReadsSeeAMovingTask(t *testing.T) {
 	const n = 100
-	for name, read := range map[string]func(string) []*Task{"openTasks": openTasks, "allTasks": allTasks} {
+	for name, read := range map[string]func(string) []*Task{"Open": taskFiles.Open, "All": taskFiles.All} {
 		testWiki(t, nil)
 		withUsers(t, "alice")
 		var ids []string
@@ -341,7 +342,7 @@ func TestEveryUsersFiles(t *testing.T) {
 	withUsers(t, "alice", "bob")
 	mine := newTestTask(t, "alice", "See [[old]]", true)
 	changed, err := renamePageRefs(func(_, s string) string { return strings.ReplaceAll(s, "[[old]]", "[[new]]") })
-	if err != nil || len(changed) != 1 || !strings.Contains(fileText(t, tasksFile("alice")), "[[new]]") {
+	if err != nil || len(changed) != 1 || !strings.Contains(fileText(t, taskFiles.OpenPath("alice")), "[[new]]") {
 		t.Errorf("rename: %v %v", changed, err)
 	}
 	last := jsonObj{}
@@ -350,13 +351,13 @@ func TestEveryUsersFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Completed last year: the start of Zone files it into her archive.
-	done := readListLenient(completedPath("alice"))
+	done := taskfiles.ReadLenient(taskFiles.CompletedPath("alice"))
 	done[0].CompletedAt = "2001-05-01T10:00:00"
-	if err := writeTasks(completedPath("alice"), done); err != nil {
+	if err := taskfiles.Write(taskFiles.CompletedPath("alice"), done); err != nil {
 		t.Fatal(err)
 	}
-	archiveOldCompleted()
-	if !strings.Contains(fileText(t, archivePath("alice", "2001")), mine.ID) {
+	taskFiles.ArchiveOldCompleted()
+	if !strings.Contains(fileText(t, taskFiles.ArchivePath("alice", "2001")), mine.ID) {
 		t.Error("not archived in alice's files")
 	}
 	found := false
@@ -366,7 +367,7 @@ func TestEveryUsersFiles(t *testing.T) {
 	if !found {
 		t.Error("the search index lacks alice's task")
 	}
-	if !taskIDsLocked()[mine.ID] {
+	if !taskFiles.IDsLocked()[mine.ID] {
 		t.Error("taskIDsLocked")
 	}
 }
@@ -381,7 +382,7 @@ func TestASharedTaskStaysShared(t *testing.T) {
 	if _, err := updateTask("alice", task.ID, data, ""); err == nil {
 		t.Fatal("alice made bob's shared task private")
 	}
-	if got := titles(readTasks("bob")); !reflect.DeepEqual(got, []string{"Errand"}) || len(readTasks("alice")) != 1 {
+	if got := titles(taskFiles.Open("bob")); !reflect.DeepEqual(got, []string{"Errand"}) || len(taskFiles.Open("alice")) != 1 {
 		t.Errorf("bob sees %v", got)
 	}
 	mine := newTestTask(t, "alice", "Mine", true)
@@ -389,8 +390,8 @@ func TestASharedTaskStaysShared(t *testing.T) {
 	if _, err := updateTask("alice", mine.ID, data, ""); err != nil {
 		t.Fatal(err)
 	}
-	if len(readTasks("bob")) != 2 {
-		t.Errorf("bob sees %v", titles(readTasks("bob")))
+	if len(taskFiles.Open("bob")) != 2 {
+		t.Errorf("bob sees %v", titles(taskFiles.Open("bob")))
 	}
 	data.Set("private", true)
 	if _, err := updateTask("alice", mine.ID, data, ""); err == nil {

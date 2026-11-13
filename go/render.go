@@ -417,5 +417,5 @@ func taskLink(t *Task, list string) string {
 	if t.IsOpen() {
 		return taskHref(t.ID, "open", list, "")
 	}
-	return taskHref(t.ID, "completed", list, pastYear(t))
+	return taskHref(t.ID, "completed", list, taskFiles.PastYear(t))
 }

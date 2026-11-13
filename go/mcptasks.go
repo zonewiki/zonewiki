@@ -580,7 +580,7 @@ func updateTaskTool(args jsonObj, base, user string) (string, error) {
 	}
 	out := head + "\n\n" + mcpTaskText(task, base, user)
 	if status == "done" || status == "skip" {
-		for _, t := range openTasks(user) {
+		for _, t := range taskFiles.Open(user) {
 			if t.SpawnedFrom == task.ID && t.IsOpen() {
 				out += "\n\nNext occurrence:\n\n" + mcpTaskText(t, base, user)
 				break

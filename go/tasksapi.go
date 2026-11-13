@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"zonewiki/internal/jsonobj"
+	"zonewiki/internal/taskfiles"
 	"zonewiki/internal/taskmodel"
 )
 
@@ -25,7 +26,7 @@ func tasksRoute(h func(w http.ResponseWriter, r *http.Request) error) http.Handl
 		rf, refused := refusalOf(err)
 		switch {
 		case err == nil:
-		case errors.Is(err, errTasksCorrupt):
+		case errors.Is(err, taskfiles.ErrCorrupt):
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		case refused && (rf.kind == refusedInvalid || rf.kind == refusedReadOnly):
 			// tasks.js shows the error (a viewer's: readOnlyMsg).
@@ -55,7 +56,7 @@ func jsonObject(r *http.Request) (jsonObj, error) {
 
 func tasksRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/tasks", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
-		writeJSON(w, http.StatusOK, apiTasks(openTasks(userOf(r))))
+		writeJSON(w, http.StatusOK, apiTasks(taskFiles.Open(userOf(r))))
 		return nil
 	}))
 	// A hidden task app, for a page without one that wants its edit modal
@@ -71,16 +72,16 @@ func tasksRoutes(mux *http.ServeMux) {
 		if err != nil {
 			return err
 		}
-		writeJSON(w, http.StatusOK, apiTasks(completedInYear(userOf(r), year)))
+		writeJSON(w, http.StatusOK, apiTasks(taskFiles.CompletedInYear(userOf(r), year)))
 		return nil
 	}))
 	mux.HandleFunc("GET /api/tasks/completed-years", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
-		writeJSON(w, http.StatusOK, map[string]any{"years": completedYears(userOf(r), cleanList(r.URL.Query().Get("list")))})
+		writeJSON(w, http.StatusOK, map[string]any{"years": completedYearsIn(userOf(r), cleanList(r.URL.Query().Get("list")))})
 		return nil
 	}))
 	mux.HandleFunc("GET /api/tasks/completed-count", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		scope, n := cleanList(r.URL.Query().Get("list")), 0
-		for _, t := range completedInYear(userOf(r), currentYear()) {
+		for _, t := range taskFiles.CompletedInYear(userOf(r), taskFiles.CurrentYear()) {
 			if inScope(t, scope) {
 				n++
 			}
@@ -208,7 +209,7 @@ var yearArgRE = regexp.MustCompile(`^\d{4}$`)
 func yearArg(r *http.Request) (string, error) {
 	year := r.URL.Query().Get("year")
 	if year == "" {
-		year = currentYear()
+		year = taskFiles.CurrentYear()
 	}
 	if !yearArgRE.MatchString(year) {
 		return "", refuse("year must be YYYY")
@@ -228,8 +229,8 @@ func apiEditComment(w http.ResponseWriter, r *http.Request) error {
 	if text, err = commentText(text); err != nil {
 		return err
 	}
-	tasksMu.Lock()
-	defer tasksMu.Unlock()
+	taskFiles.Lock()
+	defer taskFiles.Unlock()
 	active, completed, t, err := findForWriteLocked(userOf(r), r.PathValue("id"))
 	if err != nil {
 		return err
@@ -239,7 +240,7 @@ func apiEditComment(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	t.Comments[i].Text = text
-	if err := writeBothLocked(userOf(r), active, completed, "Edit task comment"); err != nil {
+	if err := taskFiles.WriteBothLocked(userOf(r), active, completed, "Edit task comment"); err != nil {
 		return err
 	}
 	writeJSON(w, http.StatusOK, apiTask{t})
@@ -247,8 +248,8 @@ func apiEditComment(w http.ResponseWriter, r *http.Request) error {
 }
 
 func apiDeleteComment(w http.ResponseWriter, r *http.Request) error {
-	tasksMu.Lock()
-	defer tasksMu.Unlock()
+	taskFiles.Lock()
+	defer taskFiles.Unlock()
 	active, completed, t, err := findForWriteLocked(userOf(r), r.PathValue("id"))
 	if err != nil {
 		return err
@@ -259,7 +260,7 @@ func apiDeleteComment(w http.ResponseWriter, r *http.Request) error {
 	}
 	rememberBy(t) // the undo sends it back
 	t.Comments = slices.Delete(t.Comments, i, i+1)
-	if err := writeBothLocked(userOf(r), active, completed, "Delete task comment"); err != nil {
+	if err := taskFiles.WriteBothLocked(userOf(r), active, completed, "Delete task comment"); err != nil {
 		return err
 	}
 	writeJSON(w, http.StatusOK, apiTask{t})
@@ -278,8 +279,8 @@ func apiBatchDelete(w http.ResponseWriter, r *http.Request) error {
 	if len(ids) == 0 {
 		return refuse("Bad Request")
 	}
-	tasksMu.Lock()
-	defer tasksMu.Unlock()
+	taskFiles.Lock()
+	defer taskFiles.Unlock()
 	if err := deleteTasksLocked(userOf(r), idSet(ids), "Delete tasks"); err != nil {
 		return err
 	}
@@ -298,14 +299,14 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 	if !ok || len(snaps) == 0 {
 		return refuse("Bad Request")
 	}
-	tasksMu.Lock()
-	defer tasksMu.Unlock()
+	taskFiles.Lock()
+	defer taskFiles.Unlock()
 	user := userOf(r)
-	active, completed, err := readForWriteLocked(user)
+	active, completed, err := taskFiles.ReadForWriteLocked(user)
 	if err != nil {
 		return err
 	}
-	existing := taskIDsLocked() // every owner's: ids stay unique across the files
+	existing := taskFiles.IDsLocked() // every owner's: ids stay unique across the files
 	restored := []*Task{}
 	for _, s := range snaps {
 		snap, ok := jsonobj.As[jsonObj](s)
@@ -329,7 +330,7 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 		restored = append(restored, t)
 	}
 	if len(restored) > 0 {
-		if err := writeBothLocked(user, active, completed, "Restore tasks"); err != nil {
+		if err := taskFiles.WriteBothLocked(user, active, completed, "Restore tasks"); err != nil {
 			return err
 		}
 	}
@@ -349,9 +350,9 @@ var importIDRE = regexp.MustCompile(`^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-f
 // task as the API shows it. apiImport reads it back.
 func apiExport(w http.ResponseWriter, r *http.Request) error {
 	list, tag := cleanList(r.URL.Query().Get("list")), strings.TrimSpace(r.URL.Query().Get("tag"))
-	tasksMu.Lock()
-	active, completed, err := readForWriteLocked(userOf(r))
-	tasksMu.Unlock()
+	taskFiles.Lock()
+	active, completed, err := taskFiles.ReadForWriteLocked(userOf(r))
+	taskFiles.Unlock()
 	if err != nil {
 		return err
 	}
@@ -414,13 +415,13 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 	if from != "" && !slices.ContainsFunc(add, func(t string) bool { return strings.EqualFold(t, from) }) {
 		remove = []string{from}
 	}
-	tasksMu.Lock()
-	defer tasksMu.Unlock()
-	active, completed, err := readForWriteLocked(user)
+	taskFiles.Lock()
+	defer taskFiles.Unlock()
+	active, completed, err := taskFiles.ReadForWriteLocked(user)
 	if err != nil {
 		return err
 	}
-	existing := taskIDsLocked() // every owner's: ids stay unique across the files
+	existing := taskFiles.IDsLocked() // every owner's: ids stay unique across the files
 	skipped, ids := 0, []string{}
 	for _, s := range snaps {
 		snap, _ := jsonobj.As[jsonObj](s)
@@ -454,7 +455,7 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 		ids = append(ids, t.ID)
 	}
 	if len(ids) > 0 {
-		if err := writeBothLocked(user, active, completed, "Import "+strconv.Itoa(len(ids))+" tasks"); err != nil {
+		if err := taskFiles.WriteBothLocked(user, active, completed, "Import "+strconv.Itoa(len(ids))+" tasks"); err != nil {
 			return err
 		}
 	}
@@ -481,9 +482,9 @@ func apiBatchComplete(w http.ResponseWriter, r *http.Request) error {
 		return refuse("Bad Request")
 	}
 	set := idSet(ids)
-	tasksMu.Lock()
-	defer tasksMu.Unlock()
-	active, completed, err := readForWriteLocked(userOf(r))
+	taskFiles.Lock()
+	defer taskFiles.Unlock()
+	active, completed, err := taskFiles.ReadForWriteLocked(userOf(r))
 	if err != nil {
 		return err
 	}
@@ -519,7 +520,7 @@ func apiBatchComplete(w http.ResponseWriter, r *http.Request) error {
 	if markCompleted {
 		msg = "Complete tasks"
 	}
-	if err := writeBothLocked(userOf(r), active, completed, msg); err != nil {
+	if err := taskFiles.WriteBothLocked(userOf(r), active, completed, msg); err != nil {
 		return err
 	}
 	writeJSON(w, http.StatusOK, apiTasks(updated))
@@ -546,9 +547,9 @@ func apiReorder(w http.ResponseWriter, r *http.Request) error {
 	if len(order) == 0 && len(updates) == 0 {
 		return refuse("Bad Request")
 	}
-	tasksMu.Lock()
-	defer tasksMu.Unlock()
-	active, err := readTasksStrict(userOf(r))
+	taskFiles.Lock()
+	defer taskFiles.Unlock()
+	active, err := taskFiles.ReadOpenStrict(userOf(r))
 	if err != nil {
 		return err
 	}
@@ -574,7 +575,7 @@ func apiReorder(w http.ResponseWriter, r *http.Request) error {
 			t.SortOrder = &f
 		}
 	}
-	if err := writeTasksLocked(userOf(r), active, "Reorder tasks"); err != nil {
+	if err := taskFiles.WriteOpenLocked(userOf(r), active, "Reorder tasks"); err != nil {
 		return err
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -610,9 +611,9 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 	}
-	tasksMu.Lock()
-	defer tasksMu.Unlock()
-	active, completed, err := readForWriteLocked(userOf(r))
+	taskFiles.Lock()
+	defer taskFiles.Unlock()
+	active, completed, err := taskFiles.ReadForWriteLocked(userOf(r))
 	if err != nil {
 		return err
 	}
@@ -638,7 +639,7 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 		updated = append(updated, t)
 	}
 	if len(updated) > 0 {
-		if err := writeBothLocked(userOf(r), active, completed, "Update tasks"); err != nil {
+		if err := taskFiles.WriteBothLocked(userOf(r), active, completed, "Update tasks"); err != nil {
 			return err
 		}
 	}

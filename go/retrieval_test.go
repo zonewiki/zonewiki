@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 	"unsafe"
+	"zonewiki/internal/taskfiles"
 	"zonewiki/internal/textsearch"
 )
 
@@ -135,7 +136,7 @@ func indexCacheStaysAsIfBuiltAfresh(t *testing.T, file string) {
 			return &SearchDoc{Slug: fmt.Sprintf("private/bob/b%d", serial), Tokens: fixedTokens(tokens()...)}
 		case 2:
 			owner := []string{"", "alice", "bob"}[r.Intn(3)]
-			return &SearchDoc{Slug: tasksDirName, Task: &Task{ID: fmt.Sprintf("t%d", serial), Owner: owner}, Tokens: fixedTokens(tokens()...)}
+			return &SearchDoc{Slug: taskfiles.DirName, Task: &Task{ID: fmt.Sprintf("t%d", serial), Owner: owner}, Tokens: fixedTokens(tokens()...)}
 		}
 		return &SearchDoc{Slug: fmt.Sprintf("p%d", serial), Tokens: fixedTokens(tokens()...)}
 	}

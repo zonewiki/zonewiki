@@ -22,6 +22,7 @@ import (
 	"time"
 	"zonewiki/internal/jsonobj"
 	"zonewiki/internal/mdtext"
+	"zonewiki/internal/taskfiles"
 	"zonewiki/internal/textsearch"
 )
 
@@ -413,8 +414,8 @@ func pageSearchDocs(rq *Req) []*SearchDoc {
 func tasksMtimes() string {
 	var b strings.Builder
 	var paths []string
-	for _, o := range everyOwner() {
-		paths = append(append(paths, tasksFile(o), completedPath(o)), archiveGlob(o)...)
+	for _, o := range taskFiles.EveryOwner() {
+		paths = append(append(paths, taskFiles.OpenPath(o), taskFiles.CompletedPath(o)), taskFiles.Archives(o)...)
 	}
 	for _, p := range paths {
 		if st, err := os.Stat(p); err == nil {
@@ -447,7 +448,7 @@ func taskSearchDocs() []*SearchDoc {
 	docs := []*SearchDoc{}
 	previous := taskDocs.byID
 	taskDocs.byID = map[string]*SearchDoc{}
-	for _, t := range everyTask() {
+	for _, t := range taskFiles.Every() {
 		// A task that didn't change keeps its doc, so the index can tell
 		// what did (the pointers are what it compares).
 		if old := previous[t.ID]; old != nil && reflect.DeepEqual(old.Task, t) {
@@ -468,14 +469,14 @@ func taskSearchDocs() []*SearchDoc {
 		}
 		text := textsearch.StripLinkTargets(strings.TrimSpace(title + " " + t.Description + " " +
 			strings.Join(comments, " ") + " " + strings.Join(tags, " ")))
-		d := &SearchDoc{Slug: tasksDirName, Title: "[Task] " + mdtext.PlainTaskTitle(title),
+		d := &SearchDoc{Slug: taskfiles.DirName, Title: "[Task] " + mdtext.PlainTaskTitle(title),
 			Tokens: func() []string {
 				return slices.Concat(textsearch.Tokenize(text), repeatTokens(mdtext.PlainTaskTitle(title), textsearch.TitleWeight))
 			},
 			Task: t, tk: &taskDocInfo{text: text, status: "open", edited: lastActivity(t)}, Tags: lowTags,
 			key: docKey("task", t.ID, mdtext.PlainTaskTitle(title), text)}
 		if !t.IsOpen() {
-			d.tk.status, d.tk.year = "done", pastYear(t)
+			d.tk.status, d.tk.year = "done", taskFiles.PastYear(t)
 		}
 		taskDocs.byID[t.ID] = d
 		docs = append(docs, d)

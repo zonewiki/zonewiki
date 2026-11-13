@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 	"zonewiki/internal/mdtext"
+	"zonewiki/internal/taskfiles"
 )
 
 // The wiki's pages (pages.go): listing, safe paths, link targets and
@@ -67,7 +68,7 @@ func TestUpdateReferences(t *testing.T) {
 // doesn't stop the others, and the caller hears of it.
 func TestUpdateReferencesReportsWhatFailed(t *testing.T) {
 	testWiki(t, map[string]string{"old-page": "# Old\n", "referencer": "# Ref\n\n[[old-page]]\n"})
-	tasks := filepath.Join(cfg.Data, tasksDirName, "tasks.json")
+	tasks := filepath.Join(cfg.Data, taskfiles.DirName, "tasks.json")
 	if err := os.MkdirAll(filepath.Dir(tasks), 0o777); err != nil {
 		t.Fatal(err)
 	}

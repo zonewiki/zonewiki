@@ -56,7 +56,7 @@ There is no `page` field: `page` in embeds or API bodies is ignored.
 
 A task app at `/tasks` (a built-in page, `tasksPage()`), also embeddable via `[[tasks:]]` (see Task list embed).
 Server side is `go/tasksapi.go` (the `/api/tasks/*` routes, `tasksRoutes`),
-`go/tasks.go` (the writes, which the MCP tools share) and `go/tasksembed.go` (the embed's HTML, `taskCounts`) on top of `go/taskstore.go` (the files and the task model: storage, recurrence, history, comments, task backlinks, search docs) and `go/tasksyntax.go` (the syntax in page text).
+`go/tasks.go` (the writes, which the MCP tools share) and `go/tasksembed.go` (the embed's HTML, `taskCounts`) on top of `go/internal/taskfiles` (the files: where they are, read and written under one lock), `go/internal/taskmodel` (a task and its file's format) and `go/tasklogic.go` (recurrence, completing, history, comments, task backlinks) and `go/tasksyntax.go` (the syntax in page text).
 Client side is `tasks.js` (DOM, one instance per embed) plus `tasks-core.js` (pure logic, tested under Node).
 
 Several embeds per page work: each instance keeps its own task array, and a write in one refreshes the others (`refreshOtherInstances`).
@@ -70,10 +70,10 @@ There is no polling.
 - The tasks' files live in the `_tasks/` folder (`tasksFile(owner)` and paths derived from it; with users each user's private tasks in `private/<user>/_tasks/`, the same files: Private tasks in `docs/spec/users.md`): open tasks in `tasks.json`,
   completed ones in `completed.json` (flat JSON arrays, committed to git on change).
   Completed tasks from earlier years live in `completed-YYYY.json` (only that exact name is an archive).
-  `atomicWrite` creates the folder, so a new wiki gets it on the first write.
+  `atomicfile.Write` creates the folder, so a new wiki gets it on the first write.
   Write routes read every completed file (`readCompletedAllStrict`) and `writeCompleted` files each task by its completion year, writing only files whose content changed; startup does the same split (`archiveOldCompleted`) for a year change without writes.
   So archived tasks can be edited, reopened, deleted, tagged and restored like any other; Completed shows them by year (see Views).
-- All mutations go through one lock (`tasksMu`) and atomic writes (temp file + rename, `atomicWrite`); the server handles requests concurrently.
+- All mutations go through one lock (`taskFiles.Lock`, `go/internal/taskfiles`) and atomic writes (temp file + rename, `go/internal/atomicfile`); the server handles requests concurrently.
   Write paths use a strict reader that fails with `errTasksCorrupt` (503) on an unreadable file instead of treating it as empty and wiping every task.
 - The files are JSON (`go/internal/taskmodel`): a list of tasks,
   two spaces of indent,
@@ -566,7 +566,7 @@ A task's notes are markdown, edited and rendered as a page's text.
 
 ### History
 
-The server logs events on the task (`logEvent` in `go/taskstore.go`): `created` (create and recurring spawn; a new task's first dates are not changes),
+The server logs events on the task (`logEvent` in `go/tasklogic.go`): `created` (create and recurring spawn; a new task's first dates are not changes),
 `start`/`due` whenever the date actually changes (`applyTaskFields`),
 `done` (also for a keep task, whose cleared start date is part of it),
 `reopened`,

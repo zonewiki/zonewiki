@@ -19,17 +19,18 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"zonewiki/internal/taskfiles"
 	"zonewiki/internal/taskmodel"
 )
 
 // pagesMu: one write to pages at a time, from the reads it decides on (does
 // the page exist, has it changed since the editor loaded it, what text does
-// an edit start from) to its commit, as tasksMu is for the task files: two
+// an edit start from) to its commit, as taskFiles' lock is for the task files: two
 // writes to one page at once would otherwise lose one of them. The doors
 // take it, not the operations, as a route's checks before its operation
 // count too: the routes that write pages through writesPages, the MCP tools
 // that do in callMCPTool (toolWritesPages in mcpToolTable). Go's mutex isn't reentrant: code
-// under it never takes it again. Lock order: pagesMu, then tasksMu (a
+// under it never takes it again. Lock order: pagesMu, then taskFiles' lock (a
 // rename's links in tasks), then commitMu.
 var pagesMu sync.Mutex
 
@@ -407,16 +408,16 @@ func checkTagRename(user, tag, newName string, merge bool) (*tagPlan, error) {
 		tasks []*Task
 	}
 	var files []fileTasks
-	tasksMu.Lock()
-	for _, f := range taskFilesOf(everyOwner()) {
-		tasks, err := readListStrict(f.path)
+	taskFiles.Lock()
+	for _, f := range taskFiles.Files(taskFiles.EveryOwner()) {
+		tasks, err := taskfiles.ReadStrict(f.Path)
 		if err != nil {
-			tasksMu.Unlock()
+			taskFiles.Unlock()
 			return nil, err
 		}
-		files = append(files, fileTasks{f.owner, tasks})
+		files = append(files, fileTasks{f.Owner, tasks})
 	}
-	tasksMu.Unlock()
+	taskFiles.Unlock()
 	seen, shared, taken := false, false, false
 	for _, f := range files {
 		visible := f.owner == "" || f.owner == user
@@ -453,7 +454,7 @@ func checkTagRename(user, tag, newName string, merge bool) (*tagPlan, error) {
 		plan.owners = []string{user}
 	}
 	if shared {
-		plan.owners = everyOwner()
+		plan.owners = taskFiles.EveryOwner()
 	}
 	plan.merges = taken && strings.ToLower(name) != old
 	if plan.merges && !merge {
@@ -503,16 +504,16 @@ func renameTagOp(user, tag, newName string, merge bool, suffix string) (*tagRena
 	if err != nil {
 		return nil, err
 	}
-	tasksMu.Lock()
-	defer tasksMu.Unlock()
+	taskFiles.Lock()
+	defer taskFiles.Unlock()
 	done := &tagRename{Name: plan.name, Merged: plan.merges, Pages: plan.visibleSlugs(user)}
 	type taskWrite struct {
 		path  string
 		tasks []*Task
 	}
 	var writes []taskWrite
-	for _, f := range taskFilesOf(plan.owners) {
-		tasks, err := readListStrict(f.path)
+	for _, f := range taskFiles.Files(plan.owners) {
+		tasks, err := taskfiles.ReadStrict(f.Path)
 		if err != nil {
 			return nil, err
 		}
@@ -523,8 +524,8 @@ func renameTagOp(user, tag, newName string, merge bool, suffix string) (*tagRena
 			}
 		}
 		if n > 0 {
-			writes = append(writes, taskWrite{f.path, tasks})
-			if f.owner == "" || f.owner == user {
+			writes = append(writes, taskWrite{f.Path, tasks})
+			if f.Owner == "" || f.Owner == user {
 				done.Tasks += n
 			}
 		}
@@ -548,7 +549,7 @@ func renameTagOp(user, tag, newName string, merge bool, suffix string) (*tagRena
 		if failed != nil {
 			break
 		}
-		if failed = writeTasks(w.path, w.tasks); failed == nil {
+		if failed = taskfiles.Write(w.path, w.tasks); failed == nil {
 			written = append(written, w.path)
 		}
 	}

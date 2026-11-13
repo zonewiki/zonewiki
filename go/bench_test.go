@@ -49,7 +49,7 @@ func benchWiki(b *testing.B, pages, open, completed int) http.Handler {
 		}
 		return out
 	}
-	for path, tasks := range map[string][]*Task{tasksFile(""): mk(open, false), completedPath(""): mk(completed, true)} {
+	for path, tasks := range map[string][]*Task{taskFiles.OpenPath(""): mk(open, false), taskFiles.CompletedPath(""): mk(completed, true)} {
 		text, err := taskmodel.Encode(tasks)
 		if err != nil {
 			b.Fatal(err)

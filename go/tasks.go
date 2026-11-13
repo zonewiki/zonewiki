@@ -140,19 +140,19 @@ func createTask(user string, data jsonObj, message string) (*Task, error) {
 	if strings.TrimSpace(title) == "" {
 		return nil, refuse("Title cannot be empty")
 	}
-	tasksMu.Lock()
-	defer tasksMu.Unlock()
+	taskFiles.Lock()
+	defer taskFiles.Unlock()
 	t := newTask()
 	if err := applyTaskFields(user, t, data, true); err != nil {
 		return nil, err
 	}
 	t.History = []HistoryEntry{} // its first dates are not changes
 	logEvent(t, user, "created", "", "")
-	active, err := readTasksStrict(user)
+	active, err := taskFiles.ReadOpenStrict(user)
 	if err != nil {
 		return nil, err
 	}
-	return t, writeTasksLocked(user, append(active, t), message)
+	return t, taskFiles.WriteOpenLocked(user, append(active, t), message)
 }
 
 // applyTaskFields applies the field changes in data (not completion); fresh:
@@ -369,7 +369,7 @@ func firstNonEmpty(a, b string) string {
 // findForWriteLocked: the open tasks and every completed task user sees,
 // and the one with id (404 when none of them has it).
 func findForWriteLocked(user, id string) (active, completed []*Task, task *Task, err error) {
-	if active, completed, err = readForWriteLocked(user); err != nil {
+	if active, completed, err = taskFiles.ReadForWriteLocked(user); err != nil {
 		return
 	}
 	for _, t := range slices.Concat(active, completed) {
@@ -397,8 +397,8 @@ func withoutIDs(tasks []*Task, ids map[string]bool) []*Task {
 // reopen) from data as the API takes it; suffix follows the commit message
 // (the MCP tools' summary).
 func updateTask(user, id string, data jsonObj, suffix string) (*Task, error) {
-	tasksMu.Lock()
-	defer tasksMu.Unlock()
+	taskFiles.Lock()
+	defer taskFiles.Unlock()
 	return updateTaskLocked(user, id, data, suffix)
 }
 
@@ -484,13 +484,13 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 			msg = "Uncomplete task"
 		}
 	}
-	return t, writeBothLocked(user, active, completed, msg+suffix)
+	return t, taskFiles.WriteBothLocked(user, active, completed, msg+suffix)
 }
 
 // toggleNoteCheck ticks or unticks the Nth checkbox of a task's notes.
 func toggleNoteCheck(user, id string, idx int) (*Task, error) {
-	tasksMu.Lock()
-	defer tasksMu.Unlock()
+	taskFiles.Lock()
+	defer taskFiles.Unlock()
 	_, _, t, err := findForWriteLocked(user, id)
 	if err != nil {
 		return nil, err
@@ -511,15 +511,15 @@ func addComment(user, id string, text string, message string) (*Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	tasksMu.Lock()
-	defer tasksMu.Unlock()
+	taskFiles.Lock()
+	defer taskFiles.Unlock()
 	active, completed, t, err := findForWriteLocked(user, id)
 	if err != nil {
 		return nil, err
 	}
 	t.Comments = append(cleanCommentList(t.Comments),
 		Comment{ID: newCommentID(), At: now().Format("2006-01-02T15:04"), By: user, Text: s})
-	return t, writeBothLocked(user, active, completed, message)
+	return t, taskFiles.WriteBothLocked(user, active, completed, message)
 }
 
 // taskComment: the index of a task's comment by id (its comments cleaned
@@ -535,13 +535,13 @@ func taskComment(t *Task, cid string) (int, error) {
 }
 
 func deleteTask(user, id, message string) error {
-	tasksMu.Lock()
-	defer tasksMu.Unlock()
+	taskFiles.Lock()
+	defer taskFiles.Unlock()
 	return deleteTasksLocked(user, map[string]bool{id: true}, message)
 }
 
 func deleteTasksLocked(user string, ids map[string]bool, message string) error {
-	active, completed, err := readForWriteLocked(user)
+	active, completed, err := taskFiles.ReadForWriteLocked(user)
 	if err != nil {
 		return err
 	}
@@ -550,7 +550,7 @@ func deleteTasksLocked(user string, ids map[string]bool, message string) error {
 			rememberBy(t) // the undo restores it
 		}
 	}
-	return writeBothLocked(user, withoutIDs(active, ids), withoutIDs(completed, ids), message)
+	return taskFiles.WriteBothLocked(user, withoutIDs(active, ids), withoutIDs(completed, ids), message)
 }
 
 func idSet(ids []string) map[string]bool {
@@ -583,9 +583,9 @@ func tagTasks(user string, ids, add, remove []string, message string) ([]*Task, 
 	if len(set) == 0 || len(addTags) == 0 && len(removeTags) == 0 {
 		return nil, refuse("Give task ids and tags to add or remove")
 	}
-	tasksMu.Lock()
-	defer tasksMu.Unlock()
-	active, completed, err := readForWriteLocked(user)
+	taskFiles.Lock()
+	defer taskFiles.Unlock()
+	active, completed, err := taskFiles.ReadForWriteLocked(user)
 	if err != nil {
 		return nil, err
 	}
@@ -597,5 +597,5 @@ func tagTasks(user string, ids, add, remove []string, message string) ([]*Task, 
 		t.Tags = retag(t.Tags, addTags, removeTags)
 		updated = append(updated, t)
 	}
-	return updated, writeBothLocked(user, active, completed, message)
+	return updated, taskFiles.WriteBothLocked(user, active, completed, message)
 }

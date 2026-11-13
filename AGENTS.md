@@ -134,7 +134,9 @@ Auth is optional (a password, or users; see Key Constraints).
 │   ├── tasks.go            # Task writes (create, change, comment, tag, delete), as functions the routes and the MCP tools share
 │   ├── tasksapi.go         # The /api/tasks routes
 │   ├── tasksembed.go       # The [[tasks:]] embed: its HTML, its settings dialog, the counts the Tasks links show
-│   ├── taskstore.go        # Tasks on disk: _tasks/ files (users' private ones in private/<user>/_tasks/), lock, recurrence, history, comments, backlinks, search docs
+│   ├── tasklogic.go        # What Zone does with tasks beyond keeping them: a series' next occurrence, completing, history, comments, backlinks, [[task:…]] references; taskFiles, the store, wired to the wiki here
+│   ├── internal/taskfiles/ # Package taskfiles, no globals: the tasks on disk: _tasks/ files (users' private ones in private/<user>/_tasks/) read and written under one lock, filed by owner and year; a Store is handed the wiki's folder, its users, the clock, who may write and how a write is committed
+│   ├── internal/atomicfile/ # Package atomicfile: a file written so that no reader sees half of it (pages, task files)
 │   ├── taskby.go           # Comments and history a client sends whole: nobody writes under another's name
 │   ├── tasksyntax.go       # The page syntax of tasks: [[tasks: …]] params, [[task:…]], tag rules, date words
 │   ├── internal/taskmodel/ # Package taskmodel, no globals: a task (Task): its fields, read leniently from a file, written in a fixed key order; tags as the filter matches them; a series' dates (recurrence.go). The API's form of a task (with "private") is the server's (apiTask)
@@ -267,7 +269,7 @@ and commit the new pins.
 **What Zone ships keeps its license notices**: a new or updated Go module, Go release or model changes `THIRD_PARTY_LICENSES`, a new vendored library brings its `LICENSE`; `tests/test_image.py` checks.
 
 - **One process.** The binary serves with `net/http` (at most 100 connections, idle ones closed after 60s).
-  Zone must stay a single process: the page and task locks (`pagesMu`, `tasksMu`), the page/search caches, the throttles and the semantic-search worker live in its memory, so several processes on one wiki would lose page and task writes.
+  Zone must stay a single process: the page and task locks (`pagesMu`, `taskFiles`' lock), the page/search caches, the throttles and the semantic-search worker live in its memory, so several processes on one wiki would lose page and task writes.
 - `highlight.js` 11.9.0 is vendored in `public/vendor/highlight/`, committed as downloaded: no CDN, no npm.
   Pages load nothing from other hosts.
   To update it, replace the three files with a newer release's.
@@ -299,7 +301,7 @@ and commit the new pins.
     Signing out ends the session wherever a copy of its cookie is (`go/signout.go`: its id in `.zone/signed-out`); renew a session with `renewSession`, which keeps the id, never with `setSession`.
   - Users instead (`[user …]` in `.zone/config`): a login per user, passwords only as hashes (`docs/spec/users.md`); the session names its user, `userOf(r)` / `rq.user` give it, and a write passes it to `gitCommit(user, …)` as the commit's author.
   - **Private pages and tasks** (`private/<user>/`, tasks in `private/<user>/_tasks/`, with users): every route and tool that shows, lists or changes a page asks `go/access.go` (`canSee`, `canWrite`, `canSeePath`; `hiddenPage`/`refusePage` in the routes);
-    every read of tasks takes the user (`readTasks(user)` …, shared + their own files), and what holds every user's tasks (the search index) filters with `canSeeTask`.
+    every read of tasks takes the user (`taskFiles.Open(user)` …, shared + their own files), and what holds every user's tasks (the search index) filters with `canSeeTask`.
     A new route gets a probe in `tests/test_privacy.py`, which fails until it has one.
     A path handed to git names one file, never a pattern (`GIT_LITERAL_PATHSPECS` in package `gitrepo`'s environment): don't turn that off for a call that takes a page's name.
   - **Guides are an admin's** (with users): `canWrite` is false for anyone else on `wiki-guide`, a folder's `AGENTS.md`/`CLAUDE.md` and the pages they pull in (`adminsOnly`, Guides in `docs/spec/users.md`): every user's assistant follows them.
@@ -335,8 +337,8 @@ and commit the new pins.
   and the routes and MCP tools only parse their input and turn the result or the refusal into their answer.
   A new write gets an operation there and a test through each door in `tests/test_page_writes.py`.
   **Page writes run one at a time** (`pagesMu`), from the reads they decide on to their commit: the doors take it, not the operations (a route that writes pages is registered as `writesPages(handler)`, an MCP tool that does says `toolWritesPages` in `mcpToolTable`);
-  code under it never takes it again (lock order `pagesMu`, `tasksMu`, `commitMu`).
-  Pages are written atomically (`writeText` → `atomicWrite`: a link written through, a new file 0666 less the umask).
+  code under it never takes it again (lock order `pagesMu`, the task files' lock (`taskFiles.Lock`), `commitMu`).
+  Pages are written atomically (`writeText` → `atomicfile.Write`: a link written through, a new file 0666 less the umask).
   `gitCommit` commits only the paths it is given (not what `.gitignore` leaves out) and returns an error, which a write returns (`notCommitted`; a `keepPending` that fails stops the write); links a move couldn't re-point are no failure (`linksLeft`: logged, the MCP tools say so).
 - `index.md` is the home page and must always exist (Zone creates it at startup when missing).
   It can't be deleted or renamed via the UI or MCP.
