@@ -405,12 +405,13 @@ Each with a dark-mode value.
   **All** (`selectAllVisible`; disabled when every task shown is selected),
   **Tag…** (the bulk tag dialog),
   **Today** (start them today, `startToday`: one `batch-update` for the open ones not starting today, one undo putting back each one's start date and history; today is never after a deadline still to come, and starting an overdue task today is the catch-up case, so no deadline question),
+  **Unplan** (clear their start dates, `startOn(ids, null)`, as the **0** key: one `batch-update` for the open ones that have one, one undo putting them back; shown while an open selected task has a start date, `anyPlanned`),
   **Done** (`completeMany`, as Space; **Reopen** when every selected task is completed, which also hides Today),
   **Delete…** and ✕ (clear).
   Toasts move up above it.
   The **⋯ menu** of a card in the selection (its button, a right-click, which then keeps the selection, or Shift+F10) offers the same for all of them, titled "N tasks" (`runSelectionAction`).
   With several task lists on a page only the active one's bar shows (`claimInstance`).
-  At ≤640px the bar spans the bottom edge in place of the phone tab bar (hidden while it shows): "N selected", All and ✕ on top, the four actions as a row of equal buttons under them, ≥44px tall; the page end and toasts keep clear of it.
+  At ≤640px the bar spans the bottom edge in place of the phone tab bar (hidden while it shows): "N selected", All and ✕ on top, the actions as a row of equal buttons under them, ≥44px tall; the page end and toasts keep clear of it.
 - **Bulk tags** (`openBulkTagModal`, `.bulk-tag-modal`; **t**, or **T** to remove, on the selected tasks): the dialog lists every tag the selection carries (`TasksCore.selectionTags`, case ignored, most common first),
   each a three-state box (`role="checkbox"`, `aria-checked`): on every task ✓,
   on some – ("2 of 3", left as it is),

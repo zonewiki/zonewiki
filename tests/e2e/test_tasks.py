@@ -1121,6 +1121,39 @@ def test_selection_bar_today_with_undo(page, wiki):
     assert [e["event"] for e in task_by_title(page, "Glue")["history"]] == ["created", "start"]
 
 
+def test_selection_bar_unplan_with_undo(page, wiki):
+    seed_four(page)
+    later = (date.today() + timedelta(days=5)).isoformat()
+    today = date.today().isoformat()
+    page.request.put(f"/api/tasks/{task_by_title(page, 'Glue')['id']}", data={"start_date": later})
+    page.request.put(f"/api/tasks/{task_by_title(page, 'Nuts')['id']}", data={"start_date": today})
+    page.reload()
+    unplan = page.locator("#task-selbar [data-sel='unplan']")
+    # Nothing planned among the selected: nothing to unplan.
+    card(page, "Saw").locator(".task-title").click()
+    card(page, "Bolts").locator(".task-title").click(modifiers=["Control"])
+    expect(page.locator("#task-selbar")).to_be_visible()
+    expect(unplan).to_be_hidden()
+    card(page, "Saw").locator(".task-title").click()
+    card(page, "Nuts").locator(".task-title").click(modifiers=["Shift"])
+    expect(unplan).to_be_visible()
+    unplan.click()
+    toast = page.locator(".task-undo-toast")
+    expect(toast).to_contain_text("2 tasks unplanned")
+    wait_for_field(page, "Glue", "start_date", None)
+    wait_for_field(page, "Nuts", "start_date", None)
+    assert selected_titles(page) == ["Saw", "Glue", "Nuts"]
+    expect(unplan).to_be_hidden()
+    toast.locator(".task-undo-btn").click()
+    wait_for_field(page, "Glue", "start_date", later)
+    wait_for_field(page, "Nuts", "start_date", today)
+    # The menu of a selected card offers it too.
+    card(page, "Glue").locator(".task-title").click(button="right")
+    page.locator(".task-menu").get_by_role("menuitem", name="Unplan").click()
+    wait_for_field(page, "Glue", "start_date", None)
+    wait_for_field(page, "Nuts", "start_date", None)
+
+
 def test_selection_bar_done_and_toast_above_it(page, wiki):
     seed_four(page)
     card(page, "Saw").locator(".task-title").click()

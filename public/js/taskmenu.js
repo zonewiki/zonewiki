@@ -34,6 +34,7 @@ function openTaskMenu(id, anchor, at) {
     const items = [
       ['tag', 'Tag…'],
       !allDone && ['today', 'Start today'],
+      app.anyPlanned() && ['unplan', 'Unplan'],
       ['done', allDone ? 'Reopen' : 'Done'],
       ['delete', 'Delete…', 'danger'],
     ].filter(Boolean);

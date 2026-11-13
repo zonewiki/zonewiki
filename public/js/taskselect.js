@@ -248,7 +248,8 @@ window.addEventListener('popstate', () => { if (st.selectMode) exitSelectMode();
 
 // The selection bar: while several tasks are selected (on a page with
 // several task lists, only the active one's), how many, and what to do to all.
-// Today goes when every selected task is completed, and Done says Reopen.
+// Today goes when every selected task is completed, and Done says Reopen;
+// Unplan shows while an open selected task has a start date.
 function syncSelBar() {
   if (!app.selBar) return;
   const show = (st.selectMode || st.selectedIds.size > 1) &&
@@ -256,6 +257,7 @@ function syncSelBar() {
   app.selBar.hidden = !show;
   if (!show) return;
   const allDone = st.tasks.filter(t => st.selectedIds.has(t.id)).every(t => t.completed_at);
+  app.selBar.querySelector('[data-sel="unplan"]').hidden = !anyPlanned();
   app.selBar.querySelector('.tasks-selbar-count').textContent =
     st.selectedIds.size ? `${st.selectedIds.size} selected` : 'Tap tasks to select';
   app.selBar.querySelectorAll('.tasks-selbar-actions .btn').forEach(b => { b.disabled = !st.selectedIds.size; });
@@ -265,6 +267,10 @@ function syncSelBar() {
   done.title = allDone ? 'Reopen the selected tasks (Space)' : 'Complete the selected tasks (Space)';
   app.selBar.querySelector('[data-sel="all"]').disabled =
     visibleItems().every(el => st.selectedIds.has(el.dataset.id));
+}
+// An open selected task has a start date: there is something to unplan.
+function anyPlanned() {
+  return st.tasks.some(t => st.selectedIds.has(t.id) && !t.completed_at && t.start_date);
 }
 app.selBar?.addEventListener('click', e => {
   const action = e.target.closest('[data-sel]')?.dataset.sel;
@@ -279,6 +285,7 @@ function runSelectionAction(action) {
     case 'clear':  exitSelectMode(); break;
     case 'tag':    if (ids.length) openBulkTagModal(ids); break;
     case 'today':  startToday(ids); break;
+    case 'unplan': startOn(ids, null); break;
     case 'done':
       if (ids.length) mayComplete(ids).then(ok => { if (ok) { exitSelectMode(); completeMany(ids); } });
       break;
@@ -401,5 +408,5 @@ function visibleItems() {
   return Array.from(app.listEl.querySelectorAll('.task-item'));
 }
 
-return { openBulkTagModal, updateSelectionClasses, inSelection, toggleSelection, selectAllVisible, clearSelection, enterSelectMode, exitSelectMode, syncSelBar, mayComplete, setImportance, runSelectionAction, startOn, completeMany, setSelected, extendSelection, visibleItems };
+return { openBulkTagModal, updateSelectionClasses, inSelection, toggleSelection, selectAllVisible, clearSelection, anyPlanned, enterSelectMode, exitSelectMode, syncSelBar, mayComplete, setImportance, runSelectionAction, startOn, completeMany, setSelected, extendSelection, visibleItems };
 }
