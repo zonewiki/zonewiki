@@ -35,7 +35,7 @@
       <button type="button" class="btn" data-sel="today" title="Start the selected tasks today">Today</button>
       <button type="button" class="btn" data-sel="unplan" title="Clear the selected tasks' start dates (0)">Unplan</button>
       <button type="button" class="btn" data-sel="done" title="Complete the selected tasks (Space)">Done</button>
-      <button type="button" class="btn danger" data-sel="delete" title="Delete the selected tasks (Delete)">Delete…</button>
+      <button type="button" class="btn" data-sel="wontdo" title="Close the selected tasks undone (Delete)">Won't do</button>
     </span>
     <button type="button" class="btn tasks-selbar-close" data-sel="clear" aria-label="Clear the selection" title="Clear the selection (Esc)">✕</button>
   </div>
@@ -154,17 +154,10 @@
     <div class="task-edit-actions">
       <button type="submit" class="btn btn-primary">Save</button>
       <button type="button" class="btn" id="task-edit-cancel{{.Sfx}}">Cancel</button>
-      <button type="button" class="btn btn-danger" id="task-edit-delete{{.Sfx}}" style="display:none">Delete</button>
+      {{- /* Close the task undone (js/taskmodal.js): an open task's only. */}}
+      <button type="button" class="btn task-edit-wontdo" id="task-edit-wontdo{{.Sfx}}" title="Close the task undone" style="display:none">Won't do</button>
     </div>
   </form>
-</dialog>
-<dialog id="task-delete-modal{{.Sfx}}" class="task-edit-modal modal">
-  <div class="modal-label">Delete task?</div>
-  <div id="task-delete-title{{.Sfx}}" class="task-delete-title"></div>
-  <div class="task-edit-actions">
-    <button type="button" class="btn btn-danger" id="task-delete-confirm{{.Sfx}}">Delete</button>
-    <button type="button" class="btn" id="task-delete-cancel{{.Sfx}}">Cancel</button>
-  </div>
 </dialog>
 {{- /* Done with subtasks (checklist items in the notes) still open? (confirmOpenSubtasks, js/taskmenu.js) */}}
 <dialog id="task-subtasks-modal{{.Sfx}}" class="task-edit-modal modal">

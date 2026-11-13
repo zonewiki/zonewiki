@@ -37,7 +37,7 @@ document.addEventListener('keydown', async e => {
 
   // Ctrl+Z undo — works everywhere except inside the edit modal
   if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey && st.pendingUndo) {
-    if (app.modal.open || app.deleteModal.open || app.deadlineModal.open) return;
+    if (app.modal.open || app.deadlineModal.open) return;
     const focus = document.activeElement;
     if (focus && focus.closest('textarea, [contenteditable]')) return;
     e.preventDefault();
@@ -45,7 +45,7 @@ document.addEventListener('keydown', async e => {
     return;
   }
 
-  if (app.modal.open || app.deleteModal.open || document.querySelector('dialog[open].modal, dialog[open].task-settings-app.modal')) return;
+  if (app.modal.open || document.querySelector('dialog[open].modal, dialog[open].task-settings-app.modal')) return;
   const focus = document.activeElement;
 
   // '/' focuses the filter field; '#' focuses it and starts a tag word
@@ -213,16 +213,19 @@ document.addEventListener('keydown', async e => {
     e.preventDefault();
     app.openEditModal(st.selectedId);
   } else if (e.key === 'Delete' && st.selectedIds.size) {
+    // Delete closes the selected open tasks undone (won't do); a task is
+    // never deleted. Closed ones stay as they are.
     e.preventDefault();
-    await app.deleteWithUndo([...st.selectedIds], () => {
-      // Move the selection to the next surviving card
-      const next = items.find(el => !st.selectedIds.has(el.dataset.id) &&
-                     items.indexOf(el) > currentIdx)
-                || items.find(el => !st.selectedIds.has(el.dataset.id));
-      st.selectedId = next?.dataset.id || null;
-      st.selectedIds = new Set(st.selectedId ? [st.selectedId] : []);
-      st.anchorId = st.selectedId;
-    });
+    const ids = [...st.selectedIds].filter(id => !st.tasks.find(t => t.id === id)?.completed_at);
+    if (!ids.length) return;
+    // Move the selection to the next surviving card
+    const next = items.find(el => !st.selectedIds.has(el.dataset.id) &&
+                   items.indexOf(el) > currentIdx)
+              || items.find(el => !st.selectedIds.has(el.dataset.id));
+    st.selectedId = next?.dataset.id || null;
+    st.selectedIds = new Set(st.selectedId ? [st.selectedId] : []);
+    st.anchorId = st.selectedId;
+    await app.wontDoMany(ids);
   } else if ((e.key === 't' || e.key === 'T') && st.selectedIds.size) {
     e.preventDefault();
     const ids = [...st.selectedIds];

@@ -740,7 +740,6 @@ div.task-card-comment > .task-comment-when { display: block; }
 .tasks-selbar .btn { white-space: nowrap; }
 .tasks-selbar .btn[hidden] { display: none; }
 .tasks-selbar .btn:disabled { opacity: .45; cursor: default; }
-.tasks-selbar .btn.danger { color: var(--link-missing); }
 .tasks-selbar-close { padding-inline: .6rem; }
 body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 /* Selection mode (.tasks-selecting): each card's checkbox becomes a round
@@ -1121,13 +1120,7 @@ ul.task-comment-list { list-style: none; margin: .3rem 0 0; padding: 0; font-siz
   padding: .75rem 0 1.5rem; background: var(--surface);
   border-top: 1px solid var(--border);
 }
-.task-edit-actions .btn-danger { margin-left: auto; background: #fbeeee; color: #a33232; border: none; }
-.task-edit-actions .btn-danger:hover { background: #f4dcdc; color: #a33232; }
-
-@media screen and (prefers-color-scheme: dark) {
-  .task-edit-actions .btn-danger { background: #2f1c1c; color: #ec9a9a; }
-  .task-edit-actions .btn-danger:hover { background: #3d2424; color: #ec9a9a; }
-}
+.task-edit-actions .task-edit-wontdo { margin-left: auto; }
 
 .task-delete-title {
   font-weight: 600; font-size: .95rem; margin: .25rem 0 1rem;

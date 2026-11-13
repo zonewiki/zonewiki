@@ -102,7 +102,7 @@ def test_menu_is_a_bottom_sheet_with_context_items(phone):
     menu = open_menu(phone, "Weekly review")
     items = menu.get_by_role("menuitem")
     expect(items).to_have_text(["Edit…", "Start today", "Start tomorrow", "Pick start date…",
-                                "Skip this occurrence", "Importance…", "Won't do", "Copy link", "Select several", "Delete…"])
+                                "Skip this occurrence", "Importance…", "Won't do", "Copy link", "Select several"])
     box = menu.bounding_box()
     assert box["x"] == 0 and abs(box["y"] + box["height"] - 844) < 1, box
     assert box["width"] == 390
@@ -138,21 +138,13 @@ def test_menu_skip_and_wont_do(phone):
     wait_until(phone, lambda: "Water plants" not in tasks_by_title(phone))
 
 
-def test_menu_delete_confirms_and_undoes(phone):
-    open_menu(phone, "Water plants").get_by_role("menuitem", name="Delete…").tap()
-    phone.locator("#task-delete-confirm").tap()
-    wait_until(phone, lambda: "Water plants" not in tasks_by_title(phone))
-    phone.locator(".task-undo-btn").tap()
-    wait_until(phone, lambda: "Water plants" in tasks_by_title(phone))
-
-
 def test_completed_task_menu(phone):
     t = tasks_by_title(phone)["Water plants"]
     phone.request.put(f"/api/tasks/{t['id']}", data={"completed": True})
     phone.reload()
     open_tab(phone, "completed")
     menu = open_menu(phone, "Water plants")
-    expect(menu.get_by_role("menuitem")).to_have_text(["Edit…", "Reopen", "Copy link", "Select several", "Delete…"])
+    expect(menu.get_by_role("menuitem")).to_have_text(["Edit…", "Reopen", "Copy link", "Select several"])
     menu.get_by_role("menuitem", name="Reopen").tap()
     wait_until(phone, lambda: "Water plants" in tasks_by_title(phone))
 

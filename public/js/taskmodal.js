@@ -447,7 +447,7 @@ function openEditModal(taskId, opts) {
   if (recFromCb) recFromCb.checked = task?.recurrence?.from === 'completion';
   syncRecFields();
   syncTarget();
-  app.deleteBtn.style.display = task ? '' : 'none';
+  app.wontDoBtn.style.display = task && !task.completed_at ? '' : 'none';
   syncDates('open');
   app.modal.showModal();
   if (task && opts?.focusComment) openCommentBox();
@@ -656,11 +656,12 @@ app.form.addEventListener('submit', async e => {
   }
 });
 
-app.deleteBtn.addEventListener('click', () => {
+// Won't do: the task is closed undone, what was typed in the modal dropped.
+app.wontDoBtn.addEventListener('click', () => {
   const id = document.getElementById('task-edit-id' + app.sfx).value;
   if (!id) return;
   app.modal.close();
-  app.deleteWithUndo([id]);
+  app.markWontDo(id);
 });
 
 return { cleanTag, chipsOnSeparators, renderComments, openEditModal };

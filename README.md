@@ -425,7 +425,7 @@ Also know this:
   can read them and sign in as you. That's fine on localhost; anywhere else,
   use HTTPS or a VPN.
 - **MCP clients can write.** Whoever has an MCP token can create, change,
-  rename and delete pages and tasks, password or not (with users, whatever
+  rename and delete pages, and change and close tasks, password or not (with users, whatever
   the token's user may). Keep the token secret and give it only to clients
   you trust.
 - **Pages can carry instructions.** An AI assistant reads your pages, and

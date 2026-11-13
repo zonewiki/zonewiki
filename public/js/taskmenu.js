@@ -1,6 +1,6 @@
 // A task app's menus and confirmations (tasks.js initTasksInstance): a
 // card's ⋯ menu (every card action in one place, by tap too), a Plan
-// header's menu of its due tasks, and the Delete and deadline dialogs.
+// header's menu of its due tasks, and the subtasks and deadline dialogs.
 // What it uses of the app comes in app (its state in app.st).
 import { copyText } from './util.js';
 import { openDatePicker } from './datepicker.js';
@@ -36,7 +36,7 @@ function openTaskMenu(id, anchor, at) {
       !allDone && ['today', 'Start today'],
       app.anyPlanned() && ['unplan', 'Unplan'],
       ['done', allDone ? 'Reopen' : 'Done'],
-      ['delete', 'Delete…', 'danger'],
+      !allDone && ['wontdo', "Won't do"],
     ].filter(Boolean);
     showMenu(`${st.selectedIds.size} tasks`, items, action => app.runSelectionAction(action), anchor, at);
     return;
@@ -48,7 +48,6 @@ function openTaskMenu(id, anchor, at) {
     ['reopen', 'Reopen'],
     ['copylink', 'Copy link'],
     ['select', 'Select several'],
-    ['delete', 'Delete…', 'danger'],
   ] : [
     ['edit', 'Edit…'],
     ['today', 'Start today'],
@@ -60,7 +59,6 @@ function openTaskMenu(id, anchor, at) {
     ['wontdo', "Won't do"],
     ['copylink', 'Copy link'],
     ['select', 'Select several'],
-    ['delete', 'Delete…', 'danger'],
   ].filter(Boolean);
   showMenu(plainTitle(task.title), items, action => runTaskAction(task, action, anchor), anchor, at);
 }
@@ -145,7 +143,6 @@ function runTaskAction(task, action, anchor) {
       app.updateTask(id, { completed: false });
       app.showUndo('Task reopened', () => app.completeTasks([id], true));
       break;
-    case 'delete':   app.deleteWithUndo([id]); break;
     case 'select':   app.enterSelectMode(id); break;
     case 'copylink':
       copyText(location.origin + taskHref(task)).then(ok => showNotice(ok ? 'Link copied' : 'Could not copy the link'));
@@ -171,17 +168,6 @@ async function postReorder(body) {
     body: JSON.stringify(body),
   });
   app.refreshOtherInstances(app.instanceId);
-}
-
-// ── Delete confirmation dialog ─────────────────────────────────────────────
-
-app.deleteCancelBtn?.addEventListener('click', () => app.deleteModal.close());
-
-function confirmDelete(title, count = 1) {
-  const labelEl = app.deleteModal.querySelector('.modal-label');
-  if (labelEl) labelEl.textContent = count > 1 ? `Delete ${count} tasks?` : 'Delete task?';
-  app.deleteTitleEl.textContent = count > 1 ? '' : title;
-  return confirmModal(app.deleteModal, app.deleteConfirmBtn, app.deleteCancelBtn);
 }
 
 // A start date after the task's deadline: the task would start after it is
@@ -240,5 +226,5 @@ function confirmModal(dialog, okBtn, cancelBtn) {
   });
 }
 
-return { openTaskMenu, headerTasksMenu, showMenu, postReorder, confirmDelete, confirmDeadlineMove, confirmOpenSubtasks };
+return { openTaskMenu, headerTasksMenu, showMenu, postReorder, confirmDeadlineMove, confirmOpenSubtasks };
 }

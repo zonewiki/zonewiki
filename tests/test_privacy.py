@@ -742,7 +742,7 @@ MCP_WRITES = [
     ("file_note", {"slug": "{bobs}", "name": "x", "folder": "private/alice"}),
     ("create_task", {"title": "Bob's", "private": True}),
     ("update_task", {"id": TASK_ID[:8], "title": "Bob was here"}),
-    ("update_task", {"id": TASK_ID, "status": "deleted"}),
+    ("update_task", {"id": TASK_ID, "status": "wont_do"}),
     ("update_task", {"id": DONE_ID, "status": "open", "comment": "Bob's"}),
     ("update_task", {"ids": [TASK_ID, OLD_ID], "add_tags": ["bob"]}),
     ("upload_file", {"filename": "bobs.txt", "text": "Bob was here", "page": DIARY}),          # not into her folder

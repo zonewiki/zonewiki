@@ -177,7 +177,7 @@ MCP_WRITES = [
     ("rename_task_tag", {"tag": "work", "new_tag": "job"}),
     ("create_task", {"title": "Carol's", "private": False}),
     ("update_task", {"id": "{task}", "title": "Carol was here"}),
-    ("update_task", {"id": "{task}", "status": "deleted"}),
+    ("update_task", {"id": "{task}", "status": "wont_do"}),
     ("update_task", {"id": "{done}", "status": "open", "comment": "Carol's"}),
     ("update_task", {"ids": ["{task}"], "add_tags": ["c"]}),
     ("write_page", {"slug": "private/carol/x", "content": "# X\n"}),

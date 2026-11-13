@@ -98,16 +98,12 @@ const completedLink = document.getElementById('task-completed-link' + sfx);
 const modal = document.getElementById('task-edit-modal' + sfx);
 const form = document.getElementById('task-edit-form' + sfx);
 const cancelBtn = document.getElementById('task-edit-cancel' + sfx);
-const deleteBtn = document.getElementById('task-edit-delete' + sfx);
+const wontDoBtn = document.getElementById('task-edit-wontdo' + sfx);
 const recTypeSelect = document.getElementById('task-edit-rec-type' + sfx);
 const keepCb = document.getElementById('task-edit-keep' + sfx);
 // With users only: the task is the user's alone.
 const privateCb = document.getElementById('task-edit-private' + sfx);
 const privateNote = document.getElementById('task-edit-private-note' + sfx);
-const deleteModal = document.getElementById('task-delete-modal' + sfx);
-const deleteConfirmBtn = document.getElementById('task-delete-confirm' + sfx);
-const deleteCancelBtn = document.getElementById('task-delete-cancel' + sfx);
-const deleteTitleEl = document.getElementById('task-delete-title' + sfx);
 const deadlineModal = document.getElementById('task-deadline-modal' + sfx);
 const deadlineTextEl = document.getElementById('task-deadline-text' + sfx);
 const selBar = document.getElementById('task-selbar' + sfx);
@@ -120,9 +116,8 @@ if (!listEl) return;
 // functions, and as getters what is set further down or changes.
 const app = {
   st, appEl,
-  listEl, sfx, instanceId, cancelBtn, deleteModal, deleteConfirmBtn, deleteCancelBtn,
-  deleteTitleEl, deadlineModal, deadlineTextEl, selBar, tasksInstances,
-  addBtn, modal, form, deleteBtn, recTypeSelect, keepCb, privateCb, privateNote,
+  listEl, sfx, instanceId, cancelBtn, deadlineModal, deadlineTextEl, selBar, tasksInstances,
+  addBtn, modal, form, wontDoBtn, recTypeSelect, keepCb, privateCb, privateNote,
 
   // its functions
   boardDivider, clearBoardDropOver, dropOnBucket, planOnDay,

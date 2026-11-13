@@ -73,7 +73,7 @@ There is no polling.
   Completed tasks from earlier years live in `completed-YYYY.json` (only that exact name is an archive).
   `atomicfile.Write` creates the folder, so a new wiki gets it on the first write.
   Write routes read every completed file (`readCompletedAllStrict`) and `writeCompleted` files each task by its completion year, writing only files whose content changed; startup does the same split (`archiveOldCompleted`) for a year change without writes.
-  So archived tasks can be edited, reopened, deleted, tagged and restored like any other; Completed shows them by year (see Views).
+  So archived tasks can be edited, reopened and tagged like any other; Completed shows them by year (see Views).
 - All mutations go through one lock (`taskFiles.Lock`, `go/internal/taskfiles`) and atomic writes (temp file + rename, `go/internal/atomicfile`); the server handles requests concurrently.
   Write paths use a strict reader that fails with `errTasksCorrupt` (503) on an unreadable file instead of treating it as empty and wiping every task.
 - The files are JSON (`go/internal/taskmodel`): a list of tasks,
@@ -399,15 +399,15 @@ Each with a dark-mode value.
   **Ctrl/Cmd+A** with a task selected takes every task shown (what the filter leaves; without a selection it stays the page's select all);
   **Esc** clears it (an expanded compact task collapses first).
   A re-render keeps the selected tasks still shown.
-  On several selected tasks **Space** completes (or reopens) them all, **Delete** deletes them, **t**/**T** open the bulk tag dialog, and **Ctrl+Shift+↑/↓** moves them.
+  On several selected tasks **Space** completes (or reopens) them all, **Delete** closes the open ones undone (won't do), **t**/**T** open the bulk tag dialog, and **Ctrl+Shift+↑/↓** moves them.
 - **Selection bar** (`#task-selbar`, `.tasks-selbar`, `syncSelBar`): while several tasks are selected,
   a bar fixed at the bottom of the window: "N selected",
   **All** (`selectAllVisible`; disabled when every task shown is selected),
   **Tag…** (the bulk tag dialog),
   **Today** (start them today, `startToday`: one `batch-update` for the open ones not starting today, one undo putting back each one's start date and history; today is never after a deadline still to come, and starting an overdue task today is the catch-up case, so no deadline question),
   **Unplan** (clear their start dates, `startOn(ids, null)`, as the **0** key: one `batch-update` for the open ones that have one, one undo putting them back; shown while an open selected task has a start date, `anyPlanned`),
-  **Done** (`completeMany`, as Space; **Reopen** when every selected task is completed, which also hides Today),
-  **Delete…** and ✕ (clear).
+  **Done** (`completeMany`, as Space; **Reopen** when every selected task is completed, which also hides Today and Won't do),
+  **Won't do** (`wontDoMany`, as the Delete key) and ✕ (clear).
   Toasts move up above it.
   The **⋯ menu** of a card in the selection (its button, a right-click, which then keeps the selection, or Shift+F10) offers the same for all of them, titled "N tasks" (`runSelectionAction`).
   With several task lists on a page only the active one's bar shows (`claimInstance`).
@@ -442,11 +442,14 @@ Each with a dark-mode value.
   A card with subtasks says how many are done, "☑ 1/3" (`.task-subtasks`, in the accent once all are, `.task-subtasks-done`), where a card with another description has 📝: on a compact line too, where the description is hidden, and a click on it opens them as 📝 does.
   Completing a task with a subtask still open asks first ("“Plan trip” has 2 open subtasks.", **Complete anyway** or Cancel; `confirmOpenSubtasks`, `#task-subtasks-modal`): from the task's checkbox and Space (`tickTask`), and once for several selected tasks (Space, the selection bar's Done; `mayComplete`), where Cancel keeps the selection.
   Won't do, a task chip's checkbox on a page and an assistant (MCP) don't ask.
-- **Won't do** (⋯ menu; cards have no ✗ button any more) archives without spawning;
+- **Won't do** (⋯ menu, the edit modal, the Delete key; cards have no ✗ button any more) archives without spawning;
   **Skip** (⏭, recurring only) archives as won't-do and spawns the next instance, the first occurrence after today (`spawn_recurring(skip=True)`): a daily task three days overdue comes back tomorrow, not as a card for today, so a skipped backlog leaves Focus.
   Completing catches up to today instead.
   Both show an undo toast; reopening a skipped entry removes its spawn (while untouched, as for un-completing).
-- **Delete** (`deleteWithUndo()`, from keyboard, modal or menu) confirms, then offers undo via `/api/tasks/restore` with full snapshots (with users, the names in its comments and history are kept only as Zone had them: Who made a change in `docs/spec/users.md`).
+- **A task can't be deleted**: nothing in the app deletes one, and an assistant (MCP) can't either.
+  A task that won't be done, or was made by mistake, is closed undone with **Won't do**: it goes to Closed with "✗ won't do", and can be reopened from there.
+  Won't do is in the ⋯ menu, in the edit modal (the button at the right of Save and Cancel, an open task's only; what was typed in the modal is dropped), on the **Delete** key and, for several selected tasks, in the selection bar and their menu (`wontDoMany`: one `batch-complete` with `wont_do`, one undo that reopens them; closed tasks in the selection stay as they are).
+  The routes that delete (`DELETE /api/tasks/<id>`, `batch-delete`) remain for what takes back a task just made: the undo of an import, and of tasks the page editor created.
 - **Planned cue**: a planned task's card gets a coloured left edge, the same on every tab for consistency: amber when it is in Focus already (start today or earlier), blue when planned later (`task-planned-now`/`-later`).
   On Open it tells decided tasks from undecided ones without changing the order.
   A due/overdue urgency colour wins.
@@ -458,8 +461,8 @@ Each with a dark-mode value.
   So planning works from the keyboard: walk Unplanned with j/k (Shift to take several) and press a day's number, however far the board puts it.
 - **⋯ menu** (the `.task-menu-btn`, always shown, three dots drawn as an SVG (`MORE_ICON`) so they sit on the line's centre in any font;
   also **right-click** on a card, `openTaskMenu(id, anchor, {x, y})` at the pointer, selecting the card, a link in the card keeping the browser's menu;
-  from the keyboard the menu key or **Shift+F10** on the selected card): all card actions (Edit…, Start today/tomorrow, Pick start date…, Unplan, Skip, Won't do, Copy link, Select several, Delete…;
-  for completed tasks Edit…, Reopen, Copy link, Select several, Delete…).
+  from the keyboard the menu key or **Shift+F10** on the selected card): all card actions (Edit…, Start today/tomorrow, Pick start date…, Unplan, Skip, Importance…, Won't do, Copy link, Select several;
+  for completed tasks Edit…, Reopen, Copy link, Select several).
   **Copy link** puts the task's full URL in the clipboard (`taskHref`, as `taskLink` builds it: `/tasks?task=<id>&view=open`, `view=completed` (with `&year=` from an earlier year's archive) for a done task, `&list=` for a list task); opening it selects and flashes the task (see `?task=`).
   Paste it anywhere: chat, mail, a page.
   A popover with ↑/↓/Enter/Esc on desktop (tasks shortcuts suspended while open), a bottom sheet at ≤640px.
@@ -470,7 +473,7 @@ Each with a dark-mode value.
   or Edit… in the menu.
   Centred with `inset: 0; margin: auto` and **no transform** (a transform would clip `position: fixed` popups like the date picker), scrollable, sticky action bar.
   At ≤640px full screen with Due | Start and Repeat | Every | From done on shared rows (`.task-row-dates`, `.task-row-repeat`).
-  **Tab goes from field to field**: Title, Description, the comment field while it is shown (and its Add once something is written), Tags, Due, Start, Days before due, the repeat fields, Keep, Private, then Save, Cancel, Delete (a field that is off, like Every N without a repeat, is none).
+  **Tab goes from field to field**: Title, Description, the comment field while it is shown (and its Add once something is written), Tags, Due, Start, Days before due, the repeat fields, Keep, Private, then Save, Cancel, Won't do (a field that is off, like Every N without a repeat, is none).
   What isn't a field of the task is no stop (`tabindex="-1"`) and has its own key or the mouse: Edit | Preview (F2), the formatting bar (Ctrl+B/I/K), Add comment (Alt+C) and the comment field's Cancel (Esc), a comment's ✎ and × and the links and boxes in comments, History.
   The List field sits in a closed `<details>`; saving a task into another list removes it from the view with a notice.
 - **Date picker** (`openDatePicker`): a row of shortcuts above the month,
@@ -489,7 +492,7 @@ Each with a dark-mode value.
 - **Rejected writes** show the server's error as a toast (`showNotice`).
 - **Toasts and modals** (`placeToast`): a toast shown while a modal dialog is open goes into the dialog, since in `<body>` it would sit under the dialog's top layer and its Undo couldn't be clicked (deleting a comment showed that); when the dialog closes the toast moves back to `<body>`.
 - **One undo at a time** (`showUndo`): only the latest action's undo is live,
-  from its toast's Undo or Ctrl+Z. An action that saves first and arms its undo when the server answers (bulk start with **0**–**7**, Done/Reopen on a selection, bulk tags, Delete, Move deadline, completing a keep task, deleting a comment) drops the previous undo as it starts saving (`dismissUndo`),
+  from its toast's Undo or Ctrl+Z. An action that saves first and arms its undo when the server answers (bulk start with **0**–**7**, Done/Reopen on a selection, bulk tags, Won't do on a selection, Move deadline, completing a keep task, deleting a comment) drops the previous undo as it starts saving (`dismissUndo`),
   so a quick Ctrl+Z in between does nothing instead of undoing the action before.
 - **Cards** (`taskHTML`, tasks.css "Cards"): one layout for every card.
   The first line: checkbox, title (as wide as it needs, at least 6rem, 4.5rem on phones; it wraps), the tags right after it (pills), markers and dates at the right end (`.task-meta` sits in the line), ⋯ last.
@@ -548,7 +551,7 @@ Each with a dark-mode value.
 
 A title can carry links: `[[wikilinks]]`, `[label](url)` and bare URLs show as links on the card (`linkifyTitle`; one to another site opens in a new tab, `class="task-link"`; a link to anything but the web, mail or the wiki, e.g. `javascript:`, stays text).
 **Pasting a URL into the title** asks for its name, as in the description and the editor (`pasteUrlAsLink`, the same dialog): a name makes `[name](url)`, none (or Cancel) the bare URL; pasted over selected text, the text becomes the label.
-`[[` and `[text](` complete pages there too, and `:name` emoji (see Emoji in `docs/spec/editor.md`). Where a title is plain text (the ⋯ menu, toasts, the delete and deadline dialogs: `plainTitle`; search results, task chips, Linked tasks: `mdtext.PlainTaskTitle`), links are reduced to their labels.
+`[[` and `[text](` complete pages there too, and `:name` emoji (see Emoji in `docs/spec/editor.md`). Where a title is plain text (the ⋯ menu, toasts, the subtasks and deadline dialogs: `plainTitle`; search results, task chips, Linked tasks: `mdtext.PlainTaskTitle`), links are reduced to their labels.
 
 ### Description
 
@@ -637,7 +640,7 @@ A task is of **high**, **normal** or **low** importance (`importance`, Task fiel
   and in a new task's title (`!`, `!low`: Quick-add).
 - **Filter**: `!high` (or `!`) and `!low` in the filter field.
 - **API**: `importance` in `POST`/`PUT /api/tasks` and `batch-update`: `"high"`, `"low"`, or `"normal"`, `""` or `null` for normal; anything else is 400 "importance must be high, normal or low". A file edited by hand is read leniently (`CleanImportance`: case and spaces aside, anything else is normal).
-- **Carried on**: a recurring task's next occurrence keeps it; so does a restored task (undo of a delete) and an export.
+- **Carried on**: a recurring task's next occurrence keeps it; so does an export.
 - **Assistants** (MCP): `create_task` and `update_task` take `importance`, and a task's line of facts says "importance: high" (or low).
 
 ### Keep tasks
@@ -646,7 +649,7 @@ A task with `keep: true` is never archived: ticking it off means "done for now, 
 It suits a shopping list used with the task app's views: Open is the catalogue of staples, starting items today puts them on Focus (the actual shopping list), and ticking one off sends it back to Open.
 Completing a keep task (`keep_done`, in `PUT` and in `batch-complete`) clears its start date and its deadline, and sets `last_done` to today; it stays in `_tasks/tasks.json` with the same id, tags, description and place in Open's order, and Completed stays empty.
 Since Completed can't reopen it, the card shows an undo toast that restores the old fields (`keepSnapshot`).
-**Won't do** and **Delete** retire a staple.
+**Won't do** retires a staple.
 Keep and Repeat both say what happens after done, so they exclude each other: `keep` clears `recurrence`, and the edit modal disables Repeat while "Keep after done" is checked.
 Cards mark keep tasks with ⟲ (`.task-keep`).
 `[[tasks: keep=1]]` makes new tasks keep tasks.
@@ -763,7 +766,7 @@ A tag no page declares stays a filter.
   It ends with ✕,
   Esc,
   another tab,
-  Done or Delete (Tag… and Today keep it, for a next action),
+  Done or Won't do (Tag…, Today and Unplan keep it, for a next action),
   or the browser's back (a phone's back gesture): entering pushes a history entry (`tasksSelect` in its state),
   `popstate` ends the mode,
   and ending it otherwise goes back past that entry,

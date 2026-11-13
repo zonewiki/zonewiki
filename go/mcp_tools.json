@@ -888,8 +888,8 @@
  },
  {
   "name": "update_task",
-  "title": "Update, comment on or delete tasks",
-  "description": "Change a task: only the fields given change. status: done (a repeating task gets its next occurrence), wont_do (abandon it), skip (won't do this occurrence, the series goes on), open (reopen), deleted (gone for good, only in the git history: for a task made by mistake; to end a task use done or wont_do). comment adds a dated status line. With ids instead of id: add_tags/remove_tags on several tasks in one change. Case is ignored; list_tags shows the tags in use: reuse those.",
+  "title": "Update or comment on tasks",
+  "description": "Change a task: only the fields given change. status: done (a repeating task gets its next occurrence), wont_do (close it undone: abandoned, or made by mistake; a task can't be deleted), skip (won't do this occurrence, the series goes on), open (reopen). comment adds a dated status line. With ids instead of id: add_tags/remove_tags on several tasks in one change. Case is ignored; list_tags shows the tags in use: reuse those.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -991,8 +991,7 @@
       "open",
       "done",
       "wont_do",
-      "skip",
-      "deleted"
+      "skip"
      ]
     },
     "summary": {

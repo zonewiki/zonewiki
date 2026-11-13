@@ -1,6 +1,6 @@
 // The task app's tasks, read and written (tasks.js initTasksInstance): the
 // list fetched and kept in app.st.tasks, a task created, changed, completed,
-// skipped or deleted through /api/tasks, each change redrawn and told to the
+// skipped or closed undone through /api/tasks, each change redrawn and told to the
 // page's other task lists, and the Undo toast that takes one back. What it
 // uses of the app comes in app (its state in app.st).
 
@@ -243,31 +243,6 @@ function offerUndoLeave(msg, restores) {
   });
 }
 
-async function deleteTask(id) {
-  const res = await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
-  if (res.ok) {
-    st.tasks = st.tasks.filter(t => t.id !== id);
-    app.render();
-    refreshDueBadge(); refreshCompletedCount();
-    app.refreshOtherInstances(app.instanceId);
-  }
-}
-
-async function deleteTasks(ids) {
-  const res = await fetch('/api/tasks/batch-delete', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ids }),
-  });
-  if (res.ok) {
-    const idSet = new Set(ids);
-    st.tasks = st.tasks.filter(t => !idSet.has(t.id));
-    app.render();
-    refreshDueBadge(); refreshCompletedCount();
-    app.refreshOtherInstances(app.instanceId);
-  }
-}
-
 // The task's box ticked (a click, Space): it completes after its grace
 // period, once the user has said so if subtasks are still open. False when
 // they cancelled.
@@ -318,11 +293,12 @@ function keepSnapshot(t) {
            last_done: t.last_done || null, history: t.history || [] };
 }
 
-async function completeTasks(ids, completed) {
+// Complete the tasks `ids` (wontDo: close them undone instead), or reopen them.
+async function completeTasks(ids, completed, wontDo = false) {
   const res = await fetch('/api/tasks/batch-complete', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ids, completed }),
+    body: JSON.stringify(wontDo ? { ids, completed, wont_do: true } : { ids, completed }),
   });
   if (res.ok) {
     // Re-fetch to capture any spawned recurring tasks
@@ -370,25 +346,16 @@ function setStart(id, startDate) {
   showUndo(msg, () => updateTask(id, { start_date: prev, recurrence, history }));
 }
 
-// Confirm, delete, and offer undo that restores the full snapshots (ids and
-// every field). beforeDelete runs after confirmation.
-async function deleteWithUndo(ids, beforeDelete) {
-  const count = ids.length;
-  const title = count === 1 ? plainTitle(st.tasks.find(t => t.id === ids[0])?.title) : '';
-  if (!await app.confirmDelete(title, count)) return;
-  const snapshot = ids.map(id => st.tasks.find(t => t.id === id)).filter(Boolean);
-  beforeDelete?.();
+// Close the open tasks among `ids` undone (won't do), in one change with
+// one undo, which reopens them. One task alone goes through markWontDo.
+async function wontDoMany(ids) {
+  const open = ids.filter(id => { const t = st.tasks.find(tk => tk.id === id); return t && !t.completed_at; });
+  if (open.length === 1) return markWontDo(open[0]);
+  if (!open.length) return;
   dismissUndo();
-  await (count === 1 ? deleteTask(ids[0]) : deleteTasks(ids));
-  showUndo(count === 1 ? 'Task deleted' : `${count} tasks deleted`, async () => {
-    await fetch('/api/tasks/restore', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tasks: snapshot }),
-    });
-    await afterBatchWrite();
-  });
+  await completeTasks(open, true, true);
+  showUndo(`${open.length} tasks marked won't do`, () => completeTasks(open, false));
 }
 
-return { dismissUndo, showUndo, triggerUndo, fetchTasks, refresh, fetchCompleted, setCompletedYear, createTask, updateTask, leftViewMessage, tickTask, cancelPendingComplete, keepSnapshot, completeTasks, afterBatchWrite, oldHistory, markWontDo, skipOccurrence, setStart, deleteWithUndo };
+return { dismissUndo, showUndo, triggerUndo, fetchTasks, refresh, fetchCompleted, setCompletedYear, createTask, updateTask, leftViewMessage, tickTask, cancelPendingComplete, keepSnapshot, completeTasks, afterBatchWrite, oldHistory, markWontDo, wontDoMany, skipOccurrence, setStart };
 }

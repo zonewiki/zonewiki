@@ -1176,16 +1176,69 @@ def test_menu_on_a_selected_card_acts_on_the_selection(page, wiki):
     menu = page.locator(".task-menu")
     expect(menu.locator(".task-menu-title")).to_have_text("2 tasks")
     assert selected_titles(page) == ["Saw", "Glue"]       # the right-click kept it
-    menu.get_by_role("menuitem", name="Delete…").click()
-    expect(page.locator("#task-delete-modal .modal-label")).to_have_text("Delete 2 tasks?")
-    page.locator("#task-delete-confirm").click()
+    # A task is never deleted: the menu closes them undone.
+    expect(menu.get_by_role("menuitem")).to_have_text(["Tag…", "Start today", "Done", "Won't do"])
+    menu.get_by_role("menuitem", name="Won't do").click()
+    toast = page.locator(".task-undo-toast")
+    expect(toast).to_contain_text("2 tasks marked won't do")
     expect(card(page, "Saw")).to_have_count(0)
     expect(card(page, "Glue")).to_have_count(0)
     expect(page.locator("#task-selbar")).to_be_hidden()
+    wait_until(page, lambda: sorted(t["title"] for t in page.request.get("/api/tasks/completed").json()
+                                    if t["wont_do"]) == ["Glue", "Saw"])
+    toast.locator(".task-undo-btn").click()
+    expect(card(page, "Saw")).to_be_visible()
+    expect(card(page, "Glue")).to_be_visible()
+    assert page.request.get("/api/tasks/completed").json() == []
     # The ⋯ button of a card not in a multi-selection is that card's own menu.
     card(page, "Nuts").locator(".task-title").click()
     card(page, "Bolts").locator(".task-menu-btn").click()
     expect(page.locator(".task-menu .task-menu-title")).to_have_text("Bolts")
+
+
+def closed_titles(page):
+    return sorted(t["title"] for t in page.request.get("/api/tasks/completed").json() if t["wont_do"])
+
+
+def test_a_task_is_closed_undone_never_deleted(page, wiki):
+    seed_four(page)
+    # Nothing offers Delete: not the menu, the selection bar or the edit modal.
+    card(page, "Bolts").locator(".task-menu-btn").click()
+    assert "Delete…" not in page.locator(".task-menu").get_by_role("menuitem").all_inner_texts()
+    page.keyboard.press("Escape")
+    expect(page.locator("#task-selbar [data-sel='delete']")).to_have_count(0)
+    expect(page.locator("#task-delete-modal")).to_have_count(0)
+    # The Delete key closes the selected task undone, with an undo.
+    card(page, "Saw").locator(".task-title").click()
+    page.keyboard.press("Delete")
+    toast = page.locator(".task-undo-toast")
+    expect(toast).to_contain_text("Marked won't do")
+    expect(card(page, "Saw")).to_have_count(0)
+    assert selected_titles(page) == ["Glue"]              # the selection moved on
+    wait_until(page, lambda: closed_titles(page) == ["Saw"])
+    toast.locator(".task-undo-btn").click()
+    expect(card(page, "Saw")).to_be_visible()
+    wait_until(page, lambda: closed_titles(page) == [])
+    # Several: the selection bar's Won't do, one undo for all.
+    card(page, "Glue").locator(".task-title").click()
+    card(page, "Nuts").locator(".task-title").click(modifiers=["Shift"])
+    page.locator("#task-selbar [data-sel='wontdo']").click()
+    expect(toast).to_contain_text("2 tasks marked won't do")
+    wait_until(page, lambda: closed_titles(page) == ["Glue", "Nuts"])
+    # The edit modal's button, for an open task.
+    modal = open_edit(page, "Bolts")
+    modal.get_by_role("button", name="Won't do").click()
+    expect(modal).to_be_hidden()
+    wait_until(page, lambda: closed_titles(page) == ["Bolts", "Glue", "Nuts"])
+    # In Closed they are still there, and can't be closed again or deleted.
+    open_tab(page, "completed")
+    expect(card(page, "Bolts")).to_be_visible()
+    card(page, "Bolts").locator(".task-title").click()
+    page.keyboard.press("Delete")
+    expect(card(page, "Bolts")).to_be_visible()
+    modal = open_edit(page, "Bolts")
+    expect(modal.get_by_role("button", name="Won't do")).to_be_hidden()
+    assert closed_titles(page) == ["Bolts", "Glue", "Nuts"]
 
 
 def test_main_task_counts_list_tasks_as_completed(page, wiki):
@@ -2864,7 +2917,7 @@ def test_tab_in_the_task_dialog_goes_from_field_to_field(page, wiki):
     modal = open_edit(page, "Plan trip")
     expect(modal.locator("#task-edit-title")).to_be_focused()
     fields = ["task-edit-title", "task-edit-desc", "task-edit-tags", "task-edit-importance", "task-edit-due", "task-edit-start", "task-edit-lead",
-              "task-edit-rec-type", "task-edit-rec-from", "task-edit-keep", "Save", "task-edit-cancel", "task-edit-delete"]
+              "task-edit-rec-type", "task-edit-rec-from", "task-edit-keep", "Save", "task-edit-cancel", "task-edit-wontdo"]
     stops = _tab_stops(page, modal)
     # "Every N" and "From done" are off without a repeat: disabled fields are no stops either.
     assert stops == [f for f in fields if f != "task-edit-rec-from"], stops
@@ -2888,12 +2941,12 @@ def test_tab_in_the_task_dialog_goes_from_field_to_field(page, wiki):
     expect(modal.locator(".task-comment-list > li")).to_have_count(2)
     page.keyboard.press("Tab")
     expect(modal.locator("#task-edit-tags")).to_be_focused()
-    # A new task: the same, without Delete.
+    # A new task: the same, without Won't do.
     modal.locator("#task-edit-cancel").click()
     page.locator(".tasks-app").get_by_role("button", name="New task").click()
     stops = _tab_stops(page, modal)
     # Without a date nothing can repeat or start before it: those fields are off.
-    off = ("task-edit-lead", "task-edit-rec-type", "task-edit-rec-from", "task-edit-delete")
+    off = ("task-edit-lead", "task-edit-rec-type", "task-edit-rec-from", "task-edit-wontdo")
     assert stops == [f for f in fields if f not in off], stops
     page.keyboard.press("Alt+c")                                     # no comments on a task not yet made
     expect(comment).to_be_hidden()

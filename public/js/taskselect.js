@@ -1,6 +1,6 @@
 // A task app's selection (tasks.js initTasksInstance): one card or several
 // (Shift and Ctrl, selection mode on touch), the selection bar and what it
-// does to every selected task at once (start, complete, delete with one
+// does to every selected task at once (start, complete, won't do with one
 // undo), and the Tags dialog for several tasks. What it uses of the app
 // comes in app (its state in app.st).
 import TasksCore from '../tasks-core.js';
@@ -226,7 +226,7 @@ function clearSelection() {
 }
 
 // Selection mode starts with the card whose menu it came from. It ends with
-// ✕, Esc, another tab, Done or Delete, or the browser's back (a phone's
+// ✕, Esc, another tab, Done or Won't do, or the browser's back (a phone's
 // back gesture): entering adds a history entry, so back leaves the mode,
 // not the page.
 function enterSelectMode(id) {
@@ -248,7 +248,7 @@ window.addEventListener('popstate', () => { if (st.selectMode) exitSelectMode();
 
 // The selection bar: while several tasks are selected (on a page with
 // several task lists, only the active one's), how many, and what to do to all.
-// Today goes when every selected task is completed, and Done says Reopen;
+// Today and Won't do go when every selected task is completed, and Done says Reopen;
 // Unplan shows while an open selected task has a start date.
 function syncSelBar() {
   if (!app.selBar) return;
@@ -262,6 +262,7 @@ function syncSelBar() {
     st.selectedIds.size ? `${st.selectedIds.size} selected` : 'Tap tasks to select';
   app.selBar.querySelectorAll('.tasks-selbar-actions .btn').forEach(b => { b.disabled = !st.selectedIds.size; });
   app.selBar.querySelector('[data-sel="today"]').hidden = allDone;
+  app.selBar.querySelector('[data-sel="wontdo"]').hidden = allDone;
   const done = app.selBar.querySelector('[data-sel="done"]');
   done.textContent = allDone ? 'Reopen' : 'Done';
   done.title = allDone ? 'Reopen the selected tasks (Space)' : 'Complete the selected tasks (Space)';
@@ -289,7 +290,7 @@ function runSelectionAction(action) {
     case 'done':
       if (ids.length) mayComplete(ids).then(ok => { if (ok) { exitSelectMode(); completeMany(ids); } });
       break;
-    case 'delete': if (ids.length) app.deleteWithUndo(ids, exitSelectMode); break;
+    case 'wontdo': if (ids.length) { exitSelectMode(); app.wontDoMany(ids); } break;
   }
 }
 

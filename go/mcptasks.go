@@ -543,8 +543,9 @@ func otherArgs(args jsonObj, allowed ...string) []string {
 	return other
 }
 
-// updateTaskTool: one task's fields, status and comment; status deleted
-// deletes it; ids instead of id tags several tasks (tagTasksTool).
+// updateTaskTool: one task's fields, status and comment; ids instead of id
+// tags several tasks (tagTasksTool). A task is never deleted: wont_do
+// closes one undone.
 func updateTaskTool(args jsonObj, base, user string) (string, error) {
 	if args.Has("ids") {
 		if args.Has("id") {
@@ -565,19 +566,6 @@ func updateTaskTool(args jsonObj, base, user string) (string, error) {
 		return "", err
 	}
 	status, _ := jsonobj.As[string](args["status"])
-	if status == "deleted" {
-		if other := otherArgs(args, "id", "status", "summary"); len(other) > 0 {
-			return "", toolErr("status deleted takes nothing else, not " + strings.Join(other, ", "))
-		}
-		msg, err := commitMsg("Delete task", args)
-		if err != nil {
-			return "", err
-		}
-		if err := deleteTask(user, task.ID, msg); err != nil {
-			return "", err
-		}
-		return "Deleted task " + shortID(task.ID) + ": " + task.Title, nil
-	}
 	var comment *string
 	if args.Has("comment") {
 		c, err := strArg(args, "comment", true)
@@ -593,7 +581,7 @@ func updateTaskTool(args jsonObj, base, user string) (string, error) {
 	if args.Has("status") {
 		f, ok := taskStatusFields[status]
 		if !ok {
-			return "", toolErr("status must be open, done, wont_do, skip or deleted")
+			return "", toolErr("status must be open, done, wont_do or skip (a task can't be deleted: wont_do closes it undone)")
 		}
 		data.Set(f.field, f.value)
 	}

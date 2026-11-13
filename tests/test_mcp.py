@@ -1897,7 +1897,7 @@ class TestTagTasks:
 
 
 class TestCommentAndDeleteTask:
-    """update_task's comment and status deleted."""
+    """update_task's comment, and that no status deletes."""
     def test_comment(self, client, git_wiki_dir):
         tid = _task_id(call(client, "create_task", title="Call Bob")[0])
         text, err = call(client, "update_task", id=tid, comment="left a voicemail", summary="bob")
@@ -1919,18 +1919,16 @@ class TestCommentAndDeleteTask:
         assert err and "comment must be" in text
         assert call(client, "search_tasks", status="open")[0].count("Call Bob") == 1
 
-    def test_delete(self, client, wiki_dir):
+    def test_a_task_cant_be_deleted(self, client, wiki_dir):
+        """No status deletes: a task made by mistake is closed with wont_do."""
         tid = _task_id(call(client, "create_task", title="Oops")[0])
         text, err = call(client, "update_task", id=tid, status="deleted")
-        assert not err and text == f"Deleted task {tid}: Oops"
-        assert call(client, "search_tasks", status="all")[0].endswith("No matching tasks.")
-        assert call(client, "update_task", id=tid, status="deleted")[1]
-
-    def test_delete_takes_nothing_else(self, client, wiki_dir):
-        tid = _task_id(call(client, "create_task", title="Oops")[0])
-        text, err = call(client, "update_task", id=tid, status="deleted", comment="why")
-        assert err and "status deleted takes nothing else, not comment" in text
+        assert err and "can't be deleted" in text and "wont_do" in text
         assert "Oops" in call(client, "search_tasks")[0]
+        tool = next(t for t in rpc(client, "tools/list").get_json()["result"]["tools"] if t["name"] == "update_task")
+        assert "deleted" not in tool["inputSchema"]["properties"]["status"]["enum"]
+        assert not call(client, "update_task", id=tid, status="wont_do")[1]
+        assert "Oops" in call(client, "search_tasks", status="done")[0]
 
     def test_old_tools_are_gone(self, client, wiki_dir):
         for name in ("tag_tasks", "comment_task", "delete_task"):

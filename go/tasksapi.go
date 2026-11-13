@@ -478,6 +478,15 @@ func apiBatchComplete(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 	}
+	// wont_do: close them undone, as PUT's wont_do does one (no next
+	// occurrence, a keep task archived too).
+	wontDo, err := boolField(data, "wont_do")
+	if err != nil {
+		return err
+	}
+	if wontDo && !markCompleted {
+		return refuse("wont_do closes tasks; it can't come with completed false")
+	}
 	if len(ids) == 0 {
 		return refuse("Bad Request")
 	}
@@ -490,7 +499,16 @@ func apiBatchComplete(w http.ResponseWriter, r *http.Request) error {
 	}
 	stamp := timestamp()
 	updated := []*Task{}
-	if markCompleted {
+	if wontDo {
+		moving, movingIDs := selectTasks(active, func(t *Task) bool { return set[t.ID] && t.IsOpen() })
+		for _, t := range moving {
+			t.CompletedAt, t.WontDo = stamp, true
+			logEvent(t, userOf(r), "wontdo", "", "")
+			updated = append(updated, t)
+		}
+		active = withoutIDs(active, movingIDs)
+		completed = append(completed, moving...)
+	} else if markCompleted {
 		for _, t := range active {
 			if set[t.ID] && t.Keep && t.IsOpen() {
 				keepDone(userOf(r), t) // stays open, back in the pool
@@ -517,7 +535,9 @@ func apiBatchComplete(w http.ResponseWriter, r *http.Request) error {
 		active = append(active, moving...)
 	}
 	msg := "Reopen tasks"
-	if markCompleted {
+	if wontDo {
+		msg = "Abandon tasks"
+	} else if markCompleted {
 		msg = "Complete tasks"
 	}
 	if err := taskFiles.WriteBothLocked(userOf(r), active, completed, msg); err != nil {

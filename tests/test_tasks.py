@@ -912,6 +912,30 @@ class TestBatchComplete:
             if t["id"] in (id1, id2):
                 assert t["completed_at"] is not None
 
+    def test_batch_wont_do(self, client):
+        """wont_do closes them undone: no next occurrence, a keep task too."""
+        ids = [client.post("/api/tasks", json=t).get_json()["id"] for t in (
+            {"title": "A"},
+            {"title": "Weekly", "due_date": "2026-01-05", "recurrence": {"type": "weekly", "interval": 1}},
+            {"title": "Milk", "keep": True})]
+        resp = client.post("/api/tasks/batch-complete", json={"ids": ids, "completed": True, "wont_do": True})
+        assert resp.status_code == 200
+        assert client.get("/api/tasks").get_json() == []          # nothing spawned, Milk gone too
+        closed = client.get("/api/tasks/completed").get_json()
+        assert sorted(t["title"] for t in closed) == ["A", "Milk", "Weekly"]
+        assert all(t["wont_do"] and t["completed_at"] for t in closed)
+        assert all(t["history"][-1]["event"] == "wontdo" for t in closed)
+        # The undo: reopening them.
+        client.post("/api/tasks/batch-complete", json={"ids": ids, "completed": False})
+        tasks = client.get("/api/tasks").get_json()
+        assert len(tasks) == 3 and not any(t["wont_do"] or t["completed_at"] for t in tasks)
+        assert client.get("/api/tasks/completed").get_json() == []
+
+    def test_batch_wont_do_cant_reopen(self, client):
+        tid = client.post("/api/tasks", json={"title": "A"}).get_json()["id"]
+        resp = client.post("/api/tasks/batch-complete", json={"ids": [tid], "completed": False, "wont_do": True})
+        assert resp.status_code == 400
+
     def test_batch_uncomplete(self, client):
         r1 = client.post("/api/tasks", json={"title": "A"})
         id1 = r1.get_json()["id"]
