@@ -1,0 +1,645 @@
+// The tasks API: the /api/tasks routes. Each reads its request and answers;
+// the writes themselves are in tasks.go, which the MCP tools share.
+package main
+
+import (
+	"encoding/json"
+	"errors"
+	"io"
+	"mime"
+	"net/http"
+	"regexp"
+	"slices"
+	"strconv"
+	"strings"
+)
+
+// tasksRoute answers a task list API request: a refusal as {"error": …} (400,
+// 403 for a viewer's change to a shared task),
+// 404, or 503 when a task list file is unreadable (the client retries).
+func tasksRoute(h func(w http.ResponseWriter, r *http.Request) error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		err := h(w, r)
+		rf, refused := refusalOf(err)
+		switch {
+		case err == nil:
+		case errors.Is(err, errTasksCorrupt):
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		case refused && (rf.kind == refusedInvalid || rf.kind == refusedReadOnly):
+			// tasks.js shows the error (a viewer's: readOnlyMsg).
+			writeJSON(w, rf.kind.status(), map[string]string{"error": rf.msg})
+		case refused:
+			http.Error(w, rf.msg, rf.kind.status())
+		default:
+			logf("%s %s: %v", r.Method, r.URL.Path, err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		}
+	}
+}
+
+// jsonObject is the request's JSON body, which must be an object (any
+// content type: text/plain bodies too).
+func jsonObject(r *http.Request) (jsonObj, error) {
+	body, err := io.ReadAll(r.Body)
+	if tooLarge(err) {
+		return nil, refuseAs(refusedTooLarge, "Too large: at most "+strconv.Itoa(bodyMax>>20)+" MB")
+	}
+	o, ok := parseObj(body)
+	if !ok {
+		return nil, refuse("Request body must be a JSON object")
+	}
+	return o, nil
+}
+
+func tasksRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/tasks", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
+		writeJSON(w, http.StatusOK, openTasks(userOf(r)))
+		return nil
+	}))
+	// A hidden task app, for a page without one that wants its edit modal
+	// (js/actions.js openDefaultTask: c t, the New task button).
+	mux.HandleFunc("GET /api/tasks/headless", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		rq := newReq(r)
+		_, _ = io.WriteString(w, buildTasksEmbed(rq, TasksParams{}, 0, true, rq.defaultPrivate(), ""))
+	})
+	mux.HandleFunc("POST /api/tasks/settings", writesPages(tasksSettingsRoute))
+	mux.HandleFunc("GET /api/tasks/completed", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
+		year, err := yearArg(r)
+		if err != nil {
+			return err
+		}
+		writeJSON(w, http.StatusOK, completedInYear(userOf(r), year))
+		return nil
+	}))
+	mux.HandleFunc("GET /api/tasks/completed-years", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
+		writeJSON(w, http.StatusOK, map[string]any{"years": completedYears(userOf(r), cleanList(r.URL.Query().Get("list")))})
+		return nil
+	}))
+	mux.HandleFunc("GET /api/tasks/completed-count", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
+		scope, n := cleanList(r.URL.Query().Get("list")), 0
+		for _, t := range completedInYear(userOf(r), currentYear()) {
+			if inScope(t, scope) {
+				n++
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]int{"count": n})
+		return nil
+	}))
+	mux.HandleFunc("GET /api/tasks/due-count", func(w http.ResponseWriter, r *http.Request) {
+		// ?places=1: also each place's counts, for the list switcher.
+		rq := newReq(r)
+		if r.URL.Query().Get("places") == "" {
+			writeJSON(w, http.StatusOK, taskCounts(rq))
+			return
+		}
+		c := taskCounts(rq)
+		writeJSON(w, http.StatusOK, map[string]any{"count": c.Count, "overdue": c.Overdue, "today": c.Today, "focus": c.Focus, "places": rq.placeCounts()})
+	})
+	mux.HandleFunc("POST /api/tasks", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
+		data, err := jsonObject(r)
+		if err != nil {
+			return err
+		}
+		t, err := createTask(userOf(r), data, "Create task")
+		if err != nil {
+			return err
+		}
+		writeJSON(w, http.StatusCreated, t)
+		return nil
+	}))
+	mux.HandleFunc("PUT /api/tasks/{id}", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
+		data, err := jsonObject(r)
+		if err != nil {
+			return err
+		}
+		t, err := updateTask(userOf(r), r.PathValue("id"), data, "")
+		if err != nil {
+			return err
+		}
+		writeJSON(w, http.StatusOK, t)
+		return nil
+	}))
+	mux.HandleFunc("POST /api/tasks/{id}/toggle-check", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
+		data, err := jsonObject(r)
+		if err != nil {
+			return err
+		}
+		idx, err := asInt(data["idx"], "idx")
+		if err != nil {
+			return err
+		}
+		if idx < 0 {
+			return refuse("idx must not be negative")
+		}
+		t, err := toggleNoteCheck(userOf(r), r.PathValue("id"), idx)
+		if err != nil {
+			return err
+		}
+		writeJSON(w, http.StatusOK, t)
+		return nil
+	}))
+	mux.HandleFunc("POST /api/tasks/{id}/comments", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
+		data, err := jsonObject(r)
+		if err != nil {
+			return err
+		}
+		text, err := asStr(data["text"], "text")
+		if err != nil {
+			return err
+		}
+		t, err := addComment(userOf(r), r.PathValue("id"), text, "Comment on task")
+		if err != nil {
+			return err
+		}
+		writeJSON(w, http.StatusCreated, t)
+		return nil
+	}))
+	mux.HandleFunc("PUT /api/tasks/{id}/comments/{cid}", tasksRoute(apiEditComment))
+	mux.HandleFunc("DELETE /api/tasks/{id}/comments/{cid}", tasksRoute(apiDeleteComment))
+	mux.HandleFunc("DELETE /api/tasks/{id}", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
+		if err := deleteTask(userOf(r), r.PathValue("id"), "Delete task"); err != nil {
+			return err
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}))
+	mux.HandleFunc("POST /api/tasks/batch-delete", tasksRoute(apiBatchDelete))
+	mux.HandleFunc("POST /api/tasks/restore", tasksRoute(apiRestore))
+	mux.HandleFunc("GET /api/tasks/export", tasksRoute(apiExport))
+	mux.HandleFunc("POST /api/tasks/import", tasksRoute(apiImport))
+	mux.HandleFunc("POST /api/tasks/batch-complete", tasksRoute(apiBatchComplete))
+	mux.HandleFunc("POST /api/tasks/reorder", tasksRoute(apiReorder))
+	mux.HandleFunc("POST /api/tasks/batch-tag", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
+		data, err := jsonObject(r)
+		if err != nil {
+			return err
+		}
+		ids, err := idList(data)
+		if err != nil {
+			return err
+		}
+		var tags [2][]string
+		for i, k := range []string{"add", "remove"} {
+			if _, ok := listField(data, k); !ok {
+				return refuse("add/remove must be lists of strings")
+			}
+			if data.has(k) {
+				if tags[i], err = asStrList(data[k], k); err != nil {
+					return err
+				}
+			}
+		}
+		tasks, err := tagTasks(userOf(r), ids, tags[0], tags[1], "Tag tasks")
+		if err != nil {
+			return err
+		}
+		writeJSON(w, http.StatusOK, tasks)
+		return nil
+	}))
+	mux.HandleFunc("POST /api/tasks/batch-update", tasksRoute(apiBatchUpdate))
+}
+
+var yearArgRE = regexp.MustCompile(`^\d{4}$`)
+
+// yearArg: ?year=YYYY (a year of the Completed view), default this year.
+func yearArg(r *http.Request) (string, error) {
+	year := r.URL.Query().Get("year")
+	if year == "" {
+		year = currentYear()
+	}
+	if !yearArgRE.MatchString(year) {
+		return "", refuse("year must be YYYY")
+	}
+	return year, nil
+}
+
+func apiEditComment(w http.ResponseWriter, r *http.Request) error {
+	data, err := jsonObject(r)
+	if err != nil {
+		return err
+	}
+	text, err := asStr(data["text"], "text")
+	if err != nil {
+		return err
+	}
+	if text, err = commentText(text); err != nil {
+		return err
+	}
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
+	active, completed, t, err := findForWriteLocked(userOf(r), r.PathValue("id"))
+	if err != nil {
+		return err
+	}
+	i, err := taskComment(t, r.PathValue("cid"))
+	if err != nil {
+		return err
+	}
+	t.Comments[i].Text = text
+	if err := writeBothLocked(userOf(r), active, completed, "Edit task comment"); err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, t)
+	return nil
+}
+
+func apiDeleteComment(w http.ResponseWriter, r *http.Request) error {
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
+	active, completed, t, err := findForWriteLocked(userOf(r), r.PathValue("id"))
+	if err != nil {
+		return err
+	}
+	i, err := taskComment(t, r.PathValue("cid"))
+	if err != nil {
+		return err
+	}
+	rememberBy(t) // the undo sends it back
+	t.Comments = slices.Delete(t.Comments, i, i+1)
+	if err := writeBothLocked(userOf(r), active, completed, "Delete task comment"); err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, t)
+	return nil
+}
+
+func apiBatchDelete(w http.ResponseWriter, r *http.Request) error {
+	data, err := jsonObject(r)
+	if err != nil {
+		return err
+	}
+	ids, err := idList(data)
+	if err != nil {
+		return err
+	}
+	if len(ids) == 0 {
+		return refuse("Bad Request")
+	}
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
+	if err := deleteTasksLocked(userOf(r), idSet(ids), "Delete tasks"); err != nil {
+		return err
+	}
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
+// apiRestore re-inserts task snapshots (undo after delete), their ids and
+// dates kept; ids that exist already are skipped.
+func apiRestore(w http.ResponseWriter, r *http.Request) error {
+	data, err := jsonObject(r)
+	if err != nil {
+		return err
+	}
+	snaps, ok := as[[]json.RawMessage](data["tasks"])
+	if !ok || len(snaps) == 0 {
+		return refuse("Bad Request")
+	}
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
+	user := userOf(r)
+	active, completed, err := readForWriteLocked(user)
+	if err != nil {
+		return err
+	}
+	existing := taskIDsLocked() // every owner's: ids stay unique across the files
+	restored := []*Task{}
+	for _, s := range snaps {
+		snap, ok := as[jsonObj](s)
+		if !ok {
+			continue
+		}
+		t := sanitizeSnapshot(snap)
+		if t == nil || existing[t.ID] {
+			continue
+		}
+		checkBy(user, t)
+		if jsonTrue(snap["private"]) && privateFolder(user) != "" {
+			t.Owner = user
+		}
+		existing[t.ID] = true
+		if !t.isOpen() {
+			completed = append(completed, t)
+		} else {
+			active = append(active, t)
+		}
+		restored = append(restored, t)
+	}
+	if len(restored) > 0 {
+		if err := writeBothLocked(user, active, completed, "Restore tasks"); err != nil {
+			return err
+		}
+	}
+	writeJSON(w, http.StatusCreated, restored)
+	return nil
+}
+
+// importMax: the most tasks one import takes.
+const importMax = 10000
+
+// importIDRE: an id an imported task may keep (a UUID, as Zone makes them).
+var importIDRE = regexp.MustCompile(`^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$`)
+
+// apiExport: the tasks a list shows (?list=, ?tag=, as an embed's params;
+// neither: every task the user sees), open and completed of every year,
+// as a file to save: {zone_tasks: 1, list, tag, exported_at, tasks}, each
+// task as the API shows it. apiImport reads it back.
+func apiExport(w http.ResponseWriter, r *http.Request) error {
+	list, tag := cleanList(r.URL.Query().Get("list")), strings.TrimSpace(r.URL.Query().Get("tag"))
+	tasksMu.Lock()
+	active, completed, err := readForWriteLocked(userOf(r))
+	tasksMu.Unlock()
+	if err != nil {
+		return err
+	}
+	tasks := []*Task{}
+	for _, t := range slices.Concat(active, completed) {
+		if inScope(t, list) && tagParamMatches(t, tag) {
+			tasks = append(tasks, t)
+		}
+	}
+	name := firstNonEmpty(list, "all")
+	// The list's name is the request's: as a quoted, escaped parameter, so
+	// a " in it can't end the file name and add one of its own.
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment",
+		map[string]string{"filename": "zone-tasks-" + name + "-" + isoDay(today()) + ".json"}))
+	writeJSON(w, http.StatusOK, map[string]any{"zone_tasks": 1, "list": list, "tag": tag, "exported_at": timestamp(), "tasks": tasks})
+	return nil
+}
+
+// apiImport adds an export's tasks: {file, list, tag, new, also, private}. file
+// is what apiExport wrote (or a bare list of tasks); list, tag and new are
+// the params of the list imported into, whose tags the tasks get as a new
+// task there would (newTaskTags, or new=), in place of the tag of the list
+// they were exported from; private: into the user's own tasks, where a
+// task exported private goes anyway. A task
+// keeps its id, and one whose id is here already is skipped, so the same
+// file imported twice adds nothing. also: more tags for them, the user's
+// own for this import. Answers {added, skipped, ids}: ids, the added
+// tasks', for the notice's Undo (batch-delete).
+func apiImport(w http.ResponseWriter, r *http.Request) error {
+	data, err := jsonObject(r)
+	if err != nil {
+		return err
+	}
+	user := userOf(r)
+	if err := mayWriteTasks(user); err != nil {
+		return err
+	}
+	notExport := refuse("Not a file of tasks exported from Zone")
+	snaps, ok := as[[]json.RawMessage](data["file"])
+	from := ""
+	if !ok {
+		file, isObj := as[jsonObj](data["file"])
+		if snaps, ok = as[[]json.RawMessage](file["tasks"]); !isObj || !ok {
+			return notExport
+		}
+		s, _ := as[string](file["list"])
+		from = cleanList(s)
+	}
+	if len(snaps) > importMax {
+		return refuse("Too many tasks: at most " + strconv.Itoa(importMax) + " in one import")
+	}
+	str := func(k string) string { s, _ := as[string](data[k]); return s }
+	add := cleanTags(strings.Split(str("new"), ","))
+	if len(add) == 0 {
+		add = newTaskTags(parseTasksParams("list=" + cleanList(str("list")) + " tag=" + strings.Join(strings.Fields(str("tag")), "")))
+	}
+	// also: tags of the user's own for this import, to find its tasks by.
+	add = cleanTags(append(add, strings.Split(str("also"), ",")...))
+	var remove []string
+	if from != "" && !slices.ContainsFunc(add, func(t string) bool { return strings.EqualFold(t, from) }) {
+		remove = []string{from}
+	}
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
+	active, completed, err := readForWriteLocked(user)
+	if err != nil {
+		return err
+	}
+	existing := taskIDsLocked() // every owner's: ids stay unique across the files
+	skipped, ids := 0, []string{}
+	for _, s := range snaps {
+		snap, _ := as[jsonObj](s)
+		t := sanitizeSnapshot(snap)
+		if t == nil {
+			return notExport
+		}
+		if id, _ := as[string](snap["id"]); !importIDRE.MatchString(id) {
+			t.ID = uuid4()
+		}
+		if existing[t.ID] {
+			skipped++
+			continue
+		}
+		// An admin's import keeps the file's names (a wiki moved, a
+		// backup put back); anyone else's only their own.
+		if !settings().isAdmin(user) {
+			checkBy(user, t)
+		}
+		existing[t.ID] = true
+		t.Tags = retag(t.Tags, add, remove)
+		// A task exported private stays private, wherever it is imported.
+		if (jsonTrue(data["private"]) || jsonTrue(snap["private"])) && privateFolder(user) != "" {
+			t.Owner = user
+		}
+		if t.isOpen() {
+			active = append(active, t)
+		} else {
+			completed = append(completed, t)
+		}
+		ids = append(ids, t.ID)
+	}
+	if len(ids) > 0 {
+		if err := writeBothLocked(user, active, completed, "Import "+strconv.Itoa(len(ids))+" tasks"); err != nil {
+			return err
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"added": len(ids), "skipped": skipped, "ids": ids})
+	return nil
+}
+
+func apiBatchComplete(w http.ResponseWriter, r *http.Request) error {
+	data, err := jsonObject(r)
+	if err != nil {
+		return err
+	}
+	ids, err := idList(data)
+	if err != nil {
+		return err
+	}
+	markCompleted := true
+	if data.has("completed") {
+		if markCompleted, err = asBool(data["completed"], "completed"); err != nil {
+			return err
+		}
+	}
+	if len(ids) == 0 {
+		return refuse("Bad Request")
+	}
+	set := idSet(ids)
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
+	active, completed, err := readForWriteLocked(userOf(r))
+	if err != nil {
+		return err
+	}
+	stamp := timestamp()
+	updated := []*Task{}
+	if markCompleted {
+		for _, t := range active {
+			if set[t.ID] && t.Keep && t.isOpen() {
+				keepDone(userOf(r), t) // stays open, back in the pool
+				updated = append(updated, t)
+			}
+		}
+		moving, movingIDs := selectTasks(active, func(t *Task) bool { return set[t.ID] && t.isOpen() && !t.Keep })
+		var spawned []*Task
+		for _, t := range moving {
+			if s := completeTask(userOf(r), t, stamp, active); s != nil {
+				spawned = append(spawned, s)
+			}
+			updated = append(updated, t)
+		}
+		active = append(withoutIDs(active, movingIDs), spawned...)
+		completed = append(completed, moving...)
+	} else {
+		moving, movingIDs := selectTasks(completed, func(t *Task) bool { return set[t.ID] && !t.isOpen() })
+		for _, t := range moving {
+			active = uncompleteTask(userOf(r), t, active, set)
+			updated = append(updated, t)
+		}
+		completed = withoutIDs(completed, movingIDs)
+		active = append(active, moving...)
+	}
+	msg := "Reopen tasks"
+	if markCompleted {
+		msg = "Complete tasks"
+	}
+	if err := writeBothLocked(userOf(r), active, completed, msg); err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, updated)
+	return nil
+}
+
+func apiReorder(w http.ResponseWriter, r *http.Request) error {
+	data, err := jsonObject(r)
+	if err != nil {
+		return err
+	}
+	order, ok1 := listField(data, "order")
+	rawUpdates, ok2 := listField(data, "updates")
+	updates := make([]jsonObj, len(rawUpdates))
+	for i, u := range rawUpdates {
+		var isObj bool
+		if updates[i], isObj = as[jsonObj](u); !isObj {
+			ok2 = false
+		}
+	}
+	if !ok1 || !ok2 {
+		return refuse("order must be a list of ids, updates a list of objects")
+	}
+	if len(order) == 0 && len(updates) == 0 {
+		return refuse("Bad Request")
+	}
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
+	active, err := readTasksStrict(userOf(r))
+	if err != nil {
+		return err
+	}
+	byID := map[string]*Task{}
+	for _, t := range active {
+		byID[t.ID] = t
+	}
+	for i, id := range order {
+		if s, ok := as[string](id); ok && byID[s] != nil {
+			f := float64(i)
+			byID[s].SortOrder = &f
+		}
+	}
+	for _, u := range updates {
+		id, _ := as[string](u["id"])
+		t := byID[id]
+		// null clears it: the task leaves the manual order.
+		if u.null("sort_order") && t != nil {
+			t.SortOrder = nil
+			continue
+		}
+		if f, ok := as[float64](u["sort_order"]); ok && t != nil {
+			t.SortOrder = &f
+		}
+	}
+	if err := writeTasksLocked(userOf(r), active, "Reorder tasks"); err != nil {
+		return err
+	}
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
+// apiBatchUpdate changes fields of several tasks in one commit: tasks is a
+// list of {id, …fields as PUT takes them}; status changes are refused, ids
+// no longer there skipped.
+func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
+	data, err := jsonObject(r)
+	if err != nil {
+		return err
+	}
+	raw, ok := as[[]json.RawMessage](data["tasks"])
+	valid := ok && len(raw) > 0
+	changes := make([]jsonObj, len(raw))
+	for i, c := range raw {
+		o, isObj := as[jsonObj](c)
+		if _, isStr := as[string](o["id"]); !isObj || !isStr {
+			valid = false
+			break
+		}
+		changes[i] = o
+	}
+	if !valid {
+		return refuse("tasks must be a list of objects with an id")
+	}
+	for _, c := range changes {
+		for _, k := range []string{"completed", "wont_do", "skip"} {
+			if c.has(k) {
+				return refuse("batch-update changes fields, not status")
+			}
+		}
+	}
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
+	active, completed, err := readForWriteLocked(userOf(r))
+	if err != nil {
+		return err
+	}
+	byID := map[string]*Task{}
+	for _, t := range slices.Concat(active, completed) {
+		byID[t.ID] = t
+	}
+	updated := []*Task{}
+	for _, change := range changes {
+		id, _ := as[string](change["id"])
+		t := byID[id]
+		if t == nil {
+			continue
+		}
+		rememberBy(t)
+		if err := applyTaskFields(userOf(r), t, change, false); err != nil {
+			return err
+		}
+		if change.has("history") {
+			t.History = cleanHistory(change["history"])
+			checkBy(userOf(r), t)
+		}
+		updated = append(updated, t)
+	}
+	if len(updated) > 0 {
+		if err := writeBothLocked(userOf(r), active, completed, "Update tasks"); err != nil {
+			return err
+		}
+	}
+	writeJSON(w, http.StatusOK, updated)
+	return nil
+}

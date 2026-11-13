@@ -2,7 +2,7 @@
 // the toolbar. It changes the app's params where they are written: the
 // [[tasks: …]] of a page (the app's own, a list's home on /tasks?list=, the
 // default list's on Pinned), or the settings of All tasks. The server
-// names that place in data-settings-* (tasks.go buildTasksEmbed) and
+// names that place in data-settings-* (tasksembed.go buildTasksEmbed) and
 // rewrites it (POST /api/tasks/settings); without them there is no gear.
 // Only what was changed is sent, so the other params stay as written.
 // Beside the gear, the list's ⋯ menu: its tasks as a file, Export and Import….
@@ -134,7 +134,7 @@ export function initTaskSettings(app) {
   }
 
   // The ⋯ menu. Export, Import…: the tasks this app shows (its list= and
-  // tag=), as a file (tasks.go apiExport, apiImport). An imported task gets
+  // tag=), as a file (tasksapi.go apiExport, apiImport). An imported task gets
   // the tags a new task here would, and is private where a new one is.
   const moreBtn = document.getElementById('task-more-btn' + sfx);
   const importFile = document.getElementById('task-import-file' + sfx);

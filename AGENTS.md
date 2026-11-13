@@ -89,10 +89,13 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 ├── go/                     # The server: package main, a file per area; pure code without Zone's state in go/internal/
 │   ├── go.mod, go.sum      # Go modules, exact versions (goldmark, x/text, onnxruntime_go)
 │   ├── server.go           # main: flags, start-up, the routes' mux, the request checks around them; zonewiki eval, zonewiki health, zonewiki user, zonewiki config
+│   ├── login.go            # The login gate's routes: /login, /logout
+│   ├── static.go           # public/ served as it is (gzipped, kept by the browser), a file sent with its type
+│   ├── uploads.go          # Uploads: _assets/ served, POST /api/upload
 │   ├── config.go           # What is fixed for the process, from the environment (read once into cfg)
 │   ├── configfile.go       # The settings file .zone/config: its keys, Settings (settings(), reloaded when the file changes), the line edits
 │   ├── storage.go          # upload-max and storage-max: sizes (25MB), what the wiki holds (not .git/, .zone/), checkRoom
-│   ├── commands.go         # zonewiki user (add, passwd, token, role, disable, enable, invite, reset, remove, list) and zonewiki config (check, set, unset, passwd, token, import), which edit the settings file (filelock_*.go: one at a time)
+│   ├── commands.go         # zonewiki user (add, passwd, token, role, disable, enable, invite, reset, remove, list) and zonewiki config (check, set, unset, passwd, token), which edit the settings file (filelock_*.go: one at a time)
 │   ├── security.go         # Host and Origin checks, the page policy, login, signed session (and its user), throttles
 │   ├── users.go            # Users: roles, password hashes, sign-in, the password prompt
 │   ├── admin.go            # The admin page (/admin, admins), its Users tab: roles, disable, remove, writing the settings file as the commands do
@@ -103,7 +106,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── setup.go            # The first-run page: /setup, a first login for a wiki other devices reach
 │   ├── access.go           # Who may see and change what: private/<user>/ (canSee, canWrite, canSeePath)
 │   ├── private.go          # The private home private/<user>/index: /private, its template, its protection
-│   ├── routes.go           # The wiki's routes: pages, the editor, notes, search, previews, uploads
+│   ├── routes.go           # The wiki's routes: pages, the editor, notes, search, previews
 │   ├── pageops.go          # Page writes the routes and the MCP tools share (delete, rename, restore, create, save): checks, text not yet in git kept
 │   ├── refusal.go          # What an operation refuses with (refusalError: a kind and a message), for pages and tasks alike; each door answers it its way
 │   ├── views.go            # The page shell, breadcrumb, modules, menus, side columns; templates/ (embedded)
@@ -116,7 +119,9 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── history.go          # History, revisions, diffs, restore, deleted pages, uncommitted changes
 │   ├── quicknotes.go       # Notes: create, Move to wiki, Append to page (the routes and MCP share it)
 │   ├── merge.go            # Several editors on one page: drafts' authors, the bases, the three-way merge, texts left in conflict
-│   ├── tasks.go            # Tasks: the /api/tasks routes (their task writes as functions the MCP tools share), the [[tasks:]] embed
+│   ├── tasks.go            # Task writes (create, change, comment, tag, delete), as functions the routes and the MCP tools share
+│   ├── tasksapi.go         # The /api/tasks routes
+│   ├── tasksembed.go       # The [[tasks:]] embed: its HTML, its settings dialog, the counts the Tasks links show
 │   ├── taskstore.go        # Tasks on disk: _tasks/ files (users' private ones in private/<user>/_tasks/), lock, recurrence, history, comments, backlinks, search docs
 │   ├── taskby.go           # Comments and history a client sends whole: nobody writes under another's name
 │   ├── tasksyntax.go       # The page syntax of tasks: [[tasks: …]] params, [[task:…]], tag rules, date words
@@ -130,7 +135,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── embed.go            # Optional semantic search: section embeddings, the index and its cache, Related pages
 │   ├── embed_onnx.go       # The model on onnxruntime (cgo; embed_nocgo.go: built without cgo, keywords only)
 │   ├── mcp.go              # MCP protocol (JSON-RPC) for /mcp; mcp_tools.json the tool definitions
-│   ├── mcptools.go         # The MCP tools that read, and the task tools; mcpwrite.go those that write pages
+│   ├── mcptools.go         # The MCP tools that read, and the table of all tools with their dispatch (mcpToolTable); mcpwrite.go and mcpreplace.go those that write pages, mcptasks.go the task tools, mcpguides.go the guides, mcpargs.go what they share
 │   ├── manual.go           # Zone's own docs (README + docs/spec) searched by section, for the MCP tool zone_help
 │   ├── eval.go             # zonewiki eval: measures search_wiki's retrieval on your wiki against your questions (./run.sh eval)
 │   ├── embedtest.go        # The tests' fake embedder (--semantic-test)
@@ -171,7 +176,7 @@ Page content does not live in the repo tree. It lives in the host directory poin
 ./run.sh config check|set|unset|passwd|token  # the wiki's settings file: check it, set a key, password and MCP token without users
 ```
 
-Zone is at **http://localhost:5000**. The deployment's settings are in `.env` (gitignored; `ZONE_DATA`, `ZONE_ALLOW_REMOTE`, `TZ` …, read once into `cfg`); the wiki's own (users, password, MCP token, hosts, locale …) are in the wiki's settings file `.zone/config`, kept out of git and reloaded when it changes (`settings()`; one left in `.env` stops Zone). The wiki lives outside the repo, in `ZONE_DATA` (default `~/zonewiki`), which must exist: pages at its root and in folders, uploads in `_assets/`, tasks in `_tasks/`, the settings file, the search index files, the semantic cache and session key in `.zone/`. Details: `docs/spec/deployment.md`.
+Zone is at **http://localhost:5000**. The deployment's settings are in `.env` (gitignored; `ZONE_DATA`, `ZONE_ALLOW_REMOTE`, `TZ` …, read once into `cfg`); the wiki's own (users, password, MCP token, hosts, locale …) are in the wiki's settings file `.zone/config`, kept out of git and reloaded when it changes (`settings()`). The wiki lives outside the repo, in `ZONE_DATA` (default `~/zonewiki`), which must exist: pages at its root and in folders, uploads in `_assets/`, tasks in `_tasks/`, the settings file, the search index files, the semantic cache and session key in `.zone/`. Details: `docs/spec/deployment.md`.
 
 Without the container (Go 1.27 and a C compiler; `CGO_ENABLED=0` builds one without semantic search):
 
