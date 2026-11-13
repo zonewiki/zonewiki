@@ -412,13 +412,6 @@ func archiveOldCompleted() {
 	gitCommit("", msg, changed...)
 }
 
-// readAll: the open and completed tasks user sees, one consistent snapshot.
-func readAll(user string) []*Task {
-	tasksMu.Lock()
-	defer tasksMu.Unlock()
-	return append(readTasks(user), readCompleted(user)...)
-}
-
 // openTasks: the open tasks user sees, under the lock: a task made private
 // or shared moves between two files, and a read between their writes
 // would miss it.
@@ -901,14 +894,12 @@ type TaskLink struct {
 	Section, Anchor string
 }
 
-// findTaskBacklinks: open tasks user sees whose title or notes link to
-// slug (a wikilink, or a markdown link to /page/<slug>).
-func findTaskBacklinks(user, slug string) []TaskLink {
+// findTaskBacklinks: those of the open tasks (a user's: rq.openTasks)
+// whose title or notes link to slug (a wikilink, or a markdown link to
+// /page/<slug>).
+func findTaskBacklinks(open []*Task, slug string) []TaskLink {
 	var out []TaskLink
-	for _, t := range readAll(user) {
-		if !t.IsOpen() {
-			continue
-		}
+	for _, t := range open {
 		text := t.Title + "\n" + t.Description
 		found, section, anchor := false, "", ""
 		for _, m := range mdtext.WikilinkRE.FindAllStringSubmatch(text, -1) {

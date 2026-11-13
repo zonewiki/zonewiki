@@ -112,6 +112,23 @@ Inside the container it is always mounted at `/wiki-data`. Layout:
 
 Uploaded image URLs use `/_assets/<filename>` (served by `serveUpload` from `cfg.Uploads`), not the static file path.
 
+## How big a wiki can be
+
+Zone keeps no index of the wiki's pages or tasks in memory beyond per-page caches: a page view walks the wiki's folders and looks at every page's links (cached by the file's mtime, so one `stat` a page) for its backlinks, and reads the open tasks' file whole, once a request (`rq.openTasks`), for the Tasks links' counts and the page's linked tasks; the tasks API reads the task files whole. So a request grows with the wiki. Measured through the real handlers (`go/bench_test.go`; `go test -run '^$' -bench . -benchtime 20x` in `go/`), warm, on a 16-core desktop in 2026-11:
+
+| Request | Wiki | Time |
+|---------|------|------|
+| A page view | 1,000 pages, 500 open tasks | 4 ms |
+| A page view | 5,000 pages | 10 ms |
+| A page view | 20,000 pages | 50 ms |
+| A page view | 1,000 pages, 5,000 open and 20,000 completed tasks | 27 ms |
+| `GET /api/tasks` | 500 open tasks | 3 ms |
+| `GET /api/tasks` | 5,000 open tasks | 31 ms |
+| The page list (`/api/pages-list`) | 1,000 pages | 3 ms |
+| The page list | 20,000 pages | 92 ms |
+
+A personal or a small team's wiki is far below where this is felt; past some ten thousand pages or open tasks every view pays for it, and a NAS's disk and CPU bring that point closer. Page writes run one at a time (`pagesMu`), each with its git commit (a few git processes), so a wiki is not for many people saving at once. Completed tasks cost nothing until they are looked at: a page view doesn't read their files. What would lift the ceiling, when it is needed: the pages' mtimes taken from the walk instead of a `stat` each (`pageStats`), and the parsed task lists kept by their files' mtimes.
+
 ## From Zone 1 (or Leaf)
 
 Zone 2 reads only today's names; what Zone 1 still answered to from before its renames (Leaf, Deck, Scratch) is gone. Start the last Zone 1 release once on the wiki first: it moves `.leaf/` to `.zone/` and `_deck/` to `_tasks/`, and takes the settings file out of git. The rest is by hand:

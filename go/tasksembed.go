@@ -254,7 +254,7 @@ type TaskCounts struct {
 // and of those how many are overdue or due today; of the pinned lists
 // (pinnedView) when pages pin some, else of every task.
 func taskCounts(rq *Req) TaskCounts {
-	tasks := openTasks(rq.who())
+	tasks := rq.openTasks()
 	if len(rq.pinnedLists()) == 0 {
 		return countTasks(tasks)
 	}
@@ -369,7 +369,7 @@ func (rq *Req) taskPlaces() []TaskPlace {
 	user := rq.who()
 	pinned, lists := rq.pinnedLists(), rq.taskLists()
 	var out []TaskPlace
-	tasks := openTasks(user)
+	tasks := rq.openTasks()
 	if len(pinned) > 1 {
 		out = append(out, TaskPlace{Key: "pinned", Label: "Pinned", Title: "Your pinned lists, as one", Href: "/tasks?pinned=1",
 			Pinned: true, Counts: countTasks(tasks, rq.pinnedView())})

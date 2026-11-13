@@ -24,7 +24,7 @@ func prepare(text string) (string, []tasksEmbed, []string) {
 
 // testWiki points cfg (and settings) at a fresh wiki with these pages (slug → text);
 // pages under secret/ are not for sharing.
-func testWiki(t *testing.T, pages map[string]string) {
+func testWiki(t testing.TB, pages map[string]string) {
 	t.Helper()
 	dir := t.TempDir()
 	for slug, text := range pages {

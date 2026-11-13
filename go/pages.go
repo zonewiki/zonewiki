@@ -37,6 +37,8 @@ type Req struct {
 	sorted     []PageFile // the same, by slug
 	slugs      map[string]bool
 	lists      map[string]TasksHome
+	open       []*Task // openTasks, once
+	openRead   bool
 }
 
 // pageFiles: iterPages, once per request (rq nil: listed now).
@@ -51,6 +53,20 @@ func (rq *Req) pageFiles() []PageFile {
 		}
 	}
 	return rq.files
+}
+
+// openTasks: the open tasks the request's user sees, read once per request
+// (rq nil: read now, shared ones only): the Tasks links' counts, the task
+// places and a page's linked tasks all go by them, and reading them is
+// reading and parsing the task files whole.
+func (rq *Req) openTasks() []*Task {
+	if rq == nil {
+		return openTasks("")
+	}
+	if !rq.openRead {
+		rq.open, rq.openRead = openTasks(rq.user), true
+	}
+	return rq.open
 }
 
 // pageStat: a page's file and its mtime when the page was listed.
@@ -544,10 +560,13 @@ func pageLinkTargets(content, slug string) map[string]bool {
 }
 
 // Per page, by its file's mtime: title, link targets, task list embeds' params.
-// Edits made outside the app show, as the mtime changes.
+// Edits made outside the app show, as the mtime changes. A page that is
+// gone (deleted, renamed, moved) leaves the cache when it is next asked
+// for, or with the next look at every page (prunePageMeta).
 var (
-	metaMu    sync.Mutex
-	metaCache = map[string]pageMetaEntry{}
+	metaMu     sync.Mutex
+	metaCache  = map[string]pageMetaEntry{}
+	metaPruned time.Time // prunePageMeta's last look
 )
 
 type pageMetaEntry struct {
@@ -591,6 +610,9 @@ func pageTaskLists(content string) []TaskList { return embedsLists(pageTasksEmbe
 func pageMetaEntryOf(p, slug string) pageMetaEntry {
 	st, err := os.Stat(p)
 	if err != nil {
+		metaMu.Lock()
+		delete(metaCache, slug)
+		metaMu.Unlock()
 		return pageMetaEntry{title: mdtext.SlugDisplayName(slug), targets: map[string]bool{}}
 	}
 	metaMu.Lock()
@@ -610,6 +632,28 @@ func pageMetaEntryOf(p, slug string) pageMetaEntry {
 	metaCache[slug] = entry
 	metaMu.Unlock()
 	return entry
+}
+
+// prunePageMeta drops the cache's entries of pages that aren't among pages
+// (every page, as just listed): without it each deleted or renamed page
+// would stay for as long as Zone runs. At most once a minute: it goes
+// through every page.
+func prunePageMeta(pages []PageFile) {
+	metaMu.Lock()
+	defer metaMu.Unlock()
+	if since := now().Sub(metaPruned); since >= 0 && since < time.Minute { // not if the clock went back
+		return
+	}
+	metaPruned = now()
+	there := make(map[string]bool, len(pages))
+	for _, p := range pages {
+		there[p.Slug] = true
+	}
+	for slug := range metaCache {
+		if !there[slug] {
+			delete(metaCache, slug)
+		}
+	}
 }
 
 // pageMeta: a page's title and outgoing link targets, cached by mtime.
@@ -837,6 +881,7 @@ func findBacklinksIn(pages []PageFile, slug string) []PageRef {
 			out = append(out, PageRef{p.Slug, title})
 		}
 	}
+	prunePageMeta(pages)
 	sort.SliceStable(out, func(i, j int) bool { return strings.ToLower(out[i].Title) < strings.ToLower(out[j].Title) })
 	return out
 }

@@ -170,7 +170,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	var tasks []TaskLink
-	for _, t := range findTaskBacklinks(rq.user, slug) {
+	for _, t := range findTaskBacklinks(rq.openTasks(), slug) {
 		if inline[t.ID] {
 			continue
 		}

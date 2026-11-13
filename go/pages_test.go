@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 	"zonewiki/internal/mdtext"
 )
 
@@ -272,5 +273,36 @@ func TestRenamedTags(t *testing.T) {
 		if !slices.Equal(got, c.want) || changed != c.changed {
 			t.Errorf("%q: got %q %v", c.in, got, changed)
 		}
+	}
+}
+
+// A page that is gone doesn't stay in the per-page cache: the next look at
+// the wiki's pages drops it (it used to stay for as long as Zone ran).
+func TestPageMetaForgetsPagesThatAreGone(t *testing.T) {
+	testWiki(t, map[string]string{"a": "# A\n\n[[b]]\n", "b": "# B\n", "c": "# C\n\n[[b]]\n"})
+	at := clock(t, time.Date(2026, 5, 1, 12, 0, 0, 0, time.Local))
+	cached := func(slug string) bool {
+		metaMu.Lock()
+		defer metaMu.Unlock()
+		_, ok := metaCache[slug]
+		return ok
+	}
+	if got := findBacklinks("b"); len(got) != 2 || !cached("a") || !cached("c") {
+		t.Fatalf("backlinks %v, cached a %v c %v", got, cached("a"), cached("c"))
+	}
+	if err := os.Remove(filepath.Join(cfg.Data, "c.md")); err != nil {
+		t.Fatal(err)
+	}
+	*at = at.Add(2 * time.Minute) // a look at every page: at most once a minute
+	if got := findBacklinks("b"); len(got) != 1 || got[0].Slug != "a" {
+		t.Errorf("backlinks after the delete: %v", got)
+	}
+	if cached("c") || !cached("a") {
+		t.Errorf("cached: c %v (gone), a %v (there)", cached("c"), cached("a"))
+	}
+	// Asked for by name: gone at once.
+	_ = os.Remove(filepath.Join(cfg.Data, "a.md"))
+	if title, _ := pageMeta(filepath.Join(cfg.Data, "a.md"), "a"); title != "A" || cached("a") {
+		t.Errorf("a: title %q, cached %v", title, cached("a"))
 	}
 }
