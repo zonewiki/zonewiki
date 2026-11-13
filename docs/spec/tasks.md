@@ -466,6 +466,8 @@ Each with a dark-mode value.
   or Edit… in the menu.
   Centred with `inset: 0; margin: auto` and **no transform** (a transform would clip `position: fixed` popups like the date picker), scrollable, sticky action bar.
   At ≤640px full screen with Due | Start and Repeat | Every | From done on shared rows (`.task-row-dates`, `.task-row-repeat`).
+  **Tab goes from field to field**: Title, Description, the comment field while it is shown (and its Add once something is written), Tags, Due, Start, Days before due, the repeat fields, Keep, Private, then Save, Cancel, Delete (a field that is off, like Every N without a repeat, is none).
+  What isn't a field of the task is no stop (`tabindex="-1"`) and has its own key or the mouse: Edit | Preview (F2), the formatting bar (Ctrl+B/I/K), Add comment (Alt+C) and the comment field's Cancel (Esc), a comment's ✎ and × and the links and boxes in comments, History.
   The List field sits in a closed `<details>`; saving a task into another list removes it from the view with a notice.
 - **Date picker** (`openDatePicker`): a row of shortcuts above the month,
   counted from today,
@@ -609,6 +611,7 @@ Not part of the History: they are never capped, undo of other changes never touc
   Enter starts a new line; **Ctrl+Enter** (or Add) saves the comment at once, not with Save, so Cancel never loses one, and puts the field away; Esc (or the field's Cancel) puts it away without saving, and doesn't close the modal.
   The field has the description's markdown helpers (`markdownEditor`): lists go on, `[[` completes pages, Ctrl+B/I/K, a pasted URL asks for its name, a pasted or dropped file is uploaded.
   ✎ edits a comment in place: the same field takes the comment's place, with its text (Save or Ctrl+Enter saves, Esc cancels without closing the modal); × deletes it with an undo toast.
+  **Alt+C** shows the field too (or goes to it), from anywhere in the modal.
   A comment still in its field is not lost: the modal's Save saves it with the task, and ✎ or × on another comment saves it first.
   The text comes back with a file's line ends (`commentText`: `\r\n` becomes `\n`).
 - **Cards**: a `💬 N` button (`.task-comments-btn`) in the meta row; its tooltip is the latest comment with its time.

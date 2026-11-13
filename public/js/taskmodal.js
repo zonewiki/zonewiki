@@ -66,6 +66,9 @@ notesPreview?.addEventListener('change', async e => {
   await fetchNotesPreview();
   notesPreview.focus({ preventScroll: true });
 });
+// Tab goes from field to field (Title, Description, Tags, the dates …):
+// the formatting bar's buttons are a click or Ctrl+B/I/K away, not a Tab.
+notesBar?.querySelectorAll('button').forEach(b => { b.tabIndex = -1; });
 if (app.descTextarea) {
   // A private task's files go where a private page's do (the user's folder).
   const privateDir = app.appEl?.dataset.privateFolder;
@@ -277,9 +280,11 @@ function renderComments(task) {
   commentList.innerHTML = comments.slice().reverse().map(c =>
     `<li data-comment="${esc(c.id)}"><span class="task-history-at">${esc(commentStamp(c))}</span>` +
     `<div class="task-comment-text task-comment-body page-content">${app.htmlOf('comments', c.text)}</div>` +
-    `<button type="button" class="task-comment-btn" data-comment-action="edit" title="Edit" aria-label="Edit comment">✎</button>` +
-    `<button type="button" class="task-comment-btn" data-comment-action="delete" title="Delete" aria-label="Delete comment">×</button>` +
+    `<button type="button" class="task-comment-btn" data-comment-action="edit" tabindex="-1" title="Edit" aria-label="Edit comment">✎</button>` +
+    `<button type="button" class="task-comment-btn" data-comment-action="delete" tabindex="-1" title="Delete" aria-label="Delete comment">×</button>` +
     '</li>').join('');
+  // What the comments hold (links, checkboxes) is no stop for Tab either.
+  commentList.querySelectorAll('a, input, summary').forEach(el => { el.tabIndex = -1; });
   renderFigures(commentList);
   if (!commentBox.hidden) {
     placeCommentBox();
@@ -307,6 +312,7 @@ function openCommentBox(cid = null, text = '') {
   commentOpenBtn.hidden = true;
   commentOpenBtn.setAttribute('aria-expanded', 'true');
   placeCommentBox();
+  syncCommentAdd();
   commentInput.focus();
   commentInput.setSelectionRange(text.length, text.length);
 }
@@ -319,6 +325,10 @@ function closeCommentBox() {
   commentOpenBtn.hidden = false;
   commentOpenBtn.setAttribute('aria-expanded', 'false');
 }
+// Add (or Save) is a stop for Tab only with a comment to add.
+function syncCommentAdd() { commentAddBtn.tabIndex = commentInput.value.trim() ? 0 : -1; }
+commentInput.addEventListener('input', syncCommentAdd);
+
 // A comment route answered with the task: take it in and redraw.
 async function commentWrite(url, method, body) {
   const res = await fetch(url, {
@@ -558,6 +568,13 @@ app.modal.addEventListener('keydown', e => {
   e.preventDefault(); e.stopPropagation();
   if (e.key === 'Enter' && e.target === commentInput) saveComment();
   else app.form.requestSubmit();
+}, true);
+// Alt+C: the comment field (Add comment is no stop for Tab).
+app.modal.addEventListener('keydown', e => {
+  if (e.code !== 'KeyC' || !e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  if (!st.commentsTaskId) return;   // a new task has no comments yet
+  e.preventDefault(); e.stopPropagation();
+  if (commentBox.hidden) openCommentBox(); else commentInput.focus();
 }, true);
 // F2: Edit | Preview of the notes, as in the editor (not the editor's,
 // on its page).

@@ -2796,6 +2796,68 @@ def test_comment_in_its_field_is_saved_with_the_task(page, wiki):
     assert [c["text"] for c in task["comments"]] == ["left a voicemail"]
 
 
+def _tab_stops(page, modal, limit=30):
+    """What Tab focuses in the dialog (its id, or what names it), from where the
+    focus is until it is back there. Between the last and the first the focus
+    may leave the fields (the dialog itself, the browser): no stop."""
+    name = """() => { const el = document.activeElement;
+        return el.closest('form') ? el.id || el.dataset.dateTrigger || el.name || el.textContent.trim() : ''; }"""
+    stops = [page.evaluate(name)]
+    for _ in range(limit):
+        page.keyboard.press("Tab")
+        at = page.evaluate(name)
+        if at == stops[0]:
+            break
+        if at:
+            stops.append(at)
+    return stops
+
+
+def test_tab_in_the_task_dialog_goes_from_field_to_field(page, wiki):
+    # Not through Edit | Preview, the formatting bar, Add comment, a
+    # comment's ✎ and ×, links in comments, or History.
+    tid = page.request.post("/api/tasks", data={"title": "Plan trip", "description": "notes",
+                                                "due_date": "2026-12-24"}).json()["id"]
+    page.request.post(f"/api/tasks/{tid}/comments", data={"text": "see [the site](https://example.com)\n\n- [ ] one"})
+    page.goto("/tasks?view=open")
+    modal = open_edit(page, "Plan trip")
+    expect(modal.locator("#task-edit-title")).to_be_focused()
+    fields = ["task-edit-title", "task-edit-desc", "task-edit-tags", "task-edit-due", "task-edit-start", "task-edit-lead",
+              "task-edit-rec-type", "task-edit-rec-from", "task-edit-keep", "Save", "task-edit-cancel", "task-edit-delete"]
+    stops = _tab_stops(page, modal)
+    # "Every N" and "From done" are off without a repeat: disabled fields are no stops either.
+    assert stops == [f for f in fields if f != "task-edit-rec-from"], stops
+    # And back the same way.
+    modal.locator("#task-edit-tags").focus()
+    page.keyboard.press("Shift+Tab")
+    expect(modal.locator("#task-edit-desc")).to_be_focused()
+    # The comment field, once asked for (Alt+C), is a field: after the description.
+    modal.locator("#task-edit-desc").focus()
+    page.keyboard.press("Alt+c")
+    comment = modal.locator("#task-edit-comment")
+    expect(comment).to_be_focused()
+    page.keyboard.press("Tab")
+    expect(modal.locator("#task-edit-tags")).to_be_focused()         # nothing written: Add is no stop
+    page.keyboard.press("Shift+Tab")
+    expect(comment).to_be_focused()
+    page.keyboard.type("called Bob")
+    page.keyboard.press("Tab")
+    expect(modal.locator("#task-edit-comment-add")).to_be_focused()  # with a comment to add, it is
+    page.keyboard.press("Enter")
+    expect(modal.locator(".task-comment-list > li")).to_have_count(2)
+    page.keyboard.press("Tab")
+    expect(modal.locator("#task-edit-tags")).to_be_focused()
+    # A new task: the same, without Delete.
+    modal.locator("#task-edit-cancel").click()
+    page.locator(".tasks-app").get_by_role("button", name="New task").click()
+    stops = _tab_stops(page, modal)
+    # Without a date nothing can repeat or start before it: those fields are off.
+    off = ("task-edit-lead", "task-edit-rec-type", "task-edit-rec-from", "task-edit-delete")
+    assert stops == [f for f in fields if f not in off], stops
+    page.keyboard.press("Alt+c")                                     # no comments on a task not yet made
+    expect(comment).to_be_hidden()
+
+
 def test_new_task_has_no_comments_field(page, wiki):
     page.goto("/tasks?view=open")
     page.locator(".tasks-app").get_by_role("button", name="New task").click()
