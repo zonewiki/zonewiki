@@ -372,7 +372,14 @@ func checks(next http.Handler) http.Handler {
 			}
 			return
 		}
-		if settings().authOn() && !authExempt(r) {
+		if tokenForFiles(r) {
+			// An assistant's upload or download, with its MCP token in
+			// place of a session (mcpfiles.go).
+			var ok bool
+			if r, ok = tokenRequest(w, r); !ok {
+				return
+			}
+		} else if settings().authOn() && !authExempt(r) {
 			user, ok, renew := signedIn(r)
 			if !ok {
 				next := r.URL.Path

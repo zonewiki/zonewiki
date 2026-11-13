@@ -5,10 +5,13 @@ handling and the limits Zone cuts long answers at have Go tests
 (go/mcp_test.go).
 """
 
+import base64
+import io
 import json
 from datetime import date, timedelta
 import os
 import re
+import textwrap
 
 import pytest
 
@@ -53,13 +56,13 @@ class TestToolDefinitions:
         tools = self.tools(client)
         assert [t["name"] for t in tools] == [
             "search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links",
-            "list_tags", "history", "zone_help", "read_guides",
-            "write_page", "edit_page", "replace_in_pages", "append_to_page", "file_note", "rename_page",
+            "list_tags", "history", "zone_help", "read_guides", "read_file",
+            "write_page", "edit_page", "replace_in_pages", "append_to_page", "file_note", "upload_file", "rename_page",
             "delete_page", "restore_page", "rename_task_tag", "create_task", "update_task"]
         reading = {"search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links",
-                   "list_tags", "history", "zone_help", "read_guides"}
+                   "list_tags", "history", "zone_help", "read_guides", "read_file"}
         assert all(t["annotations"]["readOnlyHint"] == (t["name"] in reading) for t in tools)
-        adding = {"append_to_page", "create_task"}
+        adding = {"append_to_page", "create_task", "upload_file"}
         assert all(t["annotations"]["destructiveHint"] == (t["name"] not in adding)
                    for t in tools if t["name"] not in reading)
         assert all(t["inputSchema"]["type"] == "object" for t in tools)
@@ -68,7 +71,7 @@ class TestToolDefinitions:
         # Every session loads them all. Parameters many tools share keep
         # short descriptions; read_guides explains the gate once.
         tools = {t["name"]: t for t in self.tools(client)}
-        assert len(json.dumps(list(tools.values()))) < 25700
+        assert len(json.dumps(list(tools.values()))) < 27100
         props = tools["write_page"]["inputSchema"]["properties"]
         assert len(props["summary"]["description"]) < 100 and len(props["guides"]["description"]) < 100
         assert "refused until its id" in tools["read_guides"]["description"]
@@ -963,6 +966,134 @@ class TestTaskComments:
         text, err = call(client, "update_task", id=tid, comment="Bought:\n\n- brushes\n- primer")
         assert not err
         assert re.search(r"- \d{4}-\d{2}-\d{2} \d{2}:\d{2}: Bought:\n  \n  - brushes\n  - primer", text)
+
+
+# ── Files ────────────────────────────────────────────────────────────────────
+
+PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
+
+
+def content(client, tool, /, **args):
+    """A tool's whole answer: its parts, and whether it is an error."""
+    result = rpc(client, "tools/call", {"name": tool, "arguments": args}).get_json()["result"]
+    return result["content"], result["isError"]
+
+
+class TestUploadFile:
+    def test_a_text_file_and_its_link(self, client, git_wiki_dir):
+        text, err = call(client, "upload_file", filename="My Notes (v2).txt", text="first line\n")
+        assert not err and text.startswith("Uploaded My Notes (v2).txt (11 bytes; everyone who uses the wiki can open it).")
+        assert text.endswith("\n[My Notes (v2).txt](/_assets/My%20Notes%20%28v2%29.txt)")
+        assert (git_wiki_dir / "_assets/My Notes (v2).txt").read_text() == "first line\n"
+        assert self_log(git_wiki_dir)[0] == "Upload My Notes (v2).txt (MCP)"
+        # The link works on a page.
+        url = text.rsplit("(", 1)[1][:-1]
+        assert client.get(url, headers=HOST).data == b"first line\n"
+
+    def test_an_image_from_base64_is_linked_as_an_image(self, client, wiki_dir):
+        text, err = call(client, "upload_file", filename="dot.png", content_base64=base64.b64encode(PNG).decode())
+        assert not err and text.endswith("\n![dot.png](/_assets/dot.png)")
+        assert (wiki_dir / "_assets/dot.png").read_bytes() == PNG
+        # Line breaks in the base64, and no padding, are fine.
+        wrapped = "\n".join(textwrap.wrap(base64.b64encode(PNG).decode().rstrip("="), 20))
+        text, err = call(client, "upload_file", filename="dot.png", content_base64=wrapped)
+        assert not err and "![dot-2.png](/_assets/dot-2.png)" in text            # a taken name gets a number
+        assert (wiki_dir / "_assets/dot-2.png").read_bytes() == PNG and (wiki_dir / "_assets/dot.png").read_bytes() == PNG
+
+    def test_what_is_refused(self, client, wiki_dir):
+        for args in ({"filename": "a.txt"}, {"filename": "a.txt", "text": "x", "content_base64": "eA=="},
+                     {"filename": "a.txt", "text": ""}, {"filename": "a.txt", "content_base64": "not base64!"},
+                     {"filename": "..", "text": "x"}, {"filename": ".env", "text": "x"}, {"text": "x"}):
+            assert call(client, "upload_file", **args)[1], args
+        text, err = call(client, "upload_file", filename="a/b/../../etc/passwd", text="x")
+        assert not err and (wiki_dir / "_assets/passwd").read_text() == "x"       # a path's last part is the name
+        assert sorted(p.name for p in (wiki_dir / "_assets").iterdir()) == ["passwd"]
+        # Too big for a tool call: told how to send it instead.
+        text, err = call(client, "upload_file", filename="big.bin", content_base64=base64.b64encode(b"x" * (1 << 20) + b"y").decode())
+        assert err and "at most 1 MB" in text and "/api/upload" in text and "Authorization: Bearer" in text
+        assert not (wiki_dir / "_assets/big.bin").exists()
+
+    def test_a_full_wiki_takes_no_file(self, client, wiki_dir, monkeypatch):
+        monkeypatch.setattr(settings, "CONFIG_FILE", "storage-max = 10KB\n")
+        (wiki_dir / "_assets" / "big.bin").write_bytes(b"x" * 20_000)
+        text, err = call(client, "upload_file", filename="more.txt", text="x")
+        assert err and "The wiki is full" in text and not (wiki_dir / "_assets/more.txt").exists()
+
+
+class TestReadFile:
+    def test_an_image_comes_as_an_image(self, client, wiki_dir):
+        (wiki_dir / "_assets/My Shot.png").write_bytes(PNG)
+        for url in ("/_assets/My%20Shot.png", "/_assets/My Shot.png", "http://localhost:5000/_assets/My%20Shot.png?x=1#y"):
+            parts, err = content(client, "read_file", url=url)
+            assert not err and parts[0] == {"type": "text", "text": f"My Shot.png (image/png, {len(PNG)} bytes)"}
+            assert parts[1] == {"type": "image", "data": base64.b64encode(PNG).decode(), "mimeType": "image/png"}
+
+    def test_a_text_file_comes_as_text(self, client, wiki_dir):
+        (wiki_dir / "_assets/data.csv").write_text("a,b\n1,2\n")
+        (wiki_dir / "_assets/drawing.svg").write_text("<svg></svg>")
+        assert call(client, "read_file", url="/_assets/data.csv") == ("data.csv (text/csv, 8 bytes):\n\na,b\n1,2\n", False)
+        assert "<svg></svg>" in call(client, "read_file", url="/_assets/drawing.svg")[0]      # SVG is text
+        # A long one is cut off, at a character, and says so.
+        (wiki_dir / "_assets/long.txt").write_text("ä" * 150_000)
+        text, err = call(client, "read_file", url="/_assets/long.txt")
+        assert not err and text.count("ä") == 102_400 and "[cut off after 200 KB." in text
+
+    def test_other_files_are_named_with_the_way_to_fetch_them(self, client, wiki_dir):
+        (wiki_dir / "_assets/deck.pdf").write_bytes(b"%PDF-1.4\x00\xff\xfe binary")
+        text, err = call(client, "read_file", url="/_assets/deck.pdf")
+        assert not err and text.startswith("deck.pdf (application/pdf, ")
+        assert "can't be shown here" in text and "curl -H 'Authorization: Bearer <token>' -o NAME http://localhost:5000<url>" in text
+        assert "binary" not in text
+
+    def test_only_uploads_are_read(self, client, wiki_dir):
+        (wiki_dir / "_assets/.hidden").write_text("x")
+        (wiki_dir / "_assets/sub").mkdir()
+        (wiki_dir / "_assets/sub/a.txt").write_text("x")
+        for url in ("/_assets/missing.png", "/_assets/../index.md", "/_assets/..%2Findex.md", "/index.md", "/page/index",
+                    "/_assets/.hidden", "/_assets/sub/a.txt", "/_assets/sub", "/_assets/", "/_tasks/tasks.json",
+                    "/private/x/_assets/a.txt"):
+            text, err = call(client, "read_file", url=url)
+            assert err and text.startswith("No such file"), url
+        assert call(client, "read_file", url="")[1] and call(client, "read_file")[1]
+
+
+class TestFileRoutesWithTheToken:
+    """An assistant with a shell sends and fetches files over HTTP, its MCP
+    token in place of a session (docs/spec/mcp.md, Files)."""
+
+    @pytest.fixture(autouse=True)
+    def login(self, monkeypatch):
+        monkeypatch.setattr(settings, "PASSWORD", "pw")
+
+    def upload(self, client, name, data, headers=AUTH, **form):
+        return client.post("/api/upload", data={"file": (io.BytesIO(data), name), **form},
+                           content_type="multipart/form-data", headers={**HOST, **headers})
+
+    def test_upload_and_download(self, client, wiki_dir):
+        assert self.upload(client, "deck.pdf", b"%PDF-1").get_json() == {"url": "/_assets/deck.pdf"}
+        assert (wiki_dir / "_assets/deck.pdf").read_bytes() == b"%PDF-1"
+        # Nobody to ask about a taken name: it gets a number, and overwrite counts for nothing.
+        assert self.upload(client, "deck.pdf", b"%PDF-2").get_json() == {"url": "/_assets/deck-2.pdf"}
+        assert self.upload(client, "deck.pdf", b"%PDF-3", overwrite="1").get_json() == {"url": "/_assets/deck-3.pdf"}
+        assert (wiki_dir / "_assets/deck.pdf").read_bytes() == b"%PDF-1"
+        got = client.get("/_assets/deck-2.pdf", headers={**HOST, **AUTH})
+        assert got.status_code == 200 and got.data == b"%PDF-2"
+
+    def test_without_the_token_it_is_the_login_as_ever(self, client, wiki_dir):
+        (wiki_dir / "_assets/a.txt").write_text("x")
+        assert client.get("/_assets/a.txt", headers=HOST).status_code == 302
+        assert self.upload(client, "b.txt", b"x", headers={}).status_code == 302
+        wrong = {"Authorization": "Bearer nope"}
+        assert client.get("/_assets/a.txt", headers={**HOST, **wrong}).status_code == 401
+        resp = self.upload(client, "b.txt", b"x", headers=wrong)
+        assert resp.status_code == 401 and "invalid_token" in resp.headers["WWW-Authenticate"]
+        assert not (wiki_dir / "_assets/b.txt").exists()
+
+    def test_the_token_opens_nothing_else(self, client, wiki_dir):
+        for method, path in (("GET", "/page/index"), ("GET", "/api/tasks"), ("POST", "/api/tasks"),
+                             ("GET", "/edit/index"), ("POST", "/api/save/index"), ("GET", "/_tasks/tasks.json")):
+            resp = client.open(path, method=method, headers={**HOST, **AUTH}, json={"title": "x"} if method == "POST" else None)
+            assert resp.status_code == 302 and "/login" in resp.headers["Location"], path
 
 
 # ── Writing pages ────────────────────────────────────────────────────────────

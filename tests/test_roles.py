@@ -184,6 +184,7 @@ MCP_WRITES = [
     ("write_page", {"note": True, "slug": "Mine", "content": "Mine\n"}),
     ("create_task", {"title": "Mine", "private": True}),
     ("update_task", {"id": "{mine}", "status": "done"}),
+    ("upload_file", {"filename": "carols.txt", "text": "Carol was here"}),
 ]
 
 
@@ -206,8 +207,22 @@ def test_every_write_route_is_probed():
 def test_every_write_tool_is_probed():
     tools = {t["name"] for t in json.loads((REPO / "go/mcp_tools.json").read_text())}
     reads = {"search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links", "list_tags",
-             "history", "zone_help", "read_guides"}
+             "history", "zone_help", "read_guides", "read_file"}
     assert tools - reads - {t for t, _ in MCP_WRITES} == set(), "write tools not probed"
+
+
+def test_a_viewers_token_uploads_nothing_and_reads_files(client, wiki):
+    """The file routes with her MCP token (docs/spec/mcp.md, Files): reading yes, uploading no."""
+    from io import BytesIO
+    token = {**HOST, "Authorization": "Bearer carol-token"}
+    before = shared_state(wiki)
+    resp = client.post("/api/upload", data={"file": (BytesIO(b"x"), "carols.txt")},
+                       content_type="multipart/form-data", headers=token)
+    assert resp.status_code == 403 and shared_state(wiki) == before
+    (wiki / "_assets").mkdir(exist_ok=True)
+    (wiki / "_assets/seen.txt").write_text("shared words")
+    assert client.get("/_assets/seen.txt", headers=token).data == b"shared words"
+    assert "shared words" in mcp(client, "read_file", url="/_assets/seen.txt")
 
 
 class TestWhatTheyAreTold:

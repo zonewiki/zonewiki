@@ -101,10 +101,31 @@ type initializeResult struct {
 	Instructions string `json:"instructions"`
 }
 
+// toolContent: a part of a tool's answer: text, or an image (read_file),
+// its bytes base64 in Data.
 type toolContent struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
+	Type     string
+	Text     string
+	Data     string
+	MimeType string
 }
+
+func (c toolContent) MarshalJSON() ([]byte, error) {
+	if c.Type == "image" {
+		return json.Marshal(struct {
+			Type     string `json:"type"`
+			Data     string `json:"data"`
+			MimeType string `json:"mimeType"`
+		}{c.Type, c.Data, c.MimeType})
+	}
+	return json.Marshal(struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}{c.Type, c.Text})
+}
+
+// textContent: a tool's answer of text alone.
+func textContent(text string) []toolContent { return []toolContent{{Type: "text", Text: text}} }
 
 type toolResult struct {
 	Content []toolContent `json:"content"`
@@ -125,7 +146,7 @@ func knownTool(name string) bool {
 // id, or no method) get nil: the transport answers those with 202 and no
 // body. callTool runs a tool, its error a toolError for the model; any
 // other error (a failed write) is returned, for a 500.
-func handleMCP(message json.RawMessage, user string, callTool func(name string, args jsonObj) (string, error)) (*rpcResponse, error) {
+func handleMCP(message json.RawMessage, user string, callTool func(name string, args jsonObj) ([]toolContent, error)) (*rpcResponse, error) {
 	msg, ok := jsonobj.Parse(message)
 	if v, _ := jsonobj.As[string](msg["jsonrpc"]); !ok || v != "2.0" {
 		return rpcError(nil, -32600, "Invalid Request"), nil
@@ -172,22 +193,22 @@ func handleMCP(message json.RawMessage, user string, callTool func(name string, 
 				return rpcError(id, -32602, "arguments must be an object"), nil
 			}
 		}
-		text, err := callTool(name, args)
+		content, err := callTool(name, args)
 		isError := false
 		if err != nil {
 			var te *toolError
 			var ce *writeError
 			switch {
 			case errors.As(err, &te):
-				text = te.msg
+				content = textContent(te.msg)
 			case errors.As(err, &ce):
-				text = ce.Error()
+				content = textContent(ce.Error())
 			default:
 				return nil, err
 			}
 			isError = true
 		}
-		return rpcResult(id, toolResult{[]toolContent{{"text", text}}, isError}), nil
+		return rpcResult(id, toolResult{content, isError}), nil
 	}
 	return rpcError(id, -32601, "Method not found: "+method), nil
 }
@@ -301,7 +322,7 @@ func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, rpcError(nil, -32700, "Parse error"))
 		return
 	}
-	call := func(name string, args jsonObj) (string, error) { return callMCPTool(r, name, args) }
+	call := func(name string, args jsonObj) ([]toolContent, error) { return callMCPTool(r, name, args) }
 	if batch, ok := jsonobj.As[[]json.RawMessage](body); ok { // a batch (protocol 2025-03-26)
 		replies := []*rpcResponse{}
 		for _, m := range batch {

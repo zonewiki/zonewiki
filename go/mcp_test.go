@@ -23,7 +23,7 @@ func set[T any](t *testing.T, v *T, to T) {
 }
 
 // replyText: the reply to msg as JSON text ("null" for none).
-func replyText(t *testing.T, msg string, call func(string, jsonObj) (string, error)) string {
+func replyText(t *testing.T, msg string, call func(string, jsonObj) ([]toolContent, error)) string {
 	t.Helper()
 	reply, err := handleMCP(json.RawMessage(msg), "", call)
 	if err != nil {
@@ -33,7 +33,7 @@ func replyText(t *testing.T, msg string, call func(string, jsonObj) (string, err
 }
 
 // handle: the reply to msg, as JSON reads back (nil for none).
-func handle(t *testing.T, msg string, call func(string, jsonObj) (string, error)) map[string]any {
+func handle(t *testing.T, msg string, call func(string, jsonObj) ([]toolContent, error)) map[string]any {
 	t.Helper()
 	var m map[string]any
 	if err := json.Unmarshal([]byte(replyText(t, msg, call)), &m); err != nil {
@@ -51,7 +51,7 @@ func field(v any, path ...string) any {
 	return v
 }
 
-func noTools(string, jsonObj) (string, error) { panic("not called") }
+func noTools(string, jsonObj) ([]toolContent, error) { panic("not called") }
 
 func TestMCPProtocol(t *testing.T) {
 	testWiki(t, nil)
@@ -85,7 +85,7 @@ func TestMCPProtocol(t *testing.T) {
 			t.Errorf("%s: code %v", msg, c)
 		}
 	}
-	fail := func(string, jsonObj) (string, error) { return "", toolErr("No page 'x'") }
+	fail := func(string, jsonObj) ([]toolContent, error) { return nil, toolErr("No page 'x'") }
 	got := replyText(t, `{"jsonrpc": "2.0", "id": "a", "method": "tools/call", "params": {"name": "read_page", "arguments": {"slug": "x"}}}`, fail)
 	if got != `{"jsonrpc":"2.0","id":"a","result":{"content":[{"type":"text","text":"No page 'x'"}],"isError":true}}` {
 		t.Errorf("a tool error: %s", got)
@@ -98,7 +98,7 @@ func TestMCPToolDefinitions(t *testing.T) {
 		name, _ := tool["name"].(string)
 		names = append(names, name)
 		row, ok := mcpToolTable[name]
-		if !ok || row.run == nil {
+		if !ok || row.run == nil && row.content == nil {
 			t.Errorf("%s has no function", name)
 		}
 		// What the definition tells the client and what Zone does with the
@@ -116,7 +116,7 @@ func TestMCPToolDefinitions(t *testing.T) {
 	if len(names) != len(mcpToolTable) || names[0] != "search_wiki" || names[len(names)-1] != "update_task" {
 		t.Errorf("tools: %q", names)
 	}
-	if len(mcpToolsJSON) > 30000 {
+	if len(mcpToolsJSON) > 31500 {
 		t.Errorf("the definitions grew to %d bytes: every session loads them", len(mcpToolsJSON))
 	}
 }

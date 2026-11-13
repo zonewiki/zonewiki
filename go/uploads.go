@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"zonewiki/internal/mdtext"
@@ -211,9 +212,14 @@ func apiUpload(w http.ResponseWriter, r *http.Request) {
 	if requested := strings.TrimSpace(r.FormValue("filename")); requested != "" {
 		filename = baseName(requested)
 	}
-	if filename == "" || strings.HasPrefix(filename, ".") {
+	if filename = uploadName(filename); filename == "" {
 		http.Error(w, "Bad Request", http.StatusBadRequest) // "..", ".git" and friends: not an asset name
 		return
+	}
+	// An assistant with its token has no dialog to answer: its file gets a
+	// free name, and never replaces one (mcpfiles.go).
+	if byToken(r) {
+		filename = freeUploadName(owner, filename)
 	}
 	dest := filepath.Join(uploadDir(owner), filename)
 	if _, err := os.Stat(dest); err == nil && r.FormValue("overwrite") != "1" {
@@ -229,24 +235,38 @@ func apiUpload(w http.ResponseWriter, r *http.Request) {
 // uploadMu keeps two uploads from writing one file at once.
 var uploadMu sync.Mutex
 
-// saveUpload writes an upload to owner's uploads (uploadDir) and commits it.
+// saveUpload: storeUpload for the route, which answers what went wrong.
 func saveUpload(w http.ResponseWriter, r *http.Request, src io.ReadSeeker, owner, filename string) bool {
+	err := storeUpload(userOf(r), owner, filename, src, "")
+	if pe, ok := refusalOf(err); ok {
+		http.Error(w, pe.msg, http.StatusInsufficientStorage)
+		return false
+	}
+	if err != nil {
+		logf("saving upload %s: %v", filename, err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return false
+	}
+	return true
+}
+
+// storeUpload writes an upload to owner's uploads (uploadDir) and commits
+// it as user, the commit's message ending with via (" (MCP)" for a tool's).
+// A wiki with no room for it refuses (checkRoom).
+func storeUpload(user, owner, filename string, src io.ReadSeeker, via string) error {
 	dest := filepath.Join(uploadDir(owner), filename)
 	uploadMu.Lock()
 	defer uploadMu.Unlock()
 	// What it adds: its size, less the file's it replaces.
 	size, _ := src.Seek(0, io.SeekEnd)
 	if _, err := src.Seek(0, io.SeekStart); err != nil {
-		serverError(w, r, err)
-		return false
+		return err
 	}
 	if st, err := os.Stat(dest); err == nil {
 		size -= st.Size()
 	}
 	if err := checkRoom(size); err != nil {
-		pe, _ := refusalOf(err)
-		http.Error(w, pe.msg, http.StatusInsufficientStorage)
-		return false
+		return err
 	}
 	err := os.MkdirAll(filepath.Dir(dest), 0o777)
 	var out *os.File
@@ -260,17 +280,38 @@ func saveUpload(w http.ResponseWriter, r *http.Request, src io.ReadSeeker, owner
 		}
 	}
 	if err != nil {
-		logf("saving upload %s: %v", filename, err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return false
+		return err
 	}
 	name := filename
 	if owner != "" {
 		name = privateDir + "/" + owner + "/_assets/" + filename
 	}
 	added(size)
-	gitCommit(userOf(r), "Upload "+name, dest)
-	return true
+	gitCommit(user, "Upload "+name+via, dest)
+	return nil
+}
+
+// freeUploadName: filename, or with a number before its extension
+// (deck-2.pdf, deck-3.pdf …) when owner's uploads have a file of that name:
+// an upload that asks nobody (an assistant's) never replaces a file.
+func freeUploadName(owner, filename string) string {
+	stem, ext := filename, suffix(filename)
+	stem = strings.TrimSuffix(stem, ext)
+	name := filename
+	for n := 2; exists(filepath.Join(uploadDir(owner), name)); n++ {
+		name = stem + "-" + strconv.Itoa(n) + ext
+	}
+	return name
+}
+
+// uploadName: the name an upload is kept under, from the one it came with:
+// its last part, and not a dot file ("..", ".git" and friends). "" for none.
+func uploadName(name string) string {
+	name = baseName(strings.TrimSpace(name))
+	if strings.HasPrefix(name, ".") {
+		return ""
+	}
+	return name
 }
 
 // baseName is a slash-separated path's last part ("" for ".").

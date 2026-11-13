@@ -60,6 +60,7 @@ Each rule has tests in `tests/test_routes.py` or `tests/test_mcp.py`, and `go/se
 - `/mcp` requires a token: an MCP token, `mcp-token` in the settings file (a bearer token, kept there as its hash; with users, a user's own, and the tools act as that user), or the access token of a connection a signed-in user allowed (OAuth, below).
   Without a login and without a token set it is off (403), because its tools write pages and tasks; with a login it answers 401 and says where to sign in. Nothing is reached without a token someone signed in made or allowed.
   Don't make it open again (see Auth in `docs/spec/mcp.md`).
+  The same token, sent as a bearer token, also uploads and downloads files (`POST /api/upload`, `GET /_assets/…` and `/private/<user>/_assets/…`), as its user and throttled like `/mcp`, and nothing else: every other route still wants a session (Files in `docs/spec/mcp.md`).
   A token is made on the host (`zonewiki config token`, `zonewiki user token`) or in the browser by whoever is signed in, for themselves only and with their password again, so a stolen session alone makes none (`/assistant`, Connect an assistant in `docs/spec/mcp.md`).
 - **OAuth for `/mcp`** (`go/oauth.go`, Connecting with OAuth in `docs/spec/mcp.md`; only with a login, off with `mcp-oauth = no`): an assistant is let in by its user, in the browser, with their password again.
   What keeps it safe, and isn't to be weakened:

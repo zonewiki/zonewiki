@@ -299,6 +299,27 @@
   }
  },
  {
+  "name": "read_file",
+  "title": "Read an uploaded file",
+  "description": "Read a file a page or task links to (an upload, '/_assets/…'): an image comes as an image, a text file as its text. For another kind (a PDF) or a big file, the answer says how to fetch it.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "url": {
+     "type": "string",
+     "description": "The link's target as written, e.g. '/_assets/photo.png'."
+    }
+   },
+   "required": [
+    "url"
+   ]
+  },
+  "annotations": {
+   "readOnlyHint": true,
+   "openWorldHint": false
+  }
+ },
+ {
   "name": "write_page",
   "title": "Create a page",
   "description": "Create a wiki page with the given markdown (start it with '# Title'). Fails if the page exists, unless overwrite, which replaces all of it; for part of a page, use edit_page or append_to_page. Names pages with similar names and wikilinks that lead nowhere. With note, a note instead: a quick note in the Notes module, for when the user wants something jotted down rather than filed in the wiki.",
@@ -587,6 +608,41 @@
   "annotations": {
    "readOnlyHint": false,
    "destructiveHint": true,
+   "idempotentHint": false,
+   "openWorldHint": false
+  }
+ },
+ {
+  "name": "upload_file",
+  "title": "Upload a file",
+  "description": "Add a file to the wiki's uploads (at most 1 MB here; the refusal of a bigger one says how to send it) and get the markdown that links it, to put on a page or in a task. A taken name gets a number; nothing is replaced.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "filename": {
+     "type": "string",
+     "description": "Its name, e.g. 'report.pdf'."
+    },
+    "text": {
+     "type": "string",
+     "description": "A text file's content."
+    },
+    "content_base64": {
+     "type": "string",
+     "description": "Any other file's bytes, base64. Give this or text."
+    },
+    "page": {
+     "type": "string",
+     "description": "The page it is for: a private page's file is private too."
+    }
+   },
+   "required": [
+    "filename"
+   ]
+  },
+  "annotations": {
+   "readOnlyHint": false,
+   "destructiveHint": false,
    "idempotentHint": false,
    "openWorldHint": false
   }

@@ -155,6 +155,7 @@ Auth is optional (a password, or users; see Key Constraints).
 │   ├── embed.go            # Optional semantic search: section embeddings, the index and its cache, Related pages
 │   ├── embed_onnx.go       # The model on onnxruntime (cgo; embed_nocgo.go: built without cgo, keywords only)
 │   ├── mcp.go              # MCP protocol (JSON-RPC) for /mcp; mcp_tools.json the tool definitions
+│   ├── mcpfiles.go         # Uploads for assistants: read_file, upload_file, and the file routes taking the MCP token
 │   ├── mcptools.go         # The MCP tools that read, and the table of all tools with their dispatch (mcpToolTable); mcpwrite.go and mcpreplace.go those that write pages, mcptasks.go the task tools, mcpguides.go the guides, mcpargs.go what they share
 │   ├── manual.go           # Zone's own docs (README + docs/spec) searched by section, for the MCP tool zone_help
 │   ├── eval.go             # zonewiki eval: measures search_wiki's retrieval on your wiki against your questions (./run.sh eval)

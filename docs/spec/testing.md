@@ -41,7 +41,7 @@ after a deliberate change to one of those functions, `ZONE_GOLDEN_UPDATE=1 go te
 `tests/test_git.py` uses `git_wiki_dir` and covers every git path (commit-on-write, history/revision/diff/restore, `_deleted`, uncommitted/commit endpoints, git-disabled fallbacks); it skips when git is not installed.
 A server makes any wiki a repository when it starts, so the other modules' wikis are repositories too; `settings.GIT_ENABLED = False` gives the server a `PATH` without git, for the fallbacks.
 
-`tests/test_mcp.py` covers the MCP server (with the fake semantic index too: read_page's related pages, a new page's pages close in content): the tool definitions (names, hints, their size, which take guides),
+`tests/test_mcp.py` covers the MCP server (files: `upload_file` from text and base64, the name it gets, what it refuses, `read_file`'s image, text and other files and what it won't read, the file routes with the token and nothing else opened by it; with the fake semantic index too: read_page's related pages, a new page's pages close in content): the tool definitions (names, hints, their size, which take guides),
 the HTTP transport and auth,
 the wiki-guide page in the instructions,
 folder guides (a write refused until their ids are passed, imports, a changed guide's new id, every page write gated, dry runs not; read_guides for a page, a folder and the wiki, the guided folders in its description, read_page's guide id),

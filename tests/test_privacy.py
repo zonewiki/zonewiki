@@ -541,6 +541,10 @@ MCP_READS = [
     ("search_tasks", {"query": QUERY, "status": "all"}),
     ("search_tasks", {"tag": "secretlist", "status": "all"}),
     ("replace_in_pages", {"find": QUERY, "replace": "x"}),       # a dry run
+    ("read_file", {"url": "/private/alice/_assets/photo.png"}),
+    ("read_file", {"url": "/private/bob/../alice/_assets/photo.png"}),
+    ("read_file", {"url": "/_assets/../private/alice/_assets/photo.png"}),
+    ("read_file", {"url": "/_assets/..%2Fprivate%2Falice%2Fdiary.md"}),
 ]
 
 
@@ -552,6 +556,25 @@ def test_bobs_assistant_reads_nothing_of_alices(client, wiki, tool, args):
     assert SECRET not in text and "private/alice" not in named
     assert TASK_ID[:8] not in text.replace(f"[[task:{TASK_ID[:8]}]]", "") and "secretlist" not in text
     assert sha(wiki)[:7] not in text or tool == "history" and not args, "the diary's versions"
+
+
+def test_her_private_upload_is_hers_over_mcp_and_with_her_token(client, wiki):
+    """read_file and the file routes with a token give alice her private upload, bob none of it."""
+    url = "/private/alice/_assets/photo.png"
+    mine = rpc(client, "tools/call", {"name": "read_file", "arguments": {"url": url}}, "alice-token")
+    assert not mine["isError"] and "photo.png (image/png" in mine["content"][0]["text"]
+    assert mine["content"][1]["type"] == "image"
+    assert rpc(client, "tools/call", {"name": "read_file", "arguments": {"url": url}})["isError"]
+    assert client.get(url, headers={**HOST, "Authorization": "Bearer alice-token"}).data == SECRET.encode()
+    assert client.get(url, headers={**HOST, "Authorization": "Bearer bob-token"}).status_code == 404
+    # A file for her private page goes to her folder; bob's for the same page doesn't.
+    text = mcp(client, "upload_file", token="alice-token", filename="plan.txt", text="hers", page=DIARY)
+    assert "[plan.txt](/private/alice/_assets/plan.txt)" in text and "only alice can open it" in text
+    assert (wiki / "private/alice/_assets/plan.txt").read_text() == "hers"
+    assert "[bobs.txt](/_assets/bobs.txt)" in mcp(client, "upload_file", filename="bobs.txt", text="his", page=DIARY)
+    sent = client.post("/api/upload", data={"file": (BytesIO(b"hers too"), "plan.txt"), "page": DIARY},
+                       content_type="multipart/form-data", headers={**HOST, "Authorization": "Bearer alice-token"})
+    assert sent.get_json() == {"url": "/private/alice/_assets/plan-2.txt"}
 
 
 def test_alices_assistant_sees_her_own(client, wiki):
@@ -722,6 +745,8 @@ MCP_WRITES = [
     ("update_task", {"id": TASK_ID, "status": "deleted"}),
     ("update_task", {"id": DONE_ID, "status": "open", "comment": "Bob's"}),
     ("update_task", {"ids": [TASK_ID, OLD_ID], "add_tags": ["bob"]}),
+    ("upload_file", {"filename": "bobs.txt", "text": "Bob was here", "page": DIARY}),          # not into her folder
+    ("upload_file", {"filename": "../private/alice/_assets/photo.png", "text": "Bob was here"}),
 ]
 
 

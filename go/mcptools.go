@@ -648,6 +648,8 @@ const (
 type mcpTool struct {
 	run    func(args jsonObj, base, user string) (string, error)
 	writes toolWrites
+	// In place of run, for a tool whose answer isn't text alone (read_file: an image).
+	content func(args jsonObj, base, user string) ([]toolContent, error)
 }
 
 // mcpToolTable: every tool mcp_tools.json defines, by name.
@@ -662,17 +664,19 @@ var mcpToolTable = map[string]mcpTool{
 	"list_tags":        {run: listTags},
 	"zone_help":        {run: zoneHelp},
 	"read_guides":      {run: readGuides},
-	"write_page":       {writePage, toolWritesPages},
-	"edit_page":        {editPageTool, toolWritesPages},
-	"replace_in_pages": {replaceInPages, toolWritesPages},
-	"append_to_page":   {appendToPage, toolWritesPages},
-	"file_note":        {fileNote, toolWritesPages},
-	"rename_page":      {renamePageTool, toolWritesPages},
-	"delete_page":      {deletePageTool, toolWritesPages},
-	"restore_page":     {restorePage, toolWritesPages},
-	"rename_task_tag":  {renameTaskTag, toolWritesPages}, // the tag in tasks, and in the pages' embeds
-	"create_task":      {createTaskTool, toolWritesTasks},
-	"update_task":      {updateTaskTool, toolWritesTasks},
+	"read_file":        {content: readFileTool},
+	"write_page":       {run: writePage, writes: toolWritesPages},
+	"edit_page":        {run: editPageTool, writes: toolWritesPages},
+	"replace_in_pages": {run: replaceInPages, writes: toolWritesPages},
+	"append_to_page":   {run: appendToPage, writes: toolWritesPages},
+	"file_note":        {run: fileNote, writes: toolWritesPages},
+	"upload_file":      {run: uploadFileTool, writes: toolWritesPages}, // a file and its commit, as a page's
+	"rename_page":      {run: renamePageTool, writes: toolWritesPages},
+	"delete_page":      {run: deletePageTool, writes: toolWritesPages},
+	"restore_page":     {run: restorePage, writes: toolWritesPages},
+	"rename_task_tag":  {run: renameTaskTag, writes: toolWritesPages}, // the tag in tasks, and in the pages' embeds
+	"create_task":      {run: createTaskTool, writes: toolWritesTasks},
+	"update_task":      {run: updateTaskTool, writes: toolWritesTasks},
 }
 
 // writeTool: the tool changes the wiki (pages, notes, tasks).
@@ -680,7 +684,7 @@ func writeTool(name string) bool { return mcpToolTable[name].writes != toolWrite
 
 // callMCPTool runs a tool for the request r, as its token's user: links in
 // its answer use base-url (the settings file), else the address the client reached Zone at.
-func callMCPTool(r *http.Request, name string, args jsonObj) (string, error) {
+func callMCPTool(r *http.Request, name string, args jsonObj) ([]toolContent, error) {
 	base := settings().BaseURL
 	if base == "" {
 		scheme := "http"
@@ -691,16 +695,24 @@ func callMCPTool(r *http.Request, name string, args jsonObj) (string, error) {
 	}
 	tool, ok := mcpToolTable[name]
 	if !ok {
-		return "", toolErr("Unknown tool: " + name)
+		return nil, toolErr("Unknown tool: " + name)
 	}
 	if tool.writes == toolWritesPages {
 		pagesMu.Lock()
 		defer pagesMu.Unlock()
 	}
 	if tool.writes != toolWritesNothing && settings().isViewer(userOf(r)) {
-		return "", toolErr(readOnlyMsg)
+		return nil, toolErr(readOnlyMsg)
 	}
-	out, err := tool.run(args, base, userOf(r))
+	var out []toolContent
+	var err error
+	if tool.content != nil {
+		out, err = tool.content(args, base, userOf(r))
+	} else {
+		var text string
+		text, err = tool.run(args, base, userOf(r))
+		out = textContent(text)
+	}
 	// What an operation refused (a bad date, a page that isn't there, a
 	// viewer's change to something shared), from wherever in the tool, is
 	// the tool's error, which the model can correct.

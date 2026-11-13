@@ -147,7 +147,8 @@ Done tasks go to a yearly archive. Beyond that:
   your pages, notes and tasks, find every line matching a regex, check links
   (backlinks, orphan pages, broken wikilinks), and write: create and edit pages, find and
   replace across pages, rename and delete them (move whole folders), add and update
-  tasks, rename task lists and tags. Every write is a commit marked `(MCP)`, with links back into Zone. It's
+  tasks, rename task lists and tags, look at the images and files a page links to and
+  upload new ones. Every write is a commit marked `(MCP)`, with links back into Zone. It's
   off until you set a token (see [Connect an AI assistant](#connect-an-ai-assistant)).
 - **Several users** (optional, `./run.sh user add NAME`): each signs in with their own
   name and password, their changes are committed in their name, and each has
