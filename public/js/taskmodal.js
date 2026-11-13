@@ -5,7 +5,8 @@
 // and the private box. What it uses of the app comes in app (its state in
 // app.st).
 import TasksCore from '../tasks-core.js';
-import { markdownEditor, toggleCheckboxText } from './mdedit.js';
+import { markdownEditor } from './mdedit.js';
+import { toggleCheckboxText } from './mdtext.js';
 import { renderFigures } from './figures.js';
 import { pasteUrlAsLink } from './util.js';
 import { openDatePicker } from './datepicker.js';

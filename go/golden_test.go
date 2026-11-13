@@ -11,13 +11,17 @@ import (
 	"testing"
 	"time"
 	"zonewiki/internal/mdtext"
+	"zonewiki/internal/textsearch"
 )
 
-// The answers of the Python Zone (until 2026-10) on every string in Zone's
-// tests then and some edge cases, recorded before it was removed: the text
-// functions still give them. A deliberate change to one of them changes its
-// cases here too: ZONE_GOLDEN_UPDATE=1 go test -run TestGolden writes what
-// they give now (check the mismatches it logs first).
+// The text functions' answers on every string in Zone's tests of 2026-10
+// and some edge cases, recorded then from the Python Zone before it was
+// removed: they still give them. The browser's copies of some of them
+// (public/js/mdtext.js) are held to the same file by
+// tests/test_text_parity.py, so the two sides can't drift apart. A
+// deliberate change to one of them changes its cases here too:
+// ZONE_GOLDEN_UPDATE=1 go test -run TestGolden writes what they give now
+// (check the mismatches it logs first).
 func TestGolden(t *testing.T) {
 	f, err := os.Open("testdata/golden.json.gz")
 	if err != nil {
@@ -109,6 +113,14 @@ func TestGolden(t *testing.T) {
 		check("toggle_notes", text, notes, c["toggle_notes"])
 		check("to_slug", text, mdtext.ToSlug(text), c["to_slug"])
 		check("section_anchor", text, mdtext.SectionAnchor(text), c["section_anchor"])
+		// What the browser has too (js/mdtext.js): a heading's id, a
+		// wikilink's parts, how many checkboxes, a query's words.
+		check("heading_id", text, mdtext.HeadingID(text), c["heading_id"])
+		wlPage, wlSection, wlLabel := mdtext.SplitWikilink(text)
+		check("split_wikilink", text, []string{wlPage, wlSection, wlLabel}, c["split_wikilink"])
+		lines := mdtext.SplitLines(text)
+		check("checkboxes", text, []int{len(mdtext.TaskItemLines(lines, true)), len(mdtext.TaskItemLines(lines, false))}, c["checkboxes"])
+		check("query_text", text, textsearch.ParseQuery(text).Text, c["query_text"])
 		check("plain_task_title", text, mdtext.PlainTaskTitle(text), c["plain_task_title"])
 		check("slug_display_name", text, mdtext.SlugDisplayName(text), c["slug_display_name"])
 		targets := []string{}

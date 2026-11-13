@@ -2,6 +2,7 @@ import { closeOnBackdropClick, he, localizeDates } from './util.js';
 import { sharingOn } from './actions.js';
 import { revealElement } from './fold.js';
 import { renderFigures } from './figures.js';
+import { queryWords } from './mdtext.js';
 
 // ── Search modal ──────────────────────────────────────────────────────────────
 
@@ -200,17 +201,6 @@ function highlightIndices(str, indices) {
   }
   if (inMark) out += '</mark>';
   return out;
-}
-
-// The words of a search query (textsearch.ParseQuery in go/internal/textsearch): phrases lose their
-// quotes; -word, -"phrase", #tag, -#tag and the date filters (edited:,
-// after:, before:) are filters on content, which a title can't be checked
-// against, so the title filter leaves them out.
-function queryWords(raw) {
-  return [...raw.matchAll(/(-?)(?:"([^"]+)"|(\S+))/g)]
-    .filter(m => !m[1] && !(m[3] && m[3].startsWith('#') && m[3].length > 1)
-                 && !(m[3] && /^(edited|after|before):\d{4}(-\d\d(-\d\d)?)?$/i.test(m[3])))
-    .map(m => m[2] ?? m[3]).join(' ').trim();
 }
 
 // How well q matches a page in the title list: the better of its title and

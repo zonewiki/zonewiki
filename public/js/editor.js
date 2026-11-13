@@ -1,7 +1,8 @@
 import TasksCore from '../tasks-core.js';
 import { openTasksEdit } from '../tasks.js';
-import { localDate, localizeDates, showToast, wikilinkHref } from './util.js';
-import { markdownEditor, mathFence, mathFenceEnd, opensCodeFence } from './mdedit.js';
+import { localDate, localizeDates, showToast } from './util.js';
+import { markdownEditor } from './mdedit.js';
+import { mathFence, mathFenceEnd, opensCodeFence, wikilinkHref } from './mdtext.js';
 import { HIGHLIGHT_CODE, renderFigures } from './figures.js';
 
 // ── Editor ────────────────────────────────────────────────────────────────────

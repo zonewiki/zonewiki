@@ -88,34 +88,6 @@ export async function pasteUrlAsLink(ta, e) {
   return true;
 }
 
-// Mirror of server-side to_slug(): lowercase, non [a-z0-9_] runs → '-',
-// '/' preserved as a path separator. Keep the two in sync.
-export function toSlug(name) {
-  return name.trim().split('/')
-    .map(p => p.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '-').replace(/^-+|-+$/g, ''))
-    .filter(Boolean)
-    .join('/');
-}
-
-// A heading's id as rendered (mdtext.HeadingID in
-// go/internal/mdtext): no punctuation, lowercase, spaces → hyphens.
-const headingId = text => text.replace(/[^\p{L}\p{N}\p{M}_\- ]+/gu, '').trim().toLowerCase().replace(/ /g, '-');
-
-// A wikilink's inside → { href, label }, as mdtext.SplitWikilink and
-// processWikilinks (go/render.go): `Page`, `Page|Label`, `Page#Section` (that heading),
-// `#Section` (a heading on this page).
-export function wikilinkHref(inner) {
-  const bar = inner.indexOf('|');
-  const target = bar < 0 ? inner : inner.slice(0, bar);
-  const hash = target.indexOf('#');
-  const page = (hash < 0 ? target : target.slice(0, hash)).trim();
-  const section = hash < 0 ? '' : target.slice(hash + 1).trim();
-  const label = bar >= 0 ? inner.slice(bar + 1).trim()
-    : page && section ? `${page} › ${section}` : section || page;
-  const anchor = section ? '#' + headingId(section) : '';
-  return { href: page ? `/page/${toSlug(page)}${anchor}` : anchor || '#', label };
-}
-
 // ── List continuation ─────────────────────────────────────────────────────────
 
 // Enter at the end of a list item starts the next one (a checkbox item gets

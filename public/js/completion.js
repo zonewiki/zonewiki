@@ -1,5 +1,5 @@
 import { sharingOn } from './actions.js';
-import { toSlug } from './util.js';
+import { toSlug } from './mdtext.js';
 
 // ── Link completion ───────────────────────────────────────────────────────────
 // In a text field, `[[` offers pages, `[[task:` open tasks (with

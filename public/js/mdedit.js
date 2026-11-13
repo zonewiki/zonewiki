@@ -1,5 +1,6 @@
 import { closeOnBackdropClick, continueList, localDate, pasteUrlAsLink } from './util.js';
 import { linkAutocomplete } from './completion.js';
+import { taskCheckboxOffsets } from './mdtext.js';
 
 // ── Markdown textarea ─────────────────────────────────────────────────────────
 // What makes a textarea Zone's markdown editor, shared by the page editor
@@ -459,95 +460,6 @@ function expandSnippet(textarea) {
     }
   }
   return false;
-}
-
-// ── Display math ──────────────────────────────────────────────────────────────
-
-// A $$ line as go/math.go reads it: one that opens display math (only $$,
-// up to three spaces before it), or one that is display math by itself
-// ($$tex$$). The math runs to a line ending in $$ (mathFenceEnd).
-export function mathFence(line) {
-  if (/^( {4}| {0,3}\t)/.test(line)) return { opens: false, whole: false };
-  const t = line.trim();
-  return { opens: t === '$$', whole: t.length > 4 && t.startsWith('$$') && t.endsWith('$$') };
-}
-export const mathFenceEnd = line => line.trimEnd().endsWith('$$');
-
-// A line (trimmed) that opens a code fence: a backtick after a ``` is inline
-// code (```x``` y), no fence, as mdtext.FencedLines reads it.
-export function opensCodeFence(t) {
-  return t.startsWith('~~~') || (t.startsWith('```') && !t.replace(/^`+/, '').includes('`'));
-}
-
-// ── Checkboxes in a preview ───────────────────────────────────────────────────
-
-// Character offsets of the mark inside each task-list checkbox ("[ ]"/"[x]"),
-// in rendered order. Mirrors mdtext.TaskItemLines and taskItemRE
-// (go/internal/mdtext): only
-// list items whose text starts with the box produce a checkbox, fenced code,
-// display math and (in a page, `frontmatter`) a leading frontmatter block
-// are skipped — so the Nth rendered checkbox is the Nth offset here.
-const TASK_ITEM_RE = /^([ \t]*(?:>[ \t]?)*[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+\[)([ xX])\](?=[ \t]+\S)/;
-
-export function taskCheckboxOffsets(text, frontmatter = true) {
-  const lines = text.split('\n');
-  let start = 0;
-  if (frontmatter && lines.length && lines[0].trim() === '---') {
-    const close = lines.findIndex((l, i) => i > 0 && l.trim() === '---');
-    if (close !== -1) start = close + 1;
-  }
-  const offsets = [];
-  let pos = 0, fence = null;
-  lines.forEach((line, i) => {
-    const t = line.trim();
-    const run = t.length - t.replace(/^(`+|~+)/, '').length;  // leading fence chars
-    const math = fence ? {} : mathFence(line);
-    if (fence === '$$') {
-      if (mathFenceEnd(line)) fence = null;
-    } else if (fence) {
-      // Closing fence: same char, at least as long, nothing else on the line
-      if (t[0] === fence[0] && run >= fence.length && run === t.length) fence = null;
-    } else if (opensCodeFence(t)) {
-      fence = t.slice(0, run);
-    } else if (math.opens) {
-      fence = '$$';
-    } else if (math.whole) {
-      // display math by itself: no checkbox
-    } else if (i >= start) {
-      const m = TASK_ITEM_RE.exec(line);
-      if (m) offsets.push(pos + m[1].length);
-    }
-    pos += line.length + 1;
-  });
-  return offsets;
-}
-
-// The text with its Nth checkbox ticked or unticked, recording when as the
-// server does (mdtext.toggle_nth_checkbox): ticking adds
-// <!--d:YYYY-MM-DDTHH:MM:SS--> (or the d: of an item's <!--t:…-->), shown
-// as a date chip; unticking takes it out. Local time, as the clock shows it.
-const TASK_META_RE = /<!--t:(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\s+d:\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)?-->/;
-const TASK_DONE_RE = /<!--d:\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d-->/;
-export function toggleCheckboxText(text, idx, frontmatter = true) {
-  const at = taskCheckboxOffsets(text, frontmatter)[idx];
-  if (at === undefined) return text;
-  const checking = text[at] === ' ';
-  const start = text.lastIndexOf('\n', at) + 1;
-  let end = text.indexOf('\n', at);
-  if (end === -1) end = text.length;
-  let line = text.slice(start, at) + (checking ? 'x' : ' ') + text.slice(at + 1, end);
-  const now = `${localDate()}T${new Date().toTimeString().slice(0, 8)}`;
-  const meta = line.match(TASK_META_RE);
-  if (checking) {
-    if (meta) line = line.replace(TASK_META_RE, `<!--t:${meta[1]} d:${now}-->`);
-    else if (TASK_DONE_RE.test(line)) line = line.replace(TASK_DONE_RE, `<!--d:${now}-->`);
-    else line = `${line.trimEnd()} <!--d:${now}-->`;
-  } else if (meta) {
-    line = line.replace(TASK_META_RE, `<!--t:${meta[1]}-->`);
-  } else {
-    line = line.replace(TASK_DONE_RE, '').trimEnd();
-  }
-  return text.slice(0, start) + line + text.slice(end);
 }
 
 // A click on the Nth checkbox of a preview ticks the Nth item in the

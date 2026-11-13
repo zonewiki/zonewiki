@@ -1,4 +1,5 @@
-import { closeOnBackdropClick, copyText, toSlug } from './util.js';
+import { closeOnBackdropClick, copyText } from './util.js';
+import { toSlug } from './mdtext.js';
 
 // ── Page delete dialog ────────────────────────────────────────────────────────
 

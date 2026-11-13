@@ -139,7 +139,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
     ├── style.css           # All styling
     ├── zonewiki.js             # The entry ES module every page loads; imports the modules below
     ├── js/                 # ES modules: chrome, git, util, completion, search, actions, pagemenu,
-    │                       #   shortcuts, mdedit, editor, page, figures, fold, present; the task app's parts
+    │                       #   shortcuts, mdedit, mdtext (the text functions shared with the server), editor, page, figures, fold, present; the task app's parts
     │                       #   taskrender, taskmodal, taskselect, taskmenu, taskdnd, tasktouch, tasksettings, datepicker, taskutil (see Client code in `docs/spec/rendering.md`)
     ├── tasks-core.js       # Pure task logic (no DOM), an ES module — shared by tasks.js, the editor and Node-run tests
     ├── tasks.js            # The task app, an ES module zonewiki.js imports; initTaskApps() starts each .tasks-app, its parts in js/task*.js (app, app.st)

@@ -6,10 +6,11 @@
 import TasksCore from './tasks-core.js';
 import { refreshDueBadge } from './js/chrome.js';
 import { linkAutocomplete } from './js/completion.js';
-import { markdownEditor, toggleCheckboxText } from './js/mdedit.js';
+import { markdownEditor } from './js/mdedit.js';
+import { toggleCheckboxText, wikilinkHref } from './js/mdtext.js';
 import { openLightbox } from './js/page.js';
 import { HIGHLIGHT_CODE, renderFigures } from './js/figures.js';
-import { copyText, keyPrefix, pasteUrlAsLink, putTask, wikilinkHref } from './js/util.js';
+import { copyText, keyPrefix, pasteUrlAsLink, putTask } from './js/util.js';
 import { openDatePicker } from './js/datepicker.js';
 import { initTaskRender } from './js/taskrender.js';
 import { initTaskModal } from './js/taskmodal.js';
