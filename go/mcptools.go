@@ -2031,15 +2031,51 @@ func anyPageIn(folder, user string) bool {
 
 // ── Dispatch ────────────────────────────────────────────────────────────────
 
-var mcpToolFuncs = map[string]func(args jsonObj, base, user string) (string, error){
-	"search_wiki": searchWiki, "search_tasks": searchTasks, "grep_wiki": grepWiki, "read_page": readPage,
-	"list_pages": listPages, "check_links": checkLinks, "history": history, "list_tags": listTags,
-	"zone_help": zoneHelp, "read_guides": readGuides,
-	"write_page": writePage, "edit_page": editPageTool, "replace_in_pages": replaceInPages,
-	"append_to_page": appendToPage, "file_note": fileNote, "rename_page": renamePageTool,
-	"delete_page": deletePageTool, "restore_page": restorePage, "rename_task_tag": renameTaskTag, "create_task": createTaskTool,
-	"update_task": updateTaskTool,
+// toolWrites: what a tool changes. A tool whose definition isn't
+// readOnlyHint says which (TestMCPToolDefinitions), so a new writing tool
+// can't be forgotten here.
+type toolWrites int
+
+const (
+	toolWritesNothing toolWrites = iota
+	toolWritesTasks              // tasks only: no pages, so not under pagesMu
+	toolWritesPages              // pages (and maybe tasks): run under pagesMu, as the routes that do are (writesPages)
+)
+
+// mcpTool: a tool's function and what it writes. A tool that writes is none
+// for a viewer, who isn't offered it either (toolList).
+type mcpTool struct {
+	run    func(args jsonObj, base, user string) (string, error)
+	writes toolWrites
 }
+
+// mcpToolTable: every tool mcp_tools.json defines, by name.
+var mcpToolTable = map[string]mcpTool{
+	"search_wiki":      {run: searchWiki},
+	"search_tasks":     {run: searchTasks},
+	"grep_wiki":        {run: grepWiki},
+	"read_page":        {run: readPage},
+	"list_pages":       {run: listPages},
+	"check_links":      {run: checkLinks},
+	"history":          {run: history},
+	"list_tags":        {run: listTags},
+	"zone_help":        {run: zoneHelp},
+	"read_guides":      {run: readGuides},
+	"write_page":       {writePage, toolWritesPages},
+	"edit_page":        {editPageTool, toolWritesPages},
+	"replace_in_pages": {replaceInPages, toolWritesPages},
+	"append_to_page":   {appendToPage, toolWritesPages},
+	"file_note":        {fileNote, toolWritesPages},
+	"rename_page":      {renamePageTool, toolWritesPages},
+	"delete_page":      {deletePageTool, toolWritesPages},
+	"restore_page":     {restorePage, toolWritesPages},
+	"rename_task_tag":  {renameTaskTag, toolWritesPages}, // the tag in tasks, and in the pages' embeds
+	"create_task":      {createTaskTool, toolWritesTasks},
+	"update_task":      {updateTaskTool, toolWritesTasks},
+}
+
+// writeTool: the tool changes the wiki (pages, notes, tasks).
+func writeTool(name string) bool { return mcpToolTable[name].writes != toolWritesNothing }
 
 // callMCPTool runs a tool for the request r, as its token's user: links in
 // its answer use base-url (the settings file), else the address the client reached Zone at.
@@ -2052,18 +2088,18 @@ func callMCPTool(r *http.Request, name string, args jsonObj) (string, error) {
 		}
 		base = scheme + "://" + r.Host
 	}
-	f, ok := mcpToolFuncs[name]
+	tool, ok := mcpToolTable[name]
 	if !ok {
 		return "", toolErr("Unknown tool: " + name)
 	}
-	if pageTools[name] {
+	if tool.writes == toolWritesPages {
 		pagesMu.Lock()
 		defer pagesMu.Unlock()
 	}
-	if writeTool(name) && settings().isViewer(userOf(r)) {
+	if tool.writes != toolWritesNothing && settings().isViewer(userOf(r)) {
 		return "", toolErr(readOnlyMsg)
 	}
-	out, err := f(args, base, userOf(r))
+	out, err := tool.run(args, base, userOf(r))
 	// A viewer's change to something shared, from wherever it was refused,
 	// as the tool's error.
 	if pe, ok := refusalOf(err); ok && pe.kind == refusedReadOnly {
@@ -2073,18 +2109,6 @@ func callMCPTool(r *http.Request, name string, args jsonObj) (string, error) {
 	}
 	return out, err
 }
-
-// pageTools: the tools that write pages, each run under pagesMu (as the
-// routes that do are, writesPages).
-// writeTool: the tool changes the wiki (pages, notes, tasks): none for a
-// viewer, who isn't offered them either (toolList).
-func writeTool(name string) bool {
-	return pageTools[name] || name == "create_task" || name == "update_task"
-}
-
-var pageTools = map[string]bool{"write_page": true, "edit_page": true, "replace_in_pages": true,
-	"append_to_page": true, "file_note": true, "rename_page": true, "delete_page": true, "restore_page": true,
-	"rename_task_tag": true}
 
 func joinIDs(hits []idScore) string {
 	ids := make([]string, len(hits))

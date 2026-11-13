@@ -96,11 +96,23 @@ func TestMCPToolDefinitions(t *testing.T) {
 	for _, tool := range mcpTools {
 		name, _ := tool["name"].(string)
 		names = append(names, name)
-		if _, ok := mcpToolFuncs[name]; !ok {
+		row, ok := mcpToolTable[name]
+		if !ok || row.run == nil {
 			t.Errorf("%s has no function", name)
 		}
+		// What the definition tells the client and what Zone does with the
+		// tool agree: a tool that isn't read-only says what it writes (so it
+		// takes pagesMu for pages, and a viewer doesn't get it).
+		ann, _ := tool["annotations"].(map[string]any)
+		readOnly, declared := ann["readOnlyHint"].(bool)
+		if !declared {
+			t.Errorf("%s: no readOnlyHint", name)
+		}
+		if readOnly != (row.writes == toolWritesNothing) {
+			t.Errorf("%s: readOnlyHint %v, but mcpToolTable says it writes %d", name, readOnly, row.writes)
+		}
 	}
-	if len(names) != len(mcpToolFuncs) || names[0] != "search_wiki" || names[len(names)-1] != "update_task" {
+	if len(names) != len(mcpToolTable) || names[0] != "search_wiki" || names[len(names)-1] != "update_task" {
 		t.Errorf("tools: %q", names)
 	}
 	if len(mcpToolsJSON) > 30000 {

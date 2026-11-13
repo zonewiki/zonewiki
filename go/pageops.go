@@ -27,7 +27,7 @@ import (
 // writes to one page at once would otherwise lose one of them. The doors
 // take it, not the operations, as a route's checks before its operation
 // count too: the routes that write pages through writesPages, the MCP tools
-// that do in callMCPTool (pageTools). Go's mutex isn't reentrant: code
+// that do in callMCPTool (toolWritesPages in mcpToolTable). Go's mutex isn't reentrant: code
 // under it never takes it again. Lock order: pagesMu, then tasksMu (a
 // rename's links in tasks), then commitMu.
 var pagesMu sync.Mutex
