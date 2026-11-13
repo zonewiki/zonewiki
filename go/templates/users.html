@@ -29,7 +29,7 @@
   <tbody>
   {{- range .Users}}
   <tr{{if .Disabled}} class="user-disabled"{{end}}>
-    <td class="user-name">{{.Name}}{{if .Me}} <span class="user-you">(you)</span>{{end}}{{if .Token}} <span class="user-fact" title="Has an MCP token: an assistant can act as them">MCP</span>{{end}}</td>
+    <td class="user-name">{{.Name}}{{if .Me}} <span class="user-you">(you)</span>{{end}}{{if .Token}} <span class="user-fact" title="Has an MCP token: an assistant can act as them">MCP</span>{{end}}{{with .Email}}<br><span class="user-email">{{.}}</span>{{end}}</td>
     <td>
       <form method="post" action="/admin/users/{{.Name}}/role" class="user-role-form">
         <select name="role" aria-label="Role of {{.Name}}">
@@ -41,9 +41,11 @@
         <button type="submit" class="btn">Change</button>
       </form>
     </td>
-    <td>{{if .Disabled}}Disabled{{else}}Active{{end}}</td>
+    <td>{{if .Pending}}Waiting for approval{{else if .Disabled}}Disabled{{else}}Active{{end}}</td>
     <td><div class="user-actions">
       {{- if .Me}}{{/* not yourself: another admin can (admin.go) */}}
+      {{- else if .Pending}}
+      <form method="post" action="/admin/users/{{.Name}}/enable"><button type="submit" class="btn btn-primary" title="They signed up: let them sign in">Approve</button></form>
       {{- else if .Disabled}}
       <form method="post" action="/admin/users/{{.Name}}/enable"><button type="submit" class="btn">Enable</button></form>
       {{- else}}
@@ -75,6 +77,9 @@
   <button type="submit" class="btn btn-primary">Make an invite link</button>
 </form>
 <p class="users-help">You get a link to send them any way you like: with it they choose their password, once, within 7 days.</p>
+{{- if .Signup}}
+<p class="users-help users-signup">Anyone{{with .SignupDomains}} with an address at {{range $i, $d := .}}{{if $i}}, {{end}}{{$d}}{{end}}{{end}} can sign up at <a href="/signup">/signup</a>, as {{.SignupRole}}{{if .SignupApproval}}; you approve each account here before they can sign in{{end}}. The settings <code>signup-role</code>, <code>signup-domains</code> and <code>signup-approval</code> change that; to turn sign-up off, take <code>ZONE_SIGNUP</code> out of the deployment's <code>.env</code>.</p>
+{{- end}}
 {{- with .Links}}
 <h2>Open links</h2>
 <table class="users-table">

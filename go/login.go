@@ -45,15 +45,19 @@ func login(w http.ResponseWriter, r *http.Request) {
 			if s.Users != nil {
 				errorText = "Incorrect user name or password."
 			}
-			if s.Users != nil && disabledLogin(r) {
+			if u := disabledLogin(r); s.Users != nil && u != nil {
 				// Said only to whoever knows the password; still a failure,
 				// so it guesses no faster.
 				errorText = "Your account is disabled. Ask an admin of this wiki."
+				if u.Pending {
+					errorText = "Your account waits for an admin of this wiki to approve it."
+				}
 			}
 		}
 	}
 	page(w, newReq(r), status, "login.html", "Sign in", shell{noActions: true, badgeInForm: true}, &loginView{
-		Error: errorText, NextURL: r.URL.Query().Get("next"), Username: r.PostFormValue("username")})
+		Error: errorText, NextURL: r.URL.Query().Get("next"), Username: r.PostFormValue("username"),
+		Signup: signupOn(s)})
 }
 
 // loginView: the login form (login.html); the shell says whether it asks
@@ -61,6 +65,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 type loginView struct {
 	view
 	Error, NextURL, Username string
+	Signup                   bool // people may sign up: a link to /signup
 }
 
 // checkLogin: the login form's password is right, for the user it names
@@ -76,10 +81,14 @@ func checkLogin(r *http.Request) (user string, ok bool) {
 	return "", false
 }
 
-// disabledLogin: the login form names a disabled user, with their password.
-func disabledLogin(r *http.Request) bool {
+// disabledLogin: the disabled user the login form names, with their
+// password; nil if it names none.
+func disabledLogin(r *http.Request) *User {
 	u := settings().Users[strings.ToLower(strings.TrimSpace(r.PostFormValue("username")))]
-	return u != nil && u.Disabled && checkPassword(r.PostFormValue("password"), u.PasswordHash)
+	if u != nil && u.Disabled && checkPassword(r.PostFormValue("password"), u.PasswordHash) {
+		return u
+	}
+	return nil
 }
 
 // logout ends the session, not only this browser's cookie of it: a copy

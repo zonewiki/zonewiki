@@ -159,6 +159,8 @@ the top row) and `tests/e2e/test_admin.py` the Remove dialog and your own row in
 and invite and reset links (the welcome page changes nothing until its form, once only, a role, a reset ending the old sessions, revoke, replacing, expiry, throttling, the cap per admin);
 `go/configfile_test.go`'s `TestUserRoles`, `TestUserLinks` and `TestRolesInTheFile` the commands and the keys;
 `go/gitstore_test.go`'s `TestMissingUsers` the start-up guard.
+`tests/test_signup.py` covers sign-up against a fake SMTP server in the test (`FakeSMTP`, `ZONE_SMTP_TLS=none`): off without the deployment, users or `base-url`, Zone not starting without a mail server, the whole way from the form through the mail's link to a signed-in viewer, a name taken or bad keeping the link, an address with an account getting its name, bad addresses, `signup-domains`, `signup-role`, the cap per client, a new ask replacing the link, the mail server down, the link dead once sign-up is off, and approval (waiting, the login's message, Approve on the Users tab);
+`go/mail_test.go` the SMTP client (`fakeSMTP`: the mail's headers and text, no mail without STARTTLS, a server that isn't there), the mail settings, `validEmail`, the sign-up keys and `pending`.
 `settings.USERS` maps a name to its password and token, `settings.USER_SETTINGS` a name to more of its section (`role`, `disabled`);
 `goserver.py` writes their hashes into the settings file (`password_hash`: a fixed salt and few iterations, so the server's settings stay the same between requests and logins are quick).
 `tests/test_privacy.py` is the leak test for private pages and tasks: alice's private page (committed, deleted, uncommitted),

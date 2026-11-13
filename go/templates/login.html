@@ -11,6 +11,9 @@
     <p class="login-error">{{.}}</p>
     {{- end}}
     <button type="submit" class="btn btn-primary">Sign in</button>
+    {{- if .Signup}}
+    <p class="welcome-note">No account yet? <a href="/signup">Sign up</a></p>
+    {{- end}}
   </form>
 </div>
 {{end}}

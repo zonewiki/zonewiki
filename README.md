@@ -155,6 +155,9 @@ Done tasks go to a yearly archive. Beyond that:
   manages the others under **Admin**, on its Users tab: invite links, roles, disable,
   remove, password reset links; writes the guides AI assistants follow),
   **editor** (the default) or **viewer** (reads what is shared, changes nothing).
+  Optionally people sign up themselves with their mail address
+  (`ZONE_SIGNUP=1` and a mail server in `.env`; as viewers by default, and an admin
+  approves them if you want).
   See [`docs/spec/users.md`](docs/spec/users.md).
 - **Keyboard shortcuts** for everything; `?` lists them.
 - **Sharing mode** for screen sharing: hides the trail of visited pages,

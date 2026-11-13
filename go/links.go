@@ -1,7 +1,7 @@
 // Invite and reset links (docs/spec/users.md, Invite and reset links): a
 // link that lets one person set a password, once. An invite adds a new
 // user with the role the admin chose; a reset sets an existing user's new
-// password. Zone sends no mail: the admin copies the link and sends it any
+// password. Zone doesn't mail these: the admin copies the link and sends it any
 // way they like. Zone keeps only the token's hash, in .zone/links (owner
 // only, not committed: it is state, like the session key), with whom it is
 // for, what it does, who made it and when it expires.
@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -30,11 +31,12 @@ const (
 
 // welcomeLink: an invite or reset link as .zone/links keeps it.
 type welcomeLink struct {
-	Hash    string    `json:"hash"` // hashToken of the link's token
-	User    string    `json:"user"`
-	Kind    string    `json:"kind"` // "invite" or "reset"
+	Hash    string    `json:"hash"`            // hashToken of the link's token
+	User    string    `json:"user"`            // "" for a sign-up: they choose it
+	Kind    string    `json:"kind"`            // "invite", "reset" or "signup" (signup.go)
+	Email   string    `json:"email,omitempty"` // a sign-up's address
 	Role    string    `json:"role,omitempty"`
-	By      string    `json:"by"`
+	By      string    `json:"by,omitempty"`
 	Expires time.Time `json:"expires"`
 }
 
@@ -167,36 +169,25 @@ func linkURL(base string, r *http.Request, token string) string {
 // linksPerHour per admin in an hour. In memory: a restart forgets.
 const linksPerHour = 10
 
-var linksMade = struct {
-	sync.Mutex
-	by map[string][]time.Time
-}{by: map[string][]time.Time{}}
+var linksMade = newHourlyCap(linksPerHour)
 
 // mayMakeLink counts a link by admin; false when they made linksPerHour
 // in the last hour.
-func mayMakeLink(admin string) bool {
-	linksMade.Lock()
-	defer linksMade.Unlock()
-	recent := slices.DeleteFunc(linksMade.by[admin], func(t time.Time) bool { return now().Sub(t) >= time.Hour })
-	if len(recent) >= linksPerHour {
-		linksMade.by[admin] = recent
-		return false
-	}
-	linksMade.by[admin] = append(recent, now())
-	return true
-}
+func mayMakeLink(admin string) bool { return linksMade.take(admin) }
 
 // linkRow: an open link as the Users tab lists it.
 type linkRow struct {
 	User, Kind, Role, By, Expires string
 }
 
-// openLinks: the open links, for the Users tab, by name.
+// openLinks: the open links an admin made, for the Users tab, by name
+// (sign-ups' are no one's to revoke: they expire within a day).
 func openLinks() []linkRow {
 	links, err := readLinks()
 	if err != nil {
 		logf("%v", err)
 	}
+	links = slices.DeleteFunc(links, func(l welcomeLink) bool { return l.Kind == "signup" })
 	sort.Slice(links, func(i, j int) bool { return links[i].User < links[j].User })
 	var rows []linkRow
 	for _, l := range links {
@@ -265,7 +256,9 @@ var welcomeThrottle = newThrottle()
 type welcomeView struct {
 	view
 	User, Kind, Error string
-	Dead              bool // the link doesn't work
+	Email             string // a sign-up's address
+	Dead              bool   // the link doesn't work
+	Waiting           bool   // a sign-up done, waiting for an admin's approval
 }
 
 func welcomeRoute(w http.ResponseWriter, r *http.Request) {
@@ -277,7 +270,7 @@ func welcomeRoute(w http.ResponseWriter, r *http.Request) {
 	var link *welcomeLink
 	ok, wait := welcomeThrottle.try(key, func() bool {
 		link = findLink(r.PathValue("token"))
-		return link != nil && settings().Users != nil
+		return link != nil && settings().Users != nil && (link.Kind != "signup" || signupOn(settings()))
 	})
 	if wait > 0 {
 		dead(http.StatusTooManyRequests, waitMessage(wait))
@@ -287,14 +280,32 @@ func welcomeRoute(w http.ResponseWriter, r *http.Request) {
 		dead(http.StatusNotFound, "")
 		return
 	}
-	v := &welcomeView{User: link.User, Kind: link.Kind}
+	v := &welcomeView{User: link.User, Kind: link.Kind, Email: link.Email}
 	if r.Method == http.MethodPost {
 		password := r.PostFormValue("password")
+		if link.Kind == "signup" {
+			v.User = strings.ToLower(strings.TrimSpace(r.PostFormValue("username")))
+		}
 		switch {
+		case link.Kind == "signup" && v.User == "":
+			v.Error = "Choose a user name."
 		case utf8.RuneCountInString(password) < passwordMin:
 			v.Error = "Choose a password of at least 8 characters."
 		case password != r.PostFormValue("again"):
 			v.Error = "The passwords differ."
+		case link.Kind == "signup":
+			hash, pending, err := useSignup(link, v.User, password)
+			if err != nil {
+				v.Error = err.Error()
+				break
+			}
+			if pending {
+				v.Waiting = true
+				break
+			}
+			setSessionHash(w, r, v.User, hash)
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
 		default:
 			hash, err := useLink(link, password)
 			if err != nil {
@@ -307,8 +318,11 @@ func welcomeRoute(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	title := "Welcome"
-	if link.Kind == "reset" {
+	switch link.Kind {
+	case "reset":
 		title = "New password"
+	case "signup":
+		title = "Sign up"
 	}
 	page(w, rq, http.StatusOK, "welcome.html", title, shell{noActions: true}, v)
 }

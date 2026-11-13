@@ -361,6 +361,7 @@ func (c *userCommand) setDisabled() int {
 		c.f.Set(c.name, "disabled", "yes")
 	} else {
 		c.f.Unset(c.name, "disabled")
+		c.f.Unset(c.name, "pending") // approved
 	}
 	if !c.save() {
 		return 1
@@ -428,8 +429,14 @@ func userLine(u *User) string {
 	if u.MCPToken != "" {
 		facts = append(facts, "MCP token")
 	}
-	if u.Disabled {
+	switch {
+	case u.Pending:
+		facts = append(facts, "waiting for approval: zonewiki user enable "+u.Name)
+	case u.Disabled:
 		facts = append(facts, "disabled")
+	}
+	if u.Email != "" {
+		facts = append(facts, u.Email)
 	}
 	if len(facts) == 0 {
 		return "  " + u.Name

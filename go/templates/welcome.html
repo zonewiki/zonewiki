@@ -1,4 +1,4 @@
-{{- /* /welcome/<token>: an invite or reset link's page (links.go): the
+{{- /* /welcome/<token>: an invite, reset or sign-up link's page (links.go): the
     person chooses their password, once. Opening it changes nothing. */ -}}
 {{define "body"}}
 <div class="login-wrap">
@@ -7,6 +7,23 @@
     <h2>This link doesn't work</h2>
     <p>{{with .Error}}{{.}}{{else}}It may have been used already, or expired, or been replaced by a newer one. Ask whoever sent it for a new one.{{end}}</p>
   </div>
+  {{- else if .Waiting}}
+  <div class="login-form">
+    <h2>Thanks, {{.User}}</h2>
+    <p class="welcome-note" role="status">Your account waits for an admin of this wiki to approve it. Once they have, sign in with your user name, <strong>{{.User}}</strong>, and your password.</p>
+  </div>
+  {{- else if eq .Kind "signup"}}
+  <form class="login-form" method="post">
+    <h2>Sign up to {{.Shell.AppName}}</h2>
+    <p class="welcome-note">Your address, <strong>{{.Email}}</strong>, is confirmed. Choose the user name you sign in with (lowercase letters, digits and hyphens) and a password.</p>
+    <input type="text" name="username" placeholder="User name" value="{{.User}}" required pattern="[a-z0-9]+(-[a-z0-9]+)*" title="Lowercase letters, digits and hyphens" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="username" autofocus>
+    <input type="password" name="password" placeholder="Password (at least 8 characters)" autocomplete="new-password" required>
+    <input type="password" name="again" placeholder="Again" autocomplete="new-password" required>
+    {{- with .Error}}
+    <p class="login-error">{{.}}</p>
+    {{- end}}
+    <button type="submit" class="btn btn-primary">Make my account</button>
+  </form>
   {{- else}}
   <form class="login-form" method="post">
     {{- if eq .Kind "reset"}}

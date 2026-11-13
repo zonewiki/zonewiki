@@ -63,6 +63,12 @@ type usersView struct {
 	// row stays put; not in the navigation trail.
 	BreadcrumbHTML template.HTML
 	Links          []linkRow // the open invite and reset links
+	// Sign-up, when it is on: the role it gives, the domains it takes,
+	// whether an admin approves.
+	Signup         bool
+	SignupRole     string
+	SignupDomains  []string
+	SignupApproval bool
 	// A link just made, shown once: its address, for whom, which kind.
 	Link, LinkUser, LinkKind string
 }
@@ -70,7 +76,9 @@ type usersView struct {
 // userRow: a user as the Users tab lists them.
 type userRow struct {
 	Name, Role      string
+	Email           string
 	Token, Disabled bool
+	Pending         bool // signed up, waiting for approval
 	Me, Private     bool // the admin themselves; has a private folder
 }
 
@@ -99,6 +107,8 @@ func usersPage(w http.ResponseWriter, r *http.Request) {
 			done = "Disabled " + name + ": they can't sign in, and their MCP token no longer works. Their files stay."
 		case "enable":
 			done = "Enabled " + name + ": they can sign in again."
+		case "approve":
+			done = "Approved " + name + ": they can sign in now."
 		}
 	} else if r.URL.Query().Get("done") == "remove" && userNameRE.MatchString(name) {
 		done = "Removed " + name + "."
@@ -122,10 +132,12 @@ func showUsers(w http.ResponseWriter, r *http.Request, status int, done, refused
 func usersData(r *http.Request) *usersView {
 	s, me := latestSettings(), userOf(r)
 	v := &usersView{Me: me, Roles: roles, Links: openLinks(), Tabs: adminTabs, Tab: "users",
+		Signup: signupOn(s), SignupRole: s.SignupRole, SignupDomains: s.SignupDomains, SignupApproval: s.SignupApproval,
 		BreadcrumbHTML: breadcrumb(newReq(r), []crumb{{"Admin", "/admin"}, {"Users", ""}}, "", false, "", "")}
 	for _, name := range sortedKeys(s.Users) {
 		u := s.Users[name]
-		v.Users = append(v.Users, userRow{Name: name, Role: u.Role, Token: u.MCPToken != "", Disabled: u.Disabled,
+		v.Users = append(v.Users, userRow{Name: name, Role: u.Role, Email: u.Email, Token: u.MCPToken != "",
+			Disabled: u.Disabled, Pending: u.Pending,
 			Me: name == me, Private: isDir(filepath.Join(cfg.Data, privateDir, name))})
 	}
 	return v
@@ -229,6 +241,7 @@ func userDisableRoute(w http.ResponseWriter, r *http.Request) {
 			f.Set(u.Name, "disabled", "yes")
 		} else {
 			f.Unset(u.Name, "disabled")
+			f.Unset(u.Name, "pending") // approved
 		}
 		return nil
 	})
@@ -236,7 +249,11 @@ func userDisableRoute(w http.ResponseWriter, r *http.Request) {
 		refuseChange(w, r, err)
 		return
 	}
-	afterChange(w, r, filepath.Base(r.URL.Path), u.Name)
+	done := filepath.Base(r.URL.Path)
+	if !disable && u.Pending {
+		done = "approve"
+	}
+	afterChange(w, r, done, u.Name)
 }
 
 func userRemoveRoute(w http.ResponseWriter, r *http.Request) {

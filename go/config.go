@@ -38,6 +38,8 @@ type Config struct {
 	Data        string // the wiki (ZONE_DATA)
 	Uploads     string // Data/_assets
 	GitEnabled  bool
+	Signup      bool       // ZONE_SIGNUP: people may make an account themselves (signup.go)
+	Mail        mailConfig // ZONE_SMTP_HOST …, ZONE_MAIL_FROM: how Zone sends mail (mail.go); Host "": it sends none
 }
 
 var cfg *Config
@@ -141,6 +143,13 @@ func loadWiki(getenv func(string) string) (*Config, error) {
 	_ = os.Mkdir(c.Uploads, 0o777)
 	_, err := exec.LookPath("git")
 	c.GitEnabled = err == nil
+	if c.Mail, err = loadMail(getenv); err != nil {
+		return nil, err
+	}
+	if c.Signup = truthy(getenv("ZONE_SIGNUP")); c.Signup && c.Mail.Host == "" {
+		return nil, fmt.Errorf("ZONE_SIGNUP needs mail, for the link that confirms an address: " +
+			"set ZONE_SMTP_HOST and ZONE_MAIL_FROM (see .env.example)")
+	}
 	return c, nil
 }
 

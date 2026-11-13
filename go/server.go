@@ -46,6 +46,11 @@ Environment:
   ZONE_HOST_DATA             the wiki's folder as the host sees it, for the MCP tools' file: lines
   ZONE_SEMANTIC_SEARCH       on: semantic search besides keywords (needs onnxruntime)
   ZONE_MODEL_DIR             where the semantic model's files are
+  ZONE_SIGNUP                1: people may make an account at /signup (needs mail, users, base-url)
+  ZONE_SMTP_HOST, _PORT      the mail server Zone sends sign-up mail through (port default 587)
+  ZONE_SMTP_USER, _PASSWORD  signing in to it (only over TLS, or to this machine)
+  ZONE_SMTP_TLS              starttls (default), tls (465) or none
+  ZONE_MAIL_FROM             the address Zone's mail comes from
   ZONE_BUILD                 the build shown next to the version
 
 Flags:`
@@ -123,6 +128,11 @@ func main() {
 	if needsSetup() {
 		logf("other devices can reach this wiki and it has no login: Zone asks for a password in the browser " +
 			"before it shows anything (/setup). To run it without a login on purpose: zonewiki config set no-login yes")
+	}
+	if why := signupOffReason(s); why != "" {
+		logf("%s", why)
+	} else if signupOn(s) {
+		logf("sign-up is on: anyone%s can make an account at %s/signup, as %s", signupWho(s), s.BaseURL, s.SignupRole)
 	}
 	for _, p := range strayPrivate() {
 		logf("%s is in %s/ but no user's folder there: no one sees it (a removed user's?). "+
@@ -265,6 +275,7 @@ func newHandler() http.Handler {
 	historyRoutes(mux)
 	tasksRoutes(mux)
 	adminRoutes(mux)
+	signupRoutes(mux)
 	assistantRoutes(mux)
 	return noStalls(checks(viewerGate(mux)))
 }
@@ -403,7 +414,7 @@ func dotSegments(p string) bool {
 // asks without one.
 func authExempt(r *http.Request) bool {
 	switch p := r.URL.Path; {
-	case p == "/login", p == "/logout", p == "/mcp", p == "/api/health", p == "/setup":
+	case p == "/login", p == "/logout", p == "/mcp", p == "/api/health", p == "/setup", p == "/signup":
 		return true
 	case strings.HasPrefix(p, "/welcome/"):
 		return true // an invite or reset link: the person has no password yet (links.go)

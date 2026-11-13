@@ -1,0 +1,23 @@
+{{- /* /signup: ask for an account with a mail address (signup.go). Zone
+    mails a link; the account is made on its page (welcome.html). */ -}}
+{{define "body"}}
+<div class="login-wrap">
+  {{- if .Sent}}
+  <div class="login-form">
+    <h2>Check your mail</h2>
+    <p class="welcome-note" role="status">A mail is on its way to <strong>{{.Email}}</strong>, with a link to make your account. The link works for 24 hours. Nothing there? Look in the spam folder, or try again.</p>
+  </div>
+  {{- else}}
+  <form class="login-form" method="post" action="/signup">
+    <h2>Sign up to {{.Shell.AppName}}</h2>
+    <p class="welcome-note">Zone mails you a link: with it you choose your user name and password.{{with .Domains}} Addresses at {{range $i, $d := .}}{{if $i}}, {{end}}{{$d}}{{end}} only.{{end}}</p>
+    <input type="email" name="email" placeholder="Mail address" value="{{.Email}}" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="email" autofocus required>
+    {{- with .Error}}
+    <p class="login-error">{{.}}</p>
+    {{- end}}
+    <button type="submit" class="btn btn-primary">Send the link</button>
+    <p class="welcome-note">Have an account? <a href="/login">Sign in</a></p>
+  </form>
+  {{- end}}
+</div>
+{{end}}

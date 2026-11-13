@@ -45,10 +45,10 @@ func configPath() string { return statePath("config") }
 // config check` shows them.
 var configKeys = []string{"password", "mcp-token", "hosts", "base-url", "git-remote", "noshare", "locale",
 	"date-format", "query-log", "semantic-min-score", "trusted-proxies", "upload-max", "storage-max",
-	"external-content", "no-login"}
+	"external-content", "no-login", "signup-domains", "signup-role", "signup-approval"}
 
 // userKeys: the keys of a [user …] section.
-var userKeys = []string{"password", "mcp-token", "role", "disabled"}
+var userKeys = []string{"password", "mcp-token", "role", "disabled", "email", "pending"}
 
 func knownKey(key string) bool { return slices.Contains(configKeys, key) }
 
@@ -107,6 +107,9 @@ type Settings struct {
 	StorageMax       int64          // what the wiki may hold in bytes (storage.go); 0: no limit
 	External         []string       // the hosts pages may load images, media and frames from (security.go: externalRE); "*": any
 	NoLogin          bool           // no login on purpose, though other devices reach Zone: no first-run page (setup.go)
+	SignupDomains    []string       // the mail domains sign-up takes (signup.go), lowercase; none: any
+	SignupRole       string         // the role an account made by sign-up gets: roleViewer (default) or roleEditor
+	SignupApproval   bool           // an account made by sign-up waits for an admin (pending)
 }
 
 // authOn: the wiki has a login gate, a password or users.
@@ -152,6 +155,29 @@ func loadSettings(f *settingsfile.File) (*Settings, error) {
 	s.NoLogin = truthy(noLogin)
 	if !s.NoLogin && !slices.Contains([]string{"", "0", "false", "no"}, strings.ToLower(noLogin)) {
 		return nil, fmt.Errorf("%s%s isn't yes or no.", where, noLogin)
+	}
+	approval, where, _ := get("signup-approval")
+	s.SignupApproval = truthy(approval)
+	if !s.SignupApproval && !slices.Contains([]string{"", "0", "false", "no"}, strings.ToLower(approval)) {
+		return nil, fmt.Errorf("%s%s isn't yes or no.", where, approval)
+	}
+	role, where, _ := get("signup-role")
+	switch s.SignupRole = strings.ToLower(role); s.SignupRole {
+	case "":
+		s.SignupRole = roleViewer
+	case roleViewer, roleEditor:
+	default:
+		return nil, fmt.Errorf("%s%s isn't a role sign-up gives: viewer or editor (an admin makes admins).", where, role)
+	}
+	domains, where, _ := get("signup-domains")
+	for _, d := range strings.Split(domains, ",") {
+		if d = strings.ToLower(strings.TrimPrefix(strings.TrimSpace(d), "@")); d == "" {
+			continue
+		}
+		if !domainRE.MatchString(d) {
+			return nil, fmt.Errorf("%s%s isn't a mail domain (e.g. example.org).", where, d)
+		}
+		s.SignupDomains = append(s.SignupDomains, d)
 	}
 	s.GitRemote, _, _ = get("git-remote")
 	hosts, _, _ := get("hosts")
@@ -279,8 +305,19 @@ func fileUsers(f *settingsfile.File) (map[string]*User, error) {
 		if !slices.Contains([]string{"", "0", "false", "no", "1", "true", "yes"}, strings.ToLower(disabled.Value)) {
 			return nil, lineError(disabled.Line, "%s's disabled = %s isn't yes or no.", u.Name, disabled.Value)
 		}
+		pending := u.Values["pending"]
+		if !slices.Contains([]string{"", "0", "false", "no", "1", "true", "yes"}, strings.ToLower(pending.Value)) {
+			return nil, lineError(pending.Line, "%s's pending = %s isn't yes or no.", u.Name, pending.Value)
+		}
+		email := u.Values["email"]
+		if email.Value != "" && !validEmail(email.Value) {
+			return nil, lineError(email.Line, "%s's email %s isn't a mail address.", u.Name, email.Value)
+		}
+		// Waiting for approval, a user is disabled too: every check that
+		// keeps a disabled user out keeps them out.
 		users[u.Name] = &User{Name: u.Name, PasswordHash: hash.Value, MCPToken: token.Value, Role: role,
-			Disabled: truthy(disabled.Value)}
+			Disabled: truthy(disabled.Value) || truthy(pending.Value), Pending: truthy(pending.Value),
+			Email: strings.ToLower(email.Value)}
 	}
 	return users, nil
 }
@@ -543,9 +580,12 @@ func settingsChange(old, s *Settings) string {
 			changes = append(changes, name+"'s role")
 		}
 		if was != nil && was.Disabled != now.Disabled {
-			if now.Disabled {
+			switch {
+			case was.Pending && !now.Pending && !now.Disabled:
+				changes = append(changes, "approve "+name)
+			case now.Disabled:
 				changes = append(changes, "disable "+name)
-			} else {
+			default:
 				changes = append(changes, "enable "+name)
 			}
 		}
@@ -566,6 +606,8 @@ func settingsChange(old, s *Settings) string {
 		{"upload-max", old.UploadMax != s.UploadMax}, {"storage-max", old.StorageMax != s.StorageMax},
 		{"external-content", !slices.Equal(old.External, s.External)},
 		{"no-login", old.NoLogin != s.NoLogin},
+		{"signup-domains", !slices.Equal(old.SignupDomains, s.SignupDomains)},
+		{"signup-role", old.SignupRole != s.SignupRole}, {"signup-approval", old.SignupApproval != s.SignupApproval},
 	} {
 		if c.changed {
 			changes = append(changes, c.key)

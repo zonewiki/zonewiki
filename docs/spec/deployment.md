@@ -63,9 +63,9 @@ Part of Zone's spec (see `AGENTS.md` for the index).
   Without the container, Zone itself should run on any OS with Python and git (it uses no Unix-only modules), though only Linux is tested.
 - **`.env.example`** — the template for `.env` (`cp .env.example .env`): every setting with a comment, optional ones commented out, no real values.
   `tests/test_env_example.py` keeps it in step with the code: every `ZONE_*` name the source, `run.sh`, `compose.yaml` or `compose.nas.yaml` reads is in it, and nothing else is (a typo in `.env` is silently ignored).
-- **`.env`** — the deployment's settings, read by `run.sh`, compose and Zone at start: `ZONE_DATA` (default `~/zonewiki`), `ZONE_ALLOW_REMOTE`, `TZ`, `ZONE_SEMANTIC_SEARCH`, and for compose without `run.sh` `ZONE_BIND`, `ZONE_UID`/`ZONE_GID`, `ZONE_PORT` (`compose.nas.yaml`); gitignored.
+- **`.env`** — the deployment's settings, read by `run.sh`, compose and Zone at start: `ZONE_DATA` (default `~/zonewiki`), `ZONE_ALLOW_REMOTE`, `TZ`, `ZONE_SEMANTIC_SEARCH`, sign-up and its mail server (`ZONE_SIGNUP`, `ZONE_SMTP_*`, `ZONE_MAIL_FROM`; Mail, below), and for compose without `run.sh` `ZONE_BIND`, `ZONE_UID`/`ZONE_GID`, `ZONE_PORT` (`compose.nas.yaml`); gitignored.
   With rootless podman, keep-id (`compose.podman.yaml`) runs Zone as the host user, so files written to the mounted wiki directory are the host user's.
-- **`.zone/config`** — the wiki's own settings and its users (a password, MCP tokens, `hosts`, `base-url`, `git-remote`, `noshare`, `locale`, `date-format`, `query-log`, `semantic-min-score`, `trusted-proxies`, `upload-max`, `storage-max`),
+- **`.zone/config`** — the wiki's own settings and its users (a password, MCP tokens, `hosts`, `base-url`, `git-remote`, `noshare`, `locale`, `date-format`, `query-log`, `semantic-min-score`, `trusted-proxies`, `upload-max`, `storage-max`, `signup-domains`, `signup-role`, `signup-approval`),
   in the wiki,
   kept out of git (it holds the users: back it up with the data folder),
   reloaded when it changes,
@@ -195,6 +195,27 @@ When `ZONE_ALLOW_REMOTE=1`, `run.sh` exports `ZONE_BIND=0.0.0.0` (LAN-accessible
 
 Optional git remote: `./run.sh config set git-remote git@github.com:user/wiki.git`.
 At start and when it changes, `setGitRemote()` adds or updates `origin` to that URL, so `git push` works from the terminal.
+
+## Mail
+
+Zone sends mail only for sign-up (Sign-up in `docs/spec/users.md`), through an SMTP server the deployment names in `.env` (`go/mail.go`, Go's `net/smtp`; no dependency):
+
+```bash
+ZONE_SIGNUP=1
+ZONE_SMTP_HOST=smtp.example.org
+ZONE_SMTP_PORT=587                 # default 587; 465 with ZONE_SMTP_TLS=tls
+ZONE_SMTP_USER=wiki@example.org    # optional: AUTH PLAIN
+ZONE_SMTP_PASSWORD=…
+ZONE_SMTP_TLS=starttls             # starttls (default), tls or none
+ZONE_MAIL_FROM=wiki@example.org
+```
+
+- **Encrypted** unless `ZONE_SMTP_TLS=none`: `starttls` (the default) refuses a server that doesn't offer STARTTLS, rather than sending the link in the clear; `tls` speaks TLS from the start (the default for port 465).
+  The certificate is checked against `ZONE_SMTP_HOST`.
+  `none` is for a relay that takes mail unencrypted (a local postfix); the password then goes only to this machine (`net/smtp`'s `PlainAuth` refuses otherwise).
+- **Checked at start**: Zone won't start on a mail setting without `ZONE_SMTP_HOST`, a port or TLS mode it doesn't know, a password without a user, a missing or invalid `ZONE_MAIL_FROM` (a bare address, no name), or `ZONE_SIGNUP` without a mail server.
+- **Time limits**: 20 seconds to connect, a minute for the whole mail; the sign-up form waits for it, so it can say when the mail couldn't be sent (and logs why).
+- The password is a secret in `.env` (gitignored), as compose hands every setting over (`env_file`).
 
 ## Mobile / phone access
 

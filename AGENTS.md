@@ -28,8 +28,8 @@ Read the file for the area you are working on before changing it:
 | `docs/spec/mcp.md` | The MCP server and its tools, `zone_help` (Zone's docs for assistants) |
 | `docs/spec/tasks.md` | Tasks: embed syntax, storage, dates, fields, views, interaction, cards, history, comments, keep tasks, lists, touch |
 | `docs/spec/security.md` | Login and session key, the MCP token, the Host and Origin checks, framing, HTTPS cookies, throttling |
-| `docs/spec/users.md` | Several users: setup, the settings file `.zone/config` (its format and keys, reloading, `zonewiki user`/`zonewiki config`), password hashes, signing in, per-user MCP tokens, private pages, private tasks, commit authors |
-| `docs/spec/deployment.md` | Containerfile, compose, `run.sh`, `.env`, a NAS or server (prebuilt image, Synology), CI (Forgejo, GitHub), network and phone access, the version string, the home-screen app, the data directory |
+| `docs/spec/users.md` | Several users: setup, the settings file `.zone/config` (its format and keys, reloading, `zonewiki user`/`zonewiki config`), password hashes, invite links, sign-up, signing in, per-user MCP tokens, private pages, private tasks, commit authors |
+| `docs/spec/deployment.md` | Containerfile, compose, `run.sh`, `.env`, a NAS or server (prebuilt image, Synology), CI (Forgejo, GitHub), mail (SMTP), network and phone access, the version string, the home-screen app, the data directory |
 | `docs/spec/testing.md` | The test setup (fixtures, the browser tests' harness and gotchas) and what each test module covers |
 
 The spec and this file are written a sentence a line (a long sentence a clause a line; a list item's following lines indented under its text), so a change shows as the sentence that changed, not as its paragraph.
@@ -112,6 +112,8 @@ Auth is optional (a password, or users; see Key Constraints).
 │   ├── users.go            # Users: roles, password hashes, sign-in, the password prompt
 │   ├── admin.go            # The admin page (/admin, admins), its Users tab: roles, disable, remove, writing the settings file as the commands do
 │   ├── links.go            # Invite and reset links: .zone/links, /welcome/<token>
+│   ├── signup.go           # Sign-up: /signup, the mail with its link, the account a sign-up link makes
+│   ├── mail.go             # Mail through the deployment's SMTP server (ZONE_SMTP_*), for sign-up
 │   ├── assistant.go        # Connect an assistant (/assistant): your MCP token made and revoked in the browser, with your password again
 │   ├── signout.go          # Sessions signed out: .zone/signed-out
 │   ├── stalls.go           # A request body or response that stands still for a minute fails (noStalls)

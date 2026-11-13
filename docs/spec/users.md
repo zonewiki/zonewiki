@@ -62,8 +62,11 @@ disabled = yes
 | `external-content` | Hosts a page may load images, media and frames from: `upload.wikimedia.org, *.example.org`; `*`: any (A page loads nothing from other hosts, `docs/spec/security.md`) | none: only Zone itself |
 | `no-login` | `yes`: the wiki has no login on purpose, though other devices reach it, so Zone shows no first-run page (First run, `docs/spec/security.md`) | no |
 | `storage-max` | How much the wiki may hold, a size (`5GB`): past it, nothing new is made (Storage limit, below) | no limit |
+| `signup-domains` | Sign-up takes only addresses at these domains, comma-separated (`example.org, example.net`; Sign-up, below) | any address |
+| `signup-role` | The role an account made by sign-up gets: `viewer` or `editor` (never `admin`) | `viewer` |
+| `signup-approval` | `yes`: an account made by sign-up can't sign in until an admin approves it | no |
 
-- **Format**: `key = value` (spaces optional), the wiki's settings before the first section, a `[user NAME]` section per user with `password`, `mcp-token`, `role` and `disabled` (`configKeys`, `userKeys`; Roles, below).
+- **Format**: `key = value` (spaces optional), the wiki's settings before the first section, a `[user NAME]` section per user with `password`, `mcp-token`, `role`, `disabled`, `email` and `pending` (`configKeys`, `userKeys`; Roles and Sign-up, below).
   `#` starts a comment only at the start of a line, so `noshare = #noshare` is a value.
 - **Sizes** (`upload-max`, `storage-max`; `parseSize` in `go/storage.go`): bytes (`300`), or a number with KB, MB, GB or TB, any case, a space optional, decimals too (`1.5GB`).
   They count by 1024, as Zone's caps always have (100 MB is 100 × 1024 × 1024 bytes).
@@ -305,7 +308,7 @@ It has section tabs (`adminTabs`), of which **Users** (`/admin/users`, `users.ht
 ## Invite and reset links
 
 A link that lets one person set a password, once (`go/links.go`).
-Zone sends no mail: the admin copies the link and sends it any way they like.
+Zone doesn't mail these: the admin copies the link and sends it any way they like (only sign-up mails its link, below).
 
 ```bash
 ./run.sh user invite dave --role viewer   # an invite: the link, shown once
@@ -337,6 +340,52 @@ Zone sends no mail: the admin copies the link and sends it any way they like.
   The page sends `Referrer-Policy: no-referrer`: its address holds the token.
 - **A link that doesn't work**, wrong, used, expired or replaced, gets one page for all ("This link doesn't work", 404), and a client trying them is throttled as for wrong passwords (`welcomeThrottle`).
 - **No minimum length** for the password, as `user add` has none.
+
+## Sign-up
+
+People may ask for an account themselves, with their mail address (`go/signup.go`).
+It is the deployment's to allow and the wiki's admin's to shape:
+
+```bash
+# .env (the deployment): on, and the mail server (Mail in docs/spec/deployment.md)
+ZONE_SIGNUP=1
+ZONE_SMTP_HOST=smtp.example.org
+ZONE_MAIL_FROM=wiki@example.org
+```
+
+```ini
+# .zone/config (the wiki): all optional
+base-url = https://wiki.example.org      # needed: the mail's link is on it
+signup-domains = example.org             # only these addresses; unset: any
+signup-role = viewer                     # or editor; default viewer
+signup-approval = yes                    # an admin approves each account; default no
+```
+
+- **On** when `ZONE_SIGNUP` is, with a mail server (Zone won't start with `ZONE_SIGNUP` and no `ZONE_SMTP_HOST`), the wiki has users (an admin to manage them) and `base-url` is set (`signupOn`).
+  The link in the mail is always on `base-url`, never on the address the request came in on: a request with a forged `Host` would otherwise send the link to another site.
+  Without users or `base-url` it is off and Zone says why in its log at start; `/signup` answers 404 then.
+  The login page links to it ("No account yet? Sign up"), and the admin page's Users tab says it is on, for whom and as what.
+- **Asking** (`/signup`, signed out; someone signed in is sent home): a mail address, nothing else.
+  It must be a bare address (`name@example.org`: no display name, no spaces or commas, a domain with a dot; `validEmail`), at one of `signup-domains` if there are any (refused on the form, naming them: "This wiki takes sign-ups only with an address at …").
+  Zone then mails the address a link, and the page says "Check your mail".
+  The name and password are chosen only after the address is confirmed, so the form tells no one which names exist.
+- **An address that has an account** gets a mail with its user name instead of a link, and the form says the same "Check your mail": the page tells no one who has an account.
+- **The link** is a welcome link of kind `signup` (Invite and reset links, above): its hash in `.zone/links`, with the address, valid **24 hours**, **once**.
+  Asking again with the same address replaces it; at most 200 sign-up links are open at once ("Too many sign-ups are waiting").
+  Sign-up links aren't listed with the admin's open links: nobody made them, and they expire within a day.
+  A sign-up link stops working when sign-up is turned off.
+- **The link's page** (`/welcome/<token>`) says the address is confirmed and asks for a user name (as everywhere: lowercase letters, digits and inner hyphens) and a password twice (at least 8 characters).
+  A name that is taken, by a user or an open invite, is refused there ("The user name alice is taken: choose another.") and the link stays good, as for any other mistake on the form.
+  Then the account is made in the settings file, as theirs in the log: their password's hash, `role` (`signup-role`; nothing for an editor, the default), `email` and, with `signup-approval`, `pending = yes`.
+  Without approval they are signed in and go to the home page; with it, the page says their account waits for an admin.
+- **Approval** (`signup-approval = yes`): a `pending` user is disabled in every way a disabled user is (no sign-in, no session, no MCP token), and the login tells them, with the right password, "Your account waits for an admin of this wiki to approve it."
+  The Users tab shows them as "Waiting for approval" with an **Approve** button (the Enable route: it takes out `pending` and `disabled`; the log says `approve NAME`); `zonewiki user enable NAME` does the same, and `user list` shows them as waiting.
+  To turn one down, **Remove** them.
+  Zone doesn't mail the admins about a waiting account: they see it on the Users tab.
+- **The address is kept** as the user's `email` in the settings file (out of git, as all account data), shown to admins on the Users tab and by `user list`, and used to tell a second sign-up with it apart.
+- **Capped**, so the form can't flood someone's inbox or the mail server's quota: 5 mails per client and 50 in all in an hour (`hourlyCap`, in memory; "Too many sign-ups in the last hour: try again later.", 429).
+- **A mail that can't be sent** (the server down, refusing, no STARTTLS) is logged with why, the link is taken back, and the form says "Zone couldn't send the mail: try again later." (502).
+- **Not yet**: a password reset by mail ("forgot password"): an admin makes a reset link, as before.
 
 ## Signing in
 

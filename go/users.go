@@ -28,6 +28,8 @@ type User struct {
 	Name, PasswordHash, MCPToken string
 	Role                         string // roleAdmin, roleEditor or roleViewer
 	Disabled                     bool   // can't sign in; sessions and token refused
+	Pending                      bool   // made by sign-up, waiting for an admin's approval (Disabled too)
+	Email                        string // their mail address, lowercase; "": none known
 }
 
 // The roles (docs/spec/users.md): an admin manages the users and does what
