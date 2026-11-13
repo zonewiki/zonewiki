@@ -1685,10 +1685,12 @@ class TestLimitParam:
 
     def test_tasks_code_comes_with_leaf_js(self, client, wiki_dir):
         # The embed carries no script of its own: zonewiki.js, an ES module on
-        # every page, imports tasks.js, which imports tasks-core.js.
+        # every page, imports tasks.js, which imports tasks-core.js. What the
+        # page brings for its lists is data (TestInitialTasks in test_tasks_embed.py).
         (wiki_dir / "board.md").write_text("# Board\n\n[[tasks:]]\n[[tasks:]]\n", encoding="utf-8")
         html_out = client.get("/page/board").get_data(as_text=True)
-        assert html_out.count("<script") == 2   # highlight.js and zonewiki.js
+        assert html_out.count("<script") == 3   # highlight.js, zonewiki.js and the tasks' data block
+        assert html_out.count('<script type="application/json"') == 1
         assert '<script type="module" src="/public/zonewiki.js"></script>' in html_out
 
 

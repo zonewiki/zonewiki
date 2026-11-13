@@ -18,7 +18,7 @@ import { linkAutocomplete } from './js/completion.js';
 import { openLightbox } from './js/page.js';
 import { pasteUrlAsLink } from './js/util.js';
 import { openDatePicker } from './js/datepicker.js';
-import { initTaskData } from './js/taskdata.js';
+import { forgetInitialTasks, initTaskData } from './js/taskdata.js';
 import { initTaskView } from './js/taskview.js';
 import { initTaskOrder } from './js/taskorder.js';
 import { initTaskChips } from './js/taskchips.js';
@@ -75,6 +75,8 @@ export function initTaskApps() {
     initTasksInstance(appEl);
     appEl.dataset.ready = '1';
   });
+  // The tasks the page came with were for these.
+  forgetInitialTasks();
   // Default: a lone instance is active
   if (!activeTasksInstance && tasksInstances.length === 1) activeTasksInstance = tasksInstances[0].id;
   return apps.length;

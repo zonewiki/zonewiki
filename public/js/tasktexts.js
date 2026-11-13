@@ -27,6 +27,15 @@ export function textsOf(taskList) {
     comments: taskList.flatMap(t => (t?.comments || []).map(c => c.text)),
   };
 }
+// HTML the page brought along for `texts` (initialTasks in taskdata.js), in
+// their order; texts and HTML that don't pair up are left to renderTexts.
+export function keepRendered(texts, html) {
+  for (const kind in renderedHtml) {
+    const list = texts[kind] || [], out = html[kind];
+    if (!Array.isArray(out) || out.length !== list.length) continue;
+    list.forEach((t, i) => { if (!renderedHtml[kind].has(t)) renderedHtml[kind].set(t, highlightCode(String(out[i]))); });
+  }
+}
 // Fetch the HTML of the texts not rendered yet; true when there is new.
 // Texts another task list app is fetching already are waited for, not asked
 // again. A failed request caches nothing: the next render asks again.

@@ -7,9 +7,31 @@
 import TasksCore from '../tasks-core.js';
 import { refreshDueBadge } from './chrome.js';
 import { formatDate, noticeFromResponse, placeToast, plainTitle, showNotice, startsAfterDeadline } from './taskutil.js';
-import { renderTexts, textsOf } from './tasktexts.js';
+import { keepRendered, renderTexts, textsOf } from './tasktexts.js';
 
 const { matchesFilter, parseFilter } = TasksCore;
+
+// The open tasks a page view brings along (go/tasksembed.go tasksInitial),
+// with their notes' and comments' HTML: the task lists the page starts with
+// draw from them, with no request. Each gets its own copy, as each would
+// from /api/tasks. Only at the page's start (tasks.js forgets them once its
+// lists have started): a list that starts later asks the server, which may
+// know more by then.
+let initialJSON;   // undefined: not looked for yet; '': none
+function initialTasks() {
+  if (initialJSON === undefined) {
+    initialJSON = '';
+    try {
+      const data = JSON.parse(document.getElementById('tasks-initial').textContent);
+      if (Array.isArray(data.tasks)) {
+        keepRendered(textsOf(data.tasks), data);
+        initialJSON = JSON.stringify(data.tasks);
+      }
+    } catch (_) {}
+  }
+  return initialJSON ? JSON.parse(initialJSON) : null;
+}
+export function forgetInitialTasks() { initialJSON = ''; }
 
 export function initTaskData(app) {
 const { st } = app;
@@ -59,9 +81,12 @@ function triggerUndo() {
 // closed ones: they count as not loaded again (tasksGen tells a closed
 // load in flight that its merge target is gone).
 let tasksGen = 0;
+let started = false;
 async function fetchTasks() {
-  const res = await fetch('/api/tasks');
-  const fetched = (await res.json()).filter(app.inScope);
+  // The first time, the tasks the page came with.
+  const all = (!started && initialTasks()) || await (await fetch('/api/tasks')).json();
+  started = true;
+  const fetched = all.filter(app.inScope);
   await renderTexts(textsOf(fetched));
   st.tasks = fetched;
   tasksGen++;

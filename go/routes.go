@@ -914,6 +914,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	for i := range places {
 		places[i].Current = places[i].Key == place
 	}
+	tasksHTML = tasksInitial(rq) + tasksHTML
 	q := r.URL.Query()
 	page(w, rq, http.StatusOK, "tasks_page.html", title, shell{wide: sections != nil}, &tasksPageView{Heading: heading, ListName: list,
 		RenameName: firstNonEmpty(q.Get("rename_name"), list), RenameError: q.Get("rename_error"), RenameMerge: q.Get("rename_merge") != "",

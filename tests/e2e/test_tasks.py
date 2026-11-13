@@ -1931,6 +1931,8 @@ def test_completed_matches_survive_the_load_race(page, wiki):
     # parallel with the open ones. When they arrived first, the open tasks
     # replaced the list and the completed ones were lost for good: the link
     # said "No matches" on some reloads and "1 match" on others.
+    # (The page brings its open tasks along now; a list reloading while the
+    # filter asks for the completed ones is the same race.)
     t = page.request.post("/api/tasks", data={"title": "Buy milk"}).json()
     page.request.put(f"/api/tasks/{t['id']}", data={"completed": True})
     page.request.post("/api/tasks", data={"title": "Something else"})
@@ -1939,10 +1941,14 @@ def test_completed_matches_survive_the_load_race(page, wiki):
         page.wait_for_timeout(400)  # the completed tasks arrive first
         route.continue_()
     page.route("**/api/tasks", slow_open_tasks)
+    page.goto("/tasks?view=open")
+    expect(card(page, "Something else")).to_be_visible()
     # Only once the (slow) open tasks are in: before that the link already
     # showed the right count, and the bug only struck when they replaced it.
     with page.expect_response("**/api/tasks"):
-        page.goto("/tasks?view=open&search=milk")
+        page.evaluate("() => { document.dispatchEvent(new Event('visibilitychange')); }")  # the list reloads
+        page.locator("#task-filter-search").fill("milk")
+        expect(page.locator("#task-closed-link")).to_have_text("1 match in Closed →")
     expect(card(page, "Something else")).to_have_count(0)  # filtered out
     page.wait_for_timeout(300)
     expect(page.locator("#task-closed-link")).to_have_text("1 match in Closed →")
@@ -2298,6 +2304,34 @@ def test_a_comment_keeps_its_lines(page, wiki):
     body = page.locator("#task-edit-comment-list .task-comment-body")
     expect(body.locator("br")).to_have_count(1)
     assert body.inner_text().strip() == "sanded\nprimed"
+
+
+def test_a_page_draws_its_lists_without_asking_for_the_tasks(page, wiki):
+    # The page brings the open tasks and their texts' HTML along: its lists
+    # draw from them (each its own), with no request for either. What comes
+    # after (a write, the other list's reload) asks the server.
+    wiki.write("garden", "# Garden\n")
+    tid = page.request.post("/api/tasks", data={"title": "Fence", "tags": ["yard"], "description": "see [[garden]]"}).json()["id"]
+    page.request.post(f"/api/tasks/{tid}/comments", data={"text": "**primed** today"})
+    page.request.post("/api/tasks", data={"title": "Taxes"})
+    wiki.write("lists", "# Lists\n\n[[tasks: tag=yard view=open]]\n\n[[tasks: view=open]]\n")
+    asked = []
+    page.on("request", lambda r: asked.append(r.url.split("?")[0].rsplit("/api/", 1)[-1])
+            if r.method == "GET" and r.url.endswith("/api/tasks") or "/api/render-notes" in r.url else None)
+    page.goto("/page/lists")
+    yard, everything = page.locator("#tasks-list"), page.locator("#tasks-list-1")
+    expect(yard.locator(".task-item")).to_have_count(1)
+    expect(everything.locator(".task-item")).to_have_count(2)
+    expect(yard.locator(".task-desc a.wikilink")).to_have_attribute("href", "/page/garden")
+    expect(yard.locator(".task-card-comments strong")).to_have_text("primed")
+    page.wait_for_load_state("networkidle")
+    assert asked == []
+    page.locator("#task-add-btn-1").click()
+    page.locator("#task-edit-title-1").fill("Fresh #yard")
+    page.locator("#task-edit-modal-1").get_by_role("button", name="Save").click()
+    expect(everything.locator(".task-item")).to_have_count(3)
+    expect(yard.locator(".task-item")).to_have_count(2)
+    assert "tasks" in asked
 
 
 PASTE = """(url) => {

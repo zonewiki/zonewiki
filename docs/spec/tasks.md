@@ -44,6 +44,10 @@ In the editor, the formatting bar's Task list button shows the same dialog, with
 `processTasksEmbeds()` swaps each one for a numbered placeholder before rendering, and `injectTasksEmbeds()` replaces each `<p>PLACEHOLDER</p>` with `buildTasksEmbed()`'s HTML (`templates/tasks_embed.html`) afterwards.
 The embed passes its params as `data-init-*` attributes; it carries no script: `tasks.js` (an ES module `zonewiki.js` imports on every page) starts every `.tasks-app` on load (`initTaskApps`, marking each `data-ready`).
 Element ids get a `-<n>` suffix after the first embed, so a page can hold several.
+**A page brings its tasks along**: a page view with a task list (and `/tasks`) carries, once, the user's open tasks as `GET /api/tasks` answers them
+and their notes' and comments' HTML as `POST /api/render-notes` would (`tasksInitial`: a `<script type="application/json" id="tasks-initial">` data block, which no browser runs; `<`, `>` and `&` in it are `\u` escapes, so no task's text ends it).
+The lists the page starts with draw from it, each from its own copy, with no request (`initialTasks` in `js/taskdata.js`, `keepRendered` in `js/tasktexts.js`), so the list is there when the page is rather than two round trips later.
+Every later load asks the server, and so does a list that starts later (a preview's, the hidden one a page without a list fetches for its dialog): `initTaskApps` forgets the tasks once the page's lists have started.
 `tasks.js` also reads `?tag=`, `?view=`, `?search=`, `?task=`, `?new=1` from the URL; `?new=1` opens the new-task modal in one embed only, a pinned one if the page has it, else the first.
 
 The Tasks page itself is `/tasks`; embeds are for custom views on ordinary pages (a tag's tasks, a list with notes around it).
@@ -585,7 +589,7 @@ A task's description is markdown, edited and rendered as a page's text.
   but keep their lines: a line's end is a line break (`Env.LineBreaks`), so a comment typed on three lines shows on three.
   In the modal a line separates each comment from the one before it; on a card each comment hangs on a bar of its own down its left (`border-left` of `.task-card-comment`), with a gap before the next, so the bar's end shows where a comment ends.
 - **Where the HTML comes from** (`renderTexts`, `renderedHtml` in `tasks.js`): the tasks asks the server for the texts it hasn't rendered yet, in one request (`{ notes: [...], comments: [...] }`), and keeps the HTML per text for the page's life, shared by every task list app on it.
-  Loading tasks (`fetchTasks`, Closed) and each write wait for it before drawing, so cards never flash plain text; a text that arrives some other way shows as plain text until its HTML is there (`htmlOf`), and a failed request caches nothing.
+  Loading tasks (`fetchTasks`, Closed) and each write wait for it before drawing, so cards never flash plain text (the tasks a page brings along come with their HTML, see Task list embed); a text that arrives some other way shows as plain text until its HTML is there (`htmlOf`), and a failed request caches nothing.
   Code is highlighted once, when the HTML arrives.
 - **Editing** (the edit modal's Description): the field is as tall as its text (`fitNotes` in `js/taskmodal.js`): two lines when empty, growing as the text does up to 45% of the window's height, where it scrolls.
   It has the page editor's markdown helpers (`markdownEditor` in `js/mdedit.js`): its formatting bar (`#task-edit-format`, without Make task, which is the editor's; shown only while the field has the focus, in the place of the "Description" label on the line above the field, which is as tall as the bar, so nothing moves; in a narrow dialog (≤640px) or under a finger on a line of its own under the label, where it scrolls sideways),

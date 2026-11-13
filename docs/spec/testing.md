@@ -109,6 +109,9 @@ It also keeps the notices current: `THIRD_PARTY_LICENSES` names the pinned Go, G
 `TestRenameTagInText` in `go/pages_test.go` the rewriting of text,
 and `test_rename_list_dialog` in `tests/e2e/test_tasks.py` the dialog.
 
+`TestInitialTasks` in `tests/test_tasks_embed.py` covers the tasks a page brings along (what the API would answer, once a page, a task's text not ending the block, none in a preview),
+and `test_a_page_draws_its_lists_without_asking_for_the_tasks` in `tests/e2e/test_tasks.py` that the lists draw from them with no request.
+
 `tests/test_routes.py`'s `TestMergeOnSave` covers merge on save over HTTP (different lines merged,
 the same lines 409 with the markers,
 the fallbacks,

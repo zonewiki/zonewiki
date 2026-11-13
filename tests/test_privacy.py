@@ -191,6 +191,8 @@ def test_alice_sees_her_own(client, wiki):
     assert f"Task {SECRET}" in plans                                 # the [[task:…]] chip
     tasks = client.get("/api/tasks", headers=HOST).get_json()
     assert [t["private"] for t in tasks if t["id"] == TASK_ID] == [True]
+    # The tasks /tasks brings along are hers too (not bob's: the probes above).
+    assert TASK_ID in client.get("/tasks", headers=HOST).data.decode().split('id="tasks-initial">', 1)[1].split("</script>", 1)[0]
     assert "2001" in client.get("/api/tasks/closed-years", headers=HOST).get_json()["years"]
     # Her Tasks home is hers: the Tasks link goes to its list.
     assert 'href="/tasks?list=secretlist"' in client.get("/page/index", headers=HOST).data.decode()

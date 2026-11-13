@@ -1,6 +1,7 @@
 """Tests for the [[tasks:]] embed (its HTML, data attributes) and the page
 field tasks no longer have. Its params' parsing has a Go test."""
 
+import json
 import re
 from datetime import date
 
@@ -410,3 +411,58 @@ class TestListBacklinks:
         client.set_cookie("zone-sharing", "1")
         html = client.get("/tasks?list=shop", headers=HOST).get_data(as_text=True)
         assert "/page/zz-secret" not in html and "/page/shop" in html
+
+
+# ── The tasks a page brings along ───────────────────────────────────────────────
+
+
+def initial_tasks(html: str) -> list[dict]:
+    """The data blocks of a page's HTML (<script id="tasks-initial">), parsed."""
+    return [json.loads(m) for m in re.findall(r'<script type="application/json" id="tasks-initial">(.*?)</script>', html, re.S)]
+
+
+class TestInitialTasks:
+    """A page view with a task list carries the open tasks and their texts'
+    HTML, so the list draws without asking for them (js/taskdata.js)."""
+
+    def test_a_page_with_a_list_brings_what_the_api_would_answer(self, client, wiki_dir):
+        write_page(wiki_dir, "plans", "# Plans\n")
+        a = create_task(client, title="Buy milk", description="see [[plans]]\nsoon\n\n- [ ] oat", tags=["shop"]).get_json()
+        create_task(client, title="No notes")
+        client.post(f"/api/tasks/{a['id']}/comments", json={"text": "**called** Bob\nno answer"})   # a comment keeps its lines, notes don't
+        done = create_task(client, title="Done already").get_json()
+        client.put(f"/api/tasks/{done['id']}", json={"completed": True})
+        write_page(wiki_dir, "shop", "# Shop\n\n[[tasks: tag=shop]]\n\n[[tasks:]]\n")
+        tasks = client.get("/api/tasks", headers=HOST).get_json()
+        assert sorted(t["title"] for t in tasks) == ["Buy milk", "No notes"]
+        texts = {"notes": [t["description"] for t in tasks if t["description"]],
+                 "comments": [c["text"] for t in tasks for c in t["comments"]]}
+        html = client.post("/api/render-notes", json=texts, headers=HOST).get_json()
+        assert 'href="/page/plans"' in html["notes"][0] and "<strong>called</strong>" in html["comments"][0]
+        # Once a page, whatever its lists show, and on /tasks.
+        for url in ("/page/shop", "/tasks", "/tasks?list=shop"):
+            assert initial_tasks(client.get(url, headers=HOST).get_data(as_text=True)) == [{"tasks": tasks, **html}], url
+
+    def test_no_tasks(self, client, wiki_dir):
+        write_page(wiki_dir, "shop", "# Shop\n\n[[tasks:]]\n")
+        assert initial_tasks(client.get("/page/shop", headers=HOST).get_data(as_text=True)) == [
+            {"tasks": [], "notes": [], "comments": []}]
+
+    def test_a_tasks_text_does_not_end_the_block(self, client, wiki_dir):
+        evil = '</script><script src="/x.js"></script><!-- & <b>'
+        create_task(client, title=evil, description=evil, tags=["t"])
+        write_page(wiki_dir, "shop", "# Shop\n\n[[tasks:]]\n")
+        html = client.get("/page/shop", headers=HOST).get_data(as_text=True)
+        block = html.split('id="tasks-initial">', 1)[1].split("</script>", 1)[0]
+        assert "<" not in block and ">" not in block and "&" not in block
+        (data,) = initial_tasks(html)
+        assert data["tasks"][0]["title"] == evil and data["tasks"] == client.get("/api/tasks", headers=HOST).get_json()
+
+    def test_only_a_page_view_with_a_list(self, client, wiki_dir):
+        create_task(client, title="Buy milk")
+        write_page(wiki_dir, "plain", "# Plain\n\nNo list here.\n")
+        assert "tasks-initial" not in client.get("/page/plain", headers=HOST).get_data(as_text=True)
+        # A preview's list starts later: it asks the server.
+        html = preview(client, "[[tasks:]]\n")
+        assert "tasks-app" in html and "tasks-initial" not in html
+        assert "tasks-initial" not in client.get("/api/tasks/headless", headers=HOST).get_data(as_text=True)

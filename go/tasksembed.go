@@ -252,10 +252,41 @@ func processTasksEmbeds(rq *Req, text, page string, settings bool) (string, []ta
 		ph := tasksPlaceholder + "_" + strconv.Itoa(len(embeds))
 		params := parseTasksParams(embedArgs(g))
 		params.src = &embedSrc{len(embeds), embedArgs(g)}
-		embeds = append(embeds, tasksEmbed{ph, buildTasksEmbed(rq, params, len(embeds), false, private, at)})
+		html := buildTasksEmbed(rq, params, len(embeds), false, private, at)
+		if settings && len(embeds) == 0 {
+			html = tasksInitial(rq) + html
+		}
+		embeds = append(embeds, tasksEmbed{ph, html})
 		return ph
 	})
 	return text, embeds
+}
+
+// tasksInitial: what a page view with a task list brings along, so the list
+// is drawn when the page is, with no request of its own: the user's open
+// tasks as GET /api/tasks answers them, and their notes' and comments' HTML
+// as POST /api/render-notes would, in the tasks' order (js/taskdata.js
+// initialTasks, js/tasktexts.js textsOf). A data block, which no browser
+// runs; json.Marshal writes <, > and & as \u escapes, so no text in a task
+// ends it.
+func tasksInitial(rq *Req) string {
+	tasks := taskFiles.Open(rq.who())
+	var notes, comments []string
+	for _, t := range tasks {
+		if t.Description != "" {
+			notes = append(notes, t.Description)
+		}
+		for _, c := range t.Comments {
+			comments = append(comments, c.Text)
+		}
+	}
+	data, err := json.Marshal(map[string]any{
+		"tasks": apiTasks(tasks), "notes": renderNotes(rq, notes, false), "comments": renderNotes(rq, comments, true)})
+	if err != nil {
+		logf("task list embed: %v", err)
+		return ""
+	}
+	return `<script type="application/json" id="tasks-initial">` + string(data) + `</script>`
 }
 
 // injectTasksEmbeds: the last first, as _1 is a prefix of _10.
