@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"strconv"
+	"zonewiki/internal/jsonobj"
 )
 
 type Task struct {
@@ -64,16 +65,16 @@ var taskKeys = map[string]bool{"id": true, "title": true, "description": true, "
 // strField: a field as text: a string as it is, a number or a bool as its
 // JSON text (an id of 7 is "7"), anything else "" (a file edited by hand).
 func strField(o jsonObj, k string) string {
-	s, _ := scalarText(o[k])
+	s, _ := jsonobj.ScalarText(o[k])
 	return s
 }
 
 // textList: a list's items as text (scalarText), the others left out.
 func textList(raw json.RawMessage) []string {
-	l, _ := as[[]json.RawMessage](raw)
+	l, _ := jsonobj.As[[]json.RawMessage](raw)
 	var out []string
 	for _, x := range l {
-		if s, ok := scalarText(x); ok {
+		if s, ok := jsonobj.ScalarText(x); ok {
 			out = append(out, s)
 		}
 	}
@@ -87,13 +88,13 @@ func taskFromJSON(o jsonObj) *Task {
 	t := &Task{ID: strField(o, "id"), Title: strField(o, "title"), Description: strField(o, "description"),
 		StartDate: strField(o, "start_date"), DueDate: strField(o, "due_date"),
 		CreatedAt: strField(o, "created_at"), CompletedAt: strField(o, "completed_at"),
-		WontDo: jsonTrue(o["wont_do"]), Keep: jsonTrue(o["keep"]), LastDone: strField(o, "last_done"),
+		WontDo: jsonobj.True(o["wont_do"]), Keep: jsonobj.True(o["keep"]), LastDone: strField(o, "last_done"),
 		SpawnedFrom: strField(o, "spawned_from"), History: []HistoryEntry{}, Comments: []Comment{}}
 	t.Tags = cleanTags(textList(o["tags"])) // "local llm", "#work" from a file edited by hand
-	if f, ok := as[float64](o["sort_order"]); ok {
+	if f, ok := jsonobj.As[float64](o["sort_order"]); ok {
 		t.SortOrder = &f
 	}
-	if rec, ok := as[jsonObj](o["recurrence"]); ok && len(rec) > 0 {
+	if rec, ok := jsonobj.As[jsonObj](o["recurrence"]); ok && len(rec) > 0 {
 		t.Recurrence = recurrenceFromJSON(rec)
 	}
 	for _, e := range objList(o["history"]) {
@@ -117,10 +118,10 @@ func taskFromJSON(o jsonObj) *Task {
 
 // objList: a list's objects, the other items left out.
 func objList(raw json.RawMessage) []jsonObj {
-	l, _ := as[[]json.RawMessage](raw)
+	l, _ := jsonobj.As[[]json.RawMessage](raw)
 	var out []jsonObj
 	for _, x := range l {
-		if o, ok := as[jsonObj](x); ok {
+		if o, ok := jsonobj.As[jsonObj](x); ok {
 			out = append(out, o)
 		}
 	}
@@ -131,19 +132,19 @@ func objList(raw json.RawMessage) []jsonObj {
 // a missing or bad interval 1.
 func recurrenceFromJSON(rec jsonObj) *Recurrence {
 	r := &Recurrence{Type: "daily", Interval: 1, From: "due"}
-	if s, ok := as[string](rec["type"]); ok && s != "" {
+	if s, ok := jsonobj.As[string](rec["type"]); ok && s != "" {
 		r.Type = s
 	}
-	if n, ok := wholeNumber(rec["interval"]); ok && n >= 1 {
+	if n, ok := jsonobj.WholeNumber(rec["interval"]); ok && n >= 1 {
 		r.Interval = min(n, recIntervalMax)
 	}
-	if s, _ := as[string](rec["from"]); s == "completion" {
+	if s, _ := jsonobj.As[string](rec["from"]); s == "completion" {
 		r.From = "completion"
 	}
-	if n, ok := wholeNumber(rec["day"]); ok && n >= 1 && n <= 31 {
+	if n, ok := jsonobj.WholeNumber(rec["day"]); ok && n >= 1 && n <= 31 {
 		r.Day = n
 	}
-	if n, ok := wholeNumber(rec["lead"]); ok && n >= 0 {
+	if n, ok := jsonobj.WholeNumber(rec["lead"]); ok && n >= 0 {
 		r.Lead = &n
 	}
 	return r
@@ -158,7 +159,7 @@ func nullable(s string) *string {
 }
 
 func (r *Recurrence) MarshalJSON() ([]byte, error) {
-	return marshalText(struct {
+	return jsonobj.MarshalText(struct {
 		Type     string `json:"type"`
 		Interval int    `json:"interval"`
 		From     string `json:"from"`
@@ -172,13 +173,13 @@ func (r *Recurrence) MarshalJSON() ([]byte, error) {
 // users keeps its files as they were.
 func (e HistoryEntry) MarshalJSON() ([]byte, error) {
 	if !datedEvents[e.Event] {
-		return marshalText(struct {
+		return jsonobj.MarshalText(struct {
 			At    string `json:"at"`
 			Event string `json:"event"`
 			By    string `json:"by,omitempty"`
 		}{e.At, e.Event, e.By})
 	}
-	return marshalText(struct {
+	return jsonobj.MarshalText(struct {
 		At    string  `json:"at"`
 		Event string  `json:"event"`
 		By    string  `json:"by,omitempty"`
@@ -190,7 +191,7 @@ func (e HistoryEntry) MarshalJSON() ([]byte, error) {
 // MarshalJSON: by only when someone is named, so a wiki without users
 // keeps its files as they were.
 func (c Comment) MarshalJSON() ([]byte, error) {
-	return marshalText(struct {
+	return jsonobj.MarshalText(struct {
 		ID   string `json:"id"`
 		At   string `json:"at"`
 		By   string `json:"by,omitempty"`
@@ -220,7 +221,7 @@ func (t *Task) marshal(private bool) ([]byte, error) {
 	if comments == nil {
 		comments = []Comment{}
 	}
-	b, err := marshalText(struct {
+	b, err := jsonobj.MarshalText(struct {
 		ID          string         `json:"id"`
 		Title       string         `json:"title"`
 		Description string         `json:"description"`
@@ -248,7 +249,7 @@ func (t *Task) marshal(private bool) ([]byte, error) {
 	}
 	b = b[:len(b)-1] // the closing }
 	for _, k := range sortedKeys(t.Extra) {
-		key, _ := marshalText(k)
+		key, _ := jsonobj.MarshalText(k)
 		b = append(append(append(append(b, ','), key...), ':'), t.Extra[k]...)
 	}
 	return append(b, '}'), nil

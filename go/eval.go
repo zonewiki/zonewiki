@@ -33,6 +33,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"zonewiki/internal/jsonobj"
 )
 
 type question struct {
@@ -90,7 +91,7 @@ func evalMain(args []string, stdout, stderr io.Writer) int {
 		}
 		lines := make([]string, len(stubs))
 		for i, s := range stubs {
-			lines[i] = jsonText(s)
+			lines[i] = jsonobj.Text(s)
 		}
 		fmt.Fprintln(stdout, strings.Join(lines, ",\n"))
 		return 0

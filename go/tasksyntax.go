@@ -3,7 +3,6 @@
 package main
 
 import (
-	"math"
 	"net/url"
 	"regexp"
 	"slices"
@@ -467,6 +466,3 @@ func keySet[V any](m map[string]V) map[string]bool {
 	}
 	return set
 }
-
-// isWhole: a float64 that is an integer (converting it to an int is exact).
-func isWhole(f float64) bool { return f == math.Trunc(f) && !math.IsInf(f, 0) }

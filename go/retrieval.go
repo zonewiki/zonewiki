@@ -20,6 +20,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"zonewiki/internal/jsonobj"
 	"zonewiki/internal/mdtext"
 	"zonewiki/internal/textsearch"
 )
@@ -1385,7 +1386,7 @@ func logQuery(raw, under string, hits []*SearchDoc) {
 		f, err = os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o666)
 	}
 	if err == nil {
-		_, err = f.WriteString(jsonText(entry) + "\n")
+		_, err = f.WriteString(jsonobj.Text(entry) + "\n")
 		if cerr := f.Close(); err == nil {
 			err = cerr
 		}

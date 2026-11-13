@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"zonewiki/internal/jsonobj"
 	"zonewiki/internal/mdtext"
 )
 
@@ -176,7 +177,7 @@ func parseTasks(raw []byte) ([]*Task, bool) {
 	}
 	out := make([]*Task, 0, len(l))
 	for _, x := range l {
-		if o, ok := as[jsonObj](x); ok {
+		if o, ok := jsonobj.As[jsonObj](x); ok {
 			out = append(out, taskFromJSON(o))
 		}
 	}
@@ -779,18 +780,18 @@ func logEvent(t *Task, user, event, from, to string) {
 func cleanHistory(raw json.RawMessage) []HistoryEntry {
 	out := []HistoryEntry{}
 	for _, e := range objList(raw) {
-		at, isStr := as[string](e["at"])
-		event, isStrEvent := as[string](e["event"])
+		at, isStr := jsonobj.As[string](e["at"])
+		event, isStrEvent := jsonobj.As[string](e["event"])
 		if !isStr || !isStrEvent || !historyEvents[event] {
 			continue
 		}
-		by, _ := as[string](e["by"])
+		by, _ := jsonobj.As[string](e["by"])
 		entry := HistoryEntry{At: runePrefix(at, 16), Event: event, By: byUser(by)}
 		if datedEvents[event] {
-			if s, ok := as[string](e["from"]); ok && isoDateRE.MatchString(s) {
+			if s, ok := jsonobj.As[string](e["from"]); ok && isoDateRE.MatchString(s) {
 				entry.From = s
 			}
-			if s, ok := as[string](e["to"]); ok && isoDateRE.MatchString(s) {
+			if s, ok := jsonobj.As[string](e["to"]); ok && isoDateRE.MatchString(s) {
 				entry.To = s
 			}
 		}
@@ -815,13 +816,13 @@ func newCommentID() string { return strings.ReplaceAll(uuid4(), "-", "")[:8] }
 func cleanComments(raw json.RawMessage) []Comment {
 	var cs []Comment
 	for _, c := range objList(raw) {
-		text, isText := as[string](c["text"])
-		at, isAt := as[string](c["at"])
+		text, isText := jsonobj.As[string](c["text"])
+		at, isAt := jsonobj.As[string](c["at"])
 		if !isText || !isAt {
 			continue
 		}
-		id, _ := as[string](c["id"])
-		by, _ := as[string](c["by"])
+		id, _ := jsonobj.As[string](c["id"])
+		by, _ := jsonobj.As[string](c["by"])
 		if !snapshotIDRE.MatchString(id) {
 			id = "" // a new one (cleanCommentList)
 		}
@@ -1102,27 +1103,27 @@ var ymdPrefixRE = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}`)
 // cleanRecurrence: a recurrence from a request (an undo), its fields
 // validated; nil when it names no repeat type.
 func cleanRecurrence(raw json.RawMessage) *Recurrence {
-	rec, ok := as[jsonObj](raw)
+	rec, ok := jsonobj.As[jsonObj](raw)
 	if !ok {
 		return nil
 	}
-	rtype, _ := as[string](rec["type"])
+	rtype, _ := jsonobj.As[string](rec["type"])
 	switch rtype {
 	case "daily", "weekly", "monthly", "yearly":
 	default:
 		return nil
 	}
 	out := &Recurrence{Type: rtype, Interval: 1, From: "due"}
-	if n, ok := as[int](rec["interval"]); ok && n >= 1 && n <= recIntervalMax {
+	if n, ok := jsonobj.As[int](rec["interval"]); ok && n >= 1 && n <= recIntervalMax {
 		out.Interval = n
 	}
-	if s, _ := as[string](rec["from"]); s == "completion" {
+	if s, _ := jsonobj.As[string](rec["from"]); s == "completion" {
 		out.From = "completion"
 	}
-	if n, ok := as[int](rec["day"]); ok && n >= 1 && n <= 31 {
+	if n, ok := jsonobj.As[int](rec["day"]); ok && n >= 1 && n <= 31 {
 		out.Day = n
 	}
-	if n, ok := as[int](rec["lead"]); ok && n >= 0 {
+	if n, ok := jsonobj.As[int](rec["lead"]); ok && n >= 0 {
 		out.Lead = &n
 	}
 	return out
@@ -1149,16 +1150,16 @@ func byUser(by string) string {
 // delete), known fields only; nil without a usable title. A bad optional
 // value falls back to its default.
 func sanitizeSnapshot(snap jsonObj) *Task {
-	title, _ := as[string](snap["title"])
+	title, _ := jsonobj.As[string](snap["title"])
 	if title = strings.TrimSpace(title); title == "" {
 		return nil
 	}
 	t := newTask()
 	t.Title = title
-	t.Description, _ = as[string](snap["description"])
+	t.Description, _ = jsonobj.As[string](snap["description"])
 	t.Tags = cleanTags(textList(snap["tags"]))
 	for f, field := range map[string]*string{"due_date": &t.DueDate, "start_date": &t.StartDate, "last_done": &t.LastDone} {
-		if s, ok := as[string](snap[f]); ok {
+		if s, ok := jsonobj.As[string](snap[f]); ok {
 			if _, ok := parseDay(s); ok {
 				*field = s
 			}
@@ -1168,22 +1169,22 @@ func sanitizeSnapshot(snap jsonObj) *Task {
 	// from them, and a snapshot is whatever its sender made it. An id of
 	// another shape gets a new one (newTask's), a time that is none is now.
 	for f, field := range map[string]*string{"id": &t.ID, "spawned_from": &t.SpawnedFrom} {
-		if s, ok := as[string](snap[f]); ok && snapshotIDRE.MatchString(s) {
+		if s, ok := jsonobj.As[string](snap[f]); ok && snapshotIDRE.MatchString(s) {
 			*field = s
 		}
 	}
-	if s, ok := as[string](snap["created_at"]); ok && snapshotTimeRE.MatchString(s) {
+	if s, ok := jsonobj.As[string](snap["created_at"]); ok && snapshotTimeRE.MatchString(s) {
 		t.CreatedAt = s
 	}
-	if s, ok := as[string](snap["completed_at"]); ok && s != "" {
+	if s, ok := jsonobj.As[string](snap["completed_at"]); ok && s != "" {
 		if t.CompletedAt = s; !snapshotTimeRE.MatchString(s) {
 			t.CompletedAt = timestamp()
 		}
 	}
-	if f, ok := as[float64](snap["sort_order"]); ok {
+	if f, ok := jsonobj.As[float64](snap["sort_order"]); ok {
 		t.SortOrder = &f
 	}
-	t.WontDo, t.Keep = jsonTrue(snap["wont_do"]), jsonTrue(snap["keep"])
+	t.WontDo, t.Keep = jsonobj.True(snap["wont_do"]), jsonobj.True(snap["keep"])
 	t.History = cleanHistory(snap["history"])
 	t.Comments = cleanComments(snap["comments"])
 	if !t.Keep {

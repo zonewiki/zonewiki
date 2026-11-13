@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"zonewiki/internal/jsonobj"
 	"zonewiki/internal/mdtext"
 )
 
@@ -171,7 +172,7 @@ func checkGuides(args jsonObj, slugs []string, user string) error {
 	}
 	out := []string{"Nothing was written. The user keeps guides for these pages, with instructions for writing " +
 		"them, and this call didn't confirm reading " + them + ". Read below, make the change follow it, then " +
-		"call again with guides set to " + jsonText(sortedKeys(ids)) + ". Pass every guide id you get in " +
+		"call again with guides set to " + jsonobj.Text(sortedKeys(ids)) + ". Pass every guide id you get in " +
 		"this conversation with your later writes too; a guide that changes gets a new id."}
 	for _, g := range missing {
 		out = append(out, "=== guide "+g.slug+" (id "+g.id+") ===\n"+cutGuide(g))
@@ -302,7 +303,7 @@ func readGuides(args jsonObj, base, user string) (string, error) {
 		ids[i] = g.id
 	}
 	out := []string{"Guides for " + where + ", the whole wiki's first. Follow them; where they disagree, the more " +
-		"specific one wins. Pass guides=" + jsonText(ids) + " with your writes."}
+		"specific one wins. Pass guides=" + jsonobj.Text(ids) + " with your writes."}
 	for _, g := range found {
 		if known[g.id] {
 			out = append(out, "=== guide "+g.slug+" (id "+g.id+"): you have it ===")

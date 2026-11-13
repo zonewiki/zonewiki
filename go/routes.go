@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"zonewiki/internal/jsonobj"
 	"zonewiki/internal/mdtext"
 )
 
@@ -1049,9 +1050,9 @@ func apiRenderNotes(w http.ResponseWriter, r *http.Request) {
 		inline bool
 	}{{"notes", false}, {"comments", true}} {
 		var texts []string
-		if !data.null(k.key) {
+		if !data.Null(k.key) {
 			var ok bool
-			if texts, ok = as[[]string](data[k.key]); !ok {
+			if texts, ok = jsonobj.As[[]string](data[k.key]); !ok {
 				badRequestPage(w)
 				return
 			}

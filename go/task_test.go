@@ -3,6 +3,7 @@ package main
 import (
 	"strings"
 	"testing"
+	"zonewiki/internal/jsonobj"
 )
 
 // A task as the Python Zone wrote it (its key order, 1.0, a key it no
@@ -93,7 +94,7 @@ func TestTaskFileRoundTrip(t *testing.T) {
 // Values of the wrong kind are their field's default, never an error; a
 // number or a bool where text belongs is its JSON text.
 func TestTaskFromOddValues(t *testing.T) {
-	v, _ := parseObj([]byte(`{"id": 7, "title": null, "description": true, "tags": "work", "sort_order": "x",
+	v, _ := jsonobj.Parse([]byte(`{"id": 7, "title": null, "description": true, "tags": "work", "sort_order": "x",
 		"recurrence": {"interval": "2"}, "keep": 1, "comments": [{"id": "c", "at": "2026-01-01T10:00", "text": "hi"}, 3]}`))
 	task := taskFromJSON(v)
 	if task.ID != "7" || task.Title != "" || task.Description != "true" || len(task.Tags) != 0 || task.SortOrder != nil || task.Keep ||

@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"zonewiki/internal/jsonobj"
 )
 
 // tasksRoute answers a task list API request: a refusal as {"error": …} (400,
@@ -44,7 +45,7 @@ func jsonObject(r *http.Request) (jsonObj, error) {
 	if tooLarge(err) {
 		return nil, refuseAs(refusedTooLarge, "Too large: at most "+strconv.Itoa(bodyMax>>20)+" MB")
 	}
-	o, ok := parseObj(body)
+	o, ok := jsonobj.Parse(body)
 	if !ok {
 		return nil, refuse("Request body must be a JSON object")
 	}
@@ -184,7 +185,7 @@ func tasksRoutes(mux *http.ServeMux) {
 			if _, ok := listField(data, k); !ok {
 				return refuse("add/remove must be lists of strings")
 			}
-			if data.has(k) {
+			if data.Has(k) {
 				if tags[i], err = asStrList(data[k], k); err != nil {
 					return err
 				}
@@ -292,7 +293,7 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	snaps, ok := as[[]json.RawMessage](data["tasks"])
+	snaps, ok := jsonobj.As[[]json.RawMessage](data["tasks"])
 	if !ok || len(snaps) == 0 {
 		return refuse("Bad Request")
 	}
@@ -306,7 +307,7 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 	existing := taskIDsLocked() // every owner's: ids stay unique across the files
 	restored := []*Task{}
 	for _, s := range snaps {
-		snap, ok := as[jsonObj](s)
+		snap, ok := jsonobj.As[jsonObj](s)
 		if !ok {
 			continue
 		}
@@ -315,7 +316,7 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 			continue
 		}
 		checkBy(user, t)
-		if jsonTrue(snap["private"]) && privateFolder(user) != "" {
+		if jsonobj.True(snap["private"]) && privateFolder(user) != "" {
 			t.Owner = user
 		}
 		existing[t.ID] = true
@@ -388,20 +389,20 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	notExport := refuse("Not a file of tasks exported from Zone")
-	snaps, ok := as[[]json.RawMessage](data["file"])
+	snaps, ok := jsonobj.As[[]json.RawMessage](data["file"])
 	from := ""
 	if !ok {
-		file, isObj := as[jsonObj](data["file"])
-		if snaps, ok = as[[]json.RawMessage](file["tasks"]); !isObj || !ok {
+		file, isObj := jsonobj.As[jsonObj](data["file"])
+		if snaps, ok = jsonobj.As[[]json.RawMessage](file["tasks"]); !isObj || !ok {
 			return notExport
 		}
-		s, _ := as[string](file["list"])
+		s, _ := jsonobj.As[string](file["list"])
 		from = cleanList(s)
 	}
 	if len(snaps) > importMax {
 		return refuse("Too many tasks: at most " + strconv.Itoa(importMax) + " in one import")
 	}
-	str := func(k string) string { s, _ := as[string](data[k]); return s }
+	str := func(k string) string { s, _ := jsonobj.As[string](data[k]); return s }
 	add := cleanTags(strings.Split(str("new"), ","))
 	if len(add) == 0 {
 		add = newTaskTags(parseTasksParams("list=" + cleanList(str("list")) + " tag=" + strings.Join(strings.Fields(str("tag")), "")))
@@ -421,12 +422,12 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 	existing := taskIDsLocked() // every owner's: ids stay unique across the files
 	skipped, ids := 0, []string{}
 	for _, s := range snaps {
-		snap, _ := as[jsonObj](s)
+		snap, _ := jsonobj.As[jsonObj](s)
 		t := sanitizeSnapshot(snap)
 		if t == nil {
 			return notExport
 		}
-		if id, _ := as[string](snap["id"]); !importIDRE.MatchString(id) {
+		if id, _ := jsonobj.As[string](snap["id"]); !importIDRE.MatchString(id) {
 			t.ID = uuid4()
 		}
 		if existing[t.ID] {
@@ -441,7 +442,7 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 		existing[t.ID] = true
 		t.Tags = retag(t.Tags, add, remove)
 		// A task exported private stays private, wherever it is imported.
-		if (jsonTrue(data["private"]) || jsonTrue(snap["private"])) && privateFolder(user) != "" {
+		if (jsonobj.True(data["private"]) || jsonobj.True(snap["private"])) && privateFolder(user) != "" {
 			t.Owner = user
 		}
 		if t.isOpen() {
@@ -470,7 +471,7 @@ func apiBatchComplete(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	markCompleted := true
-	if data.has("completed") {
+	if data.Has("completed") {
 		if markCompleted, err = asBool(data["completed"], "completed"); err != nil {
 			return err
 		}
@@ -534,7 +535,7 @@ func apiReorder(w http.ResponseWriter, r *http.Request) error {
 	updates := make([]jsonObj, len(rawUpdates))
 	for i, u := range rawUpdates {
 		var isObj bool
-		if updates[i], isObj = as[jsonObj](u); !isObj {
+		if updates[i], isObj = jsonobj.As[jsonObj](u); !isObj {
 			ok2 = false
 		}
 	}
@@ -555,20 +556,20 @@ func apiReorder(w http.ResponseWriter, r *http.Request) error {
 		byID[t.ID] = t
 	}
 	for i, id := range order {
-		if s, ok := as[string](id); ok && byID[s] != nil {
+		if s, ok := jsonobj.As[string](id); ok && byID[s] != nil {
 			f := float64(i)
 			byID[s].SortOrder = &f
 		}
 	}
 	for _, u := range updates {
-		id, _ := as[string](u["id"])
+		id, _ := jsonobj.As[string](u["id"])
 		t := byID[id]
 		// null clears it: the task leaves the manual order.
-		if u.null("sort_order") && t != nil {
+		if u.Null("sort_order") && t != nil {
 			t.SortOrder = nil
 			continue
 		}
-		if f, ok := as[float64](u["sort_order"]); ok && t != nil {
+		if f, ok := jsonobj.As[float64](u["sort_order"]); ok && t != nil {
 			t.SortOrder = &f
 		}
 	}
@@ -587,12 +588,12 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	raw, ok := as[[]json.RawMessage](data["tasks"])
+	raw, ok := jsonobj.As[[]json.RawMessage](data["tasks"])
 	valid := ok && len(raw) > 0
 	changes := make([]jsonObj, len(raw))
 	for i, c := range raw {
-		o, isObj := as[jsonObj](c)
-		if _, isStr := as[string](o["id"]); !isObj || !isStr {
+		o, isObj := jsonobj.As[jsonObj](c)
+		if _, isStr := jsonobj.As[string](o["id"]); !isObj || !isStr {
 			valid = false
 			break
 		}
@@ -603,7 +604,7 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 	}
 	for _, c := range changes {
 		for _, k := range []string{"completed", "wont_do", "skip"} {
-			if c.has(k) {
+			if c.Has(k) {
 				return refuse("batch-update changes fields, not status")
 			}
 		}
@@ -620,7 +621,7 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 	}
 	updated := []*Task{}
 	for _, change := range changes {
-		id, _ := as[string](change["id"])
+		id, _ := jsonobj.As[string](change["id"])
 		t := byID[id]
 		if t == nil {
 			continue
@@ -629,7 +630,7 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 		if err := applyTaskFields(userOf(r), t, change, false); err != nil {
 			return err
 		}
-		if change.has("history") {
+		if change.Has("history") {
 			t.History = cleanHistory(change["history"])
 			checkBy(userOf(r), t)
 		}

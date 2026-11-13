@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"zonewiki/internal/jsonobj"
 )
 
 // The MCP server (mcp.go, mcptools.go, mcpwrite.go): the protocol's
@@ -28,7 +29,7 @@ func replyText(t *testing.T, msg string, call func(string, jsonObj) (string, err
 	if err != nil {
 		t.Fatal(err)
 	}
-	return jsonText(reply)
+	return jsonobj.Text(reply)
 }
 
 // handle: the reply to msg, as JSON reads back (nil for none).
@@ -58,7 +59,7 @@ func TestMCPProtocol(t *testing.T) {
 	instructions, _ := field(r, "result", "instructions").(string)
 	if field(r, "result", "protocolVersion") != "2025-06-18" || field(r, "result", "serverInfo", "version") != version ||
 		!strings.Contains(instructions, "search_wiki") {
-		t.Errorf("initialize: %s", jsonText(r))
+		t.Errorf("initialize: %s", jsonobj.Text(r))
 	}
 	r = handle(t, `{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "1999-01-01"}}`, noTools)
 	if field(r, "result", "protocolVersion") != protocolVersions[0] {
@@ -181,7 +182,7 @@ func TestQueryLogMovesAsideWhenFull(t *testing.T) {
 func TestCatastrophicRegexIsFast(t *testing.T) {
 	testWiki(t, map[string]string{"slow": "# Slow\n\n" + strings.Repeat("a", 5000) + "!\n"})
 	start := time.Now()
-	args, _ := parseObj([]byte(`{"find": "(a+)+$", "replace": "x", "regex": true, "dry_run": false}`))
+	args, _ := jsonobj.Parse([]byte(`{"find": "(a+)+$", "replace": "x", "regex": true, "dry_run": false}`))
 	out, err := replaceInPages(args, "", "")
 	if err != nil || out != `Nothing matches "(a+)+$" outside code.` || time.Since(start) > 2*time.Second {
 		t.Errorf("%q %v in %v", out, err, time.Since(start))

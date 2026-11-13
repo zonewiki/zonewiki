@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"zonewiki/internal/jsonobj"
 )
 
 const tasksPlaceholder = "ZONETASKSPLACEHOLDER"
@@ -68,7 +69,7 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless, privat
 	for _, n := range names {
 		homes[n] = firstNonEmpty(lists[n].Title, lists[n].Slug)
 	}
-	listsJSON, homesJSON := jsonText(names), jsonText(homes)
+	listsJSON, homesJSON := jsonobj.Text(names), jsonobj.Text(homes)
 	sfx := ""
 	if instance > 0 {
 		sfx = "-" + strconv.Itoa(instance)

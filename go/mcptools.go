@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"zonewiki/internal/jsonobj"
 	"zonewiki/internal/mdtext"
 	"zonewiki/internal/textsearch"
 )
@@ -60,7 +61,7 @@ func mcpPageLinks(slug, content, user string) string {
 }
 
 func readPage(args jsonObj, base, user string) (string, error) {
-	raw, ok := as[string](args["slug"])
+	raw, ok := jsonobj.As[string](args["slug"])
 	if !ok || strings.TrimSpace(raw) == "" {
 		return "", toolErr("slug must be a non-empty string")
 	}
@@ -234,7 +235,7 @@ const grepLineChars = 300
 func cutLine(line string) string { return cutRunes(strings.TrimSpace(line), grepLineChars, " …") }
 
 func grepWiki(args jsonObj, base, user string) (string, error) {
-	pattern, ok := as[string](args["pattern"])
+	pattern, ok := jsonobj.As[string](args["pattern"])
 	if !ok || strings.TrimSpace(pattern) == "" {
 		return "", toolErr("pattern must be a non-empty string")
 	}
@@ -574,7 +575,7 @@ func zoneHelp(args jsonObj, base, user string) (string, error) {
 }
 
 func searchWiki(args jsonObj, base, user string) (string, error) {
-	query, ok := as[string](args["query"])
+	query, ok := jsonobj.As[string](args["query"])
 	if !ok || strings.TrimSpace(query) == "" {
 		return "", toolErr("query must be a non-empty string")
 	}

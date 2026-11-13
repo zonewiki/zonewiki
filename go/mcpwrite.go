@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"zonewiki/internal/jsonobj"
 	"zonewiki/internal/mdtext"
 )
 
@@ -29,7 +30,7 @@ func writePage(args jsonObj, base, user string) (string, error) {
 	} else if quicknote {
 		return writeQuicknote(args, content, base, user)
 	}
-	overwrite := jsonTrue(args["overwrite"])
+	overwrite := jsonobj.True(args["overwrite"])
 	raw, err := strArg(args, "slug", true)
 	if err != nil {
 		return "", err
@@ -62,7 +63,7 @@ func writePage(args jsonObj, base, user string) (string, error) {
 	} else {
 		var kept bool
 		old, content, kept, err = changePageOp(user, slug, "Update", suffix, func(old string) (string, error) {
-			if baseHash, _ := as[string](args["base_hash"]); baseHash != "" && baseHash != mdtext.ContentHash(old) {
+			if baseHash, _ := jsonobj.As[string](args["base_hash"]); baseHash != "" && baseHash != mdtext.ContentHash(old) {
 				merged = "\nThe page had changed since you read it; your changes were merged with the others (they touched different lines)."
 				return mergeWrite(slug, path, old, content, baseHash, user)
 			}
@@ -95,7 +96,7 @@ func writePage(args jsonObj, base, user string) (string, error) {
 // writeQuicknote: write_page with quicknote, a new note, named by slug
 // (any words; Zone puts the time in front) or else by the content's title.
 func writeQuicknote(args jsonObj, content, base, user string) (string, error) {
-	if jsonTrue(args["overwrite"]) {
+	if jsonobj.True(args["overwrite"]) {
 		return "", toolErr("A note is always a new one: overwrite doesn't apply. " +
 			"Change an existing note with edit_page.")
 	}
@@ -244,7 +245,7 @@ func applyEdit(content, slug string, edit jsonObj, which string) (string, int, e
 		return "", 0, toolErr(which + "old_string was not found in " + slug + ". It must match the page exactly, line breaks " +
 			"and whitespace included; read_page shows the current text.")
 	}
-	if count > 1 && !jsonTrue(edit["replace_all"]) {
+	if count > 1 && !jsonobj.True(edit["replace_all"]) {
 		return "", 0, toolErr(fmt.Sprintf("%sold_string occurs %d times in %s. Include more of the surrounding text "+
 			"to make it unique, or set replace_all=true to change every one.", which, count, slug))
 	}
@@ -260,21 +261,21 @@ func editPageTool(args jsonObj, base, user string) (string, error) {
 		return "", err
 	}
 	edits := []jsonObj{args}
-	several := !args.null("edits")
+	several := !args.Null("edits")
 	if several {
-		l, ok := as[[]json.RawMessage](args["edits"])
+		l, ok := jsonobj.As[[]json.RawMessage](args["edits"])
 		if !ok || len(l) == 0 {
 			return "", toolErr("edits must be a non-empty list of {old_string, new_string, replace_all}")
 		}
 		edits = nil
 		for _, e := range l {
-			o, ok := as[jsonObj](e)
+			o, ok := jsonobj.As[jsonObj](e)
 			if !ok {
 				return "", toolErr("edits must be a non-empty list of {old_string, new_string, replace_all}")
 			}
 			edits = append(edits, o)
 		}
-		if args.has("old_string") {
+		if args.Has("old_string") {
 			return "", toolErr("give either old_string/new_string or edits, not both")
 		}
 	}

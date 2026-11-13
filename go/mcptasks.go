@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"zonewiki/internal/jsonobj"
 	"zonewiki/internal/mdtext"
 	"zonewiki/internal/textsearch"
 )
@@ -134,8 +135,8 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 		return "", toolErr("query and tag must be strings")
 	}
 	status := "open"
-	if args.has("status") {
-		status, _ = as[string](args["status"])
+	if args.Has("status") {
+		status, _ = jsonobj.As[string](args["status"])
 	}
 	if status != "open" && status != "done" && status != "all" {
 		return "", toolErr("status must be open, done or all")
@@ -277,41 +278,41 @@ func splitComma(s string) []string { return strings.Split(s, ",") }
 func taskFields(args jsonObj, task *Task) (jsonObj, error) {
 	data := jsonObj{}
 	for _, f := range [][2]string{{"title", "title"}, {"notes", "description"}} {
-		if args.has(f[0]) {
+		if args.Has(f[0]) {
 			s, err := strArg(args, f[0], false)
 			if err != nil {
 				return nil, err
 			}
-			data.set(f[1], strings.TrimSpace(s))
+			data.Set(f[1], strings.TrimSpace(s))
 		}
 	}
 	for _, f := range [][2]string{{"due", "due_date"}, {"start", "start_date"}} {
-		if args.has(f[0]) {
+		if args.Has(f[0]) {
 			day, err := dateArg(args, f[0])
 			if err != nil {
 				return nil, err
 			}
-			data.set(f[1], nullable(day))
+			data.Set(f[1], nullable(day))
 		}
 	}
-	if title, _ := as[string](data["title"]); data.has("title") && title == "" {
+	if title, _ := jsonobj.As[string](data["title"]); data.Has("title") && title == "" {
 		return nil, toolErr("title must be a non-empty string")
 	}
 	for _, f := range []string{"keep", "private"} {
-		if args.has(f) {
-			b, ok := as[bool](args[f])
+		if args.Has(f) {
+			b, ok := jsonobj.As[bool](args[f])
 			if !ok {
 				return nil, toolErr(f + " must be true or false")
 			}
-			data.set(f, b)
+			data.Set(f, b)
 		}
 	}
-	if args.has("tags") {
+	if args.Has("tags") {
 		data["tags"] = args["tags"]
 	}
-	if task != nil && (args.has("add_tags") || args.has("remove_tags")) {
+	if task != nil && (args.Has("add_tags") || args.Has("remove_tags")) {
 		tags := append([]string{}, task.Tags...)
-		if data.has("tags") {
+		if data.Has("tags") {
 			tags = textList(data["tags"])
 		}
 		add, err := tagListArg(args, "add_tags")
@@ -322,36 +323,36 @@ func taskFields(args jsonObj, task *Task) (jsonObj, error) {
 		if err != nil {
 			return nil, err
 		}
-		data.set("tags", retag(tags, add, remove))
+		data.Set("tags", retag(tags, add, remove))
 	}
-	if args.has("repeat") || args.has("repeat_every") || args.has("repeat_from") {
+	if args.Has("repeat") || args.Has("repeat_every") || args.Has("repeat_from") {
 		repeat, interval, from := "none", json.RawMessage("1"), "due"
 		if task != nil && task.Recurrence != nil {
 			repeat, from = task.Recurrence.Type, task.Recurrence.From
 			interval = json.RawMessage(strconv.Itoa(task.Recurrence.Interval))
 		}
-		if args.has("repeat") {
-			repeat, _ = as[string](args["repeat"])
+		if args.Has("repeat") {
+			repeat, _ = jsonobj.As[string](args["repeat"])
 		}
 		switch repeat {
 		case "daily", "weekly", "monthly", "yearly":
-			data.set("rec_type", repeat)
+			data.Set("rec_type", repeat)
 		case "none":
-			data.set("rec_type", nil)
+			data.Set("rec_type", nil)
 		default:
 			return nil, toolErr("repeat must be daily, weekly, monthly, yearly or none")
 		}
-		if args.has("repeat_every") {
+		if args.Has("repeat_every") {
 			interval = args["repeat_every"]
 		}
 		data["rec_interval"] = interval
-		if args.has("repeat_from") {
-			from, _ = as[string](args["repeat_from"])
+		if args.Has("repeat_from") {
+			from, _ = jsonobj.As[string](args["repeat_from"])
 		}
 		if from != "due" && from != "completion" {
 			return nil, toolErr("repeat_from must be due or completion")
 		}
-		data.set("rec_from", from)
+		data.Set("rec_from", from)
 	}
 	return data, nil
 }
@@ -436,11 +437,11 @@ func tagHints(task *Task, user string) string {
 // the task shows in user's tasks. Not when the given tags already name a
 // declared list: the task is filed there.
 func homeTags(tags json.RawMessage, user string) json.RawMessage {
-	l, ok := as[[]string](tags)
-	if s, isStr := as[string](tags); isStr {
+	l, ok := jsonobj.As[[]string](tags)
+	if s, isStr := jsonobj.As[string](tags); isStr {
 		l, ok = splitComma(s), true
 	}
-	if !ok && !isNull(tags) {
+	if !ok && !jsonobj.IsNull(tags) {
 		return tags // createTask refuses it
 	}
 	home := lookupDefaultList(user)
@@ -467,8 +468,8 @@ func createTaskTool(args jsonObj, base, user string) (string, error) {
 	}
 	data["tags"] = homeTags(data["tags"], user)
 	// As c t in the browser: private when the user's default list is theirs alone.
-	if h := lookupDefaultList(user); !data.has("private") && h != nil && ownPrivate(user, h.Slug) {
-		data.set("private", true)
+	if h := lookupDefaultList(user); !data.Has("private") && h != nil && ownPrivate(user, h.Slug) {
+		data.Set("private", true)
 	}
 	msg, err := commitMsg("Create task", args)
 	if err != nil {
@@ -502,8 +503,8 @@ func otherArgs(args jsonObj, allowed ...string) []string {
 // updateTaskTool: one task's fields, status and comment; status deleted
 // deletes it; ids instead of id tags several tasks (tagTasksTool).
 func updateTaskTool(args jsonObj, base, user string) (string, error) {
-	if args.has("ids") {
-		if args.has("id") {
+	if args.Has("ids") {
+		if args.Has("id") {
 			return "", toolErr("Give id or ids, not both")
 		}
 		if other := otherArgs(args, "ids", "add_tags", "remove_tags", "summary"); len(other) > 0 {
@@ -520,7 +521,7 @@ func updateTaskTool(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	status, _ := as[string](args["status"])
+	status, _ := jsonobj.As[string](args["status"])
 	if status == "deleted" {
 		if other := otherArgs(args, "id", "status", "summary"); len(other) > 0 {
 			return "", toolErr("status deleted takes nothing else, not " + strings.Join(other, ", "))
@@ -535,7 +536,7 @@ func updateTaskTool(args jsonObj, base, user string) (string, error) {
 		return "Deleted task " + shortID(task.ID) + ": " + task.Title, nil
 	}
 	var comment *string
-	if args.has("comment") {
+	if args.Has("comment") {
 		c, err := strArg(args, "comment", true)
 		if err != nil {
 			return "", err
@@ -546,12 +547,12 @@ func updateTaskTool(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if args.has("status") {
+	if args.Has("status") {
 		f, ok := taskStatusFields[status]
 		if !ok {
 			return "", toolErr("status must be open, done, wont_do, skip or deleted")
 		}
-		data.set(f.field, f.value)
+		data.Set(f.field, f.value)
 	}
 	if len(data) == 0 && comment == nil {
 		return "", toolErr("Nothing to change: give the fields to set, a status or a comment")
@@ -592,12 +593,12 @@ func updateTaskTool(args jsonObj, base, user string) (string, error) {
 const tagTasksMax = 200
 
 func tagTasksTool(args jsonObj, user string) (string, error) {
-	ids, ok := as[[]json.RawMessage](args["ids"])
+	ids, ok := jsonobj.As[[]json.RawMessage](args["ids"])
 	if !ok || len(ids) == 0 {
 		return "", toolErr("ids must be a non-empty list of task ids")
 	}
 	for _, id := range ids {
-		if _, ok := as[string](id); !ok {
+		if _, ok := jsonobj.As[string](id); !ok {
 			return "", toolErr("ids must be a non-empty list of task ids")
 		}
 	}
@@ -618,7 +619,7 @@ func tagTasksTool(args jsonObj, user string) (string, error) {
 	var found []string
 	before := map[string][]string{}
 	for _, id := range ids {
-		raw, _ := as[string](id)
+		raw, _ := jsonobj.As[string](id)
 		t, err := findTask(raw, user) // an unknown id fails the whole call
 		if err != nil {
 			return "", err

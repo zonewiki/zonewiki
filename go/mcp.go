@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"zonewiki/internal/jsonobj"
 )
 
 // Versions this server speaks; it answers with the client's if listed here,
@@ -125,11 +126,11 @@ func knownTool(name string) bool {
 // body. callTool runs a tool, its error a toolError for the model; any
 // other error (a failed write) is returned, for a 500.
 func handleMCP(message json.RawMessage, user string, callTool func(name string, args jsonObj) (string, error)) (*rpcResponse, error) {
-	msg, ok := parseObj(message)
-	if v, _ := as[string](msg["jsonrpc"]); !ok || v != "2.0" {
+	msg, ok := jsonobj.Parse(message)
+	if v, _ := jsonobj.As[string](msg["jsonrpc"]); !ok || v != "2.0" {
 		return rpcError(nil, -32600, "Invalid Request"), nil
 	}
-	method, ok := as[string](msg["method"])
+	method, ok := jsonobj.As[string](msg["method"])
 	id, hasID := msg["id"]
 	if !ok {
 		return nil, nil // a response to something we never asked
@@ -138,8 +139,8 @@ func handleMCP(message json.RawMessage, user string, callTool func(name string, 
 		return nil, nil // a notification, e.g. notifications/initialized
 	}
 	params := jsonObj{}
-	if !msg.null("params") {
-		if params, ok = parseObj(msg["params"]); !ok {
+	if !msg.Null("params") {
+		if params, ok = jsonobj.Parse(msg["params"]); !ok {
 			return rpcError(id, -32602, "params must be an object"), nil
 		}
 	}
@@ -147,7 +148,7 @@ func handleMCP(message json.RawMessage, user string, callTool func(name string, 
 	case "initialize":
 		var res initializeResult
 		res.ProtocolVersion = protocolVersions[0]
-		if v, _ := as[string](params["protocolVersion"]); slices.Contains(protocolVersions, v) {
+		if v, _ := jsonobj.As[string](params["protocolVersion"]); slices.Contains(protocolVersions, v) {
 			res.ProtocolVersion = v
 		}
 		res.ServerInfo.Name, res.ServerInfo.Title, res.ServerInfo.Version = "zonewiki", "Zone wiki", version
@@ -158,7 +159,7 @@ func handleMCP(message json.RawMessage, user string, callTool func(name string, 
 	case "tools/list":
 		return rpcResult(id, map[string]any{"tools": toolList(user)}), nil
 	case "tools/call":
-		name, isStr := as[string](params["name"])
+		name, isStr := jsonobj.As[string](params["name"])
 		if !isStr || !knownTool(name) {
 			if !isStr {
 				name = string(params["name"])
@@ -166,8 +167,8 @@ func handleMCP(message json.RawMessage, user string, callTool func(name string, 
 			return rpcError(id, -32602, "Unknown tool: "+name), nil
 		}
 		args := jsonObj{}
-		if !params.null("arguments") {
-			if args, ok = parseObj(params["arguments"]); !ok {
+		if !params.Null("arguments") {
+			if args, ok = jsonobj.Parse(params["arguments"]); !ok {
 				return rpcError(id, -32602, "arguments must be an object"), nil
 			}
 		}
@@ -275,7 +276,7 @@ func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	call := func(name string, args jsonObj) (string, error) { return callMCPTool(r, name, args) }
-	if batch, ok := as[[]json.RawMessage](body); ok { // a batch (protocol 2025-03-26)
+	if batch, ok := jsonobj.As[[]json.RawMessage](body); ok { // a batch (protocol 2025-03-26)
 		replies := []*rpcResponse{}
 		for _, m := range batch {
 			reply, err := handleMCP(m, user, call)

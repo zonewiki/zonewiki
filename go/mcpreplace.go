@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+	"zonewiki/internal/jsonobj"
 	"zonewiki/internal/mdtext"
 )
 
@@ -228,9 +229,9 @@ func replaceArgs(args jsonObj, user string) (*replaceSpec, error) {
 	if spec.includeCode, err = boolArg(args, "include_code"); err != nil {
 		return nil, err
 	}
-	if args.has("dry_run") {
+	if args.Has("dry_run") {
 		var ok bool
-		if spec.dryRun, ok = as[bool](args["dry_run"]); !ok {
+		if spec.dryRun, ok = jsonobj.As[bool](args["dry_run"]); !ok {
 			return nil, toolErr("dry_run must be true or false")
 		}
 	}

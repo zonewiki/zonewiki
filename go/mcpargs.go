@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+	"zonewiki/internal/jsonobj"
 	"zonewiki/internal/mdtext"
 	"zonewiki/internal/textsearch"
 )
@@ -44,11 +45,11 @@ var digitsRE = regexp.MustCompile(`^\d+$`)
 
 // mcpInt: a whole-number argument (a string of digits too), clamped to 1…top.
 func mcpInt(args jsonObj, name string, def, top int) (int, error) {
-	if !args.has(name) {
+	if !args.Has(name) {
 		return def, nil
 	}
-	n, ok := wholeNumber(args[name])
-	if s, isStr := as[string](args[name]); isStr && digitsRE.MatchString(strings.TrimSpace(s)) {
+	n, ok := jsonobj.WholeNumber(args[name])
+	if s, isStr := jsonobj.As[string](args[name]); isStr && digitsRE.MatchString(strings.TrimSpace(s)) {
 		i, err := strconv.Atoi(strings.TrimSpace(s))
 		n, ok = i, err == nil
 	}
@@ -61,8 +62,8 @@ func mcpInt(args jsonObj, name string, def, top int) (int, error) {
 // strArg: a string argument with CRLF line ends as LF; a required one
 // non-empty. Missing or null is "".
 func strArg(args jsonObj, name string, required bool) (string, error) {
-	s, ok := as[string](args[name])
-	if !ok && !args.null(name) {
+	s, ok := jsonobj.As[string](args[name])
+	if !ok && !args.Null(name) {
 		return "", toolErr(name + " must be a string")
 	}
 	s = newlines(s)
@@ -74,8 +75,8 @@ func strArg(args jsonObj, name string, required bool) (string, error) {
 
 // boolArg: true or false; missing or null is false.
 func boolArg(args jsonObj, name string) (bool, error) {
-	b, ok := as[bool](args[name])
-	if !ok && !args.null(name) {
+	b, ok := jsonobj.As[bool](args[name])
+	if !ok && !args.Null(name) {
 		return false, toolErr(name + " must be true or false")
 	}
 	return b, nil
@@ -84,16 +85,16 @@ func boolArg(args jsonObj, name string) (bool, error) {
 // listArg: a list of strings, or one string split by split; missing or
 // null is none.
 func listArg(args jsonObj, name, msg string, split func(string) []string) ([]string, error) {
-	if args.null(name) {
+	if args.Null(name) {
 		return nil, nil
 	}
-	if s, ok := as[string](args[name]); ok {
+	if s, ok := jsonobj.As[string](args[name]); ok {
 		return split(s), nil
 	}
-	l, ok := as[[]json.RawMessage](args[name])
+	l, ok := jsonobj.As[[]json.RawMessage](args[name])
 	out := make([]string, len(l))
 	for i, x := range l {
-		if out[i], ok = as[string](x); !ok {
+		if out[i], ok = jsonobj.As[string](x); !ok {
 			break
 		}
 	}

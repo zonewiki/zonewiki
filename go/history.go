@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"zonewiki/internal/jsonobj"
 	"zonewiki/internal/mdtext"
 )
 
@@ -379,7 +380,7 @@ func apiCommitFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data, _ := jsonObject(r)
-	fp, _ := as[string](data["filepath"])
+	fp, _ := jsonobj.As[string](data["filepath"])
 	if fp == "" {
 		writeJSON(w, http.StatusBadRequest, M{"error": "No filepath provided"})
 		return

@@ -10,11 +10,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"zonewiki/internal/jsonobj"
 	"zonewiki/internal/mdtext"
 )
 
 func asStr(raw json.RawMessage, name string) (string, error) {
-	s, ok := as[string](raw)
+	s, ok := jsonobj.As[string](raw)
 	if !ok {
 		return "", refuse(name + " must be a string")
 	}
@@ -22,7 +23,7 @@ func asStr(raw json.RawMessage, name string) (string, error) {
 }
 
 func asBool(raw json.RawMessage, name string) (bool, error) {
-	b, ok := as[bool](raw)
+	b, ok := jsonobj.As[bool](raw)
 	if !ok {
 		return false, refuse(name + " must be true or false")
 	}
@@ -31,7 +32,7 @@ func asBool(raw json.RawMessage, name string) (bool, error) {
 
 // boolField: data's k as true or false; false when it is missing.
 func boolField(data jsonObj, k string) (bool, error) {
-	if !data.has(k) {
+	if !data.Has(k) {
 		return false, nil
 	}
 	return asBool(data[k], k)
@@ -39,10 +40,10 @@ func boolField(data jsonObj, k string) (bool, error) {
 
 // asInt: a whole number, or a string of one ("12", " -3 ").
 func asInt(raw json.RawMessage, name string) (int, error) {
-	if n, ok := wholeNumber(raw); ok {
+	if n, ok := jsonobj.WholeNumber(raw); ok {
 		return n, nil
 	}
-	if s, ok := as[string](raw); ok {
+	if s, ok := jsonobj.As[string](raw); ok {
 		if n, err := strconv.Atoi(strings.TrimSpace(s)); err == nil {
 			return n, nil
 		}
@@ -53,8 +54,8 @@ func asInt(raw json.RawMessage, name string) (int, error) {
 // asStrList: a list of strings, or one string split on commas; stripped,
 // empties left out.
 func asStrList(raw json.RawMessage, name string) ([]string, error) {
-	items, ok := as[[]string](raw)
-	if s, isStr := as[string](raw); isStr {
+	items, ok := jsonobj.As[[]string](raw)
+	if s, isStr := jsonobj.As[string](raw); isStr {
 		items, ok = strings.Split(s, ","), true
 	}
 	if !ok {
@@ -72,18 +73,18 @@ func asStrList(raw json.RawMessage, name string) ([]string, error) {
 // listField: data's k as a list, [] when it is missing; ok false when it
 // is something else.
 func listField(data jsonObj, k string) ([]json.RawMessage, bool) {
-	if !data.has(k) {
+	if !data.Has(k) {
 		return []json.RawMessage{}, true
 	}
-	return as[[]json.RawMessage](data[k])
+	return jsonobj.As[[]json.RawMessage](data[k])
 }
 
 // idList: the body's ids, a list of task-id strings.
 func idList(data jsonObj) ([]string, error) {
-	if !data.has("ids") {
+	if !data.Has("ids") {
 		return []string{}, nil
 	}
-	ids, ok := as[[]string](data["ids"])
+	ids, ok := jsonobj.As[[]string](data["ids"])
 	if !ok {
 		return nil, refuse("ids must be a list of task ids")
 	}
@@ -96,8 +97,8 @@ var strptimeDayRE = regexp.MustCompile(`^(\d{4})-(1[0-2]|0[1-9]|[1-9])-(3[01]|[1
 // validateDate: raw as a date field: null or "" is none (""), else a
 // valid YYYY-MM-DD.
 func validateDate(raw json.RawMessage) (string, error) {
-	s, ok := as[string](raw)
-	if isNull(raw) || ok && s == "" {
+	s, ok := jsonobj.As[string](raw)
+	if jsonobj.IsNull(raw) || ok && s == "" {
 		return "", nil
 	}
 	bad := refuse("Invalid date format, expected YYYY-MM-DD")
@@ -129,7 +130,7 @@ func commentText(s string) (string, error) {
 // them); the MCP tools share it.
 func createTask(user string, data jsonObj, message string) (*Task, error) {
 	title := ""
-	if data.has("title") {
+	if data.Has("title") {
 		var err error
 		if title, err = asStr(data["title"], "title"); err != nil {
 			return nil, err
@@ -185,7 +186,7 @@ func applyTaskFields(user string, t *Task, data jsonObj, fresh bool) error {
 
 // applyText: a write's title, description, tags and comments.
 func applyText(user string, t *Task, data jsonObj) error {
-	if data.has("title") {
+	if data.Has("title") {
 		s, err := asStr(data["title"], "title")
 		if err != nil {
 			return err
@@ -195,9 +196,9 @@ func applyText(user string, t *Task, data jsonObj) error {
 		}
 		t.Title = s
 	}
-	if data.has("description") {
+	if data.Has("description") {
 		t.Description = ""
-		if !data.null("description") {
+		if !data.Null("description") {
 			s, err := asStr(data["description"], "description")
 			if err != nil {
 				return err
@@ -205,9 +206,9 @@ func applyText(user string, t *Task, data jsonObj) error {
 			t.Description = strings.TrimSpace(s)
 		}
 	}
-	if data.has("tags") {
+	if data.Has("tags") {
 		t.Tags = []string{}
-		if !data.null("tags") {
+		if !data.Null("tags") {
 			tags, err := asStrList(data["tags"], "tags")
 			if err != nil {
 				return err
@@ -215,8 +216,8 @@ func applyText(user string, t *Task, data jsonObj) error {
 			t.Tags = cleanTags(tags)
 		}
 	}
-	if data.has("comments") { // the whole list, for undoing a comment's delete or edit
-		if _, ok := as[[]json.RawMessage](data["comments"]); !ok {
+	if data.Has("comments") { // the whole list, for undoing a comment's delete or edit
+		if _, ok := jsonobj.As[[]json.RawMessage](data["comments"]); !ok {
 			return refuse("comments must be a list")
 		}
 		t.Comments = cleanComments(data["comments"])
@@ -228,7 +229,7 @@ func applyText(user string, t *Task, data jsonObj) error {
 // applyDate: a write's date key into field; a change is logged as event
 // ("": not logged).
 func applyDate(user string, t *Task, data jsonObj, key, event string, field *string) error {
-	if !data.has(key) {
+	if !data.Has(key) {
 		return nil
 	}
 	d, err := validateDate(data[key])
@@ -245,10 +246,10 @@ func applyDate(user string, t *Task, data jsonObj, key, event string, field *str
 
 // applyOrder: a write's sort_order and keep.
 func applyOrder(t *Task, data jsonObj) error {
-	if data.has("sort_order") {
-		f, ok := as[float64](data["sort_order"])
+	if data.Has("sort_order") {
+		f, ok := jsonobj.As[float64](data["sort_order"])
 		switch {
-		case data.null("sort_order"):
+		case data.Null("sort_order"):
 			t.SortOrder = nil
 		case ok:
 			t.SortOrder = &f
@@ -256,7 +257,7 @@ func applyOrder(t *Task, data jsonObj) error {
 			return refuse("sort_order must be a number")
 		}
 	}
-	if data.has("keep") {
+	if data.Has("keep") {
 		keep, err := asBool(data["keep"], "keep")
 		if err != nil {
 			return err
@@ -269,7 +270,7 @@ func applyOrder(t *Task, data jsonObj) error {
 // applyPrivate: a write's private: a new task starts private, or a private
 // one is shared; a shared one stays shared.
 func applyPrivate(user string, t *Task, data jsonObj, fresh bool) error {
-	if !data.has("private") {
+	if !data.Has("private") {
 		return nil
 	}
 	private, err := asBool(data["private"], "private")
@@ -298,12 +299,12 @@ func applyPrivate(user string, t *Task, data jsonObj, fresh bool) error {
 // the one the task has. oldDue, oldStart, oldRec: the task's before the
 // write.
 func applyRecurrence(t *Task, data jsonObj, oldDue, oldStart string, oldRec *Recurrence) error {
-	if data.has("rec_type") {
-		rtype, _ := as[string](data["rec_type"])
+	if data.Has("rec_type") {
+		rtype, _ := jsonobj.As[string](data["rec_type"])
 		switch rtype {
 		case "daily", "weekly", "monthly", "yearly":
 			n := 1
-			if data.has("rec_interval") {
+			if data.Has("rec_interval") {
 				var err error
 				if n, err = asInt(data["rec_interval"], "rec_interval"); err != nil {
 					return err
@@ -314,7 +315,7 @@ func applyRecurrence(t *Task, data jsonObj, oldDue, oldStart string, oldRec *Rec
 				return refuse("rec_interval must be at most " + strconv.Itoa(recIntervalMax))
 			}
 			from := "due"
-			if s, _ := as[string](data["rec_from"]); s == "completion" {
+			if s, _ := jsonobj.As[string](data["rec_from"]); s == "completion" {
 				from = "completion"
 			}
 			rec := &Recurrence{Type: rtype, Interval: n, From: from}
@@ -346,10 +347,10 @@ func applyRecurrence(t *Task, data jsonObj, oldDue, oldStart string, oldRec *Rec
 		}
 	}
 	// An undo sends the whole old recurrence, day and lead included.
-	if data.has("recurrence") {
+	if data.Has("recurrence") {
 		rec := cleanRecurrence(data["recurrence"])
 		t.Recurrence = rec
-		if rec == nil && !data.null("recurrence") {
+		if rec == nil && !data.Null("recurrence") {
 			return refuse("recurrence must be null or have a type")
 		}
 	}
@@ -431,7 +432,7 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 		if spawned != nil {
 			active = append(active, spawned)
 		}
-	case data.has("wont_do"):
+	case data.Has("wont_do"):
 		if wontDo && t.isOpen() {
 			// Won't do: to completed, abandoned; no next occurrence.
 			t.CompletedAt = timestamp()
@@ -445,7 +446,7 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 			completed = without(completed, id)
 			active = append(active, t)
 		}
-	case data.has("completed"):
+	case data.Has("completed"):
 		switch {
 		case done && t.Keep && t.isOpen():
 			keepDone(user, t) // stays open, back in the pool
@@ -463,7 +464,7 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 		}
 	}
 	// An undo sends the old history back with the old fields.
-	if data.has("history") {
+	if data.Has("history") {
 		t.History = cleanHistory(data["history"])
 		checkBy(user, t)
 	}
@@ -471,12 +472,12 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 	switch {
 	case didSkip:
 		msg = "Skip task"
-	case data.has("wont_do"):
+	case data.Has("wont_do"):
 		msg = "Abandon task"
 		if !wontDo {
 			msg = "Reopen task"
 		}
-	case data.has("completed"):
+	case data.Has("completed"):
 		msg = "Complete task"
 		if !done {
 			msg = "Uncomplete task"
@@ -499,7 +500,7 @@ func toggleNoteCheck(user, id string, idx int) (*Task, error) {
 		return t, nil
 	}
 	data := jsonObj{}
-	data.set("description", toggled)
+	data.Set("description", toggled)
 	return updateTaskLocked(user, id, data, "")
 }
 

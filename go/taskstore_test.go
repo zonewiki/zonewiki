@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"zonewiki/internal/jsonobj"
 )
 
 // A list is declared by a page's [[tasks: list=…]], outside code; the first
@@ -45,7 +46,7 @@ func TestTasksLists(t *testing.T) {
 // A task's last activity: its completion, history, comments, creation.
 func TestLastActivity(t *testing.T) {
 	// As a file has them: a junk history entry is no event.
-	task := func(s string) *Task { o, _ := parseObj([]byte(s)); return taskFromJSON(o) }
+	task := func(s string) *Task { o, _ := jsonobj.Parse([]byte(s)); return taskFromJSON(o) }
 	for _, c := range []struct {
 		t    *Task
 		want string
@@ -101,12 +102,12 @@ func TestParseTasksParams(t *testing.T) {
 func newTestTask(t *testing.T, user, title string, private bool, more ...string) *Task {
 	t.Helper()
 	data := jsonObj{}
-	data.set("title", title)
+	data.Set("title", title)
 	if private {
-		data.set("private", true)
+		data.Set("private", true)
 	}
 	for i := 0; i+1 < len(more); i += 2 {
-		data.set(more[i], more[i+1])
+		data.Set(more[i], more[i+1])
 	}
 	task, err := createTask(user, data, "Create task")
 	if err != nil {
@@ -202,7 +203,7 @@ func TestPrivateTaskMovesAndCompletes(t *testing.T) {
 		t.Error("still in the shared file")
 	}
 	done := jsonObj{}
-	done.set("completed", true)
+	done.Set("completed", true)
 	if _, err := updateTask("alice", task.ID, done, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +218,7 @@ func TestPrivateTaskMovesAndCompletes(t *testing.T) {
 		t.Errorf("bob's Completed %v", titles(got))
 	}
 	shared := jsonObj{}
-	shared.set("private", false)
+	shared.Set("private", false)
 	if _, err := updateTask("alice", open[0].ID, shared, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +243,7 @@ func TestReadsSeeAMovingTask(t *testing.T) {
 			defer close(stop)
 			for _, id := range ids {
 				data := jsonObj{}
-				data.set("private", false)
+				data.Set("private", false)
 				if _, err := updateTask("alice", id, data, ""); err != nil {
 					t.Error(err)
 					return
@@ -269,8 +270,8 @@ func TestReadsSeeAMovingTask(t *testing.T) {
 func TestNoPrivateTasksWithoutUsers(t *testing.T) {
 	testWiki(t, nil)
 	data := jsonObj{}
-	data.set("title", "x")
-	data.set("private", true)
+	data.Set("title", "x")
+	data.Set("private", true)
 	if _, err := createTask("", data, "c"); err == nil {
 		t.Error("a private task without users")
 	}
@@ -343,7 +344,7 @@ func TestEveryUsersFiles(t *testing.T) {
 		t.Errorf("rename: %v %v", changed, err)
 	}
 	last := jsonObj{}
-	last.set("completed", true)
+	last.Set("completed", true)
 	if _, err := updateTask("alice", mine.ID, last, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -375,7 +376,7 @@ func TestASharedTaskStaysShared(t *testing.T) {
 	withUsers(t, "alice", "bob")
 	task := newTestTask(t, "bob", "Errand", false)
 	data := jsonObj{}
-	data.set("private", true)
+	data.Set("private", true)
 	if _, err := updateTask("alice", task.ID, data, ""); err == nil {
 		t.Fatal("alice made bob's shared task private")
 	}
@@ -383,14 +384,14 @@ func TestASharedTaskStaysShared(t *testing.T) {
 		t.Errorf("bob sees %v", got)
 	}
 	mine := newTestTask(t, "alice", "Mine", true)
-	data.set("private", false)
+	data.Set("private", false)
 	if _, err := updateTask("alice", mine.ID, data, ""); err != nil {
 		t.Fatal(err)
 	}
 	if len(readTasks("bob")) != 2 {
 		t.Errorf("bob sees %v", titles(readTasks("bob")))
 	}
-	data.set("private", true)
+	data.Set("private", true)
 	if _, err := updateTask("alice", mine.ID, data, ""); err == nil {
 		t.Error("shared again, then private")
 	}
