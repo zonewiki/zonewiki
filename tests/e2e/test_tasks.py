@@ -655,7 +655,7 @@ def test_task_link_to_title_with_hashword(page, wiki):
 def test_task_link_to_completed_task(page, wiki):
     ids = _task_link_tasks(page, wiki)
     page.request.put(f"/api/tasks/{ids[0]}", data={"completed": True})
-    page.goto(f"/page/tasks?task={ids[0]}&view=completed")
+    page.goto(f"/page/tasks?task={ids[0]}&view=closed")
     expect(page.locator(f".task-item[data-id='{ids[0]}']")).to_have_class(
         re.compile(r"\btask-selected\b"))
 
@@ -709,7 +709,7 @@ def test_completed_link_opens_completed_and_goes_back(page, wiki):
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     page.goto("/page/tasks")
     open_tab(page, "plan")
-    link = page.locator("#task-completed-link")
+    link = page.locator("#task-closed-link")
     expect(link).to_have_text("Closed (2) →")
 
     link.click()
@@ -737,19 +737,19 @@ def test_completed_count_follows_completion(page, wiki):
     page.request.post("/api/tasks", data={"title": "Finish me"})
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     page.goto("/page/tasks?view=open")
-    expect(page.locator("#task-completed-link")).to_have_text("Closed (0) →")
+    expect(page.locator("#task-closed-link")).to_have_text("Closed (0) →")
     card(page, "Finish me").locator("input[type=checkbox]").check()
     # After the checkbox's ~5 s grace period.
-    expect(page.locator("#task-completed-link")).to_have_text("Closed (1) →", timeout=10000)
+    expect(page.locator("#task-closed-link")).to_have_text("Closed (1) →", timeout=10000)
 
 
 def test_embed_filter_completed_still_opens_completed(page, wiki):
     tid = page.request.post("/api/tasks", data={"title": "Old work"}).json()["id"]
     page.request.put(f"/api/tasks/{tid}", data={"completed": True})
-    wiki.write("log", "# Log\n\n[[tasks: view=completed]]\n")
+    wiki.write("log", "# Log\n\n[[tasks: view=closed]]\n")
     page.goto("/page/log")
     expect(card(page, "Old work")).to_be_visible()
-    expect(page.locator("#task-completed-link")).to_have_text("← Back to Focus")
+    expect(page.locator("#task-closed-link")).to_have_text("← Back to Focus")
 
 
 def test_filter_points_to_matches_in_completed(page, wiki):
@@ -759,7 +759,7 @@ def test_filter_points_to_matches_in_completed(page, wiki):
         page.request.put(f"/api/tasks/{tid}", data={"completed": True})
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     page.goto("/page/tasks?view=open")
-    link = page.locator("#task-completed-link")
+    link = page.locator("#task-closed-link")
     search = page.locator("#task-filter-search")
 
     search.fill("bread")
@@ -1184,12 +1184,12 @@ def test_menu_on_a_selected_card_acts_on_the_selection(page, wiki):
     expect(card(page, "Saw")).to_have_count(0)
     expect(card(page, "Glue")).to_have_count(0)
     expect(page.locator("#task-selbar")).to_be_hidden()
-    wait_until(page, lambda: sorted(t["title"] for t in page.request.get("/api/tasks/completed").json()
+    wait_until(page, lambda: sorted(t["title"] for t in page.request.get("/api/tasks/closed").json()
                                     if t["wont_do"]) == ["Glue", "Saw"])
     toast.locator(".task-undo-btn").click()
     expect(card(page, "Saw")).to_be_visible()
     expect(card(page, "Glue")).to_be_visible()
-    assert page.request.get("/api/tasks/completed").json() == []
+    assert page.request.get("/api/tasks/closed").json() == []
     # The ⋯ button of a card not in a multi-selection is that card's own menu.
     card(page, "Nuts").locator(".task-title").click()
     card(page, "Bolts").locator(".task-menu-btn").click()
@@ -1197,7 +1197,7 @@ def test_menu_on_a_selected_card_acts_on_the_selection(page, wiki):
 
 
 def closed_titles(page):
-    return sorted(t["title"] for t in page.request.get("/api/tasks/completed").json() if t["wont_do"])
+    return sorted(t["title"] for t in page.request.get("/api/tasks/closed").json() if t["wont_do"])
 
 
 def test_a_task_is_closed_undone_never_deleted(page, wiki):
@@ -1231,7 +1231,7 @@ def test_a_task_is_closed_undone_never_deleted(page, wiki):
     expect(modal).to_be_hidden()
     wait_until(page, lambda: closed_titles(page) == ["Bolts", "Glue", "Nuts"])
     # In Closed they are still there, and can't be closed again or deleted.
-    open_tab(page, "completed")
+    open_tab(page, "closed")
     expect(card(page, "Bolts")).to_be_visible()
     card(page, "Bolts").locator(".task-title").click()
     page.keyboard.press("Delete")
@@ -1248,7 +1248,7 @@ def test_main_task_counts_list_tasks_as_completed(page, wiki):
     wiki.write("shop", "# Shop\n\n[[tasks: list=groceries]]\n")
     page.goto("/tasks?view=open")
     expect(card(page, "Oat milk")).to_be_visible()
-    expect(page.locator("#task-completed-link")).to_have_text("Closed (1) →")
+    expect(page.locator("#task-closed-link")).to_have_text("Closed (1) →")
     expect(page.locator("#task-show-lists")).to_have_count(0)
 
 
@@ -1823,7 +1823,7 @@ def test_completed_matches_survive_the_load_race(page, wiki):
         page.goto("/tasks?view=open&search=milk")
     expect(card(page, "Something else")).to_have_count(0)  # filtered out
     page.wait_for_timeout(300)
-    expect(page.locator("#task-completed-link")).to_have_text("1 match in Closed →")
+    expect(page.locator("#task-closed-link")).to_have_text("1 match in Closed →")
 
 
 def test_ticked_tasks_stay_ticked_when_the_first_one_goes(page, wiki):
@@ -1868,11 +1868,11 @@ def test_copy_link_to_a_task(page, wiki):
     page.goto(link)
     expect(card(page, "Call Bob")).to_have_class(re.compile(r"\btask-selected\b"))
 
-    open_tab(page, "completed")
+    open_tab(page, "closed")
     card(page, "Old one").locator(".task-menu-btn").click()
     page.locator(".task-menu").get_by_role("menuitem", name="Copy link").click()
     expect(page.locator(".task-undo-toast")).to_contain_text("Link copied")
-    assert page.evaluate("navigator.clipboard.readText()") == f"{base}/tasks?task={done}&view=completed"
+    assert page.evaluate("navigator.clipboard.readText()") == f"{base}/tasks?task={done}&view=closed"
 
 
 def test_click_on_checkbox_label_ticks_without_selecting(page, wiki):
@@ -1900,7 +1900,7 @@ def test_keep_task_goes_back_to_open_with_undo(page, wiki):
     page.clock.run_for(5500)   # completion grace period + fade-out
     expect(card(page, "Milk")).to_have_count(0)
     wait_for_field(page, "Milk", "start_date", None)
-    assert task_by_title(page, "Milk")["completed_at"] is None
+    assert task_by_title(page, "Milk")["closed_at"] is None
     expect(page.locator(".task-undo-toast")).to_contain_text("“Milk” done")
 
     page.locator(".task-undo-btn").click()
@@ -2139,7 +2139,7 @@ def test_checkboxes_in_task_notes(page, wiki):
                                           task_by_title(page, "Bake")["description"]))
     expect(card(page, "Bake").locator(".task-desc .task-date-done")).to_have_text(date.today().isoformat())
     expect(page.locator("#task-edit-modal")).to_be_hidden()
-    assert task_by_title(page, "Bake")["completed_at"] is None
+    assert task_by_title(page, "Bake")["closed_at"] is None
     expect(card(page, "Bake").locator(".task-checkbox input")).not_to_be_checked()
     # Undo unticks it again, and the date goes.
     page.locator(".task-undo-toast button", has_text="Undo").click()
@@ -2342,8 +2342,8 @@ def test_embed_labels_rename_the_tabs(page, wiki):
     expect(page.locator("#tasks-tabs .active")).to_have_text("Catalogue")
     expect(card(page, "Milk").locator(".task-keep")).to_have_attribute(
         "title", "Keep: back to Catalogue when ticked off")
-    open_tab(page, "completed")
-    expect(page.locator("#task-completed-link")).to_have_text("← Back to Catalogue")
+    open_tab(page, "closed")
+    expect(page.locator("#task-closed-link")).to_have_text("← Back to Catalogue")
 
 
 def test_filter_excludes_tags(page, wiki):
@@ -2562,15 +2562,15 @@ def test_completed_shows_earlier_years(page, wiki):
     """Earlier years' completed tasks (the yearly archives) are one click
     away in Completed, and a search link to one opens its year."""
     year = date.today().year
-    (wiki.root / "_tasks" / f"completed-{year-1}.json").write_text(
-        '[{"id": "old", "title": "Old done", "completed_at": "%d-05-01T10:00:00"}]' % (year - 1),
+    (wiki.root / "_tasks" / f"closed-{year-1}.json").write_text(
+        '[{"id": "old", "title": "Old done", "closed_at": "%d-05-01T10:00:00"}]' % (year - 1),
         encoding="utf-8")
     tid = page.request.post("/api/tasks", data={"title": "New done"}).json()["id"]
     page.request.put(f"/api/tasks/{tid}", data={"completed": True})
 
     page.goto("/tasks?view=focus")
-    page.locator("#task-completed-link").click()
-    years = page.locator(".completed-years button")
+    page.locator("#task-closed-link").click()
+    years = page.locator(".closed-years button")
     expect(years).to_have_text([str(year), str(year - 1)])
     expect(years.first).to_have_attribute("aria-pressed", "true")
     expect(card(page, "New done")).to_be_visible()
@@ -2581,8 +2581,8 @@ def test_completed_shows_earlier_years(page, wiki):
     expect(card(page, "New done")).to_have_count(0)
 
     # Back to a tab and to Completed again: this year.
-    page.locator("#task-completed-link").click()
-    page.locator("#task-completed-link").click()
+    page.locator("#task-closed-link").click()
+    page.locator("#task-closed-link").click()
     expect(card(page, "New done")).to_be_visible()
     expect(card(page, "Old done")).to_have_count(0)
 
@@ -3139,7 +3139,7 @@ def test_compact_defaults_per_tab(page, wiki):
     app = page.locator(".tasks-app")
     page.goto("/tasks?view=open")
     expect(app).to_have_class(COMPACT)
-    for view in ("focus", "plan", "completed"):
+    for view in ("focus", "plan", "closed"):
         open_tab(page, view)
         expect(app).to_have_class(COMPACT)
     # Full cards on Open; Focus stays compact: each tab keeps its own.

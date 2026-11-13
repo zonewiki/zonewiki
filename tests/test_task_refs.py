@@ -61,7 +61,7 @@ class TestRendering:
         body = view(client)
         assert f'<span class="task-ref task-ref-done" data-task-id="{a["id"]}">' in body
         assert 'aria-label="Done: Finished" checked>' in body
-        assert f'href="/tasks?task={a["id"]}&amp;view=completed"' in body
+        assert f'href="/tasks?task={a["id"]}&amp;view=closed"' in body
         assert f'<span class="task-ref task-ref-wontdo" data-task-id="{b["id"]}">' in body
         assert 'aria-label="Done: Dropped" disabled>' in body
         assert "won&#x27;t do" in body or "won't do" in body

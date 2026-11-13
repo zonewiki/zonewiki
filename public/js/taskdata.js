@@ -56,7 +56,7 @@ function triggerUndo() {
 // ── API ────────────────────────────────────────────────────────────────────
 
 // /api/tasks returns only open tasks, so replacing `tasks` drops the
-// completed ones: they count as not loaded again (tasksGen tells a completed
+// closed ones: they count as not loaded again (tasksGen tells a closed
 // load in flight that its merge target is gone).
 let tasksGen = 0;
 async function fetchTasks() {
@@ -65,20 +65,20 @@ async function fetchTasks() {
   await renderTexts(textsOf(fetched));
   st.tasks = fetched;
   tasksGen++;
-  st.completedLoaded = false;
+  st.closedLoaded = false;
   app.render();
-  if (st.activeView === 'completed') fetchCompleted();
-  refreshCompletedCount();
+  if (st.activeView === 'closed') fetchClosed();
+  refreshClosedCount();
 }
 
-// Completed is not a tab: a link under the list opens it, labelled with the
-// number of completed tasks. The count comes from the server because the
-// completed tasks themselves are only loaded when the view is opened.
-st.completedCount = null;
-async function refreshCompletedCount() {
+// Closed is not a tab: a link under the list opens it, labelled with the
+// number of closed tasks. The count comes from the server because the
+// closed tasks themselves are only loaded when the view is opened.
+st.closedCount = null;
+async function refreshClosedCount() {
   try {
-    const res = await fetch('/api/tasks/completed-count' + app.scopeQuery());
-    if (res.ok) { st.completedCount = (await res.json()).count; app.syncCompletedLink(); }
+    const res = await fetch('/api/tasks/closed-count' + app.scopeQuery());
+    if (res.ok) { st.closedCount = (await res.json()).count; app.syncClosedLink(); }
   } catch (_) {}
 }
 
@@ -86,55 +86,55 @@ async function refreshCompletedCount() {
 // pull in changes made by another embed on the same page.
 async function refresh() {
   await fetchTasks();
-  if (st.activeView === 'completed') await fetchCompleted();
+  if (st.activeView === 'closed') await fetchClosed();
 }
 
-let completedLoading = null;
-function fetchCompleted() {
-  if (st.completedLoaded) return Promise.resolve();
+let closedLoading = null;
+function fetchClosed() {
+  if (st.closedLoaded) return Promise.resolve();
   // One request at a time: the filter field asks for these on every render.
-  return completedLoading ||= loadCompleted().finally(() => { completedLoading = null; });
+  return closedLoading ||= loadClosed().finally(() => { closedLoading = null; });
 }
-async function loadCompleted() {
-  let completed, gen;
-  // The page load fetches open and completed tasks at the same time (the
-  // filter field, restored by the browser on reload, asks for completed
+async function loadClosed() {
+  let closed, gen;
+  // The page load fetches open and closed tasks at the same time (the
+  // filter field, restored by the browser on reload, asks for closed
   // matches). If fetchTasks replaced `tasks` meanwhile, merging into it would
   // be lost: fetch again. This race made the match count flip between
   // reloads.
-  loadCompletedYears();
+  loadClosedYears();
   do {
     gen = tasksGen;
-    const res = await fetch('/api/tasks/completed' + (st.completedYear ? `?year=${st.completedYear}` : ''));
-    completed = (await res.json()).filter(app.inScope);
-    await renderTexts(textsOf(completed));
+    const res = await fetch('/api/tasks/closed' + (st.closedYear ? `?year=${st.closedYear}` : ''));
+    closed = (await res.json()).filter(app.inScope);
+    await renderTexts(textsOf(closed));
   } while (gen !== tasksGen);
   const existingIds = new Set(st.tasks.map(t => t.id));
-  for (const t of completed) {
+  for (const t of closed) {
     if (!existingIds.has(t.id)) st.tasks.push(t);
   }
-  st.completedLoaded = true;
+  st.closedLoaded = true;
   app.render();
 }
 
-async function loadCompletedYears() {
+async function loadClosedYears() {
   try {
-    const res = await fetch('/api/tasks/completed-years' + app.scopeQuery());
-    if (res.ok) { st.completedYears = (await res.json()).years; if (st.activeView === 'completed') app.render(); }
+    const res = await fetch('/api/tasks/closed-years' + app.scopeQuery());
+    if (res.ok) { st.closedYears = (await res.json()).years; if (st.activeView === 'closed') app.render(); }
   } catch (_) {}
 }
 
-// Show another year in Completed: drop the loaded completed tasks (the
+// Show another year in Closed: drop the loaded closed tasks (the
 // match count in the other views counts whatever is loaded) and fetch that
 // year's. tasksGen tells a load in flight that its year is gone.
-function setCompletedYear(year) {
+function setClosedYear(year) {
   year = year === app.thisYear ? '' : year;
-  if (year === st.completedYear) return;
-  st.completedYear = year;
-  st.tasks = st.tasks.filter(t => !t.completed_at);
+  if (year === st.closedYear) return;
+  st.closedYear = year;
+  st.tasks = st.tasks.filter(t => !t.closed_at);
   tasksGen++;
-  st.completedLoaded = false;
-  if (st.activeView === 'completed') fetchCompleted();
+  st.closedLoaded = false;
+  if (st.activeView === 'closed') fetchClosed();
   app.render();
 }
 
@@ -151,7 +151,7 @@ async function createTask(data) {
     if (app.inScope(task)) st.tasks.push(task);
     if (msg && !app.headless) showNotice(msg);
     app.render();
-    refreshDueBadge(); refreshCompletedCount();
+    refreshDueBadge(); refreshClosedCount();
     app.refreshOtherInstances(app.instanceId);
     return task;
   }
@@ -183,7 +183,7 @@ async function updateTask(id, data) {
     } else {
       app.render();
     }
-    refreshDueBadge(); refreshCompletedCount();
+    refreshDueBadge(); refreshClosedCount();
     app.refreshOtherInstances(app.instanceId);
     return updated;
   }
@@ -268,7 +268,7 @@ function beginComplete(id, li) {
       const before = task?.keep && keepSnapshot(task);
       if (before) dismissUndo();
       const done = await updateTask(id, { completed: true });
-      // A keep task is not archived, so Completed can't reopen it: offer undo.
+      // A keep task is not archived, so Closed can't reopen it: offer undo.
       if (done && before) showUndo(`“${plainTitle(task.title)}” done`, () => updateTask(id, before));
     }, 400);
   }, 4600);
@@ -303,7 +303,7 @@ async function completeTasks(ids, completed, wontDo = false) {
   if (res.ok) {
     // Re-fetch to capture any spawned recurring tasks
     await fetchTasks();
-    refreshDueBadge(); refreshCompletedCount();
+    refreshDueBadge(); refreshClosedCount();
     app.refreshOtherInstances(app.instanceId);
   }
 }
@@ -311,7 +311,7 @@ async function completeTasks(ids, completed, wontDo = false) {
 
 async function afterBatchWrite() {
   await fetchTasks();
-  refreshDueBadge(); refreshCompletedCount();
+  refreshDueBadge(); refreshClosedCount();
   app.refreshOtherInstances(app.instanceId);
 }
 
@@ -349,7 +349,7 @@ function setStart(id, startDate) {
 // Close the open tasks among `ids` undone (won't do), in one change with
 // one undo, which reopens them. One task alone goes through markWontDo.
 async function wontDoMany(ids) {
-  const open = ids.filter(id => { const t = st.tasks.find(tk => tk.id === id); return t && !t.completed_at; });
+  const open = ids.filter(id => { const t = st.tasks.find(tk => tk.id === id); return t && !t.closed_at; });
   if (open.length === 1) return markWontDo(open[0]);
   if (!open.length) return;
   dismissUndo();
@@ -357,5 +357,5 @@ async function wontDoMany(ids) {
   showUndo(`${open.length} tasks marked won't do`, () => completeTasks(open, false));
 }
 
-return { dismissUndo, showUndo, triggerUndo, fetchTasks, refresh, fetchCompleted, setCompletedYear, createTask, updateTask, leftViewMessage, tickTask, cancelPendingComplete, keepSnapshot, completeTasks, afterBatchWrite, oldHistory, markWontDo, wontDoMany, skipOccurrence, setStart };
+return { dismissUndo, showUndo, triggerUndo, fetchTasks, refresh, fetchClosed, setClosedYear, createTask, updateTask, leftViewMessage, tickTask, cancelPendingComplete, keepSnapshot, completeTasks, afterBatchWrite, oldHistory, markWontDo, wontDoMany, skipOccurrence, setStart };
 }

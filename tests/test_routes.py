@@ -1336,7 +1336,7 @@ class TestSearch:
         client.put(f"/api/tasks/{tid}", json={"completed": True})
         resp = client.get("/search?q=finishreport+tuvwxyz", headers=HOST)
         body = resp.get_data(as_text=True)
-        assert f'href="/tasks?task={tid}&amp;view=completed"' in body
+        assert f'href="/tasks?task={tid}&amp;view=closed"' in body
 
 
 # ===========================================================================
@@ -2220,7 +2220,7 @@ class TestRenameUpdatesAllReferences:
         assert tasks[linked["id"]]["title"] == "Do [[new]] and [[new|label]]"
         assert tasks[linked["id"]]["description"] == "see [x](/page/new)"
         assert tasks[other["id"]]["title"] == "[[older]]"
-        completed = client.get("/api/tasks/completed", headers=HOST).get_json()
+        completed = client.get("/api/tasks/closed", headers=HOST).get_json()
         assert completed[0]["title"] == "Done [[new]]"
         html = client.get("/page/new", headers=HOST).get_data(as_text=True)
         assert 'id="task-backlinks"' in html

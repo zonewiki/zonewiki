@@ -83,7 +83,7 @@ export function shortDate(dateStr) {
 }
 
 export function dueDateClass(task) {
-  if (!task.due_date || task.completed_at) return '';
+  if (!task.due_date || task.closed_at) return '';
   const today = todayStr();
   if (task.due_date < today) return 'task-overdue';
   if (task.due_date === today) return 'task-due-today';
@@ -91,7 +91,7 @@ export function dueDateClass(task) {
 }
 
 export function urgencyClass(task) {
-  if (!task.due_date || task.completed_at) return '';
+  if (!task.due_date || task.closed_at) return '';
   const diff = Math.round(
     (new Date(task.due_date + 'T00:00:00') - new Date(todayStr() + 'T00:00:00')) / 86400000
   );

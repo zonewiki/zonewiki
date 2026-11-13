@@ -239,7 +239,7 @@ def test_swipe_right_on_focus_does_nothing(new_page, wiki):
     phone.wait_for_timeout(300)
     expect(c).not_to_have_class(re.compile(r"\btask-completing\b"))   # no swipe-to-done
     t = task(phone, "Water plants")
-    assert t["start_date"] == TODAY and not t["completed_at"]
+    assert t["start_date"] == TODAY and not t["closed_at"]
 
 
 def test_due_task_cannot_be_swiped_out_of_focus(new_page, wiki):

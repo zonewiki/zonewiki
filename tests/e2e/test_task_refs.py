@@ -17,7 +17,7 @@ def _task(page, **fields):
 
 def _tasks_task(wiki, task_id):
     """The task as stored, open or completed (None if neither)."""
-    for name in ("tasks.json", "completed.json"):
+    for name in ("tasks.json", "closed.json"):
         path = wiki.root / "_tasks" / name
         if path.exists():
             for t in json.loads(path.read_text()):
@@ -34,11 +34,11 @@ def test_chip_checkbox_completes_and_undo_reopens(page, wiki):
     expect(chip).to_contain_text("Call the plumber")
     chip.locator(".task-ref-check").check()
     expect(page.locator(".task-undo-toast")).to_contain_text("Done “Call the plumber”")
-    wait_until(page, lambda: (_tasks_task(wiki, t["id"]) or {}).get("completed_at"))
+    wait_until(page, lambda: (_tasks_task(wiki, t["id"]) or {}).get("closed_at"))
     expect(page.locator(f'.task-ref-done[data-task-id="{t["id"]}"]')).to_be_visible()
 
     page.locator(".task-undo-toast").get_by_role("button", name="Undo").click()
-    wait_until(page, lambda: not _tasks_task(wiki, t["id"])["completed_at"])
+    wait_until(page, lambda: not _tasks_task(wiki, t["id"])["closed_at"])
     reopened = page.locator(f'.task-ref[data-task-id="{t["id"]}"]')
     expect(reopened).not_to_have_class("task-ref task-ref-done")
     expect(reopened.locator(".task-ref-check")).not_to_be_checked()

@@ -54,12 +54,12 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 | POST   | `/api/tasks/batch-update` | Change fields of several tasks in one commit; body `{ tasks: [{ id, ...fields as PUT takes them, history? }] }`, each task its own fields (a selection's Start today, the undo of a bulk tag or start). Status keys (`completed`, `wont_do`, `skip`) are refused (400); ids no longer in the tasks are skipped. Returns the updated tasks. |
 | GET    | `/api/tasks/due-count` | `{ count, overdue, today, focus }`: tasks due today + overdue, and tasks in Focus, of the pinned lists (their `list=`/`tag=`; a task in two once), else of every task (see Modules); `?places=1` adds `places`, the same counts of each place in the list switcher by its key (`list:<name>`, `all`, `pinned`: the pinned lists as one, or a single pin without a list; Separate lists in `docs/spec/tasks.md`) |
 | POST   | `/api/tasks/settings`  | The settings dialog's Save: `{page, index, was, set}` rewrites the params of a page's `[[tasks: …]]`, `{all: true, was, set}` the settings of All tasks; `{ok}` or `{error}` (400, 403, 404, 409: Settings in `docs/spec/tasks.md`) |
-| GET    | `/api/tasks/export`    | The tasks a list shows (`?list=`, `?tag=`; neither: all), open and completed, as a JSON file to save (Export and import in `docs/spec/tasks.md`) |
+| GET    | `/api/tasks/export`    | The tasks a list shows (`?list=`, `?tag=`; neither: all), open and closed, as a JSON file to save (Export and import in `docs/spec/tasks.md`) |
 | POST   | `/api/tasks/import`    | `{file, list, tag, new, also, private}`: adds an export's tasks to a list; `{added, skipped, ids}` |
 | GET    | `/api/tasks/headless`  | A hidden task app (the headless embed, without its `<script>` tags), for a page that needs the edit modal (`c t`, the New task button; see Modules). |
-| GET    | `/api/tasks/completed` | Completed tasks of `?year=YYYY` (default this year; earlier years come from their archive file). |
-| GET    | `/api/tasks/completed-years` | `{ years }`: years with completed tasks, newest first, this year always included (Completed's year switcher). `?list=<name>` as for the count. |
-| GET    | `/api/tasks/completed-count` | `{ count }` of tasks in the Completed view (current year), for its link. `?list=<name>` counts that list's (tasks tagged with it); without it, every task's (a leftover `?all=1` changes nothing). |
+| GET    | `/api/tasks/closed` | Closed tasks of `?year=YYYY` (default this year; earlier years come from their archive file). |
+| GET    | `/api/tasks/closed-years` | `{ years }`: years with closed tasks, newest first, this year always included (Closed's year switcher). `?list=<name>` as for the count. |
+| GET    | `/api/tasks/closed-count` | `{ count }` of tasks in the Closed view (current year), for its link. `?list=<name>` counts that list's (tasks tagged with it); without it, every task's (a leftover `?all=1` changes nothing). |
 | POST   | `/api/notes`      | Create a new note (`<timestamp>_<slug>.md`); returns `{ slug }`. |
 | GET    | `/notes`                | Auto-generated index of all notes, newest first, with a filter box (`?q=`) that searches notes only |
 | POST   | `/rename/<slug>`      | Rename a page: moves the file, redirects to new slug |

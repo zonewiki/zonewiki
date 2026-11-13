@@ -555,7 +555,7 @@ A new page is made private from the start (below).
   a note,
   an upload,
   her own pinned list and list,
-  and private tasks (open, completed, archived; one a shared page refers to with `[[task:…]]`),
+  and private tasks (open, closed, archived; one a shared page refers to with `[[task:…]]`),
   holding a word no response to bob may contain,
   and probes every route and MCP read tool as bob,
   and every write route and MCP write tool (her files and the commits must stay as they were);
@@ -574,19 +574,19 @@ from New task / `c t` when your default list is in your private folder.
 Cards of private tasks show 🔒 (`.task-private`).
 Everything else (shared tasks) is everyone's to see and change, as shared pages are.
 
-- **Storage**: shared tasks stay in `_tasks/tasks.json`, `completed.json`, `completed-YYYY.json`; a user's private ones are in the same three kinds of file in `private/<user>/_tasks/` (`taskFiles.Dir(owner)`), created on their first private task.
+- **Storage**: shared tasks stay in `_tasks/tasks.json`, `closed.json`, `closed-YYYY.json`; a user's private ones are in the same three kinds of file in `private/<user>/_tasks/` (`taskFiles.Dir(owner)`), created on their first private task.
   A task's file says whose it is: the task's `Owner` (`go/internal/taskmodel`) is not written into it, it is set from the folder a task was read from (`eachOwner`), and the API shows it as `"private": true|false` (only with users: without them the API's JSON is as before).
   Toggling Private (`private` in `POST`/`PUT /api/tasks`, `batch-update`) moves the task between the files in one commit.
   Ids are random UUIDs, unique across all files; restoring a deleted task (undo) never takes an id another file has (`taskFiles.IDsLocked`) and keeps it private.
-- **Reading and writing** (`go/internal/taskfiles`, the store `taskFiles` in `go/tasklogic.go`): every reader takes the user and reads the shared files and theirs (`Owners(user)`: `Open`, `All`, `Snapshot`, `ReadForWriteLocked`, `CompletedInYear`, `CompletedYears`, and on top of them `findTasks`, `resolveTaskRefs`, `findTaskBacklinks`);
+- **Reading and writing** (`go/internal/taskfiles`, the store `taskFiles` in `go/tasklogic.go`): every reader takes the user and reads the shared files and theirs (`Owners(user)`: `Open`, `All`, `Snapshot`, `ReadForWriteLocked`, `ClosedInYear`, `ClosedYears`, and on top of them `findTasks`, `resolveTaskRefs`, `findTaskBacklinks`);
   Zone itself (`""`) reads only the shared ones.
   A write splits the tasks by owner (`byOwner`) and writes the files that changed, all in one commit; a task can only be written by its own user, since another user's is never read for them.
   One lock (`taskFiles.Lock`) for all files, taken by reads across them too (`Open` for `GET /api/tasks`, `All`, `Snapshot`): a task made private or shared moves between two files, and a read between their writes would miss it.
-  What Zone does over every task list covers every user's files (`EveryOwner`): the yearly archive at start (`ArchiveOldCompleted`), a rename's links in tasks (`renamePageRefs`), the search index (`Every`, filtered per user by `canSeeTask`, `hiddenDoc`).
+  What Zone does over every task list covers every user's files (`EveryOwner`): the yearly archive at start (`ArchiveOldClosed`), a rename's links in tasks (`renamePageRefs`), the search index (`Every`, filtered per user by `canSeeTask`, `hiddenDoc`).
   A series' next occurrence stays private (`spawnRecurring`).
   A private task's pasted files are private too (the description's editor sends `private/<you>/…` as the upload's page).
 - **Another user's private task is no task**: by id the routes answer 404 as for an id no task has (`DELETE /api/tasks/<id>` of an unknown id stays a 204, as before);
-  lists, counts, Completed and its years, the due count, Linked tasks and the section chips leave it out;
+  lists, counts, Closed and its years, the due count, Linked tasks and the section chips leave it out;
   a `[[task:…]]` to it renders as for a deleted task.
   A shared page that refers to a private task doesn't carry its title into the search index (`taskRefsAsTitles` resolves a page's references as its owner, or for a shared page as no one).
 - **Lists and pins are per user**: a list declared on a page in your private folder (`[[tasks: list=…]]`) exists only for you (`taskLists(user)`); for others its name is a plain tag.

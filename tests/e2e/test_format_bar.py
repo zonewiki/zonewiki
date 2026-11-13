@@ -267,7 +267,7 @@ def test_task_list_dialog_cancelled_writes_nothing(page, wiki):
 def test_task_list_on_an_embeds_line_changes_that_embed(page, wiki):
     # With the cursor on a [[tasks: …]] the dialog shows its params and
     # writes only what was changed: the rest stays as written.
-    text = "Intro\n\n  [[Tasks: list=shop labels=Catalogue,Shopping view=completed pin=default keep=1 new=food]]\n\nOutro"
+    text = "Intro\n\n  [[Tasks: list=shop labels=Catalogue,Shopping view=closed pin=default keep=1 new=food]]\n\nOutro"
     textarea = _edit(page, wiki, text, 20)
     _click(page, "tasklist")
     dialog, field = _list_dialog(page)
@@ -275,13 +275,13 @@ def test_task_list_on_an_embeds_line_changes_that_embed(page, wiki):
     expect(field("list")).to_have_value("shop")
     expect(field("keep")).to_be_checked()
     expect(field("pin")).to_have_value("default")
-    expect(field("view")).to_have_value("completed")
+    expect(field("view")).to_have_value("closed")
     expect(field("label-open")).to_have_value("Catalogue")           # More is open: something in it is set
     field("limit").fill("8")
     field("keep").uncheck()
     field("tag").fill("weekly")
     dialog.get_by_role("button", name="Change").click()
-    assert _body(textarea) == ("Intro\n\n  [[tasks: list=shop labels=Catalogue,Shopping view=completed pin=default"
+    assert _body(textarea) == ("Intro\n\n  [[tasks: list=shop labels=Catalogue,Shopping view=closed pin=default"
                                " new=food limit=8 tag=weekly]]\n\nOutro")
     # Emptied, a param goes.
     _click(page, "tasklist")

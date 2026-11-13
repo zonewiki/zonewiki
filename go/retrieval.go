@@ -415,7 +415,7 @@ func tasksMtimes() string {
 	var b strings.Builder
 	var paths []string
 	for _, o := range taskFiles.EveryOwner() {
-		paths = append(append(paths, taskFiles.OpenPath(o), taskFiles.CompletedPath(o)), taskFiles.Archives(o)...)
+		paths = append(append(paths, taskFiles.OpenPath(o), taskFiles.ClosedPath(o)), taskFiles.Archives(o)...)
 	}
 	for _, p := range paths {
 		if st, err := os.Stat(p); err == nil {
@@ -1081,7 +1081,7 @@ func resultMeta(d *SearchDoc, names map[string]TasksHome) string {
 	if d.isTask() {
 		status := taskStatus(d.Task)
 		if status != "open" {
-			status += " " + runePrefix(d.Task.CompletedAt, 10)
+			status += " " + runePrefix(d.Task.ClosedAt, 10)
 		}
 		where := "Tasks"
 		if l := taskList(d.Task, names); l != "" {
@@ -1175,7 +1175,7 @@ func doSearch(rq *Req, raw string, unlinked bool, limit int, quicknote bool) []M
 			}
 			tab := "open"
 			if d.tk.status == "done" {
-				tab = "completed"
+				tab = "closed"
 			}
 			list := taskList(d.Task, names)
 			if list != "" {

@@ -27,7 +27,7 @@ func mcpTaskText(t *Task, base, user string) string {
 	status := taskStatus(t)
 	fact := "status: " + status
 	if status != "open" {
-		fact += " " + runePrefix(t.CompletedAt, 10)
+		fact += " " + runePrefix(t.ClosedAt, 10)
 	}
 	facts := []string{fact}
 	if t.Owner != "" {
@@ -143,8 +143,8 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 	if args.Has("status") {
 		status, _ = jsonobj.As[string](args["status"])
 	}
-	if status != "open" && status != "done" && status != "all" {
-		return "", toolErr("status must be open, done or all")
+	if status != "open" && status != "closed" && status != "all" {
+		return "", toolErr("status must be open, closed or all")
 	}
 	limit, err := mcpInt(args, "limit", 50, 200)
 	if err != nil {
@@ -214,7 +214,7 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 			})
 		}
 		sort.SliceStable(done, func(i, j int) bool {
-			return done[i].Task.CompletedAt > done[j].Task.CompletedAt
+			return done[i].Task.ClosedAt > done[j].Task.ClosedAt
 		})
 		docs = append(open, done...)
 	}

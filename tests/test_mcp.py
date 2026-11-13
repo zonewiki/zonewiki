@@ -348,7 +348,7 @@ class TestTasksInSearchWiki:
         t = task(client, title="Renew passport")
         close(client, t["id"], completed=True)
         text, _ = call(client, "search_wiki", query="passport")
-        assert "status: done 20" in text and "view=completed" in text
+        assert "status: done 20" in text and "view=closed" in text
 
     def test_with_semantic_on_tasks_still_found(self, client, pages, monkeypatch):
         idx = make_index()
@@ -425,7 +425,7 @@ class TestSearchTasks:
         close(client, done["id"], completed=True)
         close(client, dropped["id"], wont_do=True)
         assert "Finished" not in call(client, "search_tasks", tag="x")[0]
-        text = call(client, "search_tasks", tag="x", status="done")[0]
+        text = call(client, "search_tasks", tag="x", status="closed")[0]
         assert "Still open" not in text and "status: done" in text and "status: won't do" in text
         text = call(client, "search_tasks", tag="x", status="all")[0]
         assert text.index("Still open") < text.index("Finished")
@@ -1865,7 +1865,7 @@ class TestTagTasks:
         assert f"- Nails ({a}): #Work #diy" in text and f"- Glue ({b}): #work #diy" in text
         assert self._tasks(client)["Nails"]["tags"] == ["Work", "diy"]
         assert self._tasks(client)["Glue"]["tags"] == ["work", "diy"]
-        done = client.get("/api/tasks/completed", headers=HOST).get_json()
+        done = client.get("/api/tasks/closed", headers=HOST).get_json()
         assert done[0]["tags"] == ["work", "diy"]
         log = self_log(git_wiki_dir)
         assert len(log) == before + 1 and log[0] == "Tag tasks: sort the shed (MCP)"
@@ -1928,7 +1928,7 @@ class TestCommentAndDeleteTask:
         tool = next(t for t in rpc(client, "tools/list").get_json()["result"]["tools"] if t["name"] == "update_task")
         assert "deleted" not in tool["inputSchema"]["properties"]["status"]["enum"]
         assert not call(client, "update_task", id=tid, status="wont_do")[1]
-        assert "Oops" in call(client, "search_tasks", status="done")[0]
+        assert "Oops" in call(client, "search_tasks", status="closed")[0]
 
     def test_old_tools_are_gone(self, client, wiki_dir):
         for name in ("tag_tasks", "comment_task", "delete_task"):

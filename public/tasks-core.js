@@ -124,14 +124,14 @@ function matchesFilter(t, f) {
 
 // The tasks a tab shows, of `tasks`: those passing the filter f (parseFilter)
 // that are the tab's kind. Focus: open and available now (isFocus);
-// Completed: the completed; Open and the Plan board: every open task (one
+// Closed: the closed (done or won't do); Open and the Plan board: every open task (one
 // still waiting for a day is in the board's Unplanned section).
 function tasksInView(tasks, f, view, today) {
   const filtering = f.text || f.tagGroups.length || f.excludeTags.length || f.importance;
   return tasks.filter(t => (!filtering || matchesFilter(t, f)) &&
-    (view === 'completed' ? !!t.completed_at
-      : view === 'focus' ? !t.completed_at && isFocus(t, today)
-      : !t.completed_at));
+    (view === 'closed' ? !!t.closed_at
+      : view === 'focus' ? !t.closed_at && isFocus(t, today)
+      : !t.closed_at));
 }
 
 // The [[tasks: tag=…]] / ?tag= form ("a,b" = all, "a|b" = any) as filter words.
@@ -237,7 +237,7 @@ function rankTags(partial, counts, limit = 8) {
 // Today's header counts them (`carried`), so a plan that keeps slipping
 // stays visible.
 function isCarried(t, today) {
-  return !!t.start_date && t.start_date < today && !t.completed_at;
+  return !!t.start_date && t.start_date < today && !t.closed_at;
 }
 
 // Which board section a task belongs in: an exact YYYY-MM-DD for

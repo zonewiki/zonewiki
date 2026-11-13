@@ -94,7 +94,7 @@ const addBtn = document.getElementById('task-add-btn' + sfx);
 const sortSel = document.getElementById('task-sort' + sfx);
 const planSwitch = document.getElementById('task-plan' + sfx);
 const filterSearch = document.getElementById('task-filter-search' + sfx);
-const completedLink = document.getElementById('task-completed-link' + sfx);
+const closedLink = document.getElementById('task-closed-link' + sfx);
 const modal = document.getElementById('task-edit-modal' + sfx);
 const form = document.getElementById('task-edit-form' + sfx);
 const cancelBtn = document.getElementById('task-edit-cancel' + sfx);
@@ -131,7 +131,7 @@ const app = {
   scopeQuery, headless,
   sortSel, planSwitch,
   filterSearch,
-  tabsEl, completedLink, saveActiveTab,
+  tabsEl, closedLink, saveActiveTab,
   // what is set further down, or changes
   get activeTasksInstance() { return activeTasksInstance; },
   get listSet() { return listSet; },
@@ -147,7 +147,7 @@ const app = {
 };
 
 st.tasks = [];
-st.completedLoaded = false;   // the completed tasks are among st.tasks
+st.closedLoaded = false;   // the closed tasks are among st.tasks
 st.activeView = 'focus';
 st.draggedId = null;
 st.selectedId  = null;
@@ -156,7 +156,7 @@ st.anchorId    = null;
 // Selection mode (⋯ → Select; meant for touch, which has no Shift or Ctrl):
 // a tap or click on a card adds or drops it, nothing else on the card reacts.
 st.selectMode  = false;
-st.completedLimit = 50;
+st.closedLimit = 50;
 st.pendingUndo = null;   // what Undo (the toast's button, Ctrl+Z) would run
 const pendingCompletions = new Map(); // taskId → timeoutId
 
@@ -275,8 +275,8 @@ listEl.addEventListener('pointerdown', e => {
   if (card) card.draggable = e.pointerType !== 'touch';
 }, true);
 listEl.addEventListener('click', e => {
-  const yearBtn = e.target.closest('[data-completed-year]');
-  if (yearBtn) setCompletedYear(yearBtn.dataset.completedYear);
+  const yearBtn = e.target.closest('[data-closed-year]');
+  if (yearBtn) setClosedYear(yearBtn.dataset.closedYear);
   const listBtn = e.target.closest('[data-header-tasks]');
   if (listBtn) { headerTasksMenu(listBtn); return; }
   const fold = e.target.closest('[data-fold]');
@@ -359,7 +359,7 @@ function taskList(t) { return lowerTags(t).filter(x => listSet.has(x)).sort()[0]
 function inScope(t) {
   return !initList || lowerTags(t).includes(initList);
 }
-// The scope of the server's completed counts, matching inScope.
+// The scope of the server's closed counts, matching inScope.
 function scopeQuery() {
   return initList ? `?list=${encodeURIComponent(initList)}` : '';
 }
@@ -371,12 +371,12 @@ const embedView = appEl?.dataset.initView || '';   // [[tasks: view=…]] — al
 const newTarget = document.querySelector('.tasks-app[data-pinned]:not([data-headless])')
   || document.querySelector('.tasks-app:not([data-headless])');
 const initNew = appEl?.dataset.initNew === '1' || (urlParams.has('new') && appEl === newTarget);
-// The year Completed shows: '' is this year, an earlier one ('2025', from
+// The year Closed shows: '' is this year, an earlier one ('2025', from
 // ?year= or the year switcher) comes from that year's archive.
 const thisYear = String(new Date().getFullYear());
-st.completedYear = /^\d{4}$/.test(urlParams.get('year') || '') && urlParams.get('year') !== thisYear
+st.closedYear = /^\d{4}$/.test(urlParams.get('year') || '') && urlParams.get('year') !== thisYear
   ? urlParams.get('year') : '';
-st.completedYears = [];   // years Completed can show (/api/tasks/completed-years)
+st.closedYears = [];   // years Closed can show (/api/tasks/closed-years)
 
 // Remember the active tab per page + embed instance for the current tab only
 // (sessionStorage): a refresh lands on the last-clicked tab, but a fresh load
@@ -391,7 +391,7 @@ function forgetSession() {
 }
 
 Object.assign(app, initTaskData(app));
-const { dismissUndo, showUndo, fetchTasks, refresh, fetchCompleted, setCompletedYear, updateTask, oldHistory } = app;
+const { dismissUndo, showUndo, fetchTasks, refresh, fetchClosed, setClosedYear, updateTask, oldHistory } = app;
 
 Object.assign(app, initTaskMenu(app));
 const { headerTasksMenu, confirmDeadlineMove } = app;
@@ -432,7 +432,7 @@ if (titleInput) {
 Object.assign(app, initTaskChips(app));
 
 Object.assign(app, initTaskTabs(app));
-const { VIEWS, syncCompletedLink, markActiveTab, filterChips, filterQuery } = app;
+const { VIEWS, syncClosedLink, markActiveTab, filterChips, filterQuery } = app;
 
 Object.assign(app, initTaskModal(app));
 initTaskSettings(app);
@@ -473,12 +473,12 @@ if (filterSearch) {
 // user last clicked across refreshes within the same browser tab. A name that
 // isn't one of VIEWS is passed over.
 st.activeView = [urlView, embedView, loadActiveTab()].find(v => VIEWS.includes(v)) || 'focus';
-if (st.activeView !== 'completed') st.lastTab = st.activeView;
+if (st.activeView !== 'closed') st.lastTab = st.activeView;
 applyCompact(st.activeView);
 applySort();
 applyGroup();
 markActiveTab(st.activeView);
-syncCompletedLink();
+syncClosedLink();
 
 // ?task=<id> (search results, a page's "Linked tasks"): show exactly that
 // task — the link sets its tab, and here it is selected, scrolled into view
@@ -505,7 +505,7 @@ function flashTask(el) {
 }
 
 fetchTasks().then(async () => {
-  if (st.activeView === 'completed') await fetchCompleted();
+  if (st.activeView === 'closed') await fetchClosed();
   if (initTaskId) revealTask(initTaskId);
 });
 

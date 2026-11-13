@@ -248,7 +248,7 @@ window.addEventListener('popstate', () => { if (st.selectMode) exitSelectMode();
 
 // The selection bar: while several tasks are selected (on a page with
 // several task lists, only the active one's), how many, and what to do to all.
-// Today and Won't do go when every selected task is completed, and Done says Reopen;
+// Today and Won't do go when every selected task is closed, and Done says Reopen;
 // Unplan shows while an open selected task has a start date.
 function syncSelBar() {
   if (!app.selBar) return;
@@ -256,7 +256,7 @@ function syncSelBar() {
     (app.tasksInstances.length < 2 || app.activeTasksInstance === app.instanceId);
   app.selBar.hidden = !show;
   if (!show) return;
-  const allDone = st.tasks.filter(t => st.selectedIds.has(t.id)).every(t => t.completed_at);
+  const allDone = st.tasks.filter(t => st.selectedIds.has(t.id)).every(t => t.closed_at);
   app.selBar.querySelector('[data-sel="unplan"]').hidden = !anyPlanned();
   app.selBar.querySelector('.tasks-selbar-count').textContent =
     st.selectedIds.size ? `${st.selectedIds.size} selected` : 'Tap tasks to select';
@@ -271,7 +271,7 @@ function syncSelBar() {
 }
 // An open selected task has a start date: there is something to unplan.
 function anyPlanned() {
-  return st.tasks.some(t => st.selectedIds.has(t.id) && !t.completed_at && t.start_date);
+  return st.tasks.some(t => st.selectedIds.has(t.id) && !t.closed_at && t.start_date);
 }
 app.selBar?.addEventListener('click', e => {
   const action = e.target.closest('[data-sel]')?.dataset.sel;
@@ -328,7 +328,7 @@ function startToday(ids) {
 // is set. One task alone goes through setStart, which does the same.
 async function startOn(ids, day) {
   const idSet = new Set(ids);
-  const before = st.tasks.filter(t => idSet.has(t.id) && !t.completed_at && (t.start_date ?? null) !== day);
+  const before = st.tasks.filter(t => idSet.has(t.id) && !t.closed_at && (t.start_date ?? null) !== day);
   if (before.length === 1) return app.setStart(before[0].id, day);
   const asks = before.filter(t => startsAfterDeadline(t, day));
   const plain = before.filter(t => !asks.includes(t));
@@ -355,11 +355,11 @@ function mayComplete(ids) {
 
 // Complete the tasks `ids`, or reopen them if every one is completed, with
 // an undo. Keep tasks stay open when completed; undo restores their fields
-// instead of reopening them from Completed.
+// instead of reopening them from Closed.
 async function completeMany(ids) {
-  const completing = ids.some(id => { const t = st.tasks.find(tk => tk.id === id); return t && !t.completed_at; });
+  const completing = ids.some(id => { const t = st.tasks.find(tk => tk.id === id); return t && !t.closed_at; });
   const kept = completing
-    ? ids.map(id => st.tasks.find(t => t.id === id)).filter(t => t?.keep && !t.completed_at)
+    ? ids.map(id => st.tasks.find(t => t.id === id)).filter(t => t?.keep && !t.closed_at)
          .map(t => [t.id, app.keepSnapshot(t)])
     : [];
   app.dismissUndo();

@@ -51,11 +51,11 @@
      "type": "string",
      "enum": [
       "open",
-      "done",
+      "closed",
       "all"
      ],
      "default": "open",
-     "description": "open, done (completed or won't do), or all."
+     "description": "open, closed (done or won't do), or all."
     },
     "query": {
      "type": "string",

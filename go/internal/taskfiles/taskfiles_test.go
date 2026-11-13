@@ -48,8 +48,8 @@ func newStore(t *testing.T, users ...string) *fixture {
 	return f
 }
 
-func task(id, owner, completedAt string) *Task {
-	return &Task{ID: id, Title: "Task " + id, Owner: owner, CompletedAt: completedAt}
+func task(id, owner, closedAt string) *Task {
+	return &Task{ID: id, Title: "Task " + id, Owner: owner, ClosedAt: closedAt}
 }
 
 func ids(tasks []*Task) []string {
@@ -69,25 +69,25 @@ func (f *fixture) text(t *testing.T, rel string) string {
 	return string(b)
 }
 
-// A write files each task by its owner and, completed, by its year; a read
+// A write files each task by its owner and, closed, by its year; a read
 // gives a user the shared tasks and their own, marked as whose they are.
 func TestWriteFilesByOwnerAndYear(t *testing.T) {
 	f := newStore(t, "alice", "bob")
 	f.Lock()
 	active := []*Task{task("s1", "", ""), task("a1", "alice", "")}
-	completed := []*Task{task("s2", "", "2026-03-01T10:00:00"), task("s3", "", "2024-05-01T10:00:00"), task("a2", "alice", "2025-01-02T10:00:00")}
-	err := f.WriteBothLocked("alice", active, completed, "Write")
+	closed := []*Task{task("s2", "", "2026-03-01T10:00:00"), task("s3", "", "2024-05-01T10:00:00"), task("a2", "alice", "2025-01-02T10:00:00")}
+	err := f.WriteBothLocked("alice", active, closed, "Write")
 	f.Unlock()
 	if err != nil {
 		t.Fatal(err)
 	}
-	for rel, want := range map[string]string{"_tasks/tasks.json": "s1", "private/alice/_tasks/tasks.json": "a1", "_tasks/completed.json": "s2",
-		"_tasks/completed-2024.json": "s3", "private/alice/_tasks/completed-2025.json": "a2"} {
+	for rel, want := range map[string]string{"_tasks/tasks.json": "s1", "private/alice/_tasks/tasks.json": "a1", "_tasks/closed.json": "s2",
+		"_tasks/closed-2024.json": "s3", "private/alice/_tasks/closed-2025.json": "a2"} {
 		if got := f.text(t, rel); !strings.Contains(got, `"id": "`+want+`"`) || strings.Count(got, `"id"`) != 1 {
 			t.Errorf("%s: %q, want only %s", rel, got, want)
 		}
 	}
-	want := "alice|Write|_tasks/tasks.json private/alice/_tasks/tasks.json _tasks/completed.json _tasks/completed-2024.json private/alice/_tasks/completed-2025.json"
+	want := "alice|Write|_tasks/tasks.json private/alice/_tasks/tasks.json _tasks/closed.json _tasks/closed-2024.json private/alice/_tasks/closed-2025.json"
 	if len(f.commits) != 1 || f.commits[0] != want {
 		t.Errorf("commits %q,\nwant one: %q", f.commits, want)
 	}
@@ -112,9 +112,9 @@ func TestWriteFilesByOwnerAndYear(t *testing.T) {
 	}
 	// Written again as it is: no file changes, nothing to commit.
 	f.Lock()
-	active, completed, err = f.ReadForWriteLocked("alice")
+	active, closed, err = f.ReadForWriteLocked("alice")
 	if err == nil {
-		err = f.WriteBothLocked("alice", active, completed, "Again")
+		err = f.WriteBothLocked("alice", active, closed, "Again")
 	}
 	f.Unlock()
 	if err != nil || len(f.commits) != 1 {
@@ -122,31 +122,31 @@ func TestWriteFilesByOwnerAndYear(t *testing.T) {
 	}
 }
 
-// The Completed view of a year, and the years there are.
-func TestCompletedByYear(t *testing.T) {
+// The Closed view of a year, and the years there are.
+func TestClosedByYear(t *testing.T) {
 	f := newStore(t, "alice")
 	f.Lock()
 	_ = f.WriteBothLocked("alice", nil, []*Task{task("now", "", "2026-03-01T10:00:00"), task("undated", "", "x"),
 		task("old", "", "2024-05-01T10:00:00"), task("hers", "alice", "2023-01-02T10:00:00")}, "Write")
 	f.Unlock()
-	if got := ids(f.CompletedInYear("alice", "2026")); !reflect.DeepEqual(got, []string{"now", "undated"}) {
+	if got := ids(f.ClosedInYear("alice", "2026")); !reflect.DeepEqual(got, []string{"now", "undated"}) {
 		t.Errorf("this year: %v", got)
 	}
-	if got := ids(f.CompletedInYear("alice", "2024")); !reflect.DeepEqual(got, []string{"old"}) {
+	if got := ids(f.ClosedInYear("alice", "2024")); !reflect.DeepEqual(got, []string{"old"}) {
 		t.Errorf("2024: %v", got)
 	}
 	every := func(*Task) bool { return true }
-	if got := f.CompletedYears("alice", every); !reflect.DeepEqual(got, []string{"2026", "2024", "2023"}) {
+	if got := f.ClosedYears("alice", every); !reflect.DeepEqual(got, []string{"2026", "2024", "2023"}) {
 		t.Errorf("alice's years: %v", got)
 	}
-	if got := f.CompletedYears("", every); !reflect.DeepEqual(got, []string{"2026", "2024"}) {
+	if got := f.ClosedYears("", every); !reflect.DeepEqual(got, []string{"2026", "2024"}) {
 		t.Errorf("without her own: %v", got)
 	}
-	if got := f.CompletedYears("alice", func(t *Task) bool { return t.ID == "hers" }); !reflect.DeepEqual(got, []string{"2026", "2023"}) {
+	if got := f.ClosedYears("alice", func(t *Task) bool { return t.ID == "hers" }); !reflect.DeepEqual(got, []string{"2026", "2023"}) {
 		t.Errorf("a scope: %v", got)
 	}
 	if f.PastYear(task("x", "", "2025-12-31T23:59:59")) != "2025" || f.PastYear(task("x", "", "2026-01-01T00:00:00")) != "" ||
-		CompletedYear(task("x", "", "20")) != "" {
+		ClosedYear(task("x", "", "20")) != "" {
 		t.Error("past years")
 	}
 }
@@ -214,30 +214,90 @@ func TestWhoMayWrite(t *testing.T) {
 	}
 }
 
-// At start, completed tasks of earlier years go into their archives, every
+// At start, closed tasks of earlier years go into their archives, every
 // owner's in one commit; run again, there is nothing to do.
 func TestArchiveOldCompleted(t *testing.T) {
 	f := newStore(t, "alice")
 	for owner, id := range map[string]string{"": "s", "alice": "a"} {
-		if err := Write(f.CompletedPath(owner), []*Task{task(id+"-old", owner, "2025-02-03T10:00:00"), task(id+"-new", owner, "2026-02-03T10:00:00")}); err != nil {
+		if err := Write(f.ClosedPath(owner), []*Task{task(id+"-old", owner, "2025-02-03T10:00:00"), task(id+"-new", owner, "2026-02-03T10:00:00")}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	f.ArchiveOldCompleted()
-	for rel, want := range map[string]string{"_tasks/completed.json": "s-new", "_tasks/completed-2025.json": "s-old",
-		"private/alice/_tasks/completed.json": "a-new", "private/alice/_tasks/completed-2025.json": "a-old"} {
+	f.ArchiveOldClosed()
+	for rel, want := range map[string]string{"_tasks/closed.json": "s-new", "_tasks/closed-2025.json": "s-old",
+		"private/alice/_tasks/closed.json": "a-new", "private/alice/_tasks/closed-2025.json": "a-old"} {
 		if got := f.text(t, rel); !strings.Contains(got, want) || strings.Count(got, `"id"`) != 1 {
 			t.Errorf("%s: %q", rel, got)
 		}
 	}
-	if len(f.commits) != 1 || !strings.HasPrefix(f.commits[0], "|Archive completed tasks|") || strings.Count(f.commits[0], ".json") != 4 {
+	if len(f.commits) != 1 || !strings.HasPrefix(f.commits[0], "|Archive closed tasks|") || strings.Count(f.commits[0], ".json") != 4 {
 		t.Errorf("commits: %q", f.commits)
 	}
-	f.ArchiveOldCompleted()
+	f.ArchiveOldClosed()
 	if len(f.commits) != 1 {
 		t.Errorf("a second run committed: %q", f.commits)
 	}
 	if got := f.Files([]string{""}); len(got) != 3 || got[2].Path != f.ArchivePath("", "2025") || got[0].Owner != "" {
 		t.Errorf("the shared files: %+v", got)
+	}
+}
+
+// A wiki from before the files and the field were renamed (completed.json,
+// completed-YYYY.json, completed_at): at start they get their new names and
+// are written with closed_at, every owner's in one commit, and nothing is
+// lost. A file is never renamed over one that is there.
+func TestOldCompletedFilesAreRenamed(t *testing.T) {
+	f := newStore(t, "alice")
+	old := func(id, at string) string {
+		return `{"id": "` + id + `", "title": "Task ` + id + `", "completed_at": ` + at + `, "wont_do": false}`
+	}
+	write := func(rel, text string) {
+		t.Helper()
+		p := filepath.Join(f.root, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("_tasks/tasks.json", "["+old("open", "null")+"]")
+	write("_tasks/completed.json", "["+old("new", `"2026-02-03T10:00:00"`)+", "+old("last", `"2025-12-30T10:00:00"`)+"]")
+	write("_tasks/completed-2024.json", "["+old("old", `"2024-05-06T10:00:00"`)+"]")
+	write("private/alice/_tasks/completed.json", "["+old("hers", `"2026-03-04T10:00:00"`)+"]")
+	f.ArchiveOldClosed()
+	for rel, want := range map[string]string{"_tasks/closed.json": `"closed_at": "2026-02-03T10:00:00"`,
+		"_tasks/closed-2025.json": `"closed_at": "2025-12-30T10:00:00"`, "_tasks/closed-2024.json": `"closed_at": "2024-05-06T10:00:00"`,
+		"private/alice/_tasks/closed.json": `"closed_at": "2026-03-04T10:00:00"`, "_tasks/tasks.json": `"closed_at": null`} {
+		if got := f.text(t, rel); !strings.Contains(got, want) || strings.Count(got, `"id"`) != 1 || strings.Contains(got, "completed_at") {
+			t.Errorf("%s: %q", rel, got)
+		}
+	}
+	for _, rel := range []string{"_tasks/completed.json", "_tasks/completed-2024.json", "private/alice/_tasks/completed.json"} {
+		if f.text(t, rel) != "" {
+			t.Errorf("%s is still there", rel)
+		}
+	}
+	if len(f.commits) != 1 || !strings.HasPrefix(f.commits[0], "|Name the task files of closed tasks closed|") {
+		t.Fatalf("commits: %q", f.commits)
+	}
+	for _, rel := range []string{"_tasks/completed.json", "_tasks/closed.json", "_tasks/completed-2024.json", "_tasks/closed-2024.json",
+		"_tasks/closed-2025.json", "_tasks/tasks.json", "private/alice/_tasks/completed.json", "private/alice/_tasks/closed.json"} {
+		if !strings.Contains(f.commits[0]+" ", " "+rel+" ") && !strings.Contains(f.commits[0], "|"+rel+" ") {
+			t.Errorf("%s isn't in the commit: %q", rel, f.commits[0])
+		}
+	}
+	if got := ids(f.All("alice")); len(got) != 5 {
+		t.Errorf("tasks afterwards: %v", got)
+	}
+	f.ArchiveOldClosed()
+	if len(f.commits) != 1 {
+		t.Errorf("a second run committed: %q", f.commits)
+	}
+	// Both names there: the new one is the wiki's, the old one is left alone.
+	write("_tasks/completed.json", "["+old("stray", `"2026-01-01T10:00:00"`)+"]")
+	f.ArchiveOldClosed()
+	if len(f.commits) != 1 || !strings.Contains(f.text(t, "_tasks/completed.json"), "stray") || strings.Contains(f.text(t, "_tasks/closed.json"), "stray") {
+		t.Errorf("a file was renamed over another: %q", f.commits)
 	}
 }

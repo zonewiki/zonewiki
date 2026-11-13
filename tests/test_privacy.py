@@ -41,10 +41,10 @@ OLD_ID = "a11ce000-0000-4000-8000-000000000003"
 COMMENT_ID = "c0ffee01"
 
 
-def private_task(id, title, completed_at=None):
+def private_task(id, title, closed_at=None):
     return {"id": id, "title": f"{title} {SECRET} {QUERY}", "description": f"{QUERY} {SECRET} for [[plans]]\n\n- [ ] Step",
             "tags": [f"{QUERY}-{SECRET}", "secretlist"], "start_date": None, "due_date": "2026-01-01",
-            "created_at": "2026-01-01T10:00:00", "completed_at": completed_at, "wont_do": False, "keep": False,
+            "created_at": "2026-01-01T10:00:00", "closed_at": closed_at, "wont_do": False, "keep": False,
             "last_done": None, "sort_order": None, "recurrence": {"type": "weekly", "interval": 1, "from": "due"},
             "spawned_from": None, "history": [],
             "comments": [{"id": COMMENT_ID, "at": "2026-01-02T10:00", "by": "alice", "text": SECRET}]}
@@ -76,9 +76,9 @@ def wiki(git_wiki_dir, monkeypatch):
     tasks.mkdir(parents=True)
     this_year = __import__("datetime").date.today().year
     (tasks / "tasks.json").write_text(json.dumps([private_task(TASK_ID, "Task")], indent=2) + "\n")
-    (tasks / "completed.json").write_text(
+    (tasks / "closed.json").write_text(
         json.dumps([private_task(DONE_ID, "Done", f"{this_year}-01-05T10:00:00")], indent=2) + "\n")
-    (tasks / "completed-2001.json").write_text(
+    (tasks / "closed-2001.json").write_text(
         json.dumps([private_task(OLD_ID, "Old", "2001-01-05T10:00:00")], indent=2) + "\n")
     git(w, "add", "-A")
     git(w, "commit", "-q", "-m", "Alice's pages")
@@ -138,10 +138,10 @@ READS = [
     ("GET /private/{user}/_assets/{file}", "GET", "/private/alice/_assets/photo.png", {}),
     ("GET /tasks", "GET", "/tasks", {}),
     ("GET /api/tasks", "GET", "/api/tasks", {}),
-    ("GET /api/tasks/completed", "GET", "/api/tasks/completed", {}),
-    ("GET /api/tasks/completed", "GET", "/api/tasks/completed", {"query_string": {"year": "2001"}}),
-    ("GET /api/tasks/completed-count", "GET", "/api/tasks/completed-count", {}),
-    ("GET /api/tasks/completed-years", "GET", "/api/tasks/completed-years", {}),
+    ("GET /api/tasks/closed", "GET", "/api/tasks/closed", {}),
+    ("GET /api/tasks/closed", "GET", "/api/tasks/closed", {"query_string": {"year": "2001"}}),
+    ("GET /api/tasks/closed-count", "GET", "/api/tasks/closed-count", {}),
+    ("GET /api/tasks/closed-years", "GET", "/api/tasks/closed-years", {}),
     ("GET /tasks", "GET", "/tasks", {"query_string": {"list": "secretlist"}}),
     ("GET /api/tasks/due-count", "GET", "/api/tasks/due-count", {}),
     ("GET /api/tasks/headless", "GET", "/api/tasks/headless", {}),
@@ -191,7 +191,7 @@ def test_alice_sees_her_own(client, wiki):
     assert f"Task {SECRET}" in plans                                 # the [[task:…]] chip
     tasks = client.get("/api/tasks", headers=HOST).get_json()
     assert [t["private"] for t in tasks if t["id"] == TASK_ID] == [True]
-    assert "2001" in client.get("/api/tasks/completed-years", headers=HOST).get_json()["years"]
+    assert "2001" in client.get("/api/tasks/closed-years", headers=HOST).get_json()["years"]
     # Her Tasks home is hers: the Tasks link goes to its list.
     assert 'href="/tasks?list=secretlist"' in client.get("/page/index", headers=HOST).data.decode()
 

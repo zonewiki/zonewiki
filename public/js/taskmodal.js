@@ -447,7 +447,7 @@ function openEditModal(taskId, opts) {
   if (recFromCb) recFromCb.checked = task?.recurrence?.from === 'completion';
   syncRecFields();
   syncTarget();
-  app.wontDoBtn.style.display = task && !task.completed_at ? '' : 'none';
+  app.wontDoBtn.style.display = task && !task.closed_at ? '' : 'none';
   syncDates('open');
   app.modal.showModal();
   if (task && opts?.focusComment) openCommentBox();

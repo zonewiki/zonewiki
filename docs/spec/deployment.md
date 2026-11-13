@@ -264,7 +264,7 @@ Layout:
 - `$ZONE_DATA/*.md` — markdown files live directly in the data directory (edit on the host; changes are live immediately)
 - `$ZONE_DATA/private/<user>/` — with users, each user's private pages (`docs/spec/users.md`); without users an ordinary folder
 - `$ZONE_DATA/_assets/` — uploaded images, served at `/_assets/<filename>` (created automatically); a private page's in `private/<user>/_assets/`
-- `$ZONE_DATA/_tasks/` — the tasks (`tasks.json`, `completed.json`, `completed-YYYY.json`, and `settings.json` for the settings of All tasks; see Storage in `docs/spec/tasks.md`); each user's private tasks in `private/<user>/_tasks/`
+- `$ZONE_DATA/_tasks/` — the tasks (`tasks.json`, `closed.json`, `closed-YYYY.json`, and `settings.json` for the settings of All tasks; see Storage in `docs/spec/tasks.md`); each user's private tasks in `private/<user>/_tasks/`
 - `$ZONE_DATA/.zone/` — Zone's own state: none of it in git: `config` (the settings file: the wiki's settings and users, `docs/spec/users.md`), `secret_key` (session key), `signed-out` (the sessions signed out, `docs/spec/security.md`) and `index/` (the semantic search cache, rebuildable)
 
 Uploaded image URLs use `/_assets/<filename>` (served by `serveUpload` from `cfg.Uploads`), not the static file path.
@@ -284,7 +284,7 @@ Measured through the real handlers (`go/bench_test.go`; `go test -run '^$' -benc
 | A page view | 1,000 pages, 500 open tasks | 4 ms |
 | A page view | 5,000 pages | 10 ms |
 | A page view | 20,000 pages | 50 ms |
-| A page view | 1,000 pages, 5,000 open and 20,000 completed tasks | 27 ms |
+| A page view | 1,000 pages, 5,000 open and 20,000 closed tasks | 27 ms |
 | `GET /api/tasks` | 500 open tasks | 3 ms |
 | `GET /api/tasks` | 5,000 open tasks | 31 ms |
 | The page list (`/api/pages-list`) | 1,000 pages | 3 ms |
@@ -292,7 +292,7 @@ Measured through the real handlers (`go/bench_test.go`; `go test -run '^$' -benc
 
 A personal or a small team's wiki is far below where this is felt; past some ten thousand pages or open tasks every view pays for it, and a NAS's disk and CPU bring that point closer.
 Page writes run one at a time (`pagesMu`), each with its git commit (a few git processes), so a wiki is not for many people saving at once.
-Completed tasks cost nothing until they are looked at: a page view doesn't read their files.
+Closed tasks cost nothing until they are looked at: a page view doesn't read their files.
 What would lift the ceiling, when it is needed: the pages' mtimes taken from the walk instead of a `stat` each (`pageStats`), and the parsed task lists kept by their files' mtimes.
 
 ## From Zone 1 (or Leaf)

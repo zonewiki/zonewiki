@@ -31,7 +31,7 @@ def test_export_is_the_lists_tasks_open_and_completed(client, wiki_dir):
     assert [t["title"] for t in file["tasks"]] == ["Milk", "Eggs"]
     milk, eggs = file["tasks"]
     assert milk["description"] == "2 l" and milk["due_date"] == "2030-01-02" and milk["keep"] is True
-    assert eggs["completed_at"]
+    assert eggs["closed_at"]
     # A filter as an embed's tag=; neither: every task.
     assert [t["title"] for t in export(client, list="shop", tag="weekly").get_json()["tasks"]] == ["Milk"]
     assert [t["title"] for t in export(client, tag="work|weekly").get_json()["tasks"]] == ["Milk", "Report"]
@@ -60,7 +60,7 @@ def test_import_brings_an_export_back_once(client, wiki_dir):
     assert imp(client, file, list="shop").get_json() == {"added": 0, "skipped": 2, "ids": []}
     back = client.get("/api/tasks", headers=HOST).get_json()
     assert [(t["id"], t["title"], t["description"], t["tags"]) for t in back] == [(ids[0], "Milk", "2 l", ["shop"])]
-    completed = client.get("/api/tasks/completed", headers=HOST).get_json()
+    completed = client.get("/api/tasks/closed", headers=HOST).get_json()
     assert [(t["id"], t["title"]) for t in completed] == [(ids[1], "Eggs")]
 
 

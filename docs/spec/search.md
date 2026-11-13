@@ -134,7 +134,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
     Search still finds them.
   - **Related to a text** (`relatedToText`): the same for a page's text the index doesn't have yet (MCP write_page names the pages closest to a new page): its sections are embedded at once, the ones the cache knows reused, and their mean compared like a page's.
     Little prose or a failing model give nothing.
-- **Selecting a task result** (search modal or `/search` page) opens `/tasks?task=<id>&view=<open|completed>` (plus `&list=<name>` for a task in a separate list, so it opens that list) (plus `&year=YYYY` for a task in an earlier year's archive) on the tab matching the task's state,
+- **Selecting a task result** (search modal or `/search` page) opens `/tasks?task=<id>&view=<open|closed>` (plus `&list=<name>` for a task in a separate list, so it opens that list) (plus `&year=YYYY` for a task in an earlier year's archive) on the tab matching the task's state,
   with that task selected,
   scrolled into view and briefly highlighted (`.task-flash`) — rather than the bare `_tasks` storage slug.
   The link is by id, not title: titles can repeat or contain a `#word` the filter field would read as a tag.

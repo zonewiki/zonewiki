@@ -142,7 +142,7 @@ def test_completed_task_menu(phone):
     t = tasks_by_title(phone)["Water plants"]
     phone.request.put(f"/api/tasks/{t['id']}", data={"completed": True})
     phone.reload()
-    open_tab(phone, "completed")
+    open_tab(phone, "closed")
     menu = open_menu(phone, "Water plants")
     expect(menu.get_by_role("menuitem")).to_have_text(["Edit…", "Reopen", "Copy link", "Select several"])
     menu.get_by_role("menuitem", name="Reopen").tap()
@@ -184,7 +184,7 @@ def test_select_mode_taps_toggle_cards(selecting):
     card(pg, "Saw").locator(".task-title").tap()                 # a second tap drops it, no editor
     assert selected(pg) == ["Nuts", "Bolts"]
     expect(pg.locator("#task-edit-modal")).to_be_hidden()
-    assert all(t["completed_at"] is None for t in tasks_by_title(pg).values())
+    assert all(t["closed_at"] is None for t in tasks_by_title(pg).values())
     card(pg, "Nuts").locator(".task-title").tap()
     card(pg, "Bolts").locator(".task-title").tap()
     expect(bar.locator(".tasks-selbar-count")).to_have_text("Tap tasks to select")
@@ -585,7 +585,7 @@ def complete_one(page, title="Old chore"):
 
 def test_long_press_where_nothing_drags_starts_selection_mode(phone):
     complete_one(phone)
-    open_tab(phone, "completed")
+    open_tab(phone, "closed")
     c = card(phone, "Old chore")
     touch_drag(phone, c, c)
     expect(phone.locator(".tasks-app")).to_contain_class("tasks-selecting")
@@ -594,7 +594,7 @@ def test_long_press_where_nothing_drags_starts_selection_mode(phone):
 
 def test_long_press_then_move_where_nothing_drags_does_nothing(phone):
     complete_one(phone)
-    open_tab(phone, "completed")
+    open_tab(phone, "closed")
     touch_drag(phone, card(phone, "Old chore"), phone.locator(".tasks-header"))
     phone.wait_for_timeout(200)
     expect(phone.locator(".tasks-app")).not_to_contain_class("tasks-selecting")
@@ -677,7 +677,7 @@ def test_click_outside_only_closes_the_date_picker(page, wiki):
     expect(picker).to_have_count(0)
     page.wait_for_timeout(300)
     expect(other.locator(".task-checkbox input")).not_to_be_checked()
-    assert tasks_by_title(page)["Weekly review"]["completed_at"] is None
+    assert tasks_by_title(page)["Weekly review"]["closed_at"] is None
     # The next click acts normally again.
     other.locator(".task-title").click()
     expect(other).to_have_class(re.compile(r"\btask-selected\b"))

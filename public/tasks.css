@@ -163,15 +163,15 @@ div.chip-input > input {
 @media (pointer: coarse) { .tag-chip-x { padding: .35rem .45rem; } }
 .tasks-toolbar .btn { flex: none; }
 
-/* Completed is not a tab (it is rarely needed): a quiet link under the list
+/* Closed is not a tab (it is rarely needed): a quiet link under the list
    opens it, and turns into "← Back to open tasks" there. */
 .tasks-footer { display: flex; justify-content: flex-end; margin-top: .4rem; }
-.tasks-completed-link {
+.tasks-closed-link {
   background: none; border: none; padding: .3rem .2rem; margin: 0;
   font: inherit; font-size: .8rem; color: var(--muted); cursor: pointer;
 }
-.tasks-completed-link:hover { color: var(--link); text-decoration: underline; }
-.tasks-completed-link.has-matches { font-weight: 600; }  /* muted like the plain link, just a touch heavier */
+.tasks-closed-link:hover { color: var(--link); text-decoration: underline; }
+.tasks-closed-link.has-matches { font-weight: 600; }  /* muted like the plain link, just a touch heavier */
 /* /tasks?list=…: where the list comes from; Pinned: the lists it shows. */
 .tasks-list-home { margin: -.5rem 0 1rem; font-size: .85rem; color: var(--muted); }
 .task-quick-preview { margin-top: .25rem; font-size: .8rem; color: var(--link); }
@@ -189,8 +189,8 @@ div.chip-input > input {
 /* Batch mode (Make task with several lines): the titles instead of the field. */
 .task-edit-batch-list { margin: .1rem 0 .35rem; padding-left: 1.2rem; max-height: 10rem; overflow-y: auto; }
 .task-edit-batch-list li { margin: .1rem 0; }
-.tasks-completed-link:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; border-radius: 3px; }
-@media (pointer: coarse) { .tasks-completed-link { padding: .6rem .4rem; } }
+.tasks-closed-link:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; border-radius: 3px; }
+@media (pointer: coarse) { .tasks-closed-link { padding: .6rem .4rem; } }
 
 /* .tasks-app wrapper raises specificity above `.page-content ul` (line ~213),
    which would otherwise force a 1.5rem left margin and indent the list + its
@@ -275,8 +275,8 @@ div.chip-input > input {
   transition: box-shadow .15s, opacity .15s;
 }
 .task-item:hover { box-shadow: var(--shadow); }
-.task-item.task-completed { opacity: .6; }
-.task-item.task-completed .task-title { text-decoration: line-through; color: var(--muted); }
+.task-item.task-closed { opacity: .6; }
+.task-item.task-closed .task-title { text-decoration: line-through; color: var(--muted); }
 .task-item.task-dragging { opacity: .4; }
 /* The task a ?task=<id> link points at, briefly. */
 .task-item.task-flash { animation: task-flash 2s ease-out; }
@@ -538,7 +538,7 @@ div.task-card-comment > .task-comment-when { display: block; }
 .task-importance { font-weight: 700; margin-right: .3rem; cursor: default; }
 .task-importance-high { color: #c2410c; }
 .task-importance-low { color: color-mix(in srgb, var(--fg) 45%, transparent); font-weight: 500; }
-.task-item:has(.task-importance-low):not(.task-completed) .task-title { color: color-mix(in srgb, var(--fg) 62%, transparent); font-weight: 500; }
+.task-item:has(.task-importance-low):not(.task-closed) .task-title { color: color-mix(in srgb, var(--fg) 62%, transparent); font-weight: 500; }
 @media screen and (prefers-color-scheme: dark) { .task-importance-high { color: #fb923c; } }
 .task-field-importance { max-width: 12rem; }
 /* "☑ 1/3": the notes have subtasks, so many done; all done, in the accent. */
@@ -928,16 +928,16 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
   border-bottom: 1px solid var(--border);
 }
 .task-inbox-divider.task-drag-over::before { border-top-color: var(--link); }
-/* Completed's heading: the year switcher (earlier years are the archives) */
-.completed-heading { display: flex; align-items: center; gap: .5rem; }
-.completed-years { margin-left: auto; display: flex; gap: .15rem; }
-.completed-years button {
+/* Closed's heading: the year switcher (earlier years are the archives) */
+.closed-heading { display: flex; align-items: center; gap: .5rem; }
+.closed-years { margin-left: auto; display: flex; gap: .15rem; }
+.closed-years button {
   background: none; border: none; padding: .05rem .3rem; margin: 0; cursor: pointer;
   font: inherit; color: var(--muted); border-radius: 3px;
 }
-.completed-years button:hover { color: var(--link); }
-.completed-years button[aria-pressed="true"] { color: var(--fg); text-decoration: underline; }
-@media (pointer: coarse) { .completed-years button { padding: .4rem .5rem; } }
+.closed-years button:hover { color: var(--link); }
+.closed-years button[aria-pressed="true"] { color: var(--fg); text-decoration: underline; }
+@media (pointer: coarse) { .closed-years button { padding: .4rem .5rem; } }
 
 
 .task-item.task-completing {

@@ -51,7 +51,7 @@ class TestTasksLinkRender:
 
     def test_embed_view_param(self, client, wiki_dir):
         """[[tasks: view=…]] passes the view as a data attribute, any case."""
-        for name in ("focus", "open", "plan", "completed"):
+        for name in ("focus", "open", "plan", "closed"):
             html = preview(client, f"[[tasks: view={name.upper()}]]\n")
             assert f'data-init-view="{name}"' in html, name
 
@@ -61,7 +61,7 @@ class TestTasksLinkRender:
         tabs = re.findall(r'<button type="button" role="tab" data-view="(\w+)"[^>]*>([^<]+)</button>', html)
         assert tabs == [("open", "Open"), ("focus", "Focus")]
         # Completed is a link under the list, not a tab.
-        assert 'id="task-completed-link"' in html
+        assert 'id="task-closed-link"' in html
 
     def test_embed_unknown_view_is_the_default(self, client, wiki_dir):
         """A name that isn't a view (also the tabs' old names, and `filter=`,

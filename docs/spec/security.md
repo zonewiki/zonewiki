@@ -116,7 +116,7 @@ Each rule has tests in `tests/test_routes.py` or `tests/test_mcp.py`, and `go/se
 - **A task snapshot's ids and times are checked** (`sanitizeSnapshot` in `go/tasklogic.go`; `POST /api/tasks/restore`, `/api/tasks/import`): an `id` or `spawned_from` only of letters,
   digits,
   `-` and `_` (at most 64; anything else: a new id, no `spawned_from`),
-  `created_at` and `completed_at` only as `timestamp()` writes them or a day alone (else now),
+  `created_at` and `closed_at` only as `timestamp()` writes them or a day alone (else now),
   a comment's id likewise (else a new one),
   and `by` on a comment or history entry only what could be a user's name (else no one).
   With users, a `by` other than the sender's own stays only on what Zone has seen under that name (`checkBy` in `go/taskby.go`; Who made a change in `docs/spec/users.md`): else a user could restore or import a task with a comment "by" a colleague.

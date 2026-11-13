@@ -14,7 +14,7 @@ Case doesn't matter (`[[Tasks:]]`), nor a space after the colon (`[[tasks:list=s
 | Parameter | Values | Default | Description |
 |-----------|--------|---------|-------------|
 | `tag` | comma-separated tags | — | Pre-filters by tag. Comma = AND, pipe `a\|b` = OR, a leading `-` excludes (`tag=work,-mary`). The chips are locked (the page says what it shows); new tasks get the single tags, but a task's tags stay editable. |
-| `view` | `focus`, `open`, `plan`, `completed` | Focus (or the tab remembered this session) | Opens on that tab on every load; a URL `?view=` overrides it. Case doesn't matter; any other name (`views`) opens the default. |
+| `view` | `focus`, `open`, `plan`, `closed` | Focus (or the tab remembered this session) | Opens on that tab on every load; a URL `?view=` overrides it. Case doesn't matter; any other name (`views`) opens the default. |
 | `plan` | `on`, `off` | on | What the Open tab shows: on, the board by start date (Plan); off, one list. With `view=open` or `view=plan` it decides which of the two opens (`view=open` alone is the list, `view=plan` the board, as always). The Plan switch still flips it, for the browser tab (see Views). |
 | `limit` | integer 1–99 | none | WIP limit: Focus warns at this many tasks, and Plan day sections with at least this many are flagged amber. `?limit=N` works on `/tasks`. |
 | `list` | a tag | — | Makes the embed a separate list: it shows the tasks with that tag, the tag is locked there and marked as a list everywhere (see Tasks → Separate lists). Cleaned like tags, lowercased (`cleanList`). |
@@ -69,17 +69,17 @@ There is no polling.
 
 - `_tasks/settings.json` holds the settings of All tasks (see Settings); it is no tasks file.
 - The tasks' files live in the `_tasks/` folder (`tasksFile(owner)` and paths derived from it; with users each user's private tasks in `private/<user>/_tasks/`, the same files: Private tasks in `docs/spec/users.md`): open tasks in `tasks.json`,
-  completed ones in `completed.json` (flat JSON arrays, committed to git on change).
-  Completed tasks from earlier years live in `completed-YYYY.json` (only that exact name is an archive).
+  closed ones in `closed.json` (flat JSON arrays, committed to git on change).
+  Closed tasks from earlier years live in `closed-YYYY.json` (only that exact name is an archive).
   `atomicfile.Write` creates the folder, so a new wiki gets it on the first write.
-  Write routes read every completed file (`readCompletedAllStrict`) and `writeCompleted` files each task by its completion year, writing only files whose content changed; startup does the same split (`archiveOldCompleted`) for a year change without writes.
-  So archived tasks can be edited, reopened and tagged like any other; Completed shows them by year (see Views).
+  Write routes read every closed file (`readClosedAllStrict`) and `writeClosed` files each task by its completion year, writing only files whose content changed; startup does the same split (`archiveOldClosed`) for a year change without writes.
+  So archived tasks can be edited, reopened and tagged like any other; Closed shows them by year (see Views).
 - All mutations go through one lock (`taskFiles.Lock`, `go/internal/taskfiles`) and atomic writes (temp file + rename, `go/internal/atomicfile`); the server handles requests concurrently.
   Write paths use a strict reader that fails with `errTasksCorrupt` (503) on an unreadable file instead of treating it as empty and wiping every task.
 - The files are JSON (`go/internal/taskmodel`): a list of tasks,
   two spaces of indent,
   text as written (no `\u` escapes but those JSON needs),
-  each task's fields in one order (`id`, `title`, `description`, `tags`, `start_date`, `due_date`, `created_at`, `completed_at`, `wont_do`, `keep`, `importance` (only when it isn't normal), `last_done`, `sort_order`, `recurrence`, `spawned_from`, `history`, `comments`),
+  each task's fields in one order (`id`, `title`, `description`, `tags`, `start_date`, `due_date`, `created_at`, `closed_at`, `wont_do`, `keep`, `importance` (only when it isn't normal), `last_done`, `sort_order`, `recurrence`, `spawned_from`, `history`, `comments`),
   every field written,
   also when empty (`null`, `[]`, `false`),
   then any keys Zone doesn't know (from an older version or a hand edit),
@@ -91,7 +91,7 @@ There is no polling.
 - Request bodies are validated (`jsonObject`, `asStr`, `asInt`, `asStrList`, `idList`): bad input is a 400 with JSON `{ error }`, never a 500. Numeric strings are accepted for integers; `tags` may be a comma-separated string.
 - Reads clean the tags (`normalizeList`, `cleanTags`), since a file edited by hand may have `"local llm"` or `#work`.
   Older data formats are no longer converted: the conversions (task files in the wiki's root,
-  completed tasks in `tasks.json`,
+  closed tasks in `tasks.json`,
   `focus_date`/`defer_days`/`recurrence.anchor`/`page`/`focus_order`,
   spawns without `spawned_from`) were removed in 2026-10. A wiki last used before then must be opened once with an earlier Zone (git history) first.
 
@@ -145,7 +145,7 @@ Recurring instances keep the gap between the two dates, but a new instance's sta
 | `due_date` | `"YYYY-MM-DD"` / `null` | Deadline |
 | `start_date` | `"YYYY-MM-DD"` / `null` | Start date (see Dates) |
 | `created_at` | ISO datetime | |
-| `completed_at` | ISO datetime / `null` | |
+| `closed_at` | ISO datetime / `null` | |
 | `sort_order` | number / `null` | Position in the Sorted section (Open's and Focus's, and inside Plan's days); `null` = Unsorted. Focus and Plan have no order of their own. |
 | `recurrence` | `{ type, interval, from, day?, lead? }` / `null` | `type`: `daily`/`weekly`/`monthly`/`yearly`; `interval` 1–999 (`recIntervalMax`). Driven by the primary date (`due_date`, else `start_date`). `from`: `"due"` (default, calendar-aligned) or `"completion"`. `day` (monthly/yearly) is the series' day of month, so Jan 31 → Feb 28 → Mar 31; kept on re-save unless the type changes; moving the primary date re-anchors it, however it is moved (edit modal, date picker, a drag onto a day, MCP). An undo that moves a date back sends the old `recurrence` whole (`PUT`/`batch-update` take it, `cleanRecurrence`, applied after the date rules), so the series keeps its `day` and `lead`. `lead` is the start→due gap, stored only while a spawned start was clamped to today; editing either date drops it, an unchanged modal re-save keeps it. A keep task never has one (`keep` clears it). |
 | `spawned_from` | string / `null` | Recurring instance: id of the completed task that spawned it, so undoing the completion removes exactly this instance |
@@ -249,14 +249,16 @@ On phones the control spans the full width.
   Empty Focus says "Nothing planned for today" and links to Plan.
   New tasks created here get today as start date.
   (Focus once had its own order, the Lineup (`focus_order`) above Others; it was removed as a second commitment on top of the start date.)
-- **Closed** is not a tab but a link under the list (`#task-completed-link`, `Closed (N) →`, count from `/api/tasks/completed-count`, refreshed after every write).
+- **Closed** is not a tab but a link under the list (`#task-closed-link`, `Closed (N) →`, count from `/api/tasks/closed-count`, refreshed after every write).
   It holds the tasks that are closed: done, and closed undone (won't do), which is why it isn't called Completed.
-  That is its name where people read it (the link, the view's heading, the settings dialog); in the params (`view=completed`), the routes, the files (`completed.json`) and the code it keeps the name it had, and this spec says Completed for both.
+  That is its name everywhere: where people read it (the link, the view's heading, the settings dialog), in the params (`view=closed`), the routes (`/api/tasks/closed`), the files (`closed.json`), a task's `closed_at` and the code.
+  It was called Completed: a wiki from then is renamed when Zone starts (`renameOldClosed`: `completed.json` and `completed-YYYY.json` become `closed.json` and `closed-YYYY.json`, never over a file that is there; a task's `completed_at` is read where it has no `closed_at`, and the files are written again with the new field), in one commit, "Name the task files of closed tasks closed".
+  Nothing else is kept of the old names: a page's `view=completed`, a link with it and a client asking the old routes get what an unknown view or route gets.
   In Closed, the link reads `← Back to <tab>`, naming the tab it returns to.
   While filtering another view it counts the matching closed tasks instead (`2 matches in Closed →`, no number while loading).
-  `/api/tasks` returns open tasks only, so completed tasks are fetched on demand (`fetchCompleted`, one request at a time); `tasksGen` refetches if `fetchTasks` replaced the list meanwhile.
-  Completed's heading has a **year switcher** (`.completed-years`, years from `/api/tasks/completed-years`, shown when there is more than one) for the yearly archives;
-  `?year=YYYY` opens that year (search links to archived tasks carry it), and going back to a tab returns to this year (`setCompletedYear`).
+  `/api/tasks` returns open tasks only, so closed tasks are fetched on demand (`fetchClosed`, one request at a time); `tasksGen` refetches if `fetchTasks` replaced the list meanwhile.
+  Closed's heading has a **year switcher** (`.closed-years`, years from `/api/tasks/closed-years`, shown when there is more than one) for the yearly archives;
+  `?year=YYYY` opens that year (search links to archived tasks carry it), and going back to a tab returns to this year (`setClosedYear`).
 
 **Sections** (Open and Focus; `SECTIONS`, `sectionHTML`, `.list-section[data-section]`): Unsorted (no `sort_order`, newest first) above Sorted (`sort_order`).
 Both tabs head them alike, with the light label a Plan section uses for its Unsorted/Sorted (`.plan-subdivider`), not a day heading, so the labels look the same wherever they appear; Open's sort headings (By deadline, No deadline, Newest first) take the same label.
@@ -281,7 +283,7 @@ It changes the list's params where they are written, so the dialog and a hand ed
 
 | Field | Param | |
 |-------|-------|---|
-| Opens on | `view` | The Open or the Focus tab (by their names here); Closed is offered only where the page says `view=completed` |
+| Opens on | `view` | The Open or the Focus tab (by their names here); Closed is offered only where the page says `view=closed` |
 | WIP limit | `limit` | 1–99, empty for none |
 | Plan | `plan`, `view` | The Open tab grouped by start date, or one list |
 | Pinned | `pin` | No, Pinned, or Pinned as the default list |
@@ -327,7 +329,7 @@ After a save the page reloads, and what the browser tab remembered (the active t
 
 - **Export tasks** (`GET /api/tasks/export?list=&tag=`, `apiExport`): downloads `zone-tasks-<list>-<date>.json` (`all` for All tasks;
   the name goes into `Content-Disposition` quoted and escaped, `mime.FormatMediaType`, as the list's name is the request's): the tasks the list shows (its `list=` and `tag=`, not what is typed in the search field),
-  open and completed of every year,
+  open and closed of every year,
   each as the API shows it,
   with its description,
   dates,
@@ -338,7 +340,7 @@ After a save the page reloads, and what the browser tab remembered (the active t
   A file that holds no list of tasks is refused at once, in a notice.
   They get the tags a new task there would (the list's tag and the single tags it shows, or `new=`), in place of the tag of the list they were exported from, so a `shop` export imported into `groceries` shows up there; their other tags stay.
   On All tasks they keep their tags as they are.
-  Completed tasks arrive completed.
+  Closed tasks arrive closed.
   **A task keeps its id**, and one whose id is in the wiki already is skipped: importing the same file twice adds nothing, and a file exported here brings back only what was deleted since (an id that isn't a UUID is replaced).
   So a list can't be duplicated within one wiki this way.
   A task exported private stays private, wherever it is imported; on a list in your private folder every imported task is private, as a new one is.
@@ -360,7 +362,7 @@ the urgency tints are mixed with it, so a tinted card is never lighter than a pl
 not a hue: the urgency tints use red, orange, yellow and green, and a green or warm tint on the cards swallowed them;
 blue was tried and dropped) with a soft resting shadow (`--card-shadow`;
 hover still lifts it, `--shadow`);
-Completed's heading a shade deeper than the cards (`--section-bg`);
+Closed's heading a shade deeper than the cards (`--section-bg`);
 the day headers are lighter, a heading on a line rather than a filled bar, an empty day a dashed box (its drop target).
 A card's coloured left edge (3px; planned, see Focus and Plan) never shifts its content: a card without one makes up the 2px in padding, so checkboxes and titles line up on every card and every tab.
 Titles are bold and tags plain muted words (a list's tag keeps its tint and icon), so the cards' urgency colours stand out.
@@ -406,7 +408,7 @@ Each with a dark-mode value.
   **Tag…** (the bulk tag dialog),
   **Today** (start them today, `startToday`: one `batch-update` for the open ones not starting today, one undo putting back each one's start date and history; today is never after a deadline still to come, and starting an overdue task today is the catch-up case, so no deadline question),
   **Unplan** (clear their start dates, `startOn(ids, null)`, as the **0** key: one `batch-update` for the open ones that have one, one undo putting them back; shown while an open selected task has a start date, `anyPlanned`),
-  **Done** (`completeMany`, as Space; **Reopen** when every selected task is completed, which also hides Today and Won't do),
+  **Done** (`completeMany`, as Space; **Reopen** when every selected task is closed, which also hides Today and Won't do),
   **Won't do** (`wontDoMany`, as the Delete key) and ✕ (clear).
   Toasts move up above it.
   The **⋯ menu** of a card in the selection (its button, a right-click, which then keeps the selection, or Shift+F10) offers the same for all of them, titled "N tasks" (`runSelectionAction`).
@@ -462,8 +464,8 @@ Each with a dark-mode value.
 - **⋯ menu** (the `.task-menu-btn`, always shown, three dots drawn as an SVG (`MORE_ICON`) so they sit on the line's centre in any font;
   also **right-click** on a card, `openTaskMenu(id, anchor, {x, y})` at the pointer, selecting the card, a link in the card keeping the browser's menu;
   from the keyboard the menu key or **Shift+F10** on the selected card): all card actions (Edit…, Start today/tomorrow, Pick start date…, Unplan, Skip, Importance…, Won't do, Copy link, Select several;
-  for completed tasks Edit…, Reopen, Copy link, Select several).
-  **Copy link** puts the task's full URL in the clipboard (`taskHref`, as `taskLink` builds it: `/tasks?task=<id>&view=open`, `view=completed` (with `&year=` from an earlier year's archive) for a done task, `&list=` for a list task); opening it selects and flashes the task (see `?task=`).
+  for closed tasks Edit…, Reopen, Copy link, Select several).
+  **Copy link** puts the task's full URL in the clipboard (`taskHref`, as `taskLink` builds it: `/tasks?task=<id>&view=open`, `view=closed` (with `&year=` from an earlier year's archive) for a done task, `&list=` for a list task); opening it selects and flashes the task (see `?task=`).
   Paste it anywhere: chat, mail, a page.
   A popover with ↑/↓/Enter/Esc on desktop (tasks shortcuts suspended while open), a bottom sheet at ≤640px.
 - **Edit modal**: double-click anywhere on a card (title and description too; only its controls, the checkbox, buttons, links and date chips, keep their own) or Enter on desktop;
@@ -566,7 +568,7 @@ A task's description is markdown, edited and rendered as a page's text.
   Comments render the same way, in the cards and the modal (`.task-comment-body`, at the description's scale).
   A line separates each comment from the one before it, in both places, so it shows where the next one starts.
 - **Where the HTML comes from** (`renderTexts`, `renderedHtml` in `tasks.js`): the tasks asks the server for the texts it hasn't rendered yet, in one request (`{ notes: [...], comments: [...] }`), and keeps the HTML per text for the page's life, shared by every task list app on it.
-  Loading tasks (`fetchTasks`, Completed) and each write wait for it before drawing, so cards never flash plain text; a text that arrives some other way shows as plain text until its HTML is there (`htmlOf`), and a failed request caches nothing.
+  Loading tasks (`fetchTasks`, Closed) and each write wait for it before drawing, so cards never flash plain text; a text that arrives some other way shows as plain text until its HTML is there (`htmlOf`), and a failed request caches nothing.
   Code is highlighted once, when the HTML arrives.
 - **Editing** (the edit modal's Description): the page editor's markdown helpers (`markdownEditor` in `js/mdedit.js`): its formatting bar (`#task-edit-format`, without Make task, which is the editor's),
   Ctrl+B/I/K,
@@ -612,7 +614,7 @@ an edit keeps it;
 shown after the time, "12 Mar 09:30 · alice", `commentStamp`).
 Not part of the History: they are never capped, undo of other changes never touches them, and adding one logs no event.
 
-- **Routes**: `POST /api/tasks/<id>/comments`, `PUT`/`DELETE …/comments/<cid>`, each returning the task, for open and completed tasks alike (`findForWriteLocked`).
+- **Routes**: `POST /api/tasks/<id>/comments`, `PUT`/`DELETE …/comments/<cid>`, each returning the task, for open and closed tasks alike (`findForWriteLocked`).
   `PUT /api/tasks/<id>` with `comments` replaces the whole list, for undoing a delete; `cleanComments` validates it (and restore snapshots), dropping bad entries and renumbering duplicate ids.
 - **Edit modal** (`renderComments` in `js/taskmodal.js`): Comments under Description, hidden for a new task, with the list newest first.
   The field to write one is not shown until it is asked for: **Add comment** (next to the heading) shows it, a text field of a few lines that grows with its text, focused.
@@ -647,8 +649,8 @@ A task is of **high**, **normal** or **low** importance (`importance`, Task fiel
 
 A task with `keep: true` is never archived: ticking it off means "done for now, back to the pool".
 It suits a shopping list used with the task app's views: Open is the catalogue of staples, starting items today puts them on Focus (the actual shopping list), and ticking one off sends it back to Open.
-Completing a keep task (`keep_done`, in `PUT` and in `batch-complete`) clears its start date and its deadline, and sets `last_done` to today; it stays in `_tasks/tasks.json` with the same id, tags, description and place in Open's order, and Completed stays empty.
-Since Completed can't reopen it, the card shows an undo toast that restores the old fields (`keepSnapshot`).
+Completing a keep task (`keep_done`, in `PUT` and in `batch-complete`) clears its start date and its deadline, and sets `last_done` to today; it stays in `_tasks/tasks.json` with the same id, tags, description and place in Open's order, and Closed stays empty.
+Since Closed can't reopen it, the card shows an undo toast that restores the old fields (`keepSnapshot`).
 **Won't do** retires a staple.
 Keep and Repeat both say what happens after done, so they exclude each other: `keep` clears `recurrence`, and the edit modal disables Repeat while "Keep after done" is checked.
 Cards mark keep tasks with ⟲ (`.task-keep`).
@@ -706,7 +708,7 @@ A tag no page declares stays a filter.
 - **Renaming a list or tag** (**Rename…** at the top right of `/tasks?list=<name>`, `#list-rename-dialog` in `templates/tasks_page.html`; the MCP tool `rename_task_tag`; `renameTagOp` in `go/pageops.go`): a list is a tag,
   so this renames the tag,
   and it works the same for a plain tag no page declares (open `/tasks?list=<tag>`).
-  In one commit it changes the tag on every task (open, completed, archived) and, on pages and in tasks' text, the `list=`, `tag=` and `new=` of `[[tasks: …]]` embeds and the `?list=` and `?tag=` of links to `/tasks`.
+  In one commit it changes the tag on every task (open, closed, archived) and, on pages and in tasks' text, the `list=`, `tag=` and `new=` of `[[tasks: …]]` embeds and the `?list=` and `?tag=` of links to `/tasks`.
   Pins and an embed's other params stay.
   Code stays as written, and so do a `#word` in prose and the `tags:` in pages' frontmatter, which sort pages rather than tasks.
   Case doesn't matter in matching: `Shop` and `shop` are one tag, and renaming a tag to its own name evens out how it is spelled.
@@ -735,7 +737,7 @@ A tag no page declares stays a filter.
   the **main task list** (an embed with neither `list=` nor `tag=`, including `/tasks`, URL `?tag=` notwithstanding) shows every task,
   list tasks included,
   as do a `tag=` embed (a `#task #sam` task belongs on a Sam page whatever lists exist),
-  the main Completed count and,
+  the main Closed count and,
   without a task list home,
   the due count.
 - **Locked filter**: an embed's own filter words (`list=` and `tag=`; `embedFilterWords`) are chips without × (`chipField`'s `locked`, `.tag-chip-locked`; Backspace skips them), so the page always shows what it says and new tasks get its single tags.
@@ -776,7 +778,7 @@ A tag no page declares stays a filter.
   A floating copy (`.task-touch-ghost`) follows the finger, the page auto-scrolls near the edges, and release drops through the same code as a mouse drop (`touchDrop` adapters registered by each render; list touch listeners attached once).
   A touch `pointerdown` sets the card's `draggable` to false (mouse sets it back; cards are marked `data-drag`), and native `dragstart` is cancelled for touch, because Android Chrome and iOS Safari otherwise start their own HTML5 drag mid-gesture.
   Moving earlier is a normal scroll; a finished drag isn't a tap.
-  Let go without having moved over 10px, the long press starts selection mode with that card instead of dropping it; where nothing drags (Completed, or a view without dragging) the press only selects the card (`holdCard`), letting go starts selection mode, and moving over 10px first cancels it.
+  Let go without having moved over 10px, the long press starts selection mode with that card instead of dropping it; where nothing drags (Closed, or a view without dragging) the press only selects the card (`holdCard`), letting go starts selection mode, and moving over 10px first cancels it.
   The browser's own long-press menu is suppressed on cards.
 - **Swipes** (`swipeActions`; they may start on a date chip, which sits on the first line where a thumb starts, a mere tap still opening its picker) only move tasks in and out of Focus: right = start today (Open, Plan; on Plan also a carried-over task, committing to it again),
   left = clear the start date (Focus, Plan).

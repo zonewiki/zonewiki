@@ -19,8 +19,8 @@ import (
 //	go test -run '^$' -bench . -benchtime 20x
 //
 // benchWiki: a wiki of n pages in folders of 100, each linking two others,
-// with open and completed tasks, a tenth of the open ones linking a page.
-func benchWiki(b *testing.B, pages, open, completed int) http.Handler {
+// with open and closed tasks, a tenth of the open ones linking a page.
+func benchWiki(b *testing.B, pages, open, closed int) http.Handler {
 	b.Helper()
 	testWiki(b, nil)
 	for i := range pages {
@@ -43,13 +43,13 @@ func benchWiki(b *testing.B, pages, open, completed int) http.Handler {
 				t.Title += fmt.Sprintf(" for [[f%03d/p%d]]", (i%pages)/100, i%pages)
 			}
 			if done {
-				t.CompletedAt = "2026-02-03T10:00:00"
+				t.ClosedAt = "2026-02-03T10:00:00"
 			}
 			out[i] = t
 		}
 		return out
 	}
-	for path, tasks := range map[string][]*Task{taskFiles.OpenPath(""): mk(open, false), taskFiles.CompletedPath(""): mk(completed, true)} {
+	for path, tasks := range map[string][]*Task{taskFiles.OpenPath(""): mk(open, false), taskFiles.ClosedPath(""): mk(closed, true)} {
 		text, err := taskmodel.Encode(tasks)
 		if err != nil {
 			b.Fatal(err)

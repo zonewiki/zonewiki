@@ -32,7 +32,7 @@ function fieldsOf(p) {
   const pin = (p.pin || '').trim().toLowerCase();
   const limit = parseInt(p.limit, 10);
   return {
-    view: view === 'open' || view === 'plan' ? 'open' : view === 'completed' ? 'completed' : 'focus',
+    view: view === 'open' || view === 'plan' ? 'open' : view === 'closed' ? 'closed' : 'focus',
     // view=open has always been the one list, view=plan the board.
     plan: plan === 'on' || plan === 'off' ? plan === 'on' : view !== 'open',
     label_open: name(0),
@@ -65,7 +65,7 @@ export function changedParams(was, now, p) {
     // Open's two views keep their names: view=plan the board, view=open
     // the list; plan=off only says it where view= doesn't.
     if (now.view === 'open') set.view = now.plan ? 'plan' : 'open';
-    else if (now.view === 'completed') set.view = 'completed';
+    else if (now.view === 'closed') set.view = 'closed';
     else set.view = now.view !== was.view || p.view ? 'focus' : '';
     set.plan = now.view !== 'open' && !now.plan ? 'off' : '';
   }
@@ -95,9 +95,9 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
   });
   const fill = (params, all = false) => {
     const fields = fieldsOf(params);
-    // Opens on: the tabs by their names here; Completed only where a page says so.
-    f.view.replaceChildren(...['open', 'focus', fields.view === 'completed' && 'completed'].filter(Boolean)
-      .map(v => new Option(v === 'completed' ? 'Closed' : tabLabel(v), v)));
+    // Opens on: the tabs by their names here; Closed only where a page says so.
+    f.view.replaceChildren(...['open', 'focus', fields.view === 'closed' && 'closed'].filter(Boolean)
+      .map(v => new Option(v === 'closed' ? 'Closed' : tabLabel(v), v)));
     for (const k of ['view', 'label_open', 'label_focus', 'limit', 'new', 'tag', 'pin']) f[k].value = fields[k];
     f.plan.checked = fields.plan;
     if (f.list) { f.list.value = fields.list; f.keep.checked = fields.keep; }

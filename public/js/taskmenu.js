@@ -30,7 +30,7 @@ function closeTaskMenu() {
 function openTaskMenu(id, anchor, at) {
   closeTaskMenu();
   if (app.inSelection(id)) {
-    const allDone = st.tasks.filter(t => st.selectedIds.has(t.id)).every(t => t.completed_at);
+    const allDone = st.tasks.filter(t => st.selectedIds.has(t.id)).every(t => t.closed_at);
     const items = [
       ['tag', 'Tag…'],
       !allDone && ['today', 'Start today'],
@@ -43,7 +43,7 @@ function openTaskMenu(id, anchor, at) {
   }
   const task = st.tasks.find(t => t.id === id);
   if (!task) return;
-  const items = task.completed_at ? [
+  const items = task.closed_at ? [
     ['edit', 'Edit…'],
     ['reopen', 'Reopen'],
     ['copylink', 'Copy link'],
@@ -151,13 +151,13 @@ function runTaskAction(task, action, anchor) {
 }
 
 // The link that opens this task in the tasks (render.task_link): an open
-// one on Open, a done one on Completed (its archive's year when earlier),
+// one on Open, a done one on Closed (its archive's year when earlier),
 // in its list when it has one.
 function taskHref(task) {
-  const params = new URLSearchParams({ task: task.id, view: task.completed_at ? 'completed' : 'open' });
+  const params = new URLSearchParams({ task: task.id, view: task.closed_at ? 'closed' : 'open' });
   const list = app.taskList(task);
   if (list) params.set('list', list);
-  if (task.completed_at && st.completedYear) params.set('year', st.completedYear);
+  if (task.closed_at && st.closedYear) params.set('year', st.closedYear);
   return `/tasks?${params}`;
 }
 
@@ -186,7 +186,7 @@ function confirmDeadlineMove(task, day) {
 // (open ones count) has an open subtask.
 function confirmOpenSubtasks(tasks) {
   const open = t => { const c = subtaskCounts(t.description); return c.total - c.done; };
-  const withOpen = tasks.filter(t => t && !t.completed_at && open(t) > 0);
+  const withOpen = tasks.filter(t => t && !t.closed_at && open(t) > 0);
   if (!withOpen.length) return Promise.resolve(true);
   const n = open(withOpen[0]);
   document.getElementById('task-subtasks-text' + app.sfx).textContent = tasks.length === 1

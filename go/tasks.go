@@ -379,15 +379,15 @@ func firstNonEmpty(a, b string) string {
 	return b
 }
 
-// findForWriteLocked: the open tasks and every completed task user sees,
+// findForWriteLocked: the open tasks and every closed task user sees,
 // and the one with id (404 when none of them has it).
-func findForWriteLocked(user, id string) (active, completed []*Task, task *Task, err error) {
-	if active, completed, err = taskFiles.ReadForWriteLocked(user); err != nil {
+func findForWriteLocked(user, id string) (active, closed []*Task, task *Task, err error) {
+	if active, closed, err = taskFiles.ReadForWriteLocked(user); err != nil {
 		return
 	}
-	for _, t := range slices.Concat(active, completed) {
+	for _, t := range slices.Concat(active, closed) {
 		if t.ID == id {
-			return active, completed, t, nil
+			return active, closed, t, nil
 		}
 	}
 	return nil, nil, nil, errNotFound
@@ -424,7 +424,7 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 		}
 	}
 	skip, wontDo, done := status[0], status[1], status[2]
-	active, completed, t, err := findForWriteLocked(user, id)
+	active, closed, t, err := findForWriteLocked(user, id)
 	if err != nil {
 		return nil, err
 	}
@@ -439,25 +439,25 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 		// (a plain won't-do ends the series).
 		logEvent(t, user, "skipped", "", "")
 		spawned := spawnRecurring(user, t, active, true)
-		t.CompletedAt = timestamp()
+		t.ClosedAt = timestamp()
 		t.WontDo = true
 		active = without(active, id)
-		completed = append(completed, t)
+		closed = append(closed, t)
 		if spawned != nil {
 			active = append(active, spawned)
 		}
 	case data.Has("wont_do"):
 		if wontDo && t.IsOpen() {
-			// Won't do: to completed, abandoned; no next occurrence.
-			t.CompletedAt = timestamp()
+			// Won't do: to closed, abandoned; no next occurrence.
+			t.ClosedAt = timestamp()
 			t.WontDo = true
 			logEvent(t, user, "wontdo", "", "")
 			active = without(active, id)
-			completed = append(completed, t)
+			closed = append(closed, t)
 		} else if !wontDo && !t.IsOpen() {
 			// Reopen (also takes away what a skip spawned).
 			active = uncompleteTask(user, t, active, nil)
-			completed = without(completed, id)
+			closed = without(closed, id)
 			active = append(active, t)
 		}
 	case data.Has("completed"):
@@ -467,13 +467,13 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 		case done && t.IsOpen():
 			spawned := completeTask(user, t, "", active)
 			active = without(active, id)
-			completed = append(completed, t)
+			closed = append(closed, t)
 			if spawned != nil {
 				active = append(active, spawned)
 			}
 		case !done && !t.IsOpen():
 			active = uncompleteTask(user, t, active, nil)
-			completed = without(completed, id)
+			closed = without(closed, id)
 			active = append(active, t)
 		}
 	}
@@ -497,7 +497,7 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 			msg = "Uncomplete task"
 		}
 	}
-	return t, taskFiles.WriteBothLocked(user, active, completed, msg+suffix)
+	return t, taskFiles.WriteBothLocked(user, active, closed, msg+suffix)
 }
 
 // toggleNoteCheck ticks or unticks the Nth checkbox of a task's notes.
@@ -526,13 +526,13 @@ func addComment(user, id string, text string, message string) (*Task, error) {
 	}
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
-	active, completed, t, err := findForWriteLocked(user, id)
+	active, closed, t, err := findForWriteLocked(user, id)
 	if err != nil {
 		return nil, err
 	}
 	t.Comments = append(cleanCommentList(t.Comments),
 		Comment{ID: newCommentID(), At: now().Format("2006-01-02T15:04"), By: user, Text: s})
-	return t, taskFiles.WriteBothLocked(user, active, completed, message)
+	return t, taskFiles.WriteBothLocked(user, active, closed, message)
 }
 
 // taskComment: the index of a task's comment by id (its comments cleaned
@@ -554,16 +554,16 @@ func deleteTask(user, id, message string) error {
 }
 
 func deleteTasksLocked(user string, ids map[string]bool, message string) error {
-	active, completed, err := taskFiles.ReadForWriteLocked(user)
+	active, closed, err := taskFiles.ReadForWriteLocked(user)
 	if err != nil {
 		return err
 	}
-	for _, t := range slices.Concat(active, completed) {
+	for _, t := range slices.Concat(active, closed) {
 		if ids[t.ID] {
 			rememberBy(t) // the undo restores it
 		}
 	}
-	return taskFiles.WriteBothLocked(user, withoutIDs(active, ids), withoutIDs(completed, ids), message)
+	return taskFiles.WriteBothLocked(user, withoutIDs(active, ids), withoutIDs(closed, ids), message)
 }
 
 func idSet(ids []string) map[string]bool {
@@ -588,7 +588,7 @@ func selectTasks(tasks []*Task, keep func(*Task) bool) ([]*Task, map[string]bool
 }
 
 // tagTasks adds the tags add to the tasks ids and takes remove off them
-// (case ignored; a tag a task has keeps its spelling), open and completed,
+// (case ignored; a tag a task has keeps its spelling), open and closed,
 // in one commit; the batch-tag route and the MCP tools share it.
 func tagTasks(user string, ids, add, remove []string, message string) ([]*Task, error) {
 	set := idSet(ids)
@@ -598,17 +598,17 @@ func tagTasks(user string, ids, add, remove []string, message string) ([]*Task, 
 	}
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
-	active, completed, err := taskFiles.ReadForWriteLocked(user)
+	active, closed, err := taskFiles.ReadForWriteLocked(user)
 	if err != nil {
 		return nil, err
 	}
 	updated := []*Task{}
-	for _, t := range slices.Concat(active, completed) {
+	for _, t := range slices.Concat(active, closed) {
 		if !set[t.ID] {
 			continue
 		}
 		t.Tags = retag(t.Tags, addTags, removeTags)
 		updated = append(updated, t)
 	}
-	return updated, taskFiles.WriteBothLocked(user, active, completed, message)
+	return updated, taskFiles.WriteBothLocked(user, active, closed, message)
 }

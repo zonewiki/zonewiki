@@ -431,10 +431,10 @@ def tasks_file(wiki, name="tasks.json"):
     return json.loads((wiki / "_tasks" / name).read_text())
 
 
-def stored_task(title, tags, completed_at=None):
+def stored_task(title, tags, closed_at=None):
     return {"id": f"{abs(hash(title)):032x}"[:32], "title": title, "description": "", "tags": tags,
             "start_date": None, "due_date": None, "created_at": "2001-01-01T10:00:00",
-            "completed_at": completed_at, "wont_do": False, "keep": False, "last_done": None,
+            "closed_at": closed_at, "wont_do": False, "keep": False, "last_done": None,
             "sort_order": None, "recurrence": None, "spawned_from": None, "history": [], "comments": []}
 
 
@@ -454,8 +454,8 @@ def shop(client, wiki):
     (wiki / "_tasks/tasks.json").write_text(json.dumps([
         stored_task("Milk", ["shop", "weekly"]),
         {**stored_task("See list", ["other"]), "description": "On [the list](/tasks?list=shop)."}]))
-    (wiki / "_tasks/completed.json").write_text(json.dumps([stored_task("Eggs", ["Shop"], "2099-01-01T10:00:00")]))
-    (wiki / "_tasks/completed-2001.json").write_text(json.dumps([stored_task("Old", ["shop"], "2001-01-01T10:00:00")]))
+    (wiki / "_tasks/closed.json").write_text(json.dumps([stored_task("Eggs", ["Shop"], "2099-01-01T10:00:00")]))
+    (wiki / "_tasks/closed-2001.json").write_text(json.dumps([stored_task("Old", ["shop"], "2001-01-01T10:00:00")]))
     commit(wiki, "lists", "# Lists\n\n[[tasks: list=shop keep=1 pin=1]]\n\n[[tasks: tag=shop,-x new=shop]]\n\n"
                           "[Go](/tasks?list=shop), #shop\n\n`[[tasks: list=shop]]`\n")
     return wiki
@@ -467,8 +467,8 @@ def test_rename_tag_changes_it_everywhere_in_one_commit(client, shop, door):
     assert rename_tag(client, door, "shop", "food")
     assert tasks_file(shop)[0]["tags"] == ["food", "weekly"]
     assert "/tasks?list=food" in tasks_file(shop)[1]["description"]
-    assert tasks_file(shop, "completed.json")[0]["tags"] == ["food"]
-    assert tasks_file(shop, "completed-2001.json")[0]["tags"] == ["food"]
+    assert tasks_file(shop, "closed.json")[0]["tags"] == ["food"]
+    assert tasks_file(shop, "closed-2001.json")[0]["tags"] == ["food"]
     text = (shop / "lists.md").read_text()
     assert "[[tasks: list=food keep=1 pin=1]]" in text and "[[tasks: tag=food,-x new=food]]" in text
     assert "(/tasks?list=food), #shop" in text and "`[[tasks: list=shop]]`" in text   # prose and code stay
@@ -493,7 +493,7 @@ def test_rename_tag_onto_a_name_in_use_merges_only_when_asked(client, shop, door
     assert tasks_file(shop)[0]["tags"] == ["shop", "weekly"]
     assert rename_tag(client, door, "shop", "weekly", merge=True)
     assert tasks_file(shop)[0]["tags"] == ["weekly"]
-    assert tasks_file(shop, "completed.json")[0]["tags"] == ["weekly"]
+    assert tasks_file(shop, "closed.json")[0]["tags"] == ["weekly"]
     assert "Merge tag #shop into #weekly" in git(shop, "log", "-1", "--format=%s")
 
 
@@ -511,7 +511,7 @@ def test_rename_tag_keeps_text_not_yet_in_git(client, shop, door):
 
 @pytest.mark.parametrize("door", DOORS)
 def test_a_corrupt_tasks_file_stops_a_tag_rename_with_nothing_written(client, shop, door):
-    (shop / "_tasks/completed.json").write_text("{not json")
+    (shop / "_tasks/closed.json").write_text("{not json")
     before = (shop / "lists.md").read_text(), (shop / "_tasks/tasks.json").read_text()
     if door == "browser":
         assert client.post("/tasks/rename", data={"tag": "shop", "new_name": "food"}, headers=HOST).status_code == 500
@@ -540,7 +540,7 @@ def test_rename_tag_to_its_own_name_changes_nothing(client, shop):
 
 def test_rename_tag_to_its_own_name_evens_out_the_spelling(client, shop):
     assert rename_tag(client, "browser", "shop", "shop")
-    assert tasks_file(shop, "completed.json")[0]["tags"] == ["shop"]   # it was #Shop
+    assert tasks_file(shop, "closed.json")[0]["tags"] == ["shop"]   # it was #Shop
 
 
 def test_rename_tag_dialog_comes_back_offering_the_merge(client, shop):

@@ -129,7 +129,7 @@ document.addEventListener('keydown', async e => {
   if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey && st.selectedId) {
     e.preventDefault();
     const task = st.tasks.find(t => t.id === st.selectedId);
-    if (task && !task.completed_at) {
+    if (task && !task.closed_at) {
       const target = e.key === 'f' ? dateOffset(0) : dateOffset(1);
       if (task.start_date !== target && startsAfterDeadline(task, target)) app.planOnDay(task.id, target);
       else app.updateTask(task.id, { start_date: task.start_date === target ? null : target });
@@ -149,7 +149,7 @@ document.addEventListener('keydown', async e => {
   // Tab/Shift+Tab cycles the views
   if (e.key === 'Tab') {
     e.preventDefault();
-    // Only the tabs: Completed (reached by its link) is not in the cycle,
+    // Only the tabs: Closed (reached by its link) is not in the cycle,
     // and from there Tab goes to the first tab, Shift+Tab to the last.
     const views = app.tabButtons().map(b => b.dataset.view);
     const i = views.indexOf(st.activeView === 'plan' ? 'open' : st.activeView);
@@ -193,7 +193,7 @@ document.addEventListener('keydown', async e => {
     } else {
       const task = st.tasks.find(t => t.id === st.selectedId);
       if (!task) return;
-      const completing = !task.completed_at;
+      const completing = !task.closed_at;
       if (completing) {
         if (app.pendingCompletions.has(task.id)) {
           app.cancelPendingComplete(task.id);
@@ -216,7 +216,7 @@ document.addEventListener('keydown', async e => {
     // Delete closes the selected open tasks undone (won't do); a task is
     // never deleted. Closed ones stay as they are.
     e.preventDefault();
-    const ids = [...st.selectedIds].filter(id => !st.tasks.find(t => t.id === id)?.completed_at);
+    const ids = [...st.selectedIds].filter(id => !st.tasks.find(t => t.id === id)?.closed_at);
     if (!ids.length) return;
     // Move the selection to the next surviving card
     const next = items.find(el => !st.selectedIds.has(el.dataset.id) &&

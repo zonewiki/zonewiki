@@ -15,7 +15,7 @@ const { st } = app;
 // Per-tab sort comparators. Open and Focus sort with TasksCore.byOpenOrder
 // in render(), and Plan with TasksCore.boardBuckets.
 const TAB_SORT = {
-  completed: (a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''),
+  closed: (a, b) => (b.closed_at || '').localeCompare(a.closed_at || ''),
 };
 
 // Open and Focus share one manual order, sort_order: Focus is Open
@@ -32,7 +32,7 @@ const SECTIONS = {
 const sectionKey = zone => '#' + zone;  // a heading's slot (task ids never start with #)
 // Every task in the manual order, including ones the view or filter hides.
 function manualOrderIds(s) {
-  return st.tasks.filter(t => !t.completed_at && t[s.field] != null)
+  return st.tasks.filter(t => !t.closed_at && t[s.field] != null)
     .sort((a, b) => a[s.field] - b[s.field]).map(t => t.id);
 }
 function sectionList() {

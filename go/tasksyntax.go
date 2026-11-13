@@ -275,7 +275,7 @@ func embedPlan(p TasksParams) string {
 }
 
 // The tasks' views, by the names [[tasks: view=…]] and ?view= use.
-var tasksViews = []string{"focus", "open", "plan", "completed"}
+var tasksViews = []string{"focus", "open", "plan", "closed"}
 
 // embedView: the view an embed opens on, "" for the default or an unknown name.
 func embedView(p TasksParams) string {

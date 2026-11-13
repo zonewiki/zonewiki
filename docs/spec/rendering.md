@@ -226,7 +226,7 @@ Nobody types ids: in the editor, `[[task:` (or the formatting bar's task button)
   done tasks struck through with "✓ <date>" (each date a `<time class="local-date">` in US English, which the browser rewrites in the `locale` setting; with `date-format = iso` `YYYY-MM-DD` from the server, see Dates in `docs/spec/tasks.md`), won't-do with "✗ won't do" and a disabled checkbox.
   Unknown id: a red dashed `task <id>?` (`.task-ref-missing`).
   A reference alone in a list item makes that `<li class="task-ref-item">`, a checklist row without the chip's box.
-- **Resolving** (`resolveTaskRefs`): open tasks win over completed ones with the same prefix; archives count.
+- **Resolving** (`resolveTaskRefs`): open tasks win over closed ones with the same prefix; archives count.
   A completed recurring task stands for its series: the reference follows `spawned_from` to the current occurrence, so ticking it and reloading shows the next one.
 - **Ticking** the chip's checkbox (`js/page.js`, page view and editor preview) PUTs `{ completed }` to `/api/tasks/<id>`,
   so repeating and keep tasks behave as in the tasks,

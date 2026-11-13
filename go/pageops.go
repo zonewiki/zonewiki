@@ -491,7 +491,7 @@ type tagRename struct {
 }
 
 // renameTagOp renames a tag, and so a list, which is a tag a page declares:
-// on tasks (open, completed, archived), in [[tasks: …]] embeds (list=, tag=,
+// on tasks (open, closed, archived), in [[tasks: …]] embeds (list=, tag=,
 // new=) and in links to /tasks (?list=, ?tag=), in one commit. merge: go on
 // when the new name is in use. Every tasks file is read before anything is
 // written, so one that can't be read changes nothing; text not yet in git is

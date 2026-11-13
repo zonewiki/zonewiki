@@ -23,7 +23,7 @@ class TestCRUD:
         data = resp.get_json()
         assert data["title"] == "Buy milk"
         assert data["id"]
-        assert data["completed_at"] is None
+        assert data["closed_at"] is None
         assert data["sort_order"] is None
 
     def test_read_tasks_empty(self, client):
@@ -127,7 +127,7 @@ class TestValidation:
         resp = client.post("/api/tasks/batch-complete", json={"ids": [task["id"]], "completed": "no"})
         assert resp.get_json()["error"] == "completed must be true or false"
         [same] = client.get("/api/tasks").get_json()
-        assert same["completed_at"] is None and same["keep"] is False
+        assert same["closed_at"] is None and same["keep"] is False
 
     def test_idx_must_be_whole(self, client):
         task = create_task(client, title="Task", description="- [ ] a").get_json()
@@ -173,24 +173,24 @@ class TestBatchDelete:
 class TestCompletion:
     def test_complete_task(self, client):
         task = create_task(client, title="Finish").get_json()
-        assert task["completed_at"] is None
+        assert task["closed_at"] is None
         resp = client.put(f"/api/tasks/{task['id']}", json={"completed": True})
         data = resp.get_json()
-        assert data["completed_at"] is not None
+        assert data["closed_at"] is not None
 
     def test_uncomplete_task(self, client):
         task = create_task(client, title="Undo").get_json()
         client.put(f"/api/tasks/{task['id']}", json={"completed": True})
         resp = client.put(f"/api/tasks/{task['id']}", json={"completed": False})
         data = resp.get_json()
-        assert data["completed_at"] is None
+        assert data["closed_at"] is None
 
     def test_complete_already_completed_noop(self, client):
         task = create_task(client, title="Already done").get_json()
         resp1 = client.put(f"/api/tasks/{task['id']}", json={"completed": True})
-        ts1 = resp1.get_json()["completed_at"]
+        ts1 = resp1.get_json()["closed_at"]
         resp2 = client.put(f"/api/tasks/{task['id']}", json={"completed": True})
-        ts2 = resp2.get_json()["completed_at"]
+        ts2 = resp2.get_json()["closed_at"]
         assert ts1 == ts2
 
 
@@ -222,7 +222,7 @@ class TestRecurring:
         spawned = next(t for t in tasks if t["id"] != task["id"])
         assert spawned["title"] == "Daily standup"
         assert spawned["due_date"] == _future(11)
-        assert spawned["completed_at"] is None
+        assert spawned["closed_at"] is None
 
     def test_daily_recurrence_interval(self, client):
         task = create_task(client, title="Every 3 days",
@@ -520,7 +520,7 @@ class TestWontDo:
         resp = client.put(f"/api/tasks/{task['id']}", json={"wont_do": True})
         data = resp.get_json()
         assert data["wont_do"] is True
-        assert data["completed_at"] is not None
+        assert data["closed_at"] is not None
 
     def test_mark_wont_do_removes_from_active(self, client):
         task = create_task(client, title="Drop me").get_json()
@@ -530,7 +530,7 @@ class TestWontDo:
     def test_wont_do_appears_in_completed(self, client):
         task = create_task(client, title="Drop me").get_json()
         client.put(f"/api/tasks/{task['id']}", json={"wont_do": True})
-        completed = client.get("/api/tasks/completed").get_json()
+        completed = client.get("/api/tasks/closed").get_json()
         assert len(completed) == 1
         assert completed[0]["id"] == task["id"]
         assert completed[0]["wont_do"] is True
@@ -549,7 +549,7 @@ class TestWontDo:
         resp = client.put(f"/api/tasks/{task['id']}", json={"wont_do": False})
         data = resp.get_json()
         assert data["wont_do"] is False
-        assert data["completed_at"] is None
+        assert data["closed_at"] is None
         active = client.get("/api/tasks").get_json()
         assert len(active) == 1
         assert active[0]["id"] == task["id"]
@@ -580,7 +580,7 @@ class TestUndoRecurring:
         tasks = client.get("/api/tasks").get_json()
         assert len(tasks) == 1
         assert tasks[0]["id"] == task["id"]
-        assert tasks[0]["completed_at"] is None
+        assert tasks[0]["closed_at"] is None
 
     def test_reopen_keeps_an_edited_next_occurrence(self, client):
         # Reopening a done recurring task (from Completed, days later)
@@ -750,15 +750,15 @@ class TestNoFocusOrder:
 # ---------- Completed Count ----------
 
 
-class TestCompletedCount:
+class TestClosedCount:
     def test_counts_completed_and_wont_do(self, client):
-        assert client.get("/api/tasks/completed-count").get_json() == {"count": 0}
+        assert client.get("/api/tasks/closed-count").get_json() == {"count": 0}
         a = create_task(client, title="A").get_json()["id"]
         b = create_task(client, title="B").get_json()["id"]
         create_task(client, title="C")
         client.put(f"/api/tasks/{a}", json={"completed": True})
         client.put(f"/api/tasks/{b}", json={"wont_do": True})
-        assert client.get("/api/tasks/completed-count").get_json() == {"count": 2}
+        assert client.get("/api/tasks/closed-count").get_json() == {"count": 2}
 
 
 # ---------- Due Count ----------
@@ -866,7 +866,7 @@ class TestYearlyRecurrence:
         }).get_json()["id"]
         client.put(f"/api/tasks/{tid}", json={"completed": True})
         spawned = [t for t in client.get("/api/tasks").get_json()
-                   if t["id"] != tid and not t["completed_at"]]
+                   if t["id"] != tid and not t["closed_at"]]
         assert len(spawned) == 1
         assert spawned[0]["due_date"] == "2027-07-01"
         assert spawned[0]["recurrence"]["type"] == "yearly"
@@ -878,7 +878,7 @@ class TestYearlyRecurrence:
         }).get_json()["id"]
         client.put(f"/api/tasks/{tid}", json={"completed": True})
         spawned = [t for t in client.get("/api/tasks").get_json()
-                   if t["id"] != tid and not t["completed_at"]]
+                   if t["id"] != tid and not t["closed_at"]]
         assert spawned[0]["due_date"] == "2029-02-28"
 
     def test_yearly_spawn_carries_start_gap(self, client):
@@ -888,7 +888,7 @@ class TestYearlyRecurrence:
         }).get_json()["id"]
         client.put(f"/api/tasks/{tid}", json={"completed": True})
         spawned = [t for t in client.get("/api/tasks").get_json()
-                   if t["id"] != tid and not t["completed_at"]][0]
+                   if t["id"] != tid and not t["closed_at"]][0]
         assert spawned["due_date"] == "2027-07-01"
         assert spawned["start_date"] == "2027-06-21"
 
@@ -905,12 +905,12 @@ class TestBatchComplete:
         assert resp.status_code == 200
         updated = resp.get_json()
         assert len(updated) == 2
-        assert all(t["completed_at"] is not None for t in updated)
+        assert all(t["closed_at"] is not None for t in updated)
         # Verify via GET
         tasks = client.get("/api/tasks").get_json()
         for t in tasks:
             if t["id"] in (id1, id2):
-                assert t["completed_at"] is not None
+                assert t["closed_at"] is not None
 
     def test_batch_wont_do(self, client):
         """wont_do closes them undone: no next occurrence, a keep task too."""
@@ -921,15 +921,15 @@ class TestBatchComplete:
         resp = client.post("/api/tasks/batch-complete", json={"ids": ids, "completed": True, "wont_do": True})
         assert resp.status_code == 200
         assert client.get("/api/tasks").get_json() == []          # nothing spawned, Milk gone too
-        closed = client.get("/api/tasks/completed").get_json()
+        closed = client.get("/api/tasks/closed").get_json()
         assert sorted(t["title"] for t in closed) == ["A", "Milk", "Weekly"]
-        assert all(t["wont_do"] and t["completed_at"] for t in closed)
+        assert all(t["wont_do"] and t["closed_at"] for t in closed)
         assert all(t["history"][-1]["event"] == "wontdo" for t in closed)
         # The undo: reopening them.
         client.post("/api/tasks/batch-complete", json={"ids": ids, "completed": False})
         tasks = client.get("/api/tasks").get_json()
-        assert len(tasks) == 3 and not any(t["wont_do"] or t["completed_at"] for t in tasks)
-        assert client.get("/api/tasks/completed").get_json() == []
+        assert len(tasks) == 3 and not any(t["wont_do"] or t["closed_at"] for t in tasks)
+        assert client.get("/api/tasks/closed").get_json() == []
 
     def test_batch_wont_do_cant_reopen(self, client):
         tid = client.post("/api/tasks", json={"title": "A"}).get_json()["id"]
@@ -943,7 +943,7 @@ class TestBatchComplete:
         resp = client.post("/api/tasks/batch-complete", json={"ids": [id1], "completed": False})
         assert resp.status_code == 200
         task = client.get("/api/tasks").get_json()[0]
-        assert task["completed_at"] is None
+        assert task["closed_at"] is None
 
     def test_batch_complete_empty_ids(self, client):
         resp = client.post("/api/tasks/batch-complete", json={"ids": [], "completed": True})
@@ -961,7 +961,7 @@ class TestBatchComplete:
         assert len(tasks) == 1
         spawned = [t for t in tasks if t["id"] != task_id]
         assert spawned[0]["due_date"] == _future(11)
-        assert spawned[0]["completed_at"] is None
+        assert spawned[0]["closed_at"] is None
 
     def test_batch_uncomplete_removes_spawned(self, client):
         r = client.post("/api/tasks", json={
@@ -977,7 +977,7 @@ class TestBatchComplete:
         tasks = client.get("/api/tasks").get_json()
         assert len(tasks) == 1
         assert tasks[0]["id"] == task_id
-        assert tasks[0]["completed_at"] is None
+        assert tasks[0]["closed_at"] is None
 
     def test_batch_complete_idempotent(self, client):
         r = client.post("/api/tasks", json={"title": "A"})
@@ -989,14 +989,14 @@ class TestBatchComplete:
         assert len(resp.get_json()) == 0
 
 
-# ── Split completed storage (_deck.json / _deck_completed.json) ────────────────
+# ── Split completed storage (_deck.json / _deck_closed.json) ────────────────
 
 
-class TestCompletedStorage:
+class TestClosedStorage:
     """Coverage for the active/completed file split introduced in 4c79e31."""
 
     def test_completed_endpoint_empty_initially(self, client):
-        resp = client.get("/api/tasks/completed")
+        resp = client.get("/api/tasks/closed")
         assert resp.status_code == 200
         assert resp.get_json() == []
 
@@ -1007,17 +1007,17 @@ class TestCompletedStorage:
         active = client.get("/api/tasks").get_json()
         assert all(t["id"] != task["id"] for t in active)
         # Present in completed
-        completed = client.get("/api/tasks/completed").get_json()
+        completed = client.get("/api/tasks/closed").get_json()
         assert len(completed) == 1
         assert completed[0]["id"] == task["id"]
-        assert completed[0]["completed_at"] is not None
+        assert completed[0]["closed_at"] is not None
 
     def test_uncomplete_moves_task_back_to_active(self, client):
         task = create_task(client, title="Round trip").get_json()
         client.put(f"/api/tasks/{task['id']}", json={"completed": True})
         client.put(f"/api/tasks/{task['id']}", json={"completed": False})
         active = client.get("/api/tasks").get_json()
-        completed = client.get("/api/tasks/completed").get_json()
+        completed = client.get("/api/tasks/closed").get_json()
         assert [t["id"] for t in active] == [task["id"]]
         assert completed == []
 
@@ -1026,7 +1026,7 @@ class TestCompletedStorage:
         t2 = create_task(client, title="B").get_json()
         client.post("/api/tasks/batch-complete", json={"ids": [t1["id"], t2["id"]], "completed": True})
         assert client.get("/api/tasks").get_json() == []
-        completed_ids = {t["id"] for t in client.get("/api/tasks/completed").get_json()}
+        completed_ids = {t["id"] for t in client.get("/api/tasks/closed").get_json()}
         assert completed_ids == {t1["id"], t2["id"]}
 
     def test_update_completed_task_in_place(self, client):
@@ -1040,10 +1040,10 @@ class TestCompletedStorage:
         data = resp.get_json()
         assert data["title"] == "Edited"
         assert data["description"] == "new notes"
-        assert data["completed_at"] is not None  # still completed
+        assert data["closed_at"] is not None  # still completed
         # Still only in the completed file, not active
         assert client.get("/api/tasks").get_json() == []
-        completed = client.get("/api/tasks/completed").get_json()
+        completed = client.get("/api/tasks/closed").get_json()
         assert completed[0]["title"] == "Edited"
 
     def test_delete_completed_task(self, client):
@@ -1051,7 +1051,7 @@ class TestCompletedStorage:
         client.put(f"/api/tasks/{task['id']}", json={"completed": True})
         resp = client.delete(f"/api/tasks/{task['id']}")
         assert resp.status_code == 204
-        assert client.get("/api/tasks/completed").get_json() == []
+        assert client.get("/api/tasks/closed").get_json() == []
 
     def test_batch_delete_removes_completed_tasks(self, client):
         active_task = create_task(client, title="Active").get_json()
@@ -1062,7 +1062,7 @@ class TestCompletedStorage:
         })
         assert resp.status_code == 204
         assert client.get("/api/tasks").get_json() == []
-        assert client.get("/api/tasks/completed").get_json() == []
+        assert client.get("/api/tasks/closed").get_json() == []
 
     def test_search_includes_completed_task(self, client):
         task = create_task(client, title="findable_completed_token").get_json()
@@ -1168,7 +1168,7 @@ class TestBatchTag:
             "ids": [task["id"]], "add": ["archived"],
         })
         assert resp.status_code == 200
-        completed = client.get("/api/tasks/completed").get_json()
+        completed = client.get("/api/tasks/closed").get_json()
         assert "archived" in completed[0]["tags"]
 
 
@@ -1207,7 +1207,7 @@ class TestBatchUpdate:
         a = create_task(client, title="A").get_json()
         client.put(f"/api/tasks/{a['id']}", json={"completed": True})
         client.post("/api/tasks/batch-update", json={"tasks": [{"id": a["id"], "tags": ["old"]}]})
-        assert client.get("/api/tasks/completed").get_json()[0]["tags"] == ["old"]
+        assert client.get("/api/tasks/closed").get_json()[0]["tags"] == ["old"]
 
     def test_unknown_ids_are_skipped(self, client):
         a = create_task(client, title="A").get_json()
@@ -1226,7 +1226,7 @@ class TestBatchUpdate:
         a = create_task(client, title="A").get_json()
         resp = client.post("/api/tasks/batch-update", json={"tasks": [{"id": a["id"], key: True}]})
         assert resp.status_code == 400
-        assert client.get("/api/tasks").get_json()[0]["completed_at"] is None
+        assert client.get("/api/tasks").get_json()[0]["closed_at"] is None
 
     def test_a_bad_field_changes_nothing(self, client):
         a = create_task(client, title="A").get_json()
@@ -1346,7 +1346,7 @@ class TestUncompleteClearsWontDo:
         client.post("/api/tasks/batch-complete", json={"ids": [task_id], "completed": False})
         active = client.get("/api/tasks").get_json()
         task = next(t for t in active if t["id"] == task_id)
-        assert task["completed_at"] is None
+        assert task["closed_at"] is None
         assert task["wont_do"] is False
 
 
@@ -1368,7 +1368,7 @@ class TestCreateFieldParity:
         assert t["start_date"] == "2026-08-01"
         assert t["recurrence"] == {"type": "weekly", "interval": 3, "from": "due"}
         assert t["sort_order"] is None
-        assert t["completed_at"] is None
+        assert t["closed_at"] is None
         assert t["wont_do"] is False
 
     def test_create_defaults(self, client):
@@ -1492,13 +1492,13 @@ class TestRestore:
     def test_restore_completed_snapshot_lands_in_completed(self, client):
         task = create_task(client, title="Done one").get_json()
         client.put(f"/api/tasks/{task['id']}", json={"completed": True})
-        snap = client.get("/api/tasks/completed").get_json()[0]
+        snap = client.get("/api/tasks/closed").get_json()[0]
         client.delete(f"/api/tasks/{task['id']}")
         client.post("/api/tasks/restore", json={"tasks": [snap]})
         assert client.get("/api/tasks").get_json() == []
-        completed = client.get("/api/tasks/completed").get_json()
+        completed = client.get("/api/tasks/closed").get_json()
         assert completed[0]["id"] == task["id"]
-        assert completed[0]["completed_at"] == snap["completed_at"]
+        assert completed[0]["closed_at"] == snap["closed_at"]
 
     def test_restore_skips_existing_ids(self, client):
         task = create_task(client, title="Still here").get_json()
@@ -1523,7 +1523,7 @@ class TestRestore:
             {"title": "Open", "id": evil, "created_at": "<b>", "spawned_from": evil,
              "history": [{"at": "2026-01-02T10:00", "event": "created", "by": "<i>"}],
              "comments": [{"id": evil, "at": "2026-01-02T10:00", "by": "<i>", "text": "hi"}]},
-            {"title": "Done", "id": "<textarea>", "completed_at": "<textarea>"},
+            {"title": "Done", "id": "<textarea>", "closed_at": "<textarea>"},
             {"title": "By hand", "id": "old-1", "created_at": "2025-03-04",
              "comments": [{"id": "c1", "at": "2026-01-02T10:00", "by": "alice", "text": "hi"}]}]})
         assert resp.status_code == 201
@@ -1535,8 +1535,8 @@ class TestRestore:
         assert opened["spawned_from"] is None
         assert "by" not in opened["history"][0] and "by" not in opened["comments"][0]
         assert re.match(r"^[0-9a-f]{8}$", opened["comments"][0]["id"])
-        assert uuid.match(done["id"]) and stamp.match(done["completed_at"])
-        assert client.get("/api/tasks/completed").get_json()[0]["id"] == done["id"]
+        assert uuid.match(done["id"]) and stamp.match(done["closed_at"])
+        assert client.get("/api/tasks/closed").get_json()[0]["id"] == done["id"]
         # What a file written by hand may hold stays.
         assert by_hand["id"] == "old-1" and by_hand["created_at"] == "2025-03-04"
         assert by_hand["comments"][0]["id"] == "c1" and by_hand["comments"][0]["by"] == "alice"
@@ -1605,7 +1605,7 @@ class TestSkipOccurrence:
         assert len(active) == 1
         assert active[0]["spawned_from"] == task["id"]
         assert active[0]["due_date"] == _future(3)
-        completed = client.get("/api/tasks/completed").get_json()
+        completed = client.get("/api/tasks/closed").get_json()
         assert completed[0]["id"] == task["id"]
         assert completed[0]["wont_do"] is True
 
@@ -1616,14 +1616,14 @@ class TestSkipOccurrence:
         client.put(f"/api/tasks/{task['id']}", json={"wont_do": False})
         active = client.get("/api/tasks").get_json()
         assert [t["id"] for t in active] == [task["id"]]
-        assert active[0]["completed_at"] is None
+        assert active[0]["closed_at"] is None
         assert active[0]["wont_do"] is False
 
     def test_skip_non_recurring_is_plain_wont_do(self, client):
         task = create_task(client, title="One-off").get_json()
         client.put(f"/api/tasks/{task['id']}", json={"skip": True})
         assert client.get("/api/tasks").get_json() == []
-        completed = client.get("/api/tasks/completed").get_json()
+        completed = client.get("/api/tasks/closed").get_json()
         assert completed[0]["wont_do"] is True
 
     # Skipping an overdue occurrence must not bring the series back today:
@@ -1701,7 +1701,7 @@ class TestFileFormat:
     their own. Keys Zone doesn't know stay."""
 
     OLD = [{"id": "a1", "title": "Old", "description": "", "tags": [], "due_date": None,
-            "created_at": "2026-01-02T10:00:00", "completed_at": None, "wont_do": False,
+            "created_at": "2026-01-02T10:00:00", "closed_at": None, "wont_do": False,
             "sort_order": 1.0, "recurrence": None, "blocked_by": ["x"], "spawned_from": None}]
 
     def log(self, wiki):
@@ -1739,68 +1739,93 @@ class TestFileFormat:
 # ── Round 2: completed-task year archives ─────────────────────────────────────
 
 
-class TestCompletedArchive:
+class TestClosedArchive:
     def _seed_completed(self, wiki_dir, tasks):
-        (wiki_dir / "_tasks" / "completed.json").write_text(
+        (wiki_dir / "_tasks" / "closed.json").write_text(
             json.dumps(tasks), encoding="utf-8")
 
     def test_old_years_rolled_into_archives(self, client, wiki_dir, tmp_path_factory):
         year = date.today().year
         self._seed_completed(wiki_dir, [
-            {"id": "old1", "title": "Ancient", "completed_at": f"{year-2}-05-01T10:00:00"},
-            {"id": "old2", "title": "Last year", "completed_at": f"{year-1}-11-30T10:00:00"},
-            {"id": "new1", "title": "Recent", "completed_at": f"{year}-01-02T10:00:00"},
+            {"id": "old1", "title": "Ancient", "closed_at": f"{year-2}-05-01T10:00:00"},
+            {"id": "old2", "title": "Last year", "closed_at": f"{year-1}-11-30T10:00:00"},
+            {"id": "new1", "title": "Recent", "closed_at": f"{year}-01-02T10:00:00"},
         ])
         git_setup(tmp_path_factory)   # a start archives
-        hot = json.loads((wiki_dir / "_tasks" / "completed.json").read_text(encoding="utf-8"))
+        hot = json.loads((wiki_dir / "_tasks" / "closed.json").read_text(encoding="utf-8"))
         assert [t["id"] for t in hot] == ["new1"]
-        arch1 = json.loads((wiki_dir / "_tasks" / f"completed-{year-2}.json").read_text(encoding="utf-8"))
-        arch2 = json.loads((wiki_dir / "_tasks" / f"completed-{year-1}.json").read_text(encoding="utf-8"))
+        arch1 = json.loads((wiki_dir / "_tasks" / f"closed-{year-2}.json").read_text(encoding="utf-8"))
+        arch2 = json.loads((wiki_dir / "_tasks" / f"closed-{year-1}.json").read_text(encoding="utf-8"))
         assert [t["id"] for t in arch1] == ["old1"]
         assert [t["id"] for t in arch2] == ["old2"]
 
     def test_archive_merges_into_existing_file(self, client, wiki_dir, tmp_path_factory):
         year = date.today().year
-        (wiki_dir / "_tasks" / f"completed-{year-1}.json").write_text(
+        (wiki_dir / "_tasks" / f"closed-{year-1}.json").write_text(
             json.dumps([{"id": "prior", "title": "Already archived",
-                         "completed_at": f"{year-1}-01-01T10:00:00"}]), encoding="utf-8")
+                         "closed_at": f"{year-1}-01-01T10:00:00"}]), encoding="utf-8")
         self._seed_completed(wiki_dir, [
-            {"id": "old", "title": "Old", "completed_at": f"{year-1}-06-01T10:00:00"},
+            {"id": "old", "title": "Old", "closed_at": f"{year-1}-06-01T10:00:00"},
         ])
         git_setup(tmp_path_factory)   # a start archives
-        arch = json.loads((wiki_dir / "_tasks" / f"completed-{year-1}.json").read_text(encoding="utf-8"))
+        arch = json.loads((wiki_dir / "_tasks" / f"closed-{year-1}.json").read_text(encoding="utf-8"))
         assert [t["id"] for t in arch] == ["prior", "old"]
+
+    def test_a_wiki_with_the_old_names_is_renamed(self, client, wiki_dir, tmp_path_factory):
+        """completed.json, completed-YYYY.json and completed_at, as they were
+        called: a start renames them, and the tasks are all still there."""
+        year = date.today().year
+        tasks_dir = wiki_dir / "_tasks"
+        (tasks_dir / "closed.json").unlink(missing_ok=True)
+        (tasks_dir / "tasks.json").write_text(json.dumps(
+            [{"id": "open1", "title": "Open", "completed_at": None}]), encoding="utf-8")
+        (tasks_dir / "completed.json").write_text(json.dumps([
+            {"id": "new1", "title": "Recent", "completed_at": f"{year}-01-02T10:00:00"},
+            {"id": "wont", "title": "Dropped", "completed_at": f"{year}-01-03T10:00:00", "wont_do": True},
+        ]), encoding="utf-8")
+        (tasks_dir / f"completed-{year-1}.json").write_text(json.dumps(
+            [{"id": "old1", "title": "Last year", "completed_at": f"{year-1}-11-30T10:00:00"}]), encoding="utf-8")
+        git_setup(tmp_path_factory)   # a start renames
+        assert sorted(p.name for p in tasks_dir.glob("c*.json")) == [f"closed-{year-1}.json", "closed.json"]
+        assert "completed_at" not in "".join(p.read_text(encoding="utf-8") for p in tasks_dir.glob("*.json"))
+        closed = client.get("/api/tasks/closed").get_json()
+        assert {t["id"]: t["closed_at"] for t in closed} == {
+            "new1": f"{year}-01-02T10:00:00", "wont": f"{year}-01-03T10:00:00"}
+        assert [t["wont_do"] for t in closed if t["id"] == "wont"] == [True]
+        assert [t["id"] for t in client.get(f"/api/tasks/closed?year={year-1}").get_json()] == ["old1"]
+        assert [(t["id"], t["closed_at"]) for t in client.get("/api/tasks").get_json()] == [("open1", None)]
+        assert client.get("/api/tasks/completed").status_code in (404, 405)
 
     def test_noop_when_nothing_old(self, client, wiki_dir, tmp_path_factory):
         year = date.today().year
         self._seed_completed(wiki_dir, [
-            {"id": "new1", "title": "Recent", "completed_at": f"{year}-01-02T10:00:00"},
+            {"id": "new1", "title": "Recent", "closed_at": f"{year}-01-02T10:00:00"},
         ])
         git_setup(tmp_path_factory)   # a start archives
-        assert not list((wiki_dir / "_tasks").glob("completed-*.json"))
+        assert not list((wiki_dir / "_tasks").glob("closed-*.json"))
 
     def test_archived_tasks_stay_searchable(self, client, wiki_dir, tmp_path_factory):
         year = date.today().year
         self._seed_completed(wiki_dir, [
             {"id": "old1", "title": "Zephyrscale audit",
-             "completed_at": f"{year-1}-05-01T10:00:00"},
+             "closed_at": f"{year-1}-05-01T10:00:00"},
         ])
         git_setup(tmp_path_factory)   # a start archives
         results = client.get("/api/search?q=zephyrscale").get_json()
         assert any(r.get("type") == "task" for r in results)
 
 
-class TestCompletedByYear:
+class TestClosedByYear:
     """Earlier years' completed tasks (the yearly archives) are shown by year
     in Completed and can be changed like any other completed task."""
 
     def _seed(self, wiki_dir):
         year = date.today().year
-        (wiki_dir / "_tasks" / f"completed-{year-1}.json").write_text(json.dumps([
-            {"id": "old", "title": "Last year", "completed_at": f"{year-1}-05-01T10:00:00"},
+        (wiki_dir / "_tasks" / f"closed-{year-1}.json").write_text(json.dumps([
+            {"id": "old", "title": "Last year", "closed_at": f"{year-1}-05-01T10:00:00"},
         ]), encoding="utf-8")
-        (wiki_dir / "_tasks" / "completed.json").write_text(json.dumps([
-            {"id": "new", "title": "This year", "completed_at": f"{year}-01-02T10:00:00"},
+        (wiki_dir / "_tasks" / "closed.json").write_text(json.dumps([
+            {"id": "new", "title": "This year", "closed_at": f"{year}-01-02T10:00:00"},
         ]), encoding="utf-8")
         return year
 
@@ -1809,31 +1834,31 @@ class TestCompletedByYear:
 
     def test_completed_by_year(self, client, wiki_dir):
         year = self._seed(wiki_dir)
-        assert [t["id"] for t in client.get("/api/tasks/completed").get_json()] == ["new"]
-        got = client.get(f"/api/tasks/completed?year={year-1}").get_json()
+        assert [t["id"] for t in client.get("/api/tasks/closed").get_json()] == ["new"]
+        got = client.get(f"/api/tasks/closed?year={year-1}").get_json()
         assert [t["id"] for t in got] == ["old"]
-        assert client.get("/api/tasks/completed?year=abc").status_code == 400
+        assert client.get("/api/tasks/closed?year=abc").status_code == 400
 
     def test_completed_view_and_count_leave_out_unarchived_old_tasks(self, client, wiki_dir):
         # A year change without a restart: last year's task is still in the
         # current file, but belongs to last year's view.
         year = date.today().year
-        (wiki_dir / "_tasks" / "completed.json").write_text(json.dumps([
-            {"id": "old", "title": "Old", "completed_at": f"{year-1}-12-31T10:00:00"},
-            {"id": "new", "title": "New", "completed_at": f"{year}-01-01T10:00:00"},
+        (wiki_dir / "_tasks" / "closed.json").write_text(json.dumps([
+            {"id": "old", "title": "Old", "closed_at": f"{year-1}-12-31T10:00:00"},
+            {"id": "new", "title": "New", "closed_at": f"{year}-01-01T10:00:00"},
         ]), encoding="utf-8")
-        assert [t["id"] for t in client.get("/api/tasks/completed").get_json()] == ["new"]
-        assert client.get("/api/tasks/completed-count").get_json()["count"] == 1
-        assert [t["id"] for t in client.get(f"/api/tasks/completed?year={year-1}").get_json()] == ["old"]
-        assert client.get("/api/tasks/completed-years").get_json()["years"] == [str(year), str(year-1)]
+        assert [t["id"] for t in client.get("/api/tasks/closed").get_json()] == ["new"]
+        assert client.get("/api/tasks/closed-count").get_json()["count"] == 1
+        assert [t["id"] for t in client.get(f"/api/tasks/closed?year={year-1}").get_json()] == ["old"]
+        assert client.get("/api/tasks/closed-years").get_json()["years"] == [str(year), str(year-1)]
 
     def test_completed_years_per_list(self, client, wiki_dir):
         year = self._seed(wiki_dir)
         (wiki_dir / "shop.md").write_text("# Shop\n\n[[tasks: list=groceries]]\n", encoding="utf-8")
-        arch = wiki_dir / "_tasks" / f"completed-{year-2}.json"
+        arch = wiki_dir / "_tasks" / f"closed-{year-2}.json"
         arch.write_text(json.dumps([{"id": "g", "title": "Milk", "tags": ["groceries"],
-                                     "completed_at": f"{year-2}-05-01T10:00:00"}]), encoding="utf-8")
-        years = lambda q: client.get("/api/tasks/completed-years" + q).get_json()["years"]  # noqa: E731
+                                     "closed_at": f"{year-2}-05-01T10:00:00"}]), encoding="utf-8")
+        years = lambda q: client.get("/api/tasks/closed-years" + q).get_json()["years"]  # noqa: E731
         # The main task list's are every task's: list tasks included.
         assert years("") == [str(year), str(year-1), str(year-2)]
         assert years("?list=groceries") == [str(year), str(year-2)]
@@ -1842,19 +1867,19 @@ class TestCompletedByYear:
         year = self._seed(wiki_dir)
         resp = client.put("/api/tasks/old", json={"title": "Renamed"})
         assert resp.status_code == 200
-        arch = wiki_dir / "_tasks" / f"completed-{year-1}.json"
+        arch = wiki_dir / "_tasks" / f"closed-{year-1}.json"
         assert self._ids(arch) == ["old"]
         assert json.loads(arch.read_text(encoding="utf-8"))[0]["title"] == "Renamed"
-        assert self._ids(wiki_dir / "_tasks" / "completed.json") == ["new"]
+        assert self._ids(wiki_dir / "_tasks" / "closed.json") == ["new"]
 
     def test_reopen_moves_task_out_of_archive(self, client, wiki_dir):
         year = self._seed(wiki_dir)
         assert client.put("/api/tasks/old", json={"completed": False}).status_code == 200
-        assert self._ids(wiki_dir / "_tasks" / f"completed-{year-1}.json") == []
+        assert self._ids(wiki_dir / "_tasks" / f"closed-{year-1}.json") == []
         assert [t["id"] for t in client.get("/api/tasks").get_json()] == ["old"]
         # Completed again now, it belongs to this year.
         client.put("/api/tasks/old", json={"completed": True})
-        assert self._ids(wiki_dir / "_tasks" / "completed.json") == ["new", "old"]
+        assert self._ids(wiki_dir / "_tasks" / "closed.json") == ["new", "old"]
 
     def test_batch_reopen_and_tag_reach_archives(self, client, wiki_dir):
         year = self._seed(wiki_dir)
@@ -1862,59 +1887,59 @@ class TestCompletedByYear:
         assert tagged[0]["tags"] == ["x"]
         done = client.post("/api/tasks/batch-complete", json={"ids": ["old"], "completed": False}).get_json()
         assert [t["id"] for t in done] == ["old"]
-        assert self._ids(wiki_dir / "_tasks" / f"completed-{year-1}.json") == []
+        assert self._ids(wiki_dir / "_tasks" / f"closed-{year-1}.json") == []
 
     def test_delete_and_restore_archived_task(self, client, wiki_dir):
         year = self._seed(wiki_dir)
-        arch = wiki_dir / "_tasks" / f"completed-{year-1}.json"
+        arch = wiki_dir / "_tasks" / f"closed-{year-1}.json"
         snapshot = json.loads(arch.read_text(encoding="utf-8"))[0]
         assert client.delete("/api/tasks/old").status_code == 204
         assert self._ids(arch) == []
         # Undo puts it back into its own year, not this year's file.
         assert client.post("/api/tasks/restore", json={"tasks": [snapshot]}).status_code == 201
         assert self._ids(arch) == ["old"]
-        assert self._ids(wiki_dir / "_tasks" / "completed.json") == ["new"]
+        assert self._ids(wiki_dir / "_tasks" / "closed.json") == ["new"]
 
     def test_batch_delete_reaches_archives(self, client, wiki_dir):
         year = self._seed(wiki_dir)
         client.post("/api/tasks/batch-delete", json={"ids": ["old", "new"]})
-        assert self._ids(wiki_dir / "_tasks" / f"completed-{year-1}.json") == []
-        assert self._ids(wiki_dir / "_tasks" / "completed.json") == []
+        assert self._ids(wiki_dir / "_tasks" / f"closed-{year-1}.json") == []
+        assert self._ids(wiki_dir / "_tasks" / "closed.json") == []
 
     def test_unchanged_archives_are_not_rewritten(self, client, wiki_dir):
         year = self._seed(wiki_dir)
-        arch = wiki_dir / "_tasks" / f"completed-{year-1}.json"
-        raw = '[{"id": "old", "title": "Last year", "completed_at": "%d-05-01T10:00:00"}]' % (year - 1)
+        arch = wiki_dir / "_tasks" / f"closed-{year-1}.json"
+        raw = '[{"id": "old", "title": "Last year", "closed_at": "%d-05-01T10:00:00"}]' % (year - 1)
         arch.write_text(raw, encoding="utf-8")
         create_task(client, title="Unrelated")
         client.put("/api/tasks/new", json={"title": "Edited"})
         assert arch.read_text(encoding="utf-8") == raw
 
     def test_other_files_are_not_archives(self, client, wiki_dir):
-        # Only _deck_completed-YYYY.json is an archive: anything else that
+        # Only _deck_closed-YYYY.json is an archive: anything else that
         # matches the prefix is left alone by the year split.
         self._seed(wiki_dir)
-        other = wiki_dir / "_tasks" / "completed-backup.json"
-        other.write_text(json.dumps([{"id": "b", "title": "B", "completed_at": "2001-01-01T00:00:00"}]),
+        other = wiki_dir / "_tasks" / "closed-backup.json"
+        other.write_text(json.dumps([{"id": "b", "title": "B", "closed_at": "2001-01-01T00:00:00"}]),
                          encoding="utf-8")
         client.put("/api/tasks/new", json={"title": "Edited"})
         assert self._ids(other) == ["b"]
 
     def test_search_links_archived_task_to_its_year(self, client, wiki_dir):
         year = date.today().year
-        (wiki_dir / "_tasks" / f"completed-{year-1}.json").write_text(json.dumps([
-            {"id": "old", "title": "Zephyrscale audit", "completed_at": f"{year-1}-05-01T10:00:00"},
+        (wiki_dir / "_tasks" / f"closed-{year-1}.json").write_text(json.dumps([
+            {"id": "old", "title": "Zephyrscale audit", "closed_at": f"{year-1}-05-01T10:00:00"},
         ]), encoding="utf-8")
         results = client.get("/api/search?q=zephyrscale").get_json()
         task = next(r for r in results if r.get("type") == "task")
-        assert task["href"] == f"/tasks?task=old&view=completed&year={year-1}"
+        assert task["href"] == f"/tasks?task=old&view=closed&year={year-1}"
 
     def test_search_link_of_this_years_task_has_no_year(self, client, wiki_dir):
         self._seed(wiki_dir)
         client.put("/api/tasks/new", json={"title": "Quillfeather done"})
         results = client.get("/api/search?q=quillfeather").get_json()
         task = next(r for r in results if r.get("type") == "task")
-        assert task["href"] == "/tasks?task=new&view=completed"
+        assert task["href"] == "/tasks?task=new&view=closed"
 
 
 class TestMalformedInput:
@@ -2059,7 +2084,7 @@ class TestLists:
         for tags in ([], ["groceries"], ["Groceries", "x"]):
             tid = create_task(client, tags=tags).get_json()["id"]
             client.put(f"/api/tasks/{tid}", json={"completed": True})
-        count = lambda q: client.get("/api/tasks/completed-count" + q).get_json()["count"]  # noqa: E731
+        count = lambda q: client.get("/api/tasks/closed-count" + q).get_json()["count"]  # noqa: E731
         assert count("") == 3
         assert count("?list=Groceries") == 2
         assert count("?all=1") == 3      # the old "show separate lists" scope
@@ -2183,12 +2208,12 @@ class TestKeep:
     def test_completing_keeps_it_open(self, client):
         tid = self._keep_task(client)["id"]
         done = client.put(f"/api/tasks/{tid}", json={"completed": True}).get_json()
-        assert done["completed_at"] is None
+        assert done["closed_at"] is None
         assert done["start_date"] is None and done["due_date"] is None
         assert done["sort_order"] == 0      # keeps its place in Open's order
         assert done["last_done"] == date.today().isoformat()
         assert [t["id"] for t in client.get("/api/tasks").get_json()] == [tid]
-        assert client.get("/api/tasks/completed").get_json() == []
+        assert client.get("/api/tasks/closed").get_json() == []
 
     def test_undo_restores_the_fields(self, client):
         task = self._keep_task(client)
@@ -2209,7 +2234,7 @@ class TestKeep:
         active = client.get("/api/tasks").get_json()
         assert [t["id"] for t in active] == [keep_id]
         assert active[0]["last_done"] == date.today().isoformat()
-        assert [t["id"] for t in client.get("/api/tasks/completed").get_json()] == [other_id]
+        assert [t["id"] for t in client.get("/api/tasks/closed").get_json()] == [other_id]
 
     def test_keep_never_repeats(self, client):
         task = create_task(client, keep=True, due_date=_future(1), rec_type="weekly").get_json()
@@ -2221,7 +2246,7 @@ class TestKeep:
         tid = self._keep_task(client)["id"]
         client.put(f"/api/tasks/{tid}", json={"wont_do": True})
         assert client.get("/api/tasks").get_json() == []
-        assert client.get("/api/tasks/completed").get_json()[0]["wont_do"] is True
+        assert client.get("/api/tasks/closed").get_json()[0]["wont_do"] is True
 
     def test_restore_keeps_keep_and_last_done(self, client):
         tid = self._keep_task(client)["id"]
@@ -2357,13 +2382,13 @@ class TestHistory:
         client.post("/api/tasks/batch-complete", json={"ids": [a, k], "completed": True})
         keep = next(t for t in client.get("/api/tasks").get_json() if t["id"] == k)
         assert self._events(keep) == ["created", "done"]    # the cleared start is part of "done"
-        done = client.get("/api/tasks/completed").get_json()[0]
+        done = client.get("/api/tasks/closed").get_json()[0]
         assert self._events(done) == ["created", "done"]
 
     def test_skip_and_spawn(self, client):
         tid = create_task(client, due_date=_future(1), rec_type="daily").get_json()["id"]
         client.put(f"/api/tasks/{tid}", json={"skip": True})
-        skipped = client.get("/api/tasks/completed").get_json()[0]
+        skipped = client.get("/api/tasks/closed").get_json()[0]
         assert self._events(skipped) == ["created", "skipped"]
         spawned = client.get("/api/tasks").get_json()[0]
         # The next occurrence carries the series' history on.
@@ -2471,9 +2496,9 @@ class TestComments:
         tid = create_task(client).get_json()["id"]
         client.put(f"/api/tasks/{tid}", json={"completed": True})
         assert client.post(self._url(tid), json={"text": "done by Sam"}).status_code == 201
-        done = client.get("/api/tasks/completed").get_json()[0]
+        done = client.get("/api/tasks/closed").get_json()[0]
         assert done["comments"][0]["text"] == "done by Sam"
-        assert done["completed_at"]
+        assert done["closed_at"]
 
     def test_other_writes_leave_them_alone(self, client):
         tid = create_task(client).get_json()["id"]

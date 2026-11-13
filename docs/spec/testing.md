@@ -329,7 +329,7 @@ Without Playwright installed they skip, so plain `pytest tests/` is unaffected.
   `test_security.py` also has what only a browser shows of the other rules: an iframe's `srcdoc` never frames a form, and a task's id is text on its card, not an element.
   Under that policy Playwright can't `eval` in the page: `page.wait_for_function` needs a function (`"() => scrollY > 0"`), as an expression string is evaluated with `eval`; `page.evaluate` works either way.
 
-`go/internal/taskfiles/taskfiles_test.go` covers the task files on a temp folder, without a wiki or a server: a write filed by owner and year in one commit and an unchanged one committing nothing, what each user reads, the Completed view by year and its years, a corrupt file refusing the write and staying as it is, who may write (`MayWrite`, a task of another user's refused), and the archive at start.
+`go/internal/taskfiles/taskfiles_test.go` covers the task files on a temp folder, without a wiki or a server: a write filed by owner and year in one commit and an unchanged one committing nothing, what each user reads, the Closed view by year and its years, a corrupt file refusing the write and staying as it is, who may write (`MayWrite`, a task of another user's refused), and the archive at start.
 `go/internal/atomicfile` has the atomic write's (a new file's mode, an old one's kept, a link written through).
 
 `tests/test_task_app_wiring.py` reads the task app's sources (`public/tasks.js`, `public/js/task*.js`): every `app.name` a part uses is one `tasks.js` puts on `app` or a part returns, and no name is put there twice; a misspelled or moved function is found there, not in a browser when its line runs.

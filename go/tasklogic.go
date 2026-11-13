@@ -37,13 +37,13 @@ func init() {
 	}
 }
 
-// completedYearsIn: the years with completed tasks in scope (a list, or ""
+// closedYearsIn: the years with closed tasks in scope (a list, or ""
 // for all) that user sees, newest first; this year always.
-func completedYearsIn(user, scope string) []string {
-	return taskFiles.CompletedYears(user, func(t *Task) bool { return inScope(t, scope) })
+func closedYearsIn(user, scope string) []string {
+	return taskFiles.ClosedYears(user, func(t *Task) bool { return inScope(t, scope) })
 }
 
-// timestamp is the current time as tasks store it (created_at, completed_at).
+// timestamp is the current time as tasks store it (created_at, closed_at).
 func timestamp() string { return now().Format("2006-01-02T15:04:05") }
 
 // runePrefix is s[:n] in characters.
@@ -267,13 +267,13 @@ func keepDone(user string, t *Task) {
 	t.StartDate, t.DueDate = "", ""
 }
 
-// completeTask stamps a task completed (by user, at at; "" now); returns
+// completeTask stamps a task done (by user, at at; "" now); returns
 // the spawned recurring instance, if any.
 func completeTask(user string, t *Task, at string, active []*Task) *Task {
 	if at == "" {
 		at = timestamp()
 	}
-	t.CompletedAt, t.WontDo = at, false
+	t.ClosedAt, t.WontDo = at, false
 	logEvent(t, user, "done", "", "")
 	return spawnRecurring(user, t, active, false)
 }
@@ -299,7 +299,7 @@ func untouchedSpawn(spawn, task *Task) bool {
 }
 
 // uncompleteTask clears the completion and returns active without the
-// open instance spawned when it was completed, unless that was changed
+// open instance spawned when it was closed, unless that was changed
 // since (untouchedSpawn); protect ids are never removed.
 func uncompleteTask(user string, t *Task, active []*Task, protect map[string]bool) []*Task {
 	if t.Recurrence != nil {
@@ -312,7 +312,7 @@ func uncompleteTask(user string, t *Task, active []*Task, protect map[string]boo
 		}
 		active = kept
 	}
-	t.CompletedAt, t.WontDo = "", false
+	t.ClosedAt, t.WontDo = "", false
 	logEvent(t, user, "reopened", "", "")
 	return active
 }
@@ -409,7 +409,7 @@ func findTaskBacklinks(open []*Task, slug string) []TaskLink {
 
 // resolveTaskRefs maps each reference (an id prefix, lowercased) to its
 // task among those user sees, nil when none has it (another user's private
-// task is as none). An open task wins over a completed one; a completed
+// task is as none). An open task wins over a closed one; a closed
 // recurring task stands for its series: the reference follows
 // spawned_from to the occurrence current now.
 func resolveTaskRefs(user string, refs []string) map[string]*Task {
@@ -470,7 +470,7 @@ func findTasks(user, prefix string) []*Task {
 
 // lastActivity: the day a task last changed as far as it records.
 func lastActivity(t *Task) string {
-	stamps := []string{t.CompletedAt, t.CreatedAt}
+	stamps := []string{t.ClosedAt, t.CreatedAt}
 	for _, e := range t.History {
 		stamps = append(stamps, e.At)
 	}
@@ -537,9 +537,9 @@ func sanitizeSnapshot(snap jsonObj) *Task {
 	if s, ok := jsonobj.As[string](snap["created_at"]); ok && snapshotTimeRE.MatchString(s) {
 		t.CreatedAt = s
 	}
-	if s, ok := jsonobj.As[string](snap["completed_at"]); ok && s != "" {
-		if t.CompletedAt = s; !snapshotTimeRE.MatchString(s) {
-			t.CompletedAt = timestamp()
+	if s, ok := jsonobj.As[string](snap["closed_at"]); ok && s != "" {
+		if t.ClosedAt = s; !snapshotTimeRE.MatchString(s) {
+			t.ClosedAt = timestamp()
 		}
 	}
 	if f, ok := jsonobj.As[float64](snap["sort_order"]); ok {

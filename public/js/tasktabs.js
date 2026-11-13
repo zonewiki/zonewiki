@@ -1,5 +1,5 @@
 // A task app's tabs and its filter field (tasks.js initTasksInstance): Open
-// (as the Plan board or one list) and Focus, the Completed view behind its
+// (as the Plan board or one list) and Focus, the Closed view behind its
 // link, and the filter's chips and text. What it uses of the app comes in
 // app (its state in app.st).
 
@@ -14,36 +14,35 @@ const { st } = app;
 // Segmented control: one button per view, data-view = the view's name.
 
 const tabButtons = () => Array.from(app.tabsEl.querySelectorAll('[data-view]'));
-const VIEWS = ['open', 'plan', 'focus', 'completed'];
-// The tab to return to from Completed (the link's "back" state).
+const VIEWS = ['open', 'plan', 'focus', 'closed'];
+// The tab to return to from Closed (the link's "back" state).
 st.lastTab = 'focus';
 
-// While the filter field is in use, the link counts the completed tasks it
-// matches ("✓ 2 matches in Completed →"), so a search that comes up empty
-// here still shows where the task went. That needs the completed tasks,
+// While the filter field is in use, the link counts the closed tasks it
+// matches ("✓ 2 matches in Closed →"), so a search that comes up empty
+// here still shows where the task went. That needs the closed tasks,
 // which are otherwise only loaded when the view is opened. The unfiltered
 // total is never shown while filtering: it would read as the number of
-// completed tasks the filter leaves.
-// The view is called Closed where people read it: it holds what is done and
-// what was closed undone (won't do). In the code, the params (view=completed),
-// the routes and the files it keeps the name it had, Completed.
-function syncCompletedLink() {
-  if (!app.completedLink) return;
+// closed tasks the filter leaves.
+// The view is called Closed: it holds what is done and what was closed
+// undone (won't do). So are its param (view=closed), routes and files.
+function syncClosedLink() {
+  if (!app.closedLink) return;
   let matches = null;
   const f = parseFilter(filterQuery());
-  const filtering = st.activeView !== 'completed' && (f.text || f.tagGroups.length || f.excludeTags.length);
+  const filtering = st.activeView !== 'closed' && (f.text || f.tagGroups.length || f.excludeTags.length);
   if (filtering) {
-    if (!st.completedLoaded) { app.fetchCompleted(); }
+    if (!st.closedLoaded) { app.fetchClosed(); }
     else {
-      matches = st.tasks.filter(t => t.completed_at && matchesFilter(t, f)).length;
+      matches = st.tasks.filter(t => t.closed_at && matchesFilter(t, f)).length;
     }
   }
-  app.completedLink.classList.toggle('has-matches', matches > 0);
-  app.completedLink.textContent = st.activeView === 'completed' ? `← Back to ${app.tabLabel(st.lastTab)}`
+  app.closedLink.classList.toggle('has-matches', matches > 0);
+  app.closedLink.textContent = st.activeView === 'closed' ? `← Back to ${app.tabLabel(st.lastTab)}`
     : matches ? `${matches} ${matches === 1 ? 'match' : 'matches'} in Closed →`
     : matches === 0 ? 'No matches in Closed →'
     : filtering ? 'Closed →'
-    : `Closed${st.completedCount != null ? ` (${st.completedCount})` : ''} →`;
+    : `Closed${st.closedCount != null ? ` (${st.closedCount})` : ''} →`;
 }
 
 // Mark the view's button active (no side effects — used during init too).
@@ -59,22 +58,22 @@ function markActiveTab(view) {
 function switchTab(view) {
   if (!VIEWS.includes(view)) return;
   if (st.selectMode) app.exitSelectMode();
-  if (view !== 'completed') st.lastTab = view;
+  if (view !== 'closed') st.lastTab = view;
   st.activeView = view;
   app.applyCompact(view);
   app.applySort();
   app.applyGroup();
   // Back from an earlier year: the other views count this year's matches.
-  if (view !== 'completed' && st.completedYear) app.setCompletedYear('');
-  markActiveTab(view);   // Completed has no tab: none is marked
-  syncCompletedLink();
+  if (view !== 'closed' && st.closedYear) app.setClosedYear('');
+  markActiveTab(view);   // Closed has no tab: none is marked
+  syncClosedLink();
   // Keyboard focus follows the active view (Tab-cycling from a focused tab
   // would otherwise leave the focus ring on the previous one).
   if (app.tabsEl.contains(document.activeElement)) {
     app.tabsEl.querySelector(`[data-view="${view === 'plan' ? 'open' : view}"]`)?.focus();
   }
   app.saveActiveTab(st.activeView);
-  if (st.activeView === 'completed') app.fetchCompleted();
+  if (st.activeView === 'closed') app.fetchClosed();
   app.render();
 }
 
@@ -82,9 +81,9 @@ app.tabsEl.addEventListener('click', e => {
   const btn = e.target.closest('[data-view]');
   if (btn) switchTab(app.tabView(btn.dataset.view));
 });
-app.completedLink?.addEventListener('click', () => {
-  switchTab(st.activeView === 'completed' ? st.lastTab : 'completed');
-  if (st.activeView === 'completed') app.tabsEl.scrollIntoView({ block: 'nearest' });
+app.closedLink?.addEventListener('click', () => {
+  switchTab(st.activeView === 'closed' ? st.lastTab : 'closed');
+  if (st.activeView === 'closed') app.tabsEl.scrollIntoView({ block: 'nearest' });
 });
 
 // The filter: its chips (completed tag words) plus the text typed after them.
@@ -121,5 +120,5 @@ if (app.filterSearch) {
   });
 }
 
-return { tabButtons, VIEWS, syncCompletedLink, markActiveTab, switchTab, embedFilterWords, filterChips, filterQuery, userFiltering };
+return { tabButtons, VIEWS, syncClosedLink, markActiveTab, switchTab, embedFilterWords, filterChips, filterQuery, userFiltering };
 }

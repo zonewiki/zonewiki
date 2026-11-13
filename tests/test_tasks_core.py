@@ -161,7 +161,7 @@ class TestBoardBuckets:
             {"id": "recent", "start_date": "2026-07-24", "sort_order": 0},
             {"id": "old", "start_date": "2026-07-01", "sort_order": 1},
             {"id": "today", "start_date": TODAY},
-            {"id": "done", "start_date": "2026-07-01", "completed_at": "2026-07-02T10:00"},
+            {"id": "done", "start_date": "2026-07-01", "closed_at": "2026-07-02T10:00"},
         ]
         sections = run_core(f"TasksCore.boardBuckets({json.dumps(tasks)}, '{TODAY}')")
         by_key = {s["key"]: s for s in sections}
@@ -545,7 +545,7 @@ class TestTasksInView:
         {"id": "later", "title": "Later", "tags": ["work"], "start_date": "2026-08-01"},
         {"id": "due", "title": "Due today", "tags": ["work"], "due_date": TODAY},
         {"id": "plain", "title": "No dates", "tags": []},
-        {"id": "done", "title": "Done", "tags": ["work"], "start_date": "2026-07-01", "completed_at": "2026-07-02T10:00:00"},
+        {"id": "done", "title": "Done", "tags": ["work"], "start_date": "2026-07-01", "closed_at": "2026-07-02T10:00:00"},
     ]
 
     def ids(self, view, query=""):
@@ -559,7 +559,7 @@ class TestTasksInView:
         assert self.ids("open") == self.ids("plan") == ["started", "later", "due", "plain"]
 
     def test_completed_shows_only_the_completed(self):
-        assert self.ids("completed") == ["done"]
+        assert self.ids("closed") == ["done"]
 
     def test_the_filter_takes_an_importance(self):
         tasks = [{"id": "a", "importance": "high"}, {"id": "b"}, {"id": "c", "importance": "low", "tags": ["work"]}]
@@ -572,5 +572,5 @@ class TestTasksInView:
     def test_the_filter_narrows_every_tab(self):
         assert self.ids("open", "#work") == ["later", "due"]
         assert self.ids("focus", "#work") == ["due"]
-        assert self.ids("completed", "#home") == []
+        assert self.ids("closed", "#home") == []
         assert self.ids("open", "dates") == ["plain"]

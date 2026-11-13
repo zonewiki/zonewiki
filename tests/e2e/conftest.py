@@ -146,11 +146,11 @@ def wait_until(page, predicate, timeout_ms: int = 5000):
 
 
 def open_tab(page, view: str):
-    """Switch the tasks to a view by its name (open/plan/focus/completed).
+    """Switch the tasks to a view by its name (open/plan/focus/closed).
     Completed has no tab; its link under the list opens it. Open and Plan
     are the Open tab with its Plan switch off and on."""
-    if view == "completed":
-        page.locator("#task-completed-link").click()
+    if view == "closed":
+        page.locator("#task-closed-link").click()
     elif view in ("open", "plan"):
         page.locator("#tasks-tabs [data-view='open']").click()
         switch = page.locator(".tasks-plan-switch").first

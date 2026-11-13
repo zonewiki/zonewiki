@@ -1,6 +1,6 @@
 // A task app's list, drawn (tasks.js initTasksInstance): render() draws the
 // shown tab's cards (Focus, Open in sections or as the Plan board,
-// Completed by year) from app.st and wires them; notes and comments come
+// Closed by year) from app.st and wires them; notes and comments come
 // rendered as pages are (htmlOf). What it uses of the app comes in app
 // (its state in app.st).
 import TasksCore from '../tasks-core.js';
@@ -74,8 +74,8 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
   // A task ticked but not yet done stays ticked when another completion
   // re-renders the list.
   const pending = app.pendingCompletions.has(task.id);
-  const checked = task.completed_at || pending ? 'checked' : '';
-  const completedClass = (task.completed_at ? 'task-completed' : '') + (task.wont_do ? ' task-wont-do' : '') +
+  const checked = task.closed_at || pending ? 'checked' : '';
+  const closedClass = (task.closed_at ? 'task-closed' : '') + (task.wont_do ? ' task-wont-do' : '') +
     (pending ? ' task-completing' : '');
   const dueClass = dueDateClass(task);
   const urgClass = urgencyClass(task);
@@ -89,7 +89,7 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
   const recIcon = task.recurrence ? '<span class="task-recurring" title="Recurring">↻</span>'
     : task.keep ? `<span class="task-recurring task-keep" title="Keep: back to ${esc(app.tabLabel('open'))} when ticked off">⟲</span>` : '';
   // A keep task's last completion, e.g. when the milk was last bought.
-  const lastDoneDisplay = task.keep && task.last_done && !task.completed_at
+  const lastDoneDisplay = task.keep && task.last_done && !task.closed_at
     ? `<span class="task-last-done" title="Last done">✓ ${esc(shortDate(task.last_done))}</span>` : '';
   // Comments: a count; hovering shows the latest, a click opens them.
   const comments = task.comments || [];
@@ -99,28 +99,28 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
   // A planned task is either in Focus already (start today or earlier) or
   // planned for later; the card's left edge and its 📅 date say which, the
   // same on every tab.
-  const planned = !task.completed_at && task.start_date
+  const planned = !task.closed_at && task.start_date
     ? (task.start_date <= todayStr() ? 'now' : 'later') : '';
   const focusClass = planned ? ` task-planned-${planned}` : '';
   // A past start date reads "since Sep 21" in the plain meta colour, never
   // as a warning, so only today's date is coloured amber.
   const focusMetaClass = planned === 'later' ? 'focus-later'
     : planned && task.start_date === todayStr() ? 'focus-now' : '';
-  const dueDisplay = !task.completed_at
+  const dueDisplay = !task.closed_at
     ? `<span class="task-due task-clickable-date ${dueClass}${task.due_date ? '' : ' task-date-empty'}" data-id="${esc(task.id)}" data-field="due_date" title="${task.due_date ? 'Click to change due date' : 'Set due date'}">⏰${task.due_date ? ' ' + esc(formatDate(task.due_date)) : ''}</span>`
     : (task.due_date ? `<span class="task-due ${dueClass}">⏰ ${esc(formatDate(task.due_date))}</span>` : '');
   // A past start date means "available since", not late — so it reads
   // "since Sep 21" with no warning styling.
   const focusLabel = !task.start_date ? ''
-    : (!task.completed_at && task.start_date < todayStr())
+    : (!task.closed_at && task.start_date < todayStr())
       ? `since ${shortDate(task.start_date)}` : formatDate(task.start_date);
-  const focusDisplay = !task.completed_at
+  const focusDisplay = !task.closed_at
     ? `<span class="task-date-info task-focus-info task-clickable-date ${focusMetaClass}${task.start_date ? '' : ' task-date-empty'}" data-id="${esc(task.id)}" data-field="start_date" title="${task.start_date ? 'Click to change start date' : 'Set start date'}">📅${focusLabel ? ' ' + esc(focusLabel) : ''}</span>`
     : (task.start_date ? `<span class="task-date-info task-focus-info ${focusMetaClass}">📅 ${esc(formatDate(task.start_date))}</span>` : '');
-  const completedDisplay = task.completed_at
+  const closedDisplay = task.closed_at
     ? (task.wont_do
         ? `<span class="task-date-info task-wontdo-badge">✗ won't do</span>`
-        : `<span class="task-date-info">done: ${esc(task.completed_at.slice(0, 10))}</span>`)
+        : `<span class="task-date-info">done: ${esc(task.closed_at.slice(0, 10))}</span>`)
     : '';
 
   // Marks that there are notes, which a compact line hides; on every card
@@ -133,17 +133,17 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
     ? `<button type="button" class="task-has-notes task-subtasks${subtasks.done === subtasks.total ? ' task-subtasks-done' : ''}" data-id="${esc(task.id)}" title="${subtasksLabel}" aria-label="${subtasksLabel}">☑ ${subtasks.done}/${subtasks.total}</button>`
     : task.description?.trim()
     ? `<button type="button" class="task-has-notes" data-id="${esc(task.id)}" title="Has a description" aria-label="Has a description">📝</button>` : '';
-  const skipBtnHtml = (!task.completed_at && task.recurrence)
+  const skipBtnHtml = (!task.closed_at && task.recurrence)
     ? `<button class="task-skip-btn" data-id="${esc(task.id)}" title="Skip this occurrence (series continues)">⏭</button>`
     : '';
   const tagsRight = tags ? `<span class="task-tags-right">${tags}</span>` : '';
   const privateDisplay = task.private
     ? '<span class="task-private" title="Private: only you see it" aria-label="Private">🔒</span>' : '';
   const hasRealMeta = !!(tags || task.due_date || task.start_date || task.recurrence ||
-    task.keep || task.private || task.completed_at || commentsDisplay || notesDisplay);
-  const hasMeta = !task.completed_at || dueDisplay || focusDisplay || completedDisplay || recIcon || privateDisplay || tagsRight || notesDisplay;
+    task.keep || task.private || task.closed_at || commentsDisplay || notesDisplay);
+  const hasMeta = !task.closed_at || dueDisplay || focusDisplay || closedDisplay || recIcon || privateDisplay || tagsRight || notesDisplay;
   const metaClass = (hasMeta && !hasRealMeta) ? 'task-meta task-meta--hover-only' : 'task-meta';
-  const metaHtml = hasMeta ? `<div class="${metaClass}">${tagsRight}<span class="task-meta-right">${skipBtnHtml}${privateDisplay}${recIcon}${notesDisplay}${commentsDisplay}${lastDoneDisplay}${dueDisplay}${focusDisplay}${completedDisplay}</span></div>` : '';
+  const metaHtml = hasMeta ? `<div class="${metaClass}">${tagsRight}<span class="task-meta-right">${skipBtnHtml}${privateDisplay}${recIcon}${notesDisplay}${commentsDisplay}${lastDoneDisplay}${dueDisplay}${focusDisplay}${closedDisplay}</span></div>` : '';
   const descHtml = task.description ? `<div class="task-desc page-content">${htmlOf('notes', task.description)}</div>` : '';
   // The latest comments, newest first: shown only when a compact task is
   // expanded (full cards have the 💬 count; the modal has them all).
@@ -160,7 +160,7 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
   const expandBtn = descHtml || commentsHtml
     ? `<button type="button" class="task-expand-btn" data-id="${esc(task.id)}" aria-expanded="${detailsShown}" aria-label="Description and comments" title="Description and comments (l / h)">${app.EXPAND_ICON}</button>` : '';
   return `
-    <li class="task-item ${completedClass} ${urgClass}${focusClass} ${extraClass}${st.compact && task.id === st.expandedId ? ' task-expanded' + (st.detailsOpen ? ' task-details' : '') : ''}" data-id="${esc(task.id)}" ${dragAttr}>
+    <li class="task-item ${closedClass} ${urgClass}${focusClass} ${extraClass}${st.compact && task.id === st.expandedId ? ' task-expanded' + (st.detailsOpen ? ' task-details' : '') : ''}" data-id="${esc(task.id)}" ${dragAttr}>
       <label class="task-checkbox">
         <input type="checkbox" ${checked} data-id="${esc(task.id)}">
       </label>
@@ -237,7 +237,7 @@ function planHTML(filtered) {
   }).join('');
 }
 
-// Focus, Open and Completed: the list's HTML.
+// Focus, Open and Closed: the list's HTML.
 function listHTML(orderedTasks, newTasks) {
   let html = '';
   let truncated = false;
@@ -248,21 +248,21 @@ function listHTML(orderedTasks, newTasks) {
         `<span>⚠ ${inFocus} tasks in ${esc(app.tabLabel('focus'))} (limit: ${app.LIMIT})</span></li>`;
     }
   }
-  // No tab is highlighted in Completed, so the list says where you are.
-  if (st.activeView === 'completed') {
+  // No tab is highlighted in Closed, so the list says where you are.
+  if (st.activeView === 'closed') {
     // Earlier years (the yearly archives) are one click away.
-    const shown = st.completedYear || app.thisYear;
-    const years = st.completedYears.includes(shown) ? st.completedYears : [...st.completedYears, shown].sort().reverse();
+    const shown = st.closedYear || app.thisYear;
+    const years = st.closedYears.includes(shown) ? st.closedYears : [...st.closedYears, shown].sort().reverse();
     const yearBtns = years.length > 1
-      ? `<span class="completed-years">${years.map(y =>
-          `<button type="button" data-completed-year="${y}" aria-pressed="${y === shown}">${y}</button>`).join('')}</span>`
+      ? `<span class="closed-years">${years.map(y =>
+          `<button type="button" data-closed-year="${y}" aria-pressed="${y === shown}">${y}</button>`).join('')}</span>`
       : '';
-    html += `<li class="task-inbox-divider task-inbox-divider--only completed-heading">Closed${yearBtns}</li>`;
+    html += `<li class="task-inbox-divider task-inbox-divider--only closed-heading">Closed${yearBtns}</li>`;
   }
-  // Limit completed tab display
+  // Limit what the Closed view shows
   let displayTasks = orderedTasks;
-  if (st.activeView === 'completed' && orderedTasks.length > st.completedLimit) {
-    displayTasks = orderedTasks.slice(0, st.completedLimit);
+  if (st.activeView === 'closed' && orderedTasks.length > st.closedLimit) {
+    displayTasks = orderedTasks.slice(0, st.closedLimit);
     truncated = true;
   }
   // Open sorted: by deadline the tasks with one, then those without, each
@@ -286,7 +286,7 @@ function listHTML(orderedTasks, newTasks) {
   }
   html += displayTasks.map(t => taskHTML(t)).join('');
   if (truncated) {
-    html += `<li class="tasks-show-more"><button class="btn" id="tasks-show-more-btn">Show more (${orderedTasks.length - st.completedLimit} remaining)</button></li>`;
+    html += `<li class="tasks-show-more"><button class="btn" id="tasks-show-more-btn">Show more (${orderedTasks.length - st.closedLimit} remaining)</button></li>`;
   }
   return html;
 }
@@ -327,7 +327,7 @@ function wireListHandlers() {
   const showMoreBtn = app.listEl.querySelector('#tasks-show-more-btn');
   if (showMoreBtn) {
     showMoreBtn.addEventListener('click', () => {
-      st.completedLimit += 50;
+      st.closedLimit += 50;
       render();
     });
   }
@@ -422,7 +422,7 @@ function wireListHandlers() {
 }
 
 function render() {
-  app.syncCompletedLink();
+  app.syncClosedLink();
   const filtered = app.filterTasks();
   const { orderedTasks, newTasks } = inViewOrder(filtered);
   if (st.activeView !== 'plan' && orderedTasks.length === 0 && newTasks.length === 0) {

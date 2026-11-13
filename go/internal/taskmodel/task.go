@@ -24,10 +24,10 @@ type Task struct {
 	Tags        []string
 	// Dates as YYYY-MM-DD, timestamps as YYYY-MM-DDTHH:MM:SS; "" is none
 	// (null in the file).
-	StartDate, DueDate     string
-	CreatedAt, CompletedAt string
-	WontDo                 bool // completed as won't do
-	Keep                   bool // a keep task: done returns it to the pool
+	StartDate, DueDate  string
+	CreatedAt, ClosedAt string
+	WontDo              bool // closed as won't do
+	Keep                bool // a keep task: done returns it to the pool
 	// Importance: "high" or "low"; "" is normal, which the file doesn't
 	// say, so a wiki that sets none keeps its files as they were.
 	Importance  string
@@ -78,8 +78,12 @@ func CleanImportance(s string) string {
 	return ""
 }
 
-var taskKeys = map[string]bool{"id": true, "title": true, "description": true, "tags": true,
-	"start_date": true, "due_date": true, "created_at": true, "completed_at": true, "wont_do": true,
+// oldClosedAtKey: what closed_at was called; read where closed_at is
+// missing, never written (so not kept as an unknown key either).
+const oldClosedAtKey = "completed_at"
+
+var taskKeys = map[string]bool{oldClosedAtKey: true, "id": true, "title": true, "description": true, "tags": true,
+	"start_date": true, "due_date": true, "created_at": true, "closed_at": true, "wont_do": true,
 	"keep": true, "importance": true, "last_done": true, "sort_order": true, "recurrence": true, "spawned_from": true,
 	"history": true, "comments": true, "private": true}
 
@@ -89,10 +93,13 @@ var taskKeys = map[string]bool{"id": true, "title": true, "description": true, "
 func FromJSON(o jsonobj.Obj) *Task {
 	t := &Task{ID: o.Str("id"), Title: o.Str("title"), Description: o.Str("description"),
 		StartDate: o.Str("start_date"), DueDate: o.Str("due_date"),
-		CreatedAt: o.Str("created_at"), CompletedAt: o.Str("completed_at"),
+		CreatedAt: o.Str("created_at"), ClosedAt: o.Str("closed_at"),
 		WontDo: jsonobj.True(o["wont_do"]), Keep: jsonobj.True(o["keep"]), LastDone: o.Str("last_done"),
 		Importance:  CleanImportance(o.Str("importance")),
 		SpawnedFrom: o.Str("spawned_from"), History: []HistoryEntry{}, Comments: []Comment{}}
+	if !o.Has("closed_at") {
+		t.ClosedAt = o.Str(oldClosedAtKey) // a file from before the field was renamed
+	}
 	t.Tags = CleanTags(jsonobj.TextList(o["tags"])) // "local llm", "#work" from a file edited by hand
 	if f, ok := jsonobj.As[float64](o["sort_order"]); ok {
 		t.SortOrder = &f
@@ -215,7 +222,7 @@ func (t *Task) JSON(private bool) ([]byte, error) {
 		StartDate   *string        `json:"start_date"`
 		DueDate     *string        `json:"due_date"`
 		CreatedAt   *string        `json:"created_at"`
-		CompletedAt *string        `json:"completed_at"`
+		ClosedAt    *string        `json:"closed_at"`
 		WontDo      bool           `json:"wont_do"`
 		Keep        bool           `json:"keep"`
 		Importance  string         `json:"importance,omitempty"`
@@ -226,7 +233,7 @@ func (t *Task) JSON(private bool) ([]byte, error) {
 		History     []HistoryEntry `json:"history"`
 		Comments    []Comment      `json:"comments"`
 	}{t.ID, t.Title, t.Description, tags, jsonobj.Nullable(t.StartDate), jsonobj.Nullable(t.DueDate),
-		jsonobj.Nullable(t.CreatedAt), jsonobj.Nullable(t.CompletedAt), t.WontDo, t.Keep, t.Importance, jsonobj.Nullable(t.LastDone),
+		jsonobj.Nullable(t.CreatedAt), jsonobj.Nullable(t.ClosedAt), t.WontDo, t.Keep, t.Importance, jsonobj.Nullable(t.LastDone),
 		t.SortOrder, t.Recurrence, jsonobj.Nullable(t.SpawnedFrom), history, comments})
 	if err == nil && private {
 		b = append(b[:len(b)-1], `,"private":`+strconv.FormatBool(t.Owner != "")+"}"...)
@@ -259,8 +266,8 @@ func Encode(tasks []*Task) (string, error) {
 	return b.String(), nil
 }
 
-// IsOpen: not completed (nor won't do).
-func (t *Task) IsOpen() bool { return t.CompletedAt == "" }
+// IsOpen: not closed (neither done nor won't do).
+func (t *Task) IsOpen() bool { return t.ClosedAt == "" }
 
 // Parse: a task list file's tasks; ok false when it isn't a list. An item
 // that isn't an object is left out.

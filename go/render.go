@@ -247,7 +247,7 @@ func taskRefHTML(ref string, t *Task, day string, prefer []string, lists map[str
 		} else {
 			cls += " task-ref-done"
 		}
-		badges = append(badges, `<span class="task-ref-badge">`+mark+" "+shortDate(t.CompletedAt, day)+`</span>`)
+		badges = append(badges, `<span class="task-ref-badge">`+mark+" "+shortDate(t.ClosedAt, day)+`</span>`)
 	} else {
 		due, start := t.DueDate, t.StartDate
 		if due != "" {
@@ -398,7 +398,7 @@ func renderSourcesHTML(rq *Req, sources []string, article string, ids headingIDs
 }
 
 // taskHref: the link that opens one task in the tasks on tab; year: the
-// Completed year of a task in an earlier year's archive.
+// Closed year of a task in an earlier year's archive.
 func taskHref(id, tab, list, year string) string {
 	q := []string{"task=" + url.QueryEscape(id), "view=" + url.QueryEscape(tab)}
 	if list != "" {
@@ -411,10 +411,10 @@ func taskHref(id, tab, list, year string) string {
 }
 
 // taskLink: taskHref for a task as it is now: open on Open, done on
-// Completed (in its year's archive for an earlier year).
+// Closed (in its year's archive for an earlier year).
 func taskLink(t *Task, list string) string {
 	if t.IsOpen() {
 		return taskHref(t.ID, "open", list, "")
 	}
-	return taskHref(t.ID, "completed", list, taskFiles.PastYear(t))
+	return taskHref(t.ID, "closed", list, taskFiles.PastYear(t))
 }

@@ -55,7 +55,7 @@ func TestLastActivity(t *testing.T) {
 	}{
 		{task(`{"created_at": "2026-01-02T10:00:00"}`), "2026-01-02"},
 		{task(`{"created_at": "2026-01-02T10:00:00", "history": [{"at": "2026-03-04T09:00", "event": "start"}]}`), "2026-03-04"},
-		{task(`{"created_at": "2026-01-02T10:00:00", "completed_at": "2026-05-06T08:00:00",
+		{task(`{"created_at": "2026-01-02T10:00:00", "closed_at": "2026-05-06T08:00:00",
 			"history": [{"at": "2026-03-04T09:00"}, "junk"]}`), "2026-05-06"},
 		{task(`{"created_at": "2026-01-02T10:00:00", "comments": [{"at": "2026-04-01T09:00", "text": "x"}]}`), "2026-04-01"},
 		{task(`{}`), ""},
@@ -191,7 +191,7 @@ func TestPrivateTasksInTheirUsersFiles(t *testing.T) {
 	}
 }
 
-// Completing a private task files it in its user's completed.json, and the
+// Completing a private task files it in its user's closed.json, and the
 // next occurrence of a series stays private; unticking Private moves it to
 // the shared files.
 func TestPrivateTaskMovesAndCompletes(t *testing.T) {
@@ -209,14 +209,14 @@ func TestPrivateTaskMovesAndCompletes(t *testing.T) {
 	if _, err := updateTask("alice", task.ID, done, ""); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(fileText(t, taskFiles.CompletedPath("alice")), task.ID) || strings.Contains(fileText(t, taskFiles.CompletedPath("")), "Water") {
+	if !strings.Contains(fileText(t, taskFiles.ClosedPath("alice")), task.ID) || strings.Contains(fileText(t, taskFiles.ClosedPath("")), "Water") {
 		t.Error("completed into the wrong file")
 	}
 	open := taskFiles.Open("alice")
 	if len(open) != 1 || open[0].SpawnedFrom != task.ID || open[0].Owner != "alice" || len(taskFiles.Open("bob")) != 0 {
 		t.Errorf("next occurrence %+v", open)
 	}
-	if got := taskFiles.CompletedInYear("bob", taskFiles.CurrentYear()); len(got) != 0 {
+	if got := taskFiles.ClosedInYear("bob", taskFiles.CurrentYear()); len(got) != 0 {
 		t.Errorf("bob's Completed %v", titles(got))
 	}
 	shared := jsonObj{}
@@ -350,13 +350,13 @@ func TestEveryUsersFiles(t *testing.T) {
 	if _, err := updateTask("alice", mine.ID, last, ""); err != nil {
 		t.Fatal(err)
 	}
-	// Completed last year: the start of Zone files it into her archive.
-	done := taskfiles.ReadLenient(taskFiles.CompletedPath("alice"))
-	done[0].CompletedAt = "2001-05-01T10:00:00"
-	if err := taskfiles.Write(taskFiles.CompletedPath("alice"), done); err != nil {
+	// Closed last year: the start of Zone files it into her archive.
+	done := taskfiles.ReadLenient(taskFiles.ClosedPath("alice"))
+	done[0].ClosedAt = "2001-05-01T10:00:00"
+	if err := taskfiles.Write(taskFiles.ClosedPath("alice"), done); err != nil {
 		t.Fatal(err)
 	}
-	taskFiles.ArchiveOldCompleted()
+	taskFiles.ArchiveOldClosed()
 	if !strings.Contains(fileText(t, taskFiles.ArchivePath("alice", "2001")), mine.ID) {
 		t.Error("not archived in alice's files")
 	}
