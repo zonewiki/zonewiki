@@ -196,7 +196,7 @@ class TestLinks:
         page = client.get(link, headers=HOST)
         body = page.data.decode()
         assert page.status_code == 200 and "Welcome to" in body and "dave" in body
-        assert page.headers["Referrer-Policy"] == "no-referrer"
+        assert page.headers["Referrer-Policy"] == "same-origin"   # no other site learns the address
         assert section(git_wiki_dir, "dave") is None   # opening it changes nothing
         resp = post(client, link, password="dave-password", again="dave-password")
         assert resp.status_code == 303

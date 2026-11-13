@@ -2155,7 +2155,11 @@ body.editor-page main {
   body:has(.action-buttons) .raw-toast { bottom: calc(4.75rem + env(safe-area-inset-bottom)); }
   /* While typing, the on-screen keyboard owns the bottom of the screen; the
      bar would otherwise ride on top of it. */
-  body:has(:is(input, textarea, select, [contenteditable]):focus) :is(.action-buttons, .signout-form) { display: none; }
+  body:has(:is(input, textarea, select, [contenteditable]):focus) .action-buttons { display: none; }
+  /* Sign out, in the page's flow at the top, only goes out of sight: taken
+     out, the page would jump as a field loses the focus, and a tap on a
+     form's button right after typing would miss it. */
+  body:has(:is(input, textarea, select, [contenteditable]):focus) .signout-form { visibility: hidden; }
 
   /* The status badges join the page flow instead of floating over the
      breadcrumb. The container has no box of its own, so with no badge

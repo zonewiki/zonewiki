@@ -337,7 +337,8 @@ Zone doesn't mail these: the admin copies the link and sends it any way they lik
   Only its POST uses the link: an invite adds the user with its role, a reset sets the new password, which ends every session of the old one (`passwordStamp`);
   either way the change is logged as that user's, the link is gone, and they are signed in (a session made with the new hash, `setSessionHash`, as the settings take effect only once the request has ended).
   A user who was removed (reset), or a name someone took meanwhile (invite), is refused, as is a wiki that has no users any more.
-  The page sends `Referrer-Policy: no-referrer`: its address holds the token.
+  Its address holds the token, and no other site is told it (`Referrer-Policy: same-origin`, as every page).
+  Not `no-referrer`, which the page sent until 2026-11: under it a browser sends the form with `Origin: null`, the Origin check refused that, and the links didn't work in a browser (`test_a_reset_link_works_in_a_browser` in `tests/e2e/test_admin.py`).
 - **A link that doesn't work**, wrong, used, expired or replaced, gets one page for all ("This link doesn't work", 404), and a client trying them is throttled as for wrong passwords (`welcomeThrottle`).
 - **No minimum length** for the password, as `user add` has none.
 

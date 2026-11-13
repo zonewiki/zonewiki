@@ -262,7 +262,10 @@ type welcomeView struct {
 }
 
 func welcomeRoute(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Referrer-Policy", "no-referrer") // the address holds the token
+	// The address holds the token: no other site is told it (every page's
+	// Referrer-Policy: same-origin, contentPolicy). Not no-referrer: under
+	// it a browser sends the form with "Origin: null", which the Origin
+	// check refuses, and the link wouldn't work.
 	rq, key := newReq(r), clientKey(r)
 	dead := func(status int, msg string) {
 		page(w, rq, status, "welcome.html", "Link", shell{noActions: true}, &welcomeView{Dead: true, Error: msg})

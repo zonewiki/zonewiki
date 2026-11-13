@@ -10,7 +10,7 @@ Each rule has tests in `tests/test_routes.py` or `tests/test_mcp.py`, and `go/se
   Zone makes a key once and keeps it in `$ZONE_DATA/.zone/secret_key` (mode 0600, listed in `.git/info/exclude` so it never reaches git or a git remote; `secretKey()`), so restarts don't sign anyone out.
   A wiki folder Zone can't write to gets a new key per start.
   Routes `/login` (GET/POST) and `/logout` (POST) handle the session; `/welcome/<token>`, an invite or reset link's page, needs no login either (its token is the key: Invite and reset links in `docs/spec/users.md`), nor does `/signup` when sign-up is on (Sign-up there; its mail link only on `base-url`, never on the request's Host).
-  A "Sign out" button is rendered in the bottom-right corner when auth is enabled and the visitor is signed in (not on the login page); on phones it sits in the status-badge row at the top, hidden while typing.
+  A "Sign out" button is rendered in the bottom-right corner when auth is enabled and the visitor is signed in (not on the login page); on phones it sits in the status-badge row at the top, out of sight while typing (`visibility`, its place kept: taken out, the page would jump when a field loses the focus, and a tap on a form's button right after typing would miss it).
   With `ZONE_ALLOW_REMOTE`, the login page shows the 🌐 remote-access badge in its form's heading row (it has no breadcrumb for the badge to sit beside).
 - **Signing out ends the session** (`go/signout.go`): the session is a signed cookie, so a copy of it (taken from a shared computer, a backup of a browser profile, a proxy's log) would work on, and be renewed, long after its owner signed out.
   Each session has an id (`session.ID`, random, kept as the cookie is renewed: `renewSession`);
