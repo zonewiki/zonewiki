@@ -169,7 +169,7 @@ Phones have no switch (no top actions).
 
 ## Notes
 
-- **Keybinding:** **c** then **s** creates a note (see Keyboard Shortcuts); so does the phone's action bar's Note (see Modules).
+- **Keybinding:** **c** then **n** creates a note (see Keyboard Shortcuts); so do the phone's action bar's Note (see Modules) and **+ New** in the Notes page's header (`.notes-new`, also when there are no notes yet; not shown to a viewer).
 - User types a title and submits → `POST /api/notes` → server creates `<YYYY-MM-DD_HH-MM-SS>_<slug>.md` (local time;
   with users in your private folder, `private/<you>/…`, so notes are your own: see `docs/spec/users.md`) with `# Title\n\n` (`quicknote.create`;
   a `/` in the title is a hyphen in the name, so it makes no folder, and a second note of the same name in the same second takes the next second) and returns `{ slug }` → browser navigates to `/edit/<slug>`.

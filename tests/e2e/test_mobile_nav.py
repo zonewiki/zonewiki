@@ -115,6 +115,21 @@ def test_no_note_in_a_full_wiki(page, wiki, monkeypatch):
     expect(page).to_have_url(re.compile(r"/page/index$"))
 
 
+def test_notes_page_has_a_new_note_button(page, wiki):
+    # Also with no notes yet; the note made, the list has it.
+    page.goto("/notes")
+    expect(page.get_by_text("No entries yet.")).to_be_visible()
+    page.locator(".page-header").get_by_role("button", name="New note").click()
+    expect(page.locator("#modal")).to_be_visible()
+    expect(page.locator("#new-note-title")).to_be_focused()
+    page.locator("#new-note-title").fill("Shopping idea")
+    page.locator("#new-note-title").press("Enter")
+    expect(page).to_have_url(re.compile(r"/edit/\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_shopping-idea$"))
+    page.goto("/notes")
+    expect(page.locator(".notes-list li a")).to_have_text(["Shopping idea"])
+    expect(page.locator(".page-header").get_by_role("button", name="New note")).to_be_visible()
+
+
 def test_note_creates_a_quicknote(new_page, wiki):
     phone = new_page(**TOUCH_PHONE)
     # In every module, the wiki too: Note always means a note.

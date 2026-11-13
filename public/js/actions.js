@@ -97,7 +97,7 @@ const tasksAddButton = () =>
   document.querySelector('.tasks-app[data-pinned] [id^="task-add-btn"]')
   || document.querySelector('.tasks-app:not([data-headless]) [id^="task-add-btn"]');
 
-document.querySelector('.action-new-note')?.addEventListener('click', openNewNote);
+document.querySelectorAll('.action-new-note, .notes-new').forEach(b => b.addEventListener('click', openNewNote));
 document.querySelector('.action-task')?.addEventListener('click', () => {
   const add = document.body.dataset.module === 'tasks' && tasksAddButton();
   if (add) add.click(); else openDefaultTask();
