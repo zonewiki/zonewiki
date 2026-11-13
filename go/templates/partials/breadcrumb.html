@@ -3,9 +3,9 @@
     for the navigation trail (js/chrome.js: data-slug, data-title);
     right_html sits at the right end (the backlinks chip). */ -}}
 {{define "breadcrumb" -}}
-<div class="breadcrumb"{{if .has_key}} data-slug="{{.key}}" data-title="{{.title}}"{{end}}>
-{{- template "module_switch" (dict "links" .module_links "app_name" .app_name) -}}
-{{- range .crumbs}}<span class="breadcrumb-sep">›</span>{{if .href}}<a href="{{.href}}">{{.label}}</a>{{else}}<span>{{.label}}</span>{{end}}{{end -}}
-{{- if .right_html}}<span class="breadcrumb-right">{{.right_html}}</span>{{end -}}
+<div class="breadcrumb"{{if .HasKey}} data-slug="{{.Key}}" data-title="{{.Title}}"{{end}}>
+{{- template "module_switch" (dict "links" .ModuleLinks "app_name" .AppName) -}}
+{{- range .Crumbs}}<span class="breadcrumb-sep">›</span>{{if .Href}}<a href="{{.Href}}">{{.Label}}</a>{{else}}<span>{{.Label}}</span>{{end}}{{end -}}
+{{- if .RightHTML}}<span class="breadcrumb-right">{{.RightHTML}}</span>{{end -}}
 </div>
 {{- end}}

@@ -259,17 +259,23 @@ func currentModule(rq *Req) string {
 }
 
 // crumb is a breadcrumb's step: a label and, unless it is where you are, a link.
-type crumb struct{ label, href string }
+type crumb struct{ Label, Href string }
+
+// breadcrumbView: what the breadcrumb template shows.
+type breadcrumbView struct {
+	Crumbs      []crumb
+	Key, Title  string // the view's name for the navigation trail
+	HasKey      bool   // false: no trail stop
+	RightHTML   template.HTML
+	ModuleLinks []moduleLink
+	AppName     string
+}
 
 // breadcrumb: the module switcher, then crumbs. key and title name the
 // view for the navigation trail (js/chrome.js); hasKey false: no trail stop.
 func breadcrumb(rq *Req, crumbs []crumb, key string, hasKey bool, title string, right template.HTML) template.HTML {
-	var cs []M
-	for _, c := range crumbs {
-		cs = append(cs, M{"label": c.label, "href": c.href})
-	}
-	return macro("breadcrumb", M{"crumbs": cs, "key": key, "has_key": hasKey, "title": title,
-		"right_html": right, "module_links": moduleLinks(rq), "app_name": appName})
+	return macro("breadcrumb", breadcrumbView{Crumbs: crumbs, Key: key, HasKey: hasKey, Title: title,
+		RightHTML: right, ModuleLinks: moduleLinks(rq), AppName: appName})
 }
 
 // buildBreadcrumb: a page's breadcrumb: its folders, the page, and extra
@@ -519,7 +525,14 @@ func outlinks(rq *Req, slug, path string) []pageLink {
 
 // pasteHint: the editor's hint after Move to wiki (?paste=<slug>): the
 // moved page's link, copied (copied) or to copy.
-func pasteHint(rq *Req, slug string, copied bool) M {
+// pasteHintView: the editor's hint after Move to wiki: the moved page's
+// link, copied already or to copy.
+type pasteHintView struct {
+	Link   string
+	Copied bool
+}
+
+func pasteHint(rq *Req, slug string, copied bool) *pasteHintView {
 	if slug == "" {
 		return nil
 	}
@@ -528,7 +541,7 @@ func pasteHint(rq *Req, slug string, copied bool) M {
 		return nil
 	}
 	text, _ := readText(p)
-	return M{"link": mdtext.PageWikilink(slug, mdtext.PageTitle(text, slug)), "copied": copied}
+	return &pasteHintView{Link: mdtext.PageWikilink(slug, mdtext.PageTitle(text, slug)), Copied: copied}
 }
 
 // buildDeleteDialog: the page view's delete confirmation; none for the home page.
@@ -536,16 +549,37 @@ func buildDeleteDialog(slug, title string) template.HTML {
 	if isProtected(slug) {
 		return ""
 	}
-	return macro("delete_dialog", M{"slug": slug, "title": title, "git": cfg.GitEnabled})
+	return macro("delete_dialog", struct {
+		Slug, Title string
+		Git         bool
+	}{slug, title, cfg.GitEnabled})
 }
 
 // pageMenu: what the page view's ⋯ menu and its dialogs need.
-func pageMenu(rq *Req, slug, title, renameError, promoteError, appendError, renameName string) M {
-	m := M{"slug": slug, "title": title, "git": cfg.GitEnabled, "quicknote": isQuicknote(slug),
-		"renamable": !isProtected(slug) && canWrite(rq.who(), slug), "rename_error": renameError,
-		"rename_name": renameName}
+// pageMenuView: the page view's ⋯ menu and the dialogs behind it
+// (page_menu). The fields after SharedTarget are a note's: Move to wiki and
+// Append to page.
+type pageMenuView struct {
+	Slug, Title             string
+	Git                     bool // History
+	Quicknote               bool // a note: Move to wiki…, Append to page…
+	Renamable               bool // Rename…, Delete…
+	RenameError, RenameName string
+	SharedTarget            string // Make shared…: where the private page would go ("": not offered)
+	Date                    string // the note's date, to keep in front of its name
+	Folders                 []string
+	PromoteError            string
+	AppendError             string
+	AppendHeading           string
+	WikiPages               []PageRef // the pages a note can be linked from or appended to
+}
+
+func pageMenu(rq *Req, slug, title, renameError, promoteError, appendError, renameName string) *pageMenuView {
+	m := &pageMenuView{Slug: slug, Title: title, Git: cfg.GitEnabled, Quicknote: isQuicknote(slug),
+		Renamable: !isProtected(slug) && canWrite(rq.who(), slug), RenameError: renameError,
+		RenameName: renameName}
 	if target, ok := sharedMove(rq.who(), slug); ok {
-		m["shared_target"] = target
+		m.SharedTarget = target
 	}
 	if isQuicknote(slug) {
 		var wiki []PageRef
@@ -561,11 +595,11 @@ func pageMenu(rq *Req, slug, title, renameError, promoteError, appendError, rena
 			}
 			return wiki[i].Title < wiki[j].Title
 		})
-		m["date"] = noteDate(slug)
-		m["folders"] = pageFolders(rq)
-		m["promote_error"], m["append_error"] = promoteError, appendError
-		m["append_heading"] = appendHeading(slug, title)
-		m["wiki_pages"] = wiki
+		m.Date = noteDate(slug)
+		m.Folders = pageFolders(rq)
+		m.PromoteError, m.AppendError = promoteError, appendError
+		m.AppendHeading = appendHeading(slug, title)
+		m.WikiPages = wiki
 	}
 	return m
 }
@@ -573,7 +607,21 @@ func pageMenu(rq *Req, slug, title, renameError, promoteError, appendError, rena
 // lastChanged: for the page's meta row, when it last changed ({date, rel}),
 // and while it has uncommitted changes what its Commit needs. nil, nil
 // without git or history.
-func lastChanged(slug, path, title string) (M, M) {
+// metaRowView: the row below a page's title (meta_row): its tags and tldr,
+// when it last changed, and Commit while that change is uncommitted.
+type metaRowView struct {
+	TagsHTML template.HTML
+	Tldr     string
+	Changed  *changedView
+	Commit   *commitView
+}
+
+// changedView: when a page last changed; commitView: the file its Commit
+// button commits.
+type changedView struct{ Date, Rel string }
+type commitView struct{ Filepath, Title string }
+
+func lastChanged(slug, path, title string) (*changedView, *commitView) {
 	if !cfg.GitEnabled {
 		return nil, nil
 	}
@@ -582,12 +630,12 @@ func lastChanged(slug, path, title string) (M, M) {
 	r := runGit("status", "--porcelain", "--untracked-files=all", "--", filepath)
 	if strings.TrimSpace(r.Stdout) != "" {
 		if st, err := os.Stat(path); err == nil {
-			return M{"date": st.ModTime().Format("2006-01-02"), "rel": relativeTime(st.ModTime())},
-				M{"filepath": filepath, "title": title}
+			return &changedView{st.ModTime().Format("2006-01-02"), relativeTime(st.ModTime())},
+				&commitView{filepath, title}
 		}
 	}
 	if entries := gitLog(path, 1); len(entries) > 0 {
-		return M{"date": entries[0].Date, "rel": entries[0].Rel}, nil
+		return &changedView{entries[0].Date, entries[0].Rel}, nil
 	}
 	return nil, nil
 }

@@ -3,32 +3,32 @@
     on any page). Its params reach tasks.js as data-init-* attributes; ids
     get a -<n> suffix (sfx) after a page's first embed. */ -}}
 {{define "tasks_embed" -}}
-<div class="tasks-app" id="tasks-app{{.sfx}}"{{if .headless}} data-headless="1" style="display:none"{{end}} data-init-tag="{{.tag}}" data-init-list="{{.list}}" data-lists="{{.lists_json}}" data-list-homes="{{.homes_json}}" data-init-view="{{.view}}" data-init-plan="{{.plan}}" data-init-limit="{{.limit}}" data-init-keep="{{.keep}}"{{if .private}} data-init-private="1"{{end}}{{with .private_folder}} data-private-folder="{{.}}"{{end}} data-init-new="" data-instance="{{.instance_id}}"{{if .pinned}} data-pinned="1"{{end}}{{with .new_tags}} data-new-tags="{{.}}"{{end}}{{with .settings}} data-settings-page="{{.page}}" data-settings-index="{{.index}}" data-settings-raw="{{.raw}}"{{end}}>
+<div class="tasks-app" id="tasks-app{{.Sfx}}"{{if .Headless}} data-headless="1" style="display:none"{{end}} data-init-tag="{{.Tag}}" data-init-list="{{.List}}" data-lists="{{.ListsJSON}}" data-list-homes="{{.HomesJSON}}" data-init-view="{{.View}}" data-init-plan="{{.Plan}}" data-init-limit="{{.Limit}}" data-init-keep="{{.Keep}}"{{if .Private}} data-init-private="1"{{end}}{{with .PrivateFolder}} data-private-folder="{{.}}"{{end}} data-init-new="" data-instance="{{.InstanceID}}"{{if .Pinned}} data-pinned="1"{{end}}{{with .NewTags}} data-new-tags="{{.}}"{{end}}{{with .Settings}} data-settings-page="{{.Page}}" data-settings-index="{{.Index}}" data-settings-raw="{{.Raw}}"{{end}}>
   <div class="tasks-header">
-    <div class="view-tabs" id="tasks-tabs{{.sfx}}" role="tablist" aria-label="View">
-      <button type="button" role="tab" data-view="open" aria-selected="false">{{index .labels 0}}</button>
-      <button type="button" role="tab" data-view="focus" aria-selected="false">{{index .labels 1}}</button>
+    <div class="view-tabs" id="tasks-tabs{{.Sfx}}" role="tablist" aria-label="View">
+      <button type="button" role="tab" data-view="open" aria-selected="false">{{index .Labels 0}}</button>
+      <button type="button" role="tab" data-view="focus" aria-selected="false">{{index .Labels 1}}</button>
     </div>
     {{- /* Beside the tabs, not in the toolbar: it modifies the Open tab, and on
         phones it shares the tabs' row, leaving the search its room. */}}
-    <button type="button" class="tasks-plan-switch" id="task-plan{{.sfx}}" role="switch" aria-checked="true" title="Plan: group by start date (d)" hidden><span class="tasks-plan-track" aria-hidden="true"></span>Plan</button>
+    <button type="button" class="tasks-plan-switch" id="task-plan{{.Sfx}}" role="switch" aria-checked="true" title="Plan: group by start date (d)" hidden><span class="tasks-plan-track" aria-hidden="true"></span>Plan</button>
     <div class="tasks-toolbar">
-      <input type="text" id="task-filter-search{{.sfx}}" placeholder="Search… #tag" title="Text searches title and notes · #tag filters by tag · #a #b = both tags · #a|b = either · -#tag = without" autocomplete="off">
-      <select class="tasks-sort" id="task-sort{{.sfx}}" aria-label="Order" title="Order (o)" hidden><option value="manual">Manual</option><option value="due">Due date</option><option value="created">Created</option></select>
-      <button type="button" class="btn tasks-density-btn" id="task-density-btn{{.sfx}}" aria-pressed="false" aria-label="One line per task" title="One line per task (v)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><line x1="2.5" y1="4" x2="13.5" y2="4"/><line x1="2.5" y1="8" x2="13.5" y2="8"/><line x1="2.5" y1="12" x2="13.5" y2="12"/></svg></button>
+      <input type="text" id="task-filter-search{{.Sfx}}" placeholder="Search… #tag" title="Text searches title and notes · #tag filters by tag · #a #b = both tags · #a|b = either · -#tag = without" autocomplete="off">
+      <select class="tasks-sort" id="task-sort{{.Sfx}}" aria-label="Order" title="Order (o)" hidden><option value="manual">Manual</option><option value="due">Due date</option><option value="created">Created</option></select>
+      <button type="button" class="btn tasks-density-btn" id="task-density-btn{{.Sfx}}" aria-pressed="false" aria-label="One line per task" title="One line per task (v)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><line x1="2.5" y1="4" x2="13.5" y2="4"/><line x1="2.5" y1="8" x2="13.5" y2="8"/><line x1="2.5" y1="12" x2="13.5" y2="12"/></svg></button>
       {{- /* The settings dialog (js/tasksettings.js): where this app's params can be changed. */}}
-      {{if .settings}}<button type="button" class="btn tasks-settings-btn" id="task-settings-btn{{.sfx}}" aria-label="List settings" title="List settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>{{end}}
+      {{if .Settings}}<button type="button" class="btn tasks-settings-btn" id="task-settings-btn{{.Sfx}}" aria-label="List settings" title="List settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>{{end}}
       {{- /* The list's ⋯ menu (js/tasksettings.js): its tasks as a file, Export and Import…; on phones the settings too, the gear hidden. */}}
-      {{if .settings}}<button type="button" class="btn tasks-more-btn" id="task-more-btn{{.sfx}}" aria-haspopup="menu" aria-label="More" title="More: export, import">⋯</button>{{end}}
-      <button class="btn btn-primary" id="task-add-btn{{.sfx}}" aria-label="New task" title="New task (n)">+<span class="task-add-label"> New</span></button>
+      {{if .Settings}}<button type="button" class="btn tasks-more-btn" id="task-more-btn{{.Sfx}}" aria-haspopup="menu" aria-label="More" title="More: export, import">⋯</button>{{end}}
+      <button class="btn btn-primary" id="task-add-btn{{.Sfx}}" aria-label="New task" title="New task (n)">+<span class="task-add-label"> New</span></button>
     </div>
   </div>
-  <ul class="tasks-list" id="tasks-list{{.sfx}}"></ul>
+  <ul class="tasks-list" id="tasks-list{{.Sfx}}"></ul>
   <div class="tasks-footer">
-    <button type="button" class="tasks-completed-link" id="task-completed-link{{.sfx}}">✓ Completed</button>
+    <button type="button" class="tasks-completed-link" id="task-completed-link{{.Sfx}}">✓ Completed</button>
   </div>
   {{- /* Shown while several tasks are selected (tasks.js syncSelBar). */}}
-  <div class="tasks-selbar" id="task-selbar{{.sfx}}" role="toolbar" aria-label="Selected tasks" hidden>
+  <div class="tasks-selbar" id="task-selbar{{.Sfx}}" role="toolbar" aria-label="Selected tasks" hidden>
     <span class="tasks-selbar-count" aria-live="polite"></span>
     <button type="button" class="btn" data-sel="all" title="Select every task shown (Ctrl+A)">All</button>
     <span class="tasks-selbar-actions">
@@ -40,70 +40,70 @@
     <button type="button" class="btn tasks-selbar-close" data-sel="clear" aria-label="Clear the selection" title="Clear the selection (Esc)">✕</button>
   </div>
 </div>
-<dialog id="task-edit-modal{{.sfx}}" class="task-edit-modal">
-  <form id="task-edit-form{{.sfx}}" class="task-edit-form">
-    <input type="hidden" id="task-edit-id{{.sfx}}" name="id">
+<dialog id="task-edit-modal{{.Sfx}}" class="task-edit-modal">
+  <form id="task-edit-form{{.Sfx}}" class="task-edit-form">
+    <input type="hidden" id="task-edit-id{{.Sfx}}" name="id">
     <div class="task-field">
-      <label for="task-edit-title{{.sfx}}">Title</label>
-      <input type="text" id="task-edit-title{{.sfx}}" name="title" required autocomplete="off">
-      <div class="task-quick-preview" id="task-edit-quick{{.sfx}}" hidden></div>
+      <label for="task-edit-title{{.Sfx}}">Title</label>
+      <input type="text" id="task-edit-title{{.Sfx}}" name="title" required autocomplete="off">
+      <div class="task-quick-preview" id="task-edit-quick{{.Sfx}}" hidden></div>
       {{- /* A new task: where it goes (js/taskmodal.js syncTarget). */}}
-      <p class="task-edit-target" id="task-edit-target{{.sfx}}" aria-live="polite" hidden></p>
+      <p class="task-edit-target" id="task-edit-target{{.Sfx}}" aria-live="polite" hidden></p>
     </div>
-    <div class="task-field task-edit-batch" id="task-edit-batch{{.sfx}}" style="display:none">
-      <label id="task-edit-batch-label{{.sfx}}">Tasks</label>
-      <ul class="task-edit-batch-list" id="task-edit-batch-list{{.sfx}}"></ul>
+    <div class="task-field task-edit-batch" id="task-edit-batch{{.Sfx}}" style="display:none">
+      <label id="task-edit-batch-label{{.Sfx}}">Tasks</label>
+      <ul class="task-edit-batch-list" id="task-edit-batch-list{{.Sfx}}"></ul>
       <span class="field-hint">One task per line; the fields below apply to all of them.</span>
     </div>
     <div class="task-field task-notes-field">
       <div class="task-notes-head">
-        <label for="task-edit-desc{{.sfx}}">Description</label>
+        <label for="task-edit-desc{{.Sfx}}">Description</label>
         <span class="task-notes-mode" role="group" aria-label="Description">
-          <button type="button" class="btn" data-notes-mode="edit" id="task-edit-notes-edit-btn{{.sfx}}" aria-pressed="true" title="Edit the description (F2)">Edit</button>
-          <button type="button" class="btn" data-notes-mode="preview" id="task-edit-preview-btn{{.sfx}}" aria-pressed="false" title="The description as the card will show it (F2)">Preview</button>
+          <button type="button" class="btn" data-notes-mode="edit" id="task-edit-notes-edit-btn{{.Sfx}}" aria-pressed="true" title="Edit the description (F2)">Edit</button>
+          <button type="button" class="btn" data-notes-mode="preview" id="task-edit-preview-btn{{.Sfx}}" aria-pressed="false" title="The description as the card will show it (F2)">Preview</button>
         </span>
       </div>
       {{- /* The editor's bar, without Make task (js/mdedit.js). */}}
-      {{template "format_bar" (dict "bar_id" (print "task-edit-format" .sfx) "attach_id" (print "task-edit-attach" .sfx) "pageonly" true)}}
-      <textarea id="task-edit-desc{{.sfx}}" name="description" rows="12"></textarea>
-      <div class="task-notes-preview page-content" id="task-edit-preview{{.sfx}}" tabindex="-1" aria-label="Preview of the description" hidden></div>
+      {{template "format_bar" (dict "bar_id" (print "task-edit-format" .Sfx) "attach_id" (print "task-edit-attach" .Sfx) "pageonly" true)}}
+      <textarea id="task-edit-desc{{.Sfx}}" name="description" rows="12"></textarea>
+      <div class="task-notes-preview page-content" id="task-edit-preview{{.Sfx}}" tabindex="-1" aria-label="Preview of the description" hidden></div>
     </div>
-    <div class="task-field task-comments" id="task-edit-comments{{.sfx}}" hidden>
-      <label for="task-edit-comment{{.sfx}}">Comments<span class="task-edit-links-summary" id="task-edit-comments-count{{.sfx}}"></span></label>
+    <div class="task-field task-comments" id="task-edit-comments{{.Sfx}}" hidden>
+      <label for="task-edit-comment{{.Sfx}}">Comments<span class="task-edit-links-summary" id="task-edit-comments-count{{.Sfx}}"></span></label>
       <div class="task-comment-add">
-        <input type="text" id="task-edit-comment{{.sfx}}" placeholder="Add a comment" autocomplete="off" maxlength="2000">
-        <button type="button" class="btn" id="task-edit-comment-add{{.sfx}}">Add</button>
+        <input type="text" id="task-edit-comment{{.Sfx}}" placeholder="Add a comment" autocomplete="off" maxlength="2000">
+        <button type="button" class="btn" id="task-edit-comment-add{{.Sfx}}">Add</button>
       </div>
-      <ul class="task-comment-list" id="task-edit-comment-list{{.sfx}}"></ul>
+      <ul class="task-comment-list" id="task-edit-comment-list{{.Sfx}}"></ul>
     </div>
     <div class="task-field">
-      <label for="task-edit-tags{{.sfx}}">Tags <span class="field-hint">(Tab completes; comma, space or Enter adds)</span></label>
-      <input type="text" id="task-edit-tags{{.sfx}}" name="tags" autocomplete="off">
+      <label for="task-edit-tags{{.Sfx}}">Tags <span class="field-hint">(Tab completes; comma, space or Enter adds)</span></label>
+      <input type="text" id="task-edit-tags{{.Sfx}}" name="tags" autocomplete="off">
     </div>
     <div class="task-field-row task-row-dates">
       <div class="task-field">
         <label>Due date</label>
-        <input type="hidden" id="task-edit-due{{.sfx}}" name="due_date">
-        <button type="button" class="date-trigger" data-date-trigger="task-edit-due{{.sfx}}" data-placeholder="Set date">Set date</button>
+        <input type="hidden" id="task-edit-due{{.Sfx}}" name="due_date">
+        <button type="button" class="date-trigger" data-date-trigger="task-edit-due{{.Sfx}}" data-placeholder="Set date">Set date</button>
       </div>
       <div class="task-field">
         <label>Start</label>
-        <input type="hidden" id="task-edit-start{{.sfx}}" name="start_date">
-        <button type="button" class="date-trigger" data-date-trigger="task-edit-start{{.sfx}}" data-placeholder="Set date">Set date</button>
+        <input type="hidden" id="task-edit-start{{.Sfx}}" name="start_date">
+        <button type="button" class="date-trigger" data-date-trigger="task-edit-start{{.Sfx}}" data-placeholder="Set date">Set date</button>
       </div>
       <div class="task-field task-field-lead" title="Start this many days before the due date. Just another way to set the start date; recurring tasks keep this gap.">
-        <label for="task-edit-lead{{.sfx}}">Days before due</label>
-        <input type="number" id="task-edit-lead{{.sfx}}" min="0" placeholder="—">
+        <label for="task-edit-lead{{.Sfx}}">Days before due</label>
+        <input type="number" id="task-edit-lead{{.Sfx}}" min="0" placeholder="—">
       </div>
     </div>
-    <div class="task-date-warning" id="task-edit-date-warn{{.sfx}}" hidden>
-      <span id="task-edit-date-warn-text{{.sfx}}"></span>
-      <button type="button" class="btn" id="task-edit-date-warn-fix{{.sfx}}"></button>
+    <div class="task-date-warning" id="task-edit-date-warn{{.Sfx}}" hidden>
+      <span id="task-edit-date-warn-text{{.Sfx}}"></span>
+      <button type="button" class="btn" id="task-edit-date-warn-fix{{.Sfx}}"></button>
     </div>
     <div class="task-field-row task-row-repeat">
       <div class="task-field">
-        <label for="task-edit-rec-type{{.sfx}}">Repeat</label>
-        <select id="task-edit-rec-type{{.sfx}}" name="rec_type">
+        <label for="task-edit-rec-type{{.Sfx}}">Repeat</label>
+        <select id="task-edit-rec-type{{.Sfx}}" name="rec_type">
           <option value="">—</option>
           <option value="daily">Daily</option>
           <option value="weekly">Weekly</option>
@@ -112,116 +112,116 @@
         </select>
       </div>
       <div class="task-field">
-        <label for="task-edit-rec-interval{{.sfx}}">Every N</label>
-        <input type="number" id="task-edit-rec-interval{{.sfx}}" name="rec_interval" min="1" max="999" value="1">
+        <label for="task-edit-rec-interval{{.Sfx}}">Every N</label>
+        <input type="number" id="task-edit-rec-interval{{.Sfx}}" name="rec_interval" min="1" max="999" value="1">
       </div>
       <div class="task-field task-field-check" title="Repeat from the completion date instead of the due (or start) date">
-        <label for="task-edit-rec-from{{.sfx}}">From done</label>
-        <span class="check-wrap"><input type="checkbox" id="task-edit-rec-from{{.sfx}}" name="rec_from"></span>
+        <label for="task-edit-rec-from{{.Sfx}}">From done</label>
+        <span class="check-wrap"><input type="checkbox" id="task-edit-rec-from{{.Sfx}}" name="rec_from"></span>
       </div>
     </div>
     <label class="task-edit-keep" title="Ticking it off sends it back to Open instead of archiving it, e.g. a staple on a shopping list">
-      <input type="checkbox" id="task-edit-keep{{.sfx}}" name="keep"> Keep after done <span class="field-hint">(back to Open when ticked off)</span>
+      <input type="checkbox" id="task-edit-keep{{.Sfx}}" name="keep"> Keep after done <span class="field-hint">(back to Open when ticked off)</span>
     </label>
     {{- /* With users: a private task is the user's alone (private/<user>/_tasks/). */}}
-    {{- if .can_private}}
+    {{- if .CanPrivate}}
     <label class="task-edit-keep task-edit-private" title="Only you see a private task; the others don't, not even in search. A shared task stays shared.">
-      <input type="checkbox" id="task-edit-private{{.sfx}}" name="private"> Private <span class="field-hint">(only you see it)</span>
-      <span class="field-hint task-private-note" id="task-edit-private-note{{.sfx}}" hidden></span>
+      <input type="checkbox" id="task-edit-private{{.Sfx}}" name="private"> Private <span class="field-hint">(only you see it)</span>
+      <span class="field-hint task-private-note" id="task-edit-private-note{{.Sfx}}" hidden></span>
     </label>
     {{- end}}
     <div class="task-edit-extras">
-    <details class="task-edit-links task-edit-history" id="task-edit-history{{.sfx}}" hidden>
-      <summary>History<span class="task-edit-links-summary" id="task-edit-history-count{{.sfx}}"></span></summary>
-      <ul class="task-history" id="task-edit-history-list{{.sfx}}"></ul>
+    <details class="task-edit-links task-edit-history" id="task-edit-history{{.Sfx}}" hidden>
+      <summary>History<span class="task-edit-links-summary" id="task-edit-history-count{{.Sfx}}"></span></summary>
+      <ul class="task-history" id="task-edit-history-list{{.Sfx}}"></ul>
     </details>
     </div>
     <div class="task-edit-actions">
       <button type="submit" class="btn btn-primary">Save</button>
-      <button type="button" class="btn" id="task-edit-cancel{{.sfx}}">Cancel</button>
-      <button type="button" class="btn btn-danger" id="task-edit-delete{{.sfx}}" style="display:none">Delete</button>
+      <button type="button" class="btn" id="task-edit-cancel{{.Sfx}}">Cancel</button>
+      <button type="button" class="btn btn-danger" id="task-edit-delete{{.Sfx}}" style="display:none">Delete</button>
     </div>
   </form>
 </dialog>
-<dialog id="task-delete-modal{{.sfx}}" class="task-edit-modal modal">
+<dialog id="task-delete-modal{{.Sfx}}" class="task-edit-modal modal">
   <div class="modal-label">Delete task?</div>
-  <div id="task-delete-title{{.sfx}}" class="task-delete-title"></div>
+  <div id="task-delete-title{{.Sfx}}" class="task-delete-title"></div>
   <div class="task-edit-actions">
-    <button type="button" class="btn btn-danger" id="task-delete-confirm{{.sfx}}">Delete</button>
-    <button type="button" class="btn" id="task-delete-cancel{{.sfx}}">Cancel</button>
+    <button type="button" class="btn btn-danger" id="task-delete-confirm{{.Sfx}}">Delete</button>
+    <button type="button" class="btn" id="task-delete-cancel{{.Sfx}}">Cancel</button>
   </div>
 </dialog>
-<dialog id="task-deadline-modal{{.sfx}}" class="task-edit-modal modal">
+<dialog id="task-deadline-modal{{.Sfx}}" class="task-edit-modal modal">
   <div class="modal-label">Move the deadline too?</div>
-  <div id="task-deadline-text{{.sfx}}" class="task-delete-title"></div>
+  <div id="task-deadline-text{{.Sfx}}" class="task-delete-title"></div>
   <div class="task-edit-actions">
-    <button type="button" class="btn btn-primary" id="task-deadline-confirm{{.sfx}}">Move deadline</button>
-    <button type="button" class="btn" id="task-deadline-cancel{{.sfx}}">Cancel</button>
+    <button type="button" class="btn btn-primary" id="task-deadline-confirm{{.Sfx}}">Move deadline</button>
+    <button type="button" class="btn" id="task-deadline-cancel{{.Sfx}}">Cancel</button>
   </div>
 </dialog>
-{{if .settings}}
-<dialog id="task-settings-modal{{.sfx}}" class="task-edit-modal task-settings-modal">
-  <form id="task-settings-form{{.sfx}}" class="task-edit-form">
+{{if .Settings}}
+<dialog id="task-settings-modal{{.Sfx}}" class="task-edit-modal task-settings-modal">
+  <form id="task-settings-form{{.Sfx}}" class="task-edit-form">
     <div class="modal-label">List settings</div>
     <div class="task-settings-row">
       <div class="task-field">
-        <label for="task-settings-view{{.sfx}}">Opens on</label>
-        <select id="task-settings-view{{.sfx}}" name="view"><option value="focus">Focus</option><option value="open">Open</option></select>
+        <label for="task-settings-view{{.Sfx}}">Opens on</label>
+        <select id="task-settings-view{{.Sfx}}" name="view"><option value="focus">Focus</option><option value="open">Open</option></select>
       </div>
       <div class="task-field">
-        <label for="task-settings-limit{{.sfx}}">WIP limit</label>
-        <input type="number" id="task-settings-limit{{.sfx}}" name="limit" min="1" max="99" placeholder="none" inputmode="numeric">
+        <label for="task-settings-limit{{.Sfx}}">WIP limit</label>
+        <input type="number" id="task-settings-limit{{.Sfx}}" name="limit" min="1" max="99" placeholder="none" inputmode="numeric">
       </div>
     </div>
-    <label class="task-settings-check"><input type="checkbox" id="task-settings-plan{{.sfx}}" name="plan"> Plan: group the Open tab by start date</label>
+    <label class="task-settings-check"><input type="checkbox" id="task-settings-plan{{.Sfx}}" name="plan"> Plan: group the Open tab by start date</label>
     <div class="task-field task-settings-embed">
-      <label for="task-settings-pin{{.sfx}}">Pinned</label>
-      <select id="task-settings-pin{{.sfx}}" name="pin"><option value="">No</option><option value="1">Pinned</option><option value="default">Pinned, the default list</option></select>
+      <label for="task-settings-pin{{.Sfx}}">Pinned</label>
+      <select id="task-settings-pin{{.Sfx}}" name="pin"><option value="">No</option><option value="1">Pinned</option><option value="default">Pinned, the default list</option></select>
     </div>
     {{- /* What is rarely changed: closed, unless one of them is set (tasksettings.js open). */}}
-    <details class="task-settings-more" id="task-settings-more{{.sfx}}">
+    <details class="task-settings-more" id="task-settings-more{{.Sfx}}">
       <summary>More</summary>
       <div class="task-settings-more-body">
         <div class="task-field">
-          <label for="task-settings-label-open{{.sfx}}">Tab names</label>
+          <label for="task-settings-label-open{{.Sfx}}">Tab names</label>
           <div class="task-settings-row">
-            <input type="text" id="task-settings-label-open{{.sfx}}" name="label_open" aria-label="Name of the Open tab" placeholder="Open" maxlength="30" autocomplete="off">
-            <input type="text" id="task-settings-label-focus{{.sfx}}" name="label_focus" aria-label="Name of the Focus tab" placeholder="Focus" maxlength="30" autocomplete="off">
+            <input type="text" id="task-settings-label-open{{.Sfx}}" name="label_open" aria-label="Name of the Open tab" placeholder="Open" maxlength="30" autocomplete="off">
+            <input type="text" id="task-settings-label-focus{{.Sfx}}" name="label_focus" aria-label="Name of the Focus tab" placeholder="Focus" maxlength="30" autocomplete="off">
           </div>
         </div>
         <div class="task-field">
-          <label for="task-settings-new{{.sfx}}">Tags of a new task</label>
-          <input type="text" id="task-settings-new{{.sfx}}" name="new" placeholder="those it shows" autocomplete="off">
+          <label for="task-settings-new{{.Sfx}}">Tags of a new task</label>
+          <input type="text" id="task-settings-new{{.Sfx}}" name="new" placeholder="those it shows" autocomplete="off">
         </div>
         <div class="task-field task-settings-embed">
-          <label for="task-settings-tag{{.sfx}}">Shows only the tags</label>
-          <input type="text" id="task-settings-tag{{.sfx}}" name="tag" placeholder="every task" autocomplete="off">
+          <label for="task-settings-tag{{.Sfx}}">Shows only the tags</label>
+          <input type="text" id="task-settings-tag{{.Sfx}}" name="tag" placeholder="every task" autocomplete="off">
           <span class="field-hint"><code>a,b</code> both · <code>a|b</code> either · <code>-a</code> without</span>
         </div>
       </div>
     </details>
-    <p class="task-settings-error" id="task-settings-error{{.sfx}}" role="alert" hidden></p>
-    <p class="field-hint task-settings-where" id="task-settings-where{{.sfx}}"></p>
+    <p class="task-settings-error" id="task-settings-error{{.Sfx}}" role="alert" hidden></p>
+    <p class="field-hint task-settings-where" id="task-settings-where{{.Sfx}}"></p>
     <div class="task-edit-actions">
       <button type="submit" class="btn btn-primary">Save</button>
-      <button type="button" class="btn" id="task-settings-cancel{{.sfx}}">Cancel</button>
+      <button type="button" class="btn" id="task-settings-cancel{{.Sfx}}">Cancel</button>
     </div>
   </form>
 </dialog>
 {{- /* Import… (the ⋯ menu): once a file is picked, a tag of your own for its tasks. */}}
-<input type="file" id="task-import-file{{.sfx}}" accept=".json,application/json" hidden>
-<dialog id="task-import-modal{{.sfx}}" class="task-edit-modal task-settings-modal">
-  <form id="task-import-form{{.sfx}}" class="task-edit-form">
-    <div class="modal-label" id="task-import-title{{.sfx}}">Import tasks</div>
+<input type="file" id="task-import-file{{.Sfx}}" accept=".json,application/json" hidden>
+<dialog id="task-import-modal{{.Sfx}}" class="task-edit-modal task-settings-modal">
+  <form id="task-import-form{{.Sfx}}" class="task-edit-form">
+    <div class="modal-label" id="task-import-title{{.Sfx}}">Import tasks</div>
     <div class="task-field">
-      <label for="task-import-tag{{.sfx}}">Tag for the imported tasks</label>
-      <input type="text" id="task-import-tag{{.sfx}}" placeholder="none" autocomplete="off">
+      <label for="task-import-tag{{.Sfx}}">Tag for the imported tasks</label>
+      <input type="text" id="task-import-tag{{.Sfx}}" placeholder="none" autocomplete="off">
       <span class="field-hint">Optional: a tag of your own finds them again later. Tasks already here are skipped.</span>
     </div>
-    <p class="task-settings-error" id="task-import-error{{.sfx}}" role="alert" hidden></p>
+    <p class="task-settings-error" id="task-import-error{{.Sfx}}" role="alert" hidden></p>
     <div class="task-edit-actions">
       <button type="submit" class="btn btn-primary">Import</button>
-      <button type="button" class="btn" id="task-import-cancel{{.sfx}}">Cancel</button>
+      <button type="button" class="btn" id="task-import-cancel{{.Sfx}}">Cancel</button>
     </div>
   </form>
 </dialog>

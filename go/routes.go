@@ -192,7 +192,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 	// Viewing a page from the uncommitted-changes list: Commit instead of Edit.
 	fromUncommitted := r.URL.Query().Get("from") == "uncommitted" && cfg.GitEnabled
 	var bc, metaRow, article template.HTML
-	var menu M
+	var menu *pageMenuView
 	if fromUncommitted {
 		bc = buildBreadcrumb(rq, "uncommitted", "Uncommitted Changes", chip, "", crumb{title, ""})
 		article = htmlOf(renderMd(rq, mdtext.StripH1(content), RenderOpts{Page: slug}))
@@ -206,8 +206,8 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 		menu = pageMenu(rq, slug, title, q.Get("rename_error"), q.Get("promote_error"), q.Get("append_error"), q.Get("rename_name"))
 		changed, commit := lastChanged(slug, path, title)
 		meta, _ := mdtext.ParseFrontmatter(content)
-		metaRow = macro("meta_row", M{"tags_html": htmlOf(renderTagsPillsHTML(meta.Tags)), "tldr": meta.Tldr,
-			"changed": changed, "commit": commit})
+		metaRow = macro("meta_row", metaRowView{TagsHTML: htmlOf(renderTagsPillsHTML(meta.Tags)), Tldr: meta.Tldr,
+			Changed: changed, Commit: commit})
 		article = htmlOf(renderMd(rq, mdtext.StripH1(content), RenderOpts{Page: slug, HideTags: true, HideTldr: true,
 			EditSlug: slug, SectionKeys: sectionKeys(content, headings), SectionTasks: tasks}))
 	}
@@ -229,7 +229,7 @@ type pageView struct {
 	BreadcrumbHTML, DeleteDialogHTML, RailTocHTML, MetaRowHTML, ArticleHTML template.HTML
 	LinkSections                                                            []linkSection // Backlinks, Linked tasks, Related (linkSections)
 	Outlinks                                                                []pageLink    // the right column's Links to
-	Menu                                                                    M             // the ⋯ menu (pageMenu); nil from the uncommitted list
+	Menu                                                                    *pageMenuView // the ⋯ menu (pageMenu); nil from the uncommitted list
 }
 
 // deletedPageView: a page deleted in git history, Sha the commit before
@@ -254,7 +254,7 @@ type editView struct {
 	RenameError, RenameName     string
 	PrivateOffer                string // a new shared page from a private one: the private slug to link instead
 	LeftDraft                   *leftDraftView
-	Paste                       M // after Move to wiki (pasteHint)
+	Paste                       *pasteHintView // after Move to wiki (pasteHint)
 	BreadcrumbHTML, TasksHTML   template.HTML
 }
 

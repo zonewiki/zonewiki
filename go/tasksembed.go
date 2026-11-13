@@ -20,6 +20,35 @@ import (
 
 const tasksPlaceholder = "ZONETASKSPLACEHOLDER"
 
+// tasksEmbedView: what the tasks_embed template shows: a task app as its
+// embed's params and the page it stands on say.
+type tasksEmbedView struct {
+	Tag, List, View string
+	Plan            string   // "on", "off" or "": the embed doesn't say
+	Limit           string   // the WIP limit, "" none
+	Labels          []string // the Open and Focus tabs' names
+	InstanceID      int      // which embed of the page
+	Sfx             string   // "-<InstanceID>" after the first: its elements' ids end in it
+	Headless        bool     // hidden: only its edit modal is used (the editor's Make task, a new task from any page)
+	Keep            string   // "1": new tasks here are keep tasks
+	Pinned          bool     // a pinned list: its New is the one New task clicks on its page
+	NewTags         string   // new tasks' tags, comma-separated
+	CanPrivate      bool     // with users: the modal has the Private box
+	Private         bool     // ticked for a new task here
+	PrivateFolder   string
+	ListsJSON       string           // the declared lists' names, as JSON
+	HomesJSON       string           // list name → its home page's title, as JSON
+	Settings        *embedSettingsAt // where the settings dialog writes; nil: no dialog (the gear)
+}
+
+// embedSettingsAt: where an embed's params are written, for its settings
+// dialog: the Index-th embed of Page as written (Raw); Index < 0: All tasks'.
+type embedSettingsAt struct {
+	Page  string
+	Index int
+	Raw   string
+}
+
 // buildTasksEmbed renders the task app for user on a page (instance numbers
 // a page's embeds); headless hides it but for its edit modal (the editor's
 // Make task, c t on any page), and tasks.js skips its shortcuts. private:
@@ -29,10 +58,10 @@ const tasksPlaceholder = "ZONETASKSPLACEHOLDER"
 // but for a viewer and in sharing mode.
 func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless, private bool, page string) string {
 	user := rq.who()
-	var settingsAt M
+	var settingsAt *embedSettingsAt
 	if src := params.src; src != nil && !headless && rq != nil && !rq.sharing && (src.index < 0 && page == "" && mayWriteTasks(user) == nil ||
 		src.index >= 0 && page != "" && canWrite(user, page)) {
-		settingsAt = M{"page": page, "index": src.index, "raw": src.raw}
+		settingsAt = &embedSettingsAt{Page: page, Index: src.index, Raw: src.raw}
 	}
 	// view= with plan=: the Open tab as plan= says, whichever of its two
 	// views view= names.
@@ -80,16 +109,13 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless, privat
 		keep = "1"
 	}
 	var b bytes.Buffer
-	err := partials.ExecuteTemplate(&b, "tasks_embed", map[string]any{
-		"tag": params.Get("tag"), "list": cleanList(params.Get("list")), "view": view, "plan": plan, "settings": settingsAt,
-		"limit": limit, "labels": labels, "instance_id": instance, "sfx": sfx, "headless": headless,
-		// keep=1: new tasks here are keep tasks; pin=1: a pinned list (its New
-		// is the one New task clicks on its page); new=: new tasks' tags.
-		"keep": keep, "pinned": pinnedParam(params), "new_tags": strings.Join(taskmodel.CleanTags(strings.Split(params.Get("new"), ",")), ","),
-		// With users, the modal's Private box; ticked for a new task here.
-		"can_private": privateFolder(user) != "", "private": private && privateFolder(user) != "",
-		"private_folder": privateFolder(user),
-		"lists_json":     listsJSON, "homes_json": homesJSON,
+	err := partials.ExecuteTemplate(&b, "tasks_embed", tasksEmbedView{
+		Tag: params.Get("tag"), List: cleanList(params.Get("list")), View: view, Plan: plan, Settings: settingsAt,
+		Limit: limit, Labels: labels, InstanceID: instance, Sfx: sfx, Headless: headless,
+		Keep: keep, Pinned: pinnedParam(params), NewTags: strings.Join(taskmodel.CleanTags(strings.Split(params.Get("new"), ",")), ","),
+		CanPrivate: privateFolder(user) != "", Private: private && privateFolder(user) != "",
+		PrivateFolder: privateFolder(user),
+		ListsJSON:     listsJSON, HomesJSON: homesJSON,
 	})
 	if err != nil {
 		logf("task list embed: %v", err)
