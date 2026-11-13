@@ -151,7 +151,7 @@ Recurring instances keep the gap between the two dates, but a new instance's sta
 | `wont_do` | bool | Abandoned: archived like a completed task, shown with "✗ won't do", never spawns a recurring instance |
 | `keep` | bool | Keep task: completing it doesn't archive it (see Keep tasks) |
 | `last_done` | `"YYYY-MM-DD"` / `null` | A keep task's last completion, shown on its card as "✓ Sep 21" |
-| `comments` | `[{ id, at, by, text }]` | The user's status lines, oldest first, uncapped (see Comments); `by` only with users. |
+| `comments` | `[{ id, at, by, text }]` | The user's comments, oldest first, uncapped (see Comments); `by` only with users. |
 | `history` | `[{ at, event, by?, from?, to? }]` | What happened to the task, oldest first, capped at 30 (`historyLimit`): `created`, `start`/`due` (with `from`/`to` dates), `done`, `reopened`, `wontdo`, `skipped`, `repeat` (`to` = the next occurrence's date). `at` is `YYYY-MM-DDTHH:MM`; `by` the user who did it, only with users. See History. |
 
 ### Views
@@ -549,7 +549,7 @@ A task's notes are markdown, edited and rendered as a page's text.
   the bullets are drawn there (`li::before`), since a list marker's place depends on the font;
   text starts at the same place with a box or a bullet, and the first box at the notes' edge);
   an image opens full size.
-  Comments render the same way, inline (one line each), in the cards and the modal.
+  Comments render the same way, in the cards and the modal (`.task-comment-body`, at the notes' scale).
 - **Where the HTML comes from** (`renderTexts`, `renderedHtml` in `tasks.js`): the tasks asks the server for the texts it hasn't rendered yet, in one request (`{ notes: [...], comments: [...] }`), and keeps the HTML per text for the page's life, shared by every task list app on it.
   Loading tasks (`fetchTasks`, Completed) and each write wait for it before drawing, so cards never flash plain text; a text that arrives some other way shows as plain text until its HTML is there (`htmlOf`), and a failed request caches nothing.
   Code is highlighted once, when the HTML arrives.
@@ -588,8 +588,9 @@ There is no separate "Created:" line.
 
 ### Comments
 
-Quick status lines on a task ("called Bob, waiting", "Alex: 6 people"),
-in `comments` (`[{ id, at, by, text }]`, oldest first;
+What happened on a task, dated: a quick status line ("called Bob, waiting", "Alex: 6 people") or several lines.
+A comment is markdown, rendered as the notes are (see Notes): paragraphs, lists, code, links, `[[task:…]]` chips; lines in a row make one paragraph, as on a page.
+They are kept in `comments` (`[{ id, at, by, text }]`, oldest first;
 `id` 8 hex chars, `at` `YYYY-MM-DDTHH:MM`, text up to `commentMax` = 2000 chars;
 `by` the user who wrote it, written only when there is one (with users, `docs/spec/users.md`), so a wiki without users keeps its files as they were;
 an edit keeps it;
@@ -598,13 +599,18 @@ Not part of the History: they are never capped, undo of other changes never touc
 
 - **Routes**: `POST /api/tasks/<id>/comments`, `PUT`/`DELETE …/comments/<cid>`, each returning the task, for open and completed tasks alike (`findForWriteLocked`).
   `PUT /api/tasks/<id>` with `comments` replaces the whole list, for undoing a delete; `cleanComments` validates it (and restore snapshots), dropping bad entries and renumbering duplicate ids.
-- **Edit modal** (`renderComments` in `tasks.js`): a Comments field under Description, hidden for a new task, with the list newest first.
-  Enter (or Add) saves a comment at once, not with Save, so Cancel never loses one.
-  Pasting a URL into the comment field asks for its name, as in the description. ✎ edits one in place (Enter or leaving the field saves, Esc cancels without closing the modal), × deletes it with an undo toast.
+- **Edit modal** (`renderComments` in `js/taskmodal.js`): Comments under Description, hidden for a new task, with the list newest first.
+  The field to write one is not shown until it is asked for: **Add comment** (next to the heading) shows it, a text field of a few lines that grows with its text, focused.
+  Enter starts a new line; **Ctrl+Enter** (or Add) saves the comment at once, not with Save, so Cancel never loses one, and puts the field away; Esc (or the field's Cancel) puts it away without saving, and doesn't close the modal.
+  The field has the description's markdown helpers (`markdownEditor`): lists go on, `[[` completes pages, Ctrl+B/I/K, a pasted URL asks for its name, a pasted or dropped file is uploaded.
+  ✎ edits a comment in place: the same field takes the comment's place, with its text (Save or Ctrl+Enter saves, Esc cancels without closing the modal); × deletes it with an undo toast.
+  A comment still in its field is not lost: the modal's Save saves it with the task, and ✎ or × on another comment saves it first.
+  The text comes back with a file's line ends (`commentText`: `\r\n` becomes `\n`).
 - **Cards**: a `💬 N` button (`.task-comments-btn`) in the meta row; its tooltip is the latest comment with its time.
-  On a full card (which lists the latest 3 already) a click opens the modal with the comment field focused (`openEditModal(id, { focusComment: true })`); on a compact line it opens or closes the line's details, the latest 3 among them (see Compact), whose "N earlier…" leads to the modal.
+  The latest 3 are listed (`commentCardHtml`): a comment of one paragraph on the line of its time, as a status line reads; any other (several paragraphs, a list, code) under its time.
+  On a full card (which lists the latest 3 already) a click opens the modal with the comment field open and focused (`openEditModal(id, { focusComment: true })`); on a compact line it opens or closes the line's details, the latest 3 among them (see Compact), whose "N earlier…" leads to the modal.
 - **Carried on**: a recurring task's next occurrence takes the series' comments with it, like the history.
-- **Search and MCP**: comment text is part of a task's search text (`taskSearchDocs`, so semantic search too), a comment counts as activity for `edited:`/`after:`/`before:` (`lastActivity`), and `mcpTaskText` lists them after the notes under "Comments:" (`- YYYY-MM-DD HH:MM: text`).
+- **Search and MCP**: comment text is part of a task's search text (`taskSearchDocs`, so semantic search too), a comment counts as activity for `edited:`/`after:`/`before:` (`lastActivity`), and `mcpTaskText` lists them after the notes under "Comments:" (`- YYYY-MM-DD HH:MM: text`, a comment's following lines indented under its first).
 
 ### Keep tasks
 

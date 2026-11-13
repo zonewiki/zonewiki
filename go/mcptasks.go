@@ -74,7 +74,7 @@ func mcpTaskText(t *Task, base, user string) string {
 	if notes := strings.TrimSpace(t.Description); notes != "" {
 		text += "\n\n" + notes
 	}
-	// Comments: the user's status lines, oldest first, each with its time
+	// Comments: the user's comments (markdown), oldest first, each with its time
 	// (and with users, who wrote it).
 	var comments []string
 	for _, c := range t.Comments {
@@ -83,7 +83,8 @@ func mcpTaskText(t *Task, base, user string) string {
 			if c.By != "" {
 				at += " (" + c.By + ")"
 			}
-			comments = append(comments, "- "+at+": "+c.Text)
+			// A comment of several lines: the next ones under its first.
+			comments = append(comments, "- "+at+": "+strings.ReplaceAll(c.Text, "\n", "\n  "))
 		}
 	}
 	if len(comments) > 0 {

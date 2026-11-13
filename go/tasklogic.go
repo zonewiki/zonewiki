@@ -213,7 +213,7 @@ func cleanHistory(raw json.RawMessage) []HistoryEntry {
 
 // ---- comments ----
 
-// A task's comments: short status lines, oldest first, {id, at, by, text}
+// A task's comments: markdown, a line or several, oldest first, {id, at, by, text}
 // (by: who wrote it, with users), never capped; undo of other changes
 // leaves them alone.
 const commentMax = 2000

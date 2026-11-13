@@ -957,6 +957,13 @@ class TestTaskComments:
         assert "the notes\n\nComments:\n- " in text
         assert re.search(r"- \d{4}-\d{2}-\d{2} \d{2}:\d{2}: asked alex: 6 people", text)
 
+    def test_comment_of_several_lines(self, client):
+        # Its following lines go under the first, so the list still reads as one.
+        tid = _task_id(call(client, "create_task", title="Paint the fence")[0])
+        text, err = call(client, "update_task", id=tid, comment="Bought:\n\n- brushes\n- primer")
+        assert not err
+        assert re.search(r"- \d{4}-\d{2}-\d{2} \d{2}:\d{2}: Bought:\n  \n  - brushes\n  - primer", text)
+
 
 # ── Writing pages ────────────────────────────────────────────────────────────
 

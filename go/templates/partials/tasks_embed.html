@@ -65,14 +65,22 @@
       </div>
       {{- /* The editor's bar, without Make task (js/mdedit.js). */}}
       {{template "format_bar" (dict "bar_id" (print "task-edit-format" .Sfx) "attach_id" (print "task-edit-attach" .Sfx) "pageonly" true)}}
-      <textarea id="task-edit-desc{{.Sfx}}" name="description" rows="12"></textarea>
+      <textarea id="task-edit-desc{{.Sfx}}" name="description" rows="8"></textarea>
       <div class="task-notes-preview page-content" id="task-edit-preview{{.Sfx}}" tabindex="-1" aria-label="Preview of the description" hidden></div>
     </div>
     <div class="task-field task-comments" id="task-edit-comments{{.Sfx}}" hidden>
-      <label for="task-edit-comment{{.Sfx}}">Comments<span class="task-edit-links-summary" id="task-edit-comments-count{{.Sfx}}"></span></label>
-      <div class="task-comment-add">
-        <input type="text" id="task-edit-comment{{.Sfx}}" placeholder="Add a comment" autocomplete="off" maxlength="2000">
-        <button type="button" class="btn" id="task-edit-comment-add{{.Sfx}}">Add</button>
+      <div class="task-comments-head">
+        <label for="task-edit-comment{{.Sfx}}">Comments<span class="task-edit-links-summary" id="task-edit-comments-count{{.Sfx}}"></span></label>
+        <button type="button" class="btn task-comment-open" id="task-edit-comment-open{{.Sfx}}" aria-expanded="false" aria-controls="task-edit-comment-box{{.Sfx}}">Add comment</button>
+      </div>
+      {{- /* The comment field: shown by Add comment, or in a comment's place by its ✎ (js/taskmodal.js). */}}
+      <div class="task-comment-add" id="task-edit-comment-box{{.Sfx}}" hidden>
+        <textarea id="task-edit-comment{{.Sfx}}" rows="3" placeholder="Write a comment" aria-label="Comment" autocomplete="off" maxlength="2000"></textarea>
+        <div class="task-comment-add-actions">
+          <span class="field-hint">Markdown · Ctrl+Enter saves it</span>
+          <button type="button" class="btn" id="task-edit-comment-cancel{{.Sfx}}">Cancel</button>
+          <button type="button" class="btn btn-primary" id="task-edit-comment-add{{.Sfx}}">Add</button>
+        </div>
       </div>
       <ul class="task-comment-list" id="task-edit-comment-list{{.Sfx}}"></ul>
     </div>

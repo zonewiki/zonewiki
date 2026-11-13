@@ -910,7 +910,7 @@
     },
     "comment": {
      "type": "string",
-     "description": "A comment to add: a dated status line ('called Bob, waiting'), open or done tasks alike."
+     "description": "A comment to add (markdown): a dated status line ('called Bob, waiting'), open or done tasks."
     },
     "status": {
      "type": "string",

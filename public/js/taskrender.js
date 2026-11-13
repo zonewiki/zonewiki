@@ -6,7 +6,7 @@
 import TasksCore from '../tasks-core.js';
 import { renderFigures } from './figures.js';
 import { openDatePicker } from './datepicker.js';
-import { commentStamp, dueDateClass, esc, formatDate, linkifyTitle, plainTitle, shortDate, startsAfterDeadline, todayStr, urgencyClass } from './taskutil.js';
+import { commentCardHtml, commentStamp, dueDateClass, esc, formatDate, linkifyTitle, plainTitle, shortDate, startsAfterDeadline, todayStr, urgencyClass } from './taskutil.js';
 import { plainHtml, renderedHtml, renderTexts } from './tasktexts.js';
 
 const { byOpenOrder, SORTS } = TasksCore;
@@ -144,7 +144,7 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
   const earlier = comments.length - 3;
   const commentsHtml = comments.length
     ? `<div class="task-card-comments">${comments.slice(-3).reverse().map(c =>
-        `<p><span class="task-comment-when">${esc(commentStamp(c))}</span> ${htmlOf('comments', c.text)}</p>`).join('')}` +
+        commentCardHtml(commentStamp(c), htmlOf('comments', c.text))).join('')}` +
       (earlier > 0 ? `<button type="button" class="task-comments-more" data-id="${esc(task.id)}">${earlier} earlier…</button>` : '') + '</div>'
     : '';
   const dragAttr = draggable ? 'draggable="true" data-drag' : '';

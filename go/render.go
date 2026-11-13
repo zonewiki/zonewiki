@@ -111,17 +111,16 @@ func requestHost(rq *Req) string {
 	return rq.r.Host
 }
 
-// renderNotes renders task notes (or, inline, comments: one line each)
-// as a page is, without what only a page has (frontmatter, [[tasks:]], ✎) and
+// renderNotes renders task notes or comments as a page is, without what only a page has (frontmatter, [[tasks:]], ✎) and
 // without heading ids, which would clash with the page's own.
-func renderNotes(rq *Req, texts []string, inline bool) []string {
+func renderNotes(rq *Req, texts []string) []string {
 	links := wikilinker(rq, nil, "")
 	out := make([]string, len(texts))
 	for i, text := range texts {
 		text, stash := mdtext.MaskCode(text)
 		text, refs := maskTaskRefs(text)
 		text = mdtext.UnmaskCode(escapeWikilinkPipes(text), stash)
-		result := markdown(text, &Env{Host: requestHost(rq), HeadingIDs: headingNoID, Wikilink: links}, inline)
+		result := markdown(text, &Env{Host: requestHost(rq), HeadingIDs: headingNoID, Wikilink: links}, false)
 		out[i] = injectTaskRefs(rq, result, refs, nil)
 	}
 	return out

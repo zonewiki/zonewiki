@@ -1996,7 +1996,7 @@ def test_checkboxes_in_task_notes(page, wiki):
 def test_notes_and_comments_render_as_on_a_page(page, wiki):
     # The page renderer draws the notes: headings, tables, highlighted code,
     # _italic_ (the formatting bar's), one paragraph for lines in a row.
-    # Comments too, inline.
+    # Comments too.
     tid = page.request.post("/api/tasks", data={"title": "Fence", "description":
         "## Steps\nsand\nprime\n\n| coat | days |\n|---|---|\n| 1 | 2 |\n\n```python\nx = 1\n```\n\n_soft_ wood"}).json()["id"]
     page.request.post(f"/api/tasks/{tid}/comments", data={"text": "**primed** today"})
@@ -2576,13 +2576,14 @@ def test_comment_paste_of_a_url_asks_for_its_name(page, wiki):
     page.goto("/tasks?view=open")
     modal = open_edit(page, "Link in comment")
     field = modal.locator("#task-edit-comment")
+    modal.get_by_role("button", name="Add comment").click()
     field.press_sequentially("See ")
     page.evaluate(PASTE, "https://example.com/rfc")
     page.locator("#url-name-input").fill("the RFC")
     page.locator("#url-name-input").press("Enter")
     expect(field).to_have_value("See [the RFC](https://example.com/rfc)")
     expect(field).to_be_focused()
-    field.press("Enter")                       # sends
+    field.press("Control+Enter")               # saves it
     expect(modal.locator(".task-comment-list li .task-comment-text a")).to_have_text(["the RFC"])
 
 
@@ -2591,17 +2592,37 @@ def test_comments_in_edit_modal(page, wiki):
     page.goto("/tasks?view=open")
     modal = open_edit(page, "Plan on-call")
     field = modal.locator("#task-edit-comment")
+    add = modal.get_by_role("button", name="Add comment")
+    # The field shows only once it is asked for.
+    expect(field).to_be_hidden()
+    add.click()
+    expect(field).to_be_focused()
+    expect(add).to_be_hidden()
     field.fill("asked Alex")
-    field.press("Enter")                       # adds, doesn't submit the form
+    field.press("Control+Enter")               # saves the comment, doesn't submit the form
     expect(modal).to_be_visible()
     items = modal.locator(".task-comment-list li")
     expect(items.locator(".task-comment-text")).to_have_text(["asked Alex"])
+    expect(field).to_be_hidden()               # put away again
+    expect(add).to_be_focused()
+    add.click()
     expect(field).to_have_value("")
     field.fill("6 people")
-    modal.get_by_role("button", name="Add").click()
+    modal.get_by_role("button", name="Add", exact=True).click()
     expect(items.locator(".task-comment-text")).to_have_text(["6 people", "asked Alex"])   # newest first
+    # Esc (or its Cancel) puts the field away with what it held, not the modal.
+    add.click()
+    field.fill("never mind")
+    field.press("Escape")
+    expect(field).to_be_hidden()
+    expect(modal).to_be_visible()
+    add.click()
+    expect(field).to_have_value("")
+    modal.locator("#task-edit-comment-cancel").click()
+    expect(field).to_be_hidden()
+    expect(items).to_have_count(2)
     # Saved at once: Cancel keeps them, and the card shows the count.
-    modal.get_by_role("button", name="Cancel").click()
+    modal.locator(".task-edit-actions").get_by_role("button", name="Cancel").click()
     wait_for_field(page, "Plan on-call", "comments",
                    task_by_title(page, "Plan on-call")["comments"])
     assert [c["text"] for c in task_by_title(page, "Plan on-call")["comments"]] == ["asked Alex", "6 people"]
@@ -2611,10 +2632,15 @@ def test_comments_in_edit_modal(page, wiki):
     # The badge opens the modal with the comment field focused.
     badge.click()
     expect(field).to_be_focused()
-    # Edit in place: Esc cancels without closing the modal, Enter saves.
+    field.press("Escape")
+    # Edit in place: the field takes the comment's place, with its text.
+    # Esc cancels without closing the modal, Ctrl+Enter (or Save) saves.
     items.first.hover()
     items.first.get_by_role("button", name="Edit comment").click()
-    edit = items.first.locator(".task-comment-edit")
+    edit = items.first.locator("#task-edit-comment")
+    expect(edit).to_have_value("6 people")
+    expect(edit).to_be_focused()
+    expect(items.first.locator(".task-comment-text")).to_be_hidden()
     edit.fill("nope")
     edit.press("Escape")
     expect(modal).to_be_visible()
@@ -2622,8 +2648,19 @@ def test_comments_in_edit_modal(page, wiki):
     items.first.hover()
     items.first.get_by_role("button", name="Edit comment").click()
     edit.fill("6 people, maybe 7")
-    edit.press("Enter")
+    edit.press("Control+Enter")
     expect(items.first.locator(".task-comment-text")).to_have_text("6 people, maybe 7")
+    items.last.hover()
+    items.last.get_by_role("button", name="Edit comment").click()
+    items.last.locator("#task-edit-comment").fill("asked Alex twice")
+    expect(modal.locator("#task-edit-comment-add")).to_have_text("Save")
+    modal.locator("#task-edit-comment-add").click()
+    expect(items.last.locator(".task-comment-text")).to_have_text("asked Alex twice")
+    items.last.hover()
+    items.last.get_by_role("button", name="Edit comment").click()
+    items.last.locator("#task-edit-comment").fill("asked Alex")
+    items.last.locator("#task-edit-comment").press("Control+Enter")
+    expect(items.last.locator(".task-comment-text")).to_have_text("asked Alex")
     # Delete, then undo.
     items.first.hover()
     items.first.get_by_role("button", name="Delete comment").click()
@@ -2634,11 +2671,61 @@ def test_comments_in_edit_modal(page, wiki):
     # clickable, once the modal is closed.
     items.first.hover()
     items.first.get_by_role("button", name="Delete comment").click()
-    modal.get_by_role("button", name="Cancel").click()
+    modal.locator(".task-edit-actions").get_by_role("button", name="Cancel").click()
     expect(modal).to_be_hidden()
     page.locator(".task-undo-btn").click()
     expect(card(page, "Plan on-call").locator(".task-comments-btn")).to_have_text("💬 2")
     assert len(task_by_title(page, "Plan on-call")["comments"]) == 2
+
+
+def test_comment_of_several_lines(page, wiki):
+    # A comment is markdown, as the notes are: paragraphs, lists, code.
+    page.request.post("/api/tasks", data={"title": "Paint the fence"})
+    page.goto("/tasks?view=open")
+    modal = open_edit(page, "Paint the fence")
+    modal.get_by_role("button", name="Add comment").click()
+    field = modal.locator("#task-edit-comment")
+    field.press_sequentially("Bought:")
+    field.press("Enter")                       # a new line, not a save
+    field.press("Enter")
+    field.press_sequentially("- **two** brushes")
+    field.press("Enter")                       # the list goes on, as in the editor
+    field.press_sequentially("primer")
+    expect(field).to_have_value("Bought:\n\n- **two** brushes\n- primer")
+    expect(modal.locator(".task-comment-list li")).to_have_count(0)
+    field.press("Control+Enter")
+    body = modal.locator(".task-comment-list li .task-comment-text")
+    expect(body.locator("p")).to_have_text("Bought:")
+    expect(body.locator("li")).to_have_text(["two brushes", "primer"])
+    expect(body.locator("strong")).to_have_text("two")
+    assert task_by_title(page, "Paint the fence")["comments"][0]["text"] == "Bought:\n\n- **two** brushes\n- primer"
+    # The card: its time on a line, the text under it; a one-line comment
+    # stays on the line of its time.
+    modal.get_by_role("button", name="Add comment").click()
+    field.fill("done")
+    modal.get_by_role("button", name="Add", exact=True).click()
+    expect(modal.locator(".task-comment-list > li")).to_have_count(2)
+    modal.locator(".task-edit-actions").get_by_role("button", name="Cancel").click()
+    shown = card(page, "Paint the fence").locator(".task-card-comment")
+    expect(shown).to_have_count(2)
+    expect(shown.first).to_have_js_property("tagName", "P")
+    expect(shown.last.locator(".task-comment-body li")).to_have_text(["two brushes", "primer"])
+    when, text = shown.last.locator(".task-comment-when"), shown.last.locator(".task-comment-body")
+    assert text.bounding_box()["y"] >= when.bounding_box()["y"] + when.bounding_box()["height"] - 1
+
+
+def test_comment_in_its_field_is_saved_with_the_task(page, wiki):
+    # Save with a comment still in its field: the comment is not lost.
+    page.request.post("/api/tasks", data={"title": "Call Bob"})
+    page.goto("/tasks?view=open")
+    modal = open_edit(page, "Call Bob")
+    modal.get_by_role("button", name="Add comment").click()
+    modal.locator("#task-edit-comment").fill("left a voicemail")
+    modal.locator("#task-edit-title").fill("Call Bob again")
+    modal.locator(".task-edit-actions").get_by_role("button", name="Save").click()
+    expect(modal).to_be_hidden()
+    task = task_by_title(page, "Call Bob again")
+    assert [c["text"] for c in task["comments"]] == ["left a voicemail"]
 
 
 def test_new_task_has_no_comments_field(page, wiki):

@@ -42,7 +42,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 | PUT    | `/api/tasks/<id>`      | Update a task (title, tags, due_date, start_date, completed, recurrence via `rec_type`/`rec_interval`/`rec_from`, keep, last_done, wont_do, skip). The two dates are independent: setting one never moves the other. `wont_do: true` archives the task without spawning a recurring instance; `wont_do: false` reopens it (removing any skip-spawned instance). `skip: true` archives the occurrence as won't-do **and** spawns the next instance. `completed: true` on a keep task does not archive it (see Keep tasks). `completed`, `wont_do`, `skip` and `keep` are `true` or `false`, anything else is refused (400, "completed must be true or false"); a date is `YYYY-MM-DD`, `null` or `""` (none). |
 | DELETE | `/api/tasks/<id>`      | Delete a task; returns 204. |
 | POST   | `/api/tasks/<id>/toggle-check` | Tick or untick the Nth checkbox in a task's notes, recording when as on a page; body `{ idx }`; returns the task. |
-| POST   | `/api/tasks/<id>/comments` | Add a comment (status line) to a task, open or done; body `{ text }`; returns the task (201). See Comments. |
+| POST   | `/api/tasks/<id>/comments` | Add a comment (markdown, a line or several) to a task, open or done; body `{ text }`; returns the task (201). See Comments. |
 | PUT    | `/api/tasks/<id>/comments/<cid>` | Change a comment's text (its time stays); returns the task. |
 | DELETE | `/api/tasks/<id>/comments/<cid>` | Delete a comment; returns the task. |
 | POST   | `/api/tasks/batch-delete` | Delete multiple tasks; body `{ ids: [id1, id2, …] }`; returns 204. |

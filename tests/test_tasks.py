@@ -2375,6 +2375,16 @@ class TestComments:
         long = client.post(self._url(tid), json={"text": "y" * 5000}).get_json()["comments"][-1]
         assert len(long["text"]) == 2000   # at most
 
+    def test_several_lines(self, client):
+        # Markdown of several lines is kept as written, with a file's line ends.
+        tid = create_task(client).get_json()["id"]
+        [c] = client.post(self._url(tid), json={"text": "Bought:\r\n\r\n- brushes\r\n- primer\n"}).get_json()["comments"]
+        assert c["text"] == "Bought:\n\n- brushes\n- primer"
+        html = client.post("/api/render-notes", json={"comments": [c["text"]]}).get_json()["comments"][0]
+        assert "<p>Bought:</p>" in html and html.count("<li>") == 2
+        edited = client.put(self._url(tid, c["id"]), json={"text": "one\r\ntwo"}).get_json()
+        assert edited["comments"][0]["text"] == "one\ntwo"
+
     def test_on_a_completed_task(self, client):
         tid = create_task(client).get_json()["id"]
         client.put(f"/api/tasks/{tid}", json={"completed": True})
@@ -2444,8 +2454,8 @@ class TestNotes:
         assert "<table>" in note and '<code class="language-py">' in note
         assert '<a href="/page/garden" class="wikilink">Garden</a>' in note
         assert "wikilink-missing" in note and "<em>soon</em>" in note
-        # A comment is one line: inline, no paragraph around it.
-        assert comment == '<strong>done</strong>, see <a href="/page/garden" class="wikilink">Garden</a>'
+        # A comment renders as the notes do: a line is a paragraph.
+        assert comment.strip() == '<p><strong>done</strong>, see <a href="/page/garden" class="wikilink">Garden</a></p>'
 
     def test_render_notes_task_chips_and_no_page_directives(self, client):
         tid = create_task(client, title="Order seeds").get_json()["id"]

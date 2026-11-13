@@ -232,6 +232,17 @@ export function commentWhen(at) {
 export function commentStamp(c) {
   return commentWhen(c.at) + (c.by ? ` · ${c.by}` : '');
 }
+// A comment on a card: one of a single paragraph goes on the line of its
+// time; any other (several paragraphs, a list, code …) under it, rendered
+// as the notes are.
+const ONE_PARAGRAPH = /^<p>((?:(?!<\/p>)[\s\S])*)<\/p>\s*$/;
+export function commentCardHtml(stamp, html) {
+  const when = `<span class="task-comment-when">${esc(stamp)}</span>`;
+  const one = ONE_PARAGRAPH.exec(html);
+  return one
+    ? `<p class="task-card-comment">${when} ${one[1]}</p>`
+    : `<div class="task-card-comment">${when}<div class="task-comment-body page-content">${html}</div></div>`;
+}
 
 // Relative-date helpers (used by card rendering and focus defaults).
 export function dateOffset(days) {

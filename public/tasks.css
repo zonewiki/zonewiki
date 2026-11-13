@@ -386,35 +386,35 @@ div.chip-input > input {
 /* Notes render as a page's text (.page-content, render.render_notes), at
    card scale: headings the size of the text, tighter spacing, wide tables
    and code scroll. The modal's preview shows them the same. */
-:is(.task-desc, .task-notes-preview).page-content > :first-child { margin-top: 0; }
-:is(.task-desc, .task-notes-preview).page-content > :last-child { margin-bottom: 0; }
-:is(.task-desc, .task-notes-preview).page-content :is(p, pre, blockquote, dl) { margin: .25rem 0; }
-:is(.task-desc, .task-notes-preview).page-content .markdown-alert { margin: .25rem 0; }
-:is(.task-desc, .task-notes-preview).page-content :is(ul, ol) { margin: .25rem 0 .25rem 1.25rem; }
+:is(.task-desc, .task-notes-preview, .task-comment-body).page-content > :first-child { margin-top: 0; }
+:is(.task-desc, .task-notes-preview, .task-comment-body).page-content > :last-child { margin-bottom: 0; }
+:is(.task-desc, .task-notes-preview, .task-comment-body).page-content :is(p, pre, blockquote, dl) { margin: .25rem 0; }
+:is(.task-desc, .task-notes-preview, .task-comment-body).page-content .markdown-alert { margin: .25rem 0; }
+:is(.task-desc, .task-notes-preview, .task-comment-body).page-content :is(ul, ol) { margin: .25rem 0 .25rem 1.25rem; }
 /* A card is a list item itself: its notes' lists would get a nested list's ◦. */
-:is(.task-desc, .task-notes-preview).page-content li { margin-bottom: 0; }
+:is(.task-desc, .task-notes-preview, .task-comment-body).page-content li { margin-bottom: 0; }
 /* Bullets and checkboxes share one column, a box's width (--mark) left of
    the text, both centred in it and on the first line: the bullets are drawn
    here, since a list marker's place depends on the font. */
-:is(.task-desc, .task-notes-preview).page-content { --mark: 13px; }
-:is(.task-desc, .task-notes-preview).page-content ul > li { list-style: none; position: relative; }
-:is(.task-desc, .task-notes-preview).page-content ul > li:not(.task-list-item)::before {
+:is(.task-desc, .task-notes-preview, .task-comment-body).page-content { --mark: 13px; }
+:is(.task-desc, .task-notes-preview, .task-comment-body).page-content ul > li { list-style: none; position: relative; }
+:is(.task-desc, .task-notes-preview, .task-comment-body).page-content ul > li:not(.task-list-item)::before {
   content: "•"; position: absolute; left: -1.25rem; width: var(--mark); text-align: center;
 }
-:is(.task-desc, .task-notes-preview).page-content ul ul > li:not(.task-list-item)::before { content: "◦"; }
-:is(.task-desc, .task-notes-preview).page-content .task-list-item { margin-left: 0; position: relative; }
-:is(.task-desc, .task-notes-preview).page-content .task-list-item-checkbox {
+:is(.task-desc, .task-notes-preview, .task-comment-body).page-content ul ul > li:not(.task-list-item)::before { content: "◦"; }
+:is(.task-desc, .task-notes-preview, .task-comment-body).page-content .task-list-item { margin-left: 0; position: relative; }
+:is(.task-desc, .task-notes-preview, .task-comment-body).page-content .task-list-item-checkbox {
   position: absolute; left: -1.25rem; top: calc((1lh - var(--mark)) / 2 + .2em);   /* on the lowercase letters, as the bullet */
   width: var(--mark); height: var(--mark); margin: 0;
 }
-:is(.task-desc, .task-notes-preview).page-content :is(h1, h2, h3, h4, h5, h6) {
+:is(.task-desc, .task-notes-preview, .task-comment-body).page-content :is(h1, h2, h3, h4, h5, h6) {
   font-size: 1em; font-weight: 600; margin: .4rem 0 .1rem; padding: 0; border: none; width: auto;
 }
-:is(.task-desc, .task-notes-preview).page-content table { display: block; overflow-x: auto; width: auto; margin: .3rem 0; font-size: inherit; }
-:is(.task-desc, .task-notes-preview).page-content :is(th, td) { padding: .2rem .5rem; }
-:is(.task-desc, .task-notes-preview).page-content pre { font-size: .8rem; padding: .4rem .6rem; }
-:is(.task-desc, .task-notes-preview).page-content hr { margin: .5rem 0; }
-:is(.task-desc, .task-notes-preview).page-content img { max-height: 16rem; width: auto; }
+:is(.task-desc, .task-notes-preview, .task-comment-body).page-content table { display: block; overflow-x: auto; width: auto; margin: .3rem 0; font-size: inherit; }
+:is(.task-desc, .task-notes-preview, .task-comment-body).page-content :is(th, td) { padding: .2rem .5rem; }
+:is(.task-desc, .task-notes-preview, .task-comment-body).page-content pre { font-size: .8rem; padding: .4rem .6rem; }
+:is(.task-desc, .task-notes-preview, .task-comment-body).page-content hr { margin: .5rem 0; }
+:is(.task-desc, .task-notes-preview, .task-comment-body).page-content img { max-height: 16rem; width: auto; }
 
 .task-due { font-size: .75rem; color: var(--muted); }
 .task-date-info { font-size: .75rem; color: var(--muted); }
@@ -503,8 +503,11 @@ div.chip-input > input {
   grid-area: comments; margin-top: .3rem; padding-top: .25rem; font-size: .85rem;
   border-top: 1px dashed color-mix(in srgb, var(--fg) 10%, var(--border));
 }
-.tasks-app .task-card-comments p { margin: .1rem 0; line-height: 1.45; overflow-wrap: anywhere; }
+.tasks-app p.task-card-comment { margin: .1rem 0; line-height: 1.45; overflow-wrap: anywhere; }
 .task-comment-when { color: var(--muted); font-size: .75rem; margin-right: .25rem; }
+/* A comment of more than a paragraph: its time on a line, the text under it. */
+div.task-card-comment { margin: .25rem 0; line-height: 1.45; overflow-wrap: anywhere; }
+div.task-card-comment > .task-comment-when { display: block; }
 .task-comments-more {
   background: none; border: none; padding: 0; font: inherit; font-size: .75rem;
   color: var(--link); cursor: pointer;
@@ -1063,21 +1066,27 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 .task-history { list-style: none; margin: 0; padding: 0; font-size: .8rem; max-height: 12rem; overflow-y: auto; }
 .task-history li { padding: .1rem 0; }
 .task-history-at { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: .4rem; }
-/* Comments: status lines, newest first; the field adds one at once. `ul.`
-   outranks .page-content ul (the tasks page is a page). */
-.task-comments[hidden] { display: none; }
-.task-comment-add { display: flex; gap: .4rem; }
-.task-comment-add input { flex: 1; min-width: 0; }
-ul.task-comment-list { list-style: none; margin: .3rem 0 0; padding: 0; font-size: .85rem; max-height: 10rem; overflow-y: auto; }
+/* Comments: newest first. Add comment shows the field (.task-comment-add),
+   which saves one at once; ✎ puts it in a comment's place
+   (.task-comment-editing). `ul.` outranks .page-content ul (the tasks page
+   is a page). */
+.task-comments[hidden], .task-comment-add[hidden], .task-comment-open[hidden] { display: none; }
+.task-comments-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; min-height: 1.8rem; }
+.task-comment-open { font-size: .8rem; padding: .15rem .6rem; }
+.task-comment-add { display: flex; flex-direction: column; gap: .3rem; flex: 1; min-width: 0; }
+.task-comment-add textarea { min-height: 3.2rem; field-sizing: content; max-height: 14rem; }
+.task-comment-add-actions { display: flex; align-items: center; gap: .4rem; }
+.task-comment-add-actions .field-hint { margin-right: auto; }
+ul.task-comment-list { list-style: none; margin: .3rem 0 0; padding: 0; font-size: .85rem; max-height: 18rem; overflow-y: auto; }
 .task-comment-list:empty { display: none; }
-.task-comment-list li { display: flex; align-items: baseline; gap: .2rem; padding: .15rem 0; margin: 0; }
+.task-comment-list > li { display: flex; align-items: baseline; gap: .2rem; padding: .15rem 0; margin: 0; }
 .task-comment-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.task-comment-edit { flex: 1; min-width: 0; font: inherit; }
+.task-comment-editing > :is(.task-comment-text, .task-comment-btn) { display: none; }
 .task-comment-btn {
   border: none; background: none; color: var(--muted); cursor: pointer;
   font: inherit; padding: 0 .3rem; opacity: 0; flex: none;
 }
-.task-comment-list li:hover .task-comment-btn, .task-comment-btn:focus-visible { opacity: 1; }
+.task-comment-list > li:hover .task-comment-btn, .task-comment-btn:focus-visible { opacity: 1; }
 .task-comment-btn:hover { color: var(--fg); }
 @media (hover: none) { .task-comment-btn { opacity: 1; } }
 @media (pointer: coarse) { .task-comment-btn { padding: .3rem .5rem; } }

@@ -1045,19 +1045,16 @@ func apiRenderNotes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := M{}
-	for _, k := range []struct {
-		key    string
-		inline bool
-	}{{"notes", false}, {"comments", true}} {
+	for _, key := range []string{"notes", "comments"} {
 		var texts []string
-		if !data.Null(k.key) {
+		if !data.Null(key) {
 			var ok bool
-			if texts, ok = jsonobj.As[[]string](data[k.key]); !ok {
+			if texts, ok = jsonobj.As[[]string](data[key]); !ok {
 				badRequestPage(w)
 				return
 			}
 		}
-		out[k.key] = renderNotes(rq, texts, k.inline)
+		out[key] = renderNotes(rq, texts)
 	}
 	writeJSON(w, http.StatusOK, out)
 }

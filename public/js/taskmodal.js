@@ -8,7 +8,6 @@ import TasksCore from '../tasks-core.js';
 import { markdownEditor } from './mdedit.js';
 import { toggleCheckboxText } from './mdtext.js';
 import { renderFigures } from './figures.js';
-import { pasteUrlAsLink } from './util.js';
 import { openDatePicker } from './datepicker.js';
 import { attachTagAc, commentStamp, dateOffset, esc, formatDate, hashWordAtCaret, insertHashTag, noticeFromResponse, shortDate, todayStr } from './taskutil.js';
 import { highlightCode, renderTexts, textsOf } from './tasktexts.js';
@@ -252,28 +251,73 @@ function renderHistory(task) {
     `${esc(HISTORY_TEXT[e.event](e))}</li>`).join('');
 }
 
-// The modal's Comments: short status lines ("called Bob, waiting"), newest
-// first. They are saved at once through their own routes (not with Save),
-// so a comment is never lost to Cancel. Hidden for a new task. Enter in
-// the field adds one; ✎ edits one in place (Enter saves, Esc cancels), ×
-// deletes it with undo.
+// The modal's Comments: markdown, a line or several, newest first. They are
+// saved at once through their own routes (not with Save), so a comment is
+// never lost to Cancel. Hidden for a new task. Add comment shows the field
+// (Ctrl+Enter or Add saves it, Esc or Cancel puts it away); ✎ puts the
+// field in a comment's place, with its text; × deletes one with undo.
 const commentsBox = document.getElementById('task-edit-comments' + app.sfx);
+const commentBox = document.getElementById('task-edit-comment-box' + app.sfx);
 const commentInput = document.getElementById('task-edit-comment' + app.sfx);
+const commentOpenBtn = document.getElementById('task-edit-comment-open' + app.sfx);
+const commentAddBtn = document.getElementById('task-edit-comment-add' + app.sfx);
 const commentList = document.getElementById('task-edit-comment-list' + app.sfx);
 st.commentsTaskId = null;
+let editingCid = null;   // the comment the field edits; null: a new one
+const commentItem = cid => cid ? [...commentList.children].find(li => li.dataset.comment === cid) : null;
 function renderComments(task) {
   st.commentsTaskId = task?.id || null;
   commentsBox.hidden = !task;
   if (!task) return;
   const comments = task.comments || [];
   document.getElementById('task-edit-comments-count' + app.sfx).textContent = comments.length || '';
+  // The field may be in a comment's place: out of the list while it is redrawn.
+  const focused = document.activeElement === commentInput;
+  commentList.before(commentBox);
   commentList.innerHTML = comments.slice().reverse().map(c =>
     `<li data-comment="${esc(c.id)}"><span class="task-history-at">${esc(commentStamp(c))}</span>` +
-    `<span class="task-comment-text">${app.htmlOf('comments', c.text)}</span>` +
+    `<div class="task-comment-text task-comment-body page-content">${app.htmlOf('comments', c.text)}</div>` +
     `<button type="button" class="task-comment-btn" data-comment-action="edit" title="Edit" aria-label="Edit comment">✎</button>` +
     `<button type="button" class="task-comment-btn" data-comment-action="delete" title="Delete" aria-label="Delete comment">×</button>` +
     '</li>').join('');
   renderFigures(commentList);
+  if (!commentBox.hidden) {
+    placeCommentBox();
+    if (focused) commentInput.focus();
+  }
+}
+// The field goes where it is used: in the edited comment's place, or (a new
+// comment, or the edited one is gone) above the list.
+function placeCommentBox() {
+  const li = commentItem(editingCid);
+  if (li) {
+    li.classList.add('task-comment-editing');
+    li.append(commentBox);
+  } else {
+    editingCid = null;
+    commentList.before(commentBox);
+  }
+  commentAddBtn.textContent = editingCid ? 'Save' : 'Add';
+}
+function openCommentBox(cid = null, text = '') {
+  commentItem(editingCid)?.classList.remove('task-comment-editing');
+  editingCid = cid;
+  commentInput.value = text;
+  commentBox.hidden = false;
+  commentOpenBtn.hidden = true;
+  commentOpenBtn.setAttribute('aria-expanded', 'true');
+  placeCommentBox();
+  commentInput.focus();
+  commentInput.setSelectionRange(text.length, text.length);
+}
+function closeCommentBox() {
+  commentItem(editingCid)?.classList.remove('task-comment-editing');
+  editingCid = null;
+  commentInput.value = '';
+  commentBox.hidden = true;
+  commentList.before(commentBox);
+  commentOpenBtn.hidden = false;
+  commentOpenBtn.setAttribute('aria-expanded', 'false');
 }
 // A comment route answered with the task: take it in and redraw.
 async function commentWrite(url, method, body) {
@@ -292,26 +336,45 @@ async function commentWrite(url, method, body) {
   return updated;
 }
 const commentsUrl = id => `/api/tasks/${encodeURIComponent(id)}/comments`;
-async function addComment() {
+// Saves what the field holds (a new comment, or the edited one's text) and
+// puts the field away; an empty or unchanged text only puts it away. False
+// when the server refused: the field stays, with its text.
+async function saveComment() {
+  const taskId = st.commentsTaskId;
+  if (commentBox.hidden || !taskId) return true;
+  if (commentInput.disabled) return false;   // being saved
   const text = commentInput.value.trim();
-  if (!text || !st.commentsTaskId) return;
+  const comment = editingCid && st.tasks.find(t => t.id === taskId)?.comments?.find(c => c.id === editingCid);
+  if (!text || comment?.text === text) { closeCommentBox(); return true; }
+  const hadFocus = commentBox.contains(document.activeElement);
   commentInput.disabled = true;
-  const ok = await commentWrite(commentsUrl(st.commentsTaskId), 'POST', { text });
+  const ok = comment
+    ? await commentWrite(`${commentsUrl(taskId)}/${encodeURIComponent(comment.id)}`, 'PUT', { text })
+    : await commentWrite(commentsUrl(taskId), 'POST', { text });
   commentInput.disabled = false;
-  if (ok) commentInput.value = '';
-  commentInput.focus();
+  if (!ok) { commentInput.focus(); return false; }
+  closeCommentBox();
+  if (hadFocus && app.modal.open) commentOpenBtn.focus();
+  return true;
 }
+// The page editor's markdown helpers: lists go on, [[ completes pages, a
+// pasted URL asks for its name, a pasted or dropped file is uploaded.
+markdownEditor(commentInput, { tabIndents: false, page: () => app.privateCb?.checked ? app.appEl?.dataset.privateFolder + '/task' : '' });
 commentInput.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); addComment(); }
+  if (e.defaultPrevented || e.isComposing) return;   // the completion's key
+  // Esc puts the field away, not the modal.
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeCommentBox(); commentOpenBtn.focus(); }
 });
-// Pasting a URL asks for its name, as in the description (pasteUrlAsLink).
-commentInput.addEventListener('paste', e => pasteUrlAsLink(commentInput, e));
-document.getElementById('task-edit-comment-add' + app.sfx).addEventListener('click', addComment);
-commentList.addEventListener('click', e => {
+commentOpenBtn.addEventListener('click', () => openCommentBox());
+commentAddBtn.addEventListener('click', saveComment);
+document.getElementById('task-edit-comment-cancel' + app.sfx).addEventListener('click', () => { closeCommentBox(); commentOpenBtn.focus(); });
+commentList.addEventListener('click', async e => {
   const btn = e.target.closest('[data-comment-action]');
   const li = btn?.closest('[data-comment]');
   if (!li || !st.commentsTaskId) return;
   const taskId = st.commentsTaskId, cid = li.dataset.comment;
+  // What the field holds is saved before it is used for another comment.
+  if (!(await saveComment()) || st.commentsTaskId !== taskId) return;
   const task = st.tasks.find(t => t.id === taskId);
   const comment = task?.comments?.find(c => c.id === cid);
   if (!comment) return;
@@ -325,33 +388,7 @@ commentList.addEventListener('click', e => {
     });
     return;
   }
-  // Edit in place.
-  const textEl = li.querySelector('.task-comment-text');
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.className = 'task-comment-edit';
-  input.addEventListener('paste', e => pasteUrlAsLink(input, e));
-  input.value = comment.text;
-  input.setAttribute('aria-label', 'Edit comment');
-  textEl.replaceWith(input);
-  li.querySelectorAll('.task-comment-btn').forEach(b => { b.hidden = true; });
-  input.focus();
-  let done = false;
-  const finish = async save => {
-    if (done) return;
-    done = true;
-    const text = input.value.trim();
-    if (save && text && text !== comment.text) {
-      if (await commentWrite(`${commentsUrl(taskId)}/${encodeURIComponent(cid)}`, 'PUT', { text })) return;
-    }
-    renderComments(st.tasks.find(t => t.id === taskId));
-  };
-  input.addEventListener('keydown', ev => {
-    if (ev.key === 'Enter' && !ev.isComposing) { ev.preventDefault(); finish(true); }
-    // Esc ends the edit, not the modal.
-    else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); finish(false); }
-  });
-  input.addEventListener('blur', () => finish(true));
+  openCommentBox(cid, comment.text);
 });
 
 // opts (new tasks): `tags` (comma-separated; given, even empty, it
@@ -379,8 +416,8 @@ function openEditModal(taskId, opts) {
   editChips.set(startTags, true);
   editTagsInput.value = '';
   renderHistory(task);
+  closeCommentBox();
   renderComments(task);
-  commentInput.value = '';
   app.titleInput.placeholder = task ? '' : 'e.g. Call Bob tomorrow #work due:fri';
   syncQuickPreview();
   app.keepCb.checked = task ? !!task.keep : opts && 'keep' in opts ? !!opts.keep : app.initKeep;
@@ -400,7 +437,8 @@ function openEditModal(taskId, opts) {
   app.deleteBtn.style.display = task ? '' : 'none';
   syncDates('open');
   app.modal.showModal();
-  (task && opts?.focusComment ? commentInput : batchTitles ? editTagsInput : app.titleInput).focus();
+  if (task && opts?.focusComment) openCommentBox();
+  else (batchTitles ? editTagsInput : app.titleInput).focus();
 }
 
 // Every N / From done are only meaningful with a repeat type — disable them
@@ -513,7 +551,14 @@ const blurInside = () => { if (app.modal.contains(document.activeElement)) docum
 app.modal.addEventListener('cancel', blurInside);
 app.modal.addEventListener('close', () => { onCreated = null; blurInside(); });
 
-app.modal.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === 's') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); e.stopPropagation(); app.form.requestSubmit(); } }, true);
+// Ctrl+Enter / Ctrl+S save the task; Ctrl+Enter in the comment field saves
+// the comment.
+app.modal.addEventListener('keydown', e => {
+  if (!((e.key === 'Enter' || e.key === 's') && (e.ctrlKey || e.metaKey))) return;
+  e.preventDefault(); e.stopPropagation();
+  if (e.key === 'Enter' && e.target === commentInput) saveComment();
+  else app.form.requestSubmit();
+}, true);
 // F2: Edit | Preview of the notes, as in the editor (not the editor's,
 // on its page).
 app.modal.addEventListener('keydown', e => {
@@ -524,6 +569,8 @@ app.modal.addEventListener('keydown', e => {
 
 app.form.addEventListener('submit', async e => {
   e.preventDefault();
+  // A comment still in its field is saved with the task.
+  if (!(await saveComment())) return;
   const id = document.getElementById('task-edit-id' + app.sfx).value;
   const data = {
     title: document.getElementById('task-edit-title' + app.sfx).value.trim(),

@@ -121,6 +121,8 @@ func validateDate(raw json.RawMessage) (string, error) {
 
 // commentText: a comment's text, stripped and capped; empty is refused.
 func commentText(s string) (string, error) {
+	// Lines as a file keeps them, whatever the browser's form sent.
+	s = strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\r", "\n")
 	if s = strings.TrimSpace(s); s == "" {
 		return "", refuse("Comment cannot be empty")
 	}
