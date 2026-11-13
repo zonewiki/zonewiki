@@ -252,6 +252,20 @@ class TestNames:
     def test_none_without_users(self, client):
         assert client.get("/api/tasks/assignable", headers=HOST).get_json() == {"users": [], "me": ""}
 
+    def block(self, client, wiki_dir):
+        """The data block a page with a task list brings along."""
+        (wiki_dir / "team.md").write_text("# Team\n\n[[tasks:]]\n")
+        html = client.get("/page/team", headers=HOST).get_data(as_text=True)
+        return json.loads(html.split('id="tasks-initial">', 1)[1].split("</script>", 1)[0])
+
+    def test_a_page_with_a_task_list_brings_them_along(self, alice, wiki_dir):
+        assert self.block(alice, wiki_dir)["people"] == {"users": ["alice", "bob"], "me": "alice"}
+        alice.set_cookie("zone-sharing", "1")
+        assert self.block(alice, wiki_dir)["people"] == {"users": [], "me": "alice"}
+
+    def test_but_not_without_users(self, client, wiki_dir):
+        assert "people" not in self.block(client, wiki_dir)
+
     def test_not_without_signing_in(self, alice):
         alice.post("/logout", headers=HOST)
         resp = alice.get("/api/tasks/assignable", headers=HOST)
@@ -399,3 +413,23 @@ class TestAssistant:
             "jsonrpc": "2.0", "id": 1, "method": "tools/call",
             "params": {"name": "search_tasks", "arguments": {"assignee": "me"}}})
         assert "no users" in resp.get_json()["result"]["content"][0]["text"]
+
+
+class TestHandingOn:
+    """The tasks of a user who can no longer be given any: the Users tab
+    says how many, with a link to them."""
+
+    def test_the_users_tab_counts_them(self, alice, monkeypatch):
+        for title in ("One", "Two"):
+            new(alice, title=title, assignee="bob")
+        done = new(alice, title="Done", assignee="bob")
+        put(alice, done, completed=True)
+        body = alice.get("/admin/users", headers=HOST).get_data(as_text=True)
+        assert "to hand on" not in body                    # bob can be given tasks
+        monkeypatch.setattr(settings, "USER_SETTINGS", {**USER_SETTINGS, "bob": {"disabled": "yes"}})
+        body = alice.get("/admin/users", headers=HOST).get_data(as_text=True)
+        assert '<a class="user-tasks" href="/tasks?view=open&amp;assignee=bob"' in body
+        assert ">2 open tasks to hand on</a>" in body
+        # Made a viewer instead: the same.
+        monkeypatch.setattr(settings, "USER_SETTINGS", {**USER_SETTINGS, "bob": {"role": "viewer"}})
+        assert ">2 open tasks to hand on</a>" in alice.get("/admin/users", headers=HOST).get_data(as_text=True)

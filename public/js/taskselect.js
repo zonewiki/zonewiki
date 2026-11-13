@@ -5,7 +5,7 @@
 // comes in app (its state in app.st).
 import TasksCore from '../tasks-core.js';
 import { putTask } from './util.js';
-import { attachTagAc, esc, formatDate, noSpacesInTags, noticeFromResponse, showNotice, startsAfterDeadline, tagWordOf, todayStr } from './taskutil.js';
+import { attachTagAc, esc, formatDate, noSpacesInTags, noticeFromResponse, people, showNotice, startsAfterDeadline, tagWordOf, todayStr } from './taskutil.js';
 
 const { tagCounts, selectionTags, bulkTagChange, rankTags } = TasksCore;
 
@@ -193,6 +193,65 @@ function openBulkListModal(ids) {
   (rows.find(r => r.getAttribute('aria-current') === 'true') || rows[0]).focus({ preventScroll: true });
 }
 
+// Who has several selected tasks, at once (the selection bar's Assign…,
+// the a key; with users): every user who can be assigned, yourself first,
+// each a row, then No one; a click assigns the selected tasks at once
+// (batch-update), with one undo. The row of who has them all already is
+// ticked; one who has only some says how many. Private tasks have no
+// assignee and are left alone.
+function openBulkAssignModal(ids) {
+  if (!people.users) return;
+  const idSet = new Set(ids);
+  const chosen = st.tasks.filter(t => idSet.has(t.id) && !t.private);
+  if (!chosen.length) { if (ids.length) showNotice('A private task has no assignee'); return; }
+  const count = chosen.length;
+  const names = [...people.users].sort((a, b) => (b === people.me) - (a === people.me) || a.localeCompare(b));
+  const has = name => chosen.filter(t => (t.assignee || '') === name).length;
+  const row = (name, label, n) => {
+    const all = n === count;
+    const part = n && !all ? `<span class="bulk-tag-count">${n} of ${count}</span>` : '';
+    return `<li><button type="button" class="bulk-tag-row bulk-list-row" data-assignee="${esc(name)}" aria-current="${all}">` +
+      `<span class="bulk-list-mark" aria-hidden="true">${all ? '✓' : ''}</span>` +
+      `<span class="${name ? 'task-assignee' + (name === people.me ? ' task-assignee-me' : '') : 'bulk-list-none'}">${label}</span>${part}</button></li>`;
+  };
+  const dlg = document.createElement('dialog');
+  dlg.className = 'modal bulk-tag-modal bulk-list-modal bulk-assign-modal';
+  dlg.innerHTML = `
+    <p class="modal-label">Assign ${count} task${count > 1 ? 's' : ''}</p>
+    <ul class="bulk-tag-list">${names.map(name => row(name, '@' + esc(name), has(name))).join('')}${row('', 'No one', has(''))}</ul>
+    <div class="modal-actions">
+      <button type="button" class="btn" id="bulk-assign-cancel">Cancel</button>
+    </div>`;
+  document.body.appendChild(dlg);
+  const close = () => { if (dlg.open) dlg.close(); };
+  dlg.addEventListener('close', () => dlg.remove());
+  dlg.querySelector('#bulk-assign-cancel').addEventListener('click', close);
+  dlg.addEventListener('click', ev => { if (ev.target === dlg) close(); });
+  const rows = [...dlg.querySelectorAll('.bulk-list-row')];
+  dlg.addEventListener('keydown', ev => {
+    if (ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp') return;
+    ev.preventDefault();
+    const i = rows.indexOf(document.activeElement);
+    rows[(i + (ev.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length].focus();
+  });
+  dlg.querySelector('.bulk-tag-list').addEventListener('click', async ev => {
+    const btn = ev.target.closest('.bulk-list-row');
+    if (!btn) return;
+    const name = btn.dataset.assignee;
+    const changing = chosen.filter(t => (t.assignee || '') !== name);
+    close();
+    if (!changing.length) return;
+    app.dismissUndo();
+    if (!(await batchUpdate(changing.map(t => ({ id: t.id, assignee: name || null }))))) return;
+    const what = `${changing.length} task${changing.length > 1 ? 's' : ''}`;
+    // The old history goes with the old name, so the undo leaves no trace.
+    app.showUndo(name ? `${what} assigned to ${name === people.me ? 'you' : name}` : `${what} assigned to no one`,
+      () => batchUpdate(changing.map(t => ({ id: t.id, assignee: t.assignee || null, history: t.history || [] }))));
+  });
+  dlg.showModal();
+  (rows.find(r => r.getAttribute('aria-current') === 'true') || rows[0]).focus({ preventScroll: true });
+}
+
 // Add and remove tags on the tasks `ids` (batch-tag), with one undo that
 // puts back each changed task's tags (batch-update). Tasks the change takes
 // out of this view (another list, the filter) say where they went, unless
@@ -347,6 +406,7 @@ function runSelectionAction(action) {
     case 'clear':  exitSelectMode(); break;
     case 'tag':    if (ids.length) openBulkTagModal(ids); break;
     case 'list':   if (ids.length) openBulkListModal(ids); break;
+    case 'assign': if (ids.length) openBulkAssignModal(ids); break;
     case 'today':  startToday(ids); break;
     case 'unplan': startOn(ids, null); break;
     case 'done':
@@ -471,5 +531,5 @@ function visibleItems() {
   return Array.from(app.listEl.querySelectorAll('.task-item'));
 }
 
-return { openBulkTagModal, openBulkListModal, updateSelectionClasses, inSelection, toggleSelection, selectAllVisible, clearSelection, anyPlanned, enterSelectMode, exitSelectMode, syncSelBar, mayComplete, setImportance, runSelectionAction, startOn, completeMany, setSelected, extendSelection, visibleItems };
+return { openBulkTagModal, openBulkListModal, openBulkAssignModal, updateSelectionClasses, inSelection, toggleSelection, selectAllVisible, clearSelection, anyPlanned, enterSelectMode, exitSelectMode, syncSelBar, mayComplete, setImportance, runSelectionAction, startOn, completeMany, setSelected, extendSelection, visibleItems };
 }

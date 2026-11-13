@@ -818,6 +818,7 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 /* The list dialog (openBulkListModal): the lists as rows, the selection's own ticked. */
 .bulk-list-mark { flex: none; width: 1rem; text-align: center; color: var(--btn-primary); font-weight: 700; }
 .bulk-list-none { font-size: .85rem; color: var(--muted); }
+.bulk-assign-modal .task-assignee { font-size: .85rem; }
 @media (hover: none) { .bulk-tag-row { min-height: 44px; } }
 
 /* ⋯ per-card menu button + the menu itself. The expand button (a chevron)

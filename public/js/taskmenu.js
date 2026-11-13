@@ -4,7 +4,7 @@
 // What it uses of the app comes in app (its state in app.st).
 import { copyText } from './util.js';
 import { openDatePicker } from './datepicker.js';
-import { dateOffset, esc, formatDate, plainTitle, shortDate, showNotice, subtaskCounts, todayStr } from './taskutil.js';
+import { dateOffset, esc, formatDate, people, plainTitle, shortDate, showNotice, subtaskCounts, todayStr } from './taskutil.js';
 
 export function initTaskMenu(app) {
 const { st } = app;
@@ -34,6 +34,7 @@ function openTaskMenu(id, anchor, at) {
     const items = [
       ['tag', 'Tag…'],
       app.listSet.size && ['list', 'Move to list…'],
+      people.users && ['assign', 'Assign…'],
       !allDone && ['today', 'Start today'],
       app.anyPlanned() && ['unplan', 'Unplan'],
       ['done', allDone ? 'Reopen' : 'Done'],

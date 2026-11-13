@@ -293,3 +293,36 @@ def test_the_settings_dialog_sets_whose_tasks_a_list_shows(alice, wiki):
     alice.locator("#task-more-btn").click()
     alice.get_by_role("menuitem", name="List settings…").click()
     expect(dialog.locator("[name=assignee]")).to_have_value("bob")
+
+
+def test_several_selected_tasks_are_assigned_at_once(alice):
+    """Assign… on a selection (the bar's button, the a key): to a user or
+    to no one, with one undo."""
+    for title in ("Three", "Two", "One"):
+        new(alice, title)
+    new(alice, "Bob's already", assignee="bob")
+    alice.goto("/tasks?view=open")
+    card(alice, "Three").locator(".task-title").click()
+    card(alice, "Bob's already").locator(".task-title").click(modifiers=["Shift"])
+    expect(alice.locator(".task-item.task-selected")).to_have_count(4)
+    alice.locator("#task-selbar [data-sel=assign]").click()
+    dlg = alice.locator(".bulk-assign-modal")
+    expect(dlg.locator(".modal-label")).to_have_text("Assign 4 tasks")
+    expect(dlg.locator(".bulk-list-row")).to_have_text(["@alice", re.compile(r"@bob\s*1 of 4"), re.compile(r"No one\s*3 of 4")])
+    dlg.locator(".bulk-list-row", has_text="@bob").click()
+    expect(alice.get_by_text("3 tasks assigned to bob")).to_be_visible()
+    for title in ("One", "Two", "Three"):
+        wait_for_assignee(alice, title, "bob")
+        expect(card(alice, title).locator(".task-assignee")).to_have_text("@bob")
+    alice.get_by_role("button", name="Undo").click()
+    for title in ("One", "Two", "Three"):
+        wait_for_assignee(alice, title, None)
+    assert [e["event"] for e in task(alice, "One")["history"]] == ["created"]      # no trace
+    wait_for_assignee(alice, "Bob's already", "bob")
+    # The a key, and to no one.
+    card(alice, "Bob's already").locator(".task-title").click()
+    alice.keyboard.press("a")
+    expect(dlg.locator(".bulk-list-row[aria-current=true]")).to_have_text(re.compile("@bob"))
+    dlg.locator(".bulk-list-row", has_text="No one").click()
+    expect(alice.get_by_text("1 task assigned to no one")).to_be_visible()
+    wait_for_assignee(alice, "Bob's already", None)

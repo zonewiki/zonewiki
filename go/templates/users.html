@@ -41,7 +41,9 @@
         <button type="submit" class="btn">Change</button>
       </form>
     </td>
-    <td>{{if .Pending}}Waiting for approval{{else if .Disabled}}Disabled{{else}}Active{{end}}</td>
+    <td>{{if .Pending}}Waiting for approval{{else if .Disabled}}Disabled{{else}}Active{{end}}
+      {{- /* Tasks still assigned to someone who can't be given any: to hand on. */}}
+      {{- if .Tasks}}<br><a class="user-tasks" href="/tasks?view=open&amp;assignee={{.Name}}" title="Still assigned to {{.Name}}, who can't be given tasks: they count as no one's. Select them there and Assign… to hand them on">{{.Tasks}} open task{{if ne .Tasks 1}}s{{end}} to hand on</a>{{end}}</td>
     <td><div class="user-actions">
       {{- if .Me}}{{/* not yourself: another admin can (admin.go) */}}
       {{- else if .Pending}}

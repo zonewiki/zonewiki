@@ -5,6 +5,8 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	"os"
 	"regexp"
 	"slices"
 	"strconv"
@@ -349,6 +351,38 @@ func applyAssignee(user string, t *Task, data jsonObj) error {
 	logEvent(t, user, "assigned", t.Assignee, name)
 	t.Assignee = name
 	return nil
+}
+
+// assignedOpen: how many open shared tasks each name is assigned, read
+// from the file (the user commands have no running Zone).
+func assignedOpen() map[string]int {
+	n := map[string]int{}
+	raw, err := os.ReadFile(taskFiles.OpenPath(""))
+	if err != nil {
+		return n
+	}
+	tasks, _ := taskmodel.Parse(raw)
+	for _, t := range tasks {
+		if t.Assignee != "" && t.IsOpen() {
+			n[t.Assignee]++
+		}
+	}
+	return n
+}
+
+// handOnNote: what disabling or removing name says of the open tasks
+// they are assigned; "" when they have none.
+func handOnNote(name string) string {
+	n := assignedOpen()[name]
+	if n == 0 {
+		return ""
+	}
+	tasks := "tasks are"
+	if n == 1 {
+		tasks = "task is"
+	}
+	return fmt.Sprintf("%d open %s assigned to %s and now %s as no one's (the filter @none): hand them on at /tasks?assignee=%s",
+		n, tasks, name, map[bool]string{true: "counts", false: "count"}[n == 1], name)
 }
 
 // hadAssignee: t's history says it was assigned to name.

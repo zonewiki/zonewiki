@@ -371,6 +371,9 @@ func (c *userCommand) setDisabled() int {
 	if disable {
 		fmt.Fprintf(c.stdout, "Disabled %s: they can't sign in, and their MCP token no longer works. "+
 			"Their files stay. Undo it with: zonewiki user enable %s\n", c.name, c.name)
+		if note := handOnNote(c.name); note != "" {
+			fmt.Fprintln(c.stdout, note+".")
+		}
 	} else {
 		fmt.Fprintf(c.stdout, "Enabled %s: they can sign in again.\n", c.name)
 	}
@@ -402,6 +405,9 @@ func (c *userCommand) remove() int {
 		return 1
 	}
 	fmt.Fprintf(c.stdout, "Removed %s from %s.\n", c.name, configName())
+	if note := handOnNote(c.name); note != "" {
+		fmt.Fprintln(c.stdout, note+".")
+	}
 	revokeGrantsOf(c.name) // their assistants' connections (grants.go)
 	switch {
 	case c.openFlag:

@@ -420,6 +420,7 @@ Each with a dark-mode value.
   **All** (`selectAllVisible`; disabled when every task shown is selected),
   **Tag…** (the bulk tag dialog),
   **List…** (the list dialog, below; hidden while no page declares a list),
+  **Assign…** (with users: who has them, Assigning tasks in `docs/spec/users.md`),
   **Today** (start them today, `startToday`: one `batch-update` for the open ones not starting today, one undo putting back each one's start date and history; today is never after a deadline still to come, and starting an overdue task today is the catch-up case, so no deadline question),
   **Unplan** (clear their start dates, `startOn(ids, null)`, as the **0** key: one `batch-update` for the open ones that have one, one undo putting them back; shown while an open selected task has a start date, `anyPlanned`),
   **Done** (`completeMany`, as Space; **Reopen** when every selected task is closed, which also hides Today and Won't do),
@@ -826,5 +827,6 @@ A tag no page declares stays a filter.
 - **Shift+F10** / menu key: the selected task's ⋯ menu (on several selected tasks, the selection's)
 - **Shift+click**, **Ctrl/Cmd+click**, **Shift+↑/↓**, **Ctrl/Cmd+A**: select several tasks (see Selection); **t** / **T**: their tags
 - **@** (with users): the filter field, starting an assignee's name, as **#** starts a tag
+- **a** (with users): assign the selected tasks (see Assigning tasks in `docs/spec/users.md`)
 - **c t**: a new task in the default list, with its tags (from any page; see Modules → New task from anywhere).
   The tasks' keydown runs before the page's shortcuts, so while a `g`/`c` prefix waits for its second key (`keyPrefix` in `js/util.js`) the tasks leaves that key alone: the t of **c t** or **g t** never opens the bulk tag dialog on a selected task

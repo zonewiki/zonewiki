@@ -81,7 +81,7 @@ Auth is optional (a password, or users; see Key Constraints).
 ├── LICENSE                 # AGPL-3.0-or-later
 ├── THIRD_PARTY_LICENSES    # Licenses of Go, the Go modules and the embedding model (the vendored libraries' are next to them)
 ├── docs/spec/              # The feature spec, one file per area (see Spec)
-├── docs/plans/             # Working plans for changes in progress, deleted when done (`mcp-oauth.md`, `task-assignee.md`)
+├── docs/plans/             # Working plans for changes in progress, deleted when done (`mcp-oauth.md`)
 ├── docs/licenses/mermaid_notices.py  # Writes public/vendor/mermaid/THIRD_PARTY_LICENSES from the bundle's source map
 ├── docs/screenshots/       # The README's screenshots + make_screenshots.py (./run.sh screenshots)
 ├── Containerfile           # The image: a Go build stage, onnxruntime + the model (opt-in), an Ubuntu 26.04 LTS runtime (also ships README.md and docs/spec/ for zone_help)
@@ -109,7 +109,7 @@ Auth is optional (a password, or users; see Key Constraints).
 │   ├── storage.go          # upload-max and storage-max: sizes (25MB), what the wiki holds (not .git/, .zone/), checkRoom
 │   ├── commands.go         # zonewiki user (add, passwd, token, role, disable, enable, invite, reset, remove, list) and zonewiki config (check, set, unset, passwd, token), which edit the settings file (filelock_*.go: one at a time)
 │   ├── security.go         # Host and Origin checks, the page policy, login, signed session (and its user), throttles
-│   ├── users.go            # Users: roles, password hashes, sign-in, the password prompt
+│   ├── users.go            # Users: roles, password hashes, sign-in, the password prompt, who a task can be assigned to (assignable, the reserved names me and none)
 │   ├── admin.go            # The admin page (/admin, admins), its Users tab: roles, disable, remove, writing the settings file as the commands do
 │   ├── links.go            # Invite and reset links: .zone/links, /welcome/<token>
 │   ├── signup.go           # Sign-up: /signup, the mail with its link, the account a sign-up link makes

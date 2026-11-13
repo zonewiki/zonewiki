@@ -80,6 +80,9 @@ type userRow struct {
 	Token, Disabled bool
 	Pending         bool // signed up, waiting for approval
 	Me, Private     bool // the admin themselves; has a private folder
+	// Tasks: the open tasks still assigned to a user who can't be given
+	// any (disabled, a viewer): to hand on.
+	Tasks int
 }
 
 // adminTab: a section tab of the admin page.
@@ -134,11 +137,16 @@ func usersData(r *http.Request) *usersView {
 	v := &usersView{Me: me, Roles: roles, Links: openLinks(), Tabs: adminTabs, Tab: "users",
 		Signup: signupOn(s), SignupRole: s.SignupRole, SignupDomains: s.SignupDomains, SignupApproval: s.SignupApproval,
 		BreadcrumbHTML: breadcrumb(newReq(r), []crumb{{"Admin", "/admin"}, {"Users", ""}}, "", false, "", "")}
+	assigned := assignedOpen()
 	for _, name := range sortedKeys(s.Users) {
 		u := s.Users[name]
-		v.Users = append(v.Users, userRow{Name: name, Role: u.Role, Email: u.Email, Token: u.MCPToken != "",
+		row := userRow{Name: name, Role: u.Role, Email: u.Email, Token: u.MCPToken != "",
 			Disabled: u.Disabled, Pending: u.Pending,
-			Me: name == me, Private: isDir(filepath.Join(cfg.Data, privateDir, name))})
+			Me: name == me, Private: isDir(filepath.Join(cfg.Data, privateDir, name))}
+		if !s.assignable(name) {
+			row.Tasks = assigned[name]
+		}
+		v.Users = append(v.Users, row)
 	}
 	return v
 }

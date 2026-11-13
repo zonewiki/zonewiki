@@ -156,6 +156,8 @@ Done tasks go to a yearly archive. Beyond that:
   name and password, their changes are committed in their name, and each has
   a private folder (`private/<name>/`), private notes, private tasks
   (a **Private** box on the task, 🔒 on its card) and their own pinned lists.
+  A shared task can be assigned to a user (`@anna` in its title or its dialog);
+  `@me` in the filter, or a page with `[[tasks: assignee=me]]`, shows everyone their own.
   Everything else is shared. Each has a role: **admin** (the first user;
   manages the others under **Admin**, on its Users tab: invite links, roles, disable,
   remove, password reset links; writes the guides AI assistants follow),

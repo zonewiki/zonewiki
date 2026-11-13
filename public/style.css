@@ -1518,6 +1518,7 @@ kbd {
 .user-fact { font-size: .7rem; padding: 0 .3rem; border: 1px solid var(--border); border-radius: 4px; color: var(--muted); font-weight: normal; }
 .user-email { font-size: .8rem; color: var(--muted); font-weight: normal; }
 .user-disabled .user-name { color: var(--muted); text-decoration: line-through; }
+.user-tasks { font-size: .85rem; white-space: nowrap; }
 .user-actions { display: flex; flex-wrap: wrap; gap: .3rem; align-items: flex-start; }
 .user-remove > summary { list-style: none; display: inline-block; line-height: normal; } /* as tall as the buttons beside it */
 .user-remove > summary::-webkit-details-marker { display: none; }

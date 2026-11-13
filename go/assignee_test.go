@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -53,5 +55,41 @@ func TestReservedUserNames(t *testing.T) {
 	}
 	if code, errs := run("pw\npw\n", "add", "men"); code != 0 {
 		t.Errorf("add men: %d %q", code, errs)
+	}
+}
+
+// Disabling or removing a user says how many open tasks they still have.
+func TestUserCommandsNameTheTasksToHandOn(t *testing.T) {
+	wiki := t.TempDir()
+	env := map[string]string{"ZONE_DATA": wiki}
+	getenv := func(k string) string { return env[k] }
+	run := func(input string, args ...string) (int, string) {
+		t.Helper()
+		var out, errs bytes.Buffer
+		code := userMain(args, getenv, strings.NewReader(input), &out, &errs)
+		return code, out.String() + errs.String()
+	}
+	for _, name := range []string{"alice", "bob", "carol"} {
+		if code, out := run("pw\npw\n", "add", name); code != 0 {
+			t.Fatalf("add %s: %d %q", name, code, out)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(wiki, "_tasks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tasks := `[{"id": "a", "title": "One", "assignee": "bob"}, {"id": "b", "title": "Two", "assignee": "bob"},
+		{"id": "c", "title": "Done", "assignee": "bob", "closed_at": "2026-01-02T10:00:00"}, {"id": "d", "title": "Hers", "assignee": "carol"}]`
+	if err := os.WriteFile(filepath.Join(wiki, "_tasks", "tasks.json"), []byte(tasks), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, out := run("", "disable", "bob"); code != 0 || !strings.Contains(out, "2 open tasks are assigned to bob") ||
+		!strings.Contains(out, "/tasks?assignee=bob") {
+		t.Errorf("disable bob: %d %q", code, out)
+	}
+	if code, out := run("", "remove", "carol"); code != 0 || !strings.Contains(out, "1 open task is assigned to carol and now counts as no one's") {
+		t.Errorf("remove carol: %d %q", code, out)
+	}
+	if code, out := run("", "disable", "alice"); code == 0 && strings.Contains(out, "assigned to") {
+		t.Errorf("disable alice, who has no tasks: %q", out)
 	}
 }

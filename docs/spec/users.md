@@ -612,8 +612,8 @@ One, not several, so that "who has this?" has one answer; someone helping goes i
 It is information: it never changes who sees a task or who may change it, and anyone who may change tasks may assign any task to anyone, themselves included, or to no one.
 
 You assign a task in its dialog or by ending a new task's title with `@name`, see who has it on its card, and filter a list by it (`@anna`, `@me`, `@none`).
-A page can show each user their own tasks with `[[tasks: assignee=me]]`, and an assistant assigns and asks for "my tasks" through the MCP tools.
-Assigning several tasks at once is not built yet (`docs/plans/task-assignee.md`).
+A page can show each user their own tasks with `[[tasks: assignee=me]]`, several selected tasks are assigned at once, and an assistant assigns and asks for "my tasks" through the MCP tools.
+Not there: telling someone that a task became theirs, a group as an assignee, and rules that go by the assignee (who may close a task).
 
 - **The field** is the task's `assignee`, a user's name, kept in its file after `tags` (`Task.Assignee` in `go/internal/taskmodel`; Task fields in `docs/spec/tasks.md`).
   A task without one has no such key.
@@ -640,10 +640,11 @@ Assigning several tasks at once is not built yet (`docs/plans/task-assignee.md`)
   So an export from another wiki doesn't bring its people along; the import's toast says how many tasks were assigned to people who are not users here (`unassigned` in the route's answer).
 - **Assistants** (`docs/spec/mcp.md`): `create_task` and `update_task` take `assignee` (a user name, `me` for the assistant's user, `none`), `search_tasks` filters by it (`assignee=me`: "what do I have to do"), and a task's text says who it is assigned to.
 - **In the dialog** (`js/taskmodal.js`): the **Assignee** field, after Tags.
+  It shows when the task has an assignee; on a task that has none, **Assignee** in the line under the fields ("+ Assignee") shows it and goes to it, as the dialog's other rarely set fields are asked for (Interaction in `docs/spec/tasks.md`).
   Type `@` (everyone, yourself first) or the start of a name; Tab or Enter completes it to a chip, and another name replaces it; the chip's × or Backspace takes it off.
   `me` is yourself.
   A name that is no user who can be assigned is not saved: the dialog stays open and the field says so.
-  The field is hidden while Private is ticked.
+  A private task has no field and no "+ Assignee": ticking Private hides both.
   A new task starts with the one user the filter names (`@anna` or `@me`; `filterDefaultAssignee`), as it starts with the filter's tags.
 - **In a new task's title** (`TasksCore.parseQuickAdd`): `@name` at the end, among the other shorthand ("Call Sam @bob #work tomorrow"), with completion as you type it.
   Only the name of a user who can be assigned, or `@me`; anything else stays in the title (`bob@example.org`, `@home`), as does a second name.
@@ -660,8 +661,16 @@ Assigning several tasks at once is not built yet (`docs/plans/task-assignee.md`)
   `/tasks?assignee=…` filters the same way, with an ordinary chip.
 - **The counts** on the Tasks links and the list switcher count what each user's lists show them: `assignee=me` is whoever asks (`assigneeParamMatches` in `go/tasksyntax.go`, the server's mirror of the filter).
   An export of such a list holds the tasks it shows (`/api/tasks/export?assignee=`).
+- **Several at once** (`openBulkAssignModal` in `js/taskselect.js`): **Assign…** in the selection bar and in the menu of a selected card, or **a** on the selected tasks (one is enough).
+  The dialog lists the users who can be assigned, yourself first, then **No one**; the row of who has them all is ticked, one who has some says "1 of 4".
+  A click (or ↑/↓ and Enter) assigns them in one `batch-update`, and the toast ("3 tasks assigned to bob") has one Undo for all, which leaves no trace in their histories.
+  Private tasks among the selection are left alone.
+- **Handing on** the tasks of someone who can no longer be given any: the admin page's Users tab says under a disabled user's (or a viewer's) status how many open tasks they still have, "2 open tasks to hand on", linked to `/tasks?view=open&assignee=<name>`; select them there and Assign….
+  `zonewiki user disable` and `user remove` say the count too (`handOnNote`).
+  Until then they show under `@none`.
 - **The History** reads "Assigned to bob (was anna)" and "Unassigned (was bob)".
-- **The names** come from `GET /api/tasks/assignable`, which the task app loads once per page with its tasks (`loadPeople` in `js/taskutil.js`; `people`): `{ "users": [...], "me": "<who asks>" }`, the users who can be assigned, A–Z, for anyone signed in (a viewer too: they see the names on the tasks anyway).
+- **The names** come with the page's tasks: a page view with a task list, and `/tasks`, carry them in the data block that brings the open tasks along (`"people"` in `tasksInitial`; `setPeople` in `js/taskutil.js`), so the list is drawn with no request.
+  Any other page (New task from anywhere, the editor's Make task) asks once, `GET /api/tasks/assignable` (`loadPeople`; `people`): `{ "users": [...], "me": "<who asks>" }`, the users who can be assigned, A–Z, for anyone signed in (a viewer too: they see the names on the tasks anyway).
   In sharing mode `users` is empty.
 - **Without users** there is no one to assign: a write with an assignee is a 400 ("This wiki has no users to assign a task to"), the route's `users` is empty, and the API shows no `assignee`.
   A file that has one (a wiki that had users) keeps it through reads and writes.

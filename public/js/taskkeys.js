@@ -227,6 +227,9 @@ document.addEventListener('keydown', async e => {
     const ids = [...st.selectedIds];
     const removing = e.key === 'T';
     app.openBulkTagModal(ids, removing);
+  } else if (e.key === 'a' && !e.ctrlKey && !e.metaKey && !e.altKey && people.users && st.selectedIds.size) {
+    e.preventDefault();
+    app.openBulkAssignModal([...st.selectedIds]);
   } else if (e.key === 'Escape' && (st.expandedId || st.detailsMode) && !st.selectMode) {
     st.detailsMode = false;
     app.setExpanded(null);   // collapse first; the next Esc clears the selection
