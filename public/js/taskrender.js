@@ -257,7 +257,7 @@ function listHTML(orderedTasks, newTasks) {
       ? `<span class="completed-years">${years.map(y =>
           `<button type="button" data-completed-year="${y}" aria-pressed="${y === shown}">${y}</button>`).join('')}</span>`
       : '';
-    html += `<li class="task-inbox-divider task-inbox-divider--only completed-heading">Completed${yearBtns}</li>`;
+    html += `<li class="task-inbox-divider task-inbox-divider--only completed-heading">Closed${yearBtns}</li>`;
   }
   // Limit completed tab display
   let displayTasks = orderedTasks;

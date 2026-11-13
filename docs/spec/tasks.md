@@ -249,9 +249,11 @@ On phones the control spans the full width.
   Empty Focus says "Nothing planned for today" and links to Plan.
   New tasks created here get today as start date.
   (Focus once had its own order, the Lineup (`focus_order`) above Others; it was removed as a second commitment on top of the start date.)
-- **Completed** is not a tab but a link under the list (`#task-completed-link`, `✓ Completed (N) →`, count from `/api/tasks/completed-count`, refreshed after every write).
-  In Completed, the link reads `← Back to <tab>`, naming the tab it returns to.
-  While filtering another view it counts the matching completed tasks instead (`✓ 2 matches in Completed →`, no number while loading).
+- **Closed** is not a tab but a link under the list (`#task-completed-link`, `Closed (N) →`, count from `/api/tasks/completed-count`, refreshed after every write).
+  It holds the tasks that are closed: done, and closed undone (won't do), which is why it isn't called Completed.
+  That is its name where people read it (the link, the view's heading, the settings dialog); in the params (`view=completed`), the routes, the files (`completed.json`) and the code it keeps the name it had, and this spec says Completed for both.
+  In Closed, the link reads `← Back to <tab>`, naming the tab it returns to.
+  While filtering another view it counts the matching closed tasks instead (`2 matches in Closed →`, no number while loading).
   `/api/tasks` returns open tasks only, so completed tasks are fetched on demand (`fetchCompleted`, one request at a time); `tasksGen` refetches if `fetchTasks` replaced the list meanwhile.
   Completed's heading has a **year switcher** (`.completed-years`, years from `/api/tasks/completed-years`, shown when there is more than one) for the yearly archives;
   `?year=YYYY` opens that year (search links to archived tasks carry it), and going back to a tab returns to this year (`setCompletedYear`).
@@ -279,7 +281,7 @@ It changes the list's params where they are written, so the dialog and a hand ed
 
 | Field | Param | |
 |-------|-------|---|
-| Opens on | `view` | The Open or the Focus tab (by their names here); Completed is offered only where the page says `view=completed` |
+| Opens on | `view` | The Open or the Focus tab (by their names here); Closed is offered only where the page says `view=completed` |
 | WIP limit | `limit` | 1–99, empty for none |
 | Plan | `plan`, `view` | The Open tab grouped by start date, or one list |
 | Pinned | `pin` | No, Pinned, or Pinned as the default list |

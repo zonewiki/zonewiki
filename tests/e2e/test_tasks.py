@@ -710,11 +710,11 @@ def test_completed_link_opens_completed_and_goes_back(page, wiki):
     page.goto("/page/tasks")
     open_tab(page, "plan")
     link = page.locator("#task-completed-link")
-    expect(link).to_have_text("✓ Completed (2) →")
+    expect(link).to_have_text("Closed (2) →")
 
     link.click()
     expect(page.locator("#tasks-tabs .active")).to_have_count(0)
-    expect(page.locator(".task-inbox-divider--only")).to_have_text("Completed")
+    expect(page.locator(".task-inbox-divider--only")).to_have_text("Closed")
     expect(card(page, "Done one")).to_be_visible()
     expect(card(page, "Open one")).to_have_count(0)
     expect(link).to_have_text("← Back to Open")   # names the tab it returns to
@@ -737,10 +737,10 @@ def test_completed_count_follows_completion(page, wiki):
     page.request.post("/api/tasks", data={"title": "Finish me"})
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     page.goto("/page/tasks?view=open")
-    expect(page.locator("#task-completed-link")).to_have_text("✓ Completed (0) →")
+    expect(page.locator("#task-completed-link")).to_have_text("Closed (0) →")
     card(page, "Finish me").locator("input[type=checkbox]").check()
     # After the checkbox's ~5 s grace period.
-    expect(page.locator("#task-completed-link")).to_have_text("✓ Completed (1) →", timeout=10000)
+    expect(page.locator("#task-completed-link")).to_have_text("Closed (1) →", timeout=10000)
 
 
 def test_embed_filter_completed_still_opens_completed(page, wiki):
@@ -764,21 +764,21 @@ def test_filter_points_to_matches_in_completed(page, wiki):
 
     search.fill("bread")
     expect(page.locator(".tasks-empty")).to_be_visible()   # nothing open matches…
-    expect(link).to_have_text("✓ 1 match in Completed →")  # …but it was done
+    expect(link).to_have_text("1 match in Closed →")  # …but it was done
     expect(link).to_have_class(re.compile(r"\bhas-matches\b"))
     # Subtle: the muted colour of the plain link, not the link blue.
     match_colour = link.evaluate("el => getComputedStyle(el).color")
     search.fill("buy")
-    expect(link).to_have_text("✓ 1 match in Completed →")
+    expect(link).to_have_text("1 match in Closed →")
     search.fill("b")
-    expect(link).to_have_text("✓ 2 matches in Completed →")
+    expect(link).to_have_text("2 matches in Closed →")
     search.fill("milk")   # matches only the open task: no unfiltered total
-    expect(link).to_have_text("✓ No matches in Completed →")
+    expect(link).to_have_text("No matches in Closed →")
     expect(link).not_to_have_class(re.compile(r"\bhas-matches\b"))
     page.mouse.move(0, 0)  # no hover colour
     assert link.evaluate("el => getComputedStyle(el).color") == match_colour
     search.fill("#nosuchtag")
-    expect(link).to_have_text("✓ No matches in Completed →")
+    expect(link).to_have_text("No matches in Closed →")
 
     search.fill("bread")
     link.click()   # the filter carries over into Completed
@@ -787,7 +787,7 @@ def test_filter_points_to_matches_in_completed(page, wiki):
 
     link.click()
     search.fill("")
-    expect(link).to_have_text("✓ Completed (2) →")
+    expect(link).to_have_text("Closed (2) →")
     expect(link).not_to_have_class(re.compile(r"\bhas-matches\b"))
 
 
@@ -1162,7 +1162,7 @@ def test_main_task_counts_list_tasks_as_completed(page, wiki):
     wiki.write("shop", "# Shop\n\n[[tasks: list=groceries]]\n")
     page.goto("/tasks?view=open")
     expect(card(page, "Oat milk")).to_be_visible()
-    expect(page.locator("#task-completed-link")).to_have_text("✓ Completed (1) →")
+    expect(page.locator("#task-completed-link")).to_have_text("Closed (1) →")
     expect(page.locator("#task-show-lists")).to_have_count(0)
 
 
@@ -1737,7 +1737,7 @@ def test_completed_matches_survive_the_load_race(page, wiki):
         page.goto("/tasks?view=open&search=milk")
     expect(card(page, "Something else")).to_have_count(0)  # filtered out
     page.wait_for_timeout(300)
-    expect(page.locator("#task-completed-link")).to_have_text("✓ 1 match in Completed →")
+    expect(page.locator("#task-completed-link")).to_have_text("1 match in Closed →")
 
 
 def test_ticked_tasks_stay_ticked_when_the_first_one_goes(page, wiki):

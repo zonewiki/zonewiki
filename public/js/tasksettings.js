@@ -97,7 +97,7 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
     const fields = fieldsOf(params);
     // Opens on: the tabs by their names here; Completed only where a page says so.
     f.view.replaceChildren(...['open', 'focus', fields.view === 'completed' && 'completed'].filter(Boolean)
-      .map(v => new Option(v === 'completed' ? 'Completed' : tabLabel(v), v)));
+      .map(v => new Option(v === 'completed' ? 'Closed' : tabLabel(v), v)));
     for (const k of ['view', 'label_open', 'label_focus', 'limit', 'new', 'tag', 'pin']) f[k].value = fields[k];
     f.plan.checked = fields.plan;
     if (f.list) { f.list.value = fields.list; f.keep.checked = fields.keep; }

@@ -24,6 +24,9 @@ st.lastTab = 'focus';
 // which are otherwise only loaded when the view is opened. The unfiltered
 // total is never shown while filtering: it would read as the number of
 // completed tasks the filter leaves.
+// The view is called Closed where people read it: it holds what is done and
+// what was closed undone (won't do). In the code, the params (view=completed),
+// the routes and the files it keeps the name it had, Completed.
 function syncCompletedLink() {
   if (!app.completedLink) return;
   let matches = null;
@@ -37,10 +40,10 @@ function syncCompletedLink() {
   }
   app.completedLink.classList.toggle('has-matches', matches > 0);
   app.completedLink.textContent = st.activeView === 'completed' ? `← Back to ${app.tabLabel(st.lastTab)}`
-    : matches ? `✓ ${matches} ${matches === 1 ? 'match' : 'matches'} in Completed →`
-    : matches === 0 ? '✓ No matches in Completed →'
-    : filtering ? '✓ Completed →'
-    : `✓ Completed${st.completedCount != null ? ` (${st.completedCount})` : ''} →`;
+    : matches ? `${matches} ${matches === 1 ? 'match' : 'matches'} in Closed →`
+    : matches === 0 ? 'No matches in Closed →'
+    : filtering ? 'Closed →'
+    : `Closed${st.completedCount != null ? ` (${st.completedCount})` : ''} →`;
 }
 
 // Mark the view's button active (no side effects — used during init too).
