@@ -402,7 +402,7 @@ Each with a dark-mode value.
   **Shift+click** or **Shift+↑/↓** (j/k) selects the range from the anchor;
   **Ctrl/Cmd+click** adds or drops one task (and becomes the anchor);
   **Ctrl/Cmd+A** with a task selected takes every task shown (what the filter leaves; without a selection it stays the page's select all);
-  **Esc** clears it (an expanded compact task collapses first).
+  **Esc** clears it (an expanded task collapses first).
   A re-render keeps the selected tasks still shown.
   On several selected tasks **Space** completes (or reopens) them all, **Delete** closes the open ones undone (won't do), **t**/**T** open the bulk tag dialog, and **Ctrl+Shift+↑/↓** moves them.
 - **Selection bar** (`#task-selbar`, `.tasks-selbar`, `syncSelBar`): while several tasks are selected,
@@ -451,7 +451,7 @@ Each with a dark-mode value.
   Each toggle is a change of the description like any other (a commit).
   The task's own checkbox is `.task-checkbox input`, and a page's own checklist next to a task list is the page's (`js/page.js` leaves the task app's boxes alone), so they never mix.
 - **Subtasks**: the checklist items in a task's description are its subtasks (`subtaskCounts` in `js/taskutil.js`, counted as the description renders them: not in code).
-  A card with subtasks says how many are done, "☑ 1/3" (`.task-subtasks`, in the accent once all are, `.task-subtasks-done`), where a card with another description has 📝: on a compact line too, where the description is hidden, and a click on it opens them as 📝 does.
+  A card with subtasks says how many are done, "☑ 1/3" (`.task-subtasks`, in the accent once all are, `.task-subtasks-done`), where a card with another description has 📝: the line hides the description, and a click on it opens them as 📝 does.
   Completing a task with a subtask still open asks first ("“Plan trip” has 2 open subtasks.", **Complete anyway** or Cancel; `confirmOpenSubtasks`, `#task-subtasks-modal`): from the task's checkbox and Space (`tickTask`), and once for several selected tasks (Space, the selection bar's Done; `mayComplete`), where Cancel keeps the selection.
   Won't do, a task chip's checkbox on a page and an assistant (MCP) don't ask.
 - **Won't do** (⋯ menu, the edit modal, the Delete key; cards have no ✗ button any more) archives without spawning;
@@ -479,7 +479,7 @@ Each with a dark-mode value.
   Paste it anywhere: chat, mail, a page.
   A popover with ↑/↓/Enter/Esc on desktop (tasks shortcuts suspended while open), a bottom sheet at ≤640px.
 - **Edit modal**: double-click anywhere on a card (title and description too; only its controls, the checkbox, buttons, links and date chips, keep their own) or Enter on desktop;
-  on touch the first tap selects the card (in compact view also showing a cut-off title whole, see Compact) and a tap on the selected card opens it (`pressedSelected`, noted at `pointerdown`, since touch's compat mousedown selects before the click;
+  on touch the first tap selects the card (also showing a cut-off title whole, see One line per task) and a tap on the selected card opens it (`pressedSelected`, noted at `pointerdown`, since touch's compat mousedown selects before the click;
   pointer type of the last `pointerdown`;
   a double tap's `dblclick` is ignored, so it is just those two taps),
   or Edit… in the menu.
@@ -507,49 +507,47 @@ Each with a dark-mode value.
   from its toast's Undo or Ctrl+Z. An action that saves first and arms its undo when the server answers (bulk start with **0**–**7**, Done/Reopen on a selection, bulk tags, Won't do on a selection, Move deadline, completing a keep task, deleting a comment) drops the previous undo as it starts saving (`dismissUndo`),
   so a quick Ctrl+Z in between does nothing instead of undoing the action before.
 - **Cards** (`taskHTML`, tasks.css "Cards"): one layout for every card.
-  The first line: checkbox, title (as wide as it needs, at least 6rem, 4.5rem on phones; it wraps), the tags right after it (pills), markers and dates at the right end (`.task-meta` sits in the line), ⋯ last.
+  The first line: checkbox, title (as wide as it needs, at least 6rem, 4.5rem on phones; cut off with …, whole and wrapped on the expanded card), the tags right after it (pills), markers and dates at the right end (`.task-meta` sits in the line), ⋯ last.
   **Nothing jumps on hover**: what is always shown (markers, 📝, 💬, dates, ⋯) ends at the right and stays put; what hover adds (⏭, the empty ⏰ 📅, at 60% opacity, full on their own hover: at 30% they were hard to see) appears left of it (first in `.task-meta-right`, CSS `order`).
-  A task with a description shows 📝 (`.task-has-notes`) on every card, since a compact line hides the description.
-  Under it the description, then the latest 3 comments, newest first (`.task-card-comments`; "N earlier…" opens the modal at the comments).
-  **Every card shows every tag**, full cards and compact lines alike.
+  A task with a description shows 📝 (`.task-has-notes`) on every card, since its line hides the description.
+  Under the line of a card whose details are open (see One line per task): the description, then the latest 3 comments, newest first (`.task-card-comments`; "N earlier…" opens the modal at the comments).
+  **Every card shows every tag**.
   The title and the tags share the line (desktop: `.task-meta` is `display: contents`, its tags and dates are grid columns of their own, `tags` and `dates`, with a `1fr` spacer between): each is as wide as it needs when both fit;
   short of room, both grow from their minimum (6rem for the title, the widest tag for the tags) by the same amount, so a long title can't push the tags out and many tags can't squeeze the title away.
-  The tags then wrap onto more lines under the first, which makes a compact line two (or more) lines tall; the title wraps on a full card and is cut off with … in a compact line.
+  The tags then wrap onto more lines under the first, which makes a card two (or more) lines tall; the title is cut off with ….
   Dates and markers are never clipped: their column is as wide as they are (`white-space: nowrap`, so "📅 Tomorrow" counts as one piece) and stays at the first line's right end.
-  The first line has one fixed height (`--line`, the compact row's), so a full card's first line sits exactly where a compact line's does, and expanding a compact line moves nothing.
-  Empty date placeholders (⏰ 📅 to set one) show on hover, left of the dates (full cards and compact lines); with a mouse their room, and ⏭'s, is kept while hidden (`visibility`), so hovering a card that is short of room rewraps nothing; they always show in full cards on touch.
+  The first line has one fixed height (`--line`), expanded or not, so expanding a card moves nothing on its line.
+  Empty date placeholders (⏰ 📅 to set one) show on hover, left of the dates; with a mouse their room, and ⏭'s, is kept while hidden (`visibility`), so hovering a card that is short of room rewraps nothing; touch, which has no hover, sets dates in the modal or from ⋯.
   A double-click anywhere on a card but its controls opens the modal (titles are edited there, not in place).
   **Phones** (≤640px): the line is too short for title and dates,
   so the title has the first line to itself (beside the checkbox and ⋯, which keeps its finger-sized target without making the line taller),
   tags,
   markers and dates go to a second line with the card's whole width,
   and a card with none of them stays one line;
-  compact lines the same, rows ≥44px as a whole.
+  rows are ≥44px as a whole.
   There every tag shows: the tags flow in that line (`display: contents`) and wrap onto more lines rather than drop out, the dates following the last tag at the right end, or on the next line when they don't fit beside it.
-- **Compact** (`applyCompact`, `.tasks-compact`): every card collapses to its first line (title cut off with …, description and comments hidden; 📝 says a line has a description, 💬 N that it has comments).
+- **One line per task**: every card is its first line (title cut off with …, description and comments hidden; 📝 says a line has a description, 💬 N that it has comments).
+  It is the only way a list shows: there are no full cards, and no switch (`compact=1` in an embed and the **v** key, which once chose, do nothing).
   Tags that don't fit beside the title wrap onto a second line rather than drop out (see Cards).
-  **Every tab starts compact** (one line per task; `compact=1`, which once made Focus and Plan start so too, is no longer needed and ignored).
   Rows stay ≥44px on touch.
-  Switched by **v** (`toggleCompact`; the toolbar has no button for it, so without a keyboard a list stays as it is), remembered per task list and tab in `localStorage` (`zone-tasks-compact:<path>|<list>|<tag>|<instance>|<view>`, `compactFor`), so it survives reloads.
   **Expanding a task** (`expandedId`, `setExpanded`, `.task-expanded`): selecting a task (a click, arrows, j/k; `setSelected`) shows its whole title,
   wrapped,
   when the line cuts it off (`titleCut`),
   and nothing more: description and comments stay hidden,
-  so you can read through tasks and the list stays compact;
+  so you can read through tasks and the list stays short;
   the previous one closes.
   A task whose title fits stays a line (on touch the first tap only selects it).
-  **Its details** (the description, the latest 3 comments: the rest of a full card;
+  **Its details** (the description, the latest 3 comments;
   `detailsOpen`, `.task-details`, `toggleDetails`) open only on request: a click or tap on the **expand button** (`.task-expand-btn`, a chevron left of ⋯, turned up while open, `aria-expanded`;
-  only on lines with a description or comments, though every compact line keeps its room so the dates end at the same place;
-  full cards have none),
+  only on lines with a description or comments, though every line keeps its room so the dates end at the same place),
   on 📝 or on 💬 (each toggles them; 📝 is a button, finger-sized on touch without making the line taller),
   or **→** / **l** on the selected task;
   **←** / **h** closes them and keeps the whole title.
   **Opened, they stay open on the way** (`detailsMode`, `expandSelected`): the next selected task (j/k, a click, a tap) shows its details too, the previous one's closing, until they are closed (the button, ←/h, Esc); a task without any shows its whole title as usual.
-  An open task then looks exactly like a full card, so its line doesn't move.
-  **Enter** opens the modal, as on full cards; on touch the first tap selects and expands, a tap on the selected task opens the modal.
+  An open task's line doesn't move.
+  **Enter** opens the modal; on touch the first tap selects and expands, a tap on the selected task opens the modal.
   **Esc** collapses it, details and all, and ends `detailsMode` (the next Esc clears the selection), until another task is selected; several selected or none close it too.
-  It survives re-renders (`taskHTML` adds the classes); switching density resets it.
+  It survives re-renders (`taskHTML` adds the classes); switching tabs resets it (`collapseAll`).
   Double-click still opens the modal directly.
   **Nothing moves under a click**: a mouse press on another card leaves the expanded one open (above or below it: collapsing one above would pull the pressed card up under the pointer;
   one below closes the same way, for one behaviour) for the double-click window (`COLLAPSE_DELAY_MS`, 400ms;
@@ -636,7 +634,7 @@ Not part of the History: they are never capped, undo of other changes never touc
   The text comes back with a file's line ends (`commentText`: `\r\n` becomes `\n`).
 - **Cards**: a `💬 N` button (`.task-comments-btn`) in the meta row; its tooltip is the latest comment with its time.
   The latest 3 are listed (`commentCardHtml`): a comment of one paragraph on the line of its time, as a status line reads; any other (several paragraphs, a list, code) under its time.
-  On a full card (which lists the latest 3 already) a click opens the modal with the comment field open and focused (`openEditModal(id, { focusComment: true })`); on a compact line it opens or closes the line's details, the latest 3 among them (see Compact), whose "N earlier…" leads to the modal.
+  A click on it opens or closes the line's details, the latest 3 among them (see One line per task), whose "N earlier…" leads to the modal.
 - **Carried on**: a recurring task's next occurrence takes the series' comments with it, like the history.
 - **Search and MCP**: comment text is part of a task's search text (`taskSearchDocs`, so semantic search too), a comment counts as activity for `edited:`/`after:`/`before:` (`lastActivity`), and `mcpTaskText` lists them after the description under "Comments:" (`- YYYY-MM-DD HH:MM: text`, a comment's following lines indented under its first).
 
@@ -644,7 +642,7 @@ Not part of the History: they are never capped, undo of other changes never touc
 
 A task is of **high**, **normal** or **low** importance (`importance`, Task fields); normal is what a task is unless something says otherwise, and says nothing anywhere.
 
-- **On a card**, before the title, on its line (so on a compact line too; `importanceMark` in `js/taskutil.js`, `.task-importance`): **!** in a warm red for high, **↓** in grey for low, whose title also steps back (lighter, not bold). Normal shows nothing.
+- **On a card**, before the title, on its line (`importanceMark` in `js/taskutil.js`, `.task-importance`): **!** in a warm red for high, **↓** in grey for low, whose title also steps back (lighter, not bold). Normal shows nothing.
 - **It marks, it doesn't sort**: no order changes with it. The manual order is where a task's rank is; importance says what must not be forgotten, or what may wait, wherever the task stands.
 - **Set** in the edit modal (Importance: High, Normal, Low, after Tags),
   in a task's ⋯ menu (**Importance…**, which shows the three levels in the menu's place, the task's own ticked),
@@ -799,8 +797,7 @@ A tag no page declares stays a filter.
 ### Keyboard shortcuts
 
 - **g a**: go to `/tasks`, all tasks; **g t**: go where the Tasks link goes (your pinned lists)
-- **v**: one line per task / full cards (see Compact)
-- **→** / **l**, **←** / **h** (compact): open / close the selected task's description and comments; open, they stay open as j/k move on (see Compact)
+- **→** / **l**, **←** / **h**: open / close the selected task's description and comments; open, they stay open as j/k move on (see One line per task)
 - **o** (the Open tab): the order: manual, by deadline, newest first (see Sorting)
 - **d** (the Open tab): Plan on / off, by start date or one list (see Views)
 - **i**: the importance of the selected task, in turn high, low, normal; several selected all get what follows the first one's (see Importance)

@@ -203,18 +203,6 @@ def _new_page(browser, base_url, *, viewport=DESKTOP, color_scheme="light", **co
             external.append(r.request.url)
             r.abort()
     ctx.route("**/*", route)
-    # Task lists open with full cards in tests, as before the per-tab defaults
-    # (Open compact): most tests exercise cards, not density. A test of the
-    # real defaults calls real_density(page) first.
-    ctx.add_init_script("""
-      if (!sessionStorage.getItem('zone-test-real-density')) {
-        const get = Storage.prototype.getItem;
-        Storage.prototype.getItem = function (key) {
-          const value = get.call(this, key);
-          return value === null && String(key).startsWith('zone-tasks-compact:') ? '0' : value;
-        };
-      }
-    """)
     page = ctx.new_page()
     errors = []
     page.on("pageerror", lambda exc: errors.append(str(exc)))
@@ -228,14 +216,6 @@ def _new_page(browser, base_url, *, viewport=DESKTOP, color_scheme="light", **co
             if "Content Security Policy" in msg.text else None)
     page.csp_violations = violations
     return ctx, page
-
-
-def real_density(page):
-    """Use the task app's real density defaults (Open compact …) on this page's
-    tab from the next load on; the test setup otherwise keeps full cards."""
-    if page.url.startswith("about:"):
-        page.goto("/page/index")
-    page.evaluate("sessionStorage.setItem('zone-test-real-density', '1')")
 
 
 @pytest.fixture()

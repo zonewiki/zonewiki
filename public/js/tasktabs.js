@@ -60,7 +60,7 @@ function switchTab(view) {
   if (st.selectMode) app.exitSelectMode();
   if (view !== 'closed') st.lastTab = view;
   st.activeView = view;
-  app.applyCompact(view);
+  app.collapseAll();
   app.applySort();
   app.applyGroup();
   // Back from an earlier year: the other views count this year's matches.

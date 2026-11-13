@@ -128,7 +128,7 @@ Done tasks go to a yearly archive. Beyond that:
   as a live chip you can tick (`[[task:…]]`), and **Make task** in the editor
   to turn lines of meeting notes into tasks.
 - The Tasks link shows how many tasks are due today or overdue.
-- Compact or full cards, fully keyboard-driven; on phones, swipe to plan,
+- One line per task, opened where it is to read its description and comments; fully keyboard-driven; on phones, swipe to plan,
   long-press to drag, or long-press and let go to select several tasks.
 
 ![Tasks' Open tab by days: tasks grouped by the day they're planned for](docs/screenshots/tasks.png)

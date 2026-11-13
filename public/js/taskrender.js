@@ -123,8 +123,8 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
         : `<span class="task-date-info">done: ${esc(task.closed_at.slice(0, 10))}</span>`)
     : '';
 
-  // Marks that there are notes, which a compact line hides; on every card
-  // alike, so expanding a line changes nothing on it.
+  // Marks that there are notes, which the line hides; open or not, so
+  // expanding a line changes nothing on it.
   // A task with subtasks (checklist items in its notes) says how many are
   // done instead: "☑ 1/3".
   const subtasks = subtaskCounts(task.description);
@@ -145,8 +145,8 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
   const metaClass = (hasMeta && !hasRealMeta) ? 'task-meta task-meta--hover-only' : 'task-meta';
   const metaHtml = hasMeta ? `<div class="${metaClass}">${tagsRight}<span class="task-meta-right">${skipBtnHtml}${privateDisplay}${recIcon}${notesDisplay}${commentsDisplay}${lastDoneDisplay}${dueDisplay}${focusDisplay}${closedDisplay}</span></div>` : '';
   const descHtml = task.description ? `<div class="task-desc page-content">${htmlOf('notes', task.description)}</div>` : '';
-  // The latest comments, newest first: shown only when a compact task is
-  // expanded (full cards have the 💬 count; the modal has them all).
+  // The latest comments, newest first: shown only while the task's details
+  // are open (the line has the 💬 count; the modal has them all).
   const earlier = comments.length - 3;
   const commentsHtml = comments.length
     ? `<div class="task-card-comments">${comments.slice(-3).reverse().map(c =>
@@ -154,13 +154,12 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
       (earlier > 0 ? `<button type="button" class="task-comments-more" data-id="${esc(task.id)}">${earlier} earlier…</button>` : '') + '</div>'
     : '';
   const dragAttr = draggable ? 'draggable="true" data-drag' : '';
-  // Compact lines with details get the expand button (CSS hides it on
-  // full cards, which show them).
-  const detailsShown = st.compact && task.id === st.expandedId && st.detailsOpen;
+  // Lines with details get the expand button.
+  const detailsShown = task.id === st.expandedId && st.detailsOpen;
   const expandBtn = descHtml || commentsHtml
     ? `<button type="button" class="task-expand-btn" data-id="${esc(task.id)}" aria-expanded="${detailsShown}" aria-label="Description and comments" title="Description and comments (l / h)">${app.EXPAND_ICON}</button>` : '';
   return `
-    <li class="task-item ${closedClass} ${urgClass}${focusClass} ${extraClass}${st.compact && task.id === st.expandedId ? ' task-expanded' + (st.detailsOpen ? ' task-details' : '') : ''}" data-id="${esc(task.id)}" ${dragAttr}>
+    <li class="task-item ${closedClass} ${urgClass}${focusClass} ${extraClass}${task.id === st.expandedId ? ' task-expanded' + (st.detailsOpen ? ' task-details' : '') : ''}" data-id="${esc(task.id)}" ${dragAttr}>
       <label class="task-checkbox">
         <input type="checkbox" ${checked} data-id="${esc(task.id)}">
       </label>
@@ -299,13 +298,11 @@ function wireListHandlers() {
       app.openTaskMenu(btn.dataset.id, btn);
     });
   });
-  // 💬: a compact line's toggles its details (the latest comments among
-  // them); a full card shows them already, so there it opens the modal at
-  // the comments.
+  // 💬 toggles the line's details (the latest comments among them).
   app.listEl.querySelectorAll('.task-comments-btn').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
-      if (!app.toggleDetails(btn.dataset.id)) app.openEditModal(btn.dataset.id, { focusComment: true });
+      app.toggleDetails(btn.dataset.id);
     });
   });
   app.listEl.querySelectorAll('.task-expand-btn').forEach(btn => {
@@ -314,12 +311,11 @@ function wireListHandlers() {
       app.toggleDetails(btn.dataset.id);
     });
   });
-  // 📝: a compact line's toggles its details; a full card shows the notes,
-  // so there it only selects the card.
+  // 📝 toggles the line's details.
   app.listEl.querySelectorAll('.task-has-notes').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
-      if (!app.toggleDetails(btn.dataset.id)) app.setSelected(btn.dataset.id);
+      app.toggleDetails(btn.dataset.id);
     });
   });
 

@@ -33,7 +33,7 @@ class TestTasksLinkRender:
         assert 'id="task-edit-list' not in html and "task-edit-page" not in html
 
     def test_no_density_button(self, client, wiki_dir):
-        """One line per task or full cards is the v key's: the toolbar has no button for it."""
+        """One line per task is the only way a list shows: the toolbar has no button to switch."""
         html = preview(client, "[[tasks:]]\n")
         assert "density" not in html
 

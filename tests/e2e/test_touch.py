@@ -69,7 +69,7 @@ def test_tapping_checkbox_completes_not_edits(phone):
 def test_checkbox_target_reaches_beside_the_box(phone):
     # The box is 1.35rem; a finger landing just beside it (the card's
     # padding, the gap before the title) used to hit the card, which
-    # selected it (compact: expanded it, moving the line), so the tick took
+    # selected it (and expanded it, moving the line), so the tick took
     # a second tap. (Chromium's emulated tap snaps to the box anyway, so
     # what is under those points is checked, not a tap.)
     c = card(phone, "Water plants")
@@ -405,7 +405,10 @@ def test_edit_modal_scrolls_on_short_desktop_window(new_page, wiki):
 # opened left-aligned at the chip, so on a phone most of it was off-screen.
 @pytest.mark.parametrize("field", ["due_date", "start_date"])
 def test_card_date_picker_fits_on_phone(phone, field):
-    chip = card(phone, "Water plants").locator(f".task-clickable-date[data-field='{field}']")
+    # A card has a chip only for a date it has (touch has no hover for the
+    # empty ones).
+    title = "Water plants" if field == "start_date" else "Weekly review"
+    chip = card(phone, title).locator(f".task-clickable-date[data-field='{field}']")
     chip.tap()
     picker = phone.locator(".tasks-datepicker")
     expect(picker).to_be_visible()
@@ -414,7 +417,7 @@ def test_card_date_picker_fits_on_phone(phone, field):
     assert pb["y"] >= 0 and pb["y"] + pb["height"] <= 844, pb
     assert pb["y"] >= cb["y"] + cb["height"] or pb["y"] + pb["height"] <= cb["y"]  # not covering the chip
     pick_day(picker, day(4))
-    wait_until(phone, lambda: tasks_by_title(phone)["Water plants"][field] == day(4))
+    wait_until(phone, lambda: tasks_by_title(phone)[title][field] == day(4))
 
 
 def test_edit_modal_fields_have_no_dead_space_on_phone(phone):

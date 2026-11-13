@@ -87,13 +87,6 @@ document.addEventListener('keydown', async e => {
     return;
   }
 
-  // 'v' switches between full cards and one line per task
-  if (e.key === 'v' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-    e.preventDefault();
-    app.toggleCompact();
-    return;
-  }
-
   // 'd' toggles the Open tab's Plan switch (by start date / one list)
   if (e.key === 'd' && !e.ctrlKey && !e.metaKey && !e.altKey && app.isOpenTab(st.activeView)) {
     e.preventDefault();
@@ -206,7 +199,7 @@ document.addEventListener('keydown', async e => {
       }
     }
   } else if (['ArrowRight', 'l', 'ArrowLeft', 'h'].includes(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey &&
-             st.selectedIds.size === 1 && st.compact) {
+             st.selectedIds.size === 1) {
     // → / l open the selected line's details, ← / h close them (vim's hjkl).
     if (app.toggleDetails(st.selectedId, e.key === 'ArrowRight' || e.key === 'l')) e.preventDefault();
   } else if (e.key === 'Enter' && st.selectedId) {

@@ -441,23 +441,22 @@ div.chip-input > input {
 
 /* Cards (tasks.js taskHTML): one layout for every card. The first line:
    checkbox, title, the tags right after it, markers and dates at the right
-   end, the actions. Under it the notes, then the latest comments. Full
-   cards show all of it. Compact view (.tasks-compact, applyCompact)
-   collapses each card to its line (title cut off with …, notes and
-   comments hidden), except the expanded one (Enter, a tap), which looks
-   exactly like a full card; so does a card in full view.
+   end, the actions. Under it the notes, then the latest comments. A card
+   shows only its line (title cut off with …, notes and comments hidden),
+   except the expanded one (selected: its whole title; .task-details: the
+   notes and comments too).
    Every tag always shows. The title and the tags share the line: each as
    wide as it needs when both fit; short of room, both grow from their
    minimum (6rem for the title, the widest tag for the tags) by the same
    amount (the grid's "maximize tracks" step), so a long title can't push
    the tags out and many tags can't squeeze the title away. The tags then
-   wrap onto more lines (the card gets taller), the title wraps (or, in a
-   compact line, is cut off with …); dates and markers are never cut. */
+   wrap onto more lines (the card gets taller), the title is cut off with …
+   (it wraps on the expanded card); dates and markers are never cut. */
 .tasks-app .task-item {
   grid-template-columns: auto minmax(6rem, max-content) minmax(min-content, max-content) minmax(0, 1fr) max-content auto;
   grid-template-areas: "check title tags . dates actions" ". desc desc desc desc desc" ". comments comments comments comments comments";
-  /* The first line sits where a compact line has it (a 2.1rem row), so
-     expanding one moves nothing; one line's height for every item in it. */
+  /* The first line is a 2.1rem row, expanded or not, so expanding a card
+     moves nothing; one line's height for every item in it. */
   align-items: start; padding-block: .15rem .4rem;
   --line: calc(2.1rem - .3rem - 2px);
 }
@@ -486,8 +485,7 @@ div.chip-input > input {
   }
   .tasks-app .task-meta-right { grid-area: dates; min-height: var(--line); }
 }
-/* Empty date placeholders (⏰ 📅 to set one): on hover, full cards and
-   compact lines alike. */
+/* Empty date placeholders (⏰ 📅 to set one): on hover. */
 .tasks-app .task-date-empty { display: none; }
 .tasks-app .task-item:hover .task-date-empty { display: inline; }
 /* With a mouse their room is kept (invisible) while they're hidden, so
@@ -496,8 +494,6 @@ div.chip-input > input {
   .tasks-app .task-date-empty { display: inline; visibility: hidden; }
   .tasks-app .task-item:hover .task-date-empty { visibility: visible; }
 }
-/* Touch has no hover: there full cards always offer them. */
-@media (hover: none) { .tasks-app:not(.tasks-compact) .task-date-empty { display: inline; } }
 /* The latest comments, under the notes. */
 .task-card-comments {
   grid-area: comments; margin-top: .3rem; padding-top: .25rem; font-size: .85rem;
@@ -517,17 +513,17 @@ div.task-card-comment > .task-comment-when { display: block; }
   color: var(--link); cursor: pointer;
 }
 
-/* Compact: every card is its line. The expanded one (selected) shows its
-   whole title, wrapped; only one with its details open (.task-details: 📝,
-   💬 or →) shows notes and comments, as a full card. */
-.tasks-app.tasks-compact .task-item:not(.task-details) {
+/* Every card is its line. The expanded one (selected) shows its whole
+   title, wrapped; only one with its details open (.task-details: 📝, 💬
+   or →) shows notes and comments. */
+.tasks-app .task-item:not(.task-details) {
   grid-template-areas: "check title tags . dates actions";
   padding-block: .15rem; margin-bottom: .2rem;
 }
-.tasks-compact .task-item:not(.task-expanded) .task-content { display: block; line-height: var(--line); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.tasks-compact .task-item:not(.task-details) :is(.task-desc, .task-card-comments) { display: none; }
-/* 📝: a task has notes (a compact line hides them; a click on it shows
-   them). Shown on every card, so opening a line changes nothing on it. */
+.tasks-app .task-item:not(.task-expanded) .task-content { display: block; line-height: var(--line); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tasks-app .task-item:not(.task-details) :is(.task-desc, .task-card-comments) { display: none; }
+/* 📝: a task has notes (its line hides them; a click on it shows them).
+   Shown open or not, so opening a line changes nothing on it. */
 .task-has-notes {
   font: inherit; font-size: .8rem; padding: 0; border: none; background: none;
   border-radius: 3px; cursor: pointer;
@@ -550,8 +546,7 @@ div.task-card-comment > .task-comment-when { display: block; }
 /* A phone's line is too short for title and dates: the title gets the
    first line to itself (beside the checkbox and ⋯), tags, markers and dates
    go to a second line, which has the card's whole width; a card with none
-   of them stays one line. The same in compact view, so an expanded task
-   still looks like a full card. */
+   of them stays one line. */
 @media (max-width: 640px) {
   .tasks-app .task-item {
     grid-template-columns: auto minmax(0, 1fr) auto;
@@ -563,7 +558,7 @@ div.task-card-comment > .task-comment-when { display: block; }
   .tasks-app .task-item .task-meta,
   .tasks-app .task-item .task-meta--hover-only,
   .tasks-app .task-item:hover .task-meta--hover-only { margin: 0; min-height: 0; }
-  .tasks-app.tasks-compact .task-item:not(.task-details) {
+  .tasks-app .task-item:not(.task-details) {
     grid-template-areas: "check title actions" ". meta meta";
   }
   /* Every tag shows: they wrap onto more lines rather than drop out; the
@@ -581,7 +576,6 @@ div.task-card-comment > .task-comment-when { display: block; }
   .tasks-app .task-meta:not(:has(.task-tag, .task-recurring, .task-last-done, .task-comments-btn, .task-has-notes, .task-date-info:not(.task-date-empty), .task-due:not(.task-date-empty))) {
     display: none;
   }
-  .tasks-app:not(.tasks-compact) .task-meta:has(.task-date-empty) { display: flex; }
 }
 
 .tasks-more-btn { display: inline-flex; align-items: center; justify-content: center; padding-inline: .45rem; color: var(--muted); }
@@ -806,9 +800,8 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 @media (hover: none) { .bulk-tag-row { min-height: 44px; } }
 
 /* ⋯ per-card menu button + the menu itself. The expand button (a chevron)
-   left of ⋯ on a compact line with notes or comments opens and closes them,
-   turned up while open; full cards show them, so have none. Every compact
-   line keeps its room, so the dates end at the same place on lines with
+   left of ⋯ on a line with notes or comments opens and closes them,
+   turned up while open. Every line keeps its room, so the dates end at the same place on lines with
    and without one. */
 .task-menu-btn, .task-expand-btn {
   display: inline-flex; align-items: center; justify-content: center;
@@ -819,8 +812,7 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 .task-menu-btn:hover, .task-expand-btn:hover { background: var(--code-bg); color: var(--fg); }
 .task-expand-btn svg { transition: transform .15s; }
 .task-expand-btn[aria-expanded="true"] svg { transform: rotate(180deg); }
-.tasks-app:not(.tasks-compact) .task-expand-btn { display: none; }
-.tasks-app.tasks-compact .task-actions { min-width: 3.2rem; justify-content: flex-end; }
+.tasks-app .task-actions { min-width: 3.2rem; justify-content: flex-end; }
 @media (prefers-reduced-motion: reduce) { .task-expand-btn svg { transition: none; } }
 .task-menu-backdrop, .page-menu-backdrop { position: fixed; inset: 0; z-index: 999; }
 .task-menu, .page-menu {
@@ -871,11 +863,11 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
   /* Sideways moves on a card are swipes (tasks.js), not the browser's pan. */
   .task-item { touch-action: pan-y; }
   .task-menu-btn, .task-expand-btn { width: 2.5rem; height: 2.5rem; font-size: 1.25rem; }
-  .tasks-app.tasks-compact .task-actions { min-width: 5rem; }
+  .tasks-app .task-actions { min-width: 5rem; }
   .task-checkbox input { width: 1.35rem; height: 1.35rem; }
   /* A finger-sized target: the label reaches into the card's padding and
      the gap before the title, so a tap just beside the box ticks it rather
-     than selecting (and, compact, expanding) the card under it. */
+     than selecting (and expanding) the card under it. */
   .tasks-app .task-item .task-checkbox {
     padding: .3rem .4rem .3rem .65rem; margin: -.3rem -.4rem -.3rem -.65rem; min-height: calc(var(--line) + .6rem);
   }

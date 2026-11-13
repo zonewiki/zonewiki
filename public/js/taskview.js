@@ -1,7 +1,6 @@
 // How a task app shows its list (tasks.js initTasksInstance), as this browser
-// remembers it per list and tab: compact lines or full cards, the Plan
-// board's folded sections, the sort of Open and Plan, Open as the board or as
-// one list; and a compact line's expansion. What it uses of the app comes in
+// remembers it per list and tab: the Plan board's folded sections, the sort of
+// Open and Plan, Open as the board or as one list; and a line's expansion. What it uses of the app comes in
 // app (its state in app.st).
 
 import TasksCore from '../tasks-core.js';
@@ -12,19 +11,6 @@ const { SORTS } = TasksCore;
 export function initTaskView(app) {
 const { st } = app;
 
-// Compact: one line per task (title, then tags, markers and dates; notes
-// hidden; selecting or a tap expands a task). The default on every tab;
-// v switches it, remembered per task list and tab in this
-// browser.
-const densityKey = view => 'zone-tasks-compact:' + [location.pathname, app.appEl?.dataset.initList || '',
-  app.appEl?.dataset.initTag || '', app.instanceId, view].join('|');
-function compactFor(view) {
-  try {
-    const stored = localStorage.getItem(densityKey(view));
-    if (stored !== null) return stored === '1';
-  } catch (_) {}
-  return true;
-}
 // Folded Plan sections: a section's header can hide its cards (its count
 // and drop target stay). Remembered per task list in this browser, by section
 // (`foldId`: a day by its distance from today, so "Tomorrow" stays folded
@@ -126,29 +112,25 @@ app.planSwitch?.addEventListener('click', () => setGroup(st.activeView === 'plan
 // one of them: a click on the active tab changes nothing).
 const tabView = tab => tab === 'open' && !isOpenTab(st.activeView) ? openGroup() : tab;
 
-st.compact = false;   // the shown tab's (applyCompact)
-function applyCompact(view) {
-  if (view) {
-    st.compact = compactFor(view);
-    st.expandedId = null;
-    st.detailsOpen = st.detailsMode = false;
-  }
-  app.appEl?.classList.toggle('tasks-compact', st.compact);
-}
-// In compact view one task at a time is expanded: the selected one (a
+// Every task is one line (title, then tags, markers and dates; notes and
+// comments hidden). One task at a time is expanded: the selected one (a
 // click, arrows, j/k; setSelected), or on touch the one tapped first (a tap
 // on it then opens the modal), shows its whole title, wrapped, when the
 // line cuts it off (titleCut); notes and comments stay hidden. Its details
-// (notes, latest comments: the rest of a full card) open on request only
+// (notes, latest comments) open on request only
 // (detailsOpen): 📝, 💬 or the expand button on the line, or → / l;
 // ← / h closes them, Esc closes both. Opened, they stay open while the
 // selection moves on (detailsMode): the next selected task shows its
-// details too, until they are closed. Enter opens the modal, as on full
-// cards.
+// details too, until they are closed. Enter opens the modal. Another tab
+// starts with nothing expanded (collapseAll).
 st.expandedId = null;
 st.detailsOpen = false;
 st.detailsMode = false;
-// The expand button of a compact line with details: a chevron, turned up
+function collapseAll() {
+  st.expandedId = null;
+  st.detailsOpen = st.detailsMode = false;
+}
+// The expand button of a line with details: a chevron, turned up
 // while they are open.
 const EXPAND_ICON = '<svg viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' +
   '<path d="M4 6l4 4 4-4"/></svg>';
@@ -163,7 +145,7 @@ function titleCut(id) {
   const title = cardEl(id)?.querySelector('.task-content');
   return !!title && title.scrollWidth > title.clientWidth + 1;
 }
-// Whether the task has details a compact line hides: notes or comments.
+// Whether the task has details its line hides: notes or comments.
 const hasDetails = id => !!cardEl(id)?.querySelector('.task-desc, .task-card-comments');
 function setExpanded(id, details = false) {
   st.expandedId = id;
@@ -178,16 +160,16 @@ function setExpanded(id, details = false) {
     }
   });
 }
-// 📝, 💬 or →/←: open or close a compact task's details, selecting it.
+// 📝, 💬 or →/←: open or close a task's details, selecting it.
 function toggleDetails(id, open = !(st.expandedId === id && st.detailsOpen)) {
-  if (!st.compact || !hasDetails(id)) return false;
+  if (!hasDetails(id)) return false;
   st.detailsMode = open;
   if (st.selectedIds.size !== 1 || st.selectedId !== id) app.setSelected(id);
   // Closing keeps the whole title (a short one looks the same as its line).
   setExpanded(id, open);
   return true;
 }
-// A compact task just selected: its details while they are open on the
+// A task just selected: its details while they are open on the
 // way through (detailsMode), else its whole title if the line cuts it off.
 function expandSelected(id) {
   if (st.detailsMode && hasDetails(id)) setExpanded(id, true);
@@ -221,13 +203,6 @@ function finishCollapse() {
                { duration: 150, easing: 'ease-out' });
   }
 }
-function toggleCompact() {
-  st.expandedId = null;
-  st.detailsOpen = st.detailsMode = false;
-  st.compact = !st.compact;
-  try { localStorage.setItem(densityKey(st.activeView), st.compact ? '1' : '0'); } catch (_) {}
-  applyCompact();
-}
 
-return { foldId, toggleFold, unfoldFor, SORT_TITLES, activeSort, applySort, cycleSort, isOpenTab, groupKey, applyGroup, setGroup, tabView, applyCompact, EXPAND_ICON, MORE_ICON, setExpanded, toggleDetails, expandSelected, toggleCompact };
+return { foldId, toggleFold, unfoldFor, SORT_TITLES, activeSort, applySort, cycleSort, isOpenTab, groupKey, applyGroup, setGroup, tabView, collapseAll, EXPAND_ICON, MORE_ICON, setExpanded, toggleDetails, expandSelected };
 }

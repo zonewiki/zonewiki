@@ -441,10 +441,10 @@ function setSelected(id) {
   st.anchorId   = id;
   st.selectedIds = new Set(id ? [id] : []);
   updateSelectionClasses();
-  // Compact: the selected task shows its whole title. On touch the tap
+  // The selected task shows its whole title. On touch the tap
   // handler does it, since the compat mousedown selects without the click.
   // Selecting the expanded task again keeps its details as they are.
-  if (st.compact && id && st.lastPointerType !== 'touch' && id !== st.expandedId) app.expandSelected(id);
+  if (id && st.lastPointerType !== 'touch' && id !== st.expandedId) app.expandSelected(id);
   // A pressed card is in view; scrolling an expanded one into view would
   // move it from under the pointer.
   if (id && !st.pressedCard) {

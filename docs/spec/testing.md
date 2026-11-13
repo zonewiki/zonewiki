@@ -318,7 +318,6 @@ Without Playwright installed they skip, so plain `pytest tests/` is unaffected.
 - Waiting: for what the page shows, `expect(…)`, which waits by itself.
   For what it can't watch (the API's answer, a file on disk, a request a route held back), `wait_until(page, predicate)` from `conftest.py`, which looks every 100 ms through the page, so the page's routes and events go on meanwhile (`time.sleep` would stop them).
   A fixed `page.wait_for_timeout(…)` is only for showing that nothing happens (no request went out, a card stayed where it was) and for the pace of a gesture (a touch held, a drag's steps): never for something that is about to happen.
-- Density: the test setup (`_new_page`'s init script) makes task lists open with full cards, as before the per-tab defaults, since most tests exercise cards; a test of the real defaults calls `real_density(page)` first.
 - Touch: `new_page(**TOUCH_PHONE)` gives a phone context with touch input, `hover: none` and `pointer: coarse` (use `.tap()`). Full-page screenshots of such a context lose the touch/hover emulation (Playwright re-renders with changed device metrics), so assert on computed styles/sizes rather than on a full-page image.
 - `test_screenshots` writes full-page PNGs of each view at phone/desktop × light/dark to `tests/e2e/_screenshots/` (gitignored) for visual review.
   It asserts nothing about appearance.

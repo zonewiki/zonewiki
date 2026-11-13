@@ -256,8 +256,8 @@ listEl.addEventListener('click', e => {
   if (img) openLightbox(img.src);
 });
 
-// Touch: the first tap on a card selects it (and expands it in compact
-// view), a tap on the selected card opens the editor (double-click, the
+// Touch: the first tap on a card selects it (and expands it),
+// a tap on the selected card opens the editor (double-click, the
 // desktop gesture, is unreliable on phones). Mouse clicks keep selecting.
 st.lastPointerType = 'mouse';
 // Whether the press started on the one selected card: the compat mousedown
@@ -299,7 +299,7 @@ listEl.addEventListener('click', e => {
   const id = card.dataset.id;
   if (pressedSelected) { openEditModal(id); return; }
   setSelected(id);
-  if (st.compact) expandSelected(id);
+  expandSelected(id);
 });
 
 Object.assign(app, initTaskTouch(app));
@@ -346,7 +346,7 @@ const initKeep = appEl?.dataset.initKeep === '1';
 // An embed on a page in the user's private folder: new tasks are private.
 const initPrivate = appEl?.dataset.initPrivate === '1';
 Object.assign(app, initTaskView(app));
-const { toggleFold, unfoldFor, activeSort, applySort, groupKey, applyGroup, applyCompact, expandSelected } = app;
+const { toggleFold, unfoldFor, activeSort, applySort, groupKey, applyGroup, expandSelected } = app;
 
 function cleanList(name) {
   return String(name || '').trim().replace(/^#/, '').trim().toLowerCase()
@@ -486,7 +486,6 @@ const isReload = performance.getEntriesByType?.('navigation')[0]?.type === 'relo
 st.activeView = [isReload && loadShownTab(), urlView, embedView, loadActiveTab()].find(v => VIEWS.includes(v)) || 'focus';
 saveShownTab(st.activeView);
 if (st.activeView !== 'closed') st.lastTab = st.activeView;
-applyCompact(st.activeView);
 applySort();
 applyGroup();
 markActiveTab(st.activeView);
