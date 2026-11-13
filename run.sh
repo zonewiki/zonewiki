@@ -6,18 +6,9 @@ set -e
 
 cd "$(dirname "$0")"
 
-# Read an optional KEY from .env (empty when unset). A ZONE_ key that isn't
-# there is read by its name from before Leaf was called Zone, LEAF_…, for
-# one release, with a note to rename it.
+# Read an optional KEY from .env (empty when unset).
 env_val() {
-  local v old
-  v=$(grep "^$1=" .env 2>/dev/null | cut -d= -f2-)
-  if [[ -z "$v" && "$1" == ZONE_* ]]; then
-    old="LEAF_${1#ZONE_}"
-    v=$(grep "^$old=" .env 2>/dev/null | cut -d= -f2-)
-    [[ -z "$v" ]] || echo "Note: $old in .env is the name from before Leaf was called Zone: call it $1." >&2
-  fi
-  printf '%s\n' "$v"
+  grep "^$1=" .env 2>/dev/null | cut -d= -f2-
 }
 
 # Podman if it's there, else Docker; each with its compose.
@@ -38,14 +29,10 @@ compose() {
   $ENGINE compose "${COMPOSE_FILES[@]}" "$@"
 }
 
-# The wiki folder from .env, default ~/zonewiki (~/leaf, the default before
-# Leaf was called Zone, while only that one exists), with ~ expanded
-# (compose would hand ZONE_HOST_DATA a literal ~).
+# The wiki folder from .env, default ~/zonewiki, with ~ expanded (compose
+# would hand ZONE_HOST_DATA a literal ~).
 ZONE_DATA=$(env_val ZONE_DATA)
-if [[ -z "$ZONE_DATA" ]]; then
-  ZONE_DATA="~/zonewiki"
-  [[ -d "$HOME/zonewiki" || ! -d "$HOME/leaf" ]] || ZONE_DATA="~/leaf"
-fi
+[[ -n "$ZONE_DATA" ]] || ZONE_DATA="~/zonewiki"
 case "$ZONE_DATA" in
   "~") ZONE_DATA="$HOME" ;;
   "~/"*) ZONE_DATA="$HOME/${ZONE_DATA:2}" ;;
@@ -153,15 +140,6 @@ case "${1:-up}" in
     if [[ ! -f .env ]]; then
       echo "No .env: create one (cp .env.example .env, see README)." >&2
       exit 1
-    fi
-    # The container from before Leaf was called Zone, named leaf (compose's
-    # project leaf, or an older run.sh's podman run), would hold the port.
-    if $ENGINE container inspect leaf >/dev/null 2>&1; then
-      labels=$($ENGINE container inspect leaf --format '{{json .Config.Labels}}')
-      if ! grep -q 'compose' <<<"$labels" || grep -q '"com.docker.compose.project":"leaf"' <<<"$labels"; then
-        echo "Removing the container leaf, Zone's from before the rename (the wiki stays)."
-        $ENGINE rm -f leaf >/dev/null
-      fi
     fi
     compose up -d --build
     echo "Zone running at http://localhost:5000"
@@ -282,8 +260,8 @@ case "${1:-up}" in
     echo "  screenshots - redo the README's screenshots (docs/screenshots/)"
     echo "  eval [FILE] - measure search on your wiki against questions in FILE (in the wiki)"
     echo "  user add|passwd|token|role|disable|enable|remove NAME, user list - the users in the wiki's settings file"
-    echo "  config check|passwd|token|import - the wiki's settings file: check it, the password and MCP token"
-    echo "                without users, or move the settings from an older .env into it"
+    echo "  config check|set|unset|passwd|token - the wiki's settings file: check it, set a key, the password"
+    echo "                and MCP token without users"
     exit 1
     ;;
 esac

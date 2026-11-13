@@ -110,11 +110,8 @@ type toolResult struct {
 	IsError bool          `json:"isError"`
 }
 
-// knownTool: a tool tools/list shows, or one by its old name (mcpToolAliases).
+// knownTool: a tool tools/list shows.
 func knownTool(name string) bool {
-	if n, ok := mcpToolAliases[name]; ok {
-		name = n
-	}
 	for _, t := range mcpTools {
 		if t["name"] == name {
 			return true

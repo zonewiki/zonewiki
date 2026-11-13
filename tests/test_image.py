@@ -108,11 +108,9 @@ def test_mermaids_notices_are_for_the_vendored_bundle():
     assert "GNU GENERAL PUBLIC LICENSE" in (folder / "COPYING.GPL-3.0").read_text(encoding="utf-8")
 
 
-def test_the_binary_is_zonewiki_and_still_answers_as_leaf():
-    # Compose files and healthchecks from before the rename call /app/leaf.
+def test_the_binary_is_zonewiki():
     final = CONTAINERFILE[CONTAINERFILE.rindex("\nFROM "):]
     assert "COPY --from=build /zonewiki ./zonewiki" in final
-    assert "RUN ln -s zonewiki leaf" in final
     assert 'CMD ["/app/zonewiki"]' in final
     for compose in ("compose.yaml", "compose.nas.yaml"):
         assert '"/app/zonewiki", "health"' in (REPO / compose).read_text(encoding="utf-8")

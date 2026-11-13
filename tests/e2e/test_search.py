@@ -214,7 +214,7 @@ def test_phone_reaches_quicknote_list_in_one_tap(new_page, wiki):
 
 def test_task_result_opens_the_tasks_page(page, wiki):
     # Regression: with no tasks.md, opening a task from Ctrl+P landed on
-    # /edit/deck, an empty new page. It now opens the built-in /tasks, whatever
+    # an empty new page's editor. It now opens the built-in /tasks, whatever
     # pages embed a task list.
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     tid = page.request.post("/api/tasks", data={"title": "Renew passport"}).json()["id"]

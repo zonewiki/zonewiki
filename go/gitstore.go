@@ -123,8 +123,8 @@ func gitSetup() {
 				logf("git %s failed: %s", args[0], strings.TrimSpace(r.Stderr))
 			}
 		}
-	} else if name := strings.TrimSpace(runGit("config", "user.name").Stdout); name == "" || name == legacyAppName {
-		setCommitter() // none, or still the one from before Leaf was called Zone
+	} else if strings.TrimSpace(runGit("config", "user.name").Stdout) == "" {
+		setCommitter()
 	}
 	setGitRemote()
 }
@@ -158,7 +158,7 @@ func setCommitter() {
 // from before Leaf was called Zone), and without users, so a wiki without
 // them shows no names.
 func commitAuthor(name string) string {
-	if settings().Users == nil || name == appName || name == legacyAppName {
+	if settings().Users == nil || name == appName {
 		return ""
 	}
 	return name
@@ -263,90 +263,8 @@ func gitCommit(user, message string, paths ...string) error {
 // excludeState keeps Zone's folder .zone/ out of git, all of it: the
 // session key, the caches, the query log, and the settings file, which
 // holds the users and their password hashes (docs/spec/users.md: account
-// data stays out of git; untrackSettings takes it out of a wiki that kept
-// it). .leaf/, an older Zone's folder, likewise while it is there, and its
-// lines go once it is moved. Lines an older Zone wrote go: the exceptions
-// that kept the settings file in ("!/.zone/config", "!/.leaf/config"), and
-// "/.leaf/" written any way ("/.leaf", ".leaf/", without a newline at the
-// end of the file).
-func excludeState(wiki string) {
-	oldThere := exists(filepath.Join(wiki, legacyStateDirName))
-	stale := func(l string) bool {
-		l = strings.TrimSpace(l)
-		if slices.Contains([]string{"/.leaf/", "/.leaf", ".leaf/", ".leaf", "!/.leaf/config", "!/" + stateDirName + "/config"}, l) {
-			return true
-		}
-		return !oldThere && l == "/.leaf/*"
-	}
-	exclude := filepath.Join(wiki, ".git", "info", "exclude")
-	if b, err := os.ReadFile(exclude); err == nil && slices.ContainsFunc(strings.Split(string(b), "\n"), stale) {
-		lines := slices.DeleteFunc(strings.SplitAfter(string(b), "\n"), stale)
-		if err := os.WriteFile(exclude, []byte(strings.Join(lines, "")), 0o666); err != nil {
-			logf("could not update %s: %v", exclude, err)
-		}
-	}
-	excludeFromGit(wiki, "/"+stateDirName+"/*")
-	if oldThere {
-		excludeFromGit(wiki, "/.leaf/*")
-	}
-}
-
-// untrackSettings takes the settings file out of a wiki whose git kept it
-// (Zone committed it until 2026-11), in one commit by Zone; the file stays
-// on disk. It commits from an index of its own, so what someone staged by
-// hand stays staged and out of it. The history before keeps the file as
-// it was: its password hashes too (docs/spec/users.md).
-func untrackSettings() {
-	if !cfg.GitEnabled {
-		return
-	}
-	var files []string
-	for _, name := range []string{stateDirName + "/config", legacyStateDirName + "/config"} {
-		if runGit("ls-files", "--", name).Stdout != "" {
-			files = append(files, name)
-		}
-	}
-	if len(files) == 0 {
-		return
-	}
-	commitMu.Lock()
-	defer commitMu.Unlock()
-	index, err := os.CreateTemp("", "zone-index-*")
-	if err != nil {
-		logf("could not take the settings file out of git: %v", err)
-		return
-	}
-	index.Close()
-	defer os.Remove(index.Name())
-	env := []string{"GIT_INDEX_FILE=" + index.Name()}
-	git := func(args ...string) gitResult { return runGitEnv(gitTimeout, "", env, args...) }
-	r := git("read-tree", "HEAD")
-	if r.Code == 0 {
-		r = git(append([]string{"rm", "-q", "--cached", "--"}, files...)...)
-	}
-	var tree gitResult
-	if r.Code == 0 {
-		tree = git("write-tree")
-		r = tree
-	}
-	if r.Code == 0 {
-		r = runGit("commit-tree", strings.TrimSpace(tree.Stdout), "-p", "HEAD", "-m",
-			"Keep the settings file out of git: it holds the users and their password hashes")
-	}
-	if r.Code == 0 {
-		r = runGit("update-ref", "HEAD", strings.TrimSpace(r.Stdout))
-	}
-	if r.Code == 0 {
-		r = runGit(append([]string{"rm", "-q", "--cached", "--"}, files...)...)
-	}
-	if r.Code != 0 {
-		logf("could not take the settings file out of git: %s", strings.TrimSpace(r.Stderr))
-		return
-	}
-	logf("took %s out of git: Zone no longer keeps it there (it holds the users and their password hashes). "+
-		"The history before still has it: if the wiki was pushed where others can read it, change the passwords.",
-		strings.Join(files, ", "))
-}
+// data stays out of git).
+func excludeState(wiki string) { excludeFromGit(wiki, "/"+stateDirName+"/*") }
 
 // usersInHistory: a user who made a commit in the wiki's history (Zone
 // commits as "name <name@zone>" for a user: gitCommit), "" if none did.

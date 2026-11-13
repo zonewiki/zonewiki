@@ -114,9 +114,6 @@ COPY docs/spec/ docs/spec/
 COPY LICENSE THIRD_PARTY_LICENSES ./
 COPY --from=semantic /opt/onnxruntime-licenses/ licenses/onnxruntime/
 COPY --from=build /zonewiki ./zonewiki
-# The binary was called leaf before the rename: compose files and healthchecks
-# from then still call /app/leaf, for one release.
-RUN ln -s zonewiki leaf
 
 # The build ("<hash> <commit date>") shown next to Zone's version, passed in by
 # run.sh (through compose.yaml): the image has no .git to read it from. Last, so a new commit only rebuilds this layer.

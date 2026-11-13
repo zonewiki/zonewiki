@@ -40,8 +40,7 @@ const configUsage = `Usage: zonewiki config COMMAND
   set KEY VALUE    set one of the wiki's settings (hosts, locale, noshare …)
   unset KEY        back to its default (password: no login; mcp-token: /mcp off)
   passwd           set the wiki's password, without users (asks for it)
-  token            give the wiki a new MCP token, without users (the old one stops working)
-  import           move the wiki's settings from the environment (.env, before 2026-10) into the settings file`
+  token            give the wiki a new MCP token, without users (the old one stops working)`
 
 // newToken: an MCP token, 32 random bytes as hex.
 func newToken() string {
@@ -377,7 +376,7 @@ func configMain(args []string, getenv func(string) string, stdin io.Reader, stdo
 		fmt.Fprintln(stdout, configUsage)
 		return 0
 	}
-	wantArgs := map[string]int{"check": 0, "passwd": 0, "token": 0, "import": 0, "set": 2, "unset": 1}
+	wantArgs := map[string]int{"check": 0, "passwd": 0, "token": 0, "set": 2, "unset": 1}
 	if n, ok := wantArgs[firstOf(args)]; !ok || len(args)-1 < n || n < 2 && len(args)-1 != n {
 		fmt.Fprintln(stderr, configUsage)
 		return 2
@@ -393,9 +392,6 @@ func configMain(args []string, getenv func(string) string, stdin io.Reader, stdo
 	switch args[0] {
 	case "check":
 		s, err := loadSettings(f)
-		if err == nil {
-			err = staleEnv(getenv)
-		}
 		if err != nil {
 			return fail("%v", err)
 		}
@@ -448,8 +444,6 @@ func configMain(args []string, getenv func(string) string, stdin io.Reader, stdo
 			return fail("%v", err)
 		}
 		fmt.Fprintf(stdout, "The wiki's new MCP token (shown only now; an old one no longer works): %s\n", token)
-	case "import":
-		return importEnv(f, getenv, stdout, stderr)
 	}
 	return 0
 }
@@ -461,111 +455,25 @@ func firstOf(args []string) string {
 	return args[0]
 }
 
-// importEnv moves the wiki's settings from the environment, where Zone
-// read them until 2026-10, into the file: a plain LEAF_PASSWORD and the MCP
-// tokens as their hashes (the clients keep their tokens), LEAF_USERS and
-// each user's LEAF_USER_<NAME>_… as sections.
-func importEnv(f *settingsfile.File, getenv func(string) string, stdout, stderr io.Writer) int {
-	var moved []string
-	for _, k := range configKeys {
-		value := strings.TrimSpace(getenv(k.env))
-		if value == "" {
-			continue
-		}
-		switch k.key {
-		case "password":
-			value = hashPassword(value)
-		case "mcp-token":
-			value = hashToken(value)
-		}
-		f.Set("", k.key, value)
-		moved = append(moved, k.env)
-	}
-	if strings.TrimSpace(getenv("LEAF_USERS")) != "" {
-		users, err := envUsers(getenv)
-		if err != nil {
-			fmt.Fprintf(stderr, "zonewiki config: %v\n", err)
-			return 1
-		}
-		moved = append(moved, "LEAF_USERS")
-		for _, u := range users {
-			env := "LEAF_USER_" + strings.ToUpper(strings.ReplaceAll(u.Name, "-", "_"))
-			f.Set(u.Name, "password", u.PasswordHash)
-			moved = append(moved, env+"_PASSWORD")
-			if u.MCPToken != "" {
-				f.Set(u.Name, "mcp-token", hashToken(u.MCPToken))
-				moved = append(moved, env+"_MCP_TOKEN")
-			}
-		}
-	}
-	if getenv("LEAF_SECRET_KEY") != "" {
-		moved = append(moved, "LEAF_SECRET_KEY (no longer used: Zone keeps its key in .zone/secret_key)")
-	}
-	if len(moved) == 0 {
-		fmt.Fprintf(stdout, "Nothing to import: the environment sets none of the settings %s holds.\n", configName())
-		return 0
-	}
-	if err := saveConfig(f); err != nil {
-		fmt.Fprintf(stderr, "zonewiki config: %v\n", err)
-		return 1
-	}
-	fmt.Fprintf(stdout, "Moved into %s. Now delete these from .env and restart Zone "+
-		"(until then it refuses to start):\n", configName())
-	for _, name := range moved {
-		fmt.Fprintln(stdout, "  "+name)
-	}
-	return 0
-}
-
-// envUsers: the users as the environment held them (LEAF_USERS=alice,bob,
-// and per user LEAF_USER_<NAME>_PASSWORD=<hash>, LEAF_USER_<NAME>_MCP_TOKEN=
-// <token>, the name upper case with "_" for "-"), in order.
-func envUsers(getenv func(string) string) ([]*User, error) {
-	var users []*User
-	seen := map[string]bool{}
-	for _, name := range strings.Split(getenv("LEAF_USERS"), ",") {
-		name = strings.ToLower(strings.TrimSpace(name))
-		if name == "" || seen[name] {
-			continue
-		}
-		if !userNameRE.MatchString(name) {
-			return nil, fmt.Errorf("LEAF_USERS: %q isn't a user name.", name)
-		}
-		seen[name] = true
-		env := "LEAF_USER_" + strings.ToUpper(strings.ReplaceAll(name, "-", "_"))
-		hash := strings.TrimSpace(getenv(env + "_PASSWORD"))
-		if _, _, _, err := parseHash(hash); err != nil {
-			return nil, fmt.Errorf("%s_PASSWORD isn't a password hash (%v): set %s's password afterwards "+
-				"with zonewiki user passwd %s", env, err, name, name)
-		}
-		users = append(users, &User{Name: name, PasswordHash: hash,
-			MCPToken: strings.TrimSpace(getenv(env + "_MCP_TOKEN"))})
-	}
-	if len(users) == 0 {
-		return nil, errors.New("LEAF_USERS names no one.")
-	}
-	return users, nil
-}
-
 // showSettings prints the settings in effect and where each comes from,
 // hashes masked.
 func showSettings(w io.Writer, f *settingsfile.File, s *Settings) {
 	fmt.Fprintf(w, "Settings in effect (%s, else Zone's default):\n", configName())
 	for _, k := range configKeys {
-		v, set := f.Top[k.key]
+		v, set := f.Top[k]
 		value, from := v.Value, fmt.Sprintf("line %d", v.Line)
 		if !set {
 			value, from = "", "default"
 		}
 		switch {
-		case k.key == "noshare" && !set:
+		case k == "noshare" && !set:
 			value = "#noshare"
 		case value == "":
 			value = "(none)"
-		case k.key == "password" || k.key == "mcp-token":
+		case k == "password" || k == "mcp-token":
 			value = "(set)"
 		}
-		fmt.Fprintf(w, "  %-18s %s  [%s]\n", k.key, value, from)
+		fmt.Fprintf(w, "  %-18s %s  [%s]\n", k, value, from)
 	}
 	if s.Users == nil {
 		fmt.Fprintf(w, "  %-18s (none)\n", "users")

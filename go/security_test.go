@@ -228,18 +228,11 @@ func TestSigningOut(t *testing.T) {
 		t.Fatalf("kept %d, want only the one just signed out", len(signedOut.until))
 	}
 
-	// A session from before sessions had ids: its signature's start is one.
+	// A session without an id is none: it couldn't be signed out.
 	raw, _ := json.Marshal(session{Auth: true, Issued: now().Unix(), Pw: passwordStamp("")})
 	payload := base64.RawURLEncoding.EncodeToString(raw)
-	old := payload + "." + sign(payload)
-	if _, ok, _ := signedIn(withCookie(old)); !ok {
-		t.Fatal("a session without an id doesn't pass")
-	}
-	w = httptest.NewRecorder()
-	renewSession(w, withCookie(old))
-	logout(httptest.NewRecorder(), withCookie(old))
-	if _, ok, _ := signedIn(withCookie(cookieOf(w))); ok {
-		t.Fatal("the renewed copy of a signed-out old session passes")
+	if _, ok, _ := signedIn(withCookie(payload + "." + sign(payload))); ok {
+		t.Fatal("a session without an id passes")
 	}
 }
 
@@ -385,33 +378,6 @@ func TestLoadConfig(t *testing.T) {
 		if _, s, err := loadConfig(env()); err != nil || s.Locale != tag {
 			t.Errorf("locale = %s: %v", tag, err)
 		}
-	}
-}
-
-// The wiki's settings left in the environment stop Zone: they would be
-// ignored (a forgotten LEAF_PASSWORD: an open wiki).
-func TestStaleEnv(t *testing.T) {
-	wiki := t.TempDir()
-	for _, c := range []struct{ env, want string }{
-		{"LEAF_PASSWORD", "LEAF_PASSWORD is set in the environment (.env), but Zone reads the wiki's settings only from .zone/config now. Move them there with ./run.sh config import"},
-		{"LEAF_USERS", "LEAF_USERS is set"}, {"LEAF_LOCALE", "LEAF_LOCALE is set"},
-		{"LEAF_SEMANTIC_MIN_SCORE", "LEAF_SEMANTIC_MIN_SCORE is set"},
-		{"LEAF_SECRET_KEY", "LEAF_SECRET_KEY is set in the environment (.env), but Zone no longer reads it"},
-	} {
-		getenv := func(k string) string { return map[string]string{"ZONE_DATA": wiki, c.env: "x"}[k] }
-		if _, _, err := loadConfig(getenv); err == nil || !strings.HasPrefix(err.Error(), c.want) {
-			t.Errorf("%s: %v", c.env, err)
-		}
-	}
-	getenv := func(k string) string {
-		return map[string]string{"ZONE_DATA": wiki, "LEAF_HOSTS": "x", "LEAF_LOCALE": "de"}[k]
-	}
-	if _, _, err := loadConfig(getenv); err == nil || !strings.HasPrefix(err.Error(), "LEAF_HOSTS, LEAF_LOCALE are set") {
-		t.Errorf("two: %v", err)
-	}
-	empty := func(k string) string { return map[string]string{"ZONE_DATA": wiki, "LEAF_LOCALE": ""}[k] }
-	if _, _, err := loadConfig(empty); err != nil {
-		t.Errorf("empty is unset: %v", err)
 	}
 }
 

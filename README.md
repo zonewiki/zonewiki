@@ -122,9 +122,7 @@ Done tasks go to a yearly archive. Beyond that:
   `[[tasks: view=focus limit=8 pin=1]]`.
 - Task lists inside any page (`[[tasks: tag=work view=plan]]`), a single task inline
   as a live chip you can tick (`[[task:…]]`), and **Make task** in the editor
-  to turn lines of meeting notes into tasks. (Tasks used to be called Deck:
-  pages that still say `[[deck …]]` work as before, and Zone moves the tasks
-  from `_deck/` to `_tasks/` itself.)
+  to turn lines of meeting notes into tasks.
 - The Tasks link shows how many tasks are due today or overdue.
 - Compact or full cards, fully keyboard-driven; on phones, swipe to plan,
   long-press to drag, or long-press and let go to select several tasks.
@@ -192,11 +190,7 @@ the repository: `compose.nas.yaml` runs the prebuilt image
 `docker compose -f compose.nas.yaml up -d`; Zone is then on port 5080, and
 the first page it shows asks for a password. What
 `.env` needs, and a step-by-step for Synology's Container Manager: "On a NAS
-or server" in [`docs/spec/deployment.md`](docs/spec/deployment.md). Running
-it as Leaf (`ghcr.io/gklingler/leaf`)? That image is updated for one more
-release; to switch, stop the old one (`docker compose down` with the old
-file), rename the `LEAF_…` variables in `.env` to `ZONE_…`, then start the
-new `compose.nas.yaml`.
+or server" in [`docs/spec/deployment.md`](docs/spec/deployment.md).
 
 Without a container, you need Go 1.27 or newer, a C compiler (for semantic
 search; `CGO_ENABLED=0` builds without it) and git:
@@ -223,10 +217,6 @@ except `ZONE_DATA`:
 | `ZONE_ALLOW_REMOTE=1` | Listen on the LAN (e.g. for your phone); by default only localhost |
 | `ZONE_SEMANTIC_SEARCH=on` | Semantic search with a local model (adds about 0.7 GB to the image) |
 | `TZ` | The timezone for "today", e.g. `Europe/Berlin` (default: the host's with `run.sh`, else UTC) |
-
-Coming from Leaf: its names (`LEAF_DATA` …) still work for one release, and
-Zone's log says what to rename each one to. A wiki in `~/leaf` stays the
-default while there is no `~/zonewiki`.
 
 ### The settings file
 
@@ -265,10 +255,11 @@ away, which Zone takes only at one). Set them with `run.sh`, or edit the file:
 | `upload-max` | The biggest file an upload may be, e.g. `25MB` (default: `100MB`) |
 | `storage-max` | How much the wiki may hold, e.g. `5GB` (default: no limit). Counts your pages and files, not their git history; when full, new pages, notes and uploads are refused until you delete something, while edits to pages always save |
 
-A typo in the file keeps the settings Zone has and shows up in its log. Up
-to 2026-10 these were `LEAF_…` variables in `.env`; Zone now refuses to
-start while one is still there, and `./run.sh config import` moves them into
-the file.
+A typo in the file keeps the settings Zone has and shows up in its log.
+
+Coming from Zone 1 (or Leaf): Zone 2 reads only today's names. What to
+rename, and how: "From Zone 1 (or Leaf)" in
+[`docs/spec/deployment.md`](docs/spec/deployment.md).
 
 ### Without run.sh
 

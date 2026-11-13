@@ -225,8 +225,7 @@ func sign(payload string) string {
 }
 
 // readSession: the session of the request's cookie, if Zone signed it. A
-// session from before sessions had ids has the start of its signature as
-// one, which a renewed copy of it keeps.
+// session without an id is none: it couldn't be signed out.
 func readSession(r *http.Request) (s session, ok bool) {
 	c, err := r.Cookie(sessionCookie)
 	if err != nil {
@@ -237,11 +236,8 @@ func readSession(r *http.Request) (s session, ok bool) {
 		return s, false
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(payload)
-	if err != nil || json.Unmarshal(raw, &s) != nil || !s.Auth {
+	if err != nil || json.Unmarshal(raw, &s) != nil || !s.Auth || s.ID == "" {
 		return s, false
-	}
-	if s.ID == "" {
-		s.ID = sig[:16]
 	}
 	return s, true
 }

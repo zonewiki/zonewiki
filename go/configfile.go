@@ -12,8 +12,7 @@
 //	mcp-token = sha256:<the token's hash>
 //
 // The environment (.env) holds only what the deployment needs (ZONE_DATA,
-// ZONE_ALLOW_REMOTE …: Config, config.go); a wiki setting left there stops
-// Zone, pointing to zonewiki config import. The file is in .zone/, out of
+// ZONE_ALLOW_REMOTE …: Config, config.go). The file is in .zone/, out of
 // safePath's reach and, like all of .zone/, out of git: it holds the
 // users (account data stays out of git), its MCP tokens only as hashes,
 // passwords as PBKDF2 hashes.
@@ -28,7 +27,6 @@ import (
 	"maps"
 	"net/netip"
 	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -38,50 +36,24 @@ import (
 	"zonewiki/internal/settingsfile"
 )
 
-// configName(): the file as messages name it, relative to the wiki
-// (.zone/config, or .leaf/config while Zone reads that one).
-func configName() string {
-	if cfg == nil {
-		return stateDirName + "/config"
-	}
-	return filepath.Base(stateDirIn(cfg.Data)) + "/config"
-}
+// configName(): the file as messages name it, relative to the wiki.
+func configName() string { return stateDirName + "/config" }
 
 func configPath() string { return statePath("config") }
 
 // configKeys: the keys outside a [user …] section, in the order `zonewiki
-// config check` shows them, with the environment variables that held them
-// until 2026-10 (zonewiki config import reads them; set, they stop Zone).
-var configKeys = []struct{ key, env string }{
-	{"password", "LEAF_PASSWORD"}, {"mcp-token", "LEAF_MCP_TOKEN"}, {"hosts", "LEAF_HOSTS"},
-	{"base-url", "LEAF_BASE_URL"}, {"git-remote", "LEAF_GIT_REMOTE"}, {"noshare", "LEAF_NOSHARE"},
-	{"locale", "LEAF_LOCALE"}, {"date-format", "LEAF_DATE_FORMAT"}, {"query-log", "LEAF_QUERY_LOG"},
-	{"semantic-min-score", "LEAF_SEMANTIC_MIN_SCORE"}, {"trusted-proxies", ""},
-	{"upload-max", ""}, {"storage-max", ""}, {"external-content", ""}, {"no-login", ""},
-}
+// config check` shows them.
+var configKeys = []string{"password", "mcp-token", "hosts", "base-url", "git-remote", "noshare", "locale",
+	"date-format", "query-log", "semantic-min-score", "trusted-proxies", "upload-max", "storage-max",
+	"external-content", "no-login"}
 
 // userKeys: the keys of a [user …] section.
 var userKeys = []string{"password", "mcp-token", "role", "disabled"}
 
-func knownKey(key string) bool {
-	for _, k := range configKeys {
-		if k.key == key {
-			return true
-		}
-	}
-	return false
-}
+func knownKey(key string) bool { return slices.Contains(configKeys, key) }
 
 // settingsKeys: what the file may set (settingsfile.Parse).
-var settingsKeys = settingsfile.Keys{Top: topKeys(), User: userKeys, UserName: userNameRE}
-
-func topKeys() []string {
-	var keys []string
-	for _, k := range configKeys {
-		keys = append(keys, k.key)
-	}
-	return keys
-}
+var settingsKeys = settingsfile.Keys{Top: configKeys, User: userKeys, UserName: userNameRE}
 
 // parseConfig reads the settings file's text (settingsfile.Parse).
 func parseConfig(text string) (*settingsfile.File, error) {
@@ -143,35 +115,6 @@ func (s *Settings) authOn() bool { return s.PasswordHash != "" || s.Users != nil
 var current atomic.Pointer[Settings]
 
 func settings() *Settings { return current.Load() }
-
-// staleEnv: the wiki's settings still in the environment, where Zone no
-// longer reads them; Zone stops rather than run without them (a forgotten
-// LEAF_PASSWORD would leave the wiki open).
-func staleEnv(getenv func(string) string) error {
-	var moved []string
-	for _, k := range configKeys {
-		if strings.TrimSpace(getenv(k.env)) != "" {
-			moved = append(moved, k.env)
-		}
-	}
-	if strings.TrimSpace(getenv("LEAF_USERS")) != "" {
-		moved = append(moved, "LEAF_USERS")
-	}
-	if len(moved) > 0 {
-		verb := "are"
-		if len(moved) == 1 {
-			verb = "is"
-		}
-		return fmt.Errorf("%s %s set in the environment (.env), but Zone reads the wiki's settings only from "+
-			"%s now. Move them there with ./run.sh config import (zonewiki config import), then delete them from .env.",
-			strings.Join(moved, ", "), verb, configName())
-	}
-	if getenv("LEAF_SECRET_KEY") != "" {
-		return errors.New("LEAF_SECRET_KEY is set in the environment (.env), but Zone no longer reads it: it " +
-			"keeps its own key in .zone/secret_key. Delete it from .env (everyone signs in once more).")
-	}
-	return nil
-}
 
 // loadSettings: the settings the file f (nil: none) makes, or what is
 // wrong with them.

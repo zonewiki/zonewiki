@@ -366,9 +366,8 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 // shell: how a view sits in the page shell.
 type shell struct{ editor, noActions, wide, badgeInForm bool }
 
-// sharingCookie, and what it was called before Leaf was called Zone (the
-// browser drops that one when it next sets sharing mode).
-const sharingCookie, oldSharingCookie = "zone-sharing", "leaf-sharing"
+// sharingCookie: set to 1 by a browser in sharing mode (js/actions.js).
+const sharingCookie = "zone-sharing"
 
 // sharingOn: the request comes from a browser in sharing mode.
 func sharingOn(r *http.Request) bool {
@@ -376,9 +375,6 @@ func sharingOn(r *http.Request) bool {
 		return false
 	}
 	c, err := r.Cookie(sharingCookie)
-	if err != nil {
-		c, err = r.Cookie(oldSharingCookie)
-	}
 	return err == nil && c.Value == "1"
 }
 

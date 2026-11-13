@@ -1,4 +1,4 @@
-{{- /* The login gate (LEAF_PASSWORD, or LEAF_USERS: a user name too). */ -}}
+{{- /* The login gate (a password, or with users a user name too). */ -}}
 {{define "body"}}
 <div class="login-wrap">
   <form class="login-form" method="post" action="/login{{with .NextURL}}?next={{.}}{{end}}">

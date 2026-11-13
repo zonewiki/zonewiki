@@ -440,21 +440,6 @@ def test_c_n_opens_a_new_note_and_g_n_g_a_go_to_notes_and_all_tasks(page, wiki):
     page.wait_for_url(re.compile(r"/tasks$"))
 
 
-def test_the_keys_from_before_the_rename_still_work(page, wiki):
-    # c s, g s and g d were the keys while Notes was called Scratch and Tasks Deck.
-    wiki.write("garden", "# Garden\n")
-    page.goto("/page/garden")
-    page.keyboard.press("c")
-    page.keyboard.press("s")
-    expect(page.locator("#modal")).to_be_visible()
-    page.goto("/page/garden")
-    page.keyboard.press("g")
-    page.keyboard.press("s")
-    page.wait_for_url("**/notes")
-    page.keyboard.press("g")
-    page.keyboard.press("d")
-    page.wait_for_url(re.compile(r"/tasks$"))
-
 # ── Module switcher on desktop ───────────────────────────────────────────────
 # The breadcrumb starts with the modules: Wiki (with the logo), Tasks, Notes
 # (with users two pills: Wiki · Private and Tasks · Notes).

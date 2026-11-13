@@ -403,32 +403,14 @@ func TestSemanticSettings(t *testing.T) {
 	if semanticFromEnv(env(nil)) != nil || semanticFromEnv(env(map[string]string{"ZONE_SEMANTIC_SEARCH": "bogus"})) != nil {
 		t.Error("on without being asked")
 	}
-	// The old names turn nothing on.
-	if semanticFromEnv(env(map[string]string{"LEAF_EMBEDDINGS": "fastembed"})) != nil {
-		t.Error("an old name turned it on")
-	}
 	if modelDir(env(map[string]string{"ZONE_MODEL_DIR": "/opt/zonewiki-model"})) != "/opt/zonewiki-model" {
 		t.Error("ZONE_MODEL_DIR ignored")
 	}
-	// The cache: ~/.cache/zonewiki, or ~/.cache/leaf while the model is only there.
+	// The cache: ~/.cache/zonewiki, per revision.
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	rev := "jinaai--jina-embeddings-v2-base-de@3f9eede87572"
-	fill := func(dir string) {
-		for _, f := range modelFiles {
-			_ = os.MkdirAll(filepath.Dir(filepath.Join(dir, f.name)), 0o777)
-			_ = os.WriteFile(filepath.Join(dir, f.name), nil, 0o666)
-		}
-	}
-	for _, step := range []struct{ fill, want string }{
-		{"", ".cache/zonewiki/" + rev}, {".cache/leaf/" + rev, ".cache/leaf/" + rev}, {".cache/zonewiki/" + rev, ".cache/zonewiki/" + rev},
-	} {
-		if step.fill != "" {
-			fill(filepath.Join(home, step.fill))
-		}
-		if got := modelDir(env(nil)); got != filepath.Join(home, step.want) {
-			t.Errorf("model dir %s, want ~/%s", got, step.want)
-		}
+	if got, want := modelDir(env(nil)), filepath.Join(home, ".cache/zonewiki/jinaai--jina-embeddings-v2-base-de@3f9eede87572"); got != want {
+		t.Errorf("model dir %s, want %s", got, want)
 	}
 	x := semanticFromEnv(env(map[string]string{"ZONE_SEMANTIC_SEARCH": "on"}))
 	if newOnnxEmbedderWorks() {
@@ -560,11 +542,11 @@ func TestChunkPage(t *testing.T) {
 func TestSemanticText(t *testing.T) {
 	testWiki(t, nil)
 	// Tasks embeds are markup: pages of only an embed were each other's closest match.
-	_, body := semanticText("# Zone\n\nNotes [[Deck tag=leaf view=open]] here.\n\n[[tasks:]]\n", "leaf")
+	_, body := semanticText("# Zone\n\nNotes [[Tasks: tag=leaf view=open]] here.\n\n[[tasks:]]\n", "leaf")
 	if strings.Contains(strings.ToLower(body), "tasks") || !strings.Contains(body, "Notes  here.") {
 		t.Errorf("task list embeds: %q", body)
 	}
-	if _, body := semanticText("# Zone\n\n[[Deck tag=leaf]]\n", "leaf"); strings.TrimSpace(body) != "" {
+	if _, body := semanticText("# Zone\n\n[[Tasks: tag=leaf]]\n", "leaf"); strings.TrimSpace(body) != "" {
 		t.Errorf("only an embed: %q", body)
 	}
 	title, body := semanticText("---\ntags: [cars, repair]\ntldr: Notes on the car\n---\n# Golf\n\nBody.\n", "golf")
@@ -585,34 +567,20 @@ func TestFuse(t *testing.T) {
 	}
 }
 
-// .zone/ (the cache, the session key) is in .git/info/exclude, once.
+// .zone/ (the cache, the session key, the settings file) is in
+// .git/info/exclude, once.
 func TestExcludeFromGit(t *testing.T) {
 	dir := t.TempDir()
-	excludeFromGit(dir, "/.leaf/")
+	excludeState(dir)
 	if exists(filepath.Join(dir, ".git")) {
 		t.Fatal("made a .git")
 	}
 	info := filepath.Join(dir, ".git", "info")
 	_ = os.MkdirAll(info, 0o777)
 	_ = os.WriteFile(filepath.Join(info, "exclude"), []byte("# *~"), 0o666)
-	excludeFromGit(dir, "/.leaf/")
-	excludeFromGit(dir, "/.leaf/")
-	if b, _ := os.ReadFile(filepath.Join(info, "exclude")); string(b) != "# *~\n/.leaf/\n" {
-		t.Errorf("exclude %q", b)
-	}
-	// All of .zone/, the settings file too: an older Zone's lines go, the
-	// exceptions that kept the settings file in, and with no .leaf/ there,
-	// its line too.
-	_ = os.WriteFile(filepath.Join(info, "exclude"), []byte("# *~\n/.leaf/\n/.leaf/*\n!/.leaf/config\n/.zone/*\n!/.zone/config\n"), 0o666)
 	excludeState(dir)
 	excludeState(dir)
 	if b, _ := os.ReadFile(filepath.Join(info, "exclude")); string(b) != "# *~\n/.zone/*\n" {
-		t.Errorf("exclude %q", b)
-	}
-	// While .leaf/ is there (not moved yet), both folders.
-	_ = os.Mkdir(filepath.Join(dir, ".leaf"), 0o777)
-	excludeState(dir)
-	if b, _ := os.ReadFile(filepath.Join(info, "exclude")); string(b) != "# *~\n/.zone/*\n/.leaf/*\n" {
 		t.Errorf("exclude %q", b)
 	}
 }

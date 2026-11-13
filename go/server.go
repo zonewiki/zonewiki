@@ -38,7 +38,7 @@ const usage = `Usage: zonewiki [--addr ADDRESS] [--public FOLDER] [--docs FOLDER
 
 Commands:
   user COMMAND               the wiki's users (add, passwd, token, remove, list)
-  config COMMAND             the wiki's settings file .zone/config (check, set, unset, passwd, token, import)
+  config COMMAND             the wiki's settings file .zone/config (check, set, unset, passwd, token)
   eval [--k N] [--new] FILE  measure search_wiki's retrieval against the questions in FILE
   health [ADDR]              whether a Zone running here answers (the container's healthcheck)
   help                       this text; zonewiki COMMAND --help a command's
@@ -139,8 +139,6 @@ func main() {
 		fatal(err)
 	}
 	excludeState(cfg.Data) // .zone/: the settings file, the secret key, the caches
-	migrateNames()         // before anything reads the tasks
-	untrackSettings()
 	ensureHomePage()
 	cleanLeftDrafts()
 	initTasks()
@@ -273,7 +271,6 @@ func newHandler() http.Handler {
 	tasksRoutes(mux)
 	adminRoutes(mux)
 	assistantRoutes(mux)
-	oldNameRoutes(mux)
 	return noStalls(checks(viewerGate(mux)))
 }
 
@@ -286,7 +283,6 @@ var viewerWrites = map[string]bool{
 	"POST /login": true, "POST /logout": true, "POST /welcome/{token}": true, "/mcp": true,
 	"POST /api/preview": true, "POST /api/render-notes": true, // render only
 	"POST /assistant/token": true, "POST /assistant/revoke": true, // their own MCP token, whose writing tools are refused
-	"/api/deck": true, "/api/deck/{rest...}": true, // the tasks API's old name: its reads; its writes are refused (mayWriteTasks)
 }
 
 // viewerGate refuses a viewer's write (POST, PUT, PATCH, DELETE) to a

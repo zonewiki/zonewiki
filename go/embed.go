@@ -196,11 +196,6 @@ var modelFiles = []struct{ name, sha256 string }{
 	{"tokenizer.json", "376c53a06d6911569afc19f584002a11dbcd6b871afb6d96b8600eb3c4e7e7a7"}, // gitleaks:allow
 }
 
-// renamedSettings: the settings' names until 2026-10; set, they turn
-// nothing on, and the log says what to rename them to.
-var renamedSettings = [][2]string{
-	{"LEAF_EMBEDDINGS", "ZONE_SEMANTIC_SEARCH"}}
-
 // Similarity floors per model, (search, related, tasks):
 //   - search: a query↔section similarity below this is not a hit. Vector
 //     search always has a "nearest" page, so without a floor every query,
@@ -267,19 +262,14 @@ func parseSemanticSpec(value string) (string, error) {
 
 // modelDir: where the model's files are, ZONE_MODEL_DIR (the image's
 // /opt/zonewiki-model), else a cache folder in the home directory, per
-// revision: ~/.cache/zonewiki, or ~/.cache/leaf, where it was downloaded
-// before Leaf was called Zone, while the model is only there.
+// revision (~/.cache/zonewiki).
 func modelDir(getenv func(string) string) string {
 	if d := getenv("ZONE_MODEL_DIR"); d != "" {
 		return d
 	}
 	home, _ := os.UserHomeDir()
 	rev := strings.ReplaceAll(defaultModel, "/", "--") + "@" + modelRevision[:12]
-	dir := filepath.Join(home, ".cache", "zonewiki", rev)
-	if old := filepath.Join(home, ".cache", "leaf", rev); !modelPresent(dir) && modelPresent(old) {
-		return old
-	}
-	return dir
+	return filepath.Join(home, ".cache", "zonewiki", rev)
 }
 
 func modelPresent(folder string) bool {
@@ -1128,18 +1118,9 @@ func semanticTasks() []semTask {
 }
 
 // semanticFromEnv: the index ZONE_SEMANTIC_SEARCH asks for, its worker not
-// started, or nil (keywords only). A bad setting, one by its old name, or a
+// started, or nil (keywords only). A bad setting or a
 // build without the model's runtime is logged, not fatal.
 func semanticFromEnv(getenv func(string) string) *semanticIndex {
-	for _, r := range renamedSettings {
-		if getenv(r[0]) != "" {
-			extra := ""
-			if r[1] == "ZONE_SEMANTIC_SEARCH" {
-				extra = " (on or off)"
-			}
-			semLog("%s was renamed to %s (ignored): set %s in .env instead%s", r[0], r[1], r[1], extra)
-		}
-	}
 	model, err := parseSemanticSpec(getenv("ZONE_SEMANTIC_SEARCH"))
 	if err != nil {
 		semLog("%v", err)

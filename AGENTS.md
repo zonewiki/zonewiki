@@ -69,7 +69,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 ├── LICENSE                 # AGPL-3.0-or-later
 ├── THIRD_PARTY_LICENSES    # Licenses of Go, the Go modules and the embedding model (the vendored libraries' are next to them)
 ├── docs/spec/              # The feature spec, one file per area (see Spec)
-├── docs/plans/             # Working plans for changes in progress, deleted when done (`rename-to-zone.md`)
+├── docs/plans/             # Working plans for changes in progress, deleted when done (none now)
 ├── docs/licenses/mermaid_notices.py  # Writes public/vendor/mermaid/THIRD_PARTY_LICENSES from the bundle's source map
 ├── docs/screenshots/       # The README's screenshots + make_screenshots.py (./run.sh screenshots)
 ├── Containerfile           # The image: a Go build stage, onnxruntime + the model (opt-in), an Ubuntu 26.04 LTS runtime (also ships README.md and docs/spec/ for zone_help)
@@ -114,8 +114,6 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── gitstore.go         # Git: setup, commits, moves, grep over pages, a page's log, versions, diffs, deleted pages
 │   ├── history.go          # History, revisions, diffs, restore, deleted pages, uncommitted changes
 │   ├── quicknotes.go       # Notes: create, Move to wiki, Append to page (the routes and MCP share it)
-│   ├── migrate.go          # Folders Zone renamed, moved at start-up in one commit (.leaf/ → .zone/, _deck/ → _tasks/)
-│   ├── oldnames.go         # Every old name Zone still answers to (Leaf, Deck, Scratch), listed; the old routes; all go in 2.0
 │   ├── merge.go            # Several editors on one page: drafts' authors, the bases, the three-way merge, texts left in conflict
 │   ├── tasks.go            # Tasks: the /api/tasks routes (their task writes as functions the MCP tools share), the [[tasks:]] embed
 │   ├── taskstore.go        # Tasks on disk: _tasks/ files (users' private ones in private/<user>/_tasks/), lock, recurrence, history, comments, backlinks, search docs
@@ -141,7 +139,7 @@ No build step for the browser code (no bundler: the server serves `public/` as i
     ├── style.css           # All styling
     ├── zonewiki.js             # The entry ES module every page loads; imports the modules below
     ├── js/                 # ES modules: chrome, git, util, completion, search, actions, pagemenu,
-    │                       #   shortcuts, mdedit, editor, page, figures, fold, present, oldnames; the task app's parts
+    │                       #   shortcuts, mdedit, editor, page, figures, fold, present; the task app's parts
     │                       #   taskrender, taskmodal, taskselect, taskmenu, taskdnd, tasktouch, tasksettings, datepicker, taskutil (see Client code in `docs/spec/rendering.md`)
     ├── tasks-core.js       # Pure task logic (no DOM), an ES module — shared by tasks.js, the editor and Node-run tests
     ├── tasks.js            # The task app, an ES module zonewiki.js imports; initTaskApps() starts each .tasks-app, its parts in js/task*.js (app, app.st)
@@ -169,7 +167,7 @@ Page content does not live in the repo tree. It lives in the host directory poin
 ./run.sh screenshots  # redo the README's screenshots from a sample wiki
 ./run.sh eval [FILE]  # measure retrieval on your wiki (questions in FILE, default _eval/retrieval.json in the wiki)
 ./run.sh user add|passwd|token|role|disable|enable|remove NAME, user list  # the users in the wiki's settings file (.zone/config)
-./run.sh config check|set|unset|passwd|token|import  # the wiki's settings file: check it, set a key, password and MCP token without users, import an older .env
+./run.sh config check|set|unset|passwd|token  # the wiki's settings file: check it, set a key, password and MCP token without users
 ```
 
 Zone is at **http://localhost:5000**. The deployment's settings are in `.env` (gitignored; `ZONE_DATA`, `ZONE_ALLOW_REMOTE`, `TZ` …, read once into `cfg`); the wiki's own (users, password, MCP token, hosts, locale …) are in the wiki's settings file `.zone/config`, kept out of git and reloaded when it changes (`settings()`; one left in `.env` stops Zone). The wiki lives outside the repo, in `ZONE_DATA` (default `~/zonewiki`), which must exist: pages at its root and in folders, uploads in `_assets/`, tasks in `_tasks/`, the settings file, the search index files, the semantic cache and session key in `.zone/`. Details: `docs/spec/deployment.md`.
@@ -247,7 +245,7 @@ Use the fixtures and helpers in `tests/conftest.py` (`wiki_dir`, `git_wiki_dir`,
   - **First run** (`go/setup.go`): a wiki other devices can reach (`ZONE_ALLOW_REMOTE`, `hosts`, `ZONE_BIND` beyond localhost) with no login answers only `/setup` until one is set, unless `no-login = yes`. A new route that must answer before that goes in `setupExempt`; the tests' server has `no-login = yes` (`settings.NO_LOGIN`).
   - **Viewers** (`role = viewer`) change nothing: `canWrite` in `go/access.go` is false for them, `mayWriteTasks` refuses every task write, `callMCPTool` the writing tools, and `viewerGate` a viewer's write to any route not in `viewerWrites`. A new write route gets a probe in `tests/test_roles.py`, which fails until it has one.
   - `/mcp` requires an MCP token (`mcp-token`, kept as its hash; with users, a user's own): without one it is off (403), password or not. Don't make it open again. In the browser a token is made only by whoever is signed in, for themselves, with their password again (`go/assistant.go`): don't drop that check.
-  - **The settings file** `.zone/config` holds password hashes and tokens (only as hashes): it stays out of git with all of `.zone/` (account data never goes into git; `untrackSettings` takes it out of older wikis, `missingUsers` stops a clone without it from starting open) and is never shown (`canSeePath`, `safePath`), the commands write it 0600, and a reload with an error (or a removed file) keeps the settings from before, so a broken edit never opens the wiki.
+  - **The settings file** `.zone/config` holds password hashes and tokens (only as hashes): it stays out of git with all of `.zone/` (account data never goes into git; `missingUsers` stops a clone without it from starting open) and is never shown (`canSeePath`, `safePath`), the commands write it 0600, and a reload with an error (or a removed file) keeps the settings from before, so a broken edit never opens the wiki.
   - The Host check (`hostAllowed`) validates the `Host` header (localhost, plus `hosts` from the settings file) against DNS rebinding; `ZONE_ALLOW_REMOTE=1` without `hosts` skips it.
   - The Origin check (`crossSite`) refuses cross-site writes (an `Origin` of another site, or `null`).
   - A page loads nothing from other hosts (`pageCSP`: `default-src 'self'`; images, media and frames also from the `external-content` setting's hosts; a markdown image elsewhere becomes a link): don't add a source to the policy.

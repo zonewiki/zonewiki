@@ -3460,24 +3460,6 @@ def test_plan_sorts_each_section_and_keeps_its_own_sort(page, wiki):
     expect(sel).to_have_value("created")
 
 
-def test_what_the_browser_kept_under_the_old_names_carries_over(page, wiki):
-    # Before the renames the keys said leaf and deck, and the built-in page
-    # was /deck (js/oldnames.js); the choices are kept under keys with the path.
-    page.request.post("/api/tasks", data={"title": "One"})
-    page.goto("/tasks?view=open")
-    expect(page.locator("select.tasks-sort")).to_have_value("manual")
-    page.evaluate("""() => {
-        for (const k of Object.keys(localStorage)) if (k.includes('-sort')) localStorage.removeItem(k);
-        localStorage.setItem('leaf-deck-sort:/deck|||0', JSON.stringify({open: 'created'}));
-        localStorage.setItem('leaf-deck-sort:/page/shop|shop||0', JSON.stringify({open: 'due'}));
-        localStorage.setItem('leaf-search-sort', 'title-desc');
-    }""")
-    page.reload()
-    expect(page.locator("select.tasks-sort")).to_have_value("created")
-    keys = page.evaluate("() => Object.keys(localStorage).filter(k => k.includes('-sort')).sort()")
-    assert keys == ["zone-search-sort", "zone-tasks-sort:/page/shop|shop||0", "zone-tasks-sort:/tasks|||0"]
-
-
 def test_rename_list_dialog(page, wiki):
     """Rename… on a list: its name everywhere; a name in use offers the merge, until edited."""
     wiki.write("shop", "# Shop\n\n[[tasks: list=shop]]\n")

@@ -834,7 +834,7 @@ func apiPagesList(w http.ResponseWriter, r *http.Request) {
 	out = append(out, pages...)
 	out = append(out,
 		M{"slug": "/tasks", "title": "Tasks", "href": "/tasks", "links": 0, "mtime": 0, "builtin": true},
-		M{"slug": "/notes", "title": "Notes", "href": "/notes", "links": counts["_scratch"], "mtime": 0, "builtin": true})
+		M{"slug": "/notes", "title": "Notes", "href": "/notes", "links": 0, "mtime": 0, "builtin": true})
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -1061,8 +1061,8 @@ func apiRenderNotes(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// apiSearch: the search modal's results (?limit=, ?unlinked=1; ?notes=1,
-// or ?scratch=1 as it was called before: notes only, for Notes page's filter).
+// apiSearch: the search modal's results (?limit=, ?unlinked=1; ?notes=1:
+// notes only, for the Notes page's filter).
 func apiSearch(w http.ResponseWriter, r *http.Request) {
 	args := r.URL.Query()
 	q := strings.TrimSpace(args.Get("q"))
@@ -1070,7 +1070,7 @@ func apiSearch(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, []M{})
 		return
 	}
-	quicknote := args.Get("notes") == "1" || args.Get("scratch") == "1"
+	quicknote := args.Get("notes") == "1"
 	limit, ok := intArg(args.Get("limit"), args.Has("limit"))
 	if !ok {
 		limit = searchLimit

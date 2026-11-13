@@ -19,10 +19,6 @@ func TestSetEmbedArgs(t *testing.T) {
 		{"keep=1 odd", map[string]string{"limit": "3", "tag": "a|b"}, "keep=1 odd tag=a|b limit=3"},
 		// A param written twice is written once, where it first was.
 		{"View=open list=shop view=plan", map[string]string{"view": "focus"}, "view=focus list=shop"},
-		// pin replaces home, its old name.
-		{"list=shop home=1", map[string]string{"pin": "default"}, "list=shop pin=default"},
-		{"list=shop home=1", map[string]string{"pin": ""}, "list=shop"},
-		{"list=shop home=1", map[string]string{"limit": "2"}, "list=shop home=1 limit=2"},
 	}
 	for _, c := range cases {
 		if got := setEmbedArgs(c.args, c.set); got != c.want {
@@ -32,7 +28,7 @@ func TestSetEmbedArgs(t *testing.T) {
 }
 
 func TestSetEmbedParams(t *testing.T) {
-	text := "# Shop\n\n`[[tasks: tag=code]]`\n\n[[tasks:]]\n\ntext [[Tasks: list=shop  keep=1 ]] more\n\n[[deck]]\n\n[[deck tag=a]]\n"
+	text := "# Shop\n\n`[[tasks: tag=code]]`\n\n[[tasks:]]\n\ntext [[Tasks: list=shop  keep=1 ]] more\n\n[[TASKS:]]\n\n[[tasks: tag=a]]\n"
 	cases := []struct {
 		n    int
 		was  string
@@ -42,8 +38,8 @@ func TestSetEmbedParams(t *testing.T) {
 		{0, "", map[string]string{"view": "open"}, "[[tasks: view=open]]"},
 		{1, "list=shop  keep=1 ", map[string]string{"limit": "4"}, "[[Tasks: list=shop keep=1 limit=4]]"},
 		{1, "list=shop  keep=1 ", map[string]string{"keep": ""}, "[[Tasks: list=shop]]"},
-		{2, "", map[string]string{"plan": "off"}, "[[deck plan=off]]"},
-		{3, "tag=a", map[string]string{"tag": ""}, "[[deck]]"},
+		{2, "", map[string]string{"plan": "off"}, "[[TASKS: plan=off]]"},
+		{3, "tag=a", map[string]string{"tag": ""}, "[[tasks:]]"},
 	}
 	for _, c := range cases {
 		got, err := setEmbedParams(text, c.n, c.was, c.set)

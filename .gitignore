@@ -2,5 +2,4 @@
 .venv/
 __pycache__/
 tests/e2e/_screenshots/
-/go/leaf
 /go/zonewiki

@@ -26,7 +26,7 @@ func writePage(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	quicknote, err := renamedBoolArg(args, "note", "scratch")
+	quicknote, err := boolArg(args, "note")
 	if err != nil {
 		return "", err
 	} else if quicknote {

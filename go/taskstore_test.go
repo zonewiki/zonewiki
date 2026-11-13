@@ -396,48 +396,22 @@ func TestASharedTaskStaysShared(t *testing.T) {
 	}
 }
 
-// A _deck/ the start-up move left (the rename failed) is read and written
-// while there is no _tasks/; once there is one, that one.
-func TestTasksDirFallsBackToTheOldFolder(t *testing.T) {
-	testWiki(t, nil)
-	withUsers(t, "alice")
-	for _, owner := range []string{"", "alice"} {
-		base := cfg.Data
-		if owner != "" {
-			base = filepath.Join(cfg.Data, privateDir, owner)
-		}
-		_ = os.RemoveAll(filepath.Join(base, tasksDirName))
-		if err := os.MkdirAll(filepath.Join(base, legacyTasksDirName), 0o777); err != nil {
-			t.Fatal(err)
-		}
-		if got := tasksDir(owner); got != filepath.Join(base, legacyTasksDirName) {
-			t.Errorf("tasksDir(%q) = %s with only _deck/", owner, got)
-		}
-		if err := os.Mkdir(filepath.Join(base, tasksDirName), 0o777); err != nil {
-			t.Fatal(err)
-		}
-		if got := tasksDir(owner); got != filepath.Join(base, tasksDirName) {
-			t.Errorf("tasksDir(%q) = %s with both", owner, got)
-		}
-	}
-}
-
 // The pinned lists: pin=default first, then by name (not by page); a list
-// pinned twice once; home=1 still pins. The Pinned view shows any of them
+// pinned twice once. The Pinned view shows any of them
 // and gives new tasks the default list's tags.
 func TestPinnedListsAndTheirView(t *testing.T) {
 	testWiki(t, map[string]string{
 		"a-shop":  "# Shop\n\n[[tasks: list=shop keep=1 pin=1]]\n",
 		"b-work":  "# Work\n\n[[tasks: list=work tag=office view=focus pin=default]]\n",
 		"c-again": "# Again\n\n[[tasks: list=shop pin=1]]\n",
-		"d-old":   "# Old\n\n[[tasks: tag=me home=1]]\n",
+		"d-page":  "# Page\n\n[[tasks: tag=me pin=1]]\n",
 		"e-code":  "# Code\n\n```\n[[tasks: list=nope pin=1]]\n```\n",
 	})
 	var names []string
 	for _, h := range lookupPinnedIn(sortedPages(), "") {
 		names = append(names, pinnedName(h)+"@"+h.Slug)
 	}
-	if want := []string{"work@b-work", "Old@d-old", "shop@a-shop"}; !slices.Equal(names, want) {
+	if want := []string{"work@b-work", "Page@d-page", "shop@a-shop"}; !slices.Equal(names, want) {
 		t.Errorf("pinned %v, want %v", names, want)
 	}
 	rq := &Req{}

@@ -236,7 +236,6 @@ func TestRenameTagInText(t *testing.T) {
 	for _, c := range []struct{ in, want string }{
 		{"[[tasks: list=shop keep=1]]", "[[tasks: list=food keep=1]]"},
 		{"[[tasks:  LIST=Shop   view=open]]", "[[tasks:  LIST=food   view=open]]"},
-		{"[[deck list=shop]]", "[[deck list=food]]"},
 		{"[[tasks: tag=work,-shop]]", "[[tasks: tag=work,-food]]"},
 		{"[[tasks: tag=#shop|home new=shop,x]]", "[[tasks: tag=#food|home new=food,x]]"},
 		{"[[tasks: list=shopping tag=workshop labels=shop,b]]", "[[tasks: list=shopping tag=workshop labels=shop,b]]"},

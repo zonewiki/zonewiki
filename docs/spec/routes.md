@@ -9,7 +9,6 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 | GET    | `/`                   | Redirects to `/page/index`                      |
 | GET    | `/page/<slug>`        | Render a wiki page (markdown → HTML)            |
 | GET    | `/tasks`               | The built-in tasks page (`tasksPage()`): the full main tasks (every open task, list tasks included), independent of the wiki's pages. `?list=<name>` shows that separate list instead, with the params of the page that declares it (keep, labels, limit, …; a pinned list's pinned embed's), and the pages that embed the list as its Backlinks (with a page view's side columns on big screens); the list switcher above the heading (All current, or that list), which reads "All tasks" or "List: <name>"; `?pinned=1` shows the pinned lists as one task app (with fewer than two, a redirect where the Tasks link goes). `?view=`, `?task=`, `?tag=`, `?search=`, `?new=1` work as for any embed. Every link to "the tasks" goes here (the Tasks module links without a task list home, search results, Linked tasks, `g d`). |
-| GET    | `/deck`                | What `/tasks` was called before Deck was called Tasks: redirects there (302) with its query, so old links and bookmarks work |
 | GET    | `/edit/<slug>`        | Show the in-browser editor for a page           |
 | POST   | `/edit/<slug>`        | Save edited content to `<slug>.md`               |
 | GET    | `/new`                | A form for a new page's name (without JavaScript; pages are made from links to them) |
@@ -21,7 +20,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 | POST   | `/admin/users/<name>/role`, `/disable`, `/enable`, `/remove`, `/reset`, `/revoke`; `/admin/users/invite` | The Users tab's changes, admins only (404 for anyone else) |
 | GET/POST | `/welcome/<token>`  | An invite or reset link's page: choose a password, once (no login needed) |
 | GET    | `/search?q=...`       | Full-text search results page (up to 50, with a count; `&unlinked=1` as for the API) |
-| GET    | `/api/search?q=...`   | JSON search results (used by the search UI); `&unlinked=1`: only pages nothing links to, no tasks; `&notes=1` (or `&scratch=1`, from before the rename): only notes (Notes page's filter; then `limit` goes up to 1000); `&limit=N` (default 15, max 100) |
+| GET    | `/api/search?q=...`   | JSON search results (used by the search UI); `&unlinked=1`: only pages nothing links to, no tasks; `&notes=1`: only notes (Notes page's filter; then `limit` goes up to 1000); `&limit=N` (default 15, max 100) |
 | GET    | `/api/page-preview/<slug>` | `{ title, html }`: a page rendered for the search modal's preview pane (heading ids as `data-pid`, no task list embeds) |
 | POST   | `/api/preview`        | Render posted markdown to HTML (for live editor preview); `?page=` the page being edited (your own private page: its links to new shared pages are marked) |
 | POST   | `/api/render-notes`   | Task notes and comments as HTML (`renderNotes`): body `{ notes: [...], comments: [...] }`, answer the same with HTML (see Notes in `docs/spec/tasks.md`) |
@@ -52,13 +51,11 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 | GET    | `/api/tasks/export`    | The tasks a list shows (`?list=`, `?tag=`; neither: all), open and completed, as a JSON file to save (Export and import in `docs/spec/tasks.md`) |
 | POST   | `/api/tasks/import`    | `{file, list, tag, new, also, private}`: adds an export's tasks to a list; `{added, skipped, ids}` |
 | GET    | `/api/tasks/headless`  | A hidden task app (the headless embed, without its `<script>` tags), for a page that needs the edit modal (`c t`, the New task button; see Modules). |
-| any    | `/api/deck`, `/api/deck/…` | The `/api/tasks` routes by their old path, for clients from before the rename: the request goes on to `/api/tasks/…` (same method, body and checks) |
 | GET    | `/api/tasks/completed` | Completed tasks of `?year=YYYY` (default this year; earlier years come from their archive file). |
 | GET    | `/api/tasks/completed-years` | `{ years }`: years with completed tasks, newest first, this year always included (Completed's year switcher). `?list=<name>` as for the count. |
 | GET    | `/api/tasks/completed-count` | `{ count }` of tasks in the Completed view (current year), for its link. `?list=<name>` counts that list's (tasks tagged with it); without it, every task's (a leftover `?all=1` changes nothing). |
-| POST   | `/api/notes`      | Create a new note (`<timestamp>_<slug>.md`); returns `{ slug }`. `/api/scratch`, its name before Scratch was called Notes, does the same |
+| POST   | `/api/notes`      | Create a new note (`<timestamp>_<slug>.md`); returns `{ slug }`. |
 | GET    | `/notes`                | Auto-generated index of all notes, newest first, with a filter box (`?q=`) that searches notes only |
-| GET    | `/page/_scratch`        | Notes' address while it was called Scratch: redirects to `/notes` (302) with its query |
 | POST   | `/rename/<slug>`      | Rename a page: moves the file, redirects to new slug |
 | POST   | `/tasks/rename`       | Rename a list or task tag (fields `tag`, `new_name`, `merge`; the Rename… dialog of `/tasks?list=<name>`, Separate lists in `docs/spec/tasks.md`): redirects to the new name's list; a refusal back to the dialog (`?list=…&rename_name=…&rename_error=…`, plus `&rename_merge=1` when the name is in use) |
 | POST   | `/promote/<slug>`     | Move a note to the wiki (see Notes → Move to wiki): fields `folder`, `name`, `keep_date`, `link_from`; redirects to the new page, or back with `?promote_error=…` |

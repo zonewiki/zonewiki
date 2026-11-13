@@ -85,12 +85,10 @@ document.addEventListener('keydown', e => {
 
   // g-prefix navigation: gh=home, gn=Notes, ga=all tasks, gt=your pinned
   // lists (/tasks without one), gp=your private home (with users: the Private
-  // pill). gs and gd were Notes and all tasks before the rename, kept for
-  // one release.
+  // pill).
   if (keyPrefix.key === 'g') {
     resetPrefix();
     const dest = { h: '/page/index', n: '/notes', a: '/tasks', t: tasksLinkHref() };
-    dest.s = dest.n; dest.d = dest.a;
     if (document.querySelector('.module-link[data-module="private"]')) dest.p = '/private';
     if (dest[e.key]) { e.preventDefault(); window.location.href = dest[e.key]; }
     return;
@@ -101,12 +99,11 @@ document.addEventListener('keydown', e => {
     return;
   }
 
-  // c-prefix create: cn=note (cs before the rename, kept for one release),
-  // ct=task in the default list
+  // c-prefix create: cn=note, ct=task in the default list
   if (keyPrefix.key === 'c') {
     resetPrefix();
     if (document.body.dataset.viewer) return;   // a viewer makes nothing
-    if (e.key === 'n' || e.key === 's') { e.preventDefault(); openNewNote(); }
+    if (e.key === 'n') { e.preventDefault(); openNewNote(); }
     else if (e.key === 't') { e.preventDefault(); openDefaultTask(); }
     return;
   }

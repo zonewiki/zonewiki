@@ -124,15 +124,12 @@ WRITES = [
     ("POST /api/tasks/restore", "POST", "/api/tasks/restore", {"json": {"tasks": [{"id": "new-id-1", "title": "Restored"}]}}),
     # Her own things, from when she was an editor, and new ones: refused too.
     ("POST /api/notes", "POST", "/api/notes", {"data": {"title": "New note"}}),
-    ("POST /api/scratch", "POST", "/api/scratch", {"data": {"title": "New note"}}),
     ("POST /new", "POST", "/new", {"data": {"slug": "diary", "private": "1"}}),
     ("POST /api/save/{slug...}", "POST", "/api/save/{note}", {"data": {"content": "# Mine\n"}}),
     ("POST /delete/{slug...}", "POST", "/delete/{note}", {}),
     ("POST /api/tasks", "POST", "/api/tasks", {"json": {"title": "Mine too", "private": True}}),
     ("PUT /api/tasks/{id}", "PUT", "/api/tasks/{mine}", {"json": {"completed": True}}),
     ("POST /api/upload", "POST", "/api/upload", {"data": lambda: {"file": (BytesIO(b"c"), "c.png"), "page": "{note}"}}),
-    ("/api/deck", "POST", "/api/deck", {"json": {"title": "Carol's", "private": False}}),
-    ("/api/deck/{rest...}", "PUT", "/api/deck/{task}", {"json": {"title": "Carol was here"}}),
     ("POST /admin/users/{name}/role", "POST", "/admin/users/carol/role", {"data": {"role": "admin"}}),
     ("POST /admin/users/invite", "POST", "/admin/users/invite", {"data": {"name": "dave", "role": "admin"}}),
 ]

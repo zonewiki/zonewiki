@@ -55,7 +55,7 @@ func TestGolden(t *testing.T) {
 		if failures[name]++; failures[name] <= 3 || update {
 			t.Errorf("%s(%q):\n got %s\nwant %s", name, text, gb, raw)
 		}
-		if update && name != "deck_params" {
+		if update {
 			c[name] = gb
 		}
 	}
@@ -129,7 +129,7 @@ func TestGolden(t *testing.T) {
 		check("note_as_section", text, []any{section, tags}, c["note_as_section"])
 		check("promoted_slug", text, mdtext.PromotedSlug("Folder X", text, "2026-01-02"), c["promoted_slug"])
 		check("page_wikilink", text, mdtext.PageWikilink("s", text), c["page_wikilink"])
-		check("is_scratch", text, isQuicknote(text), c["is_scratch"]) // the golden data's name for it
+		check("is_note", text, isQuicknote(text), c["is_note"])
 		check("clean_tags", text, cleanTags([]string{text, "#" + text}), c["clean_tags"])
 		check("clean_list", text, nilIfEmpty(cleanList(text)), c["clean_list"])
 		check("parse_date_word", text, nilIfEmpty(parseDateWord(text, day)), c["parse_date_word"])
@@ -140,17 +140,7 @@ func TestGolden(t *testing.T) {
 				params = append(params, []string{k, p.m[k]})
 			}
 		}
-		var want [][][]string
-		_ = json.Unmarshal(c["deck_params"], &want)
-		var flat [][]string
-		for _, w := range want {
-			flat = append(flat, w...)
-		}
-		if flat == nil {
-			flat = [][]string{}
-		}
-		b, _ := json.Marshal(flat)
-		check("deck_params", text, params, b)
+		check("tasks_params", text, params, c["tasks_params"])
 	}
 	if len(failures) > 0 {
 		t.Log(fmt.Sprint("mismatches by function: ", failures))

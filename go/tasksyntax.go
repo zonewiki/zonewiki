@@ -40,11 +40,8 @@ func cleanList(name string) string {
 }
 
 var (
-	// [[tasks: …]], with a colon so a link [[Tasks]] stays a link; [[tasks: …]]
-	// is how a page wrote it before Deck was called Tasks.
-	// is how a page wrote it before Deck was called Tasks. embedArgs reads
-	// the params from either.
-	tasksRE   = regexp.MustCompile(`(?i)\[\[(?:tasks:` + mdtext.SpaceClass + `*([^\]]*)|deck(?:` + mdtext.SpaceClass + `+([^\]]*))?)\]\]`)
+	// [[tasks: …]], with a colon so a link [[Tasks]] stays a link.
+	tasksRE   = regexp.MustCompile(`(?i)\[\[tasks:` + mdtext.SpaceClass + `*([^\]]*)\]\]`)
 	taskRefRE = regexp.MustCompile(`\[\[task:([0-9a-fA-F][0-9a-fA-F-]{3,35})\]\]`)
 	mdLinkRE  = regexp.MustCompile(`\[([^\]]*)\]\(/page/([^)]+)\)`)
 )
@@ -82,8 +79,8 @@ func (p TasksParams) With(k, v string) TasksParams {
 	return c
 }
 
-// embedArgs: what follows "tasks:" or "deck" in a tasksRE match.
-func embedArgs(m []string) string { return m[1] + m[2] }
+// embedArgs: what follows "tasks:" in a tasksRE match.
+func embedArgs(m []string) string { return m[1] }
 
 // parseTasksParams reads [[tasks: key=val …]]'s pairs.
 func parseTasksParams(raw string) TasksParams {
@@ -174,13 +171,8 @@ func renameInTasksURL(query, old, name string) string {
 func renameTagInText(text, old, name string) string {
 	masked, stash := mdtext.MaskCode(text)
 	masked = tasksRE.ReplaceAllStringFunc(masked, func(m string) string {
-		at := tasksRE.FindStringSubmatchIndex(m)
-		for _, group := range []int{2, 4} { // the args of [[tasks: …]], of [[deck …]]
-			if at[group] >= 0 {
-				return m[:at[group]] + renameInEmbed(m[at[group]:at[group+1]], old, name) + m[at[group+1]:]
-			}
-		}
-		return m
+		at := tasksRE.FindStringSubmatchIndex(m) // at[2:4]: the args
+		return m[:at[2]] + renameInEmbed(m[at[2]:at[3]], old, name) + m[at[3]:]
 	})
 	masked = tasksURLRE.ReplaceAllStringFunc(masked, func(m string) string {
 		at := strings.Index(m, "/tasks?") + len("/tasks?")
@@ -241,17 +233,13 @@ func checkEmbedSettings(set map[string]string, keys []string) (map[string]string
 
 // setEmbedArgs: an embed's params as written with those of set changed: a
 // param keeps its place, a new one goes last (in embedSettingKeys' order),
-// one set to "" goes; the others stay as written. pin also replaces home,
-// its old name.
+// one set to "" goes; the others stay as written.
 func setEmbedArgs(args string, set map[string]string) string {
 	var out []string
 	done := map[string]bool{}
 	for _, word := range strings.Fields(args) {
 		k, _, ok := strings.Cut(word, "=")
 		key := strings.ToLower(k)
-		if _, pin := set["pin"]; ok && key == "home" && pin {
-			continue
-		}
 		v, changes := set[key]
 		switch {
 		case !ok || !changes:
@@ -282,13 +270,7 @@ func setEmbedParams(text string, n int, was string, set map[string]string) (stri
 		return "", errEmbedChanged
 	}
 	at := all[n]
-	from, to := at[2], at[3] // the args of [[tasks: …]]
-	if from < 0 {
-		from, to = at[4], at[5] // of [[deck …]]
-		if from < 0 {
-			from, to = at[1]-2, at[1]-2 // [[deck]]
-		}
-	}
+	from, to := at[2], at[3] // the args
 	if masked[from:to] != was {
 		return "", errEmbedChanged
 	}

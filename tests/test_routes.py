@@ -120,10 +120,9 @@ class TestViewPage:
         assert '<body data-module="tasks" data-tasks-tags="task" data-tasks-today="1">' in client.get("/tasks", headers=HOST).get_data(as_text=True)
 
     def test_pins_ignore_code_and_several_go_together(self, client, wiki_dir):
-        # home=, pin='s name before 2026-11, still pins.
         write_page(wiki_dir, "aaa", "# A\n\n```\n[[tasks: pin=1]]\n```\n")
         write_page(wiki_dir, "zzz", "# Z\n\n[[tasks: tag=x pin=yes]]\n")
-        write_page(wiki_dir, "mmm", "# M\n\n[[tasks: home=true]]\n")
+        write_page(wiki_dir, "mmm", "# M\n\n[[tasks: pin=true]]\n")
         body = client.get("/page/aaa", headers=HOST).get_data(as_text=True)
         assert self._tasks_links(body)[0] == "/tasks?pinned=1"   # both, as one
         assert 'data-pinned-pages="mmm zzz"' in body

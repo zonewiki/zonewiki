@@ -129,7 +129,6 @@ READS = [
     ("GET /api/pages-list", "GET", "/api/pages-list", {}),
     ("GET /pages", "GET", "/pages", {}),
     ("GET /notes", "GET", "/notes", {}),
-    ("GET /page/_scratch", "GET", "/page/_scratch", {}),   # redirects to /notes
     ("GET /page/_deleted", "GET", "/page/_deleted", {}),
     ("GET /page/{slug...}", "GET", "/page/private/alice/old", {}),   # a deleted page offers restore
     ("GET /uncommitted", "GET", "/uncommitted", {}),
@@ -148,10 +147,6 @@ READS = [
     ("GET /api/tasks/headless", "GET", "/api/tasks/headless", {}),
     ("GET /api/tasks/export", "GET", "/api/tasks/export", {}),
     ("GET /api/tasks/export", "GET", "/api/tasks/export", {"query_string": {"list": "secretlist"}}),
-    # The paths from before Deck was called Tasks.
-    ("GET /deck", "GET", "/deck", {"query_string": {"list": "secretlist"}}),
-    ("/api/deck", "GET", "/api/deck", {}),
-    ("/api/deck/{rest...}", "GET", "/api/deck/completed", {"query_string": {"year": "2001"}}),
     ("POST /api/preview", "POST", "/api/preview", {"data": f"[[{DIARY}]] [[private/alice/old]] [[private/alice/draft]]"}),
     ("POST /api/render-notes", "POST", "/api/render-notes", {"json": {"notes": [f"[[{DIARY}]]"], "comments": []}}),
     ("POST /api/render-notes", "POST", "/api/render-notes",
@@ -650,8 +645,6 @@ WRITES = [
     ("PUT /api/tasks/{id}", "PUT", f"/api/tasks/{TASK_ID}", {"json": {"title": "Bob was here"}}),
     ("PUT /api/tasks/{id}", "PUT", f"/api/tasks/{DONE_ID}", {"json": {"completed": False}}),
     ("DELETE /api/tasks/{id}", "DELETE", f"/api/tasks/{TASK_ID}", {}),
-    ("/api/deck", "POST", "/api/deck", {"json": {"title": "Bob's", "private": True}}),
-    ("/api/deck/{rest...}", "PUT", f"/api/deck/{TASK_ID}", {"json": {"title": "Bob was here"}}),
     ("POST /api/tasks/{id}/toggle-check", "POST", f"/api/tasks/{TASK_ID}/toggle-check", {"json": {"idx": 0}}),
     ("POST /api/tasks/{id}/comments", "POST", f"/api/tasks/{TASK_ID}/comments", {"json": {"text": "Bob's"}}),
     ("PUT /api/tasks/{id}/comments/{cid}", "PUT", f"/api/tasks/{TASK_ID}/comments/{COMMENT_ID}", {"json": {"text": "Bob's"}}),
@@ -831,7 +824,7 @@ EXEMPT = {
     "/mcp",                         # its tools: MCP_READS
     "GET /{$}", "GET /login", "POST /login", "POST /logout", "GET /public/{path...}", "GET /api/version",
     "GET /api/health",              # ok, or the settings file's error
-    "POST /api/notes", "POST /api/scratch",   # makes bob's own note
+    "POST /api/notes",              # makes bob's own note
     "GET /private",                 # redirects to the caller's own private home (test_users.py)
     # The admin page: admins only, names and roles, no page (test_admin.py)
     "GET /admin", "GET /admin/users", "POST /admin/users/{name}/role", "POST /admin/users/{name}/disable", "POST /admin/users/{name}/enable",

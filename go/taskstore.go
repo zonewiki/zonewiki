@@ -28,28 +28,19 @@ import (
 // …Locked expect it held (Go's mutex isn't reentrant).
 var tasksMu sync.Mutex
 
-// The tasks' folder, and what it was called before Deck was called Tasks
-// (moved at start-up, migrateNames).
-const (
-	tasksDirName       = "_tasks"
-	legacyTasksDirName = "_deck"
-)
+// The tasks' folder.
+const tasksDirName = "_tasks"
 
 // tasksDir: the folder of owner's tasks files: _tasks/ for the shared tasks
 // (owner ""), private/<owner>/_tasks/ for a user's private ones: private
 // because it lies in their folder, like their pages. The files in each are
-// the same: tasks.json, completed.json, completed-YYYY.json. A _deck/ the
-// move left (it failed) is used while there is no _tasks/.
+// the same: tasks.json, completed.json, completed-YYYY.json.
 func tasksDir(owner string) string {
 	base := cfg.Data
 	if owner != "" {
 		base = filepath.Join(cfg.Data, privateDir, owner)
 	}
-	dir := filepath.Join(base, tasksDirName)
-	if legacy := filepath.Join(base, legacyTasksDirName); !exists(dir) && isDir(legacy) {
-		return legacy
-	}
-	return dir
+	return filepath.Join(base, tasksDirName)
 }
 
 func tasksFile(owner string) string     { return filepath.Join(tasksDir(owner), "tasks.json") }

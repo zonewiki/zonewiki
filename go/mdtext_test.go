@@ -137,7 +137,7 @@ func TestPrepareMasksCode(t *testing.T) {
 }
 func TestPreparePlaceholders(t *testing.T) {
 	testWiki(t, nil)
-	text, embeds, refs := prepare("[[tasks:]] [[DECK list=work]] [[task:ABCD-1234]]\u00a0[[deck\u00a0view=x]]")
+	text, embeds, refs := prepare("[[tasks:]] [[TASKS: list=work]] [[task:ABCD-1234]]\u00a0[[tasks:\u00a0view=x]]")
 	if text != "LEAFTASKSPLACEHOLDER_0 LEAFTASKSPLACEHOLDER_1 \ue0020\ue003\u00a0LEAFTASKSPLACEHOLDER_2" {
 		t.Errorf("text %q", text)
 	}

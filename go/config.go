@@ -12,49 +12,20 @@ import (
 	"regexp"
 	"runtime/debug"
 	"strings"
-	"sync"
 	"time"
 )
 
 const appName = "Zone"
 
-// legacyAppName: Zone's name before, its commits' author in older wikis.
-const legacyAppName = "Leaf"
-
 // Zone's version (semver), bumped by hand when a change is worth a number.
-const version = "1.2.0"
+const version = "2.0.0"
 
 // Where this version's source is, linked from the shortcuts dialog. The AGPL has
 // whoever runs a changed Zone for others offer them its source: a fork changes this.
 const sourceURL = "https://github.com/gklingler/zonewiki"
 
-// environ: the environment Zone reads its deployment settings from, with
-// the names from before Leaf was called Zone (zoneEnv).
-var environ = zoneEnv(os.Getenv, logf)
-
-// zoneEnv: getenv, where a ZONE_ variable that isn't set is read by its old
-// name, LEAF_…, until Zone 2.0 (oldnames.go); warn says once what to call it.
-func zoneEnv(getenv func(string) string, warn func(format string, args ...any)) func(string) string {
-	var mu sync.Mutex
-	warned := map[string]bool{}
-	return func(name string) string {
-		v := getenv(name)
-		rest, ok := strings.CutPrefix(name, "ZONE_")
-		if v != "" || !ok {
-			return v
-		}
-		old := "LEAF_" + rest
-		if v = getenv(old); v != "" {
-			mu.Lock()
-			if !warned[old] {
-				warned[old] = true
-				warn("%s is the name from before Leaf was called Zone: call it %s in .env (the old name works until Zone %s)", old, name, oldNamesUntil)
-			}
-			mu.Unlock()
-		}
-		return v
-	}
-}
+// environ: the environment Zone reads its deployment settings from.
+var environ = os.Getenv
 
 // Config: what is fixed for the process, from the environment. What the
 // wiki's settings file can set, and Zone reloads, is Settings
@@ -71,29 +42,12 @@ type Config struct {
 
 var cfg *Config
 
-// Zone's own folder in the wiki: the settings file (committed), the session
-// key, the caches, drafts (not). An older Zone's is .leaf/, moved at start-up
-// (migrateNames); Zone reads it while it is the only one there.
-const (
-	stateDirName       = ".zone"
-	legacyStateDirName = ".leaf"
-)
+// Zone's own folder in the wiki: the settings file, the session key, the
+// caches, drafts. None of it is in git (excludeState).
+const stateDirName = ".zone"
 
-// stateDirIn: Zone's folder in the wiki data, .zone/, or .leaf/ while that
-// one is still the wiki's (not moved yet, or the move failed): .zone/ has no
-// settings file, and either .leaf/ has one or .zone/ is missing or empty. So
-// a stray .zone/ never leaves the wiki without its settings, and its login.
-func stateDirIn(data string) string {
-	dir, old := filepath.Join(data, stateDirName), filepath.Join(data, legacyStateDirName)
-	if !isDir(old) || exists(filepath.Join(dir, "config")) {
-		return dir
-	}
-	entries, _ := os.ReadDir(dir)
-	if exists(filepath.Join(old, "config")) || len(entries) == 0 {
-		return old
-	}
-	return dir
-}
+// stateDirIn: Zone's folder in the wiki data.
+func stateDirIn(data string) string { return filepath.Join(data, stateDirName) }
 
 // statePath: a file in Zone's folder of the wiki (stateDirIn).
 func statePath(parts ...string) string {
@@ -146,9 +100,6 @@ var localeRE = regexp.MustCompile(`^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$`)
 func loadConfig(getenv func(string) string) (*Config, *Settings, error) {
 	c, err := loadWiki(getenv)
 	if err != nil {
-		return nil, nil, err
-	}
-	if err := staleEnv(getenv); err != nil {
 		return nil, nil, err
 	}
 	f, err := readConfigFile(filepath.Join(stateDirIn(c.Data), "config"))

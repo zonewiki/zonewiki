@@ -122,44 +122,6 @@ func writeTestPage(t *testing.T, rel string) {
 	}
 }
 
-// untrackSettings takes a settings file Zone used to commit out of git, in
-// a commit of its own; what was staged by hand stays staged, the file on disk.
-func TestUntrackSettings(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("no git")
-	}
-	testWiki(t, nil)
-	cfg.GitEnabled = true
-	gitSetup()
-	// As an older Zone left it: the file committed, its exception in exclude.
-	writeTestPage(t, ".zone/config")
-	writeTestPage(t, "p.md")
-	runGit("add", "-f", ".zone/config", "p.md")
-	runGit("commit", "-q", "-m", "As before")
-	writeTestPage(t, "staged.md")
-	runGit("add", "staged.md")
-	excludeState(cfg.Data)
-	untrackSettings()
-	if runGit("ls-files", "--", ".zone/config").Stdout != "" {
-		t.Error("still tracked")
-	}
-	if got := runGit("log", "-1", "--format=%an|%s", "--name-status").Stdout; !strings.Contains(got, "Zone|Keep the settings file out of git") ||
-		!strings.Contains(got, "D\t.zone/config") || strings.Contains(got, "staged.md") {
-		t.Errorf("commit: %q", got)
-	}
-	if !exists(filepath.Join(cfg.Data, ".zone", "config")) {
-		t.Error("the file went")
-	}
-	if status := runGit("status", "--porcelain").Stdout; !strings.Contains(status, "A  staged.md") || strings.Contains(status, ".zone") {
-		t.Errorf("status: %q", status)
-	}
-	head := runGit("rev-parse", "HEAD").Stdout
-	untrackSettings() // again: nothing to do
-	if runGit("rev-parse", "HEAD").Stdout != head {
-		t.Error("a second commit")
-	}
-}
-
 // A wiki whose history has users' commits but no settings file lost its
 // users (a clone of its remote): Zone won't start on it, open.
 func TestMissingUsers(t *testing.T) {

@@ -24,9 +24,6 @@ case "$1" in
     while [ "$1" != --iidfile ]; do shift; done
     echo fake-image > "$2" ;;
   create) echo fake-container ;;
-  container)
-    [ -n "$FAKE_LEAF_LABELS" ] || exit 1
-    [ "$4" != --format ] || echo "$FAKE_LEAF_LABELS" ;;
   image) exit 1 ;;
   run|start) exit "${FAKE_EXIT:-0}" ;;
 esac
@@ -54,7 +51,7 @@ def sandbox(tmp_path):
     engine.write_text(FAKE_ENGINE)
     engine.chmod(0o755)
     env = {k: v for k, v in os.environ.items()
-           if not k.startswith(("GIT_", "LEAF_"))}
+           if not k.startswith(("GIT_", "ZONE_"))}
     env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
     env["FAKE_LOG"] = str(tmp_path / "engine.log")
     _git(repo, "init", "-q")
@@ -219,7 +216,7 @@ def test_eval_mounts_the_wiki_read_only_and_builds_with_the_model(sandbox, tmp_p
     repo, env, log = sandbox
     wiki = tmp_path / "wiki"
     (wiki / "_eval").mkdir(parents=True)
-    (repo / ".env").write_text(f"ZONE_DATA={wiki}\nLEAF_SEMANTIC_SEARCH=on\n")
+    (repo / ".env").write_text(f"ZONE_DATA={wiki}\nZONE_SEMANTIC_SEARCH=on\n")
     r = subprocess.run(["./run.sh", "eval"], cwd=repo, env=env, capture_output=True, text=True)
     assert r.returncode == 1 and "No questions at" in r.stderr
     (wiki / "_eval" / "retrieval.json").write_text("[]")
@@ -253,51 +250,10 @@ def test_user_and_config_run_zonewiki_in_a_one_off_container(sandbox, tmp_path):
     assert r.returncode == 1 and "No wiki at" in r.stderr
 
 
-@pytest.mark.parametrize("labels,removed", [
-    ('{"com.docker.compose.project":"leaf","com.docker.compose.service":"leaf"}', True),   # compose's, before the rename
-    ('{"io.podman.compose.project":"leaf","com.docker.compose.project":"leaf"}', True),   # podman-compose's
-    ("null", True),                                                                       # an older run.sh's podman run
-    ('{"com.docker.compose.project":"other"}', False),                                    # someone else's
-])
-def test_up_removes_the_container_from_before_the_rename(sandbox, tmp_path, labels, removed):
-    repo, env, log = sandbox
-    (tmp_path / "wiki").mkdir()
-    (repo / ".env").write_text(f"ZONE_DATA={tmp_path / 'wiki'}\n")
-    env["FAKE_LEAF_LABELS"] = labels
-    r = subprocess.run(["./run.sh", "up"], cwd=repo, env=env, capture_output=True, text=True)
-    assert r.returncode == 0, r.stderr
-    assert ("rm -f leaf" in log.read_text().splitlines()) == removed
-    assert ("Removing the container leaf" in r.stdout) == removed
-    assert [l for l in _engine_calls(log, "compose") if " up -d --build" in l]
-
-
-def test_up_without_an_old_container_removes_nothing(sandbox, tmp_path):
-    repo, env, log = sandbox
-    (tmp_path / "wiki").mkdir()
-    (repo / ".env").write_text(f"ZONE_DATA={tmp_path / 'wiki'}\n")
-    r = subprocess.run(["./run.sh", "up"], cwd=repo, env=env, capture_output=True, text=True)
-    assert r.returncode == 0, r.stderr
-    assert "rm -f leaf" not in log.read_text().splitlines()
-
-
-def test_up_reads_the_old_variable_names_from_env(sandbox, tmp_path):
-    repo, env, log = sandbox
-    (tmp_path / "wiki").mkdir()
-    (repo / ".env").write_text(f"LEAF_DATA={tmp_path / 'wiki'}\nLEAF_ALLOW_REMOTE=1\n")
-    r = subprocess.run(["./run.sh", "up"], cwd=repo, env=env, capture_output=True, text=True)
-    assert r.returncode == 0, r.stderr
-    assert f"Zone data: {tmp_path / 'wiki'}" in r.stdout
-    assert "Note: LEAF_DATA in .env is the name from before Leaf was called Zone: call it ZONE_DATA." in r.stderr
-    assert "Note: LEAF_ALLOW_REMOTE in .env" in r.stderr
-
-
-def test_the_default_wiki_is_zonewiki_or_leaf_while_only_that_exists(sandbox, tmp_path):
+def test_the_default_wiki_is_zonewiki_in_the_home_folder(sandbox, tmp_path):
     repo, env, log = sandbox
     env["HOME"] = str(tmp_path / "home")
-    (tmp_path / "home" / "leaf").mkdir(parents=True)
+    (tmp_path / "home" / "zonewiki").mkdir(parents=True)
     (repo / ".env").write_text("TZ=UTC\n")
-    r = subprocess.run(["./run.sh", "up"], cwd=repo, env=env, capture_output=True, text=True)
-    assert r.returncode == 0 and f"Zone data: {tmp_path / 'home' / 'leaf'}" in r.stdout, r.stderr
-    (tmp_path / "home" / "zonewiki").mkdir()
     r = subprocess.run(["./run.sh", "up"], cwd=repo, env=env, capture_output=True, text=True)
     assert r.returncode == 0 and f"Zone data: {tmp_path / 'home' / 'zonewiki'}" in r.stdout, r.stderr

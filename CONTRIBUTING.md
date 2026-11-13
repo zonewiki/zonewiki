@@ -9,7 +9,7 @@ declined because it doesn't fit, not because it's a bad one.
 Open an issue with the **Bug report** template. It asks for:
 
 - **Zone's version**: press `?` in Zone (the shortcuts dialog shows it at the
-  bottom, e.g. `Zone 1.2.0 · c28ec9e 2026-09-26 19:22`), or open
+  bottom, e.g. `Zone 2.0.0 · c28ec9e 2026-09-26 19:22`), or open
   `/api/version`.
 - **How you run it**: `run.sh` with Podman or Docker, or without a
   container; the OS; the browser, and whether it's a phone.

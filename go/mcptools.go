@@ -85,15 +85,6 @@ func strArg(args jsonObj, name string, required bool) (string, error) {
 	return s, nil
 }
 
-// renamedBoolArg: boolArg by name, or by old, what it was called before
-// (an assistant may still send that).
-func renamedBoolArg(args jsonObj, name, old string) (bool, error) {
-	if args.null(name) && !args.null(old) {
-		name = old
-	}
-	return boolArg(args, name)
-}
-
 // boolArg: true or false; missing or null is false.
 func boolArg(args jsonObj, name string) (bool, error) {
 	b, ok := as[bool](args[name])
@@ -1522,7 +1513,7 @@ func listPages(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	onlyQuicknote, err := renamedBoolArg(args, "notes", "scratch")
+	onlyQuicknote, err := boolArg(args, "notes")
 	if err != nil {
 		return "", err
 	}
@@ -1699,12 +1690,10 @@ func grepWiki(args jsonObj, base, user string) (string, error) {
 }
 
 // fileLabel: a changed file as the model knows it, a page by its slug, the
-// task files as tasks (in _deck/ in the history from before the move).
+// task files as tasks.
 func fileLabel(fp string) string {
-	for _, dir := range []string{tasksDirName, legacyTasksDirName} {
-		if strings.HasPrefix(fp, dir+"/") || strings.Contains(fp, "/"+dir+"/") {
-			return "tasks"
-		}
+	if strings.HasPrefix(fp, tasksDirName+"/") || strings.Contains(fp, "/"+tasksDirName+"/") {
+		return "tasks"
 	}
 	return strings.TrimSuffix(fp, ".md")
 }
@@ -2002,7 +1991,7 @@ func searchWiki(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	quicknote, err := renamedBoolArg(args, "notes", "scratch")
+	quicknote, err := boolArg(args, "notes")
 	if err != nil {
 		return "", err
 	}
@@ -2052,10 +2041,6 @@ var mcpToolFuncs = map[string]func(args jsonObj, base, user string) (string, err
 	"update_task": updateTaskTool,
 }
 
-// mcpToolAliases: tools by the names they had before, for assistants that
-// still call them so; tools/list shows only the new ones.
-var mcpToolAliases = map[string]string{"file_scratch_note": "file_note", "leaf_help": "zone_help"}
-
 // callMCPTool runs a tool for the request r, as its token's user: links in
 // its answer use base-url (the settings file), else the address the client reached Zone at.
 func callMCPTool(r *http.Request, name string, args jsonObj) (string, error) {
@@ -2066,9 +2051,6 @@ func callMCPTool(r *http.Request, name string, args jsonObj) (string, error) {
 			scheme = "https"
 		}
 		base = scheme + "://" + r.Host
-	}
-	if n, ok := mcpToolAliases[name]; ok {
-		name = n
 	}
 	f, ok := mcpToolFuncs[name]
 	if !ok {

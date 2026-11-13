@@ -698,10 +698,10 @@ func firstPinned(pinned []TasksHome) *TasksHome {
 }
 
 // pinnedParam: an embed pins its list (pin=1, or pin=default for the
-// default list; home=1, its name before 2026-11).
+// default list).
 func pinnedParam(p TasksParams) bool {
 	pin := strings.TrimSpace(p.Get("pin"))
-	return isTrue(pin) || strings.EqualFold(pin, "default") || isTrue(p.Get("home"))
+	return isTrue(pin) || strings.EqualFold(pin, "default")
 }
 
 // pinnedName: what a pinned list is called: its list, else its page's title.

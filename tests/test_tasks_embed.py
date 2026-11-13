@@ -110,17 +110,10 @@ class TestTasksLinkRender:
             assert "tasks-app" in html, variant
         assert 'data-init-tag="work"' in preview(client, "[[tasks:tag=work]]\n")
 
-    def test_the_old_deck_syntax_still_embeds(self, client, wiki_dir):
-        """[[deck …]] is how pages wrote it before Deck was called Tasks."""
-        for variant in ["[[deck]]\n", "[[Deck]]\n", "[[DECK]]\n", "[[deck list=shop view=focus]]\n"]:
-            assert "tasks-app" in preview(client, variant), variant
-        html = preview(client, "[[deck list=shop view=focus]]\n")
-        assert 'data-init-list="shop"' in html and 'data-init-view="focus"' in html
-
     def test_a_link_to_a_page_called_tasks_stays_a_link(self, client, wiki_dir):
         """The colon is what makes the embed: [[Tasks]] links to the page Tasks."""
         write_page(wiki_dir, "tasks", "# Tasks\n")
-        for variant in ["[[Tasks]]\n", "[[tasks]]\n", "[[Tasks|my list]]\n", "[[decks]]\n", "[[deckchair]]\n"]:
+        for variant in ["[[Tasks]]\n", "[[tasks]]\n", "[[Tasks|my list]]\n", "[[tasksheet]]\n"]:
             html = preview(client, variant)
             assert "tasks-app" not in html and "wikilink" in html, variant
 

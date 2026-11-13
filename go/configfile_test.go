@@ -573,59 +573,33 @@ func mustParse(t *testing.T, text string) *settingsfile.File {
 func TestConfigCommands(t *testing.T) {
 	wiki := t.TempDir()
 	hash := hashPassword("pw")
-	// The settings as the environment held them before 2026-10.
-	env := map[string]string{"ZONE_DATA": wiki, "LEAF_LOCALE": "de-AT", "LEAF_HOSTS": "nas.local",
-		"LEAF_USERS": "alice,mary-ann", "LEAF_USER_ALICE_PASSWORD": hash, "LEAF_USER_ALICE_MCP_TOKEN": "s3cret-tok",
-		"LEAF_USER_MARY_ANN_PASSWORD": hash, "ZONE_ALLOW_REMOTE": "1", "LEAF_SECRET_KEY": "k"}
+	env := map[string]string{"ZONE_DATA": wiki, "ZONE_ALLOW_REMOTE": "1"}
 	getenv := func(k string) string { return env[k] }
 	run := func(input string, args ...string) (int, string, string) {
 		var out, errs bytes.Buffer
 		code := configMain(args, getenv, strings.NewReader(input), &out, &errs)
 		return code, out.String(), errs.String()
 	}
-	if code, _, errs := run("", "check"); code != 1 || !strings.Contains(errs, "LEAF_HOSTS, LEAF_LOCALE, LEAF_USERS are set") {
-		t.Errorf("check before the import: %d %q", code, errs)
-	}
-	code, out, errs := run("", "import")
-	if code != 0 || !strings.Contains(out, "  LEAF_USER_ALICE_MCP_TOKEN\n") || !strings.Contains(out, "  LEAF_LOCALE\n") ||
-		!strings.Contains(out, "  LEAF_SECRET_KEY (no longer used") || strings.Contains(out, "ZONE_ALLOW_REMOTE") {
-		t.Fatalf("import: %d %q %q", code, out, errs)
-	}
-	f, _ := readConfigFile(filepath.Join(wiki, ".zone", "config"))
-	if f.Top["locale"].Value != "de-AT" || f.Top["hosts"].Value != "nas.local" ||
-		f.User("alice").Values["mcp-token"].Value != hashToken("s3cret-tok") ||
-		f.User("mary-ann").Values["password"].Value != hash {
-		t.Fatalf("%s", f.Text())
-	}
-	env = map[string]string{"ZONE_DATA": wiki, "ZONE_ALLOW_REMOTE": "1"}
-	code, out, _ = run("", "check")
+	_ = os.Mkdir(filepath.Join(wiki, ".zone"), 0o777)
+	_ = settingsfile.Write(filepath.Join(wiki, ".zone", "config"), "locale = de-AT\nhosts = nas.local\n\n[user alice]\npassword = "+hash+
+		"\nmcp-token = "+hashToken("s3cret-tok")+"\n\n[user mary-ann]\npassword = "+hash+"\n")
+	code, out, _ := run("", "check")
 	if code != 0 || !strings.Contains(out, "locale             de-AT  [line ") ||
 		!strings.Contains(out, "users              alice (MCP token), mary-ann") ||
 		!strings.Contains(out, "noshare            #noshare  [default]") || strings.Contains(out, "sha256") {
 		t.Errorf("check:\n%s", out)
 	}
-	if code, out, _ := run("", "import"); code != 0 || !strings.Contains(out, "Nothing to import") {
-		t.Errorf("import, nothing: %q", out)
-	}
 	if code, _, errs := run("pw\npw\n", "passwd"); code == 0 || !strings.Contains(errs, "zonewiki user passwd NAME") {
 		t.Errorf("passwd with users: %q", errs)
 	}
-	// Without users: the wiki's password and token; a plain LEAF_PASSWORD goes in as its hash.
+	// Without users: the wiki's password and token.
 	wiki2 := t.TempDir()
-	env = map[string]string{"ZONE_DATA": wiki2, "LEAF_PASSWORD": "secret", "LEAF_MCP_TOKEN": "tok"}
-	if code, _, errs := run("", "import"); code != 0 {
-		t.Fatal(errs)
-	}
-	f, _ = readConfigFile(filepath.Join(wiki2, ".zone", "config"))
-	if !checkPassword("secret", f.Top["password"].Value) || f.Top["mcp-token"].Value != hashToken("tok") {
-		t.Errorf("%s", f.Text())
-	}
 	env = map[string]string{"ZONE_DATA": wiki2}
 	if code, out, errs := run("new\nnew\n", "passwd"); code != 0 || !strings.Contains(out, "Changed the wiki's password") {
 		t.Fatal(errs)
 	}
 	code, out, _ = run("", "token")
-	f, _ = readConfigFile(filepath.Join(wiki2, ".zone", "config"))
+	f, _ := readConfigFile(filepath.Join(wiki2, ".zone", "config"))
 	if code != 0 || !checkPassword("new", f.Top["password"].Value) || f.Top["mcp-token"].Value != hashToken(lastWord(out)) {
 		t.Errorf("passwd, token: %q %s", out, f.Text())
 	}
@@ -656,7 +630,7 @@ func TestConfigCommands(t *testing.T) {
 	f.Set("", "password", hashPassword("pw"))
 	f.Set("", "mcp-token", hashToken("t"))
 	_ = settingsfile.Write(filepath.Join(wiki2, ".zone", "config"), f.Text())
-	code, out, errs = run("", "unset", "password")
+	code, out, errs := run("", "unset", "password")
 	if code2, _, _ := run("", "unset", "mcp-token"); code != 0 || code2 != 0 || !strings.Contains(out, "no login") {
 		t.Errorf("unset password, token: %d %d %q", code, code2, errs)
 	}

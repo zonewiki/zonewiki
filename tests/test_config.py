@@ -153,17 +153,6 @@ def test_a_password_without_users(client, wiki_dir, monkeypatch):
     assert signed_in(client)
 
 
-def test_a_setting_left_in_the_environment_stops_zone(client, wiki_dir, monkeypatch):
-    """Zone reads the wiki's settings only from the file; one still in .env
-    would be ignored (a forgotten LEAF_PASSWORD: an open wiki)."""
-    monkeypatch.setattr(settings, "ENV", {"LEAF_PASSWORD": "pw"})
-    with pytest.raises(RuntimeError, match="didn't start"):
-        client.get("/page/index", headers=HOST)
-    log = client.live.log.read_text()
-    assert "LEAF_PASSWORD is set in the environment (.env), but Zone reads the wiki's settings only" in log
-    assert "./run.sh config import" in log
-
-
 def git(wiki, *args):
     return subprocess.run(["git", *args], cwd=wiki, capture_output=True, text=True, check=True,
                           env=settings.GIT_ENV).stdout
@@ -190,36 +179,6 @@ def test_the_file_is_kept_out_of_git_and_never_shown(client, git_wiki_dir, monke
     for path in ("/uncommitted", "/api/uncommitted"):
         body = client.get(path, headers=HOST).data.decode()
         assert ".zone" not in body, path
-
-
-@pytest.mark.parametrize("line,kept", [("/.leaf/\n", ""), ("*.tmp\n/.leaf/", "*.tmp\n"), (".leaf\n", ""),
-                                       ("/.zone/*\n!/.zone/config\n", "")])
-def test_an_older_wikis_exclude_lines_go(client, git_wiki_dir, monkeypatch, line, kept):
-    """A wiki an older Zone set up excluded all of .leaf/ (also as written by
-    hand), or all of .zone/ but the settings file: those lines go."""
-    exclude = git_wiki_dir / ".git" / "info" / "exclude"
-    assert exclude.read_text().endswith("/.zone/*\n") and "!/.zone/config" not in exclude.read_text()
-    exclude.write_text(line)
-    monkeypatch.setattr(settings, "CONFIG_FILE", "locale = de-AT\n")
-    client.get("/page/index", headers=HOST)
-    assert exclude.read_text() == kept + "/.zone/*\n"
-    assert ".zone" not in git(git_wiki_dir, "ls-files")
-
-
-def test_an_older_wikis_settings_file_leaves_git_in_one_commit(client, git_wiki_dir, monkeypatch):
-    """Zone committed the file until 2026-11: at start it takes it out, the
-    file staying on disk."""
-    monkeypatch.setattr(settings, "LEAF_USERS", dict(USERS))
-    client.get("/page/index", headers=HOST)
-    client.live.stop()
-    git(git_wiki_dir, "add", "-f", ".zone/config")
-    git(git_wiki_dir, "commit", "-qm", "As an older Zone did")
-    client.get("/page/index", headers=HOST)
-    assert ".zone" not in git(git_wiki_dir, "ls-files")
-    assert git(git_wiki_dir, "log", "-1", "--format=%s").strip() == \
-        "Keep the settings file out of git: it holds the users and their password hashes"
-    assert (git_wiki_dir / ".zone" / "config").exists()
-    assert "change the passwords" in client.live.log.read_text()
 
 
 def test_a_clone_without_its_users_doesnt_start_open(client, git_wiki_dir, monkeypatch):
