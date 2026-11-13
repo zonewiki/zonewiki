@@ -121,16 +121,14 @@ async function refresh() {
 let closedLoading = null;
 function fetchClosed() {
   if (st.closedLoaded) return Promise.resolve();
-  // One request at a time: the filter field asks for these on every render.
+  // One request at a time.
   return closedLoading ||= loadClosed().finally(() => { closedLoading = null; });
 }
 async function loadClosed() {
   let closed, gen;
-  // The page load fetches open and closed tasks at the same time (the
-  // filter field, restored by the browser on reload, asks for closed
-  // matches). If fetchTasks replaced `tasks` meanwhile, merging into it would
-  // be lost: fetch again. This race made the match count flip between
-  // reloads.
+  // Only for the Closed view. If fetchTasks replaced `tasks` meanwhile (a
+  // reload of the list while these were on their way), fetch again: what
+  // was asked for may be another year's by now.
   loadClosedYears();
   do {
     gen = tasksGen;

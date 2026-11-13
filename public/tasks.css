@@ -171,7 +171,6 @@ div.chip-input > input {
   font: inherit; font-size: .8rem; color: var(--muted); cursor: pointer;
 }
 .tasks-closed-link:hover { color: var(--link); text-decoration: underline; }
-.tasks-closed-link.has-matches { font-weight: 600; }  /* muted like the plain link, just a touch heavier */
 /* /tasks?list=…: where the list comes from; Pinned: the lists it shows. */
 .tasks-list-home { margin: -.5rem 0 1rem; font-size: .85rem; color: var(--muted); }
 .task-quick-preview { margin-top: .25rem; font-size: .8rem; color: var(--link); }

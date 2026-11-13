@@ -265,8 +265,10 @@ On phones the control spans the full width.
   It was called Completed: a wiki from then is renamed when Zone starts (`renameOldClosed`: `completed.json` and `completed-YYYY.json` become `closed.json` and `closed-YYYY.json`, never over a file that is there; a task's `completed_at` is read where it has no `closed_at`, and the files are written again with the new field), in one commit, "Name the task files of closed tasks closed".
   Nothing else is kept of the old names: a page's `view=completed`, a link with it and a client asking the old routes get what an unknown view or route gets.
   In Closed, the link reads `← Back to <tab>`, naming the tab it returns to.
-  While filtering another view it counts the matching closed tasks instead (`2 matches in Closed →`, no number while loading).
-  `/api/tasks` returns open tasks only, so closed tasks are fetched on demand (`fetchClosed`, one request at a time); `tasksGen` refetches if `fetchTasks` replaced the list meanwhile.
+  While a filter is on (text or a tag in the field, an embed's `tag=`) it reads `Closed →`, without a number: the total would read as what the filter leaves.
+  The filter carries over into Closed, so a click shows the closed tasks it matches.
+  (The link once counted them, `2 matches in Closed →`. That took every closed task of the year and its texts' HTML, loaded behind each filtered list right after it was drawn, and a second draw of the list when they arrived: too much for a number.)
+  `/api/tasks` returns open tasks only, so closed tasks are fetched only when Closed is opened (`fetchClosed`, one request at a time); `tasksGen` refetches if `fetchTasks` replaced the list meanwhile.
   Closed's heading has a **year switcher** (`.closed-years`, years from `/api/tasks/closed-years`, shown when there is more than one) for the yearly archives;
   `?year=YYYY` opens that year (search links to archived tasks carry it), and going back to a tab returns to this year (`setClosedYear`).
 

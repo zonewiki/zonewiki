@@ -6,7 +6,7 @@
 import TasksCore from '../tasks-core.js';
 import { people } from './taskutil.js';
 
-const { matchesFilter, parseFilter, tagParamToQuery } = TasksCore;
+const { parseFilter, tagParamToQuery } = TasksCore;
 
 export function initTaskTabs(app) {
 const { st } = app;
@@ -19,30 +19,18 @@ const VIEWS = ['open', 'plan', 'focus', 'closed'];
 // The tab to return to from Closed (the link's "back" state).
 st.lastTab = 'focus';
 
-// While the filter field is in use, the link counts the closed tasks it
-// matches ("✓ 2 matches in Closed →"), so a search that comes up empty
-// here still shows where the task went. That needs the closed tasks,
-// which are otherwise only loaded when the view is opened. The unfiltered
-// total is never shown while filtering: it would read as the number of
-// closed tasks the filter leaves.
+// While the filter field is in use (or the embed has a tag), the link has
+// no number: the total would read as the number of closed tasks the filter
+// leaves. Those aren't counted either: that took every closed task of the
+// year, loaded behind each filtered list only for this link; the filter
+// carries over into Closed, which shows them.
 // The view is called Closed: it holds what is done and what was closed
 // undone (won't do). So are its param (view=closed), routes and files.
 function syncClosedLink() {
   if (!app.closedLink) return;
-  let matches = null;
   const f = parseFilter(filterQuery(), people);
-  const filtering = st.activeView !== 'closed' &&
-    (f.text || f.tagGroups.length || f.excludeTags.length || f.assigneeGroups.length || f.excludeAssignees.length);
-  if (filtering) {
-    if (!st.closedLoaded) { app.fetchClosed(); }
-    else {
-      matches = st.tasks.filter(t => t.closed_at && matchesFilter(t, f)).length;
-    }
-  }
-  app.closedLink.classList.toggle('has-matches', matches > 0);
+  const filtering = f.text || f.tagGroups.length || f.excludeTags.length || f.assigneeGroups.length || f.excludeAssignees.length;
   app.closedLink.textContent = st.activeView === 'closed' ? `← Back to ${app.tabLabel(st.lastTab)}`
-    : matches ? `${matches} ${matches === 1 ? 'match' : 'matches'} in Closed →`
-    : matches === 0 ? 'No matches in Closed →'
     : filtering ? 'Closed →'
     : `Closed${st.closedCount != null ? ` (${st.closedCount})` : ''} →`;
 }

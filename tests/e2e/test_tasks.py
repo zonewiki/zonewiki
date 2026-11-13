@@ -767,43 +767,37 @@ def test_embed_filter_completed_still_opens_completed(page, wiki):
     expect(page.locator("#task-closed-link")).to_have_text("← Back to Focus")
 
 
-def test_filter_points_to_matches_in_completed(page, wiki):
-    page.request.post("/api/tasks", data={"title": "Buy milk"})
+def test_a_filter_does_not_load_the_closed_tasks(page, wiki):
+    # While a filter is on, the link has no number (the total would read as
+    # what the filter leaves) and the closed tasks aren't counted: that
+    # loaded all of them behind every filtered list, and drew it again.
+    page.request.post("/api/tasks", data={"title": "Buy milk", "tags": ["shop"]})
     for title in ("Buy bread", "Fix bike"):
-        tid = page.request.post("/api/tasks", data={"title": title}).json()["id"]
+        tid = page.request.post("/api/tasks", data={"title": title, "tags": ["shop"]}).json()["id"]
         page.request.put(f"/api/tasks/{tid}", data={"completed": True})
-    wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
+    wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n\n[[tasks: tag=shop view=open]]\n")
+    asked = []
+    page.on("request", lambda r: asked.append(r.url) if "/api/tasks/closed" in r.url and "closed-count" not in r.url else None)
     page.goto("/page/tasks?view=open")
     link = page.locator("#task-closed-link")
     search = page.locator("#task-filter-search")
+    expect(link).to_have_text("Closed (2) →")
+    expect(page.locator("#task-closed-link-1")).to_have_text("Closed →")   # the embed's tag is a filter
 
     search.fill("bread")
-    expect(page.locator(".tasks-empty")).to_be_visible()   # nothing open matches…
-    expect(link).to_have_text("1 match in Closed →")  # …but it was done
-    expect(link).to_have_class(re.compile(r"\bhas-matches\b"))
-    # Subtle: the muted colour of the plain link, not the link blue.
-    match_colour = link.evaluate("el => getComputedStyle(el).color")
-    search.fill("buy")
-    expect(link).to_have_text("1 match in Closed →")
-    search.fill("b")
-    expect(link).to_have_text("2 matches in Closed →")
-    search.fill("milk")   # matches only the open task: no unfiltered total
-    expect(link).to_have_text("No matches in Closed →")
-    expect(link).not_to_have_class(re.compile(r"\bhas-matches\b"))
-    page.mouse.move(0, 0)  # no hover colour
-    assert link.evaluate("el => getComputedStyle(el).color") == match_colour
-    search.fill("#nosuchtag")
-    expect(link).to_have_text("No matches in Closed →")
+    expect(page.locator("#tasks-list .tasks-empty")).to_be_visible()   # nothing open matches
+    expect(link).to_have_text("Closed →")
+    page.wait_for_load_state("networkidle")
+    assert asked == []
 
-    search.fill("bread")
-    link.click()   # the filter carries over into Completed
+    link.click()   # the filter carries over into Closed, which loads them
     expect(card(page, "Buy bread")).to_be_visible()
-    expect(card(page, "Fix bike")).to_have_count(0)
+    expect(page.locator("#tasks-list").get_by_text("Fix bike")).to_have_count(0)
+    assert asked
 
     link.click()
     search.fill("")
     expect(link).to_have_text("Closed (2) →")
-    expect(link).not_to_have_class(re.compile(r"\bhas-matches\b"))
 
 
 def test_new_task_on_default_focus_starts_today(page, wiki):
@@ -1926,32 +1920,31 @@ def test_open_reorder_under_a_filter_keeps_hidden_tasks_in_place(page, wiki):
     wait_until(page, lambda: _by_order(page, "sort_order") == ["A2", "A1", "B1", "B2"])
 
 
-def test_completed_matches_survive_the_load_race(page, wiki):
-    # Regression: with a filter at load, the completed tasks were fetched in
-    # parallel with the open ones. When they arrived first, the open tasks
-    # replaced the list and the completed ones were lost for good: the link
-    # said "No matches" on some reloads and "1 match" on others.
-    # (The page brings its open tasks along now; a list reloading while the
-    # filter asks for the completed ones is the same race.)
+def test_closed_tasks_survive_the_load_race(page, wiki):
+    # Regression: the closed tasks were fetched in parallel with the open
+    # ones. When they arrived first, the open tasks replaced the list and the
+    # closed ones were lost for good. (It showed in the link's count of
+    # matches in Closed, which is gone; Closed opened while the list reloads
+    # is the same race.)
     t = page.request.post("/api/tasks", data={"title": "Buy milk"}).json()
     page.request.put(f"/api/tasks/{t['id']}", data={"completed": True})
     page.request.post("/api/tasks", data={"title": "Something else"})
 
     def slow_open_tasks(route):
-        page.wait_for_timeout(400)  # the completed tasks arrive first
+        page.wait_for_timeout(400)  # the closed tasks arrive first
         route.continue_()
     page.route("**/api/tasks", slow_open_tasks)
     page.goto("/tasks?view=open")
     expect(card(page, "Something else")).to_be_visible()
-    # Only once the (slow) open tasks are in: before that the link already
-    # showed the right count, and the bug only struck when they replaced it.
+    # Only once the (slow) open tasks are in: before that Closed already
+    # showed the task, and the bug only struck when they replaced the list.
     with page.expect_response("**/api/tasks"):
         page.evaluate("() => { document.dispatchEvent(new Event('visibilitychange')); }")  # the list reloads
-        page.locator("#task-filter-search").fill("milk")
-        expect(page.locator("#task-closed-link")).to_have_text("1 match in Closed →")
-    expect(card(page, "Something else")).to_have_count(0)  # filtered out
+        page.locator("#task-closed-link").click()
+        expect(card(page, "Buy milk")).to_be_visible()
     page.wait_for_timeout(300)
-    expect(page.locator("#task-closed-link")).to_have_text("1 match in Closed →")
+    expect(card(page, "Buy milk")).to_be_visible()
+    expect(card(page, "Something else")).to_have_count(0)
 
 
 def test_ticked_tasks_stay_ticked_when_the_first_one_goes(page, wiki):
