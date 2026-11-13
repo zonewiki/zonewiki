@@ -379,15 +379,24 @@ st.closedYear = /^\d{4}$/.test(urlParams.get('year') || '') && urlParams.get('ye
 st.closedYears = [];   // years Closed can show (/api/tasks/closed-years)
 
 // Remember the active tab per page + embed instance for the current tab only
-// (sessionStorage): a refresh lands on the last-clicked tab, but a fresh load
+// (sessionStorage): a reload lands on the tab it left, but a fresh load
 // in a new tab / next day starts empty so the embed's configured filter loads.
 const tabStorageKey = `zone-tasks-tab:${location.pathname}#${instanceId}`;
-function saveActiveTab(f) { try { sessionStorage.setItem(tabStorageKey, f); } catch (_) {} }
+// The tab shown, whoever chose it (the user, a link's ?view=, the embed): what
+// a reload comes back to. The tab the user chose is what a plain [[tasks:]]
+// opens on; a link's tab isn't remembered for that.
+const shownStorageKey = `zone-tasks-shown:${location.pathname}#${instanceId}`;
+function saveShownTab(f) { try { sessionStorage.setItem(shownStorageKey, f); } catch (_) {} }
+function loadShownTab() { try { return sessionStorage.getItem(shownStorageKey); } catch (_) { return null; } }
+function saveActiveTab(f) { saveShownTab(f); try { sessionStorage.setItem(tabStorageKey, f); } catch (_) {} }
 function loadActiveTab() { try { return sessionStorage.getItem(tabStorageKey); } catch (_) { return null; } }
 // The settings dialog saved: the tab and the Plan switch this browser tab
 // remembered give way to the new defaults.
 function forgetSession() {
-  try { sessionStorage.removeItem(tabStorageKey); sessionStorage.removeItem(groupKey()); } catch (_) {}
+  try {
+    sessionStorage.removeItem(tabStorageKey); sessionStorage.removeItem(shownStorageKey);
+    sessionStorage.removeItem(groupKey());
+  } catch (_) {}
 }
 
 Object.assign(app, initTaskData(app));
@@ -467,12 +476,15 @@ if (filterSearch) {
   filterChips.set(tagParamToQuery(initTag).split(' ').filter(Boolean), true);
   filterSearch.value = initSearch || '';
 }
-// Precedence: URL ?view= > embed view (always wins when specified) >
-// tab remembered this session > Focus default. So a [[tasks: view=…]] embed
-// always opens on its configured tab; a plain [[tasks:]] remembers the tab the
-// user last clicked across refreshes within the same browser tab. A name that
-// isn't one of VIEWS is passed over.
-st.activeView = [urlView, embedView, loadActiveTab()].find(v => VIEWS.includes(v)) || 'focus';
+// Precedence when a page is opened: URL ?view= > embed view > tab remembered
+// this session > Focus default. So a link and a [[tasks: view=…]] embed open
+// on their tab, and a plain [[tasks:]] on the one last shown in this browser
+// tab. A reload (F5) is not opening the page: it stays on the tab it showed,
+// whatever the URL or the embed say, so the tab it showed comes first. A
+// name that isn't one of VIEWS is passed over.
+const isReload = performance.getEntriesByType?.('navigation')[0]?.type === 'reload';
+st.activeView = [isReload && loadShownTab(), urlView, embedView, loadActiveTab()].find(v => VIEWS.includes(v)) || 'focus';
+saveShownTab(st.activeView);
 if (st.activeView !== 'closed') st.lastTab = st.activeView;
 applyCompact(st.activeView);
 applySort();
@@ -484,7 +496,8 @@ syncClosedLink();
 // task — the link sets its tab, and here it is selected, scrolled into view
 // and briefly highlighted. By id, not by title: a title can be shared, or
 // contain a #word the filter field would read as a tag.
-const initTaskId = urlParams.get('task') || '';
+// Not after a reload on another tab than the link's: the user has moved on.
+const initTaskId = isReload && VIEWS.includes(urlView) && st.activeView !== urlView ? '' : urlParams.get('task') || '';
 function revealTask(id) {
   if (!st.tasks.some(t => t.id === id)) {
     // Deleted (or in another list). One notice per page.

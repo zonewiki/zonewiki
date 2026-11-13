@@ -14,7 +14,7 @@ Case doesn't matter (`[[Tasks:]]`), nor a space after the colon (`[[tasks:list=s
 | Parameter | Values | Default | Description |
 |-----------|--------|---------|-------------|
 | `tag` | comma-separated tags | — | Pre-filters by tag. Comma = AND, pipe `a\|b` = OR, a leading `-` excludes (`tag=work,-mary`). The chips are locked (the page says what it shows); new tasks get the single tags, but a task's tags stay editable. |
-| `view` | `focus`, `open`, `plan`, `closed` | Focus (or the tab remembered this session) | Opens on that tab on every load; a URL `?view=` overrides it. Case doesn't matter; any other name (`views`) opens the default. |
+| `view` | `focus`, `open`, `plan`, `closed` | Focus (or the tab remembered this session) | Opens on that tab whenever the page is opened; a URL `?view=` overrides it, and a reload stays on the tab it showed (see Views). Case doesn't matter; any other name (`views`) opens the default. |
 | `plan` | `on`, `off` | on | What the Open tab shows: on, the board by start date (Plan); off, one list. With `view=open` or `view=plan` it decides which of the two opens (`view=open` alone is the list, `view=plan` the board, as always). The Plan switch still flips it, for the browser tab (see Views). |
 | `limit` | integer 1–99 | none | WIP limit: Focus warns at this many tasks, and Plan day sections with at least this many are flagged amber. `?limit=N` works on `/tasks`. |
 | `list` | a tag | — | Makes the embed a separate list: it shows the tasks with that tag, the tag is locked there and marked as a list everywhere (see Tasks → Separate lists). Cleaned like tags, lowercased (`cleanList`). |
@@ -172,7 +172,11 @@ Its default is the embed's `plan=` (on without it; `data-init-plan`), set in the
 A flip is remembered for the browser tab only (`sessionStorage` `zone-tasks-group:<path>|<list>|<tag>|<instance>`, `days` or `list`), as the active tab is, so a fresh load is back at the default, and the Open tab (a click, Tab) opens it (`tabView`, `openGroup`).
 (Until 2026-11 the flip was kept in `localStorage` for good, and there was no default to set.) The views keep their names, so `?view=plan` / `view=plan` open Days and `view=open` the List, as they always did.
 (Plan was a tab of its own until 2026-10; with every section in the manual order and labelled Unsorted/Sorted, it had become Open grouped by day, and the List what's left of Open: ranking across days, and every new task in one Unsorted list.) **Tab**/**Shift+Tab** cycle the tabs.
-Initial view: URL `?view=` > embed `view=` > tab remembered in `sessionStorage` (plain embeds only) > Focus.
+Initial view, when a page is opened: URL `?view=` > embed `view=` > tab remembered in `sessionStorage` > Focus.
+**A reload (F5) keeps the tab**: the tab shown is remembered for the browser tab (`sessionStorage` `zone-tasks-shown:<path>#<instance>`, saved when a tab is chosen and when the page opens on one), and on a reload (`performance`'s navigation type `reload`) it comes first, before the URL's and the embed's `view`.
+The tab the user chose is kept apart (`zone-tasks-tab:<path>#<instance>`): it is what a page without a `view` opens on, and a tab a link chose doesn't become that.
+So a task opened from a link (`/tasks?task=…&view=open`) and then left for Focus is still on Focus after F5; the link's task is then not selected again either.
+Opening the page anew (a link, the address bar, another browser tab) follows the URL and the embed as before.
 On phones the control spans the full width.
 
 - **Open, Plan off** (`open`): every open task, in two sections: **Unsorted** (no `sort_order`, newest first; new tasks land here) above **Sorted** (manual order).

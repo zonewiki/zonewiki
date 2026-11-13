@@ -1040,6 +1040,36 @@ def test_bulk_tag_nothing_changed_sends_nothing(page, wiki):
     expect(page.locator(".task-undo-toast")).to_have_count(0)
 
 
+def test_a_reload_keeps_the_tab(page, wiki):
+    # A link opens its tab; F5 after going elsewhere stays there.
+    task = page.request.post("/api/tasks", data={"title": "Linked", "start_date": date.today().isoformat()}).json()
+    active = page.locator("#tasks-tabs .active")
+    page.goto(f"/tasks?task={task['id']}&view=open")
+    expect(active).to_have_text(["Open"])
+    expect(card(page, "Linked")).to_have_class(re.compile(r"\btask-selected\b"))
+    page.reload()                                     # nothing chosen yet: still the link's tab
+    expect(active).to_have_text(["Open"])
+    open_tab(page, "focus")
+    page.reload()
+    expect(active).to_have_text(["Focus"])
+    expect(card(page, "Linked")).to_be_visible()
+    expect(card(page, "Linked")).not_to_have_class(re.compile(r"\btask-selected\b"))  # the link's task isn't picked again
+    page.reload()
+    expect(active).to_have_text(["Focus"])
+    # Opening the link again follows it.
+    page.goto(f"/tasks?task={task['id']}&view=open")
+    expect(active).to_have_text(["Open"])
+    # An embed that names its tab: the same. Opened, its tab; reloaded, the one shown.
+    wiki.write("board", "# Board\n\n[[tasks: view=open]]\n")
+    page.goto("/page/board")
+    expect(active).to_have_text(["Open"])
+    open_tab(page, "focus")
+    page.reload()
+    expect(active).to_have_text(["Focus"])
+    page.goto("/page/board")
+    expect(active).to_have_text(["Open"])
+
+
 def seed_four(page):
     # Open shows them newest first: Saw, Glue, Nuts, Bolts.
     for title in ("Bolts", "Nuts", "Glue", "Saw"):
@@ -3148,10 +3178,10 @@ def test_compact_defaults_per_tab(page, wiki):
     expect(app).not_to_have_class(COMPACT)
     open_tab(page, "focus")
     expect(app).to_have_class(COMPACT)
-    page.reload()                                       # the URL says Open
-    expect(app).not_to_have_class(COMPACT)              # Open, as left
-    open_tab(page, "focus")
+    page.reload()                                       # stays on Focus, whatever the URL says
     expect(app).to_have_class(COMPACT)                  # Focus, as left
+    open_tab(page, "open")
+    expect(app).not_to_have_class(COMPACT)              # Open, as left
 
 
 def test_compact_choice_is_per_tasks(page, wiki):
