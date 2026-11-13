@@ -1592,7 +1592,7 @@ class TestCreateTask:
         assert "New tags, used nowhere else yet: #meeting." in text
 
     def test_creates_with_fields(self, client, wiki_dir):
-        text, err = call(client, "create_task", title="Renew passport", notes="at the Bürgeramt",
+        text, err = call(client, "create_task", title="Renew passport", description="at the Bürgeramt",
                          tags=["admin", "#home"], due="2026-11-01", start="2026-10-20")
         assert not err and text.startswith(f"Created (today is {date.today()}).\n\nTask: Renew passport\n")
         assert "status: open · tags: #admin #home · start: 2026-10-20 · due: 2026-11-01" in text
@@ -1644,11 +1644,17 @@ class TestCreateTask:
 class TestUpdateTask:
     def test_changes_only_given_fields(self, client, wiki_dir):
         tid = _task_id(call(client, "create_task", title="Report", tags=["work"], due="2026-10-15",
-                            notes="draft")[0])
+                            description="draft")[0])
         text, err = call(client, "update_task", id=tid, due="2026-10-20", add_tags=["urgent", "WORK"])
         assert not err
         assert "tags: #work #urgent · due: 2026-10-20" in text and "draft" in text
-        text, _ = call(client, "update_task", id=tid, remove_tags=["work"], due="", notes="")
+        # The field's name before it was "description": refused, not dropped without a word.
+        text, err = call(client, "update_task", id=tid, notes="lost?")
+        assert err and "give it as description, not notes" in text
+        assert call(client, "create_task", title="X", notes="lost?")[1]
+        text, err = call(client, "update_task", id=tid, description="final")
+        assert not err and "final" in text and "draft" not in text
+        text, _ = call(client, "update_task", id=tid, remove_tags=["work"], due="", description="")
         assert "tags: #urgent" in text and "due:" not in text and "draft" not in text
 
     def test_status_done_spawns_the_next_occurrence(self, client, wiki_dir):
@@ -1675,7 +1681,7 @@ class TestUpdateTask:
         full = client.post("/api/tasks", json={"title": "By id"}, headers=HOST).get_json()["id"]
         for ref in (full, full[:8], f"[[task:{full[:8]}]]", f"http://localhost:5000/tasks?task={full}",
                     f"http://localhost:5000/deck?task={full}"):   # a link from before the rename
-            text, err = call(client, "update_task", id=ref, notes=ref)
+            text, err = call(client, "update_task", id=ref, description=ref)
             assert not err, ref
 
     def test_errors(self, client, wiki_dir):

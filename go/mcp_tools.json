@@ -59,7 +59,7 @@
     },
     "query": {
      "type": "string",
-     "description": "Words to look for in title, notes and tags; \"exact phrase\", -word and edited:/after:/before: (last activity, e.g. after:2026-09-01) work too."
+     "description": "Words to look for in title, description and tags; \"exact phrase\", -word and edited:/after:/before: (last activity, e.g. after:2026-09-01) work too."
     },
     "order": {
      "type": "string",
@@ -753,9 +753,9 @@
      "type": "string",
      "description": "What to do, in a few words."
     },
-    "notes": {
+    "description": {
      "type": "string",
-     "description": "The task's notes (markdown). Replaces the notes there are."
+     "description": "Markdown; replaces the one there is."
     },
     "tags": {
      "type": "array",
@@ -842,9 +842,9 @@
     "title": {
      "type": "string"
     },
-    "notes": {
+    "description": {
      "type": "string",
-     "description": "The task's notes (markdown). Replaces the notes there are."
+     "description": "Markdown; replaces the one there is."
     },
     "tags": {
      "type": "array",

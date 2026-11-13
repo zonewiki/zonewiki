@@ -305,13 +305,18 @@ func splitComma(s string) []string { return strings.Split(s, ",") }
 // given); task, when updating one, for add_tags/remove_tags and repeat.
 func taskFields(args jsonObj, task *Task) (jsonObj, error) {
 	data := jsonObj{}
-	for _, f := range [][2]string{{"title", "title"}, {"notes", "description"}} {
-		if args.Has(f[0]) {
-			s, err := strArg(args, f[0], false)
+	// An assistant whose tool list is from before the field was renamed:
+	// told, since an argument a tool doesn't know is dropped without a word.
+	if args.Has("notes") {
+		return nil, toolErr("A task's text is its description: give it as description, not notes")
+	}
+	for _, f := range []string{"title", "description"} {
+		if args.Has(f) {
+			s, err := strArg(args, f, false)
 			if err != nil {
 				return nil, err
 			}
-			data.Set(f[1], strings.TrimSpace(s))
+			data.Set(f, strings.TrimSpace(s))
 		}
 	}
 	for _, f := range [][2]string{{"due", "due_date"}, {"start", "start_date"}} {
