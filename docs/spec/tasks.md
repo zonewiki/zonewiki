@@ -35,6 +35,7 @@ Case doesn't matter (`[[Tasks:]]`), nor a space after the colon (`[[tasks:list=s
 ```
 
 The params can be changed without editing the page: the gear in the embed's toolbar (see Settings).
+In the editor, the formatting bar's Task list button writes the embed from a dialog, and changes the one the cursor is on (Task list dialog in `docs/spec/editor.md`).
 
 **Headless instance**: `build_tasks_embed(params, headless=True)` renders the app hidden, for pages that only need its edit modal (the editor's Make task, see Task references).
 `openEditModal(null, opts)` takes, besides `tags`, a starting `title`, `description`, `start_date` and an `onCreated(task)` callback; `titles` instead of `title` is batch mode (one task per title, the fields shared, `onCreated` gets the array).

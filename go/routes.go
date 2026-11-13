@@ -6,10 +6,12 @@ import (
 	"errors"
 	"html/template"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -255,6 +257,7 @@ type editView struct {
 	PrivateOffer                string // a new shared page from a private one: the private slug to link instead
 	LeftDraft                   *leftDraftView
 	Paste                       *pasteHintView // after Move to wiki (pasteHint)
+	TaskLists                   []string       // the lists there are, for the Task list dialog
 	BreadcrumbHTML, TasksHTML   template.HTML
 }
 
@@ -368,6 +371,7 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 		CanRename: editable && !isProtected(slug), CanDelete: editable && !isProtected(slug),
 		Git: cfg.GitEnabled, RenameError: q.Get("rename_error"), RenameName: q.Get("rename_name"), LeftDraft: left,
 		PrivateOffer: privateOffer, Paste: pasteHint(rq, q.Get("paste"), q.Get("copied") == "1"),
+		TaskLists:      slices.Sorted(maps.Keys(rq.taskLists())),
 		BreadcrumbHTML: buildBreadcrumb(rq, slug, title, "", "", extra),
 		TasksHTML:      htmlOf(buildTasksEmbed(rq, TasksParams{}, 0, true, ownPrivate(rq.user, slug), ""))})
 }

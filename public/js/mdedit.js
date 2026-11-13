@@ -300,7 +300,9 @@ export function markdownEditor(textarea, { bar = null, attachInput = null, onCha
   }
 
   // A block on its own lines after the current one (on the current line if
-  // that is blank), selecting [selStart, selEnd) of the block.
+  // that is blank), a blank line between it and the text before it (in the
+  // text's paragraph a table or a task list would be its words), selecting
+  // [selStart, selEnd) of the block.
   function insertBlockAfterLine(block, selStart, selEnd) {
     const v = textarea.value;
     let at = v.indexOf('\n', textarea.selectionEnd);
@@ -308,7 +310,8 @@ export function markdownEditor(textarea, { bar = null, attachInput = null, onCha
     const lineStart = v.lastIndexOf('\n', at - 1) + 1;
     const blankLine = !v.slice(lineStart, at).trim();
     const pos = blankLine ? lineStart : at;
-    const before = blankLine ? '' : (v[pos - 1] === '\n' ? '\n' : '\n\n');
+    const textAbove = blankLine && lineStart > 0 && !!v.slice(v.lastIndexOf('\n', lineStart - 2) + 1, lineStart - 1).trim();
+    const before = blankLine ? (textAbove ? '\n' : '') : (v[pos - 1] === '\n' ? '\n' : '\n\n');
     const end = blankLine ? at : pos;
     replaceRange(pos, end, before + block, before.length + selStart, before.length + selEnd);
   }
@@ -394,7 +397,7 @@ export function markdownEditor(textarea, { bar = null, attachInput = null, onCha
     if (btn) applyFormat(btn.dataset.fmt);
   });
 
-  return { applyFormat, replaceRange, selectedLines, linkAc };
+  return { applyFormat, replaceRange, selectedLines, insertBlockAfterLine, linkAc };
 }
 
 // ── Upload conflict ───────────────────────────────────────────────────────────

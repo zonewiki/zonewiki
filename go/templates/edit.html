@@ -72,6 +72,22 @@
     <div id="editor-preview" class="page-content"></div>
   </div>
 </div>
+{{- /* The formatting bar's Task list: what the [[tasks: …]] it writes shows
+    and how it opens (js/tasklist.js). On a line that is one already, it
+    changes that one. */}}
+<dialog id="tasklist-dialog" class="modal promote-modal tasklist-modal"><p class="modal-label" id="tasklist-label">Task list</p><form id="tasklist-form">
+<label class="promote-field">List<input type="text" id="tasklist-list" list="tasklist-lists" placeholder="all tasks" autocomplete="off" spellcheck="false"></label>
+<datalist id="tasklist-lists">{{range .TaskLists}}<option value="{{.}}">{{end}}</datalist>
+<p class="modal-desc">A name makes it a list of its own (the tasks tagged with it); none shows all tasks.</p>
+<label class="promote-field">Only the tags<input type="text" id="tasklist-tag" placeholder="every task" title="a,b both · a|b either · -a without" autocomplete="off" spellcheck="false"></label>
+<div class="tasklist-row">
+<label class="promote-field">Opens on<select id="tasklist-view"><option value="">Focus</option><option value="plan">Open, by day (Plan)</option><option value="open">Open, one list</option></select></label>
+<label class="promote-field">WIP limit<input type="number" id="tasklist-limit" min="1" max="99" placeholder="none" inputmode="numeric"></label>
+</div>
+<label class="promote-check"><input type="checkbox" id="tasklist-keep"> New tasks are keep tasks (back on the list when done)</label>
+<label class="promote-check"><input type="checkbox" id="tasklist-pin"> Pinned: the Tasks link opens it</label>
+<p class="promote-preview" aria-live="polite"><code id="tasklist-preview"></code></p>
+<div class="modal-actions"><button type="submit" class="btn btn-primary" id="tasklist-ok">Insert</button><button type="button" class="btn" id="tasklist-cancel">Cancel</button></div></form></dialog>
 {{- /* A hidden task app: Make task (js/editor.js) opens its edit modal, and
     uses the task app's quick-add parser (tasks-core.js) for several lines at once. */}}
 {{.TasksHTML}}

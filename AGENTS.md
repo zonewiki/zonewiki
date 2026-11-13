@@ -166,7 +166,7 @@ Auth is optional (a password, or users; see Key Constraints).
     ├── tasks.css           # The task app's styling, loaded after style.css
     ├── zonewiki.js             # The entry ES module every page loads; imports the modules below
     ├── js/                 # ES modules: chrome, git, util, completion, search, actions, pagemenu,
-    │                       #   shortcuts, mdedit, mdtext (the text functions shared with the server), editor, page, figures, fold, present; the task app's parts
+    │                       #   shortcuts, mdedit, mdtext (the text functions shared with the server), editor, tasklist (its Task list dialog), page, figures, fold, present; the task app's parts
     │                       #   taskdata, taskview, taskorder, tasktabs, taskchips, taskrender, taskmodal, taskselect, taskmenu, taskkeys, taskdnd, tasktouch, tasksettings; tasktexts, taskutil, datepicker (see Client code in `docs/spec/rendering.md`)
     ├── tasks-core.js       # Pure task logic (no DOM), an ES module — shared by tasks.js, the editor and Node-run tests
     ├── tasks.js            # The task app, an ES module zonewiki.js imports; initTaskApps() starts each .tasks-app: it puts one together and starts its parts in js/task*.js (app, app.st; tests/test_task_app_wiring.py checks what they use of each other)

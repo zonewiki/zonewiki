@@ -2,6 +2,7 @@ import TasksCore from '../tasks-core.js';
 import { openTasksEdit } from '../tasks.js';
 import { localDate, localizeDates, showToast } from './util.js';
 import { markdownEditor } from './mdedit.js';
+import { taskListDialog } from './tasklist.js';
 import { mathFence, mathFenceEnd, opensCodeFence, wikilinkHref } from './mdtext.js';
 import { HIGHLIGHT_CODE, renderFigures } from './figures.js';
 
@@ -24,11 +25,11 @@ if (textarea && previewPane) {
     .replace(/^\/edit\//, ''));
   // The markdown helpers (js/mdedit.js), shared with the task app's task notes;
   // Enter on a [[wikilink]] follows it (after saving).
-  const { replaceRange, selectedLines } = markdownEditor(textarea, {
+  const { replaceRange, selectedLines, insertBlockAfterLine } = markdownEditor(textarea, {
     bar: document.getElementById('format-bar'),
     attachInput: document.getElementById('fmt-attach-input'),
     onChange: schedulePreview,
-    formats: { maketask: makeTasks },
+    formats: { maketask: makeTasks, tasklist: () => taskListDialog(textarea, { replaceRange, insertBlockAfterLine }) },
     page: pageSlug,
     onEnter: e => {
       const wlText = wikilinkAtCursor();

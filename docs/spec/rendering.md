@@ -99,6 +99,7 @@ They share code by `import`, not through `window`:
 | `js/git.js` | Uncommitted badge, Commit buttons, forms that confirm first (`data-confirm`) |
 | `js/search.js` | Search modal and its preview, Notes filter, highlights on a page opened from search |
 | `js/actions.js` | New note / page / task (`openDefaultTask`, loading a hidden tasks when the page has none), action bar, sharing mode |
+| `js/tasklist.js` | The editor's Task list dialog (`taskListDialog`): the `[[tasks: …]]` an embed's fields make, written or changed in the text |
 | `js/pagemenu.js` | The page's ⋯ menu and its dialogs (rename, move to wiki, append, delete) |
 | `js/shortcuts.js` | Keyboard shortcuts |
 | `js/mdedit.js` | `markdownEditor`: the markdown helpers of the editor and the task app's task notes (formatting bar, completion, snippets, lists, uploads) |
