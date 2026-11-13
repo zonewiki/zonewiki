@@ -410,6 +410,7 @@ Each with a dark-mode value.
   a bar fixed at the bottom of the window: "N selected",
   **All** (`selectAllVisible`; disabled when every task shown is selected),
   **Tag…** (the bulk tag dialog),
+  **List…** (the list dialog, below; hidden while no page declares a list),
   **Today** (start them today, `startToday`: one `batch-update` for the open ones not starting today, one undo putting back each one's start date and history; today is never after a deadline still to come, and starting an overdue task today is the catch-up case, so no deadline question),
   **Unplan** (clear their start dates, `startOn(ids, null)`, as the **0** key: one `batch-update` for the open ones that have one, one undo putting them back; shown while an open selected task has a start date, `anyPlanned`),
   **Done** (`completeMany`, as Space; **Reopen** when every selected task is closed, which also hides Today and Won't do),
@@ -417,7 +418,13 @@ Each with a dark-mode value.
   Toasts move up above it.
   The **⋯ menu** of a card in the selection (its button, a right-click, which then keeps the selection, or Shift+F10) offers the same for all of them, titled "N tasks" (`runSelectionAction`).
   With several task lists on a page only the active one's bar shows (`claimInstance`).
-  At ≤640px the bar spans the bottom edge in place of the phone tab bar (hidden while it shows): "N selected", All and ✕ on top, the actions as a row of equal buttons under them, ≥44px tall; the page end and toasts keep clear of it.
+  At ≤640px the bar spans the bottom edge in place of the phone tab bar (hidden while it shows): "N selected", All and ✕ on top, the actions as buttons sharing the width under them (on a second row when one doesn't hold them), ≥44px tall; the page end and toasts keep clear of it.
+- **Moving several tasks to a list** (`openBulkListModal`, `.bulk-list-modal`; the selection bar's **List…**, **Move to list…** in the menu of a selected card): the dialog, "Move 3 tasks to a list", lists every list you see (the declared ones, A–Z, each as its `#name`, its page in the tooltip) and **No list**.
+  A click on a row moves the selected tasks at once (↑/↓ go through the rows, Enter picks, Esc or Cancel leaves).
+  A list is a tag, so the move swaps tags in one `batch-tag`: the chosen list's tag is added, the other lists' tags the selection carries go, and every other tag stays; No list only takes the lists' tags away.
+  The row of the list every selected task is in (and no other) is ticked and has the focus; a list only some are in says how many ("1 of 3").
+  One undo puts back every task's tags ("3 tasks moved to list “work”", "3 tasks taken out of their lists").
+  The selection stays, as after Tag…; in a list's own view the moved tasks leave it.
 - **Bulk tags** (`openBulkTagModal`, `.bulk-tag-modal`; **t**, or **T** to remove, on the selected tasks): the dialog lists every tag the selection carries (`TasksCore.selectionTags`, case ignored, most common first),
   each a three-state box (`role="checkbox"`, `aria-checked`): on every task ✓,
   on some – ("2 of 3", left as it is),

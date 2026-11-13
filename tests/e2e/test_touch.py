@@ -193,6 +193,33 @@ def test_select_mode_taps_toggle_cards(selecting):
     expect(bar.locator(".tasks-selbar-count")).to_have_text("4 selected")
 
 
+def test_select_mode_bar_fits_every_action(selecting, wiki):
+    # Every action at once (a list to move to, something to unplan): the
+    # buttons stay inside the bar, whole and finger-sized, on a phone.
+    pg = selecting
+    wiki.write("shop", "# Shop\n\n[[tasks: list=shop]]\n")
+    for t in tasks_by_title(pg).values():
+        pg.request.put(f"/api/tasks/{t['id']}", data={"start_date": date.today().isoformat()})
+    pg.reload()
+    open_menu(pg, "Saw").get_by_role("menuitem", name="Select several").tap()
+    bar = pg.locator("#task-selbar")
+    pg.locator("#task-selbar [data-sel='all']").tap()
+    buttons = bar.locator(".tasks-selbar-actions .btn")
+    expect(buttons).to_have_text(["Tag…", "List…", "Today", "Unplan", "Done", "Won't do"])
+    assert pg.evaluate("document.documentElement.scrollWidth") <= 390
+    box = bar.bounding_box()
+    assert box["x"] == 0 and box["width"] == 390 and abs(box["y"] + box["height"] - 844) < 1, box
+    for b in buttons.all():
+        bb = b.bounding_box()
+        assert bb["x"] >= 0 and bb["x"] + bb["width"] <= 390 and bb["height"] >= 44, (b.inner_text(), bb)
+        assert b.evaluate("el => el.scrollWidth <= el.clientWidth"), b.inner_text()
+    # The last card stays reachable above the bar.
+    last = pg.locator(".task-item").last
+    last.scroll_into_view_if_needed()
+    lb = last.bounding_box()
+    assert lb["y"] + lb["height"] <= bar.bounding_box()["y"] + 1, (lb, bar.bounding_box())
+
+
 def test_select_mode_has_no_swipes_or_drags(selecting):
     pg = selecting
     touch_drag(pg, card(pg, "Bolts"), card(pg, "Saw"))

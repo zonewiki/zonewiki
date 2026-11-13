@@ -768,8 +768,8 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
     padding: .5rem .75rem calc(.6rem + env(safe-area-inset-bottom));
   }
   .tasks-selbar-count { flex: 1; }
-  .tasks-selbar-actions { order: 1; flex-basis: 100%; }
-  .tasks-selbar-actions .btn { flex: 1 1 0; }
+  .tasks-selbar-actions { order: 1; flex-basis: 100%; flex-wrap: wrap; }
+  .tasks-selbar-actions .btn { flex: 1 1 auto; padding-inline: .5rem; }
   .tasks-selbar .btn { min-height: 2.75rem; font-size: .9rem; }
   body:has(.tasks-selbar:not([hidden])) .action-buttons { display: none; }
   body:has(.tasks-selbar:not([hidden])) main { padding-bottom: calc(8.5rem + env(safe-area-inset-bottom)); }
@@ -800,6 +800,9 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 .bulk-tag-row[aria-checked="mixed"] .bulk-tag-box::after { content: "–"; }
 .bulk-tag-row[aria-checked="false"] .task-tag { text-decoration: line-through; opacity: .6; }
 .bulk-tag-count { margin-left: auto; font-size: .75rem; color: var(--muted); }
+/* The list dialog (openBulkListModal): the lists as rows, the selection's own ticked. */
+.bulk-list-mark { flex: none; width: 1rem; text-align: center; color: var(--btn-primary); font-weight: 700; }
+.bulk-list-none { font-size: .85rem; color: var(--muted); }
 @media (hover: none) { .bulk-tag-row { min-height: 44px; } }
 
 /* ⋯ per-card menu button + the menu itself. The expand button (a chevron)

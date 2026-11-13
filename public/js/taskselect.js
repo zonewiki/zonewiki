@@ -134,10 +134,70 @@ function openBulkTagModal(ids, removing = false) {
   else dlg.querySelector('.bulk-tag-row')?.focus({ preventScroll: true });
 }
 
+// The list of several selected tasks at once (the selection bar's List…):
+// every list there is, A–Z, each a row; a click moves the selected tasks
+// there at once. A list is a tag a page declares, so moving swaps the tags:
+// the chosen list's is added and the selection's other lists' go. "No list"
+// takes them out of every list. The row of the list every task is in
+// already is ticked; one that only some are in says how many.
+function openBulkListModal(ids) {
+  const idSet = new Set(ids);
+  const chosen = st.tasks.filter(t => idSet.has(t.id));
+  const lists = [...app.listSet].sort();
+  if (!chosen.length || !lists.length) return;
+  const count = chosen.length;
+  const listsOf = t => (t.tags || []).filter(x => app.listSet.has(x.toLowerCase()));
+  const inList = name => chosen.filter(t => listsOf(t).some(x => x.toLowerCase() === name)).length;
+  const inNone = chosen.filter(t => !listsOf(t).length).length;
+  const row = (name, label, n) => {
+    const only = n === count && (name ? chosen.every(t => listsOf(t).length === 1) : true);
+    const part = n && !only ? `<span class="bulk-tag-count">${n} of ${count}</span>` : '';
+    const tip = name ? ` title="${esc(app.listTooltip(name))}"` : '';
+    return `<li><button type="button" class="bulk-tag-row bulk-list-row" data-list="${esc(name)}" aria-current="${only}">` +
+      `<span class="bulk-list-mark" aria-hidden="true">${only ? '✓' : ''}</span>` +
+      `<span class="${name ? 'task-tag task-tag-list' : 'bulk-list-none'}"${tip}>${label}</span>${part}</button></li>`;
+  };
+  const dlg = document.createElement('dialog');
+  dlg.className = 'modal bulk-tag-modal bulk-list-modal';
+  dlg.innerHTML = `
+    <p class="modal-label">Move ${count} task${count > 1 ? 's' : ''} to a list</p>
+    <ul class="bulk-tag-list">${lists.map(name => row(name, '#' + esc(name), inList(name))).join('')}${row('', 'No list', inNone)}</ul>
+    <div class="modal-actions">
+      <button type="button" class="btn" id="bulk-list-cancel">Cancel</button>
+    </div>`;
+  document.body.appendChild(dlg);
+  const close = () => { if (dlg.open) dlg.close(); };
+  dlg.addEventListener('close', () => dlg.remove());
+  dlg.querySelector('#bulk-list-cancel').addEventListener('click', close);
+  dlg.addEventListener('click', ev => { if (ev.target === dlg) close(); });
+  const rows = [...dlg.querySelectorAll('.bulk-list-row')];
+  dlg.addEventListener('keydown', ev => {
+    if (ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp') return;
+    ev.preventDefault();
+    const i = rows.indexOf(document.activeElement);
+    rows[(i + (ev.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length].focus();
+  });
+  dlg.querySelector('.bulk-tag-list').addEventListener('click', ev => {
+    const btn = ev.target.closest('.bulk-list-row');
+    if (!btn) return;
+    const target = btn.dataset.list;
+    // The selection's other lists go, in the spelling the tasks have them.
+    const others = [...new Set(chosen.flatMap(listsOf))].filter(x => x.toLowerCase() !== target);
+    close();
+    if (!target && !others.length) return;   // in no list already
+    const what = `${count} task${count > 1 ? 's' : ''}`;
+    bulkTag(ids, target ? [target] : [], others,
+      target ? `${what} moved to list “${target}”` : `${what} taken out of ${others.length > 1 ? 'their lists' : `list “${others[0]}”`}`);
+  });
+  dlg.showModal();
+  (rows.find(r => r.getAttribute('aria-current') === 'true') || rows[0]).focus({ preventScroll: true });
+}
+
 // Add and remove tags on the tasks `ids` (batch-tag), with one undo that
 // puts back each changed task's tags (batch-update). Tasks the change takes
-// out of this view (another list, the filter) say where they went.
-async function bulkTag(ids, add, remove) {
+// out of this view (another list, the filter) say where they went, unless
+// `label` says what happened (a move to a list).
+async function bulkTag(ids, add, remove, label = '') {
   const idSet = new Set(ids);
   const before = new Map(st.tasks.filter(t => idSet.has(t.id)).map(t => [t.id, t]));
   app.dismissUndo();
@@ -176,7 +236,7 @@ async function bulkTag(ids, add, remove) {
     msg = gone.length === 1 ? gone[0].msg
       : one ? `${gone.length} tasks saved to list “${one}”.` : `${gone.length} tasks no longer show here.`;
   }
-  app.showUndo(msg, () => batchUpdate(changed.map(u => ({ id: u.id, tags: before.get(u.id).tags || [] }))));
+  app.showUndo(label || msg, () => batchUpdate(changed.map(u => ({ id: u.id, tags: before.get(u.id).tags || [] }))));
 }
 
 // ── Selection ──────────────────────────────────────────────────────────────
@@ -258,6 +318,7 @@ function syncSelBar() {
   if (!show) return;
   const allDone = st.tasks.filter(t => st.selectedIds.has(t.id)).every(t => t.closed_at);
   app.selBar.querySelector('[data-sel="unplan"]').hidden = !anyPlanned();
+  app.selBar.querySelector('[data-sel="list"]').hidden = !app.listSet.size;   // no list to move to
   app.selBar.querySelector('.tasks-selbar-count').textContent =
     st.selectedIds.size ? `${st.selectedIds.size} selected` : 'Tap tasks to select';
   app.selBar.querySelectorAll('.tasks-selbar-actions .btn').forEach(b => { b.disabled = !st.selectedIds.size; });
@@ -285,6 +346,7 @@ function runSelectionAction(action) {
     case 'all':    selectAllVisible(); break;
     case 'clear':  exitSelectMode(); break;
     case 'tag':    if (ids.length) openBulkTagModal(ids); break;
+    case 'list':   if (ids.length) openBulkListModal(ids); break;
     case 'today':  startToday(ids); break;
     case 'unplan': startOn(ids, null); break;
     case 'done':
@@ -409,5 +471,5 @@ function visibleItems() {
   return Array.from(app.listEl.querySelectorAll('.task-item'));
 }
 
-return { openBulkTagModal, updateSelectionClasses, inSelection, toggleSelection, selectAllVisible, clearSelection, anyPlanned, enterSelectMode, exitSelectMode, syncSelBar, mayComplete, setImportance, runSelectionAction, startOn, completeMany, setSelected, extendSelection, visibleItems };
+return { openBulkTagModal, openBulkListModal, updateSelectionClasses, inSelection, toggleSelection, selectAllVisible, clearSelection, anyPlanned, enterSelectMode, exitSelectMode, syncSelBar, mayComplete, setImportance, runSelectionAction, startOn, completeMany, setSelected, extendSelection, visibleItems };
 }

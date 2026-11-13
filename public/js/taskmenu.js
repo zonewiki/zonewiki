@@ -33,6 +33,7 @@ function openTaskMenu(id, anchor, at) {
     const allDone = st.tasks.filter(t => st.selectedIds.has(t.id)).every(t => t.closed_at);
     const items = [
       ['tag', 'Tag…'],
+      app.listSet.size && ['list', 'Move to list…'],
       !allDone && ['today', 'Start today'],
       app.anyPlanned() && ['unplan', 'Unplan'],
       ['done', allDone ? 'Reopen' : 'Done'],

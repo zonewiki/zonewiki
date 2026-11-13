@@ -1132,6 +1132,74 @@ def test_selection_bar_tag_opens_the_dialog(page, wiki):
     assert selected_titles(page) == ["Saw", "Glue"]
 
 
+def test_selection_bar_moves_tasks_to_a_list(page, wiki):
+    # No list declared: nothing to move to, so no button.
+    seed_four(page)
+    card(page, "Saw").locator(".task-title").click()
+    card(page, "Glue").locator(".task-title").click(modifiers=["Shift"])
+    expect(page.locator("#task-selbar")).to_be_visible()
+    expect(page.locator("#task-selbar [data-sel='list']")).to_be_hidden()
+    wiki.write("shop", "# Shop\n\n[[tasks: list=shop]]\n")
+    wiki.write("work", "# Work\n\n[[tasks: list=work]]\n")
+    for title, tags in (("Saw", ["Shop", "tools"]), ("Glue", ["work"])):
+        page.request.put(f"/api/tasks/{task_by_title(page, title)['id']}", data={"tags": tags})
+    page.reload()
+    card(page, "Saw").locator(".task-title").click()
+    card(page, "Nuts").locator(".task-title").click(modifiers=["Shift"])     # Saw, Glue, Nuts
+    page.locator("#task-selbar [data-sel='list']").click()
+    dlg = page.locator(".bulk-list-modal")
+    expect(dlg.locator(".modal-label")).to_have_text("Move 3 tasks to a list")
+    rows = dlg.locator(".bulk-list-row")
+    expect(rows).to_have_text(["#shop1 of 3", "#work1 of 3", "No list1 of 3"])
+    dlg.get_by_role("button", name="#work").click()
+    expect(dlg).to_have_count(0)
+    toast = page.locator(".task-undo-toast")
+    expect(toast).to_contain_text("3 tasks moved to list “work”")
+    # The other list's tag goes, other tags stay; the selection is kept.
+    wait_for_field(page, "Saw", "tags", ["tools", "work"])
+    wait_for_field(page, "Glue", "tags", ["work"])
+    wait_for_field(page, "Nuts", "tags", ["work"])
+    assert task_by_title(page, "Bolts")["tags"] == []
+    assert selected_titles(page) == ["Saw", "Glue", "Nuts"]
+    # Now all three are in work alone: its row is ticked.
+    page.locator("#task-selbar [data-sel='list']").click()
+    expect(dlg.locator(".bulk-list-row[aria-current='true']")).to_have_text("✓#work")
+    expect(dlg.locator(".bulk-list-row[aria-current='true']")).to_be_focused()
+    page.keyboard.press("Escape")
+    # One undo puts every task's tags back.
+    toast.locator(".task-undo-btn").click()
+    wait_for_field(page, "Saw", "tags", ["Shop", "tools"])
+    wait_for_field(page, "Glue", "tags", ["work"])
+    wait_for_field(page, "Nuts", "tags", [])
+    # No list: out of every list. The menu of a selected card offers the move too.
+    card(page, "Glue").locator(".task-title").click(button="right")
+    page.locator(".task-menu").get_by_role("menuitem", name="Move to list…").click()
+    dlg.get_by_role("button", name="No list").click()
+    expect(toast).to_contain_text("3 tasks taken out of their lists")
+    wait_for_field(page, "Saw", "tags", ["tools"])
+    wait_for_field(page, "Glue", "tags", [])
+
+
+def test_moving_tasks_out_of_the_list_shown(page, wiki):
+    wiki.write("shop", "# Shop\n\n[[tasks: list=shop]]\n")
+    wiki.write("work", "# Work\n\n[[tasks: list=work]]\n")
+    for title in ("Bolts", "Nuts", "Glue"):
+        page.request.post("/api/tasks", data={"title": title, "tags": "shop"})
+    page.goto("/tasks?list=shop&view=open")
+    card(page, "Glue").locator(".task-title").click()
+    card(page, "Nuts").locator(".task-title").click(modifiers=["Shift"])
+    page.locator("#task-selbar [data-sel='list']").click()
+    page.locator(".bulk-list-modal").get_by_role("button", name="#work").click()
+    toast = page.locator(".task-undo-toast")
+    expect(toast).to_contain_text("2 tasks moved to list “work”")
+    expect(card(page, "Glue")).to_have_count(0)
+    expect(card(page, "Nuts")).to_have_count(0)
+    expect(card(page, "Bolts")).to_be_visible()
+    toast.locator(".task-undo-btn").click()
+    expect(card(page, "Glue")).to_be_visible()
+    expect(card(page, "Nuts")).to_be_visible()
+
+
 def test_selection_bar_today_with_undo(page, wiki):
     seed_four(page)
     later = (date.today() + timedelta(days=5)).isoformat()

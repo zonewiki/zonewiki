@@ -296,7 +296,7 @@ Without Playwright installed they skip, so plain `pytest tests/` is unaffected.
   Plan board in Open's order with in-section drops ignored,
   view tabs,
   start-date Today,
-  selection (Shift/Ctrl+click, Ctrl+A, the selection bar and the menu of a selection, the bulk tag dialog's three states and undo),
+  selection (Shift/Ctrl+click, Ctrl+A, the selection bar and the menu of a selection, the bulk tag dialog's three states and undo, moving the selection to a list),
   touch: tap-to-edit,
   ⋯ menu/bottom sheet,
   selection mode (taps toggle, no drags, the bar in the tab bar's place, its ways out),
