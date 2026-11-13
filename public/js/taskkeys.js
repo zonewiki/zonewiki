@@ -3,7 +3,7 @@
 // Undo toast. Only the app that was last used answers (activeTasksInstance).
 // What it uses of the app comes in app (its state in app.st).
 
-import { dateOffset, showNotice, startsAfterDeadline } from './taskutil.js';
+import { dateOffset, people, showNotice, startsAfterDeadline } from './taskutil.js';
 import { keyPrefix } from './util.js';
 
 export function initTaskKeys(app) {
@@ -54,11 +54,14 @@ document.addEventListener('keydown', async e => {
     app.filterSearch?.focus();
     return;
   }
-  if (e.key === '#' && !e.ctrlKey && !e.metaKey && !focus?.closest('input, textarea, select, [contenteditable]')) {
+  // ('@' with users: an assignee; AltGr, which types it on many keyboards,
+  // reports Ctrl+Alt on Windows.)
+  const sigil = e.key === '#' || e.key === '@' && people.users ? e.key : '';
+  if (sigil && !(e.ctrlKey && !e.altKey) && !e.metaKey && !focus?.closest('input, textarea, select, [contenteditable]')) {
     e.preventDefault();
     if (app.filterSearch) {
       const v = app.filterSearch.value.trimEnd();
-      app.filterSearch.value = v ? v + ' #' : '#';
+      app.filterSearch.value = v ? v + ' ' + sigil : sigil;
       app.filterSearch.focus();
       app.filterSearch.setSelectionRange(app.filterSearch.value.length, app.filterSearch.value.length);
       app.filterSearch.dispatchEvent(new Event('input'));

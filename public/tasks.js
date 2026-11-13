@@ -17,6 +17,7 @@ import TasksCore from './tasks-core.js';
 import { linkAutocomplete } from './js/completion.js';
 import { openLightbox } from './js/page.js';
 import { pasteUrlAsLink } from './js/util.js';
+import { people } from './js/taskutil.js';
 import { openDatePicker } from './js/datepicker.js';
 import { forgetInitialTasks, initTaskData } from './js/taskdata.js';
 import { initTaskView } from './js/taskview.js';
@@ -412,7 +413,7 @@ const { headerTasksMenu, confirmDeadlineMove } = app;
 // `query` defaults to the filter field; the tag autocomplete passes the
 // field minus the word being typed.
 function filterTasks(query = filterQuery()) {
-  return tasksInView(st.tasks, parseFilter(query), st.activeView, todayStr());
+  return tasksInView(st.tasks, parseFilter(query, people), st.activeView, todayStr());
 }
 
 Object.assign(app, initTaskOrder(app));

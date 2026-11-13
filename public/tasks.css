@@ -442,6 +442,13 @@ div.chip-input > input {
   border-radius: 3px; color: var(--muted);
 }
 
+/* Who has the task (with users), after its tags: a plain word like them,
+   your own name in the accent colour, a name that can no longer be given
+   tasks struck through. */
+.task-assignee { font-size: .75rem; padding: .1rem .2rem; border-radius: 3px; color: var(--muted); white-space: nowrap; }
+.task-assignee-me { color: var(--link); font-weight: 600; }
+.task-assignee-former, .tag-chip-former .tag-chip-label { text-decoration: line-through; opacity: .7; }
+
 .task-tags-right { display: flex; flex-wrap: wrap; gap: .2rem; align-items: center; }
 
 /* Cards (tasks.js taskHTML): one layout for every card. The first line:
@@ -581,13 +588,13 @@ div.task-card-comment > .task-comment-when { display: block; }
   /* The tags flow in the line itself, so the dates fit in after the last
      one when there is room. */
   .tasks-app .task-tags-right { display: contents; }
-  .tasks-app .task-tag { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .tasks-app .task-tag, .tasks-app .task-assignee { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
   /* Two short lines instead of one tall one: the finger-sized minimum is
      the row's, not each line's. */
   .tasks-app .task-item { --line: 1.75rem; min-height: 2.75rem; padding-block: .3rem; }
   .tasks-app .task-item .task-meta { line-height: 1.3; }
   /* A line with nothing on it takes no room. */
-  .tasks-app .task-meta:not(:has(.task-tag, .task-recurring, .task-last-done, .task-comments-btn, .task-has-notes, .task-date-info:not(.task-date-empty), .task-due:not(.task-date-empty))) {
+  .tasks-app .task-meta:not(:has(.task-tag, .task-assignee, .task-recurring, .task-last-done, .task-comments-btn, .task-has-notes, .task-date-info:not(.task-date-empty), .task-due:not(.task-date-empty))) {
     display: none;
   }
 }
@@ -1023,6 +1030,8 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 .task-settings-error { margin: 0; font-size: .85rem; color: #a33232; }
 .task-settings-error[hidden] { display: none; }
 .task-field { display: flex; flex-direction: column; gap: .25rem; }
+/* The Assignee field shows when set or asked for (js/taskmodal.js showField). */
+.task-field-assignee[hidden] { display: none; }
 /* Notes: one line above the field, as tall as the bar so nothing moves when
    it shows: the label, or while the field has the focus the editor's
    formatting bar in its place (the label stays for screen readers), and

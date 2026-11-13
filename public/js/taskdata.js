@@ -6,7 +6,7 @@
 
 import TasksCore from '../tasks-core.js';
 import { refreshDueBadge } from './chrome.js';
-import { formatDate, noticeFromResponse, placeToast, plainTitle, showNotice, startsAfterDeadline } from './taskutil.js';
+import { formatDate, loadPeople, noticeFromResponse, people, placeToast, plainTitle, setPeople, showNotice, startsAfterDeadline } from './taskutil.js';
 import { keepRendered, renderTexts, textsOf } from './tasktexts.js';
 
 const { matchesFilter, parseFilter } = TasksCore;
@@ -23,6 +23,7 @@ function initialTasks() {
     initialJSON = '';
     try {
       const data = JSON.parse(document.getElementById('tasks-initial').textContent);
+      if (data.people) setPeople(data.people);
       if (Array.isArray(data.tasks)) {
         keepRendered(textsOf(data.tasks), data);
         initialJSON = JSON.stringify(data.tasks);
@@ -83,9 +84,12 @@ function triggerUndo() {
 let tasksGen = 0;
 let started = false;
 async function fetchTasks() {
-  // The first time, the tasks the page came with.
-  const all = (!started && initialTasks()) || await (await fetch('/api/tasks')).json();
+  // The first time, the tasks the page came with. With users, who can be
+  // assigned comes with them (or is asked for once): the cards and the
+  // filter's @me and @none go by it.
+  const initial = !started && initialTasks();
   started = true;
+  const [all] = await Promise.all([initial || fetch('/api/tasks').then(res => res.json()), loadPeople()]);
   const fetched = all.filter(app.inScope);
   await renderTexts(textsOf(fetched));
   st.tasks = fetched;
@@ -227,7 +231,7 @@ function listMovedNotice(task) {
 // filter (e.g. #sam removed on Sam's page). `before` null: a new task.
 function leftViewMessage(before, after) {
   if (!app.inScope(after)) return listMovedNotice(after);
-  const f = parseFilter(app.filterQuery());
+  const f = parseFilter(app.filterQuery(), people);
   if ((!before || matchesFilter(before, f)) && !matchesFilter(after, f)) {
     return 'Saved; it no longer shows here.';
   }
@@ -241,6 +245,7 @@ function editSnapshot(t) {
   const rec = t.recurrence;
   return {
     title: t.title, description: t.description || '', tags: t.tags || [],
+    ...(people.users ? { assignee: t.assignee || null } : {}),
     due_date: t.due_date || null, start_date: t.start_date || null, keep: !!t.keep,
     rec_type: rec?.type || null, rec_interval: rec?.interval || 1, rec_from: rec?.from || 'due',
     last_done: t.last_done || null, sort_order: t.sort_order ?? null,

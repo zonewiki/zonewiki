@@ -151,7 +151,9 @@ delete,
 rename,
 Commit file/all or MCP write (`TestDrafts`).
 `TestDisabled` covers a disabled user (no sign-in, told only with the right password, the session stopped and going on once enabled, the token refused).
-`tests/test_task_assignee.py` covers a task's assignee: assigning, reassigning and unassigning through the API and `batch-update`, how a name and no one may be written, who can't be assigned and what the refusal says, private tasks and wikis without users, the reserved names `me` and `none`, a former assignee's name staying through edits, the history and its undo, a series' next occurrence, restored and imported tasks, and `GET /api/tasks/assignable`
+`tests/test_task_assignee.py` covers a task's assignee: assigning, reassigning and unassigning through the API and `batch-update`, how a name and no one may be written, who can't be assigned and what the refusal says, private tasks and wikis without users, the reserved names `me` and `none`, a former assignee's name staying through edits and coming back only to a task that had it, the history and its undo, a series' next occurrence, restored and imported tasks, and `GET /api/tasks/assignable`
+In the browser (`tests/e2e/test_task_assignee.py`): the name on the card, the dialog's field with its completion and its refusal of a name that is no user, `@name` in a new task's title (and not on a private one), the filter's names, `@me`, `@none` and the `@` key, a new task taking the filter's assignee, a former assignee struck through and counted as no one's, the undo that puts one back, and a wiki without users.
+`tests/test_tasks_core.py`'s `TestAssignee` covers the filter's and the title's `@` words in `tasks-core.js`.
 (`go/assignee_test.go`: `assignable`, the reserved names in `zonewiki user add` and an invite; the field in the file in `go/internal/taskmodel`).
 
 `tests/test_roles.py` covers viewers: every write route and MCP write tool is probed as a viewer on shared pages and tasks and on her own note and private task from before,

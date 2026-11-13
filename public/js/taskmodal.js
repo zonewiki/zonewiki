@@ -10,7 +10,7 @@ import { markdownEditor } from './mdedit.js';
 import { toggleCheckboxText } from './mdtext.js';
 import { renderFigures } from './figures.js';
 import { openDatePicker } from './datepicker.js';
-import { IMPORTANCE, attachTagAc, commentStamp, dateOffset, esc, formatDate, hashWordAtCaret, insertHashTag, noticeFromResponse, shortDate, tagWordOf, todayStr } from './taskutil.js';
+import { IMPORTANCE, attachTagAc, commentStamp, dateOffset, esc, formatDate, hashWordAtCaret, insertHashTag, loadPeople, noticeFromResponse, people, shortDate, tagWordOf, todayStr } from './taskutil.js';
 import { highlightCode, renderTexts, textsOf } from './tasktexts.js';
 
 const { addDays, tagCounts, rankTags, parseQuickAdd } = TasksCore;
@@ -98,7 +98,8 @@ const importanceSelect = document.getElementById('task-edit-importance' + app.sf
 const propsEl = document.getElementById('task-edit-props' + app.sfx);
 const moreEl = document.getElementById('task-edit-more' + app.sfx);
 const recNote = document.getElementById('task-edit-rec-note' + app.sfx);
-const fieldEl = name => propsEl.querySelector(`[data-field="${name}"]`);
+// (Assignee is a field of its own above the boxes.)
+const fieldEl = name => (name === 'assignee' ? app.form : propsEl).querySelector(`[data-field="${name}"]`);
 const fieldShown = name => { const el = fieldEl(name); return !!el && !el.hidden; };
 function showField(name, show = true) {
   const el = fieldEl(name);
@@ -106,9 +107,10 @@ function showField(name, show = true) {
 }
 // Which buttons the line has: no Repeat for a keep task (it can't repeat),
 // Days before due only with a due date, no Private for a shared task (it
-// stays shared).
+// stays shared), no Assignee for a private one (it has none).
 function syncMore() {
   const can = {
+    assignee: !app.privateCb?.checked,
     repeat: !app.keepCb.checked,
     lead: !!document.getElementById('task-edit-due' + app.sfx).value,
     keep: true,
@@ -188,12 +190,103 @@ const editTagAc = editTagsInput && attachTagAc(editTagsInput, {
   },
 });
 
+// The Assignee field (with users): one user's name as a chip, completed
+// from the users who can be assigned (your own name first). Only a name
+// that is one is taken; a half-typed one keeps the modal open and says so.
+// The name of someone who can no longer be given tasks stays as the task
+// has it (struck through) until it is taken off or replaced. The field
+// shows when the task has an assignee, or once asked for (showField). A
+// private task has no assignee: the field hides while Private is ticked.
+const assigneeInput = document.getElementById('task-edit-assignee' + app.sfx);
+const assigneeField = document.getElementById('task-edit-assignee-field' + app.sfx);
+const cleanName = v => v.trim().replace(/^@/, '').toLowerCase();
+// The user a typed name means ('' none): a user who can be assigned, or me.
+function userNamed(typed) {
+  const name = cleanName(typed) === 'me' ? people.me : cleanName(typed);
+  return people.users?.has(name) ? name : '';
+}
+const assigneeChip = assigneeInput && app.chipField(assigneeInput, {
+  label: n => '@' + n,
+  mark: (chip, n) => {
+    if (!people.users || people.users.has(n)) return;
+    chip.classList.add('tag-chip-former');
+    chip.title = `${n} can no longer be given tasks`;
+  },
+});
+function setAssignee(name) {
+  if (!assigneeInput) return;
+  assigneeChip.set(name ? [name] : [], true);
+  assigneeInput.value = '';
+  assigneeInput.setCustomValidity('');
+}
+// What Save sends: a name, null for no one, undefined when what is typed
+// names no one who can be assigned.
+function editAssignee() {
+  const typed = cleanName(assigneeInput.value);
+  if (!typed) return assigneeChip.words()[0] || null;
+  if (typed === 'none') return null;
+  return userNamed(typed) || undefined;
+}
+const assigning = () => !!assigneeInput && !app.privateCb?.checked;
+function syncAssigneeField() {
+  if (!assigneeField) return;
+  showField('assignee', !app.privateCb?.checked && (!!assigneeChip.words().length || !!assigneeInput.value.trim()));
+}
+app.privateCb?.addEventListener('change', () => { syncAssigneeField(); syncMore(); });
+const assigneeAc = assigneeInput && attachTagAc(assigneeInput, {
+  prefix: '@',
+  // Something typed, if only "@" (which lists everyone): a click into the
+  // empty field offers nothing, so Tab moves on without assigning anyone.
+  word: () => assigneeInput.value.trim() ? { partial: cleanName(assigneeInput.value) } : null,
+  suggest: w => {
+    const counts = {};
+    for (const name of people.users || []) counts[name] = 1;
+    for (const t of st.tasks) if (t.assignee in counts) counts[t.assignee]++;
+    if (people.me in counts) counts[people.me] += st.tasks.length + 1;   // yourself first
+    delete counts[assigneeChip.words()[0]];
+    return rankTags(w.partial, counts);
+  },
+  accept: name => { setAssignee(name); assigneeInput.focus(); },
+});
+if (assigneeInput) {
+  loadPeople();
+  assigneeInput.addEventListener('input', () => assigneeInput.setCustomValidity(''));
+  // Enter with no suggestion open: a typed name becomes the chip rather
+  // than saving the task (as in Tags); Enter on an empty field saves.
+  assigneeInput.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.isComposing) return;
+    if (!assigneeInput.value.trim()) return;
+    e.preventDefault();
+    const name = editAssignee();
+    if (name === undefined) return refuseAssignee();
+    setAssignee(name);
+  });
+}
+function refuseAssignee() {
+  assigneeInput.setCustomValidity(`“${assigneeInput.value.trim()}” is no user a task can be assigned to`);
+  assigneeInput.reportValidity();
+}
+
 // A new task's title: the #tag shorthand (TasksCore.parseQuickAdd) gets the
 // same suggestions, from every tag in use.
 if (app.titleInput) attachTagAc(app.titleInput, {
   word: () => document.getElementById('task-edit-id' + app.sfx).value ? null : hashWordAtCaret(app.titleInput),
   suggest: w => rankTags(w.partial, tagCounts(st.tasks), w.partial ? 8 : 12),
   accept: (tag, w) => { insertHashTag(app.titleInput, tag, w); syncQuickPreview(); },
+});
+// And the @name shorthand, from the users who can be assigned.
+if (app.titleInput && assigneeInput) attachTagAc(app.titleInput, {
+  prefix: '@',
+  word: () => document.getElementById('task-edit-id' + app.sfx).value || !assigning() || !people.users
+    ? null : hashWordAtCaret(app.titleInput, '@'),
+  suggest: w => {
+    const counts = {};
+    for (const name of people.users) counts[name] = 1;
+    for (const t of st.tasks) if (t.assignee in counts) counts[t.assignee]++;
+    if (people.me in counts) counts[people.me] += st.tasks.length + 1;
+    return rankTags(w.partial, counts);
+  },
+  accept: (name, w) => { insertHashTag(app.titleInput, name, w); syncQuickPreview(); },
 });
 
 // ── Add task ───────────────────────────────────────────────────────────────
@@ -208,15 +301,19 @@ app.addBtn.addEventListener('click', () => openEditModal(null));
 const quickPreview = document.getElementById('task-edit-quick' + app.sfx);
 function quickParse() {
   if (document.getElementById('task-edit-id' + app.sfx).value) return null;   // editing
-  const q = parseQuickAdd(app.titleInput.value, todayStr());
+  const q = parseQuickAdd(app.titleInput.value, todayStr(), quickPeople());
   return q.found ? q : null;
 }
+// Whom the shorthand's @name may name: no one on a private task, nor
+// without users.
+const quickPeople = () => assigning() ? people : null;
 function quickText(q) {
   return [
     q.start_date && `📅 start ${formatDate(q.start_date)}`,
     q.due_date && `⏰ due ${formatDate(q.due_date)}`,
     q.importance && IMPORTANCE[q.importance][1].toLowerCase(),
     ...q.tags.map(t => '#' + t),
+    q.assignee && '@' + q.assignee,
   ].filter(Boolean).join(' · ');
 }
 
@@ -236,7 +333,7 @@ function setBatch(titles) {
   document.getElementById('task-edit-batch-label' + app.sfx).textContent = `${batchTitles.length} tasks`;
   const list = document.getElementById('task-edit-batch-list' + app.sfx);
   list.replaceChildren(...batchTitles.map(t => {
-    const q = parseQuickAdd(t, todayStr());
+    const q = parseQuickAdd(t, todayStr(), quickPeople());
     const li = document.createElement('li');
     li.textContent = q.title;
     if (q.found) {
@@ -280,6 +377,7 @@ function syncTarget() {
   targetEl.textContent = where + (app.privateCb?.checked ? ', private' : '') + '.';
 }
 app.privateCb?.addEventListener('change', syncTarget);
+app.privateCb?.addEventListener('change', () => syncQuickPreview());
 editTagsInput?.addEventListener('input', syncTarget);
 app.titleInput.addEventListener('input', syncQuickPreview);
 
@@ -295,6 +393,7 @@ const HISTORY_TEXT = {
   start: e => `Start ${historyDate(e.from)} → ${historyDate(e.to)}`,
   due: e => `Due ${historyDate(e.from)} → ${historyDate(e.to)}`,
   repeat: e => `Repeats: next ${historyDate(e.to)}`,
+  assigned: e => (e.to ? `Assigned to ${e.to}` : 'Unassigned') + (e.from ? ` (was ${e.from})` : ''),
 };
 function historyDate(d) { return d ? shortDate(d) : '—'; }
 function renderHistory(task) {
@@ -494,6 +593,9 @@ function openEditModal(taskId, opts) {
     app.privateCb.disabled = !!task && !task.private;   // shared stays shared
     app.privateNote.hidden = true;
   }
+  // A new task starts with the user the filter names, as with its tags.
+  setAssignee(task ? task.assignee || '' : opts && 'assignee' in opts ? opts.assignee || '' : app.filterDefaultAssignee());
+  syncAssigneeField();
   const recType = task?.recurrence?.type || '';
   app.recTypeSelect.value = recType;
   document.getElementById('task-edit-rec-interval' + app.sfx).value = task?.recurrence?.interval || 1;
@@ -622,7 +724,7 @@ dateWarnFix?.addEventListener('click', () => {
 });
 document.getElementById('task-edit-lead' + app.sfx).addEventListener('input', () => syncDates('lead'));
 
-app.cancelBtn.addEventListener('click', () => { editTagAc?.hide(); app.modal.close(); });
+app.cancelBtn.addEventListener('click', () => { editTagAc?.hide(); assigneeAc?.hide(); app.modal.close(); });
 // Closed without saving (Cancel, Esc): no callback later by mistake.
 // Focus would stay on a field of the closed dialog, and the task app's keys
 // (j/k, Enter, Esc …) ignore keys typed into a field. Esc's cancel comes
@@ -656,6 +758,9 @@ app.modal.addEventListener('keydown', e => {
 
 app.form.addEventListener('submit', async e => {
   e.preventDefault();
+  // A name typed into Assignee that names no one: say so, save nothing.
+  const assignee = assigning() ? editAssignee() : null;
+  if (assignee === undefined) return refuseAssignee();
   // A comment still in its field is saved with the task.
   if (!(await saveComment())) return;
   const id = document.getElementById('task-edit-id' + app.sfx).value;
@@ -671,6 +776,7 @@ app.form.addEventListener('submit', async e => {
     keep: app.keepCb.checked,
     importance: importanceSelect.value || 'normal',
     ...(app.privateCb ? { private: app.privateCb.checked } : {}),
+    ...(assigning() ? { assignee } : {}),
   };
   if (batchTitles && !id) {
     const titles = batchTitles, created = onCreated;
@@ -678,12 +784,13 @@ app.form.addEventListener('submit', async e => {
     app.modal.close();
     const today = todayStr(), made = [];
     for (const title of titles) {
-      const q = parseQuickAdd(title, today);
+      const q = parseQuickAdd(title, today, quickPeople());
       const task = await app.createTask({
         ...data, title: q.title,
         start_date: q.start_date || data.start_date, due_date: q.due_date || data.due_date,
         importance: q.importance || data.importance,
         tags: [...new Set([...data.tags, ...q.tags])],
+        ...(q.assignee ? { assignee: q.assignee } : {}),
       });
       made.push(task);
       if (!task) break;
@@ -699,6 +806,7 @@ app.form.addEventListener('submit', async e => {
     if (quick.due_date) data.due_date = quick.due_date;
     data.tags = [...new Set([...data.tags, ...quick.tags])];
     if (quick.importance) data.importance = quick.importance;
+    if (quick.assignee) data.assignee = quick.assignee;
   }
   if (!data.title) { document.getElementById('task-edit-title' + app.sfx).focus(); return; }
   const created = onCreated;

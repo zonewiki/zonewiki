@@ -83,14 +83,23 @@ function placeInOrder(old, shown, moved) {
 // all match (`#a #b`); a pipe inside one word means any of them (`#a|b`).
 // A word starting with '-#' excludes its tags (`-#mary`, `-#a|b`: neither).
 // `!high` (or `!`) and `!low` filter by importance.
-// Returns { text, tagGroups, excludeTags, importance } — every group must
-// have at least one match, and no excluded tag may be present.
-function parseFilter(q) {
+// With users (`people`: { me, users }, the signed-in user and the Set of
+// users a task can be assigned to; without it '@' is text), words starting
+// with '@' filter by assignee the same way: `@anna`, `@anna|bob`, `-@anna`,
+// `@me` (whoever is signed in) and `@none` (assigned to no one).
+// Returns { text, tagGroups, excludeTags, importance, assigneeGroups,
+// excludeAssignees, people } — every group must have at least one match,
+// and nothing excluded may be present.
+function parseFilter(q, people) {
   const words = (q || '').trim().split(/\s+/).filter(Boolean);
   const tagGroups = [];
   const excludeTags = [];
+  const assigneeGroups = [];
+  const excludeAssignees = [];
   const text = [];
-  const tagsOf = w => w.split('|').map(t => t.replace(/^#/, '').toLowerCase()).filter(Boolean);
+  const partsOf = (w, sigil) => w.split('|').map(t => (t.startsWith(sigil) ? t.slice(1) : t).toLowerCase()).filter(Boolean);
+  const tagsOf = w => partsOf(w, '#');
+  const users = !!people?.users;
   let importance = '';
   for (const w of words) {
     if (importanceWord(w)) importance = importanceWord(w);
@@ -98,11 +107,33 @@ function parseFilter(q) {
     else if (w.startsWith('#')) {
       const group = tagsOf(w);
       if (group.length) tagGroups.push(group);
+    } else if (users && w.startsWith('-@')) excludeAssignees.push(...partsOf(w.slice(1), '@'));
+    else if (users && w.startsWith('@')) {
+      const group = partsOf(w, '@');
+      if (group.length) assigneeGroups.push(group);
     } else {
       text.push(w);
     }
   }
-  return { text: text.join(' ').toLowerCase(), tagGroups, excludeTags, importance };
+  return { text: text.join(' ').toLowerCase(), tagGroups, excludeTags, importance, assigneeGroups, excludeAssignees, people };
+}
+
+// Whether a filter (parseFilter) leaves anything out.
+function filterActive(f) {
+  return !!(f.text || f.tagGroups.length || f.excludeTags.length || f.importance ||
+    f.assigneeGroups?.length || f.excludeAssignees?.length);
+}
+
+// Whether the task's assignee is what a filter word names: a user, `me`
+// (the signed-in user) or `none`. A task whose assignee can no longer be
+// given tasks (disabled, removed, a viewer now) counts as no one's too, so
+// it comes up where the team looks for what nobody has; it still matches
+// the name, so it can be found and handed on.
+function assigneeIs(t, word, people) {
+  const a = (t.assignee || '').toLowerCase();
+  if (word === 'none') return !a || !!people?.users && !people.users.has(a);
+  if (word === 'me') return !!people?.me && a === people.me;
+  return a === word;
 }
 
 // A task's importance: 'high', 'low', or '' for normal (what most are).
@@ -119,6 +150,9 @@ function matchesFilter(t, f) {
       !(t.description || '').toLowerCase().includes(f.text)) return false;
   const tags = (t.tags || []).map(tg => tg.toLowerCase());
   if ((f.excludeTags || []).some(tag => tags.includes(tag))) return false;
+  const is = w => assigneeIs(t, w, f.people);
+  if ((f.excludeAssignees || []).some(is)) return false;
+  if (!(f.assigneeGroups || []).every(g => g.some(is))) return false;
   return f.tagGroups.every(g => g.some(tag => tags.includes(tag)));
 }
 
@@ -127,7 +161,7 @@ function matchesFilter(t, f) {
 // Closed: the closed (done or won't do); Open and the Plan board: every open task (one
 // still waiting for a day is in the board's Unplanned section).
 function tasksInView(tasks, f, view, today) {
-  const filtering = f.text || f.tagGroups.length || f.excludeTags.length || f.importance;
+  const filtering = filterActive(f);
   return tasks.filter(t => (!filtering || matchesFilter(t, f)) &&
     (view === 'closed' ? !!t.closed_at
       : view === 'focus' ? !t.closed_at && isFocus(t, today)
@@ -399,11 +433,23 @@ function parseDateWord(word, today) {
   return null;
 }
 
-// Returns { title, start_date, due_date, tags, found }. Unrecognised input
-// (or shorthand that would leave no title) comes back unchanged, found=false.
-function parseQuickAdd(input, today) {
+// The user a quick-add word assigns the task to: `@name` of a user who can
+// be assigned, or `@me`; '' for any other word (bob@example.org, @home, a
+// name that is no user), which stays in the title.
+function quickAssignee(w, people) {
+  const m = /^@([a-z0-9-]+)$/i.exec(w);
+  if (!m || !people?.users) return '';
+  const name = m[1].toLowerCase() === 'me' ? people.me : m[1].toLowerCase();
+  return people.users.has(name) ? name : '';
+}
+
+// Returns { title, start_date, due_date, tags, importance, assignee, found }.
+// Unrecognised input (or shorthand that would leave no title) comes back
+// unchanged, found=false. `people` ({ me, users }, with users): `@name`
+// assigns the task (quickAssignee); one name only, a second stays text.
+function parseQuickAdd(input, today, people) {
   const words = (input || '').trim().split(/\s+/).filter(Boolean);
-  const out = { title: words.join(' '), start_date: null, due_date: null, tags: [], importance: '', found: false };
+  const out = { title: words.join(' '), start_date: null, due_date: null, tags: [], importance: '', assignee: '', found: false };
   let end = words.length;
   while (end > 1) {
     const w = words[end - 1];
@@ -412,6 +458,8 @@ function parseQuickAdd(input, today) {
       if (!out.tags.includes(tag)) out.tags.unshift(tag);
     } else if (!out.importance && importanceWord(w)) {
       out.importance = importanceWord(w);
+    } else if (!out.assignee && quickAssignee(w, people)) {
+      out.assignee = quickAssignee(w, people);
     } else if (/^due:/i.test(w) && !out.due_date && parseDateWord(w.slice(4), today)) {
       out.due_date = parseDateWord(w.slice(4), today);
     } else if (!out.start_date && parseDateWord(w, today)) {
@@ -430,7 +478,7 @@ function parseQuickAdd(input, today) {
 const TasksCore = {
   dateToStr, addDays, isOverdue, isFocus, isCarried, byOpenOrder, byDeadline, byCreated, SORTS, placeInOrder, tagMatchScore, tagCounts, selectionTags, bulkTagChange,
   rankTags, sanitizeTagInput,
-  parseFilter, matchesFilter, tasksInView, tagParamToQuery, importanceWord,
+  parseFilter, matchesFilter, filterActive, assigneeIs, tasksInView, tagParamToQuery, importanceWord,
   bucketKey, fullDayLabel, boardBuckets, parseQuickAdd,
   dateSettings, localeDate, shortDate, longDayLabel, weekStart, weekdayNames, monthTitle,
 };

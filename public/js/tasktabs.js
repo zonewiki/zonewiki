@@ -4,6 +4,7 @@
 // app (its state in app.st).
 
 import TasksCore from '../tasks-core.js';
+import { people } from './taskutil.js';
 
 const { matchesFilter, parseFilter, tagParamToQuery } = TasksCore;
 
@@ -29,8 +30,9 @@ st.lastTab = 'focus';
 function syncClosedLink() {
   if (!app.closedLink) return;
   let matches = null;
-  const f = parseFilter(filterQuery());
-  const filtering = st.activeView !== 'closed' && (f.text || f.tagGroups.length || f.excludeTags.length);
+  const f = parseFilter(filterQuery(), people);
+  const filtering = st.activeView !== 'closed' &&
+    (f.text || f.tagGroups.length || f.excludeTags.length || f.assigneeGroups.length || f.excludeAssignees.length);
   if (filtering) {
     if (!st.closedLoaded) { app.fetchClosed(); }
     else {

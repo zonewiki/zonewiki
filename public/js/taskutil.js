@@ -120,7 +120,8 @@ export function esc(str) {
 //   suggest(word)   tags to offer, best first
 //   accept(tag, w)  write the chosen tag into the field
 //   onEnter()       optional: Enter also does this after completing
-export function attachTagAc(input, { word, suggest, accept, onEnter }) {
+//   prefix          what an offered word starts with: '#', or '@' for users
+export function attachTagAc(input, { word, suggest, accept, onEnter, prefix = '#' }) {
   let el = null, idx = 0, tags = [];
   const hide = () => { el?.remove(); el = null; tags = []; };
   function highlight(i) {
@@ -143,7 +144,7 @@ export function attachTagAc(input, { word, suggest, accept, onEnter }) {
     tags.forEach((tag, i) => {
       const item = document.createElement('div');
       item.className = 'tag-ac-item';
-      item.textContent = '#' + tag;
+      item.textContent = prefix + tag;
       item.addEventListener('mouseenter', () => highlight(i));
       item.addEventListener('mousedown', e => { e.preventDefault(); choose(i); });
       el.appendChild(item);
@@ -205,26 +206,49 @@ export function noSpacesInTags(input, list) {
 
 // The word under the caret, if it starts with '#' (or '-#', an exclusion:
 // the word then starts after the '-'). Inside an OR word (#a|b) only the
-// part after the last pipe is being completed.
-export function hashWordAtCaret(input) {
+// part after the last pipe is being completed. `sigil`: '@' for a user's
+// name (@anna, -@anna, @anna|bob) instead.
+export function hashWordAtCaret(input, sigil = '#') {
   const val = input.value;
   const caret = input.selectionStart ?? val.length;
   let start = val.lastIndexOf(' ', caret - 1) + 1;
-  if (val.startsWith('-#', start) && caret > start) start++;
+  if (val.startsWith('-' + sigil, start) && caret > start) start++;
   let end = val.indexOf(' ', caret);
   if (end < 0) end = val.length;
   const w = val.slice(start, end);
-  if (!w.startsWith('#')) return null;
+  if (!w.startsWith(sigil)) return null;
   const pipe = w.lastIndexOf('|', caret - start - 1);
   const partStart = pipe >= 0 ? start + pipe + 1 : start;
-  return { start, end, partStart, partial: val.slice(partStart, end).replace(/^#/, '') };
+  const part = val.slice(partStart, end);
+  return { start, end, partStart, sigil, partial: part.startsWith(sigil) ? part.slice(1) : part };
 }
 
-// Replace that word (or its OR part) with "#tag " and put the caret after it.
+// Who a task can be assigned to and who is signed in, for every task app
+// on the page: `users` a Set of names, null while not known and without
+// users (then '@' is no syntax). A page view with a task list brings them
+// along with its tasks (setPeople, from js/taskdata.js initialTasks); any
+// other page asks once (GET /api/tasks/assignable).
+export const people = { me: '', users: null };
+let peopleLoading = null;
+export function setPeople(d) {
+  people.me = d.me || '';
+  people.users = new Set(d.users || []);
+  peopleLoading = Promise.resolve(people);
+}
+export function loadPeople() {
+  if (document.body.dataset.users !== '1') return Promise.resolve(people);
+  return peopleLoading ||= fetch('/api/tasks/assignable')
+    .then(res => res.ok ? res.json() : null)
+    .then(d => { if (d) setPeople(d); return people; })
+    .catch(() => people);
+}
+
+// Replace that word (or its OR part) with "#tag " (the word's own sigil)
+// and put the caret after it.
 export function insertHashTag(input, tag, w) {
   const val = input.value;
   const after = val.slice(w.end);
-  const insert = (w.partStart === w.start ? '#' : '') + tag + (after.startsWith(' ') ? '' : ' ');
+  const insert = (w.partStart === w.start ? w.sigil || '#' : '') + tag + (after.startsWith(' ') ? '' : ' ');
   input.value = val.slice(0, w.partStart) + insert + after;
   const caret = w.partStart + insert.length;
   input.focus();

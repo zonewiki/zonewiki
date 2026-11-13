@@ -179,7 +179,7 @@ class TestWhoCanBeAssigned:
 
 class TestFormerAssignee:
     """A name that can no longer be assigned stays on its task; it is only
-    never put on one."""
+    never put on a task that didn't have it."""
 
     @pytest.fixture()
     def bobs(self, alice, monkeypatch):
@@ -192,9 +192,13 @@ class TestFormerAssignee:
         assert task.status_code == 200 and task.get_json()["assignee"] == "bob"
         assert stored(wiki_dir, bobs)["assignee"] == "bob"
 
-    def test_it_can_be_replaced_but_not_put_back(self, alice, bobs):
-        assert put(alice, bobs, assignee="alice").get_json()["assignee"] == "alice"
-        resp = put(alice, bobs, assignee="bob")
+    def test_it_can_be_replaced_and_put_back_only_where_it_was(self, alice, bobs):
+        replaced = put(alice, bobs, assignee="alice").get_json()
+        assert replaced["assignee"] == "alice"
+        # The undo of that: the task's history says it was bob's.
+        undone = put(alice, bobs, assignee="bob", history=bobs["history"]).get_json()
+        assert undone["assignee"] == "bob" and events(undone) == [("created", None, None, "alice")]
+        resp = put(alice, new(alice), assignee="bob")       # not on a task that never was
         assert resp.status_code == 400 and "bob's account is disabled" in resp.get_json()["error"]
 
     def test_a_removed_users_name_stays_too(self, alice, wiki_dir, bobs, monkeypatch):

@@ -35,6 +35,7 @@ type tasksEmbedView struct {
 	Pinned          bool     // a pinned list: its New is the one New task clicks on its page
 	NewTags         string   // new tasks' tags, comma-separated
 	CanPrivate      bool     // with users: the modal has the Private box
+	CanAssign       bool     // with users: the modal has the Assignee field
 	Private         bool     // ticked for a new task here
 	PrivateFolder   string
 	ListsJSON       string           // the declared lists' names, as JSON
@@ -114,6 +115,7 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless, privat
 		Tag: params.Get("tag"), List: cleanList(params.Get("list")), View: view, Plan: plan, Settings: settingsAt,
 		Limit: limit, Labels: labels, InstanceID: instance, Sfx: sfx, Headless: headless,
 		Keep: keep, Pinned: pinnedParam(params), NewTags: strings.Join(taskmodel.CleanTags(strings.Split(params.Get("new"), ",")), ","),
+		CanAssign:  settings().Users != nil,
 		CanPrivate: privateFolder(user) != "", Private: private && privateFolder(user) != "",
 		PrivateFolder: privateFolder(user),
 		ListsJSON:     listsJSON, HomesJSON: homesJSON,
@@ -262,6 +264,16 @@ func processTasksEmbeds(rq *Req, text, page string, settings bool) (string, []ta
 	return text, embeds
 }
 
+// assignablePeople: who a task can be assigned to, and who asks ("me"): for
+// the browser's completion, its cards and its @me. No names in sharing mode.
+func assignablePeople(r *http.Request) map[string]any {
+	names := []string{}
+	if !sharingOn(r) {
+		names = settings().assignableUsers()
+	}
+	return map[string]any{"users": names, "me": userOf(r)}
+}
+
 // tasksInitial: what a page view with a task list brings along, so the list
 // is drawn when the page is, with no request of its own: the user's open
 // tasks as GET /api/tasks answers them, and their notes' and comments' HTML
@@ -280,8 +292,14 @@ func tasksInitial(rq *Req) string {
 			comments = append(comments, c.Text)
 		}
 	}
-	data, err := json.Marshal(map[string]any{
-		"tasks": apiTasks(tasks), "notes": renderNotes(rq, notes, false), "comments": renderNotes(rq, comments, true)})
+	block := map[string]any{
+		"tasks": apiTasks(tasks), "notes": renderNotes(rq, notes, false), "comments": renderNotes(rq, comments, true)}
+	// With users, who a task can be assigned to and who looks, as GET
+	// /api/tasks/assignable answers (js/taskutil.js setPeople).
+	if settings().Users != nil {
+		block["people"] = assignablePeople(rq.r)
+	}
+	data, err := json.Marshal(block)
 	if err != nil {
 		logf("task list embed: %v", err)
 		return ""

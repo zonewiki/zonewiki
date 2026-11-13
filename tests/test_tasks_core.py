@@ -308,7 +308,7 @@ class TestFilterField:
         ("wow!", {"text": "wow!", "tagGroups": [], "excludeTags": [], "importance": ""}),
     ])
     def test_parse(self, q, expected):
-        assert run_core(f"TasksCore.parseFilter({json.dumps(q)})") == expected
+        assert run_core(f"TasksCore.parseFilter({json.dumps(q)})") == {**expected, "assigneeGroups": [], "excludeAssignees": []}
 
     TASKS = [
         {"id": "1", "title": "Fix bug", "tags": ["work"]},
@@ -363,7 +363,7 @@ class TestQuickAdd:
     def test_full_example(self):
         q = quick("Call Bob tomorrow #work due:fri")
         assert q == {"title": "Call Bob", "start_date": "2026-07-27",
-                     "due_date": "2026-07-31", "tags": ["work"], "importance": "", "found": True}
+                     "due_date": "2026-07-31", "tags": ["work"], "importance": "", "assignee": "", "found": True}
 
     @pytest.mark.parametrize("title,importance,rest", [
         ("Call Bob !", "high", "Call Bob"), ("Call Bob !high", "high", "Call Bob"), ("Call Bob !LOW", "low", "Call Bob"),
@@ -574,3 +574,74 @@ class TestTasksInView:
         assert self.ids("focus", "#work") == ["due"]
         assert self.ids("closed", "#home") == []
         assert self.ids("open", "dates") == ["plain"]
+
+
+class TestAssignee:
+    """With users, '@' words name a task's assignee: in the filter (@anna,
+    @anna|bob, -@anna, @me, @none) and at the end of a new task's title."""
+
+    PEOPLE = "{me: 'alice', users: new Set(['alice', 'bob'])}"
+    TASKS = [
+        {"id": "a", "title": "Alice's", "assignee": "alice", "tags": ["work"]},
+        {"id": "b", "title": "Bob's", "assignee": "bob"},
+        {"id": "z", "title": "Zed's", "assignee": "zed"},     # zed can no longer be given tasks
+        {"id": "n", "title": "No one's"},
+    ]
+
+    def ids(self, query, people=PEOPLE):
+        return run_core(f"TasksCore.tasksInView({json.dumps(self.TASKS)}, "
+                        f"TasksCore.parseFilter({json.dumps(query)}, {people}), 'open', '{TODAY}').map(t => t.id)")
+
+    def test_the_filter_reads_the_words(self):
+        f = run_core(f"(f => [f.assigneeGroups, f.excludeAssignees, f.tagGroups, f.text])"
+                     f"(TasksCore.parseFilter('@Anna @bob|carol -@Dan|eve #work call @', {self.PEOPLE}))")
+        assert f == [[["anna"], ["bob", "carol"]], ["dan", "eve"], [["work"]], "call"]
+
+    def test_without_users_an_at_word_is_text(self):
+        f = run_core("(f => [f.assigneeGroups, f.excludeAssignees, f.text])(TasksCore.parseFilter('@anna -@bob'))")
+        assert f == [[], [], "@anna -@bob"]
+        assert run_core("TasksCore.filterActive(TasksCore.parseFilter(''))") is False
+
+    def test_a_name_any_of_several_and_not(self):
+        assert self.ids("@bob") == ["b"]
+        assert self.ids("@alice|bob") == ["a", "b"]
+        assert self.ids("-@bob") == ["a", "z", "n"]
+        assert self.ids("@alice #work") == ["a"] and self.ids("@bob #work") == []
+        assert self.ids("@alice @bob") == []           # a task has one
+
+    def test_me_is_whoever_is_signed_in(self):
+        assert self.ids("@me") == ["a"]
+        assert self.ids("@me", "{me: 'bob', users: new Set(['alice', 'bob'])}") == ["b"]
+        assert self.ids("@me", "{me: '', users: new Set(['alice'])}") == []
+        assert self.ids("-@me") == ["b", "z", "n"]
+
+    def test_none_is_no_one_and_whoever_can_no_longer_be_assigned(self):
+        assert self.ids("@none") == ["z", "n"]
+        assert self.ids("@zed") == ["z"]               # still found by the name
+        assert self.ids("-@none") == ["a", "b"]
+        assert self.ids("@none|bob") == ["b", "z", "n"]
+
+    def test_an_assignee_filter_counts_as_filtering(self):
+        active = lambda q: run_core(f"TasksCore.filterActive(TasksCore.parseFilter({json.dumps(q)}, {self.PEOPLE}))")
+        assert active("@me") and active("-@bob") and not active("@") and not active("")
+
+    def quick(self, title, people=PEOPLE):
+        q = run_core(f"TasksCore.parseQuickAdd({json.dumps(title)}, '{TODAY}', {people})")
+        return q["title"], q["assignee"], q["found"]
+
+    def test_quick_add_assigns(self):
+        assert self.quick("Call Sam @bob") == ("Call Sam", "bob", True)
+        assert self.quick("Call Sam @Bob #work tomorrow") == ("Call Sam", "bob", True)
+        assert self.quick("Call Sam @me") == ("Call Sam", "alice", True)
+        q = run_core(f"TasksCore.parseQuickAdd('Call Sam #work @bob due:tomorrow', '{TODAY}', {self.PEOPLE})")
+        assert (q["tags"], q["assignee"], q["due_date"]) == (["work"], "bob", "2026-07-27")
+
+    def test_quick_add_leaves_what_is_no_user_in_the_title(self):
+        for title in ("Mail bob@example.org", "Shop @home", "Call Sam @zed", "Call @bob today's list", "@bob"):
+            assert self.quick(title) == (title, "", False), title
+        # One name only: a second stays text.
+        assert self.quick("Call Sam @alice @bob") == ("Call Sam @alice", "bob", True)
+
+    def test_quick_add_without_users_knows_no_at(self):
+        assert self.quick("Call Sam @bob", "undefined") == ("Call Sam @bob", "", False)
+        assert self.quick("Call Sam @me", "{me: 'me', users: new Set(['alice'])}") == ("Call Sam @me", "", False)

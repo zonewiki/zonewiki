@@ -6,7 +6,7 @@
 import TasksCore from '../tasks-core.js';
 import { renderFigures } from './figures.js';
 import { openDatePicker } from './datepicker.js';
-import { commentCardHtml, commentStamp, importanceMark, subtaskCounts, dueDateClass, esc, formatDate, linkifyTitle, plainTitle, shortDate, startsAfterDeadline, todayStr, urgencyClass } from './taskutil.js';
+import { commentCardHtml, commentStamp, importanceMark, subtaskCounts, dueDateClass, esc, formatDate, linkifyTitle, people, plainTitle, shortDate, startsAfterDeadline, todayStr, urgencyClass } from './taskutil.js';
 import { plainHtml, renderedHtml, renderTexts } from './tasktexts.js';
 
 const { byOpenOrder, SORTS } = TasksCore;
@@ -136,10 +136,18 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
   const skipBtnHtml = (!task.closed_at && task.recurrence)
     ? `<button class="task-skip-btn" data-id="${esc(task.id)}" title="Skip this occurrence (series continues)">⏭</button>`
     : '';
-  const tagsRight = tags ? `<span class="task-tags-right">${tags}</span>` : '';
+  // Who has it, after the tags: your own name set apart, the name of
+  // someone who can no longer be given tasks struck through.
+  const assignee = task.assignee || '';
+  const formerAssignee = !!assignee && !!people.users && !people.users.has(assignee);
+  const assigneeDisplay = assignee
+    ? `<span class="task-assignee${assignee === people.me ? ' task-assignee-me' : ''}${formerAssignee ? ' task-assignee-former' : ''}" title="${
+        esc(formerAssignee ? `Was assigned to ${assignee}, who can no longer be given tasks`
+          : assignee === people.me ? 'Assigned to you' : `Assigned to ${assignee}`)}">@${esc(assignee)}</span>` : '';
+  const tagsRight = tags || assigneeDisplay ? `<span class="task-tags-right">${tags}${assigneeDisplay}</span>` : '';
   const privateDisplay = task.private
     ? '<span class="task-private" title="Private: only you see it" aria-label="Private">🔒</span>' : '';
-  const hasRealMeta = !!(tags || task.due_date || task.start_date || task.recurrence ||
+  const hasRealMeta = !!(tags || assigneeDisplay || task.due_date || task.start_date || task.recurrence ||
     task.keep || task.private || task.closed_at || commentsDisplay || notesDisplay);
   const hasMeta = !task.closed_at || dueDisplay || focusDisplay || closedDisplay || recIcon || privateDisplay || tagsRight || notesDisplay;
   const metaClass = (hasMeta && !hasRealMeta) ? 'task-meta task-meta--hover-only' : 'task-meta';

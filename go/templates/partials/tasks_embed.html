@@ -78,6 +78,14 @@
       <label for="task-edit-tags{{.Sfx}}">Tags <span class="field-hint">(Tab completes; comma, space or Enter adds)</span></label>
       <input type="text" id="task-edit-tags{{.Sfx}}" name="tags" autocomplete="off">
     </div>
+    {{- /* With users: who does it (docs/spec/users.md, Assigning tasks). Shown
+        when the task has one, or once asked for in the line below. */}}
+    {{- if .CanAssign}}
+    <div class="task-field task-field-assignee" id="task-edit-assignee-field{{.Sfx}}" data-field="assignee" hidden>
+      <label for="task-edit-assignee{{.Sfx}}">Assignee <span class="field-hint">(who does it: type @ or a name; Tab completes)</span></label>
+      <input type="text" id="task-edit-assignee{{.Sfx}}" name="assignee" autocomplete="off">
+    </div>
+    {{- end}}
     {{- /* The task's other fields, each a small box with its name inside, on
         one line that wraps. The dates and Importance are always there; the
         rest only when set, or once asked for in the line below
@@ -143,6 +151,9 @@
     {{- end}}
     {{- /* The fields not shown above: a click shows one (and ticks a box). */}}
     <div class="task-add-fields" id="task-edit-more{{.Sfx}}" role="group" aria-label="More fields">
+      {{- if .CanAssign}}
+      <button type="button" class="task-add-field" id="task-edit-more-assignee{{.Sfx}}" data-more="assignee" title="Who does it: one of the wiki's users">Assignee</button>
+      {{- end}}
       <button type="button" class="task-add-field" id="task-edit-more-repeat{{.Sfx}}" data-more="repeat" title="Make the task come back: daily, weekly, monthly or yearly">Repeat</button>
       <button type="button" class="task-add-field" id="task-edit-more-lead{{.Sfx}}" data-more="lead" title="Start this many days before the due date">Days before due</button>
       <button type="button" class="task-add-field" id="task-edit-more-keep{{.Sfx}}" data-more="keep" title="Ticking it off sends it back to Open instead of archiving it, e.g. a staple on a shopping list">Keep after done</button>

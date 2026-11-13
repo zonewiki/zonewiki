@@ -4,7 +4,7 @@
 // app.st).
 
 import TasksCore from '../tasks-core.js';
-import { attachTagAc, hashWordAtCaret } from './taskutil.js';
+import { attachTagAc, hashWordAtCaret, people } from './taskutil.js';
 
 const { parseFilter, rankTags, tagCounts } = TasksCore;
 
@@ -18,8 +18,9 @@ export function initTaskChips(app) {
 // modal's Tags field (chips are tag names, shown as #name). `locked` words
 // (an embed's filter words, case ignored) are always there and have no ×.
 // `listWord(w)` marks a separate list's tag: such chips come first, with a
-// list icon, a tint and a tooltip naming the list's page.
-function chipField(input, { label = w => w, onChange, locked = [], listWord = () => false } = {}) {
+// list icon, a tint and a tooltip naming the list's page. `mark(chip, w)`
+// may add to a chip (a class, a tooltip).
+function chipField(input, { label = w => w, onChange, locked = [], listWord = () => false, mark } = {}) {
   const lockedSet = new Set(locked.map(w => w.toLowerCase()));
   const isLocked = w => lockedSet.has(w.toLowerCase());
   const box = document.createElement('div');
@@ -41,6 +42,7 @@ function chipField(input, { label = w => w, onChange, locked = [], listWord = ()
         chip.classList.add('tag-chip-list');
         chip.title = app.listTooltip(w);
       }
+      mark?.(chip, w);
       if (isLocked(w)) {
         chip.classList.add('tag-chip-locked');
         if (!isList) chip.title = 'Set by this page';
@@ -96,23 +98,45 @@ if (app.filterSearch) attachTagAc(app.filterSearch, {
   suggest: w => {
     const val = app.filterSearch.value;
     const rest = [...app.filterChips.words(), val.slice(0, w.start) + val.slice(w.end)].join(' ');
-    const otherTags = rest.split(/\s+/).filter(word => /^-?#/.test(word)).join(' ');
+    const otherTags = rest.split(/\s+/).filter(word => /^-?[#@]/.test(word)).join(' ');
     const restFilter = parseFilter(rest);
     const used = [...restFilter.tagGroups.flat(), ...restFilter.excludeTags];
     const counts = tagCounts(app.filterTasks(otherTags));
     for (const tag of Object.keys(counts)) if (used.includes(tag.toLowerCase())) delete counts[tag];
     return rankTags(w.partial, counts, w.partial ? 8 : 12);
   },
-  // The completed word (with its '-' and any OR parts) becomes a chip.
-  accept: (tag, w) => {
+  accept: acceptFilterWord,
+});
+// The completed word (with its '-' and any OR parts) becomes a chip.
+function acceptFilterWord(tag, w) {
+  const val = app.filterSearch.value;
+  const start = val[w.start - 1] === '-' ? w.start - 1 : w.start;
+  const chip = val.slice(start, w.partStart) + (w.partStart === w.start ? w.sigil : '') + tag;
+  app.filterSearch.value = (val.slice(0, start) + val.slice(w.end).replace(/^ +/, '')).replace(/ {2,}/g, ' ');
+  app.filterSearch.focus();
+  app.filterSearch.setSelectionRange(start, start);
+  app.filterChips.add(chip);
+}
+// With users, '@' completes to an assignee the same way: `me`, `none`, and
+// the users assigned among the tasks the other words leave visible, minus
+// the names already used.
+if (app.filterSearch) attachTagAc(app.filterSearch, {
+  prefix: '@',
+  word: () => people.users ? hashWordAtCaret(app.filterSearch, '@') : null,
+  suggest: w => {
     const val = app.filterSearch.value;
-    const start = val[w.start - 1] === '-' ? w.start - 1 : w.start;
-    const chip = val.slice(start, w.partStart) + (w.partStart === w.start ? '#' : '') + tag;
-    app.filterSearch.value = (val.slice(0, start) + val.slice(w.end).replace(/^ +/, '')).replace(/ {2,}/g, ' ');
-    app.filterSearch.focus();
-    app.filterSearch.setSelectionRange(start, start);
-    app.filterChips.add(chip);
+    const rest = [...app.filterChips.words(), val.slice(0, w.start) + val.slice(w.end)].join(' ');
+    const others = rest.split(/\s+/).filter(word => /^-?[#@]/.test(word)).join(' ');
+    const restFilter = parseFilter(rest, people);
+    const used = [...restFilter.assigneeGroups.flat(), ...restFilter.excludeAssignees];
+    const tasks = app.filterTasks(others);
+    // me and none first while nothing is typed: more than any name's count.
+    const counts = { me: tasks.length + 2, none: tasks.length + 1 };
+    for (const t of tasks) if (t.assignee) counts[t.assignee] = (counts[t.assignee] || 0) + 1;
+    for (const name of Object.keys(counts)) if (used.includes(name)) delete counts[name];
+    return rankTags(w.partial, counts, w.partial ? 8 : 12);
   },
+  accept: acceptFilterWord,
 });
 // A new task starts with the tags the filter requires (single-tag words;
 // an OR word doesn't say which one), so it shows up in the current view.
@@ -125,6 +149,14 @@ function filterDefaultTags() {
   const query = newTags.length ? [...own, app.filterSearch?.value || ''].join(' ') : app.filterQuery();
   return [...newTags, ...parseFilter(query).tagGroups.filter(g => g.length === 1).map(g => g[0])];
 }
+// Likewise its assignee: the one user the filter names (@anna, or @me),
+// '' when it names none, several (an OR word) or `none`.
+function filterDefaultAssignee() {
+  const groups = parseFilter(app.filterQuery(), people).assigneeGroups.filter(g => g.length === 1 && g[0] !== 'none');
+  if (groups.length !== 1) return '';
+  const name = groups[0][0] === 'me' ? people.me : groups[0][0];
+  return people.users?.has(name) ? name : '';
+}
 
-return { chipField, filterDefaultTags };
+return { chipField, filterDefaultTags, filterDefaultAssignee };
 }

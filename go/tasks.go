@@ -312,7 +312,9 @@ func applyPrivate(user string, t *Task, data jsonObj, fresh bool) error {
 // applyAssignee: a write's assignee: a user who can be assigned
 // (assignable), "me" for whoever writes, or none ("", null, "none"). Only a
 // change is checked, so a task keeps a name that no longer can be assigned
-// through every other edit; a private task has none.
+// through every other edit; a private task has none. A name the task had
+// before (its history says so) is taken back as it is, so an undo of the
+// change that replaced a former assignee goes through.
 func applyAssignee(user string, t *Task, data jsonObj) error {
 	if !data.Has("assignee") {
 		return nil
@@ -341,12 +343,22 @@ func applyAssignee(user string, t *Task, data jsonObj) error {
 		return refuse("This wiki has no users to assign a task to")
 	case t.Owner != "":
 		return refuse("A private task is yours alone. Share it to assign it")
-	case !s.assignable(name):
+	case !s.assignable(name) && !hadAssignee(t, name):
 		return refuse(s.notAssignable(name))
 	}
 	logEvent(t, user, "assigned", t.Assignee, name)
 	t.Assignee = name
 	return nil
+}
+
+// hadAssignee: t's history says it was assigned to name.
+func hadAssignee(t *Task, name string) bool {
+	for _, e := range t.History {
+		if e.Event == "assigned" && (e.From == name || e.To == name) {
+			return true
+		}
+	}
+	return false
 }
 
 // applyRecurrence: a write's recurrence (rec_type, rec_interval, rec_from,

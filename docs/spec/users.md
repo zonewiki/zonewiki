@@ -611,8 +611,8 @@ A shared task can be assigned to one user: who does it.
 One, not several, so that "who has this?" has one answer; someone helping goes in a comment or a tag.
 It is information: it never changes who sees a task or who may change it, and anyone who may change tasks may assign any task to anyone, themselves included, or to no one.
 
-This is the server's part (the field, its checks, the names' route).
-Typing `@name` in the browser, the filter, `[[tasks: assignee=…]]` and the MCP tools' parameters are not built yet (`docs/plans/task-assignee.md`).
+You assign a task in its dialog or by ending a new task's title with `@name`, see who has it on its card, and filter a list by it (`@anna`, `@me`, `@none`).
+`[[tasks: assignee=…]]` on a page, the MCP tools' parameters and assigning several tasks at once are not built yet (`docs/plans/task-assignee.md`).
 
 - **The field** is the task's `assignee`, a user's name, kept in its file after `tags` (`Task.Assignee` in `go/internal/taskmodel`; Task fields in `docs/spec/tasks.md`).
   A task without one has no such key.
@@ -626,7 +626,10 @@ Typing `@name` in the browser, the filter, `[[tasks: assignee=…]]` and the MCP
 - **A private task has no assignee**: it is its owner's, and nobody else sees it.
   `assignee` on a private task is a 400 ("A private task is yours alone. Share it to assign it"); a write that shares a task (`private: false`) can assign it at once.
 - **Only a change is checked.** A write that names the assignee the task already has changes nothing and is never refused.
-  So a task keeps the name of a user who was disabled, removed or made a viewer since, through every other edit: the name stays in the file and in the API's answer, can be taken off or replaced, and is not put back once it is off.
+  So a task keeps the name of a user who was disabled, removed or made a viewer since, through every other edit: the name stays in the file and in the API's answer, and can be taken off or replaced.
+  A name the task had before is taken back as it is (`hadAssignee`: its history says so), so undoing the change that replaced a former assignee works; on any other task that name is refused.
+- **A former assignee counts as no one.** A task whose assignee can no longer be given tasks matches `@none` as well as the name, so it comes up where the team looks for what nobody has, and can still be found by the name to be handed on (`TasksCore.assigneeIs`).
+  Its card and the dialog show the name struck through.
   Nothing unassigns such tasks on its own: disabling is undone by enabling, and the settings file is also edited by hand, with no one to name as a rewrite's author.
 - **History**: a change is the event `assigned`, with `from` and `to` (the names, `null` no one) and `by` whoever did it (History in `docs/spec/tasks.md`).
   A new task's first assignee is part of `created`, as its first dates are.
@@ -634,7 +637,21 @@ Typing `@name` in the browser, the filter, `[[tasks: assignee=…]]` and the MCP
 - **A series** carries its assignee on: a recurring task's next occurrence has the same one (`spawnRecurring`).
 - **Restored and imported tasks** (`POST /api/tasks/restore`, `/api/tasks/import`; `sanitizeSnapshot`) have an assignee only as a write would take it: a name that can be assigned here, on a task that isn't private.
   So an export from another wiki doesn't bring its people along.
-- **The names** come from `GET /api/tasks/assignable`: `{ "users": [...], "me": "<who asks>" }`, the users who can be assigned, A–Z, for anyone signed in (a viewer too: they see the names on the tasks anyway).
+- **In the dialog** (`js/taskmodal.js`): the **Assignee** field, after Tags.
+  Type `@` (everyone, yourself first) or the start of a name; Tab or Enter completes it to a chip, and another name replaces it; the chip's × or Backspace takes it off.
+  `me` is yourself.
+  A name that is no user who can be assigned is not saved: the dialog stays open and the field says so.
+  The field is hidden while Private is ticked.
+  A new task starts with the one user the filter names (`@anna` or `@me`; `filterDefaultAssignee`), as it starts with the filter's tags.
+- **In a new task's title** (`TasksCore.parseQuickAdd`): `@name` at the end, among the other shorthand ("Call Sam @bob #work tomorrow"), with completion as you type it.
+  Only the name of a user who can be assigned, or `@me`; anything else stays in the title (`bob@example.org`, `@home`), as does a second name.
+  Not on a private task.
+- **On the card** (`.task-assignee`, after the tags): `@anna`, your own name in the accent colour, a former assignee's struck through.
+- **In the filter** (`TasksCore.parseFilter`/`matchesFilter`, given `people`): `@anna`, `@anna|bob` (either), `-@anna` (not hers), `@me` (yours), `@none` (no one's, a former assignee's included).
+  A completed word becomes a chip, as a tag does; the suggestions are `me`, `none` and the users who have tasks among those the other words leave visible.
+  `@` on the list focuses the field and starts a name.
+- **The History** reads "Assigned to bob (was anna)" and "Unassigned (was bob)".
+- **The names** come from `GET /api/tasks/assignable`, which the task app loads once per page with its tasks (`loadPeople` in `js/taskutil.js`; `people`): `{ "users": [...], "me": "<who asks>" }`, the users who can be assigned, A–Z, for anyone signed in (a viewer too: they see the names on the tasks anyway).
   In sharing mode `users` is empty.
 - **Without users** there is no one to assign: a write with an assignee is a 400 ("This wiki has no users to assign a task to"), the route's `users` is empty, and the API shows no `assignee`.
   A file that has one (a wiki that had users) keeps it through reads and writes.

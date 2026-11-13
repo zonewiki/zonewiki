@@ -69,11 +69,7 @@ func tasksRoutes(mux *http.ServeMux) {
 	// Who a task can be assigned to, and who asks ("me"): for the
 	// browser's completion and its @me. No names in sharing mode.
 	mux.HandleFunc("GET /api/tasks/assignable", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
-		names := []string{}
-		if !sharingOn(r) {
-			names = settings().assignableUsers()
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"users": names, "me": userOf(r)})
+		writeJSON(w, http.StatusOK, assignablePeople(r))
 		return nil
 	}))
 	mux.HandleFunc("POST /api/tasks/settings", writesPages(tasksSettingsRoute))

@@ -389,6 +389,7 @@ Each with a dark-mode value.
 
 - **Filter field** (`#task-filter-search`, `TasksCore.parseFilter`/`matchesFilter`): `#words` filter by tag (all must match; `#a|b` = any), `-#word` excludes a tag (`-#a|b`: neither), `!high` (or `!`) and `!low` show the tasks of that importance, the rest searches title and description.
   `/` focuses it, `#` focuses it and starts a tag.
+  With users, `@words` filter by assignee the same way (`@anna`, `@anna|bob`, `-@anna`, `@me`, `@none`), `@` focuses the field and starts a name, and typing one suggests `me`, `none` and who has tasks here (Assigning tasks in `docs/spec/users.md`).
   Typing a `#word` (or `-#word`) suggests tags of the tasks the other tag words leave visible (free text is ignored for this).
   Embed `tag=`/`?tag=` become a query via `TasksCore.tagParamToQuery`.
   New tasks get the filter's single tags.
@@ -441,7 +442,7 @@ Each with a dark-mode value.
   The toast names the change ("#work added to 3 tasks", "#old removed from 2 tasks", else "Tags changed on N tasks"; counting only tasks whose tags changed), or where tasks went if the change took them out of the view; its Undo puts back each changed task's tags in one `batch-update`.
   On touch the field is not focused while there are rows to tick, so the keyboard waits until it is tapped.
 - **Quick-add** (new tasks only, `TasksCore.parseQuickAdd`): trailing shorthand like `Call Bob tomorrow #work due:fri`.
-  Start: `today`, `tomorrow`/`tmrw`, a weekday (next one, never today), `+3`/`+3d`/`+2w`, `YYYY-MM-DD`; due: `due:` + the same; tags: `#tag` starting with a letter; importance: `!` (or `!high`) and `!low`, as words of their own ("Call Bob !", not "Call Bob!").
+  Start: `today`, `tomorrow`/`tmrw`, a weekday (next one, never today), `+3`/`+3d`/`+2w`, `YYYY-MM-DD`; due: `due:` + the same; tags: `#tag` starting with a letter; with users, the assignee: `@name` of a user who can be assigned, or `@me` (anything else stays in the title); importance: `!` (or `!high`) and `!low`, as words of their own ("Call Bob !", not "Call Bob!").
   Only trailing words count, and shorthand that would empty the title is ignored.
   `#task-edit-quick` previews the result; shorthand wins over the date fields.
 - **Completing**: the checkbox completes after a cancellable grace period (struck through meanwhile; several ticked in a row each keep their tick and strike while an earlier one leaves the list).
@@ -492,12 +493,12 @@ Each with a dark-mode value.
   Centred with `inset: 0; margin: auto` and **no transform** (a transform would clip `position: fixed` popups like the date picker), scrollable, sticky action bar.
   At ≤640px full screen.
   **The fields**: Title, Description, Tags, then one line of small boxes that wraps (`.task-props`), each with its name inside, in grey before its value (`.task-prop`, a `<label>`, so a click anywhere in it reaches the field): Due, Start and Importance, which every task shows.
-  **The rest shows only when set** as the dialog opens: Repeat with "Every 2 weeks" and From done (the two only once a repeat is chosen; `.task-prop-group` keeps the three together where the line wraps), Keep after done, Private.
-  Under the boxes a quiet line offers the ones not shown (`.task-add-fields`: "+ Repeat", "+ Days before due", "+ Keep after done", "+ Private"): a click shows the field and goes to it (`showField`), and ticks Keep or Private, since asking for the box is asking for that.
+  **The rest shows only when set** as the dialog opens: with users Assignee (a field of its own after Tags; Assigning tasks in `docs/spec/users.md`), Repeat with "Every 2 weeks" and From done (the two only once a repeat is chosen; `.task-prop-group` keeps the three together where the line wraps), Keep after done, Private.
+  Under the boxes a quiet line offers the ones not shown (`.task-add-fields`: "+ Assignee" with users, "+ Repeat", "+ Days before due", "+ Keep after done", "+ Private"): a click shows the field and goes to it (`showField`), and ticks Keep or Private, since asking for the box is asking for that.
   A field stays for as long as the dialog is open, also emptied again; a line with nothing left to offer is gone.
-  Not offered: Repeat for a keep task, Days before due without a due date (and it is never shown on opening: it is another way to set Start, which shows the result), Private for a shared task (it stays shared).
+  Not offered: Repeat for a keep task, Days before due without a due date (and it is never shown on opening: it is another way to set Start, which shows the result), Private for a shared task (it stays shared), Assignee for a private one (it has none).
   Repeat without a date shows, but off, and the line under the boxes says why ("To repeat, a task needs a due or start date.", `#task-edit-rec-note`).
-  **Tab goes from field to field**: Title, Description, the comment field while it is shown (and its Add once something is written), Tags, Due, Start, Importance, the fields shown of Days before due, the repeat fields, Keep and Private, the buttons of the line that offers the others, then Save, Cancel, Won't do.
+  **Tab goes from field to field**: Title, Description, the comment field while it is shown (and its Add once something is written), Tags, Assignee when it is shown, Due, Start, Importance, the fields shown of Days before due, the repeat fields, Keep and Private, the buttons of the line that offers the others, then Save, Cancel, Won't do.
   What isn't a field of the task is no stop (`tabindex="-1"`) and has its own key or the mouse: Edit | Preview (F2), the formatting bar (Ctrl+B/I/K), Write a comment… (Alt+C) and the comment field's Cancel (Esc), a comment's ✎ and × and the links and boxes in comments, History.
   The List field sits in a closed `<details>`; saving a task into another list removes it from the view with a notice.
 - **Date picker** (`openDatePicker`): a row of shortcuts above the month,
@@ -821,5 +822,6 @@ A tag no page declares stays a filter.
 - **i**: the importance of the selected task, in turn high, low, normal; several selected all get what follows the first one's (see Importance)
 - **Shift+F10** / menu key: the selected task's ⋯ menu (on several selected tasks, the selection's)
 - **Shift+click**, **Ctrl/Cmd+click**, **Shift+↑/↓**, **Ctrl/Cmd+A**: select several tasks (see Selection); **t** / **T**: their tags
+- **@** (with users): the filter field, starting an assignee's name, as **#** starts a tag
 - **c t**: a new task in the default list, with its tags (from any page; see Modules → New task from anywhere).
   The tasks' keydown runs before the page's shortcuts, so while a `g`/`c` prefix waits for its second key (`keyPrefix` in `js/util.js`) the tasks leaves that key alone: the t of **c t** or **g t** never opens the bulk tag dialog on a selected task
