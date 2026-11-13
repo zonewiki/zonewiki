@@ -584,8 +584,7 @@ div.task-card-comment > .task-comment-when { display: block; }
   .tasks-app:not(.tasks-compact) .task-meta:has(.task-date-empty) { display: flex; }
 }
 
-.tasks-density-btn, .tasks-settings-btn, .tasks-more-btn { display: inline-flex; align-items: center; justify-content: center; padding-inline: .45rem; color: var(--muted); }
-.tasks-density-btn[aria-pressed="true"] { color: var(--btn-primary); border-color: var(--btn-primary); }
+.tasks-settings-btn, .tasks-more-btn { display: inline-flex; align-items: center; justify-content: center; padding-inline: .45rem; color: var(--muted); }
 .tasks-toolbar select.tasks-sort { flex: none; }
 .tasks-sort[hidden] { display: none; }
 /* The Open tab's Plan switch: on, the board by start date; off, one list */

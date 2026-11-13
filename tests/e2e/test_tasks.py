@@ -3057,9 +3057,8 @@ def test_compact_switch_one_line_per_task(page, wiki):
     passport = card(page, "Renew passport")
     full = passport.bounding_box()["height"]
     expect(passport.locator(".task-desc")).to_be_visible()
-    page.locator(".tasks-density-btn").click()
+    page.keyboard.press("v")
     expect(page.locator(".tasks-app")).to_have_class(re.compile(r"\btasks-compact\b"))
-    expect(page.locator(".tasks-density-btn")).to_have_attribute("aria-pressed", "true")
     # One line: title, tags, the notes marker and the deadline side by side.
     box = passport.bounding_box()
     assert box["height"] < 45 < full
@@ -3092,7 +3091,7 @@ def test_compact_defaults_per_tab(page, wiki):
         expect(app).to_have_class(COMPACT)
     # Full cards on Open; Focus stays compact: each tab keeps its own.
     open_tab(page, "open")
-    page.locator(".tasks-density-btn").click()
+    page.keyboard.press("v")
     expect(app).not_to_have_class(COMPACT)
     open_tab(page, "focus")
     expect(app).to_have_class(COMPACT)
@@ -3109,7 +3108,7 @@ def test_compact_choice_is_per_tasks(page, wiki):
     _compact_tasks(page)
     page.goto("/page/shop")
     expect(page.locator(".tasks-app")).to_have_class(COMPACT)
-    page.locator(".tasks-density-btn").click()             # Focus there: full
+    page.keyboard.press("v")             # Focus there: full
     page.goto("/tasks?view=focus")
     expect(page.locator(".tasks-app")).to_have_class(COMPACT)       # /tasks: still the default
     page.goto("/page/shop")
@@ -3131,7 +3130,7 @@ def test_phone_cards_show_every_tag_never_clip_dates(new_page, wiki):
     expect(card(phone, "Pack for the trip")).to_be_visible()
     for switch in (False, True):                       # both densities
         if switch:
-            phone.locator(".tasks-density-btn").tap()
+            phone.keyboard.press("v")
         assert phone.evaluate("document.documentElement.scrollWidth") <= 390
         for item in phone.locator(".task-item").all():
             box = item.bounding_box()
@@ -3168,7 +3167,7 @@ def test_phone_card_menu_sits_on_the_title_line(new_page, wiki):
     expect(card(phone, "Pay rent")).to_be_visible()
     for switch in (False, True):                       # both densities
         if switch:
-            phone.locator(".tasks-density-btn").tap()
+            phone.keyboard.press("v")
         compact = "tasks-compact" in phone.locator(".tasks-app").get_attribute("class")
         rent = card(phone, "Pay rent")
         title, menu = rent.locator(".task-content").bounding_box(), rent.locator(".task-menu-btn").bounding_box()
@@ -3196,7 +3195,7 @@ def test_every_card_shows_every_tag(page, wiki):
     page.goto("/tasks?view=open")
     app, item = page.locator(".tasks-app"), card(page, "Call the insurance about the broken window in the kitchen and the hallway")
     if "tasks-compact" in app.get_attribute("class"):
-        page.locator(".tasks-density-btn").click()
+        page.keyboard.press("v")
     expect(app).not_to_have_class(COMPACT)
     tags = item.locator(".task-tag")
     expect(tags).to_have_count(7)
@@ -3217,7 +3216,7 @@ def test_every_card_shows_every_tag(page, wiki):
 
     page.mouse.move(0, 0)
     full = check()
-    page.locator(".tasks-density-btn").click()
+    page.keyboard.press("v")
     expect(app).to_have_class(COMPACT)
     page.mouse.move(0, 0)
     line = check()
@@ -3243,7 +3242,7 @@ def _expand_setup(page):
     page.request.post("/api/tasks", data={"title": "Short with notes", "description": "Some notes."})
     page.request.post("/api/tasks", data={"title": "Plain"})
     page.goto("/tasks?view=open")
-    page.locator(".tasks-density-btn").click()
+    page.keyboard.press("v")
 
 
 def test_compact_selecting_shows_the_title_details_on_request(page, wiki):
@@ -3355,7 +3354,7 @@ def test_compact_expand_button_and_hl_keys(page, wiki):
     expect(short).to_have_class(re.compile(r"\btask-selected\b"))
     page.keyboard.press("j")                                             # hjkl: j moves on
     expect(short).not_to_have_class(re.compile(r"\btask-selected\b"))
-    page.locator(".tasks-density-btn").click()                            # full cards: none
+    page.keyboard.press("v")                            # full cards: none
     expect(btn).to_be_hidden()
 
 
@@ -3366,7 +3365,7 @@ def test_compact_double_click_below_expanded_opens_that_card(page, wiki):
     page.request.post("/api/tasks", data={"title": "Below", "description": "Some notes."})
     page.request.post("/api/tasks", data={"title": "Long notes", "description": "\n\n".join(f"Line {i}" for i in range(12))})
     page.goto("/tasks?view=open")
-    page.locator(".tasks-density-btn").click()
+    page.keyboard.press("v")
     long_notes, below = card(page, "Long notes"), card(page, "Below")
 
     def open_details(item):
@@ -3504,7 +3503,7 @@ def test_compact_tags_follow_the_title(page, wiki):
     # title; dates and markers sit at the right end.
     _compact_tasks(page)
     page.goto("/tasks?view=open")
-    page.locator(".tasks-density-btn").click()
+    page.keyboard.press("v")
     passport = card(page, "Renew passport")
     expect(passport.locator(".task-tag").first).to_have_text("#personal")
     title, first, due = (passport.locator(sel).first.bounding_box() for sel in (".task-title", ".task-tag", ".task-due"))
@@ -3585,7 +3584,7 @@ def test_compact_line_marks_notes(page, wiki):
     page.goto("/tasks?view=open")
     marker = card(page, "Has notes").locator(".task-has-notes")
     expect(marker).to_be_visible()                                       # full card
-    page.locator(".tasks-density-btn").click()
+    page.keyboard.press("v")
     expect(marker).to_be_visible()
     expect(marker).to_have_attribute("title", "Has a description")
     expect(card(page, "No notes").locator(".task-has-notes")).to_have_count(0)
@@ -3603,7 +3602,7 @@ def test_expanded_task_keeps_its_line(page, wiki):
                                           "tags": "admin", "due_date": "2026-11-15", "description": "At the shop."})
     page.set_viewport_size({"width": 800, "height": 800})
     page.goto("/tasks?view=open")
-    page.locator(".tasks-density-btn").click()
+    page.keyboard.press("v")
     item = page.locator(".task-item").first
     item.locator(".task-content").hover()   # as when clicking it: hover shows the empty 📅 too
     before = {sel: item.locator(sel).first.bounding_box() for sel in (".task-tag", ".task-due")}
@@ -3632,7 +3631,7 @@ def test_expanded_task_shows_its_latest_comments(page, wiki):
     page.goto("/tasks?view=open")
     passport = card(page, "Renew passport")
     expect(passport.locator(".task-card-comments p")).to_have_count(3)   # full cards show them
-    page.locator(".tasks-density-btn").click()
+    page.keyboard.press("v")
     expect(passport.locator(".task-card-comments")).to_be_hidden()   # the line: hidden too
     passport.locator(".task-comments-btn").click()                  # 💬 opens them on the line
     expect(page.locator(".task-edit-modal[open]")).to_have_count(0)
@@ -3652,7 +3651,7 @@ def test_compact_on_a_phone_is_two_lines(new_page, wiki):
     phone = new_page(**TOUCH_PHONE)
     _compact_tasks(phone)
     phone.goto("/tasks?view=open")
-    phone.locator(".tasks-density-btn").tap()
+    phone.keyboard.press("v")
     passport, plain = card(phone, "Renew passport"), card(phone, "Plain")
     row, title, due = (passport.locator(sel).first.bounding_box() for sel in (".task-content", ".task-content", ".task-due"))
     row = passport.bounding_box()
@@ -3790,7 +3789,7 @@ def test_rename_list_dialog(page, wiki):
 
 
 def test_settings_dialog_changes_the_embeds_params(page, wiki):
-    """The gear beside the density button: what the list opens on, Plan, the
+    """The gear in the toolbar: what the list opens on, Plan, the
     tabs' names, the limit and the tags, written into the page's [[tasks: …]]."""
     page.request.post("/api/tasks", data={"title": "Milk", "tags": ["shop"]})
     wiki.write("shopping", "# Shopping\n\nBefore.\n\n[[tasks: list=shop keep=1]]\n\nAfter.\n")

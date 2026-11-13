@@ -14,7 +14,7 @@ const { st } = app;
 
 // Compact: one line per task (title, then tags, markers and dates; notes
 // hidden; selecting or a tap expands a task). The default on every tab;
-// the density button and v switch it, remembered per task list and tab in this
+// v switches it, remembered per task list and tab in this
 // browser.
 const densityKey = view => 'zone-tasks-compact:' + [location.pathname, app.appEl?.dataset.initList || '',
   app.appEl?.dataset.initTag || '', app.instanceId, view].join('|');
@@ -134,12 +134,6 @@ function applyCompact(view) {
     st.detailsOpen = st.detailsMode = false;
   }
   app.appEl?.classList.toggle('tasks-compact', st.compact);
-  app.densityBtn?.setAttribute('aria-pressed', String(st.compact));
-  if (app.densityBtn) {
-    const label = st.compact ? 'Full cards' : 'One line per task';
-    app.densityBtn.title = `${label} (v)`;
-    app.densityBtn.setAttribute('aria-label', label);
-  }
 }
 // In compact view one task at a time is expanded: the selected one (a
 // click, arrows, j/k; setSelected), or on touch the one tapped first (a tap
@@ -234,7 +228,6 @@ function toggleCompact() {
   try { localStorage.setItem(densityKey(st.activeView), st.compact ? '1' : '0'); } catch (_) {}
   applyCompact();
 }
-app.densityBtn?.addEventListener('click', toggleCompact);
 
 return { foldId, toggleFold, unfoldFor, SORT_TITLES, activeSort, applySort, cycleSort, isOpenTab, groupKey, applyGroup, setGroup, tabView, applyCompact, EXPAND_ICON, MORE_ICON, setExpanded, toggleDetails, expandSelected, toggleCompact };
 }

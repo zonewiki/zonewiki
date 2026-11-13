@@ -91,7 +91,6 @@ const st = {};
 const listEl = document.getElementById('tasks-list' + sfx);
 const tabsEl = document.getElementById('tasks-tabs' + sfx);
 const addBtn = document.getElementById('task-add-btn' + sfx);
-const densityBtn = document.getElementById('task-density-btn' + sfx);
 const sortSel = document.getElementById('task-sort' + sfx);
 const planSwitch = document.getElementById('task-plan' + sfx);
 const filterSearch = document.getElementById('task-filter-search' + sfx);
@@ -135,7 +134,7 @@ const app = {
 
   forgetSession,
   scopeQuery, headless,
-  sortSel, planSwitch, densityBtn,
+  sortSel, planSwitch,
   filterSearch,
   tabsEl, completedLink, saveActiveTab,
   // what is set further down, or changes

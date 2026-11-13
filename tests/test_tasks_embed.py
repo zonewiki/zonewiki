@@ -32,10 +32,10 @@ class TestTasksLinkRender:
         assert "task-show-lists" not in html
         assert 'id="task-edit-list' not in html and "task-edit-page" not in html
 
-    def test_density_button(self, client, wiki_dir):
-        """Every task list has the switch between one line per task and full cards."""
+    def test_no_density_button(self, client, wiki_dir):
+        """One line per task or full cards is the v key's: the toolbar has no button for it."""
         html = preview(client, "[[tasks:]]\n")
-        assert 'class="btn tasks-density-btn" id="task-density-btn"' in html and 'title="One line per task (v)"' in html
+        assert "density" not in html
 
     def test_embed_with_tag_filter(self, client, wiki_dir):
         """[[tasks: tag=work]] passes tag as data attribute."""

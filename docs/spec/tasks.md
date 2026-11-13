@@ -276,7 +276,7 @@ Dates decide where a task appears, never whether.
 
 ### Settings
 
-**The gear** in the toolbar, beside the density button (`#task-settings-btn`, `.tasks-settings-btn`), opens **List settings** (`#task-settings-modal`, `js/tasksettings.js`): what the list is and how it opens, without editing the page.
+**The gear** in the toolbar (`#task-settings-btn`, `.tasks-settings-btn`), opens **List settings** (`#task-settings-modal`, `js/tasksettings.js`): what the list is and how it opens, without editing the page.
 It changes the list's params where they are written, so the dialog and a hand edit are the same thing:
 
 | Field | Param | |
@@ -515,7 +515,7 @@ Each with a dark-mode value.
   Tags that don't fit beside the title wrap onto a second line rather than drop out (see Cards).
   **Every tab starts compact** (one line per task; `compact=1`, which once made Focus and Plan start so too, is no longer needed and ignored).
   Rows stay ≥44px on touch.
-  Switched by the density button in the toolbar (`#task-density-btn`, `aria-pressed`) or **v**, remembered per task list and tab in `localStorage` (`zone-tasks-compact:<path>|<list>|<tag>|<instance>|<view>`, `compactFor`), so it survives reloads.
+  Switched by **v** (`toggleCompact`; the toolbar has no button for it, so without a keyboard a list stays as it is), remembered per task list and tab in `localStorage` (`zone-tasks-compact:<path>|<list>|<tag>|<instance>|<view>`, `compactFor`), so it survives reloads.
   **Expanding a task** (`expandedId`, `setExpanded`, `.task-expanded`): selecting a task (a click, arrows, j/k; `setSelected`) shows its whole title,
   wrapped,
   when the line cuts it off (`titleCut`),
@@ -542,7 +542,7 @@ Each with a dark-mode value.
   so a double-click's second click still lands on the card the first one selected.
   Each press of it selects that card again, which doesn't restart the wait.
   A pressed card is also not scrolled into view when it expands (`pressedCard`; it is in view already, and scrolling would move it from under the pointer).
-- **Header**: tabs, filter, the density button and **+ New** on one line on desktop (`.tasks-toolbar` `flex: 1 1 20rem`), two lines on phones with a label-less "+" (accessible name "New task").
+- **Header**: tabs, filter and **+ New** on one line on desktop (`.tasks-toolbar` `flex: 1 1 20rem`), two lines on phones with a label-less "+" (accessible name "New task").
 
 ### Title links
 
