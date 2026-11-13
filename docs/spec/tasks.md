@@ -131,7 +131,7 @@ the Plan board's days and the picker's tooltips are the locale's short weekday a
 The calendar's month title, weekday heads and week start still follow the `locale` setting.
 The server writes the task chips' dates as ISO itself (`shortDate`), so `localizeDates` leaves them.
 
-The edit modal's "Days before due" is just another way to enter the start date (`start = due − N`) and is not stored.
+The edit modal's "Days before due" is just another way to enter the start date (`start = due − N`) and is not stored; the dialog shows it once asked for ("+ Days before due", with a due date).
 Recurring instances keep the gap between the two dates, but a new instance's start date is never before today (it can't have been available before the previous one was done); when that clamps it, the series remembers the gap in `recurrence.lead` for the next instance.
 
 ### Task fields
@@ -484,8 +484,14 @@ Each with a dark-mode value.
   a double tap's `dblclick` is ignored, so it is just those two taps),
   or Edit… in the menu.
   Centred with `inset: 0; margin: auto` and **no transform** (a transform would clip `position: fixed` popups like the date picker), scrollable, sticky action bar.
-  At ≤640px full screen with Due | Start and Repeat | Every | From done on shared rows (`.task-row-dates`, `.task-row-repeat`).
-  **Tab goes from field to field**: Title, Description, the comment field while it is shown (and its Add once something is written), Tags, Due, Start, Days before due, the repeat fields, Keep, Private, then Save, Cancel, Won't do (a field that is off, like Every N without a repeat, is none).
+  At ≤640px full screen.
+  **The fields**: Title, Description, Tags, then one line of small boxes that wraps (`.task-props`), each with its name inside, in grey before its value (`.task-prop`, a `<label>`, so a click anywhere in it reaches the field): Due, Start and Importance, which every task shows.
+  **The rest shows only when set** as the dialog opens: Repeat with "Every 2 weeks" and From done (the two only once a repeat is chosen; `.task-prop-group` keeps the three together where the line wraps), Keep after done, Private.
+  Under the boxes a quiet line offers the ones not shown (`.task-add-fields`: "+ Repeat", "+ Days before due", "+ Keep after done", "+ Private"): a click shows the field and goes to it (`showField`), and ticks Keep or Private, since asking for the box is asking for that.
+  A field stays for as long as the dialog is open, also emptied again; a line with nothing left to offer is gone.
+  Not offered: Repeat for a keep task, Days before due without a due date (and it is never shown on opening: it is another way to set Start, which shows the result), Private for a shared task (it stays shared).
+  Repeat without a date shows, but off, and the line under the boxes says why ("To repeat, a task needs a due or start date.", `#task-edit-rec-note`).
+  **Tab goes from field to field**: Title, Description, the comment field while it is shown (and its Add once something is written), Tags, Due, Start, Importance, the fields shown of Days before due, the repeat fields, Keep and Private, the buttons of the line that offers the others, then Save, Cancel, Won't do.
   What isn't a field of the task is no stop (`tabindex="-1"`) and has its own key or the mouse: Edit | Preview (F2), the formatting bar (Ctrl+B/I/K), Write a comment… (Alt+C) and the comment field's Cancel (Esc), a comment's ✎ and × and the links and boxes in comments, History.
   The List field sits in a closed `<details>`; saving a task into another list removes it from the view with a notice.
 - **Date picker** (`openDatePicker`): a row of shortcuts above the month,
@@ -580,11 +586,12 @@ A task's description is markdown, edited and rendered as a page's text.
 - **Where the HTML comes from** (`renderTexts`, `renderedHtml` in `tasks.js`): the tasks asks the server for the texts it hasn't rendered yet, in one request (`{ notes: [...], comments: [...] }`), and keeps the HTML per text for the page's life, shared by every task list app on it.
   Loading tasks (`fetchTasks`, Closed) and each write wait for it before drawing, so cards never flash plain text; a text that arrives some other way shows as plain text until its HTML is there (`htmlOf`), and a failed request caches nothing.
   Code is highlighted once, when the HTML arrives.
-- **Editing** (the edit modal's Description): the page editor's markdown helpers (`markdownEditor` in `js/mdedit.js`): its formatting bar (`#task-edit-format`, without Make task, which is the editor's),
+- **Editing** (the edit modal's Description): the field is as tall as its text (`fitNotes` in `js/taskmodal.js`): two lines when empty, growing as the text does up to 45% of the window's height, where it scrolls.
+  It has the page editor's markdown helpers (`markdownEditor` in `js/mdedit.js`): its formatting bar (`#task-edit-format`, without Make task, which is the editor's; shown only while the field has the focus, in the place of the "Description" label on the line above the field, which is as tall as the bar, so nothing moves; in a narrow dialog (≤640px) or under a finger on a line of its own under the label, where it scrolls sideways),
   Ctrl+B/I/K,
   Ctrl+Shift+X,
   `[[` / `[[task:` / `[text](` completion, snippets (`/date` + Tab), list continuation on Enter, Enter on a selection makes it a wikilink, file paste, drop and attach (uploads to `_assets/`, as in the editor), URL paste. Tab moves on to the next field unless it expands a snippet (the editor's Tab indents; a modal needs Tab between its fields). The modal's Save and Cancel stay: nothing is saved while typing.
-- **Edit | Preview** (two buttons beside the Description label, or **F2** in the modal; `setNotesPreview`): Preview shows the description as the card will (`/api/render-notes`) in place of the formatting bar and the field, at their height together, so nothing below moves; a longer description scrolls inside it.
+- **Edit | Preview** (two buttons at the right of the line above the field, or **F2** in the modal; `setNotesPreview`; not shown for an empty description that isn't being written in, which has nothing to preview): Preview shows the description as the card will (`/api/render-notes`) in place of the field, no shorter than it and as tall as what it shows, up to the field's 45% of the window, where it scrolls.
   Tinted, outlined and labelled PREVIEW at its top (stays while it scrolls), so it is never taken for the field.
   Ticking a box in it ticks the item in the text and records when, as on the card (`toggleCheckboxText` in `js/mdtext.js`, mirroring `mdtext.ToggleNthCheckbox`; local time), so the preview shows the date chip; unticking takes the date out.
   The hidden field can't take the browser's undo; unticking undoes it.
@@ -648,7 +655,7 @@ A task is of **high**, **normal** or **low** importance (`importance`, Task fiel
 
 - **On a card**, before the title, on its line (`importanceMark` in `js/taskutil.js`, `.task-importance`): **!** in a warm red for high, **↓** in grey for low, whose title also steps back (lighter, not bold). Normal shows nothing.
 - **It marks, it doesn't sort**: no order changes with it. The manual order is where a task's rank is; importance says what must not be forgotten, or what may wait, wherever the task stands.
-- **Set** in the edit modal (Importance: High, Normal, Low, after Tags),
+- **Set** in the edit modal (Importance: High, Normal, Low, after the dates),
   in a task's ⋯ menu (**Importance…**, which shows the three levels in the menu's place, the task's own ticked),
   with **i** on the selected task or tasks (`setImportance` in `js/taskselect.js`: one task by `PUT`, several by `batch-update`),
   and in a new task's title (`!`, `!low`: Quick-add).
@@ -664,7 +671,7 @@ It suits a shopping list used with the task app's views: Open is the catalogue o
 Completing a keep task (`keep_done`, in `PUT` and in `batch-complete`) clears its start date and its deadline, and sets `last_done` to today; it stays in `_tasks/tasks.json` with the same id, tags, description and place in Open's order, and Closed stays empty.
 Since Closed can't reopen it, the card shows an undo toast that restores the old fields (`keepSnapshot`).
 **Won't do** retires a staple.
-Keep and Repeat both say what happens after done, so they exclude each other: `keep` clears `recurrence`, and the edit modal disables Repeat while "Keep after done" is checked.
+Keep and Repeat both say what happens after done, so they exclude each other: `keep` clears `recurrence`, and the edit modal doesn't offer Repeat while "Keep after done" is checked (a Repeat that shows is off, and the line under the fields says "A keep task does not repeat.").
 Cards mark keep tasks with ⟲ (`.task-keep`).
 `[[tasks: keep=1]]` makes new tasks keep tasks.
 

@@ -1,5 +1,6 @@
-// A task app's edit modal (tasks.js initTasksInstance): a task's fields,
-// its tags as chips, the dates with their pickers and warnings, the notes
+// A task app's edit modal (tasks.js initTasksInstance): a task's fields
+// (the rare ones shown when set or asked for), its tags as chips, the
+// dates with their pickers and warnings, the notes
 // edited as a page is (with Edit | Preview), history and comments, the
 // quick-add shorthand, several new tasks at once (the editor's Make task)
 // and the private box. What it uses of the app comes in app (its state in
@@ -17,11 +18,12 @@ const { addDays, tagCounts, rankTags, parseQuickAdd } = TasksCore;
 export function initTaskModal(app) {
 const { st } = app;
 
-// The notes are edited as a page is (js/mdedit.js): the formatting bar,
-// completion, snippets, lists, file paste and drop. Tab stays the key to the
-// next field (it still expands a snippet). Edit | Preview (or F2) switches
-// the field for the notes as the card will show them, in the field's place
-// and at its height, so the modal keeps its layout; it opens in Edit.
+// The notes are edited as a page is (js/mdedit.js): the formatting bar
+// (shown while the field has the focus, tasks.css), completion, snippets,
+// lists, file paste and drop. Tab stays the key to the next field (it still
+// expands a snippet). Edit | Preview (or F2) switches the field for the
+// notes as the card will show them, in the field's place and at least as
+// tall; it opens in Edit.
 const notesPreview = document.getElementById('task-edit-preview' + app.sfx);
 const notesBar = document.getElementById('task-edit-format' + app.sfx);
 const notesModeBtns = [...app.modal.querySelectorAll('[data-notes-mode]')];
@@ -41,11 +43,8 @@ async function fetchNotesPreview() {
 const previewing = () => !!notesPreview && !notesPreview.hidden;
 function setNotesPreview(show, focus = true) {
   if (!notesPreview) return;
-  // The bar's and the field's space together, so nothing below moves.
-  if (show) {
-    const top = (notesBar || app.descTextarea).getBoundingClientRect().top;
-    notesPreview.style.height = `${app.descTextarea.getBoundingClientRect().bottom - top}px`;
-  }
+  // No shorter than the field, so a short description moves nothing below.
+  if (show) notesPreview.style.minHeight = `${app.descTextarea.offsetHeight}px`;
   notesPreview.hidden = !show;
   app.descTextarea.hidden = show;
   if (notesBar) notesBar.hidden = show;
@@ -53,8 +52,20 @@ function setNotesPreview(show, focus = true) {
   // Focus follows: the hidden field would drop it out of the modal, whose
   // keys (F2 back, Esc) then wouldn't reach it. Arrows scroll the preview.
   if (show) { notesPreview.innerHTML = ''; fetchNotesPreview(); if (focus) notesPreview.focus({ preventScroll: true }); }
-  else if (focus) app.descTextarea.focus();
+  else { fitNotes(); if (focus) app.descTextarea.focus(); }
 }
+// The field is as tall as its text: two lines when empty, growing as the
+// text does up to its max-height (tasks.css), where it scrolls. Measured
+// with the height let go, which must not move what the dialog shows.
+function fitNotes() {
+  const ta = app.descTextarea;
+  if (!ta || ta.hidden || !ta.offsetParent) return;
+  const scrolled = app.modal.scrollTop;
+  ta.style.height = 'auto';
+  ta.style.height = `${ta.scrollHeight + ta.offsetHeight - ta.clientHeight}px`;
+  app.modal.scrollTop = scrolled;
+}
+app.descTextarea?.addEventListener('input', fitNotes);
 notesModeBtns.forEach(b => b.addEventListener('click', () => setNotesPreview(b.dataset.notesMode === 'preview')));
 // Ticking a box in the preview ticks the item in the text, recording when
 // as on the card (the field is hidden, so not through its undo; unticking
@@ -77,6 +88,52 @@ if (app.descTextarea) {
 }
 
 const importanceSelect = document.getElementById('task-edit-importance' + app.sfx);
+
+// The fields a task rarely has (Repeat with Every and From done, Days
+// before due, Keep after done, Private) show only when set as the dialog
+// opens, or once asked for: the line under the fields (.task-add-fields) has a
+// button for each one not shown, which shows it and goes to it; Keep and
+// Private are ticked by it, since asking for the box is asking for that.
+// A field stays for as long as the dialog is open, also emptied again.
+const propsEl = document.getElementById('task-edit-props' + app.sfx);
+const moreEl = document.getElementById('task-edit-more' + app.sfx);
+const recNote = document.getElementById('task-edit-rec-note' + app.sfx);
+const fieldEl = name => propsEl.querySelector(`[data-field="${name}"]`);
+const fieldShown = name => { const el = fieldEl(name); return !!el && !el.hidden; };
+function showField(name, show = true) {
+  const el = fieldEl(name);
+  if (el) el.hidden = !show;
+}
+// Which buttons the line has: no Repeat for a keep task (it can't repeat),
+// Days before due only with a due date, no Private for a shared task (it
+// stays shared).
+function syncMore() {
+  const can = {
+    repeat: !app.keepCb.checked,
+    lead: !!document.getElementById('task-edit-due' + app.sfx).value,
+    keep: true,
+    private: !!app.privateCb && !app.privateCb.disabled,
+  };
+  let any = false;
+  moreEl.querySelectorAll('[data-more]').forEach(btn => {
+    btn.hidden = fieldShown(btn.dataset.more) || !can[btn.dataset.more];
+    any = any || !btn.hidden;
+  });
+  moreEl.hidden = !any;
+}
+moreEl.addEventListener('click', e => {
+  const name = e.target.closest('[data-more]')?.dataset.more;
+  if (!name) return;
+  showField(name);
+  const box = { keep: app.keepCb, private: app.privateCb }[name];
+  if (box) {
+    box.checked = true;
+    box.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  syncDates('more');
+  // A Repeat that is off (no date yet) can't take the focus: the first field that can.
+  [...fieldEl(name).querySelectorAll('input, select')].find(el => !el.disabled)?.focus();
+});
 let privateWas = false;   // as the modal opened: was the task private
 
 // Edit modal Tags field: each tag is a chip; the input holds the one being
@@ -445,31 +502,39 @@ function openEditModal(taskId, opts) {
   document.getElementById('task-edit-rec-interval' + app.sfx).value = task?.recurrence?.interval || 1;
   const recFromCb = document.getElementById('task-edit-rec-from' + app.sfx);
   if (recFromCb) recFromCb.checked = task?.recurrence?.from === 'completion';
-  syncRecFields();
+  showField('repeat', !!recType);
+  showField('lead', false);
+  showField('keep', app.keepCb.checked);
+  showField('private', !!app.privateCb?.checked);
   syncTarget();
   app.wontDoBtn.style.display = task && !task.closed_at ? '' : 'none';
   syncDates('open');
   app.modal.showModal();
+  fitNotes();
   if (task && opts?.focusComment) openCommentBox();
   else (batchTitles ? editTagsInput : app.titleInput).focus();
 }
 
-// Every N / From done are only meaningful with a repeat type — disable them
-// (rather than hide, which would shift the row) when Repeat is "—".
+// Every N / From done are only meaningful with a repeat type: they show
+// once Repeat is both enabled and set. "Every 2 weeks": the unit follows
+// the type and the number.
+const REC_UNIT = { daily: 'day', weekly: 'week', monthly: 'month', yearly: 'year' };
 function syncRecFields() {
-  // Sub-controls are only active when Repeat is both enabled and set.
   const on = !app.recTypeSelect.disabled && !!app.recTypeSelect.value;
-  const subHint = on ? '' : (app.recTypeSelect.disabled ? app.recTypeSelect.closest('.task-field').title : 'Select a repeat type first');
   const intervalEl = document.getElementById('task-edit-rec-interval' + app.sfx);
   intervalEl.disabled = !on;
-  intervalEl.closest('.task-field').title = subHint;
+  intervalEl.closest('.task-prop').hidden = !on;
+  const unit = REC_UNIT[app.recTypeSelect.value] || '';
+  document.getElementById('task-edit-rec-unit' + app.sfx).textContent =
+    unit && (parseInt(intervalEl.value, 10) || 1) > 1 ? unit + 's' : unit;
   const rf = document.getElementById('task-edit-rec-from' + app.sfx);
   if (rf) {
     rf.disabled = !on;
-    rf.closest('.task-field').title = on ? 'Repeat from the completion date instead of the due (or start) date' : subHint;
+    rf.closest('.task-prop').hidden = !on;
   }
 }
 app.recTypeSelect.addEventListener('change', syncRecFields);
+document.getElementById('task-edit-rec-interval' + app.sfx).addEventListener('input', syncRecFields);
 
 // ── Modal date triggers (custom calendar popup, no native <input type=date>) ──
 // Each date field is a hidden <input> holding the value plus a visible button
@@ -520,9 +585,14 @@ function syncDates(changed) {
   // never repeats (Keep and Repeat both say what happens after done).
   const noDate = !dueEl.value && !startEl.value;
   app.recTypeSelect.disabled = noDate || app.keepCb.checked;
-  app.recTypeSelect.closest('.task-field').title = app.keepCb.checked ? 'A keep task does not repeat'
-    : noDate ? 'Set a due or start date first' : '';
+  const why = app.keepCb.checked ? 'A keep task does not repeat.'
+    : noDate ? 'To repeat, a task needs a due or start date.' : '';
+  app.recTypeSelect.closest('.task-prop').title = why;
+  // Said under the fields too, where Repeat shows and is off.
+  recNote.hidden = !why || !fieldShown('repeat');
+  recNote.textContent = why;
   syncRecFields();
+  syncMore();
 }
 app.keepCb.addEventListener('change', () => syncDates('keep'));
 

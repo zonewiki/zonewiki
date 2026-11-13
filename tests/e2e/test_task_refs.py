@@ -230,7 +230,8 @@ def test_make_task_modal_takes_more_fields_and_cancel_changes_nothing(page, wiki
     # Again, this time with a field only the modal has.
     page.locator('.fmt-btn[data-fmt="maketask"]').click()
     page.locator("#task-edit-title").fill("Water plants today")
-    page.locator("#task-edit-keep").check()
+    page.locator("#task-edit-more-keep").click()        # shows the box, ticked
+    expect(page.locator("#task-edit-keep")).to_be_checked()
     _save_modal(page)
     expect(page.locator(".task-undo-toast")).to_be_visible()
     [t] = _open_tasks(wiki)

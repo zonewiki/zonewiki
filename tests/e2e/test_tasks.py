@@ -576,6 +576,9 @@ def test_modal_days_before_due_sets_start_date(page, wiki):
     page.goto("/page/tasks?view=open")
     modal = open_edit(page, "Report")
     lead = modal.locator("#task-edit-lead")
+    expect(lead).to_be_hidden()                       # shown once asked for
+    modal.locator("#task-edit-more-lead").click()
+    expect(lead).to_be_focused()
     expect(lead).to_have_value("")
     lead.fill("3")
     expect(modal.locator("#task-edit-start")).to_have_value("2099-01-07")
@@ -592,8 +595,11 @@ def test_modal_lead_disabled_without_due_date(page, wiki):
     page.request.post("/api/tasks", data={"title": "Undated"})
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     page.goto("/page/tasks?view=open")
-    open_edit(page, "Undated")
+    modal = open_edit(page, "Undated")
     expect(page.locator("#task-edit-lead")).to_be_disabled()
+    # Nor is it offered: the line of more fields has no "Days before due".
+    expect(modal.locator("#task-edit-more-keep")).to_be_visible()
+    expect(modal.locator("#task-edit-more-lead")).to_be_hidden()
 
 
 # ── Stale-tab refresh ────────────────────────────────────────────────────────
@@ -915,6 +921,7 @@ def test_undo_a_move_to_another_list(page, wiki):
     wiki.write("diy", "# DIY\n\n[[tasks: list=hardware]]\n")
     page.goto("/page/shop?view=open")
     modal = open_edit(page, "Screws")
+    modal.locator("#task-edit-more-lead").click()
     modal.locator("#task-edit-lead").fill("3")       # a start date too (logged)
     modal.locator("#task-edit-tags").click()
     page.keyboard.press("Backspace")
@@ -2384,16 +2391,16 @@ def test_notes_editor_has_the_bar_and_a_preview(page, wiki):
     expect(notes).to_be_focused()
     page.keyboard.press("Tab")
     expect(notes).not_to_be_focused()
-    # Preview takes the field's place, at its height: the notes as the card
-    # will show them; Edit (or F2) goes back.
+    # Preview takes the field's place, no shorter than it: the notes as the
+    # card will show them; Edit (or F2) goes back.
     preview = modal.locator("#task-edit-preview")
     expect(preview).to_be_hidden()
-    comments_y = modal.locator("label", has_text="Tags").bounding_box()["y"]
+    field_height = notes.bounding_box()["height"]
     modal.locator("#task-edit-preview-btn").click()
     expect(preview.locator("strong")).to_have_text("loud")
     expect(notes).to_be_hidden()
     expect(bar).to_be_hidden()
-    assert abs(modal.locator("label", has_text="Tags").bounding_box()["y"] - comments_y) <= 1   # nothing moved
+    assert preview.bounding_box()["height"] >= field_height - 1
     # Labelled, so it is never taken for the text field.
     assert preview.evaluate("el => getComputedStyle(el, '::before').content") == '"Preview"'
     modal.locator("#task-edit-notes-edit-btn").click()
@@ -3049,11 +3056,11 @@ def test_tab_in_the_task_dialog_goes_from_field_to_field(page, wiki):
     page.goto("/tasks?view=open")
     modal = open_edit(page, "Plan trip")
     expect(modal.locator("#task-edit-title")).to_be_focused()
-    fields = ["task-edit-title", "task-edit-desc", "task-edit-tags", "task-edit-importance", "task-edit-due", "task-edit-start", "task-edit-lead",
-              "task-edit-rec-type", "task-edit-rec-from", "task-edit-keep", "Save", "task-edit-cancel", "task-edit-wontdo"]
+    # The fields the task has, then the line that offers the others.
+    fields = ["task-edit-title", "task-edit-desc", "task-edit-tags", "task-edit-due", "task-edit-start", "task-edit-importance",
+              "task-edit-more-repeat", "task-edit-more-lead", "task-edit-more-keep", "Save", "task-edit-cancel", "task-edit-wontdo"]
     stops = _tab_stops(page, modal)
-    # "Every N" and "From done" are off without a repeat: disabled fields are no stops either.
-    assert stops == [f for f in fields if f != "task-edit-rec-from"], stops
+    assert stops == fields, stops
     # And back the same way.
     modal.locator("#task-edit-tags").focus()
     page.keyboard.press("Shift+Tab")
@@ -3069,7 +3076,7 @@ def test_tab_in_the_task_dialog_goes_from_field_to_field(page, wiki):
     page.keyboard.press("Shift+Tab")
     expect(comment).to_be_focused()
     page.keyboard.press("Shift+Tab")
-    expect(modal.locator("#task-edit-keep")).to_be_focused()
+    expect(modal.locator("#task-edit-more-keep")).to_be_focused()
     comment.focus()
     page.keyboard.type("called Bob")
     page.keyboard.press("Tab")
@@ -3082,11 +3089,113 @@ def test_tab_in_the_task_dialog_goes_from_field_to_field(page, wiki):
     modal.locator("#task-edit-cancel").click()
     page.locator(".tasks-app").get_by_role("button", name="New task").click()
     stops = _tab_stops(page, modal)
-    # Without a date nothing can repeat or start before it: those fields are off.
-    off = ("task-edit-lead", "task-edit-rec-type", "task-edit-rec-from", "task-edit-wontdo")
+    # Without a due date nothing can start before it: Days before due isn't offered.
+    off = ("task-edit-more-lead", "task-edit-wontdo")
     assert stops == [f for f in fields if f not in off], stops
     page.keyboard.press("Alt+c")                                     # no comments on a task not yet made
     expect(comment).to_be_hidden()
+
+
+def test_the_dialog_shows_rare_fields_when_set_or_asked_for(page, wiki):
+    # Repeat, Days before due and Keep after done are no part of a plain
+    # task's dialog: the line under the fields offers them.
+    page.request.post("/api/tasks", data={"title": "Water plants", "due_date": "2099-01-10"})
+    page.request.post("/api/tasks", data={"title": "Milk", "keep": True})
+    page.goto("/tasks?view=open")
+    modal = open_edit(page, "Water plants")
+    rec, every, from_done = (modal.locator(f"#task-edit-rec-{f}") for f in ("type", "interval", "from"))
+    keep, more = modal.locator("#task-edit-keep"), lambda f: modal.locator(f"#task-edit-more-{f}")
+    for field in (rec, every, from_done, keep, modal.locator("#task-edit-lead")):
+        expect(field).to_be_hidden()
+    expect(modal.locator(".task-add-field:visible")).to_have_text(["Repeat", "Days before due", "Keep after done"])
+    # Asked for, Repeat shows and has the focus; Every and From done come with a type.
+    more("repeat").click()
+    expect(rec).to_be_focused()
+    expect(more("repeat")).to_be_hidden()
+    expect(every).to_be_hidden()
+    rec.select_option("weekly")
+    expect(every).to_be_visible()
+    expect(from_done).to_be_visible()
+    expect(modal.locator("#task-edit-rec-unit")).to_have_text("week")
+    every.fill("2")
+    expect(modal.locator("#task-edit-rec-unit")).to_have_text("weeks")
+    # Emptied again, the field stays while the dialog is open.
+    rec.select_option("")
+    expect(rec).to_be_visible()
+    expect(every).to_be_hidden()
+    rec.select_option("weekly")
+    modal.locator(".task-edit-actions").get_by_role("button", name="Save").click()
+    wait_until(page, lambda: (task_by_title(page, "Water plants").get("recurrence") or {}).get("interval") == 2)
+    # A task that repeats opens with it; one that doesn't, without.
+    modal = open_edit(page, "Water plants")
+    expect(rec).to_have_value("weekly")
+    expect(every).to_have_value("2")
+    expect(more("repeat")).to_be_hidden()
+    # Keep after done: asked for, it is ticked, and Repeat is off, with the reason.
+    more("keep").click()
+    expect(keep).to_be_checked()
+    expect(keep).to_be_focused()
+    expect(rec).to_be_disabled()
+    expect(modal.locator("#task-edit-rec-note")).to_have_text("A keep task does not repeat.")
+    page.keyboard.press("Escape")
+    # A keep task shows its box, and is offered no Repeat.
+    modal = open_edit(page, "Milk")
+    expect(keep).to_be_visible()
+    expect(keep).to_be_checked()
+    expect(modal.locator(".task-add-field:visible")).to_have_count(0)
+    expect(modal.locator("#task-edit-more")).to_be_hidden()
+    keep.uncheck()
+    expect(modal.locator(".task-add-field:visible")).to_have_text(["Repeat"])
+    # Without a date Repeat shows, off, and says what it needs.
+    more("repeat").click()
+    expect(rec).to_be_disabled()
+    expect(modal.locator("#task-edit-rec-note")).to_have_text("To repeat, a task needs a due or start date.")
+
+
+def test_the_description_grows_and_has_its_bar_while_written_in(page, wiki):
+    page.goto("/tasks?view=open")
+    page.locator("#task-add-btn").click()
+    modal = page.locator("#task-edit-modal")
+    notes, bar = modal.locator("#task-edit-desc"), modal.locator("#task-edit-format")
+    label, mode = modal.locator("label[for=task-edit-desc]"), modal.locator(".task-notes-mode")
+    # Empty and not written in: its label, no bar, nothing to preview.
+    expect(bar).to_be_hidden()
+    expect(mode).to_be_hidden()
+    empty = notes.bounding_box()
+    assert empty["height"] < 70, empty
+    # With the focus the bar takes the label's place, whole, and nothing moves.
+    notes.click()
+    expect(bar).to_be_visible()
+    expect(mode).to_be_visible()
+    assert label.bounding_box()["width"] <= 1                          # there for screen readers
+    assert bar.evaluate("b => b.scrollWidth <= b.clientWidth")
+    assert notes.bounding_box() == empty
+    # As tall as its text, without a scrollbar of its own.
+    page.keyboard.type("one\ntwo\nthree\nfour\nfive\nsix")
+    grown = notes.bounding_box()["height"]
+    assert grown > empty["height"] + 50, grown
+    assert notes.evaluate("ta => ta.scrollHeight <= ta.clientHeight")
+    # Up to a point: then it scrolls, and the dialog's buttons stay in reach.
+    notes.fill("\n".join(f"line {i}" for i in range(80)))
+    tall = notes.bounding_box()["height"]
+    assert grown < tall <= page.viewport_size["height"] * 0.45 + 1, tall
+    assert notes.evaluate("ta => ta.scrollHeight > ta.clientHeight")
+    # Text taken out again: as small as it was.
+    notes.fill("")
+    assert notes.bounding_box()["height"] == empty["height"]
+    # Left with text in it: the label is back, and Preview stays.
+    notes.fill("**done**")
+    modal.locator("#task-edit-title").focus()
+    expect(bar).to_be_hidden()
+    expect(mode).to_be_visible()
+    assert label.bounding_box()["width"] > 20
+    # A task with a long description opens with its field that tall.
+    page.keyboard.press("Escape")
+    page.request.post("/api/tasks", data={"title": "Long", "description": "a\n\nb\n\nc\n\nd"})
+    page.reload()
+    modal = open_edit(page, "Long")
+    assert notes.evaluate("ta => ta.scrollHeight <= ta.clientHeight")
+    assert notes.bounding_box()["height"] > empty["height"] + 50
 
 
 def test_importance_shows_before_the_title_and_is_set_four_ways(page, wiki):

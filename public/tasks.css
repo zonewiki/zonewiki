@@ -551,7 +551,6 @@ div.task-card-comment > .task-comment-when { display: block; }
 .task-importance-low { color: color-mix(in srgb, var(--fg) 45%, transparent); font-weight: 500; }
 .task-item:has(.task-importance-low):not(.task-closed) .task-title { color: color-mix(in srgb, var(--fg) 62%, transparent); font-weight: 500; }
 @media screen and (prefers-color-scheme: dark) { .task-importance-high { color: #fb923c; } }
-.task-field-importance { max-width: 12rem; }
 /* "☑ 1/3": the notes have subtasks, so many done; all done, in the accent. */
 .task-subtasks { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .task-subtasks-done { color: var(--btn-primary); }
@@ -994,7 +993,6 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
   width: 1.1rem; height: 1.1rem; padding: 0; border: none; cursor: pointer;
   accent-color: var(--btn-primary);
 }
-.task-field-check .check-wrap { display: flex; align-items: center; justify-content: center; min-height: 2.15rem; }
 
 /* Task edit modal */
 /* Centred the native modal way (inset 0 + margin auto, no transform) and
@@ -1025,10 +1023,24 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 .task-settings-error { margin: 0; font-size: .85rem; color: #a33232; }
 .task-settings-error[hidden] { display: none; }
 .task-field { display: flex; flex-direction: column; gap: .25rem; }
-/* Notes: the label with Edit | Preview beside it, the editor's formatting
-   bar, the textarea, or the preview in its place (tasks.js setNotesPreview). */
-.task-notes-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
-.task-notes-mode { display: inline-flex; }
+/* Notes: one line above the field, as tall as the bar so nothing moves when
+   it shows: the label, or while the field has the focus the editor's
+   formatting bar in its place (the label stays for screen readers), and
+   Edit | Preview at the right. Then the textarea, or the preview in its
+   place (js/taskmodal.js setNotesPreview). */
+.task-notes-head { display: flex; align-items: center; gap: .5rem; min-height: 2rem; }
+.task-notes-head > label { margin-right: auto; align-self: flex-end; }
+.task-notes-head .format-bar { display: none; flex: 1 1 0; min-width: 0; padding: 0; margin: 0 0 0 -.3rem; gap: 0; }
+.task-notes-head .fmt-sep { margin: 0 .15rem; }
+/* Narrower buttons than the editor's, so the whole bar fits beside Edit | Preview. */
+@media (pointer: fine) { .task-notes-head .fmt-btn { min-width: 1.5rem; } }
+.task-notes-field:focus-within .format-bar:not([hidden]) { display: flex; }
+.task-notes-field:focus-within .task-notes-head:has(.format-bar:not([hidden])) > label {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+/* Nothing to preview in an empty field (its placeholder is a space) that isn't being written in. */
+.task-notes-field:has(textarea:placeholder-shown):not(:focus-within) .task-notes-mode { visibility: hidden; }
+.task-notes-mode { display: inline-flex; flex: none; }
 .task-notes-mode .btn { padding: .1rem .6rem; font-size: .8rem; color: var(--muted); }
 .task-notes-mode .btn:first-child { border-radius: 6px 0 0 6px; }
 .task-notes-mode .btn:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
@@ -1038,11 +1050,10 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 .task-notes-preview:focus { outline: none; }
 /* The preview's checkboxes are the card's, not the modal's field boxes. */
 .task-field .task-notes-preview input.task-list-item-checkbox { width: var(--mark); height: var(--mark); accent-color: var(--link); }
-.task-edit-modal .format-bar { padding: 0; margin: 0 -.2rem; }
 /* Clearly not the text field: tinted, outlined in the accent colour, and
    labelled "Preview" at the top, which stays put while it scrolls. */
 .task-notes-preview {
-  font-size: .9rem; padding: 0 .75rem .5rem; min-height: 6rem; overflow: auto; box-sizing: border-box;
+  font-size: .9rem; padding: 0 .75rem .5rem; max-height: 45dvh; overflow: auto; box-sizing: border-box;
   background: color-mix(in srgb, var(--btn-primary) 5%, var(--bg));
   border: 1px solid color-mix(in srgb, var(--btn-primary) 40%, var(--border)); border-radius: 6px;
 }
@@ -1064,6 +1075,8 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
   opacity: .4; cursor: not-allowed;
 }
 .task-field textarea { resize: vertical; min-height: 60px; }
+/* The description is as tall as its text (js/taskmodal.js fitNotes), to a point. */
+.task-notes-field textarea { resize: none; min-height: 0; max-height: 45dvh; }
 /* Custom-calendar date field (replaces native <input type=date> in the modal) */
 .date-trigger {
   padding: .4rem .6rem; border: 1px solid var(--border); border-radius: 4px;
@@ -1072,13 +1085,51 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 }
 .date-trigger:hover { background: var(--code-bg); }
 .date-trigger.date-trigger--set { color: var(--fg); }
-.task-field-row { display: flex; gap: .75rem; flex-wrap: wrap; }
-/* "Keep after done": a checkbox line of its own, not a field. */
-.task-edit-keep {
-  display: flex; align-items: center; gap: .4rem; flex-wrap: wrap;
-  font-size: .8rem; font-weight: 500; color: var(--muted); cursor: pointer;
+/* The task's other fields (.task-props): one line that wraps, each field a
+   small box with its name inside, in grey before its value. The box is the
+   label, so a click anywhere in it reaches the field; the control inside
+   has no border of its own. */
+.task-props { display: flex; flex-wrap: wrap; align-items: stretch; gap: .5rem; }
+.task-prop-group { display: flex; flex-wrap: wrap; gap: .5rem; min-width: 0; }
+.task-prop {
+  display: inline-flex; align-items: center; gap: .45rem; min-height: 2.15rem; min-width: 0;
+  padding: 0 .2rem 0 .6rem; border: 1px solid var(--border); border-radius: 4px;
+  background: var(--surface); font-size: .9rem; cursor: pointer;
 }
-.task-edit-keep input { width: 1rem; height: 1rem; margin: 0; accent-color: var(--btn-primary); cursor: pointer; }
+.task-prop:hover { border-color: color-mix(in srgb, var(--fg) 30%, var(--border)); }
+.task-prop:focus-within { outline: 2px solid var(--link); outline-offset: -1px; }
+.task-prop[hidden], .task-prop-group[hidden] { display: none; }
+.task-prop-label { font-size: .8rem; font-weight: 500; color: var(--muted); white-space: nowrap; }
+.task-prop :is(select, input[type="number"], .date-trigger) {
+  border: none; background: none; color: var(--fg); font: inherit; outline: none;
+  padding: .3rem .4rem .3rem 0; cursor: pointer; width: auto;
+}
+.task-prop .date-trigger:not(.date-trigger--set) { color: var(--muted); }
+.task-prop .date-trigger:hover { background: none; }
+.task-prop input[type="number"] { width: 2.8rem; cursor: text; }
+.task-prop-interval { padding-right: .6rem; }
+.task-prop-interval input[type="number"] { padding-right: 0; }
+.task-prop :disabled { opacity: .45; cursor: not-allowed; }
+/* A box to tick: the box, then its name, in the label's grey. */
+.task-prop-check { padding-right: .7rem; font-size: .8rem; font-weight: 500; color: var(--muted); white-space: nowrap; }
+.task-prop-check input { width: 1rem; height: 1rem; margin: 0; accent-color: var(--btn-primary); cursor: pointer; }
+.task-props-note { margin: -.35rem 0 0; }
+.task-props-note[hidden] { display: none; }
+/* The fields not shown (.task-add-fields): quiet words to click, "+ Repeat". */
+.task-add-fields { display: flex; flex-wrap: wrap; gap: .1rem 1rem; margin-top: -.25rem; }
+.task-add-fields[hidden], .task-add-field[hidden] { display: none; }
+.task-add-field {
+  border: none; background: none; padding: .15rem 0; border-radius: 4px;
+  font: inherit; font-size: .8rem; font-weight: 500; color: var(--muted); cursor: pointer;
+}
+.task-add-field::before { content: "+ "; }
+.task-add-field:hover { color: var(--link); }
+.task-add-field:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+/* A finger: taller boxes, and 16px in the fields (iOS zooms the page on less). */
+@media (pointer: coarse) {
+  .task-prop { min-height: 2.6rem; font-size: 16px; }
+  .task-add-field { padding: .45rem 0; }
+}
 /* History: collapsed; the summary shows the count. */
 .task-edit-links > summary { cursor: pointer; font-size: .8rem; font-weight: 500; color: var(--muted); }
 .task-edit-links[open] > summary { margin-bottom: .5rem; }
@@ -1121,16 +1172,6 @@ ul.task-comment-list { list-style: none; margin: .3rem 0 0; padding: 0; font-siz
 .task-comment-btn:hover { color: var(--fg); }
 @media (hover: none) { .task-comment-btn { opacity: 1; } }
 @media (pointer: coarse) { .task-comment-btn { padding: .3rem .5rem; } }
-/* min-width:0 lets fields shrink below their content's min-content width,
-   so the Due/Plan-for shortcut buttons can't force the row to wrap. */
-.task-field-row .task-field { flex: 1 1 7rem; min-width: 0; }
-/* Keep Repeat interval and the From-done checkbox compact. */
-.task-field-row .task-field:has(input[name="rec_interval"]) { flex: 0 1 5rem; }
-.task-field-row .task-field-check { flex: 0 0 auto; }
-/* Keep every label to one line so the controls below them line up. */
-.task-field-row .task-field > label {
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
 .task-edit-actions {
   display: flex; gap: .5rem; margin-top: .5rem;
   position: sticky; bottom: 0; z-index: 1;
@@ -1201,11 +1242,14 @@ ul.task-comment-list { list-style: none; margin: .3rem 0 0; padding: 0; font-siz
   .task-edit-form { gap: .55rem; min-height: 100%; }
   .task-edit-form .task-edit-actions { margin-top: auto; }
   .task-field { gap: .15rem; }
-  .task-edit-modal textarea[name="description"] { height: 9.6em; min-height: 3.2em; }
-  .task-field-row { display: grid; gap: .55rem .6rem; }
-  /* Due date | Start, then the days-before-due helper across the full width */
-  .task-row-dates { grid-template-columns: 1fr 1fr; align-items: start; }
-  .task-row-dates .task-field-lead { grid-column: 1 / -1; }
-  /* Repeat | Every N | From done */
-  .task-row-repeat { grid-template-columns: minmax(0, 1fr) 4.5rem auto; align-items: end; }
+}
+/* A narrow dialog or a finger: the formatting bar has a line of its own under
+   the label, where it scrolls sideways; the label stays. (The keyboard
+   coming up moves the field anyway.) */
+@media (max-width: 640px), (pointer: coarse) {
+  .task-notes-head { flex-wrap: wrap; row-gap: 0; }
+  .task-notes-head .format-bar { order: 3; flex: 0 0 100%; margin: 0; gap: .1rem; }
+  .task-notes-field:focus-within .task-notes-head:has(.format-bar:not([hidden])) > label {
+    position: static; width: auto; height: auto; overflow: visible; clip-path: none;
+  }
 }

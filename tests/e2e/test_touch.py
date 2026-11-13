@@ -348,7 +348,7 @@ def test_edit_modal_save_reachable_on_phone(new_page, wiki):
     assert in_viewport(phone, save)
     # And the rest of the form scrolls into reach inside the dialog.
     assert modal.evaluate("d => d.scrollHeight > d.clientHeight && getComputedStyle(d).overflowY === 'auto'")
-    last_field = modal.locator("#task-edit-rec-interval")
+    last_field = modal.locator("#task-edit-rec-type")
     last_field.scroll_into_view_if_needed()
     assert in_viewport(phone, last_field)
     assert in_viewport(phone, save)
@@ -422,14 +422,12 @@ def test_card_date_picker_fits_on_phone(phone, field):
 
 def test_edit_modal_fields_have_no_dead_space_on_phone(phone):
     # Regression: stacked in a column, each field kept a 7rem flex-basis as its
-    # height, leaving large empty gaps between the fields.
+    # height, leaving large empty gaps between the fields. Each of the small
+    # fields is a box one control tall.
     modal = open_editor(phone)
-    slack = modal.evaluate("""d => [...d.querySelectorAll('.task-field-row > *')].filter(f => f.offsetParent).map(f => {
-        const kids = [...f.children].filter(k => k.offsetParent).map(k => k.getBoundingClientRect());
-        const content = Math.max(...kids.map(k => k.bottom)) - Math.min(...kids.map(k => k.top));
-        return [f.textContent.trim().slice(0, 20), f.getBoundingClientRect().height - content];
-    })""")
-    assert slack and all(extra <= 2 for _, extra in slack), slack
+    heights = modal.evaluate("""d => [...d.querySelectorAll('.task-props .task-prop')].filter(f => f.offsetParent)
+        .map(f => [f.textContent.trim().slice(0, 20), f.getBoundingClientRect().height])""")
+    assert len(heights) >= 5 and all(h <= 48 for _, h in heights), heights
 
 
 # Regression: the picker's size was measured before the calendar was drawn
@@ -484,7 +482,7 @@ def test_edit_modal_is_compact_on_phone(phone):
     def top(sel):
         return modal.locator(sel).bounding_box()["y"]
     assert abs(top("[data-date-trigger='task-edit-due']") - top("[data-date-trigger='task-edit-start']")) <= 1.5
-    assert abs(top("#task-edit-rec-type") - top("#task-edit-rec-interval")) <= 1.5
+    assert abs(top(".task-prop:has(#task-edit-rec-type)") - top(".task-prop:has(#task-edit-rec-interval)")) <= 1.5
     # The action bar sits at the bottom edge, within thumb reach.
     save = modal.get_by_role("button", name="Save").bounding_box()
     assert save["y"] + save["height"] > 844 - 60, save

@@ -57,77 +57,99 @@
       <ul class="task-edit-batch-list" id="task-edit-batch-list{{.Sfx}}"></ul>
       <span class="field-hint">One task per line; the fields below apply to all of them.</span>
     </div>
+    {{- /* The description: its label, or while the field has the focus the
+        editor's bar in the label's place (without Make task, js/mdedit.js),
+        and Edit | Preview at the right once there is something to preview.
+        The field is as tall as its text (js/taskmodal.js fitNotes); its
+        placeholder, a space, is how the CSS knows an empty one. */}}
     <div class="task-field task-notes-field">
       <div class="task-notes-head">
         <label for="task-edit-desc{{.Sfx}}">Description</label>
+        {{template "format_bar" (dict "bar_id" (print "task-edit-format" .Sfx) "attach_id" (print "task-edit-attach" .Sfx) "pageonly" true)}}
         <span class="task-notes-mode" role="group" aria-label="Description">
           <button type="button" class="btn" data-notes-mode="edit" id="task-edit-notes-edit-btn{{.Sfx}}" aria-pressed="true" tabindex="-1" title="Edit the description (F2)">Edit</button>
           <button type="button" class="btn" data-notes-mode="preview" id="task-edit-preview-btn{{.Sfx}}" aria-pressed="false" tabindex="-1" title="The description as the card will show it (F2)">Preview</button>
         </span>
       </div>
-      {{- /* The editor's bar, without Make task (js/mdedit.js). */}}
-      {{template "format_bar" (dict "bar_id" (print "task-edit-format" .Sfx) "attach_id" (print "task-edit-attach" .Sfx) "pageonly" true)}}
-      <textarea id="task-edit-desc{{.Sfx}}" name="description" rows="8"></textarea>
+      <textarea id="task-edit-desc{{.Sfx}}" name="description" rows="2" placeholder=" "></textarea>
       <div class="task-notes-preview page-content" id="task-edit-preview{{.Sfx}}" tabindex="-1" aria-label="Preview of the description" hidden></div>
     </div>
     <div class="task-field">
       <label for="task-edit-tags{{.Sfx}}">Tags <span class="field-hint">(Tab completes; comma, space or Enter adds)</span></label>
       <input type="text" id="task-edit-tags{{.Sfx}}" name="tags" autocomplete="off">
     </div>
-    <div class="task-field task-field-importance">
-      <label for="task-edit-importance{{.Sfx}}">Importance</label>
-      <select id="task-edit-importance{{.Sfx}}" name="importance"><option value="high">High</option><option value="" selected>Normal</option><option value="low">Low</option></select>
-    </div>
-    <div class="task-field-row task-row-dates">
-      <div class="task-field">
-        <label>Due date</label>
+    {{- /* The task's other fields, each a small box with its name inside, on
+        one line that wraps. The dates and Importance are always there; the
+        rest only when set, or once asked for in the line below
+        (js/taskmodal.js showField). */}}
+    <div class="task-props" id="task-edit-props{{.Sfx}}">
+      <label class="task-prop">
+        <span class="task-prop-label">Due</span>
         <input type="hidden" id="task-edit-due{{.Sfx}}" name="due_date">
         <button type="button" class="date-trigger" data-date-trigger="task-edit-due{{.Sfx}}" data-placeholder="Set date">Set date</button>
-      </div>
-      <div class="task-field">
-        <label>Start</label>
+      </label>
+      <label class="task-prop">
+        <span class="task-prop-label">Start</span>
         <input type="hidden" id="task-edit-start{{.Sfx}}" name="start_date">
         <button type="button" class="date-trigger" data-date-trigger="task-edit-start{{.Sfx}}" data-placeholder="Set date">Set date</button>
-      </div>
-      <div class="task-field task-field-lead" title="Start this many days before the due date. Just another way to set the start date; recurring tasks keep this gap.">
-        <label for="task-edit-lead{{.Sfx}}">Days before due</label>
+      </label>
+      <label class="task-prop task-prop-lead" data-field="lead" title="Start this many days before the due date. Just another way to set the start date; recurring tasks keep this gap." hidden>
+        <span class="task-prop-label">Days before due</span>
         <input type="number" id="task-edit-lead{{.Sfx}}" min="0" placeholder="—">
+      </label>
+      <label class="task-prop">
+        <span class="task-prop-label">Importance</span>
+        <select id="task-edit-importance{{.Sfx}}" name="importance"><option value="high">High</option><option value="" selected>Normal</option><option value="low">Low</option></select>
+      </label>
+      {{- /* Repeat with what belongs to it, kept together where the line wraps. */}}
+      <div class="task-prop-group" data-field="repeat" hidden>
+        <label class="task-prop">
+          <span class="task-prop-label">Repeat</span>
+          <select id="task-edit-rec-type{{.Sfx}}" name="rec_type">
+            <option value="">—</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+            <option value="yearly">Yearly</option>
+          </select>
+        </label>
+        <label class="task-prop task-prop-interval" hidden>
+          <span class="task-prop-label">Every</span>
+          <input type="number" id="task-edit-rec-interval{{.Sfx}}" name="rec_interval" min="1" max="999" value="1">
+          <span class="task-prop-label" id="task-edit-rec-unit{{.Sfx}}"></span>
+        </label>
+        <label class="task-prop task-prop-check" title="Repeat from the completion date instead of the due (or start) date" hidden>
+          <input type="checkbox" id="task-edit-rec-from{{.Sfx}}" name="rec_from"> From done
+        </label>
       </div>
+      <label class="task-prop task-prop-check task-edit-keep" data-field="keep" title="Ticking it off sends it back to Open instead of archiving it, e.g. a staple on a shopping list" hidden>
+        <input type="checkbox" id="task-edit-keep{{.Sfx}}" name="keep"> Keep after done
+      </label>
+      {{- /* With users: a private task is the user's alone (private/<user>/_tasks/). */}}
+      {{- if .CanPrivate}}
+      <label class="task-prop task-prop-check task-edit-private" data-field="private" title="Only you see a private task; the others don't, not even in search. A shared task stays shared." hidden>
+        <input type="checkbox" id="task-edit-private{{.Sfx}}" name="private"> Private
+      </label>
+      {{- end}}
     </div>
     <div class="task-date-warning" id="task-edit-date-warn{{.Sfx}}" hidden>
       <span id="task-edit-date-warn-text{{.Sfx}}"></span>
       <button type="button" class="btn" id="task-edit-date-warn-fix{{.Sfx}}"></button>
     </div>
-    <div class="task-field-row task-row-repeat">
-      <div class="task-field">
-        <label for="task-edit-rec-type{{.Sfx}}">Repeat</label>
-        <select id="task-edit-rec-type{{.Sfx}}" name="rec_type">
-          <option value="">—</option>
-          <option value="daily">Daily</option>
-          <option value="weekly">Weekly</option>
-          <option value="monthly">Monthly</option>
-          <option value="yearly">Yearly</option>
-        </select>
-      </div>
-      <div class="task-field">
-        <label for="task-edit-rec-interval{{.Sfx}}">Every N</label>
-        <input type="number" id="task-edit-rec-interval{{.Sfx}}" name="rec_interval" min="1" max="999" value="1">
-      </div>
-      <div class="task-field task-field-check" title="Repeat from the completion date instead of the due (or start) date">
-        <label for="task-edit-rec-from{{.Sfx}}">From done</label>
-        <span class="check-wrap"><input type="checkbox" id="task-edit-rec-from{{.Sfx}}" name="rec_from"></span>
-      </div>
-    </div>
-    <label class="task-edit-keep" title="Ticking it off sends it back to Open instead of archiving it, e.g. a staple on a shopping list">
-      <input type="checkbox" id="task-edit-keep{{.Sfx}}" name="keep"> Keep after done <span class="field-hint">(back to Open when ticked off)</span>
-    </label>
-    {{- /* With users: a private task is the user's alone (private/<user>/_tasks/). */}}
+    {{- /* Why Repeat is off (no date, a keep task), and what sharing a private task does. */}}
+    <p class="field-hint task-props-note" id="task-edit-rec-note{{.Sfx}}" hidden></p>
     {{- if .CanPrivate}}
-    <label class="task-edit-keep task-edit-private" title="Only you see a private task; the others don't, not even in search. A shared task stays shared.">
-      <input type="checkbox" id="task-edit-private{{.Sfx}}" name="private"> Private <span class="field-hint">(only you see it)</span>
-      <span class="field-hint task-private-note" id="task-edit-private-note{{.Sfx}}" hidden></span>
-    </label>
+    <p class="field-hint task-props-note task-private-note" id="task-edit-private-note{{.Sfx}}" hidden></p>
     {{- end}}
+    {{- /* The fields not shown above: a click shows one (and ticks a box). */}}
+    <div class="task-add-fields" id="task-edit-more{{.Sfx}}" role="group" aria-label="More fields">
+      <button type="button" class="task-add-field" id="task-edit-more-repeat{{.Sfx}}" data-more="repeat" title="Make the task come back: daily, weekly, monthly or yearly">Repeat</button>
+      <button type="button" class="task-add-field" id="task-edit-more-lead{{.Sfx}}" data-more="lead" title="Start this many days before the due date">Days before due</button>
+      <button type="button" class="task-add-field" id="task-edit-more-keep{{.Sfx}}" data-more="keep" title="Ticking it off sends it back to Open instead of archiving it, e.g. a staple on a shopping list">Keep after done</button>
+      {{- if .CanPrivate}}
+      <button type="button" class="task-add-field" id="task-edit-more-private{{.Sfx}}" data-more="private" title="Only you see a private task; the others don't, not even in search">Private</button>
+      {{- end}}
+    </div>
     <div class="task-edit-extras">
     <details class="task-edit-links task-edit-history" id="task-edit-history{{.Sfx}}" hidden>
       <summary tabindex="-1">History<span class="task-edit-links-summary" id="task-edit-history-count{{.Sfx}}"></span></summary>
