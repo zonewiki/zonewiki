@@ -291,6 +291,10 @@ Without Playwright installed they skip, so plain `pytest tests/` is unaffected.
   the wavy line and its "folded" that unfolds,
   anchors/TOC/hashchange/`beforematch`/search highlights unfolding,
   `]` skipping folded headings, presentation and print, the chevron's place on desktop and phones; `test_fold.py`), math and Mermaid diagrams (rendered from the vendored copies on a page, in the editor preview, task notes and presentation slides; a page without them loads neither library; a broken diagram keeps its source; `test_figures.py`), the Content-Security-Policy (a page's `<script>`, `onerror=` and `javascript:` link and the editor preview's handler don't run, an uploaded `.js` doesn't run as a script; `test_security.py`).
+- A test that never ends: under load Playwright's driver or the browser sometimes dies (`new_page` fails with "Target crashed" or "Connection closed while reading from the driver"), and the next call of its sync API then waits forever, which nothing inside the test can interrupt.
+  So `conftest.py` stops the process of a test that runs longer than `TEST_TIMEOUT` (120 s; the slowest takes under 10), setup and teardown included (`pytest_runtest_protocol`), after writing which test it was and where every thread stood.
+  With pytest-xdist that process is one worker: the run reports the test as failed ("worker crashed while running …") and goes on with a new worker, instead of standing still until someone stops it.
+  Such a failure says the machine was short of CPU or memory, not that Zone is wrong: run the test again by itself.
 - Waiting: for what the page shows, `expect(…)`, which waits by itself.
   For what it can't watch (the API's answer, a file on disk, a request a route held back), `wait_until(page, predicate)` from `conftest.py`, which looks every 100 ms through the page, so the page's routes and events go on meanwhile (`time.sleep` would stop them).
   A fixed `page.wait_for_timeout(…)` is only for showing that nothing happens (no request went out, a card stayed where it was) and for the pace of a gesture (a touch held, a drag's steps): never for something that is about to happen.

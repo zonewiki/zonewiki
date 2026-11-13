@@ -11,7 +11,11 @@ Skipped automatically when Playwright is not installed, so a plain
     ./run.sh e2e
 """
 
+import faulthandler
+import os
 import subprocess
+import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -28,6 +32,45 @@ PHONE = {"width": 390, "height": 844}
 DESKTOP = {"width": 1280, "height": 800}
 # A real phone: touch input, no hover, coarse pointer.
 TOUCH_PHONE = {"viewport": PHONE, "has_touch": True, "is_mobile": True}
+
+
+# ── A test that never ends ───────────────────────────────────────────────────
+
+# The slowest test takes under 10 seconds. One still running after
+# TEST_TIMEOUT is waiting for an answer that won't come: under load
+# Playwright's driver or the browser sometimes dies (new_page then fails
+# with "Target crashed" or "Connection closed while reading from the
+# driver"), and the next call of its sync API waits forever. It held a whole
+# run up for 19 minutes once, with nothing to say which test it was.
+TEST_TIMEOUT = 120
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_protocol(item, nextitem):
+    """Stop the process of a test (its setup and teardown too) that runs
+    longer than TEST_TIMEOUT, saying which one and where it stands: a hung
+    browser call can't be interrupted from inside. With pytest-xdist that is
+    one worker: the run reports its test as failed (the worker crashed) and
+    goes on with a new worker."""
+    def stuck():
+        # pytest holds the process's stderr while a test runs: hand it back,
+        # or what is written here goes nowhere.
+        try:
+            item.config.pluginmanager.getplugin("capturemanager").suspend_global_capture(in_=True)
+        except Exception:
+            pass
+        sys.stderr.write(f"\n{item.nodeid} ran longer than {TEST_TIMEOUT} s: its browser or Playwright's driver no "
+                         "longer answers. Stopping this test process; where it stood:\n")
+        faulthandler.dump_traceback(file=sys.stderr, all_threads=True)
+        sys.stderr.flush()
+        os._exit(70)
+    timer = threading.Timer(TEST_TIMEOUT, stuck)
+    timer.daemon = True
+    timer.start()
+    try:
+        return (yield)
+    finally:
+        timer.cancel()
 
 
 # ── Server ────────────────────────────────────────────────────────────────────
