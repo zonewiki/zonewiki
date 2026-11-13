@@ -35,7 +35,7 @@ Case doesn't matter (`[[Tasks:]]`), nor a space after the colon (`[[tasks:list=s
 ```
 
 The params can be changed without editing the page: the gear in the embed's toolbar (see Settings).
-In the editor, the formatting bar's Task list button writes the embed from a dialog, and changes the one the cursor is on (Task list dialog in `docs/spec/editor.md`).
+In the editor, the formatting bar's Task list button shows the same dialog, with the list's name and keep, to write the embed or change the one the cursor is on (Task list dialog in `docs/spec/editor.md`).
 
 **Headless instance**: `build_tasks_embed(params, headless=True)` renders the app hidden, for pages that only need its edit modal (the editor's Make task, see Task references).
 `openEditModal(null, opts)` takes, besides `tags`, a starting `title`, `description`, `start_date` and an `onCreated(task)` callback; `titles` instead of `title` is batch mode (one task per title, the fields shared, `onCreated` gets the array).
@@ -299,7 +299,7 @@ The line above Save says where the settings are written.
 - **All tasks** (`/tasks`): no page holds its params, so they are in `_tasks/settings.json`, `{"all": {"view": "open", "limit": "5"}}` (`allTasksFile`, `allTasksParams`), for everyone.
   It has no Pinned and no filter (the fields are hidden; `allSettingKeys`).
 
-**Not which list it shows**: `list=` isn't in the dialog.
+**Not which list it shows**: `list=` isn't in the gear's dialog (it is in the editor's, where the dialog writes the embed: `.Editor` in `task_settings_dialog`).
 Another name there would show another list and leave the tasks behind, which reads like a rename and isn't one; a list is renamed by **Rename…** on `/tasks?list=<name>`, and an embed is made a list by editing the page.
 
 **No gear**: the editor's preview, an old version, a page from the uncommitted list (only a page view renders its own file: `RenderOpts.EditSlug`), a tag no page declares (`/tasks?list=<tag>`), the headless app, a viewer, a page you may not change, sharing mode.

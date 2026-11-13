@@ -203,25 +203,37 @@ def test_diagram_starts_a_flowchart_or_fences_the_selection(page, wiki):
     assert _body(textarea) == "```mermaid\ngraph TD\n  A --> B\n```\nText"
 
 
+def _list_dialog(page):
+    """The list settings dialog as the editor shows it, and a field of it by name."""
+    dialog = page.locator("#task-settings-modal-editor")
+    return dialog, lambda name: dialog.locator(f"#task-settings-{name}-editor")
+
+
 def test_task_list_asks_what_the_list_shows_and_writes_the_embed(page, wiki):
+    # The Task list button shows the dialog a list's gear shows, with List
+    # and keep, and writes the line it makes.
     wiki.write("lists", "# Lists\n\n[[tasks: list=shop]]\n")
-    page.request.post("/api/tasks", data={"title": "Buy milk", "tags": "garden-work"})
     textarea = _edit(page, wiki, "Shopping", 8)
     _click(page, "tasklist")
-    dialog = page.locator("#tasklist-dialog")
+    dialog, field = _list_dialog(page)
     expect(dialog).to_be_visible()
-    expect(dialog.locator("#tasklist-list")).to_be_focused()
+    expect(dialog.locator(".modal-label")).to_have_text("Task list")
+    expect(field("list")).to_be_focused()
     # The lists there are, to choose from; nothing set embeds all tasks.
-    assert "shop" in dialog.locator("#tasklist-lists option").evaluate_all("os => os.map(o => o.value)")
-    expect(dialog.locator("#tasklist-preview")).to_have_text("[[tasks:]]")
-    dialog.locator("#tasklist-list").fill("#Garden work")            # cleaned as a list's name is
-    dialog.locator("#tasklist-tag").fill("urgent, -later")
-    dialog.locator("#tasklist-view").select_option("open")
-    dialog.locator("#tasklist-limit").fill("5")
-    dialog.locator("#tasklist-keep").check()
-    dialog.locator("#tasklist-pin").check()
-    line = "[[tasks: list=garden-work tag=urgent,-later view=open limit=5 keep=1 pin=1]]"
-    expect(dialog.locator("#tasklist-preview")).to_have_text(line)
+    assert "shop" in dialog.locator("datalist option").evaluate_all("os => os.map(o => o.value)")
+    expect(field("where")).to_have_text("[[tasks:]]")
+    field("list").fill("#Garden work")                                # cleaned as a list's name is
+    field("view").select_option("open")
+    expect(field("where")).to_have_text("[[tasks: list=garden-work view=plan]]")   # Open, with Plan
+    field("plan").uncheck()
+    field("limit").fill("5")
+    field("keep").check()
+    field("pin").select_option("1")
+    dialog.locator("summary").click()                                 # More: the filter, the tab names
+    field("tag").fill("urgent, -later")
+    field("label-open").fill("To buy")
+    line = "[[tasks: list=garden-work view=open labels=To_buy limit=5 pin=1 tag=urgent,-later keep=1]]"
+    expect(field("where")).to_have_text(line)
     dialog.get_by_role("button", name="Insert").click()
     expect(dialog).to_be_hidden()
     assert _body(textarea) == "Shopping\n\n" + line
@@ -233,18 +245,19 @@ def test_task_list_asks_what_the_list_shows_and_writes_the_embed(page, wiki):
 def test_task_list_dialog_cancelled_writes_nothing(page, wiki):
     textarea = _edit(page, wiki, "Shopping", 8)
     _click(page, "tasklist")
-    page.locator("#tasklist-list").fill("shop")
+    dialog, field = _list_dialog(page)
+    field("list").fill("shop")
     page.keyboard.press("Escape")
-    expect(page.locator("#tasklist-dialog")).to_be_hidden()
+    expect(dialog).to_be_hidden()
     assert _body(textarea) == "Shopping"
     expect(textarea).to_be_focused()
     _click(page, "tasklist")
-    expect(page.locator("#tasklist-list")).to_have_value("")          # a fresh dialog
-    page.locator("#tasklist-dialog").get_by_role("button", name="Cancel").click()
+    expect(field("list")).to_have_value("")                           # a fresh dialog
+    dialog.get_by_role("button", name="Cancel").click()
     assert _body(textarea) == "Shopping"
     # All tasks: the bare embed, on a line of its own under the text.
     _click(page, "tasklist")
-    page.locator("#tasklist-list").press("Enter")
+    field("list").press("Enter")
     assert _body(textarea) == "Shopping\n\n[[tasks:]]"
     page.keyboard.press("Control+s")   # Done: to the page
     page.wait_for_url("**/page/fmt")
@@ -253,28 +266,30 @@ def test_task_list_dialog_cancelled_writes_nothing(page, wiki):
 
 def test_task_list_on_an_embeds_line_changes_that_embed(page, wiki):
     # With the cursor on a [[tasks: …]] the dialog shows its params and
-    # writes only what was changed: what it has no field for stays.
-    text = "Intro\n\n  [[Tasks: list=shop labels=Catalogue,Shopping view=completed pin=default keep=1]]\n\nOutro"
+    # writes only what was changed: the rest stays as written.
+    text = "Intro\n\n  [[Tasks: list=shop labels=Catalogue,Shopping view=completed pin=default keep=1 new=food]]\n\nOutro"
     textarea = _edit(page, wiki, text, 20)
     _click(page, "tasklist")
-    dialog = page.locator("#tasklist-dialog")
+    dialog, field = _list_dialog(page)
     expect(dialog.locator(".modal-label")).to_have_text("Change the task list")
-    expect(dialog.locator("#tasklist-list")).to_have_value("shop")
-    expect(dialog.locator("#tasklist-keep")).to_be_checked()
-    expect(dialog.locator("#tasklist-pin")).to_be_checked()
-    dialog.locator("#tasklist-limit").fill("8")
-    dialog.locator("#tasklist-keep").uncheck()
-    dialog.locator("#tasklist-tag").fill("weekly")
+    expect(field("list")).to_have_value("shop")
+    expect(field("keep")).to_be_checked()
+    expect(field("pin")).to_have_value("default")
+    expect(field("view")).to_have_value("completed")
+    expect(field("label-open")).to_have_value("Catalogue")           # More is open: something in it is set
+    field("limit").fill("8")
+    field("keep").uncheck()
+    field("tag").fill("weekly")
     dialog.get_by_role("button", name="Change").click()
     assert _body(textarea) == ("Intro\n\n  [[tasks: list=shop labels=Catalogue,Shopping view=completed pin=default"
-                               " tag=weekly limit=8]]\n\nOutro")
+                               " new=food limit=8 tag=weekly]]\n\nOutro")
     # Emptied, a param goes.
     _click(page, "tasklist")
-    dialog.locator("#tasklist-limit").fill("")
-    dialog.locator("#tasklist-pin").uncheck()
-    dialog.locator("#tasklist-view").select_option("plan")
-    dialog.locator("#tasklist-ok").click()
-    assert _body(textarea) == "Intro\n\n  [[tasks: list=shop labels=Catalogue,Shopping view=plan tag=weekly]]\n\nOutro"
+    field("limit").fill("")
+    field("pin").select_option("")
+    field("view").select_option("open")
+    field("save").click()
+    assert _body(textarea) == "Intro\n\n  [[tasks: list=shop labels=Catalogue,Shopping view=plan new=food tag=weekly]]\n\nOutro"
 
 
 def test_inserted_block_keeps_a_blank_line_to_the_text_above(page, wiki):

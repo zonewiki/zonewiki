@@ -1,19 +1,22 @@
 import { closeOnBackdropClick } from './util.js';
+import { changedParams, settingsForm } from './tasksettings.js';
 
-// ── Task list dialog ──────────────────────────────────────────────────────────
-// The editor's Task list button (formatting bar): a small dialog for what a
-// task list shows and how it opens, which writes the `[[tasks: …]]` line. With
-// the cursor on a line that is one already it changes that one: its params
-// fill the fields, and only the fields changed are written (a param the
-// dialog doesn't know, `labels=`, `new=`, `plan=` …, stays as written).
-// The params are the embed's own (docs/spec/tasks.md, Task list embed).
+// ── The editor's Task list button ────────────────────────────────────────────
+// The formatting bar's Task list shows the list settings dialog, the one a
+// list's gear shows (js/tasksettings.js; in the editor with List and keep,
+// which make a list), and writes the `[[tasks: …]]` line it makes into the
+// text. With the cursor on a line that is one already it changes that one:
+// its params fill the fields, and only what was changed is written
+// (changedParams), so a param without a field stays as written. The gear
+// saves the same change to the page's file; here it goes into the text.
 
 const EMBED_LINE = /^(\s*)\[\[tasks:\s*([^\]]*)\]\](\s*)$/i;
+const SFX = '-editor';
 
-// `key=value` words, as parseTasksParams (go/tasksyntax.go) reads them: a
-// word without `=` counts for nothing, a key written twice keeps its place
-// and takes the last value.
-export function parseEmbedParams(raw) {
+// `key=value` words in their order, as parseTasksParams (go/tasksyntax.go)
+// reads them: a word without `=` counts for nothing, a key written twice
+// keeps its place and takes the last value.
+function orderedParams(raw) {
   const params = new Map();
   for (const word of raw.split(/\s+/)) {
     const eq = word.indexOf('=');
@@ -22,34 +25,20 @@ export function parseEmbedParams(raw) {
   return params;
 }
 
-// cleanList (go/tasksyntax.go): a list's name is one lowercase word.
-const cleanList = name => name.trim().replace(/^#+/, '').trim().toLowerCase().replace(/\s+/g, '-').replace(/^-+|-+$/g, '');
-// A value is one word, and can't hold what would end the embed.
-const cleanValue = v => v.replace(/[\s\[\]`]+/g, '');
-
-// The line for `params`: a param keeps its place, a new one goes last, an
-// empty one goes.
-export function embedLine(params) {
-  const words = [...params].filter(([, v]) => v !== '').map(([k, v]) => `${k}=${v}`);
+// The line for the params with `set` applied, as the server rewrites an
+// embed (setEmbedParams): a param keeps its place, a new one goes last, an
+// empty one goes, and pin replaces the old home.
+function embedLine(params, set) {
+  const out = new Map(params);
+  for (const [k, v] of Object.entries(set)) out.set(k, v);
+  if ('pin' in set) out.delete('home');
+  const words = [...out].filter(([, v]) => v !== '').map(([k, v]) => `${k}=${v}`);
   return words.length ? `[[tasks: ${words.join(' ')}]]` : '[[tasks:]]';
 }
 
-const dialog = document.getElementById('tasklist-dialog');
-const el = id => document.getElementById('tasklist-' + id);
+const el = id => document.getElementById(`task-settings-${id}${SFX}`);
+const dialog = el('modal');
 closeOnBackdropClick(dialog);
-
-// What the fields say, as params: { key: value }, '' for none.
-function fieldValues() {
-  const limit = parseInt(el('limit').value, 10);
-  return {
-    list: cleanList(el('list').value),
-    tag: cleanValue(el('tag').value),
-    view: el('view').value,
-    limit: limit >= 1 && limit <= 99 ? String(limit) : '',
-    keep: el('keep').checked ? '1' : '',
-    pin: el('pin').checked ? '1' : '',
-  };
-}
 
 export function taskListDialog(textarea, { replaceRange, insertBlockAfterLine }) {
   if (!dialog) { insertBlockAfterLine('[[tasks: ]]', 9, 9); return; }
@@ -59,32 +48,20 @@ export function taskListDialog(textarea, { replaceRange, insertBlockAfterLine })
   let lineEnd = v.indexOf('\n', selStart);
   if (lineEnd === -1) lineEnd = v.length;
   const existing = EMBED_LINE.exec(v.slice(lineStart, lineEnd));
-  const params = parseEmbedParams(existing ? existing[2] : '');
-
-  // The fields as the line has them. A view or a truthy value the dialog
-  // has no choice for (view=completed, pin=default) shows as its nearest
-  // and stays as written unless that field is changed.
-  const truthy = k => /^(1|true|yes|default)$/i.test(params.get(k) || '');
-  const view = (params.get('view') || '').toLowerCase();
-  el('list').value = params.get('list') || '';
-  el('tag').value = params.get('tag') || '';
-  el('view').value = view === 'plan' || view === 'open' ? view : '';
-  el('limit').value = params.get('limit') || '';
-  el('keep').checked = truthy('keep');
-  el('pin').checked = truthy('pin');
-  el('label').textContent = existing ? 'Change the task list' : 'Task list';
-  el('ok').textContent = existing ? 'Change' : 'Insert';
-  const shown = fieldValues();
-
-  const result = () => {
-    const now = fieldValues(), out = new Map(params);
-    for (const k of Object.keys(now)) if (now[k] !== shown[k]) out.set(k, now[k]);
-    return embedLine(out);
-  };
-  const preview = () => { el('preview').textContent = result(); };
-  preview();
+  const params = orderedParams(existing ? existing[2] : '');
+  const written = Object.fromEntries(params);
 
   const form = el('form'), cancel = el('cancel');
+  const { read, fill } = settingsForm(form);
+  const was = fill(written);
+  el('title').textContent = existing ? 'Change the task list' : 'Task list';
+  el('save').textContent = existing ? 'Change' : 'Insert';
+  el('error').hidden = true;
+  const result = () => embedLine(params, changedParams(was, read(), written));
+  // In place of where the gear says it writes: the line this writes.
+  const preview = () => { el('where').textContent = result(); };
+  preview();
+
   const done = line => {
     form.removeEventListener('input', preview);
     form.removeEventListener('submit', onSubmit);
@@ -110,5 +87,5 @@ export function taskListDialog(textarea, { replaceRange, insertBlockAfterLine })
   cancel.addEventListener('click', onCancel);
   dialog.addEventListener('close', onClose);
   dialog.showModal();
-  el('list').focus();
+  form.elements.list.focus();
 }

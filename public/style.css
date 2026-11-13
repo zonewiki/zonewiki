@@ -1882,16 +1882,6 @@ body.editor-page main {
 .promote-check { display: flex; align-items: center; gap: .4rem; font-size: .875rem; }
 .promote-preview { margin: 0; font-size: .8rem; color: var(--muted); overflow-wrap: anywhere; }
 .promote-preview code { font-size: inherit; }
-/* The editor's Task list dialog (js/tasklist.js): the fields that make a
-   [[tasks: …]], and the line they make. */
-.tasklist-modal .modal-desc { font-size: .8rem; margin-top: -.4rem; }
-.tasklist-row { display: flex; gap: .75rem; }
-.tasklist-row > * { flex: 1; min-width: 0; }
-.tasklist-modal :is(select, input[type="number"]) {
-  padding: .5rem .75rem; border: 1px solid var(--border); border-radius: 6px;
-  background: var(--surface); color: var(--fg); font: inherit; font-size: .9375rem; width: 100%;
-}
-.tasklist-modal .promote-check input { accent-color: var(--btn-primary); }
 /* The editor's hint after Move to wiki: the link to paste. One row: icon,
    the message over the link (one line, cut off), Copy, ×. */
 .paste-hint {

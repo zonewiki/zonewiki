@@ -177,9 +177,43 @@
   </div>
 </dialog>
 {{if .Settings}}
+{{template "task_settings_dialog" (dict "Sfx" .Sfx)}}
+{{- /* Import… (the ⋯ menu): once a file is picked, a tag of your own for its tasks. */}}
+<input type="file" id="task-import-file{{.Sfx}}" accept=".json,application/json" hidden>
+<dialog id="task-import-modal{{.Sfx}}" class="task-edit-modal task-settings-modal">
+  <form id="task-import-form{{.Sfx}}" class="task-edit-form">
+    <div class="modal-label" id="task-import-title{{.Sfx}}">Import tasks</div>
+    <div class="task-field">
+      <label for="task-import-tag{{.Sfx}}">Tag for the imported tasks</label>
+      <input type="text" id="task-import-tag{{.Sfx}}" placeholder="none" autocomplete="off">
+      <span class="field-hint">Optional: a tag of your own finds them again later. Tasks already here are skipped.</span>
+    </div>
+    <p class="task-settings-error" id="task-import-error{{.Sfx}}" role="alert" hidden></p>
+    <div class="task-edit-actions">
+      <button type="submit" class="btn btn-primary">Import</button>
+      <button type="button" class="btn" id="task-import-cancel{{.Sfx}}">Cancel</button>
+    </div>
+  </form>
+</dialog>
+{{end}}
+{{- end}}
+
+{{- /* List settings: a task list's params as fields. The gear of a list
+    shows it (js/tasksettings.js: it rewrites the page's [[tasks: …]]), and
+    the editor's Task list button (Editor: with which list it is and keep,
+    which make a list; js/tasklist.js writes the line into the text). */}}
+{{define "task_settings_dialog" -}}
 <dialog id="task-settings-modal{{.Sfx}}" class="task-edit-modal task-settings-modal">
   <form id="task-settings-form{{.Sfx}}" class="task-edit-form">
-    <div class="modal-label">List settings</div>
+    <div class="modal-label" id="task-settings-title{{.Sfx}}">List settings</div>
+    {{- if .Editor}}
+    <div class="task-field">
+      <label for="task-settings-list{{.Sfx}}">List</label>
+      <input type="text" id="task-settings-list{{.Sfx}}" name="list" list="task-settings-lists{{.Sfx}}" placeholder="all tasks" autocomplete="off" spellcheck="false">
+      <datalist id="task-settings-lists{{.Sfx}}">{{range .Lists}}<option value="{{.}}">{{end}}</datalist>
+      <span class="field-hint">A name makes it a list of its own (the tasks tagged with it); none shows all tasks.</span>
+    </div>
+    {{- end}}
     <div class="task-settings-row">
       <div class="task-field">
         <label for="task-settings-view{{.Sfx}}">Opens on</label>
@@ -191,6 +225,9 @@
       </div>
     </div>
     <label class="task-settings-check"><input type="checkbox" id="task-settings-plan{{.Sfx}}" name="plan"> Plan: group the Open tab by start date</label>
+    {{- if .Editor}}
+    <label class="task-settings-check"><input type="checkbox" id="task-settings-keep{{.Sfx}}" name="keep"> New tasks are keep tasks (back on the list when done)</label>
+    {{- end}}
     <div class="task-field task-settings-embed">
       <label for="task-settings-pin{{.Sfx}}">Pinned</label>
       <select id="task-settings-pin{{.Sfx}}" name="pin"><option value="">No</option><option value="1">Pinned</option><option value="default">Pinned, the default list</option></select>
@@ -220,27 +257,9 @@
     <p class="task-settings-error" id="task-settings-error{{.Sfx}}" role="alert" hidden></p>
     <p class="field-hint task-settings-where" id="task-settings-where{{.Sfx}}"></p>
     <div class="task-edit-actions">
-      <button type="submit" class="btn btn-primary">Save</button>
+      <button type="submit" class="btn btn-primary" id="task-settings-save{{.Sfx}}">Save</button>
       <button type="button" class="btn" id="task-settings-cancel{{.Sfx}}">Cancel</button>
     </div>
   </form>
 </dialog>
-{{- /* Import… (the ⋯ menu): once a file is picked, a tag of your own for its tasks. */}}
-<input type="file" id="task-import-file{{.Sfx}}" accept=".json,application/json" hidden>
-<dialog id="task-import-modal{{.Sfx}}" class="task-edit-modal task-settings-modal">
-  <form id="task-import-form{{.Sfx}}" class="task-edit-form">
-    <div class="modal-label" id="task-import-title{{.Sfx}}">Import tasks</div>
-    <div class="task-field">
-      <label for="task-import-tag{{.Sfx}}">Tag for the imported tasks</label>
-      <input type="text" id="task-import-tag{{.Sfx}}" placeholder="none" autocomplete="off">
-      <span class="field-hint">Optional: a tag of your own finds them again later. Tasks already here are skipped.</span>
-    </div>
-    <p class="task-settings-error" id="task-import-error{{.Sfx}}" role="alert" hidden></p>
-    <div class="task-edit-actions">
-      <button type="submit" class="btn btn-primary">Import</button>
-      <button type="button" class="btn" id="task-import-cancel{{.Sfx}}">Cancel</button>
-    </div>
-  </form>
-</dialog>
-{{end}}
 {{- end}}

@@ -11,7 +11,7 @@ import { showNotice } from './taskutil.js';
 import { refreshDueBadge } from './chrome.js';
 
 // The params as written: key=value words (tasksyntax.go parseTasksParams).
-function parseParams(raw) {
+export function parseParams(raw) {
   const out = {};
   for (const word of raw.split(/\s+/)) {
     const at = word.indexOf('=');
@@ -41,8 +41,15 @@ function fieldsOf(p) {
     new: p.new || '',
     tag: p.tag || '',
     pin: pin === 'default' ? 'default' : isTrue(pin) || isTrue(p.home) ? '1' : '',
+    // Which list it is, and keep: only where the dialog makes the embed (the editor).
+    list: p.list || '',
+    keep: isTrue(p.keep),
   };
 }
+
+// cleanList (go/tasksyntax.go): a list's name is one lowercase word.
+const cleanList = name => name.replace(/[[\]`]/g, '').trim().replace(/^#+/, '').trim().toLowerCase()
+  .replace(/\s+/g, '-').replace(/^-+|-+$/g, '');
 
 // A tab's name as labels= takes it: no commas or brackets, "_" for a space.
 const labelWord = s => s.replace(/[,[\]`_]/g, ' ').trim().replace(/\s+/g, '_');
@@ -53,6 +60,7 @@ const oneWord = s => s.replace(/[[\]`]/g, '').replace(/\s*([,|])\s*/g, '$1').tri
 // given those the dialog opened with and the params they came from.
 export function changedParams(was, now, p) {
   const set = {};
+  if ('list' in now && now.list !== was.list) set.list = now.list;
   if (now.view !== was.view || now.plan !== was.plan) {
     // Open's two views keep their names: view=plan the board, view=open
     // the list; plan=off only says it where view= doesn't.
@@ -67,7 +75,39 @@ export function changedParams(was, now, p) {
   }
   for (const k of ['limit', 'pin']) if (now[k] !== was[k]) set[k] = now[k];
   for (const k of ['new', 'tag']) if (now[k] !== was[k]) set[k] = oneWord(now[k]);
+  if ('keep' in now && now.keep !== was.keep) set.keep = now.keep ? '1' : '';
   return set;
+}
+
+// The dialog's form (partials/tasks_embed.html task_settings_dialog), for a
+// list's gear and for the editor's Task list button (js/tasklist.js), whose
+// form has List and keep too. fill(params, all): the fields as the params
+// have them (all: All tasks, which has no pin and no filter), More open
+// when something in it is set; returns what read() then gives.
+export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Focus')) {
+  const f = form.elements;
+  const read = () => ({
+    view: f.view.value, plan: f.plan.checked,
+    label_open: f.label_open.value.trim(), label_focus: f.label_focus.value.trim(),
+    limit: f.limit.value.trim(), new: f.new.value.trim(),
+    tag: f.tag.value.trim(), pin: f.pin.value,
+    ...(f.list ? { list: cleanList(f.list.value), keep: f.keep.checked } : {}),
+  });
+  const fill = (params, all = false) => {
+    const fields = fieldsOf(params);
+    // Opens on: the tabs by their names here; Completed only where a page says so.
+    f.view.replaceChildren(...['open', 'focus', fields.view === 'completed' && 'completed'].filter(Boolean)
+      .map(v => new Option(v === 'completed' ? 'Completed' : tabLabel(v), v)));
+    for (const k of ['view', 'label_open', 'label_focus', 'limit', 'new', 'tag', 'pin']) f[k].value = fields[k];
+    f.plan.checked = fields.plan;
+    if (f.list) { f.list.value = fields.list; f.keep.checked = fields.keep; }
+    for (const el of form.querySelectorAll('.task-settings-embed')) el.hidden = all;
+    // More: closed, unless something in it is set.
+    form.querySelector('.task-settings-more').open =
+      !!(fields.label_open || fields.label_focus || fields.new || (!all && fields.tag));
+    return read();
+  };
+  return { read, fill };
 }
 
 export function initTaskSettings(app) {
@@ -82,33 +122,16 @@ export function initTaskSettings(app) {
   const all = index < 0;
   const errorEl = document.getElementById('task-settings-error' + sfx);
   const whereEl = document.getElementById('task-settings-where' + sfx);
-  const f = form.elements;
+  const { read, fill } = settingsForm(form, app.tabLabel);
   let was = null;
 
-  const read = () => ({
-    view: f.view.value, plan: f.plan.checked,
-    label_open: f.label_open.value.trim(), label_focus: f.label_focus.value.trim(),
-    limit: f.limit.value.trim(), new: f.new.value.trim(),
-    tag: f.tag.value.trim(), pin: f.pin.value,
-  });
-
   function open() {
-    const fields = fieldsOf(parseParams(raw));
-    // Opens on: the tabs by their names here; Completed only where a page says so.
-    f.view.replaceChildren(...['open', 'focus', fields.view === 'completed' && 'completed'].filter(Boolean)
-      .map(v => new Option(v === 'completed' ? 'Completed' : app.tabLabel(v), v)));
-    for (const k of ['view', 'label_open', 'label_focus', 'limit', 'new', 'tag', 'pin']) f[k].value = fields[k];
-    f.plan.checked = fields.plan;
-    for (const el of form.querySelectorAll('.task-settings-embed')) el.hidden = all;
-    // More: closed, unless something in it is set.
-    document.getElementById('task-settings-more' + sfx).open =
-      !!(fields.label_open || fields.label_focus || fields.new || (!all && fields.tag));
+    was = fill(parseParams(raw), all);
     // Where it is written: an embed's page says it itself.
     whereEl.textContent = all ? 'For All tasks, for everyone.'
       : location.pathname === '/tasks' ? `Written in the list's [[tasks: …]] on the page “${page}”.`
       : 'Written in this list’s [[tasks: …]] on this page.';
     errorEl.hidden = true;
-    was = read();
     dialog.showModal();
   }
 

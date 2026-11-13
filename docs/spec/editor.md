@@ -125,15 +125,11 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 - **Snippets** — typing a trigger word then pressing Tab expands it inline.
   Built-in snippets: `/date` → `2026-03-22`, `/time` → `HH:MM`, `/datetime` → `2026-03-22 HH:MM`, all in local time (`localDate` in `js/util.js`; `toISOString()` would give UTC's day).
   Add more by extending the `snippets` object in `js/mdedit.js` (the task app's notes get them too).
-- **Task list dialog** (`#tasklist-dialog` in `templates/edit.html`, `taskListDialog` in `js/tasklist.js`): the formatting bar's Task list asks what the list shows instead of leaving the params to be typed:
-  **List** (a name makes it a list of its own, with the lists there are to choose from, `editView.TaskLists`; cleaned as `cleanList` does; none: all tasks),
-  **Only the tags** (`tag=`),
-  **Opens on** (Focus, the default, written as no `view=`; Open by day, `view=plan`; Open as one list, `view=open`),
-  **WIP limit** (`limit=`, 1–99),
-  **New tasks are keep tasks** (`keep=1`) and **Pinned** (`pin=1`).
-  Under the fields it shows the line it will write; **Insert** (or Enter) writes it, in one undo step, a blank line between it and text above; Cancel or Esc writes nothing; either way the cursor is back in the text.
-  With the cursor on a line that is a `[[tasks: …]]` already, the dialog is **Change the task list**: the fields show that embed's params, and **Change** rewrites the line with only the fields that were changed (a param keeps its place, a new one goes last, an emptied one goes), so what the dialog has no field for (`labels=`, `new=`, `plan=`, `pin=default`, `view=completed`) stays as written.
-  On the page itself the same params are changed by the list's gear (Settings in `docs/spec/tasks.md`).
+- **Task list dialog** (`taskListDialog` in `js/tasklist.js`): the formatting bar's Task list shows **List settings**, the dialog a list's gear shows (Settings in `docs/spec/tasks.md`: one template, `task_settings_dialog`, and one set of fields, `settingsForm` and `changedParams` in `js/tasksettings.js`), instead of leaving the params to be typed.
+  In the editor it has two fields more, which make a list where the gear only changes one:
+  **List** first (a name makes it a list of its own, with the lists there are to choose from, `editView.TaskLists`; cleaned as `cleanList` does; none: all tasks) and **New tasks are keep tasks** (`keep=1`).
+  Where the gear says which page it writes to, it shows the line it will write; **Insert** (or Enter) writes it, in one undo step, a blank line between it and text above; Cancel or Esc writes nothing; either way the cursor is back in the text.
+  With the cursor on a line that is a `[[tasks: …]]` already, the dialog is **Change the task list**: the fields show that embed's params, and **Change** rewrites the line as the gear's Save rewrites the page (only what was changed; a param keeps its place, a new one goes last, an emptied one goes, `pin` replaces an old `home`), so a param without a field stays as written.
 - **A block from the bar** (table, code block, math, diagram, task list) goes on its own lines after the current one, with a blank line to the text above it also when the cursor is on an empty line right under text (`insertBlockAfterLine`): in the text's paragraph a table or an embed would be its words.
 - **Task list checkboxes** — `- [ ] task` and `- [x] task` render as interactive checkboxes in page view (rendered via `mdit-py-plugins` `tasklists_plugin` with `enabled=True`, so they are not disabled).
   Clicking a checkbox POSTs to `POST /api/toggle-checkbox/<path:slug>` with `idx` (0-based checkbox index), which toggles the `[ ]`/`[x]` in the `.md` file and answers the file's new hash (`{file_hash}`).
