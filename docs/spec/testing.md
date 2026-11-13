@@ -2,61 +2,307 @@
 
 Part of Zone's spec (see `AGENTS.md` for the index).
 
-How the suite is set up and what each module covers. The rules (run it, add tests with every change) are in `AGENTS.md`.
+How the suite is set up and what each module covers.
+The rules (run it, add tests with every change) are in `AGENTS.md`.
 
 ## Shared setup
 
-`tests/conftest.py` holds the shared setup: every test gets a fresh temp wiki (`wiki_dir`: just `index.md`, `_assets/` and `_tasks/`; `git_wiki_dir`: the same set up as a git repository, as Zone does at start; `client`, a server on it), plus helpers that modules import from `tests.conftest`: `HOST`, `write_page`, `create_task`, `content_hash`, `section_fields` (the editor's hidden fields for a section, read from its `/edit` page), `preview` (markdown as `/api/preview` renders it), `rendered` (a page's article), `backlinks` and `task_backlinks` (a page's link sections). The browser tests' `wiki` fixture builds on `git_wiki_dir`.
+`tests/conftest.py` holds the shared setup: every test gets a fresh temp wiki (`wiki_dir`: just `index.md`, `_assets/` and `_tasks/`; `git_wiki_dir`: the same set up as a git repository, as Zone does at start; `client`, a server on it),
+plus helpers that modules import from `tests.conftest`: `HOST`,
+`write_page`,
+`create_task`,
+`content_hash`,
+`section_fields` (the editor's hidden fields for a section, read from its `/edit` page),
+`preview` (markdown as `/api/preview` renders it),
+`rendered` (a page's article),
+`backlinks` and `task_backlinks` (a page's link sections).
+The browser tests' `wiki` fixture builds on `git_wiki_dir`.
 
-**The server under test** (`tests/goserver.py`): the binary is built once per run (`go build` in `go/`, by pytest's first process, which hands the path to the xdist workers in `ZONE_TEST_BINARY`). The `client` fixture is a `GoClient`: it takes the calls of Flask's test client (get/post/put/delete with headers, data, json, query_string; cookies) and sends them over HTTP to a server started on the test's wiki, answering with werkzeug's `TestResponse` (`get_json()`, `get_data(as_text=True)`, `status_code`, `headers`). The browser tests' `wiki` fixture starts one on a port fixed for the session. The settings a test changes in `tests/settings.py` (`monkeypatch.setattr(settings, "PASSWORD", …)`: `HOSTS`, `LOCALE`, `NOSHARE_TAGS`, `GIT_ENABLED` (a `PATH` without git) …) reach the server in its settings file, `.zone/config` (`config_text` in `goserver.py`: the settings that differ from Zone's defaults, passwords and tokens as their hashes, then `settings.CONFIG_FILE`, more of the file's text, then the users as `[user …]` sections; written before the server starts, and removed once the settings give none), the deployment's (`ZONE_ALLOW_REMOTE`, `settings.ENV`) as its environment): when they change, it restarts on the same wiki (and port) before the next request; the browser tests' server restarts the moment a test sets one (a `__setattr__` on the module), since requests made with `page.request` don't pass `_new_page`'s route. Zone's docs folder (`settings.DOCS`, which `TestZoneHelp` points elsewhere) reaches it as `--docs`; the semantic index (`settings.SEMANTIC`, a `tests/semantic.py` `FakeIndex`) as `--semantic-test`: the server gets the fake concept embedder and floors (`go/embedtest.go`), syncs once at start when the test called `sync()`, and restarts after each `sync()`, so it sees the wiki as it is then. A server makes the wiki a git repository at start (`gitSetup`), so `git_setup(tmp_path_factory)` (a server started and stopped) is how a test "restarts Zone" (start-up commits, `index.md`, the yearly archives). What no route reaches (text functions, search ranking, the index's cache, git helpers, the protocol's limits) has Go tests in `go/*_test.go`; `go/testdata/golden.json.gz` holds the text functions' answers on every string in the tests of 2026-10 (recorded from the Python Zone then) and on edge cases added since, which `go/golden_test.go` checks the Go ones against, and `tests/test_text_parity.py` the browser's copies of them (`public/js/mdtext.js`, run in Node: slugs, heading ids, a wikilink's parts, the checkboxes of a text, a tick, a query's words), so the two sides can't drift apart: a case added for one is a case for both; after a deliberate change to one of those functions, `ZONE_GOLDEN_UPDATE=1 go test -run TestGolden` (in `go/`) logs every case that changed and writes the new answers.
+**The server under test** (`tests/goserver.py`): the binary is built once per run (`go build` in `go/`, by pytest's first process, which hands the path to the xdist workers in `ZONE_TEST_BINARY`).
+The `client` fixture is a `GoClient`: it takes the calls of Flask's test client (get/post/put/delete with headers, data, json, query_string; cookies) and sends them over HTTP to a server started on the test's wiki,
+answering with werkzeug's `TestResponse` (`get_json()`, `get_data(as_text=True)`, `status_code`, `headers`).
+The browser tests' `wiki` fixture starts one on a port fixed for the session.
+The settings a test changes in `tests/settings.py` (`monkeypatch.setattr(settings, "PASSWORD", …)`: `HOSTS`, `LOCALE`, `NOSHARE_TAGS`, `GIT_ENABLED` (a `PATH` without git) …) reach the server in its settings file,
+`.zone/config` (`config_text` in `goserver.py`: the settings that differ from Zone's defaults, passwords and tokens as their hashes, then `settings.CONFIG_FILE`, more of the file's text, then the users as `[user …]` sections;
+written before the server starts, and removed once the settings give none),
+the deployment's (`ZONE_ALLOW_REMOTE`, `settings.ENV`) as its environment): when they change,
+it restarts on the same wiki (and port) before the next request;
+the browser tests' server restarts the moment a test sets one (a `__setattr__` on the module), since requests made with `page.request` don't pass `_new_page`'s route.
+Zone's docs folder (`settings.DOCS`, which `TestZoneHelp` points elsewhere) reaches it as `--docs`;
+the semantic index (`settings.SEMANTIC`, a `tests/semantic.py` `FakeIndex`) as `--semantic-test`: the server gets the fake concept embedder and floors (`go/embedtest.go`), syncs once at start when the test called `sync()`, and restarts after each `sync()`, so it sees the wiki as it is then.
+A server makes the wiki a git repository at start (`gitSetup`), so `git_setup(tmp_path_factory)` (a server started and stopped) is how a test "restarts Zone" (start-up commits, `index.md`, the yearly archives).
+What no route reaches (text functions, search ranking, the index's cache, git helpers, the protocol's limits) has Go tests in `go/*_test.go`;
+`go/testdata/golden.json.gz` holds the text functions' answers on every string in the tests of 2026-10 (recorded from the Python Zone then) and on edge cases added since,
+which `go/golden_test.go` checks the Go ones against,
+and `tests/test_text_parity.py` the browser's copies of them (`public/js/mdtext.js`, run in Node: slugs, heading ids, a wikilink's parts, the checkboxes of a text, a tick, a query's words),
+so the two sides can't drift apart: a case added for one is a case for both;
+after a deliberate change to one of those functions, `ZONE_GOLDEN_UPDATE=1 go test -run TestGolden` (in `go/`) logs every case that changed and writes the new answers.
 
-`tests/test_git.py` uses `git_wiki_dir` and covers every git path (commit-on-write, history/revision/diff/restore, `_deleted`, uncommitted/commit endpoints, git-disabled fallbacks); it skips when git is not installed. A server makes any wiki a repository when it starts, so the other modules' wikis are repositories too; `settings.GIT_ENABLED = False` gives the server a `PATH` without git, for the fallbacks.
+`tests/test_git.py` uses `git_wiki_dir` and covers every git path (commit-on-write, history/revision/diff/restore, `_deleted`, uncommitted/commit endpoints, git-disabled fallbacks); it skips when git is not installed.
+A server makes any wiki a repository when it starts, so the other modules' wikis are repositories too; `settings.GIT_ENABLED = False` gives the server a `PATH` without git, for the fallbacks.
 
-`tests/test_mcp.py` covers the MCP server (with the fake semantic index too: read_page's related pages, a new page's pages close in content): the tool definitions (names, hints, their size, which take guides), the HTTP transport and auth, the wiki-guide page in the instructions, folder guides (a write refused until their ids are passed, imports, a changed guide's new id, every page write gated, dry runs not; read_guides for a page, a folder and the wiki, the guided folders in its description, read_page's guide id), the reading tools (tasks created through `/api/tasks`; with and without the fake semantic index from `test_semantic.py`; search_wiki's heading paths and its query log (only with `query-log`, rotation), read_page's links and one section, list_pages' link counts and orphans, check_links, list_tags, grep_wiki with regexes, limits, a bad pattern, the timeout and the no-git fallback, history: recent changes, a page's versions and a diff), and the writing tools: pages (create/overwrite, exact-text edit, find and replace across pages (dry run, code left alone, regex groups, a folder, the max_pages guard, a regex RE2 can't take refused), append under a heading, rename with links, a folder move (subfolders, links, a page of its name, refusals), delete, similar-name and broken-wikilink notes) and tasks (create, update fields and status, id prefixes, comment, delete), several edits at once, restore_page (a version, a deleted page), write_page's `base_hash` (merged with a change made since read_page, nothing written on a clash or an unknown hash), a page open in the editor (its auto-saved draft committed first as the user's, the editor's 409 after), plus one commit per write marked `(MCP)`; and zone_help over a small docs folder (passages for a query, a doc, a section, the topic list, testing.md left out, no docs installed) and over the real docs. The protocol's handling (versions, notifications, errors) and the limits long answers are cut at are `go/mcp_test.go`'s.
+`tests/test_mcp.py` covers the MCP server (with the fake semantic index too: read_page's related pages, a new page's pages close in content): the tool definitions (names, hints, their size, which take guides),
+the HTTP transport and auth,
+the wiki-guide page in the instructions,
+folder guides (a write refused until their ids are passed, imports, a changed guide's new id, every page write gated, dry runs not; read_guides for a page, a folder and the wiki, the guided folders in its description, read_page's guide id),
+the reading tools (tasks created through `/api/tasks`;
+with and without the fake semantic index from `test_semantic.py`;
+search_wiki's heading paths and its query log (only with `query-log`,
+rotation),
+read_page's links and one section,
+list_pages' link counts and orphans,
+check_links,
+list_tags,
+grep_wiki with regexes,
+limits,
+a bad pattern,
+the timeout and the no-git fallback,
+history: recent changes,
+a page's versions and a diff),
+and the writing tools: pages (create/overwrite,
+exact-text edit,
+find and replace across pages (dry run, code left alone, regex groups, a folder, the max_pages guard, a regex RE2 can't take refused),
+append under a heading,
+rename with links,
+a folder move (subfolders, links, a page of its name, refusals),
+delete,
+similar-name and broken-wikilink notes) and tasks (create,
+update fields and status,
+id prefixes,
+comment,
+delete),
+several edits at once,
+restore_page (a version, a deleted page),
+write_page's `base_hash` (merged with a change made since read_page, nothing written on a clash or an unknown hash),
+a page open in the editor (its auto-saved draft committed first as the user's, the editor's 409 after),
+plus one commit per write marked `(MCP)`;
+and zone_help over a small docs folder (passages for a query, a doc, a section, the topic list, testing.md left out, no docs installed) and over the real docs.
+The protocol's handling (versions, notifications, errors) and the limits long answers are cut at are `go/mcp_test.go`'s.
 
-`tests/test_task_refs.py` covers `[[task:…]]` references: chip rendering and badges (dates as `<time>` for the locale), done/won't-do/missing, recurring series, list rows, code, Linked tasks, search by task title and MCP `read_page`. `tests/e2e/test_task_refs.py` ticks chips (undo, keep tasks), the editor completion and Make task (the modal for one item, Cancel, batch mode for several lines with shared tags and per-line shorthand, headings skipped, inline selection, undo, the hidden tasks leaving the editor's keys alone).
+`tests/test_task_refs.py` covers `[[task:…]]` references: chip rendering and badges (dates as `<time>` for the locale), done/won't-do/missing, recurring series, list rows, code, Linked tasks, search by task title and MCP `read_page`.
+`tests/e2e/test_task_refs.py` ticks chips (undo, keep tasks), the editor completion and Make task (the modal for one item, Cancel, batch mode for several lines with shared tags and per-line shorthand, headings skipped, inline selection, undo, the hidden tasks leaving the editor's keys alone).
 
-`tests/test_semantic.py` covers semantic search through the server with a fake embedder (words mapped to a few "concept" axes, `tests/semantic.py`), so it needs neither onnxruntime nor a model: the search dialog's mode (off, indexing, on, failed: rendered and in `X-Zone-Semantic`), hybrid `/api/search` and the Related section. The index itself (chunking with heading paths, a cache of an older chunking re-chunked with its vectors kept, the content-addressed cache, failure fallback, the worker, rank fusion, settings, the model's download) is covered by `go/embed_test.go`.
+`tests/test_semantic.py` covers semantic search through the server with a fake embedder (words mapped to a few "concept" axes, `tests/semantic.py`),
+so it needs neither onnxruntime nor a model: the search dialog's mode (off, indexing, on, failed: rendered and in `X-Zone-Semantic`),
+hybrid `/api/search` and the Related section.
+The index itself (chunking with heading paths, a cache of an older chunking re-chunked with its vectors kept, the content-addressed cache, failure fallback, the worker, rank fusion, settings, the model's download) is covered by `go/embed_test.go`.
 
-`go/eval_test.go` covers `zonewiki eval`: a page target matching any section and a section target only its own, ranks by keywords on a temp wiki, targets naming nothing (page, section, task), the report's numbers per mode, the questions file's format (questions without targets skipped and counted), `--new`'s stubs from the query logs (known and repeated queries left out, newest first), and that the semantic index it builds never writes the wiki's cache.
+`go/eval_test.go` covers `zonewiki eval`: a page target matching any section and a section target only its own,
+ranks by keywords on a temp wiki,
+targets naming nothing (page, section, task),
+the report's numbers per mode,
+the questions file's format (questions without targets skipped and counted),
+`--new`'s stubs from the query logs (known and repeated queries left out, newest first),
+and that the semantic index it builds never writes the wiki's cache.
 
-`tests/test_image.py` checks the Containerfiles: the model's revision and hashes are the ones `go/embed.go` checks, the semantic layer copies nothing from the repo (a code change mustn't download the model again), both images build with the same Go, and the image ships the browser code, the docs and the licenses. It also keeps the notices current: `THIRD_PARTY_LICENSES` names the pinned Go, Go modules and model, every library in `public/vendor/` has a `LICENSE`, and Mermaid's notices record the hash of the vendored `mermaid.min.js`.
+`tests/test_image.py` checks the Containerfiles: the model's revision and hashes are the ones `go/embed.go` checks,
+the semantic layer copies nothing from the repo (a code change mustn't download the model again),
+both images build with the same Go,
+and the image ships the browser code,
+the docs and the licenses.
+It also keeps the notices current: `THIRD_PARTY_LICENSES` names the pinned Go, Go modules and model, every library in `public/vendor/` has a `LICENSE`, and Mermaid's notices record the hash of the vendored `mermaid.min.js`.
 
 `tests/test_env_example.py` checks `.env.example` against the settings the source, `run.sh` and `compose.yaml` read (none missing, none unknown; the variables of settings that moved into the settings file, which the code names only to refuse and import them, don't count).
 
-`tests/test_page_writes.py`'s rename-tag tests cover renaming a list or tag through both doors (tasks, archives, embeds and links in one commit; refusals; asking before a merge; text not yet in git; a corrupt tasks file writing nothing), `tests/test_privacy.py` what it does across users, `TestRenameTagInText` in `go/pages_test.go` the rewriting of text, and `test_rename_list_dialog` in `tests/e2e/test_tasks.py` the dialog.
+`tests/test_page_writes.py`'s rename-tag tests cover renaming a list or tag through both doors (tasks, archives, embeds and links in one commit; refusals; asking before a merge; text not yet in git; a corrupt tasks file writing nothing),
+`tests/test_privacy.py` what it does across users,
+`TestRenameTagInText` in `go/pages_test.go` the rewriting of text,
+and `test_rename_list_dialog` in `tests/e2e/test_tasks.py` the dialog.
 
-`tests/test_routes.py`'s `TestMergeOnSave` covers merge on save over HTTP (different lines merged, the same lines 409 with the markers, the fallbacks, a section's new range, saving on from the text sent, set aside, Keep mine committing what was never in git, Done merging and committing, text left in conflict kept for the next visit and gone after a save or 30 days), and `TestApiToggleCheckbox` a tick from an older page view finding its item by its line (or refused), also after a tick found elsewhere; `tests/e2e/test_merge.py` two editors (alice and bob, two browser contexts) in the browser: a merge into the textarea (the note, the cursor, one undo), typing on while a merged answer comes back, and the banner's Merge by hand (auto-save waits for the markers), Reload theirs and Keep mine (saving on from it), also after Done, changes left in conflict offered on the next visit (also when leaving with the banner up or markers left), a merge arriving under a dialog, and `replaceChangedLines`' edge cases; `go/merge_test.go` covers `mergeText` (clean, the same change on both sides, no final newline, an empty base, conflict markers, no git) and the bases kept. `tests/test_page_writes.py` runs each page write (delete, rename, restore, create, a note's Move to wiki and Append) through both doors, the browser's route and the MCP tool, on the same wiki: text not yet in git kept before a write replaces it, the home page, an existing target, a missing page, a restore to the same text or to a version without text, and another user's private page (refused, with the answer a missing page gets). `tests/test_users.py` covers users: signing in per user (the name field, wrong name or password, throttling, a removed user and a switch from one password to users signed out), per-user MCP tokens, commit authors (browser, tasks, uploads, notes, MCP; Zone's own commits and a wiki without users), authors in the history and on tasks comments and History events (an undo keeps them), and another user's draft committed in their name before a save, Done, checkbox, delete, rename, Commit file/all or MCP write (`TestDrafts`). `TestDisabled` covers a disabled user (no sign-in, told only with the right password, the session stopped and going on once enabled, the token refused). `tests/test_roles.py` covers viewers: every write route and MCP write tool is probed as a viewer on shared pages and tasks and on her own note and private task from before, and no file may change nor any commit be made (`test_every_write_route_is_probed` and `test_every_write_tool_is_probed` fail for a new one without a probe), with the message, a refusal that tells nothing of another user's folder, and the interface (no Edit, ✎ or Rename, the editor 403, no Private or Notes, no writing tools in `tools/list`). `tests/test_admin.py` covers the admin page and its Users tab (only admins, `/admin` opening the first tab, 404 for everyone else and without users, the Origin check, role, disable, enable, remove, refusals: the last admin, the last user, disabling or removing yourself, a change meanwhile kept; the commit's author; the top row) and `tests/e2e/test_admin.py` the Remove dialog and your own row in the browser, and invite and reset links (the welcome page changes nothing until its form, once only, a role, a reset ending the old sessions, revoke, replacing, expiry, throttling, the cap per admin); `go/configfile_test.go`'s `TestUserRoles`, `TestUserLinks` and `TestRolesInTheFile` the commands and the keys; `go/gitstore_test.go`'s `TestMissingUsers` the start-up guard. `settings.USERS` maps a name to its password and token, `settings.USER_SETTINGS` a name to more of its section (`role`, `disabled`); `goserver.py` writes their hashes into the settings file (`password_hash`: a fixed salt and few iterations, so the server's settings stay the same between requests and logins are quick). `tests/test_privacy.py` is the leak test for private pages and tasks: alice's private page (committed, deleted, uncommitted), note, upload, pinned list, list and private tasks hold a word that no response to bob, signed in or through his MCP token, may contain, and bob's writes must leave her files alone. It probes every route and MCP tool; `test_every_route_is_covered` and `test_every_tool_is_covered` fail for a route Zone registers, or a tool it offers, that is neither probed nor exempt: a new one gets a probe there. `go/access_test.go` covers the rules themselves (`canSee`, `canSeePath`, `hiddenPage` with sharing mode, `strayPrivate`), `go/taskstore_test.go` the per-user task files (`canSeeTask`, `mayMakePrivate`). `go/users_test.go` covers the hash format and `authenticate`; `go/security_test.go` the session's user.
+`tests/test_routes.py`'s `TestMergeOnSave` covers merge on save over HTTP (different lines merged,
+the same lines 409 with the markers,
+the fallbacks,
+a section's new range,
+saving on from the text sent,
+set aside,
+Keep mine committing what was never in git,
+Done merging and committing,
+text left in conflict kept for the next visit and gone after a save or 30 days),
+and `TestApiToggleCheckbox` a tick from an older page view finding its item by its line (or refused),
+also after a tick found elsewhere;
+`tests/e2e/test_merge.py` two editors (alice and bob, two browser contexts) in the browser: a merge into the textarea (the note, the cursor, one undo),
+typing on while a merged answer comes back,
+and the banner's Merge by hand (auto-save waits for the markers),
+Reload theirs and Keep mine (saving on from it),
+also after Done,
+changes left in conflict offered on the next visit (also when leaving with the banner up or markers left),
+a merge arriving under a dialog,
+and `replaceChangedLines`' edge cases;
+`go/merge_test.go` covers `mergeText` (clean, the same change on both sides, no final newline, an empty base, conflict markers, no git) and the bases kept.
+`tests/test_page_writes.py` runs each page write (delete, rename, restore, create, a note's Move to wiki and Append) through both doors,
+the browser's route and the MCP tool,
+on the same wiki: text not yet in git kept before a write replaces it,
+the home page,
+an existing target,
+a missing page,
+a restore to the same text or to a version without text,
+and another user's private page (refused, with the answer a missing page gets).
+`tests/test_users.py` covers users: signing in per user (the name field, wrong name or password, throttling, a removed user and a switch from one password to users signed out),
+per-user MCP tokens,
+commit authors (browser, tasks, uploads, notes, MCP; Zone's own commits and a wiki without users),
+authors in the history and on tasks comments and History events (an undo keeps them),
+and another user's draft committed in their name before a save,
+Done,
+checkbox,
+delete,
+rename,
+Commit file/all or MCP write (`TestDrafts`).
+`TestDisabled` covers a disabled user (no sign-in, told only with the right password, the session stopped and going on once enabled, the token refused).
+`tests/test_roles.py` covers viewers: every write route and MCP write tool is probed as a viewer on shared pages and tasks and on her own note and private task from before,
+and no file may change nor any commit be made (`test_every_write_route_is_probed` and `test_every_write_tool_is_probed` fail for a new one without a probe),
+with the message,
+a refusal that tells nothing of another user's folder,
+and the interface (no Edit, ✎ or Rename, the editor 403, no Private or Notes, no writing tools in `tools/list`).
+`tests/test_admin.py` covers the admin page and its Users tab (only admins, `/admin` opening the first tab, 404 for everyone else and without users, the Origin check, role, disable, enable, remove, refusals: the last admin, the last user, disabling or removing yourself, a change meanwhile kept;
+the commit's author;
+the top row) and `tests/e2e/test_admin.py` the Remove dialog and your own row in the browser,
+and invite and reset links (the welcome page changes nothing until its form, once only, a role, a reset ending the old sessions, revoke, replacing, expiry, throttling, the cap per admin);
+`go/configfile_test.go`'s `TestUserRoles`, `TestUserLinks` and `TestRolesInTheFile` the commands and the keys;
+`go/gitstore_test.go`'s `TestMissingUsers` the start-up guard.
+`settings.USERS` maps a name to its password and token, `settings.USER_SETTINGS` a name to more of its section (`role`, `disabled`);
+`goserver.py` writes their hashes into the settings file (`password_hash`: a fixed salt and few iterations, so the server's settings stay the same between requests and logins are quick).
+`tests/test_privacy.py` is the leak test for private pages and tasks: alice's private page (committed, deleted, uncommitted),
+note,
+upload,
+pinned list,
+list and private tasks hold a word that no response to bob,
+signed in or through his MCP token,
+may contain,
+and bob's writes must leave her files alone.
+It probes every route and MCP tool; `test_every_route_is_covered` and `test_every_tool_is_covered` fail for a route Zone registers, or a tool it offers, that is neither probed nor exempt: a new one gets a probe there.
+`go/access_test.go` covers the rules themselves (`canSee`, `canSeePath`, `hiddenPage` with sharing mode, `strayPrivate`), `go/taskstore_test.go` the per-user task files (`canSeeTask`, `mayMakePrivate`).
+`go/users_test.go` covers the hash format and `authenticate`; `go/security_test.go` the session's user.
 
-`go/sections_test.go` covers sections as the parser finds them: each ✎ opening its section (`TestEachPencilOpensItsSection`), the ✎s and the sections agreeing on random pages, finding a section by number and heading (`findSection`), the MCP tools' sections and search chunks going by the parser, pages with Windows line breaks. `tests/test_section_editing.py` covers the same over HTTP (a stale ✎, Keep mine with its section moved or gone).
+`go/sections_test.go` covers sections as the parser finds them: each ✎ opening its section (`TestEachPencilOpensItsSection`),
+the ✎s and the sections agreeing on random pages,
+finding a section by number and heading (`findSection`),
+the MCP tools' sections and search chunks going by the parser,
+pages with Windows line breaks.
+`tests/test_section_editing.py` covers the same over HTTP (a stale ✎, Keep mine with its section moved or gone).
 
-`go/math_test.go` and `tests/test_math.py` cover math: the parser (pandoc's rules, prices and escapes, `$$` blocks open, closed and on one line, ```` ```math ````, `\|` in table cells, inline content), and the source side agreeing with it (heading anchors, `$$` blocks no section or checkbox, wikilinks in math kept as TeX, section editing below a `$$` block). `test_routes.py` checks that the vendored libraries are served gzipped and kept a day, Zone's own code not.
+`go/math_test.go` and `tests/test_math.py` cover math: the parser (pandoc's rules, prices and escapes, `$$` blocks open, closed and on one line, ```` ```math ````, `\|` in table cells, inline content),
+and the source side agreeing with it (heading anchors, `$$` blocks no section or checkbox, wikilinks in math kept as TeX, section editing below a `$$` block).
+`test_routes.py` checks that the vendored libraries are served gzipped and kept a day, Zone's own code not.
 
-`tests/test_users.py`'s `TestPrivateHome`, `TestMakeShared`, `TestSharedNewPage`, `TestLinkToPrivateFromShared` and `TestModuleMenu` cover the private home over HTTP (`/private` made once on the first visit, one per user, a login needed, 404 without users, never renamed or deleted by route or MCP tool, an ordinary page without users), Make shared (the menu's entry and target, not offered for shared pages, homes, notes or without users, a rename into the folder that is refused for shared pages (nothing changes), the links that follow a page made shared, committed by the user, the lock, the page list and search marks), the marked link from a shared page to a private one and the user menu's markup (the top-right user button, Sign out in it) (with users, without, the current module per view). The browser side is in `tests/e2e/test_private.py`: the user menu by click, keyboard and Esc, with Sign out, on a phone as a bottom sheet from the tab bar, Private home and `g p`, Make shared through the dialog, the locks in the search modal, `[[` completion's new private page, and a link from a private page to a new shared page (marked, the warning editor with its hint, Keep shared).
+`tests/test_users.py`'s `TestPrivateHome`,
+`TestMakeShared`,
+`TestSharedNewPage`,
+`TestLinkToPrivateFromShared` and `TestModuleMenu` cover the private home over HTTP (`/private` made once on the first visit, one per user, a login needed, 404 without users, never renamed or deleted by route or MCP tool, an ordinary page without users),
+Make shared (the menu's entry and target, not offered for shared pages, homes, notes or without users, a rename into the folder that is refused for shared pages (nothing changes), the links that follow a page made shared, committed by the user, the lock, the page list and search marks),
+the marked link from a shared page to a private one and the user menu's markup (the top-right user button, Sign out in it) (with users, without, the current module per view).
+The browser side is in `tests/e2e/test_private.py`: the user menu by click,
+keyboard and Esc,
+with Sign out,
+on a phone as a bottom sheet from the tab bar,
+Private home and `g p`,
+Make shared through the dialog,
+the locks in the search modal,
+`[[` completion's new private page, and a link from a private page to a new shared page (marked, the warning editor with its hint, Keep shared).
 
-`tests/test_assistant.py` covers Connect an assistant over HTTP (`/assistant`: a user makes their own token with their password, kept as its hash and shown once; a wrong password refused and throttled as at the login; a new token replacing the old one, revoking, the other users' tokens left alone; a viewer's assistant only reading; signed out and cross-site refused; without users the wiki's token, with the wiki's password or none; the address from `base-url`; the shortcuts dialog's link). In the browser (`tests/e2e/test_private.py`): from the user menu to the page, a wrong password, the token made and working, the page at phone width, revoking.
+`tests/test_assistant.py` covers Connect an assistant over HTTP (`/assistant`: a user makes their own token with their password, kept as its hash and shown once;
+a wrong password refused and throttled as at the login;
+a new token replacing the old one, revoking, the other users' tokens left alone;
+a viewer's assistant only reading;
+signed out and cross-site refused;
+without users the wiki's token, with the wiki's password or none;
+the address from `base-url`;
+the shortcuts dialog's link).
+In the browser (`tests/e2e/test_private.py`): from the user menu to the page, a wrong password, the token made and working, the page at phone width, revoking.
 
-`tests/test_config.py` covers the settings file through the server: a new user signs in without a restart, a removed one is signed out, a changed password (ending the old one's sessions) and MCP token, a broken file keeping the settings from before (alice stays in, no one else gets in) and failing `/api/health` until it is fixed (the error itself only with a session), a file without users and password kept until a restart, other settings reloading, the wiki's password as a hash, the file kept out of git (a change logged by name and key only) and never served or shown in history and the uncommitted list, a clone whose history has users but no settings file refused at start (an empty file allowed), and a new wiki's first commit without the session key. Zone looks at the file at most once a second, so a test that rewrites it waits that out (`write`) rather than polling logins, which the throttle would count. `go/configfile_test.go` covers the parser (every error and its line), the settings from the file (defaults, every check), the reload (kept on an error, a removed file, at most once per `reloadEvery`, the noshare cache), the line edits keeping comments, the 0600 write, `zonewiki user` and `zonewiki config` on a temp wiki (`set`/`unset`, `passwd`, `token`, `import` from an older environment), token hashes, the log line (`settingsChange`), and `zonewiki health` failing on the error. `tests/test_routes.py`'s `TestUsage` runs the binary: `zonewiki --help` (also `-h`, `help`) names every command, the environment and the flags (with two dashes, as everywhere in the docs; one works too), and each command answers `--help` with its usage, exit code 0, without a wiki.
+`tests/test_config.py` covers the settings file through the server: a new user signs in without a restart,
+a removed one is signed out,
+a changed password (ending the old one's sessions) and MCP token,
+a broken file keeping the settings from before (alice stays in, no one else gets in) and failing `/api/health` until it is fixed (the error itself only with a session),
+a file without users and password kept until a restart,
+other settings reloading,
+the wiki's password as a hash,
+the file kept out of git (a change logged by name and key only) and never served or shown in history and the uncommitted list,
+a clone whose history has users but no settings file refused at start (an empty file allowed),
+and a new wiki's first commit without the session key.
+Zone looks at the file at most once a second, so a test that rewrites it waits that out (`write`) rather than polling logins, which the throttle would count.
+`go/configfile_test.go` covers the parser (every error and its line),
+the settings from the file (defaults, every check),
+the reload (kept on an error, a removed file, at most once per `reloadEvery`, the noshare cache),
+the line edits keeping comments,
+the 0600 write,
+`zonewiki user` and `zonewiki config` on a temp wiki (`set`/`unset`, `passwd`, `token`, `import` from an older environment),
+token hashes,
+the log line (`settingsChange`),
+and `zonewiki health` failing on the error.
+`tests/test_routes.py`'s `TestUsage` runs the binary: `zonewiki --help` (also `-h`, `help`) names every command, the environment and the flags (with two dashes, as everywhere in the docs; one works too), and each command answers `--help` with its usage, exit code 0, without a wiki.
 
-`tests/test_run_sh.py` covers `run.sh`'s container calls and `.githooks/pre-commit` against a stub `podman` first on PATH (it logs its arguments; `run`/`start` exit with `FAKE_EXIT`), in a scratch git repo holding copies of both, so it needs no engine: `leaks` passes a temporary `GIT_INDEX_FILE` in as a `/repo/…` path (absolute or relative; outside the repo: exit 2), copy mode creates the container with `--rm`, a build's output stays hidden unless it fails (then nothing runs) and a first build says so, `test` runs go vet and go test before pytest, `test` and `e2e` run pytest in parallel (pytest-xdist), `eval` refuses a missing questions file and builds with `ZONE_SEMANTIC_SEARCH` and mounts the wiki read-only, and the hook scans the temporary index of `commit -a` and `commit <path>`, refuses a leak (exit 3) and only warns when the scan fails. The hook tests skip when a local gitleaks is on PATH.
+`tests/test_run_sh.py` covers `run.sh`'s container calls and `.githooks/pre-commit` against a stub `podman` first on PATH (it logs its arguments; `run`/`start` exit with `FAKE_EXIT`),
+in a scratch git repo holding copies of both,
+so it needs no engine: `leaks` passes a temporary `GIT_INDEX_FILE` in as a `/repo/…` path (absolute or relative; outside the repo: exit 2),
+copy mode creates the container with `--rm`,
+a build's output stays hidden unless it fails (then nothing runs) and a first build says so,
+`test` runs go vet and go test before pytest,
+`test` and `e2e` run pytest in parallel (pytest-xdist),
+`eval` refuses a missing questions file and builds with `ZONE_SEMANTIC_SEARCH` and mounts the wiki read-only,
+and the hook scans the temporary index of `commit -a` and `commit <path>`,
+refuses a leak (exit 3) and only warns when the scan fails.
+The hook tests skip when a local gitleaks is on PATH.
 
 To run the suite without a local Go or venv: `./run.sh test` (gofmt, go vet, go test, then pytest, inside the tools image with the repo mounted).
 
-Both `./run.sh test` and `./run.sh e2e` run in parallel with pytest-xdist: `test` with `-n auto` (a worker per CPU), `e2e` with a worker per two CPUs (each runs its own Chromium; at one per CPU the browsers starve and timing-sensitive tests fail). An `-n` in the extra args overrides it (`-n 0`: one process). Workers are separate processes: each has its own temp wikis, servers (`base_url`) and browser, so the fixtures need no locking; a test must keep its files under `tmp_path`.
+Both `./run.sh test` and `./run.sh e2e` run in parallel with pytest-xdist: `test` with `-n auto` (a worker per CPU), `e2e` with a worker per two CPUs (each runs its own Chromium; at one per CPU the browsers starve and timing-sensitive tests fail).
+An `-n` in the extra args overrides it (`-n 0`: one process).
+Workers are separate processes: each has its own temp wikis, servers (`base_url`) and browser, so the fixtures need no locking; a test must keep its files under `tmp_path`.
 
 ## Browser tests (`tests/e2e/`)
 
-End-to-end tests drive the real app in headless Chromium via Playwright. They run in the tools image (`Containerfile.tools`, based on Microsoft's Playwright image; it also has Go, Node, gitleaks, and pngquant for the README's screenshots) so the app image stays browser-free and the app still has no build step or npm. `./run.sh e2e` builds that image (cached) and runs them in parallel (above) with the repo bind-mounted; extra args pass through to pytest (e.g. `./run.sh e2e -k tasks`). Without Playwright installed they skip, so plain `pytest tests/` is unaffected.
+End-to-end tests drive the real app in headless Chromium via Playwright.
+They run in the tools image (`Containerfile.tools`, based on Microsoft's Playwright image; it also has Go, Node, gitleaks, and pngquant for the README's screenshots) so the app image stays browser-free and the app still has no build step or npm.
+`./run.sh e2e` builds that image (cached) and runs them in parallel (above) with the repo bind-mounted; extra args pass through to pytest (e.g. `./run.sh e2e -k tasks`).
+Without Playwright installed they skip, so plain `pytest tests/` is unaffected.
 
-- `conftest.py` starts a server per test on a fresh temp wiki with its own git repo (on a port fixed for the session); each test gets a fresh browser context. Dates in the task app's date picker go through `pick_date(picker, d, tap=False)`: the tests take dates from the real clock (today + N), and the picker opens on the month of the date it holds, so near a month's end the date can be a page before or after. Tests of how the editor behaves over a slow connection (`test_editor.py`'s `slow_saves`) put a small proxy between the browser and the server that answers auto-saves 2.5 seconds late. A request to any other host is aborted (offline, deterministic) and fails the test: Zone loads nothing from a CDN. Uncaught page JS errors fail the test.
-- Coverage: Notes filter and the search dialog's mode indicator (its wording, its update from `X-Zone-Semantic`, fitting on a phone; `test_search.py`), modules (breadcrumb switcher and current module, phone tab bar (a tap acts on the touch, no click of the browser's; a tap below the bar's box, as Firefox lays it out, still reaches the tab), New per module, due count on the Tasks links, pinned lists, desktop top actions, New task/`c t`/`g t` following the pinned and default lists; `test_mobile_nav.py`), side columns (sticky TOC and links from 1320px, active section, code and tables growing only when needed, none below 1320px; `test_layout.py`), editor (formatting bar and Ctrl+B/I/K, auto-save + unsaved dot, no commit on auto-save, Done/Ctrl+S commit, pagehide beacon, live preview/F2, list continuation), search modal (Ctrl+P/Esc, fuzzy ranking with file names and its tie-break, content matches, query syntax, highlights on the opened page, arrow/Enter nav, unlinked filter), tasks (an undo armed only after its own write, Plan-board drag to a day and to Unplanned, touch long-press drag via CDP touch events (board, Open-tab reorder, swipe still scrolls, a long press let go in place starts selection mode, also where nothing drags, and moving after the hold cancels it), board grouping by start date, modal "Days before due", Plan board in Open's order with in-section drops ignored, view tabs, start-date Today, selection (Shift/Ctrl+click, Ctrl+A, the selection bar and the menu of a selection, the bulk tag dialog's three states and undo), touch: tap-to-edit, ⋯ menu/bottom sheet, selection mode (taps toggle, no drags, the bar in the tab bar's place, its ways out), target sizes, editor scrolling/compact phone layout, date picker placement), sortable tables (header click cycles ascending/descending/original, numeric columns, empty cells last, keyboard, not in the editor preview), layout (no horizontal page scroll at 390px phone width on page/editor/tasks views, mobile Preview button, tldr toggle geometry (and the open text lined up with the row beside the side columns), the heading copy-link icons), folding sections (a click, nested folds, Alt+click and `z`, the wavy line and its "folded" that unfolds, anchors/TOC/hashchange/`beforematch`/search highlights unfolding, `]` skipping folded headings, presentation and print, the chevron's place on desktop and phones; `test_fold.py`), math and Mermaid diagrams (rendered from the vendored copies on a page, in the editor preview, task notes and presentation slides; a page without them loads neither library; a broken diagram keeps its source; `test_figures.py`), the Content-Security-Policy (a page's `<script>`, `onerror=` and `javascript:` link and the editor preview's handler don't run, an uploaded `.js` doesn't run as a script; `test_security.py`).
+- `conftest.py` starts a server per test on a fresh temp wiki with its own git repo (on a port fixed for the session); each test gets a fresh browser context.
+  Dates in the task app's date picker go through `pick_date(picker, d, tap=False)`: the tests take dates from the real clock (today + N), and the picker opens on the month of the date it holds, so near a month's end the date can be a page before or after.
+  Tests of how the editor behaves over a slow connection (`test_editor.py`'s `slow_saves`) put a small proxy between the browser and the server that answers auto-saves 2.5 seconds late.
+  A request to any other host is aborted (offline, deterministic) and fails the test: Zone loads nothing from a CDN.
+  Uncaught page JS errors fail the test.
+- Coverage: Notes filter and the search dialog's mode indicator (its wording, its update from `X-Zone-Semantic`, fitting on a phone; `test_search.py`),
+  modules (breadcrumb switcher and current module, phone tab bar (a tap acts on the touch, no click of the browser's;
+  a tap below the bar's box, as Firefox lays it out, still reaches the tab), New per module, due count on the Tasks links, pinned lists, desktop top actions, New task/`c t`/`g t` following the pinned and default lists;
+  `test_mobile_nav.py`),
+  side columns (sticky TOC and links from 1320px, active section, code and tables growing only when needed, none below 1320px; `test_layout.py`),
+  editor (formatting bar and Ctrl+B/I/K, auto-save + unsaved dot, no commit on auto-save, Done/Ctrl+S commit, pagehide beacon, live preview/F2, list continuation),
+  search modal (Ctrl+P/Esc, fuzzy ranking with file names and its tie-break, content matches, query syntax, highlights on the opened page, arrow/Enter nav, unlinked filter),
+  tasks (an undo armed only after its own write,
+  Plan-board drag to a day and to Unplanned,
+  touch long-press drag via CDP touch events (board, Open-tab reorder, swipe still scrolls, a long press let go in place starts selection mode, also where nothing drags, and moving after the hold cancels it),
+  board grouping by start date,
+  modal "Days before due",
+  Plan board in Open's order with in-section drops ignored,
+  view tabs,
+  start-date Today,
+  selection (Shift/Ctrl+click, Ctrl+A, the selection bar and the menu of a selection, the bulk tag dialog's three states and undo),
+  touch: tap-to-edit,
+  ⋯ menu/bottom sheet,
+  selection mode (taps toggle, no drags, the bar in the tab bar's place, its ways out),
+  target sizes,
+  editor scrolling/compact phone layout,
+  date picker placement),
+  sortable tables (header click cycles ascending/descending/original, numeric columns, empty cells last, keyboard, not in the editor preview),
+  layout (no horizontal page scroll at 390px phone width on page/editor/tasks views, mobile Preview button, tldr toggle geometry (and the open text lined up with the row beside the side columns), the heading copy-link icons),
+  folding sections (a click,
+  nested folds,
+  Alt+click and `z`,
+  the wavy line and its "folded" that unfolds,
+  anchors/TOC/hashchange/`beforematch`/search highlights unfolding,
+  `]` skipping folded headings, presentation and print, the chevron's place on desktop and phones; `test_fold.py`), math and Mermaid diagrams (rendered from the vendored copies on a page, in the editor preview, task notes and presentation slides; a page without them loads neither library; a broken diagram keeps its source; `test_figures.py`), the Content-Security-Policy (a page's `<script>`, `onerror=` and `javascript:` link and the editor preview's handler don't run, an uploaded `.js` doesn't run as a script; `test_security.py`).
 - Density: the test setup (`_new_page`'s init script) makes task lists open with full cards, as before the per-tab defaults, since most tests exercise cards; a test of the real defaults calls `real_density(page)` first.
 - Touch: `new_page(**TOUCH_PHONE)` gives a phone context with touch input, `hover: none` and `pointer: coarse` (use `.tap()`). Full-page screenshots of such a context lose the touch/hover emulation (Playwright re-renders with changed device metrics), so assert on computed styles/sizes rather than on a full-page image.
-- `test_screenshots` writes full-page PNGs of each view at phone/desktop × light/dark to `tests/e2e/_screenshots/` (gitignored) for visual review. It asserts nothing about appearance.
+- `test_screenshots` writes full-page PNGs of each view at phone/desktop × light/dark to `tests/e2e/_screenshots/` (gitignored) for visual review.
+  It asserts nothing about appearance.
 - Playwright's HTML5 drag cannot auto-scroll mid-drag, so drag tests must keep source and target on screen (e.g. enlarge the viewport).
 - Keep the `playwright==` pin in `tests/requirements.txt` equal to `Containerfile.tools`' image tag version.
-- Content-Security-Policy: Zone's pages run under `script-src 'self'` (Security in `docs/spec/security.md`). The harness collects the violations Chromium reports on the console (`page.csp_violations`) and fails a test that has any, so new code can't bring in an inline script or handler unnoticed; a test that blocks one on purpose (`test_security.py`) clears the list. `test_security.py` also has what only a browser shows of the other rules: an iframe's `srcdoc` never frames a form, and a task's id is text on its card, not an element. Under that policy Playwright can't `eval` in the page: `page.wait_for_function` needs a function (`"() => scrollY > 0"`), as an expression string is evaluated with `eval`; `page.evaluate` works either way.
+- Content-Security-Policy: Zone's pages run under `script-src 'self'` (Security in `docs/spec/security.md`).
+  The harness collects the violations Chromium reports on the console (`page.csp_violations`) and fails a test that has any, so new code can't bring in an inline script or handler unnoticed; a test that blocks one on purpose (`test_security.py`) clears the list.
+  `test_security.py` also has what only a browser shows of the other rules: an iframe's `srcdoc` never frames a form, and a task's id is text on its card, not an element.
+  Under that policy Playwright can't `eval` in the page: `page.wait_for_function` needs a function (`"() => scrollY > 0"`), as an expression string is evaluated with `eval`; `page.evaluate` works either way.
 
 `tests/test_task_app_wiring.py` reads the task app's sources (`public/tasks.js`, `public/js/task*.js`): every `app.name` a part uses is one `tasks.js` puts on `app` or a part returns, and no name is put there twice; a misspelled or moved function is found there, not in a browser when its line runs.
 
-`tests/test_tasks_core.py` exercises the pure client logic in `public/tasks-core.js` (the locale's date helpers too) by running it under Node (`node -e`); those tests skip automatically when Node is not installed. `./run.sh e2e` (and CI's e2e job) runs them, since the tools image (`Containerfile.tools`) installs Ubuntu's `nodejs`; `./run.sh test` leaves them to it.
+`tests/test_tasks_core.py` exercises the pure client logic in `public/tasks-core.js` (the locale's date helpers too) by running it under Node (`node -e`); those tests skip automatically when Node is not installed.
+`./run.sh e2e` (and CI's e2e job) runs them, since the tools image (`Containerfile.tools`) installs Ubuntu's `nodejs`; `./run.sh test` leaves them to it.

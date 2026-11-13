@@ -4,26 +4,80 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 
 ## MCP server
 
-`POST /mcp` lets an LLM client (any MCP client) read and write the wiki and the tasks through tools. Protocol in `go/mcp.go` (JSON-RPC; the tool definitions as clients see them in `go/mcp_tools.json`), route `mcpEndpoint`, tools in `go/mcp*.go` (those that read in `mcptools.go`, that write pages in `mcpwrite.go` and `mcpreplace.go`, the task tools in `mcptasks.go`, guides in `mcpguides.go`), each with what it writes in one table (`mcpToolTable`: nothing, tasks, or pages, which puts it under `pagesMu`; a tool that writes is refused to a viewer; a test holds the table against each definition's `readOnlyHint`, so a new writing tool can't be left out). MCP's Streamable HTTP transport, reduced to what tools need: each POST carries one message (or a batch) and is answered with plain JSON; notifications get 202; no event stream (GET → 405), no sessions. `initialize` echoes the client's protocol version when it is in `protocolVersions`, else the newest, and sends `instructions` (`mcpInstructions`) telling the model what Zone is, which tools find what, to call `zone_help` for questions about Zone itself, and how to write (search before creating a page, extend rather than duplicate, edit_page/append_to_page over rewriting, a summary per write, `read_guides` before drafting). **Offer to capture**: when the model researches something elsewhere (an issue tracker, chat, mail, code, the web) and finds a fact a wiki page on the topic lacks or contradicts, it offers to add it, naming the page and each fact in one line, once per answer, and writes only when the user agrees. So the wiki keeps up with what the user looks up, without the model writing on its own. The instructions stay short (about 1.3 KB, a test keeps them under 1.9 KB): Claude Code cuts a server's instructions at about 2 KB, so what every session needs comes first and the tools' descriptions carry the details; the wiki's guide is appended after them (below), cut there too, which is why the instructions point to `read_guides`.
+`POST /mcp` lets an LLM client (any MCP client) read and write the wiki and the tasks through tools.
+Protocol in `go/mcp.go` (JSON-RPC; the tool definitions as clients see them in `go/mcp_tools.json`),
+route `mcpEndpoint`,
+tools in `go/mcp*.go` (those that read in `mcptools.go`, that write pages in `mcpwrite.go` and `mcpreplace.go`, the task tools in `mcptasks.go`, guides in `mcpguides.go`),
+each with what it writes in one table (`mcpToolTable`: nothing, tasks, or pages, which puts it under `pagesMu`; a tool that writes is refused to a viewer; a test holds the table against each definition's `readOnlyHint`, so a new writing tool can't be left out).
+MCP's Streamable HTTP transport, reduced to what tools need: each POST carries one message (or a batch) and is answered with plain JSON; notifications get 202; no event stream (GET → 405), no sessions.
+`initialize` echoes the client's protocol version when it is in `protocolVersions`,
+else the newest,
+and sends `instructions` (`mcpInstructions`) telling the model what Zone is,
+which tools find what,
+to call `zone_help` for questions about Zone itself,
+and how to write (search before creating a page, extend rather than duplicate, edit_page/append_to_page over rewriting, a summary per write, `read_guides` before drafting).
+**Offer to capture**: when the model researches something elsewhere (an issue tracker, chat, mail, code, the web) and finds a fact a wiki page on the topic lacks or contradicts, it offers to add it, naming the page and each fact in one line, once per answer, and writes only when the user agrees.
+So the wiki keeps up with what the user looks up, without the model writing on its own.
+The instructions stay short (about 1.3 KB, a test keeps them under 1.9 KB): Claude Code cuts a server's instructions at about 2 KB, so what every session needs comes first and the tools' descriptions carry the details;
+the wiki's guide is appended after them (below), cut there too, which is why the instructions point to `read_guides`.
 
 A client registers `http://localhost:5000/mcp` with the HTTP transport and the header `Authorization: Bearer <token>`, the token from the page **Connect an assistant** (below) or from `./run.sh config token` (with users, `./run.sh user token NAME`).
 
-**Connect an assistant** (`/assistant`, `go/assistant.go`, `assistant.html`): the token made in the browser, without a shell on the host. With users it is in the user menu ("Connect an assistant") and makes the token of whoever is signed in, never another user's (no field names one); without users it makes the wiki's token, and anyone who can open the wiki can open it (the shortcuts dialog links to it in every wiki: "Connect an AI assistant"). A viewer may make one too: their assistant reads, and its writing tools are refused.
+**Connect an assistant** (`/assistant`, `go/assistant.go`, `assistant.html`): the token made in the browser, without a shell on the host.
+With users it is in the user menu ("Connect an assistant") and makes the token of whoever is signed in, never another user's (no field names one);
+without users it makes the wiki's token, and anyone who can open the wiki can open it (the shortcuts dialog links to it in every wiki: "Connect an AI assistant").
+A viewer may make one too: their assistant reads, and its writing tools are refused.
 
-- **The page** says where a client connects (`/mcp` on `base-url`, else on the address the request came in on: `siteURL`), whether there is a token, and has two plain forms. It works without JavaScript.
-- **Make a token** (`POST /assistant/token`): a new token (32 random bytes, as the commands make), kept as its hash in the settings file the way the admin page writes it (`changeSettings`, so every rule of the commands holds, and the log says "alice's MCP token (by alice)"). It replaces the one before, which stops working. The answer to the POST shows it **once** (`Cache-Control: no-store`), with the line for Claude Code (`claude mcp add --transport http zone <url> --header "Authorization: Bearer <token>"`) and the header for any other client; a click selects each. The page never shows it again: lost, make a new one.
-- **It takes the password again** (the user's own, or the wiki's; nothing to ask in a wiki without a login). A token outlasts the session it was made in, and signing out or a new password doesn't end it, so a session someone else got hold of mustn't be enough to make one. A wrong password is a 403 ("Incorrect password: no token was made."), and counts against the client as a wrong login does (`loginThrottle`: 429 with the wait), so the page guesses a password no faster than the login page.
+- **The page** says where a client connects (`/mcp` on `base-url`, else on the address the request came in on: `siteURL`), whether there is a token, and has two plain forms.
+  It works without JavaScript.
+- **Make a token** (`POST /assistant/token`): a new token (32 random bytes, as the commands make), kept as its hash in the settings file the way the admin page writes it (`changeSettings`, so every rule of the commands holds, and the log says "alice's MCP token (by alice)").
+  It replaces the one before, which stops working.
+  The answer to the POST shows it **once** (`Cache-Control: no-store`), with the line for Claude Code (`claude mcp add --transport http zone <url> --header "Authorization: Bearer <token>"`) and the header for any other client; a click selects each.
+  The page never shows it again: lost, make a new one.
+- **It takes the password again** (the user's own, or the wiki's; nothing to ask in a wiki without a login).
+  A token outlasts the session it was made in, and signing out or a new password doesn't end it, so a session someone else got hold of mustn't be enough to make one.
+  A wrong password is a 403 ("Incorrect password: no token was made."), and counts against the client as a wrong login does (`loginThrottle`: 429 with the wait), so the page guesses a password no faster than the login page.
 - **Revoke the token** (`POST /assistant/revoke`, no password: it only ends access): the token is taken out of the settings file, the page says so (`?done=revoke`, said only when there is none), and `/mcp` answers 401 for it (403, off, when no token is left).
 
-**The wiki's guide**: the page `wiki-guide` (`guideSlug`) holds the user's conventions for keeping the wiki: where things go, tags, page layouts, what stays private. Its text is appended to the `instructions` (`mcpInstructions`, passed to `handle`, which asks for them only on `initialize`), after a line saying it wins over the general advice and that the model should offer to add conventions the user settles. So the model knows it before its first write, in every MCP client (a client-specific skill or rules file would reach only that client), and it is versioned and editable like any page. Read anew at each `initialize`: an edit shows from the next session. Over `guideChars` (8000) it is cut, with a pointer to read_page, since the instructions stay in the model's context all session. Without the page, the instructions instead nudge the model to offer starting one when the user describes conventions. It never counts as an orphan (list_pages).
+**The wiki's guide**: the page `wiki-guide` (`guideSlug`) holds the user's conventions for keeping the wiki: where things go, tags, page layouts, what stays private.
+Its text is appended to the `instructions` (`mcpInstructions`, passed to `handle`, which asks for them only on `initialize`), after a line saying it wins over the general advice and that the model should offer to add conventions the user settles.
+So the model knows it before its first write, in every MCP client (a client-specific skill or rules file would reach only that client), and it is versioned and editable like any page.
+Read anew at each `initialize`: an edit shows from the next session.
+Over `guideChars` (8000) it is cut, with a pointer to read_page, since the instructions stay in the model's context all session.
+Without the page, the instructions instead nudge the model to offer starting one when the user describes conventions.
+It never counts as an orphan (list_pages).
 
-**Folder guides** (`checkGuides`): the user's instructions for writing the pages in a folder and its subfolders live in a `CLAUDE.md` or `AGENTS.md` in it (any case), the files coding assistants read, so one guide serves an assistant working on the files and one working through Zone. `wiki-guide` and a `CLAUDE.md`/`AGENTS.md` at the root are the whole wiki's. The guides for a page (`folderGuides`) are the root's, then each folder's on the way down to the page's. A line that is only `@other.md` is replaced by that page's text, relative to the guide's folder (`guideText`, Claude Code's import), at most 3 deep. An import that isn't a page of the wiki stays as written. A file already part of another guide is left out, so a root `CLAUDE.md` holding just `@wiki-guide.md` adds nothing. Empty guides don't count.
+**Folder guides** (`checkGuides`): the user's instructions for writing the pages in a folder and its subfolders live in a `CLAUDE.md` or `AGENTS.md` in it (any case), the files coding assistants read, so one guide serves an assistant working on the files and one working through Zone.
+`wiki-guide` and a `CLAUDE.md`/`AGENTS.md` at the root are the whole wiki's.
+The guides for a page (`folderGuides`) are the root's, then each folder's on the way down to the page's.
+A line that is only `@other.md` is replaced by that page's text, relative to the guide's folder (`guideText`, Claude Code's import), at most 3 deep.
+An import that isn't a page of the wiki stays as written.
+A file already part of another guide is left out, so a root `CLAUDE.md` holding just `@wiki-guide.md` adds nothing.
+Empty guides don't count.
 
-Every page write (write_page, edit_page, append_to_page, file_note (the target), rename_page (source and target, a folder too), delete_page, restore_page, replace_in_pages with `dry_run=false`, rename_task_tag (the pages it changes)) takes `guides`, a list of guide ids (a comma-separated string works too). A write to a page with a guide whose id isn't in the list is refused with nothing written. The refusal is a tool error starting "Nothing was written.", with the ids to pass for this write and the text of each missing guide, as `=== guide <slug> (id <id>) ===` (cut at `folderGuideChars`, 8000, with a pointer to read_page). An id is `<guide slug>:<8 hex>`, a SHA-256 of the guide's text with its imports. When the user changes a guide, its old id stops counting and the next write shows the new text. A write to a guide itself ends with its new id (`guideNote`). `read_page` of a whole guide adds `guide id: <id>` to its header, since reading it is reading the guide (not for a guide that imports other pages, whose text the page doesn't show: it says to use read_guides). The gate is the backstop; read_guides is the way in: the model reads the guide before drafting, so the draft follows it, rather than drafting, being refused and writing it again. Why a gate and not the instructions: Claude Code cuts a server's `instructions` at about 2 KB, so a guide appended there may never reach the model. Attaching a guide to every result costs its tokens on every call, since the server keeps no sessions. A refusal costs one call and sends each guide once per conversation, before the write. Without guides nothing changes. Task writes are not gated.
+Every page write (write_page, edit_page, append_to_page, file_note (the target), rename_page (source and target, a folder too), delete_page, restore_page, replace_in_pages with `dry_run=false`, rename_task_tag (the pages it changes)) takes `guides`,
+a list of guide ids (a comma-separated string works too).
+A write to a page with a guide whose id isn't in the list is refused with nothing written.
+The refusal is a tool error starting "Nothing was written.", with the ids to pass for this write and the text of each missing guide, as `=== guide <slug> (id <id>) ===` (cut at `folderGuideChars`, 8000, with a pointer to read_page).
+An id is `<guide slug>:<8 hex>`, a SHA-256 of the guide's text with its imports.
+When the user changes a guide, its old id stops counting and the next write shows the new text.
+A write to a guide itself ends with its new id (`guideNote`).
+`read_page` of a whole guide adds `guide id: <id>` to its header, since reading it is reading the guide (not for a guide that imports other pages, whose text the page doesn't show: it says to use read_guides).
+The gate is the backstop; read_guides is the way in: the model reads the guide before drafting, so the draft follows it, rather than drafting, being refused and writing it again.
+Why a gate and not the instructions: Claude Code cuts a server's `instructions` at about 2 KB, so a guide appended there may never reach the model.
+Attaching a guide to every result costs its tokens on every call, since the server keeps no sessions.
+A refusal costs one call and sends each guide once per conversation, before the write.
+Without guides nothing changes.
+Task writes are not gated.
 
 A tool failure the model can fix (bad slug, empty query, text not found) is a result with `isError`, not a protocol error.
 
-**Size of the tool list**: every session loads all tool definitions (about 24 KB), so text is said once: the parameters many tools share (`summary`, `guides`) have one-line descriptions, `read_guides` explains the guide gate, and `update_task`'s `due`/`start` refer to `create_task`'s, which carry the date rules. A test keeps the total under 25,000 characters.
+**Size of the tool list**: every session loads all tool definitions (about 24 KB),
+so text is said once: the parameters many tools share (`summary`, `guides`) have one-line descriptions,
+`read_guides` explains the guide gate,
+and `update_task`'s `due`/`start` refer to `create_task`'s,
+which carry the date rules.
+A test keeps the total under 25,000 characters.
 
 ### Reading
 
@@ -46,7 +100,10 @@ A task as the tools show it (`mcpTaskText`) includes `id:`, its 8-character shor
 
 ### Writing
 
-The wiki is mostly written by LLMs, so they write through Zone rather than to the files: each write is a git commit (no `/uncommitted` pile), a rename re-points links, and the result tells the model what it would otherwise have to look up. Every write tool takes an optional `summary`; the commit message is the action, then the summary, then `(MCP)` (`commitMsg`: `Update tickets/bug-1: add findings (MCP)`, `Create task (MCP)`), so the history tells the model's changes from the user's. Tools that only add are annotated `destructiveHint: false`, those that change or remove `true`, so a client can ask before those. The token `/mcp` requires (below) guards writes as it guards reads, and git keeps every change undoable.
+The wiki is mostly written by LLMs, so they write through Zone rather than to the files: each write is a git commit (no `/uncommitted` pile), a rename re-points links, and the result tells the model what it would otherwise have to look up.
+Every write tool takes an optional `summary`; the commit message is the action, then the summary, then `(MCP)` (`commitMsg`: `Update tickets/bug-1: add findings (MCP)`, `Create task (MCP)`), so the history tells the model's changes from the user's.
+Tools that only add are annotated `destructiveHint: false`, those that change or remove `true`, so a client can ask before those.
+The token `/mcp` requires (below) guards writes as it guards reads, and git keeps every change undoable.
 
 | Tool | Does |
 |------|------|
@@ -62,14 +119,46 @@ The wiki is mostly written by LLMs, so they write through Zone rather than to th
 | `create_task(title, notes, tags, due, start, repeat, repeat_every, repeat_from, keep, private, summary)` | A task through `createTask`, the same code as `POST /api/tasks`. `private` (with users; `update_task` takes it too): the user's own task (Private tasks in `docs/spec/users.md`); by default private when the user's default task list is in their private folder, else shared (a tag never decides). `repeat`: daily/weekly/monthly/yearly/none; `repeat_every` 1–999. **A date is the deadline**: the field descriptions send a date the user gives the task ("tomorrow", "by Friday") to `due`, and `start` only to a stated start ("start Monday", "work on it tomorrow"); the model had put "for tomorrow" in start. **Dates** (`due`, `start`, and `history`'s `since`) are `YYYY-MM-DD` or a word quick-add knows (`today`, `tomorrow`/`tmrw`, a weekday prefix of 3+ letters = the next one, `+3`/`+3d`/`+2w`; `parseDateWord`, mirroring `TasksCore.parseDateWord`), resolved with Zone's own date, so "tomorrow" is right whatever the client's clock or context says; the result starts `Created (today is YYYY-MM-DD).` **Home tags** (`homeTags`): a new task gets the default list's new-task tags (`newTaskTags`: its `list=`, its single `tag=` tags, as its "+ New" and `c t` give them) before the ones given, so it shows in the user's own tasks; not when a given tag names a declared list (`pages.list_names`), which files the task there instead. No home: just the given tags. **Tag hints** (`tagHints`), after the task: the tags of the `similarTasks` (10) tasks most like it (BM25 over every task, open and done, by its title and notes) that it lacks, most common first, at most 5 (`Tags on similar tasks …: #home (2), …`), for the model to offer the user, since it can't see the tasks; and its tags used by no other task or page (`New tags, used nowhere else yet: …`, pointing at list_tags), which are often near-duplicates (`meeting` beside `meetings`). Neither in a task list without tags. |
 | `update_task(id, …same fields…, add_tags, remove_tags, comment, status, ids, summary)` | Every change to existing tasks, in one tool (there were four: `tag_tasks`, `comment_task` and `delete_task` are now its parameters, so the model has fewer tools to tell apart and every session loads fewer descriptions). `updateTask`, as `PUT /api/tasks/<id>`: only the given fields change; an empty `due`/`start`/`notes` clears it. `add_tags`/`remove_tags` work on the current tags (case ignored). `repeat_every`/`repeat_from` alone keep the task's repeat type. `status`: `done` (a keep task goes back to the pool; a repeating one spawns its next occurrence, shown in the result), `wont_do`, `skip` (won't do this occurrence, the series goes on), `open` (reopen; the spawned occurrence goes again unless it was changed since), **`deleted`** (`deleteTask`, gone for good; nothing else may come with it; the description steers the model to done/wont_do for ending a task). **`comment`**: `addComment`, a dated status line, its own commit "Comment on task" after the fields' (checked before anything is written, so an empty one changes nothing). **`ids`** instead of `id`: `tagTasks`, the function the `batch-tag` route uses, adds and removes tags on several tasks (open, completed, archived) in one commit, "Tag tasks"; only `add_tags`, `remove_tags` and `summary` go with it, anything else is refused. Case is ignored; a tag a task has keeps its spelling; a leading `#` is dropped. An unknown or ambiguous id fails the whole call, before anything is written; at most 200 per call. The result says on how many tasks the tags changed (and that the others had them so already) and lists each task's tags. Runs under the tasks lock, so add/remove tags see the current tags. Annotated destructive, as it changes and deletes. |
 
-Pages are named as in read_page. A task `id` is its id or a prefix of it (`findTasks`: open, completed and archived tasks; an exact id wins; several matches are an error), and a `[[task:…]]` reference or a `/tasks?task=…` link work too (`_task_arg`). The tasks API's 400s (bad date, empty title, bad interval) come back as tool errors (`tasksWrite`).
+Pages are named as in read_page.
+A task `id` is its id or a prefix of it (`findTasks`: open, completed and archived tasks; an exact id wins; several matches are an error), and a `[[task:…]]` reference or a `/tasks?task=…` link work too (`_task_arg`).
+The tasks API's 400s (bad date, empty title, bad interval) come back as tool errors (`tasksWrite`).
 
-**Pages open in the editor**: the browser editor auto-saves to the file without committing (a commit comes with Done/Ctrl+S). A write tool that ran on such a page would take the user's draft into its own `(MCP)` commit, and an overwrite or delete would lose it, as it was never in git. So every page write first commits what the page holds uncommitted (`keepPending` in `go/pageops.go`: `isUncommitted`, then `Save <slug>`, the message the Uncommitted list's commit gives; by the user who auto-saved it, with users, else Zone), and the result says so: the user may have the page open. The browser's writes that replace or remove a page's text (delete, restore, rename, Keep mine, Reload theirs) do the same, through the same function. The editor's side is its own: each auto-save sends the hash of the text it last saw, so its next save after the model's write is merged with it (the user's textarea gets the model's change), or, where both changed the same lines, refused with the banner (Reload theirs, Keep mine, Merge by hand) instead of overwriting (Merge on save in `docs/spec/editor.md`).
+**Pages open in the editor**: the browser editor auto-saves to the file without committing (a commit comes with Done/Ctrl+S).
+A write tool that ran on such a page would take the user's draft into its own `(MCP)` commit, and an overwrite or delete would lose it, as it was never in git.
+So every page write first commits what the page holds uncommitted (`keepPending` in `go/pageops.go`: `isUncommitted`, then `Save <slug>`, the message the Uncommitted list's commit gives; by the user who auto-saved it, with users, else Zone), and the result says so: the user may have the page open.
+The browser's writes that replace or remove a page's text (delete, restore, rename, Keep mine, Reload theirs) do the same, through the same function.
+The editor's side is its own: each auto-save sends the hash of the text it last saw,
+so its next save after the model's write is merged with it (the user's textarea gets the model's change),
+or,
+where both changed the same lines,
+refused with the banner (Reload theirs, Keep mine, Merge by hand) instead of overwriting (Merge on save in `docs/spec/editor.md`).
 
-**Wikilink check**: page writes end with a note naming the `[[wikilinks]]` the write *added* that lead to no page (`missingLinks` before and after, by the renderer's rule: the name as a slug, else slugified; code, `[[tasks:]]` and `[[task:…]]` aside), so the model fixes a typo or creates the page. Links that were already broken are not repeated.
+**Wikilink check**: page writes end with a note naming the `[[wikilinks]]` the write *added* that lead to no page (`missingLinks` before and after, by the renderer's rule: the name as a slug, else slugified; code, `[[tasks:]]` and `[[task:…]]` aside), so the model fixes a typo or creates the page.
+Links that were already broken are not repeated.
 
-**Retrieval** (`retrieve`) works on sections, not pages: an LLM needs the passages, and the best ones may share a page. BM25 runs over sections (`_page_chunk_docs`, the same `chunkSections` split, cached per page by mtime; `chunkIndex`), fused with `searchChunks` when semantic search is on (sections match by `chunkKey`). Without semantic search it is keyword-only and still works. Tasks share that BM25 index (`taskSearchDocs()`, each doc carrying its `task`), so they rank with sections, as in the browser search, and their semantic hits (`searchTasks`) join the section hits by similarity. `search_tasks` with a query fuses BM25 and semantic hits within its filter. A task is shown by `mcpTaskText`: title, a line of facts (status, private, tags, start, due, repeat, keep, list), the `/tasks?task=…` link (`taskHref`), its notes and its comments.
+**Retrieval** (`retrieve`) works on sections, not pages: an LLM needs the passages, and the best ones may share a page.
+BM25 runs over sections (`_page_chunk_docs`, the same `chunkSections` split, cached per page by mtime; `chunkIndex`), fused with `searchChunks` when semantic search is on (sections match by `chunkKey`).
+Without semantic search it is keyword-only and still works.
+Tasks share that BM25 index (`taskSearchDocs()`, each doc carrying its `task`), so they rank with sections, as in the browser search, and their semantic hits (`searchTasks`) join the section hits by similarity.
+`search_tasks` with a query fuses BM25 and semantic hits within its filter.
+A task is shown by `mcpTaskText`: title, a line of facts (status, private, tags, start, due, repeat, keep, list), the `/tasks?task=…` link (`taskHref`), its notes and its comments.
 
-**Links** in tool results start with `base-url` from the settings file (e.g. `http://localhost:5000`, Zone's address as your browser knows it) when set, else with the address the request came in on. A client in a container reaches Zone as `host.containers.internal`, and links with that host don't open in the browser on the host. **File paths** (`file:`, `hostFile`: search_wiki's sections, read_page) are the host's wiki folder plus `<slug>.md` (a slug is the file's path relative to the wiki, unchanged): `ZONE_HOST_DATA`, which `run.sh` sets to `ZONE_DATA`'s host path, since inside the container the wiki is only `/wiki-data`; unset (no container), `ZONE_DATA` resolved. So a client on the host can open or edit the file directly. Tasks have none.
+**Links** in tool results start with `base-url` from the settings file (e.g. `http://localhost:5000`, Zone's address as your browser knows it) when set, else with the address the request came in on.
+A client in a container reaches Zone as `host.containers.internal`, and links with that host don't open in the browser on the host.
+**File paths** (`file:`, `hostFile`: search_wiki's sections, read_page) are the host's wiki folder plus `<slug>.md` (a slug is the file's path relative to the wiki, unchanged): `ZONE_HOST_DATA`, which `run.sh` sets to `ZONE_DATA`'s host path, since inside the container the wiki is only `/wiki-data`;
+unset (no container), `ZONE_DATA` resolved.
+So a client on the host can open or edit the file directly.
+Tasks have none.
 
-**Auth**: `/mcp` is exempt from the session login (`checks`, `signedIn`), since an MCP client can't log in, and checks its own: it needs the wiki's MCP token (`mcp-token` in the settings file, kept as its hash: `tokenMatches`), sent as `Authorization: Bearer <token>` (compared in constant time, `mcpAuthorized`). With users (`docs/spec/users.md`) each user has their own token instead (`mcp-token` in their section), and the tools act as the token's user: their writes are committed in that user's name, `history` names authors, and another user's private pages don't exist for them (Private pages and MCP in `docs/spec/users.md`). Without a token set, `/mcp` is off: every request gets 403 with a hint to set one, with or without a password. The tools write, so an open `/mcp` would let anything that reaches the port change the wiki; a token is never optional. A wrong or missing bearer gets 401 (`WWW-Authenticate: Bearer`); wrong tokens are throttled per client like wrong passwords (`mcpThrottle`, its own count: after 5, 429 with `Retry-After`, waits doubling from 1 minute to an hour; see `docs/spec/security.md`). The Host and cross-site Origin checks apply as everywhere.
+**Auth**: `/mcp` is exempt from the session login (`checks`, `signedIn`),
+since an MCP client can't log in,
+and checks its own: it needs the wiki's MCP token (`mcp-token` in the settings file, kept as its hash: `tokenMatches`),
+sent as `Authorization: Bearer <token>` (compared in constant time, `mcpAuthorized`).
+With users (`docs/spec/users.md`) each user has their own token instead (`mcp-token` in their section),
+and the tools act as the token's user: their writes are committed in that user's name,
+`history` names authors,
+and another user's private pages don't exist for them (Private pages and MCP in `docs/spec/users.md`).
+Without a token set, `/mcp` is off: every request gets 403 with a hint to set one, with or without a password.
+The tools write, so an open `/mcp` would let anything that reaches the port change the wiki; a token is never optional.
+A wrong or missing bearer gets 401 (`WWW-Authenticate: Bearer`); wrong tokens are throttled per client like wrong passwords (`mcpThrottle`, its own count: after 5, 429 with `Retry-After`, waits doubling from 1 minute to an hour; see `docs/spec/security.md`).
+The Host and cross-site Origin checks apply as everywhere.

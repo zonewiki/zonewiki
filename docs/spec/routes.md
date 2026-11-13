@@ -68,20 +68,58 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 | POST   | `/restore/<slug>/<sha>` | Restore a page to a prior version; creates a new commit |
 | GET    | `/page/_deleted`      | Auto-generated list of pages deleted from git history, with one-click restore (git only) |
 
-A `<slug>` in a folder starting with `_` or `.` (`_assets/`, `_tasks/`, `.zone/`, `.git/`, `a/_drafts/` …) names no page: `safePath()` refuses it (also after `..`), so no route reads or writes a `.md` file there, even by direct URL (400, or 404 for the page preview). These are the folders `iterPages()` skips. A file name starting with `_` (`notes`, `a/_notes`) is still a page.
+A `<slug>` in a folder starting with `_` or `.` (`_assets/`, `_tasks/`, `.zone/`, `.git/`, `a/_drafts/` …) names no page: `safePath()` refuses it (also after `..`), so no route reads or writes a `.md` file there, even by direct URL (400, or 404 for the page preview).
+These are the folders `iterPages()` skips.
+A file name starting with `_` (`notes`, `a/_notes`) is still a page.
 
 Every page view includes:
-- **Breadcrumb** — `Wiki Tasks Notes › Page Title` above the page header: its root is the module switcher (see Modules), the green Z logo in front of Wiki, the home page. After some navigation it becomes a trail of up to 6 recently visited pages (`js/chrome.js`, `sessionStorage`); a phone (≤640px) shows at most 4 of them, the last 3 visited plus the current page. It stays on one line: the page titles shrink with an ellipsis, while the module switcher, separators, × and the backlinks chip keep their size. A trail that could not shrink once made the page wider than a phone, which pushed the full-screen tasks edit modal's buttons off-screen.
-- **Backlinks** — section at the bottom listing all pages that link to the current page (`findBacklinks`, `pageLinkTargets`): a `[[wikilink]]`, or a markdown link that is relative (`page`, `../dir/page`, `page.md`) or absolute (`/page/<slug>`), with or without an `#anchor` or a title; the forms a rename re-points. A link in code or math (`mdtext.MaskCode`) shows as text, so it is none, as a rename leaves it too. Shows "No pages link here." when empty.
-- **Backlinks chip** — when a page has backlinks, a `← N` chip sits at the right end of the breadcrumb (left of the top actions; hidden where the side columns list the backlinks). On desktop, hovering it lists the linking pages (`.bl-tooltip`) and clicking jumps to the Backlinks section. Touch devices (`hover: none`) have no hover, so there a tap toggles the list (`.bl-open`, delegated click handler in `js/chrome.js`) instead of scrolling down. A second tap or a tap elsewhere closes it. The hover rules are wrapped in `@media (hover: hover)` because a tap leaves `:hover` stuck, which would fight the toggle.
-- **Related** — only with semantic search on (see Search → Semantic search): up to 5 pages closest in meaning, leaving out pages already linked either way (`build_related_html`). Absent when none clears the similarity floor.
-- **Linked tasks** — open tasks whose title/description link to the page. A task linking to a section (`[[Page#Section]]`, or `/page/<slug>#anchor`; `findTaskBacklinks` returns its `section` and `anchor`) names it after its title (`§ Section`, linking to the heading, named as the page's heading says), and that heading gets a `☑ N` chip (`render_md(…, section_tasks=)`, a `<details>` after the heading, no JS) listing the section's tasks. Each entry is a single link to that task in the tasks (`/tasks?task=<id>&view=open`, plus `&list=<name>` for a task in a separate list — `taskHref()`); links inside the task title are flattened to their labels (`mdtext.PlainTaskTitle`) so anchors are never nested.
+- **Breadcrumb** — `Wiki Tasks Notes › Page Title` above the page header: its root is the module switcher (see Modules), the green Z logo in front of Wiki, the home page.
+  After some navigation it becomes a trail of up to 6 recently visited pages (`js/chrome.js`, `sessionStorage`); a phone (≤640px) shows at most 4 of them, the last 3 visited plus the current page.
+  It stays on one line: the page titles shrink with an ellipsis, while the module switcher, separators, × and the backlinks chip keep their size.
+  A trail that could not shrink once made the page wider than a phone, which pushed the full-screen tasks edit modal's buttons off-screen.
+- **Backlinks** — section at the bottom listing all pages that link to the current page (`findBacklinks`, `pageLinkTargets`): a `[[wikilink]]`, or a markdown link that is relative (`page`, `../dir/page`, `page.md`) or absolute (`/page/<slug>`), with or without an `#anchor` or a title;
+  the forms a rename re-points.
+  A link in code or math (`mdtext.MaskCode`) shows as text, so it is none, as a rename leaves it too.
+  Shows "No pages link here." when empty.
+- **Backlinks chip** — when a page has backlinks, a `← N` chip sits at the right end of the breadcrumb (left of the top actions; hidden where the side columns list the backlinks).
+  On desktop, hovering it lists the linking pages (`.bl-tooltip`) and clicking jumps to the Backlinks section.
+  Touch devices (`hover: none`) have no hover, so there a tap toggles the list (`.bl-open`, delegated click handler in `js/chrome.js`) instead of scrolling down.
+  A second tap or a tap elsewhere closes it.
+  The hover rules are wrapped in `@media (hover: hover)` because a tap leaves `:hover` stuck, which would fight the toggle.
+- **Related** — only with semantic search on (see Search → Semantic search): up to 5 pages closest in meaning, leaving out pages already linked either way (`build_related_html`).
+  Absent when none clears the similarity floor.
+- **Linked tasks** — open tasks whose title/description link to the page.
+  A task linking to a section (`[[Page#Section]]`, or `/page/<slug>#anchor`; `findTaskBacklinks` returns its `section` and `anchor`) names it after its title (`§ Section`, linking to the heading, named as the page's heading says),
+  and that heading gets a `☑ N` chip (`render_md(…, section_tasks=)`, a `<details>` after the heading, no JS) listing the section's tasks.
+  Each entry is a single link to that task in the tasks (`/tasks?task=<id>&view=open`, plus `&list=<name>` for a task in a separate list — `taskHref()`); links inside the task title are flattened to their labels (`mdtext.PlainTaskTitle`) so anchors are never nested.
 
 ### Side columns (big screens)
 
-From 1320px wide a page view (`viewPage`, `views.page(…, wide=True)` → `main.wide`) uses the room beside the text: three columns (`.page-grid`: 14rem · up to 60rem · 14rem, the side columns giving way down to 9rem so the middle one keeps the text at the width other views have; the page's sheet as wide as other views' unless the page has a table, code block or image wider than the text, then the whole middle column (`.sheet-wide`, `js/chrome.js`, measured after load and whenever the content's size changes), so the text sits in the middle of the window, where the other views have theirs), both sides sticky. Every other view (tasks, notes, search) gets the same top row width at that size, its content centred at the text width (46rem), so the breadcrumb and top actions stay put when switching modules.
+From 1320px wide a page view (`viewPage`, `views.page(…, wide=True)` → `main.wide`) uses the room beside the text: three columns (`.page-grid`: 14rem · up to 60rem · 14rem, the side columns giving way down to 9rem so the middle one keeps the text at the width other views have;
+the page's sheet as wide as other views' unless the page has a table,
+code block or image wider than the text,
+then the whole middle column (`.sheet-wide`,
+`js/chrome.js`,
+measured after load and whenever the content's size changes),
+so the text sits in the middle of the window,
+where the other views have theirs),
+both sides sticky.
+Every other view (tasks, notes, search) gets the same top row width at that size, its content centred at the text width (46rem), so the breadcrumb and top actions stay put when switching modules.
 
-- **Left** (`.rail-left`): "On this page" (`rail_toc_html`): the page's rendered `##`/`###` headings (frontmatter sources' "Sources" heading too, at the end) when there are at least `railTocMinHeadings` (3), links in them flattened. Otherwise empty; the column stays so the page keeps its place. At its end **↑ Back to top** (`.rail-top`), shown once the page has scrolled a screen down; it scrolls up and drops a `#hash` from the URL. `js/chrome.js` marks the section being read (`.active`, `aria-current="location"`): the last heading scrolled past (120px from the top), at the end of the page the last one in view. A column taller than the window scrolls on its own: a fade marks the edge with more (`.rail-more-above`/`-below`, set by `js/chrome.js`, CSS `mask-image`), and the TOC scrolls its column (never the page) to keep the marked entry in view.
-- **Right** (`.rail-context`): Backlinks, Linked tasks and Related (`rail_copy`: the same sections with their ids as `data-id`; the anchors stay with the originals in `.page-foot`), and **Links to** (`outlinks_html`: the existing pages this page links to, A–Z by title; only in the column), so a page nothing links to still shows its connections.
-- **Middle** (`.page-col`, a size container): header, meta row and text keep the reading width (46rem, about 85 characters); a code block, table or image alone in its paragraph (`<p class="img-block">`, marked on the parsed tokens by `imageWidths`) is as wide as the text unless its content needs more, then grows up to the middle column, centred on the text (`width: max-content; min-width: 100%; max-width: 100cqw`); an image within a sentence stays inside the text. A task list embed keeps the text width, like the tasks and notes pages. Text itself is never widened: longer lines read worse.
-- The sections at the page's end (`.page-foot`) and the breadcrumb's backlinks chip are hidden there. `main.wide` has wider side padding (3.5rem), so the badges fixed at the top left don't touch the breadcrumb on a window just over 1320px. Below 1320px the page is the single 800px column as before.
+- **Left** (`.rail-left`): "On this page" (`rail_toc_html`): the page's rendered `##`/`###` headings (frontmatter sources' "Sources" heading too, at the end) when there are at least `railTocMinHeadings` (3), links in them flattened.
+  Otherwise empty; the column stays so the page keeps its place.
+  At its end **↑ Back to top** (`.rail-top`), shown once the page has scrolled a screen down; it scrolls up and drops a `#hash` from the URL.
+  `js/chrome.js` marks the section being read (`.active`, `aria-current="location"`): the last heading scrolled past (120px from the top), at the end of the page the last one in view.
+  A column taller than the window scrolls on its own: a fade marks the edge with more (`.rail-more-above`/`-below`, set by `js/chrome.js`, CSS `mask-image`), and the TOC scrolls its column (never the page) to keep the marked entry in view.
+- **Right** (`.rail-context`): Backlinks,
+  Linked tasks and Related (`rail_copy`: the same sections with their ids as `data-id`; the anchors stay with the originals in `.page-foot`),
+  and **Links to** (`outlinks_html`: the existing pages this page links to, A–Z by title; only in the column),
+  so a page nothing links to still shows its connections.
+- **Middle** (`.page-col`, a size container): header, meta row and text keep the reading width (46rem, about 85 characters);
+  a code block, table or image alone in its paragraph (`<p class="img-block">`, marked on the parsed tokens by `imageWidths`) is as wide as the text unless its content needs more, then grows up to the middle column, centred on the text (`width: max-content; min-width: 100%; max-width: 100cqw`);
+  an image within a sentence stays inside the text.
+  A task list embed keeps the text width, like the tasks and notes pages.
+  Text itself is never widened: longer lines read worse.
+- The sections at the page's end (`.page-foot`) and the breadcrumb's backlinks chip are hidden there.
+  `main.wide` has wider side padding (3.5rem), so the badges fixed at the top left don't touch the breadcrumb on a window just over 1320px.
+  Below 1320px the page is the single 800px column as before.
