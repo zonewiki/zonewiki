@@ -400,6 +400,7 @@ func (c *userCommand) remove() int {
 		return 1
 	}
 	fmt.Fprintf(c.stdout, "Removed %s from %s.\n", c.name, configName())
+	revokeGrantsOf(c.name) // their assistants' connections (grants.go)
 	switch {
 	case c.openFlag:
 		fmt.Fprintln(c.stdout, "No users and no password now: the wiki has no login, and private/ is an "+

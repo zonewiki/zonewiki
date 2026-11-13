@@ -61,6 +61,7 @@ disabled = yes
 | `upload-max` | The biggest upload, a size (`25MB`; below) (`Settings.uploadMax`, `docs/spec/security.md`) | 100 MB |
 | `external-content` | Hosts a page may load images, media and frames from: `upload.wikimedia.org, *.example.org`; `*`: any (A page loads nothing from other hosts, `docs/spec/security.md`) | none: only Zone itself |
 | `no-login` | `yes`: the wiki has no login on purpose, though other devices reach it, so Zone shows no first-run page (First run, `docs/spec/security.md`) | no |
+| `mcp-oauth` | `no`: assistants connect with a static token only, not by signing in through the browser (Connecting with OAuth, `docs/spec/mcp.md`) | yes, with a login |
 | `storage-max` | How much the wiki may hold, a size (`5GB`): past it, nothing new is made (Storage limit, below) | no limit |
 | `signup-domains` | Sign-up takes only addresses at these domains, comma-separated (`example.org, example.net`; Sign-up, below) | any address |
 | `signup-role` | The role an account made by sign-up gets: `viewer` or `editor` (never `admin`) | `viewer` |
@@ -334,7 +335,7 @@ Zone doesn't mail these: the admin copies the link and sends it any way they lik
 - **Capped**: 10 links per admin in an hour (`linksPerHour`, in memory), so a stolen session can't fill the list.
 - **The welcome page** (`/welcome/<token>`, `welcome.html`; no login needed): opening it changes nothing, since mail scanners and chat previews open links.
   It greets the invitee by name (or says whose password it sets) and asks for a password twice, of at least 8 characters as on the first-run page (`passwordMin`; "Choose a password of at least 8 characters.", "The passwords differ.").
-  Only its POST uses the link: an invite adds the user with its role, a reset sets the new password, which ends every session of the old one (`passwordStamp`);
+  Only its POST uses the link: an invite adds the user with its role, a reset sets the new password, which ends every session of the old one (`passwordStamp`) and the connections of the assistants they allowed (`revokeGrantsOf`: whoever needs a reset may have lost the account to someone; their static token stays, to be revoked on Connect an assistant);
   either way the change is logged as that user's, the link is gone, and they are signed in (a session made with the new hash, `setSessionHash`, as the settings take effect only once the request has ended).
   A user who was removed (reset), or a name someone took meanwhile (invite), is refused, as is a wiki that has no users any more.
   Its address holds the token, and no other site is told it (`Referrer-Policy: same-origin`, as every page).
@@ -416,7 +417,7 @@ signup-approval = yes                    # an admin approves each account; defau
   - **What it does**: the new password's hash goes into the settings file the way the admin page writes it (`changeSettings`; logged with who changed it).
     Every other session of the old password ends (the stamp above);
     the session it was changed in goes on, as the same session with the new stamp (its id kept, so Sign out still ends it everywhere), and the page says "Your password is changed" (`303` to `/password?done`).
-    The MCP token is left as it is: an assistant connected with it stays connected (revoke it on Connect an assistant).
+    The MCP token and the connections are left as they are: an assistant stays connected (revoke the token, end a connection, on Connect an assistant).
   - Tests: `tests/test_password.py`, and from the menu in a browser in `tests/e2e/test_private.py`.
 - **The request knows its user**: the request checks (`checks` in `go/server.go`) put the session's user into the request's context (`withUser`), `userOf(r)` reads it, and `newReq` keeps it as `rq.user`. "" means no users (or no one signed in).
 - The user's name is shown beside Sign out (`.signout-user`, "Signed in as alice") on phones, in the page's top row.
@@ -425,7 +426,8 @@ signup-approval = yes                    # an admin approves each account; defau
 ## MCP
 
 With users, `/mcp` takes any user's token (`mcp-token` in their section) and the tools run as that user (`mcpAuthorized` returns the user, `callMCPTool` passes it to every tool).
-`/mcp` is off (403) while no user has a token; a wrong token is a 401 and throttled as before (`docs/spec/mcp.md`).
+A user's assistant can also sign in through the browser (OAuth): the user allows it, and it gets a connection of its own, listed on Connect an assistant (Connecting with OAuth in `docs/spec/mcp.md`).
+A call without a token is a 401 that says where to sign in (with `mcp-oauth = no`: `/mcp` is off, 403, while no user has a token); a wrong token is a 401 and throttled as before (`docs/spec/mcp.md`).
 A user makes and revokes their own token in the browser, on **Connect an assistant** in the user menu (`/assistant`, with their password; `docs/spec/mcp.md`); `zonewiki user token NAME` does it on the host, for any user.
 
 An assistant sees and changes what its user does in the browser, no more (`docs/spec/mcp.md` has the tools):

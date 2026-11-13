@@ -28,7 +28,7 @@
   <form class="login-form" method="post">
     {{- if eq .Kind "reset"}}
     <h2>A new password for {{.User}}</h2>
-    <p class="welcome-note">Choose your new password. It ends your sessions everywhere else.</p>
+    <p class="welcome-note">Choose your new password. It ends your sessions everywhere else, and the connections of assistants you allowed (Connect an assistant).</p>
     {{- else}}
     <h2>Welcome to {{.Shell.AppName}}, {{.User}}</h2>
     <p class="welcome-note">Choose a password. You sign in with your user name, <strong>{{.User}}</strong>, and this password.</p>

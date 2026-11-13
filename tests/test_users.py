@@ -152,8 +152,15 @@ class TestMCP:
         assert mcp(client, "wrong").status_code == 401
         assert mcp(client, "").status_code == 401   # bob has none: no empty token gets in
 
-    def test_off_without_any_token(self, client, monkeypatch):
+    def test_without_any_token_there_is_the_way_to_sign_in(self, client, monkeypatch):
+        # No token is set, but a user can let an assistant in (OAuth, test_oauth.py).
         monkeypatch.setattr(settings, "USERS", {"bob": USERS["bob"]})
+        resp = mcp(client, "x")
+        assert resp.status_code == 401 and "resource_metadata=" in resp.headers["WWW-Authenticate"]
+
+    def test_off_without_any_token_and_without_oauth(self, client, monkeypatch):
+        monkeypatch.setattr(settings, "USERS", {"bob": USERS["bob"]})
+        monkeypatch.setattr(settings, "CONFIG_FILE", "mcp-oauth = no\n")
         resp = mcp(client, "x")
         assert resp.status_code == 403 and "./run.sh user token NAME" in resp.get_json()["error"]
 

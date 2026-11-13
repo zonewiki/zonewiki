@@ -210,6 +210,13 @@ signed out and cross-site refused;
 without users the wiki's password, and no page without a login).
 In the browser (`tests/e2e/test_private.py`): from the user menu to the page, a wrong password, the change, still signed in.
 
+`tests/test_oauth.py` plays an MCP client over HTTP (Connecting with OAuth in `docs/spec/mcp.md`): the 401 and the metadata, off without a login and with `mcp-oauth = no`;
+registration (what a redirect URI may be, nothing kept, a forged client id);
+the consent page (through the login and back, who asks and where the answer goes, the password and its throttle, Allow answering with a page and a `Refresh` header, Deny, an unregistered redirect URI, what a client got wrong, a program on this computer at any port, cross-site and signed out);
+tokens (the code once, with its verifier, client and redirect URI; refresh, a refresh token used twice, another client's, expiry by editing `.zone/grants`, the throttle);
+connections (listed and ended on Connect an assistant, only one's own, a viewer's, a disabled or removed user's, a reset link against an ordinary new password, a wiki with one password).
+In the browser (`tests/e2e/test_oauth.py`): from the login to Allow at phone width, Chromium following the answer to another origin under the page policy with no violation, the code turned into tokens, the connection ended on the page; Deny.
+
 `tests/test_assistant.py` covers Connect an assistant over HTTP (`/assistant`: a user makes their own token with their password, kept as its hash and shown once;
 a wrong password refused and throttled as at the login;
 a new token replacing the old one, revoking, the other users' tokens left alone;

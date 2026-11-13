@@ -278,6 +278,7 @@ func newHandler() http.Handler {
 	signupRoutes(mux)
 	assistantRoutes(mux)
 	passwordRoutes(mux)
+	oauthRoutes(mux)
 	return noStalls(checks(viewerGate(mux)))
 }
 
@@ -291,6 +292,9 @@ var viewerWrites = map[string]bool{
 	"POST /api/preview": true, "POST /api/render-notes": true, // render only
 	"POST /assistant/token": true, "POST /assistant/revoke": true, // their own MCP token, whose writing tools are refused
 	"POST /password": true, // their own password
+	// a connection of their own, whose writing tools are refused; the other two carry no session
+	"POST /oauth/authorize": true, "POST /oauth/token": true, "POST /oauth/register": true,
+	"POST /assistant/connections/{id}/revoke": true,
 }
 
 // viewerGate refuses a viewer's write (POST, PUT, PATCH, DELETE) to a
@@ -345,7 +349,7 @@ func checks(next http.Handler) http.Handler {
 			http.Error(w, "Bad Request", http.StatusBadRequest)
 			return
 		}
-		if crossSite(r) {
+		if crossSite(r) && !oauthOpen(r.URL.Path) {
 			http.Error(w, "Cross-site request refused", http.StatusForbidden)
 			return
 		}
@@ -371,7 +375,11 @@ func checks(next http.Handler) http.Handler {
 		if settings().authOn() && !authExempt(r) {
 			user, ok, renew := signedIn(r)
 			if !ok {
-				http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.Path), http.StatusFound)
+				next := r.URL.Path
+				if next == "/oauth/authorize" && r.Method == "GET" {
+					next = r.URL.RequestURI() // what the client asks is in the query
+				}
+				http.Redirect(w, r, "/login?next="+url.QueryEscape(next), http.StatusFound)
 				return
 			}
 			if renew {
@@ -413,13 +421,16 @@ func dotSegments(p string) bool {
 // authExempt: what needs no login. /mcp checks its own bearer token (an
 // MCP client can't log in), a welcome link its own token; the browser code and the home-screen app's
 // files may be fetched without the session cookie, and the healthcheck
-// asks without one.
+// asks without one. So do an MCP client's OAuth calls (oauthOpen), but not
+// /oauth/authorize, where its user allows it.
 func authExempt(r *http.Request) bool {
 	switch p := r.URL.Path; {
 	case p == "/login", p == "/logout", p == "/mcp", p == "/api/health", p == "/setup", p == "/signup":
 		return true
 	case strings.HasPrefix(p, "/welcome/"):
 		return true // an invite or reset link: the person has no password yet (links.go)
+	case oauthOpen(p):
+		return true
 	case strings.HasPrefix(p, "/public/"):
 		return r.Method == "GET" || r.Method == "HEAD"
 	}

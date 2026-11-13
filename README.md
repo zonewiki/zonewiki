@@ -255,6 +255,7 @@ away, which Zone takes only at one). Set them with `run.sh`, or edit the file:
 | `semantic-min-score` | How similar a passage must be to count as a semantic match (e.g. `0.4`; the default suits the default model) |
 | `trusted-proxies` | Your reverse proxy's address (or network), when it doesn't connect from localhost (e.g. `172.17.0.1` for a proxy on the host of a container): Zone then tells its clients apart when it slows down wrong passwords |
 | `external-content` | Other sites a page may show images, video and frames from, e.g. `upload.wikimedia.org, *.example.org` (`*`: any). By default none: an image elsewhere shows as a link (see Security) |
+| `mcp-oauth` | `no`: assistants connect with a token only, not by signing in through the browser (on by default with a login) |
 | `no-login` | `yes`: no login on purpose, though other devices can reach Zone; without it Zone then asks for a password before it shows anything |
 | `upload-max` | The biggest file an upload may be, e.g. `25MB` (default: `100MB`) |
 | `storage-max` | How much the wiki may hold, e.g. `5GB` (default: no limit). Counts your pages and files, not their git history; when full, new pages, notes and uploads are refused until you delete something, while edits to pages always save |
@@ -285,8 +286,21 @@ container: `podman compose -f compose.yaml -f compose.podman.yaml up -d --build`
 ## Connect an AI assistant
 
 Zone's MCP server lets an AI assistant (any MCP client) search, read and write
-your wiki and tasks. It needs a token: create one, then register Zone with
-your client.
+your wiki and tasks.
+
+**By signing in** (a wiki with a login): give the assistant the address,
+`https://your-wiki.example/mcp`. In Claude add it as a custom connector, in
+ChatGPT as a connector in developer mode; for Claude Code run
+`claude mcp add --transport http zone <address>` and then `/mcp`. It opens
+your wiki in the browser, you sign in and click **Allow**, and it is
+connected as you. **Connect an assistant** (`/assistant`, in the user menu)
+lists the connections and ends each. Assistants that run on their maker's
+servers (Claude's apps, ChatGPT) reach only a wiki on the internet over
+https (`base-url` and `hosts` set); Claude Code on your computer reaches any
+wiki your computer does. `mcp-oauth = no` turns this off.
+
+**With a token** (any wiki, any client, scripts): create one, then register
+Zone with your client.
 
 In the browser, open **Connect an assistant** (`/assistant`; with users it is
 in the user menu at the top right, and each user makes their own token). It

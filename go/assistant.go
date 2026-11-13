@@ -5,6 +5,10 @@
 // MCP client; Zone keeps its hash. Making one asks for the password again
 // (where there is one): a token outlasts the session it was made in, so a
 // session someone else got hold of mustn't be enough to make one.
+//
+// With OAuth (oauth.go) an assistant needs no token copied: it is given
+// the address and its user allows it in the browser. The page lists those
+// connections (grants.go), each to be ended on its own.
 package main
 
 import (
@@ -17,6 +21,7 @@ func assistantRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /assistant", assistantPage)
 	mux.HandleFunc("POST /assistant/token", assistantTokenRoute)
 	mux.HandleFunc("POST /assistant/revoke", assistantRevokeRoute)
+	mux.HandleFunc("POST /assistant/connections/{id}/revoke", assistantDisconnectRoute)
 }
 
 // assistantView: the page (assistant.html).
@@ -30,6 +35,8 @@ type assistantView struct {
 	Viewer         bool   // their assistant reads, and changes nothing
 	Token          string // a token just made, shown once
 	Done, Error    string // what the last change did, or why it wasn't made
+	OAuth          bool   // assistants can sign in through the browser (oauth.go)
+	Connections    []grantRow
 }
 
 // siteURL: path as an address to copy: on base (the base-url setting), or
@@ -66,7 +73,7 @@ func tokenOwner(r *http.Request) (s *Settings, name, kept string, ok bool) {
 func assistantData(r *http.Request) *assistantView {
 	s, name, kept, _ := tokenOwner(r)
 	return &assistantView{URL: siteURL(s.BaseURL, r, "/mcp"), User: name, Has: kept != "",
-		AskPassword: s.authOn(), Viewer: s.isViewer(name),
+		AskPassword: s.authOn(), Viewer: s.isViewer(name), OAuth: oauthOn(s), Connections: grantsOf(name),
 		BreadcrumbHTML: breadcrumb(newReq(r), []crumb{{"Assistant", ""}}, "", false, "", "")}
 }
 
@@ -84,8 +91,11 @@ func assistantPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v := assistantData(r)
-	if r.URL.Query().Get("done") == "revoke" && !v.Has {
+	switch done := r.URL.Query().Get("done"); {
+	case done == "revoke" && !v.Has:
 		v.Done = "Revoked the token: an assistant using it is refused from now on."
+	case done == "disconnect":
+		v.Done = "Ended the connection: that assistant is refused from now on."
 	}
 	showAssistant(w, r, http.StatusOK, v)
 }
@@ -157,4 +167,26 @@ func assistantRevokeRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/assistant?done=revoke", http.StatusSeeOther)
+}
+
+// assistantDisconnectRoute: POST /assistant/connections/{id}/revoke ends
+// one of the owner's connections (no other's: 404). No password: it only
+// ends access.
+func assistantDisconnectRoute(w http.ResponseWriter, r *http.Request) {
+	_, name, _, ok := tokenOwner(r)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	id := r.PathValue("id")
+	n, err := revokeGrants(func(g grant) bool { return g.ID == id && g.User == name })
+	if err != nil {
+		serverError(w, r, err)
+		return
+	}
+	if n == 0 {
+		http.NotFound(w, r)
+		return
+	}
+	http.Redirect(w, r, "/assistant?done=disconnect", http.StatusSeeOther)
 }

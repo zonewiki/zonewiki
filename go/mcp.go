@@ -205,12 +205,27 @@ func mcpAuthorized(r *http.Request) (user string, ok bool) {
 	given := strings.TrimSpace(auth[len("Bearer "):])
 	s := settings()
 	if s.Users == nil {
-		return "", tokenMatches(given, s.MCPToken)
+		if tokenMatches(given, s.MCPToken) {
+			return "", true
+		}
+		return connectionUser(s, given)
 	}
 	for _, u := range s.Users {
 		if !u.Disabled && tokenMatches(given, u.MCPToken) {
 			return u.Name, true
 		}
+	}
+	return connectionUser(s, given)
+}
+
+// connectionUser: given is the access token of a connection (grants.go),
+// whose user may still have one.
+func connectionUser(s *Settings, given string) (user string, ok bool) {
+	if !oauthOn(s) {
+		return "", false
+	}
+	if g := grantOf(given); g != nil && validGrantUser(s, g.User) {
+		return g.User, true
 	}
 	return "", false
 }
@@ -233,7 +248,12 @@ func mcpOn() bool {
 // answered with JSON. GET (a server-sent event stream) and DELETE (ending
 // a session) aren't offered: there are no notifications and no sessions.
 func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
-	if !mcpOn() {
+	// With OAuth a client that sends no token is told where to get one (a
+	// 401 naming the metadata, RFC 9728), token set or not.
+	challenge := "Bearer"
+	if s := settings(); oauthOn(s) {
+		challenge = `Bearer resource_metadata="` + resourceMetaURL(s, r) + `", scope="` + oauthScope + `"`
+	} else if !mcpOn() {
 		msg := "MCP is off: make a token at /assistant in the browser (or with ./run.sh config token) and send it as " +
 			"'Authorization: Bearer <token>'"
 		if settings().Users != nil {
@@ -244,7 +264,13 @@ func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Wrong tokens count against the client like wrong passwords (their own
-	// throttle: a client's MCP mistakes don't lock its browser out).
+	// throttle: a client's MCP mistakes don't lock its browser out). No
+	// token at all is no guess: a client finding out how to sign in.
+	if r.Header.Get("Authorization") == "" {
+		w.Header().Set("WWW-Authenticate", challenge)
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized: wrong or missing bearer token"})
+		return
+	}
 	user := ""
 	ok, wait := mcpThrottle.try(clientKey(r), func() (ok bool) {
 		user, ok = mcpAuthorized(r)
@@ -256,7 +282,7 @@ func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !ok {
-		w.Header().Set("WWW-Authenticate", "Bearer")
+		w.Header().Set("WWW-Authenticate", challenge+`, error="invalid_token"`)
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized: wrong or missing bearer token"})
 		return
 	}

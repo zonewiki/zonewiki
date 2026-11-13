@@ -21,7 +21,10 @@ So the wiki keeps up with what the user looks up, without the model writing on i
 The instructions stay short (about 1.3 KB, a test keeps them under 1.9 KB): Claude Code cuts a server's instructions at about 2 KB, so what every session needs comes first and the tools' descriptions carry the details;
 the wiki's guide is appended after them (below), cut there too, which is why the instructions point to `read_guides`.
 
-A client registers `http://localhost:5000/mcp` with the HTTP transport and the header `Authorization: Bearer <token>`, the token from the page **Connect an assistant** (below) or from `./run.sh config token` (with users, `./run.sh user token NAME`).
+**Two ways in.**
+With a login, a client is given only the address, `http://localhost:5000/mcp`: it opens the wiki in its user's browser, they sign in and allow it, and it gets tokens of its own (Connecting with OAuth, below).
+Or a client registers the address with the HTTP transport and the header `Authorization: Bearer <token>`, a token that doesn't change, from the page **Connect an assistant** (below) or from `./run.sh config token` (with users, `./run.sh user token NAME`): for a client that can't open a browser, a script, or a wiki without a login.
+Either way the assistant acts as the user whose token it is.
 
 **Connect an assistant** (`/assistant`, `go/assistant.go`, `assistant.html`): the token made in the browser, without a shell on the host.
 With users it is in the user menu ("Connect an assistant") and makes the token of whoever is signed in, never another user's (no field names one);
@@ -37,7 +40,56 @@ A viewer may make one too: their assistant reads, and its writing tools are refu
 - **It takes the password again** (the user's own, or the wiki's; nothing to ask in a wiki without a login).
   A token outlasts the session it was made in, and signing out or a new password doesn't end it, so a session someone else got hold of mustn't be enough to make one.
   A wrong password is a 403 ("Incorrect password: no token was made."), and counts against the client as a wrong login does (`loginThrottle`: 429 with the wait), so the page guesses a password no faster than the login page.
-- **Revoke the token** (`POST /assistant/revoke`, no password: it only ends access): the token is taken out of the settings file, the page says so (`?done=revoke`, said only when there is none), and `/mcp` answers 401 for it (403, off, when no token is left).
+- **Revoke the token** (`POST /assistant/revoke`, no password: it only ends access): the token is taken out of the settings file, the page says so (`?done=revoke`, said only when there is none), and `/mcp` answers 401 for it (403, off, when no token is left and OAuth is off).
+- **Connections** (with OAuth): the page says how an assistant signs in (the address to paste; the line for Claude Code, `claude mcp add --transport http zone <url>`), and lists the assistants its user allowed: the name each gave, the host its answer went to, since when, the day it was last used, newest first.
+  **End** (`POST /assistant/connections/<id>/revoke`, no password) ends one: its tokens are refused from then on (`?done=disconnect`); another user's is a 404.
+  The static token is one per user and stays so: several assistants are several connections.
+
+## Connecting with OAuth
+
+`go/oauth.go`, `go/grants.go`, `oauth.html`.
+What Claude's apps (web, Desktop, mobile: a "custom connector"), Claude Code and ChatGPT do with a remote MCP server: the user pastes the address of `/mcp`, a browser opens, they sign in to Zone and click Allow.
+Zone is its own authorization server, on the same address, as the MCP authorization spec (2025-11-25) has it; nothing but Go's standard library.
+
+- **Only with a login**: someone has to sign in and allow, so OAuth is on when the wiki has users or a password (`oauthOn`), and there is none in a wiki without a login (the routes below are a 404, `/mcp` answers as without it).
+  `mcp-oauth = no` in the settings file turns it off: static tokens only, and the connections there are stop working until it is on again.
+- **What reaches it**: an assistant that runs on its maker's servers (Claude's apps, ChatGPT) calls Zone from there, so the wiki must be on the internet over https (set `base-url` and `hosts`).
+  One on the user's computer (Claude Code) reaches any wiki that computer does.
+- **`/mcp` says where to sign in**: with OAuth on, a call without a token, or with a wrong one, is a `401` with `WWW-Authenticate: Bearer resource_metadata="<address>/.well-known/oauth-protected-resource/mcp", scope="mcp"` (a wrong one also `error="invalid_token"`), whether or not a static token is set.
+  A call with no `Authorization` header at all is no guess and isn't counted against the client (a client finding its way); a wrong token is, as ever.
+- **The metadata** (no login needed): `GET /.well-known/oauth-protected-resource/mcp` and `/.well-known/oauth-protected-resource` (RFC 9728: `resource`, the address of `/mcp`; `authorization_servers`, Zone's own address) and `GET /.well-known/oauth-authorization-server` (RFC 8414: the endpoints below, `code_challenge_methods_supported: ["S256"]`, `token_endpoint_auth_methods_supported: ["none"]`).
+  The addresses are on `base-url`, else on the address the request came in on (`siteURL`): behind a proxy set `base-url`, or `resource` won't be the address the user typed and the client refuses it.
+- **Registration** (`POST /oauth/register`, RFC 7591; no login, any origin): a client sends its `client_name` and `redirect_uris` and gets a `client_id`. Public clients only: there is no secret.
+  Zone keeps nothing: the client id *is* the name and the redirect URIs, signed with Zone's key (`.zone/secret_key`; `oauthClient.id`, `clientOf`), so strangers calling the endpoint leave nothing behind, and a client id Zone didn't sign is no client.
+  A redirect URI is `https`, or `http` on `localhost`, `127.0.0.1` or `[::1]` (a program on the user's computer, RFC 8252), without a fragment or a user; one to ten of them (**400** `invalid_redirect_uri`).
+  Other schemes (`cursor://` …) are refused for now.
+  Client ID Metadata Documents aren't offered yet (the metadata doesn't advertise them, so clients register): they would have Zone fetch an address a stranger names.
+- **The question** (`GET /oauth/authorize`, signed in: anyone else goes through the login and comes back, the question kept in `next`): the page says who asks (the name the client gave: it is only a claim), where the answer goes (the redirect URI's host), as whom the assistant will act ("as you, alice: it will see and change what you do, no more"; a viewer's reads only), and for an address on this computer that any program on it could ask in this name. **Allow** and **Deny**.
+  - Before anything is shown, the client id and the redirect URI are checked: one Zone doesn't know is a page saying so (**400**), never a redirect. The answer goes only where the registration said: that address exactly, or for a program on this computer the same address at whatever port.
+  - What else the client got wrong (no `response_type=code`, no PKCE challenge with `S256`, a `resource` that isn't this wiki's `/mcp`) is a page too (400), with a link back that tells the client (`error=…`).
+  - **Allow takes the password again** (`POST /oauth/authorize`), as making a token does and for the same reason: a connection outlasts the session, so a session someone else got hold of mustn't be enough.
+    A wrong one is a 403 ("Incorrect password: nothing was allowed.") and counts against the client as a wrong login (`loginThrottle`: 429).
+    The POST is behind the Origin check as every form.
+  - **The answer is a page, not a redirect**: "Connected", with a `Refresh` header that sends the browser on to the client (`<redirect_uri>?code=…&state=…&iss=…`) and the same address as a link.
+    The page policy lets a form lead only to Zone itself (`form-action 'self'`), and browsers hold a form's redirects to that, so a redirect would be blocked; this way the policy stays as it is. Deny goes back the same way with `error=access_denied`.
+  - The code is 32 random bytes, kept in memory as its hash for a minute, for one use (`authCodes`; a restart drops the few that are open).
+- **Tokens** (`POST /oauth/token`, form-encoded; no login, any origin): `grant_type=authorization_code` with the `code`, its `code_verifier` (PKCE, S256), the same `client_id` and `redirect_uri`; or `grant_type=refresh_token` with the `refresh_token` and `client_id`.
+  The answer: an `access_token` (an hour), a `refresh_token`, `token_type: Bearer`, `scope: mcp`.
+  - Both are 32 random bytes and Zone keeps only their hashes, as of a static token; not JWTs, so ending a connection takes effect at once.
+  - **A refresh token works once**: each use gives a new pair, and the access token before stops working. Unused for 90 days it expires, and the connection with it.
+    One used a second time was copied (the client, or a thief, has a newer one): the connection is ended and the log says so. A client that lost an answer to a refresh therefore has to connect again.
+  - A refresh token is its client's: another client id gets nothing.
+  - What gets none is a **400** with `error`: `invalid_grant` (a code wrong, used, older than a minute, for another client or redirect URI, the wrong verifier; a refresh token wrong, used, expired or revoked; a user who can't sign in any more), `invalid_client`, `invalid_target` (another `resource`), `unsupported_grant_type`.
+    Failures count against the client as wrong MCP tokens do (`mcpThrottle`: **429** with `Retry-After`).
+- **One scope**, `mcp`: what an assistant may do is its user's role, as with a static token.
+- **Connections are kept** in `.zone/grants` (`grants.go`): the id, the user ("" in a wiki without users: the wiki's), the client's name, the hash of its client id, the redirect host, when it was made, the day it was last used, the token hashes and when they expire.
+  Owner-only (0600), written whole, one change at a time (`changeGrants`: a lock in the process and `lockFile` on `.zone/grants.lock`, as a command writes it too), not committed (state, like `.zone/links`), read again when the file changed (`readGrants`).
+  Not in the settings file: tokens change by the hour, and a change there is a change of the settings.
+- **What ends a connection**: End on Connect an assistant; its refresh token expiring or being used twice; its user being removed (the Users tab, `zonewiki user remove`); its user setting a new password by a **reset link** (they may have lost the account to someone; the welcome page says so).
+  A disabled user's are refused while they are disabled, and work again after.
+  An ordinary new password (Change password, `zonewiki user passwd`) leaves them, as it leaves a static token.
+- **Not yet**: Client ID Metadata Documents, CORS for clients that run in a browser, a read-only connection for an editor, `/oauth/revoke` (a client's "disconnect" doesn't end the connection in Zone: End does). Tested against real clients so far: none (`docs/plans/mcp-oauth.md`, phase 3).
+- Tests: `tests/test_oauth.py` plays the client over HTTP; `tests/e2e/test_oauth.py` holds that Allow and Deny get the browser back to the client under the page policy.
 
 **The wiki's guide**: the page `wiki-guide` (`guideSlug`) holds the user's conventions for keeping the wiki: where things go, tags, page layouts, what stays private.
 Its text is appended to the `instructions` (`mcpInstructions`, passed to `handle`, which asks for them only on `initialize`), after a line saying it wins over the general advice and that the model should offer to add conventions the user settles.

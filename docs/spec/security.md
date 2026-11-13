@@ -57,9 +57,20 @@ Each rule has tests in `tests/test_routes.py` or `tests/test_mcp.py`, and `go/se
   so nothing tells what is in someone's folder.
   The rules are `go/access.go` alone (`canSee`, `canWrite`, `canSeePath`, `canSeeTask`); `tests/test_privacy.py` probes every route and MCP tool for leaks, and fails for a new one that isn't probed.
   Private is hidden inside Zone, not encrypted: the files, git history and a git remote hold everything.
-- `/mcp` requires an MCP token, `mcp-token` in the settings file (a bearer token, kept there as its hash; with users, a user's own, and the tools act as that user): without one set it is off (403), whether or not a password is set, because its tools write pages and tasks.
+- `/mcp` requires a token: an MCP token, `mcp-token` in the settings file (a bearer token, kept there as its hash; with users, a user's own, and the tools act as that user), or the access token of a connection a signed-in user allowed (OAuth, below).
+  Without a login and without a token set it is off (403), because its tools write pages and tasks; with a login it answers 401 and says where to sign in. Nothing is reached without a token someone signed in made or allowed.
   Don't make it open again (see Auth in `docs/spec/mcp.md`).
   A token is made on the host (`zonewiki config token`, `zonewiki user token`) or in the browser by whoever is signed in, for themselves only and with their password again, so a stolen session alone makes none (`/assistant`, Connect an assistant in `docs/spec/mcp.md`).
+- **OAuth for `/mcp`** (`go/oauth.go`, Connecting with OAuth in `docs/spec/mcp.md`; only with a login, off with `mcp-oauth = no`): an assistant is let in by its user, in the browser, with their password again.
+  What keeps it safe, and isn't to be weakened:
+  the answer (the code) goes only to a redirect URI the client registered, https or this computer, and an unknown client or URI gets a page, never a redirect;
+  PKCE (S256) is required, so a code is no use without its verifier;
+  codes last a minute and work once; tokens are kept as hashes; a refresh token works once, and one seen twice ends the connection;
+  Allow takes the password again and is behind the Origin check; the consent page names the client only as a claim and shows where the answer goes.
+  `/oauth/token`, `/oauth/register` and the metadata under `/.well-known/oauth-*` need no session and skip the Origin check (`oauthOpen`): a client's server calls them, and they act on nothing a cookie gives.
+  Registration keeps nothing (the client id is signed), so strangers can't fill the wiki.
+  The page policy is unchanged: `form-action 'self'` stays, and the answer after Allow is a page with a `Refresh` header instead of a redirect.
+  None of it answers during first run.
 - **Zone's own folders are not served**: `.zone/` (the session key, the settings file, the semantic cache),
   `.git/`,
   `_tasks/` and every other folder starting with `_` or `.` hold no pages,

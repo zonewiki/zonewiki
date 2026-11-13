@@ -833,6 +833,10 @@ EXEMPT = {
     "GET /signup", "POST /signup",  # asks for an account by mail, signed out (test_signup.py)
     "GET /assistant", "POST /assistant/token", "POST /assistant/revoke",   # the caller's own MCP token, no page (test_assistant.py)
     "GET /password", "POST /password",   # the caller's own password, no page (test_password.py)
+    # OAuth: the caller's own connections, no page (test_oauth.py)
+    "GET /.well-known/oauth-protected-resource", "GET /.well-known/oauth-protected-resource/mcp",
+    "GET /.well-known/oauth-authorization-server", "POST /oauth/register", "GET /oauth/authorize",
+    "POST /oauth/authorize", "POST /oauth/token", "POST /assistant/connections/{id}/revoke",
     "GET /setup", "POST /setup",    # the first-run page: only while the wiki has no login (test_setup.py)
 }
 

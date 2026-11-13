@@ -357,5 +357,10 @@ func useLink(link *welcomeLink, password string) (string, error) {
 	if _, err := revokeLink(link.User); err != nil {
 		logf("removing %s's link: %v", link.User, err)
 	}
+	if link.Kind == "reset" {
+		// Whoever needed a reset may have lost the account to someone: the
+		// assistants allowed in their name are let go with the sessions.
+		revokeGrantsOf(link.User)
+	}
 	return hash, nil
 }

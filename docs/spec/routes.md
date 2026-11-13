@@ -17,6 +17,10 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 | GET    | `/admin`, `/admin/users`    | The admin page, for admins (Managing users in `docs/spec/users.md`): `/admin` opens its first tab, Users; 404 for everyone else |
 | GET    | `/assistant`                | Connect an assistant: the MCP token of whoever is signed in (without users, the wiki's), made and revoked in the browser (`docs/spec/mcp.md`) |
 | POST   | `/assistant/token`, `/assistant/revoke` | Make a new token (with the password again; shown once) or take it away |
+| POST   | `/assistant/connections/<id>/revoke` | End one of your assistants' connections (OAuth) |
+| GET    | `/.well-known/oauth-protected-resource`, `/.well-known/oauth-protected-resource/mcp`, `/.well-known/oauth-authorization-server` | OAuth metadata for MCP clients (no login; 404 without a login or with `mcp-oauth = no`; Connecting with OAuth in `docs/spec/mcp.md`) |
+| POST   | `/oauth/register`, `/oauth/token` | An MCP client registers, and turns a code or a refresh token into tokens (no login, any origin) |
+| GET, POST | `/oauth/authorize`       | An assistant asks to connect: whoever is signed in allows it, with their password, or denies it |
 | GET, POST | `/password`              | Change password: whoever is signed in sets a new one (without users, the wiki's), with the one they have (Signing in in `docs/spec/users.md`); 404 without a login |
 | POST   | `/admin/users/<name>/role`, `/disable`, `/enable`, `/remove`, `/reset`, `/revoke`; `/admin/users/invite` | The Users tab's changes, admins only (404 for anyone else) |
 | GET/POST | `/welcome/<token>`  | An invite or reset link's page: choose a password, once (no login needed) |

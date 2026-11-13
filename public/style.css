@@ -1530,6 +1530,12 @@ kbd {
 .password-form label { display: flex; flex-direction: column; gap: .2rem; font-size: .9rem; color: var(--muted); width: 100%; max-width: 22rem; }
 .password-form input { font: inherit; font-size: .9rem; padding: .35rem .5rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); }
 
+/* An assistant asks to connect (oauth.html): the login's form, with two answers. */
+.oauth-form p { margin: 0; }
+.oauth-answers { display: flex; gap: .5rem; }
+.oauth-answers .btn { flex: 1; }
+.assistant-connections form { margin: 0; }
+
 /* Connect an assistant (assistant.html): the token and what to give a client. */
 .assistant-token p { margin: .3rem 0; }
 .assistant-token .users-link { margin: .3rem 0 .8rem; }

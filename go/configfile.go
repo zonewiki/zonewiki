@@ -45,7 +45,7 @@ func configPath() string { return statePath("config") }
 // config check` shows them.
 var configKeys = []string{"password", "mcp-token", "hosts", "base-url", "git-remote", "noshare", "locale",
 	"date-format", "query-log", "semantic-min-score", "trusted-proxies", "upload-max", "storage-max",
-	"external-content", "no-login", "signup-domains", "signup-role", "signup-approval"}
+	"external-content", "no-login", "mcp-oauth", "signup-domains", "signup-role", "signup-approval"}
 
 // userKeys: the keys of a [user …] section.
 var userKeys = []string{"password", "mcp-token", "role", "disabled", "email", "pending"}
@@ -110,6 +110,7 @@ type Settings struct {
 	SignupDomains    []string       // the mail domains sign-up takes (signup.go), lowercase; none: any
 	SignupRole       string         // the role an account made by sign-up gets: roleViewer (default) or roleEditor
 	SignupApproval   bool           // an account made by sign-up waits for an admin (pending)
+	NoOAuth          bool           // mcp-oauth = no: assistants connect with a static token only (oauth.go)
 }
 
 // authOn: the wiki has a login gate, a password or users.
@@ -178,6 +179,11 @@ func loadSettings(f *settingsfile.File) (*Settings, error) {
 			return nil, fmt.Errorf("%s%s isn't a mail domain (e.g. example.org).", where, d)
 		}
 		s.SignupDomains = append(s.SignupDomains, d)
+	}
+	mcpOAuth, where, set := get("mcp-oauth")
+	s.NoOAuth = set && slices.Contains([]string{"0", "false", "no"}, strings.ToLower(mcpOAuth))
+	if !s.NoOAuth && !truthy(mcpOAuth) && mcpOAuth != "" {
+		return nil, fmt.Errorf("%s%s isn't yes or no.", where, mcpOAuth)
 	}
 	s.GitRemote, _, _ = get("git-remote")
 	hosts, _, _ := get("hosts")
@@ -608,6 +614,7 @@ func settingsChange(old, s *Settings) string {
 		{"no-login", old.NoLogin != s.NoLogin},
 		{"signup-domains", !slices.Equal(old.SignupDomains, s.SignupDomains)},
 		{"signup-role", old.SignupRole != s.SignupRole}, {"signup-approval", old.SignupApproval != s.SignupApproval},
+		{"mcp-oauth", old.NoOAuth != s.NoOAuth},
 	} {
 		if c.changed {
 			changes = append(changes, c.key)

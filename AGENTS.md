@@ -115,6 +115,8 @@ Auth is optional (a password, or users; see Key Constraints).
 │   ├── signup.go           # Sign-up: /signup, the mail with its link, the account a sign-up link makes
 │   ├── mail.go             # Mail through the deployment's SMTP server (ZONE_SMTP_*), for sign-up
 │   ├── assistant.go        # Connect an assistant (/assistant): your MCP token made and revoked in the browser, with your password again
+│   ├── oauth.go            # OAuth for /mcp: the metadata, client registration (nothing kept), the consent page /oauth/authorize, /oauth/token
+│   ├── grants.go           # Connections: the assistants users let in through OAuth, their token hashes in .zone/grants
 │   ├── password.go         # Change password (/password): your password changed in the browser, with the one you have
 │   ├── signout.go          # Sessions signed out: .zone/signed-out
 │   ├── stalls.go           # A request body or response that stands still for a minute fails (noStalls)
@@ -312,8 +314,9 @@ and commit the new pins.
     A new route that must answer before that goes in `setupExempt`; the tests' server has `no-login = yes` (`settings.NO_LOGIN`).
   - **Viewers** (`role = viewer`) change nothing: `canWrite` in `go/access.go` is false for them, `mayWriteTasks` refuses every task write, `callMCPTool` the writing tools, and `viewerGate` a viewer's write to any route not in `viewerWrites`.
     A new write route gets a probe in `tests/test_roles.py`, which fails until it has one.
-  - `/mcp` requires an MCP token (`mcp-token`, kept as its hash; with users, a user's own): without one it is off (403), password or not.
+  - `/mcp` requires a token: an MCP token (`mcp-token`, kept as its hash; with users, a user's own) or the access token of a connection a signed-in user allowed (OAuth, `go/oauth.go`). Without a login and a token it is off (403); with a login it answers 401 and says where to sign in.
     Don't make it open again.
+    OAuth's rules (OAuth for `/mcp` in `docs/spec/security.md`) aren't to be loosened: the code goes only to a registered redirect URI (an unknown client or URI gets a page, never a redirect), PKCE is required, Allow takes the password again, tokens are kept as hashes, a refresh token works once. The answer after Allow is a page with a `Refresh` header because of `form-action 'self'`: don't widen the policy for it.
     In the browser a token is made only by whoever is signed in, for themselves, with their password again (`go/assistant.go`): don't drop that check.
     A password is changed in the browser the same way, only one's own and with the one they have (`go/password.go`).
   - **The settings file** `.zone/config` holds password hashes and tokens (only as hashes): it stays out of git with all of `.zone/` (account data never goes into git; `missingUsers` stops a clone without it from starting open) and is never shown (`canSeePath`, `safePath`),

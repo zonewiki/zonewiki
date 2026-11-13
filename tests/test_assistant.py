@@ -170,14 +170,14 @@ class TestWithoutUsers:
         assert client.post("/login", data={"password": "pw"}, headers=HOST).status_code == 302
         body = client.get("/assistant", headers=HOST).data.decode()
         assert "The wiki has no token" in body and "as you" not in body and 'type="password"' in body
-        assert mcp(client, "anything")[0] == 403   # off without a token
+        assert mcp(client, "anything")[0] == 401   # no token is set (with no login either, /mcp is off: 403)
         assert make(client, "wrong")[0].status_code == 403
         resp, token = make(client, "pw")
         assert resp.status_code == 200 and "The wiki's new token" in resp.data.decode()
         assert kept(token) in config(wiki_dir).split("[user")[0]
         assert mcp(client, token)[0] == 200
         assert client.post("/assistant/revoke", headers=HOST).status_code == 303
-        assert "mcp-token" not in config(wiki_dir) and mcp(client, token)[0] == 403
+        assert "mcp-token" not in config(wiki_dir) and mcp(client, token)[0] == 401
 
     def test_without_a_login_it_asks_for_no_password(self, client, wiki_dir):
         body = client.get("/assistant", headers=HOST).data.decode()

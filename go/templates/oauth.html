@@ -1,0 +1,55 @@
+{{- /* /oauth/authorize: an assistant asks to connect (oauth.go,
+    docs/spec/mcp.md): whoever is signed in allows or denies it. The answer
+    is a page that sends the browser back to the assistant (a Refresh
+    header), with the way as a link; a request that can't be answered is
+    said here. */ -}}
+{{define "body"}}
+<div class="login-wrap">
+  {{- if .Problem}}
+  <div class="login-form oauth-form">
+    <h2>This can't be connected</h2>
+    <p>{{.Problem}}</p>
+    {{- with .Back}}
+    <p><a href="{{.}}" rel="noreferrer">Back to {{$.Host}}</a></p>
+    {{- end}}
+  </div>
+  {{- else if .Back}}
+  <div class="login-form oauth-form" role="status">
+    {{- if .Allowed}}
+    <h2>Connected</h2>
+    <p><strong>{{.Client}}</strong> may now use this wiki{{if .User}} as <strong>{{.User}}</strong>{{end}}. You are being sent back to it.</p>
+    {{- else}}
+    <h2>Not connected</h2>
+    <p>Nothing was allowed. You are being sent back to {{.Client}}.</p>
+    {{- end}}
+    <p><a href="{{.Back}}" rel="noreferrer" class="oauth-back">Continue to {{.Host}}</a> if nothing happens.</p>
+  </div>
+  {{- else}}
+  <form class="login-form oauth-form" method="post" action="/oauth/authorize">
+    <h2>Connect an assistant?</h2>
+    <p><strong class="oauth-client">{{.Client}}</strong> asks to use this wiki{{if .User}} as you, <strong>{{.User}}</strong>: it will see and change what you do, no more{{else}}: it will search, read and write its pages and tasks{{end}}.{{if .Viewer}} You are a viewer: it reads, and changes nothing.{{end}}</p>
+    <p class="welcome-note">That is the name it gave. Its answer goes to <strong class="oauth-host">{{.Host}}</strong>: allow it only if you just asked your assistant to connect, and that is where it lives.</p>
+    {{- if .Loopback}}
+    <p class="welcome-note">That is a program on this computer; any program on it could ask in this name.</p>
+    {{- end}}
+    <input type="hidden" name="response_type" value="code">
+    <input type="hidden" name="client_id" value="{{.Req.ClientID}}">
+    <input type="hidden" name="redirect_uri" value="{{.Req.RedirectURI}}">
+    <input type="hidden" name="state" value="{{.Req.State}}">
+    <input type="hidden" name="code_challenge" value="{{.Req.Challenge}}">
+    <input type="hidden" name="code_challenge_method" value="S256">
+    <input type="hidden" name="resource" value="{{.Req.Resource}}">
+    {{- with .User}}<input type="text" name="username" value="{{.}}" autocomplete="username" hidden>{{end}}
+    <input type="password" name="password" placeholder="{{if .User}}Your password{{else}}The wiki's password{{end}}" autocomplete="current-password" aria-label="Password" autofocus>
+    {{- with .Error}}
+    <p class="login-error" role="alert">{{.}}</p>
+    {{- end}}
+    <div class="oauth-answers">
+      <button type="submit" name="answer" value="allow" class="btn btn-primary">Allow</button>
+      <button type="submit" name="answer" value="deny" class="btn">Deny</button>
+    </div>
+    <p class="welcome-note">You can end the connection any time on Connect an assistant.</p>
+  </form>
+  {{- end}}
+</div>
+{{end}}

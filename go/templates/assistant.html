@@ -5,7 +5,7 @@
 {{.BreadcrumbHTML}}
 <div class="sheet">
 <h1>Connect an assistant</h1>
-<p>An AI assistant (any MCP client) can search, read and write this wiki and its tasks{{if .User}} as you, <strong>{{.User}}</strong>: it sees and changes what you do, no more{{end}}. It connects to <code>{{.URL}}</code> with a token.{{if .Viewer}} You are a viewer: your assistant reads, and changes nothing.{{end}}</p>
+<p>An AI assistant (any MCP client) can search, read and write this wiki and its tasks{{if .User}} as you, <strong>{{.User}}</strong>: it sees and changes what you do, no more{{end}}. It connects to <code>{{.URL}}</code>.{{if .Viewer}} You are a viewer: your assistant reads, and changes nothing.{{end}}</p>
 {{- with .Done}}
 <p class="users-done" role="status">{{.}}</p>
 {{- end}}
@@ -22,7 +22,34 @@
   <code class="users-link">Authorization: Bearer {{.}}</code>
 </div>
 {{- end}}
+{{- if .OAuth}}
+<h2>Sign in from the assistant</h2>
+<p>In Claude, ChatGPT or another assistant that takes a remote MCP server (a custom connector), add one with the address above. It opens this wiki in your browser, where you sign in and allow it: there is no token to copy.</p>
+<p>Claude Code, in a terminal, then <code>/mcp</code> in it to sign in:</p>
+<code class="users-link">claude mcp add --transport http zone {{.URL}}</code>
+<p class="users-help">An assistant that runs on its maker's servers (Claude's apps, ChatGPT) reaches only a wiki that is on the internet, over https. One on this computer (Claude Code) reaches any wiki this computer does.</p>
+<h2>Connections</h2>
+{{- if .Connections}}
+<table class="users-table assistant-connections">
+  <thead><tr><th>Assistant</th><th>Answers to</th><th>Since</th><th>Last used</th><th></th></tr></thead>
+  <tbody>
+  {{- range .Connections}}
+  <tr>
+    <td>{{.Client}}</td><td>{{.Redirect}}</td><td>{{.Made}}</td><td>{{.Used}}</td>
+    <td><form method="post" action="/assistant/connections/{{.ID}}/revoke"><button type="submit" class="btn">End</button></form></td>
+  </tr>
+  {{- end}}
+  </tbody>
+</table>
+<p class="users-help">An assistant whose connection is ended is refused from then on; it can ask again, and you allow it again.</p>
+{{- else}}
+<p>{{if .User}}No assistant is connected as you this way{{else}}No assistant is connected this way{{end}}.</p>
+{{- end}}
+{{- end}}
 <h2>{{if .User}}Your token{{else}}The wiki's token{{end}}</h2>
+{{- if .OAuth}}
+<p class="users-help">For a client that can't sign in through a browser, or a script: a token it sends with every call.</p>
+{{- end}}
 {{- if .Has}}
 <p>{{if .User}}You have a token{{else}}The wiki has a token{{end}}: an assistant that was given it can connect. {{.Shell.AppName}} can't show it again; lost, make a new one.</p>
 {{- else}}
