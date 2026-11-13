@@ -5,6 +5,7 @@
 // stamps. An ES module tasks.js imports.
 
 import TasksCore from '../tasks-core.js';
+import { wikilinkHref } from './mdtext.js';
 
 const { dateToStr, sanitizeTagInput } = TasksCore;
 
@@ -237,4 +238,42 @@ export function dateOffset(days) {
   const d = new Date();
   d.setDate(d.getDate() + days);
   return dateToStr(d);
+}
+
+// ── Links in a task's title ────────────────────────────────────────────────
+
+// A link to another site opens in a new tab (as go/markdown.go's
+// external marks them in pages); a full URL to Zone itself stays.
+const extAttrs = href => {
+  try {
+    const u = new URL(href, location.href);
+    return /^https?:$/.test(u.protocol) && u.host !== location.host
+      ? ' target="_blank" rel="noopener noreferrer"' : '';
+  } catch (_) { return ''; }
+};
+
+// Links in a title: [[wikilinks]], [label](url) (a pasted URL with the
+// name the dialog asked for) and bare URLs; the rest is text. A link to
+// anything but the web, mail or this wiki (javascript: …) stays text.
+const TITLE_LINK_RE = /\[\[([^\[\]]+)\]\]|\[([^\[\]]*)\]\(([^()\s]+)\)|(https?:\/\/[^\s<>"]+)/g;
+const SAFE_HREF_RE = /^(?:https?:|mailto:|\/|#|(?![a-z][a-z0-9+.-]*:))/i;
+export function linkifyTitle(text) {
+  let out = '', last = 0;
+  for (const m of text.matchAll(TITLE_LINK_RE)) {
+    let href, label, cls = 'task-link';
+    if (m[1] !== undefined) { ({ href, label } = wikilinkHref(m[1])); cls += ' wikilink'; }
+    else if (m[3] !== undefined) { href = m[3]; label = m[2] || m[3]; }
+    else { href = label = m[4]; }
+    if (!SAFE_HREF_RE.test(href)) continue;
+    out += esc(text.slice(last, m.index)) +
+      `<a href="${esc(href)}" class="${cls}"${extAttrs(href)}>${esc(label)}</a>`;
+    last = m.index + m[0].length;
+  }
+  return out + esc(text.slice(last));
+}
+// A title as text (menus, toasts, dialogs): its links reduced to their
+// labels, as mdtext.plain_task_title does for the server.
+export function plainTitle(text) {
+  return String(text || '').replace(TITLE_LINK_RE, (all, wiki, label, url, bare) =>
+    wiki !== undefined ? wikilinkHref(wiki).label : url !== undefined ? (label || url) : bare);
 }

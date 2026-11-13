@@ -110,6 +110,18 @@ function matchesFilter(t, f) {
   return f.tagGroups.every(g => g.some(tag => tags.includes(tag)));
 }
 
+// The tasks a tab shows, of `tasks`: those passing the filter f (parseFilter)
+// that are the tab's kind. Focus: open and available now (isFocus);
+// Completed: the completed; Open and the Plan board: every open task (one
+// still waiting for a day is in the board's Unplanned section).
+function tasksInView(tasks, f, view, today) {
+  const filtering = f.text || f.tagGroups.length || f.excludeTags.length;
+  return tasks.filter(t => (!filtering || matchesFilter(t, f)) &&
+    (view === 'completed' ? !!t.completed_at
+      : view === 'focus' ? !t.completed_at && isFocus(t, today)
+      : !t.completed_at));
+}
+
 // The [[tasks: tag=…]] / ?tag= form ("a,b" = all, "a|b" = any) as filter words.
 function tagParamToQuery(raw) {
   raw = (raw || '').trim();
@@ -404,7 +416,7 @@ function parseQuickAdd(input, today) {
 const TasksCore = {
   dateToStr, addDays, isOverdue, isFocus, isCarried, byOpenOrder, byDeadline, byCreated, SORTS, placeInOrder, tagMatchScore, tagCounts, selectionTags, bulkTagChange,
   rankTags, sanitizeTagInput,
-  parseFilter, matchesFilter, tagParamToQuery,
+  parseFilter, matchesFilter, tasksInView, tagParamToQuery,
   bucketKey, fullDayLabel, boardBuckets, parseQuickAdd,
   dateSettings, localeDate, shortDate, longDayLabel, weekStart, weekdayNames, monthTitle,
 };

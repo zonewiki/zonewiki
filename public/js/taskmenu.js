@@ -4,7 +4,7 @@
 // What it uses of the app comes in app (its state in app.st).
 import { copyText } from './util.js';
 import { openDatePicker } from './datepicker.js';
-import { dateOffset, esc, formatDate, shortDate, showNotice, todayStr } from './taskutil.js';
+import { dateOffset, esc, formatDate, plainTitle, shortDate, showNotice, todayStr } from './taskutil.js';
 
 export function initTaskMenu(app) {
 const { st } = app;
@@ -60,7 +60,7 @@ function openTaskMenu(id, anchor, at) {
     ['select', 'Select several'],
     ['delete', 'Delete…', 'danger'],
   ].filter(Boolean);
-  showMenu(app.plainTitle(task.title), items, action => runTaskAction(task, action, anchor), anchor, at);
+  showMenu(plainTitle(task.title), items, action => runTaskAction(task, action, anchor), anchor, at);
 }
 
 // A Plan header's "N due" (a day), "N overdue" (Unplanned) or "N carried"
@@ -71,7 +71,7 @@ function headerTasksMenu(btn) {
   const which = btn.dataset.headerList || 'due';
   const list = section?.[which] || [];
   if (!list.length) return;
-  const items = list.map(t => [t.id, esc(app.plainTitle(t.title))]);
+  const items = list.map(t => [t.id, esc(plainTitle(t.title))]);
   const title = { due: `Due ${section.label}`, overdue: 'Overdue', carried: 'Carried over' }[which];
   showMenu(title, items, id => { app.unfoldFor(id); app.setSelected(id); }, btn);
 }
@@ -179,7 +179,7 @@ function confirmDelete(title, count = 1) {
 function confirmDeadlineMove(task, day) {
   const when = d => ({ Today: 'today', Tomorrow: 'tomorrow', Yesterday: 'yesterday' })[formatDate(d)] || shortDate(d);
   app.deadlineTextEl.textContent =
-    `“${app.plainTitle(task.title)}” is due ${when(task.due_date)}. Starting it ${when(day)} moves the deadline to that day too.`;
+    `“${plainTitle(task.title)}” is due ${when(task.due_date)}. Starting it ${when(day)} moves the deadline to that day too.`;
   return confirmModal(app.deadlineModal,
     document.getElementById('task-deadline-confirm' + app.sfx),
     document.getElementById('task-deadline-cancel' + app.sfx));

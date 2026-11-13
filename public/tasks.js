@@ -2,16 +2,28 @@
 // An ES module; zonewiki.js imports it on every page. initTaskApps() starts each
 // task app (.tasks-app) on the page, and one added later (the hidden tasks
 // that a new task from any page loads, actions.js).
+//
+// A task app is put together here (initTasksInstance): its elements, the
+// state its parts share (app.st), what the embed and the address say it
+// shows, and the list's own listeners. What it does is in its parts,
+// js/task*.js, each an initTask…(app) that is handed `app`, uses the others
+// through it (app.render(), app.updateTask(…)) and returns its own functions,
+// which are added to `app`. In the order below: a part's top-level code runs
+// when it is started, so one that calls another while starting comes after
+// it. tests/test_task_app_wiring.py checks that every app.name a part uses
+// is one that is put there, and by one place only.
 
 import TasksCore from './tasks-core.js';
-import { refreshDueBadge } from './js/chrome.js';
 import { linkAutocomplete } from './js/completion.js';
-import { markdownEditor } from './js/mdedit.js';
-import { toggleCheckboxText, wikilinkHref } from './js/mdtext.js';
 import { openLightbox } from './js/page.js';
-import { HIGHLIGHT_CODE, renderFigures } from './js/figures.js';
-import { copyText, keyPrefix, pasteUrlAsLink, putTask } from './js/util.js';
+import { pasteUrlAsLink } from './js/util.js';
 import { openDatePicker } from './js/datepicker.js';
+import { initTaskData } from './js/taskdata.js';
+import { initTaskView } from './js/taskview.js';
+import { initTaskOrder } from './js/taskorder.js';
+import { initTaskChips } from './js/taskchips.js';
+import { initTaskTabs } from './js/tasktabs.js';
+import { initTaskKeys } from './js/taskkeys.js';
 import { initTaskRender } from './js/taskrender.js';
 import { initTaskModal } from './js/taskmodal.js';
 import { initTaskSelect } from './js/taskselect.js';
@@ -19,10 +31,11 @@ import { initTaskMenu } from './js/taskmenu.js';
 import { initTaskDnd } from './js/taskdnd.js';
 import { initTaskTouch } from './js/tasktouch.js';
 import { initTaskSettings } from './js/tasksettings.js';
-import { DATES, LOCALE, attachTagAc, commentStamp, commentWhen, dateOffset, dueDateClass, esc, formatDate, hashWordAtCaret, insertHashTag, isDueNow, noSpacesInTags, noticeFromResponse, placeToast, shortDate, showNotice, startsAfterDeadline, todayStr, urgencyClass } from './js/taskutil.js';
+import { dateOffset, DATES, formatDate, shortDate, showNotice, startsAfterDeadline, todayStr } from './js/taskutil.js';
+import { renderTexts, textsOf } from './js/tasktexts.js';
 
 // Pure task logic lives in tasks-core.js.
-const { dateToStr, addDays, isFocus, byOpenOrder, SORTS, placeInOrder, tagCounts, selectionTags, bulkTagChange, rankTags, sanitizeTagInput, parseFilter, matchesFilter, tagParamToQuery, parseQuickAdd } = TasksCore;
+const { parseFilter, tasksInView, tagParamToQuery } = TasksCore;
 
 
 // Track which instance owns keyboard focus (only one at a time)
@@ -52,71 +65,6 @@ window.addEventListener('pageshow', e => { if (e.persisted) refreshStaleInstance
 let openEdit = null;
 export function openTasksEdit(taskId, opts) {
   return openEdit?.(taskId, opts);
-}
-
-// ── Notes and comments, rendered as pages are ─────────────────────────────
-// The server renders them (POST /api/render-notes, renderNotes in go/render.go: the
-// page renderer, so headings, lists, tables, code, wikilinks and task chips
-// look as on a page). The HTML is kept per text for the page's life and
-// shared by every task list app on it, so each text is fetched once.
-const renderedHtml = { notes: new Map(), comments: new Map() };
-// Until its HTML is here, a text shows as it is (line breaks kept).
-const plainHtml = text => String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;').replace(/\n/g, '<br>');
-// Math and diagrams are not kept rendered: renderFigures draws them in
-// the live list after each draw (from its caches, so without a flash), and
-// a library that failed to load is tried again then.
-function highlightCode(html) {
-  if (!window.hljs || !html.includes('<pre')) return html;
-  const tpl = document.createElement('template');
-  tpl.innerHTML = html;
-  tpl.content.querySelectorAll(HIGHLIGHT_CODE).forEach(el => hljs.highlightElement(el));
-  return tpl.innerHTML;
-}
-// The notes and comments of `taskList`, for renderTexts.
-function textsOf(taskList) {
-  return {
-    notes: taskList.map(t => t?.description).filter(Boolean),
-    comments: taskList.flatMap(t => (t?.comments || []).map(c => c.text)),
-  };
-}
-// Fetch the HTML of the texts not rendered yet; true when there is new.
-// Texts another task list app is fetching already are waited for, not asked
-// again. A failed request caches nothing: the next render asks again.
-const renderInFlight = { notes: new Map(), comments: new Map() };
-async function renderTexts({ notes = [], comments = [] }) {
-  const want = {}, waits = [];
-  for (const [kind, texts] of Object.entries({ notes, comments })) {
-    want[kind] = [];
-    for (const t of new Set(texts)) {
-      if (!t || renderedHtml[kind].has(t)) continue;
-      const pending = renderInFlight[kind].get(t);
-      if (pending) waits.push(pending);
-      else want[kind].push(t);
-    }
-  }
-  let fresh = false;
-  if (want.notes.length || want.comments.length) {
-    const req = (async () => {
-      try {
-        const res = await fetch('/api/render-notes', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(want),
-        });
-        if (!res.ok) return false;
-        const out = await res.json();
-        for (const kind in want) want[kind].forEach((t, i) => renderedHtml[kind].set(t, highlightCode(out[kind][i])));
-        return true;
-      } catch (_) {
-        return false;
-      }
-    })();
-    for (const kind in want) want[kind].forEach(t => renderInFlight[kind].set(t, req));
-    try { fresh = await req; } finally {
-      for (const kind in want) want[kind].forEach(t => renderInFlight[kind].delete(t));
-    }
-  }
-  if (waits.length) fresh = (await Promise.all(waits)).some(Boolean) || fresh;
-  return fresh;
 }
 
 // Start every task list app on the page that hasn't started yet (marked
@@ -175,21 +123,23 @@ const app = {
   st, appEl,
   listEl, sfx, instanceId, cancelBtn, deleteModal, deleteConfirmBtn, deleteCancelBtn,
   deleteTitleEl, deadlineModal, deadlineTextEl, selBar, tasksInstances,
-  addBtn, modal, form, deleteBtn, recTypeSelect, keepCb, privateCb, privateNote, renderedHtml,
-  plainHtml,
+  addBtn, modal, form, deleteBtn, recTypeSelect, keepCb, privateCb, privateNote,
+
   // its functions
-  setStart, boardDivider, clearBoardDropOver, dropOnBucket, planOnDay, applySectionList,
-  planSectionList, sectionDrop, unfoldFor, taskList, showUndo, updateTask, completeTasks,
-  markWontDo, skipOccurrence, deleteWithUndo, filterTasks, boardBuckets, plainTitle,
-  refreshOtherInstances, listTooltip, setExpanded, expandSelected, inScope, dismissUndo,
-  leftViewMessage, keepSnapshot, afterBatchWrite, chipField, createTask, filterDefaultTags,
-  flashTask, highlightCode, textsOf, renderTexts, foldId, toggleDetails, beginComplete,
-  cancelPendingComplete, sectionHTML, sortTasks, linkifyTitle, syncCompletedLink, switchTab,
-  userFiltering, forgetSession, refresh,
+  boardDivider, clearBoardDropOver, dropOnBucket, planOnDay,
+  taskList,
+  filterTasks, boardBuckets,
+  refreshOtherInstances, listTooltip, inScope,
+
+  flashTask,
+
+  forgetSession,
+  scopeQuery, headless,
+  sortSel, planSwitch, densityBtn,
+  filterSearch,
+  tabsEl, completedLink, saveActiveTab,
   // what is set further down, or changes
   get activeTasksInstance() { return activeTasksInstance; },
-  get sectionKey() { return sectionKey; },
-  get OPEN_ORDER() { return OPEN_ORDER; },
   get listSet() { return listSet; },
   get initKeep() { return initKeep; },
   get initPrivate() { return initPrivate; },
@@ -198,15 +148,12 @@ const app = {
   get pendingCompletions() { return pendingCompletions; },
   get LIMIT() { return LIMIT; },
   get tabLabel() { return tabLabel; },
-  get activeSort() { return activeSort; },
-  get EXPAND_ICON() { return EXPAND_ICON; },
-  get MORE_ICON() { return MORE_ICON; },
   get thisYear() { return thisYear; },
-  get SECTIONS() { return SECTIONS; },
+  get initList() { return initList; },
 };
 
 st.tasks = [];
-let completedLoaded = false;
+st.completedLoaded = false;   // the completed tasks are among st.tasks
 st.activeView = 'focus';
 st.draggedId = null;
 st.selectedId  = null;
@@ -216,9 +163,7 @@ st.anchorId    = null;
 // a tap or click on a card adds or drops it, nothing else on the card reacts.
 st.selectMode  = false;
 st.completedLimit = 50;
-let undoTimer  = null;
-let undoToastEl = null;
-let pendingUndoFn = null;
+st.pendingUndo = null;   // what Undo (the toast's button, Ctrl+Z) would run
 const pendingCompletions = new Map(); // taskId → timeoutId
 
 // Plan day board: dragging a task onto a day section sets its start_date;
@@ -364,7 +309,6 @@ listEl.addEventListener('click', e => {
 });
 
 Object.assign(app, initTaskTouch(app));
-const { dropSide, DROP_CLASSES } = app;
 
 // Claim keyboard focus when user interacts with this instance
 // (A page with several task lists shows the selection bar of the active one.)
@@ -407,229 +351,9 @@ const tabLabel = view => tabsEl.querySelector(`[data-view="${view === 'plan' ? '
 const initKeep = appEl?.dataset.initKeep === '1';
 // An embed on a page in the user's private folder: new tasks are private.
 const initPrivate = appEl?.dataset.initPrivate === '1';
-// Compact: one line per task (title, then tags, markers and dates; notes
-// hidden; selecting or a tap expands a task). The default on every tab;
-// the density button and v switch it, remembered per task list and tab in this
-// browser.
-const densityKey = view => 'zone-tasks-compact:' + [location.pathname, appEl?.dataset.initList || '',
-  appEl?.dataset.initTag || '', instanceId, view].join('|');
-function compactFor(view) {
-  try {
-    const stored = localStorage.getItem(densityKey(view));
-    if (stored !== null) return stored === '1';
-  } catch (_) {}
-  return true;
-}
-// Folded Plan sections: a section's header can hide its cards (its count
-// and drop target stay). Remembered per task list in this browser, by section
-// (`foldId`: a day by its distance from today, so "Tomorrow" stays folded
-// as the days go by). A filter shows every section, and a task that has to
-// be seen (a ?task= link, a new task, the due list) unfolds its own.
-const foldKey = () => 'zone-tasks-folded:' + [location.pathname, appEl?.dataset.initList || '',
-  appEl?.dataset.initTag || '', instanceId].join('|');
-function loadFolded() {
-  try { return new Set(JSON.parse(localStorage.getItem(foldKey()) || '[]')); } catch (_) { return new Set(); }
-}
-st.folded = loadFolded();
-function saveFolded() {
-  try { localStorage.setItem(foldKey(), JSON.stringify([...st.folded])); } catch (_) {}
-}
-function foldId(key, today = todayStr()) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return key;
-  return 'day' + Math.round((new Date(key + 'T00:00:00') - new Date(today + 'T00:00:00')) / 86400000);
-}
-function toggleFold(id) {
-  if (st.folded.has(id)) st.folded.delete(id); else st.folded.add(id);
-  saveFolded();
-  render();
-}
-// Unfold the Plan section task `id` sits in; true when that changed anything.
-function unfoldFor(id) {
-  const task = st.tasks.find(t => t.id === id);
-  if (st.activeView !== 'plan' || !task) return false;
-  const fid = foldId(TasksCore.bucketKey(task, todayStr()));
-  if (!st.folded.delete(fid)) return false;
-  saveFolded();
-  render();
-  return true;
-}
+Object.assign(app, initTaskView(app));
+const { toggleFold, unfoldFor, activeSort, applySort, groupKey, applyGroup, applyCompact, expandSelected } = app;
 
-// Open and Plan sorted by deadline or by creation (the Order dropdown; o
-// cycles it) instead of the manual order (TasksCore.SORTS). Nothing reorders
-// in them: ordering is done back in the manual order. Each tab's sort is
-// remembered per task list in this browser.
-const SORT_MODES = ['manual', 'due', 'created'];
-const SORT_TITLES = { manual: 'the manual order', due: 'by deadline', created: 'newest first' };
-const sortKey = () => 'zone-tasks-sort:' + [location.pathname, appEl?.dataset.initList || '',
-  appEl?.dataset.initTag || '', instanceId].join('|');
-let sortModes = {};   // view → 'due' | 'created'; missing: manual
-try { sortModes = JSON.parse(localStorage.getItem(sortKey())) || {}; } catch (_) {}
-// The shown tab's sort, when not the manual order.
-const activeSort = () => (st.activeView === 'open' || st.activeView === 'plan') && SORTS[sortModes[st.activeView]]
-  ? sortModes[st.activeView] : null;
-function applySort() {
-  if (!sortSel) return;
-  sortSel.hidden = st.activeView !== 'open' && st.activeView !== 'plan';
-  sortSel.value = activeSort() || 'manual';
-}
-function setSort(mode) {
-  if (st.activeView !== 'open' && st.activeView !== 'plan') return;
-  if (SORTS[mode]) sortModes[st.activeView] = mode; else delete sortModes[st.activeView];
-  try { localStorage.setItem(sortKey(), JSON.stringify(sortModes)); } catch (_) {}
-  applySort();
-  render();
-}
-// o: Manual → Due date → Created → Manual.
-function cycleSort() {
-  const mode = activeSort() || 'manual';
-  setSort(SORT_MODES[(SORT_MODES.indexOf(mode) + 1) % SORT_MODES.length]);
-}
-sortSel?.addEventListener('change', () => setSort(sortSel.value));
-
-// The Open tab shows every open task, grouped by start date (Plan on: the
-// board, view 'plan') or as one list (Plan off: view 'open', Unsorted ·
-// Sorted, where the manual order is ranked across everything). Plan was a
-// tab of its own until 2026-10; the views keep their names, so `view=plan`
-// and `view=open` links still open the one they always did. The Plan
-// switch (d) toggles. The Open tab opens what plan= says (the settings
-// dialog's Plan; the board without it); a flip of the switch is remembered
-// for this browser tab only (sessionStorage), as the active tab is, so a
-// fresh load is back at the default.
-const isOpenTab = view => view === 'open' || view === 'plan';
-const groupKey = () => 'zone-tasks-group:' + [location.pathname, appEl?.dataset.initList || '',
-  appEl?.dataset.initTag || '', instanceId].join('|');
-const initPlan = appEl?.dataset.initPlan || '';   // [[tasks: plan=on|off]]
-function openGroup() {
-  let stored = null;
-  try { stored = sessionStorage.getItem(groupKey()); } catch (_) {}
-  if (stored === 'list') return 'open';
-  if (stored === 'days') return 'plan';
-  return initPlan === 'off' ? 'open' : 'plan';
-}
-function applyGroup() {
-  if (!planSwitch) return;
-  planSwitch.hidden = !isOpenTab(st.activeView);
-  planSwitch.setAttribute('aria-checked', String(st.activeView === 'plan'));
-}
-function setGroup(group) {
-  if (!isOpenTab(st.activeView)) return;
-  try { sessionStorage.setItem(groupKey(), group); } catch (_) {}
-  switchTab(group === 'list' ? 'open' : 'plan');
-}
-planSwitch?.addEventListener('click', () => setGroup(st.activeView === 'plan' ? 'list' : 'days'));
-// The view a tab opens: Open its remembered grouping (unless already on
-// one of them: a click on the active tab changes nothing).
-const tabView = tab => tab === 'open' && !isOpenTab(st.activeView) ? openGroup() : tab;
-
-st.compact = false;   // the shown tab's (applyCompact)
-function applyCompact(view) {
-  if (view) {
-    st.compact = compactFor(view);
-    st.expandedId = null;
-    st.detailsOpen = detailsMode = false;
-  }
-  appEl?.classList.toggle('tasks-compact', st.compact);
-  densityBtn?.setAttribute('aria-pressed', String(st.compact));
-  if (densityBtn) {
-    const label = st.compact ? 'Full cards' : 'One line per task';
-    densityBtn.title = `${label} (v)`;
-    densityBtn.setAttribute('aria-label', label);
-  }
-}
-// In compact view one task at a time is expanded: the selected one (a
-// click, arrows, j/k; setSelected), or on touch the one tapped first (a tap
-// on it then opens the modal), shows its whole title, wrapped, when the
-// line cuts it off (titleCut); notes and comments stay hidden. Its details
-// (notes, latest comments: the rest of a full card) open on request only
-// (detailsOpen): 📝, 💬 or the expand button on the line, or → / l;
-// ← / h closes them, Esc closes both. Opened, they stay open while the
-// selection moves on (detailsMode): the next selected task shows its
-// details too, until they are closed. Enter opens the modal, as on full
-// cards.
-st.expandedId = null;
-st.detailsOpen = false;
-let detailsMode = false;
-// The expand button of a compact line with details: a chevron, turned up
-// while they are open.
-const EXPAND_ICON = '<svg viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' +
-  '<path d="M4 6l4 4 4-4"/></svg>';
-// ⋯ on cards: three dots drawn, so they sit on the line's centre whatever
-// the font (the ⋯ character sat low in some).
-const MORE_ICON = '<svg viewBox="0 0 16 16" width="1em" height="1em" aria-hidden="true" fill="currentColor">' +
-  '<circle cx="2.5" cy="8" r="1.1"/><circle cx="8" cy="8" r="1.1"/><circle cx="13.5" cy="8" r="1.1"/></svg>';
-const cardEl = id => listEl?.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
-// Whether the line cuts the task's title off (selecting it then shows it
-// whole). One whose title fits stays a line.
-function titleCut(id) {
-  const title = cardEl(id)?.querySelector('.task-content');
-  return !!title && title.scrollWidth > title.clientWidth + 1;
-}
-// Whether the task has details a compact line hides: notes or comments.
-const hasDetails = id => !!cardEl(id)?.querySelector('.task-desc, .task-card-comments');
-function setExpanded(id, details = false) {
-  st.expandedId = id;
-  st.detailsOpen = !!id && details;
-  listEl?.querySelectorAll('.task-item').forEach(el => {
-    const on = el.dataset.id === id;
-    if (!on && el.classList.contains('task-expanded') && st.pressedCard && el !== st.pressedCard) collapseLater(el);
-    else {
-      el.classList.toggle('task-expanded', on);
-      el.classList.toggle('task-details', on && st.detailsOpen);
-      el.querySelector('.task-expand-btn')?.setAttribute('aria-expanded', String(on && st.detailsOpen));
-    }
-  });
-}
-// 📝, 💬 or →/←: open or close a compact task's details, selecting it.
-function toggleDetails(id, open = !(st.expandedId === id && st.detailsOpen)) {
-  if (!st.compact || !hasDetails(id)) return false;
-  detailsMode = open;
-  if (st.selectedIds.size !== 1 || st.selectedId !== id) setSelected(id);
-  // Closing keeps the whole title (a short one looks the same as its line).
-  setExpanded(id, open);
-  return true;
-}
-// A compact task just selected: its details while they are open on the
-// way through (detailsMode), else its whole title if the line cuts it off.
-function expandSelected(id) {
-  if (detailsMode && hasDetails(id)) setExpanded(id, true);
-  else if (titleCut(id)) setExpanded(id);
-}
-// A mouse press on another card leaves the expanded one open until a
-// double-click is over (pressedCard: the card a mousedown is selecting) and
-// then closes it with a short animation. Collapsing at once would pull a
-// card below it up under the pointer, so a double-click's second click hit
-// another card; a card above closes the same way, for one behaviour.
-const COLLAPSE_DELAY_MS = 400;
-st.pressedCard = null;
-let collapsing = null;   // { el, timer }
-function collapseLater(el) {
-  if (collapsing?.el === el) return;   // already waiting (the press runs setExpanded twice, a double-click two presses)
-  finishCollapse();
-  collapsing = { el, timer: setTimeout(finishCollapse, COLLAPSE_DELAY_MS) };
-}
-function finishCollapse() {
-  if (!collapsing) return;
-  const { el, timer } = collapsing;
-  collapsing = null;
-  clearTimeout(timer);
-  if (!el.isConnected || el.dataset.id === st.expandedId) return;
-  const from = el.offsetHeight;
-  el.classList.remove('task-expanded', 'task-details');
-  el.querySelector('.task-expand-btn')?.setAttribute('aria-expanded', 'false');
-  const to = el.offsetHeight;
-  if (from > to && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    el.animate([{ height: `${from}px`, overflow: 'hidden' }, { height: `${to}px`, overflow: 'hidden' }],
-               { duration: 150, easing: 'ease-out' });
-  }
-}
-function toggleCompact() {
-  st.expandedId = null;
-  st.detailsOpen = detailsMode = false;
-  st.compact = !st.compact;
-  try { localStorage.setItem(densityKey(st.activeView), st.compact ? '1' : '0'); } catch (_) {}
-  applyCompact();
-}
-densityBtn?.addEventListener('click', toggleCompact);
 function cleanList(name) {
   return String(name || '').trim().replace(/^#/, '').trim().toLowerCase()
     .replace(/\s+/g, '-').replace(/^-+|-+$/g, '');
@@ -672,531 +396,24 @@ function forgetSession() {
   try { sessionStorage.removeItem(tabStorageKey); sessionStorage.removeItem(groupKey()); } catch (_) {}
 }
 
-// ── Undo toast ────────────────────────────────────────────────────────────
-
-function dismissUndo() {
-  if (undoTimer) { clearTimeout(undoTimer); undoTimer = null; }
-  if (undoToastEl) { undoToastEl.remove(); undoToastEl = null; }
-  pendingUndoFn = null;
-}
-
-// An action that writes first and arms its undo after the response calls
-// dismissUndo() before the write: until its own undo is armed, Ctrl+Z (or
-// the old toast's button) would otherwise undo the action before it.
-function showUndo(msg, undoFn) {
-  dismissUndo();
-  pendingUndoFn = undoFn;
-  const el = document.createElement('div');
-  el.className = 'raw-toast task-undo-toast';
-  const span = document.createElement('span');
-  span.textContent = msg;
-  const btn = document.createElement('button');
-  btn.className = 'btn task-undo-btn';
-  btn.textContent = 'Undo';
-  btn.addEventListener('click', () => { const fn = pendingUndoFn; dismissUndo(); fn?.(); });
-  el.appendChild(span);
-  el.appendChild(btn);
-  placeToast(el);
-  undoToastEl = el;
-  undoTimer = setTimeout(dismissUndo, 6000);
-}
-
-function triggerUndo() {
-  if (!pendingUndoFn) return;
-  const fn = pendingUndoFn;
-  dismissUndo();
-  fn();
-}
-
-// ── API ────────────────────────────────────────────────────────────────────
-
-// /api/tasks returns only open tasks, so replacing `tasks` drops the
-// completed ones: they count as not loaded again (tasksGen tells a completed
-// load in flight that its merge target is gone).
-let tasksGen = 0;
-async function fetchTasks() {
-  const res = await fetch('/api/tasks');
-  const fetched = (await res.json()).filter(inScope);
-  await renderTexts(textsOf(fetched));
-  st.tasks = fetched;
-  tasksGen++;
-  completedLoaded = false;
-  render();
-  if (st.activeView === 'completed') fetchCompleted();
-  refreshCompletedCount();
-}
-
-// Completed is not a tab: a link under the list opens it, labelled with the
-// number of completed tasks. The count comes from the server because the
-// completed tasks themselves are only loaded when the view is opened.
-let completedCount = null;
-async function refreshCompletedCount() {
-  try {
-    const res = await fetch('/api/tasks/completed-count' + scopeQuery());
-    if (res.ok) { completedCount = (await res.json()).count; syncCompletedLink(); }
-  } catch (_) {}
-}
-
-// Reload this instance from the server, honoring its current tab. Used to
-// pull in changes made by another embed on the same page.
-async function refresh() {
-  await fetchTasks();
-  if (st.activeView === 'completed') await fetchCompleted();
-}
-
-let completedLoading = null;
-function fetchCompleted() {
-  if (completedLoaded) return Promise.resolve();
-  // One request at a time: the filter field asks for these on every render.
-  return completedLoading ||= loadCompleted().finally(() => { completedLoading = null; });
-}
-async function loadCompleted() {
-  let completed, gen;
-  // The page load fetches open and completed tasks at the same time (the
-  // filter field, restored by the browser on reload, asks for completed
-  // matches). If fetchTasks replaced `tasks` meanwhile, merging into it would
-  // be lost: fetch again. This race made the match count flip between
-  // reloads.
-  loadCompletedYears();
-  do {
-    gen = tasksGen;
-    const res = await fetch('/api/tasks/completed' + (st.completedYear ? `?year=${st.completedYear}` : ''));
-    completed = (await res.json()).filter(inScope);
-    await renderTexts(textsOf(completed));
-  } while (gen !== tasksGen);
-  const existingIds = new Set(st.tasks.map(t => t.id));
-  for (const t of completed) {
-    if (!existingIds.has(t.id)) st.tasks.push(t);
-  }
-  completedLoaded = true;
-  render();
-}
-
-async function loadCompletedYears() {
-  try {
-    const res = await fetch('/api/tasks/completed-years' + scopeQuery());
-    if (res.ok) { st.completedYears = (await res.json()).years; if (st.activeView === 'completed') render(); }
-  } catch (_) {}
-}
-
-// Show another year in Completed: drop the loaded completed tasks (the
-// match count in the other views counts whatever is loaded) and fetch that
-// year's. tasksGen tells a load in flight that its year is gone.
-function setCompletedYear(year) {
-  year = year === thisYear ? '' : year;
-  if (year === st.completedYear) return;
-  st.completedYear = year;
-  st.tasks = st.tasks.filter(t => !t.completed_at);
-  tasksGen++;
-  completedLoaded = false;
-  if (st.activeView === 'completed') fetchCompleted();
-  render();
-}
-
-async function createTask(data) {
-  const res = await fetch('/api/tasks', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  if (res.ok) {
-    const task = await res.json();
-    await renderTexts(textsOf([task]));
-    const msg = leftViewMessage(null, task);
-    if (inScope(task)) st.tasks.push(task);
-    if (msg && !headless) showNotice(msg);
-    render();
-    refreshDueBadge(); refreshCompletedCount();
-    refreshOtherInstances(instanceId);
-    return task;
-  }
-  await noticeFromResponse(res, 'Could not create task');
-  return null;
-}
-
-async function updateTask(id, data) {
-  const res = await fetch(`/api/tasks/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  if (res.ok) {
-    const updated = await res.json();
-    await renderTexts(textsOf([updated]));
-    const idx = st.tasks.findIndex(t => t.id === id);
-    if (idx !== -1) {
-      const before = st.tasks[idx];
-      const msg = leftViewMessage(before, updated);
-      if (inScope(updated)) st.tasks[idx] = updated;
-      else st.tasks.splice(idx, 1);
-      if (msg) offerUndoLeave(msg, [[id, editSnapshot(before)]]);
-    }
-    // Completion/skip/reopen of a recurring task spawns or removes an
-    // instance server-side — re-fetch to pick it up.
-    if (updated.recurrence && (data.completed || data.skip || 'wont_do' in data)) {
-      await fetchTasks();
-    } else {
-      render();
-    }
-    refreshDueBadge(); refreshCompletedCount();
-    refreshOtherInstances(instanceId);
-    return updated;
-  }
-  await noticeFromResponse(res, 'Update rejected');
-  return null;
-}
-
-// A task saved out of a list view, into another list or none; say where it went.
-function listMovedNotice(task) {
-  const name = taskList(task);
-  return name ? `Saved to list “${name}”.` : 'Saved; it no longer shows here.';
-}
-
-// Why a saved task left this view, or null if it still shows: it went
-// into a separate list (or out of this one), or it no longer passes the
-// filter (e.g. #sam removed on Sam's page). `before` null: a new task.
-function leftViewMessage(before, after) {
-  if (!inScope(after)) return listMovedNotice(after);
-  const f = parseFilter(filterQuery());
-  if ((!before || matchesFilter(before, f)) && !matchesFilter(after, f)) {
-    return 'Saved; it no longer shows here.';
-  }
-  return null;
-}
-
-// Everything an edit-modal save can change, as PUT fields: undoing a save
-// restores the task as it was, not just the field that moved it. The old
-// history goes too, so the undo leaves no trace.
-function editSnapshot(t) {
-  const rec = t.recurrence;
-  return {
-    title: t.title, description: t.description || '', tags: t.tags || [],
-    due_date: t.due_date || null, start_date: t.start_date || null, keep: !!t.keep,
-    rec_type: rec?.type || null, rec_interval: rec?.interval || 1, rec_from: rec?.from || 'due',
-    last_done: t.last_done || null, sort_order: t.sort_order ?? null,
-    recurrence: rec ?? null, history: t.history || [],
-  };
-}
-
-// A save took tasks out of this view: say where they went, with an undo
-// that PUTs each [id, fields] back. The tasks are no longer in `tasks`, so
-// the tasks reloads to bring them back.
-function offerUndoLeave(msg, restores) {
-  if (headless) return;
-  showUndo(msg, async () => {
-    for (const [id, fields] of restores) {
-      const res = await fetch(`/api/tasks/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(fields),
-      });
-      if (!res.ok) { await noticeFromResponse(res, 'Undo failed'); break; }
-    }
-    await fetchTasks();
-    refreshDueBadge();
-    refreshOtherInstances(instanceId);
-  });
-}
-
-async function deleteTask(id) {
-  const res = await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
-  if (res.ok) {
-    st.tasks = st.tasks.filter(t => t.id !== id);
-    render();
-    refreshDueBadge(); refreshCompletedCount();
-    refreshOtherInstances(instanceId);
-  }
-}
-
-async function deleteTasks(ids) {
-  const res = await fetch('/api/tasks/batch-delete', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ids }),
-  });
-  if (res.ok) {
-    const idSet = new Set(ids);
-    st.tasks = st.tasks.filter(t => !idSet.has(t.id));
-    render();
-    refreshDueBadge(); refreshCompletedCount();
-    refreshOtherInstances(instanceId);
-  }
-}
-
-function beginComplete(id, li) {
-  const cb = li?.querySelector('.task-checkbox input');
-  if (cb) cb.checked = true;
-  if (li) li.classList.add('task-completing');
-  if (pendingCompletions.has(id)) clearTimeout(pendingCompletions.get(id));
-  const tid = setTimeout(() => {
-    pendingCompletions.delete(id);
-    // A re-render since the tick replaced the card: fade out the current one.
-    li = listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
-    if (li) li.classList.add('task-completing-out');
-    setTimeout(async () => {
-      const task = st.tasks.find(t => t.id === id);
-      const before = task?.keep && keepSnapshot(task);
-      if (before) dismissUndo();
-      const done = await updateTask(id, { completed: true });
-      // A keep task is not archived, so Completed can't reopen it: offer undo.
-      if (done && before) showUndo(`“${plainTitle(task.title)}” done`, () => updateTask(id, before));
-    }, 400);
-  }, 4600);
-  pendingCompletions.set(id, tid);
-}
-
-function cancelPendingComplete(id) {
-  if (!pendingCompletions.has(id)) return false;
-  clearTimeout(pendingCompletions.get(id));
-  pendingCompletions.delete(id);
-  const li = listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
-  if (li) li.classList.remove('task-completing', 'task-completing-out');
-  const cb = li?.querySelector('.task-checkbox input');
-  if (cb) cb.checked = false;
-  return true;
-}
-
-// What completing a keep task changes (mirrors keepDone in go/taskstore.go), so
-// undo can put it back.
-function keepSnapshot(t) {
-  return { start_date: t.start_date || null, due_date: t.due_date || null,
-           last_done: t.last_done || null, history: t.history || [] };
-}
-
-async function completeTasks(ids, completed) {
-  const res = await fetch('/api/tasks/batch-complete', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ids, completed }),
-  });
-  if (res.ok) {
-    // Re-fetch to capture any spawned recurring tasks
-    await fetchTasks();
-    refreshDueBadge(); refreshCompletedCount();
-    refreshOtherInstances(instanceId);
-  }
-}
-
-
-async function afterBatchWrite() {
-  await fetchTasks();
-  refreshDueBadge(); refreshCompletedCount();
-  refreshOtherInstances(instanceId);
-}
-
-// ── Card actions (shared by buttons, the ⋯ menu and the keyboard) ────────
-
-// Undo sends the task's old history back with the old fields (the server
-// replaces what the undone change logged), so the log shows no trace of it.
-// An undo that moves a date back also sends the old recurrence, so the
-// series keeps its day of month (moving a date re-anchors it).
-const oldHistory = id => st.tasks.find(t => t.id === id)?.history || [];
-
-function markWontDo(id) {
-  const history = oldHistory(id);
-  updateTask(id, { wont_do: true });
-  showUndo("Marked won't do", () => updateTask(id, { wont_do: false, history }));
-}
-
-function skipOccurrence(id) {
-  const history = oldHistory(id);
-  updateTask(id, { skip: true });
-  showUndo('Occurrence skipped', () => updateTask(id, { wont_do: false, history }));
-}
-
-function setStart(id, startDate) {
-  const task = st.tasks.find(t => t.id === id);
-  if (startsAfterDeadline(task, startDate)) return planOnDay(id, startDate);
-  const prev = task?.start_date ?? null;
-  const recurrence = task?.recurrence ?? null;
-  const history = oldHistory(id);
-  updateTask(id, { start_date: startDate });
-  const msg = startDate ? `Starts ${formatDate(startDate)}` : 'Start date cleared';
-  showUndo(msg, () => updateTask(id, { start_date: prev, recurrence, history }));
-}
-
-// Confirm, delete, and offer undo that restores the full snapshots (ids and
-// every field). beforeDelete runs after confirmation.
-async function deleteWithUndo(ids, beforeDelete) {
-  const count = ids.length;
-  const title = count === 1 ? plainTitle(st.tasks.find(t => t.id === ids[0])?.title) : '';
-  if (!await confirmDelete(title, count)) return;
-  const snapshot = ids.map(id => st.tasks.find(t => t.id === id)).filter(Boolean);
-  beforeDelete?.();
-  dismissUndo();
-  await (count === 1 ? deleteTask(ids[0]) : deleteTasks(ids));
-  showUndo(count === 1 ? 'Task deleted' : `${count} tasks deleted`, async () => {
-    await fetch('/api/tasks/restore', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tasks: snapshot }),
-    });
-    await afterBatchWrite();
-  });
-}
+Object.assign(app, initTaskData(app));
+const { dismissUndo, showUndo, fetchTasks, refresh, fetchCompleted, setCompletedYear, updateTask, oldHistory } = app;
 
 Object.assign(app, initTaskMenu(app));
-const { openTaskMenu, headerTasksMenu, postReorder, confirmDelete, confirmDeadlineMove } = app;
+const { headerTasksMenu, confirmDeadlineMove } = app;
 
 // ── Filtering ──────────────────────────────────────────────────────────────
 
 // `query` defaults to the filter field; the tag autocomplete passes the
 // field minus the word being typed.
 function filterTasks(query = filterQuery()) {
-  const today = todayStr();
-  let filtered = st.tasks;
-
-  // Filter field: text search plus '#tag' words (TasksCore.parseFilter).
-  const f = parseFilter(query);
-  if (f.text || f.tagGroups.length || f.excludeTags.length) filtered = filtered.filter(t => matchesFilter(t, f));
-
-  // Tab filter
-  if (st.activeView === 'focus') {
-    filtered = filtered.filter(t => !t.completed_at && isFocus(t, today));
-  } else if (st.activeView === 'plan') {
-    // Plan is a day board: show all open tasks grouped by start date; tasks
-    // without one go to the Unplanned section so they can be dragged into
-    // the week (TasksCore.boardBuckets).
-    filtered = filtered.filter(t => !t.completed_at);
-  } else if (st.activeView === 'completed') {
-    filtered = filtered.filter(t => !!t.completed_at);
-  } else {
-    // Open: every open task. Tasks still waiting for a day are the Plan
-    // board's Unplanned section.
-    filtered = filtered.filter(t => !t.completed_at);
-  }
-
-  return filtered;
+  return tasksInView(st.tasks, parseFilter(query), st.activeView, todayStr());
 }
 
-// ── Sorting ────────────────────────────────────────────────────────────────
-
-// Per-tab sort comparators. Open and Focus sort with TasksCore.byOpenOrder
-// in render(), and Plan with TasksCore.boardBuckets.
-const TAB_SORT = {
-  completed: (a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''),
-};
-
-// Open and Focus share one manual order, sort_order: Focus is Open
-// filtered to what is in Focus, so both have the same two sections under a
-// heading (sectionHTML): Unsorted (no sort_order, newest first) · Sorted
-// (sort_order). A move works on the visible list with both headings as
-// slots in it (sectionList): the side of the Sorted heading a task lands on
-// decides its section. So dropping on that heading moves a task across it,
-// and moves within Unsorted change nothing.
-const SECTIONS = {
-  open:  { field: 'sort_order', top: 'unsorted', bottom: 'sorted' },
-  focus: { field: 'sort_order', top: 'unsorted', bottom: 'sorted' },
-};
-const sectionKey = zone => '#' + zone;  // a heading's slot (task ids never start with #)
-// Every task in the manual order, including ones the view or filter hides.
-function manualOrderIds(s) {
-  return st.tasks.filter(t => !t.completed_at && t[s.field] != null)
-    .sort((a, b) => a[s.field] - b[s.field]).map(t => t.id);
-}
-function sectionList() {
-  const s = SECTIONS[st.activeView];
-  const byId = new Map(st.tasks.map(t => [t.id, t]));
-  const ids = visibleItems().map(el => el.dataset.id);
-  const manual = ids.filter(id => byId.get(id)[s.field] != null);
-  const fixed = ids.filter(id => byId.get(id)[s.field] == null);
-  return [sectionKey(s.top), ...fixed, sectionKey(s.bottom), ...manual];
-}
-// Save a rearranged sectionList() in which the tasks `moved` changed place
-// (TasksCore.placeInOrder: every other task keeps its place, hidden ones too).
-function applySectionList(list, moved, s = SECTIONS[st.activeView]) {
-  const cut = list.indexOf(sectionKey(s.bottom));
-  saveOrder(s, placeInOrder(manualOrderIds(s), list.slice(cut + 1), moved));
-}
-// Save the manual order `order`; tasks of the old order missing from it
-// become Unsorted.
-function saveOrder(s, order) {
-  const old = manualOrderIds(s);
-  const kept = new Set(order);
-  const removed = old.filter(id => !kept.has(id));
-  if (!removed.length && order.join() === old.join()) return;
-  const byId = new Map(st.tasks.map(t => [t.id, t]));
-  order.forEach((id, i) => { byId.get(id)[s.field] = i; });
-  removed.forEach(id => { byId.get(id)[s.field] = null; });
-  postReorder({ order, updates: removed.map(id => ({ id, [s.field]: null })) });
-  render();
-}
-
-// Plan: every section (`data-ordered`, in the manual order) shows Open's
-// order, its Unsorted tasks first under their label, and moves in it follow
-// Open's rules: planSectionList is the section as Open lists its sections,
-// and applySectionList / sectionKeyMove do the rest.
-const OPEN_ORDER = SECTIONS.open;
-function planSectionIds(div) {
-  const ids = [];
-  for (let el = div.nextElementSibling; el && !el.classList.contains('board-day-divider'); el = el.nextElementSibling) {
-    if (el.classList.contains('task-item')) ids.push(el.dataset.id);
-  }
-  return ids;
-}
-// A Plan section as Open lists its sections, the labels' slots included:
-// [#unsorted, …its Unsorted ids, #sorted, …its Sorted ids]. What follows
-// #sorted is the section's share of the manual order (applySectionList):
-// a task moved there is ranked, one moved above it leaves the order.
-function planSectionList(div) {
-  const byId = new Map(st.tasks.map(t => [t.id, t]));
-  const ids = planSectionIds(div);
-  return [sectionKey('unsorted'), ...ids.filter(id => byId.get(id)?.sort_order == null),
-          sectionKey('sorted'), ...ids.filter(id => byId.get(id)?.sort_order != null)];
-}
-// Drop `draggedId` on a task (`key`, `side`: before or after it, by the
-// pointer, dropSide) or on a section heading (no side: it takes the
-// heading's slot, so dropping on the Sorted heading puts it first there).
-function sectionDrop(key, side) {
-  const list = sectionList();
-  const from = list.indexOf(st.draggedId), at = list.indexOf(key);
-  if (from === -1 || at === -1 || from === at) return;
-  list.splice(from, 1);
-  const to = side ? list.indexOf(key) + (side === 'after' ? 1 : 0) : at;
-  list.splice(to, 0, st.draggedId);
-  applySectionList(list, [st.draggedId]);
-}
-// Ctrl+Shift+↑/↓: the selection moves one slot, the headings counting as
-// slots, so the top task of Sorted crosses into Unsorted. Unsorted tasks
-// can't move within it; moving down takes them straight across the heading.
-function sectionKeyMove(direction, list = sectionList(), s = SECTIONS[st.activeView]) {
-  const byId = new Map(st.tasks.map(t => [t.id, t]));
-  const idxs = list.map((id, i) => st.selectedIds.has(id) ? i : -1).filter(i => i >= 0);
-  if (!idxs.length) return;
-  const group = idxs.map(i => list[i]);
-  const rest = list.filter(id => !st.selectedIds.has(id));
-  if (group.every(id => byId.get(id)[s.field] == null)) {
-    if (direction === 'up') return;  // away from the manual order
-    rest.splice(rest.indexOf(sectionKey(s.bottom)) + 1, 0, ...group);
-  } else if (direction === 'up') {
-    const above = list[idxs[0] - 1];
-    if (above === undefined || above === sectionKey(s.top)) return;
-    rest.splice(rest.indexOf(above), 0, ...group);
-  } else {
-    const below = list[idxs[idxs.length - 1] + 1];
-    if (below === undefined) return;
-    rest.splice(rest.indexOf(below) + 1, 0, ...group);
-  }
-  applySectionList(rest, group, s);
-}
-
-// A section heading on Open and Focus: the light label of a Plan section's
-// Unsorted / Sorted (.plan-subdivider), so the two tabs look the same and the
-// labels never read as a day heading. It takes drops: an empty section is
-// only this row.
-function sectionHTML(zone, label, count) {
-  const empty = count ? '' : ' board-day--empty';
-  return `<li class="plan-subdivider list-section${empty}" data-section="${zone}">` +
-    `<span>${label}</span><span class="board-day-count">${count}</span></li>`;
-}
-
-function sortTasks(tasksArr) {
-  const fixed = TAB_SORT[st.activeView];
-  return fixed ? [...tasksArr].sort(fixed) : [...tasksArr];
-}
+Object.assign(app, initTaskOrder(app));
 
 Object.assign(app, initTaskSelect(app));
-const { openBulkTagModal, updateSelectionClasses, inSelection, toggleSelection, selectAllVisible, clearSelection, enterSelectMode, exitSelectMode, syncSelBar, runSelectionAction, startOn, completeMany, setSelected, extendSelection, visibleItems } = app;
+const { toggleSelection, syncSelBar, setSelected } = app;
 
 // ── Rendering ──────────────────────────────────────────────────────────────
 // Day-board grouping lives in TasksCore; bind it to the current date here.
@@ -1205,44 +422,7 @@ function boardBuckets(list) {
 }
 
 Object.assign(app, initTaskRender(app));
-const { htmlOf, render } = app;
-// A link to another site opens in a new tab (as go/markdown.go's
-// external marks them in pages); a full URL to Zone itself stays.
-const extAttrs = href => {
-  try {
-    const u = new URL(href, location.href);
-    return /^https?:$/.test(u.protocol) && u.host !== location.host
-      ? ' target="_blank" rel="noopener noreferrer"' : '';
-  } catch (_) { return ''; }
-};
-
-// Links in a title: [[wikilinks]], [label](url) (a pasted URL with the
-// name the dialog asked for) and bare URLs; the rest is text. A link to
-// anything but the web, mail or this wiki (javascript: …) stays text.
-const TITLE_LINK_RE = /\[\[([^\[\]]+)\]\]|\[([^\[\]]*)\]\(([^()\s]+)\)|(https?:\/\/[^\s<>"]+)/g;
-const SAFE_HREF_RE = /^(?:https?:|mailto:|\/|#|(?![a-z][a-z0-9+.-]*:))/i;
-function linkifyTitle(text) {
-  let out = '', last = 0;
-  for (const m of text.matchAll(TITLE_LINK_RE)) {
-    let href, label, cls = 'task-link';
-    if (m[1] !== undefined) { ({ href, label } = wikilinkHref(m[1])); cls += ' wikilink'; }
-    else if (m[3] !== undefined) { href = m[3]; label = m[2] || m[3]; }
-    else { href = label = m[4]; }
-    if (!SAFE_HREF_RE.test(href)) continue;
-    out += esc(text.slice(last, m.index)) +
-      `<a href="${esc(href)}" class="${cls}"${extAttrs(href)}>${esc(label)}</a>`;
-    last = m.index + m[0].length;
-  }
-  return out + esc(text.slice(last));
-}
-// A title as text (menus, toasts, dialogs): its links reduced to their
-// labels, as mdtext.plain_task_title does for the server.
-function plainTitle(text) {
-  return String(text || '').replace(TITLE_LINK_RE, (all, wiki, label, url, bare) =>
-    wiki !== undefined ? wikilinkHref(wiki).label : url !== undefined ? (label || url) : bare);
-}
-
-
+const { render } = app;
 // Page completion in the title ([[ and [text](, linkAutocomplete in
 // js/completion.js, shared with the editor).
 const titleInput = document.getElementById('task-edit-title' + sfx);
@@ -1255,454 +435,19 @@ if (titleInput) {
   titleInput.addEventListener('paste', e => pasteUrlAsLink(titleInput, e));
 }
 
-// ── Tabs ───────────────────────────────────────────────────────────────────
-// Segmented control: one button per view, data-view = the view's name.
+Object.assign(app, initTaskChips(app));
 
-const tabButtons = () => Array.from(tabsEl.querySelectorAll('[data-view]'));
-const VIEWS = ['open', 'plan', 'focus', 'completed'];
-// The tab to return to from Completed (the link's "back" state).
-let lastTab = 'focus';
-
-// While the filter field is in use, the link counts the completed tasks it
-// matches ("✓ 2 matches in Completed →"), so a search that comes up empty
-// here still shows where the task went. That needs the completed tasks,
-// which are otherwise only loaded when the view is opened. The unfiltered
-// total is never shown while filtering: it would read as the number of
-// completed tasks the filter leaves.
-function syncCompletedLink() {
-  if (!completedLink) return;
-  let matches = null;
-  const f = parseFilter(filterQuery());
-  const filtering = st.activeView !== 'completed' && (f.text || f.tagGroups.length || f.excludeTags.length);
-  if (filtering) {
-    if (!completedLoaded) { fetchCompleted(); }
-    else {
-      matches = st.tasks.filter(t => t.completed_at && matchesFilter(t, f)).length;
-    }
-  }
-  completedLink.classList.toggle('has-matches', matches > 0);
-  completedLink.textContent = st.activeView === 'completed' ? `← Back to ${tabLabel(lastTab)}`
-    : matches ? `✓ ${matches} ${matches === 1 ? 'match' : 'matches'} in Completed →`
-    : matches === 0 ? '✓ No matches in Completed →'
-    : filtering ? '✓ Completed →'
-    : `✓ Completed${completedCount != null ? ` (${completedCount})` : ''} →`;
-}
-
-// Mark the view's button active (no side effects — used during init too).
-function markActiveTab(view) {
-  const tab = view === 'plan' ? 'open' : view;   // Open grouped by day
-  tabButtons().forEach(b => {
-    const on = b.dataset.view === tab;
-    b.classList.toggle('active', on);
-    b.setAttribute('aria-selected', on ? 'true' : 'false');
-  });
-}
-
-function switchTab(view) {
-  if (!VIEWS.includes(view)) return;
-  if (st.selectMode) exitSelectMode();
-  if (view !== 'completed') lastTab = view;
-  st.activeView = view;
-  applyCompact(view);
-  applySort();
-  applyGroup();
-  // Back from an earlier year: the other views count this year's matches.
-  if (view !== 'completed' && st.completedYear) setCompletedYear('');
-  markActiveTab(view);   // Completed has no tab: none is marked
-  syncCompletedLink();
-  // Keyboard focus follows the active view (Tab-cycling from a focused tab
-  // would otherwise leave the focus ring on the previous one).
-  if (tabsEl.contains(document.activeElement)) {
-    tabsEl.querySelector(`[data-view="${view === 'plan' ? 'open' : view}"]`)?.focus();
-  }
-  saveActiveTab(st.activeView);
-  if (st.activeView === 'completed') fetchCompleted();
-  render();
-}
-
-tabsEl.addEventListener('click', e => {
-  const btn = e.target.closest('[data-view]');
-  if (btn) switchTab(tabView(btn.dataset.view));
-});
-completedLink?.addEventListener('click', () => {
-  switchTab(st.activeView === 'completed' ? lastTab : 'completed');
-  if (st.activeView === 'completed') tabsEl.scrollIntoView({ block: 'nearest' });
-});
-
-// The filter: its chips (completed tag words) plus the text typed after them.
-// The embed's own filter words (list= and tag=) are locked: the page says
-// what it shows. A URL ?tag= (e.g. g t) gives ordinary chips.
-const embedFilterWords = [
-  ...(initList ? ['#' + initList] : []),
-  ...tagParamToQuery(appEl?.dataset.initTag || '').split(' ').filter(Boolean),
-];
-// A chip that is just a separate list's tag (#groceries) is marked as a list.
-const filterChips = filterSearch && chipField(filterSearch, {
-  onChange: () => render(), locked: embedFilterWords,
-  listWord: w => w.startsWith('#') && listSet.has(w.slice(1).toLowerCase()) });
-function filterQuery() {
-  return [...(filterChips?.words() || []), filterSearch?.value || ''].join(' ').trim();
-}
-// Whether the viewer filters: words beyond the embed's locked ones (a
-// list= tasks always has its list's tag in the field, and isn't filtered).
-function userFiltering() {
-  const locked = new Set(embedFilterWords.map(w => w.toLowerCase()));
-  return (filterChips?.words() || []).some(w => !locked.has(w.toLowerCase())) || !!filterSearch?.value.trim();
-}
-
-if (filterSearch) {
-  // Debounced — render() rebuilds the whole list, too heavy per keystroke.
-  let searchTimer = null;
-  filterSearch.addEventListener('input', () => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(render, 150);
-  });
-  // Esc leaves the field (an open tag dropdown takes the first Esc).
-  filterSearch.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { e.preventDefault(); filterSearch.blur(); }
-  });
-}
-
-// ── Tag chips ──────────────────────────────────────────────────────────────
-// A completed tag becomes a chip in front of the field's text: it can't be
-// edited, only removed (its × or Backspace at the start of the field). The
-// input is wrapped in a .chip-input box that looks like the field. Used by
-// the filter field (chips are filter words: #a, -#b, #a|b) and the edit
-// modal's Tags field (chips are tag names, shown as #name). `locked` words
-// (an embed's filter words, case ignored) are always there and have no ×.
-// `listWord(w)` marks a separate list's tag: such chips come first, with a
-// list icon, a tint and a tooltip naming the list's page.
-function chipField(input, { label = w => w, onChange, locked = [], listWord = () => false } = {}) {
-  const lockedSet = new Set(locked.map(w => w.toLowerCase()));
-  const isLocked = w => lockedSet.has(w.toLowerCase());
-  const box = document.createElement('div');
-  box.className = 'chip-input';
-  input.parentNode.insertBefore(box, input);
-  box.appendChild(input);
-  let words = [];
-  function draw() {
-    box.querySelectorAll('.tag-chip').forEach(c => c.remove());
-    words.forEach((w, i) => {
-      const chip = document.createElement('span');
-      chip.className = 'tag-chip';
-      const text = document.createElement('span');
-      text.className = 'tag-chip-label';
-      text.textContent = label(w);
-      chip.appendChild(text);
-      const isList = listWord(w);
-      if (isList) {
-        chip.classList.add('tag-chip-list');
-        chip.title = listTooltip(w);
-      }
-      if (isLocked(w)) {
-        chip.classList.add('tag-chip-locked');
-        if (!isList) chip.title = 'Set by this page';
-        box.insertBefore(chip, input);
-        return;
-      }
-      const x = document.createElement('button');
-      x.type = 'button';
-      x.className = 'tag-chip-x';
-      x.tabIndex = -1;
-      x.textContent = '×';
-      x.setAttribute('aria-label', `Remove ${label(w)}`);
-      x.addEventListener('mousedown', e => e.preventDefault());   // keep the caret in the field
-      x.addEventListener('click', e => { e.stopPropagation(); remove(i); input.focus(); });
-      chip.appendChild(x);
-      box.insertBefore(chip, input);
-    });
-  }
-  function set(list, silent) {
-    const seen = new Set();
-    words = list.filter(w => w && !seen.has(w.toLowerCase()) && seen.add(w.toLowerCase()));
-    words.unshift(...locked.filter(w => !seen.has(w.toLowerCase())));
-    words = [...words.filter(w => listWord(w)), ...words.filter(w => !listWord(w))];
-    draw();
-    if (!silent) onChange?.();
-  }
-  function remove(i) {
-    if (i < 0 || isLocked(words[i])) return;
-    words.splice(i, 1); draw(); onChange?.();
-  }
-  input.addEventListener('keydown', e => {
-    if (e.key === 'Backspace' && !e.defaultPrevented &&
-        input.selectionStart === 0 && input.selectionEnd === 0) {
-      const i = words.findLastIndex(w => !isLocked(w));
-      if (i === -1) return;
-      e.preventDefault();
-      remove(i);
-    }
-  });
-  box.addEventListener('mousedown', e => {
-    if (e.target === box) { e.preventDefault(); input.focus(); }
-  });
-  return { words: () => [...words], add: w => set([...words, w]), set };
-}
-
-// ── Tag autocomplete ───────────────────────────────────────────────────────
-
-// Filter field: tags of the tasks the *other* tag words leave visible in
-// this tab, minus those already used. Free text is ignored: it is usually
-// still being typed ("some text #ta…") and would otherwise hide every tag.
-if (filterSearch) attachTagAc(filterSearch, {
-  word: () => hashWordAtCaret(filterSearch),
-  suggest: w => {
-    const val = filterSearch.value;
-    const rest = [...filterChips.words(), val.slice(0, w.start) + val.slice(w.end)].join(' ');
-    const otherTags = rest.split(/\s+/).filter(word => /^-?#/.test(word)).join(' ');
-    const restFilter = parseFilter(rest);
-    const used = [...restFilter.tagGroups.flat(), ...restFilter.excludeTags];
-    const counts = tagCounts(filterTasks(otherTags));
-    for (const tag of Object.keys(counts)) if (used.includes(tag.toLowerCase())) delete counts[tag];
-    return rankTags(w.partial, counts, w.partial ? 8 : 12);
-  },
-  // The completed word (with its '-' and any OR parts) becomes a chip.
-  accept: (tag, w) => {
-    const val = filterSearch.value;
-    const start = val[w.start - 1] === '-' ? w.start - 1 : w.start;
-    const chip = val.slice(start, w.partStart) + (w.partStart === w.start ? '#' : '') + tag;
-    filterSearch.value = (val.slice(0, start) + val.slice(w.end).replace(/^ +/, '')).replace(/ {2,}/g, ' ');
-    filterSearch.focus();
-    filterSearch.setSelectionRange(start, start);
-    filterChips.add(chip);
-  },
-});
-// A new task starts with the tags the filter requires (single-tag words;
-// an OR word doesn't say which one), so it shows up in the current view.
-// [[tasks: new=a,b]] (the Pinned view: the default list's tags) gives new
-// tasks those tags in place of the embed's own filter words.
-const newTags = (appEl?.dataset.newTags || '').split(',').filter(Boolean);
-function filterDefaultTags() {
-  const locked = new Set(newTags.length ? embedFilterWords.map(w => w.toLowerCase()) : []);
-  const own = (filterChips?.words() || []).filter(w => !locked.has(w.toLowerCase()));
-  const query = newTags.length ? [...own, filterSearch?.value || ''].join(' ') : filterQuery();
-  return [...newTags, ...parseFilter(query).tagGroups.filter(g => g.length === 1).map(g => g[0])];
-}
+Object.assign(app, initTaskTabs(app));
+const { VIEWS, syncCompletedLink, markActiveTab, filterChips, filterQuery } = app;
 
 Object.assign(app, initTaskModal(app));
 initTaskSettings(app);
-const { cleanTag, chipsOnSeparators, renderComments, openEditModal } = app;
+const { openEditModal } = app;
 
 // ── Drag and Drop ──────────────────────────────────────────────────────────
 Object.assign(app, initTaskDnd(app));
-const { setupBoardDragAndDrop, setupDragAndDrop } = app;
 
-// ── Keyboard navigation ────────────────────────────────────────────────────
-function reorderSelected(direction) {
-  if (!st.selectedIds.size) return;
-  if (activeSort()) showNotice(`Sorted ${SORT_TITLES[activeSort()]}: press o until Manual to reorder`);
-  else if (SECTIONS[st.activeView]) sectionKeyMove(direction);
-  else if (st.activeView === 'plan') planKeyMove(direction);
-}
-// Plan: Ctrl+Shift+↑/↓ moves the selection one place within its day or
-// Later, never out of it (moving to another day is 1–7 and dragging).
-function planKeyMove(direction) {
-  const els = [...st.selectedIds].map(id => listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`));
-  if (els.some(el => !el)) return;
-  const div = boardDivider(els[0]);
-  if (!div?.dataset.ordered || els.some(el => boardDivider(el) !== div)) return;
-  sectionKeyMove(direction, planSectionList(div), OPEN_ORDER);
-}
-
-document.addEventListener('keydown', async e => {
-  // Only the active instance handles keyboard events (multi-embed safety)
-  if (tasksInstances.length > 1 && activeTasksInstance !== instanceId) return;
-  if (headless) return;
-  // The second key of g … / c … is the page's (the t of c t, g t)
-  if (keyPrefix.key) return;
-  // The ⋯ menu owns the keyboard while open (its buttons take Enter/Space)
-  if (st.taskMenu) return;
-
-  // Ctrl+Z undo — works everywhere except inside the edit modal
-  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey && pendingUndoFn) {
-    if (modal.open || deleteModal.open || deadlineModal.open) return;
-    const focus = document.activeElement;
-    if (focus && focus.closest('textarea, [contenteditable]')) return;
-    e.preventDefault();
-    triggerUndo();
-    return;
-  }
-
-  if (modal.open || deleteModal.open || document.querySelector('dialog[open].modal, dialog[open].task-settings-modal')) return;
-  const focus = document.activeElement;
-
-  // '/' focuses the filter field; '#' focuses it and starts a tag word
-  if (e.key === '/' && !e.ctrlKey && !e.metaKey && !focus?.closest('input, textarea, select, [contenteditable]')) {
-    e.preventDefault();
-    filterSearch?.focus();
-    return;
-  }
-  if (e.key === '#' && !e.ctrlKey && !e.metaKey && !focus?.closest('input, textarea, select, [contenteditable]')) {
-    e.preventDefault();
-    if (filterSearch) {
-      const v = filterSearch.value.trimEnd();
-      filterSearch.value = v ? v + ' #' : '#';
-      filterSearch.focus();
-      filterSearch.setSelectionRange(filterSearch.value.length, filterSearch.value.length);
-      filterSearch.dispatchEvent(new Event('input'));
-    }
-    return;
-  }
-
-  if (focus && focus.closest('input, textarea, select, [contenteditable]')) return;
-
-  const items = visibleItems();
-  const currentIdx = st.selectedId ? items.findIndex(el => el.dataset.id === st.selectedId) : -1;
-
-  // Ctrl/Cmd+A with a task selected: every task shown (with the filter, the
-  // ones it leaves). Without a selection it stays the page's select all.
-  if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'a' && st.selectedId) {
-    e.preventDefault();
-    selectAllVisible();
-    return;
-  }
-
-  // The menu key or Shift+F10: the selected task's ⋯ menu (with a mouse
-  // there is no ⋯ button; right-click opens it too)
-  if ((e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) && st.selectedId) {
-    const el = listEl.querySelector(`.task-item[data-id="${CSS.escape(st.selectedId)}"]`);
-    if (el) { e.preventDefault(); openTaskMenu(st.selectedId, el); }
-    return;
-  }
-
-  // 'v' switches between full cards and one line per task
-  if (e.key === 'v' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-    e.preventDefault();
-    toggleCompact();
-    return;
-  }
-
-  // 'd' toggles the Open tab's Plan switch (by start date / one list)
-  if (e.key === 'd' && !e.ctrlKey && !e.metaKey && !e.altKey && isOpenTab(st.activeView)) {
-    e.preventDefault();
-    setGroup(st.activeView === 'open' ? 'days' : 'list');
-    return;
-  }
-
-  // 'o' cycles the Open tab's order: manual, by deadline, newest first
-  if (e.key === 'o' && !e.ctrlKey && !e.metaKey && !e.altKey && (st.activeView === 'open' || st.activeView === 'plan')) {
-    e.preventDefault();
-    cycleSort();
-    return;
-  }
-
-  // 'n' opens new task modal
-  if (e.key === 'n' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-    e.preventDefault();
-    openEditModal(null);
-    return;
-  }
-
-  // 'f' / 'F' — start selected task today / tomorrow
-  if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey && st.selectedId) {
-    e.preventDefault();
-    const task = st.tasks.find(t => t.id === st.selectedId);
-    if (task && !task.completed_at) {
-      const target = e.key === 'f' ? dateOffset(0) : dateOffset(1);
-      if (task.start_date !== target && startsAfterDeadline(task, target)) planOnDay(task.id, target);
-      else updateTask(task.id, { start_date: task.start_date === target ? null : target });
-    }
-    return;
-  }
-
-  // 1–7 start the selected tasks on that day of the Plan board (1 today,
-  // 2 tomorrow … 7 six days ahead), 0 unplans them; on every tab
-  if (/^[0-7]$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey && st.selectedIds.size) {
-    e.preventDefault();
-    const n = Number(e.key);
-    startOn([...st.selectedIds], n ? dateOffset(n - 1) : null);
-    return;
-  }
-
-  // Tab/Shift+Tab cycles the views
-  if (e.key === 'Tab') {
-    e.preventDefault();
-    // Only the tabs: Completed (reached by its link) is not in the cycle,
-    // and from there Tab goes to the first tab, Shift+Tab to the last.
-    const views = tabButtons().map(b => b.dataset.view);
-    const i = views.indexOf(st.activeView === 'plan' ? 'open' : st.activeView);
-    const n = views.length;
-    switchTab(tabView(views[i < 0 ? (e.shiftKey ? n - 1 : 0) : e.shiftKey ? (i - 1 + n) % n : (i + 1) % n]));
-    return;
-  }
-
-  if (!items.length) return;
-
-  // Ctrl+Shift+j/k / Ctrl+Shift+↑↓ — reorder selected (manual sort mode)
-  if (e.ctrlKey && e.shiftKey && (e.key === 'ArrowDown' || e.key === 'J')) {
-    e.preventDefault();
-    reorderSelected('down');
-  } else if (e.ctrlKey && e.shiftKey && (e.key === 'ArrowUp' || e.key === 'K')) {
-    e.preventDefault();
-    reorderSelected('up');
-  // Shift+j/k / Shift+↑↓ — extend selection range
-  } else if (e.shiftKey && (e.key === 'ArrowDown' || e.key === 'J')) {
-    e.preventDefault();
-    if (currentIdx < items.length - 1) extendSelection(items[currentIdx + 1].dataset.id);
-  } else if (e.shiftKey && (e.key === 'ArrowUp' || e.key === 'K')) {
-    e.preventDefault();
-    if (currentIdx > 0) extendSelection(items[currentIdx - 1].dataset.id);
-  } else if (e.key === 'ArrowDown' || e.key === 'j') {
-    e.preventDefault();
-    setSelected(items[currentIdx < items.length - 1 ? currentIdx + 1 : 0].dataset.id);
-  } else if (e.key === 'ArrowUp' || e.key === 'k') {
-    e.preventDefault();
-    setSelected(items[currentIdx > 0 ? currentIdx - 1 : items.length - 1].dataset.id);
-  } else if (e.key === ' ' && st.selectedId) {
-    e.preventDefault();
-    if (st.selectedIds.size > 1) {
-      // Bulk complete/uncomplete; the selection moves on to the next task.
-      const ids = [...st.selectedIds];
-      const next = items.find((el, i) => i > currentIdx && !st.selectedIds.has(el.dataset.id))
-                || items.find(el => !st.selectedIds.has(el.dataset.id));
-      setSelected(next?.dataset.id || null);
-      await completeMany(ids);
-    } else {
-      const task = st.tasks.find(t => t.id === st.selectedId);
-      if (!task) return;
-      const completing = !task.completed_at;
-      if (completing) {
-        if (pendingCompletions.has(task.id)) {
-          cancelPendingComplete(task.id);
-        } else {
-          const li = listEl.querySelector(`.task-item[data-id="${CSS.escape(task.id)}"]`);
-          beginComplete(task.id, li);
-        }
-      } else {
-        updateTask(task.id, { completed: false });
-        showUndo('Task reopened', () => completeTasks([task.id], true));
-      }
-    }
-  } else if (['ArrowRight', 'l', 'ArrowLeft', 'h'].includes(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey &&
-             st.selectedIds.size === 1 && st.compact) {
-    // → / l open the selected line's details, ← / h close them (vim's hjkl).
-    if (toggleDetails(st.selectedId, e.key === 'ArrowRight' || e.key === 'l')) e.preventDefault();
-  } else if (e.key === 'Enter' && st.selectedId) {
-    e.preventDefault();
-    openEditModal(st.selectedId);
-  } else if (e.key === 'Delete' && st.selectedIds.size) {
-    e.preventDefault();
-    await deleteWithUndo([...st.selectedIds], () => {
-      // Move the selection to the next surviving card
-      const next = items.find(el => !st.selectedIds.has(el.dataset.id) &&
-                     items.indexOf(el) > currentIdx)
-                || items.find(el => !st.selectedIds.has(el.dataset.id));
-      st.selectedId = next?.dataset.id || null;
-      st.selectedIds = new Set(st.selectedId ? [st.selectedId] : []);
-      st.anchorId = st.selectedId;
-    });
-  } else if ((e.key === 't' || e.key === 'T') && st.selectedIds.size) {
-    e.preventDefault();
-    const ids = [...st.selectedIds];
-    const removing = e.key === 'T';
-    openBulkTagModal(ids, removing);
-  } else if (e.key === 'Escape' && (st.expandedId || detailsMode) && !st.selectMode) {
-    detailsMode = false;
-    setExpanded(null);   // collapse first; the next Esc clears the selection
-  } else if (e.key === 'Escape') {
-    exitSelectMode();
-  }
-});
+initTaskKeys(app);
 
 // ── Expose refresh and modal for quick-add ────────────────────────────────
 
@@ -1734,7 +479,7 @@ if (filterSearch) {
 // user last clicked across refreshes within the same browser tab. A name that
 // isn't one of VIEWS is passed over.
 st.activeView = [urlView, embedView, loadActiveTab()].find(v => VIEWS.includes(v)) || 'focus';
-if (st.activeView !== 'completed') lastTab = st.activeView;
+if (st.activeView !== 'completed') st.lastTab = st.activeView;
 applyCompact(st.activeView);
 applySort();
 applyGroup();

@@ -522,3 +522,34 @@ class TestManualOrder:
             assert by_key[today]["ids"] == today_ids
             assert by_key["unplanned"]["ids"] == unplanned_ids
             assert by_key[today]["ordered"] is (sort is None)
+
+
+class TestTasksInView:
+    """What a tab shows: the tasks of its kind that pass the filter."""
+
+    TASKS = [
+        {"id": "started", "title": "Started", "tags": ["home"], "start_date": "2026-07-20"},
+        {"id": "later", "title": "Later", "tags": ["work"], "start_date": "2026-08-01"},
+        {"id": "due", "title": "Due today", "tags": ["work"], "due_date": TODAY},
+        {"id": "plain", "title": "No dates", "tags": []},
+        {"id": "done", "title": "Done", "tags": ["work"], "start_date": "2026-07-01", "completed_at": "2026-07-02T10:00:00"},
+    ]
+
+    def ids(self, view, query=""):
+        return run_core(f"TasksCore.tasksInView({json.dumps(self.TASKS)}, TasksCore.parseFilter({json.dumps(query)}), "
+                        f"'{view}', '{TODAY}').map(t => t.id)")
+
+    def test_focus_is_what_is_available_now(self):
+        assert self.ids("focus") == ["started", "due"]
+
+    def test_open_and_the_plan_board_show_every_open_task(self):
+        assert self.ids("open") == self.ids("plan") == ["started", "later", "due", "plain"]
+
+    def test_completed_shows_only_the_completed(self):
+        assert self.ids("completed") == ["done"]
+
+    def test_the_filter_narrows_every_tab(self):
+        assert self.ids("open", "#work") == ["later", "due"]
+        assert self.ids("focus", "#work") == ["due"]
+        assert self.ids("completed", "#home") == []
+        assert self.ids("open", "dates") == ["plain"]

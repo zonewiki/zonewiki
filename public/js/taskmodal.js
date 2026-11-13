@@ -11,6 +11,7 @@ import { renderFigures } from './figures.js';
 import { pasteUrlAsLink } from './util.js';
 import { openDatePicker } from './datepicker.js';
 import { attachTagAc, commentStamp, dateOffset, esc, formatDate, hashWordAtCaret, insertHashTag, noticeFromResponse, shortDate, todayStr } from './taskutil.js';
+import { highlightCode, renderTexts, textsOf } from './tasktexts.js';
 
 const { addDays, tagCounts, rankTags, parseQuickAdd } = TasksCore;
 
@@ -33,7 +34,7 @@ async function fetchNotesPreview() {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes: [text] }),
     });
     if (res.ok && app.descTextarea.value.trim() === text) {
-      notesPreview.innerHTML = app.highlightCode((await res.json()).notes[0]);
+      notesPreview.innerHTML = highlightCode((await res.json()).notes[0]);
       renderFigures(notesPreview);
     }
   } catch (_) { notesPreview.textContent = 'Could not render the preview'; }
@@ -282,7 +283,7 @@ async function commentWrite(url, method, body) {
   });
   if (!res.ok) { await noticeFromResponse(res, 'Comment not saved'); return null; }
   const updated = await res.json();
-  await app.renderTexts(app.textsOf([updated]));
+  await renderTexts(textsOf([updated]));
   const idx = st.tasks.findIndex(t => t.id === updated.id);
   if (idx !== -1) st.tasks[idx] = updated;
   if (st.commentsTaskId === updated.id && app.modal.open) renderComments(updated);
