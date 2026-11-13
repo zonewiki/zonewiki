@@ -42,7 +42,7 @@
 <label class="promote-field">Section heading<input type="text" name="heading" id="append-heading" value="{{.AppendHeading}}" autocomplete="off" required></label>{{template "error" (dict "message" .AppendError)}}<div class="modal-actions"><button type="submit" class="btn btn-primary">Append</button><button type="button" class="btn" id="page-append-cancel">Cancel</button></div></form></dialog>
 {{- end}}
 
-{{- /* The page view's ⋯ menu (Present, History, Export as PDF…, Move to wiki… and Append to
+{{- /* The page view's ⋯ menu (Present, History, Print…, Move to wiki… and Append to
     page… for a note, Rename…, Delete…) and the dialogs behind it.
     One hidden element that js/pagemenu.js opens under whichever ⋯ was
     pressed; Present shows only on a page with headings. Outside the page
@@ -52,7 +52,7 @@
 <div class="page-menu-backdrop" hidden></div><div class="page-menu" id="page-menu" role="menu" aria-label="Page actions" hidden>
 <button type="button" role="menuitem" id="present-btn" hidden>Present<kbd class="menu-key">p</kbd></button>
 {{- if .Git}}<a role="menuitem" href="{{url "history" .Slug}}">History</a>{{end}}
-<button type="button" role="menuitem" data-action="pdf">Export as PDF…</button>
+<button type="button" role="menuitem" data-action="print">Print…</button>
 {{- if .Quicknote}}<button type="button" role="menuitem" data-action="promote">Move to wiki…</button><button type="button" role="menuitem" data-action="append">Append to page…</button>{{end}}
 {{- if .SharedTarget}}<button type="button" role="menuitem" data-action="privacy">Make shared…</button>{{end -}}
 {{- if .Renamable}}<button type="button" role="menuitem" data-action="rename">Rename…</button><button type="button" role="menuitem" data-action="delete" class="danger">Delete…<kbd class="menu-key">Ctrl+Del</kbd></button>{{end -}}

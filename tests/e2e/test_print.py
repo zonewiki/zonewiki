@@ -1,4 +1,4 @@
-"""Printing a page and Export as PDF… (the page's ⋯ menu): the page alone,
+"""Printing a page and Print… (the page's ⋯ menu): the page alone,
 light on paper whatever the screen is."""
 from playwright.sync_api import expect
 
@@ -21,13 +21,13 @@ x = 1
 """
 
 
-def test_export_as_pdf_opens_the_print_dialog_named_after_the_page(page, wiki):
+def test_print_opens_the_print_dialog_named_after_the_page(page, wiki):
     wiki.write("garden", PAGE)
     page.goto("/page/garden")
     # The print dialog can't be driven: note what it would have been given.
     page.evaluate("window.print = () => { window.printedAs = document.title; }")
     page.locator(".page-menu-btn").click()
-    page.get_by_role("menuitem", name="Export as PDF…").click()
+    page.get_by_role("menuitem", name="Print…").click()
     page.wait_for_function("window.printedAs !== undefined")
     assert page.evaluate("window.printedAs") == "Garden plan"     # the file's name, without "— Zone"
     page.evaluate("window.dispatchEvent(new Event('afterprint'))")

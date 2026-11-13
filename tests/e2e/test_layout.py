@@ -617,7 +617,7 @@ def test_page_menu(page, wiki):
     more.click()
     expect(more).to_have_attribute("aria-expanded", "true")
     assert menu.evaluate("m => [...m.querySelectorAll('[role=menuitem]')].map(i => i.firstChild.textContent)") \
-        == ["Present", "History", "Export as PDF…", "Rename…", "Delete…"]
+        == ["Present", "History", "Print…", "Rename…", "Delete…"]
     expect(menu.get_by_role("menuitem", name="Present")).to_be_focused()
     page.keyboard.press("ArrowUp")                  # wraps to the last
     expect(menu.get_by_role("menuitem", name="Delete…")).to_be_focused()

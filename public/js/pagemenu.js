@@ -9,11 +9,12 @@ document.getElementById('page-delete-cancel')?.addEventListener('click', () => {
 });
 closeOnBackdropClick(document.getElementById('page-delete-dialog'));
 
-// Export as PDF: the browser's print dialog, whose "Save as PDF" makes the
-// file from the page as the print styles lay it out (style.css, Print). The
+// Print… (the page's ⋯ menu): the browser's print dialog, which prints the
+// page, or with "Save as PDF" makes a file of it, as the print styles lay it
+// out (style.css, Print). The
 // file is named after the page (the tab's title has "— Zone" after it), and
 // on a dark screen the diagrams are drawn again for paper first.
-async function exportPdf() {
+async function printPage() {
   const tabTitle = document.title;
   const title = document.querySelector('.page-header h1')?.firstChild?.textContent.trim();
   if (title) document.title = title;
@@ -111,7 +112,7 @@ function promotedSlug(folder, name, date) {
     else if (item.dataset.action === 'privacy') document.getElementById('page-privacy-dialog')?.showModal();
     else if (item.dataset.action === 'promote') openPromote();
     else if (item.dataset.action === 'append') openAppend();
-    else if (item.dataset.action === 'pdf') exportPdf();
+    else if (item.dataset.action === 'print') printPage();
   });
 
   // Move to wiki (notes): the slug the page will get, as the server

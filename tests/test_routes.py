@@ -382,19 +382,19 @@ class TestViewPage:
 
     def test_page_actions_menu(self, client, wiki_dir):
         # The header has Edit and a ⋯ menu (Present, History with git,
-        # Export as PDF…, Rename…, Delete…), and only the header: the right column has no copy.
+        # Print…, Rename…, Delete…), and only the header: the right column has no copy.
         write_page(wiki_dir, "garden", "# Garden\n\n## Beds\n")
         body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
         header = body.split('<div class="page-header-actions">', 1)[1].split("</div>", 1)[0]
         assert '<a href="/edit/garden" class="btn">Edit</a>' in header
         assert body.count('class="btn page-menu-btn"') == 1
         menu = body.split('<div class="page-menu" id="page-menu"', 1)[1].split("</div>", 1)[0]
-        assert re.findall(r'role="menuitem"[^>]*>([^<]+)', menu) == ["Present"] + ["History"] * settings.GIT_ENABLED + ["Export as PDF…", "Rename…", "Delete…"]
+        assert re.findall(r'role="menuitem"[^>]*>([^<]+)', menu) == ["Present"] + ["History"] * settings.GIT_ENABLED + ["Print…", "Rename…", "Delete…"]
         assert 'id="page-rename-dialog"' in body and 'id="page-delete-dialog"' in body
-        # The home page can't be renamed or deleted: Present and the export are left.
+        # The home page can't be renamed or deleted: Present and Print… are left.
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
         menu = body.split('id="page-menu"', 1)[1].split("</div>", 1)[0]
-        assert re.findall(r'role="menuitem"[^>]*>([^<]+)', menu) == ["Present"] + ["History"] * settings.GIT_ENABLED + ["Export as PDF…"]
+        assert re.findall(r'role="menuitem"[^>]*>([^<]+)', menu) == ["Present"] + ["History"] * settings.GIT_ENABLED + ["Print…"]
         assert 'id="page-rename-dialog"' not in body
 
     def test_only_page_views_are_wide(self, client, wiki_dir):

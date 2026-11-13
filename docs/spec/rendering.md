@@ -132,7 +132,7 @@ Every rendered page displays a `<header class="page-header">` above the article 
 - An Edit button linking to `/edit/<slug>`
 - A **⋯ page menu** (`.page-menu-btn`, menu `#page-menu`, `page_menu` in `templates/partials/page.html`, its data from `pageMenu`; opening, keys and actions in `js/pagemenu.js`) with the rarer actions: **Present** (`#present-btn`, only on a page with headings, `p`),
   **History** (git only),
-  **Export as PDF…** (see Print and PDF),
+  **Print…** (see Print and PDF),
   **Move to wiki…** and **Append to page…** (notes only, see Notes),
   **Rename…** (a dialog, `#page-rename-dialog`, see Rename) and **Delete…** (the `#page-delete-dialog` confirmation, also Ctrl+Delete);
   Rename… and Delete… not for `index`.
@@ -141,7 +141,7 @@ Every rendered page displays a `<header class="page-header">` above the article 
 
 ### Print and PDF
 
-A page is exported as a PDF by the browser: **Export as PDF…** in the page's ⋯ menu opens the browser's print dialog, where "Save as PDF" (the destination, in Chrome, Edge, Firefox and Safari alike) makes the file; Ctrl+P does the same.
+A page is printed, or saved as a PDF, by the browser: **Print…** in the page's ⋯ menu opens the browser's print dialog, where a printer prints it and "Save as PDF" (the destination, in Chrome, Edge, Firefox and Safari alike) makes the file; Ctrl+P does the same.
 Zone makes no PDF itself: no renderer on the server, and the file looks as the page does.
 
 - **What is on the paper** (`@media print` at the end of `style.css`): the page alone, its title, tags, "Last changed", the tldr (shown, not behind its switch) and the text, at the paper's width (`@page` margins 18mm and 16mm).
@@ -150,7 +150,7 @@ Zone makes no PDF itself: no renderer on the server, and the file looks as the p
 - **Always light**: the dark variables and dark rules are for screens (`@media screen and (prefers-color-scheme: dark)`), and code is highlighted with the light theme (`media="print, …"` on its stylesheet in `layout.html`), so a dark screen prints dark ink on white.
 - **Page breaks**: none right after a heading; code blocks, quotes, callouts, images, diagrams and table rows are kept whole where they fit; code wraps instead of being cut off where the screen would scroll.
 - **Folded sections** print unfolded (`beforeprint`, see Folding sections).
-- **Export as PDF…** (`exportPdf` in `js/pagemenu.js`) does two things Ctrl+P can't:
+- **Print…** (`printPage` in `js/pagemenu.js`) does two things Ctrl+P can't:
   the tab's title is the page's title while the dialog is open, so the file is named "Garden plan.pdf", not "Garden plan — Zone.pdf";
   and on a dark screen the Mermaid diagrams are drawn again in the light theme first (`diagramsForPaper` in `js/figures.js`), and in the dark one after (`afterprint`).
   Shortcut hints (`.menu-key`) hide on touch screens.
