@@ -7,8 +7,8 @@
 # Uses a local gitleaks if there is one, else the tools image (./run.sh
 # leaks; the first build takes a while). A leak (exit 3) blocks the commit;
 # when neither works, it only warns. Skip it once: git commit --no-verify.
-# In a git worktree (.git is a file naming a host path) the tools image
-# can't reach the repo, so there only a local gitleaks checks.
+# In a git worktree too: run.sh mounts the repo's .git, which the worktree's
+# .git file names, for the tools image.
 
 if command -v gitleaks >/dev/null 2>&1; then
   gitleaks git --pre-commit --staged --redact --no-banner --exit-code 3 .

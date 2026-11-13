@@ -178,7 +178,7 @@ Each rule has tests in `tests/test_routes.py` or `tests/test_mcp.py`, and `go/se
   The pre-commit hook `.githooks/pre-commit` (on once per clone: `git config core.hooksPath .githooks`) runs gitleaks over the staged changes, with a local gitleaks or else `./run.sh leaks --pre-commit --staged` in the tools image; a leak (exit 3) refuses the commit, a scan that can't run only warns.
   For `commit -a` and `commit <path>` git hands the hook a temporary index (`GIT_INDEX_FILE`, a host path); `run.sh leaks` passes it into the container as a `/repo/…` path, so those changes are scanned too (an index outside the repo: exit 2, a warning).
   On the first run `run.sh` says it is building the tools image.
-  In a git worktree only a local gitleaks can check (the container can't follow `.git`'s host path).
+  In a git worktree `.git` is a file that names the repo's own `.git` by its host path, where the worktree's index is too: `run.sh leaks` mounts that folder into the container at the same path, read-only, so the hook and the scan of the history work there as in the repo (until 2026-11 they didn't: a commit in a worktree went in unchecked, with a warning).
   CI's **leaks** job scans every commit (`./run.sh leaks`). gitleaks is a pinned release, checked against its published checksums in `Containerfile.tools`.
 - **What builds Zone is named by hash**: the base images by digest (`ARG UBUNTU=ubuntu:26.04@sha256:…` in the `Containerfile`, used by its three stages; the Playwright image in `Containerfile.tools`; the job container `docker:…-cli@sha256:…` in `.forgejo/workflows/ci.yml`),
   each the tag's multi-arch index,

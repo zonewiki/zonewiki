@@ -186,17 +186,27 @@ case "${1:-up}" in
     # or commit <path>, git hands the hook a temporary index (a host path);
     # without it, git in the container would scan .git/index, which lacks
     # those changes. One outside the repo can't be reached: exit 2.
-    idx=()
+    # In a git worktree .git is a file that names the repo's own .git by its
+    # host path, where the worktree's index is too: that folder is mounted
+    # at the same path, read-only, so git in the container finds both.
+    idx=() gitdir=()
+    repo=$(pwd -P)
+    common=
+    if [[ -f .git && -z "$ZONE_COPY_REPO" ]]; then
+      common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) &&
+        common=$(cd "$common" 2>/dev/null && pwd -P) || common=
+      [[ -z "$common" ]] || gitdir=(-v "$common:$common:ro,z")
+    fi
     if [[ -n "$GIT_INDEX_FILE" ]]; then
-      repo=$(pwd -P)
       index="$(cd "$(dirname "$GIT_INDEX_FILE")" && pwd -P)/$(basename "$GIT_INDEX_FILE")"
       case "$index" in
         "$repo"/*) idx=(-e "GIT_INDEX_FILE=/repo/${index#"$repo"/}") ;;
+        "${common:-/nowhere}"/*) idx=(-e "GIT_INDEX_FILE=$index") ;;
         *) echo "leaks: the index $GIT_INDEX_FILE is outside the repo." >&2; exit 2 ;;
       esac
     fi
     image=$(build_image zonewiki-tools -f Containerfile.tools)
-    in_image "$image" "${idx[@]}" -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory \
+    in_image "$image" "${gitdir[@]}" "${idx[@]}" -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory \
       -e GIT_CONFIG_VALUE_0='*' -- \
       gitleaks git --redact --no-banner --exit-code 3 "${@:2}" .
     ;;

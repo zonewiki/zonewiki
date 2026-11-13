@@ -52,7 +52,11 @@ def sandbox(tmp_path):
     engine.chmod(0o755)
     env = {k: v for k, v in os.environ.items()
            if not k.startswith(("GIT_", "ZONE_"))}
-    env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
+    # Without a local gitleaks where it has a folder of its own (the tools
+    # image): the hook then takes the engine, which is what is tested here.
+    path = [d for d in env.get("PATH", "").split(os.pathsep)
+            if d and not (os.path.exists(os.path.join(d, "gitleaks")) and not os.path.exists(os.path.join(d, "bash")))]
+    env["PATH"] = os.pathsep.join([str(bin_dir), *path])
     env["FAKE_LOG"] = str(tmp_path / "engine.log")
     _git(repo, "init", "-q")
     _git(repo, "config", "core.hooksPath", ".githooks")
@@ -103,6 +107,76 @@ def test_leaks_without_an_index_passes_none(sandbox):
     assert r.returncode == 0, r.stderr
     (run,) = _engine_calls(log, "run")
     assert "GIT_INDEX_FILE" not in run
+
+
+@pytest.fixture
+def worktree(sandbox):
+    """A git worktree of the sandbox's repo, with run.sh and the hook in it."""
+    repo, env, log = sandbox
+    _git(repo, "add", "run.sh", ".githooks")
+    _git(repo, "commit", "-q", "--no-verify", "-m", "the scripts")
+    tree = repo.parent / "tree"
+    assert _git(repo, "worktree", "add", "-q", str(tree), "-b", "feature").returncode == 0
+    return repo, tree, env, log
+
+
+def test_leaks_in_a_worktree_mounts_the_repos_git_folder(worktree):
+    """.git is a file there, naming the repo's .git by its host path: the
+    container gets that folder at the same path, read-only."""
+    repo, tree, env, log = worktree
+    r = subprocess.run(["./run.sh", "leaks"], cwd=tree, env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    (run,) = _engine_calls(log, "run")
+    git_dir = (repo / ".git").resolve()
+    assert f"-v {git_dir}:{git_dir}:ro,z " in run and f"-v {tree.resolve()}:/repo:z" in run
+    assert "GIT_INDEX_FILE" not in run
+
+
+def test_leaks_in_the_repo_itself_mounts_nothing_more(sandbox):
+    repo, env, log = sandbox
+    r = subprocess.run(["./run.sh", "leaks"], cwd=repo, env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    (run,) = _engine_calls(log, "run")
+    assert run.count(" -v ") == 1
+
+
+def test_leaks_in_a_worktree_passes_its_index_by_its_own_path(worktree, tmp_path):
+    repo, tree, env, log = worktree
+    index = (repo / ".git").resolve() / "worktrees" / "tree" / "index.lock"
+    env["GIT_INDEX_FILE"] = str(index)
+    r = subprocess.run(["./run.sh", "leaks", "--pre-commit", "--staged"], cwd=tree, env=env,
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    (run,) = _engine_calls(log, "run")
+    assert f"-e GIT_INDEX_FILE={index} " in run
+    # One in neither place still can't be reached.
+    log.unlink()
+    env["GIT_INDEX_FILE"] = str(tmp_path / "elsewhere.lock")
+    r = subprocess.run(["./run.sh", "leaks"], cwd=tree, env=env, capture_output=True, text=True)
+    assert r.returncode == 2 and "outside the repo" in r.stderr and not log.exists()
+
+
+@pytest.mark.parametrize("commit_args", [[], ["-a"], ["notes.txt"]])
+def test_hook_scans_a_commit_in_a_worktree(worktree, commit_args):
+    """The regression: in a worktree the scan didn't run (exit 2), and the
+    commit went in unchecked."""
+    repo, tree, env, log = worktree
+    if not _no_local_gitleaks(env):
+        pytest.skip("a local gitleaks takes the hook's other path")
+    (tree / "notes.txt").write_text("two\n")
+    if not commit_args:
+        _git(tree, "add", "notes.txt")
+    r = _git(tree, "commit", "-q", "-m", "change", *commit_args, env=env)
+    assert r.returncode == 0 and "didn't run" not in r.stderr, r.stderr
+    (run,) = _engine_calls(log, "run")
+    git_dir = (repo / ".git").resolve()
+    assert f"-v {git_dir}:{git_dir}:ro,z " in run and "--pre-commit --staged" in run
+    if commit_args:   # a temporary index, beside the worktree's own
+        assert f"-e GIT_INDEX_FILE={git_dir}/worktrees/tree/" in run
+    env["FAKE_EXIT"] = "3"
+    (tree / "notes.txt").write_text("three\n")
+    r = _git(tree, "commit", "-q", "-m", "leak", "-a", env=env)
+    assert r.returncode != 0 and "commit refused" in r.stderr
 
 
 def test_copy_mode_creates_a_self_removing_container(sandbox):

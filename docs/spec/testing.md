@@ -252,14 +252,16 @@ and `zonewiki health` failing on the error.
 `tests/test_run_sh.py` covers `run.sh`'s container calls and `.githooks/pre-commit` against a stub `podman` first on PATH (it logs its arguments; `run`/`start` exit with `FAKE_EXIT`),
 in a scratch git repo holding copies of both,
 so it needs no engine: `leaks` passes a temporary `GIT_INDEX_FILE` in as a `/repo/…` path (absolute or relative; outside the repo: exit 2),
+in a git worktree it mounts the repo's `.git` at its own path, read-only, and passes the worktree's index by that path,
 copy mode creates the container with `--rm`,
 a build's output stays hidden unless it fails (then nothing runs) and a first build says so,
 `test` runs go vet and go test before pytest,
 `test` and `e2e` run pytest in parallel (pytest-xdist),
 `eval` refuses a missing questions file and builds with `ZONE_SEMANTIC_SEARCH` and mounts the wiki read-only,
 and the hook scans the temporary index of `commit -a` and `commit <path>`,
-refuses a leak (exit 3) and only warns when the scan fails.
-The hook tests skip when a local gitleaks is on PATH.
+refuses a leak (exit 3) and only warns when the scan fails,
+in a worktree as in the repo.
+The hook tests skip when a local gitleaks is on PATH beside bash; one in a folder of its own (the tools image's) is left off the scratch repo's PATH, so they run there and in CI.
 
 To run the suite without a local Go or venv: `./run.sh test` (gofmt, go vet, go test, then pytest, inside the tools image with the repo mounted).
 
