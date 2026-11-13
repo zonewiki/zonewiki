@@ -188,11 +188,6 @@ func refuseChange(w http.ResponseWriter, r *http.Request, err error) {
 	showUsers(w, r, http.StatusConflict, "", err.Error())
 }
 
-// notChanged: a change the page refuses itself, said as it is.
-type notChanged struct{ msg string }
-
-func (e *notChanged) Error() string { return e.msg }
-
 func userRoleRoute(w http.ResponseWriter, r *http.Request) {
 	u := targetUser(w, r)
 	if u == nil {
@@ -226,7 +221,7 @@ func userDisableRoute(w http.ResponseWriter, r *http.Request) {
 	}
 	disable := filepath.Base(r.URL.Path) == "disable"
 	if disable && u.Name == userOf(r) {
-		refuseChange(w, r, &notChanged{"not changed: you can't disable yourself here. Another admin can."})
+		refuseChange(w, r, refuse("not changed: you can't disable yourself here. Another admin can."))
 		return
 	}
 	err := changeSettings(userOf(r), func(f *settingsfile.File) error {
@@ -254,8 +249,8 @@ func userRemoveRoute(w http.ResponseWriter, r *http.Request) {
 		// be allowed (another admin left) that admin can do it. The last
 		// user is always the admin themselves, so this also keeps the wiki
 		// from going without a login, which is for the host on purpose.
-		refuseChange(w, r, &notChanged{"not changed: you can't remove yourself here. Another admin can, " +
-			"or it's done on the host: zonewiki user remove " + u.Name + "."})
+		refuseChange(w, r, refuse("not changed: you can't remove yourself here. Another admin can, "+
+			"or it's done on the host: zonewiki user remove "+u.Name+"."))
 		return
 	}
 	err := changeSettings(userOf(r), func(f *settingsfile.File) error {

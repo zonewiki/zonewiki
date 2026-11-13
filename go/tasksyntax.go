@@ -4,7 +4,6 @@ package main
 
 import (
 	"math"
-	"net/http"
 	"net/url"
 	"regexp"
 	"slices"
@@ -197,9 +196,9 @@ func checkEmbedSettings(set map[string]string, keys []string) (map[string]string
 	out := map[string]string{}
 	for k, v := range set {
 		v = strings.TrimSpace(v)
-		bad := func() error { return badRequest("Not a value for " + k + ": " + strconv.Quote(v)) }
+		bad := func() error { return refuse("Not a value for " + k + ": " + strconv.Quote(v)) }
 		if !slices.Contains(keys, k) {
-			return nil, badRequest("Not a setting: " + strconv.Quote(k))
+			return nil, refuse("Not a setting: " + strconv.Quote(k))
 		}
 		if len(v) > 300 || !embedValueRE.MatchString(v) || len(strings.Fields(v)) > 1 {
 			return nil, bad()
@@ -216,7 +215,7 @@ func checkEmbedSettings(set map[string]string, keys []string) (map[string]string
 				}
 			case "limit":
 				if n, err := strconv.Atoi(v); err != nil || n < 1 || n > 99 {
-					return nil, badRequest("The limit is a number from 1 to 99")
+					return nil, refuse("The limit is a number from 1 to 99")
 				}
 			case "pin":
 				if v = strings.ToLower(v); v != "1" && v != "default" {
@@ -258,7 +257,7 @@ func setEmbedArgs(args string, set map[string]string) string {
 }
 
 // errEmbedChanged: the embed isn't written as the dialog saw it.
-var errEmbedChanged = &apiError{http.StatusConflict, "The page has changed since. Reload it and try again."}
+var errEmbedChanged = refuseAs(refusedConflict, "The page has changed since. Reload it and try again.")
 
 // setEmbedParams: text with the params of its n-th [[tasks: …]] outside
 // code changed (setEmbedArgs); was: the params as the caller saw them, and

@@ -104,7 +104,8 @@ No build step for the browser code (no bundler: the server serves `public/` as i
 │   ├── access.go           # Who may see and change what: private/<user>/ (canSee, canWrite, canSeePath)
 │   ├── private.go          # The private home private/<user>/index: /private, its template, its protection
 │   ├── routes.go           # The wiki's routes: pages, the editor, notes, search, previews, uploads
-│   ├── pageops.go          # Page writes the routes and the MCP tools share (delete, rename, restore, create, save): checks, refusals (pageError), text not yet in git kept
+│   ├── pageops.go          # Page writes the routes and the MCP tools share (delete, rename, restore, create, save): checks, text not yet in git kept
+│   ├── refusal.go          # What an operation refuses with (refusalError: a kind and a message), for pages and tasks alike; each door answers it its way
 │   ├── views.go            # The page shell, breadcrumb, modules, menus, side columns; templates/ (embedded)
 │   ├── pages.go            # The wiki's files: slugs, listing, sharing mode, link graph, renames, task lists/the pinned lists
 │   ├── markdown.go         # Markdown → HTML on goldmark, with Zone's rules (checkboxes, callouts, heading ids …)

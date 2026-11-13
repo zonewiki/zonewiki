@@ -1103,19 +1103,6 @@ func taskFields(args jsonObj, task *Task) (jsonObj, error) {
 	return data, nil
 }
 
-// tasksWrite: a task list write's refusals (a bad date, an empty title …) as
-// tool errors the model can correct.
-func tasksWrite[T any](v T, err error) (T, error) {
-	var ae *apiError
-	switch {
-	case errors.Is(err, errTasksCorrupt):
-		return v, toolErr("The tasks' storage can't be read right now; try again")
-	case errors.As(err, &ae):
-		return v, toolErr(ae.msg)
-	}
-	return v, err
-}
-
 // The tasks closest to a new one whose tags are suggested, and how many.
 const (
 	similarTasks  = 10
@@ -1234,7 +1221,7 @@ func createTaskTool(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	task, err := tasksWrite(createTask(user, data, msg))
+	task, err := createTask(user, data, msg)
 	if err != nil {
 		return "", err
 	}
@@ -1289,7 +1276,7 @@ func updateTaskTool(args jsonObj, base, user string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if _, err := tasksWrite(struct{}{}, deleteTask(user, task.ID, msg)); err != nil {
+		if err := deleteTask(user, task.ID, msg); err != nil {
 			return "", err
 		}
 		return "Deleted task " + shortID(task.ID) + ": " + task.Title, nil
@@ -1321,12 +1308,12 @@ func updateTaskTool(args jsonObj, base, user string) (string, error) {
 		return "", err
 	}
 	if len(data) > 0 {
-		if task, err = tasksWrite(updateTask(user, task.ID, data, suffix)); err != nil {
+		if task, err = updateTask(user, task.ID, data, suffix); err != nil {
 			return "", err
 		}
 	}
 	if comment != nil {
-		if task, err = tasksWrite(addComment(user, task.ID, *comment, "Comment on task"+suffix)); err != nil {
+		if task, err = addComment(user, task.ID, *comment, "Comment on task"+suffix); err != nil {
 			return "", err
 		}
 	}
@@ -1392,7 +1379,7 @@ func tagTasksTool(args jsonObj, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	tasks, err := tasksWrite(tagTasks(user, found, add, remove, msg))
+	tasks, err := tagTasks(user, found, add, remove, msg)
 	if err != nil {
 		return "", err
 	}
@@ -1651,9 +1638,8 @@ func grepWiki(args jsonObj, base, user string) (string, error) {
 		return "", err
 	}
 	found, err := grepPages(pattern, ignoreCase, visibleSlugs(user))
-	var ge *grepError
-	if errors.As(err, &ge) {
-		return "", toolErr("grep_wiki: " + ge.msg)
+	if rf, ok := refusalOf(err); ok {
+		return "", toolErr("grep_wiki: " + rf.msg)
 	}
 	var hits []GrepHit
 	pages := map[string]bool{}
@@ -2100,12 +2086,13 @@ func callMCPTool(r *http.Request, name string, args jsonObj) (string, error) {
 		return "", toolErr(readOnlyMsg)
 	}
 	out, err := tool.run(args, base, userOf(r))
-	// A viewer's change to something shared, from wherever it was refused,
-	// as the tool's error.
-	if pe, ok := refusalOf(err); ok && pe.kind == refusedReadOnly {
-		err = toolErr(pe.msg)
-	} else if errors.Is(err, errReadOnly) {
-		err = toolErr(readOnlyMsg)
+	// What an operation refused (a bad date, a page that isn't there, a
+	// viewer's change to something shared), from wherever in the tool, is
+	// the tool's error, which the model can correct.
+	if rf, ok := refusalOf(err); ok {
+		err = toolErr(rf.msg)
+	} else if errors.Is(err, errTasksCorrupt) {
+		err = toolErr("The tasks' storage can't be read right now; try again")
 	}
 	return out, err
 }

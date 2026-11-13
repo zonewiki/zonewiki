@@ -21,34 +21,22 @@ import (
 	"zonewiki/internal/mdtext"
 )
 
-// apiError is a refused request: status and the reason tasks.js shows.
-type apiError struct {
-	status int
-	msg    string
-}
-
-func (e *apiError) Error() string { return e.msg }
-
-func badRequest(msg string) error { return &apiError{http.StatusBadRequest, msg} }
-
-var errNotFound = &apiError{http.StatusNotFound, "Not Found"}
-
 // tasksRoute answers a task list API request: a refusal as {"error": …} (400,
 // 403 for a viewer's change to a shared task),
 // 404, or 503 when a task list file is unreadable (the client retries).
 func tasksRoute(h func(w http.ResponseWriter, r *http.Request) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		err := h(w, r)
-		var ae *apiError
+		rf, refused := refusalOf(err)
 		switch {
 		case err == nil:
 		case errors.Is(err, errTasksCorrupt):
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
-		case errors.As(err, &ae) && (ae.status == http.StatusBadRequest || ae.status == http.StatusForbidden):
+		case refused && (rf.kind == refusedInvalid || rf.kind == refusedReadOnly):
 			// tasks.js shows the error (a viewer's: readOnlyMsg).
-			writeJSON(w, ae.status, map[string]string{"error": ae.msg})
-		case errors.As(err, &ae):
-			http.Error(w, ae.msg, ae.status)
+			writeJSON(w, rf.kind.status(), map[string]string{"error": rf.msg})
+		case refused:
+			http.Error(w, rf.msg, rf.kind.status())
 		default:
 			logf("%s %s: %v", r.Method, r.URL.Path, err)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -61,11 +49,11 @@ func tasksRoute(h func(w http.ResponseWriter, r *http.Request) error) http.Handl
 func jsonObject(r *http.Request) (jsonObj, error) {
 	body, err := io.ReadAll(r.Body)
 	if tooLarge(err) {
-		return nil, &apiError{http.StatusRequestEntityTooLarge, "Too large: at most " + strconv.Itoa(bodyMax>>20) + " MB"}
+		return nil, refuseAs(refusedTooLarge, "Too large: at most "+strconv.Itoa(bodyMax>>20)+" MB")
 	}
 	o, ok := parseObj(body)
 	if !ok {
-		return nil, badRequest("Request body must be a JSON object")
+		return nil, refuse("Request body must be a JSON object")
 	}
 	return o, nil
 }
@@ -73,7 +61,7 @@ func jsonObject(r *http.Request) (jsonObj, error) {
 func asStr(raw json.RawMessage, name string) (string, error) {
 	s, ok := as[string](raw)
 	if !ok {
-		return "", badRequest(name + " must be a string")
+		return "", refuse(name + " must be a string")
 	}
 	return s, nil
 }
@@ -81,7 +69,7 @@ func asStr(raw json.RawMessage, name string) (string, error) {
 func asBool(raw json.RawMessage, name string) (bool, error) {
 	b, ok := as[bool](raw)
 	if !ok {
-		return false, badRequest(name + " must be true or false")
+		return false, refuse(name + " must be true or false")
 	}
 	return b, nil
 }
@@ -104,7 +92,7 @@ func asInt(raw json.RawMessage, name string) (int, error) {
 			return n, nil
 		}
 	}
-	return 0, badRequest(name + " must be an integer")
+	return 0, refuse(name + " must be an integer")
 }
 
 // asStrList: a list of strings, or one string split on commas; stripped,
@@ -115,7 +103,7 @@ func asStrList(raw json.RawMessage, name string) ([]string, error) {
 		items, ok = strings.Split(s, ","), true
 	}
 	if !ok {
-		return nil, badRequest(name + " must be a list of strings")
+		return nil, refuse(name + " must be a list of strings")
 	}
 	out := []string{}
 	for _, s := range items {
@@ -142,7 +130,7 @@ func idList(data jsonObj) ([]string, error) {
 	}
 	ids, ok := as[[]string](data["ids"])
 	if !ok {
-		return nil, badRequest("ids must be a list of task ids")
+		return nil, refuse("ids must be a list of task ids")
 	}
 	return ids, nil
 }
@@ -157,7 +145,7 @@ func validateDate(raw json.RawMessage) (string, error) {
 	if isNull(raw) || ok && s == "" {
 		return "", nil
 	}
-	bad := badRequest("Invalid date format, expected YYYY-MM-DD")
+	bad := refuse("Invalid date format, expected YYYY-MM-DD")
 	if !ok {
 		return "", bad
 	}
@@ -177,7 +165,7 @@ func validateDate(raw json.RawMessage) (string, error) {
 // commentText: a comment's text, stripped and capped; empty is refused.
 func commentText(s string) (string, error) {
 	if s = strings.TrimSpace(s); s == "" {
-		return "", badRequest("Comment cannot be empty")
+		return "", refuse("Comment cannot be empty")
 	}
 	return runePrefix(s, commentMax), nil
 }
@@ -359,19 +347,12 @@ func tasksSettingsRoute(w http.ResponseWriter, r *http.Request) {
 	} else {
 		err = setEmbedParamsOp(user, body.Page, body.Index, body.Was, body.Set)
 	}
-	var ae *apiError
-	pe, refused := refusalOf(err)
+	rf, refused := refusalOf(err)
 	switch {
 	case err == nil:
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
-	case errors.As(err, &ae):
-		writeJSON(w, ae.status, map[string]string{"error": ae.msg})
-	case refused && pe.kind == refusedReadOnly:
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": pe.msg})
-	case refused && pe.kind == refusedNotFound:
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": pe.msg})
 	case refused:
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": pe.msg})
+		writeJSON(w, rf.kind.status(), map[string]string{"error": rf.msg})
 	default:
 		// Written, but not committed (notCommitted): the page has the change.
 		logf("%s %s: %v", r.Method, r.URL.Path, err)
@@ -664,7 +645,7 @@ func tasksRoutes(mux *http.ServeMux) {
 			return err
 		}
 		if idx < 0 {
-			return badRequest("idx must not be negative")
+			return refuse("idx must not be negative")
 		}
 		t, err := toggleNoteCheck(userOf(r), r.PathValue("id"), idx)
 		if err != nil {
@@ -716,7 +697,7 @@ func tasksRoutes(mux *http.ServeMux) {
 		var tags [2][]string
 		for i, k := range []string{"add", "remove"} {
 			if _, ok := listField(data, k); !ok {
-				return badRequest("add/remove must be lists of strings")
+				return refuse("add/remove must be lists of strings")
 			}
 			if data.has(k) {
 				if tags[i], err = asStrList(data[k], k); err != nil {
@@ -743,7 +724,7 @@ func yearArg(r *http.Request) (string, error) {
 		year = currentYear()
 	}
 	if !yearArgRE.MatchString(year) {
-		return "", badRequest("year must be YYYY")
+		return "", refuse("year must be YYYY")
 	}
 	return year, nil
 }
@@ -759,7 +740,7 @@ func createTask(user string, data jsonObj, message string) (*Task, error) {
 		}
 	}
 	if strings.TrimSpace(title) == "" {
-		return nil, badRequest("Title cannot be empty")
+		return nil, refuse("Title cannot be empty")
 	}
 	tasksMu.Lock()
 	defer tasksMu.Unlock()
@@ -786,7 +767,7 @@ func applyTaskFields(user string, t *Task, data jsonObj, fresh bool) error {
 			return err
 		}
 		if s = strings.TrimSpace(s); s == "" {
-			return badRequest("Title cannot be empty")
+			return refuse("Title cannot be empty")
 		}
 		t.Title = s
 	}
@@ -812,7 +793,7 @@ func applyTaskFields(user string, t *Task, data jsonObj, fresh bool) error {
 	}
 	if data.has("comments") { // the whole list, for undoing a comment's delete or edit
 		if _, ok := as[[]json.RawMessage](data["comments"]); !ok {
-			return badRequest("comments must be a list")
+			return refuse("comments must be a list")
 		}
 		t.Comments = cleanComments(data["comments"])
 		checkBy(user, t)
@@ -835,7 +816,7 @@ func applyTaskFields(user string, t *Task, data jsonObj, fresh bool) error {
 		case ok:
 			t.SortOrder = &f
 		default:
-			return badRequest("sort_order must be a number")
+			return refuse("sort_order must be a number")
 		}
 	}
 	if data.has("keep") {
@@ -851,10 +832,10 @@ func applyTaskFields(user string, t *Task, data jsonObj, fresh bool) error {
 			return err
 		}
 		if private && privateFolder(user) == "" {
-			return badRequest("Only a signed-in user's tasks can be private")
+			return refuse("Only a signed-in user's tasks can be private")
 		}
 		if private && t.Owner == "" && !fresh {
-			return badRequest("A shared task stays shared: others have seen it. Make a new private task and copy the text")
+			return refuse("A shared task stays shared: others have seen it. Make a new private task and copy the text")
 		}
 		was := t.Owner
 		t.Owner = ""
@@ -900,7 +881,7 @@ func applyTaskFields(user string, t *Task, data jsonObj, fresh bool) error {
 			}
 			n = max(1, n)
 			if n > recIntervalMax {
-				return badRequest("rec_interval must be at most " + strconv.Itoa(recIntervalMax))
+				return refuse("rec_interval must be at most " + strconv.Itoa(recIntervalMax))
 			}
 			from := "due"
 			if s, _ := as[string](data["rec_from"]); s == "completion" {
@@ -939,7 +920,7 @@ func applyTaskFields(user string, t *Task, data jsonObj, fresh bool) error {
 		rec := cleanRecurrence(data["recurrence"])
 		t.Recurrence = rec
 		if rec == nil && !data.null("recurrence") {
-			return badRequest("recurrence must be null or have a type")
+			return refuse("recurrence must be null or have a type")
 		}
 	}
 	// Keep and Repeat answer the same question: a keep task never repeats.
@@ -1212,7 +1193,7 @@ func apiBatchDelete(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	if len(ids) == 0 {
-		return badRequest("Bad Request")
+		return refuse("Bad Request")
 	}
 	tasksMu.Lock()
 	defer tasksMu.Unlock()
@@ -1232,7 +1213,7 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 	}
 	snaps, ok := as[[]json.RawMessage](data["tasks"])
 	if !ok || len(snaps) == 0 {
-		return badRequest("Bad Request")
+		return refuse("Bad Request")
 	}
 	tasksMu.Lock()
 	defer tasksMu.Unlock()
@@ -1327,7 +1308,7 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 	if err := mayWriteTasks(user); err != nil {
 		return err
 	}
-	notExport := badRequest("Not a file of tasks exported from Zone")
+	notExport := refuse("Not a file of tasks exported from Zone")
 	snaps, ok := as[[]json.RawMessage](data["file"])
 	from := ""
 	if !ok {
@@ -1339,7 +1320,7 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 		from = cleanList(s)
 	}
 	if len(snaps) > importMax {
-		return badRequest("Too many tasks: at most " + strconv.Itoa(importMax) + " in one import")
+		return refuse("Too many tasks: at most " + strconv.Itoa(importMax) + " in one import")
 	}
 	str := func(k string) string { s, _ := as[string](data[k]); return s }
 	add := cleanTags(strings.Split(str("new"), ","))
@@ -1416,7 +1397,7 @@ func apiBatchComplete(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	if len(ids) == 0 {
-		return badRequest("Bad Request")
+		return refuse("Bad Request")
 	}
 	set := idSet(ids)
 	tasksMu.Lock()
@@ -1492,10 +1473,10 @@ func apiReorder(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	if !ok1 || !ok2 {
-		return badRequest("order must be a list of ids, updates a list of objects")
+		return refuse("order must be a list of ids, updates a list of objects")
 	}
 	if len(order) == 0 && len(updates) == 0 {
-		return badRequest("Bad Request")
+		return refuse("Bad Request")
 	}
 	tasksMu.Lock()
 	defer tasksMu.Unlock()
@@ -1539,7 +1520,7 @@ func tagTasks(user string, ids, add, remove []string, message string) ([]*Task, 
 	set := idSet(ids)
 	addTags, removeTags := cleanTags(add), cleanTags(remove)
 	if len(set) == 0 || len(addTags) == 0 && len(removeTags) == 0 {
-		return nil, badRequest("Give task ids and tags to add or remove")
+		return nil, refuse("Give task ids and tags to add or remove")
 	}
 	tasksMu.Lock()
 	defer tasksMu.Unlock()
@@ -1578,12 +1559,12 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 		changes[i] = o
 	}
 	if !valid {
-		return badRequest("tasks must be a list of objects with an id")
+		return refuse("tasks must be a list of objects with an id")
 	}
 	for _, c := range changes {
 		for _, k := range []string{"completed", "wont_do", "skip"} {
 			if c.has(k) {
-				return badRequest("batch-update changes fields, not status")
+				return refuse("batch-update changes fields, not status")
 			}
 		}
 	}

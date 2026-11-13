@@ -572,15 +572,11 @@ type GrepHit struct {
 	Line   string
 }
 
-// grepError: a grepPages pattern git refused (bad syntax) or that took too long.
-type grepError struct{ msg string }
-
-func (e *grepError) Error() string { return e.msg }
-
 // grepPages: every line of every page matching a regex, in file order. git
 // matches (git grep --no-index, so pages not yet committed count too) in
 // its own process, which a timeout can kill. Without git, the pattern is
-// matched as plain text. Only the pages in slugs (nil: every page).
+// matched as plain text. Only the pages in slugs (nil: every page). A
+// pattern git refuses (bad syntax) or that takes too long is a refusal.
 func grepPages(pattern string, ignoreCase bool, slugs map[string]bool) ([]GrepHit, error) {
 	if slugs == nil {
 		slugs = slugSet()
@@ -630,7 +626,7 @@ func grepPages(pattern string, ignoreCase bool, slugs map[string]bool) ([]GrepHi
 		// "*.md" is a pattern (gitEnv): git's, since Zone wrote it.
 		r = runGitEnv(grepTimeout, "", []string{"GIT_LITERAL_PATHSPECS=0"}, append(args, "-e", pattern, "--", "*.md")...)
 		if r.Code == 124 {
-			return nil, &grepError{fmt.Sprintf("the search took longer than %ds; try a simpler pattern", int(grepTimeout.Seconds()))}
+			return nil, refuse(fmt.Sprintf("the search took longer than %ds; try a simpler pattern", int(grepTimeout.Seconds())))
 		}
 		if perl && r.Code != 0 && r.Code != 1 && strings.Contains(r.Stderr, "PCRE") {
 			continue // this git has no -P: extended regexes instead
@@ -645,7 +641,7 @@ func grepPages(pattern string, ignoreCase bool, slugs map[string]bool) ([]GrepHi
 		if msg == "" {
 			msg = fmt.Sprintf("git grep failed (%d)", r.Code)
 		}
-		return nil, &grepError{msg}
+		return nil, refuse(msg)
 	}
 	for _, row := range mdtext.SplitLines(strings.ToValidUTF8(r.Stdout, "\uFFFD")) {
 		parts := strings.SplitN(mdtext.LineBody(row), "\x00", 3)

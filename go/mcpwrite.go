@@ -60,7 +60,7 @@ func writePage(args jsonObj, base, user string) (string, error) {
 	pending, old, merged := "", "", ""
 	if existing == "" {
 		if err := createPageOp(user, slug, content, suffix); err != nil {
-			return "", toolRefusal(err)
+			return "", err
 		}
 	} else {
 		var kept bool
@@ -72,7 +72,7 @@ func writePage(args jsonObj, base, user string) (string, error) {
 			return content, nil
 		})
 		if err != nil {
-			return "", toolRefusal(err)
+			return "", err
 		}
 		pending = pendingNote(slug, kept)
 	}
@@ -131,24 +131,13 @@ func writeQuicknote(args jsonObj, content, base, user string) (string, error) {
 	if name == "" {
 		name = title
 	}
-	slug, err := refused(createQuicknote(user, name, &content, suffix))
+	slug, err := createQuicknote(user, name, &content, suffix)
 	if err != nil {
 		return "", err
 	}
 	return "Created note " + slug + " (in Notes, not yet in the wiki; file_note " +
 		"moves it there or appends it to a page).\n" + pageInfo(slug, base) + linkWarning(slug, "", content, user), nil
 }
-
-// toolRefusal: an operation's refusal as a tool error.
-func toolRefusal(err error) error {
-	if pe, ok := refusalOf(err); ok {
-		return toolErr(pe.msg)
-	}
-	return err
-}
-
-// refused: toolRefusal for an operation's result.
-func refused[T any](v T, err error) (T, error) { return v, toolRefusal(err) }
 
 // fileNote: the note's Move to wiki (name, folder,
 // keep_date) or Append to page (page, heading), as in the browser.
@@ -204,7 +193,7 @@ func fileNote(args jsonObj, base, user string) (string, error) {
 		anchor, kept, err := appendQuicknote(user, slug, target, heading, suffix)
 		left, err := partly(err)
 		if err != nil {
-			return "", toolRefusal(err)
+			return "", err
 		}
 		pending = pendingNote(slug, kept) + pending
 		return "Appended note " + slug + " to " + target + " as the section “" + heading + "”, and deleted " +
@@ -231,7 +220,7 @@ func fileNote(args jsonObj, base, user string) (string, error) {
 	moved, kept, err := moveQuicknote(user, slug, folder, name, keepDate, suffix)
 	left, err := partly(err)
 	if err != nil {
-		return "", toolRefusal(err)
+		return "", err
 	}
 	pending := pendingNote(slug, kept) + left
 	return "Moved note " + slug + " into the wiki as " + moved + "; links to it were updated. " +
@@ -315,7 +304,7 @@ func editPageTool(args jsonObj, base, user string) (string, error) {
 		return text, nil
 	})
 	if err != nil {
-		return "", toolRefusal(err)
+		return "", err
 	}
 	pending := pendingNote(slug, kept)
 	what := "1 occurrence"
@@ -381,7 +370,7 @@ func appendToPage(args jsonObj, base, user string) (string, error) {
 		return text, nil
 	})
 	if err != nil {
-		return "", toolRefusal(err)
+		return "", err
 	}
 	pending := pendingNote(slug, kept)
 	return "Appended to page " + slug + where + ".\n" + pageInfo(slug, base) + pending +
@@ -417,7 +406,7 @@ func renameFolder(folder string, args jsonObj, base, user string) (string, error
 		return "", err
 	}
 	if _, err := checkFolderMove(user, folder, newFolder); err != nil {
-		return "", toolRefusal(err)
+		return "", err
 	}
 	if err := checkGuides(args, []string{folder + "/page", newFolder + "/page"}, user); err != nil {
 		return "", err
@@ -429,7 +418,7 @@ func renameFolder(folder string, args jsonObj, base, user string) (string, error
 	moves, changed, kept, err := moveFolderOp(user, folder, newFolder, suffix)
 	left, err := partly(err)
 	if err != nil {
-		return "", toolRefusal(err)
+		return "", err
 	}
 	head := fmt.Sprintf("Moved folder %s/ to %s/: %d pages.", folder, newFolder, len(moves))
 	if len(changed) > 0 {
@@ -459,9 +448,9 @@ func renameTaskTag(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	plan, err := tasksWrite(checkTagRename(user, tag, name, merge))
+	plan, err := checkTagRename(user, tag, name, merge)
 	if err != nil {
-		return "", toolRefusal(err)
+		return "", err
 	}
 	if err := checkGuides(args, plan.visibleSlugs(user), user); err != nil {
 		return "", err
@@ -470,9 +459,9 @@ func renameTaskTag(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	done, err := tasksWrite(renameTagOp(user, tag, name, merge, suffix))
+	done, err := renameTagOp(user, tag, name, merge, suffix)
 	if err != nil {
-		return "", toolRefusal(err)
+		return "", err
 	}
 	verb := "Renamed tag #" + plan.old + " to #" + done.Name
 	if done.Merged {
@@ -521,7 +510,7 @@ func renamePageTool(args jsonObj, base, user string) (string, error) {
 	changed, kept, err := renamePageOp(user, slug, newS, suffix)
 	left, err := partly(err)
 	if err != nil {
-		return "", toolRefusal(err)
+		return "", err
 	}
 	refs := ""
 	if len(changed) > 0 {
@@ -551,7 +540,7 @@ func deletePageTool(args jsonObj, base, user string) (string, error) {
 			linking = append(linking, b)
 		}
 	}
-	kept, err := refused(deletePageOp(user, slug, suffix))
+	kept, err := deletePageOp(user, slug, suffix)
 	if err != nil {
 		return "", err
 	}
@@ -602,7 +591,7 @@ func restorePage(args jsonObj, base, user string) (string, error) {
 	sha := entries[i].Sha
 	old, kept, err := restorePageOp(user, slug, sha, suffix)
 	if err != nil {
-		return "", toolRefusal(err)
+		return "", err
 	}
 	what, before := "Brought back the deleted page", ""
 	if old != nil {

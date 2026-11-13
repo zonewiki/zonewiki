@@ -8,7 +8,6 @@ package main
 
 import (
 	"io/fs"
-	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -173,7 +172,7 @@ func readOnly(user, slug string) bool { return canSee(user, slug) && !canWrite(u
 const readOnlyMsg = "You can read this wiki but not change it: you are a viewer. Ask an admin of this wiki."
 
 // errReadOnly: a viewer's change to something shared, refused.
-var errReadOnly = &apiError{http.StatusForbidden, readOnlyMsg}
+var errReadOnly = refuseAs(refusedReadOnly, readOnlyMsg)
 
 // canSeeTask: user may see the task t: a shared one, or one of their own
 // private ones.

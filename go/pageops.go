@@ -2,8 +2,8 @@
 // browser's routes and the MCP tools share, so a page is checked, kept and
 // committed the same way whichever door the write came through. An
 // operation takes the user and does every check itself; a refusal is a
-// *pageError, which the routes turn into a status or a dialog's message,
-// the tools into a tool error. suffix follows a commit's message (the MCP
+// *refusalError (refusal.go), which the routes turn into a status or a
+// dialog's message, the tools into a tool error. suffix follows a commit's message (the MCP
 // tools' summary and "(MCP)").
 package main
 
@@ -52,37 +52,6 @@ func writesPages(h http.HandlerFunc) http.HandlerFunc {
 		defer pagesMu.Unlock()
 		h(w, r)
 	}
-}
-
-// refusal: why an operation refused, for the route's answer.
-type refusal int
-
-const (
-	refusedInvalid   refusal = iota // can't be done as asked: 400, or the dialog's message
-	refusedNotFound                 // no such page, or not one the user may see: 404
-	refusedExists                   // a page by the new name is there already
-	refusedProtected                // the home page: never deleted or renamed
-	refusedUnchanged                // the page already is what the write would make it
-	refusedFull                     // the wiki would hold more than storage-max: 507 (checkRoom)
-	refusedReadOnly                 // a viewer changing something shared, an editor a guide: 403 (readOnlyWhy)
-)
-
-// pageError: an operation refused, with a message for the user.
-type pageError struct {
-	kind refusal
-	msg  string
-}
-
-func (e *pageError) Error() string { return e.msg }
-
-func refuse(msg string) error              { return &pageError{refusedInvalid, msg} }
-func refuseAs(k refusal, msg string) error { return &pageError{k, msg} }
-
-// refusalOf: err's refusal, if it is one.
-func refusalOf(err error) (*pageError, bool) {
-	var pe *pageError
-	ok := errors.As(err, &pe)
-	return pe, ok
 }
 
 // pageFailed answers a route whose operation failed: a refusal as its
