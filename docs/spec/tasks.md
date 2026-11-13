@@ -49,7 +49,7 @@ Element ids get a `-<n>` suffix after the first embed, so a page can hold severa
 The Tasks page itself is `/tasks`; embeds are for custom views on ordinary pages (a tag's tasks, a list with notes around it).
 Nothing links to a `tasks.md` page.
 
-**Task ↔ page linking** is a `[[wikilink]]` (or `/page/` link) in the task's title or notes, which lists the task under the page's "Linked tasks".
+**Task ↔ page linking** is a `[[wikilink]]` (or `/page/` link) in the task's title or description, which lists the task under the page's "Linked tasks".
 The other way round, a page shows one task inline with `[[task:<id>]]` (see Task references).
 There is no `page` field: `page` in embeds or API bodies is ignored.
 
@@ -140,7 +140,7 @@ Recurring instances keep the gap between the two dates, but a new instance's sta
 |-------|------|-------------|
 | `id` | UUID string | |
 | `title` | string | Required. Links in it work on the card (see Title links) |
-| `description` | string | Notes: markdown, rendered as a page's text (see Notes); `- [ ] item` lines are checkboxes |
+| `description` | string | Markdown, rendered as a page's text (see Description); `- [ ] item` lines are checkboxes |
 | `tags` | string[] | One word each. `cleanTags()` on every write/read/restore: inner whitespace → `-`, leading `#` dropped, empties removed, case-insensitive duplicates collapsed. Tag inputs sanitize as you type (`TasksCore.sanitizeTagInput`), leaving deletions alone. |
 | `due_date` | `"YYYY-MM-DD"` / `null` | Deadline |
 | `start_date` | `"YYYY-MM-DD"` / `null` | Start date (see Dates) |
@@ -329,7 +329,7 @@ After a save the page reloads, and what the browser tab remembered (the active t
   the name goes into `Content-Disposition` quoted and escaped, `mime.FormatMediaType`, as the list's name is the request's): the tasks the list shows (its `list=` and `tag=`, not what is typed in the search field),
   open and completed of every year,
   each as the API shows it,
-  with its notes,
+  with its description,
   dates,
   recurrence,
   comments and history: `{"zone_tasks": 1, "list": "shop", "tag": "", "exported_at": "…", "tasks": […]}`.
@@ -377,7 +377,7 @@ Each with a dark-mode value.
 
 ### Interaction
 
-- **Filter field** (`#task-filter-search`, `TasksCore.parseFilter`/`matchesFilter`): `#words` filter by tag (all must match; `#a|b` = any), `-#word` excludes a tag (`-#a|b`: neither), `!high` (or `!`) and `!low` show the tasks of that importance, the rest searches title and notes.
+- **Filter field** (`#task-filter-search`, `TasksCore.parseFilter`/`matchesFilter`): `#words` filter by tag (all must match; `#a|b` = any), `-#word` excludes a tag (`-#a|b`: neither), `!high` (or `!`) and `!low` show the tasks of that importance, the rest searches title and description.
   `/` focuses it, `#` focuses it and starts a tag.
   Typing a `#word` (or `-#word`) suggests tags of the tasks the other tag words leave visible (free text is ignored for this).
   Embed `tag=`/`?tag=` become a query via `TasksCore.tagParamToQuery`.
@@ -427,18 +427,18 @@ Each with a dark-mode value.
   `#task-edit-quick` previews the result; shorthand wins over the date fields.
 - **Completing**: the checkbox completes after a cancellable grace period (struck through meanwhile; several ticked in a row each keep their tick and strike while an earlier one leaves the list).
   Completing a recurring task spawns the next instance, stepping from the previous primary date (or today with `from: completion`) until ≥ today, with its start date not before today (see Dates); month steps clamp to the month's last day.
-  Un-completing removes the spawned instance while it is untouched (`untouchedSpawn`: its history ends with the `repeat`, and title, notes, tags and comments are the reopened task's);
+  Un-completing removes the spawned instance while it is untouched (`untouchedSpawn`: its history ends with the `repeat`, and title, description, tags and comments are the reopened task's);
   one you changed since stays, and completing the reopened task again then spawns no second one (`spawnRecurring` skips a task whose open spawn is still there).
-- **Checkboxes in notes**: a checklist item (`- [ ] item`, as on a page) is a real checkbox in the card's notes.
-  Ticking it works as on a page: `POST /api/tasks/<id>/toggle-check` with `{ idx }` flips the Nth box (`mdtext.ToggleNthCheckbox`, numbered as `renderNotes` renders them; notes have no frontmatter, so a leading `---` block is text and its boxes count) and records when,
+- **Checkboxes in the description**: a checklist item (`- [ ] item`, as on a page) is a real checkbox in the card's description.
+  Ticking it works as on a page: `POST /api/tasks/<id>/toggle-check` with `{ idx }` flips the Nth box (`mdtext.ToggleNthCheckbox`, numbered as `renderNotes` renders them; a description has no frontmatter, so a leading `---` block is text and its boxes count) and records when,
   `<!--d:YYYY-MM-DDTHH:MM:SS-->`,
   shown as a date chip;
   unticking takes the date out.
   An undo toast follows ("Checked “…” · Undo", undo is a second toggle); the toggles are chained (`toggleNoteCheck`), so an undo never overtakes the toggle it reverts.
-  Each toggle is a change of the notes like any other (a commit).
+  Each toggle is a change of the description like any other (a commit).
   The task's own checkbox is `.task-checkbox input`, and a page's own checklist next to a task list is the page's (`js/page.js` leaves the task app's boxes alone), so they never mix.
-- **Subtasks**: the checklist items in a task's notes are its subtasks (`subtaskCounts` in `js/taskutil.js`, counted as the notes render them: not in code).
-  A card with subtasks says how many are done, "☑ 1/3" (`.task-subtasks`, in the accent once all are, `.task-subtasks-done`), where a card with other notes has 📝: on a compact line too, where the notes are hidden, and a click on it opens them as 📝 does.
+- **Subtasks**: the checklist items in a task's description are its subtasks (`subtaskCounts` in `js/taskutil.js`, counted as the description renders them: not in code).
+  A card with subtasks says how many are done, "☑ 1/3" (`.task-subtasks`, in the accent once all are, `.task-subtasks-done`), where a card with another description has 📝: on a compact line too, where the description is hidden, and a click on it opens them as 📝 does.
   Completing a task with a subtask still open asks first ("“Plan trip” has 2 open subtasks.", **Complete anyway** or Cancel; `confirmOpenSubtasks`, `#task-subtasks-modal`): from the task's checkbox and Space (`tickTask`), and once for several selected tasks (Space, the selection bar's Done; `mayComplete`), where Cancel keeps the selection.
   Won't do, a task chip's checkbox on a page and an assistant (MCP) don't ask.
 - **Won't do** (⋯ menu; cards have no ✗ button any more) archives without spawning;
@@ -462,7 +462,7 @@ Each with a dark-mode value.
   **Copy link** puts the task's full URL in the clipboard (`taskHref`, as `taskLink` builds it: `/tasks?task=<id>&view=open`, `view=completed` (with `&year=` from an earlier year's archive) for a done task, `&list=` for a list task); opening it selects and flashes the task (see `?task=`).
   Paste it anywhere: chat, mail, a page.
   A popover with ↑/↓/Enter/Esc on desktop (tasks shortcuts suspended while open), a bottom sheet at ≤640px.
-- **Edit modal**: double-click anywhere on a card (title and notes too; only its controls, the checkbox, buttons, links and date chips, keep their own) or Enter on desktop;
+- **Edit modal**: double-click anywhere on a card (title and description too; only its controls, the checkbox, buttons, links and date chips, keep their own) or Enter on desktop;
   on touch the first tap selects the card (in compact view also showing a cut-off title whole, see Compact) and a tap on the selected card opens it (`pressedSelected`, noted at `pointerdown`, since touch's compat mousedown selects before the click;
   pointer type of the last `pointerdown`;
   a double tap's `dblclick` is ignored, so it is just those two taps),
@@ -493,8 +493,8 @@ Each with a dark-mode value.
 - **Cards** (`taskHTML`, tasks.css "Cards"): one layout for every card.
   The first line: checkbox, title (as wide as it needs, at least 6rem, 4.5rem on phones; it wraps), the tags right after it (pills), markers and dates at the right end (`.task-meta` sits in the line), ⋯ last.
   **Nothing jumps on hover**: what is always shown (markers, 📝, 💬, dates, ⋯) ends at the right and stays put; what hover adds (⏭, the empty ⏰ 📅, at 60% opacity, full on their own hover: at 30% they were hard to see) appears left of it (first in `.task-meta-right`, CSS `order`).
-  A task with notes shows 📝 (`.task-has-notes`) on every card, since a compact line hides the notes.
-  Under it the notes, then the latest 3 comments, newest first (`.task-card-comments`; "N earlier…" opens the modal at the comments).
+  A task with a description shows 📝 (`.task-has-notes`) on every card, since a compact line hides the description.
+  Under it the description, then the latest 3 comments, newest first (`.task-card-comments`; "N earlier…" opens the modal at the comments).
   **Every card shows every tag**, full cards and compact lines alike.
   The title and the tags share the line (desktop: `.task-meta` is `display: contents`, its tags and dates are grid columns of their own, `tags` and `dates`, with a `1fr` spacer between): each is as wide as it needs when both fit;
   short of room, both grow from their minimum (6rem for the title, the widest tag for the tags) by the same amount, so a long title can't push the tags out and many tags can't squeeze the title away.
@@ -510,7 +510,7 @@ Each with a dark-mode value.
   and a card with none of them stays one line;
   compact lines the same, rows ≥44px as a whole.
   There every tag shows: the tags flow in that line (`display: contents`) and wrap onto more lines rather than drop out, the dates following the last tag at the right end, or on the next line when they don't fit beside it.
-- **Compact** (`applyCompact`, `.tasks-compact`): every card collapses to its first line (title cut off with …, notes and comments hidden; 📝 says a line has notes, 💬 N that it has comments).
+- **Compact** (`applyCompact`, `.tasks-compact`): every card collapses to its first line (title cut off with …, description and comments hidden; 📝 says a line has a description, 💬 N that it has comments).
   Tags that don't fit beside the title wrap onto a second line rather than drop out (see Cards).
   **Every tab starts compact** (one line per task; `compact=1`, which once made Focus and Plan start so too, is no longer needed and ignored).
   Rows stay ≥44px on touch.
@@ -518,13 +518,13 @@ Each with a dark-mode value.
   **Expanding a task** (`expandedId`, `setExpanded`, `.task-expanded`): selecting a task (a click, arrows, j/k; `setSelected`) shows its whole title,
   wrapped,
   when the line cuts it off (`titleCut`),
-  and nothing more: notes and comments stay hidden,
+  and nothing more: description and comments stay hidden,
   so you can read through tasks and the list stays compact;
   the previous one closes.
   A task whose title fits stays a line (on touch the first tap only selects it).
-  **Its details** (notes, the latest 3 comments: the rest of a full card;
+  **Its details** (the description, the latest 3 comments: the rest of a full card;
   `detailsOpen`, `.task-details`, `toggleDetails`) open only on request: a click or tap on the **expand button** (`.task-expand-btn`, a chevron left of ⋯, turned up while open, `aria-expanded`;
-  only on lines with notes or comments, though every compact line keeps its room so the dates end at the same place;
+  only on lines with a description or comments, though every compact line keeps its room so the dates end at the same place;
   full cards have none),
   on 📝 or on 💬 (each toggles them; 📝 is a button, finger-sized on touch without making the line taller),
   or **→** / **l** on the selected task;
@@ -546,20 +546,20 @@ Each with a dark-mode value.
 ### Title links
 
 A title can carry links: `[[wikilinks]]`, `[label](url)` and bare URLs show as links on the card (`linkifyTitle`; one to another site opens in a new tab, `class="task-link"`; a link to anything but the web, mail or the wiki, e.g. `javascript:`, stays text).
-**Pasting a URL into the title** asks for its name, as in the notes and the editor (`pasteUrlAsLink`, the same dialog): a name makes `[name](url)`, none (or Cancel) the bare URL; pasted over selected text, the text becomes the label.
+**Pasting a URL into the title** asks for its name, as in the description and the editor (`pasteUrlAsLink`, the same dialog): a name makes `[name](url)`, none (or Cancel) the bare URL; pasted over selected text, the text becomes the label.
 `[[` and `[text](` complete pages there too, and `:name` emoji (see Emoji in `docs/spec/editor.md`). Where a title is plain text (the ⋯ menu, toasts, the delete and deadline dialogs: `plainTitle`; search results, task chips, Linked tasks: `mdtext.PlainTaskTitle`), links are reduced to their labels.
 
-### Notes
+### Description
 
-A task's notes are markdown, edited and rendered as a page's text.
+A task's description is markdown, edited and rendered as a page's text.
 
 - **Rendering** (`renderNotes`, `POST /api/render-notes`): the page renderer, so headings, lists, checklists, tables, code (highlighted), quotes, callouts, images, wikilinks, `[[task:…]]` chips and the dates a ticked checkbox records look as on a page; lines in a row make one paragraph, as on a page.
   Not what only a page has: frontmatter, `[[tasks:]]` embeds, ✎ per section; headings get no ids (they would clash with the page's anchors).
-  In the card the notes take a card's scale (`.task-desc.page-content`: headings the size of the text, tighter spacing, wide tables and code scroll, bullets and checklist boxes in one column a box wide (`--mark`), both centred in it and on the lowercase letters of the first line;
+  In the card the description takes a card's scale (`.task-desc.page-content`: headings the size of the text, tighter spacing, wide tables and code scroll, bullets and checklist boxes in one column a box wide (`--mark`), both centred in it and on the lowercase letters of the first line;
   the bullets are drawn there (`li::before`), since a list marker's place depends on the font;
-  text starts at the same place with a box or a bullet, and the first box at the notes' edge);
+  text starts at the same place with a box or a bullet, and the first box at the description's edge);
   an image opens full size.
-  Comments render the same way, in the cards and the modal (`.task-comment-body`, at the notes' scale).
+  Comments render the same way, in the cards and the modal (`.task-comment-body`, at the description's scale).
 - **Where the HTML comes from** (`renderTexts`, `renderedHtml` in `tasks.js`): the tasks asks the server for the texts it hasn't rendered yet, in one request (`{ notes: [...], comments: [...] }`), and keeps the HTML per text for the page's life, shared by every task list app on it.
   Loading tasks (`fetchTasks`, Completed) and each write wait for it before drawing, so cards never flash plain text; a text that arrives some other way shows as plain text until its HTML is there (`htmlOf`), and a failed request caches nothing.
   Code is highlighted once, when the HTML arrives.
@@ -567,7 +567,7 @@ A task's notes are markdown, edited and rendered as a page's text.
   Ctrl+B/I/K,
   Ctrl+Shift+X,
   `[[` / `[[task:` / `[text](` completion, snippets (`/date` + Tab), list continuation on Enter, Enter on a selection makes it a wikilink, file paste, drop and attach (uploads to `_assets/`, as in the editor), URL paste. Tab moves on to the next field unless it expands a snippet (the editor's Tab indents; a modal needs Tab between its fields). The modal's Save and Cancel stay: nothing is saved while typing.
-- **Edit | Preview** (two buttons beside the Description label, or **F2** in the modal; `setNotesPreview`): Preview shows the notes as the card will (`/api/render-notes`) in place of the formatting bar and the field, at their height together, so nothing below moves; longer notes scroll inside it.
+- **Edit | Preview** (two buttons beside the Description label, or **F2** in the modal; `setNotesPreview`): Preview shows the description as the card will (`/api/render-notes`) in place of the formatting bar and the field, at their height together, so nothing below moves; a longer description scrolls inside it.
   Tinted, outlined and labelled PREVIEW at its top (stays while it scrolls), so it is never taken for the field.
   Ticking a box in it ticks the item in the text and records when, as on the card (`toggleCheckboxText` in `js/mdtext.js`, mirroring `mdtext.ToggleNthCheckbox`; local time), so the preview shows the date chip; unticking takes the date out.
   The hidden field can't take the browser's undo; unticking undoes it.
@@ -599,7 +599,7 @@ There is no separate "Created:" line.
 ### Comments
 
 What happened on a task, dated: a quick status line ("called Bob, waiting", "Alex: 6 people") or several lines.
-A comment is markdown, rendered as the notes are (see Notes): paragraphs, lists, code, links, `[[task:…]]` chips; lines in a row make one paragraph, as on a page.
+A comment is markdown, rendered as the description is (see Description): paragraphs, lists, code, links, `[[task:…]]` chips; lines in a row make one paragraph, as on a page.
 They are kept in `comments` (`[{ id, at, by, text }]`, oldest first;
 `id` 8 hex chars, `at` `YYYY-MM-DDTHH:MM`, text up to `commentMax` = 2000 chars;
 `by` the user who wrote it, written only when there is one (with users, `docs/spec/users.md`), so a wiki without users keeps its files as they were;
@@ -621,7 +621,7 @@ Not part of the History: they are never capped, undo of other changes never touc
   The latest 3 are listed (`commentCardHtml`): a comment of one paragraph on the line of its time, as a status line reads; any other (several paragraphs, a list, code) under its time.
   On a full card (which lists the latest 3 already) a click opens the modal with the comment field open and focused (`openEditModal(id, { focusComment: true })`); on a compact line it opens or closes the line's details, the latest 3 among them (see Compact), whose "N earlier…" leads to the modal.
 - **Carried on**: a recurring task's next occurrence takes the series' comments with it, like the history.
-- **Search and MCP**: comment text is part of a task's search text (`taskSearchDocs`, so semantic search too), a comment counts as activity for `edited:`/`after:`/`before:` (`lastActivity`), and `mcpTaskText` lists them after the notes under "Comments:" (`- YYYY-MM-DD HH:MM: text`, a comment's following lines indented under its first).
+- **Search and MCP**: comment text is part of a task's search text (`taskSearchDocs`, so semantic search too), a comment counts as activity for `edited:`/`after:`/`before:` (`lastActivity`), and `mcpTaskText` lists them after the description under "Comments:" (`- YYYY-MM-DD HH:MM: text`, a comment's following lines indented under its first).
 
 ### Importance
 
@@ -642,7 +642,7 @@ A task is of **high**, **normal** or **low** importance (`importance`, Task fiel
 
 A task with `keep: true` is never archived: ticking it off means "done for now, back to the pool".
 It suits a shopping list used with the task app's views: Open is the catalogue of staples, starting items today puts them on Focus (the actual shopping list), and ticking one off sends it back to Open.
-Completing a keep task (`keep_done`, in `PUT` and in `batch-complete`) clears its start date and its deadline, and sets `last_done` to today; it stays in `_tasks/tasks.json` with the same id, tags, notes and place in Open's order, and Completed stays empty.
+Completing a keep task (`keep_done`, in `PUT` and in `batch-complete`) clears its start date and its deadline, and sets `last_done` to today; it stays in `_tasks/tasks.json` with the same id, tags, description and place in Open's order, and Completed stays empty.
 Since Completed can't reopen it, the card shows an undo toast that restores the old fields (`keepSnapshot`).
 **Won't do** and **Delete** retire a staple.
 Keep and Repeat both say what happens after done, so they exclude each other: `keep` clears `recurrence`, and the edit modal disables Repeat while "Keep after done" is checked.
@@ -783,7 +783,7 @@ A tag no page declares stays a filter.
 
 - **g a**: go to `/tasks`, all tasks; **g t**: go where the Tasks link goes (your pinned lists)
 - **v**: one line per task / full cards (see Compact)
-- **→** / **l**, **←** / **h** (compact): open / close the selected task's notes and comments; open, they stay open as j/k move on (see Compact)
+- **→** / **l**, **←** / **h** (compact): open / close the selected task's description and comments; open, they stay open as j/k move on (see Compact)
 - **o** (the Open tab): the order: manual, by deadline, newest first (see Sorting)
 - **d** (the Open tab): Plan on / off, by start date or one list (see Views)
 - **i**: the importance of the selected task, in turn high, low, normal; several selected all get what follows the first one's (see Importance)

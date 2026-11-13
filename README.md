@@ -116,7 +116,7 @@ Done tasks go to a yearly archive. Beyond that:
 - Repeating tasks (by due date or from when you finish them; skip one
   occurrence without ending the series), "keep" tasks that go back on the
   list when done (shopping staples), and "won't do".
-- Notes in full Markdown, written with the page editor's formatting bar and
+- A description in full Markdown, written with the page editor's formatting bar and
   shown as a page shows it (checklists, tables, code, links), dated comments in
   Markdown too (a status line or several), a history of every date change, and undo for completing
   and deleting.

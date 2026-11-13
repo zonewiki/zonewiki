@@ -13,7 +13,7 @@
         phones it shares the tabs' row, leaving the search its room. */}}
     <button type="button" class="tasks-plan-switch" id="task-plan{{.Sfx}}" role="switch" aria-checked="true" title="Plan: group by start date (d)" hidden><span class="tasks-plan-track" aria-hidden="true"></span>Plan</button>
     <div class="tasks-toolbar">
-      <input type="text" id="task-filter-search{{.Sfx}}" placeholder="Search… #tag" title="Text searches title and notes · #tag filters by tag · #a #b = both tags · #a|b = either · -#tag = without" autocomplete="off">
+      <input type="text" id="task-filter-search{{.Sfx}}" placeholder="Search… #tag" title="Text searches title and description · #tag filters by tag · #a #b = both tags · #a|b = either · -#tag = without" autocomplete="off">
       <select class="tasks-sort" id="task-sort{{.Sfx}}" aria-label="Order" title="Order (o)" hidden><option value="manual">Manual</option><option value="due">Due date</option><option value="created">Created</option></select>
       <button type="button" class="btn tasks-density-btn" id="task-density-btn{{.Sfx}}" aria-pressed="false" aria-label="One line per task" title="One line per task (v)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><line x1="2.5" y1="4" x2="13.5" y2="4"/><line x1="2.5" y1="8" x2="13.5" y2="8"/><line x1="2.5" y1="12" x2="13.5" y2="12"/></svg></button>
       {{- /* The settings dialog (js/tasksettings.js): where this app's params can be changed. */}}

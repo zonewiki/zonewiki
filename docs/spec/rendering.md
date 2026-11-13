@@ -7,7 +7,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 - Raw HTML in a page is rendered as written (goldmark's `WithUnsafe`), but no script in it runs: the Content-Security-Policy allows only Zone's own script files (Scripts in pages don't run, `docs/spec/security.md`).
   Form controls, `<meta>` and `<base>` in it show as text (`defuseHTML`: a form in a page could post to Zone as the viewer).
   One goldmark set up with Zone's rules is built per kind (block, inline) and reused from a pool (`mdRenderer` in `go/markdown.go`), bound to one render's `Env` at a time;
-  how headings carry their ids is the renderer's (`Env.HeadingIDs`: `id` on a page, `data-pid` in the search preview, none in task notes and comments), not a rewrite of its output.
+  how headings carry their ids is the renderer's (`Env.HeadingIDs`: `id` on a page, `data-pid` in the search preview, none in task descriptions and comments), not a rewrite of its output.
   Wikilinks are an inline of goldmark's (`wikilinkParser`, before its links), written by the renderer through `Env.Wikilink` (`wikilinker` in `go/render.go`), so code spans, math and raw HTML (an attribute's `[[…]]`) keep theirs as text.
   A table splits its rows at `|` before inlines are parsed: `escapeWikilinkPipes` writes the `|` of a wikilink on a table's lines as `\|` (GFM's pipe in a cell) before the parse, and the parser reads it back; elsewhere it stays as written.
   An HTML block is raw to goldmark: its wikilinks are linked in its text between the tags (`wikilinksInHTML`), not in its attributes.
@@ -16,7 +16,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 - The HTML shell includes: status badges, breadcrumb (with the module switcher), page header (title, Edit, the ⋯ page menu), content area, backlinks, the action bar, and the search/shortcut/new-note modals.
   There is no nav bar (see Modules).
 - `highlight.js` (vendored, see Dependencies) auto-highlights fenced code blocks client-side after load; math and Mermaid diagrams render client-side too (Math and diagrams).
-- **Task notes and comments** render with the same markdown (`renderNotes`, `POST /api/render-notes`): wikilinks, `[[task:…]]` chips, task-date chips, without what only a page has (frontmatter, `[[tasks:]]`, ✎ per section, heading ids).
+- **Task descriptions and comments** render with the same markdown (`renderNotes`, `POST /api/render-notes`): wikilinks, `[[task:…]]` chips, task-date chips, without what only a page has (frontmatter, `[[tasks:]]`, ✎ per section, heading ids).
   See Notes in `docs/spec/tasks.md`.
 - The shared shell renders the product brand as `Zone` (page titles, the switcher's accessible name), with a small green inline SVG Z logo (`site-logo` in `templates/partials/icons.html`) on the breadcrumb's Wiki link.
 
@@ -48,7 +48,7 @@ Both render in the browser from vendored copies (`public/vendor/katex/`, `public
 `js/figures.js` (`renderFigures`) loads a library the first time a page has something for it,
 so a page without math or diagrams loads neither (Mermaid is 5.5 MB, 1.5 MB as it is sent: `/public/vendor/` scripts and styles go gzipped to a browser that takes it, gzipped once and kept in memory, and with `Cache-Control: public, max-age=86400`, since they change only with an update of Zone;
 `servePublic`).
-It runs on the page view (the article and the side TOC), the editor's preview, presentation slides, the search dialog's preview, and task notes and comments (in the live list after each draw, from its caches, so a library that failed to load is tried again then).
+It runs on the page view (the article and the side TOC), the editor's preview, presentation slides, the search dialog's preview, and task descriptions and comments (in the live list after each draw, from its caches, so a library that failed to load is tried again then).
 Without the library (an error, offline before the first load) the source shows as written.
 
 - **Math** (KaTeX): `$…$` inline, `$$…$$` for display, and a ` ```math ` fence (display).
@@ -102,7 +102,7 @@ They share code by `import`, not through `window`:
 | `js/tasklist.js` | The editor's Task list button (`taskListDialog`): the list settings dialog (`js/tasksettings.js`) writing or changing a `[[tasks: …]]` in the text |
 | `js/pagemenu.js` | The page's ⋯ menu and its dialogs (rename, move to wiki, append, delete) |
 | `js/shortcuts.js` | Keyboard shortcuts |
-| `js/mdedit.js` | `markdownEditor`: the markdown helpers of the editor and the task app's task notes (formatting bar, completion, snippets, lists, uploads) |
+| `js/mdedit.js` | `markdownEditor`: the markdown helpers of the editor and the task app's task description (formatting bar, completion, snippets, lists, uploads) |
 | `js/editor.js` | The editor: auto-save, preview, Enter on a wikilink, Make task, rename bar |
 | `js/page.js` | Page view: checkboxes, `[[task:…]]` chips, sortable tables, syntax highlighting, lightbox |
 | `js/figures.js` | `renderFigures`: math (KaTeX) and Mermaid diagrams, loading each library on first use (Math and diagrams) |
@@ -110,7 +110,7 @@ They share code by `import`, not through `window`:
 | `js/present.js` | Presentation mode |
 | `js/admin.js` | The admin page's Remove dialog (Managing users in `users.md`) |
 | `js/taskutil.js` | What `tasks.js`'s task apps use that holds no state of an app's own: date formatting and classes (`formatDate`, `shortDate`, `dueDateClass`, `urgencyClass`, `todayStr`), `DATES`/`LOCALE`, notices and the toast's place, `esc`, the tag autocomplete (`attachTagAc`) and `#` words at the caret, links in a title (`linkifyTitle`, `plainTitle`), comment stamps |
-| `js/tasktexts.js` | Notes and comments rendered as pages are, for every task app on the page: the HTML the server made of each text (`POST /api/render-notes`), kept per text and fetched once (`renderTexts`, `renderedHtml`, `textsOf`) |
+| `js/tasktexts.js` | Task descriptions and comments rendered as pages are, for every task app on the page: the HTML the server made of each text (`POST /api/render-notes`), kept per text and fetched once (`renderTexts`, `renderedHtml`, `textsOf`) |
 | `tasks.js`, `tasks-core.js` | The task app (exports `initTaskApps`, `openTasksEdit`): `initTasksInstance` puts one together (its elements, the state its parts share, what the embed and the address say it shows, the list's own listeners) and starts its parts; and its pure logic (`TasksCore`, also run by the Node tests: dates, orders, the filter, what a tab shows, the Plan board's sections, the quick-add shorthand) |
 | `js/taskdata.js`, `js/taskview.js`, `js/taskorder.js`, `js/tasktabs.js`, `js/taskchips.js`, `js/taskrender.js`, `js/taskmodal.js`, `js/taskselect.js`, `js/taskmenu.js`, `js/taskkeys.js`, `js/taskdnd.js`, `js/tasktouch.js`, `js/tasksettings.js` | The task app's parts, each `initTask…(app)`, called by `initTasksInstance` for each task app: the tasks read and written through `/api/tasks` with the Undo toast (`taskdata`), how the list is shown as the browser remembers it (compact, folds, sort, Plan on or off) and a line's expansion (`taskview`), the manual order and its sections (`taskorder`), the tabs and the filter field (`tasktabs`), tags typed as chips (`taskchips`), drawing the list (`render` in `taskrender`: one function per kind of view, the cards' handlers wired after), the edit modal, selection and the selection bar with bulk tags, the ⋯ menus and confirmations, the keys, drag and drop with the mouse, touch gestures, the settings dialog. `tests/test_task_app_wiring.py` reads the sources: every `app.name` a part uses is put on `app` by `tasks.js` or returned by a part, and by one of them only. `app` holds what a part uses of the app (its elements and functions, as getters what is set later or changes), `app.st` the state the parts share (`st.tasks`, `st.activeView`, `st.selectedIds` …); what one part alone uses stays its own variable. A part's functions go back into `app` for the others |
 | `js/datepicker.js` | The task app's calendar popup (`openDatePicker`) and `swallowNextClick` |
@@ -193,7 +193,7 @@ Use a simple approach: if the first non-empty line of the file matches `^#\s+`, 
   labelled "Page › Section";
   `[[Page#Section|Label]]` with a label;
   `[[#Section]]` a heading on the same page.
-  `mdtext.SplitWikilink` parses all forms (server), `wikilinkHref` in `js/mdtext.js` the same for the editor's Enter-on-a-wikilink (task notes render on the server, `renderNotes`).
+  `mdtext.SplitWikilink` parses all forms (server), `wikilinkHref` in `js/mdtext.js` the same for the editor's Enter-on-a-wikilink (task descriptions render on the server, `renderNotes`).
   The section is ignored for backlinks and kept on rename.
 - Wikilinks are parsed with the markdown (`wikilinkParser`, an inline like a link; one line, no bracket inside) and written as links (`wikilinker`).
   A label renders as a link's text does (`**bold**`, code and math in it render; HTML in it is text); a heading's id has the label's text, as `[[Page#Section]]` makes it.
@@ -239,7 +239,7 @@ Nobody types ids: in the editor, `[[task:` (or the formatting bar's task button)
 - **Make task** (formatting bar, `makeTasks` in `js/editor.js`): turns text in the editor into tasks and replaces it with their references, e.g. action items in meeting notes.
   A selection within one line becomes one task and an inline reference.
   Otherwise each non-empty line the selection touches (or the cursor's line) becomes a task, keeping its list marker and dropping a checklist's `[ ]` (`- [ ] Call Bob` → `- [[task:…]]`); blank lines, headings and lines that are already a reference stay.
-  Each task's notes say `From [[<page>]]`.
+  Each task's description says `From [[<page>]]`.
   - **One item opens the task app's edit modal** to review it first: the editor page carries a hidden task app (`buildTasksEmbed(…, headless)`: `data-headless`, `display:none`; `tasks.js` then ignores the task app's keyboard shortcuts and the "moved to another list" notice),
     and `openTasksEdit(null, { title, description, start_date: null, onCreated })` (exported by `tasks.js`) opens it with the text as title (its quick-add preview shows the shorthand) and no start date.
     Save (Enter) creates the task and `onCreated` puts the reference in; Cancel/Esc changes nothing.

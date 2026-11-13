@@ -132,7 +132,7 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
   const notesDisplay = subtasks.total
     ? `<button type="button" class="task-has-notes task-subtasks${subtasks.done === subtasks.total ? ' task-subtasks-done' : ''}" data-id="${esc(task.id)}" title="${subtasksLabel}" aria-label="${subtasksLabel}">☑ ${subtasks.done}/${subtasks.total}</button>`
     : task.description?.trim()
-    ? `<button type="button" class="task-has-notes" data-id="${esc(task.id)}" title="Has notes" aria-label="Has notes">📝</button>` : '';
+    ? `<button type="button" class="task-has-notes" data-id="${esc(task.id)}" title="Has a description" aria-label="Has a description">📝</button>` : '';
   const skipBtnHtml = (!task.completed_at && task.recurrence)
     ? `<button class="task-skip-btn" data-id="${esc(task.id)}" title="Skip this occurrence (series continues)">⏭</button>`
     : '';
@@ -158,7 +158,7 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
   // full cards, which show them).
   const detailsShown = st.compact && task.id === st.expandedId && st.detailsOpen;
   const expandBtn = descHtml || commentsHtml
-    ? `<button type="button" class="task-expand-btn" data-id="${esc(task.id)}" aria-expanded="${detailsShown}" aria-label="Notes and comments" title="Notes and comments (l / h)">${app.EXPAND_ICON}</button>` : '';
+    ? `<button type="button" class="task-expand-btn" data-id="${esc(task.id)}" aria-expanded="${detailsShown}" aria-label="Description and comments" title="Description and comments (l / h)">${app.EXPAND_ICON}</button>` : '';
   return `
     <li class="task-item ${completedClass} ${urgClass}${focusClass} ${extraClass}${st.compact && task.id === st.expandedId ? ' task-expanded' + (st.detailsOpen ? ' task-details' : '') : ''}" data-id="${esc(task.id)}" ${dragAttr}>
       <label class="task-checkbox">

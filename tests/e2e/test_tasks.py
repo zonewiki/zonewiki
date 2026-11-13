@@ -3546,7 +3546,7 @@ def test_compact_line_marks_notes(page, wiki):
     expect(marker).to_be_visible()                                       # full card
     page.locator(".tasks-density-btn").click()
     expect(marker).to_be_visible()
-    expect(marker).to_have_attribute("title", "Has notes")
+    expect(marker).to_have_attribute("title", "Has a description")
     expect(card(page, "No notes").locator(".task-has-notes")).to_have_count(0)
     expect(card(page, "Has notes").locator(".task-desc")).to_be_hidden()
     marker.click()                                                       # opens them

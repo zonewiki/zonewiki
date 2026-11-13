@@ -98,7 +98,7 @@ Each rule has tests in `tests/test_routes.py` or `tests/test_mcp.py`, and `go/se
   or an assistant that read a prompt injection,
   wrote (`<form method=post action="/delete/…">`, a `<button formaction=…>` or `<button form=…>` borrowing one of Zone's own forms) would delete or overwrite the viewer's pages.
   So in a page's raw HTML,
-  and in task notes and comments,
+  and in task descriptions and comments,
   the tags that make or submit a form (`form`, `input`, `button`, `select`, `textarea`, `option`, `optgroup`, `datalist`, `fieldset`, `keygen`, `isindex`) and those that change what the page is (`meta`, a refresh to another site; `base`) show as text: their `<` is escaped.
   An iframe's `srcdoc` is renamed (`data-defused-srcdoc`), so the frame is empty: it is a document of the page's own origin and policy, and its form would be written with entities (`&lt;form`), which the tag check can't see.
   It is renamed wherever `srcdoc` is followed by `=` (or ends the raw HTML: what is rendered next may start with the `=`),

@@ -584,7 +584,7 @@ Everything else (shared tasks) is everyone's to see and change, as shared pages 
   One lock (`taskFiles.Lock`) for all files, taken by reads across them too (`Open` for `GET /api/tasks`, `All`, `Snapshot`): a task made private or shared moves between two files, and a read between their writes would miss it.
   What Zone does over every task list covers every user's files (`EveryOwner`): the yearly archive at start (`ArchiveOldCompleted`), a rename's links in tasks (`renamePageRefs`), the search index (`Every`, filtered per user by `canSeeTask`, `hiddenDoc`).
   A series' next occurrence stays private (`spawnRecurring`).
-  A private task's pasted files are private too (the notes' editor sends `private/<you>/…` as the upload's page).
+  A private task's pasted files are private too (the description's editor sends `private/<you>/…` as the upload's page).
 - **Another user's private task is no task**: by id the routes answer 404 as for an id no task has (`DELETE /api/tasks/<id>` of an unknown id stays a 204, as before);
   lists, counts, Completed and its years, the due count, Linked tasks and the section chips leave it out;
   a `[[task:…]]` to it renders as for a deleted task.

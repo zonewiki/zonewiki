@@ -73,7 +73,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
   `iterPages` walks the wiki skipping `_*` and hidden folders (`SkipDir`), instead of walking `.git`'s objects;
   a search lists the pages and their files' mtimes once (`rq.pageStats`), for both its indexes and its results' task lists, instead of walking and checking every file three times (at 17,350 pages that was most of a search's time).
   A search takes a few tens of ms; a test wiki of 330 pages and 3,600 sections went from ~150 to ~25 ms.
-  Task docs come from `taskSearchDocs()`: title, notes, comments and tags (as `#tag` words in the text, and as a `tags` list for the `#tag` filter).
+  Task docs come from `taskSearchDocs()`: title, description, comments and tags (as `#tag` words in the text, and as a `tags` list for the `#tag` filter).
 - **Results open the matching section** (`bestSections`, `doSearch`): a page result's `href` gets the anchor of the section the query matched, and its excerpt comes from that section, so the excerpt shows what the link jumps to.
   The section is one whose own text has the query as a phrase, else the best BM25-scored one whose own text (heading and body, not the page title) has a query word (`matches`), else, for a page found by meaning, its most similar section.
   A page matched only by its title gets no anchor (every section would match equally), nor does a match before the first heading or under a `####`+ heading, which has no id (`sectionAnchorOf`: h1–h3 only).
@@ -113,7 +113,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
     The BM25 section index (`pageChunks`) keeps the section's own heading (with the path in its tokens too, every parent word repeated across sibling sections cost keyword ranking on a test set: `./run.sh eval`), and `search_wiki` shows the path (`Page › Problems › Windows`);
     the anchor stays the section's own heading's;
     `semanticText` drops the frontmatter block, the H1 and the `[[tasks: …]]` directives (markup, not content: pages holding only a task list embed came out as each other's closest match) and puts tldr and tags first.
-    **Tasks** are embedded too, one vector each, from their search text (title, notes, `#tags`; `semanticTasks`, the index's tasks function, started in `main` once the task files are set up), keyed by a hash of it in the same cache (`"tasks"`: id → hash), so only new or edited tasks are embedded.
+    **Tasks** are embedded too, one vector each, from their search text (title, description, `#tags`; `semanticTasks`, the index's tasks function, started in `main` once the task files are set up), keyed by a hash of it in the same cache (`"tasks"`: id → hash), so only new or edited tasks are embedded.
   - **Storage**: no vector database.
     Vectors are in memory and cached in `$ZONE_DATA/.zone/index/embeddings.json` (rebuildable, listed in `.git/info/exclude` so it never shows as uncommitted; `iterPages` skips hidden dirs).
     The cache is content-addressed (chunk text hash → vector) and per model: editing one section re-embeds only that section, a model change starts over.
