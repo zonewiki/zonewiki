@@ -10,7 +10,7 @@ import { markdownEditor } from './mdedit.js';
 import { toggleCheckboxText } from './mdtext.js';
 import { renderFigures } from './figures.js';
 import { openDatePicker } from './datepicker.js';
-import { IMPORTANCE, attachTagAc, commentStamp, dateOffset, esc, formatDate, hashWordAtCaret, insertHashTag, noticeFromResponse, shortDate, todayStr } from './taskutil.js';
+import { IMPORTANCE, attachTagAc, commentStamp, dateOffset, esc, formatDate, hashWordAtCaret, insertHashTag, noticeFromResponse, shortDate, tagWordOf, todayStr } from './taskutil.js';
 import { highlightCode, renderTexts, textsOf } from './tasktexts.js';
 
 const { addDays, tagCounts, rankTags, parseQuickAdd } = TasksCore;
@@ -174,10 +174,7 @@ function editTags() {
   return [...editChips.words(), cleanTag(editTagsInput.value)].filter(Boolean);
 }
 const editTagAc = editTagsInput && attachTagAc(editTagsInput, {
-  word: () => {
-    const partial = editTagsInput.value.trim();
-    return partial ? { partial } : null;
-  },
+  word: () => tagWordOf(editTagsInput),
   suggest: w => {
     const committed = editChips.words().map(t => t.toLowerCase());
     const counts = tagCounts(st.tasks);

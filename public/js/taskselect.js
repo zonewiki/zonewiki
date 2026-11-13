@@ -5,7 +5,7 @@
 // comes in app (its state in app.st).
 import TasksCore from '../tasks-core.js';
 import { putTask } from './util.js';
-import { attachTagAc, esc, formatDate, noSpacesInTags, noticeFromResponse, showNotice, startsAfterDeadline, todayStr } from './taskutil.js';
+import { attachTagAc, esc, formatDate, noSpacesInTags, noticeFromResponse, showNotice, startsAfterDeadline, tagWordOf, todayStr } from './taskutil.js';
 
 const { tagCounts, selectionTags, bulkTagChange, rankTags } = TasksCore;
 
@@ -85,7 +85,7 @@ function openBulkTagModal(ids, removing = false) {
     list.querySelector(`[data-tag="${CSS.escape(row.tag)}"]`)?.setAttribute('aria-checked', 'false');
   }
   attachTagAc(input, {
-    word: () => (input.value.trim() ? { partial: input.value.trim() } : null),
+    word: () => tagWordOf(input),
     suggest: w => {
       if (removing) {
         return rankTags(w.partial, Object.fromEntries(

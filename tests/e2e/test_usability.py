@@ -402,6 +402,37 @@ def test_edit_modal_tags_complete_and_chain(page, wiki):
     assert t["tags"] == ["work", "home"]
 
 
+def test_tags_complete_with_or_without_a_hash(page, wiki):
+    # "#wo" in the Tags field suggests what "wo" does (it used to suggest
+    # nothing, so Enter made a new tag "wo"); a lone "#" lists the tags in use.
+    seed_tags(page, wiki)
+    page.locator("#task-add-btn").click()
+    modal = page.locator("#task-edit-modal")
+    tags = modal.locator("#task-edit-tags")
+    tags.click()
+    tags.press_sequentially("wo")
+    plain = page.locator(".tag-ac-dropdown .tag-ac-item").all_text_contents()
+    assert plain[0] == "#work"
+    tags.fill("")
+    tags.press_sequentially("#")
+    expect(page.locator(".tag-ac-dropdown .tag-ac-item").first).to_have_text("#work")   # the most used
+    tags.press_sequentially("wo")
+    expect(page.locator(".tag-ac-dropdown .tag-ac-item")).to_have_text(plain)
+    tags.press("Enter")
+    expect(tag_chips(page)).to_have_text(["#work"])
+    expect(tags).to_have_value("")
+    tags.press_sequentially("#brandnew")     # no such tag yet: Enter makes it, without the #
+    tags.press("Enter")
+    expect(tag_chips(page)).to_have_text(["#work", "#brandnew"])
+    modal.get_by_role("button", name="Cancel").click()
+    # The bulk tag dialog's field too.
+    page.locator(".task-item").filter(has=page.get_by_text("E", exact=True)).locator(".task-title").click()
+    page.keyboard.press("t")
+    inp = page.locator("#bulk-tag-input")
+    inp.press_sequentially("#woo")
+    expect(page.locator(".tag-ac-dropdown .tag-ac-item").first).to_have_text("#wood")
+
+
 def test_title_shorthand_tag_is_suggested(page, wiki):
     seed_tags(page, wiki)
     page.locator("#task-add-btn").click()

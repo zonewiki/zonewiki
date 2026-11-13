@@ -179,6 +179,14 @@ export function attachTagAc(input, { word, suggest, accept, onEnter }) {
   return { hide, isOpen: () => !!el };
 }
 
+// What a tags-only field (the edit modal's Tags, the bulk tag dialog) is
+// completing: the typed text, with or without a leading '#' ("#wo" and "wo"
+// suggest the same tags; a lone "#" lists the most used).
+export function tagWordOf(input) {
+  const typed = input.value.trim();
+  return typed ? { partial: typed.replace(/^#+/, '') } : null;
+}
+
 // Keep spaces out of a tag-only field as it is typed (sanitizeTagInput).
 // On `input`, not keydown: that also covers paste and phone keyboards,
 // which often report no key for a space. Registered before attachTagAc's

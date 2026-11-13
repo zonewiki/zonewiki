@@ -396,6 +396,7 @@ Each with a dark-mode value.
   The dropdown hangs under the whole box.
 - **Tag completion** (`attachTagAc`: filter, Tags field, title `#tag` shorthand, bulk tag dialog `t`/`T`): ranked by `TasksCore.rankTags` (exact, prefix, substring, in-order letters; then usage count, then A–Z).
   The best match is pre-highlighted so Tab/Enter completes it; Esc closes only the dropdown.
+  In the Tags field and the bulk tag dialog a tag may be typed with or without its `#` (`tagWordOf`): `#wo` and `wo` suggest the same tags, a lone `#` lists the most used, and the chip is the tag without it.
   Keys are handled in the capture phase.
   The dropdown is appended to the field's parent, since in a `<dialog>` only the top layer is visible.
 - **Selection** (`selectedId`, `selectedIds`, `anchorId`): a click (mouse) selects one task;
