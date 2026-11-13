@@ -383,13 +383,10 @@ div.chip-input > input {
   padding-top: .2rem; min-width: 0;
   border-top: 1px dashed color-mix(in srgb, var(--fg) 10%, var(--border));
 }
-/* An open task's description and comments hang on a bar down their left,
-   as a quote does, so they read as the task's and not as the next lines of
-   the list; the card ends with some room before the next task. */
-.tasks-app :is(.task-desc, .task-card-comments) {
-  border-top: none; padding: .1rem 0 .1rem .7rem;
-  border-left: 3px solid color-mix(in srgb, var(--fg) 22%, var(--border));
-}
+/* An open task's description is plain text under its title, the task's
+   own; each comment hangs on a bar of its own (below), so the bar says
+   which is which. The card ends with some room before the next task. */
+.tasks-app :is(.task-desc, .task-card-comments) { border-top: none; padding: .1rem 0; }
 .tasks-app .task-item.task-details { padding-bottom: .65rem; margin-bottom: .8rem; }
 /* Notes render as a page's text (.page-content, render.render_notes), at
    card scale: headings the size of the text, tighter spacing, wide tables
@@ -518,10 +515,14 @@ div.chip-input > input {
 /* A comment of more than a paragraph: its time on a line, the text under it. */
 div.task-card-comment { margin: .25rem 0; line-height: 1.45; overflow-wrap: anywhere; }
 div.task-card-comment > .task-comment-when { display: block; }
-/* A line between two comments, so it shows where the next one starts. */
-.tasks-app .task-card-comment + .task-card-comment {
-  border-top: 1px solid var(--border); margin-top: .3rem; padding-top: .3rem;
+/* Each comment on a bar down its left, with a gap before the next: the
+   bar's end shows where a comment ends. */
+.tasks-app .task-card-comment {
+  margin: 0; padding: .1rem 0 .1rem .6rem;
+  border-left: 3px solid color-mix(in srgb, var(--fg) 22%, var(--border));
 }
+.tasks-app .task-card-comment + .task-card-comment { margin-top: .4rem; }
+.tasks-app .task-comments-more { margin-top: .35rem; }
 .task-comments-more {
   background: none; border: none; padding: 0; font: inherit; font-size: .75rem;
   color: var(--link); cursor: pointer;

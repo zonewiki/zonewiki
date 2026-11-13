@@ -2984,9 +2984,12 @@ def test_comment_of_several_lines(page, wiki):
     modal.locator(".task-edit-actions").get_by_role("button", name="Cancel").click()
     shown = open_details(page, "Paint the fence").locator(".task-card-comment")
     expect(shown).to_have_count(2)
-    expect(shown.first).to_have_css("border-top-width", "0px")
-    expect(shown.last).to_have_css("border-top-width", "1px")
-    expect(shown.last).to_have_css("border-top-style", "solid")
+    # On the card: a bar down each comment's left, a gap between two.
+    for one in (shown.first, shown.last):
+        expect(one).to_have_css("border-left-width", "3px")
+        expect(one).to_have_css("border-top-width", "0px")
+    first, last = shown.first.bounding_box(), shown.last.bounding_box()
+    assert last["y"] - (first["y"] + first["height"]) >= 5
     expect(shown.first).to_have_js_property("tagName", "P")
     expect(shown.last.locator(".task-comment-body li")).to_have_text(["two brushes", "primer"])
     when, text = shown.last.locator(".task-comment-when"), shown.last.locator(".task-comment-body")
@@ -3736,8 +3739,8 @@ def test_expanded_task_keeps_its_line(page, wiki):
 
 
 def test_open_task_sets_its_details_apart(page, wiki):
-    # An open task's description and comments hang on a bar down their left,
-    # "Comments" says where the description ends, and the card ends with room
+    # An open task's description is plain, each comment hangs on a bar down
+    # its left, "Comments" says where the description ends, and the card ends with room
     # before the next task.
     page.request.post("/api/tasks", data={"title": "Below"})          # the newest is on top
     tid = page.request.post("/api/tasks", data={"title": "Renew passport", "description": "Photos first."}).json()["id"]
@@ -3749,9 +3752,11 @@ def test_open_task_sets_its_details_apart(page, wiki):
     closed_gap = gap()
     open_details(page, "Renew passport")
     desc, comments = passport.locator(".task-desc"), passport.locator(".task-card-comments")
+    # The description is plain; only a comment has a bar.
     for part in (desc, comments):
-        expect(part).to_have_css("border-left-width", "3px")
+        expect(part).to_have_css("border-left-width", "0px")
         expect(part).to_have_css("border-top-width", "0px")
+    expect(comments.locator(".task-card-comment")).to_have_css("border-left-width", "3px")
     label = comments.locator(".task-card-comments-label")
     expect(label).to_have_text("Comments")
     d, l, c = desc.bounding_box(), label.bounding_box(), comments.locator(".task-card-comment").bounding_box()
@@ -4142,4 +4147,5 @@ def test_export_and_import_a_lists_tasks(page, wiki, tmp_path):
     dialog.get_by_role("button", name="Import").click()
     expect(page.locator("#task-import-error")).to_be_visible()
     expect(dialog).to_be_visible()
+
 

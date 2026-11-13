@@ -511,7 +511,7 @@ Each with a dark-mode value.
   **Nothing jumps on hover**: what is always shown (markers, 📝, 💬, dates, ⋯) ends at the right and stays put; what hover adds (⏭, the empty ⏰ 📅, at 60% opacity, full on their own hover: at 30% they were hard to see) appears left of it (first in `.task-meta-right`, CSS `order`).
   A task with a description shows 📝 (`.task-has-notes`) on every card, since its line hides the description.
   Under the line of a card whose details are open (see One line per task): the description, then, under a small "Comments" heading (`.task-card-comments-label`) that says where the description ends, the latest 3 comments, newest first (`.task-card-comments`; "N earlier…" opens the modal at the comments).
-  Both hang on a bar down their left (`border-left`), as a quote does, so they read as the task's and not as the list's next lines, and the open card ends with room before the next task (`.task-details`: more padding and margin below).
+  The description is plain text under the title, the task's own; only the comments have bars (see Comments), so the bar says which is which. The open card ends with room before the next task (`.task-details`: more padding and margin below).
   **Every card shows every tag**.
   The title and the tags share the line (desktop: `.task-meta` is `display: contents`, its tags and dates are grid columns of their own, `tags` and `dates`, with a `1fr` spacer between): each is as wide as it needs when both fit;
   short of room, both grow from their minimum (6rem for the title, the widest tag for the tags) by the same amount, so a long title can't push the tags out and many tags can't squeeze the title away.
@@ -575,7 +575,7 @@ A task's description is markdown, edited and rendered as a page's text.
   text starts at the same place with a box or a bullet, and the first box at the description's edge);
   an image opens full size.
   Comments render the same way, in the cards and the modal (`.task-comment-body`, at the description's scale).
-  A line separates each comment from the one before it, in both places, so it shows where the next one starts.
+  In the modal a line separates each comment from the one before it; on a card each comment hangs on a bar of its own down its left (`border-left` of `.task-card-comment`), with a gap before the next, so the bar's end shows where a comment ends.
 - **Where the HTML comes from** (`renderTexts`, `renderedHtml` in `tasks.js`): the tasks asks the server for the texts it hasn't rendered yet, in one request (`{ notes: [...], comments: [...] }`), and keeps the HTML per text for the page's life, shared by every task list app on it.
   Loading tasks (`fetchTasks`, Closed) and each write wait for it before drawing, so cards never flash plain text; a text that arrives some other way shows as plain text until its HTML is there (`htmlOf`), and a failed request caches nothing.
   Code is highlighted once, when the HTML arrives.
