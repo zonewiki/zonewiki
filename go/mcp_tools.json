@@ -2,7 +2,7 @@
  {
   "name": "search_wiki",
   "title": "Search the wiki",
-  "description": "Search the user's wiki and return the most relevant page sections with their full text, best first, each with its page, the page's last edit date (to tell current notes from stale ones) and a link. Several sections may come from the same page. Tasks that match are results too, with their status, tags, dates and notes.",
+  "description": "Search the user's wiki and return the most relevant page sections with their full text, best first, each with its page, the page's last edit date (to tell current notes from stale ones) and a link. Up to three sections come from the same page. Tasks that match are results too, with their status, tags, dates and notes.",
   "inputSchema": {
    "type": "object",
    "properties": {

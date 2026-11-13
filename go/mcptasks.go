@@ -187,8 +187,7 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 			for _, d := range docs {
 				byID[d.taskID()] = d
 			}
-			meaning := bySimilarity(taskHits(q.Text, byID, max(len(byID), 1)))
-			ranked = wordsFirst(ranked, textsearch.Fuse([][]*SearchDoc{ranked, meaning}), q, x)
+			ranked = hybrid(ranked, bySimilarity(taskHits(q.Text, byID, max(len(byID), 1))), q, x)
 		}
 		docs = ranked
 	} else {

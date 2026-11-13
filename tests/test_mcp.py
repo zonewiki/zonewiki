@@ -212,6 +212,14 @@ class TestSearchWiki:
         text, _ = call(client, "search_wiki", query="git")
         assert "Git remote › Setup" in text and "Git remote › Pushing" in text
 
+    def test_at_most_three_sections_of_one_page(self, client, pages):
+        # Five sections say it; the other page's one still gets its place.
+        write_page(pages, "stripes", "# Stripes\n\n" + "".join(
+            f"## Part {n}\n\nA zebra has stripes, a zebra runs, zebra {n}.\n\n" for n in range(1, 6)))
+        write_page(pages, "zoo", "# Zoo\n\nOne zebra lives here.\n")
+        text, _ = call(client, "search_wiki", query="zebra")
+        assert text.count("Stripes › Part") == 3 and "[4] Zoo" in text and "[5]" not in text
+
     def test_limit(self, client, pages):
         text, _ = call(client, "search_wiki", query="git", limit=1)
         assert "[1]" in text and "[2]" not in text

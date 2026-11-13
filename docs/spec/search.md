@@ -74,6 +74,9 @@ Part of Zone's spec (see `AGENTS.md` for the index).
   a search lists the pages and their files' mtimes once (`rq.pageStats`), for both its indexes and its results' task lists, instead of walking and checking every file three times (at 17,350 pages that was most of a search's time).
   A search takes a few tens of ms; a test wiki of 330 pages and 3,600 sections went from ~150 to ~25 ms.
   Task docs come from `taskSearchDocs()`: title, description, comments and tags (as `#tag` words in the text, and as a `tags` list for the `#tag` filter).
+- **`search_wiki` gives at most three sections of a page** (`sectionsPerPage`, `capPerPage` in `retrieve`): a page about the query filled the list with its sections (five of eight for a person's name), where an assistant wants to see what else there is and can read the page for more.
+  The sections after a page's first three are left out and the next results move up, so the list is as long as asked for.
+  On the test set 3 lost no answer and found one more; 2 lost a question whose answer is a page's third section. Tasks aren't counted.
 - **Results open the matching section** (`bestSections`, `doSearch`): a page result's `href` gets the anchor of the section the query matched, and its excerpt comes from that section, so the excerpt shows what the link jumps to.
   The section is one whose own text has the query as a phrase, else the best BM25-scored one whose own text (heading and body, not the page title) has a query word (`matches`), else, for a page found by meaning, its most similar section.
   A page matched only by its title gets no anchor (every section would match equally), nor does a match before the first heading or under a `####`+ heading, which has no id (`sectionAnchorOf`: h1–h3 only).
@@ -128,11 +131,18 @@ Part of Zone's spec (see `AGENTS.md` for the index).
     Tasks have their own, higher floor (0.3 for the default model): short texts let nonsense score higher ("xqzt blorf" reached 0.27 against a task title).
   - **Hybrid ranking**: `rankedDocs` merges the BM25 list and the semantic list (page hits and task hits, ordered by similarity together, `bySimilarity`) by reciprocal rank fusion (`Fuse`, `RRF_K = 60`, ranks only, so the two score scales never need normalising; ties go to BM25).
     A page found only by meaning gets its most similar section as excerpt and link target (see "Results open the matching section"), since it has no word to mark.
-  - **A short query is a lookup** (`wordsFirst`, `lookupWords`: at most 3 words, stopwords counted): its results start with the BM25 docs holding every word of it (`HaveAll`: found as search finds a word, by stem, prefix, else typo), in BM25 order, and the rest follow in fused order.
+  - **A short query is a lookup** (`hybrid`, `lookupWords`: at most 3 words, stopwords counted): when docs hold every word of it, its results start with those, in BM25 order, and the rest follow in fused order.
+    Holding a word (`HaveAll`) is by its stem or as the start of a word, as search finds it; a close typo, which search falls back on, doesn't count ("Ferien" isn't in a doc that says "serien"), so a query matched only by typos keeps the fused order.
     Fusion goes by ranks alone, so the doc most similar to the query came as high as the doc saying it most, and a lone word or name is about as similar to any text as nonsense is (on a wiki of 350 pages "seccomp" reached 0.35, "xqzt blorf" 0.32, the floor is 0.25; a question's answer 0.4 to 0.8):
     "seccomp" gave the one page with the word and then guesses, "leave" a guess between every two pages with the word, and the pages that were also among the guesses on top.
     A longer query is a question and keeps the fused order: any doc holds some of its words, and meaning finds the answer (docs with all of a question's words first lost answers on a test set, `./run.sh eval`).
     In the browser's search, `search_wiki` and `search_tasks`' query alike.
+  - **The lookup floor** (`lookupFloors`, `lookupFloor`: 0.4 for the default model, and never under the search floor): after a lookup's word matches, a doc found by meaning alone follows only when it is at least this similar.
+    No score tells a guess from a find in general: the best guess for a nonsense word can score higher than a question's answer, in absolute terms and against the query's other scores alike (a floor of mean plus some deviations was tried).
+    For one or two words it does well enough: the guesses reached 0.36, a translation or synonym 0.41 to 0.47 ("Urlaub" finds the note saying "vacation").
+    On a test set of 28 lookups it took 40% of the guesses out of the results and lost no answer.
+    A lookup of words the wiki doesn't have keeps every meaning hit over the search floor: they are all there is.
+  - **Not changed, as measured** (`./run.sh eval`, 47 questions and 28 lookups): the fusion's constant (10 to 200), its depth (15 to 300) and a weight for the meaning ranking moved one or two questions either way, or traded first places for answers lost from the top 8 (a weight of 1.3: hit@1 24 to 29, hit@8 43 to 39).
   - **Related pages**: each page's vector is the mean of its chunks; `related` lists the nearest above the related floor.
     A page with little prose (under `relatedMinChars`, 100 letters and digits outside links: `proseChars` ignores `[[wikilinks]]`, link labels and bare URLs) neither gets a list nor appears in one.
     That covers near-empty pages, whose vector is little more than their title, and hubs that are only lists of links (like the index), whose vector averages everything they link to; their neighbours were noise.

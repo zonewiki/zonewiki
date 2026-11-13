@@ -411,7 +411,7 @@ func TestDocsWith(t *testing.T) {
 	}
 }
 
-// HaveAll finds a query's words as Search does (stem, prefix, else typo),
+// HaveAll finds a query's words by stem and prefix, not by a typo's guess,
 // leaves stopwords out, and answers only for the documents asked about.
 func TestHaveAll(t *testing.T) {
 	ix := NewIndex([][]string{{"seccomp", "profil"}, {"kernel"}, {"seccomp"}}).WithExtra([][]string{{"kernel", "seccomp"}})
@@ -425,7 +425,8 @@ func TestHaveAll(t *testing.T) {
 		{"Seccomp seccomp", all, []int{0, 2, 3}},
 		{"the seccomp", all, []int{0, 2, 3}},
 		{"secc", all, []int{0, 2, 3}},
-		{"secomp", all, []int{0, 2, 3}},
+		{"secomp", all, nil},
+		{"secomp kernel", all, nil},
 		{"seccomp kernels", all, []int{3}},
 		{"seccomp", []int{1, 2}, []int{2}},
 		{"seccomp zebra", all, nil},

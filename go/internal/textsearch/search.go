@@ -732,9 +732,10 @@ func (ix *Index) SearchWhere(query string, limit int, accept func(doc int) bool)
 	return ix.topHits(hits, limit)
 }
 
-// HaveAll: which of docs hold every word of the query, each word found as
-// Search finds it: its stem, a word it starts, else a close typo. Stopwords
-// don't count, as in Search. Nil for a query without words.
+// HaveAll: which of docs hold every word of the query, each word by its stem
+// or as the start of a word, as Search finds it. A close typo, which Search
+// falls back on, doesn't count: "Ferien" isn't in a doc that says "serien".
+// Stopwords don't count, as in Search. Nil for a query without words.
 func (ix *Index) HaveAll(query string, docs []int) map[int]bool {
 	var tokens []string
 	for _, w := range queryWords(query) {
@@ -760,6 +761,9 @@ func (ix *Index) HaveAll(query string, docs []int) map[int]bool {
 			}
 		}
 		for _, tw := range ix.expand([]string{t}) {
+			if tw.weight <= fuzzyWeight { // a typo's guess, not the word
+				continue
+			}
 			mark(ix.base.postings(tw.term))
 			if ix.over != nil {
 				mark(ix.over.postings[tw.term])

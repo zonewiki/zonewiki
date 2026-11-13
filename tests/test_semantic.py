@@ -108,6 +108,22 @@ class TestHybridSearch:
         slugs = [r["slug"] for r in _search(client, "golf termin")]
         assert slugs[0] == "golf" and slugs.index("garage") < slugs.index("sport")
 
+    def test_a_lookup_drops_weak_guesses_after_its_word_matches(self, client, wiki_dir, monkeypatch):
+        # "half" is about cars and money alike (0.89 similar to "golf"),
+        # "garage" only about cars (1.0). After the pages saying "golf", a
+        # page found by meaning alone needs the lookup floor.
+        write_page(wiki_dir, "golf", "# Golf\n\n## Werkstatt\n\nTermin beim Mechaniker, Bremsen quietschen.\n")
+        write_page(wiki_dir, "garage", "# Garage\n\nWerkstatt, Mechaniker, Bremsen, repair.\n")
+        write_page(wiki_dir, "half", "# Half\n\nWerkstatt, Mechaniker and the rent.\n")
+        idx = make_index(lookup_min_score=0.95)
+        idx.sync()
+        monkeypatch.setattr(settings, "SEMANTIC", idx)
+        assert [r["slug"] for r in _search(client, "golf")] == ["golf", "garage"]
+        # A word no page has: meaning is all there is, the search floor decides.
+        assert {r["slug"] for r in _search(client, "car")} == {"golf", "garage", "half"}
+        # A question isn't a lookup.
+        assert "half" in [r["slug"] for r in _search(client, "where is the golf")]
+
     def test_nonsense_finds_nothing(self, client, semantic):
         assert _search(client, "xqzt blorf") == []
 

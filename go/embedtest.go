@@ -60,6 +60,7 @@ type semanticTestSpec struct {
 	MinScore        float64        `json:"min_score"`
 	RelatedMinScore float64        `json:"related_min_score"`
 	TaskMinScore    float64        `json:"task_min_score"`
+	LookupMinScore  float64        `json:"lookup_min_score"`
 	RelatedMinChars int            `json:"related_min_chars"`
 	Synced          bool           `json:"synced"`
 }
@@ -72,6 +73,7 @@ func semanticForTest(spec string) (*semanticIndex, error) {
 	emb := &conceptEmbedder{s.Name, s.ModelName, s.Concepts, s.Dim, s.Fail}
 	x := newSemanticIndex(emb, statePath("index", "embeddings.json"), semanticTasks,
 		s.MinScore, s.RelatedMinScore, s.TaskMinScore, s.RelatedMinChars)
+	x.lookupMinScore = s.LookupMinScore
 	if s.Synced {
 		x.sync()
 	}

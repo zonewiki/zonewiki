@@ -940,33 +940,41 @@ func phraseFirst(ranked []*SearchDoc, q *textsearch.Query, x *docIndex, keep fun
 }
 
 // lookupWords: a query of at most this many words (stopwords counted) is a
-// lookup of those words; a longer one is a question (wordsFirst).
+// lookup of those words; a longer one is a question (hybrid).
 const lookupWords = 3
 
-// wordsFirst: the hybrid ranking of a query, from its BM25 ranking and that
-// fused with the meaning hits. A question's is the fused one. A short
-// query's (lookupWords) starts with the BM25 docs holding every word of it,
-// in BM25 order, and goes on with the rest in fused order: fusion goes by
-// ranks alone, so the doc most similar to a word came as high as the doc
-// that says it most, and a lone word or a name is about as similar to any
-// text as nonsense is. For "seccomp" that was the one page with the word and
-// then twenty guesses; with more pages saying the word, guesses in between
-// and the pages that were also among the guesses on top. A question is the
-// other way round: any doc holds some of its words and meaning finds the
-// answer (putting the docs with all of a question's words first lost
-// answers on a test set: ./run.sh eval).
-func wordsFirst(ranked, fused []*SearchDoc, q *textsearch.Query, x *docIndex) []*SearchDoc {
+// hybrid: a query's ranking from its BM25 ranking and its meaning hits (best
+// first). A question's is the two fused. A short query's (lookupWords),
+// when docs hold every word of it (HaveAll, among the BM25 ones), starts
+// with those in BM25 order and goes on with the rest in fused order, the
+// docs found by meaning alone only when they are similar enough for a
+// lookup (lookupFloor). Fusion goes by ranks alone, so the doc most similar
+// to a word came as high as the doc that says it most, and a lone word or a
+// name is about as similar to any text as nonsense is: for "seccomp" that
+// was the one page with the word and then twenty guesses; with more pages
+// saying the word, guesses in between and the pages that were also among
+// the guesses on top. A question is the other way round: any doc holds some
+// of its words and meaning finds the answer (putting the docs with all of a
+// question's words first lost answers on a test set: ./run.sh eval). A
+// lookup of a word the wiki doesn't have ("Ferien" for a page about
+// vacation) keeps every meaning hit: they are all there is.
+func hybrid(ranked []*SearchDoc, hits []docScore, q *textsearch.Query, x *docIndex) []*SearchDoc {
+	meaning := make([]*SearchDoc, len(hits))
+	for i, h := range hits {
+		meaning[i] = h.doc
+	}
+	fused := textsearch.Fuse([][]*SearchDoc{ranked, meaning})
 	text := q.RankingText()
 	if len(textsearch.Tokenize(text)) > lookupWords {
 		return fused
 	}
-	want := make(map[*SearchDoc]bool, len(ranked))
+	byWord := make(map[*SearchDoc]bool, len(ranked))
 	for _, d := range ranked {
-		want[d] = true
+		byWord[d] = true
 	}
 	var ids []int
 	for i, d := range x.docs {
-		if want[d] {
+		if byWord[d] {
 			ids = append(ids, x.idAt(i))
 		}
 	}
@@ -977,6 +985,11 @@ func wordsFirst(ranked, fused []*SearchDoc, q *textsearch.Query, x *docIndex) []
 	if len(first) == 0 {
 		return fused
 	}
+	floor := semantic.lookupFloor()
+	guess := map[*SearchDoc]bool{}
+	for _, h := range hits {
+		guess[h.doc] = !byWord[h.doc] && h.score < floor
+	}
 	out := make([]*SearchDoc, 0, len(fused))
 	for _, d := range ranked {
 		if first[d] {
@@ -984,9 +997,32 @@ func wordsFirst(ranked, fused []*SearchDoc, q *textsearch.Query, x *docIndex) []
 		}
 	}
 	for _, d := range fused {
-		if !first[d] {
+		if !first[d] && !guess[d] {
 			out = append(out, d)
 		}
+	}
+	return out
+}
+
+// sectionsPerPage: how many sections of one page search_wiki's results hold
+// at most. A page about the query filled the list with its sections (five
+// of eight for a person's name), where the reader wants to see what else
+// there is, and can read the page for more; with 3 no question of a test
+// set lost its answer, with 2 one did (./run.sh eval).
+const sectionsPerPage = 3
+
+// capPerPage: docs without the sections of a page after its first n.
+func capPerPage(docs []*SearchDoc, n int) []*SearchDoc {
+	seen := map[string]int{}
+	var out []*SearchDoc
+	for _, d := range docs {
+		if !d.isTask() {
+			if seen[d.Slug] >= n {
+				continue
+			}
+			seen[d.Slug]++
+		}
+		out = append(out, d)
 	}
 	return out
 }
@@ -1001,7 +1037,7 @@ func bm25(x *docIndex, q *textsearch.Query, depth int, keep func(*SearchDoc) boo
 	return x.searchWhereID(text, depth, x.filter(q, keep))
 }
 
-func firstN(docs []*SearchDoc, n int) []*SearchDoc { return docs[:min(n, len(docs))] }
+func firstN[T any](xs []T, n int) []T { return xs[:min(n, len(xs))] }
 
 // rankedDocs: the `limit` best docs for the query by keywords. Docs that
 // fail the query's filters, or keep when given, take no part.
@@ -1053,9 +1089,7 @@ func rankedDocs(q *textsearch.Query, x *docIndex, keep func(*SearchDoc) bool, li
 	if pageHits == nil && tHits == nil {
 		return firstN(phraseFirst(ranked, q, x, keep), limit)
 	}
-	meaning := firstN(bySimilarity(pageHits, tHits), depth)
-	fused := wordsFirst(ranked, textsearch.Fuse([][]*SearchDoc{ranked, meaning}), q, x)
-	return firstN(phraseFirst(fused, q, x, keep), limit)
+	return firstN(phraseFirst(hybrid(ranked, firstN(bySimilarity(pageHits, tHits), depth), q, x), q, x, keep), limit)
 }
 
 // bestSections: for each page in slugs, the section a result should open:
@@ -1383,11 +1417,10 @@ func retrieve(rq *Req, raw string, limit int, under string, quicknote bool) []*S
 			tHits = taskHits(text, tasks, fuseDepth)
 		}
 		if hits != nil || tHits != nil {
-			meaning := firstN(bySimilarity(hits, tHits), fuseDepth)
-			ranked = wordsFirst(ranked, textsearch.Fuse([][]*SearchDoc{ranked, meaning}), q, x)
+			ranked = hybrid(ranked, firstN(bySimilarity(hits, tHits), fuseDepth), q, x)
 		}
 	}
-	return firstN(phraseFirst(ranked, q, x, keep), limit)
+	return firstN(capPerPage(phraseFirst(ranked, q, x, keep), sectionsPerPage), limit)
 }
 
 // search_wiki's queries, one JSON line each (query-log in the settings file), for turning
@@ -1485,17 +1518,13 @@ func relatedSection(rq *Req, slug, path string, backlinks []PageRef) *linkSectio
 // bySimilarity: one semantic ranking from several (doc, similarity) lists,
 // page sections and tasks: all come from the same model, so their cosine
 // similarities compare directly.
-func bySimilarity(hitLists ...[]docScore) []*SearchDoc {
+func bySimilarity(hitLists ...[]docScore) []docScore {
 	var all []docScore
 	for _, hits := range hitLists {
 		all = append(all, hits...)
 	}
 	sort.SliceStable(all, func(i, j int) bool { return all[i].score > all[j].score })
-	out := make([]*SearchDoc, len(all))
-	for i, h := range all {
-		out[i] = h.doc
-	}
-	return out
+	return all
 }
 
 type docScore struct {

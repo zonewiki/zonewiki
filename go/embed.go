@@ -214,6 +214,16 @@ var (
 	defaultThresholds = [3]float64{0.4, 0.4, 0.4}
 )
 
+// lookupFloors: per model, how similar a doc found by meaning alone must be
+// to follow a short query's word matches (hybrid in retrieval.go). Higher
+// than the search floor: a lone word is about as similar to any text as
+// nonsense is. On a wiki of 350 pages a word's best guesses reached 0.36
+// and nonsense 0.32, where a word's translation or synonym had 0.41 to 0.47
+// ("Krankenstand" for sick leave). At 0.4 no lookup of a test set lost its
+// answer and 40% of the guesses among its results went. Another model has
+// none: its search floor is all.
+var lookupFloors = map[string]float64{defaultModel: 0.4}
+
 // relatedMinChars: a page with less prose than this neither gets a Related
 // list nor appears in one; search still finds it. A page that is only a
 // title, or a hub that is only a list of links, has a vector that is little
@@ -490,6 +500,7 @@ type semanticIndex struct {
 	minScore        float64
 	relatedMinScore float64
 	taskMinScore    float64
+	lookupMinScore  float64
 	relatedMinChars int
 
 	syncMu sync.Mutex // one sync at a time; it alone replaces the state below
@@ -529,7 +540,8 @@ func newSemanticIndex(emb embedder, cachePath string, tasksFn func() []semTask,
 	}
 	x := &semanticIndex{emb: emb, cachePath: cachePath, tasksFn: tasksFn,
 		minScore: floors[0], relatedMinScore: floors[1], taskMinScore: floors[2], relatedMinChars: minChars,
-		pages: map[string]*semPage{}, vecs: map[string][]float32{}, pageVecs: map[string][]float32{},
+		lookupMinScore: lookupFloors[emb.ModelName()],
+		pages:          map[string]*semPage{}, vecs: map[string][]float32{}, pageVecs: map[string][]float32{},
 		tasks: map[string]string{}, queries: map[string][]float32{}, rowsGen: -1,
 		scores: map[string]queryScores{}, wake: make(chan struct{}, 1)}
 	x.loadCache()
@@ -943,6 +955,11 @@ func (x *semanticIndex) searchFloor() float64 {
 	}
 	return x.minScore
 }
+
+// lookupFloor: the similarity a doc found by meaning alone needs to follow
+// a short query's word matches: the model's (lookupFloors), and never under
+// the search floor.
+func (x *semanticIndex) lookupFloor() float64 { return max(x.lookupMinScore, x.searchFloor()) }
 
 // chunkScores: the sections at least searchFloor similar to the query (of
 // the pages in known, unless nil), in row order.
