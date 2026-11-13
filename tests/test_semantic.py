@@ -75,14 +75,38 @@ class TestHybridSearch:
         assert results[0]["href"] == "/page/golf#werkstatt"   # its most similar section
 
     def test_matching_both_ways_beats_keyword_only(self, client, semantic, wiki_dir):
-        # All three contain "golf"; only "sport" isn't about cars, so it is
-        # the one page found by keyword alone and ranks last.
+        # A question (more than three words). All three contain "golf"; only
+        # "sport" isn't about cars, so it is the one page found by keyword
+        # alone and ranks last.
         write_page(wiki_dir, "sport", "# Sport\n\nGolf on Sundays, then an evening routine and early bed when tired.\n")
         write_page(wiki_dir, "zz-car", "# Car notes\n\nWerkstatt, Mechaniker, golf.\n")
         semantic.sync()
-        slugs = [r["slug"] for r in _search(client, "golf")]
+        slugs = [r["slug"] for r in _search(client, "where is the golf")]
         assert set(slugs) == {"golf", "sport", "zz-car"}
         assert slugs[-1] == "sport"
+
+    def test_a_short_query_lists_the_pages_with_its_words_first(self, client, semantic, wiki_dir, monkeypatch):
+        # "garage" is as close to "golf" in meaning as a page gets and never
+        # says it: fused by rank it came second. It is a guess, so it follows
+        # every page that has the word, and those keep their keyword order.
+        for n in "abc":
+            write_page(wiki_dir, f"sport-{n}",
+                       f"# Sport {n}\n\nGolf on Sundays, then an evening routine and early bed when tired.\n")
+        write_page(wiki_dir, "garage", "# Garage\n\nWerkstatt, Mechaniker, Bremsen, repair.\n")
+        semantic.sync()
+        slugs = [r["slug"] for r in _search(client, "golf")]
+        assert set(slugs[:-1]) == {"golf", "sport-a", "sport-b", "sport-c"} and slugs[-1] == "garage"
+        monkeypatch.setattr(settings, "SEMANTIC", None)
+        assert [r["slug"] for r in _search(client, "golf")] == slugs[:-1]
+
+    def test_a_short_query_needs_all_its_words_to_come_first(self, client, semantic, wiki_dir):
+        # Only "golf" has both words; "sport" has one of them, so it stays
+        # where fusion puts it, behind the page found by meaning.
+        write_page(wiki_dir, "sport", "# Sport\n\nGolf on Sundays, then an evening routine and early bed when tired.\n")
+        write_page(wiki_dir, "garage", "# Garage\n\nWerkstatt, Mechaniker, Bremsen, repair.\n")
+        semantic.sync()
+        slugs = [r["slug"] for r in _search(client, "golf termin")]
+        assert slugs[0] == "golf" and slugs.index("garage") < slugs.index("sport")
 
     def test_nonsense_finds_nothing(self, client, semantic):
         assert _search(client, "xqzt blorf") == []

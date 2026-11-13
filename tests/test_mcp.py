@@ -385,6 +385,23 @@ class TestTasksByMeaning:
         assert "1 matching tasks" in text and "Book the Werkstatt" in text
 
 
+    def test_a_short_query_gives_the_word_matches_first(self, client, semantic_on, pages):
+        # Found by meaning alone, the Werkstatt task and the garage page are
+        # guesses for "golf": they follow what says the word.
+        for n in "abc":
+            task(client, title=f"Golf {n}, then the evening routine, bed when tired")
+            write_page(pages, f"sport-{n}", f"# Sport {n}\n\nGolf on Sundays, then an evening routine and early bed when tired.\n")
+        task(client, title="Book the Werkstatt")
+        write_page(pages, "garage", "# Garage\n\nWerkstatt, Mechaniker, Bremsen, repair.\n")
+        semantic_on.sync()
+        text, _ = call(client, "search_tasks", query="golf")
+        assert "4 matching tasks" in text
+        assert max(text.index(f"Golf {n}") for n in "abc") < text.index("Book the Werkstatt")
+        text, _ = call(client, "search_wiki", query="golf", limit=20)
+        last = max(max(text.index(f"Golf {n}"), text.index(f"Sport {n}")) for n in "abc")
+        assert last < text.index("Book the Werkstatt") and last < text.index("Garage")
+
+
 class TestSearchTasks:
     def test_open_by_tag_sorted_by_deadline(self, client, wiki_dir):
         task(client, title="Later", tags=["leaf"], due_date="2026-12-01")

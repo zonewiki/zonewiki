@@ -128,6 +128,11 @@ Part of Zone's spec (see `AGENTS.md` for the index).
     Tasks have their own, higher floor (0.3 for the default model): short texts let nonsense score higher ("xqzt blorf" reached 0.27 against a task title).
   - **Hybrid ranking**: `rankedDocs` merges the BM25 list and the semantic list (page hits and task hits, ordered by similarity together, `bySimilarity`) by reciprocal rank fusion (`Fuse`, `RRF_K = 60`, ranks only, so the two score scales never need normalising; ties go to BM25).
     A page found only by meaning gets its most similar section as excerpt and link target (see "Results open the matching section"), since it has no word to mark.
+  - **A short query is a lookup** (`wordsFirst`, `lookupWords`: at most 3 words, stopwords counted): its results start with the BM25 docs holding every word of it (`HaveAll`: found as search finds a word, by stem, prefix, else typo), in BM25 order, and the rest follow in fused order.
+    Fusion goes by ranks alone, so the doc most similar to the query came as high as the doc saying it most, and a lone word or name is about as similar to any text as nonsense is (on a wiki of 350 pages "seccomp" reached 0.35, "xqzt blorf" 0.32, the floor is 0.25; a question's answer 0.4 to 0.8):
+    "seccomp" gave the one page with the word and then guesses, "leave" a guess between every two pages with the word, and the pages that were also among the guesses on top.
+    A longer query is a question and keeps the fused order: any doc holds some of its words, and meaning finds the answer (docs with all of a question's words first lost answers on a test set, `./run.sh eval`).
+    In the browser's search, `search_wiki` and `search_tasks`' query alike.
   - **Related pages**: each page's vector is the mean of its chunks; `related` lists the nearest above the related floor.
     A page with little prose (under `relatedMinChars`, 100 letters and digits outside links: `proseChars` ignores `[[wikilinks]]`, link labels and bare URLs) neither gets a list nor appears in one.
     That covers near-empty pages, whose vector is little more than their title, and hubs that are only lists of links (like the index), whose vector averages everything they link to; their neighbours were noise.

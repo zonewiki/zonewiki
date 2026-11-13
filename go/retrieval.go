@@ -939,6 +939,58 @@ func phraseFirst(ranked []*SearchDoc, q *textsearch.Query, x *docIndex, keep fun
 	return hits
 }
 
+// lookupWords: a query of at most this many words (stopwords counted) is a
+// lookup of those words; a longer one is a question (wordsFirst).
+const lookupWords = 3
+
+// wordsFirst: the hybrid ranking of a query, from its BM25 ranking and that
+// fused with the meaning hits. A question's is the fused one. A short
+// query's (lookupWords) starts with the BM25 docs holding every word of it,
+// in BM25 order, and goes on with the rest in fused order: fusion goes by
+// ranks alone, so the doc most similar to a word came as high as the doc
+// that says it most, and a lone word or a name is about as similar to any
+// text as nonsense is. For "seccomp" that was the one page with the word and
+// then twenty guesses; with more pages saying the word, guesses in between
+// and the pages that were also among the guesses on top. A question is the
+// other way round: any doc holds some of its words and meaning finds the
+// answer (putting the docs with all of a question's words first lost
+// answers on a test set: ./run.sh eval).
+func wordsFirst(ranked, fused []*SearchDoc, q *textsearch.Query, x *docIndex) []*SearchDoc {
+	text := q.RankingText()
+	if len(textsearch.Tokenize(text)) > lookupWords {
+		return fused
+	}
+	want := make(map[*SearchDoc]bool, len(ranked))
+	for _, d := range ranked {
+		want[d] = true
+	}
+	var ids []int
+	for i, d := range x.docs {
+		if want[d] {
+			ids = append(ids, x.idAt(i))
+		}
+	}
+	first := map[*SearchDoc]bool{}
+	for id := range x.ix.HaveAll(text, ids) {
+		first[x.byID[id]] = true
+	}
+	if len(first) == 0 {
+		return fused
+	}
+	out := make([]*SearchDoc, 0, len(fused))
+	for _, d := range ranked {
+		if first[d] {
+			out = append(out, d)
+		}
+	}
+	for _, d := range fused {
+		if !first[d] {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
 // bm25: the best `depth` docs by BM25 for the query's ranking text, among
 // those that pass its filters (and keep, when given).
 func bm25(x *docIndex, q *textsearch.Query, depth int, keep func(*SearchDoc) bool) []*SearchDoc {
@@ -1002,7 +1054,8 @@ func rankedDocs(q *textsearch.Query, x *docIndex, keep func(*SearchDoc) bool, li
 		return firstN(phraseFirst(ranked, q, x, keep), limit)
 	}
 	meaning := firstN(bySimilarity(pageHits, tHits), depth)
-	return firstN(phraseFirst(textsearch.Fuse([][]*SearchDoc{ranked, meaning}), q, x, keep), limit)
+	fused := wordsFirst(ranked, textsearch.Fuse([][]*SearchDoc{ranked, meaning}), q, x)
+	return firstN(phraseFirst(fused, q, x, keep), limit)
 }
 
 // bestSections: for each page in slugs, the section a result should open:
@@ -1330,7 +1383,8 @@ func retrieve(rq *Req, raw string, limit int, under string, quicknote bool) []*S
 			tHits = taskHits(text, tasks, fuseDepth)
 		}
 		if hits != nil || tHits != nil {
-			ranked = textsearch.Fuse([][]*SearchDoc{ranked, firstN(bySimilarity(hits, tHits), fuseDepth)})
+			meaning := firstN(bySimilarity(hits, tHits), fuseDepth)
+			ranked = wordsFirst(ranked, textsearch.Fuse([][]*SearchDoc{ranked, meaning}), q, x)
 		}
 	}
 	return firstN(phraseFirst(ranked, q, x, keep), limit)

@@ -732,6 +732,49 @@ func (ix *Index) SearchWhere(query string, limit int, accept func(doc int) bool)
 	return ix.topHits(hits, limit)
 }
 
+// HaveAll: which of docs hold every word of the query, each word found as
+// Search finds it: its stem, a word it starts, else a close typo. Stopwords
+// don't count, as in Search. Nil for a query without words.
+func (ix *Index) HaveAll(query string, docs []int) map[int]bool {
+	var tokens []string
+	for _, w := range queryWords(query) {
+		if t := stem(w); !slices.Contains(tokens, t) {
+			tokens = append(tokens, t)
+		}
+	}
+	if len(tokens) == 0 || ix.docCount() == 0 {
+		return nil
+	}
+	// Per doc, how many of the words so far it holds: it stays in the running
+	// only while that is all of them.
+	found := make(map[int]int, len(docs))
+	for _, d := range docs {
+		found[d] = 0
+	}
+	for i, t := range tokens {
+		mark := func(postings []posting) {
+			for _, p := range postings {
+				if n, ok := found[int(p.doc)]; ok && n == i {
+					found[int(p.doc)] = i + 1
+				}
+			}
+		}
+		for _, tw := range ix.expand([]string{t}) {
+			mark(ix.base.postings(tw.term))
+			if ix.over != nil {
+				mark(ix.over.postings[tw.term])
+			}
+		}
+	}
+	all := map[int]bool{}
+	for d, n := range found {
+		if n == len(tokens) {
+			all[d] = true
+		}
+	}
+	return all
+}
+
 // addedCount: how many documents the overlay adds (o may be nil).
 func (o *overlay) addedCount() int {
 	if o == nil {

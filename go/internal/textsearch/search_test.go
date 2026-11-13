@@ -2,6 +2,7 @@ package textsearch
 
 import (
 	"fmt"
+	"maps"
 	"math"
 	"math/rand"
 	"reflect"
@@ -407,6 +408,34 @@ func TestDocsWith(t *testing.T) {
 	}
 	if got := ix.DocsWith("kiwi"); got != nil {
 		t.Errorf("kiwi: %v", got)
+	}
+}
+
+// HaveAll finds a query's words as Search does (stem, prefix, else typo),
+// leaves stopwords out, and answers only for the documents asked about.
+func TestHaveAll(t *testing.T) {
+	ix := NewIndex([][]string{{"seccomp", "profil"}, {"kernel"}, {"seccomp"}}).WithExtra([][]string{{"kernel", "seccomp"}})
+	all := []int{0, 1, 2, 3}
+	for _, c := range []struct {
+		query string
+		docs  []int
+		want  []int
+	}{
+		{"seccomp", all, []int{0, 2, 3}},
+		{"Seccomp seccomp", all, []int{0, 2, 3}},
+		{"the seccomp", all, []int{0, 2, 3}},
+		{"secc", all, []int{0, 2, 3}},
+		{"secomp", all, []int{0, 2, 3}},
+		{"seccomp kernels", all, []int{3}},
+		{"seccomp", []int{1, 2}, []int{2}},
+		{"seccomp zebra", all, nil},
+		{"seccomp", nil, nil},
+		{"", all, nil},
+	} {
+		got := slices.Sorted(maps.Keys(ix.HaveAll(c.query, c.docs)))
+		if !slices.Equal(got, c.want) {
+			t.Errorf("%q among %v: %v, want %v", c.query, c.docs, got, c.want)
+		}
 	}
 }
 

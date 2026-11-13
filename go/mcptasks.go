@@ -179,14 +179,16 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 		}
 	}
 	if strings.TrimSpace(q.Text) != "" {
-		ranked := newDocIndex(docs).search(q.Text, max(len(docs), 1))
+		x := newDocIndex(docs)
+		ranked := x.search(q.Text, max(len(docs), 1))
 		if semantic != nil {
 			semantic.poke()
 			byID := map[string]*SearchDoc{}
 			for _, d := range docs {
 				byID[d.taskID()] = d
 			}
-			ranked = textsearch.Fuse([][]*SearchDoc{ranked, bySimilarity(taskHits(q.Text, byID, max(len(byID), 1)))})
+			meaning := bySimilarity(taskHits(q.Text, byID, max(len(byID), 1)))
+			ranked = wordsFirst(ranked, textsearch.Fuse([][]*SearchDoc{ranked, meaning}), q, x)
 		}
 		docs = ranked
 	} else {
