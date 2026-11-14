@@ -111,6 +111,67 @@ func TestGitLogAllFillsTheLimit(t *testing.T) {
 	}
 }
 
+// A page view asks git about a page once, and again only after the page's
+// file or the repository changed: Zone's own commit, a change on disk, a
+// commit made in a terminal.
+func TestLastChangedAsksGitOnce(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	testWiki(t, nil)
+	cfg.GitEnabled = true
+	gitSetup()
+	path := filepath.Join(cfg.Data, "p.md")
+	writeTestPage(t, "p.md")
+	view := func() (changed *changedView, commit *commitView, asked int64) {
+		before := changeLookups.Load()
+		changed, commit = lastChanged("p", path, "P")
+		return changed, commit, changeLookups.Load() - before
+	}
+	if changed, commit, asked := view(); changed == nil || commit == nil || commit.Filepath != "p.md" || asked != 1 {
+		t.Fatalf("a new page, not committed: %v %v, asked %d", changed, commit, asked)
+	}
+	if _, commit, asked := view(); commit == nil || asked != 0 {
+		t.Errorf("seen again: %v, asked %d", commit, asked)
+	}
+	gitCommit("", "Add p", path)
+	changed, commit, asked := view()
+	if changed == nil || commit != nil || asked != 1 || changed.Date != now().Format("2006-01-02") || changed.Rel != "just now" {
+		t.Fatalf("after Zone's commit: %+v %v, asked %d", changed, commit, asked)
+	}
+	for range 3 {
+		if _, commit, asked := view(); commit != nil || asked != 0 {
+			t.Errorf("committed, seen again: %v, asked %d", commit, asked)
+		}
+	}
+	// A change on disk, as from an editor: another size.
+	if err := os.WriteFile(path, []byte("# P\n\nMore.\n"), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	if _, commit, asked := view(); commit == nil || asked != 1 {
+		t.Errorf("after a change on disk: %v, asked %d", commit, asked)
+	}
+	// A commit made in a terminal, not by Zone.
+	if r := runGit("commit", "-q", "-m", "by hand", "--", "p.md"); r.Code != 0 {
+		t.Fatal(r.Stderr)
+	}
+	if _, commit, asked := view(); commit != nil || asked != 1 {
+		t.Errorf("after a commit by hand: %v, asked %d", commit, asked)
+	}
+	// A page git never saw, and no repository's reflog: asked each time.
+	if changed, commit, _ := view(); changed == nil || commit != nil {
+		t.Errorf("committed: %v %v", changed, commit)
+	}
+	if err := os.Remove(filepath.Join(cfg.Data, ".git", "logs", "HEAD")); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if _, _, asked := view(); asked != 1 {
+			t.Errorf("without a reflog: asked %d", asked)
+		}
+	}
+}
+
 func writeTestPage(t *testing.T, rel string) {
 	t.Helper()
 	p := filepath.Join(cfg.Data, filepath.FromSlash(rel))

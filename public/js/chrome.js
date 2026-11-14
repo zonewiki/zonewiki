@@ -1,3 +1,5 @@
+import { whileUsed } from './util.js';
+
 // ── Navigation trail breadcrumb ───────────────────────────────────────────────
 
 (function () {
@@ -283,8 +285,8 @@ export async function refreshDueBadge() {
 }
 
 if (tasksLinks.length) {
-  setInterval(() => { if (!document.hidden) refreshDueBadge(); }, 60000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshDueBadge(); });
+  // Every minute while someone uses the page, and when the tab comes back.
+  whileUsed(refreshDueBadge, 60000);
   // A page restored from the back/forward cache shows old counts.
   window.addEventListener('pageshow', e => { if (e.persisted) refreshDueBadge(); });
 }

@@ -291,6 +291,9 @@ Nobody types ids: in the editor, `[[task:` (or the formatting bar's task button)
   followed,
   when the file is uncommitted,
   by a link-styled **Commit** (the `commit_form` template, inline, `.commit-link`) on the same line rather than a separate button row (`justify-content: space-between` on the wrapper).
+  What git says of the page for that line (`lastChanged` in `go/views.go`: changes not committed, or the last commit's day and time, shown as "3 days ago" in Zone's own words) is kept per page while neither the page's file nor the repository changed (`changeStamp`: the file's time and size, and those of `.git/logs/HEAD` and `.git/index`, which Zone's commits write and so do a commit, pull or checkout in a terminal),
+  so a view of a page seen before starts no git process;
+  a repository without a reflog is asked at every view.
   It renders with `RenderOpts{HideTags: true, HideTldr: true}` so nothing frontmatter-related is duplicated in the article body.
 - The view-page tldr toggle is **not** a `<details>` — it's a visually-hidden checkbox (`.tldr-toggle`) emitted *before* `.page-meta-wrapper`, a `<label for="tldr-toggle">` *inside* the row, and the `<p class="page-tldr">` *after* the row.
   Keeping those three as siblings is what makes `.tldr-toggle:checked ~ .page-tldr { display: block }` work, so expanding reveals the text on its own full-width line below while the label stays put on the tags line.

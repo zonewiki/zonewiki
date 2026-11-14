@@ -301,6 +301,18 @@ class TestHistory:
         assert "— uncommitted" not in html
         assert "commit-file-form" not in html
 
+    def test_last_changed_follows_changes_made_outside_zone(self, client, wiki_dir):
+        """What git says of a page is kept between views: a change on disk
+        and a commit in a terminal still show at the next view."""
+        save(client, "p", "# P\n")
+        view = lambda: client.get("/page/p", headers=HOST).get_data(as_text=True)
+        assert "commit-file-form" not in view() and "commit-file-form" not in view()
+        (wiki_dir / "p.md").write_text("# P\n\nEdited in an editor.\n", encoding="utf-8")
+        assert "commit-file-form" in view() and "commit-file-form" in view()
+        git(wiki_dir, "commit", "-q", "-m", "by hand", "--", "p.md")
+        html = view()
+        assert "Last changed" in html and "commit-file-form" not in html
+
     def test_page_view_offers_commit_when_dirty(self, client, wiki_dir):
         save(client, "p", "# P\n")
         (wiki_dir / "p.md").write_text("# P\n\nedited on disk\n", encoding="utf-8")

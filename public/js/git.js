@@ -1,3 +1,5 @@
+import { whileUsed } from './util.js';
+
 // ── Uncommitted changes badge ────────────────────────────────────────────────
 
 (function () {
@@ -22,11 +24,10 @@
     }
   }
 
-  // Check on page load and every 30 seconds (skipped while the tab is hidden;
-  // refreshed immediately when it becomes visible again)
+  // Check on page load, when the tab comes back, and every 30 seconds while
+  // someone uses the page (whileUsed): not from a tab nobody is at.
   checkUncommitted();
-  setInterval(() => { if (!document.hidden) checkUncommitted(); }, 30000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkUncommitted(); });
+  whileUsed(checkUncommitted, 30000);
 }());
 
 // ── Commit file actions ───────────────────────────────────────────────────────

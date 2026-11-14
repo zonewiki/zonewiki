@@ -7,15 +7,20 @@ package main
 import (
 	"bytes"
 	"embed"
+	"fmt"
 	"html"
 	"html/template"
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 	"unicode/utf8"
 	"zonewiki/internal/mdtext"
 )
@@ -643,23 +648,107 @@ type metaRowView struct {
 type changedView struct{ Date, Rel string }
 type commitView struct{ Filepath, Title string }
 
+// lastChanged: when a page last changed, and its Commit button while it has
+// changes not committed. What git says is kept per page (pageChanges) for as
+// long as neither the page's file nor the repository changed, so a view of a
+// page seen before starts no git.
 func lastChanged(slug, path, title string) (*changedView, *commitView) {
 	if !cfg.GitEnabled {
 		return nil, nil
 	}
-	filepath := slug + ".md"
-	// Single-file status: much cheaper than the whole tree's.
-	r := runGit("status", "--porcelain", "--untracked-files=all", "--", filepath)
-	if strings.TrimSpace(r.Stdout) != "" {
-		if st, err := os.Stat(path); err == nil {
-			return &changedView{st.ModTime().Format("2006-01-02"), relativeTime(st.ModTime())},
-				&commitView{filepath, title}
-		}
+	st, err := os.Stat(path)
+	if err != nil {
+		return nil, nil
 	}
-	if entries := gitLog(path, 1); len(entries) > 0 {
-		return &changedView{entries[0].Date, entries[0].Rel}, nil
+	c := changeOf(slug, path, st)
+	switch {
+	case c.dirty:
+		return &changedView{st.ModTime().Format("2006-01-02"), relativeTime(st.ModTime())},
+			&commitView{slug + ".md", title}
+	case c.date != "":
+		return &changedView{c.date, relativeTime(c.at)}, nil
 	}
 	return nil, nil
+}
+
+// changeFacts: what git says of a page: it has changes not committed
+// (dirty), or its last commit's day (as git gives it) and time; neither for
+// a page git doesn't know. stamp: what they were found under.
+type changeFacts struct {
+	stamp string
+	dirty bool
+	date  string
+	at    time.Time
+}
+
+// pageChanges: the pages' changeFacts by slug. A gone page's entry stays
+// until the map is emptied, at changesMax.
+var pageChanges = struct {
+	sync.Mutex
+	pages map[string]changeFacts
+}{pages: map[string]changeFacts{}}
+
+const changesMax = 20000
+
+// changeLookups counts the times git was asked (the tests').
+var changeLookups atomic.Int64
+
+// changeOf: slug's changeFacts, from pageChanges while its stamp holds.
+func changeOf(slug, path string, st os.FileInfo) changeFacts {
+	stamp, stamped := changeStamp(st)
+	if stamped {
+		pageChanges.Lock()
+		c, ok := pageChanges.pages[slug]
+		pageChanges.Unlock()
+		if ok && c.stamp == stamp {
+			return c
+		}
+	}
+	changeLookups.Add(1)
+	c := changeFacts{stamp: stamp}
+	// Single-file status: much cheaper than the whole tree's. Without the
+	// optional lock, so that asking doesn't write the index it is stamped by
+	// (git refreshes it after a look, for as long as a file is as new as it).
+	if r := runGit("--no-optional-locks", "status", "--porcelain", "--untracked-files=all", "--", slug+".md"); strings.TrimSpace(r.Stdout) != "" {
+		c.dirty = true
+	} else if rel, ok := wikiRel(path); ok {
+		// The day as the commit has it (%as, in its own time zone), as History shows it.
+		out := strings.TrimSpace(runGit("log", "--follow", "-n", "1", "--format=%as\x1f%at", "--", rel).Stdout)
+		if day, unix, ok := strings.Cut(out, "\x1f"); ok {
+			if secs, err := strconv.ParseInt(unix, 10, 64); err == nil {
+				c.date, c.at = day, time.Unix(secs, 0)
+			}
+		}
+	}
+	// The stamp is from before git was asked: a change meanwhile makes it
+	// differ at the next view, which asks again.
+	if stamped {
+		pageChanges.Lock()
+		if len(pageChanges.pages) >= changesMax {
+			pageChanges.pages = map[string]changeFacts{}
+		}
+		pageChanges.pages[slug] = c
+		pageChanges.Unlock()
+	}
+	return c
+}
+
+// changeStamp: what a page's changeFacts depend on, as a string that differs
+// when any of it changed: the page's file (its time and size), and the
+// repository's reflog and index, which every commit, checkout, pull, reset,
+// add and rm writes, Zone's own and those made in a terminal. Without a
+// reflog (a repository that keeps none, or a .git that is a file) nothing is
+// kept, and git is asked at every view, as before.
+func changeStamp(page os.FileInfo) (string, bool) {
+	log, err := os.Stat(filepath.Join(cfg.Data, ".git", "logs", "HEAD"))
+	if err != nil {
+		return "", false
+	}
+	stamp := fmt.Sprintf("%d/%d %d/%d", page.ModTime().UnixNano(), page.Size(), log.ModTime().UnixNano(), log.Size())
+	if index, err := os.Stat(filepath.Join(cfg.Data, ".git", "index")); err == nil {
+		stamp += fmt.Sprintf(" %d/%d", index.ModTime().UnixNano(), index.Size())
+	}
+	return stamp, true
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }

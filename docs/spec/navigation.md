@@ -130,9 +130,9 @@ There is still no nav bar: the modules sit where the eye already goes.
   with a tooltip like "Tasks: 5 in Focus · 1 overdue · 1 due today".
   `taskCounts()` counts the pinned lists' tasks, as the Pinned view shows them: each one's `list=` and `tag=` (`tagParamMatches`, the server's reading of `tag=` as tasks.js has it; a task two of them show counts once), or every task without a pin.
   The server renders them into the page (`taskCounts`, once per request, into `partials/modules.html`), since filling them in by a fetch after the page had painted made the link change width on every load (flicker);
-  `refreshDueBadge` in `js/chrome.js` refreshes them from `/api/tasks/due-count` every minute, on tab focus, on a back/forward-cache restore and after tasks writes (`tasks.js` calls it).
+  `refreshDueBadge` in `js/chrome.js` refreshes them from `/api/tasks/due-count` every minute while someone uses the page (`whileUsed` in `js/util.js`: a key, the pointer or a scroll since the last time; a tab nobody is at asks nothing), on tab focus, on a back/forward-cache restore and after tasks writes (`tasks.js` calls it).
   They replaced the separate due badge at the top left.
-- **Status badges** (`.top-badges`: uncommitted count, and Sign out when auth is on;
+- **Status badges** (`.top-badges`: uncommitted count, asked from `/api/uncommitted` when a page loads, when its tab comes back and every 30 seconds while someone uses the page (`whileUsed`, as the Tasks counts above), and Sign out when auth is on;
   the first thing in `<main>`, after the remote 🌐 `.remote-badge`, which on desktop sits left of the module switcher, in the margin outside the content's edge, on the row's centre line, and in the editor at the top right): on desktop they sit in the top row,
   left of the top actions,
   centred on the row (the breadcrumb keeps their room free; Sign out, though inside, is fixed to the bottom-right);

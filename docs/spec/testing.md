@@ -38,6 +38,9 @@ and `tests/test_text_parity.py` the browser's copies of them (`public/js/mdtext.
 so the two sides can't drift apart: a case added for one is a case for both;
 after a deliberate change to one of those functions, `ZONE_GOLDEN_UPDATE=1 go test -run TestGolden` (in `go/`) logs every case that changed and writes the new answers.
 
+`tests/e2e/test_quiet_tab.py`: a tab nobody is at asks for neither the uncommitted count nor the Tasks counts through ten minutes, each is asked once after the pointer moved, and again when the tab comes back.
+`TestLastChangedAsksGitOnce` (Go): a page view asks git about a page once, and again after Zone's commit, a change on disk and a commit by hand; without a reflog every time.
+
 `tests/test_git.py` uses `git_wiki_dir` and covers every git path (commit-on-write, history/revision/diff/restore, `_deleted`, uncommitted/commit endpoints, git-disabled fallbacks); it skips when git is not installed.
 A server makes any wiki a repository when it starts, so the other modules' wikis are repositories too; `settings.GIT_ENABLED = False` gives the server a `PATH` without git, for the fallbacks.
 

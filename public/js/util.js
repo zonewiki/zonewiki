@@ -2,6 +2,22 @@ import TasksCore from '../tasks-core.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// whileUsed keeps something on the page fresh without asking the server for
+// ever: fn runs when the tab comes back to the front, and every ms only if
+// someone used the page since its last run (a key, the pointer, a scroll). A
+// tab left open with nobody at it asks nothing, so the server it talks to is
+// idle then (a hosted wiki is put to sleep when it is).
+let lastUse = 0;
+for (const type of ['keydown', 'pointerdown', 'pointermove', 'wheel', 'scroll', 'touchstart']) {
+  window.addEventListener(type, () => { lastUse = Date.now(); }, { capture: true, passive: true });
+}
+export function whileUsed(fn, ms) {
+  let ran = Date.now();
+  const run = () => { ran = Date.now(); fn(); };
+  setInterval(() => { if (!document.hidden && lastUse >= ran) run(); }, ms);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) run(); });
+}
+
 export function closeOnBackdropClick(dialog) {
   dialog?.addEventListener('click', e => {
     if (e.target === dialog) dialog.close();
