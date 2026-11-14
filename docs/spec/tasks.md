@@ -84,7 +84,7 @@ There is no polling.
 - The files are JSON (`go/internal/taskmodel`): a list of tasks,
   two spaces of indent,
   text as written (no `\u` escapes but those JSON needs),
-  each task's fields in one order (`id`, `title`, `description`, `tags`, `start_date`, `due_date`, `created_at`, `closed_at`, `wont_do`, `keep`, `importance` (only when it isn't normal), `last_done`, `sort_order`, `recurrence`, `spawned_from`, `history`, `comments`),
+  each task's fields in one order (`id`, `title`, `description`, `tags`, `list` (only when it has one), `start_date`, `due_date`, `created_at`, `closed_at`, `wont_do`, `keep`, `importance` (only when it isn't normal), `last_done`, `sort_order`, `recurrence`, `spawned_from`, `history`, `comments`),
   every field written,
   also when empty (`null`, `[]`, `false`),
   then any keys Zone doesn't know (from an older version or a hand edit),
@@ -707,7 +707,7 @@ the main task list shows every task,
 list tasks included (it once hid them, with a "Show separate lists" checkbox to bring them back; removed 2026-10, since the main task list is the view of all tasks you filter),
 and editing the declaration away takes the list out of the switcher,
 never its tasks.
-There is no `list` field (an old stored one is ignored); a task is in a list by carrying its tag.
+A task has a `list` field in its file (after `tags`), and `lists.json` beside the task files can hold lists (`go/internal/taskfiles/lists.go`): both are kept but not used yet (`docs/plans/lists.md`); a task is in a list by carrying its tag.
 A tag no page declares stays a filter.
 
 - **The list switcher** (`.tasks-places` in `templates/tasks_page.html`, `taskPlaces` in `go/tasksembed.go`): one Tasks link can't stand for several lists,

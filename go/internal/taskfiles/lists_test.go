@@ -1,0 +1,172 @@
+package taskfiles
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+	"zonewiki/internal/taskmodel"
+)
+
+const registryText = `{
+  "version": 1,
+  "lists": [
+    {"name": "shop", "view": "focus", "limit": "8", "keep": "1", "labels": "Catalogue,Shopping"},
+    {"name": "task"}
+  ],
+  "pinned": ["task", "shop"],
+  "default": "task",
+  "all": {"view": "open"}
+}
+`
+
+// A registry is written as it was read: the lists a line each, their
+// settings in one order.
+func TestRegistryRoundTrips(t *testing.T) {
+	r, ok := ParseRegistry([]byte(registryText))
+	if !ok {
+		t.Fatal("not read")
+	}
+	if got := r.Encode(); got != registryText {
+		t.Errorf("written as\n%s\nwant\n%s", got, registryText)
+	}
+	shop := r.Find("shop")
+	if shop == nil || shop.Settings["limit"] != "8" || shop.Settings["view"] != "focus" || r.Find("nope") != nil {
+		t.Errorf("shop = %+v", shop)
+	}
+	if !reflect.DeepEqual(r.Pinned, []string{"task", "shop"}) || r.Default != "task" || r.All["view"] != "open" {
+		t.Errorf("pins %v, default %q, all %v", r.Pinned, r.Default, r.All)
+	}
+}
+
+// A file edited by hand still reads: values of another kind as text, a
+// list without a name left out, a name twice once, unknown keys kept.
+func TestRegistryReadLeniently(t *testing.T) {
+	r, ok := ParseRegistry([]byte(`{"lists": [
+		{"name": " Shop ", "limit": 8, "keep": true, "colour": "red", "view": ["x"]},
+		{"limit": "3"}, "junk", {"name": "shop", "view": "open"}, {"name": "b"}],
+		"pinned": ["Shop", "shop", 7], "default": 3, "all": "no", "theme": {"dark": true}}`))
+	if !ok {
+		t.Fatal("not read")
+	}
+	if r.Version != 0 {
+		t.Errorf("version %d: a file without one is from before the lists", r.Version)
+	}
+	want := `{
+  "version": 1,
+  "lists": [
+    {"name": "shop", "limit": "8", "keep": "true", "colour": "red"},
+    {"name": "b"}
+  ],
+  "pinned": ["shop", "7"],
+  "default": "3",
+  "theme": {"dark": true}
+}
+`
+	if got := r.Encode(); got != want {
+		t.Errorf("written as\n%s\nwant\n%s", got, want)
+	}
+	for _, bad := range []string{"", "[]", "nope", `"x"`} {
+		if _, ok := ParseRegistry([]byte(bad)); ok {
+			t.Errorf("%q read as a registry", bad)
+		}
+	}
+}
+
+// The shared lists are in _tasks/lists.json, a user's in their folder;
+// each list says whose it is.
+func TestListsPerOwner(t *testing.T) {
+	f := newStore(t, "alice", "bob")
+	if r := f.ReadLists(""); r.Version != 0 || len(r.Lists) != 0 {
+		t.Errorf("no file: %+v", r)
+	}
+	f.Lock()
+	defer f.Unlock()
+	shared := &Registry{Lists: []*List{{Name: "shop"}}}
+	own := &Registry{Lists: []*List{{Name: "gifts", Settings: map[string]string{"view": "open"}}}}
+	p1, err1 := f.WriteListsLocked("alice", "", shared)
+	p2, err2 := f.WriteListsLocked("alice", "alice", own)
+	if err1 != nil || err2 != nil {
+		t.Fatal(err1, err2)
+	}
+	if p1 != filepath.Join(f.root, "_tasks", "lists.json") || p2 != filepath.Join(f.root, "private", "alice", "_tasks", "lists.json") {
+		t.Errorf("written to %q and %q", p1, p2)
+	}
+	if l := f.ReadLists("alice").Find("gifts"); l == nil || l.Owner != "alice" || l.Settings["view"] != "open" {
+		t.Errorf("alice's gifts: %+v", l)
+	}
+	if l := f.ReadLists("").Find("shop"); l == nil || l.Owner != "" {
+		t.Errorf("the shared shop: %+v", l)
+	}
+	if f.ReadLists("bob").Find("gifts") != nil {
+		t.Error("bob has alice's list")
+	}
+	// Written again unchanged: no file to commit.
+	if p, err := f.WriteListsLocked("alice", "alice", own); p != "" || err != nil {
+		t.Errorf("an unchanged registry written: %q, %v", p, err)
+	}
+}
+
+// Nobody writes another user's lists, and a viewer writes none.
+func TestListsWriteRefused(t *testing.T) {
+	f := newStore(t, "alice", "bob")
+	f.viewer = "bob"
+	f.Lock()
+	defer f.Unlock()
+	if _, err := f.WriteListsLocked("alice", "bob", &Registry{}); err == nil {
+		t.Error("alice wrote bob's lists")
+	}
+	if _, err := f.WriteListsLocked("bob", "", &Registry{}); err == nil {
+		t.Error("a viewer wrote the lists")
+	}
+	if _, err := os.Stat(f.ListsPath("bob")); !errors.Is(err, os.ErrNotExist) {
+		t.Error("a refused write left a file")
+	}
+}
+
+// An unreadable registry is no empty one for a write, which would then
+// drop every list.
+func TestListsCorruptRefusesWrite(t *testing.T) {
+	f := newStore(t)
+	if err := os.MkdirAll(f.Dir(""), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(f.ListsPath(""), []byte("{ half"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.ReadListsStrict(""); !errors.Is(err, ErrCorrupt) {
+		t.Errorf("read for a write: %v", err)
+	}
+	if r := f.ReadLists(""); len(r.Lists) != 0 {
+		t.Errorf("read: %+v", r)
+	}
+	if r, err := f.ReadListsStrict("nobody"); err != nil || r.Version != 0 {
+		t.Errorf("no file, read for a write: %+v, %v", r, err)
+	}
+}
+
+// A task's list is in its file after its tags, and a task without one
+// has no such key, so a wiki without lists keeps its files as they were.
+func TestTaskListInFile(t *testing.T) {
+	f := newStore(t)
+	with, without := task("a", "", ""), task("b", "", "")
+	with.List = "shop"
+	if err := Write(f.OpenPath(""), []*Task{with, without}); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(f.OpenPath(""))
+	text := string(raw)
+	if strings.Count(text, `"list"`) != 1 || !strings.Contains(text, "\"tags\": [],\n    \"list\": \"shop\",\n") {
+		t.Errorf("the file:\n%s", text)
+	}
+	back := ReadLenient(f.OpenPath(""))
+	if back[0].List != "shop" || back[1].List != "" {
+		t.Errorf("read back: %q, %q", back[0].List, back[1].List)
+	}
+	again, _ := taskmodel.Encode(back)
+	if again != text {
+		t.Error("written differently the second time")
+	}
+}
