@@ -51,6 +51,31 @@ Each rule has tests in `tests/test_routes.py` or `tests/test_mcp.py`, and `go/se
   A reload with an error keeps the settings from before (a broken edit neither locks everyone out nor opens the wiki), and so does removing the file while Zone runs;
   `GET /api/health` (no login, for the healthcheck) then answers 503 with the error, which never repeats a password or token, and which it gives only with a session (or in a wiki without a login): it may name users, so without one the answer points to the log.
   Reloading in `docs/spec/users.md`.
+- **Public wikis** (`ZONE_PUBLIC` in `.env`, the deployment's settings; `go/access.go`, `visitorGate` in `go/server.go`): a wiki with users can be shown to people who haven't signed in, **visitors**.
+  `ZONE_PUBLIC=view` lets anyone read the wiki's shared pages; `ZONE_PUBLIC=edit` lets them edit and make pages too.
+  Unset (the default), `off`, or a wiki without users: everyone signs in, as before; any other value stops Zone at start.
+  - **Where it is set**: in `.env`, not in the wiki's settings file, because it is a decision of whoever runs the server: it opens the login gate, so an admin of the wiki (or an edit of `.zone/config`, which Zone reloads) can't turn it on, and a hosted wiki never has it.
+    Zone says at start that the wiki is public, or that `ZONE_PUBLIC` does nothing because there are no users (with a wiki password alone there is nobody to tell a visitor from).
+  - **What a visitor reaches** is a list of routes, `visitorRoutes`: the home page, a page (`/page/…`, its preview), the page list (`/pages`, `/api/pages`, `/api/pages-list`), search (`/search`, `/api/search`), a page's history, versions and diffs (`/history/…`, `/revision/…`, `/diff/…`), uploads in `_assets/`, the version.
+    With `edit` also `visitorEdits`: the editor and its saves (`/edit/…`, `/api/save/…`, `/api/preview`), a new page (`/new`), a checkbox ticked on a page (`/api/toggle-checkbox/…`).
+    Every other route answers a visitor exactly as it answers someone not signed in where the wiki isn't public: a redirect to `/login`.
+    So a new route is closed to visitors until it is put on a list; `tests/test_public.py` asks every route Zone registers without a session, and fails for one that answers and isn't listed there too.
+  - **Who a visitor is**: the checks give a request without a session the user `visitor` (`_visitor`, which is no user's name: names have no `_`), only while the wiki is public, and only on its way to the gate.
+    The rules in `go/access.go` then answer for it as for a stranger: no private page (`canSee`), no private folder (`privateFolder`), no task at all (`canSeeTask`, and the task store's `NoTasks`, which every read of the task files asks: `Owners`), no task write (`mayWriteTasks`).
+    With `view` a visitor is a viewer (`isViewer`), so every rule that keeps a viewer from changing anything holds for them too; with `edit` they write the shared pages as an editor does, but never a guide (`adminsOnly`).
+  - **Not for visitors, in either mode**: tasks (no Tasks module, no task list on a page: its `[[tasks: …]]` is left out, a `[[task:…]]` reads as a task that isn't there, no task in search, no Linked tasks), notes, private pages, uploading, renaming, deleting or restoring a page, Commit and the uncommitted list, the deleted pages, the admin and account pages, `/mcp` (which wants a token as ever).
+    Renaming, deleting and uploading stay out of `edit` on purpose: an anonymous edit is undone from the page's history, a deleted page or a wiki filled with files less easily.
+  - **No user's name**: a page's history shows a visitor when it changed and what, not who (`pageLog`; a visitor's own changes say "anonymous"), and a merge names no one (`otherAuthor`). Names in a page's text are the page's.
+  - **What is public is everything shared**: every page outside `private/` (a note from before the wiki had users, at its top level, is such a page), with its whole git history, and every file in `_assets/` for whoever knows its name (a page's images, but also a file attached to a task).
+    There is no public part of a wiki yet: keep what isn't for everyone in a private folder, or in another wiki.
+  - **A visitor's edits** are committed as **anonymous** (`visitorAuthor`), and every visitor is the same one to Zone: two of them on one page merge as one user's two tabs do. `storage-max` bounds what they can add.
+    No draft is kept for a visitor who leaves a page in conflict (`leaveDraft`): it would be shown to the next one. A user called `anonymous` can't be told from them in the history (Zone says so at start).
+    A user whose session ends is a visitor from then on: where visitors edit, an editor left open saves as anonymous.
+    What `edit` takes on: a page then holds whatever a stranger wrote, so an assistant that reads the wiki reads that too (the guides stay an admin's, and a page's scripts never run: `pageCSP`), a `[[tasks: … pin=1]]` a visitor writes is a pinned list for the users, and nothing throttles saves (each Done is a commit): put a rate limit in the reverse proxy in front of a wiki strangers can write.
+  - **Search** leaves out, for a visitor, a page that refers to tasks (`[[task:…]]`; `visitorSkips` in `go/retrieval.go`): search reads such a page with the tasks' titles in place of the references, and a match or an excerpt would give a title away. The page itself they open and read.
+  - **The interface** (`pageShell.Visitor`, `body[data-visitor]`): **Sign in** at the top right (on a phone in the page's top row), which comes back to the page; the module switcher shows the wiki alone; no New note or New task, no uncommitted badge, no Commit.
+    With `view` no Edit, as for a viewer; with `edit` Edit and the editor, without Rename, Delete, Attach, Task list, Make task and Link to a task.
+  - Signed in, nothing changes: a user sees and does what their role allows.
 - **Private pages and tasks** (with users, `private/<user>/`, tasks in `private/<user>/_tasks/`, `docs/spec/users.md`): another user's are left out of every list,
   count and search and are 404 when opened directly,
   also when they don't exist (`refusePage`; an unknown task id likewise),

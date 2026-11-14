@@ -1147,7 +1147,19 @@ func hiddenDoc(rq *Req, d *SearchDoc) bool {
 	if d.isTask() {
 		return rq != nil && !canSeeTask(rq.user, d.Task)
 	}
-	return hiddenPage(rq, d.Slug)
+	return hiddenPage(rq, d.Slug) || visitorSkips(rq, d.Slug)
+}
+
+// visitorSkips: search leaves the page slug out for rq, a public wiki's
+// visitor: it refers to tasks ([[task:…]]), and search reads such a page
+// with the tasks' titles in their place (taskRefsAsTitles), which a match
+// or an excerpt would give away to someone who sees no task. The page
+// itself they read, its references naming nothing.
+func visitorSkips(rq *Req, slug string) bool {
+	if rq == nil || rq.user != visitor {
+		return false
+	}
+	return pageMetaEntryOf(safePath(slug), slug).taskRefs
 }
 
 // taskStatus: "open", "done" or "won't do".
@@ -1373,7 +1385,7 @@ func retrieve(rq *Req, raw string, limit int, under string, quicknote bool) []*S
 	x := chunkIndex(rq)
 	pagesOnly := under != "" || quicknote
 	pageOK := func(slug string) bool {
-		return inFolder(slug, under) && (!quicknote || inQuicknote(rq.who(), slug)) && !hiddenPage(rq, slug)
+		return inFolder(slug, under) && (!quicknote || inQuicknote(rq.who(), slug)) && !hiddenPage(rq, slug) && !visitorSkips(rq, slug)
 	}
 	var keep func(*SearchDoc) bool
 	if pagesOnly || rq != nil && settings().Users != nil {

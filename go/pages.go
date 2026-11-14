@@ -575,6 +575,9 @@ type pageMetaEntry struct {
 	title   string
 	targets map[string]bool
 	embeds  []TasksParams
+	// taskRefs: the page refers to tasks ([[task:…]]): search reads it with
+	// their titles in place (visitorSkips).
+	taskRefs bool
 }
 
 // pageTasksEmbeds: the params of each [[tasks: …]] on a page, outside code.
@@ -628,7 +631,8 @@ func pageMetaEntryOf(p, slug string) pageMetaEntry {
 	}
 	content := newlines(strings.ToValidUTF8(string(b), "�"))
 	// A clone: the title is a piece of content, and would keep the whole file in memory.
-	entry := pageMetaEntry{st.ModTime(), strings.Clone(mdtext.PageTitle(content, slug)), pageLinkTargets(content, slug), pageTasksEmbeds(content)}
+	entry := pageMetaEntry{st.ModTime(), strings.Clone(mdtext.PageTitle(content, slug)), pageLinkTargets(content, slug), pageTasksEmbeds(content),
+		taskRefRE.MatchString(content)}
 	metaMu.Lock()
 	metaCache[slug] = entry
 	metaMu.Unlock()

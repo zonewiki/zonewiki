@@ -31,6 +31,7 @@ func init() {
 		PrivateDir: privateDir,
 		Users:      func() []string { return sortedKeys(settings().Users) },
 		Private:    func(user string) bool { return privateFolder(user) != "" },
+		NoTasks:    func(user string) bool { return user == visitor },
 		MayWrite:   mayWriteTasks,
 		Commit:     gitCommit,
 		Now:        func() time.Time { return now() },

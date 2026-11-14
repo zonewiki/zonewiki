@@ -31,6 +31,9 @@ func pageLog(user, path string) []GitEntry {
 	for _, e := range gitLog(path, 0) {
 		if canSeePath(user, e.Path) {
 			e.Msg = hideNames(user, e.Msg)
+			if user == visitor && e.Author != visitorAuthor {
+				e.Author = "" // a public wiki's visitor learns no user's name
+			}
 			out = append(out, e)
 		}
 	}

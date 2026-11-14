@@ -315,6 +315,9 @@ and commit the new pins.
     A new route that must answer before that goes in `setupExempt`; the tests' server has `no-login = yes` (`settings.NO_LOGIN`).
   - **Viewers** (`role = viewer`) change nothing: `canWrite` in `go/access.go` is false for them, `mayWriteTasks` refuses every task write, `callMCPTool` the writing tools, and `viewerGate` a viewer's write to any route not in `viewerWrites`.
     A new write route gets a probe in `tests/test_roles.py`, which fails until it has one.
+  - **Public wikis** (`ZONE_PUBLIC=view|edit` in `.env`, with users): a request without a session is the user `visitor` (`go/access.go`), who reaches only the routes in `visitorRoutes` (and `visitorEdits` with `edit`; `visitorGate` in `go/server.go`) and sees no task, note or private page.
+    A new route is closed to visitors unless it is listed there, and `tests/test_public.py` fails until the route is listed in the test too: list one only after checking that nothing it answers is a task's, a note's or a private page's.
+    Code that shows something to "whoever asks" must hold for `visitor` as well: ask `canSee`/`canSeeTask`, never `user != ""`.
   - `/mcp` requires a token: an MCP token (`mcp-token`, kept as its hash; with users, a user's own) or the access token of a connection a signed-in user allowed (OAuth, `go/oauth.go`). Without a login and a token it is off (403); with a login it answers 401 and says where to sign in.
     Don't make it open again.
     OAuth's rules (OAuth for `/mcp` in `docs/spec/security.md`) aren't to be loosened: the code goes only to a registered redirect URI (an unknown client or URI gets a page, never a redirect), PKCE is required, Allow takes the password again, tokens are kept as hashes, a refresh token works once. The answer after Allow is a page with a `Refresh` header because of `form-action 'self'`: don't widen the policy for it.

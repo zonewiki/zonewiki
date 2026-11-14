@@ -166,6 +166,9 @@ Done tasks go to a yearly archive. Beyond that:
   (`ZONE_SIGNUP=1` and a mail server in `.env`; as viewers by default, and an admin
   approves them if you want).
   Everyone changes their own password in the browser (**Change password** in the user menu).
+  A wiki can also be **public**: `ZONE_PUBLIC=view` in `.env` shows its shared pages to
+  anyone without signing in, `ZONE_PUBLIC=edit` lets them edit pages too; tasks, notes and
+  private pages stay with the users ([`docs/spec/security.md`](docs/spec/security.md), Public wikis).
   See [`docs/spec/users.md`](docs/spec/users.md).
 - **Keyboard shortcuts** for everything; `?` lists them.
 - **Sharing mode** for screen sharing: hides the trail of visited pages,

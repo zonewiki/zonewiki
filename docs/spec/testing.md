@@ -172,6 +172,7 @@ and invite and reset links (the welcome page changes nothing until its form, onc
 `go/mail_test.go` the SMTP client (`fakeSMTP`: the mail's headers and text, no mail without STARTTLS, a server that isn't there), the mail settings, `validEmail`, the sign-up keys and `pending`.
 `settings.USERS` maps a name to its password and token, `settings.USER_SETTINGS` a name to more of its section (`role`, `disabled`);
 `goserver.py` writes their hashes into the settings file (`password_hash`: a fixed salt and few iterations, so the server's settings stay the same between requests and logins are quick).
+`tests/test_public.py` is the test of public wikis (`ZONE_PUBLIC`): it asks every route Zone registers without a session, in both modes, and fails for one that answers and isn't on its lists, which must be the server's (`visitorRoutes`, `visitorEdits`); it looks for a task's or a private page's words in what a visitor reads, and checks what a visitor writes (pages, as anonymous) and never does (uploads, renames, deletes, tasks, notes, guides).
 `tests/test_privacy.py` is the leak test for private pages and tasks: alice's private page (committed, deleted, uncommitted),
 note,
 upload,

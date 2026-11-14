@@ -16,10 +16,39 @@ import (
 	"sync"
 	"time"
 	"zonewiki/internal/mdtext"
+	"zonewiki/internal/taskfiles"
 )
 
 // privateDir is the folder of the users' private folders.
 const privateDir = "private"
+
+// A public wiki (ZONE_PUBLIC in the deployment's settings, with users;
+// docs/spec/security.md, Public wikis): whoever isn't signed in is a
+// visitor, who reads the shared pages (publicView) or edits them too
+// (publicEdit). A visitor reaches only the routes in visitorRoutes
+// (server.go), sees no task and no private page, and makes no notes, tasks
+// or uploads. The checks give such a request the user visitor, which is no
+// user's name (a name has no '_'), so every rule here that asks who a user
+// is answers for a visitor as for a stranger.
+const (
+	publicView = "view"
+	publicEdit = "edit"
+	visitor    = "_visitor"
+	// visitorAuthor: who a visitor's commits are by.
+	visitorAuthor = "anonymous"
+)
+
+// publicMode: how the wiki is public now: publicView, publicEdit, or "" (it
+// isn't: ZONE_PUBLIC unset, or no users to tell visitors from).
+func publicMode() string {
+	if cfg.Public == "" || settings().Users == nil {
+		return ""
+	}
+	return cfg.Public
+}
+
+// visitorMsg: what a visitor is told about what only users do.
+const visitorMsg = "Sign in to do this: without an account you can only read this wiki."
 
 // ownerIn: a path inside a user's folder below folder (slash-separated,
 // relative; "private/alice/x"): (that user, true); below folder but in no
@@ -85,7 +114,8 @@ func adminsOnly(user, slug string) bool {
 // "@other.md" (guideText), there or not yet.
 func guidePage(slug string) bool {
 	clean := path.Clean(slug)
-	if clean == guideSlug || guideFiles[strings.ToLower(path.Base(clean))+".md"] {
+	// In any case: where file names don't tell case apart, Wiki-Guide is wiki-guide.
+	if strings.EqualFold(clean, guideSlug) || guideFiles[strings.ToLower(path.Base(clean))+".md"] {
 		return true
 	}
 	p := safePath(slug)
@@ -153,8 +183,12 @@ const guideMsg = "Only an admin of this wiki can change this page: it is a guide
 	"follows (or a page a guide pulls in). Ask an admin of this wiki."
 
 // readOnlyWhy: why user, who sees slug, may not change it (readOnly): a
-// viewer changes nothing, anyone else no guide.
+// visitor of a wiki that is public to read signs in first, a viewer changes
+// nothing, anyone else no guide.
 func readOnlyWhy(user string) string {
+	if user == visitor && settings().isViewer(user) {
+		return visitorMsg
+	}
 	if settings().isViewer(user) {
 		return readOnlyMsg
 	}
@@ -176,12 +210,18 @@ var errReadOnly = refuseAs(refusedReadOnly, readOnlyMsg)
 
 // canSeeTask: user may see the task t: a shared one, or one of their own
 // private ones.
-func canSeeTask(user string, t *Task) bool { return t.Owner == "" || t.Owner == user }
+// A visitor sees no task.
+func canSeeTask(user string, t *Task) bool {
+	return user != visitor && (t.Owner == "" || t.Owner == user)
+}
 
 // mayWriteTasks: user may write the task files: anyone but a viewer. Every
 // task write passes it (writeOpenLocked, writeBothLocked), so no route or
 // tool changes a task for a viewer, whatever it does.
 func mayWriteTasks(user string) error {
+	if user == visitor {
+		return refuseAs(refusedReadOnly, visitorMsg)
+	}
 	if settings().isViewer(user) {
 		return errReadOnly
 	}
@@ -208,7 +248,7 @@ func inQuicknote(user, slug string) bool {
 // privateFolder: user's private folder ("private/alice"), "" without
 // users (or for Zone itself, which has no user).
 func privateFolder(user string) string {
-	if settings().Users == nil || user == "" {
+	if settings().Users == nil || user == "" || user == visitor {
 		return ""
 	}
 	return privateDir + "/" + user
@@ -227,7 +267,8 @@ func canSeePath(user, rel string) bool {
 	if owner, private := ownerIn(privateDir, rel); private {
 		return owner != "" && owner == user
 	}
-	return true
+	// A visitor sees no task, so no task file's history either.
+	return user != visitor || !strings.HasPrefix(rel, taskfiles.DirName+"/")
 }
 
 // strayPrivate: what lies in private/ outside every user's folder (seen by

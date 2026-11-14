@@ -197,6 +197,9 @@ func moduleLinks(rq *Req) []moduleLink {
 		if m[0] == "private" && !users || viewer && (m[0] == "private" || m[0] == "notes") {
 			continue // a viewer makes nothing: no private pages, no notes
 		}
+		if rq.who() == visitor && m[0] != "wiki" {
+			continue // a visitor has the wiki's pages alone
+		}
 		group := 0
 		if users && (m[0] == "tasks" || m[0] == "notes") {
 			group = 1
@@ -247,10 +250,14 @@ func currentModule(rq *Req) string {
 		return ""
 	}
 	m := moduleViewRE.FindStringSubmatch(p)
+	if rq.who() == visitor {
+		return "wiki" // a public wiki's visitor has the pages alone
+	}
 	if m != nil && isQuicknote(m[1]) {
 		return "notes"
 	}
-	if strings.HasPrefix(p, "/page/") && m != nil && rq.isPinnedPage(m[1]) {
+	// (Not for a public wiki's visitor, who has no Tasks module.)
+	if strings.HasPrefix(p, "/page/") && m != nil && rq.who() != visitor && rq.isPinnedPage(m[1]) {
 		return "tasks"
 	}
 	if m != nil && ownPrivate(rq.who(), m[1]) {
@@ -318,6 +325,11 @@ type pageShell struct {
 	User               string // who is signed in, with users
 	Admin              bool   // they are an admin: the user menu offers Admin
 	Viewer             bool   // they are a viewer: nothing to make (no New note, New task)
+	// Visitor: nobody is signed in, and the wiki is public (access.go): the
+	// wiki's pages alone, no tasks or notes; SignIn: where they sign in, to
+	// come back to this view.
+	Visitor bool
+	SignIn  string
 }
 
 // tasksNew: how a new task from any page (c t, New task) starts, as the
@@ -353,10 +365,16 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 		SignOut: s.authOn() && isSignedIn(rq.r), User: rq.user, Users: s.Users != nil, Admin: s.isAdmin(rq.user),
 		Viewer: s.isViewer(rq.user),
 	}
+	if rq.user == visitor {
+		// No name, nothing of users (private pages, assignees), nothing to
+		// make but, where visitors edit, pages.
+		sh.User, sh.Users, sh.Viewer, sh.Visitor = "", false, true, true
+		sh.SignIn = "/login?next=" + url.QueryEscape(rq.r.URL.Path)
+	}
 	if !o.editor {
 		sh.Module = currentModule(rq)
 	}
-	if !o.noActions {
+	if !o.noActions && !sh.Visitor {
 		if def := rq.defaultList(); def != nil {
 			// Its "+ New" on Focus (its view, or the default) starts the task
 			// today; elsewhere a new task has no start date.
@@ -577,13 +595,15 @@ type pageMenuView struct {
 }
 
 func pageMenu(rq *Req, slug, title, renameError, promoteError, appendError, renameName string) *pageMenuView {
-	m := &pageMenuView{Slug: slug, Title: title, Git: cfg.GitEnabled, Quicknote: isQuicknote(slug),
-		Renamable: !isProtected(slug) && canWrite(rq.who(), slug), RenameError: renameError,
+	// A visitor moves nothing: no Rename…, Delete… or Move to wiki….
+	visits := rq.who() == visitor
+	m := &pageMenuView{Slug: slug, Title: title, Git: cfg.GitEnabled, Quicknote: isQuicknote(slug) && !visits,
+		Renamable: !isProtected(slug) && canWrite(rq.who(), slug) && !visits, RenameError: renameError,
 		RenameName: renameName}
 	if target, ok := sharedMove(rq.who(), slug); ok {
 		m.SharedTarget = target
 	}
-	if isQuicknote(slug) {
+	if m.Quicknote {
 		var wiki []PageRef
 		for _, p := range rq.pageFiles() {
 			if !isQuicknote(p.Slug) && !hiddenPage(rq, p.Slug) {

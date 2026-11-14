@@ -251,6 +251,11 @@ func processTasksEmbeds(rq *Req, text, page string, settings bool) (string, []ta
 	}
 	private := page != "" && ownPrivate(rq.who(), page)
 	var embeds []tasksEmbed
+	if rq.who() == visitor {
+		// A public wiki's visitor sees no task, so no task list: the page
+		// reads as without its embeds.
+		return tasksRE.ReplaceAllString(text, ""), nil
+	}
 	text = tasksRE.ReplaceAllStringFunc(text, func(m string) string {
 		g := tasksRE.FindStringSubmatch(m)
 		ph := tasksPlaceholder + "_" + strconv.Itoa(len(embeds))

@@ -39,6 +39,7 @@ type Config struct {
 	Uploads     string // Data/_assets
 	GitEnabled  bool
 	Signup      bool       // ZONE_SIGNUP: people may make an account themselves (signup.go)
+	Public      string     // ZONE_PUBLIC: who isn't signed in reads the wiki (publicView) or edits its pages too (publicEdit); "": signs in first
 	Mail        mailConfig // ZONE_SMTP_HOST …, ZONE_MAIL_FROM: how Zone sends mail (mail.go); Host "": it sends none
 }
 
@@ -145,6 +146,14 @@ func loadWiki(getenv func(string) string) (*Config, error) {
 	c.GitEnabled = err == nil
 	if c.Mail, err = loadMail(getenv); err != nil {
 		return nil, err
+	}
+	switch p := strings.ToLower(strings.TrimSpace(getenv("ZONE_PUBLIC"))); p {
+	case "", "off", "no", "0", "false":
+	case publicView, publicEdit:
+		c.Public = p
+	default:
+		return nil, fmt.Errorf("ZONE_PUBLIC is %q: it is view (anyone reads the wiki without signing in), "+
+			"edit (anyone edits its pages too) or off", p)
 	}
 	if c.Signup = truthy(getenv("ZONE_SIGNUP")); c.Signup && c.Mail.Host == "" {
 		return nil, fmt.Errorf("ZONE_SIGNUP needs mail, for the link that confirms an address: " +

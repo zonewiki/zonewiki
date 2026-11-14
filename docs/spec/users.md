@@ -254,6 +254,12 @@ They have no private folder in use (no Private, no Notes, `/private` is a 404); 
   no Private or Notes module, no New note or New task (at the top, in the tab bar, the task app's + New, a comment's field; `body[data-viewer]` in `style.css`), and `c n` / `c t` do nothing (`js/shortcuts.js`).
   The task modal still opens on a task: a change there comes back with the message.
 
+### Visitors
+
+Not a role a user has: whoever isn't signed in, where the server's `.env` says `ZONE_PUBLIC=view` (they read the shared pages) or `ZONE_PUBLIC=edit` (they edit them too, as "anonymous").
+They see no tasks, notes or private pages.
+Public wikis in `docs/spec/security.md` says what they reach and why it is set in `.env`.
+
 ### Guides
 
 With users,

@@ -32,6 +32,8 @@
   {{- if .Shell.Users}} data-users="1"{{end}}
   {{- /* A viewer makes nothing: no New note or New task (style.css, js/shortcuts.js). */}}
   {{- if .Shell.Viewer}} data-viewer="1"{{end}}
+  {{- /* Not signed in, in a public wiki: the pages alone (style.css, the client code). */}}
+  {{- if .Shell.Visitor}} data-visitor="1"{{end}}
   {{- if .Shell.Locale}} data-locale="{{.Shell.Locale}}"{{end}}
   {{- if .Shell.DateFormat}} data-date-format="{{.Shell.DateFormat}}"{{end}}
   {{- /* New tasks from any page (c t, the New task button) get the tags the
@@ -103,10 +105,15 @@
   <div class="remote-badge" title="Remote access enabled">🌐</div>
   {{- end}}
   <div class="top-badges">
+    {{- /* Not for a public wiki's visitor, who commits nothing. */}}
+    {{- if not .Shell.Visitor}}
     <a id="uncommitted-badge" class="uncommitted-badge" href="/uncommitted" style="display: none;" title="Uncommitted changes">
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><line x1="8" y1="5.5" x2="8" y2="8"/><line x1="8" y1="8" x2="10" y2="10"/></svg>
       <span id="uncommitted-count">0</span>
     </a>
+    {{- end}}
+    {{- /* A public wiki's visitor: where to sign in (phones; the desktop's is in the top actions). */}}
+    {{- with .Shell.SignIn}}<a class="btn signin-link" href="{{.}}">Sign in</a>{{end}}
     {{- if .Shell.SignOut}}
     <form method="post" action="/logout" class="signout-form{{if .Shell.User}} signout-user-menu{{end}}">{{with .Shell.User}}<span class="signout-user" title="Signed in as {{.}}">{{.}}</span>{{end}}{{if .Shell.Admin}}<a class="btn signout-admin" href="/admin">Admin</a>{{end}}<button class="btn" type="submit">Sign out</button></form>
     {{- end}}

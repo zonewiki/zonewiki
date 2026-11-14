@@ -193,7 +193,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 	chip := macro("backlinks_chip", pageLinks(backlinks))
 
 	// Viewing a page from the uncommitted-changes list: Commit instead of Edit.
-	fromUncommitted := r.URL.Query().Get("from") == "uncommitted" && cfg.GitEnabled
+	fromUncommitted := r.URL.Query().Get("from") == "uncommitted" && cfg.GitEnabled && rq.user != visitor
 	var bc, metaRow, article template.HTML
 	var menu *pageMenuView
 	if fromUncommitted {
@@ -208,6 +208,9 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		menu = pageMenu(rq, slug, title, q.Get("rename_error"), q.Get("promote_error"), q.Get("append_error"), q.Get("rename_name"))
 		changed, commit := lastChanged(slug, path, title)
+		if rq.user == visitor {
+			commit = nil // a visitor commits nothing
+		}
 		meta, _ := mdtext.ParseFrontmatter(content)
 		metaRow = macro("meta_row", metaRowView{TagsHTML: htmlOf(renderTagsPillsHTML(meta.Tags)), Tldr: meta.Tldr,
 			Changed: changed, Commit: commit})
@@ -369,12 +372,22 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 	page(w, rq, http.StatusOK, "edit.html", "Edit — "+title, shell{editor: true}, &editView{Slug: slug,
 		PageTitle: title, Content: content, OnlyTitle: onlyTitle,
 		HasSection: hasSection, Section: section, SectionHeading: heading, StartChar: start, EndChar: end, FileHash: fileHash,
-		CanRename: editable && !isProtected(slug), CanDelete: editable && !isProtected(slug),
+		// A visitor (a public wiki) edits and makes pages, and moves none.
+		CanRename: editable && !isProtected(slug) && rq.user != visitor, CanDelete: editable && !isProtected(slug) && rq.user != visitor,
 		Git: cfg.GitEnabled, RenameError: q.Get("rename_error"), RenameName: q.Get("rename_name"), LeftDraft: left,
 		PrivateOffer: privateOffer, Paste: pasteHint(rq, q.Get("paste"), q.Get("copied") == "1"),
 		TaskLists:      slices.Sorted(maps.Keys(rq.taskLists())),
 		BreadcrumbHTML: buildBreadcrumb(rq, slug, title, "", "", extra),
-		TasksHTML:      htmlOf(buildTasksEmbed(rq, TasksParams{}, 0, true, ownPrivate(rq.user, slug), ""))})
+		TasksHTML:      editorTasksHTML(rq, slug)})
+}
+
+// editorTasksHTML: the editor's hidden task app, for Make task; none for a
+// public wiki's visitor, who makes no tasks.
+func editorTasksHTML(rq *Req, slug string) template.HTML {
+	if rq.user == visitor {
+		return ""
+	}
+	return htmlOf(buildTasksEmbed(rq, TasksParams{}, 0, true, ownPrivate(rq.user, slug), ""))
 }
 
 // postedContent: the editor's text, the browser's CRLF line ends as LF.
@@ -833,6 +846,11 @@ func apiPagesList(w http.ResponseWriter, r *http.Request) {
 	sort.SliceStable(pages, func(i, j int) bool {
 		return strings.ToLower(pages[i]["title"].(string)) < strings.ToLower(pages[j]["title"].(string))
 	})
+	if rq.user == visitor {
+		// A public wiki's visitor: the pages, not the views that need an account.
+		writeJSON(w, http.StatusOK, pages)
+		return
+	}
 	out := []M{}
 	if cfg.GitEnabled {
 		out = append(out, M{"slug": "_deleted", "title": "Deleted Pages", "links": 0, "mtime": 0, "builtin": true, "special": true})

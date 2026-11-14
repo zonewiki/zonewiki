@@ -50,8 +50,12 @@ func (s *Settings) isAdmin(name string) bool {
 	return u != nil && !u.Disabled && u.Role == roleAdmin
 }
 
-// isViewer: name is a viewer (changes nothing).
+// isViewer: name is a viewer (changes nothing): a user of that role, or a
+// visitor of a wiki that is public to read only (access.go).
 func (s *Settings) isViewer(name string) bool {
+	if name == visitor {
+		return cfg.Public != publicEdit
+	}
 	u := s.Users[name]
 	return u != nil && u.Role == roleViewer
 }

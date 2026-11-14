@@ -208,6 +208,9 @@ func gitCommit(user, message string, paths ...string) error {
 		return nil
 	}
 	args := []string{"--literal-pathspecs", "commit", "-m", message}
+	if user == visitor {
+		user = visitorAuthor // a public wiki's visitor has no name
+	}
 	if user != "" {
 		args = append(args, "--author", user+" <"+user+"@zone>")
 	}

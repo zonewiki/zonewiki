@@ -48,6 +48,8 @@ Environment:
   ZONE_HOST_DATA             the wiki's folder as the host sees it, for the MCP tools' file: lines
   ZONE_SEMANTIC_SEARCH       on: semantic search besides keywords (needs onnxruntime)
   ZONE_MODEL_DIR             where the semantic model's files are
+  ZONE_PUBLIC                view: anyone reads the shared pages without signing in; edit: and edits
+                             them (needs users; no tasks, notes or private pages for visitors)
   ZONE_SIGNUP                1: people may make an account at /signup (needs mail, users, base-url)
   ZONE_SMTP_HOST, _PORT      the mail server Zone sends sign-up mail through (port default 587)
   ZONE_SMTP_USER, _PASSWORD  signing in to it (only over TLS, or to this machine)
@@ -140,6 +142,19 @@ func main() {
 		logf("%s", why)
 	} else if signupOn(s) {
 		logf("sign-up is on: anyone%s can make an account at %s/signup, as %s", signupWho(s), s.BaseURL, s.SignupRole)
+	}
+	if cfg.Public != "" && s.Users[visitorAuthor] != nil {
+		logf("The user %q has the name a public wiki's visitors commit under (ZONE_PUBLIC): the history "+
+			"can't tell their changes from a visitor's. Give them another name.", visitorAuthor)
+	}
+	switch {
+	case cfg.Public != "" && s.Users == nil:
+		logf("ZONE_PUBLIC=%s does nothing yet: a public wiki needs users, to tell its visitors from "+
+			"(zonewiki user add NAME). Until then the wiki is as its settings file says.", cfg.Public)
+	case cfg.Public == publicView:
+		logf("this wiki is public: anyone reads its shared pages without signing in (ZONE_PUBLIC=view)")
+	case cfg.Public == publicEdit:
+		logf("this wiki is public: anyone reads and edits its shared pages without signing in (ZONE_PUBLIC=edit)")
 	}
 	for _, p := range strayPrivate() {
 		logf("%s is in %s/ but no user's folder there: no one sees it (a removed user's?). "+
@@ -357,7 +372,59 @@ func newHandler() http.Handler {
 	assistantRoutes(mux)
 	passwordRoutes(mux)
 	oauthRoutes(mux)
-	return noStalls(checks(viewerGate(mux)))
+	return noStalls(checks(visitorGate(mux, viewerGate(mux))))
+}
+
+// visitorRoutes: what a visitor of a public wiki (ZONE_PUBLIC; access.go)
+// reaches, by route: the shared pages, their history, search and uploads.
+// Everything else answers a visitor as it answers anyone not signed in
+// where the wiki isn't public: with the way to sign in. So a new route is
+// closed to visitors until it is listed here (tests/test_public.py probes
+// each route). No route of tasks or notes is here: a visitor sees neither.
+// What needs no login anyway (authExempt: /login, /signup, /public/ …)
+// never comes this far.
+var visitorRoutes = map[string]bool{
+	"GET /{$}": true, "GET /page/{slug...}": true, "GET /api/page-preview/{slug...}": true,
+	"GET /pages": true, "GET /api/pages-list": true, "GET /api/pages": true,
+	"GET /search": true, "GET /api/search": true,
+	"GET /history/{slug...}": true, "GET /revision/{rest...}": true, "GET /diff/{rest...}": true,
+	"GET /_assets/{path...}": true, "GET /api/version": true,
+}
+
+// visitorEdits: what a visitor reaches besides, where the wiki is public to
+// edit (ZONE_PUBLIC=edit): the editor, with its saves and its preview, a new
+// page, a checkbox ticked on a page. Not uploads, renames, deletes or
+// restores (spam, and what is lost), and nothing of tasks or notes.
+var visitorEdits = map[string]bool{
+	"GET /edit/{slug...}": true, "POST /edit/{slug...}": true, "POST /api/save/{slug...}": true,
+	"GET /new": true, "POST /new": true, "POST /api/preview": true,
+	"POST /api/toggle-checkbox/{slug...}": true,
+}
+
+// visitorGate lets a visitor through to the routes that are a visitor's
+// (visitorRoutes, and visitorEdits where visitors edit); any other sends
+// them to sign in, before the route runs.
+func visitorGate(mux *http.ServeMux, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if userOf(r) == visitor {
+			_, pattern := mux.Handler(r)
+			if !visitorRoutes[pattern] && !(publicMode() == publicEdit && visitorEdits[pattern]) {
+				toLogin(w, r)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// toLogin sends a request without a session to the login page, which comes
+// back to what was asked.
+func toLogin(w http.ResponseWriter, r *http.Request) {
+	next := r.URL.Path
+	if next == "/oauth/authorize" && r.Method == "GET" {
+		next = r.URL.RequestURI() // what the client asks is in the query
+	}
+	http.Redirect(w, r, "/login?next="+url.QueryEscape(next), http.StatusFound)
 }
 
 // viewerWrites: the routes taking a POST (or another write method) that a
@@ -459,18 +526,20 @@ func checks(next http.Handler) http.Handler {
 			}
 		} else if settings().authOn() && !authExempt(r) {
 			user, ok, renew := signedIn(r)
-			if !ok {
-				next := r.URL.Path
-				if next == "/oauth/authorize" && r.Method == "GET" {
-					next = r.URL.RequestURI() // what the client asks is in the query
+			switch {
+			case ok:
+				if renew {
+					renewSession(w, r)
 				}
-				http.Redirect(w, r, "/login?next="+url.QueryEscape(next), http.StatusFound)
+				r = withUser(r, user)
+			case publicMode() != "":
+				// A public wiki: a visitor, for the routes visitorGate lets
+				// them reach.
+				r = withUser(r, visitor)
+			default:
+				toLogin(w, r)
 				return
 			}
-			if renew {
-				renewSession(w, r)
-			}
-			r = withUser(r, user)
 		}
 		next.ServeHTTP(w, r)
 	})

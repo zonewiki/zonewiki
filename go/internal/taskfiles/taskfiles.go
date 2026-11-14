@@ -48,6 +48,9 @@ type Store struct {
 	Users func() []string
 	// Private: user has task files of their own (with users, a user).
 	Private func(user string) bool
+	// NoTasks: user sees no task at all (a public wiki's visitor); nil: no
+	// such user. Every read asks (Owners), so nothing above it can forget to.
+	NoTasks func(user string) bool
 	// MayWrite: nil when user may write the task files, else why not (a
 	// viewer). Every write asks, so nothing above it can forget to.
 	MayWrite func(user string) error
@@ -122,6 +125,9 @@ func (s *Store) Files(owners []string) []File {
 // Owners: whose task files user reads and writes: the shared ones and,
 // with users, their own.
 func (s *Store) Owners(user string) []string {
+	if s.NoTasks != nil && s.NoTasks(user) {
+		return nil
+	}
 	if !s.Private(user) {
 		return []string{""}
 	}

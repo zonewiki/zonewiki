@@ -4,6 +4,9 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 
 ## Routes
 
+Every route but the login's own wants a session where the wiki has a login.
+In a public wiki (`ZONE_PUBLIC`; Public wikis in `docs/spec/security.md`) a visitor reaches the ones listed there without one: pages, the page list, search, history, uploads, and with `edit` the editor and a new page.
+
 | Method | Path                  | Description                                     |
 |--------|-----------------------|-------------------------------------------------|
 | GET    | `/`                   | Redirects to `/page/index`                      |

@@ -294,12 +294,16 @@ func mergeSave(s *editorSave, user string) (m mergeOutcome, ok bool) {
 // otherAuthor: who other than user changed path last, as far as Zone
 // knows: the draft's author, else the last commit's ("": none, or Zone).
 func otherAuthor(path, user string) string {
-	if settings().Users == nil {
+	// A public wiki's visitor learns no user's name ("theirs" in a merge).
+	if settings().Users == nil || user == visitor {
 		return ""
 	}
 	if a := draftAuthor(path); a != "" {
 		if a == user {
 			return ""
+		}
+		if a == visitor {
+			return visitorAuthor // a public wiki's visitor, as their commits name them
 		}
 		return a
 	}
@@ -340,6 +344,12 @@ func leftDraftPath(user, path string) string {
 }
 
 func leaveDraft(user, path, content, base string) {
+	if user == visitor {
+		// Every visitor of a public wiki is the same one: a draft kept for
+		// "them" would be shown to the next, and anyone could fill Zone's
+		// folder with them (it isn't counted by storage-max).
+		return
+	}
 	p := leftDraftPath(user, path)
 	b, _ := json.Marshal(leftDraft{Content: content, Base: base, At: time.Now()})
 	err := os.MkdirAll(filepath.Dir(p), 0o700)
@@ -354,6 +364,9 @@ func leaveDraft(user, path, content, base string) {
 // draftLeft: user's draft of the page at path, if there is one (and not
 // too old: then it goes).
 func draftLeft(user, path string) (*leftDraft, bool) {
+	if user == visitor {
+		return nil, false // none are kept (leaveDraft)
+	}
 	p := leftDraftPath(user, path)
 	b, err := os.ReadFile(p)
 	if err != nil {

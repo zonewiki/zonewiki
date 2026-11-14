@@ -2319,6 +2319,14 @@ mark.search-hl.current {
 /* The welcome page (an invite or reset link; welcome.html), in the login's form. */
 .welcome-note { margin: 0; font-size: .9rem; color: var(--muted); }
 
+/* A public wiki's visitor (body[data-visitor], nobody signed in): Sign in
+   is in the top actions on a desktop and in the page's top row on a phone
+   and in the editor; the editor's bar has nothing of tasks or uploads. */
+.top-signin { flex: none; text-decoration: none; }
+.signin-link { text-decoration: none; }
+@media (min-width: 641px) { body:not(.editor-page) .signin-link { display: none; } }
+body[data-visitor] .version-restore { display: none; }
+body[data-visitor] .fmt-btn:is([data-fmt="taskref"], [data-fmt="tasklist"], [data-fmt="maketask"], [data-fmt="attach"]) { display: none; }
 /* A viewer (body[data-viewer]; view.html .read-only): nothing to make, edit or tick. */
 body[data-viewer] :is(.action-new-note, .notes-new, .action-task, [id^="task-add-btn"], .task-comment-add, .task-comment-open, .task-comment-btn) { display: none; }
 body[data-viewer] .action-sep:has(+ .action-new-note) { display: none; }
