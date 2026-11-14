@@ -881,6 +881,11 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 /* The list dialog (openBulkListModal): the lists as rows, the selection's own ticked. */
 .bulk-list-mark { flex: none; width: 1rem; text-align: center; color: var(--btn-primary); font-weight: 700; }
 .bulk-list-none { font-size: .85rem; color: var(--muted); }
+/* Its last row, New list…, and the name it asks for in the rows' place. */
+.bulk-list-new .bulk-list-mark { color: var(--muted); }
+.bulk-list-modal .bulk-tag-list[hidden], .bulk-list-form[hidden], .bulk-list-actions[hidden],
+.bulk-list-note[hidden], .bulk-list-modal .rename-error[hidden] { display: none; }
+.bulk-list-note { margin: 0; font-size: .8rem; color: var(--muted); }
 .bulk-assign-modal .task-assignee { font-size: .85rem; }
 @media (hover: none) { .bulk-tag-row { min-height: 44px; } }
 

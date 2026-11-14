@@ -140,12 +140,16 @@ function openBulkTagModal(ids, removing = false) {
 // shared task can't go into a private list (those rows are off when one is
 // selected), and a private one that leaves for a shared place is shared,
 // which the row says and no undo takes back.
+// The last row, New list…, asks for a name in the dialog's place and makes
+// the list (POST /api/tasks/lists), then moves the tasks into it: so the
+// dialog opens with no list too.
 function openBulkListModal(ids) {
   const idSet = new Set(ids);
   const chosen = st.tasks.filter(t => idSet.has(t.id));
   const lists = [...app.listSet].sort((a, b) => app.listName(a).localeCompare(app.listName(b)) || a.localeCompare(b));
-  if (!chosen.length || !lists.length) return;
+  if (!chosen.length) return;
   const count = chosen.length;
+  const tasksWord = `${count} task${count > 1 ? 's' : ''}`;
   const anyShared = chosen.some(t => !t.private), anyPrivate = chosen.some(t => t.private);
   const inList = ref => chosen.filter(t => (app.taskList(t) || '') === ref).length;
   const row = (ref, label, n) => {
@@ -161,12 +165,30 @@ function openBulkListModal(ids) {
       `<span class="${ref ? 'task-tag task-tag-list' : 'bulk-list-none'}"${tip}>${label}</span>${part}</button></li>`;
   };
   const label = ref => (app.privateLists.has(ref) ? '🔒 ' : '') + esc(app.listName(ref)) + (ref.startsWith('shared/') ? ' (shared)' : '');
+  // Private lists are a user's (with users); a shared task stays shared.
+  const canPrivate = !!app.appEl?.dataset.privateFolder;
   const dlg = document.createElement('dialog');
   dlg.className = 'modal bulk-tag-modal bulk-list-modal';
   dlg.innerHTML = `
-    <p class="modal-label">Move ${count} task${count > 1 ? 's' : ''} to a list</p>
-    <ul class="bulk-tag-list">${lists.map(ref => row(ref, label(ref), inList(ref))).join('')}${row('', 'No list', inList(''))}</ul>
-    <div class="modal-actions">
+    <p class="modal-label">Move ${tasksWord} to a list</p>
+    <ul class="bulk-tag-list">${lists.map(ref => row(ref, label(ref), inList(ref))).join('')}${row('', 'No list', inList(''))}` +
+      `<li><button type="button" class="bulk-tag-row bulk-list-row bulk-list-new" aria-current="false">` +
+      `<span class="bulk-list-mark" aria-hidden="true">+</span><span class="bulk-list-none">New list…</span></button></li></ul>
+    <form class="bulk-list-form" hidden>
+      <div class="task-field">
+        <input type="text" id="bulk-list-name" autocomplete="off" spellcheck="false" required
+               aria-label="The list's name" placeholder="Its name, e.g. shop">
+      </div>
+      ${canPrivate ? `<label class="promote-check"${anyShared ? ' title="A shared task stays shared"' : ''}>` +
+        `<input type="checkbox" id="bulk-list-private"${anyShared ? ' disabled' : ' checked'}> Private: only you see it and its tasks</label>` : ''}
+      <p class="bulk-list-note" hidden></p>
+      <p class="rename-error" hidden></p>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary" id="bulk-list-create">Create and move</button>
+        <button type="button" class="btn" id="bulk-list-back">Back</button>
+      </div>
+    </form>
+    <div class="modal-actions bulk-list-actions">
       <button type="button" class="btn" id="bulk-list-cancel">Cancel</button>
     </div>`;
   document.body.appendChild(dlg);
@@ -174,30 +196,91 @@ function openBulkListModal(ids) {
   dlg.addEventListener('close', () => dlg.remove());
   dlg.querySelector('#bulk-list-cancel').addEventListener('click', close);
   dlg.addEventListener('click', ev => { if (ev.target === dlg) close(); });
+  const title = dlg.querySelector('.modal-label'), listEl = dlg.querySelector('.bulk-tag-list');
+  const form = dlg.querySelector('.bulk-list-form'), actions = dlg.querySelector('.bulk-list-actions');
+  const nameInput = form.querySelector('#bulk-list-name'), privateBox = form.querySelector('#bulk-list-private');
+  const note = form.querySelector('.bulk-list-note'), error = form.querySelector('.rename-error');
   const rows = [...dlg.querySelectorAll('.bulk-list-row:not([disabled])')];
   dlg.addEventListener('keydown', ev => {
-    if (ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp') return;
+    if (!form.hidden || (ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp')) return;
     ev.preventDefault();
     const i = rows.indexOf(document.activeElement);
     rows[(i + (ev.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length].focus();
   });
-  dlg.querySelector('.bulk-tag-list').addEventListener('click', async ev => {
-    const btn = ev.target.closest('.bulk-list-row');
-    if (!btn || btn.disabled) return;
-    const target = btn.dataset.list;
+
+  // The tasks into the list `target` ('' for none), which is private or not.
+  async function move(target, targetPrivate, made) {
     const moving = chosen.filter(t => (app.taskList(t) || '') !== target);
-    close();
     if (!moving.length) return;   // there already
     app.dismissUndo();
-    const shares = t => !!t.private && !app.privateLists.has(target);
+    const shares = t => !!t.private && !targetPrivate;
     if (!(await batchUpdate(moving.map(t => ({ id: t.id, list: target, ...(shares(t) ? { share: true } : {}) }))))) return;
     const what = `${moving.length} task${moving.length > 1 ? 's' : ''}`;
-    const msg = target ? `${what} moved to list “${app.listName(target)}”` : `${what} taken out of ${moving.length > 1 ? 'their lists' : 'its list'}`;
+    const msg = target ? `${what} moved to ${made ? 'the new list' : 'list'} “${app.listName(target)}”` : `${what} taken out of ${moving.length > 1 ? 'their lists' : 'its list'}`;
     // Back where they were, but those that were private and are shared now.
+    // (A list just made stays: it is a list from now on, empty or not.)
     const back = moving.filter(t => !shares(t));
     if (back.length) app.showUndo(msg, () => batchUpdate(back.map(t => ({ id: t.id, list: app.taskList(t) || '', history: t.history || [] }))));
     else showNotice(msg);
+  }
+  listEl.addEventListener('click', ev => {
+    const btn = ev.target.closest('.bulk-list-row');
+    if (!btn || btn.disabled) return;
+    if (btn.classList.contains('bulk-list-new')) { showForm(true); return; }
+    const target = btn.dataset.list;
+    close();
+    move(target, app.privateLists.has(target), false);
   });
+
+  // New list…: the rows give way to the name (and, with users, whether the
+  // list is private: off for a shared task, on when every task is private,
+  // so nothing is shared by not looking).
+  const syncNote = () => {
+    const sharing = anyPrivate && !privateBox?.checked;
+    note.hidden = !sharing;
+    const n = chosen.filter(t => t.private).length;
+    note.textContent = !sharing ? '' : n === count
+      ? `Everyone who uses the wiki will see and change ${count > 1 ? 'these tasks' : 'this task'}. ${count > 1 ? 'They' : 'It'} can’t be made private again.`
+      : `Everyone who uses the wiki will see and change the ${n > 1 ? n + ' private tasks' : 'private task'} among them. ${n > 1 ? 'They' : 'It'} can’t be made private again.`;
+  };
+  function showForm(on) {
+    title.textContent = on ? `Move ${tasksWord} to a new list` : `Move ${tasksWord} to a list`;
+    listEl.hidden = actions.hidden = on;
+    form.hidden = !on;
+    error.hidden = true;
+    if (on) { syncNote(); nameInput.focus(); } else dlg.querySelector('.bulk-list-new').focus();
+  }
+  privateBox?.addEventListener('change', syncNote);
+  form.querySelector('#bulk-list-back').addEventListener('click', () => showForm(false));
+  let creating = false;
+  form.addEventListener('submit', async ev => {
+    ev.preventDefault();
+    if (creating) return;
+    creating = true;
+    let made = null, why = 'The list couldn’t be made';
+    try {
+      const res = await fetch('/api/tasks/lists', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: nameInput.value, private: !!privateBox?.checked }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ref) made = data; else if (data.error) why = data.error;
+    } catch (_) { why = 'The list couldn’t be made: no answer from Zone'; }
+    creating = false;
+    if (!made) {
+      error.textContent = why;
+      error.hidden = false;
+      nameInput.focus();
+      return;
+    }
+    // Every task app of the page has the list from now (tasks.js), and the
+    // Tasks page's row of lists shows it (js/listsrow.js).
+    document.dispatchEvent(new CustomEvent('zone:list-made', { detail: made }));
+    close();
+    move(made.ref, !!made.private, true);
+  });
+
   dlg.showModal();
   (rows.find(r => r.getAttribute('aria-current') === 'true') || rows[0]).focus({ preventScroll: true });
 }
@@ -386,7 +469,6 @@ function syncSelBar() {
   if (!show) return;
   const allDone = st.tasks.filter(t => st.selectedIds.has(t.id)).every(t => t.closed_at);
   app.selBar.querySelector('[data-sel="unplan"]').hidden = !anyPlanned();
-  app.selBar.querySelector('[data-sel="list"]').hidden = !app.listSet.size;   // no list to move to
   app.selBar.querySelector('.tasks-selbar-count').textContent =
     st.selectedIds.size ? `${st.selectedIds.size} selected` : 'Tap tasks to select';
   app.selBar.querySelectorAll('.tasks-selbar-actions .btn').forEach(b => { b.disabled = !st.selectedIds.size; });

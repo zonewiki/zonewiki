@@ -4,6 +4,23 @@
 // list this browser hasn't shown before is marked new; and the pinned pills
 // can be dragged into another order (the first is where a new task goes).
 
+// A list made while the page is open (New list… in the dialog that moves
+// tasks to a list, js/taskselect.js) is in the row at once: the row is asked
+// for again and wired again (initRow).
+
+const KEY = 'zone_lists_seen';
+const readSeen = () => {
+  try { const v = JSON.parse(localStorage.getItem(KEY)); return Array.isArray(v) ? new Set(v) : null; } catch (_) { return null; }
+};
+const writeSeen = seen => { try { localStorage.setItem(KEY, JSON.stringify([...seen])); } catch (_) {} };
+
+// A click elsewhere closes More.
+document.addEventListener('click', e => {
+  const more = document.querySelector('.tasks-places .lists-more');
+  if (more?.open && !more.contains(e.target)) more.open = false;
+});
+
+function initRow() {
 const nav = document.querySelector('.tasks-places');
 const more = nav?.querySelector('.lists-more');
 
@@ -12,8 +29,7 @@ if (more) {
   const filter = more.querySelector('.lists-more-filter');
   const items = [...more.querySelectorAll('.lists-more-item[data-list]')];
 
-  // A click elsewhere and Escape close it.
-  document.addEventListener('click', e => { if (more.open && !more.contains(e.target)) more.open = false; });
+  // Escape closes it.
   more.addEventListener('keydown', e => {
     if (e.key !== 'Escape' || !more.open) return;
     e.preventDefault();
@@ -48,14 +64,9 @@ if (more) {
   // them was made since, by someone else or an assistant (one made here is
   // pinned, and so a pill): "new" beside its name, a dot on More. Opening
   // More, or the list, makes it seen. The first visit knows them all.
-  const KEY = 'zone_lists_seen';
-  const read = () => {
-    try { const v = JSON.parse(localStorage.getItem(KEY)); return Array.isArray(v) ? new Set(v) : null; } catch (_) { return null; }
-  };
-  const write = seen => { try { localStorage.setItem(KEY, JSON.stringify([...seen])); } catch (_) {} };
   const pills = [...nav.querySelectorAll('a.tasks-place[data-place^="list:"]')].map(a => a.dataset.place);
   const under = items.map(a => a.dataset.place);
-  let seen = read();
+  let seen = readSeen();
   if (!seen) seen = new Set(under);
   for (const key of pills) seen.add(key);
   for (const a of items) if (a.hasAttribute('aria-current')) seen.add(a.dataset.place);
@@ -67,11 +78,11 @@ if (more) {
     a.append(mark);
   }
   button.classList.toggle('has-new', fresh.length > 0);
-  write(seen);
+  writeSeen(seen);
   more.addEventListener('toggle', () => {
     if (!more.open || !fresh.length) return;
     for (const key of under) seen.add(key);
-    write(seen);
+    writeSeen(seen);
     button.classList.remove('has-new');   // the marks stay while the page does
   });
 }
@@ -124,3 +135,25 @@ if (nav?.hasAttribute('data-reorder')) {
     group.addEventListener('drop', e => { if (dragged) { e.preventDefault(); dropped = true; } });
   }
 }
+}
+initRow();
+
+// The list is one this browser has shown (it made it), so it isn't marked
+// new under More; then the row as the server draws it now, in the old
+// one's place (or at the sheet's top, where a first list's row goes).
+document.addEventListener('zone:list-made', async e => {
+  if (location.pathname !== '/tasks') return;
+  const seen = readSeen();
+  if (seen && e.detail?.ref) { seen.add('list:' + e.detail.ref); writeSeen(seen); }
+  try {
+    const res = await fetch(location.href, { headers: { Accept: 'text/html' } });
+    if (!res.ok) return;
+    const fresh = new DOMParser().parseFromString(await res.text(), 'text/html').querySelector('.tasks-places');
+    if (!fresh) return;
+    const now = document.importNode(fresh, true);
+    const old = document.querySelector('.tasks-places');
+    if (old) old.replaceWith(now);
+    else document.querySelector('.sheet')?.prepend(now);
+    initRow();
+  } catch (_) {}
+});

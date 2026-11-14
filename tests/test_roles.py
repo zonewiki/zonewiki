@@ -108,6 +108,8 @@ WRITES = [
     ("POST /tasks/rename", "POST", "/tasks/rename", {"data": {"tag": "work", "new_name": "job"}}),
     ("POST /tasks/new-list", "POST", "/tasks/new-list", {"data": {"name": "carols"}}),
     ("POST /tasks/new-list", "POST", "/tasks/new-list", {"data": {"name": "carols", "private": "1"}}),
+    ("POST /api/tasks/lists", "POST", "/api/tasks/lists", {"json": {"name": "carols"}}),
+    ("POST /api/tasks/lists", "POST", "/api/tasks/lists", {"json": {"name": "carols", "private": True}}),
     ("POST /tasks/rename-list", "POST", "/tasks/rename-list", {"data": {"list": "team", "new_name": "carols-team"}}),
     ("POST /tasks/rename-list", "POST", "/tasks/rename-list", {"data": {"list": "carols-own", "new_name": "hers"}}),
     ("POST /tasks/delete-list", "POST", "/tasks/delete-list", {"data": {"list": "team", "to": ""}}),

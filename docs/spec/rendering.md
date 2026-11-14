@@ -101,7 +101,7 @@ They share code by `import`, not through `window`:
 | `js/actions.js` | New note / page / task (`openDefaultTask`, loading a hidden tasks when the page has none), action bar, sharing mode |
 | `js/tasklist.js` | The editor's Task list button (`taskListDialog`): the list settings dialog (`js/tasksettings.js`) writing or changing a `[[tasks: …]]` in the text |
 | `js/pagemenu.js` | The page's ⋯ menu and its dialogs (rename, move to wiki, append, delete) |
-| `js/listsrow.js` | The Tasks page's row of lists: More (closing, its filter, lists new to this browser) and dragging the pinned pills into another order |
+| `js/listsrow.js` | The Tasks page's row of lists: More (closing, its filter, lists new to this browser) and dragging the pinned pills into another order; draws the row again when a list is made on the page (`zone:list-made`) |
 | `js/shortcuts.js` | Keyboard shortcuts |
 | `js/mdedit.js` | `markdownEditor`: the markdown helpers of the editor and the task app's task description (formatting bar, completion, snippets, lists, uploads) |
 | `js/editor.js` | The editor: auto-save, preview, Enter on a wikilink, Make task, rename bar |

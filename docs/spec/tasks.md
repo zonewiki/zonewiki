@@ -434,7 +434,7 @@ Each with a dark-mode value.
   a bar fixed at the bottom of the window: "N selected",
   **All** (`selectAllVisible`; disabled when every task shown is selected),
   **Tag…** (the bulk tag dialog),
-  **List…** (the list dialog, below; hidden while there is no list),
+  **List…** (the list dialog, below),
   **Assign…** (with users: who has them, Assigning tasks in `docs/spec/users.md`),
   **Today** (start them today, `startToday`: one `batch-update` for the open ones not starting today, one undo putting back each one's start date and history; today is never after a deadline still to come, and starting an overdue task today is the catch-up case, so no deadline question),
   **Unplan** (clear their start dates, `startOn(ids, null)`, as the **0** key: one `batch-update` for the open ones that have one, one undo putting them back; shown while an open selected task has a start date, `anyPlanned`),
@@ -444,13 +444,19 @@ Each with a dark-mode value.
   The **⋯ menu** of a card in the selection (its button, a right-click, which then keeps the selection, or Shift+F10) offers the same for all of them, titled "N tasks" (`runSelectionAction`).
   With several task lists on a page only the active one's bar shows (`claimInstance`).
   At ≤640px the bar spans the bottom edge in place of the phone tab bar (hidden while it shows): "N selected", All and ✕ on top, the actions as buttons sharing the width under them (on a second row when one doesn't hold them), ≥44px tall; the page end and toasts keep clear of it.
-- **Moving tasks to a list** (`openBulkListModal`, `.bulk-list-modal`; the selection bar's **List…**, **Move to list…** in a card's ⋯ menu, for the selection or that one task, and the **m** key on the selected tasks): the dialog, "Move 3 tasks to a list", lists every list you see (A–Z by name, a private one with 🔒, the shared one of a name you have a private list of as "name (shared)") and **No list**.
+- **Moving tasks to a list** (`openBulkListModal`, `.bulk-list-modal`; the selection bar's **List…**, **Move to list…** in a card's ⋯ menu, for the selection or that one task, and the **m** key on the selected tasks): the dialog, "Move 3 tasks to a list", lists every list you see (A–Z by name, a private one with 🔒, the shared one of a name you have a private list of as "name (shared)"), **No list** and **New list…**.
   A click on a row moves the tasks at once (↑/↓ go through the rows, Enter picks, Esc or Cancel leaves).
   The move sets each task's list in one `batch-update`; its tags stay.
   The row of the list every selected task is in is ticked and has the focus; a list only some are in says how many ("1 of 3").
   **A task is as private as its list** (Lists → Private lists): the rows of your private lists are off while a shared task is selected ("a shared task stays shared"), and a row that would take a private task to a shared place says so ("shares it with everyone") and sends `share`.
   One undo puts every task back in its list ("3 tasks moved to list “work”", "3 tasks taken out of their lists"), but those that were private and are shared now: that can't be taken back, so a move of only such tasks has a notice and no undo.
   The selection stays, as after Tag…; in a list's own view the moved tasks leave it.
+  **New list…**, the last row, makes a list and moves the tasks into it, so the dialog is there with no list too (then No list, ticked, and New list…).
+  The rows give way to the list's name (`.bulk-list-form`, `#bulk-list-name`), **Create and move** (or Enter) and **Back**; a name that won't do is said under it and the dialog stays ("There is a list #shop already").
+  With users it asks **Private: only you see it and its tasks** (`#bulk-list-private`): off and not to be ticked while a shared task is selected, ticked when every selected task is private, so no task is shared by not looking; unticked with a private task selected, a line says that everyone will see it and that it can't be made private again.
+  The list is made as New list… on the Tasks page makes it (`POST /api/tasks/lists`, `apiNewList`: `createListOp`), in a commit of its own before the move's, and the page stays: every task list on it knows the new list at once (the `zone:list-made` event, `tasks.js`), and on `/tasks` the list switcher is drawn again with it (`js/listsrow.js`).
+  **It is pinned, last, beside the lists you pinned, but it is never your first pin**: with nothing pinned it is under More, since a first pin changes where the Tasks links go and where new tasks land (New list…, Lists), which a list made to hold a few tasks shouldn't.
+  The toast says "3 tasks moved to the new list “shop”"; its undo takes the tasks back and leaves the list, which **Delete…** removes.
 - **Bulk tags** (`openBulkTagModal`, `.bulk-tag-modal`; **t**, or **T** to remove, on the selected tasks): the dialog lists every tag the selection carries (`TasksCore.selectionTags`, case ignored, most common first),
   each a three-state box (`role="checkbox"`, `aria-checked`): on every task ✓,
   on some – ("2 of 3", left as it is),
@@ -708,7 +714,7 @@ Cards mark keep tasks with ⟲ (`.task-keep`).
 
 **A list is a place a task is in; a tag sorts tasks.** A task is in one list, or in none, and has any number of tags.
 A list has a name, an entry in the list switcher with its counts (below), settings of its own (the tab it opens on, a WIP limit, tab names, whether new tasks are keep tasks …), and it is shared or private: a private list and the tasks in it are yours alone.
-You make one with **New list…** on the Tasks page, put a task in it with the **List** field of its dialog (or **Move to list…**), and show it on any page with `[[tasks: list=<name>]]`.
+You make one with **New list…** on the Tasks page (or in the dialog that moves tasks to a list: Moving tasks to a list), put a task in it with the **List** field of its dialog (or **Move to list…**), and show it on any page with `[[tasks: list=<name>]]`.
 A page shows a list; it doesn't make one: editing the embed away, or deleting the page, changes nothing of the list, and a list is deleted only by **Delete…**, which asks where its tasks go.
 Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged so, whatever list it is in.
 

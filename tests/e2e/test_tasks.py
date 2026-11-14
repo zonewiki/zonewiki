@@ -1249,12 +1249,7 @@ def test_selection_bar_tag_opens_the_dialog(page, wiki):
 
 
 def test_selection_bar_moves_tasks_to_a_list(page, wiki):
-    # No list: nothing to move to, so no button.
     seed_four(page)
-    card(page, "Saw").locator(".task-title").click()
-    card(page, "Glue").locator(".task-title").click(modifiers=["Shift"])
-    expect(page.locator("#task-selbar")).to_be_visible()
-    expect(page.locator("#task-selbar [data-sel='list']")).to_be_hidden()
     for name in ("shop", "work"):
         make_list(page, name)
     for title, fields in (("Saw", {"list": "Shop", "tags": ["tools"]}), ("Glue", {"list": "work"})):
@@ -1266,7 +1261,7 @@ def test_selection_bar_moves_tasks_to_a_list(page, wiki):
     dlg = page.locator(".bulk-list-modal")
     expect(dlg.locator(".modal-label")).to_have_text("Move 3 tasks to a list")
     rows = dlg.locator(".bulk-list-row")
-    expect(rows).to_have_text(["shop1 of 3", "work1 of 3", "No list1 of 3"])
+    expect(rows).to_have_text(["shop1 of 3", "work1 of 3", "No list1 of 3", "+New list…"])
     dlg.get_by_role("button", name="work").click()
     expect(dlg).to_have_count(0)
     toast = page.locator(".task-undo-toast")
@@ -1302,6 +1297,76 @@ def test_selection_bar_moves_tasks_to_a_list(page, wiki):
     expect(dlg.locator(".modal-label")).to_have_text("Move 1 task to a list")
     dlg.get_by_role("button", name="shop").click()
     wait_for_field(page, "Bolts", "list", "shop")
+
+
+def test_the_move_dialog_makes_a_new_list(page, wiki):
+    # No list yet: the dialog still opens, with No list (where they are) and New list….
+    seed_four(page)
+    card(page, "Saw").locator(".task-title").click()
+    card(page, "Glue").locator(".task-title").click(modifiers=["Shift"])
+    page.locator("#task-selbar [data-sel='list']").click()
+    dlg = page.locator(".bulk-list-modal")
+    expect(dlg.locator(".bulk-list-row")).to_have_text(["✓No list", "+New list…"])
+    dlg.get_by_role("button", name="New list…").click()
+    expect(dlg.locator(".modal-label")).to_have_text("Move 2 tasks to a new list")
+    expect(dlg.locator(".bulk-tag-list")).to_be_hidden()
+    name = dlg.locator("#bulk-list-name")
+    expect(name).to_be_focused()
+    expect(dlg.locator("#bulk-list-private")).to_have_count(0)        # no users: no private lists
+    # A name that won't do: the dialog stays and says why.
+    name.fill("a,b")
+    name.press("Enter")
+    expect(dlg.locator(".rename-error")).to_be_visible()
+    # Back shows the rows again; then the list is made and the tasks move.
+    dlg.get_by_role("button", name="Back").click()
+    expect(dlg.locator(".bulk-tag-list")).to_be_visible()
+    expect(dlg.locator(".bulk-list-form")).to_be_hidden()
+    dlg.get_by_role("button", name="New list…").click()
+    expect(dlg.locator(".rename-error")).to_be_hidden()
+    name.fill("Shop")
+    name.press("Enter")
+    expect(dlg).to_have_count(0)
+    toast = page.locator(".task-undo-toast")
+    expect(toast).to_contain_text("2 tasks moved to the new list “shop”")
+    wait_for_field(page, "Saw", "list", "shop")
+    wait_for_field(page, "Glue", "list", "shop")
+    expect(card(page, "Saw").locator(".task-tag-list")).to_have_text("shop")   # the page knows the list
+    assert selected_titles(page) == ["Saw", "Glue"]
+    # The row of lists has it without a reload: under More, not pinned (it would be the first pin).
+    expect(page.locator(".lists-more-item[data-place='list:shop']")).to_have_count(1)
+    expect(page.locator(".lists-more-item .lists-more-new")).to_have_count(0)
+    expect(page.locator("a.tasks-place[data-place='list:shop']")).to_have_count(0)
+    # It is a row now, ticked; a second list of that name is refused.
+    page.keyboard.press("m")
+    expect(dlg.locator(".bulk-list-row")).to_have_text(["✓shop", "No list", "+New list…"])
+    dlg.get_by_role("button", name="New list…").click()
+    name.fill("shop")
+    name.press("Enter")
+    expect(dlg.locator(".rename-error")).to_have_text("There is a list #shop already")
+    page.keyboard.press("Escape")
+    # Undo takes the tasks back out; the list stays.
+    toast.locator(".task-undo-btn").click()
+    wait_for_field(page, "Saw", "list", None)
+    wait_for_field(page, "Glue", "list", None)
+    page.keyboard.press("Escape")
+    open_edit(page, "Bolts")
+    expect(page.locator("#task-edit-list option")).to_have_text(["No list", "shop"])
+
+
+def test_a_list_made_in_the_move_dialog_is_a_pill_beside_the_pinned(page, wiki):
+    make_list(page, "work", pin=True)
+    page.request.post("/api/tasks", data={"title": "Bolts"})
+    page.goto("/tasks?view=open")
+    card(page, "Bolts").locator(".task-title").click(button="right")
+    page.locator(".task-menu").get_by_role("menuitem", name="Move to list…").click()
+    dlg = page.locator(".bulk-list-modal")
+    dlg.get_by_role("button", name="New list…").click()
+    dlg.locator("#bulk-list-name").fill("home")
+    dlg.get_by_role("button", name="Create and move").click()
+    wait_for_field(page, "Bolts", "list", "home")
+    pills = page.locator("a.tasks-place[data-place^='list:']")
+    expect(pills).to_have_count(2)
+    assert pills.evaluate_all("els => els.map(a => a.dataset.place)") == ["list:work", "list:home"]
 
 
 def test_moving_tasks_out_of_the_list_shown(page, wiki):
@@ -1400,7 +1465,7 @@ def test_menu_on_a_selected_card_acts_on_the_selection(page, wiki):
     expect(menu.locator(".task-menu-title")).to_have_text("2 tasks")
     assert selected_titles(page) == ["Saw", "Glue"]       # the right-click kept it
     # A task is never deleted: the menu closes them undone.
-    expect(menu.get_by_role("menuitem")).to_have_text(["Tag…", "Start today", "Done", "Won't do"])
+    expect(menu.get_by_role("menuitem")).to_have_text(["Tag…", "Move to list…", "Start today", "Done", "Won't do"])
     menu.get_by_role("menuitem", name="Won't do").click()
     toast = page.locator(".task-undo-toast")
     expect(toast).to_contain_text("2 tasks marked won't do")
@@ -2332,6 +2397,42 @@ def test_a_shared_task_cant_go_into_a_private_list(page, wiki, monkeypatch):
     wait_for_field(page, "Alice's errand", "private", False)
     wait_for_field(page, "Bob's errand", "list", "team")
     assert task_by_title(page, "Alice's errand")["list"] == "team"
+
+
+def test_a_new_list_from_the_move_dialog_is_as_private_as_its_tasks(page, wiki, monkeypatch):
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "t1"), "bob": ("pw", "t2")})
+    page.request.post("/login", form={"username": "bob", "password": "pw"})
+    page.request.post("/api/tasks", data={"title": "Bob's errand"})
+    page.request.post("/login", form={"username": "alice", "password": "pw"})
+    make_list(page, "own", private=True)
+    page.request.post("/api/tasks", data={"title": "Alice's errand", "list": "own"})
+    page.goto("/tasks?view=open")
+    dlg = page.locator(".bulk-list-modal")
+    box, note = dlg.locator("#bulk-list-private"), dlg.locator(".bulk-list-note")
+
+    def new_list_for(title):
+        card(page, title).locator(".task-title").click(button="right")
+        page.locator(".task-menu").get_by_role("menuitem", name="Move to list…").click()
+        dlg.get_by_role("button", name="New list…").click()
+
+    # A shared task stays shared: the new list can't be private.
+    new_list_for("Bob's errand")
+    expect(box).to_be_disabled()
+    expect(box).not_to_be_checked()
+    expect(note).to_be_hidden()
+    page.keyboard.press("Escape")
+    # A private task: the new list starts private, and unticking says what that does.
+    new_list_for("Alice's errand")
+    expect(box).to_be_checked()
+    expect(note).to_be_hidden()
+    box.uncheck()
+    expect(note).to_have_text("Everyone who uses the wiki will see and change this task. It can’t be made private again.")
+    box.check()
+    dlg.locator("#bulk-list-name").fill("secret")
+    dlg.get_by_role("button", name="Create and move").click()
+    wait_for_field(page, "Alice's errand", "list", "secret")
+    assert task_by_title(page, "Alice's errand")["private"] is True
+    expect(card(page, "Alice's errand").locator(".task-tag-list")).to_have_text("secret")
 
 
 def test_every_comment_can_be_edited(page, wiki, monkeypatch):

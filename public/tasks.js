@@ -342,6 +342,19 @@ let listChoices = [];
 try { listChoices = JSON.parse(appEl?.dataset.lists || '[]'); } catch (_) {}
 const listSet = new Set(listChoices.map(l => l.ref));
 const privateLists = new Set(listChoices.filter(l => l.private).map(l => l.ref));
+// A list made while the page is open (New list… in the dialog that moves
+// tasks to a list, js/taskselect.js, which says so to every task app of the
+// page): one more list the user sees, in the List field and the dialogs;
+// the pinned lists as one show it too when it was pinned.
+document.addEventListener('zone:list-made', e => {
+  const { ref, private: isPrivate, pinned } = e.detail || {};
+  if (!ref || listSet.has(ref)) return;
+  listChoices.push({ ref, private: !!isPrivate });
+  listChoices.sort((a, b) => listName(a.ref).localeCompare(listName(b.ref)) || a.ref.localeCompare(b.ref));
+  listSet.add(ref);
+  if (isPrivate) privateLists.add(ref);
+  if (pinned && initLists.length) initLists.push(ref);
+});
 // The user's default list: where a new task goes in a view of no one list.
 const defaultList = appEl?.dataset.defaultList || '';
 // A list's name, as its chip and the dialogs show it.

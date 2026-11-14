@@ -248,7 +248,9 @@ import { whileUsed } from './util.js';
 // switcher's places (.tasks-place; No list's entry under More) carry counts
 // too, refreshed with them.
 const tasksLinks = document.querySelectorAll('.module-link[data-module="tasks"]');
-const places = document.querySelectorAll('.tasks-place[data-place], .lists-more-none[data-place]');
+// (Asked for at each refresh: the row is drawn again when a list is made on
+// the page, js/listsrow.js.)
+const placesNow = () => document.querySelectorAll('.tasks-place[data-place], .lists-more-none[data-place]');
 
 // Same as taskCountsTitle in go/views.go.
 function taskCountsTitle({ focus, overdue, today }) {
@@ -268,6 +270,7 @@ function showCount(el, n) {
 export async function refreshDueBadge() {
   if (!tasksLinks.length) return;
   try {
+    const places = placesNow();
     const res = await fetch(places.length ? '/api/tasks/due-count?places=1' : '/api/tasks/due-count');
     const c = await res.json();
     tasksLinks.forEach(a => {

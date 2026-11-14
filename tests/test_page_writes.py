@@ -600,6 +600,37 @@ def test_new_list_refuses_a_list_there_is_and_no_name(client, shop):
     assert git(shop, "rev-parse", "HEAD") == head
 
 
+def test_a_list_made_where_the_page_stays_answers_its_ref(client, wiki):
+    """POST /api/tasks/lists (New list… in the dialog that moves tasks):
+    the list as New list… makes it, answered as JSON. It isn't the user's
+    first pin (that changes where Tasks opens); beside other pins it is
+    pinned, last."""
+    before = git(wiki, "rev-parse", "HEAD").strip()
+    resp = client.post("/api/tasks/lists", json={"name": " #Shop  Runs "}, headers=HOST)
+    assert resp.status_code == 201 and resp.get_json() == {"ref": "shop-runs", "private": False, "pinned": False}
+    registry = wiki / "_tasks/lists.json"
+    assert [l["name"] for l in json.loads(registry.read_text())["lists"]] == ["shop-runs"]
+    assert not json.loads(registry.read_text()).get("pinned")
+    assert git(wiki, "log", "--format=%s", f"{before}..HEAD").splitlines() == ["Create list #shop-runs"]
+    assert git(wiki, "show", "--name-only", "--format=", "HEAD").split() == ["_tasks/lists.json"]
+    assert list_op(client, "pin", list="shop-runs", pin="1") == "/tasks?list=shop-runs"
+    resp = client.post("/api/tasks/lists", json={"name": "work"}, headers=HOST)
+    assert resp.status_code == 201 and resp.get_json() == {"ref": "work", "private": False, "pinned": True}
+    assert json.loads(registry.read_text())["pinned"] == ["shop-runs", "work"]
+
+
+def test_a_list_made_where_the_page_stays_says_why_not(client, shop):
+    head = git(shop, "rev-parse", "HEAD")
+    resp = client.post("/api/tasks/lists", json={"name": "Shop"}, headers=HOST)
+    assert resp.status_code == 400 and resp.get_json() == {"error": "There is a list #shop already"}
+    for body in ({}, {"name": ""}, {"name": "  "}, {"name": "a,b"}, {"name": 3}, {"name": "x", "private": "yes"},
+                 {"name": "x", "private": True}):       # a private list needs users
+        resp = client.post("/api/tasks/lists", json=body, headers=HOST)
+        assert resp.status_code == 400 and resp.get_json()["error"], body
+    assert client.post("/api/tasks/lists", data="[]", headers=HOST).status_code == 400
+    assert git(shop, "rev-parse", "HEAD") == head
+
+
 def test_new_list_is_no_page(client, wiki):
     commit(wiki, "lists/shop", "# Shopping notes\n")
     assert new_list(client, "shop") == "/tasks?list=shop&made=1"            # a page of that name is a page

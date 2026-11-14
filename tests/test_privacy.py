@@ -679,6 +679,18 @@ def test_a_private_new_list_is_its_makers_alone(alice, client, wiki):
     assert 'data-place="list:gifts"' in page and 'data-place="list:shared/gifts"' in page
 
 
+def test_a_private_list_made_where_the_page_stays_is_its_makers_alone(alice, client, wiki):
+    """New list… in the dialog that moves tasks, with Private."""
+    resp = alice.post("/api/tasks/lists", json={"name": "Gifts", "private": True}, headers=HOST)
+    assert resp.status_code == 201 and resp.get_json()["ref"] == "gifts" and resp.get_json()["private"] is True
+    assert '{"name": "gifts"}' in (wiki / "private/alice/_tasks/lists.json").read_text()
+    assert "gifts" not in (wiki / "_tasks/lists.json").read_text()
+    assert alice.post("/api/tasks/lists", json={"name": "gifts"}, headers=HOST).status_code == 400
+    sign_in(client, "bob")
+    assert 'data-place="list:gifts"' not in client.get("/tasks", headers=HOST).get_data(as_text=True)
+    assert client.post("/api/tasks/lists", json={"name": "gifts"}, headers=HOST).get_json()["ref"] == "gifts"
+
+
 # ── Writes ───────────────────────────────────────────────────────────────────
 
 WRITES = [
@@ -690,6 +702,8 @@ WRITES = [
     # New list…: a list named as alice's private one, and one aimed at her folder.
     ("POST /tasks/new-list", "POST", "/tasks/new-list", {"data": {"name": "secretlist"}}),
     ("POST /tasks/new-list", "POST", "/tasks/new-list", {"data": {"name": "../alice/x", "private": "1"}}),
+    ("POST /api/tasks/lists", "POST", "/api/tasks/lists", {"json": {"name": "secretlist"}}),
+    ("POST /api/tasks/lists", "POST", "/api/tasks/lists", {"json": {"name": "../alice/x", "private": True}}),
     # Her private list, by its name: no list for bob.
     ("POST /tasks/rename-list", "POST", "/tasks/rename-list", {"data": {"list": "secretlist", "new_name": "stolen"}}),
     ("POST /tasks/delete-list", "POST", "/tasks/delete-list", {"data": {"list": "secretlist", "to": "", "share": "1"}}),

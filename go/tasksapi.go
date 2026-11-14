@@ -40,6 +40,50 @@ func tasksRoute(h func(w http.ResponseWriter, r *http.Request) error) http.Handl
 	}
 }
 
+// apiNewList: a list made where the page stays (New list… in the dialog
+// that moves tasks to a list, js/taskselect.js): {name, private} makes it as
+// the New list… dialog of /tasks does (createListOp) and answers how the
+// user names it. It is pinned as a list made in the browser is, but not as
+// the user's first pin: that would change where their Tasks links go and
+// where new tasks land, which the dialog of /tasks says on the list's page
+// and this one has no place to say. A refusal is {"error": …}.
+func apiNewList(w http.ResponseWriter, r *http.Request) {
+	user := userOf(r)
+	name, private, err := newListFields(r)
+	var ref string
+	pin := false
+	if err == nil {
+		pin = len(pinnedLists(user, taskLists(user))) > 0
+		ref, err = createListOp(user, name, private, pin, "")
+	}
+	rf, refused := refusalOf(err)
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusCreated, map[string]any{"ref": ref, "private": private, "pinned": pin})
+	case refused:
+		writeJSON(w, rf.kind.status(), map[string]string{"error": rf.msg})
+	default:
+		// Written, but not committed (notCommitted), or a registry unreadable.
+		logf("%s %s: %v", r.Method, r.URL.Path, err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "The list couldn't be made (Zone's log says why)"})
+	}
+}
+
+// newListFields: the name and private of apiNewList's body.
+func newListFields(r *http.Request) (name string, private bool, err error) {
+	data, err := jsonObject(r)
+	if err != nil {
+		return "", false, err
+	}
+	if data.Has("name") {
+		if name, err = asStr(data["name"], "name"); err != nil {
+			return "", false, err
+		}
+	}
+	private, err = boolField(data, "private")
+	return strings.TrimSpace(name), private, err
+}
+
 // jsonObject is the request's JSON body, which must be an object (any
 // content type: text/plain bodies too).
 func jsonObject(r *http.Request) (jsonObj, error) {
@@ -73,6 +117,7 @@ func tasksRoutes(mux *http.ServeMux) {
 		return nil
 	}))
 	mux.HandleFunc("POST /api/tasks/settings", writesPages(tasksSettingsRoute))
+	mux.HandleFunc("POST /api/tasks/lists", writesPages(apiNewList))
 	mux.HandleFunc("GET /api/tasks/closed", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		year, err := yearArg(r)
 		if err != nil {

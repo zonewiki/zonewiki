@@ -227,7 +227,7 @@ document.addEventListener('keydown', async e => {
     const ids = [...st.selectedIds];
     const removing = e.key === 'T';
     app.openBulkTagModal(ids, removing);
-  } else if (e.key === 'm' && !e.ctrlKey && !e.metaKey && !e.altKey && app.listSet.size && st.selectedIds.size) {
+  } else if (e.key === 'm' && !e.ctrlKey && !e.metaKey && !e.altKey && st.selectedIds.size) {
     // m: move the selected tasks to a list (the selection bar's List…).
     e.preventDefault();
     app.openBulkListModal([...st.selectedIds]);

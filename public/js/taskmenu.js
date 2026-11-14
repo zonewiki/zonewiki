@@ -33,7 +33,7 @@ function openTaskMenu(id, anchor, at) {
     const allDone = st.tasks.filter(t => st.selectedIds.has(t.id)).every(t => t.closed_at);
     const items = [
       ['tag', 'Tag…'],
-      app.listSet.size && ['list', 'Move to list…'],
+      ['list', 'Move to list…'],
       people.users && ['assign', 'Assign…'],
       !allDone && ['today', 'Start today'],
       app.anyPlanned() && ['unplan', 'Unplan'],
@@ -58,7 +58,7 @@ function openTaskMenu(id, anchor, at) {
     task.start_date && ['unplan', 'Unplan'],
     task.recurrence && ['skip', 'Skip this occurrence'],
     ['importance', 'Importance…'],
-    app.listSet.size && ['list', 'Move to list…'],
+    ['list', 'Move to list…'],
     ['wontdo', "Won't do"],
     ['copylink', 'Copy link'],
     ['select', 'Select several'],
