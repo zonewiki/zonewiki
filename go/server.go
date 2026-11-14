@@ -336,7 +336,11 @@ func idleLongEnough(after time.Duration) bool {
 // that came meanwhile are answered first, and connections that come after
 // wait in the socket, which its holder starts Zone on again. Everything
 // Zone keeps is in the wiki's files (the search index too), so the next
-// start loses nothing but what the caches held.
+// start loses nothing but what the caches held, and what an editor's save
+// is merged from: a tab left open over a sleep saves as after any restart
+// (a conflict to settle by hand, if the page changed meanwhile). Who wrote
+// the drafts not yet committed is the one thing only memory has: they are
+// committed in their authors' names first (commitDrafts).
 func exitWhenIdle(srv *http.Server, after time.Duration) {
 	for {
 		time.Sleep(min(after/4, 15*time.Second))
@@ -347,6 +351,7 @@ func exitWhenIdle(srv *http.Server, after time.Duration) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		srv.Shutdown(ctx)
 		cancel()
+		commitDrafts()
 		os.Exit(0)
 	}
 }

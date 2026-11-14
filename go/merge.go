@@ -120,6 +120,33 @@ func commitOthersDrafts(user string) error {
 	return nil
 }
 
+// commitDrafts commits every draft in its author's name ("Save <slug>"),
+// before Zone exits idle: who wrote an uncommitted text is only in memory,
+// and the next Zone would commit it in the name of whoever writes next. A
+// commit that fails is said and stops nothing: the text is in its file.
+func commitDrafts() {
+	if settings().Users == nil {
+		return
+	}
+	pagesMu.Lock()
+	defer pagesMu.Unlock()
+	draftsMu.Lock()
+	authors := make(map[string]string, len(drafts))
+	for rel, author := range drafts {
+		authors[rel] = author
+	}
+	draftsMu.Unlock()
+	for _, rel := range sortedKeys(authors) {
+		path := filepath.Join(cfg.Data, filepath.FromSlash(rel))
+		if !isUncommitted(path) {
+			continue
+		}
+		if err := gitCommit(authors[rel], "Save "+strings.TrimSuffix(rel, ".md"), path); err != nil {
+			logf("%s's draft of %s couldn't be committed before the exit: %v", authors[rel], rel, err)
+		}
+	}
+}
+
 // commitAuthorOf: whom a commit of path's uncommitted text names: who
 // wrote it if Zone knows, else fallback.
 func commitAuthorOf(path, fallback string) string {

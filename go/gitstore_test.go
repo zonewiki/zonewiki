@@ -172,6 +172,32 @@ func TestLastChangedAsksGitOnce(t *testing.T) {
 	}
 }
 
+// Before Zone exits idle, a draft is committed in the name of who wrote it:
+// only memory knows, and the next Zone couldn't say.
+func TestCommitDrafts(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	configWiki(t, "[user alice]\npassword = "+hashPassword("alice-pw")+"\n[user bob]\npassword = "+hashPassword("bob-pw")+"\n")
+	cfg.GitEnabled = true
+	gitSetup()
+	t.Cleanup(func() { forgetDrafts("p.md", "q.md") })
+	for _, rel := range []string{"p.md", "q.md"} {
+		writeTestPage(t, rel)
+	}
+	noteDraft(filepath.Join(cfg.Data, "p.md"), "alice")
+	commitDrafts()
+	if got := strings.TrimSpace(runGit("log", "-1", "--format=%an: %s", "--", "p.md").Stdout); got != "alice: Save p" {
+		t.Errorf("alice's draft: %q", got)
+	}
+	if isUncommitted(filepath.Join(cfg.Data, "p.md")) || !isUncommitted(filepath.Join(cfg.Data, "q.md")) {
+		t.Error("the draft isn't committed, or a file nobody's draft is")
+	}
+	if draftAuthor(filepath.Join(cfg.Data, "p.md")) != "" {
+		t.Error("the draft is still remembered")
+	}
+}
+
 func writeTestPage(t *testing.T, rel string) {
 	t.Helper()
 	p := filepath.Join(cfg.Data, filepath.FromSlash(rel))
