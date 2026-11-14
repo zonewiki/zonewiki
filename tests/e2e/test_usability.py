@@ -93,6 +93,35 @@ def test_hash_key_starts_a_tag_word(page, wiki):
     expect(field).to_have_value("#")
 
 
+def test_filter_field_clear_button(page, wiki):
+    # An × at the field's end while it holds text or a chip of the viewer's:
+    # it empties the field, keeps the page's own chips and the focus.
+    seed_tasks(page, wiki, "[[tasks: tag=work]]")
+    field = page.locator("#task-filter-search")
+    clear = page.locator(".tasks-toolbar .chip-input-clear")
+    expect(filter_chips(page)).to_have_text(["#work"])
+    expect(clear).to_be_hidden()               # only the page's chip: nothing to clear
+    assert "@name" not in field.get_attribute("title")   # no users: '@' is text
+    assert "!high" in field.get_attribute("title")
+    field.click()
+    field.press_sequentially("#ho")
+    field.press("Enter")                       # a chip of the viewer's
+    expect(filter_chips(page)).to_have_text(["#work", "#home"])
+    expect(clear).to_be_visible()
+    field.press_sequentially("fence")
+    expect(page.locator(".task-item .task-title")).to_have_text(["Fix fence"])
+    clear.click()
+    expect(filter_chips(page)).to_have_text(["#work"])
+    expect(field).to_have_value("")
+    expect(field).to_be_focused()
+    expect(clear).to_be_hidden()
+    expect(page.locator(".task-item")).to_have_count(2)
+    field.press_sequentially("bug")            # text alone shows it too
+    expect(clear).to_be_visible()
+    clear.click()
+    expect(page.locator(".task-item")).to_have_count(2)
+
+
 def test_embed_tag_param_lands_in_filter_field(page, wiki):
     seed_tasks(page, wiki, "[[tasks: tag=home,work]]")
     expect(filter_chips(page)).to_have_text(["#home", "#work"])

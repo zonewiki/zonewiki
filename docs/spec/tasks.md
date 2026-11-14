@@ -394,6 +394,8 @@ Each with a dark-mode value.
 
 - **Filter field** (`#task-filter-search`, `TasksCore.parseFilter`/`matchesFilter`): `#words` filter by tag (all must match; `#a|b` = any), `-#word` excludes a tag (`-#a|b`: neither), `!high` (or `!`) and `!low` show the tasks of that importance, the rest searches title and description.
   `/` focuses it, `#` focuses it and starts a tag.
+  Its tooltip lists the syntax (with users the `@` words too).
+  While it holds something of yours (text, or a chip the page didn't set) an **×** at its end (`.chip-input-clear`, "Clear the filter") empties it: the text and your chips go, a page's locked chips stay, and the cursor stays in the field.
   With users, `@words` filter by assignee the same way (`@anna`, `@anna|bob`, `-@anna`, `@me`, `@none`), `@` focuses the field and starts a name, and typing one suggests `me`, `none` and who has tasks here (Assigning tasks in `docs/spec/users.md`).
   Typing a `#word` (or `-#word`) suggests tags of the tasks the other tag words leave visible (free text is ignored for this).
   Embed `tag=`/`?tag=` become a query via `TasksCore.tagParamToQuery`.

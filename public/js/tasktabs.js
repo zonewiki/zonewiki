@@ -106,6 +106,27 @@ if (app.filterSearch) {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(app.render, 150);
   });
+  // With users the tooltip names the '@' words too (without, '@' is text).
+  if (document.body.dataset.users === '1') {
+    app.filterSearch.title += ' · @name = assigned to them · @me = to you · @none = to no one · -@name = not theirs';
+  }
+  // ×, at the field's end while it holds something of the viewer's (text, or
+  // a chip that isn't the page's: tasks.css shows it): clears all of it.
+  const clear = document.createElement('button');
+  clear.type = 'button';
+  clear.className = 'chip-input-clear';
+  clear.tabIndex = -1;
+  clear.textContent = '×';
+  clear.title = 'Clear the filter';
+  clear.setAttribute('aria-label', 'Clear the filter');
+  clear.addEventListener('mousedown', e => e.preventDefault());   // keep the caret in the field
+  clear.addEventListener('click', () => {
+    clearTimeout(searchTimer);
+    app.filterSearch.value = '';
+    filterChips.set([]);   // the page's own words stay (locked); draws the list
+    app.filterSearch.focus();
+  });
+  app.filterSearch.after(clear);
   // Esc leaves the field (an open tag dropdown takes the first Esc).
   app.filterSearch.addEventListener('keydown', e => {
     if (e.key === 'Escape') { e.preventDefault(); app.filterSearch.blur(); }

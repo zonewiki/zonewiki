@@ -13,7 +13,7 @@
         phones it shares the tabs' row, leaving the search its room. */}}
     <button type="button" class="tasks-plan-switch" id="task-plan{{.Sfx}}" role="switch" aria-checked="true" title="Plan: group by start date (d)" hidden><span class="tasks-plan-track" aria-hidden="true"></span>Plan</button>
     <div class="tasks-toolbar">
-      <input type="text" id="task-filter-search{{.Sfx}}" placeholder="Search… #tag" title="Text searches title and description · #tag filters by tag · #a #b = both tags · #a|b = either · -#tag = without" autocomplete="off">
+      <input type="text" id="task-filter-search{{.Sfx}}" placeholder="Search… #tag" title="Text searches title and description · #tag filters by tag · #a #b = both tags · #a|b = either · -#tag = without · !high, !low = that importance" autocomplete="off">
       <select class="tasks-sort" id="task-sort{{.Sfx}}" aria-label="Order" title="Order (o)" hidden><option value="manual">Manual</option><option value="due">Due date</option><option value="created">Created</option></select>
       {{- /* The list's ⋯ menu (js/tasksettings.js): List settings… (the dialog where this app's params can be changed), and its tasks as a file, Export and Import…. */}}
       {{if .Settings}}<button type="button" class="btn tasks-more-btn" id="task-more-btn{{.Sfx}}" aria-haspopup="menu" aria-label="More" title="More: list settings, export, import">⋯</button>{{end}}

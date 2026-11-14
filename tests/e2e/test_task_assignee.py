@@ -163,6 +163,7 @@ def test_the_filter_takes_names_me_and_none(alice, wiki):
     alice.goto("/tasks?view=open")
     expect(card(alice, "Mine")).to_be_visible()
     search = alice.locator("#task-filter-search")
+    assert "@name" in search.get_attribute("title") and "@me" in search.get_attribute("title")   # the tooltip says so
     search.fill("@me")
     expect(alice.locator(".task-item")).to_have_count(1)
     expect(alice.locator(".task-item .task-title")).to_have_text(["Mine"])

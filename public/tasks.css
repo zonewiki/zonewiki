@@ -129,6 +129,16 @@ div.chip-input > input {
   flex: 1 1 4rem; min-width: 3rem; border: none; outline: none; background: transparent;
   padding: .1rem .2rem;
 }
+/* The filter field's × (js/tasktabs.js): there while the field holds text or
+   a chip the viewer put there, at its end. */
+.chip-input-clear {
+  display: none; flex: none; border: none; background: none; color: var(--muted); cursor: pointer;
+  font: inherit; font-size: 1.1rem; line-height: 1; padding: .1rem .35rem; border-radius: 3px;
+}
+.chip-input-clear:hover { color: var(--fg); background: var(--code-bg); }
+div.chip-input:has(> input:not(:placeholder-shown)) > .chip-input-clear,
+div.chip-input:has(> .tag-chip:not(.tag-chip-locked)) > .chip-input-clear { display: block; }
+@media (pointer: coarse) { .chip-input-clear { padding: .3rem .55rem; } }
 /* In a dialog the modal's text-field rule would draw a second box. */
 .modal div.chip-input > input[type="text"] { width: auto; padding: .1rem .2rem; border: none; }
 .tag-chip {
