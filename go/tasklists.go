@@ -23,7 +23,8 @@ import (
 const sharedRef = "shared/"
 
 // privateListName: the list a user's private task goes to when it has no
-// other place (the migration; a restore or import whose list is gone).
+// other place (the migration; a restore or import whose list is gone; a
+// new task of a user who pinned nothing: fallbackList).
 const privateListName = "private"
 
 // ListInfo: a list as one user sees it.
@@ -172,7 +173,9 @@ func inScope(t *Task, scope string, lists map[string]ListInfo) bool {
 
 // pinnedLists: the lists user pinned, in order, the first being where a new
 // task goes: their own pins when they have set some, else the wiki's (the
-// shared registry's, which are everyone's without users).
+// shared registry's, which are everyone's without users). With users
+// something is always pinned once they have a list "private" of their own:
+// when nothing else is, that list (standingPin).
 func pinnedLists(user string, lists map[string]ListInfo) []ListInfo {
 	shared, own := listRegistries(user)
 	from, find := shared, sharedList
@@ -187,7 +190,26 @@ func pinnedLists(user string, lists map[string]ListInfo) []ListInfo {
 			out = append(out, l)
 		}
 	}
+	if len(out) == 0 {
+		if l := standingPin(user, lists); l != nil {
+			out = append(out, *l)
+		}
+	}
 	return out
+}
+
+// standingPin: user's private list "private", which counts as pinned while
+// they pinned nothing else: it is where their new tasks go (fallbackList),
+// and what one captures must be in their My tasks. Nil without users, for
+// one who can't write tasks, and when they have no such list (yet).
+func standingPin(user string, lists map[string]ListInfo) *ListInfo {
+	if privateFolder(user) == "" || listsUnmigrated || mayWriteTasks(user) != nil {
+		return nil
+	}
+	if l, ok := lists[privateListName]; ok && l.Private() {
+		return &l
+	}
+	return nil
 }
 
 // ---- My tasks ----
@@ -307,12 +329,56 @@ func setMineParams(user, was string, set map[string]string) error {
 }
 
 // lookupDefaultList: the list a new task of user's goes to where no one list
-// is in view, their first pinned one; nil when they pinned none.
+// is in view: their first pinned one, else (with users) their private list
+// (fallbackList); nil when there is neither, and the task is in no list.
 func lookupDefaultList(user string) *ListInfo {
-	if pinned := pinnedLists(user, taskLists(user)); len(pinned) > 0 {
+	return defaultListOf(user, pinnedLists(user, taskLists(user)))
+}
+
+// defaultListOf: lookupDefaultList, given user's pinned lists.
+func defaultListOf(user string, pinned []ListInfo) *ListInfo {
+	if len(pinned) > 0 {
 		return &pinned[0]
 	}
-	return nil
+	return fallbackList(user)
+}
+
+// fallbackList: where a new task of user's goes when they pinned nothing
+// and no list is in view: their private list "private", so that a task
+// nobody chose a place for isn't everyone's (a private task can be shared
+// later, a shared one never made private). The list as they see it, also
+// when it isn't made yet: the first task into it makes it
+// (ensureFallbackLocked), and from then on it counts as pinned
+// (standingPin). Nil without users, for one who can't write
+// tasks, and while a shared list has that name and they have none of
+// their own (the name would be that list's): a new task is then in no
+// list, and shared.
+func fallbackList(user string) *ListInfo {
+	if privateFolder(user) == "" || listsUnmigrated || mayWriteTasks(user) != nil {
+		return nil
+	}
+	if l, ok := taskLists(user)[privateListName]; ok {
+		if !l.Private() {
+			return nil
+		}
+		return &l
+	}
+	l := listInfo(&taskfiles.List{Name: privateListName, Settings: map[string]string{}, Owner: user}, privateListName)
+	return &l
+}
+
+// ensureFallbackLocked: a new task of user's names their private list
+// "private" (list, as the request has it) and it isn't made yet: make it,
+// as the fallback promised (fallbackList). Returns the registry's path
+// when it was written, for the task's commit.
+func ensureFallbackLocked(user, list string) (string, error) {
+	if cleanList(list) != privateListName {
+		return "", nil
+	}
+	if l := fallbackList(user); l == nil {
+		return "", nil
+	}
+	return ensurePrivateListLocked(user)
 }
 
 // ---- operations ----
@@ -905,6 +971,12 @@ func pinListOp(user, ref, pin string) error {
 	case "0":
 		reg.Pinned = slices.DeleteFunc(reg.Pinned, is)
 		msg = "Unpin list #" + l.Name
+		// The private list that takes the user's new tasks stays pinned
+		// while nothing else is (standingPin).
+		if sp := standingPin(user, lists); sp != nil && sp.Ref == l.Ref &&
+			!slices.ContainsFunc(reg.Pinned, func(r string) bool { _, ok := resolveList(r, lists); return ok }) {
+			return refuse("Your list #" + l.Name + " stays pinned while no other list is: your new tasks go into it. Pin another list first")
+		}
 	case "1":
 		if !slices.ContainsFunc(reg.Pinned, is) {
 			reg.Pinned = append(reg.Pinned, l.Ref)

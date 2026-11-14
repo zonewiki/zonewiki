@@ -173,6 +173,12 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, p
 	def := ""
 	if d := rq.defaultList(); d != nil {
 		def = d.Ref
+		// The user's private list that the first task into it makes
+		// (fallbackList): a choice already.
+		if _, made := lists[def]; !made {
+			choices = append(choices, listChoice{def, d.Private()})
+			slices.SortFunc(choices, func(a, b listChoice) int { return strings.Compare(a.Ref, b.Ref) })
+		}
 	}
 	scope := paramsScope(params)
 	sfx := ""

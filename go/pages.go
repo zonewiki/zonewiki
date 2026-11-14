@@ -700,13 +700,11 @@ func (rq *Req) pinnedLists() []ListInfo {
 	return rq.pinned
 }
 
-// defaultList: the default list (the first pinned list), where New task
-// and c t put a task; nil when none is pinned.
+// defaultList: where New task and c t put a task: the first pinned list,
+// else with users the user's private list (fallbackList); nil when there
+// is neither.
 func (rq *Req) defaultList() *ListInfo {
-	if pinned := rq.pinnedLists(); len(pinned) > 0 {
-		return &pinned[0]
-	}
-	return nil
+	return defaultListOf(rq.who(), rq.pinnedLists())
 }
 
 // allBacklinkCounts: how many pages link to each slug, of those the

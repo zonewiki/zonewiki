@@ -840,7 +840,8 @@ def test_a_new_list_from_the_list_field_is_as_private_as_the_task(page, wiki, mo
     page.locator("#task-new-list-name").fill("secret")
     page.locator("#task-new-list-create").click()
     expect(lists).to_have_value("secret")
-    expect(lists.locator("option")).to_have_text(["No list", "🔒 own", "🔒 secret", "New list…"])
+    # (private: where her new tasks go while she pinned nothing, not made yet)
+    expect(lists.locator("option")).to_have_text(["No list", "🔒 own", "🔒 private", "🔒 secret", "New list…"])
     expect(note).to_have_text("Private: only you see this task.")
     modal.get_by_role("button", name="Save").click()
     wait_for_field(page, "Alice's errand", "list", "secret")
@@ -2344,7 +2345,8 @@ def test_a_task_in_a_private_list_is_private(page, wiki, monkeypatch):
     page.locator("#task-add-btn").click()
     lists, note = page.locator("#task-edit-list"), page.locator("#task-edit-list-note")
     expect(lists).to_have_value("mine")
-    expect(lists.locator("option")).to_have_text(["No list", "🔒 mine", "New list…"])
+    # (private: the list her new tasks go to while she pinned nothing, not made yet)
+    expect(lists.locator("option")).to_have_text(["No list", "🔒 mine", "🔒 private", "New list…"])
     expect(note).to_have_text("Private: only you see this task.")
     expect(page.locator(".task-edit-target")).to_have_text("Adds to the list mine, private.")
     expect(page.locator("#task-edit-private")).to_have_count(0)      # no Private box: the list says it
@@ -2383,7 +2385,8 @@ def test_a_tag_named_as_a_private_list_keeps_a_task_shared(page, wiki, monkeypat
     page.goto("/tasks?view=open")
     page.locator("#task-add-btn").click()
     lists = page.locator("#task-edit-list")
-    expect(lists).to_have_value("")
+    expect(lists).to_have_value("private")      # she pinned nothing: her private list
+    lists.select_option("")                      # no list, so shared: the tag doesn't change that
     page.locator("#task-edit-title").fill("Book")
     page.locator("#task-edit-tags").fill("gifts ")
     expect(lists).to_have_value("")
@@ -2398,6 +2401,72 @@ def test_a_tag_named_as_a_private_list_keeps_a_task_shared(page, wiki, monkeypat
     page.locator("#task-edit-form button[type=submit]").click()
     wait_for_field(page, "Ring", "private", True)
     assert task_by_title(page, "Ring")["list"] == "gifts" and task_by_title(page, "Ring")["tags"] == []
+
+
+def test_c_t_of_a_user_who_pinned_nothing_makes_a_private_task(page, wiki, monkeypatch):
+    # With users and nothing pinned, c t starts in the user's private list
+    # "private" (made by the first task): a task nobody chose a place for is
+    # not everyone's. No list is a choice, and the dialog says what it means.
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "token"), "bob": ("pw", "t2")})
+    page.request.post("/login", form={"username": "alice", "password": "pw"})
+    wiki.write("garden", "# Garden\n")
+    page.goto("/page/garden")
+    page.keyboard.press("c")
+    page.keyboard.press("t")
+    modal = page.locator(".task-edit-modal[open]")
+    lists = modal.locator("select[id^=task-edit-list]")
+    target = modal.locator(".task-edit-target")
+    expect(lists).to_have_value("private")
+    expect(target).to_have_text("Adds to the list private, private.")
+    lists.select_option("")
+    expect(target).to_have_text("Adds to no list: everyone sees it.")
+    lists.select_option("private")
+    modal.locator("button.task-edit-cancel, [id^=task-edit-cancel]").first.click()
+    # Nobody chose the private list, so a task given to someone is in no
+    # list (a private task has no assignee), and back when the name goes.
+    page.keyboard.press("c")
+    page.keyboard.press("t")
+    expect(lists).to_have_value("private")
+    title = modal.locator("[id^=task-edit-title]")
+    title.fill("Ask about the loan @bob")
+    expect(lists).to_have_value("")
+    expect(target).to_have_text("Adds to no list: everyone sees it.")
+    title.fill("Ask about the loan")
+    expect(lists).to_have_value("private")
+    title.fill("Call the bank")
+    modal.locator("button[type=submit]").click()
+    expect(modal).to_be_hidden()
+    wait_for_field(page, "Call the bank", "private", True)
+    assert task_by_title(page, "Call the bank")["list"] == "private"
+    # bob doesn't see it.
+    page.request.post("/login", form={"username": "bob", "password": "pw"})
+    assert "Call the bank" not in [t["title"] for t in page.request.get("/api/tasks").json()]
+
+
+def test_c_t_with_a_private_first_pin_shares_a_task_given_to_someone(page, wiki, monkeypatch):
+    # A private list pinned first takes c t's tasks; naming someone is the
+    # choice to share, so the task is in no list (the name isn't dropped),
+    # and the capture stays in her My tasks as a pill's list.
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "token"), "bob": ("pw", "t2")})
+    page.request.post("/login", form={"username": "alice", "password": "pw"})
+    make_list(page, "own", private=True, pin=True)
+    wiki.write("garden", "# Garden\n")
+    page.goto("/page/garden")
+    page.keyboard.press("c")
+    page.keyboard.press("t")
+    modal = page.locator(".task-edit-modal[open]")
+    lists = modal.locator("select[id^=task-edit-list]")
+    target = modal.locator(".task-edit-target")
+    expect(lists).to_have_value("own")
+    title = modal.locator("[id^=task-edit-title]")
+    title.fill("Ask about the loan @bob")
+    expect(lists).to_have_value("")
+    expect(target).to_have_text("Adds to no list: everyone sees it.")
+    modal.locator("button[type=submit]").click()
+    expect(modal).to_be_hidden()
+    wait_for_field(page, "Ask about the loan", "assignee", "bob")
+    task = task_by_title(page, "Ask about the loan")
+    assert task["private"] is False and "list" not in task
 
 
 def test_c_t_goes_to_the_default_list_shared_or_private(page, wiki, monkeypatch):
@@ -2462,7 +2531,7 @@ def test_a_shared_task_cant_go_into_a_private_list(page, wiki, monkeypatch):
     page.goto("/tasks?view=open")
     open_edit(page, "Bob's errand")
     lists, note = page.locator("#task-edit-list"), page.locator("#task-edit-list-note")
-    expect(lists.locator("option")).to_have_text(["No list", "🔒 own", "team", "New list…"])
+    expect(lists.locator("option")).to_have_text(["No list", "🔒 own", "🔒 private", "team", "New list…"])
     expect(lists.locator("option[value=own]")).to_have_attribute("disabled", "")
     expect(lists.locator("option[value=team]")).not_to_have_attribute("disabled", "")
     page.keyboard.press("Escape")

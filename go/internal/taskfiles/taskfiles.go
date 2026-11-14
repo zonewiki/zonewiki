@@ -500,10 +500,11 @@ func (s *Store) CommitFiles(user, message string, changed []string) {
 }
 
 // WriteOpenLocked writes the open tasks (each into its owner's file),
-// committed by user.
-func (s *Store) WriteOpenLocked(user string, tasks []*Task, message string) error {
+// committed by user; also: files written with them (a list's registry)
+// that belong in that commit.
+func (s *Store) WriteOpenLocked(user string, tasks []*Task, message string, also ...string) error {
 	changed, err := s.writeOpenLocked(user, tasks)
-	s.CommitFiles(user, message, changed)
+	s.CommitFiles(user, message, append(changed, also...))
 	return err
 }
 

@@ -945,7 +945,7 @@
     },
     "list": {
      "type": "string",
-     "description": "The list it goes in (list_tags shows them; '' none). Default: the user's first pinned list. In a private list only the user sees it."
+     "description": "The list it goes in (list_tags shows them; '' none). Default: the user's first pinned list, else their private one; with an assignee never a private list, but none. In a private list only the user sees it."
     },
     "summary": {
      "type": "string",

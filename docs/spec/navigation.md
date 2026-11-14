@@ -69,7 +69,7 @@ The pinned lists are the lists you pinned (a list's ⋯ menu or List settings pi
 `rq.pinnedLists()` looks them up once per request).
 In a wiki without lists the link goes to `/tasks`, which is the same tasks (`tasksLinkHref`, `moduleLinks`).
 Its counts are of My tasks.
-The **first pinned list** is where New task puts a task (`defaultList()`, `lookupDefaultList()`).
+The **first pinned list** is where New task puts a task (`defaultList()`, `lookupDefaultList()`); with users and nothing pinned, your private list `private` (Pins in `docs/spec/tasks.md`).
 Your other lists and all tasks are one click from there, in the task app's **list switcher** (Lists in `docs/spec/tasks.md`).
 `/tasks` stays the view of every task that search results, task links and `g d` open.
 There is still no nav bar: the modules sit where the eye already goes.

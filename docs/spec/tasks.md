@@ -821,6 +821,18 @@ Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged
 - **Pins** (`pinnedLists`, `pinListOp`; `POST /tasks/pin-list` with `list` and `pin`: `1`, `first` or `0`): a pin says "I follow this list": the list is a pill of the list switcher, and its tasks are in My tasks and in the Tasks links' count (those that aren't someone else's).
   **The first pinned list takes new tasks** made where no one list is in view: New task and `c t` add a task there (see Modules), My tasks' **+ New** does, and an assistant's `create_task` puts one there.
   Its pill says so, with a plus, when several are pinned.
+  **With nothing pinned, and users, a new task goes into your private list `private`** (`fallbackList` in `go/tasklists.go`; `defaultListOf`): a task nobody chose a place for isn't everyone's, since a private task can be shared later and a shared one never made private.
+  The list needn't be there: it is a choice of the List field at once, and the first task into it makes it, in the task's commit (`ensureFallbackLocked`, in `createTask`).
+  **From then on it counts as pinned while nothing else is** (`standingPin`, in `pinnedLists`): it is a pill, its tasks are in My tasks, and what you capture is never out of your home view.
+  Pinning another list makes it an ordinary pin, first in the order; unpinning it while it is the only one is refused ("Your list #private stays pinned while no other list is …"), and its ⋯ menu has no Unpin then (`PinStays`).
+  **No list is then something you choose**: the List field's No list, a task made on the No list view, an assistant's `list: ""`.
+  **A new task with an assignee doesn't go into a private list nobody chose**: a task given to someone is shared work, and a private task is nobody's but yours, so it is in no list.
+  That holds for the list `private` of one who pinned nothing and for a private list pinned first alike.
+  In the dialog, while the List field still holds the private default list it put there (`autoList` in `js/taskmodal.js`), the Assignee field and the title's `@name` work as for a shared task, and naming someone moves the field to No list (the line under the title then says "Adds to no list: everyone sees it."), taking the name away moves it back; choosing a list yourself ends that.
+  So a new task on a page that shows one user's tasks (`assignee=`), or under a filter that names one, starts in no list for such a user.
+  An assistant's `create_task` that names an assignee and no list is in no list likewise.
+  There is no such list without users (nothing is private there), for a viewer, or while a shared list is called `private` and you have none of your own by that name: a new task is then in no list.
+  A request to the API says where a task goes itself: `POST /api/tasks` without `list` makes a task in no list, as before.
   You pin, unpin and reorder in a list's ⋯ menu on `/tasks?list=`: **Pin** puts it last, **Move first** (on a pinned list that isn't) puts it at the front, **Unpin** takes it out, and the next one is first; the pills can be dragged too (the list switcher, above).
   **A list you make in the browser starts pinned**, last (New list…, below).
   The pin in List settings pins and unpins.
@@ -831,7 +843,7 @@ Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged
   From then until the first pinned list took the new tasks, that list was the **default list**, named by `default` in the registry whatever the order of the pins: such a registry reads as that list first (`ParseRegistry`), and is written without the key.
   A Zone from before reads a registry without `default` as the first pinned list being the default one.)
 - **Where a new task goes** (`.task-edit-target`, `syncTarget` in `js/taskmodal.js`): the edit dialog of a new task says it under the title: "Adds to the list shop." or "Adds to no list.",
-  with ", private" when the list is.
+  with ", private" when the list is, and with users "Adds to no list: everyone sees it.".
   It follows the List field, and a `#word` in the title that names a list (Quick-add: `#shop` puts the task in the list shop, the first such word; the others are tags).
   Hidden when editing a task and for several titles at once.
 - **The Tasks page's ⋯ menu** (`.page-menu-btn` beside the heading of `/tasks`, on every view of it; the page's ⋯ menu, `#page-menu`, with `js/pagemenu.js`): **New list…**; on a list **Rename…**, **Pin** / **Move first** / **Unpin**, **Make shared…** (a private one) and **Delete…**; on a tag's view (`/tasks?tag=<tag>`) **Rename tag…** (below).
@@ -885,7 +897,7 @@ Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged
   and the main Closed count.
   The due count is My tasks'.
 - **No list** (`noListRef`, `isNoList` in `go/tasklists.go`; `noList` in `tasks.js`): the tasks in no list have a view of their own, **`/tasks?list=none`**, headed **No list**.
-  A task is in no list when it was made with none pinned, taken out of its list, or left behind by a list deleted into none.
+  A task is in no list when it was made so (with none pinned and without users; with users only by choice or with an assignee: Pins, above), taken out of its list, or left behind by a list deleted into none.
   Such a task is in My tasks (unless it is someone else's), so the Tasks links count it; this view shows those tasks alone, whoever has them.
   In the list switcher it is under **More**, above All tasks, **while open tasks are in no list** (and on its own view), with the counts a pill has (due today or overdue, in Focus: `noListCounts`);
   `js/chrome.js` keeps them current from the due count's places (`none`).

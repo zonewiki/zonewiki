@@ -523,7 +523,7 @@ class TestAssistant:
     def test_search_filters_by_assignee(self, mcp):
         mcp("create_task", title="Alices", assignee="me")
         mcp("create_task", title="Bobs", assignee="bob")
-        mcp("create_task", title="Nobodys")
+        mcp("create_task", title="Nobodys", list="")   # in no list: shared, and no one's (without a list it would be alice's own)
         found = lambda **args: sorted(t for t in ("Alices", "Bobs", "Nobodys") if f"Task: {t}" in mcp("search_tasks", **args))
         assert found(assignee="me") == ["Alices"]
         assert found(assignee="bob") == ["Bobs"]

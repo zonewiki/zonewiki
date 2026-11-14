@@ -867,3 +867,92 @@ func TestNoListScope(t *testing.T) {
 		t.Error("a list called none is that list")
 	}
 }
+
+// With users, a new task of one who pinned nothing goes to their private
+// list "private", made by the first task into it: nobody chose a place for
+// it, so it isn't everyone's.
+func TestFallbackList(t *testing.T) {
+	testWiki(t, nil)
+	if fallbackList("") != nil || lookupDefaultList("") != nil {
+		t.Error("a fallback without users")
+	}
+	withUsers(t, "alice", "bob", "vera")
+	settings().Users["vera"].Role = roleViewer
+	l := lookupDefaultList("alice")
+	if l == nil || l.Ref != "private" || !l.Private() || l.Owner != "alice" {
+		t.Fatalf("alice's fallback %+v", l)
+	}
+	if _, made := taskLists("alice")["private"]; made {
+		t.Error("the list is there before a task went into it")
+	}
+	if fallbackList("vera") != nil || fallbackList(visitor) != nil {
+		t.Error("a fallback for one who writes no tasks")
+	}
+	// The first task into it makes it, in the task's commit; it is hers alone.
+	data := jsonObj{}
+	data.Set("title", "Call the bank")
+	data.Set("list", "private")
+	task, err := createTask("alice", data, "Create task")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.List != "private" || task.Owner != "alice" || !taskLists("alice")["private"].Private() {
+		t.Errorf("the task %+v, her lists %v", task, taskLists("alice"))
+	}
+	if _, sees := openByID("bob")[task.ID]; sees {
+		t.Error("bob sees alice's task")
+	}
+	if l := lookupDefaultList("alice"); l == nil || l.Ref != "private" {
+		t.Errorf("the fallback once made %+v", l)
+	}
+	// Once made it counts as pinned while nothing else is: a pill, and its
+	// tasks in her My tasks; bob, who has no such list, has no pin.
+	lists := taskLists("alice")
+	if pins := pinnedLists("alice", lists); len(pins) != 1 || pins[0].Ref != "private" {
+		t.Errorf("alice's pins %+v", pins)
+	}
+	if !mineFilter("alice", lists)(task) {
+		t.Error("her capture isn't in her My tasks")
+	}
+	if pins := pinnedLists("bob", taskLists("bob")); len(pins) != 0 {
+		t.Errorf("bob's pins %+v", pins)
+	}
+	// It can't be unpinned while it is the only one.
+	if err := pinListOp("alice", "private", "0"); err == nil || !strings.Contains(err.Error(), "stays pinned") {
+		t.Errorf("unpinning the only pin: %v", err)
+	}
+	// Another pin goes after it, Move first before it; then it unpins.
+	mustList(t, "alice", "work", false)
+	if err := pinListOp("alice", "work", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if l := lookupDefaultList("alice"); l == nil || l.Ref != "private" {
+		t.Errorf("with a second pin %+v", l)
+	}
+	if err := pinListOp("alice", "work", "first"); err != nil {
+		t.Fatal(err)
+	}
+	if l := lookupDefaultList("alice"); l == nil || l.Ref != "work" {
+		t.Errorf("with work first %+v", l)
+	}
+	if err := pinListOp("alice", "private", "0"); err != nil {
+		t.Errorf("unpinning it beside another pin: %v", err)
+	}
+	if err := pinListOp("alice", "work", "0"); err != nil {
+		t.Fatal(err)
+	}
+	if pins := pinnedLists("alice", taskLists("alice")); len(pins) != 1 || pins[0].Ref != "private" {
+		t.Errorf("with everything unpinned %+v", pins)
+	}
+	// While a shared list has the name and bob has none of his own, the
+	// name is that list's: no fallback, and "private" names the shared one.
+	if err := os.WriteFile(taskFiles.ListsPath(""), []byte(`{"version": 1, "lists": [{"name": "private"}, {"name": "work"}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if fallbackList("bob") != nil {
+		t.Error("bob's fallback beside a shared list called private")
+	}
+	if fallbackList("alice") == nil {
+		t.Error("alice has her own list private: it stays her fallback")
+	}
+}

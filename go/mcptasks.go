@@ -542,8 +542,19 @@ func createTaskTool(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// As c t in the browser: into the user's first pinned list, with its tags.
-	if h := lookupDefaultList(user); h != nil && !data.Has("list") {
+	// As c t in the browser: into the user's first pinned list, with its
+	// tags; with users and nothing pinned, into their private list.
+	// Not into a private list with an assignee: a task given to someone is
+	// shared work, and a private task is nobody's but its user's, so it is
+	// in no list.
+	assigns := false
+	if data.Has("assignee") && !data.Null("assignee") {
+		if s, err := asStr(data["assignee"], "assignee"); err == nil {
+			name := taskmodel.CleanAssignee(s)
+			assigns = name != "" && name != "none"
+		}
+	}
+	if h := lookupDefaultList(user); h != nil && !data.Has("list") && !(h.Private() && assigns) {
 		data.Set("list", h.Ref)
 		data["tags"] = homeTags(data["tags"], h)
 	}

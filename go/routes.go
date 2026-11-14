@@ -952,6 +952,9 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 		for i, p := range rq.pinnedLists() {
 			if p.Ref == list.Ref {
 				v.Pin = map[bool]string{true: "first", false: "1"}[i == 0]
+				// The user's list "private" as their only pin stays pinned (standingPin).
+				sp := standingPin(rq.who(), rq.taskLists())
+				v.PinStays = len(rq.pinnedLists()) == 1 && sp != nil && sp.Ref == list.Ref
 			}
 		}
 		// Just made (?made=1, newListRoute), and the user's one pinned list:
@@ -1147,6 +1150,7 @@ type tasksPageView struct {
 	Heading, Missing, Tag           string
 	List                            *ListInfo
 	Pin                             string
+	PinStays                        bool // no Unpin: the user's list "private" while it is their only pin
 	MoveTo                          []ListInfo
 	OpenInList                      int // the list's open tasks (Delete…'s "Close its open tasks")
 	RenameName, RenameError         string

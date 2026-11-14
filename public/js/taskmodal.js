@@ -110,7 +110,7 @@ function showField(name, show = true) {
 // list (it has none).
 function syncMore() {
   const can = {
-    assignee: !app.editPrivate(),
+    assignee: assigning(),
     repeat: !app.keepCb.checked,
     lead: !!document.getElementById('task-edit-due' + app.sfx).value,
     keep: true,
@@ -204,6 +204,7 @@ function userNamed(typed) {
   return people.users?.has(name) ? name : '';
 }
 const assigneeChip = assigneeInput && app.chipField(assigneeInput, {
+  onChange: () => syncAutoList(),
   label: n => '@' + n,
   mark: (chip, n) => {
     if (!people.users || people.users.has(n)) return;
@@ -216,6 +217,7 @@ function setAssignee(name) {
   assigneeChip.set(name ? [name] : [], true);
   assigneeInput.value = '';
   assigneeInput.setCustomValidity('');
+  syncAutoList();
 }
 // What Save sends: a name, null for no one, undefined when what is typed
 // names no one who can be assigned.
@@ -225,10 +227,30 @@ function editAssignee() {
   if (typed === 'none') return null;
   return userNamed(typed) || undefined;
 }
-const assigning = () => !!assigneeInput && !app.editPrivate();
+// A new task's list that nobody chose: the user's default list when it is
+// private (their first pinned list, or the list "private" of one who pinned
+// nothing: fallbackList in go/tasklists.go), for as long as the List field
+// holds what the dialog put there. Such a task can still be assigned: a task given
+// to someone is shared work, so with an assignee (the field, or the title's
+// @name) it is in no list, and without one again in the private list. The
+// line under the title says which. Choosing a list oneself ends it.
+let autoList = '';
+let autoSetting = false;
+app.listSelect?.addEventListener('change', () => { if (!autoSetting) autoList = ''; });
+function syncAutoList() {
+  if (!autoList || !app.listSelect || !assigneeInput) return;
+  const assigned = !!assigneeChip.words().length || !!assigneeInput.value.trim() || !!quickParse()?.assignee;
+  const want = assigned ? '' : autoList;
+  if (app.listSelect.value === want) return;
+  autoSetting = true;
+  app.listSelect.value = want;
+  app.listSelect.dispatchEvent(new Event('change'));
+  autoSetting = false;
+}
+const assigning = () => !!assigneeInput && (!app.editPrivate() || !!autoList);
 function syncAssigneeField() {
   if (!assigneeField) return;
-  showField('assignee', !app.editPrivate() && (!!assigneeChip.words().length || !!assigneeInput.value.trim()));
+  showField('assignee', assigning() && (!!assigneeChip.words().length || !!assigneeInput.value.trim()));
 }
 app.listSelect?.addEventListener('change', () => { syncAssigneeField(); syncMore(); });
 const assigneeAc = assigneeInput && attachTagAc(assigneeInput, {
@@ -248,7 +270,7 @@ const assigneeAc = assigneeInput && attachTagAc(assigneeInput, {
 });
 if (assigneeInput) {
   loadPeople();
-  assigneeInput.addEventListener('input', () => assigneeInput.setCustomValidity(''));
+  assigneeInput.addEventListener('input', () => { assigneeInput.setCustomValidity(''); syncAutoList(); });
   // Enter with no suggestion open: a typed name becomes the chip rather
   // than saving the task (as in Tags); Enter on an empty field saves.
   assigneeInput.addEventListener('keydown', e => {
@@ -484,12 +506,14 @@ function syncTarget() {
   if (!isNew) return;
   const q = quickParse();
   const ref = q && quickList(q).list || app.listSelect?.value || '';
-  const where = ref ? `Adds to the list ${app.listName(ref)}` : 'Adds to no list';
+  // With users a task in no list is everyone's, and can't be made private later.
+  const where = ref ? `Adds to the list ${app.listName(ref)}`
+    : document.body.dataset.users === '1' ? 'Adds to no list: everyone sees it' : 'Adds to no list';
   targetEl.textContent = where + (app.privateLists.has(ref) ? ', private' : '') + '.';
 }
 app.listSelect?.addEventListener('change', syncTarget);
 app.listSelect?.addEventListener('change', () => syncQuickPreview());
-app.titleInput.addEventListener('input', syncTarget);
+app.titleInput.addEventListener('input', () => { syncAutoList(); syncTarget(); });
 app.titleInput.addEventListener('input', syncQuickPreview);
 
 // The modal's History section: the task's logged events, newest first
@@ -702,6 +726,9 @@ function openEditModal(taskId, opts) {
   fillLists(task, task ? app.taskList(task) || '' : opts && 'list' in opts ? opts.list || '' : app.newTaskList());
   privateWas = !!task && !!task.private;
   syncListNote();
+  // Nobody chose the list when it is the default one in a view of no one list.
+  autoList = !task && !app.initList && app.privateLists.has(app.defaultList) && !!app.listSelect && app.listSelect.value === app.defaultList
+    ? app.defaultList : '';
   // A new task starts with the user the filter names, as with its tags.
   setAssignee(task ? task.assignee || '' : opts && 'assignee' in opts ? opts.assignee || '' : app.filterDefaultAssignee());
   syncAssigneeField();

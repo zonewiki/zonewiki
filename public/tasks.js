@@ -150,6 +150,7 @@ const app = {
   get thisYear() { return thisYear; },
   get initList() { return initList; },
   get noList() { return noList; },
+  get defaultList() { return defaultList; },
 };
 
 st.tasks = [];

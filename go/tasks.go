@@ -146,6 +146,18 @@ func createTask(user string, data jsonObj, message string) (*Task, error) {
 	}
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
+	// The user's private list, where their new tasks go when they pinned
+	// nothing, is made by the first task into it.
+	var also []string
+	if data.Has("list") && !data.Null("list") {
+		if list, err := asStr(data["list"], "list"); err == nil {
+			path, err := ensureFallbackLocked(user, list)
+			if err != nil {
+				return nil, err
+			}
+			also = nonEmpty([]string{path})
+		}
+	}
 	t := newTask()
 	if err := applyTaskFields(user, t, data, true); err != nil {
 		return nil, err
@@ -156,7 +168,7 @@ func createTask(user string, data jsonObj, message string) (*Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	return t, taskFiles.WriteOpenLocked(user, append(active, t), message)
+	return t, taskFiles.WriteOpenLocked(user, append(active, t), message, also...)
 }
 
 // applyTaskFields applies the field changes in data (not completion); fresh:

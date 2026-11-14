@@ -110,7 +110,7 @@ It also keeps the notices current: `THIRD_PARTY_LICENSES` names the pinned Go, G
 
 `tests/test_page_writes.py`'s rename-tag tests cover renaming a tag through both doors (tasks, archives, embeds and links in one commit, a list of that name left alone; refusals; asking before a merge; text not yet in git; a corrupt tasks file writing nothing),
 its list tests New list… (a registry entry and no page), a list's rename (its tasks, the pins, the pages' embeds and links in one commit, a tag of that name left alone; its dialog's refusals; text not yet in git; a corrupt tasks file writing nothing), Delete… (its tasks moved, the pages' embeds saying there is no such list) and the pin's commits,
-`tests/test_privacy.py` what it does across users,
+`tests/test_privacy.py` what it does across users (and where a new task of one who pinned nothing goes: their private list, made by the first task and pinned from then on while nothing else is; a task given to someone not into a private list; `TestFallbackList` in `go/tasklists_test.go`, and `test_c_t_of_a_user_who_pinned_nothing_makes_a_private_task` and `test_c_t_with_a_private_first_pin_shares_a_task_given_to_someone` in `tests/e2e/test_tasks.py`),
 `TestRenameTagInText` and `TestRenameListInText` in `go/pages_test.go` the rewriting of text,
 and `test_rename_list_dialog` in `tests/e2e/test_tasks.py` the dialog.
 

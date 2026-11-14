@@ -423,7 +423,8 @@ def test_a_new_task_goes_to_her_default_list(alice, wiki):
     sign_in(alice, "bob")
     bob = alice
     index = bob.get("/page/index", headers=HOST).data.decode()
-    assert "data-tasks-list" not in index and "secretlist" not in bob.get("/tasks", headers=HOST).data.decode()
+    # Bob pinned nothing: his new tasks go to his private list (the fallback).
+    assert 'data-tasks-list="private"' in index and "secretlist" not in bob.get("/tasks", headers=HOST).data.decode()
 
 
 def test_nothing_private_without_users(client, wiki_dir):
@@ -1055,3 +1056,84 @@ def test_an_exported_private_task_stays_private_when_imported(alice, wiki):
     back = next(t for t in json.loads((wiki / "private/alice/_tasks/tasks.json").read_text()) if t["id"] == TASK_ID)
     assert back["list"] == "private" and '{"name": "private"}' in (wiki / "private/alice/_tasks/lists.json").read_text()
     assert ((wiki / "_tasks/tasks.json").read_text() if (wiki / "_tasks/tasks.json").exists() else "") == shared_before
+
+
+# ── A new task nobody chose a place for is its user's own ───────────────────────
+
+
+def test_a_new_task_of_one_who_pinned_nothing_goes_to_their_private_list(bob, wiki):
+    """With users, where no list is in view and nothing is pinned, a new task
+    goes into the user's private list "private", which the first task into
+    it makes: a private task can be shared later, a shared one never made
+    private. No list stays a choice of its own."""
+    assert not (wiki / "private/bob/_tasks/lists.json").exists()
+    # c t (the page's body) and a task app's + New start in it, and it is a
+    # choice of the List field already, a private one.
+    body = bob.get("/page/plans", headers=HOST).get_data(as_text=True)
+    assert 'data-tasks-list="private"' in body
+    app = bob.get("/tasks", headers=HOST).get_data(as_text=True)
+    assert 'data-default-list="private"' in app
+    choices = json.loads(re.search(r'data-lists="([^"]*)"', app).group(1).replace("&#34;", '"'))
+    assert {"ref": "private", "private": True} in choices
+    assert not (wiki / "private/bob/_tasks/lists.json").exists()      # looking makes nothing
+    # The first task into it makes the list, in the task's commit.
+    made = bob.post("/api/tasks", json={"title": "Call the bank", "list": "private"}, headers=HOST)
+    assert made.status_code == 201 and made.get_json()["private"] is True and made.get_json()["list"] == "private"
+    assert '{"name": "private"}' in (wiki / "private/bob/_tasks/lists.json").read_text()
+    assert "Call the bank" in (wiki / "private/bob/_tasks/tasks.json").read_text()
+    assert "Call the bank" not in (wiki / "_tasks/tasks.json").read_text()
+    changed = git(wiki, "show", "--name-only", "--format=", "HEAD").split()
+    assert {"private/bob/_tasks/lists.json", "private/bob/_tasks/tasks.json"} <= set(changed)
+    # An assistant's create_task without a list goes there too; '' says none.
+    text = mcp(bob, "create_task", title="Renew the passport")
+    assert "Renew the passport" in (wiki / "private/bob/_tasks/tasks.json").read_text(), text
+    mcp(bob, "create_task", title="Water the plants", list="")
+    assert "Water the plants" in (wiki / "_tasks/tasks.json").read_text()
+    # Nobody else sees them; a task with no list given to the API is in none, as before.
+    sign_in(bob, "alice")
+    titles = [t["title"] for t in bob.get("/api/tasks", headers=HOST).get_json()]
+    assert "Call the bank" not in titles and "Renew the passport" not in titles and "Water the plants" in titles
+    # Her first pinned list comes before the fallback.
+    assert 'data-tasks-list="secretlist"' in bob.get("/page/plans", headers=HOST).get_data(as_text=True)
+
+
+def test_that_private_list_counts_as_pinned_while_nothing_else_is(bob, wiki):
+    """What one captures is in their My tasks: the list "private" a first
+    task made is pinned for its user while they pinned nothing else, and
+    can't be unpinned then."""
+    assert "data-init-lists" not in bob.get("/tasks?mine=1", headers=HOST).get_data(as_text=True)
+    bob.post("/api/tasks", json={"title": "Call the bank", "list": "private"}, headers=HOST)
+    mine = bob.get("/tasks?mine=1", headers=HOST).get_data(as_text=True)
+    assert 'data-init-lists="private"' in mine
+    assert "list-unpin-btn" not in bob.get("/tasks?list=private", headers=HOST).get_data(as_text=True)
+    assert bob.post("/tasks/pin-list", data={"list": "private", "pin": "0"}, headers=HOST).status_code == 400
+    assert 'data-init-lists="private"' in bob.get("/tasks?mine=1", headers=HOST).get_data(as_text=True)
+    # Beside another pin it is an ordinary one.
+    assert bob.post("/tasks/new-list", data={"name": "errands"}, headers=HOST).status_code == 302
+    assert 'data-init-lists="private|errands"' in bob.get("/tasks?mine=1", headers=HOST).get_data(as_text=True)
+    assert "list-unpin-btn" in bob.get("/tasks?list=private", headers=HOST).get_data(as_text=True)
+    assert bob.post("/tasks/pin-list", data={"list": "private", "pin": "0"}, headers=HOST).status_code == 302
+    assert 'data-init-lists="errands"' in bob.get("/tasks?mine=1", headers=HOST).get_data(as_text=True)
+
+
+def test_an_assistants_task_for_someone_is_not_in_a_private_list(bob, wiki):
+    """create_task without a list goes into the user's default list, but not
+    with an assignee when that list is private: a task given to someone is
+    shared work, so it is in no list. So for the list of one who pinned
+    nothing, and for a private list pinned first."""
+    text = mcp(bob, "create_task", title="Check the invoice", assignee="alice")
+    assert "Check the invoice" in (wiki / "_tasks/tasks.json").read_text(), text
+    assert not (wiki / "private/bob/_tasks/lists.json").exists()
+    text = mcp(bob, "create_task", title="Sign the form", assignee="alice", token="alice-token")
+    assert "Sign the form" in (wiki / "_tasks/tasks.json").read_text(), text
+    shared = {t["title"]: t for t in json.loads((wiki / "_tasks/tasks.json").read_text())}
+    assert "list" not in shared["Sign the form"] and shared["Sign the form"]["assignee"] == "alice"
+    # Without an assignee it is in her first pinned list, private.
+    mcp(bob, "create_task", title="Wrap the gift", token="alice-token")
+    assert "Wrap the gift" in (wiki / "private/alice/_tasks/tasks.json").read_text()
+
+
+def test_no_fallback_without_users(client, wiki_dir):
+    body = client.get("/page/index", headers=HOST).get_data(as_text=True)
+    assert "data-tasks-list=" not in body
+    assert 'data-default-list=""' in client.get("/tasks", headers=HOST).get_data(as_text=True)
