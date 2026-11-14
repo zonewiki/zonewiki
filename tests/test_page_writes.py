@@ -551,6 +551,60 @@ def test_rename_tag_dialog_comes_back_offering_the_merge(client, shop):
     assert 'name="merge"' in page and "already in use" in page and 'value="weekly"' in page
 
 
+# ── A new list (the Tasks page's ⋯ menu) ─────────────────────────
+
+def new_list(client, name, **more):
+    """The list's URL when made, None when the dialog comes back with a refusal."""
+    resp = client.post("/tasks/new-list", data={"name": name, **more}, headers=HOST)
+    assert resp.status_code == 302
+    return None if "newlist_error" in resp.headers["Location"] else resp.headers["Location"]
+
+
+def test_new_list_makes_a_page_that_declares_it(client, wiki):
+    before = git(wiki, "rev-parse", "HEAD").strip()
+    assert new_list(client, " #Shop  Runs ") == "/tasks?list=shop-runs"
+    assert (wiki / "lists/shop-runs.md").read_text() == "# Shop  Runs\n\n[[tasks: list=shop-runs]]\n"
+    assert git(wiki, "log", "--format=%s", f"{before}..HEAD").splitlines() == ["Create lists/shop-runs"]
+    page = client.get("/tasks?list=shop-runs", headers=HOST).get_data(as_text=True)
+    assert 'data-place="list:shop-runs"' in page                     # an entry in the list switcher
+    assert "No page declares" not in page
+    # A task made there is in the list.
+    assert 'data-init-list="shop-runs"' in page
+
+
+def test_new_list_of_a_tag_tasks_carry_shows_them(client, shop):
+    assert new_list(client, "weekly") == "/tasks?list=weekly"        # a tag of Milk's, no list yet
+    assert (shop / "lists/weekly.md").exists()
+    assert tasks_file(shop)[0]["tags"] == ["shop", "weekly"]         # the tasks stay as they are
+
+
+def test_new_list_refuses_a_list_there_is_and_no_name(client, shop):
+    head = git(shop, "rev-parse", "HEAD")
+    resp = client.post("/tasks/new-list", data={"name": "Shop"}, headers=HOST)
+    assert "newlist_error" in resp.headers["Location"]
+    page = client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True)
+    assert 'id="list-new-dialog" class="modal" data-open' in page    # the dialog again, saying why
+    assert "There is a list #shop already" in page and 'value="Shop"' in page
+    for name in ("", "  ", "#", "a,b", "x=y", "[x]"):
+        assert new_list(client, name) is None, name
+    assert git(shop, "rev-parse", "HEAD") == head and not (shop / "lists").exists()
+
+
+def test_new_list_refuses_a_page_that_is_there(client, wiki):
+    commit(wiki, "lists/shop", "# Shopping notes\n")
+    assert new_list(client, "shop") is None
+    assert (wiki / "lists/shop.md").read_text() == "# Shopping notes\n"
+    # Without users there is no private folder to put one in.
+    assert new_list(client, "mine", private="1") is None
+
+
+def test_the_tasks_page_has_the_menu_with_new_list(client, shop):
+    for url in ("/tasks", "/tasks?list=shop", "/tasks?list=nolist"):
+        page = client.get(url, headers=HOST).get_data(as_text=True)
+        assert 'class="btn page-menu-btn"' in page and 'data-action="new-list"' in page, url
+    assert 'id="list-new-private"' not in page                      # no users: no Private box
+
+
 def test_the_rename_button_is_a_lists_alone(client, shop):
     assert "list-rename-btn" in client.get("/tasks?list=shop", headers=HOST).get_data(as_text=True)
     assert "list-rename-btn" not in client.get("/tasks", headers=HOST).get_data(as_text=True)

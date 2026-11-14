@@ -19,6 +19,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode"
+	"unicode/utf8"
+	"zonewiki/internal/mdtext"
 	"zonewiki/internal/taskfiles"
 	"zonewiki/internal/taskmodel"
 )
@@ -173,6 +176,48 @@ func createPageOp(user, slug, content, suffix string) error {
 	}
 	added(int64(len(content)))
 	return notCommitted(gitCommit(user, "Create "+slug+suffix, path))
+}
+
+// listsFolder: where New list… puts a list's page (lists/<name>, or in the
+// user's private folder private/<user>/lists/<name>).
+const listsFolder = "lists"
+
+// newListOp makes a task list: a page of its own, lists/<name> (private: in
+// user's private folder, so only they see the list), titled by the name and
+// holding [[tasks: list=<name>]], which declares it. A tag tasks carry
+// already becomes a list this way; a name that is a list user sees is
+// refused, and so is one whose page is there already. Returns the list's
+// name as the embed has it and the page's slug.
+func newListOp(user, name string, private bool, suffix string) (list, slug string, err error) {
+	if settings().isViewer(user) {
+		return "", "", refuseAs(refusedReadOnly, readOnlyMsg)
+	}
+	name = strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(name), "#"))
+	list = cleanList(name)
+	page := mdtext.ToSlug(strings.ReplaceAll(list, "/", "-"))
+	switch {
+	case list == "" || page == "":
+		return "", "", refuse("A list needs a name")
+	case strings.ContainsAny(list, "[],|=\"\n"):
+		return "", "", refuse(strconv.Quote(list) + ": a list's name can't contain [ ] , | = or \"")
+	}
+	if _, ok := taskLists(user)[list]; ok {
+		return "", "", refuseAs(refusedExists, "There is a list #"+list+" already")
+	}
+	folder := listsFolder
+	if private {
+		if folder = privateFolder(user); folder == "" {
+			return "", "", refuse("A private list needs users: this wiki has none")
+		}
+		folder += "/" + listsFolder
+	}
+	slug = folder + "/" + page
+	first, size := utf8.DecodeRuneInString(name)
+	title := string(unicode.ToUpper(first)) + name[size:]
+	if err := createPageOp(user, slug, "# "+title+"\n\n[[tasks: list="+list+"]]\n", suffix); err != nil {
+		return "", "", err
+	}
+	return list, slug, nil
 }
 
 // writeDraft writes the editor's text to the page (current: what it holds,

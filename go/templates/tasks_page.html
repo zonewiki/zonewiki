@@ -2,7 +2,8 @@
     the page that declares it (home; a pinned list as its pinned embed shows it). The
     list switcher first, above the heading: the places (taskPlaces), each
     with its counts (js/chrome.js refreshes them), pinned lists with a pin,
-    the current one aria-current. ?pinned=1: the pinned lists as one, named under
+    the current one aria-current. Beside the heading the ⋯ menu: New list…,
+    and a list's Rename…. ?pinned=1: the pinned lists as one, named under
     the heading. A list's Backlinks (the pages that embed it; Pinned: its lists') as on a page
     view: at the end, on big screens in the right column. */ -}}
 {{define "body"}}
@@ -30,10 +31,21 @@
 {{- if .Private}}<span class="tasks-place-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="tasks-place-label">{{.Label}}</span>{{template "module_counts" .Counts}}</a>
 {{- end}}</nav>{{end}}
 <header class="page-header"><h1>{{.Heading}}</h1>
-{{- if .ListName}}<div class="page-header-actions"><button type="button" class="btn" id="list-rename-btn">Rename…</button></div>{{end}}</header>
-{{- /* Rename…: the list's tag, on its tasks and pages (js/pagemenu.js opens it). */}}
+{{- /* The ⋯ menu (js/pagemenu.js, as a page's): New list…, and on a list its Rename…. */}}
+{{- if .Menu}}<div class="page-header-actions"><button type="button" class="btn page-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="page-menu" title="More: new list{{if .ListName}}, rename{{end}}" aria-label="More actions">⋯</button></div>{{end}}</header>
+{{- if .Menu}}
+<div class="page-menu-backdrop" hidden></div><div class="page-menu" id="page-menu" role="menu" aria-label="Task list actions" hidden>
+<button type="button" role="menuitem" data-action="new-list" id="list-new-btn">New list…</button>
+{{- if .ListName}}<button type="button" role="menuitem" data-action="rename-list" id="list-rename-btn">Rename…</button>{{end -}}
+</div>
+{{- /* New list…: a page of its own that declares the list (POST /tasks/new-list). */}}
+<dialog id="list-new-dialog" class="modal"{{if .NewListError}} data-open{{end}}><p class="modal-label">New list</p><p class="modal-desc">A list is a place for tasks, with an entry of its own in the row above them. It gets a page, <code id="list-new-slug" data-private="{{.PrivateFolder}}">lists/…</code>, which holds its settings.</p><form method="post" action="/tasks/new-list"><input type="text" name="name" id="list-new-input" value="{{.NewListName}}" placeholder="Its name, e.g. shop" aria-label="The list's name" autocomplete="off" spellcheck="false" required>
+{{- if .PrivateFolder}}<label class="promote-check" title="Its page goes in your private folder: the list and the tasks made in it are yours alone"><input type="checkbox" name="private" id="list-new-private" value="1"> Private: only you see it</label>{{end}}
+{{- template "error" (dict "message" .NewListError)}}<div class="modal-actions"><button type="submit" class="btn btn-primary" id="list-new-submit">Create</button><button type="button" class="btn" id="list-new-cancel">Cancel</button></div></form></dialog>
+{{- /* Rename…: the list's tag, on its tasks and pages. */}}
 {{- if .ListName}}
 <dialog id="list-rename-dialog" class="modal"{{if .RenameError}} data-open{{end}}><p class="modal-label">Rename list #{{.ListName}}</p><p class="modal-desc">Renames the tag on all its tasks, done ones too, and in the embeds and links on pages.</p><form method="post" action="/tasks/rename"><input type="hidden" name="tag" value="{{.ListName}}">{{if .RenameMerge}}<input type="hidden" name="merge" value="1">{{end}}<input type="text" name="new_name" id="list-rename-input" value="{{.RenameName}}" aria-label="New name for #{{.ListName}}" autocomplete="off" spellcheck="false" required>{{template "error" (dict "message" .RenameError)}}<div class="modal-actions"><button type="submit" class="btn btn-primary" id="list-rename-submit">{{if .RenameMerge}}Merge{{else}}Rename{{end}}</button><button type="button" class="btn" id="list-rename-cancel">Cancel</button></div></form></dialog>
+{{- end}}
 {{- end}}
 <article class="page-content">
 {{- /* A list shows the list only: the pages that embed it are its Backlinks. */}}

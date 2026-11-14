@@ -55,6 +55,9 @@ function promotedSlug(folder, name, date) {
   });
 }());
 
+// /tasks: what its ⋯ menu opens (set below, where the dialogs are wired).
+let openNewList = null, openListRename = null;
+
 // ── Page ⋯ menu ───────────────────────────────────────────────────────────────
 // Present, History, Rename…, Delete… on a page view. One menu (#page-menu,
 // rendered hidden) for the header's ⋯ button: a popover under it, a bottom sheet on phones (the tasks'
@@ -113,6 +116,8 @@ function promotedSlug(folder, name, date) {
     else if (item.dataset.action === 'promote') openPromote();
     else if (item.dataset.action === 'append') openAppend();
     else if (item.dataset.action === 'print') printPage();
+    else if (item.dataset.action === 'new-list') openNewList?.();
+    else if (item.dataset.action === 'rename-list') openListRename?.();
   });
 
   // Move to wiki (notes): the slug the page will get, as the server
@@ -214,6 +219,39 @@ function promotedSlug(folder, name, date) {
   }
 }());
 
+// /tasks: New list… (its ⋯ menu; POST /tasks/new-list) asks for a name and
+// says which page the list gets, as the server names it (newListOp). A
+// refusal comes back with the error in the dialog.
+(function () {
+  const dialog = document.getElementById('list-new-dialog');
+  if (!dialog) return;
+  const input = document.getElementById('list-new-input');
+  const priv = document.getElementById('list-new-private');
+  const slug = document.getElementById('list-new-slug');
+  const update = () => {
+    // cleanList, then the page's name (mdtext.ToSlug).
+    const list = input.value.trim().replace(/^#+/, '').trim().toLowerCase().replace(/\s+/g, '-').replace(/^-+|-+$/g, '');
+    const folder = priv?.checked ? `${slug.dataset.private}/lists/` : 'lists/';
+    slug.textContent = folder + (toSlug(list.replace(/\//g, '-')) || '…');
+  };
+  input.addEventListener('input', update);
+  priv?.addEventListener('change', update);
+  openNewList = () => {
+    dialog.showModal();
+    update();
+    input.focus();
+    input.select();
+  };
+  document.getElementById('list-new-cancel').addEventListener('click', () => dialog.close());
+  closeOnBackdropClick(dialog);
+  if (dialog.hasAttribute('data-open')) {
+    openNewList();
+    const url = new URL(location.href);
+    for (const name of ['newlist_error', 'newlist_name']) url.searchParams.delete(name);
+    history.replaceState(null, '', url);
+  }
+}());
+
 // /tasks?list=<name>: Rename…, the list's tag everywhere (POST /tasks/rename).
 // A refusal comes back with the error in the dialog; a name in use, offering
 // to merge, until the name is edited.
@@ -226,7 +264,7 @@ function promotedSlug(folder, name, date) {
     input.focus();
     input.select();
   };
-  document.getElementById('list-rename-btn').addEventListener('click', open);
+  openListRename = open;
   document.getElementById('list-rename-cancel').addEventListener('click', () => dialog.close());
   closeOnBackdropClick(dialog);
   const merge = dialog.querySelector('input[name="merge"]');

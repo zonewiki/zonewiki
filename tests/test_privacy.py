@@ -634,6 +634,21 @@ def test_bobs_assistant_writes_quicknotes_in_his_folder(client, wiki):
     assert "private/bob/" not in mcp(client, "list_pages", token="alice-token", notes=True)
 
 
+def test_a_private_new_list_is_its_makers_alone(alice, client, wiki):
+    """New list… with Private: the page is in alice's folder, so bob has no
+    such list; a shared one by that name is his to make."""
+    resp = alice.post("/tasks/new-list", data={"name": "Gifts", "private": "1"}, headers=HOST)
+    assert resp.headers["Location"] == "/tasks?list=gifts"
+    assert (wiki / "private/alice/lists/gifts.md").read_text() == "# Gifts\n\n[[tasks: list=gifts]]\n"
+    page = alice.get("/tasks", headers=HOST).get_data(as_text=True)
+    assert 'data-place="list:gifts"' in page and 'id="list-new-private"' in page
+    assert alice.post("/tasks/new-list", data={"name": "gifts"}, headers=HOST).headers["Location"].startswith("/tasks?newlist_name=")
+    sign_in(client, "bob")
+    assert 'data-place="list:gifts"' not in client.get("/tasks", headers=HOST).get_data(as_text=True)
+    assert client.post("/tasks/new-list", data={"name": "gifts"}, headers=HOST).headers["Location"] == "/tasks?list=gifts"
+    assert (wiki / "lists/gifts.md").exists()
+
+
 # ── Writes ───────────────────────────────────────────────────────────────────
 
 WRITES = [
@@ -642,6 +657,9 @@ WRITES = [
     ("POST /new", "POST", "/new", {"data": {"slug": "private/alice/bobs"}}),
     ("POST /rename/{slug...}", "POST", f"/rename/{DIARY}", {"data": {"new_name": "stolen"}}),
     ("POST /tasks/rename", "POST", "/tasks/rename", {"data": {"tag": "secretlist", "new_name": "stolen"}}),
+    # New list…: a list named as alice's private one, and one aimed at her folder.
+    ("POST /tasks/new-list", "POST", "/tasks/new-list", {"data": {"name": "secretlist"}}),
+    ("POST /tasks/new-list", "POST", "/tasks/new-list", {"data": {"name": "../alice/x", "private": "1"}}),
     ("POST /tasks/rename", "POST", "/tasks/rename", {"data": {"tag": f"{QUERY}-{SECRET}", "new_name": "stolen"}}),
     ("POST /rename/{slug...}", "POST", "/rename/plans", {"data": {"new_name": "private/alice/plans"}}),
     ("POST /delete/{slug...}", "POST", f"/delete/{DIARY}", {}),

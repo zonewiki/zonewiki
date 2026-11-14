@@ -120,7 +120,7 @@ Done tasks go to a yearly archive. Beyond that:
   shown as a page shows it (checklists, tables, code, links), dated comments in
   Markdown too (a status line or several), a history of every date change, and undo for completing
   and deleting.
-- Separate lists declared on a page (`[[tasks: list=groceries keep=1]]`), with a switcher between your pinned lists, the other lists and all tasks.
+- Separate lists, made with New list… on the Tasks page or declared on a page (`[[tasks: list=groceries keep=1]]`), with a switcher between your pinned lists, the other lists and all tasks.
 - Your own task list on a page of yours, which the Tasks module then opens, with
   an optional limit on how much is in Focus:
   `[[tasks: view=focus limit=8 pin=1]]`.

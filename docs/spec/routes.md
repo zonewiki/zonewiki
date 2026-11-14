@@ -65,6 +65,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 | GET    | `/notes`                | Auto-generated index of all notes, newest first, with a filter box (`?q=`) that searches notes only |
 | POST   | `/rename/<slug>`      | Rename a page: moves the file, redirects to new slug |
 | POST   | `/tasks/rename`       | Rename a list or task tag (fields `tag`, `new_name`, `merge`; the Rename… dialog of `/tasks?list=<name>`, Separate lists in `docs/spec/tasks.md`): redirects to the new name's list; a refusal back to the dialog (`?list=…&rename_name=…&rename_error=…`, plus `&rename_merge=1` when the name is in use) |
+| POST   | `/tasks/new-list`     | Make a task list (fields `name`, `private`; the New list… dialog of `/tasks`, Separate lists in `docs/spec/tasks.md`): a page `lists/<name>` that declares it, then redirects to `/tasks?list=<name>`; a name that won't do back to the dialog (`/tasks?newlist_name=…&newlist_error=…`) |
 | POST   | `/promote/<slug>`     | Move a note to the wiki (see Notes → Move to wiki): fields `folder`, `name`, `keep_date`, `link_from`; redirects to the new page, or back with `?promote_error=…` |
 | POST   | `/append/<slug>`      | Append a note to a page as a section (see Notes → Append to page): fields `page`, `heading`; redirects to the section, or back with `?append_error=…` |
 | POST   | `/delete/<slug>`      | Delete a page file; redirects to home. Forbidden for `index`. |

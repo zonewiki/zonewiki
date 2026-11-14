@@ -4112,6 +4112,43 @@ def test_plan_sorts_each_section_and_keeps_its_own_sort(page, wiki):
     expect(sel).to_have_value("created")
 
 
+def test_new_list_from_the_tasks_pages_menu(page, wiki):
+    # The Tasks page's ⋯ menu: New list… asks for a name, says which page the
+    # list gets, makes it and opens the list; a name taken comes back saying so.
+    page.request.post("/api/tasks", data={"title": "Milk", "tags": "shop"})
+    page.goto("/tasks?view=open")
+    page.locator(".page-header .page-menu-btn").click()
+    menu = page.locator("#page-menu")
+    expect(menu.get_by_role("menuitem")).to_have_text(["New list…"])   # no Rename… on All tasks
+    menu.get_by_role("menuitem", name="New list…").click()
+    dialog = page.locator("#list-new-dialog")
+    expect(dialog).to_be_visible()
+    name = page.locator("#list-new-input")
+    expect(name).to_be_focused()
+    name.fill("#Shop")
+    expect(page.locator("#list-new-slug")).to_have_text("lists/shop")
+    expect(page.locator("#list-new-private")).to_have_count(0)        # no users: nothing private
+    name.press("Enter")
+    page.wait_for_url("**/tasks?list=shop")
+    expect(page.locator(".page-header h1")).to_have_text("List: shop")
+    expect(page.locator('.tasks-place[data-place="list:shop"]')).to_have_attribute("aria-current", "page")
+    page.goto("/tasks?list=shop&view=open")
+    expect(page.locator(".task-item .task-title")).to_have_text(["Milk"])   # the tag's tasks are the list's
+    assert wiki.read("lists/shop") == "# Shop\n\n[[tasks: list=shop]]\n"
+    # On a list the menu has Rename… too; the same name again is refused in the dialog.
+    page.locator(".page-header .page-menu-btn").click()
+    expect(menu.get_by_role("menuitem")).to_have_text(["New list…", "Rename…"])
+    page.keyboard.press("Enter")                                      # the first item
+    name.fill("shop")
+    page.locator("#list-new-submit").click()
+    expect(dialog).to_be_visible()
+    expect(dialog.locator(".rename-error")).to_contain_text("There is a list #shop already")
+    expect(name).to_have_value("shop")
+    assert "newlist_error" not in page.url                            # gone from the address
+    page.locator("#list-new-cancel").click()
+    expect(dialog).to_be_hidden()
+
+
 def test_rename_list_dialog(page, wiki):
     """Rename… on a list: its name everywhere; a name in use offers the merge, until edited."""
     wiki.write("shop", "# Shop\n\n[[tasks: list=shop]]\n")
@@ -4120,6 +4157,7 @@ def test_rename_list_dialog(page, wiki):
     page.goto("/tasks?list=shop")
     dialog = page.locator("#list-rename-dialog")
     expect(dialog).to_be_hidden()
+    page.locator(".page-header .page-menu-btn").click()             # the page's ⋯ menu
     page.locator("#list-rename-btn").click()
     expect(dialog).to_be_visible()
     expect(page.locator("#list-rename-input")).to_have_value("shop")

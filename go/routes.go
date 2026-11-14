@@ -42,6 +42,7 @@ func pageRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/pages-list", apiPagesList)
 	mux.HandleFunc("GET /tasks", tasksPage)
 	mux.HandleFunc("POST /tasks/rename", writesPages(renameTagRoute))
+	mux.HandleFunc("POST /tasks/new-list", writesPages(newListRoute))
 	mux.HandleFunc("GET /api/search", apiSearch)
 	mux.HandleFunc("GET /search", searchPage)
 	mux.HandleFunc("POST /api/toggle-checkbox/{slug...}", writesPages(apiToggleCheckbox))
@@ -918,6 +919,8 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	page(w, rq, http.StatusOK, "tasks_page.html", title, shell{wide: sections != nil}, &tasksPageView{Heading: heading, ListName: list,
 		RenameName: firstNonEmpty(q.Get("rename_name"), list), RenameError: q.Get("rename_error"), RenameMerge: q.Get("rename_merge") != "",
+		Menu: !rq.sharing && !settings().isViewer(rq.user), PrivateFolder: privateFolder(rq.user),
+		NewListName: q.Get("newlist_name"), NewListError: q.Get("newlist_error"),
 		Home: home, Places: places, PinnedLists: pinnedLinks, TasksHTML: htmlOf(tasksHTML), LinkSections: sections,
 		BreadcrumbHTML: breadcrumb(rq, crumbs, key, true, title, chip)})
 }
@@ -948,16 +951,39 @@ func renameTagRoute(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/tasks?list="+url.QueryEscape(cleanList(name)), http.StatusFound)
 }
 
+// newListRoute: the New list… dialog of /tasks (its ⋯ menu). The new list
+// opens; a refusal that another name would mend goes back to the dialog with
+// the message.
+func newListRoute(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.PostFormValue("name"))
+	list, _, err := newListOp(userOf(r), name, r.PostFormValue("private") != "", "")
+	if err != nil {
+		if pe, ok := refusalOf(err); ok && (pe.kind == refusedInvalid || pe.kind == refusedExists) {
+			http.Redirect(w, r, "/tasks?newlist_name="+url.QueryEscape(name)+"&newlist_error="+url.QueryEscape(pe.msg), http.StatusFound)
+			return
+		}
+		pageFailed(w, r, err)
+		return
+	}
+	http.Redirect(w, r, "/tasks?list="+url.QueryEscape(list), http.StatusFound)
+}
+
 // tasksPageView: /tasks (tasks_page.html); Home: the page declaring the
 // list, nil for all tasks, the pinned lists or an undeclared list; Places: the
 // list switcher; PinnedLists: what the Pinned view shows; LinkSections: a
 // list's Backlinks, the Pinned view's those of its lists (with them the page
 // has a page view's columns); Rename…: its dialog back from a refusal.
+// Menu: the ⋯ menu (New list…, a list's Rename…), for who may change the
+// wiki; PrivateFolder: with users, where New list… puts a private one (""
+// none: no such box); NewList…: its dialog back from a refusal.
 type tasksPageView struct {
 	view
 	Heading, ListName         string
 	RenameName, RenameError   string
 	RenameMerge               bool
+	Menu                      bool
+	PrivateFolder             string
+	NewListName, NewListError string
 	Home                      *TasksHome
 	Places                    []TaskPlace
 	PinnedLists               []pinnedLink

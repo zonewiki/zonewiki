@@ -317,7 +317,7 @@ The line above Save says where the settings are written.
   It has no Pinned and no filter (the fields are hidden; `allSettingKeys`).
 
 **Not which list it shows**: `list=` isn't in this dialog (it is in the editor's, where the dialog writes the embed: `.Editor` in `task_settings_dialog`).
-Another name there would show another list and leave the tasks behind, which reads like a rename and isn't one; a list is renamed by **Rename…** on `/tasks?list=<name>`, and an embed is made a list by editing the page.
+Another name there would show another list and leave the tasks behind, which reads like a rename and isn't one; a list is renamed by **Rename…** in the ⋯ menu of `/tasks?list=<name>`, made by **New list…** there, and an embed is made a list by editing the page.
 
 **No ⋯ menu, so no settings**: the editor's preview, an old version, a page from the uncommitted list (only a page view renders its own file: `RenderOpts.EditSlug`), a tag no page declares (`/tasks?list=<tag>`), the headless app, a viewer, a page you may not change, sharing mode.
 
@@ -740,7 +740,18 @@ A tag no page declares stays a filter.
   It follows the Tags field and the Private box, so swapping `#task` for `#shop` there moves the new task to another list before it is saved.
   Hidden when editing a task and for several titles at once.
 
-- **Renaming a list or tag** (**Rename…** at the top right of `/tasks?list=<name>`, `#list-rename-dialog` in `templates/tasks_page.html`; the MCP tool `rename_task_tag`; `renameTagOp` in `go/pageops.go`): a list is a tag,
+- **The Tasks page's ⋯ menu** (`.page-menu-btn` beside the heading of `/tasks`, on every view of it; the page's ⋯ menu, `#page-menu`, with `js/pagemenu.js`): **New list…**, and on a list **Rename…** (below).
+  Not for a viewer, nor in sharing mode.
+- **New list…** (`#list-new-dialog` in `templates/tasks_page.html`; `POST /tasks/new-list`, `newListOp` in `go/pageops.go`): asks for the list's name and makes it, without editing a page.
+  A list is a tag a page declares, so Zone writes that page: `lists/<name>` (`lists/shop`), titled by the name as typed ("Shop") and holding `[[tasks: list=<name>]]`, in one commit (`Create lists/shop`); the dialog names the page while you type.
+  Then the list opens (`/tasks?list=<name>`), with its entry in the list switcher.
+  The page is the list's home: List settings… writes there, and you can move, rename or extend it like any page; deleting it (or the embed) takes the list out of the switcher, never its tasks.
+  With users the dialog has **Private: only you see it**, which puts the page in your private folder (`private/<you>/lists/<name>`): the list and the tasks made in it are yours alone (Private tasks in `docs/spec/users.md`).
+  The name is cleaned as an embed's is (`cleanList`: lowercase, a leading `#` dropped, spaces to `-`).
+  A tag tasks carry already can be made a list this way: its tasks show in it at once.
+  Refused, back in the dialog with the reason: no name, a name with `[ ] , | =` or `"`, a list you already see ("There is a list #shop already"), a page already at `lists/<name>`.
+  An assistant makes a list by writing such a page (`write_page`).
+- **Renaming a list or tag** (**Rename…** in the ⋯ menu of `/tasks?list=<name>`, `#list-rename-dialog` in `templates/tasks_page.html`; the MCP tool `rename_task_tag`; `renameTagOp` in `go/pageops.go`): a list is a tag,
   so this renames the tag,
   and it works the same for a plain tag no page declares (open `/tasks?list=<tag>`).
   In one commit it changes the tag on every task (open, closed, archived) and, on pages and in tasks' text, the `list=`, `tag=` and `new=` of `[[tasks: …]]` embeds and the `?list=` and `?tag=` of links to `/tasks`.

@@ -104,6 +104,8 @@ WRITES = [
     ("POST /api/upload", "POST", "/api/upload", {"data": lambda: {"file": (BytesIO(b"c"), "c.png"), "page": "plans"}}),
     ("POST /api/upload", "POST", "/api/upload", {"data": lambda: {"file": (BytesIO(b"c"), "c.png")}}),
     ("POST /tasks/rename", "POST", "/tasks/rename", {"data": {"tag": "work", "new_name": "job"}}),
+    ("POST /tasks/new-list", "POST", "/tasks/new-list", {"data": {"name": "carols"}}),
+    ("POST /tasks/new-list", "POST", "/tasks/new-list", {"data": {"name": "carols", "private": "1"}}),
     ("POST /api/tasks/settings", "POST", "/api/tasks/settings", {"json": {"all": True, "was": "", "set": {"view": "open"}}}),
     ("POST /api/tasks/settings", "POST", "/api/tasks/settings", {"json": {"page": "plans", "index": 0, "was": "", "set": {"view": "open"}}}),
     ("POST /api/tasks", "POST", "/api/tasks", {"json": {"title": "Carol's", "private": False}}),
