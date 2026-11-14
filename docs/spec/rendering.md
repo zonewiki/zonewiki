@@ -109,6 +109,7 @@ They share code by `import`, not through `window`:
 | `js/fold.js` | Folding a page view's sections (`foldAll`, `revealElement`) |
 | `js/present.js` | Presentation mode |
 | `js/admin.js` | The admin page's Remove dialog (Managing users in `users.md`) |
+| `js/copyline.js` | Lines to copy (`.copy-line`: Connect an assistant's address, token and commands): shows each one's Copy button and copies its text (`copyText`) |
 | `js/taskutil.js` | What `tasks.js`'s task apps use that holds no state of an app's own: date formatting and classes (`formatDate`, `shortDate`, `dueDateClass`, `urgencyClass`, `todayStr`), `DATES`/`LOCALE`, notices and the toast's place, `esc`, the tag autocomplete (`attachTagAc`) and `#` words at the caret, links in a title (`linkifyTitle`, `plainTitle`), comment stamps |
 | `js/tasktexts.js` | Task descriptions and comments rendered as pages are, for every task app on the page: the HTML the server made of each text (`POST /api/render-notes`), kept per text and fetched once (`renderTexts`, `renderedHtml`, `textsOf`) |
 | `tasks.js`, `tasks-core.js` | The task app (exports `initTaskApps`, `openTasksEdit`): `initTasksInstance` puts one together (its elements, the state its parts share, what the embed and the address say it shows, the list's own listeners) and starts its parts; and its pure logic (`TasksCore`, also run by the Node tests: dates, orders, the filter, what a tab shows, the Plan board's sections, the quick-add shorthand) |

@@ -1,11 +1,18 @@
 {{- /* /assistant: Connect an assistant (assistant.go, docs/spec/mcp.md).
     Whoever is signed in makes or revokes their MCP token. Plain forms: each
-    change is a POST; a new token is shown once, in the answer to the POST. */ -}}
+    change is a POST; a new token is shown once, in the answer to the POST.
+    A .copy-line is a line to copy: a click selects it, and its Copy button
+    (hidden without JavaScript, js/copyline.js) copies it. */ -}}
+{{define "copy"}}<button type="button" class="btn btn-sm copy-btn" hidden>Copy</button>{{end}}
 {{define "body"}}
 {{.BreadcrumbHTML}}
-<div class="sheet">
+<div class="sheet assistant">
 <h1>Connect an assistant</h1>
-<p>An AI assistant (any MCP client) can search, read and write this wiki and its tasks{{if .User}} as you, <strong>{{.User}}</strong>: it sees and changes what you do, no more{{end}}. It connects to <code>{{.URL}}</code>.{{if .Viewer}} You are a viewer: your assistant reads, and changes nothing.{{end}}</p>
+<p class="assistant-lead">An AI assistant (any MCP client) can search, read and write this wiki and its tasks{{if .User}} as you, <strong>{{.User}}</strong>: it sees and changes what you do, no more{{end}}.{{if .Viewer}} You are a viewer: your assistant reads, and changes nothing.{{end}}</p>
+<div class="assistant-address">
+  <span class="assistant-label" id="assistant-address-label">It connects to</span>
+  <div class="copy-line" role="group" aria-labelledby="assistant-address-label"><code>{{.URL}}</code>{{template "copy"}}</div>
+</div>
 {{- with .Done}}
 <p class="users-done" role="status">{{.}}</p>
 {{- end}}
@@ -13,21 +20,35 @@
 <p class="users-error" role="alert">{{.}}</p>
 {{- end}}
 {{- with .Token}}
-<div class="users-done assistant-token" role="status">
+<div class="assistant-token" role="status">
   <p><strong>{{if $.User}}Your new token{{else}}The wiki's new token{{end}}</strong>, shown only now: copy it into your assistant's settings. {{$.Shell.AppName}} keeps only its hash.</p>
-  <code class="users-link" id="assistant-token">{{.}}</code>
+  <div class="copy-line"><code id="assistant-token">{{.}}</code>{{template "copy"}}</div>
   <p>Claude Code, in a terminal:</p>
-  <code class="users-link">claude mcp add --transport http zone {{$.URL}} --header "Authorization: Bearer {{.}}"</code>
-  <p>Any other client: add an MCP server with the HTTP transport at <code>{{$.URL}}</code> and the header</p>
-  <code class="users-link">Authorization: Bearer {{.}}</code>
+  <div class="copy-line"><code>claude mcp add --transport http zone {{$.URL}} --header "Authorization: Bearer {{.}}"</code>{{template "copy"}}</div>
+  <p>Any other client: add an MCP server with the HTTP transport at the address above and the header</p>
+  <div class="copy-line"><code>Authorization: Bearer {{.}}</code>{{template "copy"}}</div>
 </div>
 {{- end}}
 {{- if .OAuth}}
 <h2>Sign in from the assistant</h2>
-<p>In Claude, ChatGPT or another assistant that takes a remote MCP server (a custom connector), add one with the address above. It opens this wiki in your browser, where you sign in and allow it: there is no token to copy.</p>
-<p>Claude Code, in a terminal, then <code>/mcp</code> in it to sign in:</p>
-<code class="users-link">claude mcp add --transport http zone {{.URL}}</code>
-<p class="users-help">An assistant that runs on its maker's servers (Claude's apps, ChatGPT) reaches only a wiki that is on the internet, over https. One on this computer (Claude Code) reaches any wiki this computer does.</p>
+<p>Give the assistant the address above. It opens this wiki in your browser, where you sign in and allow it: there is no token to copy.</p>
+<dl class="assistant-ways">
+  <div>
+    <dt>Claude, ChatGPT and other apps</dt>
+    <dd>
+      <p>Add a custom connector (a remote MCP server) with the address.</p>
+      <p class="users-help">An assistant that runs on its maker's servers reaches only a wiki that is on the internet, over https.</p>
+    </dd>
+  </div>
+  <div>
+    <dt>Claude Code</dt>
+    <dd>
+      <p>In a terminal, then <code>/mcp</code> in it to sign in:</p>
+      <div class="copy-line"><code>claude mcp add --transport http zone {{.URL}}</code>{{template "copy"}}</div>
+      <p class="users-help">An assistant on this computer reaches any wiki this computer does.</p>
+    </dd>
+  </div>
+</dl>
 <h2>Connections</h2>
 {{- if .Connections}}
 <table class="users-table assistant-connections">
@@ -43,31 +64,39 @@
 </table>
 <p class="users-help">An assistant whose connection is ended is refused from then on; it can ask again, and you allow it again.</p>
 {{- else}}
-<p>{{if .User}}No assistant is connected as you this way{{else}}No assistant is connected this way{{end}}.</p>
+<p class="assistant-none">{{if .User}}No assistant is connected as you this way{{else}}No assistant is connected this way{{end}}.</p>
 {{- end}}
 {{- end}}
 <h2>{{if .User}}Your token{{else}}The wiki's token{{end}}</h2>
 {{- if .OAuth}}
-<p class="users-help">For a client that can't sign in through a browser, or a script: a token it sends with every call.</p>
+<p>For a client that can't sign in through a browser, or a script: a token it sends with every call.</p>
 {{- end}}
-{{- if .Has}}
-<p>{{if .User}}You have a token{{else}}The wiki has a token{{end}}: an assistant that was given it can connect. {{.Shell.AppName}} can't show it again; lost, make a new one.</p>
-{{- else}}
-<p>{{if .User}}You have no token{{else}}The wiki has no token{{end}}: no assistant can connect{{if .User}} as you{{end}}.</p>
-{{- end}}
-<form method="post" action="/assistant/token" class="assistant-form">
-  {{- if .AskPassword}}
-  {{- with .User}}<input type="text" name="username" value="{{.}}" autocomplete="username" hidden>{{end}}
-  <input type="password" name="password" placeholder="{{if .User}}Your password{{else}}The wiki's password{{end}}" autocomplete="current-password" required aria-label="Password">
+<div class="assistant-rows">
+  <div class="assistant-row">
+    <div>
+      {{- if .Has}}
+      <p><span class="assistant-state assistant-state-on">Set</span> {{if .User}}You have a token{{else}}The wiki has a token{{end}}: an assistant that was given it can connect.</p>
+      <p class="users-help">{{.Shell.AppName}} can't show it again; lost, make a new one. A new token replaces the old one, which stops working: an assistant using it has to be given the new one.</p>
+      {{- else}}
+      <p><span class="assistant-state">None</span> {{if .User}}You have no token{{else}}The wiki has no token{{end}}: no assistant can connect{{if .User}} as you{{end}}{{if .OAuth}} with one{{end}}.</p>
+      {{- end}}
+    </div>
+    <form method="post" action="/assistant/token" class="assistant-form">
+      {{- if .AskPassword}}
+      {{- with .User}}<input type="text" name="username" value="{{.}}" autocomplete="username" hidden>{{end}}
+      <input type="password" name="password" placeholder="{{if .User}}Your password{{else}}The wiki's password{{end}}" autocomplete="current-password" required aria-label="Password">
+      {{- end}}
+      <button type="submit" class="btn btn-primary">{{if .Has}}Make a new token{{else}}Make a token{{end}}</button>
+    </form>
+  </div>
+  {{- if .Has}}
+  <div class="assistant-row">
+    <p class="users-help">Revoked, the token stops working: an assistant using it is refused from then on.</p>
+    <form method="post" action="/assistant/revoke" class="assistant-form">
+      <button type="submit" class="btn btn-danger">Revoke the token</button>
+    </form>
+  </div>
   {{- end}}
-  <button type="submit" class="btn btn-primary">{{if .Has}}Make a new token{{else}}Make a token{{end}}</button>
-</form>
-{{- if .Has}}
-<p class="users-help">A new token replaces the old one, which stops working: an assistant using it has to be given the new one.</p>
-<form method="post" action="/assistant/revoke" class="assistant-form">
-  <button type="submit" class="btn">Revoke the token</button>
-</form>
-<p class="users-help">Without a token no assistant can connect{{if .User}} as you{{end}}.</p>
-{{- end}}
+</div>
 </div>
 {{end}}

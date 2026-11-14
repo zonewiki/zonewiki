@@ -84,6 +84,14 @@ def test_the_menu_leads_to_connect_an_assistant(alice, wiki):
     resp = alice.request.post("/mcp", headers={"Authorization": f"Bearer {shown}"},
                               data={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
     assert resp.status == 200
+    # Each line to copy has a Copy button, which says what it did and goes back.
+    alice.context.grant_permissions(["clipboard-read", "clipboard-write"])
+    copy = alice.locator(".copy-line").filter(has=token).get_by_role("button")
+    expect(alice.locator(".copy-line .copy-btn:visible")).to_have_count(5)   # the address, the token, its command and header, the line to sign in
+    copy.click()
+    expect(copy).to_have_text("Copied ✓")
+    assert alice.evaluate("navigator.clipboard.readText()") == shown
+    expect(copy).to_have_text("Copy")
     # The page fits a phone: nothing scrolls sideways, the long lines wrap.
     alice.set_viewport_size({"width": 375, "height": 700})
     assert alice.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")

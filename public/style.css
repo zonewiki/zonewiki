@@ -1542,11 +1542,55 @@ kbd {
 .oauth-answers .btn { flex: 1; }
 .assistant-connections form { margin: 0; }
 
-/* Connect an assistant (assistant.html): the token and what to give a client. */
-.assistant-token p { margin: .3rem 0; }
-.assistant-token .users-link { margin: .3rem 0 .8rem; }
-.assistant-form { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin: .5rem 0; }
-.assistant-form input { font: inherit; font-size: .9rem; padding: .3rem .5rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); min-width: 12rem; }
+/* Connect an assistant (assistant.html). Its text has a page's rhythm:
+   paragraphs apart, a section's heading well clear of the one before. */
+.assistant p { margin: .6rem 0; }
+.assistant h1 { margin-bottom: .75rem; }
+.assistant h2 { margin: 2.25rem 0 .5rem; padding-top: 1.5rem; border-top: 1px solid var(--border); }
+.assistant .users-help { margin: .35rem 0; line-height: 1.5; }
+.assistant :is(.users-done, .users-error) { margin: 1rem 0; }
+.assistant-lead { font-size: 1.05rem; }
+/* The address a client is given: the one thing every way in needs. */
+.assistant-address { margin: 1rem 0 0; }
+.assistant-label { display: block; font-size: .8rem; font-weight: 500; color: var(--muted); margin-bottom: .25rem; }
+/* A line to copy: a click selects it, its button copies it (js/copyline.js). */
+.copy-line { display: flex; align-items: flex-start; gap: .5rem; padding: .5rem .5rem .5rem .75rem; background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; }
+.copy-line code { flex: 1; min-width: 0; padding: .1rem 0; background: none; font-size: .85rem; line-height: 1.5; overflow-wrap: anywhere; user-select: all; }
+.copy-line .copy-btn { flex: none; padding: .3rem .55rem; }
+/* A token just made, shown once: set off in the accent, its lines on the page's colour. */
+.assistant-token { margin: 1.25rem 0; padding: .6rem 1rem 1rem; border: 1px solid var(--accent); border-radius: 10px; background: color-mix(in srgb, var(--accent) 7%, var(--bg)); }
+.assistant-token p { margin: .7rem 0 .3rem; }
+.assistant-token .copy-line { background: var(--bg); }
+/* The ways to sign in: who, then how. */
+.assistant-ways { display: grid; gap: .75rem; margin: 1rem 0; }
+.assistant-ways > div { padding: .75rem 1rem; border: 1px solid var(--border); border-radius: 10px; }
+.assistant-ways dt { font-weight: 600; }
+.assistant-ways dd p:first-child { margin-top: .2rem; }
+.assistant-ways dd > :last-child { margin-bottom: 0; }
+.assistant-ways .copy-line { margin: .5rem 0; }
+.assistant-none { color: var(--muted); }
+.assistant-connections td:first-child { font-weight: 500; }
+.assistant-connections :is(th, td):last-child { text-align: right; }
+.assistant-connections td { vertical-align: middle; }
+/* The token: what there is and what to do about it, a row each, the action on the right. */
+.assistant-rows { margin: 1rem 0 0; border: 1px solid var(--border); border-radius: 10px; }
+.assistant-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1.5rem; padding: .75rem 1rem; }
+.assistant-row + .assistant-row { border-top: 1px solid var(--border); }
+.assistant-row > :first-child { flex: 1 1 16rem; margin: 0; }
+.assistant-row p { margin: 0; }
+.assistant-row p + p { margin-top: .3rem; }
+.assistant-state { display: inline-block; margin-right: .25rem; padding: 0 .45rem; border: 1px solid var(--border); border-radius: 999px; font-size: .75rem; font-weight: 500; color: var(--muted); vertical-align: .08em; }
+.assistant-state-on { border-color: transparent; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.assistant-form { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin: 0; }
+.assistant-form input { font: inherit; font-size: .9rem; padding: .3rem .5rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); min-width: 11rem; }
+@media (max-width: 640px) {
+  /* A connection's dates say what they are, the table's head being gone. */
+  .assistant-connections td:nth-child(2)::before { content: "Answers to "; color: var(--muted); }
+  .assistant-connections td:nth-child(3)::before { content: "Since "; color: var(--muted); }
+  .assistant-connections td:nth-child(4)::before { content: "Last used "; color: var(--muted); }
+  .assistant-connections :is(th, td):last-child { text-align: left; }
+  .assistant-form, .assistant-form input { width: 100%; }
+}
 .users-invite { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin: .5rem 0 0; }
 .users-invite input { font: inherit; font-size: .9rem; padding: .3rem .5rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); min-width: 12rem; }
 .users-table select, .users-invite select { font: inherit; font-size: .85rem; padding: .2rem; }

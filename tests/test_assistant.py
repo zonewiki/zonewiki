@@ -83,6 +83,9 @@ class TestWithUsers:
         assert resp.headers["Cache-Control"] == "no-store"
         body = resp.data.decode()
         assert f'claude mcp add --transport http zone http://localhost:5000/mcp --header "Authorization: Bearer {token}"' in body
+        # Each line to copy comes with a Copy button, hidden until a script shows it.
+        lines = re.findall(r'<div class="copy-line"[^>]*><code[^>]*>([^<]*)</code>(<button type="button" class="btn btn-sm copy-btn" hidden>)?', body)
+        assert [text for text, _ in lines][:2] == ["http://localhost:5000/mcp", token] and all(button for _, button in lines)
         # Kept as its hash, in bob's section; the assistant acts as bob.
         assert kept(token) in section(wiki_dir, "bob") and token not in config(wiki_dir)
         status, text = mcp(bob, token, "write_page", note=True, slug="From the assistant", content="Hello\n")

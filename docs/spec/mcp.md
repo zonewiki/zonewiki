@@ -33,6 +33,8 @@ A viewer may make one too: their assistant reads, and its writing tools are refu
 
 - **The page** says where a client connects (`/mcp` on `base-url`, else on the address the request came in on: `siteURL`), whether there is a token, and has two plain forms.
   It works without JavaScript.
+  What is to be copied (the address at the top, a new token, the commands) is a line of its own with a **Copy** button (`.copy-line`, `js/copyline.js`; without JavaScript there is no button, and a click selects the line).
+  The token's two actions are a row each: what there is ("Set" or "None") with Make a token, and Revoke.
 - **Make a token** (`POST /assistant/token`): a new token (32 random bytes, as the commands make), kept as its hash in the settings file the way the admin page writes it (`changeSettings`, so every rule of the commands holds, and the log says "alice's MCP token (by alice)").
   It replaces the one before, which stops working.
   The answer to the POST shows it **once** (`Cache-Control: no-store`), with the line for Claude Code (`claude mcp add --transport http zone <url> --header "Authorization: Bearer <token>"`) and the header for any other client; a click selects each.
@@ -88,7 +90,7 @@ Zone is its own authorization server, on the same address, as the MCP authorizat
 - **What ends a connection**: End on Connect an assistant; its refresh token expiring or being used twice; its user being removed (the Users tab, `zonewiki user remove`); its user setting a new password by a **reset link** (they may have lost the account to someone; the welcome page says so).
   A disabled user's are refused while they are disabled, and work again after.
   An ordinary new password (Change password, `zonewiki user passwd`) leaves them, as it leaves a static token.
-- **Not yet**: Client ID Metadata Documents, CORS for clients that run in a browser, a read-only connection for an editor, `/oauth/revoke` (a client's "disconnect" doesn't end the connection in Zone: End does). Tested against real clients so far: none (`docs/plans/mcp-oauth.md`, phase 3).
+- **Not yet**: Client ID Metadata Documents, CORS for clients that run in a browser, a read-only connection for an editor, `/oauth/revoke` (a client's "disconnect" doesn't end the connection in Zone: End does). Tested against real clients so far: Claude (`docs/plans/mcp-oauth.md`, phase 3).
 - Tests: `tests/test_oauth.py` plays the client over HTTP; `tests/e2e/test_oauth.py` holds that Allow and Deny get the browser back to the client under the page policy.
 
 **The wiki's guide**: the page `wiki-guide` (`guideSlug`) holds the user's conventions for keeping the wiki: where things go, tags, page layouts, what stays private.

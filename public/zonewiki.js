@@ -14,6 +14,7 @@ import './js/page.js';        // the page view: checkboxes, task chips, tables, 
 import './js/fold.js';        // folding sections
 import './js/present.js';     // presentation mode
 import './js/admin.js';       // the admin page: the Remove dialog
+import './js/copyline.js';    // lines to copy: their Copy buttons
 import './tasks.js';           // tasks apps on the page
 
 // Every module above has wired up what it found on the page: from here on
