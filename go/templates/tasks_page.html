@@ -25,11 +25,11 @@
 {{define "tasks_main"}}
 {{- /* The switcher, the heading and the list on one sheet (style.css, The sheet). */}}
 <div class="sheet">
-{{- with .Places}}<nav class="tasks-places" aria-label="Task lists">
+{{- with .Places}}<nav class="tasks-places" aria-label="Task lists"><div class="tasks-places-group">
 {{- range .}}<a href="{{.Href}}" class="tasks-place" data-place="{{.Key}}" title="{{.Title}}{{if .Private}} (only you see it){{end}}"{{if .Current}} aria-current="page"{{end}}>
 {{- if .Pinned}}<span class="tasks-place-pin" aria-hidden="true">{{template "icon_pin"}}</span>{{end}}
 {{- if .Private}}<span class="tasks-place-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="tasks-place-label">{{.Label}}</span>{{template "module_counts" .Counts}}</a>
-{{- end}}</nav>{{end}}
+{{- end}}</div></nav>{{end}}
 <header class="page-header"><h1>{{.Heading}}</h1>
 {{- /* The ⋯ menu (js/pagemenu.js, as a page's): New list…, and on a list its Rename…. */}}
 {{- if .Menu}}<div class="page-header-actions"><button type="button" class="btn page-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="page-menu" title="More: new list{{if .ListName}}, rename{{end}}" aria-label="More actions">⋯</button></div>{{end}}</header>

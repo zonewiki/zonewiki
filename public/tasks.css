@@ -41,13 +41,20 @@
    the heading, a row of pills, one per list (Pinned and the pinned lists
    first, the others A–Z, All), the current one shaded as in the module switcher;
    pinned lists with a pin, private ones with a lock. Wraps on a narrow screen. */
-/* Separate white pills in the module switcher's type (.8125rem) and its
-   group's height (the 1.5rem pill, the group's padding and border). */
-.tasks-places { display: flex; flex-wrap: wrap; gap: .35rem; margin: 0 0 1.1rem; }
+/* It looks as the module switcher at the top of the page does (style.css,
+   .module-group): one white capsule with a border holding the pills, which
+   have no border of their own, in its type (.8125rem) and height (1.5rem);
+   the current one shaded. With more lists than fit a line the capsule wraps,
+   so its corners are a line's half height, not a full round. */
+.tasks-places { display: flex; margin: 0 0 1.1rem; }
+.tasks-places-group {
+  display: inline-flex; flex-wrap: wrap; align-items: center; row-gap: 2px; min-width: 0; padding: 2px;
+  border: 1px solid var(--border); border-radius: calc(.75rem + 3px); background: var(--surface);
+}
 .tasks-places .tasks-place {
-  display: inline-flex; align-items: center; gap: .3rem;
-  height: calc(1.5rem + 6px); padding: 0 .75rem; border: 1px solid var(--border); border-radius: 999px;
-  background: var(--surface); color: var(--muted); text-decoration: none; font-size: .8125rem; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: .4rem;
+  height: 1.5rem; padding: 0 .65rem; border-radius: 999px;
+  color: var(--muted); text-decoration: none; font-size: .8125rem; white-space: nowrap;
   transition: background .15s, color .15s;
 }
 .tasks-places .tasks-place .tasks-place-label { text-box: trim-both cap alphabetic; }
@@ -57,7 +64,11 @@
 }
 .tasks-place .module-counts { margin-left: 0; }
 .tasks-place-lock, .tasks-place-pin { display: inline-flex; }
-@media (pointer: coarse) { .tasks-places .tasks-place { height: 2.25rem; } }
+/* A finger: taller pills, the capsule's corners with them. */
+@media (pointer: coarse) {
+  .tasks-places .tasks-place { height: 2.25rem; padding: 0 .8rem; }
+  .tasks-places-group { border-radius: calc(1.125rem + 3px); }
+}
 
 /* Single compact header band: tabs on the left, filters + sort + New on the
    right. Wraps to a second line only when the viewport can't fit both. */

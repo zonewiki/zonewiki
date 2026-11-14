@@ -709,7 +709,7 @@ A tag no page declares stays a filter.
 
 - **The list switcher** (`.tasks-places` in `templates/tasks_page.html`, `taskPlaces` in `go/tasksembed.go`): one Tasks link can't stand for several lists,
   so `/tasks` opens with a row of pills above its heading,
-  on the page's white sheet with it (pills in the module switcher's type and height),
+  on the page's white sheet with it, looking as the module switcher at the top of the page does (`.tasks-places-group`: one white capsule with a border, the pills inside it without one, in its type and height, the current one shaded),
   one per list,
   **named by the list, never by a page that embeds it**: with several pinned lists (`pin=1`) first **Pinned**,
   all of them as **one task app** at `/tasks?pinned=1` (`pinnedView`: the default list's params, showing the tasks of any pinned list, `tag=a|b`, with the list-less pins' single tag;

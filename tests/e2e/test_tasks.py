@@ -195,6 +195,26 @@ def test_tasks_link_counts_the_due_tasks_and_opens_focus(page, wiki):
     expect(card(page, "Due today")).to_have_class(re.compile(r"\btask-urg-today\b"))
 
 
+def test_list_switcher_looks_as_the_module_switcher_does(page, wiki):
+    # One capsule with a border holding pills without one, the current pill
+    # shaded: what the module switcher at the top of the page is.
+    wiki.write("shop", "# Shop\n\n[[tasks: list=shop]]\n")
+    page.goto("/tasks?list=shop")
+    style = lambda sel, *props: page.locator(sel).first.evaluate(
+        "(el, props) => props.map(p => getComputedStyle(el)[p])", list(props))
+    capsule = ("borderTopWidth", "borderTopStyle", "borderTopColor", "backgroundColor", "paddingTop", "paddingLeft")
+    assert style(".tasks-places-group", *capsule) == style(".module-group", *capsule)
+    pill = ("height", "fontSize", "fontWeight", "color", "backgroundColor", "borderTopWidth", "paddingLeft",
+            "borderTopLeftRadius")
+    assert style(".tasks-place[aria-current]", *pill) == style(".module-switch .module-link[aria-current]", *pill)
+    assert style(".tasks-place:not([aria-current])", *pill) == style(".module-switch .module-link:not([aria-current])", *pill)
+    # The pills are inside the capsule, on one line.
+    group = page.locator(".tasks-places-group").bounding_box()
+    for b in (p.bounding_box() for p in page.locator(".tasks-place").all()):
+        assert group["x"] < b["x"] and b["x"] + b["width"] < group["x"] + group["width"]
+        assert group["y"] < b["y"] and b["y"] + b["height"] < group["y"] + group["height"]
+
+
 def test_list_switcher_goes_between_the_lists_and_keeps_its_counts(page, wiki):
     # /tasks opens with the switcher above the heading: the lists by name
     # (the Tasks home's first), All; its counts follow the task app's writes.
