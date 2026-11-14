@@ -4474,6 +4474,8 @@ def test_rename_and_delete_list_dialogs(page, wiki):
     delete = page.locator("#list-delete-dialog")
     expect(delete).to_be_visible()
     expect(delete.locator("#list-delete-to option")).to_have_text(["No list", "#hardware"])
+    expect(delete.locator("label", has=page.locator("#list-delete-close"))).to_have_text("Close its open task as won't do")
+    expect(delete.locator("#list-delete-close")).not_to_be_checked()
     delete.locator("#list-delete-to").select_option("hardware")
     delete.locator("#list-delete-submit").click()
     page.wait_for_url("**/tasks?list=hardware")

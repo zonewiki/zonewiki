@@ -841,7 +841,9 @@ Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged
   A shared list's name is everyone's, so the rename reaches every user's pins, private pages and private tasks' text too, as a page rename's links do (one who has a private list of the old name keeps their embeds of it); a private list's only its owner's.
   Refused with nothing changed: a tasks file, a registry or a page that can't be read.
   Text not yet in git is committed first (`keepPendingPages`).
-- **Delete…** (`#list-delete-dialog`; `POST /tasks/delete-list` with `list`, `to` and `share`; `deleteListOp`): the list goes, in one commit (`Delete list #shop`); **its tasks stay**, open and closed ones, in the list `to` names or in none.
+- **Delete…** (`#list-delete-dialog`; `POST /tasks/delete-list` with `list`, `to`, `share` and `close`; `deleteListOp`): the list goes, in one commit (`Delete list #shop`); **its tasks stay**, open and closed ones, in the list `to` names or in none.
+  **Close its N open tasks as won't do** (`#list-delete-close`, `close=1`; offered while the list has open tasks, not ticked): for a list that is over, its open tasks are closed undone in the same commit, as Won't do closes one (Closed shows them with "✗ won't do", and they can be reopened from there), so they aren't left open in another list or in none.
+  No task is deleted: a task can't be (A task can't be deleted).
   A shared list's tasks can't go into a private one, and a private list's go to a shared place only with `share` (the dialog's box: "Share its tasks if they go to a shared place").
   Pins of it go; pages keep their embeds of it, which then say that there is no such list.
 - **Make shared…** (a private list; `#list-share-dialog`; `POST /tasks/share-list`; `shareListOp`): the list moves to the shared registry and its tasks to the shared files, in one commit (`Share list #gifts`), each with `shared` in its History.

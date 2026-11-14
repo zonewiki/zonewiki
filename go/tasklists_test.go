@@ -455,16 +455,16 @@ func TestDeleteList(t *testing.T) {
 	if err := pinListOp("bob", "shop", "1"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := deleteListOp("alice", "shop", "gifts", false, ""); err == nil {
+	if _, err := deleteListOp("alice", "shop", "gifts", false, false, ""); err == nil {
 		t.Error("shared tasks moved into a private list")
 	}
-	if _, err := deleteListOp("alice", "shop", "shop", false, ""); err == nil {
+	if _, err := deleteListOp("alice", "shop", "shop", false, false, ""); err == nil {
 		t.Error("moved into itself")
 	}
-	if _, err := deleteListOp("bob", "gifts", "", true, ""); !refusedWith(err, refusedNotFound) {
+	if _, err := deleteListOp("bob", "gifts", "", true, false, ""); !refusedWith(err, refusedNotFound) {
 		t.Errorf("bob deleted alice's list: %v", err)
 	}
-	if n, err := deleteListOp("alice", "shop", "market", false, ""); err != nil || n != 1 {
+	if n, err := deleteListOp("alice", "shop", "market", false, false, ""); err != nil || n != 1 {
 		t.Fatalf("delete: %d, %v", n, err)
 	}
 	if _, ok := taskLists("alice")["shop"]; ok || openByID("bob")[milk.ID].List != "market" {
@@ -474,17 +474,17 @@ func TestDeleteList(t *testing.T) {
 		t.Errorf("bob still pins it: %v", refsOf(got))
 	}
 	// Her private list: to another of hers, no question.
-	if _, err := deleteListOp("alice", "gifts", "wishes", false, ""); err != nil {
+	if _, err := deleteListOp("alice", "gifts", "wishes", false, false, ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := openByID("alice")[cake.ID]; got.List != "wishes" || got.Owner != "alice" {
 		t.Errorf("cake %+v", got)
 	}
 	// To no list: its tasks would be shared.
-	if _, err := deleteListOp("alice", "wishes", "", false, ""); err == nil {
+	if _, err := deleteListOp("alice", "wishes", "", false, false, ""); err == nil {
 		t.Fatal("private tasks shared without saying so")
 	}
-	if _, err := deleteListOp("alice", "wishes", "", true, ""); err != nil {
+	if _, err := deleteListOp("alice", "wishes", "", true, false, ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := openByID("bob")[cake.ID]; got == nil || got.List != "" || got.Owner != "" || got.History[len(got.History)-1].Event != "shared" {

@@ -960,6 +960,12 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
+		// How many open tasks it has: Delete… offers to close them.
+		for _, t := range rq.openTasks() {
+			if t.List == list.Name && t.Owner == list.Owner {
+				v.OpenInList++
+			}
+		}
 		// Where its tasks can go when it is deleted: the other lists, a
 		// private list's own kind first.
 		for _, ref := range sortedKeys(rq.taskLists()) {
@@ -1088,10 +1094,11 @@ func renameListRoute(w http.ResponseWriter, r *http.Request) {
 }
 
 // deleteListRoute: a list's Delete… dialog: its tasks go to another list
-// (to) or to none; share: a private list's tasks may become shared so.
+// (to) or to none; share: a private list's tasks may become shared so;
+// close: its open tasks are closed as won't do.
 func deleteListRoute(w http.ResponseWriter, r *http.Request) {
 	ref, to := cleanList(r.PostFormValue("list")), cleanList(r.PostFormValue("to"))
-	if _, err := deleteListOp(userOf(r), ref, to, r.PostFormValue("share") != "", ""); err != nil {
+	if _, err := deleteListOp(userOf(r), ref, to, r.PostFormValue("share") != "", r.PostFormValue("close") != "", ""); err != nil {
 		listRefused(w, r, err, ref, "delete_error")
 		return
 	}
@@ -1158,6 +1165,7 @@ type tasksPageView struct {
 	List                            *ListInfo
 	Pin                             string
 	MoveTo                          []ListInfo
+	OpenInList                      int // the list's open tasks (Delete…'s "Close its open tasks")
 	RenameName, RenameError         string
 	RenameMerge                     bool
 	ListRenameName, ListRenameError string

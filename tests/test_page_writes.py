@@ -773,6 +773,35 @@ def test_delete_list_moves_its_tasks_and_keeps_the_pages(client, shop):
     assert "list" not in tasks_file(shop)[-1] and tasks_file(shop)[-1]["title"] == "Bread"
 
 
+def test_delete_list_closes_its_open_tasks_when_asked(client, shop):
+    """Delete…'s "Close its open tasks as won't do": the list's open tasks
+    go to Closed undone, in the same commit, and can be reopened; a task
+    elsewhere and one closed already stay as they are."""
+    for title in ("Bread", "Jam"):
+        client.post("/api/tasks", json={"title": title, "list": "shop"}, headers=HOST)
+    done = client.post("/api/tasks", json={"title": "Done", "list": "shop"}, headers=HOST).get_json()["id"]
+    client.put(f"/api/tasks/{done}", json={"completed": True}, headers=HOST)
+    page = client.get("/tasks?list=shop", headers=HOST).get_data(as_text=True)
+    assert 'id="list-delete-close" value="1"> Close its 2 open tasks as won\'t do' in page.replace("&#39;", "'")
+    before = git(shop, "rev-parse", "HEAD").strip()
+    assert list_op(client, "delete", list="shop", to="", close="1") == "/tasks"
+    assert git(shop, "log", "--format=%s", f"{before}..HEAD").splitlines() == ["Delete list #shop"]
+    assert [t["title"] for t in tasks_file(shop)] == ["Milk", "See list"]         # in no list all along
+    closed = {t["title"]: t for t in tasks_file(shop, "closed.json")}
+    for title in ("Bread", "Jam"):
+        t = closed[title]
+        assert t["wont_do"] is True and t["closed_at"] and "list" not in t and t["history"][-1]["event"] == "wontdo"
+    assert closed["Done"]["wont_do"] is False and "list" not in closed["Done"]
+    # Reopened from Closed, as any task closed undone.
+    assert client.put(f"/api/tasks/{closed['Bread']['id']}", json={"completed": False}, headers=HOST).status_code == 200
+    assert "Bread" in [t["title"] for t in tasks_file(shop)]
+
+
+def test_delete_list_without_open_tasks_offers_no_closing(client, shop):
+    client.post("/tasks/new-list", data={"name": "empty", "pin": "0"}, headers=HOST)
+    assert "list-delete-close" not in client.get("/tasks?list=empty", headers=HOST).get_data(as_text=True)
+
+
 def test_pinning_a_list_is_a_commit_of_the_registry(client, shop):
     before = git(shop, "rev-parse", "HEAD").strip()
     assert list_op(client, "pin", list="shop", pin="1") == "/tasks?list=shop"

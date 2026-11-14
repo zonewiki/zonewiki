@@ -669,9 +669,12 @@ func moveListTasks(user string, tasks []*Task, from ListInfo, to *ListInfo) int 
 
 // deleteListOp deletes the list user names ref; its tasks go to the list
 // to names ("": to no list), never away. A private list's tasks that would
-// become shared that way need share. Pins of it go; embeds that name it
-// stay, and say that there is no such list.
-func deleteListOp(user, ref, to string, share bool, suffix string) (int, error) {
+// become shared that way need share. wontDo: its open tasks are closed
+// undone on the way, as Won't do closes one (no next occurrence, a keep
+// task too), so a list that is over leaves no open tasks behind; they can
+// be reopened from Closed. Pins of it go; embeds that name it stay, and say
+// that there is no such list.
+func deleteListOp(user, ref, to string, share, wontDo bool, suffix string) (int, error) {
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
 	lists := taskLists(user)
@@ -713,6 +716,16 @@ func deleteListOp(user, ref, to string, share bool, suffix string) (int, error) 
 	}
 	reg := regs[l.Owner]
 	reg.Lists = slices.DeleteFunc(reg.Lists, func(x *taskfiles.List) bool { return x.Name == l.Name })
+	if wontDo {
+		stamp := timestamp()
+		closing, closingIDs := selectTasks(active, func(t *Task) bool { return t.List == l.Name && t.Owner == l.Owner && t.IsOpen() })
+		for _, t := range closing {
+			t.ClosedAt, t.WontDo = stamp, true
+			logEvent(t, user, "wontdo", "", "")
+		}
+		active = withoutIDs(active, closingIDs)
+		closed = append(closed, closing...)
+	}
 	n := moveListTasks(user, slices.Concat(active, closed), l, target)
 	var paths []string
 	for _, o := range owners {
