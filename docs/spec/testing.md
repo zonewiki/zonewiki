@@ -238,7 +238,7 @@ In the browser (`tests/e2e/test_private.py`): from the user menu to the page, a 
 
 `tests/test_socket.py` starts Zone on a Unix socket (`--addr unix:PATH`): `zonewiki health unix:PATH` answers over it and fails for a path nothing listens on,
 and five wrong passwords from one address in the proxy's `X-Forwarded-For` make that client wait and no other.
-In Go (`TestListenOnSocket`, `TestClientKeyOnSocket`): the socket's mode, a socket file left behind replaced, a live one and a plain file refused and left alone, and `trusted-proxies` without localhost not trusting the socket's peer.
+In Go (`TestListenOnSocket`, `TestClientKeyOnSocket`): the socket's mode, a socket file left behind replaced, a live one and a plain file refused and left alone, and the socket's peer trusted whatever `trusted-proxies` holds.
 
 `tests/test_config.py` covers the settings file through the server: a new user signs in without a restart,
 a removed one is signed out,

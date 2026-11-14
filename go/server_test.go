@@ -78,8 +78,9 @@ func TestListenOnSocket(t *testing.T) {
 	}
 }
 
-// A socket's peer has no address: it counts as localhost, so a reverse
-// proxy's X-Forwarded-For names the client unless trusted-proxies says otherwise.
+// A socket's peer has no address: it is the reverse proxy, so its
+// X-Forwarded-For names the client, whatever trusted-proxies holds (a wiki
+// moved from a port to a socket keeps the proxy's old address there).
 func TestClientKeyOnSocket(t *testing.T) {
 	configWiki(t, "")
 	onSocket = true
@@ -102,7 +103,12 @@ func TestClientKeyOnSocket(t *testing.T) {
 	r := httptest.NewRequest("GET", "/", nil)
 	r.RemoteAddr = "@"
 	r.Header.Set("X-Forwarded-For", "203.0.113.9")
-	if got := clientKey(r); got != "127.0.0.1" {
+	if got := clientKey(r); got != "203.0.113.9" {
 		t.Errorf("trusted-proxies without localhost: %q", got)
+	}
+	// The setting still says which entries before the last are proxies too.
+	r.Header.Set("X-Forwarded-For", "6.6.6.6, 203.0.113.9, 172.17.0.1")
+	if got := clientKey(r); got != "203.0.113.9" {
+		t.Errorf("a proxy in front of the proxy: %q", got)
 	}
 }

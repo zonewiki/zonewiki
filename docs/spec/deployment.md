@@ -199,7 +199,7 @@ When `ZONE_ALLOW_REMOTE=1`, `run.sh` exports `ZONE_BIND=0.0.0.0` (LAN-accessible
 Caddy reaches it with `reverse_proxy unix//run/zone/zone.sock`, nginx with `proxy_pass http://unix:/run/zone/zone.sock:;`.
 Who may connect is who may reach the path: the socket itself is open to every local user (mode 0666, as a port on localhost is), so the folder it is in decides, and the proxy's user must be able to enter that folder.
 Zone replaces a socket file that a Zone that was killed left behind; it doesn't start when something still listens there, or when the path is a file of another kind (`listen` in `go/server.go`).
-Whoever connects has no address and counts as localhost: with `trusted-proxies` unset, the proxy's `X-Forwarded-For` names the client (the throttle in `docs/spec/security.md`).
+Whoever connects has no address and is taken for the proxy: its `X-Forwarded-For` names the client, whatever `trusted-proxies` holds (the throttle in `docs/spec/security.md`).
 `hosts` and the rest of a proxy's setup stay as with a port.
 The healthcheck over it: `zonewiki health unix:PATH`.
 

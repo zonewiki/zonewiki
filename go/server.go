@@ -191,8 +191,8 @@ func main() {
 // socketPrefix: an --addr that names a Unix socket's path, not a TCP address.
 const socketPrefix = "unix:"
 
-// onSocket: Zone listens on a Unix socket. Its peers have no address: they
-// count as localhost (clientAddr).
+// onSocket: Zone listens on a Unix socket. Its peers have no address: each
+// is the reverse proxy the socket is for (clientAddr).
 var onSocket bool
 
 // listen: the listener of --addr, a TCP address or unix:PATH. A socket is
