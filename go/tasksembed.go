@@ -190,6 +190,8 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, p
 		v.Lists = scope
 	} else if shown {
 		v.List = list.Ref
+	} else if isNoList(scope, lists) {
+		v.List = noListRef // the tasks in no list; a new one there is in none
 	}
 	var b bytes.Buffer
 	if err := partials.ExecuteTemplate(&b, "tasks_embed", v); err != nil {
@@ -343,7 +345,8 @@ func processTasksEmbeds(rq *Req, text, page string, settings bool) (string, []ta
 		params := parseTasksParams(embedArgs(g))
 		params.src = &embedSrc{len(embeds), embedArgs(g)}
 		var html string
-		if name := cleanList(params.Get("list")); name == "" {
+		if name := cleanList(params.Get("list")); name == "" || isNoList(name, lists) {
+			// No list=, or list=none (the tasks in no list): the embed's own params.
 			html = buildTasksEmbed(rq, params, len(embeds), false, at)
 		} else if l, ok := listOnPage(name, page, rq.who(), lists); ok {
 			html = buildTasksEmbed(rq, listEmbedParams(l, params), len(embeds), false, at)
@@ -527,7 +530,8 @@ func countTasks(user string, tasks []*Task, lists map[string]ListInfo, params ..
 
 // TaskPlace is an entry of the task list switcher (tasks_page.html): a
 // list, or Pinned (the pinned lists together). Key names it
-// for the counts' refresh (js/chrome.js): "list:<ref>", "all", "pinned".
+// for the counts' refresh (js/chrome.js): "list:<ref>", "all", "pinned",
+// "none" (No list, under More).
 // Pinned: a pinned list, or Pinned itself; First: the first of several pinned
 // lists, where a new task goes (its pill carries a plus).
 type TaskPlace struct {
@@ -574,14 +578,20 @@ func (rq *Req) listHidden(l ListInfo) bool { return rq != nil && rq.sharing && l
 
 // TasksMore: the switcher's last pill, More: the lists the user sees and
 // hasn't pinned (Lists, A–Z, their own before the shared one of a name; no
-// counts) and All tasks. Label: "More", or the view the page shows when
-// that is one of these (Current: the pill is the shaded one; All: it is
-// All tasks). Filter: enough lists that a field to find one by name helps.
+// counts), No list and All tasks. Label: "More", or the view the page shows
+// when that is one of these (Current: the pill is the shaded one; All: it
+// is All tasks). Filter: enough lists that a field to find one by name
+// helps. NoList: the tasks in no list (/tasks?list=none), with their
+// counts, there while there are open ones (or the page shows them): no pin
+// reaches them, so the Tasks links never count them, and the pill carries
+// how many of them are due (Due), the one number on it.
 type TasksMore struct {
 	Label        string
 	Current, All bool
 	Lists        []TaskPlace
 	Filter       bool
+	NoList       *TaskPlace
+	Due          int
 }
 
 // moreFilterFrom: how many lists More holds before it has a filter field.
@@ -628,15 +638,52 @@ func (rq *Req) taskMore(place string) *TasksMore {
 	if place == "all" {
 		more.Label, more.Current, more.All = "All tasks", true, true
 	}
+	if open, counts := rq.noListCounts(); open > 0 || place == noListRef {
+		more.NoList = &TaskPlace{Key: noListRef, Label: "No list", Title: "The tasks in no list", Href: listHref(noListRef),
+			Counts: counts, Current: place == noListRef}
+		more.Due = counts.Count
+		if place == noListRef {
+			more.Label, more.Current = "No list", true
+		}
+	}
 	more.Filter = len(more.Lists) >= moreFilterFrom
 	return more
 }
 
-// placeCounts: each place's counts by its key (GET /api/tasks/due-count?places=1).
+// noListCounts: how many open tasks the user sees are in no list, and
+// their counts as a place has them. None where "none" is a list's name
+// (isNoList): there the name is that list's.
+func (rq *Req) noListCounts() (open int, counts TaskCounts) {
+	lists := rq.taskLists()
+	if !isNoList(noListRef, lists) {
+		return 0, TaskCounts{}
+	}
+	tasks := rq.openTasks()
+	for _, t := range tasks {
+		if t.List == "" {
+			open++
+		}
+	}
+	return open, countTasks(rq.who(), tasks, lists, noListParams())
+}
+
+// noListParams: the params of the view of the tasks in no list
+// (/tasks?list=none): All tasks' own, of those tasks. It has no settings
+// of its own, so no settings dialog (no src).
+func noListParams() TasksParams {
+	p := allTasksParams().With("list", noListRef)
+	p.src = nil
+	return p
+}
+
+// placeCounts: each place's counts by its key (GET /api/tasks/due-count?places=1):
+// the pills', and No list's ("none": on its entry under More and, the due
+// ones, on the More pill).
 func (rq *Req) placeCounts() map[string]TaskCounts {
 	out := map[string]TaskCounts{}
 	for _, p := range rq.taskPlaces() {
 		out[p.Key] = p.Counts
 	}
+	_, out[noListRef] = rq.noListCounts()
 	return out
 }

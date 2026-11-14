@@ -866,7 +866,7 @@ func apiPagesList(w http.ResponseWriter, r *http.Request) {
 }
 
 // tasksPage: /tasks, every task; with ?list= that list (by its ref), with
-// its settings; with ?pinned=1 the user's pinned lists as one; with ?tag=
+// its settings, ?list=none the tasks in no list; with ?pinned=1 the user's pinned lists as one; with ?tag=
 // every task, filtered by the tag (tasks.js reads it). Every link to "the
 // tasks" goes here; [[tasks: …]] embeds are for views on ordinary pages.
 func tasksPage(w http.ResponseWriter, r *http.Request) {
@@ -891,14 +891,18 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case ref != "":
 		name := ref
+		title, heading = "List: "+name, "List: "+name
 		if l, ok := resolveList(ref, rq.taskLists()); ok {
 			list, params, name, place = &l, l.Params, l.Name, "list:"+l.Ref
+			title, heading = "List: "+name, "List: "+name // the name as the list has it
 			// Backlinks: the pages that embed the list, as a page's are.
 			backlinks(rq.listPages(l.Ref))
+		} else if isNoList(ref, rq.taskLists()) {
+			// ?list=none: the tasks in no list, under More in the switcher.
+			params, name, place, title, heading = noListParams(), "No list", noListRef, "No list", "No list"
 		} else {
 			missing, place = ref, "" // nothing in the switcher is current
 		}
-		title, heading = "List: "+name, "List: "+name
 		crumbs = []crumb{{"Tasks", "/tasks"}, {name, ""}}
 		key += "?list=" + ref
 	case q.Get("pinned") != "":

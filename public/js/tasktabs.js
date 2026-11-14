@@ -88,7 +88,7 @@ const embedFilterWords = [
 // A chip that names a list (list:groceries) is marked as a list.
 const filterChips = app.filterSearch && app.chipField(app.filterSearch, {
   onChange: () => app.render(), locked: embedFilterWords,
-  label: w => /^list:/i.test(w) ? w.slice(5) : w,
+  label: w => app.noList && /^list:none$/i.test(w) ? 'no list' : /^list:/i.test(w) ? w.slice(5) : w,
   listWord: w => /^list:./i.test(w) });
 function filterQuery() {
   return [...(filterChips?.words() || []), app.filterSearch?.value || ''].join(' ').trim();

@@ -153,11 +153,13 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 	lists := taskLists(user)
 	scope := ""
 	if list = cleanList(strings.TrimLeft(strings.TrimSpace(list), "#")); list != "" {
-		l, ok := resolveList(list, lists)
-		if !ok {
+		if l, ok := resolveList(list, lists); ok {
+			scope = l.Ref
+		} else if isNoList(list, lists) {
+			scope = noListRef // list "none": the tasks in no list
+		} else {
 			return "", toolErr("No list #" + list + " (list_tags shows the lists)")
 		}
-		scope = l.Ref
 	}
 	if assignee != "" && settings().Users == nil {
 		return "", toolErr("This wiki has no users, so its tasks have no assignees")

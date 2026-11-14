@@ -141,11 +141,30 @@ func taskList(t *Task, lists map[string]ListInfo) string {
 	return ""
 }
 
+// noListRef: what names "no list" where a list is named: the view of the
+// tasks in none (/tasks?list=none, [[tasks: list=none]]), as the filter
+// word list:none does. No list is called so (checkListName).
+const noListRef = "none"
+
+// isNoList: ref names the tasks in no list: "none", but for a user who
+// sees a list of that name (one made before the name was kept).
+func isNoList(ref string, lists map[string]ListInfo) bool {
+	if cleanList(ref) != noListRef {
+		return false
+	}
+	_, ok := resolveList(ref, lists)
+	return !ok
+}
+
 // inScope: a task belongs to a view: scope is a list's ref (its tasks),
-// several joined by "|" (any of theirs), or "" for every task.
+// several joined by "|" (any of theirs), "none" for the tasks in no list
+// (isNoList), or "" for every task.
 func inScope(t *Task, scope string, lists map[string]ListInfo) bool {
 	if scope == "" {
 		return true
+	}
+	if isNoList(scope, lists) {
+		return t.List == ""
 	}
 	ref := taskList(t, lists)
 	return ref != "" && slices.Contains(strings.Split(scope, "|"), ref)
@@ -248,6 +267,8 @@ func checkListName(name string) (string, error) {
 		return "", refuse(strconv.Quote(list) + ": a list's name can't contain [ ] , | = / or \"")
 	case len(list) > 60:
 		return "", refuse("A list's name has at most 60 characters")
+	case list == noListRef:
+		return "", refuse("A list can't be called none: that names the tasks in no list")
 	}
 	return list, nil
 }

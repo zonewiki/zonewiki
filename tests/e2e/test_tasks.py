@@ -941,6 +941,37 @@ def test_list_embed_shows_only_its_tasks(page, wiki):
     expect(card(page, "Main task")).to_have_count(0)
 
 
+def test_the_tasks_in_no_list_have_a_view_of_their_own(page, wiki):
+    # /tasks?list=none: the tasks in no list, under More in the switcher. A
+    # task added there is in no list, and one filed into a list leaves.
+    make_list(page, "groceries", pin=True)
+    page.request.post("/api/tasks", data={"title": "Loose end", "due_date": date.today().isoformat()})
+    page.request.post("/api/tasks", data={"title": "Oat milk", "list": "groceries"})
+    page.goto("/tasks?list=groceries")
+    more = page.locator(".lists-more")
+    expect(more.locator("summary .module-due")).to_have_text("1")
+    more.locator("summary").click()
+    more.locator(".lists-more-none").click()
+    page.wait_for_url(re.compile(r"/tasks\?list=none$"))
+    expect(page.locator("h1")).to_have_text("No list")
+    expect(more.locator("summary .tasks-place-label")).to_have_text("No list")
+    open_tab(page, "open")
+    expect(card(page, "Loose end")).to_be_visible()
+    expect(card(page, "Oat milk")).to_have_count(0)
+    expect(page.locator(".tasks-toolbar .tag-chip")).to_have_text(["no list"])
+    # A new task here goes into no list, though a list is pinned.
+    page.locator("#task-add-btn").click()
+    modal = page.locator(".task-edit-modal[open]")
+    expect(modal.locator(".task-edit-target")).to_have_text("Adds to no list.")
+    modal.locator("[id^=task-edit-title]").fill("Another loose end")
+    modal.locator("[id^=task-edit-title]").press("Enter")
+    expect(card(page, "Another loose end")).to_be_visible()
+    assert not task_by_title(page, "Another loose end").get("list")
+    # Done: the due count on More goes.
+    card(page, "Loose end").locator("input[type=checkbox]").check()
+    expect(more.locator("summary .module-due")).to_be_hidden(timeout=10000)
+
+
 def test_tag_embed_shows_list_tasks(page, wiki):
     # A tag view shows list tasks like any other.
     make_list(page, "groceries")
@@ -4285,7 +4316,7 @@ def test_new_list_from_the_tasks_pages_menu(page, wiki):
     expect(page.locator('.tasks-place[data-place="list:shop"]')).to_have_attribute("aria-current", "page")
     expect(page.locator('.tasks-place[data-place="list:shop"] .tasks-place-pin')).to_have_count(1)
     expect(page.locator(".tasks-made-first")).to_have_text(
-        "Tasks opens this list now, and new tasks go into it. 1 task in no list is under All tasks, in the row above.")
+        "Tasks opens this list now, and new tasks go into it. 1 task in no list is under More, in the row above: No list.")
     expect(page.locator(".breadcrumb .module-link[data-module=tasks]")).to_have_attribute("href", "/tasks?list=shop")
     page.goto("/tasks?list=shop&view=open")
     expect(page.locator(".task-item")).to_have_count(0)                # a tag of that name is a tag: the list starts empty

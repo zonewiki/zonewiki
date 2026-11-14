@@ -411,6 +411,15 @@ class TestTasksByMeaning:
 
 
 class TestSearchTasks:
+    def test_list_none_is_the_tasks_in_no_list(self, client, wiki_dir):
+        make_list(client, "shop")
+        task(client, title="Milk", list="shop")
+        task(client, title="Loose end")
+        text, err = call(client, "search_tasks", list="none")
+        assert not err and "1 matching task" in text and "Loose end" in text and "Milk" not in text
+        text, err = call(client, "search_tasks", list="nothing")
+        assert err and "No list #nothing" in text
+
     def test_open_by_tag_sorted_by_deadline(self, client, wiki_dir):
         task(client, title="Later", tags=["leaf"], due_date="2026-12-01")
         task(client, title="Soon", tags=["leaf", "bug"], due_date="2026-10-05")

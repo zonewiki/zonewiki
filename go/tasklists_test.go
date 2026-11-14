@@ -285,7 +285,7 @@ func TestCreateList(t *testing.T) {
 	if _, ok := taskLists("bob")["gifts"]; ok {
 		t.Error("bob sees alice's list")
 	}
-	for _, bad := range []string{"", "  ", "a,b", "a|b", "a=b", "a[b", `a"b`, "a/b"} {
+	for _, bad := range []string{"", "  ", "a,b", "a|b", "a=b", "a[b", `a"b`, "a/b", "none", " #None "} {
 		if _, err := createListOp("alice", bad, false, false, ""); !refusedWith(err, refusedInvalid) {
 			t.Errorf("%q: %v", bad, err)
 		}
@@ -709,5 +709,32 @@ func TestPinOrder(t *testing.T) {
 	}
 	if got := pins("alice"); !slices.Equal(got, []string{"b", "c", "a"}) || !slices.Equal(pins("bob"), []string{"c", "a", "b"}) {
 		t.Errorf("alice %v, bob %v", got, pins("bob"))
+	}
+}
+
+// "none" names the tasks in no list where a list is named (a view's scope);
+// in a wiki that has a list called so, from before the name was kept, it
+// is that list.
+func TestNoListScope(t *testing.T) {
+	testWiki(t, nil)
+	mustList(t, "", "shop", false)
+	lists := taskLists("")
+	filed, loose := &Task{ID: "1", Title: "Filed", List: "shop"}, &Task{ID: "2", Title: "Loose"}
+	if !isNoList(" None ", lists) || isNoList("shop", lists) || isNoList("", lists) {
+		t.Error("isNoList")
+	}
+	if !inScope(loose, "none", lists) || inScope(filed, "none", lists) || !inScope(filed, "shop", lists) || inScope(loose, "shop", lists) {
+		t.Error("inScope")
+	}
+	if c := countTasks("", []*Task{filed, loose, {ID: "3", Title: "Due", DueDate: isoDay(today())}}, lists, noListParams()); c.Count != 1 || c.Focus != 1 {
+		t.Errorf("the counts of the tasks in no list %+v", c)
+	}
+	if err := os.WriteFile(taskFiles.ListsPath(""), []byte(`{"version": 1, "lists": [{"name": "none"}, {"name": "shop"}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	lists = taskLists("")
+	own := &Task{ID: "4", Title: "In the list none", List: "none"}
+	if isNoList("none", lists) || !inScope(own, "none", lists) || inScope(loose, "none", lists) {
+		t.Error("a list called none is that list")
 	}
 }

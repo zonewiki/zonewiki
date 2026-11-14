@@ -18,7 +18,7 @@ Case doesn't matter (`[[Tasks:]]`), nor a space after the colon (`[[tasks:list=s
 | `view` | `focus`, `open`, `plan`, `closed` | Focus (or the tab remembered this session) | Opens on that tab whenever the page is opened; a URL `?view=` overrides it, and a reload stays on the tab it showed (see Views). Case doesn't matter; any other name (`views`) opens the default. |
 | `plan` | `on`, `off` | on | What the Open tab shows: on, the board by start date (Plan); off, one list. With `view=open` or `view=plan` it decides which of the two opens (`view=open` alone is the list, `view=plan` the board, as always). The Plan switch still flips it, for the browser tab (see Views). |
 | `limit` | integer 1–99 | none | WIP limit: Focus warns at this many tasks, and Plan day sections with at least this many are flagged amber. `?limit=N` works on `/tasks`. |
-| `list` | a list's name | — | Shows that list: the tasks in it, with the list's own settings (see Lists). A new task made there goes into it. On a shared page the name is the shared list; on a page in your private folder your own list of that name first. A name no list has shows a line that says so, with a button that makes the list. Cleaned like tags, lowercased (`cleanList`). With `list=`, only `view`, `tag` and `assignee` of the embed count: they say how this page looks at the list; what the list is (`limit`, `plan`, `keep`, `labels`, `new`) is set on the list. |
+| `list` | a list's name | — | Shows that list: the tasks in it, with the list's own settings (see Lists). A new task made there goes into it. On a shared page the name is the shared list; on a page in your private folder your own list of that name first. A name no list has shows a line that says so, with a button that makes the list. `list=none` shows the tasks in no list (Lists → No list). Cleaned like tags, lowercased (`cleanList`). With `list=`, only `view`, `tag` and `assignee` of the embed count: they say how this page looks at the list; what the list is (`limit`, `plan`, `keep`, `labels`, `new`) is set on the list. |
 | `keep` | `1`/`true`/`yes` | — | New tasks created in the embed are keep tasks (the edit modal's checkbox starts checked), e.g. a shopping list of staples. For a list, set on the list (List settings…). |
 | `pin` | | — | Means nothing anymore: a pin is of a list and the user's own (see Lists → Pins). Until 2026-11 it pinned the embed's list; the migration moved those pins and took `pin=` out of the pages. |
 | `new` | tags, comma-separated | — | The tags a new task here gets, in place of the filter's single tags. For a list, set on the list. |
@@ -738,6 +738,7 @@ Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged
   The task's file says which registry the name is in: a task in a user's files is in one of their private lists, a task in the shared files in a shared one (`taskList`).
   So a name has to be unique only within one registry, and nobody learns another user's names from it.
 - **Names** (`cleanList`, `checkListName`): one word, lowercase, spaces `-`, a leading `#` dropped, at most 60 characters, none of `[ ] , | = / "` (they mean something in an embed or a ref).
+  No list can be called `none`: that names the tasks in no list (No list, below).
   A name is unique among the shared lists and among one user's private lists.
   A user can't make a list by a name of one they see ("There is a list #shop already"), private or shared; they can still end up with a private and a shared list of one name (the migration, or someone making the shared one later, who doesn't see theirs).
   For them the plain name is their own list and the shared one is **`shared/<name>`**: that is a **ref**, how a list is named to one user (`ListInfo.Ref`, `taskLists(user)`, `resolveList`): in URLs (`/tasks?list=shared/gifts`), in pins, in the API's and the tools' `list`, in the browser.
@@ -761,10 +762,12 @@ Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged
   the first of several pinned lists a plus beside it (`.tasks-place-first`, tooltip "Pinned list #<name>: new tasks go here"), a private list a lock (tooltip "… (only you see it)").
   - **More** (`.lists-more`, a `<details>`; its pill is the summary, `.lists-more-btn`): a click opens a panel under it (`.lists-more-panel`) of links, a line each:
     **each list you see and haven't pinned**, A–Z by name (your own before the shared one of that name), a private one with a lock,
+    then, while open tasks are in no list, **No list** (`/tasks?list=none`, with its counts; No list, below),
     then **All tasks** (`/tasks`: every task, in whatever list or in none).
-    No counts in it: a list you unpinned no longer counts anywhere but under All tasks.
+    No counts on the lists in it: a list you unpinned no longer counts anywhere but under All tasks.
+    The pill itself carries one number, how many tasks in no list are due or overdue.
     Escape and a click elsewhere close it.
-    **It names the view the page shows when that is one of its own**: on an unpinned list the pill reads that list's name, on `/tasks` (and a tag's view, which is All tasks with a filter) "All tasks", and it is the shaded one; else it reads "More".
+    **It names the view the page shows when that is one of its own**: on an unpinned list the pill reads that list's name, on `/tasks` (and a tag's view, which is All tasks with a filter) "All tasks", on `/tasks?list=none` "No list", and it is the shaded one; else it reads "More".
     So with nothing pinned the row is that one pill, reading "All tasks".
     It is there for a viewer and in sharing mode too (the page's ⋯ menu isn't), so it is no menu of the page's but links.
     On a narrow screen the panel is as wide as the row.
@@ -818,7 +821,7 @@ Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged
   **The new list is pinned for you**, last, in the same commit (a shared list with users: the shared registry and your own), so it is a pill at once and not out of sight under More; one who had set no pins starts from the wiki's, as with **Pin**.
   Then the list opens (`/tasks?list=<name>`).
   **A first list**, made with nothing pinned, is your first pin, and that changes more than the row: the Tasks links open it from then on and count its tasks, no longer every task, and New task, `c t` and an assistant's `create_task` put a task in it (privately, when it is private).
-  Its page says so once (`?made=1`, `.tasks-made-first`): "Tasks opens this list now, and new tasks go into it.", and with open tasks in no list, "12 tasks in no list are under All tasks, in the row above."
+  Its page says so once (`?made=1`, `.tasks-made-first`): "Tasks opens this list now, and new tasks go into it.", and with open tasks in no list, "12 tasks in no list are under More, in the row above: No list." (a link to that view).
   (`pin=0` in the form leaves the list unpinned; no dialog sends it.)
   With users the dialog has **Private: only you see it and its tasks**, which makes it a private list of yours.
   Refused, back in the dialog with the reason: no name, a name with `[ ] , | = /` or `"`, a list you already see ("There is a list #shop already").
@@ -850,12 +853,25 @@ Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged
     A tag only you see stays yours: another user's private tag of that name is another tag and isn't touched.
     A tag only someone else has is refused as if it didn't exist, a new name only they use is no merge for you, and the answer counts only the tasks and pages you see.
 - **Scopes** (`inScope`, `paramsScope`; `inScope` in `tasks.js`): a list view shows the tasks in that list;
+  No list (`list=none`) those in none;
   Pinned those in any pinned list (`lists=a|b`, an embed param Zone writes itself, `data-init-lists`);
   the **main task list** (an embed with neither, including `/tasks`, URL `?tag=` notwithstanding) shows every task,
   as do a `tag=` embed (a task tagged `sam` belongs on a Sam page whatever list it is in),
   the main Closed count and,
   with no list pinned,
   the due count.
+- **No list** (`noListRef`, `isNoList` in `go/tasklists.go`; `noList` in `tasks.js`): the tasks in no list have a view of their own, **`/tasks?list=none`**, headed **No list**.
+  A task is in no list when it was made with none pinned, taken out of its list, or left behind by a list deleted into none.
+  No pin reaches such a task, so with a list pinned the Tasks links and their count leave it out; this view is where it is seen.
+  In the list switcher it is under **More**, above All tasks, **while open tasks are in no list** (and on its own view), with the counts a pill has (due today or overdue, in Focus: `noListCounts`);
+  **the More pill carries how many of them are due or overdue**, the one number on it (`TasksMore.Due`; an unpinned list's tasks are not in it: not pinning a list is the user's choice, a task in no list is nobody's).
+  `js/chrome.js` keeps both current from the due count's places (`none`).
+  The view is All tasks narrowed: All tasks' settings (the tab, Plan, the limit), no settings dialog and no ⋯ menu of its own in the toolbar, a locked chip **no list** in the filter field (the filter word `list:none`), and a new task made there is in no list, whatever is pinned.
+  A task filed into a list from there leaves the view, with the notice a list's view has.
+  On a page, `[[tasks: list=none]]` shows them too, as an embed of no list with the embed's own params.
+  Where a scope is named, `none` is taken as well: `?list=none` of the closed tasks' routes and the export, and an assistant's `search_tasks(list="none")`.
+  In a wiki that has a list called `none` from before the name was kept, the name is that list's everywhere, and there is no such view.
+  The line a first list's page shows once ("Tasks opens this list now …") links to it.
 - **On screen**: a list is marked as one wherever it shows: a list icon (an SVG mask in CSS `::before`, `--list-icon`, in the accent colour), a faint blue tint and a tooltip ("List", "List (private: only you see it)", `listTooltip`).
   A card shows its list as such a chip before its tags (`.task-tag-list`), but in a view of that one list, where every card would say the same.
   In a list's view the filter field holds a chip without × for it (`list:<name>`, shown as its name; `chipField`'s `locked`, `.tag-chip-locked`; Backspace skips it), so the page always shows what it says; an embed's `tag=` and `assignee=` words are locked the same way, and a URL `?tag=` stays removable.

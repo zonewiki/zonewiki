@@ -49,7 +49,7 @@
     },
     "list": {
      "type": "string",
-     "description": "Only the tasks in this list (list_tags shows the lists)."
+     "description": "Only the tasks in this list (list_tags shows the lists); none: the tasks in no list."
     },
     "assignee": {
      "type": "string",

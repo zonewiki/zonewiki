@@ -149,6 +149,7 @@ const app = {
   get tabLabel() { return tabLabel; },
   get thisYear() { return thisYear; },
   get initList() { return initList; },
+  get noList() { return noList; },
 };
 
 st.tasks = [];
@@ -348,6 +349,7 @@ function listName(ref) { return String(ref).replace(/^shared\//, ''); }
 // The tooltip of a list's chip (cards, the filter).
 function listTooltip(ref) {
   const r = String(ref).replace(/^-?list:/, '').toLowerCase();
+  if (r === 'none' && !listSet.has('none')) return 'In no list';
   return privateLists.has(r) ? 'List (private: only you see it)' : 'List';
 }
 // The tabs' names: Open/Plan/Focus, or an embed's own (`labels=`, rendered
@@ -371,8 +373,12 @@ function taskList(t) {
   const ref = !t.private && listSet.has('shared/' + t.list) ? 'shared/' + t.list : t.list;
   return listSet.has(ref) && privateLists.has(ref) === !!t.private ? ref : null;
 }
+// list=none (no list is called so): the view of the tasks in no list, as
+// the filter word list:none finds them (isNoList in go/tasklists.go).
+const noList = initList === 'none' && !listSet.has('none');
 function inScope(t) {
   if (initLists.length) return initLists.includes(taskList(t));
+  if (noList) return !t.list;
   return !initList || taskList(t) === initList;
 }
 // The scope of the server's closed counts, matching inScope.
@@ -380,8 +386,9 @@ function scopeQuery() {
   return initLists.length ? `?lists=${encodeURIComponent(initLists.join('|'))}`
     : initList ? `?list=${encodeURIComponent(initList)}` : '';
 }
-// The list a new task starts in here: the view's own, else the default list.
-function newTaskList() { return initList || defaultList; }
+// The list a new task starts in here: the view's own (none in the view of
+// the tasks in no list), else the default list.
+function newTaskList() { return noList ? '' : initList || defaultList; }
 // The edit modal's List field names a private list: the task is (or will
 // be) the user's alone.
 function editPrivate() { return privateLists.has(listSelect?.value || ''); }

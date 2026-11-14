@@ -31,7 +31,8 @@
 {{- /* The list switcher: Pinned and the pinned lists as pills, then More: the
     other lists and All tasks, as links in a details (it is there for a
     viewer and in sharing mode too, where the ⋯ menu isn't). More carries the
-    name of the view the page shows when that is one of its own. The pills
+    name of the view the page shows when that is one of its own, and how
+    many tasks in no list are due (No list is there while such tasks are). The pills
     can be dragged into another order by who may pin (data-reorder;
     js/listsrow.js, which also closes More, filters it and marks lists new
     to this browser). */}}
@@ -41,13 +42,15 @@
 {{- if .First}}<span class="tasks-place-first" aria-hidden="true">+</span>{{end}}
 {{- if .Private}}<span class="tasks-place-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="tasks-place-label">{{.Label}}</span>{{template "module_counts" .Counts}}</a>
 {{- end}}
-{{- with .More}}<details class="lists-more"><summary class="tasks-place lists-more-btn" title="{{if .Current}}{{.Label}}: one of the lists you haven't pinned and all tasks{{else}}The lists you haven't pinned, and all tasks{{end}}"{{if .Current}} aria-current="page"{{end}}><span class="tasks-place-label">{{.Label}}</span><span class="lists-more-caret" aria-hidden="true">▾</span></summary>
+{{- with .More}}<details class="lists-more"><summary class="tasks-place lists-more-btn"{{if .NoList}} data-place="none"{{end}} title="{{if .Current}}{{.Label}}: one of the lists you haven't pinned and all tasks{{else}}The lists you haven't pinned, and all tasks{{end}}"{{if .Current}} aria-current="page"{{end}}><span class="tasks-place-label">{{.Label}}</span>{{if .NoList}}<span class="module-counts"><span class="module-due" title="Due or overdue in no list"{{if not .Due}} hidden{{end}}>{{if .Due}}{{.Due}}{{end}}</span></span>{{end}}<span class="lists-more-caret" aria-hidden="true">▾</span></summary>
 <div class="lists-more-panel">
 {{- if .Filter}}<input type="search" class="lists-more-filter" placeholder="Find a list…" aria-label="Find a list" autocomplete="off" spellcheck="false">{{end}}
 {{- range .Lists}}<a href="{{.Href}}" class="lists-more-item" data-list="{{.Label}}" data-place="{{.Key}}" title="{{.Title}}{{if .Private}} (only you see it){{end}}"{{if .Current}} aria-current="page"{{end}}>
 {{- if .Private}}<span class="tasks-place-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="lists-more-name">{{.Label}}</span></a>
 {{- end}}
-{{- if .Lists}}<hr class="lists-more-rule">{{end}}<a href="/tasks" class="lists-more-item lists-more-all" title="Every task, in whatever list or in none"{{if .All}} aria-current="page"{{end}}><span class="lists-more-name">All tasks</span></a>
+{{- if .Lists}}<hr class="lists-more-rule">{{end}}
+{{- with .NoList}}<a href="{{.Href}}" class="lists-more-item lists-more-none" data-place="{{.Key}}" title="{{.Title}}: no pinned list has them, so the Tasks link doesn't count them"{{if .Current}} aria-current="page"{{end}}><span class="lists-more-name">{{.Label}}</span>{{template "module_counts" .Counts}}</a>
+{{end}}<a href="/tasks" class="lists-more-item lists-more-all" title="Every task, in whatever list or in none"{{if .All}} aria-current="page"{{end}}><span class="lists-more-name">All tasks</span></a>
 </div></details>{{end}}</div></nav>{{end}}
 <header class="page-header"><h1>{{.Heading}}{{with .List}}{{if .Private}} <span class="lock" title="A private list: only you see it and its tasks">🔒</span>{{end}}{{end}}</h1>
 {{- if .Menu}}<div class="page-header-actions"><button type="button" class="btn page-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="page-menu" title="More: new list{{if .List}}, rename, pin, delete{{end}}{{if .Tag}}, rename the tag{{end}}" aria-label="More actions">⋯</button></div>{{end}}</header>
@@ -93,7 +96,7 @@
 {{- end}}
 <article class="page-content">
 {{- /* A first list, just made: what its pin changed. */}}
-{{- if .MadeFirst}}<p class="tasks-list-home tasks-made-first">Tasks opens this list now, and new tasks go into it.{{if .NoListTasks}} {{.NoListTasks}} {{if eq .NoListTasks 1}}task{{else}}tasks{{end}} in no list {{if eq .NoListTasks 1}}is{{else}}are{{end}} under <a href="/tasks">All tasks</a>, in the row above.{{end}}</p>{{end}}
+{{- if .MadeFirst}}<p class="tasks-list-home tasks-made-first">Tasks opens this list now, and new tasks go into it.{{if .NoListTasks}} {{.NoListTasks}} {{if eq .NoListTasks 1}}task{{else}}tasks{{end}} in no list {{if eq .NoListTasks 1}}is{{else}}are{{end}} under More, in the row above: <a href="/tasks?list=none">No list</a>.{{end}}</p>{{end}}
 {{- /* Pinned: which lists these are (pinnedSources). */}}
 {{- with .PinnedLists}}<p class="tasks-list-home tasks-pinned-lists">{{if $.Mine}}Your tasks in your pinned lists{{else}}Your pinned lists, as one{{end}}: {{range $i, $l := .}}{{if $i}}, {{end}}<a href="{{$l.Href}}">{{$l.Label}}</a>{{end}}</p>{{end -}}
 {{.TasksHTML}}</article>
