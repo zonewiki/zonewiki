@@ -937,7 +937,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 		v.DeleteError, v.ShareError = q.Get("delete_error"), q.Get("share_error")
 		for i, p := range rq.pinnedLists() {
 			if p.Ref == list.Ref {
-				v.Pin = map[bool]string{true: "default", false: "1"}[i == 0]
+				v.Pin = map[bool]string{true: "first", false: "1"}[i == 0]
 			}
 		}
 		// Where its tasks can go when it is deleted: the other lists, a
@@ -1072,8 +1072,8 @@ func shareListRoute(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, listHref(name), http.StatusFound)
 }
 
-// pinListRoute: a list's Pin, Unpin and Make default (its ⋯ menu, the
-// settings dialog's pin): pin is 1, 0 or default. Back to the list.
+// pinListRoute: a list's Pin, Move first and Unpin (its ⋯ menu, the
+// settings dialog's pin): pin is 1, first or 0. Back to the list.
 func pinListRoute(w http.ResponseWriter, r *http.Request) {
 	// mine=1 or 0, without a list: My lists show only the user's own tasks,
 	// or everyone's (the ⋯ menu's Only my tasks in My lists).
@@ -1105,7 +1105,7 @@ func pinListRoute(w http.ResponseWriter, r *http.Request) {
 // a page view's columns). Menu: the ⋯ menu (New list…; a list's Rename…,
 // its pin, Make shared…, Delete…; a tag's Rename tag…), for who may change
 // tasks; Users: with users, so New list… has its Private box. Pin: how the
-// user pinned List ("", "1", "default"); MoveTo: where its tasks can go
+// user pinned List ("", "1", "first": their first pinned list); MoveTo: where its tasks can go
 // when it is deleted. The …Name and …Error fields: a dialog back from a
 // refusal.
 type tasksPageView struct {

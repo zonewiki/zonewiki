@@ -43,7 +43,7 @@ type tasksEmbedView struct {
 // embedSettingsAt: where a task app's settings are written, for its
 // dialog: the Index-th embed of Page as written (Raw; Index < 0: All
 // tasks'), and the list it shows (List, a ref; its settings as JSON, and
-// how the user pinned it: "", "1" or "default"), "" for none. A list's own
+// whether the user pinned it: Pin "1"), "" for none. A list's own
 // settings go to its registry, the embed's (the tab, a filter) to the page.
 type embedSettingsAt struct {
 	Page         string
@@ -117,9 +117,9 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, p
 				set["noshare"] = "1"
 			}
 			at.List, at.ListSettings = list.Ref, jsonobj.Text(set)
-			for i, p := range rq.pinnedLists() {
+			for _, p := range rq.pinnedLists() {
 				if p.Ref == list.Ref {
-					at.Pin = map[bool]string{true: "default", false: "1"}[i == 0]
+					at.Pin = "1"
 				}
 			}
 		}
@@ -528,11 +528,12 @@ func countTasks(user string, tasks []*Task, lists map[string]ListInfo, params ..
 // TaskPlace is an entry of the task list switcher (tasks_page.html): a
 // list, all tasks, or My lists (the pinned lists together). Key names it
 // for the counts' refresh (js/chrome.js): "list:<ref>", "all", "pinned".
-// Pinned: a pinned list, or My lists.
+// Pinned: a pinned list, or My lists; First: the first of several pinned
+// lists, where a new task goes (its pill carries a plus).
 type TaskPlace struct {
-	Key, Label, Title, Href  string
-	Pinned, Private, Current bool
-	Counts                   TaskCounts
+	Key, Label, Title, Href         string
+	Pinned, First, Private, Current bool
+	Counts                          TaskCounts
 }
 
 // taskPlaces: where the user's tasks are, for the switcher: with several
@@ -564,10 +565,14 @@ func (rq *Req) taskPlaces() []TaskPlace {
 			Pinned: pinned, Private: l.Private(), Counts: countTasks(user, tasks, lists, l.Params)}
 	}
 	isPinned := map[string]bool{}
-	for _, l := range pinned {
+	for i, l := range pinned {
 		isPinned[l.Ref] = true
 		if !hidden(l) {
-			out = append(out, place(l, true))
+			p := place(l, true)
+			if i == 0 && len(pinned) > 1 {
+				p.First, p.Title = true, p.Title+": new tasks go here"
+			}
+			out = append(out, p)
 		}
 	}
 	rest := make([]ListInfo, 0, len(lists))

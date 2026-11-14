@@ -347,7 +347,7 @@ func migrateListsLocked() error {
 		return p.list
 	})
 	if len(wikiPins) > 0 {
-		shared.Pinned, shared.Default, shared.PinsSet = wikiPins, wikiPins[0], true
+		shared.Pinned, shared.PinsSet = wikiPins, true
 	}
 	for _, o := range owners[1:] {
 		own := ownPins[o]
@@ -371,9 +371,6 @@ func migrateListsLocked() error {
 			refs = append(refs, privateListName)
 		}
 		reg.Pinned, reg.PinsSet = refs, true
-		if len(refs) > 0 {
-			reg.Default = refs[0]
-		}
 	}
 	// 4. The settings of All tasks.
 	var oldAll map[string]map[string]string

@@ -45,7 +45,7 @@ function fieldsOf(p) {
     new: p.new || '',
     tag: p.tag || '',
     assignee: p.assignee || '',
-    pin: pin === 'default' ? 'default' : isTrue(pin) ? '1' : '',
+    pin: isTrue(pin) ? '1' : '',
     // Which list it is: only where the dialog makes the embed (the editor).
     list: p.list || '',
     keep: isTrue(p.keep),
@@ -93,8 +93,7 @@ export function changedParams(was, now, p) {
 // (Opens on, Plan, the pin); the other fields ([data-field]) only when set,
 // or once asked for in the line of words under them ([data-more]), as the
 // task dialog's rarer fields are. The pin is a button, pressed for a list
-// the user pinned, and a pinned list has a box that makes it their default
-// one; the hidden field pin holds its value for both ("", "1", "default").
+// the user pinned; the hidden field pin holds its value ("", "1").
 // fill(params, mode): the fields as the params have them; mode says what
 // the dialog is for: all (All tasks: no filter, no pin), list (a list: its
 // pin, keep, hide when sharing), embed (an embed on a page: its filter).
@@ -102,8 +101,6 @@ export function changedParams(was, now, p) {
 export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Focus')) {
   const f = form.elements;
   const pinBtn = form.querySelector('.task-settings-pin');
-  const defaultRow = form.querySelector('.task-settings-default');
-  const defaultBox = defaultRow?.querySelector('input');
   const moreEl = form.querySelector('.task-add-fields');
   const fieldEl = name => form.querySelector(`[data-field="${name}"]`);
   // (What a click needs later is the form's own: the handlers are wired once.)
@@ -138,8 +135,6 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
     pinBtn.hidden = !mode().list;
     pinBtn.setAttribute('aria-pressed', String(pinned));
     pinBtn.querySelector('.task-settings-pin-label').textContent = pinned ? 'Pinned' : 'Pin';
-    defaultRow.hidden = !pinned || !mode().list;
-    defaultBox.checked = f.pin.value === 'default';
   }
   // Wired once per form: the editor's dialog is opened again and again.
   if (!form.dataset.wired) {
@@ -149,10 +144,6 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
       f.pin.value = f.pin.value === '' ? '1' : '';
       syncPin();
       changed();
-    });
-    defaultBox?.addEventListener('input', () => {   // before the form hears of it
-      f.pin.value = defaultBox.checked ? 'default' : '1';
-      syncPin();
     });
     moreEl.addEventListener('click', e => {
       const name = e.target.closest('[data-more]')?.dataset.more;

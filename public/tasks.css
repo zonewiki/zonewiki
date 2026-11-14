@@ -64,6 +64,8 @@
 }
 .tasks-place .module-counts { margin-left: 0; }
 .tasks-place-lock, .tasks-place-pin { display: inline-flex; }
+/* The first of several pinned lists, where a new task goes: a plus by its pin. */
+.tasks-place-first { margin-left: -.2rem; font-weight: 600; line-height: 1; }
 /* A finger: taller pills, the capsule's corners with them. */
 @media (pointer: coarse) {
   .tasks-places .tasks-place { height: 2.25rem; padding: 0 .8rem; }

@@ -31,6 +31,7 @@
 {{- with .Places}}<nav class="tasks-places" aria-label="Task lists"><div class="tasks-places-group">
 {{- range .}}<a href="{{.Href}}" class="tasks-place" data-place="{{.Key}}" title="{{.Title}}{{if .Private}} (only you see it){{end}}"{{if .Current}} aria-current="page"{{end}}>
 {{- if .Pinned}}<span class="tasks-place-pin" aria-hidden="true">{{template "icon_pin"}}</span>{{end}}
+{{- if .First}}<span class="tasks-place-first" aria-hidden="true">+</span>{{end}}
 {{- if .Private}}<span class="tasks-place-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="tasks-place-label">{{.Label}}</span>{{template "module_counts" .Counts}}</a>
 {{- end}}</div></nav>{{end}}
 <header class="page-header"><h1>{{.Heading}}{{with .List}}{{if .Private}} <span class="lock" title="A private list: only you see it and its tasks">🔒</span>{{end}}{{end}}</h1>
@@ -40,10 +41,10 @@
 <button type="button" role="menuitem" data-dialog="list-new-dialog" id="list-new-btn">New list…</button>
 {{- with .List}}
 <button type="button" role="menuitem" data-dialog="list-rename-dialog" id="list-rename-btn">Rename…</button>
-{{- /* The pin is the user's own: where their Tasks links go, and (the default list) where a new task goes. */}}
+{{- /* The pin is the user's own: where their Tasks links go, and (the first pinned list) where a new task goes. */}}
 <form method="post" action="/tasks/pin-list" class="page-menu-form"><input type="hidden" name="list" value="{{.Ref}}">
 {{- if not $.Pin}}<button type="submit" role="menuitem" name="pin" value="1" id="list-pin-btn">Pin</button>{{end}}
-{{- if and $.Pin (ne $.Pin "default")}}<button type="submit" role="menuitem" name="pin" value="default" id="list-default-btn" title="New task (c t) adds its task to the default list">Make my default list</button>{{end}}
+{{- if and $.Pin (ne $.Pin "first")}}<button type="submit" role="menuitem" name="pin" value="first" id="list-first-btn" title="New task (c t) adds its task to your first pinned list">Move first</button>{{end}}
 {{- if $.Pin}}<button type="submit" role="menuitem" name="pin" value="0" id="list-unpin-btn">Unpin</button>{{end}}</form>
 {{- if .Private}}<button type="button" role="menuitem" data-dialog="list-share-dialog" id="list-share-btn">Make shared…</button>{{end}}
 <button type="button" role="menuitem" data-dialog="list-delete-dialog" id="list-delete-btn">Delete…</button>

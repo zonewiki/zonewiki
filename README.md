@@ -125,7 +125,7 @@ Done tasks go to a yearly archive. Beyond that:
   and show it on any page (`[[tasks: list=groceries]]`). A switcher goes between your pinned
   lists, the other lists and all tasks.
 - Pin the lists that are your own tasks: the Tasks module then opens them, as one,
-  and new tasks go to the one you made your default list.
+  and new tasks go to the first of them (Move first in a list's menu).
 - Task lists inside any page (`[[tasks: tag=work view=plan]]`), a single task inline
   as a live chip you can tick (`[[task:…]]`), and **Make task** in the editor
   to turn lines of meeting notes into tasks.

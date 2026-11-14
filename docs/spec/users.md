@@ -465,7 +465,7 @@ An assistant sees and changes what its user does in the browser, no more (`docs/
   `list_tags`' counts,
   `search_wiki`,
   read_page's `[[task:…]]` list ("no such task") and create_task's tag hints.
-  `create_task` and `update_task` take `list`: a task in one of the user's private lists is theirs alone, any other shared; `create_task` without it puts the task in the user's default list, as `c t` does, so a private one when that list is. `update_task` shares a private task only with `share: true`, and never takes a shared one into a private list. `private` is no argument anymore (the tool says to give `list`).
+  `create_task` and `update_task` take `list`: a task in one of the user's private lists is theirs alone, any other shared; `create_task` without it puts the task in the user's first pinned list, as `c t` does, so a private one when that list is. `update_task` shares a private task only with `share: true`, and never takes a shared one into a private list. `private` is no argument anymore (the tool says to give `list`).
   The task text says "private" among its facts.
 - **Guides**: a `CLAUDE.md`/`AGENTS.md` in another user's folder isn't a guide for you (`folderGuides(slug, user)`, `canSeePath`), not listed in read_guides' description (`toolList(user)`), and a guide's `@import` of a page you can't see stays as written (`guideText`).
   `rename_page` of a folder holding pages you may not move (`private/` itself) moves nothing.
@@ -573,7 +573,7 @@ A new page is made private from the start (below).
 
 A task can be private: only its user sees it, on every task list, in search, on pages and to their assistant.
 **Private and shared are said of lists, not of tasks**: a task is private when the list it is in is a private list of yours (Lists in `docs/spec/tasks.md`), and every other task, in a shared list or in none, is shared.
-You make a private list with **New list…** and its **Private** box, and a private task by making it in that list: with the dialog's **List** field, in a view of the list, or from anywhere when it is your default list.
+You make a private list with **New list…** and its **Private** box, and a private task by making it in that list: with the dialog's **List** field, in a view of the list, or from anywhere when it is your first pinned list.
 The dialog says under its fields who sees the task ("Private: only you see this task.").
 **A shared task can't be made private**: your private lists are off in its List field, and the API and `update_task` answer 400 "A shared task stays shared".
 **Where a task is kept is the one thing that decides who sees it; its tags never do**, and its list is what says where it is kept.
@@ -598,8 +598,8 @@ Everything else (shared tasks) is everyone's to see and change, as shared pages 
 - **Another user's private list is no list**: it is in no switcher, no List field and no answer; its name on a shared page (`[[tasks: list=gifts]]`) is the shared list of that name or none ("There is no list #gifts"), to its owner too, so a shared page shows everyone the same.
   A name means the same registry for one user only: two users can each have a private `gifts`, and a shared one can exist beside them; whoever has both names the shared one `shared/gifts` (Names in `docs/spec/tasks.md`).
   Renaming, deleting, sharing, pinning or setting another user's list is refused as for a list that isn't there (404).
-- **Pins are per user** (`pinned`, `default` in their registry): which lists the Tasks link goes to and counts, and the default list where New task puts a task, are each user's own; one who has set none has the wiki's.
-  So for a user whose default list is private, a task from New task, `c t` or their assistant's `create_task` is private; for another it is shared.
+- **Pins are per user** (`pinned` in their registry): which lists the Tasks link goes to and counts, and the first of them, where New task puts a task, are each user's own; one who has set none has the wiki's.
+  So for a user whose first pinned list is private, a task from New task, `c t` or their assistant's `create_task` is private; for another it is shared.
 - **Sharing a task**: moving it out of its private list, to a shared list or to no list (`list` with `share: true` in `PUT /api/tasks`, `batch-update`, `update_task`; the dialog and the list picker send `share` after saying what it does), moves it from your files to the shared ones, in one commit;
   it is an event in the task's History (`shared`, by who did it; older tasks may show `private` events from when tasks could move the other way).
   Without `share` such a move is a 400 that says the task would be shared; a shared task into a private list is a 400 always.

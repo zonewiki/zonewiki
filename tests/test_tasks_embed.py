@@ -327,9 +327,17 @@ class TestListSwitcher:
         assert (data["count"], data["focus"]) == (2, 3)
         assert {k: (v["count"], v["focus"]) for k, v in data["places"].items()} == {
             "pinned": (2, 3), "list:task": (1, 2), "list:shop": (1, 1), "list:gifts": (1, 1), "all": (3, 4)}
-        # The default list is the user's to choose: shop, which then comes first.
-        assert client.post("/tasks/pin-list", data={"list": "shop", "pin": "default"}, headers=HOST).status_code == 302
-        assert [k for k, _, _ in places(self.get(client, "/tasks"))][:3] == ["pinned", "list:shop", "list:task"]
+        # Which list is first, and so takes new tasks, is the user's to choose:
+        # shop, moved to the front. Its pill says so with a plus.
+        assert client.post("/tasks/pin-list", data={"list": "shop", "pin": "first"}, headers=HOST).status_code == 302
+        html = self.get(client, "/tasks")
+        assert [k for k, _, _ in places(html)][:3] == ["pinned", "list:shop", "list:task"]
+        assert 'data-tasks-list="shop"' in html
+        nav = html.split('<nav class="tasks-places"', 1)[1].split("</nav>", 1)[0]
+        assert nav.count("tasks-place-first") == 1
+        assert re.search(r'data-place="list:shop" title="Pinned list #shop: new tasks go here"[^>]*>.*?tasks-place-first', nav, re.S)
+        # "default", the word for it until 2026-11, is refused.
+        assert client.post("/tasks/pin-list", data={"list": "task", "pin": "default"}, headers=HOST).status_code == 400
         # With one pin, ?pinned=1 goes where the Tasks link does.
         assert client.post("/tasks/pin-list", data={"list": "shop", "pin": "0"}, headers=HOST).status_code == 302
         resp = client.get("/tasks?pinned=1", headers=HOST)

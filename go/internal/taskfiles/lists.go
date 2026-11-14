@@ -44,9 +44,8 @@ type List struct {
 type Registry struct {
 	Version int
 	Lists   []*List
-	Pinned  []string          // the pinned lists' names, in order
+	Pinned  []string          // the pinned lists' names, in order: the first is where a new task goes
 	PinsSet bool              // the file says which are pinned, be it none ("pinned": [])
-	Default string            // the default list: where a new task goes
 	Mine    bool              // a user's own: My lists shows only the tasks assigned to them
 	All     map[string]string // the settings of All tasks (the shared registry)
 	Extra   map[string]json.RawMessage
@@ -62,6 +61,8 @@ func (r *Registry) Find(name string) *List {
 	return nil
 }
 
+// registryKeys: the keys Zone reads. "default" (until 2026-11 the list a new
+// task goes to, now the first pinned one) is read and no longer written.
 var registryKeys = map[string]bool{"version": true, "lists": true, "pinned": true, "default": true, "mine": true, "all": true}
 
 // textMap: an object's members that are text, a number or a bool, as text.
@@ -84,7 +85,7 @@ func ParseRegistry(raw []byte) (*Registry, bool) {
 	if !ok {
 		return nil, false
 	}
-	r := &Registry{Default: listName(o.Str("default")), All: textMap(o["all"]), PinsSet: o.Has("pinned")}
+	r := &Registry{All: textMap(o["all"]), PinsSet: o.Has("pinned")}
 	r.Mine, _ = jsonobj.As[bool](o["mine"])
 	if n, ok := jsonobj.WholeNumber(o["version"]); ok && n > 0 {
 		r.Version = n
@@ -111,6 +112,11 @@ func ParseRegistry(raw []byte) (*Registry, bool) {
 			}
 		}
 		r.Lists = append(r.Lists, l)
+	}
+	// A registry from before the first pinned list was the default one names
+	// it in "default", whatever the order of its pins: it goes first.
+	if first := listName(o.Str("default")); first != "" {
+		r.Pinned, r.PinsSet = []string{first}, true
 	}
 	for _, name := range jsonobj.TextList(o["pinned"]) {
 		if name = listName(name); name != "" && !slices.Contains(r.Pinned, name) {
@@ -199,10 +205,6 @@ func (r *Registry) Encode() string {
 		b.WriteString(strings.ReplaceAll(jsonobj.Text(r.Pinned), ",", ", "))
 	} else if r.PinsSet {
 		b.WriteString(",\n  \"pinned\": []")
-	}
-	if r.Default != "" {
-		b.WriteString(",\n  \"default\": ")
-		b.WriteString(jsonobj.Text(r.Default))
 	}
 	if r.Mine {
 		b.WriteString(",\n  \"mine\": true")

@@ -83,7 +83,7 @@ def list_page(client, wiki_dir: Path, slug: str, content: str, **kwargs) -> Path
     made through the routes the browser uses: each list if it isn't there
     yet (private for a page in private/), with the embed's list settings
     (view, keep, limit, plan, labels, new) when it was made here, and pinned
-    as a pin= in the embed says (pin=1, pin=default). A list is no longer
+    as a pin= in the embed says (pin=1; pin=default: pinned first). A list is no longer
     declared by a page nor pinned by one: pin= in the text means nothing to
     Zone, it tells this helper what the test wants. Code is skipped."""
     path = write_page(wiki_dir, slug, content)
@@ -99,7 +99,7 @@ def list_page(client, wiki_dir: Path, slug: str, content: str, **kwargs) -> Path
         if own and "newlist_error" not in made.headers.get("Location", ""):
             assert client.post("/api/tasks/settings", json={"list": name, "set": own}, **kwargs).status_code == 200
         if p.get("pin"):
-            pin = "default" if p["pin"].lower() == "default" else "1"
+            pin = "first" if p["pin"].lower() == "default" else "1"
             assert client.post("/tasks/pin-list", data={"list": name, "pin": pin}, **kwargs).status_code == 302
     return path
 

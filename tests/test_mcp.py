@@ -836,7 +836,7 @@ class TestListTags:
         # The tags, then the lists apart: a list is where a task is, no tag.
         assert text.splitlines()[1:] == ["backend | 2 | 1 | 1", "infra | 1 | 0 | 1", "shopping | 0 | 1 | 0", "",
                                          "Task lists (a task is in one list or in none: its list, not a tag):",
-                                         "- shopping (1 open; the default list, where a new task goes)", "- work (0 open)"]
+                                         "- shopping (1 open; the first pinned list, where a new task goes)", "- work (0 open)"]
 
     def test_none(self, client, pages):
         assert call(client, "list_tags")[0].startswith("No tags yet")

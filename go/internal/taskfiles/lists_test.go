@@ -17,7 +17,6 @@ const registryText = `{
     {"name": "task"}
   ],
   "pinned": ["task", "shop"],
-  "default": "task",
   "mine": true,
   "all": {"view": "open"}
 }
@@ -37,8 +36,32 @@ func TestRegistryRoundTrips(t *testing.T) {
 	if shop == nil || shop.Settings["limit"] != "8" || shop.Settings["view"] != "focus" || r.Find("nope") != nil {
 		t.Errorf("shop = %+v", shop)
 	}
-	if !reflect.DeepEqual(r.Pinned, []string{"task", "shop"}) || r.Default != "task" || r.All["view"] != "open" || !r.Mine {
-		t.Errorf("pins %v, default %q, all %v", r.Pinned, r.Default, r.All)
+	if !reflect.DeepEqual(r.Pinned, []string{"task", "shop"}) || r.All["view"] != "open" || !r.Mine {
+		t.Errorf("pins %v, all %v, mine %v", r.Pinned, r.All, r.Mine)
+	}
+}
+
+// A registry from before the first pinned list took the new tasks names
+// that list in "default", whatever the order of its pins: it is read as
+// the first pin, and written without the key.
+func TestRegistryDefaultIsTheFirstPin(t *testing.T) {
+	for text, want := range map[string][]string{
+		`{"pinned": ["a", "b"], "default": "b"}`: {"b", "a"},
+		`{"pinned": ["a", "b"], "default": "a"}`: {"a", "b"},
+		`{"pinned": ["a"], "default": "C"}`:      {"c", "a"},
+		`{"default": "b"}`:                       {"b"},
+		`{"pinned": ["a", "b"]}`:                 {"a", "b"},
+	} {
+		r, ok := ParseRegistry([]byte(text))
+		if !ok || !reflect.DeepEqual(r.Pinned, want) || !r.PinsSet {
+			t.Errorf("%s: pins %v (set %v), want %v", text, r.Pinned, r.PinsSet, want)
+		}
+		if got := r.Encode(); strings.Contains(got, "default") {
+			t.Errorf("%s: written with the key:\n%s", text, got)
+		}
+	}
+	if r, _ := ParseRegistry([]byte(`{"lists": []}`)); r.PinsSet || len(r.Pinned) != 0 {
+		t.Errorf("no pins read as set: %+v", r)
 	}
 }
 
@@ -61,8 +84,7 @@ func TestRegistryReadLeniently(t *testing.T) {
     {"name": "shop", "limit": "8", "keep": "true", "colour": "red"},
     {"name": "b"}
   ],
-  "pinned": ["shop", "7"],
-  "default": "3",
+  "pinned": ["3", "shop", "7"],
   "theme": {"dark": true}
 }
 `

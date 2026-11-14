@@ -167,7 +167,7 @@
     "orphans": {
      "type": "boolean",
      "default": false,
-     "description": "Only pages no other page links to (the home page, the default task list's page and notes aside): candidates to link from somewhere."
+     "description": "Only pages no other page links to (the home page, the first pinned task list's page and notes aside): candidates to link from somewhere."
     },
     "notes": {
      "type": "boolean",
@@ -945,7 +945,7 @@
     },
     "list": {
      "type": "string",
-     "description": "The list it goes in (list_tags shows them; '' none). Default: the user's default list. In a private list only the user sees it."
+     "description": "The list it goes in (list_tags shows them; '' none). Default: the user's first pinned list. In a private list only the user sees it."
     },
     "summary": {
      "type": "string",

@@ -166,7 +166,7 @@ def list_page(page, wiki: "Wiki", slug: str, content: str) -> Path:
         if own and "newlist_error" not in made.url:
             assert page.request.post("/api/tasks/settings", data={"list": name, "set": own}).ok
         if p.get("pin"):
-            pin = "default" if p["pin"].lower() == "default" else "1"
+            pin = "first" if p["pin"].lower() == "default" else "1"
             assert page.request.post("/tasks/pin-list", form={"list": name, "pin": pin}).ok
     return path
 

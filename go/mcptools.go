@@ -503,7 +503,7 @@ func mcpListsText(user string) string {
 			facts = append(facts, "private: only the user sees it and its tasks")
 		}
 		if ref == def {
-			facts = append(facts, "the default list, where a new task goes")
+			facts = append(facts, "the first pinned list, where a new task goes")
 		}
 		lines = append(lines, "- "+ref+" ("+strings.Join(facts, "; ")+")")
 	}

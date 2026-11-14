@@ -304,7 +304,7 @@ Without Playwright installed they skip, so plain `pytest tests/` is unaffected.
   Uncaught page JS errors fail the test.
 - Coverage: Notes filter and the search dialog's mode indicator (its wording, its update from `X-Zone-Semantic`, fitting on a phone; `test_search.py`),
   modules (breadcrumb switcher and current module, phone tab bar (a tap acts on the touch, no click of the browser's;
-  a tap below the bar's box, as Firefox lays it out, still reaches the tab), New per module, due count on the Tasks links, pinned lists, desktop top actions, New task/`c t`/`g t` following the pinned and default lists;
+  a tap below the bar's box, as Firefox lays it out, still reaches the tab), New per module, due count on the Tasks links, pinned lists, desktop top actions, New task/`c t`/`g t` following the pinned lists and the first of them;
   `test_mobile_nav.py`),
   side columns (sticky TOC and links from 1320px, active section, code and tables growing only when needed, none below 1320px; `test_layout.py`),
   editor (formatting bar and Ctrl+B/I/K, the Task list dialog writing and changing an embed, auto-save + unsaved dot, no commit on auto-save, Done/Ctrl+S commit, pagehide beacon, live preview/F2, list continuation),

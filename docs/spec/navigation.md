@@ -65,13 +65,13 @@ opened by the **user button** at the top right on desktop (phones have Sign out 
 Without users there is one pill, Wiki · Tasks · Notes.
 The Tasks link goes to your **pinned lists**,
 the lists you pinned (your own tasks; a list's ⋯ menu or List settings pins it: Pins in `docs/spec/tasks.md`;
-`pinnedLists`, from your pins in the lists' registry, the wiki's when you have set none, the default list first;
+`pinnedLists`, from your pins in the lists' registry, the wiki's when you have set none, in their order;
 `rq.pinnedLists()` looks them up once per request): one at `/tasks?list=<name>` with its settings,
 several as one task app at `/tasks?pinned=1` (My lists),
 as the list switcher opens them;
 no pin, `/tasks` (`tasksLinkHref`, `moduleLinks`).
 Its counts are of the pinned lists.
-The first pinned list is the **default list** (`defaultList()`, `lookupDefaultList()`), where New task puts a task.
+The **first pinned list** is where New task puts a task (`defaultList()`, `lookupDefaultList()`).
 Your other lists and all tasks are one click from there, in the task app's **list switcher** (Lists in `docs/spec/tasks.md`).
 `/tasks` stays the view of every task that search results, task links and `g d` open.
 There is still no nav bar: the modules sit where the eye already goes.
@@ -95,10 +95,10 @@ There is still no nav bar: the modules sit where the eye already goes.
   (Until 2026-11 the row had New note and Add a task icons between the eye and Search.) The pill has a fixed width, so the row's width (`--top-actions-w`, which the breadcrumb's padding and the status badges' position use) doesn't depend on the font; its border ends on the content's right edge.
   Hidden at ≤640px.
   They replaced the round New and Search buttons in the bottom-right corner, so desktop toasts and Sign out have the bottom corners to themselves again.
-- **New task from anywhere** (`openDefaultTask` in `js/actions.js`: `c t`, and the phone's **Task** tab): the task goes into the default list, tagged as it tags new tasks (`newTaskTags`: the list's `new`) and a keep task if the list says so.
-  On a page that shows the default list or My lists it clicks that embed's own **+ New** (so the view's dates apply too, e.g. Focus's today);
-  anywhere else it opens a task list app's edit modal with the default list, its tags,
-  keep and start (`layout.html` puts them on `<body>`: `data-tasks-list`, `data-tasks-tags`, `data-tasks-keep`, `data-tasks-today` when the default list's view is Focus, as its "+ New" starts tasks today there;
+- **New task from anywhere** (`openDefaultTask` in `js/actions.js`: `c t`, and the phone's **Task** tab): the task goes into your first pinned list, tagged as it tags new tasks (`newTaskTags`: the list's `new`) and a keep task if the list says so.
+  On a page that shows that list or My lists it clicks that embed's own **+ New** (so the view's dates apply too, e.g. Focus's today);
+  anywhere else it opens a task list app's edit modal with that list, its tags,
+  keep and start (`layout.html` puts them on `<body>`: `data-tasks-list`, `data-tasks-tags`, `data-tasks-keep`, `data-tasks-today` when that list's view is Focus, as its "+ New" starts tasks today there;
   without a pin, today, as `/tasks`'s Focus;
   `openEditModal` takes `list`, `tags`, which replace the filter's even when empty, `keep` and `start_date`): the page's own task app (an embed, `/tasks`, the editor's hidden one),
   or on a page without one a hidden one loaded on demand (`loadHeadlessTasks`: `GET /api/tasks/headless`, the headless embed without its scripts, then `tasks-core.js` and `tasks.js`; once per page),
@@ -240,7 +240,7 @@ Bare-key shortcuts are suppressed when focus is inside an `input`, `textarea`, `
 |----------|---------|--------|
 | **Ctrl/⌘+P** | anywhere | Open search modal |
 | **g** then **h/n/a/t/p** | anywhere | Navigate: Home / Notes / all tasks (`/tasks`) / Tasks (its home) / your private home (with users). |
-| **c** then **n/t** | anywhere | Create: note / task in the default list (with the tags it gives new tasks). |
+| **c** then **n/t** | anywhere | Create: note / task in your first pinned list (with the tags it gives new tasks). |
 | **F2** | editor | Toggle preview pane |
 | **Ctrl/⌘+S** | editor | Done — commit and go to page view |
 | **Ctrl/⌘+B / I / K** | editor | Bold / italic / link (see Formatting bar) |

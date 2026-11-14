@@ -2201,7 +2201,7 @@ def test_c_t_goes_to_the_default_list_shared_or_private(page, wiki, monkeypatch)
     page.request.post("/login", form={"username": "bob", "password": "pw"})
     make_list(page, "task")
     page.request.post("/login", form={"username": "alice", "password": "pw"})
-    assert page.request.post("/tasks/pin-list", form={"list": "shared/task", "pin": "default"}).ok
+    assert page.request.post("/tasks/pin-list", form={"list": "shared/task", "pin": "first"}).ok
     wiki.write("garden", "# Garden\n")
     page.goto("/page/garden")
     page.keyboard.press("c")
@@ -2217,7 +2217,7 @@ def test_c_t_goes_to_the_default_list_shared_or_private(page, wiki, monkeypatch)
     wait_for_field(page, "Call the bank", "private", False)   # the dialog closes before its request is through
     assert task_by_title(page, "Call the bank")["list"] == "task"
     # Her own list of that name as the default: private.
-    assert page.request.post("/tasks/pin-list", form={"list": "task", "pin": "default"}).ok
+    assert page.request.post("/tasks/pin-list", form={"list": "task", "pin": "first"}).ok
     page.goto("/page/garden")
     page.keyboard.press("c")
     page.keyboard.press("t")
@@ -4328,8 +4328,8 @@ def test_rename_and_delete_list_dialogs(page, wiki):
     expect(page.locator(".tasks-app")).to_have_count(1)
 
 
-def test_pin_and_default_from_a_lists_menu(page, wiki):
-    """A list's ⋯ menu pins it for you, makes it your default list, unpins it."""
+def test_pin_and_move_first_from_a_lists_menu(page, wiki):
+    """A list's ⋯ menu pins it for you, moves it first (where new tasks go), unpins it."""
     for name in ("shop", "work"):
         make_list(page, name)
     page.goto("/tasks?list=shop")
@@ -4346,18 +4346,26 @@ def test_pin_and_default_from_a_lists_menu(page, wiki):
     menu.get_by_role("menuitem", name="Pin").click()
     page.wait_for_url("**/tasks?list=work")
     expect(page.locator(".tasks-place .tasks-place-label")).to_have_text(["My lists", "shop", "work", "All"])
-    expect(page.locator("body")).to_have_attribute("data-tasks-list", "shop")      # the first pinned: the default
+    expect(page.locator("body")).to_have_attribute("data-tasks-list", "shop")      # the first pinned takes new tasks
+    first = page.locator(".tasks-place:has(.tasks-place-first)")
+    expect(first).to_have_attribute("data-place", "list:shop")                     # and its pill says so
+    expect(first).to_have_attribute("title", "Pinned list #shop: new tasks go here")
     page.locator(".page-header .page-menu-btn").click()
-    expect(menu.get_by_role("menuitem")).to_have_text(["New list…", "Rename…", "Make my default list", "Unpin", "Delete…"])
-    menu.get_by_role("menuitem", name="Make my default list").click()
+    expect(menu.get_by_role("menuitem")).to_have_text(["New list…", "Rename…", "Move first", "Unpin", "Delete…"])
+    menu.get_by_role("menuitem", name="Move first").click()
     page.wait_for_url("**/tasks?list=work")
     expect(page.locator(".tasks-place .tasks-place-label")).to_have_text(["My lists", "work", "shop", "All"])
     expect(page.locator("body")).to_have_attribute("data-tasks-list", "work")
+    expect(first).to_have_attribute("data-place", "list:work")
+    page.locator(".page-header .page-menu-btn").click()
+    expect(menu.get_by_role("menuitem")).to_have_text(["New list…", "Rename…", "Unpin", "Delete…"])   # first already
+    page.keyboard.press("Escape")
     page.locator(".page-header .page-menu-btn").click()
     menu.get_by_role("menuitem", name="Unpin").click()
     page.wait_for_url("**/tasks?list=work")
     expect(page.locator(".tasks-place .tasks-place-label")).to_have_text(["shop", "work", "All"])
     expect(page.locator("body")).to_have_attribute("data-tasks-list", "shop")
+    expect(first).to_have_count(0)                                                 # one pinned list: nothing to tell apart
 
 
 def test_rename_tag_dialog(page, wiki):
@@ -4409,7 +4417,6 @@ def test_settings_dialog_changes_the_lists_settings_and_the_pages(page, wiki):
     expect(dialog.locator("[name=list]")).to_have_count(0)   # which list it shows is the page's to say
     pin = dialog.locator(".task-settings-pin")
     expect(pin).to_have_attribute("aria-pressed", "false")
-    expect(dialog.locator(".task-settings-default")).to_be_hidden()   # only a pinned list can be the default
     expect(dialog.locator(".task-settings-where")).to_contain_text("The list’s settings hold wherever it shows")
     # What is rarely changed shows only when set, so the line under the
     # fields offers each.
@@ -4452,22 +4459,18 @@ def test_settings_dialog_changes_the_lists_settings_and_the_pages(page, wiki):
     assert (registry.read_text(), wiki.read("shopping")) == before
     open_list_settings(page)
     dialog.locator("[name=plan]").check()
-    # The pin: pressed, the list is pinned, and can be made the default one.
+    # The pin: pressed, the list is pinned.
     pin.click()
     expect(pin).to_have_attribute("aria-pressed", "true")
     expect(pin).to_have_text("Pinned")
     expect(dialog.locator("[name=pin]")).to_have_value("1")
-    dialog.locator(".task-settings-default input").check()
-    expect(dialog.locator("[name=pin]")).to_have_value("default")
-    pin.click()                                                    # not pinned: not the default either
-    expect(dialog.locator(".task-settings-default")).to_be_hidden()
+    pin.click()
     expect(dialog.locator("[name=pin]")).to_have_value("")
     pin.click()
-    dialog.locator(".task-settings-default input").check()
     with page.expect_navigation():
         dialog.get_by_role("button", name="Save").click()
     text = registry.read_text()
-    assert '"plan": "on"' in text and '"pinned": ["shop"],\n  "default": "shop"' in text
+    assert '"plan": "on"' in text and '"pinned": ["shop"]' in text and "default" not in text
     assert "pin=" not in wiki.read("shopping")                       # the pin is no param of a page
     expect(page.get_by_role("switch", name="Plan")).to_have_attribute("aria-checked", "true")
     expect(page.locator(".breadcrumb .module-link[data-module=tasks]")).to_have_attribute("href", "/tasks?list=shop")
@@ -4477,7 +4480,6 @@ def test_settings_dialog_changes_the_lists_settings_and_the_pages(page, wiki):
     open_list_settings(page)
     expect(dialog.locator(".task-settings-where")).to_contain_text("For this list, for everyone")
     expect(dialog.locator(".task-settings-pin")).to_have_attribute("aria-pressed", "true")
-    expect(dialog.locator(".task-settings-default input")).to_be_checked()
     expect(dialog.locator(".task-add-field:visible")).to_have_text(["Hide when sharing"])    # no page here: no filter
     expect(dialog.locator("[name=view]")).to_have_value("focus")    # the list's own tab, not the page's
     dialog.locator("[name=view]").select_option("open")

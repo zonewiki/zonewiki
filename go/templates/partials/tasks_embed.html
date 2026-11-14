@@ -241,7 +241,7 @@
   <form id="task-settings-form{{.Sfx}}" class="task-edit-form">
     {{- /* The pin beside the title: pressed, the list is pinned for you (it is
         where your Tasks links go); a button, as the list switcher's pin is.
-        pin holds its value for the form ("", 1, default; js/tasksettings.js).
+        pin holds its value for the form ("", 1; js/tasksettings.js).
         Only where the dialog is a list's (task-settings-list). */}}
     <div class="task-settings-head">
       <div class="modal-label" id="task-settings-title{{.Sfx}}">List settings</div>
@@ -257,10 +257,6 @@
       <datalist id="task-settings-lists{{.Sfx}}">{{range .Lists}}<option value="{{.}}">{{end}}</datalist>
       <span class="field-hint">A list's name shows that list; none shows all tasks.</span>
     </div>
-    {{- end}}
-    {{- /* A pinned list can be the default one, where New task adds a task. */}}
-    {{- if not .Editor}}
-    <label class="task-settings-check task-settings-default" id="task-settings-default-row{{.Sfx}}" title="New task (c t) adds its task to your default list" hidden><input type="checkbox" id="task-settings-default{{.Sfx}}"> My default list: where New task adds a task</label>
     {{- end}}
     <div class="task-settings-row">
       <div class="task-field">

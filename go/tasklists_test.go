@@ -380,7 +380,7 @@ func TestRenameList(t *testing.T) {
 	cake := newTestTask(t, "alice", "Cake", false, "list", "gifts")
 	bobs := newTestTask(t, "bob", "Bob's", false, "list", "gifts")
 	for _, u := range []string{"alice", "bob"} {
-		if err := pinListOp(u, "shop", "default"); err != nil {
+		if err := pinListOp(u, "shop", "first"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -526,7 +526,7 @@ func TestShareList(t *testing.T) {
 }
 
 // Pins are the user's own; one who set none has the wiki's, and starts
-// from them. The default list comes first.
+// from them.
 func TestPins(t *testing.T) {
 	testWiki(t, nil)
 	mustList(t, "", "shop", false)
@@ -543,7 +543,7 @@ func TestPins(t *testing.T) {
 	if got := pins("bob"); !slices.Equal(got, []string{"shop", "work"}) {
 		t.Errorf("bob has the wiki's pins: %v", got)
 	}
-	if err := pinListOp("alice", "gifts", "default"); err != nil {
+	if err := pinListOp("alice", "gifts", "first"); err != nil {
 		t.Fatal(err)
 	}
 	if got := pins("alice"); !slices.Equal(got, []string{"gifts", "shop", "work"}) {
@@ -569,7 +569,7 @@ func TestPins(t *testing.T) {
 	if err := pinListOp("alice", "work", "maybe"); !refusedWith(err, refusedInvalid) {
 		t.Errorf("pin=maybe: %v", err)
 	}
-	// The pinned lists as one view: the default list's settings, all their tasks.
+	// The pinned lists as one view: the first one's settings, all their tasks.
 	if err := setListSettingsOp("bob", "shop", map[string]string{"view": "focus", "new": "weekly"}); err != nil {
 		t.Fatal(err)
 	}

@@ -727,7 +727,7 @@ def test_a_corrupt_tasks_file_stops_a_list_rename_with_nothing_written(client, s
 def test_delete_list_moves_its_tasks_and_keeps_the_pages(client, shop):
     client.post("/tasks/new-list", data={"name": "market"}, headers=HOST)
     client.post("/api/tasks", json={"title": "Bread", "list": "shop"}, headers=HOST)
-    list_op(client, "pin", list="shop", pin="default")
+    list_op(client, "pin", list="shop", pin="first")
     before = git(shop, "rev-parse", "HEAD").strip()
     assert list_op(client, "delete", list="shop", to="shop").startswith("/tasks?list=shop&delete_error=")
     assert list_op(client, "delete", list="shop", to="market") == "/tasks?list=market"
@@ -745,9 +745,18 @@ def test_delete_list_moves_its_tasks_and_keeps_the_pages(client, shop):
 def test_pinning_a_list_is_a_commit_of_the_registry(client, shop):
     before = git(shop, "rev-parse", "HEAD").strip()
     assert list_op(client, "pin", list="shop", pin="1") == "/tasks?list=shop"
-    assert '"pinned": ["shop"],\n  "default": "shop"' in (shop / "_tasks/lists.json").read_text()
+    registry = shop / "_tasks/lists.json"
+    assert '"pinned": ["shop"]\n' in registry.read_text() and "default" not in registry.read_text()
+    # Move first: the list goes to the front (pinned, if it wasn't), where a new task goes.
+    assert client.post("/tasks/new-list", data={"name": "work"}, headers=HOST).status_code == 302
+    assert list_op(client, "pin", list="work", pin="first") == "/tasks?list=work"
+    assert '"pinned": ["work", "shop"]\n' in registry.read_text()
+    assert list_op(client, "pin", list="shop", pin="first") == "/tasks?list=shop"
+    assert '"pinned": ["shop", "work"]\n' in registry.read_text()
     assert list_op(client, "pin", list="shop", pin="0") == "/tasks?list=shop"
-    assert git(shop, "log", "--format=%s", f"{before}..HEAD").splitlines() == ["Unpin list #shop", "Pin list #shop"]
+    assert '"pinned": ["work"]\n' in registry.read_text()
+    assert git(shop, "log", "--format=%s", f"{before}..HEAD").splitlines() == [
+        "Unpin list #shop", "Pin list #shop first", "Pin list #work first", "Create list #work", "Pin list #shop"]
     assert client.post("/tasks/pin-list", data={"list": "shop", "pin": "2"}, headers=HOST).status_code == 400
     assert client.post("/tasks/pin-list", data={"list": "nosuch", "pin": "1"}, headers=HOST).status_code == 404
 
@@ -757,3 +766,18 @@ def test_rename_tag_under_a_guide_needs_its_id(client, shop):
     text, err = mcp(client, "rename_task_tag", tag="shop", new_tag="food")
     assert err and text.startswith("Nothing was written") and tasks_file(shop)[0]["tags"][0] == "shop"
 
+
+
+def test_a_registry_naming_its_default_list_keeps_it_first(client, shop):
+    """Until 2026-11 "default" named the list a new task goes to, whatever
+    the order of the pins: it reads as the first pin, and the next write
+    drops the key and keeps the order."""
+    assert client.post("/tasks/new-list", data={"name": "work"}, headers=HOST).status_code == 302
+    registry = shop / "_tasks/lists.json"
+    registry.write_text(registry.read_text().replace("\n}\n", ',\n  "pinned": ["shop", "work"],\n  "default": "work"\n}\n'))
+    html = client.get("/tasks", headers=HOST).get_data(as_text=True)
+    assert 'data-tasks-list="work"' in html
+    assert html.index('data-place="list:work"') < html.index('data-place="list:shop"')
+    assert client.post("/tasks/new-list", data={"name": "home"}, headers=HOST).status_code == 302
+    text = registry.read_text()
+    assert '"pinned": ["work", "shop"]' in text and "default" not in text

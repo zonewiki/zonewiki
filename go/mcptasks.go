@@ -540,7 +540,7 @@ func createTaskTool(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// As c t in the browser: into the user's default list, with its tags.
+	// As c t in the browser: into the user's first pinned list, with its tags.
 	if h := lookupDefaultList(user); h != nil && !data.Has("list") {
 		data.Set("list", h.Ref)
 		data["tags"] = homeTags(data["tags"], h)

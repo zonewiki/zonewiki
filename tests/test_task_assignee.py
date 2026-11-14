@@ -422,7 +422,7 @@ class TestOnlyMine:
 
     def test_a_new_task_in_a_private_default_list_has_no_assignee(self, team):
         self.mine(team)
-        self.pin(team, "own", "default")
+        self.pin(team, "own", "first")
         assert "data-tasks-assignee" not in self.page(team, "/page/index")
 
     def test_who_cant_have_it(self, team, client):

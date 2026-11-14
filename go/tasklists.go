@@ -151,19 +151,19 @@ func inScope(t *Task, scope string, lists map[string]ListInfo) bool {
 	return ref != "" && slices.Contains(strings.Split(scope, "|"), ref)
 }
 
-// pinnedLists: the lists user pinned, in order, the default list (where a
-// new task goes) first: their own pins when they have set some, else the
-// wiki's (the shared registry's, which are everyone's without users).
+// pinnedLists: the lists user pinned, in order, the first being where a new
+// task goes: their own pins when they have set some, else the wiki's (the
+// shared registry's, which are everyone's without users).
 func pinnedLists(user string, lists map[string]ListInfo) []ListInfo {
 	shared, own := listRegistries(user)
 	from, find := shared, sharedList
-	if own != nil && (own.PinsSet || own.Default != "") {
+	if own != nil && own.PinsSet {
 		from, find = own, resolveList
 	}
 	var out []ListInfo
 	seen := map[string]bool{}
-	for _, ref := range append([]string{from.Default}, from.Pinned...) {
-		if l, ok := find(ref, lists); ok && ref != "" && !seen[l.Ref] {
+	for _, ref := range from.Pinned {
+		if l, ok := find(ref, lists); ok && !seen[l.Ref] {
 			seen[l.Ref] = true
 			out = append(out, l)
 		}
@@ -212,7 +212,8 @@ func setOnlyMineOp(user string, on bool) error {
 	return commitLists(user, msg, []string{path})
 }
 
-// lookupDefaultList: user's default list, nil when they pinned none.
+// lookupDefaultList: the list a new task of user's goes to where no one list
+// is in view, their first pinned one; nil when they pinned none.
 func lookupDefaultList(user string) *ListInfo {
 	if pinned := pinnedLists(user, taskLists(user)); len(pinned) > 0 {
 		return &pinned[0]
@@ -351,9 +352,6 @@ func renameRefs(reg *taskfiles.Registry, rename func(ref string) string) bool {
 			reg.Pinned[i], changed = n, true
 		}
 	}
-	if n := rename(reg.Default); n != reg.Default {
-		reg.Default, changed = n, true
-	}
 	return changed
 }
 
@@ -361,11 +359,7 @@ func renameRefs(reg *taskfiles.Registry, rename func(ref string) string) bool {
 func dropRefs(reg *taskfiles.Registry, drop func(ref string) bool) bool {
 	n := len(reg.Pinned)
 	reg.Pinned = slices.DeleteFunc(reg.Pinned, drop)
-	changed := len(reg.Pinned) != n
-	if reg.Default != "" && drop(reg.Default) {
-		reg.Default, changed = "", true
-	}
-	return changed
+	return len(reg.Pinned) != n
 }
 
 // renameListInText: page or task text with the lists its [[tasks: list=…]]
@@ -727,8 +721,8 @@ func shareListOp(user, ref, suffix string) (string, error) {
 	return l.Name, taskFiles.WriteBothLocked(user, active, closed, "Share list #"+l.Name+suffix, paths...)
 }
 
-// pinListOp pins the list user names ref ("1"), makes it their default list
-// ("default": where a new task goes), or unpins it ("0"). The pins are the
+// pinListOp pins the list user names ref ("1": last), makes it their first
+// pinned list ("first": where a new task goes), or unpins it ("0"). The pins are the
 // user's own (their registry); without users the wiki's. A user who has set
 // none starts from the wiki's.
 func pinListOp(user, ref, pin string) error {
@@ -753,12 +747,9 @@ func pinListOp(user, ref, pin string) error {
 	if err != nil {
 		return err
 	}
-	if owner != "" && !reg.PinsSet && reg.Default == "" {
+	if owner != "" && !reg.PinsSet {
 		for _, p := range pinnedLists(user, lists) {
 			reg.Pinned = append(reg.Pinned, p.Ref)
-		}
-		if len(reg.Pinned) > 0 {
-			reg.Default = reg.Pinned[0]
 		}
 	}
 	// Without users the registry's names are the refs.
@@ -767,21 +758,16 @@ func pinListOp(user, ref, pin string) error {
 	switch pin {
 	case "0":
 		reg.Pinned = slices.DeleteFunc(reg.Pinned, is)
-		if is(reg.Default) {
-			reg.Default = ""
-		}
 		msg = "Unpin list #" + l.Name
-	case "1", "default":
+	case "1":
 		if !slices.ContainsFunc(reg.Pinned, is) {
 			reg.Pinned = append(reg.Pinned, l.Ref)
 		}
-		if pin == "default" {
-			reg.Default, msg = l.Ref, "Make #"+l.Name+" the default list"
-		} else if reg.Default == "" && len(reg.Pinned) > 0 {
-			reg.Default = reg.Pinned[0] // the first pinned stays the default
-		}
+	case "first":
+		reg.Pinned = append([]string{l.Ref}, slices.DeleteFunc(reg.Pinned, is)...)
+		msg = "Pin list #" + l.Name + " first"
 	default:
-		return refuse("pin is 0, 1 or default")
+		return refuse("pin is 0, 1 or first")
 	}
 	reg.PinsSet = true
 	path, err := taskFiles.WriteListsLocked(user, owner, reg)
