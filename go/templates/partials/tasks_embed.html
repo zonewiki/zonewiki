@@ -112,7 +112,18 @@
         <span class="task-prop-label">Importance</span>
         <select id="task-edit-importance{{.Sfx}}" name="importance"><option value="high">High</option><option value="" selected>Normal</option><option value="low">Low</option></select>
       </label>
-      {{- /* Repeat with what belongs to it, kept together where the line wraps. */}}
+      <label class="task-prop task-prop-check task-edit-keep" data-field="keep" title="Ticking it off sends it back to Open instead of archiving it, e.g. a staple on a shopping list" hidden>
+        <input type="checkbox" id="task-edit-keep{{.Sfx}}" name="keep"> Keep after done
+      </label>
+      {{- /* With users: a private task is the user's alone (private/<user>/_tasks/). */}}
+      {{- if .CanPrivate}}
+      <label class="task-prop task-prop-check task-edit-private" data-field="private" title="Only you see a private task; the others don't, not even in search. A shared task stays shared." hidden>
+        <input type="checkbox" id="task-edit-private{{.Sfx}}" name="private"> Private
+      </label>
+      {{- end}}
+      {{- /* Repeat with what belongs to it, last and on a line of its own
+          (tasks.css): choosing a repeat adds Every and From done beside it,
+          and nothing moves to another line. */}}
       <div class="task-prop-group" data-field="repeat" hidden>
         <label class="task-prop">
           <span class="task-prop-label">Repeat</span>
@@ -133,15 +144,6 @@
           <input type="checkbox" id="task-edit-rec-from{{.Sfx}}" name="rec_from"> From done
         </label>
       </div>
-      <label class="task-prop task-prop-check task-edit-keep" data-field="keep" title="Ticking it off sends it back to Open instead of archiving it, e.g. a staple on a shopping list" hidden>
-        <input type="checkbox" id="task-edit-keep{{.Sfx}}" name="keep"> Keep after done
-      </label>
-      {{- /* With users: a private task is the user's alone (private/<user>/_tasks/). */}}
-      {{- if .CanPrivate}}
-      <label class="task-prop task-prop-check task-edit-private" data-field="private" title="Only you see a private task; the others don't, not even in search. A shared task stays shared." hidden>
-        <input type="checkbox" id="task-edit-private{{.Sfx}}" name="private"> Private
-      </label>
-      {{- end}}
     </div>
     <div class="task-date-warning" id="task-edit-date-warn{{.Sfx}}" hidden>
       <span id="task-edit-date-warn-text{{.Sfx}}"></span>

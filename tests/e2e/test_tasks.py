@@ -3122,6 +3122,47 @@ def test_tab_in_the_task_dialog_goes_from_field_to_field(page, wiki):
     expect(comment).to_be_hidden()
 
 
+def test_repeat_stays_where_it_is_when_a_repeat_is_chosen(page, wiki):
+    # Repeat has a line of its own under the dates: choosing a repeat adds
+    # Every and From done beside it and moves nothing (it used to open on the
+    # dates' line and jump to the next with its two fields).
+    page.request.post("/api/tasks", data={"title": "Water plants", "due_date": "2099-01-10"})
+    page.goto("/tasks?view=open")
+    modal = open_edit(page, "Water plants")
+    modal.locator("#task-edit-more-repeat").click()
+    rec = modal.locator("#task-edit-rec-type")
+    box = lambda loc: loc.locator("xpath=ancestor::label").bounding_box()
+    due = modal.locator("[data-date-trigger=task-edit-due]").locator("xpath=ancestor::label").bounding_box()
+    before = box(rec)
+    assert before["x"] == due["x"] and before["y"] >= due["y"] + due["height"], (before, due)
+    rec.select_option("weekly")
+    every = modal.locator("#task-edit-rec-interval")
+    expect(every).to_be_visible()
+    after = box(rec)
+    # (Within a pixel: the line is a hair taller with a number field on it.)
+    assert after["x"] == before["x"] and abs(after["y"] - before["y"]) < 1, (before, after)
+    assert abs(box(every)["y"] - after["y"]) < 1 and box(every)["x"] > after["x"]   # beside it, on its line
+
+
+def test_description_is_close_to_the_title(page, wiki):
+    # "Description" is about as far under the title's field (and, on a new
+    # task, the line saying where it goes) as "Tags" is under the description.
+    page.goto("/tasks?view=open")
+    page.locator("#task-add-btn").click()
+    modal = page.locator("#task-edit-modal")
+    bottom = lambda sel: (lambda b: b["y"] + b["height"])(modal.locator(sel).bounding_box())
+    top = lambda sel: modal.locator(sel).bounding_box()["y"]
+    expect(modal.locator("#task-edit-target")).to_be_visible()
+    tags_gap = top("label[for=task-edit-tags]") - bottom("#task-edit-desc")
+    assert 0 < top("label[for=task-edit-desc]") - bottom("#task-edit-target") <= tags_gap + 6
+    modal.locator("#task-edit-cancel").click()
+    page.request.post("/api/tasks", data={"title": "Plain"})
+    page.reload()
+    open_edit(page, "Plain")                           # editing: no such line
+    expect(modal.locator("#task-edit-target")).to_be_hidden()
+    assert 0 < top("label[for=task-edit-desc]") - bottom("#task-edit-title") <= tags_gap + 6
+
+
 def test_the_dialog_shows_rare_fields_when_set_or_asked_for(page, wiki):
     # Repeat, Days before due and Keep after done are no part of a plain
     # task's dialog: the line under the fields offers them.
@@ -3922,7 +3963,7 @@ def test_comments_are_the_edit_modals_last_section(page, wiki):
     modal = open_edit(page, "Renew passport")
     order = modal.evaluate("""d => [...d.querySelectorAll('[name=description], [name=tags], [name=rec_type], [name=keep], .task-comments, .task-edit-actions')]
         .map(el => el.name || el.className.split(' ').pop())""")
-    assert order == ["description", "tags", "rec_type", "keep", "task-comments", "task-edit-actions"]
+    assert order == ["description", "tags", "keep", "rec_type", "task-comments", "task-edit-actions"]
     section = modal.locator(".task-comments")
     expect(section).to_have_css("border-top-width", "1px")
     # The line to write one looks like a field and opens the real one.
