@@ -15,3 +15,9 @@ import './js/fold.js';        // folding sections
 import './js/present.js';     // presentation mode
 import './js/admin.js';       // the admin page: the Remove dialog
 import './tasks.js';           // tasks apps on the page
+
+// Every module above has wired up what it found on the page: from here on
+// a click or a key does what the code says, not what the plain HTML would
+// (a dialog's form posted as it is). The browser tests wait for this
+// before they act (tests/e2e/conftest.py); nothing else reads it.
+document.documentElement.dataset.ready = '1';

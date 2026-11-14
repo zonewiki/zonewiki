@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 
 pytest.importorskip("playwright.sync_api", reason="playwright not installed (use ./run.sh e2e)")
-from playwright.sync_api import sync_playwright  # noqa: E402
+from playwright.sync_api import Error as PlaywrightError, expect, sync_playwright  # noqa: E402
 
 from tests import settings  # noqa: E402
 from tests.goserver import LiveServer, free_port  # noqa: E402
@@ -133,7 +133,62 @@ class Wiki:
         return self.git("rev-parse", "HEAD").strip()
 
 
-def wait_until(page, predicate, timeout_ms: int = 5000):
+# How long an expect() waits for what it expects (Playwright's own default
+# is 5 s), and wait_until below: on a machine busy with other work a browser
+# gets little of a CPU, and what takes 100 ms alone can take seconds. A
+# passing test waits no longer for it; only a failing one takes this long
+# to say so.
+WAIT_MS = 15_000
+expect.set_options(timeout=WAIT_MS)
+
+# Whether the page takes clicks and keys as Zone's code means them: its
+# entry module has run (<html data-ready>, public/zonewiki.js) and every
+# task list that started shows its tasks (data-loaded, js/taskdata.js). A
+# page without Zone's script (a download, an error page) is ready as it is;
+# one still being read is not yet known to be such a page (wait_for_url
+# returns when the address is the new one, before any of the page is there).
+READY_JS = """() => {
+  if (document.readyState === 'loading') return false;
+  if (!document.querySelector('script[src$="/zonewiki.js"]')) return true;
+  if (!document.documentElement.dataset.ready) return false;
+  return [...document.querySelectorAll('.tasks-app[data-ready]:not([data-headless])')].every(a => a.dataset.loaded);
+}"""
+
+
+def wait_ready(page):
+    """Wait until the page is ready (READY_JS). For a navigation the test
+    didn't start with goto, reload or wait_for_url, which wait themselves: a
+    link clicked, a form that leaves the page."""
+    for _ in range(5):
+        try:
+            page.wait_for_function(READY_JS)
+            return
+        except PlaywrightError as e:
+            # The page went on to another one meanwhile (a redirect in the
+            # browser): wait for that one.
+            if "context was destroyed" not in str(e) and "navigat" not in str(e).lower():
+                raise
+    page.wait_for_function(READY_JS)
+
+
+def _wait_when_there(page):
+    """page.goto, page.reload and page.wait_for_url wait until the page is
+    ready before they return, so no test acts on a page whose code hasn't
+    started: a click then did what the plain HTML does, or met a task list
+    without its tasks. ready=False: return as Playwright does (a test that
+    holds a request back, or looks at the page while it loads)."""
+    for name in ("goto", "reload", "wait_for_url"):
+        plain = getattr(page, name)
+
+        def waiting(*args, ready=True, _plain=plain, **kwargs):
+            result = _plain(*args, **kwargs)
+            if ready:
+                wait_ready(page)
+            return result
+        setattr(page, name, waiting)
+
+
+def wait_until(page, predicate, timeout_ms: int = WAIT_MS):
     """Wait until predicate() holds, looking every 100 ms; fails when it
     never does. For what expect() can't watch: the API's answer, a file on
     disk, a request a route held back. It waits through the page, so the
@@ -215,6 +270,7 @@ def _new_page(browser, base_url, *, viewport=DESKTOP, color_scheme="light", **co
     page.on("console", lambda msg: violations.append(msg.text)
             if "Content Security Policy" in msg.text else None)
     page.csp_violations = violations
+    _wait_when_there(page)
     return ctx, page
 
 

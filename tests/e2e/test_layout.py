@@ -646,7 +646,7 @@ def test_page_menu(page, wiki):
     page.keyboard.press("Enter")
     expect(page.locator("#page-rename-dialog")).to_be_visible()
     expect(page.locator("#page-rename-dialog")).to_contain_text('A page named "other" already exists')
-    assert "rename_error" not in page.url
+    expect(page).not_to_have_url(re.compile("rename_error"))   # waits: page.url may be a moment behind the dialog
     page.keyboard.press("Escape")
     # Delete… asks first.
     more.click()
@@ -874,7 +874,7 @@ def test_append_quicknote_to_page(page, wiki):
     page.keyboard.press("Enter")
     expect(dialog).to_be_visible()
     expect(dialog).to_contain_text("There is no page “nowhere”")
-    assert "append_error" not in page.url
+    expect(page).not_to_have_url(re.compile("append_error"))   # waits: page.url may be a moment behind the dialog
 
 
 @pytest.mark.parametrize("width", [390, 1100, 1600])
@@ -937,4 +937,5 @@ def test_rename_into_private_is_refused(page, wiki, monkeypatch):
     expect(dialog).to_be_visible()
     expect(dialog).to_contain_text("stays shared")
     expect(dialog.locator("#page-rename-input")).to_have_value("private/alice/ideas")
-    assert "rename_" not in page.url and (wiki.root / "ideas.md").exists()
+    expect(page).not_to_have_url(re.compile("rename_"))
+    assert (wiki.root / "ideas.md").exists()

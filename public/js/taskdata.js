@@ -96,7 +96,12 @@ async function fetchTasks() {
   tasksGen++;
   st.closedLoaded = false;
   app.render();
-  if (st.activeView === 'closed') fetchClosed();
+  // The list shows its tasks (data-loaded; on Closed once those are there
+  // too). The browser tests wait for it before they act; nothing else
+  // reads it.
+  const loaded = () => { app.appEl.dataset.loaded = '1'; };
+  if (st.activeView === 'closed') fetchClosed().then(loaded, loaded);
+  else loaded();
   refreshClosedCount();
 }
 

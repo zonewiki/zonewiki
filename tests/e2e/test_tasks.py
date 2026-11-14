@@ -19,7 +19,7 @@ def task_by_title(page, title: str) -> dict:
     return next(t for t in tasks if t["title"] == title)
 
 
-def wait_for_field(page, title: str, field: str, expected, timeout_ms: int = 5000):
+def wait_for_field(page, title: str, field: str, expected, timeout_ms: int = 15000):
     """Poll the API until the task exists and its field reaches the expected
     value: a dialog's submit returns before its request is through, so a new
     task may not be there yet."""
@@ -2128,8 +2128,7 @@ def test_c_t_in_a_shared_home_starts_shared(page, wiki, monkeypatch):
     modal.locator("[id^=task-edit-title]").fill("Call the bank")
     modal.locator("button[type=submit]").click()
     expect(modal).to_be_hidden()
-    task = next(t for t in page.request.get("/api/tasks").json() if t["title"] == "Call the bank")
-    assert task["private"] is False
+    wait_for_field(page, "Call the bank", "private", False)   # the dialog closes before its request is through
 
 
 def test_private_box_of_a_shared_task_is_disabled(page, wiki, monkeypatch):
@@ -4089,7 +4088,7 @@ def test_rename_list_dialog(page, wiki):
     expect(dialog).to_be_visible()   # back, asking
     expect(dialog).to_contain_text("already in use")
     expect(page.locator("#list-rename-submit")).to_have_text("Merge")
-    assert "rename_error" not in page.url
+    expect(page).not_to_have_url(re.compile("rename_error"))
     page.locator("#list-rename-input").fill("food")
     expect(page.locator("#list-rename-submit")).to_have_text("Rename")   # another name: no merge
 

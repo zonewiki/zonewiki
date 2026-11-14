@@ -513,7 +513,7 @@ def test_task_counts_are_in_the_page_before_any_script(page, wiki):
     page.request.post("/api/tasks", data={"title": "Water plants", "start_date": date.today().isoformat()})
     page.route("**/public/zonewiki.js", lambda route: route.abort())
     page.route("**/api/tasks/due-count", lambda route: route.abort())
-    page.goto("/page/index")
+    page.goto("/page/index", ready=False)       # its script never runs
     tasks = page.locator(".breadcrumb .module-link[data-module=tasks]")
     expect(tasks.locator(".module-due")).to_have_text("1")
     expect(tasks.locator(".module-focus")).to_have_text("2")
@@ -680,7 +680,7 @@ def test_breadcrumb_crumbs_wait_for_the_trail_so_they_dont_jump(page, wiki):
     expect(title).to_be_visible()
     expect(page.locator(".breadcrumb .trail-link")).to_have_text(["Garden"])
     page.route("**/public/zonewiki.js", lambda route: route.abort())
-    page.goto("/page/beds")
+    page.goto("/page/beds", ready=False)        # its script never runs
     expect(page.locator(".breadcrumb")).not_to_have_class(re.compile(r"\btrail-ready\b"))
     assert title.evaluate("el => getComputedStyle(el).visibility") == "hidden"
     expect(title).to_be_visible(timeout=3000)   # the fallback shows it after a second

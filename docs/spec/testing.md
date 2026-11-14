@@ -324,8 +324,17 @@ Without Playwright installed they skip, so plain `pytest tests/` is unaffected.
   So `conftest.py` stops the process of a test that runs longer than `TEST_TIMEOUT` (120 s; the slowest takes under 10), setup and teardown included (`pytest_runtest_protocol`), after writing which test it was and where every thread stood.
   With pytest-xdist that process is one worker: the run reports the test as failed ("worker crashed while running …") and goes on with a new worker, instead of standing still until someone stops it.
   Such a failure says the machine was short of CPU or memory, not that Zone is wrong: run the test again by itself.
-- Waiting: for what the page shows, `expect(…)`, which waits by itself.
-  For what it can't watch (the API's answer, a file on disk, a request a route held back), `wait_until(page, predicate)` from `conftest.py`, which looks every 100 ms through the page, so the page's routes and events go on meanwhile (`time.sleep` would stop them).
+- A page is ready before a test acts on it: `page.goto`, `page.reload` and `page.wait_for_url` return only once Zone's code has started on the page and every task list that started shows its tasks (`_wait_when_there`, `READY_JS` in `conftest.py`).
+  Before that a click does what the plain HTML does (a dialog's form posted as it is, its error in the URL) and a task list has no cards, which on a busy machine is what a test met.
+  The page says so itself: `<html data-ready>` once the entry module `zonewiki.js` has run, `data-loaded` on a `.tasks-app` once it has drawn its tasks (`fetchTasks` in `js/taskdata.js`; on Closed once those are there); only the tests read the two.
+  A page without Zone's script (a download, an error page) counts as ready, once it is read to its end: `wait_for_url` returns when the address has changed, before the new page's script tag is there to be found.
+  `ready=False` on any of the three returns as Playwright does, for a test that keeps the script from running or looks at the page while it loads.
+  After a navigation none of them started (a link clicked, a form that leaves the page), `wait_ready(page)` waits the same way where the next step needs it.
+- Waiting: for what the page shows, `expect(…)`, which waits by itself, up to 15 s (`WAIT_MS`; Playwright's own 5 s ran out on a machine busy with other work).
+  A passing test waits no longer for that; only a failing one takes so long to say so.
+  An action whose result the app takes back is a `click()`, not a `check()`: `check()` fails when the box is unticked again before it looks.
+  The page's address is asked with `expect(page).to_have_url(…)` / `not_to_have_url(…)`, not read from `page.url` right after the page changed it itself (`history.replaceState`): `page.url` is what Playwright last heard, which can be a moment behind what the page already shows.
+  For what it can't watch (the API's answer, a file on disk, a request a route held back), `wait_until(page, predicate)` from `conftest.py`, which looks every 100 ms (as long as `expect`) through the page, so the page's routes and events go on meanwhile (`time.sleep` would stop them).
   A fixed `page.wait_for_timeout(…)` is only for showing that nothing happens (no request went out, a card stayed where it was) and for the pace of a gesture (a touch held, a drag's steps): never for something that is about to happen.
 - Touch: `new_page(**TOUCH_PHONE)` gives a phone context with touch input, `hover: none` and `pointer: coarse` (use `.tap()`). Full-page screenshots of such a context lose the touch/hover emulation (Playwright re-renders with changed device metrics), so assert on computed styles/sizes rather than on a full-page image.
 - `test_screenshots` writes full-page PNGs of each view at phone/desktop × light/dark to `tests/e2e/_screenshots/` (gitignored) for visual review.

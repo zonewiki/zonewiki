@@ -36,7 +36,7 @@ def wait_for_assignee(page, title, name):
     def there():
         found = [t for t in page.request.get("/api/tasks").json() if t["title"] == title]
         return bool(found) and found[0].get("assignee") == name
-    wait_until(page, there, 5000)
+    wait_until(page, there)
 
 
 def card(page, title):
@@ -151,7 +151,7 @@ def test_a_new_task_s_title_assigns(alice):
     title.fill("Mail bob@example.org @zed")
     expect(modal.locator("#task-edit-quick")).to_be_hidden()
     modal.get_by_role("button", name="Save").click()
-    wait_until(alice, lambda: any(t["title"] == "Mail bob@example.org @zed" for t in alice.request.get("/api/tasks").json()), 5000)
+    wait_until(alice, lambda: any(t["title"] == "Mail bob@example.org @zed" for t in alice.request.get("/api/tasks").json()))
     assert "assignee" not in task(alice, "Mail bob@example.org @zed")
 
 

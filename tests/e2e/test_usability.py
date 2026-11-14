@@ -319,7 +319,9 @@ def test_a_tick_on_a_page_changed_since_finds_its_item(page, wiki):
     wait_until(page, lambda: "- [x] Buy milk" in wiki.read("todo"))
     assert "- [ ] New one" in wiki.read("todo")
     wiki.write("todo", "# Todo\n\n- [ ] Call the plumber today\n")
-    page.locator(".task-list-item-checkbox").nth(0).check()
+    # A click, not check(): the app unticks the box again, and check() fails
+    # when that happens before it looks.
+    page.locator(".task-list-item-checkbox").nth(0).click()
     toast = page.locator(".task-undo-toast", has_text="The page changed")
     expect(toast).to_be_visible()
     expect(page.locator(".task-list-item-checkbox").nth(0)).not_to_be_checked()
