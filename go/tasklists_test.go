@@ -66,6 +66,10 @@ func TestListsTakenOverFromPages(t *testing.T) {
 		"home":        "# Home\n\n[[tasks: list=chores pin=default]]\n",
 		"secret/plan": "# Plan\n\n[[tasks: list=plans]]\n", // a page not for sharing
 		"me":          "# Me\n\n[[tasks: tag=me pin=1]]\n", // a pinned view that is no list
+		// Views by a list's tag, which its tasks lose: they show the list.
+		"views": "# Views\n\n[[tasks: tag=Groceries]]\n\n[[tasks: tag=weekly,#groceries view=open]]\n\n" +
+			"[[tasks: tag=-chores]] [[tasks: tag=chores|work]] [[tasks: tag=work]] `[[tasks: tag=chores]]`\n\n" +
+			"[Chores](/tasks?tag=chores&view=open), [both](/tasks?tag=chores%2Cwork), [work](/tasks?tag=work), [set](/tasks?list=plans&tag=chores)\n",
 	})
 	writeTasks(t, "",
 		oldTask("1", "Milk", "Groceries", "weekly"),
@@ -110,6 +114,12 @@ func TestListsTakenOverFromPages(t *testing.T) {
 	}
 	if text, _ := readText(safePath("shop")); !strings.Contains(text, "[[tasks: list=Groceries keep=1 labels=Catalogue,,Shopping limit=8 tag=weekly]]") {
 		t.Errorf("shop: %q", text)
+	}
+	wantViews := "# Views\n\n[[tasks: list=groceries]]\n\n[[tasks: list=groceries tag=weekly view=open]]\n\n" +
+		"[[tasks: tag=-chores]] [[tasks: tag=chores|work]] [[tasks: tag=work]] `[[tasks: tag=chores]]`\n\n" +
+		"[Chores](/tasks?list=chores&view=open), [both](/tasks?list=chores&tag=work), [work](/tasks?tag=work), [set](/tasks?list=plans&tag=chores)\n"
+	if text, _ := readText(safePath("views")); text != wantViews {
+		t.Errorf("views: %q", text)
 	}
 	// All tasks' settings moved into the registry.
 	if p := allTasksParams(); p.Get("view") != "open" || p.Get("limit") != "5" {

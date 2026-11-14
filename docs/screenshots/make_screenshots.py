@@ -29,7 +29,7 @@ WIKI = Path(tempfile.mkdtemp(prefix="zonewiki_screenshots_"))
 os.environ.update(ZONE_DATA=str(WIKI))
 os.environ.pop("ZONE_ALLOW_REMOTE", None)
 (WIKI / ".zone").mkdir()
-(WIKI / ".zone" / "config").write_text("hosts = 127.0.0.1\n")
+(WIKI / ".zone" / "config").write_text("hosts = 127.0.0.1\nno-login = yes\n")  # no-login: no first-run page
 # The commit the screenshots show at the bottom left, without "+dirty".
 os.environ["ZONE_BUILD"] = subprocess.run(
     ["git", "-c", "safe.directory=*", "-C", str(ROOT), "log", "-1", "--format=%h %cd", "--date=format:%Y-%m-%d %H:%M"],

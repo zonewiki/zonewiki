@@ -841,7 +841,12 @@ Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged
   3. **The pins**: `pin=1` and `pin=default` on shared pages become the wiki's (`pinned`, `default` in the shared registry), the default one first, then by name; those on a user's private pages theirs, followed by the wiki's, as before.
      A pin of a view that is no list (`[[tasks: tag=me pin=1]]`) has nowhere to go: the log says so.
      `pin=` is taken out of the pages' embeds.
-  4. **The settings of All tasks** move from `_tasks/settings.json` into the shared registry (`all`), and that file goes.
+  4. **Views by a list's tag**: an embed without `list=` whose `tag=` asks for a list's former tag (`[[tasks: tag=shop,urgent]]`) shows the list from then on (`[[tasks: list=shop tag=urgent]]`),
+     and so does a link (`/tasks?tag=shop` becomes `/tasks?list=shop`),
+     since the tag left the list's tasks and the filter would find none of them.
+     A private page's embed names a list of its user's or a shared one.
+     `tag=-shop` and `tag=shop|work` stay as written and no longer find the list's tasks (the filter words `-list:shop` and `list:shop` do); text in code stays, and so do links in tasks.
+  5. **The settings of All tasks** move from `_tasks/settings.json` into the shared registry (`all`), and that file goes.
 
   The tasks are written first, then the users' registries, the shared one (whose `version` says "done") and last the pages, so a start that was interrupted runs again without harm: a task keeps the list it got.
   A task file that can't be read stops it before anything is written; Zone then runs, says so in its log, and refuses every change to lists until a start succeeds (`listsUnmigrated`), since a registry written meanwhile would stand for "taken over".

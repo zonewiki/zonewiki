@@ -10,6 +10,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -47,6 +48,81 @@ func stripPins(text string) string {
 			args = " " + args
 		}
 		return strings.TrimRight(m[:at[2]], " \t") + args + m[at[3]:]
+	})
+	return mdtext.UnmaskCode(masked, stash)
+}
+
+// listOutOfFilter: a tag= value (an embed's, a /tasks link's) that asks for
+// a list's former tag among tags that must all be there (a,b; not a|b, not
+// -a): the list (the first such), and the value without it.
+func listOutOfFilter(value string, isList func(string) bool) (list, rest string, ok bool) {
+	if strings.Contains(value, "|") {
+		return "", value, false
+	}
+	terms := strings.Split(value, ",")
+	for i, term := range terms {
+		name := strings.ToLower(strings.TrimLeft(strings.TrimSpace(term), "#"))
+		if name != "" && !strings.HasPrefix(name, "-") && isList(name) {
+			return name, strings.Join(slices.Delete(terms, i, i+1), ","), true
+		}
+	}
+	return "", value, false
+}
+
+// tagsToLists: page text whose [[tasks: tag=<a list's former tag>]] embeds
+// and /tasks?tag= links show the list instead (list=<name>, the other tags
+// still a filter): the tag left the list's tasks, so the filter would find
+// none of them. An embed or link that names a list already stays; code
+// stays as written. isList: a (lowercase) name is a list the page sees.
+func tagsToLists(text string, isList func(string) bool) string {
+	masked, stash := mdtext.MaskCode(text)
+	masked = tasksRE.ReplaceAllStringFunc(masked, func(m string) string {
+		at := tasksRE.FindStringSubmatchIndex(m) // at[2:4]: the args
+		args := m[at[2]:at[3]]
+		if p := parseTasksParams(args); p.Has("list") || !p.Has("tag") {
+			return m
+		}
+		changed := false
+		args = embedWordRE.ReplaceAllStringFunc(args, func(word string) string {
+			k, v, ok := strings.Cut(word, "=")
+			if !ok || strings.ToLower(k) != "tag" || changed {
+				return word
+			}
+			list, rest, ok := listOutOfFilter(v, isList)
+			if !ok {
+				return word
+			}
+			changed = true
+			if rest == "" {
+				return "list=" + list
+			}
+			return "list=" + list + " " + k + "=" + rest
+		})
+		return m[:at[2]] + args + m[at[3]:]
+	})
+	masked = tasksURLRE.ReplaceAllStringFunc(masked, func(m string) string {
+		at := strings.Index(m, "/tasks?") + len("/tasks?")
+		parts := strings.Split(m[at:], "&")
+		for _, part := range parts {
+			if k, _, _ := strings.Cut(part, "="); k == "list" || k == "pinned" {
+				return m
+			}
+		}
+		for i, part := range parts {
+			k, v, _ := strings.Cut(part, "=")
+			value, err := url.QueryUnescape(v)
+			if k != "tag" || err != nil {
+				continue
+			}
+			if list, rest, ok := listOutOfFilter(value, isList); ok {
+				parts[i] = "list=" + url.QueryEscape(list)
+				if rest != "" {
+					parts[i] += "&tag=" + url.QueryEscape(rest)
+				}
+				return m[:at] + strings.Join(parts, "&")
+			}
+		}
+		return m
 	})
 	return mdtext.UnmaskCode(masked, stash)
 }
@@ -347,24 +423,45 @@ func migrateListsLocked() error {
 			written = append(written, oldAllTasksFile())
 		}
 	}
-	var pinPaths []string
+	// The pages: pin= goes, and an embed or a link that filtered by a
+	// list's former tag (tag=shop) shows the list (list=shop): the tag left
+	// the list's tasks. A private page sees its user's lists and the shared.
+	pinned := map[string]bool{}
 	for _, p := range pinPages {
-		pinPaths = append(pinPaths, p.Path)
+		pinned[p.Path] = true
 	}
-	if _, err := keepPendingPages(pinPaths, "pages before the task lists were set up"); err != nil {
-		logf("lists: the pages keep their pin= (it means nothing now): %v", err)
-		pinPages = nil
-	}
-	for _, p := range pinPages {
-		text, err := readText(p.Path)
-		if err != nil {
+	newText := map[string]string{}
+	var pagePaths []string
+	for _, p := range pages {
+		o, private := pageOwner(p.Slug)
+		if private && (o == "" || regs[o] == nil) {
 			continue
 		}
-		if n := stripPins(text); n != text && writeText(p.Path, n) == nil {
-			written = append(written, p.Path)
+		text, err := readText(p.Path)
+		if err != nil || !pinned[p.Path] && !strings.Contains(text, "tag=") {
+			continue
+		}
+		n := tagsToLists(text, func(name string) bool {
+			return shared.Find(name) != nil || o != "" && regs[o].Find(name) != nil
+		})
+		if pinned[p.Path] {
+			n = stripPins(n)
+		}
+		if n != text {
+			newText[p.Path] = n
+			pagePaths = append(pagePaths, p.Path)
 		}
 	}
-	logf("lists: %d lists taken over from the pages, %d tasks given their list", made, moved)
+	if _, err := keepPendingPages(pagePaths, "pages before the task lists were set up"); err != nil {
+		logf("lists: the pages keep their pin= (it means nothing now) and their tag= of a list's former tag (it finds none of the list's tasks: write list=): %v", err)
+		pagePaths = nil
+	}
+	for _, path := range pagePaths {
+		if writeText(path, newText[path]) == nil {
+			written = append(written, path)
+		}
+	}
+	logf("lists: %d lists taken over from the pages, %d tasks given their list, %d pages rewritten", made, moved, len(pagePaths))
 	_ = gitCommit("", "Make task lists their own", nonEmpty(written)...)
 	return nil
 }
