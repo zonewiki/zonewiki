@@ -2075,10 +2075,13 @@ class TestLists:
         create_task(client, due_date=today, tags=["groceries"])
         assert client.get("/api/tasks/due-count").get_json()["count"] == 1
 
-    def test_due_count_includes_list_tasks(self, client, shop):
+    def test_due_count_is_my_tasks(self, client, shop):
+        # The task in no list, and a list's once the list is pinned.
         today = date.today().isoformat()
         create_task(client, due_date=today)
         create_task(client, due_date=today, list="groceries")
+        assert client.get("/api/tasks/due-count").get_json()["count"] == 1
+        assert client.post("/tasks/pin-list", data={"list": "groceries", "pin": "1"}).status_code == 302
         assert client.get("/api/tasks/due-count").get_json()["count"] == 2
 
     def test_completed_count_per_scope(self, client, shop):
@@ -2089,6 +2092,7 @@ class TestLists:
         assert count("") == 4
         assert count("?list=Groceries") == 2      # a tag of that name is no list
         assert count("?lists=groceries|nope") == 2
+        assert count("?mine=1") == 2     # My tasks: those in no list (the list isn't pinned)
         assert count("?all=1") == 4      # the old "show separate lists" scope
 
     def test_a_task_is_in_a_list_by_naming_it(self, client, shop):

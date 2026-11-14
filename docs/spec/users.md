@@ -598,7 +598,7 @@ Everything else (shared tasks) is everyone's to see and change, as shared pages 
 - **Another user's private list is no list**: it is in no switcher, no List field and no answer; its name on a shared page (`[[tasks: list=gifts]]`) is the shared list of that name or none ("There is no list #gifts"), to its owner too, so a shared page shows everyone the same.
   A name means the same registry for one user only: two users can each have a private `gifts`, and a shared one can exist beside them; whoever has both names the shared one `shared/gifts` (Names in `docs/spec/tasks.md`).
   Renaming, deleting, sharing, pinning or setting another user's list is refused as for a list that isn't there (404).
-- **Pins are per user** (`pinned` in their registry): which lists the Tasks link goes to and counts, and the first of them, where New task puts a task, are each user's own; one who has set none has the wiki's.
+- **Pins are per user** (`pinned` in their registry): which lists are in the My tasks the Tasks link goes to and counts, and the first of them, where New task puts a task, are each user's own; one who has set none has the wiki's.
   So for a user whose first pinned list is private, a task from New task, `c t` or their assistant's `create_task` is private; for another it is shared.
 - **Sharing a task**: moving it out of its private list, to a shared list or to no list (`list` with `share: true` in `PUT /api/tasks`, `batch-update`, `update_task`; the dialog and the list picker send `share` after saying what it does), moves it from your files to the shared ones, in one commit;
   it is an event in the task's History (`shared`, by who did it; older tasks may show `private` events from when tasks could move the other way).
@@ -665,7 +665,8 @@ Not there: telling someone that a task became theirs, a group as an assignee, an
   `/tasks?assignee=…` filters the same way, with an ordinary chip.
 - **The counts** on the Tasks links and the list switcher count what each user's lists show them: `assignee=me` is whoever asks (`assigneeParamMatches` in `go/tasksyntax.go`, the server's mirror of the filter).
   An export of such a list holds the tasks it shows (`/api/tasks/export?assignee=`).
-  A user can have their Tasks links count, and Pinned show, only their own tasks: **Only my tasks in Pinned** (Lists → Only my tasks in Pinned in `docs/spec/tasks.md`).
+  **My tasks**, where the Tasks links go, takes assignment into account by itself: a task assigned to someone else is not in it, and a task assigned to you is, also in a list you haven't pinned (Lists → My tasks in `docs/spec/tasks.md`).
+  Zone assigns a new task to no one; its maker says who has it.
 - **Several at once** (`openBulkAssignModal` in `js/taskselect.js`): **Assign…** in the selection bar and in the menu of a selected card, or **a** on the selected tasks (one is enough).
   The dialog lists the users who can be assigned, yourself first, then **No one**; the row of who has them all is ticked, one who has some says "1 of 4".
   A click (or ↑/↓ and Enter) assigns them in one `batch-update`, and the toast ("3 tasks assigned to bob") has one Undo for all, which leaves no trace in their histories.

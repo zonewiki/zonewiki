@@ -227,7 +227,7 @@ def test_list_switcher_goes_between_the_lists_and_keeps_its_counts(page, wiki):
     page.request.post("/api/tasks", data={"title": "Milk", "list": "shop", "start_date": date.today().isoformat()})
     page.goto("/tasks?list=shop")
     places = page.locator(".tasks-places .tasks-place")
-    expect(places.locator(".tasks-place-label")).to_have_text(["Pinned", "task", "shop", "More"])
+    expect(places.locator(".tasks-place-label")).to_have_text(["My tasks", "task", "shop", "More"])
     shop = places.and_(page.locator("[data-place='list:shop']"))
     expect(shop).to_have_attribute("aria-current", "page")
     expect(shop.locator(".module-focus")).to_have_text("1")
@@ -240,7 +240,7 @@ def test_list_switcher_goes_between_the_lists_and_keeps_its_counts(page, wiki):
     card(page, "Milk").locator("input[type=checkbox]").check()
     # After the checkbox's ~5 s grace period.
     expect(shop.locator(".module-focus")).to_be_hidden(timeout=10000)
-    places.filter(has_text="task").first.click()
+    page.locator(".tasks-place[data-place='list:task']").click()
     page.wait_for_url(re.compile(r"/tasks\?list=task$"))
     expect(page.locator(".tasks-place[aria-current]")).to_have_attribute("data-place", "list:task")
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
@@ -275,32 +275,45 @@ def test_list_switcher_goes_between_the_lists_and_keeps_its_counts(page, wiki):
     expect(page.locator(".tasks-places")).to_have_count(0)
 
 
-def test_tasks_link_shows_the_pinned_lists_as_one(page, wiki):
-    # Two pinned lists: the Tasks link opens them as one task app (Pinned
-    # lists), counts both, and the switcher marks them with a pin. A new
-    # task there goes to the first of them, and the dialog says so.
+def test_tasks_link_shows_my_tasks(page, wiki):
+    # Two pinned lists: the Tasks link opens My tasks, one task app of both
+    # and of the tasks in no list, and counts what it shows; the switcher
+    # marks the lists with a pin. A new task there goes to the first of
+    # them, and the dialog says so.
     list_page(page, wiki, "tasks", "# My tasks\n\n[[tasks: list=task view=focus pin=default]]\n")
     list_page(page, wiki, "shop", "# Shop\n\n[[tasks: list=shop view=focus pin=1]]\n")
     wiki.write("garden", "# Garden\n")
     today = date.today().isoformat()
     page.request.post("/api/tasks", data={"title": "Milk", "list": "shop", "due_date": today})
     page.request.post("/api/tasks", data={"title": "Report", "list": "task", "due_date": today})
-    page.request.post("/api/tasks", data={"title": "Loose", "due_date": today})      # in no list: not among them
+    page.request.post("/api/tasks", data={"title": "Loose", "due_date": today})      # in no list: among them
+    make_list(page, "attic")
+    page.request.post("/api/tasks", data={"title": "Boxes", "list": "attic", "due_date": today})   # a list not pinned: not among them
     page.goto("/page/garden")
     tasks = page.locator(".breadcrumb .module-link[data-module=tasks]")
-    expect(tasks.locator(".module-due")).to_have_text("2")
+    expect(tasks.locator(".module-due")).to_have_text("3")
     tasks.click()
-    page.wait_for_url(re.compile(r"/tasks\?pinned=1$"))
+    page.wait_for_url(re.compile(r"/tasks\?mine=1$"))
     expect(tasks).to_have_attribute("aria-current", "page")
-    expect(page.locator("h1")).to_have_text("Pinned lists")
+    expect(page.locator("h1")).to_have_text("My tasks")
+    expect(page.locator(".tasks-pinned-lists")).to_have_text("Your pinned lists (#task, #shop) and the tasks in no list.")
     expect(page.locator(".tasks-app")).to_have_count(1)
     expect(card(page, "Report")).to_be_visible()
     expect(card(page, "Milk")).to_be_visible()
-    expect(card(page, "Loose")).to_have_count(0)
-    # Each card says which list it is in.
+    expect(card(page, "Loose")).to_be_visible()
+    expect(card(page, "Boxes")).to_have_count(0)
+    # Each card says which list it is in; one in no list says nothing.
     expect(card(page, "Milk").locator(".task-tag-list")).to_have_text("shop")
-    expect(page.locator(".tasks-place:has(.tasks-place-pin) .tasks-place-label")).to_have_text(["Pinned", "task", "shop"])
-    expect(page.locator(".tasks-place[aria-current]")).to_have_attribute("data-place", "pinned")
+    expect(card(page, "Loose").locator(".task-tag-list")).to_have_count(0)
+    expect(page.locator(".tasks-place:has(.tasks-place-pin) .tasks-place-label")).to_have_text(["task", "shop"])
+    expect(page.locator(".tasks-place[aria-current]")).to_have_attribute("data-place", "mine")
+    # Filed into the list that isn't pinned, a task leaves, and the notice says where it went.
+    card(page, "Loose").dblclick()
+    edit = page.locator(".task-edit-modal[open]")
+    edit.locator("select[id^=task-edit-list]").select_option("attic")
+    edit.get_by_role("button", name="Save").click()
+    expect(card(page, "Loose")).to_have_count(0)
+    expect(tasks.locator(".module-due")).to_have_text("2")
     page.locator("#task-add-btn").click()
     modal = page.locator(".task-edit-modal[open]")
     target = modal.locator(".task-edit-target")
@@ -1014,15 +1027,19 @@ def test_list_embed_shows_only_its_tasks(page, wiki):
 
 
 def test_the_tasks_in_no_list_have_a_view_of_their_own(page, wiki):
-    # /tasks?list=none: the tasks in no list, under More in the switcher. A
-    # task added there is in no list, and one filed into a list leaves.
+    # /tasks?list=none: the tasks in no list, under More in the switcher
+    # (they are in My tasks too, which counts them). A task added there is
+    # in no list, and one filed into a list leaves.
     make_list(page, "groceries", pin=True)
     page.request.post("/api/tasks", data={"title": "Loose end", "due_date": date.today().isoformat()})
     page.request.post("/api/tasks", data={"title": "Oat milk", "list": "groceries"})
     page.goto("/tasks?list=groceries")
     more = page.locator(".lists-more")
-    expect(more.locator("summary .module-due")).to_have_text("1")
+    expect(more.locator("summary .module-due")).to_have_count(0)       # More has no number
+    mine = page.locator('.tasks-place[data-place="mine"]')
+    expect(mine.locator(".module-due")).to_have_text("1")
     more.locator("summary").click()
+    expect(more.locator(".lists-more-none .module-due")).to_have_text("1")
     more.locator(".lists-more-none").click()
     page.wait_for_url(re.compile(r"/tasks\?list=none$"))
     expect(page.locator("h1")).to_have_text("No list")
@@ -1039,9 +1056,9 @@ def test_the_tasks_in_no_list_have_a_view_of_their_own(page, wiki):
     modal.locator("[id^=task-edit-title]").press("Enter")
     expect(card(page, "Another loose end")).to_be_visible()
     assert not task_by_title(page, "Another loose end").get("list")
-    # Done: the due count on More goes.
+    # Done: the due count on My tasks goes.
     card(page, "Loose end").locator("input[type=checkbox]").check()
-    expect(more.locator("summary .module-due")).to_be_hidden(timeout=10000)
+    expect(mine.locator(".module-due")).to_be_hidden(timeout=10000)
 
 
 def test_tag_embed_shows_list_tasks(page, wiki):
@@ -4483,14 +4500,14 @@ def test_new_list_from_the_tasks_pages_menu(page, wiki):
     expect(page.locator("#list-new-private")).to_have_count(0)        # no users: nothing private
     name.press("Enter")
     # The new list opens, pinned: a pill at once. It is the first list, so
-    # Tasks opens it from now, and the page says what that means.
+    # new tasks go into it from now, and the page says so.
     page.wait_for_url("**/tasks?list=shop&made=1")
     expect(page.locator(".page-header h1")).to_have_text("List: shop")
     expect(page.locator('.tasks-place[data-place="list:shop"]')).to_have_attribute("aria-current", "page")
     expect(page.locator('.tasks-place[data-place="list:shop"] .tasks-place-pin')).to_have_count(1)
     expect(page.locator(".tasks-made-first")).to_have_text(
-        "Tasks opens this list now, and new tasks go into it. 1 task in no list is under More, in the row above: No list.")
-    expect(page.locator(".breadcrumb .module-link[data-module=tasks]")).to_have_attribute("href", "/tasks?list=shop")
+        "New tasks go into this list now, and its tasks are in My tasks.")
+    expect(page.locator(".breadcrumb .module-link[data-module=tasks]")).to_have_attribute("href", "/tasks?mine=1")
     page.goto("/tasks?list=shop&view=open")
     expect(page.locator(".task-item")).to_have_count(0)                # a tag of that name is a tag: the list starts empty
     assert '{"name": "shop"}' in (wiki.root / "_tasks/lists.json").read_text()
@@ -4572,17 +4589,17 @@ def test_pin_and_move_first_from_a_lists_menu(page, wiki):
     page.goto("/tasks?list=shop")
     menu = page.locator("#page-menu")
     tasks = page.locator(".breadcrumb .module-link[data-module=tasks]")
-    expect(tasks).to_have_attribute("href", "/tasks")
+    expect(tasks).to_have_attribute("href", "/tasks?mine=1")
     page.locator(".page-header .page-menu-btn").click()
     menu.get_by_role("menuitem", name="Pin").click()
     page.wait_for_url("**/tasks?list=shop")
     expect(page.locator('.tasks-place[data-place="list:shop"] .tasks-place-pin')).to_have_count(1)
-    expect(tasks).to_have_attribute("href", "/tasks?list=shop")
+    expect(tasks).to_have_attribute("href", "/tasks?mine=1")
     page.goto("/tasks?list=work")
     page.locator(".page-header .page-menu-btn").click()
     menu.get_by_role("menuitem", name="Pin").click()
     page.wait_for_url("**/tasks?list=work")
-    expect(page.locator(".tasks-place .tasks-place-label")).to_have_text(["Pinned", "shop", "work", "More"])
+    expect(page.locator(".tasks-place .tasks-place-label")).to_have_text(["My tasks", "shop", "work", "More"])
     expect(page.locator("body")).to_have_attribute("data-tasks-list", "shop")      # the first pinned takes new tasks
     first = page.locator(".tasks-place:has(.tasks-place-first)")
     expect(first).to_have_attribute("data-place", "list:shop")                     # and its pill says so
@@ -4591,7 +4608,7 @@ def test_pin_and_move_first_from_a_lists_menu(page, wiki):
     expect(menu.get_by_role("menuitem")).to_have_text(["New list…", "Rename…", "Move first", "Unpin", "Delete…"])
     menu.get_by_role("menuitem", name="Move first").click()
     page.wait_for_url("**/tasks?list=work")
-    expect(page.locator(".tasks-place .tasks-place-label")).to_have_text(["Pinned", "work", "shop", "More"])
+    expect(page.locator(".tasks-place .tasks-place-label")).to_have_text(["My tasks", "work", "shop", "More"])
     expect(page.locator("body")).to_have_attribute("data-tasks-list", "work")
     expect(first).to_have_attribute("data-place", "list:work")
     page.locator(".page-header .page-menu-btn").click()
@@ -4600,7 +4617,7 @@ def test_pin_and_move_first_from_a_lists_menu(page, wiki):
     page.locator(".page-header .page-menu-btn").click()
     menu.get_by_role("menuitem", name="Unpin").click()
     page.wait_for_url("**/tasks?list=work")
-    expect(page.locator(".tasks-place .tasks-place-label")).to_have_text(["shop", "work"])   # work is under More, which names it
+    expect(page.locator(".tasks-place .tasks-place-label")).to_have_text(["My tasks", "shop", "work"])   # work is under More, which names it
     expect(page.locator("body")).to_have_attribute("data-tasks-list", "shop")
     expect(first).to_have_count(0)                                                 # one pinned list: nothing to tell apart
 
@@ -4613,13 +4630,13 @@ def test_dragging_a_pill_reorders_the_pinned_lists(page, wiki):
     make_list(page, "quiet")
     page.goto("/tasks")
     labels = page.locator(".tasks-places a.tasks-place .tasks-place-label")
-    expect(labels).to_have_text(["Pinned", "a", "b", "c"])
+    expect(labels).to_have_text(["My tasks", "a", "b", "c"])
     pill = lambda name: page.locator(f'.tasks-place[data-place="list:{name}"]')
     expect(pill("c")).to_have_attribute("draggable", "true")
-    expect(page.locator('.tasks-place[data-place="pinned"]')).not_to_have_attribute("draggable", "true")
+    expect(page.locator('.tasks-place[data-place="mine"]')).not_to_have_attribute("draggable", "true")
     with page.expect_navigation():
         pill("c").drag_to(pill("a"), target_position={"x": 3, "y": 5})    # onto a's left half: before it
-    expect(labels).to_have_text(["Pinned", "c", "a", "b"])
+    expect(labels).to_have_text(["My tasks", "c", "a", "b"])
     expect(page.locator("body")).to_have_attribute("data-tasks-list", "c")
     expect(page.locator(".tasks-place:has(.tasks-place-first)")).to_have_attribute("data-place", "list:c")
     assert '"pinned": ["c", "a", "b"]' in (wiki.root / "_tasks/lists.json").read_text()
@@ -4765,7 +4782,7 @@ def test_settings_dialog_changes_the_lists_settings_and_the_pages(page, wiki):
     assert '"plan": "on"' in text and '"pinned": ["shop"]' in text and "default" not in text
     assert "pin=" not in wiki.read("shopping")                       # the pin is no param of a page
     expect(page.get_by_role("switch", name="Plan")).to_have_attribute("aria-checked", "true")
-    expect(page.locator(".breadcrumb .module-link[data-module=tasks]")).to_have_attribute("href", "/tasks?list=shop")
+    expect(page.locator(".breadcrumb .module-link[data-module=tasks]")).to_have_attribute("href", "/tasks?mine=1")
 
     # The list on /tasks has the same settings; there the tab is the list's own.
     page.goto("/tasks?list=shop")

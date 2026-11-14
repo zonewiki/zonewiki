@@ -156,19 +156,13 @@ func (rq *Req) taskCounts() TaskCounts {
 	return *rq.counts
 }
 
-// tasksLinkHref: where the Tasks links go: the pinned lists, as the list
-// switcher opens them: several as one (/tasks?pinned=1), one at
-// /tasks?list=, unless the user sees only their own tasks there (onlyMine:
-// Pinned then too); none pinned, /tasks.
+// tasksLinkHref: where the Tasks links go: My tasks (/tasks?mine=1); with
+// no list in the wiki /tasks, which is the same tasks.
 func (rq *Req) tasksLinkHref() string {
-	pinned := rq.pinnedLists()
-	switch {
-	case rq.myLists():
-		return "/tasks?pinned=1"
-	case len(pinned) == 0:
+	if len(rq.taskLists()) == 0 {
 		return "/tasks"
 	}
-	return listHref(pinned[0].Ref)
+	return mineHref
 }
 
 // moduleLinks: the module links (where each goes, whether it is the current
@@ -324,11 +318,9 @@ type pageShell struct {
 }
 
 // tasksNew: how a new task from any page (c t, New task) starts, as the
-// default list makes them: in that list (List, its ref), with its tags;
-// Assignee: the user, when their Pinned shows only their own tasks.
+// first pinned list makes them: in that list (List, its ref), with its tags.
 type tasksNew struct {
 	List, Tags  string
-	Assignee    string
 	Keep, Today bool
 }
 
@@ -373,9 +365,6 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 			v := embedView(def.Params)
 			sh.TasksNew = &tasksNew{List: def.Ref, Tags: strings.Join(newTaskTags(def.Params), ","),
 				Keep: isTrue(def.Params.Get("keep")), Today: v == "" || v == "focus"}
-			if rq.onlyMine() && !def.Private() {
-				sh.TasksNew.Assignee = rq.user // Pinned shows only their tasks: a new one is theirs
-			}
 		}
 	}
 	if sh.ShowActions {

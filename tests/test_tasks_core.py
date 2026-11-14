@@ -686,3 +686,22 @@ class TestAssignee:
     def test_quick_add_without_users_knows_no_at(self):
         assert self.quick("Call Sam @bob", "undefined") == ("Call Sam @bob", "", False)
         assert self.quick("Call Sam @me", "{me: 'me', users: new Set(['alice'])}") == ("Call Sam @me", "", False)
+
+
+class TestMyTasks:
+    """inMine: My tasks' rule, case by case; the server's rule (inMine in
+    go/tasklists.go) runs through the same cases (go/testdata/mine_cases.json)."""
+
+    CASES = json.loads((CORE.parent.parent / "go" / "testdata" / "mine_cases.json").read_text(encoding="utf-8"))
+
+    def test_the_cases_the_server_has(self):
+        # anna asks; anna and bob can be given tasks, zoe no longer.
+        got = run_core(
+            f"{json.dumps(self.CASES)}.map(c => TasksCore.inMine(c.task, c.pinned, "
+            "{ me: 'anna', users: new Set(['anna', 'bob']), assigns: c.assigns }))")
+        wrong = [c["name"] for c, g in zip(self.CASES, got) if g != c["want"]]
+        assert not wrong and len(got) > 10
+
+    def test_without_who_no_task_is_anyones(self):
+        assert run_core("[TasksCore.inMine({assignee: 'bob'}, false), TasksCore.inMine({list: 'a', assignee: 'bob'}, false),"
+                        " TasksCore.inMine({list: 'a', assignee: 'bob'}, true)]") == [True, False, True]

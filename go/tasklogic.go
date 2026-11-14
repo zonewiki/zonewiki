@@ -43,12 +43,16 @@ func init() {
 // for all) that user sees, newest first; this year always.
 func closedYearsIn(user, scope string) []string {
 	lists := taskLists(user)
-	return taskFiles.ClosedYears(user, func(t *Task) bool { return inScope(t, scope, lists) })
+	return taskFiles.ClosedYears(user, scopeFilter(user, scope, lists))
 }
 
-// queryScope: the lists a request's ?list= (one, by its ref) or ?lists=
-// (several, "|" between) names, as inScope takes them; "" for every task.
+// queryScope: the scope a request names: ?mine=1 My tasks (mineScope),
+// ?list= one list (by its ref), ?lists= several ("|" between), as
+// scopeFilter takes them; "" for every task.
 func queryScope(r *http.Request) string {
+	if isTrue(r.URL.Query().Get("mine")) {
+		return mineScope
+	}
 	if s := strings.TrimSpace(r.URL.Query().Get("lists")); s != "" {
 		return strings.ToLower(s)
 	}

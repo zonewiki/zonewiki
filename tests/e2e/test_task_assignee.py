@@ -333,38 +333,63 @@ def test_several_selected_tasks_are_assigned_at_once(alice):
     wait_for_assignee(alice, "Bob's already", None)
 
 
-def test_only_my_tasks_in_my_lists(alice):
-    """The Tasks page's ⋯ menu: Only my tasks in Pinned. The pinned list as
-    Pinned then shows her tasks alone, with a locked @me chip, the Tasks
-    link goes there, and New task from another page starts as hers."""
+def test_my_tasks_holds_what_is_mine_and_nobodys(alice, wiki):
+    """My tasks, where the Tasks link goes: what is assigned to her wherever
+    it is, and what is nobody else's in her pinned lists and in no list. A
+    task given to someone else leaves it; its settings are her own."""
     make_list(alice, "team")
+    make_list(alice, "side")
     alice.request.post("/tasks/pin-list", form={"list": "team", "pin": "1"})
     new(alice, "Alice's", assignee="alice", list="team")
     new(alice, "Bob's", assignee="bob", list="team")
+    new(alice, "Nobody's", list="team")
+    new(alice, "Hers elsewhere", assignee="alice", list="side")
+    new(alice, "Nobody's elsewhere", list="side")
+    new(alice, "Loose")
+    new(alice, "Bob's loose", assignee="bob")
+    alice.goto("/page/index")
+    alice.locator(".breadcrumb .module-link[data-module=tasks]").click()
+    alice.wait_for_url("**/tasks?mine=1")
+    expect(alice.locator("h1")).to_have_text("My tasks")
+    expect(alice.locator(".tasks-pinned-lists")).to_have_text(
+        "What is yours or nobody's in your pinned lists (#team) and in no list, and what is assigned to you elsewhere.")
+    alice.goto("/tasks?mine=1&view=open")
+    titles = alice.locator(".task-item .task-title")
+    expect(titles).to_have_count(4)
+    assert sorted(titles.all_text_contents()) == ["Alice's", "Hers elsewhere", "Loose", "Nobody's"]
+    expect(alice.locator(".tasks-toolbar .tag-chip")).to_have_count(0)        # no filter: the view is the rule
+    expect(card(alice, "Hers elsewhere").locator(".task-tag-list")).to_have_text("side")
+    # The list itself shows everyone's.
     alice.goto("/tasks?list=team&view=open")
-    expect(alice.locator(".task-item")).to_have_count(2)
-    alice.locator(".page-menu-btn").click()
-    alice.get_by_role("menuitem", name="Only my tasks in Pinned").click()
-    alice.wait_for_url("**/tasks?pinned=1")
-    expect(alice.locator("h1")).to_have_text("Pinned lists")
-    alice.goto("/tasks?pinned=1&view=open")
-    expect(alice.locator(".task-item .task-title")).to_have_text(["Alice's"])
-    expect(alice.locator(".tasks-toolbar .tag-chip .tag-chip-label")).to_have_text(["team", "@me"])   # the list, and whose
-    # From a page: New task is hers, in the default list.
+    expect(alice.locator(".task-item")).to_have_count(3)
+    # Given to bob, a task leaves My tasks; undone, it is back.
+    alice.goto("/tasks?mine=1&view=open")
+    card(alice, "Nobody's").locator(".task-title").click()
+    alice.keyboard.press("a")
+    alice.locator(".bulk-assign-modal .bulk-list-row", has_text="@bob").click()
+    expect(card(alice, "Nobody's")).to_have_count(0)
+    wait_for_assignee(alice, "Nobody's", "bob")
+    expect(titles).to_have_count(3)
+    # From a page: New task goes into the first pinned list, assigned to no one.
     alice.goto("/page/index")
     alice.keyboard.press("c")
     alice.keyboard.press("t")
     modal = alice.locator("#task-edit-modal")
     expect(modal).to_be_visible()
-    expect(modal.locator(".task-field-assignee .tag-chip-label")).to_have_text(["@alice"])
     modal.locator("#task-edit-title").fill("From anywhere")
     modal.get_by_role("button", name="Save").click()
-    wait_for_assignee(alice, "From anywhere", "alice")
+    wait_for_assignee(alice, "From anywhere", None)
     assert task(alice, "From anywhere")["list"] == "team"
-    # And back: everyone's again, at the list itself.
-    alice.goto("/tasks?pinned=1")
-    alice.locator(".page-menu-btn").click()
-    alice.get_by_role("menuitem", name="Everyone's tasks in Pinned").click()
-    alice.wait_for_url("**/tasks?list=team")
-    alice.goto("/tasks?list=team&view=open")
-    expect(alice.locator(".task-item")).to_have_count(3)
+    # Its settings: her own, and what a new task gets is not among them.
+    alice.goto("/tasks?mine=1")
+    alice.locator("#task-more-btn").click()
+    alice.get_by_role("menuitem", name="List settings…").click()
+    dialog = alice.locator("#task-settings-modal")
+    expect(dialog.locator(".task-settings-where")).to_have_text("For My tasks: yours alone.")
+    expect(dialog.locator(".task-settings-pin")).to_be_hidden()
+    expect(dialog.locator(".task-add-field:visible")).to_have_text(["WIP limit", "Tab names"])
+    dialog.locator("[name=view]").select_option("open")
+    with alice.expect_navigation():
+        dialog.get_by_role("button", name="Save").click()
+    assert '"mine": {"view": "plan"}' in (wiki.root / "private/alice/_tasks/lists.json").read_text()
+    expect(alice.locator(".task-item .task-title")).to_have_count(4)        # it opens on Open now

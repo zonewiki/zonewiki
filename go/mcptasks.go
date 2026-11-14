@@ -546,10 +546,6 @@ func createTaskTool(args jsonObj, base, user string) (string, error) {
 	if h := lookupDefaultList(user); h != nil && !data.Has("list") {
 		data.Set("list", h.Ref)
 		data["tags"] = homeTags(data["tags"], h)
-		// And theirs, when their Pinned shows only their own tasks.
-		if !h.Private() && !data.Has("assignee") && onlyMine(user) {
-			data.Set("assignee", user)
-		}
 	}
 	msg, err := commitMsg("Create task", args)
 	if err != nil {

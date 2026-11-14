@@ -330,14 +330,17 @@ const initAssignee = document.body.dataset.users === '1'
 const LIMIT = parseInt(appEl?.dataset.initLimit || urlParams.get('limit'), 10) || null;
 // Lists: a list is a place a task is in (its `list`; one, or none). A view
 // of a list ([[tasks: list=<name>]], /tasks?list=) shows its tasks, and a
-// new task there goes into it; the pinned lists as one (data-init-lists)
-// show the tasks of any of them. Elsewhere (all tasks, a tag's embed) every
-// task shows, with its list as a chip. The lists come as refs: a list's
+// new task there goes into it; My tasks (data-init-mine, with the pinned
+// lists in data-init-lists) shows what TasksCore.inMine says, and a new
+// task there goes into the first pinned list. Elsewhere (all tasks, a
+// tag's embed) every task shows, with its list as a chip. The lists come as refs: a list's
 // name, or shared/<name> for the shared one beside the user's own list of
 // that name; data-lists has those the user sees, with which are private
 // (theirs alone, and so are the tasks in them).
 const initList = cleanList(appEl?.dataset.initList);
 const initLists = (appEl?.dataset.initLists || '').split('|').filter(Boolean);
+// My tasks: 'assign' where assignment counts for the user, else 'lists'.
+const initMine = appEl?.dataset.initMine || '';
 let listChoices = [];
 try { listChoices = JSON.parse(appEl?.dataset.lists || '[]'); } catch (_) {}
 const listSet = new Set(listChoices.map(l => l.ref));
@@ -345,7 +348,7 @@ const privateLists = new Set(listChoices.filter(l => l.private).map(l => l.ref))
 // A list made while the page is open (New list… in the dialog that moves
 // tasks to a list, js/taskselect.js, which says so to every task app of the
 // page): one more list the user sees, in the List field and the dialogs;
-// the pinned lists as one show it too when it was pinned.
+// My tasks shows its tasks too when it was pinned.
 document.addEventListener('zone:list-made', e => {
   const { ref, private: isPrivate, pinned } = e.detail || {};
   if (!ref || listSet.has(ref)) return;
@@ -353,7 +356,7 @@ document.addEventListener('zone:list-made', e => {
   listChoices.sort((a, b) => listName(a.ref).localeCompare(listName(b.ref)) || a.ref.localeCompare(b.ref));
   listSet.add(ref);
   if (isPrivate) privateLists.add(ref);
-  if (pinned && initLists.length) initLists.push(ref);
+  if (pinned && initMine) initLists.push(ref);
 });
 // The user's default list: where a new task goes in a view of no one list.
 const defaultList = appEl?.dataset.defaultList || '';
@@ -390,13 +393,18 @@ function taskList(t) {
 // the filter word list:none finds them (isNoList in go/tasklists.go).
 const noList = initList === 'none' && !listSet.has('none');
 function inScope(t) {
+  if (initMine) {
+    return TasksCore.inMine(t, initLists.includes(taskList(t)),
+      { me: people.me, users: people.users, assigns: initMine === 'assign' });
+  }
   if (initLists.length) return initLists.includes(taskList(t));
   if (noList) return !t.list;
   return !initList || taskList(t) === initList;
 }
 // The scope of the server's closed counts, matching inScope.
 function scopeQuery() {
-  return initLists.length ? `?lists=${encodeURIComponent(initLists.join('|'))}`
+  return initMine ? '?mine=1'
+    : initLists.length ? `?lists=${encodeURIComponent(initLists.join('|'))}`
     : initList ? `?list=${encodeURIComponent(initList)}` : '';
 }
 // The list a new task starts in here: the view's own (none in the view of

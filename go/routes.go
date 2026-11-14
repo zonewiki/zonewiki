@@ -866,9 +866,11 @@ func apiPagesList(w http.ResponseWriter, r *http.Request) {
 }
 
 // tasksPage: /tasks, every task; with ?list= that list (by its ref), with
-// its settings, ?list=none the tasks in no list; with ?pinned=1 the user's pinned lists as one; with ?tag=
-// every task, filtered by the tag (tasks.js reads it). Every link to "the
-// tasks" goes here; [[tasks: …]] embeds are for views on ordinary pages.
+// its settings, ?list=none the tasks in no list; with ?mine=1 My tasks,
+// the user's home view (mineFilter; ?pinned=1, its name until 2026-11,
+// answers the same); with ?tag= every task, filtered by the tag (tasks.js
+// reads it). Every link to "the tasks" goes here; [[tasks: …]] embeds are
+// for views on ordinary pages.
 func tasksPage(w http.ResponseWriter, r *http.Request) {
 	rq := newReq(r)
 	q := r.URL.Query()
@@ -878,6 +880,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	var sections []linkSection
 	var chip template.HTML
 	var pinnedLinks []pinnedLink
+	mine := false
 	missing := ""
 	crumbs := []crumb{{"Tasks", ""}}
 	// The breadcrumb's key names the view for the navigation trail; no page has it.
@@ -905,19 +908,20 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 		}
 		crumbs = []crumb{{"Tasks", "/tasks"}, {name, ""}}
 		key += "?list=" + ref
-	case q.Get("pinned") != "":
-		// ?pinned=1: the pinned lists as one task app; with one pin or
-		// none, where the Tasks link goes.
-		if !rq.myLists() {
-			http.Redirect(w, r, rq.tasksLinkHref(), http.StatusFound)
+	case q.Get("mine") != "" || q.Get("pinned") != "":
+		// ?mine=1: My tasks, one task app; with no list in the wiki that is
+		// every task, at /tasks.
+		if len(rq.taskLists()) == 0 {
+			http.Redirect(w, r, "/tasks", http.StatusFound)
 			return
 		}
-		params, place, title, heading, key = rq.pinnedView(), "pinned", "Pinned lists", "Pinned lists", "/tasks?pinned=1"
-		crumbs = []crumb{{"Tasks", "/tasks"}, {"Pinned", ""}}
+		params, place, title, heading, key = mineParams(rq.who()), "mine", "My tasks", "My tasks", mineHref
+		crumbs = []crumb{{"Tasks", "/tasks"}, {"My tasks", ""}}
 		// Which lists it shows, and as its Backlinks the pages that embed them.
 		var pages []PageRef
 		pinnedLinks, pages = rq.pinnedSources()
 		backlinks(pages)
+		mine = true
 	}
 	var tasksHTML string
 	if missing != "" {
@@ -937,7 +941,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	}
 	v := &tasksPageView{Heading: heading, Missing: missing,
 		Menu: !rq.sharing && !listsUnmigrated && mayWriteTasks(rq.who()) == nil, Users: privateFolder(rq.user) != "",
-		MineMenu: privateFolder(rq.user) != "" && len(rq.pinnedLists()) > 0 && settings().assignable(rq.user), Mine: rq.onlyMine(),
+		Mine: mine, MineAssigns: mine && mineAssigns(rq.who()),
 		NewListName: q.Get("newlist_name"), NewListError: q.Get("newlist_error"),
 		Places: places, More: more, PinnedLists: pinnedLinks, TasksHTML: htmlOf(tasksHTML), LinkSections: sections,
 		BreadcrumbHTML: breadcrumb(rq, crumbs, key, true, title, chip)}
@@ -951,15 +955,8 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		// Just made (?made=1, newListRoute), and the user's one pinned list:
-		// what that changed, and how many open tasks are in no list.
-		if q.Get("made") != "" && v.Pin == "first" && len(rq.pinnedLists()) == 1 {
-			v.MadeFirst = true
-			for _, t := range rq.openTasks() {
-				if t.List == "" {
-					v.NoListTasks++
-				}
-			}
-		}
+		// what that changed.
+		v.MadeFirst = q.Get("made") != "" && v.Pin == "first" && len(rq.pinnedLists()) == 1
 		// How many open tasks it has: Delete… offers to close them.
 		for _, t := range rq.openTasks() {
 			if t.List == list.Name && t.Owner == list.Owner {
@@ -1123,20 +1120,6 @@ func shareListRoute(w http.ResponseWriter, r *http.Request) {
 // pinListRoute: a list's Pin, Move first and Unpin (its ⋯ menu, the
 // settings dialog's pin): pin is 1, first or 0. Back to the list.
 func pinListRoute(w http.ResponseWriter, r *http.Request) {
-	// mine=1 or 0, without a list: Pinned shows only the user's own tasks,
-	// or everyone's (the ⋯ menu's Only my tasks in Pinned).
-	if mine := r.PostFormValue("mine"); mine != "" {
-		if mine != "0" && mine != "1" {
-			pageFailed(w, r, refuse("mine is 0 or 1"))
-			return
-		}
-		if err := setOnlyMineOp(userOf(r), mine == "1"); err != nil {
-			pageFailed(w, r, err)
-			return
-		}
-		http.Redirect(w, r, "/tasks?pinned=1", http.StatusFound)
-		return
-	}
 	ref := cleanList(r.PostFormValue("list"))
 	if err := pinListOp(userOf(r), ref, r.PostFormValue("pin")); err != nil {
 		pageFailed(w, r, err)
@@ -1146,14 +1129,14 @@ func pinListRoute(w http.ResponseWriter, r *http.Request) {
 }
 
 // tasksPageView: /tasks (tasks_page.html). List: the list shown, nil for
-// all tasks and the pinned lists; Missing: the name ?list= gave when no
+// all tasks and My tasks; Missing: the name ?list= gave when no
 // list has it; Tag: the one tag ?tag= names; Places: the list switcher's
 // pills and More its last one (nil: no switcher); MadeFirst: the list was
-// just made and is the user's one pinned list (NoListTasks: their open
-// tasks in no list);
-// PinnedLists: what the pinned view shows; LinkSections: a list's
-// Backlinks, the pinned view's those of its lists (with them the page has
-// a page view's columns). Menu: the ⋯ menu (New list…; a list's Rename…,
+// just made and is the user's one pinned list;
+// Mine: the view is My tasks (MineAssigns: assignment counts in it for
+// this user, mineAssigns), PinnedLists: the pinned lists it shows the
+// tasks of; LinkSections: a list's Backlinks, My tasks' those of its
+// lists (with them the page has a page view's columns). Menu: the ⋯ menu (New list…; a list's Rename…,
 // its pin, Make shared…, Delete…; a tag's Rename tag…), for who may change
 // tasks; Users: with users, so New list… has its Private box. Pin: how the
 // user pinned List ("", "1", "first": their first pinned list); MoveTo: where its tasks can go
@@ -1171,17 +1154,14 @@ type tasksPageView struct {
 	ListRenameName, ListRenameError string
 	DeleteError, ShareError         string
 	Menu, Users                     bool
-	// MineMenu: the menu has Only my tasks in Pinned (a user with a
-	// pinned list, who can be given tasks); Mine: it is on.
-	MineMenu, Mine            bool
-	NewListName, NewListError string
-	Places                    []TaskPlace
-	More                      *TasksMore
-	MadeFirst                 bool
-	NoListTasks               int
-	PinnedLists               []pinnedLink
-	LinkSections              []linkSection
-	TasksHTML, BreadcrumbHTML template.HTML
+	Mine, MineAssigns               bool
+	NewListName, NewListError       string
+	Places                          []TaskPlace
+	More                            *TasksMore
+	MadeFirst                       bool
+	PinnedLists                     []pinnedLink
+	LinkSections                    []linkSection
+	TasksHTML, BreadcrumbHTML       template.HTML
 }
 
 func apiToggleCheckbox(w http.ResponseWriter, r *http.Request) {

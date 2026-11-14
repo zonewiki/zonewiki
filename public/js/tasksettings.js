@@ -95,8 +95,10 @@ export function changedParams(was, now, p) {
 // task dialog's rarer fields are. The pin is a button, pressed for a list
 // the user pinned; the hidden field pin holds its value ("", "1").
 // fill(params, mode): the fields as the params have them; mode says what
-// the dialog is for: all (All tasks: no filter, no pin), list (a list: its
-// pin, keep, hide when sharing), embed (an embed on a page: its filter).
+// the dialog is for: all (All tasks: no filter, no pin), mine (My tasks:
+// as All tasks, less the tags of a new task, which are its list's), list
+// (a list: its pin, keep, hide when sharing), embed (an embed on a page:
+// its filter).
 // Returns what read() then gives.
 export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Focus')) {
   const f = form.elements;
@@ -104,7 +106,7 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
   const moreEl = form.querySelector('.task-add-fields');
   const fieldEl = name => form.querySelector(`[data-field="${name}"]`);
   // (What a click needs later is the form's own: the handlers are wired once.)
-  const mode = () => ({ all: form.dataset.all === '1', list: form.dataset.list === '1', embed: form.dataset.embed === '1' });
+  const mode = () => ({ all: form.dataset.all === '1', mine: form.dataset.mine === '1', list: form.dataset.list === '1', embed: form.dataset.embed === '1' });
   // Which fields the dialog has here: a filter where there is an embed to
   // write it in (the editor's always is one), keep where a list is named
   // or made, hiding in sharing mode on a list.
@@ -113,6 +115,7 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
     if (name === 'tag' || name === 'assignee') return !!f.list || m.embed;
     if (name === 'keep') return !!f.list || m.list;
     if (name === 'noshare') return m.list;
+    if (name === 'new') return !m.mine;
     return true;
   };
   // Which + words the line has: those of the fields not shown.
@@ -164,9 +167,10 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
     ...(f.noshare ? { noshare: f.noshare.checked } : {}),
     ...(f.assignee ? { assignee: f.assignee.value.trim() } : {}),   // with users
   });
-  const fill = (params, { all = false, list = false, embed = false } = {}) => {
+  const fill = (params, { all = false, mine = false, list = false, embed = false } = {}) => {
     const fields = fieldsOf(params);
     form.dataset.all = all ? '1' : '';
+    form.dataset.mine = mine ? '1' : '';
     form.dataset.list = list ? '1' : '';
     form.dataset.embed = embed ? '1' : '';
     // Opens on: the tabs by their names here; Closed only where a page says so.
@@ -204,10 +208,11 @@ export function initTaskSettings(app) {
   const raw = appEl.dataset.settingsRaw || '';
   // What the dialog is for: a list (its own settings and the user's pin of
   // it), an embed on a page (how the page looks at the list, or all of an
-  // embed of no list), All tasks.
+  // embed of no list), All tasks, My tasks (the user's own).
   const list = appEl.dataset.settingsList || '';
   const embed = appEl.dataset.settingsEmbed === '1';
   const all = !list && !embed;
+  const mine = all && appEl.dataset.settingsMine === '1';
   let listSet = {};
   try { listSet = JSON.parse(appEl.dataset.settingsListSet || '{}'); } catch (_) {}
   const pinWas = appEl.dataset.settingsPin || '';
@@ -224,9 +229,10 @@ export function initTaskSettings(app) {
   let was = null;
 
   function open() {
-    was = fill(params, { all, list: !!list, embed });
+    was = fill(params, { all, mine, list: !!list, embed });
     const who = app.privateLists.has(list) ? 'which only you see' : 'for everyone';
-    whereEl.textContent = all ? 'For All tasks, for everyone.'
+    whereEl.textContent = mine ? (document.body.dataset.users === '1' ? 'For My tasks: yours alone.' : 'For My tasks.')
+      : all ? 'For All tasks, for everyone.'
       : list && embed ? `The list’s settings hold wherever it shows, ${who}; the tab and the filter are this page’s. The pin is yours.`
       : list ? `For this list, ${who}. The pin is yours.`
       : 'Written in this [[tasks: …]] on this page.';
@@ -234,8 +240,9 @@ export function initTaskSettings(app) {
     dialog.showModal();
   }
 
-  // One write: the settings of a place ({list, set}, {page, index, was, set}
-  // or {all, was, set}); its error's message, '' when it went through.
+  // One write: the settings of a place ({list, set}, {page, index, was, set},
+  // {all, was, set} or {mine, was, set}); its error's message, '' when it
+  // went through.
   async function post(body) {
     const res = await fetch('/api/tasks/settings', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
@@ -251,7 +258,8 @@ export function initTaskSettings(app) {
     let message = '';
     try {
       if (!list) {
-        message = await post(all ? { all: true, was: raw, set } : { page, index, was: raw, set });
+        message = await post(mine ? { mine: true, was: raw, set }
+          : all ? { all: true, was: raw, set } : { page, index, was: raw, set });
       } else {
         // A list: its own settings to the registry, the page's to its embed,
         // the pin to the user's pins. The tab and Plan are said apart here:
@@ -293,7 +301,8 @@ export function initTaskSettings(app) {
   const importTitle = document.getElementById('task-import-title' + sfx);
   const importTag = document.getElementById('task-import-tag' + sfx);
   const importError = document.getElementById('task-import-error' + sfx);
-  const scope = { list: appEl.dataset.initList || '', ...(appEl.dataset.initLists ? { lists: appEl.dataset.initLists } : {}),
+  const scope = { list: appEl.dataset.initList || '',
+                  ...(appEl.dataset.initMine ? { mine: '1' } : appEl.dataset.initLists ? { lists: appEl.dataset.initLists } : {}),
                   tag: appEl.dataset.initTag || '',
                   ...(appEl.dataset.initAssignee ? { assignee: appEl.dataset.initAssignee } : {}) };
   const n = count => `${count} task${count === 1 ? '' : 's'}`;

@@ -190,45 +190,120 @@ func pinnedLists(user string, lists map[string]ListInfo) []ListInfo {
 	return out
 }
 
-// onlyMine: user has set Pinned to the tasks assigned to them ("mine" in
-// their registry): their pinned lists as one show only those, the Tasks
-// links count only those, and a new task from anywhere (New task, c t, an
-// assistant's create_task without a list) is assigned to them. Only with
-// users, and for one a task can be assigned to.
-func onlyMine(user string) bool {
-	if privateFolder(user) == "" || !settings().assignable(user) {
-		return false
-	}
-	return taskFiles.ReadLists(user).Mine
+// ---- My tasks ----
+
+// mineScope: the scope of My tasks (mineFilter), as paramsScope and
+// queryScope give it. No list's ref: a name has no "|".
+const mineScope = "|mine"
+
+// mineAssigns: tasks can be assigned to user, so assignment counts in their
+// My tasks. Not without users, nor for one no task can be given to (a
+// viewer): there no task is anyone's.
+func mineAssigns(user string) bool {
+	s := settings()
+	return s.Users != nil && s.assignable(user)
 }
 
-// setOnlyMineOp turns onlyMine on or off for user.
-func setOnlyMineOp(user string, on bool) error {
+// mineFilter: My tasks, the home view the Tasks links open and count: every
+// task user sees except one that is assigned to someone else, or in a list
+// they haven't pinned unless it is assigned to them. So: what is theirs
+// wherever it is, and what is nobody else's in their pinned lists and in no
+// list. An assignee no task can be given to anymore is no one (as @none
+// reads it); a private task has none and follows its list's pin. The
+// browser has the same rule (TasksCore.inMine; go/testdata/mine_cases.json
+// runs through both).
+func mineFilter(user string, lists map[string]ListInfo) func(*Task) bool {
+	pinned := map[string]bool{}
+	for _, l := range pinnedLists(user, lists) {
+		pinned[l.Ref] = true
+	}
+	s, assigns := settings(), mineAssigns(user)
+	return func(t *Task) bool {
+		return inMine(t, pinned[taskList(t, lists)], user, assigns, s.assignable)
+	}
+}
+
+// inMine: mineFilter's rule for one task: pinned, its list is one user
+// pinned; assigns, assignment counts for user (mineAssigns); assignable,
+// whether a task can be given to a name.
+func inMine(t *Task, pinned bool, user string, assigns bool, assignable func(string) bool) bool {
+	if assigns && t.Owner == "" && t.Assignee != "" {
+		if t.Assignee == user {
+			return true
+		}
+		if assignable(t.Assignee) {
+			return false
+		}
+	}
+	return t.List == "" || pinned
+}
+
+// scopeFilter: the tasks a view of scope shows user: My tasks (mineScope),
+// or what inScope says of a list's ref, "none" or "".
+func scopeFilter(user, scope string, lists map[string]ListInfo) func(*Task) bool {
+	if scope == mineScope {
+		return mineFilter(user, lists)
+	}
+	return func(t *Task) bool { return inScope(t, scope, lists) }
+}
+
+// mineSettingKeys: what My tasks' settings dialog sets. What a new task
+// gets (new, keep) is its list's, the first pinned one's.
+var mineSettingKeys = []string{"view", "plan", "limit", "labels"}
+
+// mineOwner: whose registry holds user's settings of My tasks: their own,
+// without users the wiki's.
+func mineOwner(user string) string {
+	if privateFolder(user) != "" {
+		return user
+	}
+	return ""
+}
+
+// mineParams: the params of My tasks (/tasks?mine=1) for user: its own
+// settings ("mine" in mineOwner's registry: the tab, Plan, the limit, the
+// tabs' names), of the scope mine=1. None when they can't be read.
+func mineParams(user string) TasksParams {
+	set, err := checkEmbedSettings(taskFiles.ReadLists(mineOwner(user)).Mine, mineSettingKeys)
+	if err != nil {
+		logf("%s: %v", taskFiles.ListsPath(mineOwner(user)), err)
+		set = nil
+	}
+	raw := setEmbedArgs("", set)
+	p := parseTasksParams(raw).With("mine", "1")
+	p.src = &embedSrc{-1, raw}
+	return p
+}
+
+// setMineParams writes user's settings of My tasks with those of set
+// changed, in a commit by user; was: the params as the dialog saw them.
+func setMineParams(user, was string, set map[string]string) error {
 	if listsUnmigrated {
 		return errListsUnmigrated
 	}
 	if err := mayWriteTasks(user); err != nil {
 		return err
 	}
-	if privateFolder(user) == "" {
-		return refuse("Only your tasks needs users: this wiki has none")
+	set, err := checkEmbedSettings(set, mineSettingKeys)
+	if err != nil {
+		return err
 	}
+	owner := mineOwner(user)
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
-	reg, err := taskFiles.ReadListsStrict(user)
+	if mineParams(user).src.raw != was {
+		return errEmbedChanged
+	}
+	reg, err := taskFiles.ReadListsStrict(owner)
 	if err != nil {
 		return err
 	}
-	reg.Mine = on
-	path, err := taskFiles.WriteListsLocked(user, user, reg)
+	reg.Mine = parseTasksParams(setEmbedArgs(was, set)).m
+	path, err := taskFiles.WriteListsLocked(user, owner, reg)
 	if err != nil {
 		return err
 	}
-	msg := "Pinned shows everyone's tasks"
-	if on {
-		msg = "Pinned shows only my tasks"
-	}
-	return commitLists(user, msg, []string{path})
+	return commitLists(user, "Change the settings of My tasks", []string{path})
 }
 
 // lookupDefaultList: the list a new task of user's goes to where no one list

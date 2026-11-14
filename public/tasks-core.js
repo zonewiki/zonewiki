@@ -144,6 +144,23 @@ function assigneeIs(t, word, people) {
   return a === word;
 }
 
+// My tasks, the home view the Tasks links open and count (mineFilter in
+// go/tasklists.go; go/testdata/mine_cases.json runs through both): every
+// task except one that is assigned to someone else, or in a list the user
+// hasn't pinned unless it is assigned to them. pinned: the task's list is
+// one the user pinned; who: { me, users (those a task can be given to),
+// assigns (assignment counts for this user: not without users, nor for a
+// viewer) }. An assignee no task can be given to anymore is no one; a
+// private task has none and follows its list's pin.
+function inMine(t, pinned, who) {
+  const a = (t.assignee || '').toLowerCase();
+  if (who?.assigns && !t.private && a) {
+    if (a === who.me) return true;
+    if (who.users?.has(a)) return false;
+  }
+  return !t.list || !!pinned;
+}
+
 // A task's importance: 'high', 'low', or '' for normal (what most are).
 // As a word, in the filter and at the end of a new task's title: `!` or
 // `!high`, `!low`.
@@ -491,7 +508,7 @@ function parseQuickAdd(input, today, people) {
 const TasksCore = {
   dateToStr, addDays, isOverdue, isFocus, isCarried, byOpenOrder, byDeadline, byCreated, SORTS, placeInOrder, tagMatchScore, tagCounts, selectionTags, bulkTagChange,
   rankTags, sanitizeTagInput,
-  parseFilter, matchesFilter, filterActive, assigneeIs, tasksInView, tagParamToQuery, importanceWord,
+  parseFilter, matchesFilter, filterActive, assigneeIs, inMine, tasksInView, tagParamToQuery, importanceWord,
   bucketKey, fullDayLabel, boardBuckets, parseQuickAdd,
   dateSettings, localeDate, shortDate, longDayLabel, weekStart, weekdayNames, monthTitle,
 };

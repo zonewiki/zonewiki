@@ -150,11 +150,15 @@ READS = [
     ("GET /api/tasks/closed-count", "GET", "/api/tasks/closed-count", {}),
     ("GET /api/tasks/closed-years", "GET", "/api/tasks/closed-years", {}),
     ("GET /tasks", "GET", "/tasks", {"query_string": {"list": "secretlist"}}),
+    ("GET /tasks", "GET", "/tasks", {"query_string": {"mine": "1"}}),
+    ("GET /api/tasks/closed-count", "GET", "/api/tasks/closed-count", {"query_string": {"mine": "1"}}),
+    ("GET /api/tasks/closed-years", "GET", "/api/tasks/closed-years", {"query_string": {"mine": "1"}}),
     ("GET /api/tasks/due-count", "GET", "/api/tasks/due-count", {}),
     ("GET /api/tasks/headless", "GET", "/api/tasks/headless", {}),
     ("GET /api/tasks/assignable", "GET", "/api/tasks/assignable", {}),
     ("GET /api/tasks/export", "GET", "/api/tasks/export", {}),
     ("GET /api/tasks/export", "GET", "/api/tasks/export", {"query_string": {"list": "secretlist"}}),
+    ("GET /api/tasks/export", "GET", "/api/tasks/export", {"query_string": {"mine": "1"}}),
     ("POST /api/preview", "POST", "/api/preview", {"data": f"[[{DIARY}]] [[private/alice/old]] [[private/alice/draft]]"}),
     ("POST /api/render-notes", "POST", "/api/render-notes", {"json": {"notes": [f"[[{DIARY}]]"], "comments": []}}),
     ("POST /api/render-notes", "POST", "/api/render-notes",
@@ -202,8 +206,11 @@ def test_alice_sees_her_own(client, wiki):
     # The tasks /tasks brings along are hers too (not bob's: the probes above).
     assert TASK_ID in client.get("/tasks", headers=HOST).data.decode().split('id="tasks-initial">', 1)[1].split("</script>", 1)[0]
     assert "2001" in client.get("/api/tasks/closed-years", headers=HOST).get_json()["years"]
-    # Her Tasks home is hers: the Tasks link goes to its list.
-    assert 'href="/tasks?list=secretlist"' in client.get("/page/index", headers=HOST).data.decode()
+    # Her Tasks home is hers: the Tasks link goes to My tasks, which has
+    # her pinned private list's task.
+    assert 'href="/tasks?mine=1"' in client.get("/page/index", headers=HOST).data.decode()
+    mine = client.get("/api/tasks/export?mine=1", headers=HOST).get_json()["tasks"]
+    assert TASK_ID in [t["id"] for t in mine]
 
 
 def test_a_private_page_of_no_one_is_seen_by_no_one(client, wiki):

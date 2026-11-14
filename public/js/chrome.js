@@ -25,8 +25,8 @@ import { whileUsed } from './util.js';
   // phone shows only the last 3 of them, so the trail is at most 4 pages.
   const maxPrev = window.matchMedia('(max-width: 640px)').matches ? 3 : Infinity;
   // The modules' own pages are in the module switcher already: home,
-  // Notes, /tasks and where the Tasks link goes (the pinned lists,
-  // /tasks?pinned=1 or ?list=), and your private home (the Private pill).
+  // Notes, /tasks and where the Tasks link goes (My tasks,
+  // /tasks?mine=1), and your private home (the Private pill).
   const tasksHref = bc.querySelector('.module-link[data-module="tasks"]')?.getAttribute('href');
   const intermediates = hist.slice(0, -1)
     .filter(p => !['index', '/notes', '/tasks', tasksHref].includes(p.slug)

@@ -44,9 +44,9 @@ func tasksRoute(h func(w http.ResponseWriter, r *http.Request) error) http.Handl
 // that moves tasks to a list, js/taskselect.js): {name, private} makes it as
 // the New list… dialog of /tasks does (createListOp) and answers how the
 // user names it. It is pinned as a list made in the browser is, but not as
-// the user's first pin: that would change where their Tasks links go and
-// where new tasks land, which the dialog of /tasks says on the list's page
-// and this one has no place to say. A refusal is {"error": …}.
+// the user's first pin: that would change where new tasks land, which the
+// dialog of /tasks says on the list's page and this one has no place to
+// say. A refusal is {"error": …}.
 func apiNewList(w http.ResponseWriter, r *http.Request) {
 	user := userOf(r)
 	name, private, err := newListFields(r)
@@ -131,9 +131,9 @@ func tasksRoutes(mux *http.ServeMux) {
 		return nil
 	}))
 	mux.HandleFunc("GET /api/tasks/closed-count", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
-		scope, lists, n := queryScope(r), taskLists(userOf(r)), 0
+		in, n := scopeFilter(userOf(r), queryScope(r), taskLists(userOf(r))), 0
 		for _, t := range taskFiles.ClosedInYear(userOf(r), taskFiles.CurrentYear()) {
-			if inScope(t, scope, lists) {
+			if in(t) {
 				n++
 			}
 		}
@@ -402,8 +402,8 @@ const importMax = 10000
 // importIDRE: an id an imported task may keep (a UUID, as Zone makes them).
 var importIDRE = regexp.MustCompile(`^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$`)
 
-// apiExport: the tasks a list shows (?list= or ?lists=, ?tag=, ?assignee=, as an embed's params;
-// neither: every task the user sees), open and closed of every year,
+// apiExport: the tasks a view shows (?list=, ?lists= or ?mine=1, ?tag=, ?assignee=, as an embed's params;
+// none: every task the user sees), open and closed of every year,
 // as a file to save: {zone_tasks: 1, list, tag, exported_at, tasks}, each
 // task as the API shows it (with the list it is in). apiImport reads it back.
 func apiExport(w http.ResponseWriter, r *http.Request) error {
@@ -417,12 +417,16 @@ func apiExport(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	tasks := []*Task{}
+	in := scopeFilter(userOf(r), list, lists)
 	for _, t := range slices.Concat(active, closed) {
-		if inScope(t, list, lists) && tagParamMatches(t, tag) && assigneeParamMatches(t, assignee, userOf(r)) {
+		if in(t) && tagParamMatches(t, tag) && assigneeParamMatches(t, assignee, userOf(r)) {
 			tasks = append(tasks, t)
 		}
 	}
 	name := strings.NewReplacer("/", "-", "|", "-").Replace(firstNonEmpty(list, "all"))
+	if list == mineScope {
+		list, name = "", "my-tasks" // no one list's
+	}
 	// The list's name is the request's: as a quoted, escaped parameter, so
 	// a " in it can't end the file name and add one of its own.
 	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment",

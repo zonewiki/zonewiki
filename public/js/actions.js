@@ -17,12 +17,11 @@ import { openSearchModal } from './search.js';
 export async function openDefaultTask() {
   const pinnedAdd = document.querySelector('.tasks-app[data-pinned]:not([data-headless]) [id^="task-add-btn"]');
   if (pinnedAdd) { pinnedAdd.click(); return; }
-  const { tasksList = '', tasksTags = '', tasksKeep, tasksToday, tasksAssignee } = document.body.dataset;
+  const { tasksList = '', tasksTags = '', tasksKeep, tasksToday } = document.body.dataset;
   // The start date as the default list's "+ New" gives it (today on Focus);
   // without a pin, as /tasks's Focus does.
   const homeless = !('tasksTags' in document.body.dataset);
-  // data-tasks-assignee: the user, whose Pinned shows only their own tasks.
-  const opts = { list: tasksList, tags: tasksTags, keep: tasksKeep === '1', ...(tasksAssignee ? { assignee: tasksAssignee } : {}),
+  const opts = { list: tasksList, tags: tasksTags, keep: tasksKeep === '1',
                  start_date: homeless || tasksToday === '1' ? localDate() : null };
   if (!document.querySelector('.tasks-app[data-ready]')) {
     try {
@@ -53,8 +52,8 @@ function loadHeadlessTasks() {
   return headlessTasks;
 }
 
-// Where the Tasks module links go: the pinned lists (/tasks?pinned=1, or one
-// at /tasks?list=; a pin without a list its page), else /tasks.
+// Where the Tasks module links go: My tasks (/tasks?mine=1), or /tasks in
+// a wiki without lists.
 export const tasksLinkHref = () =>
   document.querySelector('.module-link[data-module="tasks"]')?.getAttribute('href') || '/tasks';
 

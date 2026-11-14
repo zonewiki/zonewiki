@@ -17,7 +17,7 @@ const registryText = `{
     {"name": "task"}
   ],
   "pinned": ["task", "shop"],
-  "mine": true,
+  "mine": {"view": "focus", "limit": "5"},
   "all": {"view": "open"}
 }
 `
@@ -36,8 +36,20 @@ func TestRegistryRoundTrips(t *testing.T) {
 	if shop == nil || shop.Settings["limit"] != "8" || shop.Settings["view"] != "focus" || r.Find("nope") != nil {
 		t.Errorf("shop = %+v", shop)
 	}
-	if !reflect.DeepEqual(r.Pinned, []string{"task", "shop"}) || r.All["view"] != "open" || !r.Mine {
+	if !reflect.DeepEqual(r.Pinned, []string{"task", "shop"}) || r.All["view"] != "open" || r.Mine["view"] != "focus" || r.Mine["limit"] != "5" {
 		t.Errorf("pins %v, all %v, mine %v", r.Pinned, r.All, r.Mine)
+	}
+}
+
+// "mine" was true, until 2026-11, for a user whose Pinned showed only their
+// own tasks: that reads as no settings of My tasks, and isn't written back.
+func TestRegistryMineWasAFlag(t *testing.T) {
+	r, ok := ParseRegistry([]byte(`{"version": 1, "pinned": ["a"], "mine": true}`))
+	if !ok || len(r.Mine) != 0 {
+		t.Fatalf("read as %v (ok %v)", r.Mine, ok)
+	}
+	if got := r.Encode(); strings.Contains(got, "mine") {
+		t.Errorf("written with the key:\n%s", got)
 	}
 }
 

@@ -103,15 +103,15 @@ class TestViewPage:
         assert self._tasks_links(body) == ["/tasks", "/tasks"]   # switcher, bar
         assert '<body data-module="wiki">' in body
 
-    def test_a_pinned_list_is_where_the_tasks_links_go(self, client, wiki_dir):
-        # A list you pinned is your own tasks: the Tasks module links go to
-        # it, as the list switcher opens it. New task from anywhere goes into
-        # it (the first pinned is the default list). A page that shows it is
-        # a page like any other.
+    def test_my_tasks_is_where_the_tasks_links_go(self, client, wiki_dir):
+        # With a list in the wiki the Tasks module links go to My tasks: the
+        # pinned lists' tasks and those in no list. New task from anywhere
+        # goes into the first pinned list. A page that shows it is a page
+        # like any other.
         list_page(client, wiki_dir, "tasks", "# Tasks\n\n[[tasks: list=task view=focus pin=1]]\n")
         write_page(wiki_dir, "other", "# Other\n")
         body = client.get("/page/other", headers=HOST).get_data(as_text=True)
-        assert self._tasks_links(body) == ["/tasks?list=task", "/tasks?list=task"]
+        assert self._tasks_links(body) == ["/tasks?mine=1", "/tasks?mine=1"]
         assert "data-pinned-pages" not in body
         lv = client.get("/tasks?list=task", headers=HOST).get_data(as_text=True)
         assert 'data-init-view="focus"' in lv and 'data-pinned="1"' in lv and '<body data-module="tasks"' in lv
@@ -121,16 +121,18 @@ class TestViewPage:
         # /tasks stays the view of every task, in the Tasks module.
         assert '<body data-module="tasks" data-tasks-list="task" data-tasks-tags="" data-tasks-today="1">' in client.get("/tasks", headers=HOST).get_data(as_text=True)
 
-    def test_several_pinned_lists_go_together(self, client, wiki_dir):
+    def test_the_tasks_links_go_to_my_tasks_however_many_are_pinned(self, client, wiki_dir):
         list_page(client, wiki_dir, "zzz", "# Z\n\n[[tasks: list=zed pin=1]]\n")
         list_page(client, wiki_dir, "mmm", "# M\n\n[[tasks: list=em pin=1]]\n")
         write_page(wiki_dir, "aaa", "# A\n\n[[tasks: tag=x pin=1]]\n")   # a pin in a page pins nothing
-        body = client.get("/page/aaa", headers=HOST).get_data(as_text=True)
-        assert self._tasks_links(body)[0] == "/tasks?pinned=1"   # both, as one
-        # Unpinned, it ends at once: one left, its list.
-        assert client.post("/tasks/pin-list", data={"list": "em", "pin": "0"}, headers=HOST).status_code == 302
-        body = client.get("/page/aaa", headers=HOST).get_data(as_text=True)
-        assert self._tasks_links(body)[0] == "/tasks?list=zed"
+        links = lambda: self._tasks_links(client.get("/page/aaa", headers=HOST).get_data(as_text=True))[0]
+        assert links() == "/tasks?mine=1"
+        for name in ("em", "zed"):
+            assert client.post("/tasks/pin-list", data={"list": name, "pin": "0"}, headers=HOST).status_code == 302
+            assert links() == "/tasks?mine=1"   # one pinned, none pinned: My tasks still
+        # ?pinned=1, its address until 2026-11, answers the same page.
+        old = client.get("/tasks?pinned=1", headers=HOST).get_data(as_text=True)
+        assert "<h1>My tasks</h1>" in old and 'data-init-mine="lists"' in old
 
     def test_bottom_bar_lists_the_modules(self, client, wiki_dir):
         write_page(wiki_dir, "my-page", "# My Page\n")
@@ -2258,10 +2260,10 @@ class TestTasksPage:
 
     def test_does_not_depend_on_pages(self, client, wiki_dir):
         # Embeds elsewhere (even a task list.md) are ordinary pages now.
-        write_page(wiki_dir, "tasks", "# My tasks\n\n[[tasks: tag=work]]\n\n[[tasks: view=plan]]\n")
+        write_page(wiki_dir, "tasks", "# Desk tasks\n\n[[tasks: tag=work]]\n\n[[tasks: view=plan]]\n")
         body = self.get(client, "?task=abc&view=today")
         assert body.count('class="tasks-app"') == 1
-        assert "My tasks" not in body
+        assert "Desk tasks" not in body   # the page's title: not the view My tasks
         assert 'data-init-tag=""' in body
 
     def test_list(self, client, wiki_dir):
@@ -2298,13 +2300,13 @@ class TestTasksPage:
             client.post("/api/tasks", json={"title": title, "due_date": today, **fields}, headers=HOST)
         count = lambda: client.get("/api/tasks/due-count", headers=HOST).get_json()["count"]
         pin = lambda name, how: client.post("/tasks/pin-list", data={"list": name, "pin": how}, headers=HOST)
-        assert count() == 4   # none pinned: every task
+        assert count() == 1   # none pinned: the task in no list
         pin("task", "1")
-        assert count() == 2   # the pinned list's
+        assert count() == 3   # and the pinned list's
         pin("shop", "1")
-        assert count() == 3   # both lists', not the task in none
+        assert count() == 4   # both lists'
         pin("task", "0")
-        assert count() == 1
+        assert count() == 2
 
     def test_task_counts_are_rendered_into_the_page(self, client, wiki_dir):
         # In the HTML, not only fetched later: the Tasks link must not change

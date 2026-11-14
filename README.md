@@ -124,8 +124,10 @@ Done tasks go to a yearly archive. Beyond that:
   its own settings (a limit on how much is in Focus, keep tasks for a shopping list's staples),
   and show it on any page (`[[tasks: list=groceries]]`). Your pinned lists are a row of
   pills on the Tasks page; the others, and all tasks, are under More.
-- Pin the lists that are your own tasks: the Tasks module then opens them, as one,
-  and new tasks go to the first of them (Move first in a list's menu).
+- My tasks is where the Tasks module opens: what is assigned to you wherever it is, and what
+  is nobody else's in the lists you pinned and in no list. Give a task to someone, or file it
+  in a list you don't follow, and it is off your plate. New tasks go to the first pinned list
+  (Move first in a list's menu).
 - Task lists inside any page (`[[tasks: tag=work view=plan]]`), a single task inline
   as a live chip you can tick (`[[task:…]]`), and **Make task** in the editor
   to turn lines of meeting notes into tasks.

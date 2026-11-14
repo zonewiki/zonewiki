@@ -32,8 +32,6 @@ type Req struct {
 	sharing    bool
 	pinnedDone bool
 	pinned     []ListInfo // the pinned lists (pinnedLists), once
-	mineDone   bool
-	mine       bool // Pinned shows only the user's tasks (onlyMine), once
 	counts     *TaskCounts
 	files      []PageFile // iterPages, once
 	stats      []pageStat // the same with their mtimes, once
@@ -700,18 +698,6 @@ func (rq *Req) pinnedLists() []ListInfo {
 		rq.pinned, rq.pinnedDone = pinnedLists(rq.user, rq.taskLists()), true
 	}
 	return rq.pinned
-}
-
-// onlyMine: the user's Pinned shows only the tasks assigned to them
-// (onlyMine), once per request; never without a pinned list.
-func (rq *Req) onlyMine() bool {
-	if rq == nil || len(rq.pinnedLists()) == 0 {
-		return false
-	}
-	if !rq.mineDone {
-		rq.mine, rq.mineDone = onlyMine(rq.user), true
-	}
-	return rq.mine
 }
 
 // defaultList: the default list (the first pinned list), where New task

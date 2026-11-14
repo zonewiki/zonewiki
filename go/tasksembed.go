@@ -22,7 +22,8 @@ const tasksPlaceholder = "ZONETASKSPLACEHOLDER"
 type tasksEmbedView struct {
 	Tag, View     string
 	List          string           // the list it shows, as the user names it (a ref); "" none
-	Lists         string           // several lists as one (the pinned lists): their refs, "|" between
+	Lists         string           // several lists as one (lists=), or My tasks' pinned lists: their refs, "|" between
+	Mine          string           // My tasks (mine=1): "assign" where assignment counts for the user, else "lists"
 	Plan          string           // "on", "off" or "": the embed doesn't say
 	Limit         string           // the WIP limit, "" none
 	Labels        []string         // the Open and Focus tabs' names
@@ -30,7 +31,7 @@ type tasksEmbedView struct {
 	Sfx           string           // "-<InstanceID>" after the first: its elements' ids end in it
 	Headless      bool             // hidden: only its edit modal is used (the editor's Make task, a new task from any page)
 	Keep          string           // "1": new tasks here are keep tasks
-	Pinned        bool             // the user's default list or their pinned lists: its New is the one New task clicks on its page
+	Pinned        bool             // the user's first pinned list or My tasks: its New is the one New task clicks on its page
 	NewTags       string           // new tasks' tags, comma-separated
 	CanAssign     bool             // with users: the modal has the Assignee field
 	Assignee      string           // assignee=, with users: whose tasks it shows
@@ -42,14 +43,16 @@ type tasksEmbedView struct {
 
 // embedSettingsAt: where a task app's settings are written, for its
 // dialog: the Index-th embed of Page as written (Raw; Index < 0: All
-// tasks'), and the list it shows (List, a ref; its settings as JSON, and
-// whether the user pinned it: Pin "1"), "" for none. A list's own
-// settings go to its registry, the embed's (the tab, a filter) to the page.
+// tasks', or My tasks' with Mine), and the list it shows (List, a ref; its
+// settings as JSON, and whether the user pinned it: Pin "1"), "" for none.
+// A list's own settings go to its registry, the embed's (the tab, a
+// filter) to the page.
 type embedSettingsAt struct {
 	Page         string
 	Index        int
 	Raw          string
 	Embed        bool // an embed on a page, whose params can be written there
+	Mine         bool // My tasks on /tasks: its settings are the user's (mineParams)
 	List         string
 	ListSettings string
 	Pin          string
@@ -70,9 +73,13 @@ func listEmbedParams(l ListInfo, embed TasksParams) TasksParams {
 	return p
 }
 
-// paramsScope: which lists' tasks a view with these params shows: one
-// list's ref, several joined by "|" (lists=), or "" for every task.
+// paramsScope: which tasks a view with these params shows: My tasks
+// (mine=1: mineScope), one list's ref, several joined by "|" (lists=), or
+// "" for every task.
 func paramsScope(p TasksParams) string {
+	if isTrue(p.Get("mine")) {
+		return mineScope
+	}
 	if s := strings.TrimSpace(p.Get("lists")); s != "" {
 		return strings.ToLower(s)
 	}
@@ -99,7 +106,7 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, p
 		case src != nil && src.index >= 0 && page != "" && canWrite(user, page):
 			at.Page, at.Index, at.Raw, at.Embed = page, src.index, src.raw, true
 		case src != nil && src.index < 0 && page == "" && mayWriteTasks(user) == nil:
-			at.Raw = src.raw
+			at.Raw, at.Mine = src.raw, paramsScope(params) == mineScope
 		default:
 			at = nil
 		}
@@ -172,21 +179,38 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, p
 	if instance > 0 {
 		sfx = "-" + strconv.Itoa(instance)
 	}
+	// What a new task gets is its list's to say: in My tasks, where it goes
+	// into the first pinned list, that list's tags and keep.
+	newFrom := params
+	if d := rq.defaultList(); d != nil && scope == mineScope {
+		newFrom = d.Params
+	}
 	keep := ""
-	if isTrue(params.Get("keep")) {
+	if isTrue(newFrom.Get("keep")) {
 		keep = "1"
 	}
 	v := tasksEmbedView{
 		Tag: params.Get("tag"), View: view, Plan: plan, Settings: settingsAt,
 		Limit: limit, Labels: labels, InstanceID: instance, Sfx: sfx, Headless: headless,
-		Keep: keep, Pinned: def != "" && (scope == def || strings.Contains(scope, "|")),
-		NewTags:       strings.Join(newTaskTags(params), ","),
+		Keep: keep, Pinned: scope == mineScope || def != "" && scope == def,
+		NewTags:       strings.Join(newTaskTags(newFrom), ","),
 		CanAssign:     settings().Users != nil,
 		Assignee:      assigneeParam(params),
 		PrivateFolder: privateFolder(user),
 		ListsJSON:     jsonobj.Text(choices), DefaultList: def,
 	}
-	if strings.Contains(scope, "|") {
+	if scope == mineScope {
+		// My tasks: the browser needs the pins and whether assignment counts
+		// (TasksCore.inMine, as mineFilter).
+		refs := []string{}
+		for _, l := range rq.pinnedLists() {
+			refs = append(refs, l.Ref)
+		}
+		v.Lists, v.Mine = strings.Join(refs, "|"), "lists"
+		if mineAssigns(user) {
+			v.Mine = "assign"
+		}
+	} else if strings.Contains(scope, "|") {
 		v.Lists = scope
 	} else if shown {
 		v.List = list.Ref
@@ -281,14 +305,16 @@ func setEmbedParamsOp(user, slug string, index int, was string, set map[string]s
 }
 
 // tasksSettingsRoute: the settings dialog's Save: {page, index, was, set}
-// for an embed on a page, {all: true, was, set} for All tasks, {list, set}
-// for a list's own settings (list: its ref); set: the params to change, ""
-// taking one out. Answers {ok} or {error}.
+// for an embed on a page, {all: true, was, set} for All tasks, {mine: true,
+// was, set} for the user's My tasks, {list, set} for a list's own settings
+// (list: its ref); set: the params to change, "" taking one out. Answers
+// {ok} or {error}.
 func tasksSettingsRoute(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Page  string            `json:"page"`
 		Index int               `json:"index"`
 		All   bool              `json:"all"`
+		Mine  bool              `json:"mine"`
 		List  string            `json:"list"`
 		Was   string            `json:"was"`
 		Set   map[string]string `json:"set"`
@@ -301,6 +327,8 @@ func tasksSettingsRoute(w http.ResponseWriter, r *http.Request) {
 	user := userOf(r)
 	if body.List != "" {
 		err = setListSettingsOp(user, body.List, body.Set)
+	} else if body.Mine {
+		err = setMineParams(user, body.Was, body.Set)
 	} else if body.All {
 		err = setAllTasksParams(user, body.Was, body.Set)
 	} else {
@@ -425,51 +453,29 @@ type TaskCounts struct {
 }
 
 // taskCounts: the open tasks in Focus (started, or due today or earlier)
-// and of those how many are overdue or due today; of the pinned lists
-// (pinnedView) when pages pin some, else of every task.
+// and of those how many are overdue or due today, of My tasks (mineFilter):
+// what the Tasks links open. With no list in the wiki that is every task.
 func taskCounts(rq *Req) TaskCounts {
-	tasks := rq.openTasks()
-	if len(rq.pinnedLists()) == 0 {
-		return countTasks(rq.who(), tasks, rq.taskLists())
-	}
-	return countTasks(rq.who(), tasks, rq.taskLists(), rq.pinnedView())
+	return countTasks(rq.who(), rq.openTasks(), rq.taskLists(), mineScopeParams)
 }
 
-// pinnedView: the params of the view of the pinned lists: one list's own;
-// several as one task app, the default list's params showing the tasks of
-// all of them (lists=a|b). A new task there goes to the default list.
-// For a user who set Pinned to their own tasks (onlyMine) only those
-// (assignee=me), of one list too.
-func (rq *Req) pinnedView() TasksParams {
-	pinned := rq.pinnedLists()
-	params := pinned[0].Params
-	if len(pinned) > 1 {
-		refs := make([]string, len(pinned))
-		for i, l := range pinned {
-			refs[i] = l.Ref
-		}
-		params = params.With("list", "").With("lists", strings.Join(refs, "|"))
-	}
-	if rq.onlyMine() {
-		params = params.With("assignee", "me")
-	}
-	return params
-}
+// mineScopeParams: params of the scope of My tasks, without its settings
+// (mineParams has those), for counting.
+var mineScopeParams = TasksParams{}.With("mine", "1")
 
-// myLists: the user's pinned lists are a view of their own, Pinned
-// (/tasks?pinned=1): several lists as one, or their tasks alone (onlyMine).
-func (rq *Req) myLists() bool { return len(rq.pinnedLists()) > 1 || rq.onlyMine() }
+// mineHref: My tasks, where the Tasks links go.
+const mineHref = "/tasks?mine=1"
 
-// pinnedLink: one of the lists the pinned view shows, under its heading:
+// pinnedLink: one of the pinned lists My tasks shows, under its heading:
 // the list at /tasks?list= ("#name").
 type pinnedLink struct{ Href, Label string }
 
 // listHref: the Tasks page of the list the user names ref.
 func listHref(ref string) string { return "/tasks?list=" + url.QueryEscape(ref) }
 
-// pinnedSources: what the pinned view (pinnedView) is made of: the pinned
-// lists in their order, and the pages that embed them (each list's
-// listPages), once each, A–Z by title.
+// pinnedSources: the lists My tasks shows the tasks of: the pinned lists in
+// their order, and the pages that embed them (each list's listPages), once
+// each, A–Z by title.
 func (rq *Req) pinnedSources() ([]pinnedLink, []PageRef) {
 	var links []pinnedLink
 	var pages []PageRef
@@ -500,9 +506,13 @@ func assigneeParam(p TasksParams) string {
 // user (any of them; none: every task); lists: those user sees.
 func countTasks(user string, tasks []*Task, lists map[string]ListInfo, params ...TasksParams) TaskCounts {
 	day := isoDay(today())
+	in := make([]func(*Task) bool, len(params))
+	for i, p := range params {
+		in[i] = scopeFilter(user, paramsScope(p), lists)
+	}
 	shows := func(t *Task) bool {
-		for _, p := range params {
-			if inScope(t, paramsScope(p), lists) && tagParamMatches(t, p.Get("tag")) &&
+		for i, p := range params {
+			if in[i](t) && tagParamMatches(t, p.Get("tag")) &&
 				assigneeParamMatches(t, p.Get("assignee"), user) {
 				return true
 			}
@@ -529,35 +539,29 @@ func countTasks(user string, tasks []*Task, lists map[string]ListInfo, params ..
 }
 
 // TaskPlace is an entry of the task list switcher (tasks_page.html): a
-// list, or Pinned (the pinned lists together). Key names it
-// for the counts' refresh (js/chrome.js): "list:<ref>", "all", "pinned",
-// "none" (No list, under More).
-// Pinned: a pinned list, or Pinned itself; First: the first of several pinned
-// lists, where a new task goes (its pill carries a plus).
+// list, or My tasks. Key names it for the counts' refresh (js/chrome.js):
+// "list:<ref>", "all", "mine", "none" (No list, under More).
+// Pinned: a pinned list; First: the first of several pinned lists, where a
+// new task goes (its pill carries a plus).
 type TaskPlace struct {
 	Key, Label, Title, Href         string
 	Pinned, First, Private, Current bool
 	Counts                          TaskCounts
 }
 
-// taskPlaces: the pills of the list switcher: with several pinned lists
-// Pinned (all of them as one, /tasks?pinned=1), then the pinned lists in
-// their order, each at /tasks?list=, each with its counts; in sharing mode
-// not a list that is not for sharing. What isn't pinned is under More
-// (taskMore).
+// taskPlaces: the pills of the list switcher: My tasks (/tasks?mine=1,
+// with the counts the Tasks links have), then the pinned lists in their
+// order, each at /tasks?list=, each with its counts; in sharing mode not a
+// list that is not for sharing. What isn't pinned is under More (taskMore).
 func (rq *Req) taskPlaces() []TaskPlace {
 	user := rq.who()
 	pinned, lists := rq.pinnedLists(), rq.taskLists()
-	var out []TaskPlace
 	tasks := rq.openTasks()
-	if rq.myLists() {
-		title := "Your pinned lists, as one"
-		if rq.onlyMine() {
-			title = "Your tasks in your pinned lists"
-		}
-		out = append(out, TaskPlace{Key: "pinned", Label: "Pinned", Title: title, Href: "/tasks?pinned=1",
-			Pinned: true, Counts: countTasks(user, tasks, lists, rq.pinnedView())})
+	title := "Your pinned lists and the tasks in no list"
+	if mineAssigns(user) {
+		title = "What is yours or nobody's in your pinned lists and in no list, and what is assigned to you elsewhere"
 	}
+	out := []TaskPlace{{Key: "mine", Label: "My tasks", Title: title, Href: mineHref, Counts: taskCounts(rq)}}
 	for i, l := range pinned {
 		if rq.listHidden(l) {
 			continue
@@ -582,16 +586,14 @@ func (rq *Req) listHidden(l ListInfo) bool { return rq != nil && rq.sharing && l
 // when that is one of these (Current: the pill is the shaded one; All: it
 // is All tasks). Filter: enough lists that a field to find one by name
 // helps. NoList: the tasks in no list (/tasks?list=none), with their
-// counts, there while there are open ones (or the page shows them): no pin
-// reaches them, so the Tasks links never count them, and the pill carries
-// how many of them are due (Due), the one number on it.
+// counts, there while there are open ones (or the page shows them). The
+// pill has no number: what it holds and needs you is in My tasks.
 type TasksMore struct {
 	Label        string
 	Current, All bool
 	Lists        []TaskPlace
 	Filter       bool
 	NoList       *TaskPlace
-	Due          int
 }
 
 // moreFilterFrom: how many lists More holds before it has a filter field.
@@ -641,7 +643,6 @@ func (rq *Req) taskMore(place string) *TasksMore {
 	if open, counts := rq.noListCounts(); open > 0 || place == noListRef {
 		more.NoList = &TaskPlace{Key: noListRef, Label: "No list", Title: "The tasks in no list", Href: listHref(noListRef),
 			Counts: counts, Current: place == noListRef}
-		more.Due = counts.Count
 		if place == noListRef {
 			more.Label, more.Current = "No list", true
 		}
@@ -677,8 +678,7 @@ func noListParams() TasksParams {
 }
 
 // placeCounts: each place's counts by its key (GET /api/tasks/due-count?places=1):
-// the pills', and No list's ("none": on its entry under More and, the due
-// ones, on the More pill).
+// the pills', and No list's ("none": on its entry under More).
 func (rq *Req) placeCounts() map[string]TaskCounts {
 	out := map[string]TaskCounts{}
 	for _, p := range rq.taskPlaces() {

@@ -369,13 +369,16 @@ def test_new_task_start_follows_the_homes_view(page, wiki):
 
 
 def test_new_task_falls_back_to_the_home_page(page, wiki):
-    # Should the hidden tasks fail to load, the default list opens with the modal.
+    # Should the hidden tasks fail to load, My tasks opens with the modal,
+    # whose task goes into the first pinned list.
     _home(page, wiki)
     page.route("**/api/tasks/headless", lambda route: route.fulfill(status=500, body="no"))
     page.goto("/page/garden")
     new_task(page)
-    page.wait_for_url(re.compile(r"/tasks\?list=task&new=1$"))
-    expect(page.locator(".task-edit-modal[open]")).to_be_visible()
+    page.wait_for_url(re.compile(r"/tasks\?mine=1(&new=1)?$"))
+    modal = page.locator(".task-edit-modal[open]")
+    expect(modal).to_be_visible()
+    expect(modal.locator("select[id^=task-edit-list]")).to_have_value("task")
 
 
 def test_new_task_on_a_page_that_shows_the_default_list(page, wiki):
@@ -429,17 +432,18 @@ def test_c_t_in_the_editor_goes_to_the_default_list(page, wiki):
     assert "/edit/garden" in page.url
 
 
-def test_g_t_goes_to_the_pinned_list(page, wiki):
+def test_g_t_goes_to_my_tasks(page, wiki):
     _home(page, wiki)
     page.goto("/page/garden")
     page.keyboard.press("g")
     page.keyboard.press("t")
-    page.wait_for_url(re.compile(r"/tasks\?list=task$"))   # the pinned list
+    page.wait_for_url(re.compile(r"/tasks\?mine=1$"))
+    expect(page.locator("h1")).to_have_text("My tasks")
     assert page.request.post("/tasks/pin-list", form={"list": "task", "pin": "0"}).ok   # none pinned any more
     page.goto("/page/garden")
     page.keyboard.press("g")
     page.keyboard.press("t")
-    page.wait_for_url(re.compile(r"/tasks$"))
+    page.wait_for_url(re.compile(r"/tasks\?mine=1$"))    # My tasks still: the tasks in no list
 
 
 
@@ -534,11 +538,11 @@ def test_task_counts_follow_tasks_changes(page, wiki):
     expect(tasks.locator(".module-focus")).to_have_text("1")
 
 
-def test_the_pinned_list_is_the_tasks_module(page, wiki):
-    # A list you pinned is your own tasks. The Tasks links go to it, which
-    # counts as the Tasks module, New task adds one in it, and it is no stop
-    # in the navigation trail. A page that shows the list is a page like any
-    # other: of the wiki.
+def test_my_tasks_is_the_tasks_module(page, wiki):
+    # The Tasks links go to My tasks, which has the pinned list's tasks and
+    # counts as the Tasks module; New task adds one in the first pinned
+    # list, and it is no stop in the navigation trail. A page that shows the
+    # list is a page like any other: of the wiki.
     list_page(page, wiki, "tasks", "# My tasks\n\n[[tasks: list=task view=focus pin=1]]\n")
     make_list(page, "shop")
     wiki.write("garden", "# Garden\n\nBeds.\n")
@@ -546,9 +550,9 @@ def test_the_pinned_list_is_the_tasks_module(page, wiki):
     page.request.post("/api/tasks", data={"title": "Pay rent", "list": "task", "due_date": date.today().isoformat()})
     page.goto("/page/garden")
     tasks = page.locator(".breadcrumb .module-link[data-module=tasks]")
-    expect(tasks.locator(".module-due")).to_have_text("1")   # the list task's only
+    expect(tasks.locator(".module-due")).to_have_text("1")   # the pinned list's task only
     tasks.click()
-    page.wait_for_url(re.compile(r"/tasks\?list=task$"))
+    page.wait_for_url(re.compile(r"/tasks\?mine=1$"))
     expect(tasks).to_have_attribute("aria-current", "page")
     new_task(page)
     modal = page.locator(".task-edit-modal[open]")

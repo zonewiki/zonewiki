@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -569,13 +570,141 @@ func TestPins(t *testing.T) {
 	if err := pinListOp("alice", "work", "maybe"); !refusedWith(err, refusedInvalid) {
 		t.Errorf("pin=maybe: %v", err)
 	}
-	// The pinned lists as one view: the first one's settings, all their tasks.
-	if err := setListSettingsOp("bob", "shop", map[string]string{"view": "focus", "new": "weekly"}); err != nil {
+}
+
+// My tasks' rule, case by case: the cases the browser's rule runs through
+// too (TasksCore.inMine, tests/test_tasks_core.py).
+func TestInMineCases(t *testing.T) {
+	raw, err := os.ReadFile("testdata/mine_cases.json")
+	if err != nil {
 		t.Fatal(err)
 	}
-	v := (&Req{user: "bob"}).pinnedView()
-	if v.Get("lists") != "shop|work" || v.Get("list") != "" || v.Get("view") != "focus" || !slices.Equal(newTaskTags(v), []string{"weekly"}) {
-		t.Errorf("the pinned view: %v", v.m)
+	var cases []struct {
+		Name string
+		Task struct {
+			List, Assignee string
+			Private        bool
+		}
+		Pinned, Assigns, Want bool
+	}
+	if err := json.Unmarshal(raw, &cases); err != nil || len(cases) == 0 {
+		t.Fatalf("the cases: %v", err)
+	}
+	// anna asks; anna and bob can be given tasks, zoe no longer.
+	assignable := func(name string) bool { return name == "anna" || name == "bob" }
+	for _, c := range cases {
+		task := &Task{List: c.Task.List, Assignee: c.Task.Assignee}
+		if c.Task.Private {
+			task.Owner = "anna"
+		}
+		if got := inMine(task, c.Pinned, "anna", c.Assigns, assignable); got != c.Want {
+			t.Errorf("%s: %v, want %v", c.Name, got, c.Want)
+		}
+	}
+}
+
+// My tasks on a wiki: what is the user's wherever it is, and what is
+// nobody else's in their pinned lists and in no list; its counts are the
+// Tasks links'.
+func TestMyTasks(t *testing.T) {
+	testWiki(t, nil)
+	// Without lists and users: every task.
+	newTestTask(t, "", "Loose", false, "due_date", isoDay(today()))
+	all := func(u string) []string {
+		in, out := mineFilter(u, taskLists(u)), []string{}
+		for _, task := range taskFiles.Open(u) {
+			if in(task) {
+				out = append(out, task.Title)
+			}
+		}
+		slices.Sort(out)
+		return out
+	}
+	if got := all(""); !slices.Equal(got, []string{"Loose"}) {
+		t.Errorf("without lists: %v", got)
+	}
+	// Without users: the pinned lists and no list.
+	mustList(t, "", "work", false)
+	mustList(t, "", "shop", false)
+	newTestTask(t, "", "Report", false, "list", "work")
+	newTestTask(t, "", "Milk", false, "list", "shop")
+	if got := all(""); !slices.Equal(got, []string{"Loose"}) {
+		t.Errorf("nothing pinned: %v", got)
+	}
+	if err := pinListOp("", "work", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if got := all(""); !slices.Equal(got, []string{"Loose", "Report"}) {
+		t.Errorf("work pinned: %v", got)
+	}
+	if c := taskCounts(&Req{}); c.Count != 1 {
+		t.Errorf("the Tasks links count %+v, want the one due task in no list", c)
+	}
+	// With users: what is someone else's is out, what is theirs is in
+	// wherever it is; a private task follows its list's pin.
+	withUsers(t, "alice", "bob")
+	mustList(t, "alice", "diary", true)
+	newTestTask(t, "alice", "Bob's report", false, "list", "work", "assignee", "bob")
+	newTestTask(t, "alice", "Alice's milk", false, "list", "shop", "assignee", "alice")
+	newTestTask(t, "alice", "Bob's loose", false, "assignee", "bob")
+	newTestTask(t, "alice", "Entry", false, "list", "diary")
+	if got := all("alice"); !slices.Equal(got, []string{"Alice's milk", "Loose", "Report"}) {
+		t.Errorf("alice: %v", got)
+	}
+	if got := all("bob"); !slices.Equal(got, []string{"Bob's loose", "Bob's report", "Loose", "Report"}) {
+		t.Errorf("bob: %v", got)
+	}
+	if err := pinListOp("alice", "diary", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if got := all("alice"); !slices.Equal(got, []string{"Alice's milk", "Entry", "Loose", "Report"}) {
+		t.Errorf("alice, her diary pinned: %v", got)
+	}
+	// The scope by its name, as the routes and the counts ask for it.
+	if paramsScope(mineParams("alice")) != mineScope || paramsScope(mineScopeParams) != mineScope {
+		t.Error("mine=1 isn't the scope of My tasks")
+	}
+	in := scopeFilter("bob", mineScope, taskLists("bob"))
+	if in(&Task{List: "shop"}) || !in(&Task{List: "work"}) {
+		t.Error("scopeFilter(mineScope)")
+	}
+}
+
+// My tasks has settings of its own, the user's: not a list's, and not what
+// a new task gets.
+func TestMyTasksSettings(t *testing.T) {
+	testWiki(t, nil)
+	withUsers(t, "alice", "bob")
+	mustList(t, "alice", "work", false)
+	if p := mineParams("alice"); p.src == nil || p.src.raw != "" || p.Get("mine") != "1" {
+		t.Fatalf("unset: %v %+v", p.m, p.src)
+	}
+	if err := setMineParams("alice", "", map[string]string{"view": "open", "limit": "5"}); err != nil {
+		t.Fatal(err)
+	}
+	p := mineParams("alice")
+	if p.Get("view") != "open" || p.Get("limit") != "5" || paramsScope(p) != mineScope {
+		t.Errorf("alice's: %v", p.m)
+	}
+	if q := mineParams("bob"); q.Has("view") || q.Has("limit") {
+		t.Errorf("bob has alice's settings: %v", q.m)
+	}
+	if !strings.Contains(fileText(t, taskFiles.ListsPath("alice")), `"mine": {"view": "open", "limit": "5"}`) {
+		t.Errorf("her registry:\n%s", fileText(t, taskFiles.ListsPath("alice")))
+	}
+	if err := setMineParams("alice", "", map[string]string{"limit": "9"}); err != errEmbedChanged {
+		t.Errorf("a save from an old dialog: %v", err)
+	}
+	if err := setMineParams("alice", p.src.raw, map[string]string{"limit": ""}); err != nil {
+		t.Fatal(err)
+	}
+	if p := mineParams("alice"); p.Has("limit") || p.Get("view") != "open" {
+		t.Errorf("after taking the limit out: %v", p.m)
+	}
+	for _, bad := range []map[string]string{{"new": "x"}, {"keep": "1"}, {"tag": "x"}, {"view": "week"}} {
+		if err := setMineParams("alice", mineParams("alice").src.raw, bad); !refusedWith(err, refusedInvalid) {
+			t.Errorf("%v: %v", bad, err)
+		}
 	}
 }
 
