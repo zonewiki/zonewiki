@@ -440,7 +440,7 @@ class TestModuleMenu:
         login(client, "alice", "alice-pw")
         nav = client.get("/tasks", headers=HOST).data.decode().split('<nav class="tasks-places"', 1)[1].split("</nav>", 1)[0]
         entries = dict(re.findall(r'data-place="([^"]+)"(.*?)</a>', nav, re.S))
-        assert list(entries) == ["list:gifts", "list:shop", "all"]
+        assert list(entries) == ["list:gifts", "list:shop"]   # neither pinned: under More
         assert "tasks-place-lock" in entries["list:gifts"] and "only you see it" in entries["list:gifts"]
         assert "tasks-place-lock" not in entries["list:shop"]
         client.post("/logout", headers=HOST)

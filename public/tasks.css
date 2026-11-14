@@ -39,7 +39,7 @@
 
 /* The task list switcher (tasks_page.html .tasks-places): on /tasks, on the sheet above
    the heading, a row of pills, one per list (Pinned and the pinned lists
-   first, the others A–Z, All), the current one shaded as in the module switcher;
+   first, then More: the others A–Z and All tasks, in a panel), the current one shaded as in the module switcher;
    pinned lists with a pin, private ones with a lock. Wraps on a narrow screen. */
 /* It looks as the module switcher at the top of the page does (style.css,
    .module-group): one white capsule with a border holding the pills, which
@@ -66,9 +66,50 @@
 .tasks-place-lock, .tasks-place-pin { display: inline-flex; }
 /* The first of several pinned lists, where a new task goes: a plus by its pin. */
 .tasks-place-first { margin-left: -.2rem; font-weight: 600; line-height: 1; }
+/* More: a details whose summary is the row's last pill and whose panel hangs
+   under it: links, a line each; a filter field over them when there are many
+   (js/listsrow.js). On a narrow screen the panel is as wide as the row. */
+.tasks-places { position: relative; }
+.lists-more { position: relative; display: inline-flex; }
+.lists-more > summary { list-style: none; cursor: pointer; user-select: none; }
+.lists-more > summary::-webkit-details-marker { display: none; }
+.lists-more-caret { font-size: .7em; margin-left: -.15rem; }
+.lists-more-panel {
+  position: absolute; z-index: 30; top: calc(100% + 6px); left: 0;
+  display: flex; flex-direction: column; min-width: 12rem; max-width: min(22rem, 90vw); max-height: min(60vh, 26rem); overflow-y: auto;
+  padding: .3rem; border: 1px solid var(--border); border-radius: .6rem; background: var(--surface);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
+}
+.lists-more-item {
+  display: flex; align-items: center; gap: .4rem; padding: .35rem .6rem; border-radius: .4rem;
+  color: var(--fg); text-decoration: none; font-size: .875rem; white-space: nowrap;
+}
+.lists-more-item:hover, .lists-more-item:focus-visible { background: var(--btn-bg); text-decoration: none; }
+.lists-more-item[aria-current] { font-weight: 600; background: color-mix(in srgb, var(--fg) 8%, var(--btn-bg)); }
+.lists-more-item[hidden] { display: none; }
+.lists-more-name { overflow: hidden; text-overflow: ellipsis; }
+.lists-more-rule { width: 100%; margin: .3rem 0; border: 0; border-top: 1px solid var(--border); }
+.lists-more-filter { margin: .1rem .1rem .3rem; padding: .3rem .5rem; font: inherit; font-size: .875rem; }
+/* A list this browser hasn't shown before (someone else made it): "new"
+   beside its name, and a dot on More until it has been opened. */
+.lists-more-new {
+  margin-left: auto; padding: 0 .4rem; border-radius: 999px; font-size: .7rem; font-weight: 600;
+  color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.lists-more-btn.has-new::after {
+  content: ""; width: .4rem; height: .4rem; border-radius: 50%; background: var(--accent);
+}
+/* A pinned pill being dragged to another place in the row. */
+.tasks-places[data-reorder] .tasks-place[draggable="true"] { cursor: grab; }
+.tasks-places .tasks-place.is-dragging { opacity: .45; }
+@media (max-width: 600px) {
+  .lists-more { position: static; }
+  .lists-more-panel { right: 0; max-width: none; }
+}
 /* A finger: taller pills, the capsule's corners with them. */
 @media (pointer: coarse) {
   .tasks-places .tasks-place { height: 2.25rem; padding: 0 .8rem; }
+  .lists-more-item { padding: .6rem .7rem; }
   .tasks-places-group { border-radius: calc(1.125rem + 3px); }
 }
 

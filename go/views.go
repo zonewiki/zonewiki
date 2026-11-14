@@ -159,7 +159,7 @@ func (rq *Req) taskCounts() TaskCounts {
 // tasksLinkHref: where the Tasks links go: the pinned lists, as the list
 // switcher opens them: several as one (/tasks?pinned=1), one at
 // /tasks?list=, unless the user sees only their own tasks there (onlyMine:
-// My lists then too); none pinned, /tasks.
+// Pinned then too); none pinned, /tasks.
 func (rq *Req) tasksLinkHref() string {
 	pinned := rq.pinnedLists()
 	switch {
@@ -325,7 +325,7 @@ type pageShell struct {
 
 // tasksNew: how a new task from any page (c t, New task) starts, as the
 // default list makes them: in that list (List, its ref), with its tags;
-// Assignee: the user, when their My lists show only their own tasks.
+// Assignee: the user, when their Pinned shows only their own tasks.
 type tasksNew struct {
 	List, Tags  string
 	Assignee    string
@@ -374,7 +374,7 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 			sh.TasksNew = &tasksNew{List: def.Ref, Tags: strings.Join(newTaskTags(def.Params), ","),
 				Keep: isTrue(def.Params.Get("keep")), Today: v == "" || v == "focus"}
 			if rq.onlyMine() && !def.Private() {
-				sh.TasksNew.Assignee = rq.user // My lists show only their tasks: a new one is theirs
+				sh.TasksNew.Assignee = rq.user // Pinned shows only their tasks: a new one is theirs
 			}
 		}
 	}

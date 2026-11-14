@@ -67,7 +67,7 @@ The Tasks link goes to your **pinned lists**,
 the lists you pinned (your own tasks; a list's ⋯ menu or List settings pins it: Pins in `docs/spec/tasks.md`;
 `pinnedLists`, from your pins in the lists' registry, the wiki's when you have set none, in their order;
 `rq.pinnedLists()` looks them up once per request): one at `/tasks?list=<name>` with its settings,
-several as one task app at `/tasks?pinned=1` (My lists),
+several as one task app at `/tasks?pinned=1` (Pinned),
 as the list switcher opens them;
 no pin, `/tasks` (`tasksLinkHref`, `moduleLinks`).
 Its counts are of the pinned lists.
@@ -96,7 +96,7 @@ There is still no nav bar: the modules sit where the eye already goes.
   Hidden at ≤640px.
   They replaced the round New and Search buttons in the bottom-right corner, so desktop toasts and Sign out have the bottom corners to themselves again.
 - **New task from anywhere** (`openDefaultTask` in `js/actions.js`: `c t`, and the phone's **Task** tab): the task goes into your first pinned list, tagged as it tags new tasks (`newTaskTags`: the list's `new`) and a keep task if the list says so.
-  On a page that shows that list or My lists it clicks that embed's own **+ New** (so the view's dates apply too, e.g. Focus's today);
+  On a page that shows that list or Pinned it clicks that embed's own **+ New** (so the view's dates apply too, e.g. Focus's today);
   anywhere else it opens a task list app's edit modal with that list, its tags,
   keep and start (`layout.html` puts them on `<body>`: `data-tasks-list`, `data-tasks-tags`, `data-tasks-keep`, `data-tasks-today` when that list's view is Focus, as its "+ New" starts tasks today there;
   without a pin, today, as `/tasks`'s Focus;
@@ -127,7 +127,7 @@ There is still no nav bar: the modules sit where the eye already goes.
 - **Counts**: the Tasks links (switcher and tab bar) carry two counts (`.module-counts`): tasks due today or overdue (`.module-due`, orange) and tasks in Focus (`.module-focus`, muted; `TasksCore.isFocus`: started, or due today or earlier),
   each hidden at zero,
   with a tooltip like "Tasks: 5 in Focus · 1 overdue · 1 due today".
-  `taskCounts()` counts the pinned lists' tasks, as My lists shows them, or every task without a pin.
+  `taskCounts()` counts the pinned lists' tasks, as Pinned shows them, or every task without a pin.
   The server renders them into the page (`taskCounts`, once per request, into `partials/modules.html`), since filling them in by a fetch after the page had painted made the link change width on every load (flicker);
   `refreshDueBadge` in `js/chrome.js` refreshes them from `/api/tasks/due-count` every minute while someone uses the page (`whileUsed` in `js/util.js`: a key, the pointer or a scroll since the last time; a tab nobody is at asks nothing), on tab focus, on a back/forward-cache restore and after tasks writes (`tasks.js` calls it).
   They replaced the separate due badge at the top left.

@@ -122,8 +122,8 @@ Done tasks go to a yearly archive. Beyond that:
   and deleting.
 - Lists: a task is in one list or in none. Make a list with New list… on the Tasks page, give it
   its own settings (a limit on how much is in Focus, keep tasks for a shopping list's staples),
-  and show it on any page (`[[tasks: list=groceries]]`). A switcher goes between your pinned
-  lists, the other lists and all tasks.
+  and show it on any page (`[[tasks: list=groceries]]`). Your pinned lists are a row of
+  pills on the Tasks page; the others, and all tasks, are under More.
 - Pin the lists that are your own tasks: the Tasks module then opens them, as one,
   and new tasks go to the first of them (Move first in a list's menu).
 - Task lists inside any page (`[[tasks: tag=work view=plan]]`), a single task inline

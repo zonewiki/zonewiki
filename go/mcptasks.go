@@ -544,7 +544,7 @@ func createTaskTool(args jsonObj, base, user string) (string, error) {
 	if h := lookupDefaultList(user); h != nil && !data.Has("list") {
 		data.Set("list", h.Ref)
 		data["tags"] = homeTags(data["tags"], h)
-		// And theirs, when their My lists show only their own tasks.
+		// And theirs, when their Pinned shows only their own tasks.
 		if !h.Private() && !data.Has("assignee") && onlyMine(user) {
 			data.Set("assignee", user)
 		}
@@ -767,7 +767,7 @@ func createTaskListTool(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	ref, err := createListOp(user, name, private, suffix)
+	ref, err := createListOp(user, name, private, false, suffix)
 	if err != nil {
 		return "", err
 	}

@@ -458,7 +458,7 @@ def shop(client, wiki):
         {**stored_task("See list", ["other"]), "description": "On [the tag](/tasks?tag=shop) and [the list](/tasks?list=shop)."}]))
     (wiki / "_tasks/closed.json").write_text(json.dumps([stored_task("Eggs", ["Shop"], "2099-01-01T10:00:00")]))
     (wiki / "_tasks/closed-2001.json").write_text(json.dumps([{**stored_task("Old", ["shop"], "2001-01-01T10:00:00"), "list": "shop"}]))
-    assert client.post("/tasks/new-list", data={"name": "shop"}, headers=HOST).headers["Location"] == "/tasks?list=shop"
+    assert client.post("/tasks/new-list", data={"name": "shop", "pin": "0"}, headers=HOST).headers["Location"] == "/tasks?list=shop"
     commit(wiki, "lists", "# Lists\n\n[[tasks: list=shop view=open]]\n\n[[tasks: tag=shop,-x new=shop]]\n\n"
                           "[Go](/tasks?tag=shop), [the list](/tasks?list=shop&view=open), #shop\n\n`[[tasks: list=shop tag=shop]]`\n")
     return wiki
@@ -570,9 +570,9 @@ def new_list(client, name, **more):
 
 def test_new_list_makes_a_list_and_no_page(client, wiki):
     before = git(wiki, "rev-parse", "HEAD").strip()
-    assert new_list(client, " #Shop  Runs ") == "/tasks?list=shop-runs"
+    assert new_list(client, " #Shop  Runs ") == "/tasks?list=shop-runs&made=1"   # the first list: pinned, and the page says so
     assert not (wiki / "lists").exists()
-    assert (wiki / "_tasks/lists.json").read_text() == '{\n  "version": 1,\n  "lists": [\n    {"name": "shop-runs"}\n  ]\n}\n'
+    assert (wiki / "_tasks/lists.json").read_text() == '{\n  "version": 1,\n  "lists": [\n    {"name": "shop-runs"}\n  ],\n  "pinned": ["shop-runs"]\n}\n'
     assert git(wiki, "log", "--format=%s", f"{before}..HEAD").splitlines() == ["Create list #shop-runs"]
     assert git(wiki, "show", "--name-only", "--format=", "HEAD").split() == ["_tasks/lists.json"]
     page = client.get("/tasks?list=shop-runs", headers=HOST).get_data(as_text=True)
@@ -583,7 +583,7 @@ def test_new_list_makes_a_list_and_no_page(client, wiki):
 
 
 def test_new_list_of_a_tags_name_takes_no_task(client, shop):
-    assert new_list(client, "weekly") == "/tasks?list=weekly"        # a tag of Milk's
+    assert new_list(client, "weekly") == "/tasks?list=weekly&made=1"        # a tag of Milk's
     milk = tasks_file(shop)[0]
     assert milk["tags"] == ["shop", "weekly"] and "list" not in milk  # a tag is a tag: the tasks stay as they are
 
@@ -602,7 +602,7 @@ def test_new_list_refuses_a_list_there_is_and_no_name(client, shop):
 
 def test_new_list_is_no_page(client, wiki):
     commit(wiki, "lists/shop", "# Shopping notes\n")
-    assert new_list(client, "shop") == "/tasks?list=shop"            # a page of that name is a page
+    assert new_list(client, "shop") == "/tasks?list=shop&made=1"            # a page of that name is a page
     assert (wiki / "lists/shop.md").read_text() == "# Shopping notes\n"
     # Without users there is nobody for a list to be private to.
     assert new_list(client, "mine", private="1") is None
@@ -660,7 +660,7 @@ def test_rename_list_changes_it_everywhere_in_one_commit(client, shop):
 
 
 def test_rename_list_refuses_and_says_why_in_its_dialog(client, shop):
-    client.post("/tasks/new-list", data={"name": "market"}, headers=HOST)
+    client.post("/tasks/new-list", data={"name": "market", "pin": "0"}, headers=HOST)
     head = git(shop, "rev-parse", "HEAD")
     for name, why in (("market", "There is a list #market already"), ("a,b", "can&#39;t contain"), ("  ", "needs a name")):
         back = list_op(client, "rename", list="shop", new_name=name)
@@ -725,7 +725,7 @@ def test_a_corrupt_tasks_file_stops_a_list_rename_with_nothing_written(client, s
 
 
 def test_delete_list_moves_its_tasks_and_keeps_the_pages(client, shop):
-    client.post("/tasks/new-list", data={"name": "market"}, headers=HOST)
+    client.post("/tasks/new-list", data={"name": "market", "pin": "0"}, headers=HOST)
     client.post("/api/tasks", json={"title": "Bread", "list": "shop"}, headers=HOST)
     list_op(client, "pin", list="shop", pin="first")
     before = git(shop, "rev-parse", "HEAD").strip()
@@ -780,4 +780,4 @@ def test_a_registry_naming_its_default_list_keeps_it_first(client, shop):
     assert html.index('data-place="list:work"') < html.index('data-place="list:shop"')
     assert client.post("/tasks/new-list", data={"name": "home"}, headers=HOST).status_code == 302
     text = registry.read_text()
-    assert '"pinned": ["work", "shop"]' in text and "default" not in text
+    assert '"pinned": ["work", "shop", "home"]' in text and "default" not in text   # the new list pinned, last

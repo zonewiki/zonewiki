@@ -334,8 +334,8 @@ def test_several_selected_tasks_are_assigned_at_once(alice):
 
 
 def test_only_my_tasks_in_my_lists(alice):
-    """The Tasks page's ⋯ menu: Only my tasks in My lists. The pinned list as
-    My lists then shows her tasks alone, with a locked @me chip, the Tasks
+    """The Tasks page's ⋯ menu: Only my tasks in Pinned. The pinned list as
+    Pinned then shows her tasks alone, with a locked @me chip, the Tasks
     link goes there, and New task from another page starts as hers."""
     make_list(alice, "team")
     alice.request.post("/tasks/pin-list", form={"list": "team", "pin": "1"})
@@ -344,9 +344,9 @@ def test_only_my_tasks_in_my_lists(alice):
     alice.goto("/tasks?list=team&view=open")
     expect(alice.locator(".task-item")).to_have_count(2)
     alice.locator(".page-menu-btn").click()
-    alice.get_by_role("menuitem", name="Only my tasks in My lists").click()
+    alice.get_by_role("menuitem", name="Only my tasks in Pinned").click()
     alice.wait_for_url("**/tasks?pinned=1")
-    expect(alice.locator("h1")).to_have_text("My lists")
+    expect(alice.locator("h1")).to_have_text("Pinned lists")
     alice.goto("/tasks?pinned=1&view=open")
     expect(alice.locator(".task-item .task-title")).to_have_text(["Alice's"])
     expect(alice.locator(".tasks-toolbar .tag-chip .tag-chip-label")).to_have_text(["team", "@me"])   # the list, and whose
@@ -364,7 +364,7 @@ def test_only_my_tasks_in_my_lists(alice):
     # And back: everyone's again, at the list itself.
     alice.goto("/tasks?pinned=1")
     alice.locator(".page-menu-btn").click()
-    alice.get_by_role("menuitem", name="Everyone's tasks in My lists").click()
+    alice.get_by_role("menuitem", name="Everyone's tasks in Pinned").click()
     alice.wait_for_url("**/tasks?list=team")
     alice.goto("/tasks?list=team&view=open")
     expect(alice.locator(".task-item")).to_have_count(3)

@@ -81,7 +81,7 @@ Auth is optional (a password, or users; see Key Constraints).
 ├── LICENSE                 # AGPL-3.0-or-later
 ├── THIRD_PARTY_LICENSES    # Licenses of Go, the Go modules and the embedding model (the vendored libraries' are next to them)
 ├── docs/spec/              # The feature spec, one file per area (see Spec)
-├── docs/plans/             # Working plans for changes in progress, deleted when done (`mcp-oauth.md`, `simple-pins.md`)
+├── docs/plans/             # Working plans for changes in progress, deleted when done (`mcp-oauth.md`)
 ├── docs/licenses/mermaid_notices.py  # Writes public/vendor/mermaid/THIRD_PARTY_LICENSES from the bundle's source map
 ├── docs/screenshots/       # The README's screenshots + make_screenshots.py (./run.sh screenshots)
 ├── Containerfile           # The image: a Go build stage, onnxruntime + the model (opt-in), an Ubuntu 26.04 LTS runtime (also ships README.md and docs/spec/ for zone_help)
@@ -168,7 +168,7 @@ Auth is optional (a password, or users; see Key Constraints).
     ├── style.css           # The styling: the look's tokens (:root), pages, the editor, search, dialogs, phones
     ├── tasks.css           # The task app's styling, loaded after style.css
     ├── zonewiki.js             # The entry ES module every page loads; imports the modules below
-    ├── js/                 # ES modules: chrome, git, util, completion, search, actions, pagemenu,
+    ├── js/                 # ES modules: chrome, git, util, completion, search, actions, pagemenu, listsrow,
     │                       #   shortcuts, mdedit, mdtext (the text functions shared with the server), editor, tasklist (its Task list button), page, figures, fold, present, copyline (Copy buttons); the task app's parts
     │                       #   taskdata, taskview, taskorder, tasktabs, taskchips, taskrender, taskmodal, taskselect, taskmenu, taskkeys, taskdnd, tasktouch, tasksettings; tasktexts, taskutil, datepicker (see Client code in `docs/spec/rendering.md`)
     ├── tasks-core.js       # Pure task logic (no DOM), an ES module — shared by tasks.js, the editor and Node-run tests

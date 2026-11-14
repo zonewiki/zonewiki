@@ -49,6 +49,7 @@ func pageRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /tasks/delete-list", writesPages(deleteListRoute))
 	mux.HandleFunc("POST /tasks/share-list", writesPages(shareListRoute))
 	mux.HandleFunc("POST /tasks/pin-list", writesPages(pinListRoute))
+	mux.HandleFunc("POST /tasks/pin-order", writesPages(pinOrderRoute))
 	mux.HandleFunc("GET /api/search", apiSearch)
 	mux.HandleFunc("GET /search", searchPage)
 	mux.HandleFunc("POST /api/toggle-checkbox/{slug...}", writesPages(apiToggleCheckbox))
@@ -907,8 +908,8 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, rq.tasksLinkHref(), http.StatusFound)
 			return
 		}
-		params, place, title, heading, key = rq.pinnedView(), "pinned", "My lists", "My lists", "/tasks?pinned=1"
-		crumbs = []crumb{{"Tasks", "/tasks"}, {"My lists", ""}}
+		params, place, title, heading, key = rq.pinnedView(), "pinned", "Pinned lists", "Pinned lists", "/tasks?pinned=1"
+		crumbs = []crumb{{"Tasks", "/tasks"}, {"Pinned", ""}}
 		// Which lists it shows, and as its Backlinks the pages that embed them.
 		var pages []PageRef
 		pinnedLinks, pages = rq.pinnedSources()
@@ -920,16 +921,21 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	} else {
 		tasksHTML = tasksInitial(rq) + buildTasksEmbed(rq, params, 0, false, "")
 	}
-	// The list switcher, this list (or All) current.
-	places := rq.taskPlaces()
-	for i := range places {
-		places[i].Current = places[i].Key == place
+	// The list switcher: the pills, this view's the current one; a view
+	// that has no pill is under More, which then names it.
+	more := rq.taskMore(place)
+	var places []TaskPlace
+	if more != nil {
+		places = rq.taskPlaces()
+		for i := range places {
+			places[i].Current = places[i].Key == place
+		}
 	}
 	v := &tasksPageView{Heading: heading, Missing: missing,
 		Menu: !rq.sharing && !listsUnmigrated && mayWriteTasks(rq.who()) == nil, Users: privateFolder(rq.user) != "",
 		MineMenu: privateFolder(rq.user) != "" && len(rq.pinnedLists()) > 0 && settings().assignable(rq.user), Mine: rq.onlyMine(),
 		NewListName: q.Get("newlist_name"), NewListError: q.Get("newlist_error"),
-		Places: places, PinnedLists: pinnedLinks, TasksHTML: htmlOf(tasksHTML), LinkSections: sections,
+		Places: places, More: more, PinnedLists: pinnedLinks, TasksHTML: htmlOf(tasksHTML), LinkSections: sections,
 		BreadcrumbHTML: breadcrumb(rq, crumbs, key, true, title, chip)}
 	if list != nil {
 		v.List = list
@@ -938,6 +944,16 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 		for i, p := range rq.pinnedLists() {
 			if p.Ref == list.Ref {
 				v.Pin = map[bool]string{true: "first", false: "1"}[i == 0]
+			}
+		}
+		// Just made (?made=1, newListRoute), and the user's one pinned list:
+		// what that changed, and how many open tasks are in no list.
+		if q.Get("made") != "" && v.Pin == "first" && len(rq.pinnedLists()) == 1 {
+			v.MadeFirst = true
+			for _, t := range rq.openTasks() {
+				if t.List == "" {
+					v.NoListTasks++
+				}
 			}
 		}
 		// Where its tasks can go when it is deleted: the other lists, a
@@ -1019,11 +1035,13 @@ func listRefused(w http.ResponseWriter, r *http.Request, err error, ref, param s
 }
 
 // newListRoute: the New list… dialog of /tasks (its ⋯ menu), and Create it
-// under an embed of a list that isn't there. The new list opens; a refusal
+// under an embed of a list that isn't there. The new list is pinned for who
+// made it (pin=0: not; no dialog sends that) and opens; a refusal
 // that another name would mend goes back to the dialog with the message.
 func newListRoute(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.PostFormValue("name"))
-	ref, err := createListOp(userOf(r), name, r.PostFormValue("private") != "", "")
+	user := userOf(r)
+	ref, err := createListOp(user, name, r.PostFormValue("private") != "", r.PostFormValue("pin") != "0", "")
 	if err != nil {
 		if pe, ok := refusalOf(err); ok && (pe.kind == refusedInvalid || pe.kind == refusedExists) {
 			http.Redirect(w, r, "/tasks?newlist_name="+url.QueryEscape(name)+"&newlist_error="+url.QueryEscape(pe.msg), http.StatusFound)
@@ -1032,7 +1050,26 @@ func newListRoute(w http.ResponseWriter, r *http.Request) {
 		pageFailed(w, r, err)
 		return
 	}
-	http.Redirect(w, r, listHref(ref), http.StatusFound)
+	// A first list is the user's one pin from now: the page says what that changes.
+	href := listHref(ref)
+	if pinned := pinnedLists(user, taskLists(user)); len(pinned) == 1 && pinned[0].Ref == ref {
+		href += "&made=1"
+	}
+	http.Redirect(w, r, href, http.StatusFound)
+}
+
+// pinOrderRoute: the pinned lists in a new order (the row's pills, dragged:
+// js/listsrow.js): every list field a ref, in the order wanted.
+func pinOrderRoute(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		badRequestPage(w)
+		return
+	}
+	if err := pinOrderOp(userOf(r), r.PostForm["list"]); err != nil {
+		pageFailed(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // renameListRoute: a list's Rename… dialog (/tasks?list=<ref>).
@@ -1075,8 +1112,8 @@ func shareListRoute(w http.ResponseWriter, r *http.Request) {
 // pinListRoute: a list's Pin, Move first and Unpin (its ⋯ menu, the
 // settings dialog's pin): pin is 1, first or 0. Back to the list.
 func pinListRoute(w http.ResponseWriter, r *http.Request) {
-	// mine=1 or 0, without a list: My lists show only the user's own tasks,
-	// or everyone's (the ⋯ menu's Only my tasks in My lists).
+	// mine=1 or 0, without a list: Pinned shows only the user's own tasks,
+	// or everyone's (the ⋯ menu's Only my tasks in Pinned).
 	if mine := r.PostFormValue("mine"); mine != "" {
 		if mine != "0" && mine != "1" {
 			pageFailed(w, r, refuse("mine is 0 or 1"))
@@ -1099,7 +1136,10 @@ func pinListRoute(w http.ResponseWriter, r *http.Request) {
 
 // tasksPageView: /tasks (tasks_page.html). List: the list shown, nil for
 // all tasks and the pinned lists; Missing: the name ?list= gave when no
-// list has it; Tag: the one tag ?tag= names; Places: the list switcher;
+// list has it; Tag: the one tag ?tag= names; Places: the list switcher's
+// pills and More its last one (nil: no switcher); MadeFirst: the list was
+// just made and is the user's one pinned list (NoListTasks: their open
+// tasks in no list);
 // PinnedLists: what the pinned view shows; LinkSections: a list's
 // Backlinks, the pinned view's those of its lists (with them the page has
 // a page view's columns). Menu: the ⋯ menu (New list…; a list's Rename…,
@@ -1119,11 +1159,14 @@ type tasksPageView struct {
 	ListRenameName, ListRenameError string
 	DeleteError, ShareError         string
 	Menu, Users                     bool
-	// MineMenu: the menu has Only my tasks in My lists (a user with a
+	// MineMenu: the menu has Only my tasks in Pinned (a user with a
 	// pinned list, who can be given tasks); Mine: it is on.
 	MineMenu, Mine            bool
 	NewListName, NewListError string
 	Places                    []TaskPlace
+	More                      *TasksMore
+	MadeFirst                 bool
+	NoListTasks               int
 	PinnedLists               []pinnedLink
 	LinkSections              []linkSection
 	TasksHTML, BreadcrumbHTML template.HTML

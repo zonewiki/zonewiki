@@ -115,6 +115,7 @@ WRITES = [
     ("POST /tasks/share-list", "POST", "/tasks/share-list", {"data": {"list": "carols-own"}}),
     ("POST /tasks/pin-list", "POST", "/tasks/pin-list", {"data": {"list": "team", "pin": "1"}}),
     ("POST /tasks/pin-list", "POST", "/tasks/pin-list", {"data": {"mine": "1"}}),
+    ("POST /tasks/pin-order", "POST", "/tasks/pin-order", {"data": {"list": "team"}}),
     ("POST /api/tasks/settings", "POST", "/api/tasks/settings", {"json": {"list": "team", "set": {"limit": "3"}}}),
     ("POST /api/tasks/settings", "POST", "/api/tasks/settings", {"json": {"all": True, "was": "", "set": {"view": "open"}}}),
     ("POST /api/tasks/settings", "POST", "/api/tasks/settings", {"json": {"page": "plans", "index": 0, "was": "", "set": {"view": "open"}}}),

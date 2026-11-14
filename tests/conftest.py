@@ -68,10 +68,11 @@ def create_task(client, **kwargs):
     return client.post("/api/tasks", json={"title": "Test task", **kwargs})
 
 
-def make_list(client, name: str, private: bool = False, **kwargs):
-    """Make a task list as New list… does (private: the user's own); returns
-    the response, a redirect to the list."""
-    data = {"name": name, **({"private": "1"} if private else {})}
+def make_list(client, name: str, private: bool = False, pin: bool = False, **kwargs):
+    """Make a task list as New list… does (private: the user's own), but not
+    pinned (the dialog pins the list it makes: pin=True), so a test pins
+    what it means to; returns the response, a redirect to the list."""
+    data = {"name": name, "pin": "1" if pin else "0", **({"private": "1"} if private else {})}
     return client.post("/tasks/new-list", data=data, **kwargs)
 
 
@@ -94,7 +95,7 @@ def list_page(client, wiki_dir: Path, slug: str, content: str, **kwargs) -> Path
         name = p.get("list", "").strip("#").lower()
         if not name:
             continue
-        made = client.post("/tasks/new-list", data={"name": name, **({"private": "1"} if slug.startswith("private/") else {})}, **kwargs)
+        made = client.post("/tasks/new-list", data={"name": name, "pin": "0", **({"private": "1"} if slug.startswith("private/") else {})}, **kwargs)
         own = {k: p[k] for k in ("view", "keep", "limit", "plan", "labels", "new") if k in p}
         if own and "newlist_error" not in made.headers.get("Location", ""):
             assert client.post("/api/tasks/settings", json={"list": name, "set": own}, **kwargs).status_code == 200

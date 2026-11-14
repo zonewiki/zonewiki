@@ -18,7 +18,7 @@ import (
 // settings; a task is in one by naming it (Task.List), and a task's file
 // says which registry that name is in. A registry also holds whose pins it
 // is (pinned, default: a user's own in their file, the wiki's in the shared
-// one; mine: a user sees only their own tasks in My lists) and, the shared one, the settings of All tasks.
+// one; mine: a user sees only their own tasks in Pinned) and, the shared one, the settings of All tasks.
 
 // ListsName: the registry's file in a tasks folder.
 const ListsName = "lists.json"
@@ -46,7 +46,7 @@ type Registry struct {
 	Lists   []*List
 	Pinned  []string          // the pinned lists' names, in order: the first is where a new task goes
 	PinsSet bool              // the file says which are pinned, be it none ("pinned": [])
-	Mine    bool              // a user's own: My lists shows only the tasks assigned to them
+	Mine    bool              // a user's own: Pinned shows only the tasks assigned to them
 	All     map[string]string // the settings of All tasks (the shared registry)
 	Extra   map[string]json.RawMessage
 }

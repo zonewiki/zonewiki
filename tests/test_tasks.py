@@ -2139,7 +2139,7 @@ class TestLists:
         body = client.get("/page/shop").get_data(as_text=True)
         assert "There is no list <code>#groceries</code>" in body and body.count('class="tasks-app"') == 1
         made = client.post("/tasks/new-list", data={"name": "groceries"})
-        assert made.headers["Location"] == "/tasks?list=groceries"
+        assert made.headers["Location"] == "/tasks?list=groceries&made=1"   # the first list: pinned
         assert 'data-init-list="groceries"' in client.get("/page/shop").get_data(as_text=True)
 
     def test_search_links_to_list(self, client, shop):

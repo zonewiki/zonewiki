@@ -351,7 +351,7 @@ class TestEmbed:
 
 
 class TestOnlyMine:
-    """Only my tasks in My lists (docs/spec/tasks.md, Lists → Pins): a
+    """Only my tasks in Pinned (docs/spec/tasks.md, Lists → Pins): a
     user's own setting. Their pinned lists then show only the tasks assigned
     to them and their private ones, their Tasks links count only those, and a
     new task from anywhere is theirs."""
@@ -384,11 +384,11 @@ class TestOnlyMine:
         assert resp.status_code == 302 and resp.headers["Location"] == "/tasks?pinned=1"
         assert '"mine": true' in (wiki_dir / "private/alice/_tasks/lists.json").read_text()
         assert self.count(team) == 1                           # A1
-        # One pinned list is My lists too now: where her Tasks links go.
+        # One pinned list is Pinned too now: where her Tasks links go.
         index = self.page(team, "/page/index")
         assert 'href="/tasks?pinned=1"' in index and 'data-tasks-assignee="alice"' in index
         html = self.page(team, "/tasks?pinned=1")
-        assert "My lists" in html and 'data-init-assignee="me"' in html and "Your tasks in your pinned lists" in html
+        assert "Pinned" in html and 'data-init-assignee="me"' in html and "Your tasks in your pinned lists" in html
         assert 'id="mine-off-btn"' in html and 'id="mine-on-btn"' not in html
         # The list itself still shows everyone's.
         html = self.page(team, "/tasks?list=team")
@@ -409,7 +409,7 @@ class TestOnlyMine:
         login(team, "bob")
         assert self.count(team) == 3                           # bob pinned nothing: every task he sees
         self.mine(team)
-        assert self.count(team) == 3                           # and without a pinned list there is no My lists
+        assert self.count(team) == 3                           # and without a pinned list there is no Pinned
         assert "data-tasks-assignee" not in self.page(team, "/page/index")
         self.pin(team, "team")
         assert self.count(team) == 1                           # B1

@@ -21,7 +21,7 @@ export async function openDefaultTask() {
   // The start date as the default list's "+ New" gives it (today on Focus);
   // without a pin, as /tasks's Focus does.
   const homeless = !('tasksTags' in document.body.dataset);
-  // data-tasks-assignee: the user, whose My lists show only their own tasks.
+  // data-tasks-assignee: the user, whose Pinned shows only their own tasks.
   const opts = { list: tasksList, tags: tasksTags, keep: tasksKeep === '1', ...(tasksAssignee ? { assignee: tasksAssignee } : {}),
                  start_date: homeless || tasksToday === '1' ? localDate() : null };
   if (!document.querySelector('.tasks-app[data-ready]')) {

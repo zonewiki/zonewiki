@@ -171,7 +171,7 @@ func pinnedLists(user string, lists map[string]ListInfo) []ListInfo {
 	return out
 }
 
-// onlyMine: user has set My lists to the tasks assigned to them ("mine" in
+// onlyMine: user has set Pinned to the tasks assigned to them ("mine" in
 // their registry): their pinned lists as one show only those, the Tasks
 // links count only those, and a new task from anywhere (New task, c t, an
 // assistant's create_task without a list) is assigned to them. Only with
@@ -205,9 +205,9 @@ func setOnlyMineOp(user string, on bool) error {
 	if err != nil {
 		return err
 	}
-	msg := "My lists show everyone's tasks"
+	msg := "Pinned shows everyone's tasks"
 	if on {
-		msg = "My lists show only my tasks"
+		msg = "Pinned shows only my tasks"
 	}
 	return commitLists(user, msg, []string{path})
 }
@@ -288,9 +288,33 @@ func commitLists(user, message string, paths []string) error {
 	return notCommitted(gitCommit(user, message, paths...))
 }
 
+// seedPins: a user's own registry that says nothing of pins yet gets the
+// wiki's, which they have seen as theirs until now: their first pin (or
+// unpin, or new order) starts from those.
+func seedPins(user, owner string, reg *taskfiles.Registry, lists map[string]ListInfo) {
+	if owner != "" && !reg.PinsSet {
+		for _, p := range pinnedLists(user, lists) {
+			reg.Pinned = append(reg.Pinned, p.Ref)
+		}
+	}
+	reg.PinsSet = true
+}
+
+// pinOwner: whose registry holds user's pins: their own with users, else
+// the shared one.
+func pinOwner(user string) string {
+	if privateFolder(user) != "" {
+		return user
+	}
+	return ""
+}
+
 // createListOp makes a list called name, shared or (private) user's own;
-// returns how user names it. A name of a list they see is refused.
-func createListOp(user, name string, private bool, suffix string) (string, error) {
+// returns how user names it. A name of a list they see is refused. pin:
+// the new list is pinned for user, last (a list made in the browser, which
+// would else be out of sight under More; not an assistant's), in the same
+// commit.
+func createListOp(user, name string, private, pin bool, suffix string) (string, error) {
 	if listsUnmigrated {
 		return "", errListsUnmigrated
 	}
@@ -310,7 +334,8 @@ func createListOp(user, name string, private bool, suffix string) (string, error
 	}
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
-	if nameTaken(list, taskLists(user)) {
+	lists := taskLists(user)
+	if nameTaken(list, lists) {
 		return "", refuseAs(refusedExists, "There is a list #"+list+" already")
 	}
 	reg, err := taskFiles.ReadListsStrict(owner)
@@ -321,11 +346,30 @@ func createListOp(user, name string, private bool, suffix string) (string, error
 		return "", refuseAs(refusedExists, "There is a list #"+list+" already")
 	}
 	reg.Lists = append(reg.Lists, &taskfiles.List{Name: list, Settings: map[string]string{}, Owner: owner})
+	// The pin is in the user's registry, which is the list's own unless the
+	// list is shared and the wiki has users.
+	pins := reg
+	if pin && pinOwner(user) != owner {
+		if pins, err = taskFiles.ReadListsStrict(pinOwner(user)); err != nil {
+			return "", err
+		}
+	}
+	if pin {
+		seedPins(user, pinOwner(user), pins, lists)
+		pins.Pinned = append(pins.Pinned, list)
+	}
 	path, err := taskFiles.WriteListsLocked(user, owner, reg)
 	if err != nil {
 		return "", err
 	}
-	return list, commitLists(user, "Create list #"+list+suffix, []string{path})
+	paths := []string{path}
+	if pins != reg {
+		if path, err = taskFiles.WriteListsLocked(user, pinOwner(user), pins); err != nil {
+			return "", err
+		}
+		paths = append(paths, path)
+	}
+	return list, commitLists(user, "Create list #"+list+suffix, paths)
 }
 
 // ensurePrivateListLocked: user's list "private", made when they have none
@@ -739,19 +783,12 @@ func pinListOp(user, ref, pin string) error {
 	if !ok {
 		return refuseAs(refusedNotFound, "No list #"+cleanList(ref))
 	}
-	owner := ""
-	if privateFolder(user) != "" {
-		owner = user
-	}
+	owner := pinOwner(user)
 	reg, err := taskFiles.ReadListsStrict(owner)
 	if err != nil {
 		return err
 	}
-	if owner != "" && !reg.PinsSet {
-		for _, p := range pinnedLists(user, lists) {
-			reg.Pinned = append(reg.Pinned, p.Ref)
-		}
-	}
+	seedPins(user, owner, reg, lists)
 	// Without users the registry's names are the refs.
 	is := func(r string) bool { x, ok := resolveList(r, lists); return ok && x.Ref == l.Ref }
 	msg := "Pin list #" + l.Name
@@ -769,12 +806,56 @@ func pinListOp(user, ref, pin string) error {
 	default:
 		return refuse("pin is 0, 1 or first")
 	}
-	reg.PinsSet = true
 	path, err := taskFiles.WriteListsLocked(user, owner, reg)
 	if err != nil {
 		return err
 	}
 	return commitLists(user, msg, []string{path})
+}
+
+// pinOrderOp puts user's pinned lists in the order refs names them (the
+// row's pills, dragged): the pinned lists among refs first, as named, then
+// the pinned ones it leaves out, as they were. The first is where a new
+// task goes. Nothing is pinned or unpinned by it; an order that is the one
+// they have writes nothing.
+func pinOrderOp(user string, refs []string) error {
+	if listsUnmigrated {
+		return errListsUnmigrated
+	}
+	if err := mayWriteTasks(user); err != nil {
+		return err
+	}
+	taskFiles.Lock()
+	defer taskFiles.Unlock()
+	lists := taskLists(user)
+	var was, now []string
+	for _, l := range pinnedLists(user, lists) {
+		was = append(was, l.Ref)
+	}
+	for _, ref := range refs {
+		if l, ok := resolveList(cleanList(ref), lists); ok && slices.Contains(was, l.Ref) && !slices.Contains(now, l.Ref) {
+			now = append(now, l.Ref)
+		}
+	}
+	for _, ref := range was {
+		if !slices.Contains(now, ref) {
+			now = append(now, ref)
+		}
+	}
+	if slices.Equal(was, now) {
+		return nil
+	}
+	owner := pinOwner(user)
+	reg, err := taskFiles.ReadListsStrict(owner)
+	if err != nil {
+		return err
+	}
+	reg.Pinned, reg.PinsSet = now, true
+	path, err := taskFiles.WriteListsLocked(user, owner, reg)
+	if err != nil {
+		return err
+	}
+	return commitLists(user, "Reorder the pinned lists", []string{path})
 }
 
 // setListSettingsOp changes the settings of the list user names ref: set

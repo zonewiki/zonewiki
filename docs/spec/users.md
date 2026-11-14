@@ -665,7 +665,7 @@ Not there: telling someone that a task became theirs, a group as an assignee, an
   `/tasks?assignee=…` filters the same way, with an ordinary chip.
 - **The counts** on the Tasks links and the list switcher count what each user's lists show them: `assignee=me` is whoever asks (`assigneeParamMatches` in `go/tasksyntax.go`, the server's mirror of the filter).
   An export of such a list holds the tasks it shows (`/api/tasks/export?assignee=`).
-  A user can have their Tasks links count, and My lists show, only their own tasks: **Only my tasks in My lists** (Lists → Only my tasks in My lists in `docs/spec/tasks.md`).
+  A user can have their Tasks links count, and Pinned show, only their own tasks: **Only my tasks in Pinned** (Lists → Only my tasks in Pinned in `docs/spec/tasks.md`).
 - **Several at once** (`openBulkAssignModal` in `js/taskselect.js`): **Assign…** in the selection bar and in the menu of a selected card, or **a** on the selected tasks (one is enough).
   The dialog lists the users who can be assigned, yourself first, then **No one**; the row of who has them all is ticked, one who has some says "1 of 4".
   A click (or ↑/↓ and Enter) assigns them in one `batch-update`, and the toast ("3 tasks assigned to bob") has one Undo for all, which leaves no trace in their histories.

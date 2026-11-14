@@ -137,10 +137,11 @@ class Wiki:
 _EMBED_RE = re.compile(r"\[\[tasks:\s*([^\]]*)\]\]", re.I)
 
 
-def make_list(page, name: str, private: bool = False):
+def make_list(page, name: str, private: bool = False, pin: bool = False):
     """Make a task list as New list… does (private: the signed-in user's
-    own), through the route its dialog posts to."""
-    resp = page.request.post("/tasks/new-list", form={"name": name, **({"private": "1"} if private else {})})
+    own), through the route its dialog posts to; but not pinned (the dialog
+    pins the list it makes: pin=True), so a test pins what it means to."""
+    resp = page.request.post("/tasks/new-list", form={"name": name, "pin": "1" if pin else "0", **({"private": "1"} if private else {})})
     assert resp.ok and "newlist_error" not in resp.url, resp.url
     return resp
 
@@ -161,7 +162,7 @@ def list_page(page, wiki: "Wiki", slug: str, content: str) -> Path:
         name = p.get("list", "").strip("#").lower()
         if not name:
             continue
-        made = page.request.post("/tasks/new-list", form={"name": name, **({"private": "1"} if slug.startswith("private/") else {})})
+        made = page.request.post("/tasks/new-list", form={"name": name, "pin": "0", **({"private": "1"} if slug.startswith("private/") else {})})
         own = {k: p[k] for k in ("view", "keep", "limit", "plan", "labels", "new") if k in p}
         if own and "newlist_error" not in made.url:
             assert page.request.post("/api/tasks/settings", data={"list": name, "set": own}).ok

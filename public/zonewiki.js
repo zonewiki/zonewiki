@@ -8,6 +8,7 @@ import './js/git.js';         // uncommitted changes badge, Commit buttons
 import './js/search.js';      // search modal and preview, Notes filter, search highlights
 import './js/actions.js';     // new note / page / task, action bar, sharing mode
 import './js/pagemenu.js';    // the page's ⋯ menu and its dialogs
+import './js/listsrow.js';    // the Tasks page's row of lists: More, its filter, dragging the pills
 import './js/shortcuts.js';   // keyboard shortcuts
 import './js/editor.js';      // the editor
 import './js/page.js';        // the page view: checkboxes, task chips, tables, lightbox

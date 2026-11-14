@@ -114,6 +114,11 @@ its list tests New list… (a registry entry and no page), a list's rename (its 
 `TestRenameTagInText` and `TestRenameListInText` in `go/pages_test.go` the rewriting of text,
 and `test_rename_list_dialog` in `tests/e2e/test_tasks.py` the dialog.
 
+`TestListSwitcher` in `tests/test_tasks_embed.py` covers the Tasks page's row of lists (the pinned lists as pills, the others and All tasks under More and what More names, the first pill's plus, a new list pinned and what its page says of a first one, the pills' order by `POST /tasks/pin-order`, the filter field from eight lists),
+`TestANewListIsPinnedForWhoMadeIt` and `TestPinOrder` in `go/tasklists_test.go` whose registry a pin and an order are written to,
+`TestRegistryDefaultIsTheFirstPin` in `go/internal/taskfiles/lists_test.go` a registry from when a default list was named,
+and in `tests/e2e/test_tasks.py` More opening, closing and naming the view, a pill dragged to another place, the filter and the mark on a list new to the browser.
+
 `TestInitialTasks` in `tests/test_tasks_embed.py` covers the tasks a page brings along (what the API would answer, once a page, a task's text not ending the block, none in a preview),
 and `test_a_page_draws_its_lists_without_asking_for_the_tasks` in `tests/e2e/test_tasks.py` that the lists draw from them with no request.
 

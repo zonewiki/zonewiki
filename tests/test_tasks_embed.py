@@ -204,18 +204,40 @@ class TestPageViewLink:
 # ── The list switcher ───────────────────────────────────────────────────────────
 
 
+def git_log(wiki_dir):
+    """The wiki's commits' subjects, the latest first."""
+    import subprocess
+    return subprocess.run(["git", "-C", str(wiki_dir), "log", "--format=%s"], capture_output=True, text=True, check=True).stdout.splitlines()
+
+
 def places(html):
-    """The list switcher's places: (key, label, current) each, [] without one."""
+    """The list switcher's pills (Pinned and the pinned lists): (key, label,
+    current) each, [] without a switcher or with nothing pinned."""
     if 'class="tasks-places"' not in html:
         return []
-    nav = html.split('<nav class="tasks-places"', 1)[1].split("</nav>", 1)[0]
+    nav = html.split('<nav class="tasks-places"', 1)[1].split("</nav>", 1)[0].split("<details", 1)[0]
     return [(k, label, cur == ' aria-current="page"') for k, cur, label in re.findall(
         r'data-place="([^"]+)"[^>]*?( aria-current="page")?>.*?<span class="tasks-place-label">([^<]*)</span>', nav, re.S)]
 
 
+def more(html):
+    """The switcher's More: (its pill's label, whether it is the current
+    one, the links in its panel as (href, name, current)); None without a
+    switcher."""
+    if 'class="tasks-places"' not in html:
+        return None
+    details = html.split('<details class="lists-more">', 1)[1].split("</details>", 1)[0]
+    summary, panel = details.split("</summary>", 1)
+    label = re.search(r'<span class="tasks-place-label">([^<]*)</span>', summary).group(1)
+    links = [(href, name, cur == ' aria-current="page"') for href, cur, name in re.findall(
+        r'<a href="([^"]+)" class="lists-more-item[^>]*?( aria-current="page")?>.*?<span class="lists-more-name">([^<]*)</span>', panel, re.S)]
+    return label, 'aria-current="page"' in summary, links
+
+
 class TestListSwitcher:
     """/tasks opens with the list switcher, above its heading: the Tasks
-    pinned lists, the other lists A–Z, All; pages that embed a list show none."""
+    pinned lists as pills, the other lists A–Z and All tasks under More;
+    pages that embed a list show none."""
 
     @staticmethod
     def wiki(client, wiki_dir):
@@ -231,20 +253,27 @@ class TestListSwitcher:
 
     def test_nothing_to_switch_between_shows_no_switcher(self, client, wiki_dir):
         write_page(wiki_dir, "work", "# Work\n\n[[tasks: tag=work]]\n")
-        assert places(self.get(client, "/tasks")) == []
+        html = self.get(client, "/tasks")
+        assert places(html) == [] and more(html) is None and "lists-more" not in html
 
     def test_the_lists_and_all_above_the_heading(self, client, wiki_dir):
         self.wiki(client, wiki_dir)
         html = self.get(client, "/tasks?list=shop")
-        # Lists by their names, not their pages': the pinned one first.
-        assert places(html) == [("list:task", "task", False), ("list:gifts", "gifts", False),
-                                ("list:shop", "shop", True), ("all", "All", False)]
+        # The pinned list is a pill; the others, by their names A–Z, and All
+        # tasks are under More, which names the view the page shows: shop.
+        assert places(html) == [("list:task", "task", False)]
+        assert more(html) == ("shop", True, [("/tasks?list=gifts", "gifts", False), ("/tasks?list=shop", "shop", True), ("/tasks", "All tasks", False)])
         nav = html.split('<nav class="tasks-places"', 1)[1].split("</nav>", 1)[0]
         assert re.findall(r'href="([^"]+)"', nav) == ["/tasks?list=task", "/tasks?list=gifts", "/tasks?list=shop", "/tasks"]
         assert 'title="List #shop"' in nav and 'title="Pinned list #task"' in nav
-        # The pinned list marked with a pin; the others not.
+        # The pinned list marked with a pin; the others not. One pin: no plus.
         assert re.findall(r'data-place="([^"]+)"[^>]*>(?:<span class="tasks-place-pin")', nav) == ["list:task"]
+        assert "tasks-place-first" not in nav
         assert "tasks-place-lock" not in nav   # without users nothing is private
+        assert "lists-more-filter" not in nav  # a few lists: no field to find one
+        assert " data-reorder>" in html.split('<nav class="tasks-places"', 1)[1].split("<div", 1)[0]
+        # On the pinned list More is just More.
+        assert more(self.get(client, "/tasks?list=task"))[:2] == ("More", False)
         # Above the heading, which names the list.
         assert html.count('class="tasks-places"') == 1
         assert html.index('class="tasks-places"') < html.index("<h1>List: shop</h1>") < html.index('class="tasks-app"')
@@ -252,13 +281,17 @@ class TestListSwitcher:
 
     def test_all_tasks_and_the_pinned_list(self, client, wiki_dir):
         self.wiki(client, wiki_dir)
-        assert self.current(client, "/tasks") == ["all"]
-        assert "<h1>All tasks</h1>" in self.get(client, "/tasks")
+        html = self.get(client, "/tasks")
+        assert self.current(client, "/tasks") == []   # no pill is: All tasks is under More
+        assert more(html)[:2] == ("All tasks", True) and more(html)[2][-1] == ("/tasks", "All tasks", True)
+        assert "<h1>All tasks</h1>" in html
+        # A tag's view is All tasks with a filter.
+        assert more(self.get(client, "/tasks?tag=x"))[:2] == ("All tasks", True)
         assert self.current(client, "/tasks?list=task") == ["list:task"]
         # A name no list has: the switcher, nothing current, and a line that
         # says so, with a button that makes the list.
         html = self.get(client, "/tasks?list=nothing")
-        assert places(html) and self.current(client, "/tasks?list=nothing") == []
+        assert places(html) and self.current(client, "/tasks?list=nothing") == [] and more(html)[:2] == ("More", False)
         assert "<h1>List: nothing</h1>" in html and "There is no list <code>#nothing</code>" in html
         assert 'class="tasks-app"' not in html and 'action="/tasks/new-list"><input type="hidden" name="name" value="nothing">' in html
 
@@ -277,7 +310,7 @@ class TestListSwitcher:
         self.wiki(client, wiki_dir)
         write_page(wiki_dir, "aaa-scratch", "# Scratch\n\n[[tasks: list=task]]\n")
         html = self.get(client, "/tasks?list=task")
-        assert [k for k, _, _ in places(html)] == ["list:task", "list:gifts", "list:shop", "all"]
+        assert [k for k, _, _ in places(html)] == ["list:task"]
         assert self.current(client, "/tasks?list=task") == ["list:task"]
         assert 'data-init-view="focus"' in html   # the list's view=focus
         assert "A separate list" not in html and "tasks-list-home" not in html
@@ -290,13 +323,14 @@ class TestListSwitcher:
         write_page(wiki_dir, "shop", "# Shopping\n\n[[tasks: list=shop pin=1]]\n")
         make_list(client, "shop", headers=HOST)
         html = self.get(client, "/tasks")
-        assert places(html) == [("list:shop", "shop", False), ("all", "All", True)]
+        # Nothing pinned: the row is More alone, which says All tasks.
+        assert places(html) == [] and more(html) == ("All tasks", True, [("/tasks?list=shop", "shop", False), ("/tasks", "All tasks", True)])
         assert "tasks-place-pin" not in html and 'href="/tasks" class="module-link" data-module="tasks"' in html
 
     def test_several_pinned_lists_are_one_view(self, client, wiki_dir):
-        # Two pinned lists: My lists first (the Tasks link's target), then both
-        # lists with a pin, the default one first; /tasks?pinned=1 shows both
-        # as one task app, whose New puts a task in the default list.
+        # Two pinned lists: Pinned first (the Tasks link's target), then both
+        # lists with a pin, in their order; /tasks?pinned=1 shows both as
+        # one task app, whose New puts a task in the first of them.
         # The Tasks link counts both.
         self.wiki(client, wiki_dir)
         list_page(client, wiki_dir, "tasks", "# My tasks\n\n[[tasks: list=task view=focus pin=default]]\n")
@@ -307,11 +341,11 @@ class TestListSwitcher:
         create_task(client, title="Also", list="task", tags=["shop"], due_date=today)   # a tag is no list
         create_task(client, title="Gift", list="gifts", due_date=today)
         html = self.get(client, "/tasks?pinned=1")
-        assert places(html) == [("pinned", "My lists", True), ("list:task", "task", False), ("list:shop", "shop", False),
-                                ("list:gifts", "gifts", False), ("all", "All", False)]
+        assert places(html) == [("pinned", "Pinned", True), ("list:task", "task", False), ("list:shop", "shop", False)]
+        assert more(html) == ("More", False, [("/tasks?list=gifts", "gifts", False), ("/tasks", "All tasks", False)])
         nav = html.split('<nav class="tasks-places"', 1)[1].split("</nav>", 1)[0]
         assert re.findall(r'data-place="([^"]+)"[^>]*>(?:<span class="tasks-place-pin")', nav) == ["pinned", "list:task", "list:shop"]
-        assert "<h1>My lists</h1>" in html and "<title>My lists" in html
+        assert "<h1>Pinned lists</h1>" in html and "<title>Pinned lists" in html
         # Under the heading: the lists it shows, each a link to the list.
         line = html.split('class="tasks-list-home tasks-pinned-lists">', 1)[1].split("</p>", 1)[0]
         assert re.findall(r'<a href="([^"]+)">([^<]*)</a>', line) == [("/tasks?list=task", "#task"), ("/tasks?list=shop", "#shop")]
@@ -326,7 +360,7 @@ class TestListSwitcher:
         data = client.get("/api/tasks/due-count?places=1").get_json()
         assert (data["count"], data["focus"]) == (2, 3)
         assert {k: (v["count"], v["focus"]) for k, v in data["places"].items()} == {
-            "pinned": (2, 3), "list:task": (1, 2), "list:shop": (1, 1), "list:gifts": (1, 1), "all": (3, 4)}
+            "pinned": (2, 3), "list:task": (1, 2), "list:shop": (1, 1)}   # the pills: More has no counts
         # Which list is first, and so takes new tasks, is the user's to choose:
         # shop, moved to the front. Its pill says so with a plus.
         assert client.post("/tasks/pin-list", data={"list": "shop", "pin": "first"}, headers=HOST).status_code == 302
@@ -345,6 +379,7 @@ class TestListSwitcher:
 
     def test_each_place_has_its_counts(self, client, wiki_dir):
         self.wiki(client, wiki_dir)
+        assert client.post("/tasks/pin-list", data={"list": "shop", "pin": "1"}, headers=HOST).status_code == 302
         today = date.today().isoformat()
         create_task(client, title="Milk", list="shop", start_date=today)
         create_task(client, title="Bread", list="shop", due_date=today)
@@ -356,22 +391,76 @@ class TestListSwitcher:
         focus = lambda k: re.search(r'class="module-focus"[^>]*>(\d*)<', counts[k]).group(1)
         assert (due("list:shop"), focus("list:shop")) == ("1", "2")
         assert (due("list:task"), focus("list:task")) == ("1", "1")
-        assert (due("list:gifts"), focus("list:gifts")) == ("", "")
-        assert (due("all"), focus("all")) == ("2", "4")
+        assert (due("pinned"), focus("pinned")) == ("2", "3")
+        assert set(counts) == {"pinned", "list:task", "list:shop"}   # More's lists and All tasks carry none
         # js/chrome.js refreshes them from the due count's places.
         data = client.get("/api/tasks/due-count?places=1").get_json()
-        assert data["count"] == 1 and data["focus"] == 1   # the pinned list's, as before
+        assert data["count"] == 2 and data["focus"] == 3   # the pinned lists'
         assert {k: (v["count"], v["focus"]) for k, v in data["places"].items()} == {
-            "list:task": (1, 1), "list:shop": (1, 2), "list:gifts": (0, 0), "all": (2, 4)}
+            "pinned": (2, 3), "list:task": (1, 1), "list:shop": (1, 2)}
         assert "places" not in client.get("/api/tasks/due-count").get_json()
 
     def test_sharing_mode_leaves_out_a_list_not_for_sharing(self, client, wiki_dir):
         # A list says so itself (List settings…: Hide in sharing mode).
         self.wiki(client, wiki_dir)
         assert client.post("/api/tasks/settings", json={"list": "gifts", "set": {"noshare": "1"}}, headers=HOST).status_code == 200
-        assert "list:gifts" in [k for k, _, _ in places(self.get(client, "/tasks"))]
+        names = lambda url: [n for _, n, _ in more(self.get(client, url))[2]]
+        assert names("/tasks") == ["gifts", "shop", "All tasks"]
         client.set_cookie("zone-sharing", "1")
-        assert "list:gifts" not in [k for k, _, _ in places(self.get(client, "/tasks"))]
+        assert names("/tasks") == ["shop", "All tasks"]
+        # More is there in sharing mode (the ⋯ menu isn't), and nobody reorders the pills.
+        html = self.get(client, "/tasks")
+        assert "page-menu-btn" not in html and "data-reorder" not in html
+
+
+    def test_a_new_list_is_pinned_for_who_made_it(self, client, wiki_dir):
+        # New list… pins the list it makes, last: it is a pill at once. The
+        # first one becomes the list Tasks opens and new tasks go to, and its
+        # page says so, with the open tasks that are in no list.
+        create_task(client, title="Loose")
+        create_task(client, title="Loose too")
+        made = client.post("/tasks/new-list", data={"name": "home"}, headers=HOST)
+        assert made.headers["Location"] == "/tasks?list=home&made=1"
+        html = self.get(client, "/tasks?list=home&made=1")
+        assert places(html) == [("list:home", "home", True)] and more(html)[:2] == ("More", False)
+        note = html.split('class="tasks-list-home tasks-made-first">', 1)[1].split("</p>", 1)[0]
+        assert note == ('Tasks opens this list now, and new tasks go into it. 2 tasks in no list are under '
+                        '<a href="/tasks">All tasks</a>, in the row above.')
+        assert 'href="/tasks?list=home" class="module-link" data-module="tasks"' in html and 'data-tasks-list="home"' in html
+        assert "tasks-made-first" not in self.get(client, "/tasks?list=home")         # said once, after making it
+        # The next is pinned after it, and changes nothing else: no note.
+        made = client.post("/tasks/new-list", data={"name": "work"}, headers=HOST)
+        assert made.headers["Location"] == "/tasks?list=work"
+        html = self.get(client, "/tasks?list=work&made=1")
+        assert places(html) == [("pinned", "Pinned", False), ("list:home", "home", False), ("list:work", "work", True)]
+        assert "tasks-made-first" not in html and 'data-tasks-list="home"' in html
+        text = (wiki_dir / "_tasks/lists.json").read_text()
+        assert '"pinned": ["home", "work"]' in text
+        assert git_log(wiki_dir)[:2] == ["Create list #work", "Create list #home"]    # the pin is in the list's commit
+
+    def test_the_pills_in_another_order(self, client, wiki_dir):
+        # Dragging the pills posts their order: the pinned lists named first,
+        # as named; the first takes new tasks. Nothing is pinned by it.
+        for name in ("a", "b", "c"):
+            client.post("/tasks/new-list", data={"name": name}, headers=HOST)
+        make_list(client, "quiet", headers=HOST)
+        order = lambda *refs: client.post("/tasks/pin-order", data={"list": list(refs)}, headers=HOST).status_code
+        assert order("c", "quiet", "a") == 204
+        html = self.get(client, "/tasks")
+        assert [k for k, _, _ in places(html)] == ["pinned", "list:c", "list:a", "list:b"]
+        assert 'data-tasks-list="c"' in html and "tasks-place-first" in html.split('data-place="list:c"', 1)[1].split("</a>", 1)[0]
+        assert '"pinned": ["c", "a", "b"]' in (wiki_dir / "_tasks/lists.json").read_text()
+        before = git_log(wiki_dir)
+        assert before[0] == "Reorder the pinned lists"
+        assert order("c", "a", "b") == 204 and order() == 204 and git_log(wiki_dir) == before   # the same order: no commit
+
+    def test_more_has_a_filter_field_with_many_lists(self, client, wiki_dir):
+        for i in range(7):
+            make_list(client, f"list{i}", headers=HOST)
+        assert "lists-more-filter" not in self.get(client, "/tasks")
+        make_list(client, "list7", headers=HOST)
+        html = self.get(client, "/tasks")
+        assert '<input type="search" class="lists-more-filter"' in html and len(more(html)[2]) == 9
 
 
 class TestListBacklinks:
@@ -393,7 +482,7 @@ class TestListBacklinks:
         assert '<main class="wide">' in html
 
     def test_pinned_has_the_pages_embedding_its_lists(self, client, wiki_dir):
-        # My lists: the pages that embed any of the pinned lists, once each; a
+        # Pinned: the pages that embed any of the pinned lists, once each; a
         # page that pins a view of no list (pin= means nothing) is none of them.
         list_page(client, wiki_dir, "shop", "# Shopping\n\n[[tasks: list=shop pin=1]]\n")
         list_page(client, wiki_dir, "kitchen", "# Kitchen\n\n[[tasks: list=shop view=open]]\n\n[[tasks: list=work]]\n")

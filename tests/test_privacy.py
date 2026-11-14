@@ -672,7 +672,7 @@ def test_a_private_new_list_is_its_makers_alone(alice, client, wiki):
     assert alice.post("/tasks/new-list", data={"name": "gifts"}, headers=HOST).headers["Location"].startswith("/tasks?newlist_name=")
     sign_in(client, "bob")
     assert 'data-place="list:gifts"' not in client.get("/tasks", headers=HOST).get_data(as_text=True)
-    assert client.post("/tasks/new-list", data={"name": "gifts"}, headers=HOST).headers["Location"] == "/tasks?list=gifts"
+    assert client.post("/tasks/new-list", data={"name": "gifts"}, headers=HOST).headers["Location"] == "/tasks?list=gifts&made=1"   # his first list: his one pin
     assert '{"name": "gifts"}' in (wiki / "_tasks/lists.json").read_text()
     sign_in(client, "alice")
     page = client.get("/tasks", headers=HOST).get_data(as_text=True)
@@ -695,6 +695,7 @@ WRITES = [
     ("POST /tasks/delete-list", "POST", "/tasks/delete-list", {"data": {"list": "secretlist", "to": "", "share": "1"}}),
     ("POST /tasks/share-list", "POST", "/tasks/share-list", {"data": {"list": "secretlist"}}),
     ("POST /tasks/pin-list", "POST", "/tasks/pin-list", {"data": {"list": "secretlist", "pin": "1"}}),
+    ("POST /tasks/pin-order", "POST", "/tasks/pin-order", {"data": {"list": "secretlist"}}),
     ("POST /api/tasks/settings", "POST", "/api/tasks/settings", {"json": {"list": "secretlist", "set": {"limit": "3"}}}),
     ("POST /tasks/rename", "POST", "/tasks/rename", {"data": {"tag": f"{QUERY}-{SECRET}", "new_name": "stolen"}}),
     ("POST /rename/{slug...}", "POST", "/rename/plans", {"data": {"new_name": "private/alice/plans"}}),

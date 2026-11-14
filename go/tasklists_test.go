@@ -39,10 +39,10 @@ func refsOf(lists []ListInfo) []string {
 	return out
 }
 
-// mustList makes a list, as New list… does.
+// mustList makes a list, unpinned (as an assistant's create_task_list does).
 func mustList(t *testing.T, user, name string, private bool) string {
 	t.Helper()
-	ref, err := createListOp(user, name, private, "")
+	ref, err := createListOp(user, name, private, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +263,7 @@ func TestListsNotTakenOverFromABrokenWiki(t *testing.T) {
 	if text, _ := readText(safePath("shop")); !strings.Contains(text, "pin=1") {
 		t.Error("the page lost its pin")
 	}
-	if _, err := createListOp("", "x", false, ""); err == nil {
+	if _, err := createListOp("", "x", false, false, ""); err == nil {
 		t.Error("a list made in a wiki not taken over")
 	}
 	if err := pinListOp("", "shop", "1"); err == nil {
@@ -286,7 +286,7 @@ func TestCreateList(t *testing.T) {
 		t.Error("bob sees alice's list")
 	}
 	for _, bad := range []string{"", "  ", "a,b", "a|b", "a=b", "a[b", `a"b`, "a/b"} {
-		if _, err := createListOp("alice", bad, false, ""); !refusedWith(err, refusedInvalid) {
+		if _, err := createListOp("alice", bad, false, false, ""); !refusedWith(err, refusedInvalid) {
 			t.Errorf("%q: %v", bad, err)
 		}
 	}
@@ -295,7 +295,7 @@ func TestCreateList(t *testing.T) {
 		name    string
 		private bool
 	}{{"Shop-List", false}, {"shop-list", true}, {"gifts", false}, {"gifts", true}} {
-		if _, err := createListOp("alice", c.name, c.private, ""); !refusedWith(err, refusedExists) {
+		if _, err := createListOp("alice", c.name, c.private, false, ""); !refusedWith(err, refusedExists) {
 			t.Errorf("%+v: %v", c, err)
 		}
 	}
@@ -304,7 +304,7 @@ func TestCreateList(t *testing.T) {
 	if got := sortedKeys(taskLists("alice")); !slices.Equal(got, []string{"gifts", "shared/gifts", "shop-list"}) {
 		t.Errorf("alice's lists %v", got)
 	}
-	if _, err := createListOp("vera", "x", false, ""); !refusedWith(err, refusedReadOnly) {
+	if _, err := createListOp("vera", "x", false, false, ""); !refusedWith(err, refusedReadOnly) {
 		t.Errorf("a viewer made a list: %v", err)
 	}
 }
@@ -646,5 +646,68 @@ func TestPlaceSnapshot(t *testing.T) {
 	}
 	if got := reflect.TypeOf(lists).Kind(); got != reflect.Map {
 		t.Fatal(got)
+	}
+}
+
+// A list made in the browser is pinned for who made it, last: in their own registry, started from the wiki's pins when
+// they had set none. An assistant's isn't pinned.
+func TestANewListIsPinnedForWhoMadeIt(t *testing.T) {
+	testWiki(t, nil)
+	pins := func(u string) []string { return refsOf(pinnedLists(u, taskLists(u))) }
+	make := func(user, name string, private bool) {
+		t.Helper()
+		if _, err := createListOp(user, name, private, true, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	make("", "shop", false)
+	make("", "work", false)
+	if got := pins(""); !slices.Equal(got, []string{"shop", "work"}) {
+		t.Errorf("without users: %v", got)
+	}
+	mustList(t, "", "quiet", false)
+	if got := pins(""); !slices.Equal(got, []string{"shop", "work"}) {
+		t.Errorf("an unpinned list is pinned: %v", got)
+	}
+	withUsers(t, "alice", "bob")
+	make("alice", "team", false)
+	make("alice", "gifts", true)
+	if got := pins("alice"); !slices.Equal(got, []string{"shop", "work", "team", "gifts"}) {
+		t.Errorf("alice: the wiki's, then hers: %v", got)
+	}
+	if got := pins("bob"); !slices.Equal(got, []string{"shop", "work"}) {
+		t.Errorf("bob has the wiki's pins still: %v", got)
+	}
+}
+
+// The pinned lists in another order: those named first, the rest as they
+// were; nothing is pinned or unpinned by it, and the same order writes nothing.
+func TestPinOrder(t *testing.T) {
+	testWiki(t, nil)
+	for _, n := range []string{"a", "b", "c", "d"} {
+		if _, err := createListOp("", n, false, n != "d", ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pins := func(u string) []string { return refsOf(pinnedLists(u, taskLists(u))) }
+	if err := pinOrderOp("", []string{"c", "d", "nope", "a", "c"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := pins(""); !slices.Equal(got, []string{"c", "a", "b"}) {
+		t.Errorf("pins %v", got)
+	}
+	if l := lookupDefaultList(""); l == nil || l.Ref != "c" {
+		t.Errorf("a new task goes to %v", l)
+	}
+	if err := pinOrderOp("", []string{"c", "a"}); err != nil {
+		t.Errorf("the same order: %v", err)
+	}
+	// With users the order is the user's own, started from the wiki's.
+	withUsers(t, "alice", "bob", "vera")
+	if err := pinOrderOp("alice", []string{"b"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := pins("alice"); !slices.Equal(got, []string{"b", "c", "a"}) || !slices.Equal(pins("bob"), []string{"c", "a", "b"}) {
+		t.Errorf("alice %v, bob %v", got, pins("bob"))
 	}
 }

@@ -7,7 +7,7 @@
     Make shared… (a private one) and Delete…; on a tag Rename tag…. Each is a
     dialog with a form (js/pagemenu.js opens the one a menu item names with
     data-dialog; a refusal comes back with data-open). A list's Backlinks
-    (the pages that embed it; My lists: its lists') as on a page view: at the
+    (the pages that embed it; Pinned: its lists') as on a page view: at the
     end, on big screens in the right column. */ -}}
 {{define "body"}}
 {{.BreadcrumbHTML}}
@@ -28,12 +28,27 @@
 {{define "tasks_main"}}
 {{- /* The switcher, the heading and the list on one sheet (style.css, The sheet). */}}
 <div class="sheet">
-{{- with .Places}}<nav class="tasks-places" aria-label="Task lists"><div class="tasks-places-group">
-{{- range .}}<a href="{{.Href}}" class="tasks-place" data-place="{{.Key}}" title="{{.Title}}{{if .Private}} (only you see it){{end}}"{{if .Current}} aria-current="page"{{end}}>
+{{- /* The list switcher: Pinned and the pinned lists as pills, then More: the
+    other lists and All tasks, as links in a details (it is there for a
+    viewer and in sharing mode too, where the ⋯ menu isn't). More carries the
+    name of the view the page shows when that is one of its own. The pills
+    can be dragged into another order by who may pin (data-reorder;
+    js/listsrow.js, which also closes More, filters it and marks lists new
+    to this browser). */}}
+{{- if .More}}<nav class="tasks-places" aria-label="Task lists"{{if .Menu}} data-reorder{{end}}><div class="tasks-places-group">
+{{- range .Places}}<a href="{{.Href}}" class="tasks-place" data-place="{{.Key}}" title="{{.Title}}{{if .Private}} (only you see it){{end}}"{{if .Current}} aria-current="page"{{end}}>
 {{- if .Pinned}}<span class="tasks-place-pin" aria-hidden="true">{{template "icon_pin"}}</span>{{end}}
 {{- if .First}}<span class="tasks-place-first" aria-hidden="true">+</span>{{end}}
 {{- if .Private}}<span class="tasks-place-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="tasks-place-label">{{.Label}}</span>{{template "module_counts" .Counts}}</a>
-{{- end}}</div></nav>{{end}}
+{{- end}}
+{{- with .More}}<details class="lists-more"><summary class="tasks-place lists-more-btn" title="{{if .Current}}{{.Label}}: one of the lists you haven't pinned and all tasks{{else}}The lists you haven't pinned, and all tasks{{end}}"{{if .Current}} aria-current="page"{{end}}><span class="tasks-place-label">{{.Label}}</span><span class="lists-more-caret" aria-hidden="true">▾</span></summary>
+<div class="lists-more-panel">
+{{- if .Filter}}<input type="search" class="lists-more-filter" placeholder="Find a list…" aria-label="Find a list" autocomplete="off" spellcheck="false">{{end}}
+{{- range .Lists}}<a href="{{.Href}}" class="lists-more-item" data-list="{{.Label}}" data-place="{{.Key}}" title="{{.Title}}{{if .Private}} (only you see it){{end}}"{{if .Current}} aria-current="page"{{end}}>
+{{- if .Private}}<span class="tasks-place-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="lists-more-name">{{.Label}}</span></a>
+{{- end}}
+{{- if .Lists}}<hr class="lists-more-rule">{{end}}<a href="/tasks" class="lists-more-item lists-more-all" title="Every task, in whatever list or in none"{{if .All}} aria-current="page"{{end}}><span class="lists-more-name">All tasks</span></a>
+</div></details>{{end}}</div></nav>{{end}}
 <header class="page-header"><h1>{{.Heading}}{{with .List}}{{if .Private}} <span class="lock" title="A private list: only you see it and its tasks">🔒</span>{{end}}{{end}}</h1>
 {{- if .Menu}}<div class="page-header-actions"><button type="button" class="btn page-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="page-menu" title="More: new list{{if .List}}, rename, pin, delete{{end}}{{if .Tag}}, rename the tag{{end}}" aria-label="More actions">⋯</button></div>{{end}}</header>
 {{- if .Menu}}
@@ -49,10 +64,10 @@
 {{- if .Private}}<button type="button" role="menuitem" data-dialog="list-share-dialog" id="list-share-btn">Make shared…</button>{{end}}
 <button type="button" role="menuitem" data-dialog="list-delete-dialog" id="list-delete-btn">Delete…</button>
 {{- end}}
-{{- /* My lists (the pinned lists, where the Tasks links go) with only the user's own tasks, or everyone's. */}}
+{{- /* Pinned (the pinned lists, where the Tasks links go) with only the user's own tasks, or everyone's. */}}
 {{- if .MineMenu}}<form method="post" action="/tasks/pin-list" class="page-menu-form">
-{{- if .Mine}}<button type="submit" role="menuitem" name="mine" value="0" id="mine-off-btn" title="My lists, where your Tasks links go, show the tasks of your pinned lists whoever they are assigned to">Everyone's tasks in My lists</button>
-{{- else}}<button type="submit" role="menuitem" name="mine" value="1" id="mine-on-btn" title="My lists, where your Tasks links go, show only the tasks assigned to you (and your private ones), the links count only those, and a new task is assigned to you">Only my tasks in My lists</button>{{end}}</form>{{end}}
+{{- if .Mine}}<button type="submit" role="menuitem" name="mine" value="0" id="mine-off-btn" title="Pinned, where your Tasks links go, shows the tasks of your pinned lists whoever they are assigned to">Everyone's tasks in Pinned</button>
+{{- else}}<button type="submit" role="menuitem" name="mine" value="1" id="mine-on-btn" title="Pinned, where your Tasks links go, shows only the tasks assigned to you (and your private ones), the links count only those, and a new task is assigned to you">Only my tasks in Pinned</button>{{end}}</form>{{end}}
 {{- if .Tag}}<button type="button" role="menuitem" data-dialog="tag-rename-dialog" id="tag-rename-btn">Rename tag…</button>{{end -}}
 </div>
 {{- /* New list…: a place for tasks (POST /tasks/new-list). */}}
@@ -77,7 +92,9 @@
 {{- end}}
 {{- end}}
 <article class="page-content">
-{{- /* My lists: which lists these are (pinnedSources). */}}
+{{- /* A first list, just made: what its pin changed. */}}
+{{- if .MadeFirst}}<p class="tasks-list-home tasks-made-first">Tasks opens this list now, and new tasks go into it.{{if .NoListTasks}} {{.NoListTasks}} {{if eq .NoListTasks 1}}task{{else}}tasks{{end}} in no list {{if eq .NoListTasks 1}}is{{else}}are{{end}} under <a href="/tasks">All tasks</a>, in the row above.{{end}}</p>{{end}}
+{{- /* Pinned: which lists these are (pinnedSources). */}}
 {{- with .PinnedLists}}<p class="tasks-list-home tasks-pinned-lists">{{if $.Mine}}Your tasks in your pinned lists{{else}}Your pinned lists, as one{{end}}: {{range $i, $l := .}}{{if $i}}, {{end}}<a href="{{$l.Href}}">{{$l.Label}}</a>{{end}}</p>{{end -}}
 {{.TasksHTML}}</article>
 </div>

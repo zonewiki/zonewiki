@@ -435,7 +435,7 @@ func taskCounts(rq *Req) TaskCounts {
 // pinnedView: the params of the view of the pinned lists: one list's own;
 // several as one task app, the default list's params showing the tasks of
 // all of them (lists=a|b). A new task there goes to the default list.
-// For a user who set My lists to their own tasks (onlyMine) only those
+// For a user who set Pinned to their own tasks (onlyMine) only those
 // (assignee=me), of one list too.
 func (rq *Req) pinnedView() TasksParams {
 	pinned := rq.pinnedLists()
@@ -453,7 +453,7 @@ func (rq *Req) pinnedView() TasksParams {
 	return params
 }
 
-// myLists: the user's pinned lists are a view of their own, My lists
+// myLists: the user's pinned lists are a view of their own, Pinned
 // (/tasks?pinned=1): several lists as one, or their tasks alone (onlyMine).
 func (rq *Req) myLists() bool { return len(rq.pinnedLists()) > 1 || rq.onlyMine() }
 
@@ -526,9 +526,9 @@ func countTasks(user string, tasks []*Task, lists map[string]ListInfo, params ..
 }
 
 // TaskPlace is an entry of the task list switcher (tasks_page.html): a
-// list, all tasks, or My lists (the pinned lists together). Key names it
+// list, or Pinned (the pinned lists together). Key names it
 // for the counts' refresh (js/chrome.js): "list:<ref>", "all", "pinned".
-// Pinned: a pinned list, or My lists; First: the first of several pinned
+// Pinned: a pinned list, or Pinned itself; First: the first of several pinned
 // lists, where a new task goes (its pill carries a plus).
 type TaskPlace struct {
 	Key, Label, Title, Href         string
@@ -536,50 +536,80 @@ type TaskPlace struct {
 	Counts                          TaskCounts
 }
 
-// taskPlaces: where the user's tasks are, for the switcher: with several
-// pinned lists My lists (all of them as one, /tasks?pinned=1), then the
-// pinned lists in their order, then each other list they see A–Z, each at
-// /tasks?list=, and all tasks, each with its counts; in sharing mode not a
-// list that is not for sharing. Nil when there is nothing to switch
-// between (no list).
+// taskPlaces: the pills of the list switcher: with several pinned lists
+// Pinned (all of them as one, /tasks?pinned=1), then the pinned lists in
+// their order, each at /tasks?list=, each with its counts; in sharing mode
+// not a list that is not for sharing. What isn't pinned is under More
+// (taskMore).
 func (rq *Req) taskPlaces() []TaskPlace {
 	user := rq.who()
 	pinned, lists := rq.pinnedLists(), rq.taskLists()
 	var out []TaskPlace
 	tasks := rq.openTasks()
-	hidden := func(l ListInfo) bool { return rq != nil && rq.sharing && l.NoShare }
 	if rq.myLists() {
 		title := "Your pinned lists, as one"
 		if rq.onlyMine() {
 			title = "Your tasks in your pinned lists"
 		}
-		out = append(out, TaskPlace{Key: "pinned", Label: "My lists", Title: title, Href: "/tasks?pinned=1",
+		out = append(out, TaskPlace{Key: "pinned", Label: "Pinned", Title: title, Href: "/tasks?pinned=1",
 			Pinned: true, Counts: countTasks(user, tasks, lists, rq.pinnedView())})
 	}
-	place := func(l ListInfo, pinned bool) TaskPlace {
-		title := "List #" + l.Name
-		if pinned {
-			title = "Pinned list #" + l.Name
-		}
-		return TaskPlace{Key: "list:" + l.Ref, Label: l.Name, Title: title, Href: listHref(l.Ref),
-			Pinned: pinned, Private: l.Private(), Counts: countTasks(user, tasks, lists, l.Params)}
-	}
-	isPinned := map[string]bool{}
 	for i, l := range pinned {
-		isPinned[l.Ref] = true
-		if !hidden(l) {
-			p := place(l, true)
-			if i == 0 && len(pinned) > 1 {
-				p.First, p.Title = true, p.Title+": new tasks go here"
-			}
-			out = append(out, p)
+		if rq.listHidden(l) {
+			continue
 		}
+		p := TaskPlace{Key: "list:" + l.Ref, Label: l.Name, Title: "Pinned list #" + l.Name, Href: listHref(l.Ref),
+			Pinned: true, Private: l.Private(), Counts: countTasks(user, tasks, lists, l.Params)}
+		if i == 0 && len(pinned) > 1 {
+			p.First, p.Title = true, p.Title+": new tasks go here"
+		}
+		out = append(out, p)
 	}
+	return out
+}
+
+// listHidden: in sharing mode a list that is not for sharing shows nowhere
+// in the switcher.
+func (rq *Req) listHidden(l ListInfo) bool { return rq != nil && rq.sharing && l.NoShare }
+
+// TasksMore: the switcher's last pill, More: the lists the user sees and
+// hasn't pinned (Lists, A–Z, their own before the shared one of a name; no
+// counts) and All tasks. Label: "More", or the view the page shows when
+// that is one of these (Current: the pill is the shaded one; All: it is
+// All tasks). Filter: enough lists that a field to find one by name helps.
+type TasksMore struct {
+	Label        string
+	Current, All bool
+	Lists        []TaskPlace
+	Filter       bool
+}
+
+// moreFilterFrom: how many lists More holds before it has a filter field.
+const moreFilterFrom = 8
+
+// taskMore: More for a page whose view is place (a TaskPlace's key, "all",
+// or "" for none); nil when the wiki has no list to switch between, and so
+// no switcher.
+func (rq *Req) taskMore(place string) *TasksMore {
+	lists := rq.taskLists()
+	isPinned := map[string]bool{}
+	for _, l := range rq.pinnedLists() {
+		isPinned[l.Ref] = true
+	}
+	more := &TasksMore{Label: "More"}
+	any := false
 	rest := make([]ListInfo, 0, len(lists))
 	for _, l := range lists {
-		if !isPinned[l.Ref] && !hidden(l) {
+		if rq.listHidden(l) {
+			continue
+		}
+		any = true
+		if !isPinned[l.Ref] {
 			rest = append(rest, l)
 		}
+	}
+	if !any {
+		return nil
 	}
 	slices.SortFunc(rest, func(a, b ListInfo) int {
 		if c := strings.Compare(a.Name, b.Name); c != 0 {
@@ -588,12 +618,18 @@ func (rq *Req) taskPlaces() []TaskPlace {
 		return strings.Compare(a.Ref, b.Ref) // the user's own before the shared one of that name
 	})
 	for _, l := range rest {
-		out = append(out, place(l, false))
+		p := TaskPlace{Key: "list:" + l.Ref, Label: l.Name, Title: "List #" + l.Name, Href: listHref(l.Ref),
+			Private: l.Private(), Current: place == "list:"+l.Ref}
+		if p.Current {
+			more.Label, more.Current = l.Name, true
+		}
+		more.Lists = append(more.Lists, p)
 	}
-	if len(out) == 0 {
-		return nil
+	if place == "all" {
+		more.Label, more.Current, more.All = "All tasks", true, true
 	}
-	return append(out, TaskPlace{Key: "all", Label: "All", Title: "Every task", Href: "/tasks", Counts: countTasks(user, tasks, lists)})
+	more.Filter = len(more.Lists) >= moreFilterFrom
+	return more
 }
 
 // placeCounts: each place's counts by its key (GET /api/tasks/due-count?places=1).
