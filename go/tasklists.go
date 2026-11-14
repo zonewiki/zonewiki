@@ -171,6 +171,47 @@ func pinnedLists(user string, lists map[string]ListInfo) []ListInfo {
 	return out
 }
 
+// onlyMine: user has set My lists to the tasks assigned to them ("mine" in
+// their registry): their pinned lists as one show only those, the Tasks
+// links count only those, and a new task from anywhere (New task, c t, an
+// assistant's create_task without a list) is assigned to them. Only with
+// users, and for one a task can be assigned to.
+func onlyMine(user string) bool {
+	if privateFolder(user) == "" || !settings().assignable(user) {
+		return false
+	}
+	return taskFiles.ReadLists(user).Mine
+}
+
+// setOnlyMineOp turns onlyMine on or off for user.
+func setOnlyMineOp(user string, on bool) error {
+	if listsUnmigrated {
+		return errListsUnmigrated
+	}
+	if err := mayWriteTasks(user); err != nil {
+		return err
+	}
+	if privateFolder(user) == "" {
+		return refuse("Only your tasks needs users: this wiki has none")
+	}
+	taskFiles.Lock()
+	defer taskFiles.Unlock()
+	reg, err := taskFiles.ReadListsStrict(user)
+	if err != nil {
+		return err
+	}
+	reg.Mine = on
+	path, err := taskFiles.WriteListsLocked(user, user, reg)
+	if err != nil {
+		return err
+	}
+	msg := "My lists show everyone's tasks"
+	if on {
+		msg = "My lists show only my tasks"
+	}
+	return commitLists(user, msg, []string{path})
+}
+
 // lookupDefaultList: user's default list, nil when they pinned none.
 func lookupDefaultList(user string) *ListInfo {
 	if pinned := pinnedLists(user, taskLists(user)); len(pinned) > 0 {
@@ -378,7 +419,11 @@ type listRename struct {
 // other. A shared list's name is everyone's, so the rename reaches every
 // user's pins, private pages and private tasks' text too, as a page
 // rename's links do; a private list's only its owner's.
-func renameListOp(user, ref, newName, suffix string) (*listRename, error) {
+//
+// check (a door's own, optional) is asked before anything is written, with
+// the pages the rename will change as far as user sees them: its refusal
+// stops the rename (an assistant's guides, checkGuides).
+func renameListOp(user, ref, newName, suffix string, check ...func(pages []string) error) (*listRename, error) {
 	lists := taskLists(user)
 	l, err := listForWrite(user, ref, lists)
 	if err != nil {
@@ -483,6 +528,11 @@ func renameListOp(user, ref, newName, suffix string) (*listRename, error) {
 			if canSee(user, p.Slug) {
 				done.Pages = append(done.Pages, p.Slug)
 			}
+		}
+	}
+	for _, ok := range check {
+		if err := ok(done.Pages); err != nil {
+			return nil, err
 		}
 	}
 	paths := make([]string, len(pages))

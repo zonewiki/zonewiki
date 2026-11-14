@@ -800,6 +800,7 @@ MCP_WRITES = [
     ("file_note", {"slug": "{bobs}", "name": "x", "folder": "private/alice"}),
     ("create_task", {"title": "Bob's", "list": "secretlist"}),
     ("create_task_list", {"name": "secretlist", "private": True}),   # his own list of that name
+    ("rename_task_list", {"list": "secretlist", "new_name": "bobs"}),          # her private list, by its name: no list for bob
     ("update_task", {"id": TASK_ID, "list": "", "share": True}),
     ("update_task", {"id": TASK_ID[:8], "title": "Bob was here"}),
     ("update_task", {"id": TASK_ID, "status": "wont_do"}),

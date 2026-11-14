@@ -654,6 +654,14 @@ class TestAssignee:
         assert self.ids("-@none") == ["a", "b"]
         assert self.ids("@none|bob") == ["b", "z", "n"]
 
+    def test_a_private_task_is_mine_and_not_no_ones(self):
+        """It has no assignee: its user sees it alone, so it is theirs."""
+        tasks = [*self.TASKS, {"id": "p", "title": "Private", "private": True}]
+        ids = lambda q: run_core(f"TasksCore.tasksInView({json.dumps(tasks)}, "
+                                 f"TasksCore.parseFilter({json.dumps(q)}, {self.PEOPLE}), 'open', '{TODAY}').map(t => t.id)")
+        assert ids("@me") == ["a", "p"] and ids("@none") == ["z", "n"]
+        assert ids("-@me") == ["b", "z", "n"] and ids("@alice") == ["a"]
+
     def test_an_assignee_filter_counts_as_filtering(self):
         active = lambda q: run_core(f"TasksCore.filterActive(TasksCore.parseFilter({json.dumps(q)}, {self.PEOPLE}))")
         assert active("@me") and active("-@bob") and not active("@") and not active("")

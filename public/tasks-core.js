@@ -138,8 +138,9 @@ function filterActive(f) {
 // the name, so it can be found and handed on.
 function assigneeIs(t, word, people) {
   const a = (t.assignee || '').toLowerCase();
-  if (word === 'none') return !a || !!people?.users && !people.users.has(a);
-  if (word === 'me') return !!people?.me && a === people.me;
+  // A private task has no assignee and is its user's own: theirs, not no one's.
+  if (word === 'none') return !t.private && (!a || !!people?.users && !people.users.has(a));
+  if (word === 'me') return !!people?.me && (a === people.me || !!t.private);
   return a === word;
 }
 

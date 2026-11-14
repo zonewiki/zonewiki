@@ -544,6 +544,10 @@ func createTaskTool(args jsonObj, base, user string) (string, error) {
 	if h := lookupDefaultList(user); h != nil && !data.Has("list") {
 		data.Set("list", h.Ref)
 		data["tags"] = homeTags(data["tags"], h)
+		// And theirs, when their My lists show only their own tasks.
+		if !h.Private() && !data.Has("assignee") && onlyMine(user) {
+			data.Set("assignee", user)
+		}
 	}
 	msg, err := commitMsg("Create task", args)
 	if err != nil {
@@ -721,6 +725,32 @@ func tagTasksTool(args jsonObj, user string) (string, error) {
 		head += " (the others had them so already)"
 	}
 	return head + ".\n\n" + strings.Join(lines, "\n"), nil
+}
+
+// renameTaskListTool: a list renamed, with its tasks, the pins, and the
+// embeds and links on pages that name it (renameListOp).
+func renameTaskListTool(args jsonObj, base, user string) (string, error) {
+	ref, err := strArg(args, "list", true)
+	if err != nil {
+		return "", err
+	}
+	name, err := strArg(args, "new_name", true)
+	if err != nil {
+		return "", err
+	}
+	suffix, err := msgSuffix(args)
+	if err != nil {
+		return "", err
+	}
+	done, err := renameListOp(user, ref, name, suffix, func(pages []string) error { return checkGuides(args, pages, user) })
+	if err != nil {
+		return "", err
+	}
+	out := fmt.Sprintf("Renamed the list #%s to #%s, in one commit: %d %s", cleanList(ref), done.Ref, done.Tasks, plural(done.Tasks, "task"))
+	if len(done.Pages) > 0 {
+		out += fmt.Sprintf(", %d %s (%s)", len(done.Pages), plural(len(done.Pages), "page"), strings.Join(done.Pages, ", "))
+	}
+	return out + ".\n" + base + listHref(done.Ref), nil
 }
 
 // createTaskListTool: a new task list, shared or (private) the user's own.

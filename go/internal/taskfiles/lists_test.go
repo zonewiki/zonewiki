@@ -18,6 +18,7 @@ const registryText = `{
   ],
   "pinned": ["task", "shop"],
   "default": "task",
+  "mine": true,
   "all": {"view": "open"}
 }
 `
@@ -36,7 +37,7 @@ func TestRegistryRoundTrips(t *testing.T) {
 	if shop == nil || shop.Settings["limit"] != "8" || shop.Settings["view"] != "focus" || r.Find("nope") != nil {
 		t.Errorf("shop = %+v", shop)
 	}
-	if !reflect.DeepEqual(r.Pinned, []string{"task", "shop"}) || r.Default != "task" || r.All["view"] != "open" {
+	if !reflect.DeepEqual(r.Pinned, []string{"task", "shop"}) || r.Default != "task" || r.All["view"] != "open" || !r.Mine {
 		t.Errorf("pins %v, default %q, all %v", r.Pinned, r.Default, r.All)
 	}
 }

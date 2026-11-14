@@ -903,7 +903,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	case q.Get("pinned") != "":
 		// ?pinned=1: the pinned lists as one task app; with one pin or
 		// none, where the Tasks link goes.
-		if len(rq.pinnedLists()) < 2 {
+		if !rq.myLists() {
 			http.Redirect(w, r, rq.tasksLinkHref(), http.StatusFound)
 			return
 		}
@@ -927,6 +927,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	}
 	v := &tasksPageView{Heading: heading, Missing: missing,
 		Menu: !rq.sharing && !listsUnmigrated && mayWriteTasks(rq.who()) == nil, Users: privateFolder(rq.user) != "",
+		MineMenu: privateFolder(rq.user) != "" && len(rq.pinnedLists()) > 0 && settings().assignable(rq.user), Mine: rq.onlyMine(),
 		NewListName: q.Get("newlist_name"), NewListError: q.Get("newlist_error"),
 		Places: places, PinnedLists: pinnedLinks, TasksHTML: htmlOf(tasksHTML), LinkSections: sections,
 		BreadcrumbHTML: breadcrumb(rq, crumbs, key, true, title, chip)}
@@ -1074,6 +1075,20 @@ func shareListRoute(w http.ResponseWriter, r *http.Request) {
 // pinListRoute: a list's Pin, Unpin and Make default (its ⋯ menu, the
 // settings dialog's pin): pin is 1, 0 or default. Back to the list.
 func pinListRoute(w http.ResponseWriter, r *http.Request) {
+	// mine=1 or 0, without a list: My lists show only the user's own tasks,
+	// or everyone's (the ⋯ menu's Only my tasks in My lists).
+	if mine := r.PostFormValue("mine"); mine != "" {
+		if mine != "0" && mine != "1" {
+			pageFailed(w, r, refuse("mine is 0 or 1"))
+			return
+		}
+		if err := setOnlyMineOp(userOf(r), mine == "1"); err != nil {
+			pageFailed(w, r, err)
+			return
+		}
+		http.Redirect(w, r, "/tasks?pinned=1", http.StatusFound)
+		return
+	}
 	ref := cleanList(r.PostFormValue("list"))
 	if err := pinListOp(userOf(r), ref, r.PostFormValue("pin")); err != nil {
 		pageFailed(w, r, err)
@@ -1104,11 +1119,14 @@ type tasksPageView struct {
 	ListRenameName, ListRenameError string
 	DeleteError, ShareError         string
 	Menu, Users                     bool
-	NewListName, NewListError       string
-	Places                          []TaskPlace
-	PinnedLists                     []pinnedLink
-	LinkSections                    []linkSection
-	TasksHTML, BreadcrumbHTML       template.HTML
+	// MineMenu: the menu has Only my tasks in My lists (a user with a
+	// pinned list, who can be given tasks); Mine: it is on.
+	MineMenu, Mine            bool
+	NewListName, NewListError string
+	Places                    []TaskPlace
+	PinnedLists               []pinnedLink
+	LinkSections              []linkSection
+	TasksHTML, BreadcrumbHTML template.HTML
 }
 
 func apiToggleCheckbox(w http.ResponseWriter, r *http.Request) {

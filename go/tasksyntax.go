@@ -361,13 +361,14 @@ func tagParamMatches(t *Task, raw string) bool {
 
 // assigneeIs: t's assignee is what word names, for user: a user's name,
 // "me" (user) or "none": no one, or someone who can no longer be given
-// tasks (TasksCore.assigneeIs).
+// tasks (TasksCore.assigneeIs). A private task has no assignee and is its
+// user's own: it is "me" to them, and not "none".
 func assigneeIs(t *Task, word, user string) bool {
 	switch word {
 	case "none":
-		return t.Assignee == "" || !settings().assignable(t.Assignee)
+		return t.Owner == "" && (t.Assignee == "" || !settings().assignable(t.Assignee))
 	case "me":
-		return user != "" && t.Assignee == user
+		return user != "" && (t.Assignee == user || t.Owner == user)
 	}
 	return t.Assignee == word
 }

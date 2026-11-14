@@ -725,6 +725,7 @@ Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged
     ],
     "pinned": ["task", "shop"],
     "default": "task",
+    "mine": true,
     "all": {"view": "open"}
   }
   ```
@@ -775,6 +776,13 @@ Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged
   **Pins are the user's own**: in their registry (`pinned` in order, `default`); a user who has set none has the wiki's (the shared registry's, which are everyone's without users), and starts from those with their first pin.
   One who unpinned everything has none (`"pinned": []`), not the wiki's again.
   With users the wiki's pins are set in `_tasks/lists.json` by hand.
+- **Only my tasks in My lists** (with users; `onlyMine`, `setOnlyMineOp`; `POST /tasks/pin-list` with `mine`: `1` or `0`; `"mine": true` in the user's registry): in a team's list most tasks are someone else's.
+  With it on, your pinned lists as one (My lists) show only the tasks assigned to you and your private ones (`assignee=me`, a locked `@me` chip),
+  the Tasks links and My lists' pill count only those,
+  and a new task from anywhere (New task, `c t`, an assistant's `create_task` without a `list`) is assigned to you, unless your default list is private.
+  One pinned list is then My lists too (`/tasks?pinned=1`, where the Tasks links go); the list's own view (`/tasks?list=`) still shows everyone's tasks.
+  You turn it on and off in the ⋯ menu of any view of the Tasks page, once you have pinned a list: **Only my tasks in My lists**, **Everyone's tasks in My lists**.
+  It is each user's own, and nothing for a viewer (who can't be given tasks) or a wiki without users.
   (Until 2026-11 a pin was `pin=1` or `pin=default` in an embed, and a page's pin pinned for everyone.)
 - **Where a new task goes** (`.task-edit-target`, `syncTarget` in `js/taskmodal.js`): the edit dialog of a new task says it under the title: "Adds to the list shop." or "Adds to no list.",
   with ", private" when the list is.
@@ -793,6 +801,7 @@ Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged
   An assistant makes a list with `create_task_list`.
 - **Rename…** (`#list-rename-dialog`; `POST /tasks/rename-list` with `list` and `new_name`; `renameListOp`): in one commit (`Rename list #shop to #food`) the list's name in its registry, the `list` of its tasks (open, closed, archived), the users' pins of it, and where pages and tasks' text name it: the `list=` of `[[tasks: …]]` embeds and the `?list=` of links to `/tasks`.
   Code stays as written, and so do a tag of that name, `tag=` and `#word` in prose.
+  An assistant renames a list with `rename_task_list`, the same operation.
   A name of a list you see is refused: two lists become one by deleting one into the other.
   A shared list's name is everyone's, so the rename reaches every user's pins, private pages and private tasks' text too, as a page rename's links do (one who has a private list of the old name keeps their embeds of it); a private list's only its owner's.
   Refused with nothing changed: a tasks file, a registry or a page that can't be read.

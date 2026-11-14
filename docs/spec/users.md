@@ -655,6 +655,7 @@ Not there: telling someone that a task became theirs, a group as an assignee, an
   Not on a private task.
 - **On the card** (`.task-assignee`, after the tags): `@anna`, your own name in the accent colour, a former assignee's struck through.
 - **In the filter** (`TasksCore.parseFilter`/`matchesFilter`, given `people`): `@anna`, `@anna|bob` (either), `-@anna` (not hers), `@me` (yours), `@none` (no one's, a former assignee's included).
+  A private task has no assignee and is its user's own: it is `@me` to them, and not `@none`.
   A completed word becomes a chip, as a tag does; the suggestions are `me`, `none` and the users who have tasks among those the other words leave visible.
   `@` on the list focuses the field and starts a name.
 - **On a page**: `[[tasks: assignee=me]]` shows whoever looks at the page their own tasks, `assignee=anna` hers, `assignee=none` those no one has (a former assignee's included); `a|b` either's, `-a` not theirs, and it joins `tag=` and `list=` (Task list embed in `docs/spec/tasks.md`).
@@ -664,6 +665,7 @@ Not there: telling someone that a task became theirs, a group as an assignee, an
   `/tasks?assignee=…` filters the same way, with an ordinary chip.
 - **The counts** on the Tasks links and the list switcher count what each user's lists show them: `assignee=me` is whoever asks (`assigneeParamMatches` in `go/tasksyntax.go`, the server's mirror of the filter).
   An export of such a list holds the tasks it shows (`/api/tasks/export?assignee=`).
+  A user can have their Tasks links count, and My lists show, only their own tasks: **Only my tasks in My lists** (Lists → Only my tasks in My lists in `docs/spec/tasks.md`).
 - **Several at once** (`openBulkAssignModal` in `js/taskselect.js`): **Assign…** in the selection bar and in the menu of a selected card, or **a** on the selected tasks (one is enough).
   The dialog lists the users who can be assigned, yourself first, then **No one**; the row of who has them all is ticked, one who has some says "1 of 4".
   A click (or ↑/↓ and Enter) assigns them in one `batch-update`, and the toast ("3 tasks assigned to bob") has one Undo for all, which leaves no trace in their histories.

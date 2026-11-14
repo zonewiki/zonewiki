@@ -41,6 +41,7 @@
       if it makes them and start today when its "+ New" would
       (js/actions.js openDefaultTask). */}}
   {{- with .Shell.TasksNew}} data-tasks-list="{{.List}}" data-tasks-tags="{{.Tags}}"
+    {{- with .Assignee}} data-tasks-assignee="{{.}}"{{end}}
     {{- if .Keep}} data-tasks-keep="1"{{end}}
     {{- if .Today}} data-tasks-today="1"{{end}}
   {{- end}}>

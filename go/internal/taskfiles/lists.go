@@ -18,7 +18,7 @@ import (
 // settings; a task is in one by naming it (Task.List), and a task's file
 // says which registry that name is in. A registry also holds whose pins it
 // is (pinned, default: a user's own in their file, the wiki's in the shared
-// one) and, the shared one, the settings of All tasks.
+// one; mine: a user sees only their own tasks in My lists) and, the shared one, the settings of All tasks.
 
 // ListsName: the registry's file in a tasks folder.
 const ListsName = "lists.json"
@@ -47,6 +47,7 @@ type Registry struct {
 	Pinned  []string          // the pinned lists' names, in order
 	PinsSet bool              // the file says which are pinned, be it none ("pinned": [])
 	Default string            // the default list: where a new task goes
+	Mine    bool              // a user's own: My lists shows only the tasks assigned to them
 	All     map[string]string // the settings of All tasks (the shared registry)
 	Extra   map[string]json.RawMessage
 }
@@ -61,7 +62,7 @@ func (r *Registry) Find(name string) *List {
 	return nil
 }
 
-var registryKeys = map[string]bool{"version": true, "lists": true, "pinned": true, "default": true, "all": true}
+var registryKeys = map[string]bool{"version": true, "lists": true, "pinned": true, "default": true, "mine": true, "all": true}
 
 // textMap: an object's members that are text, a number or a bool, as text.
 func textMap(raw json.RawMessage) map[string]string {
@@ -84,6 +85,7 @@ func ParseRegistry(raw []byte) (*Registry, bool) {
 		return nil, false
 	}
 	r := &Registry{Default: listName(o.Str("default")), All: textMap(o["all"]), PinsSet: o.Has("pinned")}
+	r.Mine, _ = jsonobj.As[bool](o["mine"])
 	if n, ok := jsonobj.WholeNumber(o["version"]); ok && n > 0 {
 		r.Version = n
 	}
@@ -201,6 +203,9 @@ func (r *Registry) Encode() string {
 	if r.Default != "" {
 		b.WriteString(",\n  \"default\": ")
 		b.WriteString(jsonobj.Text(r.Default))
+	}
+	if r.Mine {
+		b.WriteString(",\n  \"mine\": true")
 	}
 	if len(r.All) > 0 {
 		b.WriteString(",\n  \"all\": ")

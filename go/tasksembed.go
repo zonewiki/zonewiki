@@ -435,17 +435,27 @@ func taskCounts(rq *Req) TaskCounts {
 // pinnedView: the params of the view of the pinned lists: one list's own;
 // several as one task app, the default list's params showing the tasks of
 // all of them (lists=a|b). A new task there goes to the default list.
+// For a user who set My lists to their own tasks (onlyMine) only those
+// (assignee=me), of one list too.
 func (rq *Req) pinnedView() TasksParams {
 	pinned := rq.pinnedLists()
-	if len(pinned) == 1 {
-		return pinned[0].Params
+	params := pinned[0].Params
+	if len(pinned) > 1 {
+		refs := make([]string, len(pinned))
+		for i, l := range pinned {
+			refs[i] = l.Ref
+		}
+		params = params.With("list", "").With("lists", strings.Join(refs, "|"))
 	}
-	refs := make([]string, len(pinned))
-	for i, l := range pinned {
-		refs[i] = l.Ref
+	if rq.onlyMine() {
+		params = params.With("assignee", "me")
 	}
-	return pinned[0].Params.With("list", "").With("lists", strings.Join(refs, "|"))
+	return params
 }
+
+// myLists: the user's pinned lists are a view of their own, My lists
+// (/tasks?pinned=1): several lists as one, or their tasks alone (onlyMine).
+func (rq *Req) myLists() bool { return len(rq.pinnedLists()) > 1 || rq.onlyMine() }
 
 // pinnedLink: one of the lists the pinned view shows, under its heading:
 // the list at /tasks?list= ("#name").
@@ -537,8 +547,12 @@ func (rq *Req) taskPlaces() []TaskPlace {
 	var out []TaskPlace
 	tasks := rq.openTasks()
 	hidden := func(l ListInfo) bool { return rq != nil && rq.sharing && l.NoShare }
-	if len(pinned) > 1 {
-		out = append(out, TaskPlace{Key: "pinned", Label: "My lists", Title: "Your pinned lists, as one", Href: "/tasks?pinned=1",
+	if rq.myLists() {
+		title := "Your pinned lists, as one"
+		if rq.onlyMine() {
+			title = "Your tasks in your pinned lists"
+		}
+		out = append(out, TaskPlace{Key: "pinned", Label: "My lists", Title: title, Href: "/tasks?pinned=1",
 			Pinned: true, Counts: countTasks(user, tasks, lists, rq.pinnedView())})
 	}
 	place := func(l ListInfo, pinned bool) TaskPlace {

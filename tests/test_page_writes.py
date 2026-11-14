@@ -673,6 +673,39 @@ def test_rename_list_refuses_and_says_why_in_its_dialog(client, shop):
     assert git(shop, "rev-parse", "HEAD") == head
 
 
+def test_an_assistant_renames_a_list_as_the_dialog_does(client, shop):
+    """rename_task_list: the same operation through the MCP door."""
+    client.post("/api/tasks", json={"title": "Bread", "list": "shop"}, headers=HOST)
+    before = git(shop, "rev-parse", "HEAD").strip()
+    text, err = mcp(client, "rename_task_list", list="shop", new_name="#Food", summary="it is food")
+    assert not err, text
+    assert text.startswith("Renamed the list #shop to #food, in one commit: 2 tasks, 1 page (lists).") and "/tasks?list=food" in text
+    assert tasks_file(shop)[-1]["list"] == "food" and tasks_file(shop, "closed-2001.json")[0]["list"] == "food"
+    assert "[[tasks: list=food view=open]]" in (shop / "lists.md").read_text()
+    assert '{"name": "food"}' in (shop / "_tasks/lists.json").read_text()
+    subjects = git(shop, "log", "--format=%s", f"{before}..HEAD").splitlines()
+    assert subjects == ["Rename list #shop to #food: it is food (MCP)"]
+    # Refusals are tool errors, and nothing is written.
+    head = git(shop, "rev-parse", "HEAD")
+    for args, why in (({"list": "nosuch", "new_name": "x"}, "No list #nosuch"),
+                      ({"list": "food", "new_name": "food"}, "already called #food"),
+                      ({"list": "food", "new_name": "a,b"}, "can't contain"),
+                      ({"list": "food"}, "new_name")):
+        text, err = mcp(client, "rename_task_list", **args)
+        assert err and why in text, args
+    assert git(shop, "rev-parse", "HEAD") == head
+
+
+def test_rename_list_under_a_guide_needs_its_id(client, shop):
+    commit(shop, "wiki-guide", "# Guide\n\nWrite well.\n")
+    text, err = mcp(client, "rename_task_list", list="shop", new_name="food")
+    assert err and text.startswith("Nothing was written") and '{"name": "shop"}' in (shop / "_tasks/lists.json").read_text()
+    assert "list=shop view=open" in (shop / "lists.md").read_text()
+    ids = json.loads(text.split("guides set to ", 1)[1].split("]", 1)[0] + "]")
+    text, err = mcp(client, "rename_task_list", list="shop", new_name="food", guides=ids)
+    assert not err and "list=food view=open" in (shop / "lists.md").read_text()
+
+
 def test_rename_list_keeps_text_not_yet_in_git(client, shop):
     (shop / "lists.md").write_text((shop / "lists.md").read_text() + "\nA draft line\n")
     assert list_op(client, "rename", list="shop", new_name="food") == "/tasks?list=food"

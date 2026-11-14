@@ -696,6 +696,7 @@ var mcpToolTable = map[string]mcpTool{
 	"restore_page":     {run: restorePage, writes: toolWritesPages},
 	"rename_task_tag":  {run: renameTaskTag, writes: toolWritesPages}, // the tag in tasks, and in the pages' embeds
 	"create_task_list": {run: createTaskListTool, writes: toolWritesTasks},
+	"rename_task_list": {run: renameTaskListTool, writes: toolWritesPages}, // the list on its tasks, and in the pages' embeds
 	"create_task":      {run: createTaskTool, writes: toolWritesTasks},
 	"update_task":      {run: updateTaskTool, writes: toolWritesTasks},
 }

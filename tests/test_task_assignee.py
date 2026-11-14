@@ -350,6 +350,109 @@ class TestEmbed:
         assert resp.status_code == 400
 
 
+class TestOnlyMine:
+    """Only my tasks in My lists (docs/spec/tasks.md, Lists → Pins): a
+    user's own setting. Their pinned lists then show only the tasks assigned
+    to them and their private ones, their Tasks links count only those, and a
+    new task from anywhere is theirs."""
+
+    @pytest.fixture()
+    def team(self, alice, wiki_dir):
+        """A pinned shared list with a task of alice's, one of bob's and one of
+        no one's, all due today; alice's private list with a task, not pinned yet."""
+        from datetime import date
+        today = date.today().isoformat()
+        make_list(alice, "team", headers=HOST)
+        make_list(alice, "own", private=True, headers=HOST)
+        self.pin(alice, "team")
+        for title, fields in (("A1", {"assignee": "alice"}), ("B1", {"assignee": "bob"}), ("N1", {})):
+            new(alice, title=title, due_date=today, list="team", **fields)
+        new(alice, title="P1", due_date=today, list="own")
+        return alice
+
+    pin = staticmethod(lambda client, name, how="1": client.post(
+        "/tasks/pin-list", data={"list": name, "pin": how}, headers=HOST))
+    mine = staticmethod(lambda client, on="1": client.post("/tasks/pin-list", data={"mine": on}, headers=HOST))
+    count = staticmethod(lambda client: client.get("/api/tasks/due-count", headers=HOST).get_json()["count"])
+    page = staticmethod(lambda client, url: client.get(url, headers=HOST).get_data(as_text=True))
+
+    def test_the_counts_and_my_lists_are_the_users_own(self, team, wiki_dir):
+        assert self.count(team) == 3
+        index = self.page(team, "/page/index")
+        assert 'href="/tasks?list=team"' in index and "data-tasks-assignee" not in index
+        resp = self.mine(team)
+        assert resp.status_code == 302 and resp.headers["Location"] == "/tasks?pinned=1"
+        assert '"mine": true' in (wiki_dir / "private/alice/_tasks/lists.json").read_text()
+        assert self.count(team) == 1                           # A1
+        # One pinned list is My lists too now: where her Tasks links go.
+        index = self.page(team, "/page/index")
+        assert 'href="/tasks?pinned=1"' in index and 'data-tasks-assignee="alice"' in index
+        html = self.page(team, "/tasks?pinned=1")
+        assert "My lists" in html and 'data-init-assignee="me"' in html and "Your tasks in your pinned lists" in html
+        assert 'id="mine-off-btn"' in html and 'id="mine-on-btn"' not in html
+        # The list itself still shows everyone's.
+        html = self.page(team, "/tasks?list=team")
+        assert "data-init-assignee" not in html and 'data-place="pinned"' in html
+        # A private task is hers: it counts once its list is pinned.
+        self.pin(team, "own")
+        assert self.count(team) == 2
+        export = team.get("/api/tasks/export?lists=team|own&assignee=me", headers=HOST).get_json()["tasks"]
+        assert sorted(t["title"] for t in export) == ["A1", "P1"]
+        # And off again.
+        assert self.mine(team, "0").status_code == 302
+        assert self.count(team) == 4
+        assert '"mine"' not in (wiki_dir / "private/alice/_tasks/lists.json").read_text()
+        assert 'id="mine-on-btn"' in self.page(team, "/tasks?pinned=1")
+
+    def test_it_is_each_users_own(self, team):
+        self.mine(team)
+        login(team, "bob")
+        assert self.count(team) == 3                           # bob pinned nothing: every task he sees
+        self.mine(team)
+        assert self.count(team) == 3                           # and without a pinned list there is no My lists
+        assert "data-tasks-assignee" not in self.page(team, "/page/index")
+        self.pin(team, "team")
+        assert self.count(team) == 1                           # B1
+        assert 'href="/tasks?pinned=1"' in self.page(team, "/page/index")
+
+    def test_a_private_task_is_mine_and_not_no_ones(self, team):
+        export = lambda who: sorted(t["title"] for t in team.get(
+            f"/api/tasks/export?assignee={who}", headers=HOST).get_json()["tasks"])
+        assert export("me") == ["A1", "P1"] and export("none") == ["N1"] and export("-me") == ["B1", "N1"]
+
+    def test_a_new_task_in_a_private_default_list_has_no_assignee(self, team):
+        self.mine(team)
+        self.pin(team, "own", "default")
+        assert "data-tasks-assignee" not in self.page(team, "/page/index")
+
+    def test_who_cant_have_it(self, team, client):
+        assert self.mine(team, "2").status_code == 400
+        login(team, "carol")                                   # a viewer changes nothing
+        assert self.mine(team).status_code == 403
+        assert 'id="mine-on-btn"' not in self.page(team, "/tasks?list=team")
+
+    def test_without_users_there_is_no_such_thing(self, client, wiki_dir):
+        make_list(client, "team", headers=HOST)
+        self.pin(client, "team")
+        assert self.mine(client).status_code == 400
+        assert 'id="mine-on-btn"' not in self.page(client, "/tasks?list=team")
+
+    def test_the_assistants_new_task_is_the_users(self, team, wiki_dir, monkeypatch):
+        monkeypatch.setattr(settings, "USERS", {**USERS, "alice": ("alice-pw", "alice-token")})
+
+        def mcp(tool, **args):
+            resp = team.post("/mcp", headers={**HOST, "Authorization": "Bearer alice-token"}, json={
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": tool, "arguments": args}})
+            return "".join(c["text"] for c in resp.get_json()["result"]["content"])
+        assert "assigned to" not in mcp("create_task", title="Before")
+        login(team, "alice")
+        self.mine(team)
+        assert "assigned to: alice (the user)" in mcp("create_task", title="Mine now")
+        assert "assigned to: bob" in mcp("create_task", title="Said so", assignee="bob")
+        assert "assigned to" not in mcp("create_task", title="No one", assignee="none")
+        assert "assigned to" not in mcp("create_task", title="Elsewhere", list="")
+
+
 class TestAssistant:
     """The MCP tools: create_task and update_task take an assignee,
     search_tasks filters by it, and a task's text names it."""

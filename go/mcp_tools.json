@@ -837,6 +837,41 @@
   }
  },
  {
+  "name": "rename_task_list",
+  "title": "Rename a task list",
+  "description": "Rename a task list: its tasks stay in it, and embeds and /tasks links on pages follow, in one commit.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "list": {
+     "type": "string"
+    },
+    "new_name": {
+     "type": "string"
+    },
+    "summary": {
+     "type": "string"
+    },
+    "guides": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    }
+   },
+   "required": [
+    "list",
+    "new_name"
+   ]
+  },
+  "annotations": {
+   "readOnlyHint": false,
+   "destructiveHint": true,
+   "idempotentHint": false,
+   "openWorldHint": false
+  }
+ },
+ {
   "name": "create_task",
   "title": "Create a task",
   "description": "Add a task to the user's tasks. Returns it with its id, and the tags of similar tasks: offer the fitting ones to the user (update_task's add_tags adds them).",
