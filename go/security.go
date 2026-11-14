@@ -521,6 +521,20 @@ func (t *Throttle) failed(key string) {
 	t.fails[key] = failures{t.fails[key].count + 1, n}
 }
 
+// remembers: some client's wrong tries are still counted (for a day after
+// its last one).
+func (t *Throttle) remembers() bool {
+	n := now()
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for _, f := range t.fails {
+		if n.Sub(f.last) < 24*time.Hour {
+			return true
+		}
+	}
+	return false
+}
+
 func (t *Throttle) succeeded(key string) {
 	t.mu.Lock()
 	delete(t.fails, key)

@@ -6,8 +6,10 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // zonewiki health asks localhost at the port Zone listens on.
@@ -110,5 +112,102 @@ func TestClientKeyOnSocket(t *testing.T) {
 	r.Header.Set("X-Forwarded-For", "6.6.6.6, 203.0.113.9, 172.17.0.1")
 	if got := clientKey(r); got != "203.0.113.9" {
 		t.Errorf("a proxy in front of the proxy: %q", got)
+	}
+}
+
+// --addr fd:N: Zone serves on a listening socket it was started with, as
+// systemd hands one to a service of a socket unit. A Unix socket's file
+// stays when Zone closes its listener: it is the holder's.
+func TestListenOnAHandedSocket(t *testing.T) {
+	configWiki(t, "")
+	t.Cleanup(func() { onSocket, handedSocket = false, false })
+	path := filepath.Join(t.TempDir(), "zone.sock")
+	holder, err := net.Listen("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer holder.Close()
+	f, err := holder.(*net.UnixListener).File()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln, err := listen("fd:" + strconv.Itoa(int(f.Fd())))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !handedSocket || !onSocket {
+		t.Errorf("handedSocket %v, onSocket %v", handedSocket, onSocket)
+	}
+	if got := listenName(ln); got != socketPrefix+path {
+		t.Errorf("listenName: %q", got)
+	}
+	go http.Serve(ln, newHandler())
+	addr := socketPrefix + path
+	if code := health(healthClient([]string{addr}), healthURL([]string{addr})); code != 0 {
+		t.Errorf("health over the handed socket: %d", code)
+	}
+	ln.Close()
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("the holder's socket file went with Zone's listener: %v", err)
+	}
+	for _, bad := range []string{"fd:", "fd:x", "fd:2", "fd:987"} {
+		if _, err := listen(bad); err == nil {
+			t.Errorf("%s was taken", bad)
+		}
+	}
+	file, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	if _, err := listen("fd:" + strconv.Itoa(int(file.Fd()))); err == nil || !strings.Contains(err.Error(), "listening socket") {
+		t.Errorf("a file that is no socket: %v", err)
+	}
+}
+
+// Zone is idle long enough to exit when nothing was asked for that long,
+// nothing runs, and no throttle remembers a wrong try; the healthcheck is
+// no request.
+func TestIdleLongEnough(t *testing.T) {
+	configWiki(t, "")
+	at := clock(t, time.Unix(2_000_000, 0))
+	loginThrottle, mcpThrottle = newThrottle(), newThrottle()
+	t.Cleanup(func() { loginThrottle, mcpThrottle = newThrottle(), newThrottle() })
+	h := countRequests(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if idle.busy.Load() != 1 && r.URL.Path != "/api/health" {
+			t.Errorf("%s: %d requests counted while it runs", r.URL.Path, idle.busy.Load())
+		}
+	}))
+	ask := func(path string) { h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", path, nil)) }
+	const after = 15 * time.Minute
+	ask("/page/index")
+	if idleLongEnough(after) {
+		t.Error("idle right after a request")
+	}
+	*at = at.Add(14 * time.Minute)
+	ask("/api/health")
+	*at = at.Add(time.Minute)
+	if !idleLongEnough(after) {
+		t.Error("not idle 15 minutes after the last request, with a healthcheck between")
+	}
+	idle.busy.Add(1)
+	if idleLongEnough(after) {
+		t.Error("idle while a request runs")
+	}
+	idle.busy.Add(-1)
+	loginThrottle.failed("203.0.113.9")
+	*at = at.Add(23 * time.Hour)
+	if idleLongEnough(after) {
+		t.Error("idle while the throttle remembers a wrong password")
+	}
+	*at = at.Add(2 * time.Hour)
+	if !idleLongEnough(after) {
+		t.Error("not idle a day after the wrong password")
+	}
+	loginThrottle.failed("203.0.113.9")
+	loginThrottle.succeeded("203.0.113.9")
+	*at = at.Add(after)
+	if !idleLongEnough(after) {
+		t.Error("not idle after the right password cleared the client")
 	}
 }

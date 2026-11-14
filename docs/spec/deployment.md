@@ -203,6 +203,25 @@ Whoever connects has no address and is taken for the proxy: its `X-Forwarded-For
 `hosts` and the rest of a proxy's setup stay as with a port.
 The healthcheck over it: `zonewiki health unix:PATH`.
 
+### Started by systemd, asleep when idle
+
+`zonewiki --addr fd:3` serves on a listening socket Zone was started with, the way systemd hands one to a service it starts for a socket unit (socket activation; `fd:3` is the first such socket, and Podman passes it on into a container).
+systemd holds the socket and starts Zone when a connection comes:
+
+```
+# zone.socket                          # zone.service
+[Socket]                               [Service]
+ListenStream=/run/zone/zone.sock       Environment=ZONE_DATA=/srv/wiki ZONE_IDLE_EXIT=15m
+                                       ExecStart=/usr/local/bin/zonewiki --addr fd:3
+```
+
+With `ZONE_IDLE_EXIT` (a duration: `15m`, `1h`; unset or `off`: never) Zone exits, with exit code 0, once no request came for that long (`exitWhenIdle` in `go/server.go`), and uses no memory until the next one starts it again: that one waits in the socket for the start, a fraction of a second, since the search index is in its files.
+What counts as a request is everything but `/api/health`, so whatever watches Zone doesn't keep it up; a browser tab nobody is at asks nothing either (`whileUsed`, Modules in `docs/spec/navigation.md`).
+Zone stays up while a request runs, and while a throttle remembers a wrong password or token (for a day after a client's last wrong try, until its right one): an exit would forget the count and give a guesser five new tries each time.
+What an exit loses is what a restart loses: the caches, which are built again.
+`ZONE_IDLE_EXIT` on a socket or port Zone opened itself is ignored, with a line in the log, since nothing would start Zone again.
+A Unix socket handed over is treated as one Zone opened (`--addr unix:PATH`, above): its peer is the proxy; the file is the holder's and stays when Zone exits.
+
 Optional git remote: `./run.sh config set git-remote git@github.com:user/wiki.git`.
 At start and when it changes, `setGitRemote()` adds or updates `origin` to that URL, so `git push` works from the terminal.
 

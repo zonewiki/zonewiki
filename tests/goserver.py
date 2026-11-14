@@ -144,7 +144,7 @@ class GoServer:
     """One Go server process, on addr (a free port: 127.0.0.1:0; unix:PATH: a socket)."""
 
     def __init__(self, env: dict[str, str], log: Path, addr: str = "127.0.0.1:0", flags: list[str] = (),
-                 config: str | None = None):
+                 config: str | None = None, pass_fds: tuple[int, ...] = ()):
         self.env, self.flags = env, list(flags)
         self.config = config_text() if config is None else config
         write_config(self.config)
@@ -153,7 +153,7 @@ class GoServer:
         self.log = open(log, "ab")
         self.proc = subprocess.Popen(
             [str(self.binary), "--addr", addr, "--public", str(REPO / "public"), *self.flags],
-            env={**base, **env}, stdout=subprocess.PIPE, stderr=self.log)
+            env={**base, **env}, stdout=subprocess.PIPE, stderr=self.log, pass_fds=pass_fds)
         line = self.proc.stdout.readline().decode()
         if " listening on " not in line:
             self.stop()

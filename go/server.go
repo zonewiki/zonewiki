@@ -17,8 +17,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -56,6 +58,8 @@ Environment:
   ZONE_SMTP_TLS              starttls (default), tls (465) or none
   ZONE_MAIL_FROM             the address Zone's mail comes from
   ZONE_BUILD                 the build shown next to the version
+  ZONE_IDLE_EXIT             15m: exit after that long without a request, for a Zone systemd starts
+                             on its socket (--addr fd:3) when the next one comes
 
 Flags:`
 
@@ -88,7 +92,7 @@ func isHelp(arg string) bool {
 }
 
 func main() {
-	addr := flag.String("addr", ":5000", "the `address` to listen on (127.0.0.1:0: a free port; unix:PATH: a Unix socket)")
+	addr := flag.String("addr", ":5000", "the `address` to listen on (127.0.0.1:0: a free port; unix:PATH: a Unix socket; fd:3: the socket systemd hands over)")
 	public := flag.String("public", "", "the `folder` of the browser code (default: public/, found from the binary)")
 	flag.StringVar(&docsDir, "docs", "", "the `folder` of README.md and docs/spec/, for zone_help (default: found from --public)")
 	semanticTest := flag.String("semantic-test", "", "the tests' embedder and index state, as `JSON` (embedtest.go)")
@@ -187,7 +191,7 @@ func main() {
 		fatal(err)
 	}
 	srv := &http.Server{
-		Handler: newHandler(),
+		Handler: countRequests(newHandler()),
 		// A slow or idle client doesn't hold a connection for long: the
 		// headers come in 10 s, and a body or a response that stands
 		// still for a minute fails (stalls.go).
@@ -195,12 +199,23 @@ func main() {
 		IdleTimeout:       60 * time.Second,
 	}
 	fmt.Printf("Zone %s (%s) listening on %s\n", version, cfg.Build, listenName(ln))
+	switch {
+	case cfg.IdleExit == 0:
+	case !handedSocket:
+		logf("ZONE_IDLE_EXIT is set, but Zone opened its own socket (--addr %s): nothing would start it again, so it stays. "+
+			"It is for a Zone that systemd starts on a socket it holds (--addr fd:3).", *addr)
+	default:
+		idle.last.Store(now().UnixNano())
+		go exitWhenIdle(srv, cfg.IdleExit)
+	}
 	// One process: the task app's lock, the caches, the login throttle and the
 	// semantic-search worker live in its memory. At most 100 connections,
 	// those beyond the limit wait.
-	if err := srv.Serve(limitListener(ln, 100)); err != nil {
-		fatal(err)
+	err = srv.Serve(limitListener(ln, 100))
+	if errors.Is(err, http.ErrServerClosed) {
+		select {} // exitWhenIdle is ending Zone, once what still runs is answered
 	}
+	fatal(err)
 }
 
 // socketPrefix: an --addr that names a Unix socket's path, not a TCP address.
@@ -217,6 +232,9 @@ var onSocket bool
 // in decides. A socket file a Zone that was killed left is replaced; one
 // something still listens on, or a file that is no socket, is refused.
 func listen(addr string) (net.Listener, error) {
+	if fd, handed := strings.CutPrefix(addr, fdPrefix); handed {
+		return handedListener(fd)
+	}
 	path, socket := strings.CutPrefix(addr, socketPrefix)
 	if !socket {
 		return net.Listen("tcp", addr)
@@ -246,6 +264,91 @@ func listen(addr string) (net.Listener, error) {
 	}
 	onSocket = true
 	return ln, nil
+}
+
+// fdPrefix: an --addr that names a listening socket Zone was started with,
+// by its file descriptor: fd:3 is the first one systemd hands a service it
+// starts for a socket unit (socket activation), also into a container.
+const fdPrefix = "fd:"
+
+// handedSocket: Zone listens on a socket it was handed (--addr fd:N), not
+// one it opened: whoever holds it starts Zone again when a connection
+// comes, so Zone may exit while nobody asks (ZONE_IDLE_EXIT).
+var handedSocket bool
+
+// handedListener: the listener on file descriptor fd, which must be a
+// listening socket. A Unix socket's peers are the proxy's, as with
+// unix:PATH; its file is the holder's, and stays when Zone closes it.
+func handedListener(fd string) (net.Listener, error) {
+	n, err := strconv.Atoi(fd)
+	if err != nil || n < 3 {
+		return nil, fmt.Errorf("--addr fd:%s: it takes the number of a file descriptor Zone was started with, as fd:3", fd)
+	}
+	f := os.NewFile(uintptr(n), "socket "+fd)
+	if f == nil {
+		return nil, fmt.Errorf("--addr fd:%s: Zone was started without that file descriptor", fd)
+	}
+	defer f.Close() // the listener has its own copy
+	ln, err := net.FileListener(f)
+	if err != nil {
+		return nil, fmt.Errorf("--addr fd:%s: not a listening socket Zone was started with (%v)", fd, err)
+	}
+	handedSocket = true
+	onSocket = ln.Addr().Network() == "unix"
+	return ln, nil
+}
+
+// idle: when the last request came (or ended), and how many run now, for
+// exitWhenIdle. The healthcheck isn't one: whoever watches Zone would keep
+// it up for ever.
+var idle struct {
+	last atomic.Int64 // UnixNano
+	busy atomic.Int64
+}
+
+// countRequests keeps idle up to date around next.
+func countRequests(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/health" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		idle.busy.Add(1)
+		idle.last.Store(now().UnixNano())
+		defer func() {
+			idle.last.Store(now().UnixNano())
+			idle.busy.Add(-1)
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
+// idleLongEnough: nothing was asked for after, nothing runs, and nothing
+// that lives only in memory would be lost that someone counts on: a client
+// who guessed a password wrong is remembered by the throttles for a day,
+// and an exit would hand a guesser five new tries each time.
+func idleLongEnough(after time.Duration) bool {
+	return idle.busy.Load() == 0 && now().Sub(time.Unix(0, idle.last.Load())) >= after &&
+		!loginThrottle.remembers() && !mcpThrottle.remembers()
+}
+
+// exitWhenIdle ends Zone, with exit code 0, once idleLongEnough: requests
+// that came meanwhile are answered first, and connections that come after
+// wait in the socket, which its holder starts Zone on again. Everything
+// Zone keeps is in the wiki's files (the search index too), so the next
+// start loses nothing but what the caches held.
+func exitWhenIdle(srv *http.Server, after time.Duration) {
+	for {
+		time.Sleep(min(after/4, 15*time.Second))
+		if !idleLongEnough(after) {
+			continue
+		}
+		logf("no request for %s: exiting; the next one starts Zone again", after)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		srv.Shutdown(ctx)
+		cancel()
+		os.Exit(0)
+	}
 }
 
 // listenName: where ln listens, as --addr takes it.

@@ -35,12 +35,16 @@ type Config struct {
 	HostData    string // the wiki folder as the host sees it
 	AllowRemote bool   // listen on the LAN: no Host check unless Hosts is set
 	Published   bool   // the container's port is open to the network (ZONE_BIND, from compose)
-	Data        string // the wiki (ZONE_DATA)
-	Uploads     string // Data/_assets
-	GitEnabled  bool
-	Signup      bool       // ZONE_SIGNUP: people may make an account themselves (signup.go)
-	Public      string     // ZONE_PUBLIC: who isn't signed in reads the wiki (publicView) or edits its pages too (publicEdit); "": signs in first
-	Mail        mailConfig // ZONE_SMTP_HOST …, ZONE_MAIL_FROM: how Zone sends mail (mail.go); Host "": it sends none
+	// IdleExit: Zone exits after this long without a request, when it
+	// listens on a socket it was handed (--addr fd:3), which whoever
+	// handed it starts Zone on again; 0: never (ZONE_IDLE_EXIT).
+	IdleExit   time.Duration
+	Data       string // the wiki (ZONE_DATA)
+	Uploads    string // Data/_assets
+	GitEnabled bool
+	Signup     bool       // ZONE_SIGNUP: people may make an account themselves (signup.go)
+	Public     string     // ZONE_PUBLIC: who isn't signed in reads the wiki (publicView) or edits its pages too (publicEdit); "": signs in first
+	Mail       mailConfig // ZONE_SMTP_HOST …, ZONE_MAIL_FROM: how Zone sends mail (mail.go); Host "": it sends none
 }
 
 var cfg *Config
@@ -154,6 +158,12 @@ func loadWiki(getenv func(string) string) (*Config, error) {
 	default:
 		return nil, fmt.Errorf("ZONE_PUBLIC is %q: it is view (anyone reads the wiki without signing in), "+
 			"edit (anyone edits its pages too) or off", p)
+	}
+	if v := strings.TrimSpace(getenv("ZONE_IDLE_EXIT")); v != "" && v != "off" && v != "0" {
+		if c.IdleExit, err = time.ParseDuration(v); err != nil || c.IdleExit < time.Second {
+			return nil, fmt.Errorf("ZONE_IDLE_EXIT is %q: it is how long Zone waits without a request before it exits, "+
+				"as 15m or 1h (a second at least), or off", v)
+		}
 	}
 	if c.Signup = truthy(getenv("ZONE_SIGNUP")); c.Signup && c.Mail.Host == "" {
 		return nil, fmt.Errorf("ZONE_SIGNUP needs mail, for the link that confirms an address: " +
