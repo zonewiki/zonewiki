@@ -47,6 +47,10 @@
      "type": "string",
      "description": "Only tasks with this tag; several comma-separated tags must all match, e.g. 'leaf' or 'work,urgent'."
     },
+    "list": {
+     "type": "string",
+     "description": "Only the tasks in this list (list_tags shows the lists)."
+    },
     "assignee": {
      "type": "string",
      "description": "With users: only this user's: 'me' (\"my tasks\"), a user name, 'none', 'a|b', '-a'."
@@ -198,7 +202,7 @@
  {
   "name": "list_tags",
   "title": "List tags",
-  "description": "List the tags in use, on pages (frontmatter tags:) and tasks, with how often each occurs. Check it before tagging, to reuse a tag instead of inventing a near-duplicate.",
+  "description": "List the tags in use, on pages (frontmatter tags:) and tasks, with how often each occurs, and the task lists. Check it before tagging, to reuse a tag instead of inventing a near-duplicate.",
   "inputSchema": {
    "type": "object",
    "properties": {}
@@ -765,8 +769,8 @@
  },
  {
   "name": "rename_task_tag",
-  "title": "Rename a task tag or list",
-  "description": "Rename a task tag, or a list (a tag a page declares): on all tasks, done ones too, and in embeds and /tasks links on pages, in one commit. Not pages' frontmatter tags.",
+  "title": "Rename a task tag",
+  "description": "Rename a task tag: on all tasks, done ones too, and in embeds and /tasks links on pages, in one commit. Not pages' frontmatter tags, nor a list (no tag).",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -803,6 +807,36 @@
   }
  },
  {
+  "name": "create_task_list",
+  "title": "Create a task list",
+  "description": "Make a task list: a place tasks are in (create_task's and update_task's list). [[tasks: list=<name>]] shows it on a page.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "name": {
+     "type": "string",
+     "description": "One word."
+    },
+    "private": {
+     "type": "boolean",
+     "description": "With users: only the user sees it and its tasks."
+    },
+    "summary": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "name"
+   ]
+  },
+  "annotations": {
+   "readOnlyHint": false,
+   "destructiveHint": false,
+   "idempotentHint": false,
+   "openWorldHint": false
+  }
+ },
+ {
   "name": "create_task",
   "title": "Create a task",
   "description": "Add a task to the user's tasks. Returns it with its id, and the tags of similar tasks: offer the fitting ones to the user (update_task's add_tags adds them).",
@@ -822,7 +856,7 @@
      "items": {
       "type": "string"
      },
-     "description": "The task's tags, without '#'. Replaces its tags; a list's name as a tag files it in that list."
+     "description": "The task's tags, without '#'. Replaces its tags."
     },
     "importance": {
      "type": "string",
@@ -874,9 +908,9 @@
      "type": "string",
      "description": "With users: who does it: a user name, 'me' or 'none'. For 'Anna should …', not a tag."
     },
-    "private": {
-     "type": "boolean",
-     "description": "With users: seen by the user alone. Default: private if their default task list (the first they pin) is in their private folder."
+    "list": {
+     "type": "string",
+     "description": "The list it goes in (list_tags shows them; '' none). Default: the user's default list. In a private list only the user sees it."
     },
     "summary": {
      "type": "string",
@@ -924,7 +958,7 @@
      "items": {
       "type": "string"
      },
-     "description": "The task's tags, without '#'. Replaces its tags; a list's name as a tag files it in that list."
+     "description": "The task's tags, without '#'. Replaces its tags."
     },
     "importance": {
      "type": "string",
@@ -975,9 +1009,13 @@
      "type": "string",
      "description": "As create_task's."
     },
-    "private": {
+    "list": {
+     "type": "string",
+     "description": "Move it to this list ('' none). A shared task can't go into a private list."
+    },
+    "share": {
      "type": "boolean",
-     "description": "With users: false shares a private task; a shared one can't go private."
+     "description": "true: the move may take it out of a private list, for everyone to see."
     },
     "add_tags": {
      "type": "array",

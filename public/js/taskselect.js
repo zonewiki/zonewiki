@@ -50,12 +50,10 @@ function openBulkTagModal(ids, removing = false) {
   const ARIA = { all: 'true', some: 'mixed', none: 'false' };
   function drawRows() {
     list.innerHTML = rows.map(r => {
-      const isList = app.listSet.has(r.tag.toLowerCase());
-      const tip = isList ? ` title="${esc(app.listTooltip(r.tag))}"` : '';
       const part = initial[r.tag] === 'some' ? `<span class="bulk-tag-count">${r.count} of ${count}</span>` : '';
       return `<li><button type="button" role="checkbox" class="bulk-tag-row" data-tag="${esc(r.tag)}" aria-checked="${ARIA[states[r.tag]]}">` +
         `<span class="bulk-tag-box" aria-hidden="true"></span>` +
-        `<span class="task-tag${isList ? ' task-tag-list' : ''}"${tip}>#${esc(r.tag)}</span>${part}</button></li>`;
+        `<span class="task-tag">#${esc(r.tag)}</span>${part}</button></li>`;
     }).join('');
   }
   drawRows();
@@ -72,7 +70,7 @@ function openBulkTagModal(ids, removing = false) {
 
   const input = dlg.querySelector('#bulk-tag-input');
   const chips = removing ? null
-    : app.chipField(input, { label: t => '#' + t, listWord: t => app.listSet.has(t.toLowerCase()) });
+    : app.chipField(input, { label: t => '#' + t });
   // A comma or space makes chips, as in the edit modal's Tags.
   if (chips) app.chipsOnSeparators(input, chips);
   else noSpacesInTags(input, false);
@@ -134,34 +132,40 @@ function openBulkTagModal(ids, removing = false) {
   else dlg.querySelector('.bulk-tag-row')?.focus({ preventScroll: true });
 }
 
-// The list of several selected tasks at once (the selection bar's List…):
-// every list there is, A–Z, each a row; a click moves the selected tasks
-// there at once. A list is a tag a page declares, so moving swaps the tags:
-// the chosen list's is added and the selection's other lists' go. "No list"
-// takes them out of every list. The row of the list every task is in
-// already is ticked; one that only some are in says how many.
+// The list of selected tasks (the selection bar's List…, a card's Move to
+// list…, the m key): every list the user sees, A–Z, each a row, then No
+// list; a click moves the tasks there at once (batch-update), with one
+// undo. The row of the list every task is in already is ticked; one that
+// only some are in says how many. A task is as private as its list: a
+// shared task can't go into a private list (those rows are off when one is
+// selected), and a private one that leaves for a shared place is shared,
+// which the row says and no undo takes back.
 function openBulkListModal(ids) {
   const idSet = new Set(ids);
   const chosen = st.tasks.filter(t => idSet.has(t.id));
-  const lists = [...app.listSet].sort();
+  const lists = [...app.listSet].sort((a, b) => app.listName(a).localeCompare(app.listName(b)) || a.localeCompare(b));
   if (!chosen.length || !lists.length) return;
   const count = chosen.length;
-  const listsOf = t => (t.tags || []).filter(x => app.listSet.has(x.toLowerCase()));
-  const inList = name => chosen.filter(t => listsOf(t).some(x => x.toLowerCase() === name)).length;
-  const inNone = chosen.filter(t => !listsOf(t).length).length;
-  const row = (name, label, n) => {
-    const only = n === count && (name ? chosen.every(t => listsOf(t).length === 1) : true);
-    const part = n && !only ? `<span class="bulk-tag-count">${n} of ${count}</span>` : '';
-    const tip = name ? ` title="${esc(app.listTooltip(name))}"` : '';
-    return `<li><button type="button" class="bulk-tag-row bulk-list-row" data-list="${esc(name)}" aria-current="${only}">` +
-      `<span class="bulk-list-mark" aria-hidden="true">${only ? '✓' : ''}</span>` +
-      `<span class="${name ? 'task-tag task-tag-list' : 'bulk-list-none'}"${tip}>${label}</span>${part}</button></li>`;
+  const anyShared = chosen.some(t => !t.private), anyPrivate = chosen.some(t => t.private);
+  const inList = ref => chosen.filter(t => (app.taskList(t) || '') === ref).length;
+  const row = (ref, label, n) => {
+    const all = n === count;
+    const isPrivate = app.privateLists.has(ref);
+    const off = isPrivate && anyShared;
+    const note = off ? 'a shared task stays shared' : anyPrivate && !isPrivate && !all ? 'shares it with everyone' : '';
+    const part = note ? `<span class="bulk-tag-count">${note}</span>`
+      : n && !all ? `<span class="bulk-tag-count">${n} of ${count}</span>` : '';
+    const tip = ref ? ` title="${esc(app.listTooltip(ref))}"` : '';
+    return `<li><button type="button" class="bulk-tag-row bulk-list-row" data-list="${esc(ref)}" aria-current="${all}"${off ? ' disabled' : ''}>` +
+      `<span class="bulk-list-mark" aria-hidden="true">${all ? '✓' : ''}</span>` +
+      `<span class="${ref ? 'task-tag task-tag-list' : 'bulk-list-none'}"${tip}>${label}</span>${part}</button></li>`;
   };
+  const label = ref => (app.privateLists.has(ref) ? '🔒 ' : '') + esc(app.listName(ref)) + (ref.startsWith('shared/') ? ' (shared)' : '');
   const dlg = document.createElement('dialog');
   dlg.className = 'modal bulk-tag-modal bulk-list-modal';
   dlg.innerHTML = `
     <p class="modal-label">Move ${count} task${count > 1 ? 's' : ''} to a list</p>
-    <ul class="bulk-tag-list">${lists.map(name => row(name, '#' + esc(name), inList(name))).join('')}${row('', 'No list', inNone)}</ul>
+    <ul class="bulk-tag-list">${lists.map(ref => row(ref, label(ref), inList(ref))).join('')}${row('', 'No list', inList(''))}</ul>
     <div class="modal-actions">
       <button type="button" class="btn" id="bulk-list-cancel">Cancel</button>
     </div>`;
@@ -170,24 +174,29 @@ function openBulkListModal(ids) {
   dlg.addEventListener('close', () => dlg.remove());
   dlg.querySelector('#bulk-list-cancel').addEventListener('click', close);
   dlg.addEventListener('click', ev => { if (ev.target === dlg) close(); });
-  const rows = [...dlg.querySelectorAll('.bulk-list-row')];
+  const rows = [...dlg.querySelectorAll('.bulk-list-row:not([disabled])')];
   dlg.addEventListener('keydown', ev => {
     if (ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp') return;
     ev.preventDefault();
     const i = rows.indexOf(document.activeElement);
     rows[(i + (ev.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length].focus();
   });
-  dlg.querySelector('.bulk-tag-list').addEventListener('click', ev => {
+  dlg.querySelector('.bulk-tag-list').addEventListener('click', async ev => {
     const btn = ev.target.closest('.bulk-list-row');
-    if (!btn) return;
+    if (!btn || btn.disabled) return;
     const target = btn.dataset.list;
-    // The selection's other lists go, in the spelling the tasks have them.
-    const others = [...new Set(chosen.flatMap(listsOf))].filter(x => x.toLowerCase() !== target);
+    const moving = chosen.filter(t => (app.taskList(t) || '') !== target);
     close();
-    if (!target && !others.length) return;   // in no list already
-    const what = `${count} task${count > 1 ? 's' : ''}`;
-    bulkTag(ids, target ? [target] : [], others,
-      target ? `${what} moved to list “${target}”` : `${what} taken out of ${others.length > 1 ? 'their lists' : `list “${others[0]}”`}`);
+    if (!moving.length) return;   // there already
+    app.dismissUndo();
+    const shares = t => !!t.private && !app.privateLists.has(target);
+    if (!(await batchUpdate(moving.map(t => ({ id: t.id, list: target, ...(shares(t) ? { share: true } : {}) }))))) return;
+    const what = `${moving.length} task${moving.length > 1 ? 's' : ''}`;
+    const msg = target ? `${what} moved to list “${app.listName(target)}”` : `${what} taken out of ${moving.length > 1 ? 'their lists' : 'its list'}`;
+    // Back where they were, but those that were private and are shared now.
+    const back = moving.filter(t => !shares(t));
+    if (back.length) app.showUndo(msg, () => batchUpdate(back.map(t => ({ id: t.id, list: app.taskList(t) || '', history: t.history || [] }))));
+    else showNotice(msg);
   });
   dlg.showModal();
   (rows.find(r => r.getAttribute('aria-current') === 'true') || rows[0]).focus({ preventScroll: true });

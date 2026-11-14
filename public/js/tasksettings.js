@@ -1,10 +1,14 @@
 // A task app's settings dialog (tasks.js initTasksInstance): List settings…
-// in the list's ⋯ menu in the toolbar. It changes the app's params where they are written: the
-// [[tasks: …]] of a page (the app's own, a list's home on /tasks?list=, the
-// default list's on Pinned), or the settings of All tasks. The server
-// names that place in data-settings-* (tasksembed.go buildTasksEmbed) and
-// rewrites it (POST /api/tasks/settings); without them there is no ⋯ menu.
-// Only what was changed is sent, so the other params stay as written.
+// in the list's ⋯ menu in the toolbar. It changes the settings where they
+// are kept: a list's own (its limit, Plan, tab names, new tasks' tags, keep,
+// whether it hides in sharing mode) in the lists' registry, wherever the
+// list is shown; how a page looks at it (the tab it opens on, a filter) in
+// that page's [[tasks: …]]; an embed of no list all in its [[tasks: …]];
+// those of All tasks in the registry too. The pin is the user's own. The
+// server names the places in data-settings-* (tasksembed.go
+// buildTasksEmbed) and writes them (POST /api/tasks/settings, POST
+// /tasks/pin-list); without them there is no ⋯ menu.
+// Only what was changed is sent, so the other settings stay as written.
 // The menu's other items: the list's tasks as a file, Export and Import….
 import { closeOnBackdropClick } from './util.js';
 import { showNotice } from './taskutil.js';
@@ -41,10 +45,11 @@ function fieldsOf(p) {
     new: p.new || '',
     tag: p.tag || '',
     assignee: p.assignee || '',
-    pin: pin === 'default' ? 'default' : isTrue(pin) || isTrue(p.home) ? '1' : '',
-    // Which list it is, and keep: only where the dialog makes the embed (the editor).
+    pin: pin === 'default' ? 'default' : isTrue(pin) ? '1' : '',
+    // Which list it is: only where the dialog makes the embed (the editor).
     list: p.list || '',
     keep: isTrue(p.keep),
+    noshare: isTrue(p.noshare),
   };
 }
 
@@ -78,60 +83,74 @@ export function changedParams(was, now, p) {
   for (const k of ['new', 'tag']) if (now[k] !== was[k]) set[k] = oneWord(now[k]);
   if ('assignee' in now && now.assignee !== was.assignee) set.assignee = oneWord(now.assignee).toLowerCase().replace(/@/g, '');
   if ('keep' in now && now.keep !== was.keep) set.keep = now.keep ? '1' : '';
+  if ('noshare' in now && now.noshare !== was.noshare) set.noshare = now.noshare ? '1' : '';
   return set;
 }
 
 // The dialog's form (partials/tasks_embed.html task_settings_dialog), for a
 // list's ⋯ menu and for the editor's Task list button (js/tasklist.js), whose
-// form has List and keep too. It shows what is changed most (Opens on, Plan,
-// the pin); the other fields ([data-field]) only when set, or once asked for
-// in the line of words under them ([data-more]), as the task dialog's rarer
-// fields are. The pin is a button, pressed for a pinned list, and a pinned
-// list has a box that makes it the default one; the hidden field pin holds
-// the param's value for both ("", "1", "default").
-// fill(params, all): the fields as the params have them (all: All tasks,
-// which has no pin and no filter); returns what read() then gives.
+// form says which list the embed shows. It shows what is changed most
+// (Opens on, Plan, the pin); the other fields ([data-field]) only when set,
+// or once asked for in the line of words under them ([data-more]), as the
+// task dialog's rarer fields are. The pin is a button, pressed for a list
+// the user pinned, and a pinned list has a box that makes it their default
+// one; the hidden field pin holds its value for both ("", "1", "default").
+// fill(params, mode): the fields as the params have them; mode says what
+// the dialog is for: all (All tasks: no filter, no pin), list (a list: its
+// pin, keep, hide when sharing), embed (an embed on a page: its filter).
+// Returns what read() then gives.
 export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Focus')) {
   const f = form.elements;
   const pinBtn = form.querySelector('.task-settings-pin');
   const defaultRow = form.querySelector('.task-settings-default');
-  const defaultBox = defaultRow.querySelector('input');
+  const defaultBox = defaultRow?.querySelector('input');
   const moreEl = form.querySelector('.task-add-fields');
   const fieldEl = name => form.querySelector(`[data-field="${name}"]`);
   // (What a click needs later is the form's own: the handlers are wired once.)
-  const allTasks = () => form.dataset.all === '1';
-  // Which + words the line has: those of the fields not shown (and, for All
-  // tasks, not the filters, which it hasn't).
+  const mode = () => ({ all: form.dataset.all === '1', list: form.dataset.list === '1', embed: form.dataset.embed === '1' });
+  // Which fields the dialog has here: a filter where there is an embed to
+  // write it in (the editor's always is one), keep where a list is named
+  // or made, hiding in sharing mode on a list.
+  const has = name => {
+    const m = mode();
+    if (name === 'tag' || name === 'assignee') return !!f.list || m.embed;
+    if (name === 'keep') return !!f.list || m.list;
+    if (name === 'noshare') return m.list;
+    return true;
+  };
+  // Which + words the line has: those of the fields not shown.
   function syncMore() {
     let any = false;
     for (const btn of moreEl.querySelectorAll('[data-more]')) {
       const el = fieldEl(btn.dataset.more);
-      btn.hidden = !el || !el.hidden || allTasks() && btn.classList.contains('task-settings-embed');
+      btn.hidden = !el || !el.hidden || !has(btn.dataset.more);
       any = any || !btn.hidden;
     }
     moreEl.hidden = !any;
   }
   function showField(name, show = true) {
     const el = fieldEl(name);
-    if (el) el.hidden = !show;
+    if (el) el.hidden = !show || !has(name);
   }
   function syncPin() {
+    if (!pinBtn) return;
     const pinned = f.pin.value !== '';
+    pinBtn.hidden = !mode().list;
     pinBtn.setAttribute('aria-pressed', String(pinned));
     pinBtn.querySelector('.task-settings-pin-label').textContent = pinned ? 'Pinned' : 'Pin';
-    defaultRow.hidden = !pinned || allTasks();
+    defaultRow.hidden = !pinned || !mode().list;
     defaultBox.checked = f.pin.value === 'default';
   }
   // Wired once per form: the editor's dialog is opened again and again.
   if (!form.dataset.wired) {
     form.dataset.wired = '1';
     const changed = () => form.dispatchEvent(new Event('input', { bubbles: true }));   // the editor's preview follows
-    pinBtn.addEventListener('click', () => {
+    pinBtn?.addEventListener('click', () => {
       f.pin.value = f.pin.value === '' ? '1' : '';
       syncPin();
       changed();
     });
-    defaultBox.addEventListener('input', () => {   // before the form hears of it
+    defaultBox?.addEventListener('input', () => {   // before the form hears of it
       f.pin.value = defaultBox.checked ? 'default' : '1';
       syncPin();
     });
@@ -139,8 +158,8 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
       const name = e.target.closest('[data-more]')?.dataset.more;
       if (!name) return;
       showField(name);
-      // Keep tasks is a box: asked for, it is ticked.
-      if (name === 'keep') { f.keep.checked = true; changed(); }
+      // Keep tasks and Hide when sharing are boxes: asked for, they are ticked.
+      if (name === 'keep' || name === 'noshare') { f[name].checked = true; changed(); }
       syncMore();
       fieldEl(name).querySelector('input')?.focus();
     });
@@ -149,28 +168,33 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
     view: f.view.value, plan: f.plan.checked,
     label_open: f.label_open.value.trim(), label_focus: f.label_focus.value.trim(),
     limit: f.limit.value.trim(), new: f.new.value.trim(),
-    tag: f.tag.value.trim(), pin: f.pin.value,
-    ...(f.list ? { list: cleanList(f.list.value), keep: f.keep.checked } : {}),
+    tag: f.tag.value.trim(), pin: f.pin.value, keep: f.keep.checked,
+    ...(f.list ? { list: cleanList(f.list.value) } : {}),
+    ...(f.noshare ? { noshare: f.noshare.checked } : {}),
     ...(f.assignee ? { assignee: f.assignee.value.trim() } : {}),   // with users
   });
-  const fill = (params, all = false) => {
+  const fill = (params, { all = false, list = false, embed = false } = {}) => {
     const fields = fieldsOf(params);
     form.dataset.all = all ? '1' : '';
+    form.dataset.list = list ? '1' : '';
+    form.dataset.embed = embed ? '1' : '';
     // Opens on: the tabs by their names here; Closed only where a page says so.
     f.view.replaceChildren(...['open', 'focus', fields.view === 'closed' && 'closed'].filter(Boolean)
       .map(v => new Option(v === 'closed' ? 'Closed' : tabLabel(v), v)));
     for (const k of ['view', 'label_open', 'label_focus', 'limit', 'new', 'tag', 'pin']) f[k].value = fields[k];
     f.plan.checked = fields.plan;
-    if (f.list) { f.list.value = fields.list; f.keep.checked = fields.keep; }
+    f.keep.checked = fields.keep;
+    if (f.noshare) f.noshare.checked = fields.noshare;
+    if (f.list) f.list.value = fields.list;
     if (f.assignee) f.assignee.value = fields.assignee;
-    for (const el of form.querySelectorAll('.task-settings-embed')) el.hidden = all;
     // The rarer fields: shown when set.
     showField('limit', !!fields.limit);
     showField('labels', !!(fields.label_open || fields.label_focus));
     showField('new', !!fields.new);
-    showField('tag', !all && !!fields.tag);
-    showField('assignee', !all && !!fields.assignee);
+    showField('tag', !!fields.tag);
+    showField('assignee', !!fields.assignee);
     showField('keep', fields.keep);
+    showField('noshare', fields.noshare);
     syncMore();
     syncPin();
     return read();
@@ -187,52 +211,99 @@ export function initTaskSettings(app) {
   const page = appEl.dataset.settingsPage || '';
   const index = parseInt(appEl.dataset.settingsIndex, 10);
   const raw = appEl.dataset.settingsRaw || '';
-  const all = index < 0;
+  // What the dialog is for: a list (its own settings and the user's pin of
+  // it), an embed on a page (how the page looks at the list, or all of an
+  // embed of no list), All tasks.
+  const list = appEl.dataset.settingsList || '';
+  const embed = appEl.dataset.settingsEmbed === '1';
+  const all = !list && !embed;
+  let listSet = {};
+  try { listSet = JSON.parse(appEl.dataset.settingsListSet || '{}'); } catch (_) {}
+  const pinWas = appEl.dataset.settingsPin || '';
+  // What of a list's embed is the page's own: the tab and the filter.
+  const PAGE_KEYS = ['view', 'tag', 'assignee'];
+  const written = parseParams(raw);
+  // The params the fields start from: a list's settings, with the page's
+  // own over them; else what the embed (or All tasks) has.
+  const params = !list ? written
+    : { ...listSet, ...(embed ? Object.fromEntries(PAGE_KEYS.filter(k => k in written).map(k => [k, written[k]])) : {}), pin: pinWas };
   const errorEl = document.getElementById('task-settings-error' + sfx);
   const whereEl = document.getElementById('task-settings-where' + sfx);
   const { read, fill } = settingsForm(form, app.tabLabel);
   let was = null;
 
   function open() {
-    was = fill(parseParams(raw), all);
-    // Where it is written: an embed's page says it itself.
+    was = fill(params, { all, list: !!list, embed });
+    const who = app.privateLists.has(list) ? 'which only you see' : 'for everyone';
     whereEl.textContent = all ? 'For All tasks, for everyone.'
-      : location.pathname === '/tasks' ? `Written in the list's [[tasks: …]] on the page “${page}”.`
-      : 'Written in this list’s [[tasks: …]] on this page.';
+      : list && embed ? `The list’s settings hold wherever it shows, ${who}; the tab and the filter are this page’s. The pin is yours.`
+      : list ? `For this list, ${who}. The pin is yours.`
+      : 'Written in this [[tasks: …]] on this page.';
     errorEl.hidden = true;
     dialog.showModal();
   }
 
+  // One write: the settings of a place ({list, set}, {page, index, was, set}
+  // or {all, was, set}); its error's message, '' when it went through.
+  async function post(body) {
+    const res = await fetch('/api/tasks/settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    if (res.ok) return '';
+    return (await res.json().catch(() => ({}))).error || 'The settings couldn’t be saved.';
+  }
+
   async function save() {
-    const set = changedParams(was, read(), parseParams(raw));
+    const now = read();
+    const set = changedParams(was, now, params);
     if (!Object.keys(set).length) { dialog.close(); return; }
-    let message = 'The settings couldn’t be saved.';
+    let message = '';
     try {
-      const res = await fetch('/api/tasks/settings', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(all ? { all: true, was: raw, set } : { page, index, was: raw, set }),
-      });
-      if (res.ok) {
+      if (!list) {
+        message = await post(all ? { all: true, was: raw, set } : { page, index, was: raw, set });
+      } else {
+        // A list: its own settings to the registry, the page's to its embed,
+        // the pin to the user's pins. The tab and Plan are said apart here:
+        // the tab is the page's (or the list's), Plan the list's.
+        const pin = set.pin;
+        delete set.pin;
+        if ('view' in set || 'plan' in set) {
+          set.view = now.view;
+          set.plan = now.plan ? 'on' : 'off';
+        }
+        const ofPage = {}, ofList = {};
+        for (const [k, v] of Object.entries(set)) (embed && PAGE_KEYS.includes(k) ? ofPage : ofList)[k] = v;
+        if (Object.keys(ofList).length) message = await post({ list, set: ofList });
+        if (!message && Object.keys(ofPage).length) message = await post({ page, index, was: raw, set: ofPage });
+        if (!message && pin !== undefined) {
+          const res = await fetch('/tasks/pin-list', {
+            method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ list, pin: pin || '0' }), redirect: 'manual',
+          });
+          if (!res.ok && res.type !== 'opaqueredirect') message = 'The pin couldn’t be changed.';
+        }
+      }
+      if (!message) {
         // The new defaults count from now: what this tab remembered goes.
         app.forgetSession();
         location.reload();
         return;
       }
-      message = (await res.json()).error || message;
-    } catch (_) {}
+    } catch (_) { message = 'The settings couldn’t be saved.'; }
     errorEl.textContent = message;
     errorEl.hidden = false;
   }
 
   // The ⋯ menu. List settings… opens the dialog. Export, Import…: the tasks this app shows (its list= and
-  // tag=), as a file (tasksapi.go apiExport, apiImport). An imported task gets
-  // the tags a new task here would, and is private where a new one is.
+  // tag=), as a file (tasksapi.go apiExport, apiImport). An imported task goes
+  // into the list shown here and gets the tags a new task here would.
   const importFile = document.getElementById('task-import-file' + sfx);
   const importDialog = document.getElementById('task-import-modal' + sfx);
   const importTitle = document.getElementById('task-import-title' + sfx);
   const importTag = document.getElementById('task-import-tag' + sfx);
   const importError = document.getElementById('task-import-error' + sfx);
-  const scope = { list: appEl.dataset.initList || '', tag: appEl.dataset.initTag || '',
+  const scope = { list: appEl.dataset.initList || '', ...(appEl.dataset.initLists ? { lists: appEl.dataset.initLists } : {}),
+                  tag: appEl.dataset.initTag || '',
                   ...(appEl.dataset.initAssignee ? { assignee: appEl.dataset.initAssignee } : {}) };
   const n = count => `${count} task${count === 1 ? '' : 's'}`;
   let picked = null;   // the file's content, while the dialog asks for the tag
@@ -277,7 +348,7 @@ export function initTaskSettings(app) {
     try {
       const res = await fetch('/api/tasks/import', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ file: picked, ...scope, new: appEl.dataset.newTags || '', also: importTag.value, private: app.initPrivate }),
+        body: JSON.stringify({ file: picked, list: scope.list, tag: scope.tag, new: appEl.dataset.newTags || '', also: importTag.value }),
       });
       const out = await res.json();
       if (res.ok) {

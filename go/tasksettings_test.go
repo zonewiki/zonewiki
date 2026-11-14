@@ -68,15 +68,15 @@ func TestSetEmbedParams(t *testing.T) {
 }
 
 func TestCheckEmbedSettings(t *testing.T) {
-	got, err := checkEmbedSettings(map[string]string{"view": " Open ", "plan": "OFF", "limit": "7", "pin": "Default",
+	got, err := checkEmbedSettings(map[string]string{"view": " Open ", "plan": "OFF", "limit": "7",
 		"new": "#a,b", "tag": "a|b", "labels": "To_buy,Cart"}, embedSettingKeys)
-	want := map[string]string{"view": "open", "plan": "off", "limit": "7", "pin": "default", "new": "a,b",
+	want := map[string]string{"view": "open", "plan": "off", "limit": "7", "new": "a,b",
 		"tag": "a|b", "labels": "To_buy,Cart"}
 	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Errorf("checkEmbedSettings = %v, %v, want %v", got, err, want)
 	}
 	for _, bad := range []map[string]string{
-		{"view": "week"}, {"plan": "maybe"}, {"limit": "0"}, {"limit": "100"}, {"limit": "x"}, {"pin": "2"},
+		{"view": "week"}, {"plan": "maybe"}, {"limit": "0"}, {"limit": "100"}, {"limit": "x"}, {"pin": "1"},
 		{"tag": "a b"}, {"tag": "a]]"}, {"labels": "a`b"}, {"keep": "1"}, {"list": "shop"},
 	} {
 		if _, err := checkEmbedSettings(bad, embedSettingKeys); err == nil {

@@ -857,6 +857,7 @@ main > .sheet > h2 { font-family: var(--serif); font-size: 1.45rem; font-weight:
 .rename-form input[type="text"],
 #modal-filter,
 .modal input[type="text"],
+.modal select,
 .login-form input {
   padding: .5rem .75rem;
   border: 1px solid var(--border);
@@ -871,6 +872,7 @@ main > .sheet > h2 { font-family: var(--serif); font-size: 1.45rem; font-weight:
 .rename-form input[type="text"]:focus,
 #modal-filter:focus,
 .modal input[type="text"]:focus,
+.modal select:focus,
 .login-form input:focus { border-color: var(--link); }
 
 /* ── New page form ─────────────────────────────────────────────────────────── */
@@ -1412,7 +1414,7 @@ html:not(.sharing) .breadcrumb > .trail-off { display: none; }
 
 .modal-label { font-size: .75rem; margin: 0; }
 
-.modal input[type="text"] { width: 100%; }
+.modal input[type="text"], .modal select { width: 100%; }
 
 .modal-actions { display: flex; gap: .5rem; justify-content: flex-end; }
 .modal-desc { font-size: .875rem; color: var(--muted); margin: 0; }
@@ -1877,6 +1879,8 @@ body.editor-page main {
 }
 .page-menu a:hover, .page-menu a:focus-visible { background: var(--code-bg); outline: none; }
 #page-menu button { display: flex; align-items: baseline; gap: 1.5rem; }
+/* A menu item that is a form's button (a list's Pin, Unpin): the form is no box of its own. */
+.page-menu-form { display: contents; }
 .modal .rename-error { margin: 0; }
 /* Move to wiki (a note's ⋯ menu) */
 .promote-field { display: flex; flex-direction: column; gap: .25rem; font-size: .8rem; color: var(--muted); }

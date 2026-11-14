@@ -64,26 +64,25 @@ until 2026-11. Who is signed in,
 opened by the **user button** at the top right on desktop (phones have Sign out in the page's top row, and both pages' links in the shortcuts dialog).
 Without users there is one pill, Wiki · Tasks · Notes.
 The Tasks link goes to your **pinned lists**,
-the lists whose embeds say `pin=1` (your own tasks, e.g. `[[tasks: list=task view=focus pin=1]]`;
-`lookupPinnedIn`, from the task list embeds' params cached per page in `metaCache`, `pin=default` first, then your private ones, then the shared ones, each A–Z by name;
-`pinnedLists()` looks them up once per request): one at `/tasks?list=<name>` with its embed's view,
-several as one task app at `/tasks?pinned=1`,
+the lists you pinned (your own tasks; a list's ⋯ menu or List settings pins it: Pins in `docs/spec/tasks.md`;
+`pinnedLists`, from your pins in the lists' registry, the wiki's when you have set none, the default list first;
+`rq.pinnedLists()` looks them up once per request): one at `/tasks?list=<name>` with its settings,
+several as one task app at `/tasks?pinned=1` (My lists),
 as the list switcher opens them;
-a single pin whose embed declares no list, its page;
 no pin, `/tasks` (`tasksLinkHref`, `moduleLinks`).
-Its counts are of the pinned lists (a task in two once).
+Its counts are of the pinned lists.
 The first pinned list is the **default list** (`defaultList()`, `lookupDefaultList()`), where New task puts a task.
-Your other lists and all tasks are one click from there, in the task app's **list switcher** (Separate lists in `docs/spec/tasks.md`).
+Your other lists and all tasks are one click from there, in the task app's **list switcher** (Lists in `docs/spec/tasks.md`).
 `/tasks` stays the view of every task that search results, task links and `g d` open.
 There is still no nav bar: the modules sit where the eye already goes.
 
-- **Current module**: `currentModule()` names each view's (`/tasks` and a pinned list's page → tasks; `/notes`, a note and its history → notes; with users a page in your own private folder, the private home included → private; `/search` and `/login` → none; everything else → wiki),
+- **Current module**: `currentModule()` names each view's (`/tasks` → tasks; `/notes`, a note and its history → notes; with users a page in your own private folder, the private home included → private; `/search` and `/login` → none; everything else → wiki),
   and `layout.html` puts it on `<body data-module>` (not in the editor).
   The server marks the matching `.module-link`s `aria-current="page"` (`moduleLinks`), so the highlight is there at first paint.
 - **Module switcher** (`switch` in `templates/partials/modules.html`, `.breadcrumb-home.module-switch`): the root of every breadcrumb, Z logo + Wiki, Tasks, and Notes; with users Wiki · Private, then Tasks · Notes (`.module-group`, one pill each).
   On desktop it is set apart from the trail as a control: bordered white pills (`--surface`) with the current module shaded, and the first separator drawn as a thin vertical divider instead of `›` (`.module-switch + .breadcrumb-sep`).
   On phones and in the editor only the logo shows (the way home).
-  The navigation trail leaves out the modules' own pages (`index`, `/notes`, `/tasks`, your private home `private/<you>/index`, the pinned lists' pages, named on the Tasks link as `data-pinned-pages`, and whatever the Tasks link points at).
+  The navigation trail leaves out the modules' own pages (`index`, `/notes`, `/tasks`, your private home `private/<you>/index`, and whatever the Tasks link points at).
   Where the row has no room for every page of the trail (a window narrower than the side columns' 1320px leaves it two or three names next to the switcher and the top actions), the oldest pages leave the row until each name left shows whole or at least 72px of it (`fitTrail`, `.trail-off`; the page itself always stays, and the pages stay in the list: a wider window shows them again).
   The trail itself is added by `js/chrome.js` from `sessionStorage` after the page is drawn, so until it has run (`.trail-ready` on the breadcrumb) `style.css` keeps the crumbs after the switcher invisible (they keep their room, so nothing jumps), showing them after a second should the script fail.
 - **Top actions** (desktop, `templates/partials/top_actions.html`, `.top-actions`, first in `<main>`): at the top right of the page,
@@ -96,12 +95,12 @@ There is still no nav bar: the modules sit where the eye already goes.
   (Until 2026-11 the row had New note and Add a task icons between the eye and Search.) The pill has a fixed width, so the row's width (`--top-actions-w`, which the breadcrumb's padding and the status badges' position use) doesn't depend on the font; its border ends on the content's right edge.
   Hidden at ≤640px.
   They replaced the round New and Search buttons in the bottom-right corner, so desktop toasts and Sign out have the bottom corners to themselves again.
-- **New task from anywhere** (`openDefaultTask` in `js/actions.js`: `c t`, and the phone's **Task** tab): the task goes to the default list, tagged as it tags new tasks (`newTaskTags`: its `list=` tag, then the single tags of `tag=`) and a keep task if it says `keep=1`.
-  On a page with a pinned list (the Pinned view included) it clicks that embed's own **+ New** (so the view's dates apply too, e.g. Focus's today);
-  anywhere else it opens a task list app's edit modal with the default list's tags,
-  keep and start (`layout.html` puts them on `<body>`: `data-tasks-tags`, `data-tasks-keep`, `data-tasks-today` when the default list's view is Focus, as its "+ New" starts tasks today there;
+- **New task from anywhere** (`openDefaultTask` in `js/actions.js`: `c t`, and the phone's **Task** tab): the task goes into the default list, tagged as it tags new tasks (`newTaskTags`: the list's `new`) and a keep task if the list says so.
+  On a page that shows the default list or My lists it clicks that embed's own **+ New** (so the view's dates apply too, e.g. Focus's today);
+  anywhere else it opens a task list app's edit modal with the default list, its tags,
+  keep and start (`layout.html` puts them on `<body>`: `data-tasks-list`, `data-tasks-tags`, `data-tasks-keep`, `data-tasks-today` when the default list's view is Focus, as its "+ New" starts tasks today there;
   without a pin, today, as `/tasks`'s Focus;
-  `openEditModal` takes `tags`, which replace the filter's even when empty, `keep` and `start_date`): the page's own task app (an embed, `/tasks`, the editor's hidden one),
+  `openEditModal` takes `list`, `tags`, which replace the filter's even when empty, `keep` and `start_date`): the page's own task app (an embed, `/tasks`, the editor's hidden one),
   or on a page without one a hidden one loaded on demand (`loadHeadlessTasks`: `GET /api/tasks/headless`, the headless embed without its scripts, then `tasks-core.js` and `tasks.js`; once per page),
   so you stay on the page and a toast says "Added “…” to your tasks".
   Should loading fail, where the Tasks link goes (or `/tasks`) opens with `?new=1`.
@@ -128,7 +127,7 @@ There is still no nav bar: the modules sit where the eye already goes.
 - **Counts**: the Tasks links (switcher and tab bar) carry two counts (`.module-counts`): tasks due today or overdue (`.module-due`, orange) and tasks in Focus (`.module-focus`, muted; `TasksCore.isFocus`: started, or due today or earlier),
   each hidden at zero,
   with a tooltip like "Tasks: 5 in Focus · 1 overdue · 1 due today".
-  `taskCounts()` counts the pinned lists' tasks, as the Pinned view shows them: each one's `list=` and `tag=` (`tagParamMatches`, the server's reading of `tag=` as tasks.js has it; a task two of them show counts once), or every task without a pin.
+  `taskCounts()` counts the pinned lists' tasks, as My lists shows them, or every task without a pin.
   The server renders them into the page (`taskCounts`, once per request, into `partials/modules.html`), since filling them in by a fetch after the page had painted made the link change width on every load (flicker);
   `refreshDueBadge` in `js/chrome.js` refreshes them from `/api/tasks/due-count` every minute while someone uses the page (`whileUsed` in `js/util.js`: a key, the pointer or a scroll since the last time; a tab nobody is at asks nothing), on tab focus, on a back/forward-cache restore and after tasks writes (`tasks.js` calls it).
   They replaced the separate due badge at the top left.
@@ -241,7 +240,7 @@ Bare-key shortcuts are suppressed when focus is inside an `input`, `textarea`, `
 |----------|---------|--------|
 | **Ctrl/⌘+P** | anywhere | Open search modal |
 | **g** then **h/n/a/t/p** | anywhere | Navigate: Home / Notes / all tasks (`/tasks`) / Tasks (its home) / your private home (with users). |
-| **c** then **n/t** | anywhere | Create: note / task in the default list (tagged as it tags new tasks). |
+| **c** then **n/t** | anywhere | Create: note / task in the default list (with the tags it gives new tasks). |
 | **F2** | editor | Toggle preview pane |
 | **Ctrl/⌘+S** | editor | Done — commit and go to page view |
 | **Ctrl/⌘+B / I / K** | editor | Bold / italic / link (see Formatting bar) |

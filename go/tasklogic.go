@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"net/http"
 	"regexp"
 	"slices"
 	"strings"
@@ -41,7 +42,42 @@ func init() {
 // closedYearsIn: the years with closed tasks in scope (a list, or ""
 // for all) that user sees, newest first; this year always.
 func closedYearsIn(user, scope string) []string {
-	return taskFiles.ClosedYears(user, func(t *Task) bool { return inScope(t, scope) })
+	lists := taskLists(user)
+	return taskFiles.ClosedYears(user, func(t *Task) bool { return inScope(t, scope, lists) })
+}
+
+// queryScope: the lists a request's ?list= (one, by its ref) or ?lists=
+// (several, "|" between) names, as inScope takes them; "" for every task.
+func queryScope(r *http.Request) string {
+	if s := strings.TrimSpace(r.URL.Query().Get("lists")); s != "" {
+		return strings.ToLower(s)
+	}
+	return cleanList(r.URL.Query().Get("list"))
+}
+
+// placeSnapshot: where a task from a snapshot (an undo's, an export's)
+// goes for user: the list it names, when user sees a list of that name
+// that is as private as the snapshot says it was; a private task whose
+// list is gone goes to user's list "private" (inbox: it has to be there),
+// any other to no list. So a snapshot never makes a shared task private
+// nor a private one shared. A private task has no assignee.
+func placeSnapshot(user string, t *Task, snap jsonObj, lists map[string]ListInfo) (inbox bool) {
+	private := jsonobj.True(snap["private"]) && privateFolder(user) != ""
+	name, _ := jsonobj.As[string](snap["list"])
+	name = cleanList(name)
+	t.List, t.Owner = "", ""
+	for _, l := range lists {
+		if name != "" && l.Name == name && l.Private() == private {
+			t.List, t.Owner = l.Name, l.Owner
+		}
+	}
+	if private && t.Owner == "" {
+		t.List, t.Owner, inbox = privateListName, user, true
+	}
+	if t.Owner != "" {
+		t.Assignee = ""
+	}
+	return inbox
 }
 
 // timestamp is the current time as tasks store it (created_at, closed_at).
@@ -137,7 +173,7 @@ func spawnRecurring(user string, task *Task, active []*Task, skip bool) *Task {
 	spawned.DueDate, spawned.StartDate = newDue, newStart
 	spawned.SortOrder, spawned.Importance = task.SortOrder, task.Importance
 	spawned.Recurrence, spawned.SpawnedFrom = nextRec, task.ID
-	spawned.Owner = task.Owner // a private series stays private
+	spawned.Owner, spawned.List = task.Owner, task.List // a series stays in its list (a private one private)
 	spawned.Assignee = task.Assignee
 	// The next occurrence carries the series' history and comments on.
 	spawned.History = append([]HistoryEntry{}, task.History...)
@@ -377,7 +413,7 @@ func renamePageRefs(rewrite func(owner, text string) string) ([]string, error) {
 // the first such link's section as written and its heading id (anchor).
 type TaskLink struct {
 	ID, Title       string
-	Tags            []string
+	List, Owner     string // the list the task is in, and whose private task it is (Task.List, Task.Owner)
 	Section, Anchor string
 }
 
@@ -409,7 +445,7 @@ func findTaskBacklinks(open []*Task, slug string) []TaskLink {
 			}
 		}
 		if found {
-			out = append(out, TaskLink{ID: t.ID, Title: t.Title, Tags: t.Tags, Section: section, Anchor: anchor})
+			out = append(out, TaskLink{ID: t.ID, Title: t.Title, List: t.List, Owner: t.Owner, Section: section, Anchor: anchor})
 		}
 	}
 	return out

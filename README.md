@@ -120,10 +120,12 @@ Done tasks go to a yearly archive. Beyond that:
   shown as a page shows it (checklists, tables, code, links), dated comments in
   Markdown too (a status line or several), a history of every date change, and undo for completing
   and deleting.
-- Separate lists, made with New list… on the Tasks page or declared on a page (`[[tasks: list=groceries keep=1]]`), with a switcher between your pinned lists, the other lists and all tasks.
-- Your own task list on a page of yours, which the Tasks module then opens, with
-  an optional limit on how much is in Focus:
-  `[[tasks: view=focus limit=8 pin=1]]`.
+- Lists: a task is in one list or in none. Make a list with New list… on the Tasks page, give it
+  its own settings (a limit on how much is in Focus, keep tasks for a shopping list's staples),
+  and show it on any page (`[[tasks: list=groceries]]`). A switcher goes between your pinned
+  lists, the other lists and all tasks.
+- Pin the lists that are your own tasks: the Tasks module then opens them, as one,
+  and new tasks go to the one you made your default list.
 - Task lists inside any page (`[[tasks: tag=work view=plan]]`), a single task inline
   as a live chip you can tick (`[[task:…]]`), and **Make task** in the editor
   to turn lines of meeting notes into tasks.
@@ -155,7 +157,7 @@ Done tasks go to a yearly archive. Beyond that:
 - **Several users** (optional, `./run.sh user add NAME`): each signs in with their own
   name and password, their changes are committed in their name, and each has
   a private folder (`private/<name>/`), private notes, private tasks
-  (a **Private** box on the task, 🔒 on its card) and their own pinned lists.
+  (the tasks in a private list of theirs, 🔒 on their cards) and their own pinned lists.
   A shared task can be assigned to a user (`@anna` in its title or its dialog);
   `@me` in the filter, or a page with `[[tasks: assignee=me]]`, shows everyone their own.
   Everything else is shared. Each has a role: **admin** (the first user;

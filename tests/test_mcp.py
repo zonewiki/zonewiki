@@ -16,7 +16,7 @@ import textwrap
 import pytest
 
 from tests import settings
-from tests.conftest import HOST, content_hash, write_page
+from tests.conftest import HOST, content_hash, list_page, make_list, write_page
 from tests.semantic import make_index
 
 
@@ -58,11 +58,11 @@ class TestToolDefinitions:
             "search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links",
             "list_tags", "history", "zone_help", "read_guides", "read_file",
             "write_page", "edit_page", "replace_in_pages", "append_to_page", "file_note", "upload_file", "rename_page",
-            "delete_page", "restore_page", "rename_task_tag", "create_task", "update_task"]
+            "delete_page", "restore_page", "rename_task_tag", "create_task_list", "create_task", "update_task"]
         reading = {"search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links",
                    "list_tags", "history", "zone_help", "read_guides", "read_file"}
         assert all(t["annotations"]["readOnlyHint"] == (t["name"] in reading) for t in tools)
-        adding = {"append_to_page", "create_task", "upload_file"}
+        adding = {"append_to_page", "create_task", "create_task_list", "upload_file"}
         assert all(t["annotations"]["destructiveHint"] == (t["name"] not in adding)
                    for t in tools if t["name"] not in reading)
         assert all(t["inputSchema"]["type"] == "object" for t in tools)
@@ -71,7 +71,7 @@ class TestToolDefinitions:
         # Every session loads them all. Parameters many tools share keep
         # short descriptions; read_guides explains the gate once.
         tools = {t["name"]: t for t in self.tools(client)}
-        assert len(json.dumps(list(tools.values()))) < 27500
+        assert len(json.dumps(list(tools.values()))) < 28300
         props = tools["write_page"]["inputSchema"]["properties"]
         assert len(props["summary"]["description"]) < 100 and len(props["guides"]["description"]) < 100
         assert "refused until its id" in tools["read_guides"]["description"]
@@ -463,12 +463,16 @@ class TestSearchTasks:
         assert "1 matching tasks" in text and "Write the importer" in text
 
     def test_list_label_and_link(self, client, wiki_dir):
-        (wiki_dir / "shop.md").write_text("# Shop\n\n[[tasks: list=groceries]]\n", encoding="utf-8")
-        task(client, title="Milk", tags=["groceries"])
-        task(client, title="Main task")
-        text, _ = call(client, "search_tasks", tag="groceries")
-        assert "Task: Milk" in text and "list: groceries" in text and "Main tasks" not in text
+        assert "Created the list #groceries" in call(client, "create_task_list", name="Groceries")[0]
+        task(client, title="Milk", list="groceries")
+        task(client, title="Main task", tags=["groceries"])     # a tag of that name: not in the list
+        text, _ = call(client, "search_tasks", list="Groceries")
+        assert "Task: Milk" in text and "list: groceries" in text and "Main task" not in text
         assert "list=groceries" in text
+        text, _ = call(client, "search_tasks", tag="groceries")
+        assert "Task: Main task" in text and "Task: Milk" not in text
+        text, err = call(client, "search_tasks", list="nosuch")
+        assert err and "No list #nosuch" in text
 
     def test_repeat_keep_and_start(self, client, wiki_dir):
         task(client, title="Water plants", start_date="2026-10-04", due_date="2026-10-06",
@@ -590,10 +594,10 @@ class TestListPages:
     def test_orphans(self, client, pages):
         write_page(pages, "a", "# A\n\n[[golf]]\n")
         write_page(pages, "2026-10-08_14-03-11_idea", "# Idea\n")       # a note
-        write_page(pages, "tasks", "# Tasks\n\n[[tasks: pin=1]]\n")     # the default list
+        write_page(pages, "tasks", "# Tasks\n\n[[tasks:]]\n")           # a page with a task list is a page like any other
         text, err = call(client, "list_pages", orphans=True)
         assert not err and text.startswith("Pages no other page links to")
-        assert sorted(line.split(" | ")[0] for line in text.splitlines()[1:]) == ["a", "git-remote"]
+        assert sorted(line.split(" | ")[0] for line in text.splitlines()[1:]) == ["a", "git-remote", "tasks"]
         assert call(client, "list_pages", orphans=True, under="golf")[0] == \
             "Every page under golf/ is linked from another page."
         assert call(client, "list_pages", orphans="yes")[1]
@@ -822,14 +826,17 @@ class TestListTags:
     def test_pages_and_tasks_most_used_first(self, client, pages):
         write_page(pages, "a", "---\ntags: [Backend, infra]\n---\n# A\n")
         write_page(pages, "b", "---\ntags: backend\n---\n# B\n")
-        write_page(pages, "shop", "# Shop\n\n[[tasks: list=shopping]]\n")
+        list_page(client, pages, "shop", "# Shop\n\n[[tasks: list=shopping pin=1]]\n")
+        make_list(client, "work", headers=HOST)
         task(client, title="t1", tags=["backend"])
         close(client, task(client, title="t2", tags=["backend", "infra"])["id"], completed=True)
-        task(client, title="milk", tags=["shopping"])
+        task(client, title="milk", list="shopping", tags=["shopping"])      # a tag may be called as a list is
         text, err = call(client, "list_tags")
         assert not err
-        assert text.splitlines()[1:] == ["backend | 2 | 1 | 1", "infra | 1 | 0 | 1",
-                                         "shopping (a list) | 0 | 1 | 0"]
+        # The tags, then the lists apart: a list is where a task is, no tag.
+        assert text.splitlines()[1:] == ["backend | 2 | 1 | 1", "infra | 1 | 0 | 1", "shopping | 0 | 1 | 0", "",
+                                         "Task lists (a task is in one list or in none: its list, not a tag):",
+                                         "- shopping (1 open; the default list, where a new task goes)", "- work (0 open)"]
 
     def test_none(self, client, pages):
         assert call(client, "list_tags")[0].startswith("No tags yet")
@@ -1776,15 +1783,37 @@ class TestCreateTask:
         assert f"due: {friday}" in call(client, "update_task", id=tid, due="Fri")[0]
 
     def test_new_tasks_get_the_tasks_homes_tags(self, client, wiki_dir):
-        # The home tasks shows list=task: a task without the tag wasn't in it.
-        write_page(wiki_dir, "my-tasks", "# My tasks\n\n[[tasks: list=task tag=work view=focus pin=1]]\n")
-        write_page(wiki_dir, "shop", "[[tasks: list=groceries]]\n")
-        assert "tags: #task #work" in call(client, "create_task", title="Report")[0]
-        assert "tags: #task #work #urgent" in call(client, "create_task", title="Fix", tags=["urgent"])[0]
-        assert "tags: #task #work #x" in call(client, "create_task", title="Y", tags="x")[0]
-        # Filed in another list: just its tags.
-        text = call(client, "create_task", title="Milk", tags=["Groceries"])[0]
-        assert "tags: #Groceries" in text and "#task" not in text
+        # A new task goes into the user's default list, with the tags it gives new tasks.
+        list_page(client, wiki_dir, "my-tasks", "# My tasks\n\n[[tasks: list=task new=work view=focus pin=1]]\n")
+        make_list(client, "groceries", headers=HOST)
+        text = call(client, "create_task", title="Report")[0]
+        assert "tags: #work" in text and "list: task" in text and "list=task" in text
+        assert "tags: #work #urgent" in call(client, "create_task", title="Fix", tags=["urgent"])[0]
+        assert "tags: #work #x" in call(client, "create_task", title="Y", tags="x")[0]
+        # Put in another list, or in none: just its tags.
+        text = call(client, "create_task", title="Milk", list="Groceries", tags=["weekly"])[0]
+        assert "tags: #weekly" in text and "list: groceries" in text and "#work" not in text
+        text = call(client, "create_task", title="Loose", list="")[0]
+        assert "list:" not in text and "#work" not in text
+        # A list's name as a tag is a tag; a list that isn't there is said.
+        text = call(client, "create_task", title="Tagged", tags=["groceries"])[0]
+        assert "tags: #work #groceries" in text and "list: task" in text
+        text, err = call(client, "create_task", title="Nowhere", list="nosuch")
+        assert err and "No list #nosuch" in text
+        # Moved with update_task.
+        tid = _task_id(call(client, "create_task", title="Moves")[0])
+        assert "list: groceries" in call(client, "update_task", id=tid, list="groceries")[0]
+        assert "list:" not in call(client, "update_task", id=tid, list="")[0]
+
+    def test_a_task_list_is_made_once(self, client, wiki_dir):
+        text, err = call(client, "create_task_list", name="#Shop runs", summary="for the weekend")
+        assert not err and "Created the list #shop-runs (shared" in text and "/tasks?list=shop-runs" in text
+        assert '{"name": "shop-runs"}' in (wiki_dir / "_tasks/lists.json").read_text()
+        text, err = call(client, "create_task_list", name="shop-runs")
+        assert err and "There is a list #shop-runs already" in text
+        assert call(client, "create_task_list", name="a,b")[1] and call(client, "create_task_list", name=" ")[1]
+        # Without users there is nobody for a list to be private to.
+        assert call(client, "create_task_list", name="mine", private=True)[1]
 
     def test_bad_input_is_a_tool_error(self, client, wiki_dir):
         text, err = call(client, "create_task", title="x", due="next week")

@@ -102,9 +102,9 @@ func renameInFilter(raw, old, name string) string {
 	})
 }
 
-// embedUsesTag: an embed names the tag old (lowercase) in list=, tag= or new=.
+// embedUsesTag: an embed names the tag old (lowercase) in tag= or new=.
 func embedUsesTag(p TasksParams, old string) bool {
-	return cleanList(p.Get("list")) == old || renameInFilter(p.Get("tag"), old, "\x00") != p.Get("tag") ||
+	return renameInFilter(p.Get("tag"), old, "\x00") != p.Get("tag") ||
 		renameInFilter(p.Get("new"), old, "\x00") != p.Get("new")
 }
 
@@ -115,8 +115,6 @@ func renameInEmbed(args, old, name string) string {
 		k, v, ok := strings.Cut(word, "=")
 		switch key := strings.ToLower(k); {
 		case !ok:
-		case key == "list" && cleanList(v) == old:
-			return k + "=" + cleanList(name)
 		case key == "tag" || key == "new":
 			return k + "=" + renameInFilter(v, old, name)
 		}
@@ -125,7 +123,7 @@ func renameInEmbed(args, old, name string) string {
 }
 
 // renameInTasksURL: a link's query with the tag old (lowercase) renamed in
-// list= and tag=; the other params as written.
+// tag=; the other params as written.
 func renameInTasksURL(query, old, name string) string {
 	parts := strings.Split(query, "&")
 	for i, part := range parts {
@@ -135,10 +133,7 @@ func renameInTasksURL(query, old, name string) string {
 			continue
 		}
 		renamed := value
-		switch {
-		case k == "list" && cleanList(value) == old:
-			renamed = cleanList(name)
-		case k == "tag":
+		if k == "tag" {
 			renamed = renameInFilter(value, old, name)
 		}
 		if renamed != value {
@@ -164,12 +159,12 @@ func renameTagInText(text, old, name string) string {
 	return mdtext.UnmaskCode(masked, stash)
 }
 
-// The params the settings dialog sets (js/tasksettings.js), in the order
-// new ones are written; those of All tasks, which has no filter and no pin.
+// The params the settings dialog sets on an embed (js/tasksettings.js), in
+// the order new ones are written; those of All tasks, which has no filter.
 // Not list=: which list an embed shows is the page's to say, and a list is
-// renamed by renameTagOp.
+// renamed by renameListOp. A list's own settings are listSettingKeys.
 var (
-	embedSettingKeys = []string{"tag", "assignee", "new", "view", "plan", "limit", "labels", "pin"}
+	embedSettingKeys = []string{"tag", "assignee", "new", "view", "plan", "limit", "labels"}
 	allSettingKeys   = []string{"new", "view", "plan", "limit", "labels"}
 	embedValueRE     = regexp.MustCompile(`^[^\[\]` + "`" + `]*$`)
 )
@@ -205,10 +200,11 @@ func checkEmbedSettings(set map[string]string, keys []string) (map[string]string
 				if n, err := strconv.Atoi(v); err != nil || n < 1 || n > 99 {
 					return nil, refuse("The limit is a number from 1 to 99")
 				}
-			case "pin":
-				if v = strings.ToLower(v); v != "1" && v != "default" {
+			case "keep", "noshare":
+				if !isTrue(v) {
 					return nil, bad()
 				}
+				v = "1"
 			case "new":
 				v = strings.Join(taskmodel.CleanTags(strings.Split(v, ",")), ",")
 			case "assignee":
@@ -406,24 +402,14 @@ func assigneeParamMatches(t *Task, raw, user string) bool {
 	return true
 }
 
-// newTaskAssignee: who a new task is assigned to in an embed with these
-// params, for user: the one user assignee= names (me: user), if a task can
-// be assigned to them; "" for several (a|b), none or an exclusion.
-func newTaskAssignee(p TasksParams, user string) string {
-	name := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(p.Get("assignee"))), "@")
-	if name == "me" {
-		name = user
-	}
-	if !settings().assignable(name) {
-		return ""
-	}
-	return name
-}
-
-// newTaskTags: the tags a new task gets in an embed with these params: the
-// list= tag, then the single tags of tag= (not an a|b group, not -tag).
+// newTaskTags: the tags a new task gets in an embed with these params:
+// those of new=, else the single tags of tag= (not an a|b group, not -tag).
+// Its list is no tag: the task is in it (Task.List).
 func newTaskTags(p TasksParams) []string {
-	tags := []string{cleanList(p.Get("list"))}
+	if tags := taskmodel.CleanTags(strings.Split(p.Get("new"), ",")); len(tags) > 0 {
+		return tags
+	}
+	var tags []string
 	if raw := strings.TrimSpace(p.Get("tag")); raw != "" && !strings.Contains(raw, "|") {
 		for _, t := range strings.Split(raw, ",") {
 			if t = strings.TrimSpace(t); !strings.HasPrefix(t, "-") {
@@ -488,12 +474,6 @@ func parseDay(s string) (time.Time, bool) {
 func today() time.Time {
 	n := now()
 	return time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, time.Local)
-}
-
-// inScope: a task belongs to a task list view: scope is a list name (its tasks)
-// or "" for every task.
-func inScope(t *Task, scope string) bool {
-	return scope == "" || taskTagsLower(t)[scope]
 }
 
 // shortIDLen: [[task:…]] names a task by this many characters of its id.

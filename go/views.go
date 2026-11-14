@@ -158,7 +158,7 @@ func (rq *Req) taskCounts() TaskCounts {
 
 // tasksLinkHref: where the Tasks links go: the pinned lists, as the list
 // switcher opens them: several as one (/tasks?pinned=1), one at
-// /tasks?list=, a single pin without a list its page; none pinned, /tasks.
+// /tasks?list=; none pinned, /tasks.
 func (rq *Req) tasksLinkHref() string {
 	pinned := rq.pinnedLists()
 	switch {
@@ -167,10 +167,7 @@ func (rq *Req) tasksLinkHref() string {
 	case len(pinned) == 0:
 		return "/tasks"
 	}
-	if l := cleanList(pinned[0].Params.Get("list")); l != "" {
-		return "/tasks?list=" + url.QueryEscape(l)
-	}
-	return pathURL("page", pinned[0].Slug)
+	return listHref(pinned[0].Ref)
 }
 
 // moduleLinks: the module links (where each goes, whether it is the current
@@ -179,8 +176,7 @@ func (rq *Req) tasksLinkHref() string {
 // own, and the list ends with the user menu ("menu": who is signed in, Sign
 // out; the desktop's user button).
 // moduleLink: a module's link in the breadcrumb's switcher and the phone's
-// tab bar. Counts: the Tasks link's (nil for the others); PinnedPages: the
-// pinned lists' pages, space-separated; Own: only the user sees what is
+// tab bar. Counts: the Tasks link's (nil for the others); Own: only the user sees what is
 // behind it (Private, Notes with users); Menu: not a link but the Account
 // entry that stands for the user menu (with users).
 type moduleLink struct {
@@ -189,7 +185,6 @@ type moduleLink struct {
 	Counts           *TaskCounts
 	Group            int
 	Own              bool
-	PinnedPages      string
 	Menu             bool
 }
 
@@ -218,12 +213,6 @@ func moduleLinks(rq *Req) []moduleLink {
 		if m[0] == "tasks" {
 			counts := rq.taskCounts()
 			link.Counts = &counts
-			// The pinned lists' pages, no stops in the navigation trail (js/chrome.js).
-			var slugs []string
-			for _, h := range rq.pinnedLists() {
-				slugs = append(slugs, h.Slug)
-			}
-			link.PinnedPages = strings.Join(slugs, " ")
 		}
 		out = append(out, link)
 	}
@@ -260,10 +249,6 @@ func currentModule(rq *Req) string {
 	}
 	if m != nil && isQuicknote(m[1]) {
 		return "notes"
-	}
-	// (Not for a public wiki's visitor, who has no Tasks module.)
-	if strings.HasPrefix(p, "/page/") && m != nil && rq.who() != visitor && rq.isPinnedPage(m[1]) {
-		return "tasks"
 	}
 	if m != nil && ownPrivate(rq.who(), m[1]) {
 		return "private"
@@ -338,11 +323,10 @@ type pageShell struct {
 }
 
 // tasksNew: how a new task from any page (c t, New task) starts, as the
-// default list makes them.
-// Assignee: who the default list's assignee= gives a new task.
+// default list makes them: in that list (List, its ref), with its tags.
 type tasksNew struct {
-	Tags, Assignee       string
-	Keep, Today, Private bool
+	List, Tags  string
+	Keep, Today bool
 }
 
 // view: what every view's data embeds, its fields the template's; page
@@ -384,8 +368,8 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 			// Its "+ New" on Focus (its view, or the default) starts the task
 			// today; elsewhere a new task has no start date.
 			v := embedView(def.Params)
-			sh.TasksNew = &tasksNew{Tags: strings.Join(newTaskTags(def.Params), ","), Assignee: newTaskAssignee(def.Params, rq.user),
-				Keep: isTrue(def.Params.Get("keep")), Today: v == "" || v == "focus", Private: rq.defaultPrivate()}
+			sh.TasksNew = &tasksNew{List: def.Ref, Tags: strings.Join(newTaskTags(def.Params), ","),
+				Keep: isTrue(def.Params.Get("keep")), Today: v == "" || v == "focus"}
 		}
 	}
 	if sh.ShowActions {
@@ -468,8 +452,8 @@ type linkSection struct {
 }
 
 // linkSections: the sections at a page's end (and in the right column):
-// Backlinks and Linked tasks. prefer: the lists the page declares.
-func linkSections(rq *Req, backlinks []PageRef, tasks []TaskLink, prefer []string) []linkSection {
+// Backlinks and Linked tasks.
+func linkSections(rq *Req, backlinks []PageRef, tasks []TaskLink) []linkSection {
 	var sections []linkSection
 	if len(backlinks) > 0 {
 		sections = append(sections, linkSection{ID: "backlinks", Heading: "Backlinks", Links: pageLinks(backlinks)})
@@ -478,7 +462,7 @@ func linkSections(rq *Req, backlinks []PageRef, tasks []TaskLink, prefer []strin
 		lists := rq.taskLists()
 		var links []pageLink
 		for _, t := range tasks {
-			links = append(links, pageLink{Href: taskHref(t.ID, "open", linkList(taskLinkObj(t), prefer, lists), ""),
+			links = append(links, pageLink{Href: taskHref(t.ID, "open", taskList(taskLinkObj(t), lists), ""),
 				Title: mdtext.PlainTaskTitle(t.Title), Section: t.Section, Anchor: t.Anchor})
 		}
 		sections = append(sections, linkSection{ID: "task-backlinks", Heading: "Linked tasks", Links: links})

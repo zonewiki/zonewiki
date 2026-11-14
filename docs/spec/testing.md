@@ -11,6 +11,7 @@ The rules (run it, add tests with every change) are in `AGENTS.md`.
 plus helpers that modules import from `tests.conftest`: `HOST`,
 `write_page`,
 `create_task`,
+`make_list` (a task list, made as New list… makes it) and `list_page` (`write_page`, plus the lists the page's `[[tasks: list=…]]` embeds show, made through the browser's routes with the embed's list settings, and pinned as a `pin=` there says: a page no longer makes or pins a list, so `pin=` in a test's page is this helper's to read, not Zone's; the browser tests have both in `tests/e2e/conftest.py`, taking the page),
 `content_hash`,
 `section_fields` (the editor's hidden fields for a section, read from its `/edit` page),
 `preview` (markdown as `/api/preview` renders it),
@@ -107,9 +108,10 @@ It also keeps the notices current: `THIRD_PARTY_LICENSES` names the pinned Go, G
 
 `tests/test_env_example.py` checks `.env.example` against the settings the source, `run.sh` and `compose.yaml` read (none missing, none unknown; the variables of settings that moved into the settings file, which the code names only to refuse and import them, don't count).
 
-`tests/test_page_writes.py`'s rename-tag tests cover renaming a list or tag through both doors (tasks, archives, embeds and links in one commit; refusals; asking before a merge; text not yet in git; a corrupt tasks file writing nothing),
+`tests/test_page_writes.py`'s rename-tag tests cover renaming a tag through both doors (tasks, archives, embeds and links in one commit, a list of that name left alone; refusals; asking before a merge; text not yet in git; a corrupt tasks file writing nothing),
+its list tests New list… (a registry entry and no page), a list's rename (its tasks, the pins, the pages' embeds and links in one commit, a tag of that name left alone; its dialog's refusals; text not yet in git; a corrupt tasks file writing nothing), Delete… (its tasks moved, the pages' embeds saying there is no such list) and the pin's commits,
 `tests/test_privacy.py` what it does across users,
-`TestRenameTagInText` in `go/pages_test.go` the rewriting of text,
+`TestRenameTagInText` and `TestRenameListInText` in `go/pages_test.go` the rewriting of text,
 and `test_rename_list_dialog` in `tests/e2e/test_tasks.py` the dialog.
 
 `TestInitialTasks` in `tests/test_tasks_embed.py` covers the tasks a page brings along (what the API would answer, once a page, a task's text not ending the block, none in a preview),
@@ -356,6 +358,8 @@ Without Playwright installed they skip, so plain `pytest tests/` is unaffected.
   `test_security.py` also has what only a browser shows of the other rules: an iframe's `srcdoc` never frames a form, and a task's id is text on its card, not an element.
   Under that policy Playwright can't `eval` in the page: `page.wait_for_function` needs a function (`"() => scrollY > 0"`), as an expression string is evaluated with `eval`; `page.evaluate` works either way.
 
+`go/tasklists_test.go` covers lists as places: the migration at start (lists and pins taken over from pages, each task given its list, per user with private and shared lists of one name, a wiki with nothing to take over, one that can't be read), a list's name, a task going into a list and the rules of private lists (`applyList`), rename, delete and share with their tasks, pins per user, a list's settings, and where an undo's or an import's task goes (`placeSnapshot`).
+`go/internal/taskfiles/lists_test.go` covers the registry file: its format read back as written, a hand-edited one read leniently, each owner's own, who may write it, an unreadable one refusing a write, and a task's `list` in its file.
 `go/internal/taskfiles/taskfiles_test.go` covers the task files on a temp folder, without a wiki or a server: a write filed by owner and year in one commit and an unchanged one committing nothing, what each user reads, the Closed view by year and its years, a corrupt file refusing the write and staying as it is, who may write (`MayWrite`, a task of another user's refused), and the archive at start.
 `go/internal/atomicfile` has the atomic write's (a new file's mode, an old one's kept, a link written through).
 

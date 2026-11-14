@@ -104,9 +104,10 @@ const cancelBtn = document.getElementById('task-edit-cancel' + sfx);
 const wontDoBtn = document.getElementById('task-edit-wontdo' + sfx);
 const recTypeSelect = document.getElementById('task-edit-rec-type' + sfx);
 const keepCb = document.getElementById('task-edit-keep' + sfx);
-// With users only: the task is the user's alone.
-const privateCb = document.getElementById('task-edit-private' + sfx);
-const privateNote = document.getElementById('task-edit-private-note' + sfx);
+// The list the task is in (a private list's tasks are the user's alone),
+// and the line that says who sees it.
+const listSelect = document.getElementById('task-edit-list' + sfx);
+const listNote = document.getElementById('task-edit-list-note' + sfx);
 const deadlineModal = document.getElementById('task-deadline-modal' + sfx);
 const deadlineTextEl = document.getElementById('task-deadline-text' + sfx);
 const selBar = document.getElementById('task-selbar' + sfx);
@@ -120,13 +121,13 @@ if (!listEl) return;
 const app = {
   st, appEl,
   listEl, sfx, instanceId, cancelBtn, deadlineModal, deadlineTextEl, selBar, tasksInstances,
-  addBtn, modal, form, wontDoBtn, recTypeSelect, keepCb, privateCb, privateNote,
+  addBtn, modal, form, wontDoBtn, recTypeSelect, keepCb, listSelect, listNote,
 
   // its functions
   boardDivider, clearBoardDropOver, dropOnBucket, planOnDay,
   taskList,
   filterTasks, boardBuckets,
-  refreshOtherInstances, listTooltip, inScope,
+  refreshOtherInstances, listTooltip, inScope, listName, editPrivate, newTaskList,
 
   flashTask,
 
@@ -139,7 +140,8 @@ const app = {
   get activeTasksInstance() { return activeTasksInstance; },
   get listSet() { return listSet; },
   get initKeep() { return initKeep; },
-  get initPrivate() { return initPrivate; },
+  get privateLists() { return privateLists; },
+  get listChoices() { return listChoices; },
   get titleInput() { return titleInput; },
   get descTextarea() { return descTextarea; },
   get pendingCompletions() { return pendingCompletions; },
@@ -325,23 +327,28 @@ const initAssignee = document.body.dataset.users === '1'
 // WIP limit: Focus warns and Plan flags a day at >= LIMIT tasks. Off unless
 // set: [[tasks: limit=N]], or ?limit=N (the built-in /tasks page has no embed).
 const LIMIT = parseInt(appEl?.dataset.initLimit || urlParams.get('limit'), 10) || null;
-// Separate lists: a list is a tag that a page declares with
-// [[tasks: list=<tag>]]. That embed (and /tasks?list=<tag>) shows the tasks
-// carrying the tag, whose filter chip is locked there (new tasks get it;
-// a task's own tags stay editable, so a task can move to another list).
-// Elsewhere a list's tag is marked as a list but otherwise a tag: the main
-// tasks and tag embeds show list tasks like any other.
+// Lists: a list is a place a task is in (its `list`; one, or none). A view
+// of a list ([[tasks: list=<name>]], /tasks?list=) shows its tasks, and a
+// new task there goes into it; the pinned lists as one (data-init-lists)
+// show the tasks of any of them. Elsewhere (all tasks, a tag's embed) every
+// task shows, with its list as a chip. The lists come as refs: a list's
+// name, or shared/<name> for the shared one beside the user's own list of
+// that name; data-lists has those the user sees, with which are private
+// (theirs alone, and so are the tasks in them).
 const initList = cleanList(appEl?.dataset.initList);
-let declaredLists = [];
-try { declaredLists = JSON.parse(appEl?.dataset.lists || '[]'); } catch (_) {}
-const listSet = new Set(declaredLists);
-let listHomes = {};   // list name → its home page's title
-try { listHomes = JSON.parse(appEl?.dataset.listHomes || '{}'); } catch (_) {}
-// The tooltip of a list's tag (cards, filter and Tags chips): its page.
-function listTooltip(name) {
-  const n = String(name).replace(/^-?#/, '').toLowerCase();
-  const home = listHomes[n];
-  return home ? `List: ${home}` : 'List';
+const initLists = (appEl?.dataset.initLists || '').split('|').filter(Boolean);
+let listChoices = [];
+try { listChoices = JSON.parse(appEl?.dataset.lists || '[]'); } catch (_) {}
+const listSet = new Set(listChoices.map(l => l.ref));
+const privateLists = new Set(listChoices.filter(l => l.private).map(l => l.ref));
+// The user's default list: where a new task goes in a view of no one list.
+const defaultList = appEl?.dataset.defaultList || '';
+// A list's name, as its chip and the dialogs show it.
+function listName(ref) { return String(ref).replace(/^shared\//, ''); }
+// The tooltip of a list's chip (cards, the filter).
+function listTooltip(ref) {
+  const r = String(ref).replace(/^-?list:/, '').toLowerCase();
+  return privateLists.has(r) ? 'List (private: only you see it)' : 'List';
 }
 // The tabs' names: Open/Plan/Focus, or an embed's own (`labels=`, rendered
 // into the tab buttons by templates/partials/tasks_embed.html, so they are
@@ -349,8 +356,6 @@ function listTooltip(name) {
 const tabLabel = view => tabsEl.querySelector(`[data-view="${view === 'plan' ? 'open' : view}"]`)?.textContent.trim() || view;
 // [[tasks: keep=1]]: new tasks are keep tasks (a shopping list of staples).
 const initKeep = appEl?.dataset.initKeep === '1';
-// An embed on a page in the user's private folder: new tasks are private.
-const initPrivate = appEl?.dataset.initPrivate === '1';
 Object.assign(app, initTaskView(app));
 const { toggleFold, unfoldFor, activeSort, applySort, groupKey, applyGroup, expandSelected } = app;
 
@@ -358,17 +363,28 @@ function cleanList(name) {
   return String(name || '').trim().replace(/^#/, '').trim().toLowerCase()
     .replace(/\s+/g, '-').replace(/^-+|-+$/g, '');
 }
-const lowerTags = t => (t.tags || []).map(x => x.toLowerCase());
-// The separate list a task belongs to (taskList in go/pages.go): the first A–Z
-// of its tags that is a declared list.
-function taskList(t) { return lowerTags(t).filter(x => listSet.has(x)).sort()[0] || null; }
+// The list a task is in, as a ref (taskList in go/tasklists.go): its `list`
+// names it, and `private` says which of two lists of one name; null for
+// none (and for a list this user doesn't see).
+function taskList(t) {
+  if (!t.list) return null;
+  const ref = !t.private && listSet.has('shared/' + t.list) ? 'shared/' + t.list : t.list;
+  return listSet.has(ref) && privateLists.has(ref) === !!t.private ? ref : null;
+}
 function inScope(t) {
-  return !initList || lowerTags(t).includes(initList);
+  if (initLists.length) return initLists.includes(taskList(t));
+  return !initList || taskList(t) === initList;
 }
 // The scope of the server's closed counts, matching inScope.
 function scopeQuery() {
-  return initList ? `?list=${encodeURIComponent(initList)}` : '';
+  return initLists.length ? `?lists=${encodeURIComponent(initLists.join('|'))}`
+    : initList ? `?list=${encodeURIComponent(initList)}` : '';
 }
+// The list a new task starts in here: the view's own, else the default list.
+function newTaskList() { return initList || defaultList; }
+// The edit modal's List field names a private list: the task is (or will
+// be) the user's alone.
+function editPrivate() { return privateLists.has(listSelect?.value || ''); }
 // ?view= / [[tasks: view=…]] pick the tab.
 const urlView = urlParams.get('view') || '';   // explicit per-navigation override
 const embedView = appEl?.dataset.initView || '';   // [[tasks: view=…]] — always wins when specified
@@ -438,7 +454,7 @@ const titleInput = document.getElementById('task-edit-title' + sfx);
 const descTextarea = document.getElementById('task-edit-desc' + sfx);
 if (titleInput) {
   // A private task's title may link private pages, a shared one's not.
-  linkAutocomplete(titleInput, { page: () => privateCb?.checked ? 'private/task' : '' });
+  linkAutocomplete(titleInput, { page: () => editPrivate() ? 'private/task' : '' });
   // Pasting a URL asks for its name, as in the notes and the editor
   // (pasteUrlAsLink): [name](url), shown as a link on the card.
   titleInput.addEventListener('paste', e => pasteUrlAsLink(titleInput, e));

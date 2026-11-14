@@ -366,7 +366,8 @@ class TestMakeShared:
         links = "[[private/alice/ideas]] [[private/alice/ideas|Our ideas]] [x](/page/private/alice/ideas) `[[private/alice/ideas]]`\n"
         (git_wiki_dir / "private/alice/diary.md").write_text("# Diary\n\n" + links)
         (git_wiki_dir / "plans.md").write_text("# Plans\n\n" + links)
-        mine = alice.post("/api/tasks", json={"title": "Think about [[private/alice/ideas]]", "private": True}).get_json()["id"]
+        alice.post("/tasks/new-list", data={"name": "own", "private": "1"}, headers=HOST)
+        mine = alice.post("/api/tasks", json={"title": "Think about [[private/alice/ideas]]", "list": "own"}).get_json()["id"]
         alice.post("/rename/private/alice/ideas", data={"from": "page", "new_name": "shared-ideas"}, headers=HOST)
         want = "# {}\n\n[[shared-ideas]] [[shared-ideas|Our ideas]] [x](/page/shared-ideas) `[[private/alice/ideas]]`\n"
         assert (git_wiki_dir / "private/alice/diary.md").read_text() == want.format("Diary")

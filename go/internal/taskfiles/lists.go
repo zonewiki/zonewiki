@@ -45,6 +45,7 @@ type Registry struct {
 	Version int
 	Lists   []*List
 	Pinned  []string          // the pinned lists' names, in order
+	PinsSet bool              // the file says which are pinned, be it none ("pinned": [])
 	Default string            // the default list: where a new task goes
 	All     map[string]string // the settings of All tasks (the shared registry)
 	Extra   map[string]json.RawMessage
@@ -82,7 +83,7 @@ func ParseRegistry(raw []byte) (*Registry, bool) {
 	if !ok {
 		return nil, false
 	}
-	r := &Registry{Default: listName(o.Str("default")), All: textMap(o["all"])}
+	r := &Registry{Default: listName(o.Str("default")), All: textMap(o["all"]), PinsSet: o.Has("pinned")}
 	if n, ok := jsonobj.WholeNumber(o["version"]); ok && n > 0 {
 		r.Version = n
 	}
@@ -194,6 +195,8 @@ func (r *Registry) Encode() string {
 	if len(r.Pinned) > 0 {
 		b.WriteString(",\n  \"pinned\": ")
 		b.WriteString(strings.ReplaceAll(jsonobj.Text(r.Pinned), ",", ", "))
+	} else if r.PinsSet {
+		b.WriteString(",\n  \"pinned\": []")
 	}
 	if r.Default != "" {
 		b.WriteString(",\n  \"default\": ")

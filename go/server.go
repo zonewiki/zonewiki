@@ -173,6 +173,7 @@ func main() {
 	ensureHomePage()
 	cleanLeftDrafts()
 	taskFiles.ArchiveOldClosed()
+	migrateLists() // lists as places: taken over from the pages, once (listsmigrate.go)
 	// The semantic index's worker reads tasks: after the task files are set up.
 	if *semanticTest != "" {
 		if semantic, err = semanticForTest(*semanticTest); err != nil {

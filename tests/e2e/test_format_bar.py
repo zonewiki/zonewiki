@@ -4,7 +4,7 @@ import re
 
 from playwright.sync_api import expect
 
-from conftest import TOUCH_PHONE
+from conftest import TOUCH_PHONE, make_list
 from tests import settings
 
 
@@ -210,9 +210,10 @@ def _list_dialog(page):
 
 
 def test_task_list_asks_what_the_list_shows_and_writes_the_embed(page, wiki):
-    # The Task list button shows the dialog a list's ⋯ menu shows, with List
-    # and keep, and writes the line it makes.
-    wiki.write("lists", "# Lists\n\n[[tasks: list=shop]]\n")
+    # The Task list button shows the dialog a list's ⋯ menu shows, with which
+    # list the embed shows, and writes the line it makes. (A pin is no
+    # param: a list is pinned on the Tasks page, by whoever pins it.)
+    make_list(page, "shop")
     textarea = _edit(page, wiki, "Shopping", 8)
     _click(page, "tasklist")
     dialog, field = _list_dialog(page)
@@ -231,13 +232,12 @@ def test_task_list_asks_what_the_list_shows_and_writes_the_embed(page, wiki):
     field("limit").fill("5")
     more("Keep tasks").click()                                        # a box: asked for, it is ticked
     expect(field("keep")).to_be_checked()
-    field("pin-btn").click()                                          # the pin is a button
-    expect(field("pin-btn")).to_have_attribute("aria-pressed", "true")
+    expect(dialog.locator(".task-settings-pin")).to_have_count(0)
     more("Filter by tag").click()
     field("tag").fill("urgent, -later")
     more("Tab names").click()
     field("label-open").fill("To buy")
-    line = "[[tasks: list=garden-work view=open labels=To_buy limit=5 pin=1 tag=urgent,-later keep=1]]"
+    line = "[[tasks: list=garden-work view=open labels=To_buy limit=5 tag=urgent,-later keep=1]]"
     expect(field("where")).to_have_text(line)
     dialog.get_by_role("button", name="Insert").click()
     expect(dialog).to_be_hidden()
@@ -271,7 +271,8 @@ def test_task_list_dialog_cancelled_writes_nothing(page, wiki):
 
 def test_task_list_on_an_embeds_line_changes_that_embed(page, wiki):
     # With the cursor on a [[tasks: …]] the dialog shows its params and
-    # writes only what was changed: the rest stays as written.
+    # writes only what was changed: the rest stays as written, also a param
+    # the dialog has no field for (pin=, from when an embed pinned its list).
     text = "Intro\n\n  [[Tasks: list=shop labels=Catalogue,Shopping view=closed pin=default keep=1 new=food]]\n\nOutro"
     textarea = _edit(page, wiki, text, 20)
     _click(page, "tasklist")
@@ -279,10 +280,7 @@ def test_task_list_on_an_embeds_line_changes_that_embed(page, wiki):
     expect(dialog.locator(".modal-label")).to_have_text("Change the task list")
     expect(field("list")).to_have_value("shop")
     expect(field("keep")).to_be_checked()
-    expect(field("pin")).to_have_value("default")
     expect(field("view")).to_have_value("closed")
-    expect(field("pin-btn")).to_have_attribute("aria-pressed", "true")
-    expect(dialog.locator(".task-settings-default input")).to_be_checked()
     expect(field("label-open")).to_have_value("Catalogue")           # shown: it is set
     expect(field("new")).to_have_value("food")
     expect(field("limit")).to_be_hidden()                             # not set: offered
@@ -297,11 +295,10 @@ def test_task_list_on_an_embeds_line_changes_that_embed(page, wiki):
     # Emptied, a param goes.
     _click(page, "tasklist")
     field("limit").fill("")
-    field("pin-btn").click()                                          # unpinned
-    expect(field("where")).not_to_contain_text("pin=")               # the line it writes follows the pin
     field("view").select_option("open")
     field("save").click()
-    assert _body(textarea) == "Intro\n\n  [[tasks: list=shop labels=Catalogue,Shopping view=plan new=food tag=weekly]]\n\nOutro"
+    assert _body(textarea) == ("Intro\n\n  [[tasks: list=shop labels=Catalogue,Shopping view=plan pin=default"
+                               " new=food tag=weekly]]\n\nOutro")
 
 
 def test_inserted_block_keeps_a_blank_line_to_the_text_above(page, wiki):

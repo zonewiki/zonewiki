@@ -450,14 +450,17 @@ def rename_tag(client, door, tag, new, merge=False):
 
 @pytest.fixture()
 def shop(client, wiki):
-    """A list #shop: declared, linked to, on open, completed and archived tasks."""
+    """A tag #shop: on open, completed and archived tasks, in a page's
+    embeds and links; and a list of that name with a task in it, which is
+    no tag: a tag's rename leaves it alone, its own rename the tag."""
     (wiki / "_tasks/tasks.json").write_text(json.dumps([
         stored_task("Milk", ["shop", "weekly"]),
-        {**stored_task("See list", ["other"]), "description": "On [the list](/tasks?list=shop)."}]))
+        {**stored_task("See list", ["other"]), "description": "On [the tag](/tasks?tag=shop) and [the list](/tasks?list=shop)."}]))
     (wiki / "_tasks/closed.json").write_text(json.dumps([stored_task("Eggs", ["Shop"], "2099-01-01T10:00:00")]))
-    (wiki / "_tasks/closed-2001.json").write_text(json.dumps([stored_task("Old", ["shop"], "2001-01-01T10:00:00")]))
-    commit(wiki, "lists", "# Lists\n\n[[tasks: list=shop keep=1 pin=1]]\n\n[[tasks: tag=shop,-x new=shop]]\n\n"
-                          "[Go](/tasks?list=shop), #shop\n\n`[[tasks: list=shop]]`\n")
+    (wiki / "_tasks/closed-2001.json").write_text(json.dumps([{**stored_task("Old", ["shop"], "2001-01-01T10:00:00"), "list": "shop"}]))
+    assert client.post("/tasks/new-list", data={"name": "shop"}, headers=HOST).headers["Location"] == "/tasks?list=shop"
+    commit(wiki, "lists", "# Lists\n\n[[tasks: list=shop view=open]]\n\n[[tasks: tag=shop,-x new=shop]]\n\n"
+                          "[Go](/tasks?tag=shop), [the list](/tasks?list=shop&view=open), #shop\n\n`[[tasks: list=shop tag=shop]]`\n")
     return wiki
 
 
@@ -466,17 +469,20 @@ def test_rename_tag_changes_it_everywhere_in_one_commit(client, shop, door):
     before = git(shop, "rev-parse", "HEAD").strip()
     assert rename_tag(client, door, "shop", "food")
     assert tasks_file(shop)[0]["tags"] == ["food", "weekly"]
-    assert "/tasks?list=food" in tasks_file(shop)[1]["description"]
+    assert "(/tasks?tag=food) and [the list](/tasks?list=shop)" in tasks_file(shop)[1]["description"]
     assert tasks_file(shop, "closed.json")[0]["tags"] == ["food"]
-    assert tasks_file(shop, "closed-2001.json")[0]["tags"] == ["food"]
+    old = tasks_file(shop, "closed-2001.json")[0]
+    assert old["tags"] == ["food"] and old["list"] == "shop"
     text = (shop / "lists.md").read_text()
-    assert "[[tasks: list=food keep=1 pin=1]]" in text and "[[tasks: tag=food,-x new=food]]" in text
-    assert "(/tasks?list=food), #shop" in text and "`[[tasks: list=shop]]`" in text   # prose and code stay
+    # The list of that name is no tag: it, its embed and its link stay.
+    assert "[[tasks: list=shop view=open]]" in text and "[[tasks: tag=food,-x new=food]]" in text
+    assert "(/tasks?tag=food), [the list](/tasks?list=shop&view=open), #shop" in text
+    assert "`[[tasks: list=shop tag=shop]]`" in text   # prose and code stay
     assert len(git(shop, "log", "--format=%H", f"{before}..HEAD").split()) == 1
     assert git(shop, "status", "--porcelain", "--", "lists.md", "_tasks").strip() == ""
-    page = client.get("/tasks?list=food", headers=HOST).get_data(as_text=True)
-    assert "List: food" in page
-    assert 'data-place="list:shop"' not in page and 'data-place="list:food"' in page
+    page = client.get("/tasks?tag=food", headers=HOST).get_data(as_text=True)
+    assert 'id="tag-rename-dialog"' in page and "Rename tag #food" in page
+    assert 'data-place="list:shop"' in page
 
 
 @pytest.mark.parametrize("door", DOORS)
@@ -484,7 +490,7 @@ def test_rename_tag_refuses_a_tag_no_one_has(client, shop, door):
     assert not rename_tag(client, door, "nosuch", "food")
     assert not rename_tag(client, door, "shop", "")
     assert not rename_tag(client, door, "shop", "a,b")
-    assert "[[tasks: list=shop" in (shop / "lists.md").read_text()
+    assert "[[tasks: tag=shop,-x new=shop]]" in (shop / "lists.md").read_text()
 
 
 @pytest.mark.parametrize("door", DOORS)
@@ -502,7 +508,7 @@ def test_rename_tag_keeps_text_not_yet_in_git(client, shop, door):
     (shop / "lists.md").write_text((shop / "lists.md").read_text() + "\nA draft line\n")
     assert rename_tag(client, door, "shop", "food")
     text = (shop / "lists.md").read_text()
-    assert "A draft line" in text and "list=food" in text
+    assert "A draft line" in text and "tag=food" in text
     assert git(shop, "status", "--porcelain", "--", "lists.md").strip() == ""
     subjects = git(shop, "log", "-2", "--format=%s", "--", "lists.md").split("\n")
     assert subjects[0].startswith("Rename tag") and subjects[1].startswith("Save ")
@@ -546,9 +552,11 @@ def test_rename_tag_to_its_own_name_evens_out_the_spelling(client, shop):
 def test_rename_tag_dialog_comes_back_offering_the_merge(client, shop):
     resp = client.post("/tasks/rename", data={"tag": "shop", "new_name": "weekly"}, headers=HOST)
     assert "rename_merge=1" in resp.headers["Location"]
+    assert resp.headers["Location"].startswith("/tasks?tag=shop&")
     page = client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True)
-    assert 'id="list-rename-dialog" class="modal" data-open' in page
-    assert 'name="merge"' in page and "already in use" in page and 'value="weekly"' in page
+    dialog = page.split('<dialog id="tag-rename-dialog"', 1)[1].split("</dialog>", 1)[0]
+    assert " data-open>" in dialog.split(">", 1)[0] + ">"
+    assert 'name="merge"' in dialog and "already in use" in dialog and 'value="weekly"' in dialog
 
 
 # ── A new list (the Tasks page's ⋯ menu) ─────────────────────────
@@ -560,22 +568,24 @@ def new_list(client, name, **more):
     return None if "newlist_error" in resp.headers["Location"] else resp.headers["Location"]
 
 
-def test_new_list_makes_a_page_that_declares_it(client, wiki):
+def test_new_list_makes_a_list_and_no_page(client, wiki):
     before = git(wiki, "rev-parse", "HEAD").strip()
     assert new_list(client, " #Shop  Runs ") == "/tasks?list=shop-runs"
-    assert (wiki / "lists/shop-runs.md").read_text() == "# Shop  Runs\n\n[[tasks: list=shop-runs]]\n"
-    assert git(wiki, "log", "--format=%s", f"{before}..HEAD").splitlines() == ["Create lists/shop-runs"]
+    assert not (wiki / "lists").exists()
+    assert (wiki / "_tasks/lists.json").read_text() == '{\n  "version": 1,\n  "lists": [\n    {"name": "shop-runs"}\n  ]\n}\n'
+    assert git(wiki, "log", "--format=%s", f"{before}..HEAD").splitlines() == ["Create list #shop-runs"]
+    assert git(wiki, "show", "--name-only", "--format=", "HEAD").split() == ["_tasks/lists.json"]
     page = client.get("/tasks?list=shop-runs", headers=HOST).get_data(as_text=True)
     assert 'data-place="list:shop-runs"' in page                     # an entry in the list switcher
-    assert "No page declares" not in page
+    assert "There is no list" not in page
     # A task made there is in the list.
     assert 'data-init-list="shop-runs"' in page
 
 
-def test_new_list_of_a_tag_tasks_carry_shows_them(client, shop):
-    assert new_list(client, "weekly") == "/tasks?list=weekly"        # a tag of Milk's, no list yet
-    assert (shop / "lists/weekly.md").exists()
-    assert tasks_file(shop)[0]["tags"] == ["shop", "weekly"]         # the tasks stay as they are
+def test_new_list_of_a_tags_name_takes_no_task(client, shop):
+    assert new_list(client, "weekly") == "/tasks?list=weekly"        # a tag of Milk's
+    milk = tasks_file(shop)[0]
+    assert milk["tags"] == ["shop", "weekly"] and "list" not in milk  # a tag is a tag: the tasks stay as they are
 
 
 def test_new_list_refuses_a_list_there_is_and_no_name(client, shop):
@@ -583,31 +593,130 @@ def test_new_list_refuses_a_list_there_is_and_no_name(client, shop):
     resp = client.post("/tasks/new-list", data={"name": "Shop"}, headers=HOST)
     assert "newlist_error" in resp.headers["Location"]
     page = client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True)
-    assert 'id="list-new-dialog" class="modal" data-open' in page    # the dialog again, saying why
+    assert 'id="list-new-dialog" class="modal" data-params="newlist_error newlist_name" data-open' in page    # the dialog again, saying why
     assert "There is a list #shop already" in page and 'value="Shop"' in page
-    for name in ("", "  ", "#", "a,b", "x=y", "[x]"):
+    for name in ("", "  ", "#", "a,b", "x=y", "[x]", "a/b"):
         assert new_list(client, name) is None, name
-    assert git(shop, "rev-parse", "HEAD") == head and not (shop / "lists").exists()
+    assert git(shop, "rev-parse", "HEAD") == head
 
 
-def test_new_list_refuses_a_page_that_is_there(client, wiki):
+def test_new_list_is_no_page(client, wiki):
     commit(wiki, "lists/shop", "# Shopping notes\n")
-    assert new_list(client, "shop") is None
+    assert new_list(client, "shop") == "/tasks?list=shop"            # a page of that name is a page
     assert (wiki / "lists/shop.md").read_text() == "# Shopping notes\n"
-    # Without users there is no private folder to put one in.
+    # Without users there is nobody for a list to be private to.
     assert new_list(client, "mine", private="1") is None
 
 
 def test_the_tasks_page_has_the_menu_with_new_list(client, shop):
     for url in ("/tasks", "/tasks?list=shop", "/tasks?list=nolist"):
         page = client.get(url, headers=HOST).get_data(as_text=True)
-        assert 'class="btn page-menu-btn"' in page and 'data-action="new-list"' in page, url
+        assert 'class="btn page-menu-btn"' in page and 'data-dialog="list-new-dialog"' in page, url
     assert 'id="list-new-private"' not in page                      # no users: no Private box
 
 
-def test_the_rename_button_is_a_lists_alone(client, shop):
-    assert "list-rename-btn" in client.get("/tasks?list=shop", headers=HOST).get_data(as_text=True)
-    assert "list-rename-btn" not in client.get("/tasks", headers=HOST).get_data(as_text=True)
+def test_a_lists_actions_are_a_lists_alone(client, shop):
+    page = client.get("/tasks?list=shop", headers=HOST).get_data(as_text=True)
+    for item in ("list-rename-btn", "list-pin-btn", "list-delete-btn"):
+        assert item in page, item
+    assert "list-share-btn" not in page and "tag-rename-btn" not in page    # a shared list; no tag here
+    for url in ("/tasks", "/tasks?list=nolist"):
+        page = client.get(url, headers=HOST).get_data(as_text=True)
+        assert "list-rename-btn" not in page and "list-delete-btn" not in page and "tag-rename-btn" not in page, url
+    page = client.get("/tasks?tag=weekly", headers=HOST).get_data(as_text=True)
+    assert "tag-rename-btn" in page and "list-rename-btn" not in page
+
+
+# ── A list's rename, delete and pin (its ⋯ menu on /tasks?list=) ──────────────
+
+def list_op(client, op, **data):
+    """Where the browser goes after a list's operation; the refusal's message when its dialog comes back."""
+    resp = client.post(f"/tasks/{op}-list", data=data, headers=HOST)
+    assert resp.status_code == 302, resp.get_data(as_text=True)
+    return resp.headers["Location"]
+
+
+def test_rename_list_changes_it_everywhere_in_one_commit(client, shop):
+    client.post("/api/tasks", json={"title": "Bread", "list": "shop", "tags": ["shop"]}, headers=HOST)
+    list_op(client, "pin", list="shop", pin="1")
+    before = git(shop, "rev-parse", "HEAD").strip()
+    assert list_op(client, "rename", list="shop", new_name=" #Food ") == "/tasks?list=food"
+    bread = tasks_file(shop)[-1]
+    assert bread["list"] == "food" and bread["tags"] == ["shop"]      # the tag of that name is no list
+    assert tasks_file(shop)[0]["tags"] == ["shop", "weekly"]
+    assert "(/tasks?tag=shop) and [the list](/tasks?list=food)" in tasks_file(shop)[1]["description"]
+    assert tasks_file(shop, "closed-2001.json")[0]["list"] == "food"  # archived ones too
+    text = (shop / "lists.md").read_text()
+    assert "[[tasks: list=food view=open]]" in text and "[[tasks: tag=shop,-x new=shop]]" in text
+    assert "(/tasks?tag=shop), [the list](/tasks?list=food&view=open), #shop" in text
+    assert "`[[tasks: list=shop tag=shop]]`" in text   # code stays
+    registry = (shop / "_tasks/lists.json").read_text()
+    assert '{"name": "food"}' in registry and '"pinned": ["food"]' in registry and "shop" not in registry
+    assert git(shop, "log", "--format=%s", f"{before}..HEAD").splitlines() == ["Rename list #shop to #food"]
+    assert git(shop, "status", "--porcelain", "--", "lists.md", "_tasks").strip() == ""
+    page = client.get("/tasks?list=food", headers=HOST).get_data(as_text=True)
+    assert "List: food" in page and 'data-place="list:shop"' not in page and 'data-place="list:food"' in page
+    assert "There is no list" in client.get("/tasks?list=shop", headers=HOST).get_data(as_text=True)
+
+
+def test_rename_list_refuses_and_says_why_in_its_dialog(client, shop):
+    client.post("/tasks/new-list", data={"name": "market"}, headers=HOST)
+    head = git(shop, "rev-parse", "HEAD")
+    for name, why in (("market", "There is a list #market already"), ("a,b", "can&#39;t contain"), ("  ", "needs a name")):
+        back = list_op(client, "rename", list="shop", new_name=name)
+        assert back.startswith("/tasks?list=shop&rename_error="), name
+        page = client.get(back, headers=HOST).get_data(as_text=True)
+        dialog = page.split('<dialog id="list-rename-dialog"', 1)[1].split("</dialog>", 1)[0]
+        assert " data-open" in dialog.split(">", 1)[0] and why in dialog, name
+    assert list_op(client, "rename", list="shop", new_name="Shop") == "/tasks?list=shop"     # its own name: nothing to do
+    assert client.post("/tasks/rename-list", data={"list": "nosuch", "new_name": "x"}, headers=HOST).status_code == 404
+    assert git(shop, "rev-parse", "HEAD") == head
+
+
+def test_rename_list_keeps_text_not_yet_in_git(client, shop):
+    (shop / "lists.md").write_text((shop / "lists.md").read_text() + "\nA draft line\n")
+    assert list_op(client, "rename", list="shop", new_name="food") == "/tasks?list=food"
+    text = (shop / "lists.md").read_text()
+    assert "A draft line" in text and "list=food view=open" in text
+    assert git(shop, "status", "--porcelain", "--", "lists.md").strip() == ""
+    subjects = git(shop, "log", "-2", "--format=%s", "--", "lists.md").split("\n")
+    assert subjects[0].startswith("Rename list") and subjects[1].startswith("Save ")
+    assert "A draft line" in git(shop, "show", "HEAD~1:lists.md")
+
+
+def test_a_corrupt_tasks_file_stops_a_list_rename_with_nothing_written(client, shop):
+    (shop / "_tasks/closed.json").write_text("{not json")
+    before = (shop / "lists.md").read_text(), (shop / "_tasks/lists.json").read_text()
+    assert client.post("/tasks/rename-list", data={"list": "shop", "new_name": "food"}, headers=HOST).status_code == 500
+    assert ((shop / "lists.md").read_text(), (shop / "_tasks/lists.json").read_text()) == before
+
+
+def test_delete_list_moves_its_tasks_and_keeps_the_pages(client, shop):
+    client.post("/tasks/new-list", data={"name": "market"}, headers=HOST)
+    client.post("/api/tasks", json={"title": "Bread", "list": "shop"}, headers=HOST)
+    list_op(client, "pin", list="shop", pin="default")
+    before = git(shop, "rev-parse", "HEAD").strip()
+    assert list_op(client, "delete", list="shop", to="shop").startswith("/tasks?list=shop&delete_error=")
+    assert list_op(client, "delete", list="shop", to="market") == "/tasks?list=market"
+    assert tasks_file(shop)[-1]["list"] == "market" and tasks_file(shop, "closed-2001.json")[0]["list"] == "market"
+    registry = (shop / "_tasks/lists.json").read_text()
+    assert '{"name": "shop"}' not in registry and '"pinned": []' in registry and "default" not in registry
+    assert git(shop, "log", "--format=%s", f"{before}..HEAD").splitlines() == ["Delete list #shop"]
+    assert "[[tasks: list=shop view=open]]" in (shop / "lists.md").read_text()   # the page keeps its embed,
+    assert "There is no list <code>#shop</code>" in client.get("/page/lists", headers=HOST).get_data(as_text=True)   # which says so
+    # To no list: its tasks stay, in none.
+    assert list_op(client, "delete", list="market", to="") == "/tasks"
+    assert "list" not in tasks_file(shop)[-1] and tasks_file(shop)[-1]["title"] == "Bread"
+
+
+def test_pinning_a_list_is_a_commit_of_the_registry(client, shop):
+    before = git(shop, "rev-parse", "HEAD").strip()
+    assert list_op(client, "pin", list="shop", pin="1") == "/tasks?list=shop"
+    assert '"pinned": ["shop"],\n  "default": "shop"' in (shop / "_tasks/lists.json").read_text()
+    assert list_op(client, "pin", list="shop", pin="0") == "/tasks?list=shop"
+    assert git(shop, "log", "--format=%s", f"{before}..HEAD").splitlines() == ["Unpin list #shop", "Pin list #shop"]
+    assert client.post("/tasks/pin-list", data={"list": "shop", "pin": "2"}, headers=HOST).status_code == 400
+    assert client.post("/tasks/pin-list", data={"list": "nosuch", "pin": "1"}, headers=HOST).status_code == 404
 
 
 def test_rename_tag_under_a_guide_needs_its_id(client, shop):

@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -14,36 +13,6 @@ import (
 	"zonewiki/internal/taskfiles"
 	"zonewiki/internal/taskmodel"
 )
-
-// A list is declared by a page's [[tasks: list=…]], outside code; the first
-// page A–Z is its home. A task belongs to the first (A–Z) of its tags that
-// is a list.
-func TestTasksLists(t *testing.T) {
-	testWiki(t, map[string]string{
-		"shop": "# Shop\n\n[[tasks: list=Groceries keep=1 labels=Catalogue,,Shopping]]\n",
-		"code": "# Code\n\n`[[tasks: list=nope]]`\n\n```\n[[tasks: list=nada]]\n```\n",
-		"home": "# Home\n\n[[tasks: list=chores]]\n",
-	})
-	lists := taskLists("")
-	var names []string
-	for n := range lists {
-		names = append(names, n)
-	}
-	sort.Strings(names)
-	if !reflect.DeepEqual(names, []string{"chores", "groceries"}) || lists["groceries"].Slug != "shop" ||
-		lists["groceries"].Params.Get("keep") != "1" {
-		t.Errorf("lists %+v", lists)
-	}
-	for tags, want := range map[string]string{"work": "", "GROCERIES": "groceries", "groceries chores": "chores"} {
-		if got := taskList(&Task{Tags: strings.Fields(tags)}, lists); got != want {
-			t.Errorf("taskList(%q) = %q, want %q", tags, got, want)
-		}
-	}
-	putPage(t, "a-list", "# A\n\n[[tasks: list=groceries]]\n")
-	if home := taskLists("")["groceries"].Slug; home != "a-list" {
-		t.Errorf("home %q", home)
-	}
-}
 
 // A task's last activity: its completion, history, comments, creation.
 func TestLastActivity(t *testing.T) {
@@ -99,14 +68,25 @@ func TestParseTasksParams(t *testing.T) {
 	}
 }
 
+// ownList: user's private list "own", made when it isn't there.
+func ownList(t *testing.T, user string) string {
+	t.Helper()
+	if _, ok := taskLists(user)["own"]; !ok {
+		if _, err := createListOp(user, "own", true, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return "own"
+}
+
 // newTestTask creates a task as user through the API's path; private asks
-// for it to be theirs alone.
+// for it to be theirs alone: in their private list "own".
 func newTestTask(t *testing.T, user, title string, private bool, more ...string) *Task {
 	t.Helper()
 	data := jsonObj{}
 	data.Set("title", title)
 	if private {
-		data.Set("private", true)
+		data.Set("list", ownList(t, user))
 	}
 	for i := 0; i+1 < len(more); i += 2 {
 		data.Set(more[i], more[i+1])
@@ -192,8 +172,8 @@ func TestPrivateTasksInTheirUsersFiles(t *testing.T) {
 }
 
 // Completing a private task files it in its user's closed.json, and the
-// next occurrence of a series stays private; unticking Private moves it to
-// the shared files.
+// next occurrence of a series stays private, in its list; taking it out of
+// its private list moves it to the shared files, when the write says share.
 func TestPrivateTaskMovesAndCompletes(t *testing.T) {
 	testWiki(t, nil)
 	withUsers(t, "alice", "bob")
@@ -213,14 +193,18 @@ func TestPrivateTaskMovesAndCompletes(t *testing.T) {
 		t.Error("completed into the wrong file")
 	}
 	open := taskFiles.Open("alice")
-	if len(open) != 1 || open[0].SpawnedFrom != task.ID || open[0].Owner != "alice" || len(taskFiles.Open("bob")) != 0 {
+	if len(open) != 1 || open[0].SpawnedFrom != task.ID || open[0].Owner != "alice" || open[0].List != "own" || len(taskFiles.Open("bob")) != 0 {
 		t.Errorf("next occurrence %+v", open)
 	}
 	if got := taskFiles.ClosedInYear("bob", taskFiles.CurrentYear()); len(got) != 0 {
 		t.Errorf("bob's Completed %v", titles(got))
 	}
 	shared := jsonObj{}
-	shared.Set("private", false)
+	shared.Set("list", "")
+	if _, err := updateTask("alice", open[0].ID, shared, ""); err == nil {
+		t.Fatal("shared without saying so")
+	}
+	shared.Set("share", true)
 	if _, err := updateTask("alice", open[0].ID, shared, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -245,7 +229,8 @@ func TestReadsSeeAMovingTask(t *testing.T) {
 			defer close(stop)
 			for _, id := range ids {
 				data := jsonObj{}
-				data.Set("private", false)
+				data.Set("list", "")
+				data.Set("share", true)
 				if _, err := updateTask("alice", id, data, ""); err != nil {
 					t.Error(err)
 					return
@@ -267,71 +252,22 @@ func TestReadsSeeAMovingTask(t *testing.T) {
 	}
 }
 
-// Without users nothing is private: the API refuses it and its JSON is as
-// before (no "private").
+// Without users nothing is private: no private list is made, and the API's
+// JSON is as before (no "private"). private is no field of a write.
 func TestNoPrivateTasksWithoutUsers(t *testing.T) {
 	testWiki(t, nil)
+	if _, err := createListOp("", "mine", true, ""); err == nil {
+		t.Error("a private list without users")
+	}
 	data := jsonObj{}
 	data.Set("title", "x")
 	data.Set("private", true)
 	if _, err := createTask("", data, "c"); err == nil {
-		t.Error("a private task without users")
+		t.Error("private taken as a field of a write")
 	}
 	task := newTestTask(t, "", "y", false)
 	if b, _ := json.Marshal(apiTask{task}); strings.Contains(string(b), "private") {
 		t.Errorf("JSON %s", b)
-	}
-}
-
-// Pins and lists are per user: a pin in your private folder comes before a
-// shared one (the default list); a list declared on a private page is its
-// owner's.
-func TestPinsAndListsPerUser(t *testing.T) {
-	testWiki(t, map[string]string{
-		"tasks":               "# Tasks\n\n[[tasks: pin=1]]\n",
-		"private/alice/mine":  "# Mine\n\n[[tasks: pin=1 list=secret]]\n",
-		"private/bob/nothing": "# Nothing\n",
-	})
-	withUsers(t, "alice", "bob")
-	if h := lookupDefaultList("alice"); h == nil || h.Slug != "private/alice/mine" {
-		t.Errorf("alice's default list %+v", h)
-	}
-	for _, u := range []string{"bob", ""} {
-		if h := lookupDefaultList(u); h == nil || h.Slug != "tasks" {
-			t.Errorf("%q's default list %+v", u, h)
-		}
-	}
-	if _, ok := taskLists("alice")["secret"]; !ok {
-		t.Error("alice's list")
-	}
-	if _, ok := taskLists("bob")["secret"]; ok {
-		t.Error("bob sees alice's list")
-	}
-}
-
-// Your own declaration of a list is its home for you, whatever the names
-// A–Z. A task's tags never decide where it is kept: a new task is private
-// only when the request says so.
-func TestTasksListsPerUser(t *testing.T) {
-	testWiki(t, map[string]string{
-		"tasks/gifts":         "# Gifts\n\n[[tasks: list=gifts]]\n",
-		"private/alice/gifts": "# My gifts\n\n[[tasks: list=gifts]]\n",
-		"private/alice/diary": "# Diary\n\n[[tasks: list=diary]]\n",
-		"zebra":               "# Z\n\n[[tasks: list=diary]]\n",
-	})
-	withUsers(t, "alice", "bob")
-	lists := taskLists("alice")
-	if lists["gifts"].Slug != "private/alice/gifts" || lists["diary"].Slug != "private/alice/diary" {
-		t.Errorf("alice's homes %+v", lists)
-	}
-	if taskLists("bob")["gifts"].Slug != "tasks/gifts" {
-		t.Error("bob's lists")
-	}
-	if task := newTestTask(t, "alice", "Scarf", false, "tags", "Gifts"); task.Owner != "" {
-		t.Error("a tag made a task private")
-	}
-	if task := newTestTask(t, "alice", "Cake", true, "tags", "gifts"); task.Owner != "alice" {
-		t.Error("private: true ignored")
 	}
 }
 
@@ -372,54 +308,32 @@ func TestEveryUsersFiles(t *testing.T) {
 	}
 }
 
-// A shared task stays shared, whoever asks; a private one can be shared.
+// A shared task stays shared, whoever asks: it never goes into a private
+// list; a private one can be shared, and then stays so.
 func TestASharedTaskStaysShared(t *testing.T) {
 	testWiki(t, map[string]string{})
 	withUsers(t, "alice", "bob")
 	task := newTestTask(t, "bob", "Errand", false)
-	data := jsonObj{}
-	data.Set("private", true)
-	if _, err := updateTask("alice", task.ID, data, ""); err == nil {
+	private := jsonObj{}
+	private.Set("list", ownList(t, "alice"))
+	if _, err := updateTask("alice", task.ID, private, ""); err == nil {
 		t.Fatal("alice made bob's shared task private")
 	}
 	if got := titles(taskFiles.Open("bob")); !reflect.DeepEqual(got, []string{"Errand"}) || len(taskFiles.Open("alice")) != 1 {
 		t.Errorf("bob sees %v", got)
 	}
 	mine := newTestTask(t, "alice", "Mine", true)
-	data.Set("private", false)
-	if _, err := updateTask("alice", mine.ID, data, ""); err != nil {
+	shared := jsonObj{}
+	shared.Set("list", nil)
+	shared.Set("share", true)
+	got, err := updateTask("alice", mine.ID, shared, "")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if len(taskFiles.Open("bob")) != 2 {
-		t.Errorf("bob sees %v", titles(taskFiles.Open("bob")))
+	if len(taskFiles.Open("bob")) != 2 || got.History[len(got.History)-1].Event != "shared" {
+		t.Errorf("bob sees %v; history %+v", titles(taskFiles.Open("bob")), got.History)
 	}
-	data.Set("private", true)
-	if _, err := updateTask("alice", mine.ID, data, ""); err == nil {
-		t.Error("shared again, then private")
-	}
-}
-
-// The pinned lists: pin=default first, then by name (not by page); a list
-// pinned twice once. The Pinned view shows any of them
-// and gives new tasks the default list's tags.
-func TestPinnedListsAndTheirView(t *testing.T) {
-	testWiki(t, map[string]string{
-		"a-shop":  "# Shop\n\n[[tasks: list=shop keep=1 pin=1]]\n",
-		"b-work":  "# Work\n\n[[tasks: list=work tag=office view=focus pin=default]]\n",
-		"c-again": "# Again\n\n[[tasks: list=shop pin=1]]\n",
-		"d-page":  "# Page\n\n[[tasks: tag=me pin=1]]\n",
-		"e-code":  "# Code\n\n```\n[[tasks: list=nope pin=1]]\n```\n",
-	})
-	var names []string
-	for _, h := range lookupPinnedIn(sortedPages(), "") {
-		names = append(names, pinnedName(h)+"@"+h.Slug)
-	}
-	if want := []string{"work@b-work", "Page@d-page", "shop@a-shop"}; !slices.Equal(names, want) {
-		t.Errorf("pinned %v, want %v", names, want)
-	}
-	rq := &Req{}
-	v := rq.pinnedView()
-	if v.Get("tag") != "work|me|shop" || v.Get("list") != "" || v.Get("new") != "work,office" || v.Get("view") != "focus" {
-		t.Errorf("pinned view tag=%q list=%q new=%q view=%q", v.Get("tag"), v.Get("list"), v.Get("new"), v.Get("view"))
+	if _, err := updateTask("alice", mine.ID, private, ""); err == nil {
+		t.Error("shared, then private again")
 	}
 }

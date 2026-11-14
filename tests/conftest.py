@@ -68,6 +68,42 @@ def create_task(client, **kwargs):
     return client.post("/api/tasks", json={"title": "Test task", **kwargs})
 
 
+def make_list(client, name: str, private: bool = False, **kwargs):
+    """Make a task list as New list… does (private: the user's own); returns
+    the response, a redirect to the list."""
+    data = {"name": name, **({"private": "1"} if private else {})}
+    return client.post("/tasks/new-list", data=data, **kwargs)
+
+
+_EMBED_RE = re.compile(r"\[\[tasks:\s*([^\]]*)\]\]", re.I)
+
+
+def list_page(client, wiki_dir: Path, slug: str, content: str, **kwargs) -> Path:
+    """write_page, and the lists the page's [[tasks: list=…]] embeds show,
+    made through the routes the browser uses: each list if it isn't there
+    yet (private for a page in private/), with the embed's list settings
+    (view, keep, limit, plan, labels, new) when it was made here, and pinned
+    as a pin= in the embed says (pin=1, pin=default). A list is no longer
+    declared by a page nor pinned by one: pin= in the text means nothing to
+    Zone, it tells this helper what the test wants. Code is skipped."""
+    path = write_page(wiki_dir, slug, content)
+    kwargs.setdefault("headers", HOST)
+    text = re.sub(r"```.*?```|`[^`\n]*`", "", content, flags=re.S)
+    for m in _EMBED_RE.finditer(text):
+        p = dict(w.split("=", 1) for w in m.group(1).split() if "=" in w)
+        name = p.get("list", "").strip("#").lower()
+        if not name:
+            continue
+        made = client.post("/tasks/new-list", data={"name": name, **({"private": "1"} if slug.startswith("private/") else {})}, **kwargs)
+        own = {k: p[k] for k in ("view", "keep", "limit", "plan", "labels", "new") if k in p}
+        if own and "newlist_error" not in made.headers.get("Location", ""):
+            assert client.post("/api/tasks/settings", json={"list": name, "set": own}, **kwargs).status_code == 200
+        if p.get("pin"):
+            pin = "default" if p["pin"].lower() == "default" else "1"
+            assert client.post("/tasks/pin-list", data={"list": name, "pin": pin}, **kwargs).status_code == 302
+    return path
+
+
 def content_hash(text: str) -> str:
     """The editor's hash of a page's text (file_hash), for conflict checks."""
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]

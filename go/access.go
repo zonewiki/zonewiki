@@ -215,6 +215,21 @@ func canSeeTask(user string, t *Task) bool {
 	return user != visitor && (t.Owner == "" || t.Owner == user)
 }
 
+// canSeeList: user may see the list l and the tasks in it: a shared list,
+// or their own private one. A visitor sees no list. What lists, counts or
+// names a list asks (taskLists gives only these).
+func canSeeList(user string, l ListInfo) bool {
+	return user != visitor && (l.Owner == "" || l.Owner == user)
+}
+
+// canWriteList: user may change the list l (rename, delete, its settings)
+// and the tasks in it (make, change, move in or out): whoever sees it and
+// may write tasks at all. One place to ask, so that members or roles per
+// list change this and canSeeList, and nothing else.
+func canWriteList(user string, l ListInfo) bool {
+	return canSeeList(user, l) && mayWriteTasks(user) == nil
+}
+
 // mayWriteTasks: user may write the task files: anyone but a viewer. Every
 // task write passes it (writeOpenLocked, writeBothLocked), so no route or
 // tool changes a task for a viewer, whatever it does.

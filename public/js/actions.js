@@ -7,9 +7,9 @@ import { openSearchModal } from './search.js';
 // A new task in the default list (the first pinned one), from any page (c t,
 // the New task button). On a page with a pinned list its own "+ New" (so
 // the view's tags and dates apply); where a task list app is loaded (an
-// embed, the editor's hidden one) its edit modal, with the tags and keep
-// the default list gives new tasks (the server puts them on <body>:
-// data-tasks-tags, data-tasks-keep; none without a pin); elsewhere where
+// embed, the editor's hidden one) its edit modal, in the default list and
+// with the tags and keep it gives new tasks (the server puts them on <body>:
+// data-tasks-list, data-tasks-tags, data-tasks-keep; none without a pin); elsewhere where
 // the Tasks link goes (or /tasks) opens with the modal.
 // A page without a task list app loads a hidden one first (/api/tasks/headless,
 // started by tasks.js's initTaskApps), so you stay on the page; a toast says
@@ -17,11 +17,11 @@ import { openSearchModal } from './search.js';
 export async function openDefaultTask() {
   const pinnedAdd = document.querySelector('.tasks-app[data-pinned]:not([data-headless]) [id^="task-add-btn"]');
   if (pinnedAdd) { pinnedAdd.click(); return; }
-  const { tasksTags = '', tasksKeep, tasksToday, tasksPrivate, tasksAssignee = '' } = document.body.dataset;
+  const { tasksList = '', tasksTags = '', tasksKeep, tasksToday } = document.body.dataset;
   // The start date as the default list's "+ New" gives it (today on Focus);
   // without a pin, as /tasks's Focus does.
   const homeless = !('tasksTags' in document.body.dataset);
-  const opts = { tags: tasksTags, keep: tasksKeep === '1', private: tasksPrivate === '1', assignee: tasksAssignee,
+  const opts = { list: tasksList, tags: tasksTags, keep: tasksKeep === '1',
                  start_date: homeless || tasksToday === '1' ? localDate() : null };
   if (!document.querySelector('.tasks-app[data-ready]')) {
     try {

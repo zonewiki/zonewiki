@@ -7,7 +7,7 @@ import re
 import pytest
 from playwright.sync_api import expect
 
-from conftest import wait_until
+from conftest import make_list, wait_until
 from tests import settings
 
 
@@ -23,7 +23,7 @@ def alice(page, wiki, monkeypatch):
 
 
 def new(page, title, **fields):
-    resp = page.request.post("/api/tasks", data={"title": title, "private": False, **fields})
+    resp = page.request.post("/api/tasks", data={"title": title, **fields})
     assert resp.ok, resp.text()
     return resp.json()
 
@@ -126,6 +126,7 @@ def test_a_name_that_is_no_user_keeps_the_modal_open(alice):
 
 
 def test_a_new_task_s_title_assigns(alice):
+    make_list(alice, "own", private=True)
     alice.goto("/tasks?view=open")
     alice.locator("#task-add-btn").click()
     modal = alice.locator("#task-edit-modal")
@@ -135,13 +136,14 @@ def test_a_new_task_s_title_assigns(alice):
     alice.keyboard.press("Tab")
     expect(title).to_have_value("Call Sam @bob ")
     expect(modal.locator("#task-edit-quick")).to_have_text("@bob")
-    # A private task has no assignee: it isn't offered, and @bob is text.
+    # A task in a private list has no assignee: it isn't offered, and @bob is text.
     expect(modal.locator("[data-more=assignee]")).to_be_visible()
-    modal.locator("[data-more=private]").click()
-    expect(modal.locator("#task-edit-private")).to_be_checked()
+    modal.locator("#task-edit-list").select_option("own")
+    expect(modal.locator("#task-edit-list-note")).to_have_text("Private: only you see this task.")
     expect(modal.locator("[data-more=assignee]")).to_be_hidden()
     expect(modal.locator("#task-edit-quick")).to_be_hidden()
-    modal.locator("#task-edit-private").uncheck()
+    modal.locator("#task-edit-list").select_option("")
+    expect(modal.locator("#task-edit-list-note")).to_be_hidden()
     expect(modal.locator("[data-more=assignee]")).to_be_visible()
     expect(modal.locator("#task-edit-quick")).to_have_text("@bob")
     modal.get_by_role("button", name="Save").click()

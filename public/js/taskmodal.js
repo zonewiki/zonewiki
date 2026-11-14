@@ -84,16 +84,16 @@ if (app.descTextarea) {
   // A private task's files go where a private page's do (the user's folder).
   const privateDir = app.appEl?.dataset.privateFolder;
   markdownEditor(app.descTextarea, { bar: notesBar, attachInput: document.getElementById('task-edit-attach' + app.sfx),
-                                 tabIndents: false, page: () => app.privateCb?.checked ? privateDir + '/task' : '' });
+                                 tabIndents: false, page: () => app.editPrivate() ? privateDir + '/task' : '' });
 }
 
 const importanceSelect = document.getElementById('task-edit-importance' + app.sfx);
 
 // The fields a task rarely has (Repeat with Every and From done, Days
-// before due, Keep after done, Private) show only when set as the dialog
-// opens, or once asked for: the line under the fields (.task-add-fields) has a
-// button for each one not shown, which shows it and goes to it; Keep and
-// Private are ticked by it, since asking for the box is asking for that.
+// before due, Keep after done) show only when set as the dialog opens, or
+// once asked for: the line under the fields (.task-add-fields) has a button
+// for each one not shown, which shows it and goes to it; Keep is ticked by
+// it, since asking for the box is asking for that.
 // A field stays for as long as the dialog is open, also emptied again.
 const propsEl = document.getElementById('task-edit-props' + app.sfx);
 const moreEl = document.getElementById('task-edit-more' + app.sfx);
@@ -106,15 +106,14 @@ function showField(name, show = true) {
   if (el) el.hidden = !show;
 }
 // Which buttons the line has: no Repeat for a keep task (it can't repeat),
-// Days before due only with a due date, no Private for a shared task (it
-// stays shared), no Assignee for a private one (it has none).
+// Days before due only with a due date, no Assignee for a task in a private
+// list (it has none).
 function syncMore() {
   const can = {
-    assignee: !app.privateCb?.checked,
+    assignee: !app.editPrivate(),
     repeat: !app.keepCb.checked,
     lead: !!document.getElementById('task-edit-due' + app.sfx).value,
     keep: true,
-    private: !!app.privateCb && !app.privateCb.disabled,
   };
   let any = false;
   moreEl.querySelectorAll('[data-more]').forEach(btn => {
@@ -127,7 +126,7 @@ moreEl.addEventListener('click', e => {
   const name = e.target.closest('[data-more]')?.dataset.more;
   if (!name) return;
   showField(name);
-  const box = { keep: app.keepCb, private: app.privateCb }[name];
+  const box = { keep: app.keepCb }[name];
   if (box) {
     box.checked = true;
     box.dispatchEvent(new Event('change', { bubbles: true }));
@@ -136,7 +135,7 @@ moreEl.addEventListener('click', e => {
   // A Repeat that is off (no date yet) can't take the focus: the first field that can.
   [...fieldEl(name).querySelectorAll('input, select')].find(el => !el.disabled)?.focus();
 });
-let privateWas = false;   // as the modal opened: was the task private
+let privateWas = false;   // as the modal opened: was the task in a private list
 
 // Edit modal Tags field: each tag is a chip; the input holds the one being
 // typed. Completing it (Tab/Enter on a suggestion), typing a comma or a
@@ -156,8 +155,7 @@ function chipsOnSeparators(input, chips) {
     input.value = last;
   });
 }
-const editChips = editTagsInput && app.chipField(editTagsInput, {
-  label: t => '#' + t, listWord: t => app.listSet.has(t.toLowerCase()), onChange: () => syncTarget() });
+const editChips = editTagsInput && app.chipField(editTagsInput, { label: t => '#' + t });
 if (editTagsInput) {
   chipsOnSeparators(editTagsInput, editChips);
   // Enter with no suggestion open (the dropdown takes it first when one
@@ -196,7 +194,7 @@ const editTagAc = editTagsInput && attachTagAc(editTagsInput, {
 // The name of someone who can no longer be given tasks stays as the task
 // has it (struck through) until it is taken off or replaced. The field
 // shows when the task has an assignee, or once asked for (showField). A
-// private task has no assignee: the field hides while Private is ticked.
+// private task has no assignee: the field hides while its list is private.
 const assigneeInput = document.getElementById('task-edit-assignee' + app.sfx);
 const assigneeField = document.getElementById('task-edit-assignee-field' + app.sfx);
 const cleanName = v => v.trim().replace(/^@/, '').toLowerCase();
@@ -227,12 +225,12 @@ function editAssignee() {
   if (typed === 'none') return null;
   return userNamed(typed) || undefined;
 }
-const assigning = () => !!assigneeInput && !app.privateCb?.checked;
+const assigning = () => !!assigneeInput && !app.editPrivate();
 function syncAssigneeField() {
   if (!assigneeField) return;
-  showField('assignee', !app.privateCb?.checked && (!!assigneeChip.words().length || !!assigneeInput.value.trim()));
+  showField('assignee', !app.editPrivate() && (!!assigneeChip.words().length || !!assigneeInput.value.trim()));
 }
-app.privateCb?.addEventListener('change', () => { syncAssigneeField(); syncMore(); });
+app.listSelect?.addEventListener('change', () => { syncAssigneeField(); syncMore(); });
 const assigneeAc = assigneeInput && attachTagAc(assigneeInput, {
   prefix: '@',
   // Something typed, if only "@" (which lists everyone): a click into the
@@ -268,10 +266,11 @@ function refuseAssignee() {
 }
 
 // A new task's title: the #tag shorthand (TasksCore.parseQuickAdd) gets the
-// same suggestions, from every tag in use.
+// same suggestions, from every tag in use and the lists (#shop puts the
+// task in the list shop: quickList).
 if (app.titleInput) attachTagAc(app.titleInput, {
   word: () => document.getElementById('task-edit-id' + app.sfx).value ? null : hashWordAtCaret(app.titleInput),
-  suggest: w => rankTags(w.partial, tagCounts(st.tasks), w.partial ? 8 : 12),
+  suggest: w => rankTags(w.partial, { ...Object.fromEntries([...app.listSet].filter(r => !r.includes('/')).map(r => [r, 1])), ...tagCounts(st.tasks) }, w.partial ? 8 : 12),
   accept: (tag, w) => { insertHashTag(app.titleInput, tag, w); syncQuickPreview(); },
 });
 // And the @name shorthand, from the users who can be assigned.
@@ -307,12 +306,20 @@ function quickParse() {
 // Whom the shorthand's @name may name: no one on a private task, nor
 // without users.
 const quickPeople = () => assigning() ? people : null;
+// The shorthand's #words: one that names a list (the first) is the task's
+// list, the others its tags.
+function quickList(q) {
+  const list = q.tags.find(t => app.listSet.has(t)) || '';
+  return { list, tags: q.tags.filter(t => t !== list) };
+}
 function quickText(q) {
+  const { list, tags } = quickList(q);
   return [
     q.start_date && `📅 start ${formatDate(q.start_date)}`,
     q.due_date && `⏰ due ${formatDate(q.due_date)}`,
     q.importance && IMPORTANCE[q.importance][1].toLowerCase(),
-    ...q.tags.map(t => '#' + t),
+    list && `list ${list}`,
+    ...tags.map(t => '#' + t),
     q.assignee && '@' + q.assignee,
   ].filter(Boolean).join(' · ');
 }
@@ -353,32 +360,54 @@ function syncQuickPreview() {
   quickPreview.textContent = quickText(q);
 }
 
-// A private task is shared by unticking the Private box (the note says what
-// that does); a shared task stays shared, so its box is disabled.
-function syncPrivateNote() {
-  if (!app.privateCb) return;
-  const share = privateWas && !app.privateCb.checked;
-  app.privateNote.hidden = !share;
-  if (share) app.privateNote.textContent = 'Everyone who uses the wiki will see and change this task.';
+// The List field: the lists the user sees, their own private ones marked,
+// and No list. A task is as private as its list: one in a private list is
+// the user's alone, any other everyone's. A shared task stays shared, so
+// the private lists are off for it; a private task leaves for a shared
+// place by choosing one, and the line under the fields says what that does.
+function fillLists(task, ref) {
+  const sel = app.listSelect;
+  if (!sel) return;
+  const shared = !!task && !task.private;   // a shared task: no private list
+  const options = [new Option('No list', '')];
+  for (const l of app.listChoices) {
+    const twin = l.ref.startsWith('shared/');
+    const o = new Option((l.private ? '🔒 ' : '') + app.listName(l.ref) + (twin ? ' (shared)' : ''), l.ref);
+    o.disabled = l.private && shared;
+    if (o.disabled) o.title = 'A shared task stays shared';
+    options.push(o);
+  }
+  sel.replaceChildren(...options);
+  sel.value = app.listSet.has(ref) ? ref : '';
+  showField('list', app.listChoices.length > 0);
 }
-app.privateCb?.addEventListener('change', syncPrivateNote);
+function syncListNote() {
+  if (!app.listNote) return;
+  const users = document.body.dataset.users === '1';
+  const isPrivate = app.editPrivate();
+  const text = isPrivate ? 'Private: only you see this task.'
+    : privateWas ? 'Everyone who uses the wiki will see and change this task. It can’t be made private again.' : '';
+  app.listNote.hidden = !users || !text;
+  app.listNote.textContent = text;
+}
+app.listSelect?.addEventListener('change', syncListNote);
 
-// Where a new task goes, under its title: the list its tags put it in (the
-// first A–Z that is a list, as the server files it), or none, and whether
-// it is private; it follows the Tags field and the Private box.
+// Where a new task goes, under its title: the list the List field names
+// (or the title's #shorthand), or none, and whether that makes it private.
 const targetEl = document.getElementById('task-edit-target' + app.sfx);
 function syncTarget() {
   if (!targetEl) return;
   const isNew = !document.getElementById('task-edit-id' + app.sfx).value && !batchTitles;
   targetEl.hidden = !isNew;
   if (!isNew) return;
-  const list = editTags().map(t => t.toLowerCase()).filter(t => app.listSet.has(t)).sort()[0];
-  const where = list ? `Adds to the list #${list}` : 'Adds to no list (tags only)';
-  targetEl.textContent = where + (app.privateCb?.checked ? ', private' : '') + '.';
+  const q = quickParse();
+  const ref = q && quickList(q).list || app.listSelect?.value || '';
+  const where = ref ? `Adds to the list ${app.listName(ref)}` : 'Adds to no list';
+  targetEl.textContent = where + (app.privateLists.has(ref) ? ', private' : '') + '.';
 }
-app.privateCb?.addEventListener('change', syncTarget);
-app.privateCb?.addEventListener('change', () => syncQuickPreview());
-editTagsInput?.addEventListener('input', syncTarget);
+app.listSelect?.addEventListener('change', syncTarget);
+app.listSelect?.addEventListener('change', () => syncQuickPreview());
+app.titleInput.addEventListener('input', syncTarget);
 app.titleInput.addEventListener('input', syncQuickPreview);
 
 // The modal's History section: the task's logged events, newest first
@@ -524,7 +553,7 @@ async function saveComment() {
 }
 // The page editor's markdown helpers: lists go on, [[ completes pages, a
 // pasted URL asks for its name, a pasted or dropped file is uploaded.
-markdownEditor(commentInput, { tabIndents: false, page: () => app.privateCb?.checked ? app.appEl?.dataset.privateFolder + '/task' : '' });
+markdownEditor(commentInput, { tabIndents: false, page: () => app.editPrivate() ? app.appEl?.dataset.privateFolder + '/task' : '' });
 commentInput.addEventListener('keydown', e => {
   if (e.defaultPrevented || e.isComposing) return;   // the completion's key
   // Esc puts the field away, not the modal.
@@ -556,7 +585,8 @@ commentList.addEventListener('click', async e => {
   openCommentBox(cid, comment.text);
 });
 
-// opts (new tasks): `tags` (comma-separated; given, even empty, it
+// opts (new tasks): `list` (a ref, instead of the view's or the default
+// list), `tags` (comma-separated; given, even empty, it
 // replaces the filter's tags), `keep` (instead of the embed's keep=), and from the editor's Make
 // task a starting `title` and `description`, a `start_date` (null: none,
 // instead of Focus's today) and `onCreated(task)`, called once it is saved.
@@ -587,12 +617,9 @@ function openEditModal(taskId, opts) {
   syncQuickPreview();
   importanceSelect.value = task?.importance || '';
   app.keepCb.checked = task ? !!task.keep : opts && 'keep' in opts ? !!opts.keep : app.initKeep;
-  if (app.privateCb) {
-    app.privateCb.checked = task ? !!task.private : opts && 'private' in opts ? !!opts.private : app.initPrivate;
-    privateWas = app.privateCb.checked;
-    app.privateCb.disabled = !!task && !task.private;   // shared stays shared
-    app.privateNote.hidden = true;
-  }
+  fillLists(task, task ? app.taskList(task) || '' : opts && 'list' in opts ? opts.list || '' : app.newTaskList());
+  privateWas = !!task && !!task.private;
+  syncListNote();
   // A new task starts with the user the filter names, as with its tags.
   setAssignee(task ? task.assignee || '' : opts && 'assignee' in opts ? opts.assignee || '' : app.filterDefaultAssignee());
   syncAssigneeField();
@@ -604,7 +631,6 @@ function openEditModal(taskId, opts) {
   showField('repeat', !!recType);
   showField('lead', false);
   showField('keep', app.keepCb.checked);
-  showField('private', !!app.privateCb?.checked);
   syncTarget();
   app.wontDoBtn.style.display = task && !task.closed_at ? '' : 'none';
   syncDates('open');
@@ -775,7 +801,10 @@ app.form.addEventListener('submit', async e => {
     rec_from: document.getElementById('task-edit-rec-from' + app.sfx)?.checked ? 'completion' : 'due',
     keep: app.keepCb.checked,
     importance: importanceSelect.value || 'normal',
-    ...(app.privateCb ? { private: app.privateCb.checked } : {}),
+    // Its list, and with it who sees it; leaving a private list for a shared
+    // place shares the task (the line under the fields said so).
+    ...(app.listSelect ? { list: app.listSelect.value } : {}),
+    ...(privateWas && !app.editPrivate() ? { share: true } : {}),
     ...(assigning() ? { assignee } : {}),
   };
   if (batchTitles && !id) {
@@ -785,11 +814,13 @@ app.form.addEventListener('submit', async e => {
     const today = todayStr(), made = [];
     for (const title of titles) {
       const q = parseQuickAdd(title, today, quickPeople());
+      const ql = quickList(q);
       const task = await app.createTask({
         ...data, title: q.title,
         start_date: q.start_date || data.start_date, due_date: q.due_date || data.due_date,
         importance: q.importance || data.importance,
-        tags: [...new Set([...data.tags, ...q.tags])],
+        ...(ql.list ? { list: ql.list } : {}),
+        tags: [...new Set([...data.tags, ...ql.tags])],
         ...(q.assignee ? { assignee: q.assignee } : {}),
       });
       made.push(task);
@@ -804,7 +835,9 @@ app.form.addEventListener('submit', async e => {
     data.title = quick.title;
     if (quick.start_date) data.start_date = quick.start_date;
     if (quick.due_date) data.due_date = quick.due_date;
-    data.tags = [...new Set([...data.tags, ...quick.tags])];
+    const ql = quickList(quick);
+    if (ql.list) data.list = ql.list;
+    data.tags = [...new Set([...data.tags, ...ql.tags])];
     if (quick.importance) data.importance = quick.importance;
     if (quick.assignee) data.assignee = quick.assignee;
   }

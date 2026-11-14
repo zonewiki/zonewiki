@@ -8,6 +8,7 @@ from datetime import date, timedelta
 
 from playwright.sync_api import expect
 
+from conftest import make_list
 from test_usability import wait_until
 
 
@@ -60,18 +61,20 @@ def test_keep_task_chip_comes_back_and_undo_restores_its_dates(page, wiki):
     assert _tasks_task(wiki, t["id"])["last_done"] is None
 
 
-def test_ticked_chip_keeps_linking_to_the_pages_list(page, wiki):
-    # A task in two lists; the page declares the second one A–Z. The chip
-    # re-rendered after ticking still links to the page's list.
-    wiki.write("ideas", "# Ideas\n\n[[tasks: list=presentideas]]\n")
-    t = _task(page, title="Lego", keep=True, tags=["presentideas", "task"])
+def test_ticked_chip_keeps_linking_to_the_tasks_list(page, wiki):
+    # A task in a list, on a page that shows another list (of the name of
+    # one of its tags). The chip links to the task's list, re-rendered after
+    # ticking too.
+    for name in ("presentideas", "task"):
+        make_list(page, name)
+    t = _task(page, title="Lego", keep=True, list="presentideas", tags=["task"])
     wiki.write("todo", f"# Todo\n\n[[tasks: list=task]]\n\n[[task:{t['id'][:8]}]]\n")
     page.goto("/page/todo")
     link = page.locator(".page-content .task-ref-title")
-    expect(link).to_have_attribute("href", re.compile(r"list=task$"))
+    expect(link).to_have_attribute("href", re.compile(r"list=presentideas$"))
     page.locator(".page-content .task-ref-check").check()
     expect(page.locator(".page-content .task-ref")).to_contain_text("⟲ ✓")   # re-rendered
-    expect(link).to_have_attribute("href", re.compile(r"list=task$"))
+    expect(link).to_have_attribute("href", re.compile(r"list=presentideas$"))
 
 
 def test_editor_completes_task_references(page, wiki):

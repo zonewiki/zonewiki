@@ -17,8 +17,8 @@ Three rules; the rest of this file is how they are kept.
    Everything outside it is shared, and every user may change it, but a viewer, who changes nothing (Roles, below).
    (Hidden inside Zone, not encrypted: whoever has the wiki's folder or git repository has it all.)
 2. **Where something is kept is who sees it.** Not its tags, not its links, not its name.
-   A new page or task starts where it is made: from a link to `private/<you>/…`, an embed on a private page, your private pinned list or list.
-3. **Private can be shared; shared stays shared.** A private page goes public by Make shared (a rename out of the folder), a private task by unticking its Private box.
+   A new page starts where it is made: from a link to `private/<you>/…`. A task is kept where its list is: one in a private list of yours in your folder, any other with the shared tasks.
+3. **Private can be shared; shared stays shared.** A private page goes public by Make shared (a rename out of the folder), a private task by moving it out of its private list (or making that list shared).
    Never the other way: others have seen a shared page or task, link to it and have comments on it, so Zone refuses to take one into a private folder or tasks (the error says to make a new private one and copy the text).
    Making a page shared takes the uploads it shows with it.
    Nothing else moves anything.
@@ -465,7 +465,7 @@ An assistant sees and changes what its user does in the browser, no more (`docs/
   `list_tags`' counts,
   `search_wiki`,
   read_page's `[[task:…]]` list ("no such task") and create_task's tag hints.
-  `create_task` and `update_task` take `private` (true: the user's own; false: shared; refused without users); `create_task` makes a private task by default when the user's default task list is in their private folder, as `c t` does.
+  `create_task` and `update_task` take `list`: a task in one of the user's private lists is theirs alone, any other shared; `create_task` without it puts the task in the user's default list, as `c t` does, so a private one when that list is. `update_task` shares a private task only with `share: true`, and never takes a shared one into a private list. `private` is no argument anymore (the tool says to give `list`).
   The task text says "private" among its facts.
 - **Guides**: a `CLAUDE.md`/`AGENTS.md` in another user's folder isn't a guide for you (`folderGuides(slug, user)`, `canSeePath`), not listed in read_guides' description (`toolList(user)`), and a guide's `@import` of a page you can't see stays as written (`guideText`).
   `rename_page` of a folder holding pages you may not move (`private/` itself) moves nothing.
@@ -561,7 +561,7 @@ A new page is made private from the start (below).
 - **Tests**: `tests/test_privacy.py` gives alice a private page (committed, deleted, uncommitted),
   a note,
   an upload,
-  her own pinned list and list,
+  her own private list, pinned,
   and private tasks (open, closed, archived; one a shared page refers to with `[[task:…]]`),
   holding a word no response to bob may contain,
   and probes every route and MCP read tool as bob,
@@ -572,44 +572,42 @@ A new page is made private from the start (below).
 ## Private tasks
 
 A task can be private: only its user sees it, on every task list, in search, on pages and to their assistant.
-A new task is made private by ticking **Private** in the edit modal (it shows only with users); untick it later to share the task (the modal says that everyone then sees and changes it).
-**A shared task can't be made private**: its box is disabled, and the API and `update_task` answer 400 "A shared task stays shared".
-**Where a task is kept is the one thing that decides who sees it; its tags never do.** A new task starts private where that is what you'd expect: from an embed on a page in your private folder,
-from `/tasks?list=` of a list declared there,
-from the editor's Make task on a private page,
-from New task / `c t` when your default list is in your private folder.
+**Private and shared are said of lists, not of tasks**: a task is private when the list it is in is a private list of yours (Lists in `docs/spec/tasks.md`), and every other task, in a shared list or in none, is shared.
+You make a private list with **New list…** and its **Private** box, and a private task by making it in that list: with the dialog's **List** field, in a view of the list, or from anywhere when it is your default list.
+The dialog says under its fields who sees the task ("Private: only you see this task.").
+**A shared task can't be made private**: your private lists are off in its List field, and the API and `update_task` answer 400 "A shared task stays shared".
+**Where a task is kept is the one thing that decides who sees it; its tags never do**, and its list is what says where it is kept.
 Cards of private tasks show 🔒 (`.task-private`).
 Everything else (shared tasks) is everyone's to see and change, as shared pages are.
 
-- **Storage**: shared tasks stay in `_tasks/tasks.json`, `closed.json`, `closed-YYYY.json`; a user's private ones are in the same three kinds of file in `private/<user>/_tasks/` (`taskFiles.Dir(owner)`), created on their first private task.
+- **Storage**: shared tasks stay in `_tasks/tasks.json`, `closed.json`, `closed-YYYY.json`; a user's private ones are in the same three kinds of file in `private/<user>/_tasks/` (`taskFiles.Dir(owner)`), created on their first private task, beside their lists' registry (`lists.json`: their private lists and their pins).
   A task's file says whose it is: the task's `Owner` (`go/internal/taskmodel`) is not written into it, it is set from the folder a task was read from (`eachOwner`), and the API shows it as `"private": true|false` (only with users: without them the API's JSON is as before).
-  Toggling Private (`private` in `POST`/`PUT /api/tasks`, `batch-update`) moves the task between the files in one commit.
-  Ids are random UUIDs, unique across all files; restoring a deleted task (undo) never takes an id another file has (`taskFiles.IDsLocked`) and keeps it private.
+  A write that puts a task in a list sets where it is kept (`applyList` in `go/tasks.go`), and the task moves between the files in one commit.
+  Ids are random UUIDs, unique across all files; restoring a deleted task (undo) never takes an id another file has (`taskFiles.IDsLocked`) and puts it back where it was (`placeSnapshot`: in its list, when you still have one of that name that is as private as the task was; a private task whose list is gone in your list `private`, made for it; never a shared task into a private list, nor a private one into the open).
 - **Reading and writing** (`go/internal/taskfiles`, the store `taskFiles` in `go/tasklogic.go`): every reader takes the user and reads the shared files and theirs (`Owners(user)`: `Open`, `All`, `Snapshot`, `ReadForWriteLocked`, `ClosedInYear`, `ClosedYears`, and on top of them `findTasks`, `resolveTaskRefs`, `findTaskBacklinks`);
   Zone itself (`""`) reads only the shared ones.
   A write splits the tasks by owner (`byOwner`) and writes the files that changed, all in one commit; a task can only be written by its own user, since another user's is never read for them.
-  One lock (`taskFiles.Lock`) for all files, taken by reads across them too (`Open` for `GET /api/tasks`, `All`, `Snapshot`): a task made private or shared moves between two files, and a read between their writes would miss it.
-  What Zone does over every task list covers every user's files (`EveryOwner`): the yearly archive at start (`ArchiveOldClosed`), a rename's links in tasks (`renamePageRefs`), the search index (`Every`, filtered per user by `canSeeTask`, `hiddenDoc`).
-  A series' next occurrence stays private (`spawnRecurring`).
+  One lock (`taskFiles.Lock`) for all files, taken by reads across them too (`Open` for `GET /api/tasks`, `All`, `Snapshot`): a task that is shared moves between two files, and a read between their writes would miss it.
+  What Zone does over every task list covers every user's files (`EveryOwner`): the yearly archive at start (`ArchiveOldClosed`), the lists' migration, a rename's links in tasks (`renamePageRefs`), a shared list's rename, the search index (`Every`, filtered per user by `canSeeTask`, `hiddenDoc`).
+  A series' next occurrence stays in its list, so private (`spawnRecurring`).
   A private task's pasted files are private too (the description's editor sends `private/<you>/…` as the upload's page).
 - **Another user's private task is no task**: by id the routes answer 404 as for an id no task has (`DELETE /api/tasks/<id>` of an unknown id stays a 204, as before);
   lists, counts, Closed and its years, the due count, Linked tasks and the section chips leave it out;
   a `[[task:…]]` to it renders as for a deleted task.
   A shared page that refers to a private task doesn't carry its title into the search index (`taskRefsAsTitles` resolves a page's references as its owner, or for a shared page as no one).
-- **Lists and pins are per user**: a list declared on a page in your private folder (`[[tasks: list=…]]`) exists only for you (`taskLists(user)`); for others its name is a plain tag.
-  When you and a shared page both declare one, yours is its home for you (`taskLists`: your own declaration first, A–Z, else the first shared one A–Z), whatever the pages' names; for the others the shared page is.
-  Likewise a `pin=1` embed in your private folder pins its list for you alone, ahead of shared pins (`lookupPinnedIn(…, user)`), so with no `pin=default` your own list is the default one, and the Tasks link, its counts and New task's tags are your own.
-  Pins on shared pages are everyone's: a list pinned there is pinned for every user.
-  **So one list name can start tasks in different places for different users**: when alice declares `gifts` in her folder and a shared page declares it too, a new task in `/tasks?list=gifts` starts private for her and shared for bob.
-  The tasks she tags `#gifts` that are shared show in the list for everyone, her private ones only for her.
-- **Sharing a task**: unticking Private (`private: false` in `PUT /api/tasks`, `batch-update`, `update_task`) moves your task from your files to the shared ones, in one commit;
+- **Another user's private list is no list**: it is in no switcher, no List field and no answer; its name on a shared page (`[[tasks: list=gifts]]`) is the shared list of that name or none ("There is no list #gifts"), to its owner too, so a shared page shows everyone the same.
+  A name means the same registry for one user only: two users can each have a private `gifts`, and a shared one can exist beside them; whoever has both names the shared one `shared/gifts` (Names in `docs/spec/tasks.md`).
+  Renaming, deleting, sharing, pinning or setting another user's list is refused as for a list that isn't there (404).
+- **Pins are per user** (`pinned`, `default` in their registry): which lists the Tasks link goes to and counts, and the default list where New task puts a task, are each user's own; one who has set none has the wiki's.
+  So for a user whose default list is private, a task from New task, `c t` or their assistant's `create_task` is private; for another it is shared.
+- **Sharing a task**: moving it out of its private list, to a shared list or to no list (`list` with `share: true` in `PUT /api/tasks`, `batch-update`, `update_task`; the dialog and the list picker send `share` after saying what it does), moves it from your files to the shared ones, in one commit;
   it is an event in the task's History (`shared`, by who did it; older tasks may show `private` events from when tasks could move the other way).
-  `private: true` on a task that is shared answers 400; it is accepted only when a task is created.
-  The tasks' undo of an edit doesn't restore the Private box, so it never tries to take a shared task back.
-- **Private lists are a location, not a tag**: a list declared on a page in your private folder is yours alone (Lists and pins are per user, above), and a new task made from `/tasks?list=` of that list, or from an embed on that page, starts private.
-  A tag never moves a task: adding `#gifts` to a task, in the modal, a batch or `update_task`, leaves it where it is; creating one with the tag shared, shared.
-  The tag of your private list on a shared task shows to others as a plain tag.
-- **History**: `private/<user>/_tasks/` files show only to that user in history views (`canSeePath`); the commit messages ("Update task") name no task.
+  Without `share` such a move is a 400 that says the task would be shared; a shared task into a private list is a 400 always.
+  Making a private list shared (**Make shared…** in its ⋯ menu) shares its tasks with it, and deleting it into a shared place does when the dialog's box says so.
+  The tasks' undo of an edit doesn't put a task that was private back in its list, so it never tries to take a shared task back.
+- **A tag never moves a task**: adding a tag with a private list's name to a task, in the modal, a batch or `update_task`, leaves it where it is; such a tag on a shared task shows to everyone, as any tag.
+- **History**: `private/<user>/_tasks/` files (the task files and `lists.json`) show only to that user in history views (`canSeePath`); the commit messages of task writes ("Update task") name no task.
+  A private list's own commits name it ("Create list #gifts", in your files): they show to you alone.
 
 ## Assigning tasks
 
@@ -662,7 +660,6 @@ Not there: telling someone that a task became theirs, a group as an assignee, an
 - **On a page**: `[[tasks: assignee=me]]` shows whoever looks at the page their own tasks, `assignee=anna` hers, `assignee=none` those no one has (a former assignee's included); `a|b` either's, `-a` not theirs, and it joins `tag=` and `list=` (Task list embed in `docs/spec/tasks.md`).
   The chip is locked there, as a `tag=`'s is.
   A new task in such a list is assigned to the one user it names (`me`: whoever makes it), so it shows up where it was made; `a|b`, `none` and `-a` give it no one.
-  The same for **New task** from any page when the default list has `assignee=` (`newTaskAssignee`, `<body data-tasks-assignee>`).
   List settings has it under More, "Shows only the tasks of".
   `/tasks?assignee=…` filters the same way, with an ordinary chip.
 - **The counts** on the Tasks links and the list switcher count what each user's lists show them: `assignee=me` is whoever asks (`assigneeParamMatches` in `go/tasksyntax.go`, the server's mirror of the filter).

@@ -58,6 +58,7 @@ function openTaskMenu(id, anchor, at) {
     task.start_date && ['unplan', 'Unplan'],
     task.recurrence && ['skip', 'Skip this occurrence'],
     ['importance', 'Importance…'],
+    app.listSet.size && ['list', 'Move to list…'],
     ['wontdo', "Won't do"],
     ['copylink', 'Copy link'],
     ['select', 'Select several'],
@@ -140,6 +141,7 @@ function runTaskAction(task, action, anchor) {
       level => app.setImportance([id], level), anchor);
       break;
     }
+    case 'list':     app.openBulkListModal([id]); break;
     case 'wontdo':   app.markWontDo(id); break;
     case 'reopen':
       app.updateTask(id, { completed: false });

@@ -64,7 +64,7 @@ func tasksRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/tasks/headless", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		rq := newReq(r)
-		_, _ = io.WriteString(w, buildTasksEmbed(rq, TasksParams{}, 0, true, rq.defaultPrivate(), ""))
+		_, _ = io.WriteString(w, buildTasksEmbed(rq, TasksParams{}, 0, true, ""))
 	})
 	// Who a task can be assigned to, and who asks ("me"): for the
 	// browser's completion and its @me. No names in sharing mode.
@@ -82,13 +82,13 @@ func tasksRoutes(mux *http.ServeMux) {
 		return nil
 	}))
 	mux.HandleFunc("GET /api/tasks/closed-years", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
-		writeJSON(w, http.StatusOK, map[string]any{"years": closedYearsIn(userOf(r), cleanList(r.URL.Query().Get("list")))})
+		writeJSON(w, http.StatusOK, map[string]any{"years": closedYearsIn(userOf(r), queryScope(r))})
 		return nil
 	}))
 	mux.HandleFunc("GET /api/tasks/closed-count", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
-		scope, n := cleanList(r.URL.Query().Get("list")), 0
+		scope, lists, n := queryScope(r), taskLists(userOf(r)), 0
 		for _, t := range taskFiles.ClosedInYear(userOf(r), taskFiles.CurrentYear()) {
-			if inScope(t, scope) {
+			if inScope(t, scope, lists) {
 				n++
 			}
 		}
@@ -314,6 +314,7 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 	}
 	existing := taskFiles.IDsLocked() // every owner's: ids stay unique across the files
 	restored := []*Task{}
+	lists, inbox := taskLists(user), false
 	for _, s := range snaps {
 		snap, ok := jsonobj.As[jsonObj](s)
 		if !ok {
@@ -324,9 +325,7 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 			continue
 		}
 		checkBy(user, t)
-		if jsonobj.True(snap["private"]) && privateFolder(user) != "" {
-			t.Owner, t.Assignee = user, "" // a private task has no assignee
-		}
+		inbox = placeSnapshot(user, t, snap, lists) || inbox
 		existing[t.ID] = true
 		if !t.IsOpen() {
 			closed = append(closed, t)
@@ -336,7 +335,15 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 		restored = append(restored, t)
 	}
 	if len(restored) > 0 {
-		if err := taskFiles.WriteBothLocked(user, active, closed, "Restore tasks"); err != nil {
+		var also []string
+		if inbox {
+			path, err := ensurePrivateListLocked(user)
+			if err != nil {
+				return err
+			}
+			also = append(also, path)
+		}
+		if err := taskFiles.WriteBothLocked(user, active, closed, "Restore tasks", nonEmpty(also)...); err != nil {
 			return err
 		}
 	}
@@ -350,12 +357,13 @@ const importMax = 10000
 // importIDRE: an id an imported task may keep (a UUID, as Zone makes them).
 var importIDRE = regexp.MustCompile(`^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$`)
 
-// apiExport: the tasks a list shows (?list=, ?tag=, ?assignee=, as an embed's params;
+// apiExport: the tasks a list shows (?list= or ?lists=, ?tag=, ?assignee=, as an embed's params;
 // neither: every task the user sees), open and closed of every year,
 // as a file to save: {zone_tasks: 1, list, tag, exported_at, tasks}, each
-// task as the API shows it. apiImport reads it back.
+// task as the API shows it (with the list it is in). apiImport reads it back.
 func apiExport(w http.ResponseWriter, r *http.Request) error {
-	list, tag := cleanList(r.URL.Query().Get("list")), strings.TrimSpace(r.URL.Query().Get("tag"))
+	list, tag := queryScope(r), strings.TrimSpace(r.URL.Query().Get("tag"))
+	lists := taskLists(userOf(r))
 	assignee := r.URL.Query().Get("assignee")
 	taskFiles.Lock()
 	active, closed, err := taskFiles.ReadForWriteLocked(userOf(r))
@@ -365,11 +373,11 @@ func apiExport(w http.ResponseWriter, r *http.Request) error {
 	}
 	tasks := []*Task{}
 	for _, t := range slices.Concat(active, closed) {
-		if inScope(t, list) && tagParamMatches(t, tag) && assigneeParamMatches(t, assignee, userOf(r)) {
+		if inScope(t, list, lists) && tagParamMatches(t, tag) && assigneeParamMatches(t, assignee, userOf(r)) {
 			tasks = append(tasks, t)
 		}
 	}
-	name := firstNonEmpty(list, "all")
+	name := strings.NewReplacer("/", "-", "|", "-").Replace(firstNonEmpty(list, "all"))
 	// The list's name is the request's: as a quoted, escaped parameter, so
 	// a " in it can't end the file name and add one of its own.
 	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment",
@@ -378,16 +386,18 @@ func apiExport(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// apiImport adds an export's tasks: {file, list, tag, new, also, private}. file
-// is what apiExport wrote (or a bare list of tasks); list, tag and new are
-// the params of the list imported into, whose tags the tasks get as a new
-// task there would (newTaskTags, or new=), in place of the tag of the list
-// they were exported from; private: into the user's own tasks, where a
-// task exported private goes anyway. A task
-// keeps its id, and one whose id is here already is skipped, so the same
-// file imported twice adds nothing. also: more tags for them, the user's
-// own for this import. Answers {added, skipped, ids}: ids, the added
-// tasks', for the notice's Undo (batch-delete).
+// apiImport adds an export's tasks: {file, list, tag, new, also}. file is
+// what apiExport wrote (or a bare list of tasks); list is the list imported
+// into (its ref), where the tasks go, and tag and new the params of that
+// view, whose tags they get as a new task there would (newTaskTags).
+// Without list (All tasks, a tag's view) a task goes where its own list
+// says, as an undo's does (placeSnapshot). A task exported private stays
+// private wherever it is imported: into a shared list it goes to the user's
+// list "private" instead. A task keeps its id, and one whose id is here
+// already is skipped, so the same file imported twice adds nothing. also:
+// more tags for them, the user's own for this import. Answers {added,
+// skipped, ids}: ids, the added tasks', for the notice's Undo
+// (batch-delete).
 func apiImport(w http.ResponseWriter, r *http.Request) error {
 	data, err := jsonObject(r)
 	if err != nil {
@@ -399,14 +409,11 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 	}
 	notExport := refuse("Not a file of tasks exported from Zone")
 	snaps, ok := jsonobj.As[[]json.RawMessage](data["file"])
-	from := ""
 	if !ok {
 		file, isObj := jsonobj.As[jsonObj](data["file"])
 		if snaps, ok = jsonobj.As[[]json.RawMessage](file["tasks"]); !isObj || !ok {
 			return notExport
 		}
-		s, _ := jsonobj.As[string](file["list"])
-		from = cleanList(s)
 	}
 	if len(snaps) > importMax {
 		return refuse("Too many tasks: at most " + strconv.Itoa(importMax) + " in one import")
@@ -414,16 +421,22 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 	str := func(k string) string { s, _ := jsonobj.As[string](data[k]); return s }
 	add := taskmodel.CleanTags(strings.Split(str("new"), ","))
 	if len(add) == 0 {
-		add = newTaskTags(parseTasksParams("list=" + cleanList(str("list")) + " tag=" + strings.Join(strings.Fields(str("tag")), "")))
+		add = newTaskTags(parseTasksParams("tag=" + strings.Join(strings.Fields(str("tag")), "")))
 	}
 	// also: tags of the user's own for this import, to find its tasks by.
 	add = taskmodel.CleanTags(append(add, strings.Split(str("also"), ",")...))
-	var remove []string
-	if from != "" && !slices.ContainsFunc(add, func(t string) bool { return strings.EqualFold(t, from) }) {
-		remove = []string{from}
-	}
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
+	lists := taskLists(user)
+	var into *ListInfo
+	if ref := cleanList(str("list")); ref != "" {
+		l, ok := resolveList(ref, lists)
+		if !ok || !canWriteList(user, l) {
+			return refuse("No list #" + ref)
+		}
+		into = &l
+	}
+	inbox := false
 	active, closed, err := taskFiles.ReadForWriteLocked(user)
 	if err != nil {
 		return err
@@ -456,10 +469,18 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 		if lost {
 			unassigned++
 		}
-		t.Tags = retag(t.Tags, add, remove)
-		// A task exported private stays private, wherever it is imported.
-		if (jsonobj.True(data["private"]) || jsonobj.True(snap["private"])) && privateFolder(user) != "" {
-			t.Owner, t.Assignee = user, "" // a private task has no assignee
+		t.Tags = retag(t.Tags, add, nil)
+		switch private := jsonobj.True(snap["private"]) && privateFolder(user) != ""; {
+		case into == nil:
+			inbox = placeSnapshot(user, t, snap, lists) || inbox
+		case private && !into.Private():
+			// A task exported private stays private, wherever it is imported.
+			t.List, t.Owner, t.Assignee, inbox = privateListName, user, "", true
+		default:
+			t.List, t.Owner = into.Name, into.Owner
+			if into.Private() {
+				t.Assignee = "" // a private task has no assignee
+			}
 		}
 		if t.IsOpen() {
 			active = append(active, t)
@@ -469,7 +490,15 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 		ids = append(ids, t.ID)
 	}
 	if len(ids) > 0 {
-		if err := taskFiles.WriteBothLocked(user, active, closed, "Import "+strconv.Itoa(len(ids))+" tasks"); err != nil {
+		var also []string
+		if inbox {
+			path, err := ensurePrivateListLocked(user)
+			if err != nil {
+				return err
+			}
+			also = append(also, path)
+		}
+		if err := taskFiles.WriteBothLocked(user, active, closed, "Import "+strconv.Itoa(len(ids))+" tasks", nonEmpty(also)...); err != nil {
 			return err
 		}
 	}

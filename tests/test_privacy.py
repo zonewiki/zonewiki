@@ -43,7 +43,7 @@ COMMENT_ID = "c0ffee01"
 
 def private_task(id, title, closed_at=None):
     return {"id": id, "title": f"{title} {SECRET} {QUERY}", "description": f"{QUERY} {SECRET} for [[plans]]\n\n- [ ] Step",
-            "tags": [f"{QUERY}-{SECRET}", "secretlist"], "start_date": None, "due_date": "2026-01-01",
+            "tags": [f"{QUERY}-{SECRET}", "secretlist"], "list": "secretlist", "start_date": None, "due_date": "2026-01-01",
             "created_at": "2026-01-01T10:00:00", "closed_at": closed_at, "wont_do": False, "keep": False,
             "last_done": None, "sort_order": None, "recurrence": {"type": "weekly", "interval": 1, "from": "due"},
             "spawned_from": None, "history": [],
@@ -70,10 +70,17 @@ def wiki(git_wiki_dir, monkeypatch):
     (w / f"{NOTE}.md").write_text(f"# Idea {SECRET}\n\n{QUERY} {SECRET}\n")
     (w / "private/alice/_assets/photo.png").write_bytes(SECRET.encode())
     (w / "plans.md").write_text(f"# Plans\n\nSee [[{DIARY}]] and [[{DIARY}|my diary]].\n\n- [[task:{TASK_ID[:8]}]]\n")
-    # Her tasks: her own home and a list of hers, and her tasks.
-    (w / "private/alice/deck.md").write_text(f"# My tasks {SECRET}\n\n[[tasks: pin=1 list=secretlist]]\n")
+    # Her tasks: a private list of hers, pinned (her default list), a page
+    # that shows it and one of her tags, and her tasks, in that list.
+    (w / "private/alice/deck.md").write_text(
+        f"# My tasks {SECRET}\n\n[[tasks: list=secretlist]]\n\n[[tasks: tag=secretlist]]\n")
     tasks = w / "private/alice/_tasks"
     tasks.mkdir(parents=True)
+    (tasks / "lists.json").write_text(
+        '{\n  "version": 1,\n  "lists": [\n    {"name": "secretlist"}\n  ],\n'
+        '  "pinned": ["secretlist"],\n  "default": "secretlist"\n}\n')
+    (w / "_tasks").mkdir(exist_ok=True)
+    (w / "_tasks/lists.json").write_text('{\n  "version": 1,\n  "lists": []\n}\n')
     this_year = __import__("datetime").date.today().year
     (tasks / "tasks.json").write_text(json.dumps([private_task(TASK_ID, "Task")], indent=2) + "\n")
     (tasks / "closed.json").write_text(
@@ -392,36 +399,47 @@ def test_links_from_invisible_pages_dont_count(alice, wiki):
     assert links(bob)["plans"] == 0
 
 
-def test_a_new_task_in_a_private_place_is_private(alice, wiki):
-    """An embed on a page in her folder, and New task / c t with her tasks
-    home there, start a new task private; /tasks doesn't."""
-    assert 'data-init-private="1"' in alice.get("/page/private/alice/deck", headers=HOST).data.decode()
+def test_a_new_task_goes_to_her_default_list(alice, wiki):
+    """Her default list is her private one: an embed of it shows it, and
+    New task / c t (the page's data, the headless app) start a new task
+    there, so private; the List field names her lists, hers marked. Bob has
+    no such list."""
+    html = __import__("html")
+    assert 'data-init-list="secretlist"' in alice.get("/page/private/alice/deck", headers=HOST).data.decode()
     index = alice.get("/page/index", headers=HOST).data.decode()
-    assert 'data-tasks-private="1"' in index
-    tasks = alice.get("/tasks", headers=HOST).data.decode()
-    assert 'id="task-edit-private"' in tasks and "data-init-private" not in tasks
+    assert 'data-tasks-list="secretlist"' in index
+    tasks = html.unescape(alice.get("/tasks", headers=HOST).data.decode())
+    assert 'id="task-edit-list"' in tasks and "task-edit-private" not in tasks
+    assert 'data-default-list="secretlist"' in tasks and '{"ref":"secretlist","private":true}' in tasks
     assert 'data-private-folder="private/alice"' in tasks
-    assert 'data-init-private="1"' in alice.get("/api/tasks/headless", headers=HOST).data.decode()
+    assert 'data-default-list="secretlist"' in alice.get("/api/tasks/headless", headers=HOST).data.decode()
     sign_in(alice, "bob")
     bob = alice
     index = bob.get("/page/index", headers=HOST).data.decode()
-    assert "data-tasks-private" not in index and 'id="task-edit-private"' in bob.get("/tasks", headers=HOST).data.decode()
+    assert "data-tasks-list" not in index and "secretlist" not in bob.get("/tasks", headers=HOST).data.decode()
 
 
-def test_no_private_box_without_users(client, wiki_dir):
+def test_nothing_private_without_users(client, wiki_dir):
     tasks = client.get("/tasks", headers=HOST).data.decode()
-    assert "task-edit-private" not in tasks and "data-private-folder" not in tasks
+    assert "list-new-private" not in tasks and "data-private-folder" not in tasks
     assert "private" not in client.post("/api/tasks", json={"title": "x"}, headers=HOST).get_json()
+    # private is no field of a write, and no list is private.
     resp = client.post("/api/tasks", json={"title": "y", "private": True}, headers=HOST)
-    assert resp.status_code == 400
+    assert resp.status_code == 400 and "list" in resp.get_json()["error"]
+    made = client.post("/tasks/new-list", data={"name": "mine", "private": "1"}, headers=HOST)
+    assert "newlist_error" in made.headers["Location"] and not (wiki_dir / "_tasks/lists.json").exists()
 
 
 def test_a_task_moves_between_her_files_and_the_shared_ones(alice, wiki):
-    task = alice.post("/api/tasks", json={"title": "Gift", "private": True}, headers=HOST).get_json()
-    assert task["private"] is True
+    task = alice.post("/api/tasks", json={"title": "Gift", "list": "secretlist"}, headers=HOST).get_json()
+    assert task["private"] is True and task["list"] == "secretlist"
     mine, shared = wiki / "private/alice/_tasks/tasks.json", wiki / "_tasks/tasks.json"
     assert task["id"] in mine.read_text() and task["id"] not in shared.read_text()
-    assert alice.put(f"/api/tasks/{task['id']}", json={"private": False}, headers=HOST).get_json()["private"] is False
+    # Out of her private list it is shared: only when the write says so.
+    refused = alice.put(f"/api/tasks/{task['id']}", json={"list": ""}, headers=HOST)
+    assert refused.status_code == 400 and "share" in refused.get_json()["error"] and task["id"] in mine.read_text()
+    moved = alice.put(f"/api/tasks/{task['id']}", json={"list": "", "share": True}, headers=HOST).get_json()
+    assert moved["private"] is False and "list" not in moved
     assert task["id"] in shared.read_text() and task["id"] not in mine.read_text()
     # One commit, both files, in her name.
     assert git(wiki, "show", "--name-only", "--format=%an", "HEAD").split() == [
@@ -431,15 +449,15 @@ def test_a_task_moves_between_her_files_and_the_shared_ones(alice, wiki):
 
 
 def test_a_tag_does_not_make_a_task_private(alice, wiki):
-    """secretlist is declared in her folder, but where a task is kept is
-    not decided by its tags: it is private only when the request says so."""
-    assert "data-private-lists" not in alice.get("/tasks", headers=HOST).data.decode()
-    assert alice.post("/api/tasks", json={"title": "A", "tags": ["SecretList"]}, headers=HOST).get_json()["private"] is False
-    own = alice.post("/api/tasks", json={"title": "B", "tags": ["secretlist"], "private": True}, headers=HOST)
-    assert own.get_json()["private"] is True
-    c = alice.post("/api/tasks", json={"title": "C", "private": False}, headers=HOST).get_json()
+    """secretlist is her private list, but a tag of that name is a tag:
+    a task is in a list, and so private, only by its list."""
+    a = alice.post("/api/tasks", json={"title": "A", "tags": ["SecretList"]}, headers=HOST).get_json()
+    assert a["private"] is False and "list" not in a
+    own = alice.post("/api/tasks", json={"title": "B", "list": "SecretList"}, headers=HOST).get_json()
+    assert own["private"] is True and own["list"] == "secretlist" and own["tags"] == []
+    c = alice.post("/api/tasks", json={"title": "C"}, headers=HOST).get_json()
     tagged = alice.post("/api/tasks/batch-tag", json={"ids": [c["id"]], "add": ["secretlist"]}, headers=HOST)
-    assert tagged.get_json()[0]["private"] is False
+    assert tagged.get_json()[0]["private"] is False and "list" not in tagged.get_json()[0]
 
 
 def test_a_shared_task_cannot_be_made_private(alice, wiki):
@@ -448,23 +466,25 @@ def test_a_shared_task_cannot_be_made_private(alice, wiki):
     sign_in(alice, "bob")
     bobs = alice.post("/api/tasks", json={"title": "Bob's"}, headers=HOST).get_json()
     sign_in(alice, "alice")
-    for resp in (alice.put(f"/api/tasks/{bobs['id']}", json={"private": True}, headers=HOST),
-                 alice.post("/api/tasks/batch-update", json={"tasks": [{"id": bobs["id"], "private": True}]}, headers=HOST)):
+    for resp in (alice.put(f"/api/tasks/{bobs['id']}", json={"list": "secretlist"}, headers=HOST),
+                 alice.post("/api/tasks/batch-update", json={"tasks": [{"id": bobs["id"], "list": "secretlist"}]}, headers=HOST)):
         assert resp.status_code == 400 and "stays shared" in resp.get_json()["error"]
-    assert "stays shared" in mcp(alice, "update_task", token="alice-token", id=bobs["id"], private=True)
+    assert "stays shared" in mcp(alice, "update_task", token="alice-token", id=bobs["id"], list="secretlist")
     assert bobs["id"] in (wiki / "_tasks/tasks.json").read_text()
     assert not (wiki / "private/alice/_tasks/tasks.json").exists() or bobs["id"] not in (wiki / "private/alice/_tasks/tasks.json").read_text()
-    # Her own private task goes the other way; unchanged (false on a shared one) is no error.
-    mine = alice.post("/api/tasks", json={"title": "Mine", "private": True}, headers=HOST).get_json()
-    assert alice.put(f"/api/tasks/{bobs['id']}", json={"private": False}, headers=HOST).status_code == 200
-    assert alice.put(f"/api/tasks/{mine['id']}", json={"private": False}, headers=HOST).get_json()["private"] is False
+    # Her own private task goes the other way; unchanged (no list, on one in none) is no error.
+    mine = alice.post("/api/tasks", json={"title": "Mine", "list": "secretlist"}, headers=HOST).get_json()
+    assert alice.put(f"/api/tasks/{bobs['id']}", json={"list": ""}, headers=HOST).status_code == 200
+    assert alice.put(f"/api/tasks/{mine['id']}", json={"list": "", "share": True}, headers=HOST).get_json()["private"] is False
+    assert alice.put(f"/api/tasks/{mine['id']}", json={"list": "secretlist"}, headers=HOST).status_code == 400
+    # private is no field of a write: a task is private by its list.
     assert alice.put(f"/api/tasks/{mine['id']}", json={"private": True}, headers=HOST).status_code == 400
 
 
 def test_comments_are_everyones_to_change(alice, wiki):
     """A shared task is everyone's, its comments too: alice may edit and
     delete bob's, and an edit keeps the author."""
-    task = alice.post("/api/tasks", json={"title": "Shared", "private": False}, headers=HOST).get_json()
+    task = alice.post("/api/tasks", json={"title": "Shared", "list": ""}, headers=HOST).get_json()
     url = f"/api/tasks/{task['id']}/comments"
     sign_in(alice, "bob")
     his = alice.post(url, json={"text": "His"}, headers=HOST).get_json()["comments"][-1]
@@ -477,13 +497,14 @@ def test_comments_are_everyones_to_change(alice, wiki):
 
 def test_sharing_a_task_is_in_its_history(alice, wiki):
     """Making a private task shared is an event in its History, by who did it."""
-    task = alice.post("/api/tasks", json={"title": "Own", "private": True}, headers=HOST).get_json()
+    task = alice.post("/api/tasks", json={"title": "Own", "list": "secretlist"}, headers=HOST).get_json()
     url = f"/api/tasks/{task['id']}"
-    last = alice.put(url, json={"private": False}, headers=HOST).get_json()["history"][-1]
+    last = alice.put(url, json={"list": "", "share": True}, headers=HOST).get_json()["history"][-1]
     assert (last["event"], last["by"]) == ("shared", "alice")
     # Unchanged is no event, and a new private task has none to start with.
-    assert alice.put(url, json={"private": False}, headers=HOST).get_json()["history"][-1]["event"] == "shared"
-    new = alice.post("/api/tasks", json={"title": "New", "private": True}, headers=HOST).get_json()
+    again = alice.put(url, json={"list": ""}, headers=HOST).get_json()["history"]
+    assert [e["event"] for e in again].count("shared") == 1
+    new = alice.post("/api/tasks", json={"title": "New", "list": "secretlist"}, headers=HOST).get_json()
     assert [e["event"] for e in new["history"]] == ["created"]
 
 
@@ -496,12 +517,16 @@ def test_undoing_a_delete_keeps_a_task_private(alice, wiki):
 
 
 def test_alices_assistant_makes_private_tasks(client, wiki):
-    """Her Tasks home is in her folder: create_task makes private tasks
-    unless told otherwise, as c t does."""
+    """Her default list is her private one: create_task puts a task there,
+    so private, unless told another list, as c t does."""
     text = mcp(client, "create_task", token="alice-token", title="Call mum")
-    assert "· private ·" in text
-    text = mcp(client, "create_task", token="alice-token", title="Team lunch", private=False)
-    assert "private" not in text.split("\n")[3]
+    assert "· private ·" in text and "list: secretlist" in text
+    assert "Created the list #team" in mcp(client, "create_task_list", token="alice-token", name="Team")
+    text = mcp(client, "create_task", token="alice-token", title="Team lunch", list="team")
+    assert "private" not in text.split("\n")[3] and "list: team" in text
+    assert "private" not in mcp(client, "create_task", token="alice-token", title="Loose lunch", list="").split("\n")[3]
+    assert "stays" not in mcp(client, "create_task", token="alice-token", title="x", private=True)   # told to give list
+    assert "list" in mcp(client, "create_task", token="alice-token", title="x", private=True)
     assert "Team lunch" in mcp(client, "search_tasks", query="lunch")
     assert "Call mum" not in mcp(client, "search_tasks", query="mum")
 
@@ -635,18 +660,23 @@ def test_bobs_assistant_writes_quicknotes_in_his_folder(client, wiki):
 
 
 def test_a_private_new_list_is_its_makers_alone(alice, client, wiki):
-    """New list… with Private: the page is in alice's folder, so bob has no
-    such list; a shared one by that name is his to make."""
+    """New list… with Private: the list is in alice's registry, so bob has
+    no such list; a shared one by that name is his to make, and she then
+    has both, her own by the plain name."""
     resp = alice.post("/tasks/new-list", data={"name": "Gifts", "private": "1"}, headers=HOST)
     assert resp.headers["Location"] == "/tasks?list=gifts"
-    assert (wiki / "private/alice/lists/gifts.md").read_text() == "# Gifts\n\n[[tasks: list=gifts]]\n"
+    assert '{"name": "gifts"}' in (wiki / "private/alice/_tasks/lists.json").read_text()
+    assert not (wiki / "private/alice/lists").exists() and "gifts" not in (wiki / "_tasks/lists.json").read_text()
     page = alice.get("/tasks", headers=HOST).get_data(as_text=True)
     assert 'data-place="list:gifts"' in page and 'id="list-new-private"' in page
     assert alice.post("/tasks/new-list", data={"name": "gifts"}, headers=HOST).headers["Location"].startswith("/tasks?newlist_name=")
     sign_in(client, "bob")
     assert 'data-place="list:gifts"' not in client.get("/tasks", headers=HOST).get_data(as_text=True)
     assert client.post("/tasks/new-list", data={"name": "gifts"}, headers=HOST).headers["Location"] == "/tasks?list=gifts"
-    assert (wiki / "lists/gifts.md").exists()
+    assert '{"name": "gifts"}' in (wiki / "_tasks/lists.json").read_text()
+    sign_in(client, "alice")
+    page = client.get("/tasks", headers=HOST).get_data(as_text=True)
+    assert 'data-place="list:gifts"' in page and 'data-place="list:shared/gifts"' in page
 
 
 # ── Writes ───────────────────────────────────────────────────────────────────
@@ -660,6 +690,12 @@ WRITES = [
     # New list…: a list named as alice's private one, and one aimed at her folder.
     ("POST /tasks/new-list", "POST", "/tasks/new-list", {"data": {"name": "secretlist"}}),
     ("POST /tasks/new-list", "POST", "/tasks/new-list", {"data": {"name": "../alice/x", "private": "1"}}),
+    # Her private list, by its name: no list for bob.
+    ("POST /tasks/rename-list", "POST", "/tasks/rename-list", {"data": {"list": "secretlist", "new_name": "stolen"}}),
+    ("POST /tasks/delete-list", "POST", "/tasks/delete-list", {"data": {"list": "secretlist", "to": "", "share": "1"}}),
+    ("POST /tasks/share-list", "POST", "/tasks/share-list", {"data": {"list": "secretlist"}}),
+    ("POST /tasks/pin-list", "POST", "/tasks/pin-list", {"data": {"list": "secretlist", "pin": "1"}}),
+    ("POST /api/tasks/settings", "POST", "/api/tasks/settings", {"json": {"list": "secretlist", "set": {"limit": "3"}}}),
     ("POST /tasks/rename", "POST", "/tasks/rename", {"data": {"tag": f"{QUERY}-{SECRET}", "new_name": "stolen"}}),
     ("POST /rename/{slug...}", "POST", "/rename/plans", {"data": {"new_name": "private/alice/plans"}}),
     ("POST /delete/{slug...}", "POST", f"/delete/{DIARY}", {}),
@@ -683,9 +719,10 @@ WRITES = [
                                                                   "overwrite": "1"}}),
     # The settings dialog: the [[tasks: …]] on alice's page.
     ("POST /api/tasks/settings", "POST", "/api/tasks/settings",
-     {"json": {"page": "private/alice/deck", "index": 0, "was": "pin=1 list=secretlist", "set": {"view": "open", "pin": ""}}}),
-    # alice's tasks, by id; bob's own private task goes into his files.
-    ("POST /api/tasks", "POST", "/api/tasks", {"json": {"title": "Bob's", "private": True}}),
+     {"json": {"page": "private/alice/deck", "index": 0, "was": "list=secretlist", "set": {"view": "open"}}}),
+    # alice's tasks, by id; a task of bob's for her list is refused (he has no such list).
+    ("POST /api/tasks", "POST", "/api/tasks", {"json": {"title": "Bob's", "list": "secretlist"}}),
+    ("PUT /api/tasks/{id}", "PUT", f"/api/tasks/{TASK_ID}", {"json": {"list": "", "share": True}}),
     ("PUT /api/tasks/{id}", "PUT", f"/api/tasks/{TASK_ID}", {"json": {"title": "Bob was here"}}),
     ("PUT /api/tasks/{id}", "PUT", f"/api/tasks/{DONE_ID}", {"json": {"completed": False}}),
     ("DELETE /api/tasks/{id}", "DELETE", f"/api/tasks/{TASK_ID}", {}),
@@ -761,7 +798,9 @@ MCP_WRITES = [
     ("file_note", {"slug": NOTE, "name": "stolen"}),
     ("file_note", {"slug": "{bobs}", "page": DIARY}),
     ("file_note", {"slug": "{bobs}", "name": "x", "folder": "private/alice"}),
-    ("create_task", {"title": "Bob's", "private": True}),
+    ("create_task", {"title": "Bob's", "list": "secretlist"}),
+    ("create_task_list", {"name": "secretlist", "private": True}),   # his own list of that name
+    ("update_task", {"id": TASK_ID, "list": "", "share": True}),
     ("update_task", {"id": TASK_ID[:8], "title": "Bob was here"}),
     ("update_task", {"id": TASK_ID, "status": "wont_do"}),
     ("update_task", {"id": DONE_ID, "status": "open", "comment": "Bob's"}),
@@ -796,7 +835,10 @@ def test_a_shared_tags_rename_reaches_private_files_and_tells_nothing(bob, wiki)
     out = mcp(bob, "rename_task_tag", tag="secretlist", new_tag="renamed")
     assert out == "Renamed tag #secretlist to #renamed, in one commit: 1 task."
     assert "renamed" in _private_tags(wiki) and "secretlist" not in _private_tags(wiki)
-    assert "list=renamed" in (wiki / "private/alice/deck.md").read_text()
+    # Her embed that filters by the tag follows; her list of that name is no tag, and stays.
+    deck = (wiki / "private/alice/deck.md").read_text()
+    assert "tag=renamed" in deck and "list=secretlist" in deck
+    assert '{"name": "secretlist"}' in (wiki / "private/alice/_tasks/lists.json").read_text()
 
 
 def test_a_tag_only_she_sees_stays_hers(alice, wiki):
@@ -804,7 +846,7 @@ def test_a_tag_only_she_sees_stays_hers(alice, wiki):
     and nothing about it shows in the history bob reads."""
     bobs = wiki / "private/bob/_tasks"
     bobs.mkdir(parents=True)
-    (bobs / "tasks.json").write_text(json.dumps([{**private_task(TASK_ID[:-1] + "9", "Bob's"), "tags": ["secretlist"]}]))
+    (bobs / "tasks.json").write_text(json.dumps([{**private_task(TASK_ID[:-1] + "9", "Bob's"), "tags": ["secretlist"], "list": ""}]))
     out = mcp(alice, "rename_task_tag", token="alice-token", tag="secretlist", new_tag="lumenword")
     assert "Renamed tag" in out and "private/alice/deck" in out, out
     assert "lumenword" in _private_tags(wiki)
@@ -983,7 +1025,10 @@ def test_an_exported_private_task_stays_private_when_imported(alice, wiki):
     assert mine and mine[0]["private"] is True
     alice.delete(f"/api/tasks/{TASK_ID}", headers=HOST)
     shared_before = (wiki / "_tasks/tasks.json").read_text() if (wiki / "_tasks/tasks.json").exists() else ""
+    alice.post("/tasks/new-list", data={"name": "shared"}, headers=HOST)
     out = alice.post("/api/tasks/import", json={"file": {"tasks": mine}, "list": "shared"}, headers=HOST).get_json()
     assert out == {"added": 1, "skipped": 0, "ids": [TASK_ID]}
-    assert TASK_ID in (wiki / "private/alice/_tasks/tasks.json").read_text()
+    # Into a shared list: it stays hers, in her list "private", made for it.
+    back = next(t for t in json.loads((wiki / "private/alice/_tasks/tasks.json").read_text()) if t["id"] == TASK_ID)
+    assert back["list"] == "private" and '{"name": "private"}' in (wiki / "private/alice/_tasks/lists.json").read_text()
     assert ((wiki / "_tasks/tasks.json").read_text() if (wiki / "_tasks/tasks.json").exists() else "") == shared_before

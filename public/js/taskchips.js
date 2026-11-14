@@ -17,8 +17,8 @@ export function initTaskChips(app) {
 // the filter field (chips are filter words: #a, -#b, #a|b) and the edit
 // modal's Tags field (chips are tag names, shown as #name). `locked` words
 // (an embed's filter words, case ignored) are always there and have no ×.
-// `listWord(w)` marks a separate list's tag: such chips come first, with a
-// list icon, a tint and a tooltip naming the list's page. `mark(chip, w)`
+// `listWord(w)` marks a word that names a list (the filter's list:shop):
+// such chips come first, with a list icon, a tint and a tooltip. `mark(chip, w)`
 // may add to a chip (a class, a tooltip).
 function chipField(input, { label = w => w, onChange, locked = [], listWord = () => false, mark } = {}) {
   const lockedSet = new Set(locked.map(w => w.toLowerCase()));

@@ -6,7 +6,7 @@ from datetime import date, timedelta
 import pytest
 from playwright.sync_api import expect
 
-from conftest import TOUCH_PHONE, open_tab, pick_date, wait_until
+from conftest import TOUCH_PHONE, make_list, open_tab, pick_date, wait_until
 
 
 def day(offset: int) -> str:
@@ -197,7 +197,7 @@ def test_select_mode_bar_fits_every_action(selecting, wiki):
     # Every action at once (a list to move to, something to unplan): the
     # buttons stay inside the bar, whole and finger-sized, on a phone.
     pg = selecting
-    wiki.write("shop", "# Shop\n\n[[tasks: list=shop]]\n")
+    make_list(pg, "shop")
     for t in tasks_by_title(pg).values():
         pg.request.put(f"/api/tasks/{t['id']}", data={"start_date": date.today().isoformat()})
     pg.reload()

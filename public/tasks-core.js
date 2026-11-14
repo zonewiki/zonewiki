@@ -87,22 +87,29 @@ function placeInOrder(old, shown, moved) {
 // users a task can be assigned to; without it '@' is text), words starting
 // with '@' filter by assignee the same way: `@anna`, `@anna|bob`, `-@anna`,
 // `@me` (whoever is signed in) and `@none` (assigned to no one).
+// `list:shop` filters by the list a task is in (by its name; `list:a|b`
+// either, `-list:shop` not in it, `list:none` in no list).
 // Returns { text, tagGroups, excludeTags, importance, assigneeGroups,
-// excludeAssignees, people } — every group must have at least one match,
-// and nothing excluded may be present.
+// excludeAssignees, listGroups, excludeLists, people } — every group must
+// have at least one match, and nothing excluded may be present.
 function parseFilter(q, people) {
   const words = (q || '').trim().split(/\s+/).filter(Boolean);
   const tagGroups = [];
   const excludeTags = [];
   const assigneeGroups = [];
   const excludeAssignees = [];
+  const listGroups = [];
+  const excludeLists = [];
   const text = [];
+  const listsOf = w => w.replace(/^list:/i, '').split('|').map(n => n.replace(/^shared\//i, '').toLowerCase()).filter(Boolean);
   const partsOf = (w, sigil) => w.split('|').map(t => (t.startsWith(sigil) ? t.slice(1) : t).toLowerCase()).filter(Boolean);
   const tagsOf = w => partsOf(w, '#');
   const users = !!people?.users;
   let importance = '';
   for (const w of words) {
     if (importanceWord(w)) importance = importanceWord(w);
+    else if (/^-list:./i.test(w)) excludeLists.push(...listsOf(w.slice(1)));
+    else if (/^list:./i.test(w)) listGroups.push(listsOf(w));
     else if (w.startsWith('-#')) excludeTags.push(...tagsOf(w.slice(1)));
     else if (w.startsWith('#')) {
       const group = tagsOf(w);
@@ -115,13 +122,13 @@ function parseFilter(q, people) {
       text.push(w);
     }
   }
-  return { text: text.join(' ').toLowerCase(), tagGroups, excludeTags, importance, assigneeGroups, excludeAssignees, people };
+  return { text: text.join(' ').toLowerCase(), tagGroups, excludeTags, importance, assigneeGroups, excludeAssignees, listGroups, excludeLists, people };
 }
 
 // Whether a filter (parseFilter) leaves anything out.
 function filterActive(f) {
   return !!(f.text || f.tagGroups.length || f.excludeTags.length || f.importance ||
-    f.assigneeGroups?.length || f.excludeAssignees?.length);
+    f.assigneeGroups?.length || f.excludeAssignees?.length || f.listGroups?.length || f.excludeLists?.length);
 }
 
 // Whether the task's assignee is what a filter word names: a user, `me`
@@ -153,6 +160,9 @@ function matchesFilter(t, f) {
   const is = w => assigneeIs(t, w, f.people);
   if ((f.excludeAssignees || []).some(is)) return false;
   if (!(f.assigneeGroups || []).every(g => g.some(is))) return false;
+  const inList = n => n === 'none' ? !t.list : (t.list || '').toLowerCase() === n;
+  if ((f.excludeLists || []).some(inList)) return false;
+  if (!(f.listGroups || []).every(g => g.some(inList))) return false;
   return f.tagGroups.every(g => g.some(tag => tags.includes(tag)));
 }
 

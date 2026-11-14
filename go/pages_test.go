@@ -125,11 +125,11 @@ func TestPlainTaskTitle(t *testing.T) {
 
 func TestNewTaskTags(t *testing.T) {
 	for raw, want := range map[string][]string{
-		"list=Shop tag=weekly,food": {"shop", "weekly", "food"},
+		"list=Shop tag=weekly,food": {"weekly", "food"}, // its list is no tag
 		"tag=work,-mary":            {"work"},
-		"list=task tag=a|b":         {"task"},
+		"list=task tag=a|b":         nil,
 		"":                          nil,
-		"list=task tag=Task":        {"task"},
+		"tag=weekly new=Milk,eggs":  {"Milk", "eggs"}, // new= in place of the filter's
 	} {
 		if got := newTaskTags(parseTasksParams(raw)); len(got)+len(want) > 0 && !reflect.DeepEqual(got, want) {
 			t.Errorf("newTaskTags(%q) = %q, want %q", raw, got, want)
@@ -236,14 +236,13 @@ func TestRetag(t *testing.T) {
 
 func TestRenameTagInText(t *testing.T) {
 	for _, c := range []struct{ in, want string }{
-		{"[[tasks: list=shop keep=1]]", "[[tasks: list=food keep=1]]"},
-		{"[[tasks:  LIST=Shop   view=open]]", "[[tasks:  LIST=food   view=open]]"},
+		{"[[tasks: list=shop keep=1]]", "[[tasks: list=shop keep=1]]"}, // a list is no tag (renameListInText)
 		{"[[tasks: tag=work,-shop]]", "[[tasks: tag=work,-food]]"},
 		{"[[tasks: tag=#shop|home new=shop,x]]", "[[tasks: tag=#food|home new=food,x]]"},
 		{"[[tasks: list=shopping tag=workshop labels=shop,b]]", "[[tasks: list=shopping tag=workshop labels=shop,b]]"},
-		{"[go](/tasks?list=shop)", "[go](/tasks?list=food)"},
+		{"[go](/tasks?list=shop)", "[go](/tasks?list=shop)"},
 		{"[go](/tasks?view=open&tag=shop#x)", "[go](/tasks?view=open&tag=food#x)"},
-		{"http://wiki.lan/tasks?list=shop and /tasks?tag=a%7Cshop", "http://wiki.lan/tasks?list=food and /tasks?tag=a%7Cfood"},
+		{"http://wiki.lan/tasks?list=shop and /tasks?tag=a%7Cshop", "http://wiki.lan/tasks?list=shop and /tasks?tag=a%7Cfood"},
 		{"[go](/tasks?list=other&view=shop)", "[go](/tasks?list=other&view=shop)"},
 		{"/mytasks?list=shop", "/mytasks?list=shop"},
 		{"#shop and shop stay, [[shop]] too", "#shop and shop stay, [[shop]] too"},
@@ -254,8 +253,40 @@ func TestRenameTagInText(t *testing.T) {
 			t.Errorf("%q: got %q, want %q", c.in, got, c.want)
 		}
 	}
-	if got := renameTagInText("[[tasks: list=shop tag=shop]]", "shop", "Food"); got != "[[tasks: list=food tag=Food]]" {
-		t.Errorf("a list's name is lowercase, a tag keeps its spelling: %q", got)
+	if got := renameTagInText("[[tasks: list=shop tag=shop]]", "shop", "Food"); got != "[[tasks: list=shop tag=Food]]" {
+		t.Errorf("a tag keeps its spelling, a list of that name its name: %q", got)
+	}
+}
+
+// A list's rename in text: the embeds and /tasks links that name it, by
+// what the renamer says a name becomes; code and everything else stay.
+func TestRenameListInText(t *testing.T) {
+	rename := func(ref string) string {
+		return map[string]string{"shop": "food", "shared/shop": "shared/food"}[ref]
+	}
+	keep := func(ref string) string {
+		if n := rename(ref); n != "" {
+			return n
+		}
+		return ref
+	}
+	for _, c := range []struct{ in, want string }{
+		{"[[tasks: list=shop keep=1]]", "[[tasks: list=food keep=1]]"},
+		{"[[tasks:  LIST=Shop   view=open]]", "[[tasks:  LIST=food   view=open]]"},
+		{"[[tasks: list=shared/shop]]", "[[tasks: list=shared/food]]"},
+		{"[[tasks: tag=shop new=shop]]", "[[tasks: tag=shop new=shop]]"},
+		{"[[tasks: list=shopping labels=shop,b]]", "[[tasks: list=shopping labels=shop,b]]"},
+		{"[go](/tasks?list=shop)", "[go](/tasks?list=food)"},
+		{"http://wiki.lan/tasks?view=open&list=shop#x and /tasks?tag=shop", "http://wiki.lan/tasks?view=open&list=food#x and /tasks?tag=shop"},
+		{"[go](/tasks?list=shared%2Fshop)", "[go](/tasks?list=shared%2Ffood)"},
+		{"/mytasks?list=shop", "/mytasks?list=shop"},
+		{"#shop and shop stay, [[shop]] too", "#shop and shop stay, [[shop]] too"},
+		{"`[[tasks: list=shop]]` and `/tasks?list=shop`", "`[[tasks: list=shop]]` and `/tasks?list=shop`"},
+		{"```\n[[tasks: list=shop]]\n```\n", "```\n[[tasks: list=shop]]\n```\n"},
+	} {
+		if got := renameListInText(c.in, keep); got != c.want {
+			t.Errorf("%q: got %q, want %q", c.in, got, c.want)
+		}
 	}
 }
 

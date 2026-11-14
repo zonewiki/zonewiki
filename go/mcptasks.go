@@ -146,8 +146,18 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 	query, err1 := strArg(args, "query", false)
 	tag, err2 := strArg(args, "tag", false)
 	assignee, err3 := strArg(args, "assignee", false)
-	if err1 != nil || err2 != nil || err3 != nil {
-		return "", toolErr("query, tag and assignee must be strings")
+	list, err4 := strArg(args, "list", false)
+	if err1 != nil || err2 != nil || err3 != nil || err4 != nil {
+		return "", toolErr("query, tag, list and assignee must be strings")
+	}
+	lists := taskLists(user)
+	scope := ""
+	if list = cleanList(strings.TrimLeft(strings.TrimSpace(list), "#")); list != "" {
+		l, ok := resolveList(list, lists)
+		if !ok {
+			return "", toolErr("No list #" + list + " (list_tags shows the lists)")
+		}
+		scope = l.Ref
 	}
 	if assignee != "" && settings().Users == nil {
 		return "", toolErr("This wiki has no users, so its tasks have no assignees")
@@ -187,7 +197,7 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 		for w := range want {
 			all = all && have[w]
 		}
-		if all && assigneeParamMatches(d.Task, assignee, user) && (!q.HasFilters() || q.Accepts(d.text(), d.Tags, d.date()) && !q.HoldsExcluded(d.tokens())) {
+		if all && inScope(d.Task, scope, lists) && assigneeParamMatches(d.Task, assignee, user) && (!q.HasFilters() || q.Accepts(d.text(), d.Tags, d.date()) && !q.HoldsExcluded(d.tokens())) {
 			docs = append(docs, d)
 		}
 	}
@@ -356,7 +366,18 @@ func taskFields(args jsonObj, task *Task) (jsonObj, error) {
 		}
 		data.Set("assignee", s)
 	}
-	for _, f := range []string{"keep", "private"} {
+	// An assistant whose tool list is from before lists were places.
+	if args.Has("private") {
+		return nil, toolErr("A task is private by its list: give list (the name of one of the user's private lists; list_tags shows them), not private")
+	}
+	if args.Has("list") {
+		s, err := strArg(args, "list", false)
+		if err != nil {
+			return nil, err
+		}
+		data.Set("list", strings.TrimLeft(strings.TrimSpace(s), "#"))
+	}
+	for _, f := range []string{"keep", "share"} {
 		if args.Has(f) {
 			b, ok := jsonobj.As[bool](args[f])
 			if !ok {
@@ -497,27 +518,15 @@ func tagHints(task *Task, user string) string {
 	return out
 }
 
-// homeTags: a new task's tags, the default list's new-task tags (its list, its
-// single tags, as its "+ New" and c t give them) before the ones given, so
-// the task shows in user's tasks. Not when the given tags already name a
-// declared list: the task is filed there.
-func homeTags(tags json.RawMessage, user string) json.RawMessage {
+// homeTags: a new task's tags in the list home: the list's new-task tags
+// (as its "+ New" and c t give them) before the ones given.
+func homeTags(tags json.RawMessage, home *ListInfo) json.RawMessage {
 	l, ok := jsonobj.As[[]string](tags)
 	if s, isStr := jsonobj.As[string](tags); isStr {
 		l, ok = splitComma(s), true
 	}
 	if !ok && !jsonobj.IsNull(tags) {
 		return tags // createTask refuses it
-	}
-	home := lookupDefaultList(user)
-	if home == nil {
-		return tags
-	}
-	lists := taskLists(user)
-	for _, t := range l {
-		if _, ok := lists[strings.ToLower(strings.TrimLeft(t, "#"))]; ok {
-			return tags
-		}
 	}
 	b, _ := json.Marshal(taskmodel.CleanTags(append(newTaskTags(home.Params), l...)))
 	return b
@@ -531,17 +540,10 @@ func createTaskTool(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	data["tags"] = homeTags(data["tags"], user)
-	// As c t in the browser: private when the user's default list is theirs alone.
-	h := lookupDefaultList(user)
-	if !data.Has("private") && h != nil && ownPrivate(user, h.Slug) {
-		data.Set("private", true)
-	}
-	// And assigned as its "+ New" would: to the one user its assignee= names.
-	if private, _ := jsonobj.As[bool](data["private"]); h != nil && !private && !data.Has("assignee") {
-		if who := newTaskAssignee(h.Params, user); who != "" {
-			data.Set("assignee", who)
-		}
+	// As c t in the browser: into the user's default list, with its tags.
+	if h := lookupDefaultList(user); h != nil && !data.Has("list") {
+		data.Set("list", h.Ref)
+		data["tags"] = homeTags(data["tags"], h)
 	}
 	msg, err := commitMsg("Create task", args)
 	if err != nil {
@@ -719,4 +721,30 @@ func tagTasksTool(args jsonObj, user string) (string, error) {
 		head += " (the others had them so already)"
 	}
 	return head + ".\n\n" + strings.Join(lines, "\n"), nil
+}
+
+// createTaskListTool: a new task list, shared or (private) the user's own.
+func createTaskListTool(args jsonObj, base, user string) (string, error) {
+	name, err := strArg(args, "name", true)
+	if err != nil {
+		return "", err
+	}
+	private, err := boolArg(args, "private")
+	if err != nil {
+		return "", err
+	}
+	suffix, err := msgSuffix(args)
+	if err != nil {
+		return "", err
+	}
+	ref, err := createListOp(user, name, private, suffix)
+	if err != nil {
+		return "", err
+	}
+	kind := "shared: everyone who uses the wiki sees it and its tasks"
+	if private {
+		kind = "private: only the user sees it and its tasks"
+	}
+	return "Created the list #" + ref + " (" + kind + "). create_task's and update_task's list puts a task in it; " +
+		"[[tasks: list=" + ref + "]] shows it on a page.\n" + base + listHref(ref), nil
 }

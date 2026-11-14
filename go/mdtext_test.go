@@ -137,6 +137,7 @@ func TestPrepareMasksCode(t *testing.T) {
 }
 func TestPreparePlaceholders(t *testing.T) {
 	testWiki(t, nil)
+	mustList(t, "", "work", false)
 	text, embeds, refs := prepare("[[tasks:]] [[TASKS: list=work]] [[task:ABCD-1234]]\u00a0[[tasks:\u00a0view=x]]")
 	if text != "ZONETASKSPLACEHOLDER_0 ZONETASKSPLACEHOLDER_1 \ue0020\ue003\u00a0ZONETASKSPLACEHOLDER_2" {
 		t.Errorf("text %q", text)

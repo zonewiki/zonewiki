@@ -3,6 +3,7 @@
 package main
 
 import (
+	"cmp"
 	"errors"
 	"html/template"
 	"io"
@@ -17,6 +18,7 @@ import (
 	"strings"
 	"zonewiki/internal/jsonobj"
 	"zonewiki/internal/mdtext"
+	"zonewiki/internal/taskmodel"
 )
 
 func pageRoutes(mux *http.ServeMux) {
@@ -43,6 +45,10 @@ func pageRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /tasks", tasksPage)
 	mux.HandleFunc("POST /tasks/rename", writesPages(renameTagRoute))
 	mux.HandleFunc("POST /tasks/new-list", writesPages(newListRoute))
+	mux.HandleFunc("POST /tasks/rename-list", writesPages(renameListRoute))
+	mux.HandleFunc("POST /tasks/delete-list", writesPages(deleteListRoute))
+	mux.HandleFunc("POST /tasks/share-list", writesPages(shareListRoute))
+	mux.HandleFunc("POST /tasks/pin-list", writesPages(pinListRoute))
 	mux.HandleFunc("GET /api/search", apiSearch)
 	mux.HandleFunc("GET /search", searchPage)
 	mux.HandleFunc("POST /api/toggle-checkbox/{slug...}", writesPages(apiToggleCheckbox))
@@ -182,11 +188,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 		}
 		tasks = append(tasks, t)
 	}
-	var lists []string
-	for _, l := range pageTaskLists(content) {
-		lists = append(lists, l.Name)
-	}
-	sections := linkSections(rq, backlinks, tasks, lists)
+	sections := linkSections(rq, backlinks, tasks)
 	if rel := relatedSection(rq, slug, path, backlinks); rel != nil {
 		sections = append(sections, *rel)
 	}
@@ -387,7 +389,7 @@ func editorTasksHTML(rq *Req, slug string) template.HTML {
 	if rq.user == visitor {
 		return ""
 	}
-	return htmlOf(buildTasksEmbed(rq, TasksParams{}, 0, true, ownPrivate(rq.user, slug), ""))
+	return htmlOf(buildTasksEmbed(rq, TasksParams{}, 0, true, ""))
 }
 
 // postedContent: the editor's text, the browser's CRLF line ends as LF.
@@ -862,93 +864,122 @@ func apiPagesList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// tasksPage: /tasks, every task, or with ?list= that list, looking as on the
-// page that declares it (that embed's params apply). Every link to "the
+// tasksPage: /tasks, every task; with ?list= that list (by its ref), with
+// its settings; with ?pinned=1 the user's pinned lists as one; with ?tag=
+// every task, filtered by the tag (tasks.js reads it). Every link to "the
 // tasks" goes here; [[tasks: …]] embeds are for views on ordinary pages.
 func tasksPage(w http.ResponseWriter, r *http.Request) {
 	rq := newReq(r)
-	list := cleanList(r.URL.Query().Get("list"))
-	params, title, heading := TasksParams{}, "Tasks", "All tasks"
-	var home *TasksHome
+	q := r.URL.Query()
+	ref := cleanList(q.Get("list"))
+	params, title, heading := allTasksParams(), "Tasks", "All tasks"
+	var list *ListInfo
 	var sections []linkSection
 	var chip template.HTML
 	var pinnedLinks []pinnedLink
+	missing := ""
 	crumbs := []crumb{{"Tasks", ""}}
 	// The breadcrumb's key names the view for the navigation trail; no page has it.
-	key := "/tasks"
-	if list != "" {
-		if declared, ok := rq.taskLists()[list]; ok {
-			params = declared.Params
-			t, _ := pageMeta(safePath(declared.Slug), declared.Slug)
-			home = &TasksHome{Slug: declared.Slug, Title: t}
-		}
-		// A pinned list looks as its pinned embed shows it, wherever else it
-		// is declared.
-		if h := rq.pinnedFor(list); h != nil {
-			params, home = h.Params, h
-		}
-		params = params.With("list", list)
-		title, heading = "List: "+list, "List: "+list
-		// Backlinks: the pages that embed the list, as a page's are.
-		if pages := rq.listPages(list); len(pages) > 0 {
-			sections = []linkSection{{ID: "backlinks", Heading: "Backlinks", Links: pageLinks(pages)}}
-			chip = macro("backlinks_chip", pageLinks(pages))
-		}
-		crumbs = []crumb{{"Tasks", "/tasks"}, {list, ""}}
-		key += "?list=" + list
-	}
-	// A list declared in the user's private folder makes private tasks, as there.
-	private := home != nil && ownPrivate(rq.user, home.Slug)
-	at := ""
-	if home != nil {
-		at = home.Slug
-	} else if list == "" {
-		params = allTasksParams() // All tasks: its own settings
-	}
-	tasksHTML := buildTasksEmbed(rq, params, 0, false, private, at)
-	// The list switcher, this list (or All) current.
-	place := "all"
-	if list != "" {
-		place = "list:" + list
-	} else if r.URL.Query().Get("pinned") != "" {
-		// ?pinned=1: the pinned lists as one task app; with one pin or
-		// none, where the Tasks link goes.
-		pinned := rq.pinnedLists()
-		if len(pinned) < 2 {
-			http.Redirect(w, r, rq.tasksLinkHref(), http.StatusFound)
-			return
-		}
-		place, title, heading, crumbs, key = "pinned", "Pinned", "Pinned", []crumb{{"Tasks", "/tasks"}, {"Pinned", ""}}, "/tasks?pinned=1"
-		// Its settings are the default list's, whose params it has.
-		tasksHTML = buildTasksEmbed(rq, rq.pinnedView(), 0, false, rq.defaultPrivate(), pinned[0].Slug)
-		// Which lists it shows, and as its Backlinks the pages that embed them.
-		var pages []PageRef
-		pinnedLinks, pages = rq.pinnedSources()
+	key, place := "/tasks", "all"
+	backlinks := func(pages []PageRef) {
 		if len(pages) > 0 {
 			sections = []linkSection{{ID: "backlinks", Heading: "Backlinks", Links: pageLinks(pages)}}
 			chip = macro("backlinks_chip", pageLinks(pages))
 		}
 	}
+	switch {
+	case ref != "":
+		name := ref
+		if l, ok := resolveList(ref, rq.taskLists()); ok {
+			list, params, name, place = &l, l.Params, l.Name, "list:"+l.Ref
+			// Backlinks: the pages that embed the list, as a page's are.
+			backlinks(rq.listPages(l.Ref))
+		} else {
+			missing, place = ref, "" // nothing in the switcher is current
+		}
+		title, heading = "List: "+name, "List: "+name
+		crumbs = []crumb{{"Tasks", "/tasks"}, {name, ""}}
+		key += "?list=" + ref
+	case q.Get("pinned") != "":
+		// ?pinned=1: the pinned lists as one task app; with one pin or
+		// none, where the Tasks link goes.
+		if len(rq.pinnedLists()) < 2 {
+			http.Redirect(w, r, rq.tasksLinkHref(), http.StatusFound)
+			return
+		}
+		params, place, title, heading, key = rq.pinnedView(), "pinned", "My lists", "My lists", "/tasks?pinned=1"
+		crumbs = []crumb{{"Tasks", "/tasks"}, {"My lists", ""}}
+		// Which lists it shows, and as its Backlinks the pages that embed them.
+		var pages []PageRef
+		pinnedLinks, pages = rq.pinnedSources()
+		backlinks(pages)
+	}
+	var tasksHTML string
+	if missing != "" {
+		tasksHTML = noListHTML(rq, missing)
+	} else {
+		tasksHTML = tasksInitial(rq) + buildTasksEmbed(rq, params, 0, false, "")
+	}
+	// The list switcher, this list (or All) current.
 	places := rq.taskPlaces()
 	for i := range places {
 		places[i].Current = places[i].Key == place
 	}
-	tasksHTML = tasksInitial(rq) + tasksHTML
-	q := r.URL.Query()
-	page(w, rq, http.StatusOK, "tasks_page.html", title, shell{wide: sections != nil}, &tasksPageView{Heading: heading, ListName: list,
-		RenameName: firstNonEmpty(q.Get("rename_name"), list), RenameError: q.Get("rename_error"), RenameMerge: q.Get("rename_merge") != "",
-		Menu: !rq.sharing && !settings().isViewer(rq.user), PrivateFolder: privateFolder(rq.user),
+	v := &tasksPageView{Heading: heading, Missing: missing,
+		Menu: !rq.sharing && !listsUnmigrated && mayWriteTasks(rq.who()) == nil, Users: privateFolder(rq.user) != "",
 		NewListName: q.Get("newlist_name"), NewListError: q.Get("newlist_error"),
-		Home: home, Places: places, PinnedLists: pinnedLinks, TasksHTML: htmlOf(tasksHTML), LinkSections: sections,
-		BreadcrumbHTML: breadcrumb(rq, crumbs, key, true, title, chip)})
+		Places: places, PinnedLists: pinnedLinks, TasksHTML: htmlOf(tasksHTML), LinkSections: sections,
+		BreadcrumbHTML: breadcrumb(rq, crumbs, key, true, title, chip)}
+	if list != nil {
+		v.List = list
+		v.ListRenameName, v.ListRenameError = firstNonEmpty(q.Get("rename_name"), list.Name), q.Get("rename_error")
+		v.DeleteError, v.ShareError = q.Get("delete_error"), q.Get("share_error")
+		for i, p := range rq.pinnedLists() {
+			if p.Ref == list.Ref {
+				v.Pin = map[bool]string{true: "default", false: "1"}[i == 0]
+			}
+		}
+		// Where its tasks can go when it is deleted: the other lists, a
+		// private list's own kind first.
+		for _, ref := range sortedKeys(rq.taskLists()) {
+			if o := rq.taskLists()[ref]; o.Ref != list.Ref && (list.Private() || !o.Private()) {
+				v.MoveTo = append(v.MoveTo, o)
+			}
+		}
+		slices.SortStableFunc(v.MoveTo, func(a, b ListInfo) int {
+			return cmp.Compare(btoi(a.Private() != list.Private()), btoi(b.Private() != list.Private()))
+		})
+	} else if tags := taskmodel.CleanTags([]string{q.Get("tag")}); place == "all" && len(tags) == 1 && !strings.ContainsAny(tags[0], ",|") {
+		// ?tag=<one tag>: its Rename… is in the menu.
+		v.Tag = tags[0]
+		v.RenameName, v.RenameError, v.RenameMerge = firstNonEmpty(q.Get("rename_name"), v.Tag), q.Get("rename_error"), q.Get("rename_merge") != ""
+	}
+	page(w, rq, http.StatusOK, "tasks_page.html", title, shell{wide: sections != nil}, v)
 }
 
-// renameTagRoute: the Rename… dialog of /tasks?list=<name>. A refusal goes
-// back to the dialog with the message; a new name in use, there with the
-// offer to merge.
+func btoi(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// listBack: where a list's dialog goes back to with its refusal: the
+// list's view with the dialog's params (name → value).
+func listBack(w http.ResponseWriter, r *http.Request, ref string, params ...string) {
+	back := listHref(ref)
+	for i := 0; i+1 < len(params); i += 2 {
+		back += "&" + params[i] + "=" + url.QueryEscape(params[i+1])
+	}
+	http.Redirect(w, r, back, http.StatusFound)
+}
+
+// renameTagRoute: the Rename tag… dialog of /tasks?tag=<tag>. A refusal
+// goes back to the dialog with the message; a new name in use, there with
+// the offer to merge.
 func renameTagRoute(w http.ResponseWriter, r *http.Request) {
 	tag, name := r.PostFormValue("tag"), strings.TrimSpace(r.PostFormValue("new_name"))
-	back := "/tasks?list=" + url.QueryEscape(cleanList(tag))
+	back := "/tasks?tag=" + url.QueryEscape(strings.TrimLeft(strings.TrimSpace(tag), "#"))
 	_, err := renameTagOp(userOf(r), tag, name, r.PostFormValue("merge") != "", "")
 	if err != nil {
 		pe, ok := refusalOf(err)
@@ -966,15 +997,32 @@ func renameTagRoute(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	http.Redirect(w, r, "/tasks?list="+url.QueryEscape(cleanList(name)), http.StatusFound)
+	http.Redirect(w, r, "/tasks?tag="+url.QueryEscape(strings.TrimLeft(name, "#")), http.StatusFound)
 }
 
-// newListRoute: the New list… dialog of /tasks (its ⋯ menu). The new list
-// opens; a refusal that another name would mend goes back to the dialog with
-// the message.
+// listRefused answers a list operation's refusal: one the dialog can say
+// goes back to the list's view with it (param: the dialog's error), a list
+// that isn't there is a 404, a viewer's a 403; anything else failed.
+func listRefused(w http.ResponseWriter, r *http.Request, err error, ref, param string, more ...string) {
+	pe, ok := refusalOf(err)
+	switch {
+	case !ok:
+		serverError(w, r, err)
+	case pe.kind == refusedUnchanged:
+		listBack(w, r, ref)
+	case pe.kind == refusedNotFound, pe.kind == refusedReadOnly:
+		pageFailed(w, r, err)
+	default:
+		listBack(w, r, ref, append([]string{param, pe.msg}, more...)...)
+	}
+}
+
+// newListRoute: the New list… dialog of /tasks (its ⋯ menu), and Create it
+// under an embed of a list that isn't there. The new list opens; a refusal
+// that another name would mend goes back to the dialog with the message.
 func newListRoute(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.PostFormValue("name"))
-	list, _, err := newListOp(userOf(r), name, r.PostFormValue("private") != "", "")
+	ref, err := createListOp(userOf(r), name, r.PostFormValue("private") != "", "")
 	if err != nil {
 		if pe, ok := refusalOf(err); ok && (pe.kind == refusedInvalid || pe.kind == refusedExists) {
 			http.Redirect(w, r, "/tasks?newlist_name="+url.QueryEscape(name)+"&newlist_error="+url.QueryEscape(pe.msg), http.StatusFound)
@@ -983,30 +1031,84 @@ func newListRoute(w http.ResponseWriter, r *http.Request) {
 		pageFailed(w, r, err)
 		return
 	}
-	http.Redirect(w, r, "/tasks?list="+url.QueryEscape(list), http.StatusFound)
+	http.Redirect(w, r, listHref(ref), http.StatusFound)
 }
 
-// tasksPageView: /tasks (tasks_page.html); Home: the page declaring the
-// list, nil for all tasks, the pinned lists or an undeclared list; Places: the
-// list switcher; PinnedLists: what the Pinned view shows; LinkSections: a
-// list's Backlinks, the Pinned view's those of its lists (with them the page
-// has a page view's columns); Rename…: its dialog back from a refusal.
-// Menu: the ⋯ menu (New list…, a list's Rename…), for who may change the
-// wiki; PrivateFolder: with users, where New list… puts a private one (""
-// none: no such box); NewList…: its dialog back from a refusal.
+// renameListRoute: a list's Rename… dialog (/tasks?list=<ref>).
+func renameListRoute(w http.ResponseWriter, r *http.Request) {
+	ref, name := cleanList(r.PostFormValue("list")), strings.TrimSpace(r.PostFormValue("new_name"))
+	done, err := renameListOp(userOf(r), ref, name, "")
+	if err != nil {
+		listRefused(w, r, err, ref, "rename_error", "rename_name", name)
+		return
+	}
+	http.Redirect(w, r, listHref(done.Ref), http.StatusFound)
+}
+
+// deleteListRoute: a list's Delete… dialog: its tasks go to another list
+// (to) or to none; share: a private list's tasks may become shared so.
+func deleteListRoute(w http.ResponseWriter, r *http.Request) {
+	ref, to := cleanList(r.PostFormValue("list")), cleanList(r.PostFormValue("to"))
+	if _, err := deleteListOp(userOf(r), ref, to, r.PostFormValue("share") != "", ""); err != nil {
+		listRefused(w, r, err, ref, "delete_error")
+		return
+	}
+	if to != "" {
+		http.Redirect(w, r, listHref(to), http.StatusFound)
+		return
+	}
+	http.Redirect(w, r, "/tasks", http.StatusFound)
+}
+
+// shareListRoute: a private list's Make shared… dialog.
+func shareListRoute(w http.ResponseWriter, r *http.Request) {
+	ref := cleanList(r.PostFormValue("list"))
+	name, err := shareListOp(userOf(r), ref, "")
+	if err != nil {
+		listRefused(w, r, err, ref, "share_error")
+		return
+	}
+	http.Redirect(w, r, listHref(name), http.StatusFound)
+}
+
+// pinListRoute: a list's Pin, Unpin and Make default (its ⋯ menu, the
+// settings dialog's pin): pin is 1, 0 or default. Back to the list.
+func pinListRoute(w http.ResponseWriter, r *http.Request) {
+	ref := cleanList(r.PostFormValue("list"))
+	if err := pinListOp(userOf(r), ref, r.PostFormValue("pin")); err != nil {
+		pageFailed(w, r, err)
+		return
+	}
+	http.Redirect(w, r, listHref(ref), http.StatusFound)
+}
+
+// tasksPageView: /tasks (tasks_page.html). List: the list shown, nil for
+// all tasks and the pinned lists; Missing: the name ?list= gave when no
+// list has it; Tag: the one tag ?tag= names; Places: the list switcher;
+// PinnedLists: what the pinned view shows; LinkSections: a list's
+// Backlinks, the pinned view's those of its lists (with them the page has
+// a page view's columns). Menu: the ⋯ menu (New list…; a list's Rename…,
+// its pin, Make shared…, Delete…; a tag's Rename tag…), for who may change
+// tasks; Users: with users, so New list… has its Private box. Pin: how the
+// user pinned List ("", "1", "default"); MoveTo: where its tasks can go
+// when it is deleted. The …Name and …Error fields: a dialog back from a
+// refusal.
 type tasksPageView struct {
 	view
-	Heading, ListName         string
-	RenameName, RenameError   string
-	RenameMerge               bool
-	Menu                      bool
-	PrivateFolder             string
-	NewListName, NewListError string
-	Home                      *TasksHome
-	Places                    []TaskPlace
-	PinnedLists               []pinnedLink
-	LinkSections              []linkSection
-	TasksHTML, BreadcrumbHTML template.HTML
+	Heading, Missing, Tag           string
+	List                            *ListInfo
+	Pin                             string
+	MoveTo                          []ListInfo
+	RenameName, RenameError         string
+	RenameMerge                     bool
+	ListRenameName, ListRenameError string
+	DeleteError, ShareError         string
+	Menu, Users                     bool
+	NewListName, NewListError       string
+	Places                          []TaskPlace
+	PinnedLists                     []pinnedLink
+	LinkSections                    []linkSection
+	TasksHTML, BreadcrumbHTML       template.HTML
 }
 
 func apiToggleCheckbox(w http.ResponseWriter, r *http.Request) {
@@ -1058,20 +1160,13 @@ func apiToggleCheckbox(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, M{"file_hash": mdtext.ContentHash(toggled)})
 }
 
-// apiPreview renders posted markdown (the editor's live preview); ?lists=
-// the lists the page declares, so a chip re-rendered alone keeps linking
-// to the page's list (js/page.js rerenderTaskRef).
+// apiPreview renders posted markdown (the editor's live preview, a task
+// chip re-rendered alone: js/page.js rerenderTaskRef).
 func apiPreview(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if tooLarge(err) {
 		tooLargeError(w, bodyMax)
 		return
-	}
-	var lists []string
-	for _, x := range strings.Split(r.URL.Query().Get("lists"), ",") {
-		if n := cleanList(x); n != "" {
-			lists = append(lists, n)
-		}
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// ?page=: the page being edited, for what depends on where the text is
@@ -1081,7 +1176,7 @@ func apiPreview(w http.ResponseWriter, r *http.Request) {
 	if safePath(page) == "" || !canSee(rq.who(), page) {
 		page = ""
 	}
-	_, _ = io.WriteString(w, renderMd(rq, string(body), RenderOpts{Page: page, PreferLists: lists}))
+	_, _ = io.WriteString(w, renderMd(rq, string(body), RenderOpts{Page: page}))
 }
 
 // apiRenderNotes: task notes and comments as HTML, as pages render:

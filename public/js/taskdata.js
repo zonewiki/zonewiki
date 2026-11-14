@@ -225,12 +225,12 @@ async function updateTask(id, data) {
 
 // A task saved out of a list view, into another list or none; say where it went.
 function listMovedNotice(task) {
-  const name = app.taskList(task);
-  return name ? `Saved to list “${name}”.` : 'Saved; it no longer shows here.';
+  const ref = app.taskList(task);
+  return ref ? `Saved to list “${app.listName(ref)}”.` : 'Saved; it no longer shows here.';
 }
 
 // Why a saved task left this view, or null if it still shows: it went
-// into a separate list (or out of this one), or it no longer passes the
+// into another list (or out of this one), or it no longer passes the
 // filter (e.g. #sam removed on Sam's page). `before` null: a new task.
 function leftViewMessage(before, after) {
   if (!app.inScope(after)) return listMovedNotice(after);
@@ -243,11 +243,14 @@ function leftViewMessage(before, after) {
 
 // Everything an edit-modal save can change, as PUT fields: undoing a save
 // restores the task as it was, not just the field that moved it. The old
-// history goes too, so the undo leaves no trace.
+// history goes too, so the undo leaves no trace. Not the list of a task
+// that was private: a save that shared it can't be taken back (a shared
+// task stays shared).
 function editSnapshot(t) {
   const rec = t.recurrence;
   return {
     title: t.title, description: t.description || '', tags: t.tags || [],
+    ...(t.private ? {} : { list: app.taskList(t) || '' }),
     ...(people.users ? { assignee: t.assignee || null } : {}),
     due_date: t.due_date || null, start_date: t.start_date || null, keep: !!t.keep,
     rec_type: rec?.type || null, rec_interval: rec?.interval || 1, rec_from: rec?.from || 'due',

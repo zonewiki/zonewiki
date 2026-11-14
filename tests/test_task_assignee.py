@@ -7,7 +7,7 @@ import json
 import pytest
 
 from tests import settings
-from tests.conftest import HOST
+from tests.conftest import HOST, make_list
 
 USERS = {name: (f"{name}-pw", "") for name in ("alice", "bob", "carol", "dan", "eve")}
 USER_SETTINGS = {"alice": {"role": "admin"}, "carol": {"role": "viewer"}, "dan": {"disabled": "yes"},
@@ -139,13 +139,14 @@ class TestWhoCanBeAssigned:
         assert resp.status_code == 400 and "assignee must be a string" in resp.get_json()["error"]
 
     def test_a_private_task_has_none(self, alice, wiki_dir):
-        resp = alice.post("/api/tasks", json={"title": "Mine", "private": True, "assignee": "bob"}, headers=HOST)
+        make_list(alice, "own", private=True, headers=HOST)
+        resp = alice.post("/api/tasks", json={"title": "Mine", "list": "own", "assignee": "bob"}, headers=HOST)
         assert resp.status_code == 400 and "private task" in resp.get_json()["error"]
-        mine = new(alice, private=True)
+        mine = new(alice, list="own")
         assert put(alice, mine, assignee="alice").status_code == 400
         assert put(alice, mine, assignee="").status_code == 200       # none is what it has
-        # Shared and assigned in one write.
-        shared = put(alice, mine, private=False, assignee="bob").get_json()
+        # Shared (out of its private list) and assigned in one write.
+        shared = put(alice, mine, list="", share=True, assignee="bob").get_json()
         assert shared["private"] is False and shared["assignee"] == "bob"
 
     def test_without_users_there_is_no_one(self, client, wiki_dir):
@@ -274,7 +275,8 @@ class TestNames:
 
 class TestEmbed:
     """[[tasks: assignee=…]]: whose tasks an embed shows; the server's side is
-    the counts, the export, the settings and what a new task gets."""
+    the export and the settings (the embed's own "+ New" assigns as its
+    filter says, in the browser)."""
 
     @pytest.fixture()
     def tasks(self, alice):
@@ -285,9 +287,9 @@ class TestEmbed:
         return alice
 
     def today(self, client, wiki_dir, params):
-        """How many tasks due today the pinned list with these params counts."""
-        (wiki_dir / "team.md").write_text(f"# Team\n\n[[tasks: {params} pin=1]]\n")
-        return client.get("/api/tasks/due-count", headers=HOST).get_json()["today"]
+        """How many tasks an embed with these params shows, as its export has them."""
+        query = dict(w.split("=", 1) for w in params.split())
+        return len(client.get("/api/tasks/export", query_string=query, headers=HOST).get_json()["tasks"])
 
     def test_the_counts_are_each_users_own(self, tasks, wiki_dir):
         assert self.today(tasks, wiki_dir, "assignee=me") == 2
@@ -313,6 +315,7 @@ class TestEmbed:
         from datetime import date
         new(client, title="One", due_date=date.today().isoformat())
         assert self.today(client, wiki_dir, "assignee=me") == 1
+        (wiki_dir / "team.md").write_text("# Team\n\n[[tasks: assignee=me]]\n")
         assert "data-init-assignee" not in client.get("/page/team", headers=HOST).get_data(as_text=True)
 
     def test_the_page_tells_the_browser(self, alice, wiki_dir):
@@ -321,14 +324,11 @@ class TestEmbed:
         assert 'data-init-assignee="me"' in html
         assert 'name="assignee"' in html.split('id="task-settings-modal', 1)[1]     # the settings dialog's row
 
-    def test_a_new_task_from_anywhere_gets_the_default_lists_assignee(self, alice, wiki_dir):
+    def test_a_pinned_filter_gives_new_tasks_no_assignee(self, alice, wiki_dir):
+        """pin= in an embed means nothing since pins are of lists, and a list
+        has no assignee: New task from anywhere assigns no one."""
         (wiki_dir / "team.md").write_text("# Team\n\n[[tasks: assignee=me pin=default]]\n")
-        assert 'data-tasks-assignee="alice"' in alice.get("/page/index", headers=HOST).get_data(as_text=True)
-        login(alice, "bob")
-        assert 'data-tasks-assignee="bob"' in alice.get("/page/index", headers=HOST).get_data(as_text=True)
-        for params in ("assignee=alice|bob", "assignee=none", "assignee=-bob", "assignee=carol", ""):
-            (wiki_dir / "team.md").write_text(f"# Team\n\n[[tasks: {params} pin=default]]\n")
-            assert "data-tasks-assignee" not in alice.get("/page/index", headers=HOST).get_data(as_text=True), params
+        assert "data-tasks-assignee" not in alice.get("/page/index", headers=HOST).get_data(as_text=True)
 
     def test_the_export_takes_it(self, tasks):
         got = tasks.get("/api/tasks/export?assignee=me", headers=HOST).get_json()["tasks"]
@@ -382,7 +382,8 @@ class TestAssistant:
         assert "Task: No" not in mcp("search_tasks")
 
     def test_a_private_task_has_none(self, mcp):
-        assert "private task" in mcp("create_task", title="Mine", private=True, assignee="bob")
+        assert "Created the list #own" in mcp("create_task_list", name="own", private=True)
+        assert "private task" in mcp("create_task", title="Mine", list="own", assignee="bob")
 
     def test_search_filters_by_assignee(self, mcp):
         mcp("create_task", title="Alices", assignee="me")
@@ -401,11 +402,11 @@ class TestAssistant:
         monkeypatch.setattr(settings, "USER_SETTINGS", {**USER_SETTINGS, "bob": {"disabled": "yes"}})
         assert "assigned to: bob (who can no longer be given tasks" in mcp("search_tasks", assignee="none")
 
-    def test_a_new_task_gets_the_default_lists_assignee(self, mcp, wiki_dir):
+    def test_a_new_task_is_assigned_only_when_told(self, mcp, wiki_dir):
         (wiki_dir / "team.md").write_text("# Team\n\n[[tasks: assignee=me pin=default]]\n")
-        assert "assigned to: alice (the user)" in mcp("create_task", title="Mine by default")
-        assert "assigned to: bob" in mcp("create_task", title="Said otherwise", assignee="bob")
-        assert "assigned to" not in mcp("create_task", title="No one", assignee="none")
+        assert "assigned to" not in mcp("create_task", title="No one by default")
+        assert "assigned to: bob" in mcp("create_task", title="Said so", assignee="bob")
+        assert "assigned to: alice (the user)" in mcp("create_task", title="Mine", assignee="me")
 
     def test_without_users_search_says_there_are_no_assignees(self, client, wiki_dir, monkeypatch):
         monkeypatch.setattr(settings, "MCP_TOKEN", "tok")

@@ -13,6 +13,7 @@ Skipped automatically when Playwright is not installed, so a plain
 
 import faulthandler
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -131,6 +132,43 @@ class Wiki:
 
     def head(self) -> str:
         return self.git("rev-parse", "HEAD").strip()
+
+
+_EMBED_RE = re.compile(r"\[\[tasks:\s*([^\]]*)\]\]", re.I)
+
+
+def make_list(page, name: str, private: bool = False):
+    """Make a task list as New list… does (private: the signed-in user's
+    own), through the route its dialog posts to."""
+    resp = page.request.post("/tasks/new-list", form={"name": name, **({"private": "1"} if private else {})})
+    assert resp.ok and "newlist_error" not in resp.url, resp.url
+    return resp
+
+
+def list_page(page, wiki: "Wiki", slug: str, content: str) -> Path:
+    """wiki.write, and the lists the page's [[tasks: list=…]] embeds show,
+    made through the routes the browser uses (as tests/conftest.py's
+    list_page): each list if it isn't there yet (private for a page in
+    private/), with the embed's list settings (view, keep, limit, plan,
+    labels, new) when it was made here, and pinned as a pin= in the embed
+    says. A list is no longer declared by a page nor pinned by one: pin= in
+    the text means nothing to Zone, it tells this helper what the test
+    wants. Code is skipped."""
+    path = wiki.write(slug, content)
+    text = re.sub(r"```.*?```|`[^`\n]*`", "", content, flags=re.S)
+    for m in _EMBED_RE.finditer(text):
+        p = dict(w.split("=", 1) for w in m.group(1).split() if "=" in w)
+        name = p.get("list", "").strip("#").lower()
+        if not name:
+            continue
+        made = page.request.post("/tasks/new-list", form={"name": name, **({"private": "1"} if slug.startswith("private/") else {})})
+        own = {k: p[k] for k in ("view", "keep", "limit", "plan", "labels", "new") if k in p}
+        if own and "newlist_error" not in made.url:
+            assert page.request.post("/api/tasks/settings", data={"list": name, "set": own}).ok
+        if p.get("pin"):
+            pin = "default" if p["pin"].lower() == "default" else "1"
+            assert page.request.post("/tasks/pin-list", form={"list": name, "pin": pin}).ok
+    return path
 
 
 # How long an expect() waits for what it expects (Playwright's own default

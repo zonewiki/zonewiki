@@ -467,8 +467,10 @@ func taskSearchDocs() []*SearchDoc {
 			tags = append(tags, "#"+tag)
 			lowTags = append(lowTags, strings.ToLower(tag))
 		}
+		// Its list's name is a word of it too (no tag: tag: doesn't match it),
+		// so a search for "shop" finds what is on the shop list.
 		text := textsearch.StripLinkTargets(strings.TrimSpace(title + " " + t.Description + " " +
-			strings.Join(comments, " ") + " " + strings.Join(tags, " ")))
+			strings.Join(comments, " ") + " " + strings.Join(tags, " ") + " " + t.List))
 		d := &SearchDoc{Slug: taskfiles.DirName, Title: "[Task] " + mdtext.PlainTaskTitle(title),
 			Tokens: func() []string {
 				return slices.Concat(textsearch.Tokenize(text), repeatTokens(mdtext.PlainTaskTitle(title), textsearch.TitleWeight))
@@ -1176,7 +1178,7 @@ func taskStatus(t *Task) string {
 // resultMeta: the small line under a result's title, telling apart
 // results whose titles look alike: a page's folder and last edit, a task's
 // list and status ("Tasks · done 2026-05-01").
-func resultMeta(d *SearchDoc, names map[string]TasksHome) string {
+func resultMeta(d *SearchDoc, names map[string]ListInfo) string {
 	if d.isTask() {
 		status := taskStatus(d.Task)
 		if status != "open" {

@@ -508,8 +508,9 @@ func (s *Store) WriteOpenLocked(user string, tasks []*Task, message string) erro
 }
 
 // WriteBothLocked writes the open tasks and every closed task (filed by
-// owner and year) in one commit, by user.
-func (s *Store) WriteBothLocked(user string, active, closed []*Task, message string) error {
+// owner and year) in one commit, by user; also: files written with them
+// (the lists' registries) that belong in that commit.
+func (s *Store) WriteBothLocked(user string, active, closed []*Task, message string, also ...string) error {
 	if err := s.MayWrite(user); err != nil {
 		return err
 	}
@@ -526,7 +527,7 @@ func (s *Store) WriteBothLocked(user string, active, closed []*Task, message str
 			}
 		}
 	}
-	s.CommitFiles(user, message, changed)
+	s.CommitFiles(user, message, append(changed, also...))
 	return err
 }
 

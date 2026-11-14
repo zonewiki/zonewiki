@@ -3,7 +3,7 @@
     on any page). Its params reach tasks.js as data-init-* attributes; ids
     get a -<n> suffix (sfx) after a page's first embed. */ -}}
 {{define "tasks_embed" -}}
-<div class="tasks-app" id="tasks-app{{.Sfx}}"{{if .Headless}} data-headless="1" style="display:none"{{end}} data-init-tag="{{.Tag}}"{{with .Assignee}} data-init-assignee="{{.}}"{{end}} data-init-list="{{.List}}" data-lists="{{.ListsJSON}}" data-list-homes="{{.HomesJSON}}" data-init-view="{{.View}}" data-init-plan="{{.Plan}}" data-init-limit="{{.Limit}}" data-init-keep="{{.Keep}}"{{if .Private}} data-init-private="1"{{end}}{{with .PrivateFolder}} data-private-folder="{{.}}"{{end}} data-init-new="" data-instance="{{.InstanceID}}"{{if .Pinned}} data-pinned="1"{{end}}{{with .NewTags}} data-new-tags="{{.}}"{{end}}{{with .Settings}} data-settings-page="{{.Page}}" data-settings-index="{{.Index}}" data-settings-raw="{{.Raw}}"{{end}}>
+<div class="tasks-app" id="tasks-app{{.Sfx}}"{{if .Headless}} data-headless="1" style="display:none"{{end}} data-init-tag="{{.Tag}}"{{with .Assignee}} data-init-assignee="{{.}}"{{end}} data-init-list="{{.List}}"{{with .Lists}} data-init-lists="{{.}}"{{end}} data-lists="{{.ListsJSON}}" data-default-list="{{.DefaultList}}" data-init-view="{{.View}}" data-init-plan="{{.Plan}}" data-init-limit="{{.Limit}}" data-init-keep="{{.Keep}}"{{with .PrivateFolder}} data-private-folder="{{.}}"{{end}} data-init-new="" data-instance="{{.InstanceID}}"{{if .Pinned}} data-pinned="1"{{end}}{{with .NewTags}} data-new-tags="{{.}}"{{end}}{{with .Settings}} data-settings-page="{{.Page}}" data-settings-index="{{.Index}}" data-settings-raw="{{.Raw}}"{{if .Embed}} data-settings-embed="1"{{end}}{{with .List}} data-settings-list="{{.}}"{{end}}{{with .ListSettings}} data-settings-list-set="{{.}}"{{end}}{{with .Pin}} data-settings-pin="{{.}}"{{end}}{{end}}>
   <div class="tasks-header">
     <div class="view-tabs" id="tasks-tabs{{.Sfx}}" role="tablist" aria-label="View">
       <button type="button" role="tab" data-view="open" aria-selected="false">{{index .Labels 0}}</button>
@@ -30,7 +30,7 @@
     <button type="button" class="btn" data-sel="all" title="Select every task shown (Ctrl+A)">All</button>
     <span class="tasks-selbar-actions">
       <button type="button" class="btn" data-sel="tag" title="Tags of the selected tasks (t)">Tag…</button>
-      <button type="button" class="btn" data-sel="list" title="Move the selected tasks to a list">List…</button>
+      <button type="button" class="btn" data-sel="list" title="Move the selected tasks to a list (m)">List…</button>
       {{- if .CanAssign}}
       <button type="button" class="btn" data-sel="assign" title="Assign the selected tasks to a user (a)">Assign…</button>
       {{- end}}
@@ -94,6 +94,13 @@
         rest only when set, or once asked for in the line below
         (js/taskmodal.js showField). */}}
     <div class="task-props" id="task-edit-props{{.Sfx}}">
+      {{- /* The list the task is in: one of those the user sees, or none
+          (js/taskmodal.js fills it). A private list's tasks are the user's
+          alone; the line under the fields says who sees the task. */}}
+      <label class="task-prop task-prop-list" data-field="list" title="The list the task is in" hidden>
+        <span class="task-prop-label">List</span>
+        <select id="task-edit-list{{.Sfx}}" name="list"></select>
+      </label>
       <label class="task-prop">
         <span class="task-prop-label">Due</span>
         <input type="hidden" id="task-edit-due{{.Sfx}}" name="due_date">
@@ -115,12 +122,6 @@
       <label class="task-prop task-prop-check task-edit-keep" data-field="keep" title="Ticking it off sends it back to Open instead of archiving it, e.g. a staple on a shopping list" hidden>
         <input type="checkbox" id="task-edit-keep{{.Sfx}}" name="keep"> Keep after done
       </label>
-      {{- /* With users: a private task is the user's alone (private/<user>/_tasks/). */}}
-      {{- if .CanPrivate}}
-      <label class="task-prop task-prop-check task-edit-private" data-field="private" title="Only you see a private task; the others don't, not even in search. A shared task stays shared." hidden>
-        <input type="checkbox" id="task-edit-private{{.Sfx}}" name="private"> Private
-      </label>
-      {{- end}}
       {{- /* Repeat with what belongs to it, last and on a line of its own
           (tasks.css): choosing a repeat adds Every and From done beside it,
           and nothing moves to another line. */}}
@@ -149,11 +150,9 @@
       <span id="task-edit-date-warn-text{{.Sfx}}"></span>
       <button type="button" class="btn" id="task-edit-date-warn-fix{{.Sfx}}"></button>
     </div>
-    {{- /* Why Repeat is off (no date, a keep task), and what sharing a private task does. */}}
+    {{- /* Why Repeat is off (no date, a keep task), and who sees the task (its list says). */}}
     <p class="field-hint task-props-note" id="task-edit-rec-note{{.Sfx}}" hidden></p>
-    {{- if .CanPrivate}}
-    <p class="field-hint task-props-note task-private-note" id="task-edit-private-note{{.Sfx}}" hidden></p>
-    {{- end}}
+    <p class="field-hint task-props-note task-private-note" id="task-edit-list-note{{.Sfx}}" hidden></p>
     {{- /* The fields not shown above: a click shows one (and ticks a box). */}}
     <div class="task-add-fields" id="task-edit-more{{.Sfx}}" role="group" aria-label="More fields">
       {{- if .CanAssign}}
@@ -162,9 +161,6 @@
       <button type="button" class="task-add-field" id="task-edit-more-repeat{{.Sfx}}" data-more="repeat" title="Make the task come back: daily, weekly, monthly or yearly">Repeat</button>
       <button type="button" class="task-add-field" id="task-edit-more-lead{{.Sfx}}" data-more="lead" title="Start this many days before the due date">Days before due</button>
       <button type="button" class="task-add-field" id="task-edit-more-keep{{.Sfx}}" data-more="keep" title="Ticking it off sends it back to Open instead of archiving it, e.g. a staple on a shopping list">Keep after done</button>
-      {{- if .CanPrivate}}
-      <button type="button" class="task-add-field" id="task-edit-more-private{{.Sfx}}" data-more="private" title="Only you see a private task; the others don't, not even in search">Private</button>
-      {{- end}}
     </div>
     <div class="task-edit-extras">
     <details class="task-edit-links task-edit-history" id="task-edit-history{{.Sfx}}" hidden>
@@ -235,31 +231,37 @@
 {{end}}
 {{- end}}
 
-{{- /* List settings: a task list's params as fields. A list's ⋯ menu
-    shows it (js/tasksettings.js: it rewrites the page's [[tasks: …]]), and
-    the editor's Task list button (Editor: with which list it is and keep,
-    which make a list; js/tasklist.js writes the line into the text). */}}
+{{- /* List settings: a task list's settings as fields. A list's ⋯ menu
+    shows it (js/tasksettings.js: a list's own settings go to its registry,
+    how a page looks at it into the page's [[tasks: …]]), and the editor's
+    Task list button (Editor: with which list it shows; js/tasklist.js
+    writes the line into the text). */}}
 {{define "task_settings_dialog" -}}
 <dialog id="task-settings-modal{{.Sfx}}" class="task-edit-modal task-settings-modal">
   <form id="task-settings-form{{.Sfx}}" class="task-edit-form">
-    {{- /* The pin beside the title: pressed, the list is pinned (it is where the
-        Tasks links go); a button, as the list switcher's pin is. pin holds the
-        param's value for the form ("", 1, default; js/tasksettings.js). */}}
+    {{- /* The pin beside the title: pressed, the list is pinned for you (it is
+        where your Tasks links go); a button, as the list switcher's pin is.
+        pin holds its value for the form ("", 1, default; js/tasksettings.js).
+        Only where the dialog is a list's (task-settings-list). */}}
     <div class="task-settings-head">
       <div class="modal-label" id="task-settings-title{{.Sfx}}">List settings</div>
       <input type="hidden" id="task-settings-pin{{.Sfx}}" name="pin">
-      <button type="button" class="task-settings-pin task-settings-embed" id="task-settings-pin-btn{{.Sfx}}" aria-pressed="false" title="Pin this list: the Tasks links go to your pinned lists">{{template "icon_pin"}}<span class="task-settings-pin-label">Pin</span></button>
+      {{- if not .Editor}}
+      <button type="button" class="task-settings-pin task-settings-list" id="task-settings-pin-btn{{.Sfx}}" aria-pressed="false" title="Pin this list for you: the Tasks links go to your pinned lists">{{template "icon_pin"}}<span class="task-settings-pin-label">Pin</span></button>
+      {{- end}}
     </div>
     {{- if .Editor}}
     <div class="task-field">
       <label for="task-settings-list{{.Sfx}}">List</label>
       <input type="text" id="task-settings-list{{.Sfx}}" name="list" list="task-settings-lists{{.Sfx}}" placeholder="all tasks" autocomplete="off" spellcheck="false">
       <datalist id="task-settings-lists{{.Sfx}}">{{range .Lists}}<option value="{{.}}">{{end}}</datalist>
-      <span class="field-hint">A name makes it a list of its own (the tasks tagged with it); none shows all tasks.</span>
+      <span class="field-hint">A list's name shows that list; none shows all tasks.</span>
     </div>
     {{- end}}
     {{- /* A pinned list can be the default one, where New task adds a task. */}}
-    <label class="task-settings-check task-settings-default" id="task-settings-default-row{{.Sfx}}" title="New task (c t) adds its task to the default list" hidden><input type="checkbox" id="task-settings-default{{.Sfx}}"> The default list: where New task adds a task</label>
+    {{- if not .Editor}}
+    <label class="task-settings-check task-settings-default" id="task-settings-default-row{{.Sfx}}" title="New task (c t) adds its task to your default list" hidden><input type="checkbox" id="task-settings-default{{.Sfx}}"> My default list: where New task adds a task</label>
+    {{- end}}
     <div class="task-settings-row">
       <div class="task-field">
         <label for="task-settings-view{{.Sfx}}">Opens on</label>
@@ -273,8 +275,9 @@
     <label class="task-settings-check"><input type="checkbox" id="task-settings-plan{{.Sfx}}" name="plan"> Plan: group the Open tab by start date</label>
     {{- /* The rest shows only when set, or once asked for in the line below
         (js/tasksettings.js showField), as the task dialog's rarer fields do. */}}
-    {{- if .Editor}}
     <label class="task-settings-check" data-field="keep" hidden><input type="checkbox" id="task-settings-keep{{.Sfx}}" name="keep"> New tasks are keep tasks (back on the list when done)</label>
+    {{- if not .Editor}}
+    <label class="task-settings-check task-settings-list" data-field="noshare" hidden><input type="checkbox" id="task-settings-noshare{{.Sfx}}" name="noshare"> Hide this list in sharing mode</label>
     {{- end}}
     <div class="task-field" data-field="labels" hidden>
       <label for="task-settings-label-open{{.Sfx}}">Tab names</label>
@@ -308,8 +311,9 @@
       {{- if .CanAssign}}
       <button type="button" class="task-add-field task-settings-embed" data-more="assignee" title="Show only the tasks of one user, or of whoever looks">Filter by person</button>
       {{- end}}
-      {{- if .Editor}}
       <button type="button" class="task-add-field" data-more="keep" title="A task made here goes back on the list when it is done, e.g. the staples of a shopping list">Keep tasks</button>
+      {{- if not .Editor}}
+      <button type="button" class="task-add-field task-settings-list" data-more="noshare" title="Leave this list out of the list switcher while sharing mode is on">Hide when sharing</button>
       {{- end}}
     </div>
     <p class="task-settings-error" id="task-settings-error{{.Sfx}}" role="alert" hidden></p>
@@ -320,4 +324,12 @@
     </div>
   </form>
 </dialog>
+{{- end}}
+
+{{- /* In the place of an embed whose list=<name> no list has (tasksembed.go
+    noListHTML): what is missing, and for who may make lists a button that
+    makes it (POST /tasks/new-list). */}}
+{{define "tasks_no_list" -}}
+<div class="tasks-no-list"><p>There is no list <code>#{{.Name}}</code>.{{if not .Create}} A task list is made on the Tasks page (New list…).{{end}}</p>
+{{- if .Create}}<form method="post" action="/tasks/new-list"><input type="hidden" name="name" value="{{.Name}}"><button type="submit" class="btn">Create the list #{{.Name}}</button> <a href="/tasks?tag={{.Name}}">Tasks tagged #{{.Name}}</a></form>{{end}}</div>
 {{- end}}

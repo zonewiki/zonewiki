@@ -79,13 +79,12 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
     (pending ? ' task-completing' : '');
   const dueClass = dueDateClass(task);
   const urgClass = urgencyClass(task);
-  // A separate list's tag first and marked (icon, tint, tooltip), as in
-  // the filter and the modal.
-  const isListTag = t => app.listSet.has(t.toLowerCase());
-  const tags = [...(task.tags || []).filter(isListTag), ...(task.tags || []).filter(t => !isListTag(t))]
-    .map(t => isListTag(t)
-      ? `<span class="task-tag task-tag-list" title="${esc(app.listTooltip(t))}">#${esc(t)}</span>`
-      : `<span class="task-tag">#${esc(t)}</span>`).join('');
+  // The list the task is in, first and marked (icon, tint, tooltip), as in
+  // the filter; not in a view of that one list, where every card would say it.
+  const listRef = app.taskList(task);
+  const listChip = listRef && listRef !== app.initList
+    ? `<span class="task-tag task-tag-list" title="${esc(app.listTooltip(listRef))}">${esc(app.listName(listRef))}</span>` : '';
+  const tags = listChip + (task.tags || []).map(t => `<span class="task-tag">#${esc(t)}</span>`).join('');
   const recIcon = task.recurrence ? '<span class="task-recurring" title="Recurring">↻</span>'
     : task.keep ? `<span class="task-recurring task-keep" title="Keep: back to ${esc(app.tabLabel('open'))} when ticked off">⟲</span>` : '';
   // A keep task's last completion, e.g. when the milk was last bought.

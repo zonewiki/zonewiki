@@ -6,7 +6,7 @@ from datetime import date, timedelta
 import pytest
 from playwright.sync_api import expect
 
-from conftest import open_tab, pick_date, wait_until
+from conftest import list_page, make_list, open_tab, pick_date, wait_until
 from tests import settings
 
 
@@ -25,7 +25,7 @@ def wait_for_field(page, title: str, field: str, expected, timeout_ms: int = 150
     task may not be there yet."""
     def there():
         task = next((t for t in page.request.get("/api/tasks").json() if t["title"] == title), None)
-        return task is not None and task[field] == expected
+        return task is not None and task.get(field) == expected
     wait_until(page, there, timeout_ms)
 
 
@@ -198,7 +198,7 @@ def test_tasks_link_counts_the_due_tasks_and_opens_focus(page, wiki):
 def test_list_switcher_looks_as_the_module_switcher_does(page, wiki):
     # One capsule with a border holding pills without one, the current pill
     # shaded: what the module switcher at the top of the page is.
-    wiki.write("shop", "# Shop\n\n[[tasks: list=shop]]\n")
+    make_list(page, "shop")
     page.goto("/tasks?list=shop")
     style = lambda sel, *props: page.locator(sel).first.evaluate(
         "(el, props) => props.map(p => getComputedStyle(el)[p])", list(props))
@@ -217,10 +217,10 @@ def test_list_switcher_looks_as_the_module_switcher_does(page, wiki):
 
 def test_list_switcher_goes_between_the_lists_and_keeps_its_counts(page, wiki):
     # /tasks opens with the switcher above the heading: the lists by name
-    # (the Tasks home's first), All; its counts follow the task app's writes.
-    wiki.write("tasks", "# My tasks\n\n[[tasks: list=task view=focus pin=1]]\n")
-    wiki.write("shop", "# Shop\n\n[[tasks: list=shop view=focus]]\n")
-    page.request.post("/api/tasks", data={"title": "Milk", "tags": "shop", "start_date": date.today().isoformat()})
+    # (the pinned one first), All; its counts follow the task app's writes.
+    list_page(page, wiki, "tasks", "# My tasks\n\n[[tasks: list=task view=focus pin=1]]\n")
+    list_page(page, wiki, "shop", "# Shop\n\n[[tasks: list=shop view=focus]]\n")
+    page.request.post("/api/tasks", data={"title": "Milk", "list": "shop", "start_date": date.today().isoformat()})
     page.goto("/tasks?list=shop")
     places = page.locator(".tasks-places .tasks-place")
     expect(places.locator(".tasks-place-label")).to_have_text(["task", "shop", "All"])
@@ -251,39 +251,50 @@ def test_list_switcher_goes_between_the_lists_and_keeps_its_counts(page, wiki):
 
 
 def test_tasks_link_shows_the_pinned_lists_as_one(page, wiki):
-    # Two pinned lists: the Tasks link opens them as one task app, counts
-    # both, and the switcher marks them with a pin. A new task there goes to
-    # the default list (pin=default), and the dialog says so.
-    wiki.write("tasks", "# My tasks\n\n[[tasks: list=task view=focus pin=default]]\n")
-    wiki.write("shop", "# Shop\n\n[[tasks: list=shop view=focus pin=1]]\n")
+    # Two pinned lists: the Tasks link opens them as one task app (My
+    # lists), counts both, and the switcher marks them with a pin. A new
+    # task there goes to the default list, and the dialog says so.
+    list_page(page, wiki, "tasks", "# My tasks\n\n[[tasks: list=task view=focus pin=default]]\n")
+    list_page(page, wiki, "shop", "# Shop\n\n[[tasks: list=shop view=focus pin=1]]\n")
     wiki.write("garden", "# Garden\n")
     today = date.today().isoformat()
-    page.request.post("/api/tasks", data={"title": "Milk", "tags": "shop", "due_date": today})
-    page.request.post("/api/tasks", data={"title": "Report", "tags": "task", "due_date": today})
+    page.request.post("/api/tasks", data={"title": "Milk", "list": "shop", "due_date": today})
+    page.request.post("/api/tasks", data={"title": "Report", "list": "task", "due_date": today})
+    page.request.post("/api/tasks", data={"title": "Loose", "due_date": today})      # in no list: not among them
     page.goto("/page/garden")
     tasks = page.locator(".breadcrumb .module-link[data-module=tasks]")
     expect(tasks.locator(".module-due")).to_have_text("2")
     tasks.click()
     page.wait_for_url(re.compile(r"/tasks\?pinned=1$"))
     expect(tasks).to_have_attribute("aria-current", "page")
-    expect(page.locator("h1")).to_have_text("Pinned")
+    expect(page.locator("h1")).to_have_text("My lists")
     expect(page.locator(".tasks-app")).to_have_count(1)
     expect(card(page, "Report")).to_be_visible()
     expect(card(page, "Milk")).to_be_visible()
-    expect(page.locator(".tasks-place:has(.tasks-place-pin) .tasks-place-label")).to_have_text(["Pinned", "task", "shop"])
+    expect(card(page, "Loose")).to_have_count(0)
+    # Each card says which list it is in.
+    expect(card(page, "Milk").locator(".task-tag-list")).to_have_text("shop")
+    expect(page.locator(".tasks-place:has(.tasks-place-pin) .tasks-place-label")).to_have_text(["My lists", "task", "shop"])
     expect(page.locator(".tasks-place[aria-current]")).to_have_attribute("data-place", "pinned")
     page.locator("#task-add-btn").click()
     modal = page.locator(".task-edit-modal[open]")
     target = modal.locator(".task-edit-target")
-    expect(target).to_have_text("Adds to the list #task.")
-    # The target follows the tags: swap #task for #shop.
-    modal.locator(".tag-chip", has_text="task").locator("button").click()
-    expect(target).to_have_text("Adds to no list (tags only).")
-    modal.locator("[id^=task-edit-tags]").fill("shop,")
-    expect(target).to_have_text("Adds to the list #shop.")
-    modal.locator("[id^=task-edit-title]").fill("Eggs")
+    lists = modal.locator("select[id^=task-edit-list]")
+    expect(lists).to_have_value("task")
+    expect(target).to_have_text("Adds to the list task.")
+    # The target follows the List field, and a #list in the title.
+    lists.select_option("")
+    expect(target).to_have_text("Adds to no list.")
+    lists.select_option("shop")
+    expect(target).to_have_text("Adds to the list shop.")
+    lists.select_option("")
+    modal.locator("[id^=task-edit-title]").fill("Eggs #shop #weekly")
+    expect(target).to_have_text("Adds to the list shop.")
+    expect(modal.locator("[id^=task-edit-quick]")).to_have_text("list shop · #weekly")
     modal.locator("[id^=task-edit-title]").press("Enter")
     expect(card(page, "Eggs")).to_be_visible()
+    eggs = next(t for t in page.request.get("/api/tasks").json() if t["title"] == "Eggs")
+    assert (eggs["list"], eggs["tags"]) == ("shop", ["weekly"])
     # Editing a task: no target line.
     card(page, "Eggs").dblclick()
     expect(page.locator(".task-edit-modal[open] .task-edit-target")).to_be_hidden()
@@ -292,9 +303,9 @@ def test_tasks_link_shows_the_pinned_lists_as_one(page, wiki):
 def test_tasks_page_opens_linked_task_and_lists(page, wiki):
     # /tasks is one built-in main tasks, whatever embeds the wiki's pages have.
     wiki.write("tasks", "# Tasks\n\n[[tasks: tag=work]]\n\n[[tasks: view=plan]]\n")
-    wiki.write("shop", "# Shop\n\n[[tasks: list=groceries]]\n")
+    make_list(page, "groceries")
     tid = page.request.post("/api/tasks", data={"title": "Untagged"}).json()["id"]
-    page.request.post("/api/tasks", data={"title": "Milk", "tags": "groceries"})
+    page.request.post("/api/tasks", data={"title": "Milk", "list": "groceries"})
     page.goto(f"/tasks?task={tid}&view=open")
     expect(page.locator(".tasks-app")).to_have_count(1)
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Open"])
@@ -465,9 +476,10 @@ def test_whole_header_folds_but_due_count_opens_its_list(page, wiki):
 
 @pytest.mark.parametrize("embed", ["list=task", "tag=task"])
 def test_list_and_tag_taskss_fold_too(page, wiki, embed):
-    # Regression: the embed's locked filter chip (#task) counted as the
-    # viewer filtering, which shows every section, so nothing could fold.
-    page.request.post("/api/tasks", data={"title": "Loose", "tags": ["task"]})
+    # Regression: the embed's locked filter chip (the list's, #task) counted
+    # as the viewer filtering, which shows every section, so nothing could fold.
+    make_list(page, "task")
+    page.request.post("/api/tasks", data={"title": "Loose", "list": "task", "tags": ["task"]})
     wiki.write("tasks", f"# Tasks\n\n[[tasks: {embed}]]\n")
     page.goto("/page/tasks?view=plan")
     expect(card(page, "Loose")).to_be_visible()
@@ -701,36 +713,50 @@ def test_task_link_to_missing_task_says_so(page, wiki):
     expect(page.get_by_text("That task is no longer in your tasks.")).to_be_visible()
 
 
-# Swapping a list's tag in a list view moves the task into the other list.
+# The List field of a task's dialog moves the task into another list.
 
-def test_list_tag_moves_task_to_another_list(page, wiki):
-    page.request.post("/api/tasks", data={"title": "Prune", "tags": "chores"})
-    wiki.write("garden", "# Garden\n\n[[tasks: list=garden]]\n")
+def test_the_list_field_moves_a_task_to_another_list(page, wiki):
+    for name in ("chores", "garden"):
+        make_list(page, name)
+    page.request.post("/api/tasks", data={"title": "Prune", "list": "chores", "tags": "weekly"})
     wiki.write("home", "# Home\n\n[[tasks: list=chores]]\n")
     page.goto("/page/home?view=open")
+    # In a view of its list a card doesn't say the list; its tags are tags.
+    expect(card(page, "Prune").locator(".task-tag-list")).to_have_count(0)
     modal = open_edit(page, "Prune")
-    expect(modal.locator("#task-edit-list")).to_have_count(0)   # no List field any more
-    modal.locator("#task-edit-tags").click()
-    page.keyboard.press("Backspace")      # drops #chores
-    modal.locator("#task-edit-tags").fill("garden,")
+    lists = modal.locator("#task-edit-list")
+    expect(lists).to_have_value("chores")
+    expect(lists.locator("option")).to_have_text(["No list", "chores", "garden"])
+    expect(modal.locator(".tag-chip")).to_have_text(["#weekly×"])      # the list is no tag
+    lists.select_option("garden")
     modal.get_by_role("button", name="Save").click()
     # It leaves this list and says where it went.
     expect(card(page, "Prune")).to_have_count(0)
     expect(page.get_by_text("Saved to list “garden”.")).to_be_visible()
-    wait_for_field(page, "Prune", "tags", ["garden"])
+    wait_for_field(page, "Prune", "list", "garden")
+    assert task_by_title(page, "Prune")["tags"] == ["weekly"]
 
 
-def test_list_tag_in_main_tasks_keeps_the_task(page, wiki):
-    # On the main task list a list's tag is just a tag: the task stays.
+def test_a_tag_named_as_a_list_is_a_tag(page, wiki):
+    # A list is no tag: tagging a task with a list's name leaves it where it
+    # is. On the main task list a task that goes into a list stays in view,
+    # with its list as a chip.
     page.request.post("/api/tasks", data={"title": "Prune"})
-    wiki.write("garden", "# Garden\n\n[[tasks: list=garden]]\n")
+    make_list(page, "garden")
     page.goto("/tasks?view=open")
     modal = open_edit(page, "Prune")
     modal.locator("#task-edit-tags").fill("garden,")
     modal.get_by_role("button", name="Save").click()
     wait_for_field(page, "Prune", "tags", ["garden"])
     expect(card(page, "Prune")).to_be_visible()
-    expect(card(page, "Prune").locator(".task-tag-list")).to_have_text("#garden")
+    expect(card(page, "Prune").locator(".task-tag-list")).to_have_count(0)
+    assert "list" not in task_by_title(page, "Prune")
+    modal = open_edit(page, "Prune")
+    modal.locator("#task-edit-list").select_option("garden")
+    modal.get_by_role("button", name="Save").click()
+    wait_for_field(page, "Prune", "list", "garden")
+    expect(card(page, "Prune").locator(".task-tag-list")).to_have_text("garden")
+    expect(card(page, "Prune").locator(".task-tag")).to_have_text(["garden", "#garden"])   # its list first, then its tags
     expect(page.get_by_text("Saved to list “garden”.")).to_have_count(0)
 
 
@@ -871,8 +897,9 @@ def test_quick_add_is_not_applied_when_editing(page, wiki):
 
 
 def test_list_embed_shows_only_its_tasks(page, wiki):
-    page.request.post("/api/tasks", data={"title": "Main task"})
-    page.request.post("/api/tasks", data={"title": "Oat milk", "tags": "groceries"})
+    make_list(page, "groceries")
+    page.request.post("/api/tasks", data={"title": "Main task", "tags": "groceries"})      # tagged so: not in the list
+    page.request.post("/api/tasks", data={"title": "Oat milk", "list": "groceries"})
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     wiki.write("shop", "# Shop\n\n[[tasks: list=groceries]]\n")
 
@@ -891,8 +918,8 @@ def test_list_embed_shows_only_its_tasks(page, wiki):
 
 def test_tag_embed_shows_list_tasks(page, wiki):
     # A tag view shows list tasks like any other.
-    page.request.post("/api/tasks", data={"title": "Oat milk", "tags": "groceries,sam"})
-    wiki.write("shop", "# Shop\n\n[[tasks: list=groceries]]\n")
+    make_list(page, "groceries")
+    page.request.post("/api/tasks", data={"title": "Oat milk", "list": "groceries", "tags": "sam"})
     wiki.write("sam", "# Sam\n\n[[tasks: tag=sam]]\n")
     page.goto("/page/sam?view=open")
     expect(card(page, "Oat milk")).to_be_visible()
@@ -928,25 +955,24 @@ def test_url_tag_chip_stays_removable(page, wiki):
 
 
 def test_undo_a_move_to_another_list(page, wiki):
-    # Undo restores the whole save, not just the tags, and leaves no trace.
-    page.request.post("/api/tasks", data={"title": "Screws", "tags": "groceries",
+    # Undo restores the whole save, not just the list, and leaves no trace.
+    for name in ("groceries", "hardware"):
+        make_list(page, name)
+    page.request.post("/api/tasks", data={"title": "Screws", "list": "groceries",
                                          "due_date": "2099-01-10"})
     wiki.write("shop", "# Shop\n\n[[tasks: list=groceries]]\n")
-    wiki.write("diy", "# DIY\n\n[[tasks: list=hardware]]\n")
     page.goto("/page/shop?view=open")
     modal = open_edit(page, "Screws")
     modal.locator("#task-edit-more-lead").click()
     modal.locator("#task-edit-lead").fill("3")       # a start date too (logged)
-    modal.locator("#task-edit-tags").click()
-    page.keyboard.press("Backspace")
-    page.keyboard.type("hardware,")
+    modal.locator("#task-edit-list").select_option("hardware")
     modal.get_by_role("button", name="Save").click()
     toast = page.locator(".task-undo-toast")
     expect(toast).to_contain_text("Saved to list “hardware”.")
     expect(card(page, "Screws")).to_have_count(0)
     toast.locator(".task-undo-btn").click()
     expect(card(page, "Screws")).to_be_visible()
-    wait_for_field(page, "Screws", "tags", ["groceries"])
+    wait_for_field(page, "Screws", "list", "groceries")
     t = task_by_title(page, "Screws")
     assert t["start_date"] is None
     assert [e["event"] for e in t["history"]] == ["created"]
@@ -966,13 +992,11 @@ def test_undo_removing_the_tag_on_a_tag_page(page, wiki):
     wait_for_field(page, "Review PR", "tags", ["task", "sam"])
 
 
-def test_undo_a_bulk_retag(page, wiki):
-    # Bulk tag (T) taking tasks out of a list into another one they carry:
-    # one toast, one undo for all.
+def test_undo_a_bulk_untag_on_a_tag_page(page, wiki):
+    # Bulk tag (T) taking tasks out of a tag's view: one toast, one undo for all.
     for title in ("Nails", "Glue"):
         page.request.post("/api/tasks", data={"title": title, "tags": "misc,hardware"})
-    wiki.write("diy", "# DIY\n\n[[tasks: list=hardware]]\n")
-    wiki.write("misc", "# Misc\n\n[[tasks: list=misc]]\n")
+    wiki.write("misc", "# Misc\n\n[[tasks: tag=misc]]\n")
     page.goto("/page/misc?view=open")
     card(page, "Glue").locator(".task-title").click()     # newest first: Glue, Nails
     page.keyboard.press("Shift+ArrowDown")
@@ -980,7 +1004,7 @@ def test_undo_a_bulk_retag(page, wiki):
     page.locator("#bulk-tag-input").fill("misc")
     page.keyboard.press("Enter")
     toast = page.locator(".task-undo-toast")
-    expect(toast).to_contain_text("2 tasks saved to list “hardware”.")
+    expect(toast).to_contain_text("2 tasks no longer show here.")
     expect(card(page, "Nails")).to_have_count(0)
     expect(card(page, "Glue")).to_have_count(0)
     toast.locator(".task-undo-btn").click()
@@ -1169,16 +1193,16 @@ def test_selection_bar_tag_opens_the_dialog(page, wiki):
 
 
 def test_selection_bar_moves_tasks_to_a_list(page, wiki):
-    # No list declared: nothing to move to, so no button.
+    # No list: nothing to move to, so no button.
     seed_four(page)
     card(page, "Saw").locator(".task-title").click()
     card(page, "Glue").locator(".task-title").click(modifiers=["Shift"])
     expect(page.locator("#task-selbar")).to_be_visible()
     expect(page.locator("#task-selbar [data-sel='list']")).to_be_hidden()
-    wiki.write("shop", "# Shop\n\n[[tasks: list=shop]]\n")
-    wiki.write("work", "# Work\n\n[[tasks: list=work]]\n")
-    for title, tags in (("Saw", ["Shop", "tools"]), ("Glue", ["work"])):
-        page.request.put(f"/api/tasks/{task_by_title(page, title)['id']}", data={"tags": tags})
+    for name in ("shop", "work"):
+        make_list(page, name)
+    for title, fields in (("Saw", {"list": "Shop", "tags": ["tools"]}), ("Glue", {"list": "work"})):
+        page.request.put(f"/api/tasks/{task_by_title(page, title)['id']}", data=fields)
     page.reload()
     card(page, "Saw").locator(".task-title").click()
     card(page, "Nuts").locator(".task-title").click(modifiers=["Shift"])     # Saw, Glue, Nuts
@@ -1186,46 +1210,55 @@ def test_selection_bar_moves_tasks_to_a_list(page, wiki):
     dlg = page.locator(".bulk-list-modal")
     expect(dlg.locator(".modal-label")).to_have_text("Move 3 tasks to a list")
     rows = dlg.locator(".bulk-list-row")
-    expect(rows).to_have_text(["#shop1 of 3", "#work1 of 3", "No list1 of 3"])
-    dlg.get_by_role("button", name="#work").click()
+    expect(rows).to_have_text(["shop1 of 3", "work1 of 3", "No list1 of 3"])
+    dlg.get_by_role("button", name="work").click()
     expect(dlg).to_have_count(0)
     toast = page.locator(".task-undo-toast")
-    expect(toast).to_contain_text("3 tasks moved to list “work”")
-    # The other list's tag goes, other tags stay; the selection is kept.
-    wait_for_field(page, "Saw", "tags", ["tools", "work"])
-    wait_for_field(page, "Glue", "tags", ["work"])
-    wait_for_field(page, "Nuts", "tags", ["work"])
-    assert task_by_title(page, "Bolts")["tags"] == []
+    expect(toast).to_contain_text("2 tasks moved to list “work”")      # Glue was there already
+    # Their list changes, their tags stay; the selection is kept.
+    wait_for_field(page, "Saw", "list", "work")
+    wait_for_field(page, "Nuts", "list", "work")
+    assert task_by_title(page, "Saw")["tags"] == ["tools"] and task_by_title(page, "Glue")["list"] == "work"
+    assert "list" not in task_by_title(page, "Bolts")
     assert selected_titles(page) == ["Saw", "Glue", "Nuts"]
-    # Now all three are in work alone: its row is ticked.
+    # Now all three are in work: its row is ticked.
     page.locator("#task-selbar [data-sel='list']").click()
-    expect(dlg.locator(".bulk-list-row[aria-current='true']")).to_have_text("✓#work")
+    expect(dlg.locator(".bulk-list-row[aria-current='true']")).to_have_text("✓work")
     expect(dlg.locator(".bulk-list-row[aria-current='true']")).to_be_focused()
     page.keyboard.press("Escape")
-    # One undo puts every task's tags back.
+    # One undo puts every task back in its list.
     toast.locator(".task-undo-btn").click()
-    wait_for_field(page, "Saw", "tags", ["Shop", "tools"])
-    wait_for_field(page, "Glue", "tags", ["work"])
-    wait_for_field(page, "Nuts", "tags", [])
+    wait_for_field(page, "Saw", "list", "shop")
+    wait_for_field(page, "Nuts", "list", None)
+    assert task_by_title(page, "Glue")["list"] == "work"
     # No list: out of every list. The menu of a selected card offers the move too.
     card(page, "Glue").locator(".task-title").click(button="right")
     page.locator(".task-menu").get_by_role("menuitem", name="Move to list…").click()
     dlg.get_by_role("button", name="No list").click()
-    expect(toast).to_contain_text("3 tasks taken out of their lists")
-    wait_for_field(page, "Saw", "tags", ["tools"])
-    wait_for_field(page, "Glue", "tags", [])
+    expect(toast).to_contain_text("2 tasks taken out of their lists")
+    wait_for_field(page, "Saw", "list", None)
+    wait_for_field(page, "Glue", "list", None)
+    assert task_by_title(page, "Saw")["tags"] == ["tools"]
+    # One task alone: Move to list… is in its card's menu too.
+    page.keyboard.press("Escape")
+    card(page, "Bolts").locator(".task-title").click(button="right")
+    page.locator(".task-menu").get_by_role("menuitem", name="Move to list…").click()
+    expect(dlg.locator(".modal-label")).to_have_text("Move 1 task to a list")
+    dlg.get_by_role("button", name="shop").click()
+    wait_for_field(page, "Bolts", "list", "shop")
 
 
 def test_moving_tasks_out_of_the_list_shown(page, wiki):
-    wiki.write("shop", "# Shop\n\n[[tasks: list=shop]]\n")
-    wiki.write("work", "# Work\n\n[[tasks: list=work]]\n")
+    for name in ("shop", "work"):
+        make_list(page, name)
     for title in ("Bolts", "Nuts", "Glue"):
-        page.request.post("/api/tasks", data={"title": title, "tags": "shop"})
+        page.request.post("/api/tasks", data={"title": title, "list": "shop"})
     page.goto("/tasks?list=shop&view=open")
     card(page, "Glue").locator(".task-title").click()
     card(page, "Nuts").locator(".task-title").click(modifiers=["Shift"])
-    page.locator("#task-selbar [data-sel='list']").click()
-    page.locator(".bulk-list-modal").get_by_role("button", name="#work").click()
+    page.keyboard.press("m")                                         # as the selection bar's List…
+    expect(page.locator(".bulk-list-modal .modal-label")).to_have_text("Move 2 tasks to a list")
+    page.locator(".bulk-list-modal").get_by_role("button", name="work").click()
     toast = page.locator(".task-undo-toast")
     expect(toast).to_contain_text("2 tasks moved to list “work”")
     expect(card(page, "Glue")).to_have_count(0)
@@ -1386,89 +1419,100 @@ def test_main_task_counts_list_tasks_as_completed(page, wiki):
     expect(page.locator("#task-show-lists")).to_have_count(0)
 
 
-def test_new_task_in_list_embed_gets_the_locked_tag(page, wiki):
-    wiki.write("shop", "# Shop\n\n[[tasks: list=groceries]]\n")
+def test_new_task_in_a_list_embed_goes_into_the_list(page, wiki):
+    list_page(page, wiki, "shop", "# Shop\n\n[[tasks: list=groceries]]\n")
     page.goto("/page/shop?view=open")
+    # The filter says which list this is: a chip of the list's, with no ×.
     filt = page.locator(".tasks-toolbar .tag-chip")
-    expect(filt).to_have_text(["#groceries"])
+    expect(filt).to_have_text(["groceries"])
+    expect(filt).to_have_class(re.compile(r"\btag-chip-list\b"))
     expect(filt.locator(".tag-chip-x")).to_have_count(0)
     page.locator("#task-filter-search").click()
     page.keyboard.press("Backspace")      # a locked chip stays
-    expect(filt).to_have_text(["#groceries"])
+    expect(filt).to_have_text(["groceries"])
     page.locator("#task-add-btn").click()
     modal = page.locator("#task-edit-modal")
-    # The task's tags aren't locked: it starts with the list's, removable.
-    expect(modal.locator(".tag-chip .tag-chip-label")).to_have_text(["#groceries"])
-    expect(modal.locator(".tag-chip .tag-chip-x")).to_have_count(1)
+    # The task starts in the list: the List field says so, and it has no tag for it.
+    expect(modal.locator("#task-edit-list")).to_have_value("groceries")
+    expect(modal.locator(".task-edit-target")).to_have_text("Adds to the list groceries.")
+    expect(modal.locator(".tag-chip")).to_have_count(0)
     modal.locator("#task-edit-title").fill("Bread")
     modal.get_by_role("button", name="Save").click()
     expect(card(page, "Bread")).to_be_visible()
-    wait_for_field(page, "Bread", "tags", ["groceries"])
+    wait_for_field(page, "Bread", "list", "groceries")
+    assert task_by_title(page, "Bread")["tags"] == []
 
 
-def test_list_tag_comes_first_and_marked(page, wiki):
-    page.request.post("/api/tasks", data={"title": "Oat milk", "tags": "dairy,groceries"})
-    wiki.write("shop", "# Shop\n\n[[tasks: list=groceries]]\n")
-    page.goto("/page/shop?view=open")
-    tags = card(page, "Oat milk").locator(".task-tag")      # the card too
-    expect(tags).to_have_text(["#groceries", "#dairy"])
+def test_a_cards_list_comes_first_and_marked(page, wiki):
+    make_list(page, "groceries")
+    page.request.post("/api/tasks", data={"title": "Oat milk", "list": "groceries", "tags": "dairy"})
+    page.goto("/tasks?view=open")
+    tags = card(page, "Oat milk").locator(".task-tag")
+    expect(tags).to_have_text(["groceries", "#dairy"])
     expect(tags.first).to_have_class(re.compile(r"\btask-tag-list\b"))
+    # Icon, tint and a tooltip on the list's chip; a tag is plain.
+    el, plain = tags.first, tags.nth(1)
+    assert "svg" in el.evaluate("e => getComputedStyle(e, '::before').maskImage")
+    assert plain.evaluate("e => getComputedStyle(e, '::before').content") in ("none", "normal")
+    bg = "e => getComputedStyle(e).backgroundColor"
+    assert el.evaluate(bg) != plain.evaluate(bg)
+    assert el.get_attribute("title") == "List"
+    assert not plain.get_attribute("title")
+    # The dialog's Tags are its tags alone: the list has its own field.
     modal = open_edit(page, "Oat milk")
     chips = modal.locator(".tag-chip")
-    expect(chips.locator(".tag-chip-label")).to_have_text(["#groceries", "#dairy"])
-    expect(chips.first).to_have_class(re.compile(r"\btag-chip-list\b"))
-    expect(chips.nth(1)).not_to_have_class(re.compile(r"\btag-chip-list\b"))
-    # Icon, tint and a tooltip naming the list's page, on the chip and the card.
-    for el, plain in ((chips.first, chips.nth(1)), (tags.first, tags.nth(1))):
-        assert "svg" in el.evaluate("e => getComputedStyle(e, '::before').maskImage")
-        assert plain.evaluate("e => getComputedStyle(e, '::before').content") in ("none", "normal")
-        bg = "e => getComputedStyle(e).backgroundColor"
-        assert el.evaluate(bg) != plain.evaluate(bg)
-        assert el.get_attribute("title") == "List: Shop"
-        assert not plain.get_attribute("title")
-    # A list tag typed in later moves to the front too.
-    wiki.write("diy", "# DIY\n\n[[tasks: list=hardware]]\n")
+    expect(chips.locator(".tag-chip-label")).to_have_text(["#dairy"])
+    expect(chips.first).not_to_have_class(re.compile(r"\btag-chip-list\b"))
+    expect(modal.locator("#task-edit-list")).to_have_value("groceries")
+    page.keyboard.press("Escape")
+    # In a view of that one list the cards don't repeat it.
+    wiki.write("shop", "# Shop\n\n[[tasks: list=groceries]]\n")
     page.goto("/page/shop?view=open")
-    modal = open_edit(page, "Oat milk")
-    modal.locator("#task-edit-tags").click()
-    page.keyboard.type("hardware,")
-    expect(modal.locator(".tag-chip .tag-chip-label")).to_have_text(["#groceries", "#hardware", "#dairy"])
+    expect(card(page, "Oat milk").locator(".task-tag")).to_have_text(["#dairy"])
 
 
-def test_filter_marks_only_list_tags(page, wiki):
-    page.request.post("/api/tasks", data={"title": "Screws", "tags": "groceries,weekly,hardware,dairy"})
+def test_filter_marks_the_list_and_takes_list_words(page, wiki):
+    for name in ("groceries", "hardware"):
+        make_list(page, name)
+    page.request.post("/api/tasks", data={"title": "Screws", "list": "groceries", "tags": "weekly,dairy"})
     wiki.write("shop", "# Shop\n\n[[tasks: list=groceries tag=weekly]]\n")
-    wiki.write("diy", "# DIY\n\n[[tasks: list=hardware]]\n")
     page.goto("/page/shop?view=open")
     filt = page.locator("#task-filter-search")
     filt.click()
-    for partial in ("#hard", "#dai"):           # chips come from completion
-        page.keyboard.type(partial)
-        page.keyboard.press("Enter")
+    page.keyboard.type("#dai")                   # chips come from completion
+    page.keyboard.press("Enter")
     chips = page.locator(".tasks-toolbar .tag-chip")
-    expect(chips.locator(".tag-chip-label")).to_have_text(
-        ["#groceries", "#hardware", "#weekly", "#dairy"])
+    expect(chips.locator(".tag-chip-label")).to_have_text(["groceries", "#weekly", "#dairy"])
     bgs = chips.evaluate_all("cs => cs.map(c => getComputedStyle(c).backgroundColor)")
-    assert bgs[0] == bgs[1] and bgs[2] == bgs[3] and bgs[0] != bgs[2]   # lists tinted only
+    assert bgs[1] == bgs[2] and bgs[0] != bgs[1]   # the list tinted only
     titles = chips.evaluate_all("cs => cs.map(c => c.title)")
-    assert titles[0] == "List: Shop"
-    assert titles[1] == "List: DIY"
-    assert titles[2] == "Set by this page" and titles[3] == ""
+    assert titles == ["List", "Set by this page", ""]
+    expect(card(page, "Screws")).to_be_visible()
+    # A tag named as a list finds nothing of the list; list: does, on any view.
+    page.goto("/tasks?view=open")
+    filt.fill("#groceries")
+    expect(card(page, "Screws")).to_have_count(0)
+    filt.fill("list:groceries")
+    expect(card(page, "Screws")).to_be_visible()
+    filt.fill("list:hardware")
+    expect(card(page, "Screws")).to_have_count(0)
+    filt.fill("-list:hardware #weekly")
+    expect(card(page, "Screws")).to_be_visible()
 
 
 def test_task_moves_to_another_list(page, wiki):
-    page.request.post("/api/tasks", data={"title": "Screws", "tags": "groceries"})
+    for name in ("groceries", "hardware"):
+        make_list(page, name)
+    page.request.post("/api/tasks", data={"title": "Screws", "list": "groceries"})
     wiki.write("shop", "# Shop\n\n[[tasks: list=groceries]]\n")
     wiki.write("diy", "# DIY\n\n[[tasks: list=hardware]]\n")
     page.goto("/page/shop?view=open")
     modal = open_edit(page, "Screws")
-    modal.locator("#task-edit-tags").click()
-    page.keyboard.press("Backspace")      # drops #groceries
-    page.keyboard.type("hardware,")
+    modal.locator("#task-edit-list").select_option("hardware")
     modal.get_by_role("button", name="Save").click()
     expect(card(page, "Screws")).to_have_count(0)
     expect(page.get_by_text("Saved to list “hardware”.")).to_be_visible()
-    wait_for_field(page, "Screws", "tags", ["hardware"])
+    wait_for_field(page, "Screws", "list", "hardware")
     page.goto("/page/diy?view=open")
     expect(card(page, "Screws")).to_be_visible()
 
@@ -2058,8 +2102,8 @@ def test_keep_task_goes_back_to_open_with_undo(page, wiki):
 
 
 def test_keep_checkbox_in_modal(page, wiki):
-    # keep=1 makes new tasks keep tasks; a keep task can't repeat.
-    wiki.write("shop", "# Shop\n\n[[tasks: list=groceries keep=1 view=open]]\n")
+    # A list whose new tasks are keep tasks (its setting); a keep task can't repeat.
+    list_page(page, wiki, "shop", "# Shop\n\n[[tasks: list=groceries keep=1 view=open]]\n")
     page.goto("/page/shop")
     page.locator("#task-add-btn").click()
     keep = page.locator("#task-edit-keep")
@@ -2079,16 +2123,21 @@ def test_keep_checkbox_in_modal(page, wiki):
     wait_for_field(page, "Bread", "keep", False)
 
 
-def test_private_checkbox_in_modal(page, wiki, monkeypatch):
-    # With users: an embed on a page in your private folder makes private
-    # tasks (🔒 on the card, in your own tasks files); unticked, it is shared.
+def test_a_task_in_a_private_list_is_private(page, wiki, monkeypatch):
+    # With users: a task made in a private list of yours is private (🔒 on
+    # the card, in your own task files); moved out of it, it is shared, which
+    # the dialog says before Save.
     monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "token")})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
-    wiki.write("private/alice/todo", "# Todo\n\n[[tasks: view=open]]\n")
+    list_page(page, wiki, "private/alice/todo", "# Todo\n\n[[tasks: list=mine view=open]]\n")
     page.goto("/page/private/alice/todo")
     page.locator("#task-add-btn").click()
-    private = page.locator("#task-edit-private")
-    expect(private).to_be_checked()
+    lists, note = page.locator("#task-edit-list"), page.locator("#task-edit-list-note")
+    expect(lists).to_have_value("mine")
+    expect(lists.locator("option")).to_have_text(["No list", "🔒 mine"])
+    expect(note).to_have_text("Private: only you see this task.")
+    expect(page.locator(".task-edit-target")).to_have_text("Adds to the list mine, private.")
+    expect(page.locator("#task-edit-private")).to_have_count(0)      # no Private box: the list says it
     page.locator("#task-edit-title").fill("Gift for Bob")
     page.locator("#task-edit-form button[type=submit]").click()
     expect(card(page, "Gift for Bob").locator(".task-private")).to_be_visible()
@@ -2096,81 +2145,137 @@ def test_private_checkbox_in_modal(page, wiki, monkeypatch):
     assert "Gift for Bob" in (wiki.root / "private/alice/_tasks/tasks.json").read_text()
 
     page.keyboard.press("Enter")   # the new task is selected: edit it
-    expect(private).to_be_checked()
-    private.uncheck()
+    expect(lists).to_have_value("mine")
+    lists.select_option("")
+    expect(note).to_have_text("Everyone who uses the wiki will see and change this task. It can’t be made private again.")
+    lists.select_option("mine")
+    expect(note).to_have_text("Private: only you see this task.")
+    lists.select_option("")
     page.locator("#task-edit-form button[type=submit]").click()
     wait_for_field(page, "Gift for Bob", "private", False)
+    # It left the list this page shows; All tasks has it, without the lock.
+    expect(card(page, "Gift for Bob")).to_have_count(0)
+    page.goto("/tasks?view=open")
+    expect(card(page, "Gift for Bob")).to_be_visible()
     expect(card(page, "Gift for Bob").locator(".task-private")).to_have_count(0)
     assert "Gift for Bob" in (wiki.root / "_tasks/tasks.json").read_text()
+    # No undo of a share: the toast that says where it went has none to take it back.
+    assert "Gift for Bob" not in (wiki.root / "private/alice/_tasks/tasks.json").read_text()
 
 
-def test_a_private_lists_tag_does_not_tick_private(page, wiki, monkeypatch):
-    # gifts is declared in alice's folder, but tags don't decide where a
-    # task is kept: the box is as the tasks opened it, and a shared task
-    # keeps it disabled (shared stays shared).
+def test_a_tag_named_as_a_private_list_keeps_a_task_shared(page, wiki, monkeypatch):
+    # gifts is alice's private list, but a tag of that name is a tag: the
+    # task stays where its list says. In the title, #gifts is the list.
     monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "token")})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
-    wiki.write("private/alice/gifts", "# Gifts\n\n[[tasks: list=gifts]]\n")
-    page.request.post("/api/tasks", data={"title": "Scarf", "private": False})
+    make_list(page, "gifts", private=True)
+    page.request.post("/api/tasks", data={"title": "Scarf"})
     page.goto("/tasks?view=open")
     page.locator("#task-add-btn").click()
-    private = page.locator("#task-edit-private")
-    expect(private).not_to_be_checked()
-    page.locator("#task-edit-title").fill("Book #gifts")
+    lists = page.locator("#task-edit-list")
+    expect(lists).to_have_value("")
+    page.locator("#task-edit-title").fill("Book")
     page.locator("#task-edit-tags").fill("gifts ")
-    expect(private).not_to_be_checked()
+    expect(lists).to_have_value("")
+    expect(page.locator("#task-edit-list-note")).to_be_hidden()
     page.locator("#task-edit-form button[type=submit]").click()
     wait_for_field(page, "Book", "private", False)
-
-    open_edit(page, "Scarf")
-    page.locator("#task-edit-tags").fill("gifts ")
-    expect(private).not_to_be_checked()
-    expect(private).to_be_disabled()
+    assert task_by_title(page, "Book")["tags"] == ["gifts"]
+    # The title's shorthand names the list: the new task goes into it, private.
+    page.locator("#task-add-btn").click()
+    page.locator("#task-edit-title").fill("Ring #gifts")
+    expect(page.locator(".task-edit-target")).to_have_text("Adds to the list gifts, private.")
     page.locator("#task-edit-form button[type=submit]").click()
-    wait_for_field(page, "Scarf", "private", False)
+    wait_for_field(page, "Ring", "private", True)
+    assert task_by_title(page, "Ring")["list"] == "gifts" and task_by_title(page, "Ring")["tags"] == []
 
 
-def test_c_t_in_a_shared_home_starts_shared(page, wiki, monkeypatch):
-    # The shared Tasks home is list=task, and alice declares task in her
-    # folder too: c t starts with #task, but the Tasks home is a shared page
-    # (location, not the tag), so Private is not ticked.
-    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "token")})
+def test_c_t_goes_to_the_default_list_shared_or_private(page, wiki, monkeypatch):
+    # alice has a private list task, and bob made a shared one of that name
+    # (he doesn't see hers), which she pinned: her own is "task" to her, the
+    # shared one "shared/task". c t starts in her default list: the shared
+    # one, so the task is shared; with her own as the default, it is private.
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "token"), "bob": ("pw", "t2")})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
-    wiki.write("team", "# Team\n\n[[tasks: list=task pin=1]]\n")
-    wiki.write("private/alice/mine", "# Mine\n\n[[tasks: list=task]]\n")
+    make_list(page, "task", private=True)
+    page.request.post("/login", form={"username": "bob", "password": "pw"})
+    make_list(page, "task")
+    page.request.post("/login", form={"username": "alice", "password": "pw"})
+    assert page.request.post("/tasks/pin-list", form={"list": "shared/task", "pin": "default"}).ok
     wiki.write("garden", "# Garden\n")
     page.goto("/page/garden")
     page.keyboard.press("c")
     page.keyboard.press("t")
     modal = page.locator(".task-edit-modal[open]")
-    expect(modal.locator(".tag-chip")).to_contain_text("task")
-    expect(modal.locator("input[id^=task-edit-private]")).not_to_be_checked()
+    lists = modal.locator("select[id^=task-edit-list]")
+    expect(lists).to_have_value("shared/task")
+    expect(lists.locator("option")).to_have_text(["No list", "task (shared)", "🔒 task"])
+    expect(modal.locator("[id^=task-edit-list-note]")).to_be_hidden()
     modal.locator("[id^=task-edit-title]").fill("Call the bank")
     modal.locator("button[type=submit]").click()
     expect(modal).to_be_hidden()
     wait_for_field(page, "Call the bank", "private", False)   # the dialog closes before its request is through
+    assert task_by_title(page, "Call the bank")["list"] == "task"
+    # Her own list of that name as the default: private.
+    assert page.request.post("/tasks/pin-list", form={"list": "task", "pin": "default"}).ok
+    page.goto("/page/garden")
+    page.keyboard.press("c")
+    page.keyboard.press("t")
+    expect(lists).to_have_value("task")
+    expect(modal.locator("[id^=task-edit-list-note]")).to_have_text("Private: only you see this task.")
+    modal.locator("[id^=task-edit-title]").fill("Buy a ring")
+    modal.locator("button[type=submit]").click()
+    wait_for_field(page, "Buy a ring", "private", True)
+    # The switcher has both, hers with a lock, each with its own tasks.
+    page.goto("/tasks?list=shared/task&view=open")
+    expect(page.locator("h1")).to_have_text("List: task")
+    expect(card(page, "Call the bank")).to_be_visible()
+    expect(card(page, "Buy a ring")).to_have_count(0)
+    expect(page.locator(".tasks-place[data-place='list:task'] .tasks-place-lock")).to_have_count(1)
+    expect(page.locator(".tasks-place[data-place='list:shared/task'] .tasks-place-lock")).to_have_count(0)
+    page.goto("/tasks?list=task&view=open")
+    expect(card(page, "Buy a ring")).to_be_visible()
+    expect(card(page, "Call the bank")).to_have_count(0)
 
 
-def test_private_box_of_a_shared_task_is_disabled(page, wiki, monkeypatch):
-    # bob made it: it is shared for good. Alice's own private task can be
-    # shared, and the modal says what that does.
+def test_a_shared_task_cant_go_into_a_private_list(page, wiki, monkeypatch):
+    # bob made it: it is shared for good, so alice's private list is off for
+    # it. Her own private task can leave its list, and the modal says what
+    # that does.
     monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "t1"), "bob": ("pw", "t2")})
     page.request.post("/login", form={"username": "bob", "password": "pw"})
-    page.request.post("/api/tasks", data={"title": "Bob's errand", "private": False})
+    page.request.post("/api/tasks", data={"title": "Bob's errand"})
+    make_list(page, "team")
     page.request.post("/login", form={"username": "alice", "password": "pw"})
-    page.request.post("/api/tasks", data={"title": "Alice's errand", "private": True})
+    make_list(page, "own", private=True)
+    page.request.post("/api/tasks", data={"title": "Alice's errand", "list": "own"})
     page.goto("/tasks?view=open")
     open_edit(page, "Bob's errand")
-    private, note = page.locator("#task-edit-private"), page.locator("#task-edit-private-note")
-    expect(private).to_be_disabled()
+    lists, note = page.locator("#task-edit-list"), page.locator("#task-edit-list-note")
+    expect(lists.locator("option")).to_have_text(["No list", "🔒 own", "team"])
+    expect(lists.locator("option[value=own]")).to_have_attribute("disabled", "")
+    expect(lists.locator("option[value=team]")).not_to_have_attribute("disabled", "")
     page.keyboard.press("Escape")
     open_edit(page, "Alice's errand")
-    expect(private).to_be_enabled()
-    expect(note).to_be_hidden()
-    private.uncheck()
-    expect(note).to_have_text("Everyone who uses the wiki will see and change this task.")
-    private.check()
-    expect(note).to_be_hidden()
+    expect(lists.locator("option[value=own]")).not_to_have_attribute("disabled", "")
+    expect(note).to_have_text("Private: only you see this task.")
+    lists.select_option("team")
+    expect(note).to_have_text("Everyone who uses the wiki will see and change this task. It can’t be made private again.")
+    lists.select_option("own")
+    expect(note).to_have_text("Private: only you see this task.")
+    # Moving several: the private list is off while a shared task is among them.
+    page.keyboard.press("Escape")
+    card(page, "Alice's errand").locator(".task-title").click()
+    card(page, "Bob's errand").locator(".task-title").click(modifiers=["Control"])
+    page.locator("#task-selbar [data-sel='list']").click()
+    dlg = page.locator(".bulk-list-modal")
+    expect(dlg.locator(".bulk-list-row[data-list=own]")).to_be_disabled()
+    expect(dlg.locator(".bulk-list-row[data-list=own]")).to_contain_text("a shared task stays shared")
+    expect(dlg.locator(".bulk-list-row[data-list=team]")).to_contain_text("shares it with everyone")
+    dlg.locator(".bulk-list-row[data-list=team]").click()
+    wait_for_field(page, "Alice's errand", "private", False)
+    wait_for_field(page, "Bob's errand", "list", "team")
+    assert task_by_title(page, "Alice's errand")["list"] == "team"
 
 
 def test_every_comment_can_be_edited(page, wiki, monkeypatch):
@@ -2515,8 +2620,8 @@ def test_notes_continue_checkbox_list_on_enter(page, wiki):
 def test_embed_labels_rename_the_tabs(page, wiki):
     # labels= changes only the words: tabs, the back link, tooltips. Views
     # and links keep their names.
-    page.request.post("/api/tasks", data={"title": "Milk", "tags": "groceries", "keep": True})
-    wiki.write("shop", "# Shop\n\n[[tasks: list=groceries keep=1 labels=Catalogue,,Shopping_list]]\n")
+    list_page(page, wiki, "shop", "# Shop\n\n[[tasks: list=groceries keep=1 labels=Catalogue,,Shopping_list]]\n")
+    page.request.post("/api/tasks", data={"title": "Milk", "list": "groceries", "keep": True})
     page.goto("/page/shop?view=open")
     expect(page.locator("#tasks-tabs [role='tab']")).to_have_text(["Catalogue", "Shopping list"])
     expect(page.locator("#tasks-tabs .active")).to_have_text("Catalogue")
@@ -3392,18 +3497,18 @@ def test_date_picker_shortcuts_move_the_start_date(page, wiki):
 
 def test_new_param_opens_one_modal_on_a_page_with_several_taskss(page, wiki):
     # Regression: the first embed always took ?new=1 (and removed it from
-    # the URL), even on a page with the Tasks home further down. The home
-    # embed opens it, as the New buttons do, else the first one.
-    wiki.write("lists", "# Lists\n\n[[tasks: list=shop]]\n\n[[tasks: list=task pin=1]]\n")
+    # the URL), even on a page with the default list further down. The
+    # default list's embed opens it, as the New buttons do, else the first one.
+    list_page(page, wiki, "lists", "# Lists\n\n[[tasks: list=shop]]\n\n[[tasks: list=task pin=1]]\n")
     page.goto("/page/lists?new=1")
     modal = page.locator(".task-edit-modal[open]")
     expect(modal).to_have_count(1)
-    expect(modal.locator(".tag-chip")).to_contain_text("task")
+    expect(modal.locator("select[id^=task-edit-list]")).to_have_value("task")
     page.keyboard.press("Escape")
-    wiki.write("lists", "# Lists\n\n[[tasks: list=shop]]\n\n[[tasks: list=task]]\n")
+    assert page.request.post("/tasks/pin-list", form={"list": "task", "pin": "0"}).ok
     page.goto("/page/lists?new=1")
     expect(modal).to_have_count(1)
-    expect(modal.locator(".tag-chip")).to_contain_text("shop")
+    expect(modal.locator("select[id^=task-edit-list]")).to_have_value("shop")
 
 
 def test_section_wikilinks_in_task_notes(page, wiki):
@@ -4133,31 +4238,31 @@ def test_plan_sorts_each_section_and_keeps_its_own_sort(page, wiki):
 
 
 def test_new_list_from_the_tasks_pages_menu(page, wiki):
-    # The Tasks page's ⋯ menu: New list… asks for a name, says which page the
-    # list gets, makes it and opens the list; a name taken comes back saying so.
+    # The Tasks page's ⋯ menu: New list… asks for a name, makes the list and
+    # opens it; a name taken comes back saying so.
     page.request.post("/api/tasks", data={"title": "Milk", "tags": "shop"})
     page.goto("/tasks?view=open")
     page.locator(".page-header .page-menu-btn").click()
     menu = page.locator("#page-menu")
-    expect(menu.get_by_role("menuitem")).to_have_text(["New list…"])   # no Rename… on All tasks
+    expect(menu.get_by_role("menuitem")).to_have_text(["New list…"])   # a list's own actions aren't All tasks'
     menu.get_by_role("menuitem", name="New list…").click()
     dialog = page.locator("#list-new-dialog")
     expect(dialog).to_be_visible()
     name = page.locator("#list-new-input")
     expect(name).to_be_focused()
     name.fill("#Shop")
-    expect(page.locator("#list-new-slug")).to_have_text("lists/shop")
     expect(page.locator("#list-new-private")).to_have_count(0)        # no users: nothing private
     name.press("Enter")
     page.wait_for_url("**/tasks?list=shop")
     expect(page.locator(".page-header h1")).to_have_text("List: shop")
     expect(page.locator('.tasks-place[data-place="list:shop"]')).to_have_attribute("aria-current", "page")
     page.goto("/tasks?list=shop&view=open")
-    expect(page.locator(".task-item .task-title")).to_have_text(["Milk"])   # the tag's tasks are the list's
-    assert wiki.read("lists/shop") == "# Shop\n\n[[tasks: list=shop]]\n"
-    # On a list the menu has Rename… too; the same name again is refused in the dialog.
+    expect(page.locator(".task-item")).to_have_count(0)                # a tag of that name is a tag: the list starts empty
+    assert '{"name": "shop"}' in (wiki.root / "_tasks/lists.json").read_text()
+    assert not (wiki.root / "lists").exists()                          # a list is no page
+    # On a list the menu has its actions too; the same name again is refused in the dialog.
     page.locator(".page-header .page-menu-btn").click()
-    expect(menu.get_by_role("menuitem")).to_have_text(["New list…", "Rename…"])
+    expect(menu.get_by_role("menuitem")).to_have_text(["New list…", "Rename…", "Pin", "Delete…"])
     page.keyboard.press("Enter")                                      # the first item
     name.fill("shop")
     page.locator("#list-new-submit").click()
@@ -4169,11 +4274,13 @@ def test_new_list_from_the_tasks_pages_menu(page, wiki):
     expect(dialog).to_be_hidden()
 
 
-def test_rename_list_dialog(page, wiki):
-    """Rename… on a list: its name everywhere; a name in use offers the merge, until edited."""
-    wiki.write("shop", "# Shop\n\n[[tasks: list=shop]]\n")
-    page.request.post("/api/tasks", data={"title": "Milk", "tags": ["shop"]})
-    page.request.post("/api/tasks", data={"title": "Nails", "tags": ["hardware"]})
+def test_rename_and_delete_list_dialogs(page, wiki):
+    """Rename… on a list: its name everywhere; a name of another list is
+    refused in the dialog. Delete…: its tasks go where the dialog says."""
+    list_page(page, wiki, "shop", "# Shop\n\n[[tasks: list=shop]]\n")
+    make_list(page, "hardware")
+    page.request.post("/api/tasks", data={"title": "Milk", "list": "shop", "tags": ["shop"]})
+    page.request.post("/api/tasks", data={"title": "Nails", "list": "hardware"})
     page.goto("/tasks?list=shop")
     dialog = page.locator("#list-rename-dialog")
     expect(dialog).to_be_hidden()
@@ -4181,53 +4288,140 @@ def test_rename_list_dialog(page, wiki):
     page.locator("#list-rename-btn").click()
     expect(dialog).to_be_visible()
     expect(page.locator("#list-rename-input")).to_have_value("shop")
+    expect(page.locator("#list-rename-input")).to_be_focused()
 
     page.locator("#list-rename-input").fill("hardware")
     page.locator("#list-rename-submit").click()
-    expect(dialog).to_be_visible()   # back, asking
-    expect(dialog).to_contain_text("already in use")
-    expect(page.locator("#list-rename-submit")).to_have_text("Merge")
+    expect(dialog).to_be_visible()   # back, saying why
+    expect(dialog).to_contain_text("There is a list #hardware already")
+    expect(page.locator("#list-rename-input")).to_have_value("hardware")
     expect(page).not_to_have_url(re.compile("rename_error"))
     page.locator("#list-rename-input").fill("food")
-    expect(page.locator("#list-rename-submit")).to_have_text("Rename")   # another name: no merge
-
     page.locator("#list-rename-submit").click()
     page.wait_for_url("**/tasks?list=food")
     expect(page.locator(".page-header h1")).to_have_text("List: food")
     open_tab(page, "open")
     expect(card(page, "Milk")).to_be_visible()
     assert "list=food" in (wiki.root / "shop.md").read_text()
+    assert task_by_title(page, "Milk")["tags"] == ["shop"]            # the tag of the old name is a tag
+
+    # Delete…: the list goes, its tasks into the list chosen.
+    page.locator(".page-header .page-menu-btn").click()
+    page.locator("#list-delete-btn").click()
+    delete = page.locator("#list-delete-dialog")
+    expect(delete).to_be_visible()
+    expect(delete.locator("#list-delete-to option")).to_have_text(["No list", "#hardware"])
+    delete.locator("#list-delete-to").select_option("hardware")
+    delete.locator("#list-delete-submit").click()
+    page.wait_for_url("**/tasks?list=hardware")
+    open_tab(page, "open")
+    expect(card(page, "Milk")).to_be_visible()
+    expect(card(page, "Nails")).to_be_visible()
+    expect(page.locator('.tasks-place[data-place="list:food"]')).to_have_count(0)
+    # The page that showed it says so, and offers to make it again.
+    page.goto("/page/shop")
+    expect(page.locator(".tasks-no-list")).to_contain_text("There is no list #food.")
+    expect(page.locator(".tasks-app")).to_have_count(0)
+    page.locator(".tasks-no-list button").click()
+    page.wait_for_url("**/tasks?list=food")
+    page.goto("/page/shop")
+    expect(page.locator(".tasks-app")).to_have_count(1)
 
 
+def test_pin_and_default_from_a_lists_menu(page, wiki):
+    """A list's ⋯ menu pins it for you, makes it your default list, unpins it."""
+    for name in ("shop", "work"):
+        make_list(page, name)
+    page.goto("/tasks?list=shop")
+    menu = page.locator("#page-menu")
+    tasks = page.locator(".breadcrumb .module-link[data-module=tasks]")
+    expect(tasks).to_have_attribute("href", "/tasks")
+    page.locator(".page-header .page-menu-btn").click()
+    menu.get_by_role("menuitem", name="Pin").click()
+    page.wait_for_url("**/tasks?list=shop")
+    expect(page.locator('.tasks-place[data-place="list:shop"] .tasks-place-pin')).to_have_count(1)
+    expect(tasks).to_have_attribute("href", "/tasks?list=shop")
+    page.goto("/tasks?list=work")
+    page.locator(".page-header .page-menu-btn").click()
+    menu.get_by_role("menuitem", name="Pin").click()
+    page.wait_for_url("**/tasks?list=work")
+    expect(page.locator(".tasks-place .tasks-place-label")).to_have_text(["My lists", "shop", "work", "All"])
+    expect(page.locator("body")).to_have_attribute("data-tasks-list", "shop")      # the first pinned: the default
+    page.locator(".page-header .page-menu-btn").click()
+    expect(menu.get_by_role("menuitem")).to_have_text(["New list…", "Rename…", "Make my default list", "Unpin", "Delete…"])
+    menu.get_by_role("menuitem", name="Make my default list").click()
+    page.wait_for_url("**/tasks?list=work")
+    expect(page.locator(".tasks-place .tasks-place-label")).to_have_text(["My lists", "work", "shop", "All"])
+    expect(page.locator("body")).to_have_attribute("data-tasks-list", "work")
+    page.locator(".page-header .page-menu-btn").click()
+    menu.get_by_role("menuitem", name="Unpin").click()
+    page.wait_for_url("**/tasks?list=work")
+    expect(page.locator(".tasks-place .tasks-place-label")).to_have_text(["shop", "work", "All"])
+    expect(page.locator("body")).to_have_attribute("data-tasks-list", "shop")
 
-def test_settings_dialog_changes_the_embeds_params(page, wiki):
-    """List settings… in the toolbar's ⋯ menu: what the list opens on, Plan, the
-    tabs' names, the limit and the tags, written into the page's [[tasks: …]]."""
+
+def test_rename_tag_dialog(page, wiki):
+    """Rename tag… on a tag's view: the tag everywhere; a name in use offers the merge, until edited."""
+    wiki.write("shop", "# Shop\n\n[[tasks: tag=shop]]\n")
     page.request.post("/api/tasks", data={"title": "Milk", "tags": ["shop"]})
-    wiki.write("shopping", "# Shopping\n\nBefore.\n\n[[tasks: list=shop keep=1]]\n\nAfter.\n")
+    page.request.post("/api/tasks", data={"title": "Nails", "tags": ["hardware"]})
+    page.goto("/tasks?tag=shop")
+    dialog = page.locator("#tag-rename-dialog")
+    expect(dialog).to_be_hidden()
+    page.locator(".page-header .page-menu-btn").click()
+    page.locator("#tag-rename-btn").click()
+    expect(dialog).to_be_visible()
+    expect(page.locator("#tag-rename-input")).to_have_value("shop")
+
+    page.locator("#tag-rename-input").fill("hardware")
+    page.locator("#tag-rename-submit").click()
+    expect(dialog).to_be_visible()   # back, asking
+    expect(dialog).to_contain_text("already in use")
+    expect(page.locator("#tag-rename-submit")).to_have_text("Merge")
+    expect(page).not_to_have_url(re.compile("rename_error"))
+    page.locator("#tag-rename-input").fill("food")
+    expect(page.locator("#tag-rename-submit")).to_have_text("Rename")   # another name: no merge
+
+    page.locator("#tag-rename-submit").click()
+    page.wait_for_url("**/tasks?tag=food")
+    open_tab(page, "open")
+    expect(card(page, "Milk")).to_be_visible()
+    expect(card(page, "Nails")).to_have_count(0)
+    assert "tag=food" in (wiki.root / "shop.md").read_text()
+
+
+def test_settings_dialog_changes_the_lists_settings_and_the_pages(page, wiki):
+    """List settings… in the toolbar's ⋯ menu: Plan, the tabs' names, the
+    limit and the tags are the list's own, kept with the list; the tab a page
+    opens it on is the page's, written into its [[tasks: …]]; the pin is yours."""
+    list_page(page, wiki, "shopping", "# Shopping\n\nBefore.\n\n[[tasks: list=shop keep=1]]\n\nAfter.\n")
+    page.request.post("/api/tasks", data={"title": "Milk", "list": "shop"})
+    registry = wiki.root / "_tasks/lists.json"
     page.goto("/page/shopping")
     expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Focus"])
     open_list_settings(page)
     dialog = page.locator("#task-settings-modal")
     expect(dialog).to_be_visible()
-    # It opens with what the page says.
+    # It opens with what the list and the page say.
     expect(dialog.locator("[name=view]")).to_have_value("focus")
     expect(dialog.locator("[name=plan]")).to_be_checked()
+    expect(dialog.locator("[name=keep]")).to_be_checked()   # shown: the list makes keep tasks
     expect(dialog.locator("[name=list]")).to_have_count(0)   # which list it shows is the page's to say
     pin = dialog.locator(".task-settings-pin")
     expect(pin).to_have_attribute("aria-pressed", "false")
     expect(dialog.locator(".task-settings-default")).to_be_hidden()   # only a pinned list can be the default
-    # What is rarely changed shows only when set: none of it is, so the line
-    # under the fields offers each.
-    for name in ("label_open", "tag", "limit", "new"):
+    expect(dialog.locator(".task-settings-where")).to_contain_text("The list’s settings hold wherever it shows")
+    # What is rarely changed shows only when set, so the line under the
+    # fields offers each.
+    for name in ("label_open", "tag", "limit", "new", "noshare"):
         expect(dialog.locator(f"[name={name}]")).to_be_hidden()
     more = dialog.locator(".task-add-field:visible")
-    expect(more).to_have_text(["WIP limit", "Tab names", "Tags of a new task", "Filter by tag"])
+    expect(more).to_have_text(["WIP limit", "Tab names", "Tags of a new task", "Filter by tag", "Hide when sharing"])
     more.filter(has_text="Tab names").click()
     expect(dialog.locator("[name=label_open]")).to_be_focused()
     more.filter(has_text="WIP limit").click()
     more.filter(has_text="Tags of a new task").click()
-    expect(dialog.locator(".task-add-field:visible")).to_have_text(["Filter by tag"])
+    expect(dialog.locator(".task-add-field:visible")).to_have_text(["Filter by tag", "Hide when sharing"])
     # The app's shortcuts leave the dialog's typing alone.
     dialog.locator("[name=label_open]").fill("To buy")
     dialog.locator("[name=label_focus]").fill("Cart")
@@ -4237,8 +4431,9 @@ def test_settings_dialog_changes_the_embeds_params(page, wiki):
     dialog.locator("[name=new]").fill("weekly, fresh")
     with page.expect_navigation():
         dialog.get_by_role("button", name="Save").click()
-    assert wiki.read("shopping") == ("# Shopping\n\nBefore.\n\n"
-                                     "[[tasks: list=shop keep=1 new=weekly,fresh view=open limit=6 labels=To_buy,Cart]]\n\nAfter.\n")
+    # The list's own to the registry; the tab, the page's, into its embed.
+    assert '{"name": "shop", "limit": "6", "plan": "off", "keep": "1", "labels": "To_buy,Cart", "new": "weekly,fresh"}' in registry.read_text()
+    assert wiki.read("shopping") == "# Shopping\n\nBefore.\n\n[[tasks: list=shop keep=1 view=open]]\n\nAfter.\n"
     # The page opens as set: the Open tab, by its new name, as one list.
     expect(page.locator("#tasks-tabs [role='tab']")).to_have_text(["To buy", "Cart"])
     expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["To buy"])
@@ -4248,11 +4443,13 @@ def test_settings_dialog_changes_the_embeds_params(page, wiki):
     open_list_settings(page)
     expect(dialog.locator("[name=view] option")).to_have_text(["To buy", "Cart"])
     expect(dialog.locator("[name=label_open]")).to_be_visible()   # shown: names are set
-    expect(dialog.locator(".task-add-field:visible")).to_have_text(["Filter by tag"])
+    expect(dialog.locator(".task-add-field:visible")).to_have_text(["Filter by tag", "Hide when sharing"])
     expect(dialog.locator("[name=label_open]")).to_have_value("To buy")
     expect(dialog.locator("[name=limit]")).to_have_value("6")
+    before = registry.read_text(), wiki.read("shopping")
     dialog.get_by_role("button", name="Save").click()
     expect(dialog).to_be_hidden()
+    assert (registry.read_text(), wiki.read("shopping")) == before
     open_list_settings(page)
     dialog.locator("[name=plan]").check()
     # The pin: pressed, the list is pinned, and can be made the default one.
@@ -4269,25 +4466,34 @@ def test_settings_dialog_changes_the_embeds_params(page, wiki):
     dialog.locator(".task-settings-default input").check()
     with page.expect_navigation():
         dialog.get_by_role("button", name="Save").click()
-    assert "[[tasks: list=shop keep=1 new=weekly,fresh view=plan limit=6 labels=To_buy,Cart pin=default]]" in wiki.read("shopping")
+    text = registry.read_text()
+    assert '"plan": "on"' in text and '"pinned": ["shop"],\n  "default": "shop"' in text
+    assert "pin=" not in wiki.read("shopping")                       # the pin is no param of a page
     expect(page.get_by_role("switch", name="Plan")).to_have_attribute("aria-checked", "true")
+    expect(page.locator(".breadcrumb .module-link[data-module=tasks]")).to_have_attribute("href", "/tasks?list=shop")
 
-    # The list on /tasks has the same settings, for the same line of the page.
+    # The list on /tasks has the same settings; there the tab is the list's own.
     page.goto("/tasks?list=shop")
     open_list_settings(page)
-    expect(dialog.locator(".task-settings-where")).to_contain_text("shopping")
-    expect(dialog.locator(".task-settings-pin")).to_have_attribute("aria-pressed", "true")   # as the page says
+    expect(dialog.locator(".task-settings-where")).to_contain_text("For this list, for everyone")
+    expect(dialog.locator(".task-settings-pin")).to_have_attribute("aria-pressed", "true")
     expect(dialog.locator(".task-settings-default input")).to_be_checked()
-    dialog.locator("[name=view]").select_option("focus")
+    expect(dialog.locator(".task-add-field:visible")).to_have_text(["Hide when sharing"])    # no page here: no filter
+    expect(dialog.locator("[name=view]")).to_have_value("focus")    # the list's own tab, not the page's
+    dialog.locator("[name=view]").select_option("open")
+    dialog.locator(".task-settings-pin").click()                    # unpinned
     with page.expect_navigation():
         dialog.get_by_role("button", name="Save").click()
-    assert "[[tasks: list=shop keep=1 new=weekly,fresh view=focus limit=6 labels=To_buy,Cart pin=default]]" in wiki.read("shopping")
-    expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Cart"])
+    text = registry.read_text()
+    assert '{"name": "shop", "view": "open", "limit": "6", "plan": "on"' in text and '"pinned": []' in text
+    assert wiki.read("shopping") == before[1]                        # the page keeps its own tab
+    expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["To buy"])
+    expect(page.locator(".tasks-place-pin")).to_have_count(0)
 
 
 def test_plan_default_and_all_tasks_settings(page, wiki):
     """plan=off: Open is one list on a fresh load; a flip of the switch lasts
-    for the browser tab. All tasks keeps its settings in _tasks/settings.json."""
+    for the browser tab. All tasks keeps its settings in the lists' registry."""
     page.request.post("/api/tasks", data={"title": "Some task"})
     wiki.write("tasks", "# Tasks\n\n[[tasks: plan=off]]\n")
     page.goto("/page/tasks")
@@ -4319,7 +4525,7 @@ def test_plan_default_and_all_tasks_settings(page, wiki):
     dialog.locator("[name=plan]").uncheck()
     with page.expect_navigation():
         dialog.get_by_role("button", name="Save").click()
-    assert '"view": "open"' in (wiki.root / "_tasks" / "settings.json").read_text()
+    assert '"all": {"view": "open"}' in (wiki.root / "_tasks" / "lists.json").read_text()
     expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Open"])
     expect(plan).to_have_attribute("aria-checked", "false")
 
@@ -4328,8 +4534,8 @@ def test_settings_are_in_the_more_menu_on_a_phone(new_page, wiki):
     """List settings… is the first item of the ⋯ menu, on a phone as
     anywhere: the toolbar has no button of its own for it."""
     from conftest import TOUCH_PHONE
-    wiki.write("shopping", "# Shopping\n\n[[tasks: list=shop]]\n")
     phone = new_page(**TOUCH_PHONE)
+    list_page(phone, wiki, "shopping", "# Shopping\n\n[[tasks: list=shop]]\n")
     phone.goto("/page/shopping")
     expect(phone.locator("#task-settings-btn")).to_have_count(0)
     phone.locator("#task-more-btn").click()
@@ -4341,17 +4547,18 @@ def test_settings_are_in_the_more_menu_on_a_phone(new_page, wiki):
     dialog.locator("[name=limit]").fill("4")
     with phone.expect_navigation():
         dialog.get_by_role("button", name="Save").click()
-    assert "[[tasks: list=shop limit=4]]" in wiki.read("shopping")
+    assert '{"name": "shop", "limit": "4"}' in (wiki.root / "_tasks/lists.json").read_text()
+    assert "[[tasks: list=shop]]" in wiki.read("shopping")
 
 
 def test_export_and_import_a_lists_tasks(page, wiki, tmp_path):
     """The list's ⋯ menu: Export saves the list's tasks as a
     file, Import… adds a file's tasks to the list it is opened in, asking for
     a tag of your own once the file is picked."""
-    page.request.post("/api/tasks", data={"title": "Milk", "tags": ["shop"]})
-    page.request.post("/api/tasks", data={"title": "Report", "tags": ["work"]})
-    wiki.write("shopping", "# Shopping\n\n[[tasks: list=shop view=open]]\n")
-    wiki.write("food", "# Food\n\n[[tasks: list=food view=open]]\n")
+    list_page(page, wiki, "shopping", "# Shopping\n\n[[tasks: list=shop view=open]]\n")
+    list_page(page, wiki, "food", "# Food\n\n[[tasks: list=food view=open]]\n")
+    page.request.post("/api/tasks", data={"title": "Milk", "list": "shop"})
+    page.request.post("/api/tasks", data={"title": "Report", "tags": ["shop"]})     # a tag of that name: not the list's
     page.goto("/page/shopping")
     more = page.locator("#task-more-btn")
     dialog = page.locator("#task-import-modal")
@@ -4381,7 +4588,7 @@ def test_export_and_import_a_lists_tasks(page, wiki, tmp_path):
     dialog.get_by_role("button", name="Import").click()
     expect(page.locator(".task-undo-toast")).to_have_text("Nothing imported: the tasks are already here.")
     expect(dialog).to_be_hidden()
-    # Into another list, once the task is gone from this one: it gets that list's tag.
+    # Into another list, once the task is gone from this one: it goes into that list.
     page.request.delete(f"/api/tasks/{task_by_title(page, 'Milk')['id']}")
     page.goto("/page/food")
     expect(page.locator("#tasks-list .task-item")).to_have_count(0)
@@ -4396,7 +4603,7 @@ def test_export_and_import_a_lists_tasks(page, wiki, tmp_path):
     expect(page.locator(".task-undo-toast")).to_contain_text("Imported 1 task.")
     expect(dialog).to_be_hidden()
     expect(page.locator("#tasks-list .task-item")).to_have_count(1)
-    assert task_by_title(page, "Milk")["tags"] == ["food", "from-anna"]
+    assert (task_by_title(page, "Milk")["list"], task_by_title(page, "Milk")["tags"]) == ("food", ["from-anna"])
     # Undo takes the imported tasks out again; then without a tag of its own.
     page.locator(".task-undo-btn").click()
     expect(page.locator("#tasks-list .task-item")).to_have_count(0)
@@ -4405,7 +4612,7 @@ def test_export_and_import_a_lists_tasks(page, wiki, tmp_path):
     expect(page.locator("#task-import-tag")).to_have_value("")
     dialog.get_by_role("button", name="Import").click()
     expect(page.locator("#tasks-list .task-item")).to_have_count(1)
-    assert task_by_title(page, "Milk")["tags"] == ["food"]
+    assert (task_by_title(page, "Milk")["list"], task_by_title(page, "Milk")["tags"]) == ("food", [])
 
     # A file that is no export says so, without asking for a tag.
     other = tmp_path / "notes.json"

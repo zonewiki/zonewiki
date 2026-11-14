@@ -160,7 +160,7 @@ func createTask(user string, data jsonObj, message string) (*Task, error) {
 }
 
 // applyTaskFields applies the field changes in data (not completion); fresh:
-// t is a task being created, the only time it may start private.
+// t is a task being created, the only time it may go into a private list.
 func applyTaskFields(user string, t *Task, data jsonObj, fresh bool) error {
 	oldDue, oldStart, oldRec := t.DueDate, t.StartDate, t.Recurrence
 	if oldRec == nil {
@@ -172,8 +172,8 @@ func applyTaskFields(user string, t *Task, data jsonObj, fresh bool) error {
 		func() error { return applyText(user, t, data) },
 		func() error { return applyDate(user, t, data, "due_date", "due", &t.DueDate) },
 		func() error { return applyOrder(t, data) },
-		func() error { return applyPrivate(user, t, data, fresh) },
-		func() error { return applyAssignee(user, t, data) }, // after private: a private task has none
+		func() error { return applyList(user, t, data, fresh) },
+		func() error { return applyAssignee(user, t, data) }, // after its list: a private task has none
 		func() error { return applyDate(user, t, data, "last_done", "", &t.LastDone) },
 		func() error { return applyDate(user, t, data, "start_date", "start", &t.StartDate) },
 		func() error { return applyRecurrence(t, data, oldDue, oldStart, oldRec) },
@@ -284,30 +284,57 @@ func applyOrder(t *Task, data jsonObj) error {
 	return nil
 }
 
-// applyPrivate: a write's private: a new task starts private, or a private
-// one is shared; a shared one stays shared.
-func applyPrivate(user string, t *Task, data jsonObj, fresh bool) error {
-	if !data.Has("private") {
+// applyList: a write's list: the list the task is in, as user names it (a
+// ref), or none ("", null). Where a task is kept follows its list: in a
+// private list it is its user's alone, anywhere else shared. A new task
+// may start in a private list; a shared task never goes into one, and a
+// private task leaves for a shared place only when the write says share.
+// Only a change is checked. private is no field of a write: a task is
+// private by its list.
+func applyList(user string, t *Task, data jsonObj, fresh bool) error {
+	if data.Has("private") {
+		return refuse("private is not set on a task: a task is private when its list is. Give list")
+	}
+	if !data.Has("list") {
 		return nil
 	}
-	private, err := asBool(data["private"], "private")
+	ref := ""
+	if !data.Null("list") {
+		s, err := asStr(data["list"], "list")
+		if err != nil {
+			return err
+		}
+		ref = cleanList(s)
+	}
+	share, err := boolField(data, "share")
 	if err != nil {
 		return err
 	}
-	if private && privateFolder(user) == "" {
-		return refuse("Only a signed-in user's tasks can be private")
+	lists := taskLists(user)
+	name, owner := "", ""
+	if ref != "" {
+		l, ok := resolveList(ref, lists)
+		if !ok {
+			return refuse("No list #" + ref)
+		}
+		if !canWriteList(user, l) {
+			return errReadOnly
+		}
+		name, owner = l.Name, l.Owner
 	}
-	if private && t.Owner == "" && !fresh {
-		return refuse("A shared task stays shared: others have seen it. Make a new private task and copy the text")
+	if !fresh && name == t.List && owner == t.Owner {
+		return nil
 	}
-	was := t.Owner
-	t.Owner = ""
-	if private {
-		t.Owner = user
-	}
-	if t.Owner != was && !private {
+	switch {
+	case fresh:
+	case owner != "" && t.Owner == "":
+		return errSharedStays
+	case owner == "" && t.Owner != "" && !share:
+		return shareNeeded("The task")
+	case owner == "" && t.Owner != "":
 		logEvent(t, user, "shared", "", "")
 	}
+	t.List, t.Owner = name, owner
 	return nil
 }
 

@@ -31,13 +31,13 @@ type Req struct {
 	user       string // who is asking (userOf): "" without users
 	sharing    bool
 	pinnedDone bool
-	pinned     []TasksHome // the pinned lists (lookupPinnedIn), once
+	pinned     []ListInfo // the pinned lists (pinnedLists), once
 	counts     *TaskCounts
 	files      []PageFile // iterPages, once
 	stats      []pageStat // the same with their mtimes, once
 	sorted     []PageFile // the same, by slug
 	slugs      map[string]bool
-	lists      map[string]TasksHome
+	lists      map[string]ListInfo
 	open       []*Task // openTasks, once
 	openRead   bool
 }
@@ -122,12 +122,12 @@ func (rq *Req) slugSet() map[string]bool {
 }
 
 // taskLists: taskLists for the user asking, once per request.
-func (rq *Req) taskLists() map[string]TasksHome {
+func (rq *Req) taskLists() map[string]ListInfo {
 	if rq == nil {
 		return taskLists("")
 	}
 	if rq.lists == nil {
-		rq.lists = taskListsIn(rq.sortedPageFiles(), rq.user)
+		rq.lists = taskLists(rq.user)
 	}
 	return rq.lists
 }
@@ -592,12 +592,14 @@ func pageTasksEmbeds(content string) []TasksParams {
 	return out
 }
 
-// TaskList is a list an embed declares: its name and params.
+// TaskList is an embed that names a list ([[tasks: list=<name>]]): the
+// name as written (cleaned) and the embed's params.
 type TaskList struct {
 	Name   string
 	Params TasksParams
 }
 
+// embedsLists: those of a page's embeds that name a list.
 func embedsLists(embeds []TasksParams) []TaskList {
 	var out []TaskList
 	for _, p := range embeds {
@@ -607,9 +609,6 @@ func embedsLists(embeds []TasksParams) []TaskList {
 	}
 	return out
 }
-
-// pageTaskLists: each [[tasks: list=…]] on a page, outside code.
-func pageTaskLists(content string) []TaskList { return embedsLists(pageTasksEmbeds(content)) }
 
 func pageMetaEntryOf(p, slug string) pageMetaEntry {
 	st, err := os.Stat(p)
@@ -667,47 +666,20 @@ func pageMeta(p, slug string) (string, map[string]bool) {
 	return e.title, e.targets
 }
 
-// TasksHome is a page with a task list embed: a pinned list, or a list's home.
-type TasksHome struct {
-	Slug, Title string
-	Params      TasksParams
-}
-
-// taskLists: every list a page user sees declares ([[tasks: list=<name>]]),
-// by name; when several pages declare one, its home is the first A–Z in
-// user's private folder, else the first shared one A–Z. A list declared on
-// a private page is its owner's alone: for others its name is a plain tag.
-func taskLists(user string) map[string]TasksHome { return taskListsIn(sortedPages(), user) }
-
-// taskListsIn: taskLists over pages (sorted by slug).
-func taskListsIn(pages []PageFile, user string) map[string]TasksHome {
-	out := map[string]TasksHome{}
-	for _, p := range pages {
-		if !canSee(user, p.Slug) {
-			continue
-		}
-		own := ownPrivate(user, p.Slug)
-		e := pageMetaEntryOf(p.Path, p.Slug)
-		for _, l := range embedsLists(e.embeds) {
-			if have, ok := out[l.Name]; !ok || own && !ownPrivate(user, have.Slug) {
-				out[l.Name] = TasksHome{p.Slug, e.title, l.Params}
-			}
-		}
-	}
-	return out
-}
-
-// listPages: the pages with an embed of the list name that the request may
-// show, A–Z by title (the Backlinks of /tasks?list=).
-func (rq *Req) listPages(name string) []PageRef {
+// listPages: the pages with an embed of the list the request's user names
+// ref that the request may show, A–Z by title (the Backlinks of
+// /tasks?list=).
+func (rq *Req) listPages(ref string) []PageRef {
+	lists := rq.taskLists()
+	list, ok := resolveList(ref, lists)
 	var out []PageRef
 	for _, p := range rq.pageFiles() {
-		if hiddenPage(rq, p.Slug) {
+		if !ok || hiddenPage(rq, p.Slug) {
 			continue
 		}
 		e := pageMetaEntryOf(p.Path, p.Slug)
 		for _, l := range embedsLists(e.embeds) {
-			if l.Name == name {
+			if shown, ok := listOnPage(l.Name, p.Slug, rq.who(), lists); ok && shown.Ref == list.Ref {
 				out = append(out, PageRef{p.Slug, e.title})
 				break
 			}
@@ -717,137 +689,24 @@ func (rq *Req) listPages(name string) []PageRef {
 	return out
 }
 
-// taskList: the list a task belongs to: the first (A–Z) of its tags a page
-// declares as a list (names: taskLists), or "".
-func taskList(t *Task, names map[string]TasksHome) string {
-	var hits []string
-	for tag := range taskTagsLower(t) {
-		if _, ok := names[tag]; ok {
-			hits = append(hits, tag)
-		}
-	}
-	sort.Strings(hits)
-	if len(hits) > 0 {
-		return hits[0]
-	}
-	return ""
-}
-
-// lookupDefaultList: the default list, the first of user's pinned lists
-// (lookupPinnedIn): where New task and c t put a task; nil: none pinned.
-func lookupDefaultList(user string) *TasksHome {
-	return firstPinned(lookupPinnedIn(sortedPages(), user))
-}
-
-func firstPinned(pinned []TasksHome) *TasksHome {
-	if len(pinned) == 0 {
-		return nil
-	}
-	return &pinned[0]
-}
-
-// pinnedParam: an embed pins its list (pin=1, or pin=default for the
-// default list).
-func pinnedParam(p TasksParams) bool {
-	pin := strings.TrimSpace(p.Get("pin"))
-	return isTrue(pin) || strings.EqualFold(pin, "default")
-}
-
-// pinnedName: what a pinned list is called: its list, else its page's title.
-func pinnedName(h TasksHome) string {
-	if l := cleanList(h.Params.Get("list")); l != "" {
-		return l
-	}
-	return firstNonEmpty(h.Title, h.Slug)
-}
-
-// lookupPinnedIn: the pinned lists, each [[tasks: … pin=1]] embed on a page
-// user sees (pages sorted by slug): the default list first (pin=default,
-// else the first of the rest), then those in user's private folder, then
-// the shared ones, each A–Z by name (pinnedName); a list pinned twice
-// counts once (the first). The Tasks link shows them, and counts their tasks.
-func lookupPinnedIn(pages []PageFile, user string) []TasksHome {
-	var own, shared []TasksHome
-	for _, p := range pages {
-		if !canSee(user, p.Slug) {
-			continue
-		}
-		e := pageMetaEntryOf(p.Path, p.Slug)
-		for _, params := range e.embeds {
-			if !pinnedParam(params) {
-				continue
-			}
-			if ownPrivate(user, p.Slug) {
-				own = append(own, TasksHome{p.Slug, e.title, params})
-			} else {
-				shared = append(shared, TasksHome{p.Slug, e.title, params})
-			}
-		}
-	}
-	byName := func(a, b TasksHome) int {
-		return strings.Compare(strings.ToLower(pinnedName(a)), strings.ToLower(pinnedName(b)))
-	}
-	slices.SortStableFunc(own, byName)
-	slices.SortStableFunc(shared, byName)
-	// pin=default: the default list, first (yours before a shared one).
-	all := append(own, shared...)
-	if i := slices.IndexFunc(all, func(h TasksHome) bool { return strings.EqualFold(strings.TrimSpace(h.Params.Get("pin")), "default") }); i > 0 {
-		def := all[i]
-		all = slices.Insert(slices.Delete(all, i, i+1), 0, def)
-	}
-	var out []TasksHome
-	seen := map[string]bool{}
-	for _, h := range all {
-		if l := cleanList(h.Params.Get("list")); l != "" {
-			if seen[l] {
-				continue
-			}
-			seen[l] = true
-		}
-		out = append(out, h)
-	}
-	return out
-}
-
-// pinnedLists is lookupPinnedIn, once per request.
-func (rq *Req) pinnedLists() []TasksHome {
+// pinnedLists: the user's pinned lists (pinnedLists), once per request.
+func (rq *Req) pinnedLists() []ListInfo {
 	if rq == nil {
-		return lookupPinnedIn(sortedPages(), "")
+		return pinnedLists("", taskLists(""))
 	}
 	if !rq.pinnedDone {
-		rq.pinned, rq.pinnedDone = lookupPinnedIn(rq.sortedPageFiles(), rq.user), true
+		rq.pinned, rq.pinnedDone = pinnedLists(rq.user, rq.taskLists()), true
 	}
 	return rq.pinned
 }
 
-// defaultList: the default list (the first pinned list), once per request.
-func (rq *Req) defaultList() *TasksHome { return firstPinned(rq.pinnedLists()) }
-
-// pinnedFor: the pinned list named list, nil when it is none.
-func (rq *Req) pinnedFor(list string) *TasksHome {
-	for _, h := range rq.pinnedLists() {
-		if list != "" && cleanList(h.Params.Get("list")) == list {
-			return &h
-		}
+// defaultList: the default list (the first pinned list), where New task
+// and c t put a task; nil when none is pinned.
+func (rq *Req) defaultList() *ListInfo {
+	if pinned := rq.pinnedLists(); len(pinned) > 0 {
+		return &pinned[0]
 	}
 	return nil
-}
-
-// isPinnedPage: a page with a pinned list (it counts as the Tasks module's).
-func (rq *Req) isPinnedPage(slug string) bool {
-	for _, h := range rq.pinnedLists() {
-		if h.Slug == slug {
-			return true
-		}
-	}
-	return false
-}
-
-// defaultPrivate: the default list is in the user's own folder, so a task
-// from New task or c t is private.
-func (rq *Req) defaultPrivate() bool {
-	h := rq.defaultList()
-	return h != nil && ownPrivate(rq.who(), h.Slug)
 }
 
 // allBacklinkCounts: how many pages link to each slug, of those the

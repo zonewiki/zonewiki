@@ -10,7 +10,7 @@ from datetime import date, timedelta
 import pytest
 
 from tests import settings
-from tests.conftest import create_task, git_setup
+from tests.conftest import create_task, git_setup, list_page, make_list
 
 
 # ---------- CRUD Basics ----------
@@ -1856,9 +1856,9 @@ class TestClosedByYear:
 
     def test_completed_years_per_list(self, client, wiki_dir):
         year = self._seed(wiki_dir)
-        (wiki_dir / "shop.md").write_text("# Shop\n\n[[tasks: list=groceries]]\n", encoding="utf-8")
+        make_list(client, "groceries")
         arch = wiki_dir / "_tasks" / f"closed-{year-2}.json"
-        arch.write_text(json.dumps([{"id": "g", "title": "Milk", "tags": ["groceries"],
+        arch.write_text(json.dumps([{"id": "g", "title": "Milk", "list": "groceries",
                                      "closed_at": f"{year-2}-05-01T10:00:00"}]), encoding="utf-8")
         years = lambda q: client.get("/api/tasks/closed-years" + q).get_json()["years"]  # noqa: E731
         # The main task list's are every task's: list tasks included.
@@ -2067,9 +2067,8 @@ class TestLists:
     Completed count include its tasks."""
 
     @pytest.fixture()
-    def shop(self, wiki_dir):
-        (wiki_dir / "shop.md").write_text(
-            "# Shop\n\n[[tasks: list=Groceries keep=1 labels=Catalogue,,Shopping]]\n", encoding="utf-8")
+    def shop(self, client, wiki_dir):
+        list_page(client, wiki_dir, "shop", "# Shop\n\n[[tasks: list=Groceries keep=1 labels=Catalogue,,Shopping]]\n")
 
     def test_tag_without_a_page_is_no_list(self, client):
         today = date.today().isoformat()
@@ -2079,56 +2078,90 @@ class TestLists:
     def test_due_count_includes_list_tasks(self, client, shop):
         today = date.today().isoformat()
         create_task(client, due_date=today)
-        create_task(client, due_date=today, tags=["groceries"])
+        create_task(client, due_date=today, list="groceries")
         assert client.get("/api/tasks/due-count").get_json()["count"] == 2
 
     def test_completed_count_per_scope(self, client, shop):
-        for tags in ([], ["groceries"], ["Groceries", "x"]):
-            tid = create_task(client, tags=tags).get_json()["id"]
+        for fields in ({}, {"list": "groceries"}, {"list": "Groceries", "tags": ["x"]}, {"tags": ["groceries"]}):
+            tid = create_task(client, **fields).get_json()["id"]
             client.put(f"/api/tasks/{tid}", json={"completed": True})
         count = lambda q: client.get("/api/tasks/closed-count" + q).get_json()["count"]  # noqa: E731
-        assert count("") == 3
-        assert count("?list=Groceries") == 2
-        assert count("?all=1") == 3      # the old "show separate lists" scope
+        assert count("") == 4
+        assert count("?list=Groceries") == 2      # a tag of that name is no list
+        assert count("?lists=groceries|nope") == 2
+        assert count("?all=1") == 4      # the old "show separate lists" scope
 
-    def test_list_field_is_gone(self, client):
-        task = create_task(client, list="groceries").get_json()
-        assert "list" not in task
-        assert "list" not in client.put(f"/api/tasks/{task['id']}", json={"list": "x"}).get_json()
+    def test_a_task_is_in_a_list_by_naming_it(self, client, shop):
+        task = create_task(client, list="Groceries", tags=["x"]).get_json()
+        assert task["list"] == "groceries" and task["tags"] == ["x"]
+        assert "list" not in create_task(client, tags=["groceries"]).get_json()   # a tag is a tag
+        url = f"/api/tasks/{task['id']}"
+        assert "list" not in client.put(url, json={"list": ""}).get_json()
+        assert client.put(url, json={"list": None}).status_code == 200
+        bad = client.put(url, json={"list": "nope"})
+        assert bad.status_code == 400 and "No list #nope" in bad.get_json()["error"]
+        assert create_task(client, list="nope").status_code == 400
+        # In the file after its tags, and only when it is in one.
+        assert client.put(url, json={"list": "groceries"}).get_json()["list"] == "groceries"
+        text = (settings.ZONE_DATA / "_tasks/tasks.json").read_text()
+        assert '    "tags": [\n      "x"\n    ],\n    "list": "groceries",\n' in text and text.count('"list"') == 1
 
-    def test_embed_carries_list_and_declared_lists(self, client, wiki_dir, shop):
+    def test_embed_carries_list_and_the_lists(self, client, wiki_dir, shop):
         body = client.get("/page/shop").get_data(as_text=True)
         assert 'data-init-list="groceries"' in body
-        assert 'data-lists="[&#34;groceries&#34;]"' in body
-        # The home page's title, for the list tag's tooltip.
-        assert 'data-list-homes="{&#34;groceries&#34;:&#34;Shop&#34;}"' in body
-        assert 'id="task-edit-list"' not in body
+        # The lists there are, for the dialog's List field and the cards' chips.
+        assert 'data-lists="[{&#34;ref&#34;:&#34;groceries&#34;,&#34;private&#34;:false}]"' in body
+        assert 'id="task-edit-list"' in body and "data-list-homes" not in body
         assert "task-show-lists" not in body       # the main task list hides nothing
 
-    def test_tasks_list_page_uses_the_declaring_embed(self, client, shop):
+    def test_tasks_list_page_has_the_lists_settings(self, client, shop):
         body = client.get("/tasks?list=groceries").get_data(as_text=True)
         assert 'data-init-list="groceries"' in body and 'data-init-keep="1"' in body
         assert ">Catalogue</button>" in body and ">Shopping</button>" in body
-        assert 'href="/page/shop">Shop</a>' in body
+        assert 'href="/page/shop">Shop</a>' in body     # its Backlinks: the page that shows it
 
-    def test_tasks_list_page_without_declaration(self, client):
+    def test_an_embed_says_only_how_the_page_looks_at_the_list(self, client, wiki_dir, shop):
+        """Its tab and a filter are the page's; what the list is (keep, the
+        tab names, the limit) is the list's, whatever the embed says."""
+        (wiki_dir / "kitchen.md").write_text(
+            "# Kitchen\n\n[[tasks: list=groceries view=open tag=weekly keep=0 labels=A,B limit=3]]\n", encoding="utf-8")
+        body = client.get("/page/kitchen").get_data(as_text=True)
+        assert 'data-init-tag="weekly"' in body and 'data-init-view="open"' in body
+        assert 'data-init-keep="1"' in body and ">Catalogue</button>" in body and 'data-init-limit=""' in body
+
+    def test_tasks_list_page_of_no_list(self, client):
         body = client.get("/tasks?list=books").get_data(as_text=True)
-        assert 'data-init-list="books"' in body
-        assert "these are the tasks tagged #books" in body
+        assert "data-init-list" not in body and "There is no list <code>#books</code>" in body
+        assert 'href="/tasks?tag=books"' in body      # the tasks tagged so
+
+    def test_an_embed_of_no_list_says_so_and_offers_to_make_it(self, client, wiki_dir):
+        (wiki_dir / "shop.md").write_text("# Shop\n\n[[tasks: list=Groceries]]\n\n[[tasks:]]\n", encoding="utf-8")
+        body = client.get("/page/shop").get_data(as_text=True)
+        assert "There is no list <code>#groceries</code>" in body and body.count('class="tasks-app"') == 1
+        made = client.post("/tasks/new-list", data={"name": "groceries"})
+        assert made.headers["Location"] == "/tasks?list=groceries"
+        assert 'data-init-list="groceries"' in client.get("/page/shop").get_data(as_text=True)
 
     def test_search_links_to_list(self, client, shop):
-        tid = create_task(client, title="Buy oat milk", tags=["groceries"]).get_json()["id"]
+        tid = create_task(client, title="Buy oat milk", list="groceries").get_json()["id"]
         hit = next(r for r in client.get("/api/search?q=oat").get_json() if r.get("task_id") == tid)
         assert hit["href"] == f"/tasks?task={tid}&view=open&list=groceries"
         assert hit["meta"].startswith("Tasks › groceries")
+        # The list's name finds its tasks; as a tag it finds none (a list is no tag).
+        assert tid in [r.get("task_id") for r in client.get("/api/search?q=groceries").get_json()]
+        assert tid not in [r.get("task_id") for r in client.get("/api/search?q=%23groceries").get_json()]
 
-    def test_list_follows_the_page(self, client, wiki_dir, shop):
-        """Declarations are read live: editing the page away ends the list."""
-        tid = create_task(client, title="Buy oat milk", tags=["groceries"]).get_json()["id"]
+    def test_a_list_outlives_the_page_that_showed_it(self, client, wiki_dir, shop):
+        """A list is no page's: editing its embed away changes nothing of it.
+        Deleting it is asked for, and its tasks stay."""
+        tid = create_task(client, title="Buy oat milk", list="groceries").get_json()["id"]
         (wiki_dir / "shop.md").write_text("# Shop\n\nNothing.\n", encoding="utf-8")
         os.utime(wiki_dir / "shop.md", (1, 1))   # a new mtime even within the same tick
-        hit = next(r for r in client.get("/api/search?q=oat").get_json() if r.get("task_id") == tid)
-        assert hit["href"] == f"/tasks?task={tid}&view=open"
+        hit = lambda: next(r for r in client.get("/api/search?q=oat").get_json() if r.get("task_id") == tid)  # noqa: E731
+        assert hit()["href"] == f"/tasks?task={tid}&view=open&list=groceries"
+        assert client.post("/tasks/delete-list", data={"list": "groceries", "to": ""}).headers["Location"] == "/tasks"
+        assert hit()["href"] == f"/tasks?task={tid}&view=open"
+        assert "list" not in next(t for t in client.get("/api/tasks").get_json() if t["id"] == tid)
 
 
 # ---------- Keep tasks ----------
@@ -2262,10 +2295,13 @@ class TestKeep:
         assert client.put(f"/api/tasks/{tid}", json={"last_done": "soon"}).status_code == 400
 
     def test_embed_keep_param(self, client, wiki_dir):
-        (wiki_dir / "shop.md").write_text("# Shop\n\n[[tasks: list=groceries keep=1]]\n", encoding="utf-8")
+        list_page(client, wiki_dir, "shop", "# Shop\n\n[[tasks: list=groceries keep=1]]\n")
         body = client.get("/page/shop").get_data(as_text=True)
         assert 'data-init-keep="1"' in body
         assert 'id="task-edit-keep"' in body
+        # An embed of no list says it itself.
+        (wiki_dir / "staples.md").write_text("# Staples\n\n[[tasks: tag=staple keep=1]]\n", encoding="utf-8")
+        assert 'data-init-keep="1"' in client.get("/page/staples").get_data(as_text=True)
         (wiki_dir / "plain.md").write_text("# Plain\n\n[[tasks:]]\n", encoding="utf-8")
         assert 'data-init-keep=""' in client.get("/page/plain").get_data(as_text=True)
 

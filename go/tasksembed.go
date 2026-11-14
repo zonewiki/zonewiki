@@ -1,6 +1,6 @@
-// The [[tasks:]] embed: its HTML, its settings dialog (the params written
-// back into the page, All tasks' in _tasks/settings.json), and the counts the
-// Tasks links and the pinned lists show.
+// The [[tasks:]] embed: its HTML, its settings dialog (an embed's params
+// written back into the page, a list's and All tasks' into the lists'
+// registry), and the counts the Tasks links and the pinned lists show.
 package main
 
 import (
@@ -9,14 +9,10 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
-	"zonewiki/internal/atomicfile"
 	"zonewiki/internal/jsonobj"
-	"zonewiki/internal/taskmodel"
 )
 
 const tasksPlaceholder = "ZONETASKSPLACEHOLDER"
@@ -24,47 +20,110 @@ const tasksPlaceholder = "ZONETASKSPLACEHOLDER"
 // tasksEmbedView: what the tasks_embed template shows: a task app as its
 // embed's params and the page it stands on say.
 type tasksEmbedView struct {
-	Tag, List, View string
-	Plan            string   // "on", "off" or "": the embed doesn't say
-	Limit           string   // the WIP limit, "" none
-	Labels          []string // the Open and Focus tabs' names
-	InstanceID      int      // which embed of the page
-	Sfx             string   // "-<InstanceID>" after the first: its elements' ids end in it
-	Headless        bool     // hidden: only its edit modal is used (the editor's Make task, a new task from any page)
-	Keep            string   // "1": new tasks here are keep tasks
-	Pinned          bool     // a pinned list: its New is the one New task clicks on its page
-	NewTags         string   // new tasks' tags, comma-separated
-	CanPrivate      bool     // with users: the modal has the Private box
-	CanAssign       bool     // with users: the modal has the Assignee field
-	Assignee        string   // assignee=, with users: whose tasks it shows
-	Private         bool     // ticked for a new task here
-	PrivateFolder   string
-	ListsJSON       string           // the declared lists' names, as JSON
-	HomesJSON       string           // list name → its home page's title, as JSON
-	Settings        *embedSettingsAt // where the settings dialog writes; nil: no dialog (the gear)
+	Tag, View     string
+	List          string           // the list it shows, as the user names it (a ref); "" none
+	Lists         string           // several lists as one (the pinned lists): their refs, "|" between
+	Plan          string           // "on", "off" or "": the embed doesn't say
+	Limit         string           // the WIP limit, "" none
+	Labels        []string         // the Open and Focus tabs' names
+	InstanceID    int              // which embed of the page
+	Sfx           string           // "-<InstanceID>" after the first: its elements' ids end in it
+	Headless      bool             // hidden: only its edit modal is used (the editor's Make task, a new task from any page)
+	Keep          string           // "1": new tasks here are keep tasks
+	Pinned        bool             // the user's default list or their pinned lists: its New is the one New task clicks on its page
+	NewTags       string           // new tasks' tags, comma-separated
+	CanAssign     bool             // with users: the modal has the Assignee field
+	Assignee      string           // assignee=, with users: whose tasks it shows
+	PrivateFolder string           // the user's private folder: where a private task's pasted files go
+	ListsJSON     string           // the lists the user sees, [{ref, private}], as JSON: the List field's choices
+	DefaultList   string           // the user's default list (a ref): where a new task goes in a view of no one list
+	Settings      *embedSettingsAt // where the settings dialog writes; nil: no dialog (the ⋯ menu)
 }
 
-// embedSettingsAt: where an embed's params are written, for its settings
-// dialog: the Index-th embed of Page as written (Raw); Index < 0: All tasks'.
+// embedSettingsAt: where a task app's settings are written, for its
+// dialog: the Index-th embed of Page as written (Raw; Index < 0: All
+// tasks'), and the list it shows (List, a ref; its settings as JSON, and
+// how the user pinned it: "", "1" or "default"), "" for none. A list's own
+// settings go to its registry, the embed's (the tab, a filter) to the page.
 type embedSettingsAt struct {
-	Page  string
-	Index int
-	Raw   string
+	Page         string
+	Index        int
+	Raw          string
+	Embed        bool // an embed on a page, whose params can be written there
+	List         string
+	ListSettings string
+	Pin          string
+}
+
+// listEmbedParams: what an embed of the list l shows: the list's own
+// settings, and of the embed's params how the page looks at the list: the
+// tab it opens on (view) and a filter (tag, assignee). What the list is
+// (limit, plan, keep, labels, new) is said on the list alone.
+func listEmbedParams(l ListInfo, embed TasksParams) TasksParams {
+	p := l.Params
+	for _, k := range []string{"view", "tag", "assignee"} {
+		if embed.Has(k) {
+			p = p.With(k, embed.Get(k))
+		}
+	}
+	p.src = embed.src
+	return p
+}
+
+// paramsScope: which lists' tasks a view with these params shows: one
+// list's ref, several joined by "|" (lists=), or "" for every task.
+func paramsScope(p TasksParams) string {
+	if s := strings.TrimSpace(p.Get("lists")); s != "" {
+		return strings.ToLower(s)
+	}
+	return cleanList(p.Get("list"))
 }
 
 // buildTasksEmbed renders the task app for user on a page (instance numbers
 // a page's embeds); headless hides it but for its edit modal (the editor's
-// Make task, c t on any page), and tasks.js skips its shortcuts. private:
-// a new task here is private (a page in user's own folder). page: the page
-// whose text holds the params (params.src), "" for none: with it, or with
-// the settings of All tasks, the embed has the settings dialog (the gear),
-// but for a viewer and in sharing mode.
-func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless, private bool, page string) string {
+// Make task, c t on any page), and tasks.js skips its shortcuts. params:
+// what it shows, a list's by its ref as the user names it (listEmbedParams
+// for an embed of one). page: the page whose text holds the embed's params
+// (params.src), "" for none. It has the settings dialog (the ⋯ menu) where
+// something can be written: the page's embed, the list it shows, the
+// settings of All tasks; not for a viewer nor in sharing mode.
+func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, page string) string {
 	user := rq.who()
+	lists := rq.taskLists()
+	list, shown := resolveList(params.Get("list"), lists)
 	var settingsAt *embedSettingsAt
-	if src := params.src; src != nil && !headless && rq != nil && !rq.sharing && (src.index < 0 && page == "" && mayWriteTasks(user) == nil ||
-		src.index >= 0 && page != "" && canWrite(user, page)) {
-		settingsAt = &embedSettingsAt{Page: page, Index: src.index, Raw: src.raw}
+	if !headless && rq != nil && !rq.sharing {
+		at := &embedSettingsAt{Index: -1}
+		src := params.src
+		switch {
+		case src != nil && src.index >= 0 && page != "" && canWrite(user, page):
+			at.Page, at.Index, at.Raw, at.Embed = page, src.index, src.raw, true
+		case src != nil && src.index < 0 && page == "" && mayWriteTasks(user) == nil:
+			at.Raw = src.raw
+		default:
+			at = nil
+		}
+		if shown && canWriteList(user, list) {
+			if at == nil {
+				at = &embedSettingsAt{Index: -1}
+			}
+			set := map[string]string{}
+			for _, k := range listSettingKeys {
+				if v := list.Params.Get(k); v != "" {
+					set[k] = v
+				}
+			}
+			if list.NoShare {
+				set["noshare"] = "1"
+			}
+			at.List, at.ListSettings = list.Ref, jsonobj.Text(set)
+			for i, p := range rq.pinnedLists() {
+				if p.Ref == list.Ref {
+					at.Pin = map[bool]string{true: "default", false: "1"}[i == 0]
+				}
+			}
+		}
+		settingsAt = at
 	}
 	// view= with plan=: the Open tab as plan= says, whichever of its two
 	// views view= names.
@@ -96,13 +155,19 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless, privat
 			labels[i] = name
 		}
 	}
-	lists := rq.taskLists()
-	names = sortedKeys(lists)
-	homes := map[string]string{}
-	for _, n := range names {
-		homes[n] = firstNonEmpty(lists[n].Title, lists[n].Slug)
+	type listChoice struct {
+		Ref     string `json:"ref"`
+		Private bool   `json:"private"`
 	}
-	listsJSON, homesJSON := jsonobj.Text(names), jsonobj.Text(homes)
+	choices := []listChoice{}
+	for _, ref := range sortedKeys(lists) {
+		choices = append(choices, listChoice{ref, lists[ref].Private()})
+	}
+	def := ""
+	if d := rq.defaultList(); d != nil {
+		def = d.Ref
+	}
+	scope := paramsScope(params)
 	sfx := ""
 	if instance > 0 {
 		sfx = "-" + strconv.Itoa(instance)
@@ -111,17 +176,35 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless, privat
 	if isTrue(params.Get("keep")) {
 		keep = "1"
 	}
-	var b bytes.Buffer
-	err := partials.ExecuteTemplate(&b, "tasks_embed", tasksEmbedView{
-		Tag: params.Get("tag"), List: cleanList(params.Get("list")), View: view, Plan: plan, Settings: settingsAt,
+	v := tasksEmbedView{
+		Tag: params.Get("tag"), View: view, Plan: plan, Settings: settingsAt,
 		Limit: limit, Labels: labels, InstanceID: instance, Sfx: sfx, Headless: headless,
-		Keep: keep, Pinned: pinnedParam(params), NewTags: strings.Join(taskmodel.CleanTags(strings.Split(params.Get("new"), ",")), ","),
-		CanAssign:  settings().Users != nil,
-		Assignee:   assigneeParam(params),
-		CanPrivate: privateFolder(user) != "", Private: private && privateFolder(user) != "",
+		Keep: keep, Pinned: def != "" && (scope == def || strings.Contains(scope, "|")),
+		NewTags:       strings.Join(newTaskTags(params), ","),
+		CanAssign:     settings().Users != nil,
+		Assignee:      assigneeParam(params),
 		PrivateFolder: privateFolder(user),
-		ListsJSON:     listsJSON, HomesJSON: homesJSON,
-	})
+		ListsJSON:     jsonobj.Text(choices), DefaultList: def,
+	}
+	if strings.Contains(scope, "|") {
+		v.Lists = scope
+	} else if shown {
+		v.List = list.Ref
+	}
+	var b bytes.Buffer
+	if err := partials.ExecuteTemplate(&b, "tasks_embed", v); err != nil {
+		logf("task list embed: %v", err)
+	}
+	return b.String()
+}
+
+// noListHTML: what stands in the place of an embed whose list=<name> no
+// list has (for whoever looks): a line that says so, and for who may make
+// lists a button that makes it.
+func noListHTML(rq *Req, name string) string {
+	var b bytes.Buffer
+	err := partials.ExecuteTemplate(&b, "tasks_no_list", map[string]any{
+		"Name": name, "Create": rq != nil && !rq.sharing && !listsUnmigrated && mayWriteTasks(rq.who()) == nil})
 	if err != nil {
 		logf("task list embed: %v", err)
 	}
@@ -130,23 +213,13 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless, privat
 
 // ---- the settings dialog ----
 
-// allTasksFile: the settings of All tasks (/tasks), which no page's
-// [[tasks: …]] holds: {"all": {"view": "open", …}}, the params an embed
-// would have (allSettingKeys).
-func allTasksFile() string { return filepath.Join(taskFiles.Dir(""), "settings.json") }
-
-// allTasksParams: the params of All tasks, from allTasksFile; none when
-// there is no file or it can't be read.
+// allTasksParams: the params of All tasks (/tasks), which no page's
+// [[tasks: …]] holds: they are in the shared registry ("all": the params
+// an embed would have, allSettingKeys). None when they can't be read.
 func allTasksParams() TasksParams {
-	var stored map[string]map[string]string
-	if raw, err := os.ReadFile(allTasksFile()); err == nil {
-		if err := json.Unmarshal(raw, &stored); err != nil {
-			logf("%s: %v", allTasksFile(), err)
-		}
-	}
-	set, err := checkEmbedSettings(stored["all"], allSettingKeys)
+	set, err := checkEmbedSettings(taskFiles.ReadLists("").All, allSettingKeys)
 	if err != nil {
-		logf("%s: %v", allTasksFile(), err)
+		logf("%s: %v", taskFiles.ListsPath(""), err)
 		set = nil
 	}
 	raw := setEmbedArgs("", set)
@@ -158,6 +231,9 @@ func allTasksParams() TasksParams {
 // setAllTasksParams writes the settings of All tasks with those of set
 // changed, in a commit by user; was: the params as the dialog saw them.
 func setAllTasksParams(user, was string, set map[string]string) error {
+	if listsUnmigrated {
+		return errListsUnmigrated
+	}
 	if err := mayWriteTasks(user); err != nil {
 		return err
 	}
@@ -170,16 +246,16 @@ func setAllTasksParams(user, was string, set map[string]string) error {
 	if allTasksParams().src.raw != was {
 		return errEmbedChanged
 	}
-	p := parseTasksParams(setEmbedArgs(was, set))
-	text, err := json.MarshalIndent(map[string]map[string]string{"all": p.m}, "", "  ")
+	reg, err := taskFiles.ReadListsStrict("")
 	if err != nil {
 		return err
 	}
-	if err := atomicfile.Write(allTasksFile(), string(text)+"\n"); err != nil {
+	reg.All = parseTasksParams(setEmbedArgs(was, set)).m
+	path, err := taskFiles.WriteListsLocked(user, "", reg)
+	if err != nil {
 		return err
 	}
-	taskFiles.CommitFiles(user, "Change the settings of All tasks", []string{allTasksFile()})
-	return nil
+	return commitLists(user, "Change the settings of All tasks", []string{path})
 }
 
 // setEmbedParamsOp changes the params of the index-th [[tasks: …]] of the
@@ -203,13 +279,15 @@ func setEmbedParamsOp(user, slug string, index int, was string, set map[string]s
 }
 
 // tasksSettingsRoute: the settings dialog's Save: {page, index, was, set}
-// for an embed on a page, {all: true, was, set} for All tasks; set: the
-// params to change, "" taking one out. Answers {ok} or {error}.
+// for an embed on a page, {all: true, was, set} for All tasks, {list, set}
+// for a list's own settings (list: its ref); set: the params to change, ""
+// taking one out. Answers {ok} or {error}.
 func tasksSettingsRoute(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Page  string            `json:"page"`
 		Index int               `json:"index"`
 		All   bool              `json:"all"`
+		List  string            `json:"list"`
 		Was   string            `json:"was"`
 		Set   map[string]string `json:"set"`
 	}
@@ -219,7 +297,9 @@ func tasksSettingsRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := userOf(r)
-	if body.All {
+	if body.List != "" {
+		err = setListSettingsOp(user, body.List, body.Set)
+	} else if body.All {
 		err = setAllTasksParams(user, body.Was, body.Set)
 	} else {
 		err = setEmbedParamsOp(user, body.Page, body.Index, body.Was, body.Set)
@@ -241,15 +321,16 @@ type tasksEmbed struct{ placeholder, html string }
 
 // processTasksEmbeds swaps each [[tasks: …]] for a placeholder; the embeds'
 // HTML replaces them after rendering (injectTasksEmbeds). page: the page
-// rendered ("" none); in rq's user's own folder its embeds make private
-// tasks. settings: text is that page's as its file has it (a page view,
-// not a preview or an old version), so the embeds get the settings dialog.
+// rendered ("" none): a list=<name> there is the list of that name as the
+// page has it (listOnPage), and a name no list has a line that says so.
+// settings: text is that page's as its file has it (a page view, not a
+// preview or an old version), so the embeds get the settings dialog.
 func processTasksEmbeds(rq *Req, text, page string, settings bool) (string, []tasksEmbed) {
 	at := ""
 	if settings {
 		at = page
 	}
-	private := page != "" && ownPrivate(rq.who(), page)
+	lists := rq.taskLists()
 	var embeds []tasksEmbed
 	if rq.who() == visitor {
 		// A public wiki's visitor sees no task, so no task list: the page
@@ -261,7 +342,14 @@ func processTasksEmbeds(rq *Req, text, page string, settings bool) (string, []ta
 		ph := tasksPlaceholder + "_" + strconv.Itoa(len(embeds))
 		params := parseTasksParams(embedArgs(g))
 		params.src = &embedSrc{len(embeds), embedArgs(g)}
-		html := buildTasksEmbed(rq, params, len(embeds), false, private, at)
+		var html string
+		if name := cleanList(params.Get("list")); name == "" {
+			html = buildTasksEmbed(rq, params, len(embeds), false, at)
+		} else if l, ok := listOnPage(name, page, rq.who(), lists); ok {
+			html = buildTasksEmbed(rq, listEmbedParams(l, params), len(embeds), false, at)
+		} else {
+			html = noListHTML(rq, name)
+		}
 		if settings && len(embeds) == 0 {
 			html = tasksInitial(rq) + html
 		}
@@ -339,59 +427,47 @@ type TaskCounts struct {
 func taskCounts(rq *Req) TaskCounts {
 	tasks := rq.openTasks()
 	if len(rq.pinnedLists()) == 0 {
-		return countTasks(rq.user, tasks)
+		return countTasks(rq.who(), tasks, rq.taskLists())
 	}
-	return countTasks(rq.user, tasks, rq.pinnedView())
+	return countTasks(rq.who(), tasks, rq.taskLists(), rq.pinnedView())
 }
 
 // pinnedView: the params of the view of the pinned lists: one list's own;
 // several as one task app, the default list's params showing the tasks of
-// any of them (tag=a|b: each list, or a list-less pin's single tag; other
-// pins can't be written so and are left out), new tasks getting the default
-// list's tags (new=).
+// all of them (lists=a|b). A new task there goes to the default list.
 func (rq *Req) pinnedView() TasksParams {
 	pinned := rq.pinnedLists()
 	if len(pinned) == 1 {
 		return pinned[0].Params
 	}
-	var words []string
-	for _, h := range pinned {
-		if l := cleanList(h.Params.Get("list")); l != "" {
-			words = append(words, l)
-		} else if tag := strings.TrimSpace(h.Params.Get("tag")); tag != "" && !strings.ContainsAny(tag, "|,-") {
-			words = append(words, strings.ToLower(strings.TrimLeft(tag, "#")))
-		}
+	refs := make([]string, len(pinned))
+	for i, l := range pinned {
+		refs[i] = l.Ref
 	}
-	def := pinned[0].Params
-	return def.With("list", "").With("tag", strings.Join(words, "|")).With("new", strings.Join(newTaskTags(def), ","))
+	return pinned[0].Params.With("list", "").With("lists", strings.Join(refs, "|"))
 }
 
-// pinnedLink: one of the lists the Pinned view shows, under its heading: a
-// list at /tasks?list= ("#name"), a pin without a list its page, by its title.
+// pinnedLink: one of the lists the pinned view shows, under its heading:
+// the list at /tasks?list= ("#name").
 type pinnedLink struct{ Href, Label string }
 
-// pinnedSources: what the Pinned view (pinnedView) is made of: the pinned
+// listHref: the Tasks page of the list the user names ref.
+func listHref(ref string) string { return "/tasks?list=" + url.QueryEscape(ref) }
+
+// pinnedSources: what the pinned view (pinnedView) is made of: the pinned
 // lists in their order, and the pages that embed them (each list's
-// listPages, a list-less pin's own page), once each, A–Z by title.
+// listPages), once each, A–Z by title.
 func (rq *Req) pinnedSources() ([]pinnedLink, []PageRef) {
 	var links []pinnedLink
 	var pages []PageRef
 	seen := map[string]bool{}
-	add := func(refs ...PageRef) {
-		for _, p := range refs {
+	for _, l := range rq.pinnedLists() {
+		links = append(links, pinnedLink{listHref(l.Ref), "#" + l.Name})
+		for _, p := range rq.listPages(l.Ref) {
 			if !seen[p.Slug] {
 				seen[p.Slug] = true
 				pages = append(pages, p)
 			}
-		}
-	}
-	for _, h := range rq.pinnedLists() {
-		if l := cleanList(h.Params.Get("list")); l != "" {
-			links = append(links, pinnedLink{"/tasks?list=" + url.QueryEscape(l), "#" + l})
-			add(rq.listPages(l)...)
-		} else if !hiddenPage(rq, h.Slug) {
-			links = append(links, pinnedLink{pathURL("page", h.Slug), h.Title})
-			add(PageRef{h.Slug, h.Title})
 		}
 	}
 	slices.SortStableFunc(pages, func(a, b PageRef) int { return strings.Compare(strings.ToLower(a.Title), strings.ToLower(b.Title)) })
@@ -408,12 +484,12 @@ func assigneeParam(p TasksParams) string {
 }
 
 // countTasks: taskCounts of the open tasks the views with params show
-// user (any of them; none: every task).
-func countTasks(user string, tasks []*Task, params ...TasksParams) TaskCounts {
+// user (any of them; none: every task); lists: those user sees.
+func countTasks(user string, tasks []*Task, lists map[string]ListInfo, params ...TasksParams) TaskCounts {
 	day := isoDay(today())
 	shows := func(t *Task) bool {
 		for _, p := range params {
-			if inScope(t, cleanList(p.Get("list"))) && tagParamMatches(t, p.Get("tag")) &&
+			if inScope(t, paramsScope(p), lists) && tagParamMatches(t, p.Get("tag")) &&
 				assigneeParamMatches(t, p.Get("assignee"), user) {
 				return true
 			}
@@ -440,58 +516,65 @@ func countTasks(user string, tasks []*Task, params ...TasksParams) TaskCounts {
 }
 
 // TaskPlace is an entry of the task list switcher (tasks_page.html): a
-// list, all tasks, or Pinned (the pinned lists together, or a single pin
-// without a list). Key names it for the counts' refresh (js/chrome.js):
-// "list:<name>", "all", "pinned". Pinned: a pinned list, or Pinned.
+// list, all tasks, or My lists (the pinned lists together). Key names it
+// for the counts' refresh (js/chrome.js): "list:<ref>", "all", "pinned".
+// Pinned: a pinned list, or My lists.
 type TaskPlace struct {
 	Key, Label, Title, Href  string
 	Pinned, Private, Current bool
 	Counts                   TaskCounts
 }
 
-// taskPlaces: where the user's tasks are, for the switcher, each list named
-// by its name, not by a page that embeds it: with several pinned lists
-// Pinned (all of them as one, /tasks?pinned=1), then the pinned lists
-// (their embeds' params and counts, wherever else they are declared), then
-// each other list a page declares A–Z, each at /tasks?list= (the list with
-// its params and the pages that embed it), and all tasks, each with its
-// counts; in sharing mode not a list whose page is not for sharing. A
-// single pin without a list is "Pinned", at its page. Nil when there is
-// nothing to switch between (no pin, no list).
+// taskPlaces: where the user's tasks are, for the switcher: with several
+// pinned lists My lists (all of them as one, /tasks?pinned=1), then the
+// pinned lists in their order, then each other list they see A–Z, each at
+// /tasks?list=, and all tasks, each with its counts; in sharing mode not a
+// list that is not for sharing. Nil when there is nothing to switch
+// between (no list).
 func (rq *Req) taskPlaces() []TaskPlace {
 	user := rq.who()
 	pinned, lists := rq.pinnedLists(), rq.taskLists()
 	var out []TaskPlace
 	tasks := rq.openTasks()
+	hidden := func(l ListInfo) bool { return rq != nil && rq.sharing && l.NoShare }
 	if len(pinned) > 1 {
-		out = append(out, TaskPlace{Key: "pinned", Label: "Pinned", Title: "Your pinned lists, as one", Href: "/tasks?pinned=1",
-			Pinned: true, Counts: countTasks(user, tasks, rq.pinnedView())})
+		out = append(out, TaskPlace{Key: "pinned", Label: "My lists", Title: "Your pinned lists, as one", Href: "/tasks?pinned=1",
+			Pinned: true, Counts: countTasks(user, tasks, lists, rq.pinnedView())})
+	}
+	place := func(l ListInfo, pinned bool) TaskPlace {
+		title := "List #" + l.Name
+		if pinned {
+			title = "Pinned list #" + l.Name
+		}
+		return TaskPlace{Key: "list:" + l.Ref, Label: l.Name, Title: title, Href: listHref(l.Ref),
+			Pinned: pinned, Private: l.Private(), Counts: countTasks(user, tasks, lists, l.Params)}
 	}
 	isPinned := map[string]bool{}
-	for _, h := range pinned {
-		l := cleanList(h.Params.Get("list"))
-		switch {
-		case l != "":
-			isPinned[l] = true
-			out = append(out, TaskPlace{Key: "list:" + l, Label: l, Title: "Pinned list #" + l, Href: "/tasks?list=" + url.QueryEscape(l),
-				Pinned: true, Private: ownPrivate(user, h.Slug), Counts: countTasks(user, tasks, h.Params)})
-		case len(pinned) == 1:
-			out = append(out, TaskPlace{Key: "pinned", Label: "Pinned", Title: "Your pinned tasks", Href: pathURL("page", h.Slug),
-				Pinned: true, Private: ownPrivate(user, h.Slug), Counts: countTasks(user, tasks, h.Params)})
+	for _, l := range pinned {
+		isPinned[l.Ref] = true
+		if !hidden(l) {
+			out = append(out, place(l, true))
 		}
 	}
-	for _, name := range sortedKeys(lists) {
-		l := lists[name]
-		if isPinned[name] || hiddenPage(rq, l.Slug) {
-			continue
+	rest := make([]ListInfo, 0, len(lists))
+	for _, l := range lists {
+		if !isPinned[l.Ref] && !hidden(l) {
+			rest = append(rest, l)
 		}
-		out = append(out, TaskPlace{Key: "list:" + name, Label: name, Title: "List #" + name,
-			Href: "/tasks?list=" + url.QueryEscape(name), Private: ownPrivate(user, l.Slug), Counts: countTasks(user, tasks, l.Params.With("list", name))})
+	}
+	slices.SortFunc(rest, func(a, b ListInfo) int {
+		if c := strings.Compare(a.Name, b.Name); c != 0 {
+			return c
+		}
+		return strings.Compare(a.Ref, b.Ref) // the user's own before the shared one of that name
+	})
+	for _, l := range rest {
+		out = append(out, place(l, false))
 	}
 	if len(out) == 0 {
 		return nil
 	}
-	return append(out, TaskPlace{Key: "all", Label: "All", Title: "Every task", Href: "/tasks", Counts: countTasks(user, tasks)})
+	return append(out, TaskPlace{Key: "all", Label: "All", Title: "Every task", Href: "/tasks", Counts: countTasks(user, tasks, lists)})
 }
 
 // placeCounts: each place's counts by its key (GET /api/tasks/due-count?places=1).

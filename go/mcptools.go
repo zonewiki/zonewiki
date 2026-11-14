@@ -95,11 +95,11 @@ func readPage(args jsonObj, base, user string) (string, error) {
 	return head + "\n" + content + mcpTaskRefs(content, base, user) + mcpPageLinks(slug, content, user), nil
 }
 
-// isOrphan: no other page links to it. The home page, the default list's page and
-// notes are reached otherwise (the module switcher), and the guide
-// is read by the assistant, so they never are.
-func isOrphan(slug string, counts map[string]int, home string) bool {
-	return counts[slug] == 0 && !isProtected(slug) && slug != home && slug != guideSlug && !isQuicknote(slug)
+// isOrphan: no other page links to it. The home page and notes are reached
+// otherwise (the module switcher), and the guide is read by the assistant,
+// so they never are.
+func isOrphan(slug string, counts map[string]int) bool {
+	return counts[slug] == 0 && !isProtected(slug) && slug != guideSlug && !isQuicknote(slug)
 }
 
 func listPages(args jsonObj, base, user string) (string, error) {
@@ -120,17 +120,13 @@ func listPages(args jsonObj, base, user string) (string, error) {
 		return "", err
 	}
 	counts := allBacklinkCounts(&Req{user: user})
-	home := ""
-	if h := lookupDefaultList(user); h != nil {
-		home = h.Slug
-	}
 	type row struct {
 		mtime       int64
 		slug, title string
 	}
 	var rows []row
 	for _, p := range visiblePages(user) {
-		if !inFolder(p.Slug, under) || orphans && !isOrphan(p.Slug, counts, home) || onlyQuicknote && !inQuicknote(user, p.Slug) {
+		if !inFolder(p.Slug, under) || orphans && !isOrphan(p.Slug, counts) || onlyQuicknote && !inQuicknote(user, p.Slug) {
 			continue
 		}
 		st, err := os.Stat(p.Path)
@@ -473,21 +469,45 @@ func listTags(args jsonObj, base, user string) (string, error) {
 	if len(counts) == 0 {
 		return "No tags yet: neither pages (frontmatter tags:) nor tasks have any.", nil
 	}
-	lists := taskLists(user)
 	tags := sortedKeys(counts)
 	sum := func(t string) int { c := counts[t]; return c[0] + c[1] + c[2] }
 	sort.SliceStable(tags, func(i, j int) bool { return sum(tags[i]) > sum(tags[j]) })
 	var lines []string
 	for _, t := range tags {
 		c := counts[t]
-		list := ""
-		if _, ok := lists[t]; ok {
-			list = " (a list)"
-		}
-		lines = append(lines, fmt.Sprintf("%s%s | %d | %d | %d", t, list, c[0], c[1], c[2]))
+		lines = append(lines, fmt.Sprintf("%s | %d | %d | %d", t, c[0], c[1], c[2]))
 	}
 	return "Tags in use, most used first; reuse these rather than inventing near-duplicates. " +
-		"tag | pages | open tasks | done tasks:\n" + strings.Join(lines, "\n"), nil
+		"tag | pages | open tasks | done tasks:\n" + strings.Join(lines, "\n") + mcpListsText(user), nil
+}
+
+// mcpListsText: the task lists user sees, for list_tags: a list is where a
+// task is (create_task's and update_task's list), not a tag.
+func mcpListsText(user string) string {
+	lists := taskLists(user)
+	if len(lists) == 0 {
+		return ""
+	}
+	open := map[string]int{}
+	for _, t := range taskFiles.Open(user) {
+		open[taskList(t, lists)]++
+	}
+	def := ""
+	if d := lookupDefaultList(user); d != nil {
+		def = d.Ref
+	}
+	var lines []string
+	for _, ref := range sortedKeys(lists) {
+		facts := []string{fmt.Sprintf("%d open", open[ref])}
+		if lists[ref].Private() {
+			facts = append(facts, "private: only the user sees it and its tasks")
+		}
+		if ref == def {
+			facts = append(facts, "the default list, where a new task goes")
+		}
+		lines = append(lines, "- "+ref+" ("+strings.Join(facts, "; ")+")")
+	}
+	return "\n\nTask lists (a task is in one list or in none: its list, not a tag):\n" + strings.Join(lines, "\n")
 }
 
 // zoneHelp: Zone's documentation (manual.go), passages for a query, a doc
@@ -675,6 +695,7 @@ var mcpToolTable = map[string]mcpTool{
 	"delete_page":      {run: deletePageTool, writes: toolWritesPages},
 	"restore_page":     {run: restorePage, writes: toolWritesPages},
 	"rename_task_tag":  {run: renameTaskTag, writes: toolWritesPages}, // the tag in tasks, and in the pages' embeds
+	"create_task_list": {run: createTaskListTool, writes: toolWritesTasks},
 	"create_task":      {run: createTaskTool, writes: toolWritesTasks},
 	"update_task":      {run: updateTaskTool, writes: toolWritesTasks},
 }

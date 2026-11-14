@@ -55,9 +55,6 @@ function promotedSlug(folder, name, date) {
   });
 }());
 
-// /tasks: what its ⋯ menu opens (set below, where the dialogs are wired).
-let openNewList = null, openListRename = null;
-
 // ── Page ⋯ menu ───────────────────────────────────────────────────────────────
 // Present, History, Rename…, Delete… on a page view. One menu (#page-menu,
 // rendered hidden) for the header's ⋯ button: a popover under it, a bottom sheet on phones (the tasks'
@@ -116,8 +113,7 @@ let openNewList = null, openListRename = null;
     else if (item.dataset.action === 'promote') openPromote();
     else if (item.dataset.action === 'append') openAppend();
     else if (item.dataset.action === 'print') printPage();
-    else if (item.dataset.action === 'new-list') openNewList?.();
-    else if (item.dataset.action === 'rename-list') openListRename?.();
+    else if (item.dataset.dialog) openDialog(document.getElementById(item.dataset.dialog));
   });
 
   // Move to wiki (notes): the slug the page will get, as the server
@@ -219,65 +215,33 @@ let openNewList = null, openListRename = null;
   }
 }());
 
-// /tasks: New list… (its ⋯ menu; POST /tasks/new-list) asks for a name and
-// says which page the list gets, as the server names it (newListOp). A
-// refusal comes back with the error in the dialog.
-(function () {
-  const dialog = document.getElementById('list-new-dialog');
+// /tasks: the dialogs of its ⋯ menu (New list…, a list's Rename…, Delete…,
+// Make shared…, a tag's Rename tag…; tasks_page.html), each a form the
+// server answers. A menu item names its dialog (data-dialog); a refusal
+// comes back with the error in the dialog (data-open), whose params
+// (data-params) then leave the URL.
+function openDialog(dialog) {
   if (!dialog) return;
-  const input = document.getElementById('list-new-input');
-  const priv = document.getElementById('list-new-private');
-  const slug = document.getElementById('list-new-slug');
-  const update = () => {
-    // cleanList, then the page's name (mdtext.ToSlug).
-    const list = input.value.trim().replace(/^#+/, '').trim().toLowerCase().replace(/\s+/g, '-').replace(/^-+|-+$/g, '');
-    const folder = priv?.checked ? `${slug.dataset.private}/lists/` : 'lists/';
-    slug.textContent = folder + (toSlug(list.replace(/\//g, '-')) || '…');
-  };
-  input.addEventListener('input', update);
-  priv?.addEventListener('change', update);
-  openNewList = () => {
-    dialog.showModal();
-    update();
-    input.focus();
-    input.select();
-  };
-  document.getElementById('list-new-cancel').addEventListener('click', () => dialog.close());
+  dialog.showModal();
+  const field = dialog.querySelector('input[type="text"], select');
+  field?.focus();
+  field?.select?.();
+}
+for (const dialog of document.querySelectorAll('dialog[data-params]')) {
+  dialog.querySelector('[data-close]')?.addEventListener('click', () => dialog.close());
   closeOnBackdropClick(dialog);
-  if (dialog.hasAttribute('data-open')) {
-    openNewList();
-    const url = new URL(location.href);
-    for (const name of ['newlist_error', 'newlist_name']) url.searchParams.delete(name);
-    history.replaceState(null, '', url);
-  }
-}());
-
-// /tasks?list=<name>: Rename…, the list's tag everywhere (POST /tasks/rename).
-// A refusal comes back with the error in the dialog; a name in use, offering
-// to merge, until the name is edited.
-(function () {
-  const dialog = document.getElementById('list-rename-dialog');
-  if (!dialog) return;
-  const input = document.getElementById('list-rename-input');
-  const open = () => {
-    dialog.showModal();
-    input.focus();
-    input.select();
-  };
-  openListRename = open;
-  document.getElementById('list-rename-cancel').addEventListener('click', () => dialog.close());
-  closeOnBackdropClick(dialog);
+  // A name in use offers to merge (a tag's rename), until the name is edited.
   const merge = dialog.querySelector('input[name="merge"]');
   if (merge) {
-    input.addEventListener('input', () => {
+    dialog.querySelector('input[type="text"]').addEventListener('input', () => {
       merge.disabled = true;
-      document.getElementById('list-rename-submit').textContent = 'Rename';
+      dialog.querySelector('button[type="submit"]').textContent = 'Rename';
     });
   }
   if (dialog.hasAttribute('data-open')) {
-    open();
+    openDialog(dialog);
     const url = new URL(location.href);
-    for (const name of ['rename_error', 'rename_name', 'rename_merge']) url.searchParams.delete(name);
+    for (const name of dialog.dataset.params.split(' ')) url.searchParams.delete(name);
     history.replaceState(null, '', url);
   }
-}());
+}

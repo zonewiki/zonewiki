@@ -7,7 +7,7 @@ import re
 from datetime import date, timedelta
 
 from tests import settings
-from tests.conftest import HOST, write_page
+from tests.conftest import HOST, make_list, write_page
 
 
 def task(client, **fields):
@@ -99,8 +99,8 @@ class TestRendering:
         soon = task(client, title="Soon", start_date=day(3), due_date=day(0))
         keep = task(client, title="Milk", keep=True, tags=["shop"])
         put(client, keep["id"], completed=True)          # keep: stays open, ✓ today
-        write_page(wiki_dir, "shopping", "# Shopping\n\n[[tasks: list=groceries]]\n")
-        listed = task(client, title="Eggs", tags=["groceries"])
+        make_list(client, "groceries", headers=HOST)
+        listed = task(client, title="Eggs", list="groceries")
         write_page(wiki_dir, "notes", "# N\n\n" + " ".join(
             f"[[task:{t['id'][:8]}]]" for t in (late, soon, keep, listed)) + "\n")
         body = view(client)
@@ -149,46 +149,39 @@ class TestLinkedTasks:
         assert other["id"] in linked
 
 
-class TestTwoLists:
-    """A task in two lists links, from a page declaring one of them, to that
-    list rather than to its first list A–Z."""
+class TestItsList:
+    """A task is in one list: a link to it opens it there, whatever lists
+    the linking page shows and whatever its tags are called."""
 
     def _setup(self, client, wiki_dir):
-        write_page(wiki_dir, "ideas", "# Ideas\n\n[[tasks: list=presentideas]]\n")
-        t = task(client, title="Lego for Sam", tags=["presentideas", "task"],
-                 description="see [[todo]]")
+        for name in ("presentideas", "task"):
+            make_list(client, name, headers=HOST)
+        t = task(client, title="Lego for Sam", list="presentideas", tags=["task"], description="see [[todo]]")
         write_page(wiki_dir, "todo", f"# Todo\n\n[[tasks: list=task]]\n\n[[task:{t['id'][:8]}]]\n")
         return t
 
-    def test_chip_links_to_the_list_the_page_declares(self, client, wiki_dir):
+    def test_chip_links_to_the_tasks_list(self, client, wiki_dir):
         t = self._setup(client, wiki_dir)
-        body = view(client, "todo")
-        assert f'href="/tasks?task={t["id"]}&amp;view=open&amp;list=task"' in body
-        assert '<span class="task-ref-badge task-ref-list">task</span>' in body
+        body = view(client, "todo")     # a page that shows another list, of the name of its tag
+        assert f'href="/tasks?task={t["id"]}&amp;view=open&amp;list=presentideas"' in body
+        assert '<span class="task-ref-badge task-ref-list">presentideas</span>' in body
 
-    def test_elsewhere_the_first_list_wins(self, client, wiki_dir):
-        t = self._setup(client, wiki_dir)
-        write_page(wiki_dir, "notes", f"# N\n\n[[task:{t['id'][:8]}]]\n")
-        assert f'href="/tasks?task={t["id"]}&amp;view=open&amp;list=presentideas"' in view(client)
-
-    def test_page_declaring_a_list_the_task_is_not_in(self, client, wiki_dir):
-        t = self._setup(client, wiki_dir)
-        write_page(wiki_dir, "notes", f"# N\n\n[[tasks: list=groceries]]\n\n[[task:{t['id'][:8]}]]\n")
-        assert f'href="/tasks?task={t["id"]}&amp;view=open&amp;list=presentideas"' in view(client)
-
-    def test_linked_tasks_link_to_the_pages_list(self, client, wiki_dir):
+    def test_linked_tasks_link_to_the_tasks_list(self, client, wiki_dir):
         t = self._setup(client, wiki_dir)
         write_page(wiki_dir, "todo", "# Todo\n\n[[tasks: list=task]]\n")   # no chip: Linked tasks
         linked = view(client, "todo").split('id="task-backlinks"', 1)[1]
-        assert f'href="/tasks?task={t["id"]}&amp;view=open&amp;list=task"' in linked
+        assert f'href="/tasks?task={t["id"]}&amp;view=open&amp;list=presentideas"' in linked
 
-    def test_preview_with_lists_param(self, client, wiki_dir):
+    def test_a_task_in_no_list_links_to_all_tasks(self, client, wiki_dir):
+        t = task(client, title="Loose", tags=["task"])
+        write_page(wiki_dir, "notes", f"# N\n\n[[task:{t['id'][:8]}]]\n")
+        body = view(client)
+        assert f'href="/tasks?task={t["id"]}&amp;view=open"' in body and "task-ref-list" not in body
+
+    def test_the_preview_of_a_chip_alone_links_alike(self, client, wiki_dir):
         t = self._setup(client, wiki_dir)
-        ref = f"[[task:{t['id']}]]"
-        plain = client.post("/api/preview", data=ref, headers=HOST).data.decode()
-        assert "list=presentideas" in plain
-        kept = client.post("/api/preview?lists=Task", data=ref, headers=HOST).data.decode()
-        assert "list=task" in kept and "list=presentideas" not in kept
+        chip = client.post("/api/preview?lists=Task", data=f"[[task:{t['id']}]]", headers=HOST).data.decode()
+        assert "list=presentideas" in chip      # ?lists= (an older page's script) counts for nothing
 
 
 class TestSearch:

@@ -8,7 +8,6 @@ import (
 	"html"
 	"net/url"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -70,11 +69,10 @@ func wikilinker(rq *Req, slugs map[string]bool, from string) func(inner string) 
 
 // RenderOpts: what a page view adds to a render. EditSlug gives each ## and
 // ### heading its ✎, SectionTasks (findTaskBacklinks) a heading tasks link
-// to its ☑ N chip; PreferLists are lists a task chip links into.
+// to its ☑ N chip.
 type RenderOpts struct {
-	Page               string // the page rendered, "" none: its task list embeds make private tasks in the user's own folder, its links are marked by where it is (a preview gets it as ?page=)
+	Page               string // the page rendered, "" none: an embed's list=<name> is the list of that name as the page has it, its links are marked by where it is (a preview gets it as ?page=)
 	HideTags, HideTldr bool
-	PreferLists        []string
 	EditSlug           string
 	SectionKeys        []string // a key per section, for its ✎ link (sectionKeys)
 	SectionTasks       []TaskLink
@@ -84,20 +82,15 @@ type RenderOpts struct {
 // renderMd renders a page's markdown.
 func renderMd(rq *Req, text string, o RenderOpts) string {
 	meta, text := mdtext.ParseFrontmatter(text)
-	var prefer []string
-	for _, l := range pageTaskLists(text) {
-		prefer = append(prefer, l.Name)
-	}
-	prefer = append(prefer, o.PreferLists...)
 	fmHTML := renderFrontmatterHTML(meta, !o.HideTags, !o.HideTldr)
 	text, stash := mdtext.MaskCode(text)
 	text, embeds := processTasksEmbeds(rq, text, o.Page, o.EditSlug != "" && o.EditSlug == o.Page)
 	text, refs := maskTaskRefs(text)
 	text = mdtext.UnmaskCode(escapeWikilinkPipes(text), stash)
-	env := &Env{EditSlug: o.EditSlug, SectionKeys: o.SectionKeys, SectionChips: sectionTaskChips(rq, o.SectionTasks, prefer), Host: requestHost(rq),
+	env := &Env{EditSlug: o.EditSlug, SectionKeys: o.SectionKeys, SectionChips: sectionTaskChips(rq, o.SectionTasks), Host: requestHost(rq),
 		HeadingIDs: o.HeadingIDs, Wikilink: wikilinker(rq, nil, o.Page)}
 	result := markdown(text, env, false)
-	result = injectTaskRefs(rq, result, refs, prefer)
+	result = injectTaskRefs(rq, result, refs)
 	if len(embeds) > 0 {
 		result = injectTasksEmbeds(result, embeds)
 	}
@@ -122,7 +115,7 @@ func renderNotes(rq *Req, texts []string, lineBreaks bool) []string {
 		text, refs := maskTaskRefs(text)
 		text = mdtext.UnmaskCode(escapeWikilinkPipes(text), stash)
 		result := markdown(text, &Env{Host: requestHost(rq), HeadingIDs: headingNoID, Wikilink: links, LineBreaks: lineBreaks}, false)
-		out[i] = injectTaskRefs(rq, result, refs, nil)
+		out[i] = injectTaskRefs(rq, result, refs)
 	}
 	return out
 }
@@ -152,7 +145,7 @@ func maskTaskRefs(text string) (string, []string) {
 	return text, refs
 }
 
-func injectTaskRefs(rq *Req, html string, refs, prefer []string) string {
+func injectTaskRefs(rq *Req, html string, refs []string) string {
 	if len(refs) == 0 {
 		return html
 	}
@@ -190,7 +183,7 @@ func injectTaskRefs(rq *Req, html string, refs, prefer []string) string {
 		if strings.HasPrefix(ref, "") {
 			return ref
 		}
-		return taskRefHTML(ref, tasks[ref], day, prefer, lists)
+		return taskRefHTML(ref, tasks[ref], day, lists)
 	})
 }
 
@@ -211,32 +204,15 @@ func shortDate(iso, day string) string {
 	return `<time class="local-date" datetime="` + d.Format("2006-01-02") + `">` + text + `</time>`
 }
 
-// linkList: the list a link to a task opens it in: one of prefer (the
-// lists the linking page declares) when the task is in it, else its own.
-func linkList(t *Task, prefer []string, lists map[string]TasksHome) string {
-	tags := taskTagsLower(t)
-	var hits []string
-	for _, p := range prefer {
-		if tags[strings.ToLower(p)] {
-			hits = append(hits, strings.ToLower(p))
-		}
-	}
-	if len(hits) > 0 {
-		sort.Strings(hits)
-		return hits[0]
-	}
-	return taskList(t, lists)
-}
-
 // taskRefHTML: a task as an inline chip: its checkbox (completes it, js/page.js),
 // its title linking to it in the tasks, badges for what its card shows.
-func taskRefHTML(ref string, t *Task, day string, prefer []string, lists map[string]TasksHome) string {
+func taskRefHTML(ref string, t *Task, day string, lists map[string]ListInfo) string {
 	if t == nil {
 		return `<span class="task-ref task-ref-missing" title="No task with id ` + html.EscapeString(ref) + `">task ` + html.EscapeString(ref) + `?</span>`
 	}
 	title := html.EscapeString(mdtext.PlainTaskTitle(t.Title))
 	done, wont := !t.IsOpen(), t.WontDo
-	list := linkList(t, prefer, lists)
+	list := taskList(t, lists) // a link to a task opens it in its list
 	href := html.EscapeString(taskLink(t, list))
 	cls := "task-ref"
 	var badges []string
@@ -295,7 +271,7 @@ func taskRefHTML(ref string, t *Task, day string, prefer []string, lists map[str
 
 // sectionTaskChips: {heading id: its ☑ N chip}: a section that tasks link
 // to lists them in a <details> after its heading.
-func sectionTaskChips(rq *Req, tasks []TaskLink, prefer []string) map[string]string {
+func sectionTaskChips(rq *Req, tasks []TaskLink) map[string]string {
 	var order []string
 	byAnchor := map[string][]TaskLink{}
 	for _, t := range tasks {
@@ -316,7 +292,7 @@ func sectionTaskChips(rq *Req, tasks []TaskLink, prefer []string) map[string]str
 		var items strings.Builder
 		for _, t := range ts {
 			fmt.Fprintf(&items, `<li><a href="%s">%s</a></li>`,
-				html.EscapeString(taskHref(t.ID, "open", linkList(taskLinkObj(t), prefer, lists), "")),
+				html.EscapeString(taskHref(t.ID, "open", taskList(taskLinkObj(t), lists), "")),
 				html.EscapeString(mdtext.PlainTaskTitle(t.Title)))
 		}
 		s := ""
@@ -329,9 +305,9 @@ func sectionTaskChips(rq *Req, tasks []TaskLink, prefer []string) map[string]str
 	return chips
 }
 
-// taskLinkObj is a TaskLink as a task, for linkList.
+// taskLinkObj is a TaskLink as a task, for taskList.
 func taskLinkObj(t TaskLink) *Task {
-	return &Task{ID: t.ID, Title: t.Title, Tags: t.Tags}
+	return &Task{ID: t.ID, Title: t.Title, List: t.List, Owner: t.Owner}
 }
 
 // renderTagsPillsHTML: tags as pills searching #tag (pages and tasks with

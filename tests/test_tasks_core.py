@@ -308,7 +308,40 @@ class TestFilterField:
         ("wow!", {"text": "wow!", "tagGroups": [], "excludeTags": [], "importance": ""}),
     ])
     def test_parse(self, q, expected):
-        assert run_core(f"TasksCore.parseFilter({json.dumps(q)})") == {**expected, "assigneeGroups": [], "excludeAssignees": []}
+        assert run_core(f"TasksCore.parseFilter({json.dumps(q)})") == {
+            **expected, "assigneeGroups": [], "excludeAssignees": [], "listGroups": [], "excludeLists": []}
+
+    @pytest.mark.parametrize("q,groups,excluded,text", [
+        ("list:Shop", [["shop"]], [], ""),
+        ("list:shop|work -list:old fix", [["shop", "work"]], ["old"], "fix"),
+        ("list:shared/gifts", [["gifts"]], [], ""),      # a list by its name, whichever of two it is
+        ("list: -list:", [], [], "list: -list:"),        # a bare word while typing is text
+        ("#list:x", [], [], ""),                         # a tag, whatever it is called
+    ])
+    def test_parse_list_words(self, q, groups, excluded, text):
+        f = run_core(f"TasksCore.parseFilter({json.dumps(q)})")
+        assert (f["listGroups"], f["excludeLists"], f["text"]) == (groups, excluded, text)
+
+    LISTED = [
+        {"id": "1", "title": "Milk", "list": "shop", "tags": ["work"]},
+        {"id": "2", "title": "Report", "list": "work", "tags": ["shop"]},
+        {"id": "3", "title": "Loose", "tags": []},
+    ]
+
+    @pytest.mark.parametrize("q,ids", [
+        ("list:shop", ["1"]),               # the list, not the tag of that name
+        ("#shop", ["2"]),                   # the tag, not the list
+        ("list:shop|work", ["1", "2"]),
+        ("-list:shop", ["2", "3"]),
+        ("list:none", ["3"]),
+        ("list:SHOP #work", ["1"]),
+        ("list:nope", []),
+    ])
+    def test_list_words_match_the_list_a_task_is_in(self, q, ids):
+        expr = (f"{json.dumps(self.LISTED)}.filter(t => TasksCore.matchesFilter(t, "
+                f"TasksCore.parseFilter({json.dumps(q)}))).map(t => t.id)")
+        assert run_core(expr) == ids
+        assert run_core(f"TasksCore.filterActive(TasksCore.parseFilter({json.dumps(q)}))") is True
 
     TASKS = [
         {"id": "1", "title": "Fix bug", "tags": ["work"]},

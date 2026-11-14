@@ -5,6 +5,7 @@ and what they answer are tests/test_public.py's."""
 import pytest
 from playwright.sync_api import expect
 
+from conftest import list_page
 from tests import settings
 
 
@@ -16,10 +17,9 @@ def visitor(page, wiki, monkeypatch):
     monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "")})
     monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
-    wiki.write("index", "# Home\n\nWelcome. See [[Garden]].\n\n- [ ] a box\n\n[[tasks: list=shop pin=1]]\n\n## More\n\ntext\n")
+    list_page(page, wiki, "index", "# Home\n\nWelcome. See [[Garden]].\n\n- [ ] a box\n\n[[tasks: list=shop pin=1]]\n\n## More\n\ntext\n")
     wiki.write("garden", "# Garden\n\nBeds.\n")
-    assert page.request.post("/api/tasks", data={"title": "Quokka task for [[garden]]", "private": False,
-                                                 "tags": ["shop"]}).ok
+    assert page.request.post("/api/tasks", data={"title": "Quokka task for [[garden]]", "list": "shop"}).ok
     page.request.post("/logout")
     page.problems = []
     page.on("pageerror", lambda e: page.problems.append(f"error: {e}"))

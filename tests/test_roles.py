@@ -61,7 +61,9 @@ def wiki(client, git_wiki_dir, monkeypatch):
     comment = next(t for t in comment if t["id"] == task["id"])["comments"][0]["id"]
     login(client, "carol")
     note = client.post("/api/notes", data={"title": "Carols"}, headers=HOST).get_json()["slug"]
-    mine = client.post("/api/tasks", json={"title": "Mine", "private": True}, headers=HOST).get_json()
+    client.post("/tasks/new-list", data={"name": "team"}, headers=HOST)
+    client.post("/tasks/new-list", data={"name": "carols-own", "private": "1"}, headers=HOST)
+    mine = client.post("/api/tasks", json={"title": "Mine", "list": "carols-own"}, headers=HOST).get_json()
     monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}, "carol": {"role": "viewer"}})
     login(client, "carol")
     (wiki / "plans.md").write_text("# Plans\n\n- [ ] one\n\nshared words, uncommitted\n")
@@ -106,9 +108,17 @@ WRITES = [
     ("POST /tasks/rename", "POST", "/tasks/rename", {"data": {"tag": "work", "new_name": "job"}}),
     ("POST /tasks/new-list", "POST", "/tasks/new-list", {"data": {"name": "carols"}}),
     ("POST /tasks/new-list", "POST", "/tasks/new-list", {"data": {"name": "carols", "private": "1"}}),
+    ("POST /tasks/rename-list", "POST", "/tasks/rename-list", {"data": {"list": "team", "new_name": "carols-team"}}),
+    ("POST /tasks/rename-list", "POST", "/tasks/rename-list", {"data": {"list": "carols-own", "new_name": "hers"}}),
+    ("POST /tasks/delete-list", "POST", "/tasks/delete-list", {"data": {"list": "team", "to": ""}}),
+    ("POST /tasks/delete-list", "POST", "/tasks/delete-list", {"data": {"list": "carols-own", "to": "", "share": "1"}}),
+    ("POST /tasks/share-list", "POST", "/tasks/share-list", {"data": {"list": "carols-own"}}),
+    ("POST /tasks/pin-list", "POST", "/tasks/pin-list", {"data": {"list": "team", "pin": "1"}}),
+    ("POST /api/tasks/settings", "POST", "/api/tasks/settings", {"json": {"list": "team", "set": {"limit": "3"}}}),
     ("POST /api/tasks/settings", "POST", "/api/tasks/settings", {"json": {"all": True, "was": "", "set": {"view": "open"}}}),
     ("POST /api/tasks/settings", "POST", "/api/tasks/settings", {"json": {"page": "plans", "index": 0, "was": "", "set": {"view": "open"}}}),
-    ("POST /api/tasks", "POST", "/api/tasks", {"json": {"title": "Carol's", "private": False}}),
+    ("POST /api/tasks", "POST", "/api/tasks", {"json": {"title": "Carol's", "list": "team"}}),
+    ("PUT /api/tasks/{id}", "PUT", "/api/tasks/{task}", {"json": {"list": "team"}}),
     ("PUT /api/tasks/{id}", "PUT", "/api/tasks/{task}", {"json": {"title": "Carol was here"}}),
     ("PUT /api/tasks/{id}", "PUT", "/api/tasks/{task}", {"json": {"completed": True}}),
     ("PUT /api/tasks/{id}", "PUT", "/api/tasks/{done}", {"json": {"completed": False}}),
@@ -129,7 +139,8 @@ WRITES = [
     ("POST /new", "POST", "/new", {"data": {"slug": "diary", "private": "1"}}),
     ("POST /api/save/{slug...}", "POST", "/api/save/{note}", {"data": {"content": "# Mine\n"}}),
     ("POST /delete/{slug...}", "POST", "/delete/{note}", {}),
-    ("POST /api/tasks", "POST", "/api/tasks", {"json": {"title": "Mine too", "private": True}}),
+    ("POST /api/tasks", "POST", "/api/tasks", {"json": {"title": "Mine too", "list": "carols-own"}}),
+    ("PUT /api/tasks/{id}", "PUT", "/api/tasks/{mine}", {"json": {"list": "team", "share": True}}),
     ("PUT /api/tasks/{id}", "PUT", "/api/tasks/{mine}", {"json": {"completed": True}}),
     ("POST /api/upload", "POST", "/api/upload", {"data": lambda: {"file": (BytesIO(b"c"), "c.png"), "page": "{note}"}}),
     ("POST /admin/users/{name}/role", "POST", "/admin/users/carol/role", {"data": {"role": "admin"}}),
@@ -177,14 +188,18 @@ MCP_WRITES = [
     ("file_note", {"slug": "{note}", "name": "carols"}),
     ("file_note", {"slug": "{note}", "page": "plans"}),
     ("rename_task_tag", {"tag": "work", "new_tag": "job"}),
-    ("create_task", {"title": "Carol's", "private": False}),
+    ("create_task", {"title": "Carol's", "list": "team"}),
+    ("create_task_list", {"name": "carols"}),
+    ("create_task_list", {"name": "carols", "private": True}),
+    ("update_task", {"id": "{task}", "list": "team"}),
     ("update_task", {"id": "{task}", "title": "Carol was here"}),
     ("update_task", {"id": "{task}", "status": "wont_do"}),
     ("update_task", {"id": "{done}", "status": "open", "comment": "Carol's"}),
     ("update_task", {"ids": ["{task}"], "add_tags": ["c"]}),
     ("write_page", {"slug": "private/carol/x", "content": "# X\n"}),
     ("write_page", {"note": True, "slug": "Mine", "content": "Mine\n"}),
-    ("create_task", {"title": "Mine", "private": True}),
+    ("create_task", {"title": "Mine", "list": "carols-own"}),
+    ("update_task", {"id": "{mine}", "list": "team", "share": True}),
     ("update_task", {"id": "{mine}", "status": "done"}),
     ("upload_file", {"filename": "carols.txt", "text": "Carol was here"}),
 ]

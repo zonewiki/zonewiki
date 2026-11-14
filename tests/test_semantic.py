@@ -259,7 +259,8 @@ class TestSearchWithUsers:
         assert "private/alice/policy" in str(_search(client, "budget"))
 
     def test_tasks_by_meaning(self, client, semantic, alice_bob):
-        self._mcp(client, "create_task", "alice-token", title="Renew insurance", private=True)
+        self._mcp(client, "create_task_list", "alice-token", name="own", private=True)
+        self._mcp(client, "create_task", "alice-token", title="Renew insurance", list="own")
         semantic.sync()
         assert "Renew insurance" in self._mcp(client, "search_tasks", "alice-token", query="budget")
         assert "Renew insurance" not in self._mcp(client, "search_tasks", "bob-token", query="budget")

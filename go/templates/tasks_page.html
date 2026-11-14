@@ -1,11 +1,14 @@
-{{- /* /tasks: every task, or with ?list= that separate list, looking as on
-    the page that declares it (home; a pinned list as its pinned embed shows it). The
-    list switcher first, above the heading: the places (taskPlaces), each
-    with its counts (js/chrome.js refreshes them), pinned lists with a pin,
-    the current one aria-current. Beside the heading the ⋯ menu: New list…,
-    and a list's Rename…. ?pinned=1: the pinned lists as one, named under
-    the heading. A list's Backlinks (the pages that embed it; Pinned: its lists') as on a page
-    view: at the end, on big screens in the right column. */ -}}
+{{- /* /tasks: every task; with ?list= that list, with its settings; with
+    ?pinned=1 the user's pinned lists as one, named under the heading; with
+    ?tag= every task filtered by that tag. The list switcher first, above the
+    heading: the places (taskPlaces), each with its counts (js/chrome.js
+    refreshes them), pinned lists with a pin, the current one aria-current.
+    Beside the heading the ⋯ menu: New list…; on a list Rename…, its pin,
+    Make shared… (a private one) and Delete…; on a tag Rename tag…. Each is a
+    dialog with a form (js/pagemenu.js opens the one a menu item names with
+    data-dialog; a refusal comes back with data-open). A list's Backlinks
+    (the pages that embed it; My lists: its lists') as on a page view: at the
+    end, on big screens in the right column. */ -}}
 {{define "body"}}
 {{.BreadcrumbHTML}}
 {{- if .LinkSections}}
@@ -30,27 +33,46 @@
 {{- if .Pinned}}<span class="tasks-place-pin" aria-hidden="true">{{template "icon_pin"}}</span>{{end}}
 {{- if .Private}}<span class="tasks-place-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="tasks-place-label">{{.Label}}</span>{{template "module_counts" .Counts}}</a>
 {{- end}}</div></nav>{{end}}
-<header class="page-header"><h1>{{.Heading}}</h1>
-{{- /* The ⋯ menu (js/pagemenu.js, as a page's): New list…, and on a list its Rename…. */}}
-{{- if .Menu}}<div class="page-header-actions"><button type="button" class="btn page-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="page-menu" title="More: new list{{if .ListName}}, rename{{end}}" aria-label="More actions">⋯</button></div>{{end}}</header>
+<header class="page-header"><h1>{{.Heading}}{{with .List}}{{if .Private}} <span class="lock" title="A private list: only you see it and its tasks">🔒</span>{{end}}{{end}}</h1>
+{{- if .Menu}}<div class="page-header-actions"><button type="button" class="btn page-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="page-menu" title="More: new list{{if .List}}, rename, pin, delete{{end}}{{if .Tag}}, rename the tag{{end}}" aria-label="More actions">⋯</button></div>{{end}}</header>
 {{- if .Menu}}
 <div class="page-menu-backdrop" hidden></div><div class="page-menu" id="page-menu" role="menu" aria-label="Task list actions" hidden>
-<button type="button" role="menuitem" data-action="new-list" id="list-new-btn">New list…</button>
-{{- if .ListName}}<button type="button" role="menuitem" data-action="rename-list" id="list-rename-btn">Rename…</button>{{end -}}
+<button type="button" role="menuitem" data-dialog="list-new-dialog" id="list-new-btn">New list…</button>
+{{- with .List}}
+<button type="button" role="menuitem" data-dialog="list-rename-dialog" id="list-rename-btn">Rename…</button>
+{{- /* The pin is the user's own: where their Tasks links go, and (the default list) where a new task goes. */}}
+<form method="post" action="/tasks/pin-list" class="page-menu-form"><input type="hidden" name="list" value="{{.Ref}}">
+{{- if not $.Pin}}<button type="submit" role="menuitem" name="pin" value="1" id="list-pin-btn">Pin</button>{{end}}
+{{- if and $.Pin (ne $.Pin "default")}}<button type="submit" role="menuitem" name="pin" value="default" id="list-default-btn" title="New task (c t) adds its task to the default list">Make my default list</button>{{end}}
+{{- if $.Pin}}<button type="submit" role="menuitem" name="pin" value="0" id="list-unpin-btn">Unpin</button>{{end}}</form>
+{{- if .Private}}<button type="button" role="menuitem" data-dialog="list-share-dialog" id="list-share-btn">Make shared…</button>{{end}}
+<button type="button" role="menuitem" data-dialog="list-delete-dialog" id="list-delete-btn">Delete…</button>
+{{- end}}
+{{- if .Tag}}<button type="button" role="menuitem" data-dialog="tag-rename-dialog" id="tag-rename-btn">Rename tag…</button>{{end -}}
 </div>
-{{- /* New list…: a page of its own that declares the list (POST /tasks/new-list). */}}
-<dialog id="list-new-dialog" class="modal"{{if .NewListError}} data-open{{end}}><p class="modal-label">New list</p><p class="modal-desc">A list is a place for tasks, with an entry of its own in the row above them. It gets a page, <code id="list-new-slug" data-private="{{.PrivateFolder}}">lists/…</code>, which holds its settings.</p><form method="post" action="/tasks/new-list"><input type="text" name="name" id="list-new-input" value="{{.NewListName}}" placeholder="Its name, e.g. shop" aria-label="The list's name" autocomplete="off" spellcheck="false" required>
-{{- if .PrivateFolder}}<label class="promote-check" title="Its page goes in your private folder: the list and the tasks made in it are yours alone"><input type="checkbox" name="private" id="list-new-private" value="1"> Private: only you see it</label>{{end}}
-{{- template "error" (dict "message" .NewListError)}}<div class="modal-actions"><button type="submit" class="btn btn-primary" id="list-new-submit">Create</button><button type="button" class="btn" id="list-new-cancel">Cancel</button></div></form></dialog>
-{{- /* Rename…: the list's tag, on its tasks and pages. */}}
-{{- if .ListName}}
-<dialog id="list-rename-dialog" class="modal"{{if .RenameError}} data-open{{end}}><p class="modal-label">Rename list #{{.ListName}}</p><p class="modal-desc">Renames the tag on all its tasks, done ones too, and in the embeds and links on pages.</p><form method="post" action="/tasks/rename"><input type="hidden" name="tag" value="{{.ListName}}">{{if .RenameMerge}}<input type="hidden" name="merge" value="1">{{end}}<input type="text" name="new_name" id="list-rename-input" value="{{.RenameName}}" aria-label="New name for #{{.ListName}}" autocomplete="off" spellcheck="false" required>{{template "error" (dict "message" .RenameError)}}<div class="modal-actions"><button type="submit" class="btn btn-primary" id="list-rename-submit">{{if .RenameMerge}}Merge{{else}}Rename{{end}}</button><button type="button" class="btn" id="list-rename-cancel">Cancel</button></div></form></dialog>
+{{- /* New list…: a place for tasks (POST /tasks/new-list). */}}
+<dialog id="list-new-dialog" class="modal" data-params="newlist_error newlist_name"{{if .NewListError}} data-open{{end}}><p class="modal-label">New list</p><p class="modal-desc">A list is a place for tasks, with an entry of its own in the row above them. A task is in one list, or in none.</p><form method="post" action="/tasks/new-list"><input type="text" name="name" id="list-new-input" value="{{.NewListName}}" placeholder="Its name, e.g. shop" aria-label="The list's name" autocomplete="off" spellcheck="false" required>
+{{- if .Users}}<label class="promote-check" title="The list and the tasks in it are yours alone: no one else sees them, not even in search"><input type="checkbox" name="private" id="list-new-private" value="1"> Private: only you see it and its tasks</label>{{end}}
+{{- template "error" (dict "message" .NewListError)}}<div class="modal-actions"><button type="submit" class="btn btn-primary" id="list-new-submit">Create</button><button type="button" class="btn" data-close id="list-new-cancel">Cancel</button></div></form></dialog>
+{{- with .List}}
+{{- /* Rename…: the list's name, on its tasks, in the pins and where pages name it. */}}
+<dialog id="list-rename-dialog" class="modal" data-params="rename_error rename_name"{{if $.ListRenameError}} data-open{{end}}><p class="modal-label">Rename list #{{.Name}}</p><p class="modal-desc">Its tasks stay in it, and the pages that show it (<code>[[tasks: list={{.Name}}]]</code>) and links to it follow.</p><form method="post" action="/tasks/rename-list"><input type="hidden" name="list" value="{{.Ref}}"><input type="text" name="new_name" id="list-rename-input" value="{{$.ListRenameName}}" aria-label="New name for #{{.Name}}" autocomplete="off" spellcheck="false" required>{{template "error" (dict "message" $.ListRenameError)}}<div class="modal-actions"><button type="submit" class="btn btn-primary" id="list-rename-submit">Rename</button><button type="button" class="btn" data-close id="list-rename-cancel">Cancel</button></div></form></dialog>
+{{- /* Delete…: the list goes, its tasks to another list or to none. */}}
+<dialog id="list-delete-dialog" class="modal" data-params="delete_error"{{if $.DeleteError}} data-open{{end}}><p class="modal-label">Delete list #{{.Name}}</p><p class="modal-desc">The list goes; its tasks stay, open and closed ones. They move to:</p><form method="post" action="/tasks/delete-list"><input type="hidden" name="list" value="{{.Ref}}"><select name="to" id="list-delete-to" aria-label="Move its tasks to">{{if not .Private}}<option value="">No list</option>{{end}}{{range $.MoveTo}}<option value="{{.Ref}}">#{{.Name}}{{if .Private}} (private){{else if $.List.Private}} (shared){{end}}</option>{{end}}{{if .Private}}<option value="">No list (shared)</option>{{end}}</select>
+{{- if .Private}}<label class="promote-check" title="A task moved out of a private list is shared: it can't be made private again"><input type="checkbox" name="share" id="list-delete-share" value="1"> Share its tasks if they go to a shared place: everyone who uses the wiki will see them</label>{{end}}
+{{- template "error" (dict "message" $.DeleteError)}}<div class="modal-actions"><button type="submit" class="btn btn-danger" id="list-delete-submit">Delete</button><button type="button" class="btn" data-close id="list-delete-cancel">Cancel</button></div></form></dialog>
+{{- if .Private}}
+{{- /* Make shared…: a private list and its tasks, for everyone from then on. */}}
+<dialog id="list-share-dialog" class="modal" data-params="share_error"{{if $.ShareError}} data-open{{end}}><p class="modal-label">Make #{{.Name}} shared</p><p class="modal-desc">Everyone who uses the wiki will see this list and its tasks, and change them. A shared list can't be made private again.</p><form method="post" action="/tasks/share-list"><input type="hidden" name="list" value="{{.Ref}}">{{template "error" (dict "message" $.ShareError)}}<div class="modal-actions"><button type="submit" class="btn btn-primary" id="list-share-submit">Make shared</button><button type="button" class="btn" data-close id="list-share-cancel">Cancel</button></div></form></dialog>
+{{- end}}
+{{- end}}
+{{- /* Rename tag…: the tag on tasks, and in the embeds and links that filter by it. */}}
+{{- if .Tag}}
+<dialog id="tag-rename-dialog" class="modal" data-params="rename_error rename_name rename_merge"{{if .RenameError}} data-open{{end}}><p class="modal-label">Rename tag #{{.Tag}}</p><p class="modal-desc">Renames the tag on all tasks, done ones too, and in the embeds and links on pages that filter by it.</p><form method="post" action="/tasks/rename"><input type="hidden" name="tag" value="{{.Tag}}">{{if .RenameMerge}}<input type="hidden" name="merge" value="1">{{end}}<input type="text" name="new_name" id="tag-rename-input" value="{{.RenameName}}" aria-label="New name for #{{.Tag}}" autocomplete="off" spellcheck="false" required>{{template "error" (dict "message" .RenameError)}}<div class="modal-actions"><button type="submit" class="btn btn-primary" id="tag-rename-submit">{{if .RenameMerge}}Merge{{else}}Rename{{end}}</button><button type="button" class="btn" data-close id="tag-rename-cancel">Cancel</button></div></form></dialog>
 {{- end}}
 {{- end}}
 <article class="page-content">
-{{- /* A list shows the list only: the pages that embed it are its Backlinks. */}}
-{{- if and .ListName (not .Home)}}<p class="tasks-list-home">No page declares <code>[[tasks: list={{.ListName}}]]</code>: these are the tasks tagged #{{.ListName}}.</p>{{end -}}
-{{- /* Pinned: which lists these are (pinnedSources). */}}
+{{- /* My lists: which lists these are (pinnedSources). */}}
 {{- with .PinnedLists}}<p class="tasks-list-home tasks-pinned-lists">Your pinned lists, as one: {{range $i, $l := .}}{{if $i}}, {{end}}<a href="{{$l.Href}}">{{$l.Label}}</a>{{end}}</p>{{end -}}
 {{.TasksHTML}}</article>
 </div>

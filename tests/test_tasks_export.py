@@ -3,7 +3,7 @@ GET /api/tasks/export and POST /api/tasks/import."""
 
 import re
 
-from tests.conftest import HOST, create_task
+from tests.conftest import HOST, create_task, make_list
 
 
 def export(client, **query):
@@ -19,10 +19,11 @@ def titles(client):
 
 
 def test_export_is_the_lists_tasks_open_and_completed(client, wiki_dir):
-    create_task(client, title="Milk", tags=["shop", "weekly"], description="2 l", due_date="2030-01-02", keep=True)
-    done = create_task(client, title="Eggs", tags=["shop"]).get_json()
+    make_list(client, "shop", headers=HOST)
+    create_task(client, title="Milk", list="shop", tags=["weekly"], description="2 l", due_date="2030-01-02", keep=True)
+    done = create_task(client, title="Eggs", list="shop").get_json()
     client.put(f"/api/tasks/{done['id']}", json={"completed": True}, headers=HOST)
-    create_task(client, title="Report", tags=["work"])
+    create_task(client, title="Report", tags=["work", "shop"])     # a tag of the list's name: not in it
     resp = export(client, list="shop")
     assert resp.status_code == 200
     assert re.fullmatch(r'attachment; filename=zone-tasks-shop-\d{4}-\d{2}-\d{2}\.json', resp.headers["Content-Disposition"])
@@ -31,7 +32,9 @@ def test_export_is_the_lists_tasks_open_and_completed(client, wiki_dir):
     assert [t["title"] for t in file["tasks"]] == ["Milk", "Eggs"]
     milk, eggs = file["tasks"]
     assert milk["description"] == "2 l" and milk["due_date"] == "2030-01-02" and milk["keep"] is True
+    assert milk["list"] == "shop" and milk["tags"] == ["weekly"]
     assert eggs["closed_at"]
+    assert export(client, list="nosuch").get_json()["tasks"] == []
     # A filter as an embed's tag=; neither: every task.
     assert [t["title"] for t in export(client, list="shop", tag="weekly").get_json()["tasks"]] == ["Milk"]
     assert [t["title"] for t in export(client, tag="work|weekly").get_json()["tasks"]] == ["Milk", "Report"]
@@ -47,8 +50,9 @@ def test_the_lists_name_cant_add_to_the_download_header(client, wiki_dir):
 
 
 def test_import_brings_an_export_back_once(client, wiki_dir):
-    create_task(client, title="Milk", tags=["shop"], description="2 l")
-    done = create_task(client, title="Eggs", tags=["shop"]).get_json()
+    make_list(client, "shop", headers=HOST)
+    create_task(client, title="Milk", list="shop", tags=["weekly"], description="2 l")
+    done = create_task(client, title="Eggs", list="shop").get_json()
     client.put(f"/api/tasks/{done['id']}", json={"completed": True}, headers=HOST)
     file = export(client, list="shop").get_json()
     # Here already: nothing is added.
@@ -59,33 +63,39 @@ def test_import_brings_an_export_back_once(client, wiki_dir):
     assert imp(client, file, list="shop").get_json() == {"added": 2, "skipped": 0, "ids": ids}
     assert imp(client, file, list="shop").get_json() == {"added": 0, "skipped": 2, "ids": []}
     back = client.get("/api/tasks", headers=HOST).get_json()
-    assert [(t["id"], t["title"], t["description"], t["tags"]) for t in back] == [(ids[0], "Milk", "2 l", ["shop"])]
+    assert [(t["id"], t["title"], t["description"], t["tags"], t["list"]) for t in back] == [(ids[0], "Milk", "2 l", ["weekly"], "shop")]
     completed = client.get("/api/tasks/closed", headers=HOST).get_json()
     assert [(t["id"], t["title"]) for t in completed] == [(ids[1], "Eggs")]
 
 
-def test_import_into_another_list_changes_the_lists_tag(client, wiki_dir):
+def test_import_into_another_list_puts_the_tasks_there(client, wiki_dir):
+    make_list(client, "groceries", headers=HOST)
     file = {"zone_tasks": 1, "list": "shop", "tasks": [
-        {"id": "11111111-2222-4333-8444-555555555555", "title": "Milk", "tags": ["shop", "weekly"]},
+        {"id": "11111111-2222-4333-8444-555555555555", "title": "Milk", "list": "shop", "tags": ["weekly"]},
         {"id": "not an id", "title": "Bread", "tags": []},
         {"title": "Salt"},
     ]}
+    assert imp(client, file, list="nosuch").status_code == 400      # a list there is, or none
     out = imp(client, file, list="groceries", tag="staples,-old").get_json()
     assert (out["added"], out["skipped"], len(out["ids"])) == (3, 0, 3)
     tasks = {t["title"]: t for t in client.get("/api/tasks", headers=HOST).get_json()}
-    assert tasks["Milk"]["tags"] == ["weekly", "groceries", "staples"]
+    assert tasks["Milk"]["tags"] == ["weekly", "staples"] and tasks["Milk"]["list"] == "groceries"
     assert tasks["Milk"]["id"] == "11111111-2222-4333-8444-555555555555"
-    assert tasks["Bread"]["tags"] == ["groceries", "staples"] and len(tasks["Bread"]["id"]) == 36
-    assert tasks["Salt"]["tags"] == ["groceries", "staples"]
+    assert tasks["Bread"]["tags"] == ["staples"] and len(tasks["Bread"]["id"]) == 36
+    assert tasks["Salt"]["tags"] == ["staples"] and tasks["Salt"]["list"] == "groceries"
     # new= says the tags, as for a new task; All tasks adds none, and a bare list of tasks does.
     assert imp(client, [{"title": "Pepper", "tags": ["x"]}], list="groceries", new="pantry").get_json()["added"] == 1
     assert imp(client, [{"title": "Oil", "tags": ["x"]}]).get_json()["added"] == 1
     tasks = {t["title"]: t for t in client.get("/api/tasks", headers=HOST).get_json()}
-    assert tasks["Pepper"]["tags"] == ["x", "pantry"] and tasks["Oil"]["tags"] == ["x"]
+    assert tasks["Pepper"]["tags"] == ["x", "pantry"] and tasks["Oil"]["tags"] == ["x"] and "list" not in tasks["Oil"]
     # also=: tags of the user's own for this import, on top of the list's.
     assert imp(client, [{"title": "Rice", "tags": ["x"]}], list="groceries", also="#From Anna, x").get_json()["added"] == 1
     tasks = {t["title"]: t for t in client.get("/api/tasks", headers=HOST).get_json()}
-    assert tasks["Rice"]["tags"] == ["x", "groceries", "From-Anna"]
+    assert tasks["Rice"]["tags"] == ["x", "From-Anna"] and tasks["Rice"]["list"] == "groceries"
+    # Into All tasks a task goes where its own list says: the list of that name here, or none.
+    assert imp(client, [{"title": "Tea", "list": "groceries"}, {"title": "Soap", "list": "shop"}]).get_json()["added"] == 2
+    tasks = {t["title"]: t for t in client.get("/api/tasks", headers=HOST).get_json()}
+    assert tasks["Tea"]["list"] == "groceries" and "list" not in tasks["Soap"]
 
 
 def test_import_refuses_what_is_no_export(client, wiki_dir):

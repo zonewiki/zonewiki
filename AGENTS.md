@@ -41,7 +41,7 @@ Markdown joins the lines when it renders them.
 
 - **Simple over clever** — minimal dependencies, no build step, no bundler
 - **Markdown is the source of truth** — `.md` files in the data directory (`$ZONE_DATA`) are the wiki content.
-  Deliberate exception: Tasks live in `_tasks/tasks.json`/`_tasks/closed.json` (structured fields, concurrency-safe writes) — still plain files, still git-versioned, but not markdown.
+  Deliberate exception: Tasks live in `_tasks/tasks.json`/`_tasks/closed.json` and their lists in `_tasks/lists.json` (structured fields, concurrency-safe writes) — still plain files, still git-versioned, but not markdown.
 - **Editable two ways** — edit files in any text editor, or click "Edit" in the browser
 - **Nice looking** — clean typography, readable line lengths, good contrast
 - **Searchable** — server-side full-text search across all pages
@@ -127,7 +127,7 @@ Auth is optional (a password, or users; see Key Constraints).
 │   ├── pageops.go          # Page writes the routes and the MCP tools share (delete, rename, restore, create, save): checks, text not yet in git kept
 │   ├── refusal.go          # What an operation refuses with (refusalError: a kind and a message), for pages and tasks alike; each door answers it its way
 │   ├── views.go            # The page shell, breadcrumb, modules, menus, side columns; templates/ (embedded)
-│   ├── pages.go            # The wiki's files: slugs, listing, sharing mode, link graph, renames, task lists/the pinned lists
+│   ├── pages.go            # The wiki's files: slugs, listing, sharing mode, link graph, renames, the pages that embed a list
 │   ├── markdown.go         # Markdown → HTML on goldmark, with Zone's rules (checkboxes, callouts, heading ids …)
 │   ├── math.go             # $…$ and $$…$$ math kept as TeX for KaTeX (a goldmark extension)
 │   ├── sections.go         # Headings and sections as the parser finds them, for the ✎s, the editor, the MCP tools and search (pageHeadings, pageSections, findSection)
@@ -137,10 +137,12 @@ Auth is optional (a password, or users; see Key Constraints).
 │   ├── quicknotes.go       # Notes: create, Move to wiki, Append to page (the routes and MCP share it)
 │   ├── merge.go            # Several editors on one page: drafts' authors, the bases, the three-way merge, texts left in conflict
 │   ├── tasks.go            # Task writes (create, change, comment, tag, delete), as functions the routes and the MCP tools share
+│   ├── tasklists.go        # Task lists: the lists a user sees (taskLists, refs), their pins, and the list operations (make, rename, delete, share, pin, settings)
+│   ├── listsmigrate.go     # The lists' migration at start: lists that pages declared and pins in embeds, taken over into the registries, once
 │   ├── tasksapi.go         # The /api/tasks routes
 │   ├── tasksembed.go       # The [[tasks:]] embed: its HTML, its settings dialog, the counts the Tasks links show
 │   ├── tasklogic.go        # What Zone does with tasks beyond keeping them: a series' next occurrence, completing, history, comments, backlinks, [[task:…]] references; taskFiles, the store, wired to the wiki here
-│   ├── internal/taskfiles/ # Package taskfiles, no globals: the tasks on disk: _tasks/ files (users' private ones in private/<user>/_tasks/) read and written under one lock, filed by owner and year; a Store is handed the wiki's folder, its users, the clock, who may write and how a write is committed
+│   ├── internal/taskfiles/ # Package taskfiles, no globals: the tasks on disk: _tasks/ files (users' private ones in private/<user>/_tasks/) read and written under one lock, filed by owner and year, and the lists' registries beside them (lists.json: lists.go); a Store is handed the wiki's folder, its users, the clock, who may write and how a write is committed
 │   ├── internal/atomicfile/ # Package atomicfile: a file written so that no reader sees half of it (pages, task files)
 │   ├── taskby.go           # Comments and history a client sends whole: nobody writes under another's name
 │   ├── tasksyntax.go       # The page syntax of tasks: [[tasks: …]] params, [[task:…]], tag rules, date words
@@ -201,7 +203,7 @@ It lives in the host directory pointed to by `ZONE_DATA` (default: `~/zonewiki`)
 
 Zone is at **http://localhost:5000**.
 The deployment's settings are in `.env` (gitignored; `ZONE_DATA`, `ZONE_ALLOW_REMOTE`, `TZ` …, read once into `cfg`); the wiki's own (users, password, MCP token, hosts, locale …) are in the wiki's settings file `.zone/config`, kept out of git and reloaded when it changes (`settings()`).
-The wiki lives outside the repo, in `ZONE_DATA` (default `~/zonewiki`), which must exist: pages at its root and in folders, uploads in `_assets/`, tasks in `_tasks/`, the settings file, the search index files, the semantic cache and session key in `.zone/`.
+The wiki lives outside the repo, in `ZONE_DATA` (default `~/zonewiki`), which must exist: pages at its root and in folders, uploads in `_assets/`, tasks and their lists in `_tasks/`, the settings file, the search index files, the semantic cache and session key in `.zone/`.
 Details: `docs/spec/deployment.md`.
 
 Without the container (Go 1.27 and a C compiler; `CGO_ENABLED=0` builds one without semantic search):
@@ -306,8 +308,9 @@ and commit the new pins.
   - `password` in `.zone/config` (a hash) turns on a login gate; the session key is one Zone keeps in `.zone/secret_key` (0600, excluded from git).
     Signing out ends the session wherever a copy of its cookie is (`go/signout.go`: its id in `.zone/signed-out`); renew a session with `renewSession`, which keeps the id, never with `setSession`.
   - Users instead (`[user …]` in `.zone/config`): a login per user, passwords only as hashes (`docs/spec/users.md`); the session names its user, `userOf(r)` / `rq.user` give it, and a write passes it to `gitCommit(user, …)` as the commit's author.
-  - **Private pages and tasks** (`private/<user>/`, tasks in `private/<user>/_tasks/`, with users): every route and tool that shows, lists or changes a page asks `go/access.go` (`canSee`, `canWrite`, `canSeePath`; `hiddenPage`/`refusePage` in the routes);
+  - **Private pages and tasks** (`private/<user>/`, tasks and private lists in `private/<user>/_tasks/`, with users): every route and tool that shows, lists or changes a page asks `go/access.go` (`canSee`, `canWrite`, `canSeePath`; `hiddenPage`/`refusePage` in the routes);
     every read of tasks takes the user (`taskFiles.Open(user)` …, shared + their own files), and what holds every user's tasks (the search index) filters with `canSeeTask`.
+    A task is private by its list (`applyList` in `go/tasks.go`: a private list's task is in its user's files): a shared task never goes into a private list, and a private one leaves for a shared place only with `share`. Lists are read with `taskLists(user)`, which gives only those a user sees, and a write to a list or a task in it asks `canWriteList`: don't read another user's registry for them.
     A new route gets a probe in `tests/test_privacy.py`, which fails until it has one.
     A path handed to git names one file, never a pattern (`GIT_LITERAL_PATHSPECS` in package `gitrepo`'s environment): don't turn that off for a call that takes a page's name.
   - **Guides are an admin's** (with users): `canWrite` is false for anyone else on `wiki-guide`, a folder's `AGENTS.md`/`CLAUDE.md` and the pages they pull in (`adminsOnly`, Guides in `docs/spec/users.md`): every user's assistant follows them.
@@ -347,6 +350,7 @@ and commit the new pins.
   a note's move and append in `quicknotes.go`): it checks access itself and keeps text not yet in git (`keepPending` before a write that replaces or removes a page's text, `commitOthersDraft` before one that continues it),
   and the routes and MCP tools only parse their input and turn the result or the refusal into their answer.
   A new write gets an operation there and a test through each door in `tests/test_page_writes.py`.
+  (A list's rename, `renameListOp` in `go/tasklists.go`, writes pages too: the embeds and links that name the list.)
   **Page writes run one at a time** (`pagesMu`), from the reads they decide on to their commit: the doors take it, not the operations (a route that writes pages is registered as `writesPages(handler)`, an MCP tool that does says `toolWritesPages` in `mcpToolTable`);
   code under it never takes it again (lock order `pagesMu`, the task files' lock (`taskFiles.Lock`), `commitMu`).
   Pages are written atomically (`writeText` → `atomicfile.Write`: a link written through, a new file 0666 less the umask).

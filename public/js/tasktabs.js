@@ -80,15 +80,16 @@ app.closedLink?.addEventListener('click', () => {
 // The embed's own filter words (list= and tag=) are locked: the page says
 // what it shows. A URL ?tag= (e.g. g t) gives ordinary chips.
 const embedFilterWords = [
-  ...(app.initList ? ['#' + app.initList] : []),
+  ...(app.initList ? ['list:' + app.listName(app.initList)] : []),
   ...tagParamToQuery(app.appEl?.dataset.initTag || '').split(' ').filter(Boolean),
   // [[tasks: assignee=…]] (with users): whose tasks the page shows.
   ...tagParamToQuery(app.appEl?.dataset.initAssignee || '', '@').split(' ').filter(Boolean),
 ];
-// A chip that is just a separate list's tag (#groceries) is marked as a list.
+// A chip that names a list (list:groceries) is marked as a list.
 const filterChips = app.filterSearch && app.chipField(app.filterSearch, {
   onChange: () => app.render(), locked: embedFilterWords,
-  listWord: w => w.startsWith('#') && app.listSet.has(w.slice(1).toLowerCase()) });
+  label: w => /^list:/i.test(w) ? w.slice(5) : w,
+  listWord: w => /^list:./i.test(w) });
 function filterQuery() {
   return [...(filterChips?.words() || []), app.filterSearch?.value || ''].join(' ').trim();
 }

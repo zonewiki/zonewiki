@@ -164,8 +164,8 @@ div.chip-input:has(> .tag-chip:not(.tag-chip-locked)) > .chip-input-clear { disp
 .tag-chip-x:hover { color: var(--fg); }
 /* Set by the embed (list= and tag= filter words): no ×. */
 .tag-chip-locked { padding-right: .4rem; }
-/* A separate list's tag (filter, edit modal, cards): first, with a list icon
-   and a tint, so a list never passes for an ordinary tag. */
+/* A list's chip (the filter's list: word, a card's list): first, with a list
+   icon and a tint, so a list never passes for a tag. */
 .tag-chip-list, .task-tag.task-tag-list {
   color: var(--fg);
   background: color-mix(in srgb, var(--link) 7%, var(--code-bg));
@@ -1303,3 +1303,16 @@ ul.task-comment-list { list-style: none; margin: .3rem 0 0; padding: 0; font-siz
     position: static; width: auto; height: auto; overflow: visible; clip-path: none;
   }
 }
+
+/* In the place of an embed whose list isn't there (tasks_embed.html tasks_no_list). */
+.tasks-no-list {
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: .75rem 1rem;
+  color: var(--muted);
+}
+.tasks-no-list p { margin: 0 0 .5rem; }
+.tasks-no-list form { display: flex; gap: .75rem; align-items: baseline; flex-wrap: wrap; margin: 0; }
+
+/* A list a selected task can't go into (a private one, for a shared task). */
+.bulk-list-row:disabled { opacity: .55; cursor: default; }
