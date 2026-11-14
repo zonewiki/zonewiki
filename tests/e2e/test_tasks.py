@@ -4214,11 +4214,20 @@ def test_settings_dialog_changes_the_embeds_params(page, wiki):
     expect(dialog.locator("[name=view]")).to_have_value("focus")
     expect(dialog.locator("[name=plan]")).to_be_checked()
     expect(dialog.locator("[name=list]")).to_have_count(0)   # which list it shows is the page's to say
-    expect(dialog.locator("[name=pin]")).to_have_value("")
-    # What is rarely changed is folded under More, nothing of it being set.
-    expect(dialog.locator("[name=label_open]")).to_be_hidden()
-    expect(dialog.locator("[name=tag]")).to_be_hidden()
-    dialog.locator("summary").click()
+    pin = dialog.locator(".task-settings-pin")
+    expect(pin).to_have_attribute("aria-pressed", "false")
+    expect(dialog.locator(".task-settings-default")).to_be_hidden()   # only a pinned list can be the default
+    # What is rarely changed shows only when set: none of it is, so the line
+    # under the fields offers each.
+    for name in ("label_open", "tag", "limit", "new"):
+        expect(dialog.locator(f"[name={name}]")).to_be_hidden()
+    more = dialog.locator(".task-add-field:visible")
+    expect(more).to_have_text(["WIP limit", "Tab names", "Tags of a new task", "Filter by tag"])
+    more.filter(has_text="Tab names").click()
+    expect(dialog.locator("[name=label_open]")).to_be_focused()
+    more.filter(has_text="WIP limit").click()
+    more.filter(has_text="Tags of a new task").click()
+    expect(dialog.locator(".task-add-field:visible")).to_have_text(["Filter by tag"])
     # The app's shortcuts leave the dialog's typing alone.
     dialog.locator("[name=label_open]").fill("To buy")
     dialog.locator("[name=label_focus]").fill("Cart")
@@ -4238,14 +4247,26 @@ def test_settings_dialog_changes_the_embeds_params(page, wiki):
     # Saving without a change writes nothing; one change leaves the rest.
     open_list_settings(page)
     expect(dialog.locator("[name=view] option")).to_have_text(["To buy", "Cart"])
-    expect(dialog.locator("[name=label_open]")).to_be_visible()   # More is open: names are set
+    expect(dialog.locator("[name=label_open]")).to_be_visible()   # shown: names are set
+    expect(dialog.locator(".task-add-field:visible")).to_have_text(["Filter by tag"])
     expect(dialog.locator("[name=label_open]")).to_have_value("To buy")
     expect(dialog.locator("[name=limit]")).to_have_value("6")
     dialog.get_by_role("button", name="Save").click()
     expect(dialog).to_be_hidden()
     open_list_settings(page)
     dialog.locator("[name=plan]").check()
-    dialog.locator("[name=pin]").select_option("default")
+    # The pin: pressed, the list is pinned, and can be made the default one.
+    pin.click()
+    expect(pin).to_have_attribute("aria-pressed", "true")
+    expect(pin).to_have_text("Pinned")
+    expect(dialog.locator("[name=pin]")).to_have_value("1")
+    dialog.locator(".task-settings-default input").check()
+    expect(dialog.locator("[name=pin]")).to_have_value("default")
+    pin.click()                                                    # not pinned: not the default either
+    expect(dialog.locator(".task-settings-default")).to_be_hidden()
+    expect(dialog.locator("[name=pin]")).to_have_value("")
+    pin.click()
+    dialog.locator(".task-settings-default input").check()
     with page.expect_navigation():
         dialog.get_by_role("button", name="Save").click()
     assert "[[tasks: list=shop keep=1 new=weekly,fresh view=plan limit=6 labels=To_buy,Cart pin=default]]" in wiki.read("shopping")
@@ -4255,6 +4276,8 @@ def test_settings_dialog_changes_the_embeds_params(page, wiki):
     page.goto("/tasks?list=shop")
     open_list_settings(page)
     expect(dialog.locator(".task-settings-where")).to_contain_text("shopping")
+    expect(dialog.locator(".task-settings-pin")).to_have_attribute("aria-pressed", "true")   # as the page says
+    expect(dialog.locator(".task-settings-default input")).to_be_checked()
     dialog.locator("[name=view]").select_option("focus")
     with page.expect_navigation():
         dialog.get_by_role("button", name="Save").click()
@@ -4286,10 +4309,11 @@ def test_plan_default_and_all_tasks_settings(page, wiki):
     page.goto("/tasks")
     open_list_settings(page)
     dialog = page.locator("#task-settings-modal")
-    # No Pinned and no filter there, also under More.
-    dialog.locator("summary").click()
+    # No pin and no filter there, nor offered.
+    expect(dialog.locator(".task-settings-pin")).to_be_hidden()
+    expect(dialog.locator(".task-add-field:visible")).to_have_text(["WIP limit", "Tab names", "Tags of a new task"])
+    dialog.locator(".task-add-field", has_text="Tags of a new task").click()
     expect(dialog.locator("[name=new]")).to_be_visible()
-    expect(dialog.locator("[name=pin]")).to_be_hidden()
     expect(dialog.locator("[name=tag]")).to_be_hidden()
     dialog.locator("[name=view]").select_option("open")
     dialog.locator("[name=plan]").uncheck()
@@ -4313,6 +4337,7 @@ def test_settings_are_in_the_more_menu_on_a_phone(new_page, wiki):
     phone.get_by_role("menuitem", name="List settings…").click()
     dialog = phone.locator("#task-settings-modal")
     expect(dialog).to_be_visible()
+    dialog.locator(".task-add-field", has_text="WIP limit").tap()
     dialog.locator("[name=limit]").fill("4")
     with phone.expect_navigation():
         dialog.get_by_role("button", name="Save").click()

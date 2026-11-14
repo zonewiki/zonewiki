@@ -296,16 +296,19 @@ It changes the list's params where they are written, so the dialog and a hand ed
 | Field | Param | |
 |-------|-------|---|
 | Opens on | `view` | The Open or the Focus tab (by their names here); Closed is offered only where the page says `view=closed` |
-| WIP limit | `limit` | 1–99, empty for none |
 | Plan | `plan`, `view` | The Open tab grouped by start date, or one list |
-| Pinned | `pin` | No, Pinned, or Pinned as the default list |
-| Tab names (under More) | `labels` | The Open tab's and the Focus tab's; empty keeps Open and Focus |
-| Tags of a new task (under More) | `new` | Comma-separated; empty: the list's tag and the single tags it shows |
-| Shows only the tags (under More) | `tag` | The filter: `a,b` both, `a\|b` either, `-a` without |
-| Shows only the tasks of (under More, with users) | `assignee` | `me` whoever looks, a user's name, `a\|b` either, `none` no one's, `-a` not theirs |
+| The pin (a button beside the title), The default list (a box, once pinned) | `pin` | Not pinned, pinned (`pin=1`), or pinned as the default list (`pin=default`) |
+| WIP limit (on request) | `limit` | 1–99, empty for none |
+| Tab names (on request) | `labels` | The Open tab's and the Focus tab's; empty keeps Open and Focus |
+| Tags of a new task (on request) | `new` | Comma-separated; empty: the list's tag and the single tags it shows |
+| Shows only the tags (on request: Filter by tag) | `tag` | The filter: `a,b` both, `a\|b` either, `-a` without |
+| Shows only the tasks of (on request: Filter by person; with users) | `assignee` | `me` whoever looks, a user's name, `a\|b` either, `none` no one's, `-a` not theirs |
 
 
-**More** (`<details class="task-settings-more">`) folds the fields that are rarely changed; it is open when the dialog opens with one of them set.
+**It shows what is changed most**: Opens on, Plan and the pin.
+The other fields show only when set as the dialog opens (`[data-field]`, `showField` in `settingsForm`); for the rest a line of quiet words under the fields offers each, "+ WIP limit", "+ Tab names", "+ Tags of a new task", "+ Filter by tag", "+ Filter by person" (`.task-add-fields`, as in the task dialog): a click shows the field and puts the cursor in it.
+**The pin** is a button at the title's right, with the list switcher's pin (`.task-settings-pin`, `aria-pressed`): "Pin" on a list that isn't pinned, pressed and "Pinned" on one that is; a click pins or unpins.
+A pinned list has a box under the title, **The default list: where New task adds a task** (`.task-settings-default`); unpinning takes that away too.
 The line above Save says where the settings are written.
 
 **Where it writes** (`data-settings-page`, `-index`, `-raw` on `.tasks-app`, from `buildTasksEmbed`: the page, which of its `[[tasks: …]]` outside code, and the params as written there):

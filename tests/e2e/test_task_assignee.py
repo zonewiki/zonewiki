@@ -285,7 +285,9 @@ def test_the_settings_dialog_sets_whose_tasks_a_list_shows(alice, wiki):
     alice.locator("#task-more-btn").click()
     alice.get_by_role("menuitem", name="List settings…").click()
     dialog = alice.locator("#task-settings-modal")
-    dialog.locator("[name=assignee]").fill("@Bob")        # More is open: the list has a filter
+    expect(dialog.locator("[name=tag]")).to_be_visible()   # shown: the list has that filter
+    dialog.locator(".task-add-field", has_text="Filter by person").click()
+    dialog.locator("[name=assignee]").fill("@Bob")
     with alice.expect_navigation():
         dialog.get_by_role("button", name="Save").click()
     assert wiki.read("work") == "# Work\n\n[[tasks: tag=work view=open assignee=bob]]\n"

@@ -83,11 +83,68 @@ export function changedParams(was, now, p) {
 
 // The dialog's form (partials/tasks_embed.html task_settings_dialog), for a
 // list's ⋯ menu and for the editor's Task list button (js/tasklist.js), whose
-// form has List and keep too. fill(params, all): the fields as the params
-// have them (all: All tasks, which has no pin and no filter), More open
-// when something in it is set; returns what read() then gives.
+// form has List and keep too. It shows what is changed most (Opens on, Plan,
+// the pin); the other fields ([data-field]) only when set, or once asked for
+// in the line of words under them ([data-more]), as the task dialog's rarer
+// fields are. The pin is a button, pressed for a pinned list, and a pinned
+// list has a box that makes it the default one; the hidden field pin holds
+// the param's value for both ("", "1", "default").
+// fill(params, all): the fields as the params have them (all: All tasks,
+// which has no pin and no filter); returns what read() then gives.
 export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Focus')) {
   const f = form.elements;
+  const pinBtn = form.querySelector('.task-settings-pin');
+  const defaultRow = form.querySelector('.task-settings-default');
+  const defaultBox = defaultRow.querySelector('input');
+  const moreEl = form.querySelector('.task-add-fields');
+  const fieldEl = name => form.querySelector(`[data-field="${name}"]`);
+  // (What a click needs later is the form's own: the handlers are wired once.)
+  const allTasks = () => form.dataset.all === '1';
+  // Which + words the line has: those of the fields not shown (and, for All
+  // tasks, not the filters, which it hasn't).
+  function syncMore() {
+    let any = false;
+    for (const btn of moreEl.querySelectorAll('[data-more]')) {
+      const el = fieldEl(btn.dataset.more);
+      btn.hidden = !el || !el.hidden || allTasks() && btn.classList.contains('task-settings-embed');
+      any = any || !btn.hidden;
+    }
+    moreEl.hidden = !any;
+  }
+  function showField(name, show = true) {
+    const el = fieldEl(name);
+    if (el) el.hidden = !show;
+  }
+  function syncPin() {
+    const pinned = f.pin.value !== '';
+    pinBtn.setAttribute('aria-pressed', String(pinned));
+    pinBtn.querySelector('.task-settings-pin-label').textContent = pinned ? 'Pinned' : 'Pin';
+    defaultRow.hidden = !pinned || allTasks();
+    defaultBox.checked = f.pin.value === 'default';
+  }
+  // Wired once per form: the editor's dialog is opened again and again.
+  if (!form.dataset.wired) {
+    form.dataset.wired = '1';
+    const changed = () => form.dispatchEvent(new Event('input', { bubbles: true }));   // the editor's preview follows
+    pinBtn.addEventListener('click', () => {
+      f.pin.value = f.pin.value === '' ? '1' : '';
+      syncPin();
+      changed();
+    });
+    defaultBox.addEventListener('input', () => {   // before the form hears of it
+      f.pin.value = defaultBox.checked ? 'default' : '1';
+      syncPin();
+    });
+    moreEl.addEventListener('click', e => {
+      const name = e.target.closest('[data-more]')?.dataset.more;
+      if (!name) return;
+      showField(name);
+      // Keep tasks is a box: asked for, it is ticked.
+      if (name === 'keep') { f.keep.checked = true; changed(); }
+      syncMore();
+      fieldEl(name).querySelector('input')?.focus();
+    });
+  }
   const read = () => ({
     view: f.view.value, plan: f.plan.checked,
     label_open: f.label_open.value.trim(), label_focus: f.label_focus.value.trim(),
@@ -98,6 +155,7 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
   });
   const fill = (params, all = false) => {
     const fields = fieldsOf(params);
+    form.dataset.all = all ? '1' : '';
     // Opens on: the tabs by their names here; Closed only where a page says so.
     f.view.replaceChildren(...['open', 'focus', fields.view === 'closed' && 'closed'].filter(Boolean)
       .map(v => new Option(v === 'closed' ? 'Closed' : tabLabel(v), v)));
@@ -106,9 +164,15 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
     if (f.list) { f.list.value = fields.list; f.keep.checked = fields.keep; }
     if (f.assignee) f.assignee.value = fields.assignee;
     for (const el of form.querySelectorAll('.task-settings-embed')) el.hidden = all;
-    // More: closed, unless something in it is set.
-    form.querySelector('.task-settings-more').open =
-      !!(fields.label_open || fields.label_focus || fields.new || (!all && (fields.tag || fields.assignee)));
+    // The rarer fields: shown when set.
+    showField('limit', !!fields.limit);
+    showField('labels', !!(fields.label_open || fields.label_focus));
+    showField('new', !!fields.new);
+    showField('tag', !all && !!fields.tag);
+    showField('assignee', !all && !!fields.assignee);
+    showField('keep', fields.keep);
+    syncMore();
+    syncPin();
     return read();
   };
   return { read, fill };

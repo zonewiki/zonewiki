@@ -242,7 +242,14 @@
 {{define "task_settings_dialog" -}}
 <dialog id="task-settings-modal{{.Sfx}}" class="task-edit-modal task-settings-modal">
   <form id="task-settings-form{{.Sfx}}" class="task-edit-form">
-    <div class="modal-label" id="task-settings-title{{.Sfx}}">List settings</div>
+    {{- /* The pin beside the title: pressed, the list is pinned (it is where the
+        Tasks links go); a button, as the list switcher's pin is. pin holds the
+        param's value for the form ("", 1, default; js/tasksettings.js). */}}
+    <div class="task-settings-head">
+      <div class="modal-label" id="task-settings-title{{.Sfx}}">List settings</div>
+      <input type="hidden" id="task-settings-pin{{.Sfx}}" name="pin">
+      <button type="button" class="task-settings-pin task-settings-embed" id="task-settings-pin-btn{{.Sfx}}" aria-pressed="false" title="Pin this list: the Tasks links go to your pinned lists">{{template "icon_pin"}}<span class="task-settings-pin-label">Pin</span></button>
+    </div>
     {{- if .Editor}}
     <div class="task-field">
       <label for="task-settings-list{{.Sfx}}">List</label>
@@ -251,53 +258,60 @@
       <span class="field-hint">A name makes it a list of its own (the tasks tagged with it); none shows all tasks.</span>
     </div>
     {{- end}}
+    {{- /* A pinned list can be the default one, where New task adds a task. */}}
+    <label class="task-settings-check task-settings-default" id="task-settings-default-row{{.Sfx}}" title="New task (c t) adds its task to the default list" hidden><input type="checkbox" id="task-settings-default{{.Sfx}}"> The default list: where New task adds a task</label>
     <div class="task-settings-row">
       <div class="task-field">
         <label for="task-settings-view{{.Sfx}}">Opens on</label>
         <select id="task-settings-view{{.Sfx}}" name="view"><option value="focus">Focus</option><option value="open">Open</option></select>
       </div>
-      <div class="task-field">
+      <div class="task-field" data-field="limit" hidden>
         <label for="task-settings-limit{{.Sfx}}">WIP limit</label>
         <input type="number" id="task-settings-limit{{.Sfx}}" name="limit" min="1" max="99" placeholder="none" inputmode="numeric">
       </div>
     </div>
     <label class="task-settings-check"><input type="checkbox" id="task-settings-plan{{.Sfx}}" name="plan"> Plan: group the Open tab by start date</label>
+    {{- /* The rest shows only when set, or once asked for in the line below
+        (js/tasksettings.js showField), as the task dialog's rarer fields do. */}}
     {{- if .Editor}}
-    <label class="task-settings-check"><input type="checkbox" id="task-settings-keep{{.Sfx}}" name="keep"> New tasks are keep tasks (back on the list when done)</label>
+    <label class="task-settings-check" data-field="keep" hidden><input type="checkbox" id="task-settings-keep{{.Sfx}}" name="keep"> New tasks are keep tasks (back on the list when done)</label>
     {{- end}}
-    <div class="task-field task-settings-embed">
-      <label for="task-settings-pin{{.Sfx}}">Pinned</label>
-      <select id="task-settings-pin{{.Sfx}}" name="pin"><option value="">No</option><option value="1">Pinned</option><option value="default">Pinned, the default list</option></select>
-    </div>
-    {{- /* What is rarely changed: closed, unless one of them is set (tasksettings.js open). */}}
-    <details class="task-settings-more" id="task-settings-more{{.Sfx}}">
-      <summary>More</summary>
-      <div class="task-settings-more-body">
-        <div class="task-field">
-          <label for="task-settings-label-open{{.Sfx}}">Tab names</label>
-          <div class="task-settings-row">
-            <input type="text" id="task-settings-label-open{{.Sfx}}" name="label_open" aria-label="Name of the Open tab" placeholder="Open" maxlength="30" autocomplete="off">
-            <input type="text" id="task-settings-label-focus{{.Sfx}}" name="label_focus" aria-label="Name of the Focus tab" placeholder="Focus" maxlength="30" autocomplete="off">
-          </div>
-        </div>
-        <div class="task-field">
-          <label for="task-settings-new{{.Sfx}}">Tags of a new task</label>
-          <input type="text" id="task-settings-new{{.Sfx}}" name="new" placeholder="those it shows" autocomplete="off">
-        </div>
-        <div class="task-field task-settings-embed">
-          <label for="task-settings-tag{{.Sfx}}">Shows only the tags</label>
-          <input type="text" id="task-settings-tag{{.Sfx}}" name="tag" placeholder="every task" autocomplete="off">
-          <span class="field-hint"><code>a,b</code> both · <code>a|b</code> either · <code>-a</code> without</span>
-        </div>
-        {{- if .CanAssign}}
-        <div class="task-field task-settings-embed">
-          <label for="task-settings-assignee{{.Sfx}}">Shows only the tasks of</label>
-          <input type="text" id="task-settings-assignee{{.Sfx}}" name="assignee" placeholder="everyone" autocomplete="off">
-          <span class="field-hint"><code>me</code> whoever looks · a user's name · <code>a|b</code> either · <code>none</code> no one's · <code>-a</code> not theirs</span>
-        </div>
-        {{- end}}
+    <div class="task-field" data-field="labels" hidden>
+      <label for="task-settings-label-open{{.Sfx}}">Tab names</label>
+      <div class="task-settings-row">
+        <input type="text" id="task-settings-label-open{{.Sfx}}" name="label_open" aria-label="Name of the Open tab" placeholder="Open" maxlength="30" autocomplete="off">
+        <input type="text" id="task-settings-label-focus{{.Sfx}}" name="label_focus" aria-label="Name of the Focus tab" placeholder="Focus" maxlength="30" autocomplete="off">
       </div>
-    </details>
+    </div>
+    <div class="task-field" data-field="new" hidden>
+      <label for="task-settings-new{{.Sfx}}">Tags of a new task</label>
+      <input type="text" id="task-settings-new{{.Sfx}}" name="new" placeholder="those it shows" autocomplete="off">
+    </div>
+    <div class="task-field task-settings-embed" data-field="tag" hidden>
+      <label for="task-settings-tag{{.Sfx}}">Shows only the tags</label>
+      <input type="text" id="task-settings-tag{{.Sfx}}" name="tag" placeholder="every task" autocomplete="off">
+      <span class="field-hint"><code>a,b</code> both · <code>a|b</code> either · <code>-a</code> without</span>
+    </div>
+    {{- if .CanAssign}}
+    <div class="task-field task-settings-embed" data-field="assignee" hidden>
+      <label for="task-settings-assignee{{.Sfx}}">Shows only the tasks of</label>
+      <input type="text" id="task-settings-assignee{{.Sfx}}" name="assignee" placeholder="everyone" autocomplete="off">
+      <span class="field-hint"><code>me</code> whoever looks · a user's name · <code>a|b</code> either · <code>none</code> no one's · <code>-a</code> not theirs</span>
+    </div>
+    {{- end}}
+    {{- /* The fields not shown: a click shows one. */}}
+    <div class="task-add-fields" id="task-settings-more{{.Sfx}}" role="group" aria-label="More settings">
+      <button type="button" class="task-add-field" data-more="limit" title="At most this many tasks in Focus">WIP limit</button>
+      <button type="button" class="task-add-field" data-more="labels" title="Other names for the Open and Focus tabs">Tab names</button>
+      <button type="button" class="task-add-field" data-more="new" title="The tags a task made here gets">Tags of a new task</button>
+      <button type="button" class="task-add-field task-settings-embed" data-more="tag" title="Show only the tasks with these tags">Filter by tag</button>
+      {{- if .CanAssign}}
+      <button type="button" class="task-add-field task-settings-embed" data-more="assignee" title="Show only the tasks of one user, or of whoever looks">Filter by person</button>
+      {{- end}}
+      {{- if .Editor}}
+      <button type="button" class="task-add-field" data-more="keep" title="A task made here goes back on the list when it is done, e.g. the staples of a shopping list">Keep tasks</button>
+      {{- end}}
+    </div>
     <p class="task-settings-error" id="task-settings-error{{.Sfx}}" role="alert" hidden></p>
     <p class="field-hint task-settings-where" id="task-settings-where{{.Sfx}}"></p>
     <div class="task-edit-actions">

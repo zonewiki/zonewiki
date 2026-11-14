@@ -226,11 +226,16 @@ def test_task_list_asks_what_the_list_shows_and_writes_the_embed(page, wiki):
     field("view").select_option("open")
     expect(field("where")).to_have_text("[[tasks: list=garden-work view=plan]]")   # Open, with Plan
     field("plan").uncheck()
+    more = lambda name: dialog.locator(".task-add-field", has_text=name)
+    more("WIP limit").click()                                         # the rarer fields, asked for
     field("limit").fill("5")
-    field("keep").check()
-    field("pin").select_option("1")
-    dialog.locator("summary").click()                                 # More: the filter, the tab names
+    more("Keep tasks").click()                                        # a box: asked for, it is ticked
+    expect(field("keep")).to_be_checked()
+    field("pin-btn").click()                                          # the pin is a button
+    expect(field("pin-btn")).to_have_attribute("aria-pressed", "true")
+    more("Filter by tag").click()
     field("tag").fill("urgent, -later")
+    more("Tab names").click()
     field("label-open").fill("To buy")
     line = "[[tasks: list=garden-work view=open labels=To_buy limit=5 pin=1 tag=urgent,-later keep=1]]"
     expect(field("where")).to_have_text(line)
@@ -276,9 +281,15 @@ def test_task_list_on_an_embeds_line_changes_that_embed(page, wiki):
     expect(field("keep")).to_be_checked()
     expect(field("pin")).to_have_value("default")
     expect(field("view")).to_have_value("closed")
-    expect(field("label-open")).to_have_value("Catalogue")           # More is open: something in it is set
+    expect(field("pin-btn")).to_have_attribute("aria-pressed", "true")
+    expect(dialog.locator(".task-settings-default input")).to_be_checked()
+    expect(field("label-open")).to_have_value("Catalogue")           # shown: it is set
+    expect(field("new")).to_have_value("food")
+    expect(field("limit")).to_be_hidden()                             # not set: offered
+    dialog.locator(".task-add-field", has_text="WIP limit").click()
     field("limit").fill("8")
     field("keep").uncheck()
+    dialog.locator(".task-add-field", has_text="Filter by tag").click()
     field("tag").fill("weekly")
     dialog.get_by_role("button", name="Change").click()
     assert _body(textarea) == ("Intro\n\n  [[tasks: list=shop labels=Catalogue,Shopping view=closed pin=default"
@@ -286,7 +297,8 @@ def test_task_list_on_an_embeds_line_changes_that_embed(page, wiki):
     # Emptied, a param goes.
     _click(page, "tasklist")
     field("limit").fill("")
-    field("pin").select_option("")
+    field("pin-btn").click()                                          # unpinned
+    expect(field("where")).not_to_contain_text("pin=")               # the line it writes follows the pin
     field("view").select_option("open")
     field("save").click()
     assert _body(textarea) == "Intro\n\n  [[tasks: list=shop labels=Catalogue,Shopping view=plan new=food tag=weekly]]\n\nOutro"

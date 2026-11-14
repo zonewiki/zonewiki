@@ -1043,10 +1043,22 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 .task-settings-row :is(.task-field, input) { min-width: 0; }
 .task-settings-embed[hidden] { display: none; }
 .task-settings-check { display: flex; align-items: center; gap: .5rem; font-size: .9rem; }
-/* More: what is rarely changed, folded */
-.task-settings-more summary { width: fit-content; font-size: .8rem; font-weight: 500; color: var(--muted); cursor: pointer; }
-.task-settings-more summary:hover { color: var(--fg); }
-.task-settings-more-body { display: flex; flex-direction: column; gap: .75rem; padding-top: .6rem; }
+/* The title with the pin at its right: a button, pressed for a pinned list. */
+.task-settings-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+.task-settings-head .modal-label { margin: 0; }
+.task-settings-pin {
+  display: inline-flex; align-items: center; gap: .35rem; padding: .25rem .7rem; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+  font: inherit; font-size: .8125rem; cursor: pointer; transition: background .15s, color .15s, border-color .15s;
+}
+.task-settings-pin:hover { color: var(--fg); background: var(--btn-bg); }
+.task-settings-pin[aria-pressed="true"] {
+  color: var(--fg); font-weight: 600; border-color: transparent;
+  background: color-mix(in srgb, var(--fg) 8%, var(--btn-bg));
+}
+.task-settings-pin:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+.task-settings-pin[hidden], .task-settings-check[hidden], .task-settings-modal .task-field[hidden] { display: none; }
+.task-settings-modal .task-add-fields { margin-top: 0; }
 .task-settings-where { margin: 0; }
 .task-settings-error { margin: 0; font-size: .85rem; color: #a33232; }
 .task-settings-error[hidden] { display: none; }
