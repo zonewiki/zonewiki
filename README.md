@@ -39,11 +39,11 @@ everything as it is. Search indexes and caches are rebuilt from the files.
   notes, and manage tasks. Its edits land as git commits marked `(MCP)` that
   you can review, diff or undo.
 
-Zone is for one person's pages and tasks on a server you run, or a few
-people's (a household, a small group) who share one wiki, each with their own
-login and private pages and tasks. It is deliberately a single process with no
-plugins, no graph view and no real-time collaboration, so it isn't a team
-product or a plugin platform. That keeps it small and readable.
+Zone is for one person's pages and tasks on a server you run, or a small
+team's (or a household's) who share one wiki, each with their own login,
+private pages and tasks, and the tasks assigned to them. It is deliberately a
+single process with no plugins, no graph view and no real-time collaboration,
+so it isn't a plugin platform. That keeps it small and readable.
 
 ## How Zone is organised
 
@@ -370,7 +370,7 @@ under [Security](#security).
 
 ## Security
 
-Zone is for one person, or a few who share a wiki (users): run it on
+Zone is for one person, or a small team sharing a wiki (users): run it on
 your own machine, or self-host it on a server. Out of the box it listens on localhost only, refuses requests with a
 foreign `Host` header (DNS rebinding) and cross-site writes (another site
 posting to `localhost:5000`). HTML in your pages is shown as written, but no
