@@ -337,6 +337,8 @@ func sameSecret(given, secret string) bool {
 // which a proxy appended (entries before it are the client's to make up).
 // Anyone else's X-Forwarded-For is ignored: a client on the LAN could
 // otherwise send a new one with every guess and never be throttled.
+// On a Unix socket (--addr unix:PATH) a peer has no address and counts as
+// localhost: only what is on this machine and may reach the socket connects.
 func clientKey(r *http.Request) string { return network(clientAddr(r)) }
 
 // network: an address as the throttle counts it: an IPv6 address by its
@@ -356,6 +358,9 @@ func clientAddr(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		host = r.RemoteAddr
+	}
+	if onSocket {
+		host = "127.0.0.1"
 	}
 	header := r.Header.Get("X-Forwarded-For")
 	peer, err := netip.ParseAddr(host)

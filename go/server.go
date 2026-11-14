@@ -6,6 +6,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -29,7 +30,8 @@ func logf(format string, args ...any) {
 }
 
 const usage = `Usage: zonewiki [--addr ADDRESS] [--public FOLDER] [--docs FOLDER]
-  serve the wiki in ZONE_DATA (http://localhost:5000)
+  serve the wiki in ZONE_DATA (http://localhost:5000; --addr unix:PATH: on a Unix socket,
+  for a reverse proxy on this machine)
 
 Commands:
   user COMMAND               the wiki's users (add, passwd, token, remove, list)
@@ -84,7 +86,7 @@ func isHelp(arg string) bool {
 }
 
 func main() {
-	addr := flag.String("addr", ":5000", "the `address` to listen on (127.0.0.1:0: a free port)")
+	addr := flag.String("addr", ":5000", "the `address` to listen on (127.0.0.1:0: a free port; unix:PATH: a Unix socket)")
 	public := flag.String("public", "", "the `folder` of the browser code (default: public/, found from the binary)")
 	flag.StringVar(&docsDir, "docs", "", "the `folder` of README.md and docs/spec/, for zone_help (default: found from --public)")
 	semanticTest := flag.String("semantic-test", "", "the tests' embedder and index state, as `JSON` (embedtest.go)")
@@ -102,7 +104,7 @@ func main() {
 				fmt.Println(healthUsage)
 				os.Exit(0)
 			}
-			os.Exit(health(healthURL(os.Args[2:])))
+			os.Exit(health(healthClient(os.Args[2:]), healthURL(os.Args[2:])))
 		case "user":
 			restore := echoOff()
 			code := userMain(os.Args[2:], environ, os.Stdin, os.Stdout, os.Stderr)
@@ -164,8 +166,8 @@ func main() {
 	// All interfaces by default, so the container's network bridge can
 	// forward connections; exposure is the port mapping's (compose.yaml:
 	// ZONE_BIND, 127.0.0.1 = localhost only), the Host check the
-	// DNS-rebinding defence.
-	ln, err := net.Listen("tcp", *addr)
+	// DNS-rebinding defence. Or a Unix socket, for a reverse proxy.
+	ln, err := listen(*addr)
 	if err != nil {
 		fatal(err)
 	}
@@ -177,13 +179,66 @@ func main() {
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
-	fmt.Printf("Zone %s (%s) listening on %s\n", version, cfg.Build, ln.Addr())
+	fmt.Printf("Zone %s (%s) listening on %s\n", version, cfg.Build, listenName(ln))
 	// One process: the task app's lock, the caches, the login throttle and the
 	// semantic-search worker live in its memory. At most 100 connections,
 	// those beyond the limit wait.
 	if err := srv.Serve(limitListener(ln, 100)); err != nil {
 		fatal(err)
 	}
+}
+
+// socketPrefix: an --addr that names a Unix socket's path, not a TCP address.
+const socketPrefix = "unix:"
+
+// onSocket: Zone listens on a Unix socket. Its peers have no address: they
+// count as localhost (clientAddr).
+var onSocket bool
+
+// listen: the listener of --addr, a TCP address or unix:PATH. A socket is
+// for a reverse proxy on the same machine, with no port for anyone else: who
+// may connect is who may reach the path, so the socket itself is open to all
+// (0666, as a port on localhost is to every local user) and the folder it is
+// in decides. A socket file a Zone that was killed left is replaced; one
+// something still listens on, or a file that is no socket, is refused.
+func listen(addr string) (net.Listener, error) {
+	path, socket := strings.CutPrefix(addr, socketPrefix)
+	if !socket {
+		return net.Listen("tcp", addr)
+	}
+	if path == "" {
+		return nil, errors.New("--addr unix: takes the socket's path, as unix:/run/zone/zone.sock")
+	}
+	if st, err := os.Lstat(path); err == nil {
+		if st.Mode()&os.ModeSocket == 0 {
+			return nil, fmt.Errorf("--addr %s: %s is there and is no socket", addr, path)
+		}
+		if c, err := net.DialTimeout("unix", path, time.Second); err == nil {
+			c.Close()
+			return nil, fmt.Errorf("--addr %s: something listens on %s already", addr, path)
+		}
+		if err := os.Remove(path); err != nil {
+			return nil, err
+		}
+	}
+	ln, err := net.Listen("unix", path)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.Chmod(path, 0o666); err != nil {
+		ln.Close()
+		return nil, err
+	}
+	onSocket = true
+	return ln, nil
+}
+
+// listenName: where ln listens, as --addr takes it.
+func listenName(ln net.Listener) string {
+	if ln.Addr().Network() == "unix" {
+		return socketPrefix + ln.Addr().String()
+	}
+	return ln.Addr().String()
 }
 
 // fatal says what stops Zone from starting (or serving), and exits.
@@ -193,13 +248,17 @@ func fatal(err error) {
 }
 
 const healthUsage = `Usage: zonewiki health [ADDR]
-  whether the Zone listening on ADDR (its --addr, default :5000) answers on localhost
-  and took its settings file: exit code 0, or 1`
+  whether the Zone listening on ADDR (its --addr, default :5000; unix:PATH for a
+  socket) answers on localhost and took its settings file: exit code 0, or 1`
 
 // healthURL: /api/health on localhost at the port of zonewiki health's
-// argument, the --addr Zone listens on (":8080"; default :5000).
+// argument, the --addr Zone listens on (":8080"; default :5000). For a
+// socket (unix:PATH) there is no port: healthClient connects to it.
 func healthURL(args []string) string {
 	port := "5000"
+	if len(args) > 0 && strings.HasPrefix(args[0], socketPrefix) {
+		return "http://localhost/api/health"
+	}
 	if len(args) > 0 {
 		if _, p, err := net.SplitHostPort(args[0]); err == nil && p != "" {
 			port = p
@@ -208,11 +267,25 @@ func healthURL(args []string) string {
 	return "http://localhost:" + port + "/api/health"
 }
 
-// health: whether Zone answers at url within 5 seconds, its settings file
-// taken (0), or not (1), for the container's healthcheck (compose.yaml),
-// which has no curl.
-func health(url string) int {
-	resp, err := (&http.Client{Timeout: 5 * time.Second}).Get(url)
+// healthClient: what zonewiki health asks with: within 5 seconds, and over
+// the socket when its argument names one (unix:PATH).
+func healthClient(args []string) *http.Client {
+	client := &http.Client{Timeout: 5 * time.Second}
+	if len(args) > 0 {
+		if path, ok := strings.CutPrefix(args[0], socketPrefix); ok {
+			client.Transport = &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+				return (&net.Dialer{}).DialContext(ctx, "unix", path)
+			}}
+		}
+	}
+	return client
+}
+
+// health: whether Zone answers at url within the client's 5 seconds, its
+// settings file taken (0), or not (1), for the container's healthcheck
+// (compose.yaml), which has no curl.
+func health(client *http.Client, url string) int {
+	resp, err := client.Get(url)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Zone:", err)
 		return 1

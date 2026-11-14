@@ -31,7 +31,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
   a healthcheck,
   `/app/zonewiki health`,
   which fetches `/api/health` from localhost (port 5000;
-  `zonewiki health :8080` for a Zone started with `--addr :8080`) (it fails while the settings file has an error Zone didn't take, see Reloading in `docs/spec/users.md`;
+  `zonewiki health :8080` for a Zone started with `--addr :8080`, `zonewiki health unix:PATH` for one on a socket) (it fails while the settings file has an error Zone didn't take, see Reloading in `docs/spec/users.md`;
   the image has no curl or Python;
   reported by `compose ps`;
   restarting an unhealthy container is podman's `--health-on-failure` or an autoheal container's job);
@@ -192,6 +192,16 @@ A new package on ghcr.io is private: make it public once in its settings on GitH
 When unset, `run.sh` exports `ZONE_BIND=127.0.0.1`, so the container's port 5000 is only exposed on the host's loopback interface, and the host-header check rejects any `Host` header but localhost and the settings file's `hosts`.
 When `ZONE_ALLOW_REMOTE=1`, `run.sh` exports `ZONE_BIND=0.0.0.0` (LAN-accessible port binding) and the host-header check is skipped unless `hosts` is set.
 `compose.yaml` maps `${ZONE_BIND:-127.0.0.1}:5000:5000`; used without `run.sh`, `ZONE_BIND=0.0.0.0` must be set in `.env` alongside `ZONE_ALLOW_REMOTE=1`.
+
+### A Unix socket
+
+`zonewiki --addr unix:PATH` listens on a Unix socket at PATH and on no port: for a reverse proxy on the same machine, when Zone runs from the binary or in a container with the socket's folder mounted and no network of its own.
+Caddy reaches it with `reverse_proxy unix//run/zone/zone.sock`, nginx with `proxy_pass http://unix:/run/zone/zone.sock:;`.
+Who may connect is who may reach the path: the socket itself is open to every local user (mode 0666, as a port on localhost is), so the folder it is in decides, and the proxy's user must be able to enter that folder.
+Zone replaces a socket file that a Zone that was killed left behind; it doesn't start when something still listens there, or when the path is a file of another kind (`listen` in `go/server.go`).
+Whoever connects has no address and counts as localhost: with `trusted-proxies` unset, the proxy's `X-Forwarded-For` names the client (the throttle in `docs/spec/security.md`).
+`hosts` and the rest of a proxy's setup stay as with a port.
+The healthcheck over it: `zonewiki health unix:PATH`.
 
 Optional git remote: `./run.sh config set git-remote git@github.com:user/wiki.git`.
 At start and when it changes, `setGitRemote()` adds or updates `origin` to that URL, so `git push` works from the terminal.

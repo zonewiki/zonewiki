@@ -386,6 +386,10 @@ wiki.example.org {
 }
 ```
 
+Without a port at all, Zone listens on a Unix socket (`zonewiki --addr
+unix:/run/zone/zone.sock`), and Caddy's line is `reverse_proxy
+unix//run/zone/zone.sock`.
+
 ```bash
 ./run.sh config set hosts wiki.example.org
 ./run.sh config set base-url https://wiki.example.org

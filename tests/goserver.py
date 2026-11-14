@@ -141,7 +141,7 @@ def _flags() -> list[str]:
 
 
 class GoServer:
-    """One Go server process, on addr (a free port: 127.0.0.1:0)."""
+    """One Go server process, on addr (a free port: 127.0.0.1:0; unix:PATH: a socket)."""
 
     def __init__(self, env: dict[str, str], log: Path, addr: str = "127.0.0.1:0", flags: list[str] = (),
                  config: str | None = None):
@@ -158,8 +158,12 @@ class GoServer:
         if " listening on " not in line:
             self.stop()
             raise RuntimeError(f"Go server didn't start: {line!r} (log: {log})")
-        host, port = line.rsplit(" ", 1)[1].strip().rsplit(":", 1)
-        self.host, self.port = host, int(port)
+        where = line.rsplit(" ", 1)[1].strip()
+        if where.startswith("unix:"):   # a socket: no port
+            self.host, self.port = where, 0
+        else:
+            host, port = where.rsplit(":", 1)
+            self.host, self.port = host, int(port)
 
     def stop(self) -> None:
         self.proc.terminate()

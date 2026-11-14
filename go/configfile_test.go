@@ -669,11 +669,11 @@ func TestHealthSettingsError(t *testing.T) {
 	cfg.AllowRemote = true // the test server's Host
 	srv := httptest.NewServer(newHandler())
 	defer srv.Close()
-	if code := health(srv.URL + "/api/health"); code != 0 {
+	if code := health(healthClient(nil), srv.URL+"/api/health"); code != 0 {
 		t.Fatal("healthy")
 	}
 	rewrite(t, path, "locale = de_AT\n")
-	if code := health(srv.URL + "/api/health"); code != 1 || !strings.Contains(settingsError(), "line 1") {
+	if code := health(healthClient(nil), srv.URL+"/api/health"); code != 1 || !strings.Contains(settingsError(), "line 1") {
 		t.Errorf("broken: %d", code)
 	}
 }

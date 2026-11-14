@@ -410,7 +410,8 @@ func TestHealth(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
-	if health(srv.URL+"/ok") != 0 || health(srv.URL+"/missing") != 1 || health("http://127.0.0.1:1/") != 1 {
+	client := healthClient(nil)
+	if health(client, srv.URL+"/ok") != 0 || health(client, srv.URL+"/missing") != 1 || health(client, "http://127.0.0.1:1/") != 1 {
 		t.Error("health")
 	}
 }

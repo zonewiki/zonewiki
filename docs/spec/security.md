@@ -150,6 +150,7 @@ Each rule has tests in `tests/test_routes.py` or `tests/test_mcp.py`, and `go/se
   when that is a trusted proxy (`trusted-proxies` in the settings file; unset: loopback),
   the last `X-Forwarded-For` entry that isn't itself a trusted proxy (the one the proxy appended; entries before it are the client's to make up).
   Anyone else's `X-Forwarded-For` is ignored: a client on the LAN, which reaches Zone without a proxy, could otherwise send a new one with every guess and never be throttled.
+  On a Unix socket (`--addr unix:PATH`, A Unix socket in `docs/spec/deployment.md`) a peer has no address and counts as `127.0.0.1` (`onSocket`): only what is on the machine and may reach the socket's path connects there.
   A peer on a private network that sends the header without being trusted (likely a proxy in a container network, `172.17.0.1`) is named once in the log with the `config set trusted-proxies` that trusts it; until then its clients count as one.
   Secrets are compared as bytes (`sameSecret`), so non-ASCII passwords work.
 - **Request bodies are capped** (`checks`): at most 16 MB (`bodyMax`: a page, a task, an MCP call), an upload (`/api/upload`) 100 MB, or the settings' `upload-max` (`Settings.uploadMax`; reloaded with them, so a change needs no restart).
