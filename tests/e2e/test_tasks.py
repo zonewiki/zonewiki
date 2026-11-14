@@ -751,7 +751,7 @@ def test_the_list_field_moves_a_task_to_another_list(page, wiki):
     modal = open_edit(page, "Prune")
     lists = modal.locator("#task-edit-list")
     expect(lists).to_have_value("chores")
-    expect(lists.locator("option")).to_have_text(["No list", "chores", "garden"])
+    expect(lists.locator("option")).to_have_text(["No list", "chores", "garden", "New list…"])
     expect(modal.locator(".tag-chip")).to_have_text(["#weekly×"])      # the list is no tag
     lists.select_option("garden")
     modal.get_by_role("button", name="Save").click()
@@ -760,6 +760,78 @@ def test_the_list_field_moves_a_task_to_another_list(page, wiki):
     expect(page.get_by_text("Saved to list “garden”.")).to_be_visible()
     wait_for_field(page, "Prune", "list", "garden")
     assert task_by_title(page, "Prune")["tags"] == ["weekly"]
+
+
+def test_the_list_field_makes_a_new_list(page, wiki):
+    make_list(page, "chores")
+    page.request.post("/api/tasks", data={"title": "Rake"})
+    page.goto("/tasks?view=open")
+    modal = open_edit(page, "Rake")
+    lists = modal.locator("#task-edit-list")
+    lists.select_option(label="New list…")
+    dlg = page.locator(".list-new-modal")
+    name = dlg.locator("#task-new-list-name")
+    expect(name).to_be_focused()
+    expect(lists).to_have_value("")                                   # New list… is no choice: the field is as it was
+    expect(dlg.locator("#task-new-list-private")).to_have_count(0)    # no users: no private lists
+    # Escape leaves only this dialog; the edit modal stays.
+    page.keyboard.press("Escape")
+    expect(dlg).to_have_count(0)
+    expect(modal).to_be_visible()
+    expect(lists).to_be_focused()
+    # A name there is: said in the dialog. Then the list is made and the field names it.
+    lists.select_option(label="New list…")
+    name.fill("chores")
+    name.press("Enter")
+    expect(dlg.locator(".rename-error")).to_have_text("There is a list #chores already")
+    expect(modal).to_be_visible()
+    name.fill("Garden")
+    name.press("Enter")
+    expect(dlg).to_have_count(0)
+    expect(lists).to_have_value("garden")
+    expect(lists.locator("option")).to_have_text(["No list", "chores", "garden", "New list…"])
+    assert "list" not in task_by_title(page, "Rake")                  # the task moves with Save
+    modal.get_by_role("button", name="Save").click()
+    wait_for_field(page, "Rake", "list", "garden")
+    expect(card(page, "Rake").locator(".task-tag-list")).to_have_text("garden")
+    # A new task: the line under its title follows the list just made.
+    page.keyboard.press("Escape")
+    page.locator("#task-add-btn").click()
+    lists.select_option(label="New list…")
+    name.fill("yard")
+    dlg.get_by_role("button", name="Create").click()
+    expect(page.locator("#task-edit-target")).to_have_text("Adds to the list yard.")
+
+
+def test_a_new_list_from_the_list_field_is_as_private_as_the_task(page, wiki, monkeypatch):
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "t1"), "bob": ("pw", "t2")})
+    page.request.post("/login", form={"username": "bob", "password": "pw"})
+    page.request.post("/api/tasks", data={"title": "Bob's errand"})
+    page.request.post("/login", form={"username": "alice", "password": "pw"})
+    make_list(page, "own", private=True)
+    page.request.post("/api/tasks", data={"title": "Alice's errand", "list": "own"})
+    page.goto("/tasks?view=open")
+    lists, note = page.locator("#task-edit-list"), page.locator("#task-edit-list-note")
+    box = page.locator("#task-new-list-private")
+    # A shared task stays shared: its new list can't be private.
+    open_edit(page, "Bob's errand")
+    lists.select_option(label="New list…")
+    expect(box).to_be_disabled()
+    expect(box).not_to_be_checked()
+    page.keyboard.press("Escape")
+    page.keyboard.press("Escape")
+    # A private task: its new list starts private, and the task stays so.
+    modal = open_edit(page, "Alice's errand")
+    lists.select_option(label="New list…")
+    expect(box).to_be_checked()
+    page.locator("#task-new-list-name").fill("secret")
+    page.locator("#task-new-list-create").click()
+    expect(lists).to_have_value("secret")
+    expect(lists.locator("option")).to_have_text(["No list", "🔒 own", "🔒 secret", "New list…"])
+    expect(note).to_have_text("Private: only you see this task.")
+    modal.get_by_role("button", name="Save").click()
+    wait_for_field(page, "Alice's errand", "list", "secret")
+    assert task_by_title(page, "Alice's errand")["private"] is True
 
 
 def test_a_tag_named_as_a_list_is_a_tag(page, wiki):
@@ -1350,7 +1422,7 @@ def test_the_move_dialog_makes_a_new_list(page, wiki):
     wait_for_field(page, "Glue", "list", None)
     page.keyboard.press("Escape")
     open_edit(page, "Bolts")
-    expect(page.locator("#task-edit-list option")).to_have_text(["No list", "shop"])
+    expect(page.locator("#task-edit-list option")).to_have_text(["No list", "shop", "New list…"])
 
 
 def test_a_list_made_in_the_move_dialog_is_a_pill_beside_the_pinned(page, wiki):
@@ -2255,7 +2327,7 @@ def test_a_task_in_a_private_list_is_private(page, wiki, monkeypatch):
     page.locator("#task-add-btn").click()
     lists, note = page.locator("#task-edit-list"), page.locator("#task-edit-list-note")
     expect(lists).to_have_value("mine")
-    expect(lists.locator("option")).to_have_text(["No list", "🔒 mine"])
+    expect(lists.locator("option")).to_have_text(["No list", "🔒 mine", "New list…"])
     expect(note).to_have_text("Private: only you see this task.")
     expect(page.locator(".task-edit-target")).to_have_text("Adds to the list mine, private.")
     expect(page.locator("#task-edit-private")).to_have_count(0)      # no Private box: the list says it
@@ -2330,7 +2402,7 @@ def test_c_t_goes_to_the_default_list_shared_or_private(page, wiki, monkeypatch)
     modal = page.locator(".task-edit-modal[open]")
     lists = modal.locator("select[id^=task-edit-list]")
     expect(lists).to_have_value("shared/task")
-    expect(lists.locator("option")).to_have_text(["No list", "task (shared)", "🔒 task"])
+    expect(lists.locator("option")).to_have_text(["No list", "task (shared)", "🔒 task", "New list…"])
     expect(modal.locator("[id^=task-edit-list-note]")).to_be_hidden()
     modal.locator("[id^=task-edit-title]").fill("Call the bank")
     modal.locator("button[type=submit]").click()
@@ -2373,7 +2445,7 @@ def test_a_shared_task_cant_go_into_a_private_list(page, wiki, monkeypatch):
     page.goto("/tasks?view=open")
     open_edit(page, "Bob's errand")
     lists, note = page.locator("#task-edit-list"), page.locator("#task-edit-list-note")
-    expect(lists.locator("option")).to_have_text(["No list", "🔒 own", "team"])
+    expect(lists.locator("option")).to_have_text(["No list", "🔒 own", "team", "New list…"])
     expect(lists.locator("option[value=own]")).to_have_attribute("disabled", "")
     expect(lists.locator("option[value=team]")).not_to_have_attribute("disabled", "")
     page.keyboard.press("Escape")

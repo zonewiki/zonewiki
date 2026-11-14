@@ -365,9 +365,15 @@ function syncQuickPreview() {
 // the user's alone, any other everyone's. A shared task stays shared, so
 // the private lists are off for it; a private task leaves for a shared
 // place by choosing one, and the line under the fields says what that does.
+// Its last choice, New list…, asks for a name (openNewList) and makes the
+// list, which is then the field's choice; the task goes into it with Save.
+const NEW_LIST = '/new';   // no list's ref: a name has no slash
+let listWas = '';          // the field's choice, to go back to from New list…
+let listTask = null;       // the task the field was filled for (null: a new one)
 function fillLists(task, ref) {
   const sel = app.listSelect;
   if (!sel) return;
+  listTask = task || null;
   const shared = !!task && !task.private;   // a shared task: no private list
   const options = [new Option('No list', '')];
   for (const l of app.listChoices) {
@@ -377,9 +383,85 @@ function fillLists(task, ref) {
     if (o.disabled) o.title = 'A shared task stays shared';
     options.push(o);
   }
+  options.push(new Option('New list…', NEW_LIST));
   sel.replaceChildren(...options);
   sel.value = app.listSet.has(ref) ? ref : '';
+  listWas = sel.value;
   showField('list', app.listChoices.length > 0);
+}
+// Before the field's other listeners: New list… is no list to sync to, so
+// the field goes back to what it said and the name is asked for.
+app.listSelect?.addEventListener('change', e => {
+  const sel = app.listSelect;
+  if (sel.value !== NEW_LIST) { listWas = sel.value; return; }
+  e.stopImmediatePropagation();
+  sel.value = listWas;
+  openNewList();
+}, true);
+// New list…: a small dialog over the edit modal with the list's name and,
+// with users, whether it is private (off for a shared task, which stays
+// shared; on when the task is in a private list now). The list is made at
+// once (POST /api/tasks/lists, as the dialog that moves tasks makes one),
+// every task app of the page learns of it (zone:list-made), and the field
+// names it.
+function openNewList() {
+  const sel = app.listSelect;
+  const canPrivate = !!app.appEl?.dataset.privateFolder;
+  const shared = !!listTask && !listTask.private;
+  const dlg = document.createElement('dialog');
+  dlg.className = 'modal list-new-modal';
+  dlg.innerHTML = `
+    <p class="modal-label">New list</p>
+    <form>
+      <input type="text" id="task-new-list-name" autocomplete="off" spellcheck="false" required
+             aria-label="The list's name" placeholder="Its name, e.g. shop">
+      ${canPrivate ? `<label class="promote-check"${shared ? ' title="A shared task stays shared"' : ''}>` +
+        `<input type="checkbox" id="task-new-list-private"${shared ? ' disabled' : app.editPrivate() ? ' checked' : ''}> Private: only you see it and its tasks</label>` : ''}
+      <p class="rename-error" hidden></p>
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary" id="task-new-list-create">Create</button>
+        <button type="button" class="btn" id="task-new-list-cancel">Cancel</button>
+      </div>
+    </form>`;
+  document.body.appendChild(dlg);
+  const nameInput = dlg.querySelector('#task-new-list-name'), privateBox = dlg.querySelector('#task-new-list-private');
+  const error = dlg.querySelector('.rename-error');
+  const close = () => { if (dlg.open) dlg.close(); };
+  dlg.addEventListener('close', () => { dlg.remove(); sel.focus(); });
+  dlg.querySelector('#task-new-list-cancel').addEventListener('click', close);
+  dlg.addEventListener('click', ev => { if (ev.target === dlg) close(); });
+  // Keys stay in this dialog: the edit modal under it has its own.
+  dlg.addEventListener('keydown', ev => ev.stopPropagation());
+  let creating = false;
+  dlg.querySelector('form').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    if (creating) return;
+    creating = true;
+    let made = null, why = 'The list couldn’t be made';
+    try {
+      const res = await fetch('/api/tasks/lists', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: nameInput.value, private: !!privateBox?.checked }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ref) made = data; else if (data.error) why = data.error;
+    } catch (_) { why = 'The list couldn’t be made: no answer from Zone'; }
+    creating = false;
+    if (!made) {
+      error.textContent = why;
+      error.hidden = false;
+      nameInput.focus();
+      return;
+    }
+    document.dispatchEvent(new CustomEvent('zone:list-made', { detail: made }));
+    fillLists(listTask, made.ref);
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    close();
+  });
+  dlg.showModal();
+  nameInput.focus();
 }
 function syncListNote() {
   if (!app.listNote) return;
