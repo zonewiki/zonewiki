@@ -555,6 +555,9 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 	}
 	rememberBy(t) // an undo sends its comments and history back (taskby.go)
 	before := assignedBefore{t.ID: t.Assignee}
+	if err := textUnchanged(t, data); err != nil {
+		return nil, err
+	}
 	if err := applyTaskFields(user, t, data, false); err != nil {
 		return nil, err
 	}
@@ -628,6 +631,31 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 	}
 	tellAssigned(user, before, t)
 	return t, nil
+}
+
+// textUnchanged: a write that changes a task's title or description may say
+// what it started from (was: {title, description}, as the dialog does):
+// when the task's text is another one by now, someone else changed it
+// meanwhile, and writing would take their change away. Refused (409), with
+// nothing written: the dialog keeps what was typed. Fields are merged by
+// writing only what changed; a text can't be.
+func textUnchanged(t *Task, data jsonObj) error {
+	if !data.Has("was") {
+		return nil
+	}
+	was, ok := jsonobj.As[jsonObj](data["was"])
+	if !ok {
+		return refuse("was must be an object")
+	}
+	for k, now := range map[string]string{"title": t.Title, "description": t.Description} {
+		if !was.Has(k) || !data.Has(k) {
+			continue
+		}
+		if s, _ := jsonobj.As[string](was[k]); strings.TrimSpace(s) != now {
+			return refuseAs(refusedConflict, "Someone changed this task's "+k+" while you were editing it. Copy what you wrote, close the dialog and open the task again.")
+		}
+	}
+	return nil
 }
 
 // toggleNoteCheck ticks or unticks the Nth checkbox of a task's notes.

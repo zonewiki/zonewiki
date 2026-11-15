@@ -796,6 +796,7 @@ function openEditModal(taskId, opts) {
   syncTarget();
   app.wontDoBtn.style.display = task && !task.closed_at ? '' : 'none';
   syncDates('open');
+  openedData = task ? formData(assigning() ? editAssignee() : null) : null;
   app.modal.showModal();
   fitNotes();
   if (task && opts?.focusComment) openCommentBox();
@@ -944,15 +945,10 @@ app.modal.addEventListener('keydown', e => {
   setNotesPreview(!previewing());
 }, true);
 
-app.form.addEventListener('submit', async e => {
-  e.preventDefault();
-  // A name typed into Assignee that names no one: say so, save nothing.
-  const assignee = assigning() ? editAssignee() : null;
-  if (assignee === undefined) return refuseAssignee();
-  // A comment still in its field is saved with the task.
-  if (!(await saveComment())) return;
-  const id = document.getElementById('task-edit-id' + app.sfx).value;
-  const data = {
+// The task as the form has it, as a write takes it. assignee: what the
+// Assignee field says (editAssignee), where the task can have one.
+function formData(assignee) {
+  return {
     title: document.getElementById('task-edit-title' + app.sfx).value.trim(),
     description: document.getElementById('task-edit-desc' + app.sfx).value.trim(),
     due_date: document.getElementById('task-edit-due' + app.sfx).value || null,
@@ -969,6 +965,41 @@ app.form.addEventListener('submit', async e => {
     ...(privateWas && !app.editPrivate() ? { share: true } : {}),
     ...(assigning() ? { assignee } : {}),
   };
+}
+// What the form held when an existing task's dialog opened: Save sends only
+// what differs from it (changedFields), so a field someone else changed
+// meanwhile isn't written back as it was when the dialog opened.
+let openedData = null;
+// The fields of data that differ from what the dialog opened with. The
+// repeat's three go together (the server reads them as one), share with
+// the list. A changed title or description says what it started from
+// (was): the server refuses it when the task's is another text by now.
+function changedFields(data) {
+  if (!openedData) return data;
+  const same = k => JSON.stringify(data[k]) === JSON.stringify(openedData[k]);
+  const rec = ['rec_type', 'rec_interval', 'rec_from'];
+  const out = {};
+  for (const k of Object.keys(data)) {
+    if (k === 'share' || rec.includes(k)) continue;
+    if (!same(k)) out[k] = data[k];
+  }
+  if (!rec.every(same)) for (const k of rec) out[k] = data[k];
+  if ('list' in out && data.share) out.share = true;
+  const was = {};
+  for (const k of ['title', 'description']) if (k in out) was[k] = openedData[k];
+  if (Object.keys(was).length) out.was = was;
+  return out;
+}
+
+app.form.addEventListener('submit', async e => {
+  e.preventDefault();
+  // A name typed into Assignee that names no one: say so, save nothing.
+  const assignee = assigning() ? editAssignee() : null;
+  if (assignee === undefined) return refuseAssignee();
+  // A comment still in its field is saved with the task.
+  if (!(await saveComment())) return;
+  const id = document.getElementById('task-edit-id' + app.sfx).value;
+  const data = formData(assignee);
   if (batchTitles && !id) {
     const titles = batchTitles, created = onCreated;
     onCreated = null;
@@ -1014,11 +1045,19 @@ app.form.addEventListener('submit', async e => {
   }
   if (!id) rememberShared(data.list);
   const created = onCreated;
+  if (id) {
+    // Only what was changed here; nothing changed, nothing written. When
+    // the save is refused (a text someone else changed meanwhile, a list
+    // that won't do) the dialog comes back with what was typed still in it.
+    const changed = changedFields(data);
+    onCreated = null;
+    app.modal.close();
+    if (Object.keys(changed).length && !(await app.updateTask(id, changed))) app.modal.showModal();
+    return;
+  }
   onCreated = null;
   app.modal.close();
-  if (id) {
-    await app.updateTask(id, data);
-  } else if (created) {
+  if (created) {
     const task = await app.createTask(data);
     if (task) created(task);
   } else {

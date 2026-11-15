@@ -553,6 +553,9 @@ Each with a dark-mode value.
   A press outside only closes it: `pointerdown` in the capture phase, then `swallowNextClick` eats that press's mouse/click events, so a tap can't also hit what's underneath.
 - **`?task=<id>`** selects, scrolls to and flashes (`.task-flash`) that task; a missing task gets a notice.
   A newly created task is flashed the same way when the view shows it.
+- **Two people on one task** (`changedFields`, `openedData` in `js/taskmodal.js`; `textUnchanged` in `go/tasks.go`): the dialog remembers the task as it opened and **Save sends only the fields changed in it** (the repeat's three together, `share` with the list), so a deadline, a tag or an assignee someone else set meanwhile is not written back as it was. Nothing changed, nothing is sent.
+  Fields merge that way; a text can't. A changed title or description goes with what it started from (`was: {title, description}`), and when the task's text is another one by now the write is refused whole (409, "Someone changed this task's description while you were editing it. …"): the dialog comes back with what was typed still in it, to copy.
+  `PUT /api/tasks/<id>` takes `was` from any client; without it a write is as it always was.
 - **Rejected writes** show the server's error as a toast (`showNotice`).
 - **Toasts and modals** (`placeToast`): a toast shown while a modal dialog is open goes into the dialog, since in `<body>` it would sit under the dialog's top layer and its Undo couldn't be clicked (deleting a comment showed that); when the dialog closes the toast moves back to `<body>`.
 - **One undo at a time** (`showUndo`): only the latest action's undo is live,

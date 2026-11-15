@@ -2683,3 +2683,26 @@ class TestTasksChanged:
         # A list made, too.
         assert client.post("/api/tasks/lists", json={"name": "shop"}).status_code == 201
         assert word() != third
+
+
+class TestTextChangedMeanwhile:
+    """A write that changes a task's title or description may say what it
+    started from (was): refused when the task's text is another one by now."""
+
+    def test_a_text_someone_else_changed_is_not_overwritten(self, client):
+        task = create_task(client, title="T", description="first").get_json()
+        url = f"/api/tasks/{task['id']}"
+        # As it was: written.
+        resp = client.put(url, json={"description": "second", "was": {"description": "first"}})
+        assert resp.status_code == 200 and resp.get_json()["description"] == "second"
+        # Another text by now: 409, nothing written, and no other field of the write either.
+        resp = client.put(url, json={"description": "mine", "due_date": "2030-01-01", "was": {"description": "first"}})
+        assert resp.status_code == 409 and "description" in resp.get_json()["error"]
+        got = next(t for t in client.get("/api/tasks").get_json() if t["id"] == task["id"])
+        assert got["description"] == "second" and got["due_date"] is None
+        # The title likewise; a was for a field the write doesn't change is not looked at.
+        assert client.put(url, json={"title": "T2", "was": {"title": "other"}}).status_code == 409
+        assert client.put(url, json={"title": "T2", "was": {"title": "T", "description": "stale"}}).status_code == 200
+        # Without was a write is as it always was; was must be an object.
+        assert client.put(url, json={"description": "third"}).status_code == 200
+        assert client.put(url, json={"description": "x", "was": "first"}).status_code == 400

@@ -18,7 +18,8 @@ import (
 )
 
 // tasksRoute answers a task list API request: a refusal as {"error": …} (400,
-// 403 for a viewer's change to a shared task),
+// 403 for a viewer's change to a shared task, 409 for a text someone else
+// changed meanwhile),
 // 404, or 503 when a task list file is unreadable (the client retries).
 func tasksRoute(h func(w http.ResponseWriter, r *http.Request) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -28,7 +29,7 @@ func tasksRoute(h func(w http.ResponseWriter, r *http.Request) error) http.Handl
 		case err == nil:
 		case errors.Is(err, taskfiles.ErrCorrupt):
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
-		case refused && (rf.kind == refusedInvalid || rf.kind == refusedReadOnly):
+		case refused && (rf.kind == refusedInvalid || rf.kind == refusedReadOnly || rf.kind == refusedConflict):
 			// tasks.js shows the error (a viewer's: readOnlyMsg).
 			writeJSON(w, rf.kind.status(), map[string]string{"error": rf.msg})
 		case refused:

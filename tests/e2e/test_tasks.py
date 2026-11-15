@@ -734,6 +734,48 @@ def test_tasks_show_what_someone_else_changed_within_a_minute(page, wiki):
     expect(card(page, "Added elsewhere")).to_be_visible()
 
 
+def test_save_writes_only_what_was_changed_in_the_dialog(page, wiki):
+    """Two people on one task: Save sends the fields changed in this dialog,
+    so what someone else changed meanwhile stays; a text both changed is
+    refused, and the dialog comes back with what was typed."""
+    task = page.request.post("/api/tasks", data={"title": "Shared work", "description": "first"}).json()
+    wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
+    page.goto("/page/tasks?view=open")
+    card(page, "Shared work").locator(".task-title").click(button="right")
+    page.get_by_role("menuitem", name="Edit…").click()
+    modal = page.locator("#task-edit-modal")
+    expect(modal).to_be_visible()
+    # Meanwhile, elsewhere: a deadline and a tag.
+    page.request.put(f"/api/tasks/{task['id']}", data={"due_date": "2031-05-06", "tags": ["elsewhere"]})
+    modal.locator("#task-edit-title").fill("Shared work, renamed")
+    with page.expect_request(lambda r: r.method == "PUT" and r.url.endswith(task["id"])) as sent:
+        modal.get_by_role("button", name="Save").click()
+    assert sent.value.post_data_json == {"title": "Shared work, renamed", "was": {"title": "Shared work"}}
+    expect(modal).to_be_hidden()
+    wait_until(page, lambda: page.request.get("/api/tasks").json()[0]["title"] == "Shared work, renamed")
+    got = page.request.get("/api/tasks").json()[0]
+    assert got["due_date"] == "2031-05-06" and got["tags"] == ["elsewhere"] and got["description"] == "first"
+    # Nothing changed: nothing is sent.
+    card(page, "Shared work, renamed").locator(".task-title").click(button="right")
+    page.get_by_role("menuitem", name="Edit…").click()
+    puts = []
+    page.on("request", lambda r: puts.append(r) if r.method == "PUT" else None)
+    modal.get_by_role("button", name="Save").click()
+    expect(modal).to_be_hidden()
+    page.wait_for_timeout(200)
+    assert not puts
+    # The description changed by both: refused, and the dialog is back with what was typed.
+    card(page, "Shared work, renamed").locator(".task-title").click(button="right")
+    page.get_by_role("menuitem", name="Edit…").click()
+    page.request.put(f"/api/tasks/{task['id']}", data={"description": "theirs"})
+    modal.locator("#task-edit-desc").fill("mine")
+    modal.get_by_role("button", name="Save").click()
+    expect(page.get_by_text("Someone changed this task's description")).to_be_visible()
+    expect(modal).to_be_visible()
+    expect(modal.locator("#task-edit-desc")).to_have_value("mine")
+    assert page.request.get("/api/tasks").json()[0]["description"] == "theirs"
+
+
 def test_tasks_refreshes_when_restored_from_bfcache(page, wiki):
     _tasks_with_one_task(page, wiki)
     page.evaluate("window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted: true}))")
