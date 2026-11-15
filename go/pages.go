@@ -700,13 +700,6 @@ func (rq *Req) pinnedLists() []ListInfo {
 	return rq.pinned
 }
 
-// defaultList: where New task and c t put a task: the first pinned list,
-// else with users the user's private list (fallbackList); nil when there
-// is neither.
-func (rq *Req) defaultList() *ListInfo {
-	return defaultListOf(rq.who(), rq.pinnedLists())
-}
-
 // allBacklinkCounts: how many pages link to each slug, of those the
 // request may see (rq nil: all).
 func allBacklinkCounts(rq *Req) map[string]int {

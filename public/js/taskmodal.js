@@ -227,30 +227,41 @@ function editAssignee() {
   if (typed === 'none') return null;
   return userNamed(typed) || undefined;
 }
-// A new task's list that nobody chose: the user's default list when it is
-// private (their first pinned list, or the list "private" of one who pinned
-// nothing: fallbackList in go/tasklists.go), for as long as the List field
-// holds what the dialog put there. Such a task can still be assigned: a task given
-// to someone is shared work, so with an assignee (the field, or the title's
-// @name) it is in no list, and without one again in the private list. The
-// line under the title says which. Choosing a list oneself ends it.
-let autoList = '';
+// A new task in the user's Inbox that nobody chose a list for (autoInbox:
+// with users, for as long as the List field holds what the dialog put
+// there). The Inbox is its user's alone, and a task for someone is shared
+// work: with an assignee (the field, or the title's @name) the List field
+// moves to a shared list (sharedDefault), and without one back to the
+// Inbox. The line under the title says which. With no shared list to move
+// to, Save asks for one. Choosing a list oneself ends it.
+let autoInbox = false;
 let autoSetting = false;
-// How often the dialog was opened: what a late answer checks before it
-// fills a field in.
-let openCount = 0;
-app.listSelect?.addEventListener('change', () => { if (!autoSetting) autoList = ''; });
+app.listSelect?.addEventListener('change', () => { if (!autoSetting) autoInbox = false; });
+// The shared list a new task for someone goes to when none was chosen: the
+// one this browser last made a task in, else the only one there is.
+const LAST_SHARED = 'zone-tasks-shared-list';
+function sharedDefault() {
+  const shared = app.listChoices.filter(l => !l.private).map(l => l.ref);
+  let last = '';
+  try { last = localStorage.getItem(LAST_SHARED) || ''; } catch (_) {}
+  return shared.includes(last) ? last : shared.length === 1 ? shared[0] : '';
+}
+function rememberShared(ref) {
+  if (!ref || app.isPrivateList(ref)) return;
+  try { localStorage.setItem(LAST_SHARED, ref); } catch (_) {}
+}
+const assignedNow = () => !!assigneeInput && (!!assigneeChip.words().length || !!assigneeInput.value.trim() || !!quickParse()?.assignee);
 function syncAutoList() {
-  if (!autoList || !app.listSelect || !assigneeInput) return;
-  const assigned = !!assigneeChip.words().length || !!assigneeInput.value.trim() || !!quickParse()?.assignee;
-  const want = assigned ? '' : autoList;
-  if (app.listSelect.value === want) return;
+  if (!autoInbox || !app.listSelect || !assigneeInput) return;
+  const want = assignedNow() ? sharedDefault() : '';
+  // (No shared list to move to: the line under the title asks for one.)
+  if (app.listSelect.value === want) { syncTarget(); return; }
   autoSetting = true;
   app.listSelect.value = want;
   app.listSelect.dispatchEvent(new Event('change'));
   autoSetting = false;
 }
-const assigning = () => !!assigneeInput && (!app.editPrivate() || !!autoList);
+const assigning = () => !!assigneeInput && (!app.editPrivate() || autoInbox);
 function syncAssigneeField() {
   if (!assigneeField) return;
   showField('assignee', assigning() && (!!assigneeChip.words().length || !!assigneeInput.value.trim()));
@@ -272,7 +283,15 @@ const assigneeAc = assigneeInput && attachTagAc(assigneeInput, {
   accept: name => { setAssignee(name); assigneeInput.focus(); },
 });
 if (assigneeInput) {
-  loadPeople();
+  // Who a task can be given to comes with a request: a title typed before
+  // its answer (c t on a page that loads the task app for it) is read
+  // again then, for its @name.
+  loadPeople().then(() => {
+    if (!app.modal.open) return;
+    syncQuickPreview();
+    syncAutoList();
+    syncTarget();
+  });
   assigneeInput.addEventListener('input', () => { assigneeInput.setCustomValidity(''); syncAutoList(); });
   // Enter with no suggestion open: a typed name becomes the chip rather
   // than saving the task (as in Tags); Enter on an empty field saves.
@@ -296,7 +315,7 @@ function refuseAssignee() {
 if (app.titleInput) attachTagAc(app.titleInput, {
   word: () => document.getElementById('task-edit-id' + app.sfx).value ? null : hashWordAtCaret(app.titleInput),
   suggest: w => rankTags(w.partial, { ...Object.fromEntries([...app.listSet].filter(r => !r.includes('/')).map(r => [r, 1])), ...tagCounts(st.tasks) }, w.partial ? 8 : 12),
-  accept: (tag, w) => { insertHashTag(app.titleInput, tag, w); syncQuickPreview(); },
+  accept: (tag, w) => { insertHashTag(app.titleInput, tag, w); syncQuickPreview(); syncTarget(); },
 });
 // And the @name shorthand, from the users who can be assigned.
 if (app.titleInput && assigneeInput) attachTagAc(app.titleInput, {
@@ -310,7 +329,9 @@ if (app.titleInput && assigneeInput) attachTagAc(app.titleInput, {
     if (people.me in counts) counts[people.me] += st.tasks.length + 1;
     return rankTags(w.partial, counts);
   },
-  accept: (name, w) => { insertHashTag(app.titleInput, name, w); syncQuickPreview(); },
+  // (A name taken from the suggestions is no input event: the List field
+  // and the line under the title follow here.)
+  accept: (name, w) => { insertHashTag(app.titleInput, name, w); syncQuickPreview(); syncAutoList(); syncTarget(); },
 });
 
 // ── Add task ───────────────────────────────────────────────────────────────
@@ -386,7 +407,7 @@ function syncQuickPreview() {
 }
 
 // The List field: the lists the user sees, their own private ones marked,
-// and No list. A task is as private as its list: one in a private list is
+// and the Inbox (no list). A task is as private as its list: one in a private list is
 // the user's alone, any other everyone's. A shared task stays shared, so
 // the private lists are off for it; a private task leaves for a shared
 // place by choosing one, and the line under the fields says what that does.
@@ -400,7 +421,11 @@ function fillLists(task, ref) {
   if (!sel) return;
   listTask = task || null;
   const shared = !!task && !task.private;   // a shared task: no private list
-  const options = [new Option('No list', '')];
+  const inbox = new Option((app.inboxPrivate ? '🔒 ' : '') + 'Inbox', '');
+  // With users the Inbox is its user's alone: no place for a shared task.
+  inbox.disabled = app.inboxPrivate && shared;
+  if (inbox.disabled) inbox.title = 'A shared task stays shared';
+  const options = [inbox];
   for (const l of app.listChoices) {
     const twin = l.ref.startsWith('shared/');
     const o = new Option((l.private ? '🔒 ' : '') + app.listName(l.ref) + (twin ? ' (shared)' : ''), l.ref);
@@ -488,11 +513,25 @@ function openNewList() {
   dlg.showModal();
   nameInput.focus();
 }
+// A private task that the List field takes to a shared list is assigned to
+// its user, once: what was theirs stays in their My tasks unless they take
+// the name off.
+let sharedByEdit = false;
+app.listSelect?.addEventListener('change', () => {
+  if (!privateWas || sharedByEdit || app.editPrivate() || !assigneeInput || !people.users?.has(people.me)) return;
+  sharedByEdit = true;
+  if (!assigneeChip.words().length) setAssignee(people.me);
+  syncAssigneeField();
+  syncMore();   // the field shows now: no "+ Assignee" beside it
+});
+app.listSelect?.addEventListener('change', () => app.listSelect.setCustomValidity(''));
 function syncListNote() {
   if (!app.listNote) return;
   const users = document.body.dataset.users === '1';
   const isPrivate = app.editPrivate();
-  const text = isPrivate ? 'Private: only you see this task.'
+  // A new task says who sees it under its title (syncTarget): once is enough.
+  const isNew = !document.getElementById('task-edit-id' + app.sfx).value;
+  const text = isNew ? '' : isPrivate ? 'Private: only you see this task.'
     : privateWas ? 'Everyone who uses the wiki will see and change this task. It can’t be made private again.' : '';
   app.listNote.hidden = !users || !text;
   app.listNote.textContent = text;
@@ -509,11 +548,21 @@ function syncTarget() {
   if (!isNew) return;
   const q = quickParse();
   const ref = q && quickList(q).list || app.listSelect?.value || '';
-  // With users the line says who sees the task: a task in a shared list or
-  // in none is everyone's, and can't be made private later.
-  const where = ref ? `Adds to the list ${app.listName(ref)}` : 'Adds to no list';
-  const who = app.privateLists.has(ref) ? ', private' : document.body.dataset.users === '1' ? ': everyone sees it' : '';
+  // With users it says who sees it: a shared list's task can't be made
+  // private later.
+  const users = document.body.dataset.users === '1';
+  const where = ref ? `Adds to the list ${app.listName(ref)}` : users ? 'Adds to your Inbox' : 'Adds to the Inbox';
+  const who = !users ? '' : app.isPrivateList(ref) ? ': only you see it' : ': everyone sees it';
   targetEl.textContent = where + who + '.';
+  // A task for someone, still in the Inbox nobody chose: it needs a shared
+  // list. (In the Inbox the user chose, as in a private list, there is no
+  // assignee.)
+  const needsList = !ref && app.inboxPrivate && assigning() && assignedNow();
+  targetEl.classList.toggle('task-edit-target-warn', needsList);
+  if (needsList) {
+    targetEl.textContent = 'A task for someone else needs a shared list: choose one in List.';
+    showField('list', true);   // also in a wiki without a list: New list… makes one
+  }
 }
 app.listSelect?.addEventListener('change', syncTarget);
 app.listSelect?.addEventListener('change', () => syncQuickPreview());
@@ -730,25 +779,11 @@ function openEditModal(taskId, opts) {
   fillLists(task, task ? app.taskList(task) || '' : opts && 'list' in opts ? opts.list || '' : app.newTaskList());
   privateWas = !!task && !!task.private;
   syncListNote();
-  // Nobody chose the list when it is the default one in a view of no one list.
-  autoList = !task && !app.initList && app.privateLists.has(app.defaultList) && !!app.listSelect && app.listSelect.value === app.defaultList
-    ? app.defaultList : '';
+  // Nobody chose the Inbox of a new task that starts there.
+  autoInbox = !task && app.inboxPrivate && !!app.listSelect && app.listSelect.value === '';
+  sharedByEdit = false;
   // A new task starts with the user the filter names, as with its tags.
-  // One whose My tasks hides unassigned tasks gets the task they add where
-  // no one list is in view (it goes to their default list, or none), unless
-  // that list is private.
-  const mineNew = !task && !(opts && 'assignee' in opts) && app.newMine && !app.initList && !app.noList && !!app.listSelect
-    && app.listSelect.value === app.defaultList && !app.editPrivate();
-  setAssignee(task ? task.assignee || '' : opts && 'assignee' in opts ? opts.assignee || '' : app.filterDefaultAssignee() || mineNew && people.me || '');
-  // (Who that is may still be on its way: c t right after the page loaded.)
-  const opened = ++openCount;
-  if (mineNew && !people.me && assigneeInput) {
-    loadPeople().then(() => {
-      if (opened !== openCount || !app.modal.open || assigneeChip.words().length || assigneeInput.value.trim()) return;
-      setAssignee(people.me);
-      syncAssigneeField();
-    });
-  }
+  setAssignee(task ? task.assignee || '' : opts && 'assignee' in opts ? opts.assignee || '' : app.filterDefaultAssignee());
   syncAssigneeField();
   const recType = task?.recurrence?.type || '';
   app.recTypeSelect.value = recType;
@@ -969,6 +1004,15 @@ app.form.addEventListener('submit', async e => {
     if (quick.assignee) data.assignee = quick.assignee;
   }
   if (!data.title) { document.getElementById('task-edit-title' + app.sfx).focus(); return; }
+  // A task for someone, still in the user's Inbox (or a private list): it
+  // needs a shared list. New list… in the field makes one.
+  if (data.assignee && app.listSelect && app.isPrivateList(data.list || '')) {
+    showField('list', true);
+    app.listSelect.setCustomValidity('A task for someone else needs a shared list');
+    app.listSelect.reportValidity();
+    return;
+  }
+  if (!id) rememberShared(data.list);
   const created = onCreated;
   onCreated = null;
   app.modal.close();

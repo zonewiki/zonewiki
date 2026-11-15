@@ -120,17 +120,16 @@ Done tasks go to a yearly archive. Beyond that:
   shown as a page shows it (checklists, tables, code, links), dated comments in
   Markdown too (a status line or several), a history of every date change, and undo for completing
   and deleting.
-- Lists: a task is in one list or in none. Make a list with New list… on the Tasks page, give it
+- Lists: a task is in one list. A new task lands in your Inbox; file it by moving it to a list.
+  Make a list with New list… on the Tasks page, give it
   its own settings (a limit on how much is in Focus, keep tasks for a shopping list's staples),
   and show it on any page (`[[tasks: list=groceries]]`). Your pinned lists are a row of
   pills on the Tasks page; the others, and all tasks, are under More.
-- My tasks is where the Tasks module opens: what is assigned to you wherever it is, and what
-  is nobody else's in the lists you pinned and in no list. Give a task to someone, or file it
-  in a list you don't follow, and it is off your plate. New tasks go to the first pinned list
-  (Move first in a list's menu). In a team, My tasks can hide the tasks nobody has taken yet
-  (Hide unassigned tasks in its settings): what you add is then assigned to you. A task
-  someone gives you is marked new on its card, and mailed to you where Zone has a mail
-  server and your address.
+- My tasks is where the Tasks module opens: what is yours. Alone, that is every task (leave a
+  catalogue or a someday list out of it in the list's settings). With users, it is your own
+  lists and the shared tasks assigned to you; a shared list's unassigned tasks are its backlog,
+  to take with one key. A task someone gives you is marked new on its card, and mailed to
+  you where Zone has a mail server and your address.
 - Task lists inside any page (`[[tasks: tag=work view=plan]]`), a single task inline
   as a live chip you can tick (`[[task:…]]`), and **Make task** in the editor
   to turn lines of meeting notes into tasks.
@@ -162,7 +161,7 @@ Done tasks go to a yearly archive. Beyond that:
 - **Several users** (optional, `./run.sh user add NAME`): each signs in with their own
   name and password, their changes are committed in their name, and each has
   a private folder (`private/<name>/`), private notes, private tasks
-  (the tasks in a private list of theirs, 🔒 on their cards) and their own pinned lists.
+  (their Inbox and the tasks in a private list of theirs, 🔒 on their cards) and their own pinned lists.
   A shared task can be assigned to a user (`@anna` in its title or its dialog);
   `@me` in the filter, or a page with `[[tasks: assignee=me]]`, shows everyone their own.
   Everything else is shared. Each has a role: **admin** (the first user;

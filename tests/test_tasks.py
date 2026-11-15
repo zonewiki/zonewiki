@@ -2076,13 +2076,19 @@ class TestLists:
         assert client.get("/api/tasks/due-count").get_json()["count"] == 1
 
     def test_due_count_is_my_tasks(self, client, shop):
-        # The task in no list, and a list's once the list is pinned.
+        # Without users every task, in the Inbox or in a list, pinned or
+        # not; but a list left out of My tasks (home=off).
         today = date.today().isoformat()
         create_task(client, due_date=today)
         create_task(client, due_date=today, list="groceries")
-        assert client.get("/api/tasks/due-count").get_json()["count"] == 1
+        assert client.get("/api/tasks/due-count").get_json()["count"] == 2
         assert client.post("/tasks/pin-list", data={"list": "groceries", "pin": "1"}).status_code == 302
         assert client.get("/api/tasks/due-count").get_json()["count"] == 2
+        assert client.post("/api/tasks/settings", json={"list": "groceries", "set": {"home": "off"}}).status_code == 200
+        assert client.get("/api/tasks/due-count").get_json()["count"] == 1
+        # The places' counts (the switcher's pills): My tasks, the Inbox, the pinned list.
+        places = client.get("/api/tasks/due-count?places=1").get_json()["places"]
+        assert {k: v["count"] for k, v in places.items()} == {"mine": 1, "inbox": 1, "list:groceries": 1}
 
     def test_completed_count_per_scope(self, client, shop):
         for fields in ({}, {"list": "groceries"}, {"list": "Groceries", "tags": ["x"]}, {"tags": ["groceries"]}):
@@ -2092,7 +2098,10 @@ class TestLists:
         assert count("") == 4
         assert count("?list=Groceries") == 2      # a tag of that name is no list
         assert count("?lists=groceries|nope") == 2
-        assert count("?mine=1") == 2     # My tasks: those in no list (the list isn't pinned)
+        assert count("?mine=1") == 4     # My tasks: without users every task
+        assert count("?list=inbox") == 2 and count("?list=none") == 2     # the Inbox: those in no list
+        assert client.post("/api/tasks/settings", json={"list": "groceries", "set": {"home": "off"}}).status_code == 200
+        assert count("?mine=1") == 2     # but a list left out of it
         assert count("?all=1") == 4      # the old "show separate lists" scope
 
     def test_a_task_is_in_a_list_by_naming_it(self, client, shop):
@@ -2143,7 +2152,7 @@ class TestLists:
         body = client.get("/page/shop").get_data(as_text=True)
         assert "There is no list <code>#groceries</code>" in body and body.count('class="tasks-app"') == 1
         made = client.post("/tasks/new-list", data={"name": "groceries"})
-        assert made.headers["Location"] == "/tasks?list=groceries&made=1"   # the first list: pinned
+        assert made.headers["Location"] == "/tasks?list=groceries"
         assert 'data-init-list="groceries"' in client.get("/page/shop").get_data(as_text=True)
 
     def test_search_links_to_list(self, client, shop):

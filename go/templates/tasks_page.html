@@ -28,8 +28,8 @@
 {{define "tasks_main"}}
 {{- /* The switcher, the heading and the list on one sheet (style.css, The sheet). */}}
 <div class="sheet">
-{{- /* The list switcher: My tasks and the pinned lists as pills, then More: the
-    other lists, No list (while such open tasks are) and All tasks, as links
+{{- /* The list switcher: My tasks, the Inbox and the pinned lists as pills, then More: the
+    other lists and All tasks, as links
     in a details (it is there for a viewer and in sharing mode too, where the
     ⋯ menu isn't). More carries the name of the view the page shows when that
     is one of its own, and no number. The pills
@@ -39,7 +39,6 @@
 {{- if .More}}<nav class="tasks-places" aria-label="Task lists"{{if .Menu}} data-reorder{{end}}><div class="tasks-places-group">
 {{- range .Places}}<a href="{{.Href}}" class="tasks-place" data-place="{{.Key}}" title="{{.Title}}{{if .Private}} (only you see it){{end}}"{{if .Current}} aria-current="page"{{end}}>
 {{- if .Pinned}}<span class="tasks-place-pin" aria-hidden="true">{{template "icon_pin"}}</span>{{end}}
-{{- if .First}}<span class="tasks-place-first" aria-hidden="true">+</span>{{end}}
 {{- if .Private}}<span class="tasks-place-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="tasks-place-label">{{.Label}}</span>{{template "module_counts" .Counts}}</a>
 {{- end}}
 {{- with .More}}<details class="lists-more"><summary class="tasks-place lists-more-btn" title="{{if .Current}}{{.Label}}: one of the lists you haven't pinned and all tasks{{else}}The lists you haven't pinned, and all tasks{{end}}"{{if .Current}} aria-current="page"{{end}}><span class="tasks-place-label">{{.Label}}</span><span class="lists-more-caret" aria-hidden="true">▾</span></summary>
@@ -49,36 +48,35 @@
 {{- if .Private}}<span class="tasks-place-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="lists-more-name">{{.Label}}</span></a>
 {{- end}}
 {{- if .Lists}}<hr class="lists-more-rule">{{end}}
-{{- with .NoList}}<a href="{{.Href}}" class="lists-more-item lists-more-none" data-place="{{.Key}}" title="{{.Title}}: they are in My tasks, unless they are someone else's"{{if .Current}} aria-current="page"{{end}}><span class="lists-more-name">{{.Label}}</span>{{template "module_counts" .Counts}}</a>
-{{end}}<a href="/tasks" class="lists-more-item lists-more-all" title="Every task, in whatever list or in none"{{if .All}} aria-current="page"{{end}}><span class="lists-more-name">All tasks</span></a>
+<a href="/tasks" class="lists-more-item lists-more-all" title="Every task you see, in whatever list"{{if .All}} aria-current="page"{{end}}><span class="lists-more-name">All tasks</span></a>
 </div></details>{{end}}</div></nav>{{end}}
-<header class="page-header"><h1>{{.Heading}}{{with .List}}{{if .Private}} <span class="lock" title="A private list: only you see it and its tasks">🔒</span>{{end}}{{end}}</h1>
+<header class="page-header"><h1>{{.Heading}}{{with .List}}{{if .Private}} <span class="lock" title="A private list: only you see it and its tasks">🔒</span>{{end}}{{end}}{{if .InboxPrivate}} <span class="lock" title="Your Inbox: only you see its tasks">🔒</span>{{end}}</h1>
 {{- if .Menu}}<div class="page-header-actions"><button type="button" class="btn page-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="page-menu" title="More: new list{{if .List}}, rename, pin, delete{{end}}{{if .Tag}}, rename the tag{{end}}" aria-label="More actions">⋯</button></div>{{end}}</header>
 {{- if .Menu}}
 <div class="page-menu-backdrop" hidden></div><div class="page-menu" id="page-menu" role="menu" aria-label="Task list actions" hidden>
 <button type="button" role="menuitem" data-dialog="list-new-dialog" id="list-new-btn">New list…</button>
 {{- with .List}}
 <button type="button" role="menuitem" data-dialog="list-rename-dialog" id="list-rename-btn">Rename…</button>
-{{- /* The pin is the user's own: a pinned list is a pill and its tasks are in My tasks; the first pinned list takes new tasks. */}}
+{{- /* The pin is the user's own: a pinned list is a pill of their switcher. */}}
 <form method="post" action="/tasks/pin-list" class="page-menu-form"><input type="hidden" name="list" value="{{.Ref}}">
 {{- if not $.Pin}}<button type="submit" role="menuitem" name="pin" value="1" id="list-pin-btn">Pin</button>{{end}}
-{{- if and $.Pin (ne $.Pin "first")}}<button type="submit" role="menuitem" name="pin" value="first" id="list-first-btn" title="New task (c t) adds its task to your first pinned list">Move first</button>{{end}}
-{{- if and $.Pin (not $.PinStays)}}<button type="submit" role="menuitem" name="pin" value="0" id="list-unpin-btn">Unpin</button>{{end}}</form>
+{{- if and $.Pin (ne $.Pin "first")}}<button type="submit" role="menuitem" name="pin" value="first" id="list-first-btn" title="Its pill comes first among your pinned lists">Move first</button>{{end}}
+{{- if $.Pin}}<button type="submit" role="menuitem" name="pin" value="0" id="list-unpin-btn">Unpin</button>{{end}}</form>
 {{- if .Private}}<button type="button" role="menuitem" data-dialog="list-share-dialog" id="list-share-btn">Make shared…</button>{{end}}
 <button type="button" role="menuitem" data-dialog="list-delete-dialog" id="list-delete-btn">Delete…</button>
 {{- end}}
 {{- if .Tag}}<button type="button" role="menuitem" data-dialog="tag-rename-dialog" id="tag-rename-btn">Rename tag…</button>{{end -}}
 </div>
 {{- /* New list…: a place for tasks (POST /tasks/new-list). */}}
-<dialog id="list-new-dialog" class="modal" data-params="newlist_error newlist_name"{{if .NewListError}} data-open{{end}}><p class="modal-label">New list</p><p class="modal-desc">A list is a place for tasks, with an entry of its own in the row above them. A task is in one list, or in none.</p><form method="post" action="/tasks/new-list"><input type="text" name="name" id="list-new-input" value="{{.NewListName}}" placeholder="Its name, e.g. shop" aria-label="The list's name" autocomplete="off" spellcheck="false" required>
+<dialog id="list-new-dialog" class="modal" data-params="newlist_error newlist_name"{{if .NewListError}} data-open{{end}}><p class="modal-label">New list</p><p class="modal-desc">A list is a place for tasks, with an entry of its own in the row above them. A task is in one list; a new one starts in {{if .Users}}your{{else}}the{{end}} Inbox.</p><form method="post" action="/tasks/new-list"><input type="text" name="name" id="list-new-input" value="{{.NewListName}}" placeholder="Its name, e.g. shop" aria-label="The list's name" autocomplete="off" spellcheck="false" required>
 {{- if .Users}}<label class="promote-check" title="The list and the tasks in it are yours alone: no one else sees them, not even in search"><input type="checkbox" name="private" id="list-new-private" value="1"> Private: only you see it and its tasks</label>{{end}}
 {{- template "error" (dict "message" .NewListError)}}<div class="modal-actions"><button type="submit" class="btn btn-primary" id="list-new-submit">Create</button><button type="button" class="btn" data-close id="list-new-cancel">Cancel</button></div></form></dialog>
 {{- with .List}}
 {{- /* Rename…: the list's name, on its tasks, in the pins and where pages name it. */}}
 <dialog id="list-rename-dialog" class="modal" data-params="rename_error rename_name"{{if $.ListRenameError}} data-open{{end}}><p class="modal-label">Rename list #{{.Name}}</p><p class="modal-desc">Its tasks stay in it, and the pages that show it (<code>[[tasks: list={{.Name}}]]</code>) and links to it follow.</p><form method="post" action="/tasks/rename-list"><input type="hidden" name="list" value="{{.Ref}}"><input type="text" name="new_name" id="list-rename-input" value="{{$.ListRenameName}}" aria-label="New name for #{{.Name}}" autocomplete="off" spellcheck="false" required>{{template "error" (dict "message" $.ListRenameError)}}<div class="modal-actions"><button type="submit" class="btn btn-primary" id="list-rename-submit">Rename</button><button type="button" class="btn" data-close id="list-rename-cancel">Cancel</button></div></form></dialog>
-{{- /* Delete…: the list goes, its tasks to another list or to none; its open ones closed as won't do if asked. */}}
-<dialog id="list-delete-dialog" class="modal" data-params="delete_error"{{if $.DeleteError}} data-open{{end}}><p class="modal-label">Delete list #{{.Name}}</p><p class="modal-desc">The list goes; its tasks stay, open and closed ones. They move to:</p><form method="post" action="/tasks/delete-list"><input type="hidden" name="list" value="{{.Ref}}"><select name="to" id="list-delete-to" aria-label="Move its tasks to">{{if not .Private}}<option value="">No list</option>{{end}}{{range $.MoveTo}}<option value="{{.Ref}}">#{{.Name}}{{if .Private}} (private){{else if $.List.Private}} (shared){{end}}</option>{{end}}{{if .Private}}<option value="">No list (shared)</option>{{end}}</select>
-{{- if .Private}}<label class="promote-check" title="A task moved out of a private list is shared: it can't be made private again"><input type="checkbox" name="share" id="list-delete-share" value="1"> Share its tasks if they go to a shared place: everyone who uses the wiki will see them</label>{{end}}
+{{- /* Delete…: the list goes, its tasks to another list (a private one's also to the Inbox; a shared one's, with users, to #general when no other is named); its open ones closed as won't do if asked. */}}
+<dialog id="list-delete-dialog" class="modal" data-params="delete_error"{{if $.DeleteError}} data-open{{end}}><p class="modal-label">Delete list #{{.Name}}</p><p class="modal-desc">The list goes; its tasks stay, open and closed ones. They move to:</p><form method="post" action="/tasks/delete-list"><input type="hidden" name="list" value="{{.Ref}}"><select name="to" id="list-delete-to" aria-label="Move its tasks to">{{if .Private}}<option value="">Your Inbox</option>{{else if not $.Users}}<option value="">The Inbox (no list)</option>{{else if $.DeleteToGeneral}}<option value="">#general</option>{{end}}{{range $.MoveTo}}<option value="{{.Ref}}">#{{.Name}}{{if .Private}} (private){{else if $.List.Private}} (shared){{end}}</option>{{end}}{{if and $.Users (not .Private) (not $.DeleteToGeneral) (not $.MoveTo)}}<option value="">No other shared list</option>{{end}}</select>
+{{- if .Private}}<label class="promote-check" title="A task moved out of a private list into a shared one is shared: it can't be made private again"><input type="checkbox" name="share" id="list-delete-share" value="1"> Share its tasks if they go to a shared list: everyone who uses the wiki will see them</label>{{end}}
 {{- if $.OpenInList}}<label class="promote-check" title="They go to Closed as won't do, and can be reopened from there"><input type="checkbox" name="close" id="list-delete-close" value="1"> Close its {{if eq $.OpenInList 1}}open task{{else}}{{$.OpenInList}} open tasks{{end}} as won't do</label>{{end}}
 {{- template "error" (dict "message" $.DeleteError)}}<div class="modal-actions"><button type="submit" class="btn btn-danger" id="list-delete-submit">Delete</button><button type="button" class="btn" data-close id="list-delete-cancel">Cancel</button></div></form></dialog>
 {{- if .Private}}
@@ -92,10 +90,12 @@
 {{- end}}
 {{- end}}
 <article class="page-content">
-{{- /* A first list, just made: what its pin changed. */}}
-{{- if .MadeFirst}}<p class="tasks-list-home tasks-made-first">New tasks go into this list now, and its tasks are in <a href="/tasks?mine=1">My tasks</a>.</p>{{end}}
-{{- /* My tasks: what it holds (mineFilter), the pinned lists as links (pinnedSources). */}}
-{{- if .Mine}}<p class="tasks-list-home tasks-pinned-lists">{{if .MineOwn}}What is assigned to you{{if .PinnedLists}}, and your private tasks in your pinned lists ({{range $i, $l := .PinnedLists}}{{if $i}}, {{end}}<a href="{{$l.Href}}">{{$l.Label}}</a>{{end}}){{end}}. Unassigned tasks are hidden{{else}}{{if .MineAssigns}}What is yours or nobody's in {{end}}{{if .PinnedLists}}{{if .MineAssigns}}your{{else}}Your{{end}} pinned lists ({{range $i, $l := .PinnedLists}}{{if $i}}, {{end}}<a href="{{$l.Href}}">{{$l.Label}}</a>{{end}}) and {{if .MineAssigns}}in {{else}}the tasks in {{end}}<a href="/tasks?list=none">no list</a>{{else}}{{if .MineAssigns}}<a href="/tasks?list=none">no list</a>{{else}}The tasks in <a href="/tasks?list=none">no list</a>: you have pinned no list{{end}}{{end}}{{if .MineAssigns}}, and what is assigned to you elsewhere{{end}}{{end}}.</p>{{end -}}
+{{- /* My tasks: what it holds (mineFilter), the lists left out as links (leftOutLinks). */}}
+{{- if .Mine}}<p class="tasks-list-home tasks-mine-line">{{if .MineAssigns}}Your own tasks and what is assigned to you{{else}}Every open task{{end}}{{if .LeftOutLists}}, but the lists left out of it ({{range $i, $l := .LeftOutLists}}{{if $i}}, {{end}}<a href="{{$l.Href}}">{{$l.Label}}</a>{{end}}){{end}}.</p>{{end}}
+{{- /* The Inbox: what it is for. */}}
+{{- if .Inbox}}<p class="tasks-list-home tasks-inbox-line">{{if .InboxPrivate}}New tasks land here, and only you see them. Move one to a list to file it; in a shared list everyone sees it.{{else}}New tasks land here, in no list. Move one to a list to file it.{{end}}</p>{{end}}
+{{- /* A list: its backlog (a shared list's tasks no one has), and that it is left out of My tasks. */}}
+{{- if or .Unassigned .LeftOut}}<p class="tasks-list-home tasks-list-facts">{{with .Unassigned}}<a href="/tasks?list={{$.List.Ref}}&amp;assignee=none" class="tasks-unassigned" title="The tasks of this list that no one has: take one with a, Enter">{{.}} unassigned</a>{{if $.LeftOut}} · {{end}}{{end}}{{if .LeftOut}}Left out of <a href="/tasks?mine=1">My tasks</a>{{end}}.</p>{{end -}}
 {{.TasksHTML}}</article>
 </div>
 {{- end}}

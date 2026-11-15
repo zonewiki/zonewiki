@@ -149,9 +149,9 @@ const app = {
   get tabLabel() { return tabLabel; },
   get thisYear() { return thisYear; },
   get initList() { return initList; },
-  get noList() { return noList; },
-  get defaultList() { return defaultList; },
-  get newMine() { return newMine; },
+  get inboxView() { return inboxView; },
+  get inboxPrivate() { return inboxPrivate; },
+  isPrivateList,
 };
 
 st.tasks = [];
@@ -332,47 +332,43 @@ const initAssignee = document.body.dataset.users === '1'
 const LIMIT = parseInt(appEl?.dataset.initLimit || urlParams.get('limit'), 10) || null;
 // Lists: a list is a place a task is in (its `list`; one, or none). A view
 // of a list ([[tasks: list=<name>]], /tasks?list=) shows its tasks, and a
-// new task there goes into it; My tasks (data-init-mine, with the pinned
-// lists in data-init-lists) shows what TasksCore.inMine says, and a new
-// task there goes into the first pinned list. Elsewhere (all tasks, a
-// tag's embed) every task shows, with its list as a chip. The lists come as refs: a list's
+// new task there goes into it; My tasks (data-init-mine, with the lists
+// left out of it in data-init-out) shows what TasksCore.inMine says.
+// Elsewhere (all tasks, a tag's embed) every task shows, with its list as
+// a chip. A task in no list is in the Inbox, where a new task goes unless
+// its view has a list: with users (data-inbox-private) its maker's own. The lists come as refs: a list's
 // name, or shared/<name> for the shared one beside the user's own list of
 // that name; data-lists has those the user sees, with which are private
 // (theirs alone, and so are the tasks in them).
 const initList = cleanList(appEl?.dataset.initList);
 const initLists = (appEl?.dataset.initLists || '').split('|').filter(Boolean);
-// My tasks: 'assign' where assignment counts for the user ('own': and they
-// hide unassigned tasks), else 'lists'.
+// My tasks: 'assign' where assignment counts for the user, else 'lists';
+// and the lists left out of it.
 const initMine = appEl?.dataset.initMine || '';
+const initOut = (appEl?.dataset.initOut || '').split('|').filter(Boolean);
+// With users a task in no list is in its user's Inbox: private.
+const inboxPrivate = appEl?.dataset.inboxPrivate === '1';
 let listChoices = [];
 try { listChoices = JSON.parse(appEl?.dataset.lists || '[]'); } catch (_) {}
 const listSet = new Set(listChoices.map(l => l.ref));
 const privateLists = new Set(listChoices.filter(l => l.private).map(l => l.ref));
 // A list made while the page is open (New list… in the dialog that moves
 // tasks to a list, js/taskselect.js, which says so to every task app of the
-// page): one more list the user sees, in the List field and the dialogs;
-// My tasks shows its tasks too when it was pinned.
+// page): one more list the user sees, in the List field and the dialogs.
 document.addEventListener('zone:list-made', e => {
-  const { ref, private: isPrivate, pinned } = e.detail || {};
+  const { ref, private: isPrivate } = e.detail || {};
   if (!ref || listSet.has(ref)) return;
   listChoices.push({ ref, private: !!isPrivate });
   listChoices.sort((a, b) => listName(a.ref).localeCompare(listName(b.ref)) || a.ref.localeCompare(b.ref));
   listSet.add(ref);
   if (isPrivate) privateLists.add(ref);
-  if (pinned && initMine) initLists.push(ref);
 });
-// The user's default list: where a new task goes in a view of no one list.
-const defaultList = appEl?.dataset.defaultList || '';
-// The user's My tasks hides unassigned tasks (mineOwn in go/tasklists.go):
-// a new task nobody says a list or an assignee for is assigned to them,
-// unless its list is private, so that a capture is in their home view.
-const newMine = appEl?.dataset.newMine === '1';
 // A list's name, as its chip and the dialogs show it.
 function listName(ref) { return String(ref).replace(/^shared\//, ''); }
 // The tooltip of a list's chip (cards, the filter).
 function listTooltip(ref) {
   const r = String(ref).replace(/^-?list:/, '').toLowerCase();
-  if (r === 'none' && !listSet.has('none')) return 'In no list';
+  if ((r === 'inbox' || r === 'none') && !listSet.has(r)) return inboxPrivate ? 'In your Inbox: only you see it' : 'In the Inbox: in no list';
   return privateLists.has(r) ? 'List (private: only you see it)' : 'List';
 }
 // The tabs' names: Open/Plan/Focus, or an embed's own (`labels=`, rendered
@@ -396,16 +392,16 @@ function taskList(t) {
   const ref = !t.private && listSet.has('shared/' + t.list) ? 'shared/' + t.list : t.list;
   return listSet.has(ref) && privateLists.has(ref) === !!t.private ? ref : null;
 }
-// list=none (no list is called so): the view of the tasks in no list, as
-// the filter word list:none finds them (isNoList in go/tasklists.go).
-const noList = initList === 'none' && !listSet.has('none');
+// list=inbox (no list is called so): the Inbox, the view of the tasks in
+// no list, as the filter word list:inbox finds them (isInbox in
+// go/tasklists.go).
+const inboxView = initList === 'inbox' && !listSet.has('inbox');
 function inScope(t) {
   if (initMine) {
-    return TasksCore.inMine(t, initLists.includes(taskList(t)),
-      { me: people.me, users: people.users, assigns: initMine !== 'lists', own: initMine === 'own' });
+    return TasksCore.inMine(t, initOut.includes(taskList(t)), { me: people.me, assigns: initMine === 'assign' });
   }
   if (initLists.length) return initLists.includes(taskList(t));
-  if (noList) return !t.list;
+  if (inboxView) return !t.list;
   return !initList || taskList(t) === initList;
 }
 // The scope of the server's closed counts, matching inScope.
@@ -414,12 +410,12 @@ function scopeQuery() {
     : initLists.length ? `?lists=${encodeURIComponent(initLists.join('|'))}`
     : initList ? `?list=${encodeURIComponent(initList)}` : '';
 }
-// The list a new task starts in here: the view's own (none in the view of
-// the tasks in no list), else the default list.
-function newTaskList() { return noList ? '' : initList || defaultList; }
-// The edit modal's List field names a private list: the task is (or will
-// be) the user's alone.
-function editPrivate() { return privateLists.has(listSelect?.value || ''); }
+// The list a new task starts in here: the view's own, else none: the Inbox.
+function newTaskList() { return inboxView ? '' : initList; }
+// The edit modal's List field names a private list, or with users the
+// Inbox: the task is (or will be) the user's alone.
+function isPrivateList(ref) { return ref ? privateLists.has(ref) : inboxPrivate; }
+function editPrivate() { return isPrivateList(listSelect?.value || ''); }
 // ?view= / [[tasks: view=…]] pick the tab.
 const urlView = urlParams.get('view') || '';   // explicit per-navigation override
 const embedView = appEl?.dataset.initView || '';   // [[tasks: view=…]] — always wins when specified

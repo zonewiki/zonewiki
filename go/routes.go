@@ -879,8 +879,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	var list *ListInfo
 	var sections []linkSection
 	var chip template.HTML
-	var pinnedLinks []pinnedLink
-	mine := false
+	mine, inbox := false, false
 	missing := ""
 	crumbs := []crumb{{"Tasks", ""}}
 	// The breadcrumb's key names the view for the navigation trail; no page has it.
@@ -900,9 +899,10 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 			title, heading = "List: "+name, "List: "+name // the name as the list has it
 			// Backlinks: the pages that embed the list, as a page's are.
 			backlinks(rq.listPages(l.Ref))
-		} else if isNoList(ref, rq.taskLists()) {
-			// ?list=none: the tasks in no list, under More in the switcher.
-			params, name, place, title, heading = noListParams(), "No list", noListRef, "No list", "No list"
+		} else if isInbox(ref, rq.taskLists()) && rq.hasInbox() {
+			// ?list=inbox: the Inbox, the tasks in no list.
+			params, name, place, title, heading = inboxParams(), "Inbox", inboxRef, "Inbox", "Inbox"
+			inbox = true
 		} else {
 			missing, place = ref, "" // nothing in the switcher is current
 		}
@@ -917,10 +917,6 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 		}
 		params, place, title, heading, key = mineParams(rq.who()), "mine", "My tasks", "My tasks", mineHref
 		crumbs = []crumb{{"Tasks", "/tasks"}, {"My tasks", ""}}
-		// Which lists it shows, and as its Backlinks the pages that embed them.
-		var pages []PageRef
-		pinnedLinks, pages = rq.pinnedSources()
-		backlinks(pages)
 		mine = true
 	}
 	var tasksHTML string
@@ -941,10 +937,13 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	}
 	v := &tasksPageView{Heading: heading, Missing: missing,
 		Menu: !rq.sharing && !listsUnmigrated && mayWriteTasks(rq.who()) == nil, Users: privateFolder(rq.user) != "",
-		Mine: mine, MineAssigns: mine && mineAssigns(rq.who()), MineOwn: mine && mineOwn(rq.who()),
+		Mine: mine, MineAssigns: mine && mineAssigns(rq.who()), Inbox: inbox, InboxPrivate: inbox && inboxOwner(rq.who()) != "",
 		NewListName: q.Get("newlist_name"), NewListError: q.Get("newlist_error"),
-		Places: places, More: more, PinnedLists: pinnedLinks, TasksHTML: htmlOf(tasksHTML), LinkSections: sections,
+		Places: places, More: more, TasksHTML: htmlOf(tasksHTML), LinkSections: sections,
 		BreadcrumbHTML: breadcrumb(rq, crumbs, key, true, title, chip)}
+	if mine {
+		v.LeftOutLists = rq.leftOutLinks()
+	}
 	if list != nil {
 		v.List = list
 		v.ListRenameName, v.ListRenameError = firstNonEmpty(q.Get("rename_name"), list.Name), q.Get("rename_error")
@@ -952,24 +951,28 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 		for i, p := range rq.pinnedLists() {
 			if p.Ref == list.Ref {
 				v.Pin = map[bool]string{true: "first", false: "1"}[i == 0]
-				// The user's list "private" as their only pin stays pinned (standingPin).
-				sp := standingPin(rq.who(), rq.taskLists())
-				v.PinStays = len(rq.pinnedLists()) == 1 && sp != nil && sp.Ref == list.Ref
 			}
 		}
-		// Just made (?made=1, newListRoute), and the user's one pinned list:
-		// what that changed.
-		v.MadeFirst = q.Get("made") != "" && v.Pin == "first" && len(rq.pinnedLists()) == 1
-		// How many open tasks it has: Delete… offers to close them.
+		// How many open tasks it has: Delete… offers to close them; and of a
+		// shared list's, with users, how many no one has: its backlog.
+		assigns := settings().Users != nil && !list.Private()
 		for _, t := range rq.openTasks() {
 			if t.List == list.Name && t.Owner == list.Owner {
 				v.OpenInList++
+				if assigns && !settings().assignable(t.Assignee) {
+					v.Unassigned++
+				}
 			}
 		}
+		v.LeftOut = list.LeftOut() && (list.Private() || !mineAssigns(rq.who()))
+		// Where a deleted list's tasks go when no list is named: a private
+		// list's to the Inbox, a shared one's with users to #general.
+		v.DeleteToGeneral = settings().Users != nil && !list.Private() && list.Name != generalListName
 		// Where its tasks can go when it is deleted: the other lists, a
 		// private list's own kind first.
 		for _, ref := range sortedKeys(rq.taskLists()) {
-			if o := rq.taskLists()[ref]; o.Ref != list.Ref && (list.Private() || !o.Private()) {
+			if o := rq.taskLists()[ref]; o.Ref != list.Ref && (list.Private() || !o.Private()) &&
+				!(v.DeleteToGeneral && !o.Private() && o.Name == generalListName) {
 				v.MoveTo = append(v.MoveTo, o)
 			}
 		}
@@ -1060,12 +1063,7 @@ func newListRoute(w http.ResponseWriter, r *http.Request) {
 		pageFailed(w, r, err)
 		return
 	}
-	// A first list is the user's one pin from now: the page says what that changes.
-	href := listHref(ref)
-	if pinned := pinnedLists(user, taskLists(user)); len(pinned) == 1 && pinned[0].Ref == ref {
-		href += "&made=1"
-	}
-	http.Redirect(w, r, href, http.StatusFound)
+	http.Redirect(w, r, listHref(ref), http.StatusFound)
 }
 
 // pinOrderRoute: the pinned lists in a new order (the row's pills, dragged:
@@ -1134,12 +1132,15 @@ func pinListRoute(w http.ResponseWriter, r *http.Request) {
 // tasksPageView: /tasks (tasks_page.html). List: the list shown, nil for
 // all tasks and My tasks; Missing: the name ?list= gave when no
 // list has it; Tag: the one tag ?tag= names; Places: the list switcher's
-// pills and More its last one (nil: no switcher); MadeFirst: the list was
-// just made and is the user's one pinned list;
+// pills and More its last one (nil: no switcher);
 // Mine: the view is My tasks (MineAssigns: assignment counts in it for
-// this user, mineAssigns; MineOwn: and they hide unassigned tasks, mineOwn), PinnedLists: the pinned lists it shows the
-// tasks of; LinkSections: a list's Backlinks, My tasks' those of its
-// lists (with them the page has a page view's columns). Menu: the ⋯ menu (New list…; a list's Rename…,
+// this user, mineAssigns), LeftOutLists: the lists left out of it; Inbox:
+// the view is the Inbox (InboxPrivate: the user's own, with users);
+// Unassigned: a shared list's open tasks that no one has (with users);
+// LeftOut: the list is left out of the user's My tasks; DeleteToGeneral: a
+// deleted shared list's tasks go to #general when no list is named;
+// LinkSections: a list's Backlinks (with them the page has a page view's
+// columns). Menu: the ⋯ menu (New list…; a list's Rename…,
 // its pin, Make shared…, Delete…; a tag's Rename tag…), for who may change
 // tasks; Users: with users, so New list… has its Private box. Pin: how the
 // user pinned List ("", "1", "first": their first pinned list); MoveTo: where its tasks can go
@@ -1150,7 +1151,6 @@ type tasksPageView struct {
 	Heading, Missing, Tag           string
 	List                            *ListInfo
 	Pin                             string
-	PinStays                        bool // no Unpin: the user's list "private" while it is their only pin
 	MoveTo                          []ListInfo
 	OpenInList                      int // the list's open tasks (Delete…'s "Close its open tasks")
 	RenameName, RenameError         string
@@ -1158,12 +1158,14 @@ type tasksPageView struct {
 	ListRenameName, ListRenameError string
 	DeleteError, ShareError         string
 	Menu, Users                     bool
-	Mine, MineAssigns, MineOwn      bool
+	Mine, MineAssigns               bool
 	NewListName, NewListError       string
 	Places                          []TaskPlace
 	More                            *TasksMore
-	MadeFirst                       bool
-	PinnedLists                     []pinnedLink
+	Inbox, InboxPrivate             bool
+	LeftOutLists                    []listLink
+	Unassigned                      int
+	LeftOut, DeleteToGeneral        bool
 	LinkSections                    []linkSection
 	TasksHTML, BreadcrumbHTML       template.HTML
 }

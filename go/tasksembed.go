@@ -22,8 +22,9 @@ const tasksPlaceholder = "ZONETASKSPLACEHOLDER"
 type tasksEmbedView struct {
 	Tag, View     string
 	List          string           // the list it shows, as the user names it (a ref); "" none
-	Lists         string           // several lists as one (lists=), or My tasks' pinned lists: their refs, "|" between
-	Mine          string           // My tasks (mine=1): "assign" where assignment counts for the user ("own": and they hide unassigned tasks), else "lists"
+	Lists         string           // several lists as one (lists=): their refs, "|" between
+	Out           string           // My tasks: the lists left out of it, their refs, "|" between
+	Mine          string           // My tasks (mine=1): "assign" where assignment counts for the user, else "lists"
 	Plan          string           // "on", "off" or "": the embed doesn't say
 	Limit         string           // the WIP limit, "" none
 	Labels        []string         // the Open and Focus tabs' names
@@ -31,14 +32,13 @@ type tasksEmbedView struct {
 	Sfx           string           // "-<InstanceID>" after the first: its elements' ids end in it
 	Headless      bool             // hidden: only its edit modal is used (the editor's Make task, a new task from any page)
 	Keep          string           // "1": new tasks here are keep tasks
-	Pinned        bool             // the user's first pinned list or My tasks: its New is the one New task clicks on its page
+	Pinned        bool             // the Inbox or My tasks: its New is the one New task clicks on its page
 	NewTags       string           // new tasks' tags, comma-separated
 	CanAssign     bool             // with users: the modal has the Assignee field
 	Assignee      string           // assignee=, with users: whose tasks it shows
 	PrivateFolder string           // the user's private folder: where a private task's pasted files go
 	ListsJSON     string           // the lists the user sees, [{ref, private}], as JSON: the List field's choices
-	DefaultList   string           // the user's default list (a ref): where a new task goes in a view of no one list
-	NewMine       bool             // a new task nobody says a list or an assignee for is assigned to the user (mineOwn), unless its list is private
+	InboxPrivate  bool             // with users: a task without a list is in the user's Inbox, private
 	Settings      *embedSettingsAt // where the settings dialog writes; nil: no dialog (the ⋯ menu)
 }
 
@@ -58,6 +58,7 @@ type embedSettingsAt struct {
 	List         string
 	ListSettings string
 	Pin          string
+	Home         bool // the list can be left out of the user's My tasks (its setting home)
 }
 
 // listEmbedParams: what an embed of the list l shows: the list's own
@@ -129,6 +130,8 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, p
 				set["noshare"] = "1"
 			}
 			at.List, at.ListSettings = list.Ref, jsonobj.Text(set)
+			// Left out of My tasks counts for a list that is the user's own.
+			at.Home = list.Private() || !mineAssigns(user)
 			for _, p := range rq.pinnedLists() {
 				if p.Ref == list.Ref {
 					at.Pin = "1"
@@ -175,60 +178,45 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, p
 	for _, ref := range sortedKeys(lists) {
 		choices = append(choices, listChoice{ref, lists[ref].Private()})
 	}
-	def := ""
-	if d := rq.defaultList(); d != nil {
-		def = d.Ref
-		// The user's private list that the first task into it makes
-		// (fallbackList): a choice already.
-		if _, made := lists[def]; !made {
-			choices = append(choices, listChoice{def, d.Private()})
-			slices.SortFunc(choices, func(a, b listChoice) int { return strings.Compare(a.Ref, b.Ref) })
-		}
-	}
 	scope := paramsScope(params)
 	sfx := ""
 	if instance > 0 {
 		sfx = "-" + strconv.Itoa(instance)
 	}
-	// What a new task gets is its list's to say: in My tasks, where it goes
-	// into the first pinned list, that list's tags and keep.
-	newFrom := params
-	if d := rq.defaultList(); d != nil && scope == mineScope {
-		newFrom = d.Params
-	}
 	keep := ""
-	if isTrue(newFrom.Get("keep")) {
+	if isTrue(params.Get("keep")) {
 		keep = "1"
 	}
 	v := tasksEmbedView{
 		Tag: params.Get("tag"), View: view, Plan: plan, Settings: settingsAt,
 		Limit: limit, Labels: labels, InstanceID: instance, Sfx: sfx, Headless: headless,
-		Keep: keep, Pinned: scope == mineScope || def != "" && scope == def,
-		NewTags:       strings.Join(newTaskTags(newFrom), ","),
+		Keep: keep, Pinned: scope == mineScope || isInbox(scope, lists),
+		NewTags:       strings.Join(newTaskTags(params), ","),
 		CanAssign:     settings().Users != nil,
 		Assignee:      assigneeParam(params),
 		PrivateFolder: privateFolder(user),
-		ListsJSON:     jsonobj.Text(choices), DefaultList: def, NewMine: mineOwn(user),
+		ListsJSON:     jsonobj.Text(choices),
+		InboxPrivate:  inboxOwner(user) != "",
 	}
 	if scope == mineScope {
-		// My tasks: the browser needs the pins and whether assignment counts
-		// (TasksCore.inMine, as mineFilter).
+		// My tasks: the browser needs the lists left out of it and whether
+		// assignment counts (TasksCore.inMine, as mineFilter).
 		refs := []string{}
-		for _, l := range rq.pinnedLists() {
-			refs = append(refs, l.Ref)
+		for _, ref := range sortedKeys(lists) {
+			if lists[ref].LeftOut() {
+				refs = append(refs, ref)
+			}
 		}
-		v.Lists, v.Mine = strings.Join(refs, "|"), "lists"
-		if mineOwn(user) {
-			v.Mine = "own"
-		} else if mineAssigns(user) {
+		v.Out, v.Mine = strings.Join(refs, "|"), "lists"
+		if mineAssigns(user) {
 			v.Mine = "assign"
 		}
 	} else if strings.Contains(scope, "|") {
 		v.Lists = scope
 	} else if shown {
 		v.List = list.Ref
-	} else if isNoList(scope, lists) {
-		v.List = noListRef // the tasks in no list; a new one there is in none
+	} else if isInbox(scope, lists) {
+		v.List = inboxRef // the Inbox: the tasks in no list; a new one there is in none
 	}
 	var b bytes.Buffer
 	if err := partials.ExecuteTemplate(&b, "tasks_embed", v); err != nil {
@@ -386,8 +374,8 @@ func processTasksEmbeds(rq *Req, text, page string, settings bool) (string, []ta
 		params := parseTasksParams(embedArgs(g))
 		params.src = &embedSrc{len(embeds), embedArgs(g)}
 		var html string
-		if name := cleanList(params.Get("list")); name == "" || isNoList(name, lists) {
-			// No list=, or list=none (the tasks in no list): the embed's own params.
+		if name := cleanList(params.Get("list")); name == "" || isInbox(name, lists) {
+			// No list=, or list=inbox (the tasks in no list): the embed's own params.
 			html = buildTasksEmbed(rq, params, len(embeds), false, at)
 		} else if l, ok := listOnPage(name, page, rq.who(), lists); ok {
 			html = buildTasksEmbed(rq, listEmbedParams(l, params), len(embeds), false, at)
@@ -479,31 +467,25 @@ var mineScopeParams = TasksParams{}.With("mine", "1")
 // mineHref: My tasks, where the Tasks links go.
 const mineHref = "/tasks?mine=1"
 
-// pinnedLink: one of the pinned lists My tasks shows, under its heading:
-// the list at /tasks?list= ("#name").
-type pinnedLink struct{ Href, Label string }
+// listLink: a list as a link under a heading: the list at /tasks?list=
+// ("#name").
+type listLink struct{ Href, Label string }
 
 // listHref: the Tasks page of the list the user names ref.
 func listHref(ref string) string { return "/tasks?list=" + url.QueryEscape(ref) }
 
-// pinnedSources: the lists My tasks shows the tasks of: the pinned lists in
-// their order, and the pages that embed them (each list's listPages), once
-// each, A–Z by title.
-func (rq *Req) pinnedSources() ([]pinnedLink, []PageRef) {
-	var links []pinnedLink
-	var pages []PageRef
-	seen := map[string]bool{}
-	for _, l := range rq.pinnedLists() {
-		links = append(links, pinnedLink{listHref(l.Ref), "#" + l.Name})
-		for _, p := range rq.listPages(l.Ref) {
-			if !seen[p.Slug] {
-				seen[p.Slug] = true
-				pages = append(pages, p)
-			}
+// leftOutLinks: the lists left out of the user's My tasks (LeftOut), as far
+// as that counts for them: their own (private ones; without users, or for
+// one no task is assigned to, any), A–Z.
+func (rq *Req) leftOutLinks() []listLink {
+	var links []listLink
+	lists, assigns := rq.taskLists(), mineAssigns(rq.who())
+	for _, ref := range sortedKeys(lists) {
+		if l := lists[ref]; l.LeftOut() && (l.Private() || !assigns) && !rq.listHidden(l) {
+			links = append(links, listLink{listHref(l.Ref), "#" + l.Name})
 		}
 	}
-	slices.SortStableFunc(pages, func(a, b PageRef) int { return strings.Compare(strings.ToLower(a.Title), strings.ToLower(b.Title)) })
-	return links, pages
+	return links
 }
 
 // assigneeParam: an embed's assignee= as the browser gets it: lowercase,
@@ -553,40 +535,39 @@ func countTasks(user string, tasks []*Task, lists map[string]ListInfo, params ..
 
 // TaskPlace is an entry of the task list switcher (tasks_page.html): a
 // list, or My tasks. Key names it for the counts' refresh (js/chrome.js):
-// "list:<ref>", "all", "mine", "none" (No list, under More).
-// Pinned: a pinned list; First: the first of several pinned lists, where a
-// new task goes (its pill carries a plus).
+// "list:<ref>", "all", "mine", "inbox". Pinned: a pinned list.
 type TaskPlace struct {
-	Key, Label, Title, Href         string
-	Pinned, First, Private, Current bool
-	Counts                          TaskCounts
+	Key, Label, Title, Href  string
+	Pinned, Private, Current bool
+	Counts                   TaskCounts
 }
 
 // taskPlaces: the pills of the list switcher: My tasks (/tasks?mine=1,
-// with the counts the Tasks links have), then the pinned lists in their
-// order, each at /tasks?list=, each with its counts; in sharing mode not a
-// list that is not for sharing. What isn't pinned is under More (taskMore).
+// with the counts the Tasks links have), the Inbox (for who has one: not a
+// viewer among users), then the pinned lists in their order, each at
+// /tasks?list=, each with its counts; in sharing mode not a list that is
+// not for sharing, nor a user's Inbox. What isn't pinned is under More
+// (taskMore).
 func (rq *Req) taskPlaces() []TaskPlace {
 	user := rq.who()
 	pinned, lists := rq.pinnedLists(), rq.taskLists()
 	tasks := rq.openTasks()
-	title := "Your pinned lists and the tasks in no list"
-	if mineOwn(user) {
-		title = "What is assigned to you, and your private tasks in your pinned lists"
-	} else if mineAssigns(user) {
-		title = "What is yours or nobody's in your pinned lists and in no list, and what is assigned to you elsewhere"
+	title := "Every task but those of the lists left out of My tasks"
+	if mineAssigns(user) {
+		title = "Your own tasks and what is assigned to you"
 	}
 	out := []TaskPlace{{Key: "mine", Label: "My tasks", Title: title, Href: mineHref, Counts: taskCounts(rq)}}
-	for i, l := range pinned {
+	if rq.hasInbox() {
+		p := TaskPlace{Key: inboxRef, Label: "Inbox", Title: "Inbox: new tasks land here", Href: listHref(inboxRef),
+			Private: inboxOwner(user) != "", Counts: countTasks(user, tasks, lists, inboxParams())}
+		out = append(out, p)
+	}
+	for _, l := range pinned {
 		if rq.listHidden(l) {
 			continue
 		}
-		p := TaskPlace{Key: "list:" + l.Ref, Label: l.Name, Title: "Pinned list #" + l.Name, Href: listHref(l.Ref),
-			Pinned: true, Private: l.Private(), Counts: countTasks(user, tasks, lists, l.Params)}
-		if i == 0 && len(pinned) > 1 {
-			p.First, p.Title = true, p.Title+": new tasks go here"
-		}
-		out = append(out, p)
+		out = append(out, TaskPlace{Key: "list:" + l.Ref, Label: l.Name, Title: "Pinned list #" + l.Name, Href: listHref(l.Ref),
+			Pinned: true, Private: l.Private(), Counts: countTasks(user, tasks, lists, l.Params)})
 	}
 	return out
 }
@@ -597,18 +578,15 @@ func (rq *Req) listHidden(l ListInfo) bool { return rq != nil && rq.sharing && l
 
 // TasksMore: the switcher's last pill, More: the lists the user sees and
 // hasn't pinned (Lists, A–Z, their own before the shared one of a name; no
-// counts), No list and All tasks. Label: "More", or the view the page shows
+// counts) and All tasks. Label: "More", or the view the page shows
 // when that is one of these (Current: the pill is the shaded one; All: it
 // is All tasks). Filter: enough lists that a field to find one by name
-// helps. NoList: the tasks in no list (/tasks?list=none), with their
-// counts, there while there are open ones (or the page shows them). The
-// pill has no number: what it holds and needs you is in My tasks.
+// helps. The pill has no number.
 type TasksMore struct {
 	Label        string
 	Current, All bool
 	Lists        []TaskPlace
 	Filter       bool
-	NoList       *TaskPlace
 }
 
 // moreFilterFrom: how many lists More holds before it has a filter field.
@@ -655,50 +633,39 @@ func (rq *Req) taskMore(place string) *TasksMore {
 	if place == "all" {
 		more.Label, more.Current, more.All = "All tasks", true, true
 	}
-	if open, counts := rq.noListCounts(); open > 0 || place == noListRef {
-		more.NoList = &TaskPlace{Key: noListRef, Label: "No list", Title: "The tasks in no list", Href: listHref(noListRef),
-			Counts: counts, Current: place == noListRef}
-		if place == noListRef {
-			more.Label, more.Current = "No list", true
-		}
-	}
 	more.Filter = len(more.Lists) >= moreFilterFrom
 	return more
 }
 
-// noListCounts: how many open tasks the user sees are in no list, and
-// their counts as a place has them. None where "none" is a list's name
-// (isNoList): there the name is that list's.
-func (rq *Req) noListCounts() (open int, counts TaskCounts) {
-	lists := rq.taskLists()
-	if !isNoList(noListRef, lists) {
-		return 0, TaskCounts{}
+// hasInbox: the user has an Inbox to show: anyone without users; with users
+// who may write tasks (a viewer makes none), and not in sharing mode, where
+// what is private isn't shown.
+func (rq *Req) hasInbox() bool {
+	user := rq.who()
+	if user == visitor {
+		return false
 	}
-	tasks := rq.openTasks()
-	for _, t := range tasks {
-		if t.List == "" {
-			open++
-		}
+	if inboxOwner(user) == "" {
+		return true
 	}
-	return open, countTasks(rq.who(), tasks, lists, noListParams())
+	return mayWriteTasks(user) == nil && !(rq != nil && rq.sharing)
 }
 
-// noListParams: the params of the view of the tasks in no list
-// (/tasks?list=none): All tasks' own, of those tasks. It has no settings
-// of its own, so no settings dialog (no src).
-func noListParams() TasksParams {
-	p := allTasksParams().With("list", noListRef)
+// inboxParams: the params of the Inbox's view (/tasks?list=inbox): All
+// tasks' own, of the tasks in no list. It has no settings of its own, so no
+// settings dialog (no src).
+func inboxParams() TasksParams {
+	p := allTasksParams().With("list", inboxRef)
 	p.src = nil
 	return p
 }
 
 // placeCounts: each place's counts by its key (GET /api/tasks/due-count?places=1):
-// the pills', and No list's ("none": on its entry under More).
+// the pills'.
 func (rq *Req) placeCounts() map[string]TaskCounts {
 	out := map[string]TaskCounts{}
 	for _, p := range rq.taskPlaces() {
 		out[p.Key] = p.Counts
 	}
-	_, out[noListRef] = rq.noListCounts()
 	return out
 }

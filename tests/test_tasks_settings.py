@@ -16,7 +16,7 @@ class TestListSettings:
         assert 'data-settings-page="lists" data-settings-index="0" data-settings-raw="tag=a" data-settings-embed="1">' in html
         # An embed of a list: the page's own params, and the list whose settings are its own.
         assert ('data-settings-page="lists" data-settings-index="1" data-settings-raw="list=shop  view=open" '
-                'data-settings-embed="1" data-settings-list="shop" data-settings-list-set="{}">') in html
+                'data-settings-embed="1" data-settings-list="shop" data-settings-list-set="{}" data-settings-home="1">') in html   # home: it can be left out of My tasks
         assert 'id="task-settings-modal"' in html and 'id="task-settings-modal-1"' in html
         # The list's ⋯ menu opens it (List settings…, then Export, Import…); the toolbar has no gear.
         assert 'id="task-more-btn"' in html and 'id="task-more-btn-1"' in html and 'id="task-import-modal-1"' in html
@@ -32,7 +32,7 @@ class TestListSettings:
         html = client.get("/tasks?list=shop", headers=HOST).get_data(as_text=True)
         # A list: its own settings (no page's), and how the user pinned it.
         assert ('data-settings-page="" data-settings-index="-1" data-settings-raw="" data-settings-list="shop" '
-                'data-settings-list-set="{&#34;keep&#34;:&#34;1&#34;}" data-settings-pin="1">') in html
+                'data-settings-list-set="{&#34;keep&#34;:&#34;1&#34;}" data-settings-pin="1" data-settings-home="1">') in html
         html = client.get("/tasks", headers=HOST).get_data(as_text=True)
         assert 'data-settings-page="" data-settings-index="-1" data-settings-raw="">' in html
         # A name no list has: nothing to set.

@@ -24,12 +24,15 @@ import (
 const ListsName = "lists.json"
 
 // ListsVersion: the format this Zone writes. A registry without a version
-// (or no file) is a wiki from before lists were kept here.
-const ListsVersion = 1
+// (or no file) is a wiki from before lists were kept here; version 1 is
+// one from before the Inbox (a task without a list is in its user's Inbox,
+// and with users a shared task is always in a list).
+const ListsVersion = 2
 
 // ListSettings: a list's settings, in the order its line keeps them. Their
 // values are text, as an embed writes them (limit "8", keep "1").
-var ListSettings = []string{"view", "limit", "plan", "keep", "labels", "new", "noshare"}
+// home "off": the list's tasks are left out of My tasks.
+var ListSettings = []string{"view", "limit", "plan", "keep", "labels", "new", "noshare", "home"}
 
 // List: a list as its registry keeps it. Owner is not in the file: whose
 // registry it was read from ("" the shared one).
@@ -44,7 +47,7 @@ type List struct {
 type Registry struct {
 	Version int
 	Lists   []*List
-	Pinned  []string          // the pinned lists' names, in order: the first is where a new task goes
+	Pinned  []string          // the pinned lists' names, in order: the pills of the list switcher
 	PinsSet bool              // the file says which are pinned, be it none ("pinned": [])
 	Mine    map[string]string // the settings of My tasks: a user's own, without users the wiki's
 	All     map[string]string // the settings of All tasks (the shared registry)
@@ -186,7 +189,10 @@ func textObject(order []string, m map[string]string, extra map[string]json.RawMe
 // the keys Zone doesn't know, A–Z. What is empty has no key.
 func (r *Registry) Encode() string {
 	var b bytes.Buffer
-	version := max(r.Version, ListsVersion)
+	version := r.Version // a registry keeps its version: a start takes an older one over
+	if version <= 0 {
+		version = ListsVersion
+	}
 	b.WriteString("{\n  \"version\": ")
 	b.WriteString(jsonobj.Text(version))
 	b.WriteString(",\n  \"lists\": [")

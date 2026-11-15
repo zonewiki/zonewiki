@@ -746,13 +746,20 @@ class TestMyTasks:
     CASES = json.loads((CORE.parent.parent / "go" / "testdata" / "mine_cases.json").read_text(encoding="utf-8"))
 
     def test_the_cases_the_server_has(self):
-        # anna asks; anna and bob can be given tasks, zoe no longer.
+        # anna asks.
         got = run_core(
-            f"{json.dumps(self.CASES)}.map(c => TasksCore.inMine(c.task, c.pinned, "
-            "{ me: 'anna', users: new Set(['anna', 'bob']), assigns: c.assigns, own: c.own }))")
+            f"{json.dumps(self.CASES)}.map(c => TasksCore.inMine(c.task, c.out, "
+            "{ me: 'anna', assigns: c.assigns }))")
         wrong = [c["name"] for c, g in zip(self.CASES, got) if g != c["want"]]
-        assert not wrong and len(got) > 20
+        assert not wrong and len(got) > 10
 
-    def test_without_who_no_task_is_anyones(self):
-        assert run_core("[TasksCore.inMine({assignee: 'bob'}, false), TasksCore.inMine({list: 'a', assignee: 'bob'}, false),"
-                        " TasksCore.inMine({list: 'a', assignee: 'bob'}, true)]") == [True, False, True]
+    def test_without_who_every_list_is_the_users_own(self):
+        # No assignment: every task but those of a list left out.
+        assert run_core("[TasksCore.inMine({assignee: 'bob'}, false), TasksCore.inMine({list: 'a', assignee: 'bob'}, true),"
+                        " TasksCore.inMine({list: 'a', assignee: 'bob'}, false)]") == [True, False, True]
+
+    def test_the_filter_words_for_the_inbox(self):
+        # list:inbox, and list:none as before: the tasks in no list.
+        got = run_core("['list:inbox', 'list:none', '-list:inbox'].map(q => [{}, {list: 'a'}].map(t =>"
+                       " TasksCore.matchesFilter(t, TasksCore.parseFilter(q))))")
+        assert got == [[True, False], [True, False], [False, True]]

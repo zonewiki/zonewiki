@@ -205,9 +205,9 @@ func checkEmbedSettings(set map[string]string, keys []string) (map[string]string
 					return nil, bad()
 				}
 				v = "1"
-			case "unassigned":
-				if v = strings.ToLower(v); v != "hide" {
-					return nil, bad()
+			case "home":
+				if v = strings.ToLower(v); v != "off" {
+					return nil, refuse("home is off (the list's tasks are left out of My tasks) or not set")
 				}
 			case "mail":
 				if v = strings.ToLower(v); v != "off" {
@@ -244,8 +244,8 @@ func setEmbedArgs(args string, set map[string]string) string {
 		}
 		done[key] = done[key] || ok && changes
 	}
-	// (unassigned: My tasks' own, mineSettingKeys.)
-	for _, k := range append(slices.Clone(embedSettingKeys), "unassigned", "mail") {
+	// (mail: My tasks' own, mineSettingKeys.)
+	for _, k := range append(slices.Clone(embedSettingKeys), "mail") {
 		if v := set[k]; v != "" && !done[k] {
 			out = append(out, k+"="+v)
 		}

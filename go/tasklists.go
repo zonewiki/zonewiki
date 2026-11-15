@@ -22,10 +22,16 @@ import (
 // of that name (shared/gifts); their own is the bare name.
 const sharedRef = "shared/"
 
-// privateListName: the list a user's private task goes to when it has no
-// other place (the migration; a restore or import whose list is gone; a
-// new task of a user who pinned nothing: fallbackList).
+// privateListName: the list the first migration made for a user's private
+// tasks without one, and until 2026-11 the list a new task went to when
+// nothing was pinned. The Inbox took its place (migrateInbox).
 const privateListName = "private"
+
+// generalListName: the shared list that takes a shared task that loses its
+// list (with users a shared task is always in one): the tasks that were in
+// no list before the Inbox, a deleted list's when no other is named, a
+// restored task whose list is gone. Made when first needed.
+const generalListName = "general"
 
 // ListInfo: a list as one user sees it.
 type ListInfo struct {
@@ -39,9 +45,15 @@ type ListInfo struct {
 // Private: only its owner sees the list and the tasks in it.
 func (l ListInfo) Private() bool { return l.Owner != "" }
 
+// LeftOut: the list's tasks are left out of My tasks (its setting home=off):
+// a catalogue, a someday list. It counts for a list that is its user's own
+// (a private one; without users any): a shared task is in My tasks by its
+// assignee.
+func (l ListInfo) LeftOut() bool { return strings.EqualFold(l.Params.Get("home"), "off") }
+
 // listSettingKeys: what List settings… sets on a list (the registry's
 // keys), in the order they are kept.
-var listSettingKeys = []string{"view", "plan", "limit", "labels", "new", "keep", "noshare"}
+var listSettingKeys = []string{"view", "plan", "limit", "labels", "new", "keep", "noshare", "home"}
 
 // listInfo: a registry's list as the user who names it ref sees it.
 func listInfo(l *taskfiles.List, ref string) ListInfo {
@@ -142,40 +154,50 @@ func taskList(t *Task, lists map[string]ListInfo) string {
 	return ""
 }
 
-// noListRef: what names "no list" where a list is named: the view of the
-// tasks in none (/tasks?list=none, [[tasks: list=none]]), as the filter
-// word list:none does. No list is called so (checkListName).
-const noListRef = "none"
+// inboxRef: what names the Inbox where a list is named: the tasks in no
+// list (/tasks?list=inbox, [[tasks: list=inbox]], the filter word
+// list:inbox). With users those are each user's own, private: a new task
+// goes there unless it is made in a list or names one, and a shared task is
+// always in a list. Without users they are the wiki's. No list is called so
+// (checkListName). "none" named them until 2026-11 and still does.
+const inboxRef = "inbox"
 
-// isNoList: ref names the tasks in no list: "none", but for a user who
-// sees a list of that name (one made before the name was kept).
-func isNoList(ref string, lists map[string]ListInfo) bool {
-	if cleanList(ref) != noListRef {
+// isInbox: ref names the Inbox: "inbox" or "none", but for a user who sees
+// a list of that name (one made before the name was kept).
+func isInbox(ref string, lists map[string]ListInfo) bool {
+	if r := cleanList(ref); r != inboxRef && r != "none" {
 		return false
 	}
 	_, ok := resolveList(ref, lists)
 	return !ok
 }
 
+// inboxOwner: whose files hold the tasks of user's Inbox: their own with
+// users, the shared ones without.
+func inboxOwner(user string) string {
+	if privateFolder(user) != "" {
+		return user
+	}
+	return ""
+}
+
 // inScope: a task belongs to a view: scope is a list's ref (its tasks),
-// several joined by "|" (any of theirs), "none" for the tasks in no list
-// (isNoList), or "" for every task.
+// several joined by "|" (any of theirs), "inbox" for the tasks in no list
+// (isInbox), or "" for every task.
 func inScope(t *Task, scope string, lists map[string]ListInfo) bool {
 	if scope == "" {
 		return true
 	}
-	if isNoList(scope, lists) {
+	if isInbox(scope, lists) {
 		return t.List == ""
 	}
 	ref := taskList(t, lists)
 	return ref != "" && slices.Contains(strings.Split(scope, "|"), ref)
 }
 
-// pinnedLists: the lists user pinned, in order, the first being where a new
-// task goes: their own pins when they have set some, else the wiki's (the
-// shared registry's, which are everyone's without users). With users
-// something is always pinned once they have a list "private" of their own:
-// when nothing else is, that list (standingPin).
+// pinnedLists: the lists user pinned, in order: the pills of their list
+// switcher, and nothing else. Their own pins when they have set some, else
+// the wiki's (the shared registry's, which are everyone's without users).
 func pinnedLists(user string, lists map[string]ListInfo) []ListInfo {
 	shared, own := listRegistries(user)
 	from, find := shared, sharedList
@@ -190,26 +212,7 @@ func pinnedLists(user string, lists map[string]ListInfo) []ListInfo {
 			out = append(out, l)
 		}
 	}
-	if len(out) == 0 {
-		if l := standingPin(user, lists); l != nil {
-			out = append(out, *l)
-		}
-	}
 	return out
-}
-
-// standingPin: user's private list "private", which counts as pinned while
-// they pinned nothing else: it is where their new tasks go (fallbackList),
-// and what one captures must be in their My tasks. Nil without users, for
-// one who can't write tasks, and when they have no such list (yet).
-func standingPin(user string, lists map[string]ListInfo) *ListInfo {
-	if privateFolder(user) == "" || listsUnmigrated || mayWriteTasks(user) != nil {
-		return nil
-	}
-	if l, ok := lists[privateListName]; ok && l.Private() {
-		return &l
-	}
-	return nil
 }
 
 // ---- My tasks ----
@@ -226,60 +229,29 @@ func mineAssigns(user string) bool {
 	return s.Users != nil && s.assignable(user)
 }
 
-// mineOwn: user's My tasks leaves out the shared tasks that are nobody's
-// (their setting Unassigned tasks: hidden, "unassigned": "hide" in their
-// registry's mine): it is then what is assigned to them and their private
-// tasks in the lists they pinned, and a new task they make without saying
-// where is assigned to them (newTaskMine). Only where assignment counts.
-func mineOwn(user string) bool {
-	return mineAssigns(user) && taskFiles.ReadLists(mineOwner(user)).Mine["unassigned"] == "hide"
-}
-
-// newTaskMine: a new task of user's that nobody said a list or an assignee
-// for, going into list (nil: none), is assigned to them: their My tasks
-// hides unassigned tasks (mineOwn), and what they capture must be in it. Not
-// in a private list, whose tasks are theirs already.
-func newTaskMine(user string, list *ListInfo) bool {
-	return (list == nil || !list.Private()) && mineOwn(user)
-}
-
-// mineFilter: My tasks, the home view the Tasks links open and count: every
-// task user sees except one that is assigned to someone else, or in a list
-// they haven't pinned unless it is assigned to them. So: what is theirs
-// wherever it is, and what is nobody else's in their pinned lists and in no
-// list. An assignee no task can be given to anymore is no one (as @none
-// reads it); a private task has none and follows its list's pin. With
-// unassigned tasks hidden (mineOwn) a shared task that is nobody's is out
-// too. The browser has the same rule (TasksCore.inMine; go/testdata/mine_cases.json
-// runs through both).
+// mineFilter: My tasks, the home view the Tasks links open and count: what
+// is user's. A task of their own (a private one: in their Inbox or a
+// private list) unless its list is left out (ListInfo.LeftOut), and a
+// shared task assigned to them, wherever it is. An unassigned shared task
+// is its list's, not anyone's. Where no task can be assigned (without
+// users; a viewer: mineAssigns) every list is the user's own: every task
+// but those of a list left out. The browser has the same rule
+// (TasksCore.inMine; go/testdata/mine_cases.json runs through both).
 func mineFilter(user string, lists map[string]ListInfo) func(*Task) bool {
-	pinned := map[string]bool{}
-	for _, l := range pinnedLists(user, lists) {
-		pinned[l.Ref] = true
-	}
-	s, assigns, own := settings(), mineAssigns(user), mineOwn(user)
+	assigns := mineAssigns(user)
 	return func(t *Task) bool {
-		return inMine(t, pinned[taskList(t, lists)], user, assigns, own, s.assignable)
+		ref := taskList(t, lists)
+		return inMine(t, ref != "" && lists[ref].LeftOut(), user, assigns)
 	}
 }
 
-// inMine: mineFilter's rule for one task: pinned, its list is one user
-// pinned; assigns, assignment counts for user (mineAssigns); own, they hide
-// the shared tasks that are nobody's (mineOwn); assignable, whether a task
-// can be given to a name.
-func inMine(t *Task, pinned bool, user string, assigns, own bool, assignable func(string) bool) bool {
-	if assigns && t.Owner == "" && t.Assignee != "" {
-		if t.Assignee == user {
-			return true
-		}
-		if assignable(t.Assignee) {
-			return false
-		}
+// inMine: mineFilter's rule for one task: out, its list is left out of My
+// tasks; assigns, assignment counts for user (mineAssigns).
+func inMine(t *Task, out bool, user string, assigns bool) bool {
+	if assigns && t.Owner == "" {
+		return t.Assignee == user
 	}
-	if own && t.Owner == "" {
-		return false
-	}
-	return t.List == "" || pinned
+	return !out
 }
 
 // scopeFilter: the tasks a view of scope shows user: My tasks (mineScope),
@@ -291,11 +263,9 @@ func scopeFilter(user, scope string, lists map[string]ListInfo) func(*Task) bool
 	return func(t *Task) bool { return inScope(t, scope, lists) }
 }
 
-// mineSettingKeys: what My tasks' settings dialog sets. What a new task
-// gets (new, keep) is its list's, the first pinned one's. unassigned
-// ("hide"): mineOwn. mail ("off"): no mail when a task is assigned to the
-// user (mailsAssigned in notify.go).
-var mineSettingKeys = []string{"view", "plan", "limit", "labels", "unassigned", "mail"}
+// mineSettingKeys: what My tasks' settings dialog sets. mail ("off"): no
+// mail when a task is assigned to the user (mailsAssigned in notify.go).
+var mineSettingKeys = []string{"view", "plan", "limit", "labels", "mail"}
 
 // mineOwner: whose registry holds user's settings of My tasks: their own,
 // without users the wiki's.
@@ -334,9 +304,6 @@ func setMineParams(user, was string, set map[string]string) error {
 	if err != nil {
 		return err
 	}
-	if set["unassigned"] != "" && !mineAssigns(user) {
-		return refuse("Unassigned tasks can be hidden only where tasks can be assigned to you")
-	}
 	if set["mail"] != "" && !mineAssigns(user) {
 		return refuse("There is no mail about assigned tasks where no task can be assigned to you")
 	}
@@ -358,59 +325,6 @@ func setMineParams(user, was string, set map[string]string) error {
 	return commitLists(user, "Change the settings of My tasks", []string{path})
 }
 
-// lookupDefaultList: the list a new task of user's goes to where no one list
-// is in view: their first pinned one, else (with users) their private list
-// (fallbackList); nil when there is neither, and the task is in no list.
-func lookupDefaultList(user string) *ListInfo {
-	return defaultListOf(user, pinnedLists(user, taskLists(user)))
-}
-
-// defaultListOf: lookupDefaultList, given user's pinned lists.
-func defaultListOf(user string, pinned []ListInfo) *ListInfo {
-	if len(pinned) > 0 {
-		return &pinned[0]
-	}
-	return fallbackList(user)
-}
-
-// fallbackList: where a new task of user's goes when they pinned nothing
-// and no list is in view: their private list "private", so that a task
-// nobody chose a place for isn't everyone's (a private task can be shared
-// later, a shared one never made private). The list as they see it, also
-// when it isn't made yet: the first task into it makes it
-// (ensureFallbackLocked), and from then on it counts as pinned
-// (standingPin). Nil without users, for one who can't write
-// tasks, and while a shared list has that name and they have none of
-// their own (the name would be that list's): a new task is then in no
-// list, and shared.
-func fallbackList(user string) *ListInfo {
-	if privateFolder(user) == "" || listsUnmigrated || mayWriteTasks(user) != nil {
-		return nil
-	}
-	if l, ok := taskLists(user)[privateListName]; ok {
-		if !l.Private() {
-			return nil
-		}
-		return &l
-	}
-	l := listInfo(&taskfiles.List{Name: privateListName, Settings: map[string]string{}, Owner: user}, privateListName)
-	return &l
-}
-
-// ensureFallbackLocked: a new task of user's names their private list
-// "private" (list, as the request has it) and it isn't made yet: make it,
-// as the fallback promised (fallbackList). Returns the registry's path
-// when it was written, for the task's commit.
-func ensureFallbackLocked(user, list string) (string, error) {
-	if cleanList(list) != privateListName {
-		return "", nil
-	}
-	if l := fallbackList(user); l == nil {
-		return "", nil
-	}
-	return ensurePrivateListLocked(user)
-}
-
 // ---- operations ----
 
 // listsUnmigrated: the lists couldn't be taken over from the pages at
@@ -425,6 +339,8 @@ func shareNeeded(what string) error {
 	return refuse(what + " would be shared: everyone who uses the wiki will see it. Say so to go on (share)")
 }
 
+var errSharedListed = refuse("A shared task is always in a list: move it to another shared list")
+
 var errSharedStays = refuse("A shared task stays shared: others have seen it. Make a new task in your private list and copy the text")
 
 // checkListName: a list's name as it is kept (cleanList), or why it can't
@@ -438,8 +354,8 @@ func checkListName(name string) (string, error) {
 		return "", refuse(strconv.Quote(list) + ": a list's name can't contain [ ] , | = / or \"")
 	case len(list) > 60:
 		return "", refuse("A list's name has at most 60 characters")
-	case list == noListRef:
-		return "", refuse("A list can't be called none: that names the tasks in no list")
+	case list == inboxRef || list == "none":
+		return "", refuse("A list can't be called " + list + ": that names the Inbox, the tasks in no list")
 	}
 	return list, nil
 }
@@ -504,8 +420,7 @@ func pinOwner(user string) string {
 // createListOp makes a list called name, shared or (private) user's own;
 // returns how user names it. A name of a list they see is refused. pin:
 // the new list is pinned for user, last (it would else be out of sight
-// under More; the doors don't pin a list that would be the user's first
-// pin: apiNewList, createTaskListTool), in the same commit.
+// under More), in the same commit.
 func createListOp(user, name string, private, pin bool, suffix string) (string, error) {
 	if listsUnmigrated {
 		return "", errListsUnmigrated
@@ -564,19 +479,19 @@ func createListOp(user, name string, private, pin bool, suffix string) (string, 
 	return list, commitLists(user, "Create list #"+list+suffix, paths)
 }
 
-// ensurePrivateListLocked: user's list "private", made when they have none
-// of that name: where a private task goes that has no other place. Returns
-// the registry's path when it was written.
-func ensurePrivateListLocked(user string) (string, error) {
-	reg, err := taskFiles.ReadListsStrict(user)
+// ensureGeneralLocked: the shared list "general", made when there is none
+// of that name: where a shared task goes that loses its list (with users).
+// Returns the registry's path when it was written.
+func ensureGeneralLocked() (string, error) {
+	reg, err := taskFiles.ReadListsStrict("")
 	if err != nil {
 		return "", err
 	}
-	if reg.Find(privateListName) != nil {
+	if reg.Find(generalListName) != nil {
 		return "", nil
 	}
-	reg.Lists = append(reg.Lists, &taskfiles.List{Name: privateListName, Settings: map[string]string{}, Owner: user})
-	return taskFiles.WriteListsOf(user, reg)
+	reg.Lists = append(reg.Lists, &taskfiles.List{Name: generalListName, Settings: map[string]string{}})
+	return taskFiles.WriteListsOf("", reg)
 }
 
 // renameRefs: a registry's pins with the refs rename changes renamed;
@@ -817,8 +732,9 @@ func renameListOp(user, ref, newName, suffix string, check ...func(pages []strin
 }
 
 // moveListTasks puts the tasks of the list from (of those tasks holds)
-// into to (nil: no list); a task that leaves a private list for a shared
-// place is shared, and its history says so. Returns how many moved.
+// into to (nil: no list, which for a private list's tasks is their user's
+// Inbox: they stay private); a task that leaves a private list for a shared
+// one is shared, and its history says so. Returns how many moved.
 func moveListTasks(user string, tasks []*Task, from ListInfo, to *ListInfo) int {
 	n := 0
 	for _, t := range tasks {
@@ -826,7 +742,7 @@ func moveListTasks(user string, tasks []*Task, from ListInfo, to *ListInfo) int 
 			continue
 		}
 		t.List, n = "", n+1
-		owner := ""
+		owner := from.Owner
 		if to != nil {
 			t.List, owner = to.Name, to.Owner
 		}
@@ -839,8 +755,11 @@ func moveListTasks(user string, tasks []*Task, from ListInfo, to *ListInfo) int 
 }
 
 // deleteListOp deletes the list user names ref; its tasks go to the list
-// to names ("": to no list), never away. A private list's tasks that would
-// become shared that way need share. wontDo: its open tasks are closed
+// to names, never away. With no list named (""), a private list's go to
+// their user's Inbox, and a shared list's, which with users are always in a
+// list, to the shared list "general" (made for them when there is none);
+// without users they are in no list, the wiki's Inbox. A private list's
+// tasks that would become shared need share. wontDo: its open tasks are closed
 // undone on the way, as Won't do closes one (no next occurrence, a keep
 // task too), so a list that is over leaves no open tasks behind; they can
 // be reopened from Closed. Pins of it go; embeds that name it stay, and say
@@ -860,7 +779,7 @@ func deleteListOp(user, ref, to string, share, wontDo bool, suffix string) (int,
 			return 0, err
 		}
 		if t.Ref == l.Ref {
-			return 0, refuse("Move its tasks to another list, or to no list")
+			return 0, refuse("Move its tasks to another list")
 		}
 		target = &t
 	}
@@ -872,9 +791,12 @@ func deleteListOp(user, ref, to string, share, wontDo bool, suffix string) (int,
 	switch {
 	case has && !l.Private() && target != nil && target.Private():
 		return 0, errSharedStays
-	case has && l.Private() && (target == nil || !target.Private()) && !share:
+	case has && l.Private() && target != nil && !target.Private() && !share:
 		return 0, shareNeeded("The tasks of #" + l.Name)
+	case has && !l.Private() && target == nil && settings().Users != nil && l.Name == generalListName:
+		return 0, refuse("With users a shared task is always in a list: name the list the tasks of #" + l.Name + " go to")
 	}
+	toGeneral := has && !l.Private() && target == nil && settings().Users != nil
 	owners := []string{l.Owner}
 	if !l.Private() {
 		owners = taskFiles.EveryOwner()
@@ -887,6 +809,12 @@ func deleteListOp(user, ref, to string, share, wontDo bool, suffix string) (int,
 	}
 	reg := regs[l.Owner]
 	reg.Lists = slices.DeleteFunc(reg.Lists, func(x *taskfiles.List) bool { return x.Name == l.Name })
+	if toGeneral {
+		if reg.Find(generalListName) == nil {
+			reg.Lists = append(reg.Lists, &taskfiles.List{Name: generalListName, Settings: map[string]string{}})
+		}
+		target = &ListInfo{Ref: generalListName, Name: generalListName}
+	}
 	if wontDo {
 		stamp := timestamp()
 		closing, closingIDs := selectTasks(active, func(t *Task) bool { return t.List == l.Name && t.Owner == l.Owner && t.IsOpen() })
@@ -971,7 +899,7 @@ func shareListOp(user, ref, suffix string) (string, error) {
 }
 
 // pinListOp pins the list user names ref ("1": last), makes it their first
-// pinned list ("first": where a new task goes), or unpins it ("0"). The pins are the
+// pinned list ("first"), or unpins it ("0"). The pins are the
 // user's own (their registry); without users the wiki's. A user who has set
 // none starts from the wiki's.
 func pinListOp(user, ref, pin string) error {
@@ -1001,12 +929,6 @@ func pinListOp(user, ref, pin string) error {
 	case "0":
 		reg.Pinned = slices.DeleteFunc(reg.Pinned, is)
 		msg = "Unpin list #" + l.Name
-		// The private list that takes the user's new tasks stays pinned
-		// while nothing else is (standingPin).
-		if sp := standingPin(user, lists); sp != nil && sp.Ref == l.Ref &&
-			!slices.ContainsFunc(reg.Pinned, func(r string) bool { _, ok := resolveList(r, lists); return ok }) {
-			return refuse("Your list #" + l.Name + " stays pinned while no other list is: your new tasks go into it. Pin another list first")
-		}
 	case "1":
 		if !slices.ContainsFunc(reg.Pinned, is) {
 			reg.Pinned = append(reg.Pinned, l.Ref)
@@ -1026,8 +948,7 @@ func pinListOp(user, ref, pin string) error {
 
 // pinOrderOp puts user's pinned lists in the order refs names them (the
 // row's pills, dragged): the pinned lists among refs first, as named, then
-// the pinned ones it leaves out, as they were. The first is where a new
-// task goes. Nothing is pinned or unpinned by it; an order that is the one
+// the pinned ones it leaves out, as they were. Nothing is pinned or unpinned by it; an order that is the one
 // they have writes nothing.
 func pinOrderOp(user string, refs []string) error {
 	if listsUnmigrated {

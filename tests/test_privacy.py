@@ -38,6 +38,8 @@ USERS = {"alice": ("alice-pw", "alice-token"), "bob": ("bob-pw", "bob-token")}
 TASK_ID = "a11ce000-0000-4000-8000-000000000001"
 DONE_ID = "a11ce000-0000-4000-8000-000000000002"
 OLD_ID = "a11ce000-0000-4000-8000-000000000003"
+INBOX_ID = "a11ce000-0000-4000-8000-000000000004"      # in no list: in her Inbox
+HER_TASKS = (TASK_ID, DONE_ID, OLD_ID, INBOX_ID)
 COMMENT_ID = "c0ffee01"
 
 
@@ -70,19 +72,22 @@ def wiki(git_wiki_dir, monkeypatch):
     (w / f"{NOTE}.md").write_text(f"# Idea {SECRET}\n\n{QUERY} {SECRET}\n")
     (w / "private/alice/_assets/photo.png").write_bytes(SECRET.encode())
     (w / "plans.md").write_text(f"# Plans\n\nSee [[{DIARY}]] and [[{DIARY}|my diary]].\n\n- [[task:{TASK_ID[:8]}]]\n")
-    # Her tasks: a private list of hers, pinned (her default list), a page
-    # that shows it and one of her tags, and her tasks, in that list.
+    # Her tasks: a private list of hers, pinned, a page that shows it and
+    # one of her tags, her tasks in that list, and one in her Inbox (in no
+    # list). A shared list, team, for the tasks everyone sees. The registries
+    # are this Zone's (version 2): a start changes and commits nothing.
     (w / "private/alice/deck.md").write_text(
         f"# My tasks {SECRET}\n\n[[tasks: list=secretlist]]\n\n[[tasks: tag=secretlist]]\n")
     tasks = w / "private/alice/_tasks"
     tasks.mkdir(parents=True)
     (tasks / "lists.json").write_text(
-        '{\n  "version": 1,\n  "lists": [\n    {"name": "secretlist"}\n  ],\n'
-        '  "pinned": ["secretlist"],\n  "default": "secretlist"\n}\n')
+        '{\n  "version": 2,\n  "lists": [\n    {"name": "secretlist"}\n  ],\n'
+        '  "pinned": ["secretlist"]\n}\n')
     (w / "_tasks").mkdir(exist_ok=True)
-    (w / "_tasks/lists.json").write_text('{\n  "version": 1,\n  "lists": []\n}\n')
+    (w / "_tasks/lists.json").write_text('{\n  "version": 2,\n  "lists": [\n    {"name": "team"}\n  ]\n}\n')
     this_year = __import__("datetime").date.today().year
-    (tasks / "tasks.json").write_text(json.dumps([private_task(TASK_ID, "Task")], indent=2) + "\n")
+    inbox = {k: v for k, v in private_task(INBOX_ID, "Inbox").items() if k != "list"}
+    (tasks / "tasks.json").write_text(json.dumps([private_task(TASK_ID, "Task"), inbox], indent=2) + "\n")
     (tasks / "closed.json").write_text(
         json.dumps([private_task(DONE_ID, "Done", f"{this_year}-01-05T10:00:00")], indent=2) + "\n")
     (tasks / "closed-2001.json").write_text(
@@ -103,6 +108,12 @@ def wiki(git_wiki_dir, monkeypatch):
 def bob(client, wiki):
     client.post("/login", data={"username": "bob", "password": "bob-pw"}, headers=HOST)
     return client
+
+
+def shared_tasks(wiki):
+    """The shared open tasks' file as text ("" while there is none)."""
+    path = wiki / "_tasks/tasks.json"
+    return path.read_text() if path.exists() else ""
 
 
 def sha(wiki):
@@ -151,6 +162,14 @@ READS = [
     ("GET /api/tasks/closed-years", "GET", "/api/tasks/closed-years", {}),
     ("GET /tasks", "GET", "/tasks", {"query_string": {"list": "secretlist"}}),
     ("GET /tasks", "GET", "/tasks", {"query_string": {"mine": "1"}}),
+    ("GET /tasks", "GET", "/tasks", {"query_string": {"list": "inbox"}}),          # his Inbox, not hers
+    ("GET /tasks", "GET", "/tasks", {"query_string": {"list": "none"}}),
+    ("GET /tasks", "GET", "/tasks", {"query_string": {"list": "team"}}),
+    ("GET /api/tasks/closed-count", "GET", "/api/tasks/closed-count", {"query_string": {"list": "inbox"}}),
+    ("GET /api/tasks/due-count", "GET", "/api/tasks/due-count", {"query_string": {"places": "1"}}),
+    ("GET /api/tasks/export", "GET", "/api/tasks/export", {"query_string": {"list": "inbox"}}),
+    ("GET /api/tasks/export", "GET", "/api/tasks/export", {"query_string": {"list": "none"}}),
+    ("GET /api/tasks/export", "GET", "/api/tasks/export", {"query_string": {"assignee": "none"}}),
     ("GET /api/tasks/closed-count", "GET", "/api/tasks/closed-count", {"query_string": {"mine": "1"}}),
     ("GET /api/tasks/closed-years", "GET", "/api/tasks/closed-years", {"query_string": {"mine": "1"}}),
     ("GET /api/tasks/due-count", "GET", "/api/tasks/due-count", {}),
@@ -182,7 +201,7 @@ def test_bob_reads_nothing_of_alices(bob, wiki, method, path, kwargs):
     body = resp.data.decode(errors="replace")
     assert SECRET not in body
     assert not re.search(r'href="[^"]*private/alice', body), "a link to alice's page"
-    assert not any(id in body and id not in str(kwargs) for id in (TASK_ID, DONE_ID, OLD_ID)), "alice's task"
+    assert not any(id in body and id not in str(kwargs) for id in HER_TASKS), "alice's task"
     assert "secretlist" not in body or "secretlist" in str(kwargs), "alice's list"
     assert "2001" not in body or "2001" in str(kwargs), "the year of alice's archive"
     if path.startswith(f"/page/{DIARY}") or "/private/alice/" in path:
@@ -210,7 +229,35 @@ def test_alice_sees_her_own(client, wiki):
     # her pinned private list's task.
     assert 'href="/tasks?mine=1"' in client.get("/page/index", headers=HOST).data.decode()
     mine = client.get("/api/tasks/export?mine=1", headers=HOST).get_json()["tasks"]
-    assert TASK_ID in [t["id"] for t in mine]
+    assert {TASK_ID, INBOX_ID} <= {t["id"] for t in mine}
+    # Her Inbox is hers: its view and its export have its task, private.
+    inbox = client.get("/api/tasks/export?list=inbox", headers=HOST).get_json()["tasks"]
+    assert [(t["id"], t["private"]) for t in inbox] == [(INBOX_ID, True)]
+    page = client.get("/tasks?list=inbox", headers=HOST).data.decode()
+    assert INBOX_ID in page.split('id="tasks-initial">', 1)[1].split("</script>", 1)[0]
+    assert "<h1>Inbox" in page and "Your Inbox: only you see its tasks" in page
+    assert client.get("/api/tasks/due-count", headers=HOST).get_json()["count"] == 2      # both are overdue
+    assert client.get("/api/tasks/due-count?places=1", headers=HOST).get_json()["places"]["inbox"]["count"] == 1
+
+
+def test_bobs_inbox_is_his_own(bob, wiki):
+    """Each user's Inbox is their own: bob's view of it is empty while he
+    has no task there, counts nothing of alice's, and shows his capture
+    only to him."""
+    assert bob.get("/api/tasks/export?list=inbox", headers=HOST).get_json()["tasks"] == []
+    counts = bob.get("/api/tasks/due-count?places=1", headers=HOST).get_json()
+    assert counts["count"] == 0 and counts["places"]["inbox"]["count"] == 0
+    made = bob.post("/api/tasks", json={"title": "His capture", "due_date": "2020-01-01"}, headers=HOST).get_json()
+    assert made["private"] is True and "list" not in made
+    assert [t["title"] for t in bob.get("/api/tasks/export?list=inbox", headers=HOST).get_json()["tasks"]] == ["His capture"]
+    assert bob.get("/api/tasks/due-count?places=1", headers=HOST).get_json()["places"]["inbox"]["count"] == 1
+    sign_in(bob, "alice")
+    alice = bob
+    assert "His capture" not in alice.get("/api/tasks", headers=HOST).get_data(as_text=True)
+    assert "His capture" not in alice.get("/tasks?list=inbox", headers=HOST).get_data(as_text=True)
+    assert [t["id"] for t in alice.get("/api/tasks/export?list=inbox", headers=HOST).get_json()["tasks"]] == [INBOX_ID]
+    assert alice.get("/api/tasks/due-count?places=1", headers=HOST).get_json()["places"]["inbox"]["count"] == 1
+    assert alice.put(f"/api/tasks/{made['id']}", json={"title": "Hers now"}, headers=HOST).status_code == 404
 
 
 def test_a_private_page_of_no_one_is_seen_by_no_one(client, wiki):
@@ -406,31 +453,38 @@ def test_links_from_invisible_pages_dont_count(alice, wiki):
     assert links(bob)["plans"] == 0
 
 
-def test_a_new_task_goes_to_her_default_list(alice, wiki):
-    """Her default list is her private one: an embed of it shows it, and
-    New task / c t (the page's data, the headless app) start a new task
-    there, so private; the List field names her lists, hers marked. Bob has
-    no such list."""
+def test_a_new_task_goes_to_her_inbox(alice, wiki):
+    """An embed of her private list shows it; New task / c t (the headless
+    app) start a new task in no list, which with users is her Inbox, so
+    private, whatever she pinned; the List field names her lists, hers
+    marked. Bob has no such list."""
     html = __import__("html")
     assert 'data-init-list="secretlist"' in alice.get("/page/private/alice/deck", headers=HOST).data.decode()
     index = alice.get("/page/index", headers=HOST).data.decode()
-    assert 'data-tasks-list="secretlist"' in index
+    assert "data-tasks-list" not in index           # nothing on the page says where a new task goes
     tasks = html.unescape(alice.get("/tasks", headers=HOST).data.decode())
     assert 'id="task-edit-list"' in tasks and "task-edit-private" not in tasks
-    assert 'data-default-list="secretlist"' in tasks and '{"ref":"secretlist","private":true}' in tasks
+    assert 'data-inbox-private="1"' in tasks and "data-default-list" not in tasks
+    assert '{"ref":"secretlist","private":true}' in tasks and '{"ref":"team","private":false}' in tasks
     assert 'data-private-folder="private/alice"' in tasks
-    assert 'data-default-list="secretlist"' in alice.get("/api/tasks/headless", headers=HOST).data.decode()
+    headless = alice.get("/api/tasks/headless", headers=HOST).data.decode()
+    assert 'data-inbox-private="1"' in headless and "data-default-list" not in headless
+    # The task itself: hers alone, in her files, though her pinned list is another.
+    made = alice.post("/api/tasks", json={"title": "Capture"}, headers=HOST).get_json()
+    assert made["private"] is True and "list" not in made
+    assert made["id"] in (wiki / "private/alice/_tasks/tasks.json").read_text()
+    assert made["id"] not in shared_tasks(wiki)
     sign_in(alice, "bob")
     bob = alice
-    index = bob.get("/page/index", headers=HOST).data.decode()
-    # Bob pinned nothing: his new tasks go to his private list (the fallback).
-    assert 'data-tasks-list="private"' in index and "secretlist" not in bob.get("/tasks", headers=HOST).data.decode()
+    page = bob.get("/tasks", headers=HOST).data.decode()
+    assert 'data-inbox-private="1"' in page and "secretlist" not in page and "Capture" not in page
 
 
 def test_nothing_private_without_users(client, wiki_dir):
     tasks = client.get("/tasks", headers=HOST).data.decode()
     assert "list-new-private" not in tasks and "data-private-folder" not in tasks
     assert "private" not in client.post("/api/tasks", json={"title": "x"}, headers=HOST).get_json()
+    assert "data-inbox-private" not in tasks        # the Inbox is the wiki's: the tasks in no list
     # private is no field of a write, and no list is private.
     resp = client.post("/api/tasks", json={"title": "y", "private": True}, headers=HOST)
     assert resp.status_code == 400 and "list" in resp.get_json()["error"]
@@ -442,12 +496,20 @@ def test_a_task_moves_between_her_files_and_the_shared_ones(alice, wiki):
     task = alice.post("/api/tasks", json={"title": "Gift", "list": "secretlist"}, headers=HOST).get_json()
     assert task["private"] is True and task["list"] == "secretlist"
     mine, shared = wiki / "private/alice/_tasks/tasks.json", wiki / "_tasks/tasks.json"
-    assert task["id"] in mine.read_text() and task["id"] not in shared.read_text()
-    # Out of her private list it is shared: only when the write says so.
-    refused = alice.put(f"/api/tasks/{task['id']}", json={"list": ""}, headers=HOST)
+    assert task["id"] in mine.read_text() and task["id"] not in shared_tasks(wiki)
+    # Out of her private list it is in her Inbox: still hers alone, share or not.
+    for body in ({"list": ""}, {"list": "secretlist"}, {"list": "inbox", "share": True}, {"list": "secretlist"}, {"list": None}):
+        moved = alice.put(f"/api/tasks/{task['id']}", json=body, headers=HOST)
+        assert moved.status_code == 200 and moved.get_json()["private"] is True, body
+        assert moved.get_json().get("list") == (body["list"] if body["list"] == "secretlist" else None)
+        assert task["id"] in mine.read_text() and task["id"] not in shared_tasks(wiki)
+        assert "shared" not in [e["event"] for e in moved.get_json()["history"]]
+    # Into a shared list it is shared: only when the write says so.
+    refused = alice.put(f"/api/tasks/{task['id']}", json={"list": "team"}, headers=HOST)
     assert refused.status_code == 400 and "share" in refused.get_json()["error"] and task["id"] in mine.read_text()
-    moved = alice.put(f"/api/tasks/{task['id']}", json={"list": "", "share": True}, headers=HOST).get_json()
-    assert moved["private"] is False and "list" not in moved
+    assert task["id"] not in shared_tasks(wiki)
+    moved = alice.put(f"/api/tasks/{task['id']}", json={"list": "team", "share": True}, headers=HOST).get_json()
+    assert moved["private"] is False and moved["list"] == "team"
     assert task["id"] in shared.read_text() and task["id"] not in mine.read_text()
     # One commit, both files, in her name.
     assert git(wiki, "show", "--name-only", "--format=%an", "HEAD").split() == [
@@ -459,32 +521,49 @@ def test_a_task_moves_between_her_files_and_the_shared_ones(alice, wiki):
 def test_a_tag_does_not_make_a_task_private(alice, wiki):
     """secretlist is her private list, but a tag of that name is a tag:
     a task is in a list, and so private, only by its list."""
-    a = alice.post("/api/tasks", json={"title": "A", "tags": ["SecretList"]}, headers=HOST).get_json()
-    assert a["private"] is False and "list" not in a
+    a = alice.post("/api/tasks", json={"title": "A", "list": "team", "tags": ["SecretList"]}, headers=HOST).get_json()
+    assert a["private"] is False and a["list"] == "team"
     own = alice.post("/api/tasks", json={"title": "B", "list": "SecretList"}, headers=HOST).get_json()
     assert own["private"] is True and own["list"] == "secretlist" and own["tags"] == []
-    c = alice.post("/api/tasks", json={"title": "C"}, headers=HOST).get_json()
+    c = alice.post("/api/tasks", json={"title": "C", "list": "team"}, headers=HOST).get_json()
     tagged = alice.post("/api/tasks/batch-tag", json={"ids": [c["id"]], "add": ["secretlist"]}, headers=HOST)
-    assert tagged.get_json()[0]["private"] is False and "list" not in tagged.get_json()[0]
+    assert tagged.get_json()[0]["private"] is False and tagged.get_json()[0]["list"] == "team"
+    # Nor does a tag put a task into the list: one in her Inbox stays there.
+    d = alice.post("/api/tasks", json={"title": "D", "tags": ["secretlist", "team"]}, headers=HOST).get_json()
+    assert d["private"] is True and "list" not in d
 
 
 def test_a_shared_task_cannot_be_made_private(alice, wiki):
-    """Others have seen it: shared stays shared, by every route and tool.
-    A private task, though, can be shared (and not back)."""
+    """Others have seen it: shared stays shared, by every route and tool:
+    it goes neither into a private list nor into an Inbox (with users a
+    shared task is always in a list). A private task, though, can be shared
+    (and not back)."""
     sign_in(alice, "bob")
-    bobs = alice.post("/api/tasks", json={"title": "Bob's"}, headers=HOST).get_json()
+    bobs = alice.post("/api/tasks", json={"title": "Bob's", "list": "team"}, headers=HOST).get_json()
+    assert bobs["private"] is False
     sign_in(alice, "alice")
-    for resp in (alice.put(f"/api/tasks/{bobs['id']}", json={"list": "secretlist"}, headers=HOST),
-                 alice.post("/api/tasks/batch-update", json={"tasks": [{"id": bobs["id"], "list": "secretlist"}]}, headers=HOST)):
-        assert resp.status_code == 400 and "stays shared" in resp.get_json()["error"]
-    assert "stays shared" in mcp(alice, "update_task", token="alice-token", id=bobs["id"], list="secretlist")
-    assert bobs["id"] in (wiki / "_tasks/tasks.json").read_text()
-    assert not (wiki / "private/alice/_tasks/tasks.json").exists() or bobs["id"] not in (wiki / "private/alice/_tasks/tasks.json").read_text()
-    # Her own private task goes the other way; unchanged (no list, on one in none) is no error.
+    shared_file, her_file = wiki / "_tasks/tasks.json", wiki / "private/alice/_tasks/tasks.json"
+    for where, why in (("secretlist", "stays shared"), ("", "always in a list"), ("inbox", "always in a list"),
+                       ("none", "always in a list"), (None, "always in a list")):
+        for resp in (alice.put(f"/api/tasks/{bobs['id']}", json={"list": where}, headers=HOST),
+                     alice.put(f"/api/tasks/{bobs['id']}", json={"list": where, "share": True}, headers=HOST),
+                     alice.post("/api/tasks/batch-update", json={"tasks": [{"id": bobs["id"], "list": where}]}, headers=HOST)):
+            assert resp.status_code == 400 and why in resp.get_json()["error"], where
+        if where is not None:
+            assert why in mcp(alice, "update_task", token="alice-token", id=bobs["id"], list=where)
+        assert bobs["id"] in shared_file.read_text() and bobs["id"] not in her_file.read_text()
+    # Whoever made it: bob can't take it back into his Inbox either.
+    sign_in(alice, "bob")
+    assert alice.put(f"/api/tasks/{bobs['id']}", json={"list": ""}, headers=HOST).status_code == 400
+    assert not (wiki / "private/bob/_tasks/tasks.json").exists() or bobs["id"] not in (wiki / "private/bob/_tasks/tasks.json").read_text()
+    sign_in(alice, "alice")
+    # Her own private task goes the other way; unchanged (the list it is in) is no error.
     mine = alice.post("/api/tasks", json={"title": "Mine", "list": "secretlist"}, headers=HOST).get_json()
-    assert alice.put(f"/api/tasks/{bobs['id']}", json={"list": ""}, headers=HOST).status_code == 200
-    assert alice.put(f"/api/tasks/{mine['id']}", json={"list": "", "share": True}, headers=HOST).get_json()["private"] is False
+    assert alice.put(f"/api/tasks/{bobs['id']}", json={"list": "team"}, headers=HOST).status_code == 200
+    assert alice.put(f"/api/tasks/{mine['id']}", json={"list": "team", "share": True}, headers=HOST).get_json()["private"] is False
     assert alice.put(f"/api/tasks/{mine['id']}", json={"list": "secretlist"}, headers=HOST).status_code == 400
+    assert alice.put(f"/api/tasks/{mine['id']}", json={"list": ""}, headers=HOST).status_code == 400
+    assert mine["id"] in shared_file.read_text() and mine["id"] not in her_file.read_text()
     # private is no field of a write: a task is private by its list.
     assert alice.put(f"/api/tasks/{mine['id']}", json={"private": True}, headers=HOST).status_code == 400
 
@@ -492,7 +571,7 @@ def test_a_shared_task_cannot_be_made_private(alice, wiki):
 def test_comments_are_everyones_to_change(alice, wiki):
     """A shared task is everyone's, its comments too: alice may edit and
     delete bob's, and an edit keeps the author."""
-    task = alice.post("/api/tasks", json={"title": "Shared", "list": ""}, headers=HOST).get_json()
+    task = alice.post("/api/tasks", json={"title": "Shared", "list": "team"}, headers=HOST).get_json()
     url = f"/api/tasks/{task['id']}/comments"
     sign_in(alice, "bob")
     his = alice.post(url, json={"text": "His"}, headers=HOST).get_json()["comments"][-1]
@@ -507,13 +586,17 @@ def test_sharing_a_task_is_in_its_history(alice, wiki):
     """Making a private task shared is an event in its History, by who did it."""
     task = alice.post("/api/tasks", json={"title": "Own", "list": "secretlist"}, headers=HOST).get_json()
     url = f"/api/tasks/{task['id']}"
-    last = alice.put(url, json={"list": "", "share": True}, headers=HOST).get_json()["history"][-1]
+    # Into her Inbox nothing is shared: no event.
+    inbox = alice.put(url, json={"list": "", "share": True}, headers=HOST).get_json()
+    assert inbox["private"] is True and "shared" not in [e["event"] for e in inbox["history"]]
+    last = alice.put(url, json={"list": "team", "share": True}, headers=HOST).get_json()["history"][-1]
     assert (last["event"], last["by"]) == ("shared", "alice")
     # Unchanged is no event, and a new private task has none to start with.
-    again = alice.put(url, json={"list": ""}, headers=HOST).get_json()["history"]
+    again = alice.put(url, json={"list": "team"}, headers=HOST).get_json()["history"]
     assert [e["event"] for e in again].count("shared") == 1
-    new = alice.post("/api/tasks", json={"title": "New", "list": "secretlist"}, headers=HOST).get_json()
-    assert [e["event"] for e in new["history"]] == ["created"]
+    for fields in ({"list": "secretlist"}, {}):
+        new = alice.post("/api/tasks", json={"title": "New", **fields}, headers=HOST).get_json()
+        assert [e["event"] for e in new["history"]] == ["created"]
 
 
 def test_undoing_a_delete_keeps_a_task_private(alice, wiki):
@@ -525,18 +608,32 @@ def test_undoing_a_delete_keeps_a_task_private(alice, wiki):
 
 
 def test_alices_assistant_makes_private_tasks(client, wiki):
-    """Her default list is her private one: create_task puts a task there,
-    so private, unless told another list, as c t does."""
+    """create_task without a list puts a task into her Inbox, so private,
+    whatever she pinned, as c t does; told a list, into that."""
     text = mcp(client, "create_task", token="alice-token", title="Call mum")
+    assert "· private" in text and "list:" not in text
+    for none in ("", "inbox", "none"):
+        text = mcp(client, "create_task", token="alice-token", title="Loose lunch", list=none)
+        assert "· private" in text and "list:" not in text, none
+    text = mcp(client, "create_task", token="alice-token", title="Wrap the gift", list="secretlist")
     assert "· private ·" in text and "list: secretlist" in text
-    assert "Created the list #team" in mcp(client, "create_task_list", token="alice-token", name="Team")
     text = mcp(client, "create_task", token="alice-token", title="Team lunch", list="team")
     assert "private" not in text.split("\n")[3] and "list: team" in text
-    assert "private" not in mcp(client, "create_task", token="alice-token", title="Loose lunch", list="").split("\n")[3]
     assert "stays" not in mcp(client, "create_task", token="alice-token", title="x", private=True)   # told to give list
     assert "list" in mcp(client, "create_task", token="alice-token", title="x", private=True)
+    her_file = (wiki / "private/alice/_tasks/tasks.json").read_text()
+    assert all(t in her_file for t in ("Call mum", "Loose lunch", "Wrap the gift")) and "Team lunch" not in her_file
+    shared = (wiki / "_tasks/tasks.json").read_text()
+    assert "Team lunch" in shared and not any(t in shared for t in ("Call mum", "Loose lunch", "Wrap the gift"))
+    # Her Inbox, by its name, is hers: bob's has none of it.
+    assert "Call mum" in mcp(client, "search_tasks", token="alice-token", list="inbox")
+    assert "Wrap the gift" not in mcp(client, "search_tasks", token="alice-token", list="inbox")
     assert "Team lunch" in mcp(client, "search_tasks", query="lunch")
+    assert "Loose lunch" not in mcp(client, "search_tasks", query="lunch")
     assert "Call mum" not in mcp(client, "search_tasks", query="mum")
+    for name in ("inbox", "none"):
+        text = mcp(client, "search_tasks", list=name)
+        assert "Call mum" not in text and "Loose lunch" not in text and SECRET not in text
 
 
 # ── MCP ──────────────────────────────────────────────────────────────────────
@@ -576,6 +673,9 @@ MCP_READS = [
     ("read_guides", {"slug": "private/alice/"}),
     ("search_tasks", {"query": QUERY, "status": "all"}),
     ("search_tasks", {"tag": "secretlist", "status": "all"}),
+    ("search_tasks", {"list": "inbox", "status": "all"}),        # his Inbox, not hers
+    ("search_tasks", {"list": "none"}),
+    ("search_tasks", {"assignee": "none", "status": "all"}),
     ("replace_in_pages", {"find": QUERY, "replace": "x"}),       # a dry run
     ("read_file", {"url": "/private/alice/_assets/photo.png"}),
     ("read_file", {"url": "/private/bob/../alice/_assets/photo.png"}),
@@ -680,7 +780,7 @@ def test_a_private_new_list_is_its_makers_alone(alice, client, wiki):
     assert alice.post("/tasks/new-list", data={"name": "gifts"}, headers=HOST).headers["Location"].startswith("/tasks?newlist_name=")
     sign_in(client, "bob")
     assert 'data-place="list:gifts"' not in client.get("/tasks", headers=HOST).get_data(as_text=True)
-    assert client.post("/tasks/new-list", data={"name": "gifts"}, headers=HOST).headers["Location"] == "/tasks?list=gifts&made=1"   # his first list: his one pin
+    assert client.post("/tasks/new-list", data={"name": "gifts"}, headers=HOST).headers["Location"] == "/tasks?list=gifts"
     assert '{"name": "gifts"}' in (wiki / "_tasks/lists.json").read_text()
     sign_in(client, "alice")
     page = client.get("/tasks", headers=HOST).get_data(as_text=True)
@@ -746,6 +846,17 @@ WRITES = [
     # alice's tasks, by id; a task of bob's for her list is refused (he has no such list).
     ("POST /api/tasks", "POST", "/api/tasks", {"json": {"title": "Bob's", "list": "secretlist"}}),
     ("PUT /api/tasks/{id}", "PUT", f"/api/tasks/{TASK_ID}", {"json": {"list": "", "share": True}}),
+    ("PUT /api/tasks/{id}", "PUT", f"/api/tasks/{TASK_ID}", {"json": {"list": "team", "share": True}}),
+    # Her Inbox's task: filed into a shared list, taken into his Inbox, changed, deleted.
+    ("PUT /api/tasks/{id}", "PUT", f"/api/tasks/{INBOX_ID}", {"json": {"list": "team", "share": True}}),
+    ("PUT /api/tasks/{id}", "PUT", f"/api/tasks/{INBOX_ID}", {"json": {"list": "inbox"}}),
+    ("PUT /api/tasks/{id}", "PUT", f"/api/tasks/{INBOX_ID}", {"json": {"title": "Bob was here", "assignee": "bob"}}),
+    ("DELETE /api/tasks/{id}", "DELETE", f"/api/tasks/{INBOX_ID}", {}),
+    ("POST /api/tasks/batch-update", "POST", "/api/tasks/batch-update", {"json": {"tasks": [{"id": INBOX_ID, "list": "team", "share": True}]}}),
+    ("POST /api/tasks/batch-complete", "POST", "/api/tasks/batch-complete", {"json": {"ids": [INBOX_ID]}}),
+    # A list's settings: her Inbox has none to set, by either name.
+    ("POST /api/tasks/settings", "POST", "/api/tasks/settings", {"json": {"list": "inbox", "set": {"home": "off"}}}),
+    ("POST /api/tasks/settings", "POST", "/api/tasks/settings", {"json": {"list": "secretlist", "set": {"home": "off"}}}),
     ("PUT /api/tasks/{id}", "PUT", f"/api/tasks/{TASK_ID}", {"json": {"title": "Bob was here"}}),
     ("PUT /api/tasks/{id}", "PUT", f"/api/tasks/{DONE_ID}", {"json": {"completed": False}}),
     ("DELETE /api/tasks/{id}", "DELETE", f"/api/tasks/{TASK_ID}", {}),
@@ -777,7 +888,7 @@ def _alices_files(wiki):
              for p in (wiki / folder).rglob("*") if p.is_file()
              and "private/bob/" not in p.relative_to(wiki).as_posix() + "/"}   # bob's own, bob may change
     shared = "".join(p.read_text() for p in (wiki / "_tasks").glob("*.json"))
-    files["shared tasks has her ids"] = str(TASK_ID in shared or DONE_ID in shared)
+    files["shared tasks has her ids"] = str(any(id in shared for id in HER_TASKS))
     return files
 
 
@@ -825,6 +936,10 @@ MCP_WRITES = [
     ("create_task_list", {"name": "secretlist", "private": True}),   # his own list of that name
     ("rename_task_list", {"list": "secretlist", "new_name": "bobs"}),          # her private list, by its name: no list for bob
     ("update_task", {"id": TASK_ID, "list": "", "share": True}),
+    ("update_task", {"id": TASK_ID, "list": "team", "share": True}),
+    ("update_task", {"id": INBOX_ID, "list": "team", "share": True}),
+    ("update_task", {"id": INBOX_ID[:8], "title": "Bob was here"}),
+    ("update_task", {"ids": [INBOX_ID], "status": "done"}),
     ("update_task", {"id": TASK_ID[:8], "title": "Bob was here"}),
     ("update_task", {"id": TASK_ID, "status": "wont_do"}),
     ("update_task", {"id": DONE_ID, "status": "open", "comment": "Bob's"}),
@@ -855,7 +970,8 @@ def _private_tags(wiki, owner="alice"):
 def test_a_shared_tags_rename_reaches_private_files_and_tells_nothing(bob, wiki):
     """secretlist on a shared task too is one tag for all: bob's rename goes on in
     alice's private tasks and embeds, but he is told only of what he sees."""
-    assert bob.post("/api/tasks", json={"title": "Shared", "tags": ["secretlist"]}, headers=HOST).status_code < 300
+    made = bob.post("/api/tasks", json={"title": "Shared", "list": "team", "tags": ["secretlist"]}, headers=HOST)
+    assert made.status_code < 300 and made.get_json()["private"] is False
     out = mcp(bob, "rename_task_tag", tag="secretlist", new_tag="renamed")
     assert out == "Renamed tag #secretlist to #renamed, in one commit: 1 task."
     assert "renamed" in _private_tags(wiki) and "secretlist" not in _private_tags(wiki)
@@ -1052,88 +1168,158 @@ def test_an_exported_private_task_stays_private_when_imported(alice, wiki):
     alice.post("/tasks/new-list", data={"name": "shared"}, headers=HOST)
     out = alice.post("/api/tasks/import", json={"file": {"tasks": mine}, "list": "shared"}, headers=HOST).get_json()
     assert out == {"added": 1, "skipped": 0, "ids": [TASK_ID]}
-    # Into a shared list: it stays hers, in her list "private", made for it.
+    # Into a shared list: it stays hers, in her Inbox; no list is made for it.
     back = next(t for t in json.loads((wiki / "private/alice/_tasks/tasks.json").read_text()) if t["id"] == TASK_ID)
-    assert back["list"] == "private" and '{"name": "private"}' in (wiki / "private/alice/_tasks/lists.json").read_text()
+    assert "list" not in back and '"private"' not in (wiki / "private/alice/_tasks/lists.json").read_text()
     assert ((wiki / "_tasks/tasks.json").read_text() if (wiki / "_tasks/tasks.json").exists() else "") == shared_before
 
 
-# ── A new task nobody chose a place for is its user's own ───────────────────────
+# ── A new task nobody chose a place for is its user's own: the Inbox ────────────
 
 
-def test_a_new_task_of_one_who_pinned_nothing_goes_to_their_private_list(bob, wiki):
-    """With users, where no list is in view and nothing is pinned, a new task
-    goes into the user's private list "private", which the first task into
-    it makes: a private task can be shared later, a shared one never made
-    private. No list stays a choice of its own."""
-    assert not (wiki / "private/bob/_tasks/lists.json").exists()
-    # c t (the page's body) and a task app's + New start in it, and it is a
-    # choice of the List field already, a private one.
+@pytest.mark.parametrize("named", [{}, {"list": ""}, {"list": None}, {"list": "inbox"}, {"list": "None"}])
+def test_a_new_task_that_names_no_list_goes_to_its_makers_inbox(bob, wiki, named):
+    """With users a new task that names no list is in its maker's Inbox:
+    theirs alone, in their files, with no list made for it. A private task
+    can be shared later, a shared one never made private."""
+    assert not (wiki / "private/bob/_tasks").exists()
+    # Nothing on a page says where c t puts a task; the task app is told
+    # that no list means private.
     body = bob.get("/page/plans", headers=HOST).get_data(as_text=True)
-    assert 'data-tasks-list="private"' in body
+    assert "data-tasks-list" not in body
     app = bob.get("/tasks", headers=HOST).get_data(as_text=True)
-    assert 'data-default-list="private"' in app
+    assert 'data-inbox-private="1"' in app and "data-default-list" not in app
     choices = json.loads(re.search(r'data-lists="([^"]*)"', app).group(1).replace("&#34;", '"'))
-    assert {"ref": "private", "private": True} in choices
-    assert not (wiki / "private/bob/_tasks/lists.json").exists()      # looking makes nothing
-    # The first task into it makes the list, in the task's commit.
-    made = bob.post("/api/tasks", json={"title": "Call the bank", "list": "private"}, headers=HOST)
-    assert made.status_code == 201 and made.get_json()["private"] is True and made.get_json()["list"] == "private"
-    assert '{"name": "private"}' in (wiki / "private/bob/_tasks/lists.json").read_text()
+    assert choices == [{"ref": "team", "private": False}]
+    assert not (wiki / "private/bob/_tasks").exists()      # looking makes nothing
+    made = bob.post("/api/tasks", json={"title": "Call the bank", **named}, headers=HOST)
+    assert made.status_code == 201 and made.get_json()["private"] is True and "list" not in made.get_json()
     assert "Call the bank" in (wiki / "private/bob/_tasks/tasks.json").read_text()
-    assert "Call the bank" not in (wiki / "_tasks/tasks.json").read_text()
+    assert "Call the bank" not in shared_tasks(wiki)
+    assert not (wiki / "private/bob/_tasks/lists.json").exists()      # no list "private" is made any more
     changed = git(wiki, "show", "--name-only", "--format=", "HEAD").split()
-    assert {"private/bob/_tasks/lists.json", "private/bob/_tasks/tasks.json"} <= set(changed)
-    # An assistant's create_task without a list goes there too; '' says none.
-    text = mcp(bob, "create_task", title="Renew the passport")
+    assert "private/bob/_tasks/tasks.json" in changed and not any(f.endswith("lists.json") for f in changed)
+    # An assistant's create_task goes there too.
+    text = mcp(bob, "create_task", title="Renew the passport", **{k: v for k, v in named.items() if v is not None})
+    assert "· private" in text and "list:" not in text
     assert "Renew the passport" in (wiki / "private/bob/_tasks/tasks.json").read_text(), text
-    mcp(bob, "create_task", title="Water the plants", list="")
-    assert "Water the plants" in (wiki / "_tasks/tasks.json").read_text()
-    # Nobody else sees them; a task with no list given to the API is in none, as before.
+    assert json.loads(shared_tasks(wiki) or "[]") == []
+    # Nobody else sees them, whatever they ask for.
     sign_in(bob, "alice")
-    titles = [t["title"] for t in bob.get("/api/tasks", headers=HOST).get_json()]
-    assert "Call the bank" not in titles and "Renew the passport" not in titles and "Water the plants" in titles
-    # Her first pinned list comes before the fallback.
-    assert 'data-tasks-list="secretlist"' in bob.get("/page/plans", headers=HOST).get_data(as_text=True)
+    for url in ("/api/tasks", "/api/tasks/export?list=inbox", "/api/tasks/export?mine=1", "/tasks?list=inbox", "/tasks"):
+        seen = bob.get(url, headers=HOST).get_data(as_text=True)
+        assert "Call the bank" not in seen and "Renew the passport" not in seen, url
+    assert "Call the bank" not in mcp(bob, "search_tasks", token="alice-token", query="bank passport")
 
 
-def test_that_private_list_counts_as_pinned_while_nothing_else_is(bob, wiki):
-    """What one captures is in their My tasks: the list "private" a first
-    task made is pinned for its user while they pinned nothing else, and
-    can't be unpinned then."""
-    assert "data-init-lists" not in bob.get("/tasks?mine=1", headers=HOST).get_data(as_text=True)
-    bob.post("/api/tasks", json={"title": "Call the bank", "list": "private"}, headers=HOST)
-    mine = bob.get("/tasks?mine=1", headers=HOST).get_data(as_text=True)
-    assert 'data-init-lists="private"' in mine
-    assert "list-unpin-btn" not in bob.get("/tasks?list=private", headers=HOST).get_data(as_text=True)
-    assert bob.post("/tasks/pin-list", data={"list": "private", "pin": "0"}, headers=HOST).status_code == 400
-    assert 'data-init-lists="private"' in bob.get("/tasks?mine=1", headers=HOST).get_data(as_text=True)
-    # Beside another pin it is an ordinary one.
-    assert bob.post("/tasks/new-list", data={"name": "errands"}, headers=HOST).status_code == 302
-    assert 'data-init-lists="private|errands"' in bob.get("/tasks?mine=1", headers=HOST).get_data(as_text=True)
+def test_the_inbox_is_a_pill_and_a_view(bob, wiki):
+    """The switcher has the Inbox after My tasks, with its counts; its view
+    is headed Inbox, marked private, and has its tasks; a task filed into a
+    shared list leaves it."""
+    made = bob.post("/api/tasks", json={"title": "Call the bank", "due_date": "2020-01-01"}, headers=HOST).get_json()
+    page = bob.get("/tasks?list=inbox", headers=HOST).get_data(as_text=True)
+    places = re.findall(r'data-place="([^"]+)"', page)
+    assert places[:2] == ["mine", "inbox"]
+    pill = page.split('data-place="inbox"', 1)[1].split("</a>", 1)[0]
+    assert 'aria-current="page"' in pill and "(only you see it)" in pill and ">Inbox<" in pill
+    assert '<a href="/tasks?list=inbox" class="tasks-place" data-place="inbox"' in page
+    assert "<h1>Inbox" in page and "Your Inbox: only you see its tasks" in page
+    assert "New tasks land here, and only you see them." in page
+    assert 'data-init-list="inbox"' in page
+    assert made["id"] in page.split('id="tasks-initial">', 1)[1].split("</script>", 1)[0]
+    # ?list=none is the same view.
+    assert "<h1>Inbox" in bob.get("/tasks?list=none", headers=HOST).get_data(as_text=True)
+    counts = lambda: bob.get("/api/tasks/due-count?places=1", headers=HOST).get_json()
+    assert counts()["count"] == 1 and counts()["places"]["inbox"]["count"] == 1
+    # Filed (share): it is the list's, no one's, and in no Inbox.
+    filed = bob.put(f"/api/tasks/{made['id']}", json={"list": "team", "share": True}, headers=HOST)
+    assert filed.status_code == 200 and filed.get_json()["private"] is False
+    assert counts()["count"] == 0 and counts()["places"]["inbox"]["count"] == 0
+    assert bob.get("/api/tasks/export?list=inbox", headers=HOST).get_json()["tasks"] == []
+    sign_in(bob, "alice")
+    assert [t["id"] for t in bob.get("/api/tasks/export?list=team", headers=HOST).get_json()["tasks"]] == [made["id"]]
+    assert made["id"] not in [t["id"] for t in bob.get("/api/tasks/export?list=inbox", headers=HOST).get_json()["tasks"]]
+
+
+def test_sharing_mode_shows_no_inbox_of_a_user(alice, wiki):
+    """Sharing mode (a screen others look at) shows nothing of what is
+    private in the switcher: with users the Inbox has no pill there, and no
+    view by its name."""
+    assert 'data-place="inbox"' in alice.get("/tasks", headers=HOST).get_data(as_text=True)
+    alice.set_cookie("zone-sharing", "1")
+    page = alice.get("/tasks", headers=HOST).get_data(as_text=True)
+    assert 'data-place="mine"' in page and 'data-place="inbox"' not in page
+    for name in ("inbox", "none"):
+        view = alice.get(f"/tasks?list={name}", headers=HOST).get_data(as_text=True)
+        assert "<h1>Inbox" not in view and "tasks-inbox-line" not in view and 'class="tasks-app"' not in view, name
+
+
+def test_a_list_called_private_is_an_ordinary_list(bob, wiki):
+    """Until 2026-11 a user's list "private" took their new tasks and
+    stayed pinned while nothing else was. It is a list like any other now:
+    it pins and unpins, and a new task doesn't go into it."""
+    assert bob.post("/tasks/new-list", data={"name": "private", "private": "1"}, headers=HOST).status_code == 302
     assert "list-unpin-btn" in bob.get("/tasks?list=private", headers=HOST).get_data(as_text=True)
     assert bob.post("/tasks/pin-list", data={"list": "private", "pin": "0"}, headers=HOST).status_code == 302
-    assert 'data-init-lists="errands"' in bob.get("/tasks?mine=1", headers=HOST).get_data(as_text=True)
+    page = bob.get("/tasks?list=private", headers=HOST).get_data(as_text=True)
+    assert "list-unpin-btn" not in page and "list-pin-btn" in page
+    assert 'data-place="list:private"' not in page.split('class="lists-more"', 1)[0]
+    made = bob.post("/api/tasks", json={"title": "Call the bank"}, headers=HOST).get_json()
+    assert made["private"] is True and "list" not in made
+    # Unpinned, its tasks are in his My tasks all the same: a pin is a pill.
+    listed = bob.post("/api/tasks", json={"title": "Listed", "list": "private"}, headers=HOST).get_json()
+    mine = [t["id"] for t in bob.get("/api/tasks/export?mine=1", headers=HOST).get_json()["tasks"]]
+    assert sorted(mine) == sorted([made["id"], listed["id"]])
 
 
-def test_an_assistants_task_for_someone_is_not_in_a_private_list(bob, wiki):
-    """create_task without a list goes into the user's default list, but not
-    with an assignee when that list is private: a task given to someone is
-    shared work, so it is in no list. So for the list of one who pinned
-    nothing, and for a private list pinned first."""
-    text = mcp(bob, "create_task", title="Check the invoice", assignee="alice")
-    assert "Check the invoice" in (wiki / "_tasks/tasks.json").read_text(), text
-    assert not (wiki / "private/bob/_tasks/lists.json").exists()
-    text = mcp(bob, "create_task", title="Sign the form", assignee="alice", token="alice-token")
-    assert "Sign the form" in (wiki / "_tasks/tasks.json").read_text(), text
+def test_an_assistants_task_for_someone_is_not_made_private(bob, wiki):
+    """create_task without a list goes into the user's Inbox, which only
+    they see: with an assignee that would be a task its assignee never
+    hears of, so it is refused, and the answer names the shared lists (not
+    a private one, the asker's own or anyone's)."""
+    for token in ("bob-token", "alice-token"):
+        text = mcp(bob, "create_task", title="Check the invoice", assignee="alice", token=token)
+        assert "has to be in a shared list" in text and text.rstrip().endswith("Pass list: team"), text
+        assert "secretlist" not in text
+    assert json.loads(shared_tasks(wiki) or "[]") == [] and not (wiki / "private/bob/_tasks").exists()
+    assert "Check the invoice" not in (wiki / "private/alice/_tasks/tasks.json").read_text()
+    # In a shared list it is made, and assigned.
+    text = mcp(bob, "create_task", title="Sign the form", assignee="alice", list="team")
     shared = {t["title"]: t for t in json.loads((wiki / "_tasks/tasks.json").read_text())}
-    assert "list" not in shared["Sign the form"] and shared["Sign the form"]["assignee"] == "alice"
-    # Without an assignee it is in her first pinned list, private.
+    assert shared["Sign the form"]["list"] == "team" and shared["Sign the form"]["assignee"] == "alice", text
+    # Without an assignee it is in the asker's Inbox.
     mcp(bob, "create_task", title="Wrap the gift", token="alice-token")
     assert "Wrap the gift" in (wiki / "private/alice/_tasks/tasks.json").read_text()
+    assert "Wrap the gift" not in (wiki / "_tasks/tasks.json").read_text()
 
 
-def test_no_fallback_without_users(client, wiki_dir):
+def test_deleting_a_private_list_keeps_its_tasks_private(alice, wiki):
+    """A deleted private list's tasks go to their user's Inbox when no list
+    is named: private still, with or without share; into a shared list only
+    with share."""
+    her_file = wiki / "private/alice/_tasks/tasks.json"
+    refused = alice.post("/tasks/delete-list", data={"list": "secretlist", "to": "team"}, headers=HOST)
+    assert "delete_error" in refused.headers["Location"] and "secretlist" in (wiki / "private/alice/_tasks/lists.json").read_text()
+    gone = alice.post("/tasks/delete-list", data={"list": "secretlist", "to": ""}, headers=HOST)
+    assert gone.status_code == 302 and "delete_error" not in gone.headers["Location"]
+    assert "secretlist" not in (wiki / "private/alice/_tasks/lists.json").read_text()
+    tasks = {t["id"]: t for t in json.loads(her_file.read_text())}
+    assert "list" not in tasks[TASK_ID] and json.loads(shared_tasks(wiki) or "[]") == []
+    closed = json.loads((wiki / "private/alice/_tasks/closed.json").read_text())
+    assert "list" not in closed[0] and closed[0]["id"] == DONE_ID
+    mine = alice.get("/api/tasks/export?list=inbox", headers=HOST).get_json()["tasks"]
+    assert sorted(t["id"] for t in mine) == sorted(HER_TASKS) and all(t["private"] for t in mine)    # open and closed
+    sign_in(alice, "bob")
+    assert SECRET not in alice.get("/api/tasks", headers=HOST).get_data(as_text=True)
+    assert SECRET not in alice.get("/tasks?list=inbox", headers=HOST).get_data(as_text=True)
+
+
+def test_no_private_inbox_without_users(client, wiki_dir):
     body = client.get("/page/index", headers=HOST).get_data(as_text=True)
     assert "data-tasks-list=" not in body
-    assert 'data-default-list=""' in client.get("/tasks", headers=HOST).get_data(as_text=True)
+    page = client.get("/tasks?list=inbox", headers=HOST).get_data(as_text=True)
+    assert "data-inbox-private" not in page and "data-default-list" not in page
+    assert "<h1>Inbox</h1>" in page and "New tasks land here, in no list." in page and "only you" not in page
+    made = client.post("/api/tasks", json={"title": "Loose"}, headers=HOST).get_json()
+    assert "private" not in made and "list" not in made
+    assert "Loose" in (wiki_dir / "_tasks/tasks.json").read_text() and not (wiki_dir / "private").exists()

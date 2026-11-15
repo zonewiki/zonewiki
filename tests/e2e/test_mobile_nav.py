@@ -149,14 +149,15 @@ def test_note_creates_a_quicknote(new_page, wiki):
     expect(ta).to_have_value("# Shopping idea\n\nmilk")
 
 
-def test_task_adds_a_task_to_your_tasks_from_the_wiki(new_page, wiki):
+def test_task_adds_a_task_to_your_inbox_from_the_wiki(new_page, wiki):
     phone = new_page(**TOUCH_PHONE)
     list_page(phone, wiki, "tasks", "# My tasks\n\n[[tasks: list=task view=focus pin=1]]\n")
     phone.goto("/page/index")
     phone.locator(".action-task").tap()
     modal = phone.locator(".task-edit-modal[open]")
     expect(modal).to_be_visible()
-    expect(modal.locator("select[id^=task-edit-list]")).to_have_value("task")     # your default list
+    expect(modal.locator("select[id^=task-edit-list]")).to_have_value("")         # the Inbox, whatever is pinned
+    expect(modal.locator(".task-edit-target")).to_have_text("Adds to the Inbox.")
     expect(phone).to_have_url(re.compile(r"/page/index$"))   # stays on the page
 
 
@@ -322,8 +323,9 @@ def test_top_search_and_the_new_note_key(page, wiki):
     expect(page.locator("#modal")).to_be_visible()
 
 
-# ── New task: the Tasks home decides ────────────────────────────────────────
-# c t gives a new task the Tasks home's tags.
+# ── New task: into the Inbox ────────────────────────────────────────────────
+# c t makes a task in the Inbox from any page, starting today; no list's
+# pin, tags or keep decide anything about it.
 
 def new_task(page):
     page.keyboard.press("c")
@@ -331,29 +333,30 @@ def new_task(page):
 
 
 def _home(page, wiki, embed="[[tasks: list=task view=focus pin=1]]"):
-    """A pinned list (so the default list, where New task puts a task), and a page that shows it."""
+    """A pinned list and a page that shows it, and a page without tasks."""
     list_page(page, wiki, "tasks", f"# My tasks\n\n{embed}\n")
     wiki.write("garden", "# Garden\n\nBeds.\n")
 
 
 def test_new_task_stays_on_the_page(page, wiki):
     # A page without a task list app loads a hidden one: the modal opens right
-    # there, in the default list and with its start (Focus: today); a toast
-    # says where the task went.
-    _home(page, wiki)
+    # there, for a task in the Inbox that starts today (though a list is
+    # pinned, and opens on Open); a toast says where the task went.
+    _home(page, wiki, "[[tasks: list=task view=open pin=1]]")
     page.goto("/page/garden")
     new_task(page)
     modal = page.locator(".task-edit-modal[open]")
     expect(modal).to_be_visible()
     assert page.url.endswith("/page/garden")
-    expect(modal.locator("select[id^=task-edit-list]")).to_have_value("task")
+    expect(modal.locator("select[id^=task-edit-list]")).to_have_value("")
+    expect(modal.locator(".task-edit-target")).to_have_text("Adds to the Inbox.")
     expect(modal.locator(".tag-chip")).to_have_count(0)
     expect(modal.locator("[id^=task-edit-start]")).to_have_value(date.today().isoformat())
     modal.locator("[id^=task-edit-title]").fill("Order seeds")
     page.keyboard.press("Enter")
     expect(page.locator(".task-undo-toast")).to_contain_text("Added “Order seeds” to your tasks")
     tasks = page.request.get("/api/tasks").json()
-    assert [(t["title"], t["list"], t["tags"], t["start_date"]) for t in tasks] == [("Order seeds", "task", [], date.today().isoformat())]
+    assert [(t["title"], t.get("list"), t["tags"], t["start_date"]) for t in tasks] == [("Order seeds", None, [], date.today().isoformat())]
     # A second time doesn't load the tasks again.
     page.keyboard.press("c")
     page.keyboard.press("t")
@@ -361,16 +364,9 @@ def test_new_task_stays_on_the_page(page, wiki):
     expect(page.locator(".tasks-app[data-headless]")).to_have_count(1)
 
 
-def test_new_task_start_follows_the_homes_view(page, wiki):
-    _home(page, wiki, "[[tasks: list=task view=open pin=1]]")
-    page.goto("/page/garden")
-    new_task(page)
-    expect(page.locator(".task-edit-modal[open] [id^=task-edit-start]")).to_have_value("")
-
-
-def test_new_task_falls_back_to_the_home_page(page, wiki):
+def test_new_task_falls_back_to_my_tasks(page, wiki):
     # Should the hidden tasks fail to load, My tasks opens with the modal,
-    # whose task goes into the first pinned list.
+    # whose task goes into the Inbox.
     _home(page, wiki)
     page.route("**/api/tasks/headless", lambda route: route.fulfill(status=500, body="no"))
     page.goto("/page/garden")
@@ -378,31 +374,39 @@ def test_new_task_falls_back_to_the_home_page(page, wiki):
     page.wait_for_url(re.compile(r"/tasks\?mine=1(&new=1)?$"))
     modal = page.locator(".task-edit-modal[open]")
     expect(modal).to_be_visible()
-    expect(modal.locator("select[id^=task-edit-list]")).to_have_value("task")
+    expect(modal.locator("select[id^=task-edit-list]")).to_have_value("")
 
 
-def test_new_task_on_a_page_that_shows_the_default_list(page, wiki):
+def test_new_task_on_a_page_that_shows_a_list_goes_to_the_inbox(page, wiki):
+    # c t is the same on every page: on one that shows a list (a pinned one
+    # too) its task is still the Inbox's; the list's own "+ New" adds to the list.
     _home(page, wiki)
     page.goto("/page/tasks")
     new_task(page)
     modal = page.locator(".task-edit-modal[open]")
     expect(modal).to_be_visible()
-    expect(modal.locator("select[id^=task-edit-list]")).to_have_value("task")
+    expect(modal.locator("select[id^=task-edit-list]")).to_have_value("")
+    expect(modal.locator(".task-edit-target")).to_have_text("Adds to the Inbox.")
     assert page.url.endswith("/page/tasks")
+    page.keyboard.press("Escape")
+    page.locator("#task-add-btn").click()
+    expect(modal.locator("select[id^=task-edit-list]")).to_have_value("task")
+    expect(modal.locator(".task-edit-target")).to_have_text("Adds to the list task.")
 
 
-def test_new_task_on_another_tasks_gets_the_homes_tags(page, wiki):
-    # A page with another task list (here /tasks, every task): the modal opens
-    # there, but in the default list, with its tags and keep, not that task list's filter.
+def test_new_task_on_a_tags_view_has_no_lists_tags_nor_the_views(page, wiki):
+    # A page with a task list (here /tasks filtered by a tag): the modal opens
+    # there, for a task in the Inbox, without the view's filter and without
+    # what a pinned list gives its new tasks (tags, keep).
     _home(page, wiki, "[[tasks: list=shop keep=1 new=food pin=1]]")
     page.goto("/tasks?tag=garden")
     new_task(page)
     modal = page.locator(".task-edit-modal[open]")
     expect(modal).to_be_visible()
-    expect(modal.locator("select[id^=task-edit-list]")).to_have_value("shop")
-    expect(modal.locator(".tag-chip")).to_have_count(1)
-    expect(modal.locator(".tag-chip")).to_contain_text("food")
-    expect(modal.locator("[id^=task-edit-keep]")).to_be_checked()
+    expect(modal.locator("select[id^=task-edit-list]")).to_have_value("")
+    expect(modal.locator(".tag-chip")).to_have_count(0)
+    expect(modal.locator("[id^=task-edit-keep]")).not_to_be_checked()
+    expect(modal.locator("[id^=task-edit-start]")).to_have_value(date.today().isoformat())
     assert "/tasks" in page.url
 
 
@@ -417,9 +421,9 @@ def test_new_task_without_a_home_has_no_tags(page, wiki):
     expect(modal.locator(".tag-chip")).to_have_count(0)
 
 
-def test_c_t_in_the_editor_goes_to_the_default_list(page, wiki):
-    # The editor has a hidden tasks: the modal opens right there, in the
-    # default list.
+def test_c_t_in_the_editor_goes_to_the_inbox(page, wiki):
+    # The editor has a hidden tasks: the modal opens right there, for a task
+    # in the Inbox.
     _home(page, wiki, "[[tasks: list=work pin=1]]")
     page.goto("/edit/garden")
     page.locator("#editor-textarea").evaluate("el => el.blur()")
@@ -427,7 +431,7 @@ def test_c_t_in_the_editor_goes_to_the_default_list(page, wiki):
     page.keyboard.press("t")
     modal = page.locator(".task-edit-modal[open]")
     expect(modal).to_be_visible()
-    expect(modal.locator("select[id^=task-edit-list]")).to_have_value("work")
+    expect(modal.locator("select[id^=task-edit-list]")).to_have_value("")
     expect(modal.locator(".tag-chip")).to_have_count(0)
     assert "/edit/garden" in page.url
 
@@ -443,7 +447,7 @@ def test_g_t_goes_to_my_tasks(page, wiki):
     page.goto("/page/garden")
     page.keyboard.press("g")
     page.keyboard.press("t")
-    page.wait_for_url(re.compile(r"/tasks\?mine=1$"))    # My tasks still: the tasks in no list
+    page.wait_for_url(re.compile(r"/tasks\?mine=1$"))    # My tasks still: a pin decides nothing about it
 
 
 
@@ -539,25 +543,27 @@ def test_task_counts_follow_tasks_changes(page, wiki):
 
 
 def test_my_tasks_is_the_tasks_module(page, wiki):
-    # The Tasks links go to My tasks, which has the pinned list's tasks and
-    # counts as the Tasks module; New task adds one in the first pinned
-    # list, and it is no stop in the navigation trail. A page that shows the
-    # list is a page like any other: of the wiki.
+    # The Tasks links go to My tasks, which has every task but those of a
+    # list left out of it (pinned or not) and counts as the Tasks module;
+    # New task adds one to the Inbox, and it is no stop in the navigation
+    # trail. A page that shows a list is a page like any other: of the wiki.
     list_page(page, wiki, "tasks", "# My tasks\n\n[[tasks: list=task view=focus pin=1]]\n")
     make_list(page, "shop")
+    make_list(page, "someday", pin=True)
+    assert page.request.post("/api/tasks/settings", data={"list": "someday", "set": {"home": "off"}}).ok
     wiki.write("garden", "# Garden\n\nBeds.\n")
-    page.request.post("/api/tasks", data={"title": "Milk", "list": "shop", "due_date": date.today().isoformat()})
-    page.request.post("/api/tasks", data={"title": "Pay rent", "list": "task", "due_date": date.today().isoformat()})
+    for title, name in (("Milk", "shop"), ("Pay rent", "task"), ("Learn the oboe", "someday")):
+        page.request.post("/api/tasks", data={"title": title, "list": name, "due_date": date.today().isoformat()})
     page.goto("/page/garden")
     tasks = page.locator(".breadcrumb .module-link[data-module=tasks]")
-    expect(tasks.locator(".module-due")).to_have_text("1")   # the pinned list's task only
+    expect(tasks.locator(".module-due")).to_have_text("2")   # not the task of the list left out
     tasks.click()
     page.wait_for_url(re.compile(r"/tasks\?mine=1$"))
     expect(tasks).to_have_attribute("aria-current", "page")
     new_task(page)
     modal = page.locator(".task-edit-modal[open]")
     expect(modal).to_be_visible()
-    expect(modal.locator("select[id^=task-edit-list]")).to_have_value("task")
+    expect(modal.locator("select[id^=task-edit-list]")).to_have_value("")
     page.keyboard.press("Escape")
     page.goto("/page/garden")
     expect(page.locator(".breadcrumb > a")).to_have_count(0)   # the list is no stop

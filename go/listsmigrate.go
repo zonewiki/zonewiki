@@ -154,7 +154,11 @@ func migrateLists() {
 	defer pagesMu.Unlock()
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
-	if err := migrateListsLocked(); err != nil {
+	err := migrateListsLocked()
+	if err == nil {
+		err = migrateInboxLocked()
+	}
+	if err != nil {
 		listsUnmigrated = true
 		logf("The task lists couldn't be set up (lists stay as they were, and can't be changed, until Zone starts with this mended): %v", err)
 	}
@@ -172,7 +176,7 @@ func migrateListsLocked() error {
 	if err != nil {
 		return err
 	}
-	if shared.Version >= taskfiles.ListsVersion {
+	if shared.Version >= 1 {
 		return nil
 	}
 	owners := taskFiles.EveryOwner()
@@ -180,6 +184,11 @@ func migrateListsLocked() error {
 	for _, o := range owners[1:] {
 		if regs[o], err = taskFiles.ReadListsStrict(o); err != nil {
 			return err
+		}
+		// A user's registry with a version: a wiki whose lists are places
+		// already, and that has no shared list.
+		if regs[o].Version >= 1 {
+			return nil
 		}
 	}
 	// Every task file, read before anything is decided: one that can't be
@@ -268,8 +277,7 @@ func migrateListsLocked() error {
 	// 2. The tasks: the first A–Z of a task's tags that names a list of its
 	// own kind (a shared task: the shared lists; a private one: its user's)
 	// is its list from now on, and that tag goes. A private task without one
-	// goes to its user's list "private", so that it has a place.
-	inbox := map[string]bool{}
+	// is in its user's Inbox.
 	moved := 0
 	for _, f := range files {
 		reg := regs[f.Owner]
@@ -289,9 +297,6 @@ func migrateListsLocked() error {
 					t.List = hits[0]
 				}
 			}
-			if t.List == "" && f.Owner != "" {
-				t.List, inbox[f.Owner] = privateListName, true
-			}
 			if t.List != "" {
 				t.Tags = slices.DeleteFunc(t.Tags, func(tag string) bool { return strings.ToLower(tag) == t.List })
 			}
@@ -299,12 +304,6 @@ func migrateListsLocked() error {
 				f.changed = true
 				moved++
 			}
-		}
-	}
-	for o := range inbox {
-		if regs[o].Find(privateListName) == nil {
-			regs[o].Lists = append(regs[o].Lists, &taskfiles.List{Name: privateListName, Owner: o, Settings: map[string]string{}})
-			made++
 		}
 	}
 	// 3. The pins: a shared page's are the wiki's (everyone's who set none
@@ -351,7 +350,7 @@ func migrateListsLocked() error {
 	}
 	for _, o := range owners[1:] {
 		own := ownPins[o]
-		if len(own) == 0 && !inbox[o] {
+		if len(own) == 0 {
 			continue
 		}
 		slices.SortStableFunc(own, byName)
@@ -367,9 +366,6 @@ func migrateListsLocked() error {
 			}
 			return ""
 		})
-		if inbox[o] && !slices.Contains(refs, privateListName) {
-			refs = append(refs, privateListName)
-		}
 		reg.Pinned, reg.PinsSet = refs, true
 	}
 	// 4. The settings of All tasks.
@@ -409,6 +405,7 @@ func migrateListsLocked() error {
 		if o != "" && len(reg.Lists) == 0 && !reg.PinsSet {
 			continue
 		}
+		reg.Version = 1 // lists as places; the Inbox comes next (migrateInboxLocked)
 		path, err := taskFiles.WriteListsOf(o, reg)
 		if err != nil {
 			return err
@@ -460,5 +457,188 @@ func migrateListsLocked() error {
 	}
 	logf("lists: %d lists taken over from the pages, %d tasks given their list, %d pages rewritten", made, moved, len(pagePaths))
 	_ = gitCommit("", "Make task lists their own", nonEmpty(written)...)
+	return nil
+}
+
+// inboxListName: what a list called "inbox" is called from the Inbox on,
+// which keeps that name.
+const inboxListName = "inbox-list"
+
+// migrateInboxLocked takes a wiki over to the Inbox, when Zone starts,
+// after migrateListsLocked and under its locks; one commit.
+//
+// Once for each registry that says version 1 (lists as places, from before
+// the Inbox; it says 2 afterwards), the shared one and each user's own:
+//  1. A list called "inbox" is called "inbox-list": the name is the Inbox's.
+//  2. With users, a user's list "private" that has no settings and was
+//     where their new tasks went (pinned by them, or they pinned nothing)
+//     becomes their Inbox: its tasks lose their list, the list and its pin
+//     go. Zone made that list, as a place for tasks without one.
+//  3. The lists whose tasks were not in a user's My tasks, since they had
+//     not pinned them, are left out of it (home=off): without users any
+//     list, with users each user's private lists. Nobody's My tasks grows.
+//
+// At every start, with users: a shared task without a list goes to the
+// shared list "general", made for it and pinned for the wiki: a shared task
+// is always in a list. That takes over the tasks that were in no list, and
+// a wiki whose users were turned on later.
+func migrateInboxLocked() error {
+	shared, err := taskFiles.ReadListsStrict("")
+	if err != nil {
+		return err
+	}
+	users := settings().Users != nil
+	owners := taskFiles.EveryOwner()
+	regs := map[string]*taskfiles.Registry{"": shared}
+	for _, o := range owners[1:] {
+		if regs[o], err = taskFiles.ReadListsStrict(o); err != nil {
+			return err
+		}
+	}
+	// first: a registry from before the Inbox (version 1). Each registry
+	// says so for itself: a wiki whose users have lists and that never had a
+	// shared one has no shared registry to say it.
+	first := map[string]bool{}
+	any := users
+	for _, o := range owners {
+		first[o] = regs[o].Version == 1
+		any = any || first[o]
+	}
+	if !any {
+		return nil
+	}
+	type taskFile struct {
+		taskfiles.File
+		tasks   []*Task
+		changed bool
+	}
+	var files []*taskFile
+	for _, f := range taskFiles.Files(owners) {
+		tasks, err := taskfiles.ReadStrict(f.Path)
+		if err != nil {
+			return errors.New(f.Path + ": " + err.Error())
+		}
+		files = append(files, &taskFile{File: f, tasks: tasks})
+	}
+	regChanged := map[string]bool{}
+	// relist: owner's tasks in the list from are in to from now on.
+	relist := func(owner, from, to string) (n int) {
+		for _, f := range files {
+			if f.Owner != owner {
+				continue
+			}
+			for _, t := range f.tasks {
+				if t.List == from {
+					t.List, f.changed, n = to, true, n+1
+				}
+			}
+		}
+		return n
+	}
+	renamed, inboxed, leftOut, general := 0, 0, 0, 0
+	{
+		// 1. "inbox" is the Inbox's name.
+		for _, o := range owners {
+			l := regs[o].Find(inboxRef)
+			if !first[o] || l == nil || regs[o].Find(inboxListName) != nil {
+				continue
+			}
+			l.Name = inboxListName
+			relist(o, inboxRef, inboxListName)
+			regChanged[o], renamed = true, renamed+1
+			for _, p := range owners {
+				if o != "" && p != o {
+					continue // a private list is in its owner's pins alone
+				}
+				own := p != "" && o == "" && regs[p].Find(inboxRef) != nil
+				if renameRefs(regs[p], func(r string) string {
+					switch {
+					case r == inboxRef && !own:
+						return inboxListName
+					case o == "" && r == sharedRef+inboxRef:
+						return sharedRef + inboxListName
+					}
+					return r
+				}) {
+					regChanged[p] = true
+				}
+			}
+		}
+		// 2. A user's list "private" that took their new tasks is their Inbox.
+		for _, o := range owners[1:] {
+			reg := regs[o]
+			l := reg.Find(privateListName)
+			if !first[o] || l == nil || len(l.Settings) > 0 {
+				continue
+			}
+			pinnedOwn := false
+			for _, r := range reg.Pinned {
+				pinnedOwn = pinnedOwn || reg.Find(r) != nil || shared.Find(strings.TrimPrefix(r, sharedRef)) != nil
+			}
+			if !slices.Contains(reg.Pinned, privateListName) && (pinnedOwn || !reg.PinsSet && len(shared.Pinned) > 0) {
+				continue // an ordinary list of theirs, not pinned: it stays one
+			}
+			inboxed += relist(o, privateListName, "")
+			reg.Lists = slices.DeleteFunc(reg.Lists, func(x *taskfiles.List) bool { return x == l })
+			reg.Pinned = slices.DeleteFunc(reg.Pinned, func(r string) bool { return r == privateListName })
+			regChanged[o] = true
+		}
+		// 3. What wasn't in My tasks stays out of it.
+		for _, o := range owners {
+			if !first[o] || o == "" && users {
+				continue // a shared task is in My tasks by its assignee
+			}
+			reg := regs[o]
+			for _, l := range reg.Lists {
+				if slices.Contains(reg.Pinned, l.Name) || l.Settings["home"] != "" {
+					continue
+				}
+				l.Settings["home"] = "off"
+				regChanged[o], leftOut = true, leftOut+1
+			}
+		}
+		for _, o := range owners {
+			if first[o] {
+				regs[o].Version, regChanged[o] = taskfiles.ListsVersion, true
+			}
+		}
+	}
+	// With users a shared task is always in a list.
+	if users {
+		if general = relist("", "", generalListName); general > 0 && shared.Find(generalListName) == nil {
+			shared.Lists = append(shared.Lists, &taskfiles.List{Name: generalListName, Settings: map[string]string{}})
+			if !slices.Contains(shared.Pinned, generalListName) {
+				shared.Pinned, shared.PinsSet = append(shared.Pinned, generalListName), true
+			}
+			regChanged[""] = true
+		}
+	}
+	// The tasks first, then the users' registries, the shared one last: its
+	// version says "done", and a start that was interrupted runs again.
+	var written []string
+	for _, f := range files {
+		if f.changed {
+			if err := taskfiles.Write(f.Path, f.tasks); err != nil {
+				return err
+			}
+			written = append(written, f.Path)
+		}
+	}
+	for _, o := range slices.Backward(owners) {
+		if !regChanged[o] {
+			continue
+		}
+		path, err := taskFiles.WriteListsOf(o, regs[o])
+		if err != nil {
+			return err
+		}
+		written = append(written, path)
+	}
+	if written = nonEmpty(written); len(written) == 0 {
+		return nil
+	}
+	logf("lists: the Inbox: %d tasks of lists \"private\" are in their users' Inbox, %d shared tasks without a list are in #%s, %d lists are left out of My tasks, %d lists called inbox renamed to %s",
+		inboxed, general, generalListName, leftOut, renamed, inboxListName)
+	_ = gitCommit("", "Give every task a list: the Inbox", written...)
 	return nil
 }

@@ -155,8 +155,8 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 	if list = cleanList(strings.TrimLeft(strings.TrimSpace(list), "#")); list != "" {
 		if l, ok := resolveList(list, lists); ok {
 			scope = l.Ref
-		} else if isNoList(list, lists) {
-			scope = noListRef // list "none": the tasks in no list
+		} else if isInbox(list, lists) {
+			scope = inboxRef // list "inbox" (or "none"): the Inbox, the tasks in no list
 		} else {
 			return "", toolErr("No list #" + list + " (list_tags shows the lists)")
 		}
@@ -520,20 +520,6 @@ func tagHints(task *Task, user string) string {
 	return out
 }
 
-// homeTags: a new task's tags in the list home: the list's new-task tags
-// (as its "+ New" and c t give them) before the ones given.
-func homeTags(tags json.RawMessage, home *ListInfo) json.RawMessage {
-	l, ok := jsonobj.As[[]string](tags)
-	if s, isStr := jsonobj.As[string](tags); isStr {
-		l, ok = splitComma(s), true
-	}
-	if !ok && !jsonobj.IsNull(tags) {
-		return tags // createTask refuses it
-	}
-	b, _ := json.Marshal(taskmodel.CleanTags(append(newTaskTags(home.Params), l...)))
-	return b
-}
-
 func createTaskTool(args jsonObj, base, user string) (string, error) {
 	if _, err := strArg(args, "title", true); err != nil {
 		return "", err
@@ -542,31 +528,25 @@ func createTaskTool(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// As c t in the browser: into the user's first pinned list, with its
-	// tags; with users and nothing pinned, into their private list.
-	// Not into a private list with an assignee: a task given to someone is
-	// shared work, and a private task is nobody's but its user's, so it is
-	// in no list.
-	assigns := false
-	if data.Has("assignee") && !data.Null("assignee") {
-		if s, err := asStr(data["assignee"], "assignee"); err == nil {
-			name := taskmodel.CleanAssignee(s)
-			assigns = name != "" && name != "none"
+	// As c t in the browser: without a list, into the user's Inbox, which
+	// with users is theirs alone. A task for someone needs a shared list:
+	// say which there are rather than refuse with the write's own words.
+	if data.Has("assignee") && !data.Null("assignee") && inboxOwner(user) != "" {
+		s, _ := asStr(data["assignee"], "assignee")
+		ref, _ := asStr(data["list"], "list")
+		lists := taskLists(user)
+		if name := taskmodel.CleanAssignee(s); name != "" && name != "none" && (!data.Has("list") || data.Null("list") || cleanList(ref) == "" || isInbox(ref, lists)) {
+			var shared []string
+			for _, r := range sortedKeys(lists) {
+				if !lists[r].Private() {
+					shared = append(shared, r)
+				}
+			}
+			if len(shared) == 0 {
+				return "", toolErr("A task assigned to someone has to be in a shared list, and this wiki has none: make one with create_task_list, then pass it as list")
+			}
+			return "", toolErr("A task assigned to someone has to be in a shared list (without one it is in the user's Inbox, which only they see). Pass list: " + strings.Join(shared, ", "))
 		}
-	}
-	unasked := !data.Has("list")
-	h := lookupDefaultList(user)
-	if h != nil && (!unasked || h.Private() && assigns) {
-		h = nil
-	}
-	if h != nil {
-		data.Set("list", h.Ref)
-		data["tags"] = homeTags(data["tags"], h)
-	}
-	// And theirs, when their My tasks hides unassigned tasks: a capture is
-	// in its maker's home view.
-	if unasked && !data.Has("assignee") && newTaskMine(user, h) {
-		data.Set("assignee", user)
 	}
 	msg, err := commitMsg("Create task", args)
 	if err != nil {
@@ -773,9 +753,6 @@ func renameTaskListTool(args jsonObj, base, user string) (string, error) {
 }
 
 // createTaskListTool: a new task list, shared or (private) the user's own.
-// It is pinned for the user, last, as a list made in the browser is, so that
-// they see it and its tasks are in their My tasks; but never as their first
-// pin, which would start taking their new tasks unasked (as apiNewList).
 func createTaskListTool(args jsonObj, base, user string) (string, error) {
 	name, err := strArg(args, "name", true)
 	if err != nil {
@@ -789,8 +766,7 @@ func createTaskListTool(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	pin := len(pinnedLists(user, taskLists(user))) > 0
-	ref, err := createListOp(user, name, private, pin, suffix)
+	ref, err := createListOp(user, name, private, true, suffix)
 	if err != nil {
 		return "", err
 	}
@@ -798,10 +774,6 @@ func createTaskListTool(args jsonObj, base, user string) (string, error) {
 	if private {
 		kind = "private: only the user sees it and its tasks"
 	}
-	where := "It is pinned on the user's Tasks page, and its tasks are in their My tasks."
-	if !pin {
-		where = "It is under More on the user's Tasks page (they pinned no list yet): its tasks aren't in their My tasks until they pin it."
-	}
-	return "Created the list #" + ref + " (" + kind + "). " + where + " create_task's and update_task's list puts a task in it; " +
+	return "Created the list #" + ref + " (" + kind + "). create_task's and update_task's list puts a task in it; " +
 		"[[tasks: list=" + ref + "]] shows it on a page.\n" + base + listHref(ref), nil
 }

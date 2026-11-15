@@ -292,12 +292,11 @@ func buildBreadcrumb(rq *Req, slug, title string, right template.HTML, query str
 // partials it calls with it: shortcuts, top_actions, action_bar), the same
 // for every view. Templates reach it as .Shell.
 type pageShell struct {
-	Title              string // the window's title, and a view's heading
-	Editor, Wide       bool   // the editor's page; a page view's side columns
-	ShowActions        bool   // new note, new task, search (not on the login page, nor in the editor)
-	BadgeInForm        bool   // the remote badge in the view's form (the login page), not the corner
-	Module             string // the module the page is in (currentModule); "" in the editor
-	TasksNew           *tasksNew
+	Title              string       // the window's title, and a view's heading
+	Editor, Wide       bool         // the editor's page; a page view's side columns
+	ShowActions        bool         // new note, new task, search (not on the login page, nor in the editor)
+	BadgeInForm        bool         // the remote badge in the view's form (the login page), not the corner
+	Module             string       // the module the page is in (currentModule); "" in the editor
 	ModuleLinks        []moduleLink // the module switcher's and the action bar's links (moduleLinks)
 	Sharing, Users     bool
 	Semantic           string // semanticStatus
@@ -315,13 +314,6 @@ type pageShell struct {
 	// come back to this view.
 	Visitor bool
 	SignIn  string
-}
-
-// tasksNew: how a new task from any page (c t, New task) starts, as the
-// first pinned list makes them: in that list (List, its ref), with its tags.
-type tasksNew struct {
-	List, Tags  string
-	Keep, Today bool
 }
 
 // view: what every view's data embeds, its fields the template's; page
@@ -357,15 +349,6 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 	}
 	if !o.editor {
 		sh.Module = currentModule(rq)
-	}
-	if !o.noActions && !sh.Visitor {
-		if def := rq.defaultList(); def != nil {
-			// Its "+ New" on Focus (its view, or the default) starts the task
-			// today; elsewhere a new task has no start date.
-			v := embedView(def.Params)
-			sh.TasksNew = &tasksNew{List: def.Ref, Tags: strings.Join(newTaskTags(def.Params), ","),
-				Keep: isTrue(def.Params.Get("keep")), Today: v == "" || v == "focus"}
-		}
 	}
 	if sh.ShowActions {
 		sh.ModuleLinks = moduleLinks(rq)

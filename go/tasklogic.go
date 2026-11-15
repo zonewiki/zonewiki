@@ -61,27 +61,35 @@ func queryScope(r *http.Request) string {
 
 // placeSnapshot: where a task from a snapshot (an undo's, an export's)
 // goes for user: the list it names, when user sees a list of that name
-// that is as private as the snapshot says it was; a private task whose
-// list is gone goes to user's list "private" (inbox: it has to be there),
-// any other to no list. So a snapshot never makes a shared task private
-// nor a private one shared. A private task has no assignee.
-func placeSnapshot(user string, t *Task, snap jsonObj, lists map[string]ListInfo) (inbox bool) {
+// that is as private as the snapshot says it was. A private task whose
+// list is gone (or that was in none) goes to user's Inbox. A shared one
+// whose list is gone goes, with users, to the shared list "general"
+// (general: it has to be there, ensureGeneralLocked), since a shared task
+// is always in a list; without users to no list, the wiki's Inbox. So a
+// snapshot never makes a shared task private nor a private one shared. A
+// private task has no assignee.
+func placeSnapshot(user string, t *Task, snap jsonObj, lists map[string]ListInfo) (general bool) {
 	private := jsonobj.True(snap["private"]) && privateFolder(user) != ""
 	name, _ := jsonobj.As[string](snap["list"])
 	name = cleanList(name)
 	t.List, t.Owner = "", ""
+	found := false
 	for _, l := range lists {
 		if name != "" && l.Name == name && l.Private() == private {
-			t.List, t.Owner = l.Name, l.Owner
+			t.List, t.Owner, found = l.Name, l.Owner, true
 		}
 	}
-	if private && t.Owner == "" {
-		t.List, t.Owner, inbox = privateListName, user, true
+	switch {
+	case found:
+	case private:
+		t.Owner = user
+	case settings().Users != nil:
+		t.List, general = generalListName, true
 	}
 	if t.Owner != "" {
 		t.Assignee = ""
 	}
-	return inbox
+	return general
 }
 
 // timestamp is the current time as tasks store it (created_at, closed_at).

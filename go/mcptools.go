@@ -492,22 +492,22 @@ func mcpListsText(user string) string {
 	for _, t := range taskFiles.Open(user) {
 		open[taskList(t, lists)]++
 	}
-	def := ""
-	if d := lookupDefaultList(user); d != nil {
-		def = d.Ref
-	}
 	var lines []string
 	for _, ref := range sortedKeys(lists) {
 		facts := []string{fmt.Sprintf("%d open", open[ref])}
 		if lists[ref].Private() {
 			facts = append(facts, "private: only the user sees it and its tasks")
 		}
-		if ref == def {
-			facts = append(facts, "the first pinned list, where a new task goes")
+		if lists[ref].LeftOut() && (lists[ref].Private() || !mineAssigns(user)) {
+			facts = append(facts, "left out of My tasks")
 		}
 		lines = append(lines, "- "+ref+" ("+strings.Join(facts, "; ")+")")
 	}
-	return "\n\nTask lists (a task is in one list or in none: its list, not a tag):\n" + strings.Join(lines, "\n")
+	inbox := "a new task without a list is in the Inbox"
+	if inboxOwner(user) != "" {
+		inbox = "a new task without a list is in the user's Inbox, which only they see; a shared list's tasks everyone sees"
+	}
+	return "\n\nTask lists (a task is in one list, its list, not a tag; " + inbox + "):\n" + strings.Join(lines, "\n")
 }
 
 // zoneHelp: Zone's documentation (manual.go), passages for a query, a doc

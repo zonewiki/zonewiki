@@ -245,12 +245,12 @@ import { whileUsed } from './util.js';
 // The server renders the counts into the page (no change of width after it
 // has painted); refreshDueBadge keeps them current: every minute, when the
 // tab comes back, and after tasks writes (tasks.js). The task list
-// switcher's places (.tasks-place; No list's entry under More) carry counts
+// switcher's places (.tasks-place) carry counts
 // too, refreshed with them.
 const tasksLinks = document.querySelectorAll('.module-link[data-module="tasks"]');
 // (Asked for at each refresh: the row is drawn again when a list is made on
 // the page, js/listsrow.js.)
-const placesNow = () => document.querySelectorAll('.tasks-place[data-place], .lists-more-none[data-place]');
+const placesNow = () => document.querySelectorAll('.tasks-place[data-place]');
 
 // Same as taskCountsTitle in go/views.go.
 function taskCountsTitle({ focus, overdue, today }) {

@@ -411,12 +411,14 @@ class TestTasksByMeaning:
 
 
 class TestSearchTasks:
-    def test_list_none_is_the_tasks_in_no_list(self, client, wiki_dir):
+    def test_list_inbox_is_the_tasks_in_no_list(self, client, wiki_dir):
         make_list(client, "shop")
         task(client, title="Milk", list="shop")
         task(client, title="Loose end")
-        text, err = call(client, "search_tasks", list="none")
-        assert not err and "1 matching task" in text and "Loose end" in text and "Milk" not in text
+        # "inbox" names the Inbox, the tasks in no list; "none" named them before and still does.
+        for name in ("inbox", "#Inbox", "none"):
+            text, err = call(client, "search_tasks", list=name)
+            assert not err and "1 matching task" in text and "Loose end" in text and "Milk" not in text, name
         text, err = call(client, "search_tasks", list="nothing")
         assert err and "No list #nothing" in text
 
@@ -844,8 +846,11 @@ class TestListTags:
         assert not err
         # The tags, then the lists apart: a list is where a task is, no tag.
         assert text.splitlines()[1:] == ["backend | 2 | 1 | 1", "infra | 1 | 0 | 1", "shopping | 0 | 1 | 0", "",
-                                         "Task lists (a task is in one list or in none: its list, not a tag):",
-                                         "- shopping (1 open; the first pinned list, where a new task goes)", "- work (0 open)"]
+                                         "Task lists (a task is in one list, its list, not a tag; a new task without a list is in the Inbox):",
+                                         "- shopping (1 open)", "- work (0 open)"]
+        # A list left out of My tasks says so.
+        assert client.post("/api/tasks/settings", json={"list": "work", "set": {"home": "off"}}, headers=HOST).status_code == 200
+        assert call(client, "list_tags")[0].splitlines()[-1] == "- work (0 open; left out of My tasks)"
 
     def test_none(self, client, pages):
         assert call(client, "list_tags")[0].startswith("No tags yet")
@@ -1791,56 +1796,62 @@ class TestCreateTask:
         friday = today + timedelta(days=(4 - today.weekday() + 6) % 7 + 1)
         assert f"due: {friday}" in call(client, "update_task", id=tid, due="Fri")[0]
 
-    def test_new_tasks_get_the_tasks_homes_tags(self, client, wiki_dir):
-        # A new task goes into the user's default list, with the tags it gives new tasks.
+    def test_a_new_task_goes_to_the_inbox_unless_it_names_a_list(self, client, wiki_dir):
+        # No list takes a new task by being pinned first, nor gives it its tags:
+        # without a list it is in the Inbox, in no list.
         list_page(client, wiki_dir, "my-tasks", "# My tasks\n\n[[tasks: list=task new=work view=focus pin=1]]\n")
         make_list(client, "groceries", headers=HOST)
         text = call(client, "create_task", title="Report")[0]
-        assert "tags: #work" in text and "list: task" in text and "list=task" in text
-        assert "tags: #work #urgent" in call(client, "create_task", title="Fix", tags=["urgent"])[0]
-        assert "tags: #work #x" in call(client, "create_task", title="Y", tags="x")[0]
-        # Put in another list, or in none: just its tags.
+        assert "list:" not in text and "list=" not in text and "#work" not in text and "private" not in text
+        assert "tags: #urgent" in call(client, "create_task", title="Fix", tags=["urgent"])[0]
+        assert "tags: #x" in call(client, "create_task", title="Y", tags="x")[0]
+        # Put in a list: there, with just its tags.
         text = call(client, "create_task", title="Milk", list="Groceries", tags=["weekly"])[0]
         assert "tags: #weekly" in text and "list: groceries" in text and "#work" not in text
-        text = call(client, "create_task", title="Loose", list="")[0]
-        assert "list:" not in text and "#work" not in text
+        assert "list: task" in call(client, "create_task", title="Listed", list="task")[0]
+        for none in ("", "inbox", " #Inbox ", "none"):
+            text, err = call(client, "create_task", title="Loose", list=none)
+            assert not err and "list:" not in text and "#work" not in text, none
         # A list's name as a tag is a tag; a list that isn't there is said.
         text = call(client, "create_task", title="Tagged", tags=["groceries"])[0]
-        assert "tags: #work #groceries" in text and "list: task" in text
+        assert "tags: #groceries" in text and "list:" not in text
         text, err = call(client, "create_task", title="Nowhere", list="nosuch")
         assert err and "No list #nosuch" in text
-        # Moved with update_task.
+        # Without users there is nobody to assign a task to, list or not.
+        text, err = call(client, "create_task", title="For bob", assignee="bob")
+        assert err and "no users" in text
+        # The Inbox by its name has them, and not a list's.
+        text = call(client, "search_tasks", list="inbox")[0]
+        assert all(f"Task: {t}" in text for t in ("Report", "Fix", "Y", "Loose", "Tagged"))
+        assert "Task: Milk" not in text and "Task: Listed" not in text and "Task: For bob" not in text
+        files = json.loads((wiki_dir / "_tasks/tasks.json").read_text())
+        assert {t["title"]: t.get("list") for t in files}["Report"] is None and not (wiki_dir / "private").exists()
+        # Moved with update_task, and back into the Inbox (without users nothing is shared or private).
         tid = _task_id(call(client, "create_task", title="Moves")[0])
         assert "list: groceries" in call(client, "update_task", id=tid, list="groceries")[0]
-        assert "list:" not in call(client, "update_task", id=tid, list="")[0]
+        for none in ("", "inbox"):
+            assert "list:" not in call(client, "update_task", id=tid, list=none)[0]
+            assert "list: groceries" in call(client, "update_task", id=tid, list="groceries")[0]
 
     def test_a_task_list_is_made_once(self, client, wiki_dir):
         text, err = call(client, "create_task_list", name="#Shop runs", summary="for the weekend")
         assert not err and "Created the list #shop-runs (shared" in text and "/tasks?list=shop-runs" in text
         assert '{"name": "shop-runs"}' in (wiki_dir / "_tasks/lists.json").read_text()
+        # An assistant's list is pinned as one made in the browser is: last, a pill of the switcher.
+        assert '"pinned": ["shop-runs"]' in (wiki_dir / "_tasks/lists.json").read_text()
+        assert "Created the list #later" in call(client, "create_task_list", name="later")[0]
+        assert '"pinned": ["shop-runs", "later"]' in (wiki_dir / "_tasks/lists.json").read_text()
+        # inbox and none name the Inbox: no list is called so.
+        for name in ("inbox", " #Inbox", "none"):
+            text, err = call(client, "create_task_list", name=name)
+            assert err and "names the Inbox" in text, name
+        text, err = call(client, "rename_task_list", list="later", new_name="inbox")
+        assert err and "names the Inbox" in text
         text, err = call(client, "create_task_list", name="shop-runs")
         assert err and "There is a list #shop-runs already" in text
         assert call(client, "create_task_list", name="a,b")[1] and call(client, "create_task_list", name=" ")[1]
         # Without users there is nobody for a list to be private to.
         assert call(client, "create_task_list", name="mine", private=True)[1]
-
-    def test_a_task_list_an_assistant_makes_is_pinned_but_never_first(self, client, wiki_dir):
-        # The user sees a list their assistant made: it is pinned, last, as
-        # one made in the browser, and its tasks are in their My tasks. Not
-        # as their first pin, which would take their new tasks unasked.
-        text, err = call(client, "create_task_list", name="research")
-        assert not err and "under More on the user's Tasks page" in text
-        assert '"pinned"' not in (wiki_dir / "_tasks/lists.json").read_text()
-        assert "list:" not in call(client, "create_task", title="Still nowhere")[0]
-        assert client.post("/tasks/pin-list", data={"list": "research", "pin": "1"}, headers=HOST).status_code == 302
-        text, err = call(client, "create_task_list", name="reading")
-        assert not err and "pinned on the user's Tasks page" in text
-        assert '"pinned": ["research", "reading"]' in (wiki_dir / "_tasks/lists.json").read_text()
-        call(client, "create_task", title="A paper", list="reading")
-        mine = client.get("/api/tasks/export?mine=1", headers=HOST).get_json()["tasks"]
-        assert "A paper" in [t["title"] for t in mine]
-        # New tasks still go to the first pin.
-        assert "list: research" in call(client, "create_task", title="Goes first")[0]
 
     def test_bad_input_is_a_tool_error(self, client, wiki_dir):
         text, err = call(client, "create_task", title="x", due="next week")

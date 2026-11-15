@@ -440,7 +440,8 @@ class TestModuleMenu:
         login(client, "alice", "alice-pw")
         nav = client.get("/tasks", headers=HOST).data.decode().split('<nav class="tasks-places"', 1)[1].split("</nav>", 1)[0]
         entries = dict(re.findall(r'data-place="([^"]+)"(.*?)</a>', nav, re.S))
-        assert list(entries) == ["mine", "list:gifts", "list:shop"]   # My tasks; neither list pinned: under More
+        assert list(entries) == ["mine", "inbox", "list:gifts", "list:shop"]   # My tasks, her Inbox; neither list pinned: under More
+        assert "tasks-place-lock" in entries["inbox"] and "only you see it" in entries["inbox"]   # her Inbox is hers alone
         assert "tasks-place-lock" in entries["list:gifts"] and "only you see it" in entries["list:gifts"]
         assert "tasks-place-lock" not in entries["list:shop"]
         client.post("/logout", headers=HOST)
@@ -678,9 +679,18 @@ class TestAuthors:
         text = mcp(client, "alice-token", "history", slug="plans").get_json()["result"]["content"][0]["text"]
         assert "Create plans (by alice)" in text
 
+    @staticmethod
+    def shared_task(client, **fields):
+        """A task in the shared list team (made when it isn't there): with
+        users a task without a list is its maker's alone."""
+        client.post("/tasks/new-list", data={"name": "team"}, headers=HOST)
+        task = client.post("/api/tasks", json={"list": "team", **fields}, headers=HOST).get_json()
+        assert task["private"] is False
+        return task
+
     def test_comments_name_their_author(self, client, git_wiki_dir, users):
         login(client, "alice", "alice-pw")
-        task = client.post("/api/tasks", json={"title": "Call Sam"}, headers=HOST).get_json()
+        task = self.shared_task(client, title="Call Sam")
         resp = client.post(f"/api/tasks/{task['id']}/comments", json={"text": "Left a message"}, headers=HOST)
         [comment] = resp.get_json()["comments"]
         assert comment["by"] == "alice"
@@ -693,8 +703,8 @@ class TestAuthors:
 
     def test_task_history_names_who_did_what(self, client, git_wiki_dir, users):
         login(client, "alice", "alice-pw")
-        task = client.post("/api/tasks", json={"title": "Water plants", "due_date": "2030-01-01",
-                                              "recurrence": {"type": "weekly", "interval": 1}}, headers=HOST).get_json()
+        task = self.shared_task(client, title="Water plants", due_date="2030-01-01",
+                                recurrence={"type": "weekly", "interval": 1})
         client.put(f"/api/tasks/{task['id']}", json={"due_date": "2030-01-02"}, headers=HOST)
         client.post("/logout", headers=HOST)
         login(client, "bob", "bob-pw")
@@ -735,7 +745,7 @@ class TestAuthors:
 
     def test_an_undo_keeps_the_names_zone_has_seen(self, client, users):
         login(client, "alice", "alice-pw")
-        task = client.post("/api/tasks", json={"title": "Call Sam"}, headers=HOST).get_json()
+        task = self.shared_task(client, title="Call Sam")
         task = client.post(f"/api/tasks/{task['id']}/comments", json={"text": "Left a message"}, headers=HOST).get_json()
         [comment] = task["comments"]
         client.post("/logout", headers=HOST)

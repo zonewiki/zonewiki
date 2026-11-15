@@ -83,8 +83,8 @@ document.addEventListener('keydown', e => {
     return;
   }
 
-  // g-prefix navigation: gh=home, gn=Notes, ga=all tasks, gt=your pinned
-  // lists (/tasks without one), gp=your private home (with users: the Private
+  // g-prefix navigation: gh=home, gn=Notes, ga=all tasks, gt=My tasks
+  // (/tasks in a wiki without lists), gp=your private home (with users: the Private
   // pill).
   if (keyPrefix.key === 'g') {
     resetPrefix();
@@ -99,7 +99,7 @@ document.addEventListener('keydown', e => {
     return;
   }
 
-  // c-prefix create: cn=note, ct=task in the first pinned list
+  // c-prefix create: cn=note, ct=task in the Inbox
   if (keyPrefix.key === 'c') {
     resetPrefix();
     if (document.body.dataset.viewer) return;   // a viewer makes nothing

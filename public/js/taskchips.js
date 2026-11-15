@@ -140,7 +140,7 @@ if (app.filterSearch) attachTagAc(app.filterSearch, {
 });
 // A new task starts with the tags the filter requires (single-tag words;
 // an OR word doesn't say which one), so it shows up in the current view.
-// [[tasks: new=a,b]] (My tasks: the first pinned list's tags) gives new
+// [[tasks: new=a,b]] gives new
 // tasks those tags in place of the embed's own filter words.
 const newTags = (app.appEl?.dataset.newTags || '').split(',').filter(Boolean);
 function filterDefaultTags() {

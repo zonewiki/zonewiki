@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -129,6 +128,18 @@ func TestListsTakenOverFromPages(t *testing.T) {
 	if _, err := os.Stat(oldAllTasksFile()); err == nil {
 		t.Error("settings.json is still there")
 	}
+	// The Inbox's migration ran after it (migrateInboxLocked): the list
+	// nobody pinned, whose tasks were not in My tasks, is left out of it.
+	if !strings.Contains(fileText(t, taskFiles.ListsPath("")), `"version": 2`) {
+		t.Errorf("the registry's version:\n%s", fileText(t, taskFiles.ListsPath("")))
+	}
+	if !lists["plans"].LeftOut() || lists["chores"].LeftOut() || lists["groceries"].LeftOut() {
+		t.Errorf("left out of My tasks: plans %v, chores %v, groceries %v", lists["plans"].LeftOut(), lists["chores"].LeftOut(), lists["groceries"].LeftOut())
+	}
+	// Without users a task without a list stays one: it is in the Inbox.
+	if tasks["3"].List != "" || len(lists) != 3 {
+		t.Error("a list was made for the tasks in none")
+	}
 	// Run again (the next start): nothing changes.
 	before := fileText(t, taskFiles.OpenPath("")) + fileText(t, taskFiles.ListsPath(""))
 	putPage(t, "later", "# Later\n\n[[tasks: list=typed-later pin=1]]\n")
@@ -143,9 +154,11 @@ func TestListsTakenOverFromPages(t *testing.T) {
 
 // With users: a private page's list is its user's own, unless a shared page
 // declares the name too and they have no private task with it; private
-// tasks stay private, in a list of their user's (one without any goes to
-// "private"); a shared task never gets a private list. A user's pins come
-// before the wiki's.
+// tasks stay private, in a list of their user's; a shared task never gets a
+// private list. A user's pins come before the wiki's. The Inbox's migration
+// runs after it, in the same start: a private task without a list (which
+// the first step puts into a list "private") is in its user's Inbox, a
+// shared one without a list in #general.
 func TestListsTakenOverPerUser(t *testing.T) {
 	testWiki(t, map[string]string{
 		"tasks/gifts":         "# Gifts\n\n[[tasks: list=gifts pin=1]]\n",
@@ -164,21 +177,21 @@ func TestListsTakenOverPerUser(t *testing.T) {
 		t.Fatal("the migration failed")
 	}
 	alice, bob := taskLists("alice"), taskLists("bob")
-	if got := sortedKeys(alice); !slices.Equal(got, []string{"diary", "gifts", "private", "secret", "shared/gifts"}) {
+	if got := sortedKeys(alice); !slices.Equal(got, []string{"diary", "general", "gifts", "secret", "shared/gifts"}) {
 		t.Errorf("alice's lists %v", got)
 	}
 	if !alice["gifts"].Private() || alice["shared/gifts"].Private() || alice["diary"].Private() || !alice["secret"].Private() {
 		t.Errorf("alice's lists %+v", alice)
 	}
 	// Bob declared nothing: his private task with the shared list's tag has
-	// no list of his own to be in, so it goes to his "private".
-	if got := sortedKeys(bob); !slices.Equal(got, []string{"diary", "gifts", "private"}) {
+	// no list of his own to be in, so it is in his Inbox.
+	if got := sortedKeys(bob); !slices.Equal(got, []string{"diary", "general", "gifts"}) {
 		t.Errorf("bob's lists %v", got)
 	}
 	a := openByID("alice")
 	for id, want := range map[string][3]string{
-		"s1": {"gifts", "", "shared/gifts"}, "s2": {"", "", ""}, // a shared task with her private list's tag: no list, the tag stays
-		"a1": {"gifts", "alice", "gifts"}, "a2": {"private", "alice", "private"}, "a3": {"secret", "alice", "secret"},
+		"s1": {"gifts", "", "shared/gifts"}, "s2": {"general", "", "general"}, // a shared task with her private list's tag: no list of its own, so #general; the tag stays
+		"a1": {"gifts", "alice", "gifts"}, "a2": {"", "alice", ""}, "a3": {"secret", "alice", "secret"},
 	} {
 		got := a[id]
 		if got == nil || got.List != want[0] || got.Owner != want[1] || taskList(got, alice) != want[2] {
@@ -189,26 +202,45 @@ func TestListsTakenOverPerUser(t *testing.T) {
 		t.Errorf("s2's tags %v", tags)
 	}
 	b := openByID("bob")
-	if b["b1"].List != "private" || b["b1"].Owner != "bob" || !slices.Equal(b["b1"].Tags, []string{"gifts"}) || b["a1"] != nil {
+	if b["b1"].List != "" || b["b1"].Owner != "bob" || !slices.Equal(b["b1"].Tags, []string{"gifts"}) || b["a1"] != nil {
 		t.Errorf("bob's task %+v", b["b1"])
 	}
 	// No task changed its file: nobody sees more or less than before.
 	if strings.Contains(fileText(t, taskFiles.OpenPath("")), "Cake") || strings.Contains(fileText(t, taskFiles.OpenPath("alice")), "Scarf") {
 		t.Error("a task moved between files")
 	}
-	// Alice's own pins first, then the wiki's; her "private" too. Bob had
-	// none: the wiki's, and his "private".
-	if got := refsOf(pinnedLists("alice", alice)); !slices.Equal(got, []string{"secret", "shared/gifts", "private"}) {
+	// Alice's own pins first, then the wiki's. Bob had none and has the
+	// wiki's, #general with them. The lists "private" and their pins are gone; #general is
+	// pinned for the wiki.
+	if got := refsOf(pinnedLists("alice", alice)); !slices.Equal(got, []string{"secret", "shared/gifts"}) {
 		t.Errorf("alice's pins %v", got)
 	}
-	if got := refsOf(pinnedLists("bob", bob)); !slices.Equal(got, []string{"gifts", "private"}) {
+	if got := refsOf(pinnedLists("bob", bob)); !slices.Equal(got, []string{"gifts", "general"}) {
 		t.Errorf("bob's pins %v", got)
 	}
-	if got := refsOf(pinnedLists("", taskLists(""))); !slices.Equal(got, []string{"gifts"}) {
+	if got := refsOf(pinnedLists("", taskLists(""))); !slices.Equal(got, []string{"gifts", "general"}) {
 		t.Errorf("the wiki's pins %v", got)
 	}
-	if d := lookupDefaultList("alice"); d == nil || d.Ref != "secret" || !d.Private() {
-		t.Errorf("alice's default list %+v", d)
+	// Her private list she hadn't pinned stays out of her My tasks; a shared
+	// list is never left out (a shared task is in My tasks by its assignee).
+	if !alice["gifts"].LeftOut() || alice["secret"].LeftOut() || alice["diary"].LeftOut() || alice["shared/gifts"].LeftOut() {
+		t.Errorf("left out: %+v", alice)
+	}
+	mine := mineFilter("alice", alice)
+	if !mine(a["a2"]) || !mine(a["a3"]) || mine(a["a1"]) || mine(a["s1"]) || mine(a["s2"]) {
+		t.Error("alice's My tasks after the migration")
+	}
+	// A second start changes nothing.
+	files := func() (out string) {
+		for _, o := range []string{"", "alice", "bob"} {
+			out += fileText(t, taskFiles.OpenPath(o)) + fileText(t, taskFiles.ListsPath(o))
+		}
+		return out
+	}
+	before := files()
+	migrateLists()
+	if files() != before || listsUnmigrated {
+		t.Errorf("a second start changed the files:\n%s", files())
 	}
 	// Scopes tell the two lists of one name apart.
 	if !inScope(a["a1"], "gifts", alice) || inScope(a["s1"], "gifts", alice) || !inScope(a["s1"], "shared/gifts", alice) ||
@@ -238,7 +270,7 @@ func TestNothingToTakeOver(t *testing.T) {
 		t.Error("a wiki without lists was changed")
 	}
 	mustList(t, "", "shop", false)
-	if !strings.Contains(fileText(t, taskFiles.ListsPath("")), `"version": 1`) {
+	if !strings.Contains(fileText(t, taskFiles.ListsPath("")), `"version": 2`) {
 		t.Errorf("the registry: %s", fileText(t, taskFiles.ListsPath("")))
 	}
 }
@@ -286,7 +318,7 @@ func TestCreateList(t *testing.T) {
 	if _, ok := taskLists("bob")["gifts"]; ok {
 		t.Error("bob sees alice's list")
 	}
-	for _, bad := range []string{"", "  ", "a,b", "a|b", "a=b", "a[b", `a"b`, "a/b", "none", " #None "} {
+	for _, bad := range []string{"", "  ", "a,b", "a|b", "a=b", "a[b", `a"b`, "a/b", "none", " #None ", "inbox", " #Inbox "} {
 		if _, err := createListOp("alice", bad, false, false, ""); !refusedWith(err, refusedInvalid) {
 			t.Errorf("%q: %v", bad, err)
 		}
@@ -311,7 +343,8 @@ func TestCreateList(t *testing.T) {
 }
 
 // A task goes into a list by naming it; a new one may start private, and a
-// private list's task is in its user's files.
+// private list's task is in its user's files. One that names no list is in
+// its maker's Inbox, private too; a shared task is always in a list.
 func TestTaskInAList(t *testing.T) {
 	testWiki(t, nil)
 	withUsers(t, "alice", "bob")
@@ -319,8 +352,8 @@ func TestTaskInAList(t *testing.T) {
 	mustList(t, "alice", "gifts", true)
 	milk := newTestTask(t, "alice", "Milk", false, "list", "Shop")
 	cake := newTestTask(t, "alice", "Cake", false, "list", "gifts")
-	loose := newTestTask(t, "alice", "Loose", false, "tags", "shop") // a tag is a tag
-	if milk.List != "shop" || milk.Owner != "" || cake.List != "gifts" || cake.Owner != "alice" || loose.List != "" {
+	loose := newTestTask(t, "alice", "Loose", false, "list", "", "tags", "shop") // a tag is a tag
+	if milk.List != "shop" || milk.Owner != "" || cake.List != "gifts" || cake.Owner != "alice" || loose.List != "" || loose.Owner != "alice" {
 		t.Fatalf("milk %+v, cake %+v, loose %+v", milk, cake, loose)
 	}
 	if !strings.Contains(fileText(t, taskFiles.OpenPath("alice")), "Cake") || strings.Contains(fileText(t, taskFiles.OpenPath("")), "Cake") {
@@ -352,8 +385,35 @@ func TestTaskInAList(t *testing.T) {
 	if got := openByID("bob")[cake.ID]; got == nil || got.List != "shop" || got.Owner != "" {
 		t.Errorf("shared into shop: %+v", got)
 	}
-	if err := set(milk.ID, "list", ""); err != nil || openByID("alice")[milk.ID].List != "" {
-		t.Errorf("out of its list: %v", err)
+	// A shared task doesn't leave its list for none: that is an Inbox, and
+	// what others have seen stays shared.
+	for _, none := range []any{"", "inbox", "none", nil} {
+		if err := set(milk.ID, "list", none); err != errSharedListed || openByID("bob")[milk.ID].List != "shop" {
+			t.Errorf("a shared task out of its list (%v): %v", none, err)
+		}
+	}
+	// A private one does: into her Inbox, still hers alone, no share needed;
+	// and back into a private list.
+	extra := newTestTask(t, "alice", "Extra", false, "list", "gifts")
+	if err := set(extra.ID, "list", ""); err != nil {
+		t.Errorf("a private task into the Inbox: %v", err)
+	}
+	if got := openByID("alice")[extra.ID]; got.List != "" || got.Owner != "alice" || openByID("bob")[extra.ID] != nil {
+		t.Errorf("in her Inbox: %+v", got)
+	}
+	if err := set(extra.ID, "list", "gifts"); err != nil || openByID("alice")[extra.ID].List != "gifts" {
+		t.Errorf("from the Inbox into her private list: %v", err)
+	}
+	// The Inbox's task is shared by filing it into a shared list, and only
+	// when the write says so.
+	if err := set(loose.ID, "list", "shop"); err == nil {
+		t.Error("an Inbox task was shared without saying so")
+	}
+	if err := set(loose.ID, "list", "shop", "share", true); err != nil {
+		t.Fatal(err)
+	}
+	if got := openByID("bob")[loose.ID]; got == nil || got.List != "shop" || got.Owner != "" {
+		t.Errorf("filed into shop: %+v", got)
 	}
 	// Bob has no list "gifts": hers is not his to name.
 	data := jsonObj{}
@@ -418,8 +478,8 @@ func TestRenameList(t *testing.T) {
 		t.Errorf("her page: %s", text)
 	}
 	for _, u := range []string{"alice", "bob"} {
-		if d := lookupDefaultList(u); d == nil || d.Ref != "market" {
-			t.Errorf("%s's default list %+v", u, d)
+		if pins := refsOf(pinnedLists(u, taskLists(u))); len(pins) == 0 || pins[0] != "market" {
+			t.Errorf("%s's pins %v", u, pins)
 		}
 	}
 	// Her private list: only hers, her pages, her pin.
@@ -441,7 +501,8 @@ func TestRenameList(t *testing.T) {
 }
 
 // Deleting a list moves its tasks, never drops them; a private list's go
-// to a shared place only when the delete says share.
+// to a shared list only when the delete says share, and with no list named
+// to their user's Inbox; a shared list's then go to #general.
 func TestDeleteList(t *testing.T) {
 	testWiki(t, nil)
 	withUsers(t, "alice", "bob")
@@ -481,18 +542,71 @@ func TestDeleteList(t *testing.T) {
 	if got := openByID("alice")[cake.ID]; got.List != "wishes" || got.Owner != "alice" {
 		t.Errorf("cake %+v", got)
 	}
-	// To no list: its tasks would be shared.
-	if _, err := deleteListOp("alice", "wishes", "", false, false, ""); err == nil {
-		t.Fatal("private tasks shared without saying so")
-	}
-	if _, err := deleteListOp("alice", "wishes", "", true, false, ""); err != nil {
+	// To no list: her Inbox. Its tasks stay hers alone, share or not.
+	if _, err := deleteListOp("alice", "wishes", "", false, false, ""); err != nil {
 		t.Fatal(err)
 	}
-	if got := openByID("bob")[cake.ID]; got == nil || got.List != "" || got.Owner != "" || got.History[len(got.History)-1].Event != "shared" {
+	if got := openByID("alice")[cake.ID]; got == nil || got.List != "" || got.Owner != "alice" || openByID("bob")[cake.ID] != nil {
 		t.Errorf("cake after the delete: %+v", got)
 	}
-	if strings.Contains(fileText(t, taskFiles.OpenPath("alice")), "Cake") {
-		t.Error("cake is still in her file")
+	if !strings.Contains(fileText(t, taskFiles.OpenPath("alice")), "Cake") || strings.Contains(fileText(t, taskFiles.OpenPath("")), "Cake") {
+		t.Error("cake left her file")
+	}
+	if _, ok := taskLists("alice")["wishes"]; ok {
+		t.Error("wishes is still there")
+	}
+	// A private list's tasks into a shared one: only when the delete says share.
+	mustList(t, "alice", "plans", true)
+	plan := newTestTask(t, "alice", "Plan", false, "list", "plans")
+	if _, err := deleteListOp("alice", "plans", "market", false, false, ""); err == nil {
+		t.Fatal("private tasks shared without saying so")
+	}
+	if _, err := deleteListOp("alice", "plans", "market", true, false, ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := openByID("bob")[plan.ID]; got == nil || got.List != "market" || got.Owner != "" || got.History[len(got.History)-1].Event != "shared" {
+		t.Errorf("plan after the delete: %+v", got)
+	}
+	// A shared list with no list named: its tasks go to #general, made for them.
+	if n, err := deleteListOp("bob", "market", "", false, false, ""); err != nil || n != 2 {
+		t.Fatalf("delete market: %d, %v", n, err)
+	}
+	if l, ok := taskLists("alice")[generalListName]; !ok || l.Private() {
+		t.Errorf("#general: %+v", taskLists("alice"))
+	}
+	for _, id := range []string{milk.ID, plan.ID} {
+		if got := openByID("alice")[id]; got == nil || got.List != generalListName || got.Owner != "" {
+			t.Errorf("after market went: %+v", got)
+		}
+	}
+	// #general itself, while it has tasks, needs a list named; another takes them.
+	if _, err := deleteListOp("alice", generalListName, "", false, false, ""); !refusedWith(err, refusedInvalid) {
+		t.Errorf("#general deleted into itself: %v", err)
+	}
+	mustList(t, "alice", "team", false)
+	if _, err := deleteListOp("alice", generalListName, "team", false, false, ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := openByID("bob")[milk.ID]; got.List != "team" {
+		t.Errorf("milk %+v", got)
+	}
+	// An empty #general goes without a list named.
+	mustList(t, "alice", generalListName, false)
+	if _, err := deleteListOp("alice", generalListName, "", false, false, ""); err != nil {
+		t.Errorf("an empty #general: %v", err)
+	}
+}
+
+// Without users a deleted list's tasks are in no list, the wiki's Inbox.
+func TestDeleteListWithoutUsers(t *testing.T) {
+	testWiki(t, nil)
+	mustList(t, "", "shop", false)
+	milk := newTestTask(t, "", "Milk", false, "list", "shop")
+	if n, err := deleteListOp("", "shop", "", false, false, ""); err != nil || n != 1 {
+		t.Fatalf("delete: %d, %v", n, err)
+	}
+	if got := openByID("")[milk.ID]; got == nil || got.List != "" || got.Owner != "" || len(taskLists("")) != 0 {
+		t.Errorf("milk %+v, lists %v", got, sortedKeys(taskLists("")))
 	}
 }
 
@@ -585,31 +699,32 @@ func TestInMineCases(t *testing.T) {
 			List, Assignee string
 			Private        bool
 		}
-		Pinned, Assigns, Own, Want bool
+		Out, Assigns, Want bool
 	}
 	if err := json.Unmarshal(raw, &cases); err != nil || len(cases) == 0 {
 		t.Fatalf("the cases: %v", err)
 	}
-	// anna asks; anna and bob can be given tasks, zoe no longer.
-	assignable := func(name string) bool { return name == "anna" || name == "bob" }
+	// anna asks.
 	for _, c := range cases {
 		task := &Task{List: c.Task.List, Assignee: c.Task.Assignee}
 		if c.Task.Private {
 			task.Owner = "anna"
 		}
-		if got := inMine(task, c.Pinned, "anna", c.Assigns, c.Own, assignable); got != c.Want {
+		if got := inMine(task, c.Out, "anna", c.Assigns); got != c.Want {
 			t.Errorf("%s: %v, want %v", c.Name, got, c.Want)
 		}
 	}
 }
 
-// My tasks on a wiki: what is the user's wherever it is, and what is
-// nobody else's in their pinned lists and in no list; its counts are the
-// Tasks links'.
+// My tasks on a wiki: what is the user's: their own tasks (the Inbox, their
+// private lists) and the shared ones assigned to them; without users every
+// task. A list left out (home=off) is out of it; pins change nothing. Its
+// counts are the Tasks links'.
 func TestMyTasks(t *testing.T) {
 	testWiki(t, nil)
+	day := isoDay(today())
 	// Without lists and users: every task.
-	newTestTask(t, "", "Loose", false, "due_date", isoDay(today()))
+	newTestTask(t, "", "Loose", false, "due_date", day)
 	all := func(u string) []string {
 		in, out := mineFilter(u, taskLists(u)), []string{}
 		for _, task := range taskFiles.Open(u) {
@@ -620,52 +735,90 @@ func TestMyTasks(t *testing.T) {
 		slices.Sort(out)
 		return out
 	}
+	off := func(u, ref, v string) {
+		t.Helper()
+		if err := setListSettingsOp(u, ref, map[string]string{"home": v}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if got := all(""); !slices.Equal(got, []string{"Loose"}) {
 		t.Errorf("without lists: %v", got)
 	}
-	// Without users: the pinned lists and no list.
+	// Without users: every list's tasks, pinned or not.
 	mustList(t, "", "work", false)
 	mustList(t, "", "shop", false)
 	newTestTask(t, "", "Report", false, "list", "work")
-	newTestTask(t, "", "Milk", false, "list", "shop")
-	if got := all(""); !slices.Equal(got, []string{"Loose"}) {
+	newTestTask(t, "", "Milk", false, "list", "shop", "due_date", day)
+	if got := all(""); !slices.Equal(got, []string{"Loose", "Milk", "Report"}) {
 		t.Errorf("nothing pinned: %v", got)
 	}
 	if err := pinListOp("", "work", "1"); err != nil {
 		t.Fatal(err)
 	}
-	if got := all(""); !slices.Equal(got, []string{"Loose", "Report"}) {
+	if got := all(""); !slices.Equal(got, []string{"Loose", "Milk", "Report"}) {
 		t.Errorf("work pinned: %v", got)
 	}
-	if c := taskCounts(&Req{}); c.Count != 1 {
-		t.Errorf("the Tasks links count %+v, want the one due task in no list", c)
+	if c := taskCounts(&Req{}); c.Count != 2 {
+		t.Errorf("the Tasks links count %+v, want the two due tasks", c)
 	}
-	// With users: what is someone else's is out, what is theirs is in
-	// wherever it is; a private task follows its list's pin.
-	withUsers(t, "alice", "bob")
+	// But a list that is left out.
+	off("", "shop", "off")
+	if got := all(""); !slices.Equal(got, []string{"Loose", "Report"}) {
+		t.Errorf("shop left out: %v", got)
+	}
+	if c := taskCounts(&Req{}); c.Count != 1 {
+		t.Errorf("the Tasks links count %+v, want the one due task not left out", c)
+	}
+	if err := setListSettingsOp("", "shop", map[string]string{"home": "maybe"}); !refusedWith(err, refusedInvalid) {
+		t.Errorf("home=maybe: %v", err)
+	}
+	// With users: a shared task is in My tasks of whom it is assigned to,
+	// wherever it is (in a list left out too), and in nobody else's; one's own
+	// tasks are, but those of a list left out.
+	withUsers(t, "alice", "bob", "vera")
+	settings().Users["vera"].Role = roleViewer
 	mustList(t, "alice", "diary", true)
+	mustList(t, "alice", "someday", true)
 	newTestTask(t, "alice", "Bob's report", false, "list", "work", "assignee", "bob")
 	newTestTask(t, "alice", "Alice's milk", false, "list", "shop", "assignee", "alice")
-	newTestTask(t, "alice", "Bob's loose", false, "assignee", "bob")
+	capture := newTestTask(t, "alice", "Capture", false, "list", "")
 	newTestTask(t, "alice", "Entry", false, "list", "diary")
-	if got := all("alice"); !slices.Equal(got, []string{"Alice's milk", "Loose", "Report"}) {
+	newTestTask(t, "alice", "Maybe", false, "list", "someday")
+	if capture.Owner != "alice" || capture.List != "" {
+		t.Fatalf("a capture: %+v", capture)
+	}
+	if got := all("alice"); !slices.Equal(got, []string{"Alice's milk", "Capture", "Entry", "Maybe"}) {
 		t.Errorf("alice: %v", got)
 	}
-	if got := all("bob"); !slices.Equal(got, []string{"Bob's loose", "Bob's report", "Loose", "Report"}) {
+	off("alice", "someday", "off")
+	if got := all("alice"); !slices.Equal(got, []string{"Alice's milk", "Capture", "Entry"}) {
+		t.Errorf("alice, someday left out: %v", got)
+	}
+	if got := all("bob"); !slices.Equal(got, []string{"Bob's report"}) {
 		t.Errorf("bob: %v", got)
 	}
-	if err := pinListOp("alice", "diary", "1"); err != nil {
-		t.Fatal(err)
+	// Pins change nothing.
+	for _, pin := range []string{"1", "0"} {
+		for _, ref := range []string{"diary", "someday", "shop"} {
+			if err := pinListOp("alice", ref, pin); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if got := all("alice"); !slices.Equal(got, []string{"Alice's milk", "Capture", "Entry"}) {
+			t.Errorf("alice, pin=%s: %v", pin, got)
+		}
 	}
-	if got := all("alice"); !slices.Equal(got, []string{"Alice's milk", "Entry", "Loose", "Report"}) {
-		t.Errorf("alice, her diary pinned: %v", got)
+	// A viewer, to whom no task is assigned: every task she sees but those of
+	// a list left out.
+	if got := all("vera"); !slices.Equal(got, []string{"Bob's report", "Loose", "Report"}) {
+		t.Errorf("vera: %v", got)
 	}
 	// The scope by its name, as the routes and the counts ask for it.
 	if paramsScope(mineParams("alice")) != mineScope || paramsScope(mineScopeParams) != mineScope {
 		t.Error("mine=1 isn't the scope of My tasks")
 	}
 	in := scopeFilter("bob", mineScope, taskLists("bob"))
-	if in(&Task{List: "shop"}) || !in(&Task{List: "work"}) {
+	if in(&Task{List: "work"}) || !in(&Task{List: "work", Assignee: "bob"}) || in(&Task{List: "work", Assignee: "alice"}) {
 		t.Error("scopeFilter(mineScope)")
 	}
 }
@@ -740,46 +893,63 @@ func TestListSettings(t *testing.T) {
 }
 
 // A snapshot (an undo's, an import's) puts a task back where it was, and
-// never makes a shared task private nor a private one shared.
+// never makes a shared task private nor a private one shared: a private
+// task whose list is gone is in its user's Inbox, a shared one's, with
+// users, in #general.
 func TestPlaceSnapshot(t *testing.T) {
 	testWiki(t, nil)
-	withUsers(t, "alice", "bob")
-	mustList(t, "alice", "shop", false)
-	mustList(t, "alice", "gifts", true)
-	lists := taskLists("alice")
 	snap := func(list string, private bool) jsonObj {
 		o := jsonObj{}
 		o.Set("list", list)
 		o.Set("private", private)
 		return o
 	}
-	for _, c := range []struct {
+	type place struct {
 		list             string
 		private          bool
 		wantList, wantBy string
-		inbox            bool
-	}{
-		{"shop", false, "shop", "", false},
-		{"gifts", true, "gifts", "alice", false},
-		{"gifts", false, "", "", false},               // a shared task with her private list's name: no list
-		{"shop", true, "private", "alice", true},      // a private one whose list is shared: her "private"
-		{"long-gone", true, "private", "alice", true}, // its list is gone
-		{"long-gone", false, "", "", false},           // a shared one's too
-		{"", false, "", "", false},
-	} {
-		task := &Task{Assignee: "bob"}
-		inbox := placeSnapshot("alice", task, snap(c.list, c.private), lists)
-		if task.List != c.wantList || task.Owner != c.wantBy || inbox != c.inbox || (task.Owner != "") != (task.Assignee == "") {
-			t.Errorf("%+v: list %q owner %q inbox %v assignee %q", c, task.List, task.Owner, inbox, task.Assignee)
+		general          bool
+	}
+	check := func(user string, cases []place) {
+		t.Helper()
+		lists := taskLists(user)
+		for _, c := range cases {
+			task := &Task{Assignee: "bob"}
+			general := placeSnapshot(user, task, snap(c.list, c.private), lists)
+			if task.List != c.wantList || task.Owner != c.wantBy || general != c.general || (task.Owner != "") != (task.Assignee == "") {
+				t.Errorf("%q %+v: list %q owner %q general %v assignee %q", user, c, task.List, task.Owner, general, task.Assignee)
+			}
 		}
 	}
-	if got := reflect.TypeOf(lists).Kind(); got != reflect.Map {
-		t.Fatal(got)
+	// Without users: nothing is private, and a task whose list is gone is in none.
+	mustList(t, "", "shop", false)
+	check("", []place{
+		{"shop", false, "shop", "", false},
+		{"shop", true, "shop", "", false},
+		{"long-gone", false, "", "", false},
+		{"long-gone", true, "", "", false},
+		{"", false, "", "", false},
+	})
+	withUsers(t, "alice", "bob")
+	mustList(t, "alice", "gifts", true)
+	check("alice", []place{
+		{"shop", false, "shop", "", false},
+		{"gifts", true, "gifts", "alice", false},
+		{"gifts", false, generalListName, "", true},     // a shared task with her private list's name: #general
+		{"shop", true, "", "alice", false},              // a private one whose list is shared: her Inbox
+		{"long-gone", true, "", "alice", false},         // its list is gone
+		{"", true, "", "alice", false},                  // it was in her Inbox
+		{"long-gone", false, generalListName, "", true}, // a shared one's too
+		{"", false, generalListName, "", true},          // a shared task is always in a list
+	})
+	// No list is made for a user's private tasks any more.
+	if _, ok := taskLists("alice")[privateListName]; ok {
+		t.Error("a list private was made")
 	}
 }
 
-// A list made in the browser is pinned for who made it, last: in their own registry, started from the wiki's pins when
-// they had set none. An assistant's isn't pinned.
+// A new list is pinned for who made it, last (createListOp's pin): in their
+// own registry, started from the wiki's pins when they had set none.
 func TestANewListIsPinnedForWhoMadeIt(t *testing.T) {
 	testWiki(t, nil)
 	pins := func(u string) []string { return refsOf(pinnedLists(u, taskLists(u))) }
@@ -825,9 +995,6 @@ func TestPinOrder(t *testing.T) {
 	if got := pins(""); !slices.Equal(got, []string{"c", "a", "b"}) {
 		t.Errorf("pins %v", got)
 	}
-	if l := lookupDefaultList(""); l == nil || l.Ref != "c" {
-		t.Errorf("a new task goes to %v", l)
-	}
 	if err := pinOrderOp("", []string{"c", "a"}); err != nil {
 		t.Errorf("the same order: %v", err)
 	}
@@ -841,118 +1008,455 @@ func TestPinOrder(t *testing.T) {
 	}
 }
 
-// "none" names the tasks in no list where a list is named (a view's scope);
-// in a wiki that has a list called so, from before the name was kept, it
-// is that list.
-func TestNoListScope(t *testing.T) {
+// "inbox" names the Inbox where a list is named (a view's scope): the tasks
+// in no list; "none" named them before and still does. In a wiki that has a
+// list called so, from before the name was kept, it is that list.
+func TestInboxScope(t *testing.T) {
 	testWiki(t, nil)
 	mustList(t, "", "shop", false)
 	lists := taskLists("")
 	filed, loose := &Task{ID: "1", Title: "Filed", List: "shop"}, &Task{ID: "2", Title: "Loose"}
-	if !isNoList(" None ", lists) || isNoList("shop", lists) || isNoList("", lists) {
-		t.Error("isNoList")
+	if !isInbox(" Inbox ", lists) || !isInbox(" None ", lists) || isInbox("shop", lists) || isInbox("", lists) {
+		t.Error("isInbox")
 	}
-	if !inScope(loose, "none", lists) || inScope(filed, "none", lists) || !inScope(filed, "shop", lists) || inScope(loose, "shop", lists) {
+	for _, ref := range []string{"inbox", "none"} {
+		if !inScope(loose, ref, lists) || inScope(filed, ref, lists) {
+			t.Errorf("inScope(%s)", ref)
+		}
+	}
+	if !inScope(filed, "shop", lists) || inScope(loose, "shop", lists) {
 		t.Error("inScope")
 	}
-	if c := countTasks("", []*Task{filed, loose, {ID: "3", Title: "Due", DueDate: isoDay(today())}}, lists, noListParams()); c.Count != 1 || c.Focus != 1 {
-		t.Errorf("the counts of the tasks in no list %+v", c)
+	if c := countTasks("", []*Task{filed, loose, {ID: "3", Title: "Due", DueDate: isoDay(today())}}, lists, inboxParams()); c.Count != 1 || c.Focus != 1 {
+		t.Errorf("the Inbox's counts %+v", c)
 	}
-	if err := os.WriteFile(taskFiles.ListsPath(""), []byte(`{"version": 1, "lists": [{"name": "none"}, {"name": "shop"}]}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	lists = taskLists("")
-	own := &Task{ID: "4", Title: "In the list none", List: "none"}
-	if isNoList("none", lists) || !inScope(own, "none", lists) || inScope(loose, "none", lists) {
-		t.Error("a list called none is that list")
+	for _, name := range []string{"none", "inbox"} {
+		if err := os.WriteFile(taskFiles.ListsPath(""), []byte(`{"version": 2, "lists": [{"name": "`+name+`"}, {"name": "shop"}]}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		lists = taskLists("")
+		own := &Task{ID: "4", Title: "In the list", List: name}
+		if isInbox(name, lists) || !inScope(own, name, lists) || inScope(loose, name, lists) {
+			t.Errorf("a list called %s is that list", name)
+		}
 	}
 }
 
-// With users, a new task of one who pinned nothing goes to their private
-// list "private", made by the first task into it: nobody chose a place for
-// it, so it isn't everyone's.
-func TestFallbackList(t *testing.T) {
+// The Inbox: a task that names no list. With users it is its maker's alone,
+// kept in their files, with no list made for it; without users it is the
+// wiki's, in the shared file. A task there has no assignee.
+func TestInbox(t *testing.T) {
 	testWiki(t, nil)
-	if fallbackList("") != nil || lookupDefaultList("") != nil {
-		t.Error("a fallback without users")
+	if inboxOwner("") != "" {
+		t.Error("an Inbox owner without users")
+	}
+	loose := newTestTask(t, "", "Loose", false)
+	if loose.List != "" || loose.Owner != "" || !strings.Contains(fileText(t, taskFiles.OpenPath("")), "Loose") {
+		t.Errorf("without users: %+v", loose)
 	}
 	withUsers(t, "alice", "bob", "vera")
 	settings().Users["vera"].Role = roleViewer
-	l := lookupDefaultList("alice")
-	if l == nil || l.Ref != "private" || !l.Private() || l.Owner != "alice" {
-		t.Fatalf("alice's fallback %+v", l)
+	if inboxOwner("alice") != "alice" || inboxOwner(visitor) != "" {
+		t.Error("inboxOwner")
 	}
-	if _, made := taskLists("alice")["private"]; made {
-		t.Error("the list is there before a task went into it")
+	make := func(user string, kv ...any) (*Task, error) {
+		data := jsonObj{}
+		for i := 0; i+1 < len(kv); i += 2 {
+			data.Set(kv[i].(string), kv[i+1])
+		}
+		return createTask(user, data, "Create task")
 	}
-	if fallbackList("vera") != nil || fallbackList(visitor) != nil {
-		t.Error("a fallback for one who writes no tasks")
+	// No list, an empty one, null, "inbox" and "none": her Inbox.
+	for i, list := range []any{"-", "", nil, "inbox", " Inbox ", "none"} {
+		kv := []any{"title", "Capture " + string(rune('a'+i))}
+		if list != "-" {
+			kv = append(kv, "list", list)
+		}
+		task, err := make("alice", kv...)
+		if err != nil || task.List != "" || task.Owner != "alice" {
+			t.Errorf("list %v: %+v, %v", list, task, err)
+			continue
+		}
+		if _, sees := openByID("bob")[task.ID]; sees {
+			t.Errorf("list %v: bob sees alice's capture", list)
+		}
+		if !mineFilter("alice", taskLists("alice"))(task) {
+			t.Errorf("list %v: her capture isn't in her My tasks", list)
+		}
 	}
-	// The first task into it makes it, in the task's commit; it is hers alone.
-	data := jsonObj{}
-	data.Set("title", "Call the bank")
-	data.Set("list", "private")
-	task, err := createTask("alice", data, "Create task")
-	if err != nil {
+	if !strings.Contains(fileText(t, taskFiles.OpenPath("alice")), "Capture a") || strings.Contains(fileText(t, taskFiles.OpenPath("")), "Capture") {
+		t.Error("her captures aren't in her files alone")
+	}
+	// No list is made for them, and nothing is pinned.
+	if len(taskLists("alice")) != 0 || len(pinnedLists("alice", taskLists("alice"))) != 0 || fileText(t, taskFiles.ListsPath("alice")) != "" {
+		t.Errorf("her lists %v", sortedKeys(taskLists("alice")))
+	}
+	// An Inbox task is nobody else's: no assignee, when made or later, not
+	// even oneself.
+	for _, who := range []string{"bob", "alice", "me"} {
+		if _, err := make("alice", "title", "For "+who, "assignee", who); !refusedWith(err, refusedInvalid) || !strings.Contains(err.Error(), "shared list") {
+			t.Errorf("an Inbox task for %s: %v", who, err)
+		}
+	}
+	capture, _ := make("alice", "title", "Mine")
+	set := jsonObj{}
+	set.Set("assignee", "bob")
+	if _, err := updateTask("alice", capture.ID, set, ""); !refusedWith(err, refusedInvalid) {
+		t.Errorf("an Inbox task assigned: %v", err)
+	}
+	// Filed into a shared list with share, it can be, in the same write.
+	mustList(t, "alice", "team", false)
+	set.Set("list", "team")
+	if _, err := updateTask("alice", capture.ID, set, ""); err == nil {
+		t.Error("filed without share")
+	}
+	set.Set("share", true)
+	if _, err := updateTask("alice", capture.ID, set, ""); err != nil {
 		t.Fatal(err)
 	}
-	if task.List != "private" || task.Owner != "alice" || !taskLists("alice")["private"].Private() {
-		t.Errorf("the task %+v, her lists %v", task, taskLists("alice"))
+	if got := openByID("bob")[capture.ID]; got == nil || got.List != "team" || got.Owner != "" || got.Assignee != "bob" {
+		t.Errorf("filed: %+v", got)
 	}
-	if _, sees := openByID("bob")[task.ID]; sees {
+	// A viewer makes no task, so has no Inbox to fill.
+	if _, err := make("vera", "title", "Hers"); !refusedWith(err, refusedReadOnly) {
+		t.Errorf("a viewer's task: %v", err)
+	}
+	// The task made before there were users is shared and in no list: a
+	// stray until the next start, which puts it in #general.
+	if got := openByID("bob")[loose.ID]; got == nil || got.Owner != "" || got.List != "" {
+		t.Errorf("the task from before: %+v", got)
+	}
+	migrateLists()
+	if got := openByID("bob")[loose.ID]; got == nil || got.Owner != "" || got.List != generalListName || listsUnmigrated {
+		t.Errorf("the task from before, after a start: %+v", got)
+	}
+}
+
+// writeRegistry writes owner's lists.json as a wiki from before has it.
+func writeRegistry(t *testing.T, owner, text string) {
+	t.Helper()
+	if err := os.MkdirAll(taskFiles.Dir(owner), 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(taskFiles.ListsPath(owner), []byte(text), 0o666); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// taskFilesText: every owner's task files and registries, to see whether a
+// start changed any.
+func taskFilesText(t *testing.T) string {
+	t.Helper()
+	out := ""
+	for _, o := range taskFiles.EveryOwner() {
+		out += fileText(t, taskFiles.OpenPath(o)) + fileText(t, taskFiles.ClosedPath(o)) + fileText(t, taskFiles.ListsPath(o))
+	}
+	return out
+}
+
+// startAgain: a second start changes nothing.
+func startAgain(t *testing.T) {
+	t.Helper()
+	before := taskFilesText(t)
+	migrateLists()
+	if after := taskFilesText(t); after != before || listsUnmigrated {
+		t.Errorf("a second start changed the files:\n%s", after)
+	}
+}
+
+func inList(list string, tasks ...*Task) []*Task {
+	for _, t := range tasks {
+		t.List = list
+	}
+	return tasks
+}
+
+// The Inbox's migration, step 1: a list called "inbox" (the name is the
+// Inbox's from now on) is called "inbox-list", on its tasks and in the pins
+// that name it; a user's own and the shared one are told apart.
+func TestInboxMigrationRenamesListsCalledInbox(t *testing.T) {
+	testWiki(t, nil)
+	withUsers(t, "alice", "bob")
+	writeRegistry(t, "", `{"version": 1, "lists": [{"name": "inbox", "limit": "5"}, {"name": "work"}], "pinned": ["inbox", "work"]}`)
+	writeRegistry(t, "alice", `{"version": 1, "lists": [{"name": "inbox"}], "pinned": ["inbox", "shared/inbox"]}`)
+	writeRegistry(t, "bob", `{"version": 1, "lists": [], "pinned": ["work", "inbox"]}`)
+	writeTasks(t, "", inList("inbox", oldTask("s1", "Shared"))[0], inList("work", oldTask("s2", "Work"))[0])
+	writeTasks(t, "alice", inList("inbox", oldTask("a1", "Hers"))[0])
+	migrateLists()
+	if listsUnmigrated {
+		t.Fatal("the migration failed")
+	}
+	alice, bob := taskLists("alice"), taskLists("bob")
+	if got := sortedKeys(alice); !slices.Equal(got, []string{"inbox-list", "shared/inbox-list", "work"}) {
+		t.Errorf("alice's lists %v", got)
+	}
+	if got := sortedKeys(bob); !slices.Equal(got, []string{"inbox-list", "work"}) {
+		t.Errorf("bob's lists %v", got)
+	}
+	if !alice["inbox-list"].Private() || alice["shared/inbox-list"].Private() || alice["shared/inbox-list"].Params.Get("limit") != "5" {
+		t.Errorf("alice's lists %+v", alice)
+	}
+	a := openByID("alice")
+	if a["s1"].List != "inbox-list" || a["s1"].Owner != "" || a["a1"].List != "inbox-list" || a["a1"].Owner != "alice" || a["s2"].List != "work" {
+		t.Errorf("the tasks: %+v %+v %+v", a["s1"], a["a1"], a["s2"])
+	}
+	if openByID("bob")["a1"] != nil {
 		t.Error("bob sees alice's task")
 	}
-	if l := lookupDefaultList("alice"); l == nil || l.Ref != "private" {
-		t.Errorf("the fallback once made %+v", l)
+	if got := refsOf(pinnedLists("alice", alice)); !slices.Equal(got, []string{"inbox-list", "shared/inbox-list"}) {
+		t.Errorf("alice's pins %v", got)
 	}
-	// Once made it counts as pinned while nothing else is: a pill, and its
-	// tasks in her My tasks; bob, who has no such list, has no pin.
-	lists := taskLists("alice")
-	if pins := pinnedLists("alice", lists); len(pins) != 1 || pins[0].Ref != "private" {
-		t.Errorf("alice's pins %+v", pins)
+	if got := refsOf(pinnedLists("bob", bob)); !slices.Equal(got, []string{"work", "inbox-list"}) {
+		t.Errorf("bob's pins %v", got)
 	}
-	if !mineFilter("alice", lists)(task) {
-		t.Error("her capture isn't in her My tasks")
+	if got := refsOf(pinnedLists("", taskLists(""))); !slices.Equal(got, []string{"inbox-list", "work"}) {
+		t.Errorf("the wiki's pins %v", got)
 	}
-	if pins := pinnedLists("bob", taskLists("bob")); len(pins) != 0 {
-		t.Errorf("bob's pins %+v", pins)
+	// The name is the Inbox's now.
+	if !isInbox("inbox", alice) || !isInbox("inbox", bob) {
+		t.Error("inbox still names a list")
 	}
-	// It can't be unpinned while it is the only one.
-	if err := pinListOp("alice", "private", "0"); err == nil || !strings.Contains(err.Error(), "stays pinned") {
-		t.Errorf("unpinning the only pin: %v", err)
+	if !strings.Contains(fileText(t, taskFiles.ListsPath("")), `"version": 2`) {
+		t.Errorf("the registry:\n%s", fileText(t, taskFiles.ListsPath("")))
 	}
-	// Another pin goes after it, Move first before it; then it unpins.
-	mustList(t, "alice", "work", false)
-	if err := pinListOp("alice", "work", "1"); err != nil {
+	startAgain(t)
+}
+
+// Step 2: a user's list "private" that Zone made for their tasks without a
+// list, and that took their new ones (they pinned it, or pinned nothing
+// while the wiki pinned nothing), is their Inbox: its tasks, open and
+// closed, lose their list and stay theirs; the list and its pin go. One
+// with settings of its own, or that they left unpinned beside other pins,
+// is an ordinary list and stays (step 3 then leaves it out of My tasks).
+func TestInboxMigrationTurnsThePrivateListIntoTheInbox(t *testing.T) {
+	testWiki(t, nil)
+	withUsers(t, "alice", "bob", "carl", "dora")
+	writeRegistry(t, "", `{"version": 1, "lists": [{"name": "work"}], "pinned": ["work"]}`)
+	writeRegistry(t, "alice", `{"version": 1, "lists": [{"name": "private"}, {"name": "diary"}], "pinned": ["work", "private"]}`)
+	writeRegistry(t, "bob", `{"version": 1, "lists": [{"name": "private"}, {"name": "diary"}], "pinned": ["diary"]}`)
+	writeRegistry(t, "carl", `{"version": 1, "lists": [{"name": "private", "view": "open"}], "pinned": ["private"]}`)
+	writeRegistry(t, "dora", `{"version": 1, "lists": [{"name": "private"}]}`) // no pins of her own: the wiki's
+	writeTasks(t, "", inList("work", oldTask("s1", "Work"))[0])
+	writeTasks(t, "alice", inList("private", oldTask("a1", "Hers"))[0], inList("diary", oldTask("a2", "Entry"))[0])
+	if err := taskfiles.Write(taskFiles.ClosedPath("alice"), inList("private", &Task{ID: "a3", Title: "Done", ClosedAt: "2026-02-01T10:00:00", CreatedAt: "2026-01-01T10:00:00"})); err != nil {
 		t.Fatal(err)
 	}
-	if l := lookupDefaultList("alice"); l == nil || l.Ref != "private" {
-		t.Errorf("with a second pin %+v", l)
+	for _, u := range []string{"bob", "carl", "dora"} {
+		writeTasks(t, u, inList("private", oldTask(u+"1", u+"'s"))[0])
 	}
-	if err := pinListOp("alice", "work", "first"); err != nil {
+	migrateLists()
+	if listsUnmigrated {
+		t.Fatal("the migration failed")
+	}
+	alice := taskLists("alice")
+	if got := sortedKeys(alice); !slices.Equal(got, []string{"diary", "work"}) {
+		t.Errorf("alice's lists %v", got)
+	}
+	a := openByID("alice")
+	if a["a1"].List != "" || a["a1"].Owner != "alice" || a["a2"].List != "diary" || a["s1"].List != "work" {
+		t.Errorf("alice's tasks: %+v %+v", a["a1"], a["a2"])
+	}
+	if text := fileText(t, taskFiles.ClosedPath("alice")); !strings.Contains(text, "Done") || strings.Contains(text, `"list"`) {
+		t.Errorf("her closed task keeps the list:\n%s", text)
+	}
+	if strings.Contains(fileText(t, taskFiles.OpenPath("")), "Hers") {
+		t.Error("her task went into the shared file")
+	}
+	if got := refsOf(pinnedLists("alice", alice)); !slices.Equal(got, []string{"work"}) {
+		t.Errorf("alice's pins %v", got)
+	}
+	// What was in her My tasks still is: the Inbox's task; her diary, which
+	// she hadn't pinned, stays out.
+	mine := mineFilter("alice", alice)
+	if !mine(a["a1"]) || mine(a["a2"]) || !alice["diary"].LeftOut() {
+		t.Error("alice's My tasks")
+	}
+	for _, u := range []string{"bob", "carl", "dora"} {
+		lists := taskLists(u)
+		l, ok := lists["private"]
+		task := openByID(u)[u+"1"]
+		if !ok || !l.Private() || task.List != "private" || task.Owner != u {
+			t.Errorf("%s's list private: %+v, task %+v", u, l, task)
+			continue
+		}
+		// carl pinned his: in his My tasks as before; bob and dora had not.
+		if want := u != "carl"; l.LeftOut() != want || mineFilter(u, lists)(task) == want {
+			t.Errorf("%s's list private left out: %v", u, l.LeftOut())
+		}
+	}
+	if l := taskLists("bob")["diary"]; l.LeftOut() {
+		t.Error("bob's pinned diary is left out")
+	}
+	// The shared list nobody of them pinned is not left out: with users a
+	// shared task is in My tasks by its assignee.
+	if taskLists("alice")["work"].LeftOut() {
+		t.Error("a shared list left out, with users")
+	}
+	startAgain(t)
+}
+
+// Step 2, for a user who pinned nothing in a wiki that pinned nothing: their
+// list "private" counted as pinned and took their new tasks, so it is their
+// Inbox.
+func TestInboxMigrationOfAUserWhoPinnedNothing(t *testing.T) {
+	testWiki(t, nil)
+	withUsers(t, "erin")
+	writeRegistry(t, "", `{"version": 1, "lists": []}`)
+	writeRegistry(t, "erin", `{"version": 1, "lists": [{"name": "private"}]}`)
+	writeTasks(t, "erin", inList("private", oldTask("e1", "Hers"))[0])
+	migrateLists()
+	if got := openByID("erin")["e1"]; got == nil || got.List != "" || got.Owner != "erin" || len(taskLists("erin")) != 0 || listsUnmigrated {
+		t.Errorf("erin's task %+v, lists %v", got, sortedKeys(taskLists("erin")))
+	}
+	startAgain(t)
+}
+
+// A wiki whose users have lists and that never had a shared one has no
+// shared registry: each registry says for itself that it is from before the
+// Inbox, so the list "private" the fallback made there is the Inbox too,
+// and a list of the user's called inbox gets out of its way.
+func TestInboxMigrationWithoutASharedRegistry(t *testing.T) {
+	testWiki(t, nil)
+	withUsers(t, "erin", "finn")
+	writeRegistry(t, "erin", `{"version": 1, "lists": [{"name": "private"}, {"name": "someday"}]}`)
+	writeRegistry(t, "finn", `{"version": 1, "lists": [{"name": "inbox"}], "pinned": ["inbox"]}`)
+	writeTasks(t, "erin", inList("private", oldTask("e1", "Hers"))[0], inList("someday", oldTask("e2", "Later"))[0])
+	writeTasks(t, "finn", inList("inbox", oldTask("f1", "His"))[0])
+	migrateLists()
+	if got := openByID("erin")["e1"]; got == nil || got.List != "" || got.Owner != "erin" || listsUnmigrated {
+		t.Errorf("erin's task %+v", got)
+	}
+	if l, ok := taskLists("erin")["someday"]; !ok || !l.LeftOut() || len(taskLists("erin")) != 1 {
+		t.Errorf("erin's lists %v", sortedKeys(taskLists("erin")))
+	}
+	if got := openByID("finn")["f1"]; got == nil || got.List != inboxListName {
+		t.Errorf("finn's task %+v", got)
+	}
+	if got := refsOf(pinnedLists("finn", taskLists("finn"))); !slices.Equal(got, []string{inboxListName}) {
+		t.Errorf("finn's pins %v", got)
+	}
+	for _, u := range []string{"erin", "finn"} {
+		if text := fileText(t, taskFiles.ListsPath(u)); !strings.Contains(text, `"version": 2`) {
+			t.Errorf("%s's registry:\n%s", u, text)
+		}
+	}
+	startAgain(t)
+}
+
+// Step 3: the lists whose tasks were not in My tasks, since nobody had
+// pinned them, are left out of it (home=off); once: a list unpinned later
+// isn't.
+func TestInboxMigrationLeavesOutWhatWasNotPinned(t *testing.T) {
+	testWiki(t, nil)
+	writeRegistry(t, "", `{"version": 1, "lists": [{"name": "work"}, {"name": "someday", "limit": "3"}, {"name": "shop"}], "pinned": ["shop", "work"], "all": {"view": "open"}}`)
+	writeTasks(t, "", oldTask("1", "Loose"), inList("work", oldTask("2", "Report"))[0], inList("someday", oldTask("3", "Maybe"))[0])
+	before := fileText(t, taskFiles.OpenPath(""))
+	migrateLists()
+	if listsUnmigrated {
+		t.Fatal("the migration failed")
+	}
+	lists := taskLists("")
+	if lists["work"].LeftOut() || lists["shop"].LeftOut() || !lists["someday"].LeftOut() || lists["someday"].Params.Get("limit") != "3" {
+		t.Errorf("left out: %+v", lists)
+	}
+	in, got := mineFilter("", lists), []string{}
+	for _, task := range taskFiles.Open("") {
+		if in(task) {
+			got = append(got, task.Title)
+		}
+	}
+	if slices.Sort(got); !slices.Equal(got, []string{"Loose", "Report"}) {
+		t.Errorf("My tasks: %v", got)
+	}
+	// Without users no task moves: one without a list is in the Inbox.
+	if fileText(t, taskFiles.OpenPath("")) != before {
+		t.Error("the tasks were rewritten")
+	}
+	text := fileText(t, taskFiles.ListsPath(""))
+	if !strings.Contains(text, `"version": 2`) || !strings.Contains(text, `{"name": "someday", "limit": "3", "home": "off"}`) || !strings.Contains(text, `"all": {"view": "open"}`) {
+		t.Errorf("the registry:\n%s", text)
+	}
+	startAgain(t)
+	// Unpinned after the migration: not left out by the next start.
+	if err := pinListOp("", "work", "0"); err != nil {
 		t.Fatal(err)
 	}
-	if l := lookupDefaultList("alice"); l == nil || l.Ref != "work" {
-		t.Errorf("with work first %+v", l)
+	migrateLists()
+	if taskLists("")["work"].LeftOut() {
+		t.Error("a list unpinned later was left out")
 	}
-	if err := pinListOp("alice", "private", "0"); err != nil {
-		t.Errorf("unpinning it beside another pin: %v", err)
-	}
-	if err := pinListOp("alice", "work", "0"); err != nil {
+}
+
+// With users a shared task is always in a list: at every start the shared
+// tasks without one, open and closed, go to #general, made for them and
+// pinned for the wiki. That takes over the tasks that were in no list, and a
+// wiki whose users were turned on later. A user's own tasks without a list
+// are their Inbox and stay.
+func TestSharedTasksWithoutAListGoToGeneral(t *testing.T) {
+	testWiki(t, nil)
+	writeRegistry(t, "", `{"version": 1, "lists": [{"name": "work"}], "pinned": ["work"]}`)
+	writeTasks(t, "", oldTask("1", "Loose"), inList("work", oldTask("2", "Report"))[0])
+	if err := taskfiles.Write(taskFiles.ClosedPath(""), []*Task{{ID: "3", Title: "Done", ClosedAt: "2026-02-01T10:00:00", CreatedAt: "2026-01-01T10:00:00"}}); err != nil {
 		t.Fatal(err)
 	}
-	if pins := pinnedLists("alice", taskLists("alice")); len(pins) != 1 || pins[0].Ref != "private" {
-		t.Errorf("with everything unpinned %+v", pins)
+	// Without users: nothing moves, and no list is made.
+	migrateLists()
+	if got := openByID("")["1"]; got.List != "" || len(taskLists("")) != 1 || listsUnmigrated {
+		t.Fatalf("without users: %+v, lists %v", got, sortedKeys(taskLists("")))
 	}
-	// While a shared list has the name and bob has none of his own, the
-	// name is that list's: no fallback, and "private" names the shared one.
-	if err := os.WriteFile(taskFiles.ListsPath(""), []byte(`{"version": 1, "lists": [{"name": "private"}, {"name": "work"}]}`), 0o644); err != nil {
+	startAgain(t)
+	// Users are turned on: the next start files them.
+	withUsers(t, "alice", "bob")
+	writeTasks(t, "alice", oldTask("a1", "Hers"))
+	migrateLists()
+	if listsUnmigrated {
+		t.Fatal("the migration failed")
+	}
+	a := openByID("alice")
+	if a["1"].List != generalListName || a["1"].Owner != "" || a["2"].List != "work" || a["a1"].List != "" || a["a1"].Owner != "alice" {
+		t.Errorf("the tasks: %+v %+v %+v", a["1"], a["2"], a["a1"])
+	}
+	if text := fileText(t, taskFiles.ClosedPath("")); !strings.Contains(text, `"list": "general"`) {
+		t.Errorf("the closed task:\n%s", text)
+	}
+	if l, ok := taskLists("bob")[generalListName]; !ok || l.Private() || l.LeftOut() {
+		t.Errorf("#general: %+v", l)
+	}
+	if got := refsOf(pinnedLists("bob", taskLists("bob"))); !slices.Equal(got, []string{"work", generalListName}) {
+		t.Errorf("the wiki's pins %v", got)
+	}
+	startAgain(t)
+	// A stray that turns up later (a file edited by hand, an older Zone)
+	// goes there too; the list is there, and an unpin of it stays.
+	if err := pinListOp("", generalListName, "0"); err != nil {
 		t.Fatal(err)
 	}
-	if fallbackList("bob") != nil {
-		t.Error("bob's fallback beside a shared list called private")
+	writeTasks(t, "", append(taskFiles.Open(""), oldTask("9", "Stray"))...)
+	migrateLists()
+	if got := openByID("bob")["9"]; got == nil || got.List != generalListName {
+		t.Errorf("the stray: %+v", got)
 	}
-	if fallbackList("alice") == nil {
-		t.Error("alice has her own list private: it stays her fallback")
+	if got := refsOf(pinnedLists("", taskLists(""))); !slices.Equal(got, []string{"work"}) {
+		t.Errorf("#general was pinned again: %v", got)
 	}
+	startAgain(t)
+}
+
+// A wiki with users that never had a list or a registry: its shared tasks
+// without a list go to #general at start all the same.
+func TestGeneralInAWikiWithoutARegistry(t *testing.T) {
+	testWiki(t, nil)
+	withUsers(t, "alice")
+	if err := os.MkdirAll(taskFiles.Dir(""), 0o777); err != nil {
+		t.Fatal(err)
+	}
+	writeTasks(t, "", oldTask("1", "Loose"))
+	migrateLists()
+	if got := openByID("alice")["1"]; got == nil || got.List != generalListName || got.Owner != "" || listsUnmigrated {
+		t.Errorf("the task: %+v", got)
+	}
+	if text := fileText(t, taskFiles.ListsPath("")); !strings.Contains(text, `"version": 2`) || !strings.Contains(text, `"pinned": ["general"]`) {
+		t.Errorf("the registry:\n%s", text)
+	}
+	startAgain(t)
 }

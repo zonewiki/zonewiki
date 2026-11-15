@@ -245,7 +245,7 @@ Nobody types ids: in the editor, `[[task:` (or the formatting bar's task button)
   - **One item opens the task app's edit modal** to review it first: the editor page carries a hidden task app (`buildTasksEmbed(…, headless)`: `data-headless`, `display:none`; `tasks.js` then ignores the task app's keyboard shortcuts and the "moved to another list" notice),
     and `openTasksEdit(null, { title, description, start_date: null, onCreated })` (exported by `tasks.js`) opens it with the text as title (its quick-add preview shows the shorthand) and no start date.
     Save (Enter) creates the task and `onCreated` puts the reference in; Cancel/Esc changes nothing.
-    The same modal serves `c t` in the editor (with the first pinned list's tags).
+    The same modal serves `c t` in the editor (a task in the Inbox).
   - **Several lines** open the same modal in batch mode (`openTasksEdit(null, { titles, … })`, `setBatch` in `js/taskmodal.js`): the titles are listed instead of the title field (each with its shorthand preview),
     focus starts in Tags,
     and the fields (notes, tags, dates, repeat, keep) apply to every task.

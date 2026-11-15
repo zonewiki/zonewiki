@@ -63,13 +63,11 @@ until 2026-11. Who is signed in,
 **Change password** (`/password`, Signing in in `docs/spec/users.md`) and Sign out are in the **user menu**,
 opened by the **user button** at the top right on desktop (phones have Sign out in the page's top row, and both pages' links in the shortcuts dialog).
 Without users there is one pill, Wiki · Tasks · Notes.
-The Tasks link goes to **My tasks** (`/tasks?mine=1`; Lists → My tasks in `docs/spec/tasks.md`): one task app of what is assigned to you wherever it is, and of what is nobody else's in your pinned lists and in no list.
-The pinned lists are the lists you pinned (a list's ⋯ menu or List settings pins it: Pins in `docs/spec/tasks.md`;
-`pinnedLists`, from your pins in the lists' registry, the wiki's when you have set none, in their order;
-`rq.pinnedLists()` looks them up once per request).
+The Tasks link goes to **My tasks** (`/tasks?mine=1`; Lists → My tasks in `docs/spec/tasks.md`): one task app of what is yours: the tasks in your own lists (your Inbox, your private lists) and the shared tasks assigned to you; without users every task but those of a list left out.
 In a wiki without lists the link goes to `/tasks`, which is the same tasks (`tasksLinkHref`, `moduleLinks`).
 Its counts are of My tasks.
-The **first pinned list** is where New task puts a task (`defaultList()`, `lookupDefaultList()`); with users and nothing pinned, your private list `private` (Pins in `docs/spec/tasks.md`).
+A new task goes to the **Inbox** (with users your own, private; The Inbox in `docs/spec/tasks.md`).
+The lists you pinned are pills of the list switcher, and nothing else (Pins in `docs/spec/tasks.md`; `pinnedLists`, from your pins in the lists' registry, the wiki's when you have set none, in their order; `rq.pinnedLists()` looks them up once per request).
 Your other lists and all tasks are one click from there, in the task app's **list switcher** (Lists in `docs/spec/tasks.md`).
 `/tasks` stays the view of every task that search results, task links and `g d` open.
 There is still no nav bar: the modules sit where the eye already goes.
@@ -93,16 +91,12 @@ There is still no nav bar: the modules sit where the eye already goes.
   (Until 2026-11 the row had New note and Add a task icons between the eye and Search.) The pill has a fixed width, so the row's width (`--top-actions-w`, which the breadcrumb's padding and the status badges' position use) doesn't depend on the font; its border ends on the content's right edge.
   Hidden at ≤640px.
   They replaced the round New and Search buttons in the bottom-right corner, so desktop toasts and Sign out have the bottom corners to themselves again.
-- **New task from anywhere** (`openDefaultTask` in `js/actions.js`: `c t`, and the phone's **Task** tab): the task goes into your first pinned list, tagged as it tags new tasks (`newTaskTags`: the list's `new`) and a keep task if the list says so.
-  On a page that shows that list or My tasks it clicks that embed's own **+ New** (so the view's dates apply too, e.g. Focus's today);
-  anywhere else it opens a task list app's edit modal with that list, its tags,
-  keep and start (`layout.html` puts them on `<body>`: `data-tasks-list`, `data-tasks-tags`, `data-tasks-keep`, `data-tasks-today` when that list's view is Focus, as its "+ New" starts tasks today there;
-  without a pin, today, as `/tasks`'s Focus;
-  `openEditModal` takes `list`, `tags`, which replace the filter's even when empty, `keep` and `start_date`): the page's own task app (an embed, `/tasks`, the editor's hidden one),
+- **New task from anywhere** (`openDefaultTask` in `js/actions.js`: `c t`, and the phone's **Task** tab): the task goes into your Inbox and starts today, so it is on My tasks' Focus.
+  On a page that shows My tasks or the Inbox it clicks that embed's own **+ New** (so the view's dates apply, e.g. Focus's today);
+  anywhere else it opens a task list app's edit modal for a task in the Inbox (`openEditModal` takes `list`, `tags`, which replace the filter's even when empty, `keep` and `start_date`): the page's own task app (an embed, `/tasks`, the editor's hidden one),
   or on a page without one a hidden one loaded on demand (`loadHeadlessTasks`: `GET /api/tasks/headless`, the headless embed without its scripts, then `tasks-core.js` and `tasks.js`; once per page),
   so you stay on the page and a toast says "Added “…” to your tasks".
   Should loading fail, where the Tasks link goes (or `/tasks`) opens with `?new=1`.
-  Without a pin the task gets no tags.
   The dialog says which list the task goes to (Where a new task goes in `docs/spec/tasks.md`). **g t** goes where the Tasks link goes (`tasksLinkHref`: where the Tasks module link points, else `/tasks`).
 - **Action bar** (`action_bar` in `templates/partials/modules.html`, `nav.action-buttons`): the phone's: three groups set apart by dividers (`.action-sep`), as on desktop: the modules (`.action-module`; with users a divider between Wiki · Private and Tasks · Notes);
   the two "new" actions (`icons.new_note`, `icons.new_task`; on desktop only their shortcuts), **Note** (`.action-new-note`, a new note, `openNewNote`, `c s`) and **Task** (`.action-task`, a new task);
@@ -238,7 +232,7 @@ Bare-key shortcuts are suppressed when focus is inside an `input`, `textarea`, `
 |----------|---------|--------|
 | **Ctrl/⌘+P** | anywhere | Open search modal |
 | **g** then **h/n/a/t/p** | anywhere | Navigate: Home / Notes / all tasks (`/tasks`) / Tasks (its home) / your private home (with users). |
-| **c** then **n/t** | anywhere | Create: note / task in your first pinned list (with the tags it gives new tasks). |
+| **c** then **n/t** | anywhere | Create: note / task in your Inbox, starting today. |
 | **F2** | editor | Toggle preview pane |
 | **Ctrl/⌘+S** | editor | Done — commit and go to page view |
 | **Ctrl/⌘+B / I / K** | editor | Bold / italic / link (see Formatting bar) |

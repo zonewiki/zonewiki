@@ -35,15 +35,7 @@
   {{- /* Not signed in, in a public wiki: the pages alone (style.css, the client code). */}}
   {{- if .Shell.Visitor}} data-visitor="1"{{end}}
   {{- if .Shell.Locale}} data-locale="{{.Shell.Locale}}"{{end}}
-  {{- if .Shell.DateFormat}} data-date-format="{{.Shell.DateFormat}}"{{end}}
-  {{- /* New tasks from any page (c t, the New task button) go to the default
-      list (the first pinned one), get the tags it gives them, are keep tasks
-      if it makes them and start today when its "+ New" would
-      (js/actions.js openDefaultTask). */}}
-  {{- with .Shell.TasksNew}} data-tasks-list="{{.List}}" data-tasks-tags="{{.Tags}}"
-    {{- if .Keep}} data-tasks-keep="1"{{end}}
-    {{- if .Today}} data-tasks-today="1"{{end}}
-  {{- end}}>
+  {{- if .Shell.DateFormat}} data-date-format="{{.Shell.DateFormat}}"{{end}}>
   <dialog id="search-modal" class="search-modal">
     <div class="search-modal-controls">
       <input type="text" id="modal-filter" placeholder="Search pages…" autocomplete="off" spellcheck="false">

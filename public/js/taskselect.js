@@ -137,9 +137,10 @@ function openBulkTagModal(ids, removing = false) {
 // list; a click moves the tasks there at once (batch-update), with one
 // undo. The row of the list every task is in already is ticked; one that
 // only some are in says how many. A task is as private as its list: a
-// shared task can't go into a private list (those rows are off when one is
-// selected), and a private one that leaves for a shared place is shared,
-// which the row says and no undo takes back.
+// shared task can't go into a private list nor, with users, into the Inbox
+// (those rows are off when one is selected), and a private one that leaves
+// for a shared list is shared, which the row says and no undo takes back;
+// it is assigned to its user then, so it stays in their My tasks.
 // The last row, New list…, asks for a name in the dialog's place and makes
 // the list (POST /api/tasks/lists), then moves the tasks into it: so the
 // dialog opens with no list too.
@@ -154,9 +155,9 @@ function openBulkListModal(ids) {
   const inList = ref => chosen.filter(t => (app.taskList(t) || '') === ref).length;
   const row = (ref, label, n) => {
     const all = n === count;
-    const isPrivate = app.privateLists.has(ref);
+    const isPrivate = app.isPrivateList(ref);
     const off = isPrivate && anyShared;
-    const note = off ? 'a shared task stays shared' : anyPrivate && !isPrivate && !all ? 'shares it with everyone' : '';
+    const note = off ? 'a shared task stays shared' : anyPrivate && !isPrivate && !all ? (people.users?.has(people.me) ? 'shares it with everyone, assigned to you' : 'shares it with everyone') : '';
     const part = note ? `<span class="bulk-tag-count">${note}</span>`
       : n && !all ? `<span class="bulk-tag-count">${n} of ${count}</span>` : '';
     const tip = ref ? ` title="${esc(app.listTooltip(ref))}"` : '';
@@ -171,7 +172,7 @@ function openBulkListModal(ids) {
   dlg.className = 'modal bulk-tag-modal bulk-list-modal';
   dlg.innerHTML = `
     <p class="modal-label">Move ${tasksWord} to a list</p>
-    <ul class="bulk-tag-list">${lists.map(ref => row(ref, label(ref), inList(ref))).join('')}${row('', 'No list', inList(''))}` +
+    <ul class="bulk-tag-list">${row('', (app.inboxPrivate ? '🔒 ' : '') + 'Inbox', inList(''))}${lists.map(ref => row(ref, label(ref), inList(ref))).join('')}` +
       `<li><button type="button" class="bulk-tag-row bulk-list-row bulk-list-new" aria-current="false">` +
       `<span class="bulk-list-mark" aria-hidden="true">+</span><span class="bulk-list-none">New list…</span></button></li></ul>
     <form class="bulk-list-form" hidden>
@@ -214,9 +215,10 @@ function openBulkListModal(ids) {
     if (!moving.length) return;   // there already
     app.dismissUndo();
     const shares = t => !!t.private && !targetPrivate;
-    if (!(await batchUpdate(moving.map(t => ({ id: t.id, list: target, ...(shares(t) ? { share: true } : {}) }))))) return;
+    const mine = people.me && people.users?.has(people.me) ? { assignee: people.me } : {};
+    if (!(await batchUpdate(moving.map(t => ({ id: t.id, list: target, ...(shares(t) ? { share: true, ...mine } : {}) }))))) return;
     const what = `${moving.length} task${moving.length > 1 ? 's' : ''}`;
-    const msg = target ? `${what} moved to ${made ? 'the new list' : 'list'} “${app.listName(target)}”` : `${what} taken out of ${moving.length > 1 ? 'their lists' : 'its list'}`;
+    const msg = target ? `${what} moved to ${made ? 'the new list' : 'list'} “${app.listName(target)}”` : `${what} moved to the Inbox`;
     // Back where they were, but those that were private and are shared now.
     // (A list just made stays: it is a list from now on, empty or not.)
     const back = moving.filter(t => !shares(t));
@@ -229,7 +231,7 @@ function openBulkListModal(ids) {
     if (btn.classList.contains('bulk-list-new')) { showForm(true); return; }
     const target = btn.dataset.list;
     close();
-    move(target, app.privateLists.has(target), false);
+    move(target, app.isPrivateList(target), false);
   });
 
   // New list…: the rows give way to the name (and, with users, whether the

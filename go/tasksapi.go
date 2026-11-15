@@ -43,17 +43,14 @@ func tasksRoute(h func(w http.ResponseWriter, r *http.Request) error) http.Handl
 // apiNewList: a list made where the page stays (New list… in the dialog
 // that moves tasks to a list, js/taskselect.js): {name, private} makes it as
 // the New list… dialog of /tasks does (createListOp) and answers how the
-// user names it. It is pinned as a list made in the browser is, but not as
-// the user's first pin: that would change where new tasks land, which the
-// dialog of /tasks says on the list's page and this one has no place to
-// say. A refusal is {"error": …}.
+// user names it. It is pinned as every new list is, last (a pin is a pill
+// of the switcher and nothing else). A refusal is {"error": …}.
 func apiNewList(w http.ResponseWriter, r *http.Request) {
 	user := userOf(r)
 	name, private, err := newListFields(r)
 	var ref string
-	pin := false
+	const pin = true
 	if err == nil {
-		pin = len(pinnedLists(user, taskLists(user))) > 0
 		ref, err = createListOp(user, name, private, pin, "")
 	}
 	rf, refused := refusalOf(err)
@@ -359,7 +356,7 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 	}
 	existing := taskFiles.IDsLocked() // every owner's: ids stay unique across the files
 	restored := []*Task{}
-	lists, inbox := taskLists(user), false
+	lists, general := taskLists(user), false
 	for _, s := range snaps {
 		snap, ok := jsonobj.As[jsonObj](s)
 		if !ok {
@@ -370,7 +367,7 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 			continue
 		}
 		checkBy(user, t)
-		inbox = placeSnapshot(user, t, snap, lists) || inbox
+		general = placeSnapshot(user, t, snap, lists) || general
 		existing[t.ID] = true
 		if !t.IsOpen() {
 			closed = append(closed, t)
@@ -381,8 +378,8 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 	}
 	if len(restored) > 0 {
 		var also []string
-		if inbox {
-			path, err := ensurePrivateListLocked(user)
+		if general {
+			path, err := ensureGeneralLocked()
 			if err != nil {
 				return err
 			}
@@ -478,14 +475,15 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 	defer taskFiles.Unlock()
 	lists := taskLists(user)
 	var into *ListInfo
-	if ref := cleanList(str("list")); ref != "" {
+	intoInbox := isInbox(str("list"), lists)
+	if ref := cleanList(str("list")); ref != "" && !intoInbox {
 		l, ok := resolveList(ref, lists)
 		if !ok || !canWriteList(user, l) {
 			return refuse("No list #" + ref)
 		}
 		into = &l
 	}
-	inbox := false
+	general := false
 	active, closed, err := taskFiles.ReadForWriteLocked(user)
 	if err != nil {
 		return err
@@ -520,11 +518,17 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 		}
 		t.Tags = retag(t.Tags, add, nil)
 		switch private := jsonobj.True(snap["private"]) && privateFolder(user) != ""; {
+		case intoInbox && privateFolder(user) != "":
+			// Into the Inbox: the importer's own, whatever the file says.
+			t.List, t.Owner, t.Assignee = "", user, ""
+		case intoInbox:
+			t.List, t.Owner = "", ""
 		case into == nil:
-			inbox = placeSnapshot(user, t, snap, lists) || inbox
+			general = placeSnapshot(user, t, snap, lists) || general
 		case private && !into.Private():
-			// A task exported private stays private, wherever it is imported.
-			t.List, t.Owner, t.Assignee, inbox = privateListName, user, "", true
+			// A task exported private stays private, wherever it is
+			// imported: in the importer's Inbox.
+			t.List, t.Owner, t.Assignee = "", user, ""
 		default:
 			t.List, t.Owner = into.Name, into.Owner
 			if into.Private() {
@@ -540,8 +544,8 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 	}
 	if len(ids) > 0 {
 		var also []string
-		if inbox {
-			path, err := ensurePrivateListLocked(user)
+		if general {
+			path, err := ensureGeneralLocked()
 			if err != nil {
 				return err
 			}

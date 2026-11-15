@@ -104,3 +104,30 @@ def test_import_refuses_what_is_no_export(client, wiki_dir):
         assert resp.status_code == 400 and "exported from Zone" in resp.get_json()["error"], file
     assert titles(client) == []
     assert imp(client, {"tasks": []}).get_json() == {"added": 0, "skipped": 0, "ids": []}
+
+
+def test_import_into_the_inbox_puts_the_tasks_in_no_list(client, wiki_dir):
+    """list=inbox (or none, its name until 2026-11): the Inbox, whatever
+    list the file's tasks name; without users that is no list, shared as
+    everything is."""
+    make_list(client, "shop", headers=HOST)
+    file = [{"title": "Milk", "list": "shop"}, {"title": "Salt", "list": "gone"}, {"title": "Tea", "private": True}]
+    assert imp(client, file, list="inbox").get_json()["added"] == 3
+    assert imp(client, [{"title": "Rice", "list": "shop"}], list="none").get_json()["added"] == 1
+    tasks = {t["title"]: t for t in client.get("/api/tasks", headers=HOST).get_json()}
+    assert all("list" not in t and "private" not in t for t in tasks.values()) and len(tasks) == 4
+    assert [t["title"] for t in export(client, list="inbox").get_json()["tasks"]] == ["Milk", "Salt", "Tea", "Rice"]
+    assert not (wiki_dir / "private").exists() and '"general"' not in (wiki_dir / "_tasks/lists.json").read_text()
+
+
+def test_an_undone_delete_goes_back_where_it_was_or_into_the_inbox(client, wiki_dir):
+    """POST /api/tasks/restore without users: the list the snapshot names
+    when it is there, else no list (the Inbox); no list is made for it."""
+    make_list(client, "shop", headers=HOST)
+    snaps = [{"id": "r-1", "title": "Milk", "list": "shop"}, {"id": "r-2", "title": "Salt", "list": "gone"},
+             {"id": "r-3", "title": "Tea"}, {"id": "r-4", "title": "Rice", "list": "gone", "private": True}]
+    assert client.post("/api/tasks/restore", json={"tasks": snaps}, headers=HOST).status_code == 201
+    tasks = {t["title"]: t.get("list") for t in client.get("/api/tasks", headers=HOST).get_json()}
+    assert tasks == {"Milk": "shop", "Salt": None, "Tea": None, "Rice": None}
+    registry = (wiki_dir / "_tasks/lists.json").read_text()
+    assert '"general"' not in registry and '"private"' not in registry and not (wiki_dir / "private").exists()

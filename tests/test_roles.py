@@ -42,8 +42,9 @@ def git(wiki, *args):
 @pytest.fixture()
 def wiki(client, git_wiki_dir, monkeypatch):
     """A shared page with a checkbox, an uncommitted shared change, shared
-    tasks (open with a comment, completed), a note and a private task of
-    carol's from when she was an editor; signed in as carol, a viewer."""
+    tasks in the shared list team (open with a comment, completed), a note,
+    a private task of carol's in a list of hers and one in her Inbox, from
+    when she was an editor; signed in as carol, a viewer."""
     monkeypatch.setattr(settings, "USERS", dict(USERS))
     monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}})
     wiki = git_wiki_dir
@@ -53,22 +54,26 @@ def wiki(client, git_wiki_dir, monkeypatch):
     git(wiki, "add", "-A")
     git(wiki, "commit", "-qm", "Plans")
     login(client, "alice")
-    task = client.post("/api/tasks", json={"title": "Shared task", "tags": ["work"]}, headers=HOST).get_json()
+    assert client.post("/tasks/new-list", data={"name": "team"}, headers=HOST).status_code == 302
+    task = client.post("/api/tasks", json={"title": "Shared task", "list": "team", "tags": ["work"]}, headers=HOST).get_json()
+    assert task["private"] is False        # with users a task without a list would be alice's own
     client.post(f"/api/tasks/{task['id']}/comments", json={"text": "hi"}, headers=HOST)
-    done = client.post("/api/tasks", json={"title": "Done task"}, headers=HOST).get_json()
+    done = client.post("/api/tasks", json={"title": "Done task", "list": "team"}, headers=HOST).get_json()
     client.put(f"/api/tasks/{done['id']}", json={"completed": True}, headers=HOST)
     comment = client.get("/api/tasks", headers=HOST).get_json()
     comment = next(t for t in comment if t["id"] == task["id"])["comments"][0]["id"]
     login(client, "carol")
     note = client.post("/api/notes", data={"title": "Carols"}, headers=HOST).get_json()["slug"]
-    client.post("/tasks/new-list", data={"name": "team"}, headers=HOST)
     client.post("/tasks/new-list", data={"name": "carols-own", "private": "1"}, headers=HOST)
     mine = client.post("/api/tasks", json={"title": "Mine", "list": "carols-own"}, headers=HOST).get_json()
+    inbox = client.post("/api/tasks", json={"title": "Captured"}, headers=HOST).get_json()
+    assert inbox["private"] is True and "list" not in inbox
     monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}, "carol": {"role": "viewer"}})
     login(client, "carol")
     (wiki / "plans.md").write_text("# Plans\n\n- [ ] one\n\nshared words, uncommitted\n")
     IDS.clear()
-    IDS.update({"task": task["id"], "done": done["id"], "comment": comment, "note": note, "mine": mine["id"]})
+    IDS.update({"task": task["id"], "done": done["id"], "comment": comment, "note": note, "mine": mine["id"],
+                "inbox": inbox["id"]})
     return wiki
 
 
@@ -146,6 +151,18 @@ WRITES = [
     ("POST /api/tasks", "POST", "/api/tasks", {"json": {"title": "Mine too", "list": "carols-own"}}),
     ("PUT /api/tasks/{id}", "PUT", "/api/tasks/{mine}", {"json": {"list": "team", "share": True}}),
     ("PUT /api/tasks/{id}", "PUT", "/api/tasks/{mine}", {"json": {"completed": True}}),
+    ("PUT /api/tasks/{id}", "PUT", "/api/tasks/{mine}", {"json": {"list": ""}}),
+    # Her Inbox: no new task into it, and the one there stays as it is.
+    ("POST /api/tasks", "POST", "/api/tasks", {"json": {"title": "A capture"}}),
+    ("POST /api/tasks", "POST", "/api/tasks", {"json": {"title": "A capture", "list": "inbox"}}),
+    ("PUT /api/tasks/{id}", "PUT", "/api/tasks/{inbox}", {"json": {"title": "Carol was here"}}),
+    ("PUT /api/tasks/{id}", "PUT", "/api/tasks/{inbox}", {"json": {"list": "team", "share": True}}),
+    ("PUT /api/tasks/{id}", "PUT", "/api/tasks/{inbox}", {"json": {"list": "carols-own"}}),
+    ("DELETE /api/tasks/{id}", "DELETE", "/api/tasks/{inbox}", {}),
+    ("POST /tasks/delete-list", "POST", "/tasks/delete-list", {"data": {"list": "carols-own", "to": ""}}),
+    ("POST /api/tasks/settings", "POST", "/api/tasks/settings", {"json": {"list": "carols-own", "set": {"home": "off"}}}),
+    ("POST /api/tasks/settings", "POST", "/api/tasks/settings", {"json": {"list": "team", "set": {"home": "off"}}}),
+    ("POST /api/tasks/import", "POST", "/api/tasks/import", {"json": {"file": {"tasks": [{"title": "Imported"}]}, "list": "inbox"}}),
     ("POST /api/upload", "POST", "/api/upload", {"data": lambda: {"file": (BytesIO(b"c"), "c.png"), "page": "{note}"}}),
     ("POST /admin/users/{name}/role", "POST", "/admin/users/carol/role", {"data": {"role": "admin"}}),
     ("POST /admin/users/invite", "POST", "/admin/users/invite", {"data": {"name": "dave", "role": "admin"}}),
@@ -206,6 +223,12 @@ MCP_WRITES = [
     ("create_task", {"title": "Mine", "list": "carols-own"}),
     ("update_task", {"id": "{mine}", "list": "team", "share": True}),
     ("update_task", {"id": "{mine}", "status": "done"}),
+    ("update_task", {"id": "{mine}", "list": ""}),
+    ("create_task", {"title": "A capture"}),
+    ("create_task", {"title": "A capture", "list": "inbox"}),
+    ("create_task", {"title": "For alice", "assignee": "alice"}),
+    ("update_task", {"id": "{inbox}", "title": "Carol was here"}),
+    ("update_task", {"id": "{inbox}", "list": "team", "share": True}),
     ("upload_file", {"filename": "carols.txt", "text": "Carol was here"}),
 ]
 
@@ -272,6 +295,18 @@ class TestWhatTheyAreTold:
     def test_she_reads_everything_shared(self, client, wiki):
         assert "shared words" in client.get("/page/plans", headers=HOST).data.decode()
         assert any(t["id"] == IDS["task"] for t in client.get("/api/tasks", headers=HOST).get_json())
+
+    def test_she_has_no_inbox_to_fill(self, client, wiki):
+        """A viewer makes no task, so the switcher offers her no Inbox; what
+        she captured as an editor is still hers, in her My tasks."""
+        page = client.get("/tasks", headers=HOST).data.decode()
+        assert 'data-place="mine"' in page and 'data-place="inbox"' not in page
+        assert "<h1>Inbox" not in client.get("/tasks?list=inbox", headers=HOST).data.decode()
+        mine = {t["id"] for t in client.get("/api/tasks/export?mine=1", headers=HOST).get_json()["tasks"]}
+        assert {IDS["inbox"], IDS["mine"], IDS["task"]} <= mine
+        login(client, "alice")
+        page = client.get("/tasks", headers=HOST).data.decode()
+        assert 'data-place="inbox"' in page and "Captured" not in page
 
 
 class TestTheInterface:

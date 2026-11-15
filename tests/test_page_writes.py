@@ -570,20 +570,21 @@ def new_list(client, name, **more):
 
 def test_new_list_makes_a_list_and_no_page(client, wiki):
     before = git(wiki, "rev-parse", "HEAD").strip()
-    assert new_list(client, " #Shop  Runs ") == "/tasks?list=shop-runs&made=1"   # the first list: pinned, and the page says so
+    assert new_list(client, " #Shop  Runs ") == "/tasks?list=shop-runs"   # the list's page; it is pinned
     assert not (wiki / "lists").exists()
-    assert (wiki / "_tasks/lists.json").read_text() == '{\n  "version": 1,\n  "lists": [\n    {"name": "shop-runs"}\n  ],\n  "pinned": ["shop-runs"]\n}\n'
+    assert (wiki / "_tasks/lists.json").read_text() == '{\n  "version": 2,\n  "lists": [\n    {"name": "shop-runs"}\n  ],\n  "pinned": ["shop-runs"]\n}\n'
     assert git(wiki, "log", "--format=%s", f"{before}..HEAD").splitlines() == ["Create list #shop-runs"]
     assert git(wiki, "show", "--name-only", "--format=", "HEAD").split() == ["_tasks/lists.json"]
     page = client.get("/tasks?list=shop-runs", headers=HOST).get_data(as_text=True)
     assert 'data-place="list:shop-runs"' in page                     # an entry in the list switcher
     assert "There is no list" not in page
+    assert "tasks-made-first" not in page and "New tasks go into this list" not in page     # a pin takes no new task
     # A task made there is in the list.
     assert 'data-init-list="shop-runs"' in page
 
 
 def test_new_list_of_a_tags_name_takes_no_task(client, shop):
-    assert new_list(client, "weekly") == "/tasks?list=weekly&made=1"        # a tag of Milk's
+    assert new_list(client, "weekly") == "/tasks?list=weekly"        # a tag of Milk's
     milk = tasks_file(shop)[0]
     assert milk["tags"] == ["shop", "weekly"] and "list" not in milk  # a tag is a tag: the tasks stay as they are
 
@@ -595,25 +596,27 @@ def test_new_list_refuses_a_list_there_is_and_no_name(client, shop):
     page = client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True)
     assert 'id="list-new-dialog" class="modal" data-params="newlist_error newlist_name" data-open' in page    # the dialog again, saying why
     assert "There is a list #shop already" in page and 'value="Shop"' in page
-    for name in ("", "  ", "#", "a,b", "x=y", "[x]", "a/b"):
+    for name in ("", "  ", "#", "a,b", "x=y", "[x]", "a/b", "inbox", " #Inbox ", "none"):
         assert new_list(client, name) is None, name
+    # inbox and none name the Inbox, the tasks in no list: the dialog says so.
+    resp = client.post("/tasks/new-list", data={"name": "Inbox"}, headers=HOST)
+    page = client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True)
+    assert "A list can&#39;t be called inbox: that names the Inbox, the tasks in no list" in page
     assert git(shop, "rev-parse", "HEAD") == head
 
 
 def test_a_list_made_where_the_page_stays_answers_its_ref(client, wiki):
     """POST /api/tasks/lists (New list… in the dialog that moves tasks):
-    the list as New list… makes it, answered as JSON. It isn't the user's
-    first pin (that changes where Tasks opens); beside other pins it is
-    pinned, last."""
+    the list as New list… makes it, answered as JSON: pinned, last, the
+    first list too (a pin is a pill of the switcher, and takes no new task)."""
     before = git(wiki, "rev-parse", "HEAD").strip()
     resp = client.post("/api/tasks/lists", json={"name": " #Shop  Runs "}, headers=HOST)
-    assert resp.status_code == 201 and resp.get_json() == {"ref": "shop-runs", "private": False, "pinned": False}
+    assert resp.status_code == 201 and resp.get_json() == {"ref": "shop-runs", "private": False, "pinned": True}
     registry = wiki / "_tasks/lists.json"
     assert [l["name"] for l in json.loads(registry.read_text())["lists"]] == ["shop-runs"]
-    assert not json.loads(registry.read_text()).get("pinned")
+    assert json.loads(registry.read_text())["pinned"] == ["shop-runs"]
     assert git(wiki, "log", "--format=%s", f"{before}..HEAD").splitlines() == ["Create list #shop-runs"]
     assert git(wiki, "show", "--name-only", "--format=", "HEAD").split() == ["_tasks/lists.json"]
-    assert list_op(client, "pin", list="shop-runs", pin="1") == "/tasks?list=shop-runs"
     resp = client.post("/api/tasks/lists", json={"name": "work"}, headers=HOST)
     assert resp.status_code == 201 and resp.get_json() == {"ref": "work", "private": False, "pinned": True}
     assert json.loads(registry.read_text())["pinned"] == ["shop-runs", "work"]
@@ -624,7 +627,8 @@ def test_a_list_made_where_the_page_stays_says_why_not(client, shop):
     resp = client.post("/api/tasks/lists", json={"name": "Shop"}, headers=HOST)
     assert resp.status_code == 400 and resp.get_json() == {"error": "There is a list #shop already"}
     for body in ({}, {"name": ""}, {"name": "  "}, {"name": "a,b"}, {"name": 3}, {"name": "x", "private": "yes"},
-                 {"name": "x", "private": True}):       # a private list needs users
+                 {"name": "x", "private": True},        # a private list needs users
+                 {"name": "inbox"}, {"name": "None"}):  # the Inbox's names
         resp = client.post("/api/tasks/lists", json=body, headers=HOST)
         assert resp.status_code == 400 and resp.get_json()["error"], body
     assert client.post("/api/tasks/lists", data="[]", headers=HOST).status_code == 400
@@ -633,7 +637,7 @@ def test_a_list_made_where_the_page_stays_says_why_not(client, shop):
 
 def test_new_list_is_no_page(client, wiki):
     commit(wiki, "lists/shop", "# Shopping notes\n")
-    assert new_list(client, "shop") == "/tasks?list=shop&made=1"            # a page of that name is a page
+    assert new_list(client, "shop") == "/tasks?list=shop"            # a page of that name is a page
     assert (wiki / "lists/shop.md").read_text() == "# Shopping notes\n"
     # Without users there is nobody for a list to be private to.
     assert new_list(client, "mine", private="1") is None
@@ -830,13 +834,14 @@ def test_rename_tag_under_a_guide_needs_its_id(client, shop):
 
 def test_a_registry_naming_its_default_list_keeps_it_first(client, shop):
     """Until 2026-11 "default" named the list a new task goes to, whatever
-    the order of the pins: it reads as the first pin, and the next write
-    drops the key and keeps the order."""
+    the order of the pins: it reads as the first pin (which takes no new
+    task any more: it is the first pill), and the next write drops the key
+    and keeps the order."""
     assert client.post("/tasks/new-list", data={"name": "work"}, headers=HOST).status_code == 302
     registry = shop / "_tasks/lists.json"
     registry.write_text(registry.read_text().replace("\n}\n", ',\n  "pinned": ["shop", "work"],\n  "default": "work"\n}\n'))
     html = client.get("/tasks", headers=HOST).get_data(as_text=True)
-    assert 'data-tasks-list="work"' in html
+    assert "data-tasks-list" not in html
     assert html.index('data-place="list:work"') < html.index('data-place="list:shop"')
     assert client.post("/tasks/new-list", data={"name": "home"}, headers=HOST).status_code == 302
     text = registry.read_text()

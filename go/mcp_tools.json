@@ -49,7 +49,7 @@
     },
     "list": {
      "type": "string",
-     "description": "Only the tasks in this list (list_tags shows the lists); none: the tasks in no list."
+     "description": "Only the tasks in this list (list_tags shows the lists); inbox: the user's Inbox, the tasks in no list."
     },
     "assignee": {
      "type": "string",
@@ -945,7 +945,7 @@
     },
     "list": {
      "type": "string",
-     "description": "The list it goes in (list_tags shows them; '' none). Default: the user's first pinned list, else their private one. In a private list only the user sees it."
+     "description": "The list it goes in (list_tags shows them). Default: the user's Inbox, which only they see. With an assignee: a shared list."
     },
     "summary": {
      "type": "string",
@@ -1046,7 +1046,7 @@
     },
     "list": {
      "type": "string",
-     "description": "Move it to this list ('' none). A shared task can't go into a private list."
+     "description": "Move it to this list ('' the Inbox, a private task only). A shared task can't go into a private list."
     },
     "share": {
      "type": "boolean",

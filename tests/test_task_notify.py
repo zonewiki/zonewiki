@@ -35,6 +35,7 @@ def alice(client, wiki_dir, monkeypatch, smtp):
     monkeypatch.setattr(settings, "ENV", {"ZONE_SMTP_HOST": "127.0.0.1", "ZONE_SMTP_PORT": str(smtp.server_address[1]),
                                           "ZONE_SMTP_TLS": "none", "ZONE_MAIL_FROM": "wiki@example.org"})
     login(client, "alice")
+    make_list(client, "team", headers=HOST)   # a task for someone is in a shared list
     return client
 
 
@@ -43,7 +44,7 @@ def login(client, name):
 
 
 def new(client, **fields):
-    resp = client.post("/api/tasks", json=fields, headers=HOST)
+    resp = client.post("/api/tasks", json={"list": "team", **fields}, headers=HOST)
     assert resp.status_code == 201, resp.get_data(as_text=True)
     return resp.get_json()
 
@@ -114,7 +115,7 @@ def test_several_at_once_are_one_mail_a_user(alice, smtp):
 def test_an_assistants_assignment_is_mailed_too(alice, smtp):
     resp = alice.post("/mcp", headers={**HOST, "Authorization": "Bearer alice-token"}, json={
         "jsonrpc": "2.0", "id": 1, "method": "tools/call",
-        "params": {"name": "create_task", "arguments": {"title": "From her assistant", "assignee": "bob"}}})
+        "params": {"name": "create_task", "arguments": {"title": "From her assistant", "assignee": "bob", "list": "team"}}})
     assert "assigned to: bob" in "".join(c["text"] for c in resp.get_json()["result"]["content"])
     (to, text), = mails(smtp, 1)
     assert to == "bob@example.org" and "alice gave you a task: From her assistant" in text
@@ -147,7 +148,7 @@ def test_no_mail_without_a_mail_server(client, wiki_dir, monkeypatch):
     monkeypatch.setattr(settings, "USERS", dict(USERS))
     monkeypatch.setattr(settings, "USER_SETTINGS", dict(USER_SETTINGS))
     login(client, "alice")
-    assert new(client, title="No server", assignee="bob")["assignee"] == "bob"
     make_list(client, "team", headers=HOST)
+    assert new(client, title="No server", assignee="bob")["assignee"] == "bob"
     page = client.get("/tasks?mine=1", headers=HOST).get_data(as_text=True)
     assert "data-settings-mine" in page and "data-settings-mail" not in page

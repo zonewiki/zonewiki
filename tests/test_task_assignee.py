@@ -27,10 +27,21 @@ def alice(client, wiki_dir, monkeypatch):
     monkeypatch.setattr(settings, "USERS", dict(USERS))
     monkeypatch.setattr(settings, "USER_SETTINGS", dict(USER_SETTINGS))
     login(client, "alice")
+    team(client)
     return client
 
 
+def team(client):
+    """The shared list team, where new() puts this client's tasks from now
+    on: with users a task has an assignee only in a shared list (one
+    without a list is in its maker's Inbox, private)."""
+    assert make_list(client, "team", headers=HOST).status_code == 302
+    client.in_team = True
+
+
 def new(client, **fields):
+    if getattr(client, "in_team", False):
+        fields.setdefault("list", "team")
     resp = client.post("/api/tasks", json={"title": "Call Sam", **fields}, headers=HOST)
     assert resp.status_code == 201, resp.data.decode()
     return resp.get_json()
@@ -57,7 +68,7 @@ class TestAssigning:
         assert task["assignee"] == "bob"
         assert events(task) == [("created", None, None, "alice")]   # its first assignee is no change
         keys = list(stored(wiki_dir, task))
-        assert keys[keys.index("tags") + 1] == "assignee"
+        assert keys[keys.index("tags") + 1:keys.index("tags") + 3] == ["list", "assignee"]
 
     def test_a_task_without_one_has_no_key(self, alice, wiki_dir):
         task = new(alice)
@@ -127,7 +138,7 @@ class TestWhoCanBeAssigned:
         ("Not A Name", "is not a user"),
     ])
     def test_only_an_active_user_who_can_change_tasks(self, alice, wiki_dir, name, why):
-        resp = alice.post("/api/tasks", json={"title": "No", "assignee": name}, headers=HOST)
+        resp = alice.post("/api/tasks", json={"title": "No", "list": "team", "assignee": name}, headers=HOST)
         assert resp.status_code == 400 and why in resp.get_json()["error"]
         assert alice.get("/api/tasks", headers=HOST).get_json() == []
         task = new(alice, assignee="bob")
@@ -146,9 +157,34 @@ class TestWhoCanBeAssigned:
         mine = new(alice, list="own")
         assert put(alice, mine, assignee="alice").status_code == 400
         assert put(alice, mine, assignee="").status_code == 200       # none is what it has
-        # Shared (out of its private list) and assigned in one write.
-        shared = put(alice, mine, list="", share=True, assignee="bob").get_json()
+        # Out of its private list it is in her Inbox, private still: no assignee there.
+        resp = put(alice, mine, list="", share=True, assignee="bob")
+        assert resp.status_code == 400 and "private task" in resp.get_json()["error"]
+        # Shared (into a shared list) and assigned in one write.
+        shared = put(alice, mine, list="team", share=True, assignee="bob").get_json()
         assert shared["private"] is False and shared["assignee"] == "bob"
+
+    @pytest.mark.parametrize("list_", [None, "", "inbox", "none"])
+    def test_an_inbox_task_has_none(self, alice, wiki_dir, list_):
+        """A task without a list is in its maker's Inbox, theirs alone: it
+        can't be given to anyone, not even to themselves, when made or later."""
+        named = {} if list_ is None else {"list": list_}
+        for who in ("bob", "alice", "me"):
+            resp = alice.post("/api/tasks", json={"title": "No", "assignee": who, **named}, headers=HOST)
+            assert resp.status_code == 400, who
+            assert "A private task is yours alone. Put it in a shared list to assign it" in resp.get_json()["error"]
+        assert alice.get("/api/tasks", headers=HOST).get_json() == []
+        mine = new(alice, list=list_)
+        assert mine["private"] is True and "list" not in mine and "assignee" not in mine
+        resp = put(alice, mine, assignee="bob")
+        assert resp.status_code == 400 and "shared list" in resp.get_json()["error"]
+        assert put(alice, mine, assignee="").status_code == 200       # none is what it has
+        # An empty assignee on a new one is no assignee.
+        assert "assignee" not in new(alice, list=list_, assignee="")
+        # Filed into a shared list (share), it takes one in the same write.
+        filed = put(alice, mine, list="team", share=True, assignee="me").get_json()
+        assert filed["private"] is False and filed["list"] == "team" and filed["assignee"] == "alice"
+        assert stored(wiki_dir, mine)["assignee"] == "alice"
 
     def test_without_users_there_is_no_one(self, client, wiki_dir):
         resp = client.post("/api/tasks", json={"title": "No", "assignee": "bob"}, headers=HOST)
@@ -170,10 +206,11 @@ class TestWhoCanBeAssigned:
         monkeypatch.setattr(settings, "USERS", {**USERS, "me": ("me-pw", ""), "none": ("none-pw", "")})
         monkeypatch.setattr(settings, "USER_SETTINGS", dict(USER_SETTINGS))
         login(client, "alice")
+        team(client)
         assert new(client, assignee="me")["assignee"] == "alice"
         assert "assignee" not in new(client, assignee="none")
         login(client, "me")       # the account still works
-        resp = client.post("/api/tasks", json={"title": "No", "assignee": "me"}, headers=HOST)
+        resp = client.post("/api/tasks", json={"title": "No", "list": "team", "assignee": "me"}, headers=HOST)
         assert resp.status_code == 400 and "word for whoever is signed in" in resp.get_json()["error"]
         names = client.get("/api/tasks/assignable", headers=HOST).get_json()
         assert names == {"users": ["alice", "bob"], "me": "me"}
@@ -353,95 +390,176 @@ class TestEmbed:
 
 class TestMyTasks:
     """My tasks with users (docs/spec/tasks.md, Lists → My tasks): what is
-    assigned to you wherever it is, and what is nobody else's in your pinned
-    lists and in no list. The Tasks links open it and count it."""
+    yours: your own tasks (your Inbox and your private lists, but a list
+    left out of it) and the shared tasks assigned to you, wherever they
+    are. A pin changes nothing. The Tasks links open it and count it."""
 
     @pytest.fixture()
     def team(self, alice, wiki_dir):
         """alice pinned the shared list team: a task of hers, one of bob's
         and one of no one's in it. A shared list she hasn't pinned, side,
         with a task of hers and one of no one's; her private list own, not
-        pinned, with a task; in no list a task of no one's and one of
-        bob's. All due today."""
+        pinned, with a task; her private list someday, left out of My tasks
+        (home=off), with a task; a task in her Inbox, and one in bob's. All
+        due today."""
         from datetime import date
         today = date.today().isoformat()
-        for name, private in (("team", False), ("side", False), ("own", True)):
+        for name, private in (("side", False), ("own", True), ("someday", True)):
             make_list(alice, name, private=private, headers=HOST)
         self.pin(alice, "team")
+        assert self.home(alice, "someday", "off").status_code == 200
         for title, fields in (("A1", {"list": "team", "assignee": "alice"}), ("B1", {"list": "team", "assignee": "bob"}),
                               ("N1", {"list": "team"}), ("A2", {"list": "side", "assignee": "alice"}),
-                              ("N2", {"list": "side"}), ("P1", {"list": "own"}), ("L1", {}), ("LB", {"assignee": "bob"})):
+                              ("N2", {"list": "side"}), ("P1", {"list": "own"}), ("S1", {"list": "someday"}),
+                              ("I1", {"list": ""})):
             new(alice, title=title, due_date=today, **fields)
+        login(alice, "bob")
+        new(alice, title="BI", due_date=today, list="")
+        login(alice, "alice")
         return alice
 
     pin = staticmethod(lambda client, name, how="1": client.post(
         "/tasks/pin-list", data={"list": name, "pin": how}, headers=HOST))
+    home = staticmethod(lambda client, name, value: client.post(
+        "/api/tasks/settings", json={"list": name, "set": {"home": value}}, headers=HOST))
     count = staticmethod(lambda client: client.get("/api/tasks/due-count", headers=HOST).get_json()["count"])
     page = staticmethod(lambda client, url: client.get(url, headers=HOST).get_data(as_text=True))
     titles = staticmethod(lambda client, query="mine=1": sorted(t["title"] for t in client.get(
         "/api/tasks/export?" + query, headers=HOST).get_json()["tasks"]))
 
+    @staticmethod
+    def line(html):
+        """The line under My tasks' heading, as text."""
+        line = html.split('class="tasks-list-home tasks-mine-line">', 1)[1].split("</p>", 1)[0]
+        return re.sub(r"<[^>]+>", "", line)
+
     def test_what_it_holds(self, team):
-        # Hers in the pinned list and in the one she hasn't pinned, no one's
-        # in the pinned list and in no list; not bob's, not no one's in the
-        # unpinned list, not her private task in an unpinned list.
-        assert self.titles(team) == ["A1", "A2", "L1", "N1"]
+        # Hers in the pinned list and in the one she hasn't pinned, her
+        # private list's and her Inbox's; not bob's, not no one's (a shared
+        # list's backlog), not the task of the list she left out, and
+        # nothing of bob's Inbox.
+        assert self.titles(team) == ["A1", "A2", "I1", "P1"]
         assert self.count(team) == 4
         index = self.page(team, "/page/index")
         assert 'href="/tasks?mine=1"' in index and "data-tasks-assignee" not in index
         html = self.page(team, "/tasks?mine=1")
-        assert "<h1>My tasks</h1>" in html and 'data-init-lists="team" data-init-mine="assign"' in html
-        assert "data-init-assignee" not in html and "mine-on-btn" not in html
-        line = html.split('class="tasks-list-home tasks-pinned-lists">', 1)[1].split("</p>", 1)[0]
-        assert re.sub(r"<[^>]+>", "", line) == (
-            "What is yours or nobody's in your pinned lists (#team) and in no list, and what is assigned to you elsewhere.")
+        assert "<h1>My tasks</h1>" in html and 'data-init-mine="assign" data-init-out="someday"' in html
+        assert "data-init-assignee" not in html and "mine-on-btn" not in html and "data-init-lists" not in html
+        assert self.line(html) == "Your own tasks and what is assigned to you, but the lists left out of it (#someday)."
+        assert '<a href="/tasks?list=someday">#someday</a>' in html
         # The list itself shows everyone's.
         assert self.titles(team, "list=team") == ["A1", "B1", "N1"]
         assert "data-init-mine" not in self.page(team, "/tasks?list=team")
-        # A private task follows its list's pin.
-        self.pin(team, "own")
-        assert self.titles(team) == ["A1", "A2", "L1", "N1", "P1"] and self.count(team) == 5
         # A task given to someone else leaves it, one given to her enters it.
         tasks = {t["title"]: t for t in team.get("/api/tasks", headers=HOST).get_json()}
-        assert put(team, tasks["N1"], assignee="bob").status_code == 200
+        assert put(team, tasks["A1"], assignee="bob").status_code == 200
         assert put(team, tasks["N2"], assignee="alice").status_code == 200
-        assert self.titles(team) == ["A1", "A2", "L1", "N2", "P1"]
+        assert self.titles(team) == ["A2", "I1", "N2", "P1"]
+        # An Inbox task filed into a shared list is the list's, no one's:
+        # it leaves My tasks unless it is assigned to her.
+        assert put(team, tasks["I1"], list="team", share=True).status_code == 200
+        assert self.titles(team) == ["A2", "N2", "P1"]
+        assert put(team, tasks["I1"], assignee="me").status_code == 200
+        assert self.titles(team) == ["A2", "I1", "N2", "P1"]
         # The closed ones it counts are its own.
-        for title in ("A1", "B1", "N2"):
+        for title in ("A1", "B1", "N2", "P1"):
             assert put(team, tasks[title], completed=True).status_code == 200
         assert team.get("/api/tasks/closed-count?mine=1", headers=HOST).get_json()["count"] == 2
-        assert self.count(team) == 3
+        assert self.count(team) == 2
+
+    def test_a_pin_changes_nothing(self, team):
+        """A pin is a pill of the switcher: pinning, unpinning and the
+        pins' order take no task into My tasks and none out of it."""
+        base = ["A1", "A2", "I1", "P1"]
+        for name, how in (("own", "1"), ("side", "1"), ("someday", "first"), ("team", "0"), ("own", "0"),
+                          ("side", "0"), ("someday", "0")):
+            assert self.pin(team, name, how).status_code == 302
+            assert self.titles(team) == base and self.count(team) == 4, (name, how)
+
+    def test_a_list_left_out(self, team, wiki_dir):
+        """home=off, a setting of one's own list: its tasks are left out of
+        My tasks and of the number on the Tasks links; taken back, they are
+        in it again. On a shared list it changes nothing for who can be
+        given tasks: a shared task is in My tasks by its assignee."""
+        assert self.home(team, "own", "off").status_code == 200
+        assert '{"name": "own", "home": "off"}' in (wiki_dir / "private/alice/_tasks/lists.json").read_text()
+        assert self.titles(team) == ["A1", "A2", "I1"] and self.count(team) == 3
+        html = self.page(team, "/tasks?mine=1")
+        assert 'data-init-out="own|someday"' in html
+        assert self.line(html) == "Your own tasks and what is assigned to you, but the lists left out of it (#own, #someday)."
+        # The list says so, and still shows its tasks.
+        own = self.page(team, "/tasks?list=own")
+        assert 'Left out of <a href="/tasks?mine=1">My tasks</a>' in own and self.titles(team, "list=own") == ["P1"]
+        assert "Left out of" not in self.page(team, "/tasks?list=team")
+        for bad in ("on", "yes", "1"):
+            assert self.home(team, "own", bad).status_code == 400, bad
+        assert self.home(team, "own", "").status_code == 200
+        assert self.home(team, "someday", "").status_code == 200
+        assert self.titles(team) == ["A1", "A2", "I1", "P1", "S1"] and self.count(team) == 5
+        assert self.line(self.page(team, "/tasks?mine=1")) == "Your own tasks and what is assigned to you."
+        # A shared list left out: hers in it stays hers.
+        assert self.home(team, "side", "off").status_code == 200
+        assert self.titles(team) == ["A1", "A2", "I1", "P1", "S1"]
+        html = self.page(team, "/tasks?mine=1")
+        assert self.line(html) == "Your own tasks and what is assigned to you."
+        assert "Left out of" not in self.page(team, "/tasks?list=side")
+        # The Inbox can't be left out: it is no list with settings.
+        assert self.home(team, "inbox", "off").status_code in (400, 404)
+        assert self.titles(team) == ["A1", "A2", "I1", "P1", "S1"]
 
     def test_it_is_each_users_own(self, team):
         login(team, "bob")
-        # bob pinned nothing: his tasks wherever they are, and no one's in no list.
-        assert self.titles(team) == ["B1", "L1", "LB"] and self.count(team) == 3
+        # bob: his tasks wherever they are, and his own Inbox; nothing of alice's.
+        assert self.titles(team) == ["B1", "BI"] and self.count(team) == 2
         html = self.page(team, "/tasks?mine=1")
-        assert 'data-init-mine="assign"' in html and "data-init-lists" not in html
-        line = html.split('class="tasks-list-home tasks-pinned-lists">', 1)[1].split("</p>", 1)[0]
-        assert re.sub(r"<[^>]+>", "", line) == "What is yours or nobody's in no list, and what is assigned to you elsewhere."
+        assert 'data-init-mine="assign" data-init-out=""' in html and "data-init-lists" not in html
+        assert self.line(html) == "Your own tasks and what is assigned to you."
+        assert "#someday" not in html and "list=someday" not in html    # alice's private list is nothing he hears of
         self.pin(team, "side")
-        assert self.titles(team) == ["B1", "L1", "LB", "N2"]
+        assert self.titles(team) == ["B1", "BI"]
         login(team, "alice")
-        assert self.titles(team) == ["A1", "A2", "L1", "N1"]
+        assert self.titles(team) == ["A1", "A2", "I1", "P1"]
 
     def test_assignment_doesnt_count_for_who_cant_be_given_tasks(self, team):
-        # A viewer: the wiki's pins (none here) and the tasks in no list,
-        # whoever has them.
+        # A viewer: every task she sees, whoever has it; no one's private
+        # task, so no Inbox's.
         login(team, "carol")
-        assert self.titles(team) == ["L1", "LB"]
+        assert self.titles(team) == ["A1", "A2", "B1", "N1", "N2"] and self.count(team) == 5
         html = self.page(team, "/tasks?mine=1")
-        assert 'data-init-mine="lists"' in html and "data-settings-" not in html
+        assert 'data-init-mine="lists" data-init-out=""' in html and "data-settings-" not in html
+        assert self.line(html) == "Every open task."
         assert team.post("/api/tasks/settings", json={"mine": True, "was": "", "set": {"view": "open"}},
                          headers=HOST).status_code == 403
+        assert self.home(team, "side", "off").status_code == 403
+        # For her a shared list that is left out is: no task is hers by assignment.
+        login(team, "alice")
+        assert self.home(team, "side", "off").status_code == 200
+        login(team, "carol")
+        assert self.titles(team) == ["A1", "B1", "N1"] and self.count(team) == 3
+        html = self.page(team, "/tasks?mine=1")
+        assert 'data-init-out="side"' in html
+        assert self.line(html) == "Every open task, but the lists left out of it (#side)."
+        assert 'Left out of <a href="/tasks?mine=1">My tasks</a>' in self.page(team, "/tasks?list=side")
 
-    def test_without_users_no_task_is_anyones(self, client, wiki_dir):
-        make_list(client, "team", headers=HOST)
+    def test_without_users_every_task_is_in_it(self, client, wiki_dir):
+        for name in ("team", "later"):
+            make_list(client, name, headers=HOST)
         self.pin(client, "team")
+        for title, fields in (("T1", {"list": "team"}), ("L1", {"list": "later"}), ("I1", {})):
+            new(client, title=title, due_date="2020-01-01", **fields)
         html = self.page(client, "/tasks?mine=1")
-        assert 'data-init-lists="team" data-init-mine="lists"' in html
-        line = html.split('class="tasks-list-home tasks-pinned-lists">', 1)[1].split("</p>", 1)[0]
-        assert re.sub(r"<[^>]+>", "", line) == "Your pinned lists (#team) and the tasks in no list."
+        assert 'data-init-mine="lists" data-init-out=""' in html and "data-init-lists" not in html
+        assert self.line(html) == "Every open task."
+        assert self.titles(client) == ["I1", "L1", "T1"] and self.count(client) == 3
+        # But a list left out; pinning it brings nothing back.
+        assert self.home(client, "later", "off").status_code == 200
+        assert '{"name": "later", "home": "off"}' in (wiki_dir / "_tasks/lists.json").read_text()
+        self.pin(client, "later")
+        html = self.page(client, "/tasks?mine=1")
+        assert 'data-init-mine="lists" data-init-out="later"' in html
+        assert self.line(html) == "Every open task, but the lists left out of it (#later)."
+        assert self.titles(client) == ["I1", "T1"] and self.count(client) == 2
+        assert 'Left out of <a href="/tasks?mine=1">My tasks</a>' in self.page(client, "/tasks?list=later")
 
     def test_only_my_tasks_is_no_setting_anymore(self, team, wiki_dir):
         # Until 2026-11 "mine": true in a user's registry narrowed Pinned to
@@ -450,7 +568,7 @@ class TestMyTasks:
         path = wiki_dir / "private/alice/_tasks/lists.json"
         path.write_text(path.read_text().replace("\n}\n", ',\n  "mine": true\n}\n'))
         assert '"mine": true' in path.read_text()
-        assert self.titles(team) == ["A1", "A2", "L1", "N1"]
+        assert self.titles(team) == ["A1", "A2", "I1", "P1"]
         assert team.post("/tasks/pin-list", data={"mine": "1"}, headers=HOST).status_code in (400, 404)
         self.pin(team, "side")
         assert '"mine"' not in path.read_text()
@@ -464,8 +582,9 @@ class TestMyTasks:
         login(team, "bob")
         assert 'data-init-view=""' in self.page(team, "/tasks?mine=1")
 
-    def test_the_assistants_new_task_is_no_ones(self, team, wiki_dir, monkeypatch):
-        # Into the first pinned list, as c t; Zone assigns it to no one.
+    def test_the_assistants_new_task_is_in_the_inbox(self, team, wiki_dir, monkeypatch):
+        # Without a list: the user's Inbox, as c t; Zone assigns it to no
+        # one, and whatever is pinned first takes nothing.
         monkeypatch.setattr(settings, "USERS", {**USERS, "alice": ("alice-pw", "alice-token")})
 
         def mcp(tool, **args):
@@ -473,85 +592,182 @@ class TestMyTasks:
                 "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": tool, "arguments": args}})
             return "".join(c["text"] for c in resp.get_json()["result"]["content"])
         assert "assigned to" not in mcp("create_task", title="From the assistant")
-        assert "assigned to: bob" in mcp("create_task", title="Said so", assignee="bob")
+        # A task for someone needs a shared list: the error names them, and no task is made.
+        refused = mcp("create_task", title="Said so", assignee="bob")
+        assert "has to be in a shared list" in refused and "Pass list: side, team" in refused
+        assert "own" not in refused.split("Pass list:", 1)[1] and "someday" not in refused
+        assert "assigned to: bob" in mcp("create_task", title="Said so, in team", assignee="bob", list="team")
         login(team, "alice")
-        made = {t["title"]: t for t in team.get("/api/tasks", headers=HOST).get_json()}["From the assistant"]
-        assert made["list"] == "team" and "assignee" not in made
-        assert "From the assistant" in self.titles(team) and "Said so" not in self.titles(team)
-
-    def test_unassigned_tasks_can_be_hidden(self, team, wiki_dir, monkeypatch):
-        """Unassigned tasks: hidden, a setting of My tasks, the user's own:
-        it is then what is assigned to her, and her private tasks in the
-        lists she pinned; a task her assistant adds without saying where
-        is hers, so a capture stays in her home view."""
-        hide = lambda value="hide", was="": team.post(
-            "/api/tasks/settings", json={"mine": True, "was": was, "set": {"unassigned": value}}, headers=HOST)
-        assert hide("show").status_code == 400
-        assert hide().status_code == 200
-        assert '"mine": {"unassigned": "hide"}' in (wiki_dir / "private/alice/_tasks/lists.json").read_text()
-        # No one's in the pinned list and in no list are out; so is the badge.
-        assert self.titles(team) == ["A1", "A2"] and self.count(team) == 2
-        html = self.page(team, "/tasks?mine=1")
-        assert 'data-init-lists="team" data-init-mine="own"' in html and 'data-new-mine="1"' in html
-        assert 'data-settings-raw="unassigned=hide"' in html
-        line = html.split('class="tasks-list-home tasks-pinned-lists">', 1)[1].split("</p>", 1)[0]
-        assert re.sub(r"<[^>]+>", "", line) == (
-            "What is assigned to you, and your private tasks in your pinned lists (#team). Unassigned tasks are hidden.")
-        assert 'data-new-mine="1"' in self.page(team, "/api/tasks/headless")
-        # Her private tasks follow their list's pin, as before.
-        self.pin(team, "own")
-        assert self.titles(team) == ["A1", "A2", "P1"]
-        # The list's own view still shows everyone's.
-        assert self.titles(team, "list=team") == ["A1", "B1", "N1"]
-        # Her assistant's task without a list is hers; one it says a list or
-        # an assignee for is as said.
-        monkeypatch.setattr(settings, "USERS", {**USERS, "alice": ("alice-pw", "alice-token")})
-
-        def mcp(tool, **args):
-            resp = team.post("/mcp", headers={**HOST, "Authorization": "Bearer alice-token"}, json={
-                "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": tool, "arguments": args}})
-            return "".join(c["text"] for c in resp.get_json()["result"]["content"])
-        assert "assigned to: alice" in mcp("create_task", title="Captured")
-        assert "assigned to" not in mcp("create_task", title="For the team", list="team")
-        assert "assigned to: bob" in mcp("create_task", title="For bob", assignee="bob")
-        assert "assigned to" not in mcp("create_task", title="No one's, said so", assignee="none")
-        login(team, "alice")
-        assert self.titles(team) == ["A1", "A2", "Captured", "P1"]
-        # It is hers alone: bob's My tasks is as it was.
+        made = {t["title"]: t for t in team.get("/api/tasks", headers=HOST).get_json()}
+        assert "Said so" not in made
+        inbox = made["From the assistant"]
+        assert "list" not in inbox and inbox["private"] is True and "assignee" not in inbox
+        assert "From the assistant" in self.titles(team) and "Said so, in team" not in self.titles(team)
         login(team, "bob")
-        assert 'data-init-mine="assign"' in self.page(team, "/tasks?mine=1")
-        assert "data-new-mine" not in self.page(team, "/tasks?mine=1")
-        # Shown again.
-        login(team, "alice")
-        assert hide("", was="unassigned=hide").status_code == 200
-        assert self.titles(team) == ["A1", "A2", "Captured", "For the team", "L1", "N1", "No one's, said so", "P1"]
-
-    def test_unassigned_tasks_are_hidden_only_where_tasks_are_assigned(self, team, client, wiki_dir):
-        # A viewer, to whom no task can be given, can't write settings at
-        # all; without users no task is anyone's.
-        login(team, "carol")
-        assert team.post("/api/tasks/settings", json={"mine": True, "was": "", "set": {"unassigned": "hide"}},
-                         headers=HOST).status_code == 403
-
-    def test_a_private_first_pin_keeps_a_capture_private_with_unassigned_hidden(self, team, monkeypatch):
-        # Her first pinned list is private: a task into it is hers already,
-        # and gets no assignee (a private task has none).
-        self.pin(team, "own", "first")
-        assert team.post("/api/tasks/settings", json={"mine": True, "was": "", "set": {"unassigned": "hide"}},
-                         headers=HOST).status_code == 200
-        monkeypatch.setattr(settings, "USERS", {**USERS, "alice": ("alice-pw", "alice-token")})
-        resp = team.post("/mcp", headers={**HOST, "Authorization": "Bearer alice-token"}, json={
-            "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "create_task", "arguments": {"title": "Quiet"}}})
-        assert "assigned to" not in "".join(c["text"] for c in resp.get_json()["result"]["content"])
-        login(team, "alice")
-        made = {t["title"]: t for t in team.get("/api/tasks", headers=HOST).get_json()}["Quiet"]
-        assert made["list"] == "own" and made["private"] is True and "assignee" not in made
-        assert "Quiet" in self.titles(team)
+        seen = [t["title"] for t in team.get("/api/tasks", headers=HOST).get_json()]
+        assert "From the assistant" not in seen and "Said so, in team" in seen
 
     def test_a_private_task_is_mine_and_not_no_ones(self, team):
-        # The filter word @me, as before: a private task is its user's.
+        # The filter word @me, as before: a private task is its user's,
+        # in a list of hers or in her Inbox.
         export = lambda who: self.titles(team, f"assignee={who}")
-        assert export("me") == ["A1", "A2", "P1"] and export("none") == ["L1", "N1", "N2"]
+        assert export("me") == ["A1", "A2", "I1", "P1", "S1"] and export("none") == ["N1", "N2"]
+
+
+class TestASharedTaskIsInAList:
+    """With users a shared task is always in a list (docs/spec/tasks.md,
+    Lists): it never loses its list for none, and where one would (its list
+    deleted, a restore or an import whose list is gone, a task left without
+    one by an older Zone) it goes to the shared list general, made when it
+    isn't there. A private task without a list is in its user's Inbox."""
+
+    @staticmethod
+    def tasks(client):
+        return {t["title"]: t for t in client.get("/api/tasks", headers=HOST).get_json()}
+
+    @staticmethod
+    def delete(client, name, to="", **more):
+        return client.post("/tasks/delete-list", data={"list": name, "to": to, **more}, headers=HOST).headers["Location"]
+
+    @staticmethod
+    def targets(client, name):
+        """The Delete… dialog's choices for the list, as (value, text)."""
+        html = client.get(f"/tasks?list={name}", headers=HOST).get_data(as_text=True)
+        select = html.split('id="list-delete-to"', 1)[1].split("</select>", 1)[0]
+        return re.findall(r'<option value="([^"]*)">([^<]*)</option>', select)
+
+    def test_it_cant_leave_its_list_for_none(self, alice, wiki_dir):
+        task = new(alice, title="Shared")
+        for none in ("", None, "inbox", "none", " #Inbox "):
+            for share in ({}, {"share": True}):
+                resp = put(alice, task, list=none, **share)
+                assert resp.status_code == 400, none
+                assert resp.get_json()["error"] == "A shared task is always in a list: move it to another shared list"
+        resp = alice.post("/api/tasks/batch-update", json={"tasks": [{"id": task["id"], "list": ""}]}, headers=HOST)
+        assert resp.status_code == 400 and "always in a list" in resp.get_json()["error"]
+        assert stored(wiki_dir, task)["list"] == "team"
+        # To another shared list it moves, and unchanged is no error.
+        make_list(alice, "side", headers=HOST)
+        assert put(alice, task, list="side").get_json()["list"] == "side"
+        assert put(alice, task, list="side").status_code == 200
+        # Without users a task leaves its list for the Inbox: test_tasks.py.
+
+    def test_a_deleted_shared_lists_tasks_go_to_general(self, alice, wiki_dir):
+        make_list(alice, "side", headers=HOST)
+        make_list(alice, "own", private=True, headers=HOST)
+        for title, fields in (("One", {"list": "side", "assignee": "bob"}), ("Two", {"list": "side"}), ("Mine", {"list": "own"})):
+            new(alice, title=title, **fields)
+        done = new(alice, title="Done", list="side")
+        put(alice, done, completed=True)
+        # The dialog: no list named is #general for a shared list, the Inbox for a private one.
+        assert self.targets(alice, "side") == [("", "#general"), ("team", "#team")]
+        assert self.targets(alice, "own") == [("", "Your Inbox"), ("side", "#side (shared)"), ("team", "#team (shared)")]
+        assert self.delete(alice, "side") == "/tasks"
+        registry = json.loads((wiki_dir / "_tasks/lists.json").read_text())
+        assert [l["name"] for l in registry["lists"]] == ["team", "general"]
+        tasks = self.tasks(alice)
+        assert tasks["One"]["list"] == tasks["Two"]["list"] == "general" and tasks["One"]["assignee"] == "bob"
+        assert tasks["One"]["private"] is False
+        closed = json.loads((wiki_dir / "_tasks/closed.json").read_text())
+        assert [(t["title"], t["list"]) for t in closed] == [("Done", "general")]
+        login(alice, "bob")
+        assert self.tasks(alice)["One"]["list"] == "general"        # everyone's, as its tasks were
+        login(alice, "alice")
+        # #general itself, while it has tasks, needs a list named: the dialog offers none without.
+        assert self.targets(alice, "general") == [("team", "#team")]
+        assert "delete_error=" in self.delete(alice, "general") and "general" in (wiki_dir / "_tasks/lists.json").read_text()
+        assert self.tasks(alice)["One"]["list"] == "general"
+        assert self.delete(alice, "general", to="team") == "/tasks?list=team"
+        assert self.tasks(alice)["One"]["list"] == "team"
+        # Closing them instead leaves no open task to place.
+        assert self.delete(alice, "team", close="1") == "/tasks"
+        assert "One" not in self.tasks(alice)
+        # A private list's go to her Inbox: private still, no share asked.
+        assert self.delete(alice, "own") == "/tasks"
+        mine = self.tasks(alice)["Mine"]
+        assert mine["private"] is True and "list" not in mine
+        assert "Mine" not in (wiki_dir / "_tasks/tasks.json").read_text()
+
+    def test_a_restored_task_whose_list_is_gone(self, alice, wiki_dir):
+        make_list(alice, "own", private=True, headers=HOST)
+        snaps = [{"id": "r-1", "title": "In team", "list": "team", "assignee": "bob"},
+                 {"id": "r-2", "title": "Gone", "list": "long-gone", "assignee": "bob"},
+                 {"id": "r-3", "title": "Stray"},
+                 {"id": "r-4", "title": "Own", "list": "own", "private": True},
+                 {"id": "r-5", "title": "Own gone", "list": "long-gone", "private": True, "assignee": "bob"},
+                 {"id": "r-6", "title": "Inbox", "private": True},
+                 {"id": "r-7", "title": "Private, a shared list's name", "list": "team", "private": True},
+                 {"id": "r-8", "title": "Shared, her list's name", "list": "own"}]
+        assert alice.post("/api/tasks/restore", json={"tasks": snaps}, headers=HOST).status_code == 201
+        got = {t["title"]: (t.get("list"), t["private"], t.get("assignee")) for t in self.tasks(alice).values()}
+        assert got == {"In team": ("team", False, "bob"), "Gone": ("general", False, "bob"), "Stray": ("general", False, None),
+                       "Own": ("own", True, None), "Own gone": (None, True, None), "Inbox": (None, True, None),
+                       "Private, a shared list's name": (None, True, None), "Shared, her list's name": ("general", False, None)}
+        # #general is made, shared; no list "private" is made for her any more.
+        assert '{"name": "general"}' in (wiki_dir / "_tasks/lists.json").read_text()
+        assert '"private"' not in (wiki_dir / "private/alice/_tasks/lists.json").read_text()
+        shared = (wiki_dir / "_tasks/tasks.json").read_text()
+        assert "Own gone" not in shared and '"Inbox"' not in shared and "Private, a shared" not in shared
+        login(alice, "bob")
+        assert sorted(self.tasks(alice)) == ["Gone", "In team", "Shared, her list's name", "Stray"]
+
+    def test_an_imported_task(self, alice, wiki_dir):
+        imp = lambda file, **body: alice.post("/api/tasks/import", json={"file": file, **body}, headers=HOST)
+        file = [{"title": "Theirs", "list": "elsewhere", "assignee": "bob"}, {"title": "Ours", "list": "team", "assignee": "bob"},
+                {"title": "Hers", "private": True, "list": "elsewhere"}]
+        # Into All tasks: where each says, as a restore.
+        assert imp(file).get_json()["added"] == 3
+        got = {t["title"]: (t.get("list"), t["private"], t.get("assignee")) for t in self.tasks(alice).values()}
+        assert got == {"Theirs": ("general", False, "bob"), "Ours": ("team", False, "bob"), "Hers": (None, True, None)}
+        # Into the Inbox: hers alone, whatever the file says, and no one's.
+        alice.post("/api/tasks/batch-delete", json={"ids": [t["id"] for t in self.tasks(alice).values()]}, headers=HOST)
+        for name in ("inbox", "none"):
+            assert imp([{"title": f"Into {name}", "list": "team", "assignee": "bob"}], list=name).get_json()["added"] == 1
+            task = self.tasks(alice)[f"Into {name}"]
+            assert task["private"] is True and "list" not in task and "assignee" not in task
+        assert "Into inbox" not in (wiki_dir / "_tasks/tasks.json").read_text()
+        # Into a shared list: there; one exported private stays private, in her Inbox.
+        assert imp([{"title": "Listed", "assignee": "bob"}, {"title": "Was private", "private": True}], list="team").get_json()["added"] == 2
+        tasks = self.tasks(alice)
+        assert tasks["Listed"]["list"] == "team" and tasks["Listed"]["assignee"] == "bob"
+        assert tasks["Was private"]["private"] is True and "list" not in tasks["Was private"]
+        login(alice, "bob")
+        assert sorted(self.tasks(alice)) == ["Listed"]
+
+    def test_a_task_left_without_a_list_is_filed_when_zone_starts(self, alice, wiki_dir, monkeypatch):
+        """A shared task in no list (a wiki whose users were turned on
+        later, a file edited by hand) goes to #general at the next start,
+        pinned for the wiki; a user's own without a list is their Inbox."""
+        mine = new(alice, title="Hers", list="")
+        path = wiki_dir / "_tasks" / "tasks.json"
+        stray = {**json.loads((wiki_dir / "private/alice/_tasks/tasks.json").read_text())[0], "id": "stray-1", "title": "Stray"}
+        path.write_text(json.dumps(json.loads(path.read_text()) + [stray]))
+        assert "list" not in self.tasks(alice)["Stray"] and self.tasks(alice)["Stray"]["private"] is False
+        # Until then it is no one's: in nobody's My tasks.
+        assert [t["id"] for t in alice.get("/api/tasks/export?mine=1", headers=HOST).get_json()["tasks"]] == [mine["id"]]
+        monkeypatch.setattr(settings, "USER_SETTINGS", {**USER_SETTINGS, "bob": {"role": "admin"}})   # a restart
+        tasks = self.tasks(alice)
+        assert tasks["Stray"]["list"] == "general" and tasks["Stray"]["private"] is False
+        assert tasks["Hers"]["private"] is True and "list" not in tasks["Hers"]
+        registry = json.loads((wiki_dir / "_tasks/lists.json").read_text())
+        assert registry["version"] == 2 and "general" in [l["name"] for l in registry["lists"]] and "general" in registry["pinned"]
+        assert [t["id"] for t in alice.get("/api/tasks/export?list=inbox", headers=HOST).get_json()["tasks"]] == [mine["id"]]
+        assert [t["id"] for t in alice.get("/api/tasks/export?list=general", headers=HOST).get_json()["tasks"]] == ["stray-1"]
+
+    def test_a_shared_lists_backlog_is_counted_on_its_page(self, alice, wiki_dir):
+        """The tasks of a shared list that no one has: "N unassigned" under
+        its heading, a link to them."""
+        assert "tasks-unassigned" not in alice.get("/tasks?list=team", headers=HOST).get_data(as_text=True)
+        for title, who in (("A", "alice"), ("B", "bob"), ("N1", None), ("N2", None)):
+            new(alice, title=title, **({"assignee": who} if who else {}))
+        html = alice.get("/tasks?list=team", headers=HOST).get_data(as_text=True)
+        link = html.split('class="tasks-unassigned"', 1)[0].rsplit("<a ", 1)[1] + html.split('class="tasks-unassigned"', 1)[1].split("</a>", 1)[0]
+        assert 'href="/tasks?list=team&amp;assignee=none"' in link and link.endswith(">2 unassigned")
+        assert sorted(t["title"] for t in alice.get("/api/tasks/export?list=team&assignee=none", headers=HOST).get_json()["tasks"]) == ["N1", "N2"]
+        # A private list has no backlog: its tasks are its user's.
+        make_list(alice, "own", private=True, headers=HOST)
+        new(alice, title="Mine", list="own")
+        assert "tasks-unassigned" not in alice.get("/tasks?list=own", headers=HOST).get_data(as_text=True)
 
 
 class TestAssistant:
@@ -559,7 +775,14 @@ class TestAssistant:
     search_tasks filters by it, and a task's text names it."""
 
     @pytest.fixture()
-    def mcp(self, client, wiki_dir, monkeypatch):
+    def mcp(self, bare_mcp):
+        """bare_mcp in a wiki with the shared list team: a task has an
+        assignee only in a shared list."""
+        assert "Created the list #team" in bare_mcp("create_task_list", name="team")
+        return bare_mcp
+
+    @pytest.fixture()
+    def bare_mcp(self, client, wiki_dir, monkeypatch):
         """Calls a tool as alice's assistant; returns the answer's text."""
         monkeypatch.setattr(settings, "USERS", {**USERS, "alice": ("alice-pw", "alice-token")})
         monkeypatch.setattr(settings, "USER_SETTINGS", dict(USER_SETTINGS))
@@ -571,7 +794,7 @@ class TestAssistant:
         return call
 
     def test_create_and_update_assign(self, mcp):
-        text = mcp("create_task", title="Call Sam", assignee="bob")
+        text = mcp("create_task", title="Call Sam", assignee="bob", list="team")
         assert "assigned to: bob" in text and "(the user)" not in text
         task_id = text.split("id: ", 1)[1].split()[0]
         assert "assigned to: alice (the user)" in mcp("update_task", id=task_id, assignee="me")
@@ -582,35 +805,59 @@ class TestAssistant:
     @pytest.mark.parametrize("name,why", [("zed", "is not a user of this wiki"), ("carol", "is a viewer"),
                                           ("dan", "account is disabled")])
     def test_a_name_that_cant_be_assigned_is_a_tool_error(self, mcp, name, why):
-        assert why in mcp("create_task", title="No", assignee=name)
+        assert why in mcp("create_task", title="No", assignee=name, list="team")
         assert "Task: No" not in mcp("search_tasks")
 
     def test_a_private_task_has_none(self, mcp):
         assert "Created the list #own" in mcp("create_task_list", name="own", private=True)
         assert "private task" in mcp("create_task", title="Mine", list="own", assignee="bob")
+        assert "Task: Mine" not in mcp("search_tasks")
+
+    @pytest.mark.parametrize("named", [{}, {"list": ""}, {"list": "inbox"}, {"list": "none"}])
+    def test_a_task_for_someone_needs_a_shared_list(self, mcp, named):
+        """Without a list a new task is in the user's Inbox, which only they
+        see: with an assignee that is a tool error naming the shared lists,
+        the user's own name too."""
+        mcp("create_task_list", name="own", private=True)
+        mcp("create_task_list", name="side")
+        for who in ("bob", "me", "@Alice"):
+            text = mcp("create_task", title="For someone", assignee=who, **named)
+            assert "A task assigned to someone has to be in a shared list" in text, who
+            assert text.rstrip().endswith("Pass list: side, team"), text
+        assert "Task: For someone" not in mcp("search_tasks")
+        # No assignee, or none: the Inbox takes it.
+        assert "assigned to" not in mcp("create_task", title="Nobody's", assignee="none", **named)
+        assert "Task: Nobody's" in mcp("search_tasks", list="inbox")
+
+    def test_a_task_for_someone_in_a_wiki_without_a_shared_list(self, bare_mcp):
+        bare_mcp("create_task_list", name="own", private=True)
+        text = bare_mcp("create_task", title="For bob", assignee="bob")
+        assert "this wiki has none: make one with create_task_list" in text and "own" not in text
+        assert "Task: For bob" not in bare_mcp("search_tasks")
 
     def test_search_filters_by_assignee(self, mcp):
-        mcp("create_task", title="Alices", assignee="me")
-        mcp("create_task", title="Bobs", assignee="bob")
-        mcp("create_task", title="Nobodys", list="")   # in no list: shared, and no one's (without a list it would be alice's own)
-        found = lambda **args: sorted(t for t in ("Alices", "Bobs", "Nobodys") if f"Task: {t}" in mcp("search_tasks", **args))
-        assert found(assignee="me") == ["Alices"]
+        mcp("create_task", title="Alices", assignee="me", list="team")
+        mcp("create_task", title="Bobs", assignee="bob", list="team")
+        mcp("create_task", title="Nobodys", list="team")   # shared, and no one's
+        mcp("create_task", title="Inboxed")                # in her Inbox: her own, as @me reads it
+        found = lambda **args: sorted(t for t in ("Alices", "Bobs", "Nobodys", "Inboxed") if f"Task: {t}" in mcp("search_tasks", **args))
+        assert found(assignee="me") == ["Alices", "Inboxed"]
         assert found(assignee="bob") == ["Bobs"]
         assert found(assignee="none") == ["Nobodys"]
-        assert found(assignee="me|bob") == ["Alices", "Bobs"]
-        assert found(assignee="-bob") == ["Alices", "Nobodys"]
-        assert found() == ["Alices", "Bobs", "Nobodys"]
+        assert found(assignee="me|bob") == ["Alices", "Bobs", "Inboxed"]
+        assert found(assignee="-bob") == ["Alices", "Inboxed", "Nobodys"]
+        assert found() == ["Alices", "Bobs", "Inboxed", "Nobodys"]
 
     def test_a_former_assignee_is_said_to_be_one(self, mcp, monkeypatch):
-        mcp("create_task", title="Bobs", assignee="bob")
+        mcp("create_task", title="Bobs", assignee="bob", list="team")
         monkeypatch.setattr(settings, "USER_SETTINGS", {**USER_SETTINGS, "bob": {"disabled": "yes"}})
         assert "assigned to: bob (who can no longer be given tasks" in mcp("search_tasks", assignee="none")
 
     def test_a_new_task_is_assigned_only_when_told(self, mcp, wiki_dir):
         (wiki_dir / "team.md").write_text("# Team\n\n[[tasks: assignee=me pin=default]]\n")
         assert "assigned to" not in mcp("create_task", title="No one by default")
-        assert "assigned to: bob" in mcp("create_task", title="Said so", assignee="bob")
-        assert "assigned to: alice (the user)" in mcp("create_task", title="Mine", assignee="me")
+        assert "assigned to: bob" in mcp("create_task", title="Said so", assignee="bob", list="team")
+        assert "assigned to: alice (the user)" in mcp("create_task", title="Mine", assignee="me", list="team")
 
     def test_without_users_search_says_there_are_no_assignees(self, client, wiki_dir, monkeypatch):
         monkeypatch.setattr(settings, "MCP_TOKEN", "tok")

@@ -1,8 +1,8 @@
 // The Tasks page's row of lists (.tasks-places in tasks_page.html): the
-// pinned lists as pills and More, a details holding the other lists and All
-// tasks. Here: More closes as a menu does and can be filtered by name; a
+// My tasks, the Inbox and the pinned lists as pills and More, a details
+// holding the other lists and All tasks. Here: More closes as a menu does and can be filtered by name; a
 // list this browser hasn't shown before is marked new; and the pinned pills
-// can be dragged into another order (the first is where a new task goes).
+// can be dragged into another order.
 
 // A list made while the page is open (New list… in the dialog that moves
 // tasks to a list, js/taskselect.js) is in the row at once: the row is asked
@@ -127,7 +127,6 @@ if (nav?.hasAttribute('data-reorder')) {
         try {
           const res = await fetch('/tasks/pin-order', { method: 'POST', body });
           if (!res.ok) throw new Error(String(res.status));
-          location.reload();                           // the first pill's mark, where New task goes
         } catch (_) { before = was; restore(); }
       });
     }

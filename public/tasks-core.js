@@ -88,7 +88,8 @@ function placeInOrder(old, shown, moved) {
 // with '@' filter by assignee the same way: `@anna`, `@anna|bob`, `-@anna`,
 // `@me` (whoever is signed in) and `@none` (assigned to no one).
 // `list:shop` filters by the list a task is in (by its name; `list:a|b`
-// either, `-list:shop` not in it, `list:none` in no list).
+// either, `-list:shop` not in it, `list:inbox` in no list: the Inbox;
+// `list:none` says the same).
 // Returns { text, tagGroups, excludeTags, importance, assigneeGroups,
 // excludeAssignees, listGroups, excludeLists, people } — every group must
 // have at least one match, and nothing excluded may be present.
@@ -145,22 +146,16 @@ function assigneeIs(t, word, people) {
 }
 
 // My tasks, the home view the Tasks links open and count (mineFilter in
-// go/tasklists.go; go/testdata/mine_cases.json runs through both): every
-// task except one that is assigned to someone else, or in a list the user
-// hasn't pinned unless it is assigned to them. pinned: the task's list is
-// one the user pinned; who: { me, users (those a task can be given to),
-// assigns (assignment counts for this user: not without users, nor for a
-// viewer), own (they hide unassigned tasks: a shared task that is nobody's
-// is out too) }. An assignee no task can be given to anymore is no one; a
-// private task has none and follows its list's pin.
-function inMine(t, pinned, who) {
-  const a = (t.assignee || '').toLowerCase();
-  if (who?.assigns && !t.private && a) {
-    if (a === who.me) return true;
-    if (who.users?.has(a)) return false;
-  }
-  if (who?.own && !t.private) return false;
-  return !t.list || !!pinned;
+// go/tasklists.go; go/testdata/mine_cases.json runs through both): what is
+// the user's. A task of their own (a private one: in their Inbox or a
+// private list) unless its list is left out of My tasks, and a shared task
+// assigned to them, wherever it is; an unassigned shared task is its
+// list's. out: the task's list is left out (its setting home=off); who:
+// { me, assigns (assignment counts for this user: not without users, nor
+// for a viewer, where every list is the user's own) }.
+function inMine(t, out, who) {
+  if (who?.assigns && !t.private) return (t.assignee || '').toLowerCase() === who.me;
+  return !out;
 }
 
 // A task someone else gave the user, which they haven't touched since: its
@@ -206,7 +201,7 @@ function matchesFilter(t, f) {
   const is = w => assigneeIs(t, w, f.people);
   if ((f.excludeAssignees || []).some(is)) return false;
   if (!(f.assigneeGroups || []).every(g => g.some(is))) return false;
-  const inList = n => n === 'none' ? !t.list : (t.list || '').toLowerCase() === n;
+  const inList = n => n === 'inbox' || n === 'none' ? !t.list : (t.list || '').toLowerCase() === n;
   if ((f.excludeLists || []).some(inList)) return false;
   if (!(f.listGroups || []).every(g => g.some(inList))) return false;
   return f.tagGroups.every(g => g.some(tag => tags.includes(tag)));

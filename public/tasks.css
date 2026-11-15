@@ -38,7 +38,7 @@
 }
 
 /* The task list switcher (tasks_page.html .tasks-places): on /tasks, on the sheet above
-   the heading, a row of pills, one per list (Pinned and the pinned lists
+   the heading, a row of pills, one per list (My tasks, the Inbox and the pinned lists
    first, then More: the others A–Z and All tasks, in a panel), the current one shaded as in the module switcher;
    pinned lists with a pin, private ones with a lock. Wraps on a narrow screen. */
 /* It looks as the module switcher at the top of the page does (style.css,
@@ -64,8 +64,6 @@
 }
 .tasks-place .module-counts { margin-left: 0; }
 .tasks-place-lock, .tasks-place-pin { display: inline-flex; }
-/* The first of several pinned lists, where a new task goes: a plus by its pin. */
-.tasks-place-first { margin-left: -.2rem; font-weight: 600; line-height: 1; }
 /* More: a details whose summary is the row's last pill and whose panel hangs
    under it: links, a line each; a filter field over them when there are many
    (js/listsrow.js). On a narrow screen the panel is as wide as the row. */
@@ -242,6 +240,9 @@ div.chip-input:has(> .tag-chip:not(.tag-chip-locked)) > .chip-input-clear { disp
 /* A new task's list (and Private), under its title. */
 .task-field > p.task-edit-target { margin: .3rem 0 0; font-size: .8rem; color: var(--muted); }
 .task-edit-target[hidden] { display: none; }
+/* A task for someone, with no shared list to go to: in the colour of the
+   dialog's other warning (the dialog is outside .tasks-app and its tokens). */
+.task-field > p.task-edit-target-warn { color: #b45309; font-weight: 600; }
 /* Start after Due in the edit modal (syncDateWarning in tasks.js). */
 .task-date-warning {
   display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem;

@@ -4,12 +4,10 @@ import { openSearchModal } from './search.js';
 
 // ── Quick-task modal ──────────────────────────────────────────────────────────
 
-// A new task in the default list (the first pinned one), from any page (c t,
-// the New task button). On a page with a pinned list its own "+ New" (so
-// the view's tags and dates apply); where a task list app is loaded (an
-// embed, the editor's hidden one) its edit modal, in the default list and
-// with the tags and keep it gives new tasks (the server puts them on <body>:
-// data-tasks-list, data-tasks-tags, data-tasks-keep; none without a pin); elsewhere where
+// A new task in the Inbox, from any page (c t, the New task button). On a
+// page that shows My tasks or the Inbox its own "+ New" (so the view's
+// dates apply); where a task list app is loaded (an embed, the editor's
+// hidden one) its edit modal, for a task in the Inbox; elsewhere where
 // the Tasks link goes (or /tasks) opens with the modal.
 // A page without a task list app loads a hidden one first (/api/tasks/headless,
 // started by tasks.js's initTaskApps), so you stay on the page; a toast says
@@ -17,12 +15,8 @@ import { openSearchModal } from './search.js';
 export async function openDefaultTask() {
   const pinnedAdd = document.querySelector('.tasks-app[data-pinned]:not([data-headless]) [id^="task-add-btn"]');
   if (pinnedAdd) { pinnedAdd.click(); return; }
-  const { tasksList = '', tasksTags = '', tasksKeep, tasksToday } = document.body.dataset;
-  // The start date as the default list's "+ New" gives it (today on Focus);
-  // without a pin, as /tasks's Focus does.
-  const homeless = !('tasksTags' in document.body.dataset);
-  const opts = { list: tasksList, tags: tasksTags, keep: tasksKeep === '1',
-                 start_date: homeless || tasksToday === '1' ? localDate() : null };
+  // Into the Inbox, starting today, as the "+ New" of My tasks' Focus gives it.
+  const opts = { list: '', tags: '', keep: false, start_date: localDate() };
   if (!document.querySelector('.tasks-app[data-ready]')) {
     try {
       await loadHeadlessTasks();
@@ -90,8 +84,8 @@ newNoteForm?.addEventListener('submit', async e => {
 // ── Action bar ───────────────────────────────────────────────────────────────
 // The phone's actions, as the desktop's top actions: a new note, a
 // new task and Search (Ctrl+P). In the tasks the new task comes from its own
-// "+ New" (so the view's tags and dates apply; on a page with a pinned list
-// the pinned embed's), elsewhere it goes to your tasks (openDefaultTask).
+// "+ New" (so the view's tags and dates apply; on a page that shows My tasks
+// or the Inbox that one's), elsewhere it goes to your Inbox (openDefaultTask).
 
 const tasksAddButton = () =>
   document.querySelector('.tasks-app[data-pinned] [id^="task-add-btn"]')

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -79,14 +80,30 @@ func ownList(t *testing.T, user string) string {
 	return "own"
 }
 
+// teamList: the shared list "team", made when it isn't there.
+func teamList(t *testing.T, user string) string {
+	t.Helper()
+	if _, ok := resolveList("team", taskLists(user)); !ok {
+		if _, err := createListOp(user, "team", false, false, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return "team"
+}
+
 // newTestTask creates a task as user through the API's path; private asks
-// for it to be theirs alone: in their private list "own".
+// for it to be theirs alone: in their private list "own". With users a
+// shared task is always in a list: one that isn't private and names none
+// (more: "list") is in the shared list "team"; pass "list", "" for the
+// user's Inbox. Without users it is in no list.
 func newTestTask(t *testing.T, user, title string, private bool, more ...string) *Task {
 	t.Helper()
 	data := jsonObj{}
 	data.Set("title", title)
 	if private {
 		data.Set("list", ownList(t, user))
+	} else if inboxOwner(user) != "" && !slices.Contains(more, "list") {
+		data.Set("list", teamList(t, user))
 	}
 	for i := 0; i+1 < len(more); i += 2 {
 		data.Set(more[i], more[i+1])
@@ -173,7 +190,8 @@ func TestPrivateTasksInTheirUsersFiles(t *testing.T) {
 
 // Completing a private task files it in its user's closed.json, and the
 // next occurrence of a series stays private, in its list; taking it out of
-// its private list moves it to the shared files, when the write says share.
+// its private list leaves it in its user's Inbox, private still; into a
+// shared list it moves to the shared files, when the write says share.
 func TestPrivateTaskMovesAndCompletes(t *testing.T) {
 	testWiki(t, nil)
 	withUsers(t, "alice", "bob")
@@ -199,8 +217,16 @@ func TestPrivateTaskMovesAndCompletes(t *testing.T) {
 	if got := taskFiles.ClosedInYear("bob", taskFiles.CurrentYear()); len(got) != 0 {
 		t.Errorf("bob's Completed %v", titles(got))
 	}
+	inbox := jsonObj{}
+	inbox.Set("list", "")
+	if got, err := updateTask("alice", open[0].ID, inbox, ""); err != nil || got.List != "" || got.Owner != "alice" {
+		t.Fatalf("into her Inbox: %+v, %v", got, err)
+	}
+	if len(taskFiles.Open("bob")) != 0 || !strings.Contains(fileText(t, taskFiles.OpenPath("alice")), "Water") || strings.Contains(fileText(t, taskFiles.OpenPath("")), "Water") {
+		t.Error("a task in her Inbox left her files")
+	}
 	shared := jsonObj{}
-	shared.Set("list", "")
+	shared.Set("list", teamList(t, "alice"))
 	if _, err := updateTask("alice", open[0].ID, shared, ""); err == nil {
 		t.Fatal("shared without saying so")
 	}
@@ -224,12 +250,13 @@ func TestReadsSeeAMovingTask(t *testing.T) {
 		for i := range n {
 			ids = append(ids, newTestTask(t, "alice", "Scarf "+strconv.Itoa(i), true).ID)
 		}
+		teamList(t, "alice")
 		stop := make(chan struct{})
 		go func() {
 			defer close(stop)
 			for _, id := range ids {
 				data := jsonObj{}
-				data.Set("list", "")
+				data.Set("list", "team")
 				data.Set("share", true)
 				if _, err := updateTask("alice", id, data, ""); err != nil {
 					t.Error(err)
@@ -323,8 +350,15 @@ func TestASharedTaskStaysShared(t *testing.T) {
 		t.Errorf("bob sees %v", got)
 	}
 	mine := newTestTask(t, "alice", "Mine", true)
+	// Into no list is into her Inbox: that shares nothing, share or not.
+	inbox := jsonObj{}
+	inbox.Set("list", nil)
+	inbox.Set("share", true)
+	if got, err := updateTask("alice", mine.ID, inbox, ""); err != nil || got.Owner != "alice" || len(taskFiles.Open("bob")) != 1 {
+		t.Fatalf("into her Inbox with share: %+v, %v", got, err)
+	}
 	shared := jsonObj{}
-	shared.Set("list", nil)
+	shared.Set("list", "team")
 	shared.Set("share", true)
 	got, err := updateTask("alice", mine.ID, shared, "")
 	if err != nil {
@@ -335,5 +369,15 @@ func TestASharedTaskStaysShared(t *testing.T) {
 	}
 	if _, err := updateTask("alice", mine.ID, private, ""); err == nil {
 		t.Error("shared, then private again")
+	}
+	// Nor into an Inbox, hers or (asked by him) bob's: a shared task is
+	// always in a list.
+	for _, who := range []string{"alice", "bob"} {
+		if _, err := updateTask(who, mine.ID, inbox, ""); err != errSharedListed {
+			t.Errorf("%s put a shared task into an Inbox: %v", who, err)
+		}
+	}
+	if len(taskFiles.Open("bob")) != 2 || len(taskFiles.Open("")) != 2 {
+		t.Errorf("bob sees %v", titles(taskFiles.Open("bob")))
 	}
 }

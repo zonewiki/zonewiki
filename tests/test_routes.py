@@ -104,22 +104,26 @@ class TestViewPage:
         assert '<body data-module="wiki">' in body
 
     def test_my_tasks_is_where_the_tasks_links_go(self, client, wiki_dir):
-        # With a list in the wiki the Tasks module links go to My tasks: the
-        # pinned lists' tasks and those in no list. New task from anywhere
-        # goes into the first pinned list. A page that shows it is a page
-        # like any other.
+        # With a list in the wiki the Tasks module links go to My tasks. New
+        # task from anywhere goes into the Inbox, whatever is pinned: the
+        # page says nothing of a list for it, and the views whose New it
+        # clicks are My tasks and the Inbox. A page that shows a list is a
+        # page like any other.
         list_page(client, wiki_dir, "tasks", "# Tasks\n\n[[tasks: list=task view=focus pin=1]]\n")
         write_page(wiki_dir, "other", "# Other\n")
         body = client.get("/page/other", headers=HOST).get_data(as_text=True)
         assert self._tasks_links(body) == ["/tasks?mine=1", "/tasks?mine=1"]
         assert "data-pinned-pages" not in body
         lv = client.get("/tasks?list=task", headers=HOST).get_data(as_text=True)
-        assert 'data-init-view="focus"' in lv and 'data-pinned="1"' in lv and '<body data-module="tasks"' in lv
+        assert 'data-init-view="focus"' in lv and '<body data-module="tasks">' in lv
+        assert 'data-pinned="1"' not in lv          # the first pinned list takes no new task
         home = client.get("/page/tasks", headers=HOST).get_data(as_text=True)
-        assert '<body data-module="wiki" data-tasks-list="task" data-tasks-tags="" data-tasks-today="1">' in home
-        assert 'data-pinned="1"' in home   # the embed New clicks
+        assert '<body data-module="wiki">' in home and 'data-pinned="1"' not in home
+        for url in ("/tasks?mine=1", "/tasks?list=inbox"):
+            view = client.get(url, headers=HOST).get_data(as_text=True)
+            assert '<body data-module="tasks">' in view and 'data-pinned="1"' in view, url
         # /tasks stays the view of every task, in the Tasks module.
-        assert '<body data-module="tasks" data-tasks-list="task" data-tasks-tags="" data-tasks-today="1">' in client.get("/tasks", headers=HOST).get_data(as_text=True)
+        assert '<body data-module="tasks">' in client.get("/tasks", headers=HOST).get_data(as_text=True)
 
     def test_the_tasks_links_go_to_my_tasks_however_many_are_pinned(self, client, wiki_dir):
         list_page(client, wiki_dir, "zzz", "# Z\n\n[[tasks: list=zed pin=1]]\n")
@@ -177,22 +181,20 @@ class TestViewPage:
         for url in ("/page/my-page", "/edit/my-page", "/tasks"):
             assert '<html lang="en" class="sharing">' in client.get(url, headers=HOST).get_data(as_text=True), url
 
-    def test_new_tasks_get_the_tasks_homes_tags(self, client, wiki_dir):
-        # c t and the New task button put a task in the default list, with
-        # the tags (and keep) it gives new tasks: zonewiki.js reads them from
-        # <body>, on every view.
+    def test_no_page_says_where_a_new_task_goes(self, client, wiki_dir):
+        # c t and the New task button put a task in the Inbox, in no list:
+        # <body> names no list, tags or keep for it, whatever is pinned first
+        # and whatever that list gives its new tasks.
         write_page(wiki_dir, "my-page", "# My Page\n")
-        body = client.get("/page/my-page", headers=HOST).get_data(as_text=True)
-        assert "data-tasks-list" not in body and "data-tasks-tags" not in body and "data-tasks-keep" not in body   # no default list
         list_page(client, wiki_dir, "tasks", "# Tasks\n\n[[tasks: list=Task new=work,home pin=1 keep=1]]\n")
-        for url in ("/page/my-page", "/edit/my-page", "/tasks"):
+        for url in ("/page/my-page", "/edit/my-page", "/tasks", "/tasks?mine=1", "/tasks?list=task"):
             tag = client.get(url, headers=HOST).get_data(as_text=True).split("<body", 1)[1].split(">", 1)[0]
-            assert 'data-tasks-list="task" data-tasks-tags="work,home"' in tag and 'data-tasks-keep="1"' in tag, url
-            assert 'data-tasks-today="1"' in tag, url   # the default view, Focus: start today
-        assert client.post("/api/tasks/settings", json={"list": "task", "set": {"view": "open", "keep": "", "new": ""}},
-                           headers=HOST).status_code == 200
-        tag = client.get("/page/my-page", headers=HOST).get_data(as_text=True).split("<body", 1)[1].split(">", 1)[0]
-        assert 'data-tasks-list="task" data-tasks-tags=""' in tag and "data-tasks-today" not in tag and "data-tasks-keep" not in tag
+            assert "data-tasks-" not in tag, url
+        # The list's own view gives its new tasks what it says; My tasks doesn't take them over.
+        own = client.get("/tasks?list=task", headers=HOST).get_data(as_text=True)
+        assert 'data-init-keep="1"' in own and 'data-new-tags="work,home"' in own
+        mine = client.get("/tasks?mine=1", headers=HOST).get_data(as_text=True)
+        assert 'data-init-keep=""' in mine and "data-new-tags" not in mine
 
     def test_headless_tasks_for_pages_without_one(self, client, wiki_dir):
         # c t on a page without a task list app loads this hidden one (scripts
@@ -2290,7 +2292,7 @@ class TestTasksPage:
         body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
         assert f'href="/tasks?task={tid}&amp;view=open&amp;list=shop"' in body
 
-    def test_due_count_follows_the_pinned_lists(self, client, wiki_dir):
+    def test_due_count_is_my_tasks_whatever_is_pinned(self, client, wiki_dir):
         from datetime import date
         today = date.today().isoformat()
         for name in ("task", "shop"):
@@ -2300,13 +2302,18 @@ class TestTasksPage:
             client.post("/api/tasks", json={"title": title, "due_date": today, **fields}, headers=HOST)
         count = lambda: client.get("/api/tasks/due-count", headers=HOST).get_json()["count"]
         pin = lambda name, how: client.post("/tasks/pin-list", data={"list": name, "pin": how}, headers=HOST)
-        assert count() == 1   # none pinned: the task in no list
-        pin("task", "1")
-        assert count() == 3   # and the pinned list's
-        pin("shop", "1")
-        assert count() == 4   # both lists'
-        pin("task", "0")
+        home = lambda name, value: client.post("/api/tasks/settings", json={"list": name, "set": {"home": value}}, headers=HOST)
+        assert count() == 4   # without users every task, pinned or not
+        for name, how in (("task", "1"), ("shop", "first"), ("task", "0"), ("shop", "0")):
+            pin(name, how)
+            assert count() == 4, (name, how)   # a pin is a pill
+        # But a list left out of My tasks, pinned or not.
+        assert home("task", "off").status_code == 200
         assert count() == 2
+        pin("task", "1")
+        assert count() == 2
+        assert home("task", "").status_code == 200
+        assert count() == 4
 
     def test_task_counts_are_rendered_into_the_page(self, client, wiki_dir):
         # In the HTML, not only fetched later: the Tasks link must not change

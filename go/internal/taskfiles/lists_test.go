@@ -41,6 +41,33 @@ func TestRegistryRoundTrips(t *testing.T) {
 	}
 }
 
+// A registry keeps the version it was read with (a start takes an older
+// one over, and says so by writing the next); one without a version, or a
+// new one, is written with this Zone's. home, a list's being left out of My
+// tasks, is a setting like the others.
+func TestRegistryVersion(t *testing.T) {
+	for text, want := range map[string]string{
+		`{"version": 1, "lists": []}`: `"version": 1`,
+		`{"version": 2, "lists": []}`: `"version": 2`,
+		`{"lists": []}`:               `"version": 2`,
+	} {
+		r, ok := ParseRegistry([]byte(text))
+		if !ok || !strings.Contains(r.Encode(), want) {
+			t.Errorf("%s written as\n%s", text, r.Encode())
+		}
+	}
+	if got := (&Registry{}).Encode(); !strings.Contains(got, `"version": 2`) || ListsVersion != 2 {
+		t.Errorf("a new registry:\n%s", got)
+	}
+	r, _ := ParseRegistry([]byte(`{"version": 2, "lists": [{"home": "off", "name": "someday", "limit": 3}]}`))
+	if l := r.Find("someday"); l == nil || l.Settings["home"] != "off" || len(l.Extra) != 0 {
+		t.Fatalf("someday = %+v", l)
+	}
+	if got := r.Encode(); !strings.Contains(got, `{"name": "someday", "limit": "3", "home": "off"}`) {
+		t.Errorf("written as\n%s", got)
+	}
+}
+
 // "mine" was true, until 2026-11, for a user whose Pinned showed only their
 // own tasks: that reads as no settings of My tasks, and isn't written back.
 func TestRegistryMineWasAFlag(t *testing.T) {
@@ -91,7 +118,7 @@ func TestRegistryReadLeniently(t *testing.T) {
 		t.Errorf("version %d: a file without one is from before the lists", r.Version)
 	}
 	want := `{
-  "version": 1,
+  "version": 2,
   "lists": [
     {"name": "shop", "limit": "8", "keep": "true", "colour": "red"},
     {"name": "b"}

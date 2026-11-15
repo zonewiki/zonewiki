@@ -146,18 +146,6 @@ func createTask(user string, data jsonObj, message string) (*Task, error) {
 	}
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
-	// The user's private list, where their new tasks go when they pinned
-	// nothing, is made by the first task into it.
-	var also []string
-	if data.Has("list") && !data.Null("list") {
-		if list, err := asStr(data["list"], "list"); err == nil {
-			path, err := ensureFallbackLocked(user, list)
-			if err != nil {
-				return nil, err
-			}
-			also = nonEmpty([]string{path})
-		}
-	}
 	t := newTask()
 	if err := applyTaskFields(user, t, data, true); err != nil {
 		return nil, err
@@ -168,7 +156,7 @@ func createTask(user string, data jsonObj, message string) (*Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := taskFiles.WriteOpenLocked(user, append(active, t), message, also...); err != nil {
+	if err := taskFiles.WriteOpenLocked(user, append(active, t), message); err != nil {
 		return t, err
 	}
 	tellAssigned(user, nil, t)
@@ -301,17 +289,22 @@ func applyOrder(t *Task, data jsonObj) error {
 }
 
 // applyList: a write's list: the list the task is in, as user names it (a
-// ref), or none ("", null). Where a task is kept follows its list: in a
-// private list it is its user's alone, anywhere else shared. A new task
-// may start in a private list; a shared task never goes into one, and a
-// private task leaves for a shared place only when the write says share.
-// Only a change is checked. private is no field of a write: a task is
-// private by its list.
+// ref), or none ("", null, "inbox"): the Inbox. Where a task is kept
+// follows its list: in a private list or in its user's Inbox it is theirs
+// alone, in a shared list shared. A new task that names no list is in its
+// maker's Inbox; it may start in any list. A shared task never goes into a
+// private list nor into an Inbox (with users a shared task is always in a
+// list), and a private task leaves for a shared list only when the write
+// says share. Only a change is checked. private is no field of a write: a
+// task is private by its list.
 func applyList(user string, t *Task, data jsonObj, fresh bool) error {
 	if data.Has("private") {
 		return refuse("private is not set on a task: a task is private when its list is. Give list")
 	}
 	if !data.Has("list") {
+		if fresh {
+			t.List, t.Owner = "", inboxOwner(user)
+		}
 		return nil
 	}
 	ref := ""
@@ -327,8 +320,8 @@ func applyList(user string, t *Task, data jsonObj, fresh bool) error {
 		return err
 	}
 	lists := taskLists(user)
-	name, owner := "", ""
-	if ref != "" {
+	name, owner := "", inboxOwner(user)
+	if ref != "" && !isInbox(ref, lists) {
 		l, ok := resolveList(ref, lists)
 		if !ok {
 			return refuse("No list #" + ref)
@@ -343,6 +336,8 @@ func applyList(user string, t *Task, data jsonObj, fresh bool) error {
 	}
 	switch {
 	case fresh:
+	case owner != "" && t.Owner == "" && name == "":
+		return errSharedListed
 	case owner != "" && t.Owner == "":
 		return errSharedStays
 	case owner == "" && t.Owner != "" && !share:
@@ -387,7 +382,7 @@ func applyAssignee(user string, t *Task, data jsonObj) error {
 	case s.Users == nil:
 		return refuse("This wiki has no users to assign a task to")
 	case t.Owner != "":
-		return refuse("A private task is yours alone. Share it to assign it")
+		return refuse("A private task is yours alone. Put it in a shared list to assign it (list)")
 	case !s.assignable(name) && !hadAssignee(t, name):
 		return refuse(s.notAssignable(name))
 	}

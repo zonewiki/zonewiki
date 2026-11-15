@@ -18,8 +18,8 @@ Case doesn't matter (`[[Tasks:]]`), nor a space after the colon (`[[tasks:list=s
 | `view` | `focus`, `open`, `plan`, `closed` | Focus (or the tab remembered this session) | Opens on that tab whenever the page is opened; a URL `?view=` overrides it, and a reload stays on the tab it showed (see Views). Case doesn't matter; any other name (`views`) opens the default. |
 | `plan` | `on`, `off` | on | What the Open tab shows: on, the board by start date (Plan); off, one list. With `view=open` or `view=plan` it decides which of the two opens (`view=open` alone is the list, `view=plan` the board, as always). The Plan switch still flips it, for the browser tab (see Views). |
 | `limit` | integer 1–99 | none | WIP limit: Focus warns at this many tasks, and Plan day sections with at least this many are flagged amber. `?limit=N` works on `/tasks`. |
-| `list` | a list's name | — | Shows that list: the tasks in it, with the list's own settings (see Lists). A new task made there goes into it. On a shared page the name is the shared list; on a page in your private folder your own list of that name first. A name no list has shows a line that says so, with a button that makes the list. `list=none` shows the tasks in no list (Lists → No list). Cleaned like tags, lowercased (`cleanList`). With `list=`, only `view`, `tag` and `assignee` of the embed count: they say how this page looks at the list; what the list is (`limit`, `plan`, `keep`, `labels`, `new`) is set on the list. |
-| `mine` | `1` | — | Shows My tasks (Lists → My tasks): for whoever looks, their own. A new task made there goes into their first pinned list, with the tags and keep that list gives new tasks. The embed's `view`, `plan`, `limit`, `labels`, `tag` and `assignee` count, as for an embed of no list. |
+| `list` | a list's name | — | Shows that list: the tasks in it, with the list's own settings (see Lists). A new task made there goes into it. On a shared page the name is the shared list; on a page in your private folder your own list of that name first. A name no list has shows a line that says so, with a button that makes the list. `list=inbox` shows the Inbox, the tasks in no list: with users whoever looks their own (Lists → The Inbox; `list=none` says the same). Cleaned like tags, lowercased (`cleanList`). With `list=`, only `view`, `tag` and `assignee` of the embed count: they say how this page looks at the list; what the list is (`limit`, `plan`, `keep`, `labels`, `new`) is set on the list. |
+| `mine` | `1` | — | Shows My tasks (Lists → My tasks): for whoever looks, their own. A new task made there goes into the Inbox. The embed's `view`, `plan`, `limit`, `labels`, `tag` and `assignee` count, as for an embed of no list. |
 | `keep` | `1`/`true`/`yes` | — | New tasks created in the embed are keep tasks (the edit modal's checkbox starts checked), e.g. a shopping list of staples. For a list, set on the list (List settings…). |
 | `pin` | | — | Means nothing anymore: a pin is of a list and the user's own (see Lists → Pins). Until 2026-11 it pinned the embed's list; the migration moved those pins and took `pin=` out of the pages. |
 | `new` | tags, comma-separated | — | The tags a new task here gets, in place of the filter's single tags. For a list, set on the list. |
@@ -50,7 +50,7 @@ Element ids get a `-<n>` suffix after the first embed, so a page can hold severa
 and their notes' and comments' HTML as `POST /api/render-notes` would (`tasksInitial`: a `<script type="application/json" id="tasks-initial">` data block, which no browser runs; `<`, `>` and `&` in it are `\u` escapes, so no task's text ends it).
 The lists the page starts with draw from it, each from its own copy, with no request (`initialTasks` in `js/taskdata.js`, `keepRendered` in `js/tasktexts.js`), so the list is there when the page is rather than two round trips later.
 Every later load asks the server, and so does a list that starts later (a preview's, the hidden one a page without a list fetches for its dialog): `initTaskApps` forgets the tasks once the page's lists have started.
-`tasks.js` also reads `?tag=`, `?view=`, `?search=`, `?task=`, `?new=1` from the URL; `?new=1` opens the new-task modal in one embed only, one of the first pinned list or of My tasks if the page has it, else the first.
+`tasks.js` also reads `?tag=`, `?view=`, `?search=`, `?task=`, `?new=1` from the URL; `?new=1` opens the new-task modal in one embed only, one of My tasks or of the Inbox if the page has it, else the first.
 
 The Tasks page itself is `/tasks`; embeds are for custom views on ordinary pages (a tag's tasks, a list with notes around it).
 Nothing links to a `tasks.md` page.
@@ -149,7 +149,7 @@ Recurring instances keep the gap between the two dates, but a new instance's sta
 | `title` | string | Required. Links in it work on the card (see Title links) |
 | `description` | string | Markdown, rendered as a page's text (see Description); `- [ ] item` lines are checkboxes |
 | `tags` | string[] | One word each. `cleanTags()` on every write/read/restore: inner whitespace → `-`, leading `#` dropped, empties removed, case-insensitive duplicates collapsed. Tag inputs sanitize as you type (`TasksCore.sanitizeTagInput`), leaving deletions alone. A tag sorts tasks; it never puts one in a list. |
-| `list` | string | The list the task is in, by its name; no key at all when it is in none (see Lists). Which list of that name is the task's file's to say: a task in a user's files is in one of their private lists, any other in a shared one. A write takes a list as the user names it (its name, or `shared/<name>`: Lists → Names), `""` or `null` for none; a name no list has is a 400. With users the API also answers `"private": true|false`, from where the task is kept; `private` in a write is a 400 that points to `list`. |
+| `list` | string | The list the task is in, by its name; no key at all when it is in the Inbox (see Lists). Which list of that name is the task's file's to say: a task in a user's files is in one of their private lists (without `list`: in their Inbox), any other in a shared one. A write takes a list as the user names it (its name, or `shared/<name>`: Lists → Names), `""`, `null` or `inbox` for the Inbox (with users not for a shared task, which is always in a list: 400); a name no list has is a 400. With users the API also answers `"private": true|false`, from where the task is kept; `private` in a write is a 400 that points to `list`. |
 | `assignee` | string | The user the task is assigned to (with users; Assigning tasks in `docs/spec/users.md`). No key at all when there is none: in the file and in the API's answers, so a wiki that assigns nothing keeps its files as they were. A write takes a user's name, `me` (whoever writes) or `""`/`null`/`none` (no one); a leading `@` and the case don't matter. |
 | `due_date` | `"YYYY-MM-DD"` / `null` | Deadline |
 | `start_date` | `"YYYY-MM-DD"` / `null` | Start date (see Dates) |
@@ -306,17 +306,18 @@ A setting is kept where it belongs: a list's own with the list, how a page looks
 | Tags of a new task (on request) | `new` | the list's | Comma-separated; empty: the single tags the view shows |
 | Keep tasks (on request) | `keep` | the list's | New tasks there are keep tasks |
 | Hide when sharing (on request) | `noshare` | the list's | The list is left out of the list switcher in sharing mode |
+| Leave out of My tasks (on request) | `home` | the list's | `off`: its tasks are not in My tasks nor in the Tasks links' count (Lists → My tasks). Offered on a list that is yours: a private one, without users any |
 | Shows only the tags (on request: Filter by tag) | `tag` | the page's embed | The filter: `a,b` both, `a\|b` either, `-a` without |
 | Shows only the tasks of (on request: Filter by person; with users) | `assignee` | the page's embed | `me` whoever looks, a user's name, `a\|b` either, `none` no one's, `-a` not theirs |
 
-An embed of no list (`[[tasks: tag=work]]`) has all of them but the pin, Keep tasks and Hide when sharing, written in its `[[tasks: …]]`.
+An embed of no list (`[[tasks: tag=work]]`) has all of them but the pin, Keep tasks, Hide when sharing and Leave out of My tasks, written in its `[[tasks: …]]`.
 All tasks (`/tasks`) has Opens on, Plan, WIP limit, Tab names and Tags of a new task, for everyone.
-My tasks (`/tasks?mine=1`) has Opens on, Plan, WIP limit and Tab names, yours alone, and with users **Hide unassigned tasks** (Lists → My tasks); what a new task gets there (its tags, keep) is its list's, the first pinned one's.
+My tasks (`/tasks?mine=1`) has Opens on, Plan, WIP limit and Tab names, yours alone.
 
 **It shows what is changed most**: Opens on, Plan and, on a list, the pin.
-The other fields show only when set as the dialog opens (`[data-field]`, `showField` in `settingsForm`); for the rest a line of quiet words under the fields offers each, "+ WIP limit", "+ Tab names", "+ Tags of a new task", "+ Keep tasks", "+ Hide when sharing", "+ Filter by tag", "+ Filter by person" (`.task-add-fields`, as in the task dialog): a click shows the field and puts the cursor in it (a box is ticked).
+The other fields show only when set as the dialog opens (`[data-field]`, `showField` in `settingsForm`); for the rest a line of quiet words under the fields offers each, "+ WIP limit", "+ Tab names", "+ Tags of a new task", "+ Keep tasks", "+ Hide when sharing", "+ Leave out of My tasks", "+ Filter by tag", "+ Filter by person" (`.task-add-fields`, as in the task dialog): a click shows the field and puts the cursor in it (a box is ticked).
 **The pin** is a button at the title's right, with the list switcher's pin (`.task-settings-pin`, `aria-pressed`): "Pin" on a list you haven't pinned, pressed and "Pinned" on one you have; a click pins or unpins.
-Which pinned list is first, and so takes new tasks, is said in the list's ⋯ menu (**Move first**), not here.
+Which pinned list's pill is first is said in the list's ⋯ menu (**Move first**), not here.
 The line above Save says whose the settings are: the list's, for everyone (or "which only you see" for a private list), the page's, and that the pin is yours.
 
 **Where it writes** (`data-settings-*` on `.tasks-app`, from `buildTasksEmbed`: `-page`, `-index`, `-raw` and `-embed` for an embed's `[[tasks: …]]` on a page, as written there; `-list`, `-list-set` and `-pin` for the list shown: its ref, its own settings as JSON, and how you pinned it):
@@ -328,7 +329,6 @@ The line above Save says whose the settings are: the list's, for everyone (or "w
 - **All tasks** (`/tasks`): the shared registry's `all`, `"all": {"view": "open", "limit": "5"}` (`allTasksParams`), for everyone.
   It has no pin and no filter (`allSettingKeys`).
 - **My tasks** (`/tasks?mine=1`): your registry's `mine`, `"mine": {"view": "focus", "limit": "5"}` (`mineParams`, `setMineParams`, `mineSettingKeys`; without users the shared registry's), for you alone.
-  `"unassigned": "hide"` there is Hide unassigned tasks (a box of the dialog, among the fields asked for; only where tasks can be assigned to you, else a 400).
   `"mail": "off"` there turns off the mail about a task assigned to you (**Mail me when a task is assigned to me**, a box that is ticked unless turned off, shown where Zone could mail you: `data-settings-mail`; Assigning tasks in `docs/spec/users.md`).
   It has no pin and no filter, and the dialog says "For My tasks: yours alone."
   Unset, it opens on Focus with Plan on and no limit.
@@ -370,11 +370,12 @@ After a save the page reloads, and what the browser tab remembered (the active t
   With users, a task assigned to someone who can't be given tasks here comes in as no one's, and the toast says how many ("…; 2 were assigned to people who are not users of this wiki").
   A file that holds no list of tasks is refused at once, in a notice.
   They go into the list the menu was opened in, whatever list they were exported from, so a `shop` export imported into `groceries` shows up there, and they get the tags a new task there would (`new`, or the single tags the view shows); their own tags stay.
-  On All tasks (and a tag's embed) each goes where its own list says: the list of that name here, when there is one as private as the task was; else into no list.
+  On All tasks (and a tag's embed) each goes where its own list says: the list of that name here, when there is one as private as the task was; else a private task into your Inbox, and a shared one, with users, into the shared list `general` (made for it; without users into the Inbox).
+  Imported on the Inbox's view, every task goes into the Inbox: with users yours alone, without an assignee.
   Closed tasks arrive closed.
   **A task keeps its id**, and one whose id is in the wiki already is skipped: importing the same file twice adds nothing, and a file exported here brings back only what was deleted since (an id that isn't a UUID is replaced).
   So a list can't be duplicated within one wiki this way.
-  A task exported private stays private, wherever it is imported: into a shared list it goes to your list `private` instead (made for it when you have none); into a private list of yours every imported task is private, as a new one is.
+  A task exported private stays private, wherever it is imported: into a shared list it goes to your Inbox instead; into a private list of yours every imported task is private, as a new one is.
   **A tag of your own** (the dialog's field, optional; `also`): the imported tasks get it too, on top of the list's, to find the batch again later (`from-anna`); cleaned like any tag, several comma-separated.
   One commit, "Import N tasks".
   The notice says what happened ("Imported 12 tasks; 3 already here.") and has **Undo** (also Ctrl+Z, for the few seconds it shows; `showUndo`): the tasks just added are deleted again (`/api/tasks/batch-delete` with the `ids` the import answered).
@@ -410,7 +411,7 @@ Each with a dark-mode value.
 
 ### Interaction
 
-- **Filter field** (`#task-filter-search`, `TasksCore.parseFilter`/`matchesFilter`): `#words` filter by tag (all must match; `#a|b` = any), `-#word` excludes a tag (`-#a|b`: neither), `list:shop` shows the tasks in that list (`list:a|b` either, `-list:shop` not in it, `list:none` in no list; a list is no tag, so `#shop` doesn't find it), `!high` (or `!`) and `!low` show the tasks of that importance, the rest searches title and description.
+- **Filter field** (`#task-filter-search`, `TasksCore.parseFilter`/`matchesFilter`): `#words` filter by tag (all must match; `#a|b` = any), `-#word` excludes a tag (`-#a|b`: neither), `list:shop` shows the tasks in that list (`list:a|b` either, `-list:shop` not in it, `list:inbox` in no list, the Inbox, as `list:none` says too; a list is no tag, so `#shop` doesn't find it), `!high` (or `!`) and `!low` show the tasks of that importance, the rest searches title and description.
   `/` focuses it, `#` focuses it and starts a tag.
   Its tooltip lists the syntax (with users the `@` words too).
   While it holds something of yours (text, or a chip the page didn't set) an **×** at its end (`.chip-input-clear`, "Clear the filter") empties it: the text and your chips go, a page's locked chips stay, and the cursor stays in the field.
@@ -451,14 +452,14 @@ Each with a dark-mode value.
   The **⋯ menu** of a card in the selection (its button, a right-click, which then keeps the selection, or Shift+F10) offers the same for all of them, titled "N tasks" (`runSelectionAction`).
   With several task lists on a page only the active one's bar shows (`claimInstance`).
   At ≤640px the bar spans the bottom edge in place of the phone tab bar (hidden while it shows): "N selected", All and ✕ on top, the actions as buttons sharing the width under them (on a second row when one doesn't hold them), ≥44px tall; the page end and toasts keep clear of it.
-- **Moving tasks to a list** (`openBulkListModal`, `.bulk-list-modal`; the selection bar's **List…**, **Move to list…** in a card's ⋯ menu, for the selection or that one task, and the **m** key on the selected tasks): the dialog, "Move 3 tasks to a list", lists every list you see (A–Z by name, a private one with 🔒, the shared one of a name you have a private list of as "name (shared)"), **No list** and **New list…**.
+- **Moving tasks to a list** (`openBulkListModal`, `.bulk-list-modal`; the selection bar's **List…**, **Move to list…** in a card's ⋯ menu, for the selection or that one task, and the **m** key on the selected tasks): the dialog, "Move 3 tasks to a list", lists every list you see (A–Z by name, a private one with 🔒, the shared one of a name you have a private list of as "name (shared)"), **Inbox** (with 🔒 with users) and **New list…**.
   A click on a row moves the tasks at once (↑/↓ go through the rows, Enter picks, Esc or Cancel leaves).
   The move sets each task's list in one `batch-update`; its tags stay.
   The row of the list every selected task is in is ticked and has the focus; a list only some are in says how many ("1 of 3").
-  **A task is as private as its list** (Lists → Private lists): the rows of your private lists are off while a shared task is selected ("a shared task stays shared"), and a row that would take a private task to a shared place says so ("shares it with everyone") and sends `share`.
-  One undo puts every task back in its list ("3 tasks moved to list “work”", "3 tasks taken out of their lists"), but those that were private and are shared now: that can't be taken back, so a move of only such tasks has a notice and no undo.
+  **A task is as private as its list** (Lists → Private lists): the rows of your private lists, and with users the Inbox's, are off while a shared task is selected ("a shared task stays shared"), and a row that would take a private task to a shared list says so ("shares it with everyone") and sends `share`, and with it `assignee`, you: a task of yours that you file stays in your My tasks (assign it to no one, or someone, afterwards).
+  One undo puts every task back in its list ("3 tasks moved to list “work”", "3 tasks moved to the Inbox"), but those that were private and are shared now: that can't be taken back, so a move of only such tasks has a notice and no undo.
   The selection stays, as after Tag…; in a list's own view the moved tasks leave it.
-  **New list…**, the last row, makes a list and moves the tasks into it, so the dialog is there with no list too (then No list, ticked, and New list…).
+  **New list…**, the last row, makes a list and moves the tasks into it, so the dialog is there with no list too (then Inbox, ticked, and New list…).
   The rows give way to the list's name (`.bulk-list-form`, `#bulk-list-name`), **Create and move** (or Enter) and **Back**; a name that won't do is said under it and the dialog stays ("There is a list #shop already").
   With users it asks **Private: only you see it and its tasks** (`#bulk-list-private`): off and not to be ticked while a shared task is selected, ticked when every selected task is private, so no task is shared by not looking; unticked with a private task selected, a line says that everyone will see it and that it can't be made private again.
   The list is made as New list… on the Tasks page makes it (`POST /api/tasks/lists`, `apiNewList`: `createListOp`), in a commit of its own before the move's, and the page stays: every task list on it knows the new list at once (the `zone:list-made` event, `tasks.js`), and on `/tasks` the list switcher is drawn again with it (`js/listsrow.js`).
@@ -526,7 +527,7 @@ Each with a dark-mode value.
   Centred with `inset: 0; margin: auto` and **no transform** (a transform would clip `position: fixed` popups like the date picker), scrollable, sticky action bar.
   At ≤640px full screen.
   **The fields**: Title, Description, Tags, then one line of small boxes that wraps (`.task-props`), each with its name inside, in grey before its value (`.task-prop`, a `<label>`, so a click anywhere in it reaches the field): List (while there are lists), Due, Start and Importance, which every task shows.
-  **List** (`#task-edit-list`, `fillLists` in `js/taskmodal.js`) is one choice: the lists you see, A–Z as the server names them (a private one with 🔒, the shared one of a name you have a private list of as "name (shared)"), No list, and last **New list…**. New list… asks for a name in a small dialog over this one (`.list-new-modal`, `openNewList`; with users **Private: only you see it and its tasks**, off for a shared task and ticked when the task is in a private list now) and makes the list at once (`POST /api/tasks/lists`, pinned as one made in the dialog that moves tasks: Moving tasks to a list); the field then names it, and the task goes into it with Save. A name that won't do is said in that dialog; Cancel or Esc leaves the field as it was. The field shows once the wiki has a list you see: a first list is made with New list… on the Tasks page or Move to list…. A new task starts in the list of the view it was made in, else in your first pinned list; choosing another moves the task. A task is as private as its list (Lists → Private lists): for a shared task your private lists are off, and under the fields a line says who sees the task: "Private: only you see this task." in a private list, and for a private task about to leave it "Everyone who uses the wiki will see and change this task. It can’t be made private again."; Save then sends `share`.
+  **List** (`#task-edit-list`, `fillLists` in `js/taskmodal.js`) is one choice: the lists you see, A–Z as the server names them (a private one with 🔒, the shared one of a name you have a private list of as "name (shared)"), first **Inbox** (with 🔒 with users, where it is off for a shared task), and last **New list…**. New list… asks for a name in a small dialog over this one (`.list-new-modal`, `openNewList`; with users **Private: only you see it and its tasks**, off for a shared task and ticked when the task is in a private list now) and makes the list at once (`POST /api/tasks/lists`, pinned as one made in the dialog that moves tasks: Moving tasks to a list); the field then names it, and the task goes into it with Save. A name that won't do is said in that dialog; Cancel or Esc leaves the field as it was. The field shows once the wiki has a list you see: a first list is made with New list… on the Tasks page or Move to list…. A new task starts in the list of the view it was made in, else in the Inbox; choosing another moves the task. A task is as private as its list (Lists → Private lists): for a shared task your private lists are off, and under the fields a line says who sees the task: "Private: only you see this task." in a private list or your Inbox, and for a private task about to leave for a shared list "Everyone who uses the wiki will see and change this task. It can’t be made private again."; Save then sends `share`. Choosing a shared list for a task of yours also puts your name in Assignee, once (`sharedByEdit`): it stays in your My tasks unless you take the name off.
   **The rest shows only when set** as the dialog opens: with users Assignee (a field of its own after Tags; Assigning tasks in `docs/spec/users.md`), Keep after done, and Repeat with "Every 2 weeks" and From done (the two only once a repeat is chosen). Repeat comes last, on a line of its own (`.task-prop-group`), so the two fields a chosen repeat adds come beside it and Repeat stays where it was clicked.
   Under the boxes a quiet line offers the ones not shown (`.task-add-fields`: "+ Assignee" with users, "+ Repeat", "+ Days before due", "+ Keep after done"): a click shows the field and goes to it (`showField`), and ticks Keep, since asking for the box is asking for that.
   A field stays for as long as the dialog is open, also emptied again; a line with nothing left to offer is gone.
@@ -719,21 +720,32 @@ Cards mark keep tasks with ⟲ (`.task-keep`).
 
 ### Lists
 
-**A list is a place a task is in; a tag sorts tasks.** A task is in one list, or in none, and has any number of tags.
+**A list is a place a task is in; a tag sorts tasks.** A task is in exactly one list and has any number of tags.
+Five sentences say all of it:
+
+1. A task is in one list.
+2. A list is yours (private) or everyone's (shared); everyone has one list built in, the **Inbox**, where a new task goes unless it is made in a list or names one.
+3. A shared task can be assigned to one person.
+4. **My tasks** is what is yours: the tasks in your own lists, and the shared tasks assigned to you.
+5. A pin is a shortcut: a pill in your list switcher.
+
+Without users there is one person, and every list is theirs: the Inbox is the tasks without a list, and My tasks is every task.
+
 A list has a name, an entry in the list switcher with its counts (below), settings of its own (the tab it opens on, a WIP limit, tab names, whether new tasks are keep tasks …), and it is shared or private: a private list and the tasks in it are yours alone.
 You make one with **New list…** on the Tasks page (or in the dialog that moves tasks to a list, or in a task's List field), put a task in it with the **List** field of its dialog (or **Move to list…**), and show it on any page with `[[tasks: list=<name>]]`.
 A page shows a list; it doesn't make one: editing the embed away, or deleting the page, changes nothing of the list, and a list is deleted only by **Delete…**, which asks where its tasks go.
 Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged so, whatever list it is in.
 
-(Until 2026-11 a list was a tag a page declared with `[[tasks: list=<tag>]]`: a task could be in two, a list ended with its page, and a task moved by a change of its tags. A wiki from then is taken over once, when Zone starts: The migration, below.)
+(Until 2026-11 a list was a tag a page declared with `[[tasks: list=<tag>]]`: a task could be in two, a list ended with its page, and a task moved by a change of its tags. A wiki from then is taken over once, when Zone starts: The migration, below.
+Later in 2026-11 came the Inbox: until then a task could be in no list, which with users was everyone's; a pin also put a list's tasks in My tasks, and the first pinned list took new tasks. The Inbox's migration, below.)
 
 - **The registry** (`go/internal/taskfiles/lists.go`; `ListsName`): the lists are in `lists.json` beside the task files, the shared ones in `_tasks/lists.json`, a user's private ones in `private/<user>/_tasks/lists.json`, read and written under the task files' lock, atomically, committed to git.
 
   ```json
   {
-    "version": 1,
+    "version": 2,
     "lists": [
-      {"name": "shop", "view": "focus", "limit": "8", "keep": "1", "labels": "Catalogue,Shopping"},
+      {"name": "shop", "view": "focus", "limit": "8", "keep": "1", "labels": "Catalogue,Shopping", "home": "off"},
       {"name": "task"}
     ],
     "pinned": ["task", "shop"],
@@ -742,118 +754,117 @@ Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged
   }
   ```
 
-  Each list is one line: its name and its settings (`view`, `limit`, `plan`, `keep`, `labels`, `new`, `noshare`), their values text as an embed writes them, a setting that isn't set no key.
+  Each list is one line: its name and its settings (`view`, `limit`, `plan`, `keep`, `labels`, `new`, `noshare`, `home`), their values text as an embed writes them, a setting that isn't set no key.
   So a list can be added or changed by hand in one line, and a commit shows the list that changed.
-  `pinned` is whose registry it is: a user's own pins in theirs, the wiki's in the shared one, the first being where a new task goes (Pins, below); `all` (the shared one) the settings of All tasks, `mine` those of My tasks (a user's own; without users the shared one's).
+  `pinned` is whose registry it is: a user's own pins in theirs, the wiki's in the shared one (Pins, below); `all` (the shared one) the settings of All tasks, `mine` those of My tasks (a user's own; without users the shared one's).
   (Until 2026-11 `"mine": true` in a user's registry narrowed their Pinned to their own tasks; it reads as no settings and is written back no more.)
   It is read leniently (a value of another kind as text, a list without a name left out, a name twice once, unknown keys kept and written back A–Z) and written in one format; a file that is there but unreadable refuses every write (`ReadListsStrict`: never an empty registry, which would drop every list).
-  `version` says that the wiki's lists are kept here: a shared registry without it (or none) is a wiki to take over (The migration).
-- **A task's list** is its `list`, the list's name (Task fields): `"list": "shop"` after its tags, no key when it is in none.
-  The task's file says which registry the name is in: a task in a user's files is in one of their private lists, a task in the shared files in a shared one (`taskList`).
+  `version` says that the wiki's lists are kept here: a shared registry without it (or none) is a wiki to take over (The migration), one with `1` a wiki from before the Inbox (The Inbox's migration).
+  A registry keeps the version it has when it is written; a new one gets the current one, 2.
+- **A task's list** is its `list`, the list's name (Task fields): `"list": "shop"` after its tags, no key when it is in the Inbox.
+  The task's file says which registry the name is in: a task in a user's files is in one of their private lists (or, without `list`, in their Inbox), a task in the shared files in a shared one (`taskList`).
   So a name has to be unique only within one registry, and nobody learns another user's names from it.
 - **Names** (`cleanList`, `checkListName`): one word, lowercase, spaces `-`, a leading `#` dropped, at most 60 characters, none of `[ ] , | = / "` (they mean something in an embed or a ref).
-  No list can be called `none`: that names the tasks in no list (No list, below).
+  No list can be called `inbox` or `none`: they name the Inbox (below).
   A name is unique among the shared lists and among one user's private lists.
   A user can't make a list by a name of one they see ("There is a list #shop already"), private or shared; they can still end up with a private and a shared list of one name (the migration, or someone making the shared one later, who doesn't see theirs).
   For them the plain name is their own list and the shared one is **`shared/<name>`**: that is a **ref**, how a list is named to one user (`ListInfo.Ref`, `taskLists(user)`, `resolveList`): in URLs (`/tasks?list=shared/gifts`), in pins, in the API's and the tools' `list`, in the browser.
   On a page, `[[tasks: list=gifts]]` is the shared list unless the page is in your private folder (`listOnPage`), so a shared page shows everyone the same list.
-- **Private lists** (with users; `docs/spec/users.md`, Private tasks): **private and shared are said of lists, not of tasks**. A task in a private list is its user's alone and is kept in their files; every other task, in a shared list or in none, is shared.
-  A new task may start in a private list.
-  **A shared task never goes into a private list** ("A shared task stays shared": others have seen it), by any route or tool.
-  **A private task leaves for a shared place** (a shared list, or no list) only when the write says `share`, which the browser sends after telling you that everyone will see it; its History then says `shared`.
+- **Private lists** (with users; `docs/spec/users.md`, Private tasks): **private and shared are said of lists, not of tasks**. A task in a private list, or in your Inbox, is yours alone and is kept in your files; a task in a shared list is shared.
+  **With users a shared task is always in a list**: there is no place that is everyone's and nobody's.
+  A new task may start in any list.
+  **A shared task never goes into a private list nor into an Inbox** ("A shared task stays shared": others have seen it), by any route or tool.
+  **A private task leaves for a shared list** only when the write says `share`, which the browser sends after telling you that everyone will see it; its History then says `shared`.
+  Out of a private list into your Inbox, or the other way, it stays private, and nothing is asked.
   A private list can be made shared with **Make shared…** (below), its tasks with it; a shared one never private.
   Every reader asks `canSeeList` (through `taskLists(user)`, which gives only the lists a user sees), every write to a list or to a task in it `canWriteList` (`go/access.go`): today whoever sees a list and may write tasks may change it; members or roles per list would change those two and nothing else.
+- **The Inbox** (`inboxRef`, `isInbox`, `inboxOwner` in `go/tasklists.go`; `inboxView` in `tasks.js`): the list every user has without making it: **the tasks without a `list`**.
+  **A new task goes there unless it is made in a list's view or names a list**: from `c t`, New task, My tasks' **+ New**, an assistant's `create_task`, `POST /api/tasks` without `list`.
+  With users it is yours alone (the task is kept in your files, `private/<user>/_tasks/`): what you capture is seen by nobody until you file it.
+  Without users it is the wiki's: the tasks in no list, in the shared files, as they always were.
+  - **Filing** is moving a task to a list: the List field, **Move to list…**, `m`. Into a shared list that shares it (`share`), and the browser then **assigns it to you** (the dialog shows the name, to be taken off; the move dialog sends it), so what was yours stays in your My tasks unless you say otherwise.
+  - **Its view** is `/tasks?list=inbox`, headed **Inbox** (with 🔒 with users), the second pill of the list switcher; a line under the heading says what it is for.
+    It is All tasks narrowed: All tasks' settings (the tab, Plan, the limit), no settings dialog of its own, a locked chip **Inbox** in the filter field (the filter word `list:inbox`), and a new task made there is in the Inbox.
+    A task filed from there leaves the view, with the notice a list's view has.
+    On a page, `[[tasks: list=inbox]]` shows whoever looks their own.
+  - **It can't be renamed, deleted, shared or pinned**, and has no entry in a registry.
+  - **`none`** names it too (`list=none`, `list:none`, `search_tasks(list="none")`): until 2026-11 that was the view of the tasks in no list.
+    In a wiki that has a list called `inbox` or `none` from before the names were kept, the name is that list's (the Inbox's migration renames a list `inbox`).
+  - **Not for a viewer** among users (they make no task), nor in sharing mode, where what is private isn't shown.
+  - **A shared task that loses its list** (with users) goes to the shared list **`general`**, made for it when there is none (`generalListName`, `ensureGeneralLocked`): a list deleted without naming another, a restored or imported task whose list is gone, and the tasks that were in no list before the Inbox. It is a list like any other.
 - **My tasks** (`/tasks?mine=1`; `mineFilter`, `inMine` in `go/tasklists.go`, `TasksCore.inMine` in the browser): your home view, the one the Tasks links open and their badge counts.
-  It shows every open task you see, **except one that is assigned to someone else, or in a list you haven't pinned unless it is assigned to you**.
-  So it holds what is assigned to you, wherever it is; what is in your pinned lists and nobody else's; and what is in no list and nobody else's.
-  Two ways to get a task off your plate: give it to someone, or file it in a list you don't follow.
-  - **Assigned to someone else** means to a user a task can be given to, other than you.
-    An assignee who is no user anymore (or disabled, or a viewer now) is no one, as `@none` reads it.
-  - **Assigned to you** is the task's `assignee`, not `@me` as the filter reads it, which also matches every private task: **a private task follows its list's pin**, or an unpinned private list could never be put away.
-  - **Without users**, and for one no task can be given to (a viewer; `mineAssigns`), no task is anyone's: My tasks is the pinned lists and the tasks in no list.
+  It shows **what is yours: the tasks in your own lists (your Inbox, your private lists), and the shared tasks assigned to you**, wherever they are.
+  - **An unassigned shared task is its list's**, not yours: it is in the list's view and in its pill's counts, and the list's heading says how many there are ("3 unassigned", a link to them; A list's backlog, below). Taking one (assigning it to yourself: `a`, Enter) puts it in My tasks.
+    So My tasks is as short for one of a hundred as for one alone, and nothing is in everyone's.
+  - **Assigned to you** is the task's `assignee`. An assignee who is no user anymore (or disabled, or a viewer now) is no one.
+  - **Leave out of My tasks** (`home=off`, a list's setting: List settings → "+ Leave out of My tasks"; `ListInfo.LeftOut`): a list of your own whose tasks don't belong there, a catalogue of staples, a someday list. Its tasks are in its own view only, and not in the Tasks links' count.
+    It counts for a list that is yours (a private one; without users any); a shared list's tasks are in My tasks by their assignee, so the dialog doesn't offer it there.
+  - **Without users**, and for one no task can be given to (a viewer; `mineAssigns`), every list is the user's own: My tasks is every task but those of a list left out.
   - **With no list in the wiki** it is every task, and there is no such view: `/tasks?mine=1` goes to `/tasks`, where the Tasks links go then.
-  - **One task app**: the cards' list chips say where each task is (a task in no list has none), and a new task there goes into your first pinned list, with the tags and keep that list gives new tasks (into no list with none pinned).
+  - **One task app**: the cards' list chips say where each task is (a task in the Inbox has none), and a new task there goes into the Inbox.
     A task that leaves by a change of its assignee or its list gets the notice a list's view gives ("Saved; it no longer shows here.").
-  - **Under the heading** a line says what it holds: "Your pinned lists (#task, #shop) and the tasks in no list.", the lists and "no list" as links;
-    where tasks can be assigned to you, "What is yours or nobody's in your pinned lists (#task, #shop) and in no list, and what is assigned to you elsewhere."
-    Its **Backlinks** are the pages that embed any pinned list, once each (`pinnedSources`).
+  - **Under the heading** a line says what it holds: "Your own tasks and what is assigned to you.", without users "Every open task.", and the lists left out, as links (`leftOutLinks`).
   - **Its settings are its own**, and yours (Settings, above): the tab, Plan, the limit, the tabs' names.
-  - **The server and the browser have the same rule**: the page gets the pinned lists and whether assignment counts (`data-init-lists`, `data-init-mine`: `assign`, `own` with unassigned tasks hidden, or `lists`), the routes take the scope as `?mine=1` (the closed tasks' count and years, the export), and one table of cases runs through both (`go/testdata/mine_cases.json`).
+  - **The server and the browser have the same rule**: the page gets the lists left out and whether assignment counts (`data-init-out`, `data-init-mine`: `assign` or `lists`), the routes take the scope as `?mine=1` (the closed tasks' count and years, the export), and one table of cases runs through both (`go/testdata/mine_cases.json`).
   - **On a page**: `[[tasks: mine=1]]` shows it to whoever looks.
-  - **Zone assigns nothing by itself**: a new task from `c t`, New task or an assistant's `create_task` goes into the first pinned list with no assignee. It is in its maker's My tasks, and in that of everyone who pinned the list, until someone takes it; who wants a capture to be theirs alone puts a private list first, or hides unassigned tasks (next).
-  - **Unassigned tasks: shown or hidden** (`mineOwn`; `"unassigned": "hide"` in your registry's `mine`; **Hide unassigned tasks** in My tasks' settings dialog, with users, for whoever tasks can be assigned to): in a team an unassigned task is the backlog's normal state, and a badge that counts everyone's unclaimed work says little about yours.
-    Hidden, My tasks is **what is assigned to you, wherever it is, and your private tasks in the lists you pinned**: a shared task that is nobody's is out of the view and out of the Tasks links' count. It stays in its list's own view, whose pill counts everyone's tasks, and under No list.
-    The line under the heading says so: "What is assigned to you, and your private tasks in your pinned lists (#team). Unassigned tasks are hidden."
-    **A task you add without saying where is then yours** (`newTaskMine`; `data-new-mine` on every task app of yours, `mineNew` in `js/taskmodal.js`): from `c t`, New task, My tasks' or All tasks' **+ New**, or an assistant's `create_task` without `list` and `assignee`, a task that goes into a shared list or into none is assigned to you, so a capture is in your My tasks; the dialog shows your name in Assignee, to take out. Not in a private list (its tasks are yours already), not in a view of one list or of No list (a task added there is the list's), and not through `POST /api/tasks`, which says everything itself.
-    The setting is each user's own: for another user the same tasks show as before.
-    (It takes the place of Only my tasks in Pinned, without that setting's special cases: one pinned list is no different, and a private task follows its list's pin.)
-  - (Until 2026-11 the Tasks links opened the pinned lists as one, called Pinned and before that My lists, at `/tasks?pinned=1`, which answers My tasks now; with one pinned list they opened that list, with none every task.
-    Tasks in no list were out of it and out of the badge, and the More pill counted their due ones.
-    **Only my tasks in Pinned**, a setting of each user's, narrowed it to `assignee=me` and assigned new tasks to their maker; the rule above took its place.)
+  - **Zone assigns nothing by itself**; the browser proposes you when you file a task of your own into a shared list.
+  - (Until 2026-11 My tasks was every task except one assigned to someone else, or in a list you hadn't pinned unless it was assigned to you: every unassigned task of a pinned list, and of no list, was in everyone's.
+    Before that the Tasks links opened the pinned lists as one, called Pinned and before that My lists, at `/tasks?pinned=1`, which answers My tasks now.)
+- **A list's backlog** (a shared list, with users): under the list's heading, **N unassigned** (`.tasks-unassigned`; `tasksPageView.Unassigned`) links to the list filtered by `@none` (`/tasks?list=<ref>&assignee=none`): the open tasks no one has, a former assignee's included.
+  A list left out of My tasks says so there too.
 - **The list switcher** (`.tasks-places` in `templates/tasks_page.html`, `taskPlaces` and `taskMore` in `go/tasksembed.go`, `js/listsrow.js`): `/tasks` opens with a row of pills above its heading,
   on the page's white sheet with it, looking as the module switcher at the top of the page does (`.tasks-places-group`: one white capsule with a border, the pills inside it without one, in its type and height, the current one shaded).
-  **My tasks is the first pill; a pinned list is a pill; a list that isn't pinned is under More.**
-  In order: **My tasks** (above), whenever there is a row, so with one pinned list or none too: it has one place;
+  **My tasks is the first pill, the Inbox the second; a pinned list is a pill; a list that isn't pinned is under More.**
+  In order: **My tasks** (above), whenever there is a row;
+  **Inbox** (`data-place="inbox"`; for who has one, `hasInbox`: with a lock with users);
   then **the pinned lists** in their order,
   then **More ▾**.
-  The pinned lists carry a pin (`.tasks-place-pin`, tooltip "Pinned list #<name>"),
-  the first of several pinned lists a plus beside it (`.tasks-place-first`, tooltip "Pinned list #<name>: new tasks go here"), a private list a lock (tooltip "… (only you see it)").
+  The pinned lists carry a pin (`.tasks-place-pin`, tooltip "Pinned list #<name>"), a private list a lock (tooltip "… (only you see it)").
   - **More** (`.lists-more`, a `<details>`; its pill is the summary, `.lists-more-btn`): a click opens a panel under it (`.lists-more-panel`) of links, a line each:
     **each list you see and haven't pinned**, A–Z by name (your own before the shared one of that name), a private one with a lock,
-    then, while open tasks are in no list, **No list** (`/tasks?list=none`, with its counts; No list, below),
-    then **All tasks** (`/tasks`: every task, in whatever list or in none).
-    No counts on the lists in it, and **no number on the pill**: what is due under More and yours to do is in My tasks.
+    then **All tasks** (`/tasks`: every task you see, in whatever list).
+    No counts on the lists in it, and **no number on the pill**: what is yours to do is in My tasks.
     Escape and a click elsewhere close it.
-    **It names the view the page shows when that is one of its own**: on an unpinned list the pill reads that list's name, on `/tasks` (and a tag's view, which is All tasks with a filter) "All tasks", on `/tasks?list=none` "No list", and it is the shaded one; else it reads "More".
+    **It names the view the page shows when that is one of its own**: on an unpinned list the pill reads that list's name, on `/tasks` (and a tag's view, which is All tasks with a filter) "All tasks", and it is the shaded one; else it reads "More".
     It is there for a viewer and in sharing mode too (the page's ⋯ menu isn't), so it is no menu of the page's but links.
     On a narrow screen the panel is as wide as the row.
   - **Finding a list** (`.lists-more-filter`, with `moreFilterFrom` = 8 lists or more under More): a field at the panel's top, focused when it opens; what is typed leaves the lists whose name has it (All tasks stays), and Enter opens the first.
   - **A list new to you** (`.lists-more-new`; `zone_lists_seen` in the browser's `localStorage`): a list under More that this browser hasn't shown before, so one someone else made, or an assistant (a list you make in the browser is pinned), has "new" beside its name, and More a dot (`.has-new`) until it is opened.
     The first visit knows every list; a list is known once it was a pill, was under More when More was opened, or was the page's view.
     It is the browser's memory, not the wiki's: another browser marks it again.
-  - **Dragging the pills** (`data-reorder` on the row, for who may pin; `POST /tasks/pin-order`, `pinOrderOp`): a pinned list's pill dragged with the mouse to another place among the pinned lists puts the pins in that order, in one commit ("Reorder the pinned lists"); the page reloads, since the first pinned list is where new tasks go.
+  - **Dragging the pills** (`data-reorder` on the row, for who may pin; `POST /tasks/pin-order`, `pinOrderOp`): a pinned list's pill dragged with the mouse to another place among the pinned lists puts the pins in that order, in one commit ("Reorder the pinned lists").
     Let go outside the row, it goes back.
-    My tasks and More stay where they are.
+    My tasks, the Inbox and More stay where they are.
     With a finger there is no dragging (it scrolls and taps): **Move first** in the list's menu does it.
-  The heading names what is shown: **List: <name>** (with 🔒 for a private one), **My tasks** or **All tasks** (the window's title likewise).
+  The heading names what is shown: **List: <name>** (with 🔒 for a private one), **My tasks**, **Inbox** or **All tasks** (the window's title likewise).
   Every list's pill or link goes to `/tasks?list=<ref>`: the list with its settings,
   and as its **Backlinks** every page that embeds it (`listPages`: any `[[tasks: list=<name>]]` outside code on a page you may see that shows this list, A–Z by title; at the end, in the right column on big screens and as the breadcrumb's `← N` chip, as on a page view).
   Each pill but More carries counts (due today or overdue, in Focus): My tasks those the Tasks module link has, a list its own (`countTasks` over the list: everyone's tasks in it);
-  the current one is shaded (`aria-current`): My tasks on `?mine=1`, the list on `?list=<ref>`, More for a view under it, none for a name no list has.
+  the current one is shaded (`aria-current`): My tasks on `?mine=1`, the Inbox on `?list=inbox`, the list on `?list=<ref>`, More for a view under it, none for a name no list has.
   **Only `/tasks` has it**: a page that embeds a list shows the list, as any embed does, and no switcher, so the Tasks module and the wiki's pages stay apart; the pages are a list's Backlinks.
   With no list there is no switcher.
   Another user's private list is not in it; in sharing mode a list that hides when sharing (`noshare`) is left out of the pills and of More (on its own URL More then reads "More"), and the counts are hidden as on the module links.
-  `js/chrome.js` keeps the counts current with the Tasks link's (`refreshDueBadge`: `GET /api/tasks/due-count?places=1` adds `places`, each pill's counts by its key: `list:<ref>`, `mine`, and `none` for No list's entry).
+  `js/chrome.js` keeps the counts current with the Tasks link's (`refreshDueBadge`: `GET /api/tasks/due-count?places=1` adds `places`, each pill's counts by its key: `list:<ref>`, `mine`, `inbox`).
   The pills wrap onto more lines on a narrow screen and are finger-sized under `(pointer: coarse)`.
   (Until 2026-11 every list was a pill, pinned or not, with an **All** pill last.)
-- **Pins** (`pinnedLists`, `pinListOp`; `POST /tasks/pin-list` with `list` and `pin`: `1`, `first` or `0`): a pin says "I follow this list": the list is a pill of the list switcher, and its tasks are in My tasks and in the Tasks links' count (those that aren't someone else's).
-  **The first pinned list takes new tasks** made where no one list is in view: New task and `c t` add a task there (see Modules), My tasks' **+ New** does, and an assistant's `create_task` puts one there.
-  Its pill says so, with a plus, when several are pinned.
-  **With nothing pinned, and users, a new task goes into your private list `private`** (`fallbackList` in `go/tasklists.go`; `defaultListOf`): a task nobody chose a place for isn't everyone's, since a private task can be shared later and a shared one never made private.
-  The list needn't be there: it is a choice of the List field at once, and the first task into it makes it, in the task's commit (`ensureFallbackLocked`, in `createTask`).
-  **From then on it counts as pinned while nothing else is** (`standingPin`, in `pinnedLists`): it is a pill, its tasks are in My tasks, and what you capture is never out of your home view.
-  Pinning another list makes it an ordinary pin, first in the order; unpinning it while it is the only one is refused ("Your list #private stays pinned while no other list is …"), and its ⋯ menu has no Unpin then (`PinStays`).
-  **No list is then something you choose**: the List field's No list, a task made on the No list view, an assistant's `list: ""`.
-  **A new task with an assignee doesn't go into a private list nobody chose**: a task given to someone is shared work, and a private task is nobody's but yours, so it is in no list.
-  That holds for the list `private` of one who pinned nothing and for a private list pinned first alike.
-  In the dialog, while the List field still holds the private default list it put there (`autoList` in `js/taskmodal.js`), the Assignee field and the title's `@name` work as for a shared task, and naming someone moves the field to No list (the line under the title then says "Adds to no list: everyone sees it."), taking the name away moves it back; choosing a list yourself ends that.
-  So a new task on a page that shows one user's tasks (`assignee=`), or under a filter that names one, starts in no list for such a user.
-  An assistant's `create_task` that names an assignee and no list is in no list likewise.
-  There is no such list without users (nothing is private there), for a viewer, or while a shared list is called `private` and you have none of your own by that name: a new task is then in no list.
-  A request to the API says where a task goes itself: `POST /api/tasks` without `list` makes a task in no list, as before.
-  You pin, unpin and reorder in a list's ⋯ menu on `/tasks?list=`: **Pin** puts it last, **Move first** (on a pinned list that isn't) puts it at the front, **Unpin** takes it out, and the next one is first; the pills can be dragged too (the list switcher, above).
-  **A list you make in the browser starts pinned**, last (New list…, below).
+- **Pins** (`pinnedLists`, `pinListOp`; `POST /tasks/pin-list` with `list` and `pin`: `1`, `first` or `0`): **a pin is a shortcut**: the list is a pill of your list switcher, and nothing else.
+  It doesn't say what is in My tasks (that is whose a task is), nor where a new task goes (the Inbox, or the list in view).
+  You pin, unpin and reorder in a list's ⋯ menu on `/tasks?list=`: **Pin** puts it last, **Move first** (on a pinned list that isn't) puts its pill at the front, **Unpin** takes it out; the pills can be dragged too (the list switcher, above).
+  **A list you make starts pinned**, last, wherever it is made: New list…, the List field, the move dialog, an assistant's `create_task_list`.
   The pin in List settings pins and unpins.
   **Pins are the user's own**: in their registry (`pinned`, in order); a user who has set none has the wiki's (the shared registry's, which are everyone's without users), and starts from those with their first pin.
   One who unpinned everything has none (`"pinned": []`), not the wiki's again.
   With users the wiki's pins are set in `_tasks/lists.json` by hand.
   (Until 2026-11 a pin was `pin=1` or `pin=default` in an embed, and a page's pin pinned for everyone.
-  From then until the first pinned list took the new tasks, that list was the **default list**, named by `default` in the registry whatever the order of the pins: such a registry reads as that list first (`ParseRegistry`), and is written without the key.
-  A Zone from before reads a registry without `default` as the first pinned list being the default one.)
-- **Where a new task goes** (`.task-edit-target`, `syncTarget` in `js/taskmodal.js`): the edit dialog of a new task says it under the title: "Adds to the list shop." or "Adds to no list.",
-  with ", private" when the list is, and with users it says who sees a shared task: "Adds to the list team: everyone sees it.", "Adds to no list: everyone sees it.".
+  Then, until the Inbox, a pin also put a list's tasks in My tasks, and the first pinned list took the new tasks; with nothing pinned they went to a private list `private`, which counted as pinned.
+  A registry that names a `default` list reads as that list pinned first (`ParseRegistry`), and is written without the key.)
+- **Where a new task goes** (`.task-edit-target`, `syncTarget` in `js/taskmodal.js`): the edit dialog of a new task says it under the title, and with users who sees it: "Adds to your Inbox: only you see it.", "Adds to the list team: everyone sees it.", "Adds to the list diary: only you see it."; without users "Adds to the Inbox." or "Adds to the list shop.".
   It follows the List field, and a `#word` in the title that names a list (Quick-add: `#shop` puts the task in the list shop, the first such word; the others are tags).
   Hidden when editing a task and for several titles at once.
+  **A task for someone needs a shared list** (with users; `autoInbox`, `sharedDefault`, `syncAutoList`): the Inbox is yours alone, so on a new task still in the Inbox that nobody chose a list for, naming an assignee (the Assignee field, the title's `@name`, a view's `assignee=`) moves the List field to a shared list: the one this browser last made a task in (`localStorage` `zone-tasks-shared-list`), else the only one there is; taking the name away moves it back.
+  With several shared lists and none remembered, or none at all, the line reads "A task for someone else needs a shared list: choose one in List." and Save says so on the List field (New list… in it makes one).
+  Choosing a list yourself ends the following.
+  An assistant's `create_task` with an assignee and no shared list is refused, naming the shared lists; `POST /api/tasks` likewise answers 400 ("A private task is yours alone. Put it in a shared list to assign it").
 - **The Tasks page's ⋯ menu** (`.page-menu-btn` beside the heading of `/tasks`, on every view of it; the page's ⋯ menu, `#page-menu`, with `js/pagemenu.js`): **New list…**; on a list **Rename…**, **Pin** / **Move first** / **Unpin**, **Make shared…** (a private one) and **Delete…**; on a tag's view (`/tasks?tag=<tag>`) **Rename tag…** (below).
   Each but the pin is a dialog with a form the server answers (`data-dialog` on the menu item; a refusal comes back with the message in the dialog).
   Not for a viewer, nor in sharing mode.
@@ -861,16 +872,13 @@ Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged
   No page is written.
   **The new list is pinned for you**, last, in the same commit (a shared list with users: the shared registry and your own), so it is a pill at once and not out of sight under More; one who had set no pins starts from the wiki's, as with **Pin**.
   Then the list opens (`/tasks?list=<name>`).
-  **A first list**, made with nothing pinned, is your first pin: New task, `c t` and an assistant's `create_task` put a task in it from then on (privately, when it is private).
-  Its page says so once (`?made=1`, `.tasks-made-first`): "New tasks go into this list now, and its tasks are in My tasks." (a link to that view).
-  The tasks made before it, in no list, stay in My tasks and in the Tasks links' count.
+  Nothing else changes by it: new tasks still go to the Inbox, and the tasks there stay.
   (`pin=0` in the form leaves the list unpinned; no dialog sends it.)
   With users the dialog has **Private: only you see it and its tasks**, which makes it a private list of yours.
   Refused, back in the dialog with the reason: no name, a name with `[ ] , | = /` or `"`, a list you already see ("There is a list #shop already").
   A tag of that name is a tag: making a list takes no task into it.
   Under an embed of a list that isn't there, **Create the list #<name>** does the same.
-  An assistant makes a list with `create_task_list`, which pins it for you, last, as the browser does, so its tasks are in your My tasks; but never as your first pin (with nothing pinned it is under More, marked new), since a first pin takes your new tasks. The tool's answer says which.
-  (Until 2026-11 it pinned nothing, and a list an assistant filled was out of the Tasks links' count.)
+  An assistant makes a list with `create_task_list`, the same operation: the list is pinned for its user, last.
 - **Rename…** (`#list-rename-dialog`; `POST /tasks/rename-list` with `list` and `new_name`; `renameListOp`): in one commit (`Rename list #shop to #food`) the list's name in its registry, the `list` of its tasks (open, closed, archived), the users' pins of it, and where pages and tasks' text name it: the `list=` of `[[tasks: …]]` embeds and the `?list=` of links to `/tasks`.
   Code stays as written, and so do a tag of that name, `tag=` and `#word` in prose.
   An assistant renames a list with `rename_task_list`, the same operation.
@@ -878,10 +886,12 @@ Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged
   A shared list's name is everyone's, so the rename reaches every user's pins, private pages and private tasks' text too, as a page rename's links do (one who has a private list of the old name keeps their embeds of it); a private list's only its owner's.
   Refused with nothing changed: a tasks file, a registry or a page that can't be read.
   Text not yet in git is committed first (`keepPendingPages`).
-- **Delete…** (`#list-delete-dialog`; `POST /tasks/delete-list` with `list`, `to`, `share` and `close`; `deleteListOp`): the list goes, in one commit (`Delete list #shop`); **its tasks stay**, open and closed ones, in the list `to` names or in none.
+- **Delete…** (`#list-delete-dialog`; `POST /tasks/delete-list` with `list`, `to`, `share` and `close`; `deleteListOp`): the list goes, in one commit (`Delete list #shop`); **its tasks stay**, open and closed ones, in the list `to` names.
+  With none named, a private list's go to your Inbox (they stay private); a shared list's, with users, to the shared list `general`, made for them when there is none (a shared task is always in a list; `general` itself is deleted so only when it is empty); without users to the Inbox.
+  The dialog offers those first: "Your Inbox", "#general", "The Inbox (no list)".
   **Close its N open tasks as won't do** (`#list-delete-close`, `close=1`; offered while the list has open tasks, not ticked): for a list that is over, its open tasks are closed undone in the same commit, as Won't do closes one (Closed shows them with "✗ won't do", and they can be reopened from there), so they aren't left open in another list or in none.
   No task is deleted: a task can't be (A task can't be deleted).
-  A shared list's tasks can't go into a private one, and a private list's go to a shared place only with `share` (the dialog's box: "Share its tasks if they go to a shared place").
+  A shared list's tasks can't go into a private one, and a private list's go to a shared list only with `share` (the dialog's box: "Share its tasks if they go to a shared list").
   Pins of it go; pages keep their embeds of it, which then say that there is no such list.
 - **Make shared…** (a private list; `#list-share-dialog`; `POST /tasks/share-list`; `shareListOp`): the list moves to the shared registry and its tasks to the shared files, in one commit (`Share list #gifts`), each with `shared` in its History.
   Refused while a shared list has that name.
@@ -898,25 +908,13 @@ Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged
     A tag only you see stays yours: another user's private tag of that name is another tag and isn't touched.
     A tag only someone else has is refused as if it didn't exist, a new name only they use is no merge for you, and the answer counts only the tasks and pages you see.
 - **Scopes** (`inScope`, `paramsScope`; `inScope` in `tasks.js`): a list view shows the tasks in that list;
-  No list (`list=none`) those in none;
+  the Inbox (`list=inbox`) those in none;
   My tasks what its rule says (`mine=1`, `mineScope`; `scopeFilter` gives a scope's tasks for a user);
   several lists as one those in any of them (`lists=a|b`, which the routes still take: what Pinned was until 2026-11);
   the **main task list** (an embed with neither, including `/tasks`, URL `?tag=` notwithstanding) shows every task,
   as do a `tag=` embed (a task tagged `sam` belongs on a Sam page whatever list it is in),
   and the main Closed count.
   The due count is My tasks'.
-- **No list** (`noListRef`, `isNoList` in `go/tasklists.go`; `noList` in `tasks.js`): the tasks in no list have a view of their own, **`/tasks?list=none`**, headed **No list**.
-  A task is in no list when it was made so (with none pinned and without users; with users only by choice or with an assignee: Pins, above), taken out of its list, or left behind by a list deleted into none.
-  Such a task is in My tasks (unless it is someone else's), so the Tasks links count it; this view shows those tasks alone, whoever has them.
-  In the list switcher it is under **More**, above All tasks, **while open tasks are in no list** (and on its own view), with the counts a pill has (due today or overdue, in Focus: `noListCounts`);
-  `js/chrome.js` keeps them current from the due count's places (`none`).
-  (Until 2026-11 no pin reached such a task, the Tasks links left it out once a list was pinned, and the More pill carried how many of them were due.)
-  The view is All tasks narrowed: All tasks' settings (the tab, Plan, the limit), no settings dialog and no ⋯ menu of its own in the toolbar, a locked chip **no list** in the filter field (the filter word `list:none`), and a new task made there is in no list, whatever is pinned.
-  A task filed into a list from there leaves the view, with the notice a list's view has.
-  On a page, `[[tasks: list=none]]` shows them too, as an embed of no list with the embed's own params.
-  Where a scope is named, `none` is taken as well: `?list=none` of the closed tasks' routes and the export, and an assistant's `search_tasks(list="none")`.
-  In a wiki that has a list called `none` from before the name was kept, the name is that list's everywhere, and there is no such view.
-  The line under My tasks' heading links to it.
 - **On screen**: a list is marked as one wherever it shows: a list icon (an SVG mask in CSS `::before`, `--list-icon`, in the accent colour), a faint blue tint and a tooltip ("List", "List (private: only you see it)", `listTooltip`).
   A card shows its list as such a chip before its tags (`.task-tag-list`), but in a view of that one list, where every card would say the same.
   In a list's view the filter field holds a chip without × for it (`list:<name>`, shown as its name; `chipField`'s `locked`, `.tag-chip-locked`; Backspace skips it), so the page always shows what it says; an embed's `tag=` and `assignee=` words are locked the same way, and a URL `?tag=` stays removable.
@@ -925,14 +923,23 @@ Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged
   A new task created out of view only gets the notice.
 - **An embed of a list that isn't there** (`noListHTML`, `tasks_no_list`; also `/tasks?list=<name>`): in the app's place a line, "There is no list #<name>.", and for who may make lists **Create the list #<name>** and a link to the tasks tagged so (`/tasks?tag=<name>`).
   Nothing else on the page changes.
-- **The migration** (`migrateLists` in `go/listsmigrate.go`, when Zone starts and the shared registry has no `version`): a wiki from before lists were places is taken over, in one commit ("Make task lists their own"), under the page and task locks.
+- **The Inbox's migration** (`migrateInboxLocked` in `go/listsmigrate.go`, when Zone starts, after the migration below and under its locks; one commit, "Give every task a list: the Inbox").
+  Once for each registry that says `version` 1 (lists as places, from before the Inbox), the shared one and each user's own, which then says 2 (each for itself: a wiki whose users have lists and that never had a shared one has no shared registry):
+  1. A list called `inbox` is called `inbox-list` (its tasks and pins follow; embeds that name it show the Inbox from then on).
+  2. With users, a user's list `private` that has no settings and took their new tasks (they pinned it, or pinned nothing) becomes their **Inbox**: its tasks lose their list, the list and its pin go. Zone made that list.
+  3. **What wasn't in My tasks stays out of it**: the lists a user hadn't pinned are left out (`home=off`): without users any such list, with users each user's private ones.
+     A shared list's unassigned tasks, which a pin put in My tasks, are in the list alone now: that is the change.
+
+  At every start, with users: **a shared task without a list goes to the shared list `general`**, made for it and pinned for the wiki. That takes over the tasks that were in no list, and a wiki whose users are turned on later (its one Inbox becomes `general`).
+  A task file or registry that can't be read stops it before anything is written, as below (`listsUnmigrated`).
+- **The migration** (`migrateLists` in `go/listsmigrate.go`, when Zone starts and no registry, the shared one or a user's, has a `version`): a wiki from before lists were places is taken over, in one commit ("Make task lists their own"), under the page and task locks.
   It changes nobody's view of who sees what: no task changes its file.
   1. **The lists**: each name a shared page declared (`[[tasks: list=<name>]]` outside code) becomes a shared list, with its first page's (A–Z) params as its settings (`view`, `plan`, `limit`, `labels`, `new`, `keep`; `noshare` when that page was not for sharing).
      A name a user's private page declared becomes a private list of theirs, unless a shared page declares it too and they have no private task with that tag: their embed then shows the shared list.
      Another page's embed that set a list's settings differently loses that difference: the params stay in its text and mean nothing.
   2. **The tasks**, in every file of every owner (open, closed, archived): the first A–Z of a task's tags that names a list of its own kind (a shared task: the shared lists; a private task: its user's) becomes its `list`, and that tag goes.
      Any other list's tag stays, as a plain tag, so the task still shows in a `tag=` view.
-     A private task without a list of its user's (it carried a shared list's tag, or none) goes to a private list `private` of theirs, made for it and pinned.
+     A private task without a list of its user's (it carried a shared list's tag, or none) is in their Inbox (until the Inbox it went to a private list `private` of theirs, made for it and pinned).
      A shared task carrying the tag of someone's private list keeps the tag and is in no list.
   3. **The pins**: `pin=1` and `pin=default` on shared pages become the wiki's (`pinned` in the shared registry), the default one first, then by name; those on a user's private pages theirs, followed by the wiki's, as before.
      A pin of a view that is no list (`[[tasks: tag=me pin=1]]`) has nowhere to go: the log says so.
@@ -985,7 +992,7 @@ Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged
 
 ### Keyboard shortcuts
 
-- **g a**: go to `/tasks`, all tasks; **g t**: go where the Tasks link goes (your pinned lists)
+- **g a**: go to `/tasks`, all tasks; **g t**: go where the Tasks link goes (My tasks)
 - **→** / **l**, **←** / **h**: open / close the selected task's description and comments; open, they stay open as j/k move on (see One line per task)
 - **o** (the Open tab): the order: manual, by deadline, newest first (see Sorting)
 - **d** (the Open tab): Plan on / off, by start date or one list (see Views)
@@ -994,5 +1001,5 @@ Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged
 - **Shift+click**, **Ctrl/Cmd+click**, **Shift+↑/↓**, **Ctrl/Cmd+A**: select several tasks (see Selection); **t** / **T**: their tags; **m**: move them to a list
 - **@** (with users): the filter field, starting an assignee's name, as **#** starts a tag
 - **a** (with users): assign the selected tasks (see Assigning tasks in `docs/spec/users.md`)
-- **c t**: a new task in your first pinned list, with its tags (from any page; see Modules → New task from anywhere).
+- **c t**: a new task in your Inbox, starting today (from any page; see Modules → New task from anywhere).
   The tasks' keydown runs before the page's shortcuts, so while a `g`/`c` prefix waits for its second key (`keyPrefix` in `js/util.js`) the tasks leaves that key alone: the t of **c t** or **g t** never opens the bulk tag dialog on a selected task

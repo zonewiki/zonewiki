@@ -3,7 +3,7 @@
     on any page). Its params reach tasks.js as data-init-* attributes; ids
     get a -<n> suffix (sfx) after a page's first embed. */ -}}
 {{define "tasks_embed" -}}
-<div class="tasks-app" id="tasks-app{{.Sfx}}"{{if .Headless}} data-headless="1" style="display:none"{{end}} data-init-tag="{{.Tag}}"{{with .Assignee}} data-init-assignee="{{.}}"{{end}} data-init-list="{{.List}}"{{with .Lists}} data-init-lists="{{.}}"{{end}}{{with .Mine}} data-init-mine="{{.}}"{{end}} data-lists="{{.ListsJSON}}" data-default-list="{{.DefaultList}}"{{if .NewMine}} data-new-mine="1"{{end}} data-init-view="{{.View}}" data-init-plan="{{.Plan}}" data-init-limit="{{.Limit}}" data-init-keep="{{.Keep}}"{{with .PrivateFolder}} data-private-folder="{{.}}"{{end}} data-init-new="" data-instance="{{.InstanceID}}"{{if .Pinned}} data-pinned="1"{{end}}{{with .NewTags}} data-new-tags="{{.}}"{{end}}{{with .Settings}} data-settings-page="{{.Page}}" data-settings-index="{{.Index}}" data-settings-raw="{{.Raw}}"{{if .Embed}} data-settings-embed="1"{{end}}{{if .Mine}} data-settings-mine="1"{{end}}{{if .Mail}} data-settings-mail="1"{{end}}{{with .List}} data-settings-list="{{.}}"{{end}}{{with .ListSettings}} data-settings-list-set="{{.}}"{{end}}{{with .Pin}} data-settings-pin="{{.}}"{{end}}{{end}}>
+<div class="tasks-app" id="tasks-app{{.Sfx}}"{{if .Headless}} data-headless="1" style="display:none"{{end}} data-init-tag="{{.Tag}}"{{with .Assignee}} data-init-assignee="{{.}}"{{end}} data-init-list="{{.List}}"{{with .Lists}} data-init-lists="{{.}}"{{end}}{{with .Mine}} data-init-mine="{{.}}" data-init-out="{{$.Out}}"{{end}} data-lists="{{.ListsJSON}}"{{if .InboxPrivate}} data-inbox-private="1"{{end}} data-init-view="{{.View}}" data-init-plan="{{.Plan}}" data-init-limit="{{.Limit}}" data-init-keep="{{.Keep}}"{{with .PrivateFolder}} data-private-folder="{{.}}"{{end}} data-init-new="" data-instance="{{.InstanceID}}"{{if .Pinned}} data-pinned="1"{{end}}{{with .NewTags}} data-new-tags="{{.}}"{{end}}{{with .Settings}} data-settings-page="{{.Page}}" data-settings-index="{{.Index}}" data-settings-raw="{{.Raw}}"{{if .Embed}} data-settings-embed="1"{{end}}{{if .Mine}} data-settings-mine="1"{{end}}{{with .List}} data-settings-list="{{.}}"{{end}}{{with .ListSettings}} data-settings-list-set="{{.}}"{{end}}{{with .Pin}} data-settings-pin="{{.}}"{{end}}{{if .Home}} data-settings-home="1"{{end}}{{if .Mail}} data-settings-mail="1"{{end}}{{end}}>
   <div class="tasks-header">
     <div class="view-tabs" id="tasks-tabs{{.Sfx}}" role="tablist" aria-label="View">
       <button type="button" role="tab" data-view="open" aria-selected="false">{{index .Labels 0}}</button>
@@ -240,14 +240,14 @@
 <dialog id="task-settings-modal{{.Sfx}}" class="task-edit-modal task-settings-modal">
   <form id="task-settings-form{{.Sfx}}" class="task-edit-form">
     {{- /* The pin beside the title: pressed, the list is pinned for you (it is
-        a pill on the Tasks page and its tasks are in My tasks); a button, as the list switcher's pin is.
+        a pill on the Tasks page); a button, as the list switcher's pin is.
         pin holds its value for the form ("", 1; js/tasksettings.js).
         Only where the dialog is a list's (task-settings-list). */}}
     <div class="task-settings-head">
       <div class="modal-label" id="task-settings-title{{.Sfx}}">List settings</div>
       <input type="hidden" id="task-settings-pin{{.Sfx}}" name="pin">
       {{- if not .Editor}}
-      <button type="button" class="task-settings-pin task-settings-list" id="task-settings-pin-btn{{.Sfx}}" aria-pressed="false" title="Pin this list for you: it is a pill on the Tasks page, and its tasks are in My tasks">{{template "icon_pin"}}<span class="task-settings-pin-label">Pin</span></button>
+      <button type="button" class="task-settings-pin task-settings-list" id="task-settings-pin-btn{{.Sfx}}" aria-pressed="false" title="Pin this list for you: it is a pill on the Tasks page">{{template "icon_pin"}}<span class="task-settings-pin-label">Pin</span></button>
       {{- end}}
     </div>
     {{- if .Editor}}
@@ -272,12 +272,12 @@
     {{- /* The rest shows only when set, or once asked for in the line below
         (js/tasksettings.js showField), as the task dialog's rarer fields do. */}}
     <label class="task-settings-check" data-field="keep" hidden><input type="checkbox" id="task-settings-keep{{.Sfx}}" name="keep"> New tasks are keep tasks (back on the list when done)</label>
-    {{- if and .CanAssign (not .Editor)}}
-    <label class="task-settings-check" data-field="mail" hidden><input type="checkbox" id="task-settings-mail{{.Sfx}}" name="mail"> Mail me when a task is assigned to me</label>
-    <label class="task-settings-check" data-field="unassigned" hidden><input type="checkbox" id="task-settings-unassigned{{.Sfx}}" name="unassigned"> Hide unassigned tasks: only what is assigned to you, and your private tasks</label>
-    {{- end}}
     {{- if not .Editor}}
     <label class="task-settings-check task-settings-list" data-field="noshare" hidden><input type="checkbox" id="task-settings-noshare{{.Sfx}}" name="noshare"> Hide this list in sharing mode</label>
+    {{- if .CanAssign}}
+    <label class="task-settings-check" data-field="mail" hidden><input type="checkbox" id="task-settings-mail{{.Sfx}}" name="mail"> Mail me when a task is assigned to me</label>
+    {{- end}}
+    <label class="task-settings-check task-settings-list" data-field="home" hidden><input type="checkbox" id="task-settings-home{{.Sfx}}" name="homeout"> Leave its tasks out of My tasks</label>
     {{- end}}
     <div class="task-field" data-field="labels" hidden>
       <label for="task-settings-label-open{{.Sfx}}">Tab names</label>
@@ -312,11 +312,9 @@
       <button type="button" class="task-add-field task-settings-embed" data-more="assignee" title="Show only the tasks of one user, or of whoever looks">Filter by person</button>
       {{- end}}
       <button type="button" class="task-add-field" data-more="keep" title="A task made here goes back on the list when it is done, e.g. the staples of a shopping list">Keep tasks</button>
-      {{- if and .CanAssign (not .Editor)}}
-      <button type="button" class="task-add-field" data-more="unassigned" title="Leave out the tasks that are nobody's: My tasks is then what is assigned to you and your private tasks, and a task you add without saying where is assigned to you">Hide unassigned tasks</button>
-      {{- end}}
       {{- if not .Editor}}
       <button type="button" class="task-add-field task-settings-list" data-more="noshare" title="Leave this list out of the list switcher while sharing mode is on">Hide when sharing</button>
+      <button type="button" class="task-add-field task-settings-list" data-more="home" title="Its tasks don't show in My tasks nor count on the Tasks link: a catalogue, a someday list">Leave out of My tasks</button>
       {{- end}}
     </div>
     <p class="task-settings-error" id="task-settings-error{{.Sfx}}" role="alert" hidden></p>

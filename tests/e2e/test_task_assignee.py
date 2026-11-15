@@ -3,6 +3,7 @@ the modal's Assignee field, @name in a new task's title, the name on the
 card, and the filter's @name, @me and @none."""
 
 import re
+from datetime import date
 
 import pytest
 from playwright.sync_api import expect
@@ -14,16 +15,20 @@ from tests import settings
 @pytest.fixture()
 def alice(page, wiki, monkeypatch):
     """The browser, signed in as alice; bob can be assigned too, carol is a
-    viewer and dan disabled."""
+    viewer and dan disabled. A task for someone is shared work, and with
+    users a shared task is in a list: there is one, team (not pinned)."""
     monkeypatch.setattr(settings, "USERS", {name: ("pw", "") for name in ("alice", "bob", "carol", "dan")})
     monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}, "carol": {"role": "viewer"},
                                                     "dan": {"disabled": "yes"}})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
+    make_list(page, "team")
     return page
 
 
 def new(page, title, **fields):
-    resp = page.request.post("/api/tasks", data={"title": title, **fields})
+    """A task in the shared list team (list=None: in the user's Inbox)."""
+    fields.setdefault("list", "team")
+    resp = page.request.post("/api/tasks", data={"title": title, **{k: v for k, v in fields.items() if v is not None}})
     assert resp.ok, resp.text()
     return resp.json()
 
@@ -65,8 +70,8 @@ def test_the_card_names_who_has_it(alice):
     expect(bobs).to_have_text("@bob")
     expect(bobs).not_to_have_class(re.compile(r"task-assignee-(me|former)"))
     expect(card(alice, "No one's").locator(".task-assignee")).to_have_count(0)
-    # After the tags.
-    expect(card(alice, "Mine").locator(".task-tags-right > *")).to_have_text(["#work", "@alice"])
+    # After the list and the tags.
+    expect(card(alice, "Mine").locator(".task-tags-right > *")).to_have_text(["team", "#work", "@alice"])
 
 
 def test_the_modal_assigns_with_completion(alice):
@@ -126,35 +131,53 @@ def test_a_name_that_is_no_user_keeps_the_modal_open(alice):
 
 
 def test_a_new_task_s_title_assigns(alice):
+    """@name in a new task's title: the task is for that user. A new task
+    starts in the Inbox, which is alice's alone, so the List field moves to
+    the shared list; in a list of her own a task has no assignee."""
     make_list(alice, "own", private=True)
     alice.goto("/tasks?view=open")
     alice.locator("#task-add-btn").click()
     modal = alice.locator("#task-edit-modal")
-    title = modal.locator("#task-edit-title")
+    title, lists = modal.locator("#task-edit-title"), modal.locator("#task-edit-list")
+    expect(lists).to_have_value("")
     title.type("Call Sam @b")
     expect(modal.locator(".tag-ac-item")).to_have_text(["@bob"])
     alice.keyboard.press("Tab")
     expect(title).to_have_value("Call Sam @bob ")
     expect(modal.locator("#task-edit-quick")).to_have_text("@bob")
-    # A task in a private list has no assignee: it isn't offered, and @bob is text.
+    expect(lists).to_have_value("team")
+    target, note = modal.locator("#task-edit-target"), modal.locator("#task-edit-list-note")
+    expect(target).to_have_text("Adds to the list team: everyone sees it.")
+    expect(note).to_be_hidden()                  # a new task: the line under the title says who sees it
     expect(modal.locator("[data-more=assignee]")).to_be_visible()
-    modal.locator("#task-edit-list").select_option("own")
-    expect(modal.locator("#task-edit-list-note")).to_have_text("Private: only you see this task.")
+    # A task in a private list has no assignee: it isn't offered, and @bob is text.
+    lists.select_option("own")
+    expect(target).to_have_text("Adds to the list own: only you see it.")
+    expect(note).to_be_hidden()
     expect(modal.locator("[data-more=assignee]")).to_be_hidden()
     expect(modal.locator("#task-edit-quick")).to_be_hidden()
-    modal.locator("#task-edit-list").select_option("")
-    expect(modal.locator("#task-edit-list-note")).to_be_hidden()
+    # The same in the Inbox, once she chose it herself.
+    lists.select_option("")
+    expect(lists).to_have_value("")
+    expect(target).to_have_text("Adds to your Inbox: only you see it.")
+    expect(modal.locator("[data-more=assignee]")).to_be_hidden()
+    expect(modal.locator("#task-edit-quick")).to_be_hidden()
+    lists.select_option("team")
+    expect(target).to_have_text("Adds to the list team: everyone sees it.")
     expect(modal.locator("[data-more=assignee]")).to_be_visible()
     expect(modal.locator("#task-edit-quick")).to_have_text("@bob")
     modal.get_by_role("button", name="Save").click()
     wait_for_assignee(alice, "Call Sam", "bob")
-    # A name that is no user stays in the title.
+    assert task(alice, "Call Sam")["list"] == "team" and task(alice, "Call Sam")["private"] is False
+    # A name that is no user stays in the title, and the task in her Inbox.
     alice.locator("#task-add-btn").click()
     title.fill("Mail bob@example.org @zed")
     expect(modal.locator("#task-edit-quick")).to_be_hidden()
+    expect(lists).to_have_value("")
     modal.get_by_role("button", name="Save").click()
     wait_until(alice, lambda: any(t["title"] == "Mail bob@example.org @zed" for t in alice.request.get("/api/tasks").json()))
-    assert "assignee" not in task(alice, "Mail bob@example.org @zed")
+    made = task(alice, "Mail bob@example.org @zed")
+    assert "assignee" not in made and "list" not in made and made["private"] is True
 
 
 def test_the_filter_takes_names_me_and_none(alice, wiki):
@@ -194,6 +217,7 @@ def test_the_filter_takes_names_me_and_none(alice, wiki):
     modal.locator("#task-edit-title").fill("Another for Bob")
     modal.get_by_role("button", name="Save").click()
     wait_for_assignee(alice, "Another for Bob", "bob")
+    assert task(alice, "Another for Bob")["list"] == "team"      # out of her Inbox: a task for someone is shared
     expect(alice.locator(".task-item")).to_have_count(3)
 
 
@@ -266,6 +290,7 @@ def test_one_page_shows_each_user_their_own_tasks(alice, wiki):
     modal.locator("#task-edit-title").fill("Another of mine")
     modal.get_by_role("button", name="Save").click()
     wait_for_assignee(alice, "Another of mine", "alice")
+    assert task(alice, "Another of mine")["list"] == "team"
     expect(alice.locator(".task-item")).to_have_count(2)
     # Bob, on the same page.
     alice.request.post("/logout")
@@ -276,73 +301,6 @@ def test_one_page_shows_each_user_their_own_tasks(alice, wiki):
     alice.goto("/tasks?view=open&assignee=none")
     expect(alice.locator(".task-item .task-title")).to_have_text(["No one's"])
     expect(alice.locator(".tasks-toolbar .tag-chip .tag-chip-x")).to_have_count(1)
-
-
-def test_my_tasks_can_hide_unassigned_tasks(alice, wiki):
-    # Unassigned tasks: hidden, a setting of My tasks: only what is assigned
-    # to her (and her private tasks in pinned lists) shows, and a task she
-    # adds without saying where is hers, so a capture stays in view.
-    make_list(alice, "team")
-    make_list(alice, "own", private=True)
-    alice.request.post("/tasks/pin-list", form={"list": "team", "pin": "1"})
-    alice.request.post("/tasks/pin-list", form={"list": "own", "pin": "1"})
-    new(alice, "Alice's", assignee="alice", list="team")
-    new(alice, "Nobody's", list="team")
-    new(alice, "Loose")
-    new(alice, "Her own", list="own")
-    alice.goto("/tasks?mine=1&view=open")
-    titles = alice.locator(".task-item .task-title")
-    expect(titles).to_have_count(4)
-    alice.locator("#task-more-btn").click()
-    alice.get_by_role("menuitem", name="List settings…").click()
-    dialog = alice.locator("#task-settings-modal")
-    box = dialog.locator("[name=unassigned]")
-    expect(box).to_be_hidden()
-    dialog.locator(".task-add-field", has_text="Hide unassigned tasks").click()
-    expect(box).to_be_checked()
-    with alice.expect_navigation():
-        dialog.get_by_role("button", name="Save").click()
-    assert '"unassigned": "hide"' in (wiki.root / "private/alice/_tasks/lists.json").read_text()
-    expect(alice.locator(".tasks-pinned-lists")).to_have_text(
-        "What is assigned to you, and your private tasks in your pinned lists (#team, #own). Unassigned tasks are hidden.")
-    alice.goto("/tasks?mine=1&view=open")
-    expect(titles).to_have_count(2)
-    assert sorted(titles.all_text_contents()) == ["Alice's", "Her own"]
-    # + New there: the task is hers, in the first pinned list.
-    alice.locator("#task-add-btn").click()
-    modal = alice.locator("#task-edit-modal")
-    modal.locator("#task-edit-title").fill("Added here")
-    expect(modal.locator(".task-edit-target")).to_have_text("Adds to the list team: everyone sees it.")
-    modal.get_by_role("button", name="Save").click()
-    wait_for_assignee(alice, "Added here", "alice")
-    expect(card(alice, "Added here")).to_be_visible()
-    # c t from a page likewise.
-    alice.goto("/page/index")
-    alice.keyboard.press("c")
-    alice.keyboard.press("t")
-    expect(modal).to_be_visible()
-    modal.locator("#task-edit-title").fill("From anywhere")
-    modal.get_by_role("button", name="Save").click()
-    wait_for_assignee(alice, "From anywhere", "alice")
-    assert task(alice, "From anywhere")["list"] == "team"
-    # In a list's own view a new task is the list's, nobody's.
-    alice.goto("/tasks?list=team&view=open")
-    alice.locator("#task-add-btn").click()
-    modal.locator("#task-edit-title").fill("For the team")
-    modal.get_by_role("button", name="Save").click()
-    wait_for_assignee(alice, "For the team", None)
-    # A task she gives away leaves My tasks; the setting shown again brings the rest back.
-    alice.goto("/tasks?mine=1&view=open")
-    expect(titles).to_have_count(4)
-    alice.locator("#task-more-btn").click()
-    alice.get_by_role("menuitem", name="List settings…").click()
-    expect(box).to_be_checked()
-    box.uncheck()
-    with alice.expect_navigation():
-        dialog.get_by_role("button", name="Save").click()
-    assert '"unassigned"' not in (wiki.root / "private/alice/_tasks/lists.json").read_text()
-    alice.goto("/tasks?mine=1&view=open")
-    expect(titles).to_have_count(7)
 
 
 def test_the_settings_dialog_sets_whose_tasks_a_list_shows(alice, wiki):
@@ -400,53 +358,66 @@ def test_several_selected_tasks_are_assigned_at_once(alice):
     wait_for_assignee(alice, "Bob's already", None)
 
 
-def test_my_tasks_holds_what_is_mine_and_nobodys(alice, wiki):
-    """My tasks, where the Tasks link goes: what is assigned to her wherever
-    it is, and what is nobody else's in her pinned lists and in no list. A
-    task given to someone else leaves it; its settings are her own."""
-    make_list(alice, "team")
+def test_my_tasks_holds_what_is_mine(alice, wiki):
+    """My tasks, where the Tasks link goes: her own tasks (her Inbox, her
+    private lists unless one is left out) and the shared ones assigned to
+    her, wherever they are; a pin decides nothing. A task given to someone
+    else leaves it; its settings are her own."""
     make_list(alice, "side")
+    make_list(alice, "own", private=True)
+    make_list(alice, "someday", private=True)
     alice.request.post("/tasks/pin-list", form={"list": "team", "pin": "1"})
-    new(alice, "Alice's", assignee="alice", list="team")
-    new(alice, "Bob's", assignee="bob", list="team")
-    new(alice, "Nobody's", list="team")
-    new(alice, "Hers elsewhere", assignee="alice", list="side")
+    assert alice.request.post("/api/tasks/settings", data={"list": "someday", "set": {"home": "off"}}).ok
+    today = date.today().isoformat()
+    new(alice, "Alice's", assignee="alice", due_date=today)
+    new(alice, "Bob's", assignee="bob", due_date=today)
+    new(alice, "Nobody's", due_date=today)                   # in a pinned list, but no one's: the list's
+    new(alice, "Hers elsewhere", assignee="alice", list="side", due_date=today)
     new(alice, "Nobody's elsewhere", list="side")
-    new(alice, "Loose")
-    new(alice, "Bob's loose", assignee="bob")
+    new(alice, "Loose", list=None, due_date=today)           # her Inbox
+    new(alice, "Own one", list="own", due_date=today)
+    new(alice, "Some day", list="someday", due_date=today)   # left out
     alice.goto("/page/index")
-    alice.locator(".breadcrumb .module-link[data-module=tasks]").click()
+    link = alice.locator(".breadcrumb .module-link[data-module=tasks]")
+    expect(link.locator(".module-due")).to_have_text("4")    # what My tasks shows
+    link.click()
     alice.wait_for_url("**/tasks?mine=1")
     expect(alice.locator("h1")).to_have_text("My tasks")
-    expect(alice.locator(".tasks-pinned-lists")).to_have_text(
-        "What is yours or nobody's in your pinned lists (#team) and in no list, and what is assigned to you elsewhere.")
+    line = alice.locator(".tasks-mine-line")
+    expect(line).to_have_text("Your own tasks and what is assigned to you, but the lists left out of it (#someday).")
+    expect(line.locator("a")).to_have_attribute("href", "/tasks?list=someday")
     alice.goto("/tasks?mine=1&view=open")
     titles = alice.locator(".task-item .task-title")
     expect(titles).to_have_count(4)
-    assert sorted(titles.all_text_contents()) == ["Alice's", "Hers elsewhere", "Loose", "Nobody's"]
+    assert sorted(titles.all_text_contents()) == ["Alice's", "Hers elsewhere", "Loose", "Own one"]
     expect(alice.locator(".tasks-toolbar .tag-chip")).to_have_count(0)        # no filter: the view is the rule
     expect(card(alice, "Hers elsewhere").locator(".task-tag-list")).to_have_text("side")
+    expect(card(alice, "Loose").locator(".task-tag-list")).to_have_count(0)
+    expect(card(alice, "Loose").locator(".task-private")).to_be_visible()
     # The list itself shows everyone's.
     alice.goto("/tasks?list=team&view=open")
     expect(alice.locator(".task-item")).to_have_count(3)
-    # Given to bob, a task leaves My tasks; undone, it is back.
+    # Given to bob, a task leaves My tasks and its count; undone, it is back.
     alice.goto("/tasks?mine=1&view=open")
-    card(alice, "Nobody's").locator(".task-title").click()
+    card(alice, "Alice's").locator(".task-title").click()
     alice.keyboard.press("a")
     alice.locator(".bulk-assign-modal .bulk-list-row", has_text="@bob").click()
-    expect(card(alice, "Nobody's")).to_have_count(0)
-    wait_for_assignee(alice, "Nobody's", "bob")
+    expect(card(alice, "Alice's")).to_have_count(0)
+    wait_for_assignee(alice, "Alice's", "bob")
     expect(titles).to_have_count(3)
-    # From a page: New task goes into the first pinned list, assigned to no one.
-    alice.goto("/page/index")
-    alice.keyboard.press("c")
-    alice.keyboard.press("t")
-    modal = alice.locator("#task-edit-modal")
-    expect(modal).to_be_visible()
-    modal.locator("#task-edit-title").fill("From anywhere")
-    modal.get_by_role("button", name="Save").click()
-    wait_for_assignee(alice, "From anywhere", None)
-    assert task(alice, "From anywhere")["list"] == "team"
+    expect(link.locator(".module-due")).to_have_text("3")
+    alice.get_by_role("button", name="Undo").click()
+    expect(card(alice, "Alice's")).to_be_visible()
+    wait_for_assignee(alice, "Alice's", "alice")
+    # Taken from the list's backlog, a task is in My tasks.
+    alice.goto("/tasks?list=team&view=open")
+    card(alice, "Nobody's").locator(".task-title").click()
+    alice.keyboard.press("a")
+    alice.locator(".bulk-assign-modal .bulk-list-row", has_text="@alice").click()
+    wait_for_assignee(alice, "Nobody's", "alice")
+    alice.goto("/tasks?mine=1&view=open")
+    expect(card(alice, "Nobody's")).to_be_visible()
+    expect(titles).to_have_count(5)
     # Its settings: her own, and what a new task gets is not among them.
     alice.goto("/tasks?mine=1")
     alice.locator("#task-more-btn").click()
@@ -454,12 +425,12 @@ def test_my_tasks_holds_what_is_mine_and_nobodys(alice, wiki):
     dialog = alice.locator("#task-settings-modal")
     expect(dialog.locator(".task-settings-where")).to_have_text("For My tasks: yours alone.")
     expect(dialog.locator(".task-settings-pin")).to_be_hidden()
-    expect(dialog.locator(".task-add-field:visible")).to_have_text(["WIP limit", "Tab names", "Hide unassigned tasks"])
+    expect(dialog.locator(".task-add-field:visible")).to_have_text(["WIP limit", "Tab names"])
     dialog.locator("[name=view]").select_option("open")
     with alice.expect_navigation():
         dialog.get_by_role("button", name="Save").click()
     assert '"mine": {"view": "plan"}' in (wiki.root / "private/alice/_tasks/lists.json").read_text()
-    expect(alice.locator(".task-item .task-title")).to_have_count(4)        # it opens on Open now
+    expect(alice.locator(".task-item .task-title")).to_have_count(5)        # it opens on Open now
 
 
 def test_a_task_someone_gave_you_is_marked_new(alice):
