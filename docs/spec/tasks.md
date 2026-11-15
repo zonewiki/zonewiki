@@ -324,7 +324,9 @@ On phones the control spans the full width.
   New tasks created here get today as start date.
   (Today once had its own order, the Lineup (`focus_order`) above Others; it was removed as a second commitment on top of the start date.)
   **Updates** (My tasks' Today only; `.updates-heading`, cards `.task-update`; `inViewOrder` in `js/taskrender.js`, `tasksInView` given the user): above Unsorted, **the tasks with news for you** (`TasksCore.newsFor`: What happens on your tasks is told to you, in `docs/spec/users.md`), **whatever their dates**, each card saying what the news is. A task given to you often has no date, and was then on no tab the Tasks links open, while their count said it was there. Among them are tasks that aren't in My tasks otherwise: what you gave away (someone commented, it was done), what mentions you, a task closed this month or last; the server sends those along with My tasks (`withUpdates`: `GET /api/tasks?mine=1`, and the tasks a page of My tasks brings), the list holds them for Updates alone (`t.extra`) and no other tab shows them. A task there is in neither section below, nothing is dragged into Updates and nothing ranks there (`sectionList` leaves its cards out); opening the task, or doing something with it, takes it out: one of yours with a start date not after today is in Today below, else on Open.
-- **Closed** is not a tab but a link under the list (`#task-closed-link`, `Closed (N) →`, count from `/api/tasks/closed-count`, refreshed after every write).
+  **On My tasks' Open tab a line says that there are some** (`.tasks-updates-note`, `syncUpdatesNote` in `js/taskrender.js`: "2 updates for you →", which opens Today), so the Tasks links never count what the page doesn't show; the tasks themselves stay in their sections there.
+- **Closed** is not a tab but a link under the list (`#task-closed-link`, `Closed (N) →`, count from `/api/tasks/closed-count`, refreshed after every write): it is seldom looked at, and a tab would put it beside what is done every day.
+  While it shows, the lines above the list that are about its open tasks ("4 unassigned", Given to others, what the view is for) aren't (`.tasks-shows-closed`, `markActiveTab`).
   It holds the tasks that are closed: done, and closed undone (won't do), which is why it isn't called Completed.
   That is its name everywhere: where people read it (the link, the view's heading, the settings dialog), in the params (`view=closed`), the routes (`/api/tasks/closed`), the files (`closed.json`), a task's `closed_at` and the code.
   It was called Completed: a wiki from then is renamed when Zone starts (`renameOldClosed`: `completed.json` and `completed-YYYY.json` become `closed.json` and `closed-YYYY.json`, never over a file that is there; a task's `completed_at` is read where it has no `closed_at`, and the files are written again with the new field), in one commit, "Name the task files of closed tasks closed".
@@ -363,7 +365,7 @@ Dates decide where a task appears, never whether.
 
 ### Settings
 
-**List settings…**, the first item of the list's **⋯ menu** in the toolbar (`#task-more-btn`; the toolbar has no button of its own for it), opens **List settings** (`#task-settings-modal`, `js/tasksettings.js`): what the list is and how it opens.
+**List settings…**, the first item of the list's **⋯ menu** (on a wiki page the ⋯ of the embed's toolbar, `#task-more-btn`; on the Tasks page the page's own ⋯ beside the heading, which holds the list's actions too: Lists → The Tasks page's ⋯ menu), opens **List settings** (`#task-settings-modal`, `js/tasksettings.js`): what the list is and how it opens.
 A setting is kept where it belongs: a list's own with the list, how a page looks at a list in that page's `[[tasks: …]]`.
 
 | Field | Setting | Whose | |
@@ -387,7 +389,7 @@ My tasks (`/tasks?mine=1`) has Opens on, The Open tab shows, WIP limit and Tab n
 **It shows what is changed most**: Opens on, The Open tab shows and, on a list, the pin.
 The other fields show only when set as the dialog opens (`[data-field]`, `showField` in `settingsForm`); for the rest a line of quiet words under the fields offers each, "+ WIP limit", "+ Tab names", "+ Tags of a new task", "+ Keep tasks", "+ Hide when sharing", "+ Leave out of My tasks", "+ Filter by tag", "+ Filter by person" (`.task-add-fields`, as in the task dialog): a click shows the field and puts the cursor in it (a box is ticked).
 **The pin** is a button at the title's right, with the list switcher's pin (`.task-settings-pin`, `aria-pressed`): "Pin" on a list you haven't pinned, pressed and "Pinned" on one you have; a click pins or unpins.
-Which pinned list's pill is first is said in the list's ⋯ menu (**Move first**), not here.
+Which pinned list's pill is first is said by dragging the pills, not here.
 The line above Save says whose the settings are: the list's, for everyone (or "which only you see" for a private list), the page's, and that the pin is yours.
 
 **Where it writes** (`data-settings-*` on `.tasks-app`, from `buildTasksEmbed`: `-page`, `-index`, `-raw` and `-embed` for an embed's `[[tasks: …]]` on a page, as written there; `-list`, `-list-set` and `-pin` for the list shown: its ref, its own settings as JSON, and how you pinned it):
@@ -923,7 +925,7 @@ Later in 2026-11 came the Inbox: until then a task could be in no list, which wi
   - **Dragging the pills** (`data-reorder` on the row, for who may pin; `POST /tasks/pin-order`, `pinOrderOp`): a pinned list's pill dragged with the mouse to another place among the pinned lists puts the pins in that order, in one commit ("Reorder the pinned lists").
     Let go outside the row, it goes back.
     My tasks, the Inbox and More stay where they are.
-    With a finger there is no dragging (it scrolls and taps): **Move first** in the list's menu does it.
+    With a finger there is no dragging (it scrolls and taps): **Unpin** and **Pin** again puts a list last.
   The heading names what is shown: **List: <name>** (with 🔒 for a private one), **My tasks**, **Inbox** or **All tasks** (the window's title likewise).
   Every list's pill or link goes to `/tasks?list=<ref>`: the list with its settings,
   and as its **Backlinks** every page that embeds it (`listPages`: any `[[tasks: list=<name>]]` outside code on a page you may see that shows this list, A–Z by title; at the end, in the right column on big screens and as the breadcrumb's `← N` chip, as on a page view).
@@ -937,7 +939,7 @@ Later in 2026-11 came the Inbox: until then a task could be in no list, which wi
   (Until 2026-11 every list was a pill, pinned or not, with an **All** pill last.)
 - **Pins** (`pinnedLists`, `pinListOp`; `POST /tasks/pin-list` with `list` and `pin`: `1`, `first` or `0`): **a pin is a shortcut**: the list is a pill of your list switcher, and nothing else.
   It doesn't say what is in My tasks (that is whose a task is), nor where a new task goes (the Inbox, or the list in view).
-  You pin, unpin and reorder in a list's ⋯ menu on `/tasks?list=`: **Pin** puts it last, **Move first** (on a pinned list that isn't) puts its pill at the front, **Unpin** takes it out; the pills can be dragged too (the list switcher, above).
+  You pin, unpin and reorder in a list's ⋯ menu on `/tasks?list=`: **Pin** puts it last, **Unpin** takes it out (until 2026-11 **Move first** put a pill at the front: dragging does that; `pin=first` is still the route's); the pills can be dragged too (the list switcher, above).
   **A list you make starts pinned**, last, wherever it is made: New list…, the List field, the move dialog, an assistant's `create_task_list`.
   The pin in List settings pins and unpins.
   **Pins are the user's own**: in their registry (`pinned`, in order); a user who has set none has the wiki's (the shared registry's, which are everyone's without users), and starts from those with their first pin.
@@ -953,7 +955,7 @@ Later in 2026-11 came the Inbox: until then a task could be in no list, which wi
   With several shared lists and none remembered, or none at all, the line reads "A task for someone else needs a shared list: choose one in List." and Save says so on the List field (New list… in it makes one).
   Choosing a list yourself ends the following.
   An assistant's `create_task` with an assignee and no shared list is refused, naming the shared lists; `POST /api/tasks` likewise answers 400 ("A private task is yours alone. Put it in a shared list to assign it").
-- **The Tasks page's ⋯ menu** (`.page-menu-btn` beside the heading of `/tasks`, on every view of it; the page's ⋯ menu, `#page-menu`, with `js/pagemenu.js`): **New list…**; on a list **Rename…**, **Pin** / **Move first** / **Unpin**, **Make shared…** (a private one) and **Delete…**; on a tag's view (`/tasks?tag=<tag>`) **Rename tag…** (below).
+- **The Tasks page's ⋯ menu** (`.page-menu-btn` beside the heading of `/tasks`, on every view of it; the page's ⋯ menu, `#page-menu`, with `js/pagemenu.js`): **it is the page's one such menu**: the view's own actions are in it, **List settings…** first and **Mark all read**, **Export tasks** and **Import tasks…** last (`[data-tasks-action]`, shown and run by `js/tasksettings.js` where the view has them; the toolbar's ⋯ is not shown on this page. Until 2026-11 the page had two ⋯ menus with different things in them), and between them **New list…**; on a list **Rename…**, **Pin** / **Move first** / **Unpin**, **Make shared…** (a private one) and **Delete…**; on a tag's view (`/tasks?tag=<tag>`) **Rename tag…** (below).
   Each but the pin is a dialog with a form the server answers (`data-dialog` on the menu item; a refusal comes back with the message in the dialog).
   Not for a viewer, nor in sharing mode.
 - **New list…** (`#list-new-dialog`; `POST /tasks/new-list`, `createListOp` in `go/tasklists.go`): asks for the list's name and makes it: an entry in the registry, in one commit (`Create list #shop`).

@@ -51,21 +51,26 @@
 <a href="/tasks" class="lists-more-item lists-more-all" title="Every task you see, in whatever list"{{if .All}} aria-current="page"{{end}}><span class="lists-more-name">All tasks</span></a>
 </div></details>{{end}}</div></nav>{{end}}
 <header class="page-header"><h1>{{.Heading}}{{with .List}}{{if .Private}} <span class="lock" title="A private list: only you see it and its tasks">🔒</span>{{end}}{{end}}{{if .InboxPrivate}} <span class="lock" title="Your Inbox: only you see its tasks">🔒</span>{{end}}</h1>
-{{- if .Menu}}<div class="page-header-actions"><button type="button" class="btn page-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="page-menu" title="More: new list{{if .List}}, rename, pin, delete{{end}}{{if .Tag}}, rename the tag{{end}}" aria-label="More actions">⋯</button></div>{{end}}</header>
+{{- if .Menu}}<div class="page-header-actions"><button type="button" class="btn page-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="page-menu" title="More: settings, new list{{if .List}}, rename, pin, delete{{end}}{{if .Tag}}, rename the tag{{end}}, export, import" aria-label="More actions">⋯</button></div>{{end}}</header>
 {{- if .Menu}}
 <div class="page-menu-backdrop" hidden></div><div class="page-menu" id="page-menu" role="menu" aria-label="Task list actions" hidden>
+{{- /* The view's own actions (js/tasksettings.js shows those it has, and runs
+    them): on this page they are here, not in a ⋯ of the toolbar's. */}}
+<button type="button" role="menuitem" data-tasks-action="settings" hidden>List settings…</button>
 <button type="button" role="menuitem" data-dialog="list-new-dialog" id="list-new-btn">New list…</button>
 {{- with .List}}
 <button type="button" role="menuitem" data-dialog="list-rename-dialog" id="list-rename-btn">Rename…</button>
 {{- /* The pin is the user's own: a pinned list is a pill of their switcher. */}}
 <form method="post" action="/tasks/pin-list" class="page-menu-form"><input type="hidden" name="list" value="{{.Ref}}">
 {{- if not $.Pin}}<button type="submit" role="menuitem" name="pin" value="1" id="list-pin-btn">Pin</button>{{end}}
-{{- if and $.Pin (ne $.Pin "first")}}<button type="submit" role="menuitem" name="pin" value="first" id="list-first-btn" title="Its pill comes first among your pinned lists">Move first</button>{{end}}
 {{- if $.Pin}}<button type="submit" role="menuitem" name="pin" value="0" id="list-unpin-btn">Unpin</button>{{end}}</form>
 {{- if .Private}}<button type="button" role="menuitem" data-dialog="list-share-dialog" id="list-share-btn">Make shared…</button>{{end}}
 <button type="button" role="menuitem" data-dialog="list-delete-dialog" id="list-delete-btn">Delete…</button>
 {{- end}}
 {{- if .Tag}}<button type="button" role="menuitem" data-dialog="tag-rename-dialog" id="tag-rename-btn">Rename tag…</button>{{end -}}
+<button type="button" role="menuitem" data-tasks-action="read" hidden>Mark all read</button>
+<button type="button" role="menuitem" data-tasks-action="export" hidden>Export tasks</button>
+<button type="button" role="menuitem" data-tasks-action="import" hidden>Import tasks…</button>
 </div>
 {{- /* New list…: a place for tasks (POST /tasks/new-list). */}}
 <dialog id="list-new-dialog" class="modal" data-params="newlist_error newlist_name"{{if .NewListError}} data-open{{end}}><p class="modal-label">New list</p><p class="modal-desc">A list is a place for tasks, with an entry of its own in the row above them. A task is in one list; a new one starts in {{if .Users}}your{{else}}the{{end}} Inbox.</p><form method="post" action="/tasks/new-list"><input type="text" name="name" id="list-new-input" value="{{.NewListName}}" placeholder="Its name, e.g. shop" aria-label="The list's name" autocomplete="off" spellcheck="false" required>

@@ -170,25 +170,26 @@ def test_task_creates_a_task_in_the_tasks(new_page, wiki):
 
 def test_tasks_tab_counts_stand_beside_the_icon(new_page, wiki):
     # Regression: two two-digit counts hung past the narrow Tasks tab, over
-    # its neighbour; moved in, they covered the icon. They stand right of the
-    # icon, due above Focus, clear of the label and of the next tab's icon.
+    # its neighbour; moved in, they covered the icon. The link shows one
+    # number now, what is due, right of the icon, clear of the label and of
+    # the next tab's icon; how much is for today is in its tooltip.
     phone = new_page(**{**TOUCH_PHONE, "viewport": {"width": 320, "height": 640}})
     for i in range(12):
         phone.request.post("/api/tasks", data={
             "title": f"Task {i}", "due_date": "2020-01-01", "start_date": date.today().isoformat()})
     phone.goto("/page/index")
     bar = phone.locator(".action-buttons")
-    expect(bar.locator(".module-focus")).to_have_text("12")
+    expect(bar.locator(".module-due")).to_have_text("12")
+    expect(bar.locator(".module-focus")).to_be_hidden()
     tasks = bar.locator(".action-module[data-module=tasks]")
+    expect(tasks).to_have_attribute("title", "Tasks: 12 for today · 12 overdue")
     tab, icon = tasks.bounding_box(), tasks.locator("svg").bounding_box()
     label = tasks.locator(".action-label").bounding_box()
     nxt = bar.locator(".action-module[data-module=tasks] ~ .action-module svg").first.bounding_box()
-    due, focus = bar.locator(".module-due").bounding_box(), bar.locator(".module-focus").bounding_box()
-    assert due["y"] + due["height"] <= focus["y"]                       # due on top
-    for b in (due, focus):
-        assert b["x"] >= icon["x"] + icon["width"], (b, icon)            # beside the icon
-        assert b["x"] + b["width"] < nxt["x"], (b, nxt)                  # clear of the next tab's icon
-        assert not _overlap(b, label), (b, label)
+    due = bar.locator(".module-due").bounding_box()
+    assert due["x"] >= icon["x"] + icon["width"], (due, icon)            # beside the icon
+    assert due["x"] + due["width"] < nxt["x"], (due, nxt)                # clear of the next tab's icon
+    assert not _overlap(due, label), (due, label)
     # The icons stay evenly spaced: the counts take no room from a wider Tasks tab.
     xs = [bar.locator(f".action-module[data-module={m}] svg").bounding_box() for m in ("wiki", "tasks", "notes")]
     centres = [x["x"] + x["width"] / 2 for x in xs]

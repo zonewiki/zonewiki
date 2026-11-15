@@ -15,7 +15,7 @@ from datetime import date
 import pytest
 from playwright.sync_api import expect
 
-from conftest import make_list, wait_until
+from conftest import make_list, more_menu, wait_until
 from tests import settings
 
 
@@ -60,7 +60,7 @@ def open_edit(page, title):
 
 
 def open_list_settings(page):
-    page.locator("#task-more-btn").click()
+    more_menu(page)
     page.get_by_role("menuitem", name="List settings…").click()
     dialog = page.locator("#task-settings-modal")
     expect(dialog).to_be_visible()

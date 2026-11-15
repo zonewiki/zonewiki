@@ -334,13 +334,15 @@ export function initTaskSettings(app) {
   const n = count => `${count} task${count === 1 ? '' : 's'}`;
   let picked = null;   // the file's content, while the dialog asks for the tag
 
-  moreBtn.addEventListener('click', () => app.showMenu('This list', [
+  // What the menu offers: List settings…, Mark all read (My tasks, while a
+  // task has news for the user: all of them seen), Export, Import.
+  const actions = () => [
     ['settings', 'List settings…'],
-    // My tasks, while a task has news for the user: all of them seen.
     ...(app.initMine && app.updatesNow().length ? [['read', 'Mark all read']] : []),
     ['export', 'Export tasks'],
     ['import', 'Import tasks…'],
-  ], action => {
+  ];
+  function run(action) {
     if (action === 'settings') { open(); return; }
     if (action === 'read') { app.markAllSeen(); return; }
     if (action === 'import') { importFile.click(); return; }
@@ -350,7 +352,25 @@ export function initTaskSettings(app) {
     document.body.append(a);
     a.click();
     a.remove();
-  }, moreBtn));
+  }
+  // On the Tasks page they are the page's ⋯ menu's (beside the heading,
+  // with the list's own actions: templates/tasks_page.html), so the page has
+  // one such menu; an embed on a wiki page has no heading of the list's, and
+  // keeps the ⋯ of its toolbar.
+  const pageItems = location.pathname === '/tasks' && app.instanceId === '0'
+    ? [...document.querySelectorAll('#page-menu [data-tasks-action]')] : [];
+  if (pageItems.length) {
+    moreBtn.hidden = true;
+    const sync = () => {
+      const now = actions().map(([action]) => action);
+      for (const item of pageItems) item.hidden = !now.includes(item.dataset.tasksAction);
+    };
+    sync();
+    document.querySelector('.page-menu-btn')?.addEventListener('click', sync, true);
+    for (const item of pageItems) item.addEventListener('click', () => run(item.dataset.tasksAction));
+  } else {
+    moreBtn.addEventListener('click', () => app.showMenu('This list', actions(), run, moreBtn));
+  }
 
   // A file is picked: what it holds, and a tag of your own for its tasks.
   importFile.addEventListener('change', async () => {

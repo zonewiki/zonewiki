@@ -8,7 +8,7 @@ from datetime import date
 import pytest
 from playwright.sync_api import expect
 
-from conftest import make_list, wait_until
+from conftest import make_list, more_menu, wait_until
 from tests import settings
 
 
@@ -308,7 +308,7 @@ def test_the_settings_dialog_sets_whose_tasks_a_list_shows(alice, wiki):
     wiki.write("work", "# Work\n\n[[tasks: tag=work view=open group=none]]\n")
     alice.goto("/page/work")
     expect(alice.locator(".task-item")).to_have_count(2)
-    alice.locator("#task-more-btn").click()
+    more_menu(alice)
     alice.get_by_role("menuitem", name="List settings…").click()
     dialog = alice.locator("#task-settings-modal")
     expect(dialog.locator("[name=tag]")).to_be_visible()   # shown: the list has that filter
@@ -319,7 +319,7 @@ def test_the_settings_dialog_sets_whose_tasks_a_list_shows(alice, wiki):
     assert wiki.read("work") == "# Work\n\n[[tasks: tag=work view=open group=none assignee=bob]]\n"
     expect(alice.locator(".task-item .task-title")).to_have_text(["Bob's"])
     # It opens with what the page says, More open since it is set.
-    alice.locator("#task-more-btn").click()
+    more_menu(alice)
     alice.get_by_role("menuitem", name="List settings…").click()
     expect(dialog.locator("[name=assignee]")).to_have_value("bob")
 
@@ -419,7 +419,7 @@ def test_my_tasks_holds_what_is_mine(alice, wiki):
     expect(titles).to_have_count(5)
     # Its settings: her own, and what a new task gets is not among them.
     alice.goto("/tasks?mine=1")
-    alice.locator("#task-more-btn").click()
+    more_menu(alice)
     alice.get_by_role("menuitem", name="List settings…").click()
     dialog = alice.locator("#task-settings-modal")
     expect(dialog.locator(".task-settings-where")).to_have_text("For My tasks: yours alone.")
@@ -461,7 +461,7 @@ def test_my_tasks_settings_turn_the_mails_on(page, wiki, monkeypatch):
     page.request.post("/login", form={"username": "alice", "password": "pw"})
     make_list(page, "team", pin=True)
     page.goto("/tasks?mine=1")
-    page.locator("#task-more-btn").click()
+    more_menu(page)
     page.get_by_role("menuitem", name="List settings…").click()
     dialog = page.locator("#task-settings-modal")
     box = dialog.locator("[name=mail_assigned]")
@@ -474,7 +474,7 @@ def test_my_tasks_settings_turn_the_mails_on(page, wiki, monkeypatch):
     with page.expect_navigation():
         dialog.get_by_role("button", name="Save").click()
     assert '"mine": {"mail": "assigned,comments"}' in (wiki.root / "private/alice/_tasks/lists.json").read_text()
-    page.locator("#task-more-btn").click()
+    more_menu(page)
     page.get_by_role("menuitem", name="List settings…").click()
     expect(box).to_be_checked()
     expect(dialog.locator("[name=mail_mentioned]")).not_to_be_checked()
@@ -486,7 +486,7 @@ def test_my_tasks_settings_turn_the_mails_on(page, wiki, monkeypatch):
     # bob has no address: no box.
     page.request.post("/login", form={"username": "bob", "password": "pw"})
     page.goto("/tasks?mine=1")
-    page.locator("#task-more-btn").click()
+    more_menu(page)
     page.get_by_role("menuitem", name="List settings…").click()
     expect(dialog).to_be_visible()
     expect(box).to_be_hidden()
@@ -726,7 +726,7 @@ def test_updates_show_what_happened_on_your_tasks(alice, new_page):
     expect(card(alice, "For bob")).to_have_count(0)
     alice.locator("#tasks-tabs [data-view='focus']").click()
     # The list's menu marks all read.
-    alice.locator("#task-more-btn").click()
+    more_menu(alice)
     alice.get_by_role("menuitem", name="Mark all read").click()
     expect(alice.locator(".updates-heading")).to_have_count(0)
     expect(alice.locator('.module-link[data-module="tasks"] .module-new').first).to_be_hidden()
@@ -772,3 +772,56 @@ def test_a_cards_menu_assigns(alice):
     expect(dialog).to_be_visible()
     dialog.locator(".bulk-list-row", has_text="@bob").click()
     wait_for_assignee(alice, "Shared work", "bob")
+
+
+def test_closed_hides_the_lines_about_open_tasks(alice):
+    """A list's "N unassigned" is of its open tasks: it isn't shown while
+    Closed is, and is back with the tab."""
+    new(alice, "No one's")
+    done = new(alice, "Done", assignee="alice")
+    alice.request.put(f"/api/tasks/{done['id']}", data={"completed": True})
+    alice.goto("/tasks?list=team")
+    line = alice.locator(".tasks-list-facts")
+    expect(line).to_contain_text("1 unassigned")
+    alice.locator("#task-closed-link").click()
+    expect(card(alice, "Done")).to_be_visible()
+    expect(line).to_be_hidden()
+    alice.locator("#task-closed-link").click()
+    expect(line).to_be_visible()
+
+
+def test_the_tasks_link_has_one_number_and_a_dot(alice):
+    """The Tasks link shows what is due and, when there is news, a dot: how
+    many updates there are is in its tooltip, and My tasks lists them."""
+    new(alice, "Due", assignee="alice", due_date=date.today().isoformat())
+    alice.request.post("/login", form={"username": "bob", "password": "pw"})
+    new(alice, "From bob", assignee="alice")
+    alice.request.post("/login", form={"username": "alice", "password": "pw"})
+    alice.goto("/page/index")
+    link = alice.locator(".breadcrumb .module-link[data-module=tasks]")
+    expect(link.locator(".module-due")).to_have_text("1")
+    expect(link.locator(".module-focus")).to_be_hidden()
+    dot = link.locator(".module-new")
+    expect(dot).to_be_visible()
+    box = dot.bounding_box()
+    assert box["width"] <= 10 and box["height"] <= 10          # a dot, no number
+    expect(link).to_have_attribute("title", re.compile(r"1 update for you"))
+
+
+def test_my_tasks_open_tab_says_that_there_are_updates(alice):
+    """Updates are listed on My tasks' Today tab; its Open tab says that
+    there are some and leads there, so the Tasks links never count what the
+    page doesn't show."""
+    alice.request.post("/login", form={"username": "bob", "password": "pw"})
+    new(alice, "From bob", assignee="alice")
+    alice.request.post("/login", form={"username": "alice", "password": "pw"})
+    alice.goto("/tasks?mine=1&view=open&group=none")
+    note = alice.locator(".tasks-updates-note")
+    expect(note).to_have_text("1 update for you →")
+    note.locator("button").click()
+    expect(alice.locator("#tasks-tabs .active")).to_have_text(["Today"])
+    expect(alice.locator(".updates-heading")).to_be_visible()
+    expect(note).to_be_hidden()
+    alice.goto("/tasks?list=team&view=open&group=none")
+    expect(card(alice, "From bob")).to_be_visible()
+    expect(alice.locator(".tasks-updates-note")).to_have_count(0)      # a list's view has none

@@ -496,6 +496,7 @@ function render() {
   app.closedStale();   // the Closed view: another filter by now, asked for again
   app.applyGroup();   // who can be assigned may have arrived since
   app.syncClosedLink();
+  syncUpdatesNote();
   const filtered = app.filterTasks();
   const { orderedTasks, newTasks, updates } = inViewOrder(filtered);
   if (st.activeView !== 'plan' && orderedTasks.length === 0 && newTasks.length === 0 && updates.length === 0) {
@@ -505,6 +506,25 @@ function render() {
   app.listEl.innerHTML = st.activeView === 'plan' ? planHTML(filtered) : listHTML(orderedTasks, newTasks, updates);
   renderFigures(app.listEl);
   wireListHandlers();
+}
+
+// My tasks' Open tab: the tasks with news for the user are listed on Today,
+// under Updates; here a line above the list says that there are some and
+// leads there, so the count on the Tasks links is never of something the
+// page doesn't show.
+function syncUpdatesNote() {
+  const n = app.initMine && (st.activeView === 'open' || st.activeView === 'plan') ? app.updatesNow().length : 0;
+  let note = app.appEl.querySelector('.tasks-updates-note');
+  if (n && !note) {
+    note = document.createElement('p');
+    note.className = 'tasks-updates-note';
+    note.innerHTML = '<button type="button" class="btn btn-sm"></button>';
+    note.firstChild.addEventListener('click', () => app.switchTab('focus'));
+    app.listEl.before(note);
+  }
+  if (!note) return;
+  note.hidden = !n;
+  note.firstChild.textContent = `${n} update${n === 1 ? '' : 's'} for you →`;
 }
 
 return { htmlOf, render };

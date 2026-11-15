@@ -37,6 +37,9 @@ function syncClosedLink() {
 
 // Mark the view's button active (no side effects — used during init too).
 function markActiveTab(view) {
+  // Closed: the lines above the list that are about its open tasks ("4
+  // unassigned", Given to others, what the view is for) aren't shown (CSS).
+  app.appEl?.closest('.page-content')?.classList.toggle('tasks-shows-closed', view === 'closed');
   const tab = view === 'plan' ? 'open' : view;   // Open grouped by day
   tabButtons().forEach(b => {
     const on = b.dataset.view === tab;

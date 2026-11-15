@@ -8,7 +8,7 @@ from datetime import date, timedelta
 import pytest
 from playwright.sync_api import expect
 
-from conftest import list_page, make_list, open_tab, pick_date, wait_until
+from conftest import list_page, make_list, more_menu, open_tab, pick_date, wait_until
 from tests import settings
 
 
@@ -1511,7 +1511,7 @@ def test_a_reload_keeps_the_tab(page, wiki):
 
 def open_list_settings(page):
     """List settings…, the first item of the toolbar's ⋯ menu."""
-    page.locator("#task-more-btn").click()
+    more_menu(page)
     page.get_by_role("menuitem", name="List settings…").click()
 
 
@@ -4935,7 +4935,8 @@ def test_new_list_from_the_tasks_pages_menu(page, wiki):
     page.goto("/tasks?view=open&group=none")
     page.locator(".page-header .page-menu-btn").click()
     menu = page.locator("#page-menu")
-    expect(menu.get_by_role("menuitem")).to_have_text(["New list…"])   # a list's own actions aren't All tasks'
+    # The page's one ⋯ menu: the view's settings, export and import, and New list…; a list's own actions aren't All tasks'.
+    expect(menu.get_by_role("menuitem")).to_have_text(["List settings…", "New list…", "Export tasks", "Import tasks…"])
     menu.get_by_role("menuitem", name="New list…").click()
     dialog = page.locator("#list-new-dialog")
     expect(dialog).to_be_visible()
@@ -4960,8 +4961,8 @@ def test_new_list_from_the_tasks_pages_menu(page, wiki):
     assert not (wiki.root / "lists").exists()                          # a list is no page
     # On a list the menu has its actions too; the same name again is refused in the dialog.
     page.locator(".page-header .page-menu-btn").click()
-    expect(menu.get_by_role("menuitem")).to_have_text(["New list…", "Rename…", "Unpin", "Delete…"])
-    page.keyboard.press("Enter")                                      # the first item
+    expect(menu.get_by_role("menuitem")).to_have_text(["List settings…", "New list…", "Rename…", "Unpin", "Delete…", "Export tasks", "Import tasks…"])
+    menu.get_by_role("menuitem", name="New list…").click()
     name.fill("shop")
     page.locator("#list-new-submit").click()
     expect(dialog).to_be_visible()
@@ -5053,15 +5054,14 @@ def test_pin_and_move_first_from_a_lists_menu(page, wiki):
     expect(page.locator('.tasks-place[data-place="list:shop"]')).to_have_attribute("title", "Pinned list #shop")
     for attr in ("data-tasks-list", "data-tasks-tags"):
         assert page.locator("body").get_attribute(attr) is None
+    # The menu has no Move first: the pills are put in order by dragging them
+    # (the list switcher), which the route does here.
     page.locator(".page-header .page-menu-btn").click()
-    expect(menu.get_by_role("menuitem")).to_have_text(["New list…", "Rename…", "Move first", "Unpin", "Delete…"])
-    expect(menu.get_by_role("menuitem", name="Move first")).to_have_attribute("title", "Its pill comes first among your pinned lists")
-    menu.get_by_role("menuitem", name="Move first").click()
-    page.wait_for_url("**/tasks?list=work")
-    expect(labels).to_have_text(["My tasks", "Inbox", "work", "shop", "More"])
-    page.locator(".page-header .page-menu-btn").click()
-    expect(menu.get_by_role("menuitem")).to_have_text(["New list…", "Rename…", "Unpin", "Delete…"])   # first already
+    expect(menu.get_by_role("menuitem")).to_have_text(["List settings…", "New list…", "Rename…", "Unpin", "Delete…", "Export tasks", "Import tasks…"])
     page.keyboard.press("Escape")
+    assert page.request.post("/tasks/pin-list", form={"list": "work", "pin": "first"}).ok
+    page.goto("/tasks?list=work")
+    expect(labels).to_have_text(["My tasks", "Inbox", "work", "shop", "More"])
     # A new task still goes to the Inbox.
     page.keyboard.press("c")
     page.keyboard.press("t")
@@ -5319,7 +5319,7 @@ def test_settings_are_in_the_more_menu_on_a_phone(new_page, wiki):
     list_page(phone, wiki, "shopping", "# Shopping\n\n[[tasks: list=shop]]\n")
     phone.goto("/page/shopping")
     expect(phone.locator("#task-settings-btn")).to_have_count(0)
-    phone.locator("#task-more-btn").click()
+    more_menu(phone)
     expect(phone.get_by_role("menuitem")).to_have_text(["List settings…", "Export tasks", "Import tasks…"])
     phone.get_by_role("menuitem", name="List settings…").click()
     dialog = phone.locator("#task-settings-modal")

@@ -117,7 +117,7 @@ and `test_rename_and_delete_list_dialogs` in `tests/e2e/test_tasks.py` the dialo
 `TestListSwitcher` in `tests/test_tasks_embed.py` covers the Tasks page's row of lists (My tasks, the Inbox and the pinned lists as pills, the others and All tasks under More and what More names, each place's counts, a new list pinned for who made it, the pills' order by `POST /tasks/pin-order`, the filter field from eight lists, sharing mode),
 `TestANewListIsPinnedForWhoMadeIt` and `TestPinOrder` in `go/tasklists_test.go` whose registry a pin and an order are written to,
 `TestRegistryDefaultIsTheFirstPin` in `go/internal/taskfiles/lists_test.go` a registry from when a default list was named,
-and in `tests/e2e/test_tasks.py` More opening, closing and naming the view, a list's menu (Pin, Move first, Unpin: a pin is a pill and no more), a pill dragged to another place without the page loading again, the filter and the mark on a list new to the browser.
+and in `tests/e2e/test_tasks.py` More opening, closing and naming the view, the Tasks page's one ⋯ menu (List settings…, a list's Pin and Unpin: a pin is a pill and no more; Export, Import), a pill dragged to another place without the page loading again, the filter and the mark on a list new to the browser.
 **The Inbox** (a task in no list; with users its maker's own): `TestInbox` in `go/tasklists_test.go` covers where such a task is kept with and without users and that it has no assignee,
 `TestInboxScope` the names `inbox` and `none` where a list is named, and a list called so from before;
 `test_the_inbox_is_a_pill_and_a_view` in `tests/test_tasks_embed.py` its pill, its counts, its view and its line, the name refused for a list, and `test_my_tasks_and_the_inbox_have_none` that it has no backlinks;

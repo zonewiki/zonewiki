@@ -117,6 +117,7 @@ There is still no nav bar: the modules sit where the eye already goes.
   A new page comes from a link to it (a missing wikilink opens its editor, `docs/spec/rendering.md`), so every page is linked from somewhere; or from a note and its **Move to wiki**, which asks what links to it.
   There is no New page button or shortcut (Ctrl+N was one until 2026-10, but browsers keep it for a new window).
 - **Counts**: the Tasks links (switcher and tab bar) carry two counts (`.module-counts`): tasks due today or overdue (`.module-due`, orange) and tasks in Today (`.module-focus`, muted; `TasksCore.isFocus`: started, or due today or earlier),
+  **They show one number and a dot** (CSS, `.module-link .module-focus`, `.module-new`): what is due, and a dot when there is news for you; how much is for today, and how many updates, are in the link's tooltip, and the Today tab says its own. The other counts are still in the page, for the tooltip and the list switcher's pills, which keep their numbers. (Until 2026-11 the links showed up to three numbers without a word.)
   each hidden at zero,
   with a tooltip like "Tasks: 5 in Today · 1 overdue · 1 due today".
   `taskCounts()` counts My tasks (`mineFilter`), which is every task in a wiki without lists.

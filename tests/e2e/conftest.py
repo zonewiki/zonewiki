@@ -227,6 +227,16 @@ def _wait_when_there(page):
         setattr(page, name, waiting)
 
 
+def more_menu(page):
+    """Opens the ⋯ menu of the list shown: on the Tasks page the page's own
+    (beside the heading), on a wiki page the ⋯ of the embed's toolbar."""
+    from urllib.parse import urlparse
+    if urlparse(page.url).path == "/tasks":
+        page.locator(".page-header .page-menu-btn").click()
+    else:
+        page.locator("#task-more-btn").click()
+
+
 def wait_until(page, predicate, timeout_ms: int = WAIT_MS):
     """Wait until predicate() holds, looking every 100 ms; fails when it
     never does. For what expect() can't watch: the API's answer, a file on

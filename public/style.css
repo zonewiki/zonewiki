@@ -228,6 +228,16 @@ html.sharing :is(
    the "new" on their cards. */
 .module-new { background: var(--link); color: var(--bg); }
 :is(.module-due, .module-focus, .module-new)[hidden] { display: none; }
+/* The Tasks links show one number, what is due (today or overdue), and a dot
+   when there is news for you: how many, and how much is for today, are in the
+   link's tooltip, and the Today tab says its own. (Until 2026-11 they showed
+   three numbers without a word. A pill of the list switcher keeps its
+   numbers: .tasks-place is no .module-link.) */
+.module-link .module-focus { display: none; }
+.module-link .module-new {
+  min-width: 0; width: .5rem; height: .5rem; padding: 0; align-self: center;
+  font-size: 0; overflow: hidden;
+}
 @media screen and (prefers-color-scheme: dark) {
   .module-due { background: color-mix(in srgb, #f97316 22%, transparent); color: #fb923c; }
   .module-focus { background: color-mix(in srgb, var(--muted) 25%, transparent); }
@@ -2196,7 +2206,7 @@ body.editor-page main {
     position: absolute; top: calc(50% - .45rem); left: calc(50% + .9rem); transform: translateY(-50%);
     flex-direction: column; align-items: flex-start; margin: 0; gap: .1rem; pointer-events: none;
   }
-  .action-buttons :is(.module-due, .module-focus, .module-new) {
+  .action-buttons :is(.module-due, .module-focus) {
     min-width: .9rem; height: .85rem; padding: 0 .2rem; font-size: .6rem;
   }
   /* Notes is private with users: a small lock at its icon's top right
