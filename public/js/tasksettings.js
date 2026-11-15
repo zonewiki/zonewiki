@@ -24,12 +24,16 @@ export function parseParams(raw) {
   return out;
 }
 
+// What the Open tab shows, as group= names it (tasksGroups in go/tasksyntax.go).
+const GROUPS = ['none', 'day', 'person', 'list'];
+
 const isTrue = v => ['1', 'true', 'yes', 'on'].includes((v || '').trim().toLowerCase());
 
 // What the dialog shows for params: its fields' values.
 function fieldsOf(p) {
   const view = (p.view || '').toLowerCase();
   const plan = (p.plan || '').toLowerCase();
+  const group = (p.group || '').toLowerCase();
   let names = (p.labels || '').split(',');
   if (names.length === 3) names = [names[0], names[2]];   // from when Plan was a tab
   const name = i => (names[i] || '').replace(/_/g, ' ').trim();
@@ -37,8 +41,10 @@ function fieldsOf(p) {
   const limit = parseInt(p.limit, 10);
   return {
     view: view === 'open' || view === 'plan' ? 'open' : view === 'closed' ? 'closed' : 'focus',
-    // view=open has always been the one list, view=plan the board.
-    plan: plan === 'on' || plan === 'off' ? plan === 'on' : view !== 'open',
+    // What the Open tab shows: group=, else what plan= said (on: by day,
+    // off: one list); view=open has always been the one list, view=plan
+    // the board.
+    group: GROUPS.includes(group) ? group : plan === 'on' ? 'day' : plan === 'off' ? 'none' : view !== 'open' ? 'day' : 'none',
     label_open: name(0),
     label_focus: name(1),
     limit: Number.isNaN(limit) ? '' : String(Math.max(1, Math.min(99, limit))),
@@ -71,13 +77,17 @@ const oneWord = s => s.replace(/[[\]`]/g, '').replace(/\s*([,|])\s*/g, '$1').tri
 export function changedParams(was, now, p) {
   const set = {};
   if ('list' in now && now.list !== was.list) set.list = now.list;
-  if (now.view !== was.view || now.plan !== was.plan) {
+  if (now.view !== was.view || now.group !== was.group) {
     // Open's two views keep their names: view=plan the board, view=open
-    // the list; plan=off only says it where view= doesn't.
-    if (now.view === 'open') set.view = now.plan ? 'plan' : 'open';
+    // the list; group= only says what view= doesn't: by person or by list,
+    // and the one list where the embed opens on another tab. plan=, which
+    // said on or off until 2026-11, is written no more.
+    const cut = now.group !== 'none' && now.group !== 'day';
+    if (now.view === 'open') set.view = now.group === 'none' ? 'open' : 'plan';
     else if (now.view === 'closed') set.view = 'closed';
     else set.view = now.view !== was.view || p.view ? 'focus' : '';
-    set.plan = now.view !== 'open' && !now.plan ? 'off' : '';
+    set.group = cut || (now.view !== 'open' && now.group === 'none') ? now.group : '';
+    if (p.plan !== undefined) set.plan = '';
   }
   if (now.label_open !== was.label_open || now.label_focus !== was.label_focus) {
     const a = labelWord(now.label_open), b = labelWord(now.label_focus);
@@ -171,7 +181,7 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
     });
   }
   const read = () => ({
-    view: f.view.value, plan: f.plan.checked,
+    view: f.view.value, group: f.group.value,
     label_open: f.label_open.value.trim(), label_focus: f.label_focus.value.trim(),
     limit: f.limit.value.trim(), new: f.new.value.trim(),
     tag: f.tag.value.trim(), pin: f.pin.value, keep: f.keep.checked,
@@ -181,7 +191,7 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
     ...(f.mail && mode().mine && mode().mail ? { mail: f.mail.checked } : {}),
     ...(f.assignee ? { assignee: f.assignee.value.trim() } : {}),   // with users
   });
-  const fill = (params, { all = false, mine = false, list = false, embed = false, home = false, mail = false } = {}) => {
+  const fill = (params, { all = false, mine = false, list = false, embed = false, home = false, mail = false, ownList = false } = {}) => {
     const fields = fieldsOf(params);
     form.dataset.home = home ? '1' : '';
     form.dataset.mail = mail ? '1' : '';
@@ -193,7 +203,13 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
     f.view.replaceChildren(...['open', 'focus', fields.view === 'closed' && 'closed'].filter(Boolean)
       .map(v => new Option(v === 'closed' ? 'Closed' : tabLabel(v), v)));
     for (const k of ['view', 'label_open', 'label_focus', 'limit', 'new', 'tag', 'pin']) f[k].value = fields[k];
-    f.plan.checked = fields.plan;
+    // By person where tasks have assignees (with users; not My tasks nor a
+    // list of the user's own), By list where the view holds several lists;
+    // what is set stays to be seen.
+    const users = document.body.dataset.users === '1';
+    const offered = { none: true, day: true, person: users && !mine && !ownList, list: !list };
+    for (const o of f.group.options) o.hidden = o.disabled = !offered[o.value] && o.value !== fields.group;
+    f.group.value = fields.group;
     f.keep.checked = fields.keep;
     if (f.noshare) f.noshare.checked = fields.noshare;
     if (f.homeout) f.homeout.checked = fields.home;
@@ -249,7 +265,7 @@ export function initTaskSettings(app) {
   let was = null;
 
   function open() {
-    was = fill(params, { all, mine, list: !!list, embed, home: appEl.dataset.settingsHome === '1', mail: appEl.dataset.settingsMail === '1' });
+    was = fill(params, { all, mine, list: !!list, embed, ownList: !!list && app.privateLists.has(list), home: appEl.dataset.settingsHome === '1', mail: appEl.dataset.settingsMail === '1' });
     const who = app.privateLists.has(list) ? 'which only you see' : 'for everyone';
     whereEl.textContent = mine ? (document.body.dataset.users === '1' ? 'For My tasks: yours alone.' : 'For My tasks.')
       : all ? 'For All tasks, for everyone.'
@@ -286,9 +302,10 @@ export function initTaskSettings(app) {
         // the tab is the page's (or the list's), Plan the list's.
         const pin = set.pin;
         delete set.pin;
-        if ('view' in set || 'plan' in set) {
+        if ('view' in set || 'group' in set) {
           set.view = now.view;
-          set.plan = now.plan ? 'on' : 'off';
+          set.group = now.group;
+          if (listSet.plan !== undefined) set.plan = '';
         }
         const ofPage = {}, ofList = {};
         for (const [k, v] of Object.entries(set)) (embed && PAGE_KEYS.includes(k) ? ofPage : ofList)[k] = v;

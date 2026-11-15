@@ -98,7 +98,7 @@ const listEl = document.getElementById('tasks-list' + sfx);
 const tabsEl = document.getElementById('tasks-tabs' + sfx);
 const addBtn = document.getElementById('task-add-btn' + sfx);
 const sortSel = document.getElementById('task-sort' + sfx);
-const planSwitch = document.getElementById('task-plan' + sfx);
+const cutEl = document.getElementById('task-cut' + sfx);
 const filterSearch = document.getElementById('task-filter-search' + sfx);
 const closedLink = document.getElementById('task-closed-link' + sfx);
 const modal = document.getElementById('task-edit-modal' + sfx);
@@ -127,7 +127,7 @@ const app = {
   addBtn, modal, form, wontDoBtn, recTypeSelect, keepCb, listSelect, listNote,
 
   // its functions
-  boardDivider, clearBoardDropOver, dropOnBucket, planOnDay,
+  boardDivider, clearBoardDropOver, dropOnBucket, dropWrite, planOnDay,
   taskList,
   filterTasks, boardBuckets,
   refreshOtherInstances, listTooltip, inScope, listName, editPrivate, newTaskList,
@@ -136,7 +136,7 @@ const app = {
 
   forgetSession,
   scopeQuery, headless,
-  sortSel, planSwitch,
+  sortSel, cutEl,
   filterSearch,
   tabsEl, closedLink, saveActiveTab,
   // what is set further down, or changes
@@ -154,6 +154,7 @@ const app = {
   get initList() { return initList; },
   get inboxView() { return inboxView; },
   get inboxPrivate() { return inboxPrivate; },
+  get initMine() { return initMine; },
   isPrivateList,
   get ownsOrder() { return !!initMine; },
   own, setOwnOrder,
@@ -191,6 +192,7 @@ listEl.addEventListener('dragover', e => {
   if (st.activeView !== 'plan' || !st.draggedId) return;
   const div = boardDivider(e.target);
   if (!div || !div.dataset.dropBucket) return;  // non-droppable section
+  if (refusesDrop(st.tasks.find(t => t.id === st.draggedId), div)) return;   // not this task
   e.preventDefault();
   if (!div.classList.contains('board-drop-over')) { clearBoardDropOver(); div.classList.add('board-drop-over'); }
 });
@@ -201,8 +203,43 @@ listEl.addEventListener('drop', e => {
   e.preventDefault();
   dropOnBucket(st.draggedId, div);
 });
+// What a section stands for other than a day (By person, By list): the
+// user a drop there assigns the task to ('' no one), the list it moves it
+// to ('' the Inbox); undefined on the board by day.
+const dropPerson = div => div.dataset.dropPerson;
+const dropList = div => div.dataset.dropList;
+// Why the section doesn't take the task, '' when it does: a private task
+// has no assignee, and a shared task stays shared.
+function refusesDrop(task, div) {
+  if (!task) return '';
+  if (dropPerson(div) !== undefined && task.private && dropPerson(div) !== people.me) {
+    return 'A private task is yours alone: move it to a shared list to assign it';
+  }
+  if (dropList(div) !== undefined && !task.private && isPrivateList(dropList(div))) return 'A shared task stays shared';
+  return '';
+}
+// Write what a drop on the section means for the task: a day starts it
+// there, a person's section assigns it, a list's moves it (a private task
+// into a shared list only after asking: everyone sees it from then on).
+// Whether it was written.
+async function dropWrite(id, div) {
+  const task = st.tasks.find(t => t.id === id);
+  if (!task) return false;
+  const why = refusesDrop(task, div);
+  if (why) { showNotice(why); return false; }
+  if (dropPerson(div) !== undefined) {
+    return task.private ? true : app.assignTasks([task], dropPerson(div));
+  }
+  if (dropList(div) !== undefined) {
+    const ref = dropList(div), toPrivate = isPrivateList(ref);
+    if (task.private && !toPrivate && !await app.confirmShare(task, listName(ref))) return false;
+    return app.moveTasks([task], ref, toPrivate, false);
+  }
+  return planOnDay(id, div.dataset.dropDay);
+}
 // Move a task to a board section: a day sets its start date, Unplanned
-// clears it, and Later asks for a date. A drop on the task's own section
+// clears it, and Later asks for a date; a person's section assigns it, a
+// list's moves it there (dropWrite). A drop on the task's own section
 // does nothing, except on Later, where it picks another later date, and a
 // carried-over task's on Today, which starts it today: committing to it
 // again.
@@ -212,7 +249,8 @@ function dropOnBucket(id, div) {
   const task = st.tasks.find(t => t.id === id);
   const recommit = div.dataset.dropDay === todayStr() && task && TasksCore.isCarried(task, todayStr());
   if (el && boardDivider(el) === div && div.dataset.dropBucket !== 'later' && !recommit) return;
-  if (div.dataset.dropBucket === 'unplanned') updateTask(id, { start_date: null });
+  if (dropPerson(div) !== undefined || dropList(div) !== undefined) dropWrite(id, div);
+  else if (div.dataset.dropBucket === 'unplanned') updateTask(id, { start_date: null });
   else if (div.dataset.dropBucket === 'later') {
     // "Later" is a range, not a day — ask which date (min: beyond this week).
     openDatePicker('', d => { if (d) planOnDay(id, d); }, div, dateOffset(7));
@@ -399,6 +437,7 @@ const tabLabel = view => tabsEl.querySelector(`[data-view="${view === 'plan' ? '
 const initKeep = appEl?.dataset.initKeep === '1';
 Object.assign(app, initTaskView(app));
 const { toggleFold, unfoldFor, activeSort, applySort, groupKey, applyGroup, expandSelected } = app;
+const { initCut } = app;
 
 function cleanList(name) {
   return String(name || '').trim().replace(/^#/, '').trim().toLowerCase()
@@ -493,7 +532,18 @@ const { toggleSelection, syncSelBar, setSelected } = app;
 
 // ── Rendering ──────────────────────────────────────────────────────────────
 // Day-board grouping lives in TasksCore; bind it to the current date here.
+// What the board's sections stand for is st.cut (js/taskview.js): days,
+// people or lists.
 function boardBuckets(list) {
+  if (st.cut === 'person') return TasksCore.personBuckets(list, todayStr(), activeSort(), people);
+  if (st.cut === 'list') {
+    // The user's own lists before the shared ones, each A–Z.
+    const lists = [...listChoices].sort((a, b) => b.private - a.private
+      || listName(a.ref).localeCompare(listName(b.ref)) || a.ref.localeCompare(b.ref))
+      .map(l => ({ ref: l.ref, label: (l.private ? '🔒 ' : '') + listName(l.ref) + (l.ref.startsWith('shared/') ? ' (shared)' : '') }));
+    return TasksCore.listBuckets(list, todayStr(), activeSort(), lists, taskList)
+      .map(b => b.list ? b : { ...b, label: (inboxPrivate ? '🔒 ' : '') + 'Inbox' });
+  }
   return TasksCore.boardBuckets(list, todayStr(), activeSort(), DATES);
 }
 
@@ -558,6 +608,9 @@ if (filterSearch) {
 const isReload = performance.getEntriesByType?.('navigation')[0]?.type === 'reload';
 st.activeView = [isReload && loadShownTab(), urlView, embedView, loadActiveTab()].find(v => VIEWS.includes(v)) || 'focus';
 saveShownTab(st.activeView);
+// The board's sections: by day for a link's ?view=plan, else what the view
+// or this browser tab says.
+initCut(urlView === 'plan' && !(isReload && VIEWS.includes(loadShownTab())));
 if (st.activeView !== 'closed') st.lastTab = st.activeView;
 applySort();
 applyGroup();

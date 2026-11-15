@@ -197,6 +197,17 @@ function confirmDeadlineMove(task, day) {
 // Completing a task whose subtasks (checklist items in its notes) are not
 // all ticked: usually a slip, so it asks. True at once when none of `tasks`
 // (open ones count) has an open subtask.
+// A private task dropped on a shared list's section (By list): everyone
+// would see it from then on, and that can't be taken back, so it asks, as
+// the move dialog's row says it.
+function confirmShare(task, listName) {
+  document.getElementById('task-share-text' + app.sfx).textContent =
+    `“${plainTitle(task.title)}” goes to the list “${listName}”: everyone who uses the wiki will see and change it. It can’t be made private again.`;
+  return confirmModal(document.getElementById('task-share-modal' + app.sfx),
+    document.getElementById('task-share-confirm' + app.sfx),
+    document.getElementById('task-share-cancel' + app.sfx));
+}
+
 function confirmOpenSubtasks(tasks) {
   const open = t => { const c = subtaskCounts(t.description); return c.total - c.done; };
   const withOpen = tasks.filter(t => t && !t.closed_at && open(t) > 0);
@@ -239,5 +250,5 @@ function confirmModal(dialog, okBtn, cancelBtn) {
   });
 }
 
-return { openTaskMenu, headerTasksMenu, showMenu, postReorder, confirmDeadlineMove, confirmOpenSubtasks };
+return { openTaskMenu, headerTasksMenu, showMenu, postReorder, confirmDeadlineMove, confirmOpenSubtasks, confirmShare };
 }

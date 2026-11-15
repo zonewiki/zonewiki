@@ -103,9 +103,10 @@ later.
 A task list built around two different dates: the day you start on a task,
 and its deadline. It has two views:
 
-- **Open**: every task. With **Plan** on, a board of the coming days
-  (today, tomorrow, the week, later) where you drag a task onto the day
-  you'll do it; with Plan off, one list, in an order you set by dragging.
+- **Open**: every task, as one **List** in an order you set by dragging,
+  or as a **Plan**: a board of the coming days (today, tomorrow, the week,
+  later) where you drag a task onto the day you'll do it. A team's list
+  also shows **By person**: who has what, and a drag hands a task over.
 - **Focus**: what's on today, started or due.
 
 Done tasks go to a monthly archive. Beyond that:

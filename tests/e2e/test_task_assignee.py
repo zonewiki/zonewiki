@@ -536,3 +536,77 @@ def test_opening_a_task_given_to_you_takes_the_new_away(alice):
     open_edit(alice, "Plain")
     alice.wait_for_timeout(300)
     assert [e["event"] for e in task(alice, "Plain")["history"]] == ["created", "seen"]
+
+
+def section(page, key):
+    return page.locator(f".board-day-divider[data-drop-bucket='{key}']")
+
+
+def cut(page):
+    """The choices of the Open tab's control that show, by their names."""
+    return page.locator(".tasks-cut button:visible").all_inner_texts()
+
+
+def test_by_person_shows_who_has_what_and_a_drop_assigns(alice):
+    """The Open tab By person (docs/spec/tasks.md, Views): a section per
+    assignee, Unassigned and your own first, and a card dropped on a
+    section is that user's, with an undo."""
+    new(alice, "Bob's", assignee="bob")
+    new(alice, "Mine", assignee="alice")
+    new(alice, "No one's")
+    alice.goto("/tasks?list=team&view=open")
+    assert cut(alice) == ["List", "Plan", "By person"]
+    alice.locator(".tasks-cut [data-group=person]").click()
+    expect(alice.locator(".board-day-label")).to_have_text(["Unassigned", "You", "@bob"])
+    expect(section(alice, "p:bob").locator(".board-day-count")).to_have_text("1")
+    card(alice, "No one's").drag_to(section(alice, "p:bob"))
+    wait_for_assignee(alice, "No one's", "bob")
+    expect(section(alice, "p:bob").locator(".board-day-count")).to_have_text("2")
+    expect(alice.get_by_text("1 task assigned to bob")).to_be_visible()
+    alice.keyboard.press("Control+z")
+    wait_for_assignee(alice, "No one's", None)
+    # On Unassigned a task is let go; on your own it is taken.
+    card(alice, "Bob's").drag_to(section(alice, "p:"))
+    wait_for_assignee(alice, "Bob's", None)
+    card(alice, "Bob's").drag_to(section(alice, "p:alice"))
+    wait_for_assignee(alice, "Bob's", "alice")
+    # d goes through the choices; a reload stays By person.
+    alice.reload()
+    expect(alice.locator(".tasks-cut [data-group=person]")).to_have_attribute("aria-pressed", "true")
+    card(alice, "Mine").locator(".task-title").click()
+    alice.keyboard.press("d")
+    expect(alice.locator(".tasks-cut [data-group=none]")).to_have_attribute("aria-pressed", "true")
+
+
+def test_by_list_in_my_tasks_and_a_drop_moves(alice):
+    """By list, where a view holds several lists: a section per list, the
+    Inbox first; a drop moves the task, a private one into a shared list
+    only after asking, and a shared one never into the Inbox."""
+    new(alice, "Shared", assignee="alice")
+    new(alice, "Private", list=None)
+    alice.goto("/tasks?mine=1&view=open")
+    assert cut(alice) == ["List", "Plan", "By list"]      # My tasks are all yours: not By person
+    alice.locator(".tasks-cut [data-group=list]").click()
+    expect(alice.locator(".board-day-label")).to_have_text(["🔒 Inbox", "team"])
+    card(alice, "Shared").drag_to(section(alice, "l:"))
+    expect(section(alice, "l:team").locator(".board-day-count")).to_have_text("1")   # a shared task stays shared
+    card(alice, "Private").drag_to(section(alice, "l:team"))
+    modal = alice.locator("#task-share-modal")
+    expect(modal).to_contain_text("everyone who uses the wiki will see and change it")
+    modal.locator("#task-share-cancel").click()
+    assert task(alice, "Private").get("list") is None
+    card(alice, "Private").drag_to(section(alice, "l:team"))
+    modal.locator("#task-share-confirm").click()
+    wait_until(alice, lambda: task(alice, "Private").get("list") == "team")
+    expect(section(alice, "l:team").locator(".board-day-count")).to_have_text("2")
+
+
+def test_one_person_has_list_and_plan(page, wiki):
+    """Without users, and with no list, the control is what the Plan switch
+    was: List and Plan."""
+    page.request.post("/api/tasks", data={"title": "One"})
+    page.goto("/tasks?view=open")
+    assert cut(page) == ["List", "Plan"]
+    expect(page.locator(".tasks-cut [data-group=none]")).to_have_attribute("aria-pressed", "true")
+    page.locator(".tasks-cut [data-group=day]").click()
+    expect(page.locator(".board-day-divider[data-drop-bucket='unplanned']")).to_be_visible()

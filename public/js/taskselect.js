@@ -209,22 +209,7 @@ function openBulkListModal(ids) {
     rows[(i + (ev.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length].focus();
   });
 
-  // The tasks into the list `target` ('' for none), which is private or not.
-  async function move(target, targetPrivate, made) {
-    const moving = chosen.filter(t => (app.taskList(t) || '') !== target);
-    if (!moving.length) return;   // there already
-    app.dismissUndo();
-    const shares = t => !!t.private && !targetPrivate;
-    const mine = people.me && people.users?.has(people.me) ? { assignee: people.me } : {};
-    if (!(await batchUpdate(moving.map(t => ({ id: t.id, list: target, ...(shares(t) ? { share: true, ...mine } : {}) }))))) return;
-    const what = `${moving.length} task${moving.length > 1 ? 's' : ''}`;
-    const msg = target ? `${what} moved to ${made ? 'the new list' : 'list'} “${app.listName(target)}”` : `${what} moved to the Inbox`;
-    // Back where they were, but those that were private and are shared now.
-    // (A list just made stays: it is a list from now on, empty or not.)
-    const back = moving.filter(t => !shares(t));
-    if (back.length) app.showUndo(msg, () => batchUpdate(back.map(t => ({ id: t.id, list: app.taskList(t) || '', history: t.history || [] }))));
-    else showNotice(msg);
-  }
+  const move = (target, targetPrivate, made) => moveTasks(chosen, target, targetPrivate, made);
   listEl.addEventListener('click', ev => {
     const btn = ev.target.closest('.bulk-list-row');
     if (!btn || btn.disabled) return;
@@ -287,6 +272,41 @@ function openBulkListModal(ids) {
   (rows.find(r => r.getAttribute('aria-current') === 'true') || rows[0]).focus({ preventScroll: true });
 }
 
+// The tasks `chosen` into the list `target` ('' for the Inbox), which is
+// private or not (the move dialog's rows, a drop on a list's section By
+// list), with one undo. True when they are there now.
+async function moveTasks(chosen, target, targetPrivate, made) {
+  const moving = chosen.filter(t => (app.taskList(t) || '') !== target);
+  if (!moving.length) return true;   // there already
+  app.dismissUndo();
+  const shares = t => !!t.private && !targetPrivate;
+  const mine = people.me && people.users?.has(people.me) ? { assignee: people.me } : {};
+  if (!(await batchUpdate(moving.map(t => ({ id: t.id, list: target, ...(shares(t) ? { share: true, ...mine } : {}) }))))) return false;
+  const what = `${moving.length} task${moving.length > 1 ? 's' : ''}`;
+  const msg = target ? `${what} moved to ${made ? 'the new list' : 'list'} “${app.listName(target)}”` : `${what} moved to the Inbox`;
+  // Back where they were, but those that were private and are shared now.
+  // (A list just made stays: it is a list from now on, empty or not.)
+  const back = moving.filter(t => !shares(t));
+  if (back.length) app.showUndo(msg, () => batchUpdate(back.map(t => ({ id: t.id, list: app.taskList(t) || '', history: t.history || [] }))));
+  else showNotice(msg);
+  return true;
+}
+
+// The shared tasks `chosen` to the user `name` ('' no one), with one undo
+// (the assign dialog's rows, a drop on a person's section By person). True
+// when they are that user's now.
+async function assignTasks(chosen, name) {
+  const changing = chosen.filter(t => (t.assignee || '') !== name);
+  if (!changing.length) return true;
+  app.dismissUndo();
+  if (!(await batchUpdate(changing.map(t => ({ id: t.id, assignee: name || null }))))) return false;
+  const what = `${changing.length} task${changing.length > 1 ? 's' : ''}`;
+  // The old history goes with the old name, so the undo leaves no trace.
+  app.showUndo(name ? `${what} assigned to ${name === people.me ? 'you' : name}` : `${what} assigned to no one`,
+    () => batchUpdate(changing.map(t => ({ id: t.id, assignee: t.assignee || null, history: t.history || [] }))));
+  return true;
+}
+
 // Who has several selected tasks, at once (the selection bar's Assign…,
 // the a key; with users): every user who can be assigned, yourself first,
 // each a row, then No one; a click assigns the selected tasks at once
@@ -331,16 +351,8 @@ function openBulkAssignModal(ids) {
   dlg.querySelector('.bulk-tag-list').addEventListener('click', async ev => {
     const btn = ev.target.closest('.bulk-list-row');
     if (!btn) return;
-    const name = btn.dataset.assignee;
-    const changing = chosen.filter(t => (t.assignee || '') !== name);
     close();
-    if (!changing.length) return;
-    app.dismissUndo();
-    if (!(await batchUpdate(changing.map(t => ({ id: t.id, assignee: name || null }))))) return;
-    const what = `${changing.length} task${changing.length > 1 ? 's' : ''}`;
-    // The old history goes with the old name, so the undo leaves no trace.
-    app.showUndo(name ? `${what} assigned to ${name === people.me ? 'you' : name}` : `${what} assigned to no one`,
-      () => batchUpdate(changing.map(t => ({ id: t.id, assignee: t.assignee || null, history: t.history || [] }))));
+    assignTasks(chosen, btn.dataset.assignee);
   });
   dlg.showModal();
   (rows.find(r => r.getAttribute('aria-current') === 'true') || rows[0]).focus({ preventScroll: true });
@@ -624,5 +636,5 @@ function visibleItems() {
   return Array.from(app.listEl.querySelectorAll('.task-item'));
 }
 
-return { openBulkTagModal, openBulkListModal, openBulkAssignModal, updateSelectionClasses, inSelection, toggleSelection, selectAllVisible, clearSelection, anyPlanned, enterSelectMode, exitSelectMode, syncSelBar, mayComplete, setImportance, runSelectionAction, startOn, completeMany, setSelected, extendSelection, visibleItems };
+return { moveTasks, assignTasks, openBulkTagModal, openBulkListModal, openBulkAssignModal, updateSelectionClasses, inSelection, toggleSelection, selectAllVisible, clearSelection, anyPlanned, enterSelectMode, exitSelectMode, syncSelBar, mayComplete, setImportance, runSelectionAction, startOn, completeMany, setSelected, extendSelection, visibleItems };
 }

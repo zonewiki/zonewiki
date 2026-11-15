@@ -90,10 +90,10 @@ document.addEventListener('keydown', async e => {
     return;
   }
 
-  // 'd' toggles the Open tab's Plan switch (by start date / one list)
+  // 'd' goes through what the Open tab shows (one list, Plan, by person, by list)
   if (e.key === 'd' && !e.ctrlKey && !e.metaKey && !e.altKey && app.isOpenTab(st.activeView)) {
     e.preventDefault();
-    app.setGroup(st.activeView === 'open' ? 'days' : 'list');
+    app.cycleGroup();
     return;
   }
 

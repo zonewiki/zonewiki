@@ -346,7 +346,7 @@ Without Playwright installed they skip, so plain `pytest tests/` is unaffected.
   board grouping by start date,
   modal "Days before due",
   Plan board in Open's order with in-section drops ignored,
-  view tabs,
+  view tabs and the Open tab's control (List, Plan; By person and By list where offered, and their drops: a person's section assigns, a list's moves, a private task into a shared list asks),
   start-date Today,
   selection (Shift/Ctrl+click, Ctrl+A, the selection bar and the menu of a selection, the bulk tag dialog's three states and undo, moving the selection to a list),
   touch: tap-to-edit,

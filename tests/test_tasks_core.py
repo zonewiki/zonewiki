@@ -796,3 +796,35 @@ class TestMyTasks:
         got = run_core("['list:inbox', 'list:none', '-list:inbox'].map(q => [{}, {list: 'a'}].map(t =>"
                        " TasksCore.matchesFilter(t, TasksCore.parseFilter(q))))")
         assert got == [[True, False], [True, False], [False, True]]
+
+
+class TestGroups:
+    """The Open tab By person and By list (personBuckets, listBuckets)."""
+
+    PEOPLE = "{me: 'alice', users: new Set(['alice', 'bob'])}"
+
+    def task(self, title, **fields):
+        return {"id": title, "title": title, "sort_order": None, "created_at": "2026-07-01T10:00:00", **fields}
+
+    def test_by_person(self):
+        tasks = [self.task("bobs", assignee="bob"), self.task("mine", assignee="alice"),
+                 self.task("private", private=True), self.task("free"),
+                 self.task("former", assignee="dan"), self.task("late", assignee="bob", due_date="2026-07-01")]
+        got = run_core(f"TasksCore.personBuckets({json.dumps(tasks)}, '{TODAY}', '', {self.PEOPLE})"
+                       ".map(s => [s.key, s.label, s.person, s.tasks.map(t => t.id).sort(), s.overdue.map(t => t.id), s.ordered])")
+        assert got == [["p:", "Unassigned", "", ["former", "free"], [], True],
+                       ["p:alice", "You", "alice", ["mine", "private"], [], True],
+                       ["p:bob", "@bob", "bob", ["bobs", "late"], ["late"], True]]
+
+    def test_by_person_always_has_unassigned_and_you(self):
+        got = run_core(f"TasksCore.personBuckets([], '{TODAY}', 'due', {self.PEOPLE}).map(s => [s.label, s.ordered])")
+        assert got == [["Unassigned", False], ["You", False]]
+
+    def test_by_list(self):
+        tasks = [self.task("a", list="shop"), self.task("b"), self.task("c", list="team"), self.task("d", list="gone")]
+        lists = [{"ref": "diary", "label": "diary"}, {"ref": "team", "label": "team"}, {"ref": "shop", "label": "shop"}]
+        got = run_core(f"TasksCore.listBuckets({json.dumps(tasks)}, '{TODAY}', '', {json.dumps(lists)}, "
+                       "t => ['shop', 'team'].includes(t.list) ? t.list : null)"
+                       ".map(s => [s.key, s.label, s.list, s.tasks.map(t => t.id).sort()])")
+        # The Inbox first, with what is in no list the user sees; then the lists with tasks, as given.
+        assert got == [["l:", "Inbox", "", ["b", "d"]], ["l:team", "team", "team", ["c"]], ["l:shop", "shop", "shop", ["a"]]]

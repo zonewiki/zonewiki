@@ -10,7 +10,8 @@ const { st } = app;
 // Plan board: make cards draggable; the list-level dragover/drop handlers
 // (attached once at init) re-plan the task to the section it's dropped on.
 // A drop on a card in a section (`data-ordered`) lands above or below it,
-// as on Open: on another day it also starts the task there. A drop on a
+// as on Open: on another day it also starts the task there (another
+// person's section assigns it, another list's moves it: dropWrite). A drop on a
 // section's Sorted label puts it first among the sorted ones, as Open's
 // Sorted heading does. Elsewhere a drop on a card is a drop on its section.
 const orderedCard = item => !!app.boardDivider(item)?.dataset.ordered;
@@ -28,14 +29,15 @@ function setupBoardDragAndDrop() {
     const same = draggedDiv === targetDiv;
     // Later is a range: a task from elsewhere asks for its date first, as
     // on the heading, and lands where Open's order puts it.
-    if (!targetDiv.dataset.ordered || (!same && !targetDiv.dataset.dropDay)) {
+    const writes = targetDiv.dataset.dropDay || targetDiv.dataset.dropPerson !== undefined || targetDiv.dataset.dropList !== undefined;
+    if (!targetDiv.dataset.ordered || (!same && !writes)) {
       if (!same) app.dropOnBucket(id, targetDiv);
       return;
     }
     const list = app.planSectionList(targetDiv).filter(x => x !== id);
     list.splice(label ? list.indexOf(app.sectionKey('sorted')) + 1
       : list.indexOf(targetId) + (side === 'after' ? 1 : 0), 0, id);
-    if (!same && !await app.planOnDay(id, targetDiv.dataset.dropDay)) return;
+    if (!same && !await app.dropWrite(id, targetDiv)) return;
     app.applySectionList(list, [id], app.OPEN_ORDER);
   }
   const SORTED_LABEL = '.plan-subdivider[data-sub="sorted"]';

@@ -467,6 +467,53 @@ function boardBuckets(list, today, sort, dates) {
   return sections;
 }
 
+// The Open tab By person (with users): a section per assignee, as the board
+// has one per day, and a drop on one assigns. Unassigned first (what no one
+// has, a former assignee's included: assigneeIs none), then the user's own
+// (the tasks assigned to them and their private ones), then everyone else
+// who has tasks here, A–Z. Unassigned and the user's own are always there:
+// they are where a task is let go and taken. Each names its overdue tasks
+// (`overdue`), the most overdue first. `sort` as for boardBuckets.
+// people: { me, users (a Set of who can be assigned) }.
+function personBuckets(list, today, sort, people) {
+  const by = SORTS[sort];
+  const me = people?.me || '';
+  const groups = new Map([['', []], [me, []]]);
+  [...list].reverse().forEach(t => {
+    const name = assigneeIs(t, 'none', people) ? '' : t.private ? me : (t.assignee || '').toLowerCase();
+    if (!groups.has(name)) groups.set(name, []);
+    groups.get(name).push(t);
+  });
+  const names = [...groups.keys()].filter(n => n && n !== me).sort((a, b) => a.localeCompare(b));
+  return ['', ...(me ? [me] : []), ...names].map(name => {
+    const tasks = groups.get(name).sort(by || byOpenOrder);
+    return { key: 'p:' + name, person: name, label: !name ? 'Unassigned' : name === me ? 'You' : '@' + name,
+      date: null, droppable: true, ordered: !by, tasks,
+      overdue: tasks.filter(t => isOverdue(t, today)).sort(byDeadline) };
+  });
+}
+
+// The Open tab By list (My tasks, All tasks): a section per list, and a drop
+// on one moves the task there. The Inbox first, always (ref ''), then the
+// lists that have tasks here in the order `lists` gives them ([{ ref,
+// label }]: the user's own before the shared ones); listOf(t) is a task's
+// list as the user names it, '' for the Inbox.
+function listBuckets(list, today, sort, lists, listOf) {
+  const by = SORTS[sort];
+  const groups = new Map([['', []]]);
+  [...list].reverse().forEach(t => {
+    const ref = listOf(t) || '';
+    if (!groups.has(ref)) groups.set(ref, []);
+    groups.get(ref).push(t);
+  });
+  const known = lists.filter(l => l.ref && groups.has(l.ref));
+  return [{ ref: '', label: 'Inbox' }, ...known].map(l => {
+    const tasks = groups.get(l.ref).sort(by || byOpenOrder);
+    return { key: 'l:' + l.ref, list: l.ref, label: l.label, date: null, droppable: true, ordered: !by, tasks,
+      overdue: tasks.filter(t => isOverdue(t, today)).sort(byDeadline) };
+  });
+}
+
 // ── Quick-add shorthand ────────────────────────────────────────────────────
 // A new task's title may end in shorthand that fills its fields:
 //   Call Bob tomorrow #work due:fri
@@ -545,7 +592,7 @@ const TasksCore = {
   dateToStr, addDays, isOverdue, isFocus, isCarried, byOpenOrder, byDeadline, byCreated, SORTS, placeInOrder, tagMatchScore, tagCounts, selectionTags, bulkTagChange,
   rankTags, sanitizeTagInput,
   parseFilter, matchesFilter, filterActive, assigneeIs, inMine, givenToMe, orderMoves, tasksInView, tagParamToQuery, importanceWord,
-  bucketKey, fullDayLabel, boardBuckets, parseQuickAdd,
+  bucketKey, fullDayLabel, boardBuckets, personBuckets, listBuckets, parseQuickAdd,
   dateSettings, localeDate, shortDate, longDayLabel, weekStart, weekdayNames, monthTitle,
 };
 

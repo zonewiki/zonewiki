@@ -4,7 +4,7 @@
 // app (its state in app.st).
 
 import TasksCore from '../tasks-core.js';
-import { todayStr } from './taskutil.js';
+import { todayStr, people } from './taskutil.js';
 import { renderTexts, textsOf } from './tasktexts.js';
 
 const { SORTS } = TasksCore;
@@ -44,7 +44,9 @@ function unfoldFor(id) {
     if (!app.listEl?.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`) && app.listEl?.querySelector('[data-draw-more]')) app.render();
   }
   if (st.activeView !== 'plan' || !task) return false;
-  const fid = foldId(TasksCore.bucketKey(task, todayStr()));
+  const key = app.boardBuckets([task]).find(b => b.tasks.length)?.key;
+  if (!key) return false;
+  const fid = foldId(key);
   if (!st.folded.delete(fid)) return false;
   saveFolded();
   app.render();
@@ -83,37 +85,90 @@ function cycleSort() {
 }
 app.sortSel?.addEventListener('change', () => setSort(app.sortSel.value));
 
-// The Open tab shows every open task, grouped by start date (Plan on: the
-// board, view 'plan') or as one list (Plan off: view 'open', Unsorted ·
-// Sorted, where the manual order is ranked across everything). Plan was a
-// tab of its own until 2026-10; the views keep their names, so `view=plan`
-// and `view=open` links still open the one they always did. The Plan
-// switch (d) toggles. The Open tab opens what plan= says (the settings
-// dialog's Plan; the board without it); a flip of the switch is remembered
-// for this browser tab only (sessionStorage), as the active tab is, so a
-// fresh load is back at the default.
+// The Open tab shows every open task one of a few ways, which the control
+// beside the tabs picks (.tasks-cut; d goes through them): as one list
+// (List: view 'open', Unsorted · Sorted, where the manual order is ranked
+// across everything), or in sections (view 'plan', the board), by what
+// st.cut says: by start date (Plan: 'day'), a section per assignee (By
+// person: 'person') or per list (By list: 'list'). A drop on a section
+// sets what it stands for. Plan was a tab of its own until 2026-10 and a
+// switch until 2026-11; the views keep their names, so `view=plan` and
+// `view=open` links still open the one they always did. The Open tab
+// opens what group= says (the settings dialog's "The Open tab shows"; Plan
+// without it); a choice made here is remembered for this browser tab only
+// (sessionStorage), as the active tab is, so a fresh load is back at the
+// default.
 const isOpenTab = view => view === 'open' || view === 'plan';
 const groupKey = () => 'zone-tasks-group:' + [location.pathname, app.appEl?.dataset.initList || '',
   app.appEl?.dataset.initTag || '', app.instanceId].join('|');
-const initPlan = app.appEl?.dataset.initPlan || '';   // [[tasks: plan=on|off]]
-function openGroup() {
+const initGroup = app.appEl?.dataset.initGroup || '';   // [[tasks: group=none|day|person|list]]
+// What the session remembers, by the control's names ('days' and 'list'
+// are from when it was the Plan switch).
+const STORED = { list: 'none', days: 'day', person: 'person', lists: 'list' };
+const storedAs = group => Object.keys(STORED).find(k => STORED[k] === group);
+// The choices this view offers: List and Plan always; By person where
+// tasks have assignees (with users, not in My tasks, a list of the user's
+// own or their Inbox, where every task is theirs); By list where the view
+// holds several lists (My tasks, All tasks) and the wiki has one.
+function groupsOffered() {
+  const own = app.initMine || (app.inboxView ? app.inboxPrivate : !!app.initList && app.isPrivateList(app.initList));
+  const several = app.initMine || (!app.initList && !app.inboxView);
+  return ['none', 'day',
+    ...((people.users ? people.users.size : document.body.dataset.users === '1') && !own ? ['person'] : []),
+    ...(several && app.listSet.size ? ['list'] : [])];
+}
+// The grouping the Open tab opens with: what this browser tab chose, else
+// the view's own (group=), else Plan; one this view doesn't offer is Plan.
+function defaultGroup() {
   let stored = null;
   try { stored = sessionStorage.getItem(groupKey()); } catch (_) {}
-  if (stored === 'list') return 'open';
-  if (stored === 'days') return 'plan';
-  return initPlan === 'off' ? 'open' : 'plan';
+  const group = STORED[stored] || initGroup || 'day';
+  return groupsOffered().includes(group) ? group : 'day';
+}
+const viewOf = group => group === 'none' ? 'open' : 'plan';
+// What the board's sections stand for; set whenever the Open tab is shown
+// grouped. A link's or an embed's view=plan is the board by day, as always.
+st.cut = 'day';
+function openGroup() {
+  const group = defaultGroup();
+  if (group !== 'none') st.cut = group;
+  return viewOf(group);
 }
 function applyGroup() {
-  if (!app.planSwitch) return;
-  app.planSwitch.hidden = !isOpenTab(st.activeView);
-  app.planSwitch.setAttribute('aria-checked', String(st.activeView === 'plan'));
+  if (!app.cutEl) return;
+  app.cutEl.hidden = !isOpenTab(st.activeView);
+  const offered = groupsOffered();
+  if (st.activeView === 'plan' && !offered.includes(st.cut)) st.cut = 'day';
+  const now = st.activeView === 'plan' ? st.cut : 'none';
+  for (const b of app.cutEl.querySelectorAll('[data-group]')) {
+    b.hidden = !offered.includes(b.dataset.group);
+    b.setAttribute('aria-pressed', String(b.dataset.group === now));
+  }
+  app.cutEl.classList.toggle('tasks-cut--more', offered.length > 2);
 }
 function setGroup(group) {
-  if (!isOpenTab(st.activeView)) return;
-  try { sessionStorage.setItem(groupKey(), group); } catch (_) {}
-  app.switchTab(group === 'list' ? 'open' : 'plan');
+  if (!isOpenTab(st.activeView) || !groupsOffered().includes(group)) return;
+  try { sessionStorage.setItem(groupKey(), storedAs(group)); } catch (_) {}
+  if (group !== 'none') st.cut = group;
+  app.switchTab(viewOf(group));
 }
-app.planSwitch?.addEventListener('click', () => setGroup(st.activeView === 'plan' ? 'list' : 'days'));
+// d: the next choice (with two, it flips, as the Plan switch did).
+function cycleGroup() {
+  const offered = groupsOffered();
+  const now = st.activeView === 'plan' ? st.cut : 'none';
+  setGroup(offered[(offered.indexOf(now) + 1) % offered.length]);
+}
+app.cutEl?.addEventListener('click', e => {
+  const btn = e.target.closest('[data-group]');
+  if (btn) setGroup(btn.dataset.group);
+});
+// The page opened on the board (the embed's view, with its group=; a
+// reload): its sections are what group= or this browser tab says, by day
+// for a link's ?view=plan.
+function initCut(byLink) {
+  const group = byLink ? 'day' : defaultGroup();
+  st.cut = group === 'none' ? 'day' : group;
+}
 // The view a tab opens: Open its remembered grouping (unless already on
 // one of them: a click on the active tab changes nothing).
 const tabView = tab => tab === 'open' && !isOpenTab(st.activeView) ? openGroup() : tab;
@@ -218,5 +273,5 @@ function finishCollapse() {
   }
 }
 
-return { foldId, toggleFold, unfoldFor, SORT_TITLES, activeSort, applySort, cycleSort, isOpenTab, groupKey, applyGroup, setGroup, tabView, collapseAll, EXPAND_ICON, MORE_ICON, setExpanded, toggleDetails, expandSelected };
+return { foldId, toggleFold, unfoldFor, SORT_TITLES, activeSort, applySort, cycleSort, isOpenTab, groupKey, applyGroup, setGroup, cycleGroup, initCut, tabView, collapseAll, EXPAND_ICON, MORE_ICON, setExpanded, toggleDetails, expandSelected };
 }

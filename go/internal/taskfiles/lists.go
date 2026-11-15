@@ -32,7 +32,7 @@ const ListsVersion = 2
 // ListSettings: a list's settings, in the order its line keeps them. Their
 // values are text, as an embed writes them (limit "8", keep "1").
 // home "off": the list's tasks are left out of My tasks.
-var ListSettings = []string{"view", "limit", "plan", "keep", "labels", "new", "noshare", "home"}
+var ListSettings = []string{"view", "limit", "group", "plan", "keep", "labels", "new", "noshare", "home"}
 
 // List: a list as its registry keeps it. Owner is not in the file: whose
 // registry it was read from ("" the shared one).

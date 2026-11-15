@@ -62,7 +62,7 @@ function renderEmpty() {
   if (st.activeView === 'focus') {
     app.listEl.innerHTML = '<li class="tasks-empty">Nothing planned for today. ' +
       '<button type="button" class="btn btn-sm" data-goto-tab="plan">Plan your day</button></li>';
-    app.listEl.querySelector('[data-goto-tab]').addEventListener('click', () => app.switchTab('plan'));
+    app.listEl.querySelector('[data-goto-tab]').addEventListener('click', () => { st.cut = 'day'; app.switchTab('plan'); });
   } else {
     app.listEl.innerHTML = '<li class="tasks-empty">No tasks here.</li>';
   }
@@ -82,7 +82,8 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
   // The list the task is in, first and marked (icon, tint, tooltip), as in
   // the filter; not in a view of that one list, where every card would say it.
   const listRef = app.taskList(task);
-  const listChip = listRef && listRef !== app.initList
+  // nor By list, where its section does.
+  const listChip = listRef && listRef !== app.initList && !(st.activeView === 'plan' && st.cut === 'list')
     ? `<span class="task-tag task-tag-list" title="${esc(app.listTooltip(listRef))}">${esc(app.listName(listRef))}</span>` : '';
   const tags = listChip + (task.tags || []).map(t => `<span class="task-tag">#${esc(t)}</span>`).join('');
   const recIcon = task.recurrence ? '<span class="task-recurring" title="Recurring">↻</span>'
@@ -143,7 +144,10 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
   const gave = TasksCore.givenToMe(task, people.me);
   const newDisplay = gave
     ? `<span class="task-new" title="${esc(`${gave.by} gave you this task on ${shortDate(gave.at.slice(0, 10))}`)}">new</span>` : '';
-  const assigneeDisplay = assignee
+  // By person the section says who has it (not of a former assignee, whose
+  // task is under Unassigned).
+  const sectionSays = st.activeView === 'plan' && st.cut === 'person' && !formerAssignee;
+  const assigneeDisplay = assignee && sectionSays ? newDisplay : assignee
     ? `${newDisplay}<span class="task-assignee${assignee === people.me ? ' task-assignee-me' : ''}${formerAssignee ? ' task-assignee-former' : ''}" title="${
         esc(formerAssignee ? `Was assigned to ${assignee}, who can no longer be given tasks`
           : assignee === people.me ? 'Assigned to you' : `Assigned to ${assignee}`)}">@${esc(assignee)}</span>` : '';
@@ -224,7 +228,9 @@ function planHTML(filtered) {
     const overIcon = over
       ? `<span class="board-day-over-icon" title="Over the limit (${s.tasks.length}/${app.LIMIT})">⚠</span>`
       : '';
-    const dropAttr = (s.droppable ? ` data-drop-bucket="${s.key}" data-drop-day="${s.date || ''}"` : '') +
+    const dropAttr = (s.droppable ? ` data-drop-bucket="${esc(s.key)}" data-drop-day="${s.date || ''}"` +
+      (s.person !== undefined ? ` data-drop-person="${esc(s.person)}"` : '') +
+      (s.list !== undefined ? ` data-drop-list="${esc(s.list)}"` : '') : '') +
       (s.ordered ? ' data-ordered="1"' : '');
     const emptyCls = (s.tasks.length ? '' : ' board-day--empty') + (isFolded ? ' board-day--folded' : '');
     // The deadlines on this day, wherever their cards sit, Unplanned's
@@ -267,7 +273,7 @@ function planHTML(filtered) {
       (unsorted && i === 0 ? sub('Unsorted', unsorted) : '') +
       (unsorted && i === unsorted ? sub('Sorted', s.tasks.length - unsorted) : '') +
       taskHTML(t, true, 'board-item' + (i < unsorted ? ' task-inbox' : '') +
-        (TasksCore.isCarried(t, today) ? ' task-carried' : ''))).join('') + more;
+        (s.date && TasksCore.isCarried(t, today) ? ' task-carried' : ''))).join('') + more;
     return header + body;
   }).join('');
 }
@@ -465,6 +471,7 @@ function wireListHandlers() {
 }
 
 function render() {
+  app.applyGroup();   // who can be assigned may have arrived since
   app.syncClosedLink();
   const filtered = app.filterTasks();
   const { orderedTasks, newTasks } = inViewOrder(filtered);

@@ -680,6 +680,7 @@ Not there: telling someone that a task became theirs, a group as an assignee, an
   An export of such a list holds the tasks it shows (`/api/tasks/export?assignee=`).
   **My tasks**, where the Tasks links go, is what is yours: of the shared tasks those assigned to you, whatever list they are in, and your own private ones; an unassigned shared task is its list's backlog (Lists → My tasks in `docs/spec/tasks.md`).
   Zone assigns a new task to no one; its maker says who has it. Only a task of your own that you file into a shared list is proposed as yours, by the browser.
+- **By person** (the Open tab's control, on a shared list and All tasks; Views in `docs/spec/tasks.md`): the tasks in a section per assignee, Unassigned and your own first, so a team sees who has what; a card dragged onto a section is that user's.
 - **Several at once** (`openBulkAssignModal` in `js/taskselect.js`): **Assign…** in the selection bar and in the menu of a selected card, or **a** on the selected tasks (one is enough).
   The dialog lists the users who can be assigned, yourself first, then **No one**; the row of who has them all is ticked, one who has some says "1 of 4".
   A click (or ↑/↓ and Enter) assigns them in one `batch-update`, and the toast ("3 tasks assigned to bob") has one Undo for all, which leaves no trace in their histories.

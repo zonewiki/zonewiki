@@ -3,15 +3,23 @@
     on any page). Its params reach tasks.js as data-init-* attributes; ids
     get a -<n> suffix (sfx) after a page's first embed. */ -}}
 {{define "tasks_embed" -}}
-<div class="tasks-app" id="tasks-app{{.Sfx}}"{{if .Headless}} data-headless="1" style="display:none"{{end}} data-init-tag="{{.Tag}}"{{with .Assignee}} data-init-assignee="{{.}}"{{end}} data-init-list="{{.List}}"{{with .Lists}} data-init-lists="{{.}}"{{end}}{{with .Mine}} data-init-mine="{{.}}" data-init-out="{{$.Out}}"{{end}} data-lists="{{.ListsJSON}}"{{if .InboxPrivate}} data-inbox-private="1"{{end}} data-init-view="{{.View}}" data-init-plan="{{.Plan}}" data-init-limit="{{.Limit}}" data-init-keep="{{.Keep}}"{{with .PrivateFolder}} data-private-folder="{{.}}"{{end}} data-init-new="" data-instance="{{.InstanceID}}"{{if .Pinned}} data-pinned="1"{{end}}{{with .NewTags}} data-new-tags="{{.}}"{{end}}{{with .Settings}} data-settings-page="{{.Page}}" data-settings-index="{{.Index}}" data-settings-raw="{{.Raw}}"{{if .Embed}} data-settings-embed="1"{{end}}{{if .Mine}} data-settings-mine="1"{{end}}{{with .List}} data-settings-list="{{.}}"{{end}}{{with .ListSettings}} data-settings-list-set="{{.}}"{{end}}{{with .Pin}} data-settings-pin="{{.}}"{{end}}{{if .Home}} data-settings-home="1"{{end}}{{if .Mail}} data-settings-mail="1"{{end}}{{end}}>
+<div class="tasks-app" id="tasks-app{{.Sfx}}"{{if .Headless}} data-headless="1" style="display:none"{{end}} data-init-tag="{{.Tag}}"{{with .Assignee}} data-init-assignee="{{.}}"{{end}} data-init-list="{{.List}}"{{with .Lists}} data-init-lists="{{.}}"{{end}}{{with .Mine}} data-init-mine="{{.}}" data-init-out="{{$.Out}}"{{end}} data-lists="{{.ListsJSON}}"{{if .InboxPrivate}} data-inbox-private="1"{{end}} data-init-view="{{.View}}" data-init-group="{{.Group}}" data-init-limit="{{.Limit}}" data-init-keep="{{.Keep}}"{{with .PrivateFolder}} data-private-folder="{{.}}"{{end}} data-init-new="" data-instance="{{.InstanceID}}"{{if .Pinned}} data-pinned="1"{{end}}{{with .NewTags}} data-new-tags="{{.}}"{{end}}{{with .Settings}} data-settings-page="{{.Page}}" data-settings-index="{{.Index}}" data-settings-raw="{{.Raw}}"{{if .Embed}} data-settings-embed="1"{{end}}{{if .Mine}} data-settings-mine="1"{{end}}{{with .List}} data-settings-list="{{.}}"{{end}}{{with .ListSettings}} data-settings-list-set="{{.}}"{{end}}{{with .Pin}} data-settings-pin="{{.}}"{{end}}{{if .Home}} data-settings-home="1"{{end}}{{if .Mail}} data-settings-mail="1"{{end}}{{end}}>
   <div class="tasks-header">
     <div class="view-tabs" id="tasks-tabs{{.Sfx}}" role="tablist" aria-label="View">
       <button type="button" role="tab" data-view="open" aria-selected="false">{{index .Labels 0}}</button>
       <button type="button" role="tab" data-view="focus" aria-selected="false">{{index .Labels 1}}</button>
     </div>
-    {{- /* Beside the tabs, not in the toolbar: it modifies the Open tab, and on
-        phones it shares the tabs' row, leaving the search its room. */}}
-    <button type="button" class="tasks-plan-switch" id="task-plan{{.Sfx}}" role="switch" aria-checked="true" title="Plan: group by start date (d)" hidden><span class="tasks-plan-track" aria-hidden="true"></span>Plan</button>
+    {{- /* What the Open tab shows (js/taskview.js): one list, the Plan board by
+        start date, a section per person or per list; the last two only where
+        they say something (the browser shows them). Beside the tabs, not in
+        the toolbar: it modifies the Open tab, and on phones it shares the
+        tabs' row while it has two choices. */}}
+    <div class="tasks-cut" id="task-cut{{.Sfx}}" role="group" aria-label="The Open tab shows" hidden>
+      <button type="button" data-group="none" aria-pressed="false" title="One list (d)">List</button>
+      <button type="button" data-group="day" aria-pressed="false" title="Plan: by start date (d)">Plan</button>
+      <button type="button" data-group="person" aria-pressed="false" title="By person: who has what (d)" hidden>By person</button>
+      <button type="button" data-group="list" aria-pressed="false" title="By list (d)" hidden>By list</button>
+    </div>
     <div class="tasks-toolbar">
       <input type="text" id="task-filter-search{{.Sfx}}" placeholder="Search… #tag" title="Text searches title and description · #tag filters by tag · #a #b = both tags · #a|b = either · -#tag = without · !high, !low = that importance" autocomplete="off">
       <select class="tasks-sort" id="task-sort{{.Sfx}}" aria-label="Order" title="Order (o)" hidden><option value="manual">Manual</option><option value="due">Due date</option><option value="created">Created</option></select>
@@ -209,6 +217,14 @@
     <button type="button" class="btn" id="task-deadline-cancel{{.Sfx}}">Cancel</button>
   </div>
 </dialog>
+<dialog id="task-share-modal{{.Sfx}}" class="task-edit-modal modal">
+  <div class="modal-label">Share this task?</div>
+  <div id="task-share-text{{.Sfx}}" class="task-delete-title"></div>
+  <div class="task-edit-actions">
+    <button type="button" class="btn btn-primary" id="task-share-confirm{{.Sfx}}">Share and move</button>
+    <button type="button" class="btn" id="task-share-cancel{{.Sfx}}">Cancel</button>
+  </div>
+</dialog>
 {{if .Settings}}
 {{template "task_settings_dialog" (dict "Sfx" .Sfx "CanAssign" .CanAssign)}}
 {{- /* Import… (the ⋯ menu): once a file is picked, a tag of your own for its tasks. */}}
@@ -268,7 +284,10 @@
         <input type="number" id="task-settings-limit{{.Sfx}}" name="limit" min="1" max="99" placeholder="none" inputmode="numeric">
       </div>
     </div>
-    <label class="task-settings-check"><input type="checkbox" id="task-settings-plan{{.Sfx}}" name="plan"> Plan: group the Open tab by start date</label>
+    <div class="task-field">
+      <label for="task-settings-group{{.Sfx}}">The Open tab shows</label>
+      <select id="task-settings-group{{.Sfx}}" name="group"><option value="none">List: one list</option><option value="day">Plan: by start date</option><option value="person">By person</option><option value="list">By list</option></select>
+    </div>
     {{- /* The rest shows only when set, or once asked for in the line below
         (js/tasksettings.js showField), as the task dialog's rarer fields do. */}}
     <label class="task-settings-check" data-field="keep" hidden><input type="checkbox" id="task-settings-keep{{.Sfx}}" name="keep"> New tasks are keep tasks (back on the list when done)</label>

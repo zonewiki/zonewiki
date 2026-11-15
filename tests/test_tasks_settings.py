@@ -45,13 +45,24 @@ class TestListSettings:
 
 class TestPlanParam:
     def test_plan_reaches_the_app(self, client, wiki_dir):
-        assert 'data-init-view="" data-init-plan="off"' in preview(client, "[[tasks: plan=off]]\n")
-        assert 'data-init-view="" data-init-plan=""' in preview(client, "[[tasks: plan=maybe]]\n")
+        assert 'data-init-view="" data-init-group="none"' in preview(client, "[[tasks: plan=off]]\n")
+        assert 'data-init-view="" data-init-group=""' in preview(client, "[[tasks: plan=maybe]]\n")
         # view=open has always been the one list, view=plan the board; plan= wins.
-        assert 'data-init-view="open" data-init-plan="off"' in preview(client, "[[tasks: view=open]]\n")
-        assert 'data-init-view="plan" data-init-plan="on"' in preview(client, "[[tasks: view=open plan=on]]\n")
-        assert 'data-init-view="open" data-init-plan="off"' in preview(client, "[[tasks: view=plan plan=off]]\n")
-        assert 'data-init-view="focus" data-init-plan="off"' in preview(client, "[[tasks: view=focus plan=off]]\n")
+        assert 'data-init-view="open" data-init-group="none"' in preview(client, "[[tasks: view=open]]\n")
+        assert 'data-init-view="plan" data-init-group="day"' in preview(client, "[[tasks: view=open plan=on]]\n")
+        assert 'data-init-view="open" data-init-group="none"' in preview(client, "[[tasks: view=plan plan=off]]\n")
+        assert 'data-init-view="focus" data-init-group="none"' in preview(client, "[[tasks: view=focus plan=off]]\n")
+
+    def test_group_says_what_the_open_tab_shows(self, client, wiki_dir):
+        """group= (none, day, person, list) took over from plan=, which is
+        still read; with both, group= counts."""
+        assert 'data-init-view="" data-init-group="person"' in preview(client, "[[tasks: group=person]]\n")
+        assert 'data-init-view="" data-init-group=""' in preview(client, "[[tasks: group=week]]\n")
+        assert 'data-init-view="plan" data-init-group="list"' in preview(client, "[[tasks: view=open group=list]]\n")
+        assert 'data-init-view="open" data-init-group="none"' in preview(client, "[[tasks: view=plan group=none]]\n")
+        assert 'data-init-view="plan" data-init-group="person"' in preview(client, "[[tasks: view=plan group=person plan=off]]\n")
+        assert 'data-init-view="focus" data-init-group="day"' in preview(client, "[[tasks: view=focus group=day]]\n")
+        assert 'data-init-view="plan" data-init-group=""' in preview(client, "[[tasks: view=plan]]\n")
 
 
 class TestSave:
@@ -81,7 +92,7 @@ class TestSave:
     def test_bad_values_and_pages(self, client, wiki_dir):
         path = write_page(wiki_dir, "lists", "[[tasks:]]\n")
         # (pin is no param: a pin is the user's, of a list.)
-        for bad in ({"view": "week"}, {"limit": "0"}, {"tag": "a]] x"}, {"keep": "1"}, {"list": "other"}, {"plan": "yes"}, {"pin": "1"}):
+        for bad in ({"view": "week"}, {"limit": "0"}, {"tag": "a]] x"}, {"keep": "1"}, {"list": "other"}, {"plan": "yes"}, {"group": "week"}, {"pin": "1"}):
             resp = save(client, page="lists", index=0, was="", set=bad)
             assert resp.status_code == 400 and resp.get_json()["error"], bad
         assert save(client, page="nope", index=0, was="", set={"view": "open"}).status_code == 404
@@ -102,7 +113,7 @@ class TestSave:
             html = client.get(url, headers=HOST).get_data(as_text=True)
             assert ">To buy</button>" in html and ">Cart</button>" in html, url
             assert 'data-init-limit="5" data-init-keep="1"' in html and 'data-new-tags="weekly"' in html, url
-        assert 'data-init-view="open" data-init-plan="off"' in client.get("/page/lists", headers=HOST).get_data(as_text=True)
+        assert 'data-init-view="open" data-init-group="none"' in client.get("/page/lists", headers=HOST).get_data(as_text=True)
         # "" takes a setting out; hiding in sharing mode is one too.
         assert save(client, list="shop", set={"limit": "", "noshare": "1"}).status_code == 200
         assert '{"name": "shop", "plan": "off", "keep": "1", "labels": "To_buy,Cart", "new": "weekly", "noshare": "1"}' in registry.read_text()
@@ -121,7 +132,7 @@ class TestSave:
         assert '  "all": {"view": "open", "limit": "4", "labels": "Backlog,Now"}\n' in registry.read_text()
         html = client.get("/tasks", headers=HOST).get_data(as_text=True)
         assert 'data-settings-raw="view=open limit=4 labels=Backlog,Now"' in html
-        assert 'data-init-view="open" data-init-plan="off" data-init-limit="4"' in html and ">Backlog</button>" in html
+        assert 'data-init-view="open" data-init-group="none" data-init-limit="4"' in html and ">Backlog</button>" in html
         # Saved from what it was; a filter isn't All tasks'.
         assert save(client, all=True, was="", set={"view": "focus"}).status_code == 409
         assert save(client, all=True, was="view=open limit=4 labels=Backlog,Now", set={"tag": "a"}).status_code == 400

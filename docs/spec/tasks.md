@@ -16,7 +16,8 @@ Case doesn't matter (`[[Tasks:]]`), nor a space after the colon (`[[tasks:list=s
 | `tag` | comma-separated tags | — | Pre-filters by tag. Comma = AND, pipe `a\|b` = OR, a leading `-` excludes (`tag=work,-mary`). The chips are locked (the page says what it shows); new tasks get the single tags, but a task's tags stay editable. |
 | `assignee` | `me`, a user's name, `none` | — | With users: shows only the tasks assigned to that user; `me` is whoever looks at the page, so one page shows each user their own, and `none` those no one has (Assigning tasks in `docs/spec/users.md`). Joined as `tag` is: `a\|b` either's, a leading `-` not theirs (`assignee=-anna`). The chip is locked, and a new task here is assigned to the one user it names. Without users it filters nothing. |
 | `view` | `focus`, `open`, `plan`, `closed` | Focus (or the tab remembered this session) | Opens on that tab whenever the page is opened; a URL `?view=` overrides it, and a reload stays on the tab it showed (see Views). Case doesn't matter; any other name (`views`) opens the default. |
-| `plan` | `on`, `off` | on | What the Open tab shows: on, the board by start date (Plan); off, one list. With `view=open` or `view=plan` it decides which of the two opens (`view=open` alone is the list, `view=plan` the board, as always). The Plan switch still flips it, for the browser tab (see Views). |
+| `group` | `none`, `day`, `person`, `list` | `day` | What the Open tab shows (see Views): one list (`none`), the Plan board by start date (`day`), a section per assignee (`person`) or per list (`list`). With `view=open` or `view=plan` it decides which opens (`view=open` alone is the list, `view=plan` the board by day, as always). The control beside the tabs still changes it, for the browser tab. A view that doesn't offer the one named (By person without users) shows Plan. |
+| `plan` | `on`, `off` | — | What `group` said until 2026-11: `on` is `group=day`, `off` is `group=none`. Read for good (`embedGroup`), written no more; with both, `group` counts. |
 | `limit` | integer 1–99 | none | WIP limit: Focus warns at this many tasks, and Plan day sections with at least this many are flagged amber. `?limit=N` works on `/tasks`. |
 | `list` | a list's name | — | Shows that list: the tasks in it, with the list's own settings (see Lists). A new task made there goes into it. On a shared page the name is the shared list; on a page in your private folder your own list of that name first. A name no list has shows a line that says so, with a button that makes the list. `list=inbox` shows the Inbox, the tasks in no list: with users whoever looks their own (Lists → The Inbox; `list=none` says the same). Cleaned like tags, lowercased (`cleanList`). With `list=`, only `view`, `tag` and `assignee` of the embed count: they say how this page looks at the list; what the list is (`limit`, `plan`, `keep`, `labels`, `new`) is set on the list. |
 | `mine` | `1` | — | Shows My tasks (Lists → My tasks): for whoever looks, their own. A new task made there goes into the Inbox. The embed's `view`, `plan`, `limit`, `labels`, `tag` and `assignee` count, as for an embed of no list. |
@@ -33,7 +34,8 @@ Case doesn't matter (`[[Tasks:]]`), nor a space after the colon (`[[tasks:list=s
 [[tasks: view=focus limit=5]]
 [[tasks: list=groceries view=open]]
 [[tasks: tag=staple keep=1 labels=Catalogue,Shopping]]
-[[tasks: tag=work plan=off]]
+[[tasks: tag=work group=none]]
+[[tasks: list=team view=open group=person]]
 ```
 
 The params can be changed without editing the page: List settings… in the ⋯ menu of the embed's toolbar (see Settings).
@@ -175,18 +177,42 @@ Recurring instances keep the gap between the two dates, but a new instance's sta
 ### Views
 
 A segmented control (`.view-tabs`, one `<button data-view>` each) in the order **Open · Focus** (`data-view` `open`/`focus`).
-The Open tab shows one of two views (`activeView` in `tasks.js`): grouped by start date, the board (`plan`), or as one list (`open`).
-The **Plan** switch right after the tabs (`button.tasks-plan-switch`, outside the toolbar: it modifies the Open tab, and on phones it shares the tabs' row, which keeps the search field at least 100px wide;
-`role="switch"`, `aria-checked`;
+The Open tab shows its tasks one of a few ways (`activeView` and `st.cut` in `tasks.js`): as one list (`open`), or in sections (`plan`, the board): by start date, by person or by list.
+The control right after the tabs picks one (`.tasks-cut`, a segmented control of `<button data-group>`, the current one `aria-pressed`; outside the toolbar: it modifies the Open tab;
 shown on the Open tab;
-**d** toggles;
-not `p`, which starts presentation mode on a page with an embedded tasks) picks one: on,
-the board;
-off, the list.
-A switch rather than a dropdown: it is one yes/no, seen at a glance and changed in one click, and "Plan" names what the board is for.
-Its default is the embed's `plan=` (on without it; `data-init-plan`), set in the settings dialog.
-A flip is remembered for the browser tab only (`sessionStorage` `zone-tasks-group:<path>|<list>|<tag>|<instance>`, `days` or `list`), as the active tab is, so a fresh load is back at the default, and the Open tab (a click, Tab) opens it (`tabView`, `openGroup`).
-(Until 2026-11 the flip was kept in `localStorage` for good, and there was no default to set.) The views keep their names, so `?view=plan` / `view=plan` open Days and `view=open` the List, as they always did.
+**d** goes through its choices;
+not `p`, which starts presentation mode on a page with an embedded tasks):
+
+| Choice | `group` | Sections | A drop on a section | Offered |
+|--------|---------|----------|---------------------|---------|
+| **List** | `none` | Unsorted, Sorted | ranks | always |
+| **Plan** | `day` | Unplanned, Today, Tomorrow, the weekdays, Later (the board, below) | sets the start date | always |
+| **By person** | `person` | Unassigned, You, then everyone else who has tasks here, A–Z | assigns | with users, where tasks have assignees: not in My tasks, a private list or your Inbox |
+| **By list** | `list` | Inbox, then each list with tasks here, your own before the shared ones | moves the task there | where the view holds several lists (My tasks, All tasks, a tag's view) and the wiki has a list |
+
+One person without lists sees List and Plan, and **d** flips between them.
+A control of named choices rather than a dropdown: each is one click, the one shown is seen at a glance, and "Plan" names what the board by day is for.
+(Until 2026-11 it was a switch, Plan, on or off.)
+Its default is the view's `group=` (Plan without it; `data-init-group`), set in the settings dialog (The Open tab shows).
+A choice is remembered for the browser tab only (`sessionStorage` `zone-tasks-group:<path>|<list>|<tag>|<instance>`: `list`, `days`, `person` or `lists`), as the active tab is, so a fresh load is back at the default, and the Open tab (a click, Tab) opens it (`tabView`, `openGroup`); one the view doesn't offer is Plan (`groupsOffered`, `defaultGroup`).
+(Until 2026-11 the flip was kept in `localStorage` for good, and there was no default to set.) The views keep their names, so `?view=plan` / `view=plan` open the board by day and `view=open` the List, as they always did.
+On a phone the control shares the tabs' row while it has two choices and takes a row of its own with more (`.tasks-cut--more`).
+
+**By person and By list are the board with another key** (`TasksCore.personBuckets`, `listBuckets`; `boardBuckets` in `tasks.js` picks by `st.cut`): the same sections with counts, folding, Unsorted and Sorted labels, the manual order inside a section, Order's sorts and the 200-card window; a section's header says how many of its tasks are overdue, in red, with their list on a click.
+What is the day's alone stays the day's: the WIP limit's flag, the due and carried counts, Later's date picker.
+**1**–**7** and **0** plan the selected tasks there as on every tab; dragging onto a day needs Plan.
+
+- **By person**: **Unassigned** (what no one has, a former assignee's included: `assigneeIs` `none`) and **You** (the tasks assigned to you, and your private ones) are always there, as where a task is let go and taken; then a section for each other user who has tasks in the view, `@name`.
+  A card dropped on a section's header is that user's (`dropWrite` → `assignTasks`, the function the Assign… dialog uses: one `batch-update`, a toast "1 task assigned to bob" with an undo that leaves no trace; the mail goes as for any assignment); on Unassigned, no one's.
+  Dropped on a card there, it is assigned and takes that place in the manual order, as a drop on another day's card starts the task there.
+  A private task has no assignee: it stays under You, and another section doesn't take it ("A private task is yours alone: move it to a shared list to assign it").
+  A card there doesn't repeat who has it (a former assignee's name still shows, struck through).
+- **By list**: the **Inbox** is always there, first; a list without tasks in the view has no section (**m** moves a task to any list).
+  A drop moves the task (`moveTasks`, the function Move to list… uses, with its undo).
+  A private task dropped on a shared list asks first ("Share this task?", `#task-share-modal`, `confirmShare`: everyone will see it, and it can't be made private again), and is then assigned to you, as the move dialog does it;
+  a shared task is never taken by a private list or, with users, the Inbox ("A shared task stays shared": the section doesn't light up, `refusesDrop`).
+  A card there has no list chip.
+
 (Plan was a tab of its own until 2026-10; with every section in the manual order and labelled Unsorted/Sorted, it had become Open grouped by day, and the List what's left of Open: ranking across days, and every new task in one Unsorted list.) **Tab**/**Shift+Tab** cycle the tabs.
 Initial view, when a page is opened: URL `?view=` > embed `view=` > tab remembered in `sessionStorage` > Focus.
 **A reload (F5) keeps the tab**: the tab shown is remembered for the browser tab (`sessionStorage` `zone-tasks-shown:<path>#<instance>`, saved when a tab is chosen and when the page opens on one), and on a reload (`performance`'s navigation type `reload`) it comes first, before the URL's and the embed's `view`.
@@ -195,7 +221,7 @@ So a task opened from a link (`/tasks?task=…&view=open`) and then left for Foc
 Opening the page anew (a link, the address bar, another browser tab) follows the URL and the embed as before.
 On phones the control spans the full width.
 
-- **Open, Plan off** (`open`): every open task, in two sections: **Unsorted** (no `sort_order`, newest first; new tasks land here) above **Sorted** (manual order).
+- **Open as one list** (List, `open`): every open task, in two sections: **Unsorted** (no `sort_order`, newest first; new tasks land here) above **Sorted** (manual order).
   Open has no filter for unplanned tasks (an "Unplanned" toggle was removed): those are the Plan board's Unplanned section, where dragging to a day plans them.
   So Unsorted means "not yet ranked" and Unplanned "not yet scheduled", each with one home.
   A leftover `unplanned=` embed param is ignored.
@@ -207,7 +233,7 @@ On phones the control spans the full width.
   Nothing reorders in a sort, since the manual order is only edited where it is shown: Open doesn't drag, on Plan no section is `ordered`, so a card dropped on another card is a drop on its section (dragging between days still plans), and Ctrl+Shift+↑/↓ only says to press `o` until Manual.
   Each tab's sort is remembered per task list in this browser (`localStorage` `zone-tasks-sort:<path>|<list>|<tag>|<instance>`, JSON `{"open": "due", "plan": "created"}`; missing means manual).
   Focus has none: it is the day's manual order, worked top to bottom.
-- **Open, Plan on** (`plan`, called Plan below): a day board grouped by start date (`TasksCore.bucketKey`): Unplanned (no start date), Today (with the tasks **carried over**: started on an earlier day and still open, `TasksCore.isCarried`), Tomorrow, the next weekdays, Later.
+- **Open as the Plan board** (`plan` with `group=day`, called Plan below): a day board grouped by start date (`TasksCore.bucketKey`): Unplanned (no start date), Today (with the tasks **carried over**: started on an earlier day and still open, `TasksCore.isCarried`), Tomorrow, the next weekdays, Later.
   Unplanned is first because planning starts there: its cards are dragged onto the days just below, not up past the whole week.
   **Overdue has no section**: a missed deadline shows on the card (red), and the task sits where its start date puts it (an earlier start or today: Today; a later one, accepted in the edit modal: that day).
   Only a deadline today puts a task without a start date on Today.
@@ -313,7 +339,7 @@ A setting is kept where it belongs: a list's own with the list, how a page looks
 | Field | Setting | Whose | |
 |-------|---------|-------|---|
 | Opens on | `view` | the page's embed; the list's on `/tasks?list=` | The Open or the Focus tab (by their names here); Closed is offered only where the page says `view=closed` |
-| Plan | `plan` | the list's | The Open tab grouped by start date, or one list |
+| The Open tab shows | `group` | the list's | One list, Plan (the board by start date), By person or By list: those the view offers (and the one set) |
 | The pin (a button beside the title) | | yours | Whether you pinned the list (Lists → Pins) |
 | WIP limit (on request) | `limit` | the list's | 1–99, empty for none |
 | Tab names (on request) | `labels` | the list's | The Open tab's and the Focus tab's; empty keeps Open and Focus |
@@ -325,10 +351,10 @@ A setting is kept where it belongs: a list's own with the list, how a page looks
 | Shows only the tasks of (on request: Filter by person; with users) | `assignee` | the page's embed | `me` whoever looks, a user's name, `a\|b` either, `none` no one's, `-a` not theirs |
 
 An embed of no list (`[[tasks: tag=work]]`) has all of them but the pin, Keep tasks, Hide when sharing and Leave out of My tasks, written in its `[[tasks: …]]`.
-All tasks (`/tasks`) has Opens on, Plan, WIP limit, Tab names and Tags of a new task, for everyone.
-My tasks (`/tasks?mine=1`) has Opens on, Plan, WIP limit and Tab names, yours alone.
+All tasks (`/tasks`) has Opens on, The Open tab shows, WIP limit, Tab names and Tags of a new task, for everyone.
+My tasks (`/tasks?mine=1`) has Opens on, The Open tab shows, WIP limit and Tab names, yours alone.
 
-**It shows what is changed most**: Opens on, Plan and, on a list, the pin.
+**It shows what is changed most**: Opens on, The Open tab shows and, on a list, the pin.
 The other fields show only when set as the dialog opens (`[data-field]`, `showField` in `settingsForm`); for the rest a line of quiet words under the fields offers each, "+ WIP limit", "+ Tab names", "+ Tags of a new task", "+ Keep tasks", "+ Hide when sharing", "+ Leave out of My tasks", "+ Filter by tag", "+ Filter by person" (`.task-add-fields`, as in the task dialog): a click shows the field and puts the cursor in it (a box is ticked).
 **The pin** is a button at the title's right, with the list switcher's pin (`.task-settings-pin`, `aria-pressed`): "Pin" on a list you haven't pinned, pressed and "Pinned" on one you have; a click pins or unpins.
 Which pinned list's pill is first is said in the list's ⋯ menu (**Move first**), not here.
@@ -345,7 +371,7 @@ The line above Save says whose the settings are: the list's, for everyone (or "w
 - **My tasks** (`/tasks?mine=1`): your registry's `mine`, `"mine": {"view": "focus", "limit": "5"}` (`mineParams`, `setMineParams`, `mineSettingKeys`; without users the shared registry's), for you alone.
   `"mail": "off"` there turns off the mail about a task assigned to you (**Mail me when a task is assigned to me**, a box that is ticked unless turned off, shown where Zone could mail you: `data-settings-mail`; Assigning tasks in `docs/spec/users.md`).
   It has no pin and no filter, and the dialog says "For My tasks: yours alone."
-  Unset, it opens on Focus with Plan on and no limit.
+  Unset, it opens on Focus, with Plan on the Open tab and no limit.
   (Until 2026-11 the view, then called Pinned, showed its first pinned list's settings and had no dialog.)
 
 **Not which list it shows**: `list=` isn't in this dialog (it is in the editor's, where the dialog writes the embed: `.Editor` in `task_settings_dialog`).
@@ -355,16 +381,16 @@ Another name there would show another list, which reads like a rename and isn't 
 
 **Saving** (`POST /api/tasks/settings`, `tasksSettingsRoute`): the dialog sends only what was changed (`changedParams`), to each place its own: `{list, set}` for a list's settings (`setListSettingsOp`), `{page, index, was, set}` for an embed, `{all: true, was, set}` for All tasks, `{mine: true, was, set}` for My tasks. `set` maps a setting to its new value, `""` taking it out; `was` is an embed's params as the dialog saw them.
 So saving without a change writes nothing, and a param the dialog doesn't know stays as written.
-The server checks each value (`checkEmbedSettings`: one word without `[`, `]` or a backtick; `view` a view, `plan` on/off, `limit` 1–99, `new` cleaned like tags, `keep` and `noshare` a yes; a list takes only its own settings, `listSettingKeys`, an embed only an embed's, `embedSettingKeys`: `list` and `pin` are refused).
+The server checks each value (`checkEmbedSettings`: one word without `[`, `]` or a backtick; `view` a view, `group` one of `none`, `day`, `person`, `list`, `plan` on/off (taken still, written by no dialog), `limit` 1–99, `new` cleaned like tags, `keep` and `noshare` a yes; a list takes only its own settings, `listSettingKeys`, an embed only an embed's, `embedSettingKeys`: `list` and `pin` are refused).
 An embed's params are rewritten in place (`setEmbedParams`, `setEmbedArgs`): a param keeps its place,
 a new one goes last,
 one written twice is written once;
 the rest of the page is untouched.
-For an embed of no list, Opens on and Plan are written as the views' names: Open with Plan is `view=plan`, Open without `view=open`, and `plan=off` only where `view=` isn't one of those two; for a list the tab is `view=open` or `view=focus` and Plan the list's `plan=on` or `off`.
+For an embed of no list, Opens on and what the Open tab shows are written as the views' names where they have one: Open as the board is `view=plan`, Open as one list `view=open`, and `group=` only says what those don't: `group=person` or `group=list`, and `group=none` where `view=` is another tab; for a list the tab is `view=open` or `view=focus` and the rest the list's `group=`. A `plan=` the params still had is taken out by the same save.
 A page is changed in one commit, "Change the task list's settings on <slug>" (`changePageOp`: what it held uncommitted is committed first), a list in "Change the settings of list #<name>", All tasks in "Change the settings of All tasks", My tasks in "Change the settings of My tasks".
 When the `[[tasks: …]]` is no longer as the dialog saw it (the page was edited meanwhile), nothing is written: 409, "The page has changed since.
 Reload it and try again." Other refusals: 400 with the reason, 403 for a viewer, 404 for a page or a list you can't see; the dialog shows the message.
-After a save the page reloads, and what the browser tab remembered (the active tab, a flip of the Plan switch) is forgotten, so the list opens as just set (`forgetSession`).
+After a save the page reloads, and what the browser tab remembered (the active tab, a choice of the Open tab's control) is forgotten, so the list opens as just set (`forgetSession`).
 
 ### Export and import
 
@@ -1021,7 +1047,7 @@ Later in 2026-11 came the Inbox: until then a task could be in no list, which wi
 - **g a**: go to `/tasks`, all tasks; **g t**: go where the Tasks link goes (My tasks)
 - **→** / **l**, **←** / **h**: open / close the selected task's description and comments; open, they stay open as j/k move on (see One line per task)
 - **o** (the Open tab): the order: manual, by deadline, newest first (see Sorting)
-- **d** (the Open tab): Plan on / off, by start date or one list (see Views)
+- **d** (the Open tab): what it shows, in turn: one list, Plan, by person, by list, as far as the view offers them (see Views)
 - **i**: the importance of the selected task, in turn high, low, normal; several selected all get what follows the first one's (see Importance)
 - **Shift+F10** / menu key: the selected task's ⋯ menu (on several selected tasks, the selection's)
 - **Shift+click**, **Ctrl/Cmd+click**, **Shift+↑/↓**, **Ctrl/Cmd+A**: select several tasks (see Selection); **t** / **T**: their tags; **m**: move them to a list

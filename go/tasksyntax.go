@@ -164,8 +164,8 @@ func renameTagInText(text, old, name string) string {
 // Not list=: which list an embed shows is the page's to say, and a list is
 // renamed by renameListOp. A list's own settings are listSettingKeys.
 var (
-	embedSettingKeys = []string{"tag", "assignee", "new", "view", "plan", "limit", "labels"}
-	allSettingKeys   = []string{"new", "view", "plan", "limit", "labels"}
+	embedSettingKeys = []string{"tag", "assignee", "new", "view", "group", "plan", "limit", "labels"}
+	allSettingKeys   = []string{"new", "view", "group", "plan", "limit", "labels"}
 	embedValueRE     = regexp.MustCompile(`^[^\[\]` + "`" + `]*$`)
 )
 
@@ -194,6 +194,10 @@ func checkEmbedSettings(set map[string]string, keys []string) (map[string]string
 				}
 			case "plan":
 				if v = strings.ToLower(v); v != "on" && v != "off" {
+					return nil, bad()
+				}
+			case "group":
+				if v = strings.ToLower(v); !slices.Contains(tasksGroups, v) {
 					return nil, bad()
 				}
 			case "limit":
@@ -278,11 +282,23 @@ func setEmbedParams(text string, n int, was string, set map[string]string) (stri
 	return mdtext.UnmaskCode(head+args+masked[to:], stash), nil
 }
 
-// embedPlan: an embed's plan=: "on" or "off" (the Open tab grouped by start
-// date, or one list), "" when it doesn't say.
-func embedPlan(p TasksParams) string {
-	if v := strings.ToLower(strings.TrimSpace(p.Get("plan"))); v == "on" || v == "off" {
+// What the Open tab shows, by the names group= uses: one list (none), the
+// Plan board by start date (day), a section per assignee (person), a
+// section per list (list).
+var tasksGroups = []string{"none", "day", "person", "list"}
+
+// embedGroup: what an embed says its Open tab shows: its group=, else what
+// plan= said until 2026-11 (on: day, off: none; read for good, written no
+// more), "" when it says neither.
+func embedGroup(p TasksParams) string {
+	if v := strings.ToLower(strings.TrimSpace(p.Get("group"))); slices.Contains(tasksGroups, v) {
 		return v
+	}
+	switch strings.ToLower(strings.TrimSpace(p.Get("plan"))) {
+	case "on":
+		return "day"
+	case "off":
+		return "none"
 	}
 	return ""
 }

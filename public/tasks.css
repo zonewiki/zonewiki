@@ -668,27 +668,26 @@ div.task-card-comment > .task-comment-when { display: block; }
 .tasks-more-btn { display: inline-flex; align-items: center; justify-content: center; padding-inline: .45rem; color: var(--muted); }
 .tasks-toolbar select.tasks-sort { flex: none; }
 .tasks-sort[hidden] { display: none; }
-/* The Open tab's Plan switch: on, the board by start date; off, one list */
-.tasks-plan-switch {
-  flex: none; display: inline-flex; align-items: center; gap: .4rem;
-  padding: .2rem .35rem; border: none; background: none; cursor: pointer;
-  font: inherit; font-size: .8rem; color: var(--muted);
+/* What the Open tab shows: one list, the Plan board, by person, by list.
+   A segmented control lighter than the tabs it modifies: an outline in the
+   border's grey, the current choice shaded, not filled. */
+.tasks-cut {
+  flex: none; display: inline-flex;
+  border: 1px solid var(--border); border-radius: 4px; overflow: hidden;
 }
-.tasks-plan-switch[hidden] { display: none; }
-.tasks-plan-track {
-  position: relative; width: 1.9rem; height: 1.05rem; border-radius: 999px;
-  background: var(--border); transition: background .15s;
+.tasks-cut[hidden], .tasks-cut button[hidden] { display: none; }
+.tasks-cut button {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 1.65rem; padding: 0 .55rem; border: none; margin: 0;
+  background: transparent; color: var(--muted);
+  font: inherit; font-size: .8rem; line-height: 1;
+  cursor: pointer; white-space: nowrap;
 }
-.tasks-plan-track::after {
-  content: ''; position: absolute; top: .15rem; left: .15rem;
-  width: .75rem; height: .75rem; border-radius: 50%; background: var(--bg);
-  transition: transform .15s;
-}
-.tasks-plan-switch[aria-checked="true"] { color: var(--fg); }
-.tasks-plan-switch[aria-checked="true"] .tasks-plan-track { background: var(--btn-primary); }
-.tasks-plan-switch[aria-checked="true"] .tasks-plan-track::after { transform: translateX(.85rem); }
-.tasks-plan-switch:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; border-radius: 4px; }
-@media (pointer: coarse) { .tasks-plan-switch { min-height: 2.25rem; } }
+.tasks-cut button:not([hidden]) ~ button:not([hidden]) { border-left: 1px solid var(--border); }
+.tasks-cut button:hover { color: var(--fg); }
+.tasks-cut button[aria-pressed="true"] { background: var(--code-bg); color: var(--fg); font-weight: 600; }
+.tasks-cut button:focus-visible { outline: 2px solid var(--link); outline-offset: -2px; }
+@media (pointer: coarse) { .tasks-cut button { height: 2.25rem; } }
 .task-meta-right { margin-left: auto; display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
 
 .task-skip-btn {
@@ -1315,7 +1314,11 @@ ul.task-comment-list { list-style: none; margin: .3rem 0 0; padding: 0; font-siz
 
 
 @media (max-width: 640px) {
-  /* The tabs fill their row, which the Plan switch shares when shown. */
+  /* The tabs fill their row, which the Open tab's control shares while it
+     has two choices (List, Plan); with more it takes a row of its own. */
+  .tasks-cut button { height: 1.95rem; padding: 0 .45rem; }
+  .tasks-cut--more { display: flex; flex-basis: 100%; }
+  .tasks-cut--more button { flex: 1 1 0; }
   .view-tabs { display: flex; flex: 1 1 0; min-width: 0; }
   /* Task editor: full screen on phones (it is a whole form, not a popup). */
   .task-edit-modal {
@@ -1331,7 +1334,7 @@ ul.task-comment-list { list-style: none; margin: .3rem 0 0; padding: 0; font-siz
     padding: .4rem .5rem calc(.6rem + env(safe-area-inset-bottom));
   }
   .view-tabs button { flex: 1 1 0; height: 1.95rem; padding: 0 .25rem; }
-  /* Phones: tabs (and the Plan switch) on one line, then search · sort ·
+  /* Phones: tabs (and the Open tab's control) on one line, then search · sort ·
      toggle · "+" on the next.
      The New button drops its label to leave the search field the room. */
   .tasks-toolbar { flex-basis: 100%; }

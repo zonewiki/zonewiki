@@ -226,7 +226,7 @@ def test_task_list_asks_what_the_list_shows_and_writes_the_embed(page, wiki):
     field("list").fill("#Garden work")                                # cleaned as a list's name is
     field("view").select_option("open")
     expect(field("where")).to_have_text("[[tasks: list=garden-work view=plan]]")   # Open, with Plan
-    field("plan").uncheck()
+    field("group").select_option("none")
     more = lambda name: dialog.locator(".task-add-field", has_text=name)
     more("WIP limit").click()                                         # the rarer fields, asked for
     field("limit").fill("5")

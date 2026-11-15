@@ -95,23 +95,24 @@ def test_view_tabs_segmented_control(page, wiki):
     expect(tabs).to_have_text(["Open", "Focus"])
     # Focus is the default view and the only one marked active.
     expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Focus"])
-    plan = page.get_by_role("switch", name="Plan")
+    plan = page.locator(".tasks-cut [data-group=day]")
+    as_list = page.locator(".tasks-cut [data-group=none]")
     expect(plan).to_be_hidden()
 
     # Open has Plan on at first: the board.
     tabs.nth(0).click()
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Open"])
-    expect(plan).to_have_attribute("aria-checked", "true")
+    expect(plan).to_have_attribute("aria-pressed", "true")
     expect(page.locator(".board-day-divider[data-drop-day]").first).to_be_visible()
-    # Plan off: one list, Unsorted · Sorted; d toggles back and forth.
-    plan.click()
-    expect(plan).to_have_attribute("aria-checked", "false")
+    # List: one list, Unsorted · Sorted; d goes back and forth.
+    as_list.click()
+    expect(plan).to_have_attribute("aria-pressed", "false")
     expect(page.locator(".list-section[data-section='unsorted']")).to_be_visible()
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Open"])
     page.keyboard.press("d")
-    expect(plan).to_have_attribute("aria-checked", "true")
+    expect(plan).to_have_attribute("aria-pressed", "true")
     page.keyboard.press("d")
-    expect(plan).to_have_attribute("aria-checked", "false")
+    expect(plan).to_have_attribute("aria-pressed", "false")
 
     # Tab / Shift+Tab cycle through the tabs in on-screen order, wrapping;
     # keyboard focus follows the active view (from a tab), and Open comes
@@ -122,7 +123,7 @@ def test_view_tabs_segmented_control(page, wiki):
     expect(page.locator("#tasks-tabs .active")).to_be_focused()
     page.keyboard.press("Tab")
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Open"])
-    expect(plan).to_have_attribute("aria-checked", "false")
+    expect(plan).to_have_attribute("aria-pressed", "false")
     page.keyboard.press("Shift+Tab")
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
 
@@ -131,7 +132,7 @@ def test_view_tabs_segmented_control(page, wiki):
     page.reload()
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
     tabs.nth(0).click()
-    expect(plan).to_have_attribute("aria-checked", "false")
+    expect(plan).to_have_attribute("aria-pressed", "false")
 
 
 def test_embed_filter_marks_its_tab_active(page, wiki):
@@ -5064,7 +5065,7 @@ def test_settings_dialog_changes_the_lists_settings_and_the_pages(page, wiki):
     expect(dialog).to_be_visible()
     # It opens with what the list and the page say.
     expect(dialog.locator("[name=view]")).to_have_value("focus")
-    expect(dialog.locator("[name=plan]")).to_be_checked()
+    expect(dialog.locator("[name=group]")).to_have_value("day")
     expect(dialog.locator("[name=keep]")).to_be_checked()   # shown: the list makes keep tasks
     expect(dialog.locator("[name=list]")).to_have_count(0)   # which list it shows is the page's to say
     pin = dialog.locator(".task-settings-pin")
@@ -5085,18 +5086,18 @@ def test_settings_dialog_changes_the_lists_settings_and_the_pages(page, wiki):
     dialog.locator("[name=label_open]").fill("To buy")
     dialog.locator("[name=label_focus]").fill("Cart")
     dialog.locator("[name=view]").select_option("open")
-    dialog.locator("[name=plan]").uncheck()
+    dialog.locator("[name=group]").select_option("none")
     dialog.locator("[name=limit]").fill("6")
     dialog.locator("[name=new]").fill("weekly, fresh")
     with page.expect_navigation():
         dialog.get_by_role("button", name="Save").click()
     # The list's own to the registry; the tab, the page's, into its embed.
-    assert '{"name": "shop", "limit": "6", "plan": "off", "keep": "1", "labels": "To_buy,Cart", "new": "weekly,fresh"}' in registry.read_text()
+    assert '{"name": "shop", "limit": "6", "group": "none", "keep": "1", "labels": "To_buy,Cart", "new": "weekly,fresh"}' in registry.read_text()
     assert wiki.read("shopping") == "# Shopping\n\nBefore.\n\n[[tasks: list=shop keep=1 view=open]]\n\nAfter.\n"
     # The page opens as set: the Open tab, by its new name, as one list.
     expect(page.locator("#tasks-tabs [role='tab']")).to_have_text(["To buy", "Cart"])
     expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["To buy"])
-    expect(page.get_by_role("switch", name="Plan")).to_have_attribute("aria-checked", "false")
+    expect(page.locator(".tasks-cut [data-group=day]")).to_have_attribute("aria-pressed", "false")
 
     # Saving without a change writes nothing; one change leaves the rest.
     open_list_settings(page)
@@ -5110,7 +5111,7 @@ def test_settings_dialog_changes_the_lists_settings_and_the_pages(page, wiki):
     expect(dialog).to_be_hidden()
     assert (registry.read_text(), wiki.read("shopping")) == before
     open_list_settings(page)
-    dialog.locator("[name=plan]").check()
+    dialog.locator("[name=group]").select_option("day")
     # The pin: pressed, the list is pinned.
     pin.click()
     expect(pin).to_have_attribute("aria-pressed", "true")
@@ -5122,9 +5123,9 @@ def test_settings_dialog_changes_the_lists_settings_and_the_pages(page, wiki):
     with page.expect_navigation():
         dialog.get_by_role("button", name="Save").click()
     text = registry.read_text()
-    assert '"plan": "on"' in text and '"pinned": ["shop"]' in text and "default" not in text
+    assert '"group": "day"' in text and '"pinned": ["shop"]' in text and "default" not in text
     assert "pin=" not in wiki.read("shopping")                       # the pin is no param of a page
-    expect(page.get_by_role("switch", name="Plan")).to_have_attribute("aria-checked", "true")
+    expect(page.locator(".tasks-cut [data-group=day]")).to_have_attribute("aria-pressed", "true")
     expect(page.locator(".breadcrumb .module-link[data-module=tasks]")).to_have_attribute("href", "/tasks?mine=1")
 
     # The list on /tasks has the same settings; there the tab is the list's own.
@@ -5139,7 +5140,7 @@ def test_settings_dialog_changes_the_lists_settings_and_the_pages(page, wiki):
     with page.expect_navigation():
         dialog.get_by_role("button", name="Save").click()
     text = registry.read_text()
-    assert '{"name": "shop", "view": "open", "limit": "6", "plan": "on"' in text and '"pinned": []' in text
+    assert '{"name": "shop", "view": "open", "limit": "6", "group": "day"' in text and '"pinned": []' in text
     assert wiki.read("shopping") == before[1]                        # the page keeps its own tab
     expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["To buy"])
     expect(page.locator(".tasks-place-pin")).to_have_count(0)
@@ -5151,19 +5152,20 @@ def test_plan_default_and_all_tasks_settings(page, wiki):
     page.request.post("/api/tasks", data={"title": "Some task"})
     wiki.write("tasks", "# Tasks\n\n[[tasks: plan=off]]\n")
     page.goto("/page/tasks")
-    plan = page.get_by_role("switch", name="Plan")
+    plan = page.locator(".tasks-cut [data-group=day]")
+    as_list = page.locator(".tasks-cut [data-group=none]")
     page.locator("#tasks-tabs [data-view='open']").click()
-    expect(plan).to_have_attribute("aria-checked", "false")
+    expect(plan).to_have_attribute("aria-pressed", "false")
     plan.click()
-    expect(plan).to_have_attribute("aria-checked", "true")
+    expect(plan).to_have_attribute("aria-pressed", "true")
     page.locator("#tasks-tabs [data-view='focus']").click()
     page.locator("#tasks-tabs [data-view='open']").click()
-    expect(plan).to_have_attribute("aria-checked", "true")
+    expect(plan).to_have_attribute("aria-pressed", "true")
     # A new browser tab starts at the default again.
     other = page.context.new_page()
     other.goto("/page/tasks")
     other.locator("#tasks-tabs [data-view='open']").click()
-    expect(other.get_by_role("switch", name="Plan")).to_have_attribute("aria-checked", "false")
+    expect(other.locator(".tasks-cut [data-group=day]")).to_have_attribute("aria-pressed", "false")
     other.close()
 
     page.goto("/tasks")
@@ -5176,12 +5178,12 @@ def test_plan_default_and_all_tasks_settings(page, wiki):
     expect(dialog.locator("[name=new]")).to_be_visible()
     expect(dialog.locator("[name=tag]")).to_be_hidden()
     dialog.locator("[name=view]").select_option("open")
-    dialog.locator("[name=plan]").uncheck()
+    dialog.locator("[name=group]").select_option("none")
     with page.expect_navigation():
         dialog.get_by_role("button", name="Save").click()
     assert '"all": {"view": "open"}' in (wiki.root / "_tasks" / "lists.json").read_text()
     expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Open"])
-    expect(plan).to_have_attribute("aria-checked", "false")
+    expect(plan).to_have_attribute("aria-pressed", "false")
 
 
 def test_settings_are_in_the_more_menu_on_a_phone(new_page, wiki):

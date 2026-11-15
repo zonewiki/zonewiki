@@ -54,7 +54,7 @@ func (l ListInfo) LeftOut() bool { return strings.EqualFold(l.Params.Get("home")
 
 // listSettingKeys: what List settings… sets on a list (the registry's
 // keys), in the order they are kept.
-var listSettingKeys = []string{"view", "plan", "limit", "labels", "new", "keep", "noshare", "home"}
+var listSettingKeys = []string{"view", "group", "plan", "limit", "labels", "new", "keep", "noshare", "home"}
 
 // listInfo: a registry's list as the user who names it ref sees it.
 func listInfo(l *taskfiles.List, ref string) ListInfo {
@@ -266,7 +266,7 @@ func scopeFilter(user, scope string, lists map[string]ListInfo) func(*Task) bool
 
 // mineSettingKeys: what My tasks' settings dialog sets. mail ("off"): no
 // mail when a task is assigned to the user (mailsAssigned in notify.go).
-var mineSettingKeys = []string{"view", "plan", "limit", "labels", "mail"}
+var mineSettingKeys = []string{"view", "group", "plan", "limit", "labels", "mail"}
 
 // mineOwner: whose registry holds user's settings of My tasks: their own,
 // without users the wiki's.

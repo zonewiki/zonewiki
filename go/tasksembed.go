@@ -26,7 +26,7 @@ type tasksEmbedView struct {
 	Lists         string           // several lists as one (lists=): their refs, "|" between
 	Out           string           // My tasks: the lists left out of it, their refs, "|" between
 	Mine          string           // My tasks (mine=1): "assign" where assignment counts for the user, else "lists"
-	Plan          string           // "on", "off" or "": the embed doesn't say
+	Group         string           // none, day, person, list (tasksGroups) or "": the embed doesn't say
 	Limit         string           // the WIP limit, "" none
 	Labels        []string         // the Open and Focus tabs' names
 	InstanceID    int              // which embed of the page
@@ -65,7 +65,7 @@ type embedSettingsAt struct {
 // listEmbedParams: what an embed of the list l shows: the list's own
 // settings, and of the embed's params how the page looks at the list: the
 // tab it opens on (view) and a filter (tag, assignee). What the list is
-// (limit, plan, keep, labels, new) is said on the list alone.
+// (limit, group, keep, labels, new) is said on the list alone.
 func listEmbedParams(l ListInfo, embed TasksParams) TasksParams {
 	p := l.Params
 	for _, k := range []string{"view", "tag", "assignee"} {
@@ -141,14 +141,18 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, p
 		}
 		settingsAt = at
 	}
-	// view= with plan=: the Open tab as plan= says, whichever of its two
-	// views view= names.
-	view, plan := embedView(params), embedPlan(params)
+	// view= with group=: the Open tab as group= says, whichever of its two
+	// views view= names (open: the one list; plan: grouped, by day unless
+	// group= says by what).
+	view, group := embedView(params), embedGroup(params)
 	switch {
-	case plan != "" && (view == "open" || view == "plan"):
-		view = map[string]string{"on": "plan", "off": "open"}[plan]
+	case group != "" && (view == "open" || view == "plan"):
+		view = "plan"
+		if group == "none" {
+			view = "open"
+		}
 	case view == "open":
-		plan = "off" // view=open has always been the one list
+		group = "none" // view=open has always been the one list
 	}
 	// limit=N: the WIP limit (Focus warning, Plan day flags).
 	limit := ""
@@ -189,7 +193,7 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, p
 		keep = "1"
 	}
 	v := tasksEmbedView{
-		Tag: params.Get("tag"), View: view, Plan: plan, Settings: settingsAt,
+		Tag: params.Get("tag"), View: view, Group: group, Settings: settingsAt,
 		Limit: limit, Labels: labels, InstanceID: instance, Sfx: sfx, Headless: headless,
 		Keep: keep, Pinned: scope == mineScope || isInbox(scope, lists),
 		NewTags:       strings.Join(newTaskTags(params), ","),
