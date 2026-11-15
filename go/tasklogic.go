@@ -449,9 +449,14 @@ func spawnRecurring(user string, task *Task, active []*Task, skip bool) *Task {
 	spawned.Owner, spawned.List = task.Owner, task.List // a series stays in its list (a private one private)
 	spawned.Assignee = task.Assignee
 	spawned.CreatedBy = task.Maker() // the series' maker
-	// The next occurrence carries the series' history and comments on.
+	// The next occurrence carries the series' history on (it is capped:
+	// capHistory), so the series reads as one log. Not its comments: they
+	// have no cap, and each occurrence was a copy more of all of them (a
+	// daily task with ten comments: ten more a day, for good, until 2026-11).
+	// They stay on the occurrence they were written on, which this one names
+	// (spawned_from; its dialog links to it).
 	spawned.History = append([]HistoryEntry{}, task.History...)
-	spawned.Comments = append([]Comment{}, task.Comments...)
+	spawned.Comments = nil
 	when := newDue
 	if when == "" {
 		when = newStart

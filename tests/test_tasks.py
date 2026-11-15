@@ -2823,13 +2823,17 @@ class TestComments:
         assert len({c["id"] for c in dup["comments"]}) == 2
         assert client.put(f"/api/tasks/{tid}", json={"comments": "x"}).status_code == 400
 
-    def test_next_occurrence_carries_them_on(self, client):
+    def test_comments_stay_on_their_occurrence(self, client):
+        """A series' next occurrence has no comments of its own yet: those of
+        the one before stay there (they have no cap, and were copied into
+        every occurrence), and the new one names it."""
         tid = create_task(client, rec_type="daily", due_date=_future(0)).get_json()["id"]
         client.post(self._url(tid), json={"text": "first round"})
         client.put(f"/api/tasks/{tid}", json={"completed": True})
         nxt = client.get("/api/tasks").get_json()[0]
-        assert nxt["id"] != tid
-        assert [c["text"] for c in nxt["comments"]] == ["first round"]
+        assert nxt["id"] != tid and nxt["spawned_from"] == tid
+        assert nxt["comments"] == []
+        assert [c["text"] for c in client.get("/api/tasks/closed").get_json()[0]["comments"]] == ["first round"]
 
     def test_restore_keeps_them(self, client):
         task = create_task(client).get_json()

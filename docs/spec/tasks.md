@@ -565,10 +565,13 @@ Each with a dark-mode value.
   **Skip** (⏭, recurring only) archives as won't-do and spawns the next instance, the first occurrence after today (`spawn_recurring(skip=True)`): a daily task three days overdue comes back tomorrow, not as a card for today, so a skipped backlog leaves Focus.
   Completing catches up to today instead.
   Both show an undo toast; reopening a skipped entry removes its spawn (while untouched, as for un-completing).
-- **A task can't be deleted**: nothing in the app deletes one, and an assistant (MCP) can't either.
-  A task that won't be done, or was made by mistake, is closed undone with **Won't do**: it goes to Closed with "✗ won't do", and can be reopened from there.
+- **A task is closed, not deleted; who made it can delete it for good.**
+  A task that won't be done is closed undone with **Won't do**: it goes to Closed with "✗ won't do", and can be reopened from there.
   Won't do is in the ⋯ menu, in the edit modal (the button at the right of Save and Cancel, an open task's only; what was typed in the modal is dropped), on the **Delete** key and, for several selected tasks, in the selection bar and their menu (`wontDoMany`: one `batch-complete` with `wont_do`, one undo that reopens them; closed tasks in the selection stay as they are).
-  The routes that delete (`DELETE /api/tasks/<id>`, `batch-delete`) remain for what takes back a task just made: the undo of an import, and of tasks the page editor created.
+  **Delete for good…** is in a closed task's ⋯ menu (`mayDelete` in `js/taskmenu.js`): for a task made by mistake, or shared by mistake. It asks first, has no undo, and takes the task out of its file in a commit ("Delete task"); the wiki's git history keeps what it was, as it keeps a deleted page.
+  **Who may** (`mayDeleteTask` in `go/tasks.go`; `DELETE /api/tasks/<id>` and `batch-delete` answer 403 "Only who made a task, or an admin, deletes it" otherwise): without users anyone; with users who made the task (`created_by`), an admin, and its user for a private one. Others have seen a shared task, so anyone else closes it.
+  The same routes take back what was just made: the tasks the page editor created (their maker's), and an import's (what a user imported is theirs to delete while Zone runs: `noteBrought`).
+  An assistant (MCP) deletes no task.
 - **Planned cue**: a planned task's card gets a coloured left edge, the same on every tab for consistency: amber when it is in Focus already (start today or earlier), blue when planned later (`task-planned-now`/`-later`).
   On Open it tells decided tasks from undecided ones without changing the order.
   A due/overdue urgency colour wins.
@@ -761,7 +764,7 @@ Not part of the History: they are never capped, undo of other changes never touc
 - **Cards**: a `💬 N` button (`.task-comments-btn`) in the meta row; its tooltip is the latest comment with its time.
   The latest 3 are listed (`commentCardHtml`): a comment of one line on the line of its time, as a status line reads; any other (several lines or paragraphs, a list, code) under its time.
   A click on it opens or closes the line's details, the latest 3 among them (see One line per task), whose "N earlier…" leads to the modal.
-- **Carried on**: a recurring task's next occurrence takes the series' comments with it, like the history.
+- **They stay on their occurrence**: a recurring task's next occurrence starts without comments (the history is carried on, and capped; comments have no cap, and until 2026-11 every occurrence was a copy more of all of them). It names the occurrence before it (`spawned_from`), and its dialog's History ends with a link there, **The occurrence before →** (`.task-history-before`), where those comments are.
 - **Search and MCP**: comment text is part of a task's search text (`taskSearchDocs`, so semantic search too), a comment counts as activity for `edited:`/`after:`/`before:` (`lastActivity`), and `mcpTaskText` lists them after the description under "Comments:" (`- YYYY-MM-DD HH:MM: text`, a comment's following lines indented under its first).
 
 ### Importance
@@ -970,7 +973,7 @@ Later in 2026-11 came the Inbox: until then a task could be in no list, which wi
   With none named, a private list's go to your Inbox (they stay private); a shared list's, with users, to the shared list `general`, made for them when there is none (a shared task is always in a list; `general` itself is deleted so only when it is empty); without users to the Inbox.
   The dialog offers those first: "Your Inbox", "#general", "The Inbox (no list)".
   **Close its N open tasks as won't do** (`#list-delete-close`, `close=1`; offered while the list has open tasks, not ticked): for a list that is over, its open tasks are closed undone in the same commit, as Won't do closes one (Closed shows them with "✗ won't do", and they can be reopened from there), so they aren't left open in another list or in none.
-  No task is deleted: a task can't be (A task can't be deleted).
+  No task is deleted by it.
   A shared list's tasks can't go into a private one, and a private list's go to a shared list only with `share` (the dialog's box: "Share its tasks if they go to a shared list").
   Pins of it go; pages keep their embeds of it, which then say that there is no such list.
 - **Make shared…** (a private list; `#list-share-dialog`; `POST /tasks/share-list`; `shareListOp`): the list moves to the shared registry and its tasks to the shared files, in one commit (`Share list #gifts`), each with `shared` in its History.

@@ -593,10 +593,15 @@ function renderHistory(task) {
   }
   historyDetails.hidden = !entries.length;
   historyDetails.open = false;
+  // A series' occurrence names the one before it, where that one's
+  // comments are: they stay on the occurrence they were written on.
+  const list = task && app.taskList(task);
+  const before = task?.spawned_from ? `<li><a class="task-history-before" href="/tasks?${new URLSearchParams({
+    task: task.spawned_from, view: 'closed', ...(list ? { list } : {}) })}">The occurrence before →</a></li>` : '';
   document.getElementById('task-edit-history-count' + app.sfx).textContent = entries.length || '';
   document.getElementById('task-edit-history-list' + app.sfx).innerHTML = entries.slice().reverse().map(e =>
     `<li><span class="task-history-at">${esc(commentStamp(e))}</span> ` +
-    `${esc(HISTORY_TEXT[e.event](e))}</li>`).join('');
+    `${esc(HISTORY_TEXT[e.event](e))}</li>`).join('') + before;
 }
 
 // The modal's Comments: markdown, a line or several, newest first. They are

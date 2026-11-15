@@ -775,6 +775,47 @@ def test_a_board_section_of_only_unsorted_tasks_has_no_labels(page, wiki):
     expect(page.locator(".plan-subdivider")).to_have_count(0)
 
 
+def test_a_closed_task_is_deleted_for_good_from_its_menu(page, wiki):
+    """Delete for good… in a closed task's menu asks first and then takes
+    the task out of the wiki; an open task has no such entry (Won't do
+    closes it)."""
+    done = page.request.post("/api/tasks", data={"title": "Made by mistake"}).json()
+    page.request.put(f"/api/tasks/{done['id']}", data={"wont_do": True})
+    page.request.post("/api/tasks", data={"title": "Still open"})
+    page.goto("/tasks?view=open&plan=off")
+    card(page, "Still open").locator(".task-title").click(button="right")
+    expect(page.get_by_role("menuitem", name="Won't do")).to_be_visible()
+    expect(page.get_by_role("menuitem", name="Delete for good…")).to_have_count(0)
+    page.keyboard.press("Escape")
+    page.goto("/tasks?view=closed")
+    card(page, "Made by mistake").locator(".task-title").click(button="right")
+    page.once("dialog", lambda d: d.dismiss())
+    page.get_by_role("menuitem", name="Delete for good…").click()
+    expect(card(page, "Made by mistake")).to_be_visible()
+    card(page, "Made by mistake").locator(".task-title").click(button="right")
+    page.once("dialog", lambda d: d.accept())
+    page.get_by_role("menuitem", name="Delete for good…").click()
+    expect(card(page, "Made by mistake")).to_have_count(0)
+    assert page.request.get("/api/tasks/closed").json() == []
+
+
+def test_a_series_occurrence_links_to_the_one_before(page, wiki):
+    """Comments stay on the occurrence they were written on; the next one's
+    History ends with a link to it."""
+    first = page.request.post("/api/tasks", data={"title": "Water the plants", "rec_type": "daily", "due_date": date.today().isoformat()}).json()
+    page.request.post(f"/api/tasks/{first['id']}/comments", data={"text": "The fern needs more"})
+    page.request.put(f"/api/tasks/{first['id']}", data={"completed": True})
+    page.goto("/tasks?view=open&plan=off")
+    card(page, "Water the plants").locator(".task-title").dblclick()
+    modal = page.locator("#task-edit-modal")
+    expect(modal).to_be_visible()
+    expect(modal.locator(".task-comment-body")).to_have_count(0)
+    modal.locator("#task-edit-history summary").click()
+    link = modal.locator(".task-history-before")
+    expect(link).to_have_text("The occurrence before →")
+    assert first["id"] in link.get_attribute("href") and "view=closed" in link.get_attribute("href")
+
+
 def test_save_writes_only_what_was_changed_in_the_dialog(page, wiki):
     """Two people on one task: Save sends the fields changed in this dialog,
     so what someone else changed meanwhile stays; a text both changed is
@@ -3365,7 +3406,7 @@ def test_history_of_a_repeating_task_continues(page, wiki):
     page.keyboard.press("Enter")
     history = page.locator("#task-edit-history")
     history.locator("summary").click()
-    expect(history.locator("li")).to_have_count(3)
+    expect(history.locator("li")).to_have_count(4)             # and the link to the occurrence before
     expect(history.locator("li").nth(0)).to_contain_text("Repeats: next")   # newest first
     expect(history.locator("li").nth(1)).to_contain_text("Done")
     expect(history.locator("li").nth(2)).to_contain_text("Created")

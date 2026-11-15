@@ -4,7 +4,7 @@
 // What it uses of the app comes in app (its state in app.st).
 import { copyText } from './util.js';
 import { openDatePicker } from './datepicker.js';
-import { dateOffset, esc, formatDate, people, plainTitle, shortDate, showNotice, subtaskCounts, todayStr } from './taskutil.js';
+import { dateOffset, esc, formatDate, noticeFromResponse, people, plainTitle, shortDate, showNotice, subtaskCounts, todayStr } from './taskutil.js';
 
 export function initTaskMenu(app) {
 const { st } = app;
@@ -45,12 +45,17 @@ function openTaskMenu(id, anchor, at) {
   }
   const task = st.tasks.find(t => t.id === id);
   if (!task) return;
+  // A closed task can be deleted for good by who made it, or an admin (a
+  // task of one's own, and without users any: mayDeleteTask in go/tasks.go).
+  const mayDelete = document.body.dataset.users !== '1' || document.body.dataset.admin === '1' ||
+    task.private || !task.created_by || task.created_by === people.me;
   const items = task.closed_at ? [
     ['edit', 'Edit…'],
     ['reopen', 'Reopen'],
     ['copylink', 'Copy link'],
     ['select', 'Select several'],
-  ] : [
+    mayDelete && ['delete', 'Delete for good…'],
+  ].filter(Boolean) : [
     ['edit', 'Edit…'],
     ['today', 'Start today'],
     ['tomorrow', 'Start tomorrow'],
@@ -148,6 +153,15 @@ function runTaskAction(task, action, anchor) {
       app.showUndo('Task reopened', () => app.completeTasks([id], true));
       break;
     case 'select':   app.enterSelectMode(id); break;
+    case 'delete':
+      // No undo: it asks first. The task leaves its file; git keeps what it was.
+      if (!confirm(`Delete “${plainTitle(task.title)}” for good? It can't be brought back here.`)) break;
+      fetch(`/api/tasks/${id}`, { method: 'DELETE' }).then(async res => {
+        if (!res.ok) return showNotice(await noticeFromResponse(res));
+        showNotice('Task deleted');
+        app.afterBatchWrite();
+      }).catch(() => showNotice('Could not delete the task'));
+      break;
     case 'copylink':
       copyText(location.origin + taskHref(task)).then(ok => showNotice(ok ? 'Link copied' : 'Could not copy the link'));
       break;

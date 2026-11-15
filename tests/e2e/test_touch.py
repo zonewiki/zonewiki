@@ -144,7 +144,7 @@ def test_completed_task_menu(phone):
     phone.reload()
     open_tab(phone, "closed")
     menu = open_menu(phone, "Water plants")
-    expect(menu.get_by_role("menuitem")).to_have_text(["Edit…", "Reopen", "Copy link", "Select several"])
+    expect(menu.get_by_role("menuitem")).to_have_text(["Edit…", "Reopen", "Copy link", "Select several", "Delete for good…"])
     menu.get_by_role("menuitem", name="Reopen").tap()
     wait_until(phone, lambda: "Water plants" in tasks_by_title(phone))
 

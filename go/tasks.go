@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"zonewiki/internal/jsonobj"
 	"zonewiki/internal/mdtext"
@@ -747,6 +748,53 @@ func taskComment(t *Task, cid string) (int, error) {
 	return 0, errNotFound
 }
 
+// errNotYours: a task only its maker or an admin deletes.
+var errNotYours = refuseAs(refusedReadOnly, "Only who made a task, or an admin, deletes it")
+
+// brought: the tasks a user brought in with an import (apiImport), which
+// its undo deletes again though others made them, by id; in memory, the
+// oldest forgotten past broughtMax.
+var brought = struct {
+	sync.Mutex
+	by    map[string]string // task id → who imported it
+	order []string
+}{by: map[string]string{}}
+
+const broughtMax = 20000
+
+// noteBrought: user imported the tasks ids.
+func noteBrought(user string, ids []string) {
+	brought.Lock()
+	defer brought.Unlock()
+	for _, id := range ids {
+		if _, ok := brought.by[id]; !ok {
+			brought.order = append(brought.order, id)
+		}
+		brought.by[id] = user
+	}
+	if over := len(brought.order) - broughtMax; over > 0 {
+		for _, id := range brought.order[:over] {
+			delete(brought.by, id)
+		}
+		brought.order = append([]string(nil), brought.order[over:]...)
+	}
+}
+
+// mayDeleteTask: user may delete the task t for good: without users
+// anyone; a task of their own (a private one, or one they made, which is
+// also what takes back a task just made: the editor's Make task); an admin
+// any; and what they imported, while Zone runs (the import's undo). A task
+// someone else made is closed (Won't do), not deleted: others have seen it.
+func mayDeleteTask(user string, t *Task) bool {
+	s := settings()
+	if s.Users == nil || t.Owner != "" || t.Maker() == user || t.Maker() == "" || s.isAdmin(user) {
+		return true
+	}
+	brought.Lock()
+	defer brought.Unlock()
+	return brought.by[t.ID] == user
+}
+
 func deleteTask(user, id, message string) error {
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
@@ -760,6 +808,9 @@ func deleteTasksLocked(user string, ids map[string]bool, message string) error {
 	}
 	for _, t := range slices.Concat(active, closed) {
 		if ids[t.ID] {
+			if !mayDeleteTask(user, t) {
+				return errNotYours
+			}
 			rememberBy(t) // the undo restores it
 		}
 	}

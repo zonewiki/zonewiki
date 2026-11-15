@@ -1007,3 +1007,28 @@ def test_a_task_shared_is_given_to_who_shares_it_whatever_the_door(alice, wiki_d
     # A viewer can't be given tasks, so nothing of theirs is shared by them; a
     # task that stays private has no one.
     assert "assignee" not in own("Still mine")
+
+
+def test_a_task_is_deleted_by_who_made_it_or_an_admin(alice, wiki_dir):
+    """Delete for good: a task's maker and an admin delete it; anyone else
+    closes it (Won't do), since others have seen it. One's own private task,
+    and what one just imported (the import's undo), go too."""
+    made = new(alice, title="Alice made it")
+    login(alice, "bob")
+    alice.in_team = True
+    assert alice.delete(f"/api/tasks/{made['id']}", headers=HOST).status_code == 403
+    assert alice.post("/api/tasks/batch-delete", json={"ids": [made["id"]]}, headers=HOST).status_code == 403
+    own = new(alice, title="Bob made it")
+    private = alice.post("/api/tasks", json={"title": "Bob's own", "list": ""}, headers=HOST).get_json()
+    assert alice.delete(f"/api/tasks/{own['id']}", headers=HOST).status_code == 204
+    assert alice.delete(f"/api/tasks/{private['id']}", headers=HOST).status_code == 204
+    # What bob imports was made by someone else, and its undo deletes it again.
+    file = {"zone_tasks": 1, "tasks": [dict(made, id="0b7c1b0e-3c6e-4c56-9d8e-2a6f1f3b9a10", title="Imported")]}
+    resp = alice.post("/api/tasks/import", json={"file": file, "list": "team"}, headers=HOST)
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+    assert alice.post("/api/tasks/batch-delete", json={"ids": resp.get_json()["ids"]}, headers=HOST).status_code == 204
+    # An admin deletes any.
+    theirs = new(alice, title="Bob's, for the admin")
+    login(alice, "alice")
+    assert alice.delete(f"/api/tasks/{theirs['id']}", headers=HOST).status_code == 204
+    assert [t["title"] for t in alice.get("/api/tasks", headers=HOST).get_json()] == ["Alice made it"]

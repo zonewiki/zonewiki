@@ -603,6 +603,7 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 		}
 		ids = append(ids, t.ID)
 	}
+	noteBrought(user, ids) // the undo deletes them again (mayDeleteTask)
 	if len(ids) > 0 {
 		var also []string
 		if general {
