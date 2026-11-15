@@ -259,7 +259,22 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 		}
 		or9 := func(s string) string { return firstNonEmpty(s, "9999") }
 		if order == "manual" {
-			sort.SliceStable(open, func(i, j int) bool { return manualBefore(open[i].Task, open[j].Task) })
+			// What the user ranked in My tasks is their own order, across
+			// lists (mineOrder): those first, as they stand there; then by
+			// the lists' order.
+			own := map[string]int{}
+			if reg := taskFiles.ReadLists(mineOwner(user)); reg.OrderSet {
+				for i, id := range reg.Order {
+					own[id] = i + 1
+				}
+			}
+			sort.SliceStable(open, func(i, j int) bool {
+				a, b := open[i].Task, open[j].Task
+				if x, y := own[a.ID], own[b.ID]; x != 0 || y != 0 {
+					return x != 0 && (y == 0 || x < y)
+				}
+				return manualBefore(a, b)
+			})
 		} else {
 			sort.SliceStable(open, func(i, j int) bool {
 				a, b := open[i].Task, open[j].Task
@@ -292,8 +307,9 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 	return "Today is " + day + ". " + count + ":\n\n" + strings.Join(body, "\n\n---\n\n"), nil
 }
 
-// manualBefore: a comes before b in search_tasks' manual order, the
-// user's priority: the tasks they ranked (sort_order) top to bottom, then
+// manualBefore: a comes before b in search_tasks' manual order, where the
+// user ranked neither in My tasks: the tasks ranked in their lists
+// (sort_order) top to bottom, then
 // those not yet ranked, newest first. (The Open view shows the unranked
 // above, as new ones wait there to be ranked; for "what first" they come
 // after.)

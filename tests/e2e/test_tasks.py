@@ -756,6 +756,25 @@ def test_a_long_list_of_every_task_loads_again_every_five_minutes(page, wiki):
     expect(card(page, "Added elsewhere")).to_be_visible()
 
 
+def test_a_board_section_of_only_unsorted_tasks_has_no_labels(page, wiki):
+    """Unsorted and Sorted are labelled in a section that holds both; where
+    nothing is ranked yet (a team's list nobody ordered) the label would say
+    nothing, in every section. The cards are hollow all the same."""
+    ids = [page.request.post("/api/tasks", data={"title": t}).json()["id"] for t in ("One", "Two")]
+    page.goto("/tasks?view=plan")
+    expect(card(page, "Two")).to_be_visible()
+    expect(page.locator(".plan-subdivider")).to_have_count(0)
+    expect(card(page, "One")).to_have_class(re.compile(r"\btask-inbox\b"))
+    page.request.post("/api/tasks/reorder", data={"order": ids[:1]})
+    page.reload()
+    expect(card(page, "Two")).to_be_visible()
+    expect(page.locator(".plan-subdivider")).to_have_text(["Unsorted1", "Sorted1"])
+    page.request.post("/api/tasks/reorder", data={"order": ids})
+    page.reload()
+    expect(card(page, "Two")).to_be_visible()
+    expect(page.locator(".plan-subdivider")).to_have_count(0)
+
+
 def test_save_writes_only_what_was_changed_in_the_dialog(page, wiki):
     """Two people on one task: Save sends the fields changed in this dialog,
     so what someone else changed meanwhile stays; a text both changed is

@@ -284,8 +284,8 @@ On phones the control spans the full width.
   Dropped on a Later card from elsewhere, it asks for the date as on Later's heading and lands where Open's order puts it.
   Ctrl+Shift+↑/↓ moves the selection one place within its section, never out of it (`planKeyMove`), crossing the Unsorted/Sorted labels as on Open (below).
   As on Focus, only the moved tasks change place in the full order and hidden tasks keep theirs (`TasksCore.placeInOrder`).
-  **Unsorted / Sorted labels**: a section with Unsorted tasks (listed first) labels them **Unsorted** and the rest **Sorted** (`.plan-subdivider`), as Open's sections do one level down;
-  a section without any has no labels, so most days show none, and the labels appear where something is still to be ranked (often Today: a task added on Focus starts today, unsorted).
+  **Unsorted / Sorted labels**: a section that holds both, Unsorted tasks (listed first) and Sorted ones, labels them **Unsorted** and **Sorted** (`.plan-subdivider`), as Open's sections do one level down;
+  a section without Unsorted tasks has no labels, and neither has one with nothing else (until 2026-11 it was headed Unsorted: in a team's list that nobody ranked, every section of By person said so), so most sections show none, and the labels appear where something is still to be ranked among what is (often Today: a task added on Focus starts today, unsorted).
   Lighter than the day headings on purpose: as headings, "Sorted" would read as another day.
   Moves follow Open's rules, through Open's own code: `planSectionList` gives the section as Open lists its sections, `[#unsorted, …Unsorted ids, #sorted, …Sorted ids]`, and `applySectionList` / `sectionKeyMove` do the rest.
   So a task dropped among the Unsorted ones leaves the order (Unsorted is newest first, nothing moves within it), one dropped among the Sorted ones takes that place, and no other task is ranked as a side effect;

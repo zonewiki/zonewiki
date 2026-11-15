@@ -447,6 +447,11 @@ class TestSearchTasks:
         assert entries(call(client, "search_tasks", tag="leaf")[0].split(":\n\n", 1)[1])[0] == "Task: Unranked"
         text, err = call(client, "search_tasks", order="priority")
         assert err and "order must be deadline or manual" in text
+        # What was ranked in My tasks is the user's own order: those first, as they stand there.
+        ids = {t["title"]: t["id"] for t in client.get("/api/tasks").get_json()}
+        assert client.post("/api/tasks/reorder", json={"mine": True, "order": [ids["Third"], ids["Unranked"]]}).status_code == 204
+        text, _ = call(client, "search_tasks", tag="leaf", order="manual")
+        assert entries(text.split(":\n\n", 1)[1]) == ["Task: Third", "Task: Unranked", "Task: First", "Task: Second"]
 
     def test_several_tags_must_all_match(self, client, wiki_dir):
         task(client, title="A", tags=["leaf", "bug"])

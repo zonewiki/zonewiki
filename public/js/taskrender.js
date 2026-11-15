@@ -275,8 +275,11 @@ function planHTML(filtered) {
     // level down: so you see what is still to be ranked, and moves follow
     // Open's rules (planSectionList). The labels are no sections
     // (.plan-subdivider, not .board-day-divider); Sorted takes drops, as
-    // Open's heading does. No Unsorted task: no labels.
+    // Open's heading does. Only where a section holds both: with no
+    // Unsorted task, or nothing but Unsorted ones (a team's list that nobody
+    // ranked: every section of By person), the label says nothing.
     const unsorted = s.ordered ? s.tasks.filter(t => t.sort_order == null).length : 0;
+    const labels = unsorted > 0 && unsorted < s.tasks.length;
     const sub = (label, n) => `<li class="plan-subdivider" data-sub="${label.toLowerCase()}">` +
       `<span>${label}</span><span class="board-day-count">${n}</span></li>`;
     // A carried-over card's "since" badge is amber here (task-carried):
@@ -284,8 +287,8 @@ function planHTML(filtered) {
     // cards are hollow (task-inbox), as on Open and Focus.
     const [shown, more] = isFolded ? [[], ''] : windowed('plan:' + s.key, s.tasks);
     const body = shown.map((t, i) =>
-      (unsorted && i === 0 ? sub('Unsorted', unsorted) : '') +
-      (unsorted && i === unsorted ? sub('Sorted', s.tasks.length - unsorted) : '') +
+      (labels && i === 0 ? sub('Unsorted', unsorted) : '') +
+      (labels && i === unsorted ? sub('Sorted', s.tasks.length - unsorted) : '') +
       taskHTML(t, true, 'board-item' + (i < unsorted ? ' task-inbox' : '') +
         (s.date && TasksCore.isCarried(t, today) ? ' task-carried' : ''))).join('') + more;
     return header + body;
