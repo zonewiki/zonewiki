@@ -508,10 +508,12 @@ func firstNonEmpty(a, b string) string {
 	return b
 }
 
-// findForWriteLocked: the open tasks and every closed task user sees,
-// and the one with id (404 when none of them has it).
+// findForWriteLocked: the task with id (404 when user sees none such), and
+// what a write of it takes: the open tasks user sees and, when it is a
+// closed one, the closed tasks of its file (taskFiles.ReadTaskForWriteLocked):
+// not every closed task of the wiki.
 func findForWriteLocked(user, id string) (active, closed []*Task, task *Task, err error) {
-	if active, closed, err = taskFiles.ReadForWriteLocked(user); err != nil {
+	if active, closed, err = taskFiles.ReadTaskForWriteLocked(user, id); err != nil {
 		return
 	}
 	for _, t := range slices.Concat(active, closed) {

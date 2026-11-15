@@ -1168,3 +1168,152 @@ func TestAListNameThatIsNoFolder(t *testing.T) {
 		t.Errorf("read back: %v", got)
 	}
 }
+
+// one: a write of the one task id as the server does it: what it needs
+// read (ReadTaskForWriteLocked), changed by change, and written.
+func (f *fixture) one(t *testing.T, user, id, message string, change func(active, closed []*Task) ([]*Task, []*Task)) {
+	t.Helper()
+	f.Lock()
+	defer f.Unlock()
+	active, closed, err := f.ReadTaskForWriteLocked(user, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	active, closed = change(active, closed)
+	if err := f.WriteBothLocked(user, active, closed, message); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A write of one task reads the open tasks and, of the closed ones, the
+// file that holds it: no other closed file is read, copied or written, so
+// an archive that can't be read doesn't stop it, and what a file holds that
+// the write didn't read is there afterwards.
+func TestAWriteOfOneTaskReadsItsOwnFile(t *testing.T) {
+	f := newStore(t, "alice")
+	f.write(t, "alice", []*Task{in("shop", task("o1", "", "")), in("shop", task("o2", "", "")), task("i1", "", "")},
+		[]*Task{in("shop", task("c-now", "", "2026-06-01T09:00:00")), in("shop", task("c-may", "", "2026-05-02T09:00:00")),
+			in("shop", task("c-may2", "", "2026-05-03T09:00:00")), in("team", task("c-old", "", "2025-01-02T09:00:00"))}, "Write")
+	f.put(t, "_tasks/lists/team/closed-2024-01.json", "not json")
+	move := func(id string, closeIt bool, at string) func(active, closed []*Task) ([]*Task, []*Task) {
+		return func(active, closed []*Task) ([]*Task, []*Task) {
+			if closeIt {
+				for i, x := range active {
+					if x.ID == id {
+						x.ClosedAt = at
+						return slices.Delete(active, i, i+1), append(closed, x)
+					}
+				}
+			} else {
+				for i, x := range closed {
+					if x.ID == id {
+						x.ClosedAt = ""
+						return append(active, x), slices.Delete(closed, i, i+1)
+					}
+				}
+			}
+			t.Fatalf("%s isn't there to move", id)
+			return nil, nil
+		}
+	}
+	// An open task changes: its file, and nothing of the closed ones.
+	f.commits = nil
+	f.one(t, "alice", "o1", "Retitle", func(active, closed []*Task) ([]*Task, []*Task) {
+		if len(closed) != 0 {
+			t.Errorf("closed tasks read for an open one: %v", ids(closed))
+		}
+		for _, x := range active {
+			if x.ID == "o1" {
+				x.Title = "Another"
+			}
+		}
+		return active, closed
+	})
+	if want := []string{"alice|Retitle|_tasks/lists/shop/tasks.json"}; !reflect.DeepEqual(f.commits, want) {
+		t.Errorf("commits %q, want %q", f.commits, want)
+	}
+	// It is completed: this month's file of its list takes it, beside what was there.
+	f.commits = nil
+	f.one(t, "alice", "o1", "Done", move("o1", true, "2026-06-01T10:00:00"))
+	if got := f.ids(t, "_tasks/lists/shop/closed.json"); !reflect.DeepEqual(got, []string{"c-now", "o1"}) {
+		t.Errorf("this month's closed tasks: %v", got)
+	}
+	if want := []string{"alice|Done|_tasks/lists/shop/tasks.json _tasks/lists/shop/closed.json"}; !reflect.DeepEqual(f.commits, want) {
+		t.Errorf("commits %q, want %q", f.commits, want)
+	}
+	// A task of an archive changes: that archive, with its other task.
+	f.commits = nil
+	f.one(t, "alice", "c-may", "Retitle", func(active, closed []*Task) ([]*Task, []*Task) {
+		if got := ids(closed); !reflect.DeepEqual(got, []string{"c-may", "c-may2"}) {
+			t.Errorf("read for a task of May's archive: %v", got)
+		}
+		closed[0].Title = "Another"
+		return active, closed
+	})
+	if want := []string{"alice|Retitle|_tasks/lists/shop/closed-2026-05.json"}; !reflect.DeepEqual(f.commits, want) {
+		t.Errorf("commits %q, want %q", f.commits, want)
+	}
+	// It is reopened: out of its archive, which keeps the other; the last one out takes the file away.
+	f.one(t, "alice", "c-may", "Reopen", move("c-may", false, ""))
+	if got := f.ids(t, "_tasks/lists/shop/closed-2026-05.json"); !reflect.DeepEqual(got, []string{"c-may2"}) {
+		t.Errorf("May's archive: %v", got)
+	}
+	f.one(t, "alice", "c-may2", "Reopen", move("c-may2", false, ""))
+	if _, err := os.Stat(filepath.Join(f.root, "_tasks/lists/shop/closed-2026-05.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the emptied archive is still there (%v)", err)
+	}
+	if got := f.ids(t, "_tasks/lists/shop/tasks.json"); !reflect.DeepEqual(got, []string{"o2", "c-may", "c-may2"}) {
+		t.Errorf("the open tasks: %v", got)
+	}
+	// Nothing else was touched, the file that can't be read included.
+	if got := f.ids(t, "_tasks/lists/team/closed-2025-01.json"); !reflect.DeepEqual(got, []string{"c-old"}) {
+		t.Errorf("another list's archive: %v", got)
+	}
+	if f.text(t, "_tasks/lists/team/closed-2024-01.json") != "not json" {
+		t.Error("the unreadable archive was written")
+	}
+	// A task no file has: nothing read for it but the open ones, and the caller finds none.
+	f.Lock()
+	_, closed, err := f.ReadTaskForWriteLocked("alice", "nope")
+	f.Unlock()
+	if err != nil || len(closed) != 0 {
+		t.Errorf("a task that isn't there: %v, %v", ids(closed), err)
+	}
+	// A write that reads everything still refuses over the unreadable file.
+	f.Lock()
+	_, _, err = f.ReadForWriteLocked("alice")
+	f.Unlock()
+	if !errors.Is(err, ErrCorrupt) {
+		t.Errorf("a full read beside an unreadable archive: %v", err)
+	}
+}
+
+// An archive nobody read for a while is no longer kept parsed; the open
+// tasks and this month's closed ones stay.
+func TestIdleArchivesAreForgotten(t *testing.T) {
+	f := newStore(t)
+	f.write(t, "", []*Task{task("o1", "", "")}, []*Task{task("c1", "", "2026-06-01T09:00:00"), task("c2", "", "2025-01-02T09:00:00")}, "Write")
+	_ = f.All("")
+	kept := func() []string {
+		parsed.Lock()
+		defer parsed.Unlock()
+		var out []string
+		for p := range parsed.files {
+			out = append(out, filepath.Base(p))
+		}
+		slices.Sort(out)
+		return out
+	}
+	if got := kept(); !reflect.DeepEqual(got, []string{"closed-2025-01.json", "closed.json", "tasks.json"}) {
+		t.Fatalf("kept after a read of everything: %v", got)
+	}
+	parsed.Lock()
+	forgetOldArchives(time.Now().Add(archiveKept + time.Minute))
+	parsed.Unlock()
+	if got := kept(); !reflect.DeepEqual(got, []string{"closed.json", "tasks.json"}) {
+		t.Errorf("kept after the archive was idle: %v", got)
+	}
+	if got := ids(f.ClosedInYear("", "2025")); !reflect.DeepEqual(got, []string{"c2"}) {
+		t.Errorf("read again: %v", got)
+	}
+}

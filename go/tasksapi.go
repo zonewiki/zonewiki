@@ -110,7 +110,7 @@ func tasksRoutes(mux *http.ServeMux) {
 			open := tasks
 			tasks = scopedTasks(user, open, taskLists(user), scope)
 			if scope == mineScope {
-				tasks = withUpdates(user, tasks, open, taskFiles.RecentClosed(user)) // My tasks' Updates
+				tasks = withUpdates(user, tasks, open, recentUpdates(user)) // My tasks' Updates
 			}
 		}
 		// ?with=order: {tasks, order}, with the user's own order of My tasks
@@ -150,12 +150,8 @@ func tasksRoutes(mux *http.ServeMux) {
 		return nil
 	}))
 	mux.HandleFunc("GET /api/tasks/closed-count", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
-		in, n := scopeFilter(userOf(r), queryScope(r), taskLists(userOf(r))), 0
-		for _, t := range taskFiles.ClosedInYear(userOf(r), taskFiles.CurrentYear()) {
-			if in(t) {
-				n++
-			}
-		}
+		in := scopeFilter(userOf(r), queryScope(r), taskLists(userOf(r)))
+		n := taskFiles.CountClosedInYear(userOf(r), taskFiles.CurrentYear(), in)
 		writeJSON(w, http.StatusOK, map[string]int{"count": n})
 		return nil
 	}))

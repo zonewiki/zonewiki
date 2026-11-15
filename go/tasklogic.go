@@ -281,6 +281,15 @@ func updatesFor(user string, open, recentClosed []*Task) []*Task {
 	return out
 }
 
+// recentUpdates: the closed tasks of this month and the last that have news
+// for user (taskFiles.RecentClosed copies those alone).
+func recentUpdates(user string) []*Task {
+	if user == "" || settings().Users == nil {
+		return nil
+	}
+	return taskFiles.RecentClosed(user, func(t *Task) bool { return newsFor(t, user).Kind != "" })
+}
+
 // withUpdates: tasks (those a view of My tasks holds) and, after them, the
 // tasks with news for user that aren't among them: what they gave away,
 // what mentions them, what was closed. My tasks shows those under Updates

@@ -62,14 +62,14 @@ func (rq *Req) pageFiles() []PageFile {
 // (rq nil: read now, shared ones only): the Tasks links' counts, the task
 // places and a page's linked tasks all go by them, and reading them is
 // reading and parsing the task files whole.
-// recentClosed: the closed tasks of this month and the last the request's
-// user sees (taskFiles.RecentClosed), read once a request.
+// recentClosed: the closed tasks of this month and the last that have news
+// for the request's user (recentUpdates), read once a request.
 func (rq *Req) recentClosed() []*Task {
 	if rq == nil {
 		return nil
 	}
 	if !rq.recentRead {
-		rq.recent, rq.recentRead = taskFiles.RecentClosed(rq.user), true
+		rq.recent, rq.recentRead = recentUpdates(rq.user), true
 	}
 	return rq.recent
 }

@@ -12,6 +12,7 @@ browser draws anything.
 """
 
 import json
+from pathlib import Path
 import os
 import random
 import statistics
@@ -35,13 +36,14 @@ BUDGETS = {
     "one list (ms)": 200,
     "All tasks (ms)": 1500,
     "the due count (ms)": 40,
-    "a task changed (ms)": 150,
-    "a task completed (ms)": 150,
+    "a task changed (ms)": 80,
+    "a task completed (ms)": 90,
     "My tasks reordered (ms)": 300,
     "a search after a write (ms)": 1500,
     "the repository per 100 writes (MB)": 10,
     "the same, packed (MB)": 1.5,
     "the same, joined (MB)": 0.15,
+    "the server's memory (MB)": 260,
     "joining the packs (ms)": 3000,
 }
 
@@ -182,6 +184,12 @@ def test_the_tasks_at_a_teams_size(team, client):
     subprocess.run(join, check=True, capture_output=True)
     got["joining the packs (ms)"] = (time.perf_counter() - start) * 1000
     got["the same, joined (MB)"] = (repo_mb(root) - before) / writes * 100
+
+    # What the Zone process holds after all of that (its resident memory):
+    # the tasks it keeps parsed and the search index's, not every closed
+    # task of the wiki's years.
+    status = Path(f"/proc/{client.live.ensure().proc.pid}/status").read_text()
+    got["the server's memory (MB)"] = int(status.split("VmRSS:")[1].split()[0]) / 1024
 
     print(f"\n\nTasks at a team's size: {USERS} users, {LISTS} lists, {OPEN} open and {CLOSED} closed tasks; "
           f"{sum(p.stat().st_size for p in (root / '_tasks').rglob('tasks.json')) / 1e6:.1f} MB open, "

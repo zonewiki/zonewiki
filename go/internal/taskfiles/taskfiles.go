@@ -72,6 +72,11 @@ type Store struct {
 	Now func() time.Time
 
 	mu sync.Mutex
+	// scope: the closed files the write in progress read
+	// (ReadTaskForWriteLocked), which are the only ones it may write whole;
+	// nil: it read every one (ReadForWriteLocked). Lives as long as the lock
+	// is held.
+	scope map[string]bool
 }
 
 // Lock serializes every read-modify-write of the task files: two concurrent
@@ -79,7 +84,7 @@ type Store struct {
 // from its read to its commit; the methods named …Locked expect it held
 // (Go's mutex isn't reentrant), the others take it themselves or only read.
 func (s *Store) Lock()   { s.mu.Lock() }
-func (s *Store) Unlock() { s.mu.Unlock() }
+func (s *Store) Unlock() { s.scope = nil; s.mu.Unlock() }
 
 // ---- where the files are ----
 
@@ -285,7 +290,26 @@ func eachOwner(owners []string, list func(owner string) []*Task) []*Task {
 type parsedFile struct {
 	info  os.FileInfo
 	tasks []*Task
-	ok    bool // it held a list of tasks
+	ok    bool      // it held a list of tasks
+	used  time.Time // when it was last read
+}
+
+// archiveKept: how long an archive (an earlier month's closed tasks) stays
+// parsed after it was last read. The open tasks and this month's closed
+// ones are read all the time; an archive is read by the Closed view of its
+// year, a search's index and a change to an old task, and a wiki keeps
+// years of them: parsed and kept, they are most of what Zone holds in
+// memory (62 of 163 MB with 80,000 tasks, measured 2026-11-15).
+const archiveKept = 10 * time.Minute
+
+// forgetOldArchives drops the archives nobody read for archiveKept (with
+// parsed locked; when a file is parsed, which is when the cache grows).
+func forgetOldArchives(now time.Time) {
+	for path, f := range parsed.files {
+		if archiveNameRE.MatchString(filepath.Base(path)) && now.Sub(f.used) > archiveKept {
+			delete(parsed.files, path)
+		}
+	}
 }
 
 var parsed = struct {
@@ -296,10 +320,27 @@ var parsed = struct {
 // readFile: path's tasks as copies of their own (a caller may change them);
 // exists: there is such a file to read; ok: it holds a list of tasks.
 func readFile(path string) (tasks []*Task, exists, ok bool) {
+	kept, exists, ok := peekFile(path)
+	if !ok {
+		return nil, exists, false
+	}
+	out := make([]*Task, len(kept))
+	for i, t := range kept {
+		out[i] = t.Clone()
+	}
+	return out, true, true
+}
+
+// peekFile: path's tasks as the cache keeps them, for a reader that only
+// looks: no copies, so nothing of them may be changed, and whose they are
+// is not in them (Owner is ""). A write replaces a file's tasks, it never
+// changes them, so they stay what they were for whoever still holds them.
+func peekFile(path string) (tasks []*Task, exists, ok bool) {
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil, !errors.Is(err, os.ErrNotExist), false
 	}
+	now := time.Now()
 	parsed.Lock()
 	defer parsed.Unlock()
 	f, hit := parsed.files[path]
@@ -314,16 +355,11 @@ func readFile(path string) (tasks []*Task, exists, ok bool) {
 		if strings.TrimSpace(string(raw)) != "" {
 			f.tasks, f.ok = taskmodel.Parse(raw)
 		}
-		parsed.files[path] = f
+		forgetOldArchives(now)
 	}
-	if !f.ok {
-		return nil, true, false
-	}
-	out := make([]*Task, len(f.tasks))
-	for i, t := range f.tasks {
-		out[i] = t.Clone()
-	}
-	return out, true, true
+	f.used = now
+	parsed.files[path] = f
+	return f.tasks, true, f.ok
 }
 
 // ReadStrict reads a task list for a write: a file that is there but
@@ -377,7 +413,7 @@ func writeTasks(path string, tasks []*Task, text string) error {
 			kept[i] = t.Clone()
 			kept[i].Owner = ""
 		}
-		parsed.files[path] = parsedFile{info: info, tasks: kept, ok: true}
+		parsed.files[path] = parsedFile{info: info, tasks: kept, ok: true, used: time.Now()}
 	}
 	return nil
 }
@@ -686,6 +722,7 @@ func (s *Store) readOwnerStrict(owner string) (active, closed []*Task, err error
 // ReadForWriteLocked: the open tasks and every closed task user sees
 // (shared and their own), read for a write.
 func (s *Store) ReadForWriteLocked(user string) (active, closed []*Task, err error) {
+	s.scope = nil
 	active, closed = []*Task{}, []*Task{}
 	for _, o := range s.Owners(user) {
 		a, c, err := s.readOwnerStrict(o)
@@ -695,6 +732,82 @@ func (s *Store) ReadForWriteLocked(user string) (active, closed []*Task, err err
 		active, closed = append(active, a...), append(closed, c...)
 	}
 	return active, closed, nil
+}
+
+// ReadTaskForWriteLocked: what a write of the one task id needs: the open
+// tasks user sees and, of the closed ones, those of the file that holds the
+// task (none when it is open, or when no file has it). A change of a task
+// then reads and copies its own file, not every closed task of the wiki's
+// years; the write that follows (WriteBothLocked) writes whole only the
+// closed files read here, and reads any other it has to put a task into
+// (writeClosed).
+func (s *Store) ReadTaskForWriteLocked(user, id string) (active, closed []*Task, err error) {
+	// Closed tasks that wait to be filed (a month has ended, a year's file
+	// from before the months): this write reads everything and files them,
+	// as every write did; the next one reads its own file again.
+	if s.unfiled(user) {
+		return s.ReadForWriteLocked(user)
+	}
+	s.scope = map[string]bool{}
+	if active, err = s.ReadOpenStrict(user); err != nil {
+		return nil, nil, err
+	}
+	for _, t := range active {
+		if t.ID == id {
+			return active, []*Task{}, nil
+		}
+	}
+	// A closed one: this month's files first, then the archives, the
+	// newest first (what is changed is mostly what was closed lately).
+	type file struct{ path, owner string }
+	var current, archives []file
+	for _, o := range s.Owners(user) {
+		for _, d := range s.dirs(o) {
+			current = append(current, file{closedIn(d), o})
+			for _, p := range archivesIn(d) {
+				archives = append(archives, file{p, o})
+			}
+		}
+	}
+	sort.SliceStable(archives, func(i, j int) bool { return filepath.Base(archives[i].path) > filepath.Base(archives[j].path) })
+	for _, f := range append(current, archives...) {
+		kept, _, ok := peekFile(f.path)
+		if !ok || !slices.ContainsFunc(kept, func(t *Task) bool { return t.ID == id }) {
+			continue
+		}
+		if closed, err = ReadStrict(f.path); err != nil {
+			return nil, nil, err
+		}
+		for _, t := range closed {
+			t.Owner = f.owner
+		}
+		s.scope[f.path] = true
+		return active, closed, nil
+	}
+	return active, []*Task{}, nil
+}
+
+// unfiled: a closed task user sees is not in its month's file: a year's
+// file from before the months is there, or a closed.json holds a task of
+// an earlier month. Found by the files' names and a look at this month's
+// files, which are parsed anyway.
+func (s *Store) unfiled(user string) bool {
+	current := s.currentMonth()
+	for _, o := range s.Owners(user) {
+		for _, d := range s.dirs(o) {
+			for _, p := range archivesIn(d) {
+				if !monthRE.MatchString(strings.TrimSuffix(strings.TrimPrefix(filepath.Base(p), "closed-"), ".json")) {
+					return true // closed-YYYY.json
+				}
+			}
+			old := false
+			lookAt(closedIn(d), o, func(t *Task) { old = old || pastMonthOf(t, current) != "" })
+			if old {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // ---- writing ----
@@ -826,11 +939,23 @@ func (s *Store) writeClosed(owner string, closed []*Task, reformat bool) ([]stri
 	current := s.currentMonth()
 	var order []string
 	byPath := map[string][]*Task{}
-	for _, d := range s.dirs(owner) {
-		for _, p := range append([]string{closedIn(d)}, archivesIn(d)...) {
-			order = append(order, p)
-			byPath[p] = []*Task{}
+	if s.scope == nil {
+		for _, d := range s.dirs(owner) {
+			for _, p := range append([]string{closedIn(d)}, archivesIn(d)...) {
+				order = append(order, p)
+				byPath[p] = []*Task{}
+			}
 		}
+	} else {
+		// A write that read some closed files (ReadTaskForWriteLocked):
+		// those are the ones it writes whole; any other stays as it is.
+		for p := range s.scope {
+			if strings.HasPrefix(p, s.Dir(owner)+string(filepath.Separator)) {
+				order = append(order, p)
+				byPath[p] = []*Task{}
+			}
+		}
+		sort.Strings(order)
 	}
 	var fresh []string // files that aren't there yet: written first (byDir)
 	for _, t := range closed {
@@ -840,7 +965,25 @@ func (s *Store) writeClosed(owner string, closed []*Task, reformat bool) ([]stri
 			p = archiveIn(d, m)
 		}
 		if _, ok := byPath[p]; !ok {
-			fresh = append(fresh, p)
+			// A file this write didn't read takes a task (one just closed,
+			// one filed under its month): what it holds is read now, so it
+			// is never written without it.
+			var there []*Task
+			if s.scope != nil && exists(p) {
+				var err error
+				if there, err = ReadStrict(p); err != nil {
+					return nil, err
+				}
+				for _, x := range there {
+					x.Owner = owner
+				}
+			}
+			if there != nil {
+				order = append(order, p)
+				byPath[p] = slices.DeleteFunc(there, func(x *Task) bool { return x.ID == t.ID })
+			} else {
+				fresh = append(fresh, p)
+			}
 		}
 		byPath[p] = append(byPath[p], t)
 	}
@@ -1046,20 +1189,72 @@ func (s *Store) FileByListLocked(owners []string) []string {
 // current closed files and last month's archives): what a page view may
 // read beside the open tasks (they are parsed once), where an older archive
 // is never read for it.
-func (s *Store) RecentClosed(user string) []*Task {
+//
+// Those of them keep takes, as copies; keep looks at each without one
+// (lookAt), so a page view copies the few it wants, not two months' tasks.
+func (s *Store) RecentClosed(user string, keep func(*Task) bool) []*Task {
 	last := "closed-" + s.Now().AddDate(0, 0, 1-s.Now().Day()).AddDate(0, -1, 0).Format("2006-01") + ".json"
 	s.Lock()
 	defer s.Unlock()
-	tasks := s.readClosed(user)
-	return append(tasks, eachOwner(s.Owners(user), func(o string) []*Task {
-		var l []*Task
-		for _, p := range s.archives(o) {
-			if filepath.Base(p) == last {
-				l = append(l, ReadLenient(p)...)
+	out := []*Task{}
+	for _, o := range s.Owners(user) {
+		for _, d := range s.dirs(o) {
+			files := []string{closedIn(d)}
+			if p := filepath.Join(d, last); exists(p) {
+				files = append(files, p)
+			}
+			for _, p := range files {
+				lookAt(p, o, func(t *Task) {
+					if keep(t) {
+						c := t.Clone()
+						out = append(out, c)
+					}
+				})
 			}
 		}
-		return l
-	})...)
+	}
+	return unique(out)
+}
+
+// lookAt shows fn each task of the file at path, owner's, without copying
+// what the cache keeps: a look-alike of the task whose lists and texts are
+// the cache's own, so fn only reads it (and keeps none of it).
+func lookAt(path, owner string, fn func(*Task)) {
+	tasks, _, ok := peekFile(path)
+	if !ok {
+		return
+	}
+	for _, t := range tasks {
+		shown := *t
+		shown.Owner = owner
+		fn(&shown)
+	}
+}
+
+// CountClosedInYear: how many of the closed tasks of a year user sees in
+// takes (the Closed link's number, asked for after every write): counted
+// by looking, without a copy of a year's tasks.
+func (s *Store) CountClosedInYear(user, year string, in func(*Task) bool) int {
+	current := s.CurrentYear()
+	s.Lock()
+	defer s.Unlock()
+	n := 0
+	count := func(t *Task) {
+		if (year == current && pastYearOf(t, current) == "" || year != current && ClosedYear(t) == year) && in(t) {
+			n++
+		}
+	}
+	for _, o := range s.Owners(user) {
+		for _, d := range s.dirs(o) {
+			lookAt(closedIn(d), o, count)
+			for _, p := range archivesIn(d) {
+				if archiveYear(p) == year {
+					lookAt(p, o, count)
+				}
+			}
+		}
+	}
+	return n
 }
 
 // Snapshot: the open tasks user sees and every closed one (this month's
