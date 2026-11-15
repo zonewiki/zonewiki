@@ -354,6 +354,7 @@ and commit the new pins.
   (A list's rename, `renameListOp` in `go/tasklists.go`, writes pages too: the embeds and links that name the list.)
   **Page writes run one at a time** (`pagesMu`), from the reads they decide on to their commit: the doors take it, not the operations (a route that writes pages is registered as `writesPages(handler)`, an MCP tool that does says `toolWritesPages` in `mcpToolTable`);
   code under it never takes it again (lock order `pagesMu`, the task files' lock (`taskFiles.Lock`), `commitMu`).
+  Task reads don't take the task files' lock: they wait only while a write replaces its files (`taskFiles.Hold` … `Release`, Storage in `docs/spec/tasks.md`), so code that writes a task file itself calls `taskFiles.Hold()` first, and a section under `taskFiles.Lock` calls only the store's `…Locked` readers.
   Pages are written atomically (`writeText` → `atomicfile.Write`: a link written through, a new file 0666 less the umask).
   `gitCommit` commits only the paths it is given (not what `.gitignore` leaves out) and returns an error, which a write returns (`notCommitted`; a `keepPending` that fails stops the write); links a move couldn't re-point are no failure (`linksLeft`: logged, the MCP tools say so).
 - `index.md` is the home page and must always exist (Zone creates it at startup when missing).

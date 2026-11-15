@@ -229,6 +229,7 @@ Nobody types ids: in the editor, `[[task:` (or the formatting bar's task button)
   Unknown id: a red dashed `task <id>?` (`.task-ref-missing`).
   A reference alone in a list item makes that `<li class="task-ref-item">`, a checklist row without the chip's box.
 - **Resolving** (`resolveTaskRefs`): open tasks win over closed ones with the same prefix; archives count.
+  The tasks are looked up among the search's records (`taskRecords`: a task without its description, comments and history, which is what a chip shows; Indexing in `docs/spec/search.md`), so a page with a reference doesn't read and copy every closed task of the wiki's years, as it did twice a view until 2026-11; an assistant's `update_task` finds its task the same way and reads that one whole (`findTasks`).
   A completed recurring task stands for its series: the reference follows `spawned_from` to the current occurrence, so ticking it and reloading shows the next one.
 - **Ticking** the chip's checkbox (`js/page.js`, page view and editor preview) PUTs `{ completed }` to `/api/tasks/<id>`,
   so repeating and keep tasks behave as in the tasks,

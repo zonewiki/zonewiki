@@ -2996,3 +2996,26 @@ class TestMyTasksOrder:
         assert client.post("/api/tasks/reorder", json={"order": [a]}).status_code == 204
         assert client.post("/api/tasks/reorder", json={"mine": True, "order": ["x"]}).status_code == 204
         assert client.get("/api/tasks?with=order").get_json()["order"] == []
+
+
+# ---------- The counts are kept until the files change ----------
+
+
+def test_the_counts_follow_the_task_files(client, wiki_dir):
+    """The Tasks links' counts are kept per user and counted anew when a
+    task file is another one: after Zone's own write, also one that leaves
+    the file its size within one tick of the clock, and after a change by
+    hand."""
+    today, tomorrow = date.today().isoformat(), (date.today() + timedelta(days=1)).isoformat()
+    count = lambda: client.get("/api/tasks/due-count").get_json()["count"]
+    assert count() == 0
+    task = create_task(client, title="A", due_date=tomorrow).get_json()
+    assert count() == 0
+    for due, n in ((today, 1), (tomorrow, 0), (today, 1), (tomorrow, 0)):      # the file keeps its size
+        assert client.put(f"/api/tasks/{task['id']}", json={"due_date": due}).status_code == 200
+        assert count() == n
+    path = wiki_dir / "_tasks" / "tasks.json"
+    tasks = json.loads(path.read_text())
+    tasks.append(dict(tasks[0], id="by-hand", title="By hand", due_date=today))
+    path.write_text(json.dumps(tasks))
+    assert count() == 1

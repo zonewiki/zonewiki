@@ -548,6 +548,7 @@ func renameTagOp(user, tag, newName string, merge bool, suffix string) (*tagRena
 		if failed != nil {
 			break
 		}
+		taskFiles.Hold()
 		if failed = taskfiles.Write(w.path, w.tasks); failed == nil {
 			written = append(written, w.path)
 		}

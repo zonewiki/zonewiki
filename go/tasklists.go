@@ -453,6 +453,8 @@ func commitLists(user, message string, paths []string) error {
 	if len(paths) == 0 {
 		return nil
 	}
+	// The files are written: no reader waits for the commit.
+	taskFiles.Release()
 	return notCommitted(gitCommit(user, message, paths...))
 }
 
@@ -759,6 +761,7 @@ func renameListOp(user, ref, newName, suffix string, check ...func(pages []strin
 		if failed != nil {
 			break
 		}
+		taskFiles.Hold()
 		if failed = taskfiles.Write(w.path, w.tasks); failed == nil {
 			written = append(written, w.path)
 		}

@@ -527,7 +527,13 @@ func tasksMtimes() string {
 			fmt.Fprintf(&b, "%s\x00-\x00", p)
 		}
 	}
-	return b.String()
+	// Zone's own writes by their count too: two within one tick of the file
+	// system's clock are two.
+	var every []taskfiles.Place
+	for _, o := range taskFiles.EveryOwner() {
+		every = append(every, taskfiles.Place{Owner: o, Every: true})
+	}
+	return b.String() + taskFiles.Word(every)
 }
 
 var taskDocs struct {

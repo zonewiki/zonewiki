@@ -45,6 +45,17 @@ BUDGETS = {
     "the same, joined (MB)": 0.15,
     "the server's memory (MB)": 210,
     "joining the packs (ms)": 3000,
+    # Beside writes (test_reads_beside_writes): the 95th percentile, and the
+    # slowest. A read never waits for a write's commit, nor for the packing
+    # a commit now and then waits for (which is the slowest write).
+    "beside writes: a page without tasks, p95 (ms)": 60,
+    "beside writes: the due count, p95 (ms)": 60,
+    "beside writes: My tasks, p95 (ms)": 100,
+    "beside writes: a task changed, p95 (ms)": 150,
+    "beside writes: a page without tasks, slowest (ms)": 250,
+    "beside writes: the due count, slowest (ms)": 250,
+    "beside writes: My tasks, slowest (ms)": 250,
+    "beside writes: a task changed, slowest (ms)": 2500,
 }
 
 WORDS = ("review the draft of the offer for the customer and send it back with notes call about invoice "
@@ -116,6 +127,88 @@ def timed(fn, n=7):
 def repo_mb(root):
     out = subprocess.run(["du", "-sk", str(root / ".git")], check=True, capture_output=True, text=True).stdout
     return int(out.split()[0]) / 1024
+
+
+def report(got):
+    """Prints the measures and fails where one is over its budget."""
+    over = []
+    for name, value in got.items():
+        budget = BUDGETS.get(name)
+        flag = ""
+        if budget is not None and value > budget and (USERS, OPEN) == SIZES["team"][:1] + SIZES["team"][2:3]:
+            flag = f"   over the budget of {budget}"
+            over.append(name)
+        print(f"  {name:48s} {value:10.1f}{flag}")
+    print()
+    assert not over, f"over budget: {over}"
+
+
+READERS, WRITERS, SECONDS, PAUSE = 6, 4, 15, 0.25
+
+
+def test_reads_beside_writes(team, client):
+    """What a reader waits while others write: READERS people who open pages,
+    My tasks and whose pages ask for the counts without a pause, and WRITERS
+    who each change a task every PAUSE seconds (a hundred people's writes of
+    a day in a few minutes), for SECONDS. One client at a time
+    (the test above) doesn't see a reader held up by a write's commit."""
+    import threading
+    from tests.goserver import GoClient
+    root, users, lists = team
+
+    def signed_in(user):
+        c = GoClient.__new__(GoClient)
+        c.live, c.cookies = client.live, {}
+        assert c.post("/login", data={"username": user, "password": "pw"}, headers=HOST).status_code == 302
+        return c
+
+    clients = [signed_in(u) for u in users[:READERS + WRITERS]]
+    for c in clients:                                     # warm: the files parsed, the counts kept
+        assert c.get("/tasks?mine=1", headers=HOST).status_code == 200
+    times, failed, stop = {}, [], time.monotonic() + SECONDS
+    lock = threading.Lock()
+
+    def timed_get(c, name, call):
+        start = time.perf_counter()
+        resp = call()
+        ms = (time.perf_counter() - start) * 1000
+        with lock:
+            times.setdefault(name, []).append(ms)
+            if resp.status_code >= 400:
+                failed.append((name, resp.status_code))
+
+    def reader(c, n):
+        urls = [("a page without tasks", "/page/plain"), ("the due count", "/api/tasks/due-count?places=1"),
+                ("My tasks", "/api/tasks?mine=1")]
+        i = n
+        while time.monotonic() < stop:
+            name, url = urls[i % len(urls)]
+            timed_get(c, name, lambda: c.get(url, headers=HOST))
+            i += 1
+
+    def writer(c, n):
+        mine = [t for t in c.get("/api/tasks?mine=1", headers=HOST).get_json() if not t.get("private")]
+        i = 0
+        while time.monotonic() < stop:
+            t = mine[i % len(mine)]
+            timed_get(c, "a task changed", lambda: c.put(f"/api/tasks/{t['id']}", json={"title": f"Changed {n} {i}"}, headers=HOST))
+            i += 1
+            time.sleep(PAUSE)
+
+    threads = [threading.Thread(target=reader, args=(c, n)) for n, c in enumerate(clients[:READERS])]
+    threads += [threading.Thread(target=writer, args=(c, n)) for n, c in enumerate(clients[READERS:])]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert not failed, failed[:5]
+    p95 = lambda values: sorted(values)[int(len(values) * 0.95)]
+    got = {f"beside writes: {name}, p95 (ms)": p95(values) for name, values in times.items()}
+    for name, values in times.items():
+        got[f"beside writes: {name}, slowest (ms)"] = max(values)
+    print(f"\n\nReads beside writes: {READERS} readers, {WRITERS} writers, {SECONDS} s; "
+          + ", ".join(f"{len(v)} × {name}" for name, v in times.items()) + "\n")
+    report(got)
 
 
 def test_the_tasks_at_a_teams_size(team, client):
@@ -195,13 +288,4 @@ def test_the_tasks_at_a_teams_size(team, client):
           f"{sum(p.stat().st_size for p in (root / '_tasks').rglob('tasks.json')) / 1e6:.1f} MB open, "
           f"{sum(p.stat().st_size for p in (root / '_tasks').rglob('closed*.json')) / 1e6:.1f} MB closed, "
           f"in {len(list((root / '_tasks').rglob('*.json')))} files\n")
-    over = []
-    for name, value in got.items():
-        budget = BUDGETS.get(name)
-        flag = ""
-        if budget is not None and value > budget and (USERS, OPEN) == SIZES["team"][:1] + SIZES["team"][2:3]:
-            flag = f"   over the budget of {budget}"
-            over.append(name)
-        print(f"  {name:38s} {value:10.1f}{flag}")
-    print()
-    assert not over, f"over budget: {over}"
+    report(got)

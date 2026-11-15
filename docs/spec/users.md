@@ -588,7 +588,7 @@ Everything else (shared tasks) is everyone's to see and change, as shared pages 
 - **Reading and writing** (`go/internal/taskfiles`, the store `taskFiles` in `go/tasklogic.go`): every reader takes the user and reads the shared files and theirs (`Owners(user)`: `Open`, `All`, `Snapshot`, `ReadForWriteLocked`, `ClosedInYear`, `ClosedYears`, and on top of them `findTasks`, `resolveTaskRefs`, `findTaskBacklinks`);
   Zone itself (`""`) reads only the shared ones.
   A write splits the tasks by owner (`byOwner`) and writes the files that changed, all in one commit; a task can only be written by its own user, since another user's is never read for them.
-  One lock (`taskFiles.Lock`) for all files, taken by reads across them too (`Open` for `GET /api/tasks`, `All`, `Snapshot`): a task that is shared moves between two files, and a read between their writes would miss it.
+  One lock (`taskFiles.Lock`) for all files' writes, and a second one that readers share and a write holds while it replaces its files (`Open` for `GET /api/tasks`, `All`, `Snapshot`; Storage in `docs/spec/tasks.md`): a task that is shared moves between two files, and a read between their writes would miss it.
   What Zone does over every task list covers every user's files (`EveryOwner`): the closed tasks' filing by month at start (`ArchiveOldClosed`), the lists' migration, a rename's links in tasks (`renamePageRefs`), a shared list's rename, the search index (`Every`, filtered per user by `canSeeTask`, `hiddenDoc`).
   A series' next occurrence stays in its list, so private (`spawnRecurring`).
   A private task's pasted files are private too (the description's editor sends `private/<you>/…` as the upload's page).

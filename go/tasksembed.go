@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"zonewiki/internal/jsonobj"
 )
 
@@ -518,11 +519,69 @@ type TaskCounts struct {
 // and of those how many are overdue or due today, of My tasks (mineFilter):
 // what the Tasks links open. With no list in the wiki that is every task.
 func taskCounts(rq *Req) TaskCounts {
-	c := countTasks(rq.who(), rq.openTasks(), rq.taskLists(), mineScopeParams)
-	// New: every task with news for the user, wherever it is and also one
-	// closed lately: what they gave away is not in My tasks.
-	c.New = len(updatesFor(rq.who(), rq.openTasks(), rq.recentClosed()))
+	return rq.keptCounts("mine", func() TaskCounts {
+		c := countTasks(rq.who(), rq.openTasks(), rq.taskLists(), mineScopeParams)
+		// New: every task with news for the user, wherever it is and also one
+		// closed lately: what they gave away is not in My tasks.
+		c.New = len(updatesFor(rq.who(), rq.openTasks(), rq.recentClosed()))
+		return c
+	})
+}
+
+// countsKept: the counts each user was last shown (the Tasks links' and the
+// list switcher's, by a place's key), for as long as what they are counted
+// from is what it was: the task files and registries the user reads
+// (taskFiles.Stamp: a write of Zone's, a change by hand), the day (what is
+// due), and the settings (who is a user). Every page view shows the Tasks
+// links' counts and every open page asks for them once a minute: counted
+// anew each time, that is every open task the user sees read and looked
+// through, for a number that changes with a write.
+var countsKept = struct {
+	sync.Mutex
+	of map[string]*userCounts
+}{of: map[string]*userCounts{}}
+
+type userCounts struct {
+	stamp, day string
+	set        *Settings
+	counts     map[string]TaskCounts
+}
+
+// keptCounts: the counts of the place key for the request's user, counted
+// by count when what was kept is no longer true.
+func (rq *Req) keptCounts(key string, count func() TaskCounts) TaskCounts {
+	user := rq.who()
+	// The stamp before the count: a write between the two gives counts kept
+	// under a stamp that is no longer the files', which are then counted anew.
+	stamp, day, set := rq.tasksStamp(), isoDay(today()), settings()
+	countsKept.Lock()
+	kept := countsKept.of[user]
+	if kept == nil || kept.stamp != stamp || kept.day != day || kept.set != set {
+		kept = &userCounts{stamp: stamp, day: day, set: set, counts: map[string]TaskCounts{}}
+		countsKept.of[user] = kept
+	}
+	c, ok := kept.counts[key]
+	countsKept.Unlock()
+	if ok {
+		return c
+	}
+	c = count()
+	countsKept.Lock()
+	kept.counts[key] = c
+	countsKept.Unlock()
 	return c
+}
+
+// tasksStamp: taskFiles.Stamp of the request's user, looked up once a
+// request.
+func (rq *Req) tasksStamp() string {
+	if rq == nil {
+		return taskFiles.Stamp("")
+	}
+	if rq.stamp == "" {
+		rq.stamp = taskFiles.Stamp(rq.user) + "."
+	}
+	return rq.stamp
 }
 
 // mineScopeParams: params of the scope of My tasks, without its settings
@@ -619,7 +678,6 @@ type TaskPlace struct {
 func (rq *Req) taskPlaces() []TaskPlace {
 	user := rq.who()
 	pinned, lists := rq.pinnedLists(), rq.taskLists()
-	tasks := rq.openTasks()
 	title := "Every task but those of the lists left out of My tasks"
 	if mineAssigns(user) {
 		title = "Your own tasks and what is assigned to you"
@@ -627,7 +685,8 @@ func (rq *Req) taskPlaces() []TaskPlace {
 	out := []TaskPlace{{Key: "mine", Label: "My tasks", Title: title, Href: mineHref, Counts: taskCounts(rq)}}
 	if rq.hasInbox() {
 		p := TaskPlace{Key: inboxRef, Label: "Inbox", Title: "Inbox: new tasks land here", Href: listHref(inboxRef),
-			Private: inboxOwner(user) != "", Counts: countTasks(user, tasks, lists, inboxParams())}
+			Private: inboxOwner(user) != "",
+			Counts:  rq.keptCounts(inboxRef, func() TaskCounts { return countTasks(user, rq.openTasks(), lists, inboxParams()) })}
 		out = append(out, p)
 	}
 	for _, l := range pinned {
@@ -635,7 +694,8 @@ func (rq *Req) taskPlaces() []TaskPlace {
 			continue
 		}
 		out = append(out, TaskPlace{Key: "list:" + l.Ref, Label: l.Name, Title: "Pinned list #" + l.Name, Href: listHref(l.Ref),
-			Pinned: true, Private: l.Private(), Counts: countTasks(user, tasks, lists, l.Params)})
+			Pinned: true, Private: l.Private(),
+			Counts: rq.keptCounts("list:"+l.Ref, func() TaskCounts { return countTasks(user, rq.openTasks(), lists, l.Params) })})
 	}
 	return out
 }

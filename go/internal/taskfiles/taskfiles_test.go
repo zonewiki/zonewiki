@@ -1317,3 +1317,91 @@ func TestIdleArchivesAreForgotten(t *testing.T) {
 		t.Errorf("read again: %v", got)
 	}
 }
+
+// A reader waits for a write's files, not for its commit: while git runs,
+// the open tasks are read, and they are what the write left.
+func TestAReadDoesntWaitForACommit(t *testing.T) {
+	f := newStore(t)
+	committing, done := make(chan bool), make(chan bool)
+	f.Store.Commit = func(user, message string, paths ...string) error {
+		committing <- true
+		<-done
+		return nil
+	}
+	go func() {
+		f.Lock()
+		defer f.Unlock()
+		if err := f.WriteBothLocked("", []*Task{task("o1", "", "")}, []*Task{task("c1", "", "2026-06-01T09:00:00")}, "Write"); err != nil {
+			t.Error(err)
+		}
+	}()
+	<-committing
+	read := make(chan []string)
+	go func() { read <- ids(f.All("")) }()
+	select {
+	case got := <-read:
+		if !reflect.DeepEqual(got, []string{"o1", "c1"}) {
+			t.Errorf("read during the commit: %v", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Error("a read waited for the commit")
+	}
+	close(done)
+	f.Lock() // the write is over
+	f.Unlock()
+}
+
+// While a write is between its files, a reader waits: it sees all of the
+// write or none of it.
+func TestAReadWaitsForAWritesFiles(t *testing.T) {
+	f := newStore(t)
+	f.Lock()
+	f.Hold()
+	read := make(chan []string)
+	go func() { read <- ids(f.Open("")) }()
+	select {
+	case <-read:
+		t.Fatal("a read went on between a write's files")
+	case <-time.After(50 * time.Millisecond):
+	}
+	f.Release()
+	select {
+	case <-read:
+	case <-time.After(5 * time.Second):
+		t.Error("a read still waits after the files were written")
+	}
+	f.Unlock()
+	// Without Lock nothing is held: a command without a running Zone.
+	f.Hold()
+	_ = f.Open("")
+}
+
+// Stamp is another word after a write of Zone's and after a file changed by
+// hand, and the same while nothing changed; another user's own tasks don't
+// change it.
+func TestStamp(t *testing.T) {
+	f := newStore(t, "anna", "bob")
+	f.write(t, "", []*Task{task("o1", "", "")}, nil, "Write")
+	a := f.Stamp("anna")
+	if f.Stamp("anna") != a {
+		t.Error("the stamp changed with nothing written")
+	}
+	f.write(t, "bob", []*Task{task("o1", "", ""), task("p1", "bob", "")}, nil, "Write")
+	if f.Stamp("anna") != a {
+		t.Error("bob's own task changed anna's stamp")
+	}
+	if f.Stamp("bob") == a {
+		t.Error("bob's stamp is anna's")
+	}
+	f.write(t, "", []*Task{task("o1", "", ""), task("o2", "", "")}, nil, "Write")
+	b := f.Stamp("anna")
+	if b == a {
+		t.Error("a write left the stamp")
+	}
+	if err := os.WriteFile(f.OpenPath(""), []byte("[]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if f.Stamp("anna") == b {
+		t.Error("a change by hand left the stamp")
+	}
+}

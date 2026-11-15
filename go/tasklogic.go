@@ -672,6 +672,7 @@ func renamePageRefs(rewrite func(owner, text string) string) ([]string, error) {
 			}
 		}
 		if dirty {
+			taskFiles.Hold()
 			if err := taskfiles.Write(p, tasks); err != nil {
 				return changed, err
 			}
@@ -723,30 +724,49 @@ func findTaskBacklinks(open []*Task, slug string) []TaskLink {
 	return out
 }
 
+// taskRecords: the tasks user sees as the search keeps them (taskSearchDocs:
+// a record each, the task without its description, comments and history),
+// the open ones and the closed ones. Only to read: they are the search's
+// own. What needs a task by its id asks here, so no closed task of the
+// wiki's years is read and copied to show a chip.
+func taskRecords(user string) (open, done []*SearchDoc) {
+	for _, d := range taskSearchDocs() {
+		switch {
+		case !canSeeTask(user, d.Task):
+		case d.Task.IsOpen():
+			open = append(open, d)
+		default:
+			done = append(done, d)
+		}
+	}
+	return open, done
+}
+
 // resolveTaskRefs maps each reference (an id prefix, lowercased) to its
 // task among those user sees, nil when none has it (another user's private
 // task is as none). An open task wins over a closed one; a closed
 // recurring task stands for its series: the reference follows
-// spawned_from to the occurrence current now.
+// spawned_from to the occurrence current now. The tasks are records
+// (taskRecords): what a chip, a link or a line of facts shows, to read only.
 func resolveTaskRefs(user string, refs []string) map[string]*Task {
 	out := map[string]*Task{}
 	if len(refs) == 0 {
 		return out
 	}
-	active, done := taskFiles.Snapshot(user)
+	active, done := taskRecords(user)
 	successor := map[string]*Task{}
-	for _, t := range append(append([]*Task{}, active...), done...) {
-		if t.SpawnedFrom != "" {
-			successor[t.SpawnedFrom] = t
+	for _, d := range slices.Concat(active, done) {
+		if d.Task.SpawnedFrom != "" {
+			successor[d.Task.SpawnedFrom] = d.Task
 		}
 	}
 	for _, ref := range refs {
 		ref = strings.ToLower(ref)
 		var task *Task
-		for _, list := range [][]*Task{active, done} {
-			for _, t := range list {
-				if strings.HasPrefix(strings.ToLower(t.ID), ref) {
-					task = t
+		for _, list := range [][]*SearchDoc{active, done} {
+			for _, d := range list {
+				if strings.HasPrefix(strings.ToLower(d.Task.ID), ref) {
+					task = d.Task
 					break
 				}
 			}
@@ -765,13 +785,15 @@ func resolveTaskRefs(user string, refs []string) map[string]*Task {
 }
 
 // findTasks: every task user sees whose id starts with prefix (lowercase);
-// only the one with exactly that id when there is one.
+// only the one with exactly that id when there is one. Each whole, read
+// from its file.
 func findTasks(user, prefix string) []*Task {
-	tasks := taskFiles.All(user)
 	var found, exact []*Task
-	for _, t := range tasks {
-		id := strings.ToLower(t.ID)
+	open, done := taskRecords(user)
+	for _, d := range slices.Concat(open, done) {
+		id := strings.ToLower(d.Task.ID)
 		if strings.HasPrefix(id, prefix) {
+			t := d.wholeTask()
 			found = append(found, t)
 			if id == prefix {
 				exact = append(exact, t)

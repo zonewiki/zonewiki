@@ -30,6 +30,7 @@ type Req struct {
 	r          *http.Request
 	user       string // who is asking (userOf): "" without users
 	sharing    bool
+	stamp      string // taskFiles.Stamp of the user (tasksStamp)
 	pinnedDone bool
 	pinned     []ListInfo // the pinned lists (pinnedLists), once
 	counts     *TaskCounts

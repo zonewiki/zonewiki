@@ -304,6 +304,7 @@ func (s *Store) WriteListsLocked(user, owner string, r *Registry) (string, error
 // over every owner's files (a migration at start). Returns its path when
 // the file changed.
 func (s *Store) WriteListsOf(owner string, r *Registry) (string, error) {
+	s.Hold()
 	path, text := s.ListsPath(owner), r.Encode()
 	if raw, err := os.ReadFile(path); err == nil && string(raw) == text {
 		return "", nil
