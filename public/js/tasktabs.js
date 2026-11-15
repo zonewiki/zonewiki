@@ -37,8 +37,8 @@ st.lastTab = 'focus';
 // undone (won't do). So are its param (view=closed), routes and files.
 function syncClosedLink() {
   if (!app.closedLink) return;
-  const f = parseFilter(filterQuery(), people);
-  const filtering = f.text || f.tagGroups.length || f.excludeTags.length || f.assigneeGroups.length || f.excludeAssignees.length;
+  // Any word of the filter: list:, from:, ! and is:updated too.
+  const filtering = TasksCore.filterActive(parseFilter(filterQuery(), people));
   app.closedLink.textContent = st.activeView === 'closed' ? `← Back to ${app.tabLabel(st.lastTab)}`
     : filtering ? 'Closed →'
     : `Closed${st.closedCount != null ? ` (${st.closedCount})` : ''} →`;

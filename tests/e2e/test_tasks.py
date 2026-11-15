@@ -403,6 +403,24 @@ def test_past_start_date_reads_since(page, wiki):
     expect(chip).to_have_text(f"📅 since {start.strftime('%b')} {start.day}")
     expect(card(page, "Started last year").locator(".task-focus-info")).to_have_text(
         f"📅 since Mar 4, {long_ago.year}")
+    # Every date of a card is written that way, never ISO: a later start, a
+    # deadline, and the day a closed task was done.
+    later, due = date.today() + timedelta(days=40), date.today() + timedelta(days=45)
+    short = lambda d: f"{d.strftime('%b')} {d.day}" + ("" if d.year == date.today().year else f", {d.year}")
+    page.request.post("/api/tasks", data={"title": "Later", "start_date": later.isoformat(), "due_date": due.isoformat()})
+    page.request.post("/api/tasks", data={"title": "Done one"})
+    page.request.put(f"/api/tasks/{task_by_title(page, 'Done one')['id']}", data={"completed": True})
+    page.reload()
+    open_tab(page, "open")
+    expect(card(page, "Later").locator(".task-focus-info")).to_have_text(f"📅 {short(later)}")
+    expect(card(page, "Later").locator(".task-due")).to_have_text(f"⏰ {short(due)}")
+    page.locator("#task-closed-link").click()
+    done = card(page, "Done one").locator(".task-date-info", has_text="done:")
+    expect(done).to_have_text(f"done: {short(date.today())}")
+    assert done.get_attribute("title") == date.today().isoformat()
+    page.locator("#task-closed-link").click()
+    open_tab(page, "focus")
+    chip = card(page, "Started").locator(".task-focus-info")
     color = chip.evaluate("el => getComputedStyle(el).color")
     muted = chip.evaluate("""el => { const p = document.createElement('span');
         p.style.color = 'var(--muted)'; el.parentNode.appendChild(p);
@@ -1228,6 +1246,13 @@ def test_a_filter_does_not_load_the_closed_tasks(page, wiki):
     assert asked
 
     link.click()
+    search.fill("")
+    expect(link).to_have_text("Closed (2) →")
+    # Any word of the filter takes the number away: ! and is:updated too
+    # (they once left it, and it read as what the filter leaves).
+    for words in ("!", "!low", "is:updated", "list:shop", "-list:shop"):
+        search.fill(words)
+        expect(link).to_have_text("Closed →")
     search.fill("")
     expect(link).to_have_text("Closed (2) →")
 

@@ -65,6 +65,9 @@ export function isDueNow(t, today) {
   return !!t.due_date && t.due_date <= today;
 }
 
+// A day as a card, a toast and the dialog say it: Today, Tomorrow,
+// Yesterday, else as the locale writes dates (shortDate), never ISO: a card
+// said "since Sep 21" beside "2026-11-20" once.
 export function formatDate(dateStr) {
   if (!dateStr) return '';
   const d = new Date(dateStr + 'T00:00:00');
@@ -74,10 +77,10 @@ export function formatDate(dateStr) {
   if (diff === 0) return 'Today';
   if (diff === 1) return 'Tomorrow';
   if (diff === -1) return 'Yesterday';
-  return dateStr;
+  return shortDate(dateStr);
 }
 
-// "Sep 21" (plus the year when it isn't this year), for "since …" labels.
+// "Sep 21" (plus the year when it isn't this year), in the locale's order.
 export function shortDate(dateStr) {
   return TasksCore.shortDate(dateStr, todayStr(), DATES);
 }

@@ -279,7 +279,7 @@ async function planOnDay(id, day) {
                 recurrence: task.recurrence ?? null, history: oldHistory(id) };
   dismissUndo();
   if (!await updateTask(id, { start_date: day, due_date: day })) return null;
-  showUndo(`Starts and due ${formatDate(day) === day ? shortDate(day) : formatDate(day)}`, () => updateTask(id, old));
+  showUndo(`Starts and due ${formatDate(day)}`, () => updateTask(id, old));
   return true;
 }
 

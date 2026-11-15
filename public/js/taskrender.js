@@ -129,7 +129,7 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
   const closedDisplay = task.closed_at
     ? (task.wont_do
         ? `<span class="task-date-info task-wontdo-badge">✗ won't do</span>`
-        : `<span class="task-date-info">done: ${esc(task.closed_at.slice(0, 10))}</span>`)
+        : `<span class="task-date-info" title="${esc(task.closed_at.slice(0, 10))}">done: ${esc(shortDate(task.closed_at.slice(0, 10)))}</span>`)
     : '';
 
   // Marks that there are notes, which the line hides; open or not, so

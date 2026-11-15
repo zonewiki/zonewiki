@@ -1,5 +1,5 @@
 import { closeOnBackdropClick } from './util.js';
-import { changedParams, settingsForm } from './tasksettings.js';
+import { changedParams, LIST_OWN, settingsForm } from './tasksettings.js';
 
 // ── The editor's Task list button ────────────────────────────────────────────
 // The formatting bar's Task list shows the list settings dialog, the one a
@@ -56,7 +56,13 @@ export function taskListDialog(textarea, { replaceRange, insertBlockAfterLine })
   el('title').textContent = existing ? 'Change the task list' : 'Task list';
   el('save').textContent = existing ? 'Change' : 'Insert';
   el('error').hidden = true;
-  const result = () => embedLine(params, changedParams(was, read(), written));
+  // With a list named, what is the list's own isn't written (a field filled
+  // in before the list was named); what the line had stays as written.
+  const result = () => {
+    const now = read(), set = changedParams(was, now, written);
+    if (now.list) for (const k of LIST_OWN) delete set[k];
+    return embedLine(params, set);
+  };
   // In place of where the list's own dialog says it writes: the line this writes.
   const preview = () => { el('where').textContent = result(); };
   preview();

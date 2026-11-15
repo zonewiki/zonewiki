@@ -108,6 +108,8 @@ export function changedParams(was, now, p) {
 // (a list: its pin, keep, hide when sharing), embed (an embed on a page:
 // its filter).
 // Returns what read() then gives.
+// The settings that are a list's own, wherever it shows (the fields' names).
+export const LIST_OWN = ['limit', 'labels', 'new', 'keep'];
 export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Today')) {
   const f = form.elements;
   const moreEl = form.querySelector('.task-add-fields');
@@ -119,6 +121,11 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Tod
   // or made, hiding in sharing mode on a list.
   const has = name => {
     const m = mode();
+    // The editor's dialog with a list named: the embed says how the page
+    // looks at the list (its tab, grouping and filter); the list's own
+    // settings are set in the list's dialog, and written here they would
+    // mean nothing.
+    if (LIST_OWN.includes(name) && f.list && cleanList(f.list.value)) return false;
     if (name === 'tag' || name === 'assignee') return !!f.list || m.embed;
     if (name === 'keep') return !!f.list || m.list;
     if (name === 'noshare') return m.list;
@@ -147,6 +154,12 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Tod
   // Wired once per form: the editor's dialog is opened again and again.
   if (!form.dataset.wired) {
     form.dataset.wired = '1';
+    // The List field named or emptied: the fields that are a list's own go or
+    // can be asked for again.
+    f.list?.addEventListener('input', () => {
+      for (const name of LIST_OWN) if (!has(name)) fieldEl(name).hidden = true;
+      syncMore();
+    });
     const changed = () => form.dispatchEvent(new Event('input', { bubbles: true }));   // the editor's preview follows
     moreEl.addEventListener('click', e => {
       const name = e.target.closest('[data-more]')?.dataset.more;

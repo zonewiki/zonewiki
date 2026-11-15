@@ -157,12 +157,13 @@ It doesn't block saving.
 **Locale** (`locale` in the settings file, a BCP 47 tag like `de-AT` or `en-GB`): how dates read and the day weeks start on, in the browser's `Intl` (no locale data in Zone).
 `loadSettings` refuses a value that isn't a tag shape (`localeRE`);
 `layout.html` puts it on `<body data-locale>`,
-and `tasks.js` (`LOCALE`) passes it to `tasks-core.js`'s helpers: `shortDate` ("since …", history, comments; "Oct 5" or "5. Okt.", the year added when it isn't this year; or ISO, below),
+and `tasks.js` (`LOCALE`) passes it to `tasks-core.js`'s helpers: `shortDate` (every date a card, a toast and the dialog write that isn't Today, Tomorrow or Yesterday: `formatDate` in `js/taskutil.js`, so a card's ⏰ and 📅, "since …", Closed's "done:" with the ISO date as its tooltip, history, comments; "Oct 5" or "5. Okt.", the year added when it isn't this year; or ISO, below),
 `fullDayLabel` (the Plan board's days after Tomorrow),
 and the date picker's month title (`monthTitle`),
 weekday heads (`weekdayNames`, two letters) and first column (`weekStart`: `Intl.Locale`'s week info, Monday where the engine has none).
 Unset: US-English dates and weeks from Monday, as before the setting (an explicit `en-US` starts them on Sunday).
-Only dates: Today, Tomorrow, Tmrw, the shortcuts' labels and the rest of the UI stay English, and the edit modal's date buttons keep `YYYY-MM-DD` for days further off.
+Only dates: Today, Tomorrow, Tmrw, the shortcuts' labels and the rest of the UI stay English.
+(Until 2026-11 a date further off was written `YYYY-MM-DD` on a card and in the edit modal's date buttons, beside "since Sep 21".)
 The task chips on pages are rendered by the server in US English inside `<time class="local-date" datetime>`, which `localizeDates` (`js/util.js`) rewrites in the locale: on the page view, a re-rendered chip, the editor's preview and the search modal's preview.
 
 **ISO dates** (`date-format = iso`, the only value; anything else is an error in the settings file): dates read `2026-10-05` (ISO 8601) wherever the locale would write them (`<body data-date-format="iso">`, `TasksCore.dateSettings` → `{ locale, iso }`): `shortDate` gives the date itself,
@@ -336,6 +337,7 @@ On phones the control spans the full width.
   It was called Completed: a wiki from then is renamed when Zone starts (`renameOldClosed`: `completed.json` and `completed-YYYY.json` become `closed.json` and `closed-YYYY.json`, never over a file that is there; a task's `completed_at` is read where it has no `closed_at`, and the files are written again with the new field), in one commit, "Name the task files of closed tasks closed".
   Nothing else is kept of the old names: a page's `view=completed`, a link with it and a client asking the old routes get what an unknown view or route gets.
   In Closed, the link reads `← Back to <tab>`, naming the tab it returns to.
+  While the filter has any word (`TasksCore.filterActive`: text, a tag, a name, `list:`, `from:`, `!`, `is:updated`) or the embed a tag, the link has no number (`Closed →`): the total would read as what the filter leaves.
   While a filter is on (text or a tag in the field, an embed's `tag=`) it reads `Closed →`, without a number: the total would read as what the filter leaves.
   The filter carries over into Closed, so a click shows the closed tasks it matches.
   (The link once counted them, `2 matches in Closed →`. That took every closed task of the year and its texts' HTML, loaded behind each filtered list right after it was drawn, and a second draw of the list when they arrived: too much for a number.)

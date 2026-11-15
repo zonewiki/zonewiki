@@ -223,21 +223,36 @@ def test_task_list_asks_what_the_list_shows_and_writes_the_embed(page, wiki):
     # The lists there are, to choose from; nothing set embeds all tasks.
     assert "shop" in dialog.locator("datalist option").evaluate_all("os => os.map(o => o.value)")
     expect(field("where")).to_have_text("[[tasks:]]")
+    more = lambda name: dialog.locator(".task-add-field", has_text=name)
+    # No list: every task, and everything the embed can say is the page's.
+    for name in ("WIP limit", "Tab names", "Keep tasks", "Tags of a new task", "Filter by tag"):
+        expect(more(name)).to_be_visible()
+    more("WIP limit").click()                                         # the rarer fields, asked for
+    field("limit").fill("5")
+    expect(field("where")).to_have_text("[[tasks: limit=5]]")
+    # A list named: only how the page looks at it counts here (its tab, its
+    # grouping, the filter); the list's own settings are set in its own
+    # dialog, and aren't offered, nor written when filled in before.
     field("list").fill("#Garden work")                                # cleaned as a list's name is
+    expect(field("limit")).to_be_hidden()
+    for name in ("WIP limit", "Tab names", "Keep tasks", "Tags of a new task"):
+        expect(more(name)).to_be_hidden()
     field("view").select_option("open")
     expect(field("where")).to_have_text("[[tasks: list=garden-work view=open]]")   # Open, with Plan
     field("group").select_option("none")
-    more = lambda name: dialog.locator(".task-add-field", has_text=name)
-    more("WIP limit").click()                                         # the rarer fields, asked for
-    field("limit").fill("5")
-    more("Keep tasks").click()                                        # a box: asked for, it is ticked
-    expect(field("keep")).to_be_checked()
     expect(dialog.locator(".task-settings-pin")).to_have_count(0)
     more("Filter by tag").click()
     field("tag").fill("urgent, -later")
+    expect(field("where")).to_have_text("[[tasks: list=garden-work view=open group=none tag=urgent,-later]]")
+    # Without the list again they can be asked for.
+    field("list").fill("")
+    more("Keep tasks").click()                                        # a box: asked for, it is ticked
+    expect(field("keep")).to_be_checked()
     more("Tab names").click()
     field("label-open").fill("To buy")
-    line = "[[tasks: list=garden-work view=open group=none labels=To_buy limit=5 tag=urgent,-later keep=1]]"
+    more("WIP limit").click()
+    expect(field("limit")).to_have_value("5")
+    line = "[[tasks: view=open group=none labels=To_buy limit=5 tag=urgent,-later keep=1]]"
     expect(field("where")).to_have_text(line)
     dialog.get_by_role("button", name="Insert").click()
     expect(dialog).to_be_hidden()
@@ -273,12 +288,12 @@ def test_task_list_on_an_embeds_line_changes_that_embed(page, wiki):
     # With the cursor on a [[tasks: …]] the dialog shows its params and
     # writes only what was changed: the rest stays as written, also a param
     # the dialog has no field for (pin=, from when an embed pinned its list).
-    text = "Intro\n\n  [[Tasks: list=shop labels=Catalogue,Shopping view=closed pin=default keep=1 new=food]]\n\nOutro"
+    text = "Intro\n\n  [[Tasks: labels=Catalogue,Shopping view=closed pin=default keep=1 new=food]]\n\nOutro"
     textarea = _edit(page, wiki, text, 20)
     _click(page, "tasklist")
     dialog, field = _list_dialog(page)
     expect(dialog.locator(".modal-label")).to_have_text("Change the task list")
-    expect(field("list")).to_have_value("shop")
+    expect(field("list")).to_have_value("")
     expect(field("keep")).to_be_checked()
     expect(field("view")).to_have_value("closed")
     expect(field("label-open")).to_have_value("Catalogue")           # shown: it is set
@@ -290,15 +305,35 @@ def test_task_list_on_an_embeds_line_changes_that_embed(page, wiki):
     dialog.locator(".task-add-field", has_text="Filter by tag").click()
     field("tag").fill("weekly")
     dialog.get_by_role("button", name="Change").click()
-    assert _body(textarea) == ("Intro\n\n  [[tasks: list=shop labels=Catalogue,Shopping view=closed pin=default"
+    assert _body(textarea) == ("Intro\n\n  [[tasks: labels=Catalogue,Shopping view=closed pin=default"
                                " new=food limit=8 tag=weekly]]\n\nOutro")
     # Emptied, a param goes.
     _click(page, "tasklist")
     field("limit").fill("")
     field("view").select_option("open")
     field("save").click()
-    assert _body(textarea) == ("Intro\n\n  [[tasks: list=shop labels=Catalogue,Shopping view=open pin=default"
+    assert _body(textarea) == ("Intro\n\n  [[tasks: labels=Catalogue,Shopping view=open pin=default"
                                " new=food tag=weekly]]\n\nOutro")
+
+
+def test_task_list_on_a_lists_embed_changes_what_is_the_pages(page, wiki):
+    # An embed of a list: the dialog has the tab, the grouping and the filter.
+    # What the line says of the list's own settings (from before they were
+    # the list's) has no field, and stays as written.
+    text = "[[tasks: list=shop labels=Catalogue,Shopping view=today keep=1 new=food limit=3]]"
+    textarea = _edit(page, wiki, text, 5)
+    _click(page, "tasklist")
+    dialog, field = _list_dialog(page)
+    expect(field("list")).to_have_value("shop")
+    expect(field("view")).to_have_value("today")
+    for name in ("keep", "label-open", "new", "limit"):
+        expect(field(name)).to_be_hidden()
+    field("view").select_option("open")
+    field("group").select_option("none")
+    dialog.locator(".task-add-field", has_text="Filter by tag").click()
+    field("tag").fill("weekly")
+    dialog.get_by_role("button", name="Change").click()
+    assert _body(textarea) == "[[tasks: list=shop labels=Catalogue,Shopping view=open keep=1 new=food limit=3 group=none tag=weekly]]"
 
 
 def test_inserted_block_keeps_a_blank_line_to_the_text_above(page, wiki):
