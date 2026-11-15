@@ -146,6 +146,7 @@ Auth is optional (a password, or users; see Key Constraints).
 │   ├── internal/taskfiles/ # Package taskfiles, no globals: the tasks on disk: _tasks/ files (users' private ones in private/<user>/_tasks/) read and written under one lock, filed by owner and month (parsed once, and a file a write didn't touch skipped), and the lists' registries beside them (lists.json: lists.go); a Store is handed the wiki's folder, its users, the clock, who may write and how a write is committed
 │   ├── internal/atomicfile/ # Package atomicfile: a file written so that no reader sees half of it (pages, task files)
 │   ├── taskby.go           # Comments and history a client sends whole: nobody writes under another's name
+│   ├── taskseen.go         # What each user has seen of the tasks' news: .zone/seen/<user>.json, read into a task's history for the news' rule and the API
 │   ├── tasksyntax.go       # The page syntax of tasks: [[tasks: …]] params, [[task:…]], tag rules, date words
 │   ├── internal/taskmodel/ # Package taskmodel, no globals: a task (Task): its fields, read leniently from a file, written in a fixed key order; tags as the filter matches them; a series' dates (recurrence.go). The API's form of a task (with "private") is the server's (apiTask)
 │   ├── internal/jsonobj/   # Package jsonobj: JSON objects read a member at a time (jsonObj in main): task requests, MCP messages and arguments, task files

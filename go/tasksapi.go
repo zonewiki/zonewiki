@@ -910,7 +910,7 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		if change.Has("history") {
-			t.History = cleanHistory(change["history"])
+			t.History = sentHistory(cleanHistory(change["history"]), t.History)
 			checkBy(userOf(r), t)
 		}
 		updated = append(updated, t)

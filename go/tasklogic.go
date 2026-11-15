@@ -173,12 +173,12 @@ const (
 
 // newsFor: what a shared task has for user that they haven't seen (Updates
 // in docs/spec/tasks.md): its mark on their cards, and what the Tasks links
-// count (TaskCounts.New). From the task alone, so no state is kept beside
-// it. User has to do with a task they are assigned or that they made; a
+// count (TaskCounts.New). From the task and from when user last looked at
+// it (taskseen.go). User has to do with a task they are assigned or that they made; a
 // mention reaches them whatever the task. What counts is someone else's and
 // after the last thing user did on the task (anything of theirs in its
-// history, "seen" among it, which is logged when they open the task:
-// seenTask; or a comment of theirs):
+// history, or their look at it, "seen", which is noted when they open the
+// task: markSeen; or a comment of theirs):
 //   - it was given to them: the last "assigned" entry, or "created" for a
 //     task made with their name on it, while it is open;
 //   - a comment;
@@ -202,7 +202,9 @@ func newsFor(t *Task, user string) News {
 	has, made := t.Assignee == user, t.Maker() == user
 	mine, myAct, sawIt := -1, "", false
 	lastAssigned := -1
-	for i, e := range t.History {
+	// With who looked at it (taskseen.go): a look is the user's, not the task's.
+	history := historyWithSeen(t)
+	for i, e := range history {
 		if e.By == user {
 			mine, myAct, sawIt = i, minute(e.At), e.Event == "seen"
 		}
@@ -222,8 +224,8 @@ func newsFor(t *Task, user string) News {
 			news = News{kind, by, at}
 		}
 	}
-	for i := mine + 1; i < len(t.History); i++ {
-		e := t.History[i]
+	for i := mine + 1; i < len(history); i++ {
+		e := history[i]
 		at := minute(e.At)
 		if e.By == "" || e.By == user || said != "" && at <= said {
 			continue
@@ -488,11 +490,43 @@ func logEvent(t *Task, user, event, from, to string) {
 	if taskmodel.DatedEvents[event] || taskmodel.NamedEvents[event] {
 		entry.From, entry.To = from, to
 	}
-	h := t.History
-	if len(h) > historyLimit-1 {
-		h = h[len(h)-(historyLimit-1):]
+	t.History = capHistory(append(append([]HistoryEntry{}, t.History...), entry))
+}
+
+// capHistory: h with at most historyLimit entries beside those a task is
+// read by for good: who made it ("created"), who has it (the last
+// "assigned") and who shared it (the last "shared"). The oldest of the rest
+// go: a task's dates moved forty times still says who made it, and its news
+// is still right (newsFor).
+func capHistory(h []HistoryEntry) []HistoryEntry {
+	kept := map[int]bool{}
+	for i, e := range h {
+		if e.Event == "created" {
+			kept[i] = true
+			break
+		}
 	}
-	t.History = append(append([]HistoryEntry{}, h...), entry)
+	for _, event := range []string{"assigned", "shared"} {
+		for i := len(h) - 1; i >= 0; i-- {
+			if h[i].Event == event {
+				kept[i] = true
+				break
+			}
+		}
+	}
+	over := len(h) - len(kept) - historyLimit
+	if over <= 0 {
+		return h
+	}
+	out := make([]HistoryEntry, 0, len(h)-over)
+	for i, e := range h {
+		if !kept[i] && over > 0 {
+			over--
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
 }
 
 // cleanHistory validates a history list from a request or snapshot.
@@ -521,10 +555,7 @@ func cleanHistory(raw json.RawMessage) []HistoryEntry {
 		}
 		out = append(out, entry)
 	}
-	if len(out) > historyLimit {
-		out = out[len(out)-historyLimit:]
-	}
-	return out
+	return capHistory(out)
 }
 
 // ---- comments ----
@@ -891,7 +922,7 @@ func sanitizeSnapshot(snap jsonObj) *Task {
 	t.WontDo, t.Keep = jsonobj.True(snap["wont_do"]), jsonobj.True(snap["keep"])
 	importance, _ := jsonobj.As[string](snap["importance"])
 	t.Importance = taskmodel.CleanImportance(importance)
-	t.History = cleanHistory(snap["history"])
+	t.History = sentHistory(cleanHistory(snap["history"]), nil)
 	t.Comments = cleanComments(snap["comments"])
 	if !t.Keep {
 		t.Recurrence = taskmodel.CleanRecurrence(snap["recurrence"])

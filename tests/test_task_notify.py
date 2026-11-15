@@ -293,3 +293,57 @@ def test_the_count_is_of_every_task_with_news_for_you(alice, smtp):
     seen = alice.put(f"/api/tasks/{given['id']}", json={"seen": True}, headers=HOST).get_json()
     assert count() == 0
     assert sum(1 for e in seen["history"] if e["event"] == "seen" and e["by"] == "alice") == 1
+
+
+def test_a_look_is_the_users_not_the_tasks(alice, wiki_dir, smtp):
+    """What a user has seen is kept beside the tasks (.zone/seen/<user>.json):
+    opening a task with news writes no task file and changes no list's word,
+    so nobody's list loads again for a look; the API still answers who saw
+    it, in the task's history; an undo that sends the history back writes no
+    look into the task; and a "seen" entry a task's file has from before
+    counts until its user looks again."""
+    import json
+    task = new(alice, title="Check the invoice", assignee="bob", due_date="2030-01-01")
+    url = f"/api/tasks/{task['id']}"
+    path = wiki_dir / "_tasks" / "lists" / "team" / "tasks.json"
+    before = path.read_text()
+    login(alice, "bob")
+    word = alice.get("/api/tasks/due-count", headers=HOST).headers["Zone-Tasks"]
+    assert alice.get("/api/tasks/due-count", headers=HOST).get_json()["new"] == 1
+    seen = alice.put(url, json={"seen": True}, headers=HOST).get_json()
+    assert [(e["event"], e.get("by")) for e in seen["history"]] == [("created", "alice"), ("seen", "bob")]
+    assert path.read_text() == before                                           # no task was written
+    assert alice.get("/api/tasks/due-count", headers=HOST).headers["Zone-Tasks"] == word
+    assert "new" not in alice.get("/api/tasks/due-count", headers=HOST).get_json()
+    looks = json.loads((wiki_dir / ".zone" / "seen" / "bob.json").read_text())
+    assert list(looks) == [task["id"]] and looks[task["id"]]["at"][:4].isdigit()
+    # alice, who gave it, reads that it arrived.
+    login(alice, "alice")
+    assert [e["event"] for e in alice.get("/api/tasks", headers=HOST).get_json()[0]["history"]] == ["created", "seen"]
+    # An undo sends the old history back, with bob's look in it: the task's file gets none.
+    changed = alice.put(url, json={"due_date": "2030-02-02"}, headers=HOST).get_json()
+    assert alice.put(url, json={"due_date": "2030-01-01", "history": seen["history"]}, headers=HOST).status_code == 200
+    assert '"seen"' not in path.read_text() and [e["event"] for e in changed["history"]] == ["created", "seen", "due"]
+    assert [e["event"] for e in alice.get("/api/tasks", headers=HOST).get_json()[0]["history"]] == ["created", "seen"]
+    # From before the looks were kept apart: a task whose file says that carol... dan saw it.
+    other = new(alice, title="An old one", assignee="dan")
+    tasks = json.loads(path.read_text())
+    for t in tasks:
+        if t["id"] == other["id"]:
+            t["history"].append({"at": "2030-01-01T10:00", "event": "seen", "by": "dan"})
+    path.write_text(json.dumps(tasks))
+    login(alice, "dan")
+    assert "new" not in alice.get("/api/tasks/due-count", headers=HOST).get_json()
+
+
+def test_the_history_keeps_who_made_a_task_and_who_has_it(alice, smtp):
+    """The history holds 30 entries beside those a task is read by for good:
+    created, the last assigned, the last shared."""
+    task = new(alice, title="Moved often")
+    url = f"/api/tasks/{task['id']}"
+    assert alice.put(url, json={"assignee": "bob"}, headers=HOST).status_code == 200
+    for day in range(1, 41):
+        assert alice.put(url, json={"due_date": f"2031-{1 + day // 28:02d}-{1 + day % 28:02d}"}, headers=HOST).status_code == 200
+    history = alice.get("/api/tasks", headers=HOST).get_json()[0]["history"]
+    assert [e["event"] for e in history[:2]] == ["created", "assigned"] and len(history) == 32
+    assert alice.get("/api/tasks", headers=HOST).get_json()[0]["created_by"] == "alice"

@@ -540,8 +540,9 @@ func taskCounts(rq *Req) TaskCounts {
 // countsKept: the counts each user was last shown (the Tasks links' and the
 // list switcher's, by a place's key), for as long as what they are counted
 // from is what it was: the task files and registries the user reads
-// (taskFiles.Stamp: a write of Zone's, a change by hand), the day (what is
-// due), and the settings (who is a user). Every page view shows the Tasks
+// (taskFiles.Stamp: a write of Zone's, a change by hand), what the user has
+// seen (seenVersion), the day (what is due), and the settings (who is a
+// user). Every page view shows the Tasks
 // links' counts and every open page asks for them once a minute: counted
 // anew each time, that is every open task the user sees read and looked
 // through, for a number that changes with a write.
@@ -562,7 +563,7 @@ func (rq *Req) keptCounts(key string, count func() TaskCounts) TaskCounts {
 	user := rq.who()
 	// The stamp before the count: a write between the two gives counts kept
 	// under a stamp that is no longer the files', which are then counted anew.
-	stamp, day, set := rq.tasksStamp(), isoDay(today()), settings()
+	stamp, day, set := rq.tasksStamp()+itoa(int(seenVersion(user))), isoDay(today()), settings()
 	countsKept.Lock()
 	kept := countsKept.of[user]
 	if kept == nil || kept.stamp != stamp || kept.day != day || kept.set != set {

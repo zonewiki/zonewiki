@@ -564,20 +564,18 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 	if err := textUnchanged(t, data); err != nil {
 		return nil, err
 	}
-	// seen: the user opened a task someone gave them (the browser says so:
-	// markSeen in js/taskdata.js). Logged once, in its history, so it is no
-	// longer new to them (givenTo), and whoever gave it sees that it
-	// arrived. For any other task it says nothing.
+	// seen: the user opened a task that has news for them (the browser says
+	// so: markSeen in js/taskdata.js). Noted once, so it is no longer new to
+	// them, and whoever gave it reads in its History that it arrived. For any
+	// other task it says nothing.
 	seen, err := boolField(data, "seen")
 	if err != nil {
 		return nil, err
 	}
 	if seen && newsFor(t, user).Kind != "" {
-		// One "seen" a user: a newer one takes the place of their earlier
-		// one, so looking at a task's news again and again doesn't fill its
-		// history, which holds historyLimit entries.
-		t.History = slices.DeleteFunc(t.History, func(e HistoryEntry) bool { return e.Event == "seen" && e.By == user })
-		logEvent(t, user, "seen", "", "")
+		// Their look is theirs: kept beside the tasks (taskseen.go), so this
+		// writes no task and commits nothing.
+		markSeen(user, t)
 	}
 	described := t.Description
 	if err := applyTaskFields(user, t, data, false); err != nil {
@@ -631,7 +629,7 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 	}
 	// An undo sends the old history back with the old fields.
 	if data.Has("history") {
-		t.History = cleanHistory(data["history"])
+		t.History = sentHistory(cleanHistory(data["history"]), t.History)
 		checkBy(user, t)
 	}
 	msg := "Update task"

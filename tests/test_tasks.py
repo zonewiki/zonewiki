@@ -2731,7 +2731,8 @@ class TestHistory:
         for i in range(40):
             client.put(f"/api/tasks/{tid}", json={"due_date": _future(i + 1)})
         task = next(t for t in client.get("/api/tasks").get_json() if t["id"] == tid)
-        assert len(task["history"]) == 30
+        assert len(task["history"]) == 31            # the 30 latest, and who made it
+        assert task["history"][0]["event"] == "created"
         assert self._events(task)[-1] == ("due", _future(39), _future(40))
 
     def test_restore_keeps_history(self, client):
