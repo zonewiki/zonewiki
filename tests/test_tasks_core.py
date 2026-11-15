@@ -739,6 +739,25 @@ class TestGivenToMe:
         assert self.given(f"{{assignee: 'anna', private: true, history: [{self.GAVE}]}}") is None
 
 
+class TestOrderMoves:
+    """orderMoves: what a reorder tells the server: each moved task with the
+    task now before it and the next one after it that didn't move."""
+
+    def test_a_task_between_two(self):
+        assert run_core("TasksCore.orderMoves(['a', 'd', 'b', 'c'], ['d'])") == [{"id": "d", "after": "a", "before": "b"}]
+
+    def test_first_and_last(self):
+        assert run_core("TasksCore.orderMoves(['d', 'a', 'b'], ['d'])") == [{"id": "d", "after": None, "before": "a"}]
+        assert run_core("TasksCore.orderMoves(['a', 'b', 'd'], ['d'])") == [{"id": "d", "after": "b", "before": None}]
+
+    def test_several_together_each_after_the_one_before_it(self):
+        assert run_core("TasksCore.orderMoves(['a', 'x', 'y', 'b'], ['y', 'x'])") == [
+            {"id": "x", "after": "a", "before": "b"}, {"id": "y", "after": "x", "before": "b"}]
+
+    def test_one_no_longer_in_the_order_is_no_move(self):
+        assert run_core("TasksCore.orderMoves(['a', 'b'], ['gone'])") == []
+
+
 class TestMyTasks:
     """inMine: My tasks' rule, case by case; the server's rule (inMine in
     go/tasklists.go) runs through the same cases (go/testdata/mine_cases.json)."""

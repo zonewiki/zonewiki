@@ -80,10 +80,13 @@ It says nothing of what changed or whose, so another user's private write reload
   (Until 2026-11 the settings of All tasks were in `_tasks/settings.json`; the migration moved them.)
 - The tasks' files live in the `_tasks/` folder (`tasksFile(owner)` and paths derived from it; with users each user's private tasks in `private/<user>/_tasks/`, the same files: Private tasks in `docs/spec/users.md`): open tasks in `tasks.json`,
   closed ones in `closed.json` (flat JSON arrays, committed to git on change).
-  Closed tasks from earlier years live in `closed-YYYY.json` (only that exact name is an archive).
+  **Closed tasks are filed by month**: `closed.json` holds those closed in the current month (and any without a usable date), `closed-YYYY-MM.json` those of an earlier month (only such a name, and the older `closed-YYYY.json`, is an archive).
+  So completing a task writes a month's closed tasks, not a year's: a file is written whole and kept whole in git at every change, and in a large wiki a year's is megabytes.
   `atomicfile.Write` creates the folder, so a new wiki gets it on the first write.
-  Write routes read every closed file (`readClosedAllStrict`) and `writeClosed` files each task by its completion year, writing only files whose content changed; startup does the same split (`archiveOldClosed`) for a year change without writes.
-  So archived tasks can be edited, reopened and tagged like any other; Closed shows them by year (see Views).
+  Write routes read every closed file (`readClosedAllStrict`) and `writeClosed` files each task by its completion month, writing only files whose tasks changed, and removing an archive left without a task; startup does the same (`ArchiveOldClosed`) for a month's end without writes.
+  So archived tasks can be edited, reopened and tagged like any other; Closed shows them by year (see Views), reading that year's files.
+  (Until 2026-11 the closed tasks were filed by year, `closed-YYYY.json`: such a file's tasks go to their months' files at the first start, and it is removed, in the commit "Archive closed tasks".)
+- **A file whose tasks a write didn't touch costs a comparison** (`holds` in `go/internal/taskfiles`): the store knows each file's tasks as it parsed or wrote them (`writeTasks`), and a write compares what it would write with that (`Task.Same`) before it reads or encodes anything. Changing an open task doesn't read or encode the closed files.
 - All mutations go through one lock (`taskFiles.Lock`, `go/internal/taskfiles`) and atomic writes (temp file + rename, `go/internal/atomicfile`); the server handles requests concurrently.
 - **A file is parsed once** (`readFile` in `go/internal/taskfiles`): every page view reads the open tasks (the Tasks links' count) and a write reads every file, so a file's tasks are kept as parsed and handed out as copies (`Task.Clone`: a reader may change its own) until the file is another one (its time, size or inode: Zone's own writes, which also forget it, `writeText`; a hand edit).
   Write paths use a strict reader that fails with `errTasksCorrupt` (503) on an unreadable file instead of treating it as empty and wiping every task.
@@ -279,6 +282,10 @@ On phones the control spans the full width.
   Closed's heading has a **year switcher** (`.closed-years`, years from `/api/tasks/closed-years`, shown when there is more than one) for the yearly archives;
   `?year=YYYY` opens that year (search links to archived tasks carry it), and going back to a tab returns to this year (`setClosedYear`).
 
+**A long section draws its top** (`windowed`, `DRAW` = 200 in `js/taskrender.js`): a section of more than 200 cards (Unsorted, Sorted, a sort's group, a Plan section) draws its first 200 and a row **Show N more** (`[data-draw-more]`), which shows that section whole from then on (`st.drawAll`).
+The section's count is of all its tasks, the filter searches all of them, and a task that has to be seen (a `?task=` link's, a new one: `unfoldFor`, `st.mustDraw`) shows its section whole.
+All tasks of a large wiki is thousands of cards, and a list is read from its top.
+
 **Sections** (Open and Focus; `SECTIONS`, `sectionHTML`, `.list-section[data-section]`): Unsorted (no `sort_order`, newest first) above Sorted (`sort_order`).
 Both tabs head them alike, with the light label a Plan section uses for its Unsorted/Sorted (`.plan-subdivider`), not a day heading, so the labels look the same wherever they appear; Open's sort headings (By deadline, No deadline, Newest first) take the same label.
 A heading is also an empty section's drop target, so it is at least 1.6rem tall (2.5rem on coarse pointers).
@@ -290,7 +297,10 @@ leaving Sorted sets `sort_order` to `null`.
 Ctrl+Shift+↑/↓ moves one slot, headings counting.
 Only the moved tasks change place in the full order: each goes right after the visible task now above it (or right before the one below, when first), and every task the view or filter hides keeps its place.
 So on Focus, sorting in one item never shuffles the catalogue around it.
-Every save renumbers the whole order densely.
+**A move is saved as a move** (`TasksCore.orderMoves`, `saveOrder` in `js/taskorder.js`; `placeBetween` in `go/tasksapi.go`): a list tells the server each moved task with the task now before it and the next one after it that didn't move (`POST /api/tasks/reorder` with `moves: [{id, after, before}]`), and the server gives the task a number between those two's as it has them by then (`sort_order` is a number, not a count), writing no other task.
+So a list that is stale in someone's browser doesn't put its old order back over what a colleague ranked meanwhile; neighbours that are no longer in that order leave `after` to say where, and when the numbers between two tasks are used up the order is numbered anew as it stands.
+My tasks' order, which is one user's own, is sent whole (Lists → My tasks).
+(Until 2026-11 every save sent the list's whole order, numbered from 0.)
 
 **No hiding**: every open task is always reachable from its own tasks (Open or Plan) and from search.
 Dates decide where a task appears, never whether.
@@ -633,6 +643,7 @@ A task's description is markdown, edited and rendered as a page's text.
   but keep their lines: a line's end is a line break (`Env.LineBreaks`), so a comment typed on three lines shows on three.
   In the modal a line separates each comment from the one before it; on a card each comment hangs on a bar of its own down its left (`border-left` of `.task-card-comment`), with a gap before the next, so the bar's end shows where a comment ends.
 - **Where the HTML comes from** (`renderTexts`, `renderedHtml` in `tasks.js`): the tasks asks the server for the texts it hasn't rendered yet, in one request (`{ notes: [...], comments: [...] }`), and keeps the HTML per text for the page's life, shared by every task list app on it.
+  **A long list renders a text when it is opened** (over 150 tasks: `LAZY_FROM` in `js/taskdata.js`, `lazyTextsFrom` in `go/tasksembed.go`): the page brings such a list's tasks without their texts' HTML, and the list doesn't ask for all of them; a card's description and comments have their places empty and marked (`data-lazy`, not shown), and opening its details fetches that task's texts and draws the list again (`setExpanded` in `js/taskview.js`). So no card shows markdown as plain text, and All tasks of a large wiki doesn't render and carry every description to show a list of titles.
   Loading tasks (`fetchTasks`, Closed) and each write wait for it before drawing, so cards never flash plain text (the tasks a page brings along come with their HTML, see Task list embed); a text that arrives some other way shows as plain text until its HTML is there (`htmlOf`), and a failed request caches nothing.
   Code is highlighted once, when the HTML arrives.
 - **Editing** (the edit modal's Description): the field is as tall as its text (`fitNotes` in `js/taskmodal.js`): two lines when empty, growing as the text does up to 45% of the window's height, where it scrolls.

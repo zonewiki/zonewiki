@@ -78,6 +78,22 @@ function placeInOrder(old, shown, moved) {
   return order;
 }
 
+// What a reorder tells the server of the manual order `order` in which the
+// tasks `moved` changed place: for each moved task still in it, in the
+// order's sequence, the task now right before it (after: null when it is
+// first; that may be a moved task placed just before) and the next task
+// after it that didn't move (before: null when none follows).
+function orderMoves(order, moved) {
+  const movedSet = new Set(moved);
+  const out = [];
+  order.forEach((id, i) => {
+    if (!movedSet.has(id)) return;
+    const next = order.slice(i + 1).find(o => !movedSet.has(o));
+    out.push({ id, after: i > 0 ? order[i - 1] : null, before: next ?? null });
+  });
+  return out;
+}
+
 // The tasks' single filter field: words starting with '#' filter by tag, the
 // rest is a text search over title + description. Separate tag words must
 // all match (`#a #b`); a pipe inside one word means any of them (`#a|b`).
@@ -531,7 +547,7 @@ function parseQuickAdd(input, today, people) {
 const TasksCore = {
   dateToStr, addDays, isOverdue, isFocus, isCarried, byOpenOrder, byDeadline, byCreated, SORTS, placeInOrder, tagMatchScore, tagCounts, selectionTags, bulkTagChange,
   rankTags, sanitizeTagInput,
-  parseFilter, matchesFilter, filterActive, assigneeIs, inMine, givenToMe, tasksInView, tagParamToQuery, importanceWord,
+  parseFilter, matchesFilter, filterActive, assigneeIs, inMine, givenToMe, orderMoves, tasksInView, tagParamToQuery, importanceWord,
   bucketKey, fullDayLabel, boardBuckets, parseQuickAdd,
   dateSettings, localeDate, shortDate, longDayLabel, weekStart, weekdayNames, monthTitle,
 };

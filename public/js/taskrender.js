@@ -155,18 +155,30 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
   const hasMeta = !task.closed_at || dueDisplay || focusDisplay || closedDisplay || recIcon || privateDisplay || tagsRight || notesDisplay;
   const metaClass = (hasMeta && !hasRealMeta) ? 'task-meta task-meta--hover-only' : 'task-meta';
   const metaHtml = hasMeta ? `<div class="${metaClass}">${tagsRight}<span class="task-meta-right">${skipBtnHtml}${privateDisplay}${recIcon}${notesDisplay}${commentsDisplay}${lastDoneDisplay}${dueDisplay}${focusDisplay}${closedDisplay}</span></div>` : '';
-  const descHtml = task.description ? `<div class="task-desc page-content">${htmlOf('notes', task.description)}</div>` : '';
+  // A card's details (its description, its latest comments) are in it, shown
+  // when it is opened. Their HTML is the server's (htmlOf), and in a long
+  // list it isn't fetched for every task up front (taskdata.js lazyTexts):
+  // a card whose texts aren't rendered yet has their places empty and marked
+  // (data-lazy, not shown), and opening its details fetches them and draws
+  // the list again (taskview.js setExpanded), so no card shows plain text.
+  const detailsShown = task.id === st.expandedId && st.detailsOpen;
+  const latest = comments.slice(-3).reverse();
+  const have = (kind, text) => renderedHtml[kind].has(text);
+  const descReady = !task.description || have('notes', task.description);
+  const commentsReady = latest.every(c => have('comments', c.text));
+  const lazy = ready => ready ? '' : ' data-lazy';
+  const descHtml = task.description
+    ? `<div class="task-desc page-content"${lazy(descReady)}>${descReady || detailsShown ? htmlOf('notes', task.description) : ''}</div>` : '';
   // The latest comments, newest first: shown only while the task's details
   // are open (the line has the 💬 count; the modal has them all).
   const earlier = comments.length - 3;
   const commentsHtml = comments.length
-    ? `<div class="task-card-comments"><div class="task-card-comments-label">Comments</div>${comments.slice(-3).reverse().map(c =>
-        commentCardHtml(commentStamp(c), htmlOf('comments', c.text))).join('')}` +
+    ? `<div class="task-card-comments"${lazy(commentsReady)}><div class="task-card-comments-label">Comments</div>${
+        commentsReady || detailsShown ? latest.map(c => commentCardHtml(commentStamp(c), htmlOf('comments', c.text))).join('') : ''}` +
       (earlier > 0 ? `<button type="button" class="task-comments-more" data-id="${esc(task.id)}">${earlier} earlier…</button>` : '') + '</div>'
     : '';
   const dragAttr = draggable ? 'draggable="true" data-drag' : '';
   // Lines with details get the expand button.
-  const detailsShown = task.id === st.expandedId && st.detailsOpen;
   const expandBtn = descHtml || commentsHtml
     ? `<button type="button" class="task-expand-btn" data-id="${esc(task.id)}" aria-expanded="${detailsShown}" aria-label="Description and comments" title="Description and comments (l / h)">${app.EXPAND_ICON}</button>` : '';
   return `
@@ -182,6 +194,18 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
       </div>
       ${metaHtml}${descHtml}${commentsHtml}
     </li>`;
+}
+
+// A long section draws its first DRAW cards and a row that shows the rest
+// (st.drawAll: the sections asked for whole; st.mustDraw: tasks that have to
+// be seen, a link's, a new one, which their section then shows whole): All
+// tasks of a large wiki is thousands of cards, and a list is read from its
+// top. The filter still searches every task, and counts are of all.
+const DRAW = 200;
+function windowed(key, tasks) {
+  if (tasks.length <= DRAW || st.drawAll.has(key) || tasks.slice(DRAW).some(t => st.mustDraw.has(t.id))) return [tasks, ''];
+  return [tasks.slice(0, DRAW), `<li class="tasks-show-more tasks-draw-more"><button type="button" class="btn" ` +
+    `data-draw-more="${esc(key)}">Show ${tasks.length - DRAW} more</button></li>`];
 }
 
 // The Plan board: one section per day, whose dividers double as drop
@@ -238,11 +262,12 @@ function planHTML(filtered) {
     // A carried-over card's "since" badge is amber here (task-carried):
     // on Today it is a slipped plan, not just an available task. Unsorted
     // cards are hollow (task-inbox), as on Open and Focus.
-    const body = isFolded ? '' : s.tasks.map((t, i) =>
+    const [shown, more] = isFolded ? [[], ''] : windowed('plan:' + s.key, s.tasks);
+    const body = shown.map((t, i) =>
       (unsorted && i === 0 ? sub('Unsorted', unsorted) : '') +
       (unsorted && i === unsorted ? sub('Sorted', s.tasks.length - unsorted) : '') +
       taskHTML(t, true, 'board-item' + (i < unsorted ? ' task-inbox' : '') +
-        (TasksCore.isCarried(t, today) ? ' task-carried' : ''))).join('');
+        (TasksCore.isCarried(t, today) ? ' task-carried' : ''))).join('') + more;
     return header + body;
   }).join('');
 }
@@ -281,7 +306,10 @@ function listHTML(orderedTasks, newTasks) {
   if (st.activeView === 'open' && app.activeSort()) {
     const heading = (label, n) => n ? `<li class="plan-subdivider sort-heading">` +
       `<span>${label}</span><span class="board-day-count">${n}</span></li>` : '';
-    const group = (label, tasks) => heading(label, tasks.length) + tasks.map(t => taskHTML(t, false)).join('');
+    const group = (label, tasks) => {
+      const [shown, more] = windowed('sort:' + label, tasks);
+      return heading(label, tasks.length) + shown.map(t => taskHTML(t, false)).join('') + more;
+    };
     html += app.activeSort() === 'due'
       ? group('By deadline', displayTasks.filter(t => t.due_date)) + group('No deadline', displayTasks.filter(t => !t.due_date))
       : group('Newest first', displayTasks);
@@ -290,9 +318,13 @@ function listHTML(orderedTasks, newTasks) {
   // Open and Focus: both sections always have a heading, even when empty,
   // because the heading is where a task is dropped to enter an empty section.
   else if (app.SECTIONS[st.activeView]) {
+    const [fresh, moreFresh] = windowed(st.activeView + ':unsorted', newTasks);
     html += app.sectionHTML('unsorted', 'Unsorted', newTasks.length);
-    html += newTasks.map(t => taskHTML(t, undefined, 'task-inbox')).join('');
+    html += fresh.map(t => taskHTML(t, undefined, 'task-inbox')).join('') + moreFresh;
     html += app.sectionHTML('sorted', 'Sorted', orderedTasks.length);
+    const [ranked, moreRanked] = windowed(st.activeView + ':sorted', displayTasks);
+    html += ranked.map(t => taskHTML(t)).join('') + moreRanked;
+    displayTasks = [];
   }
   html += displayTasks.map(t => taskHTML(t)).join('');
   if (truncated) {
@@ -331,6 +363,10 @@ function wireListHandlers() {
   });
 
   // "Show more" button
+  app.listEl.querySelectorAll('[data-draw-more]').forEach(btn => btn.addEventListener('click', () => {
+    st.drawAll.add(btn.dataset.drawMore);
+    render();
+  }));
   const showMoreBtn = app.listEl.querySelector('#tasks-show-more-btn');
   if (showMoreBtn) {
     showMoreBtn.addEventListener('click', () => {

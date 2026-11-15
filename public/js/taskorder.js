@@ -47,11 +47,15 @@ function sectionList() {
 // (TasksCore.placeInOrder: every other task keeps its place, hidden ones too).
 function applySectionList(list, moved, s = SECTIONS[st.activeView]) {
   const cut = list.indexOf(sectionKey(s.bottom));
-  saveOrder(s, placeInOrder(manualOrderIds(s), list.slice(cut + 1), moved));
+  saveOrder(s, placeInOrder(manualOrderIds(s), list.slice(cut + 1), moved), moved);
 }
-// Save the manual order `order`; tasks of the old order missing from it
-// become Unsorted.
-function saveOrder(s, order) {
+// Save the manual order `order`, in which the tasks `moved` changed place;
+// tasks of the old order missing from it become Unsorted. The server is
+// told the moves, not the order: each moved task with the task now before
+// it and the next one that didn't move (TasksCore.orderMoves), so it places
+// them in the order it has by then, and a list that is stale here (someone
+// ranked meanwhile) doesn't put its old order back.
+function saveOrder(s, order, moved = []) {
   const old = manualOrderIds(s);
   const kept = new Set(order);
   const removed = old.filter(id => !kept.has(id));
@@ -59,7 +63,7 @@ function saveOrder(s, order) {
   const byId = new Map(st.tasks.map(t => [t.id, t]));
   order.forEach((id, i) => { byId.get(id)[s.field] = i; });
   removed.forEach(id => { byId.get(id)[s.field] = null; });
-  app.postReorder({ order, updates: removed.map(id => ({ id, [s.field]: null })) });
+  app.postReorder({ order, moves: TasksCore.orderMoves(order, moved), updates: removed.map(id => ({ id, [s.field]: null })) });
   app.render();
 }
 

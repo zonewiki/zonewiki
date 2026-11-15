@@ -294,7 +294,7 @@ Layout:
 - `$ZONE_DATA/*.md` — markdown files live directly in the data directory (edit on the host; changes are live immediately)
 - `$ZONE_DATA/private/<user>/` — with users, each user's private pages (`docs/spec/users.md`); without users an ordinary folder
 - `$ZONE_DATA/_assets/` — uploaded images, served at `/_assets/<filename>` (created automatically); a private page's in `private/<user>/_assets/`
-- `$ZONE_DATA/_tasks/` — the tasks (`tasks.json`, `closed.json`, `closed-YYYY.json`, and `settings.json` for the settings of All tasks; see Storage in `docs/spec/tasks.md`); each user's private tasks in `private/<user>/_tasks/`
+- `$ZONE_DATA/_tasks/` — the tasks (`tasks.json`, `closed.json`, `closed-YYYY-MM.json`, and `settings.json` for the settings of All tasks; see Storage in `docs/spec/tasks.md`); each user's private tasks in `private/<user>/_tasks/`
 - `$ZONE_DATA/.zone/` — Zone's own state: none of it in git: `config` (the settings file: the wiki's settings and users, `docs/spec/users.md`), `secret_key` (session key), `signed-out` (the sessions signed out, `docs/spec/security.md`) and `index/` (the semantic search cache, rebuildable)
 
 Uploaded image URLs use `/_assets/<filename>` (served by `serveUpload` from `cfg.Uploads`), not the static file path.

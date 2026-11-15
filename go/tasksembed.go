@@ -425,7 +425,14 @@ func tasksInitial(rq *Req, scopes ...string) string {
 	word := taskfiles.Changes() // of these tasks: read before them (tasksapi.go, Zone-Tasks)
 	tasks := scopedTasks(rq.who(), taskFiles.Open(rq.who()), rq.taskLists(), scopes...)
 	var notes, comments []string
-	for _, t := range tasks {
+	// Not of a long list: there the browser asks for a card's texts when its
+	// details are opened (js/taskdata.js lazyTexts), and the page doesn't
+	// carry every description rendered.
+	texts := tasks
+	if len(tasks) > lazyTextsFrom {
+		texts = nil
+	}
+	for _, t := range texts {
 		if t.Description != "" {
 			notes = append(notes, t.Description)
 		}
@@ -447,6 +454,10 @@ func tasksInitial(rq *Req, scopes ...string) string {
 	}
 	return `<script type="application/json" id="tasks-initial">` + string(data) + `</script>`
 }
+
+// lazyTextsFrom: a page with more tasks than this brings them without their
+// texts' HTML (LAZY_FROM in js/taskdata.js is the same number).
+const lazyTextsFrom = 150
 
 // scopedTasks: those of tasks that a view of any of scopes shows user
 // (scopeFilter); every task when one of them is "" (every task).

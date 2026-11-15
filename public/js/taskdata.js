@@ -84,6 +84,14 @@ function triggerUndo() {
 // /api/tasks returns only open tasks, so replacing `tasks` drops the
 // closed ones: they count as not loaded again (tasksGen tells a closed
 // load in flight that its merge target is gone).
+// The notes' and comments' HTML of a list's tasks, before it is drawn, so no
+// card shows plain text. Not of a long list (over LAZY_FROM tasks): there
+// each card's texts are fetched when its details are opened
+// (taskview.js setExpanded), and the list is there without every
+// description of the wiki rendered and sent. (The page does the same with
+// the tasks it brings along: tasksInitial in go/tasksembed.go.)
+const LAZY_FROM = 150;
+const lazyTexts = list => list.length > LAZY_FROM ? Promise.resolve(false) : renderTexts(textsOf(list));
 let tasksGen = 0;
 let started = false;
 async function fetchTasks() {
@@ -108,7 +116,7 @@ async function fetchTasks() {
   if (initial && app.ownsOrder) app.setOwnOrder(initialOrder || []);
   const [all] = await Promise.all([initial || load(), loadPeople()]);
   const fetched = all.filter(app.inScope).map(app.own);
-  await renderTexts(textsOf(fetched));
+  await lazyTexts(fetched);
   st.tasks = fetched;
   tasksGen++;
   st.closedLoaded = false;
@@ -156,7 +164,7 @@ async function loadClosed() {
     gen = tasksGen;
     const res = await fetch('/api/tasks/closed' + (st.closedYear ? `?year=${st.closedYear}` : ''));
     closed = (await res.json()).filter(app.inScope);
-    await renderTexts(textsOf(closed));
+    await lazyTexts(closed);
   } while (gen !== tasksGen);
   const existingIds = new Set(st.tasks.map(t => t.id));
   for (const t of closed) {
@@ -271,8 +279,10 @@ function editSnapshot(t) {
     ...(people.users ? { assignee: t.assignee || null } : {}),
     due_date: t.due_date || null, start_date: t.start_date || null, keep: !!t.keep,
     rec_type: rec?.type || null, rec_interval: rec?.interval || 1, rec_from: rec?.from || 'due',
-    // (Not its place in My tasks' own order, which is no field of the task.)
-    last_done: t.last_done || null, ...(app.ownsOrder ? {} : { sort_order: t.sort_order ?? null }),
+    // (Not its place in the manual order: no save of the dialog changes it,
+    // and the number here is this list's own count since its last move, not
+    // the server's.)
+    last_done: t.last_done || null,
     recurrence: rec ?? null, history: t.history || [],
   };
 }

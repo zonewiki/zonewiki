@@ -108,7 +108,7 @@ and its deadline. It has two views:
   you'll do it; with Plan off, one list, in an order you set by dragging.
 - **Focus**: what's on today, started or due.
 
-Done tasks go to a yearly archive. Beyond that:
+Done tasks go to a monthly archive. Beyond that:
 
 - Quick-add shorthand: `Call Bob tomorrow #work due:fri`.
 - Importance (high, normal, low): a mark before the title, set with a key, the

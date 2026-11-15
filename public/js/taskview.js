@@ -5,6 +5,7 @@
 
 import TasksCore from '../tasks-core.js';
 import { todayStr } from './taskutil.js';
+import { renderTexts, textsOf } from './tasktexts.js';
 
 const { SORTS } = TasksCore;
 
@@ -37,6 +38,11 @@ function toggleFold(id) {
 // Unfold the Plan section task `id` sits in; true when that changed anything.
 function unfoldFor(id) {
   const task = st.tasks.find(t => t.id === id);
+  // In a long section it may be past what is drawn: its section shows whole.
+  if (task && !st.mustDraw.has(id)) {
+    st.mustDraw.add(id);
+    if (!app.listEl?.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`) && app.listEl?.querySelector('[data-draw-more]')) app.render();
+  }
   if (st.activeView !== 'plan' || !task) return false;
   const fid = foldId(TasksCore.bucketKey(task, todayStr()));
   if (!st.folded.delete(fid)) return false;
@@ -159,6 +165,13 @@ function setExpanded(id, details = false) {
       el.querySelector('.task-expand-btn')?.setAttribute('aria-expanded', String(on && st.detailsOpen));
     }
   });
+  // Details whose texts aren't rendered yet (a long list fetches them when
+  // they are asked for): fetched, and the list drawn again with them.
+  const opened = id && st.detailsOpen && cardEl(id);
+  if (opened && opened.querySelector('[data-lazy]')) {
+    const task = st.tasks.find(t => t.id === id);
+    if (task) renderTexts(textsOf([task])).then(() => { if (st.expandedId === id && st.detailsOpen) app.render(); });
+  }
 }
 // 📝, 💬 or →/←: open or close a task's details, selecting it.
 function toggleDetails(id, open = !(st.expandedId === id && st.detailsOpen)) {

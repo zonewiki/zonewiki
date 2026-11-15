@@ -170,6 +170,8 @@ st.anchorId    = null;
 // a tap or click on a card adds or drops it, nothing else on the card reacts.
 st.selectMode  = false;
 st.closedLimit = 50;
+st.drawAll = new Set();    // the long sections shown whole (taskrender.js windowed)
+st.mustDraw = new Set();   // tasks that have to be drawn: a link's, a new one
 st.pendingUndo = null;   // what Undo (the toast's button, Ctrl+Z) would run
 const pendingCompletions = new Map(); // taskId → timeoutId
 

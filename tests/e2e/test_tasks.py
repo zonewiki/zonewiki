@@ -1,6 +1,8 @@
 """Tasks: Plan board, start/due dates in the edit modal, views, sections and task links."""
 
+import json
 import re
+import uuid
 from datetime import date, timedelta
 
 import pytest
@@ -2240,11 +2242,12 @@ def test_open_drag_between_unsorted_and_sorted(page, wiki):
     # Onto a sorted task: where the pointer is, here its lower half, so after it.
     _drop(card(page, "One"), card(page, "Alpha"), "after")
     wait_until(page, lambda: _open_titles(page, "sorted") == ["Alpha", "One", "Bravo"])
-    wait_for_field(page, "One", "sort_order", 1)
+    # (The numbers are whatever places them so: a move writes the moved task alone.)
+    wait_until(page, lambda: _by_order(page, "sort_order") == ["Alpha", "One", "Bravo"])
     assert task_by_title(page, "Two")["sort_order"] is None
     # Onto the Sorted heading: first in Sorted.
     card(page, "Two").drag_to(_section(page, "sorted"))
-    wait_for_field(page, "Two", "sort_order", 0)
+    wait_until(page, lambda: _by_order(page, "sort_order") == ["Two", "Alpha", "One", "Bravo"])
     expect(_section(page, "unsorted")).to_have_class(re.compile(r"\bboard-day--empty\b"))
     # A sorted task onto the Sorted heading (from below) or the Unsorted
     # heading goes back to Unsorted.
@@ -2287,7 +2290,7 @@ def test_open_keyboard_crosses_the_sections(page, wiki):
     # ↓ on any unsorted task (not just the last) puts it first in Sorted.
     card(page, "Two").click()
     page.keyboard.press("Control+Shift+ArrowDown")
-    wait_for_field(page, "Two", "sort_order", 0)
+    wait_until(page, lambda: _by_order(page, "sort_order") == ["Two", "Alpha", "Bravo"])
     assert _open_titles(page, "sorted") == ["Two", "Alpha", "Bravo"]
     # ↑ on the first sorted task sends it back to Unsorted.
     page.keyboard.press("Control+Shift+ArrowUp")
@@ -5279,3 +5282,81 @@ def test_export_and_import_a_lists_tasks(page, wiki, tmp_path):
     expect(dialog).to_be_visible()
 
 
+
+
+def _many_tasks(wiki, n):
+    """n open tasks in the wiki's file, Task 000 the oldest; Task 000 and
+    Task 220 have a description in markdown."""
+    tasks = [{"id": str(uuid.UUID(int=i + 1, version=4)), "title": f"Task {i:03d}",
+              "description": "Some **bold** words" if i in (0, 220) else "",
+              "created_at": f"2026-01-01T{i // 3600:02d}:{i // 60 % 60:02d}:{i % 60:02d}"} for i in range(n)]
+    (wiki.root / "_tasks").mkdir(exist_ok=True)
+    (wiki.root / "_tasks" / "tasks.json").write_text(json.dumps(tasks), encoding="utf-8")
+    return tasks
+
+
+def test_a_long_section_draws_its_top_and_shows_the_rest_on_request(page, wiki):
+    """All tasks of a large wiki: a section draws its first 200 cards and a
+    row that shows the rest; its count is of all, the filter searches all,
+    and a task a link names is drawn."""
+    tasks = _many_tasks(wiki, 230)
+    page.goto("/tasks?view=open&plan=off")
+    expect(page.locator(".task-item")).to_have_count(200)
+    expect(page.locator(".list-section[data-section=unsorted] .board-day-count")).to_have_text("230")
+    more = page.locator("[data-draw-more]")
+    expect(more).to_have_text("Show 30 more")
+    expect(card(page, "Task 229")).to_be_visible()          # newest first
+    expect(card(page, "Task 000")).to_have_count(0)
+    # The filter finds what isn't drawn.
+    page.locator("#task-filter-search").fill("Task 000")
+    expect(card(page, "Task 000")).to_be_visible()
+    expect(page.locator(".task-item")).to_have_count(1)
+    page.locator("#task-filter-search").fill("")
+    expect(page.locator(".task-item")).to_have_count(200)
+    # The rest on request, and it stays through a redraw.
+    more.click()
+    expect(page.locator(".task-item")).to_have_count(230)
+    expect(page.locator("[data-draw-more]")).to_have_count(0)
+    page.locator("#task-filter-search").fill("x")
+    page.locator("#task-filter-search").fill("")
+    expect(page.locator(".task-item")).to_have_count(230)
+    # A link to a task past the window: its section shows whole, the task selected.
+    page.goto(f"/tasks?view=open&plan=off&task={tasks[0]['id']}")
+    expect(card(page, "Task 000")).to_be_visible()
+    expect(card(page, "Task 000")).to_have_class(re.compile(r"\btask-selected\b|\bselected\b"))
+    # The Plan board's sections too.
+    page.goto("/tasks?view=plan")
+    expect(page.locator(".task-item")).to_have_count(200)
+    expect(page.locator("[data-draw-more]")).to_have_text("Show 30 more")
+
+
+def test_a_long_list_renders_a_description_when_it_is_opened(page, wiki):
+    """Over 150 tasks, the page doesn't bring every description's HTML, and
+    the list doesn't ask for them: a card's are fetched when its details are
+    opened, and no card shows the markdown as plain text."""
+    _many_tasks(wiki, 230)
+    asked = []
+    page.on("request", lambda r: asked.append(r.post_data_json) if r.url.endswith("/api/render-notes") else None)
+    page.goto("/tasks?view=open&plan=off")
+    block = json.loads(page.locator("#tasks-initial").inner_text())
+    assert len(block["tasks"]) == 230 and block["notes"] == [] and block["comments"] == []
+    row = card(page, "Task 220")
+    expect(row).to_be_visible()
+    expect(row.locator(".task-desc[data-lazy]")).to_have_count(1)
+    assert not asked
+    # Opened: fetched, and shown as a page shows it.
+    row.locator(".task-has-notes").click()
+    expect(row.locator(".task-desc strong")).to_have_text("bold")
+    expect(row.locator(".task-desc")).to_be_visible()
+    assert asked == [{"notes": ["Some **bold** words"], "comments": []}]
+    expect(page.get_by_text("**bold**")).to_have_count(0)
+    # Closed and opened again: nothing asked twice.
+    row.locator(".task-has-notes").click()
+    row.locator(".task-has-notes").click()
+    expect(row.locator(".task-desc strong")).to_be_visible()
+    assert len(asked) == 1
+    # A short list has its descriptions with it, as always.
+    _many_tasks(wiki, 3)
+    page.goto("/tasks?view=open&plan=off")
+    assert json.loads(page.locator("#tasks-initial").inner_text())["notes"] == ["<p>Some <strong>bold</strong> words</p>\n"]
+    expect(card(page, "Task 000").locator(".task-desc strong")).to_have_count(1)

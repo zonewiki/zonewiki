@@ -170,6 +170,10 @@ async function postReorder(body) {
   if (app.ownsOrder) {
     app.setOwnOrder(body.order || []);
     body = { mine: true, order: body.order || [] };
+  } else {
+    // A list's order is everyone's: the moves, which the server places in
+    // the order it has now.
+    body = { moves: body.moves || [], updates: body.updates || [] };
   }
   await fetch('/api/tasks/reorder', {
     method: 'POST',

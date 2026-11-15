@@ -314,6 +314,13 @@ Both `./run.sh test` and `./run.sh e2e` run in parallel with pytest-xdist: `test
 An `-n` in the extra args overrides it (`-n 0`: one process).
 Workers are separate processes: each has its own temp wikis, servers (`base_url`) and browser, so the fixtures need no locking; a test must keep its files under `tmp_path`.
 
+## The bench
+
+`tests/bench_tasks.py` measures the tasks at a team's size and is no part of the suites (its name is no test module's): `./run.sh test tests/bench_tasks.py -n 0 -s`.
+It generates a wiki in git (100 users with ten Inbox tasks each, 40 shared lists, 5,000 open and 25,000 closed tasks, most assigned), signs in as one user and takes the median over HTTP of: a page without tasks, My tasks, one list, All tasks (time and size), the due count, a task changed, a task completed, My tasks reordered, a search right after a write, and how much the repository grows per 100 writes, before and after a pack.
+It prints the table and fails where a number is over its budget (`BUDGETS`, set for the tools image on a developer's machine): run it before and after a change to how tasks are read, written or sent.
+The numbers are the server's alone; no browser draws anything.
+
 ## Browser tests (`tests/e2e/`)
 
 End-to-end tests drive the real app in headless Chromium via Playwright.
@@ -385,9 +392,13 @@ Without Playwright installed they skip, so plain `pytest tests/` is unaffected.
 `go/tasklists_test.go` covers lists as places: the migration at start (lists and pins taken over from pages, each task given its list, per user with private and shared lists of one name, a wiki with nothing to take over, one that can't be read), a list's name, a task going into a list and the rules of private lists (`applyList`), rename, delete (a private list's tasks to the Inbox, a shared one's with users to `general`) and share with their tasks, pins per user, a list's settings, the Inbox and its migration (above), and where an undo's or an import's task goes (`placeSnapshot`).
 `go/internal/taskfiles/lists_test.go` covers the registry file: its format read back as written, its version, a hand-edited one read leniently, each owner's own, who may write it, an unreadable one refusing a write, and a task's `list` in its file.
 `go/internal/taskfiles/taskfiles_test.go` covers the task files on a temp folder, without a wiki or a server: a write filed by owner and year in one commit and an unchanged one committing nothing, what each user reads, the Closed view by year and its years, a corrupt file refusing the write and staying as it is, who may write (`MayWrite`, a task of another user's refused), and the archive at start.
+There too: the closed tasks filed by month across a month's and a year's end, a year's file taken over into months and removed (at start and by a plain write), an emptied archive removed, the Closed view and its years over month files, year files and both, a second start changing nothing, `TestHolds` and `TestAFileChangedByHand` (a write that changes one open task writes only `tasks.json`; a file changed by hand is not skipped wrongly); `TestSame` in `go/internal/taskmodel` (it fails when a new field of a task has no case).
+`TestACommitDoesNotPack` and `TestPack` in `go/internal/gitrepo` and `TestPackSoon` in `go/gitstore_test.go` cover the packing (no pack inside a commit, Pack, Prune and Join, a pack after `packEvery` commits and never two at once, the start's threshold, the history whole afterwards).
+`TestClosedByMonth` in `tests/test_tasks.py` covers the month files over HTTP, `test_her_archives_by_month_are_hers` in `tests/test_privacy.py` that they show to their user alone.
 `TestReadsAreCopiesOfAFileParsedOnce` there covers the parsed files: a read's changes show in no later read, and a file written by Zone, changed by hand, unusable or gone is read again.
 `TestTextChangedMeanwhile` in `tests/test_tasks.py` covers `was` (a text that is another one by now refuses the write whole) and `test_save_writes_only_what_was_changed_in_the_dialog` in `tests/e2e/test_tasks.py` the dialog (only the changed fields sent, nothing sent for nothing changed, a refused save back in the dialog).
 `test_a_page_brings_the_tasks_its_lists_show_and_no_others` in `tests/test_tasks_embed.py` covers the scoped tasks a page carries and `GET /api/tasks` with a scope.
+`tests/test_task_order.py` covers a list's order changed by moves (`moves` of `POST /api/tasks/reorder`: between two, first, last, several, a stale list's neighbours, the numbers running out, what is refused), `TestOrderMoves` in `tests/test_tasks_core.py` what the browser sends, and `test_a_long_section_draws_its_top_and_shows_the_rest_on_request` and `test_a_long_list_renders_a_description_when_it_is_opened` in `tests/e2e/test_tasks.py` a long list in the browser.
 `TestMyTasksOrder` in `tests/test_tasks.py` covers My tasks' own order (from the lists' until ranked, then its own; no task written; what is closed or no task dropped) and `test_ranking_in_my_tasks_leaves_the_lists_order_alone` in `tests/e2e/test_task_inbox.py` it in the browser, with users.
 `TestTasksChanged` in `tests/test_tasks.py` covers the `Zone-Tasks` word (another one after a write of a task or a list, the same without), `test_tasks_show_what_someone_else_changed_within_a_minute` in `tests/e2e/test_tasks.py` the lists loading again by it (Playwright's clock moves the minute; a busy list is told the next one).
 `go/internal/atomicfile` has the atomic write's (a new file's mode, an old one's kept, a link written through).
