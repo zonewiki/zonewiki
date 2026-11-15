@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 	"zonewiki/internal/mdtext"
 	"zonewiki/internal/settingsfile"
 )
@@ -45,7 +46,9 @@ func testWiki(t testing.TB, pages map[string]string) {
 	old, oldSettings := cfg, settings()
 	cfg = c
 	current.Store(s)
-	t.Cleanup(func() { cfg = old; current.Store(oldSettings) })
+	// A pack a commit of the test started (packSoon) ends in this wiki, not
+	// in whatever cfg names next, and before the folder goes.
+	t.Cleanup(func() { packed(10 * time.Second); cfg = old; current.Store(oldSettings) })
 }
 func TestWikilinks(t *testing.T) {
 	testWiki(t, nil)

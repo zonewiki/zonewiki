@@ -18,7 +18,7 @@ from urllib.parse import unquote
 import pytest
 
 from tests import settings
-from tests.conftest import HOST, content_hash
+from tests.conftest import HOST, content_hash, git_setup
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -85,12 +85,13 @@ def wiki(git_wiki_dir, monkeypatch):
         '  "pinned": ["secretlist"]\n}\n')
     (w / "_tasks").mkdir(exist_ok=True)
     (w / "_tasks/lists.json").write_text('{\n  "version": 2,\n  "lists": [\n    {"name": "team"}\n  ]\n}\n')
-    this_year = __import__("datetime").date.today().year
+    # Her closed tasks as Zone files them: this month's, and an earlier month's.
+    this_month = datetime.date.today().strftime("%Y-%m")
     inbox = {k: v for k, v in private_task(INBOX_ID, "Inbox").items() if k != "list"}
     (tasks / "tasks.json").write_text(json.dumps([private_task(TASK_ID, "Task"), inbox], indent=2) + "\n")
     (tasks / "closed.json").write_text(
-        json.dumps([private_task(DONE_ID, "Done", f"{this_year}-01-05T10:00:00")], indent=2) + "\n")
-    (tasks / "closed-2001.json").write_text(
+        json.dumps([private_task(DONE_ID, "Done", f"{this_month}-01T10:00:00")], indent=2) + "\n")
+    (tasks / "closed-2001-01.json").write_text(
         json.dumps([private_task(OLD_ID, "Old", "2001-01-05T10:00:00")], indent=2) + "\n")
     git(w, "add", "-A")
     git(w, "commit", "-q", "-m", "Alice's pages")
@@ -207,6 +208,63 @@ def test_bob_reads_nothing_of_alices(bob, wiki, method, path, kwargs):
     if path.startswith(f"/page/{DIARY}") or "/private/alice/" in path:
         assert resp.status_code == 404
 
+
+
+def test_her_archives_by_month_are_hers(client, wiki, tmp_path_factory):
+    """A year's file of hers from before the months, and a shared one: a
+    start files both by month in one commit of Zone's. Bob sees the shared
+    year and nothing of hers: not her tasks, not her year, not her files'
+    names in the history; she sees both."""
+    write = lambda rel, tasks: (wiki / rel).write_text(json.dumps(tasks, indent=2) + "\n")  # noqa: E731
+    hers = "a11ce000-0000-4000-8000-000000001999"
+    write("private/alice/_tasks/closed-1999.json", [private_task(hers, "Long ago", "1999-03-05T10:00:00")])
+    write("_tasks/closed-1998.json", [{"id": "5ba4ed00-0000-4000-8000-000000001998", "title": "Shared long ago", "list": "team",
+                                       "closed_at": "1998-07-05T10:00:00"}])
+    git(wiki, "add", "-A")
+    git(wiki, "commit", "-q", "-m", "Archives from before the months")
+    client.live.stop()     # the fixture's server, which started before these files were there
+    git_setup(tmp_path_factory)
+    assert not (wiki / "private/alice/_tasks/closed-1999.json").exists() and not (wiki / "_tasks/closed-1998.json").exists()
+    assert hers in (wiki / "private/alice/_tasks/closed-1999-03.json").read_text()
+    assert "Shared long ago" in (wiki / "_tasks/closed-1998-07.json").read_text()
+    assert hers not in "".join(p.read_text() for p in (wiki / "_tasks").glob("*.json")), "her task in the shared files"
+    assert git(wiki, "log", "-n1", "--format=%s") == "Archive closed tasks"
+    files = git(wiki, "show", "--no-renames", "--name-only", "--format=", "HEAD").split()
+    assert sorted(files) == ["_tasks/closed-1998-07.json", "_tasks/closed-1998.json",          # one commit has both
+                             "private/alice/_tasks/closed-1999-03.json", "private/alice/_tasks/closed-1999.json"]
+    sign_in(client, "bob")
+    assert client.get("/api/tasks/closed-years", headers=HOST).get_json()["years"][1:] == ["1998"]
+    assert client.get("/api/tasks/closed?year=1999", headers=HOST).get_json() == []
+    assert [t["title"] for t in client.get("/api/tasks/closed?year=1998", headers=HOST).get_json()] == ["Shared long ago"]
+    for path in ("/api/tasks/export", "/api/tasks/closed?year=2001", "/api/search?q=long+ago", "/uncommitted", "/api/uncommitted",
+                 "/page/_deleted", "/history/index", "/tasks?view=closed&year=1999"):
+        body = client.get(path, headers=HOST).get_data(as_text=True)
+        assert hers not in body and "Long ago" not in body and "private/alice" not in body and "1999" not in body, path
+    for text in (mcp(client, "history"), mcp(client, "history", limit=50), mcp(client, "search_tasks", status="closed"),
+                 mcp(client, "search_wiki", query="long ago")):
+        assert "private/alice" not in text and "closed-1999" not in text and hers not in text and "Long ago" not in text
+    # A write of his files nothing of hers and commits none of her files.
+    (wiki / "private/alice/_tasks/closed-1997.json").write_text(json.dumps([private_task(hers[:-4] + "1997", "Older", "1997-03-05T10:00:00")]))
+    git(wiki, "add", "-A")
+    git(wiki, "commit", "-q", "-m", "Another year's file of hers")
+    made = client.post("/api/tasks", json={"title": "Bob's", "list": "team"}, headers=HOST).get_json()
+    assert client.put(f"/api/tasks/{made['id']}", json={"completed": True}, headers=HOST).status_code == 200
+    assert (wiki / "private/alice/_tasks/closed-1997.json").exists()
+    assert "private/alice" not in git(wiki, "show", "--stat", "--format=", "HEAD")
+    assert "1997" not in client.get("/api/tasks/closed-years", headers=HOST).get_data(as_text=True)
+    # Hers: both years, her task, and her own write files her year's file.
+    sign_in(client, "alice")
+    years = client.get("/api/tasks/closed-years", headers=HOST).get_json()["years"]
+    assert years[1:] == ["2001", "1999", "1998", "1997"]
+    assert [t["id"] for t in client.get("/api/tasks/closed?year=1999", headers=HOST).get_json()] == [hers]
+    assert client.put(f"/api/tasks/{hers}", json={"title": "Long ago, edited"}, headers=HOST).status_code == 200
+    assert (wiki / "private/alice/_tasks/closed-1997-03.json").exists() and not (wiki / "private/alice/_tasks/closed-1997.json").exists()
+    assert "Long ago, edited" in (wiki / "private/alice/_tasks/closed-1999-03.json").read_text()
+    files = git(wiki, "show", "--no-renames", "--name-only", "--format=%an", "HEAD").split()
+    assert files[0] == "alice" and sorted(files[1:]) == [
+        "private/alice/_tasks/closed-1997-03.json", "private/alice/_tasks/closed-1997.json", "private/alice/_tasks/closed-1999-03.json"]
+    sign_in(client, "bob")
+    assert "private/alice" not in mcp(client, "history") and "1997" not in mcp(client, "history")
 
 def test_alice_is_offered_the_changes_she_left(alice, wiki):
     body = alice.get("/edit/plans", headers=HOST).get_data(as_text=True)

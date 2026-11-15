@@ -1738,7 +1738,33 @@ class TestFileFormat:
         assert '"title": "Fix <b> & “quotes” ü"' in raw
 
 
-# ── Round 2: completed-task year archives ─────────────────────────────────────
+# ── Closed tasks' archives: by month, shown by year ──────────────────────────
+
+
+def this_month(day=1):
+    """A time in this month, as closed_at has it (closed.json's tasks)."""
+    return f"{date.today():%Y-%m}-{day:02d}T10:00:00"
+
+
+def last_month():
+    """The month before this one, as the archives name it ("2026-10")."""
+    return f"{date.today().replace(day=1) - timedelta(days=1):%Y-%m}"
+
+
+def closed_files(wiki_dir):
+    """The closed tasks' files and the ids each holds, as the files have them."""
+    return {p.name: [t["id"] for t in json.loads(p.read_text(encoding="utf-8"))]
+            for p in sorted((wiki_dir / "_tasks").glob("closed*.json"))}
+
+
+def write_closed(wiki_dir, name, tasks):
+    (wiki_dir / "_tasks").mkdir(exist_ok=True)
+    (wiki_dir / "_tasks" / name).write_text(json.dumps(tasks), encoding="utf-8")
+
+
+def wiki_git(wiki_dir, *args):
+    return subprocess.run(["git", *args], cwd=wiki_dir, capture_output=True, text=True, check=True,
+                          env=settings.GIT_ENV).stdout
 
 
 class TestClosedArchive:
@@ -1746,32 +1772,65 @@ class TestClosedArchive:
         (wiki_dir / "_tasks" / "closed.json").write_text(
             json.dumps(tasks), encoding="utf-8")
 
-    def test_old_years_rolled_into_archives(self, client, wiki_dir, tmp_path_factory):
+    def test_old_months_rolled_into_archives(self, client, wiki_dir, tmp_path_factory):
         year = date.today().year
         self._seed_completed(wiki_dir, [
             {"id": "old1", "title": "Ancient", "closed_at": f"{year-2}-05-01T10:00:00"},
             {"id": "old2", "title": "Last year", "closed_at": f"{year-1}-11-30T10:00:00"},
-            {"id": "new1", "title": "Recent", "closed_at": f"{year}-01-02T10:00:00"},
+            {"id": "old3", "title": "Last year too", "closed_at": f"{year-1}-11-02T10:00:00"},
+            {"id": "last", "title": "Last month", "closed_at": f"{last_month()}-15T10:00:00"},
+            {"id": "new1", "title": "Recent", "closed_at": this_month()},
+            {"id": "undated", "title": "No date", "closed_at": "once"},
         ])
         git_setup(tmp_path_factory)   # a start archives
-        hot = json.loads((wiki_dir / "_tasks" / "closed.json").read_text(encoding="utf-8"))
-        assert [t["id"] for t in hot] == ["new1"]
-        arch1 = json.loads((wiki_dir / "_tasks" / f"closed-{year-2}.json").read_text(encoding="utf-8"))
-        arch2 = json.loads((wiki_dir / "_tasks" / f"closed-{year-1}.json").read_text(encoding="utf-8"))
-        assert [t["id"] for t in arch1] == ["old1"]
-        assert [t["id"] for t in arch2] == ["old2"]
+        assert closed_files(wiki_dir) == {
+            f"closed-{year-2}-05.json": ["old1"], f"closed-{year-1}-11.json": ["old2", "old3"],
+            f"closed-{last_month()}.json": ["last"], "closed.json": ["new1", "undated"]}
+        # A second start has nothing to do.
+        before = {p.name: p.read_bytes() for p in (wiki_dir / "_tasks").iterdir()}
+        git_setup(tmp_path_factory)
+        assert {p.name: p.read_bytes() for p in (wiki_dir / "_tasks").iterdir()} == before
 
     def test_archive_merges_into_existing_file(self, client, wiki_dir, tmp_path_factory):
         year = date.today().year
-        (wiki_dir / "_tasks" / f"closed-{year-1}.json").write_text(
-            json.dumps([{"id": "prior", "title": "Already archived",
-                         "closed_at": f"{year-1}-01-01T10:00:00"}]), encoding="utf-8")
+        write_closed(wiki_dir, f"closed-{year-1}-06.json", [
+            {"id": "prior", "title": "Already archived", "closed_at": f"{year-1}-06-30T10:00:00"}])
         self._seed_completed(wiki_dir, [
             {"id": "old", "title": "Old", "closed_at": f"{year-1}-06-01T10:00:00"},
         ])
         git_setup(tmp_path_factory)   # a start archives
-        arch = json.loads((wiki_dir / "_tasks" / f"closed-{year-1}.json").read_text(encoding="utf-8"))
-        assert [t["id"] for t in arch] == ["prior", "old"]
+        assert closed_files(wiki_dir) == {f"closed-{year-1}-06.json": ["prior", "old"], "closed.json": []}
+
+    def test_a_years_file_is_filed_by_month_at_start(self, git_wiki_dir, tmp_path_factory):
+        """A wiki from before the months (closed-YYYY.json): a start files its
+        tasks under their months, beside what is there, and removes the
+        year's file, in one commit of the wiki's history; started again,
+        nothing happens."""
+        wiki, year = git_wiki_dir, date.today().year
+        write_closed(wiki, f"closed-{year-1}.json", [
+            {"id": "jan", "title": "January", "closed_at": f"{year-1}-01-01T10:00:00"},
+            {"id": "jun", "title": "June", "closed_at": f"{year-1}-06-01T10:00:00"},
+            {"id": "jun2", "title": "June too", "closed_at": f"{year-1}-06-30T23:59:59"}])
+        write_closed(wiki, f"closed-{year-2}.json", [{"id": "older", "title": "Older", "closed_at": f"{year-2}-12-31T10:00:00"}])
+        write_closed(wiki, f"closed-{year-1}-06.json", [{"id": "prior", "title": "There", "closed_at": f"{year-1}-06-15T10:00:00"}])
+        write_closed(wiki, "closed.json", [{"id": "new", "title": "New", "closed_at": this_month()}])
+        wiki_git(wiki, "add", "-A")
+        wiki_git(wiki, "commit", "-q", "-m", "A wiki from before the months")
+        before = wiki_git(wiki, "rev-parse", "HEAD").strip()
+        git_setup(tmp_path_factory)   # a start files by month
+        assert closed_files(wiki) == {
+            f"closed-{year-2}-12.json": ["older"], f"closed-{year-1}-01.json": ["jan"],
+            f"closed-{year-1}-06.json": ["prior", "jun", "jun2"], "closed.json": ["new"]}
+        assert wiki_git(wiki, "log", "--format=%s", f"{before}..HEAD").splitlines() == ["Archive closed tasks"]
+        changed = dict(reversed(line.split("\t")) for line in wiki_git(wiki, "show", "--no-renames", "--name-status", "--format=", "HEAD").splitlines())
+        assert changed == {f"_tasks/closed-{year-1}.json": "D", f"_tasks/closed-{year-2}.json": "D",
+                           f"_tasks/closed-{year-1}-01.json": "A", f"_tasks/closed-{year-1}-06.json": "M",
+                           f"_tasks/closed-{year-2}-12.json": "A", "_tasks/closed.json": "M"}
+        assert wiki_git(wiki, "status", "--porcelain", "--", "_tasks") == ""
+        # The year's file as it was is still in the history.
+        assert "January" in wiki_git(wiki, "show", f"{before}:_tasks/closed-{year-1}.json")
+        git_setup(tmp_path_factory)
+        assert wiki_git(wiki, "log", "--format=%s", f"{before}..HEAD").splitlines() == ["Archive closed tasks"]
 
     def test_a_wiki_with_the_old_names_is_renamed(self, client, wiki_dir, tmp_path_factory):
         """completed.json, completed-YYYY.json and completed_at, as they were
@@ -1782,26 +1841,25 @@ class TestClosedArchive:
         (tasks_dir / "tasks.json").write_text(json.dumps(
             [{"id": "open1", "title": "Open", "completed_at": None}]), encoding="utf-8")
         (tasks_dir / "completed.json").write_text(json.dumps([
-            {"id": "new1", "title": "Recent", "completed_at": f"{year}-01-02T10:00:00"},
-            {"id": "wont", "title": "Dropped", "completed_at": f"{year}-01-03T10:00:00", "wont_do": True},
+            {"id": "new1", "title": "Recent", "completed_at": this_month(2)},
+            {"id": "wont", "title": "Dropped", "completed_at": this_month(3), "wont_do": True},
         ]), encoding="utf-8")
         (tasks_dir / f"completed-{year-1}.json").write_text(json.dumps(
             [{"id": "old1", "title": "Last year", "completed_at": f"{year-1}-11-30T10:00:00"}]), encoding="utf-8")
         git_setup(tmp_path_factory)   # a start renames
-        assert sorted(p.name for p in tasks_dir.glob("c*.json")) == [f"closed-{year-1}.json", "closed.json"]
+        assert sorted(p.name for p in tasks_dir.glob("c*.json")) == [f"closed-{year-1}-11.json", "closed.json"]
         assert "completed_at" not in "".join(p.read_text(encoding="utf-8") for p in tasks_dir.glob("*.json"))
         closed = client.get("/api/tasks/closed").get_json()
         assert {t["id"]: t["closed_at"] for t in closed} == {
-            "new1": f"{year}-01-02T10:00:00", "wont": f"{year}-01-03T10:00:00"}
+            "new1": this_month(2), "wont": this_month(3)}
         assert [t["wont_do"] for t in closed if t["id"] == "wont"] == [True]
         assert [t["id"] for t in client.get(f"/api/tasks/closed?year={year-1}").get_json()] == ["old1"]
         assert [(t["id"], t["closed_at"]) for t in client.get("/api/tasks").get_json()] == [("open1", None)]
         assert client.get("/api/tasks/completed").status_code in (404, 405)
 
     def test_noop_when_nothing_old(self, client, wiki_dir, tmp_path_factory):
-        year = date.today().year
         self._seed_completed(wiki_dir, [
-            {"id": "new1", "title": "Recent", "closed_at": f"{year}-01-02T10:00:00"},
+            {"id": "new1", "title": "Recent", "closed_at": this_month()},
         ])
         git_setup(tmp_path_factory)   # a start archives
         assert not list((wiki_dir / "_tasks").glob("closed-*.json"))
@@ -1818,16 +1876,16 @@ class TestClosedArchive:
 
 
 class TestClosedByYear:
-    """Earlier years' completed tasks (the yearly archives) are shown by year
-    in Completed and can be changed like any other completed task."""
+    """Earlier months' closed tasks (the archives) are shown by year in
+    Closed and can be changed like any other closed task."""
 
     def _seed(self, wiki_dir):
         year = date.today().year
-        (wiki_dir / "_tasks" / f"closed-{year-1}.json").write_text(json.dumps([
+        (wiki_dir / "_tasks" / f"closed-{year-1}-05.json").write_text(json.dumps([
             {"id": "old", "title": "Last year", "closed_at": f"{year-1}-05-01T10:00:00"},
         ]), encoding="utf-8")
         (wiki_dir / "_tasks" / "closed.json").write_text(json.dumps([
-            {"id": "new", "title": "This year", "closed_at": f"{year}-01-02T10:00:00"},
+            {"id": "new", "title": "This year", "closed_at": this_month()},
         ]), encoding="utf-8")
         return year
 
@@ -1869,7 +1927,7 @@ class TestClosedByYear:
         year = self._seed(wiki_dir)
         resp = client.put("/api/tasks/old", json={"title": "Renamed"})
         assert resp.status_code == 200
-        arch = wiki_dir / "_tasks" / f"closed-{year-1}.json"
+        arch = wiki_dir / "_tasks" / f"closed-{year-1}-05.json"
         assert self._ids(arch) == ["old"]
         assert json.loads(arch.read_text(encoding="utf-8"))[0]["title"] == "Renamed"
         assert self._ids(wiki_dir / "_tasks" / "closed.json") == ["new"]
@@ -1877,27 +1935,31 @@ class TestClosedByYear:
     def test_reopen_moves_task_out_of_archive(self, client, wiki_dir):
         year = self._seed(wiki_dir)
         assert client.put("/api/tasks/old", json={"completed": False}).status_code == 200
-        assert self._ids(wiki_dir / "_tasks" / f"closed-{year-1}.json") == []
+        # Its archive held nothing else: the file is gone, and so is its year.
+        assert closed_files(wiki_dir) == {"closed.json": ["new"]}
+        assert client.get("/api/tasks/closed-years").get_json()["years"] == [str(year)]
+        assert client.get(f"/api/tasks/closed?year={year-1}").get_json() == []
         assert [t["id"] for t in client.get("/api/tasks").get_json()] == ["old"]
-        # Completed again now, it belongs to this year.
+        # Completed again now, it belongs to this month.
         client.put("/api/tasks/old", json={"completed": True})
-        assert self._ids(wiki_dir / "_tasks" / "closed.json") == ["new", "old"]
+        assert closed_files(wiki_dir) == {"closed.json": ["new", "old"]}
 
     def test_batch_reopen_and_tag_reach_archives(self, client, wiki_dir):
         year = self._seed(wiki_dir)
         tagged = client.post("/api/tasks/batch-tag", json={"ids": ["old"], "add": ["x"]}).get_json()
         assert tagged[0]["tags"] == ["x"]
         done = client.post("/api/tasks/batch-complete", json={"ids": ["old"], "completed": False}).get_json()
-        assert [t["id"] for t in done] == ["old"]
-        assert self._ids(wiki_dir / "_tasks" / f"closed-{year-1}.json") == []
+        assert [t["id"] for t in done] == ["old"] and done[0]["tags"] == ["x"] and done[0]["closed_at"] is None
+        assert not (wiki_dir / "_tasks" / f"closed-{year-1}-05.json").exists()
+        assert closed_files(wiki_dir) == {"closed.json": ["new"]}
 
     def test_delete_and_restore_archived_task(self, client, wiki_dir):
         year = self._seed(wiki_dir)
-        arch = wiki_dir / "_tasks" / f"closed-{year-1}.json"
+        arch = wiki_dir / "_tasks" / f"closed-{year-1}-05.json"
         snapshot = json.loads(arch.read_text(encoding="utf-8"))[0]
         assert client.delete("/api/tasks/old").status_code == 204
-        assert self._ids(arch) == []
-        # Undo puts it back into its own year, not this year's file.
+        assert not arch.exists()
+        # Undo puts it back into its own month, not this month's file.
         assert client.post("/api/tasks/restore", json={"tasks": [snapshot]}).status_code == 201
         assert self._ids(arch) == ["old"]
         assert self._ids(wiki_dir / "_tasks" / "closed.json") == ["new"]
@@ -1905,12 +1967,12 @@ class TestClosedByYear:
     def test_batch_delete_reaches_archives(self, client, wiki_dir):
         year = self._seed(wiki_dir)
         client.post("/api/tasks/batch-delete", json={"ids": ["old", "new"]})
-        assert self._ids(wiki_dir / "_tasks" / f"closed-{year-1}.json") == []
-        assert self._ids(wiki_dir / "_tasks" / "closed.json") == []
+        assert closed_files(wiki_dir) == {"closed.json": []}
+        assert year and client.get("/api/tasks/closed-years").get_json()["years"] == [str(year)]
 
     def test_unchanged_archives_are_not_rewritten(self, client, wiki_dir):
         year = self._seed(wiki_dir)
-        arch = wiki_dir / "_tasks" / f"closed-{year-1}.json"
+        arch = wiki_dir / "_tasks" / f"closed-{year-1}-05.json"
         raw = '[{"id": "old", "title": "Last year", "closed_at": "%d-05-01T10:00:00"}]' % (year - 1)
         arch.write_text(raw, encoding="utf-8")
         create_task(client, title="Unrelated")
@@ -1918,8 +1980,9 @@ class TestClosedByYear:
         assert arch.read_text(encoding="utf-8") == raw
 
     def test_other_files_are_not_archives(self, client, wiki_dir):
-        # Only _deck_closed-YYYY.json is an archive: anything else that
-        # matches the prefix is left alone by the year split.
+        # Only closed-YYYY-MM.json (and closed-YYYY.json, from before the
+        # months) is an archive: anything else that matches the prefix is left
+        # alone by the split.
         self._seed(wiki_dir)
         other = wiki_dir / "_tasks" / "closed-backup.json"
         other.write_text(json.dumps([{"id": "b", "title": "B", "closed_at": "2001-01-01T00:00:00"}]),
@@ -1943,6 +2006,190 @@ class TestClosedByYear:
         task = next(r for r in results if r.get("type") == "task")
         assert task["href"] == "/tasks?task=new&view=closed"
 
+
+
+class TestClosedByMonth:
+    """Closed tasks are filed by month (closed.json: this month's; an earlier
+    month's, of any year, closed-YYYY-MM.json) at every write; the Closed
+    view stays by year, over whatever files hold a year's tasks."""
+
+    def _seed(self, wiki_dir):
+        """A wiki as an older Zone and time left it, not started since: a
+        year's file from before the months, a month's file, and a closed.json
+        whose month has ended for one of its tasks."""
+        year = date.today().year
+        write_closed(wiki_dir, f"closed-{year-2}.json", [
+            {"id": "y2-mar", "title": "March", "closed_at": f"{year-2}-03-10T10:00:00"},
+            {"id": "y2-nov", "title": "November", "closed_at": f"{year-2}-11-20T10:00:00"}])
+        write_closed(wiki_dir, f"closed-{year-1}-05.json", [
+            {"id": "y1-may", "title": "May", "closed_at": f"{year-1}-05-01T10:00:00"}])
+        write_closed(wiki_dir, "closed.json", [
+            {"id": "y1-dec", "title": "New Year's Eve", "closed_at": f"{year-1}-12-31T23:59:59"},
+            {"id": "now", "title": "This month", "closed_at": this_month()},
+            {"id": "undated", "title": "No date", "closed_at": "once"}])
+        return year
+
+    def _by_year(self, client, year):
+        ids = lambda q: sorted(t["id"] for t in client.get("/api/tasks/closed" + q).get_json())  # noqa: E731
+        return {"": ids(""), year: ids(f"?year={year}"), year - 1: ids(f"?year={year-1}"), year - 2: ids(f"?year={year-2}"),
+                year - 3: ids(f"?year={year-3}"), "years": client.get("/api/tasks/closed-years").get_json()["years"]}
+
+    def _filed(self, year, *new):
+        return {f"closed-{year-2}-03.json": ["y2-mar"], f"closed-{year-2}-11.json": ["y2-nov"],
+                f"closed-{year-1}-05.json": ["y1-may"], f"closed-{year-1}-12.json": ["y1-dec"],
+                "closed.json": ["now", "undated", *new]}
+
+    def test_the_views_are_by_year_whatever_the_files(self, client, wiki_dir):
+        year = self._seed(wiki_dir)
+        before = {p.name: p.read_bytes() for p in (wiki_dir / "_tasks").glob("closed*.json")}
+        want = {"": ["now", "undated"], year: ["now", "undated"], year - 1: ["y1-dec", "y1-may"], year - 2: ["y2-mar", "y2-nov"],
+                year - 3: [], "years": [str(year), str(year - 1), str(year - 2)]}
+        assert self._by_year(client, year) == want
+        assert client.get("/api/tasks/closed-count").get_json() == {"count": 2}
+        # A read files nothing.
+        assert {p.name: p.read_bytes() for p in (wiki_dir / "_tasks").glob("closed*.json")} == before
+        # The first write does (here: of an open task, by the reorder that
+        # writes open and closed); the views are what they were.
+        done = create_task(client, title="Just done").get_json()["id"]
+        assert client.put(f"/api/tasks/{done}", json={"completed": True}).status_code == 200
+        assert closed_files(wiki_dir) == self._filed(year, done)
+        want[""] = want[year] = sorted(["now", "undated", done])
+        assert self._by_year(client, year) == want
+        assert client.get("/api/tasks/closed-count").get_json() == {"count": 3}
+        closed_at = next(t for t in client.get("/api/tasks/closed").get_json() if t["id"] == done)["closed_at"]
+        assert closed_at.startswith(f"{date.today():%Y-%m}")
+
+    def test_a_task_closed_in_another_month_is_changed_like_any(self, client, wiki_dir):
+        """Edit, tag, reopen and close again: tasks of a year's file, a
+        month's file and closed.json alike, each write filing by month."""
+        year = self._seed(wiki_dir)
+        file = lambda name: {t["id"]: t for t in json.loads((wiki_dir / "_tasks" / name).read_text(encoding="utf-8"))}  # noqa: E731
+        # An edit of a task in the year's file: its month's file has it.
+        assert client.put("/api/tasks/y2-mar", json={"title": "Renamed", "description": "More"}).status_code == 200
+        assert closed_files(wiki_dir) == self._filed(year)
+        assert file(f"closed-{year-2}-03.json")["y2-mar"]["title"] == "Renamed"
+        assert file(f"closed-{year-2}-03.json")["y2-mar"]["closed_at"] == f"{year-2}-03-10T10:00:00"
+        # Tags on tasks of four files at once.
+        tagged = client.post("/api/tasks/batch-tag", json={"ids": ["y2-nov", "y1-may", "y1-dec", "now"], "add": ["x"]}).get_json()
+        assert sorted(t["id"] for t in tagged) == ["now", "y1-dec", "y1-may", "y2-nov"] and all(t["tags"] == ["x"] for t in tagged)
+        assert closed_files(wiki_dir) == self._filed(year)
+        assert file(f"closed-{year-2}-11.json")["y2-nov"]["tags"] == ["x"] and file("closed.json")["now"]["tags"] == ["x"]
+        assert file(f"closed-{year-2}-03.json")["y2-mar"]["tags"] == []
+        # A comment, as the task's dialog adds one.
+        assert client.post("/api/tasks/y1-may/comments", json={"text": "Looked at again"}).status_code in (200, 201)
+        assert file(f"closed-{year-1}-05.json")["y1-may"]["comments"][0]["text"] == "Looked at again"
+        # Reopened: a month's last task takes its file along.
+        assert client.put("/api/tasks/y2-nov", json={"completed": False}).status_code == 200
+        reopened = client.post("/api/tasks/batch-complete", json={"ids": ["y1-dec", "y1-may"], "completed": False}).get_json()
+        assert sorted(t["id"] for t in reopened) == ["y1-dec", "y1-may"]
+        assert closed_files(wiki_dir) == {f"closed-{year-2}-03.json": ["y2-mar"], "closed.json": ["now", "undated"]}
+        assert sorted(t["id"] for t in client.get("/api/tasks").get_json()) == ["y1-dec", "y1-may", "y2-nov"]
+        assert client.get("/api/tasks/closed-years").get_json()["years"] == [str(year), str(year - 2)]
+        assert client.get(f"/api/tasks/closed?year={year-1}").get_json() == []
+        # Closed again, they are this month's, with what they carried.
+        assert client.put("/api/tasks/y1-may", json={"completed": True}).status_code == 200
+        assert closed_files(wiki_dir) == {f"closed-{year-2}-03.json": ["y2-mar"], "closed.json": ["now", "undated", "y1-may"]}
+        again = file("closed.json")["y1-may"]
+        assert again["closed_at"].startswith(f"{date.today():%Y-%m}") and again["tags"] == ["x"]
+        assert again["comments"][0]["text"] == "Looked at again"
+        # Deleted: the last file of the year before last goes too.
+        assert client.delete("/api/tasks/y2-mar").status_code == 204
+        assert closed_files(wiki_dir) == {"closed.json": ["now", "undated", "y1-may"]}
+        assert client.get("/api/tasks/closed-years").get_json()["years"] == [str(year)]
+
+    def test_export_and_import_hold_every_year(self, client, wiki_dir):
+        year = self._seed(wiki_dir)
+        # Ids as Zone makes them: an import keeps those (and gives a task without one a new one).
+        names = ["now", "undated", "y1-dec", "y1-may", "y2-mar", "y2-nov"]
+        uid = {name: f"0000000{i}-0000-4000-8000-000000000000" for i, name in enumerate(names)}
+        for path in (wiki_dir / "_tasks").glob("closed*.json"):
+            path.write_text(json.dumps([{**t, "id": uid[t["id"]]} for t in json.loads(path.read_text())]), encoding="utf-8")
+        filed = {name: sorted(uid[i] for i in ids) for name, ids in self._filed(year).items()}
+        open_id = create_task(client, title="Open").get_json()["id"]
+        everything = sorted([*uid.values(), open_id])
+        file = client.get("/api/tasks/export").get_json()
+        assert sorted(t["id"] for t in file["tasks"]) == everything
+        closed_at = {t["id"]: t["closed_at"] for t in file["tasks"]}
+        assert closed_at[uid["y2-mar"]] == f"{year-2}-03-10T10:00:00" and closed_at[uid["y1-dec"]] == f"{year-1}-12-31T23:59:59"
+        # An export wrote nothing: the year's file is as it was.
+        assert f"closed-{year-2}.json" in closed_files(wiki_dir)
+        # Already here: an import adds nothing (it knows the tasks of every file).
+        assert client.post("/api/tasks/import", json={"file": file}).get_json() == {"added": 0, "skipped": 7, "ids": []}
+        # Gone, every one; the import brings each back into its month.
+        client.post("/api/tasks/batch-delete", json={"ids": everything})
+        assert closed_files(wiki_dir) == {"closed.json": []} and client.get("/api/tasks").get_json() == []
+        back = client.post("/api/tasks/import", json={"file": file}).get_json()
+        assert (back["added"], back["skipped"], sorted(back["ids"])) == (7, 0, everything)
+        assert {name: sorted(ids) for name, ids in closed_files(wiki_dir).items()} == filed
+        by_year = lambda *names: sorted(uid[n] for n in names)  # noqa: E731
+        assert self._by_year(client, year) == {
+            "": by_year("now", "undated"), year: by_year("now", "undated"), year - 1: by_year("y1-dec", "y1-may"),
+            year - 2: by_year("y2-mar", "y2-nov"), year - 3: [], "years": [str(year), str(year - 1), str(year - 2)]}
+        again = client.get("/api/tasks/export").get_json()
+        # (An import gives a closed task without a usable date the time of the import.)
+        back_at = {t["id"]: t["closed_at"] for t in again["tasks"]}
+        assert back_at.pop(uid["undated"]).startswith(f"{date.today():%Y-%m}") and closed_at.pop(uid["undated"]) == "once"
+        assert back_at == closed_at
+        # Undo of a delete (restore): a task goes back to its month.
+        snap = next(t for t in again["tasks"] if t["id"] == uid["y2-nov"])
+        assert client.delete(f"/api/tasks/{uid['y2-nov']}").status_code == 204
+        assert f"closed-{year-2}-11.json" not in closed_files(wiki_dir)
+        assert client.post("/api/tasks/restore", json={"tasks": [snap]}).status_code == 201
+        assert closed_files(wiki_dir)[f"closed-{year-2}-11.json"] == [uid["y2-nov"]]
+
+    def test_a_write_takes_a_years_file_over_in_its_commit(self, client, git_wiki_dir):
+        """Without a start: the write that first comes by files the year's
+        tasks by month and removes the year's file, in its own commit; the
+        next write of an open task commits the open tasks alone."""
+        wiki, year = git_wiki_dir, date.today().year
+        self._seed(wiki)
+        wiki_git(wiki, "add", "-A")
+        wiki_git(wiki, "commit", "-q", "-m", "A wiki from before the months")
+        before = wiki_git(wiki, "rev-parse", "HEAD").strip()
+        status = lambda rev: dict(reversed(line.split("\t")) for line in wiki_git(  # noqa: E731
+            wiki, "show", "--no-renames", "--name-status", "--format=", rev).splitlines())
+        assert client.put("/api/tasks/y1-may", json={"title": "Edited"}).status_code == 200
+        assert closed_files(wiki) == self._filed(year)
+        assert len(wiki_git(wiki, "log", "--format=%s", f"{before}..HEAD").splitlines()) == 1
+        changed = status("HEAD")
+        changed.pop("_tasks/tasks.json", None)     # made by the first write, when there was none
+        assert changed == {
+            f"_tasks/closed-{year-2}.json": "D", f"_tasks/closed-{year-2}-03.json": "A", f"_tasks/closed-{year-2}-11.json": "A",
+            f"_tasks/closed-{year-1}-05.json": "M", f"_tasks/closed-{year-1}-12.json": "A", "_tasks/closed.json": "M"}
+        assert wiki_git(wiki, "status", "--porcelain", "--", "_tasks") == ""
+        assert "March" in wiki_git(wiki, "show", f"{before}:_tasks/closed-{year-2}.json")   # still in the history
+        # From here on a write changes what it changes.
+        task = create_task(client, title="Open").get_json()["id"]
+        assert list(status("HEAD")) == ["_tasks/tasks.json"]
+        assert client.put(f"/api/tasks/{task}", json={"title": "Open still"}).status_code == 200
+        assert status("HEAD") == {"_tasks/tasks.json": "M"}
+        assert client.put("/api/tasks/y2-mar", json={"title": "Edited too"}).status_code == 200
+        assert status("HEAD") == {f"_tasks/closed-{year-2}-03.json": "M"}
+        assert client.put(f"/api/tasks/{task}", json={"completed": True}).status_code == 200
+        assert status("HEAD") == {"_tasks/tasks.json": "M", "_tasks/closed.json": "M"}
+        # Reopening a month's last task: the commit has the file's removal.
+        assert client.put("/api/tasks/y2-nov", json={"completed": False}).status_code == 200
+        assert status("HEAD") == {"_tasks/tasks.json": "M", f"_tasks/closed-{year-2}-11.json": "D"}
+        assert wiki_git(wiki, "status", "--porcelain", "--", "_tasks") == ""
+
+    def test_a_file_edited_by_hand_while_zone_runs(self, client, wiki_dir):
+        """What a hand changes in a closed file (a task added, one removed)
+        is what the next read and the next write have."""
+        year = self._seed(wiki_dir)
+        client.put("/api/tasks/now", json={"title": "Filed"})    # Zone has read and written every file
+        assert closed_files(wiki_dir) == self._filed(year)
+        write_closed(wiki_dir, f"closed-{year-1}-05.json", [
+            {"id": "y1-may", "title": "May, by hand", "closed_at": f"{year-1}-05-01T10:00:00"},
+            {"id": "y1-may2", "title": "Added by hand", "closed_at": f"{year-1}-05-02T10:00:00"}])
+        (wiki_dir / "_tasks" / f"closed-{year-2}-03.json").unlink()
+        got = {t["id"]: t["title"] for t in client.get(f"/api/tasks/closed?year={year-1}").get_json()}
+        assert got == {"y1-dec": "New Year's Eve", "y1-may": "May, by hand", "y1-may2": "Added by hand"}
+        assert client.put("/api/tasks/y1-may2", json={"tags": ["seen"]}).status_code == 200
+        assert client.put("/api/tasks/y2-mar", json={"title": "Gone"}).status_code == 404
+        assert closed_files(wiki_dir) == {**{k: v for k, v in self._filed(year).items() if k != f"closed-{year-2}-03.json"},
+                                          f"closed-{year-1}-05.json": ["y1-may", "y1-may2"]}
+        text = (wiki_dir / "_tasks" / f"closed-{year-1}-05.json").read_text(encoding="utf-8")
+        assert "May, by hand" in text and '"seen"' in text
 
 class TestMalformedInput:
     """Regression: malformed JSON bodies raised inside the handlers (500)

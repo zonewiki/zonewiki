@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -32,12 +33,56 @@ const TimedOut = 124
 // (GIT_LITERAL_PATHSPECS, git's --literal-pathspecs for every call); a call
 // that means a pattern, or a command that refuses the setting (check-ignore),
 // turns it off for itself (Call.Env).
+//
+// A commit doesn't pack: git's own maintenance after a commit (gc.auto) runs
+// inside it, and when its turn comes that one commit, and the request that
+// made it, waits for the whole repository's loose objects to be packed.
+// Whoever commits packs when it suits them (Pack, Prune).
 var baseEnv = append(os.Environ(),
 	"GIT_LITERAL_PATHSPECS=1",
-	"GIT_CONFIG_COUNT=2",
+	"GIT_CONFIG_COUNT=4",
 	"GIT_CONFIG_KEY_0=maintenance.autoDetach", "GIT_CONFIG_VALUE_0=false",
 	"GIT_CONFIG_KEY_1=gc.autoDetach", "GIT_CONFIG_VALUE_1=false",
+	"GIT_CONFIG_KEY_2=gc.auto", "GIT_CONFIG_VALUE_2=0",
+	"GIT_CONFIG_KEY_3=maintenance.auto", "GIT_CONFIG_VALUE_3=false",
 )
+
+// Pack packs the repository's loose objects into a pack of their own (git
+// repack -l: what is packed already stays as it is, so it costs what is
+// new): the versions of a file become differences, and a task file written
+// whole at every change takes what changed. The objects it packed are still
+// there loose as well, until Prune. Beside commits; it may take long in a
+// large repository, timeout bounds it.
+func (r Repo) Pack(ctx context.Context, timeout time.Duration) Result {
+	return r.Run(ctx, Call{Timeout: timeout}, "repack", "-l", "-q")
+}
+
+// ManyPacks: the repository has more packs than packsMany: time for Join.
+func (r Repo) ManyPacks() bool {
+	packs, _ := filepath.Glob(filepath.Join(r.Dir, ".git", "objects", "pack", "*.pack"))
+	return len(packs) > packsMany
+}
+
+// Join makes the repository's packs one (git repack -a -d -l). Like Prune
+// not beside a commit: it removes loose objects' folders too. It copies
+// what is packed, so it takes as long as the repository is large, and is
+// for once in many packs (ManyPacks).
+func (r Repo) Join(ctx context.Context, timeout time.Duration) Result {
+	return r.Run(ctx, Call{Timeout: timeout}, "repack", "-a", "-d", "-l", "-q")
+}
+
+// Prune removes the loose objects that are in a pack (git prune-packed),
+// after Pack. Not beside a commit, or any git that writes objects: it
+// removes the folders it empties, and a git about to write an object into
+// one of them fails (git add: "unable to create temporary file: No such
+// file or directory"), which is why Pack leaves it to its caller, who knows
+// when no commit runs. Quick: it reads no object.
+func (r Repo) Prune(ctx context.Context, timeout time.Duration) Result {
+	return r.Run(ctx, Call{Timeout: timeout}, "prune-packed", "-q")
+}
+
+// packsMany: more packs than this are made one.
+const packsMany = 20
 
 // Repo is a repository's working tree.
 type Repo struct{ Dir string }

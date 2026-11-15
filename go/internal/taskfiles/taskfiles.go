@@ -2,8 +2,8 @@
 // read and written under one lock.
 //
 // The shared tasks are in _tasks/ (tasks.json: the open ones;
-// closed.json: this year's closed; closed-YYYY.json: an earlier
-// year's), a user's private ones in the same files under
+// closed.json: this month's closed; closed-YYYY-MM.json: an earlier
+// month's), a user's private ones in the same files under
 // private/<user>/_tasks/: private because they lie in their folder, like
 // their pages. A task's file says whose it is (Task.Owner, "" the shared
 // ones), and a write files it there.
@@ -83,19 +83,28 @@ func (s *Store) Dir(owner string) string {
 	return filepath.Join(base, DirName)
 }
 
-// OpenPath: owner's open tasks; ClosedPath: this year's closed ones;
-// ArchivePath: an earlier year's.
+// OpenPath: owner's open tasks; ClosedPath: this month's closed ones (and
+// those without a usable date).
 func (s *Store) OpenPath(owner string) string { return filepath.Join(s.Dir(owner), "tasks.json") }
 func (s *Store) ClosedPath(owner string) string {
 	return filepath.Join(s.Dir(owner), "closed.json")
 }
-func (s *Store) ArchivePath(owner, year string) string {
-	return filepath.Join(s.Dir(owner), "closed-"+year+".json")
+
+// ArchivePath: owner's archive of a month ("2026-03": closed-2026-03.json;
+// until 2026-11 a year's, "2025": closed-2025.json).
+func (s *Store) ArchivePath(owner, period string) string {
+	return filepath.Join(s.Dir(owner), "closed-"+period+".json")
 }
 
-var archiveNameRE = regexp.MustCompile(`^closed-(\d{4})\.json$`)
+// An archive's name: closed-YYYY-MM.json, a month's; closed-YYYY.json, a
+// year's, from before the months (its tasks are filed by month at the next
+// start). The year is the first group.
+var archiveNameRE = regexp.MustCompile(`^closed-(\d{4})(-\d{2})?\.json$`)
 
-// Archives: owner's yearly archives (closed-2025.json …), sorted.
+// archiveYear: the year an archive file is of.
+func archiveYear(path string) string { return archiveNameRE.FindStringSubmatch(filepath.Base(path))[1] }
+
+// Archives: owner's archives (closed-2026-03.json …, closed-2025.json), sorted.
 func (s *Store) Archives(owner string) []string {
 	entries, _ := os.ReadDir(s.Dir(owner))
 	var out []string
@@ -232,17 +241,67 @@ func Write(path string, tasks []*Task) error {
 	if err != nil {
 		return err
 	}
-	return writeText(path, text)
+	return writeTasks(path, tasks, text)
 }
 
-// writeText writes a task file's text, atomically: every write of one
-// passes here, so the file is parsed anew and the change counted.
-func writeText(path, text string) error {
+// writeTasks writes a task file, atomically: tasks as text (their
+// taskmodel.Encode). Every write of one passes here: the change is counted,
+// and the file is known as parsed from then on (copies of tasks), so the
+// next read doesn't parse what was just written.
+func writeTasks(path string, tasks []*Task, text string) error {
+	parsed.Lock()
+	defer parsed.Unlock()
+	delete(parsed.files, path)
+	changes.Add(1)
+	if err := atomicfile.Write(path, text); err != nil {
+		return err
+	}
+	if info, err := os.Stat(path); err == nil {
+		// As a parse of the file would give them: whose they are is not in it
+		// (a reader says: eachOwner, readOwnerStrict).
+		kept := make([]*Task, len(tasks))
+		for i, t := range tasks {
+			kept[i] = t.Clone()
+			kept[i].Owner = ""
+		}
+		parsed.files[path] = parsedFile{info: info, tasks: kept, ok: true}
+	}
+	return nil
+}
+
+// forget: path is no longer the file that was parsed (it is gone).
+func forget(path string) {
 	parsed.Lock()
 	delete(parsed.files, path)
 	parsed.Unlock()
 	changes.Add(1)
-	return atomicfile.Write(path, text)
+}
+
+func exists(path string) bool { _, err := os.Stat(path); return err == nil }
+
+// holds: path is known to hold exactly tasks (as it was parsed or written,
+// and it is that file still): a write of them changes nothing, and needs
+// neither the file read nor the tasks encoded to find that out. A large
+// file whose tasks a write didn't touch (the closed tasks, when an open one
+// changes) costs a comparison.
+func holds(path string, tasks []*Task) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	parsed.Lock()
+	defer parsed.Unlock()
+	f, hit := parsed.files[path]
+	if !hit || !f.ok || len(f.tasks) != len(tasks) ||
+		!os.SameFile(f.info, info) || !f.info.ModTime().Equal(info.ModTime()) || f.info.Size() != info.Size() {
+		return false
+	}
+	for i, t := range tasks {
+		if !t.Same(f.tasks[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 // changes counts the writes of task files and registries since Zone
@@ -285,6 +344,24 @@ func pastYearOf(t *Task, current string) string {
 	return ""
 }
 
+var monthRE = regexp.MustCompile(`^\d{4}-\d{2}$`)
+
+// pastMonthOf: the month a closed task is archived under ("2026-03") when
+// it was closed before the month current, else "" (the current closed
+// file, closed.json, which also takes a task without a usable date). The
+// closed tasks are filed by month so that completing one writes a month's
+// tasks, not a year's: in a large wiki that file is megabytes, written
+// whole, and kept whole in git, at every completion.
+func pastMonthOf(t *Task, current string) string {
+	if m := t.ClosedAt; len(m) >= 7 && monthRE.MatchString(m[:7]) && m[:7] < current {
+		return m[:7]
+	}
+	return ""
+}
+
+// currentMonth: this month, as the files name it.
+func (s *Store) currentMonth() string { return s.Now().Format("2006-01") }
+
 // ---- reading what a user sees ----
 
 // ReadOpenStrict: the open tasks user sees, read for a write.
@@ -303,12 +380,13 @@ func (s *Store) readOpen(user string) []*Task {
 	return eachOwner(s.Owners(user), func(o string) []*Task { return ReadLenient(s.OpenPath(o)) })
 }
 
-// readClosed: this year's closed tasks user sees.
+// readClosed: the closed tasks user sees that are in closed.json: this
+// month's (and, until the next write, an earlier month's).
 func (s *Store) readClosed(user string) []*Task {
 	return eachOwner(s.Owners(user), func(o string) []*Task { return ReadLenient(s.ClosedPath(o)) })
 }
 
-// readArchived: the archived tasks (earlier years') of owners.
+// readArchived: the archived tasks (earlier months') of owners.
 func (s *Store) readArchived(owners []string) []*Task {
 	return eachOwner(owners, func(o string) []*Task {
 		var tasks []*Task
@@ -365,12 +443,18 @@ func (s *Store) IDsLocked() map[string]bool {
 func (s *Store) ClosedInYear(user, year string) []*Task {
 	current := s.CurrentYear()
 	s.Lock()
+	// The current file (this month's, and what has no usable date) and the
+	// year's archives.
 	tasks := s.readClosed(user)
-	if year != current {
-		tasks = append(tasks, eachOwner(s.Owners(user), func(o string) []*Task {
-			return ReadLenient(s.ArchivePath(o, year))
-		})...)
-	}
+	tasks = append(tasks, eachOwner(s.Owners(user), func(o string) []*Task {
+		var l []*Task
+		for _, p := range s.Archives(o) {
+			if archiveYear(p) == year {
+				l = append(l, ReadLenient(p)...)
+			}
+		}
+		return l
+	})...)
 	s.Unlock()
 	out := []*Task{}
 	for _, t := range tasks {
@@ -395,8 +479,8 @@ func (s *Store) ClosedYears(user string, in func(*Task) bool) []string {
 	for _, o := range s.Owners(user) {
 		for _, p := range s.Archives(o) {
 			for _, t := range ReadLenient(p) {
-				if in(t) {
-					years[archiveNameRE.FindStringSubmatch(filepath.Base(p))[1]] = true
+				if t.Owner = o; in(t) {
+					years[archiveYear(p)] = true
 					break
 				}
 			}
@@ -411,7 +495,7 @@ func (s *Store) ClosedYears(user string, in func(*Task) bool) []string {
 // ---- reading for a write ----
 
 // readClosedAllStrict: every closed task of owner's, the archives
-// first, for a write (writeClosed files each by year again).
+// first, for a write (writeClosed files each by month again).
 func (s *Store) readClosedAllStrict(owner string) ([]*Task, error) {
 	var tasks []*Task
 	for _, p := range s.Archives(owner) {
@@ -489,6 +573,9 @@ func (s *Store) writeOpenLocked(user string, tasks []*Task) ([]string, error) {
 	}
 	var changed []string
 	for _, o := range s.Owners(user) {
+		if holds(s.OpenPath(o), split[o]) {
+			continue
+		}
 		text, err := taskmodel.Encode(split[o])
 		if err != nil {
 			return changed, err
@@ -497,7 +584,7 @@ func (s *Store) writeOpenLocked(user string, tasks []*Task) ([]string, error) {
 		if rerr == nil && string(raw) == text || errors.Is(rerr, os.ErrNotExist) && o != "" && len(split[o]) == 0 {
 			continue
 		}
-		if err := writeText(s.OpenPath(o), text); err != nil {
+		if err := writeTasks(s.OpenPath(o), split[o], text); err != nil {
 			return changed, err
 		}
 		changed = append(changed, s.OpenPath(o))
@@ -505,12 +592,15 @@ func (s *Store) writeOpenLocked(user string, tasks []*Task) ([]string, error) {
 	return changed, nil
 }
 
-// writeClosed writes owner's closed tasks split by year (this year's
-// into closed.json, earlier ones into closed-YYYY.json); only files
-// whose tasks change (with reformat also those in another format). Returns
-// their paths, for the commit.
+// writeClosed writes owner's closed tasks filed by month (this month's, and
+// those without a usable date, into closed.json, earlier ones into
+// closed-YYYY-MM.json); only files whose tasks change (with reformat also
+// those in another format). An archive left without a task is removed: a
+// year's file from before the months (closed-YYYY.json), whose tasks are in
+// their months' files from the first write on. Returns the paths written
+// and removed, for the commit.
 func (s *Store) writeClosed(owner string, closed []*Task, reformat bool) ([]string, error) {
-	current := s.CurrentYear()
+	current := s.currentMonth()
 	order := []string{s.ClosedPath(owner)}
 	byPath := map[string][]*Task{s.ClosedPath(owner): {}}
 	for _, p := range s.Archives(owner) {
@@ -519,8 +609,8 @@ func (s *Store) writeClosed(owner string, closed []*Task, reformat bool) ([]stri
 	}
 	for _, t := range closed {
 		p := s.ClosedPath(owner)
-		if y := pastYearOf(t, current); y != "" {
-			p = s.ArchivePath(owner, y)
+		if m := pastMonthOf(t, current); m != "" {
+			p = s.ArchivePath(owner, m)
 		}
 		if _, ok := byPath[p]; !ok {
 			order = append(order, p)
@@ -530,9 +620,21 @@ func (s *Store) writeClosed(owner string, closed []*Task, reformat bool) ([]stri
 	var changed []string
 	for _, p := range order {
 		tasks := byPath[p]
+		if !reformat && holds(p, tasks) {
+			continue
+		}
 		raw, err := os.ReadFile(p)
 		if errors.Is(err, os.ErrNotExist) && len(tasks) == 0 {
 			continue // no file for no tasks
+		}
+		// An archive that holds no task anymore goes: a year's, whose tasks
+		// are filed by month now; a month's whose tasks were all reopened.
+		if err == nil && len(tasks) == 0 && p != s.ClosedPath(owner) {
+			if os.Remove(p) == nil {
+				forget(p)
+				changed = append(changed, p)
+			}
+			continue
 		}
 		text, encErr := taskmodel.Encode(tasks)
 		if encErr != nil {
@@ -541,7 +643,7 @@ func (s *Store) writeClosed(owner string, closed []*Task, reformat bool) ([]stri
 		if err == nil && (string(raw) == text || !reformat && sameTasks(raw, text)) {
 			continue
 		}
-		if err := writeText(p, text); err != nil {
+		if err := writeTasks(p, tasks, text); err != nil {
 			return changed, err
 		}
 		changed = append(changed, p)
@@ -576,7 +678,7 @@ func (s *Store) WriteOpenLocked(user string, tasks []*Task, message string, also
 }
 
 // WriteBothLocked writes the open tasks and every closed task (filed by
-// owner and year) in one commit, by user; also: files written with them
+// owner and month) in one commit, by user; also: files written with them
 // (the lists' registries) that belong in that commit.
 func (s *Store) WriteBothLocked(user string, active, closed []*Task, message string, also ...string) error {
 	if err := s.MayWrite(user); err != nil {
@@ -627,8 +729,8 @@ func (s *Store) renameOldClosed(owner string) []string {
 	return changed
 }
 
-// ArchiveOldClosed rolls earlier years' closed tasks into their
-// archives (at start; every write files by year too), gives files of the
+// ArchiveOldClosed rolls earlier months' closed tasks into their
+// archives (at start; every write files by month too), gives files of the
 // old names their new ones (renameOldClosed), and writes files in
 // another format (a hand-edited file) as Zone writes them, so later commits
 // show only what changed; every owner's files, in one commit. An unreadable
@@ -647,11 +749,11 @@ func (s *Store) ArchiveOldClosed() {
 		if err != nil {
 			continue
 		}
-		for _, t := range ReadLenient(s.ClosedPath(o)) {
-			moved = moved || s.PastYear(t) != ""
+		for _, t := range closed {
+			moved = moved || pastMonthOf(t, s.currentMonth()) != "" && !exists(s.ArchivePath(o, pastMonthOf(t, s.currentMonth())))
 		}
 		if raw, err := os.ReadFile(s.OpenPath(o)); err == nil {
-			if text, err := taskmodel.Encode(active); err == nil && string(raw) != text && writeText(s.OpenPath(o), text) == nil {
+			if text, err := taskmodel.Encode(active); err == nil && string(raw) != text && writeTasks(s.OpenPath(o), active, text) == nil {
 				changed = append(changed, s.OpenPath(o))
 			}
 		}
@@ -671,7 +773,7 @@ func (s *Store) ArchiveOldClosed() {
 	_ = s.Commit("", msg, changed...)
 }
 
-// Snapshot: the open tasks user sees and every closed one (this year's
+// Snapshot: the open tasks user sees and every closed one (this month's
 // and the archives'), read together.
 func (s *Store) Snapshot(user string) (open, done []*Task) {
 	s.Lock()

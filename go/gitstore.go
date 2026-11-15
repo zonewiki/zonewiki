@@ -218,7 +218,88 @@ func gitCommit(user, message string, paths ...string) error {
 		return failed("commit", r)
 	}
 	forgetDrafts(rels...) // committed: no one's draft now
+	packSoon()
 	return nil
+}
+
+// Packing: a commit leaves loose objects (git's own packing after a commit
+// is off: package gitrepo), and every packEvery commits Zone packs them in
+// the background, one run at a time, beside whatever commits meanwhile; and
+// once after the start, when an earlier run left many (packLoose: a Zone
+// that is stopped while idle may never count packEvery commits in one run).
+const (
+	packEvery   = 50
+	packLoose   = 4 * packEvery // loose objects, about what packEvery commits of a task leave
+	packTimeout = 10 * time.Minute
+)
+
+var packing struct {
+	sync.Mutex
+	commits int
+	running bool
+}
+
+// packSoon counts a commit and starts a pack when it is time.
+func packSoon() {
+	packing.Lock()
+	defer packing.Unlock()
+	if packing.commits++; packing.commits < packEvery || packing.running {
+		return
+	}
+	packing.commits, packing.running = 0, true
+	go packNow(0)
+}
+
+// packAtStart packs what an earlier run left loose, in the background, when
+// it is much: a few loose objects are no reason to pack at every start.
+func packAtStart() {
+	if !cfg.GitEnabled {
+		return
+	}
+	packing.Lock()
+	defer packing.Unlock()
+	if !packing.running {
+		packing.running = true
+		go packNow(packLoose)
+	}
+}
+
+// looseObjects: how many loose objects the wiki's repository has (git
+// count-objects: "12 objects, 48 kilobytes"); 0 when git doesn't say.
+func looseObjects() int {
+	n, _ := strconv.Atoi(strings.Fields(runGit("count-objects").Stdout + " 0")[0])
+	return n
+}
+
+// packNow packs the wiki's repository (packSoon; packAtStart: only with
+// atLeast loose objects). The pack is made beside whatever commits; the
+// loose objects it made superfluous are removed while no commit runs
+// (commitMu): removing them takes their folders along, and a git add that
+// is writing into one just then fails.
+func packNow(atLeast int) {
+	defer func() {
+		packing.Lock()
+		packing.running = false
+		packing.Unlock()
+	}()
+	if atLeast > 0 && looseObjects() < atLeast {
+		return
+	}
+	repo := wikiRepo()
+	r := repo.Pack(context.Background(), packTimeout)
+	if r.Code == 0 {
+		commitMu.Lock()
+		r = repo.Prune(context.Background(), gitTimeout)
+		// Once in many packs (some thousand commits) they are made one, also
+		// while no commit runs: a commit then waits for it.
+		if r.Code == 0 && repo.ManyPacks() {
+			r = repo.Join(context.Background(), packTimeout)
+		}
+		commitMu.Unlock()
+	}
+	if r.Code != 0 {
+		logf("git: packing failed (the repository stays as it is, only larger): %s", strings.TrimSpace(r.Stderr+" "+r.Stdout))
+	}
 }
 
 // excludeState keeps Zone's folder .zone/ out of git, all of it: the

@@ -457,7 +457,7 @@ def shop(client, wiki):
         stored_task("Milk", ["shop", "weekly"]),
         {**stored_task("See list", ["other"]), "description": "On [the tag](/tasks?tag=shop) and [the list](/tasks?list=shop)."}]))
     (wiki / "_tasks/closed.json").write_text(json.dumps([stored_task("Eggs", ["Shop"], "2099-01-01T10:00:00")]))
-    (wiki / "_tasks/closed-2001.json").write_text(json.dumps([{**stored_task("Old", ["shop"], "2001-01-01T10:00:00"), "list": "shop"}]))
+    (wiki / "_tasks/closed-2001-01.json").write_text(json.dumps([{**stored_task("Old", ["shop"], "2001-01-01T10:00:00"), "list": "shop"}]))
     assert client.post("/tasks/new-list", data={"name": "shop", "pin": "0"}, headers=HOST).headers["Location"] == "/tasks?list=shop"
     commit(wiki, "lists", "# Lists\n\n[[tasks: list=shop view=open]]\n\n[[tasks: tag=shop,-x new=shop]]\n\n"
                           "[Go](/tasks?tag=shop), [the list](/tasks?list=shop&view=open), #shop\n\n`[[tasks: list=shop tag=shop]]`\n")
@@ -471,7 +471,7 @@ def test_rename_tag_changes_it_everywhere_in_one_commit(client, shop, door):
     assert tasks_file(shop)[0]["tags"] == ["food", "weekly"]
     assert "(/tasks?tag=food) and [the list](/tasks?list=shop)" in tasks_file(shop)[1]["description"]
     assert tasks_file(shop, "closed.json")[0]["tags"] == ["food"]
-    old = tasks_file(shop, "closed-2001.json")[0]
+    old = tasks_file(shop, "closed-2001-01.json")[0]
     assert old["tags"] == ["food"] and old["list"] == "shop"
     text = (shop / "lists.md").read_text()
     # The list of that name is no tag: it, its embed and its link stay.
@@ -680,7 +680,7 @@ def test_rename_list_changes_it_everywhere_in_one_commit(client, shop):
     assert bread["list"] == "food" and bread["tags"] == ["shop"]      # the tag of that name is no list
     assert tasks_file(shop)[0]["tags"] == ["shop", "weekly"]
     assert "(/tasks?tag=shop) and [the list](/tasks?list=food)" in tasks_file(shop)[1]["description"]
-    assert tasks_file(shop, "closed-2001.json")[0]["list"] == "food"  # archived ones too
+    assert tasks_file(shop, "closed-2001-01.json")[0]["list"] == "food"  # archived ones too
     text = (shop / "lists.md").read_text()
     assert "[[tasks: list=food view=open]]" in text and "[[tasks: tag=shop,-x new=shop]]" in text
     assert "(/tasks?tag=shop), [the list](/tasks?list=food&view=open), #shop" in text
@@ -715,7 +715,7 @@ def test_an_assistant_renames_a_list_as_the_dialog_does(client, shop):
     text, err = mcp(client, "rename_task_list", list="shop", new_name="#Food", summary="it is food")
     assert not err, text
     assert text.startswith("Renamed the list #shop to #food, in one commit: 2 tasks, 1 page (lists).") and "/tasks?list=food" in text
-    assert tasks_file(shop)[-1]["list"] == "food" and tasks_file(shop, "closed-2001.json")[0]["list"] == "food"
+    assert tasks_file(shop)[-1]["list"] == "food" and tasks_file(shop, "closed-2001-01.json")[0]["list"] == "food"
     assert "[[tasks: list=food view=open]]" in (shop / "lists.md").read_text()
     assert '{"name": "food"}' in (shop / "_tasks/lists.json").read_text()
     subjects = git(shop, "log", "--format=%s", f"{before}..HEAD").splitlines()
@@ -766,7 +766,7 @@ def test_delete_list_moves_its_tasks_and_keeps_the_pages(client, shop):
     before = git(shop, "rev-parse", "HEAD").strip()
     assert list_op(client, "delete", list="shop", to="shop").startswith("/tasks?list=shop&delete_error=")
     assert list_op(client, "delete", list="shop", to="market") == "/tasks?list=market"
-    assert tasks_file(shop)[-1]["list"] == "market" and tasks_file(shop, "closed-2001.json")[0]["list"] == "market"
+    assert tasks_file(shop)[-1]["list"] == "market" and tasks_file(shop, "closed-2001-01.json")[0]["list"] == "market"
     registry = (shop / "_tasks/lists.json").read_text()
     assert '{"name": "shop"}' not in registry and '"pinned": []' in registry and "default" not in registry
     assert git(shop, "log", "--format=%s", f"{before}..HEAD").splitlines() == ["Delete list #shop"]

@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -63,6 +64,224 @@ func TestGitDoesNotDetach(t *testing.T) {
 		if r := runGit("config", "--get", key); strings.TrimSpace(r.Stdout) != "false" {
 			t.Errorf("%s: %q", key, r.Stdout)
 		}
+	}
+	// Nor does a commit pack: Zone does, between commits (packSoon).
+	for key, want := range map[string]string{"gc.auto": "0", "maintenance.auto": "false"} {
+		if r := runGit("config", "--get", key); strings.TrimSpace(r.Stdout) != want {
+			t.Errorf("%s: %q, want %s", key, r.Stdout, want)
+		}
+	}
+}
+
+// packed waits for a pack that runs to end (at most limit); false: one still runs.
+func packed(limit time.Duration) bool {
+	for end := time.Now().Add(limit); ; time.Sleep(5 * time.Millisecond) {
+		packing.Lock()
+		running := packing.running
+		packing.Unlock()
+		if !running || time.Now().After(end) {
+			return !running
+		}
+	}
+}
+
+// gitObjects: the wiki's loose objects and packs.
+func gitObjects(t *testing.T) (loose, packs int) {
+	t.Helper()
+	r := runGit("count-objects", "-v")
+	if r.Code != 0 {
+		t.Fatalf("count-objects: %s", r.Stderr)
+	}
+	for _, line := range strings.Split(r.Stdout, "\n") {
+		key, value, _ := strings.Cut(line, ": ")
+		n, _ := strconv.Atoi(value)
+		switch key {
+		case "count":
+			loose = n
+		case "packs":
+			packs = n
+		}
+	}
+	return loose, packs
+}
+
+// Commits leave loose objects; every packEvery commits Zone packs them in
+// the background, one pack at a time (a commit that comes while one runs
+// starts no second, and is not forgotten), and at the start when many are
+// loose. The loose objects go only while no commit runs. The history is
+// whole afterwards.
+func TestPackSoon(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	testWiki(t, nil)
+	cfg.GitEnabled = true
+	gitSetup()
+	if !packed(10 * time.Second) {
+		t.Fatal("a pack runs before the test")
+	}
+	state := func() (commits int, running bool) {
+		packing.Lock()
+		defer packing.Unlock()
+		return packing.commits, packing.running
+	}
+	set := func(commits int, running bool) {
+		packing.Lock()
+		defer packing.Unlock()
+		packing.commits, packing.running = commits, running
+	}
+	t.Cleanup(func() { packed(10 * time.Second); set(0, false) })
+	n := 0
+	commit := func() {
+		t.Helper()
+		n++
+		name := fmt.Sprintf("p%d.md", n)
+		writeTestPage(t, name)
+		if err := gitCommit("", "Add "+name, filepath.Join(cfg.Data, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A commit counts, and packs nothing.
+	set(0, false)
+	for range 3 {
+		commit()
+	}
+	loose, packs := gitObjects(t)
+	if c, running := state(); c != 3 || running || loose < 6 || packs != 0 {
+		t.Fatalf("after 3 commits: counted %d, running %v, %d loose objects, %d packs", c, running, loose, packs)
+	}
+	// A commit that commits nothing (the file is as committed) doesn't count.
+	if err := gitCommit("", "Nothing", filepath.Join(cfg.Data, "p1.md")); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := state(); c != 3 {
+		t.Errorf("a commit of nothing counted: %d", c)
+	}
+	// Up to the one before packEvery: nothing.
+	set(packEvery-2, false)
+	commit()
+	if c, running := state(); c != packEvery-1 || running {
+		t.Fatalf("one before: counted %d, running %v", c, running)
+	}
+	// While a pack runs (here: one that never ends), the next starts none.
+	set(packEvery-1, true)
+	commit()
+	commit()
+	time.Sleep(100 * time.Millisecond)
+	if c, running := state(); c != packEvery+1 || !running {
+		t.Errorf("while one runs: counted %d, running %v", c, running)
+	}
+	if l, p := gitObjects(t); p != 0 || l <= loose {
+		t.Errorf("a second pack ran beside the first: %d loose objects, %d packs", l, p)
+	}
+	// It ended: the next commit packs, what it made too or not (it runs beside).
+	set(packEvery+1, false)
+	commit()
+	if !packed(30 * time.Second) {
+		t.Fatal("the pack didn't end")
+	}
+	if c, _ := state(); c != 0 {
+		t.Errorf("counted after a pack started: %d", c)
+	}
+	if l, p := gitObjects(t); p != 1 || l > 3 {
+		t.Errorf("after the pack: %d loose objects, %d packs", l, p)
+	}
+	// The packEvery-th commit packs, counted from there.
+	for range packEvery - 1 {
+		packing.Lock()
+		packing.commits++ // a commit, without git
+		packing.Unlock()
+	}
+	if _, running := state(); running {
+		t.Fatal("packed before its time")
+	}
+	commit()
+	if c, running := state(); c != 0 || !packed(30*time.Second) {
+		t.Errorf("the %dth commit: counted %d, running %v", packEvery, c, running)
+	}
+	if _, p := gitObjects(t); p != 2 {
+		t.Errorf("packs after the second: %d", p)
+	}
+	// The loose objects go while no commit runs: with a commit under way
+	// (here: its lock held) the pack is made and waits with removing them.
+	commit()
+	commit()
+	before, _ := gitObjects(t)
+	commitMu.Lock()
+	set(0, true)
+	go packNow(0)
+	for end := time.Now().Add(30 * time.Second); time.Now().Before(end); time.Sleep(5 * time.Millisecond) {
+		if _, p := gitObjects(t); p == 3 {
+			break
+		}
+	}
+	time.Sleep(100 * time.Millisecond)
+	l, p := gitObjects(t)
+	_, running := state()
+	commitMu.Unlock()
+	if p != 3 || l != before || before < 4 || !running {
+		t.Errorf("beside a commit: %d loose objects (were %d), %d packs, running %v", l, before, p, running)
+	}
+	if !packed(30 * time.Second) {
+		t.Fatal("the pack didn't end after the commit")
+	}
+	if l, p := gitObjects(t); l != 0 || p != 3 {
+		t.Errorf("after the commit: %d loose objects, %d packs", l, p)
+	}
+	// At the start: a few loose objects are left alone,
+	commit()
+	commit()
+	packAtStart()
+	if !packed(30 * time.Second) {
+		t.Fatal("the start's look didn't end")
+	}
+	if l, p := gitObjects(t); l < 4 || l >= packLoose || p != 3 || looseObjects() != l {
+		t.Errorf("a start with few loose objects: %d (counted %d), %d packs", l, looseObjects(), p)
+	}
+	// many are packed.
+	for i := range packLoose {
+		if err := os.WriteFile(filepath.Join(cfg.Data, fmt.Sprintf("loose%d.md", i)), []byte(fmt.Sprintf("# %d\n", i)), 0o666); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if r := runGit("add", "-A"); r.Code != 0 {
+		t.Fatalf("add: %s", r.Stderr)
+	}
+	if got := looseObjects(); got < packLoose {
+		t.Fatalf("loose objects before a start: %d", got)
+	}
+	packAtStart()
+	if !packed(30 * time.Second) {
+		t.Fatal("the start's pack didn't end")
+	}
+	if l, p := gitObjects(t); l != 0 || p != 4 {
+		t.Errorf("after a start: %d loose objects, %d packs", l, p)
+	}
+	if c, _ := state(); c != 2 {
+		t.Errorf("the start's pack changed the count: %d", c)
+	}
+	// The history is whole: every commit, every page, nothing left to commit.
+	if r := runGit("fsck", "--full", "--strict"); r.Code != 0 {
+		t.Errorf("fsck: %s%s", r.Stderr, r.Stdout)
+	}
+	if r := runGit("log", "--format=%s"); strings.Count(r.Stdout, "\nAdd p") != n-1 || !strings.HasPrefix(r.Stdout, fmt.Sprintf("Add p%d.md\n", n)) {
+		t.Errorf("the log:\n%s", r.Stdout)
+	}
+	if r := runGit("show", "HEAD:p1.md"); r.Stdout != "# P\n" {
+		t.Errorf("the first page: %q", r.Stdout)
+	}
+	if r := runGit("status", "--porcelain", "--", "p1.md", fmt.Sprintf("p%d.md", n)); strings.TrimSpace(r.Stdout) != "" {
+		t.Errorf("status: %q", r.Stdout)
+	}
+	// A wiki without git packs nothing, at the start or later.
+	cfg.GitEnabled = false
+	set(packEvery-1, false)
+	packAtStart()
+	if err := gitCommit("", "No git", filepath.Join(cfg.Data, "p1.md")); err != nil {
+		t.Fatal(err)
+	}
+	if c, running := state(); c != packEvery-1 || running {
+		t.Errorf("without git: counted %d, running %v", c, running)
 	}
 }
 

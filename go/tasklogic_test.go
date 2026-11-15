@@ -299,7 +299,7 @@ func TestNoPrivateTasksWithoutUsers(t *testing.T) {
 }
 
 // What Zone does over all task lists reaches every user's files: a rename's
-// links, the yearly archive, the search index.
+// links, the archive of closed tasks, the search index.
 func TestEveryUsersFiles(t *testing.T) {
 	testWiki(t, map[string]string{"old": "# Old\n"})
 	withUsers(t, "alice", "bob")
@@ -313,15 +313,18 @@ func TestEveryUsersFiles(t *testing.T) {
 	if _, err := updateTask("alice", mine.ID, last, ""); err != nil {
 		t.Fatal(err)
 	}
-	// Closed last year: the start of Zone files it into her archive.
+	// Closed years ago: the start of Zone files it into her archive, that month's.
 	done := taskfiles.ReadLenient(taskFiles.ClosedPath("alice"))
 	done[0].ClosedAt = "2001-05-01T10:00:00"
 	if err := taskfiles.Write(taskFiles.ClosedPath("alice"), done); err != nil {
 		t.Fatal(err)
 	}
 	taskFiles.ArchiveOldClosed()
-	if !strings.Contains(fileText(t, taskFiles.ArchivePath("alice", "2001")), mine.ID) {
+	if !strings.Contains(fileText(t, taskFiles.ArchivePath("alice", "2001-05")), mine.ID) || strings.Contains(fileText(t, taskFiles.ClosedPath("alice")), mine.ID) {
 		t.Error("not archived in alice's files")
+	}
+	if exists(taskFiles.ArchivePath("", "2001-05")) || exists(taskFiles.ArchivePath("bob", "2001-05")) {
+		t.Error("archived in someone else's files")
 	}
 	found := false
 	for _, d := range taskSearchDocs() {

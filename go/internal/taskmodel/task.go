@@ -74,6 +74,32 @@ func (t *Task) Clone() *Task {
 	return &c
 }
 
+// Same: the two tasks are written alike: every field that is in a file the
+// same (a list that is empty and one that isn't there are one), whoever's
+// they are (Owner is not in the file).
+func (t *Task) Same(o *Task) bool {
+	if t.ID != o.ID || t.Title != o.Title || t.Description != o.Description || t.List != o.List ||
+		t.Assignee != o.Assignee || t.StartDate != o.StartDate || t.DueDate != o.DueDate ||
+		t.CreatedAt != o.CreatedAt || t.ClosedAt != o.ClosedAt || t.WontDo != o.WontDo || t.Keep != o.Keep ||
+		t.Importance != o.Importance || t.LastDone != o.LastDone || t.SpawnedFrom != o.SpawnedFrom {
+		return false
+	}
+	if (t.SortOrder == nil) != (o.SortOrder == nil) || t.SortOrder != nil && *t.SortOrder != *o.SortOrder {
+		return false
+	}
+	if (t.Recurrence == nil) != (o.Recurrence == nil) {
+		return false
+	}
+	if a, b := t.Recurrence, o.Recurrence; a != nil {
+		if a.Type != b.Type || a.Interval != b.Interval || a.From != b.From || a.Day != b.Day ||
+			(a.Lead == nil) != (b.Lead == nil) || a.Lead != nil && *a.Lead != *b.Lead {
+			return false
+		}
+	}
+	return slices.Equal(t.Tags, o.Tags) && slices.Equal(t.History, o.History) && slices.Equal(t.Comments, o.Comments) &&
+		maps.EqualFunc(t.Extra, o.Extra, func(a, b json.RawMessage) bool { return bytes.Equal(a, b) })
+}
+
 // Recurrence: a task's series. Day (monthly, yearly) is the day of month
 // it returns to, 0 when not anchored; Lead the remembered gap between a
 // clamped start and the due date.

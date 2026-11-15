@@ -174,6 +174,7 @@ func main() {
 	cleanLeftDrafts()
 	taskFiles.ArchiveOldClosed()
 	migrateLists() // lists as places: taken over from the pages, once (listsmigrate.go)
+	packAtStart()  // the repository's loose objects, in the background (gitstore.go)
 	// The semantic index's worker reads tasks: after the task files are set up.
 	if *semanticTest != "" {
 		if semantic, err = semanticForTest(*semanticTest); err != nil {
