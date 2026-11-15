@@ -276,26 +276,45 @@ def test_backlinks_chip_desktop_hover_and_click(page, wiki):
 
 
 TASKS_HEADER_PARTS = ["#tasks-tabs", "#task-filter-search", "#task-add-btn"]
+# On a phone the filter field is behind the search button, on the tabs' line.
+PHONE_HEADER_PARTS = ["#tasks-tabs", ".tasks-search-btn", "#task-add-btn"]
 
 
-def tasks_header_rows(pg) -> int:
+def tasks_header_rows(pg, parts=TASKS_HEADER_PARTS) -> int:
     """Number of distinct lines the Open tab's header controls sit on."""
     centres = sorted(
         (lambda b: b["y"] + b["height"] / 2)(pg.locator(sel).bounding_box())
-        for sel in TASKS_HEADER_PARTS)
+        for sel in parts)
     return 1 + sum(1 for a, b in zip(centres, centres[1:]) if b - a > 8)
 
 
-@pytest.mark.parametrize("ctx,rows", [({"viewport": DESKTOP}, 1), (TOUCH_PHONE, 2)],
+@pytest.mark.parametrize("ctx,rows", [({"viewport": DESKTOP}, 1), (TOUCH_PHONE, 1)],
                          ids=["desktop", "phone"])
 def test_tasks_all_tab_header_is_compact(new_page, wiki, ctx, rows):
-    # Tabs + search + New: one line on desktop, two on a
-    # phone (it used to be two and five).
+    # Tabs + search + New: one line on desktop and on a phone, where the
+    # filter field is behind the search button (it used to be two lines on a
+    # phone, and before that five); the Open tab's control and order are on
+    # a second one, and the field, asked for, on a third.
     pg = new_page(**ctx)
     seed(wiki, pg)
     open_view(pg, "/page/tasks", "open")
-    assert tasks_header_rows(pg) == rows
-    assert pg.locator("#task-filter-search").bounding_box()["width"] >= 100
+    phone = ctx is TOUCH_PHONE
+    assert tasks_header_rows(pg, PHONE_HEADER_PARTS if phone else TASKS_HEADER_PARTS) == rows
+    field = pg.locator("#task-filter-search")
+    if phone:
+        expect(field).to_be_hidden()
+        assert tasks_header_rows(pg, PHONE_HEADER_PARTS + ["#task-sort"]) == 2
+        pg.locator(".tasks-search-btn").tap()
+        expect(field).to_be_focused()
+        assert tasks_header_rows(pg, PHONE_HEADER_PARTS + ["#task-sort", "#task-filter-search"]) == 3
+        # Left empty it is put away again; while it filters it stays.
+        pg.locator("#tasks-list").tap(position={"x": 5, "y": 5})
+        expect(field).to_be_hidden()
+        pg.locator(".tasks-search-btn").tap()
+        field.fill("zzz")
+        pg.locator("#tasks-list").tap(position={"x": 5, "y": 5})
+        expect(field).to_be_visible()
+    assert field.bounding_box()["width"] >= 100
     assert horizontal_overflow(pg) <= 0
 
 

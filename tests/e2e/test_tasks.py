@@ -5204,8 +5204,7 @@ def test_settings_dialog_changes_the_lists_settings_and_the_pages(page, wiki):
     expect(dialog.locator("[name=group]")).to_have_value("day")
     expect(dialog.locator("[name=keep]")).to_be_checked()   # shown: the list makes keep tasks
     expect(dialog.locator("[name=list]")).to_have_count(0)   # which list it shows is the page's to say
-    pin = dialog.locator(".task-settings-pin")
-    expect(pin).to_have_attribute("aria-pressed", "false")
+    expect(dialog.locator(".task-settings-pin")).to_have_count(0)      # a list is pinned in its ⋯ menu, not here
     expect(dialog.locator(".task-settings-where")).to_contain_text("The list’s settings hold wherever it shows")
     # What is rarely changed shows only when set, so the line under the
     # fields offers each.
@@ -5248,14 +5247,8 @@ def test_settings_dialog_changes_the_lists_settings_and_the_pages(page, wiki):
     assert (registry.read_text(), wiki.read("shopping")) == before
     open_list_settings(page)
     dialog.locator("[name=group]").select_option("day")
-    # The pin: pressed, the list is pinned.
-    pin.click()
-    expect(pin).to_have_attribute("aria-pressed", "true")
-    expect(pin).to_have_text("Pinned")
-    expect(dialog.locator("[name=pin]")).to_have_value("1")
-    pin.click()
-    expect(dialog.locator("[name=pin]")).to_have_value("")
-    pin.click()
+    # (The list is pinned meanwhile, as its ⋯ menu's Pin does: no setting of this dialog.)
+    assert page.request.post("/tasks/pin-list", form={"list": "shop", "pin": "1"}).ok
     with page.expect_navigation():
         dialog.get_by_role("button", name="Save").click()
     text = registry.read_text()
@@ -5268,11 +5261,10 @@ def test_settings_dialog_changes_the_lists_settings_and_the_pages(page, wiki):
     page.goto("/tasks?list=shop")
     open_list_settings(page)
     expect(dialog.locator(".task-settings-where")).to_contain_text("For this list, for everyone")
-    expect(dialog.locator(".task-settings-pin")).to_have_attribute("aria-pressed", "true")
     expect(dialog.locator(".task-add-field:visible")).to_have_text(["Hide when sharing", "Leave out of My tasks"])    # no page here: no filter
     expect(dialog.locator("[name=view]")).to_have_value("today")    # the list's own tab, not the page's
     dialog.locator("[name=view]").select_option("open")
-    dialog.locator(".task-settings-pin").click()                    # unpinned
+    assert page.request.post("/tasks/pin-list", form={"list": "shop", "pin": "0"}).ok     # unpinned
     with page.expect_navigation():
         dialog.get_by_role("button", name="Save").click()
     text = registry.read_text()

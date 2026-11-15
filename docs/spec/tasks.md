@@ -222,7 +222,7 @@ A control of named choices rather than a dropdown: each is one click, the one sh
 Its default is the view's `group=` (Plan without it; `data-init-group`), set in the settings dialog (The Open tab shows).
 A choice is remembered for the browser tab only (`sessionStorage` `zone-tasks-group:<path>|<list>|<tag>|<instance>`: `list`, `days`, `person` or `lists`), as the active tab is, so a fresh load is back at the default, and the Open tab (a click, Tab) opens it (`tabView`, `openGroup`); one the view doesn't offer is Plan (`groupsOffered`, `defaultGroup`).
 (Until 2026-11 the flip was kept in `localStorage` for good, and there was no default to set.)
-On a phone the control shares the tabs' row while it has two choices and takes a row of its own with more (`.tasks-cut--more`).
+On a phone the control has the line under the tabs, with the Order (Header, below).
 
 **By person and By list are the board with another key** (`TasksCore.personBuckets`, `listBuckets`; `boardBuckets` in `tasks.js` picks by `st.cut`): the same sections with counts, folding, Unsorted and Sorted labels, the manual order inside a section, Order's sorts and the 200-card window; a section's header says how many of its tasks are overdue, in red, with their list on a click.
 What is the day's alone stays the day's: the WIP limit's flag, the due and carried counts, Later's date picker.
@@ -373,7 +373,6 @@ A setting is kept where it belongs: a list's own with the list, how a page looks
 |-------|---------|-------|---|
 | Opens on | `view` | the page's embed; the list's on `/tasks?list=` | The Open or the Today tab (by their names here); Closed is offered only where the page says `view=closed` |
 | The Open tab shows | `group` | the list's | One list, Plan (the board by start date), By person or By list: those the view offers (and the one set) |
-| The pin (a button beside the title) | | yours | Whether you pinned the list (Lists → Pins) |
 | WIP limit (on request) | `limit` | the list's | 1–99, empty for none |
 | Tab names (on request) | `labels` | the list's | The Open tab's and the Today tab's; empty keeps Open and Today |
 | Tags of a new task (on request) | `new` | the list's | Comma-separated; empty: the single tags the view shows |
@@ -387,18 +386,16 @@ An embed of no list (`[[tasks: tag=work]]`) has all of them but the pin, Keep ta
 All tasks (`/tasks`) has Opens on, The Open tab shows, WIP limit, Tab names and Tags of a new task, for everyone.
 My tasks (`/tasks?mine=1`) has Opens on, The Open tab shows, WIP limit and Tab names, yours alone.
 
-**It shows what is changed most**: Opens on, The Open tab shows and, on a list, the pin.
+**It shows what is changed most**: Opens on and The Open tab shows.
 The other fields show only when set as the dialog opens (`[data-field]`, `showField` in `settingsForm`); for the rest a line of quiet words under the fields offers each, "+ WIP limit", "+ Tab names", "+ Tags of a new task", "+ Keep tasks", "+ Hide when sharing", "+ Leave out of My tasks", "+ Filter by tag", "+ Filter by person" (`.task-add-fields`, as in the task dialog): a click shows the field and puts the cursor in it (a box is ticked).
-**The pin** is a button at the title's right, with the list switcher's pin (`.task-settings-pin`, `aria-pressed`): "Pin" on a list you haven't pinned, pressed and "Pinned" on one you have; a click pins or unpins.
-Which pinned list's pill is first is said by dragging the pills, not here.
-The line above Save says whose the settings are: the list's, for everyone (or "which only you see" for a private list), the page's, and that the pin is yours.
+A list is pinned and unpinned in its ⋯ menu, where this dialog is opened too, not here (until 2026-11 the dialog had a pin button beside its title).
+The line above Save says whose the settings are: the list's, for everyone (or "which only you see" for a private list), or the page's.
 
 **Where it writes** (`data-settings-*` on `.tasks-app`, from `buildTasksEmbed`: `-page`, `-index`, `-raw` and `-embed` for an embed's `[[tasks: …]]` on a page, as written there; `-list`, `-list-set` and `-pin` for the list shown: its ref, its own settings as JSON, and how you pinned it):
 
 - **A list's own settings**: the registry (Lists → The registry), wherever the dialog was opened: on `/tasks?list=<name>` or on a page that shows the list.
   They hold wherever the list shows.
 - **An embed on a page**: that `[[tasks: …]]`: for a list the tab and the filter, for an embed of no list everything.
-- **The pin**: your pins (`POST /tasks/pin-list`).
 - **All tasks** (`/tasks`): the shared registry's `all`, `"all": {"view": "open", "limit": "5"}` (`allTasksParams`), for everyone.
   It has no pin and no filter (`allSettingKeys`).
 - **My tasks** (`/tasks?mine=1`): your registry's `mine`, `"mine": {"view": "focus", "limit": "5"}` (`mineParams`, `setMineParams`, `mineSettingKeys`; without users the shared registry's), for you alone.
@@ -684,7 +681,8 @@ Each with a dark-mode value.
   so a double-click's second click still lands on the card the first one selected.
   Each press of it selects that card again, which doesn't restart the wait.
   A pressed card is also not scrolled into view when it expands (`pressedCard`; it is in view already, and scrolling would move it from under the pointer).
-- **Header**: tabs, filter and **+ New** on one line on desktop (`.tasks-toolbar` `flex: 1 1 20rem`), two lines on phones with a label-less "+" (accessible name "New task").
+- **Header**: tabs, filter and **+ New** on one line on desktop (`.tasks-toolbar` `flex: 1 1 20rem`).
+  **On a phone** (≤640px) the tabs share their line with a search button, ⋯ and a label-less "+" (accessible name "New task"); the line under it holds what the tab adds (how it shows its tasks, the Order), and **the filter field is behind the search button** (`.tasks-search-btn`, `showFilter` in `js/tasktabs.js`): it shows once asked for (the button, or `/`, `#`, `@`), is put away when left empty, and stays for as long as it filters (`.tasks-filtered`), so what narrows the list is never out of sight. Where nothing is grouped or filtered (Today, most days) the list starts right under the tabs. (Until 2026-11 the field had a line of its own on every tab.) A page's locked words (a list's name, an embed's `tag=`) are in the field, not on that line: the page's heading says what it shows.
 
 ### Title links
 
@@ -942,7 +940,6 @@ Later in 2026-11 came the Inbox: until then a task could be in no list, which wi
   It doesn't say what is in My tasks (that is whose a task is), nor where a new task goes (the Inbox, or the list in view).
   You pin, unpin and reorder in a list's ⋯ menu on `/tasks?list=`: **Pin** puts it last, **Unpin** takes it out (until 2026-11 **Move first** put a pill at the front: dragging does that; `pin=first` is still the route's); the pills can be dragged too (the list switcher, above).
   **A list you make starts pinned**, last, wherever it is made: New list…, the List field, the move dialog, an assistant's `create_task_list`.
-  The pin in List settings pins and unpins.
   **Pins are the user's own**: in their registry (`pinned`, in order); a user who has set none has the wiki's (the shared registry's, which are everyone's without users), and starts from those with their first pin.
   One who unpinned everything has none (`"pinned": []`), not the wiki's again.
   With users the wiki's pins are set in `_tasks/lists.json` by hand.

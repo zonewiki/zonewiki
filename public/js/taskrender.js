@@ -497,6 +497,7 @@ function render() {
   app.applyGroup();   // who can be assigned may have arrived since
   app.syncClosedLink();
   syncUpdatesNote();
+  app.syncFilterShown();   // a phone shows the filter field while it filters
   let filtered = app.filterTasks();
   // Today as a board: the tasks to do now in their sections. Those My tasks
   // holds for its Updates alone are listed where Today is one list (the

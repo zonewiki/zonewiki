@@ -122,6 +122,25 @@ function userFiltering() {
   return (filterChips?.words() || []).some(w => !locked.has(w.toLowerCase())) || !!app.filterSearch?.value.trim();
 }
 
+// On a phone the filter field is behind the header's 🔍 (tasks.css): shown
+// once it is asked for (the button; / # @, which go to the field:
+// showFilter), and for as long as the viewer filters (syncFilterShown, with
+// each draw), so what narrows the list is never out of sight.
+const headerEl = app.appEl?.querySelector('.tasks-header');
+const searchBtn = app.appEl?.querySelector('.tasks-search-btn');
+function showFilter(show = true) {
+  headerEl?.classList.toggle('tasks-searching', show);
+  searchBtn?.setAttribute('aria-expanded', String(show));
+}
+const syncFilterShown = () => headerEl?.classList.toggle('tasks-filtered', userFiltering());
+searchBtn?.addEventListener('click', () => {
+  const open = !headerEl.classList.contains('tasks-searching');
+  showFilter(open);
+  if (open) app.filterSearch?.focus();
+});
+// Left empty, it is put away again.
+app.filterSearch?.addEventListener('blur', () => { if (!userFiltering()) showFilter(false); });
+
 if (app.filterSearch) {
   // Debounced — render() rebuilds the whole list, too heavy per keystroke.
   let searchTimer = null;
@@ -156,5 +175,5 @@ if (app.filterSearch) {
   });
 }
 
-return { tabButtons, VIEWS, syncClosedLink, markActiveTab, switchTab, embedFilterWords, filterChips, filterQuery, userFiltering, shown };
+return { tabButtons, VIEWS, syncClosedLink, markActiveTab, switchTab, embedFilterWords, filterChips, filterQuery, userFiltering, shown, showFilter, syncFilterShown };
 }

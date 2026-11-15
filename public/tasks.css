@@ -132,6 +132,8 @@
   border-bottom: 1px solid var(--border); padding-bottom: .35rem;
 }
 .tasks-header .btn { padding: .25rem .7rem; }
+/* The phone's way to the filter field (below); elsewhere the field is there. */
+.tasks-search-btn { display: none; }
 
 /* View selector — a segmented control: every view visible, one click to
    switch, the current one filled with the primary colour. */
@@ -1122,21 +1124,9 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 .task-settings-row :is(.task-field, input) { min-width: 0; }
 .task-settings-embed[hidden] { display: none; }
 .task-settings-check { display: flex; align-items: center; gap: .5rem; font-size: .9rem; }
-/* The title with the pin at its right: a button, pressed for a pinned list. */
 .task-settings-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
 .task-settings-head .modal-label { margin: 0; }
-.task-settings-pin {
-  display: inline-flex; align-items: center; gap: .35rem; padding: .25rem .7rem; border-radius: 999px;
-  border: 1px solid var(--border); background: var(--surface); color: var(--muted);
-  font: inherit; font-size: .8125rem; cursor: pointer; transition: background .15s, color .15s, border-color .15s;
-}
-.task-settings-pin:hover { color: var(--fg); background: var(--btn-bg); }
-.task-settings-pin[aria-pressed="true"] {
-  color: var(--fg); font-weight: 600; border-color: transparent;
-  background: color-mix(in srgb, var(--fg) 8%, var(--btn-bg));
-}
-.task-settings-pin:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
-.task-settings-pin[hidden], .task-settings-check[hidden], .task-settings-modal .task-field[hidden] { display: none; }
+.task-settings-check[hidden], .task-settings-modal .task-field[hidden] { display: none; }
 .task-settings-modal .task-add-fields { margin-top: 0; }
 .task-settings-where { margin: 0; }
 .task-settings-error { margin: 0; font-size: .85rem; color: #a33232; }
@@ -1340,12 +1330,27 @@ ul.task-comment-list { list-style: none; margin: .3rem 0 0; padding: 0; font-siz
 
 
 @media (max-width: 640px) {
-  /* The tabs fill their row, which the Open tab's control shares while it
-     has two choices (List, Plan); with more it takes a row of its own. */
-  .tasks-cut button { height: 1.95rem; padding: 0 .45rem; }
-  .tasks-cut--more { display: flex; flex-basis: 100%; }
-  .tasks-cut--more button { flex: 1 1 0; }
-  .view-tabs { display: flex; flex: 1 1 0; min-width: 0; }
+  /* A phone's header: the tabs with search, ⋯ and "+" on one line; under it
+     what the tab adds (how it shows its tasks, the order); and the filter
+     field once it is asked for (the 🔍, or / # @) or while it filters. So
+     where nothing is grouped or filtered (Today, most days) the list starts
+     right under the tabs. The toolbar's parts are the header's own here. */
+  .tasks-toolbar { display: contents; }
+  .view-tabs { display: flex; flex: 1 1 0; min-width: 0; order: 1; }
+  .tasks-search-btn { display: inline-flex; align-items: center; order: 2; align-self: stretch; padding: .25rem .55rem; color: var(--muted); }
+  .tasks-search-btn svg { width: 1rem; height: 1rem; }
+  .tasks-search-btn[aria-expanded="true"], .tasks-filtered .tasks-search-btn { color: var(--fg); background: var(--code-bg); }
+  .tasks-header .tasks-more-btn { order: 3; align-self: stretch; }
+  .tasks-header [id^="task-add-btn"] { order: 4; }
+  /* The line's end, where a second one follows. */
+  .tasks-header:has(> .tasks-cut:not([hidden]), .tasks-sort:not([hidden]))::after {
+    content: ""; order: 5; flex-basis: 100%; height: 0; margin-bottom: -.4rem;
+  }
+  .tasks-cut { order: 6; display: flex; flex: 1 1 0; }
+  .tasks-cut button { flex: 1 1 0; height: 1.95rem; padding: 0 .45rem; }
+  .tasks-header select.tasks-sort { order: 7; }
+  .tasks-header div.chip-input, .tasks-header > input, .tasks-toolbar > input { order: 8; flex: 1 1 100%; }
+  .tasks-header:not(.tasks-searching):not(.tasks-filtered) :is(div.chip-input, .tasks-toolbar > input) { display: none; }
   /* Task editor: full screen on phones (it is a whole form, not a popup). */
   .task-edit-modal {
     width: 100%; max-width: none; height: 100dvh; max-height: none;
@@ -1360,10 +1365,7 @@ ul.task-comment-list { list-style: none; margin: .3rem 0 0; padding: 0; font-siz
     padding: .4rem .5rem calc(.6rem + env(safe-area-inset-bottom));
   }
   .view-tabs button { flex: 1 1 0; height: 1.95rem; padding: 0 .25rem; }
-  /* Phones: tabs (and the Open tab's control) on one line, then search · sort ·
-     toggle · "+" on the next.
-     The New button drops its label to leave the search field the room. */
-  .tasks-toolbar { flex-basis: 100%; }
+  /* The New button drops its label. */
   .tasks-toolbar #task-filter-search { min-width: 0; }
   .tasks-toolbar select { padding-right: 1.4rem; background-position: right .4rem center; }
   .task-add-label { display: none; }

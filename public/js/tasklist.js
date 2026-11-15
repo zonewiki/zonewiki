@@ -27,11 +27,10 @@ function orderedParams(raw) {
 
 // The line for the params with `set` applied, as the server rewrites an
 // embed (setEmbedParams): a param keeps its place, a new one goes last, an
-// empty one goes, and pin replaces the old home.
+// empty one goes.
 function embedLine(params, set) {
   const out = new Map(params);
   for (const [k, v] of Object.entries(set)) out.set(k, v);
-  if ('pin' in set) out.delete('home');
   const words = [...out].filter(([, v]) => v !== '').map(([k, v]) => `${k}=${v}`);
   return words.length ? `[[tasks: ${words.join(' ')}]]` : '[[tasks:]]';
 }

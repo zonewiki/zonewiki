@@ -38,7 +38,6 @@ function fieldsOf(p, defaultView = 'today') {
   const group = (p.group || '').toLowerCase();
   const names = (p.labels || '').split(',');
   const name = i => (names[i] || '').replace(/_/g, ' ').trim();
-  const pin = (p.pin || '').trim().toLowerCase();
   const limit = parseInt(p.limit, 10);
   return {
     view: ['today', 'open', 'closed'].includes(view) ? view : defaultView,
@@ -50,7 +49,6 @@ function fieldsOf(p, defaultView = 'today') {
     new: p.new || '',
     tag: p.tag || '',
     assignee: p.assignee || '',
-    pin: isTrue(pin) ? '1' : '',
     // Which list it is: only where the dialog makes the embed (the editor).
     list: p.list || '',
     keep: isTrue(p.keep),
@@ -87,7 +85,7 @@ export function changedParams(was, now, p) {
     const a = labelWord(now.label_open), b = labelWord(now.label_focus);
     set.labels = b ? `${a},${b}` : a;
   }
-  for (const k of ['limit', 'pin']) if (now[k] !== was[k]) set[k] = now[k];
+  if (now.limit !== was.limit) set.limit = now.limit;
   for (const k of ['new', 'tag']) if (now[k] !== was[k]) set[k] = oneWord(now[k]);
   if ('assignee' in now && now.assignee !== was.assignee) set.assignee = oneWord(now.assignee).toLowerCase().replace(/@/g, '');
   if ('keep' in now && now.keep !== was.keep) set.keep = now.keep ? '1' : '';
@@ -100,10 +98,10 @@ export function changedParams(was, now, p) {
 // The dialog's form (partials/tasks_embed.html task_settings_dialog), for a
 // list's ⋯ menu and for the editor's Task list button (js/tasklist.js), whose
 // form says which list the embed shows. It shows what is changed most
-// (Opens on, Plan, the pin); the other fields ([data-field]) only when set,
-// or once asked for in the line of words under them ([data-more]), as the
-// task dialog's rarer fields are. The pin is a button, pressed for a list
-// the user pinned; the hidden field pin holds its value ("", "1").
+// (Opens on, Plan); the other fields ([data-field]) only when set, or once
+// asked for in the line of words under them ([data-more]), as the task
+// dialog's rarer fields are. (A list is pinned in its ⋯ menu, where this
+// dialog is opened too, not here.)
 // fill(params, mode): the fields as the params have them; mode says what
 // the dialog is for: all (All tasks: no filter, no pin), mine (My tasks:
 // as All tasks, less the tags of a new task, which are its list's), list
@@ -112,7 +110,6 @@ export function changedParams(was, now, p) {
 // Returns what read() then gives.
 export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Today')) {
   const f = form.elements;
-  const pinBtn = form.querySelector('.task-settings-pin');
   const moreEl = form.querySelector('.task-add-fields');
   const fieldEl = name => form.querySelector(`[data-field="${name}"]`);
   // (What a click needs later is the form's own: the handlers are wired once.)
@@ -147,22 +144,10 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Tod
     const el = fieldEl(name);
     if (el) el.hidden = !show || !has(name);
   }
-  function syncPin() {
-    if (!pinBtn) return;
-    const pinned = f.pin.value !== '';
-    pinBtn.hidden = !mode().list;
-    pinBtn.setAttribute('aria-pressed', String(pinned));
-    pinBtn.querySelector('.task-settings-pin-label').textContent = pinned ? 'Pinned' : 'Pin';
-  }
   // Wired once per form: the editor's dialog is opened again and again.
   if (!form.dataset.wired) {
     form.dataset.wired = '1';
     const changed = () => form.dispatchEvent(new Event('input', { bubbles: true }));   // the editor's preview follows
-    pinBtn?.addEventListener('click', () => {
-      f.pin.value = f.pin.value === '' ? '1' : '';
-      syncPin();
-      changed();
-    });
     moreEl.addEventListener('click', e => {
       const name = e.target.closest('[data-more]')?.dataset.more;
       if (!name) return;
@@ -178,7 +163,7 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Tod
     view: f.view.value, group: f.group.value,
     label_open: f.label_open.value.trim(), label_focus: f.label_focus.value.trim(),
     limit: f.limit.value.trim(), new: f.new.value.trim(),
-    tag: f.tag.value.trim(), pin: f.pin.value, keep: f.keep.checked,
+    tag: f.tag.value.trim(), keep: f.keep.checked,
     ...(f.list ? { list: cleanList(f.list.value) } : {}),
     ...(f.noshare ? { noshare: f.noshare.checked } : {}),
     ...(f.homeout ? { home: f.homeout.checked } : {}),
@@ -196,7 +181,7 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Tod
     // Opens on: the tabs by their names here; Closed only where a page says so.
     f.view.replaceChildren(...['open', 'today', fields.view === 'closed' && 'closed'].filter(Boolean)
       .map(v => new Option(v === 'closed' ? 'Closed' : tabLabel(v === 'today' ? 'focus' : v), v)));
-    for (const k of ['view', 'label_open', 'label_focus', 'limit', 'new', 'tag', 'pin']) f[k].value = fields[k];
+    for (const k of ['view', 'label_open', 'label_focus', 'limit', 'new', 'tag']) f[k].value = fields[k];
     // By person where tasks have assignees (with users; not My tasks nor a
     // list of the user's own), By list where the view holds several lists;
     // what is set stays to be seen.
@@ -221,7 +206,6 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Tod
     showField('home', fields.home);
     showField('mail');   // always there, where there is mail: nothing is sent until a box is ticked
     syncMore();
-    syncPin();
     return read();
   };
   return { read, fill };
@@ -245,14 +229,13 @@ export function initTaskSettings(app) {
   const mine = all && appEl.dataset.settingsMine === '1';
   let listSet = {};
   try { listSet = JSON.parse(appEl.dataset.settingsListSet || '{}'); } catch (_) {}
-  const pinWas = appEl.dataset.settingsPin || '';
   // What of a list's embed is the page's own: the tab and the filter.
   const PAGE_KEYS = ['view', 'tag', 'assignee'];
   const written = parseParams(raw);
   // The params the fields start from: a list's settings, with the page's
   // own over them; else what the embed (or All tasks) has.
   const params = !list ? written
-    : { ...listSet, ...(embed ? Object.fromEntries(PAGE_KEYS.filter(k => k in written).map(k => [k, written[k]])) : {}), pin: pinWas };
+    : { ...listSet, ...(embed ? Object.fromEntries(PAGE_KEYS.filter(k => k in written).map(k => [k, written[k]])) : {}) };
   const errorEl = document.getElementById('task-settings-error' + sfx);
   const whereEl = document.getElementById('task-settings-where' + sfx);
   const { read, fill } = settingsForm(form, app.tabLabel);
@@ -263,8 +246,8 @@ export function initTaskSettings(app) {
     const who = app.privateLists.has(list) ? 'which only you see' : 'for everyone';
     whereEl.textContent = mine ? (document.body.dataset.users === '1' ? 'For My tasks: yours alone.' : 'For My tasks.')
       : all ? 'For All tasks, for everyone.'
-      : list && embed ? `The list’s settings hold wherever it shows, ${who}; the tab and the filter are this page’s. The pin is yours.`
-      : list ? `For this list, ${who}. The pin is yours.`
+      : list && embed ? `The list’s settings hold wherever it shows, ${who}; the tab and the filter are this page’s.`
+      : list ? `For this list, ${who}.`
       : 'Written in this [[tasks: …]] on this page.';
     errorEl.hidden = true;
     dialog.showModal();
@@ -291,22 +274,13 @@ export function initTaskSettings(app) {
         message = await post(mine ? { mine: true, was: raw, set }
           : all ? { all: true, was: raw, set } : { page, index, was: raw, set });
       } else {
-        // A list: its own settings to the registry, the page's to its embed,
-        // the pin to the user's pins. The tab and Plan are said apart here:
-        // the tab is the page's (or the list's), Plan the list's.
-        const pin = set.pin;
-        delete set.pin;
+        // A list: its own settings to the registry, the page's to its embed.
+        // The tab and Plan are said apart here: the tab is the page's (or
+        // the list's), Plan the list's.
         const ofPage = {}, ofList = {};
         for (const [k, v] of Object.entries(set)) (embed && PAGE_KEYS.includes(k) ? ofPage : ofList)[k] = v;
         if (Object.keys(ofList).length) message = await post({ list, set: ofList });
         if (!message && Object.keys(ofPage).length) message = await post({ page, index, was: raw, set: ofPage });
-        if (!message && pin !== undefined) {
-          const res = await fetch('/tasks/pin-list', {
-            method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({ list, pin: pin || '0' }), redirect: 'manual',
-          });
-          if (!res.ok && res.type !== 'opaqueredirect') message = 'The pin couldn’t be changed.';
-        }
       }
       if (!message) {
         // The new defaults count from now: what this tab remembered goes.

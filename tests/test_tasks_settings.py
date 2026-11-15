@@ -32,7 +32,7 @@ class TestListSettings:
         html = client.get("/tasks?list=shop", headers=HOST).get_data(as_text=True)
         # A list: its own settings (no page's), and how the user pinned it.
         assert ('data-settings-page="" data-settings-index="-1" data-settings-raw="" data-settings-list="shop" '
-                'data-settings-list-set="{&#34;keep&#34;:&#34;1&#34;}" data-settings-pin="1" data-settings-home="1">') in html
+                'data-settings-list-set="{&#34;keep&#34;:&#34;1&#34;}" data-settings-home="1">') in html
         html = client.get("/tasks", headers=HOST).get_data(as_text=True)
         assert 'data-settings-page="" data-settings-index="-1" data-settings-raw="">' in html
         # A name no list has: nothing to set.

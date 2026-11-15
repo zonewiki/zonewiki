@@ -51,6 +51,7 @@ document.addEventListener('keydown', async e => {
   // '/' focuses the filter field; '#' focuses it and starts a tag word
   if (e.key === '/' && !e.ctrlKey && !e.metaKey && !focus?.closest('input, textarea, select, [contenteditable]')) {
     e.preventDefault();
+    app.showFilter();
     app.filterSearch?.focus();
     return;
   }
@@ -62,6 +63,7 @@ document.addEventListener('keydown', async e => {
     if (app.filterSearch) {
       const v = app.filterSearch.value.trimEnd();
       app.filterSearch.value = v ? v + ' ' + sigil : sigil;
+      app.showFilter();
       app.filterSearch.focus();
       app.filterSearch.setSelectionRange(app.filterSearch.value.length, app.filterSearch.value.length);
       app.filterSearch.dispatchEvent(new Event('input'));

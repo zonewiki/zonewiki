@@ -47,7 +47,7 @@ type tasksEmbedView struct {
 // embedSettingsAt: where a task app's settings are written, for its
 // dialog: the Index-th embed of Page as written (Raw; Index < 0: All
 // tasks', or My tasks' with Mine), and the list it shows (List, a ref; its
-// settings as JSON, and whether the user pinned it: Pin "1"), "" for none.
+// settings as JSON), "" for none.
 // A list's own settings go to its registry, the embed's (the tab, a
 // filter) to the page.
 type embedSettingsAt struct {
@@ -59,7 +59,6 @@ type embedSettingsAt struct {
 	Mail         bool // My tasks: Zone could mail the user about a task assigned to them (it sends mail, they have an address): the dialog has the box
 	List         string
 	ListSettings string
-	Pin          string
 	Home         bool // the list can be left out of the user's My tasks (its setting home)
 }
 
@@ -135,11 +134,6 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, p
 			at.List, at.ListSettings = list.Ref, jsonobj.Text(set)
 			// Left out of My tasks counts for a list that is the user's own.
 			at.Home = list.Private() || !mineAssigns(user)
-			for _, p := range rq.pinnedLists() {
-				if p.Ref == list.Ref {
-					at.Pin = "1"
-				}
-			}
 		}
 		settingsAt = at
 	}
