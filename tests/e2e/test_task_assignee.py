@@ -130,9 +130,10 @@ def test_a_name_that_is_no_user_keeps_the_modal_open(alice):
 
 
 def test_a_new_task_s_title_assigns(alice):
-    """@name in a new task's title: the task is for that user. A new task
-    starts in the Inbox, which is alice's alone, so the List field moves to
-    the shared list; in a list of her own a task has no assignee."""
+    """@name in a new task's title: the task is for that user, and the
+    Assignee field shows it. A new task starts in the Inbox, which is alice's
+    alone, so the dialog asks for a shared list and offers them; in a list of
+    her own a task has no assignee."""
     make_list(alice, "own", private=True)
     alice.goto("/tasks?view=open&group=none")
     alice.locator("#task-add-btn").click()
@@ -144,8 +145,12 @@ def test_a_new_task_s_title_assigns(alice):
     alice.keyboard.press("Tab")
     expect(title).to_have_value("Call Sam @bob ")
     expect(modal.locator("#task-edit-quick")).to_have_text("@bob")
-    expect(lists).to_have_value("team")
+    expect(modal.locator(".task-field-assignee .tag-chip-label")).to_have_text(["@bob"])   # the field follows the title
+    expect(lists).to_have_value("")                # nothing chosen for her
     target, note = modal.locator("#task-edit-target"), modal.locator("#task-edit-list-note")
+    expect(target.locator(".task-edit-target-list")).to_have_text(["team"])
+    target.locator(".task-edit-target-list").click()
+    expect(lists).to_have_value("team")
     expect(target).to_have_text("Adds to the list team: everyone sees it.")
     expect(note).to_be_hidden()                  # a new task: the line under the title says who sees it
     expect(modal.locator("#task-edit-assignee")).to_be_visible()   # in a shared list: who has it shows
@@ -154,6 +159,8 @@ def test_a_new_task_s_title_assigns(alice):
     expect(target).to_have_text("Adds to the list own: only you see it.")
     expect(note).to_be_hidden()
     expect(modal.locator("[data-more=assignee]")).to_be_hidden()
+    expect(modal.locator(".task-field-assignee")).to_be_hidden()
+    expect(title).to_have_value("Call Sam @bob ")  # text now, and still there
     expect(modal.locator("#task-edit-quick")).to_be_hidden()
     # The same in the Inbox, once she chose it herself.
     lists.select_option("")
@@ -214,6 +221,7 @@ def test_the_filter_takes_names_me_and_none(alice, wiki):
     modal = alice.locator("#task-edit-modal")
     expect(modal.locator(".task-field-assignee .tag-chip-label")).to_have_text(["@bob"])
     modal.locator("#task-edit-title").fill("Another for Bob")
+    modal.locator(".task-edit-target-list", has_text="team").click()   # a task for someone: which shared list
     modal.get_by_role("button", name="Save").click()
     wait_for_assignee(alice, "Another for Bob", "bob")
     assert task(alice, "Another for Bob")["list"] == "team"      # out of her Inbox: a task for someone is shared
@@ -273,7 +281,8 @@ def test_without_users_there_is_no_assignee(page, wiki):
 
 
 def test_one_page_shows_each_user_their_own_tasks(alice, wiki):
-    """[[tasks: assignee=me]]: a locked @me chip; a new task there is yours."""
+    """[[tasks: assignee=me]]: a locked @me chip; a new task there is yours:
+    in your Inbox, where it needs no name and no shared list."""
     new(alice, "Alice's", assignee="alice")
     new(alice, "Bob's", assignee="bob")
     new(alice, "No one's")
@@ -287,10 +296,11 @@ def test_one_page_shows_each_user_their_own_tasks(alice, wiki):
     modal = alice.locator("#task-edit-modal")
     expect(modal.locator(".task-field-assignee .tag-chip-label")).to_have_text(["@alice"])
     modal.locator("#task-edit-title").fill("Another of mine")
+    expect(modal.locator("#task-edit-target")).to_have_text("Adds to your Inbox: only you see it.")   # no question
     modal.get_by_role("button", name="Save").click()
-    wait_for_assignee(alice, "Another of mine", "alice")
-    assert task(alice, "Another of mine")["list"] == "team"
     expect(alice.locator(".task-item")).to_have_count(2)
+    made = task(alice, "Another of mine")
+    assert made["private"] is True and "assignee" not in made and "list" not in made
     # Bob, on the same page.
     alice.request.post("/logout")
     alice.request.post("/login", form={"username": "bob", "password": "pw"})

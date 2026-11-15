@@ -7,7 +7,7 @@ from datetime import date
 
 from playwright.sync_api import expect
 
-from conftest import TOUCH_PHONE, list_page, make_list, open_tab
+from conftest import TOUCH_PHONE, list_page, make_list, open_tab, wait_until
 from test_touch import touch_drag
 from tests import settings
 
@@ -363,6 +363,33 @@ def test_new_task_stays_on_the_page(page, wiki):
     page.keyboard.press("t")
     expect(modal).to_be_visible()
     expect(page.locator(".tasks-app[data-headless]")).to_have_count(1)
+
+
+def test_new_task_is_the_same_on_every_page(page, wiki):
+    # c t presses no list's + New: on My tasks' Open tab, and on a list's own
+    # page, it is still a task in the Inbox that starts today. (On a page
+    # with My tasks it pressed that list's + New once, and what it made
+    # depended on the tab.)
+    page.request.post("/api/tasks/lists", data={"name": "shop"})
+    today = date.today().isoformat()
+    for url, title in (("/tasks?mine=1&view=open", "From my tasks"), ("/tasks?list=shop&view=open", "From the shop list")):
+        page.goto(url)
+        expect(page.locator(".tasks-app[data-ready]").first).to_be_visible()
+        new_task(page)
+        modal = page.locator(".task-edit-modal[open]")
+        expect(modal.locator("select[id^=task-edit-list]")).to_have_value("")
+        expect(modal.locator("[id^=task-edit-start]")).to_have_value(today)
+        modal.locator("[id^=task-edit-title]").fill(title)
+        page.keyboard.press("Enter")
+        expect(modal).to_be_hidden()
+        wait_until(page, lambda: any(t["title"] == title for t in page.request.get("/api/tasks").json()))
+        made = next(t for t in page.request.get("/api/tasks").json() if t["title"] == title)
+        assert (made.get("list"), made["start_date"]) == (None, today)
+    # The list's own + New: in the list, and no date on its Open tab.
+    page.locator("[id^=task-add-btn]").click()
+    modal = page.locator(".task-edit-modal[open]")
+    expect(modal.locator("select[id^=task-edit-list]")).to_have_value("shop")
+    expect(modal.locator("[id^=task-edit-start]")).to_have_value("")
 
 
 def test_new_task_falls_back_to_my_tasks(page, wiki):

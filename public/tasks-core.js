@@ -617,43 +617,71 @@ function quickAssignee(w, people) {
   return people.users.has(name) ? name : '';
 }
 
+// The shorthand at the end of a new task's title, word by word from its
+// end: [{ field, value, index }], field one of 'tag', 'importance',
+// 'assignee', 'due_date', 'start_date', index the word's place among the
+// title's words. It ends at the first word that is none (or a second of a
+// kind that is taken once), and never takes the first word: a title is
+// never only shorthand.
+function quickWords(words, today, people) {
+  const found = [], has = {};
+  for (let i = words.length - 1; i > 0; i--) {
+    const w = words[i];
+    let field = '', value = '';
+    if (/^#\p{L}[\p{L}\p{N}_-]*$/u.test(w)) {
+      field = 'tag'; value = w.slice(1).toLowerCase();
+    } else if (!has.importance && importanceWord(w)) {
+      field = 'importance'; value = importanceWord(w);
+    } else if (!has.assignee && quickAssignee(w, people)) {
+      field = 'assignee'; value = quickAssignee(w, people);
+    } else if (/^due:/i.test(w) && !has.due_date && parseDateWord(w.slice(4), today)) {
+      field = 'due_date'; value = parseDateWord(w.slice(4), today);
+    } else if (!has.start_date && parseDateWord(w, today)) {
+      field = 'start_date'; value = parseDateWord(w, today);
+    } else {
+      break;
+    }
+    has[field] = true;
+    found.push({ field, value, index: i });
+  }
+  return found;
+}
+const titleWords = input => (input || '').trim().split(/\s+/).filter(Boolean);
+
 // Returns { title, start_date, due_date, tags, importance, assignee, found }.
 // Unrecognised input (or shorthand that would leave no title) comes back
 // unchanged, found=false. `people` ({ me, users }, with users): `@name`
 // assigns the task (quickAssignee); one name only, a second stays text.
 function parseQuickAdd(input, today, people) {
-  const words = (input || '').trim().split(/\s+/).filter(Boolean);
+  const words = titleWords(input);
   const out = { title: words.join(' '), start_date: null, due_date: null, tags: [], importance: '', assignee: '', found: false };
-  let end = words.length;
-  while (end > 1) {
-    const w = words[end - 1];
-    if (/^#\p{L}[\p{L}\p{N}_-]*$/u.test(w)) {
-      const tag = w.slice(1).toLowerCase();
-      if (!out.tags.includes(tag)) out.tags.unshift(tag);
-    } else if (!out.importance && importanceWord(w)) {
-      out.importance = importanceWord(w);
-    } else if (!out.assignee && quickAssignee(w, people)) {
-      out.assignee = quickAssignee(w, people);
-    } else if (/^due:/i.test(w) && !out.due_date && parseDateWord(w.slice(4), today)) {
-      out.due_date = parseDateWord(w.slice(4), today);
-    } else if (!out.start_date && parseDateWord(w, today)) {
-      out.start_date = parseDateWord(w, today);
-    } else {
-      break;
-    }
-    end--;
+  const found = quickWords(words, today, people);
+  if (!found.length) return out;
+  for (const { field, value } of found) {
+    if (field !== 'tag') out[field] = value;
+    else if (!out.tags.includes(value)) out.tags.unshift(value);
   }
-  if (end === words.length) return out;
-  out.title = words.slice(0, end).join(' ');
+  out.title = words.slice(0, words.length - found.length).join(' ');
   out.found = true;
   return out;
+}
+
+// The title without the shorthand word that gives `field` (for 'tag': the
+// tag `value`, each time it is there): what a field changed by hand leaves
+// of a new task's title, so the title and the field never say two things.
+// A title without such a word comes back as it is.
+function dropQuickWord(input, today, people, field, value) {
+  const words = titleWords(input);
+  const drop = new Set(quickWords(words, today, people)
+    .filter(f => f.field === field && (field !== 'tag' || f.value === value)).map(f => f.index));
+  return drop.size ? words.filter((_, i) => !drop.has(i)).join(' ') : input;
 }
 
 const TasksCore = {
   dateToStr, addDays, isOverdue, isFocus, isCarried, byOpenOrder, byDeadline, byCreated, SORTS, placeInOrder, tagMatchScore, tagCounts, selectionTags, bulkTagChange,
   rankTags, sanitizeTagInput,
   parseFilter, matchesFilter, filterActive, assigneeIs, inMine, newsFor, givenToMe, orderMoves, tasksInView, tagParamToQuery, importanceWord,
-  bucketKey, fullDayLabel, boardBuckets, personBuckets, listBuckets, parseQuickAdd,
+  bucketKey, fullDayLabel, boardBuckets, personBuckets, listBuckets, parseQuickAdd, dropQuickWord,
   dateSettings, localeDate, shortDate, longDayLabel, weekStart, weekdayNames, monthTitle,
 };
 

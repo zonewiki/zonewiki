@@ -260,6 +260,14 @@ div.chip-input:has(> .tag-chip:not(.tag-chip-locked)) > .chip-input-clear { disp
 /* A task for someone, with no shared list to go to: in the colour of the
    dialog's other warning (the dialog is outside .tasks-app and its tokens). */
 .task-field > p.task-edit-target-warn { color: #b45309; font-weight: 600; }
+/* The shared lists it offers then (syncTarget in js/taskmodal.js): each a
+   button, finger-sized on touch. */
+.task-edit-target-list {
+  font: inherit; font-weight: 500; line-height: 1.4; padding: .05rem .5rem; margin: .15rem .1rem;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--bg); color: var(--fg); cursor: pointer;
+}
+.task-edit-target-list:hover, .task-edit-target-list:focus-visible { border-color: var(--link); color: var(--link); }
+@media (pointer: coarse) { .task-edit-target-list { padding: .3rem .7rem; } }
 /* Start after Due in the edit modal (syncDateWarning in tasks.js). */
 .task-date-warning {
   display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem;

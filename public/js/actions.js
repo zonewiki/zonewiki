@@ -4,18 +4,16 @@ import { openSearchModal } from './search.js';
 
 // ── Quick-task modal ──────────────────────────────────────────────────────────
 
-// A new task in the Inbox, from any page (c t, the New task button). On a
-// page that shows My tasks or the Inbox its own "+ New" (so the view's
-// dates apply); where a task list app is loaded (an embed, the editor's
-// hidden one) its edit modal, for a task in the Inbox; elsewhere where
-// the Tasks link goes (or /tasks) opens with the modal.
+// A new task in the Inbox, starting today, from any page and the same on
+// every one (c t, the New task button): it presses no list's "+ New", so
+// what it makes doesn't depend on the page or the tab it was pressed on.
+// Where a task list app is loaded (an embed, the Tasks page, the editor's
+// hidden one) it is that app's edit modal that opens.
 // A page without a task list app loads a hidden one first (/api/tasks/headless,
 // started by tasks.js's initTaskApps), so you stay on the page; a toast says
 // where the task went. Should that fail, where the Tasks link goes opens instead.
 export async function openDefaultTask() {
-  const pinnedAdd = document.querySelector('.tasks-app[data-pinned]:not([data-headless]) [id^="task-add-btn"]');
-  if (pinnedAdd) { pinnedAdd.click(); return; }
-  // Into the Inbox, starting today, as the "+ New" of My tasks' Focus gives it.
+  // Into the Inbox, starting today, as the "+ New" of My tasks' Today gives it.
   const opts = { list: '', tags: '', keep: false, start_date: localDate() };
   if (!document.querySelector('.tasks-app[data-ready]')) {
     try {

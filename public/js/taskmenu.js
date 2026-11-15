@@ -133,11 +133,11 @@ function runTaskAction(task, action, anchor) {
   const id = task.id;
   switch (action) {
     case 'edit':     app.openEditModal(id); break;
-    case 'today':    app.setStart(id, dateOffset(0)); break;
-    case 'tomorrow': app.setStart(id, dateOffset(1)); break;
-    case 'unplan':   app.setStart(id, null); break;
+    case 'today':    app.startOn([id], dateOffset(0)); break;
+    case 'tomorrow': app.startOn([id], dateOffset(1)); break;
+    case 'unplan':   app.startOn([id], null); break;
     case 'pick':
-      openDatePicker(task.start_date || '', d => d !== undefined && app.setStart(id, d), anchor, todayStr());
+      openDatePicker(task.start_date || '', d => d !== undefined && app.startOn([id], d), anchor, todayStr());
       break;
     case 'skip':     app.skipOccurrence(id); break;
     case 'importance': {

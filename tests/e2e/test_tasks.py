@@ -608,6 +608,59 @@ def test_number_keys_start_selected_tasks_on_that_day(page, wiki):
     wait_for_field(page, "Second", "start_date", tomorrow())
 
 
+def test_every_quick_start_is_one_rule(page, wiki):
+    # f, F, the card's 📅 and a drop on a day set a start date as 1–7 do
+    # (startOn): for the selection, with one undo, and nothing toggles.
+    # (f and F were one task's, cleared the date when pressed again and had
+    # no undo; the picker and the drop had none either.)
+    for title in ("First", "Second", "Third"):
+        page.request.post("/api/tasks", data={"title": title})
+    open_board(page, wiki)
+    toast = page.locator(".task-undo-toast")
+    today = date.today().isoformat()
+
+    # f: today, with an undo; again changes nothing.
+    card(page, "First").locator(".task-title").click()
+    page.keyboard.press("f")
+    wait_for_field(page, "First", "start_date", today)
+    expect(toast).to_contain_text("Starts Today")
+    page.keyboard.press("f")
+    page.wait_for_timeout(300)
+    assert task_by_title(page, "First")["start_date"] == today      # no toggle
+    page.keyboard.press("Control+z")
+    wait_for_field(page, "First", "start_date", None)
+
+    # F on several: all of them tomorrow, one undo.
+    card(page, "Second").locator(".task-title").click()
+    card(page, "Third").locator(".task-title").click(modifiers=["Shift"])
+    page.keyboard.press("F")
+    wait_for_field(page, "Second", "start_date", tomorrow())
+    wait_for_field(page, "Third", "start_date", tomorrow())
+    expect(toast).to_contain_text("2 tasks start tomorrow")
+    toast.locator(".task-undo-btn").click()
+    wait_for_field(page, "Second", "start_date", None)
+    wait_for_field(page, "Third", "start_date", None)
+
+    # A drop on a day: an undo too.
+    card(page, "First").drag_to(page.locator(".board-day-divider[data-drop-day]", has_text="Tomorrow"))
+    wait_for_field(page, "First", "start_date", tomorrow())
+    expect(toast).to_contain_text("Starts Tomorrow")
+    toast.locator(".task-undo-btn").click()
+    wait_for_field(page, "First", "start_date", None)
+
+    # The card's 📅: the same.
+    page.keyboard.press("Escape")
+    card(page, "First").locator(".task-title").click()
+    page.keyboard.press("f")
+    wait_for_field(page, "First", "start_date", today)
+    card(page, "First").locator(".task-focus-info").click()
+    pick_date(page.locator(".tasks-datepicker"), _day(2))
+    wait_for_field(page, "First", "start_date", _day(2))
+    expect(toast).to_contain_text("Starts")
+    toast.locator(".task-undo-btn").click()
+    wait_for_field(page, "First", "start_date", today)
+
+
 def test_undo_waits_for_the_write_it_belongs_to(page, wiki):
     # A bulk start writes first and arms its undo after the response: Ctrl+Z
     # in between does nothing, instead of undoing the step before.
@@ -2720,12 +2773,13 @@ def test_c_t_makes_a_private_task_in_the_users_inbox(page, wiki, monkeypatch):
     expect(page.locator(".breadcrumb .module-link[data-module=tasks] .module-focus")).to_be_hidden()
 
 
-def test_a_name_on_a_new_inbox_task_moves_it_to_a_shared_list(page, wiki, monkeypatch):
+def test_a_name_on_a_new_inbox_task_asks_for_a_shared_list(page, wiki, monkeypatch):
     # The Inbox is its user's alone and a task for someone is shared work:
-    # naming someone on a new task nobody chose a list for moves the List
-    # field to a shared list (the only one; of several the one this browser
-    # last made a task in), and back when the name goes. With none to move
-    # to, the dialog says so and Save asks for a list.
+    # naming someone on a new task nobody chose a list for asks for a shared
+    # list and offers them, the one this browser last made a task in first.
+    # None is chosen for the user (the List field moved by itself once, and
+    # a task went where nobody had looked). With none to offer, the dialog
+    # says so and Save asks for a list.
     monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "token"), "bob": ("pw", "t2")})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
     make_list(page, "own", private=True, pin=True)        # a private list, pinned first: no place for it either
@@ -2734,6 +2788,7 @@ def test_a_name_on_a_new_inbox_task_moves_it_to_a_shared_list(page, wiki, monkey
     modal = page.locator(".task-edit-modal[open]")
     lists = modal.locator("select[id^=task-edit-list]")
     target = modal.locator(".task-edit-target")
+    offered = target.locator(".task-edit-target-list")
     title = modal.locator("[id^=task-edit-title]")
     warn = re.compile(r"\btask-edit-target-warn\b")
 
@@ -2748,6 +2803,7 @@ def test_a_name_on_a_new_inbox_task_moves_it_to_a_shared_list(page, wiki, monkey
     expect(lists).to_have_value("")
     expect(target).to_have_text("A task for someone else needs a shared list: choose one in List.")
     expect(target).to_have_class(warn)
+    expect(offered).to_have_count(0)
     assert target.evaluate("el => getComputedStyle(el).color") == "rgb(180, 83, 9)"     # a warning, not the muted line
     expect(lists).to_be_visible()                         # the field it speaks of is there
     modal.locator("button[type=submit]").click()
@@ -2765,16 +2821,28 @@ def test_a_name_on_a_new_inbox_task_moves_it_to_a_shared_list(page, wiki, monkey
     expect(target).to_have_text("Adds to your Inbox: only you see it.")
     page.keyboard.press("Escape")
 
-    # One shared list: that is where it goes; without the name, back to the Inbox.
+    # One shared list: it is offered, not taken; Save without it still asks.
     make_list(page, "team")
     page.goto("/page/garden")
     c_t()
     title.fill("Ask about the loan @bob")
+    expect(offered).to_have_text(["team"])
+    expect(lists).to_have_value("")                       # nothing chosen for her
+    expect(target).to_have_class(warn)
+    modal.locator("button[type=submit]").click()
+    expect(modal).to_be_visible()
+    assert lists.evaluate("el => el.validationMessage") == "A task for someone else needs a shared list"
+    title.fill("Ask about the loan")                      # without the name there is nothing to ask
+    expect(offered).to_have_count(0)
+    expect(target).to_have_text("Adds to your Inbox: only you see it.")
+    title.fill("Ask about the loan @bob")
+    offered.first.click()                                 # choosing it is choosing it in the List field
     expect(lists).to_have_value("team")
     expect(target).to_have_text("Adds to the list team: everyone sees it.")
     expect(target).not_to_have_class(warn)
-    title.fill("Ask about the loan")
-    expect(lists).to_have_value("")
+    expect(title).to_be_focused()
+    title.fill("Ask about the loan")                      # chosen by hand: it stays, whatever the title says
+    expect(lists).to_have_value("team")
     title.fill("Ask about the loan @bob")
     modal.locator("button[type=submit]").click()
     expect(modal).to_be_hidden()
@@ -2782,34 +2850,96 @@ def test_a_name_on_a_new_inbox_task_moves_it_to_a_shared_list(page, wiki, monkey
     task = task_by_title(page, "Ask about the loan")
     assert task["private"] is False and task["list"] == "team"
 
-    # Several shared lists: none is the obvious one, until a task was made in one here.
+    # Several shared lists: the one the last task went to comes first, then A–Z.
     make_list(page, "board")
+    make_list(page, "zoo")
     page.goto("/page/garden")
     assert page.evaluate("localStorage.getItem('zone-tasks-shared-list')") == "team"
     c_t()
     title.fill("Send the minutes @bob")
-    expect(lists).to_have_value("team")                   # the one the last task went to
-    lists.select_option("board")                          # chosen by hand: it stays, whatever the title says
-    title.fill("Send the minutes")
+    expect(offered).to_have_text(["team", "board", "zoo"])
+    expect(lists).to_have_value("")
+    offered.nth(1).click()
     expect(lists).to_have_value("board")
     modal.locator("button[type=submit]").click()
     expect(modal).to_be_hidden()
     wait_for_field(page, "Send the minutes", "list", "board")
     c_t()
     title.fill("Book the room @bob")
-    expect(lists).to_have_value("board")                  # remembered
+    expect(offered).to_have_text(["board", "team", "zoo"])   # remembered
     page.keyboard.press("Escape")
     page.evaluate("localStorage.removeItem('zone-tasks-shared-list')")
     page.reload()
     c_t()
     title.fill("Book the room @bob")
-    expect(lists).to_have_value("")                       # two shared lists and none remembered: hers to choose
-    expect(target).to_have_text("A task for someone else needs a shared list: choose one in List.")
-    lists.select_option("team")
+    expect(offered).to_have_text(["board", "team", "zoo"])   # none remembered: A–Z
+    lists.select_option("team")                           # the List field does the same
     expect(target).to_have_text("Adds to the list team: everyone sees it.")
     modal.locator("button[type=submit]").click()
     wait_for_field(page, "Book the room", "assignee", "bob")
     assert task_by_title(page, "Book the room")["list"] == "team"
+
+
+def test_a_new_tasks_fields_follow_its_title(page, wiki, monkeypatch):
+    # What the title's words say shows in the fields as it is typed, and what
+    # they showed before once the word is gone; a field changed by hand takes
+    # its word out of the title. So the dialog never says two things.
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "token"), "bob": ("pw", "t2")})
+    page.request.post("/login", form={"username": "alice", "password": "pw"})
+    make_list(page, "website")
+    make_list(page, "team")
+    page.goto("/tasks?list=team&view=open")
+    page.locator("[id^=task-add-btn]").click()
+    modal = page.locator(".task-edit-modal[open]")
+    title = modal.locator("[id^=task-edit-title]")
+    lists = modal.locator("select[id^=task-edit-list]")
+    start, due = modal.locator("input[id^=task-edit-start]"), modal.locator("input[id^=task-edit-due]")
+    importance = modal.locator("select[id^=task-edit-importance]")
+    chip = modal.locator("[id^=task-edit-assignee-field] .tag-chip-label")
+    expect(lists).to_have_value("team")
+    expect(start).to_have_value("")
+
+    title.fill("Fix footer @bob #website tomorrow due:+3 !")
+    expect(lists).to_have_value("website")
+    expect(start).to_have_value(_day(1))
+    expect(due).to_have_value(_day(3))
+    expect(importance).to_have_value("high")
+    expect(chip).to_have_text(["@bob"])
+    expect(modal.locator("[data-date-trigger^=task-edit-start]")).to_have_text("Tomorrow")
+
+    # A word gone: its field is what it was before.
+    title.fill("Fix footer @bob tomorrow")
+    expect(lists).to_have_value("team")
+    expect(due).to_have_value("")
+    expect(importance).to_have_value("")
+    expect(start).to_have_value(_day(1))
+    title.fill("Fix footer")
+    expect(start).to_have_value("")
+    expect(chip).to_have_count(0)
+
+    # A field changed by hand takes its word out of the title, and keeps the hand's.
+    title.fill("Fix footer @bob #website tomorrow !low")
+    lists.select_option("team")
+    expect(title).to_have_value("Fix footer @bob tomorrow !low")
+    importance.select_option("")
+    expect(title).to_have_value("Fix footer @bob tomorrow")
+    modal.locator("[data-date-trigger^=task-edit-start]").click()
+    pick_date(modal.locator(".tasks-datepicker"), _day(2))
+    expect(title).to_have_value("Fix footer @bob")
+    expect(start).to_have_value(_day(2))
+    modal.locator("[id^=task-edit-assignee-field] .tag-chip-x").click()
+    expect(title).to_have_value("Fix footer")
+    expect(chip).to_have_count(0)
+    title.fill("Fix footer !")                            # typed on: the other fields keep the hand's
+    expect(importance).to_have_value("high")
+    expect(lists).to_have_value("team")
+    expect(start).to_have_value(_day(2))
+
+    modal.locator("button[type=submit]").click()
+    expect(modal).to_be_hidden()
+    wait_for_field(page, "Fix footer", "importance", "high")
+    task = task_by_title(page, "Fix footer")
+    assert (task["list"], task["start_date"], task["due_date"], task.get("assignee")) == ("team", _day(2), None, None)
 
 
 def test_a_name_typed_before_the_users_are_known_still_counts(page, wiki, monkeypatch):
@@ -2834,8 +2964,10 @@ def test_a_name_typed_before_the_users_are_known_still_counts(page, wiki, monkey
     expect(modal.locator("[id^=task-edit-quick]")).to_be_hidden()
     for route in held:
         route.continue_()
-    expect(lists).to_have_value("team")
     expect(modal.locator("[id^=task-edit-quick]")).to_have_text("@bob")
+    expect(modal.locator("[id^=task-edit-assignee-field] .tag-chip-label")).to_have_text(["@bob"])
+    modal.locator(".task-edit-target-list", has_text="team").click()
+    expect(lists).to_have_value("team")
     expect(modal.locator(".task-edit-target")).to_have_text("Adds to the list team: everyone sees it.")
     modal.locator("button[type=submit]").click()
     wait_for_field(page, "Ask about the loan", "assignee", "bob")

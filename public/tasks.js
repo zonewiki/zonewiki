@@ -247,7 +247,7 @@ async function dropWrite(id, div) {
     if (task.private && !toPrivate && !await app.confirmShare(task, listName(ref))) return false;
     return app.moveTasks([task], ref, toPrivate, false);
   }
-  return planOnDay(id, div.dataset.dropDay);
+  return app.startOn([id], div.dataset.dropDay);
 }
 // Move a task to a board section: a day sets its start date, Unplanned
 // clears it, and Later asks for a date; a person's section assigns it, a
@@ -262,12 +262,12 @@ function dropOnBucket(id, div) {
   const recommit = div.dataset.dropDay === todayStr() && task && TasksCore.isCarried(task, todayStr());
   if (el && boardDivider(el) === div && div.dataset.dropBucket !== 'later' && !recommit) return;
   if (dropPerson(div) !== undefined || dropList(div) !== undefined) dropWrite(id, div);
-  else if (div.dataset.dropBucket === 'unplanned') updateTask(id, { start_date: null });
+  else if (div.dataset.dropBucket === 'unplanned') app.startOn([id], null);
   else if (div.dataset.dropBucket === 'later') {
     // "Later" is a range, not a day — ask which date (min: beyond this week).
-    openDatePicker('', d => { if (d) planOnDay(id, d); }, div, dateOffset(7));
+    openDatePicker('', d => { if (d) app.startOn([id], d); }, div, dateOffset(7));
   }
-  else if (div.dataset.dropDay) planOnDay(id, div.dataset.dropDay);
+  else if (div.dataset.dropDay) app.startOn([id], div.dataset.dropDay);
 }
 
 // Returns whether the task now starts on `day`.

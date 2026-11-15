@@ -551,9 +551,13 @@ function startToday(ids) {
 }
 
 // Start the open tasks among `ids` on `day` (null: unplan them), with one
-// undo. A task whose deadline `day` passes asks whether the deadline moves
-// too, one by one after the others (planOnDay), as everywhere a start date
-// is set. One task alone goes through setStart, which does the same.
+// undo: every quick way to set a start date comes here (f, F, 0–7, the ⋯
+// menu, the selection bar, a card's 📅, a swipe, a drop on a day). A task
+// whose deadline `day` passes asks whether the deadline moves too, one by
+// one after the others (planOnDay). One task alone goes through setStart,
+// which does the same. A task that starts on `day` already is left alone:
+// nothing here toggles. Whether the tasks start on `day` now (the ones that
+// asked aside).
 async function startOn(ids, day) {
   const idSet = new Set(ids);
   const before = st.tasks.filter(t => idSet.has(t.id) && !t.closed_at && (t.start_date ?? null) !== day);
@@ -562,7 +566,7 @@ async function startOn(ids, day) {
   const plain = before.filter(t => !asks.includes(t));
   if (plain.length) {
     app.dismissUndo();
-    if (!await batchUpdate(plain.map(t => ({ id: t.id, start_date: day })))) return;
+    if (!await batchUpdate(plain.map(t => ({ id: t.id, start_date: day })))) return false;
     const n = plain.length;
     const msg = n === 1 ? (day ? `Starts ${formatDate(day)}` : 'Start date cleared')
       : day ? `${n} tasks start ${/^(Today|Tomorrow)$/.test(formatDate(day)) ? formatDate(day).toLowerCase() : formatDate(day)}`
@@ -572,6 +576,7 @@ async function startOn(ids, day) {
                                     recurrence: t.recurrence ?? null, history: t.history || [] }))));
   }
   for (const t of asks) await app.planOnDay(t.id, day);
+  return true;
 }
 
 // Before completeMany, and before the selection moves on: some of `ids`

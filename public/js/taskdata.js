@@ -469,15 +469,20 @@ function skipOccurrence(id) {
   showUndo('Occurrence skipped', () => updateTask(id, { wont_do: false, history }));
 }
 
-function setStart(id, startDate) {
+// One task's start date (null: none), with an undo; a day past its deadline
+// asks first (planOnDay). Whether it was written. What sets a start date
+// quickly calls startOn (js/taskselect.js), which comes here for one task.
+async function setStart(id, startDate) {
   const task = st.tasks.find(t => t.id === id);
-  if (startsAfterDeadline(task, startDate)) return app.planOnDay(id, startDate);
+  if (startsAfterDeadline(task, startDate)) return !!await app.planOnDay(id, startDate);
   const prev = task?.start_date ?? null;
   const recurrence = task?.recurrence ?? null;
   const history = oldHistory(id);
-  updateTask(id, { start_date: startDate });
+  dismissUndo();
+  if (!await updateTask(id, { start_date: startDate })) return false;
   const msg = startDate ? `Starts ${formatDate(startDate)}` : 'Start date cleared';
   showUndo(msg, () => updateTask(id, { start_date: prev, recurrence, history }));
+  return true;
 }
 
 // Close the open tasks among `ids` undone (won't do), in one change with

@@ -204,7 +204,7 @@ function userNamed(typed) {
   return people.users?.has(name) ? name : '';
 }
 const assigneeChip = assigneeInput && app.chipField(assigneeInput, {
-  onChange: () => syncAutoList(),
+  onChange: () => { byHand('assignee'); syncTarget(); },   // the chip taken off
   label: n => '@' + n,
   mark: (chip, n) => {
     if (!people.users || people.users.has(n)) return;
@@ -217,7 +217,8 @@ function setAssignee(name) {
   assigneeChip.set(name ? [name] : [], true);
   assigneeInput.value = '';
   assigneeInput.setCustomValidity('');
-  syncAutoList();
+  byHand('assignee');
+  syncTarget();
 }
 // What Save sends: a name, null for no one, undefined when what is typed
 // names no one who can be assigned.
@@ -229,38 +230,36 @@ function editAssignee() {
 }
 // A new task in the user's Inbox that nobody chose a list for (autoInbox:
 // with users, for as long as the List field holds what the dialog put
-// there). The Inbox is its user's alone, and a task for someone is shared
-// work: with an assignee (the field, or the title's @name) the List field
-// moves to a shared list (sharedDefault), and without one back to the
-// Inbox. The line under the title says which. With no shared list to move
-// to, Save asks for one. Choosing a list oneself ends it.
+// there or what the title's #list says). The Inbox is its user's alone, and
+// a task for someone is shared work: with an assignee (the field, or the
+// title's @name) the line under the title asks for a shared list and offers
+// them, the one this browser last made a task in first (sharedChoices,
+// syncTarget). None is chosen for the user: until 2026-11 the List field
+// moved to the last used one by itself, and a task went where nobody had
+// looked. Save without one asks for it. Choosing a list oneself ends it.
 let autoInbox = false;
-let autoSetting = false;
+let autoSetting = false;   // the List field set by the dialog (the title's #list): no choice of the user's
 app.listSelect?.addEventListener('change', () => { if (!autoSetting) autoInbox = false; });
-// The shared list a new task for someone goes to when none was chosen: the
-// one this browser last made a task in, else the only one there is.
 const LAST_SHARED = 'zone-tasks-shared-list';
-function sharedDefault() {
+function sharedChoices() {
   const shared = app.listChoices.filter(l => !l.private).map(l => l.ref);
   let last = '';
   try { last = localStorage.getItem(LAST_SHARED) || ''; } catch (_) {}
-  return shared.includes(last) ? last : shared.length === 1 ? shared[0] : '';
+  return shared.includes(last) ? [last, ...shared.filter(r => r !== last)] : shared;
 }
 function rememberShared(ref) {
   if (!ref || app.isPrivateList(ref)) return;
   try { localStorage.setItem(LAST_SHARED, ref); } catch (_) {}
 }
-const assignedNow = () => !!assigneeInput && (!!assigneeChip.words().length || !!assigneeInput.value.trim() || !!quickParse()?.assignee);
-function syncAutoList() {
-  if (!autoInbox || !app.listSelect || !assigneeInput) return;
-  const want = assignedNow() ? sharedDefault() : '';
-  // (No shared list to move to: the line under the title asks for one.)
-  if (app.listSelect.value === want) { syncTarget(); return; }
-  autoSetting = true;
-  app.listSelect.value = want;
-  app.listSelect.dispatchEvent(new Event('change'));
-  autoSetting = false;
-}
+// Someone else is named on the task: the chip, a name being typed, the
+// title's @name. Yourself doesn't count: a task in your Inbox is yours
+// already, and stays there without a question (Save sends no assignee).
+const assignedNow = () => {
+  if (!assigneeInput) return false;
+  const typed = assigneeInput.value.trim();
+  const name = typed ? userNamed(typed) || typed : assigneeChip.words()[0] || quickParse()?.assignee || '';
+  return !!name && name !== people.me;
+};
 const assigning = () => !!assigneeInput && (!app.editPrivate() || autoInbox);
 function syncAssigneeField() {
   if (!assigneeField) return;
@@ -289,12 +288,9 @@ if (assigneeInput) {
   // its answer (c t on a page that loads the task app for it) is read
   // again then, for its @name.
   loadPeople().then(() => {
-    if (!app.modal.open) return;
-    syncQuickPreview();
-    syncAutoList();
-    syncTarget();
+    if (app.modal.open) titleChanged();
   });
-  assigneeInput.addEventListener('input', () => { assigneeInput.setCustomValidity(''); syncAutoList(); });
+  assigneeInput.addEventListener('input', () => { assigneeInput.setCustomValidity(''); syncTarget(); });
   // Enter with no suggestion open: a typed name becomes the chip rather
   // than saving the task (as in Tags); Enter on an empty field saves.
   assigneeInput.addEventListener('keydown', e => {
@@ -317,7 +313,7 @@ function refuseAssignee() {
 if (app.titleInput) attachTagAc(app.titleInput, {
   word: () => document.getElementById('task-edit-id' + app.sfx).value ? null : hashWordAtCaret(app.titleInput),
   suggest: w => rankTags(w.partial, { ...Object.fromEntries([...app.listSet].filter(r => !r.includes('/')).map(r => [r, 1])), ...tagCounts(st.tasks) }, w.partial ? 8 : 12),
-  accept: (tag, w) => { insertHashTag(app.titleInput, tag, w); syncQuickPreview(); syncTarget(); },
+  accept: (tag, w) => { insertHashTag(app.titleInput, tag, w); titleChanged(); },
 });
 // And the @name shorthand, from the users who can be assigned.
 if (app.titleInput && assigneeInput) attachTagAc(app.titleInput, {
@@ -331,9 +327,9 @@ if (app.titleInput && assigneeInput) attachTagAc(app.titleInput, {
     if (people.me in counts) counts[people.me] += st.tasks.length + 1;
     return rankTags(w.partial, counts);
   },
-  // (A name taken from the suggestions is no input event: the List field
-  // and the line under the title follow here.)
-  accept: (name, w) => { insertHashTag(app.titleInput, name, w); syncQuickPreview(); syncAutoList(); syncTarget(); },
+  // (A name taken from the suggestions is no input event: the fields and
+  // the line under the title follow here.)
+  accept: (name, w) => { insertHashTag(app.titleInput, name, w); titleChanged(); },
 });
 
 // ── Add task ───────────────────────────────────────────────────────────────
@@ -343,8 +339,9 @@ app.addBtn.addEventListener('click', () => openEditModal(null));
 // ── Edit modal ─────────────────────────────────────────────────────────────
 
 // Quick-add shorthand (TasksCore.parseQuickAdd) — new tasks only: a title
-// ending in "tomorrow #work due:fri" fills those fields on save. The line
-// under the title shows what was recognised, so nothing is a surprise.
+// ending in "tomorrow #work due:fri" fills those fields, as it is typed
+// (followTitle). The line under the title shows what was recognised, the
+// tags too, which have no field to follow into until they are chips.
 const quickPreview = document.getElementById('task-edit-quick' + app.sfx);
 function quickParse() {
   if (document.getElementById('task-edit-id' + app.sfx).value) return null;   // editing
@@ -407,6 +404,91 @@ function syncQuickPreview() {
   if (!q) return;
   quickPreview.textContent = quickText(q);
 }
+
+// A new task's fields follow its title: List, Start, Due, Importance and
+// Assignee show what the title's words say while they say it, and what they
+// showed before once the word is gone (followed: the fields the title sets
+// now, each with what it held before). So the dialog never says two things:
+// until 2026-11 the line under the title said "tomorrow" and the Start
+// field below it "Today". A field changed by hand takes its word out of the
+// title (byHand) and keeps what the hand gave it.
+const startEl = document.getElementById('task-edit-start' + app.sfx);
+const dueEl = document.getElementById('task-edit-due' + app.sfx);
+const FOLLOW = {
+  list: {
+    get: () => app.listSelect.value,
+    set: v => {
+      autoSetting = true;
+      app.listSelect.value = v;
+      app.listSelect.dispatchEvent(new Event('change'));
+      autoSetting = false;
+    },
+  },
+  start_date: { get: () => startEl.value, set: v => { startEl.value = v; } },
+  due_date: { get: () => dueEl.value, set: v => { dueEl.value = v; } },
+  importance: { get: () => importanceSelect.value, set: v => { importanceSelect.value = v; } },
+  assignee: { get: () => assigneeChip.words()[0] || '', set: v => setAssignee(v) },
+};
+let followed = {};
+let saidList = '';       // the list the title names while 'list' is followed
+let following = false;   // the fields are being set from the title: no hand's change
+function titleSays() {
+  const q = !batchTitles && quickParse();
+  if (!q) return {};
+  const list = app.listSelect ? quickList(q).list : '';
+  return {
+    ...(list ? { list } : {}),
+    ...(q.start_date ? { start_date: q.start_date } : {}),
+    ...(q.due_date ? { due_date: q.due_date } : {}),
+    ...(q.importance ? { importance: q.importance } : {}),
+    ...(q.assignee && assigneeInput ? { assignee: q.assignee } : {}),
+  };
+}
+function followTitle() {
+  following = true;
+  // The list first: whom the title's @name may name depends on it.
+  for (const fields of [['list'], ['start_date', 'due_date', 'importance', 'assignee']]) {
+    const says = titleSays();
+    for (const f of fields) {
+      if (f in says) {
+        if (!(f in followed)) followed[f] = FOLLOW[f].get();
+        if (f === 'list') saidList = says[f];
+        if (FOLLOW[f].get() !== says[f]) FOLLOW[f].set(says[f]);
+      } else if (f in followed) {
+        FOLLOW[f].set(followed[f]);
+        delete followed[f];
+      }
+    }
+  }
+  following = false;
+}
+// The title changed (typed, completed, a word taken out): the fields, the
+// line of what was recognised and the line of where the task goes follow.
+function titleChanged() {
+  followTitle();
+  syncAssigneeField();
+  syncDates('title');
+  syncQuickPreview();
+  syncTarget();
+}
+// A field the title set was changed by hand: its word leaves the title.
+function byHand(field) {
+  if (following || !(field in followed)) return;
+  delete followed[field];
+  // (Read with every user a name could be: the list just chosen may take
+  // none, and the words before an @name are still the title's shorthand.)
+  app.titleInput.value = field === 'list'
+    ? TasksCore.dropQuickWord(app.titleInput.value, todayStr(), people, 'tag', saidList)
+    : TasksCore.dropQuickWord(app.titleInput.value, todayStr(), quickPeople(), field);
+  titleChanged();
+}
+importanceSelect.addEventListener('change', () => byHand('importance'));
+// The List field changed by hand: its word goes, and the title is read
+// again either way (whom its @name may name depends on the list).
+app.listSelect?.addEventListener('change', () => {
+  if (autoSetting) return;
+  if ('list' in followed) byHand('list'); else titleChanged();
+});
 
 // The List field: the lists the user sees, their own private ones marked,
 // and the Inbox (no list). A task is as private as its list: one in a private list is
@@ -559,17 +641,38 @@ function syncTarget() {
   // A task for someone, still in the Inbox nobody chose: it needs a shared
   // list. (In the Inbox the user chose, as in a private list, there is no
   // assignee.)
-  const needsList = !ref && app.inboxPrivate && assigning() && assignedNow();
+  const needsList = app.isPrivateList(ref) && assigning() && assignedNow();
   targetEl.classList.toggle('task-edit-target-warn', needsList);
   if (needsList) {
-    targetEl.textContent = 'A task for someone else needs a shared list: choose one in List.';
+    // The shared lists to pick from, the last used one first; nothing is
+    // chosen for the user (sharedChoices). More than a few: the rest are in
+    // the List field, as New list… is.
+    const refs = sharedChoices();
+    targetEl.textContent = refs.length ? 'A task for someone else needs a shared list: '
+      : 'A task for someone else needs a shared list: choose one in List.';
+    for (const r of refs.slice(0, SHARED_SHOWN)) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'task-edit-target-list';
+      btn.dataset.list = r;
+      btn.textContent = app.listName(r);
+      targetEl.append(btn, ' ');
+    }
+    if (refs.length > SHARED_SHOWN) targetEl.append('or another in List.');
     showField('list', true);   // also in a wiki without a list: New list… makes one
   }
 }
+const SHARED_SHOWN = 6;
+targetEl?.addEventListener('click', e => {
+  const btn = e.target.closest('.task-edit-target-list');
+  if (!btn || !app.listSelect) return;
+  app.listSelect.value = btn.dataset.list;
+  app.listSelect.dispatchEvent(new Event('change'));   // the user's choice
+  app.titleInput.focus();
+});
 app.listSelect?.addEventListener('change', syncTarget);
 app.listSelect?.addEventListener('change', () => syncQuickPreview());
-app.titleInput.addEventListener('input', () => { syncAutoList(); syncTarget(); });
-app.titleInput.addEventListener('input', syncQuickPreview);
+app.titleInput.addEventListener('input', titleChanged);
 
 // The modal's History section: the task's logged events, newest first
 // (logEvent in go/taskstore.go), with its creation as the oldest. Closed on every open;
@@ -765,6 +868,7 @@ commentList.addEventListener('click', async e => {
 let onCreated = null;
 function openEditModal(taskId, opts) {
   const task = taskId ? st.tasks.find(t => t.id === taskId) : null;
+  followed = {};
   const defaultTags = opts?.tags || '';
   const givenTags = !!opts && 'tags' in opts;
   onCreated = !task && opts?.onCreated || null;
@@ -807,6 +911,7 @@ function openEditModal(taskId, opts) {
   syncTarget();
   app.wontDoBtn.style.display = task && !task.closed_at ? '' : 'none';
   syncDates('open');
+  if (!task) titleChanged();   // a title the dialog opens with (the editor's Make task)
   openedData = task ? formData(assigning() ? editAssignee() : null) : null;
   app.modal.showModal();
   // A task someone gave you, opened: no longer new, and its History here says so.
@@ -854,7 +959,9 @@ app.modal.querySelectorAll('.date-trigger').forEach(btn => {
     const input = document.getElementById(btn.dataset.dateTrigger);
     openDatePicker(input.value || '', d => {
       input.value = d || '';
-      syncDates(btn.dataset.dateTrigger === 'task-edit-due' + app.sfx ? 'due' : 'start');
+      const which = btn.dataset.dateTrigger === 'task-edit-due' + app.sfx ? 'due' : 'start';
+      byHand(which + '_date');
+      syncDates(which);
     }, btn, todayStr(), app.modal);
   });
 });
@@ -924,9 +1031,10 @@ dateWarnFix?.addEventListener('click', () => {
   const due = document.getElementById('task-edit-due' + app.sfx);
   const start = document.getElementById('task-edit-start' + app.sfx);
   if (dateWarnMove === 'due') due.value = start.value; else start.value = due.value;
+  byHand(dateWarnMove + '_date');
   syncDates(dateWarnMove);
 });
-document.getElementById('task-edit-lead' + app.sfx).addEventListener('input', () => syncDates('lead'));
+document.getElementById('task-edit-lead' + app.sfx).addEventListener('input', () => { syncDates('lead'); byHand('start_date'); });
 
 app.cancelBtn.addEventListener('click', () => { editTagAc?.hide(); assigneeAc?.hide(); app.modal.close(); });
 // Closed without saving (Cancel, Esc): no callback later by mistake.
@@ -1042,7 +1150,8 @@ app.form.addEventListener('submit', async e => {
     created?.(made);
     return;
   }
-  // Shorthand in a new task's title wins over the fields (the preview said so).
+  // Shorthand in a new task's title is what the fields show (followTitle);
+  // its tags join the Tags field's.
   const quick = !id && quickParse();
   if (quick) {
     data.title = quick.title;
@@ -1057,6 +1166,7 @@ app.form.addEventListener('submit', async e => {
   if (!data.title) { document.getElementById('task-edit-title' + app.sfx).focus(); return; }
   // A task for someone, still in the user's Inbox (or a private list): it
   // needs a shared list. New list… in the field makes one.
+  if (data.assignee === people.me && !id && app.isPrivateList(data.list || '')) data.assignee = null;   // yours as it is
   if (data.assignee && app.listSelect && app.isPrivateList(data.list || '')) {
     showField('list', true);
     app.listSelect.setCustomValidity('A task for someone else needs a shared list');

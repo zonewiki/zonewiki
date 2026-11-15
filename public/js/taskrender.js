@@ -426,7 +426,7 @@ function wireListHandlers() {
       const task = st.tasks.find(t => t.id === id);
       if (!task) return;
       openDatePicker(task[field] || '', d => {
-        if (field === 'start_date' && startsAfterDeadline(task, d)) app.planOnDay(id, d);
+        if (field === 'start_date') app.startOn([id], d);
         else app.updateTask(id, { [field]: d });
       }, el, todayStr());
     });

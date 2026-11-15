@@ -143,10 +143,13 @@ A task has two independent dates; changing one never moves the other.
   A past start date is not overdue, it means "available since" (cards show "since Sep 21").
 
 **A start after the deadline** is usually a slip, but not always (a late task planned for next week), so it is never forbidden, only questioned.
-Every quick way to set a start date (the Plan board, ⋯ Start today/tomorrow and Pick start date, the card's 📅 picker, **f**/**F**, **1**–**7**;
-`setStart` and the picker go through `startsAfterDeadline` → `planOnDay`) asks "Move the deadline too?" (`confirmDeadlineMove`): Move deadline sets both dates,
+**Every quick way to set a start date is one function**, `startOn(ids, day)` in `js/taskselect.js` (the Plan board's drop on a day, ⋯ Start today/tomorrow and Pick start date, the card's 📅 picker, **f**/**F**, **0**–**7**, the selection bar, a swipe): it takes one task or the selection,
+comes with one undo ("Starts Tomorrow · Undo", "3 tasks start tomorrow · Undo"),
+leaves a task that starts that day already as it is (nothing toggles),
+and asks "Move the deadline too?" (`confirmDeadlineMove`, through `startsAfterDeadline` → `planOnDay`) for a task whose deadline the day passes: Move deadline sets both dates,
 with undo;
 Cancel writes nothing.
+(Until 2026-11 **f**/**F** acted on one task, cleared the date when pressed again and had no undo, and the 📅 picker and a drop on a day had none either: which of them you used decided what you could take back.)
 An overdue task started today doesn't ask, on the board too: that is catching up on a missed deadline (swiping right never asks for that reason).
 The edit modal shows a hint under the dates instead (`syncDateWarning`): "Starts after its deadline", with a button that moves the other date (the deadline, or the start when Due was moved before it).
 It doesn't block saving.
@@ -549,7 +552,11 @@ Each with a dark-mode value.
 - **Quick-add** (new tasks only, `TasksCore.parseQuickAdd`): trailing shorthand like `Call Bob tomorrow #work due:fri`.
   Start: `today`, `tomorrow`/`tmrw`, a weekday (next one, never today), `+3`/`+3d`/`+2w`, `YYYY-MM-DD`; due: `due:` + the same; tags: `#tag` starting with a letter, of which the first that names a list you see puts the task in that list instead (`#shop`: `quickList` in `js/taskmodal.js`; the completion offers the lists with the tags); with users, the assignee: `@name` of a user who can be assigned, or `@me` (anything else stays in the title); importance: `!` (or `!high`) and `!low`, as words of their own ("Call Bob !", not "Call Bob!").
   Only trailing words count, and shorthand that would empty the title is ignored.
-  `#task-edit-quick` previews the result; shorthand wins over the date fields.
+  `#task-edit-quick` previews the result.
+  **The fields follow the title** (`followTitle` in `js/taskmodal.js`): List, Start, Due, Importance and Assignee show what the title's words say as they are typed, and what they showed before once the word is gone, so the dialog never says two things
+  (until 2026-11 the line under the title said "tomorrow" while the Start field below still said "Today").
+  **A field changed by hand takes its word out of the title** (`byHand`, `TasksCore.dropQuickWord`) and keeps what the hand gave it: with "Call Bob tomorrow" typed, picking Friday in Start leaves "Call Bob".
+  Tags stay words of the title until Save (the line under it names them): the Tags field holds the ones you put there.
 - **Completing**: the checkbox completes after a cancellable grace period (struck through meanwhile; several ticked in a row each keep their tick and strike while an earlier one leaves the list).
   Completing a recurring task spawns the next instance, stepping from the previous primary date (or today with `from: completion`) until ≥ today, with its start date not before today (see Dates); month steps clamp to the month's last day.
   Un-completing removes the spawned instance while it is untouched (`untouchedSpawn`: its history ends with the `repeat`, and title, description, tags and comments are the reopened task's);
@@ -581,8 +588,8 @@ Each with a dark-mode value.
   On Open it tells decided tasks from undecided ones without changing the order.
   A due/overdue urgency colour wins.
   The 📅 date is coloured too: blue for a later start, amber for today, plain for a past start ("since …", never a warning).
-- **Inline dates**: the ⏰ (due) and 📅 (start) chips open a date picker. **f** starts the selected task today,
-  **F** tomorrow (again clears). **1**–**7** start the selected tasks on that day of the Plan board (1 today, 2 tomorrow, … 7 six days ahead),
+- **Inline dates**: the ⏰ (due) and 📅 (start) chips open a date picker. **f** starts the selected tasks today,
+  **F** tomorrow. **1**–**7** start them on that day of the Plan board (1 today, 2 tomorrow, … 7 six days ahead; **1** is **f**, **2** is **F**),
   **0** unplans them,
   on every tab and for several selected tasks at once (`startOn`: one batch with one undo; a task whose deadline the day passes asks "Move the deadline too?" on its own, after the others).
   So planning works from the keyboard: walk Unplanned with j/k (Shift to take several) and press a day's number, however far the board puts it.
@@ -949,9 +956,11 @@ Later in 2026-11 came the Inbox: until then a task could be in no list, which wi
 - **Where a new task goes** (`.task-edit-target`, `syncTarget` in `js/taskmodal.js`): the edit dialog of a new task says it under the title, and with users who sees it: "Adds to your Inbox: only you see it.", "Adds to the list team: everyone sees it.", "Adds to the list diary: only you see it."; without users "Adds to the Inbox." or "Adds to the list shop.".
   It follows the List field, and a `#word` in the title that names a list (Quick-add: `#shop` puts the task in the list shop, the first such word; the others are tags).
   Hidden when editing a task and for several titles at once.
-  **A task for someone needs a shared list** (with users; `autoInbox`, `sharedDefault`, `syncAutoList`): the Inbox is yours alone, so on a new task still in the Inbox that nobody chose a list for, naming an assignee (the Assignee field, the title's `@name`, a view's `assignee=`) moves the List field to a shared list: the one this browser last made a task in (`localStorage` `zone-tasks-shared-list`), else the only one there is; taking the name away moves it back.
-  With several shared lists and none remembered, or none at all, the line reads "A task for someone else needs a shared list: choose one in List." and Save says so on the List field (New list… in it makes one).
-  Choosing a list yourself ends the following.
+  **A task for someone needs a shared list** (with users; `autoInbox`, `sharedChoices`): the Inbox is yours alone, so on a new task still in the Inbox that nobody chose a list for, naming an assignee (the Assignee field, the title's `@name`, a view's `assignee=`) turns the line into a question: "A task for someone else needs a shared list:" and the shared lists, each a button (`.task-edit-target-list`), the one this browser last made a task in first (`localStorage` `zone-tasks-shared-list`), then A–Z; past six it says "or another in List.".
+  A click on one is choosing it in the List field. **Nothing is chosen for you**: until 2026-11 the List field moved by itself to the last used list (or the only one), and a task went where nobody had looked.
+  Taking the name away takes the question away.
+  **Your own name asks nothing**: a task in your Inbox is yours as it is (a view's `assignee=me`, the title's `@me`), so it stays there, private, and is saved without an assignee.
+  With no shared list the line reads "A task for someone else needs a shared list: choose one in List." (New list… in it makes one), and Save without one says so on the List field.
   An assistant's `create_task` with an assignee and no shared list is refused, naming the shared lists; `POST /api/tasks` likewise answers 400 ("A private task is yours alone. Put it in a shared list to assign it").
 - **The Tasks page's ⋯ menu** (`.page-menu-btn` beside the heading of `/tasks`, on every view of it; the page's ⋯ menu, `#page-menu`, with `js/pagemenu.js`): **it is the page's one such menu**: the view's own actions are in it, **List settings…** first and **Mark all read**, **Export tasks** and **Import tasks…** last (`[data-tasks-action]`, shown and run by `js/tasksettings.js` where the view has them; the toolbar's ⋯ is not shown on this page. Until 2026-11 the page had two ⋯ menus with different things in them), and between them **New list…**; on a list **Rename…**, **Pin** / **Move first** / **Unpin**, **Make shared…** (a private one) and **Delete…**; on a tag's view (`/tasks?tag=<tag>`) **Rename tag…** (below).
   Each but the pin is a dialog with a form the server answers (`data-dialog` on the menu item; a refusal comes back with the message in the dialog).
@@ -1089,5 +1098,5 @@ Later in 2026-11 came the Inbox: until then a task could be in no list, which wi
 - **Shift+click**, **Ctrl/Cmd+click**, **Shift+↑/↓**, **Ctrl/Cmd+A**: select several tasks (see Selection); **t** / **T**: their tags; **m**: move them to a list
 - **@** (with users): the filter field, starting an assignee's name, as **#** starts a tag
 - **a** (with users): assign the selected tasks (see Assigning tasks in `docs/spec/users.md`)
-- **c t**: a new task in your Inbox, starting today (from any page; see Modules → New task from anywhere).
+- **c t**: a new task in your Inbox, starting today: from any page and the same on every one (see Modules → New task from anywhere). **n** is the list's own + New.
   The tasks' keydown runs before the page's shortcuts, so while a `g`/`c` prefix waits for its second key (`keyPrefix` in `js/util.js`) the tasks leaves that key alone: the t of **c t** or **g t** never opens the bulk tag dialog on a selected task

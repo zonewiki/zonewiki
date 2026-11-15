@@ -684,6 +684,27 @@ class TestAssignee:
         # One name only: a second stays text.
         assert self.quick("Call Sam @alice @bob") == ("Call Sam @alice", "bob", True)
 
+    def test_a_word_is_taken_out_of_a_title(self):
+        # What a field changed by hand leaves of the title (dropQuickWord):
+        # the word that gave the field, and only that one.
+        def drop(title, field, value=""):
+            return run_core(f"TasksCore.dropQuickWord({json.dumps(title)}, '{TODAY}', {self.PEOPLE}, "
+                            f"{json.dumps(field)}, {json.dumps(value)})")
+        full = "Call Sam tomorrow #work @bob due:fri ! #shop"
+        assert drop(full, "start_date") == "Call Sam #work @bob due:fri ! #shop"
+        assert drop(full, "due_date") == "Call Sam tomorrow #work @bob ! #shop"
+        assert drop(full, "assignee") == "Call Sam tomorrow #work due:fri ! #shop"
+        assert drop(full, "importance") == "Call Sam tomorrow #work @bob due:fri #shop"
+        assert drop(full, "tag", "shop") == "Call Sam tomorrow #work @bob due:fri !"
+        assert drop("Buy milk #shop #Shop", "tag", "shop") == "Buy milk"       # each time it is there
+        # A word that is no shorthand where it stands is text, and stays.
+        assert drop("Meet tomorrow at noon", "start_date") == "Meet tomorrow at noon"
+        assert drop("tomorrow", "start_date") == "tomorrow"                     # a title is never only shorthand
+        assert drop("Call Sam", "assignee") == "Call Sam"
+        # What is left reads as before, without the field.
+        q = run_core(f"TasksCore.parseQuickAdd({json.dumps(drop(full, 'start_date'))}, '{TODAY}', {self.PEOPLE})")
+        assert (q["title"], q["start_date"], q["due_date"], q["assignee"]) == ("Call Sam", None, "2026-07-31", "bob")
+
     def test_quick_add_without_users_knows_no_at(self):
         assert self.quick("Call Sam @bob", "undefined") == ("Call Sam @bob", "", False)
         assert self.quick("Call Sam @me", "{me: 'me', users: new Set(['alice'])}") == ("Call Sam @me", "", False)

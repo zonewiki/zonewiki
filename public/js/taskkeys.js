@@ -3,7 +3,7 @@
 // Undo toast. Only the app that was last used answers (activeTasksInstance).
 // What it uses of the app comes in app (its state in app.st).
 
-import { dateOffset, people, showNotice, startsAfterDeadline } from './taskutil.js';
+import { dateOffset, people, showNotice } from './taskutil.js';
 import { keyPrefix } from './util.js';
 
 export function initTaskKeys(app) {
@@ -123,15 +123,10 @@ document.addEventListener('keydown', async e => {
     return;
   }
 
-  // 'f' / 'F' — start selected task today / tomorrow
+  // 'f' / 'F' — start the selected tasks today / tomorrow (0 unplans them)
   if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey && st.selectedId) {
     e.preventDefault();
-    const task = st.tasks.find(t => t.id === st.selectedId);
-    if (task && !task.closed_at) {
-      const target = e.key === 'f' ? dateOffset(0) : dateOffset(1);
-      if (task.start_date !== target && startsAfterDeadline(task, target)) app.planOnDay(task.id, target);
-      else app.updateTask(task.id, { start_date: task.start_date === target ? null : target });
-    }
+    app.startOn(st.selectedIds.size ? [...st.selectedIds] : [st.selectedId], dateOffset(e.key === 'f' ? 0 : 1));
     return;
   }
 

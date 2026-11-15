@@ -22,7 +22,7 @@ const { st } = app;
 // Swipes only move a task in and out of Focus (swipeActions): right starts
 // it today (Open and Plan), left clears its start date (Focus and Plan).
 // A direction with nothing to do doesn't move the card. Both come with an
-// undo toast (setStart). Drags work only where touchDrop is set.
+// undo toast (startOn). Drags work only where touchDrop is set.
 // A long press let go without moving (10px) starts selection mode with
 // that card, as ⋯ → Select several does; where nothing drags, the press
 // only holds the card for that (holdCard), and moving drops the hold.
@@ -142,8 +142,8 @@ function endTouchDrag(drop) {
     t.item.style.transform = '';
     t.item.classList.remove('task-swipe-armed');
     delete t.item.dataset.swipe;
-    if (drop && armed && action === 'start') app.setStart(t.item.dataset.id, todayStr());
-    if (drop && armed && action === 'unplan') app.setStart(t.item.dataset.id, null);
+    if (drop && armed && action === 'start') app.startOn([t.item.dataset.id], todayStr());
+    if (drop && armed && action === 'unplan') app.startOn([t.item.dataset.id], null);
     return;
   }
   // Held and let go in place: no drop, selection mode.
