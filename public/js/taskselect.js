@@ -279,9 +279,10 @@ async function moveTasks(chosen, target, targetPrivate, made) {
   const moving = chosen.filter(t => (app.taskList(t) || '') !== target);
   if (!moving.length) return true;   // there already
   app.dismissUndo();
+  // A task of the user's that is shared is given to them: the server's rule
+  // (sharedBy in go/tasks.go), whatever shares it.
   const shares = t => !!t.private && !targetPrivate;
-  const mine = people.me && people.users?.has(people.me) ? { assignee: people.me } : {};
-  if (!(await batchUpdate(moving.map(t => ({ id: t.id, list: target, ...(shares(t) ? { share: true, ...mine } : {}) }))))) return false;
+  if (!(await batchUpdate(moving.map(t => ({ id: t.id, list: target, ...(shares(t) ? { share: true } : {}) }))))) return false;
   const what = `${moving.length} task${moving.length > 1 ? 's' : ''}`;
   const msg = target ? `${what} moved to ${made ? 'the new list' : 'list'} “${app.listName(target)}”` : `${what} moved to the Inbox`;
   // Back where they were, but those that were private and are shared now.

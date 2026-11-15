@@ -352,10 +352,25 @@ func applyList(user string, t *Task, data jsonObj, fresh bool) error {
 	case owner == "" && t.Owner != "" && !share:
 		return shareNeeded("The task")
 	case owner == "" && t.Owner != "":
-		logEvent(t, user, "shared", "", "")
+		t.Owner = owner
+		sharedBy(t, user, !data.Has("assignee"))
 	}
 	t.List, t.Owner = name, owner
 	return nil
+}
+
+// sharedBy: the private task t (its Owner set to none already) is shared
+// now, by user: its history says so, and, when the write says nothing of
+// who has it (takes), it is given to them: what was theirs stays in their
+// My tasks, whatever door shared it (the dialog, a move, a list made shared
+// or deleted into a shared one, an assistant). A write that names an
+// assignee, or says none, decides for itself (applyAssignee runs next).
+func sharedBy(t *Task, user string, takes bool) {
+	logEvent(t, user, "shared", "", "")
+	if takes && t.Assignee == "" && settings().Users != nil && settings().assignable(user) {
+		logEvent(t, user, "assigned", "", user)
+		t.Assignee = user
+	}
 }
 
 // applyAssignee: a write's assignee: a user who can be assigned

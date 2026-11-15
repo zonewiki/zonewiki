@@ -522,7 +522,7 @@ Each with a dark-mode value.
   A click on a row moves the tasks at once (↑/↓ go through the rows, Enter picks, Esc or Cancel leaves).
   The move sets each task's list in one `batch-update`; its tags stay.
   The row of the list every selected task is in is ticked and has the focus; a list only some are in says how many ("1 of 3").
-  **A task is as private as its list** (Lists → Private lists): the rows of your private lists, and with users the Inbox's, are off while a shared task is selected ("a shared task stays shared"), and a row that would take a private task to a shared list says so ("shares it with everyone") and sends `share`, and with it `assignee`, you: a task of yours that you file stays in your My tasks (assign it to no one, or someone, afterwards).
+  **A task is as private as its list** (Lists → Private lists): the rows of your private lists, and with users the Inbox's, are off while a shared task is selected ("a shared task stays shared"), and a row that would take a private task to a shared list says so ("shares it with everyone") and sends `share`; Zone gives it to you: a task of yours that you file stays in your My tasks (assign it to no one, or someone, afterwards).
   One undo puts every task back in its list ("3 tasks moved to list “work”", "3 tasks moved to the Inbox"), but those that were private and are shared now: that can't be taken back, so a move of only such tasks has a notice and no undo.
   The selection stays, as after Tag…; in a list's own view the moved tasks leave it.
   **New list…**, the last row, makes a list and moves the tasks into it, so the dialog is there with no list too (then Inbox, ticked, and New list…).
@@ -855,7 +855,7 @@ Later in 2026-11 came the Inbox: until then a task could be in no list, which wi
   **A new task goes there unless it is made in a list's view or names a list**: from `c t`, New task, My tasks' **+ New**, an assistant's `create_task`, `POST /api/tasks` without `list`.
   With users it is yours alone (the task is kept in your files, `private/<user>/_tasks/`): what you capture is seen by nobody until you file it.
   Without users it is the wiki's: the tasks in no list, in the shared files, as they always were.
-  - **Filing** is moving a task to a list: the List field, **Move to list…**, `m`. Into a shared list that shares it (`share`), and the browser then **assigns it to you** (the dialog shows the name, to be taken off; the move dialog sends it), so what was yours stays in your My tasks unless you say otherwise.
+  - **Filing** is moving a task to a list: the List field, **Move to list…**, `m`. Into a shared list that shares it (`share`), and Zone then **assigns it to you** unless the write says who has it (`sharedBy`, whatever door shares it: Sharing a task in `docs/spec/users.md`; the dialog shows the name, to be taken off; the move dialog sends it), so what was yours stays in your My tasks unless you say otherwise.
   - **Its view** is `/tasks?list=inbox`, headed **Inbox** (with 🔒 with users), the second pill of the list switcher; a line under the heading says what it is for.
     It is All tasks narrowed: All tasks' settings (the tab, Plan, the limit), no settings dialog of its own, a locked chip **Inbox** in the filter field (the filter word `list:inbox`), and a new task made there is in the Inbox.
     A task filed from there leaves the view, with the notice a list's view has.
@@ -887,7 +887,7 @@ Later in 2026-11 came the Inbox: until then a task could be in no list, which wi
     (Until 2026-11 a move in My tasks numbered its tasks' `sort_order` from 0, which put them above everyone else's in their lists.)
   - **The server and the browser have the same rule**: the page gets the lists left out and whether assignment counts (`data-init-out`, `data-init-mine`: `assign` or `lists`), the routes take the scope as `?mine=1` (the closed tasks' count and years, the export), and one table of cases runs through both (`go/testdata/mine_cases.json`).
   - **On a page**: `[[tasks: mine=1]]` shows it to whoever looks.
-  - **Zone assigns nothing by itself**; the browser proposes you when you file a task of your own into a shared list.
+  - **Zone assigns nothing by itself**, but a task of your own that you share: it is yours to do unless you say otherwise.
   - (Until 2026-11 My tasks was every task except one assigned to someone else, or in a list you hadn't pinned unless it was assigned to you: every unassigned task of a pinned list, and of no list, was in everyone's.
     Before that the Tasks links opened the pinned lists as one, called Pinned and before that My lists, at `/tasks?pinned=1`, which answers My tasks now.)
 - **A list's backlog** (a shared list, with users): under the list's heading, **N unassigned** (`.tasks-unassigned`; `tasksPageView.Unassigned`) links to the list filtered by `@none` (`/tasks?list=<ref>&assignee=none`): the open tasks no one has, a former assignee's included.

@@ -673,7 +673,8 @@ def test_sharing_a_task_is_in_its_history(alice, wiki):
     # Into her Inbox nothing is shared: no event.
     inbox = alice.put(url, json={"list": "", "share": True}, headers=HOST).get_json()
     assert inbox["private"] is True and "shared" not in [e["event"] for e in inbox["history"]]
-    last = alice.put(url, json={"list": "team", "share": True}, headers=HOST).get_json()["history"][-1]
+    last, given = alice.put(url, json={"list": "team", "share": True}, headers=HOST).get_json()["history"][-2:]
+    assert (given["event"], given["to"]) == ("assigned", "alice")              # and it stays hers to do
     assert (last["event"], last["by"]) == ("shared", "alice")
     # Unchanged is no event, and a new private task has none to start with.
     again = alice.put(url, json={"list": "team"}, headers=HOST).get_json()["history"]
@@ -1315,8 +1316,8 @@ def test_the_inbox_is_a_pill_and_a_view(bob, wiki):
     assert "<h1>Inbox" in bob.get("/tasks?list=none", headers=HOST).get_data(as_text=True)
     counts = lambda: bob.get("/api/tasks/due-count?places=1", headers=HOST).get_json()
     assert counts()["count"] == 1 and counts()["places"]["inbox"]["count"] == 1
-    # Filed (share): it is the list's, no one's, and in no Inbox.
-    filed = bob.put(f"/api/tasks/{made['id']}", json={"list": "team", "share": True}, headers=HOST)
+    # Filed (share) as no one's: it is the list's, and in no Inbox.
+    filed = bob.put(f"/api/tasks/{made['id']}", json={"list": "team", "share": True, "assignee": None}, headers=HOST)
     assert filed.status_code == 200 and filed.get_json()["private"] is False
     assert counts()["count"] == 0 and counts()["places"]["inbox"]["count"] == 0
     assert bob.get("/api/tasks/export?list=inbox", headers=HOST).get_json()["tasks"] == []

@@ -367,7 +367,8 @@ func TestASharedTaskStaysShared(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(taskFiles.Open("bob")) != 2 || got.History[len(got.History)-1].Event != "shared" {
+	// Shared, and given to who shared it.
+	if len(taskFiles.Open("bob")) != 2 || got.History[len(got.History)-2].Event != "shared" || got.Assignee != "alice" {
 		t.Errorf("bob sees %v; history %+v", titles(taskFiles.Open("bob")), got.History)
 	}
 	if _, err := updateTask("alice", mine.ID, private, ""); err == nil {

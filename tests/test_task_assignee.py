@@ -458,9 +458,9 @@ class TestMyTasks:
         assert put(team, tasks["A1"], assignee="bob").status_code == 200
         assert put(team, tasks["N2"], assignee="alice").status_code == 200
         assert self.titles(team) == ["A2", "I1", "N2", "P1"]
-        # An Inbox task filed into a shared list is the list's, no one's:
-        # it leaves My tasks unless it is assigned to her.
-        assert put(team, tasks["I1"], list="team", share=True).status_code == 200
+        # An Inbox task filed into a shared list as no one's is the list's:
+        # it leaves My tasks (filed without a word of who has it, it is hers).
+        assert put(team, tasks["I1"], list="team", share=True, assignee=None).status_code == 200
         assert self.titles(team) == ["A2", "N2", "P1"]
         assert put(team, tasks["I1"], assignee="me").status_code == 200
         assert self.titles(team) == ["A2", "I1", "N2", "P1"]
@@ -970,3 +970,40 @@ class TestTheClosedViewsPage:
         # bob doesn't get her Inbox's.
         login(client, "bob")
         assert self.closed(client)["total"] == 5
+
+
+def test_a_task_shared_is_given_to_who_shares_it_whatever_the_door(alice, wiki_dir):
+    """A private task that becomes shared without a word of who has it is
+    its user's: by the API, a batch (the move dialog, a drop), a list made
+    shared, a list deleted into a shared one. A write that names someone, or
+    no one, decides for itself."""
+    get = lambda title: next(t for t in alice.get("/api/tasks", headers=HOST).get_json() if t["title"] == title)
+    events = lambda title: [(e["event"], e.get("to")) for e in get(title)["history"]]
+    own = lambda title, **f: alice.post("/api/tasks", json={"title": title, "list": "", **f}, headers=HOST).get_json()
+    # PUT with share (the dialog, an assistant's update_task).
+    t = own("By put")
+    assert put(alice, t, list="team", share=True).status_code == 200
+    assert get("By put")["assignee"] == "alice" and events("By put") == [("created", None), ("shared", None), ("assigned", "alice")]
+    # … naming someone else, or no one.
+    t = own("For bob")
+    assert put(alice, t, list="team", share=True, assignee="bob").status_code == 200
+    assert get("For bob")["assignee"] == "bob"
+    t = own("No one's")
+    assert put(alice, t, list="team", share=True, assignee=None).status_code == 200
+    assert "assignee" not in get("No one's") and events("No one's") == [("created", None), ("shared", None)]
+    # A batch.
+    t = own("By batch")
+    resp = alice.post("/api/tasks/batch-update", json={"tasks": [{"id": t["id"], "list": "team", "share": True}]}, headers=HOST)
+    assert resp.status_code == 200 and get("By batch")["assignee"] == "alice"
+    # A private list made shared, and one deleted into a shared list.
+    assert make_list(alice, "gifts", private=True, headers=HOST).status_code == 302
+    assert make_list(alice, "someday", private=True, headers=HOST).status_code == 302
+    own("A gift", list="gifts")
+    own("Some day", list="someday")
+    assert alice.post("/tasks/share-list", data={"list": "gifts"}, headers=HOST).status_code == 302
+    assert get("A gift")["assignee"] == "alice" and not get("A gift")["private"]
+    assert alice.post("/tasks/delete-list", data={"list": "someday", "to": "team", "share": "1"}, headers=HOST).status_code == 302
+    assert get("Some day")["assignee"] == "alice" and get("Some day")["list"] == "team"
+    # A viewer can't be given tasks, so nothing of theirs is shared by them; a
+    # task that stays private has no one.
+    assert "assignee" not in own("Still mine")

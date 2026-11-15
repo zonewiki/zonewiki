@@ -604,7 +604,7 @@ Everything else (shared tasks) is everyone's to see and change, as shared pages 
 - **Sharing a task**: moving it out of your Inbox or its private list to a shared list (`list` with `share: true` in `PUT /api/tasks`, `batch-update`, `update_task`; the dialog and the list picker send `share` after saying what it does), moves it from your files to the shared ones, in one commit;
   it is an event in the task's History (`shared`, by who did it; older tasks may show `private` events from when tasks could move the other way).
   Without `share` such a move is a 400 that says the task would be shared; a shared task into a private list or an Inbox is a 400 always.
-  The browser assigns a task you share to you, unless you take the name off: it stays in your My tasks.
+  **A task you share is yours to do, unless the write says otherwise** (`sharedBy` in `go/tasks.go`): shared without a word of who has it, it is assigned to who shares it, so it stays in their My tasks; a write that names someone, or no one (`assignee: null`), decides for itself. One rule for every door: the dialog (which shows your name, to be taken off), a move, a drop, a private list made shared or deleted into a shared one, an assistant's `update_task`. (Until 2026-11 the browser's dialog and move did this and the other doors didn't: there a task fell out of its owner's My tasks.)
   Making a private list shared (**Make shared…** in its ⋯ menu) shares its tasks with it, and deleting it into a shared list does when the dialog's box says so (into your Inbox its tasks stay private).
   The tasks' undo of an edit doesn't put a task that was private back in its list, so it never tries to take a shared task back.
 - **A tag never moves a task**: adding a tag with a private list's name to a task, in the modal, a batch or `update_task`, leaves it where it is; such a tag on a shared task shows to everyone, as any tag.
@@ -683,7 +683,7 @@ Not there: telling someone that a task became theirs, a group as an assignee, an
 - **The counts** on the Tasks links and the list switcher count what each user's lists show them: `assignee=me` is whoever asks (`assigneeParamMatches` in `go/tasksyntax.go`, the server's mirror of the filter).
   An export of such a list holds the tasks it shows (`/api/tasks/export?assignee=`).
   **My tasks**, where the Tasks links go, is what is yours: of the shared tasks those assigned to you, whatever list they are in, and your own private ones; an unassigned shared task is its list's backlog (Lists → My tasks in `docs/spec/tasks.md`).
-  Zone assigns a new task to no one; its maker says who has it. Only a task of your own that you file into a shared list is proposed as yours, by the browser.
+  Zone assigns a new task to no one; its maker says who has it. Only a task of your own that you share is yours unless you say otherwise (Sharing a task, above).
 - **By person** (the Open tab's control, on a shared list and All tasks; Views in `docs/spec/tasks.md`): the tasks in a section per assignee, Unassigned and your own first, so a team sees who has what; a card dragged onto a section is that user's.
 - **Several at once** (`openBulkAssignModal` in `js/taskselect.js`): **Assign…** in the selection bar and in the menu of a selected card, or **a** on the selected tasks (one is enough).
   The dialog lists the users who can be assigned, yourself first, then **No one**; the row of who has them all is ticked, one who has some says "1 of 4".

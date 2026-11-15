@@ -566,7 +566,7 @@ func TestDeleteList(t *testing.T) {
 	if _, err := deleteListOp("alice", "plans", "market", true, false, ""); err != nil {
 		t.Fatal(err)
 	}
-	if got := openByID("bob")[plan.ID]; got == nil || got.List != "market" || got.Owner != "" || got.History[len(got.History)-1].Event != "shared" {
+	if got := openByID("bob")[plan.ID]; got == nil || got.List != "market" || got.Owner != "" || got.History[len(got.History)-2].Event != "shared" || got.Assignee != "alice" {
 		t.Errorf("plan after the delete: %+v", got)
 	}
 	// A shared list with no list named: its tasks go to #general, made for them.

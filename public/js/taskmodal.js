@@ -994,7 +994,12 @@ function changedFields(data) {
     if (!same(k)) out[k] = data[k];
   }
   if (!rec.every(same)) for (const k of rec) out[k] = data[k];
-  if ('list' in out && data.share) out.share = true;
+  if ('list' in out && data.share) {
+    out.share = true;
+    // Who has it goes with a share, also when it is no one: without a word
+    // the server gives a task to who shares it (sharedBy in go/tasks.go).
+    if ('assignee' in data) out.assignee = data.assignee;
+  }
   const was = {};
   for (const k of ['title', 'description']) if (k in out) was[k] = openedData[k];
   if (Object.keys(was).length) out.was = was;

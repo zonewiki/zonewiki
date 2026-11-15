@@ -801,7 +801,8 @@ func renameListOp(user, ref, newName, suffix string, check ...func(pages []strin
 // moveListTasks puts the tasks of the list from (of those tasks holds)
 // into to (nil: no list, which for a private list's tasks is their user's
 // Inbox: they stay private); a task that leaves a private list for a shared
-// one is shared, and its history says so. Returns how many moved.
+// one is shared, and its history says so and gives it to user (sharedBy).
+// Returns how many moved.
 func moveListTasks(user string, tasks []*Task, from ListInfo, to *ListInfo) int {
 	n := 0
 	for _, t := range tasks {
@@ -815,7 +816,7 @@ func moveListTasks(user string, tasks []*Task, from ListInfo, to *ListInfo) int 
 		}
 		if t.Owner != owner {
 			t.Owner = owner
-			logEvent(t, user, "shared", "", "")
+			sharedBy(t, user, true)
 		}
 	}
 	return n
