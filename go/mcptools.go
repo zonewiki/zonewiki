@@ -624,7 +624,7 @@ func searchWiki(args jsonObj, base, user string) (string, error) {
 	var out []string
 	for i, d := range hits {
 		if d.isTask() {
-			out = append(out, fmt.Sprintf("[%d] ", i+1)+mcpTaskText(d.Task, base, user))
+			out = append(out, fmt.Sprintf("[%d] ", i+1)+mcpTaskText(d.wholeTask(), base, user))
 			continue
 		}
 		body, ok := d.body()

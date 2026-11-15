@@ -176,6 +176,9 @@ func chunkKey(title, chunk string) string {
 	return sha1Hex(title)
 }
 
+// emptyTextHash: the hash of no text: a task with none is not embedded.
+var emptyTextHash = sha1Hex("")
+
 func sha1Hex(s string) string {
 	h := sha1.Sum([]byte(s))
 	return hex.EncodeToString(h[:])
@@ -457,7 +460,12 @@ type semCache struct {
 	Vectors  map[string]string   `json:"vectors"`
 }
 
-type semTask struct{ id, text string }
+// semTask: a task for the semantic index: its id, the hash of its text (what
+// its vector is known by), and its text, read when it has no vector yet.
+type semTask struct {
+	id, hash string
+	text     func() string
+}
 
 type chunkRow struct {
 	slug, hash, text string
@@ -705,21 +713,26 @@ func (x *semanticIndex) doSync() bool {
 		pages[slug] = newSemPage(f.mtime, chunks)
 		changed = true
 	}
-	// Tasks are short, so they are simply re-hashed each time: a changed
-	// task gets a new hash and only that one is embedded.
+	// A task is known by the hash of its text (its doc has it): a changed
+	// task has a new hash and only that one is read and embedded.
 	tasks := map[string]string{}
 	var taskOrder []string
 	if x.tasksFn != nil {
 		for _, t := range x.tasksFn() {
-			if strings.TrimSpace(t.text) == "" {
+			if t.hash == emptyTextHash {
 				continue
 			}
 			if _, ok := tasks[t.id]; !ok {
 				taskOrder = append(taskOrder, t.id)
 			}
-			h := sha1Hex(t.text)
-			tasks[t.id] = h
-			want(h, t.text)
+			tasks[t.id] = t.hash
+			// Its text only when it has no vector yet: a task that didn't
+			// change is not read for this.
+			if _, ok := x.vecs[t.hash]; !ok {
+				if _, ok := todo[t.hash]; !ok {
+					want(t.hash, t.text())
+				}
+			}
 		}
 	}
 	changed = changed || !maps.Equal(tasks, x.tasks)
@@ -1129,7 +1142,7 @@ func semanticTasks() []semTask {
 	docs := taskSearchDocs()
 	out := make([]semTask, len(docs))
 	for i, d := range docs {
-		out[i] = semTask{d.taskID(), d.tk.text}
+		out[i] = semTask{d.taskID(), d.tk.sem, func() string { text, _ := d.taskText(); return text }}
 	}
 	return out
 }

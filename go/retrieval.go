@@ -4,8 +4,13 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
+	"cmp"
 	"crypto/sha256"
 	"encoding/binary"
+	"encoding/gob"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"maps"
@@ -20,6 +25,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"zonewiki/internal/atomicfile"
 	"zonewiki/internal/jsonobj"
 	"zonewiki/internal/mdtext"
 	"zonewiki/internal/taskfiles"
@@ -42,18 +48,79 @@ type SearchDoc struct {
 	nth         int32           // a section: which of its page's sections it is
 	file        *pageFile       // a page's or section's file
 
-	// A task: the whole task (the MCP tools' dates and tags), and what its
-	// doc adds (tk).
+	// A task: its record (Task: the task without what is long, its
+	// description, comments and history; taskRecord), which is what a search
+	// filters and sorts by and what a result shows, and what its doc adds
+	// (tk). The whole task is read from its file when it is asked for
+	// (fullTask): for a hit's text, its tokens when it is indexed, an
+	// assistant's answer. So a wiki's closed tasks of years are a few
+	// hundred bytes each in memory, as a page's sections are, not the tasks.
 	Task *Task
 	tk   *taskDocInfo
 
 	key textsearch.DocKey // what its tokens are made from, hashed (docKey)
 }
 
-// taskDocInfo: what a task's doc holds beside the task: its searchable text,
-// its status ("open", "done"), the year of its archive, its last activity
-// (dates).
-type taskDocInfo struct{ text, status, year, edited string }
+// taskDocInfo: what a task's doc holds beside its record: the task file it
+// is in (path), its status ("open", "done"), the year of its archive, its
+// last activity (dates), and the hash of its searchable text (sem: what the
+// semantic index knows its vector by).
+type taskDocInfo struct{ path, status, year, edited, sem string }
+
+// taskRecord: a task as a search doc keeps it: all of it but what is long
+// (its description, comments, history, and keys Zone doesn't know), owner's.
+// t is only read (it may be the store's own: taskfiles.Look).
+func taskRecord(t *Task, owner string) *Task {
+	r := *t
+	r.Owner = owner
+	r.Description, r.History, r.Comments, r.Extra = "", nil, nil, nil
+	r.Tags = slices.Clone(t.Tags)
+	return &r
+}
+
+// taskSearchText: a task's searchable text: its title, description and
+// comments, its tags as "#tag" words (so a page's tag pill, /search?q=<tag>,
+// finds the tasks with that tag too, and the excerpt can show the match),
+// and its list's name (no tag: tag: doesn't match it), so a search for
+// "shop" finds what is on the shop list.
+func taskSearchText(t *Task) string {
+	var comments, tags []string
+	for _, c := range t.Comments {
+		comments = append(comments, c.Text)
+	}
+	for _, tag := range t.Tags {
+		tags = append(tags, "#"+tag)
+	}
+	return textsearch.StripLinkTargets(strings.TrimSpace(t.Title + " " + t.Description + " " +
+		strings.Join(comments, " ") + " " + strings.Join(tags, " ") + " " + t.List))
+}
+
+// fullTask: a task doc's whole task, read from its file (a copy); nil when
+// the file no longer holds it (the next search makes its doc anew), or for
+// a page.
+func (d *SearchDoc) fullTask() *Task {
+	if d.tk == nil || d.Task == nil {
+		return nil
+	}
+	return taskfiles.TaskIn(d.tk.path, d.Task.ID, d.Task.Owner)
+}
+
+// wholeTask: fullTask, or the record when its file no longer holds it.
+func (d *SearchDoc) wholeTask() *Task {
+	if t := d.fullTask(); t != nil {
+		return t
+	}
+	return d.Task
+}
+
+// taskText: a task doc's searchable text, from its file.
+func (d *SearchDoc) taskText() (string, bool) {
+	t := d.fullTask()
+	if t == nil {
+		return "", false
+	}
+	return taskSearchText(t), true
+}
 
 func (d *SearchDoc) isTask() bool { return d.Task != nil }
 
@@ -91,7 +158,8 @@ func (d *SearchDoc) body() (string, bool) {
 func (d *SearchDoc) bodyNow() (body string, same, ok bool) {
 	if d.file == nil {
 		if d.tk != nil {
-			return d.tk.text, true, true
+			text, ok := d.taskText()
+			return text, true, ok
 		}
 		return "", true, true
 	}
@@ -425,16 +493,27 @@ func tasksMtimes() string {
 }
 
 var taskDocs struct {
-	mu   sync.Mutex
-	key  string
-	docs []*SearchDoc
-	byID map[string]*SearchDoc
-	done bool
+	mu    sync.Mutex
+	key   string
+	docs  []*SearchDoc
+	files map[string]*taskDocFile // by the task file's path
+	done  bool
 }
 
-// taskSearchDocs: every task as a BM25 document, the title weighted,
-// cached until a task list file changes; every owner's (searches keep those
-// their user sees: canSeeTask).
+// taskDocFile: the docs of one task file, as it was when they were made
+// (stamp: its time and size).
+type taskDocFile struct {
+	stamp string
+	docs  []*SearchDoc
+}
+
+// taskSearchDocs: every task as a BM25 document, the title weighted; every
+// owner's (searches keep those their user sees: canSeeTask). Kept file by
+// file: when a task file changes, that file's docs are made anew (from what
+// the store has parsed, without a copy of the tasks: taskfiles.Look), and
+// every other file's stay, unread. An archive's docs are also kept in Zone's
+// folder (archiveDocs), so a start doesn't read the wiki's closed tasks of
+// years to know them.
 func taskSearchDocs() []*SearchDoc {
 	key := tasksMtimes()
 	taskDocs.mu.Lock()
@@ -442,46 +521,191 @@ func taskSearchDocs() []*SearchDoc {
 	if taskDocs.done && taskDocs.key == key {
 		return taskDocs.docs
 	}
-	docs := []*SearchDoc{}
-	previous := taskDocs.byID
-	taskDocs.byID = map[string]*SearchDoc{}
-	for _, t := range taskFiles.Every() {
-		// A task that didn't change keeps its doc, so the index can tell
-		// what did (the pointers are what it compares).
-		if old := previous[t.ID]; old != nil && reflect.DeepEqual(old.Task, t) {
-			taskDocs.byID[t.ID] = old
-			docs = append(docs, old)
+	// A task that didn't change keeps its doc, so the index can tell what
+	// did (the pointers are what it compares).
+	previous := map[string]*SearchDoc{}
+	for _, d := range taskDocs.docs {
+		previous[d.Task.ID] = d
+	}
+	files := map[string]*taskDocFile{}
+	var open, closed, archived []*SearchDoc
+	for _, f := range taskFiles.Files(taskFiles.EveryOwner()) {
+		st, err := os.Stat(f.Path)
+		if err != nil {
+			forgetArchiveDocs(f.Path)
 			continue
 		}
-		title := t.Title
-		var comments, tags, lowTags []string
-		for _, c := range t.Comments {
-			comments = append(comments, c.Text)
+		stamp := fmt.Sprintf("%d-%d", st.ModTime().UnixNano(), st.Size())
+		kept := taskDocs.files[f.Path]
+		if kept == nil || kept.stamp != stamp {
+			kept = &taskDocFile{stamp: stamp}
+			archive := taskfiles.IsArchive(f.Path)
+			if docs, ok := archiveDocs(f.Path, f.Owner, stamp); archive && ok {
+				kept.docs = docs
+			} else {
+				taskfiles.Look(f.Path, f.Owner, func(t *Task) { kept.docs = append(kept.docs, taskDoc(t, f.Path, f.Owner)) })
+				if archive {
+					saveArchiveDocs(f.Path, stamp, kept.docs)
+				}
+			}
+			for i, d := range kept.docs {
+				if old := previous[d.Task.ID]; old != nil && old.key == d.key && *old.tk == *d.tk && reflect.DeepEqual(old.Task, d.Task) {
+					kept.docs[i] = old
+				}
+			}
 		}
-		// Tags as "#tag" words, so a page's tag pill (/search?q=<tag>) finds
-		// the tasks with that tag too, and the excerpt can show the match.
-		for _, tag := range t.Tags {
-			tags = append(tags, "#"+tag)
-			lowTags = append(lowTags, strings.ToLower(tag))
+		files[f.Path] = kept
+		switch name := filepath.Base(f.Path); {
+		case name == "tasks.json":
+			open = append(open, kept.docs...)
+		case name == "closed.json":
+			closed = append(closed, kept.docs...)
+		default:
+			archived = append(archived, kept.docs...)
 		}
-		// Its list's name is a word of it too (no tag: tag: doesn't match it),
-		// so a search for "shop" finds what is on the shop list.
-		text := textsearch.StripLinkTargets(strings.TrimSpace(title + " " + t.Description + " " +
-			strings.Join(comments, " ") + " " + strings.Join(tags, " ") + " " + t.List))
-		d := &SearchDoc{Slug: taskfiles.DirName, Title: "[Task] " + mdtext.PlainTaskTitle(title),
-			Tokens: func() []string {
-				return slices.Concat(textsearch.Tokenize(text), repeatTokens(mdtext.PlainTaskTitle(title), textsearch.TitleWeight))
-			},
-			Task: t, tk: &taskDocInfo{text: text, status: "open", edited: lastActivity(t)}, Tags: lowTags,
-			key: docKey("task", t.ID, mdtext.PlainTaskTitle(title), text)}
-		if !t.IsOpen() {
-			d.tk.status, d.tk.year = "done", taskFiles.PastYear(t)
-		}
-		taskDocs.byID[t.ID] = d
-		docs = append(docs, d)
 	}
-	taskDocs.key, taskDocs.docs, taskDocs.done = key, docs, true
+	// The open ones first, in the order they were made (as the store reads
+	// them), then this month's closed ones, then the archives'; one task in
+	// two files (a write that stopped between them) is one doc.
+	slices.SortStableFunc(open, func(a, b *SearchDoc) int {
+		return cmp.Or(cmp.Compare(ownerRank(a.Task.Owner), ownerRank(b.Task.Owner)), cmp.Compare(a.Task.CreatedAt, b.Task.CreatedAt))
+	})
+	seen := map[string]bool{}
+	docs := []*SearchDoc{}
+	for _, d := range slices.Concat(open, closed, archived) {
+		if !seen[d.Task.ID] {
+			seen[d.Task.ID] = true
+			docs = append(docs, d)
+		}
+	}
+	taskDocs.key, taskDocs.docs, taskDocs.files, taskDocs.done = key, docs, files, true
 	return docs
+}
+
+// ownerRank: the shared tasks before a user's own, as the store reads them.
+func ownerRank(owner string) int {
+	if owner == "" {
+		return 0
+	}
+	return 1
+}
+
+// taskDoc: the search doc of the task t (only read here), which is in the
+// task file at path and owner's.
+func taskDoc(t *Task, path, owner string) *SearchDoc {
+	text := taskSearchText(t)
+	return newTaskDoc(taskRecord(t, owner), &taskDocInfo{path: path, edited: lastActivity(t), sem: sha1Hex(text)},
+		docKey("task", t.ID, mdtext.PlainTaskTitle(t.Title), text))
+}
+
+// newTaskDoc: the doc of a task's record, with what was read from the task
+// (info) and its key; its status and year follow from the record.
+func newTaskDoc(rec *Task, info *taskDocInfo, key textsearch.DocKey) *SearchDoc {
+	title := mdtext.PlainTaskTitle(rec.Title)
+	var lowTags []string
+	for _, tag := range rec.Tags {
+		lowTags = append(lowTags, strings.ToLower(tag))
+	}
+	info.status, info.year = "open", ""
+	if !rec.IsOpen() {
+		info.status, info.year = "done", taskFiles.PastYear(rec)
+	}
+	d := &SearchDoc{Slug: taskfiles.DirName, Title: "[Task] " + title, Task: rec, tk: info, Tags: lowTags, key: key}
+	d.Tokens = func() []string {
+		text, _ := d.taskText()
+		return slices.Concat(textsearch.Tokenize(text), repeatTokens(title, textsearch.TitleWeight))
+	}
+	return d
+}
+
+// An archive's docs in Zone's folder (.zone/index/tasks/<hash>.gob): the
+// records of its tasks with their keys, as they were made from the file
+// with that stamp. An archive rarely changes and a wiki has years of them:
+// with these a start, and a change elsewhere, don't read them. Whose the
+// tasks are is never taken from here: it is the folder the archive is in.
+// Written by encoding/gob: small, and read without the work a file of
+// JSON as large as the archives would be.
+type savedTaskDocs struct {
+	Version, Path, Stamp string
+	Docs                 []savedTaskDoc
+}
+
+type savedTaskDoc struct {
+	Task        Task
+	Key         textsearch.DocKey
+	Edited, Sem string
+}
+
+// savedTaskDocsVersion: what the saved docs were made by: the keys' version
+// and this file's format.
+const savedTaskDocsVersion = indexKeyVersion + "/2"
+
+func archiveDocsPath(path string) string {
+	rel, ok := wikiRel(path)
+	if !ok || cfg.Data == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(rel))
+	return statePath("index", "tasks", hex.EncodeToString(sum[:12])+".gob")
+}
+
+// archiveDocs: the docs saved for the archive at path, owner's, when they
+// were made from the file as it is now (stamp).
+func archiveDocs(path, owner, stamp string) ([]*SearchDoc, bool) {
+	file := archiveDocsPath(path)
+	if file == "" {
+		return nil, false
+	}
+	f, err := os.Open(file)
+	if err != nil {
+		return nil, false
+	}
+	defer f.Close()
+	var saved savedTaskDocs
+	rel, _ := wikiRel(path)
+	if gob.NewDecoder(bufio.NewReader(f)).Decode(&saved) != nil || saved.Version != savedTaskDocsVersion || saved.Path != rel || saved.Stamp != stamp {
+		return nil, false
+	}
+	docs := make([]*SearchDoc, len(saved.Docs))
+	for i := range saved.Docs {
+		d := &saved.Docs[i]
+		if d.Task.ID == "" {
+			return nil, false
+		}
+		docs[i] = newTaskDoc(taskRecord(&d.Task, owner), &taskDocInfo{path: path, edited: d.Edited, sem: d.Sem}, d.Key)
+	}
+	return docs, true
+}
+
+// saveArchiveDocs keeps the docs made from the archive at path (stamp: the
+// file they were made from). A failure is nothing: the next start reads the
+// archive.
+func saveArchiveDocs(path, stamp string, docs []*SearchDoc) {
+	file := archiveDocsPath(path)
+	if file == "" || !writeIndexFiles {
+		return
+	}
+	saved := savedTaskDocs{Version: savedTaskDocsVersion, Stamp: stamp, Docs: make([]savedTaskDoc, len(docs))}
+	saved.Path, _ = wikiRel(path)
+	for i, d := range docs {
+		rec := *d.Task
+		rec.Owner = "" // not kept: the folder says whose
+		saved.Docs[i] = savedTaskDoc{Task: rec, Key: d.key, Edited: d.tk.edited, Sem: d.tk.sem}
+	}
+	var b bytes.Buffer
+	if gob.NewEncoder(&b).Encode(saved) != nil {
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(file), 0o777); err == nil {
+		_ = atomicfile.Write(file, b.String())
+	}
+}
+
+// forgetArchiveDocs removes what was saved for an archive that is gone.
+func forgetArchiveDocs(path string) {
+	if file := archiveDocsPath(path); file != "" && taskfiles.IsArchive(path) && writeIndexFiles {
+		_ = os.Remove(file)
+	}
 }
 
 // docIndex is BM25 over docs.

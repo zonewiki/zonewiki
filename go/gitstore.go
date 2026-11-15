@@ -214,11 +214,17 @@ func gitCommit(user, message string, paths ...string) error {
 	if user != "" {
 		args = append(args, "--author", user+" <"+user+"@zone>")
 	}
-	if r := runGit(append(append(args, "--"), changed...)...); r.Code != 0 {
+	r = runGit(append(append(args, "--"), changed...)...)
+	if r.Code != 0 {
 		return failed("commit", r)
 	}
 	forgetDrafts(rels...) // committed: no one's draft now
 	packSoon()
+	// The commit it made ("[main 3b1b793] Update task"), for the mark of
+	// the task files (tasksetup.go).
+	if m := committedRE.FindStringSubmatch(r.Stdout); m != nil {
+		noteTaskCommit(changed, m[1])
+	}
 	return nil
 }
 
@@ -399,6 +405,9 @@ func noDeltaForUploads(wiki string) {
 }
 
 var shaRE = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
+
+// committedRE: the commit git commit says it made, in its first line.
+var committedRE = regexp.MustCompile(`^\[[^\]\n]* ([0-9a-f]{7,40})\]`)
 
 // movePage moves a page's file, points every link to it at the new slug,
 // and commits the move (by user) with the pages and tasks files whose links

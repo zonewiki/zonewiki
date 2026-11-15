@@ -197,7 +197,7 @@ Links that were already broken are not repeated.
 **Retrieval** (`retrieve`) works on sections, not pages: an LLM needs the passages, and the best ones may share a page.
 BM25 runs over sections (`_page_chunk_docs`, the same `chunkSections` split, cached per page by mtime; `chunkIndex`), fused with `searchChunks` when semantic search is on (sections match by `chunkKey`).
 Without semantic search it is keyword-only and still works.
-Tasks share that BM25 index (`taskSearchDocs()`, each doc carrying its `task`), so they rank with sections, as in the browser search, and their semantic hits (`searchTasks`) join the section hits by similarity.
+Tasks share that BM25 index (`taskSearchDocs()`, each doc carrying its task's record; the whole task is read for an answer: Indexing in `docs/spec/search.md`), so they rank with sections, as in the browser search, and their semantic hits (`searchTasks`) join the section hits by similarity.
 `search_tasks` with a query fuses BM25 and semantic hits within its filter.
 A task is shown by `mcpTaskText`: title, a line of facts (status, private, tags, with users `assigned to: <name>` (marked when it is the user, or someone who can no longer be given tasks), importance when it isn't normal, start, due, repeat, keep, list), the `/tasks?task=…` link (`taskHref`), its description and its comments.
 The tools call a task's text `description`, as the task's file and the edit dialog do; `notes`, its name in the tools before, is refused with a message saying so (an argument a tool doesn't know is otherwise dropped without a word, and an assistant's tool list may be older than the server).

@@ -3,10 +3,12 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 	"zonewiki/internal/taskfiles"
 )
 
@@ -79,7 +81,7 @@ func TestListsTakenOverFromPages(t *testing.T) {
 	if err := os.WriteFile(oldAllTasksFile(), []byte(`{"all": {"view": "open", "limit": "5"}}`), 0o666); err != nil {
 		t.Fatal(err)
 	}
-	migrateLists()
+	migrateLists(false)
 	if listsUnmigrated {
 		t.Fatal("the migration failed")
 	}
@@ -143,7 +145,7 @@ func TestListsTakenOverFromPages(t *testing.T) {
 	// Run again (the next start): nothing changes.
 	before := fileText(t, taskFiles.OpenPath("")) + fileText(t, taskFiles.ListsPath(""))
 	putPage(t, "later", "# Later\n\n[[tasks: list=typed-later pin=1]]\n")
-	migrateLists()
+	migrateLists(false)
 	if after := fileText(t, taskFiles.OpenPath("")) + fileText(t, taskFiles.ListsPath("")); after != before {
 		t.Errorf("a second run changed the files:\n%s", after)
 	}
@@ -172,7 +174,7 @@ func TestListsTakenOverPerUser(t *testing.T) {
 	writeTasks(t, "", oldTask("s1", "Scarf", "gifts"), oldTask("s2", "Hers, shared", "secret"))
 	writeTasks(t, "alice", oldTask("a1", "Cake", "Gifts"), oldTask("a2", "Loose"), oldTask("a3", "Hidden", "secret"))
 	writeTasks(t, "bob", oldTask("b1", "Bob's", "gifts"))
-	migrateLists()
+	migrateLists(false)
 	if listsUnmigrated {
 		t.Fatal("the migration failed")
 	}
@@ -238,7 +240,7 @@ func TestListsTakenOverPerUser(t *testing.T) {
 		return out
 	}
 	before := files()
-	migrateLists()
+	migrateLists(false)
 	if files() != before || listsUnmigrated {
 		t.Errorf("a second start changed the files:\n%s", files())
 	}
@@ -265,7 +267,7 @@ func TestNothingToTakeOver(t *testing.T) {
 	testWiki(t, map[string]string{"index": "# Home\n\n[[tasks:]]\n"})
 	writeTasks(t, "", oldTask("1", "Plain", "work"))
 	before := fileText(t, taskFiles.OpenPath(""))
-	migrateLists()
+	migrateLists(false)
 	if _, err := os.Stat(taskFiles.ListsPath("")); err == nil || fileText(t, taskFiles.OpenPath("")) != before || listsUnmigrated {
 		t.Error("a wiki without lists was changed")
 	}
@@ -286,7 +288,7 @@ func TestListsNotTakenOverFromABrokenWiki(t *testing.T) {
 	if err := os.WriteFile(taskFiles.OpenPath(""), []byte("[ half"), 0o666); err != nil {
 		t.Fatal(err)
 	}
-	migrateLists()
+	migrateLists(false)
 	if !listsUnmigrated {
 		t.Fatal("migrated over a file that can't be read")
 	}
@@ -1126,7 +1128,7 @@ func TestInbox(t *testing.T) {
 	if got := openByID("bob")[loose.ID]; got == nil || got.Owner != "" || got.List != "" {
 		t.Errorf("the task from before: %+v", got)
 	}
-	migrateLists()
+	migrateLists(false)
 	if got := openByID("bob")[loose.ID]; got == nil || got.Owner != "" || got.List != generalListName || listsUnmigrated {
 		t.Errorf("the task from before, after a start: %+v", got)
 	}
@@ -1158,7 +1160,7 @@ func taskFilesText(t *testing.T) string {
 func startAgain(t *testing.T) {
 	t.Helper()
 	before := taskFilesText(t)
-	migrateLists()
+	migrateLists(false)
 	if after := taskFilesText(t); after != before || listsUnmigrated {
 		t.Errorf("a second start changed the files:\n%s", after)
 	}
@@ -1182,7 +1184,7 @@ func TestInboxMigrationRenamesListsCalledInbox(t *testing.T) {
 	writeRegistry(t, "bob", `{"version": 1, "lists": [], "pinned": ["work", "inbox"]}`)
 	writeTasks(t, "", inList("inbox", oldTask("s1", "Shared"))[0], inList("work", oldTask("s2", "Work"))[0])
 	writeTasks(t, "alice", inList("inbox", oldTask("a1", "Hers"))[0])
-	migrateLists()
+	migrateLists(false)
 	if listsUnmigrated {
 		t.Fatal("the migration failed")
 	}
@@ -1244,7 +1246,7 @@ func TestInboxMigrationTurnsThePrivateListIntoTheInbox(t *testing.T) {
 	for _, u := range []string{"bob", "carl", "dora"} {
 		writeTasks(t, u, inList("private", oldTask(u+"1", u+"'s"))[0])
 	}
-	migrateLists()
+	migrateLists(false)
 	if listsUnmigrated {
 		t.Fatal("the migration failed")
 	}
@@ -1304,7 +1306,7 @@ func TestInboxMigrationOfAUserWhoPinnedNothing(t *testing.T) {
 	writeRegistry(t, "", `{"version": 1, "lists": []}`)
 	writeRegistry(t, "erin", `{"version": 1, "lists": [{"name": "private"}]}`)
 	writeTasks(t, "erin", inList("private", oldTask("e1", "Hers"))[0])
-	migrateLists()
+	migrateLists(false)
 	if got := openByID("erin")["e1"]; got == nil || got.List != "" || got.Owner != "erin" || len(taskLists("erin")) != 0 || listsUnmigrated {
 		t.Errorf("erin's task %+v, lists %v", got, sortedKeys(taskLists("erin")))
 	}
@@ -1322,7 +1324,7 @@ func TestInboxMigrationWithoutASharedRegistry(t *testing.T) {
 	writeRegistry(t, "finn", `{"version": 1, "lists": [{"name": "inbox"}], "pinned": ["inbox"]}`)
 	writeTasks(t, "erin", inList("private", oldTask("e1", "Hers"))[0], inList("someday", oldTask("e2", "Later"))[0])
 	writeTasks(t, "finn", inList("inbox", oldTask("f1", "His"))[0])
-	migrateLists()
+	migrateLists(false)
 	if got := openByID("erin")["e1"]; got == nil || got.List != "" || got.Owner != "erin" || listsUnmigrated {
 		t.Errorf("erin's task %+v", got)
 	}
@@ -1351,7 +1353,7 @@ func TestInboxMigrationLeavesOutWhatWasNotPinned(t *testing.T) {
 	writeRegistry(t, "", `{"version": 1, "lists": [{"name": "work"}, {"name": "someday", "limit": "3"}, {"name": "shop"}], "pinned": ["shop", "work"], "all": {"view": "open"}}`)
 	writeTasks(t, "", oldTask("1", "Loose"), inList("work", oldTask("2", "Report"))[0], inList("someday", oldTask("3", "Maybe"))[0])
 	before := fileText(t, taskFiles.OpenPath(""))
-	migrateLists()
+	migrateLists(false)
 	if listsUnmigrated {
 		t.Fatal("the migration failed")
 	}
@@ -1381,7 +1383,7 @@ func TestInboxMigrationLeavesOutWhatWasNotPinned(t *testing.T) {
 	if err := pinListOp("", "work", "0"); err != nil {
 		t.Fatal(err)
 	}
-	migrateLists()
+	migrateLists(false)
 	if taskLists("")["work"].LeftOut() {
 		t.Error("a list unpinned later was left out")
 	}
@@ -1400,7 +1402,7 @@ func TestSharedTasksWithoutAListGoToGeneral(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Without users: nothing moves, and no list is made.
-	migrateLists()
+	migrateLists(false)
 	if got := openByID("")["1"]; got.List != "" || len(taskLists("")) != 1 || listsUnmigrated {
 		t.Fatalf("without users: %+v, lists %v", got, sortedKeys(taskLists("")))
 	}
@@ -1408,7 +1410,7 @@ func TestSharedTasksWithoutAListGoToGeneral(t *testing.T) {
 	// Users are turned on: the next start files them.
 	withUsers(t, "alice", "bob")
 	writeTasks(t, "alice", oldTask("a1", "Hers"))
-	migrateLists()
+	migrateLists(false)
 	if listsUnmigrated {
 		t.Fatal("the migration failed")
 	}
@@ -1432,7 +1434,7 @@ func TestSharedTasksWithoutAListGoToGeneral(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeTasks(t, "", append(taskFiles.Open(""), oldTask("9", "Stray"))...)
-	migrateLists()
+	migrateLists(false)
 	if got := openByID("bob")["9"]; got == nil || got.List != generalListName {
 		t.Errorf("the stray: %+v", got)
 	}
@@ -1451,7 +1453,7 @@ func TestGeneralInAWikiWithoutARegistry(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeTasks(t, "", oldTask("1", "Loose"))
-	migrateLists()
+	migrateLists(false)
 	if got := openByID("alice")["1"]; got == nil || got.List != generalListName || got.Owner != "" || listsUnmigrated {
 		t.Errorf("the task: %+v", got)
 	}
@@ -1459,4 +1461,239 @@ func TestGeneralInAWikiWithoutARegistry(t *testing.T) {
 		t.Errorf("the registry:\n%s", text)
 	}
 	startAgain(t)
+}
+
+// A start reads every task file to file tasks and set up the lists once;
+// from then on, while git says the task files are as Zone left them, a
+// start reads the open tasks' files and this month's closed ones, not the
+// archives. A file changed by hand, users turned on or off, or no mark, and
+// it reads them again.
+func TestAStartReadsTheArchivesWhenItMust(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	testWiki(t, nil)
+	cfg.GitEnabled = true
+	gitSetup()
+	taskMarkDelay = 10 * time.Millisecond
+	t.Cleanup(func() { taskMarkDelay = 3 * time.Second })
+	withUsers(t, "alice", "bob")
+	mustList(t, "alice", "shop", false)
+	done := newTestTask(t, "alice", "Milk", false, "list", "shop")
+	newTestTask(t, "alice", "Eggs", false, "list", "shop")
+	closeIt := jsonObj{}
+	closeIt.Set("completed", true)
+	if _, err := updateTask("alice", done.ID, closeIt, ""); err != nil {
+		t.Fatal(err)
+	}
+	// Closed years ago: an archive.
+	closedFile := taskFiles.PathIn("", "shop", "closed.json")
+	tasks := taskfiles.ReadLenient(closedFile)
+	tasks[0].ClosedAt = "2001-05-01T10:00:00"
+	if err := taskfiles.Write(closedFile, tasks); err != nil {
+		t.Fatal(err)
+	}
+	archive := taskFiles.PathIn("", "shop", "closed-2001-05.json")
+	start := func() (parsed int64, readArchive bool) {
+		taskfiles.ForgetParsed()
+		before := taskfiles.Parsed()
+		setUpTasks()
+		return taskfiles.Parsed() - before, taskfiles.KeepsParsed(archive)
+	}
+	if tasksChecked() {
+		t.Fatal("checked before any start")
+	}
+	start() // files the old task under its month, and leaves the mark
+	if !exists(archive) || !tasksChecked() {
+		t.Fatalf("after the first start: archive %v, checked %v", exists(archive), tasksChecked())
+	}
+	if n, read := start(); read {
+		t.Errorf("a start with nothing to do read the archive (%d files parsed)", n)
+	}
+	// A task file changed by hand: read again, and written in Zone's format.
+	raw, _ := os.ReadFile(archive)
+	if err := os.WriteFile(archive, append([]byte(" "), raw...), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	if tasksChecked() {
+		t.Error("checked with a task file changed by hand")
+	}
+	if _, read := start(); !read || !tasksChecked() {
+		t.Errorf("after a hand edit: read %v, checked %v", read, tasksChecked())
+	}
+	// A task file committed by hand (or pulled): no commit of Zone's.
+	raw, _ = os.ReadFile(archive)
+	if err := os.WriteFile(archive, append([]byte("\n"), raw...), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	if r := runGit("commit", "-qam", "By hand"); r.Code != 0 || tasksChecked() {
+		t.Errorf("checked with a task file committed by hand (%d %s)", r.Code, r.Stderr)
+	}
+	start()
+	// Zone's own commit of a task file: the mark follows it.
+	title := jsonObj{}
+	title.Set("title", "Eggs, a dozen")
+	for _, x := range taskFiles.Open("alice") {
+		if x.Title == "Eggs" {
+			if _, err := updateTask("alice", x.ID, title, ""); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	for i := 0; i < 200 && !tasksChecked(); i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !tasksChecked() {
+		mark, _ := os.ReadFile(tasksCheckedPath())
+		t.Errorf("not checked after Zone's own commit of a task file: mark %q, head %q, status %q, log %q", mark,
+			runGit("rev-parse", "HEAD").Stdout, runGit("status", "--porcelain", "--untracked-files=all").Stdout,
+			runGit("log", "--format=%h %s", "-4").Stdout)
+	}
+	// Users turned off: the mark is of a wiki with users.
+	settings().Users = nil
+	if tasksChecked() {
+		t.Error("checked though the wiki has no users now")
+	}
+	// Without git nothing says that the files didn't change.
+	withUsers(t, "alice", "bob")
+	start()
+	cfg.GitEnabled = false
+	if tasksChecked() {
+		t.Error("checked without git")
+	}
+}
+
+// The search keeps a task's record, not the task: what is long (its
+// description, comments, history) is read from its file for a hit. Docs
+// are made file by file: a change makes one file's anew and leaves the
+// others as they are, unread; an archive's are kept in Zone's folder, so a
+// start knows the wiki's closed tasks of years without reading them, and
+// whose they are is the folder's to say, never the saved file's.
+func TestTheSearchKeepsRecordsOfTasks(t *testing.T) {
+	testWiki(t, nil)
+	withUsers(t, "alice", "bob")
+	mustList(t, "alice", "shop", false)
+	mustList(t, "alice", "diary", true)
+	milk := newTestTask(t, "alice", "Milk", false, "list", "shop", "description", "Oat, the barista kind")
+	old := newTestTask(t, "alice", "Old errand", false, "list", "shop", "description", "Zephyrscale audit")
+	hers := newTestTask(t, "alice", "Dear diary", false, "list", "diary", "description", "Quillfeather notes")
+	if _, err := addComment("bob", milk.ID, "Two litres please", "Comment on task"); err != nil {
+		t.Fatal(err)
+	}
+	// Two closed years ago, a shared one and one of hers: archives.
+	closeIt := jsonObj{}
+	closeIt.Set("completed", true)
+	for _, id := range []string{old.ID, hers.ID} {
+		if _, err := updateTask("alice", id, closeIt, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, f := range []string{taskFiles.PathIn("", "shop", "closed.json"), taskFiles.PathIn("alice", "diary", "closed.json")} {
+		tasks := taskfiles.ReadLenient(f)
+		tasks[0].ClosedAt = "2001-05-01T10:00:00"
+		if err := taskfiles.Write(f, tasks); err != nil {
+			t.Fatal(err)
+		}
+	}
+	taskFiles.ArchiveOldClosed()
+	archive, herArchive := taskFiles.PathIn("", "shop", "closed-2001-05.json"), taskFiles.PathIn("alice", "diary", "closed-2001-05.json")
+	if !exists(archive) || !exists(herArchive) {
+		t.Fatal("no archives to test with")
+	}
+	byID := func() map[string]*SearchDoc {
+		out := map[string]*SearchDoc{}
+		for _, d := range taskSearchDocs() {
+			out[d.taskID()] = d
+		}
+		return out
+	}
+	docs := byID()
+	d := docs[milk.ID]
+	if d == nil || d.Task.Description != "" || d.Task.Comments != nil || d.Task.History != nil || d.Task.Title != "Milk" || d.Task.List != "shop" {
+		t.Fatalf("the record: %+v", d.Task)
+	}
+	if text, ok := d.taskText(); !ok || !strings.Contains(text, "barista") || !strings.Contains(text, "Two litres") {
+		t.Errorf("its text, from its file: %q", text)
+	}
+	if full := d.wholeTask(); full.Description == "" || len(full.Comments) != 1 || len(full.History) == 0 {
+		t.Errorf("the whole task: %+v", full)
+	}
+	if !slices.Contains(d.tokens(), "barista") {
+		t.Errorf("its tokens: %v", d.tokens())
+	}
+	if docs[hers.ID].Task.Owner != "alice" || docs[old.ID].Task.Owner != "" || docs[old.ID].tk.status != "done" || docs[old.ID].tk.year != "2001" {
+		t.Errorf("the archives' docs: %+v %+v", docs[hers.ID].Task, docs[old.ID].tk)
+	}
+	// A change of one task: its file's docs anew, the others the docs they were.
+	title := jsonObj{}
+	title.Set("title", "Oat milk")
+	if _, err := updateTask("alice", milk.ID, title, ""); err != nil {
+		t.Fatal(err)
+	}
+	after := byID()
+	if after[milk.ID] == d || after[milk.ID].Task.Title != "Oat milk" || after[old.ID] != docs[old.ID] || after[hers.ID] != docs[hers.ID] {
+		t.Error("a change of one task: its doc is the old one, or another's is a new one")
+	}
+	// A start: nothing parsed, nothing known. The archives' docs come from
+	// Zone's folder, with their keys; the archives aren't read.
+	taskDocs.mu.Lock()
+	taskDocs.done, taskDocs.docs, taskDocs.files = false, nil, nil
+	taskDocs.mu.Unlock()
+	taskfiles.ForgetParsed()
+	again := byID()
+	if taskfiles.KeepsParsed(archive) || taskfiles.KeepsParsed(herArchive) {
+		t.Error("a start read the archives for the search's docs")
+	}
+	for _, id := range []string{old.ID, hers.ID} {
+		a, b := again[id], after[id]
+		if a == nil || a.key != b.key || *a.tk != *b.tk || a.Task.Title != b.Task.Title || a.Task.Owner != b.Task.Owner || a.Task.ClosedAt != b.Task.ClosedAt {
+			t.Errorf("an archive's doc from Zone's folder: %+v %+v, was %+v %+v", a.Task, a.tk, b.Task, b.tk)
+		}
+	}
+	if text, ok := again[old.ID].taskText(); !ok || !strings.Contains(text, "Zephyrscale") {
+		t.Errorf("an archived task's text, read when asked for: %q", text)
+	}
+	// What is saved names no owner: hers is hers by its folder alone.
+	// What is saved has her record; whose it is comes from the archive's folder.
+	if raw, _ := os.ReadFile(archiveDocsPath(herArchive)); !strings.Contains(string(raw), "Dear diary") || strings.Contains(string(raw), "Quillfeather") {
+		t.Errorf("what is saved of her archive: %q", raw)
+	}
+	if !canSeeTask("alice", again[hers.ID].Task) || canSeeTask("bob", again[hers.ID].Task) {
+		t.Error("who sees her archived task")
+	}
+	// A start's first search: by the index file, which has every task's
+	// words; an archive is read for a hit in it, not to search.
+	if got := retrieve(&Req{user: "alice"}, "barista", 5, "", false); len(got) == 0 {
+		t.Fatal("no hit before the start")
+	}
+	restartSearch()
+	taskDocs.mu.Lock()
+	taskDocs.done, taskDocs.docs, taskDocs.files = false, nil, nil
+	taskDocs.mu.Unlock()
+	taskfiles.ForgetParsed()
+	before := taskfiles.Parsed()
+	if got := retrieve(&Req{user: "alice"}, "barista", 5, "", false); len(got) == 0 || got[0].taskID() != milk.ID {
+		t.Errorf("a start's search for an open task: %d hits", len(got))
+	}
+	// (Her own archive is read: what is private is in no index file, its
+	// words are added for its user at each search's index.)
+	if taskfiles.KeepsParsed(archive) {
+		t.Errorf("a start's first search read the shared archive (%d files parsed)", taskfiles.Parsed()-before)
+	}
+	if got := retrieve(&Req{user: "alice"}, "zephyrscale", 5, "", false); len(got) == 0 || got[0].taskID() != old.ID {
+		t.Errorf("a search for an archived task: %d hits", len(got))
+	}
+	if got := retrieve(&Req{user: "bob"}, "quillfeather", 5, "", false); len(got) != 0 {
+		t.Errorf("bob finds her archived task: %d hits", len(got))
+	}
+	if got := retrieve(&Req{user: "alice"}, "quillfeather", 5, "", false); len(got) == 0 || got[0].taskID() != hers.ID {
+		t.Errorf("she doesn't find her archived task: %d hits", len(got))
+	}
+	// The archive changes: what was saved is of another file, and is not taken.
+	if _, err := updateTask("alice", old.ID, title, ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := byID()[old.ID]; got.Task.Title != "Oat milk" {
+		t.Errorf("after the archive changed: %+v", got.Task)
+	}
 }

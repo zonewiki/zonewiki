@@ -207,9 +207,18 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 		}
 	}
 	q := textsearch.ParseQuery(query)
+	// updated: the tasks the user's Tasks links count (updatesFor): of the
+	// open ones and those closed this month or last. A doc keeps a task's
+	// record, not its history, so they are asked for by id.
+	news := map[string]bool{}
+	if updated {
+		for _, t := range updatesFor(user, taskFiles.Open(user), recentUpdates(user)) {
+			news[t.ID] = true
+		}
+	}
 	var docs []*SearchDoc
 	for _, d := range taskSearchDocs() {
-		if !canSeeTask(user, d.Task) || status != "all" && (status == "open") != d.Task.IsOpen() || updated && newsFor(d.Task, user).Kind == "" {
+		if !canSeeTask(user, d.Task) || status != "all" && (status == "open") != d.Task.IsOpen() || updated && !news[d.taskID()] {
 			continue
 		}
 		have := taskTagsLower(d.Task)
@@ -222,8 +231,14 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 		}
 	}
 	if strings.TrimSpace(q.Text) != "" {
-		x := newDocIndex(docs)
-		ranked := x.search(q.Text, max(len(docs), 1))
+		// Ranked by the wiki's search index, among these tasks: it has
+		// every task's words in its file, so none is read to rank them.
+		x := searchIndex(&Req{user: user})
+		among := make(map[*SearchDoc]bool, len(docs))
+		for _, d := range docs {
+			among[d] = true
+		}
+		ranked := x.searchWhere(q.Text, max(len(docs), 1), func(d *SearchDoc) bool { return among[d] })
 		if semantic != nil {
 			semantic.poke()
 			byID := map[string]*SearchDoc{}
@@ -272,7 +287,7 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 	}
 	var body []string
 	for _, d := range docs[:min(limit, len(docs))] {
-		body = append(body, mcpTaskText(d.Task, base, user))
+		body = append(body, mcpTaskText(d.wholeTask(), base, user))
 	}
 	return "Today is " + day + ". " + count + ":\n\n" + strings.Join(body, "\n\n---\n\n"), nil
 }
@@ -474,18 +489,15 @@ const (
 // it lacks, so the model can offer them; and its tags no other task or page
 // uses, which may be near-duplicates of existing ones.
 func tagHints(task *Task, user string) string {
-	var others []*SearchDoc
-	for _, d := range taskSearchDocs() {
-		if d.taskID() != task.ID && canSeeTask(user, d.Task) {
-			others = append(others, d)
-		}
-	}
+	// The other tasks the user sees, by the wiki's search index (no task is
+	// read to find the ones like this one).
+	other := func(d *SearchDoc) bool { return d.isTask() && d.taskID() != task.ID && canSeeTask(user, d.Task) }
 	have := taskTagsLower(task)
 	text := textsearch.ParseQuery(task.Title + " " + task.Description).Text
 	counts := map[string]int{}
 	var order []string
 	if strings.TrimSpace(text) != "" {
-		for _, d := range newDocIndex(others).search(text, similarTasks) {
+		for _, d := range searchIndex(&Req{user: user}).searchWhere(text, similarTasks, other) {
 			for _, tag := range d.Task.Tags {
 				tag = strings.ToLower(tag)
 				if have[tag] {
@@ -512,7 +524,10 @@ func tagHints(task *Task, user string) string {
 			strings.Join(hints, ", ")
 	}
 	used := map[string]bool{}
-	for _, d := range others {
+	for _, d := range taskSearchDocs() {
+		if !other(d) {
+			continue
+		}
 		for t := range taskTagsLower(d.Task) {
 			used[t] = true
 		}

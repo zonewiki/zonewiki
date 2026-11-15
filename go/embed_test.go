@@ -314,7 +314,7 @@ func TestProseChars(t *testing.T) {
 
 func TestSemanticTasks(t *testing.T) {
 	testWiki(t, map[string]string{"index": "# Home\n"})
-	tasks := []semTask{{"t1", "Book the Werkstatt"}, {"t2", "Buy milk"}, {"t3", "Evening routine: bed early"}}
+	tasks := []semTask{semTaskOf("t1", "Book the Werkstatt"), semTaskOf("t2", "Buy milk"), semTaskOf("t3", "Evening routine: bed early")}
 	r := newRecorder()
 	x := testIndex(r, func() []semTask { return tasks })
 	x.sync()
@@ -328,7 +328,7 @@ func TestSemanticTasks(t *testing.T) {
 	if x.sync() || r.calls != nil {
 		t.Error("unchanged tasks cost something")
 	}
-	tasks = []semTask{{"t1", "Book the Werkstatt"}, {"t2", "Buy oat milk"}}
+	tasks = []semTask{semTaskOf("t1", "Book the Werkstatt"), semTaskOf("t2", "Buy oat milk")}
 	if !x.sync() || !reflect.DeepEqual(r.calls, []string{"Buy oat milk"}) || len(x.tasks) != 2 {
 		t.Errorf("embedded %q, tasks %v", r.calls, x.tasks)
 	}
@@ -340,7 +340,7 @@ func TestSemanticTasks(t *testing.T) {
 
 	// A task under its own floor; one that failed is retried.
 	floor := newSemanticIndex(newRecorder(), filepath.Join(t.TempDir(), "c.json"),
-		func() []semTask { return []semTask{{"t1", "Werkstatt and milk and bed"}} }, 0.5, 0.5, 0.9, 0)
+		func() []semTask { return []semTask{semTaskOf("t1", "Werkstatt and milk and bed")} }, 0.5, 0.5, 0.9, 0)
 	floor.sync()
 	if len(floor.searchTasks("car repair", nil, 30)) > 0 {
 		t.Error("found under the task floor")
@@ -598,4 +598,9 @@ func TestSearchFloor(t *testing.T) {
 	if x.searchFloor() != 0.7 {
 		t.Errorf("set %v", x.searchFloor())
 	}
+}
+
+// semTaskOf: a task for the semantic index with this text.
+func semTaskOf(id, text string) semTask {
+	return semTask{id, sha1Hex(text), func() string { return text }}
 }

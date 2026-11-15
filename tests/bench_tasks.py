@@ -43,7 +43,7 @@ BUDGETS = {
     "the repository per 100 writes (MB)": 10,
     "the same, packed (MB)": 1.5,
     "the same, joined (MB)": 0.15,
-    "the server's memory (MB)": 260,
+    "the server's memory (MB)": 230,
     "joining the packs (ms)": 3000,
 }
 

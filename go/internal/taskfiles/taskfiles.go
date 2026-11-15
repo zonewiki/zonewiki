@@ -35,6 +35,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"zonewiki/internal/atomicfile"
 	"zonewiki/internal/taskmodel"
@@ -302,6 +303,29 @@ type parsedFile struct {
 // memory (62 of 163 MB with 80,000 tasks, measured 2026-11-15).
 const archiveKept = 10 * time.Minute
 
+// parses counts the task files parsed (Parsed): what a test and the bench
+// ask to see that something didn't read the wiki's task files.
+var parses atomic.Int64
+
+// Parsed: how many task files were parsed since Zone started.
+func Parsed() int64 { return parses.Load() }
+
+// ForgetParsed: nothing is kept parsed, as when Zone starts.
+func ForgetParsed() {
+	parsed.Lock()
+	clear(parsed.files)
+	parsed.Unlock()
+}
+
+// KeepsParsed: the task file at path is kept parsed (it was read, and not
+// forgotten since).
+func KeepsParsed(path string) bool {
+	parsed.Lock()
+	defer parsed.Unlock()
+	_, ok := parsed.files[path]
+	return ok
+}
+
 // forgetOldArchives drops the archives nobody read for archiveKept (with
 // parsed locked; when a file is parsed, which is when the cache grows).
 func forgetOldArchives(now time.Time) {
@@ -355,6 +379,7 @@ func peekFile(path string) (tasks []*Task, exists, ok bool) {
 		if strings.TrimSpace(string(raw)) != "" {
 			f.tasks, f.ok = taskmodel.Parse(raw)
 		}
+		parses.Add(1)
 		forgetOldArchives(now)
 	}
 	f.used = now
@@ -791,9 +816,27 @@ func (s *Store) ReadTaskForWriteLocked(user, id string) (active, closed []*Task,
 // file from before the months is there, or a closed.json holds a task of
 // an earlier month. Found by the files' names and a look at this month's
 // files, which are parsed anyway.
-func (s *Store) unfiled(user string) bool {
+func (s *Store) unfiled(user string) bool { return s.unfiledOf(s.Owners(user)) }
+
+// Unfiled: any owner's closed tasks wait to be filed (unfiled), or a task
+// file still has its name from before they were called closed: what a
+// start has to do something about (ArchiveOldClosed), found without
+// reading the archives.
+func (s *Store) Unfiled() bool {
+	for _, o := range s.EveryOwner() {
+		entries, _ := os.ReadDir(s.Dir(o))
+		for _, e := range entries {
+			if !e.IsDir() && oldClosedNameRE.MatchString(e.Name()) {
+				return true
+			}
+		}
+	}
+	return s.unfiledOf(s.EveryOwner())
+}
+
+func (s *Store) unfiledOf(owners []string) bool {
 	current := s.currentMonth()
-	for _, o := range s.Owners(user) {
+	for _, o := range owners {
 		for _, d := range s.dirs(o) {
 			for _, p := range archivesIn(d) {
 				if !monthRE.MatchString(strings.TrimSuffix(strings.TrimPrefix(filepath.Base(p), "closed-"), ".json")) {
@@ -1230,6 +1273,38 @@ func lookAt(path, owner string, fn func(*Task)) {
 		fn(&shown)
 	}
 }
+
+// Look shows fn each task of the task file at path, owner's, without a copy
+// (lookAt): for who keeps something of each and not the task (the search's
+// records). False when the file is not there or can't be read.
+func Look(path, owner string, fn func(*Task)) bool {
+	_, _, ok := peekFile(path)
+	if ok {
+		lookAt(path, owner, fn)
+	}
+	return ok
+}
+
+// TaskIn: the task id of the task file at path, owner's, as a copy; nil
+// when the file doesn't hold it (any more).
+func TaskIn(path, id, owner string) *Task {
+	tasks, _, ok := peekFile(path)
+	if !ok {
+		return nil
+	}
+	for _, t := range tasks {
+		if t.ID == id {
+			c := t.Clone()
+			c.Owner = owner
+			return c
+		}
+	}
+	return nil
+}
+
+// IsArchive: path is an archive, an earlier month's closed tasks (or a
+// year's, from before the months): a file that rarely changes.
+func IsArchive(path string) bool { return archiveNameRE.MatchString(filepath.Base(path)) }
 
 // CountClosedInYear: how many of the closed tasks of a year user sees in
 // takes (the Closed link's number, asked for after every write): counted
