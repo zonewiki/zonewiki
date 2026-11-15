@@ -451,9 +451,9 @@ def test_a_task_someone_gave_you_is_marked_new(alice):
     expect(card(alice, "From bob").locator(".task-new")).to_have_count(0)
 
 
-def test_my_tasks_settings_turn_the_mail_off(page, wiki, monkeypatch):
-    # Where Zone could mail her about a task assigned to her, My tasks'
-    # settings have the box, ticked; unticked, her registry says mail: off.
+def test_my_tasks_settings_turn_the_mails_on(page, wiki, monkeypatch):
+    # Where Zone could mail her, My tasks' settings have a box for each kind
+    # of mail, none ticked: mail is for who asks for it.
     monkeypatch.setattr(settings, "USERS", {name: ("pw", "") for name in ("alice", "bob")})
     monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"email": "alice@example.org"}})
     monkeypatch.setattr(settings, "ENV", {"ZONE_SMTP_HOST": "127.0.0.1", "ZONE_SMTP_PORT": "9", "ZONE_SMTP_TLS": "none",
@@ -464,16 +464,25 @@ def test_my_tasks_settings_turn_the_mail_off(page, wiki, monkeypatch):
     page.locator("#task-more-btn").click()
     page.get_by_role("menuitem", name="List settings…").click()
     dialog = page.locator("#task-settings-modal")
-    box = dialog.locator("[name=mail]")
-    expect(box).to_be_visible()
-    expect(box).to_be_checked()
-    box.uncheck()
+    box = dialog.locator("[name=mail_assigned]")
+    expect(dialog.locator(".task-settings-mail label")).to_have_text(
+        ["a task is given to me", "someone mentions me (@name)", "someone comments on a task I have or gave"])
+    for name in ("mail_assigned", "mail_mentioned", "mail_comments"):
+        expect(dialog.locator(f"[name={name}]")).not_to_be_checked()
+    box.check()
+    dialog.locator("[name=mail_comments]").check()
     with page.expect_navigation():
         dialog.get_by_role("button", name="Save").click()
-    assert '"mine": {"mail": "off"}' in (wiki.root / "private/alice/_tasks/lists.json").read_text()
+    assert '"mine": {"mail": "assigned,comments"}' in (wiki.root / "private/alice/_tasks/lists.json").read_text()
     page.locator("#task-more-btn").click()
     page.get_by_role("menuitem", name="List settings…").click()
-    expect(box).not_to_be_checked()
+    expect(box).to_be_checked()
+    expect(dialog.locator("[name=mail_mentioned]")).not_to_be_checked()
+    box.uncheck()
+    dialog.locator("[name=mail_comments]").uncheck()
+    with page.expect_navigation():
+        dialog.get_by_role("button", name="Save").click()
+    assert '"mail"' not in (wiki.root / "private/alice/_tasks/lists.json").read_text()
     # bob has no address: no box.
     page.request.post("/login", form={"username": "bob", "password": "pw"})
     page.goto("/tasks?mine=1")
@@ -492,7 +501,7 @@ def test_the_tasks_link_says_that_something_is_new_for_you(alice):
     alice.goto("/")
     badge = alice.locator('.module-link[data-module="tasks"] .module-new').first
     expect(badge).to_have_text("1")
-    expect(alice.locator('.module-link[data-module="tasks"]').first).to_have_attribute("title", "Tasks: 1 new for you")
+    expect(alice.locator('.module-link[data-module="tasks"]').first).to_have_attribute("title", "Tasks: 1 update for you")
     # On My tasks its pill has it too, and it goes when she sets a date, without a reload.
     alice.goto("/tasks?mine=1&view=open")
     pill = alice.locator('.tasks-place[data-place="mine"] .module-new')
@@ -694,3 +703,28 @@ def test_a_comment_is_its_authors(alice, new_page):
     assert bob.request.delete(f"{url}/{cid}").ok
     assert bob.request.put(f"/api/tasks/{t['id']}", data={"comments": kept}).ok
     assert [c["text"] for c in task(alice, "Talk")["comments"]] == ["bob's second word", "alice's word"]
+
+
+def test_updates_show_what_happened_on_your_tasks(alice, new_page):
+    """My tasks' Updates (docs/spec/tasks.md, Views): a comment on a task you
+    gave away, with what happened in words; opening the task clears it, and
+    the Tasks link counts it meanwhile."""
+    t = new(alice, "For bob", assignee="bob")
+    bob = new_page()
+    bob.request.post("/login", form={"username": "bob", "password": "pw"})
+    assert bob.request.post(f"/api/tasks/{t['id']}/comments", data={"text": "Need the contract first"}).ok
+    alice.goto("/tasks?mine=1")
+    expect(alice.locator(".updates-heading")).to_contain_text("Updates")
+    expect(alice.locator(".task-item.task-update .task-title")).to_have_text(["For bob"])
+    expect(card(alice, "For bob").locator(".task-update-mark")).to_have_text("bob commented")
+    expect(alice.locator('.module-link[data-module="tasks"] .module-new').first).to_have_text("1")
+    # Not hers to do: on no other tab.
+    alice.locator("#tasks-tabs [data-view='open']").click()
+    expect(card(alice, "For bob")).to_have_count(0)
+    alice.locator("#tasks-tabs [data-view='focus']").click()
+    # The list's menu marks all read.
+    alice.locator("#task-more-btn").click()
+    alice.get_by_role("menuitem", name="Mark all read").click()
+    expect(alice.locator(".updates-heading")).to_have_count(0)
+    expect(alice.locator('.module-link[data-module="tasks"] .module-new').first).to_be_hidden()
+    assert [e["event"] for e in task(alice, "For bob")["history"]][-1] == "seen"

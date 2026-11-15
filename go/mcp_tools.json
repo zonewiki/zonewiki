@@ -60,10 +60,11 @@
      "enum": [
       "open",
       "closed",
-      "all"
+      "all",
+      "updated"
      ],
      "default": "open",
-     "description": "open, closed (done or won't do), or all."
+     "description": "open, closed (done or won't do), all, or updated: tasks with news the user hasn't seen (a comment, a mention, given, closed)."
     },
     "query": {
      "type": "string",

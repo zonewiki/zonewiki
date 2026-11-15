@@ -303,7 +303,7 @@ On phones the control spans the full width.
   Empty Focus says "Nothing planned for today" and links to Plan.
   New tasks created here get today as start date.
   (Focus once had its own order, the Lineup (`focus_order`) above Others; it was removed as a second commitment on top of the start date.)
-  **Updates** (My tasks' Focus only; `.updates-heading`, cards `.task-update`; `inViewOrder` in `js/taskrender.js`, `tasksInView` given the user): above Unsorted, the tasks someone gave you that you haven't opened (`TasksCore.givenToMe`: the card's "new"), **whatever their dates**. A task given to you often has none, and was then on no tab the Tasks links open, while their count said it was there. It is in neither section below, nothing is dragged into Updates and nothing ranks there (`sectionList` leaves its cards out); opening the task, or doing something with it, takes it out: with a start date not after today it is in Focus below, else on Open.
+  **Updates** (My tasks' Focus only; `.updates-heading`, cards `.task-update`; `inViewOrder` in `js/taskrender.js`, `tasksInView` given the user): above Unsorted, **the tasks with news for you** (`TasksCore.newsFor`: What happens on your tasks is told to you, in `docs/spec/users.md`), **whatever their dates**, each card saying what the news is. A task given to you often has no date, and was then on no tab the Tasks links open, while their count said it was there. Among them are tasks that aren't in My tasks otherwise: what you gave away (someone commented, it was done), what mentions you, a task closed this month or last; the server sends those along with My tasks (`withUpdates`: `GET /api/tasks?mine=1`, and the tasks a page of My tasks brings), the list holds them for Updates alone (`t.extra`) and no other tab shows them. A task there is in neither section below, nothing is dragged into Updates and nothing ranks there (`sectionList` leaves its cards out); opening the task, or doing something with it, takes it out: one of yours with a start date not after today is in Focus below, else on Open.
 - **Closed** is not a tab but a link under the list (`#task-closed-link`, `Closed (N) →`, count from `/api/tasks/closed-count`, refreshed after every write).
   It holds the tasks that are closed: done, and closed undone (won't do), which is why it isn't called Completed.
   That is its name everywhere: where people read it (the link, the view's heading, the settings dialog), in the params (`view=closed`), the routes (`/api/tasks/closed`), the files (`closed.json`), a task's `closed_at` and the code.
@@ -378,7 +378,7 @@ The line above Save says whose the settings are: the list's, for everyone (or "w
 - **All tasks** (`/tasks`): the shared registry's `all`, `"all": {"view": "open", "limit": "5"}` (`allTasksParams`), for everyone.
   It has no pin and no filter (`allSettingKeys`).
 - **My tasks** (`/tasks?mine=1`): your registry's `mine`, `"mine": {"view": "focus", "limit": "5"}` (`mineParams`, `setMineParams`, `mineSettingKeys`; without users the shared registry's), for you alone.
-  `"mail": "off"` there turns off the mail about a task assigned to you (**Mail me when a task is assigned to me**, a box that is ticked unless turned off, shown where Zone could mail you: `data-settings-mail`; Assigning tasks in `docs/spec/users.md`).
+  `"mail"` there names the kinds of mail you turned on (**Mail me when**: a task is given to me, someone mentions me, someone comments on a task I have or gave; three boxes, none ticked until you tick it, shown where Zone could mail you: `data-settings-mail`; What happens on your tasks is told to you, in `docs/spec/users.md`).
   It has no pin and no filter, and the dialog says "For My tasks: yours alone."
   Unset, it opens on Focus, with Plan on the Open tab and no limit.
   (Until 2026-11 the view, then called Pinned, showed its first pinned list's settings and had no dialog.)
@@ -460,7 +460,7 @@ Each with a dark-mode value.
 
 ### Interaction
 
-- **Filter field** (`#task-filter-search`, `TasksCore.parseFilter`/`matchesFilter`): `#words` filter by tag (all must match; `#a|b` = any), `-#word` excludes a tag (`-#a|b`: neither), `list:shop` shows the tasks in that list (`list:a|b` either, `-list:shop` not in it, `list:inbox` in no list, the Inbox, as `list:none` says too; a list is no tag, so `#shop` doesn't find it), `!high` (or `!`) and `!low` show the tasks of that importance, the rest searches title and description.
+- **Filter field** (`#task-filter-search`, `TasksCore.parseFilter`/`matchesFilter`): `#words` filter by tag (all must match; `#a|b` = any), `-#word` excludes a tag (`-#a|b`: neither), `is:updated` shows the tasks with news for you, `list:shop` shows the tasks in that list (`list:a|b` either, `-list:shop` not in it, `list:inbox` in no list, the Inbox, as `list:none` says too; a list is no tag, so `#shop` doesn't find it), `!high` (or `!`) and `!low` show the tasks of that importance, the rest searches title and description.
   `/` focuses it, `#` focuses it and starts a tag.
   Its tooltip lists the syntax (with users the `@` words too).
   While it holds something of yours (text, or a chip the page didn't set) an **×** at its end (`.chip-input-clear`, "Clear the filter") empties it: the text and your chips go, a page's locked chips stay, and the cursor stays in the field.
@@ -702,7 +702,7 @@ The server logs events on the task (`logEvent` in `go/tasklogic.go`): `created` 
 `reopened`,
 `wontdo`,
 `skipped`,
-and with users `shared` (a private task made shared, by whoever did it: moved out of a private list, or its list made shared; older tasks may show `private` from when tasks could move the other way)
+and with users `seen` (a user opened the task while it had news for them: one a user, the latest), `mentioned` (a comment or the description names a user with `@name`: `to` says who), `shared` (a private task made shared, by whoever did it: moved out of a private list, or its list made shared; older tasks may show `private` from when tasks could move the other way)
 and `assigned` (the assignee changed: `from` and `to` name the users, `null` no one; `applyAssignee`)
 and `seen` (the user a task was given to opened it, once: Assigning tasks in `docs/spec/users.md`).
 A recurring task's next occurrence carries the series' history on (with the `done` or `skipped` just logged) plus a `repeat` entry ("Repeats: next Oct 3"), so the series reads as one log; it gets no `created` of its own.

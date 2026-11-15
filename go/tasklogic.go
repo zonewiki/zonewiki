@@ -155,47 +155,191 @@ func givenToOthers(user string, open []*Task) int {
 // tasks from them that are not theirs to do, a section per person.
 const givenHref = "/tasks?view=plan&group=person&from=me&assignee=-me,-none"
 
-// givenTo: someone else gave user this task and they haven't touched it
-// since: its card says "new", and the Tasks links count it (TaskCounts.New).
-// From its history alone, so no state is kept: the entry that made it
-// theirs (the last "assigned" one, or "created" for a task made with their
-// name on it) is someone else's, and nothing they did is logged after it: a
-// date, done, a comment, or "seen", which is logged when they open the task
-// (seenTask). No time takes it away: a task given a week ago and not looked
-// at is the one that needs the mark. The browser has the same rule
-// (TasksCore.givenToMe; go/testdata/given_cases.json runs through both).
-func givenTo(t *Task, user string) bool {
-	if user == "" || t.Owner != "" || !t.IsOpen() || t.Assignee != user {
-		return false
+// News: what someone else did on a task that user has to do with and
+// hasn't seen: its kind, who did it and when ("" kind: nothing).
+type News struct{ Kind, By, At string }
+
+// The kinds of news: a task given to the user (its card says "new"), a
+// comment, a mention of them, the task closed or reopened, and for who made
+// it that it was given to someone else.
+const (
+	newsGiven    = "given"
+	newsComment  = "comment"
+	newsMention  = "mention"
+	newsClosed   = "closed"
+	newsReopened = "reopened"
+	newsHandedOn = "handed"
+)
+
+// newsFor: what a shared task has for user that they haven't seen (Updates
+// in docs/spec/tasks.md): its mark on their cards, and what the Tasks links
+// count (TaskCounts.New). From the task alone, so no state is kept beside
+// it. User has to do with a task they are assigned or that they made; a
+// mention reaches them whatever the task. What counts is someone else's and
+// after the last thing user did on the task (anything of theirs in its
+// history, "seen" among it, which is logged when they open the task:
+// seenTask; or a comment of theirs):
+//   - it was given to them: the last "assigned" entry, or "created" for a
+//     task made with their name on it, while it is open;
+//   - a comment;
+//   - a mention of them ("mentioned", logged with the comment or the
+//     description that names them);
+//   - it was closed, or reopened;
+//   - for who made it: it was given to someone else.
+//
+// Not a date, a tag, the title or the order. No time takes news away: a
+// task given a week ago and not looked at is the one that needs the mark.
+// The latest of them is the news. History entries are in order, comments
+// are, and between the two the minute decides: within one minute a comment
+// of the user's own, or their look at the task ("seen"), counts as the
+// later one. The browser has the same rule
+// (TasksCore.newsFor; go/testdata/news_cases.json runs through both).
+func newsFor(t *Task, user string) News {
+	if user == "" || t.Owner != "" {
+		return News{}
 	}
-	at := -1
-	for i := len(t.History) - 1; i >= 0 && at < 0; i-- {
-		if t.History[i].Event == "assigned" {
-			at = i
-		}
-	}
-	if at < 0 {
-		at = slices.IndexFunc(t.History, func(e HistoryEntry) bool { return e.Event == "created" })
-	}
-	if at < 0 {
-		return false
-	}
-	gave := t.History[at]
-	if gave.By == "" || gave.By == user || gave.Event == "assigned" && strings.ToLower(gave.To) != user {
-		return false
-	}
-	for _, e := range t.History[at+1:] {
+	minute := func(at string) string { return runePrefix(at, 16) }
+	has, made := t.Assignee == user, t.Maker() == user
+	mine, myAct, sawIt := -1, "", false
+	lastAssigned := -1
+	for i, e := range t.History {
 		if e.By == user {
-			return false
+			mine, myAct, sawIt = i, minute(e.At), e.Event == "seen"
+		}
+		if e.Event == "assigned" {
+			lastAssigned = i
 		}
 	}
-	when := runePrefix(gave.At, 16)
-	for _, c := range t.Comments {
-		if c.By == user && runePrefix(c.At, 16) >= when {
-			return false
+	myComment, said := -1, ""
+	for i, c := range t.Comments {
+		if c.By == user {
+			myComment, said = i, minute(c.At)
 		}
 	}
-	return true
+	var news News
+	take := func(kind, by, at string) {
+		if at >= news.At {
+			news = News{kind, by, at}
+		}
+	}
+	for i := mine + 1; i < len(t.History); i++ {
+		e := t.History[i]
+		at := minute(e.At)
+		if e.By == "" || e.By == user || said != "" && at <= said {
+			continue
+		}
+		to := strings.ToLower(e.To)
+		switch e.Event {
+		case "assigned":
+			if has && to == user && i == lastAssigned && t.IsOpen() {
+				take(newsGiven, e.By, at)
+			} else if made && to != "" && to != user {
+				take(newsHandedOn, e.By, at)
+			}
+		case "created":
+			if has && lastAssigned < 0 && t.IsOpen() {
+				take(newsGiven, e.By, at)
+			}
+		case "done", "wontdo":
+			if (has || made) && !t.IsOpen() {
+				take(newsClosed, e.By, at)
+			}
+		case "reopened":
+			if (has || made) && t.IsOpen() {
+				take(newsReopened, e.By, at)
+			}
+		case "mentioned":
+			if to == user {
+				take(newsMention, e.By, at)
+			}
+		}
+	}
+	if has || made {
+		for _, c := range t.Comments[myComment+1:] {
+			if at := minute(c.At); c.By != "" && c.By != user && (myAct == "" || at > myAct || at == myAct && !sawIt) {
+				take(newsComment, c.By, at)
+			}
+		}
+	}
+	return news
+}
+
+// updatesFor: the tasks with news for user (newsFor): of the open tasks
+// they see, whatever list they are in, and of the closed ones of this month
+// and the last (a task they gave away that was done). What the Tasks links
+// count, and what My tasks shows under Updates.
+func updatesFor(user string, open, recentClosed []*Task) []*Task {
+	if user == "" || settings().Users == nil {
+		return nil
+	}
+	var out []*Task
+	for _, t := range slices.Concat(open, recentClosed) {
+		if newsFor(t, user).Kind != "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// withUpdates: tasks (those a view of My tasks holds) and, after them, the
+// tasks with news for user that aren't among them: what they gave away,
+// what mentions them, what was closed. My tasks shows those under Updates
+// alone.
+func withUpdates(user string, tasks, open, recentClosed []*Task) []*Task {
+	have := make(map[string]bool, len(tasks))
+	for _, t := range tasks {
+		have[t.ID] = true
+	}
+	for _, t := range updatesFor(user, open, recentClosed) {
+		if !have[t.ID] {
+			tasks = append(tasks, t)
+		}
+	}
+	return tasks
+}
+
+// givenTo: someone else gave user this task and they haven't opened it: the
+// news its card calls "new".
+func givenTo(t *Task, user string) bool { return newsFor(t, user).Kind == newsGiven }
+
+// mentionRE: @name in a text: a user's name after a space, a bracket or the
+// text's start (not the @ of a mail address).
+var mentionRE = regexp.MustCompile(`(?:^|[\s(\[{>,;:])@([a-z0-9][a-z0-9-]*)`)
+
+// mentionsOf: the users a comment or a description names with @name, each
+// once, in the text's order: users who can be given tasks, not in code.
+func mentionsOf(text string) []string {
+	s := settings()
+	if s.Users == nil || !strings.Contains(text, "@") {
+		return nil
+	}
+	masked, _ := mdtext.MaskCode(text)
+	var out []string
+	for _, m := range mentionRE.FindAllStringSubmatch(strings.ToLower(masked), -1) {
+		if name := m[1]; s.assignable(name) && !slices.Contains(out, name) {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+// logMentions logs "mentioned" for each user text names that before didn't
+// (a comment: before is ""; a description: what it was), by user, on a
+// shared task: it is news to them (newsFor), and whoever turned it on is
+// mailed (tellMentioned). Not for naming oneself. Returns who was named.
+func logMentions(t *Task, user, before, text string) []string {
+	if t.Owner != "" || user == "" {
+		return nil
+	}
+	had := mentionsOf(before)
+	var named []string
+	for _, name := range mentionsOf(text) {
+		if name != user && !slices.Contains(had, name) {
+			logEvent(t, user, "mentioned", "", name)
+			named = append(named, name)
+		}
+	}
+	return named
 }
 
 // timestamp is the current time as tasks store it (created_at, closed_at).
@@ -323,7 +467,7 @@ func daysBetween(a, b time.Time) int {
 // sends the old history back with the old fields, so an undone change
 // leaves no trace.
 var historyEvents = map[string]bool{"created": true, "start": true, "due": true, "done": true,
-	"reopened": true, "wontdo": true, "skipped": true, "repeat": true, "private": true, "shared": true, "assigned": true, "seen": true}
+	"reopened": true, "wontdo": true, "skipped": true, "repeat": true, "private": true, "shared": true, "assigned": true, "seen": true, "mentioned": true}
 
 const historyLimit = 30
 

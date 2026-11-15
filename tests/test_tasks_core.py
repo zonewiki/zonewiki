@@ -310,7 +310,7 @@ class TestFilterField:
     def test_parse(self, q, expected):
         assert run_core(f"TasksCore.parseFilter({json.dumps(q)})") == {
             **expected, "assigneeGroups": [], "excludeAssignees": [], "listGroups": [], "excludeLists": [],
-            "fromGroups": [], "excludeFrom": []}
+            "fromGroups": [], "excludeFrom": [], "updated": False}
 
     @pytest.mark.parametrize("q,groups,excluded,text", [
         ("list:Shop", [["shop"]], [], ""),
@@ -689,17 +689,19 @@ class TestAssignee:
         assert self.quick("Call Sam @me", "{me: 'me', users: new Set(['alice'])}") == ("Call Sam @me", "", False)
 
 
-class TestGivenCases:
-    """givenToMe, case by case; the server's rule (givenTo in
-    go/tasklogic.go, which counts such tasks on the Tasks links) runs through
-    the same cases (go/testdata/given_cases.json)."""
+class TestNewsCases:
+    """newsFor, case by case; the server's rule (newsFor in go/tasklogic.go,
+    which counts such tasks on the Tasks links) runs through the same cases
+    (go/testdata/news_cases.json)."""
 
-    CASES = json.loads((CORE.parent.parent / "go" / "testdata" / "given_cases.json").read_text(encoding="utf-8"))
+    CASES = json.loads((CORE.parent.parent / "go" / "testdata" / "news_cases.json").read_text(encoding="utf-8"))
 
     def test_the_cases_the_server_has(self):
-        got = run_core(f"{json.dumps(self.CASES)}.map(c => !!TasksCore.givenToMe(c.task, 'anna'))")
-        wrong = [c["name"] for c, g in zip(self.CASES, got) if g != c["want"]]
-        assert not wrong and len(got) > 10
+        got = run_core(f"{json.dumps(self.CASES)}.map(c => (TasksCore.newsFor(c.task, 'anna') || {{}}).kind || '')")
+        wrong = [(c["name"], g) for c, g in zip(self.CASES, got) if g != c["want"]]
+        assert not wrong and len(got) > 30
+        given = run_core(f"{json.dumps(self.CASES)}.map(c => !!TasksCore.givenToMe(c.task, 'anna'))")
+        assert given == [c["want"] == "given" for c in self.CASES]
 
 
 class TestGivenToMe:

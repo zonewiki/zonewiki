@@ -154,6 +154,7 @@ func createTask(user string, data jsonObj, message string) (*Task, error) {
 	if settings().Users != nil {
 		t.CreatedBy = user // who gave it, when it is someone else's to do
 	}
+	named := logMentions(t, user, "", t.Description)
 	active, err := taskFiles.ReadOpenStrict(user)
 	if err != nil {
 		return nil, err
@@ -162,6 +163,7 @@ func createTask(user string, data jsonObj, message string) (*Task, error) {
 		return t, err
 	}
 	tellAssigned(user, nil, t)
+	tellMentioned(user, t, named)
 	return t, nil
 }
 
@@ -568,12 +570,18 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 	if err != nil {
 		return nil, err
 	}
-	if seen && givenTo(t, user) {
+	if seen && newsFor(t, user).Kind != "" {
+		// One "seen" a user: a newer one takes the place of their earlier
+		// one, so looking at a task's news again and again doesn't fill its
+		// history, which holds historyLimit entries.
+		t.History = slices.DeleteFunc(t.History, func(e HistoryEntry) bool { return e.Event == "seen" && e.By == user })
 		logEvent(t, user, "seen", "", "")
 	}
+	described := t.Description
 	if err := applyTaskFields(user, t, data, false); err != nil {
 		return nil, err
 	}
+	named := logMentions(t, user, described, t.Description) // who the description names now
 	didSkip := skip && t.IsOpen()
 	switch {
 	case didSkip:
@@ -643,6 +651,7 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 		return t, err
 	}
 	tellAssigned(user, before, t)
+	tellMentioned(user, t, named)
 	return t, nil
 }
 
@@ -703,7 +712,12 @@ func addComment(user, id string, text string, message string) (*Task, error) {
 	}
 	t.Comments = append(cleanCommentList(t.Comments),
 		Comment{ID: newCommentID(), At: now().Format("2006-01-02T15:04"), By: user, Text: s})
-	return t, taskFiles.WriteBothLocked(user, active, closed, message)
+	named := logMentions(t, user, "", s)
+	if err := taskFiles.WriteBothLocked(user, active, closed, message); err != nil {
+		return t, err
+	}
+	tellComment(user, t, s, named)
+	return t, nil
 }
 
 // taskComment: the index of a task's comment by id (its comments cleaned

@@ -388,33 +388,37 @@ func TestASharedTaskStaysShared(t *testing.T) {
 // The rule for a task someone gave a user, case by case: the cases the
 // browser's rule runs through too (TasksCore.givenToMe,
 // tests/test_tasks_core.py).
-func TestGivenToCases(t *testing.T) {
-	raw, err := os.ReadFile("testdata/given_cases.json")
+func TestNewsCases(t *testing.T) {
+	raw, err := os.ReadFile("testdata/news_cases.json")
 	if err != nil {
 		t.Fatal(err)
 	}
 	var cases []struct {
 		Name string
 		Task struct {
-			Assignee string
-			ClosedAt string `json:"closed_at"`
-			Private  bool
-			History  []HistoryEntry
-			Comments []Comment
+			Assignee  string
+			CreatedBy string `json:"created_by"`
+			ClosedAt  string `json:"closed_at"`
+			Private   bool
+			History   []HistoryEntry
+			Comments  []Comment
 		}
-		Want bool
+		Want string
 	}
-	if err := json.Unmarshal(raw, &cases); err != nil || len(cases) < 10 {
+	if err := json.Unmarshal(raw, &cases); err != nil || len(cases) < 30 {
 		t.Fatalf("the cases: %v", err)
 	}
 	// anna asks.
 	for _, c := range cases {
-		task := &Task{Assignee: c.Task.Assignee, ClosedAt: c.Task.ClosedAt, History: c.Task.History, Comments: c.Task.Comments}
+		task := &Task{Assignee: c.Task.Assignee, CreatedBy: c.Task.CreatedBy, ClosedAt: c.Task.ClosedAt, History: c.Task.History, Comments: c.Task.Comments}
 		if c.Task.Private {
 			task.Owner = "anna"
 		}
-		if got := givenTo(task, "anna"); got != c.Want {
-			t.Errorf("%s: %v, want %v", c.Name, got, c.Want)
+		if got := newsFor(task, "anna").Kind; got != c.Want {
+			t.Errorf("%s: %q, want %q", c.Name, got, c.Want)
+		}
+		if got := givenTo(task, "anna"); got != (c.Want == "given") {
+			t.Errorf("%s: given %v", c.Name, got)
 		}
 	}
 }

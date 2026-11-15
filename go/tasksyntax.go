@@ -214,9 +214,21 @@ func checkEmbedSettings(set map[string]string, keys []string) (map[string]string
 					return nil, refuse("home is off (the list's tasks are left out of My tasks) or not set")
 				}
 			case "mail":
-				if v = strings.ToLower(v); v != "off" {
-					return nil, bad()
+				// The kinds of mail turned on, "," between (mailKinds);
+				// "off" from before they were opt-in reads as none.
+				asked := strings.Split(strings.ToLower(v), ",")
+				for _, k := range asked {
+					if k != "" && k != "off" && !slices.Contains(mailKinds, k) {
+						return nil, bad()
+					}
 				}
+				var kinds []string
+				for _, k := range mailKinds { // in one order, whatever was sent
+					if slices.Contains(asked, k) {
+						kinds = append(kinds, k)
+					}
+				}
+				v = strings.Join(kinds, ",")
 			case "new":
 				v = strings.Join(taskmodel.CleanTags(strings.Split(v, ",")), ",")
 			case "assignee":

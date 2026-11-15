@@ -255,7 +255,7 @@ const placesNow = () => document.querySelectorAll('.tasks-place[data-place]');
 // Same as taskCountsTitle in go/views.go.
 function taskCountsTitle({ focus, overdue, today, new: fresh }) {
   const parts = [];
-  if (fresh > 0) parts.push(`${fresh} new for you`);
+  if (fresh > 0) parts.push(`${fresh} update${fresh === 1 ? '' : 's'} for you`);
   if (focus > 0) parts.push(`${focus} in Focus`);
   if (overdue > 0) parts.push(`${overdue} overdue`);
   if (today > 0) parts.push(`${today} due today`);

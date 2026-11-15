@@ -3,13 +3,14 @@
 // task. The task writes call tellAssigned after a write went through
 // (createTask, updateTaskLocked, apiBatchUpdate), with who had each task
 // before. No mail without an SMTP server (mail.go), to a user without an
-// address, or to one who turned it off in their My tasks' settings
-// ("mail": "off" in their registry's mine). In the app such a task is
-// marked new on its card (TasksCore.givenToMe), from its history alone.
+// address, or to one who didn't turn that mail on in their My tasks'
+// settings (mails). In the app such a task is marked on its card and
+// counted on the Tasks links (newsFor), from the task alone.
 package main
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -18,13 +19,78 @@ import (
 // write made is not in it.
 type assignedBefore map[string]string
 
-// mailsAssigned: user gets a mail when a task is assigned to them: the
-// deployment sends mail, they have an address, they aren't disabled, and
-// they didn't turn it off.
-func mailsAssigned(s *Settings, user string) bool {
+// The kinds of mail about tasks a user can turn on (My tasks' settings):
+// a task given to them, a mention of them, a comment on a task they have or
+// gave. "mail" in their registry's mine names those turned on, "," between.
+// None is turned on until they do it: "" and "off" (what turned the one
+// mail off until 2026-11, when it was on by itself) are none.
+var mailKinds = []string{"assigned", "mentioned", "comments"}
+
+// mails: user gets the mails of kind: the deployment sends mail, they have
+// an address, they aren't disabled, and they turned that kind on.
+func mails(s *Settings, user, kind string) bool {
 	u := s.Users[user]
 	return cfg.Mail.Host != "" && u != nil && u.Email != "" && s.assignable(user) &&
-		taskFiles.ReadLists(user).Mine["mail"] != "off"
+		slices.Contains(strings.Split(taskFiles.ReadLists(user).Mine["mail"], ","), kind)
+}
+
+// mailsAssigned: user gets a mail when a task is assigned to them.
+func mailsAssigned(s *Settings, user string) bool { return mails(s, user, "assigned") }
+
+// taskMail: a mail about one task, sent in the background (a task write
+// doesn't wait for a mail server); a failure is logged.
+func taskMail(s *Settings, name, subject, intro string, t *Task, text, kindLine string) {
+	var b strings.Builder
+	b.WriteString(intro + "\n\n  " + oneLine(t.Title) + "\n")
+	if s.BaseURL != "" {
+		b.WriteString("  " + s.BaseURL + "/tasks?task=" + t.ID + "\n")
+	}
+	if text = strings.TrimSpace(text); text != "" {
+		b.WriteString("\n" + runePrefix(text, 2000) + "\n")
+	}
+	b.WriteString("\n" + appName + " sends this mail " + kindLine + ". To turn it off, open My tasks, then its menu, List settings.\n")
+	to, body := s.Users[name].Email, b.String()
+	go func() {
+		if err := sendMail(cfg.Mail, to, subject, body); err != nil {
+			logf("mail to %s about a task: %v", name, err)
+		}
+	}()
+}
+
+// tellMentioned mails the users a comment or a description of by's named
+// with @name (logMentions), those who turned that mail on.
+func tellMentioned(by string, t *Task, named []string, text ...string) {
+	s := settings()
+	if by == "" || s.Users == nil || cfg.Mail.Host == "" {
+		return
+	}
+	for _, name := range named {
+		if name != by && mails(s, name, "mentioned") {
+			taskMail(s, name, by+" mentioned you: "+oneLine(t.Title), by+" mentioned you on "+appName+", in this task:", t,
+				strings.Join(text, ""), "when someone mentions you in a task")
+		}
+	}
+}
+
+// tellComment mails a comment by on a shared task to who has it and who
+// made it (not to its author, nor to one the comment names: they get the
+// mention's mail), those who turned that mail on; and the mention's mail to
+// who it names.
+func tellComment(by string, t *Task, text string, named []string) {
+	s := settings()
+	if by == "" || s.Users == nil || cfg.Mail.Host == "" || t.Owner != "" {
+		return
+	}
+	tellMentioned(by, t, named, text)
+	var told []string
+	for _, name := range []string{t.Assignee, t.Maker()} {
+		if name == "" || name == by || slices.Contains(named, name) || slices.Contains(told, name) || !mails(s, name, "comments") {
+			continue
+		}
+		told = append(told, name)
+		taskMail(s, name, by+" commented: "+oneLine(t.Title), by+" commented on this task on "+appName+":", t, text,
+			"when someone comments on a task you have or gave")
+	}
 }
 
 // tellAssigned mails each user the open tasks among tasks that by gave them
@@ -89,6 +155,6 @@ func assignedMail(s *Settings, by string, tasks []*Task) string {
 		b.WriteString("\nAll your tasks: " + s.BaseURL + mineHref + "\n")
 	}
 	b.WriteString("\n" + appName + " sends this mail when someone gives you a task. To turn it off, open My tasks, " +
-		"then its menu, List settings, and untick \"Mail me when a task is assigned to me\".\n")
+		"then its menu, List settings.\n")
 	return b.String()
 }

@@ -117,7 +117,12 @@ async function fetchTasks() {
   });
   if (initial && app.ownsOrder) app.setOwnOrder(initialOrder || []);
   const [all] = await Promise.all([initial || load(), loadPeople()]);
-  const fetched = all.filter(app.inScope).map(app.own);
+  // My tasks also holds the tasks with news for the user that aren't in it
+  // (what they gave away, what mentions them, a closed one): for its
+  // Updates alone (t.extra; no other tab shows them).
+  const me = people.me, news = t => app.initMine && !!TasksCore.newsFor(t, me);
+  const fetched = all.filter(t => (app.inScope(t) && !t.closed_at) || news(t))
+    .map(t => { if (!app.inScope(t) || t.closed_at) t.extra = true; return app.own(t); });
   await lazyTexts(fetched);
   st.tasks = fetched;
   tasksGen++;
@@ -225,9 +230,24 @@ async function createTask(data) {
 const seenSent = new Set();
 function markSeen(id) {
   const task = st.tasks.find(t => t.id === id);
-  if (!task || seenSent.has(id) || !TasksCore.givenToMe(task, people.me)) return null;
-  seenSent.add(id);
+  if (!task || !TasksCore.newsFor(task, people.me)) return null;
+  // Once for one piece of news: a second look at the same news says nothing.
+  const news = TasksCore.newsFor(task, people.me), key = [id, news.kind, news.by, news.at].join('|');
+  if (seenSent.has(key)) return null;
+  seenSent.add(key);
   return updateTask(id, { seen: true });   // the task as it is now, for who shows its history
+}
+// The tasks with news for the user among those this list holds, and all of
+// them seen at once (My tasks' Mark all read).
+const updatesNow = () => st.tasks.filter(t => TasksCore.newsFor(t, people.me));
+async function markAllSeen() {
+  const ids = updatesNow().map(t => t.id);
+  if (!ids.length) return;
+  await Promise.all(ids.map(id => fetch(`/api/tasks/${id}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seen: true }) }).catch(() => null)));
+  await refresh();
+  refreshDueBadge();
+  app.refreshOtherInstances(app.instanceId);
 }
 
 async function updateTask(id, data) {
@@ -435,5 +455,5 @@ async function wontDoMany(ids) {
   showUndo(`${open.length} tasks marked won't do`, () => completeTasks(open, false));
 }
 
-return { dismissUndo, showUndo, triggerUndo, fetchTasks, refresh, fetchClosed, setClosedYear, createTask, updateTask, markSeen, leftViewMessage, tickTask, cancelPendingComplete, keepSnapshot, completeTasks, afterBatchWrite, oldHistory, markWontDo, wontDoMany, skipOccurrence, setStart };
+return { dismissUndo, showUndo, triggerUndo, fetchTasks, refresh, fetchClosed, setClosedYear, createTask, updateTask, markSeen, updatesNow, markAllSeen, leftViewMessage, tickTask, cancelPendingComplete, keepSnapshot, completeTasks, afterBatchWrite, oldHistory, markWontDo, wontDoMany, skipOccurrence, setStart };
 }

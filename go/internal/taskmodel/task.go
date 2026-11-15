@@ -373,7 +373,7 @@ func CleanTags(tags []string) []string {
 var DatedEvents = map[string]bool{"start": true, "due": true, "repeat": true}
 
 // NamedEvents: the history events that say from and to which user.
-var NamedEvents = map[string]bool{"assigned": true}
+var NamedEvents = map[string]bool{"assigned": true, "mentioned": true}
 
 // Maker: the user who made the task: its CreatedBy, and for a task from
 // before that field whoever its history's "created" entry is by; "" when

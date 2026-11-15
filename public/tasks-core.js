@@ -127,8 +127,10 @@ function parseFilter(q, people) {
   const tagsOf = w => partsOf(w, '#');
   const users = !!people?.users;
   let importance = '';
+  let updated = false;   // is:updated: the tasks with news for the user
   for (const w of words) {
-    if (importanceWord(w)) importance = importanceWord(w);
+    if (/^is:updated$/i.test(w)) updated = true;
+    else if (importanceWord(w)) importance = importanceWord(w);
     else if (/^-list:./i.test(w)) excludeLists.push(...listsOf(w.slice(1)));
     else if (/^list:./i.test(w)) listGroups.push(listsOf(w));
     else if (users && /^-from:./i.test(w)) excludeFrom.push(...fromOf(w.slice(1)));
@@ -145,14 +147,14 @@ function parseFilter(q, people) {
       text.push(w);
     }
   }
-  return { text: text.join(' ').toLowerCase(), tagGroups, excludeTags, importance, assigneeGroups, excludeAssignees, listGroups, excludeLists, fromGroups, excludeFrom, people };
+  return { text: text.join(' ').toLowerCase(), tagGroups, excludeTags, importance, assigneeGroups, excludeAssignees, listGroups, excludeLists, fromGroups, excludeFrom, updated, people };
 }
 
 // Whether a filter (parseFilter) leaves anything out.
 function filterActive(f) {
   return !!(f.text || f.tagGroups.length || f.excludeTags.length || f.importance ||
     f.assigneeGroups?.length || f.excludeAssignees?.length || f.listGroups?.length || f.excludeLists?.length ||
-    f.fromGroups?.length || f.excludeFrom?.length);
+    f.fromGroups?.length || f.excludeFrom?.length || f.updated);
 }
 
 // Whether the task's assignee is what a filter word names: a user, `me`
@@ -181,27 +183,69 @@ function inMine(t, out, who) {
   return !out;
 }
 
-// A task someone else gave the user, which they haven't touched since: its
-// card says "new". From its history alone, so no state is kept: the entry
-// that made it theirs (the last `assigned` one, or `created` for a task
-// made with their name on it) is someone else's, nothing they did is logged
-// after it (a date, done, a comment; and "seen", which the app logs when
-// they open the task: markSeen in js/taskdata.js). No time takes the mark
-// away: a task given a week ago and not looked at is the one that needs
-// it. Returns that entry ({ at, by }), or null.
+// What a shared task has for the user that they haven't seen (newsFor in
+// go/tasklogic.go, which counts such tasks on the Tasks links;
+// go/testdata/news_cases.json runs through both): { kind, by, at }, or
+// null. The user has to do with a task they are assigned or that they made
+// (created_by); a mention reaches them whatever the task. What counts is
+// someone else's and after the last thing the user did on the task
+// (anything of theirs in its history, "seen" among it, which the app logs
+// when they open the task: markSeen in js/taskdata.js; or a comment of
+// theirs): it was given to them ('given': its card says "new"), a comment
+// ('comment'), a mention of them ('mention'), it was closed or reopened
+// ('closed', 'reopened'), and for who made it that it was given to someone
+// else ('handed'). Not a date, a tag, the title or the order; no time takes
+// it away. The latest is the news. History entries are in order, comments
+// are, and between the two the minute decides: within one minute a comment
+// of the user's own, or their look at the task ("seen"), counts as the
+// later one.
+function newsFor(t, me) {
+  if (!me || !t || t.private) return null;
+  const minute = at => String(at || '').slice(0, 16);
+  const history = t.history || [], comments = t.comments || [];
+  const open = !t.closed_at;
+  const has = (t.assignee || '').toLowerCase() === me;
+  const made = (t.created_by || (history.find(e => e.event === 'created') || {}).by || '') === me;
+  let mine = -1, myAct = '', sawIt = false, lastAssigned = -1;
+  history.forEach((e, i) => {
+    if (e.by === me) { mine = i; myAct = minute(e.at); sawIt = e.event === 'seen'; }
+    if (e.event === 'assigned') lastAssigned = i;
+  });
+  let myComment = -1, said = '';
+  comments.forEach((c, i) => { if (c.by === me) { myComment = i; said = minute(c.at); } });
+  let news = null;
+  const take = (kind, by, at) => { if (!news || at >= news.at) news = { kind, by, at }; };
+  for (let i = mine + 1; i < history.length; i++) {
+    const e = history[i], at = minute(e.at);
+    if (!e.by || e.by === me || (said && at <= said)) continue;
+    const to = (e.to || '').toLowerCase();
+    if (e.event === 'assigned') {
+      if (has && to === me && i === lastAssigned && open) take('given', e.by, at);
+      else if (made && to && to !== me) take('handed', e.by, at);
+    } else if (e.event === 'created') {
+      if (has && lastAssigned < 0 && open) take('given', e.by, at);
+    } else if (e.event === 'done' || e.event === 'wontdo') {
+      if ((has || made) && !open) take('closed', e.by, at);
+    } else if (e.event === 'reopened') {
+      if ((has || made) && open) take('reopened', e.by, at);
+    } else if (e.event === 'mentioned') {
+      if (to === me) take('mention', e.by, at);
+    }
+  }
+  if (has || made) {
+    for (const c of comments.slice(myComment + 1)) {
+      const at = minute(c.at);
+      if (c.by && c.by !== me && (!myAct || at > myAct || (at === myAct && !sawIt))) take('comment', c.by, at);
+    }
+  }
+  return news;
+}
+
+// A task someone else gave the user that they haven't opened: the news its
+// card calls "new". Returns who gave it and when ({ at, by }), or null.
 function givenToMe(t, me) {
-  if (!me || !t || t.private || t.closed_at || (t.assignee || '').toLowerCase() !== me) return null;
-  const history = t.history || [];
-  let at = -1;
-  for (let i = history.length - 1; i >= 0 && at < 0; i--) if (history[i].event === 'assigned') at = i;
-  if (at < 0) at = history.findIndex(e => e.event === 'created');
-  const gave = history[at];
-  if (!gave || !gave.by || gave.by === me) return null;
-  if (gave.event === 'assigned' && (gave.to || '').toLowerCase() !== me) return null;
-  if (history.slice(at + 1).some(e => e.by === me)) return null;
-  const when = String(gave.at || '').slice(0, 16);
-  if ((t.comments || []).some(c => c.by === me && String(c.at || '').slice(0, 16) >= when)) return null;
-  return { at: when, by: gave.by };
+  const news = newsFor(t, me);
+  return news && news.kind === 'given' ? { at: news.at, by: news.by } : null;
 }
 
 // A task's importance: 'high', 'low', or '' for normal (what most are).
@@ -214,6 +258,7 @@ function importanceWord(w) {
 
 function matchesFilter(t, f) {
   if (f.importance && (t.importance || '') !== f.importance) return false;
+  if (f.updated && !newsFor(t, f.people?.me)) return false;
   if (f.text && !(t.title || '').toLowerCase().includes(f.text) &&
       !(t.description || '').toLowerCase().includes(f.text)) return false;
   const tags = (t.tags || []).map(tg => tg.toLowerCase());
@@ -236,14 +281,16 @@ function matchesFilter(t, f) {
 // that are the tab's kind. Focus: open and available now (isFocus);
 // Closed: the closed (done or won't do); Open and the Plan board: every open task (one
 // still waiting for a day is in the board's Unplanned section).
-// me: in My tasks, the user: Focus then also holds what someone gave them
-// and they haven't opened (givenToMe), whatever its dates: its Updates.
+// me: in My tasks, the user: Focus then also holds every task with news
+// for them (newsFor), whatever its dates: its Updates. Among them the ones
+// My tasks holds for that alone (t.extra: what the user gave away, a closed
+// one), which no other tab shows.
 function tasksInView(tasks, f, view, today, me) {
   const filtering = filterActive(f);
   return tasks.filter(t => (!filtering || matchesFilter(t, f)) &&
     (view === 'closed' ? !!t.closed_at
-      : view === 'focus' ? !t.closed_at && (isFocus(t, today) || !!(me && givenToMe(t, me)))
-      : !t.closed_at));
+      : view === 'focus' ? (!t.closed_at && !t.extra && isFocus(t, today)) || !!(me && newsFor(t, me))
+      : !t.closed_at && !t.extra));
 }
 
 // The [[tasks: tag=…]] / ?tag= form ("a,b" = all, "a|b" = any) as filter words.
@@ -605,7 +652,7 @@ function parseQuickAdd(input, today, people) {
 const TasksCore = {
   dateToStr, addDays, isOverdue, isFocus, isCarried, byOpenOrder, byDeadline, byCreated, SORTS, placeInOrder, tagMatchScore, tagCounts, selectionTags, bulkTagChange,
   rankTags, sanitizeTagInput,
-  parseFilter, matchesFilter, filterActive, assigneeIs, inMine, givenToMe, orderMoves, tasksInView, tagParamToQuery, importanceWord,
+  parseFilter, matchesFilter, filterActive, assigneeIs, inMine, newsFor, givenToMe, orderMoves, tasksInView, tagParamToQuery, importanceWord,
   bucketKey, fullDayLabel, boardBuckets, personBuckets, listBuckets, parseQuickAdd,
   dateSettings, localeDate, shortDate, longDayLabel, weekStart, weekdayNames, monthTitle,
 };

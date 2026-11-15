@@ -24,6 +24,9 @@ export function parseParams(raw) {
   return out;
 }
 
+// The kinds of mail about tasks a user can turn on (mailKinds in go/notify.go).
+const MAIL = ['assigned', 'mentioned', 'comments'];
+
 // What the Open tab shows, as group= names it (tasksGroups in go/tasksyntax.go).
 const GROUPS = ['none', 'day', 'person', 'list'];
 
@@ -58,8 +61,9 @@ function fieldsOf(p, defaultView = 'focus') {
     noshare: isTrue(p.noshare),
     // home=off: the list's tasks are left out of My tasks.
     home: String(p.home || '').toLowerCase() === 'off',
-    // My tasks: a mail when a task is assigned to the user, unless turned off.
-    mail: (p.mail || '').toLowerCase() !== 'off',
+    // My tasks: the kinds of mail the user turned on (none until they do;
+    // "off", from when one mail was on by itself, is none), in MAIL's order.
+    mail: MAIL.filter(k => (p.mail || '').toLowerCase().split(',').includes(k)).join(','),
   };
 }
 
@@ -99,7 +103,7 @@ export function changedParams(was, now, p) {
   if ('keep' in now && now.keep !== was.keep) set.keep = now.keep ? '1' : '';
   if ('noshare' in now && now.noshare !== was.noshare) set.noshare = now.noshare ? '1' : '';
   if ('home' in now && now.home !== was.home) set.home = now.home ? 'off' : '';
-  if ('mail' in now && now.mail !== was.mail) set.mail = now.mail ? '' : 'off';
+  if ('mail' in now && now.mail !== was.mail) set.mail = now.mail;
   return set;
 }
 
@@ -135,7 +139,7 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
     // one; without users any), whose tasks are in My tasks by the list.
     if (name === 'home') return m.list && m.home;
     // My tasks: Mail me when a task is assigned to me, where Zone can mail the user.
-    if (name === 'mail') return m.mine && m.mail && !!f.mail;
+    if (name === 'mail') return m.mine && m.mail && !!f.mail_assigned;
     if (name === 'new') return !m.mine;
     return true;
   };
@@ -188,7 +192,7 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
     ...(f.list ? { list: cleanList(f.list.value) } : {}),
     ...(f.noshare ? { noshare: f.noshare.checked } : {}),
     ...(f.homeout ? { home: f.homeout.checked } : {}),
-    ...(f.mail && mode().mine && mode().mail ? { mail: f.mail.checked } : {}),
+    ...(f.mail_assigned && mode().mine && mode().mail ? { mail: MAIL.filter(k => f['mail_' + k].checked).join(',') } : {}),
     ...(f.assignee ? { assignee: f.assignee.value.trim() } : {}),   // with users
   });
   const fill = (params, { all = false, mine = false, list = false, embed = false, home = false, mail = false, ownList = false, defaultView = 'focus' } = {}) => {
@@ -213,7 +217,7 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
     f.keep.checked = fields.keep;
     if (f.noshare) f.noshare.checked = fields.noshare;
     if (f.homeout) f.homeout.checked = fields.home;
-    if (f.mail) f.mail.checked = fields.mail;
+    if (f.mail_assigned) for (const k of MAIL) f['mail_' + k].checked = fields.mail.split(',').includes(k);
     if (f.list) f.list.value = fields.list;
     if (f.assignee) f.assignee.value = fields.assignee;
     // The rarer fields: shown when set.
@@ -225,7 +229,7 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
     showField('keep', fields.keep);
     showField('noshare', fields.noshare);
     showField('home', fields.home);
-    showField('mail');   // a box that is on unless turned off: always there, where there is mail
+    showField('mail');   // always there, where there is mail: nothing is sent until a box is ticked
     syncMore();
     syncPin();
     return read();
@@ -347,10 +351,13 @@ export function initTaskSettings(app) {
 
   moreBtn.addEventListener('click', () => app.showMenu('This list', [
     ['settings', 'List settings…'],
+    // My tasks, while a task has news for the user: all of them seen.
+    ...(app.initMine && app.updatesNow().length ? [['read', 'Mark all read']] : []),
     ['export', 'Export tasks'],
     ['import', 'Import tasks…'],
   ], action => {
     if (action === 'settings') { open(); return; }
+    if (action === 'read') { app.markAllSeen(); return; }
     if (action === 'import') { importFile.click(); return; }
     const a = document.createElement('a');
     a.href = '/api/tasks/export?' + new URLSearchParams(scope);

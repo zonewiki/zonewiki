@@ -53,11 +53,11 @@ function inViewOrder(filtered) {
   } else {
     orderedTasks = app.sortTasks(filtered);
   }
-  // My tasks' Focus: what someone gave the user and they haven't opened
-  // is on top, under Updates, whatever its dates, and in neither section.
+  // My tasks' Focus: the tasks with news for the user (TasksCore.newsFor)
+  // are on top, under Updates, whatever their dates, and in neither section.
   let updates = [];
   if (st.activeView === 'focus' && app.initMine) {
-    const given = t => !!TasksCore.givenToMe(t, people.me);
+    const given = t => !!TasksCore.newsFor(t, people.me);
     updates = [...filtered].reverse().filter(given);
     orderedTasks = orderedTasks.filter(t => !given(t));
     newTasks = newTasks.filter(t => !given(t));
@@ -149,18 +149,22 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
   // someone who can no longer be given tasks struck through.
   const assignee = task.assignee || '';
   const formerAssignee = !!assignee && !!people.users && !people.users.has(assignee);
-  // A task someone else gave you that you haven't touched yet is marked new.
-  const gave = TasksCore.givenToMe(task, people.me);
-  const newDisplay = gave
-    ? `<span class="task-new" title="${esc(`${gave.by} gave you this task on ${shortDate(gave.at.slice(0, 10))}`)}">new</span>` : '';
+  // What the task has for you that you haven't seen (TasksCore.newsFor): a
+  // task someone gave you is marked new, any other news says what it is.
+  const news = TasksCore.newsFor(task, people.me);
+  const NEWS = { comment: 'commented', mention: 'mentioned you', closed: 'closed it', reopened: 'reopened it', handed: 'gave it on' };
+  const newDisplay = !news ? ''
+    : news.kind === 'given'
+      ? `<span class="task-new" title="${esc(`${news.by} gave you this task on ${shortDate(news.at.slice(0, 10))}`)}">new</span>`
+      : `<span class="task-new task-update-mark" title="${esc(`${shortDate(news.at.slice(0, 10))} ${news.at.slice(11)}: open the task to mark it seen`)}">${esc(news.by)} ${NEWS[news.kind]}</span>`;
   // By person the section says who has it (not of a former assignee, whose
   // task is under Unassigned).
   const sectionSays = st.activeView === 'plan' && st.cut === 'person' && !formerAssignee;
   // In My tasks every shared task is yours: its card doesn't say so.
-  const assigneeDisplay = assignee && (sectionSays || (app.initMine && assignee === people.me)) ? newDisplay : assignee
-    ? `${newDisplay}<span class="task-assignee${assignee === people.me ? ' task-assignee-me' : ''}${formerAssignee ? ' task-assignee-former' : ''}" title="${
+  const assigneeDisplay = !assignee || sectionSays || (app.initMine && assignee === people.me) ? newDisplay
+    : `${newDisplay}<span class="task-assignee${assignee === people.me ? ' task-assignee-me' : ''}${formerAssignee ? ' task-assignee-former' : ''}" title="${
         esc(formerAssignee ? `Was assigned to ${assignee}, who can no longer be given tasks`
-          : assignee === people.me ? 'Assigned to you' : `Assigned to ${assignee}`)}">@${esc(assignee)}</span>` : '';
+          : assignee === people.me ? 'Assigned to you' : `Assigned to ${assignee}`)}">@${esc(assignee)}</span>`;
   const tagsRight = tags || assigneeDisplay ? `<span class="task-tags-right">${tags}${assigneeDisplay}</span>` : '';
   const privateDisplay = task.private
     ? '<span class="task-private" title="Private: only you see it" aria-label="Private">🔒</span>' : '';

@@ -432,7 +432,10 @@ func assignablePeople(r *http.Request) map[string]any {
 // takes them all.
 func tasksInitial(rq *Req, scopes ...string) string {
 	word := tasksWord(rq.who(), scopes...) // of these tasks: read before them (tasksapi.go, Zone-Tasks)
-	tasks := scopedTasks(rq.who(), taskFiles.Open(rq.who()), rq.taskLists(), scopes...)
+	tasks := scopedTasks(rq.who(), rq.openTasks(), rq.taskLists(), scopes...)
+	if slices.Contains(scopes, mineScope) && !slices.Contains(scopes, "") {
+		tasks = withUpdates(rq.who(), tasks, rq.openTasks(), rq.recentClosed()) // My tasks' Updates
+	}
 	var notes, comments []string
 	// Not of a long list: there the browser asks for a card's texts when its
 	// details are opened (js/taskdata.js lazyTexts), and the page doesn't
@@ -515,7 +518,11 @@ type TaskCounts struct {
 // and of those how many are overdue or due today, of My tasks (mineFilter):
 // what the Tasks links open. With no list in the wiki that is every task.
 func taskCounts(rq *Req) TaskCounts {
-	return countTasks(rq.who(), rq.openTasks(), rq.taskLists(), mineScopeParams)
+	c := countTasks(rq.who(), rq.openTasks(), rq.taskLists(), mineScopeParams)
+	// New: every task with news for the user, wherever it is and also one
+	// closed lately: what they gave away is not in My tasks.
+	c.New = len(updatesFor(rq.who(), rq.openTasks(), rq.recentClosed()))
+	return c
 }
 
 // mineScopeParams: params of the scope of My tasks, without its settings
@@ -586,7 +593,7 @@ func countTasks(user string, tasks []*Task, lists map[string]ListInfo, params ..
 		} else if due == day {
 			c.Today++
 		}
-		if givenTo(t, user) {
+		if newsFor(t, user).Kind != "" {
 			c.New++
 		}
 	}

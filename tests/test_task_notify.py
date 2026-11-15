@@ -36,7 +36,18 @@ def alice(client, wiki_dir, monkeypatch, smtp):
                                           "ZONE_SMTP_TLS": "none", "ZONE_MAIL_FROM": "wiki@example.org"})
     login(client, "alice")
     make_list(client, "team", headers=HOST)   # a task for someone is in a shared list
+    # Mail is for who asks for it: alice and bob turned on the one about a task given to them.
+    for name in ("bob", "alice"):
+        mail_on(client, name, "assigned")
     return client
+
+
+def mail_on(client, name, kinds, was=""):
+    """name turns the kinds of mail on in their My tasks' settings ("": none); alice is signed in afterwards."""
+    login(client, name)
+    resp = client.post("/api/tasks/settings", headers=HOST, json={"mine": True, "was": was, "set": {"mail": kinds}})
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+    login(client, "alice")
 
 
 def login(client, name):
@@ -66,7 +77,7 @@ def test_a_new_task_for_someone_is_mailed_to_them(alice, smtp):
     assert "Subject: alice gave you a task: Check the invoice" in text
     assert "alice assigned this task to you on Zone:" in text and "  Check the invoice\n" in text.replace("\r\n", "\n")
     assert f"{BASE}/tasks?task={task['id']}" in text and f"All your tasks: {BASE}/tasks?mine=1" in text
-    assert "Mail me when a task is assigned to me" in text
+    assert "To turn it off, open My tasks, then its menu, List settings." in text
 
 
 def test_no_mail_for_what_one_takes_or_what_is_no_ones(alice, smtp):
@@ -129,16 +140,17 @@ def test_the_mail_is_turned_off_in_my_tasks_settings(alice, smtp, wiki_dir):
     login(alice, "dan")
     assert "data-settings-mail" not in alice.get("/tasks?mine=1", headers=HOST).get_data(as_text=True)
     login(alice, "bob")
-    off = lambda value, was: alice.post("/api/tasks/settings", headers=HOST,
-                                        json={"mine": True, "was": was, "set": {"mail": value}})
-    assert off("no", "").status_code == 400
-    assert off("off", "").status_code == 200
-    assert '"mine": {"mail": "off"}' in (wiki_dir / "private/bob/_tasks/lists.json").read_text()
+    turn = lambda value, was: alice.post("/api/tasks/settings", headers=HOST,
+                                         json={"mine": True, "was": was, "set": {"mail": value}})
+    assert turn("no", "mail=assigned").status_code == 400
+    assert turn("", "mail=assigned").status_code == 200
+    assert '"mail"' not in (wiki_dir / "private/bob/_tasks/lists.json").read_text()
     login(alice, "alice")
     new(alice, title="Quietly", assignee="bob")
     mails(smtp, 0)
     login(alice, "bob")
-    assert off("", "mail=off").status_code == 200
+    assert turn("comments,assigned", "").status_code == 200        # the kinds, in Zone's order
+    assert '"mine": {"mail": "assigned,comments"}' in (wiki_dir / "private/bob/_tasks/lists.json").read_text()
     login(alice, "alice")
     new(alice, title="Aloud", assignee="bob")
     assert "Aloud" in mails(smtp, 1)[0][1]
@@ -168,7 +180,7 @@ def test_the_tasks_links_count_what_is_new_for_you(alice, smtp):
     assert counts["new"] == 1 and counts["count"] == 0 and counts["focus"] == 0
     assert counts["places"]["mine"]["new"] == 1 and "new" not in counts["places"]["inbox"]
     page = alice.get("/page/index", headers=HOST).get_data(as_text=True)
-    assert '<span class="module-new">1</span>' in page and 'title="Tasks: 1 new for you"' in page
+    assert '<span class="module-new">1</span>' in page and 'title="Tasks: 1 update for you"' in page
     # In the list's own counts too (its pill), for him; the list has no pill here, so ask the route with it pinned.
     assert alice.post("/tasks/pin-list", data={"list": "team", "pin": "1"}, headers=HOST).status_code == 302
     assert alice.get("/api/tasks/due-count?places=1", headers=HOST).get_json()["places"]["list:team"]["new"] == 1
@@ -208,3 +220,76 @@ def test_opening_a_task_given_to_you_says_seen(alice, smtp):
     assert alice.put(url, json={"assignee": "bob"}, headers=HOST).status_code == 200
     login(alice, "bob")
     assert alice.get("/api/tasks/due-count", headers=HOST).get_json()["new"] == 1
+
+
+def test_no_mail_until_it_is_turned_on(alice, smtp, wiki_dir):
+    """Mail is opt-in: someone who never opened the settings gets none, and
+    "off" from when the one mail was on by itself reads as none."""
+    new(alice, title="For carol's colleague", assignee="bob")
+    mails(smtp, 1)                                             # bob turned it on (the fixture)
+    smtp.mails.clear()
+    mail_on(alice, "bob", "", was="mail=assigned")
+    new(alice, title="Quiet", assignee="bob")
+    mails(smtp, 0)
+    registry = wiki_dir / "private/bob/_tasks/lists.json"
+    registry.write_text(registry.read_text().replace('"lists": [', '"mine": {"mail": "off"},\n  "lists": [') if '"mine"' not in registry.read_text()
+                        else registry.read_text())
+    new(alice, title="Still quiet", assignee="bob")
+    mails(smtp, 0)
+
+
+def test_a_comment_and_a_mention_are_mailed_to_who_asked(alice, smtp):
+    """A comment on a task you have or gave, and a mention of you: each a
+    mail of its own kind, to who turned that kind on, never to its author."""
+    task = new(alice, title="Offer for Acme", assignee="bob")
+    mails(smtp, 1)
+    smtp.mails.clear()
+    url = f"/api/tasks/{task['id']}/comments"
+    mail_on(alice, "bob", "assigned,comments", was="mail=assigned")
+    assert alice.post(url, json={"text": "Any news?"}, headers=HOST).status_code == 201      # alice, its maker, to bob who has it
+    (to, text), = mails(smtp, 1)
+    assert to == "bob@example.org" and "alice commented" in text and "Any news?" in text and f"{BASE}/tasks?task={task['id']}" in text
+    smtp.mails.clear()
+    # bob answers: alice gave the task, but didn't ask for that mail.
+    login(alice, "bob")
+    assert alice.post(url, json={"text": "Waiting for the contract"}, headers=HOST).status_code == 201
+    mails(smtp, 0)
+    # A mention reaches who it names, whatever the task: alice turned that on.
+    mail_on(alice, "alice", "assigned,mentioned", was="mail=assigned")
+    login(alice, "bob")
+    other = new(alice, title="Nobody's yet")
+    assert alice.post(f"/api/tasks/{other['id']}/comments", json={"text": "@alice can you look? not bob@example.org"}, headers=HOST).status_code == 201
+    (to, text), = mails(smtp, 1)
+    assert to == "alice@example.org" and "bob mentioned you" in text
+    login(alice, "alice")
+    mine = alice.get("/api/tasks?mine=1&with=order", headers=HOST).get_json()["tasks"]
+    assert [e["event"] for e in next(t for t in mine if t["id"] == other["id"])["history"]][-1] == "mentioned"
+
+
+def test_the_count_is_of_every_task_with_news_for_you(alice, smtp):
+    """The Tasks links' count: a comment on a task you gave away, a mention,
+    a task of yours that someone closed; opening the task (seen) takes it
+    away, with one seen entry a user however often they look."""
+    count = lambda: alice.get("/api/tasks/due-count", headers=HOST).get_json().get("new", 0)
+    given = new(alice, title="Given away", assignee="bob")
+    assert count() == 0
+    login(alice, "bob")
+    assert count() == 1                                                     # given to him
+    assert alice.post(f"/api/tasks/{given['id']}/comments", json={"text": "On it"}, headers=HOST).status_code == 201
+    assert count() == 0                                                     # his own comment: he has seen it
+    login(alice, "alice")
+    assert count() == 1                                                     # bob commented on what she gave him
+    held = {t["id"]: t for t in alice.get("/api/tasks?mine=1&with=order", headers=HOST).get_json()["tasks"]}
+    assert given["id"] in held                                               # My tasks holds it, for its Updates
+    assert alice.put(f"/api/tasks/{given['id']}", json={"seen": True}, headers=HOST).status_code == 200
+    assert count() == 0
+    # bob closes it: news again, though it is closed; she looks again: one seen of hers.
+    login(alice, "bob")
+    assert alice.put(f"/api/tasks/{given['id']}", json={"completed": True}, headers=HOST).status_code == 200
+    login(alice, "alice")
+    assert count() == 1
+    closed = next(t for t in alice.get("/api/tasks?mine=1&with=order", headers=HOST).get_json()["tasks"] if t["id"] == given["id"])
+    assert closed["closed_at"]
+    seen = alice.put(f"/api/tasks/{given['id']}", json={"seen": True}, headers=HOST).get_json()
+    assert count() == 0
+    assert sum(1 for e in seen["history"] if e["event"] == "seen" and e["by"] == "alice") == 1

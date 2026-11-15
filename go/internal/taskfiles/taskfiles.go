@@ -1042,6 +1042,26 @@ func (s *Store) FileByListLocked(owners []string) []string {
 	return changed
 }
 
+// RecentClosed: the closed tasks user sees of this month and the last (the
+// current closed files and last month's archives): what a page view may
+// read beside the open tasks (they are parsed once), where an older archive
+// is never read for it.
+func (s *Store) RecentClosed(user string) []*Task {
+	last := "closed-" + s.Now().AddDate(0, 0, 1-s.Now().Day()).AddDate(0, -1, 0).Format("2006-01") + ".json"
+	s.Lock()
+	defer s.Unlock()
+	tasks := s.readClosed(user)
+	return append(tasks, eachOwner(s.Owners(user), func(o string) []*Task {
+		var l []*Task
+		for _, p := range s.archives(o) {
+			if filepath.Base(p) == last {
+				l = append(l, ReadLenient(p)...)
+			}
+		}
+		return l
+	})...)
+}
+
 // Snapshot: the open tasks user sees and every closed one (this month's
 // and the archives'), read together.
 func (s *Store) Snapshot(user string) (open, done []*Task) {

@@ -579,7 +579,7 @@ const historyDetails = document.getElementById('task-edit-history' + app.sfx);
 const HISTORY_TEXT = {
   created: () => 'Created', done: () => 'Done', reopened: () => 'Reopened',
   wontdo: () => "Won't do", skipped: () => 'Skipped',
-  private: () => 'Made private', shared: () => 'Made shared', seen: () => 'Seen',
+  private: () => 'Made private', shared: () => 'Made shared', seen: () => 'Seen', mentioned: e => `Mentioned ${e.to || ''}`.trim(),
   start: e => `Start ${historyDate(e.from)} → ${historyDate(e.to)}`,
   due: e => `Due ${historyDate(e.from)} → ${historyDate(e.to)}`,
   repeat: e => `Repeats: next ${historyDate(e.to)}`,

@@ -132,7 +132,7 @@ var modules = [][3]string{{"wiki", "Wiki", "/"}, {"private", "Private", "/privat
 func taskCountsTitle(c TaskCounts) string {
 	var parts []string
 	if c.New > 0 {
-		parts = append(parts, itoa(c.New)+" new for you")
+		parts = append(parts, itoa(c.New)+" update"+map[bool]string{true: "", false: "s"}[c.New == 1]+" for you")
 	}
 	if c.Focus > 0 {
 		parts = append(parts, itoa(c.Focus)+" in Focus")

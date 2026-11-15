@@ -49,6 +49,13 @@ func mcpTaskText(t *Task, base, user string) string {
 		}
 		facts = append(facts, who)
 	}
+	// What it has for the user that they haven't seen. Reading it here
+	// doesn't see it for them: their own look does.
+	if news := newsFor(t, user); news.Kind != "" {
+		what := map[string]string{newsGiven: "gave it to the user", newsComment: "commented", newsMention: "mentioned the user",
+			newsClosed: "closed it", newsReopened: "reopened it", newsHandedOn: "gave it to someone else"}[news.Kind]
+		facts = append(facts, "update: "+news.By+" "+what+" ("+strings.Replace(news.At, "T", " ", 1)+")")
+	}
 	if maker := t.Maker(); maker != "" && maker != t.Assignee && settings().Users != nil {
 		if maker == user {
 			maker += " (the user)"
@@ -174,8 +181,13 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 	if args.Has("status") {
 		status, _ = jsonobj.As[string](args["status"])
 	}
+	// updated: the tasks with news for the user (newsFor), open or closed.
+	updated := status == "updated"
+	if updated {
+		status = "all"
+	}
 	if status != "open" && status != "closed" && status != "all" {
-		return "", toolErr("status must be open, closed or all")
+		return "", toolErr("status must be open, closed, all or updated")
 	}
 	limit, err := mcpInt(args, "limit", 50, 200)
 	if err != nil {
@@ -197,7 +209,7 @@ func searchTasks(args jsonObj, base, user string) (string, error) {
 	q := textsearch.ParseQuery(query)
 	var docs []*SearchDoc
 	for _, d := range taskSearchDocs() {
-		if !canSeeTask(user, d.Task) || status != "all" && (status == "open") != d.Task.IsOpen() {
+		if !canSeeTask(user, d.Task) || status != "all" && (status == "open") != d.Task.IsOpen() || updated && newsFor(d.Task, user).Kind == "" {
 			continue
 		}
 		have := taskTagsLower(d.Task)

@@ -107,7 +107,11 @@ func tasksRoutes(mux *http.ServeMux) {
 		user := userOf(r)
 		tasks := taskFiles.Open(user)
 		if scope := queryScope(r); scope != "" {
-			tasks = scopedTasks(user, tasks, taskLists(user), scope)
+			open := tasks
+			tasks = scopedTasks(user, open, taskLists(user), scope)
+			if scope == mineScope {
+				tasks = withUpdates(user, tasks, open, taskFiles.RecentClosed(user)) // My tasks' Updates
+			}
 		}
 		// ?with=order: {tasks, order}, with the user's own order of My tasks
 		// (mineOrder), which that view lays over the lists' order.
