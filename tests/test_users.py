@@ -743,7 +743,8 @@ class TestAuthors:
         assert len(imported) == 2
         assert all("by" not in t["comments"][0] and "by" not in t["history"][0] for t in imported)
 
-    def test_an_undo_keeps_the_names_zone_has_seen(self, client, users):
+    def test_an_undo_keeps_the_names_zone_has_seen(self, client, users, monkeypatch):
+        monkeypatch.setattr(settings, "USER_SETTINGS", {"bob": {"role": "admin"}})   # an admin deletes anyone's comment
         login(client, "alice", "alice-pw")
         task = self.shared_task(client, title="Call Sam")
         task = client.post(f"/api/tasks/{task['id']}/comments", json={"text": "Left a message"}, headers=HOST).get_json()
@@ -761,8 +762,8 @@ class TestAuthors:
         assert [e["by"] for e in restored["history"]] == [e["by"] for e in back["history"]] == ["alice"]
         # Seen as alice's is that comment, not another under its name.
         other = {**comment, "id": "c-other"}
-        put = client.put(f"/api/tasks/{task['id']}", json={"comments": [other]}, headers=HOST).get_json()
-        assert "by" not in put["comments"][0]
+        put = client.put(f"/api/tasks/{task['id']}", json={"comments": [restored["comments"][0], other]}, headers=HOST)
+        assert "by" not in put.get_json()["comments"][1]
 
     def test_an_admins_import_keeps_the_files_names(self, client, users, monkeypatch):
         # A wiki moved or a backup put back: the admin's to do.

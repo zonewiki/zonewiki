@@ -152,6 +152,9 @@ func createTask(user string, data jsonObj, message string) (*Task, error) {
 	}
 	t.History = []HistoryEntry{} // its first dates are not changes
 	logEvent(t, user, "created", "", "")
+	if settings().Users != nil {
+		t.CreatedBy = user // who gave it, when it is someone else's to do
+	}
 	active, err := taskFiles.ReadOpenStrict(user)
 	if err != nil {
 		return nil, err
@@ -230,8 +233,13 @@ func applyText(user string, t *Task, data jsonObj) error {
 		if _, ok := jsonobj.As[[]json.RawMessage](data["comments"]); !ok {
 			return refuse("comments must be a list")
 		}
+		old := t.Comments
 		t.Comments = cleanComments(data["comments"])
 		checkBy(user, t)
+		if err := othersCommentsKept(user, old, t.Comments); err != nil {
+			t.Comments = old
+			return err
+		}
 	}
 	return nil
 }

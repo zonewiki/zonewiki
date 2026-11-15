@@ -92,6 +92,23 @@ func placeSnapshot(user string, t *Task, snap jsonObj, lists map[string]ListInfo
 	return general
 }
 
+// givenToOthers: how many of the open shared tasks user made someone else
+// has: what they gave away, and are waiting for. My tasks links to them
+// (givenHref): they are not the user's to do, so they are not in it.
+func givenToOthers(user string, open []*Task) int {
+	n := 0
+	for _, t := range open {
+		if t.Owner == "" && t.Assignee != "" && t.Assignee != user && t.Maker() == user {
+			n++
+		}
+	}
+	return n
+}
+
+// givenHref: the view of what the user gave to others: All tasks, of the
+// tasks from them that are not theirs to do, a section per person.
+const givenHref = "/tasks?view=plan&group=person&from=me&assignee=-me,-none"
+
 // givenTo: someone else gave user this task and they haven't touched it
 // since: its card says "new", and the Tasks links count it (TaskCounts.New).
 // From its history alone, so no state is kept: the entry that made it
@@ -230,6 +247,7 @@ func spawnRecurring(user string, task *Task, active []*Task, skip bool) *Task {
 	spawned.Recurrence, spawned.SpawnedFrom = nextRec, task.ID
 	spawned.Owner, spawned.List = task.Owner, task.List // a series stays in its list (a private one private)
 	spawned.Assignee = task.Assignee
+	spawned.CreatedBy = task.Maker() // the series' maker
 	// The next occurrence carries the series' history and comments on.
 	spawned.History = append([]HistoryEntry{}, task.History...)
 	spawned.Comments = append([]Comment{}, task.Comments...)

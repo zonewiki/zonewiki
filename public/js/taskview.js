@@ -165,8 +165,9 @@ app.cutEl?.addEventListener('click', e => {
 // The page opened on the board (the embed's view, with its group=; a
 // reload): its sections are what group= or this browser tab says, by day
 // for a link's ?view=plan.
-function initCut(byLink) {
-  const group = byLink ? 'day' : defaultGroup();
+// A link may say by what (?view=plan&group=person), where the view offers it.
+function initCut(byLink, linkGroup = '') {
+  const group = byLink ? (['person', 'list'].includes(linkGroup) && groupsOffered().includes(linkGroup) ? linkGroup : 'day') : defaultGroup();
   st.cut = group === 'none' ? 'day' : group;
 }
 // The view a tab opens: Open its remembered grouping (unless already on

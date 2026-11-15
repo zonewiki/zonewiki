@@ -95,7 +95,7 @@ It says nothing of what changed or whose, so another user's private write reload
 - The files are JSON (`go/internal/taskmodel`): a list of tasks,
   two spaces of indent,
   text as written (no `\u` escapes but those JSON needs),
-  each task's fields in one order (`id`, `title`, `description`, `tags`, `list` (only when it is in one), `assignee` (only when it has one), `start_date`, `due_date`, `created_at`, `closed_at`, `wont_do`, `keep`, `importance` (only when it isn't normal), `last_done`, `sort_order`, `recurrence`, `spawned_from`, `history`, `comments`),
+  each task's fields in one order (`id`, `title`, `description`, `tags`, `list` (only when it is in one), `assignee` (only when it has one), `created_by` (only when it says), `start_date`, `due_date`, `created_at`, `closed_at`, `wont_do`, `keep`, `importance` (only when it isn't normal), `last_done`, `sort_order`, `recurrence`, `spawned_from`, `history`, `comments`),
   every field written,
   also when empty (`null`, `[]`, `false`),
   then any keys Zone doesn't know (from an older version or a hand edit),
@@ -160,6 +160,7 @@ Recurring instances keep the gap between the two dates, but a new instance's sta
 | `tags` | string[] | One word each. `cleanTags()` on every write/read/restore: inner whitespace → `-`, leading `#` dropped, empties removed, case-insensitive duplicates collapsed. Tag inputs sanitize as you type (`TasksCore.sanitizeTagInput`), leaving deletions alone. A tag sorts tasks; it never puts one in a list. |
 | `list` | string | The list the task is in, by its name; no key at all when it is in the Inbox (see Lists). Which list of that name is the task's file's to say: a task in a user's files is in one of their private lists (without `list`: in their Inbox), any other in a shared one. A write takes a list as the user names it (its name, or `shared/<name>`: Lists → Names), `""`, `null` or `inbox` for the Inbox (with users not for a shared task, which is always in a list: 400); a name no list has is a 400. With users the API also answers `"private": true|false`, from where the task is kept; `private` in a write is a 400 that points to `list`. |
 | `assignee` | string | The user the task is assigned to (with users; Assigning tasks in `docs/spec/users.md`). No key at all when there is none: in the file and in the API's answers, so a wiki that assigns nothing keeps its files as they were. A write takes a user's name, `me` (whoever writes) or `""`/`null`/`none` (no one); a leading `@` and the case don't matter. |
+| `created_by` | string | The user who made the task (with users; `Task.CreatedBy`, set by `createTask`, carried on by a series' next occurrence). No key in the file without one: a task from before the field, or a wiki without users. The API answers it for those too, from the history's `created` entry (`Task.Maker`), so no file is rewritten for it. Not taken from a write. |
 | `due_date` | `"YYYY-MM-DD"` / `null` | Deadline |
 | `start_date` | `"YYYY-MM-DD"` / `null` | Start date (see Dates) |
 | `created_at` | ISO datetime | |
@@ -456,6 +457,7 @@ Each with a dark-mode value.
   `/` focuses it, `#` focuses it and starts a tag.
   Its tooltip lists the syntax (with users the `@` words too).
   While it holds something of yours (text, or a chip the page didn't set) an **×** at its end (`.chip-input-clear`, "Clear the filter") empties it: the text and your chips go, a page's locked chips stay, and the cursor stays in the field.
+  With users, `from:anna` shows the tasks anna made (`created_by`; `from:me` your own, `from:a|b` either's, `-from:anna` not hers; a private task is its user's own making), and `/tasks?from=me` arrives as that word.
   With users, `@words` filter by assignee the same way (`@anna`, `@anna|bob`, `-@anna`, `@me`, `@none`), `@` focuses the field and starts a name, and typing one suggests `me`, `none` and who has tasks here (Assigning tasks in `docs/spec/users.md`).
   Typing a `#word` (or `-#word`) suggests tags of the tasks the other tag words leave visible (free text is ignored for this).
   Embed `tag=`/`?tag=` become a query via `TasksCore.tagParamToQuery`.
@@ -728,6 +730,7 @@ Not part of the History: they are never capped, undo of other changes never touc
   Under the heading is a line that looks like an empty field, **Write a comment…** (`.task-comment-open`, a button): a click puts the real field in its place, a text field of a few lines that grows with its text, focused.
   Enter starts a new line; **Ctrl+Enter** (or Add) saves the comment at once, not with Save, so Cancel never loses one, and puts the field away; Esc (or the field's Cancel) puts it away without saving, and doesn't close the modal.
   The field has the description's markdown helpers (`markdownEditor`): lists go on, `[[` completes pages, Ctrl+B/I/K, a pasted URL asks for its name, a pasted or dropped file is uploaded.
+  **A comment is its author's** (with users; `mayChangeComment` in `go/taskby.go`): ✎ and × show on your own comments, × also to an admin, who may delete any; a comment by no one (from before users) is anyone's. The routes answer 403 "Only its author changes a comment" otherwise, and a write that sends a task's comments whole (the undo of a delete or an edit) changes only the sender's own (`othersCommentsKept`: every other comment was there with that text, and none of them is dropped but by an admin).
   ✎ edits a comment in place: the same field takes the comment's place, with its text (Save or Ctrl+Enter saves, Esc cancels without closing the modal); × deletes it with an undo toast.
   **Alt+C** shows the field too (or goes to it), from anywhere in the modal.
   A comment still in its field is not lost: the modal's Save saves it with the task, and ✎ or × on another comment saves it first.
@@ -850,6 +853,7 @@ Later in 2026-11 came the Inbox: until then a task could be in no list, which wi
   - **With no list in the wiki** it is every task, and there is no such view: `/tasks?mine=1` goes to `/tasks`, where the Tasks links go then.
   - **One task app**: the cards' list chips say where each task is (a task in the Inbox has none), and a new task there goes into the Inbox.
     A task that leaves by a change of its assignee or its list gets the notice a list's view gives ("Saved; it no longer shows here.").
+  - **Given to others** (`.tasks-given`, in the line under the heading; `givenToOthers`, `givenHref` in `go/tasklogic.go`): "Given to others: 3" links to the open shared tasks you made that someone else has: All tasks filtered `from:me -@me -@none`, By person (`/tasks?view=plan&group=person&from=me&assignee=-me,-none`; `?group=` names what the board's sections stand for, for a link). They are not yours to do, so they are not in My tasks nor in its counts; this is where you see what you are waiting for, who has it, and whether it arrived (its card says "new" until its assignee opened it). Not shown when there is none.
   - **Under the heading** a line says what it holds: "Your own tasks and what is assigned to you.", without users "Every open task.", and the lists left out, as links (`leftOutLinks`).
   - **Its settings are its own**, and yours (Settings, above): the tab, Plan, the limit, the tabs' names.
   - **Its manual order is its own**, and yours (`mineOrder`, `setMineOrder` in `go/tasklists.go`; `own`, `setOwnOrder` in `tasks.js`): a list's order (a task's `sort_order`) is the list's, for everyone who looks at it, a team's ranking of its backlog; what you rank in My tasks, across lists, is your sequence and moves nothing in any list.

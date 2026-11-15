@@ -316,6 +316,10 @@ func apiEditComment(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	if !mayChangeComment(userOf(r), t.Comments[i], false) {
+		return errNotYourComment
+	}
+	rememberBy(t) // the undo sends the old text back
 	t.Comments[i].Text = text
 	if err := taskFiles.WriteBothLocked(userOf(r), active, closed, "Edit task comment"); err != nil {
 		return err
@@ -334,6 +338,9 @@ func apiDeleteComment(w http.ResponseWriter, r *http.Request) error {
 	i, err := taskComment(t, r.PathValue("cid"))
 	if err != nil {
 		return err
+	}
+	if !mayChangeComment(userOf(r), t.Comments[i], true) {
+		return errNotYourComment
 	}
 	rememberBy(t) // the undo sends it back
 	t.Comments = slices.Delete(t.Comments, i, i+1)

@@ -943,6 +943,9 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 		BreadcrumbHTML: breadcrumb(rq, crumbs, key, true, title, chip)}
 	if mine {
 		v.LeftOutLists = rq.leftOutLinks()
+		if v.MineAssigns {
+			v.Given, v.GivenHref = givenToOthers(rq.who(), rq.openTasks()), givenHref
+		}
 	}
 	if list != nil {
 		v.List = list
@@ -1165,6 +1168,8 @@ type tasksPageView struct {
 	Inbox, InboxPrivate             bool
 	LeftOutLists                    []listLink
 	Unassigned                      int
+	GivenHref                       string
+	Given                           int // My tasks: the open tasks the user made that someone else has (givenToOthers)
 	LeftOut, DeleteToGeneral        bool
 	LinkSections                    []linkSection
 	TasksHTML, BreadcrumbHTML       template.HTML

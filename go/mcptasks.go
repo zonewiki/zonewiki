@@ -49,6 +49,12 @@ func mcpTaskText(t *Task, base, user string) string {
 		}
 		facts = append(facts, who)
 	}
+	if maker := t.Maker(); maker != "" && maker != t.Assignee && settings().Users != nil {
+		if maker == user {
+			maker += " (the user)"
+		}
+		facts = append(facts, "from: "+maker)
+	}
 	if t.Importance != "" {
 		facts = append(facts, "importance: "+t.Importance)
 	}

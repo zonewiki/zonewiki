@@ -626,15 +626,18 @@ def test_a_shared_task_cannot_be_made_private(alice, wiki):
     assert alice.put(f"/api/tasks/{mine['id']}", json={"private": True}, headers=HOST).status_code == 400
 
 
-def test_comments_are_everyones_to_change(alice, wiki):
-    """A shared task is everyone's, its comments too: alice may edit and
-    delete bob's, and an edit keeps the author."""
+def test_a_comment_is_its_authors_to_change(alice, wiki):
+    """A shared task is everyone's; a comment on it is its author's: alice
+    can't edit or delete bob's, and his own edit keeps him as its author."""
     task = alice.post("/api/tasks", json={"title": "Shared", "list": "team"}, headers=HOST).get_json()
     url = f"/api/tasks/{task['id']}/comments"
     sign_in(alice, "bob")
     his = alice.post(url, json={"text": "His"}, headers=HOST).get_json()["comments"][-1]
     sign_in(alice, "alice")
     assert his["by"] == "bob"
+    assert alice.put(f"{url}/{his['id']}", json={"text": "Changed"}, headers=HOST).status_code == 403
+    assert alice.delete(f"{url}/{his['id']}", headers=HOST).status_code == 403
+    sign_in(alice, "bob")
     edited = alice.put(f"{url}/{his['id']}", json={"text": "Changed"}, headers=HOST).get_json()
     assert [(c["text"], c["by"]) for c in edited["comments"]] == [("Changed", "bob")]
     assert alice.delete(f"{url}/{his['id']}", headers=HOST).get_json()["comments"] == []

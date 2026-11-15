@@ -30,6 +30,8 @@
       settings file; tasks-core.js). */}}
   {{- /* With users, private/ holds their private pages (js/completion.js). */}}
   {{- if .Shell.Users}} data-users="1"{{end}}
+  {{- /* An admin may delete anyone's task comment (js/taskmodal.js). */}}
+  {{- if .Shell.Admin}} data-admin="1"{{end}}
   {{- /* A viewer makes nothing: no New note or New task (style.css, js/shortcuts.js). */}}
   {{- if .Shell.Viewer}} data-viewer="1"{{end}}
   {{- /* Not signed in, in a public wiki: the pages alone (style.css, the client code). */}}

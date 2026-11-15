@@ -309,7 +309,8 @@ class TestFilterField:
     ])
     def test_parse(self, q, expected):
         assert run_core(f"TasksCore.parseFilter({json.dumps(q)})") == {
-            **expected, "assigneeGroups": [], "excludeAssignees": [], "listGroups": [], "excludeLists": []}
+            **expected, "assigneeGroups": [], "excludeAssignees": [], "listGroups": [], "excludeLists": [],
+            "fromGroups": [], "excludeFrom": []}
 
     @pytest.mark.parametrize("q,groups,excluded,text", [
         ("list:Shop", [["shop"]], [], ""),

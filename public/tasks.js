@@ -596,7 +596,9 @@ openEdit = openEditModal;
 const initSearch = urlParams.get('search') || '';
 // ?tag= / [[tasks: tag=…]] arrive as chips, ?search= as text.
 if (filterSearch) {
-  filterChips.set([...tagParamToQuery(initTag).split(' '), ...tagParamToQuery(initAssignee, '@').split(' ')].filter(Boolean), true);
+  // ?from=me (with users): the tasks that user made, as the word from:me.
+  const initFrom = document.body.dataset.users === '1' && /^[a-z0-9-]+$/i.test(urlParams.get('from') || '') ? ['from:' + urlParams.get('from').toLowerCase()] : [];
+  filterChips.set([...tagParamToQuery(initTag).split(' '), ...tagParamToQuery(initAssignee, '@').split(' '), ...initFrom].filter(Boolean), true);
   filterSearch.value = initSearch || '';
 }
 // Precedence when a page is opened: URL ?view= > embed view > tab remembered
@@ -612,7 +614,7 @@ st.activeView = [isReload && loadShownTab(), urlView, embedView, loadActiveTab()
 saveShownTab(st.activeView);
 // The board's sections: by day for a link's ?view=plan, else what the view
 // or this browser tab says.
-initCut(urlView === 'plan' && !(isReload && VIEWS.includes(loadShownTab())));
+initCut(urlView === 'plan' && !(isReload && VIEWS.includes(loadShownTab())), urlParams.get('group') || '');
 if (st.activeView !== 'closed') st.lastTab = st.activeView;
 applySort();
 applyGroup();

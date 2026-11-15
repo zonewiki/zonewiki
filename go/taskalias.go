@@ -20,6 +20,12 @@ type apiTask struct{ *Task }
 
 func (a apiTask) MarshalJSON() ([]byte, error) {
 	if settings().Users != nil {
+		// created_by for every task, also one from before the field (Maker).
+		if maker := a.Maker(); maker != a.CreatedBy {
+			t := *a.Task
+			t.CreatedBy = maker
+			return t.JSON(true)
+		}
 		return a.JSON(true)
 	}
 	if a.Assignee == "" {

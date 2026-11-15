@@ -165,6 +165,7 @@ func TestSame(t *testing.T) {
 	changes := map[string]func(*Task){
 		"ID": func(x *Task) { x.ID = "a2" }, "Title": func(x *Task) { x.Title = "one" }, "Description": func(x *Task) { x.Description += " " },
 		"Tags": func(x *Task) { x.Tags[1] = "c" }, "List": func(x *Task) { x.List = "" }, "Assignee": func(x *Task) { x.Assignee = "" },
+		"CreatedBy": func(x *Task) { x.CreatedBy = "zed" },
 		"StartDate": func(x *Task) { x.StartDate = "" }, "DueDate": func(x *Task) { x.DueDate = "2026-01-03" },
 		"CreatedAt": func(x *Task) { x.CreatedAt = "" }, "ClosedAt": func(x *Task) { x.ClosedAt = "" },
 		"WontDo": func(x *Task) { x.WontDo = false }, "Keep": func(x *Task) { x.Keep = false }, "Importance": func(x *Task) { x.Importance = "" },

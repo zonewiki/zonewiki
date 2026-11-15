@@ -91,7 +91,7 @@
 {{- end}}
 <article class="page-content">
 {{- /* My tasks: what it holds (mineFilter), the lists left out as links (leftOutLinks). */}}
-{{- if .Mine}}<p class="tasks-list-home tasks-mine-line">{{if .MineAssigns}}Your own tasks and what is assigned to you{{else}}Every open task{{end}}{{if .LeftOutLists}}, but the lists left out of it ({{range $i, $l := .LeftOutLists}}{{if $i}}, {{end}}<a href="{{$l.Href}}">{{$l.Label}}</a>{{end}}){{end}}.</p>{{end}}
+{{- if .Mine}}<p class="tasks-list-home tasks-mine-line">{{if .MineAssigns}}Your own tasks and what is assigned to you{{else}}Every open task{{end}}{{if .LeftOutLists}}, but the lists left out of it ({{range $i, $l := .LeftOutLists}}{{if $i}}, {{end}}<a href="{{$l.Href}}">{{$l.Label}}</a>{{end}}){{end}}.{{if .Given}} <a href="{{.GivenHref}}" class="tasks-given" title="The open tasks you made that someone else has: not yours to do, so not in My tasks">Given to others: {{.Given}}</a>{{end}}</p>{{end}}
 {{- /* The Inbox: what it is for. */}}
 {{- if .Inbox}}<p class="tasks-list-home tasks-inbox-line">{{if .InboxPrivate}}New tasks land here, and only you see them. Move one to a list to file it; in a shared list everyone sees it.{{else}}New tasks land here, in no list. Move one to a list to file it.{{end}}</p>{{end}}
 {{- /* A list: its backlog (a shared list's tasks no one has), and that it is left out of My tasks. */}}

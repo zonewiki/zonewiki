@@ -383,8 +383,8 @@ def test_my_tasks_holds_what_is_mine(alice, wiki):
     alice.wait_for_url("**/tasks?mine=1")
     expect(alice.locator("h1")).to_have_text("My tasks")
     line = alice.locator(".tasks-mine-line")
-    expect(line).to_have_text("Your own tasks and what is assigned to you, but the lists left out of it (#someday).")
-    expect(line.locator("a")).to_have_attribute("href", "/tasks?list=someday")
+    expect(line).to_have_text("Your own tasks and what is assigned to you, but the lists left out of it (#someday). Given to others: 1")
+    expect(line.locator("a").first).to_have_attribute("href", "/tasks?list=someday")
     alice.goto("/tasks?mine=1&view=open")
     titles = alice.locator(".task-item .task-title")
     expect(titles).to_have_count(4)
@@ -645,3 +645,52 @@ def test_a_shared_list_opens_on_open_and_your_own_on_focus(alice):
     assert alice.request.post("/api/tasks/settings", data={"list": "team", "set": {"view": "focus"}}).ok
     alice.goto("/tasks?list=team")
     expect(alice.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Focus"])
+
+
+def test_what_you_gave_to_others_is_one_click_from_my_tasks(alice):
+    """My tasks links to the open tasks you made that someone else has
+    (docs/spec/tasks.md, Lists → My tasks): not yours to do, so not in it."""
+    new(alice, "For bob", assignee="bob")
+    new(alice, "Mine", assignee="alice")
+    new(alice, "No one's")
+    assert task(alice, "For bob")["created_by"] == "alice"
+    alice.goto("/tasks?mine=1&view=open")
+    expect(card(alice, "For bob")).to_have_count(0)
+    link = alice.locator(".tasks-given")
+    expect(link).to_have_text("Given to others: 1")
+    link.click()
+    expect(alice.locator(".task-item .task-title")).to_have_text(["For bob"])
+    expect(alice.locator(".board-day-label")).to_have_text(["Unassigned", "You", "@bob"])
+    expect(alice.locator(".tasks-cut [data-group=person]")).to_have_attribute("aria-pressed", "true")
+
+
+def test_a_comment_is_its_authors(alice, new_page):
+    """Only its author edits or deletes a comment; an admin deletes any."""
+    t = new(alice, "Talk", assignee="bob")
+    bob = new_page()
+    bob.request.post("/login", form={"username": "bob", "password": "pw"})
+    url = f"/api/tasks/{t['id']}/comments"
+    cid = bob.request.post(url, data={"text": "bob's word"}).json()["comments"][0]["id"]
+    mine = alice.request.post(url, data={"text": "alice's word"}).json()["comments"][1]["id"]
+    # bob can't touch alice's; alice (an admin) may delete bob's, not edit it.
+    assert bob.request.put(f"{url}/{mine}", data={"text": "changed"}).status == 403
+    assert bob.request.delete(f"{url}/{mine}").status == 403
+    assert alice.request.put(f"{url}/{cid}", data={"text": "changed"}).status == 403
+    # Nor by sending the comments whole, as an undo does.
+    whole = [{**c, "text": "changed"} if c["id"] == mine else c for c in task(bob, "Talk")["comments"]]
+    assert bob.request.put(f"/api/tasks/{t['id']}", data={"comments": whole}).status == 403
+    assert bob.request.put(f"/api/tasks/{t['id']}", data={"comments": [c for c in whole if c["id"] != mine]}).status == 403
+    assert [c["text"] for c in task(alice, "Talk")["comments"]] == ["bob's word", "alice's word"]
+    # In the dialog: bob's comment has no ✎ for alice, but × (she is an admin); her own has both.
+    alice.goto("/tasks?list=team")
+    modal = open_edit(alice, "Talk")
+    theirs = modal.locator(f"[data-comment='{cid}']")
+    expect(theirs.locator("[data-comment-action=edit]")).to_have_count(0)
+    expect(theirs.locator("[data-comment-action=delete]")).to_have_count(1)
+    expect(modal.locator(f"[data-comment='{mine}'] [data-comment-action=edit]")).to_have_count(1)
+    # bob's own: he edits and deletes it, and the delete's undo puts it back.
+    assert bob.request.put(f"{url}/{cid}", data={"text": "bob's second word"}).ok
+    kept = task(bob, "Talk")["comments"]
+    assert bob.request.delete(f"{url}/{cid}").ok
+    assert bob.request.put(f"/api/tasks/{t['id']}", data={"comments": kept}).ok
+    assert [c["text"] for c in task(alice, "Talk")["comments"]] == ["bob's second word", "alice's word"]

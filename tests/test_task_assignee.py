@@ -445,7 +445,7 @@ class TestMyTasks:
         html = self.page(team, "/tasks?mine=1")
         assert "<h1>My tasks</h1>" in html and 'data-init-mine="assign" data-init-out="someday"' in html
         assert "data-init-assignee" not in html and "mine-on-btn" not in html and "data-init-lists" not in html
-        assert self.line(html) == "Your own tasks and what is assigned to you, but the lists left out of it (#someday)."
+        assert self.line(html) == "Your own tasks and what is assigned to you, but the lists left out of it (#someday). Given to others: 1"
         assert '<a href="/tasks?list=someday">#someday</a>' in html
         # The list itself shows everyone's.
         assert self.titles(team, "list=team") == ["A1", "B1", "N1"]
@@ -486,7 +486,7 @@ class TestMyTasks:
         assert self.titles(team) == ["A1", "A2", "I1"] and self.count(team) == 3
         html = self.page(team, "/tasks?mine=1")
         assert 'data-init-out="own|someday"' in html
-        assert self.line(html) == "Your own tasks and what is assigned to you, but the lists left out of it (#own, #someday)."
+        assert self.line(html) == "Your own tasks and what is assigned to you, but the lists left out of it (#own, #someday). Given to others: 1"
         # The list says so, and still shows its tasks.
         own = self.page(team, "/tasks?list=own")
         assert 'Left out of <a href="/tasks?mine=1">My tasks</a>' in own and self.titles(team, "list=own") == ["P1"]
@@ -496,12 +496,12 @@ class TestMyTasks:
         assert self.home(team, "own", "").status_code == 200
         assert self.home(team, "someday", "").status_code == 200
         assert self.titles(team) == ["A1", "A2", "I1", "P1", "S1"] and self.count(team) == 5
-        assert self.line(self.page(team, "/tasks?mine=1")) == "Your own tasks and what is assigned to you."
+        assert self.line(self.page(team, "/tasks?mine=1")) == "Your own tasks and what is assigned to you. Given to others: 1"
         # A shared list left out: hers in it stays hers.
         assert self.home(team, "side", "off").status_code == 200
         assert self.titles(team) == ["A1", "A2", "I1", "P1", "S1"]
         html = self.page(team, "/tasks?mine=1")
-        assert self.line(html) == "Your own tasks and what is assigned to you."
+        assert self.line(html) == "Your own tasks and what is assigned to you. Given to others: 1"
         assert "Left out of" not in self.page(team, "/tasks?list=side")
         # The Inbox can't be left out: it is no list with settings.
         assert self.home(team, "inbox", "off").status_code in (400, 404)
@@ -795,7 +795,7 @@ class TestAssistant:
 
     def test_create_and_update_assign(self, mcp):
         text = mcp("create_task", title="Call Sam", assignee="bob", list="team")
-        assert "assigned to: bob" in text and "(the user)" not in text
+        assert "assigned to: bob" in text and "bob (the user)" not in text and "from: alice (the user)" in text
         task_id = text.split("id: ", 1)[1].split()[0]
         assert "assigned to: alice (the user)" in mcp("update_task", id=task_id, assignee="me")
         assert "assigned to" not in mcp("update_task", id=task_id, assignee="none")

@@ -30,6 +30,10 @@ type Task struct {
 	// the file). A name, whether or not it still is a user who can be
 	// assigned: the server decides what a name that isn't counts as.
 	Assignee string
+	// CreatedBy: the user who made the task, "" unknown (and no key in the
+	// file): a task from before the field, or a wiki without users. Maker
+	// answers for those too.
+	CreatedBy string
 	// Dates as YYYY-MM-DD, timestamps as YYYY-MM-DDTHH:MM:SS; "" is none
 	// (null in the file).
 	StartDate, DueDate  string
@@ -79,7 +83,7 @@ func (t *Task) Clone() *Task {
 // they are (Owner is not in the file).
 func (t *Task) Same(o *Task) bool {
 	if t.ID != o.ID || t.Title != o.Title || t.Description != o.Description || t.List != o.List ||
-		t.Assignee != o.Assignee || t.StartDate != o.StartDate || t.DueDate != o.DueDate ||
+		t.Assignee != o.Assignee || t.CreatedBy != o.CreatedBy || t.StartDate != o.StartDate || t.DueDate != o.DueDate ||
 		t.CreatedAt != o.CreatedAt || t.ClosedAt != o.ClosedAt || t.WontDo != o.WontDo || t.Keep != o.Keep ||
 		t.Importance != o.Importance || t.LastDone != o.LastDone || t.SpawnedFrom != o.SpawnedFrom {
 		return false
@@ -159,6 +163,7 @@ func FromJSON(o jsonobj.Obj) *Task {
 	t.Tags = CleanTags(jsonobj.TextList(o["tags"])) // "local llm", "#work" from a file edited by hand
 	t.List = strings.ToLower(strings.TrimSpace(o.Str("list")))
 	t.Assignee = CleanAssignee(o.Str("assignee"))
+	t.CreatedBy = CleanAssignee(o.Str("created_by"))
 	if f, ok := jsonobj.As[float64](o["sort_order"]); ok {
 		t.SortOrder = &f
 	}
@@ -279,6 +284,7 @@ func (t *Task) JSON(private bool) ([]byte, error) {
 		Tags        []string       `json:"tags"`
 		List        string         `json:"list,omitempty"`
 		Assignee    string         `json:"assignee,omitempty"`
+		CreatedBy   string         `json:"created_by,omitempty"`
 		StartDate   *string        `json:"start_date"`
 		DueDate     *string        `json:"due_date"`
 		CreatedAt   *string        `json:"created_at"`
@@ -292,7 +298,7 @@ func (t *Task) JSON(private bool) ([]byte, error) {
 		SpawnedFrom *string        `json:"spawned_from"`
 		History     []HistoryEntry `json:"history"`
 		Comments    []Comment      `json:"comments"`
-	}{t.ID, t.Title, t.Description, tags, t.List, t.Assignee, jsonobj.Nullable(t.StartDate), jsonobj.Nullable(t.DueDate),
+	}{t.ID, t.Title, t.Description, tags, t.List, t.Assignee, t.CreatedBy, jsonobj.Nullable(t.StartDate), jsonobj.Nullable(t.DueDate),
 		jsonobj.Nullable(t.CreatedAt), jsonobj.Nullable(t.ClosedAt), t.WontDo, t.Keep, t.Importance, jsonobj.Nullable(t.LastDone),
 		t.SortOrder, t.Recurrence, jsonobj.Nullable(t.SpawnedFrom), history, comments})
 	if err == nil && private {
@@ -368,6 +374,21 @@ var DatedEvents = map[string]bool{"start": true, "due": true, "repeat": true}
 
 // NamedEvents: the history events that say from and to which user.
 var NamedEvents = map[string]bool{"assigned": true}
+
+// Maker: the user who made the task: its CreatedBy, and for a task from
+// before that field whoever its history's "created" entry is by; "" when
+// neither says (no users then, or the entry left the capped history).
+func (t *Task) Maker() string {
+	if t.CreatedBy != "" {
+		return t.CreatedBy
+	}
+	for _, e := range t.History {
+		if e.Event == "created" {
+			return e.By
+		}
+	}
+	return ""
+}
 
 // CleanAssignee: an assignee as it is kept: a user's name is lowercase,
 // and a leading "@" is how it is typed, not part of it.

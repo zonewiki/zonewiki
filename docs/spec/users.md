@@ -721,7 +721,7 @@ Not there: telling someone that a task became theirs, a group as an assignee, an
   Zone's own commits, and every commit in a wiki without users, show no name.
 - **Tasks**: comments and History events record who wrote or did them (`by`, see Comments and History in `docs/spec/tasks.md`): the cards and the edit modal show "12 Mar 09:30 · alice" (`commentStamp` in `tasks.js`), MCP's task text names a comment's author "(alice)".
   Editing a comment keeps its author.
-  Any user may edit or delete any comment on a task they can see, as they may change the task itself.
+  A comment is its author's: only they edit or delete it, and an admin may delete any (Comments in `docs/spec/tasks.md`); the task itself anyone who sees it may change.
   **Nobody writes under another's name** (`go/taskby.go`): the routes that take comments or history whole (`PUT /api/tasks/<id>` and `batch-update` for an undo, `/api/tasks/restore`, `/api/tasks/import`) get them from the browser, which could say anything.
   A `by` that is the sender's own stays;
   another user's stays only on a comment (by its id) or a history entry (of that task, at that time, with those dates) Zone has seen under that name: it notes them as it deletes a task or a comment and before a request replaces a task's lists (`rememberBy`, in memory, the newest 20 000),

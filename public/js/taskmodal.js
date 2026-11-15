@@ -622,11 +622,15 @@ function renderComments(task) {
   // The field may be in a comment's place: out of the list while it is redrawn.
   const focused = document.activeElement === commentInput;
   commentList.before(commentBox);
+  // With users a comment is its author's: only they edit it, and delete it
+  // (an admin deletes any); one by no one, from before users, is anyone's.
+  const users = document.body.dataset.users === '1';
+  const own = c => !users || !c.by || c.by === people.me;
   commentList.innerHTML = comments.slice().reverse().map(c =>
     `<li data-comment="${esc(c.id)}"><span class="task-history-at">${esc(commentStamp(c))}</span>` +
     `<div class="task-comment-text task-comment-body page-content">${app.htmlOf('comments', c.text)}</div>` +
-    `<button type="button" class="task-comment-btn" data-comment-action="edit" tabindex="-1" title="Edit" aria-label="Edit comment">✎</button>` +
-    `<button type="button" class="task-comment-btn" data-comment-action="delete" tabindex="-1" title="Delete" aria-label="Delete comment">×</button>` +
+    (own(c) ? `<button type="button" class="task-comment-btn" data-comment-action="edit" tabindex="-1" title="Edit" aria-label="Edit comment">✎</button>` : '') +
+    (own(c) || document.body.dataset.admin === '1' ? `<button type="button" class="task-comment-btn" data-comment-action="delete" tabindex="-1" title="Delete" aria-label="Delete comment">×</button>` : '') +
     '</li>').join('');
   // What the comments hold (links, checkboxes) is no stop for Tab either.
   commentList.querySelectorAll('a, input, summary').forEach(el => { el.tabIndex = -1; });

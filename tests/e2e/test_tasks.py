@@ -2843,7 +2843,7 @@ def test_a_new_list_from_the_move_dialog_is_as_private_as_its_tasks(page, wiki, 
     expect(card(page, "Alice's errand").locator(".task-tag-list")).to_have_text("secret")
 
 
-def test_every_comment_can_be_edited(page, wiki, monkeypatch):
+def test_a_comment_can_be_edited_by_its_author(page, wiki, monkeypatch):
     monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "t1"), "bob": ("pw", "t2")})
     page.request.post("/login", form={"username": "bob", "password": "pw"})
     make_list(page, "team")                     # a task both see is in a shared list
@@ -2855,7 +2855,7 @@ def test_every_comment_can_be_edited(page, wiki, monkeypatch):
     open_edit(page, "Errand")
     items = page.locator("#task-edit-comment-list li")
     expect(items.filter(has_text="From Alice").locator("[data-comment-action]")).to_have_count(2)
-    expect(items.filter(has_text="From Bob").locator("[data-comment-action]")).to_have_count(2)
+    expect(items.filter(has_text="From Bob").locator("[data-comment-action]")).to_have_count(0)   # bob's: his alone to change
 
 
 def test_no_private_checkbox_without_users(page, wiki):
