@@ -170,7 +170,7 @@ Recurring instances keep the gap between the two dates, but a new instance's sta
 | `importance` | `"high"`, `"low"` | How much the task matters (see Importance). Normal, what a task is unless said, is no key at all: in the file and in the API's answers, so a wiki that sets none keeps its files as they were |
 | `last_done` | `"YYYY-MM-DD"` / `null` | A keep task's last completion, shown on its card as "✓ Sep 21" |
 | `comments` | `[{ id, at, by, text }]` | The user's comments, oldest first, uncapped (see Comments); `by` only with users. |
-| `history` | `[{ at, event, by?, from?, to? }]` | What happened to the task, oldest first, capped at 30 (`historyLimit`): `created`, `start`/`due` (with `from`/`to` dates), `done`, `reopened`, `wontdo`, `skipped`, `repeat` (`to` = the next occurrence's date), `assigned` (with `from`/`to` user names, `null` no one). `at` is `YYYY-MM-DDTHH:MM`; `by` the user who did it, only with users. See History. |
+| `history` | `[{ at, event, by?, from?, to? }]` | What happened to the task, oldest first, capped at 30 (`historyLimit`): `created`, `start`/`due` (with `from`/`to` dates), `done`, `reopened`, `wontdo`, `skipped`, `repeat` (`to` = the next occurrence's date), `assigned` (with `from`/`to` user names, `null` no one), `seen` (who it was given to opened it). `at` is `YYYY-MM-DDTHH:MM`; `by` the user who did it, only with users. See History. |
 
 ### Views
 
@@ -667,7 +667,8 @@ The server logs events on the task (`logEvent` in `go/tasklogic.go`): `created` 
 `wontdo`,
 `skipped`,
 and with users `shared` (a private task made shared, by whoever did it: moved out of a private list, or its list made shared; older tasks may show `private` from when tasks could move the other way)
-and `assigned` (the assignee changed: `from` and `to` name the users, `null` no one; `applyAssignee`).
+and `assigned` (the assignee changed: `from` and `to` name the users, `null` no one; `applyAssignee`)
+and `seen` (the user a task was given to opened it, once: Assigning tasks in `docs/spec/users.md`).
 A recurring task's next occurrence carries the series' history on (with the `done` or `skipped` just logged) plus a `repeat` entry ("Repeats: next Oct 3"), so the series reads as one log; it gets no `created` of its own.
 Only these; title, tag or order edits are not logged.
 Undo must not leave a trace, so every undo that PUTs old fields also sends the task's old `history` (`oldHistory` in `tasks.js`: start-date, won't-do, skip and keep undos), and the server applies a sent `history` last (`cleanHistory` validates it), replacing what that request logged.

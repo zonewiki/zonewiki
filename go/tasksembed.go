@@ -577,7 +577,7 @@ func countTasks(user string, tasks []*Task, lists map[string]ListInfo, params ..
 		} else if due == day {
 			c.Today++
 		}
-		if givenTo(t, user, day) {
+		if givenTo(t, user) {
 			c.New++
 		}
 	}

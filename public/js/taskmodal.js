@@ -577,7 +577,7 @@ const historyDetails = document.getElementById('task-edit-history' + app.sfx);
 const HISTORY_TEXT = {
   created: () => 'Created', done: () => 'Done', reopened: () => 'Reopened',
   wontdo: () => "Won't do", skipped: () => 'Skipped',
-  private: () => 'Made private', shared: () => 'Made shared',
+  private: () => 'Made private', shared: () => 'Made shared', seen: () => 'Seen',
   start: e => `Start ${historyDate(e.from)} → ${historyDate(e.to)}`,
   due: e => `Due ${historyDate(e.from)} → ${historyDate(e.to)}`,
   repeat: e => `Repeats: next ${historyDate(e.to)}`,
@@ -798,6 +798,10 @@ function openEditModal(taskId, opts) {
   syncDates('open');
   openedData = task ? formData(assigning() ? editAssignee() : null) : null;
   app.modal.showModal();
+  // A task someone gave you, opened: no longer new, and its History here says so.
+  if (task) app.markSeen(task.id)?.then(seen => {
+    if (seen && app.modal.open && document.getElementById('task-edit-id' + app.sfx).value === seen.id) renderHistory(seen);
+  });
   fitNotes();
   if (task && opts?.focusComment) openCommentBox();
   else (batchTitles ? editTagsInput : app.titleInput).focus();

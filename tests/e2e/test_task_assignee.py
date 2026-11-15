@@ -502,3 +502,37 @@ def test_the_tasks_link_says_that_something_is_new_for_you(alice):
     alice.keyboard.press("f")                        # starts today: hers now
     expect(pill).to_be_hidden()
     expect(alice.locator('.module-link[data-module="tasks"] .module-new').first).to_be_hidden()
+
+
+def test_opening_a_task_given_to_you_takes_the_new_away(alice):
+    # bob gives alice two tasks. Opening one (its dialog, or its details)
+    # takes its "new" away, on the card and on the Tasks link, and its
+    # History says that she saw it.
+    alice.request.post("/login", form={"username": "bob", "password": "pw"})
+    new(alice, "With notes", assignee="alice", description="Read **this**")
+    new(alice, "Plain", assignee="alice")
+    alice.request.post("/login", form={"username": "alice", "password": "pw"})
+    alice.goto("/tasks?mine=1&view=open")
+    badge = alice.locator('.module-link[data-module="tasks"] .module-new').first
+    expect(badge).to_have_text("2")
+    # Its details opened: seen.
+    card(alice, "With notes").locator(".task-has-notes").click()
+    expect(card(alice, "With notes").locator(".task-desc strong")).to_be_visible()
+    expect(card(alice, "With notes").locator(".task-new")).to_have_count(0)
+    expect(card(alice, "Plain").locator(".task-new")).to_have_count(1)
+    expect(badge).to_have_text("1")
+    # Its dialog opened: seen, and the History says so.
+    modal = open_edit(alice, "Plain")
+    expect(card(alice, "Plain").locator(".task-new")).to_have_count(0)
+    expect(badge).to_be_hidden()
+    modal.locator("#task-edit-history summary").click()
+    expect(modal.locator("#task-edit-history")).to_contain_text("Seen")
+    alice.keyboard.press("Escape")
+    events = [(e["event"], e.get("by")) for e in task(alice, "Plain")["history"]]
+    assert events == [("created", "bob"), ("seen", "alice")]
+    # bob, who gave them, opens one: nothing is logged for him.
+    alice.request.post("/login", form={"username": "bob", "password": "pw"})
+    alice.goto("/tasks?list=team&view=open")
+    open_edit(alice, "Plain")
+    alice.wait_for_timeout(300)
+    assert [e["event"] for e in task(alice, "Plain")["history"]] == ["created", "seen"]

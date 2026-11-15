@@ -167,6 +167,7 @@ function setExpanded(id, details = false) {
   });
   // Details whose texts aren't rendered yet (a long list fetches them when
   // they are asked for): fetched, and the list drawn again with them.
+  if (id && st.detailsOpen) app.markSeen(id);   // a task someone gave you, opened: no longer new
   const opened = id && st.detailsOpen && cardEl(id);
   if (opened && opened.querySelector('[data-lazy]')) {
     const task = st.tasks.find(t => t.id === id);

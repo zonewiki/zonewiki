@@ -696,7 +696,7 @@ class TestGivenCases:
     CASES = json.loads((CORE.parent.parent / "go" / "testdata" / "given_cases.json").read_text(encoding="utf-8"))
 
     def test_the_cases_the_server_has(self):
-        got = run_core(f"{json.dumps(self.CASES)}.map(c => !!TasksCore.givenToMe(c.task, 'anna', '2026-07-26'))")
+        got = run_core(f"{json.dumps(self.CASES)}.map(c => !!TasksCore.givenToMe(c.task, 'anna'))")
         wrong = [c["name"] for c, g in zip(self.CASES, got) if g != c["want"]]
         assert not wrong and len(got) > 10
 
@@ -744,10 +744,11 @@ class TestGivenToMe:
         took = "{at: '2026-07-25T12:00', event: 'assigned', by: 'anna', from: 'bob', to: 'anna'}"
         assert self.given(f"{{assignee: 'anna', history: [{self.GAVE}, {took}]}}") is None
 
-    def test_it_fades_after_a_week_and_is_never_on_closed_or_private_tasks(self):
+    def test_no_time_takes_it_away_and_it_is_never_on_closed_or_private_tasks(self):
         task = f"{{assignee: 'anna', history: [{self.GAVE}]}}"
-        assert self.given(task, "'anna', '2026-08-01'") is not None
-        assert self.given(task, "'anna', '2026-08-02'") is None
+        assert self.given(task, "'anna'") is not None
+        seen = "{at: '2026-09-01T08:00', event: 'seen', by: 'anna'}"
+        assert self.given(f"{{assignee: 'anna', history: [{self.GAVE}, {seen}]}}") is None
         assert self.given(f"{{assignee: 'anna', closed_at: '2026-07-26T08:00:00', history: [{self.GAVE}]}}") is None
         assert self.given(f"{{assignee: 'anna', private: true, history: [{self.GAVE}]}}") is None
 

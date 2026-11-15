@@ -92,18 +92,16 @@ func placeSnapshot(user string, t *Task, snap jsonObj, lists map[string]ListInfo
 	return general
 }
 
-// newDays: for how many days a task someone gave a user is new to them.
-const newDays = 7
-
 // givenTo: someone else gave user this task and they haven't touched it
 // since: its card says "new", and the Tasks links count it (TaskCounts.New).
 // From its history alone, so no state is kept: the entry that made it
 // theirs (the last "assigned" one, or "created" for a task made with their
-// name on it) is someone else's, nothing they did is logged after it (a
-// date, done, a comment), and it is at most newDays days old on day
-// (YYYY-MM-DD). The browser has the same rule (TasksCore.givenToMe;
-// go/testdata/given_cases.json runs through both).
-func givenTo(t *Task, user, day string) bool {
+// name on it) is someone else's, and nothing they did is logged after it: a
+// date, done, a comment, or "seen", which is logged when they open the task
+// (seenTask). No time takes it away: a task given a week ago and not looked
+// at is the one that needs the mark. The browser has the same rule
+// (TasksCore.givenToMe; go/testdata/given_cases.json runs through both).
+func givenTo(t *Task, user string) bool {
 	if user == "" || t.Owner != "" || !t.IsOpen() || t.Assignee != user {
 		return false
 	}
@@ -134,9 +132,7 @@ func givenTo(t *Task, user, day string) bool {
 			return false
 		}
 	}
-	gaveDay, err1 := time.Parse("2006-01-02", runePrefix(when, 10))
-	now, err2 := time.Parse("2006-01-02", day)
-	return err1 == nil && err2 == nil && now.Sub(gaveDay) <= newDays*24*time.Hour
+	return true
 }
 
 // timestamp is the current time as tasks store it (created_at, closed_at).
@@ -263,7 +259,7 @@ func daysBetween(a, b time.Time) int {
 // sends the old history back with the old fields, so an undone change
 // leaves no trace.
 var historyEvents = map[string]bool{"created": true, "start": true, "due": true, "done": true,
-	"reopened": true, "wontdo": true, "skipped": true, "repeat": true, "private": true, "shared": true, "assigned": true}
+	"reopened": true, "wontdo": true, "skipped": true, "repeat": true, "private": true, "shared": true, "assigned": true, "seen": true}
 
 const historyLimit = 30
 

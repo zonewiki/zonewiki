@@ -558,6 +558,17 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 	if err := textUnchanged(t, data); err != nil {
 		return nil, err
 	}
+	// seen: the user opened a task someone gave them (the browser says so:
+	// markSeen in js/taskdata.js). Logged once, in its history, so it is no
+	// longer new to them (givenTo), and whoever gave it sees that it
+	// arrived. For any other task it says nothing.
+	seen, err := boolField(data, "seen")
+	if err != nil {
+		return nil, err
+	}
+	if seen && givenTo(t, user) {
+		logEvent(t, user, "seen", "", "")
+	}
 	if err := applyTaskFields(user, t, data, false); err != nil {
 		return nil, err
 	}

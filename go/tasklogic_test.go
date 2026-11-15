@@ -407,13 +407,13 @@ func TestGivenToCases(t *testing.T) {
 	if err := json.Unmarshal(raw, &cases); err != nil || len(cases) < 10 {
 		t.Fatalf("the cases: %v", err)
 	}
-	// anna asks, on 2026-07-26.
+	// anna asks.
 	for _, c := range cases {
 		task := &Task{Assignee: c.Task.Assignee, ClosedAt: c.Task.ClosedAt, History: c.Task.History, Comments: c.Task.Comments}
 		if c.Task.Private {
 			task.Owner = "anna"
 		}
-		if got := givenTo(task, "anna", "2026-07-26"); got != c.Want {
+		if got := givenTo(task, "anna"); got != c.Want {
 			t.Errorf("%s: %v, want %v", c.Name, got, c.Want)
 		}
 	}

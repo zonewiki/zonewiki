@@ -178,10 +178,11 @@ function inMine(t, out, who) {
 // card says "new". From its history alone, so no state is kept: the entry
 // that made it theirs (the last `assigned` one, or `created` for a task
 // made with their name on it) is someone else's, nothing they did is logged
-// after it (a date, done, a comment), and it is at most NEW_DAYS days old
-// (today: YYYY-MM-DD). Returns that entry ({ at, by }), or null.
-const NEW_DAYS = 7;
-function givenToMe(t, me, today) {
+// after it (a date, done, a comment; and "seen", which the app logs when
+// they open the task: markSeen in js/taskdata.js). No time takes the mark
+// away: a task given a week ago and not looked at is the one that needs
+// it. Returns that entry ({ at, by }), or null.
+function givenToMe(t, me) {
   if (!me || !t || t.private || t.closed_at || (t.assignee || '').toLowerCase() !== me) return null;
   const history = t.history || [];
   let at = -1;
@@ -193,10 +194,6 @@ function givenToMe(t, me, today) {
   if (history.slice(at + 1).some(e => e.by === me)) return null;
   const when = String(gave.at || '').slice(0, 16);
   if ((t.comments || []).some(c => c.by === me && String(c.at || '').slice(0, 16) >= when)) return null;
-  if (today) {
-    const days = (Date.parse(today + 'T00:00') - Date.parse(when.slice(0, 10) + 'T00:00')) / 86400000;
-    if (!(days <= NEW_DAYS)) return null;
-  }
   return { at: when, by: gave.by };
 }
 

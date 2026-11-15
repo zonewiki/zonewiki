@@ -178,3 +178,33 @@ def test_the_tasks_links_count_what_is_new_for_you(alice, smtp):
     assert "new" not in counts
     page = alice.get("/page/index", headers=HOST).get_data(as_text=True)
     assert '<span class="module-new" hidden></span>' in page
+
+
+def test_opening_a_task_given_to_you_says_seen(alice, smtp):
+    """The browser tells the server when the user opens a task someone gave
+    them (PUT with seen): logged once in its history, so it is no longer new
+    to them and whoever gave it sees that it arrived. No time takes the mark
+    away, and for anyone else's task seen says nothing."""
+    task = new(alice, title="Check the invoice", assignee="bob")
+    url = f"/api/tasks/{task['id']}"
+    events = lambda: [(e["event"], e.get("by")) for e in alice.get("/api/tasks", headers=HOST).get_json()[0]["history"]]
+    # alice gave it: her opening it logs nothing, and writes nothing.
+    head = lambda: alice.get("/api/tasks/due-count", headers=HOST).headers["Zone-Tasks"]
+    word = head()
+    assert alice.put(url, json={"seen": True}, headers=HOST).status_code == 200
+    assert events() == [("created", "alice")] and head() == word
+    login(alice, "bob")
+    assert alice.get("/api/tasks/due-count", headers=HOST).get_json()["new"] == 1
+    assert alice.put(url, json={"seen": True}, headers=HOST).status_code == 200
+    assert events() == [("created", "alice"), ("seen", "bob")]
+    assert "new" not in alice.get("/api/tasks/due-count", headers=HOST).get_json()
+    # Once: opening it again logs nothing more.
+    assert alice.put(url, json={"seen": True}, headers=HOST).status_code == 200
+    assert events() == [("created", "alice"), ("seen", "bob")]
+    assert alice.put(url, json={"seen": "yes"}, headers=HOST).status_code == 400
+    # Given to someone else and back: new again.
+    login(alice, "alice")
+    assert alice.put(url, json={"assignee": "alice"}, headers=HOST).status_code == 200
+    assert alice.put(url, json={"assignee": "bob"}, headers=HOST).status_code == 200
+    login(alice, "bob")
+    assert alice.get("/api/tasks/due-count", headers=HOST).get_json()["new"] == 1

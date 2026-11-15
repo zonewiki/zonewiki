@@ -216,6 +216,18 @@ async function createTask(data) {
   return null;
 }
 
+// A task someone gave the user, which they now open (its dialog, its
+// details): the server is told, once, and logs "seen" in its history. So
+// it is no longer new to them (TasksCore.givenToMe: its card's mark, the
+// Tasks links' count), and whoever gave it sees that it arrived.
+const seenSent = new Set();
+function markSeen(id) {
+  const task = st.tasks.find(t => t.id === id);
+  if (!task || seenSent.has(id) || !TasksCore.givenToMe(task, people.me)) return null;
+  seenSent.add(id);
+  return updateTask(id, { seen: true });   // the task as it is now, for who shows its history
+}
+
 async function updateTask(id, data) {
   const res = await fetch(`/api/tasks/${id}`, {
     method: 'PUT',
@@ -421,5 +433,5 @@ async function wontDoMany(ids) {
   showUndo(`${open.length} tasks marked won't do`, () => completeTasks(open, false));
 }
 
-return { dismissUndo, showUndo, triggerUndo, fetchTasks, refresh, fetchClosed, setClosedYear, createTask, updateTask, leftViewMessage, tickTask, cancelPendingComplete, keepSnapshot, completeTasks, afterBatchWrite, oldHistory, markWontDo, wontDoMany, skipOccurrence, setStart };
+return { dismissUndo, showUndo, triggerUndo, fetchTasks, refresh, fetchClosed, setClosedYear, createTask, updateTask, markSeen, leftViewMessage, tickTask, cancelPendingComplete, keepSnapshot, completeTasks, afterBatchWrite, oldHistory, markWontDo, wontDoMany, skipOccurrence, setStart };
 }

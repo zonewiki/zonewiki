@@ -140,7 +140,7 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
   const assignee = task.assignee || '';
   const formerAssignee = !!assignee && !!people.users && !people.users.has(assignee);
   // A task someone else gave you that you haven't touched yet is marked new.
-  const gave = TasksCore.givenToMe(task, people.me, todayStr());
+  const gave = TasksCore.givenToMe(task, people.me);
   const newDisplay = gave
     ? `<span class="task-new" title="${esc(`${gave.by} gave you this task on ${shortDate(gave.at.slice(0, 10))}`)}">new</span>` : '';
   const assigneeDisplay = assignee
