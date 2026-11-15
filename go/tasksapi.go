@@ -142,7 +142,28 @@ func tasksRoutes(mux *http.ServeMux) {
 		if err != nil {
 			return err
 		}
-		writeJSON(w, http.StatusOK, apiTasks(taskFiles.ClosedInYear(userOf(r), year)))
+		// ?limit=N: the Closed view's page: {tasks, total}: of the year's
+		// closed tasks of the scope the request names (?list=, ?mine=1:
+		// queryScope) that the filter field's words take (?q=: taskFilter),
+		// the latest closed first, the first N (more when ?task=<id> is
+		// further down: a link to that task), and how many there are. The
+		// view shows a page; a year of a team's closed tasks is far more
+		// than it shows. Without limit: every closed task of the year the
+		// user sees.
+		q := r.URL.Query()
+		if q.Get("limit") == "" {
+			writeJSON(w, http.StatusOK, apiTasks(taskFiles.ClosedInYear(userOf(r), year)))
+			return nil
+		}
+		limit, err := strconv.Atoi(q.Get("limit"))
+		if err != nil || limit < 1 {
+			return refuse("limit must be a number from 1")
+		}
+		user := userOf(r)
+		in, filter := scopeFilter(user, queryScope(r), taskLists(user)), parseTaskFilter(q.Get("q"))
+		page, total := taskFiles.ClosedPage(user, year, func(t *Task) bool { return in(t) && filter.matches(t, user) },
+			min(limit, closedPageMax), q.Get("task"))
+		writeJSON(w, http.StatusOK, map[string]any{"tasks": apiTasks(page), "total": total})
 		return nil
 	}))
 	mux.HandleFunc("GET /api/tasks/closed-years", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
@@ -284,6 +305,9 @@ func tasksRoutes(mux *http.ServeMux) {
 var yearArgRE = regexp.MustCompile(`^\d{4}$`)
 
 // yearArg: ?year=YYYY (a year of the Closed view), default this year.
+// closedPageMax: the most closed tasks the Closed view is answered at once.
+const closedPageMax = 2000
+
 func yearArg(r *http.Request) (string, error) {
 	year := r.URL.Query().Get("year")
 	if year == "" {

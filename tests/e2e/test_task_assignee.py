@@ -728,3 +728,26 @@ def test_updates_show_what_happened_on_your_tasks(alice, new_page):
     expect(alice.locator(".updates-heading")).to_have_count(0)
     expect(alice.locator('.module-link[data-module="tasks"] .module-new').first).to_be_hidden()
     assert [e["event"] for e in task(alice, "For bob")["history"]][-1] == "seen"
+
+
+def test_the_closed_view_shows_a_page_and_asks_for_more(alice):
+    """Closed shows the latest closed tasks and says how many more there
+    are; Show more and the filter ask the server again."""
+    for i in range(53):
+        t = new(alice, f"Done {i:02d}", tags=["odd"] if i % 2 else [])
+        assert alice.request.put(f"/api/tasks/{t['id']}", data={"completed": True}).ok
+    alice.goto("/tasks?list=team&view=closed")
+    cards = alice.locator(".task-item")
+    expect(cards).to_have_count(50)
+    more = alice.locator("#tasks-show-more-btn")
+    expect(more).to_have_text("Show more (3 remaining)")
+    more.click()
+    expect(cards).to_have_count(53)
+    expect(more).to_have_count(0)
+    # The filter is the server's too: all of what it matches, counted.
+    field = alice.locator("#task-filter-search")
+    field.fill("#odd")
+    field.press("Enter")
+    expect(cards).to_have_count(26)
+    field.fill("Done 07")
+    expect(cards).to_have_count(1)

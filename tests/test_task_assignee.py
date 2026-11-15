@@ -921,3 +921,52 @@ class TestTheWordOfWhatAPageHolds:
         team = self.word(client, "team")
         assert make_list(client, "third", headers=HOST).status_code == 302
         assert self.word(client, "team") != team
+
+
+class TestTheClosedViewsPage:
+    """GET /api/tasks/closed?limit= (docs/spec/tasks.md, Views → Closed): the
+    page the Closed view shows, of its scope and filter, the latest closed
+    first, with how many there are; a task a link names is among them."""
+
+    def closed(self, client, **q):
+        resp = client.get("/api/tasks/closed", query_string={"limit": 50, **q}, headers=HOST)
+        assert resp.status_code == 200, resp.get_data(as_text=True)
+        return resp.get_json()
+
+    def test_a_page_of_the_scope_and_the_filter(self, alice):
+        client = alice
+        assert make_list(client, "side", headers=HOST).status_code == 302
+        ids = {}
+        for i, (title, fields) in enumerate([("One", {"tags": ["x"]}), ("Two", {"assignee": "bob"}), ("Three", {"tags": ["x"], "assignee": "bob"}),
+                                             ("Aside", {"list": "side"}), ("Four", {"description": "about the invoice", "importance": "high"})]):
+            task = new(client, title=title, **fields)
+            ids[title] = task["id"]
+            assert put(client, task, completed=True).status_code == 200
+        own = client.post("/api/tasks", json={"title": "Hers alone"}, headers=HOST).get_json()      # in her Inbox
+        assert put(client, own, completed=True).status_code == 200
+        titles = lambda page: sorted(t["title"] for t in page["tasks"])
+        everything = self.closed(client)
+        assert everything["total"] == 6 and len(everything["tasks"]) == 6
+        # Its scope: one list, My tasks.
+        assert titles(self.closed(client, list="team")) == ["Four", "One", "Three", "Two"]
+        assert titles(self.closed(client, list="side")) == ["Aside"]
+        assert titles(self.closed(client, mine="1")) == ["Hers alone"]
+        # The filter field's words, as the browser reads them.
+        for q, want in (("#x", ["One", "Three"]), ("-#x", ["Aside", "Four", "Hers alone", "Two"]), ("@bob", ["Three", "Two"]),
+                        ("#x @bob", ["Three"]), ("@none", ["Aside", "Four", "One"]), ("@me", ["Hers alone"]), ("list:side", ["Aside"]),
+                        ("-list:team", ["Aside", "Hers alone"]), ("list:inbox", ["Hers alone"]), ("invoice", ["Four"]), ("!high", ["Four"]),
+                        ("from:me -@me", ["Aside", "Four", "One", "Three", "Two"]), ("nothing-like-it", [])):
+            page = self.closed(client, q=q)
+            assert titles(page) == want and page["total"] == len(want), q
+        # A page, and how many there are; a linked task is among them however far down.
+        page = self.closed(client, limit=2)
+        assert len(page["tasks"]) == 2 and page["total"] == 6
+        last = everything["tasks"][-1]                                               # the one furthest down
+        assert [t["id"] for t in page["tasks"]] == [t["id"] for t in everything["tasks"][:2]]
+        assert last["id"] in [t["id"] for t in self.closed(client, limit=2, task=last["id"])["tasks"]]
+        assert client.get("/api/tasks/closed?limit=0", headers=HOST).status_code == 400
+        # Without limit: the year's closed tasks, as ever.
+        assert len(client.get("/api/tasks/closed", headers=HOST).get_json()) == 6
+        # bob doesn't get her Inbox's.
+        login(client, "bob")
+        assert self.closed(client)["total"] == 5

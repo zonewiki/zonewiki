@@ -314,12 +314,11 @@ function listHTML(orderedTasks, newTasks, updates = []) {
       : '';
     html += `<li class="task-inbox-divider task-inbox-divider--only closed-heading">Closed${yearBtns}</li>`;
   }
-  // Limit what the Closed view shows
+  // The Closed view shows the page the server answered (js/taskdata.js
+  // loadClosed), and says how many more there are.
   let displayTasks = orderedTasks;
-  if (st.activeView === 'closed' && orderedTasks.length > st.closedLimit) {
-    displayTasks = orderedTasks.slice(0, st.closedLimit);
-    truncated = true;
-  }
+  const moreClosed = st.activeView === 'closed' ? Math.max(0, (st.closedTotal || 0) - orderedTasks.length) : 0;
+  if (st.activeView === 'closed' && moreClosed > 0 && st.closedLoaded) truncated = true;
   // Open sorted: by deadline the tasks with one, then those without, each
   // under a heading; newest first under one. Not drop targets: nothing
   // drags here.
@@ -354,7 +353,7 @@ function listHTML(orderedTasks, newTasks, updates = []) {
   }
   html += displayTasks.map(t => taskHTML(t)).join('');
   if (truncated) {
-    html += `<li class="tasks-show-more"><button class="btn" id="tasks-show-more-btn">Show more (${orderedTasks.length - st.closedLimit} remaining)</button></li>`;
+    html += `<li class="tasks-show-more"><button class="btn" id="tasks-show-more-btn">Show more (${moreClosed} remaining)</button></li>`;
   }
   return html;
 }
@@ -397,7 +396,7 @@ function wireListHandlers() {
   if (showMoreBtn) {
     showMoreBtn.addEventListener('click', () => {
       st.closedLimit += 50;
-      render();
+      app.closedStale();   // asks for the longer page
     });
   }
 
@@ -491,6 +490,7 @@ function wireListHandlers() {
 }
 
 function render() {
+  app.closedStale();   // the Closed view: another filter by now, asked for again
   app.applyGroup();   // who can be assigned may have arrived since
   app.syncClosedLink();
   const filtered = app.filterTasks();

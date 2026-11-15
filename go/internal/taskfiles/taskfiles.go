@@ -1274,6 +1274,62 @@ func lookAt(path, owner string, fn func(*Task)) {
 	}
 }
 
+// ClosedPage: the Closed view of one year as it shows it: of the closed
+// tasks user sees that keep takes, the latest closed first, the first limit
+// (and as many more as it takes to have the task must among them, "" for
+// none), as copies; and how many there are in all. keep looks at each task
+// without a copy (lookAt), so a year's closed tasks are looked through and
+// a page of them is copied: the view of a team's year is tens of megabytes
+// of tasks, and it shows fifty.
+func (s *Store) ClosedPage(user, year string, keep func(*Task) bool, limit int, must string) (page []*Task, total int) {
+	current := s.CurrentYear()
+	type found struct{ closedAt, id, path, owner string }
+	var all []found
+	s.Lock()
+	defer s.Unlock()
+	for _, o := range s.Owners(user) {
+		for _, d := range s.dirs(o) {
+			files := []string{closedIn(d)}
+			for _, p := range archivesIn(d) {
+				if archiveYear(p) == year {
+					files = append(files, p)
+				}
+			}
+			for _, p := range files {
+				lookAt(p, o, func(t *Task) {
+					if (year == current && pastYearOf(t, current) == "" || year != current && ClosedYear(t) == year) && keep(t) {
+						all = append(all, found{t.ClosedAt, t.ID, p, o})
+					}
+				})
+			}
+		}
+	}
+	sort.SliceStable(all, func(i, j int) bool {
+		return cmp.Or(cmp.Compare(all[j].closedAt, all[i].closedAt), cmp.Compare(all[i].id, all[j].id)) < 0
+	})
+	seen := map[string]bool{}
+	unique := all[:0]
+	for _, f := range all {
+		if !seen[f.id] {
+			seen[f.id] = true
+			unique = append(unique, f)
+		}
+	}
+	all = unique
+	if must != "" {
+		if i := slices.IndexFunc(all, func(f found) bool { return f.id == must }); i >= limit {
+			limit = i + 1
+		}
+	}
+	page = []*Task{}
+	for _, f := range all[:min(limit, len(all))] {
+		if t := TaskIn(f.path, f.id, f.owner); t != nil {
+			page = append(page, t)
+		}
+	}
+	return page, len(all)
+}
+
 // Look shows fn each task of the task file at path, owner's, without a copy
 // (lookAt): for who keeps something of each and not the task (the search's
 // records). False when the file is not there or can't be read.

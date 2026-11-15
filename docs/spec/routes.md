@@ -61,7 +61,7 @@ In a public wiki (`ZONE_PUBLIC`; Public wikis in `docs/spec/security.md`) a visi
 | GET    | `/api/tasks/export`    | The tasks a view shows (`?list=`, `?mine=1` for My tasks, `?tag=`, `?assignee=`; none of them: all), open and closed, as a JSON file to save (Export and import in `docs/spec/tasks.md`) |
 | POST   | `/api/tasks/import`    | `{file, list, tag, new, also, private}`: adds an export's tasks to a list; `{added, skipped, ids}` |
 | GET    | `/api/tasks/headless`  | A hidden task app (the headless embed, without its `<script>` tags), for a page that needs the edit modal (`c t`, the New task button; see Modules). |
-| GET    | `/api/tasks/closed` | Closed tasks of `?year=YYYY` (default this year; earlier years come from their archive file). |
+| GET    | `/api/tasks/closed` | Closed tasks of `?year=YYYY` (default this year; earlier years come from their archive file). `?limit=N`: the Closed view's page, `{tasks, total}`: of the scope (`?list=`, `?mine=1`) and the filter field's words (`?q=`), the latest closed first, with `?task=<id>` that task among them (Views → Closed in `docs/spec/tasks.md`). |
 | GET    | `/api/tasks/assignable` | `{ users, me }`: the users a task can be assigned to, A–Z, and who asks (Assigning tasks in `docs/spec/users.md`). `users` is empty without users and in sharing mode. |
 | GET    | `/api/tasks/closed-years` | `{ years }`: years with closed tasks, newest first, this year always included (Closed's year switcher). `?list=<name>` and `?mine=1` as for the count. |
 | GET    | `/api/tasks/closed-count` | `{ count }` of tasks in the Closed view (current year), for its link. `?list=<name>` counts that list's, `?mine=1` My tasks'; without them, every task's (a leftover `?all=1` changes nothing). |

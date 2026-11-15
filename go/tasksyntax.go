@@ -534,3 +534,158 @@ func keySet[V any](m map[string]V) map[string]bool {
 	}
 	return set
 }
+
+// taskFilter: what the task list's filter field says (TasksCore.parseFilter
+// in the browser, whose words these are): the Closed view asks the server
+// with it, which answers the tasks it matches, a page of them.
+type taskFilter struct {
+	text, importance            string
+	tagGroups, assigneeGroups   [][]string
+	listGroups, fromGroups      [][]string
+	excludeTags, excludeLists   []string
+	excludeAssignees, excludeBy []string
+	updated                     bool
+}
+
+// parseTaskFilter: the filter the words of q make: #tag (#a|b either),
+// -#tag, list:name, -list:name, !high and !low, is:updated, with users
+// @name and from:name (and their -), the rest text.
+func parseTaskFilter(q string) taskFilter {
+	users := settings().Users != nil
+	var f taskFilter
+	var text []string
+	parts := func(w, sigil string) []string {
+		var out []string
+		for _, p := range strings.Split(w, "|") {
+			if p = strings.ToLower(strings.TrimPrefix(p, sigil)); p != "" {
+				out = append(out, p)
+			}
+		}
+		return out
+	}
+	lists := func(w string) []string {
+		var out []string
+		for _, p := range strings.Split(w[len("list:"):], "|") {
+			if p = strings.ToLower(strings.TrimPrefix(strings.ToLower(p), "shared/")); p != "" {
+				out = append(out, p)
+			}
+		}
+		return out
+	}
+	from := func(w string) []string {
+		var out []string
+		for _, p := range strings.Split(w[len("from:"):], "|") {
+			if p = strings.ToLower(strings.TrimPrefix(p, "@")); p != "" {
+				out = append(out, p)
+			}
+		}
+		return out
+	}
+	has := func(w, prefix string) bool {
+		return len(w) > len(prefix) && strings.EqualFold(w[:len(prefix)], prefix)
+	}
+	for _, w := range strings.Fields(q) {
+		low := strings.ToLower(w)
+		switch {
+		case low == "is:updated":
+			f.updated = true
+		case low == "!" || low == "!high":
+			f.importance = "high"
+		case low == "!low":
+			f.importance = "low"
+		case has(w, "-list:"):
+			f.excludeLists = append(f.excludeLists, lists(w[1:])...)
+		case has(w, "list:"):
+			f.listGroups = append(f.listGroups, lists(w))
+		case users && has(w, "-from:"):
+			f.excludeBy = append(f.excludeBy, from(w[1:])...)
+		case users && has(w, "from:"):
+			f.fromGroups = append(f.fromGroups, from(w))
+		case strings.HasPrefix(w, "-#"):
+			f.excludeTags = append(f.excludeTags, parts(w[1:], "#")...)
+		case strings.HasPrefix(w, "#"):
+			if g := parts(w, "#"); len(g) > 0 {
+				f.tagGroups = append(f.tagGroups, g)
+			}
+		case users && strings.HasPrefix(w, "-@"):
+			f.excludeAssignees = append(f.excludeAssignees, parts(w[1:], "@")...)
+		case users && strings.HasPrefix(w, "@"):
+			if g := parts(w, "@"); len(g) > 0 {
+				f.assigneeGroups = append(f.assigneeGroups, g)
+			}
+		default:
+			text = append(text, w)
+		}
+	}
+	f.text = strings.ToLower(strings.Join(text, " "))
+	return f
+}
+
+// matches: the task passes the filter, for user (TasksCore.matchesFilter).
+// t is only read.
+func (f taskFilter) matches(t *Task, user string) bool {
+	if f.importance != "" && t.Importance != f.importance {
+		return false
+	}
+	if f.updated && newsFor(t, user).Kind == "" {
+		return false
+	}
+	if f.text != "" && !strings.Contains(strings.ToLower(t.Title), f.text) && !strings.Contains(strings.ToLower(t.Description), f.text) {
+		return false
+	}
+	tags := taskTagsLower(t)
+	for _, tag := range f.excludeTags {
+		if tags[tag] {
+			return false
+		}
+	}
+	any := func(group []string, is func(string) bool) bool { return slices.ContainsFunc(group, is) }
+	assignee := func(w string) bool { return assigneeIs(t, w, user) }
+	if any(f.excludeAssignees, assignee) {
+		return false
+	}
+	for _, g := range f.assigneeGroups {
+		if !any(g, assignee) {
+			return false
+		}
+	}
+	// Who made it: a private task is its user's own making.
+	maker := t.Maker()
+	if maker == "" && t.Owner != "" {
+		maker = user
+	}
+	by := func(w string) bool {
+		if w == "me" {
+			w = user
+		}
+		return maker != "" && w == maker
+	}
+	if any(f.excludeBy, by) {
+		return false
+	}
+	for _, g := range f.fromGroups {
+		if !any(g, by) {
+			return false
+		}
+	}
+	inList := func(n string) bool {
+		if n == "inbox" || n == "none" {
+			return t.List == ""
+		}
+		return strings.ToLower(t.List) == n
+	}
+	if any(f.excludeLists, inList) {
+		return false
+	}
+	for _, g := range f.listGroups {
+		if !any(g, inList) {
+			return false
+		}
+	}
+	for _, g := range f.tagGroups {
+		if !any(g, func(tag string) bool { return tags[tag] }) {
+			return false
+		}
+	}
+	return true
+}

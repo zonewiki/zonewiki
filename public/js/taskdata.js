@@ -161,24 +161,59 @@ function fetchClosed() {
   // One request at a time.
   return closedLoading ||= loadClosed().finally(() => { closedLoading = null; });
 }
+// What the Closed view asks the server for: the year, this list's scope,
+// the filter field's words, how many it shows (st.closedLimit) and the
+// task a link names, which is among them however far down. The server
+// answers that page and how many there are in all (st.closedTotal): a
+// year of a team's closed tasks is far more than the view shows.
+function closedQuery() {
+  const q = new URLSearchParams(app.scopeQuery().slice(1));
+  if (st.closedYear) q.set('year', st.closedYear);
+  if (app.filterQuery()) q.set('q', app.filterQuery());
+  q.set('limit', st.closedLimit);
+  const linked = new URLSearchParams(location.search).get('task');
+  if (linked) q.set('task', linked);
+  return q.toString();
+}
 async function loadClosed() {
-  let closed, gen;
+  let closed, gen, asked, total = 0;
   // Only for the Closed view. If fetchTasks replaced `tasks` meanwhile (a
-  // reload of the list while these were on their way), fetch again: what
-  // was asked for may be another year's by now.
+  // reload of the list while these were on their way), or the filter or
+  // the number shown is another one by now, fetch again.
   loadClosedYears();
   do {
     gen = tasksGen;
-    const res = await fetch('/api/tasks/closed' + (st.closedYear ? `?year=${st.closedYear}` : ''));
-    closed = (await res.json()).filter(app.inScope);
+    asked = closedQuery();
+    const res = await fetch('/api/tasks/closed?' + asked);
+    const page = await res.json();
+    closed = (page.tasks || []).filter(app.inScope);
+    total = page.total || 0;
     await lazyTexts(closed);
-  } while (gen !== tasksGen);
+  } while (gen !== tasksGen || asked !== closedQuery());
+  // The page in the place of the closed tasks held (but those My tasks
+  // holds for its Updates).
+  st.tasks = st.tasks.filter(t => !t.closed_at || t.extra);
   const existingIds = new Set(st.tasks.map(t => t.id));
   for (const t of closed) {
     if (!existingIds.has(t.id)) st.tasks.push(app.own(t));
   }
+  st.closedAsked = asked;
+  st.closedTotal = total;
   st.closedLoaded = true;
   app.render();
+}
+// The Closed view shows what it asked for: when the filter, or how many it
+// shows, is another one by now, it asks again (a moment after the last
+// key).
+let closedSoon = null;
+function closedStale() {
+  if (st.activeView !== 'closed' || !st.closedLoaded || st.closedAsked === closedQuery()) return;
+  clearTimeout(closedSoon);
+  closedSoon = setTimeout(() => {
+    if (st.activeView !== 'closed' || st.closedAsked === closedQuery()) return;
+    st.closedLoaded = false;
+    fetchClosed();
+  }, 200);
 }
 
 async function loadClosedYears() {
@@ -455,5 +490,5 @@ async function wontDoMany(ids) {
   showUndo(`${open.length} tasks marked won't do`, () => completeTasks(open, false));
 }
 
-return { dismissUndo, showUndo, triggerUndo, fetchTasks, refresh, fetchClosed, setClosedYear, createTask, updateTask, markSeen, updatesNow, markAllSeen, leftViewMessage, tickTask, cancelPendingComplete, keepSnapshot, completeTasks, afterBatchWrite, oldHistory, markWontDo, wontDoMany, skipOccurrence, setStart };
+return { dismissUndo, showUndo, triggerUndo, fetchTasks, refresh, fetchClosed, setClosedYear, createTask, updateTask, markSeen, updatesNow, markAllSeen, closedStale, leftViewMessage, tickTask, cancelPendingComplete, keepSnapshot, completeTasks, afterBatchWrite, oldHistory, markWontDo, wontDoMany, skipOccurrence, setStart };
 }
