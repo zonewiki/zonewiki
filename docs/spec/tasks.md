@@ -907,7 +907,7 @@ Later in 2026-11 came the Inbox: until then a task could be in no list, which wi
   - **On a page**: `[[tasks: mine=1]]` shows it to whoever looks.
   - **Zone assigns nothing by itself**, but a task of your own that you share: it is yours to do unless you say otherwise.
   - (Until 2026-11 My tasks was every task except one assigned to someone else, or in a list you hadn't pinned unless it was assigned to you: every unassigned task of a pinned list, and of no list, was in everyone's.
-    Before that the Tasks links opened the pinned lists as one, called Pinned and before that My lists, at `/tasks?pinned=1`, which answers My tasks now.)
+    Before that the Tasks links opened the pinned lists as one, called Pinned and before that My lists, at `/tasks?pinned=1`, which is no address anymore.)
 - **A list's backlog** (a shared list, with users): under the list's heading, **N unassigned** (`.tasks-unassigned`; `tasksPageView.Unassigned`) links to the list filtered by `@none` (`/tasks?list=<ref>&assignee=none`): the open tasks no one has, a former assignee's included.
   A list left out of My tasks says so there too.
 - **The list switcher** (`.tasks-places` in `templates/tasks_page.html`, `taskPlaces` and `taskMore` in `go/tasksembed.go`, `js/listsrow.js`): `/tasks` opens with a row of pills above its heading,

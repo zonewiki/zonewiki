@@ -86,7 +86,7 @@ newNoteForm?.addEventListener('submit', async e => {
 // or the Inbox that one's), elsewhere it goes to your Inbox (openDefaultTask).
 
 const tasksAddButton = () =>
-  document.querySelector('.tasks-app[data-pinned] [id^="task-add-btn"]')
+  document.querySelector('.tasks-app[data-home] [id^="task-add-btn"]')
   || document.querySelector('.tasks-app:not([data-headless]) [id^="task-add-btn"]');
 
 document.querySelectorAll('.action-new-note, .notes-new').forEach(b => b.addEventListener('click', openNewNote));

@@ -110,22 +110,22 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
   // same on every tab.
   const planned = !task.closed_at && task.start_date
     ? (task.start_date <= todayStr() ? 'now' : 'later') : '';
-  const focusClass = planned ? ` task-planned-${planned}` : '';
+  const plannedClass = planned ? ` task-planned-${planned}` : '';
   // A past start date reads "since Sep 21" in the plain meta colour, never
   // as a warning, so only today's date is coloured amber.
-  const focusMetaClass = planned === 'later' ? 'focus-later'
-    : planned && task.start_date === todayStr() ? 'focus-now' : '';
+  const startClass = planned === 'later' ? 'start-later'
+    : planned && task.start_date === todayStr() ? 'start-now' : '';
   const dueDisplay = !task.closed_at
     ? `<span class="task-due task-clickable-date ${dueClass}${task.due_date ? '' : ' task-date-empty'}" data-id="${esc(task.id)}" data-field="due_date" title="${task.due_date ? 'Click to change due date' : 'Set due date'}">⏰${task.due_date ? ' ' + esc(formatDate(task.due_date)) : ''}</span>`
     : (task.due_date ? `<span class="task-due ${dueClass}">⏰ ${esc(formatDate(task.due_date))}</span>` : '');
   // A past start date means "available since", not late — so it reads
   // "since Sep 21" with no warning styling.
-  const focusLabel = !task.start_date ? ''
+  const startLabel = !task.start_date ? ''
     : (!task.closed_at && task.start_date < todayStr())
       ? `since ${shortDate(task.start_date)}` : formatDate(task.start_date);
-  const focusDisplay = !task.closed_at
-    ? `<span class="task-date-info task-focus-info task-clickable-date ${focusMetaClass}${task.start_date ? '' : ' task-date-empty'}" data-id="${esc(task.id)}" data-field="start_date" title="${task.start_date ? 'Click to change start date' : 'Set start date'}">📅${focusLabel ? ' ' + esc(focusLabel) : ''}</span>`
-    : (task.start_date ? `<span class="task-date-info task-focus-info ${focusMetaClass}">📅 ${esc(formatDate(task.start_date))}</span>` : '');
+  const startDisplay = !task.closed_at
+    ? `<span class="task-date-info task-start-info task-clickable-date ${startClass}${task.start_date ? '' : ' task-date-empty'}" data-id="${esc(task.id)}" data-field="start_date" title="${task.start_date ? 'Click to change start date' : 'Set start date'}">📅${startLabel ? ' ' + esc(startLabel) : ''}</span>`
+    : (task.start_date ? `<span class="task-date-info task-start-info ${startClass}">📅 ${esc(formatDate(task.start_date))}</span>` : '');
   const closedDisplay = task.closed_at
     ? (task.wont_do
         ? `<span class="task-date-info task-wontdo-badge">✗ won't do</span>`
@@ -170,9 +170,9 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
     ? '<span class="task-private" title="Private: only you see it" aria-label="Private">🔒</span>' : '';
   const hasRealMeta = !!(tags || assigneeDisplay || task.due_date || task.start_date || task.recurrence ||
     task.keep || task.private || task.closed_at || commentsDisplay || notesDisplay);
-  const hasMeta = !task.closed_at || dueDisplay || focusDisplay || closedDisplay || recIcon || privateDisplay || tagsRight || notesDisplay;
+  const hasMeta = !task.closed_at || dueDisplay || startDisplay || closedDisplay || recIcon || privateDisplay || tagsRight || notesDisplay;
   const metaClass = (hasMeta && !hasRealMeta) ? 'task-meta task-meta--hover-only' : 'task-meta';
-  const metaHtml = hasMeta ? `<div class="${metaClass}">${tagsRight}<span class="task-meta-right">${skipBtnHtml}${privateDisplay}${recIcon}${notesDisplay}${commentsDisplay}${lastDoneDisplay}${dueDisplay}${focusDisplay}${closedDisplay}</span></div>` : '';
+  const metaHtml = hasMeta ? `<div class="${metaClass}">${tagsRight}<span class="task-meta-right">${skipBtnHtml}${privateDisplay}${recIcon}${notesDisplay}${commentsDisplay}${lastDoneDisplay}${dueDisplay}${startDisplay}${closedDisplay}</span></div>` : '';
   // A card's details (its description, its latest comments) are in it, shown
   // when it is opened. Their HTML is the server's (htmlOf), and in a long
   // list it isn't fetched for every task up front (taskdata.js lazyTexts):
@@ -200,7 +200,7 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
   const expandBtn = descHtml || commentsHtml
     ? `<button type="button" class="task-expand-btn" data-id="${esc(task.id)}" aria-expanded="${detailsShown}" aria-label="Description and comments" title="Description and comments (l / h)">${app.EXPAND_ICON}</button>` : '';
   return `
-    <li class="task-item ${closedClass} ${urgClass}${focusClass} ${extraClass}${task.id === st.expandedId ? ' task-expanded' + (st.detailsOpen ? ' task-details' : '') : ''}" data-id="${esc(task.id)}" ${dragAttr}>
+    <li class="task-item ${closedClass} ${urgClass}${plannedClass} ${extraClass}${task.id === st.expandedId ? ' task-expanded' + (st.detailsOpen ? ' task-details' : '') : ''}" data-id="${esc(task.id)}" ${dragAttr}>
       <label class="task-checkbox">
         <input type="checkbox" ${checked} data-id="${esc(task.id)}">
       </label>
@@ -302,7 +302,7 @@ function listHTML(orderedTasks, newTasks, updates = []) {
   if (st.today && st.activeView === 'open') {
     const inFocus = orderedTasks.length + newTasks.length;
     if (app.LIMIT && inFocus >= app.LIMIT) {
-      html += `<li class="focus-stale-bar focus-over-limit">` +
+      html += `<li class="today-limit-bar today-over-limit">` +
         `<span>⚠ ${inFocus} tasks in ${esc(app.tabLabel('focus'))} (limit: ${app.LIMIT})</span></li>`;
     }
   }

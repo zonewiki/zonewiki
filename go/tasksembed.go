@@ -34,7 +34,7 @@ type tasksEmbedView struct {
 	Sfx           string           // "-<InstanceID>" after the first: its elements' ids end in it
 	Headless      bool             // hidden: only its edit modal is used (the editor's Make task, a new task from any page)
 	Keep          string           // "1": new tasks here are keep tasks
-	Pinned        bool             // the Inbox or My tasks: its New is the one New task clicks on its page
+	Home          bool             // the Inbox or My tasks (data-home): its + New is the one the phone's Task tab clicks on its page
 	NewTags       string           // new tasks' tags, comma-separated
 	CanAssign     bool             // with users: the modal has the Assignee field
 	Assignee      string           // assignee=, with users: whose tasks it shows
@@ -176,7 +176,7 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, p
 	v := tasksEmbedView{
 		Tag: params.Get("tag"), View: view, Group: group, Settings: settingsAt,
 		Limit: limit, Labels: labels, InstanceID: instance, Sfx: sfx, Headless: headless,
-		Keep: keep, Pinned: scope == mineScope || isInbox(scope, lists),
+		Keep: keep, Home: scope == mineScope || isInbox(scope, lists),
 		NewTags:       strings.Join(newTaskTags(params), ","),
 		CanAssign:     settings().Users != nil,
 		Assignee:      assigneeParam(params),

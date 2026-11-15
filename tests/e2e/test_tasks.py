@@ -399,9 +399,9 @@ def test_past_start_date_reads_since(page, wiki):
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     page.goto("/page/tasks?view=open&group=none")
     open_tab(page, "focus")
-    chip = card(page, "Started").locator(".task-focus-info")
+    chip = card(page, "Started").locator(".task-start-info")
     expect(chip).to_have_text(f"📅 since {start.strftime('%b')} {start.day}")
-    expect(card(page, "Started last year").locator(".task-focus-info")).to_have_text(
+    expect(card(page, "Started last year").locator(".task-start-info")).to_have_text(
         f"📅 since Mar 4, {long_ago.year}")
     # Every date of a card is written that way, never ISO: a later start, a
     # deadline, and the day a closed task was done.
@@ -412,7 +412,7 @@ def test_past_start_date_reads_since(page, wiki):
     page.request.put(f"/api/tasks/{task_by_title(page, 'Done one')['id']}", data={"completed": True})
     page.reload()
     open_tab(page, "open")
-    expect(card(page, "Later").locator(".task-focus-info")).to_have_text(f"📅 {short(later)}")
+    expect(card(page, "Later").locator(".task-start-info")).to_have_text(f"📅 {short(later)}")
     expect(card(page, "Later").locator(".task-due")).to_have_text(f"⏰ {short(due)}")
     page.locator("#task-closed-link").click()
     done = card(page, "Done one").locator(".task-date-info", has_text="done:")
@@ -420,7 +420,7 @@ def test_past_start_date_reads_since(page, wiki):
     assert done.get_attribute("title") == date.today().isoformat()
     page.locator("#task-closed-link").click()
     open_tab(page, "focus")
-    chip = card(page, "Started").locator(".task-focus-info")
+    chip = card(page, "Started").locator(".task-start-info")
     color = chip.evaluate("el => getComputedStyle(el).color")
     muted = chip.evaluate("""el => { const p = document.createElement('span');
         p.style.color = 'var(--muted)'; el.parentNode.appendChild(p);
@@ -671,7 +671,7 @@ def test_every_quick_start_is_one_rule(page, wiki):
     card(page, "First").locator(".task-title").click()
     page.keyboard.press("f")
     wait_for_field(page, "First", "start_date", today)
-    card(page, "First").locator(".task-focus-info").click()
+    card(page, "First").locator(".task-start-info").click()
     pick_date(page.locator(".tasks-datepicker"), _day(2))
     wait_for_field(page, "First", "start_date", _day(2))
     expect(toast).to_contain_text("Starts")
@@ -2347,19 +2347,19 @@ def test_focus_limit_is_off_unless_set(page, wiki):
     # No limit by default: no Focus warning, no flagged day on Plan.
     page.goto("/tasks?view=today")
     expect(_focus_titles(page)).to_have_count(5)
-    expect(page.locator(".focus-over-limit")).to_have_count(0)
+    expect(page.locator(".today-over-limit")).to_have_count(0)
     open_tab(page, "plan")
     expect(page.locator(".board-day-divider", has_text="Today")).to_be_visible()
     expect(page.locator(".board-day--over")).to_have_count(0)
     # ?limit= (the /tasks page) turns it on; the count includes Unsorted.
     page.goto("/tasks?view=today&limit=5")
-    expect(page.locator(".focus-over-limit")).to_contain_text("5 tasks in Today (limit: 5)")
+    expect(page.locator(".today-over-limit")).to_contain_text("5 tasks in Today (limit: 5)")
     open_tab(page, "plan")
     expect(page.locator(".board-day--over")).to_have_count(1)
     # [[tasks: limit=N]] in an embed.
     wiki.write("board", "# Board\n\n[[tasks: view=today limit=3]]\n")
     page.goto("/page/board")
-    expect(page.locator(".focus-over-limit")).to_contain_text("(limit: 3)")
+    expect(page.locator(".today-over-limit")).to_contain_text("(limit: 3)")
 
 
 def test_task_added_on_focus_lands_in_unsorted(page, wiki):
@@ -3566,8 +3566,8 @@ def test_planned_tasks_are_marked_on_every_tab(page, wiki):
     edge = lambda title: card(page, title).evaluate("el => getComputedStyle(el).borderLeftColor")
     assert edge("Since yesterday") != edge("Thursday-ish") != edge("Undecided")
     # The 📅 date: blue for later; a past start ("since …") stays plain.
-    expect(card(page, "Thursday-ish").locator(".task-focus-info")).to_have_class(re.compile(r"\bfocus-later\b"))
-    expect(card(page, "Since yesterday").locator(".task-focus-info")).not_to_have_class(re.compile(r"\bfocus-(now|later)\b"))
+    expect(card(page, "Thursday-ish").locator(".task-start-info")).to_have_class(re.compile(r"\bstart-later\b"))
+    expect(card(page, "Since yesterday").locator(".task-start-info")).not_to_have_class(re.compile(r"\bstart-(now|later)\b"))
 
     open_tab(page, "focus")
     expect(card(page, "Since yesterday")).to_have_class(re.compile(r"\btask-planned-now\b"))
@@ -3754,7 +3754,7 @@ def test_locale_formats_dates_and_the_calendar(page, wiki, monkeypatch):
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     page.goto("/page/tasks?view=open&group=none")
     open_tab(page, "focus")
-    expect(card(page, "Started last year").locator(".task-focus-info")).to_have_text(
+    expect(card(page, "Started last year").locator(".task-start-info")).to_have_text(
         f"📅 since 4. März {long_ago.year}")
 
     modal = open_edit(page, "Started last year")
@@ -3780,7 +3780,7 @@ def test_iso_date_format(page, wiki, monkeypatch):
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     page.goto("/page/tasks?view=open&group=none")
     open_tab(page, "focus")
-    expect(card(page, "Started").locator(".task-focus-info")).to_have_text(f"📅 since {start.isoformat()}")
+    expect(card(page, "Started").locator(".task-start-info")).to_have_text(f"📅 since {start.isoformat()}")
     in3 = date.today() + timedelta(days=3)
     open_tab(page, "plan")
     expect(page.locator(".board-day-label", has_text=in3.isoformat())).to_have_count(1)
@@ -4329,7 +4329,7 @@ def test_new_task_has_no_comments_field(page, wiki):
 def test_date_picker_shortcuts_move_the_start_date(page, wiki):
     page.request.post("/api/tasks", data={"title": "Shift me", "start_date": date.today().isoformat()})
     page.goto("/tasks?view=open&group=none")
-    chip = card(page, "Shift me").locator(".task-focus-info")
+    chip = card(page, "Shift me").locator(".task-start-info")
     for label, days in (("Tomorrow", 1), ("In 2 days", 2), ("In a week", 7), ("Today", 0),
                         ("Next Monday", (7 - date.today().weekday()) or 7)):
         before = chip.inner_text()
@@ -4860,7 +4860,7 @@ def test_dates_end_at_the_right_edge(page, wiki):
         after = weekly.locator(sel).bounding_box()
         assert abs(after["x"] - box["x"]) < 1 and abs(after["y"] - box["y"]) < 1, sel
     boxes = [weekly.locator(sel).bounding_box() for sel in
-             (".task-skip-btn", ".task-focus-info.task-date-empty", ".task-recurring", ".task-due", ".task-menu-btn")]
+             (".task-skip-btn", ".task-start-info.task-date-empty", ".task-recurring", ".task-due", ".task-menu-btn")]
     assert all(l["x"] + l["width"] <= r["x"] + 1 for l, r in zip(boxes, boxes[1:]))    # left to right
     dots, title = weekly.locator(".task-menu-btn svg").bounding_box(), weekly.locator(".task-title").bounding_box()
     assert abs((dots["y"] + dots["height"] / 2) - (title["y"] + title["height"] / 2)) < 1.5   # ⋯ on the line's centre

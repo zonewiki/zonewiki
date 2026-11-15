@@ -367,7 +367,7 @@ class TestListSwitcher:
         assert 'data-init-tag="" data-init-list="" data-init-mine="lists" data-init-out="gifts"' in html
         assert "data-init-lists" not in html
         assert 'data-init-view=""' in html and 'data-init-keep=""' in html and "data-new-tags" not in html
-        assert "data-default-list" not in html and 'data-pinned="1"' in html and "data-inbox-private" not in html
+        assert "data-default-list" not in html and 'data-home="1"' in html and "data-inbox-private" not in html
         # The Tasks link goes there and counts what it shows.
         body = self.get(client, "/page/index")
         assert 'href="/tasks?mine=1" class="module-link" data-module="tasks"' in body
@@ -424,7 +424,7 @@ class TestListSwitcher:
         html = self.get(client, "/page/desk")
         assert 'data-init-mine="lists" data-init-out=""' in html and 'data-init-view="open"' in html
         assert "data-init-lists" not in html
-        assert 'data-pinned="1"' in html                       # New task from this page clicks its + New
+        assert 'data-home="1"' in html                       # the phone's Task tab clicks its + New
         assert 'data-settings-embed="1"' in html and "data-settings-mine" not in html
 
     def test_without_lists_my_tasks_is_all_tasks(self, client, wiki_dir):
@@ -493,7 +493,7 @@ class TestListSwitcher:
             assert "<h1>Inbox</h1>" in html and "<title>Inbox" in html and "There is no list" not in html, url
             assert html.count('class="tasks-app"') == 1 and 'data-init-list="inbox"' in html, url
             assert "data-settings-" not in html, url   # nothing of its own to set
-            assert 'data-pinned="1"' in html, url      # New task from anywhere clicks its + New
+            assert 'data-home="1"' in html, url      # the phone's Task tab clicks its + New
         line = html.split('class="tasks-list-home tasks-inbox-line">', 1)[1].split("</p>", 1)[0]
         assert line == "New tasks land here, in no list. Move one to a list to file it."
         # It is no list: no Rename…, pin, Delete… in the menu, no Backlinks.

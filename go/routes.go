@@ -867,8 +867,7 @@ func apiPagesList(w http.ResponseWriter, r *http.Request) {
 
 // tasksPage: /tasks, every task; with ?list= that list (by its ref), with
 // its settings, ?list=none the tasks in no list; with ?mine=1 My tasks,
-// the user's home view (mineFilter; ?pinned=1, its name until 2026-11,
-// answers the same); with ?tag= every task, filtered by the tag (tasks.js
+// the user's home view (mineFilter); with ?tag= every task, filtered by the tag (tasks.js
 // reads it). Every link to "the tasks" goes here; [[tasks: …]] embeds are
 // for views on ordinary pages.
 func tasksPage(w http.ResponseWriter, r *http.Request) {
@@ -908,7 +907,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 		}
 		crumbs = []crumb{{"Tasks", "/tasks"}, {name, ""}}
 		key += "?list=" + ref
-	case q.Get("mine") != "" || q.Get("pinned") != "":
+	case q.Get("mine") != "":
 		// ?mine=1: My tasks, one task app; with no list in the wiki that is
 		// every task, at /tasks.
 		if len(rq.taskLists()) == 0 {

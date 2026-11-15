@@ -116,12 +116,12 @@ class TestViewPage:
         assert "data-pinned-pages" not in body
         lv = client.get("/tasks?list=task", headers=HOST).get_data(as_text=True)
         assert 'data-init-view="today"' in lv and '<body data-module="tasks">' in lv
-        assert 'data-pinned="1"' not in lv          # the first pinned list takes no new task
+        assert 'data-home="1"' not in lv          # the first pinned list takes no new task
         home = client.get("/page/tasks", headers=HOST).get_data(as_text=True)
-        assert '<body data-module="wiki">' in home and 'data-pinned="1"' not in home
+        assert '<body data-module="wiki">' in home and 'data-home="1"' not in home
         for url in ("/tasks?mine=1", "/tasks?list=inbox"):
             view = client.get(url, headers=HOST).get_data(as_text=True)
-            assert '<body data-module="tasks">' in view and 'data-pinned="1"' in view, url
+            assert '<body data-module="tasks">' in view and 'data-home="1"' in view, url
         # /tasks stays the view of every task, in the Tasks module.
         assert '<body data-module="tasks">' in client.get("/tasks", headers=HOST).get_data(as_text=True)
 
@@ -134,9 +134,9 @@ class TestViewPage:
         for name in ("em", "zed"):
             assert client.post("/tasks/pin-list", data={"list": name, "pin": "0"}, headers=HOST).status_code == 302
             assert links() == "/tasks?mine=1"   # one pinned, none pinned: My tasks still
-        # ?pinned=1, its address until 2026-11, answers the same page.
+        # ?pinned=1, its address until 2026-11, is no view: every task, as any unknown word.
         old = client.get("/tasks?pinned=1", headers=HOST).get_data(as_text=True)
-        assert "<h1>My tasks</h1>" in old and 'data-init-mine="lists"' in old
+        assert "<h1>My tasks</h1>" not in old and "data-init-mine" not in old
 
     def test_bottom_bar_lists_the_modules(self, client, wiki_dir):
         write_page(wiki_dir, "my-page", "# My Page\n")

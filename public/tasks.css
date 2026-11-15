@@ -823,18 +823,18 @@ div.task-card-comment > .task-comment-when { display: block; }
    2px in padding, so checkbox and title line up on every card, every tab. */
 .task-item:not(.task-planned-now, .task-planned-later),
 .task-item:is(.task-urg-overdue, .task-urg-today) { padding-left: calc(.65rem + 2px); }
-.task-focus-info.focus-now   { color: var(--amber-text, #d97706) !important; font-weight: 600; }
-.task-focus-info.focus-later { color: var(--blue-text, #3d6a8e) !important; }
+.task-start-info.start-now   { color: var(--amber-text, #d97706) !important; font-weight: 600; }
+.task-start-info.start-later { color: var(--blue-text, #3d6a8e) !important; }
 
 
-.focus-stale-bar {
+.today-limit-bar {
   list-style: none;
   display: flex; align-items: center; justify-content: space-between;
   gap: .5rem; margin: 0 0 .4rem; padding: .25rem .5rem;
   font-size: .75rem; color: var(--muted);
   background: var(--code-bg); border: 1px solid var(--border); border-radius: 4px;
 }
-.focus-over-limit { color: #d97706; }
+.today-over-limit { color: #d97706; }
 
 .tasks-empty .btn { margin-left: .5rem; }
 
@@ -1009,7 +1009,7 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 
 /* Plan: Today's carried-over tasks, their header count and "since" badge */
 .board-day-due.board-day-carried { color: var(--amber-text, #d97706); }
-.task-carried .task-focus-info { color: var(--amber-text, #d97706); }
+.task-carried .task-start-info { color: var(--amber-text, #d97706); }
 
 /* Unsorted / Sorted, the same light label in a Plan section, on the Open
    list and on Focus (where it is also a drop target), and the Open list's

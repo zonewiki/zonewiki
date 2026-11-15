@@ -495,9 +495,9 @@ function editPrivate() { return isPrivateList(listSelect?.value || ''); }
 const urlViewName = urlParams.get('view') || '';   // explicit per-navigation override
 const urlGroup = urlParams.get('group') || '';
 const embedViewName = appEl?.dataset.initView || '';   // [[tasks: view=…]] — always wins when specified
-// ?new=1 opens the new-task modal in one embed: a pinned one if the page
-// has it (as the New buttons do), else the first.
-const newTarget = document.querySelector('.tasks-app[data-pinned]:not([data-headless])')
+// ?new=1 opens the new-task modal in one embed: My tasks' or the Inbox's
+// if the page has it (data-home, as the phone's Task tab does), else the first.
+const newTarget = document.querySelector('.tasks-app[data-home]:not([data-headless])')
   || document.querySelector('.tasks-app:not([data-headless])');
 const initNew = appEl?.dataset.initNew === '1' || (urlParams.has('new') && appEl === newTarget);
 // The year Closed shows: '' is this year, an earlier one ('2025', from
