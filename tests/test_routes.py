@@ -2329,14 +2329,15 @@ class TestTasksPage:
             "count": 1, "overdue": 1, "today": 0, "focus": 2}
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
         counts = ('<span class="module-counts"><span class="module-due">1</span>'
-                  '<span class="module-focus">2</span></span>')
+                  '<span class="module-focus">2</span><span class="module-new" hidden></span></span>')
         assert body.count(counts) == 2   # switcher and tab bar
         assert body.count('title="Tasks: 2 in Focus · 1 overdue"') == 2
         # Zero is hidden, not "0".
         client.post("/api/tasks/batch-delete", json={"ids": [t["id"] for t in client.get(
             "/api/tasks", headers=HOST).get_json()]}, headers=HOST)
         body = client.get("/page/index", headers=HOST).get_data(as_text=True)
-        assert '<span class="module-due" hidden></span><span class="module-focus" hidden></span>' in body
+        assert ('<span class="module-due" hidden></span><span class="module-focus" hidden></span>'
+                '<span class="module-new" hidden></span>') in body
 
     def test_due_badge_and_task_links_use_it(self, client, wiki_dir):
         write_page(wiki_dir, "garden", "# Garden\n")

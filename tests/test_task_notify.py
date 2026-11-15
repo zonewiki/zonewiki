@@ -152,3 +152,29 @@ def test_no_mail_without_a_mail_server(client, wiki_dir, monkeypatch):
     assert new(client, title="No server", assignee="bob")["assignee"] == "bob"
     page = client.get("/tasks?mine=1", headers=HOST).get_data(as_text=True)
     assert "data-settings-mine" in page and "data-settings-mail" not in page
+
+
+def test_the_tasks_links_count_what_is_new_for_you(alice, smtp):
+    """A task someone gives you often has no date, so it is in neither of the
+    Tasks links' counts: they have a third one, the tasks someone else gave
+    you that you haven't touched yet."""
+    task = new(alice, title="Check the invoice", assignee="bob")
+    new(alice, title="Hers", assignee="alice")
+    new(alice, title="Nobody's")
+    # alice gave it: nothing new for her, and no key in the answer.
+    assert alice.get("/api/tasks/due-count", headers=HOST).get_json() == {"count": 0, "overdue": 0, "today": 0, "focus": 0}
+    login(alice, "bob")
+    counts = alice.get("/api/tasks/due-count?places=1", headers=HOST).get_json()
+    assert counts["new"] == 1 and counts["count"] == 0 and counts["focus"] == 0
+    assert counts["places"]["mine"]["new"] == 1 and "new" not in counts["places"]["inbox"]
+    page = alice.get("/page/index", headers=HOST).get_data(as_text=True)
+    assert '<span class="module-new">1</span>' in page and 'title="Tasks: 1 new for you"' in page
+    # In the list's own counts too (its pill), for him; the list has no pill here, so ask the route with it pinned.
+    assert alice.post("/tasks/pin-list", data={"list": "team", "pin": "1"}, headers=HOST).status_code == 302
+    assert alice.get("/api/tasks/due-count?places=1", headers=HOST).get_json()["places"]["list:team"]["new"] == 1
+    # He touches it (a date): no longer new.
+    assert alice.put(f"/api/tasks/{task['id']}", json={"due_date": "2031-01-01"}, headers=HOST).status_code == 200
+    counts = alice.get("/api/tasks/due-count", headers=HOST).get_json()
+    assert "new" not in counts
+    page = alice.get("/page/index", headers=HOST).get_data(as_text=True)
+    assert '<span class="module-new" hidden></span>' in page

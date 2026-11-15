@@ -384,3 +384,37 @@ func TestASharedTaskStaysShared(t *testing.T) {
 		t.Errorf("bob sees %v", titles(taskFiles.Open("bob")))
 	}
 }
+
+// The rule for a task someone gave a user, case by case: the cases the
+// browser's rule runs through too (TasksCore.givenToMe,
+// tests/test_tasks_core.py).
+func TestGivenToCases(t *testing.T) {
+	raw, err := os.ReadFile("testdata/given_cases.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cases []struct {
+		Name string
+		Task struct {
+			Assignee string
+			ClosedAt string `json:"closed_at"`
+			Private  bool
+			History  []HistoryEntry
+			Comments []Comment
+		}
+		Want bool
+	}
+	if err := json.Unmarshal(raw, &cases); err != nil || len(cases) < 10 {
+		t.Fatalf("the cases: %v", err)
+	}
+	// anna asks, on 2026-07-26.
+	for _, c := range cases {
+		task := &Task{Assignee: c.Task.Assignee, ClosedAt: c.Task.ClosedAt, History: c.Task.History, Comments: c.Task.Comments}
+		if c.Task.Private {
+			task.Owner = "anna"
+		}
+		if got := givenTo(task, "anna", "2026-07-26"); got != c.Want {
+			t.Errorf("%s: %v, want %v", c.Name, got, c.Want)
+		}
+	}
+}

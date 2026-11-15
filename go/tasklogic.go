@@ -92,6 +92,53 @@ func placeSnapshot(user string, t *Task, snap jsonObj, lists map[string]ListInfo
 	return general
 }
 
+// newDays: for how many days a task someone gave a user is new to them.
+const newDays = 7
+
+// givenTo: someone else gave user this task and they haven't touched it
+// since: its card says "new", and the Tasks links count it (TaskCounts.New).
+// From its history alone, so no state is kept: the entry that made it
+// theirs (the last "assigned" one, or "created" for a task made with their
+// name on it) is someone else's, nothing they did is logged after it (a
+// date, done, a comment), and it is at most newDays days old on day
+// (YYYY-MM-DD). The browser has the same rule (TasksCore.givenToMe;
+// go/testdata/given_cases.json runs through both).
+func givenTo(t *Task, user, day string) bool {
+	if user == "" || t.Owner != "" || !t.IsOpen() || t.Assignee != user {
+		return false
+	}
+	at := -1
+	for i := len(t.History) - 1; i >= 0 && at < 0; i-- {
+		if t.History[i].Event == "assigned" {
+			at = i
+		}
+	}
+	if at < 0 {
+		at = slices.IndexFunc(t.History, func(e HistoryEntry) bool { return e.Event == "created" })
+	}
+	if at < 0 {
+		return false
+	}
+	gave := t.History[at]
+	if gave.By == "" || gave.By == user || gave.Event == "assigned" && strings.ToLower(gave.To) != user {
+		return false
+	}
+	for _, e := range t.History[at+1:] {
+		if e.By == user {
+			return false
+		}
+	}
+	when := runePrefix(gave.At, 16)
+	for _, c := range t.Comments {
+		if c.By == user && runePrefix(c.At, 16) >= when {
+			return false
+		}
+	}
+	gaveDay, err1 := time.Parse("2006-01-02", runePrefix(when, 10))
+	now, err2 := time.Parse("2006-01-02", day)
+	return err1 == nil && err2 == nil && now.Sub(gaveDay) <= newDays*24*time.Hour
+}
+
 // timestamp is the current time as tasks store it (created_at, closed_at).
 func timestamp() string { return now().Format("2006-01-02T15:04:05") }
 

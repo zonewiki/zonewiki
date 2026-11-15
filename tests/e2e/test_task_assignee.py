@@ -482,3 +482,23 @@ def test_my_tasks_settings_turn_the_mail_off(page, wiki, monkeypatch):
     page.get_by_role("menuitem", name="List settings…").click()
     expect(dialog).to_be_visible()
     expect(box).to_be_hidden()
+
+
+def test_the_tasks_link_says_that_something_is_new_for_you(alice):
+    # bob gives alice a task with no date: the Tasks link counts it as new,
+    # on any page, and no longer once she has touched it.
+    alice.request.post("/login", form={"username": "bob", "password": "pw"})
+    new(alice, "From bob", assignee="alice")
+    alice.request.post("/login", form={"username": "alice", "password": "pw"})
+    alice.goto("/")
+    badge = alice.locator('.module-link[data-module="tasks"] .module-new').first
+    expect(badge).to_have_text("1")
+    expect(alice.locator('.module-link[data-module="tasks"]').first).to_have_attribute("title", "Tasks: 1 new for you")
+    # On My tasks its pill has it too, and it goes when she sets a date, without a reload.
+    alice.goto("/tasks?mine=1&view=open")
+    pill = alice.locator('.tasks-place[data-place="mine"] .module-new')
+    expect(pill).to_have_text("1")
+    card(alice, "From bob").locator(".task-title").click()
+    alice.keyboard.press("f")                        # starts today: hers now
+    expect(pill).to_be_hidden()
+    expect(alice.locator('.module-link[data-module="tasks"] .module-new').first).to_be_hidden()

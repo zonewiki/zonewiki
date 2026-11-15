@@ -490,11 +490,16 @@ func injectTasksEmbeds(html string, embeds []tasksEmbed) string {
 
 // TaskCounts is what the Tasks module links show.
 type TaskCounts struct {
-	Count   int    `json:"count"`
-	Overdue int    `json:"overdue"`
-	Today   int    `json:"today"`
-	Focus   int    `json:"focus"`
-	Title   string `json:"-"`
+	Count   int `json:"count"`
+	Overdue int `json:"overdue"`
+	Today   int `json:"today"`
+	Focus   int `json:"focus"`
+	// New: the open tasks someone else gave the user that they haven't
+	// touched yet (givenTo). Such a task often has no date, so it is in
+	// neither of the counts above; without this one, nothing outside My
+	// tasks would say that it is there.
+	New   int    `json:"new,omitempty"`
+	Title string `json:"-"`
 }
 
 // taskCounts: the open tasks in Focus (started, or due today or earlier)
@@ -571,6 +576,9 @@ func countTasks(user string, tasks []*Task, lists map[string]ListInfo, params ..
 			c.Overdue++
 		} else if due == day {
 			c.Today++
+		}
+		if givenTo(t, user, day) {
+			c.New++
 		}
 	}
 	c.Count = c.Overdue + c.Today

@@ -253,8 +253,9 @@ const tasksLinks = document.querySelectorAll('.module-link[data-module="tasks"]'
 const placesNow = () => document.querySelectorAll('.tasks-place[data-place]');
 
 // Same as taskCountsTitle in go/views.go.
-function taskCountsTitle({ focus, overdue, today }) {
+function taskCountsTitle({ focus, overdue, today, new: fresh }) {
   const parts = [];
+  if (fresh > 0) parts.push(`${fresh} new for you`);
   if (focus > 0) parts.push(`${focus} in Focus`);
   if (overdue > 0) parts.push(`${overdue} overdue`);
   if (today > 0) parts.push(`${today} due today`);
@@ -290,12 +291,14 @@ export async function refreshDueBadge(poll = false) {
     tasksLinks.forEach(a => {
       showCount(a.querySelector('.module-due'), c.count);
       showCount(a.querySelector('.module-focus'), c.focus);
+      showCount(a.querySelector('.module-new'), c.new || 0);
       a.title = taskCountsTitle(c);
     });
     places.forEach(a => {
       const p = c.places?.[a.dataset.place];
       showCount(a.querySelector('.module-due'), p ? p.count : 0);
       showCount(a.querySelector('.module-focus'), p ? p.focus : 0);
+      showCount(a.querySelector('.module-new'), p ? p.new || 0 : 0);
     });
   } catch (e) {}
 }

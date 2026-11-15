@@ -216,7 +216,7 @@ html.sharing :is(
    each hidden at zero. */
 .module-counts { display: inline-flex; gap: .2rem; margin-left: .3rem; }
 .module-counts:not(:has(> :not([hidden]))) { display: none; }
-.module-due, .module-focus {
+.module-due, .module-focus, .module-new {
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 1.15rem; height: 1.15rem; padding: 0 .3rem;
   border-radius: 1rem; font-size: .7rem; font-weight: 600; line-height: 1;
@@ -224,7 +224,10 @@ html.sharing :is(
 }
 .module-due { background: color-mix(in srgb, #f97316 18%, transparent); color: #c2540a; }
 .module-focus { background: color-mix(in srgb, var(--muted) 15%, transparent); color: var(--muted); }
-:is(.module-due, .module-focus)[hidden] { display: none; }
+/* Tasks someone gave you that you haven't touched yet: the accent, filled, as
+   the "new" on their cards. */
+.module-new { background: var(--link); color: var(--bg); }
+:is(.module-due, .module-focus, .module-new)[hidden] { display: none; }
 @media screen and (prefers-color-scheme: dark) {
   .module-due { background: color-mix(in srgb, #f97316 22%, transparent); color: #fb923c; }
   .module-focus { background: color-mix(in srgb, var(--muted) 25%, transparent); }
@@ -2193,7 +2196,7 @@ body.editor-page main {
     position: absolute; top: calc(50% - .45rem); left: calc(50% + .9rem); transform: translateY(-50%);
     flex-direction: column; align-items: flex-start; margin: 0; gap: .1rem; pointer-events: none;
   }
-  .action-buttons :is(.module-due, .module-focus) {
+  .action-buttons :is(.module-due, .module-focus, .module-new) {
     min-width: .9rem; height: .85rem; padding: 0 .2rem; font-size: .6rem;
   }
   /* Notes is private with users: a small lock at its icon's top right

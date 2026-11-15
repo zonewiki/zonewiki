@@ -688,6 +688,19 @@ class TestAssignee:
         assert self.quick("Call Sam @me", "{me: 'me', users: new Set(['alice'])}") == ("Call Sam @me", "", False)
 
 
+class TestGivenCases:
+    """givenToMe, case by case; the server's rule (givenTo in
+    go/tasklogic.go, which counts such tasks on the Tasks links) runs through
+    the same cases (go/testdata/given_cases.json)."""
+
+    CASES = json.loads((CORE.parent.parent / "go" / "testdata" / "given_cases.json").read_text(encoding="utf-8"))
+
+    def test_the_cases_the_server_has(self):
+        got = run_core(f"{json.dumps(self.CASES)}.map(c => !!TasksCore.givenToMe(c.task, 'anna', '2026-07-26'))")
+        wrong = [c["name"] for c, g in zip(self.CASES, got) if g != c["want"]]
+        assert not wrong and len(got) > 10
+
+
 class TestGivenToMe:
     """givenToMe: a task someone else gave the user, which they haven't
     touched since; its card says "new". From the task's history alone."""

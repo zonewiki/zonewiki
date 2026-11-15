@@ -170,7 +170,11 @@ func tasksRoutes(mux *http.ServeMux) {
 			return
 		}
 		c := taskCounts(rq)
-		writeJSON(w, http.StatusOK, map[string]any{"count": c.Count, "overdue": c.Overdue, "today": c.Today, "focus": c.Focus, "places": rq.placeCounts()})
+		out := map[string]any{"count": c.Count, "overdue": c.Overdue, "today": c.Today, "focus": c.Focus, "places": rq.placeCounts()}
+		if c.New > 0 {
+			out["new"] = c.New
+		}
+		writeJSON(w, http.StatusOK, out)
 	})
 	mux.HandleFunc("POST /api/tasks", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
 		data, err := jsonObject(r)

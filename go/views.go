@@ -131,6 +131,9 @@ var modules = [][3]string{{"wiki", "Wiki", "/"}, {"private", "Private", "/privat
 // · 1 due today" (js/chrome.js taskCountsTitle builds the same).
 func taskCountsTitle(c TaskCounts) string {
 	var parts []string
+	if c.New > 0 {
+		parts = append(parts, itoa(c.New)+" new for you")
+	}
 	if c.Focus > 0 {
 		parts = append(parts, itoa(c.Focus)+" in Focus")
 	}

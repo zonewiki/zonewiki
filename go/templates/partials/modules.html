@@ -1,9 +1,10 @@
 {{- /* Links to Zone's three modules (views.go moduleLinks): the breadcrumb's
     module switcher (desktop) and the action bar (phones). The current
     module's link is aria-current from the first paint; the Tasks's carries
-    the due and Focus counts, which js/chrome.js refreshes. */ -}}
+    the due and Focus counts, and how many tasks someone gave the user that
+    they haven't touched yet (new), which js/chrome.js refreshes. */ -}}
 {{define "module_counts" -}}
-<span class="module-counts"><span class="module-due"{{if not .Count}} hidden{{end}}>{{if .Count}}{{.Count}}{{end}}</span><span class="module-focus"{{if not .Focus}} hidden{{end}}>{{if .Focus}}{{.Focus}}{{end}}</span></span>
+<span class="module-counts"><span class="module-due"{{if not .Count}} hidden{{end}}>{{if .Count}}{{.Count}}{{end}}</span><span class="module-focus"{{if not .Focus}} hidden{{end}}>{{if .Focus}}{{.Focus}}{{end}}</span><span class="module-new"{{if not .New}} hidden{{end}}>{{if .New}}{{.New}}{{end}}</span></span>
 {{- end}}
 
 {{- /* The root of every breadcrumb: the Z logo with "Wiki" (the home page),
