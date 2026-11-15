@@ -244,7 +244,8 @@ def test_her_archives_by_month_are_hers(client, wiki, tmp_path_factory):
     assert hers in (wiki / "private/alice/_tasks/lists/secretlist/closed-1999-03.json").read_text()
     assert "Shared long ago" in (wiki / "_tasks/lists/team/closed-1998-07.json").read_text()
     assert hers not in "".join(p.read_text() for p in (wiki / "_tasks").rglob("*.json")), "her task in the shared files"
-    assert git(wiki, "log", "-n1", "--format=%s") == "Archive closed tasks"
+    # Both are in lists, so the same start files them by list, and says that.
+    assert git(wiki, "log", "-n1", "--format=%s") == "File the tasks by list"
     files = git(wiki, "show", "--no-renames", "--name-only", "--format=", "HEAD").split()
     assert sorted(files) == ["_tasks/closed-1998.json", "_tasks/lists/team/closed-1998-07.json",          # one commit has both
                              "private/alice/_tasks/closed-1999.json", "private/alice/_tasks/lists/secretlist/closed-1999-03.json"]

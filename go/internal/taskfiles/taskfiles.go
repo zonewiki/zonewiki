@@ -1261,11 +1261,14 @@ func (s *Store) ArchiveOldClosed() {
 		return
 	}
 	msg := "Write the task files in Zone's format"
-	if filed {
-		msg = "File the tasks by list"
-	}
 	if moved {
 		msg = "Archive closed tasks"
+	}
+	// Filing comes first: an archive in another folder than its list's looks
+	// like a month still to roll (its list's folder has none), and the commit
+	// that filed a wiki is the one to revert for an older Zone, so it says so.
+	if filed {
+		msg = "File the tasks by list"
 	}
 	if renamed {
 		msg = "Name the task files of closed tasks closed"

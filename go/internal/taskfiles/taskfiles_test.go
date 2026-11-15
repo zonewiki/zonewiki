@@ -1114,6 +1114,23 @@ func TestAListsTasksAreInItsFolder(t *testing.T) {
 	}
 }
 
+// A wiki from before the folders with months already archived: the start
+// moves the archives into their lists' folders, and the commit says that it
+// filed the tasks, not that it archived any: it is the one to revert for
+// an older Zone.
+func TestAStartThatFilesArchivesSaysItFiled(t *testing.T) {
+	f := newStore(t, "alice")
+	f.put(t, "_tasks/tasks.json", `[{"id":"s1","title":"Milk","list":"shop"}]`)
+	f.put(t, "_tasks/closed-2020-03.json", `[{"id":"s2","title":"Eggs","list":"shop","closed_at":"2020-03-01T09:00:00"}]`)
+	f.ArchiveOldClosed()
+	if len(f.commits) != 1 || !strings.HasPrefix(f.commits[0], "|File the tasks by list|") {
+		t.Fatalf("commits %q", f.commits)
+	}
+	if got := f.ids(t, "_tasks/lists/shop/closed-2020-03.json"); !reflect.DeepEqual(got, []string{"s2"}) {
+		t.Errorf("the archive in its list's folder: %v", got)
+	}
+}
+
 // A wiki from before the folders has every task in _tasks/: the start
 // files each where its list is, in one commit, and a second start changes
 // nothing. A task that is in two files (a write that stopped between them)
