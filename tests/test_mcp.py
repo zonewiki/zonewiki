@@ -1824,6 +1824,24 @@ class TestCreateTask:
         # Without users there is nobody for a list to be private to.
         assert call(client, "create_task_list", name="mine", private=True)[1]
 
+    def test_a_task_list_an_assistant_makes_is_pinned_but_never_first(self, client, wiki_dir):
+        # The user sees a list their assistant made: it is pinned, last, as
+        # one made in the browser, and its tasks are in their My tasks. Not
+        # as their first pin, which would take their new tasks unasked.
+        text, err = call(client, "create_task_list", name="research")
+        assert not err and "under More on the user's Tasks page" in text
+        assert '"pinned"' not in (wiki_dir / "_tasks/lists.json").read_text()
+        assert "list:" not in call(client, "create_task", title="Still nowhere")[0]
+        assert client.post("/tasks/pin-list", data={"list": "research", "pin": "1"}, headers=HOST).status_code == 302
+        text, err = call(client, "create_task_list", name="reading")
+        assert not err and "pinned on the user's Tasks page" in text
+        assert '"pinned": ["research", "reading"]' in (wiki_dir / "_tasks/lists.json").read_text()
+        call(client, "create_task", title="A paper", list="reading")
+        mine = client.get("/api/tasks/export?mine=1", headers=HOST).get_json()["tasks"]
+        assert "A paper" in [t["title"] for t in mine]
+        # New tasks still go to the first pin.
+        assert "list: research" in call(client, "create_task", title="Goes first")[0]
+
     def test_bad_input_is_a_tool_error(self, client, wiki_dir):
         text, err = call(client, "create_task", title="x", due="next week")
         assert err and "YYYY-MM-DD, today, tomorrow" in text

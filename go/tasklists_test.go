@@ -585,7 +585,7 @@ func TestInMineCases(t *testing.T) {
 			List, Assignee string
 			Private        bool
 		}
-		Pinned, Assigns, Want bool
+		Pinned, Assigns, Own, Want bool
 	}
 	if err := json.Unmarshal(raw, &cases); err != nil || len(cases) == 0 {
 		t.Fatalf("the cases: %v", err)
@@ -597,7 +597,7 @@ func TestInMineCases(t *testing.T) {
 		if c.Task.Private {
 			task.Owner = "anna"
 		}
-		if got := inMine(task, c.Pinned, "anna", c.Assigns, assignable); got != c.Want {
+		if got := inMine(task, c.Pinned, "anna", c.Assigns, c.Own, assignable); got != c.Want {
 			t.Errorf("%s: %v, want %v", c.Name, got, c.Want)
 		}
 	}

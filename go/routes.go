@@ -941,7 +941,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	}
 	v := &tasksPageView{Heading: heading, Missing: missing,
 		Menu: !rq.sharing && !listsUnmigrated && mayWriteTasks(rq.who()) == nil, Users: privateFolder(rq.user) != "",
-		Mine: mine, MineAssigns: mine && mineAssigns(rq.who()),
+		Mine: mine, MineAssigns: mine && mineAssigns(rq.who()), MineOwn: mine && mineOwn(rq.who()),
 		NewListName: q.Get("newlist_name"), NewListError: q.Get("newlist_error"),
 		Places: places, More: more, PinnedLists: pinnedLinks, TasksHTML: htmlOf(tasksHTML), LinkSections: sections,
 		BreadcrumbHTML: breadcrumb(rq, crumbs, key, true, title, chip)}
@@ -1137,7 +1137,7 @@ func pinListRoute(w http.ResponseWriter, r *http.Request) {
 // pills and More its last one (nil: no switcher); MadeFirst: the list was
 // just made and is the user's one pinned list;
 // Mine: the view is My tasks (MineAssigns: assignment counts in it for
-// this user, mineAssigns), PinnedLists: the pinned lists it shows the
+// this user, mineAssigns; MineOwn: and they hide unassigned tasks, mineOwn), PinnedLists: the pinned lists it shows the
 // tasks of; LinkSections: a list's Backlinks, My tasks' those of its
 // lists (with them the page has a page view's columns). Menu: the ⋯ menu (New list…; a list's Rename…,
 // its pin, Make shared…, Delete…; a tag's Rename tag…), for who may change
@@ -1158,7 +1158,7 @@ type tasksPageView struct {
 	ListRenameName, ListRenameError string
 	DeleteError, ShareError         string
 	Menu, Users                     bool
-	Mine, MineAssigns               bool
+	Mine, MineAssigns, MineOwn      bool
 	NewListName, NewListError       string
 	Places                          []TaskPlace
 	More                            *TasksMore

@@ -278,6 +278,73 @@ def test_one_page_shows_each_user_their_own_tasks(alice, wiki):
     expect(alice.locator(".tasks-toolbar .tag-chip .tag-chip-x")).to_have_count(1)
 
 
+def test_my_tasks_can_hide_unassigned_tasks(alice, wiki):
+    # Unassigned tasks: hidden, a setting of My tasks: only what is assigned
+    # to her (and her private tasks in pinned lists) shows, and a task she
+    # adds without saying where is hers, so a capture stays in view.
+    make_list(alice, "team")
+    make_list(alice, "own", private=True)
+    alice.request.post("/tasks/pin-list", form={"list": "team", "pin": "1"})
+    alice.request.post("/tasks/pin-list", form={"list": "own", "pin": "1"})
+    new(alice, "Alice's", assignee="alice", list="team")
+    new(alice, "Nobody's", list="team")
+    new(alice, "Loose")
+    new(alice, "Her own", list="own")
+    alice.goto("/tasks?mine=1&view=open")
+    titles = alice.locator(".task-item .task-title")
+    expect(titles).to_have_count(4)
+    alice.locator("#task-more-btn").click()
+    alice.get_by_role("menuitem", name="List settings…").click()
+    dialog = alice.locator("#task-settings-modal")
+    box = dialog.locator("[name=unassigned]")
+    expect(box).to_be_hidden()
+    dialog.locator(".task-add-field", has_text="Hide unassigned tasks").click()
+    expect(box).to_be_checked()
+    with alice.expect_navigation():
+        dialog.get_by_role("button", name="Save").click()
+    assert '"unassigned": "hide"' in (wiki.root / "private/alice/_tasks/lists.json").read_text()
+    expect(alice.locator(".tasks-pinned-lists")).to_have_text(
+        "What is assigned to you, and your private tasks in your pinned lists (#team, #own). Unassigned tasks are hidden.")
+    alice.goto("/tasks?mine=1&view=open")
+    expect(titles).to_have_count(2)
+    assert sorted(titles.all_text_contents()) == ["Alice's", "Her own"]
+    # + New there: the task is hers, in the first pinned list.
+    alice.locator("#task-add-btn").click()
+    modal = alice.locator("#task-edit-modal")
+    modal.locator("#task-edit-title").fill("Added here")
+    expect(modal.locator(".task-edit-target")).to_have_text("Adds to the list team: everyone sees it.")
+    modal.get_by_role("button", name="Save").click()
+    wait_for_assignee(alice, "Added here", "alice")
+    expect(card(alice, "Added here")).to_be_visible()
+    # c t from a page likewise.
+    alice.goto("/page/index")
+    alice.keyboard.press("c")
+    alice.keyboard.press("t")
+    expect(modal).to_be_visible()
+    modal.locator("#task-edit-title").fill("From anywhere")
+    modal.get_by_role("button", name="Save").click()
+    wait_for_assignee(alice, "From anywhere", "alice")
+    assert task(alice, "From anywhere")["list"] == "team"
+    # In a list's own view a new task is the list's, nobody's.
+    alice.goto("/tasks?list=team&view=open")
+    alice.locator("#task-add-btn").click()
+    modal.locator("#task-edit-title").fill("For the team")
+    modal.get_by_role("button", name="Save").click()
+    wait_for_assignee(alice, "For the team", None)
+    # A task she gives away leaves My tasks; the setting shown again brings the rest back.
+    alice.goto("/tasks?mine=1&view=open")
+    expect(titles).to_have_count(4)
+    alice.locator("#task-more-btn").click()
+    alice.get_by_role("menuitem", name="List settings…").click()
+    expect(box).to_be_checked()
+    box.uncheck()
+    with alice.expect_navigation():
+        dialog.get_by_role("button", name="Save").click()
+    assert '"unassigned"' not in (wiki.root / "private/alice/_tasks/lists.json").read_text()
+    alice.goto("/tasks?mine=1&view=open")
+    expect(titles).to_have_count(7)
+
+
 def test_the_settings_dialog_sets_whose_tasks_a_list_shows(alice, wiki):
     new(alice, "Bob's", assignee="bob", tags=["work"])
     new(alice, "Alice's", assignee="alice", tags=["work"])
@@ -387,7 +454,7 @@ def test_my_tasks_holds_what_is_mine_and_nobodys(alice, wiki):
     dialog = alice.locator("#task-settings-modal")
     expect(dialog.locator(".task-settings-where")).to_have_text("For My tasks: yours alone.")
     expect(dialog.locator(".task-settings-pin")).to_be_hidden()
-    expect(dialog.locator(".task-add-field:visible")).to_have_text(["WIP limit", "Tab names"])
+    expect(dialog.locator(".task-add-field:visible")).to_have_text(["WIP limit", "Tab names", "Hide unassigned tasks"])
     dialog.locator("[name=view]").select_option("open")
     with alice.expect_navigation():
         dialog.get_by_role("button", name="Save").click()

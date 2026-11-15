@@ -698,9 +698,9 @@ class TestMyTasks:
         # anna asks; anna and bob can be given tasks, zoe no longer.
         got = run_core(
             f"{json.dumps(self.CASES)}.map(c => TasksCore.inMine(c.task, c.pinned, "
-            "{ me: 'anna', users: new Set(['anna', 'bob']), assigns: c.assigns }))")
+            "{ me: 'anna', users: new Set(['anna', 'bob']), assigns: c.assigns, own: c.own }))")
         wrong = [c["name"] for c, g in zip(self.CASES, got) if g != c["want"]]
-        assert not wrong and len(got) > 10
+        assert not wrong and len(got) > 20
 
     def test_without_who_no_task_is_anyones(self):
         assert run_core("[TasksCore.inMine({assignee: 'bob'}, false), TasksCore.inMine({list: 'a', assignee: 'bob'}, false),"

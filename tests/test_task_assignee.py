@@ -479,6 +479,75 @@ class TestMyTasks:
         assert made["list"] == "team" and "assignee" not in made
         assert "From the assistant" in self.titles(team) and "Said so" not in self.titles(team)
 
+    def test_unassigned_tasks_can_be_hidden(self, team, wiki_dir, monkeypatch):
+        """Unassigned tasks: hidden, a setting of My tasks, the user's own:
+        it is then what is assigned to her, and her private tasks in the
+        lists she pinned; a task her assistant adds without saying where
+        is hers, so a capture stays in her home view."""
+        hide = lambda value="hide", was="": team.post(
+            "/api/tasks/settings", json={"mine": True, "was": was, "set": {"unassigned": value}}, headers=HOST)
+        assert hide("show").status_code == 400
+        assert hide().status_code == 200
+        assert '"mine": {"unassigned": "hide"}' in (wiki_dir / "private/alice/_tasks/lists.json").read_text()
+        # No one's in the pinned list and in no list are out; so is the badge.
+        assert self.titles(team) == ["A1", "A2"] and self.count(team) == 2
+        html = self.page(team, "/tasks?mine=1")
+        assert 'data-init-lists="team" data-init-mine="own"' in html and 'data-new-mine="1"' in html
+        assert 'data-settings-raw="unassigned=hide"' in html
+        line = html.split('class="tasks-list-home tasks-pinned-lists">', 1)[1].split("</p>", 1)[0]
+        assert re.sub(r"<[^>]+>", "", line) == (
+            "What is assigned to you, and your private tasks in your pinned lists (#team). Unassigned tasks are hidden.")
+        assert 'data-new-mine="1"' in self.page(team, "/api/tasks/headless")
+        # Her private tasks follow their list's pin, as before.
+        self.pin(team, "own")
+        assert self.titles(team) == ["A1", "A2", "P1"]
+        # The list's own view still shows everyone's.
+        assert self.titles(team, "list=team") == ["A1", "B1", "N1"]
+        # Her assistant's task without a list is hers; one it says a list or
+        # an assignee for is as said.
+        monkeypatch.setattr(settings, "USERS", {**USERS, "alice": ("alice-pw", "alice-token")})
+
+        def mcp(tool, **args):
+            resp = team.post("/mcp", headers={**HOST, "Authorization": "Bearer alice-token"}, json={
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": tool, "arguments": args}})
+            return "".join(c["text"] for c in resp.get_json()["result"]["content"])
+        assert "assigned to: alice" in mcp("create_task", title="Captured")
+        assert "assigned to" not in mcp("create_task", title="For the team", list="team")
+        assert "assigned to: bob" in mcp("create_task", title="For bob", assignee="bob")
+        assert "assigned to" not in mcp("create_task", title="No one's, said so", assignee="none")
+        login(team, "alice")
+        assert self.titles(team) == ["A1", "A2", "Captured", "P1"]
+        # It is hers alone: bob's My tasks is as it was.
+        login(team, "bob")
+        assert 'data-init-mine="assign"' in self.page(team, "/tasks?mine=1")
+        assert "data-new-mine" not in self.page(team, "/tasks?mine=1")
+        # Shown again.
+        login(team, "alice")
+        assert hide("", was="unassigned=hide").status_code == 200
+        assert self.titles(team) == ["A1", "A2", "Captured", "For the team", "L1", "N1", "No one's, said so", "P1"]
+
+    def test_unassigned_tasks_are_hidden_only_where_tasks_are_assigned(self, team, client, wiki_dir):
+        # A viewer, to whom no task can be given, can't write settings at
+        # all; without users no task is anyone's.
+        login(team, "carol")
+        assert team.post("/api/tasks/settings", json={"mine": True, "was": "", "set": {"unassigned": "hide"}},
+                         headers=HOST).status_code == 403
+
+    def test_a_private_first_pin_keeps_a_capture_private_with_unassigned_hidden(self, team, monkeypatch):
+        # Her first pinned list is private: a task into it is hers already,
+        # and gets no assignee (a private task has none).
+        self.pin(team, "own", "first")
+        assert team.post("/api/tasks/settings", json={"mine": True, "was": "", "set": {"unassigned": "hide"}},
+                         headers=HOST).status_code == 200
+        monkeypatch.setattr(settings, "USERS", {**USERS, "alice": ("alice-pw", "alice-token")})
+        resp = team.post("/mcp", headers={**HOST, "Authorization": "Bearer alice-token"}, json={
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "create_task", "arguments": {"title": "Quiet"}}})
+        assert "assigned to" not in "".join(c["text"] for c in resp.get_json()["result"]["content"])
+        login(team, "alice")
+        made = {t["title"]: t for t in team.get("/api/tasks", headers=HOST).get_json()}["Quiet"]
+        assert made["list"] == "own" and made["private"] is True and "assignee" not in made
+        assert "Quiet" in self.titles(team)
+
     def test_a_private_task_is_mine_and_not_no_ones(self, team):
         # The filter word @me, as before: a private task is its user's.
         export = lambda who: self.titles(team, f"assignee={who}")

@@ -127,7 +127,8 @@ Done tasks go to a yearly archive. Beyond that:
 - My tasks is where the Tasks module opens: what is assigned to you wherever it is, and what
   is nobody else's in the lists you pinned and in no list. Give a task to someone, or file it
   in a list you don't follow, and it is off your plate. New tasks go to the first pinned list
-  (Move first in a list's menu).
+  (Move first in a list's menu). In a team, My tasks can hide the tasks nobody has taken yet
+  (Hide unassigned tasks in its settings): what you add is then assigned to you.
 - Task lists inside any page (`[[tasks: tag=work view=plan]]`), a single task inline
   as a live chip you can tick (`[[task:…]]`), and **Make task** in the editor
   to turn lines of meeting notes into tasks.

@@ -16,5 +16,14 @@
   {"name": "someone else's, for one no task can be given to: assignment doesn't count", "task": {"list": "work", "assignee": "bob"}, "pinned": true, "assigns": false, "want": true},
   {"name": "theirs by name, for one no task can be given to, unpinned", "task": {"list": "work", "assignee": "anna"}, "pinned": false, "assigns": false, "want": false},
   {"name": "a private task in a pinned private list", "task": {"list": "diary", "private": true}, "pinned": true, "assigns": true, "want": true},
-  {"name": "a private task in an unpinned private list follows the pin", "task": {"list": "diary", "private": true}, "pinned": false, "assigns": true, "want": false}
+  {"name": "a private task in an unpinned private list follows the pin", "task": {"list": "diary", "private": true}, "pinned": false, "assigns": true, "want": false},
+  {"name": "unassigned hidden: no list, nobody's", "task": {}, "pinned": false, "assigns": true, "own": true, "want": false},
+  {"name": "unassigned hidden: a pinned list, nobody's", "task": {"list": "work"}, "pinned": true, "assigns": true, "own": true, "want": false},
+  {"name": "unassigned hidden: a pinned list, mine", "task": {"list": "work", "assignee": "anna"}, "pinned": true, "assigns": true, "own": true, "want": true},
+  {"name": "unassigned hidden: an unpinned list, mine", "task": {"list": "work", "assignee": "anna"}, "pinned": false, "assigns": true, "own": true, "want": true},
+  {"name": "unassigned hidden: no list, mine", "task": {"assignee": "anna"}, "pinned": false, "assigns": true, "own": true, "want": true},
+  {"name": "unassigned hidden: a pinned list, someone else's", "task": {"list": "work", "assignee": "bob"}, "pinned": true, "assigns": true, "own": true, "want": false},
+  {"name": "unassigned hidden: a pinned list, a former user's: no one's", "task": {"list": "work", "assignee": "zoe"}, "pinned": true, "assigns": true, "own": true, "want": false},
+  {"name": "unassigned hidden: a pinned private list", "task": {"list": "own", "private": true}, "pinned": true, "assigns": true, "own": true, "want": true},
+  {"name": "unassigned hidden: an unpinned private list", "task": {"list": "own", "private": true}, "pinned": false, "assigns": true, "own": true, "want": false}
 ]

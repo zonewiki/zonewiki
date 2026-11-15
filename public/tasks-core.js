@@ -150,7 +150,8 @@ function assigneeIs(t, word, people) {
 // hasn't pinned unless it is assigned to them. pinned: the task's list is
 // one the user pinned; who: { me, users (those a task can be given to),
 // assigns (assignment counts for this user: not without users, nor for a
-// viewer) }. An assignee no task can be given to anymore is no one; a
+// viewer), own (they hide unassigned tasks: a shared task that is nobody's
+// is out too) }. An assignee no task can be given to anymore is no one; a
 // private task has none and follows its list's pin.
 function inMine(t, pinned, who) {
   const a = (t.assignee || '').toLowerCase();
@@ -158,6 +159,7 @@ function inMine(t, pinned, who) {
     if (a === who.me) return true;
     if (who.users?.has(a)) return false;
   }
+  if (who?.own && !t.private) return false;
   return !t.list || !!pinned;
 }
 

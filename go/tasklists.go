@@ -226,29 +226,48 @@ func mineAssigns(user string) bool {
 	return s.Users != nil && s.assignable(user)
 }
 
+// mineOwn: user's My tasks leaves out the shared tasks that are nobody's
+// (their setting Unassigned tasks: hidden, "unassigned": "hide" in their
+// registry's mine): it is then what is assigned to them and their private
+// tasks in the lists they pinned, and a new task they make without saying
+// where is assigned to them (newTaskMine). Only where assignment counts.
+func mineOwn(user string) bool {
+	return mineAssigns(user) && taskFiles.ReadLists(mineOwner(user)).Mine["unassigned"] == "hide"
+}
+
+// newTaskMine: a new task of user's that nobody said a list or an assignee
+// for, going into list (nil: none), is assigned to them: their My tasks
+// hides unassigned tasks (mineOwn), and what they capture must be in it. Not
+// in a private list, whose tasks are theirs already.
+func newTaskMine(user string, list *ListInfo) bool {
+	return (list == nil || !list.Private()) && mineOwn(user)
+}
+
 // mineFilter: My tasks, the home view the Tasks links open and count: every
 // task user sees except one that is assigned to someone else, or in a list
 // they haven't pinned unless it is assigned to them. So: what is theirs
 // wherever it is, and what is nobody else's in their pinned lists and in no
 // list. An assignee no task can be given to anymore is no one (as @none
-// reads it); a private task has none and follows its list's pin. The
-// browser has the same rule (TasksCore.inMine; go/testdata/mine_cases.json
+// reads it); a private task has none and follows its list's pin. With
+// unassigned tasks hidden (mineOwn) a shared task that is nobody's is out
+// too. The browser has the same rule (TasksCore.inMine; go/testdata/mine_cases.json
 // runs through both).
 func mineFilter(user string, lists map[string]ListInfo) func(*Task) bool {
 	pinned := map[string]bool{}
 	for _, l := range pinnedLists(user, lists) {
 		pinned[l.Ref] = true
 	}
-	s, assigns := settings(), mineAssigns(user)
+	s, assigns, own := settings(), mineAssigns(user), mineOwn(user)
 	return func(t *Task) bool {
-		return inMine(t, pinned[taskList(t, lists)], user, assigns, s.assignable)
+		return inMine(t, pinned[taskList(t, lists)], user, assigns, own, s.assignable)
 	}
 }
 
 // inMine: mineFilter's rule for one task: pinned, its list is one user
-// pinned; assigns, assignment counts for user (mineAssigns); assignable,
-// whether a task can be given to a name.
-func inMine(t *Task, pinned bool, user string, assigns bool, assignable func(string) bool) bool {
+// pinned; assigns, assignment counts for user (mineAssigns); own, they hide
+// the shared tasks that are nobody's (mineOwn); assignable, whether a task
+// can be given to a name.
+func inMine(t *Task, pinned bool, user string, assigns, own bool, assignable func(string) bool) bool {
 	if assigns && t.Owner == "" && t.Assignee != "" {
 		if t.Assignee == user {
 			return true
@@ -256,6 +275,9 @@ func inMine(t *Task, pinned bool, user string, assigns bool, assignable func(str
 		if assignable(t.Assignee) {
 			return false
 		}
+	}
+	if own && t.Owner == "" {
+		return false
 	}
 	return t.List == "" || pinned
 }
@@ -270,8 +292,9 @@ func scopeFilter(user, scope string, lists map[string]ListInfo) func(*Task) bool
 }
 
 // mineSettingKeys: what My tasks' settings dialog sets. What a new task
-// gets (new, keep) is its list's, the first pinned one's.
-var mineSettingKeys = []string{"view", "plan", "limit", "labels"}
+// gets (new, keep) is its list's, the first pinned one's. unassigned
+// ("hide"): mineOwn.
+var mineSettingKeys = []string{"view", "plan", "limit", "labels", "unassigned"}
 
 // mineOwner: whose registry holds user's settings of My tasks: their own,
 // without users the wiki's.
@@ -309,6 +332,9 @@ func setMineParams(user, was string, set map[string]string) error {
 	set, err := checkEmbedSettings(set, mineSettingKeys)
 	if err != nil {
 		return err
+	}
+	if set["unassigned"] != "" && !mineAssigns(user) {
+		return refuse("Unassigned tasks can be hidden only where tasks can be assigned to you")
 	}
 	owner := mineOwner(user)
 	taskFiles.Lock()
@@ -473,9 +499,9 @@ func pinOwner(user string) string {
 
 // createListOp makes a list called name, shared or (private) user's own;
 // returns how user names it. A name of a list they see is refused. pin:
-// the new list is pinned for user, last (a list made in the browser, which
-// would else be out of sight under More; not an assistant's), in the same
-// commit.
+// the new list is pinned for user, last (it would else be out of sight
+// under More; the doors don't pin a list that would be the user's first
+// pin: apiNewList, createTaskListTool), in the same commit.
 func createListOp(user, name string, private, pin bool, suffix string) (string, error) {
 	if listsUnmigrated {
 		return "", errListsUnmigrated

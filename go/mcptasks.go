@@ -554,9 +554,19 @@ func createTaskTool(args jsonObj, base, user string) (string, error) {
 			assigns = name != "" && name != "none"
 		}
 	}
-	if h := lookupDefaultList(user); h != nil && !data.Has("list") && !(h.Private() && assigns) {
+	unasked := !data.Has("list")
+	h := lookupDefaultList(user)
+	if h != nil && (!unasked || h.Private() && assigns) {
+		h = nil
+	}
+	if h != nil {
 		data.Set("list", h.Ref)
 		data["tags"] = homeTags(data["tags"], h)
+	}
+	// And theirs, when their My tasks hides unassigned tasks: a capture is
+	// in its maker's home view.
+	if unasked && !data.Has("assignee") && newTaskMine(user, h) {
+		data.Set("assignee", user)
 	}
 	msg, err := commitMsg("Create task", args)
 	if err != nil {
@@ -763,6 +773,9 @@ func renameTaskListTool(args jsonObj, base, user string) (string, error) {
 }
 
 // createTaskListTool: a new task list, shared or (private) the user's own.
+// It is pinned for the user, last, as a list made in the browser is, so that
+// they see it and its tasks are in their My tasks; but never as their first
+// pin, which would start taking their new tasks unasked (as apiNewList).
 func createTaskListTool(args jsonObj, base, user string) (string, error) {
 	name, err := strArg(args, "name", true)
 	if err != nil {
@@ -776,7 +789,8 @@ func createTaskListTool(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	ref, err := createListOp(user, name, private, false, suffix)
+	pin := len(pinnedLists(user, taskLists(user))) > 0
+	ref, err := createListOp(user, name, private, pin, suffix)
 	if err != nil {
 		return "", err
 	}
@@ -784,6 +798,10 @@ func createTaskListTool(args jsonObj, base, user string) (string, error) {
 	if private {
 		kind = "private: only the user sees it and its tasks"
 	}
-	return "Created the list #" + ref + " (" + kind + "). create_task's and update_task's list puts a task in it; " +
+	where := "It is pinned on the user's Tasks page, and its tasks are in their My tasks."
+	if !pin {
+		where = "It is under More on the user's Tasks page (they pinned no list yet): its tasks aren't in their My tasks until they pin it."
+	}
+	return "Created the list #" + ref + " (" + kind + "). " + where + " create_task's and update_task's list puts a task in it; " +
 		"[[tasks: list=" + ref + "]] shows it on a page.\n" + base + listHref(ref), nil
 }

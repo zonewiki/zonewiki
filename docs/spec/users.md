@@ -668,6 +668,7 @@ Not there: telling someone that a task became theirs, a group as an assignee, an
   An export of such a list holds the tasks it shows (`/api/tasks/export?assignee=`).
   **My tasks**, where the Tasks links go, takes assignment into account by itself: a task assigned to someone else is not in it, and a task assigned to you is, also in a list you haven't pinned (Lists → My tasks in `docs/spec/tasks.md`).
   Zone assigns a new task to no one; its maker says who has it.
+  One who hides unassigned tasks in their My tasks (**Hide unassigned tasks** in its settings) sees only what is assigned to them and their private tasks, and a task they add without saying where is assigned to them.
 - **Several at once** (`openBulkAssignModal` in `js/taskselect.js`): **Assign…** in the selection bar and in the menu of a selected card, or **a** on the selected tasks (one is enough).
   The dialog lists the users who can be assigned, yourself first, then **No one**; the row of who has them all is ticked, one who has some says "1 of 4".
   A click (or ↑/↓ and Enter) assigns them in one `batch-update`, and the toast ("3 tasks assigned to bob") has one Undo for all, which leaves no trace in their histories.

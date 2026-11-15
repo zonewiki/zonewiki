@@ -167,7 +167,8 @@ In the browser (`tests/e2e/test_task_assignee.py`): the name on the card, the di
 `tests/test_tasks_core.py`'s `TestAssignee` covers the filter's and the title's `@` words in `tasks-core.js`.
 **My tasks** (the home view's rule): `go/testdata/mine_cases.json` is one table of cases that runs through the server's rule (`TestInMineCases` in `go/tasklists_test.go`) and the browser's (`TestMyTasks` in `tests/test_tasks_core.py`), so the two can't drift apart;
 `TestMyTasks` and `TestMyTasksSettings` in `go/tasklists_test.go` cover it on a wiki (without lists, without users, with users, a private list's pin) and its settings in the registry (`TestRegistryMineWasAFlag` in `go/internal/taskfiles`: the old flag reads as nothing);
-`TestMyTasks` in `tests/test_task_assignee.py` what each user's holds, a viewer's, the settings each user's own, an assistant's new task assigned to no one;
+`TestMyTasks` in `tests/test_task_assignee.py` what each user's holds, a viewer's, the settings each user's own, an assistant's new task assigned to no one, and unassigned tasks hidden (what it holds then, its count, an assistant's capture assigned to the user, a private first pin; the cases with `own` in the table; `test_my_tasks_can_hide_unassigned_tasks` in `tests/e2e/test_task_assignee.py` for the dialog's box, + New and `c t`);
+`test_a_task_list_an_assistant_makes_is_pinned_but_never_first` in `tests/test_mcp.py` the pin of a list `create_task_list` makes;
 `TestListSwitcher` in `tests/test_tasks_embed.py` the view at `/tasks?mine=1` (its pill, its line, its counts, its settings dialog's route, `?pinned=1`, a wiki without lists);
 `tests/test_privacy.py` probes its scope on every route that takes it.
 `TestHandingOn` covers the Users tab's count of a disabled user's open tasks.

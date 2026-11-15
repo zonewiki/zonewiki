@@ -23,7 +23,7 @@ type tasksEmbedView struct {
 	Tag, View     string
 	List          string           // the list it shows, as the user names it (a ref); "" none
 	Lists         string           // several lists as one (lists=), or My tasks' pinned lists: their refs, "|" between
-	Mine          string           // My tasks (mine=1): "assign" where assignment counts for the user, else "lists"
+	Mine          string           // My tasks (mine=1): "assign" where assignment counts for the user ("own": and they hide unassigned tasks), else "lists"
 	Plan          string           // "on", "off" or "": the embed doesn't say
 	Limit         string           // the WIP limit, "" none
 	Labels        []string         // the Open and Focus tabs' names
@@ -38,6 +38,7 @@ type tasksEmbedView struct {
 	PrivateFolder string           // the user's private folder: where a private task's pasted files go
 	ListsJSON     string           // the lists the user sees, [{ref, private}], as JSON: the List field's choices
 	DefaultList   string           // the user's default list (a ref): where a new task goes in a view of no one list
+	NewMine       bool             // a new task nobody says a list or an assignee for is assigned to the user (mineOwn), unless its list is private
 	Settings      *embedSettingsAt // where the settings dialog writes; nil: no dialog (the ⋯ menu)
 }
 
@@ -203,7 +204,7 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, p
 		CanAssign:     settings().Users != nil,
 		Assignee:      assigneeParam(params),
 		PrivateFolder: privateFolder(user),
-		ListsJSON:     jsonobj.Text(choices), DefaultList: def,
+		ListsJSON:     jsonobj.Text(choices), DefaultList: def, NewMine: mineOwn(user),
 	}
 	if scope == mineScope {
 		// My tasks: the browser needs the pins and whether assignment counts
@@ -213,7 +214,9 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, p
 			refs = append(refs, l.Ref)
 		}
 		v.Lists, v.Mine = strings.Join(refs, "|"), "lists"
-		if mineAssigns(user) {
+		if mineOwn(user) {
+			v.Mine = "own"
+		} else if mineAssigns(user) {
 			v.Mine = "assign"
 		}
 	} else if strings.Contains(scope, "|") {
@@ -564,7 +567,9 @@ func (rq *Req) taskPlaces() []TaskPlace {
 	pinned, lists := rq.pinnedLists(), rq.taskLists()
 	tasks := rq.openTasks()
 	title := "Your pinned lists and the tasks in no list"
-	if mineAssigns(user) {
+	if mineOwn(user) {
+		title = "What is assigned to you, and your private tasks in your pinned lists"
+	} else if mineAssigns(user) {
 		title = "What is yours or nobody's in your pinned lists and in no list, and what is assigned to you elsewhere"
 	}
 	out := []TaskPlace{{Key: "mine", Label: "My tasks", Title: title, Href: mineHref, Counts: taskCounts(rq)}}

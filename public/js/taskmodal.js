@@ -236,6 +236,9 @@ function editAssignee() {
 // line under the title says which. Choosing a list oneself ends it.
 let autoList = '';
 let autoSetting = false;
+// How often the dialog was opened: what a late answer checks before it
+// fills a field in.
+let openCount = 0;
 app.listSelect?.addEventListener('change', () => { if (!autoSetting) autoList = ''; });
 function syncAutoList() {
   if (!autoList || !app.listSelect || !assigneeInput) return;
@@ -506,10 +509,11 @@ function syncTarget() {
   if (!isNew) return;
   const q = quickParse();
   const ref = q && quickList(q).list || app.listSelect?.value || '';
-  // With users a task in no list is everyone's, and can't be made private later.
-  const where = ref ? `Adds to the list ${app.listName(ref)}`
-    : document.body.dataset.users === '1' ? 'Adds to no list: everyone sees it' : 'Adds to no list';
-  targetEl.textContent = where + (app.privateLists.has(ref) ? ', private' : '') + '.';
+  // With users the line says who sees the task: a task in a shared list or
+  // in none is everyone's, and can't be made private later.
+  const where = ref ? `Adds to the list ${app.listName(ref)}` : 'Adds to no list';
+  const who = app.privateLists.has(ref) ? ', private' : document.body.dataset.users === '1' ? ': everyone sees it' : '';
+  targetEl.textContent = where + who + '.';
 }
 app.listSelect?.addEventListener('change', syncTarget);
 app.listSelect?.addEventListener('change', () => syncQuickPreview());
@@ -730,7 +734,21 @@ function openEditModal(taskId, opts) {
   autoList = !task && !app.initList && app.privateLists.has(app.defaultList) && !!app.listSelect && app.listSelect.value === app.defaultList
     ? app.defaultList : '';
   // A new task starts with the user the filter names, as with its tags.
-  setAssignee(task ? task.assignee || '' : opts && 'assignee' in opts ? opts.assignee || '' : app.filterDefaultAssignee());
+  // One whose My tasks hides unassigned tasks gets the task they add where
+  // no one list is in view (it goes to their default list, or none), unless
+  // that list is private.
+  const mineNew = !task && !(opts && 'assignee' in opts) && app.newMine && !app.initList && !app.noList && !!app.listSelect
+    && app.listSelect.value === app.defaultList && !app.editPrivate();
+  setAssignee(task ? task.assignee || '' : opts && 'assignee' in opts ? opts.assignee || '' : app.filterDefaultAssignee() || mineNew && people.me || '');
+  // (Who that is may still be on its way: c t right after the page loaded.)
+  const opened = ++openCount;
+  if (mineNew && !people.me && assigneeInput) {
+    loadPeople().then(() => {
+      if (opened !== openCount || !app.modal.open || assigneeChip.words().length || assigneeInput.value.trim()) return;
+      setAssignee(people.me);
+      syncAssigneeField();
+    });
+  }
   syncAssigneeField();
   const recType = task?.recurrence?.type || '';
   app.recTypeSelect.value = recType;

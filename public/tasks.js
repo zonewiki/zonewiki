@@ -151,6 +151,7 @@ const app = {
   get initList() { return initList; },
   get noList() { return noList; },
   get defaultList() { return defaultList; },
+  get newMine() { return newMine; },
 };
 
 st.tasks = [];
@@ -340,7 +341,8 @@ const LIMIT = parseInt(appEl?.dataset.initLimit || urlParams.get('limit'), 10) |
 // (theirs alone, and so are the tasks in them).
 const initList = cleanList(appEl?.dataset.initList);
 const initLists = (appEl?.dataset.initLists || '').split('|').filter(Boolean);
-// My tasks: 'assign' where assignment counts for the user, else 'lists'.
+// My tasks: 'assign' where assignment counts for the user ('own': and they
+// hide unassigned tasks), else 'lists'.
 const initMine = appEl?.dataset.initMine || '';
 let listChoices = [];
 try { listChoices = JSON.parse(appEl?.dataset.lists || '[]'); } catch (_) {}
@@ -361,6 +363,10 @@ document.addEventListener('zone:list-made', e => {
 });
 // The user's default list: where a new task goes in a view of no one list.
 const defaultList = appEl?.dataset.defaultList || '';
+// The user's My tasks hides unassigned tasks (mineOwn in go/tasklists.go):
+// a new task nobody says a list or an assignee for is assigned to them,
+// unless its list is private, so that a capture is in their home view.
+const newMine = appEl?.dataset.newMine === '1';
 // A list's name, as its chip and the dialogs show it.
 function listName(ref) { return String(ref).replace(/^shared\//, ''); }
 // The tooltip of a list's chip (cards, the filter).
@@ -396,7 +402,7 @@ const noList = initList === 'none' && !listSet.has('none');
 function inScope(t) {
   if (initMine) {
     return TasksCore.inMine(t, initLists.includes(taskList(t)),
-      { me: people.me, users: people.users, assigns: initMine === 'assign' });
+      { me: people.me, users: people.users, assigns: initMine !== 'lists', own: initMine === 'own' });
   }
   if (initLists.length) return initLists.includes(taskList(t));
   if (noList) return !t.list;

@@ -205,6 +205,10 @@ func checkEmbedSettings(set map[string]string, keys []string) (map[string]string
 					return nil, bad()
 				}
 				v = "1"
+			case "unassigned":
+				if v = strings.ToLower(v); v != "hide" {
+					return nil, bad()
+				}
 			case "new":
 				v = strings.Join(taskmodel.CleanTags(strings.Split(v, ",")), ",")
 			case "assignee":
@@ -236,7 +240,8 @@ func setEmbedArgs(args string, set map[string]string) string {
 		}
 		done[key] = done[key] || ok && changes
 	}
-	for _, k := range embedSettingKeys {
+	// (unassigned: My tasks' own, mineSettingKeys.)
+	for _, k := range append(slices.Clone(embedSettingKeys), "unassigned") {
 		if v := set[k]; v != "" && !done[k] {
 			out = append(out, k+"="+v)
 		}

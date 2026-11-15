@@ -50,6 +50,8 @@ function fieldsOf(p) {
     list: p.list || '',
     keep: isTrue(p.keep),
     noshare: isTrue(p.noshare),
+    // My tasks: the tasks that are nobody's are left out.
+    unassigned: (p.unassigned || '').toLowerCase() === 'hide',
   };
 }
 
@@ -84,6 +86,7 @@ export function changedParams(was, now, p) {
   if ('assignee' in now && now.assignee !== was.assignee) set.assignee = oneWord(now.assignee).toLowerCase().replace(/@/g, '');
   if ('keep' in now && now.keep !== was.keep) set.keep = now.keep ? '1' : '';
   if ('noshare' in now && now.noshare !== was.noshare) set.noshare = now.noshare ? '1' : '';
+  if ('unassigned' in now && now.unassigned !== was.unassigned) set.unassigned = now.unassigned ? 'hide' : '';
   return set;
 }
 
@@ -96,7 +99,9 @@ export function changedParams(was, now, p) {
 // the user pinned; the hidden field pin holds its value ("", "1").
 // fill(params, mode): the fields as the params have them; mode says what
 // the dialog is for: all (All tasks: no filter, no pin), mine (My tasks:
-// as All tasks, less the tags of a new task, which are its list's), list
+// as All tasks, less the tags of a new task, which are its list's, and
+// with Hide unassigned tasks where tasks can be assigned to the user:
+// assigns), list
 // (a list: its pin, keep, hide when sharing), embed (an embed on a page:
 // its filter).
 // Returns what read() then gives.
@@ -106,7 +111,7 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
   const moreEl = form.querySelector('.task-add-fields');
   const fieldEl = name => form.querySelector(`[data-field="${name}"]`);
   // (What a click needs later is the form's own: the handlers are wired once.)
-  const mode = () => ({ all: form.dataset.all === '1', mine: form.dataset.mine === '1', list: form.dataset.list === '1', embed: form.dataset.embed === '1' });
+  const mode = () => ({ all: form.dataset.all === '1', mine: form.dataset.mine === '1', assigns: form.dataset.assigns === '1', list: form.dataset.list === '1', embed: form.dataset.embed === '1' });
   // Which fields the dialog has here: a filter where there is an embed to
   // write it in (the editor's always is one), keep where a list is named
   // or made, hiding in sharing mode on a list.
@@ -115,6 +120,7 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
     if (name === 'tag' || name === 'assignee') return !!f.list || m.embed;
     if (name === 'keep') return !!f.list || m.list;
     if (name === 'noshare') return m.list;
+    if (name === 'unassigned') return m.mine && m.assigns && !!f.unassigned;
     if (name === 'new') return !m.mine;
     return true;
   };
@@ -153,7 +159,7 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
       if (!name) return;
       showField(name);
       // Keep tasks and Hide when sharing are boxes: asked for, they are ticked.
-      if (name === 'keep' || name === 'noshare') { f[name].checked = true; changed(); }
+      if (name === 'keep' || name === 'noshare' || name === 'unassigned') { f[name].checked = true; changed(); }
       syncMore();
       fieldEl(name).querySelector('input')?.focus();
     });
@@ -165,12 +171,14 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
     tag: f.tag.value.trim(), pin: f.pin.value, keep: f.keep.checked,
     ...(f.list ? { list: cleanList(f.list.value) } : {}),
     ...(f.noshare ? { noshare: f.noshare.checked } : {}),
+    ...(f.unassigned && mode().mine && mode().assigns ? { unassigned: f.unassigned.checked } : {}),
     ...(f.assignee ? { assignee: f.assignee.value.trim() } : {}),   // with users
   });
-  const fill = (params, { all = false, mine = false, list = false, embed = false } = {}) => {
+  const fill = (params, { all = false, mine = false, assigns = false, list = false, embed = false } = {}) => {
     const fields = fieldsOf(params);
     form.dataset.all = all ? '1' : '';
     form.dataset.mine = mine ? '1' : '';
+    form.dataset.assigns = assigns ? '1' : '';
     form.dataset.list = list ? '1' : '';
     form.dataset.embed = embed ? '1' : '';
     // Opens on: the tabs by their names here; Closed only where a page says so.
@@ -180,6 +188,7 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
     f.plan.checked = fields.plan;
     f.keep.checked = fields.keep;
     if (f.noshare) f.noshare.checked = fields.noshare;
+    if (f.unassigned) f.unassigned.checked = fields.unassigned;
     if (f.list) f.list.value = fields.list;
     if (f.assignee) f.assignee.value = fields.assignee;
     // The rarer fields: shown when set.
@@ -190,6 +199,7 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
     showField('assignee', !!fields.assignee);
     showField('keep', fields.keep);
     showField('noshare', fields.noshare);
+    showField('unassigned', fields.unassigned);
     syncMore();
     syncPin();
     return read();
@@ -229,7 +239,7 @@ export function initTaskSettings(app) {
   let was = null;
 
   function open() {
-    was = fill(params, { all, mine, list: !!list, embed });
+    was = fill(params, { all, mine, assigns: !!appEl.dataset.initMine && appEl.dataset.initMine !== 'lists', list: !!list, embed });
     const who = app.privateLists.has(list) ? 'which only you see' : 'for everyone';
     whereEl.textContent = mine ? (document.body.dataset.users === '1' ? 'For My tasks: yours alone.' : 'For My tasks.')
       : all ? 'For All tasks, for everyone.'

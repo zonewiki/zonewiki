@@ -311,7 +311,7 @@ A setting is kept where it belongs: a list's own with the list, how a page looks
 
 An embed of no list (`[[tasks: tag=work]]`) has all of them but the pin, Keep tasks and Hide when sharing, written in its `[[tasks: …]]`.
 All tasks (`/tasks`) has Opens on, Plan, WIP limit, Tab names and Tags of a new task, for everyone.
-My tasks (`/tasks?mine=1`) has Opens on, Plan, WIP limit and Tab names, yours alone; what a new task gets there (its tags, keep) is its list's, the first pinned one's.
+My tasks (`/tasks?mine=1`) has Opens on, Plan, WIP limit and Tab names, yours alone, and with users **Hide unassigned tasks** (Lists → My tasks); what a new task gets there (its tags, keep) is its list's, the first pinned one's.
 
 **It shows what is changed most**: Opens on, Plan and, on a list, the pin.
 The other fields show only when set as the dialog opens (`[data-field]`, `showField` in `settingsForm`); for the rest a line of quiet words under the fields offers each, "+ WIP limit", "+ Tab names", "+ Tags of a new task", "+ Keep tasks", "+ Hide when sharing", "+ Filter by tag", "+ Filter by person" (`.task-add-fields`, as in the task dialog): a click shows the field and puts the cursor in it (a box is ticked).
@@ -328,6 +328,7 @@ The line above Save says whose the settings are: the list's, for everyone (or "w
 - **All tasks** (`/tasks`): the shared registry's `all`, `"all": {"view": "open", "limit": "5"}` (`allTasksParams`), for everyone.
   It has no pin and no filter (`allSettingKeys`).
 - **My tasks** (`/tasks?mine=1`): your registry's `mine`, `"mine": {"view": "focus", "limit": "5"}` (`mineParams`, `setMineParams`, `mineSettingKeys`; without users the shared registry's), for you alone.
+  `"unassigned": "hide"` there is Hide unassigned tasks (a box of the dialog, among the fields asked for; only where tasks can be assigned to you, else a 400).
   It has no pin and no filter, and the dialog says "For My tasks: yours alone."
   Unset, it opens on Focus with Plan on and no limit.
   (Until 2026-11 the view, then called Pinned, showed its first pinned list's settings and had no dialog.)
@@ -776,9 +777,15 @@ Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged
     where tasks can be assigned to you, "What is yours or nobody's in your pinned lists (#task, #shop) and in no list, and what is assigned to you elsewhere."
     Its **Backlinks** are the pages that embed any pinned list, once each (`pinnedSources`).
   - **Its settings are its own**, and yours (Settings, above): the tab, Plan, the limit, the tabs' names.
-  - **The server and the browser have the same rule**: the page gets the pinned lists and whether assignment counts (`data-init-lists`, `data-init-mine`: `assign` or `lists`), the routes take the scope as `?mine=1` (the closed tasks' count and years, the export), and one table of cases runs through both (`go/testdata/mine_cases.json`).
+  - **The server and the browser have the same rule**: the page gets the pinned lists and whether assignment counts (`data-init-lists`, `data-init-mine`: `assign`, `own` with unassigned tasks hidden, or `lists`), the routes take the scope as `?mine=1` (the closed tasks' count and years, the export), and one table of cases runs through both (`go/testdata/mine_cases.json`).
   - **On a page**: `[[tasks: mine=1]]` shows it to whoever looks.
-  - **Zone assigns nothing**: a new task from `c t`, New task or an assistant's `create_task` goes into the first pinned list with no assignee. It is in its maker's My tasks, and in that of everyone who pinned the list, until someone takes it; who wants a capture to be theirs alone puts a private list first.
+  - **Zone assigns nothing by itself**: a new task from `c t`, New task or an assistant's `create_task` goes into the first pinned list with no assignee. It is in its maker's My tasks, and in that of everyone who pinned the list, until someone takes it; who wants a capture to be theirs alone puts a private list first, or hides unassigned tasks (next).
+  - **Unassigned tasks: shown or hidden** (`mineOwn`; `"unassigned": "hide"` in your registry's `mine`; **Hide unassigned tasks** in My tasks' settings dialog, with users, for whoever tasks can be assigned to): in a team an unassigned task is the backlog's normal state, and a badge that counts everyone's unclaimed work says little about yours.
+    Hidden, My tasks is **what is assigned to you, wherever it is, and your private tasks in the lists you pinned**: a shared task that is nobody's is out of the view and out of the Tasks links' count. It stays in its list's own view, whose pill counts everyone's tasks, and under No list.
+    The line under the heading says so: "What is assigned to you, and your private tasks in your pinned lists (#team). Unassigned tasks are hidden."
+    **A task you add without saying where is then yours** (`newTaskMine`; `data-new-mine` on every task app of yours, `mineNew` in `js/taskmodal.js`): from `c t`, New task, My tasks' or All tasks' **+ New**, or an assistant's `create_task` without `list` and `assignee`, a task that goes into a shared list or into none is assigned to you, so a capture is in your My tasks; the dialog shows your name in Assignee, to take out. Not in a private list (its tasks are yours already), not in a view of one list or of No list (a task added there is the list's), and not through `POST /api/tasks`, which says everything itself.
+    The setting is each user's own: for another user the same tasks show as before.
+    (It takes the place of Only my tasks in Pinned, without that setting's special cases: one pinned list is no different, and a private task follows its list's pin.)
   - (Until 2026-11 the Tasks links opened the pinned lists as one, called Pinned and before that My lists, at `/tasks?pinned=1`, which answers My tasks now; with one pinned list they opened that list, with none every task.
     Tasks in no list were out of it and out of the badge, and the More pill counted their due ones.
     **Only my tasks in Pinned**, a setting of each user's, narrowed it to `assignee=me` and assigned new tasks to their maker; the rule above took its place.)
@@ -843,7 +850,7 @@ Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged
   From then until the first pinned list took the new tasks, that list was the **default list**, named by `default` in the registry whatever the order of the pins: such a registry reads as that list first (`ParseRegistry`), and is written without the key.
   A Zone from before reads a registry without `default` as the first pinned list being the default one.)
 - **Where a new task goes** (`.task-edit-target`, `syncTarget` in `js/taskmodal.js`): the edit dialog of a new task says it under the title: "Adds to the list shop." or "Adds to no list.",
-  with ", private" when the list is, and with users "Adds to no list: everyone sees it.".
+  with ", private" when the list is, and with users it says who sees a shared task: "Adds to the list team: everyone sees it.", "Adds to no list: everyone sees it.".
   It follows the List field, and a `#word` in the title that names a list (Quick-add: `#shop` puts the task in the list shop, the first such word; the others are tags).
   Hidden when editing a task and for several titles at once.
 - **The Tasks page's ⋯ menu** (`.page-menu-btn` beside the heading of `/tasks`, on every view of it; the page's ⋯ menu, `#page-menu`, with `js/pagemenu.js`): **New list…**; on a list **Rename…**, **Pin** / **Move first** / **Unpin**, **Make shared…** (a private one) and **Delete…**; on a tag's view (`/tasks?tag=<tag>`) **Rename tag…** (below).
@@ -861,7 +868,8 @@ Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged
   Refused, back in the dialog with the reason: no name, a name with `[ ] , | = /` or `"`, a list you already see ("There is a list #shop already").
   A tag of that name is a tag: making a list takes no task into it.
   Under an embed of a list that isn't there, **Create the list #<name>** does the same.
-  An assistant makes a list with `create_task_list`, which pins nothing: where a list shows on your page is yours to say, and the list is under More, marked new.
+  An assistant makes a list with `create_task_list`, which pins it for you, last, as the browser does, so its tasks are in your My tasks; but never as your first pin (with nothing pinned it is under More, marked new), since a first pin takes your new tasks. The tool's answer says which.
+  (Until 2026-11 it pinned nothing, and a list an assistant filled was out of the Tasks links' count.)
 - **Rename…** (`#list-rename-dialog`; `POST /tasks/rename-list` with `list` and `new_name`; `renameListOp`): in one commit (`Rename list #shop to #food`) the list's name in its registry, the `list` of its tasks (open, closed, archived), the users' pins of it, and where pages and tasks' text name it: the `list=` of `[[tasks: …]]` embeds and the `?list=` of links to `/tasks`.
   Code stays as written, and so do a tag of that name, `tag=` and `#word` in prose.
   An assistant renames a list with `rename_task_list`, the same operation.
