@@ -1711,3 +1711,67 @@ func TestTheSearchKeepsRecordsOfTasks(t *testing.T) {
 		t.Errorf("after the archive changed: %+v", got.Task)
 	}
 }
+
+// The search keeps the indexes of the viewers who searched last, not every
+// user's: a view numbers every doc of the wiki for its viewer. One who
+// comes back after others gets theirs made again, with their own private
+// tasks in it and nobody else's.
+func TestTheSearchKeepsTheLastViewersIndexes(t *testing.T) {
+	testWiki(t, nil)
+	var names []string
+	for i := 0; i < maxViews+4; i++ {
+		names = append(names, "user"+string(rune('a'+i)))
+	}
+	withUsers(t, names...)
+	mustList(t, names[0], "team", false)
+	newTestTask(t, names[0], "Shared zephyrscale audit", false, "list", "team")
+	for _, u := range names {
+		newTestTask(t, u, "Own quillfeather of "+u, true)
+	}
+	restartSearch()
+	finds := func(u string) (own, others int) {
+		for _, d := range retrieve(&Req{user: u}, "quillfeather", 50, "", false) {
+			if d.Task.Owner == u {
+				own++
+			} else {
+				others++
+			}
+		}
+		return
+	}
+	for round := 0; round < 2; round++ {
+		for _, u := range names {
+			if own, others := finds(u); own != 1 || others != 0 {
+				t.Fatalf("round %d, %s finds %d of their own and %d of others", round, u, own, others)
+			}
+			if got := retrieve(&Req{user: u}, "zephyrscale", 5, "", false); len(got) != 1 {
+				t.Fatalf("%s finds %d shared tasks", u, len(got))
+			}
+			for _, c := range []*indexCache{&searchIndexCache, &chunkIndexCache} {
+				c.mu.Lock()
+				n := len(c.views)
+				c.mu.Unlock()
+				if n > maxViews {
+					t.Fatalf("%d views kept, more than %d", n, maxViews)
+				}
+			}
+		}
+	}
+	// The last viewers' are the ones kept.
+	kept := 0
+	for _, c := range []*indexCache{&searchIndexCache, &chunkIndexCache} {
+		c.mu.Lock()
+		_, last := c.views["user:"+names[len(names)-1]]
+		_, first := c.views["user:"+names[0]]
+		if len(c.views) > 0 {
+			kept += len(c.views)
+			if !last || first {
+				t.Errorf("kept: the last viewer's %v, the first one's %v (%d views)", last, first, len(c.views))
+			}
+		}
+		c.mu.Unlock()
+	}
+	if kept == 0 {
+		t.Error("no view kept at all: the test looks at the wrong place")
+	}
+}

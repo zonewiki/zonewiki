@@ -828,6 +828,7 @@ type indexCache struct {
 	dead      []int        // base docs no longer shared docs, by number
 	delta     []*SearchDoc // shared docs that are not in base, in order
 	views     map[string]*indexView
+	asked     int // counts get's calls for a view, for which was asked for last
 }
 
 // indexView: the index of one viewer, with their own private docs.
@@ -836,7 +837,16 @@ type indexView struct {
 	gen  int
 	own  []*SearchDoc
 	idx  *docIndex
+	used int // when it was last asked for (indexCache.asked)
 }
+
+// maxViews: how many viewers' indexes are kept. A view numbers every doc
+// of the wiki for its viewer (a few bytes each, three times over): with
+// 80,000 tasks about 2 MB a user, 63 MB for thirty users who had searched
+// (measured 2026-11-15), and more with every user. So the viewers who
+// searched last keep theirs, and another's is made again when they come
+// back, which takes a few milliseconds.
+const maxViews = 8
 
 // maxChanges: how many docs may differ from the base before it is built
 // again; more only slow every search down, fewer rebuild too often.
@@ -904,14 +914,34 @@ func (c *indexCache) get(rq *Req, docs []*SearchDoc) *docIndex {
 	} else if len(own) == 0 {
 		viewKey = "shared" // the same for everyone with nothing private of their own
 	}
+	c.asked++
 	if v := c.views[viewKey]; v != nil && v.base == c.base && v.gen == c.sharedGen && slices.Equal(v.own, own) {
+		v.used = c.asked
 		return v.idx
 	}
 	if c.views == nil {
 		c.views = map[string]*indexView{}
 	}
+	// Room for it: the views of an index that is no longer the one (they
+	// are never asked for again) go, and past maxViews the one asked for
+	// longest ago.
+	delete(c.views, viewKey)
+	for key, v := range c.views {
+		if v.base != c.base || v.gen != c.sharedGen {
+			delete(c.views, key)
+		}
+	}
+	for len(c.views) >= maxViews {
+		oldest := ""
+		for key, v := range c.views {
+			if oldest == "" || v.used < c.views[oldest].used {
+				oldest = key
+			}
+		}
+		delete(c.views, oldest)
+	}
 	idx := c.view(own)
-	c.views[viewKey] = &indexView{c.base, c.sharedGen, own, idx}
+	c.views[viewKey] = &indexView{c.base, c.sharedGen, own, idx, c.asked}
 	return idx
 }
 
