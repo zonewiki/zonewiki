@@ -522,7 +522,7 @@ const { headerTasksMenu, confirmDeadlineMove } = app;
 // `query` defaults to the filter field; the tag autocomplete passes the
 // field minus the word being typed.
 function filterTasks(query = filterQuery()) {
-  return tasksInView(st.tasks, parseFilter(query, people), st.activeView, todayStr());
+  return tasksInView(st.tasks, parseFilter(query, people), st.activeView, todayStr(), initMine ? people.me : '');
 }
 
 Object.assign(app, initTaskOrder(app));
@@ -606,7 +606,9 @@ if (filterSearch) {
 // whatever the URL or the embed say, so the tab it showed comes first. A
 // name that isn't one of VIEWS is passed over.
 const isReload = performance.getEntriesByType?.('navigation')[0]?.type === 'reload';
-st.activeView = [isReload && loadShownTab(), urlView, embedView, loadActiveTab()].find(v => VIEWS.includes(v)) || 'focus';
+// A shared list, where a team looks for its backlog, opens on Open
+// (data-default-view); anything else on Focus.
+st.activeView = [isReload && loadShownTab(), urlView, embedView, loadActiveTab(), appEl?.dataset.defaultView].find(v => VIEWS.includes(v)) || 'focus';
 saveShownTab(st.activeView);
 // The board's sections: by day for a link's ?view=plan, else what the view
 // or this browser tab says.

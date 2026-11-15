@@ -22,6 +22,8 @@ document.addEventListener('click', e => {
 
 function initRow() {
 const nav = document.querySelector('.tasks-places');
+// On a phone the row scrolls sideways: the current pill is in view.
+nav?.querySelector('.tasks-places-group [aria-current]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 const more = nav?.querySelector('.lists-more');
 
 if (more) {

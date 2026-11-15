@@ -53,7 +53,16 @@ function inViewOrder(filtered) {
   } else {
     orderedTasks = app.sortTasks(filtered);
   }
-  return { orderedTasks, newTasks };
+  // My tasks' Focus: what someone gave the user and they haven't opened
+  // is on top, under Updates, whatever its dates, and in neither section.
+  let updates = [];
+  if (st.activeView === 'focus' && app.initMine) {
+    const given = t => !!TasksCore.givenToMe(t, people.me);
+    updates = [...filtered].reverse().filter(given);
+    orderedTasks = orderedTasks.filter(t => !given(t));
+    newTasks = newTasks.filter(t => !given(t));
+  }
+  return { orderedTasks, newTasks, updates };
 }
 
 // A tab with nothing to show says so (Focus offers the Plan board).
@@ -147,7 +156,8 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
   // By person the section says who has it (not of a former assignee, whose
   // task is under Unassigned).
   const sectionSays = st.activeView === 'plan' && st.cut === 'person' && !formerAssignee;
-  const assigneeDisplay = assignee && sectionSays ? newDisplay : assignee
+  // In My tasks every shared task is yours: its card doesn't say so.
+  const assigneeDisplay = assignee && (sectionSays || (app.initMine && assignee === people.me)) ? newDisplay : assignee
     ? `${newDisplay}<span class="task-assignee${assignee === people.me ? ' task-assignee-me' : ''}${formerAssignee ? ' task-assignee-former' : ''}" title="${
         esc(formerAssignee ? `Was assigned to ${assignee}, who can no longer be given tasks`
           : assignee === people.me ? 'Assigned to you' : `Assigned to ${assignee}`)}">@${esc(assignee)}</span>` : '';
@@ -279,7 +289,7 @@ function planHTML(filtered) {
 }
 
 // Focus, Open and Closed: the list's HTML.
-function listHTML(orderedTasks, newTasks) {
+function listHTML(orderedTasks, newTasks, updates = []) {
   let html = '';
   let truncated = false;
   if (st.activeView === 'focus') {
@@ -324,6 +334,12 @@ function listHTML(orderedTasks, newTasks) {
   // Open and Focus: both sections always have a heading, even when empty,
   // because the heading is where a task is dropped to enter an empty section.
   else if (app.SECTIONS[st.activeView]) {
+    // Updates (My tasks' Focus): no section of the manual order, so no
+    // drop target and nothing ranks there (data-updates: sectionList).
+    if (updates.length) {
+      html += `<li class="plan-subdivider updates-heading"><span>Updates</span><span class="board-day-count">${updates.length}</span></li>` +
+        updates.map(t => taskHTML(t, false, 'task-update')).join('');
+    }
     const [fresh, moreFresh] = windowed(st.activeView + ':unsorted', newTasks);
     html += app.sectionHTML('unsorted', 'Unsorted', newTasks.length);
     html += fresh.map(t => taskHTML(t, undefined, 'task-inbox')).join('') + moreFresh;
@@ -474,12 +490,12 @@ function render() {
   app.applyGroup();   // who can be assigned may have arrived since
   app.syncClosedLink();
   const filtered = app.filterTasks();
-  const { orderedTasks, newTasks } = inViewOrder(filtered);
-  if (st.activeView !== 'plan' && orderedTasks.length === 0 && newTasks.length === 0) {
+  const { orderedTasks, newTasks, updates } = inViewOrder(filtered);
+  if (st.activeView !== 'plan' && orderedTasks.length === 0 && newTasks.length === 0 && updates.length === 0) {
     renderEmpty();
     return;
   }
-  app.listEl.innerHTML = st.activeView === 'plan' ? planHTML(filtered) : listHTML(orderedTasks, newTasks);
+  app.listEl.innerHTML = st.activeView === 'plan' ? planHTML(filtered) : listHTML(orderedTasks, newTasks, updates);
   renderFigures(app.listEl);
   wireListHandlers();
 }

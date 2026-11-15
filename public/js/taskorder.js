@@ -38,7 +38,7 @@ function manualOrderIds(s) {
 function sectionList() {
   const s = SECTIONS[st.activeView];
   const byId = new Map(st.tasks.map(t => [t.id, t]));
-  const ids = app.visibleItems().map(el => el.dataset.id);
+  const ids = app.visibleItems().filter(el => !el.classList.contains('task-update')).map(el => el.dataset.id);
   const manual = ids.filter(id => byId.get(id)[s.field] != null);
   const fixed = ids.filter(id => byId.get(id)[s.field] == null);
   return [sectionKey(s.top), ...fixed, sectionKey(s.bottom), ...manual];

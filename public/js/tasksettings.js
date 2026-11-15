@@ -30,7 +30,7 @@ const GROUPS = ['none', 'day', 'person', 'list'];
 const isTrue = v => ['1', 'true', 'yes', 'on'].includes((v || '').trim().toLowerCase());
 
 // What the dialog shows for params: its fields' values.
-function fieldsOf(p) {
+function fieldsOf(p, defaultView = 'focus') {
   const view = (p.view || '').toLowerCase();
   const plan = (p.plan || '').toLowerCase();
   const group = (p.group || '').toLowerCase();
@@ -40,7 +40,7 @@ function fieldsOf(p) {
   const pin = (p.pin || '').trim().toLowerCase();
   const limit = parseInt(p.limit, 10);
   return {
-    view: view === 'open' || view === 'plan' ? 'open' : view === 'closed' ? 'closed' : 'focus',
+    view: view === 'open' || view === 'plan' ? 'open' : view === 'closed' ? 'closed' : view === 'focus' ? 'focus' : defaultView,
     // What the Open tab shows: group=, else what plan= said (on: by day,
     // off: one list); view=open has always been the one list, view=plan
     // the board.
@@ -191,8 +191,8 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
     ...(f.mail && mode().mine && mode().mail ? { mail: f.mail.checked } : {}),
     ...(f.assignee ? { assignee: f.assignee.value.trim() } : {}),   // with users
   });
-  const fill = (params, { all = false, mine = false, list = false, embed = false, home = false, mail = false, ownList = false } = {}) => {
-    const fields = fieldsOf(params);
+  const fill = (params, { all = false, mine = false, list = false, embed = false, home = false, mail = false, ownList = false, defaultView = 'focus' } = {}) => {
+    const fields = fieldsOf(params, defaultView);
     form.dataset.home = home ? '1' : '';
     form.dataset.mail = mail ? '1' : '';
     form.dataset.all = all ? '1' : '';
@@ -265,7 +265,7 @@ export function initTaskSettings(app) {
   let was = null;
 
   function open() {
-    was = fill(params, { all, mine, list: !!list, embed, ownList: !!list && app.privateLists.has(list), home: appEl.dataset.settingsHome === '1', mail: appEl.dataset.settingsMail === '1' });
+    was = fill(params, { all, mine, list: !!list, embed, ownList: !!list && app.privateLists.has(list), defaultView: appEl.dataset.defaultView === 'open' ? 'open' : 'focus', home: appEl.dataset.settingsHome === '1', mail: appEl.dataset.settingsMail === '1' });
     const who = app.privateLists.has(list) ? 'which only you see' : 'for everyone';
     whereEl.textContent = mine ? (document.body.dataset.users === '1' ? 'For My tasks: yours alone.' : 'For My tasks.')
       : all ? 'For All tasks, for everyone.'

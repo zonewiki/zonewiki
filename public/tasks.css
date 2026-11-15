@@ -63,6 +63,9 @@
   background: color-mix(in srgb, var(--fg) 8%, var(--btn-bg)); color: var(--fg); font-weight: 600;
 }
 .tasks-place .module-counts { margin-left: 0; }
+/* One number on a pill: what is due there (My tasks also what is new for
+   you). The Focus count is the Tasks link's: the day's load. */
+.tasks-place .module-focus { display: none; }
 .tasks-place-lock, .tasks-place-pin { display: inline-flex; }
 /* More: a details whose summary is the row's last pill and whose panel hangs
    under it: links, a line each; a filter field over them when there are many
@@ -103,6 +106,16 @@
 @media (max-width: 600px) {
   .lists-more { position: static; }
   .lists-more-panel { right: 0; max-width: none; }
+}
+/* A phone: the row is one line that scrolls sideways (js/listsrow.js brings
+   the current pill into view), so the tasks start on the first screen; and
+   the line under the heading that only says what the view is isn't shown
+   (one with a link in it stays). */
+@media (max-width: 640px) {
+  .tasks-places-group { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; max-width: 100%; }
+  .tasks-places-group::-webkit-scrollbar { display: none; }
+  .tasks-places .tasks-place { flex: none; }
+  .tasks-list-home:not(:has(a)) { display: none; }
 }
 /* A finger: taller pills, the capsule's corners with them. */
 @media (pointer: coarse) {

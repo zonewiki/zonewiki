@@ -121,7 +121,8 @@ def test_filing_an_inbox_task_through_the_dialog_shares_it_assigned_to_you(alice
     titles = alice.locator(".task-item .task-title")
     expect(titles).to_have_count(2)
     assert sorted(titles.all_text_contents()) == ["Idea", "Second thoughts, kept"]
-    expect(card(alice, "Idea").locator(".task-assignee")).to_have_text("@alice")
+    expect(card(alice, "Idea").locator(".task-assignee")).to_have_count(0)   # yours, as all of My tasks: the card doesn't say it
+    assert task(alice, "Idea")["assignee"] == "alice"
     expect(card(alice, "Idea").locator(".task-private")).to_have_count(0)
     # bob sees what was filed, not what stayed.
     alice.request.post("/login", form={"username": "bob", "password": "pw"})

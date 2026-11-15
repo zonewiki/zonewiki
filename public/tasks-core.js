@@ -224,11 +224,13 @@ function matchesFilter(t, f) {
 // that are the tab's kind. Focus: open and available now (isFocus);
 // Closed: the closed (done or won't do); Open and the Plan board: every open task (one
 // still waiting for a day is in the board's Unplanned section).
-function tasksInView(tasks, f, view, today) {
+// me: in My tasks, the user: Focus then also holds what someone gave them
+// and they haven't opened (givenToMe), whatever its dates: its Updates.
+function tasksInView(tasks, f, view, today, me) {
   const filtering = filterActive(f);
   return tasks.filter(t => (!filtering || matchesFilter(t, f)) &&
     (view === 'closed' ? !!t.closed_at
-      : view === 'focus' ? !t.closed_at && isFocus(t, today)
+      : view === 'focus' ? !t.closed_at && (isFocus(t, today) || !!(me && givenToMe(t, me)))
       : !t.closed_at));
 }
 

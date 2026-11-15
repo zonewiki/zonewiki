@@ -647,7 +647,7 @@ Not there: telling someone that a task became theirs, a group as an assignee, an
   So an export from another wiki doesn't bring its people along; the import's toast says how many tasks were assigned to people who are not users here (`unassigned` in the route's answer).
 - **Assistants** (`docs/spec/mcp.md`): `create_task` and `update_task` take `assignee` (a user name, `me` for the assistant's user, `none`), `search_tasks` filters by it (`assignee=me`: "what do I have to do"), and a task's text says who it is assigned to.
 - **In the dialog** (`js/taskmodal.js`): the **Assignee** field, after Tags.
-  It shows when the task has an assignee; on a task that has none, **Assignee** in the line under the fields ("+ Assignee") shows it and goes to it, as the dialog's other rarely set fields are asked for (Interaction in `docs/spec/tasks.md`).
+  It always shows on a shared task (empty: "No one"); on a new task still in your Inbox, **Assignee** in the line under the fields ("+ Assignee") shows it and goes to it, as the dialog's other rarely set fields are asked for (Interaction in `docs/spec/tasks.md`).
   Type `@` (everyone, yourself first) or the start of a name; Tab or Enter completes it to a chip, and another name replaces it; the chip's × or Backspace takes it off.
   `me` is yourself.
   A name that is no user who can be assigned is not saved: the dialog stays open and the field says so.
@@ -656,7 +656,7 @@ Not there: telling someone that a task became theirs, a group as an assignee, an
 - **In a new task's title** (`TasksCore.parseQuickAdd`): `@name` at the end, among the other shorthand ("Call Sam @bob #work tomorrow"), with completion as you type it.
   Only the name of a user who can be assigned, or `@me`; anything else stays in the title (`bob@example.org`, `@home`), as does a second name.
   Not on a private task.
-- **On the card** (`.task-assignee`, after the tags): `@anna`, your own name in the accent colour, a former assignee's struck through.
+- **On the card** (`.task-assignee`, after the tags): `@anna`, your own name in the accent colour, a former assignee's struck through. Not where the view says it: in My tasks your own name (every shared task there is yours), By person any name but a former assignee's.
 - **A task given to you is told to you**, in the app and by mail (`go/notify.go`).
   **On its card: new** (`.task-new`, before your name; `TasksCore.givenToMe`): a task someone else gave you that you haven't touched since. It is read from the task's history, so nothing is kept for it: the entry that made the task yours (the last `assigned` one, or `created` for a task made with your name on it) is someone else's, and nothing of yours is logged after it (a date you set, done, a comment, or that you saw it). Its tooltip says who gave it and when ("bob gave you this task on …").
   **Opening the task takes it away** (`markSeen` in `js/taskdata.js`; `seen` in `PUT /api/tasks/<id>`, `updateTaskLocked`): when you open its dialog or its details, the browser says so once and Zone logs `seen` in the task's history, by you. So the mark goes when you have looked, and whoever gave you the task reads in its History that it arrived ("Seen · anna"). For a task that isn't new to whoever opens it, `seen` logs and writes nothing.

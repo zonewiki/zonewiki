@@ -264,7 +264,9 @@ function syncAutoList() {
 const assigning = () => !!assigneeInput && (!app.editPrivate() || autoInbox);
 function syncAssigneeField() {
   if (!assigneeField) return;
-  showField('assignee', assigning() && (!!assigneeChip.words().length || !!assigneeInput.value.trim()));
+  // A shared task always shows who has it (or that no one does); a new
+  // task still in the Inbox once a name is there, or asked for.
+  showField('assignee', assigning() && (!app.editPrivate() || !!assigneeChip.words().length || !!assigneeInput.value.trim()));
 }
 app.listSelect?.addEventListener('change', () => { syncAssigneeField(); syncMore(); });
 const assigneeAc = assigneeInput && attachTagAc(assigneeInput, {

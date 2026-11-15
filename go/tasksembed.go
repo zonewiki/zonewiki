@@ -22,6 +22,7 @@ const tasksPlaceholder = "ZONETASKSPLACEHOLDER"
 // embed's params and the page it stands on say.
 type tasksEmbedView struct {
 	Tag, View     string
+	DefaultView   string           // the tab the view opens on when nothing says: "open" for a shared list (with users), "" Focus
 	List          string           // the list it shows, as the user names it (a ref); "" none
 	Lists         string           // several lists as one (lists=): their refs, "|" between
 	Out           string           // My tasks: the lists left out of it, their refs, "|" between
@@ -202,6 +203,11 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, p
 		PrivateFolder: privateFolder(user),
 		ListsJSON:     jsonobj.Text(choices),
 		InboxPrivate:  inboxOwner(user) != "",
+	}
+	// A shared list is a team's: it opens on Open, where its backlog and
+	// what no one has are; one's own lists, My tasks and All tasks on Focus.
+	if shown && !list.Private() && settings().Users != nil {
+		v.DefaultView = "open"
 	}
 	if scope == mineScope {
 		// My tasks: the browser needs the lists left out of it and whether

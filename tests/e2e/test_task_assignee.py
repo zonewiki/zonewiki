@@ -79,11 +79,11 @@ def test_the_modal_assigns_with_completion(alice):
     alice.goto("/tasks?view=open")
     modal = open_edit(alice, "Call Sam")
     field = modal.locator("#task-edit-assignee")
-    # No one has it: the field shows once asked for, and has the focus.
-    expect(field).to_be_hidden()
-    modal.locator("[data-more=assignee]").click()
-    expect(field).to_be_focused()
+    # A shared task always shows who has it: no one, and nothing to ask for.
+    expect(field).to_be_visible()
+    expect(field).to_have_attribute("placeholder", "No one")
     expect(modal.locator("[data-more=assignee]")).to_be_hidden()
+    field.click()
     expect(modal.locator(".tag-ac-item")).to_have_count(0)     # nothing offered until something is typed
     field.type("@")
     expect(modal.locator(".tag-ac-item")).to_have_text(["@alice", "@bob"])   # yourself first; no viewer, no one disabled
@@ -118,7 +118,6 @@ def test_a_name_that_is_no_user_keeps_the_modal_open(alice):
     alice.goto("/tasks?view=open")
     modal = open_edit(alice, "Call Sam")
     field = modal.locator("#task-edit-assignee")
-    modal.locator("[data-more=assignee]").click()
     for name in ("carol", "dan", "zed"):
         field.fill(name)
         modal.get_by_role("button", name="Save").click()
@@ -149,7 +148,7 @@ def test_a_new_task_s_title_assigns(alice):
     target, note = modal.locator("#task-edit-target"), modal.locator("#task-edit-list-note")
     expect(target).to_have_text("Adds to the list team: everyone sees it.")
     expect(note).to_be_hidden()                  # a new task: the line under the title says who sees it
-    expect(modal.locator("[data-more=assignee]")).to_be_visible()
+    expect(modal.locator("#task-edit-assignee")).to_be_visible()   # in a shared list: who has it shows
     # A task in a private list has no assignee: it isn't offered, and @bob is text.
     lists.select_option("own")
     expect(target).to_have_text("Adds to the list own: only you see it.")
@@ -164,7 +163,7 @@ def test_a_new_task_s_title_assigns(alice):
     expect(modal.locator("#task-edit-quick")).to_be_hidden()
     lists.select_option("team")
     expect(target).to_have_text("Adds to the list team: everyone sees it.")
-    expect(modal.locator("[data-more=assignee]")).to_be_visible()
+    expect(modal.locator("#task-edit-assignee")).to_be_visible()
     expect(modal.locator("#task-edit-quick")).to_have_text("@bob")
     modal.get_by_role("button", name="Save").click()
     wait_for_assignee(alice, "Call Sam", "bob")
@@ -610,3 +609,39 @@ def test_one_person_has_list_and_plan(page, wiki):
     expect(page.locator(".tasks-cut [data-group=none]")).to_have_attribute("aria-pressed", "true")
     page.locator(".tasks-cut [data-group=day]").click()
     expect(page.locator(".board-day-divider[data-drop-bucket='unplanned']")).to_be_visible()
+
+
+def test_a_task_given_to_you_is_on_focus_under_updates(alice, new_page):
+    """My tasks' Focus holds what someone gave you and you haven't opened,
+    under Updates, whatever its dates (docs/spec/tasks.md, Views): a task
+    without a date was on no tab the Tasks links open."""
+    bob = new_page()
+    bob.request.post("/login", form={"username": "bob", "password": "pw"})
+    assert bob.request.post("/api/tasks", data={"title": "From bob", "list": "team", "assignee": "alice"}).ok
+    new(alice, "Own, today", assignee="alice", start_date=date.today().isoformat())
+    alice.goto("/tasks?mine=1")
+    expect(alice.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Focus"])
+    expect(alice.locator(".updates-heading")).to_contain_text("Updates")
+    expect(alice.locator(".task-item.task-update .task-title")).to_have_text(["From bob"])
+    expect(card(alice, "From bob").locator(".task-assignee")).to_have_count(0)   # in My tasks a card doesn't say your name
+    expect(card(alice, "From bob").locator(".task-new")).to_be_visible()
+    # Opened, it is no update anymore; without a date it is on Open.
+    open_edit(alice, "From bob")
+    alice.keyboard.press("Escape")
+    expect(alice.locator(".updates-heading")).to_have_count(0)
+    expect(card(alice, "From bob")).to_have_count(0)
+    expect(card(alice, "Own, today")).to_be_visible()
+
+
+def test_a_shared_list_opens_on_open_and_your_own_on_focus(alice):
+    """A team's list opens where its backlog is; a private list, My tasks
+    and All tasks on Focus. The list's own setting still wins."""
+    make_list(alice, "diary", private=True)
+    alice.goto("/tasks?list=team")
+    expect(alice.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Open"])
+    for url in ("/tasks?list=diary", "/tasks?mine=1", "/tasks"):
+        alice.goto(url)
+        expect(alice.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Focus"])
+    assert alice.request.post("/api/tasks/settings", data={"list": "team", "set": {"view": "focus"}}).ok
+    alice.goto("/tasks?list=team")
+    expect(alice.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Focus"])

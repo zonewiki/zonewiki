@@ -233,7 +233,7 @@ def test_list_switcher_goes_between_the_lists_and_keeps_its_counts(page, wiki):
     expect(places.locator(".tasks-place-label")).to_have_text(["My tasks", "Inbox", "task", "shop", "More"])
     shop = places.and_(page.locator("[data-place='list:shop']"))
     expect(shop).to_have_attribute("aria-current", "page")
-    expect(shop.locator(".module-focus")).to_have_text("1")
+    expect(shop.locator(".module-focus")).to_be_hidden()      # a pill has one number: what is due
     expect(page.locator("h1")).to_have_text("List: shop")
     expect(page.locator(".page-foot #backlinks a")).to_have_text(["Shop"])
     # One row, above the heading.
@@ -242,7 +242,7 @@ def test_list_switcher_goes_between_the_lists_and_keeps_its_counts(page, wiki):
     assert boxes[0]["y"] + boxes[0]["height"] <= page.locator("h1").bounding_box()["y"]
     card(page, "Milk").locator("input[type=checkbox]").check()
     # After the checkbox's ~5 s grace period.
-    expect(shop.locator(".module-focus")).to_be_hidden(timeout=10000)
+    expect(card(page, "Milk")).to_have_count(0, timeout=10000)
     page.locator(".tasks-place[data-place='list:task']").click()
     page.wait_for_url(re.compile(r"/tasks\?list=task$"))
     expect(page.locator(".tasks-place[aria-current]")).to_have_attribute("data-place", "list:task")
