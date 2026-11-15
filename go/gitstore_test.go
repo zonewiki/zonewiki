@@ -454,3 +454,35 @@ func TestMissingUsers(t *testing.T) {
 		t.Errorf("with a file: %v", err)
 	}
 }
+
+// A wiki's repository is told not to look for differences between uploads
+// when it packs (noDeltaForUploads): its own attributes, in no commit,
+// written once and beside what is there.
+func TestNoDeltaForUploads(t *testing.T) {
+	testWiki(t, map[string]string{"p": "# P\n"})
+	cfg.GitEnabled = true
+	gitSetup()
+	if !isDir(filepath.Join(cfg.Data, ".git")) {
+		t.Fatal("no repository")
+	}
+	path := filepath.Join(cfg.Data, ".git", "info", "attributes")
+	if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("*.psd binary"), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	noDeltaForUploads(cfg.Data)
+	noDeltaForUploads(cfg.Data)
+	b, _ := os.ReadFile(path)
+	if want := "*.psd binary\n_assets/** -delta\nprivate/*/_assets/** -delta\n"; string(b) != want {
+		t.Errorf("attributes: %q, want %q", b, want)
+	}
+	if out := runGitEnv(gitTimeout, "", []string{"GIT_LITERAL_PATHSPECS=0"}, "check-attr", "delta", "--", "_assets/photo.png", "private/anna/_assets/a.pdf", "p.md").Stdout; !strings.Contains(out, "_assets/photo.png: delta: unset") ||
+		!strings.Contains(out, "private/anna/_assets/a.pdf: delta: unset") || !strings.Contains(out, "p.md: delta: unspecified") {
+		t.Errorf("git reads them as: %s", out)
+	}
+	if out := runGit("status", "--porcelain").Stdout; strings.Contains(out, "attributes") {
+		t.Errorf("the attributes are in the work tree: %s", out)
+	}
+}

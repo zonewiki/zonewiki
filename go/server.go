@@ -170,6 +170,7 @@ func main() {
 		fatal(err)
 	}
 	excludeState(cfg.Data) // .zone/: the settings file, the secret key, the caches
+	noDeltaForUploads(cfg.Data)
 	ensureHomePage()
 	cleanLeftDrafts()
 	taskFiles.ArchiveOldClosed()

@@ -41,6 +41,8 @@ BUDGETS = {
     "a search after a write (ms)": 1500,
     "the repository per 100 writes (MB)": 10,
     "the same, packed (MB)": 1.5,
+    "the same, joined (MB)": 0.15,
+    "joining the packs (ms)": 3000,
 }
 
 WORDS = ("review the draft of the offer for the customer and send it back with notes call about invoice "
@@ -135,6 +137,9 @@ def test_the_tasks_at_a_teams_size(team, client):
     mine = client.get("/api/tasks?mine=1", headers=HOST).get_json()
     shared = [t for t in mine if not t.get("private")]
     assert len(shared) > 10, "the bench's user has tasks assigned"
+    # The wiki as joined (Repo.Join) is what the growth is measured from.
+    join = ["git", "-C", str(root), "repack", "-a", "-d", "-l", "-q", "-f", "--window=50"]
+    subprocess.run(join, check=True, capture_output=True)
     before = repo_mb(root)
     writes = 0
 
@@ -172,6 +177,11 @@ def test_the_tasks_at_a_teams_size(team, client):
     # Packed, as Zone packs every 50 commits (Repo.Pack): the versions of a file as differences.
     subprocess.run(["git", "-C", str(root), "repack", "-d", "-l", "-q"], check=True, capture_output=True)
     got["the same, packed (MB)"] = (repo_mb(root) - before) / writes * 100
+    # Joined, as Zone joins its packs after a few of them: the differences computed anew.
+    start = time.perf_counter()
+    subprocess.run(join, check=True, capture_output=True)
+    got["joining the packs (ms)"] = (time.perf_counter() - start) * 1000
+    got["the same, joined (MB)"] = (repo_mb(root) - before) / writes * 100
 
     print(f"\n\nTasks at a team's size: {USERS} users, {LISTS} lists, {OPEN} open and {CLOSED} closed tasks; "
           f"{sum(p.stat().st_size for p in (root / '_tasks').rglob('tasks.json')) / 1e6:.1f} MB open, "

@@ -365,6 +365,39 @@ func excludeFromGit(wiki, entry string) {
 	}
 }
 
+// noDeltaForUploads tells the wiki's repository (its own
+// .git/info/attributes, which is in no commit) not to look for differences
+// between uploads when it packs: gitrepo.NoDeltaAttributes.
+func noDeltaForUploads(wiki string) {
+	if !isDir(filepath.Join(wiki, ".git")) {
+		return
+	}
+	info := filepath.Join(wiki, ".git", "info")
+	path := filepath.Join(info, "attributes")
+	b, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		logf("could not update %s: %v", path, err)
+		return
+	}
+	text, have := string(b), strings.Split(string(b), "\n")
+	var add []string
+	for _, line := range gitrepo.NoDeltaAttributes("_assets", privateDir+"/*/_assets") {
+		if !slices.Contains(have, line) {
+			add = append(add, line)
+		}
+	}
+	if len(add) == 0 {
+		return
+	}
+	if text != "" && !strings.HasSuffix(text, "\n") {
+		text += "\n"
+	}
+	_ = os.Mkdir(info, 0o777)
+	if err := os.WriteFile(path, []byte(text+strings.Join(add, "\n")+"\n"), 0o666); err != nil {
+		logf("could not update %s: %v", path, err)
+	}
+}
+
 var shaRE = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
 
 // movePage moves a page's file, points every link to it at the new slug,
