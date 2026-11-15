@@ -1621,7 +1621,7 @@ func TestTheSearchKeepsRecordsOfTasks(t *testing.T) {
 	if !slices.Contains(d.tokens(), "barista") {
 		t.Errorf("its tokens: %v", d.tokens())
 	}
-	if docs[hers.ID].Task.Owner != "alice" || docs[old.ID].Task.Owner != "" || docs[old.ID].tk.status != "done" || docs[old.ID].tk.year != "2001" {
+	if docs[hers.ID].Task.Owner != "alice" || docs[old.ID].Task.Owner != "" || docs[old.ID].taskStatus() != "done" || docs[old.ID].taskYear() != "2001" {
 		t.Errorf("the archives' docs: %+v %+v", docs[hers.ID].Task, docs[old.ID].tk)
 	}
 	// A change of one task: its file's docs anew, the others the docs they were.
@@ -1688,6 +1688,20 @@ func TestTheSearchKeepsRecordsOfTasks(t *testing.T) {
 	}
 	if got := retrieve(&Req{user: "alice"}, "quillfeather", 5, "", false); len(got) == 0 || got[0].taskID() != hers.ID {
 		t.Errorf("she doesn't find her archived task: %d hits", len(got))
+	}
+	// Her own archive was read for her index once; a change elsewhere makes
+	// her index anew without reading it again (viewTokens).
+	taskfiles.ForgetParsed()
+	other := jsonObj{}
+	other.Set("title", "Oat milk, two litres")
+	if _, err := updateTask("alice", milk.ID, other, ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := retrieve(&Req{user: "alice"}, "litres", 5, "", false); len(got) == 0 || got[0].taskID() != milk.ID {
+		t.Errorf("a search after a change: %d hits", len(got))
+	}
+	if taskfiles.KeepsParsed(herArchive) {
+		t.Error("her index made anew read her archive again")
 	}
 	// The archive changes: what was saved is of another file, and is not taken.
 	if _, err := updateTask("alice", old.ID, title, ""); err != nil {

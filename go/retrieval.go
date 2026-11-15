@@ -25,6 +25,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unique"
 	"zonewiki/internal/atomicfile"
 	"zonewiki/internal/jsonobj"
 	"zonewiki/internal/mdtext"
@@ -62,19 +63,51 @@ type SearchDoc struct {
 }
 
 // taskDocInfo: what a task's doc holds beside its record: the task file it
-// is in (path), its status ("open", "done"), the year of its archive, its
-// last activity (dates), and the hash of its searchable text (sem: what the
-// semantic index knows its vector by).
-type taskDocInfo struct{ path, status, year, edited, sem string }
+// is in (path), its last activity (dates), and the hash of its searchable
+// text (sem: what the semantic index knows its vector by). Its status and
+// its archive's year follow from the record (taskStatus, taskYear).
+type taskDocInfo struct{ path, edited, sem string }
+
+// taskStatus: a task doc's status as search answers it: "open" or "done".
+func (d *SearchDoc) taskStatus() string {
+	if d.Task.IsOpen() {
+		return "open"
+	}
+	return "done"
+}
+
+// taskYear: the year of a closed task's archive when it is an earlier one,
+// else "".
+func (d *SearchDoc) taskYear() string {
+	if d.Task.IsOpen() {
+		return ""
+	}
+	return taskFiles.PastYear(d.Task)
+}
+
+// same: text as the one string every task with that text shares (a list's
+// name, a user's, a tag, a day): a record's short words are few and said
+// again and again, in tens of thousands of records.
+func same(text string) string {
+	if text == "" {
+		return ""
+	}
+	return unique.Make(text).Value()
+}
 
 // taskRecord: a task as a search doc keeps it: all of it but what is long
 // (its description, comments, history, and keys Zone doesn't know), owner's.
 // t is only read (it may be the store's own: taskfiles.Look).
 func taskRecord(t *Task, owner string) *Task {
 	r := *t
-	r.Owner = owner
+	r.Owner = same(owner)
 	r.Description, r.History, r.Comments, r.Extra = "", nil, nil, nil
-	r.Tags = slices.Clone(t.Tags)
+	r.List, r.Assignee, r.CreatedBy, r.Importance = same(t.List), same(t.Assignee), same(t.CreatedBy), same(t.Importance)
+	r.StartDate, r.DueDate, r.LastDone = same(t.StartDate), same(t.DueDate), same(t.LastDone)
+	r.Tags = nil
+	for _, tag := range t.Tags {
+		r.Tags = append(r.Tags, same(tag))
+	}
 	return &r
 }
 
@@ -137,6 +170,11 @@ func (d *SearchDoc) taskID() string {
 func (d *SearchDoc) tokens() []string {
 	if d.Tokens != nil {
 		return d.Tokens()
+	}
+	if d.tk != nil {
+		// A task's: from its text, read from its file, the title weighted.
+		text, _ := d.taskText()
+		return slices.Concat(textsearch.Tokenize(text), repeatTokens(mdtext.PlainTaskTitle(d.Task.Title), textsearch.TitleWeight))
 	}
 	if d.file != nil {
 		toks, _, _ := d.indexed()
@@ -604,18 +642,14 @@ func newTaskDoc(rec *Task, info *taskDocInfo, key textsearch.DocKey) *SearchDoc 
 	title := mdtext.PlainTaskTitle(rec.Title)
 	var lowTags []string
 	for _, tag := range rec.Tags {
-		lowTags = append(lowTags, strings.ToLower(tag))
+		lowTags = append(lowTags, same(strings.ToLower(tag)))
 	}
-	info.status, info.year = "open", ""
-	if !rec.IsOpen() {
-		info.status, info.year = "done", taskFiles.PastYear(rec)
+	// The record's own tags where they are lowercase already (most are).
+	if slices.Equal(lowTags, rec.Tags) {
+		lowTags = rec.Tags
 	}
-	d := &SearchDoc{Slug: taskfiles.DirName, Title: "[Task] " + title, Task: rec, tk: info, Tags: lowTags, key: key}
-	d.Tokens = func() []string {
-		text, _ := d.taskText()
-		return slices.Concat(textsearch.Tokenize(text), repeatTokens(title, textsearch.TitleWeight))
-	}
-	return d
+	info.edited = same(info.edited)
+	return &SearchDoc{Slug: taskfiles.DirName, Title: "[Task] " + title, Task: rec, tk: info, Tags: lowTags, key: key}
 }
 
 // An archive's docs in Zone's folder (.zone/index/tasks/<hash>.gob): the
@@ -1042,7 +1076,7 @@ func (c *indexCache) view(own []*SearchDoc) *docIndex {
 	tokens := make([][]string, len(extra))
 	for i, d := range extra {
 		extraID[d] = n + i
-		tokens[i] = d.tokens()
+		tokens[i] = viewTokens.of(d)
 	}
 	dead := make(map[int]bool, len(c.dead))
 	for _, id := range c.dead {
@@ -1064,6 +1098,44 @@ func (c *indexCache) view(own []*SearchDoc) *docIndex {
 		ids = append(ids, id)
 	}
 	return &docIndex{docs: live, byID: slices.Concat(c.base.byID, extra), ids: ids, ix: c.base.ix.With(dead, tokens, pos)}
+}
+
+// viewTokens: the tokens of the task docs a viewer's index adds to the
+// base (view): a user's own private tasks, which are in no index file, and
+// what changed since the base was written. A view is made again whenever a
+// shared doc changes, and a task's tokens come from its file: without this
+// each of them read a user's private archives again. Kept by the docs' keys
+// (what their tokens are made from), up to viewTokensMax tokens; past it,
+// it starts over.
+var viewTokens tokenCache
+
+const viewTokensMax = 400_000
+
+type tokenCache struct {
+	sync.Mutex
+	m map[textsearch.DocKey][]string
+	n int
+}
+
+func (c *tokenCache) of(d *SearchDoc) []string {
+	if d.tk == nil || d.Tokens != nil {
+		return d.tokens() // a page's come from the texts kept of its file (docTexts)
+	}
+	c.Lock()
+	toks, ok := c.m[d.key]
+	c.Unlock()
+	if ok {
+		return toks
+	}
+	toks = d.tokens()
+	c.Lock()
+	if c.m == nil || c.n+len(toks) > viewTokensMax {
+		c.m, c.n = map[textsearch.DocKey][]string{}, 0
+	}
+	c.m[d.key] = toks
+	c.n += len(toks)
+	c.Unlock()
+	return toks
 }
 
 // docVisible: user may see the search doc d (a page's, or a task's).
@@ -1491,19 +1563,19 @@ func doSearch(rq *Req, raw string, unlinked bool, limit int, quicknote bool) []M
 		r := M{"slug": d.Slug, "title": d.Title, "excerpt": htmlOf(textsearch.Excerpt(excerptOf, text)),
 			"meta": resultMeta(d, names)}
 		if d.isTask() {
-			r["type"], r["task_id"], r["status"] = "task", d.taskID(), d.tk.status
-			if d.tk.year != "" {
-				r["year"] = d.tk.year
+			r["type"], r["task_id"], r["status"] = "task", d.taskID(), d.taskStatus()
+			if d.taskYear() != "" {
+				r["year"] = d.taskYear()
 			}
 			tab := "open"
-			if d.tk.status == "done" {
+			if d.taskStatus() == "done" {
 				tab = "closed"
 			}
 			list := taskList(d.Task, names)
 			if list != "" {
 				r["list"] = list
 			}
-			r["href"] = taskHref(d.taskID(), tab, list, d.tk.year)
+			r["href"] = taskHref(d.taskID(), tab, list, d.taskYear())
 		} else {
 			href := pathURL("page", d.Slug)
 			// The page highlights what matched (js/search.js); before the #anchor.
