@@ -653,7 +653,7 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 	case didSkip:
 		msg = "Skip task"
 	case data.Has("wont_do"):
-		msg = "Abandon task"
+		msg = "Close task as won't do"
 		if !wontDo {
 			msg = "Reopen task"
 		}

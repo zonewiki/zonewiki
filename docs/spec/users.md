@@ -619,7 +619,7 @@ It is information: it never changes who sees a task or who may change it, and an
 
 You assign a task in its dialog or by ending a new task's title with `@name`, see who has it on its card, and filter a list by it (`@anna`, `@me`, `@none`).
 A page can show each user their own tasks with `[[tasks: assignee=me]]`, several selected tasks are assigned at once, and an assistant assigns and asks for "my tasks" through the MCP tools.
-Not there: telling someone that a task became theirs, a group as an assignee, and rules that go by the assignee (who may close a task).
+What happens on a task you have to do with is told to you (below). Not there: a group as an assignee, and rules that go by the assignee (who may close a task).
 
 - **The field** is the task's `assignee`, a user's name, kept in its file after `tags` (`Task.Assignee` in `go/internal/taskmodel`; Task fields in `docs/spec/tasks.md`).
   A task without one has no such key.
@@ -651,7 +651,7 @@ Not there: telling someone that a task became theirs, a group as an assignee, an
   Type `@` (everyone, yourself first) or the start of a name; Tab or Enter completes it to a chip, and another name replaces it; the chip's × or Backspace takes it off.
   `me` is yourself.
   A name that is no user who can be assigned is not saved: the dialog stays open and the field says so.
-  A private task has no field and no "+ Assignee": ticking Private hides both.
+  A private task has no field and no "+ Assignee": choosing a private list, or the Inbox, hides both.
   A new task starts with the one user the filter names (`@anna` or `@me`; `filterDefaultAssignee`), as it starts with the filter's tags.
 - **In a new task's title** (`TasksCore.parseQuickAdd`): `@name` at the end, among the other shorthand ("Call Sam @bob #work tomorrow"), with completion as you type it.
   Only the name of a user who can be assigned, or `@me`; anything else stays in the title (`bob@example.org`, `@home`), as does a second name.

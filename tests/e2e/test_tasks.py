@@ -816,6 +816,24 @@ def test_a_series_occurrence_links_to_the_one_before(page, wiki):
     assert first["id"] in link.get_attribute("href") and "view=closed" in link.get_attribute("href")
 
 
+def test_tab_is_the_browsers_on_a_page_that_embeds_a_list(page, wiki):
+    """Tab goes through the tabs on the Tasks page, and on any page while a
+    task is selected or the focus is in the list; on a page that only embeds
+    a list it stays what it is everywhere, the way to the next link or
+    field."""
+    page.request.post("/api/tasks", data={"title": "One"})
+    wiki.write("notes", "# Notes\n\n[A link](/page/index)\n\n[[tasks: view=open group=none]]\n")
+    page.goto("/page/notes")
+    expect(card(page, "One")).to_be_visible()
+    active = page.locator("#tasks-tabs .active")
+    expect(active).to_have_text(["Open"])
+    page.keyboard.press("Tab")
+    expect(active).to_have_text(["Open"])                 # the page's Tab
+    card(page, "One").locator(".task-title").click()
+    page.keyboard.press("Tab")
+    expect(active).to_have_text(["Focus"])
+
+
 def test_save_writes_only_what_was_changed_in_the_dialog(page, wiki):
     """Two people on one task: Save sends the fields changed in this dialog,
     so what someone else changed meanwhile stays; a text both changed is
@@ -1061,12 +1079,13 @@ def test_completed_link_opens_completed_and_goes_back(page, wiki):
     link.click()
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Open"])
 
-    # Completed survives a reload, like any view; Tab from there goes to the
-    # first tab.
+    # Completed survives a reload, like any view; Tab from there (a task
+    # selected: on a page that embeds a list Tab is otherwise the page's)
+    # goes to the first tab.
     link.click()
     page.reload()
     expect(card(page, "Done two")).to_be_visible()
-    page.locator("body").click()
+    card(page, "Done two").locator(".task-title").click()
     page.keyboard.press("Tab")
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Open"])
 

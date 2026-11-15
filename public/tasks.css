@@ -103,7 +103,7 @@
 /* A pinned pill being dragged to another place in the row. */
 .tasks-places[data-reorder] .tasks-place[draggable="true"] { cursor: grab; }
 .tasks-places .tasks-place.is-dragging { opacity: .45; }
-@media (max-width: 600px) {
+@media (max-width: 640px) {
   .lists-more { position: static; }
   .lists-more-panel { right: 0; max-width: none; }
 }

@@ -168,7 +168,7 @@
     "orphans": {
      "type": "boolean",
      "default": false,
-     "description": "Only pages no other page links to (the home page, the first pinned task list's page and notes aside): candidates to link from somewhere."
+     "description": "Only pages no other page links to (the home page and notes aside): candidates to link from somewhere."
     },
     "notes": {
      "type": "boolean",

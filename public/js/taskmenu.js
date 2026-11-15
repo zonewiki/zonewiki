@@ -64,6 +64,8 @@ function openTaskMenu(id, anchor, at) {
     task.recurrence && ['skip', 'Skip this occurrence'],
     ['importance', 'Importance…'],
     ['list', 'Move to list…'],
+    // With users, a shared task: who has it (a private one is its user's).
+    document.body.dataset.users === '1' && !task.private && ['assign', 'Assign…'],
     ['wontdo', "Won't do"],
     ['copylink', 'Copy link'],
     ['select', 'Select several'],
@@ -147,6 +149,7 @@ function runTaskAction(task, action, anchor) {
       break;
     }
     case 'list':     app.openBulkListModal([id]); break;
+    case 'assign':   app.openBulkAssignModal([id]); break;
     case 'wontdo':   app.markWontDo(id); break;
     case 'reopen':
       app.updateTask(id, { completed: false });

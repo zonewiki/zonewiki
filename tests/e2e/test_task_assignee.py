@@ -751,3 +751,21 @@ def test_the_closed_view_shows_a_page_and_asks_for_more(alice):
     expect(cards).to_have_count(26)
     field.fill("Done 07")
     expect(cards).to_have_count(1)
+
+
+def test_a_cards_menu_assigns(alice):
+    """Assign… is in a shared task's own menu too, not only on a selection;
+    a private task, which is its user's, has none."""
+    new(alice, "Shared work")
+    new(alice, "My own", list=None)
+    alice.goto("/tasks?view=open&plan=off")
+    card(alice, "My own").locator(".task-title").click(button="right")
+    expect(alice.get_by_role("menuitem", name="Move to list…")).to_be_visible()
+    expect(alice.get_by_role("menuitem", name="Assign…")).to_have_count(0)
+    alice.keyboard.press("Escape")
+    card(alice, "Shared work").locator(".task-title").click(button="right")
+    alice.get_by_role("menuitem", name="Assign…").click()
+    dialog = alice.locator(".bulk-assign-modal")
+    expect(dialog).to_be_visible()
+    dialog.locator(".bulk-list-row", has_text="@bob").click()
+    wait_for_assignee(alice, "Shared work", "bob")

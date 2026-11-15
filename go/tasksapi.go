@@ -698,7 +698,7 @@ func apiBatchComplete(w http.ResponseWriter, r *http.Request) error {
 	}
 	msg := "Reopen tasks"
 	if wontDo {
-		msg = "Abandon tasks"
+		msg = "Close tasks as won't do"
 	} else if markCompleted {
 		msg = "Complete tasks"
 	}

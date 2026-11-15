@@ -142,8 +142,11 @@ document.addEventListener('keydown', async e => {
     return;
   }
 
-  // Tab/Shift+Tab cycles the views
-  if (e.key === 'Tab') {
+  // Tab/Shift+Tab cycles the views: on the Tasks page, where the list is the
+  // page, and on any page while a task is selected or the focus is in the
+  // list (on one of its tabs). A page that only embeds a list keeps Tab for
+  // what it is everywhere: the next link or field.
+  if (e.key === 'Tab' && (location.pathname === '/tasks' || st.selectedId || app.appEl.contains(document.activeElement))) {
     e.preventDefault();
     // Only the tabs: Closed (reached by its link) is not in the cycle,
     // and from there Tab goes to the first tab, Shift+Tab to the last.
