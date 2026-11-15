@@ -764,7 +764,7 @@ func (s *Store) writeOpenLocked(user string, tasks []*Task) ([]string, error) {
 	}
 	var changed []string
 	for _, o := range s.Owners(user) {
-		more, err := s.writeOpenOf(o, split[o], false)
+		more, err := s.writeOpenOf(o, split[o], false, true)
 		changed = append(changed, more...)
 		if err != nil {
 			return changed, err
@@ -777,8 +777,9 @@ func (s *Store) writeOpenLocked(user string, tasks []*Task) ([]string, error) {
 // changed (reformat: also when it is in another format); returns the paths
 // written and removed. A list's file left without a task is removed, and
 // its folder when nothing else is in it; the file of the tasks in no list
-// stays, empty (the shared one is written even when it wasn't there).
-func (s *Store) writeOpenOf(owner string, tasks []*Task, reformat bool) ([]string, error) {
+// stays, empty (create: the shared one is written even when it wasn't
+// there, as a user's write does; not what only files tasks where they belong).
+func (s *Store) writeOpenOf(owner string, tasks []*Task, reformat, create bool) ([]string, error) {
 	var changed []string
 	order, in := s.byDir(owner, tasks)
 	// A list's emptied file goes last: a task that left it for another
@@ -802,7 +803,7 @@ func (s *Store) writeOpenOf(owner string, tasks []*Task, reformat bool) ([]strin
 		if err != nil {
 			return changed, err
 		}
-		if rerr == nil && string(raw) == text || errors.Is(rerr, os.ErrNotExist) && (owner != "" || reformat) && len(in[d]) == 0 {
+		if rerr == nil && string(raw) == text || errors.Is(rerr, os.ErrNotExist) && (owner != "" || !create) && len(in[d]) == 0 {
 			continue
 		}
 		if err := writeTasks(p, in[d], text); err != nil {
@@ -990,7 +991,7 @@ func (s *Store) ArchiveOldClosed() {
 				filed = filed || filepath.Dir(f.Path) != s.dirOf(o, t.List)
 			}
 		}
-		more, _ := s.writeOpenOf(o, active, true)
+		more, _ := s.writeOpenOf(o, active, true, false)
 		changed = append(changed, more...)
 		more, _ = s.writeClosed(o, closed, true)
 		changed = append(changed, more...)
@@ -1033,7 +1034,7 @@ func (s *Store) FileByListLocked(owners []string) []string {
 		if err != nil {
 			continue
 		}
-		more, _ := s.writeOpenOf(o, active, false)
+		more, _ := s.writeOpenOf(o, active, false, false)
 		changed = append(changed, more...)
 		more, _ = s.writeClosed(o, closed, false)
 		changed = append(changed, more...)

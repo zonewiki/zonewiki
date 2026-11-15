@@ -298,7 +298,7 @@ def test_what_a_visitor_never_writes(client, wiki, edit):
             ("GET", "/page/_deleted", {}), ("GET", "/admin", {}), ("GET", "/assistant", {}), ("GET", "/private", {})):
         assert to_login(client.open(path, method=method, headers=HOST, **kwargs)), path
     assert (wiki / "garden.md").exists() and not (wiki / "_assets/x.png").exists()
-    assert TASKWORD in (wiki / "_tasks/tasks.json").read_text() and git(wiki, "rev-parse", "HEAD") == head
+    assert TASKWORD in "".join(p.read_text() for p in (wiki / "_tasks").rglob("tasks.json")) and git(wiki, "rev-parse", "HEAD") == head
 
 
 def test_a_visitor_learns_no_users_name(client, wiki, edit):
