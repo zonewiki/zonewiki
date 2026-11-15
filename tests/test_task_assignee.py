@@ -753,7 +753,7 @@ class TestASharedTaskIsInAList:
         assert tasks["Stray"]["list"] == "general" and tasks["Stray"]["private"] is False
         assert tasks["Hers"]["private"] is True and "list" not in tasks["Hers"]
         registry = json.loads((wiki_dir / "_tasks/lists.json").read_text())
-        assert registry["version"] == 2 and "general" in [l["name"] for l in registry["lists"]] and "general" in registry["pinned"]
+        assert registry["version"] == 3 and "general" in [l["name"] for l in registry["lists"]] and "general" in registry["pinned"]
         assert [t["id"] for t in alice.get("/api/tasks/export?list=inbox", headers=HOST).get_json()["tasks"]] == [mine["id"]]
         assert [t["id"] for t in alice.get("/api/tasks/export?list=general", headers=HOST).get_json()["tasks"]] == ["stray-1"]
 

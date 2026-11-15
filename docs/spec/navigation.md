@@ -91,8 +91,8 @@ There is still no nav bar: the modules sit where the eye already goes.
   (Until 2026-11 the row had New note and Add a task icons between the eye and Search.) The pill has a fixed width, so the row's width (`--top-actions-w`, which the breadcrumb's padding and the status badges' position use) doesn't depend on the font; its border ends on the content's right edge.
   Hidden at ≤640px.
   They replaced the round New and Search buttons in the bottom-right corner, so desktop toasts and Sign out have the bottom corners to themselves again.
-- **New task from anywhere** (`openDefaultTask` in `js/actions.js`: `c t`, and the phone's **Task** tab): the task goes into your Inbox and starts today, so it is on My tasks' Focus.
-  On a page that shows My tasks or the Inbox it clicks that embed's own **+ New** (so the view's dates apply, e.g. Focus's today);
+- **New task from anywhere** (`openDefaultTask` in `js/actions.js`: `c t`, and the phone's **Task** tab): the task goes into your Inbox and starts today, so it is on My tasks' Today.
+  On a page that shows My tasks or the Inbox it clicks that embed's own **+ New** (so the view's dates apply, e.g. Today's today);
   anywhere else it opens a task list app's edit modal for a task in the Inbox (`openEditModal` takes `list`, `tags`, which replace the filter's even when empty, `keep` and `start_date`): the page's own task app (an embed, `/tasks`, the editor's hidden one),
   or on a page without one a hidden one loaded on demand (`loadHeadlessTasks`: `GET /api/tasks/headless`, the headless embed without its scripts, then `tasks-core.js` and `tasks.js`; once per page),
   so you stay on the page and a toast says "Added “…” to your tasks".
@@ -107,7 +107,7 @@ There is still no nav bar: the modules sit where the eye already goes.
   icon over label,
   the current module in the accent green,
   each at least 44px.
-  The Tasks tab's counts stand right of its icon, due above Focus, centred on the icon; they may reach a little past the tab's edge, clear of the next tab's icon, and the tabs keep one width, the icons evenly spaced.
+  The Tasks tab's counts stand right of its icon, due above Today, centred on the icon; they may reach a little past the tab's edge, clear of the next tab's icon, and the tabs keep one width, the icons evenly spaced.
   `views.page(…, action_buttons=False)` omits it, and the editor and the login page leave it out.
   On phones it is hidden via CSS `:has()` whenever an input/textarea/select has focus, because the on-screen keyboard owns the bottom edge then, and `main` gets extra bottom space so the bar never covers the page's end.
   A tap on the bar acts on its `touchend` (`item.click()`) and cancels the browser's own click (`preventDefault`; a long press over 500ms or a move over 10px is left to the browser).
@@ -116,9 +116,9 @@ There is still no nav bar: the modules sit where the eye already goes.
 - **Task** (`js/actions.js`): in the tasks module it clicks the task app's own **+ New** (`#task-add-btn`, a pinned embed's (`data-pinned`) on a page with one), so the view's tags and dates apply; elsewhere it adds a task to your tasks as `c t` does (`openDefaultTask`).
   A new page comes from a link to it (a missing wikilink opens its editor, `docs/spec/rendering.md`), so every page is linked from somewhere; or from a note and its **Move to wiki**, which asks what links to it.
   There is no New page button or shortcut (Ctrl+N was one until 2026-10, but browsers keep it for a new window).
-- **Counts**: the Tasks links (switcher and tab bar) carry two counts (`.module-counts`): tasks due today or overdue (`.module-due`, orange) and tasks in Focus (`.module-focus`, muted; `TasksCore.isFocus`: started, or due today or earlier),
+- **Counts**: the Tasks links (switcher and tab bar) carry two counts (`.module-counts`): tasks due today or overdue (`.module-due`, orange) and tasks in Today (`.module-focus`, muted; `TasksCore.isFocus`: started, or due today or earlier),
   each hidden at zero,
-  with a tooltip like "Tasks: 5 in Focus · 1 overdue · 1 due today".
+  with a tooltip like "Tasks: 5 in Today · 1 overdue · 1 due today".
   `taskCounts()` counts My tasks (`mineFilter`), which is every task in a wiki without lists.
   With users a third count, filled in the accent (`.module-new`), says how many tasks someone else gave you that you haven't touched yet (Assigning tasks in `docs/spec/users.md`): such a task often has no date and is in neither of the others.
   The server renders them into the page (`taskCounts`, once per request, into `partials/modules.html`), since filling them in by a fetch after the page had painted made the link change width on every load (flicker);

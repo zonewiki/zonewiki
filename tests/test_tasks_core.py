@@ -142,7 +142,7 @@ class TestBoardBuckets:
     def test_past_start_date_is_on_today_not_overdue(self):
         # Regression: a start date in the past put the task under Overdue,
         # though the card itself says "since …" without any warning. It is
-        # in Focus, today's load: on Today, carried over.
+        # for today, today's load: on Today, carried over.
         by_key = self._by_key([{"id": "1", "title": "x", "start_date": "2026-07-01"}])
         assert by_key[TODAY] == ["1"]
         assert "overdue" not in by_key and "carried" not in by_key

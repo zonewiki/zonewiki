@@ -76,7 +76,7 @@ def test_a_tasks_id_is_text_on_its_card(page, wiki):
         "id": evil, "title": "Odd id", "created_at": "2026-01-01T10:00:00"}, {
         "id": "done-1", "title": "Odd day", "created_at": "2026-01-01T10:00:00",
         "due_date": "<i id=evil2>", "start_date": "<i id=evil3>"}]))
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     expect(page.locator(".task-item")).to_have_count(2)
     expect(page.locator("#evil, #evil2, #evil3")).to_have_count(0)
     assert page.locator(".task-item").first.get_attribute("data-id") in (evil, "done-1")

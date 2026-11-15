@@ -140,6 +140,7 @@ Auth is optional (a password, or users; see Key Constraints).
 │   ├── tasks.go            # Task writes (create, change, comment, tag, delete), as functions the routes and the MCP tools share
 │   ├── tasklists.go        # Task lists: the lists a user sees (taskLists, refs), their pins, My tasks (the home view's rule, mineFilter, and its settings), and the list operations (make, rename, delete, share, pin, settings)
 │   ├── listsmigrate.go     # The lists' migration at start: lists that pages declared and pins in embeds, taken over into the registries, once
+│   ├── viewsmigrate.go     # The views' names of 2026-11 (view=today|open|closed, group=): embeds and registries from before rewritten at start, once
 │   ├── tasksapi.go         # The /api/tasks routes
 │   ├── tasksembed.go       # The [[tasks:]] embed: its HTML, its settings dialog, the counts the Tasks links show
 │   ├── tasklogic.go        # What Zone does with tasks beyond keeping them: a series' next occurrence, completing, history, comments, backlinks, [[task:…]] references; taskFiles, the store, wired to the wiki here

@@ -43,26 +43,24 @@ class TestListSettings:
         assert "task-settings" not in client.get("/api/tasks/headless", headers=HOST).get_data(as_text=True)
 
 
-class TestPlanParam:
-    def test_plan_reaches_the_app(self, client, wiki_dir):
-        assert 'data-init-view="" data-init-group="none"' in preview(client, "[[tasks: plan=off]]\n")
-        assert 'data-init-view="" data-init-group=""' in preview(client, "[[tasks: plan=maybe]]\n")
-        # view=open has always been the one list, view=plan the board; plan= wins.
-        assert 'data-init-view="open" data-init-group="none"' in preview(client, "[[tasks: view=open]]\n")
-        assert 'data-init-view="plan" data-init-group="day"' in preview(client, "[[tasks: view=open plan=on]]\n")
-        assert 'data-init-view="open" data-init-group="none"' in preview(client, "[[tasks: view=plan plan=off]]\n")
-        assert 'data-init-view="focus" data-init-group="none"' in preview(client, "[[tasks: view=focus plan=off]]\n")
-
-    def test_group_says_what_the_open_tab_shows(self, client, wiki_dir):
-        """group= (none, day, person, list) took over from plan=, which is
-        still read; with both, group= counts."""
+class TestViewAndGroup:
+    def test_view_says_the_tab_and_group_what_the_open_tab_shows(self, client, wiki_dir):
+        """view= (today, open, closed) says which tasks, group= (none, day,
+        person, list) how the Open tab shows them; each reaches the app as
+        written, and neither says anything of the other."""
         assert 'data-init-view="" data-init-group="person"' in preview(client, "[[tasks: group=person]]\n")
         assert 'data-init-view="" data-init-group=""' in preview(client, "[[tasks: group=week]]\n")
-        assert 'data-init-view="plan" data-init-group="list"' in preview(client, "[[tasks: view=open group=list]]\n")
-        assert 'data-init-view="open" data-init-group="none"' in preview(client, "[[tasks: view=plan group=none]]\n")
-        assert 'data-init-view="plan" data-init-group="person"' in preview(client, "[[tasks: view=plan group=person plan=off]]\n")
-        assert 'data-init-view="focus" data-init-group="day"' in preview(client, "[[tasks: view=focus group=day]]\n")
-        assert 'data-init-view="plan" data-init-group=""' in preview(client, "[[tasks: view=plan]]\n")
+        assert 'data-init-view="open" data-init-group=""' in preview(client, "[[tasks: view=open]]\n")
+        assert 'data-init-view="open" data-init-group="list"' in preview(client, "[[tasks: view=open group=list]]\n")
+        assert 'data-init-view="open" data-init-group="none"' in preview(client, "[[tasks: view=Open group=NONE]]\n")
+        assert 'data-init-view="today" data-init-group="day"' in preview(client, "[[tasks: view=today group=day]]\n")
+
+    def test_the_names_of_before_are_unknown(self, client, wiki_dir):
+        """view=focus, view=plan and plan=on|off said this until 2026-11: a
+        wiki from then is rewritten when Zone starts (go/viewsmigrate.go),
+        and from then on they are names no view has."""
+        for old in ("view=focus", "view=plan", "plan=off", "plan=on", "view=plan plan=off"):
+            assert 'data-init-view="" data-init-group=""' in preview(client, f"[[tasks: {old}]]\n"), old
 
 
 class TestSave:
@@ -92,7 +90,7 @@ class TestSave:
     def test_bad_values_and_pages(self, client, wiki_dir):
         path = write_page(wiki_dir, "lists", "[[tasks:]]\n")
         # (pin is no param: a pin is the user's, of a list.)
-        for bad in ({"view": "week"}, {"limit": "0"}, {"tag": "a]] x"}, {"keep": "1"}, {"list": "other"}, {"plan": "yes"}, {"group": "week"}, {"pin": "1"}):
+        for bad in ({"view": "week"}, {"limit": "0"}, {"tag": "a]] x"}, {"keep": "1"}, {"list": "other"}, {"plan": "off"}, {"view": "focus"}, {"group": "week"}, {"pin": "1"}):
             resp = save(client, page="lists", index=0, was="", set=bad)
             assert resp.status_code == 400 and resp.get_json()["error"], bad
         assert save(client, page="nope", index=0, was="", set={"view": "open"}).status_code == 404
@@ -103,10 +101,10 @@ class TestSave:
         make_list(client, "shop", headers=HOST)
         text = "# Lists\n\n[[tasks: list=shop view=open]]\n"
         path = write_page(wiki_dir, "lists", text)
-        resp = save(client, list="Shop", set={"limit": "5", "labels": "To_buy,Cart", "keep": "yes", "new": "#weekly", "plan": "off"})
+        resp = save(client, list="Shop", set={"limit": "5", "labels": "To_buy,Cart", "keep": "yes", "new": "#weekly", "group": "none"})
         assert resp.status_code == 200 and resp.get_json() == {"ok": True}
         registry = wiki_dir / "_tasks" / "lists.json"
-        assert '    {"name": "shop", "limit": "5", "plan": "off", "keep": "1", "labels": "To_buy,Cart", "new": "weekly"}\n' in registry.read_text()
+        assert '    {"name": "shop", "limit": "5", "group": "none", "keep": "1", "labels": "To_buy,Cart", "new": "weekly"}\n' in registry.read_text()
         assert path.read_text() == text             # no page is written
         # Wherever the list shows: its page, with the page's own tab, and /tasks?list=.
         for url in ("/page/lists", "/tasks?list=shop"):
@@ -116,7 +114,7 @@ class TestSave:
         assert 'data-init-view="open" data-init-group="none"' in client.get("/page/lists", headers=HOST).get_data(as_text=True)
         # "" takes a setting out; hiding in sharing mode is one too.
         assert save(client, list="shop", set={"limit": "", "noshare": "1"}).status_code == 200
-        assert '{"name": "shop", "plan": "off", "keep": "1", "labels": "To_buy,Cart", "new": "weekly", "noshare": "1"}' in registry.read_text()
+        assert '{"name": "shop", "group": "none", "keep": "1", "labels": "To_buy,Cart", "new": "weekly", "noshare": "1"}' in registry.read_text()
         # What is no setting of a list, and a list that isn't there.
         before = registry.read_text()
         for bad in ({"tag": "x"}, {"assignee": "me"}, {"pin": "1"}, {"limit": "0"}, {"list": "other"}, {"keep": "maybe"}):
@@ -132,9 +130,9 @@ class TestSave:
         assert '  "all": {"view": "open", "limit": "4", "labels": "Backlog,Now"}\n' in registry.read_text()
         html = client.get("/tasks", headers=HOST).get_data(as_text=True)
         assert 'data-settings-raw="view=open limit=4 labels=Backlog,Now"' in html
-        assert 'data-init-view="open" data-init-group="none" data-init-limit="4"' in html and ">Backlog</button>" in html
+        assert 'data-init-view="open" data-init-group="" data-init-limit="4"' in html and ">Backlog</button>" in html
         # Saved from what it was; a filter isn't All tasks'.
-        assert save(client, all=True, was="", set={"view": "focus"}).status_code == 409
+        assert save(client, all=True, was="", set={"view": "today"}).status_code == 409
         assert save(client, all=True, was="view=open limit=4 labels=Backlog,Now", set={"tag": "a"}).status_code == 400
         assert save(client, all=True, was="view=open limit=4 labels=Backlog,Now", set={"view": "", "limit": ""}).status_code == 200
         assert '  "all": {"labels": "Backlog,Now"}\n' in registry.read_text()
@@ -153,14 +151,52 @@ def test_a_save_is_one_commit(client, git_wiki_dir):
                               text=True, check=True, env=settings.GIT_ENV).stdout.split()
 
     write_page(git_wiki_dir, "lists", "[[tasks: tag=a]]\n")
-    assert save(client, page="lists", index=0, was="tag=a", set={"plan": "off"}).status_code == 200
+    assert save(client, page="lists", index=0, was="tag=a", set={"group": "none"}).status_code == 200
     assert " ".join(log()).startswith("Change the task list's settings on lists lists.md")
-    assert save(client, all=True, was="", set={"plan": "off"}).status_code == 200
+    assert save(client, all=True, was="", set={"group": "none"}).status_code == 200
     assert " ".join(log()).startswith("Change the settings of All tasks _tasks/lists.json")
     make_list(client, "shop", headers=HOST)
     assert save(client, list="shop", set={"limit": "3"}).status_code == 200
     assert " ".join(log()).startswith("Change the settings of list #shop _tasks/lists.json Create list #shop _tasks/lists.json")
     # Nothing changed: nothing written, no commit.
     head = log()
-    assert save(client, page="lists", index=0, was="tag=a plan=off", set={"plan": "off"}).status_code == 200
+    assert save(client, page="lists", index=0, was="tag=a group=none", set={"group": "none"}).status_code == 200
     assert log() == head
+
+
+def test_a_wiki_from_before_is_taken_over_to_the_views_names(git_wiki_dir, tmp_path_factory):
+    """view=focus, view=plan and plan= of before 2026-11 are rewritten when
+    Zone starts, once, in one commit: embeds on pages and the registries'
+    settings, so that every view shows what it showed; code stays."""
+    import subprocess
+
+    from tests import settings
+    from tests.goserver import GoClient
+    root = git_wiki_dir
+    write_page(root, "home", "# Home\n\n[[tasks: view=focus]]\n\n[[tasks: tag=a view=plan]]\n\n`[[tasks: view=plan]]`\n\n"
+                             "[[tasks: list=shop view=open]]\n\n[[tasks: plan=off labels=A,B,C]]\n")
+    (root / "_tasks").mkdir(exist_ok=True)
+    (root / "_tasks" / "lists.json").write_text(
+        '{"version": 2, "lists": [{"name": "shop", "view": "plan", "plan": "on"}, {"name": "b", "view": "focus"}],'
+        ' "mine": {"view": "open"}, "all": {"plan": "off"}}')
+    git = lambda *args: subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, check=True, env=settings.GIT_ENV).stdout
+    git("add", "-A")
+    git("commit", "-q", "-m", "Before")
+    with GoClient(tmp_path_factory.mktemp("go") / "server.log") as c:
+        c.live.ensure()
+        assert (root / "home.md").read_text() == (
+            "# Home\n\n[[tasks: view=today]]\n\n[[tasks: tag=a view=open group=day]]\n\n`[[tasks: view=plan]]`\n\n"
+            "[[tasks: list=shop view=open group=none]]\n\n[[tasks: labels=A,C group=none]]\n")
+        registry = (root / "_tasks" / "lists.json").read_text()
+        assert '"version": 3' in registry and '{"name": "shop", "view": "open", "group": "day"}' in registry
+        assert '{"name": "b", "view": "today"}' in registry
+        assert '"mine": {"view": "open", "group": "none"}' in registry and '"all": {"group": "none"}' in registry
+        assert git("log", "-1", "--format=%s").strip() == "Name the tasks' views Today and Open"
+        html = c.get("/page/home", headers=HOST).get_data(as_text=True)
+        assert 'data-init-view="today"' in html and 'data-init-view="open" data-init-group="day"' in html
+    # A second start changes nothing; neither does a view=open written since.
+    write_page(root, "later", "[[tasks: view=open]]\n")
+    with GoClient(tmp_path_factory.mktemp("go") / "server.log") as c:
+        c.live.ensure()
+        assert (root / "later.md").read_text() == "[[tasks: view=open]]\n"
+        assert git("log", "-1", "--format=%s").strip() == "Name the tasks' views Today and Open"

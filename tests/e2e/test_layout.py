@@ -195,7 +195,7 @@ def test_view_tab_labels_vertically_centred(new_page, wiki, viewport):
     # the labels sat visibly high (caps 1.3px above centre).
     pg = new_page(viewport=viewport)
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
-    pg.goto("/page/tasks?view=open")
+    pg.goto("/page/tasks?view=open&group=none")
     for label, above, below in pg.evaluate(_TAB_TEXT_GAPS):
         assert abs(above - below) <= 1.0, f"{label}: {above:.1f}px above vs {below:.1f}px below"
 
@@ -222,7 +222,7 @@ def test_board_header_labels_vertically_centred(new_page, wiki, viewport):
     pg.request.post("/api/tasks", data={"title": "Loose"})
     pg.request.post("/api/tasks", data={"title": "Started", "start_date": date.today().isoformat()})
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
-    pg.goto("/page/tasks?view=plan")
+    pg.goto("/page/tasks?view=open&group=day")
     pg.locator(".board-day-divider").first.wait_for()
     rows = pg.evaluate(_BOARD_HEADER_GAPS)
     assert len(rows) >= 9          # with cards (Unplanned, Today) and empty ones
@@ -310,7 +310,7 @@ def test_long_breadcrumb_trail_fits_on_phone(new_page, wiki):
     for i in range(5):
         wiki.write(f"long-{i}", f"# Infrastructure-Troubleshooting{i} Kubernetes\n")
         pg.goto(f"/page/long-{i}")
-    pg.goto("/tasks?view=focus")
+    pg.goto("/tasks?view=today")
     # A phone shows at most 4 pages: the last 3 visited and the current one.
     crumbs = pg.locator(".breadcrumb > a")   # after the module switcher
     expect(crumbs).to_have_count(4)  # 3 pages, current

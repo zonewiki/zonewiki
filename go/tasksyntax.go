@@ -164,8 +164,8 @@ func renameTagInText(text, old, name string) string {
 // Not list=: which list an embed shows is the page's to say, and a list is
 // renamed by renameListOp. A list's own settings are listSettingKeys.
 var (
-	embedSettingKeys = []string{"tag", "assignee", "new", "view", "group", "plan", "limit", "labels"}
-	allSettingKeys   = []string{"new", "view", "group", "plan", "limit", "labels"}
+	embedSettingKeys = []string{"tag", "assignee", "new", "view", "group", "limit", "labels"}
+	allSettingKeys   = []string{"new", "view", "group", "limit", "labels"}
 	embedValueRE     = regexp.MustCompile(`^[^\[\]` + "`" + `]*$`)
 )
 
@@ -190,10 +190,6 @@ func checkEmbedSettings(set map[string]string, keys []string) (map[string]string
 			switch k {
 			case "view":
 				if v = strings.ToLower(v); !slices.Contains(tasksViews, v) {
-					return nil, bad()
-				}
-			case "plan":
-				if v = strings.ToLower(v); v != "on" && v != "off" {
 					return nil, bad()
 				}
 			case "group":
@@ -299,24 +295,21 @@ func setEmbedParams(text string, n int, was string, set map[string]string) (stri
 // section per list (list).
 var tasksGroups = []string{"none", "day", "person", "list"}
 
-// embedGroup: what an embed says its Open tab shows: its group=, else what
-// plan= said until 2026-11 (on: day, off: none; read for good, written no
-// more), "" when it says neither.
+// embedGroup: what a view says its Open tab shows: its group=, "" when it
+// says none (the board by day then). (Until 2026-11 view=open|plan and
+// plan=on|off said it too: migrateViewsLocked rewrote those.)
 func embedGroup(p TasksParams) string {
 	if v := strings.ToLower(strings.TrimSpace(p.Get("group"))); slices.Contains(tasksGroups, v) {
 		return v
 	}
-	switch strings.ToLower(strings.TrimSpace(p.Get("plan"))) {
-	case "on":
-		return "day"
-	case "off":
-		return "none"
-	}
 	return ""
 }
 
-// The tasks' views, by the names [[tasks: view=…]] and ?view= use.
-var tasksViews = []string{"focus", "open", "plan", "closed"}
+// The tasks' views, by the names [[tasks: view=…]] and ?view= use: which
+// tasks a view shows. Today: what is to do now; open: every open task (how,
+// group= says); closed: the closed ones. (Until 2026-11 today was called
+// focus, and plan was the Open tab as a board.)
+var tasksViews = []string{"today", "open", "closed"}
 
 // embedView: the view an embed opens on, "" for the default or an unknown name.
 func embedView(p TasksParams) string {

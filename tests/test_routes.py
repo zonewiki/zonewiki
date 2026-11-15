@@ -109,13 +109,13 @@ class TestViewPage:
         # page says nothing of a list for it, and the views whose New it
         # clicks are My tasks and the Inbox. A page that shows a list is a
         # page like any other.
-        list_page(client, wiki_dir, "tasks", "# Tasks\n\n[[tasks: list=task view=focus pin=1]]\n")
+        list_page(client, wiki_dir, "tasks", "# Tasks\n\n[[tasks: list=task view=today pin=1]]\n")
         write_page(wiki_dir, "other", "# Other\n")
         body = client.get("/page/other", headers=HOST).get_data(as_text=True)
         assert self._tasks_links(body) == ["/tasks?mine=1", "/tasks?mine=1"]
         assert "data-pinned-pages" not in body
         lv = client.get("/tasks?list=task", headers=HOST).get_data(as_text=True)
-        assert 'data-init-view="focus"' in lv and '<body data-module="tasks">' in lv
+        assert 'data-init-view="today"' in lv and '<body data-module="tasks">' in lv
         assert 'data-pinned="1"' not in lv          # the first pinned list takes no new task
         home = client.get("/page/tasks", headers=HOST).get_data(as_text=True)
         assert '<body data-module="wiki">' in home and 'data-pinned="1"' not in home
@@ -2262,7 +2262,7 @@ class TestTasksPage:
 
     def test_does_not_depend_on_pages(self, client, wiki_dir):
         # Embeds elsewhere (even a task list.md) are ordinary pages now.
-        write_page(wiki_dir, "tasks", "# Desk tasks\n\n[[tasks: tag=work]]\n\n[[tasks: view=plan]]\n")
+        write_page(wiki_dir, "tasks", "# Desk tasks\n\n[[tasks: tag=work]]\n\n[[tasks: view=open group=day]]\n")
         body = self.get(client, "?task=abc&view=today")
         assert body.count('class="tasks-app"') == 1
         assert "Desk tasks" not in body   # the page's title: not the view My tasks
@@ -2331,7 +2331,7 @@ class TestTasksPage:
         counts = ('<span class="module-counts"><span class="module-due">1</span>'
                   '<span class="module-focus">2</span><span class="module-new" hidden></span></span>')
         assert body.count(counts) == 2   # switcher and tab bar
-        assert body.count('title="Tasks: 2 in Focus · 1 overdue"') == 2
+        assert body.count('title="Tasks: 2 for today · 1 overdue"') == 2
         # Zero is hidden, not "0".
         client.post("/api/tasks/batch-delete", json={"ids": [t["id"] for t in client.get(
             "/api/tasks", headers=HOST).get_json()]}, headers=HOST)

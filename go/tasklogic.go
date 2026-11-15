@@ -153,7 +153,7 @@ func givenToOthers(user string, open []*Task) int {
 
 // givenHref: the view of what the user gave to others: All tasks, of the
 // tasks from them that are not theirs to do, a section per person.
-const givenHref = "/tasks?view=plan&group=person&from=me&assignee=-me,-none"
+const givenHref = "/tasks?view=open&group=person&from=me&assignee=-me,-none"
 
 // News: what someone else did on a task that user has to do with and
 // hasn't seen: its kind, who did it and when ("" kind: nothing).

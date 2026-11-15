@@ -225,7 +225,7 @@ def test_task_list_asks_what_the_list_shows_and_writes_the_embed(page, wiki):
     expect(field("where")).to_have_text("[[tasks:]]")
     field("list").fill("#Garden work")                                # cleaned as a list's name is
     field("view").select_option("open")
-    expect(field("where")).to_have_text("[[tasks: list=garden-work view=plan]]")   # Open, with Plan
+    expect(field("where")).to_have_text("[[tasks: list=garden-work view=open]]")   # Open, with Plan
     field("group").select_option("none")
     more = lambda name: dialog.locator(".task-add-field", has_text=name)
     more("WIP limit").click()                                         # the rarer fields, asked for
@@ -237,7 +237,7 @@ def test_task_list_asks_what_the_list_shows_and_writes_the_embed(page, wiki):
     field("tag").fill("urgent, -later")
     more("Tab names").click()
     field("label-open").fill("To buy")
-    line = "[[tasks: list=garden-work view=open labels=To_buy limit=5 tag=urgent,-later keep=1]]"
+    line = "[[tasks: list=garden-work view=open group=none labels=To_buy limit=5 tag=urgent,-later keep=1]]"
     expect(field("where")).to_have_text(line)
     dialog.get_by_role("button", name="Insert").click()
     expect(dialog).to_be_hidden()
@@ -297,7 +297,7 @@ def test_task_list_on_an_embeds_line_changes_that_embed(page, wiki):
     field("limit").fill("")
     field("view").select_option("open")
     field("save").click()
-    assert _body(textarea) == ("Intro\n\n  [[tasks: list=shop labels=Catalogue,Shopping view=plan pin=default"
+    assert _body(textarea) == ("Intro\n\n  [[tasks: list=shop labels=Catalogue,Shopping view=open pin=default"
                                " new=food tag=weekly]]\n\nOutro")
 
 

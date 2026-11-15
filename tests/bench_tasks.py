@@ -106,7 +106,7 @@ def team(git_wiki_dir, monkeypatch):
     dump(root / "_tasks/tasks.json", [task(rng, users, lists) for _ in range(OPEN)])
     dump(root / "_tasks/closed.json", [task(rng, users, lists, closed=True) for _ in range(CLOSED)])
     (root / "_tasks/lists.json").write_text(json.dumps(
-        {"version": 2, "lists": [{"name": n} for n in lists], "pinned": lists[:3]}), encoding="utf-8")
+        {"version": 3, "lists": [{"name": n} for n in lists], "pinned": lists[:3]}), encoding="utf-8")
     for u in users:      # everyone's Inbox
         dump(root / f"private/{u}/_tasks/tasks.json", [task(rng, users, lists, private=True) for _ in range(10)])
     (root / "plain.md").write_text("# Plain\n\nNo task list here.\n", encoding="utf-8")

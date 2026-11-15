@@ -256,7 +256,7 @@ const placesNow = () => document.querySelectorAll('.tasks-place[data-place]');
 function taskCountsTitle({ focus, overdue, today, new: fresh }) {
   const parts = [];
   if (fresh > 0) parts.push(`${fresh} update${fresh === 1 ? '' : 's'} for you`);
-  if (focus > 0) parts.push(`${focus} in Focus`);
+  if (focus > 0) parts.push(`${focus} for today`);
   if (overdue > 0) parts.push(`${overdue} overdue`);
   if (today > 0) parts.push(`${today} due today`);
   return parts.length ? `Tasks: ${parts.join(' · ')}` : 'Tasks';

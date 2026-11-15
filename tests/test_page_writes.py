@@ -574,7 +574,7 @@ def test_new_list_makes_a_list_and_no_page(client, wiki):
     before = git(wiki, "rev-parse", "HEAD").strip()
     assert new_list(client, " #Shop  Runs ") == "/tasks?list=shop-runs"   # the list's page; it is pinned
     assert not (wiki / "lists").exists()
-    assert (wiki / "_tasks/lists.json").read_text() == '{\n  "version": 2,\n  "lists": [\n    {"name": "shop-runs"}\n  ],\n  "pinned": ["shop-runs"]\n}\n'
+    assert (wiki / "_tasks/lists.json").read_text() == '{\n  "version": 3,\n  "lists": [\n    {"name": "shop-runs"}\n  ],\n  "pinned": ["shop-runs"]\n}\n'
     assert git(wiki, "log", "--format=%s", f"{before}..HEAD").splitlines() == ["Create list #shop-runs"]
     assert git(wiki, "show", "--name-only", "--format=", "HEAD").split() == ["_tasks/lists.json"]
     page = client.get("/tasks?list=shop-runs", headers=HOST).get_data(as_text=True)

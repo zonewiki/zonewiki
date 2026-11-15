@@ -15,23 +15,22 @@ Case doesn't matter (`[[Tasks:]]`), nor a space after the colon (`[[tasks:list=s
 |-----------|--------|---------|-------------|
 | `tag` | comma-separated tags | — | Pre-filters by tag. Comma = AND, pipe `a\|b` = OR, a leading `-` excludes (`tag=work,-mary`). The chips are locked (the page says what it shows); new tasks get the single tags, but a task's tags stay editable. |
 | `assignee` | `me`, a user's name, `none` | — | With users: shows only the tasks assigned to that user; `me` is whoever looks at the page, so one page shows each user their own, and `none` those no one has (Assigning tasks in `docs/spec/users.md`). Joined as `tag` is: `a\|b` either's, a leading `-` not theirs (`assignee=-anna`). The chip is locked, and a new task here is assigned to the one user it names. Without users it filters nothing. |
-| `view` | `focus`, `open`, `plan`, `closed` | Focus (or the tab remembered this session) | Opens on that tab whenever the page is opened; a URL `?view=` overrides it, and a reload stays on the tab it showed (see Views). Case doesn't matter; any other name (`views`) opens the default. |
-| `group` | `none`, `day`, `person`, `list` | `day` | What the Open tab shows (see Views): one list (`none`), the Plan board by start date (`day`), a section per assignee (`person`) or per list (`list`). With `view=open` or `view=plan` it decides which opens (`view=open` alone is the list, `view=plan` the board by day, as always). The control beside the tabs still changes it, for the browser tab. A view that doesn't offer the one named (By person without users) shows Plan. |
-| `plan` | `on`, `off` | — | What `group` said until 2026-11: `on` is `group=day`, `off` is `group=none`. Read for good (`embedGroup`), written no more; with both, `group` counts. |
-| `limit` | integer 1–99 | none | WIP limit: Focus warns at this many tasks, and Plan day sections with at least this many are flagged amber. `?limit=N` works on `/tasks`. |
-| `list` | a list's name | — | Shows that list: the tasks in it, with the list's own settings (see Lists). A new task made there goes into it. On a shared page the name is the shared list; on a page in your private folder your own list of that name first. A name no list has shows a line that says so, with a button that makes the list. `list=inbox` shows the Inbox, the tasks in no list: with users whoever looks their own (Lists → The Inbox; `list=none` says the same). Cleaned like tags, lowercased (`cleanList`). With `list=`, only `view`, `tag` and `assignee` of the embed count: they say how this page looks at the list; what the list is (`limit`, `plan`, `keep`, `labels`, `new`) is set on the list. |
-| `mine` | `1` | — | Shows My tasks (Lists → My tasks): for whoever looks, their own. A new task made there goes into the Inbox. The embed's `view`, `plan`, `limit`, `labels`, `tag` and `assignee` count, as for an embed of no list. |
+| `view` | `today`, `open`, `closed` | Today for what is yours to do, Open for a place you look into (see Views; or the tab remembered this session) | Which tasks: opens on that tab whenever the page is opened; a URL `?view=` overrides it, and a reload stays on the tab it showed (see Views). `closed` is the Closed view, which has no tab. Case doesn't matter; any other name (`views`, and `focus` or `plan`, the names of before 2026-11) opens the default. |
+| `group` | `none`, `day`, `person`, `list` | `day` | How the Open tab shows its tasks (see Views): one list (`none`), the Plan board by start date (`day`), a section per assignee (`person`) or per list (`list`). It says nothing of the tab: `view=open` alone opens the Open tab as `group=` says, or by day. The control beside the tabs still changes it, for the browser tab. A view that doesn't offer the one named (By person without users) shows Plan. |
+| `limit` | integer 1–99 | none | WIP limit: Today warns at this many tasks, and Plan day sections with at least this many are flagged amber. `?limit=N` works on `/tasks`. |
+| `list` | a list's name | — | Shows that list: the tasks in it, with the list's own settings (see Lists). A new task made there goes into it. On a shared page the name is the shared list; on a page in your private folder your own list of that name first. A name no list has shows a line that says so, with a button that makes the list. `list=inbox` shows the Inbox, the tasks in no list: with users whoever looks their own (Lists → The Inbox; `list=none` says the same). Cleaned like tags, lowercased (`cleanList`). With `list=`, only `view`, `group`, `tag` and `assignee` of the embed count: they say how this page looks at the list; what the list is (`limit`, `keep`, `labels`, `new`) is set on the list. |
+| `mine` | `1` | — | Shows My tasks (Lists → My tasks): for whoever looks, their own. A new task made there goes into the Inbox. The embed's `view`, `group`, `limit`, `labels`, `tag` and `assignee` count, as for an embed of no list. |
 | `keep` | `1`/`true`/`yes` | — | New tasks created in the embed are keep tasks (the edit modal's checkbox starts checked), e.g. a shopping list of staples. For a list, set on the list (List settings…). |
 | `pin` | | — | Means nothing anymore: a pin is of a list and the user's own (see Lists → Pins). Until 2026-11 it pinned the embed's list; the migration moved those pins and took `pin=` out of the pages. |
 | `new` | tags, comma-separated | — | The tags a new task here gets, in place of the filter's single tags. For a list, set on the list. |
-| `labels` | up to 2 comma-separated names | `Open,Focus` | The embed's own names for the tabs, in on-screen order, e.g. `labels=Catalogue,Shopping` for a shopping list (three names, from when Plan was a tab: the first and the last count). Only the words change: views, `view=` values and links keep their names. An empty entry keeps the default, `_` stands for a space (params split on whitespace). Rendered into the tab buttons by `buildTasksEmbed`; `tasks.js` reads them back (`tabLabel`) for the "← Back to …" link, the limit warning and the ⟲ tooltip. |
+| `labels` | up to 2 comma-separated names | `Open,Today` | The embed's own names for the tabs, in on-screen order, e.g. `labels=Catalogue,Shopping` for a shopping list. Only the words change: views, `view=` values and links keep their names. An empty entry keeps the default, `_` stands for a space (params split on whitespace). Rendered into the tab buttons by `buildTasksEmbed`; `tasks.js` reads them back (`tabLabel`) for the "← Back to …" link, the limit warning and the ⟲ tooltip. |
 
 ```markdown
 [[tasks:]]
-[[tasks: tag=urgent view=plan]]
+[[tasks: tag=urgent view=open group=day]]
 [[tasks: view=open]]
 [[tasks: list=groceries tag=weekly]]
-[[tasks: view=focus limit=5]]
+[[tasks: view=today limit=5]]
 [[tasks: list=groceries view=open]]
 [[tasks: tag=staple keep=1 labels=Catalogue,Shopping]]
 [[tasks: tag=work group=none]]
@@ -187,7 +186,7 @@ Recurring instances keep the gap between the two dates, but a new instance's sta
 | `start_date` | `"YYYY-MM-DD"` / `null` | Start date (see Dates) |
 | `created_at` | ISO datetime | |
 | `closed_at` | ISO datetime / `null` | |
-| `sort_order` | number / `null` | Position in the Sorted section (Open's and Focus's, and inside Plan's days); `null` = Unsorted. Focus and Plan have no order of their own. |
+| `sort_order` | number / `null` | Position in the Sorted section (Open's and Today's, and inside Plan's days); `null` = Unsorted. Today and Plan have no order of their own. |
 | `recurrence` | `{ type, interval, from, day?, lead? }` / `null` | `type`: `daily`/`weekly`/`monthly`/`yearly`; `interval` 1–999 (`recIntervalMax`). Driven by the primary date (`due_date`, else `start_date`). `from`: `"due"` (default, calendar-aligned) or `"completion"`. `day` (monthly/yearly) is the series' day of month, so Jan 31 → Feb 28 → Mar 31; kept on re-save unless the type changes; moving the primary date re-anchors it, however it is moved (edit modal, date picker, a drag onto a day, MCP). An undo that moves a date back sends the old `recurrence` whole (`PUT`/`batch-update` take it, `cleanRecurrence`, applied after the date rules), so the series keeps its `day` and `lead`. `lead` is the start→due gap, stored only while a spawned start was clamped to today; editing either date drops it, an unchanged modal re-save keeps it. A keep task never has one (`keep` clears it). |
 | `spawned_from` | string / `null` | Recurring instance: id of the completed task that spawned it, so undoing the completion removes exactly this instance |
 | `wont_do` | bool | Abandoned: archived like a completed task, shown with "✗ won't do", never spawns a recurring instance |
@@ -199,8 +198,12 @@ Recurring instances keep the gap between the two dates, but a new instance's sta
 
 ### Views
 
-A segmented control (`.view-tabs`, one `<button data-view>` each) in the order **Open · Focus** (`data-view` `open`/`focus`).
-The Open tab shows its tasks one of a few ways (`activeView` and `st.cut` in `tasks.js`): as one list (`open`), or in sections (`plan`, the board): by start date, by person or by list.
+**A view says which tasks it shows and how the Open tab shows them**, and has one name for each: `view=` is `today` (what is to do now), `open` (every open task) or `closed`; `group=` is `none`, `day`, `person` or `list`. These are the names in embeds, in links (`/tasks?view=open&group=person`), in the registries and in the settings dialog.
+(Until 2026-11 there were four: `view=focus|open|plan`, where `open` and `plan` also said how Open showed its tasks, `group=`, and `plan=on|off` from before that. A wiki from then is taken over once, when Zone starts (`migrateViewsLocked` in `go/viewsmigrate.go`, after the lists' migrations; one commit, "Name the tasks' views Today and Open"): each `[[tasks: …]]` on a page and each registry's settings are rewritten so that every view shows what it showed (`view=focus` is `view=today`; `view=plan` is `view=open group=day`; `view=open`, which was the one list, is `view=open group=none`; `plan=on|off` is `group=day|none`; of three `labels` the first and the last stay), and the registries say `version` 3; a wiki without a registry keeps a mark in Zone's folder. From then on the old names are no view's: a link with `view=focus` or `view=plan` opens the default tab.)
+In the browser a view is kept by what it draws (`st.activeView` in `tasks.js`: `focus`, `open` the one list, `plan` the board, `closed`); `namedView` turns the names into that where a page opens.
+
+A segmented control (`.view-tabs`, one `<button data-view>` each) in the order **Open · Today** (`data-view` `open`/`focus`).
+The Open tab shows its tasks one of a few ways (`activeView` and `st.cut` in `tasks.js`): as one list, or in sections (the board): by start date, by person or by list.
 The control right after the tabs picks one (`.tasks-cut`, a segmented control of `<button data-group>`, the current one `aria-pressed`; outside the toolbar: it modifies the Open tab;
 shown on the Open tab;
 **d** goes through its choices;
@@ -218,7 +221,7 @@ A control of named choices rather than a dropdown: each is one click, the one sh
 (Until 2026-11 it was a switch, Plan, on or off.)
 Its default is the view's `group=` (Plan without it; `data-init-group`), set in the settings dialog (The Open tab shows).
 A choice is remembered for the browser tab only (`sessionStorage` `zone-tasks-group:<path>|<list>|<tag>|<instance>`: `list`, `days`, `person` or `lists`), as the active tab is, so a fresh load is back at the default, and the Open tab (a click, Tab) opens it (`tabView`, `openGroup`); one the view doesn't offer is Plan (`groupsOffered`, `defaultGroup`).
-(Until 2026-11 the flip was kept in `localStorage` for good, and there was no default to set.) The views keep their names, so `?view=plan` / `view=plan` open the board by day and `view=open` the List, as they always did.
+(Until 2026-11 the flip was kept in `localStorage` for good, and there was no default to set.)
 On a phone the control shares the tabs' row while it has two choices and takes a row of its own with more (`.tasks-cut--more`).
 
 **By person and By list are the board with another key** (`TasksCore.personBuckets`, `listBuckets`; `boardBuckets` in `tasks.js` picks by `st.cut`): the same sections with counts, folding, Unsorted and Sorted labels, the manual order inside a section, Order's sorts and the 200-card window; a section's header says how many of its tasks are overdue, in red, with their list on a click.
@@ -237,10 +240,12 @@ What is the day's alone stays the day's: the WIP limit's flag, the due and carri
   A card there has no list chip.
 
 (Plan was a tab of its own until 2026-10; with every section in the manual order and labelled Unsorted/Sorted, it had become Open grouped by day, and the List what's left of Open: ranking across days, and every new task in one Unsorted list.) **Tab**/**Shift+Tab** cycle the tabs: on the Tasks page, and on any page while a task is selected or the focus is in the list; a page that only embeds a list keeps Tab for the next link or field (until 2026-11 a list took it wherever the focus was).
-Initial view, when a page is opened: URL `?view=` > embed `view=` > tab remembered in `sessionStorage` > the view's default: **Open for a shared list** (with users: a team opens its list for the backlog and what no one has, which Focus by its dates leaves out; `data-default-view`, `DefaultView` in `buildTasksEmbed`), Focus for everything else (a list of your own, the Inbox, My tasks, All tasks, any view without users).
+Initial view, when a page is opened: URL `?view=` > embed `view=` > tab remembered in `sessionStorage` > the view's default (`data-default-view`, `DefaultView` in `buildTasksEmbed`):
+**what is yours to do opens on Today, a place you look into on Open.** Today: My tasks, a list of your own (without users any list), a view of every task on a page, and `/tasks` where the Tasks links go there (a wiki without lists). Open: a shared list (with users: a team opens its list for the backlog and what no one has, which Today by its dates leaves out), the Inbox (what was captured, with or without a date), and All tasks beside My tasks.
+(Until 2026-11 the Inbox and All tasks opened on the tab then called Focus: of six captured tasks the Inbox showed the two with a date.)
 **A reload (F5) keeps the tab**: the tab shown is remembered for the browser tab (`sessionStorage` `zone-tasks-shown:<path>#<instance>`, saved when a tab is chosen and when the page opens on one), and on a reload (`performance`'s navigation type `reload`) it comes first, before the URL's and the embed's `view`.
 The tab the user chose is kept apart (`zone-tasks-tab:<path>#<instance>`): it is what a page without a `view` opens on, and a tab a link chose doesn't become that.
-So a task opened from a link (`/tasks?task=…&view=open`) and then left for Focus is still on Focus after F5; the link's task is then not selected again either.
+So a task opened from a link (`/tasks?task=…&view=open`) and then left for Today is still on Today after F5; the link's task is then not selected again either.
 Opening the page anew (a link, the address bar, another browser tab) follows the URL and the embed as before.
 On phones the control spans the full width.
 
@@ -255,8 +260,8 @@ On phones the control spans the full width.
   On Plan the sections stay (the board still places tasks by start date) and each is sorted inside; Unplanned's overdue and Today's carried-over lists stay by deadline and by start.
   Nothing reorders in a sort, since the manual order is only edited where it is shown: Open doesn't drag, on Plan no section is `ordered`, so a card dropped on another card is a drop on its section (dragging between days still plans), and Ctrl+Shift+↑/↓ only says to press `o` until Manual.
   Each tab's sort is remembered per task list in this browser (`localStorage` `zone-tasks-sort:<path>|<list>|<tag>|<instance>`, JSON `{"open": "due", "plan": "created"}`; missing means manual).
-  Focus has none: it is the day's manual order, worked top to bottom.
-- **Open as the Plan board** (`plan` with `group=day`, called Plan below): a day board grouped by start date (`TasksCore.bucketKey`): Unplanned (no start date), Today (with the tasks **carried over**: started on an earlier day and still open, `TasksCore.isCarried`), Tomorrow, the next weekdays, Later.
+  Today has none: it is the day's manual order, worked top to bottom.
+- **Open as the Plan board** (`view=open` with `group=day`, called Plan below): a day board grouped by start date (`TasksCore.bucketKey`): Unplanned (no start date), Today (with the tasks **carried over**: started on an earlier day and still open, `TasksCore.isCarried`), Tomorrow, the next weekdays, Later.
   Unplanned is first because planning starts there: its cards are dragged onto the days just below, not up past the whole week.
   **Overdue has no section**: a missed deadline shows on the card (red), and the task sits where its start date puts it (an earlier start or today: Today; a later one, accepted in the edit modal: that day).
   Only a deadline today puts a task without a start date on Today.
@@ -283,9 +288,9 @@ On phones the control spans the full width.
   on another day it also starts the task there (`planOnDay`, so a deadline it passes still asks), start date and place in one move.
   Dropped on a Later card from elsewhere, it asks for the date as on Later's heading and lands where Open's order puts it.
   Ctrl+Shift+↑/↓ moves the selection one place within its section, never out of it (`planKeyMove`), crossing the Unsorted/Sorted labels as on Open (below).
-  As on Focus, only the moved tasks change place in the full order and hidden tasks keep theirs (`TasksCore.placeInOrder`).
+  As on Today, only the moved tasks change place in the full order and hidden tasks keep theirs (`TasksCore.placeInOrder`).
   **Unsorted / Sorted labels**: a section that holds both, Unsorted tasks (listed first) and Sorted ones, labels them **Unsorted** and **Sorted** (`.plan-subdivider`), as Open's sections do one level down;
-  a section without Unsorted tasks has no labels, and neither has one with nothing else (until 2026-11 it was headed Unsorted: in a team's list that nobody ranked, every section of By person said so), so most sections show none, and the labels appear where something is still to be ranked among what is (often Today: a task added on Focus starts today, unsorted).
+  a section without Unsorted tasks has no labels, and neither has one with nothing else (until 2026-11 it was headed Unsorted: in a team's list that nobody ranked, every section of By person said so), so most sections show none, and the labels appear where something is still to be ranked among what is (often Today: a task added on Today starts today, unsorted).
   Lighter than the day headings on purpose: as headings, "Sorted" would read as another day.
   Moves follow Open's rules, through Open's own code: `planSectionList` gives the section as Open lists its sections, `[#unsorted, …Unsorted ids, #sorted, …Sorted ids]`, and `applySectionList` / `sectionKeyMove` do the rest.
   So a task dropped among the Unsorted ones leaves the order (Unsorted is newest first, nothing moves within it), one dropped among the Sorted ones takes that place, and no other task is ranked as a side effect;
@@ -296,29 +301,29 @@ On phones the control spans the full width.
   Its header still counts the overdue tasks, most overdue first (Due date sorts the whole board by deadline).
   It used to be sorted by deadline and not reorderable; that hid the backlog's manual ranking where it is planned.
   A drop on a task's own heading does nothing, except Later's, which opens the date picker to choose another later date.
-  **Carried over has no section**: those tasks are on Focus already (a past start means available), so they are today's load, and Today holds them, in Open's order with the rest, so Today reads as Focus does and its count and limit include them.
+  **Carried over has no section**: those tasks are on the Today tab already (a past start means available), so they are today's load, and the board's Today section holds them, in Open's order with the rest, so Today reads as Today does and its count and limit include them.
   A slipped plan stays visible without a section of its own: on Plan a carried-over card's "since Mon" badge is amber (`.task-carried`),
   and Today's header counts them,
   amber,
   before its due count (`· 3 carried`, `.board-day-carried`; `boardBuckets` gives Today its `carried` list, the longest-slipping first; a click lists them, `headerTasksMenu`, shown even folded).
   Committing to one again is optional: dropping it on Today's heading (its own section, but `dropOnBucket` starts it today: `recommit`) or swiping it right starts it today, which takes the badge away.
   (Carried over was a section of its own above Today until 2026-10;
-  it made Today's count and limit leave out part of the day's load and split one list, Focus's, in two.) A drop on a day after the task's deadline (`planOnDay`, through `startsAfterDeadline`;
+  it made Today's count and limit leave out part of the day's load and split one list, Today's, in two.) A drop on a day after the task's deadline (`planOnDay`, through `startsAfterDeadline`;
   not an overdue task dropped on Today) asks "Move the deadline too?" (`#task-deadline-modal`): Move deadline sets start and due to that day,
   with an undo toast restoring both;
   Cancel writes nothing.
   Wiring: `setupBoardDragAndDrop` per card plus list-level handlers attached once.
-- **Focus**: what you're working on now (`TasksCore.isFocus`: `start_date <= today`, or due today/overdue; on the board: Today, its carried-over tasks included, and overdue tasks wherever their start date puts them).
+- **Today** (the tab; called Focus until 2026-11, and `focus` in the code still): what you're working on now (`TasksCore.isFocus`: `start_date <= today`, or due today/overdue; on the board: Today, its carried-over tasks included, and overdue tasks wherever their start date puts them).
   It is Open filtered: the same sections (Unsorted · Sorted) and the same order (`byOpenOrder`);
-  its section headings look the same as the Open list's: the light labels of the Plan board's Unsorted/Sorted (`sectionHTML`: `.plan-subdivider.list-section`, see Sections), so there is one manual order, and ordering on Focus orders Open.
-  That fits a shopping list: Open is the shop's order, Focus today's list, and an item added on Focus (Unsorted) is dragged into place among today's items, which places it in the shop's order (see Sections).
+  its section headings look the same as the Open list's: the light labels of the Plan board's Unsorted/Sorted (`sectionHTML`: `.plan-subdivider.list-section`, see Sections), so there is one manual order, and ordering on Today orders Open.
+  That fits a shopping list: Open is the shop's order, Today today's list, and an item added on Today (Unsorted) is dragged into place among today's items, which places it in the shop's order (see Sections).
   Due and overdue tasks have no section of their own: they keep their place in the order, marked by their deadline colour.
   The Tasks links (with the due count) open here unless another tab was used this session.
-  With a limit, a warning shows when Focus reaches it.
-  Empty Focus says "Nothing planned for today" and links to Plan.
+  With a limit, a warning shows when Today reaches it.
+  Empty Today says "Nothing planned for today" and links to Plan.
   New tasks created here get today as start date.
-  (Focus once had its own order, the Lineup (`focus_order`) above Others; it was removed as a second commitment on top of the start date.)
-  **Updates** (My tasks' Focus only; `.updates-heading`, cards `.task-update`; `inViewOrder` in `js/taskrender.js`, `tasksInView` given the user): above Unsorted, **the tasks with news for you** (`TasksCore.newsFor`: What happens on your tasks is told to you, in `docs/spec/users.md`), **whatever their dates**, each card saying what the news is. A task given to you often has no date, and was then on no tab the Tasks links open, while their count said it was there. Among them are tasks that aren't in My tasks otherwise: what you gave away (someone commented, it was done), what mentions you, a task closed this month or last; the server sends those along with My tasks (`withUpdates`: `GET /api/tasks?mine=1`, and the tasks a page of My tasks brings), the list holds them for Updates alone (`t.extra`) and no other tab shows them. A task there is in neither section below, nothing is dragged into Updates and nothing ranks there (`sectionList` leaves its cards out); opening the task, or doing something with it, takes it out: one of yours with a start date not after today is in Focus below, else on Open.
+  (Today once had its own order, the Lineup (`focus_order`) above Others; it was removed as a second commitment on top of the start date.)
+  **Updates** (My tasks' Today only; `.updates-heading`, cards `.task-update`; `inViewOrder` in `js/taskrender.js`, `tasksInView` given the user): above Unsorted, **the tasks with news for you** (`TasksCore.newsFor`: What happens on your tasks is told to you, in `docs/spec/users.md`), **whatever their dates**, each card saying what the news is. A task given to you often has no date, and was then on no tab the Tasks links open, while their count said it was there. Among them are tasks that aren't in My tasks otherwise: what you gave away (someone commented, it was done), what mentions you, a task closed this month or last; the server sends those along with My tasks (`withUpdates`: `GET /api/tasks?mine=1`, and the tasks a page of My tasks brings), the list holds them for Updates alone (`t.extra`) and no other tab shows them. A task there is in neither section below, nothing is dragged into Updates and nothing ranks there (`sectionList` leaves its cards out); opening the task, or doing something with it, takes it out: one of yours with a start date not after today is in Today below, else on Open.
 - **Closed** is not a tab but a link under the list (`#task-closed-link`, `Closed (N) →`, count from `/api/tasks/closed-count`, refreshed after every write).
   It holds the tasks that are closed: done, and closed undone (won't do), which is why it isn't called Completed.
   That is its name everywhere: where people read it (the link, the view's heading, the settings dialog), in the params (`view=closed`), the routes (`/api/tasks/closed`), the files (`closed.json`), a task's `closed_at` and the code.
@@ -337,17 +342,17 @@ On phones the control spans the full width.
 The section's count is of all its tasks, the filter searches all of them, and a task that has to be seen (a `?task=` link's, a new one: `unfoldFor`, `st.mustDraw`) shows its section whole.
 All tasks of a large wiki is thousands of cards, and a list is read from its top.
 
-**Sections** (Open and Focus; `SECTIONS`, `sectionHTML`, `.list-section[data-section]`): Unsorted (no `sort_order`, newest first) above Sorted (`sort_order`).
+**Sections** (Open and Today; `SECTIONS`, `sectionHTML`, `.list-section[data-section]`): Unsorted (no `sort_order`, newest first) above Sorted (`sort_order`).
 Both tabs head them alike, with the light label a Plan section uses for its Unsorted/Sorted (`.plan-subdivider`), not a day heading, so the labels look the same wherever they appear; Open's sort headings (By deadline, No deadline, Newest first) take the same label.
 A heading is also an empty section's drop target, so it is at least 1.6rem tall (2.5rem on coarse pointers).
-(Until 2026-11 Open's were day headings and Focus's light labels.) Moves treat both headings as slots in the visible list (`sectionList`, `applySectionList(list, moved)`): which side of the Sorted heading a task lands on decides its section;
+(Until 2026-11 Open's were day headings and Today's light labels.) Moves treat both headings as slots in the visible list (`sectionList`, `applySectionList(list, moved)`): which side of the Sorted heading a task lands on decides its section;
 a task dropped on a task lands where the pointer is: above it on its upper half, below it on the lower half, from Unsorted and within Sorted alike, a line on that edge showing it while dragging (`dropSide`, `.task-drop-before`/`-after`, mouse and touch; `sectionDrop`);
 dropping on the Sorted heading moves the task to its top;
 reordering within Unsorted does nothing;
 leaving Sorted sets `sort_order` to `null`.
 Ctrl+Shift+↑/↓ moves one slot, headings counting.
 Only the moved tasks change place in the full order: each goes right after the visible task now above it (or right before the one below, when first), and every task the view or filter hides keeps its place.
-So on Focus, sorting in one item never shuffles the catalogue around it.
+So on Today, sorting in one item never shuffles the catalogue around it.
 **A move is saved as a move** (`TasksCore.orderMoves`, `saveOrder` in `js/taskorder.js`; `placeBetween` in `go/tasksapi.go`): a list tells the server each moved task with the task now before it and the next one after it that didn't move (`POST /api/tasks/reorder` with `moves: [{id, after, before}]`), and the server gives the task a number between those two's as it has them by then (`sort_order` is a number, not a count), writing no other task.
 So a list that is stale in someone's browser doesn't put its old order back over what a colleague ranked meanwhile; neighbours that are no longer in that order leave `after` to say where, and when the numbers between two tasks are used up the order is numbered anew as it stands.
 My tasks' order, which is one user's own, is sent whole (Lists → My tasks).
@@ -363,11 +368,11 @@ A setting is kept where it belongs: a list's own with the list, how a page looks
 
 | Field | Setting | Whose | |
 |-------|---------|-------|---|
-| Opens on | `view` | the page's embed; the list's on `/tasks?list=` | The Open or the Focus tab (by their names here); Closed is offered only where the page says `view=closed` |
+| Opens on | `view` | the page's embed; the list's on `/tasks?list=` | The Open or the Today tab (by their names here); Closed is offered only where the page says `view=closed` |
 | The Open tab shows | `group` | the list's | One list, Plan (the board by start date), By person or By list: those the view offers (and the one set) |
 | The pin (a button beside the title) | | yours | Whether you pinned the list (Lists → Pins) |
 | WIP limit (on request) | `limit` | the list's | 1–99, empty for none |
-| Tab names (on request) | `labels` | the list's | The Open tab's and the Focus tab's; empty keeps Open and Focus |
+| Tab names (on request) | `labels` | the list's | The Open tab's and the Today tab's; empty keeps Open and Today |
 | Tags of a new task (on request) | `new` | the list's | Comma-separated; empty: the single tags the view shows |
 | Keep tasks (on request) | `keep` | the list's | New tasks there are keep tasks |
 | Hide when sharing (on request) | `noshare` | the list's | The list is left out of the list switcher in sharing mode |
@@ -396,7 +401,7 @@ The line above Save says whose the settings are: the list's, for everyone (or "w
 - **My tasks** (`/tasks?mine=1`): your registry's `mine`, `"mine": {"view": "focus", "limit": "5"}` (`mineParams`, `setMineParams`, `mineSettingKeys`; without users the shared registry's), for you alone.
   `"mail"` there names the kinds of mail you turned on (**Mail me when**: a task is given to me, someone mentions me, someone comments on a task I have or gave; three boxes, none ticked until you tick it, shown where Zone could mail you: `data-settings-mail`; What happens on your tasks is told to you, in `docs/spec/users.md`).
   It has no pin and no filter, and the dialog says "For My tasks: yours alone."
-  Unset, it opens on Focus, with Plan on the Open tab and no limit.
+  Unset, it opens on Today, with Plan on the Open tab and no limit.
   (Until 2026-11 the view, then called Pinned, showed its first pinned list's settings and had no dialog.)
 
 **Not which list it shows**: `list=` isn't in this dialog (it is in the editor's, where the dialog writes the embed: `.Editor` in `task_settings_dialog`).
@@ -406,12 +411,12 @@ Another name there would show another list, which reads like a rename and isn't 
 
 **Saving** (`POST /api/tasks/settings`, `tasksSettingsRoute`): the dialog sends only what was changed (`changedParams`), to each place its own: `{list, set}` for a list's settings (`setListSettingsOp`), `{page, index, was, set}` for an embed, `{all: true, was, set}` for All tasks, `{mine: true, was, set}` for My tasks. `set` maps a setting to its new value, `""` taking it out; `was` is an embed's params as the dialog saw them.
 So saving without a change writes nothing, and a param the dialog doesn't know stays as written.
-The server checks each value (`checkEmbedSettings`: one word without `[`, `]` or a backtick; `view` a view, `group` one of `none`, `day`, `person`, `list`, `plan` on/off (taken still, written by no dialog), `limit` 1–99, `new` cleaned like tags, `keep` and `noshare` a yes; a list takes only its own settings, `listSettingKeys`, an embed only an embed's, `embedSettingKeys`: `list` and `pin` are refused).
+The server checks each value (`checkEmbedSettings`: one word without `[`, `]` or a backtick; `view` a view, `group` one of `none`, `day`, `person`, `list`, `limit` 1–99, `new` cleaned like tags, `keep` and `noshare` a yes; a list takes only its own settings, `listSettingKeys`, an embed only an embed's, `embedSettingKeys`: `list` and `pin` are refused).
 An embed's params are rewritten in place (`setEmbedParams`, `setEmbedArgs`): a param keeps its place,
 a new one goes last,
 one written twice is written once;
 the rest of the page is untouched.
-For an embed of no list, Opens on and what the Open tab shows are written as the views' names where they have one: Open as the board is `view=plan`, Open as one list `view=open`, and `group=` only says what those don't: `group=person` or `group=list`, and `group=none` where `view=` is another tab; for a list the tab is `view=open` or `view=focus` and the rest the list's `group=`. A `plan=` the params still had is taken out by the same save.
+Opens on is written as `view=` (`today`, `open`), and what the Open tab shows as `group=`: each when it was changed or was written already (`changedParams`); for a list the tab is the page's or the list's, and `group` the list's.
 A page is changed in one commit, "Change the task list's settings on <slug>" (`changePageOp`: what it held uncommitted is committed first), a list in "Change the settings of list #<name>", All tasks in "Change the settings of All tasks", My tasks in "Change the settings of My tasks".
 When the `[[tasks: …]]` is no longer as the dialog saw it (the page was edited meanwhile), nothing is written: 409, "The page has changed since.
 Reload it and try again." Other refusals: 400 with the reason, 403 for a viewer, 404 for a page or a list you can't see; the dialog shows the message.
@@ -461,14 +466,14 @@ blue was tried and dropped) with a soft resting shadow (`--card-shadow`;
 hover still lifts it, `--shadow`);
 Closed's heading a shade deeper than the cards (`--section-bg`);
 the day headers are lighter, a heading on a line rather than a filled bar, an empty day a dashed box (its drop target).
-A card's coloured left edge (3px; planned, see Focus and Plan) never shifts its content: a card without one makes up the 2px in padding, so checkboxes and titles line up on every card and every tab.
+A card's coloured left edge (3px; planned, see Today and Plan) never shifts its content: a card without one makes up the 2px in padding, so checkboxes and titles line up on every card and every tab.
 Titles are bold and tags plain muted words (the list's chip has its tint and icon), so the cards' urgency colours stand out.
 Unsorted cards are hollow,
 on Open,
-Focus and in a Plan section with Unsorted/Sorted labels alike (`.task-inbox`; not in a sorted view, which has no Unsorted section): a dashed frame in a firmer grey than a card's border,
+Today and in a Plan section with Unsorted/Sorted labels alike (`.task-inbox`; not in a sorted view, which has no Unsorted section): a dashed frame in a firmer grey than a card's border,
 no fill and no shadow (they read as not placed yet; a grey fill took the code blocks' beige),
 urgency colours their tint.
-Dates as text take readable shades (`--amber-text` for a start today and the carried-over badge and count: `#d97706`, the Focus limit warning's amber, in both modes;
+Dates as text take readable shades (`--amber-text` for a start today and the carried-over badge and count: `#d97706`, the Today limit warning's amber, in both modes;
 bold, since in light mode it is about 3:1;
 `--blue-text` for a later start, a slate blue in Zone's palette (the note callout's), `--green-text` for a deadline today): the bright colours of the cards' left edges are only about 2:1 on a card;
 the blue and green are at least 4.5:1, a darker shade in light mode and a brighter one in dark.
@@ -562,7 +567,7 @@ Each with a dark-mode value.
   Completing a task with a subtask still open asks first ("“Plan trip” has 2 open subtasks.", **Complete anyway** or Cancel; `confirmOpenSubtasks`, `#task-subtasks-modal`): from the task's checkbox and Space (`tickTask`), and once for several selected tasks (Space, the selection bar's Done; `mayComplete`), where Cancel keeps the selection.
   Won't do, a task chip's checkbox on a page and an assistant (MCP) don't ask.
 - **Won't do** (⋯ menu, the edit modal, the Delete key; cards have no ✗ button any more) archives without spawning;
-  **Skip** (⏭, recurring only) archives as won't-do and spawns the next instance, the first occurrence after today (`spawn_recurring(skip=True)`): a daily task three days overdue comes back tomorrow, not as a card for today, so a skipped backlog leaves Focus.
+  **Skip** (⏭, recurring only) archives as won't-do and spawns the next instance, the first occurrence after today (`spawn_recurring(skip=True)`): a daily task three days overdue comes back tomorrow, not as a card for today, so a skipped backlog leaves Today.
   Completing catches up to today instead.
   Both show an undo toast; reopening a skipped entry removes its spawn (while untouched, as for un-completing).
 - **A task is closed, not deleted; who made it can delete it for good.**
@@ -572,7 +577,7 @@ Each with a dark-mode value.
   **Who may** (`mayDeleteTask` in `go/tasks.go`; `DELETE /api/tasks/<id>` and `batch-delete` answer 403 "Only who made a task, or an admin, deletes it" otherwise): without users anyone; with users who made the task (`created_by`), an admin, and its user for a private one. Others have seen a shared task, so anyone else closes it.
   The same routes take back what was just made: the tasks the page editor created (their maker's), and an import's (what a user imported is theirs to delete while Zone runs: `noteBrought`).
   An assistant (MCP) deletes no task.
-- **Planned cue**: a planned task's card gets a coloured left edge, the same on every tab for consistency: amber when it is in Focus already (start today or earlier), blue when planned later (`task-planned-now`/`-later`).
+- **Planned cue**: a planned task's card gets a coloured left edge, the same on every tab for consistency: amber when it is in Today already (start today or earlier), blue when planned later (`task-planned-now`/`-later`).
   On Open it tells decided tasks from undecided ones without changing the order.
   A due/overdue urgency colour wins.
   The 📅 date is coloured too: blue for a later start, amber for today, plain for a past start ("since …", never a warning).
@@ -785,7 +790,7 @@ A task is of **high**, **normal** or **low** importance (`importance`, Task fiel
 ### Keep tasks
 
 A task with `keep: true` is never archived: ticking it off means "done for now, back to the pool".
-It suits a shopping list used with the task app's views: Open is the catalogue of staples, starting items today puts them on Focus (the actual shopping list), and ticking one off sends it back to Open.
+It suits a shopping list used with the task app's views: Open is the catalogue of staples, starting items today puts them on Today (the actual shopping list), and ticking one off sends it back to Open.
 Completing a keep task (`keep_done`, in `PUT` and in `batch-complete`) clears its start date and its deadline, and sets `last_done` to today; it stays in `_tasks/tasks.json` with the same id, tags, description and place in Open's order, and Closed stays empty.
 Since Closed can't reopen it, the card shows an undo toast that restores the old fields (`keepSnapshot`).
 **Won't do** retires a staple.
@@ -818,25 +823,25 @@ Later in 2026-11 came the Inbox: until then a task could be in no list, which wi
 
   ```json
   {
-    "version": 2,
+    "version": 3,
     "lists": [
-      {"name": "shop", "view": "focus", "limit": "8", "keep": "1", "labels": "Catalogue,Shopping", "home": "off"},
+      {"name": "shop", "view": "today", "limit": "8", "keep": "1", "labels": "Catalogue,Shopping", "home": "off"},
       {"name": "task"}
     ],
     "pinned": ["task", "shop"],
-    "mine": {"view": "focus"},
+    "mine": {"view": "today"},
     "all": {"view": "open"},
     "order": ["0b7c…", "9e21…"]
   }
   ```
 
-  Each list is one line: its name and its settings (`view`, `limit`, `plan`, `keep`, `labels`, `new`, `noshare`, `home`), their values text as an embed writes them, a setting that isn't set no key.
+  Each list is one line: its name and its settings (`view`, `limit`, `group`, `keep`, `labels`, `new`, `noshare`, `home`), their values text as an embed writes them, a setting that isn't set no key.
   So a list can be added or changed by hand in one line, and a commit shows the list that changed.
   `pinned` is whose registry it is: a user's own pins in theirs, the wiki's in the shared one (Pins, below); `all` (the shared one) the settings of All tasks, `mine` those of My tasks (a user's own; without users the shared one's), `order` the manual order of My tasks (task ids; the same owner).
   (Until 2026-11 `"mine": true` in a user's registry narrowed their Pinned to their own tasks; it reads as no settings and is written back no more.)
   It is read leniently (a value of another kind as text, a list without a name left out, a name twice once, unknown keys kept and written back A–Z) and written in one format; a file that is there but unreadable refuses every write (`ReadListsStrict`: never an empty registry, which would drop every list).
   `version` says that the wiki's lists are kept here: a shared registry without it (or none) is a wiki to take over (The migration), one with `1` a wiki from before the Inbox (The Inbox's migration).
-  A registry keeps the version it has when it is written; a new one gets the current one, 2.
+  A registry keeps the version it has when it is written; a new one gets the current one, 3 (2 until the views got their names of 2026-11: Views).
 - **A task's list** is its `list`, the list's name (Task fields): `"list": "shop"` after its tags, no key when it is in the Inbox.
   The task's file says which registry the name is in: a task in a user's files is in one of their private lists (or, without `list`, in their Inbox), a task in the shared files in a shared one (`taskList`).
   So a name has to be unique only within one registry, and nobody learns another user's names from it.
@@ -879,12 +884,12 @@ Later in 2026-11 came the Inbox: until then a task could be in no list, which wi
   - **With no list in the wiki** it is every task, and there is no such view: `/tasks?mine=1` goes to `/tasks`, where the Tasks links go then.
   - **One task app**: the cards' list chips say where each task is (a task in the Inbox has none), and a new task there goes into the Inbox.
     A task that leaves by a change of its assignee or its list gets the notice a list's view gives ("Saved; it no longer shows here.").
-  - **Given to others** (`.tasks-given`, in the line under the heading; `givenToOthers`, `givenHref` in `go/tasklogic.go`): "Given to others: 3" links to the open shared tasks you made that someone else has: All tasks filtered `from:me -@me -@none`, By person (`/tasks?view=plan&group=person&from=me&assignee=-me,-none`; `?group=` names what the board's sections stand for, for a link). They are not yours to do, so they are not in My tasks nor in its counts; this is where you see what you are waiting for, who has it, and whether it arrived (its card says "new" until its assignee opened it). Not shown when there is none.
+  - **Given to others** (`.tasks-given`, in the line under the heading; `givenToOthers`, `givenHref` in `go/tasklogic.go`): "Given to others: 3" links to the open shared tasks you made that someone else has: All tasks filtered `from:me -@me -@none`, By person (`/tasks?view=open&group=person&from=me&assignee=-me,-none`; `?group=` names what the board's sections stand for, for a link). They are not yours to do, so they are not in My tasks nor in its counts; this is where you see what you are waiting for, who has it, and whether it arrived (its card says "new" until its assignee opened it). Not shown when there is none.
   - **Under the heading** a line says what it holds: "Your own tasks and what is assigned to you.", without users "Every open task.", and the lists left out, as links (`leftOutLinks`).
   - **Its settings are its own**, and yours (Settings, above): the tab, Plan, the limit, the tabs' names.
   - **Its manual order is its own**, and yours (`mineOrder`, `setMineOrder` in `go/tasklists.go`; `own`, `setOwnOrder` in `tasks.js`): a list's order (a task's `sort_order`) is the list's, for everyone who looks at it, a team's ranking of its backlog; what you rank in My tasks, across lists, is your sequence and moves nothing in any list.
     It is kept as task ids in your registry (`"order"`; without users the wiki's), written by `POST /api/tasks/reorder` with `mine: true` in a commit "Reorder My tasks": no task is written.
-    The view lays it over its own copies of the tasks (a task's place in it stands for its `sort_order` there, a task not in it is Unsorted), so Unsorted and Sorted, Focus and the Plan board's sections work in My tasks as everywhere; it comes with the page's tasks (`"order"` in `tasksInitial`) and with `GET /api/tasks?with=order`.
+    The view lays it over its own copies of the tasks (a task's place in it stands for its `sort_order` there, a task not in it is Unsorted), so Unsorted and Sorted, Today and the Plan board's sections work in My tasks as everywhere; it comes with the page's tasks (`"order"` in `tasksInitial`) and with `GET /api/tasks?with=order`.
     A task new to My tasks (one just given to you, a capture) is Unsorted, at the top, until you place it.
     Until you rank something there it is the lists' order of your tasks, so nothing moves on the day; ids of tasks that are closed or gone drop out at the next move.
     (Until 2026-11 a move in My tasks numbered its tasks' `sort_order` from 0, which put them above everyone else's in their lists.)
@@ -922,7 +927,7 @@ Later in 2026-11 came the Inbox: until then a task could be in no list, which wi
   The heading names what is shown: **List: <name>** (with 🔒 for a private one), **My tasks**, **Inbox** or **All tasks** (the window's title likewise).
   Every list's pill or link goes to `/tasks?list=<ref>`: the list with its settings,
   and as its **Backlinks** every page that embeds it (`listPages`: any `[[tasks: list=<name>]]` outside code on a page you may see that shows this list, A–Z by title; at the end, in the right column on big screens and as the breadcrumb's `← N` chip, as on a page view).
-  Each pill but More carries **one number: what is due today or overdue** there (a list's own, `countTasks` over the list: everyone's tasks in it), and how many of its tasks are new for you; the Focus count is on the Tasks module links alone, where it is the day's load (`.tasks-place .module-focus` is not shown; until 2026-11 a pill had up to three numbers);
+  Each pill but More carries **one number: what is due today or overdue** there (a list's own, `countTasks` over the list: everyone's tasks in it), and how many of its tasks are new for you; the Today count is on the Tasks module links alone, where it is the day's load (`.tasks-place .module-focus` is not shown; until 2026-11 a pill had up to three numbers);
   the current one is shaded (`aria-current`): My tasks on `?mine=1`, the Inbox on `?list=inbox`, the list on `?list=<ref>`, More for a view under it, none for a name no list has.
   **Only `/tasks` has it**: a page that embeds a list shows the list, as any embed does, and no switcher, so the Tasks module and the wiki's pages stay apart; the pages are a list's Backlinks.
   With no list there is no switcher.
@@ -1067,9 +1072,9 @@ Later in 2026-11 came the Inbox: until then a task could be in no list, which wi
   Moving earlier is a normal scroll; a finished drag isn't a tap.
   Let go without having moved over 10px, the long press starts selection mode with that card instead of dropping it; where nothing drags (Closed, or a view without dragging) the press only selects the card (`holdCard`), letting go starts selection mode, and moving over 10px first cancels it.
   The browser's own long-press menu is suppressed on cards.
-- **Swipes** (`swipeActions`; they may start on a date chip, which sits on the first line where a thumb starts, a mere tap still opening its picker) only move tasks in and out of Focus: right = start today (Open, Plan; on Plan also a carried-over task, committing to it again),
-  left = clear the start date (Focus, Plan).
-  No action, no movement (e.g. right on a Focus task, left on an unplanned or due task).
+- **Swipes** (`swipeActions`; they may start on a date chip, which sits on the first line where a thumb starts, a mere tap still opening its picker) only move tasks in and out of Today: right = start today (Open, Plan; on Plan also a carried-over task, committing to it again),
+  left = clear the start date (Today, Plan).
+  No action, no movement (e.g. right on a Today task, left on an unplanned or due task).
   A mostly sideways move (|dx| > 1.5·|dy|, over 10px) drags the card and reveals the label (`data-swipe-label`); past `min(110px, 30%)` it arms (`.task-swipe-armed`), and release runs `setStart` with an undo toast.
   Cards have `touch-action: pan-y` and `.tasks-list` `overflow-x: clip`.
 

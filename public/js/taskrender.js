@@ -255,7 +255,7 @@ function planHTML(filtered) {
       ? `<button type="button" class="board-day-due${cls}" data-header-tasks="${esc(s.key)}" data-header-list="${which}"` +
         ` title="${esc(title + ': ' + list.map(t => plainTitle(t.title)).join(', '))}">${list.length} ${which}</button>`
       : '';
-    const dueBtn = listBtn(s.carried, 'carried', 'Carried over, on Focus since an earlier day', ' board-day-carried') +
+    const dueBtn = listBtn(s.carried, 'carried', 'Carried over, on Today since an earlier day', ' board-day-carried') +
       listBtn(s.due, 'due', `Due ${s.label}`) +
       listBtn(s.overdue, 'overdue', 'Overdue', ' board-day-overdue');
     // The whole header folds the section (the label is its button, for

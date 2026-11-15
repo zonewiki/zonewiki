@@ -52,7 +52,7 @@ class TestTasksLinkRender:
 
     def test_embed_view_param(self, client, wiki_dir):
         """[[tasks: view=…]] passes the view as a data attribute, any case."""
-        for name in ("focus", "open", "plan", "closed"):
+        for name in ("today", "open", "closed"):
             html = preview(client, f"[[tasks: view={name.upper()}]]\n")
             assert f'data-init-view="{name}"' in html, name
 
@@ -60,14 +60,14 @@ class TestTasksLinkRender:
         html = preview(client, "[[tasks:]]\n")
         assert 'class="view-tabs" id="tasks-tabs" role="tablist"' in html
         tabs = re.findall(r'<button type="button" role="tab" data-view="(\w+)"[^>]*>([^<]+)</button>', html)
-        assert tabs == [("open", "Open"), ("focus", "Focus")]
+        assert tabs == [("open", "Open"), ("focus", "Today")]
         # Completed is a link under the list, not a tab.
         assert 'id="task-closed-link"' in html
 
     def test_embed_unknown_view_is_the_default(self, client, wiki_dir):
         """A name that isn't a view (also the tabs' old names, and `filter=`,
         the old name of `view=`) opens the default view."""
-        for directive in ("view=bogus", "view=due", "view=backlog", "view=today",
+        for directive in ("view=bogus", "view=due", "view=backlog", "view=focus", "view=plan",
                           "view=all", "view=upcoming", "view=done", "filter=plan"):
             html = preview(client, f"[[tasks: {directive}]]\n")
             assert 'data-init-view=""' in html, directive
@@ -173,16 +173,16 @@ class TestPageViewLink:
         assert "tasks-app" in body
 
     def test_tasks_embed_with_params(self, client, wiki_dir):
-        """[[tasks: tag=work list=proj view=plan]] passes all data attrs."""
+        """[[tasks: tag=work list=proj view=open group=person]] passes all data attrs."""
         make_list(client, "proj", headers=HOST)
         (wiki_dir / "my-page.md").write_text(
-            "# My Page\n\n[[tasks: tag=work list=proj view=plan]]\n", encoding="utf-8"
+            "# My Page\n\n[[tasks: tag=work list=proj view=open group=person]]\n", encoding="utf-8"
         )
         resp = client.get("/page/my-page")
         body = resp.get_data(as_text=True)
         assert 'data-init-tag="work"' in body
         assert 'data-init-list="proj"' in body
-        assert 'data-init-view="plan"' in body
+        assert 'data-init-view="open"' in body and 'data-init-group="person"' in body   # the page's way to look at the list
 
     def test_embed_has_single_filter_field(self, client, wiki_dir):
         html = preview(client, "[[tasks:]]\n")
@@ -241,7 +241,7 @@ class TestListSwitcher:
 
     @staticmethod
     def wiki(client, wiki_dir):
-        list_page(client, wiki_dir, "tasks", "# My tasks\n\n[[tasks: list=task view=focus pin=1]]\n")
+        list_page(client, wiki_dir, "tasks", "# My tasks\n\n[[tasks: list=task view=today pin=1]]\n")
         list_page(client, wiki_dir, "shop", "# Shopping\n\n[[tasks: list=shop keep=1]]\n")
         list_page(client, wiki_dir, "gifts", "# Gifts\n\n[[tasks: list=gifts]]\n")
 
@@ -314,7 +314,7 @@ class TestListSwitcher:
         html = self.get(client, "/tasks?list=task")
         assert [k for k, _, _ in places(html)] == ["mine", "inbox", "list:task"]
         assert self.current(client, "/tasks?list=task") == ["list:task"]
-        assert 'data-init-view="focus"' in html   # the list's view=focus
+        assert 'data-init-view="today"' in html   # the list's view=today
         assert "A separate list" not in html and "tasks-list-home" not in html
         foot = html.split('<div class="page-foot">', 1)[1].split("</div>", 1)[0]
         assert re.findall(r'<li><a href="([^"]+)">', foot) == ["/page/tasks", "/page/aaa-scratch"]
@@ -340,7 +340,7 @@ class TestListSwitcher:
         # whose New puts a task in the Inbox. The Tasks link counts what it
         # shows. The pins and their order change nothing of it.
         self.wiki(client, wiki_dir)
-        list_page(client, wiki_dir, "tasks", "# My tasks\n\n[[tasks: list=task view=focus pin=default]]\n")
+        list_page(client, wiki_dir, "tasks", "# My tasks\n\n[[tasks: list=task view=today pin=default]]\n")
         list_page(client, wiki_dir, "shop", "# Shopping\n\n[[tasks: list=shop keep=1 pin=1]]\n")
         assert client.post("/api/tasks/settings", json={"list": "gifts", "set": {"home": "off"}}, headers=HOST).status_code == 200
         today = date.today().isoformat()
@@ -361,7 +361,7 @@ class TestListSwitcher:
         assert re.sub(r"<[^>]+>", "", line) == "Every open task, but the lists left out of it (#gifts)."
         assert re.findall(r'<a href="([^"]+)">([^<]*)</a>', line) == [("/tasks?list=gifts", "#gifts")]
         assert "tasks-pinned-lists" not in html and 'id="backlinks"' not in html     # no line of pins, no Backlinks
-        # One task app: its own settings (none yet: not a list's view=focus
+        # One task app: its own settings (none yet: not a list's view=today
         # or keep), new tasks into the Inbox.
         assert html.count('class="tasks-app"') == 1
         assert 'data-init-tag="" data-init-list="" data-init-mine="lists" data-init-out="gifts"' in html
@@ -410,7 +410,7 @@ class TestListSwitcher:
         assert 'data-init-view="open"' in html and 'data-init-limit="4"' in html
         assert 'data-settings-raw="view=open limit=4"' in html
         # A list keeps its own, and so does All tasks.
-        assert 'data-init-view="focus"' in self.get(client, "/tasks?list=task")
+        assert 'data-init-view="today"' in self.get(client, "/tasks?list=task")
         assert 'data-init-limit=""' in self.get(client, "/tasks")
         assert save("", limit="9").status_code == 409            # from a dialog opened before
         for bad in ({"new": "x"}, {"keep": "1"}, {"tag": "x"}, {"limit": "0"}):

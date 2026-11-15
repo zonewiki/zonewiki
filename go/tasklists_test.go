@@ -132,7 +132,7 @@ func TestListsTakenOverFromPages(t *testing.T) {
 	}
 	// The Inbox's migration ran after it (migrateInboxLocked): the list
 	// nobody pinned, whose tasks were not in My tasks, is left out of it.
-	if !strings.Contains(fileText(t, taskFiles.ListsPath("")), `"version": 2`) {
+	if !strings.Contains(fileText(t, taskFiles.ListsPath("")), `"version": 3`) {
 		t.Errorf("the registry's version:\n%s", fileText(t, taskFiles.ListsPath("")))
 	}
 	if !lists["plans"].LeftOut() || lists["chores"].LeftOut() || lists["groceries"].LeftOut() {
@@ -272,7 +272,7 @@ func TestNothingToTakeOver(t *testing.T) {
 		t.Error("a wiki without lists was changed")
 	}
 	mustList(t, "", "shop", false)
-	if !strings.Contains(fileText(t, taskFiles.ListsPath("")), `"version": 2`) {
+	if !strings.Contains(fileText(t, taskFiles.ListsPath("")), `"version": 3`) {
 		t.Errorf("the registry: %s", fileText(t, taskFiles.ListsPath("")))
 	}
 }
@@ -1218,7 +1218,7 @@ func TestInboxMigrationRenamesListsCalledInbox(t *testing.T) {
 	if !isInbox("inbox", alice) || !isInbox("inbox", bob) {
 		t.Error("inbox still names a list")
 	}
-	if !strings.Contains(fileText(t, taskFiles.ListsPath("")), `"version": 2`) {
+	if !strings.Contains(fileText(t, taskFiles.ListsPath("")), `"version": 3`) {
 		t.Errorf("the registry:\n%s", fileText(t, taskFiles.ListsPath("")))
 	}
 	startAgain(t)
@@ -1338,7 +1338,7 @@ func TestInboxMigrationWithoutASharedRegistry(t *testing.T) {
 		t.Errorf("finn's pins %v", got)
 	}
 	for _, u := range []string{"erin", "finn"} {
-		if text := fileText(t, taskFiles.ListsPath(u)); !strings.Contains(text, `"version": 2`) {
+		if text := fileText(t, taskFiles.ListsPath(u)); !strings.Contains(text, `"version": 3`) {
 			t.Errorf("%s's registry:\n%s", u, text)
 		}
 	}
@@ -1375,7 +1375,7 @@ func TestInboxMigrationLeavesOutWhatWasNotPinned(t *testing.T) {
 		t.Error("the tasks were rewritten")
 	}
 	text := fileText(t, taskFiles.ListsPath(""))
-	if !strings.Contains(text, `"version": 2`) || !strings.Contains(text, `{"name": "someday", "limit": "3", "home": "off"}`) || !strings.Contains(text, `"all": {"view": "open"}`) {
+	if !strings.Contains(text, `"version": 3`) || !strings.Contains(text, `{"name": "someday", "limit": "3", "home": "off"}`) || !strings.Contains(text, `"all": {"view": "open"}`) {
 		t.Errorf("the registry:\n%s", text)
 	}
 	startAgain(t)
@@ -1457,7 +1457,7 @@ func TestGeneralInAWikiWithoutARegistry(t *testing.T) {
 	if got := openByID("alice")["1"]; got == nil || got.List != generalListName || got.Owner != "" || listsUnmigrated {
 		t.Errorf("the task: %+v", got)
 	}
-	if text := fileText(t, taskFiles.ListsPath("")); !strings.Contains(text, `"version": 2`) || !strings.Contains(text, `"pinned": ["general"]`) {
+	if text := fileText(t, taskFiles.ListsPath("")); !strings.Contains(text, `"version": 3`) || !strings.Contains(text, `"pinned": ["general"]`) {
 		t.Errorf("the registry:\n%s", text)
 	}
 	startAgain(t)

@@ -75,7 +75,7 @@ def test_editor_preview_renders_figures(page, wiki):
 
 def test_task_notes_render_math(page, wiki):
     page.request.post("/api/tasks", data={"title": "Sums", "description": "Total: $\\sum x_i$"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     desc = page.locator(".task-item").filter(has=page.get_by_text("Sums", exact=True)).locator(".task-desc")
     expect(desc.locator(".math-inline .katex")).to_have_count(1)
 
@@ -150,6 +150,6 @@ def test_a_section_link_stays_in_view_as_figures_render(page, wiki):
 def test_task_comments_render_math(page, wiki):
     tid = page.request.post("/api/tasks", data={"title": "Proof"}).json()["id"]
     page.request.post(f"/api/tasks/{tid}/comments", data={"text": "since $a^2 \\ge 0$"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     card = page.locator(".task-item").filter(has=page.get_by_text("Proof", exact=True))
     expect(card.locator(".task-card-comments .katex")).to_have_count(1)

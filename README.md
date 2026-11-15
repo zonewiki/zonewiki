@@ -107,7 +107,7 @@ and its deadline. It has two views:
   or as a **Plan**: a board of the coming days (today, tomorrow, the week,
   later) where you drag a task onto the day you'll do it. A team's list
   also shows **By person**: who has what, and a drag hands a task over.
-- **Focus**: what's on today, started or due.
+- **Today**: what's on today, started or due.
 
 Done tasks go to a monthly archive. Beyond that:
 
@@ -123,7 +123,7 @@ Done tasks go to a monthly archive. Beyond that:
   and deleting.
 - Lists: a task is in one list. A new task lands in your Inbox; file it by moving it to a list.
   Make a list with New list… on the Tasks page, give it
-  its own settings (a limit on how much is in Focus, keep tasks for a shopping list's staples),
+  its own settings (a limit on how much is on Today, keep tasks for a shopping list's staples),
   and show it on any page (`[[tasks: list=groceries]]`). Your pinned lists are a row of
   pills on the Tasks page; the others, and all tasks, are under More.
 - My tasks is where the Tasks module opens: what is yours. Alone, that is every task (leave a
@@ -131,7 +131,7 @@ Done tasks go to a monthly archive. Beyond that:
   lists and the shared tasks assigned to you; a shared list's unassigned tasks are its backlog,
   to take with one key. A task someone gives you is marked new on its card, and mailed to
   you where Zone has a mail server and your address.
-- Task lists inside any page (`[[tasks: tag=work view=plan]]`), a single task inline
+- Task lists inside any page (`[[tasks: tag=work view=open]]`), a single task inline
   as a live chip you can tick (`[[task:…]]`), and **Make task** in the editor
   to turn lines of meeting notes into tasks.
 - The Tasks link shows how many tasks are due today or overdue.
@@ -183,7 +183,7 @@ Done tasks go to a monthly archive. Beyond that:
 - **Phones**: a responsive layout with a tab bar, installable on the home
   screen. Light and dark mode follow your system.
 
-<p align="center"><img src="docs/screenshots/phone.png" width="640" alt="Zone on a phone: a wiki page, and the Focus view of Tasks"></p>
+<p align="center"><img src="docs/screenshots/phone.png" width="640" alt="Zone on a phone: a wiki page, and the Today view of Tasks"></p>
 
 ## Quick start
 

@@ -277,7 +277,7 @@
     <div class="task-settings-row">
       <div class="task-field">
         <label for="task-settings-view{{.Sfx}}">Opens on</label>
-        <select id="task-settings-view{{.Sfx}}" name="view"><option value="focus">Focus</option><option value="open">Open</option></select>
+        <select id="task-settings-view{{.Sfx}}" name="view"><option value="today">Today</option><option value="open">Open</option></select>
       </div>
       <div class="task-field" data-field="limit" hidden>
         <label for="task-settings-limit{{.Sfx}}">WIP limit</label>
@@ -308,7 +308,7 @@
       <label for="task-settings-label-open{{.Sfx}}">Tab names</label>
       <div class="task-settings-row">
         <input type="text" id="task-settings-label-open{{.Sfx}}" name="label_open" aria-label="Name of the Open tab" placeholder="Open" maxlength="30" autocomplete="off">
-        <input type="text" id="task-settings-label-focus{{.Sfx}}" name="label_focus" aria-label="Name of the Focus tab" placeholder="Focus" maxlength="30" autocomplete="off">
+        <input type="text" id="task-settings-label-focus{{.Sfx}}" name="label_focus" aria-label="Name of the Today tab" placeholder="Today" maxlength="30" autocomplete="off">
       </div>
     </div>
     <div class="task-field" data-field="new" hidden>
@@ -329,8 +329,8 @@
     {{- end}}
     {{- /* The fields not shown: a click shows one. */}}
     <div class="task-add-fields" id="task-settings-more{{.Sfx}}" role="group" aria-label="More settings">
-      <button type="button" class="task-add-field" data-more="limit" title="At most this many tasks in Focus">WIP limit</button>
-      <button type="button" class="task-add-field" data-more="labels" title="Other names for the Open and Focus tabs">Tab names</button>
+      <button type="button" class="task-add-field" data-more="limit" title="At most this many tasks on Today">WIP limit</button>
+      <button type="button" class="task-add-field" data-more="labels" title="Other names for the Open and Today tabs">Tab names</button>
       <button type="button" class="task-add-field" data-more="new" title="The tags a task made here gets">Tags of a new task</button>
       <button type="button" class="task-add-field task-settings-embed" data-more="tag" title="Show only the tasks with these tags">Filter by tag</button>
       {{- if .CanAssign}}

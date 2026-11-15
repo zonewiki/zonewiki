@@ -76,7 +76,7 @@ def test_filing_an_inbox_task_through_the_dialog_shares_it_assigned_to_you(alice
     stays in her My tasks; she can take her name off."""
     for title in ("Idea", "Hand over", "Second thoughts"):
         new(alice, title)
-    alice.goto("/tasks?list=inbox&view=open")
+    alice.goto("/tasks?list=inbox&view=open&group=none")
     modal = open_edit(alice, "Idea")
     lists, note = modal.locator("#task-edit-list"), modal.locator("#task-edit-list-note")
     chips = modal.locator(".task-field-assignee .tag-chip-label")
@@ -117,7 +117,7 @@ def test_filing_an_inbox_task_through_the_dialog_shares_it_assigned_to_you(alice
     modal.get_by_role("button", name="Save").click()
     wait_for(alice, "Second thoughts, kept", private=True, list=None, assignee=None)
 
-    alice.goto("/tasks?mine=1&view=open")
+    alice.goto("/tasks?mine=1&view=open&group=none")
     titles = alice.locator(".task-item .task-title")
     expect(titles).to_have_count(2)
     assert sorted(titles.all_text_contents()) == ["Idea", "Second thoughts, kept"]
@@ -137,7 +137,7 @@ def test_the_move_dialog_files_inbox_tasks_assigned_to_you(alice):
     for title in ("Two", "One"):
         new(alice, title)
     new(alice, "Bob's", list="team", assignee="bob")
-    alice.goto("/tasks?list=inbox&view=open")
+    alice.goto("/tasks?list=inbox&view=open&group=none")
     card(alice, "One").locator(".task-title").click()
     card(alice, "Two").locator(".task-title").click(modifiers=["Shift"])
     alice.keyboard.press("m")
@@ -154,13 +154,13 @@ def test_the_move_dialog_files_inbox_tasks_assigned_to_you(alice):
     expect(alice.get_by_role("button", name="Undo")).to_have_count(0)
     assert task(alice, "Bob's")["assignee"] == "bob"
     # In her My tasks still, by her name.
-    alice.goto("/tasks?mine=1&view=open")
+    alice.goto("/tasks?mine=1&view=open&group=none")
     titles = alice.locator(".task-item .task-title")
     expect(titles).to_have_count(2)
     assert sorted(titles.all_text_contents()) == ["One", "Two"]
     # Into her own list a task stays private, with no name on it, and comes back with Undo.
     new(alice, "Three")
-    alice.goto("/tasks?list=inbox&view=open")
+    alice.goto("/tasks?list=inbox&view=open&group=none")
     card(alice, "Three").locator(".task-title").click(button="right")
     alice.locator(".task-menu").get_by_role("menuitem", name="Move to list…").click()
     dlg.locator(".bulk-list-row[data-list=own]").click()
@@ -179,7 +179,7 @@ def test_a_shared_list_says_how_many_of_its_tasks_no_one_has(alice):
     new(alice, "Bob's", list="team", assignee="bob")
     new(alice, "Hers", list="team", assignee="alice")
     new(alice, "Own one", list="own")
-    alice.goto("/tasks?list=team&view=open")
+    alice.goto("/tasks?list=team&view=open&group=none")
     facts = alice.locator(".tasks-list-facts")
     expect(facts).to_have_text("2 unassigned.")
     link = facts.locator("a.tasks-unassigned")
@@ -219,7 +219,7 @@ def test_leave_out_of_my_tasks_is_a_setting_of_your_own_lists(alice, wiki):
     new(alice, "Learn the oboe", list="someday", due_date=today)
     new(alice, "Call Sam", due_date=today)
     link = alice.locator(".breadcrumb .module-link[data-module=tasks]")
-    alice.goto("/tasks?list=someday&view=open")
+    alice.goto("/tasks?list=someday&view=open&group=none")
     expect(link.locator(".module-due")).to_have_text("2")
     expect(alice.locator(".tasks-list-facts")).to_have_count(0)
     dialog = open_list_settings(alice)
@@ -293,11 +293,11 @@ def test_leave_out_of_my_tasks_without_users_is_any_lists(page, wiki):
     assert '"home": "off"' in (wiki.root / "_tasks/lists.json").read_text()
     expect(page.locator(".tasks-list-facts")).to_have_text("Left out of My tasks.")
     expect(link.locator(".module-due")).to_have_text("1")
-    page.goto("/tasks?mine=1&view=open")
+    page.goto("/tasks?mine=1&view=open&group=none")
     expect(page.locator(".tasks-mine-line")).to_have_text("Every open task, but the lists left out of it (#catalogue).")
     expect(page.locator(".task-item .task-title")).to_have_text(["Call Sam"])
     # All tasks has every task, as ever.
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     expect(page.locator(".task-item")).to_have_count(2)
 
 
@@ -324,7 +324,7 @@ def test_delete_sends_a_private_lists_tasks_to_your_inbox(alice):
     dialog.locator("#list-delete-submit").click()
     alice.wait_for_url(re.compile(r"/tasks$"))
     wait_for(alice, "Own one", private=True, list=None)
-    alice.goto("/tasks?list=inbox&view=open")
+    alice.goto("/tasks?list=inbox&view=open&group=none")
     expect(card(alice, "Own one")).to_be_visible()
     expect(alice.locator('.tasks-place[data-place="list:own"], .lists-more-item[data-place="list:own"]')).to_have_count(0)
 
@@ -348,7 +348,7 @@ def test_delete_sends_a_shared_lists_tasks_to_general(alice):
     # general is made for them: a list of the switcher (under More: nobody pinned it).
     expect(alice.locator('.lists-more-item[data-place="list:general"]')).to_have_count(1)
     expect(alice.locator('[data-place="list:team"]')).to_have_count(0)
-    alice.goto("/tasks?list=general&view=open")
+    alice.goto("/tasks?list=general&view=open&group=none")
     expect(card(alice, "Agenda")).to_be_visible()
     # With a general there, it is offered once; a named list takes them instead.
     make_list(alice, "team")
@@ -387,7 +387,7 @@ def test_ranking_in_my_tasks_leaves_the_lists_order_alone(alice):
     page = alice
     for title in ("One", "Two"):
         new(page, title, list="team", assignee="alice")
-    page.goto("/tasks?mine=1&view=open")
+    page.goto("/tasks?mine=1&view=open&group=none")
     expect(card(page, "One")).to_be_visible()
     card(page, "One").locator(".task-title").click()
     with page.expect_request(lambda r: r.url.endswith("/api/tasks/reorder")) as sent:
@@ -396,10 +396,10 @@ def test_ranking_in_my_tasks_leaves_the_lists_order_alone(alice):
     wait_until(page, lambda: page.request.get("/api/tasks?with=order").json()["order"] == [task(page, "One")["id"]])
     # No task was written: in the list both are unranked still.
     assert [t["sort_order"] for t in page.request.get("/api/tasks").json()] == [None, None]
-    page.goto("/tasks?list=team&view=open")
+    page.goto("/tasks?list=team&view=open&group=none")
     expect(page.locator(".list-section[data-section=unsorted] .board-day-count")).to_have_text("2")
     # Back in My tasks, One is where it was put.
-    page.goto("/tasks?mine=1&view=open")
+    page.goto("/tasks?mine=1&view=open&group=none")
     expect(page.locator(".list-section[data-section=unsorted] .board-day-count")).to_have_text("1")
     expect(page.locator(".list-section[data-section=sorted] .board-day-count")).to_have_text("1")
     # A change to the task keeps its place (the answer's sort_order is the list's).

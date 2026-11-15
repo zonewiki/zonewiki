@@ -81,10 +81,10 @@ def wiki(git_wiki_dir, monkeypatch):
     tasks = w / "private/alice/_tasks"
     tasks.mkdir(parents=True)
     (tasks / "lists.json").write_text(
-        '{\n  "version": 2,\n  "lists": [\n    {"name": "secretlist"}\n  ],\n'
+        '{\n  "version": 3,\n  "lists": [\n    {"name": "secretlist"}\n  ],\n'
         '  "pinned": ["secretlist"]\n}\n')
     (w / "_tasks").mkdir(exist_ok=True)
-    (w / "_tasks/lists.json").write_text('{\n  "version": 2,\n  "lists": [\n    {"name": "team"}\n  ]\n}\n')
+    (w / "_tasks/lists.json").write_text('{\n  "version": 3,\n  "lists": [\n    {"name": "team"}\n  ]\n}\n')
     # Her closed tasks as Zone files them: this month's, and an earlier month's.
     this_month = datetime.date.today().strftime("%Y-%m")
     inbox = {k: v for k, v in private_task(INBOX_ID, "Inbox").items() if k != "list"}

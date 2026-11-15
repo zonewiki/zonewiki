@@ -151,7 +151,7 @@ def test_note_creates_a_quicknote(new_page, wiki):
 
 def test_task_adds_a_task_to_your_inbox_from_the_wiki(new_page, wiki):
     phone = new_page(**TOUCH_PHONE)
-    list_page(phone, wiki, "tasks", "# My tasks\n\n[[tasks: list=task view=focus pin=1]]\n")
+    list_page(phone, wiki, "tasks", "# My tasks\n\n[[tasks: list=task view=today pin=1]]\n")
     phone.goto("/page/index")
     phone.locator(".action-task").tap()
     modal = phone.locator(".task-edit-modal[open]")
@@ -332,7 +332,7 @@ def new_task(page):
     page.keyboard.press("t")
 
 
-def _home(page, wiki, embed="[[tasks: list=task view=focus pin=1]]"):
+def _home(page, wiki, embed="[[tasks: list=task view=today pin=1]]"):
     """A pinned list and a page that shows it, and a page without tasks."""
     list_page(page, wiki, "tasks", f"# My tasks\n\n{embed}\n")
     wiki.write("garden", "# Garden\n\nBeds.\n")
@@ -342,7 +342,7 @@ def test_new_task_stays_on_the_page(page, wiki):
     # A page without a task list app loads a hidden one: the modal opens right
     # there, for a task in the Inbox that starts today (though a list is
     # pinned, and opens on Open); a toast says where the task went.
-    _home(page, wiki, "[[tasks: list=task view=open pin=1]]")
+    _home(page, wiki, "[[tasks: list=task view=open group=none pin=1]]")
     page.goto("/page/garden")
     new_task(page)
     modal = page.locator(".task-edit-modal[open]")
@@ -513,7 +513,7 @@ def test_desktop_breadcrumb_tasks_link_shows_the_due_count(page, wiki):
     tasks = page.locator(".breadcrumb .module-link[data-module=tasks]")
     expect(tasks.locator(".module-due")).to_have_text("2")
     expect(tasks.locator(".module-focus")).to_have_text("2")
-    expect(tasks).to_have_attribute("title", "Tasks: 2 in Focus · 1 overdue · 1 due today")
+    expect(tasks).to_have_attribute("title", "Tasks: 2 for today · 1 overdue · 1 due today")
 
 
 def test_task_counts_are_in_the_page_before_any_script(page, wiki):
@@ -528,13 +528,13 @@ def test_task_counts_are_in_the_page_before_any_script(page, wiki):
     tasks = page.locator(".breadcrumb .module-link[data-module=tasks]")
     expect(tasks.locator(".module-due")).to_have_text("1")
     expect(tasks.locator(".module-focus")).to_have_text("2")
-    expect(tasks).to_have_attribute("title", "Tasks: 2 in Focus · 1 due today")
+    expect(tasks).to_have_attribute("title", "Tasks: 2 for today · 1 due today")
 
 
 def test_task_counts_follow_tasks_changes(page, wiki):
     # A task started from the tasks shows up in the Focus count at once.
     page.request.post("/api/tasks", data={"title": "Water plants"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     tasks = page.locator(".breadcrumb .module-link[data-module=tasks]")
     expect(tasks.locator(".module-focus")).to_be_hidden()
     page.locator(".task-item").first.click()
@@ -547,7 +547,7 @@ def test_my_tasks_is_the_tasks_module(page, wiki):
     # list left out of it (pinned or not) and counts as the Tasks module;
     # New task adds one to the Inbox, and it is no stop in the navigation
     # trail. A page that shows a list is a page like any other: of the wiki.
-    list_page(page, wiki, "tasks", "# My tasks\n\n[[tasks: list=task view=focus pin=1]]\n")
+    list_page(page, wiki, "tasks", "# My tasks\n\n[[tasks: list=task view=today pin=1]]\n")
     make_list(page, "shop")
     make_list(page, "someday", pin=True)
     assert page.request.post("/api/tasks/settings", data={"list": "someday", "set": {"home": "off"}}).ok
@@ -620,7 +620,7 @@ def test_badges_do_not_cover_breadcrumb_on_phone(new_page, wiki):
 def test_empty_sections_are_single_rows(page, wiki):
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     page.request.post("/api/tasks", data={"title": "Today's", "start_date": date.today().isoformat()})
-    page.goto("/page/tasks?view=open")
+    page.goto("/page/tasks?view=open&group=none")
     open_tab(page, "plan")
     empties = page.locator(".board-day-divider.board-day--empty")
     expect(empties).to_have_count(8)   # Tomorrow + five more days + Later + Unplanned
@@ -639,7 +639,7 @@ def test_empty_sections_are_single_rows(page, wiki):
 def test_empty_sections_are_finger_sized_on_touch(new_page, wiki):
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     phone = new_page(**TOUCH_PHONE)
-    phone.goto("/page/tasks?view=open")
+    phone.goto("/page/tasks?view=open&group=none")
     open_tab(phone, "plan")
     assert all(r.bounding_box()["height"] >= 40
                for r in phone.locator(".board-day--empty").all())
@@ -652,7 +652,7 @@ def test_board_layout_does_not_change_when_a_drag_starts(new_page, wiki):
     phone = new_page(**TOUCH_PHONE)
     phone.request.post("/api/tasks", data={"title": "Water plants",
                                           "start_date": date.today().isoformat()})
-    phone.goto("/page/tasks?view=open")
+    phone.goto("/page/tasks?view=open&group=none")
     open_tab(phone, "plan")
     rows = phone.locator(".board-day-divider")
     before = [r.bounding_box() for r in rows.all()]

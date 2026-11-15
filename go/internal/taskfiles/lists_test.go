@@ -49,14 +49,14 @@ func TestRegistryVersion(t *testing.T) {
 	for text, want := range map[string]string{
 		`{"version": 1, "lists": []}`: `"version": 1`,
 		`{"version": 2, "lists": []}`: `"version": 2`,
-		`{"lists": []}`:               `"version": 2`,
+		`{"lists": []}`:               `"version": 3`,
 	} {
 		r, ok := ParseRegistry([]byte(text))
 		if !ok || !strings.Contains(r.Encode(), want) {
 			t.Errorf("%s written as\n%s", text, r.Encode())
 		}
 	}
-	if got := (&Registry{}).Encode(); !strings.Contains(got, `"version": 2`) || ListsVersion != 2 {
+	if got := (&Registry{}).Encode(); !strings.Contains(got, `"version": 3`) || ListsVersion != 3 {
 		t.Errorf("a new registry:\n%s", got)
 	}
 	r, _ := ParseRegistry([]byte(`{"version": 2, "lists": [{"home": "off", "name": "someday", "limit": 3}]}`))
@@ -118,7 +118,7 @@ func TestRegistryReadLeniently(t *testing.T) {
 		t.Errorf("version %d: a file without one is from before the lists", r.Version)
 	}
 	want := `{
-  "version": 2,
+  "version": 3,
   "lists": [
     {"name": "shop", "limit": "8", "keep": "true", "colour": "red"},
     {"name": "b"}

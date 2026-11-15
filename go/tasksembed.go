@@ -22,7 +22,7 @@ const tasksPlaceholder = "ZONETASKSPLACEHOLDER"
 // embed's params and the page it stands on say.
 type tasksEmbedView struct {
 	Tag, View     string
-	DefaultView   string           // the tab the view opens on when nothing says: "open" for a shared list (with users), "" Focus
+	DefaultView   string           // the tab the view opens on when nothing says: "open", "" Today
 	List          string           // the list it shows, as the user names it (a ref); "" none
 	Lists         string           // several lists as one (lists=): their refs, "|" between
 	Out           string           // My tasks: the lists left out of it, their refs, "|" between
@@ -65,11 +65,12 @@ type embedSettingsAt struct {
 
 // listEmbedParams: what an embed of the list l shows: the list's own
 // settings, and of the embed's params how the page looks at the list: the
-// tab it opens on (view) and a filter (tag, assignee). What the list is
-// (limit, group, keep, labels, new) is said on the list alone.
+// tab it opens on (view), how the Open tab shows its tasks (group) and a
+// filter (tag, assignee). What the list is (limit, keep, labels, new) is
+// said on the list alone.
 func listEmbedParams(l ListInfo, embed TasksParams) TasksParams {
 	p := l.Params
-	for _, k := range []string{"view", "tag", "assignee"} {
+	for _, k := range []string{"view", "group", "tag", "assignee"} {
 		if embed.Has(k) {
 			p = p.With(k, embed.Get(k))
 		}
@@ -142,32 +143,17 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, p
 		}
 		settingsAt = at
 	}
-	// view= with group=: the Open tab as group= says, whichever of its two
-	// views view= names (open: the one list; plan: grouped, by day unless
-	// group= says by what).
+	// view=: the tab; group=: how the Open tab shows its tasks.
 	view, group := embedView(params), embedGroup(params)
-	switch {
-	case group != "" && (view == "open" || view == "plan"):
-		view = "plan"
-		if group == "none" {
-			view = "open"
-		}
-	case view == "open":
-		group = "none" // view=open has always been the one list
-	}
 	// limit=N: the WIP limit (Focus warning, Plan day flags).
 	limit := ""
 	if n, err := strconv.Atoi(strings.TrimSpace(params.Get("limit"))); err == nil {
 		limit = strconv.Itoa(max(1, min(99, n)))
 	}
-	// labels=Catalogue,Shopping: the embed's own names for Open and Focus;
-	// "_" stands for a space, an empty entry keeps the default. Of three
-	// names (from when Plan was a tab) the first and the last count.
-	labels := []string{"Open", "Focus"}
+	// labels=Catalogue,Shopping: the embed's own names for Open and Today;
+	// "_" stands for a space, an empty entry keeps the default.
+	labels := []string{"Open", "Today"}
 	names := strings.Split(params.Get("labels"), ",")
-	if len(names) == 3 {
-		names = []string{names[0], names[2]}
-	}
 	for i, name := range names {
 		if i >= 2 {
 			break
@@ -204,9 +190,14 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, p
 		ListsJSON:     jsonobj.Text(choices),
 		InboxPrivate:  inboxOwner(user) != "",
 	}
-	// A shared list is a team's: it opens on Open, where its backlog and
-	// what no one has are; one's own lists, My tasks and All tasks on Focus.
-	if shown && !list.Private() && settings().Users != nil {
+	// What is yours to do opens on Today: My tasks, a list of your own, a
+	// view of every task where that is the Tasks links' (a wiki without
+	// lists) or a page's. A place you look into opens on Open: a shared list
+	// (a team's backlog, and what no one has), the Inbox (what was captured,
+	// with or without a date), and All tasks beside My tasks.
+	allTasksPage := page == "" && !headless && scope == "" && len(lists) > 0 // /tasks, where the Tasks links go to My tasks
+	switch {
+	case shown && !list.Private() && settings().Users != nil, isInbox(scope, lists), allTasksPage:
 		v.DefaultView = "open"
 	}
 	if scope == mineScope {

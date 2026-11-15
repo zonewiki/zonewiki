@@ -33,7 +33,7 @@ def wait_for_field(page, title: str, field: str, expected, timeout_ms: int = 150
 
 def open_board(page, wiki):
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
-    page.goto("/page/tasks?view=open")
+    page.goto("/page/tasks?view=open&group=none")
     open_tab(page, "plan")
     expect(page.locator(".board-day-divider").first).to_be_visible()
 
@@ -92,9 +92,9 @@ def test_view_tabs_segmented_control(page, wiki):
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     page.goto("/page/tasks")
     tabs = page.locator("#tasks-tabs [role='tab']")
-    expect(tabs).to_have_text(["Open", "Focus"])
+    expect(tabs).to_have_text(["Open", "Today"])
     # Focus is the default view and the only one marked active.
-    expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Focus"])
+    expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Today"])
     plan = page.locator(".tasks-cut [data-group=day]")
     as_list = page.locator(".tasks-cut [data-group=none]")
     expect(plan).to_be_hidden()
@@ -119,36 +119,36 @@ def test_view_tabs_segmented_control(page, wiki):
     # back as it was left.
     tabs.nth(0).click()
     page.keyboard.press("Tab")
-    expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Today"])
     expect(page.locator("#tasks-tabs .active")).to_be_focused()
     page.keyboard.press("Tab")
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Open"])
     expect(plan).to_have_attribute("aria-pressed", "false")
     page.keyboard.press("Shift+Tab")
-    expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Today"])
 
     # The active view survives a reload within the browser tab; the
     # grouping is remembered for the tasks.
     page.reload()
-    expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Today"])
     tabs.nth(0).click()
     expect(plan).to_have_attribute("aria-pressed", "false")
 
 
 def test_embed_filter_marks_its_tab_active(page, wiki):
-    wiki.write("tasks", "# Tasks\n\n[[tasks: view=plan]]\n")
+    wiki.write("tasks", "# Tasks\n\n[[tasks: view=open group=day]]\n")
     page.goto("/page/tasks")
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Open"])
 
 
 def test_view_url_param_picks_the_tab(page, wiki):
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
-    page.goto("/page/tasks?view=plan")
+    page.goto("/page/tasks?view=open&group=day")
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Open"])
     # Not a view's name (here the Plan tab's old one, and ?filter=, the old
     # name of ?view=): the default, Focus, ...
     page.goto("/page/tasks?view=due")
-    expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Today"])
     # ... or the tab last clicked in this browser tab.
     open_tab(page, "open")
     page.goto("/page/tasks?filter=plan")
@@ -163,7 +163,7 @@ def test_focus_shows_everything_whose_start_date_has_arrived(page, wiki):
         page.request.post("/api/tasks", data={"title": title, "start_date":
                                               (date.today() + timedelta(days=start)).isoformat()})
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
-    page.goto("/page/tasks?view=open")
+    page.goto("/page/tasks?view=open&group=none")
     open_tab(page, "focus")
     expect(card(page, "Started last week")).to_be_visible()
     expect(card(page, "Starts today")).to_be_visible()
@@ -173,7 +173,7 @@ def test_focus_shows_everything_whose_start_date_has_arrived(page, wiki):
 
 def test_tasks_link_counts_the_due_tasks_and_opens_focus(page, wiki):
     # The Tasks link counts deadlines (overdue + due today); the tasks opens on Focus.
-    # There is no Due section: the counted tasks sit in Focus's order like
+    # There is no Due section: the counted tasks sit for today's order like
     # any other, marked by their deadline colour.
     d = lambda n: (date.today() + timedelta(days=n)).isoformat()
     page.request.post("/api/tasks", data={"title": "Overdue", "due_date": d(-2)})
@@ -187,10 +187,10 @@ def test_tasks_link_counts_the_due_tasks_and_opens_focus(page, wiki):
     tasks = page.locator(".breadcrumb .module-link[data-module=tasks]")
     expect(tasks.locator(".module-due")).to_have_text("2")
     expect(tasks.locator(".module-focus")).to_have_text("4")
-    expect(tasks).to_have_attribute("title", "Tasks: 4 in Focus · 1 overdue · 1 due today")
+    expect(tasks).to_have_attribute("title", "Tasks: 4 for today · 1 overdue · 1 due today")
     tasks.click()
     expect(page).to_have_url(re.compile(r"/tasks$"))
-    expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Today"])
     expect(page.locator(".task-inbox-divider--only")).to_have_count(0)   # no Due section
     # All in Unsorted, in Open's order (newest first).
     expect(_focus_titles(page)).to_have_text(["Started, due later", "Started", "Due today", "Overdue"])
@@ -224,8 +224,8 @@ def test_list_switcher_goes_between_the_lists_and_keeps_its_counts(page, wiki):
     # /tasks opens with the switcher above the heading: the lists by name
     # pinned lists as pills, then More with the others and All tasks; its
     # counts follow the task app's writes.
-    list_page(page, wiki, "tasks", "# My tasks\n\n[[tasks: list=task view=focus pin=1]]\n")
-    list_page(page, wiki, "shop", "# Shop\n\n[[tasks: list=shop view=focus pin=1]]\n")
+    list_page(page, wiki, "tasks", "# My tasks\n\n[[tasks: list=task view=today pin=1]]\n")
+    list_page(page, wiki, "shop", "# Shop\n\n[[tasks: list=shop view=today pin=1]]\n")
     make_list(page, "garden")
     page.request.post("/api/tasks", data={"title": "Milk", "list": "shop", "start_date": date.today().isoformat()})
     page.goto("/tasks?list=shop")
@@ -246,7 +246,7 @@ def test_list_switcher_goes_between_the_lists_and_keeps_its_counts(page, wiki):
     page.locator(".tasks-place[data-place='list:task']").click()
     page.wait_for_url(re.compile(r"/tasks\?list=task$"))
     expect(page.locator(".tasks-place[aria-current]")).to_have_attribute("data-place", "list:task")
-    expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Today"])
     # More: the lists that aren't pinned, and All tasks. It opens under its
     # pill, closes on Escape and on a click elsewhere, and names the view
     # the page shows when that is one of its own.
@@ -283,8 +283,8 @@ def test_tasks_link_shows_my_tasks(page, wiki):
     # a list left out of it, and counts what it shows; a pin decides nothing
     # about it, the switcher marks the pinned lists with one. A new task
     # there goes to the Inbox, and the dialog says so.
-    list_page(page, wiki, "tasks", "# My tasks\n\n[[tasks: list=task view=focus pin=default]]\n")
-    list_page(page, wiki, "shop", "# Shop\n\n[[tasks: list=shop view=focus pin=1]]\n")
+    list_page(page, wiki, "tasks", "# My tasks\n\n[[tasks: list=task view=today pin=default]]\n")
+    list_page(page, wiki, "shop", "# Shop\n\n[[tasks: list=shop view=today pin=1]]\n")
     wiki.write("garden", "# Garden\n")
     today = date.today().isoformat()
     page.request.post("/api/tasks", data={"title": "Milk", "list": "shop", "due_date": today})
@@ -354,7 +354,7 @@ def test_tasks_link_shows_my_tasks(page, wiki):
 
 def test_tasks_page_opens_linked_task_and_lists(page, wiki):
     # /tasks is one built-in main tasks, whatever embeds the wiki's pages have.
-    wiki.write("tasks", "# Tasks\n\n[[tasks: tag=work]]\n\n[[tasks: view=plan]]\n")
+    wiki.write("tasks", "# Tasks\n\n[[tasks: tag=work]]\n\n[[tasks: view=open group=day]]\n")
     make_list(page, "groceries")
     tid = page.request.post("/api/tasks", data={"title": "Untagged"}).json()["id"]
     page.request.post("/api/tasks", data={"title": "Milk", "list": "groceries"})
@@ -364,7 +364,7 @@ def test_tasks_page_opens_linked_task_and_lists(page, wiki):
     expect(card(page, "Untagged")).to_have_class(re.compile(r"\btask-selected\b"))
     expect(card(page, "Milk")).to_be_visible()     # list tasks too: it's every task
 
-    page.goto("/tasks?list=groceries&view=open")
+    page.goto("/tasks?list=groceries&view=open&group=none")
     expect(page.locator("h1")).to_have_text("List: groceries")
     expect(card(page, "Milk")).to_be_visible()
     expect(card(page, "Untagged")).to_have_count(0)
@@ -382,7 +382,7 @@ def test_search_modal_lists_the_tasks(page, wiki):
 
 def test_empty_focus_offers_planning(page, wiki):
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
-    page.goto("/page/tasks?view=open")
+    page.goto("/page/tasks?view=open&group=none")
     open_tab(page, "focus")
     expect(page.locator(".tasks-empty")).to_contain_text("Nothing planned for today")
     page.get_by_role("button", name="Plan your day").click()
@@ -397,7 +397,7 @@ def test_past_start_date_reads_since(page, wiki):
     page.request.post("/api/tasks", data={"title": "Started", "start_date": start.isoformat()})
     page.request.post("/api/tasks", data={"title": "Started last year", "start_date": long_ago.isoformat()})
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
-    page.goto("/page/tasks?view=open")
+    page.goto("/page/tasks?view=open&group=none")
     open_tab(page, "focus")
     chip = card(page, "Started").locator(".task-focus-info")
     expect(chip).to_have_text(f"📅 since {start.strftime('%b')} {start.day}")
@@ -428,7 +428,7 @@ def test_board_groups_by_start_date(page, wiki):
     page.set_viewport_size({"width": 1280, "height": 1400})
     open_board(page, wiki)
     # A past start date means "available since": not Overdue, but today's
-    # load (it is in Focus) — on Today, carried over, its badge amber.
+    # load (it is for today) — on Today, carried over, its badge amber.
     assert section_of(page, "Started earlier") == today.isoformat()
     expect(card(page, "Started earlier")).to_have_class(re.compile(r"\btask-carried\b"))
     expect(page.locator(".board-day-divider", has_text="Carried over")).to_have_count(0)
@@ -504,7 +504,7 @@ def test_folded_section_hides_its_cards_and_is_remembered(page, wiki):
     # j skips the folded section: the first card it selects is Today's.
     page.keyboard.press("j")
     expect(card(page, "Today one")).to_have_class(re.compile(r"\btask-selected\b"))
-    page.goto("/page/tasks?view=plan")   # the same tasks: folding is remembered per task list
+    page.goto("/page/tasks?view=open&group=day")   # the same tasks: folding is remembered per task list
     expect(card(page, "Today one")).to_be_visible()
     expect(card(page, "Loose one")).to_have_count(0)
     fold(page, "unplanned")
@@ -533,7 +533,7 @@ def test_list_and_tag_taskss_fold_too(page, wiki, embed):
     make_list(page, "task")
     page.request.post("/api/tasks", data={"title": "Loose", "list": "task", "tags": ["task"]})
     wiki.write("tasks", f"# Tasks\n\n[[tasks: {embed}]]\n")
-    page.goto("/page/tasks?view=plan")
+    page.goto("/page/tasks?view=open&group=day")
     expect(card(page, "Loose")).to_be_visible()
     fold(page, "unplanned")
     expect(card(page, "Loose")).to_have_count(0)
@@ -568,7 +568,7 @@ def test_task_link_unfolds_its_section(page, wiki):
     open_board(page, wiki)
     fold(page, "unplanned")
     expect(card(page, "Linked")).to_have_count(0)
-    page.goto(f"/tasks?view=plan&task={tid}")
+    page.goto(f"/tasks?view=open&group=day&task={tid}")
     expect(card(page, "Linked")).to_have_class(re.compile(r"\btask-selected\b"))
 
 
@@ -657,7 +657,7 @@ def open_edit(page, title: str):
 def test_modal_days_before_due_sets_start_date(page, wiki):
     page.request.post("/api/tasks", data={"title": "Report", "due_date": "2099-01-10"})
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
-    page.goto("/page/tasks?view=open")
+    page.goto("/page/tasks?view=open&group=none")
     modal = open_edit(page, "Report")
     lead = modal.locator("#task-edit-lead")
     expect(lead).to_be_hidden()                       # shown once asked for
@@ -678,7 +678,7 @@ def test_modal_days_before_due_sets_start_date(page, wiki):
 def test_modal_lead_disabled_without_due_date(page, wiki):
     page.request.post("/api/tasks", data={"title": "Undated"})
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
-    page.goto("/page/tasks?view=open")
+    page.goto("/page/tasks?view=open&group=none")
     modal = open_edit(page, "Undated")
     expect(page.locator("#task-edit-lead")).to_be_disabled()
     # Nor is it offered: the line of more fields has no "Days before due".
@@ -692,7 +692,7 @@ def test_modal_lead_disabled_without_due_date(page, wiki):
 def _tasks_with_one_task(page, wiki):
     page.request.post("/api/tasks", data={"title": "Loaded"})
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
-    page.goto("/page/tasks?view=open")
+    page.goto("/page/tasks?view=open&group=none")
     expect(card(page, "Loaded")).to_be_visible()
     # Changed elsewhere (another device) while this tab sat in the background.
     page.request.post("/api/tasks", data={"title": "Added elsewhere"})
@@ -714,7 +714,7 @@ def test_tasks_show_what_someone_else_changed_within_a_minute(page, wiki):
     page.clock.install()
     page.request.post("/api/tasks", data={"title": "Loaded"})
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
-    page.goto("/page/tasks?view=open")
+    page.goto("/page/tasks?view=open&group=none")
     expect(card(page, "Loaded")).to_be_visible()
     # Nothing changed: a minute later the list is as it was (no reload).
     page.mouse.move(10, 10)
@@ -743,7 +743,7 @@ def test_a_long_list_of_every_task_loads_again_every_five_minutes(page, wiki):
     minutes have passed since it last did."""
     page.clock.install()
     _many_tasks(wiki, 160)
-    page.goto("/tasks?view=open&plan=off")
+    page.goto("/tasks?view=open&group=none")
     expect(card(page, "Task 000")).to_be_visible()
     page.request.post("/api/tasks", data={"title": "Added elsewhere"})
     page.mouse.move(10, 10)
@@ -761,7 +761,7 @@ def test_a_board_section_of_only_unsorted_tasks_has_no_labels(page, wiki):
     nothing is ranked yet (a team's list nobody ordered) the label would say
     nothing, in every section. The cards are hollow all the same."""
     ids = [page.request.post("/api/tasks", data={"title": t}).json()["id"] for t in ("One", "Two")]
-    page.goto("/tasks?view=plan")
+    page.goto("/tasks?view=open&group=day")
     expect(card(page, "Two")).to_be_visible()
     expect(page.locator(".plan-subdivider")).to_have_count(0)
     expect(card(page, "One")).to_have_class(re.compile(r"\btask-inbox\b"))
@@ -782,7 +782,7 @@ def test_a_closed_task_is_deleted_for_good_from_its_menu(page, wiki):
     done = page.request.post("/api/tasks", data={"title": "Made by mistake"}).json()
     page.request.put(f"/api/tasks/{done['id']}", data={"wont_do": True})
     page.request.post("/api/tasks", data={"title": "Still open"})
-    page.goto("/tasks?view=open&plan=off")
+    page.goto("/tasks?view=open&group=none")
     card(page, "Still open").locator(".task-title").click(button="right")
     expect(page.get_by_role("menuitem", name="Won't do")).to_be_visible()
     expect(page.get_by_role("menuitem", name="Delete for good…")).to_have_count(0)
@@ -805,7 +805,7 @@ def test_a_series_occurrence_links_to_the_one_before(page, wiki):
     first = page.request.post("/api/tasks", data={"title": "Water the plants", "rec_type": "daily", "due_date": date.today().isoformat()}).json()
     page.request.post(f"/api/tasks/{first['id']}/comments", data={"text": "The fern needs more"})
     page.request.put(f"/api/tasks/{first['id']}", data={"completed": True})
-    page.goto("/tasks?view=open&plan=off")
+    page.goto("/tasks?view=open&group=none")
     card(page, "Water the plants").locator(".task-title").dblclick()
     modal = page.locator("#task-edit-modal")
     expect(modal).to_be_visible()
@@ -831,7 +831,33 @@ def test_tab_is_the_browsers_on_a_page_that_embeds_a_list(page, wiki):
     expect(active).to_have_text(["Open"])                 # the page's Tab
     card(page, "One").locator(".task-title").click()
     page.keyboard.press("Tab")
-    expect(active).to_have_text(["Focus"])
+    expect(active).to_have_text(["Today"])
+
+
+def test_a_link_names_the_tab_and_how_open_shows_its_tasks(page, wiki):
+    """?view= says the tab (today, open), ?group= how the Open tab shows its
+    tasks; view=open alone opens it as the view's own group says (the board
+    by day). The names of before 2026-11 (focus, plan) are no view's: such
+    a link opens the default tab."""
+    page.request.post("/api/tasks", data={"title": "One", "start_date": date.today().isoformat()})
+    active = page.locator("#tasks-tabs .active")
+    pressed = page.locator(".tasks-cut [aria-pressed='true']")
+    page.goto("/tasks?view=open")
+    expect(active).to_have_text(["Open"])
+    expect(pressed).to_have_text(["Plan"])
+    page.goto("/tasks?view=open&group=none")
+    expect(active).to_have_text(["Open"])
+    expect(pressed).to_have_text(["List"])
+    expect(page.locator(".list-section[data-section]")).to_have_count(2)
+    page.goto("/tasks?view=today")
+    expect(active).to_have_text(["Today"])
+    for old in ("focus", "plan", "week"):
+        page.goto("/tasks?view=open&group=none")
+        expect(active).to_have_text(["Open"])
+        page.evaluate("sessionStorage.clear()")
+        page.goto(f"/tasks?view={old}")
+        expect(card(page, "One")).to_be_visible()
+        expect(active).to_have_text(["Today"])
 
 
 def test_save_writes_only_what_was_changed_in_the_dialog(page, wiki):
@@ -840,7 +866,7 @@ def test_save_writes_only_what_was_changed_in_the_dialog(page, wiki):
     refused, and the dialog comes back with what was typed."""
     task = page.request.post("/api/tasks", data={"title": "Shared work", "description": "first"}).json()
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
-    page.goto("/page/tasks?view=open")
+    page.goto("/page/tasks?view=open&group=none")
     card(page, "Shared work").locator(".task-title").click(button="right")
     page.get_by_role("menuitem", name="Edit…").click()
     modal = page.locator("#task-edit-modal")
@@ -942,7 +968,7 @@ def test_the_list_field_moves_a_task_to_another_list(page, wiki):
         make_list(page, name)
     page.request.post("/api/tasks", data={"title": "Prune", "list": "chores", "tags": "weekly"})
     wiki.write("home", "# Home\n\n[[tasks: list=chores]]\n")
-    page.goto("/page/home?view=open")
+    page.goto("/page/home?view=open&group=none")
     # In a view of its list a card doesn't say the list; its tags are tags.
     expect(card(page, "Prune").locator(".task-tag-list")).to_have_count(0)
     modal = open_edit(page, "Prune")
@@ -962,7 +988,7 @@ def test_the_list_field_moves_a_task_to_another_list(page, wiki):
 def test_the_list_field_makes_a_new_list(page, wiki):
     make_list(page, "chores")
     page.request.post("/api/tasks", data={"title": "Rake"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     modal = open_edit(page, "Rake")
     lists = modal.locator("#task-edit-list")
     lists.select_option(label="New list…")
@@ -1008,7 +1034,7 @@ def test_a_new_list_from_the_list_field_is_as_private_as_the_task(page, wiki, mo
     page.request.post("/login", form={"username": "alice", "password": "pw"})
     make_list(page, "own", private=True)
     page.request.post("/api/tasks", data={"title": "Alice's errand", "list": "own"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     lists, note = page.locator("#task-edit-list"), page.locator("#task-edit-list-note")
     box = page.locator("#task-new-list-private")
     # A shared task stays shared: its new list can't be private.
@@ -1038,7 +1064,7 @@ def test_a_tag_named_as_a_list_is_a_tag(page, wiki):
     # with its list as a chip.
     page.request.post("/api/tasks", data={"title": "Prune"})
     make_list(page, "garden")
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     modal = open_edit(page, "Prune")
     modal.locator("#task-edit-tags").fill("garden,")
     modal.get_by_role("button", name="Save").click()
@@ -1093,7 +1119,7 @@ def test_completed_link_opens_completed_and_goes_back(page, wiki):
 def test_completed_count_follows_completion(page, wiki):
     page.request.post("/api/tasks", data={"title": "Finish me"})
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
-    page.goto("/page/tasks?view=open")
+    page.goto("/page/tasks?view=open&group=none")
     expect(page.locator("#task-closed-link")).to_have_text("Closed (0) →")
     card(page, "Finish me").locator("input[type=checkbox]").check()
     # After the checkbox's ~5 s grace period.
@@ -1106,7 +1132,7 @@ def test_embed_filter_completed_still_opens_completed(page, wiki):
     wiki.write("log", "# Log\n\n[[tasks: view=closed]]\n")
     page.goto("/page/log")
     expect(card(page, "Old work")).to_be_visible()
-    expect(page.locator("#task-closed-link")).to_have_text("← Back to Focus")
+    expect(page.locator("#task-closed-link")).to_have_text("← Back to Today")
 
 
 def test_a_filter_does_not_load_the_closed_tasks(page, wiki):
@@ -1117,10 +1143,10 @@ def test_a_filter_does_not_load_the_closed_tasks(page, wiki):
     for title in ("Buy bread", "Fix bike"):
         tid = page.request.post("/api/tasks", data={"title": title, "tags": ["shop"]}).json()["id"]
         page.request.put(f"/api/tasks/{tid}", data={"completed": True})
-    wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n\n[[tasks: tag=shop view=open]]\n")
+    wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n\n[[tasks: tag=shop view=open group=none]]\n")
     asked = []
     page.on("request", lambda r: asked.append(r.url) if "/api/tasks/closed" in r.url and "closed-count" not in r.url else None)
-    page.goto("/page/tasks?view=open")
+    page.goto("/page/tasks?view=open&group=none")
     link = page.locator("#task-closed-link")
     search = page.locator("#task-filter-search")
     expect(link).to_have_text("Closed (2) →")
@@ -1147,7 +1173,7 @@ def test_new_task_on_default_focus_starts_today(page, wiki):
     # stays in the view instead of vanishing on save.
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     page.goto("/page/tasks")
-    expect(page.locator("#tasks-tabs .active")).to_have_text(["Focus"])
+    expect(page.locator("#tasks-tabs .active")).to_have_text(["Today"])
     page.locator("#task-add-btn").click()
     page.locator("#task-edit-title").fill("Water plants")
     page.locator("#task-edit-modal").get_by_role("button", name="Save").click()
@@ -1160,7 +1186,7 @@ def test_new_task_on_default_focus_starts_today(page, wiki):
 def test_quick_add_shorthand_fills_fields(page, wiki):
     from datetime import date as _date
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
-    page.goto("/page/tasks?view=open")
+    page.goto("/page/tasks?view=open&group=none")
     page.locator("#task-add-btn").click()
     modal = page.locator("#task-edit-modal")
     title = modal.locator("#task-edit-title")
@@ -1180,7 +1206,7 @@ def test_quick_add_shorthand_fills_fields(page, wiki):
 def test_quick_add_is_not_applied_when_editing(page, wiki):
     page.request.post("/api/tasks", data={"title": "Old task"})
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
-    page.goto("/page/tasks?view=open")
+    page.goto("/page/tasks?view=open&group=none")
     modal = open_edit(page, "Old task")
     modal.locator("#task-edit-title").fill("Old task tomorrow")
     expect(modal.locator("#task-edit-quick")).to_be_hidden()
@@ -1200,14 +1226,14 @@ def test_list_embed_shows_only_its_tasks(page, wiki):
     wiki.write("shop", "# Shop\n\n[[tasks: list=groceries]]\n")
 
     # The main tasks shows every task, list tasks included.
-    page.goto("/page/tasks?view=open")
+    page.goto("/page/tasks?view=open&group=none")
     expect(card(page, "Main task")).to_be_visible()
     expect(card(page, "Oat milk")).to_be_visible()
     open_tab(page, "plan")
     expect(card(page, "Main task")).to_be_visible()
     expect(card(page, "Oat milk")).to_be_visible()
 
-    page.goto("/page/shop?view=open")
+    page.goto("/page/shop?view=open&group=none")
     expect(card(page, "Oat milk")).to_be_visible()
     expect(card(page, "Main task")).to_have_count(0)
 
@@ -1280,7 +1306,7 @@ def test_tag_embed_shows_list_tasks(page, wiki):
     make_list(page, "groceries")
     page.request.post("/api/tasks", data={"title": "Oat milk", "list": "groceries", "tags": "sam"})
     wiki.write("sam", "# Sam\n\n[[tasks: tag=sam]]\n")
-    page.goto("/page/sam?view=open")
+    page.goto("/page/sam?view=open&group=none")
     expect(card(page, "Oat milk")).to_be_visible()
 
 
@@ -1289,7 +1315,7 @@ def test_tag_embed_filter_is_locked_and_says_when_a_task_leaves(page, wiki):
     # #sam off a task on Sam's page is a normal edit, and it says so.
     page.request.post("/api/tasks", data={"title": "Review PR", "tags": "task,sam"})
     wiki.write("sam", "# Sam\n\n[[tasks: tag=sam]]\n")
-    page.goto("/page/sam?view=open")
+    page.goto("/page/sam?view=open&group=none")
     filt = page.locator(".tasks-toolbar .tag-chip")
     expect(filt).to_have_text(["#sam"])
     expect(filt.locator(".tag-chip-x")).to_have_count(0)
@@ -1307,7 +1333,7 @@ def test_tag_embed_filter_is_locked_and_says_when_a_task_leaves(page, wiki):
 
 
 def test_url_tag_chip_stays_removable(page, wiki):
-    page.goto("/tasks?tag=task&view=open")
+    page.goto("/tasks?tag=task&view=open&group=none")
     filt = page.locator(".tasks-toolbar .tag-chip")
     expect(filt.locator(".tag-chip-label")).to_have_text(["#task"])
     expect(filt.locator(".tag-chip-x")).to_have_count(1)
@@ -1320,7 +1346,7 @@ def test_undo_a_move_to_another_list(page, wiki):
     page.request.post("/api/tasks", data={"title": "Screws", "list": "groceries",
                                          "due_date": "2099-01-10"})
     wiki.write("shop", "# Shop\n\n[[tasks: list=groceries]]\n")
-    page.goto("/page/shop?view=open")
+    page.goto("/page/shop?view=open&group=none")
     modal = open_edit(page, "Screws")
     modal.locator("#task-edit-more-lead").click()
     modal.locator("#task-edit-lead").fill("3")       # a start date too (logged)
@@ -1340,7 +1366,7 @@ def test_undo_a_move_to_another_list(page, wiki):
 def test_undo_removing_the_tag_on_a_tag_page(page, wiki):
     page.request.post("/api/tasks", data={"title": "Review PR", "tags": "task,sam"})
     wiki.write("sam", "# Sam\n\n[[tasks: tag=sam]]\n")
-    page.goto("/page/sam?view=open")
+    page.goto("/page/sam?view=open&group=none")
     modal = open_edit(page, "Review PR")
     modal.locator("#task-edit-tags").click()
     page.keyboard.press("Backspace")      # drops #sam
@@ -1356,7 +1382,7 @@ def test_undo_a_bulk_untag_on_a_tag_page(page, wiki):
     for title in ("Nails", "Glue"):
         page.request.post("/api/tasks", data={"title": title, "tags": "misc,hardware"})
     wiki.write("misc", "# Misc\n\n[[tasks: tag=misc]]\n")
-    page.goto("/page/misc?view=open")
+    page.goto("/page/misc?view=open&group=none")
     card(page, "Glue").locator(".task-title").click()     # newest first: Glue, Nails
     page.keyboard.press("Shift+ArrowDown")
     page.keyboard.press("Shift+T")
@@ -1386,7 +1412,7 @@ def test_bulk_tag_dialog_three_states(page, wiki):
     # one undo that puts every task's tags back.
     page.request.post("/api/tasks", data={"title": "Bolts", "tags": "x,y"})
     page.request.post("/api/tasks", data={"title": "Nuts", "tags": "x"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     select_by_keys(page, "Nuts", 2)                   # newest first: Nuts, Bolts
     page.keyboard.press("t")
     dlg = page.locator(".bulk-tag-modal")
@@ -1426,7 +1452,7 @@ def test_bulk_tag_dialog_three_states(page, wiki):
 def test_bulk_tag_one_tag_says_so_and_skips_unchanged(page, wiki):
     page.request.post("/api/tasks", data={"title": "Bolts", "tags": "work"})
     page.request.post("/api/tasks", data={"title": "Nuts"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     select_by_keys(page, "Nuts", 2)
     page.keyboard.press("t")
     page.locator("#bulk-tag-input").fill("work")
@@ -1441,7 +1467,7 @@ def test_bulk_tag_one_tag_says_so_and_skips_unchanged(page, wiki):
 
 def test_bulk_tag_nothing_changed_sends_nothing(page, wiki):
     page.request.post("/api/tasks", data={"title": "Bolts", "tags": "work"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     card(page, "Bolts").locator(".task-title").click()
     page.keyboard.press("t")
     requests = []
@@ -1457,28 +1483,28 @@ def test_a_reload_keeps_the_tab(page, wiki):
     # A link opens its tab; F5 after going elsewhere stays there.
     task = page.request.post("/api/tasks", data={"title": "Linked", "start_date": date.today().isoformat()}).json()
     active = page.locator("#tasks-tabs .active")
-    page.goto(f"/tasks?task={task['id']}&view=open")
+    page.goto(f"/tasks?task={task['id']}&view=open&group=none")
     expect(active).to_have_text(["Open"])
     expect(card(page, "Linked")).to_have_class(re.compile(r"\btask-selected\b"))
     page.reload()                                     # nothing chosen yet: still the link's tab
     expect(active).to_have_text(["Open"])
     open_tab(page, "focus")
     page.reload()
-    expect(active).to_have_text(["Focus"])
+    expect(active).to_have_text(["Today"])
     expect(card(page, "Linked")).to_be_visible()
     expect(card(page, "Linked")).not_to_have_class(re.compile(r"\btask-selected\b"))  # the link's task isn't picked again
     page.reload()
-    expect(active).to_have_text(["Focus"])
+    expect(active).to_have_text(["Today"])
     # Opening the link again follows it.
-    page.goto(f"/tasks?task={task['id']}&view=open")
+    page.goto(f"/tasks?task={task['id']}&view=open&group=none")
     expect(active).to_have_text(["Open"])
     # An embed that names its tab: the same. Opened, its tab; reloaded, the one shown.
-    wiki.write("board", "# Board\n\n[[tasks: view=open]]\n")
+    wiki.write("board", "# Board\n\n[[tasks: view=open group=none]]\n")
     page.goto("/page/board")
     expect(active).to_have_text(["Open"])
     open_tab(page, "focus")
     page.reload()
-    expect(active).to_have_text(["Focus"])
+    expect(active).to_have_text(["Today"])
     page.goto("/page/board")
     expect(active).to_have_text(["Open"])
 
@@ -1493,7 +1519,7 @@ def seed_four(page):
     # Open shows them newest first: Saw, Glue, Nuts, Bolts.
     for title in ("Bolts", "Nuts", "Glue", "Saw"):
         page.request.post("/api/tasks", data={"title": title})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
 
 
 def selected_titles(page):
@@ -1524,7 +1550,7 @@ def test_shift_and_ctrl_click_select(page, wiki):
 def test_ctrl_a_selects_what_the_filter_shows(page, wiki):
     for title, tags in (("Bolts", "hw"), ("Nuts", "hw"), ("Glue", "")):
         page.request.post("/api/tasks", data={"title": title, "tags": tags})
-    page.goto("/tasks?view=open&tag=hw")
+    page.goto("/tasks?view=open&group=none&tag=hw")
     card(page, "Nuts").locator(".task-title").click()
     page.keyboard.press("Control+a")
     assert sorted(selected_titles(page)) == ["Bolts", "Nuts"]
@@ -1663,7 +1689,7 @@ def test_the_move_dialog_makes_a_new_list(page, wiki):
 def test_a_list_made_in_the_move_dialog_is_a_pill_beside_the_pinned(page, wiki):
     make_list(page, "work", pin=True)
     page.request.post("/api/tasks", data={"title": "Bolts"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     card(page, "Bolts").locator(".task-title").click(button="right")
     page.locator(".task-menu").get_by_role("menuitem", name="Move to list…").click()
     dlg = page.locator(".bulk-list-modal")
@@ -1681,7 +1707,7 @@ def test_moving_tasks_out_of_the_list_shown(page, wiki):
         make_list(page, name)
     for title in ("Bolts", "Nuts", "Glue"):
         page.request.post("/api/tasks", data={"title": title, "list": "shop"})
-    page.goto("/tasks?list=shop&view=open")
+    page.goto("/tasks?list=shop&view=open&group=none")
     card(page, "Glue").locator(".task-title").click()
     card(page, "Nuts").locator(".task-title").click(modifiers=["Shift"])
     page.keyboard.press("m")                                         # as the selection bar's List…
@@ -1841,7 +1867,7 @@ def test_main_task_counts_list_tasks_as_completed(page, wiki):
     done = page.request.post("/api/tasks", data={"title": "Bread", "tags": "groceries"}).json()
     page.request.put(f"/api/tasks/{done['id']}", data={"completed": True})
     wiki.write("shop", "# Shop\n\n[[tasks: list=groceries]]\n")
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     expect(card(page, "Oat milk")).to_be_visible()
     expect(page.locator("#task-closed-link")).to_have_text("Closed (1) →")
     expect(page.locator("#task-show-lists")).to_have_count(0)
@@ -1849,7 +1875,7 @@ def test_main_task_counts_list_tasks_as_completed(page, wiki):
 
 def test_new_task_in_a_list_embed_goes_into_the_list(page, wiki):
     list_page(page, wiki, "shop", "# Shop\n\n[[tasks: list=groceries]]\n")
-    page.goto("/page/shop?view=open")
+    page.goto("/page/shop?view=open&group=none")
     # The filter says which list this is: a chip of the list's, with no ×.
     filt = page.locator(".tasks-toolbar .tag-chip")
     expect(filt).to_have_text(["groceries"])
@@ -1874,7 +1900,7 @@ def test_new_task_in_a_list_embed_goes_into_the_list(page, wiki):
 def test_a_cards_list_comes_first_and_marked(page, wiki):
     make_list(page, "groceries")
     page.request.post("/api/tasks", data={"title": "Oat milk", "list": "groceries", "tags": "dairy"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     tags = card(page, "Oat milk").locator(".task-tag")
     expect(tags).to_have_text(["groceries", "#dairy"])
     expect(tags.first).to_have_class(re.compile(r"\btask-tag-list\b"))
@@ -1895,7 +1921,7 @@ def test_a_cards_list_comes_first_and_marked(page, wiki):
     page.keyboard.press("Escape")
     # In a view of that one list the cards don't repeat it.
     wiki.write("shop", "# Shop\n\n[[tasks: list=groceries]]\n")
-    page.goto("/page/shop?view=open")
+    page.goto("/page/shop?view=open&group=none")
     expect(card(page, "Oat milk").locator(".task-tag")).to_have_text(["#dairy"])
 
 
@@ -1904,7 +1930,7 @@ def test_filter_marks_the_list_and_takes_list_words(page, wiki):
         make_list(page, name)
     page.request.post("/api/tasks", data={"title": "Screws", "list": "groceries", "tags": "weekly,dairy"})
     wiki.write("shop", "# Shop\n\n[[tasks: list=groceries tag=weekly]]\n")
-    page.goto("/page/shop?view=open")
+    page.goto("/page/shop?view=open&group=none")
     filt = page.locator("#task-filter-search")
     filt.click()
     page.keyboard.type("#dai")                   # chips come from completion
@@ -1917,7 +1943,7 @@ def test_filter_marks_the_list_and_takes_list_words(page, wiki):
     assert titles == ["List", "Set by this page", ""]
     expect(card(page, "Screws")).to_be_visible()
     # A tag named as a list finds nothing of the list; list: does, on any view.
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     filt.fill("#groceries")
     expect(card(page, "Screws")).to_have_count(0)
     filt.fill("list:groceries")
@@ -1934,14 +1960,14 @@ def test_task_moves_to_another_list(page, wiki):
     page.request.post("/api/tasks", data={"title": "Screws", "list": "groceries"})
     wiki.write("shop", "# Shop\n\n[[tasks: list=groceries]]\n")
     wiki.write("diy", "# DIY\n\n[[tasks: list=hardware]]\n")
-    page.goto("/page/shop?view=open")
+    page.goto("/page/shop?view=open&group=none")
     modal = open_edit(page, "Screws")
     modal.locator("#task-edit-list").select_option("hardware")
     modal.get_by_role("button", name="Save").click()
     expect(card(page, "Screws")).to_have_count(0)
     expect(page.get_by_text("Saved to list “hardware”.")).to_be_visible()
     wait_for_field(page, "Screws", "list", "hardware")
-    page.goto("/page/diy?view=open")
+    page.goto("/page/diy?view=open&group=none")
     expect(card(page, "Screws")).to_be_visible()
 
 
@@ -1961,7 +1987,7 @@ def test_focus_is_open_filtered(page, wiki):
            for t, s in (("Alpha", today), ("Later", later), ("Bravo", today), ("Charlie", today))]
     page.request.post("/api/tasks/reorder", data={"order": list(reversed(ids))})
     page.request.post("/api/tasks", data={"title": "Unordered", "start_date": today})
-    page.goto("/tasks?view=focus")
+    page.goto("/tasks?view=today")
     # Open's sections and order, without the task planned later.
     expect(_section(page, "unsorted")).to_have_text(re.compile("Unsorted"))
     expect(_section(page, "sorted")).to_have_text(re.compile("Sorted"))
@@ -1985,7 +2011,7 @@ def test_focus_drag_sorts_into_open_order(page, wiki):
            for t, s in (("Apples", today), ("Bread", None), ("Cheese", today),
                         ("Dates", None), ("Eggs", today))]
     page.request.post("/api/tasks/reorder", data={"order": ids})
-    page.goto("/tasks?view=focus")
+    page.goto("/tasks?view=today")
     page.locator("#task-add-btn").click()
     page.locator("#task-edit-title").fill("Butter")
     page.locator("#task-edit-modal").get_by_role("button", name="Save").click()
@@ -2035,7 +2061,7 @@ def test_board_reorders_a_day_in_open_order(page, wiki):
            for t, s in (("Alpha", today), ("Elsewhere", tomorrow()), ("Bravo", today), ("Charlie", today))]
     page.request.post("/api/tasks/reorder", data={"order": ids})
     page.request.post("/api/tasks", data={"title": "Newbie", "start_date": today})
-    page.goto("/tasks?view=plan")
+    page.goto("/tasks?view=open&group=day")
     expect(card(page, "Charlie")).to_be_visible()
     assert _day_titles(page, today) == ["Newbie", "Alpha", "Bravo", "Charlie"]
 
@@ -2063,7 +2089,7 @@ def test_board_drop_on_a_card_of_another_day_starts_and_places_it(page, wiki):
     ids = [page.request.post("/api/tasks", data={"title": t, "start_date": s}).json()["id"]
            for t, s in (("Alpha", today), ("Bravo", today), ("Mover", tomorrow()))]
     page.request.post("/api/tasks/reorder", data={"order": ids})
-    page.goto("/tasks?view=plan")
+    page.goto("/tasks?view=open&group=day")
     _drop(card(page, "Mover"), card(page, "Bravo"), "before")
     wait_for_field(page, "Mover", "start_date", today)
     wait_until(page, lambda: _by_order(page, "sort_order") == ["Alpha", "Mover", "Bravo"])
@@ -2076,7 +2102,7 @@ def test_board_keyboard_reorders_within_a_day_only(page, wiki):
     ids = [page.request.post("/api/tasks", data={"title": t, "start_date": s}).json()["id"]
            for t, s in (("Alpha", today), ("Bravo", today), ("Next", tomorrow()))]
     page.request.post("/api/tasks/reorder", data={"order": ids})
-    page.goto("/tasks?view=plan")
+    page.goto("/tasks?view=open&group=day")
     card(page, "Bravo").click()
     page.keyboard.press("Control+Shift+ArrowUp")
     wait_until(page, lambda: _by_order(page, "sort_order") == ["Bravo", "Alpha", "Next"])
@@ -2117,7 +2143,7 @@ def test_board_labels_unsorted_in_every_section_that_has_some(page, wiki):
     other = page.request.post("/api/tasks", data={"title": "Tomorrow ranked", "start_date": tomorrow}).json()["id"]
     page.request.post("/api/tasks/reorder", data={"order": [ranked, other]})
     page.set_viewport_size({"width": 1280, "height": 1400})
-    page.goto("/tasks?view=plan")
+    page.goto("/tasks?view=open&group=day")
     expect(card(page, "Added today")).to_be_visible()
     rows = lambda day: page.evaluate("""day => {
         const out = [];
@@ -2137,7 +2163,7 @@ def test_board_unplanned_shows_unsorted_apart_and_reorders(page, wiki):
     ids = [page.request.post("/api/tasks", data={"title": t}).json()["id"] for t in ("Alpha", "Bravo")]
     page.request.post("/api/tasks/reorder", data={"order": ids})
     page.request.post("/api/tasks", data={"title": "Fresh"})
-    page.goto("/tasks?view=plan")
+    page.goto("/tasks?view=open&group=day")
     expect(card(page, "Fresh")).to_be_visible()
     assert _unplanned_rows(page) == ["# Unsorted", "Fresh", "# Sorted", "Alpha", "Bravo"]
     # Unsorted cards are hollow, as on Open and Focus; Sorted ones aren't.
@@ -2169,7 +2195,7 @@ def test_board_drop_on_own_heading_changes_nothing_except_later(page, wiki):
     page.request.post("/api/tasks", data={"title": "Loose task"})
     far = (date.today() + timedelta(days=30)).isoformat()
     page.request.post("/api/tasks", data={"title": "Later task", "start_date": far})
-    page.goto("/tasks?view=plan")
+    page.goto("/tasks?view=open&group=day")
     expect(card(page, "Later task")).to_be_visible()
     writes = []
     page.on("request", lambda r: writes.append(r.url) if r.method != "GET" else None)
@@ -2189,7 +2215,7 @@ def test_focus_follows_open_order(page, wiki):
     ids = [page.request.post("/api/tasks", data={"title": t, "start_date": today}).json()["id"]
            for t in ("Alpha", "Bravo")]
     page.request.post("/api/tasks/reorder", data={"order": ids})
-    page.goto("/tasks?view=focus")
+    page.goto("/tasks?view=today")
     expect(_focus_titles(page)).to_have_text(["Alpha", "Bravo"])
     open_tab(page, "open")
     card(page, "Bravo").drag_to(card(page, "Alpha"))
@@ -2203,7 +2229,7 @@ def test_focus_keyboard_crosses_the_sections(page, wiki):
     ids = [page.request.post("/api/tasks", data={"title": t, "start_date": t2}).json()["id"]
            for t, t2 in (("Bravo", today), ("Hidden", None), ("Alpha", today))]
     page.request.post("/api/tasks/reorder", data={"order": ids})
-    page.goto("/tasks?view=focus")
+    page.goto("/tasks?view=today")
     # Unsorted (the due task) above Sorted.
     expect(_focus_titles(page)).to_have_text(["Deadline", "Bravo", "Alpha"])
     # Unsorted can't be reordered: ↑ does nothing, ↓ sorts the task in at the
@@ -2230,19 +2256,19 @@ def test_focus_limit_is_off_unless_set(page, wiki):
     for i in range(5):
         page.request.post("/api/tasks", data={"title": f"Task {i}", "start_date": today})
     # No limit by default: no Focus warning, no flagged day on Plan.
-    page.goto("/tasks?view=focus")
+    page.goto("/tasks?view=today")
     expect(_focus_titles(page)).to_have_count(5)
     expect(page.locator(".focus-over-limit")).to_have_count(0)
     open_tab(page, "plan")
     expect(page.locator(".board-day-divider", has_text="Today")).to_be_visible()
     expect(page.locator(".board-day--over")).to_have_count(0)
     # ?limit= (the /tasks page) turns it on; the count includes Unsorted.
-    page.goto("/tasks?view=focus&limit=5")
-    expect(page.locator(".focus-over-limit")).to_contain_text("5 tasks in Focus (limit: 5)")
+    page.goto("/tasks?view=today&limit=5")
+    expect(page.locator(".focus-over-limit")).to_contain_text("5 tasks in Today (limit: 5)")
     open_tab(page, "plan")
     expect(page.locator(".board-day--over")).to_have_count(1)
     # [[tasks: limit=N]] in an embed.
-    wiki.write("board", "# Board\n\n[[tasks: view=focus limit=3]]\n")
+    wiki.write("board", "# Board\n\n[[tasks: view=today limit=3]]\n")
     page.goto("/page/board")
     expect(page.locator(".focus-over-limit")).to_contain_text("(limit: 3)")
 
@@ -2252,7 +2278,7 @@ def test_task_added_on_focus_lands_in_unsorted(page, wiki):
     ids = [page.request.post("/api/tasks", data={"title": t, "start_date": today}).json()["id"]
            for t in ("Alpha", "Bravo")]
     page.request.post("/api/tasks/reorder", data={"order": ids})
-    page.goto("/tasks?view=focus")
+    page.goto("/tasks?view=today")
     page.locator("#task-add-btn").click()
     page.locator("#task-edit-title").fill("Added now")
     page.locator("#task-edit-modal").get_by_role("button", name="Save").click()
@@ -2266,7 +2292,7 @@ def test_new_task_is_selected_and_scrolled_into_view(page, wiki):
     for i in range(30):
         page.request.post("/api/tasks", data={"title": f"Filler {i}", "start_date": today})
     page.set_viewport_size({"width": 1000, "height": 600})
-    page.goto("/tasks?view=focus")
+    page.goto("/tasks?view=today")
     expect(_focus_titles(page)).to_have_count(30)
     page.locator("#task-add-btn").click()
     page.locator("#task-edit-title").fill("Added now")
@@ -2293,7 +2319,7 @@ def test_open_has_unsorted_and_sorted_sections(page, wiki):
     for t in ("Old new", "Fresh"):
         page.request.post("/api/tasks", data={"title": t})
     page.request.post("/api/tasks", data={"title": "Overdue", "due_date": "2020-01-01"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     expect(_section(page, "unsorted")).to_have_text(re.compile("Unsorted"))
     expect(_section(page, "sorted")).to_have_text(re.compile("Sorted"))
     # Unsorted: newest first. No Due section on Open: a due task sits in its section.
@@ -2308,7 +2334,7 @@ def test_open_has_unsorted_and_sorted_sections(page, wiki):
 def test_double_click_on_title_or_notes_opens_modal(page, wiki):
     """The title and the notes open the modal too; nothing is edited in place."""
     page.request.post("/api/tasks", data={"title": "Paint fence", "description": "Two coats."})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     modal = page.locator("#task-edit-modal")
     for part in (".task-title", ".task-desc"):
         if part == ".task-desc":
@@ -2334,7 +2360,7 @@ def test_open_drag_between_unsorted_and_sorted(page, wiki):
     page.request.post("/api/tasks/reorder", data={"order": ids})
     for t in ("One", "Two"):
         page.request.post("/api/tasks", data={"title": t})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     assert _open_titles(page, "unsorted") == ["Two", "One"]
     # Within Unsorted nothing moves (newest first).
     card(page, "Two").drag_to(card(page, "One"))
@@ -2369,7 +2395,7 @@ def test_drop_lands_where_the_pointer_is_from_anywhere(page, wiki):
     ids = [page.request.post("/api/tasks", data={"title": t}).json()["id"] for t in ("Alpha", "Bravo", "Charlie")]
     page.request.post("/api/tasks/reorder", data={"order": ids})
     page.request.post("/api/tasks", data={"title": "New"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     _drop(card(page, "New"), card(page, "Bravo"), "before")          # from Unsorted
     wait_until(page, lambda: _open_titles(page, "sorted") == ["Alpha", "New", "Bravo", "Charlie"])
     _drop(card(page, "Charlie"), card(page, "Alpha"), "before")      # within Sorted, up
@@ -2386,7 +2412,7 @@ def test_open_keyboard_crosses_the_sections(page, wiki):
     page.request.post("/api/tasks/reorder", data={"order": ids})
     for t in ("One", "Two"):
         page.request.post("/api/tasks", data={"title": t})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     # ↓ on any unsorted task (not just the last) puts it first in Sorted.
     card(page, "Two").click()
     page.keyboard.press("Control+Shift+ArrowDown")
@@ -2405,7 +2431,7 @@ def test_open_reorder_under_a_filter_keeps_hidden_tasks_in_place(page, wiki):
     ids = [page.request.post("/api/tasks", data={"title": t, "tags": tags}).json()["id"]
            for t, tags in (("A1", "a"), ("B1", "b"), ("A2", "a"), ("B2", "b"))]
     page.request.post("/api/tasks/reorder", data={"order": ids})
-    page.goto("/tasks?view=open&tag=a")
+    page.goto("/tasks?view=open&group=none&tag=a")
     assert _open_titles(page, "sorted") == ["A1", "A2"]
     card(page, "A2").drag_to(card(page, "A1"))
     wait_until(page, lambda: _open_titles(page, "sorted") == ["A2", "A1"])
@@ -2427,7 +2453,7 @@ def test_closed_tasks_survive_the_load_race(page, wiki):
         page.wait_for_timeout(400)  # the closed tasks arrive first
         route.continue_()
     page.route("**/api/tasks", slow_open_tasks)
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     expect(card(page, "Something else")).to_be_visible()
     # Only once the (slow) open tasks are in: before that Closed already
     # showed the task, and the bug only struck when they replaced the list.
@@ -2446,7 +2472,7 @@ def test_ticked_tasks_stay_ticked_when_the_first_one_goes(page, wiki):
     for title in ("Alpha", "Beta", "Gamma"):
         page.request.post("/api/tasks", data={"title": title})
     page.clock.install()
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     card(page, "Alpha").locator("input[type=checkbox]").check()
     page.clock.run_for(2000)
     card(page, "Beta").locator("input[type=checkbox]").check()
@@ -2471,7 +2497,7 @@ def test_copy_link_to_a_task(page, wiki):
     done = page.request.post("/api/tasks", data={"title": "Old one"}).json()["id"]
     page.request.put(f"/api/tasks/{done}", data={"completed": True})
     page.context.grant_permissions(["clipboard-read", "clipboard-write"])
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     card(page, "Call Bob").locator(".task-menu-btn").click()
     page.locator(".task-menu").get_by_role("menuitem", name="Copy link").click()
     expect(page.locator(".task-undo-toast")).to_contain_text("Link copied")
@@ -2493,7 +2519,7 @@ def test_click_on_checkbox_label_ticks_without_selecting(page, wiki):
     # A press on the checkbox's label (on touch it reaches beside the box)
     # ticks it like one on the box: it used to select the card as well.
     page.request.post("/api/tasks", data={"title": "Water plants"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     c = card(page, "Water plants")
     label = c.locator(".task-checkbox")
     label.dispatch_event("mousedown", {"button": 0})
@@ -2508,7 +2534,7 @@ def test_keep_task_goes_back_to_open_with_undo(page, wiki):
     today = date.today().isoformat()
     page.request.post("/api/tasks", data={"title": "Milk", "keep": True, "start_date": today})
     page.clock.install()
-    page.goto("/tasks?view=focus")
+    page.goto("/tasks?view=today")
     expect(card(page, "Milk").locator(".task-keep")).to_be_visible()
     card(page, "Milk").locator("input[type=checkbox]").check()
     page.clock.run_for(5500)   # completion grace period + fade-out
@@ -2532,7 +2558,7 @@ def test_keep_task_goes_back_to_open_with_undo(page, wiki):
 
 def test_keep_checkbox_in_modal(page, wiki):
     # A list whose new tasks are keep tasks (its setting); a keep task can't repeat.
-    list_page(page, wiki, "shop", "# Shop\n\n[[tasks: list=groceries keep=1 view=open]]\n")
+    list_page(page, wiki, "shop", "# Shop\n\n[[tasks: list=groceries keep=1 view=open group=none]]\n")
     page.goto("/page/shop")
     page.locator("#task-add-btn").click()
     keep = page.locator("#task-edit-keep")
@@ -2559,7 +2585,7 @@ def test_a_task_in_a_private_list_is_private(page, wiki, monkeypatch):
     monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "token")})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
     make_list(page, "team")
-    list_page(page, wiki, "private/alice/todo", "# Todo\n\n[[tasks: list=mine view=open]]\n")
+    list_page(page, wiki, "private/alice/todo", "# Todo\n\n[[tasks: list=mine view=open group=none]]\n")
     page.goto("/page/private/alice/todo")
     page.locator("#task-add-btn").click()
     lists, note = page.locator("#task-edit-list"), page.locator("#task-edit-list-note")
@@ -2588,7 +2614,7 @@ def test_a_task_in_a_private_list_is_private(page, wiki, monkeypatch):
     assert task_by_title(page, "Gift for Bob")["list"] == "team"
     # It left the list this page shows; All tasks has it, without the lock.
     expect(card(page, "Gift for Bob")).to_have_count(0)
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     expect(card(page, "Gift for Bob")).to_be_visible()
     expect(card(page, "Gift for Bob").locator(".task-private")).to_have_count(0)
     assert "Gift for Bob" in (wiki.root / "_tasks/lists/team/tasks.json").read_text()
@@ -2607,7 +2633,7 @@ def test_a_tag_named_as_a_private_list_keeps_a_task_shared(page, wiki, monkeypat
     page.request.post("/login", form={"username": "alice", "password": "pw"})
     make_list(page, "gifts", private=True)
     make_list(page, "team")
-    page.goto("/tasks?list=team&view=open")
+    page.goto("/tasks?list=team&view=open&group=none")
     page.locator("#task-add-btn").click()
     lists = page.locator("#task-edit-list")
     expect(lists).to_have_value("team")         # a shared list: the tag doesn't change that
@@ -2815,7 +2841,7 @@ def test_a_private_and_a_shared_list_of_one_name(page, wiki, monkeypatch):
     make_list(page, "task")
     page.request.post("/login", form={"username": "alice", "password": "pw"})
     assert page.request.post("/tasks/pin-list", form={"list": "shared/task", "pin": "first"}).ok
-    page.goto("/tasks?list=shared/task&view=open")
+    page.goto("/tasks?list=shared/task&view=open&group=none")
     expect(page.locator("h1")).to_have_text("List: task")
     page.locator("#task-add-btn").click()
     modal = page.locator(".task-edit-modal[open]")
@@ -2830,7 +2856,7 @@ def test_a_private_and_a_shared_list_of_one_name(page, wiki, monkeypatch):
     wait_for_field(page, "Call the bank", "private", False)   # the dialog closes before its request is through
     assert task_by_title(page, "Call the bank")["list"] == "task"
     # Her own list of that name: private.
-    page.goto("/tasks?list=task&view=open")
+    page.goto("/tasks?list=task&view=open&group=none")
     page.locator("#task-add-btn").click()
     expect(lists).to_have_value("task")
     expect(modal.locator("[id^=task-edit-list-note]")).to_be_hidden()
@@ -2839,12 +2865,12 @@ def test_a_private_and_a_shared_list_of_one_name(page, wiki, monkeypatch):
     modal.locator("button[type=submit]").click()
     wait_for_field(page, "Buy a ring", "private", True)
     # The switcher has both, hers with a lock, each with its own tasks.
-    page.goto("/tasks?list=shared/task&view=open")
+    page.goto("/tasks?list=shared/task&view=open&group=none")
     expect(card(page, "Call the bank")).to_be_visible()
     expect(card(page, "Buy a ring")).to_have_count(0)
     expect(page.locator(".tasks-place[data-place='list:task'] .tasks-place-lock")).to_have_count(1)
     expect(page.locator(".tasks-place[data-place='list:shared/task'] .tasks-place-lock")).to_have_count(0)
-    page.goto("/tasks?list=task&view=open")
+    page.goto("/tasks?list=task&view=open&group=none")
     expect(card(page, "Buy a ring")).to_be_visible()
     expect(card(page, "Call the bank")).to_have_count(0)
 
@@ -2862,7 +2888,7 @@ def test_a_shared_task_cant_go_into_a_private_list(page, wiki, monkeypatch):
     make_list(page, "own", private=True)
     page.request.post("/api/tasks", data={"title": "Alice's errand", "list": "own"})
     page.request.post("/api/tasks", data={"title": "Alice's note"})        # her Inbox
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     open_edit(page, "Bob's errand")
     lists, note = page.locator("#task-edit-list"), page.locator("#task-edit-list-note")
     expect(lists.locator("option")).to_have_text(["🔒 Inbox", "board", "🔒 own", "team", "New list…"])
@@ -2913,7 +2939,7 @@ def test_a_new_list_from_the_move_dialog_is_as_private_as_its_tasks(page, wiki, 
     page.request.post("/login", form={"username": "alice", "password": "pw"})
     make_list(page, "own", private=True)
     page.request.post("/api/tasks", data={"title": "Alice's errand", "list": "own"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     dlg = page.locator(".bulk-list-modal")
     box, note = dlg.locator("#bulk-list-private"), dlg.locator(".bulk-list-note")
 
@@ -2950,7 +2976,7 @@ def test_a_comment_can_be_edited_by_its_author(page, wiki, monkeypatch):
     page.request.post(f"/api/tasks/{task['id']}/comments", data={"text": "From Bob"})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
     page.request.post(f"/api/tasks/{task['id']}/comments", data={"text": "From Alice"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     open_edit(page, "Errand")
     items = page.locator("#task-edit-comment-list li")
     expect(items.filter(has_text="From Alice").locator("[data-comment-action]")).to_have_count(2)
@@ -2971,7 +2997,7 @@ def test_subtasks_show_their_count_and_ask_before_done(page, wiki):
     page.request.post("/api/tasks", data={"title": "Plan trip", "description": notes})
     page.request.post("/api/tasks", data={"title": "Only notes", "description": "no list here"})
     page.request.post("/api/tasks", data={"title": "All ticked", "description": "- [x] one"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     badge = card(page, "Plan trip").locator(".task-subtasks")
     expect(badge).to_have_text("☑ 1/3")
     expect(badge).to_have_attribute("title", "1 of 3 subtasks done")
@@ -3008,7 +3034,7 @@ def test_subtasks_show_their_count_and_ask_before_done(page, wiki):
 def test_space_and_bulk_done_ask_about_open_subtasks(page, wiki):
     page.request.post("/api/tasks", data={"title": "Plan trip", "description": "- [ ] tickets\n- [ ] hotel"})
     page.request.post("/api/tasks", data={"title": "Water plants"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     dialog = page.locator("#task-subtasks-modal")
     card(page, "Plan trip").locator(".task-title").click()
     page.keyboard.press("Space")
@@ -3036,7 +3062,7 @@ def test_checkboxes_in_task_notes(page, wiki):
     # ticking one edits the notes (recording when, shown as a date chip),
     # leaves the task itself alone, and can be undone.
     page.request.post("/api/tasks", data={"title": "Bake", "description": "Need:\n- [ ] eggs\n- [x] flour"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     checks = open_details(page, "Bake").locator(".task-desc input[type=checkbox]")
     expect(checks).to_have_count(2)
     expect(checks.nth(0)).not_to_be_checked()
@@ -3063,7 +3089,7 @@ def test_notes_and_comments_render_as_on_a_page(page, wiki):
     tid = page.request.post("/api/tasks", data={"title": "Fence", "description":
         "## Steps\nsand\nprime\n\n| coat | days |\n|---|---|\n| 1 | 2 |\n\n```python\nx = 1\n```\n\n_soft_ wood"}).json()["id"]
     page.request.post(f"/api/tasks/{tid}/comments", data={"text": "**primed** today"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     desc = card(page, "Fence").locator(".task-desc")
     expect(desc.locator("h2")).to_have_text("Steps")
     expect(desc.locator("p").first).to_have_text("sand prime")
@@ -3080,7 +3106,7 @@ def test_a_comment_keeps_its_lines(page, wiki):
     # (under its time, not on the time's line) and in the dialog.
     tid = page.request.post("/api/tasks", data={"title": "Fence"}).json()["id"]
     page.request.post(f"/api/tasks/{tid}/comments", data={"text": "sanded\nprimed"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     expect(card(page, "Fence").locator("div.task-card-comment .task-comment-body br")).to_have_count(1)
     card(page, "Fence").dblclick()
     body = page.locator("#task-edit-comment-list .task-comment-body")
@@ -3096,7 +3122,7 @@ def test_a_page_draws_its_lists_without_asking_for_the_tasks(page, wiki):
     tid = page.request.post("/api/tasks", data={"title": "Fence", "tags": ["yard"], "description": "see [[garden]]"}).json()["id"]
     page.request.post(f"/api/tasks/{tid}/comments", data={"text": "**primed** today"})
     page.request.post("/api/tasks", data={"title": "Taxes"})
-    wiki.write("lists", "# Lists\n\n[[tasks: tag=yard view=open]]\n\n[[tasks: view=open]]\n")
+    wiki.write("lists", "# Lists\n\n[[tasks: tag=yard view=open group=none]]\n\n[[tasks: view=open group=none]]\n")
     asked = []
     page.on("request", lambda r: asked.append(r.url.split("?")[0].rsplit("/api/", 1)[-1])
             if r.method == "GET" and r.url.endswith("/api/tasks") or "/api/render-notes" in r.url else None)
@@ -3128,7 +3154,7 @@ def test_title_links(page, wiki):
     # card shows [name](url), [[wikilinks]] and bare URLs as links, menus
     # and toasts the plain words. A javascript: link stays text.
     page.request.post("/api/tasks", data={"title": "See [[Garden]] and https://e.x/a or [bad](javascript:alert(1))"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     page.locator("#task-add-btn").click()
     title = page.locator("#task-edit-title")
     title.press_sequentially("Read ")
@@ -3157,7 +3183,7 @@ def test_note_checklist_starts_flush_with_the_text(page, wiki):
     # does, and a nested one is indented. The same in the modal's preview.
     page.request.post("/api/tasks", data={"title": "Pack", "description":
         "Before:\n\n- [ ] tent\n  - [ ] pegs\n  - poles\n- stove"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     desc = open_details(page, "Pack").locator(".task-desc")
     text_x = desc.locator("p").bounding_box()["x"]
     checks = desc.locator(".task-list-item-checkbox")
@@ -3186,7 +3212,7 @@ def test_note_checklist_starts_flush_with_the_text(page, wiki):
 
 
 def test_notes_editor_has_the_bar_and_a_preview(page, wiki):
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     page.locator("#task-add-btn").click()
     modal = page.locator("#task-edit-modal")
     notes = page.locator("#task-edit-desc")
@@ -3254,7 +3280,7 @@ def test_page_and_tasks_checkboxes_stay_apart(page, wiki):
     # A page with its own checklist and a task list: ticking one never ticks
     # the other, though both render the same checkboxes.
     page.request.post("/api/tasks", data={"title": "Pack", "description": "- [ ] tent"})
-    wiki.write("trip", "# Trip\n\n[[tasks: view=open]]\n\n- [ ] book train\n")
+    wiki.write("trip", "# Trip\n\n[[tasks: view=open group=none]]\n\n- [ ] book train\n")
     page.goto("/page/trip")
     tasks_box = open_details(page, "Pack").locator(".task-desc .task-list-item-checkbox")
     tasks_box.check()
@@ -3268,7 +3294,7 @@ def test_page_and_tasks_checkboxes_stay_apart(page, wiki):
 def test_notes_continue_checkbox_list_on_enter(page, wiki):
     # As in the page editor: Enter after a checkbox item starts the next one,
     # Enter on an empty item ends the list.
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     page.locator("#task-add-btn").click()
     notes = page.locator("#task-edit-desc")
     notes.click()
@@ -3285,9 +3311,9 @@ def test_notes_continue_checkbox_list_on_enter(page, wiki):
 def test_embed_labels_rename_the_tabs(page, wiki):
     # labels= changes only the words: tabs, the back link, tooltips. Views
     # and links keep their names.
-    list_page(page, wiki, "shop", "# Shop\n\n[[tasks: list=groceries keep=1 labels=Catalogue,,Shopping_list]]\n")
+    list_page(page, wiki, "shop", "# Shop\n\n[[tasks: list=groceries keep=1 labels=Catalogue,Shopping_list]]\n")
     page.request.post("/api/tasks", data={"title": "Milk", "list": "groceries", "keep": True})
-    page.goto("/page/shop?view=open")
+    page.goto("/page/shop?view=open&group=none")
     expect(page.locator("#tasks-tabs [role='tab']")).to_have_text(["Catalogue", "Shopping list"])
     expect(page.locator("#tasks-tabs .active")).to_have_text("Catalogue")
     expect(card(page, "Milk").locator(".task-keep")).to_have_attribute(
@@ -3300,7 +3326,7 @@ def test_filter_excludes_tags(page, wiki):
     # -#tag hides tasks with that tag; its suggestions work like #tag's.
     for title, tags in (("Plan trip", "tags,gernot"), ("Call vet", "tags,mary"), ("Untagged", "")):
         page.request.post("/api/tasks", data={"title": title, "tags": tags})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     field = page.locator("#task-filter-search")
     field.click()
     page.keyboard.type("-#ma")
@@ -3321,7 +3347,7 @@ def test_filter_excludes_tags(page, wiki):
 def test_history_in_edit_modal_and_undo_leaves_no_trace(page, wiki):
     tid = page.request.post("/api/tasks", data={"title": "Report"}).json()["id"]
     page.request.put(f"/api/tasks/{tid}", data={"due_date": tomorrow()})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
 
     # Start today from the ⋯ menu; its undo puts the old log back.
     card(page, "Report").locator(".task-title").click(button="right")
@@ -3348,7 +3374,7 @@ def test_history_of_a_task_from_before_the_log(page, wiki):
     import json
     (wiki.root / "_tasks" / "tasks.json").write_text(json.dumps([{
         "id": "old-1", "title": "Ancient", "created_at": "2025-03-04T09:15:00"}]))
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     card(page, "Ancient").click()
     page.keyboard.press("Enter")
     history = page.locator("#task-edit-history")
@@ -3359,13 +3385,13 @@ def test_history_of_a_task_from_before_the_log(page, wiki):
 
 def test_planned_tasks_are_marked_on_every_tab(page, wiki):
     # A planned task gets a coloured left edge, the same on every tab: amber
-    # when it is in Focus already (start today or earlier, also "since" a past
+    # when it is for today already (start today or earlier, also "since" a past
     # day), blue when planned later. Unplanned tasks get none.
     yesterday = (date.today() - timedelta(days=1)).isoformat()
     in_week = (date.today() + timedelta(days=4)).isoformat()
     for title, start in (("Since yesterday", yesterday), ("Thursday-ish", in_week), ("Undecided", None)):
         page.request.post("/api/tasks", data={"title": title, "start_date": start})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     expect(card(page, "Since yesterday")).to_have_class(re.compile(r"\btask-planned-now\b"))
     expect(card(page, "Thursday-ish")).to_have_class(re.compile(r"\btask-planned-later\b"))
     expect(card(page, "Undecided")).not_to_have_class(re.compile(r"task-planned"))
@@ -3387,7 +3413,7 @@ def test_due_colour_is_the_same_on_every_tab(page, wiki):
     # than on Focus.
     today = date.today().isoformat()
     page.request.post("/api/tasks", data={"title": "Due now", "due_date": today, "start_date": today})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     looks = lambda: card(page, "Due now").evaluate(
         "el => { const s = getComputedStyle(el); return [s.backgroundColor, s.borderTopColor]; }")
     expect(card(page, "Due now")).to_have_class(re.compile(r"\btask-inbox\b"))   # in Unsorted
@@ -3408,7 +3434,7 @@ def test_due_date_does_not_affect_order(page, wiki):
                                                 "due_date": due}).json()["id"]
            for t, due in (("Ranked first", None), ("Ranked second, due", today))]
     page.request.post("/api/tasks/reorder", data={"order": ids})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     assert _open_titles(page, "unsorted") == ["New", "Old, due"]
     assert _open_titles(page, "sorted") == ["Ranked first", "Ranked second, due"]
     open_tab(page, "focus")
@@ -3420,7 +3446,7 @@ def test_history_of_a_repeating_task_continues(page, wiki):
     tid = page.request.post("/api/tasks", data={"title": "Water plants", "rec_type": "daily",
                                                "start_date": today}).json()["id"]
     page.request.put(f"/api/tasks/{tid}", data={"completed": True})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     card(page, "Water plants").click()
     page.keyboard.press("Enter")
     history = page.locator("#task-edit-history")
@@ -3443,7 +3469,7 @@ def test_board_drop_past_deadline_moves_deadline_too(page, wiki):
     page.request.post("/api/tasks", data={"title": "Late task", "due_date": yesterday})
     page.request.post("/api/tasks", data={"title": "Due today", "due_date": today})
     page.request.post("/api/tasks", data={"title": "Due soon", "due_date": soon})
-    page.goto("/tasks?view=plan")
+    page.goto("/tasks?view=open&group=day")
     tomorrow_div = page.locator(f".board-day-divider[data-drop-day='{tomorrow()}']")
     dialog = page.locator("#task-deadline-modal")
 
@@ -3487,7 +3513,7 @@ def test_overdue_dropped_on_today_starts_without_asking(page, wiki):
     today = date.today().isoformat()
     page.request.post("/api/tasks", data={"title": "Late task",
                                          "due_date": (date.today() - timedelta(days=2)).isoformat()})
-    page.goto("/tasks?view=plan")
+    page.goto("/tasks?view=open&group=day")
     card(page, "Late task").drag_to(page.locator(f".board-day-divider[data-drop-day='{today}']"))
     wait_for_field(page, "Late task", "start_date", today)
     expect(page.locator("#task-deadline-modal")).to_be_hidden()
@@ -3518,7 +3544,7 @@ def test_completed_shows_earlier_years(page, wiki):
     tid = page.request.post("/api/tasks", data={"title": "New done"}).json()["id"]
     page.request.put(f"/api/tasks/{tid}", data={"completed": True})
 
-    page.goto("/tasks?view=focus")
+    page.goto("/tasks?view=today")
     page.locator("#task-closed-link").click()
     years = page.locator(".closed-years button")
     expect(years).to_have_text([str(year), str(year - 1)])
@@ -3558,7 +3584,7 @@ def test_locale_formats_dates_and_the_calendar(page, wiki, monkeypatch):
     t = page.request.post("/api/tasks", data={"title": "Started last year", "start_date": long_ago.isoformat(),
                                               "due_date": (date.today() + timedelta(days=400)).isoformat()}).json()
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
-    page.goto("/page/tasks?view=open")
+    page.goto("/page/tasks?view=open&group=none")
     open_tab(page, "focus")
     expect(card(page, "Started last year").locator(".task-focus-info")).to_have_text(
         f"📅 since 4. März {long_ago.year}")
@@ -3584,7 +3610,7 @@ def test_iso_date_format(page, wiki, monkeypatch):
     t = page.request.post("/api/tasks", data={"title": "Started", "start_date": start.isoformat(),
                                               "due_date": (date.today() + timedelta(days=40)).isoformat()}).json()
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
-    page.goto("/page/tasks?view=open")
+    page.goto("/page/tasks?view=open&group=none")
     open_tab(page, "focus")
     expect(card(page, "Started").locator(".task-focus-info")).to_have_text(f"📅 since {start.isoformat()}")
     in3 = date.today() + timedelta(days=3)
@@ -3615,7 +3641,7 @@ def _pick(page, d: str):
 
 def test_modal_warns_when_start_is_after_due_and_offers_a_fix(page, wiki):
     page.request.post("/api/tasks", data={"title": "Report", "due_date": _day(2)})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     modal = open_edit(page, "Report")
     warn = modal.locator("#task-edit-date-warn")
     expect(warn).to_be_hidden()
@@ -3648,7 +3674,7 @@ def test_modal_warns_when_start_is_after_due_and_offers_a_fix(page, wiki):
 def test_quick_start_after_the_deadline_asks(page, wiki):
     page.request.post("/api/tasks", data={"title": "Due today", "due_date": _day(0)})
     page.request.post("/api/tasks", data={"title": "Late task", "due_date": _day(-1)})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     dialog = page.locator("#task-deadline-modal")
 
     # ⋯ Start tomorrow on a task due today: asks; Cancel changes nothing.
@@ -3677,7 +3703,7 @@ def test_quick_start_after_the_deadline_asks(page, wiki):
 
 def test_comment_paste_of_a_url_asks_for_its_name(page, wiki):
     page.request.post("/api/tasks", data={"title": "Link in comment"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     modal = open_edit(page, "Link in comment")
     field = modal.locator("#task-edit-comment")
     modal.get_by_role("button", name="Write a comment…").click()
@@ -3693,7 +3719,7 @@ def test_comment_paste_of_a_url_asks_for_its_name(page, wiki):
 
 def test_comments_in_edit_modal(page, wiki):
     page.request.post("/api/tasks", data={"title": "Plan on-call"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     modal = open_edit(page, "Plan on-call")
     field = modal.locator("#task-edit-comment")
     add = modal.get_by_role("button", name="Write a comment…")
@@ -3788,7 +3814,7 @@ def test_comments_in_edit_modal(page, wiki):
 def test_comment_of_several_lines(page, wiki):
     # A comment is markdown, as the notes are: paragraphs, lists, code.
     page.request.post("/api/tasks", data={"title": "Paint the fence"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     modal = open_edit(page, "Paint the fence")
     modal.get_by_role("button", name="Write a comment…").click()
     field = modal.locator("#task-edit-comment")
@@ -3835,7 +3861,7 @@ def test_comment_of_several_lines(page, wiki):
 def test_comment_in_its_field_is_saved_with_the_task(page, wiki):
     # Save with a comment still in its field: the comment is not lost.
     page.request.post("/api/tasks", data={"title": "Call Bob"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     modal = open_edit(page, "Call Bob")
     modal.get_by_role("button", name="Write a comment…").click()
     modal.locator("#task-edit-comment").fill("left a voicemail")
@@ -3869,7 +3895,7 @@ def test_tab_in_the_task_dialog_goes_from_field_to_field(page, wiki):
     tid = page.request.post("/api/tasks", data={"title": "Plan trip", "description": "notes",
                                                 "due_date": "2026-12-24"}).json()["id"]
     page.request.post(f"/api/tasks/{tid}/comments", data={"text": "see [the site](https://example.com)\n\n- [ ] one"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     modal = open_edit(page, "Plan trip")
     expect(modal.locator("#task-edit-title")).to_be_focused()
     # The fields the task has, then the line that offers the others.
@@ -3917,7 +3943,7 @@ def test_repeat_stays_where_it_is_when_a_repeat_is_chosen(page, wiki):
     # Every and From done beside it and moves nothing (it used to open on the
     # dates' line and jump to the next with its two fields).
     page.request.post("/api/tasks", data={"title": "Water plants", "due_date": "2099-01-10"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     modal = open_edit(page, "Water plants")
     modal.locator("#task-edit-more-repeat").click()
     rec = modal.locator("#task-edit-rec-type")
@@ -3937,7 +3963,7 @@ def test_repeat_stays_where_it_is_when_a_repeat_is_chosen(page, wiki):
 def test_description_is_close_to_the_title(page, wiki):
     # "Description" is about as far under the title's field (and, on a new
     # task, the line saying where it goes) as "Tags" is under the description.
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     page.locator("#task-add-btn").click()
     modal = page.locator("#task-edit-modal")
     bottom = lambda sel: (lambda b: b["y"] + b["height"])(modal.locator(sel).bounding_box())
@@ -3958,7 +3984,7 @@ def test_the_dialog_shows_rare_fields_when_set_or_asked_for(page, wiki):
     # task's dialog: the line under the fields offers them.
     page.request.post("/api/tasks", data={"title": "Water plants", "due_date": "2099-01-10"})
     page.request.post("/api/tasks", data={"title": "Milk", "keep": True})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     modal = open_edit(page, "Water plants")
     rec, every, from_done = (modal.locator(f"#task-edit-rec-{f}") for f in ("type", "interval", "from"))
     keep, more = modal.locator("#task-edit-keep"), lambda f: modal.locator(f"#task-edit-more-{f}")
@@ -4010,7 +4036,7 @@ def test_the_dialog_shows_rare_fields_when_set_or_asked_for(page, wiki):
 
 
 def test_the_description_grows_and_has_its_bar_while_written_in(page, wiki):
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     page.locator("#task-add-btn").click()
     modal = page.locator("#task-edit-modal")
     notes, bar = modal.locator("#task-edit-desc"), modal.locator("#task-edit-format")
@@ -4059,7 +4085,7 @@ def test_importance_shows_before_the_title_and_is_set_four_ways(page, wiki):
     page.request.post("/api/tasks", data={"title": "Tax return", "importance": "high"})
     page.request.post("/api/tasks", data={"title": "Sort photos", "importance": "low"})
     page.request.post("/api/tasks", data={"title": "Water plants"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     mark = lambda title: card(page, title).locator(".task-importance")
     expect(mark("Tax return")).to_have_text("!")
     expect(mark("Tax return")).to_have_attribute("title", "High importance")
@@ -4104,7 +4130,7 @@ def test_importance_shows_before_the_title_and_is_set_four_ways(page, wiki):
 
 def test_importance_in_quick_add_and_the_filter(page, wiki):
     page.request.post("/api/tasks", data={"title": "Plain one"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     page.locator(".tasks-app").get_by_role("button", name="New task").click()
     modal = page.locator("#task-edit-modal")
     modal.locator("#task-edit-title").fill("Call the bank ! #money")
@@ -4127,14 +4153,14 @@ def test_importance_in_quick_add_and_the_filter(page, wiki):
 
 
 def test_new_task_has_no_comments_field(page, wiki):
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     page.locator(".tasks-app").get_by_role("button", name="New task").click()
     expect(page.locator("#task-edit-comments")).to_be_hidden()
 
 
 def test_date_picker_shortcuts_move_the_start_date(page, wiki):
     page.request.post("/api/tasks", data={"title": "Shift me", "start_date": date.today().isoformat()})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     chip = card(page, "Shift me").locator(".task-focus-info")
     for label, days in (("Tomorrow", 1), ("In 2 days", 2), ("In a week", 7), ("Today", 0),
                         ("Next Monday", (7 - date.today().weekday()) or 7)):
@@ -4181,14 +4207,14 @@ def test_section_wikilinks_in_task_notes(page, wiki):
     # "Page › Section" as label; [[Page#Section|label]] keeps the label.
     wiki.write("garden", "# Garden\n\n## Raised beds\n")
     page.request.post("/api/tasks", data={"title": "Weed", "description": "See [[Garden#Raised beds]] and [[Garden#Raised beds|there]]."})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     expect(page.locator(".task-item a[href='/page/garden#raised-beds']")).to_have_text(["Garden › Raised beds", "there"])
 
 
 def test_external_links_in_tasks_open_a_new_tab(page, wiki):
     page.request.post("/api/tasks", data={"title": "Read https://example.com/a",
                                           "description": "[docs](https://example.org) and https://example.net/x and [[Home]]"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     item = page.locator(".task-item").first
     for href in ("https://example.com/a", "https://example.org", "https://example.net/x"):
         link = item.locator(f'a[href="{href}"]')
@@ -4209,7 +4235,7 @@ def test_one_line_per_task(page, wiki):
     # Every tab shows one line per task, and nothing switches to full cards:
     # not v, which once did, nor a choice an earlier version remembered.
     _line_tasks(page)
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     page.evaluate("""() => { for (const view of ['focus', 'open', 'plan', 'closed'])
         localStorage.setItem('zone-tasks-compact:/tasks|||0|' + view, '0'); }""")
     page.reload()
@@ -4238,7 +4264,7 @@ def test_phone_cards_show_every_tag_never_clip_dates(new_page, wiki):
     _line_tasks(phone)
     phone.request.post("/api/tasks", data={"title": "Pack for the trip", "due_date": "2026-11-15",
                                           "tags": "admin,travel,family,urgent,paperwork,portugal"})
-    phone.goto("/tasks?view=open")
+    phone.goto("/tasks?view=open&group=none")
     tid = task_by_title(phone, "Renew passport")["id"]
     phone.request.put(f"/api/tasks/{tid}", data={"rec_type": "yearly", "rec_interval": 10})
     phone.request.post(f"/api/tasks/{tid}/comments", data={"text": "Shop closes at 6"})
@@ -4277,7 +4303,7 @@ def test_phone_card_menu_sits_on_the_title_line(new_page, wiki):
     phone = new_page(**TOUCH_PHONE)
     phone.request.post("/api/tasks", data={"title": "Pay rent", "tags": "home,money", "due_date": "2026-11-15"})
     phone.request.post("/api/tasks", data={"title": "Plain"})
-    phone.goto("/tasks?view=open")
+    phone.goto("/tasks?view=open&group=none")
     expect(card(phone, "Pay rent")).to_be_visible()
     rent = card(phone, "Pay rent")
     title, menu = rent.locator(".task-content").bounding_box(), rent.locator(".task-menu-btn").bounding_box()
@@ -4299,7 +4325,7 @@ def test_every_card_shows_every_tag(page, wiki):
                                          "tags": "home,insurance,money,calls,waiting,landlord,repairs",
                                          "due_date": tomorrow()})
     page.request.post("/api/tasks", data={"title": "Plain"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     item = card(page, "Call the insurance about the broken window in the kitchen and the hallway")
     tags = item.locator(".task-tag")
     expect(tags).to_have_count(7)
@@ -4341,7 +4367,7 @@ def _expand_setup(page):
                                           "description": "At the shop.\n- [ ] old passport"})
     page.request.post("/api/tasks", data={"title": "Short with notes", "description": "Some notes."})
     page.request.post("/api/tasks", data={"title": "Plain"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
 
 
 def test_line_selecting_shows_the_title_details_on_request(page, wiki):
@@ -4461,7 +4487,7 @@ def test_line_double_click_below_expanded_opens_that_card(page, wiki):
     # double-click opens the card it started on, the other closes after.
     page.request.post("/api/tasks", data={"title": "Below", "description": "Some notes."})
     page.request.post("/api/tasks", data={"title": "Long notes", "description": "\n\n".join(f"Line {i}" for i in range(12))})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     long_notes, below = card(page, "Long notes"), card(page, "Below")
 
     def open_details(item):
@@ -4543,7 +4569,7 @@ def test_line_tap_on_nothing_more_selects_then_opens(new_page, wiki):
 
 def test_full_cards_enter_opens_the_modal_at_once(page, wiki):
     page.request.post("/api/tasks", data={"title": "Plain"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     card(page, "Plain").locator(".task-content").click()
     page.keyboard.press("Enter")
     expect(page.locator(".task-edit-modal[open]")).to_be_visible()
@@ -4584,7 +4610,7 @@ def test_tasks_keys_work_right_after_the_modal_closes(page, wiki):
     # Enter and Esc did nothing until a click somewhere.
     for t in ("Alpha", "Bravo"):
         page.request.post("/api/tasks", data={"title": t})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     card(page, "Bravo").locator(".task-content").click()
     page.keyboard.press("Enter")
     expect(page.locator(".task-edit-modal[open]")).to_be_visible()
@@ -4598,7 +4624,7 @@ def test_line_tags_follow_the_title(page, wiki):
     # In the line the tags (pills) come right after the
     # title; dates and markers sit at the right end.
     _line_tasks(page)
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     passport = card(page, "Renew passport")
     expect(passport.locator(".task-tag").first).to_have_text("#personal")
     title, first, due = (passport.locator(sel).first.bounding_box() for sel in (".task-title", ".task-tag", ".task-due"))
@@ -4614,7 +4640,7 @@ def test_card_actions_on_hover_and_right_click_menu(page, wiki):
     page.request.post("/api/tasks", data={"title": "Water plants", "description": "See https://example.com",
                                           "due_date": "2026-11-12", "rec_type": "weekly", "rec_interval": 1})
     page.request.post("/api/tasks", data={"title": "Other"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     water = card(page, "Water plants")
     skip = water.locator(".task-skip-btn")
     expect(water.locator(".task-wontdo-btn")).to_have_count(0)        # no ✗ on cards
@@ -4650,7 +4676,7 @@ def test_dates_end_at_the_right_edge(page, wiki):
     page.request.post("/api/tasks", data={"title": "Weekly review", "due_date": "2026-11-12",
                                           "rec_type": "weekly", "rec_interval": 1, "tags": "work"})
     page.request.post("/api/tasks", data={"title": "Call the plumber", "due_date": "2026-11-14"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     page.mouse.move(0, 0)
     ends = []
     for title in ("Weekly review", "Call the plumber"):
@@ -4677,7 +4703,7 @@ def test_line_marks_notes(page, wiki):
     # open, so expanding a line changes nothing on it.
     page.request.post("/api/tasks", data={"title": "Has notes", "description": "Some details"})
     page.request.post("/api/tasks", data={"title": "No notes"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     marker = card(page, "Has notes").locator(".task-has-notes")
     expect(marker).to_be_visible()
     expect(marker).to_have_attribute("title", "Has a description")
@@ -4695,7 +4721,7 @@ def test_expanded_task_keeps_its_line(page, wiki):
     page.request.post("/api/tasks", data={"title": "Renew the passport before the trip to Lisbon in spring next year, with new photos from the shop on Main Street and the form",
                                           "tags": "admin", "due_date": "2026-11-15", "description": "At the shop."})
     page.set_viewport_size({"width": 800, "height": 800})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     item = page.locator(".task-item").first
     item.locator(".task-content").hover()   # as when clicking it: hover shows the empty 📅 too
     before = {sel: item.locator(sel).first.bounding_box() for sel in (".task-tag", ".task-due")}
@@ -4725,7 +4751,7 @@ def test_open_task_sets_its_details_apart(page, wiki):
     tid = page.request.post("/api/tasks", data={"title": "Renew passport", "description": "Photos first."}).json()["id"]
     page.request.post(f"/api/tasks/{tid}/comments", data={"text": "Form printed"})
     page.request.post("/api/tasks", data={"title": "Above"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     passport, after = card(page, "Renew passport"), card(page, "Below")
     gap = lambda: after.bounding_box()["y"] - (passport.bounding_box()["y"] + passport.bounding_box()["height"])
     closed_gap = gap()
@@ -4749,7 +4775,7 @@ def test_comments_are_the_edit_modals_last_section(page, wiki):
     tid = page.request.post("/api/tasks", data={"title": "Renew passport", "description": "Photos first."}).json()["id"]
     for i in range(30):
         page.request.post(f"/api/tasks/{tid}/comments", data={"text": f"Step {i}"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     modal = open_edit(page, "Renew passport")
     order = modal.evaluate("""d => [...d.querySelectorAll('[name=description], [name=tags], [name=rec_type], [name=keep], .task-comments, .task-edit-actions')]
         .map(el => el.name || el.className.split(' ').pop())""")
@@ -4777,7 +4803,7 @@ def test_expanded_task_shows_its_latest_comments(page, wiki):
     tid = page.request.post("/api/tasks", data={"title": "Renew passport"}).json()["id"]
     for text in ("Photos done", "Form printed", "Appointment Tue", "Paid the fee"):
         page.request.post(f"/api/tasks/{tid}/comments", data={"text": text})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     passport = card(page, "Renew passport")
     expect(passport.locator(".task-card-comments")).to_be_hidden()   # the line: hidden too
     passport.locator(".task-comments-btn").click()                  # 💬 opens them on the line
@@ -4797,7 +4823,7 @@ def test_line_on_a_phone_is_two_lines(new_page, wiki):
     from conftest import TOUCH_PHONE
     phone = new_page(**TOUCH_PHONE)
     _line_tasks(phone)
-    phone.goto("/tasks?view=open")
+    phone.goto("/tasks?view=open&group=none")
     passport, plain = card(phone, "Renew passport"), card(phone, "Plain")
     row, title, due = (passport.locator(sel).first.bounding_box() for sel in (".task-content", ".task-content", ".task-due"))
     row = passport.bounding_box()
@@ -4811,7 +4837,7 @@ def test_empty_dates_show_on_hover_in_lines_too(page, wiki):
     # With a mouse the empty ⏰ / 📅 placeholders (to set a date) show on
     # hover.
     page.request.post("/api/tasks", data={"title": "No dates yet"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     empty = card(page, "No dates yet").locator(".task-date-empty")
     page.mouse.move(0, 0)
     expect(empty.first).to_be_hidden()
@@ -4835,7 +4861,7 @@ def test_open_sorts_by_deadline_then_created_and_remembers_it(page, wiki):
            for t, d in (("Plain", None), ("Later due", later), ("Soon due", soon))]
     page.request.post("/api/tasks/reorder", data={"order": ids})
     page.request.post("/api/tasks", data={"title": "Fresh"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     sel = page.locator("select.tasks-sort")
     expect(sel).to_have_value("manual")
     sel.select_option("due")
@@ -4863,7 +4889,7 @@ def test_open_by_deadline_does_not_reorder(page, wiki):
     ids = [page.request.post("/api/tasks", data={"title": t, "due_date": soon}).json()["id"]
            for t in ("Alpha", "Bravo")]
     page.request.post("/api/tasks/reorder", data={"order": ids})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     page.locator("select.tasks-sort").select_option("due")
     card(page, "Bravo").click()
     writes = []
@@ -4881,7 +4907,7 @@ def test_plan_sorts_each_section_and_keeps_its_own_sort(page, wiki):
     ids = [page.request.post("/api/tasks", data={"title": t, "start_date": today, "due_date": d}).json()["id"]
            for t, d in (("Old", later), ("Mid", None), ("New", soon))]
     page.request.post("/api/tasks/reorder", data={"order": [ids[1], ids[0], ids[2]]})
-    page.goto("/tasks?view=plan")
+    page.goto("/tasks?view=open&group=day")
     expect(card(page, "New")).to_be_visible()
     sel = page.locator("select.tasks-sort")
     expect(sel).to_have_value("manual")
@@ -4906,7 +4932,7 @@ def test_new_list_from_the_tasks_pages_menu(page, wiki):
     # The Tasks page's ⋯ menu: New list… asks for a name, makes the list and
     # opens it; a name taken comes back saying so.
     page.request.post("/api/tasks", data={"title": "Milk", "tags": "shop"})
-    page.goto("/tasks?view=open")
+    page.goto("/tasks?view=open&group=none")
     page.locator(".page-header .page-menu-btn").click()
     menu = page.locator("#page-menu")
     expect(menu.get_by_role("menuitem")).to_have_text(["New list…"])   # a list's own actions aren't All tasks'
@@ -4928,7 +4954,7 @@ def test_new_list_from_the_tasks_pages_menu(page, wiki):
     expect(page.locator('.tasks-place[data-place="list:shop"] .tasks-place-pin')).to_have_count(1)
     expect(page.locator(".tasks-made-first")).to_have_count(0)
     expect(page.locator(".breadcrumb .module-link[data-module=tasks]")).to_have_attribute("href", "/tasks?mine=1")
-    page.goto("/tasks?list=shop&view=open")
+    page.goto("/tasks?list=shop&view=open&group=none")
     expect(page.locator(".task-item")).to_have_count(0)                # a tag of that name is a tag: the list starts empty
     assert '{"name": "shop"}' in (wiki.root / "_tasks/lists.json").read_text()
     assert not (wiki.root / "lists").exists()                          # a list is no page
@@ -5158,12 +5184,12 @@ def test_settings_dialog_changes_the_lists_settings_and_the_pages(page, wiki):
     page.request.post("/api/tasks", data={"title": "Milk", "list": "shop"})
     registry = wiki.root / "_tasks/lists.json"
     page.goto("/page/shopping")
-    expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Focus"])
+    expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Today"])
     open_list_settings(page)
     dialog = page.locator("#task-settings-modal")
     expect(dialog).to_be_visible()
     # It opens with what the list and the page say.
-    expect(dialog.locator("[name=view]")).to_have_value("focus")
+    expect(dialog.locator("[name=view]")).to_have_value("today")
     expect(dialog.locator("[name=group]")).to_have_value("day")
     expect(dialog.locator("[name=keep]")).to_be_checked()   # shown: the list makes keep tasks
     expect(dialog.locator("[name=list]")).to_have_count(0)   # which list it shows is the page's to say
@@ -5233,7 +5259,7 @@ def test_settings_dialog_changes_the_lists_settings_and_the_pages(page, wiki):
     expect(dialog.locator(".task-settings-where")).to_contain_text("For this list, for everyone")
     expect(dialog.locator(".task-settings-pin")).to_have_attribute("aria-pressed", "true")
     expect(dialog.locator(".task-add-field:visible")).to_have_text(["Hide when sharing", "Leave out of My tasks"])    # no page here: no filter
-    expect(dialog.locator("[name=view]")).to_have_value("focus")    # the list's own tab, not the page's
+    expect(dialog.locator("[name=view]")).to_have_value("today")    # the list's own tab, not the page's
     dialog.locator("[name=view]").select_option("open")
     dialog.locator(".task-settings-pin").click()                    # unpinned
     with page.expect_navigation():
@@ -5246,10 +5272,10 @@ def test_settings_dialog_changes_the_lists_settings_and_the_pages(page, wiki):
 
 
 def test_plan_default_and_all_tasks_settings(page, wiki):
-    """plan=off: Open is one list on a fresh load; a flip of the switch lasts
+    """group=none: Open is one list on a fresh load; a flip of the switch lasts
     for the browser tab. All tasks keeps its settings in the lists' registry."""
     page.request.post("/api/tasks", data={"title": "Some task"})
-    wiki.write("tasks", "# Tasks\n\n[[tasks: plan=off]]\n")
+    wiki.write("tasks", "# Tasks\n\n[[tasks: group=none]]\n")
     page.goto("/page/tasks")
     plan = page.locator(".tasks-cut [data-group=day]")
     as_list = page.locator(".tasks-cut [data-group=none]")
@@ -5280,7 +5306,7 @@ def test_plan_default_and_all_tasks_settings(page, wiki):
     dialog.locator("[name=group]").select_option("none")
     with page.expect_navigation():
         dialog.get_by_role("button", name="Save").click()
-    assert '"all": {"view": "open"}' in (wiki.root / "_tasks" / "lists.json").read_text()
+    assert '"all": {"view": "open", "group": "none"}' in (wiki.root / "_tasks" / "lists.json").read_text()
     expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["Open"])
     expect(plan).to_have_attribute("aria-pressed", "false")
 
@@ -5310,8 +5336,8 @@ def test_export_and_import_a_lists_tasks(page, wiki, tmp_path):
     """The list's ⋯ menu: Export saves the list's tasks as a
     file, Import… adds a file's tasks to the list it is opened in, asking for
     a tag of your own once the file is picked."""
-    list_page(page, wiki, "shopping", "# Shopping\n\n[[tasks: list=shop view=open]]\n")
-    list_page(page, wiki, "food", "# Food\n\n[[tasks: list=food view=open]]\n")
+    list_page(page, wiki, "shopping", "# Shopping\n\n[[tasks: list=shop view=open group=none]]\n")
+    list_page(page, wiki, "food", "# Food\n\n[[tasks: list=food view=open group=none]]\n")
     page.request.post("/api/tasks", data={"title": "Milk", "list": "shop"})
     page.request.post("/api/tasks", data={"title": "Report", "tags": ["shop"]})     # a tag of that name: not the list's
     page.goto("/page/shopping")
@@ -5401,7 +5427,7 @@ def test_a_long_section_draws_its_top_and_shows_the_rest_on_request(page, wiki):
     row that shows the rest; its count is of all, the filter searches all,
     and a task a link names is drawn."""
     tasks = _many_tasks(wiki, 230)
-    page.goto("/tasks?view=open&plan=off")
+    page.goto("/tasks?view=open&group=none")
     expect(page.locator(".task-item")).to_have_count(200)
     expect(page.locator(".list-section[data-section=unsorted] .board-day-count")).to_have_text("230")
     more = page.locator("[data-draw-more]")
@@ -5422,11 +5448,11 @@ def test_a_long_section_draws_its_top_and_shows_the_rest_on_request(page, wiki):
     page.locator("#task-filter-search").fill("")
     expect(page.locator(".task-item")).to_have_count(230)
     # A link to a task past the window: its section shows whole, the task selected.
-    page.goto(f"/tasks?view=open&plan=off&task={tasks[0]['id']}")
+    page.goto(f"/tasks?view=open&group=none&task={tasks[0]['id']}")
     expect(card(page, "Task 000")).to_be_visible()
     expect(card(page, "Task 000")).to_have_class(re.compile(r"\btask-selected\b|\bselected\b"))
     # The Plan board's sections too.
-    page.goto("/tasks?view=plan")
+    page.goto("/tasks?view=open&group=day")
     expect(page.locator(".task-item")).to_have_count(200)
     expect(page.locator("[data-draw-more]")).to_have_text("Show 30 more")
 
@@ -5438,7 +5464,7 @@ def test_a_long_list_renders_a_description_when_it_is_opened(page, wiki):
     _many_tasks(wiki, 230)
     asked = []
     page.on("request", lambda r: asked.append(r.post_data_json) if r.url.endswith("/api/render-notes") else None)
-    page.goto("/tasks?view=open&plan=off")
+    page.goto("/tasks?view=open&group=none")
     assert "tasks" not in json.loads(page.locator("#tasks-initial").inner_text())    # the list asks for them
     row = card(page, "Task 220")
     expect(row).to_be_visible()
@@ -5457,6 +5483,6 @@ def test_a_long_list_renders_a_description_when_it_is_opened(page, wiki):
     assert len(asked) == 1
     # A short list has its descriptions with it, as always.
     _many_tasks(wiki, 3)
-    page.goto("/tasks?view=open&plan=off")
+    page.goto("/tasks?view=open&group=none")
     assert json.loads(page.locator("#tasks-initial").inner_text())["notes"] == ["<p>Some <strong>bold</strong> words</p>\n"]
     expect(card(page, "Task 000").locator(".task-desc strong")).to_have_count(1)

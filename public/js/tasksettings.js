@@ -33,21 +33,17 @@ const GROUPS = ['none', 'day', 'person', 'list'];
 const isTrue = v => ['1', 'true', 'yes', 'on'].includes((v || '').trim().toLowerCase());
 
 // What the dialog shows for params: its fields' values.
-function fieldsOf(p, defaultView = 'focus') {
+function fieldsOf(p, defaultView = 'today') {
   const view = (p.view || '').toLowerCase();
-  const plan = (p.plan || '').toLowerCase();
   const group = (p.group || '').toLowerCase();
-  let names = (p.labels || '').split(',');
-  if (names.length === 3) names = [names[0], names[2]];   // from when Plan was a tab
+  const names = (p.labels || '').split(',');
   const name = i => (names[i] || '').replace(/_/g, ' ').trim();
   const pin = (p.pin || '').trim().toLowerCase();
   const limit = parseInt(p.limit, 10);
   return {
-    view: view === 'open' || view === 'plan' ? 'open' : view === 'closed' ? 'closed' : view === 'focus' ? 'focus' : defaultView,
-    // What the Open tab shows: group=, else what plan= said (on: by day,
-    // off: one list); view=open has always been the one list, view=plan
-    // the board.
-    group: GROUPS.includes(group) ? group : plan === 'on' ? 'day' : plan === 'off' ? 'none' : view !== 'open' ? 'day' : 'none',
+    view: ['today', 'open', 'closed'].includes(view) ? view : defaultView,
+    // What the Open tab shows: group=, else the board by day.
+    group: GROUPS.includes(group) ? group : 'day',
     label_open: name(0),
     label_focus: name(1),
     limit: Number.isNaN(limit) ? '' : String(Math.max(1, Math.min(99, limit))),
@@ -81,18 +77,12 @@ const oneWord = s => s.replace(/[[\]`]/g, '').replace(/\s*([,|])\s*/g, '$1').tri
 export function changedParams(was, now, p) {
   const set = {};
   if ('list' in now && now.list !== was.list) set.list = now.list;
-  if (now.view !== was.view || now.group !== was.group) {
-    // Open's two views keep their names: view=plan the board, view=open
-    // the list; group= only says what view= doesn't: by person or by list,
-    // and the one list where the embed opens on another tab. plan=, which
-    // said on or off until 2026-11, is written no more.
-    const cut = now.group !== 'none' && now.group !== 'day';
-    if (now.view === 'open') set.view = now.group === 'none' ? 'open' : 'plan';
-    else if (now.view === 'closed') set.view = 'closed';
-    else set.view = now.view !== was.view || p.view ? 'focus' : '';
-    set.group = cut || (now.view !== 'open' && now.group === 'none') ? now.group : '';
-    if (p.plan !== undefined) set.plan = '';
-  }
+  // view= says the tab, group= what the Open tab shows; each is written
+  // when it was changed, or was written already.
+  if (now.view !== was.view || p.view) set.view = now.view;
+  if (now.group !== was.group || p.group) set.group = now.group;
+  if (set.view === (p.view || '').toLowerCase()) delete set.view;
+  if (set.group === (p.group || '').toLowerCase()) delete set.group;
   if (now.label_open !== was.label_open || now.label_focus !== was.label_focus) {
     const a = labelWord(now.label_open), b = labelWord(now.label_focus);
     set.labels = b ? `${a},${b}` : a;
@@ -120,7 +110,7 @@ export function changedParams(was, now, p) {
 // (a list: its pin, keep, hide when sharing), embed (an embed on a page:
 // its filter).
 // Returns what read() then gives.
-export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Focus')) {
+export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Today')) {
   const f = form.elements;
   const pinBtn = form.querySelector('.task-settings-pin');
   const moreEl = form.querySelector('.task-add-fields');
@@ -195,7 +185,7 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
     ...(f.mail_assigned && mode().mine && mode().mail ? { mail: MAIL.filter(k => f['mail_' + k].checked).join(',') } : {}),
     ...(f.assignee ? { assignee: f.assignee.value.trim() } : {}),   // with users
   });
-  const fill = (params, { all = false, mine = false, list = false, embed = false, home = false, mail = false, ownList = false, defaultView = 'focus' } = {}) => {
+  const fill = (params, { all = false, mine = false, list = false, embed = false, home = false, mail = false, ownList = false, defaultView = 'today' } = {}) => {
     const fields = fieldsOf(params, defaultView);
     form.dataset.home = home ? '1' : '';
     form.dataset.mail = mail ? '1' : '';
@@ -204,8 +194,8 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Foc
     form.dataset.list = list ? '1' : '';
     form.dataset.embed = embed ? '1' : '';
     // Opens on: the tabs by their names here; Closed only where a page says so.
-    f.view.replaceChildren(...['open', 'focus', fields.view === 'closed' && 'closed'].filter(Boolean)
-      .map(v => new Option(v === 'closed' ? 'Closed' : tabLabel(v), v)));
+    f.view.replaceChildren(...['open', 'today', fields.view === 'closed' && 'closed'].filter(Boolean)
+      .map(v => new Option(v === 'closed' ? 'Closed' : tabLabel(v === 'today' ? 'focus' : v), v)));
     for (const k of ['view', 'label_open', 'label_focus', 'limit', 'new', 'tag', 'pin']) f[k].value = fields[k];
     // By person where tasks have assignees (with users; not My tasks nor a
     // list of the user's own), By list where the view holds several lists;
@@ -269,7 +259,7 @@ export function initTaskSettings(app) {
   let was = null;
 
   function open() {
-    was = fill(params, { all, mine, list: !!list, embed, ownList: !!list && app.privateLists.has(list), defaultView: appEl.dataset.defaultView === 'open' ? 'open' : 'focus', home: appEl.dataset.settingsHome === '1', mail: appEl.dataset.settingsMail === '1' });
+    was = fill(params, { all, mine, list: !!list, embed, ownList: !!list && app.privateLists.has(list), defaultView: appEl.dataset.defaultView === 'open' ? 'open' : 'today', home: appEl.dataset.settingsHome === '1', mail: appEl.dataset.settingsMail === '1' });
     const who = app.privateLists.has(list) ? 'which only you see' : 'for everyone';
     whereEl.textContent = mine ? (document.body.dataset.users === '1' ? 'For My tasks: yours alone.' : 'For My tasks.')
       : all ? 'For All tasks, for everyone.'
@@ -306,11 +296,6 @@ export function initTaskSettings(app) {
         // the tab is the page's (or the list's), Plan the list's.
         const pin = set.pin;
         delete set.pin;
-        if ('view' in set || 'group' in set) {
-          set.view = now.view;
-          set.group = now.group;
-          if (listSet.plan !== undefined) set.plan = '';
-        }
         const ofPage = {}, ofList = {};
         for (const [k, v] of Object.entries(set)) (embed && PAGE_KEYS.includes(k) ? ofPage : ofList)[k] = v;
         if (Object.keys(ofList).length) message = await post({ list, set: ofList });

@@ -135,7 +135,7 @@ func taskCountsTitle(c TaskCounts) string {
 		parts = append(parts, itoa(c.New)+" update"+map[bool]string{true: "", false: "s"}[c.New == 1]+" for you")
 	}
 	if c.Focus > 0 {
-		parts = append(parts, itoa(c.Focus)+" in Focus")
+		parts = append(parts, itoa(c.Focus)+" for today")
 	}
 	if c.Overdue > 0 {
 		parts = append(parts, itoa(c.Overdue)+" overdue")

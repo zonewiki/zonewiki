@@ -24,7 +24,7 @@ def seed_tasks(page, wiki, embed="[[tasks:]]"):
     for title, tags in (("Fix bug", "work"), ("Buy milk", "home"), ("Fix fence", "home,work")):
         page.request.post("/api/tasks", data={"title": title, "tags": tags})
     wiki.write("tasks", f"# Tasks\n\n{embed}\n")
-    page.goto("/page/tasks?view=open")
+    page.goto("/page/tasks?view=open&group=none")
 
 
 # ── 4. One filter field: text plus #tags ─────────────────────────────────────
@@ -198,7 +198,8 @@ def phone_tasks(new_page, wiki, view="open", **fields):
     phone = new_page(**TOUCH_PHONE)
     phone.request.post("/api/tasks", data={"title": "Water plants", **fields})
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
-    phone.goto(f"/tasks?view={view}")
+    # The views by what they showed before 2026-11's names: open the one list, plan the board, focus Today.
+    phone.goto("/tasks?view=" + {"open": "open&group=none", "plan": "open&group=day", "focus": "today"}[view])
     return phone
 
 
@@ -272,7 +273,7 @@ def test_swipe_right_on_focus_does_nothing(new_page, wiki):
 
 
 def test_due_task_cannot_be_swiped_out_of_focus(new_page, wiki):
-    # Clearing the start date would leave it in Focus: the deadline keeps it.
+    # Clearing the start date would leave it for today: the deadline keeps it.
     phone = phone_tasks(new_page, wiki, view="focus", start_date=TODAY, due_date=TODAY)
     c = card(phone, "Water plants")
     send = swipe(phone, c, -200, release=False)
@@ -366,7 +367,7 @@ def seed_tags(page, wiki):
                         ("D", "wood"), ("E", "home")):
         page.request.post("/api/tasks", data={"title": title, "tags": tags})
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
-    page.goto("/page/tasks?view=open")
+    page.goto("/page/tasks?view=open&group=none")
 
 
 def test_filter_tab_completes_to_best_match(page, wiki):
@@ -499,7 +500,7 @@ def test_tag_with_space_is_findable_in_filter(page, wiki):
     page.request.post("/api/tasks", data={"title": "Try models", "tags": "locallm xxx"})
     page.request.post("/api/tasks", data={"title": "Other"})
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
-    page.goto("/page/tasks?view=open")
+    page.goto("/page/tasks?view=open&group=none")
     field = page.locator("#task-filter-search")
     field.click()
     field.press_sequentially("#locallm")

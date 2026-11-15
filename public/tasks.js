@@ -486,9 +486,14 @@ function newTaskList() { return inboxView ? '' : initList; }
 // Inbox: the task is (or will be) the user's alone.
 function isPrivateList(ref) { return ref ? privateLists.has(ref) : inboxPrivate; }
 function editPrivate() { return isPrivateList(listSelect?.value || ''); }
-// ?view= / [[tasks: view=…]] pick the tab.
-const urlView = urlParams.get('view') || '';   // explicit per-navigation override
-const embedView = appEl?.dataset.initView || '';   // [[tasks: view=…]] — always wins when specified
+// ?view= / [[tasks: view=…]] pick the tab, by the views' names: today,
+// open, closed, and with open group= how it shows its tasks (none, day,
+// person, list; without it as the view's own group= says). The app keeps a
+// view by what it draws (namedView: 'focus', 'open' the one list, 'plan'
+// the board, 'closed'); any other name is none.
+const urlViewName = urlParams.get('view') || '';   // explicit per-navigation override
+const urlGroup = urlParams.get('group') || '';
+const embedViewName = appEl?.dataset.initView || '';   // [[tasks: view=…]] — always wins when specified
 // ?new=1 opens the new-task modal in one embed: a pinned one if the page
 // has it (as the New buttons do), else the first.
 const newTarget = document.querySelector('.tasks-app[data-pinned]:not([data-headless])')
@@ -623,13 +628,18 @@ if (filterSearch) {
 // whatever the URL or the embed say, so the tab it showed comes first. A
 // name that isn't one of VIEWS is passed over.
 const isReload = performance.getEntriesByType?.('navigation')[0]?.type === 'reload';
-// A shared list, where a team looks for its backlog, opens on Open
-// (data-default-view); anything else on Focus.
-st.activeView = [isReload && loadShownTab(), urlView, embedView, loadActiveTab(), appEl?.dataset.defaultView].find(v => VIEWS.includes(v)) || 'focus';
+// What nothing else says: the view's own default (data-default-view: today
+// for what is the user's to do, open for a place they look into).
+const namedView = (name, group) => name === 'today' ? 'focus' : name === 'closed' ? 'closed' : name !== 'open' ? ''
+  : group === 'none' ? 'open' : ['day', 'person', 'list'].includes(group) ? 'plan' : app.openView();
+const urlView = namedView(urlViewName, urlGroup);
+const embedView = namedView(embedViewName, appEl?.dataset.initGroup || '');
+st.activeView = [isReload && loadShownTab(), urlView, embedView, loadActiveTab(),
+  namedView(appEl?.dataset.defaultView || '', appEl?.dataset.initGroup || '')].find(v => VIEWS.includes(v)) || 'focus';
 saveShownTab(st.activeView);
-// The board's sections: by day for a link's ?view=plan, else what the view
-// or this browser tab says.
-initCut(urlView === 'plan' && !(isReload && VIEWS.includes(loadShownTab())), urlParams.get('group') || '');
+// The board's sections: what a link's ?view=open&group= says, else what the
+// view or this browser tab says.
+initCut(urlView === 'plan' && ['day', 'person', 'list'].includes(urlGroup) && !(isReload && VIEWS.includes(loadShownTab())), urlGroup);
 if (st.activeView !== 'closed') st.lastTab = st.activeView;
 applySort();
 applyGroup();

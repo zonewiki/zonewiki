@@ -92,8 +92,7 @@ app.sortSel?.addEventListener('change', () => setSort(app.sortSel.value));
 // st.cut says: by start date (Plan: 'day'), a section per assignee (By
 // person: 'person') or per list (By list: 'list'). A drop on a section
 // sets what it stands for. Plan was a tab of its own until 2026-10 and a
-// switch until 2026-11; the views keep their names, so `view=plan` and
-// `view=open` links still open the one they always did. The Open tab
+// switch until 2026-11, and view=plan named the board). The Open tab
 // opens what group= says (the settings dialog's "The Open tab shows"; Plan
 // without it); a choice made here is remembered for this browser tab only
 // (sessionStorage), as the active tab is, so a fresh load is back at the
@@ -127,8 +126,10 @@ function defaultGroup() {
 }
 const viewOf = group => group === 'none' ? 'open' : 'plan';
 // What the board's sections stand for; set whenever the Open tab is shown
-// grouped. A link's or an embed's view=plan is the board by day, as always.
+// grouped.
 st.cut = 'day';
+// openView: the view the Open tab opens with, without opening it.
+const openView = () => viewOf(defaultGroup());
 function openGroup() {
   const group = defaultGroup();
   if (group !== 'none') st.cut = group;
@@ -163,11 +164,10 @@ app.cutEl?.addEventListener('click', e => {
   if (btn) setGroup(btn.dataset.group);
 });
 // The page opened on the board (the embed's view, with its group=; a
-// reload): its sections are what group= or this browser tab says, by day
-// for a link's ?view=plan.
-// A link may say by what (?view=plan&group=person), where the view offers it.
+// reload): its sections are what group= or this browser tab says. A link
+// says by what (?view=open&group=person), where the view offers it.
 function initCut(byLink, linkGroup = '') {
-  const group = byLink ? (['person', 'list'].includes(linkGroup) && groupsOffered().includes(linkGroup) ? linkGroup : 'day') : defaultGroup();
+  const group = byLink ? (groupsOffered().includes(linkGroup) ? linkGroup : 'day') : defaultGroup();
   st.cut = group === 'none' ? 'day' : group;
 }
 // The view a tab opens: Open its remembered grouping (unless already on
@@ -274,5 +274,5 @@ function finishCollapse() {
   }
 }
 
-return { foldId, toggleFold, unfoldFor, SORT_TITLES, activeSort, applySort, cycleSort, isOpenTab, groupKey, applyGroup, setGroup, cycleGroup, initCut, tabView, collapseAll, EXPAND_ICON, MORE_ICON, setExpanded, toggleDetails, expandSelected };
+return { foldId, toggleFold, unfoldFor, SORT_TITLES, activeSort, applySort, cycleSort, isOpenTab, groupKey, applyGroup, setGroup, cycleGroup, initCut, tabView, openView, collapseAll, EXPAND_ICON, MORE_ICON, setExpanded, toggleDetails, expandSelected };
 }

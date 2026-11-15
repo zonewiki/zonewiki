@@ -158,6 +158,9 @@ func migrateLists(checked bool) {
 	if err == nil {
 		err = migrateInboxLocked(checked)
 	}
+	if err == nil {
+		err = migrateViewsLocked()
+	}
 	if err != nil {
 		listsUnmigrated = true
 		logf("The task lists couldn't be set up (lists stay as they were, and can't be changed, until Zone starts with this mended): %v", err)

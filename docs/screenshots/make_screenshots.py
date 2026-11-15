@@ -132,7 +132,7 @@ A slow, forgiving loaf: mix in the evening, bake the next morning.
 - *A Pattern Language*, Christopher Alexander
 - [[Projects/Garden shed]] links: *The Backyard Builder*
 """,
-    "tasks": "# Tasks\n\n[[tasks: view=focus]]\n",
+    "tasks": "# Tasks\n\n[[tasks: view=today]]\n",
 }
 
 TASKS = [
@@ -205,7 +205,7 @@ def main():
 
         # 2. The tasks' Open tab with Plan on: the board.
         pg = page(1280, 820)
-        pg.goto("/tasks?view=plan")
+        pg.goto("/tasks?view=open&group=day")
         settle(pg)
         pg.screenshot(path=OUT / "tasks.png")
 

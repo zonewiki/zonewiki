@@ -1804,7 +1804,7 @@ class TestCreateTask:
     def test_a_new_task_goes_to_the_inbox_unless_it_names_a_list(self, client, wiki_dir):
         # No list takes a new task by being pinned first, nor gives it its tags:
         # without a list it is in the Inbox, in no list.
-        list_page(client, wiki_dir, "my-tasks", "# My tasks\n\n[[tasks: list=task new=work view=focus pin=1]]\n")
+        list_page(client, wiki_dir, "my-tasks", "# My tasks\n\n[[tasks: list=task new=work view=today pin=1]]\n")
         make_list(client, "groceries", headers=HOST)
         text = call(client, "create_task", title="Report")[0]
         assert "list:" not in text and "list=" not in text and "#work" not in text and "private" not in text
