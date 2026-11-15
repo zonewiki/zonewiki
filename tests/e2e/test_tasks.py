@@ -703,6 +703,37 @@ def test_tasks_refreshes_when_tab_becomes_visible(page, wiki):
     expect(card(page, "Added elsewhere")).to_be_visible()
 
 
+def test_tasks_show_what_someone_else_changed_within_a_minute(page, wiki):
+    """The page asks for the due count every minute while it is used; its
+    Zone-Tasks word is another one after a write elsewhere, and the lists
+    load again. A list that is busy (its dialog open) is told the next
+    minute."""
+    page.clock.install()
+    page.request.post("/api/tasks", data={"title": "Loaded"})
+    wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
+    page.goto("/page/tasks?view=open")
+    expect(card(page, "Loaded")).to_be_visible()
+    # Nothing changed: a minute later the list is as it was (no reload).
+    page.mouse.move(10, 10)
+    with page.expect_response(lambda r: "/api/tasks/due-count" in r.url):
+        page.clock.fast_forward(61_000)
+    page.request.post("/api/tasks", data={"title": "Added elsewhere"})
+    # Busy: the edit dialog is open, so the list waits …
+    card(page, "Loaded").locator(".task-title").click(button="right")
+    page.get_by_role("menuitem", name="Edit…").click()
+    expect(page.locator("#task-edit-modal")).to_be_visible()
+    page.mouse.move(20, 20)
+    with page.expect_response(lambda r: "/api/tasks/due-count" in r.url):
+        page.clock.fast_forward(61_000)
+    expect(card(page, "Added elsewhere")).to_have_count(0)
+    # … and is told again the minute after it is closed.
+    page.keyboard.press("Escape")
+    expect(page.locator("#task-edit-modal")).to_be_hidden()
+    page.mouse.move(30, 30)
+    page.clock.fast_forward(61_000)
+    expect(card(page, "Added elsewhere")).to_be_visible()
+
+
 def test_tasks_refreshes_when_restored_from_bfcache(page, wiki):
     _tasks_with_one_task(page, wiki)
     page.evaluate("window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted: true}))")

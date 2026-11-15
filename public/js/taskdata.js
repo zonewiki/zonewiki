@@ -24,6 +24,7 @@ function initialTasks() {
     try {
       const data = JSON.parse(document.getElementById('tasks-initial').textContent);
       if (data.people) setPeople(data.people);
+      if (data.word) document.body.dataset.tasksWord = data.word;
       if (Array.isArray(data.tasks)) {
         keepRendered(textsOf(data.tasks), data);
         initialJSON = JSON.stringify(data.tasks);
@@ -89,7 +90,14 @@ async function fetchTasks() {
   // filter's @me and @none go by it.
   const initial = !started && initialTasks();
   started = true;
-  const [all] = await Promise.all([initial || fetch('/api/tasks').then(res => res.json()), loadPeople()]);
+  // The word of the tasks held (the Zone-Tasks header; js/chrome.js compares
+  // it with the server's every minute).
+  const load = () => fetch('/api/tasks').then(res => {
+    const word = res.headers.get('Zone-Tasks');
+    if (word) document.body.dataset.tasksWord = word;
+    return res.json();
+  });
+  const [all] = await Promise.all([initial || load(), loadPeople()]);
   const fetched = all.filter(app.inScope);
   await renderTexts(textsOf(fetched));
   st.tasks = fetched;

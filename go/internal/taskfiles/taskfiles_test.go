@@ -301,3 +301,52 @@ func TestOldCompletedFilesAreRenamed(t *testing.T) {
 		t.Errorf("a file was renamed over another: %q", f.commits)
 	}
 }
+
+// A file is parsed once and handed out as copies: what a reader does to its
+// tasks shows in no later read, and a file that changed (written by Zone,
+// or by hand) is read again.
+func TestReadsAreCopiesOfAFileParsedOnce(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tasks.json")
+	order := 1.0
+	if err := Write(path, []*Task{{ID: "1", Title: "One", Tags: []string{"a"}, SortOrder: &order}}); err != nil {
+		t.Fatal(err)
+	}
+	first := ReadLenient(path)
+	first[0].Title, first[0].Tags[0] = "Changed", "z"
+	*first[0].SortOrder = 9
+	second, err := ReadStrict(path)
+	if err != nil || len(second) != 1 || second[0].Title != "One" || second[0].Tags[0] != "a" || *second[0].SortOrder != 1 {
+		t.Errorf("a read changed the next one: %+v, %v", second[0], err)
+	}
+	// Written by Zone: the next read has it.
+	if err := Write(path, []*Task{{ID: "1", Title: "Two"}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := ReadLenient(path); len(got) != 1 || got[0].Title != "Two" {
+		t.Errorf("after a write: %+v", got)
+	}
+	// Changed by hand (another size): read again; and unusable then.
+	text, _ := os.ReadFile(path)
+	if err := os.WriteFile(path, []byte(strings.Replace(string(text), "Two", "Three, by hand", 1)), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	if got := ReadLenient(path); len(got) != 1 || got[0].Title != "Three, by hand" {
+		t.Errorf("after a hand edit: %+v", got)
+	}
+	if err := os.WriteFile(path, []byte("not json at all"), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadStrict(path); !errors.Is(err, ErrCorrupt) {
+		t.Errorf("an unusable file: %v", err)
+	}
+	if got := ReadLenient(path); len(got) != 0 {
+		t.Errorf("an unusable file, read leniently: %+v", got)
+	}
+	// Gone: no tasks, and no error.
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := ReadStrict(path); err != nil || len(got) != 0 {
+		t.Errorf("a missing file: %+v, %v", got, err)
+	}
+}

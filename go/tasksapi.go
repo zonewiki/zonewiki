@@ -97,6 +97,9 @@ func jsonObject(r *http.Request) (jsonObj, error) {
 
 func tasksRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/tasks", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
+		// Zone-Tasks: the word of the tasks answered (taskfiles.Changes, read
+		// before them: a write in between only shows as one more change).
+		w.Header().Set("Zone-Tasks", taskfiles.Changes())
 		writeJSON(w, http.StatusOK, apiTasks(taskFiles.Open(userOf(r))))
 		return nil
 	}))
@@ -139,6 +142,13 @@ func tasksRoutes(mux *http.ServeMux) {
 	}))
 	mux.HandleFunc("GET /api/tasks/due-count", func(w http.ResponseWriter, r *http.Request) {
 		// ?places=1: also each place's counts, for the list switcher.
+		// Zone-Tasks: a word that changes with every write of tasks or lists
+		// (taskfiles.Changes). A page knows the word of the tasks it holds
+		// (GET /api/tasks answers it too, and the tasks a page brings along
+		// have it), asks here every minute, and loads its lists again when
+		// the word is another one: someone else changed a task
+		// (js/chrome.js). It says nothing of what changed, or whose.
+		w.Header().Set("Zone-Tasks", taskfiles.Changes())
 		rq := newReq(r)
 		if r.URL.Query().Get("places") == "" {
 			writeJSON(w, http.StatusOK, taskCounts(rq))

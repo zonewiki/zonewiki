@@ -52,6 +52,28 @@ type Task struct {
 	Owner string
 }
 
+// Clone: a copy of the task that shares nothing with it that can change.
+func (t *Task) Clone() *Task {
+	c := *t
+	c.Tags = slices.Clone(t.Tags)
+	c.History = slices.Clone(t.History)
+	c.Comments = slices.Clone(t.Comments)
+	c.Extra = maps.Clone(t.Extra)
+	if t.SortOrder != nil {
+		v := *t.SortOrder
+		c.SortOrder = &v
+	}
+	if t.Recurrence != nil {
+		r := *t.Recurrence
+		if r.Lead != nil {
+			l := *r.Lead
+			r.Lead = &l
+		}
+		c.Recurrence = &r
+	}
+	return &c
+}
+
 // Recurrence: a task's series. Day (monthly, yearly) is the day of month
 // it returns to, 0 when not anchored; Lead the remembered gap between a
 // clamped start and the due date.

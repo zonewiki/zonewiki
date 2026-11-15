@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"zonewiki/internal/jsonobj"
+	"zonewiki/internal/taskfiles"
 )
 
 const tasksPlaceholder = "ZONETASKSPLACEHOLDER"
@@ -409,6 +410,7 @@ func assignablePeople(r *http.Request) map[string]any {
 // runs; json.Marshal writes <, > and & as \u escapes, so no text in a task
 // ends it.
 func tasksInitial(rq *Req) string {
+	word := taskfiles.Changes() // of these tasks: read before them (tasksapi.go, Zone-Tasks)
 	tasks := taskFiles.Open(rq.who())
 	var notes, comments []string
 	for _, t := range tasks {
@@ -420,7 +422,7 @@ func tasksInitial(rq *Req) string {
 		}
 	}
 	block := map[string]any{
-		"tasks": apiTasks(tasks), "notes": renderNotes(rq, notes, false), "comments": renderNotes(rq, comments, true)}
+		"word": word, "tasks": apiTasks(tasks), "notes": renderNotes(rq, notes, false), "comments": renderNotes(rq, comments, true)}
 	// With users, who a task can be assigned to and who looks, as GET
 	// /api/tasks/assignable answers (js/taskutil.js setPeople).
 	if settings().Users != nil {

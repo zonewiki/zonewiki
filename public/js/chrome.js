@@ -267,12 +267,26 @@ function showCount(el, n) {
   if (el) el.hidden = !(n > 0);
 }
 
-export async function refreshDueBadge() {
+// The answer's Zone-Tasks header is a word that changes with every write of
+// tasks or lists, anyone's. The page keeps the word of the tasks it holds
+// (<body data-tasks-word>, set where they are loaded: js/taskdata.js). When
+// the minute's own asking (poll) finds another word, someone changed a task
+// since: the page's task lists are told (zone:tasks-changed; tasks.js loads
+// them again when idle). A refresh after this page's own write only takes
+// note of the word.
+export async function refreshDueBadge(poll = false) {
   if (!tasksLinks.length) return;
   try {
     const places = placesNow();
     const res = await fetch(places.length ? '/api/tasks/due-count?places=1' : '/api/tasks/due-count');
     const c = await res.json();
+    const word = res.headers.get('Zone-Tasks');
+    const held = document.body.dataset.tasksWord;
+    const changed = poll === true && word && held && word !== held;
+    // After this page's own write the word is its own; a poll leaves it to
+    // the lists' load, so a list that was busy is told again next minute.
+    if (word && held && poll !== true) document.body.dataset.tasksWord = word;
+    if (changed) document.dispatchEvent(new CustomEvent('zone:tasks-changed'));
     tasksLinks.forEach(a => {
       showCount(a.querySelector('.module-due'), c.count);
       showCount(a.querySelector('.module-focus'), c.focus);
@@ -288,7 +302,7 @@ export async function refreshDueBadge() {
 
 if (tasksLinks.length) {
   // Every minute while someone uses the page, and when the tab comes back.
-  whileUsed(refreshDueBadge, 60000);
+  whileUsed(() => refreshDueBadge(true), 60000);
   // A page restored from the back/forward cache shows old counts.
   window.addEventListener('pageshow', e => { if (e.persisted) refreshDueBadge(); });
 }

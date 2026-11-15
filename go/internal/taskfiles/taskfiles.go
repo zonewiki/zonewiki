@@ -21,8 +21,10 @@ import (
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"zonewiki/internal/atomicfile"
 	"zonewiki/internal/taskmodel"
@@ -153,18 +155,63 @@ func eachOwner(owners []string, list func(owner string) []*Task) []*Task {
 
 // ---- reading and writing a file ----
 
+// What a file held when it was last parsed: every page view reads the open
+// tasks (the Tasks links' count), and a write reads every file, so a file
+// is parsed once and handed out as copies until it changes. Zone is one
+// process and writes its task files here (Write, which forgets the file); a
+// file changed by hand is a file with another time, size or inode.
+type parsedFile struct {
+	info  os.FileInfo
+	tasks []*Task
+	ok    bool // it held a list of tasks
+}
+
+var parsed = struct {
+	sync.Mutex
+	files map[string]parsedFile
+}{files: map[string]parsedFile{}}
+
+// readFile: path's tasks as copies of their own (a caller may change them);
+// exists: there is such a file to read; ok: it holds a list of tasks.
+func readFile(path string) (tasks []*Task, exists, ok bool) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, !errors.Is(err, os.ErrNotExist), false
+	}
+	parsed.Lock()
+	defer parsed.Unlock()
+	f, hit := parsed.files[path]
+	if !hit || !os.SameFile(f.info, info) || !f.info.ModTime().Equal(info.ModTime()) || f.info.Size() != info.Size() {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return nil, true, false
+		}
+		// The file as it was read: a write between the stat and the read
+		// shows as a change next time.
+		f = parsedFile{info: info}
+		if strings.TrimSpace(string(raw)) != "" {
+			f.tasks, f.ok = taskmodel.Parse(raw)
+		}
+		parsed.files[path] = f
+	}
+	if !f.ok {
+		return nil, true, false
+	}
+	out := make([]*Task, len(f.tasks))
+	for i, t := range f.tasks {
+		out[i] = t.Clone()
+	}
+	return out, true, true
+}
+
 // ReadStrict reads a task list for a write: a file that is there but
 // unusable (empty, not JSON, not a list) is ErrCorrupt, never [].
 func ReadStrict(path string) ([]*Task, error) {
-	raw, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
+	tasks, exists, ok := readFile(path)
+	switch {
+	case !exists:
 		return []*Task{}, nil
-	}
-	if err != nil || strings.TrimSpace(string(raw)) == "" {
-		return nil, ErrCorrupt
-	}
-	tasks, ok := taskmodel.Parse(raw)
-	if !ok {
+	case !ok:
 		return nil, ErrCorrupt
 	}
 	return tasks, nil
@@ -172,11 +219,7 @@ func ReadStrict(path string) ([]*Task, error) {
 
 // ReadLenient reads a task list for reading: missing or unreadable is [].
 func ReadLenient(path string) []*Task {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return []*Task{}
-	}
-	tasks, ok := taskmodel.Parse(raw)
+	tasks, _, ok := readFile(path)
 	if !ok {
 		return []*Task{}
 	}
@@ -189,7 +232,31 @@ func Write(path string, tasks []*Task) error {
 	if err != nil {
 		return err
 	}
+	return writeText(path, text)
+}
+
+// writeText writes a task file's text, atomically: every write of one
+// passes here, so the file is parsed anew and the change counted.
+func writeText(path, text string) error {
+	parsed.Lock()
+	delete(parsed.files, path)
+	parsed.Unlock()
+	changes.Add(1)
 	return atomicfile.Write(path, text)
+}
+
+// changes counts the writes of task files and registries since Zone
+// started, so that a page can ask whether its tasks are still what the
+// server has (Changes) without fetching them.
+var (
+	changes atomic.Int64
+	started = time.Now().UnixNano()
+)
+
+// Changes: a word that is another one after any write of a task file or a
+// lists' registry, and after a restart. Not after a file changed by hand.
+func Changes() string {
+	return strconv.FormatInt(started, 36) + "-" + strconv.FormatInt(changes.Load(), 10)
 }
 
 // ---- years ----
@@ -430,7 +497,7 @@ func (s *Store) writeOpenLocked(user string, tasks []*Task) ([]string, error) {
 		if rerr == nil && string(raw) == text || errors.Is(rerr, os.ErrNotExist) && o != "" && len(split[o]) == 0 {
 			continue
 		}
-		if err := atomicfile.Write(s.OpenPath(o), text); err != nil {
+		if err := writeText(s.OpenPath(o), text); err != nil {
 			return changed, err
 		}
 		changed = append(changed, s.OpenPath(o))
@@ -474,7 +541,7 @@ func (s *Store) writeClosed(owner string, closed []*Task, reformat bool) ([]stri
 		if err == nil && (string(raw) == text || !reformat && sameTasks(raw, text)) {
 			continue
 		}
-		if err := atomicfile.Write(p, text); err != nil {
+		if err := writeText(p, text); err != nil {
 			return changed, err
 		}
 		changed = append(changed, p)
@@ -584,7 +651,7 @@ func (s *Store) ArchiveOldClosed() {
 			moved = moved || s.PastYear(t) != ""
 		}
 		if raw, err := os.ReadFile(s.OpenPath(o)); err == nil {
-			if text, err := taskmodel.Encode(active); err == nil && string(raw) != text && atomicfile.Write(s.OpenPath(o), text) == nil {
+			if text, err := taskmodel.Encode(active); err == nil && string(raw) != text && writeText(s.OpenPath(o), text) == nil {
 				changed = append(changed, s.OpenPath(o))
 			}
 		}

@@ -59,6 +59,9 @@ function refreshStaleInstances() {
   tasksInstances.forEach(inst => inst.refreshIfIdle());
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshStaleInstances(); });
+// Someone else changed a task (js/chrome.js asks every minute): the lists
+// show it without the tab having been away.
+document.addEventListener('zone:tasks-changed', refreshStaleInstances);
 window.addEventListener('pageshow', e => { if (e.persisted) refreshStaleInstances(); });
 
 // The edit modal of the last task app started: the editor's Make task and a

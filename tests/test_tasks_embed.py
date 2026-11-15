@@ -688,13 +688,16 @@ class TestInitialTasks:
         html = client.post("/api/render-notes", json=texts, headers=HOST).get_json()
         assert 'href="/page/plans"' in html["notes"][0] and "<strong>called</strong>" in html["comments"][0]
         # Once a page, whatever its lists show, and on /tasks.
+        # With them the word of these tasks, as GET /api/tasks answers it.
+        word = client.get("/api/tasks", headers=HOST).headers["Zone-Tasks"]
         for url in ("/page/shop", "/tasks", "/tasks?tag=shop"):
-            assert initial_tasks(client.get(url, headers=HOST).get_data(as_text=True)) == [{"tasks": tasks, **html}], url
+            assert initial_tasks(client.get(url, headers=HOST).get_data(as_text=True)) == [{"word": word, "tasks": tasks, **html}], url
 
     def test_no_tasks(self, client, wiki_dir):
         write_page(wiki_dir, "shop", "# Shop\n\n[[tasks:]]\n")
-        assert initial_tasks(client.get("/page/shop", headers=HOST).get_data(as_text=True)) == [
-            {"tasks": [], "notes": [], "comments": []}]
+        [block] = initial_tasks(client.get("/page/shop", headers=HOST).get_data(as_text=True))
+        assert block.pop("word") == client.get("/api/tasks/due-count", headers=HOST).headers["Zone-Tasks"]
+        assert block == {"tasks": [], "notes": [], "comments": []}
 
     def test_a_tasks_text_does_not_end_the_block(self, client, wiki_dir):
         evil = '</script><script src="/x.js"></script><!-- & <b>'

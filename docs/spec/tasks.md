@@ -69,7 +69,10 @@ Client side is `tasks.js` (DOM, one instance per embed) plus `tasks-core.js` (pu
 Several embeds per page work: each instance keeps its own task array, and a write in one refreshes the others (`refreshOtherInstances`).
 Every instance also reloads on `visibilitychange` and bfcache `pageshow`, so a tab left open for days shows current tasks and today's day sections.
 `refreshIfIdle` skips the reload while a drag, swipe, completion grace period, ⋯ menu or edit modal is in progress.
-There is no polling.
+**What someone else changed shows within a minute**, without fetching tasks to find out: every write of a task file or a lists' registry gives the server another word (`taskfiles.Changes`: the start's time and a count; not a file changed by hand), which `GET /api/tasks` and `GET /api/tasks/due-count` answer in the `Zone-Tasks` header and a page's own tasks bring along (`"word"` in `tasksInitial`).
+The page keeps the word of the tasks it holds (`<body data-tasks-word>`, `js/taskdata.js`); the due count it asks for every minute while it is used (`refreshDueBadge`, `whileUsed`) says the server's, and when that is another one the lists load again (`zone:tasks-changed`, `refreshIfIdle`; a list that was busy is told again the next minute).
+After the page's own write the word is taken as its own.
+It says nothing of what changed or whose, so another user's private write reloads a list too.
 
 ### Storage
 
@@ -82,6 +85,7 @@ There is no polling.
   Write routes read every closed file (`readClosedAllStrict`) and `writeClosed` files each task by its completion year, writing only files whose content changed; startup does the same split (`archiveOldClosed`) for a year change without writes.
   So archived tasks can be edited, reopened and tagged like any other; Closed shows them by year (see Views).
 - All mutations go through one lock (`taskFiles.Lock`, `go/internal/taskfiles`) and atomic writes (temp file + rename, `go/internal/atomicfile`); the server handles requests concurrently.
+- **A file is parsed once** (`readFile` in `go/internal/taskfiles`): every page view reads the open tasks (the Tasks links' count) and a write reads every file, so a file's tasks are kept as parsed and handed out as copies (`Task.Clone`: a reader may change its own) until the file is another one (its time, size or inode: Zone's own writes, which also forget it, `writeText`; a hand edit).
   Write paths use a strict reader that fails with `errTasksCorrupt` (503) on an unreadable file instead of treating it as empty and wiping every task.
 - The files are JSON (`go/internal/taskmodel`): a list of tasks,
   two spaces of indent,

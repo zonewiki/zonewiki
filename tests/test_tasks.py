@@ -2662,3 +2662,24 @@ class TestNotes:
         assert self._toggle(client, task["id"], -1).status_code == 400
         assert client.post(f"/api/tasks/{task['id']}/toggle-check", json={"idx": "x"}).status_code == 400
         assert self._toggle(client, "nope", 0).status_code == 404
+
+
+class TestTasksChanged:
+    """The due count says, in a header, whether tasks or lists were written
+    since: a page asks every minute and loads its lists again when the word
+    is another one."""
+
+    def test_the_word_changes_with_a_write_and_only_then(self, client):
+        word = lambda: client.get("/api/tasks/due-count").headers["Zone-Tasks"]
+        first = word()
+        assert first and word() == first
+        task = create_task(client, title="T").get_json()
+        second = word()
+        assert second != first
+        assert client.get("/api/tasks").status_code == 200 and word() == second
+        assert client.put(f"/api/tasks/{task['id']}", json={"title": "T2"}).status_code == 200
+        third = word()
+        assert third != second
+        # A list made, too.
+        assert client.post("/api/tasks/lists", json={"name": "shop"}).status_code == 201
+        assert word() != third
