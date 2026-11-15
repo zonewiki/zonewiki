@@ -139,8 +139,12 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
   // someone who can no longer be given tasks struck through.
   const assignee = task.assignee || '';
   const formerAssignee = !!assignee && !!people.users && !people.users.has(assignee);
+  // A task someone else gave you that you haven't touched yet is marked new.
+  const gave = TasksCore.givenToMe(task, people.me, todayStr());
+  const newDisplay = gave
+    ? `<span class="task-new" title="${esc(`${gave.by} gave you this task on ${shortDate(gave.at.slice(0, 10))}`)}">new</span>` : '';
   const assigneeDisplay = assignee
-    ? `<span class="task-assignee${assignee === people.me ? ' task-assignee-me' : ''}${formerAssignee ? ' task-assignee-former' : ''}" title="${
+    ? `${newDisplay}<span class="task-assignee${assignee === people.me ? ' task-assignee-me' : ''}${formerAssignee ? ' task-assignee-former' : ''}" title="${
         esc(formerAssignee ? `Was assigned to ${assignee}, who can no longer be given tasks`
           : assignee === people.me ? 'Assigned to you' : `Assigned to ${assignee}`)}">@${esc(assignee)}</span>` : '';
   const tagsRight = tags || assigneeDisplay ? `<span class="task-tags-right">${tags}${assigneeDisplay}</span>` : '';

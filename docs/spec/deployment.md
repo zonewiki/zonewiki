@@ -228,7 +228,7 @@ At start and when it changes, `setGitRemote()` adds or updates `origin` to that 
 
 ## Mail
 
-Zone sends mail only for sign-up (Sign-up in `docs/spec/users.md`), through an SMTP server the deployment names in `.env` (`go/mail.go`, Go's `net/smtp`; no dependency):
+Zone sends mail for sign-up (Sign-up in `docs/spec/users.md`) and to tell a user that someone gave them a task (Assigning tasks there; each user can turn that off), through an SMTP server the deployment names in `.env` (`go/mail.go`, Go's `net/smtp`; no dependency):
 
 ```bash
 ZONE_SIGNUP=1
@@ -244,7 +244,7 @@ ZONE_MAIL_FROM=wiki@example.org
   The certificate is checked against `ZONE_SMTP_HOST`.
   `none` is for a relay that takes mail unencrypted (a local postfix); the password then goes only to this machine (`net/smtp`'s `PlainAuth` refuses otherwise).
 - **Checked at start**: Zone won't start on a mail setting without `ZONE_SMTP_HOST`, a port or TLS mode it doesn't know, a password without a user, a missing or invalid `ZONE_MAIL_FROM` (a bare address, no name), or `ZONE_SIGNUP` without a mail server.
-- **Time limits**: 20 seconds to connect, a minute for the whole mail; the sign-up form waits for it, so it can say when the mail couldn't be sent (and logs why).
+- **Time limits**: 20 seconds to connect, a minute for the whole mail; the sign-up form waits for it, so it can say when the mail couldn't be sent (and logs why). The mail about an assigned task is sent in the background: a task write never waits for the mail server, and a failure is only logged.
 - The password is a secret in `.env` (gitignored), as compose hands every setting over (`env_file`).
 
 ## Mobile / phone access

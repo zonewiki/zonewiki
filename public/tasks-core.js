@@ -163,6 +163,32 @@ function inMine(t, pinned, who) {
   return !t.list || !!pinned;
 }
 
+// A task someone else gave the user, which they haven't touched since: its
+// card says "new". From its history alone, so no state is kept: the entry
+// that made it theirs (the last `assigned` one, or `created` for a task
+// made with their name on it) is someone else's, nothing they did is logged
+// after it (a date, done, a comment), and it is at most NEW_DAYS days old
+// (today: YYYY-MM-DD). Returns that entry ({ at, by }), or null.
+const NEW_DAYS = 7;
+function givenToMe(t, me, today) {
+  if (!me || !t || t.private || t.closed_at || (t.assignee || '').toLowerCase() !== me) return null;
+  const history = t.history || [];
+  let at = -1;
+  for (let i = history.length - 1; i >= 0 && at < 0; i--) if (history[i].event === 'assigned') at = i;
+  if (at < 0) at = history.findIndex(e => e.event === 'created');
+  const gave = history[at];
+  if (!gave || !gave.by || gave.by === me) return null;
+  if (gave.event === 'assigned' && (gave.to || '').toLowerCase() !== me) return null;
+  if (history.slice(at + 1).some(e => e.by === me)) return null;
+  const when = String(gave.at || '').slice(0, 16);
+  if ((t.comments || []).some(c => c.by === me && String(c.at || '').slice(0, 16) >= when)) return null;
+  if (today) {
+    const days = (Date.parse(today + 'T00:00') - Date.parse(when.slice(0, 10) + 'T00:00')) / 86400000;
+    if (!(days <= NEW_DAYS)) return null;
+  }
+  return { at: when, by: gave.by };
+}
+
 // A task's importance: 'high', 'low', or '' for normal (what most are).
 // As a word, in the filter and at the end of a new task's title: `!` or
 // `!high`, `!low`.
@@ -510,7 +536,7 @@ function parseQuickAdd(input, today, people) {
 const TasksCore = {
   dateToStr, addDays, isOverdue, isFocus, isCarried, byOpenOrder, byDeadline, byCreated, SORTS, placeInOrder, tagMatchScore, tagCounts, selectionTags, bulkTagChange,
   rankTags, sanitizeTagInput,
-  parseFilter, matchesFilter, filterActive, assigneeIs, inMine, tasksInView, tagParamToQuery, importanceWord,
+  parseFilter, matchesFilter, filterActive, assigneeIs, inMine, givenToMe, tasksInView, tagParamToQuery, importanceWord,
   bucketKey, fullDayLabel, boardBuckets, parseQuickAdd,
   dateSettings, localeDate, shortDate, longDayLabel, weekStart, weekdayNames, monthTitle,
 };

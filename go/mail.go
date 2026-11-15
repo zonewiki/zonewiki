@@ -1,6 +1,6 @@
-// Mail (docs/spec/deployment.md, Mail): Zone sends a mail only for
-// sign-up (signup.go), through the SMTP server the deployment names in
-// ZONE_SMTP_HOST … (.env). Go's net/smtp, no dependency. The connection is
+// Mail (docs/spec/deployment.md, Mail): Zone sends a mail for sign-up
+// (signup.go) and about a task given to a user (notify.go), through the
+// SMTP server the deployment names in ZONE_SMTP_HOST … (.env). Go's net/smtp, no dependency. The connection is
 // encrypted unless ZONE_SMTP_TLS=none says otherwise: STARTTLS, which the
 // server must offer (587), or TLS from the start (465).
 package main

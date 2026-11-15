@@ -688,6 +688,57 @@ class TestAssignee:
         assert self.quick("Call Sam @me", "{me: 'me', users: new Set(['alice'])}") == ("Call Sam @me", "", False)
 
 
+class TestGivenToMe:
+    """givenToMe: a task someone else gave the user, which they haven't
+    touched since; its card says "new". From the task's history alone."""
+
+    ME = "'anna', '2026-07-26'"
+    GAVE = "{at: '2026-07-25T10:00', event: 'assigned', by: 'bob', from: null, to: 'anna'}"
+
+    def given(self, task: str, who: str = ME):
+        return run_core(f"TasksCore.givenToMe({task}, {who})")
+
+    def test_a_task_someone_assigned_or_made_for_me(self):
+        assert self.given(f"{{assignee: 'anna', history: [{self.GAVE}]}}") == {"at": "2026-07-25T10:00", "by": "bob"}
+        made = "{assignee: 'anna', history: [{at: '2026-07-24T09:00', event: 'created', by: 'bob'}]}"
+        assert self.given(made) == {"at": "2026-07-24T09:00", "by": "bob"}
+
+    def test_not_what_i_took_or_made_myself(self):
+        assert self.given("{assignee: 'anna', history: [{at: '2026-07-25T10:00', event: 'assigned', by: 'anna', to: 'anna'}]}") is None
+        assert self.given("{assignee: 'anna', history: [{at: '2026-07-25T10:00', event: 'created', by: 'anna'}]}") is None
+        # Without users nobody is named; someone else's task; no one's.
+        assert self.given("{assignee: 'anna', history: [{at: '2026-07-25T10:00', event: 'created', by: ''}]}") is None
+        assert self.given(f"{{assignee: 'bob', history: [{self.GAVE}]}}") is None
+        assert self.given(f"{{history: [{self.GAVE}]}}") is None
+        assert self.given(f"{{assignee: 'anna', history: [{self.GAVE}]}}", "'', '2026-07-26'") is None
+
+    def test_what_i_did_since_takes_the_mark_away(self):
+        moved = "{at: '2026-07-25T11:00', event: 'due', by: 'anna', from: null, to: '2026-08-01'}"
+        assert self.given(f"{{assignee: 'anna', history: [{self.GAVE}, {moved}]}}") is None
+        # Someone else's change doesn't.
+        others = "{at: '2026-07-25T11:00', event: 'due', by: 'bob', from: null, to: '2026-08-01'}"
+        assert self.given(f"{{assignee: 'anna', history: [{self.GAVE}, {others}]}}") is not None
+        # A comment of mine after it does, one from before doesn't.
+        after = "comments: [{at: '2026-07-25T12:00:00', by: 'anna', text: 'On it'}]"
+        before = "comments: [{at: '2026-07-24T12:00:00', by: 'anna', text: 'Who has this?'}]"
+        assert self.given(f"{{assignee: 'anna', history: [{self.GAVE}], {after}}}") is None
+        assert self.given(f"{{assignee: 'anna', history: [{self.GAVE}], {before}}}") is not None
+
+    def test_given_again_it_is_new_again(self):
+        mine = "{at: '2026-07-20T11:00', event: 'done', by: 'anna'}"
+        assert self.given(f"{{assignee: 'anna', history: [{mine}, {self.GAVE}]}}") is not None
+        # The last assignment counts: one that took it elsewhere and back by me.
+        took = "{at: '2026-07-25T12:00', event: 'assigned', by: 'anna', from: 'bob', to: 'anna'}"
+        assert self.given(f"{{assignee: 'anna', history: [{self.GAVE}, {took}]}}") is None
+
+    def test_it_fades_after_a_week_and_is_never_on_closed_or_private_tasks(self):
+        task = f"{{assignee: 'anna', history: [{self.GAVE}]}}"
+        assert self.given(task, "'anna', '2026-08-01'") is not None
+        assert self.given(task, "'anna', '2026-08-02'") is None
+        assert self.given(f"{{assignee: 'anna', closed_at: '2026-07-26T08:00:00', history: [{self.GAVE}]}}") is None
+        assert self.given(f"{{assignee: 'anna', private: true, history: [{self.GAVE}]}}") is None
+
+
 class TestMyTasks:
     """inMine: My tasks' rule, case by case; the server's rule (inMine in
     go/tasklists.go) runs through the same cases (go/testdata/mine_cases.json)."""

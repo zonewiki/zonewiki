@@ -54,6 +54,7 @@ type embedSettingsAt struct {
 	Raw          string
 	Embed        bool // an embed on a page, whose params can be written there
 	Mine         bool // My tasks on /tasks: its settings are the user's (mineParams)
+	Mail         bool // My tasks: Zone could mail the user about a task assigned to them (it sends mail, they have an address): the dialog has the box
 	List         string
 	ListSettings string
 	Pin          string
@@ -108,6 +109,9 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, p
 			at.Page, at.Index, at.Raw, at.Embed = page, src.index, src.raw, true
 		case src != nil && src.index < 0 && page == "" && mayWriteTasks(user) == nil:
 			at.Raw, at.Mine = src.raw, paramsScope(params) == mineScope
+			if u := settings().Users[user]; at.Mine && cfg.Mail.Host != "" && u != nil && u.Email != "" && mineAssigns(user) {
+				at.Mail = true
+			}
 		default:
 			at = nil
 		}

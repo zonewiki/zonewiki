@@ -329,6 +329,7 @@ The line above Save says whose the settings are: the list's, for everyone (or "w
   It has no pin and no filter (`allSettingKeys`).
 - **My tasks** (`/tasks?mine=1`): your registry's `mine`, `"mine": {"view": "focus", "limit": "5"}` (`mineParams`, `setMineParams`, `mineSettingKeys`; without users the shared registry's), for you alone.
   `"unassigned": "hide"` there is Hide unassigned tasks (a box of the dialog, among the fields asked for; only where tasks can be assigned to you, else a 400).
+  `"mail": "off"` there turns off the mail about a task assigned to you (**Mail me when a task is assigned to me**, a box that is ticked unless turned off, shown where Zone could mail you: `data-settings-mail`; Assigning tasks in `docs/spec/users.md`).
   It has no pin and no filter, and the dialog says "For My tasks: yours alone."
   Unset, it opens on Focus with Plan on and no limit.
   (Until 2026-11 the view, then called Pinned, showed its first pinned list's settings and had no dialog.)

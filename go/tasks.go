@@ -168,7 +168,11 @@ func createTask(user string, data jsonObj, message string) (*Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	return t, taskFiles.WriteOpenLocked(user, append(active, t), message, also...)
+	if err := taskFiles.WriteOpenLocked(user, append(active, t), message, also...); err != nil {
+		return t, err
+	}
+	tellAssigned(user, nil, t)
+	return t, nil
 }
 
 // applyTaskFields applies the field changes in data (not completion); fresh:
@@ -555,6 +559,7 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 		return nil, err
 	}
 	rememberBy(t) // an undo sends its comments and history back (taskby.go)
+	before := assignedBefore{t.ID: t.Assignee}
 	if err := applyTaskFields(user, t, data, false); err != nil {
 		return nil, err
 	}
@@ -623,7 +628,11 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 			msg = "Uncomplete task"
 		}
 	}
-	return t, taskFiles.WriteBothLocked(user, active, closed, msg+suffix)
+	if err := taskFiles.WriteBothLocked(user, active, closed, msg+suffix); err != nil {
+		return t, err
+	}
+	tellAssigned(user, before, t)
+	return t, nil
 }
 
 // toggleNoteCheck ticks or unticks the Nth checkbox of a task's notes.

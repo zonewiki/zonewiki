@@ -510,6 +510,8 @@ div.chip-input:has(> .tag-chip:not(.tag-chip-locked)) > .chip-input-clear { disp
    tasks struck through. */
 .task-assignee { font-size: .75rem; padding: .1rem .2rem; border-radius: 3px; color: var(--muted); white-space: nowrap; }
 .task-assignee-me { color: var(--link); font-weight: 600; }
+/* A task someone else gave you that you haven't touched yet. */
+.task-new { font-size: .68rem; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; padding: .05rem .3rem; border-radius: 3px; background: var(--link); color: var(--bg); white-space: nowrap; }
 .task-assignee-former, .tag-chip-former .tag-chip-label { text-decoration: line-through; opacity: .7; }
 
 .task-tags-right { display: flex; flex-wrap: wrap; gap: .2rem; align-items: center; }

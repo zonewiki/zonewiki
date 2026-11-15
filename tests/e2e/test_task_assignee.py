@@ -460,3 +460,54 @@ def test_my_tasks_holds_what_is_mine_and_nobodys(alice, wiki):
         dialog.get_by_role("button", name="Save").click()
     assert '"mine": {"view": "plan"}' in (wiki.root / "private/alice/_tasks/lists.json").read_text()
     expect(alice.locator(".task-item .task-title")).to_have_count(4)        # it opens on Open now
+
+
+def test_a_task_someone_gave_you_is_marked_new(alice):
+    # bob gives alice a task: its card says "new" until she does something
+    # with it. What she took herself isn't new.
+    alice.request.post("/login", form={"username": "bob", "password": "pw"})
+    new(alice, "From bob", assignee="alice")
+    alice.request.post("/login", form={"username": "alice", "password": "pw"})
+    new(alice, "Her own", assignee="alice")
+    alice.goto("/tasks?view=open")
+    mark = card(alice, "From bob").locator(".task-new")
+    expect(mark).to_have_text("new")
+    expect(mark).to_have_attribute("title", re.compile(r"^bob gave you this task on "))
+    expect(card(alice, "Her own").locator(".task-new")).to_have_count(0)
+    # A date she sets is hers: the mark goes.
+    alice.request.put(f"/api/tasks/{task(alice, 'From bob')['id']}", data={"due_date": "2030-01-01"})
+    alice.reload()
+    expect(card(alice, "From bob")).to_be_visible()
+    expect(card(alice, "From bob").locator(".task-new")).to_have_count(0)
+
+
+def test_my_tasks_settings_turn_the_mail_off(page, wiki, monkeypatch):
+    # Where Zone could mail her about a task assigned to her, My tasks'
+    # settings have the box, ticked; unticked, her registry says mail: off.
+    monkeypatch.setattr(settings, "USERS", {name: ("pw", "") for name in ("alice", "bob")})
+    monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"email": "alice@example.org"}})
+    monkeypatch.setattr(settings, "ENV", {"ZONE_SMTP_HOST": "127.0.0.1", "ZONE_SMTP_PORT": "9", "ZONE_SMTP_TLS": "none",
+                                          "ZONE_MAIL_FROM": "wiki@example.org"})
+    page.request.post("/login", form={"username": "alice", "password": "pw"})
+    make_list(page, "team", pin=True)
+    page.goto("/tasks?mine=1")
+    page.locator("#task-more-btn").click()
+    page.get_by_role("menuitem", name="List settings…").click()
+    dialog = page.locator("#task-settings-modal")
+    box = dialog.locator("[name=mail]")
+    expect(box).to_be_visible()
+    expect(box).to_be_checked()
+    box.uncheck()
+    with page.expect_navigation():
+        dialog.get_by_role("button", name="Save").click()
+    assert '"mine": {"mail": "off"}' in (wiki.root / "private/alice/_tasks/lists.json").read_text()
+    page.locator("#task-more-btn").click()
+    page.get_by_role("menuitem", name="List settings…").click()
+    expect(box).not_to_be_checked()
+    # bob has no address: no box.
+    page.request.post("/login", form={"username": "bob", "password": "pw"})
+    page.goto("/tasks?mine=1")
+    page.locator("#task-more-btn").click()
+    page.get_by_role("menuitem", name="List settings…").click()
+    expect(dialog).to_be_visible()
+    expect(box).to_be_hidden()

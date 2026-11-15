@@ -293,8 +293,9 @@ func scopeFilter(user, scope string, lists map[string]ListInfo) func(*Task) bool
 
 // mineSettingKeys: what My tasks' settings dialog sets. What a new task
 // gets (new, keep) is its list's, the first pinned one's. unassigned
-// ("hide"): mineOwn.
-var mineSettingKeys = []string{"view", "plan", "limit", "labels", "unassigned"}
+// ("hide"): mineOwn. mail ("off"): no mail when a task is assigned to the
+// user (mailsAssigned in notify.go).
+var mineSettingKeys = []string{"view", "plan", "limit", "labels", "unassigned", "mail"}
 
 // mineOwner: whose registry holds user's settings of My tasks: their own,
 // without users the wiki's.
@@ -335,6 +336,9 @@ func setMineParams(user, was string, set map[string]string) error {
 	}
 	if set["unassigned"] != "" && !mineAssigns(user) {
 		return refuse("Unassigned tasks can be hidden only where tasks can be assigned to you")
+	}
+	if set["mail"] != "" && !mineAssigns(user) {
+		return refuse("There is no mail about assigned tasks where no task can be assigned to you")
 	}
 	owner := mineOwner(user)
 	taskFiles.Lock()

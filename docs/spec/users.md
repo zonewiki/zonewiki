@@ -655,6 +655,13 @@ Not there: telling someone that a task became theirs, a group as an assignee, an
   Only the name of a user who can be assigned, or `@me`; anything else stays in the title (`bob@example.org`, `@home`), as does a second name.
   Not on a private task.
 - **On the card** (`.task-assignee`, after the tags): `@anna`, your own name in the accent colour, a former assignee's struck through.
+- **A task given to you is told to you**, in the app and by mail (`go/notify.go`).
+  **On its card: new** (`.task-new`, before your name; `TasksCore.givenToMe`): a task someone else gave you that you haven't touched since. It is read from the task's history, so nothing is kept for it: the entry that made the task yours (the last `assigned` one, or `created` for a task made with your name on it) is someone else's, nothing of yours is logged after it (a date you set, done, a comment), and it is at most seven days old. Its tooltip says who gave it and when ("bob gave you this task on …"). A change that logs nothing (the title, a tag) leaves the mark; it fades after the week.
+  **By mail, at once** (`tellAssigned`, called by the task writes after a write went through: a new task, an edit, `batch-update`, an assistant's `create_task` and `update_task`): "bob gave you a task: <title>", with the task's link and the link to My tasks where Zone knows its address (`base-url`); several tasks given in one write (Assign… on a selection) are one mail a user, "bob gave you 3 tasks".
+  Only an open, shared task that someone else assigned: nothing for a task you take yourself, an unassignment, another edit of a task you have already, or a task closed in the same write.
+  A mail needs the deployment's mail server (`ZONE_SMTP_*`, Mail in `docs/spec/deployment.md`) and your `email` in `.zone/config`, and goes to nobody a task can't be given to. It is sent in the background: the write doesn't wait for the mail server, and a mail that couldn't be sent is in Zone's log.
+  **You turn it off yourself**: **Mail me when a task is assigned to me**, a box in My tasks' settings dialog (there where Zone could mail you; `"mail": "off"` in your registry's `mine`, `mailsAssigned`). My tasks is there once the wiki has a list.
+  There is no digest and no mail for mentions or watched pages yet.
 - **In the filter** (`TasksCore.parseFilter`/`matchesFilter`, given `people`): `@anna`, `@anna|bob` (either), `-@anna` (not hers), `@me` (yours), `@none` (no one's, a former assignee's included).
   A private task has no assignee and is its user's own: it is `@me` to them, and not `@none`.
   A completed word becomes a chip, as a tag does; the suggestions are `me`, `none` and the users who have tasks among those the other words leave visible.

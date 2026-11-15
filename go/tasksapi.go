@@ -738,11 +738,15 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 		byID[t.ID] = t
 	}
 	updated := []*Task{}
+	before := assignedBefore{}
 	for _, change := range changes {
 		id, _ := jsonobj.As[string](change["id"])
 		t := byID[id]
 		if t == nil {
 			continue
+		}
+		if _, seen := before[id]; !seen {
+			before[id] = t.Assignee
 		}
 		rememberBy(t)
 		if err := applyTaskFields(userOf(r), t, change, false); err != nil {
@@ -758,6 +762,7 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 		if err := taskFiles.WriteBothLocked(userOf(r), active, closed, "Update tasks"); err != nil {
 			return err
 		}
+		tellAssigned(userOf(r), before, updated...)
 	}
 	writeJSON(w, http.StatusOK, apiTasks(updated))
 	return nil
