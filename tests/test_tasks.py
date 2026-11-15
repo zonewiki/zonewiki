@@ -2706,3 +2706,45 @@ class TestTextChangedMeanwhile:
         # Without was a write is as it always was; was must be an object.
         assert client.put(url, json={"description": "third"}).status_code == 200
         assert client.put(url, json={"description": "x", "was": "first"}).status_code == 400
+
+
+class TestMyTasksOrder:
+    """My tasks has a manual order of its own (docs/spec/tasks.md, Lists → My
+    tasks): ranking there writes no task, so a list's order stays."""
+
+    def _ids(self, client, *titles):
+        by = {t["title"]: t["id"] for t in client.get("/api/tasks").get_json()}
+        return [by[t] for t in titles]
+
+    def test_it_starts_from_the_lists_order_and_is_then_its_own(self, client):
+        make_list(client, "work")
+        for title in ("A", "B", "C"):
+            create_task(client, title=title, list="work")
+        a, b, c = self._ids(client, "A", "B", "C")
+        # The list's order: C, A (B not ranked).
+        assert client.post("/api/tasks/reorder", json={"order": [c, a]}).status_code == 204
+        got = client.get("/api/tasks?with=order").get_json()
+        assert got["order"] == [c, a] and {t["title"] for t in got["tasks"]} == {"A", "B", "C"}
+        # Ranked in My tasks: its own order from then on …
+        assert client.post("/api/tasks/reorder", json={"mine": True, "order": [b, a, c]}).status_code == 204
+        assert client.get("/api/tasks?with=order").get_json()["order"] == [b, a, c]
+        # … and no task was written: the list's order is as it was.
+        order = {t["title"]: t["sort_order"] for t in client.get("/api/tasks").get_json()}
+        assert order == {"A": 1, "B": None, "C": 0}
+        # The list ranked again changes nothing of My tasks'.
+        assert client.post("/api/tasks/reorder", json={"order": [a, b, c]}).status_code == 204
+        assert client.get("/api/tasks?with=order").get_json()["order"] == [b, a, c]
+        # Without ?with=order the answer is the list of tasks, as always.
+        assert isinstance(client.get("/api/tasks").get_json(), list)
+
+    def test_what_is_closed_or_no_task_drops_out(self, client):
+        for title in ("A", "B"):
+            create_task(client, title=title)
+        a, b = self._ids(client, "A", "B")
+        assert client.put(f"/api/tasks/{b}", json={"completed": True}).status_code == 200
+        assert client.post("/api/tasks/reorder", json={"mine": True, "order": [b, "no-such-task", a, a]}).status_code == 204
+        assert client.get("/api/tasks?with=order").get_json()["order"] == [a]
+        # Emptied: an order of its own still, not the lists' again.
+        assert client.post("/api/tasks/reorder", json={"order": [a]}).status_code == 204
+        assert client.post("/api/tasks/reorder", json={"mine": True, "order": ["x"]}).status_code == 204
+        assert client.get("/api/tasks?with=order").get_json()["order"] == []

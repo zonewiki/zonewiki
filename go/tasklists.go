@@ -9,6 +9,7 @@
 package main
 
 import (
+	"cmp"
 	"errors"
 	"net/url"
 	"slices"
@@ -323,6 +324,65 @@ func setMineParams(user, was string, set map[string]string) error {
 		return err
 	}
 	return commitLists(user, "Change the settings of My tasks", []string{path})
+}
+
+// mineOrder: the manual order of user's My tasks, task ids first to last.
+// It is the view's own (their registry's "order"; without users the
+// wiki's): a list's order (Task.SortOrder) is the list's, for everyone who
+// looks at it, and what one ranks in My tasks, across lists, moves nothing
+// there. Until they rank something it is the lists' order of their tasks.
+func mineOrder(user string) []string {
+	if reg := taskFiles.ReadLists(mineOwner(user)); reg.OrderSet {
+		return append([]string{}, reg.Order...)
+	}
+	in := mineFilter(user, taskLists(user))
+	var ranked []*Task
+	for _, t := range taskFiles.Open(user) {
+		if t.SortOrder != nil && in(t) {
+			ranked = append(ranked, t)
+		}
+	}
+	slices.SortStableFunc(ranked, func(a, b *Task) int { return cmp.Compare(*a.SortOrder, *b.SortOrder) })
+	ids := make([]string, len(ranked))
+	for i, t := range ranked {
+		ids[i] = t.ID
+	}
+	return ids
+}
+
+// setMineOrder keeps ids as the manual order of user's My tasks: those of
+// open tasks they see, each once (so what is closed or gone drops out), in
+// a commit by user.
+func setMineOrder(user string, ids []string) error {
+	if listsUnmigrated {
+		return errListsUnmigrated
+	}
+	if err := mayWriteTasks(user); err != nil {
+		return err
+	}
+	open := map[string]bool{}
+	for _, t := range taskFiles.Open(user) {
+		open[t.ID] = true
+	}
+	order := []string{}
+	for _, id := range ids {
+		if open[id] {
+			order, open[id] = append(order, id), false
+		}
+	}
+	owner := mineOwner(user)
+	taskFiles.Lock()
+	defer taskFiles.Unlock()
+	reg, err := taskFiles.ReadListsStrict(owner)
+	if err != nil {
+		return err
+	}
+	reg.Order, reg.OrderSet = order, true
+	path, err := taskFiles.WriteListsLocked(user, owner, reg)
+	if err != nil {
+		return err
+	}
+	return commitLists(user, "Reorder My tasks", []string{path})
 }
 
 // ---- operations ----

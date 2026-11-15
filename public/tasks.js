@@ -155,6 +155,8 @@ const app = {
   get inboxView() { return inboxView; },
   get inboxPrivate() { return inboxPrivate; },
   isPrivateList,
+  get ownsOrder() { return !!initMine; },
+  own, setOwnOrder,
 };
 
 st.tasks = [];
@@ -244,7 +246,7 @@ function toggleNoteCheck(id, idx) {
     const updated = await res.json();
     await renderTexts(textsOf([updated]));
     const i = st.tasks.findIndex(t => t.id === id);
-    if (i !== -1) st.tasks[i] = updated;
+    if (i !== -1) st.tasks[i] = own(updated);
     render();
     refreshOtherInstances(instanceId);
   });
@@ -349,6 +351,19 @@ const initLists = (appEl?.dataset.initLists || '').split('|').filter(Boolean);
 // and the lists left out of it.
 const initMine = appEl?.dataset.initMine || '';
 const initOut = (appEl?.dataset.initOut || '').split('|').filter(Boolean);
+// My tasks has a manual order of its own, the user's (mineOrder in
+// go/tasklists.go): a list's order (a task's sort_order) is the list's, for
+// everyone who looks at it, and ranking across lists in My tasks moves
+// nothing there. The view lays its order over its own copies of the tasks
+// (own: a task's place in it as its sort_order, none: Unsorted), so the
+// rest of the app orders as it does everywhere; a move saves the order as
+// the user's (postReorder) and writes no task.
+let ownOrder = null;
+function setOwnOrder(ids) { ownOrder = new Map(ids.map((id, i) => [id, i])); }
+function own(t) {
+  if (initMine && ownOrder && t) t.sort_order = ownOrder.has(t.id) ? ownOrder.get(t.id) : null;
+  return t;
+}
 // With users a task in no list is in its user's Inbox: private.
 const inboxPrivate = appEl?.dataset.inboxPrivate === '1';
 let listChoices = [];

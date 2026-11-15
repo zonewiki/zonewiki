@@ -682,7 +682,7 @@ async function commentWrite(url, method, body) {
   const updated = await res.json();
   await renderTexts(textsOf([updated]));
   const idx = st.tasks.findIndex(t => t.id === updated.id);
-  if (idx !== -1) st.tasks[idx] = updated;
+  if (idx !== -1) st.tasks[idx] = app.own(updated);
   if (st.commentsTaskId === updated.id && app.modal.open) renderComments(updated);
   app.render();
   app.refreshOtherInstances(app.instanceId);

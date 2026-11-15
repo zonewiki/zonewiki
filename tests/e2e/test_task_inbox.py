@@ -377,3 +377,35 @@ def test_delete_sends_a_shared_lists_tasks_to_general(alice):
     expect(dialog).to_be_visible()
     expect(dialog.locator(".rename-error")).to_contain_text("With users a shared task is always in a list")
     assert task(alice, "Agenda")["list"] == "general"
+
+
+def test_ranking_in_my_tasks_leaves_the_lists_order_alone(alice):
+    """My tasks has the user's own manual order: a task ranked there is
+    ranked for them, in that view; the list's order, which is everyone's,
+    stays as it was."""
+    page = alice
+    for title in ("One", "Two"):
+        new(page, title, list="team", assignee="alice")
+    page.goto("/tasks?mine=1&view=open")
+    expect(card(page, "One")).to_be_visible()
+    card(page, "One").locator(".task-title").click()
+    with page.expect_request(lambda r: r.url.endswith("/api/tasks/reorder")) as sent:
+        page.keyboard.press("Control+Shift+ArrowDown")    # out of Unsorted: first of Sorted
+    assert sent.value.post_data_json == {"mine": True, "order": [task(page, "One")["id"]]}
+    wait_until(page, lambda: page.request.get("/api/tasks?with=order").json()["order"] == [task(page, "One")["id"]])
+    # No task was written: in the list both are unranked still.
+    assert [t["sort_order"] for t in page.request.get("/api/tasks").json()] == [None, None]
+    page.goto("/tasks?list=team&view=open")
+    expect(page.locator(".list-section[data-section=unsorted] .board-day-count")).to_have_text("2")
+    # Back in My tasks, One is where it was put.
+    page.goto("/tasks?mine=1&view=open")
+    expect(page.locator(".list-section[data-section=unsorted] .board-day-count")).to_have_text("1")
+    expect(page.locator(".list-section[data-section=sorted] .board-day-count")).to_have_text("1")
+    # A change to the task keeps its place (the answer's sort_order is the list's).
+    page.request.put(f"/api/tasks/{task(page, 'One')['id']}", data={"due_date": "2031-01-01"})
+    page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+    expect(card(page, "One").locator(".task-due, [class*=due]").first).to_be_visible()
+    expect(page.locator(".list-section[data-section=sorted] .board-day-count")).to_have_text("1")
+    # bob's My tasks has his own order: nothing of alice's.
+    page.request.post("/login", form={"username": "bob", "password": "pw"})
+    assert page.request.get("/api/tasks?with=order").json()["order"] == []

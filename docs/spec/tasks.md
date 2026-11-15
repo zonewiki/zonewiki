@@ -757,13 +757,14 @@ Later in 2026-11 came the Inbox: until then a task could be in no list, which wi
     ],
     "pinned": ["task", "shop"],
     "mine": {"view": "focus"},
-    "all": {"view": "open"}
+    "all": {"view": "open"},
+    "order": ["0b7c…", "9e21…"]
   }
   ```
 
   Each list is one line: its name and its settings (`view`, `limit`, `plan`, `keep`, `labels`, `new`, `noshare`, `home`), their values text as an embed writes them, a setting that isn't set no key.
   So a list can be added or changed by hand in one line, and a commit shows the list that changed.
-  `pinned` is whose registry it is: a user's own pins in theirs, the wiki's in the shared one (Pins, below); `all` (the shared one) the settings of All tasks, `mine` those of My tasks (a user's own; without users the shared one's).
+  `pinned` is whose registry it is: a user's own pins in theirs, the wiki's in the shared one (Pins, below); `all` (the shared one) the settings of All tasks, `mine` those of My tasks (a user's own; without users the shared one's), `order` the manual order of My tasks (task ids; the same owner).
   (Until 2026-11 `"mine": true` in a user's registry narrowed their Pinned to their own tasks; it reads as no settings and is written back no more.)
   It is read leniently (a value of another kind as text, a list without a name left out, a name twice once, unknown keys kept and written back A–Z) and written in one format; a file that is there but unreadable refuses every write (`ReadListsStrict`: never an empty registry, which would drop every list).
   `version` says that the wiki's lists are kept here: a shared registry without it (or none) is a wiki to take over (The migration), one with `1` a wiki from before the Inbox (The Inbox's migration).
@@ -812,6 +813,12 @@ Later in 2026-11 came the Inbox: until then a task could be in no list, which wi
     A task that leaves by a change of its assignee or its list gets the notice a list's view gives ("Saved; it no longer shows here.").
   - **Under the heading** a line says what it holds: "Your own tasks and what is assigned to you.", without users "Every open task.", and the lists left out, as links (`leftOutLinks`).
   - **Its settings are its own**, and yours (Settings, above): the tab, Plan, the limit, the tabs' names.
+  - **Its manual order is its own**, and yours (`mineOrder`, `setMineOrder` in `go/tasklists.go`; `own`, `setOwnOrder` in `tasks.js`): a list's order (a task's `sort_order`) is the list's, for everyone who looks at it, a team's ranking of its backlog; what you rank in My tasks, across lists, is your sequence and moves nothing in any list.
+    It is kept as task ids in your registry (`"order"`; without users the wiki's), written by `POST /api/tasks/reorder` with `mine: true` in a commit "Reorder My tasks": no task is written.
+    The view lays it over its own copies of the tasks (a task's place in it stands for its `sort_order` there, a task not in it is Unsorted), so Unsorted and Sorted, Focus and the Plan board's sections work in My tasks as everywhere; it comes with the page's tasks (`"order"` in `tasksInitial`) and with `GET /api/tasks?with=order`.
+    A task new to My tasks (one just given to you, a capture) is Unsorted, at the top, until you place it.
+    Until you rank something there it is the lists' order of your tasks, so nothing moves on the day; ids of tasks that are closed or gone drop out at the next move.
+    (Until 2026-11 a move in My tasks numbered its tasks' `sort_order` from 0, which put them above everyone else's in their lists.)
   - **The server and the browser have the same rule**: the page gets the lists left out and whether assignment counts (`data-init-out`, `data-init-mine`: `assign` or `lists`), the routes take the scope as `?mine=1` (the closed tasks' count and years, the export), and one table of cases runs through both (`go/testdata/mine_cases.json`).
   - **On a page**: `[[tasks: mine=1]]` shows it to whoever looks.
   - **Zone assigns nothing by itself**; the browser proposes you when you file a task of your own into a shared list.

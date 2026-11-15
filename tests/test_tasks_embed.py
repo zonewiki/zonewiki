@@ -691,13 +691,13 @@ class TestInitialTasks:
         # With them the word of these tasks, as GET /api/tasks answers it.
         word = client.get("/api/tasks", headers=HOST).headers["Zone-Tasks"]
         for url in ("/page/shop", "/tasks", "/tasks?tag=shop"):
-            assert initial_tasks(client.get(url, headers=HOST).get_data(as_text=True)) == [{"word": word, "tasks": tasks, **html}], url
+            assert initial_tasks(client.get(url, headers=HOST).get_data(as_text=True)) == [{"word": word, "order": [], "tasks": tasks, **html}], url
 
     def test_no_tasks(self, client, wiki_dir):
         write_page(wiki_dir, "shop", "# Shop\n\n[[tasks:]]\n")
         [block] = initial_tasks(client.get("/page/shop", headers=HOST).get_data(as_text=True))
         assert block.pop("word") == client.get("/api/tasks/due-count", headers=HOST).headers["Zone-Tasks"]
-        assert block == {"tasks": [], "notes": [], "comments": []}
+        assert block == {"order": [], "tasks": [], "notes": [], "comments": []}
 
     def test_a_tasks_text_does_not_end_the_block(self, client, wiki_dir):
         evil = '</script><script src="/x.js"></script><!-- & <b>'

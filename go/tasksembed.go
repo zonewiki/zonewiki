@@ -422,7 +422,7 @@ func tasksInitial(rq *Req) string {
 		}
 	}
 	block := map[string]any{
-		"word": word, "tasks": apiTasks(tasks), "notes": renderNotes(rq, notes, false), "comments": renderNotes(rq, comments, true)}
+		"word": word, "order": mineOrder(rq.who()), "tasks": apiTasks(tasks), "notes": renderNotes(rq, notes, false), "comments": renderNotes(rq, comments, true)}
 	// With users, who a task can be assigned to and who looks, as GET
 	// /api/tasks/assignable answers (js/taskutil.js setPeople).
 	if settings().Users != nil {

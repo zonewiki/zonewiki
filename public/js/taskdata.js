@@ -18,6 +18,7 @@ const { matchesFilter, parseFilter } = TasksCore;
 // lists have started): a list that starts later asks the server, which may
 // know more by then.
 let initialJSON;   // undefined: not looked for yet; '': none
+let initialOrder = null;   // with them: the user's own order of My tasks (ids)
 function initialTasks() {
   if (initialJSON === undefined) {
     initialJSON = '';
@@ -25,6 +26,7 @@ function initialTasks() {
       const data = JSON.parse(document.getElementById('tasks-initial').textContent);
       if (data.people) setPeople(data.people);
       if (data.word) document.body.dataset.tasksWord = data.word;
+      if (Array.isArray(data.order)) initialOrder = data.order;
       if (Array.isArray(data.tasks)) {
         keepRendered(textsOf(data.tasks), data);
         initialJSON = JSON.stringify(data.tasks);
@@ -92,13 +94,18 @@ async function fetchTasks() {
   started = true;
   // The word of the tasks held (the Zone-Tasks header; js/chrome.js compares
   // it with the server's every minute).
-  const load = () => fetch('/api/tasks').then(res => {
+  // My tasks asks for its own order with the tasks (app.ownsOrder).
+  const load = () => fetch(app.ownsOrder ? '/api/tasks?with=order' : '/api/tasks').then(async res => {
     const word = res.headers.get('Zone-Tasks');
     if (word) document.body.dataset.tasksWord = word;
-    return res.json();
+    const data = await res.json();
+    if (!app.ownsOrder) return data;
+    app.setOwnOrder(data.order || []);
+    return data.tasks;
   });
+  if (initial && app.ownsOrder) app.setOwnOrder(initialOrder || []);
   const [all] = await Promise.all([initial || load(), loadPeople()]);
-  const fetched = all.filter(app.inScope);
+  const fetched = all.filter(app.inScope).map(app.own);
   await renderTexts(textsOf(fetched));
   st.tasks = fetched;
   tasksGen++;
@@ -151,7 +158,7 @@ async function loadClosed() {
   } while (gen !== tasksGen);
   const existingIds = new Set(st.tasks.map(t => t.id));
   for (const t of closed) {
-    if (!existingIds.has(t.id)) st.tasks.push(t);
+    if (!existingIds.has(t.id)) st.tasks.push(app.own(t));
   }
   st.closedLoaded = true;
   app.render();
@@ -188,7 +195,7 @@ async function createTask(data) {
     const task = await res.json();
     await renderTexts(textsOf([task]));
     const msg = leftViewMessage(null, task);
-    if (app.inScope(task)) st.tasks.push(task);
+    if (app.inScope(task)) st.tasks.push(app.own(task));
     if (msg && !app.headless) showNotice(msg);
     app.render();
     refreshDueBadge(); refreshClosedCount();
@@ -212,7 +219,7 @@ async function updateTask(id, data) {
     if (idx !== -1) {
       const before = st.tasks[idx];
       const msg = leftViewMessage(before, updated);
-      if (app.inScope(updated)) st.tasks[idx] = updated;
+      if (app.inScope(updated)) st.tasks[idx] = app.own(updated);
       else st.tasks.splice(idx, 1);
       if (msg) offerUndoLeave(msg, [[id, editSnapshot(before)]]);
     }
@@ -262,7 +269,8 @@ function editSnapshot(t) {
     ...(people.users ? { assignee: t.assignee || null } : {}),
     due_date: t.due_date || null, start_date: t.start_date || null, keep: !!t.keep,
     rec_type: rec?.type || null, rec_interval: rec?.interval || 1, rec_from: rec?.from || 'due',
-    last_done: t.last_done || null, sort_order: t.sort_order ?? null,
+    // (Not its place in My tasks' own order, which is no field of the task.)
+    last_done: t.last_done || null, ...(app.ownsOrder ? {} : { sort_order: t.sort_order ?? null }),
     recurrence: rec ?? null, history: t.history || [],
   };
 }

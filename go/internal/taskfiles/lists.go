@@ -51,7 +51,12 @@ type Registry struct {
 	PinsSet bool              // the file says which are pinned, be it none ("pinned": [])
 	Mine    map[string]string // the settings of My tasks: a user's own, without users the wiki's
 	All     map[string]string // the settings of All tasks (the shared registry)
-	Extra   map[string]json.RawMessage
+	// Order: the manual order of My tasks, task ids, first to last: a user's
+	// own, without users the wiki's. OrderSet: the file has one (be it
+	// empty); without, My tasks starts from the lists' order.
+	Order    []string
+	OrderSet bool
+	Extra    map[string]json.RawMessage
 }
 
 // Find: the list named name (as the file has it), nil when there is none.
@@ -68,7 +73,7 @@ func (r *Registry) Find(name string) *List {
 // task goes to, now the first pinned one) is read and no longer written.
 // "mine" holds the settings of My tasks; until 2026-11 it was true for a
 // user whose Pinned showed only their own tasks, which reads as no settings.
-var registryKeys = map[string]bool{"version": true, "lists": true, "pinned": true, "default": true, "mine": true, "all": true}
+var registryKeys = map[string]bool{"version": true, "lists": true, "pinned": true, "default": true, "mine": true, "all": true, "order": true}
 
 // textMap: an object's members that are text, a number or a bool, as text.
 func textMap(raw json.RawMessage) map[string]string {
@@ -90,7 +95,12 @@ func ParseRegistry(raw []byte) (*Registry, bool) {
 	if !ok {
 		return nil, false
 	}
-	r := &Registry{All: textMap(o["all"]), Mine: textMap(o["mine"]), PinsSet: o.Has("pinned")}
+	r := &Registry{All: textMap(o["all"]), Mine: textMap(o["mine"]), PinsSet: o.Has("pinned"), OrderSet: o.Has("order")}
+	for _, id := range jsonobj.TextList(o["order"]) {
+		if id = strings.TrimSpace(id); id != "" && !slices.Contains(r.Order, id) {
+			r.Order = append(r.Order, id)
+		}
+	}
 	if n, ok := jsonobj.WholeNumber(o["version"]); ok && n > 0 {
 		r.Version = n
 	}
@@ -220,6 +230,12 @@ func (r *Registry) Encode() string {
 	if len(r.All) > 0 {
 		b.WriteString(",\n  \"all\": ")
 		b.Write(textObject(ListSettings, r.All, nil))
+	}
+	if len(r.Order) > 0 {
+		b.WriteString(",\n  \"order\": ")
+		b.WriteString(jsonobj.Text(r.Order))
+	} else if r.OrderSet {
+		b.WriteString(",\n  \"order\": []")
 	}
 	for _, k := range slices.Sorted(maps.Keys(r.Extra)) {
 		b.WriteString(",\n  ")

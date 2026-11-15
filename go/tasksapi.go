@@ -101,6 +101,12 @@ func tasksRoutes(mux *http.ServeMux) {
 		// Zone-Tasks: the word of the tasks answered (taskfiles.Changes, read
 		// before them: a write in between only shows as one more change).
 		w.Header().Set("Zone-Tasks", taskfiles.Changes())
+		// ?with=order: {tasks, order}, with the user's own order of My tasks
+		// (mineOrder), which that view lays over the lists' order.
+		if r.URL.Query().Get("with") == "order" {
+			writeJSON(w, http.StatusOK, map[string]any{"tasks": apiTasks(taskFiles.Open(userOf(r))), "order": mineOrder(userOf(r))})
+			return nil
+		}
 		writeJSON(w, http.StatusOK, apiTasks(taskFiles.Open(userOf(r))))
 		return nil
 	}))
@@ -677,6 +683,23 @@ func apiReorder(w http.ResponseWriter, r *http.Request) error {
 	}
 	if len(order) == 0 && len(updates) == 0 {
 		return refuse("Bad Request")
+	}
+	// mine: the order of My tasks, the user's own (setMineOrder): no task
+	// is written, and a list's order stays as it is.
+	if mine, err := boolField(data, "mine"); err != nil {
+		return err
+	} else if mine {
+		ids := make([]string, 0, len(order))
+		for _, id := range order {
+			if s, ok := jsonobj.As[string](id); ok {
+				ids = append(ids, s)
+			}
+		}
+		if err := setMineOrder(userOf(r), ids); err != nil {
+			return err
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return nil
 	}
 	taskFiles.Lock()
 	defer taskFiles.Unlock()

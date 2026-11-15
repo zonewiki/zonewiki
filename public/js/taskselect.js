@@ -371,7 +371,7 @@ async function bulkTag(ids, add, remove, label = '') {
     const idx = st.tasks.findIndex(t => t.id === u.id);
     if (idx === -1) continue;
     const msg = app.leftViewMessage(st.tasks[idx], u);
-    if (app.inScope(u)) st.tasks[idx] = u;
+    if (app.inScope(u)) st.tasks[idx] = app.own(u);
     else st.tasks.splice(idx, 1);
     if (msg) gone.push({ msg, list: !app.inScope(u) && app.taskList(u) });
   }

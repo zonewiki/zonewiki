@@ -166,6 +166,11 @@ function taskHref(task) {
 }
 
 async function postReorder(body) {
+  // My tasks' order is the user's own: kept as theirs, no task is written.
+  if (app.ownsOrder) {
+    app.setOwnOrder(body.order || []);
+    body = { mine: true, order: body.order || [] };
+  }
   await fetch('/api/tasks/reorder', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
