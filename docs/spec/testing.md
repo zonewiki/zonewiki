@@ -325,6 +325,7 @@ Measured on 2026-11-15, before and after readers stopped taking the writes' lock
 It also reads the Zone process's memory at the end (its resident size: 171 MB at the team's size on 2026-11-15, in a run whose start files every task; it was 224 MB while the search kept a copy of every task, and a later start that finds the task files as Zone left them is at 50 MB before its first search and 150 MB after a search and 100 changes).
 The repository's growth is measured three ways: as the commits leave it, packed in steps as Zone packs every 50 commits, and joined as Zone joins its packs (with how long the join takes).
 Measured on 2026-11-15, before and after each list got a folder of its own (Storage in `docs/spec/tasks.md`): a task changed 112 → 50 ms, a task completed 276 → 54 ms, the repository per 100 writes 66 → 3.4 MB, packed 3.8 → 0.6 MB, and joined 0.1 MB (the join: 1.7 s); then, with a write of one task reading its own file, a task changed 50 → 24 ms and completed 54 → 29 ms; the reads as before (My tasks 25 ms and 106 KB, one list 26 ms, All tasks 44 ms and 3.3 MB).
+Then All tasks: its page 3.3 MB → 57 KB (a long list's tasks no longer come with the page), and its tasks asked for, gzipped, 0.65 MB in 40 ms.
 
 ## Browser tests (`tests/e2e/`)
 

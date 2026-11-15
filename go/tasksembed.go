@@ -437,15 +437,22 @@ func tasksInitial(rq *Req, scopes ...string) string {
 	if slices.Contains(scopes, mineScope) && !slices.Contains(scopes, "") {
 		tasks = withUpdates(rq.who(), tasks, rq.openTasks(), rq.recentClosed()) // My tasks' Updates
 	}
-	var notes, comments []string
-	// Not of a long list: there the browser asks for a card's texts when its
-	// details are opened (js/taskdata.js lazyTexts), and the page doesn't
-	// carry every description rendered.
-	texts := tasks
-	if len(tasks) > lazyTextsFrom {
-		texts = nil
+	block := map[string]any{}
+	// With users, who a task can be assigned to and who looks, as GET
+	// /api/tasks/assignable answers (js/taskutil.js setPeople).
+	if settings().Users != nil {
+		block["people"] = assignablePeople(rq.r)
 	}
-	for _, t := range texts {
+	// Not a long list: its tasks are megabytes, and a page goes as it is
+	// while GET /api/tasks answers gzipped (gzipTasks), a tenth of it. The
+	// list then asks for its tasks when it starts, as one that starts later
+	// does; it renders a card's texts when its details are opened anyway
+	// (js/taskdata.js lazyTexts).
+	if len(tasks) > lazyTextsFrom {
+		return taskData(block)
+	}
+	var notes, comments []string
+	for _, t := range tasks {
 		if t.Description != "" {
 			notes = append(notes, t.Description)
 		}
@@ -453,13 +460,13 @@ func tasksInitial(rq *Req, scopes ...string) string {
 			comments = append(comments, c.Text)
 		}
 	}
-	block := map[string]any{
-		"word": word, "order": mineOrder(rq.who()), "tasks": apiTasks(tasks), "notes": renderNotes(rq, notes, false), "comments": renderNotes(rq, comments, true)}
-	// With users, who a task can be assigned to and who looks, as GET
-	// /api/tasks/assignable answers (js/taskutil.js setPeople).
-	if settings().Users != nil {
-		block["people"] = assignablePeople(rq.r)
-	}
+	block["word"], block["order"], block["tasks"] = word, mineOrder(rq.who()), apiTasks(tasks)
+	block["notes"], block["comments"] = renderNotes(rq, notes, false), renderNotes(rq, comments, true)
+	return taskData(block)
+}
+
+// taskData: block as the page's data block of tasks (tasksInitial).
+func taskData(block map[string]any) string {
 	data, err := json.Marshal(block)
 	if err != nil {
 		logf("task list embed: %v", err)
@@ -468,8 +475,10 @@ func tasksInitial(rq *Req, scopes ...string) string {
 	return `<script type="application/json" id="tasks-initial">` + string(data) + `</script>`
 }
 
-// lazyTextsFrom: a page with more tasks than this brings them without their
-// texts' HTML (LAZY_FROM in js/taskdata.js is the same number).
+// lazyTextsFrom: a page whose lists show more tasks than this doesn't bring
+// them (the list asks for them), and such a list renders a card's texts
+// when its details are opened (LAZY_FROM in js/taskdata.js is the same
+// number).
 const lazyTextsFrom = 150
 
 // scopedTasks: those of tasks that a view of any of scopes shows user

@@ -737,6 +737,25 @@ def test_tasks_show_what_someone_else_changed_within_a_minute(page, wiki):
     expect(card(page, "Added elsewhere")).to_be_visible()
 
 
+def test_a_long_list_of_every_task_loads_again_every_five_minutes(page, wiki):
+    """All tasks of a team is thousands of tasks, and some task changes every
+    minute: such a list is told of a change once and loads again when five
+    minutes have passed since it last did."""
+    page.clock.install()
+    _many_tasks(wiki, 160)
+    page.goto("/tasks?view=open&plan=off")
+    expect(card(page, "Task 000")).to_be_visible()
+    page.request.post("/api/tasks", data={"title": "Added elsewhere"})
+    page.mouse.move(10, 10)
+    with page.expect_response(lambda r: "/api/tasks/due-count" in r.url):
+        page.clock.fast_forward(61_000)
+    page.clock.fast_forward(61_000)
+    expect(card(page, "Added elsewhere")).to_have_count(0)
+    with page.expect_response(lambda r: r.url.endswith("/api/tasks")):
+        page.clock.fast_forward(200_000)
+    expect(card(page, "Added elsewhere")).to_be_visible()
+
+
 def test_save_writes_only_what_was_changed_in_the_dialog(page, wiki):
     """Two people on one task: Save sends the fields changed in this dialog,
     so what someone else changed meanwhile stays; a text both changed is
@@ -5341,8 +5360,7 @@ def test_a_long_list_renders_a_description_when_it_is_opened(page, wiki):
     asked = []
     page.on("request", lambda r: asked.append(r.post_data_json) if r.url.endswith("/api/render-notes") else None)
     page.goto("/tasks?view=open&plan=off")
-    block = json.loads(page.locator("#tasks-initial").inner_text())
-    assert len(block["tasks"]) == 230 and block["notes"] == [] and block["comments"] == []
+    assert "tasks" not in json.loads(page.locator("#tasks-initial").inner_text())    # the list asks for them
     row = card(page, "Task 220")
     expect(row).to_be_visible()
     expect(row.locator(".task-desc[data-lazy]")).to_have_count(1)

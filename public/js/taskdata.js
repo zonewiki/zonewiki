@@ -125,6 +125,7 @@ async function fetchTasks() {
     .map(t => { if (!app.inScope(t) || t.closed_at) t.extra = true; return app.own(t); });
   await lazyTexts(fetched);
   st.tasks = fetched;
+  st.loadedAt = Date.now();
   tasksGen++;
   st.closedLoaded = false;
   app.render();

@@ -6,6 +6,8 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -482,7 +484,7 @@ func newHandler() http.Handler {
 	assistantRoutes(mux)
 	passwordRoutes(mux)
 	oauthRoutes(mux)
-	return noStalls(checks(visitorGate(mux, viewerGate(mux))))
+	return noStalls(checks(visitorGate(mux, gzipTasks(viewerGate(mux)))))
 }
 
 // visitorRoutes: what a visitor of a public wiki (ZONE_PUBLIC; access.go)
@@ -731,9 +733,58 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
+	b = append(b, '\n')
 	w.Header().Set("Content-Type", "application/json")
+	if len(b) >= gzipFrom && takesGzip(w) {
+		var buf bytes.Buffer
+		zw, _ := gzip.NewWriterLevel(&buf, gzip.BestSpeed)
+		_, _ = zw.Write(b)
+		_ = zw.Close()
+		b = buf.Bytes()
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Add("Vary", "Accept-Encoding")
+	}
 	w.WriteHeader(status)
-	_, _ = w.Write(append(b, '\n'))
+	_, _ = w.Write(b)
+}
+
+// The tasks' answers go gzipped to a browser that takes it: a list of a
+// team's tasks is megabytes of JSON that compress to a tenth (All tasks at
+// a team's size: 3.3 MB, measured 2026-11-15). Only what GET /api/tasks…
+// answers: tasks, counts, the closed ones. It holds the user's text and
+// nothing secret beside it (no token, no form's field), which is what
+// compressing the two together would give away (BREACH); pages, which hold
+// a session's forms, go as they are.
+const gzipFrom = 1024 // bytes: below that the header costs what it saves
+
+// gzipTasks marks the answers of GET /api/tasks… as ones writeJSON may
+// gzip, for a request that takes it.
+func gzipTasks(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && (r.URL.Path == "/api/tasks" || strings.HasPrefix(r.URL.Path, "/api/tasks/")) && acceptsGzip(r) {
+			w = &gzipOK{w}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// gzipOK: a response writeJSON may gzip (takesGzip).
+type gzipOK struct{ http.ResponseWriter }
+
+func (g *gzipOK) Unwrap() http.ResponseWriter { return g.ResponseWriter }
+
+// takesGzip: w is, or wraps, a response marked by gzipTasks.
+func takesGzip(w http.ResponseWriter) bool {
+	for {
+		if _, ok := w.(*gzipOK); ok {
+			return true
+		}
+		u, ok := w.(interface{ Unwrap() http.ResponseWriter })
+		if !ok {
+			return false
+		}
+		w = u.Unwrap()
+	}
 }
 
 // limitListener accepts at most n connections at once; more wait.

@@ -60,8 +60,19 @@ function refreshStaleInstances() {
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshStaleInstances(); });
 // Someone else changed a task (js/chrome.js asks every minute): the lists
-// show it without the tab having been away.
-document.addEventListener('zone:tasks-changed', refreshStaleInstances);
+// show it without the tab having been away. A long list of every task (All
+// tasks or a tag's view, of a team) at most every EVERY_MS: there some task
+// changes every minute, and such a list is all of them, loaded again each
+// time.
+const EVERY_MS = 5 * 60 * 1000;
+document.addEventListener('zone:tasks-changed', () => {
+  tasksInstances.forEach(inst => {
+    const wait = inst.holdsEvery() ? inst.loadedAt() + EVERY_MS - Date.now() : 0;
+    if (wait <= 0) inst.refreshIfIdle();
+    // Told once (the page then has the server's word): it loads when its time has come.
+    else if (!inst.later) inst.later = setTimeout(() => { inst.later = null; inst.refreshIfIdle(); }, wait);
+  });
+});
 window.addEventListener('pageshow', e => { if (e.persisted) refreshStaleInstances(); });
 
 // The edit modal of the last task app started: the editor's Make task and a
@@ -585,7 +596,11 @@ function refreshIfIdle() {
   const busy = st.draggedId || st.touchDrag || pendingCompletions.size || st.taskMenu || modal.open || deadlineModal.open;
   if (!busy) refresh();
 }
-tasksInstances.push({ id: instanceId, refresh, refreshIfIdle, syncSelBar, openEdit: openEditModal });
+// holdsEvery: the list holds every task the user sees (no list's, not My
+// tasks), and they are many (what a long list is: LAZY_FROM in
+// js/taskdata.js); loadedAt: when it last asked for its tasks.
+tasksInstances.push({ id: instanceId, refresh, refreshIfIdle, syncSelBar, openEdit: openEditModal,
+  holdsEvery: () => !scopeQuery() && st.tasks.length > 150, loadedAt: () => st.loadedAt || 0 });
 
 openEdit = openEditModal;
 

@@ -3019,3 +3019,39 @@ def test_the_counts_follow_the_task_files(client, wiki_dir):
     tasks.append(dict(tasks[0], id="by-hand", title="By hand", due_date=today))
     path.write_text(json.dumps(tasks))
     assert count() == 1
+
+
+def test_the_tasks_answers_go_gzipped(client, wiki_dir):
+    """GET /api/tasks answers gzipped to a client that takes it, once it is
+    worth it; a page, and a write's answer, go as they are."""
+    import gzip
+    for i in range(30):
+        create_task(client, title=f"Task {i}", description="A description of some length. " * 4)
+    plain = client.get("/api/tasks")
+    assert "Content-Encoding" not in plain.headers
+    zipped = client.get("/api/tasks", headers={"Accept-Encoding": "gzip"})
+    assert zipped.headers["Content-Encoding"] == "gzip" and "Accept-Encoding" in zipped.headers["Vary"]
+    assert json.loads(gzip.decompress(zipped.get_data())) == plain.get_json()
+    assert len(zipped.get_data()) < len(plain.get_data()) / 3
+    small = client.get("/api/tasks/due-count", headers={"Accept-Encoding": "gzip"})
+    assert "Content-Encoding" not in small.headers and small.get_json()["count"] == 0
+    page = client.get("/tasks", headers={"Accept-Encoding": "gzip"})
+    assert "Content-Encoding" not in page.headers and "tasks-initial" in page.get_data(as_text=True)
+    task = plain.get_json()[0]
+    put = client.put(f"/api/tasks/{task['id']}", json={"description": "x" * 3000}, headers={"Accept-Encoding": "gzip"})
+    assert put.status_code == 200 and "Content-Encoding" not in put.headers
+
+
+def test_a_page_brings_a_short_lists_tasks_only(client, wiki_dir):
+    """A page view carries its lists' open tasks up to 150; a longer list
+    asks for them (gzipped), so the page isn't megabytes."""
+    block = lambda: json.loads(client.get("/tasks").get_data(as_text=True)
+                               .split('id="tasks-initial">', 1)[1].split("</script>", 1)[0])
+    tasks = [{"id": f"t{i}", "title": f"Task {i}", "created_at": "2026-01-01T09:00:00"} for i in range(150)]
+    path = wiki_dir / "_tasks" / "tasks.json"
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(json.dumps(tasks))
+    assert len(block()["tasks"]) == 150
+    path.write_text(json.dumps(tasks + [dict(tasks[0], id="t150")]))
+    assert "tasks" not in block() and "word" not in block()
+    assert len(client.get("/api/tasks").get_json()) == 151

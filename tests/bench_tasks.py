@@ -35,6 +35,9 @@ BUDGETS = {
     "My tasks (KB)": 400,
     "one list (ms)": 200,
     "All tasks (ms)": 1500,
+    "All tasks (KB)": 100,
+    "All tasks' tasks, gzipped (ms)": 300,
+    "All tasks' tasks, gzipped (KB)": 700,
     "the due count (ms)": 40,
     "a task changed (ms)": 80,
     "a task completed (ms)": 90,
@@ -228,6 +231,10 @@ def test_the_tasks_at_a_teams_size(team, client):
     ms, resp = timed(get("/tasks"), n=3)
     got["All tasks (ms)"], got["All tasks (KB)"] = ms, len(resp.get_data()) / 1024
     got["the due count (ms)"], _ = timed(get("/api/tasks/due-count?places=1"))
+    # What a list of every task asks for when it starts: its tasks, gzipped.
+    ms, resp = timed(lambda: client.get("/api/tasks", headers={**HOST, "Accept-Encoding": "gzip"}), n=3)
+    assert resp.headers.get("Content-Encoding") == "gzip"
+    got["All tasks' tasks, gzipped (ms)"], got["All tasks' tasks, gzipped (KB)"] = ms, len(resp.get_data()) / 1024
 
     mine = client.get("/api/tasks?mine=1", headers=HOST).get_json()
     shared = [t for t in mine if not t.get("private")]
