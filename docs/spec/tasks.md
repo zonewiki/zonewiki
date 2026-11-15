@@ -46,10 +46,10 @@ In the editor, the formatting bar's Task list button shows the same dialog, with
 `processTasksEmbeds()` swaps each one for a numbered placeholder before rendering, and `injectTasksEmbeds()` replaces each `<p>PLACEHOLDER</p>` with `buildTasksEmbed()`'s HTML (`templates/tasks_embed.html`) afterwards.
 The embed passes its params as `data-init-*` attributes; it carries no script: `tasks.js` (an ES module `zonewiki.js` imports on every page) starts every `.tasks-app` on load (`initTaskApps`, marking each `data-ready`).
 Element ids get a `-<n>` suffix after the first embed, so a page can hold several.
-**A page brings its tasks along**: a page view with a task list (and `/tasks`) carries, once, the user's open tasks as `GET /api/tasks` answers them
+**A page brings its tasks along**: a page view with a task list (and `/tasks`) carries, once, the open tasks its lists show (`scopedTasks`: those of any of the lists' scopes, so My tasks or one list doesn't carry every open task the user sees; a list of every task, All tasks or a tag's view, takes them all) as `GET /api/tasks` answers them
 and their notes' and comments' HTML as `POST /api/render-notes` would (`tasksInitial`: a `<script type="application/json" id="tasks-initial">` data block, which no browser runs; `<`, `>` and `&` in it are `\u` escapes, so no task's text ends it).
 The lists the page starts with draw from it, each from its own copy, with no request (`initialTasks` in `js/taskdata.js`, `keepRendered` in `js/tasktexts.js`), so the list is there when the page is rather than two round trips later.
-Every later load asks the server, and so does a list that starts later (a preview's, the hidden one a page without a list fetches for its dialog): `initTaskApps` forgets the tasks once the page's lists have started.
+Every later load asks the server for the list's scope (`GET /api/tasks?list=`, `?lists=`, `?mine=1`: `scopeQuery`; the server's rule is the one `inScope` has in the browser), and so does a list that starts later (a preview's, the hidden one a page without a list fetches for its dialog): `initTaskApps` forgets the tasks once the page's lists have started.
 `tasks.js` also reads `?tag=`, `?view=`, `?search=`, `?task=`, `?new=1` from the URL; `?new=1` opens the new-task modal in one embed only, one of My tasks or of the Inbox if the page has it, else the first.
 
 The Tasks page itself is `/tasks`; embeds are for custom views on ordinary pages (a tag's tasks, a list with notes around it).

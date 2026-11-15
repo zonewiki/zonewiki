@@ -693,6 +693,36 @@ class TestInitialTasks:
         for url in ("/page/shop", "/tasks", "/tasks?tag=shop"):
             assert initial_tasks(client.get(url, headers=HOST).get_data(as_text=True)) == [{"word": word, "order": [], "tasks": tasks, **html}], url
 
+    def test_a_page_brings_the_tasks_its_lists_show_and_no_others(self, client, wiki_dir):
+        """My tasks or one list doesn't carry every open task: the block
+        holds what the page's lists show (their scopes), a list of every
+        task all of them; GET /api/tasks takes the scope too."""
+        for name in ("shop", "work", "someday"):
+            make_list(client, name, headers=HOST)
+        for title, fields in (("Milk", {"list": "shop"}), ("Report", {"list": "work"}),
+                              ("Loose", {}), ("Later", {"list": "someday"})):
+            assert create_task(client, title=title, headers=HOST, **fields).status_code == 201
+        # Left out of My tasks: someday.
+        assert client.post("/api/tasks/settings", json={"list": "someday", "set": {"home": "off"}}, headers=HOST).status_code == 200
+        titles = lambda url: sorted(t["title"] for t in initial_tasks(client.get(url, headers=HOST).get_data(as_text=True))[0]["tasks"])
+        assert titles("/tasks?list=shop") == ["Milk"]
+        assert titles("/tasks?list=inbox") == ["Loose"]
+        assert titles("/tasks?mine=1") == ["Loose", "Milk", "Report"]
+        assert titles("/tasks") == ["Later", "Loose", "Milk", "Report"]
+        assert titles("/tasks?tag=x") == ["Later", "Loose", "Milk", "Report"]      # a tag's view is every task, filtered
+        # A page: what any of its lists shows; a list that isn't there adds nothing.
+        write_page(wiki_dir, "two", "[[tasks: list=shop]]\n\n[[tasks: list=work]]\n\n[[tasks: list=nope]]\n")
+        assert titles("/page/two") == ["Milk", "Report"]
+        write_page(wiki_dir, "mixed", "[[tasks: list=shop]]\n\n[[tasks: tag=x]]\n")
+        assert titles("/page/mixed") == ["Later", "Loose", "Milk", "Report"]
+        # The route a list loads from later.
+        api = lambda q: sorted(t["title"] for t in client.get("/api/tasks" + q, headers=HOST).get_json())
+        assert api("?list=shop") == ["Milk"] and api("?list=inbox") == ["Loose"] and api("?lists=shop|work") == ["Milk", "Report"]
+        assert api("?mine=1") == ["Loose", "Milk", "Report"] and api("") == ["Later", "Loose", "Milk", "Report"]
+        assert api("?list=nope") == []
+        got = client.get("/api/tasks?mine=1&with=order", headers=HOST).get_json()
+        assert sorted(t["title"] for t in got["tasks"]) == ["Loose", "Milk", "Report"] and got["order"] == []
+
     def test_no_tasks(self, client, wiki_dir):
         write_page(wiki_dir, "shop", "# Shop\n\n[[tasks:]]\n")
         [block] = initial_tasks(client.get("/page/shop", headers=HOST).get_data(as_text=True))

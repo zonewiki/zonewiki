@@ -94,8 +94,10 @@ async function fetchTasks() {
   started = true;
   // The word of the tasks held (the Zone-Tasks header; js/chrome.js compares
   // it with the server's every minute).
-  // My tasks asks for its own order with the tasks (app.ownsOrder).
-  const load = () => fetch(app.ownsOrder ? '/api/tasks?with=order' : '/api/tasks').then(async res => {
+  // A list asks for the tasks of its scope (the server's rule is the one
+  // inScope has); My tasks for its own order with them (app.ownsOrder).
+  const query = app.scopeQuery();
+  const load = () => fetch('/api/tasks' + query + (app.ownsOrder ? (query ? '&' : '?') + 'with=order' : '')).then(async res => {
     const word = res.headers.get('Zone-Tasks');
     if (word) document.body.dataset.tasksWord = word;
     const data = await res.json();

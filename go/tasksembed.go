@@ -369,6 +369,9 @@ func processTasksEmbeds(rq *Req, text, page string, settings bool) (string, []ta
 		// reads as without its embeds.
 		return tasksRE.ReplaceAllString(text, ""), nil
 	}
+	// What the page's lists show: the tasks it brings along are those
+	// (tasksInitial).
+	var scopes []string
 	text = tasksRE.ReplaceAllStringFunc(text, func(m string) string {
 		g := tasksRE.FindStringSubmatch(m)
 		ph := tasksPlaceholder + "_" + strconv.Itoa(len(embeds))
@@ -378,17 +381,20 @@ func processTasksEmbeds(rq *Req, text, page string, settings bool) (string, []ta
 		if name := cleanList(params.Get("list")); name == "" || isInbox(name, lists) {
 			// No list=, or list=inbox (the tasks in no list): the embed's own params.
 			html = buildTasksEmbed(rq, params, len(embeds), false, at)
+			scopes = append(scopes, paramsScope(params))
 		} else if l, ok := listOnPage(name, page, rq.who(), lists); ok {
-			html = buildTasksEmbed(rq, listEmbedParams(l, params), len(embeds), false, at)
+			shown := listEmbedParams(l, params)
+			html = buildTasksEmbed(rq, shown, len(embeds), false, at)
+			scopes = append(scopes, paramsScope(shown))
 		} else {
 			html = noListHTML(rq, name)
-		}
-		if settings && len(embeds) == 0 {
-			html = tasksInitial(rq) + html
 		}
 		embeds = append(embeds, tasksEmbed{ph, html})
 		return ph
 	})
+	if settings && len(embeds) > 0 {
+		embeds[0].html = tasksInitial(rq, scopes...) + embeds[0].html
+	}
 	return text, embeds
 }
 
@@ -409,9 +415,15 @@ func assignablePeople(r *http.Request) map[string]any {
 // initialTasks, js/tasktexts.js textsOf). A data block, which no browser
 // runs; json.Marshal writes <, > and & as \u escapes, so no text in a task
 // ends it.
-func tasksInitial(rq *Req) string {
+//
+// scopes: what the page's lists show (paramsScope of each): the tasks of
+// any of them come along, and no others, so a page that shows My tasks or
+// one list doesn't carry every open task the user sees, with every
+// description rendered. A list of every task ("": All tasks, a tag's view)
+// takes them all.
+func tasksInitial(rq *Req, scopes ...string) string {
 	word := taskfiles.Changes() // of these tasks: read before them (tasksapi.go, Zone-Tasks)
-	tasks := taskFiles.Open(rq.who())
+	tasks := scopedTasks(rq.who(), taskFiles.Open(rq.who()), rq.taskLists(), scopes...)
 	var notes, comments []string
 	for _, t := range tasks {
 		if t.Description != "" {
@@ -434,6 +446,25 @@ func tasksInitial(rq *Req) string {
 		return ""
 	}
 	return `<script type="application/json" id="tasks-initial">` + string(data) + `</script>`
+}
+
+// scopedTasks: those of tasks that a view of any of scopes shows user
+// (scopeFilter); every task when one of them is "" (every task).
+func scopedTasks(user string, tasks []*Task, lists map[string]ListInfo, scopes ...string) []*Task {
+	if slices.Contains(scopes, "") {
+		return tasks
+	}
+	in := make([]func(*Task) bool, len(scopes))
+	for i, s := range scopes {
+		in[i] = scopeFilter(user, s, lists)
+	}
+	out := []*Task{}
+	for _, t := range tasks {
+		if slices.ContainsFunc(in, func(f func(*Task) bool) bool { return f(t) }) {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // injectTasksEmbeds: the last first, as _1 is a prefix of _10.

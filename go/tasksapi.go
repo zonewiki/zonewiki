@@ -101,13 +101,20 @@ func tasksRoutes(mux *http.ServeMux) {
 		// Zone-Tasks: the word of the tasks answered (taskfiles.Changes, read
 		// before them: a write in between only shows as one more change).
 		w.Header().Set("Zone-Tasks", taskfiles.Changes())
+		// ?list=, ?lists=, ?mine=1: the tasks a view of that scope shows
+		// (queryScope), which is what a task list asks for; without, all.
+		user := userOf(r)
+		tasks := taskFiles.Open(user)
+		if scope := queryScope(r); scope != "" {
+			tasks = scopedTasks(user, tasks, taskLists(user), scope)
+		}
 		// ?with=order: {tasks, order}, with the user's own order of My tasks
 		// (mineOrder), which that view lays over the lists' order.
 		if r.URL.Query().Get("with") == "order" {
-			writeJSON(w, http.StatusOK, map[string]any{"tasks": apiTasks(taskFiles.Open(userOf(r))), "order": mineOrder(userOf(r))})
+			writeJSON(w, http.StatusOK, map[string]any{"tasks": apiTasks(tasks), "order": mineOrder(user)})
 			return nil
 		}
-		writeJSON(w, http.StatusOK, apiTasks(taskFiles.Open(userOf(r))))
+		writeJSON(w, http.StatusOK, apiTasks(tasks))
 		return nil
 	}))
 	// A hidden task app, for a page without one that wants its edit modal

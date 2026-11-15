@@ -923,7 +923,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	if missing != "" {
 		tasksHTML = noListHTML(rq, missing)
 	} else {
-		tasksHTML = tasksInitial(rq) + buildTasksEmbed(rq, params, 0, false, "")
+		tasksHTML = tasksInitial(rq, paramsScope(params)) + buildTasksEmbed(rq, params, 0, false, "")
 	}
 	// The list switcher: the pills, this view's the current one; a view
 	// that has no pill is under More, which then names it.
