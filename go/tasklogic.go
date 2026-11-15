@@ -46,6 +46,52 @@ func closedYearsIn(user, scope string) []string {
 	return taskFiles.ClosedYears(user, scopeFilter(user, scope, lists))
 }
 
+// tasksWord: the word of the tasks user's views of scopes hold
+// (taskFiles.Word): another one after a write to a list one of them shows,
+// to the user's Inbox, or to a registry they read; not after a write to a
+// list none of them shows, nor to another user's own tasks. A scope that
+// is every task ("": All tasks, a tag's view), My tasks or several lists
+// takes every list the user sees; no scope at all is every task.
+func tasksWord(user string, scopes ...string) string {
+	every := []taskfiles.Place{}
+	for _, o := range taskFiles.Owners(user) {
+		every = append(every, taskfiles.Place{Owner: o, Every: true})
+	}
+	lists := taskLists(user)
+	var places []taskfiles.Place
+	for _, scope := range scopes {
+		l, ok := resolveList(scope, lists)
+		switch {
+		case ok:
+			places = append(places, taskfiles.Place{Owner: l.Owner, List: l.Name})
+		case scope != "" && isInbox(scope, lists):
+			places = append(places, taskfiles.Place{Owner: inboxOwner(user)})
+		default:
+			return taskFiles.Word(every)
+		}
+	}
+	if len(places) == 0 {
+		return taskFiles.Word(every)
+	}
+	// The registries the user reads, whatever the lists: a list made, a pin.
+	for _, o := range taskFiles.Owners(user) {
+		places = append(places, taskfiles.Place{Owner: o})
+	}
+	return taskFiles.Word(places)
+}
+
+// heldScopes: the scopes of the lists a page holds, as its requests name
+// them (?held=a,b: js/chrome.js pageScopes); none: every task.
+func heldScopes(r *http.Request) []string {
+	var out []string
+	for _, s := range strings.Split(r.URL.Query().Get("held"), ",") {
+		if s = cleanList(s); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 // queryScope: the scope a request names: ?mine=1 My tasks (mineScope),
 // ?list= one list (by its ref), ?lists= several ("|" between), as
 // scopeFilter takes them; "" for every task.

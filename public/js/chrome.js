@@ -268,25 +268,39 @@ function showCount(el, n) {
   if (el) el.hidden = !(n > 0);
 }
 
-// The answer's Zone-Tasks header is a word that changes with every write of
-// tasks or lists, anyone's. The page keeps the word of the tasks it holds
+// The answer's Zone-Tasks header is a word that changes with every write to
+// the lists the page holds (pageScopes), not with one elsewhere. The page keeps the word of the tasks it holds
 // (<body data-tasks-word>, set where they are loaded: js/taskdata.js). When
 // the minute's own asking (poll) finds another word, someone changed a task
 // since: the page's task lists are told (zone:tasks-changed; tasks.js loads
 // them again when idle). A refresh after this page's own write only takes
 // note of the word.
+// What the page's task lists hold, for the word: their lists' refs, ","
+// between; '' when one of them holds more than a list (My tasks, All tasks,
+// a tag's view, several lists as one): then any write the user sees counts.
+export function pageScopes() {
+  const scopes = [];
+  for (const app of document.querySelectorAll('.tasks-app:not([data-headless])')) {
+    const d = app.dataset;
+    if (d.initMine || d.initLists || !d.initList) return '';
+    scopes.push(d.initList);
+  }
+  return scopes.join(',');
+}
 export async function refreshDueBadge(poll = false) {
   if (!tasksLinks.length) return;
   try {
     const places = placesNow();
-    const res = await fetch(places.length ? '/api/tasks/due-count?places=1' : '/api/tasks/due-count');
+    const held = pageScopes();
+    const query = [places.length ? 'places=1' : '', held ? 'held=' + encodeURIComponent(held) : ''].filter(Boolean).join('&');
+    const res = await fetch('/api/tasks/due-count' + (query ? '?' + query : ''));
     const c = await res.json();
     const word = res.headers.get('Zone-Tasks');
-    const held = document.body.dataset.tasksWord;
-    const changed = poll === true && word && held && word !== held;
+    const had = document.body.dataset.tasksWord;
+    const changed = poll === true && word && had && word !== had;
     // After this page's own write the word is its own; a poll leaves it to
     // the lists' load, so a list that was busy is told again next minute.
-    if (word && held && poll !== true) document.body.dataset.tasksWord = word;
+    if (word && had && poll !== true) document.body.dataset.tasksWord = word;
     if (changed) document.dispatchEvent(new CustomEvent('zone:tasks-changed'));
     tasksLinks.forEach(a => {
       showCount(a.querySelector('.module-due'), c.count);

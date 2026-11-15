@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"reflect"
 	"slices"
 	"sort"
@@ -153,7 +152,7 @@ func TestPrivateTasksInTheirUsersFiles(t *testing.T) {
 	if got := titles(taskFiles.Open("")); !reflect.DeepEqual(got, []string{"Shared one"}) {
 		t.Errorf("Zone sees %v", got)
 	}
-	shared, own := fileText(t, taskFiles.OpenPath("")), fileText(t, filepath.Join(cfg.Data, "private/alice/_tasks/tasks.json"))
+	shared, own := fileText(t, taskFiles.PathIn("", teamList(t, "alice"), "tasks.json")), fileText(t, taskFiles.PathIn("alice", ownList(t, "alice"), "tasks.json"))
 	if strings.Contains(shared, "Alice's own") || !strings.Contains(own, "Alice's own") ||
 		strings.Contains(own, "Shared one") || strings.Contains(own+shared, `"private"`) {
 		t.Errorf("files:\n%s\n%s", shared, own)
@@ -207,7 +206,7 @@ func TestPrivateTaskMovesAndCompletes(t *testing.T) {
 	if _, err := updateTask("alice", task.ID, done, ""); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(fileText(t, taskFiles.ClosedPath("alice")), task.ID) || strings.Contains(fileText(t, taskFiles.ClosedPath("")), "Water") {
+	if !strings.Contains(fileText(t, taskFiles.PathIn("alice", ownList(t, "alice"), "closed.json")), task.ID) || strings.Contains(fileText(t, taskFiles.ClosedPath("")), "Water") {
 		t.Error("completed into the wrong file")
 	}
 	open := taskFiles.Open("alice")
@@ -305,7 +304,7 @@ func TestEveryUsersFiles(t *testing.T) {
 	withUsers(t, "alice", "bob")
 	mine := newTestTask(t, "alice", "See [[old]]", true)
 	changed, err := renamePageRefs(func(_, s string) string { return strings.ReplaceAll(s, "[[old]]", "[[new]]") })
-	if err != nil || len(changed) != 1 || !strings.Contains(fileText(t, taskFiles.OpenPath("alice")), "[[new]]") {
+	if err != nil || len(changed) != 1 || !strings.Contains(fileText(t, taskFiles.PathIn("alice", ownList(t, "alice"), "tasks.json")), "[[new]]") {
 		t.Errorf("rename: %v %v", changed, err)
 	}
 	last := jsonObj{}
@@ -314,13 +313,14 @@ func TestEveryUsersFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Closed years ago: the start of Zone files it into her archive, that month's.
-	done := taskfiles.ReadLenient(taskFiles.ClosedPath("alice"))
+	own := func(file string) string { return taskFiles.PathIn("alice", ownList(t, "alice"), file) }
+	done := taskfiles.ReadLenient(own("closed.json"))
 	done[0].ClosedAt = "2001-05-01T10:00:00"
-	if err := taskfiles.Write(taskFiles.ClosedPath("alice"), done); err != nil {
+	if err := taskfiles.Write(own("closed.json"), done); err != nil {
 		t.Fatal(err)
 	}
 	taskFiles.ArchiveOldClosed()
-	if !strings.Contains(fileText(t, taskFiles.ArchivePath("alice", "2001-05")), mine.ID) || strings.Contains(fileText(t, taskFiles.ClosedPath("alice")), mine.ID) {
+	if !strings.Contains(fileText(t, own("closed-2001-05.json")), mine.ID) || exists(own("closed.json")) {
 		t.Error("not archived in alice's files")
 	}
 	if exists(taskFiles.ArchivePath("", "2001-05")) || exists(taskFiles.ArchivePath("bob", "2001-05")) {

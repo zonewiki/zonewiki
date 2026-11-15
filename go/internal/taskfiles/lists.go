@@ -311,6 +311,6 @@ func (s *Store) WriteListsOf(owner string, r *Registry) (string, error) {
 	if err := atomicfile.Write(path, text); err != nil {
 		return "", err
 	}
-	changes.Add(1)
+	changed(path)
 	return path, nil
 }

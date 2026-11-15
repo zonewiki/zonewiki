@@ -413,11 +413,8 @@ func pageSearchDocs(rq *Req) []*SearchDoc {
 // included (a cache key).
 func tasksMtimes() string {
 	var b strings.Builder
-	var paths []string
-	for _, o := range taskFiles.EveryOwner() {
-		paths = append(append(paths, taskFiles.OpenPath(o), taskFiles.ClosedPath(o)), taskFiles.Archives(o)...)
-	}
-	for _, p := range paths {
+	for _, f := range taskFiles.Files(taskFiles.EveryOwner()) {
+		p := f.Path
 		if st, err := os.Stat(p); err == nil {
 			fmt.Fprintf(&b, "%s\x00%d\x00", p, st.ModTime().UnixNano())
 		} else {

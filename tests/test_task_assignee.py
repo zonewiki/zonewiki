@@ -53,8 +53,11 @@ def put(client, task, **fields):
 
 def stored(wiki_dir, task):
     """The task as its file has it."""
-    tasks = json.loads((wiki_dir / "_tasks" / "tasks.json").read_text())
-    return next(t for t in tasks if t["id"] == task["id"])
+    for path in (wiki_dir / "_tasks").rglob("tasks.json"):       # the Inbox's and each list's
+        for t in json.loads(path.read_text()):
+            if t["id"] == task["id"]:
+                return t
+    raise LookupError(task["id"])
 
 
 def events(task):
@@ -668,7 +671,7 @@ class TestASharedTaskIsInAList:
         tasks = self.tasks(alice)
         assert tasks["One"]["list"] == tasks["Two"]["list"] == "general" and tasks["One"]["assignee"] == "bob"
         assert tasks["One"]["private"] is False
-        closed = json.loads((wiki_dir / "_tasks/closed.json").read_text())
+        closed = json.loads((wiki_dir / "_tasks/lists/general/closed.json").read_text())
         assert [(t["title"], t["list"]) for t in closed] == [("Done", "general")]
         login(alice, "bob")
         assert self.tasks(alice)["One"]["list"] == "general"        # everyone's, as its tasks were
@@ -885,3 +888,36 @@ class TestHandingOn:
         # Made a viewer instead: the same.
         monkeypatch.setattr(settings, "USER_SETTINGS", {**USER_SETTINGS, "bob": {"role": "viewer"}})
         assert ">2 open tasks to hand on</a>" in alice.get("/admin/users", headers=HOST).get_data(as_text=True)
+
+
+class TestTheWordOfWhatAPageHolds:
+    """Zone-Tasks (docs/spec/tasks.md, The task app): another word after a
+    write to a list the page holds (?held=), not after one elsewhere or
+    to another user's own tasks."""
+
+    def word(self, client, held=""):
+        return client.get("/api/tasks/due-count" + (f"?held={held}" if held else ""), headers=HOST).headers["Zone-Tasks"]
+
+    def test_a_write_elsewhere_leaves_it(self, alice):
+        client = alice
+        assert make_list(client, "side", headers=HOST).status_code == 302
+        new(client, title="The first")        # the first write also makes the file of the tasks in no list
+        team, side, everything = self.word(client, "team"), self.word(client, "side"), self.word(client)
+        task = new(client, title="In team")
+        assert self.word(client, "team") != team and self.word(client, "side") == side and self.word(client) != everything
+        # Moved to the other list: both lists' words.
+        team, side = self.word(client, "team"), self.word(client, "side")
+        assert put(client, task, list="side").status_code == 200
+        assert self.word(client, "team") != team and self.word(client, "side") != side
+        # bob's Inbox is his: alice's page isn't told, whatever it holds; bob's is.
+        everything, inbox = self.word(client), self.word(client, "inbox")
+        login(client, "bob")
+        bobs = self.word(client)
+        assert client.post("/api/tasks", json={"title": "Bob's own"}, headers=HOST).status_code == 201
+        assert self.word(client) != bobs
+        login(client, "alice")
+        assert self.word(client) == everything and self.word(client, "inbox") == inbox
+        # A list made: every page's word, since its switcher shows it.
+        team = self.word(client, "team")
+        assert make_list(client, "third", headers=HOST).status_code == 302
+        assert self.word(client, "team") != team

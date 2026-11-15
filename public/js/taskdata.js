@@ -5,7 +5,7 @@
 // uses of the app comes in app (its state in app.st).
 
 import TasksCore from '../tasks-core.js';
-import { refreshDueBadge } from './chrome.js';
+import { pageScopes, refreshDueBadge } from './chrome.js';
 import { formatDate, loadPeople, noticeFromResponse, people, placeToast, plainTitle, setPeople, showNotice, startsAfterDeadline } from './taskutil.js';
 import { keepRendered, renderTexts, textsOf } from './tasktexts.js';
 
@@ -104,8 +104,10 @@ async function fetchTasks() {
   // it with the server's every minute).
   // A list asks for the tasks of its scope (the server's rule is the one
   // inScope has); My tasks for its own order with them (app.ownsOrder).
-  const query = app.scopeQuery();
-  const load = () => fetch('/api/tasks' + query + (app.ownsOrder ? (query ? '&' : '?') + 'with=order' : '')).then(async res => {
+  // held=: what the page's lists hold, so the word is of all of them.
+  const query = [app.scopeQuery().slice(1), app.ownsOrder ? 'with=order' : '',
+    pageScopes() ? 'held=' + encodeURIComponent(pageScopes()) : ''].filter(Boolean).join('&');
+  const load = () => fetch('/api/tasks' + (query ? '?' + query : '')).then(async res => {
     const word = res.headers.get('Zone-Tasks');
     if (word) document.body.dataset.tasksWord = word;
     const data = await res.json();

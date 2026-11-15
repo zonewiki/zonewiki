@@ -35,12 +35,12 @@ BUDGETS = {
     "one list (ms)": 200,
     "All tasks (ms)": 1500,
     "the due count (ms)": 40,
-    "a task changed (ms)": 300,
-    "a task completed (ms)": 500,
+    "a task changed (ms)": 150,
+    "a task completed (ms)": 150,
     "My tasks reordered (ms)": 300,
     "a search after a write (ms)": 1500,
-    "the repository per 100 writes (MB)": 150,
-    "the same, packed (MB)": 5,
+    "the repository per 100 writes (MB)": 10,
+    "the same, packed (MB)": 1.5,
 }
 
 WORDS = ("review the draft of the offer for the customer and send it back with notes call about invoice "
@@ -174,8 +174,9 @@ def test_the_tasks_at_a_teams_size(team, client):
     got["the same, packed (MB)"] = (repo_mb(root) - before) / writes * 100
 
     print(f"\n\nTasks at a team's size: {USERS} users, {LISTS} lists, {OPEN} open and {CLOSED} closed tasks; "
-          f"{(root / '_tasks/tasks.json').stat().st_size / 1e6:.1f} MB open, "
-          f"{(root / '_tasks/closed.json').stat().st_size / 1e6:.1f} MB closed\n")
+          f"{sum(p.stat().st_size for p in (root / '_tasks').rglob('tasks.json')) / 1e6:.1f} MB open, "
+          f"{sum(p.stat().st_size for p in (root / '_tasks').rglob('closed*.json')) / 1e6:.1f} MB closed, "
+          f"in {len(list((root / '_tasks').rglob('*.json')))} files\n")
     over = []
     for name, value in got.items():
         budget = BUDGETS.get(name)

@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"zonewiki/internal/jsonobj"
-	"zonewiki/internal/taskfiles"
 )
 
 const tasksPlaceholder = "ZONETASKSPLACEHOLDER"
@@ -432,7 +431,7 @@ func assignablePeople(r *http.Request) map[string]any {
 // description rendered. A list of every task ("": All tasks, a tag's view)
 // takes them all.
 func tasksInitial(rq *Req, scopes ...string) string {
-	word := taskfiles.Changes() // of these tasks: read before them (tasksapi.go, Zone-Tasks)
+	word := tasksWord(rq.who(), scopes...) // of these tasks: read before them (tasksapi.go, Zone-Tasks)
 	tasks := scopedTasks(rq.who(), taskFiles.Open(rq.who()), rq.taskLists(), scopes...)
 	var notes, comments []string
 	// Not of a long list: there the browser asks for a card's texts when its

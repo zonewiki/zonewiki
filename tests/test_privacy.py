@@ -88,10 +88,15 @@ def wiki(git_wiki_dir, monkeypatch):
     # Her closed tasks as Zone files them: this month's, and an earlier month's.
     this_month = datetime.date.today().strftime("%Y-%m")
     inbox = {k: v for k, v in private_task(INBOX_ID, "Inbox").items() if k != "list"}
-    (tasks / "tasks.json").write_text(json.dumps([private_task(TASK_ID, "Task"), inbox], indent=2) + "\n")
-    (tasks / "closed.json").write_text(
+    # Each list's tasks in its folder, those in no list (her Inbox) beside the registry.
+    (tasks / "tasks.json").write_text(json.dumps([inbox], indent=2) + "\n")
+    (tasks / "closed.json").write_text("[]\n")
+    hers = tasks / "lists/secretlist"
+    hers.mkdir(parents=True)
+    (hers / "tasks.json").write_text(json.dumps([private_task(TASK_ID, "Task")], indent=2) + "\n")
+    (hers / "closed.json").write_text(
         json.dumps([private_task(DONE_ID, "Done", f"{this_month}-01T10:00:00")], indent=2) + "\n")
-    (tasks / "closed-2001-01.json").write_text(
+    (hers / "closed-2001-01.json").write_text(
         json.dumps([private_task(OLD_ID, "Old", "2001-01-05T10:00:00")], indent=2) + "\n")
     git(w, "add", "-A")
     git(w, "commit", "-q", "-m", "Alice's pages")
@@ -112,9 +117,20 @@ def bob(client, wiki):
 
 
 def shared_tasks(wiki):
-    """The shared open tasks' file as text ("" while there is none)."""
-    path = wiki / "_tasks/tasks.json"
-    return path.read_text() if path.exists() else ""
+    """The shared open tasks' files as text ("" while there is none): the
+    Inbox's and each list's."""
+    return open_tasks(wiki / "_tasks")
+
+
+def open_tasks(folder):
+    """The open tasks' files of a _tasks folder as text: those of no list
+    and each list's (lists/<name>/tasks.json)."""
+    return "".join(p.read_text() for p in sorted(folder.rglob("tasks.json")))
+
+
+def her_tasks(wiki):
+    """alice's open tasks' files as text."""
+    return open_tasks(wiki / "private/alice/_tasks")
 
 
 def sha(wiki):
@@ -225,13 +241,13 @@ def test_her_archives_by_month_are_hers(client, wiki, tmp_path_factory):
     client.live.stop()     # the fixture's server, which started before these files were there
     git_setup(tmp_path_factory)
     assert not (wiki / "private/alice/_tasks/closed-1999.json").exists() and not (wiki / "_tasks/closed-1998.json").exists()
-    assert hers in (wiki / "private/alice/_tasks/closed-1999-03.json").read_text()
-    assert "Shared long ago" in (wiki / "_tasks/closed-1998-07.json").read_text()
-    assert hers not in "".join(p.read_text() for p in (wiki / "_tasks").glob("*.json")), "her task in the shared files"
+    assert hers in (wiki / "private/alice/_tasks/lists/secretlist/closed-1999-03.json").read_text()
+    assert "Shared long ago" in (wiki / "_tasks/lists/team/closed-1998-07.json").read_text()
+    assert hers not in "".join(p.read_text() for p in (wiki / "_tasks").rglob("*.json")), "her task in the shared files"
     assert git(wiki, "log", "-n1", "--format=%s") == "Archive closed tasks"
     files = git(wiki, "show", "--no-renames", "--name-only", "--format=", "HEAD").split()
-    assert sorted(files) == ["_tasks/closed-1998-07.json", "_tasks/closed-1998.json",          # one commit has both
-                             "private/alice/_tasks/closed-1999-03.json", "private/alice/_tasks/closed-1999.json"]
+    assert sorted(files) == ["_tasks/closed-1998.json", "_tasks/lists/team/closed-1998-07.json",          # one commit has both
+                             "private/alice/_tasks/closed-1999.json", "private/alice/_tasks/lists/secretlist/closed-1999-03.json"]
     sign_in(client, "bob")
     assert client.get("/api/tasks/closed-years", headers=HOST).get_json()["years"][1:] == ["1998"]
     assert client.get("/api/tasks/closed?year=1999", headers=HOST).get_json() == []
@@ -258,11 +274,13 @@ def test_her_archives_by_month_are_hers(client, wiki, tmp_path_factory):
     assert years[1:] == ["2001", "1999", "1998", "1997"]
     assert [t["id"] for t in client.get("/api/tasks/closed?year=1999", headers=HOST).get_json()] == [hers]
     assert client.put(f"/api/tasks/{hers}", json={"title": "Long ago, edited"}, headers=HOST).status_code == 200
-    assert (wiki / "private/alice/_tasks/closed-1997-03.json").exists() and not (wiki / "private/alice/_tasks/closed-1997.json").exists()
-    assert "Long ago, edited" in (wiki / "private/alice/_tasks/closed-1999-03.json").read_text()
+    hers_dir = wiki / "private/alice/_tasks/lists/secretlist"
+    assert (hers_dir / "closed-1997-03.json").exists() and not (wiki / "private/alice/_tasks/closed-1997.json").exists()
+    assert "Long ago, edited" in (hers_dir / "closed-1999-03.json").read_text()
     files = git(wiki, "show", "--no-renames", "--name-only", "--format=%an", "HEAD").split()
     assert files[0] == "alice" and sorted(files[1:]) == [
-        "private/alice/_tasks/closed-1997-03.json", "private/alice/_tasks/closed-1997.json", "private/alice/_tasks/closed-1999-03.json"]
+        "private/alice/_tasks/closed-1997.json", "private/alice/_tasks/lists/secretlist/closed-1997-03.json",
+        "private/alice/_tasks/lists/secretlist/closed-1999-03.json"]
     sign_in(client, "bob")
     assert "private/alice" not in mcp(client, "history") and "1997" not in mcp(client, "history")
 
@@ -530,7 +548,7 @@ def test_a_new_task_goes_to_her_inbox(alice, wiki):
     # The task itself: hers alone, in her files, though her pinned list is another.
     made = alice.post("/api/tasks", json={"title": "Capture"}, headers=HOST).get_json()
     assert made["private"] is True and "list" not in made
-    assert made["id"] in (wiki / "private/alice/_tasks/tasks.json").read_text()
+    assert made["id"] in (wiki / "private/alice/_tasks/tasks.json").read_text()      # her Inbox's file
     assert made["id"] not in shared_tasks(wiki)
     sign_in(alice, "bob")
     bob = alice
@@ -553,7 +571,8 @@ def test_nothing_private_without_users(client, wiki_dir):
 def test_a_task_moves_between_her_files_and_the_shared_ones(alice, wiki):
     task = alice.post("/api/tasks", json={"title": "Gift", "list": "secretlist"}, headers=HOST).get_json()
     assert task["private"] is True and task["list"] == "secretlist"
-    mine, shared = wiki / "private/alice/_tasks/tasks.json", wiki / "_tasks/tasks.json"
+    class mine:            # her open tasks, whichever of her folders holds them
+        read_text = staticmethod(lambda: her_tasks(wiki))
     assert task["id"] in mine.read_text() and task["id"] not in shared_tasks(wiki)
     # Out of her private list it is in her Inbox: still hers alone, share or not.
     for body in ({"list": ""}, {"list": "secretlist"}, {"list": "inbox", "share": True}, {"list": "secretlist"}, {"list": None}):
@@ -568,10 +587,10 @@ def test_a_task_moves_between_her_files_and_the_shared_ones(alice, wiki):
     assert task["id"] not in shared_tasks(wiki)
     moved = alice.put(f"/api/tasks/{task['id']}", json={"list": "team", "share": True}, headers=HOST).get_json()
     assert moved["private"] is False and moved["list"] == "team"
-    assert task["id"] in shared.read_text() and task["id"] not in mine.read_text()
+    assert task["id"] in shared_tasks(wiki) and task["id"] not in mine.read_text()
     # One commit, both files, in her name.
     assert git(wiki, "show", "--name-only", "--format=%an", "HEAD").split() == [
-        "alice", "_tasks/tasks.json", "private/alice/_tasks/tasks.json"]
+        "alice", "_tasks/lists/team/tasks.json", "private/alice/_tasks/tasks.json"]
     sign_in(alice, "bob")
     assert task["id"] in [t["id"] for t in alice.get("/api/tasks", headers=HOST).get_json()]
 
@@ -600,7 +619,11 @@ def test_a_shared_task_cannot_be_made_private(alice, wiki):
     bobs = alice.post("/api/tasks", json={"title": "Bob's", "list": "team"}, headers=HOST).get_json()
     assert bobs["private"] is False
     sign_in(alice, "alice")
-    shared_file, her_file = wiki / "_tasks/tasks.json", wiki / "private/alice/_tasks/tasks.json"
+    class shared_file:
+        read_text = staticmethod(lambda: shared_tasks(wiki))
+
+    class her_file:
+        read_text = staticmethod(lambda: her_tasks(wiki))
     for where, why in (("secretlist", "stays shared"), ("", "always in a list"), ("inbox", "always in a list"),
                        ("none", "always in a list"), (None, "always in a list")):
         for resp in (alice.put(f"/api/tasks/{bobs['id']}", json={"list": where}, headers=HOST),
@@ -665,7 +688,7 @@ def test_undoing_a_delete_keeps_a_task_private(alice, wiki):
     assert alice.delete(f"/api/tasks/{TASK_ID}", headers=HOST).status_code == 204
     restored = alice.post("/api/tasks/restore", json={"tasks": [snap]}, headers=HOST).get_json()
     assert [t["private"] for t in restored] == [True]
-    assert TASK_ID in (wiki / "private/alice/_tasks/tasks.json").read_text()
+    assert TASK_ID in her_tasks(wiki)
 
 
 def test_alices_assistant_makes_private_tasks(client, wiki):
@@ -682,9 +705,9 @@ def test_alices_assistant_makes_private_tasks(client, wiki):
     assert "private" not in text.split("\n")[3] and "list: team" in text
     assert "stays" not in mcp(client, "create_task", token="alice-token", title="x", private=True)   # told to give list
     assert "list" in mcp(client, "create_task", token="alice-token", title="x", private=True)
-    her_file = (wiki / "private/alice/_tasks/tasks.json").read_text()
+    her_file = her_tasks(wiki)
     assert all(t in her_file for t in ("Call mum", "Loose lunch", "Wrap the gift")) and "Team lunch" not in her_file
-    shared = (wiki / "_tasks/tasks.json").read_text()
+    shared = shared_tasks(wiki)
     assert "Team lunch" in shared and not any(t in shared for t in ("Call mum", "Loose lunch", "Wrap the gift"))
     # Her Inbox, by its name, is hers: bob's has none of it.
     assert "Call mum" in mcp(client, "search_tasks", token="alice-token", list="inbox")
@@ -948,7 +971,7 @@ def _alices_files(wiki):
              for folder in ("private",)
              for p in (wiki / folder).rglob("*") if p.is_file()
              and "private/bob/" not in p.relative_to(wiki).as_posix() + "/"}   # bob's own, bob may change
-    shared = "".join(p.read_text() for p in (wiki / "_tasks").glob("*.json"))
+    shared = "".join(p.read_text() for p in (wiki / "_tasks").rglob("*.json"))
     files["shared tasks has her ids"] = str(any(id in shared for id in HER_TASKS))
     return files
 
@@ -1264,7 +1287,7 @@ def test_a_new_task_that_names_no_list_goes_to_its_makers_inbox(bob, wiki, named
     text = mcp(bob, "create_task", title="Renew the passport", **{k: v for k, v in named.items() if v is not None})
     assert "· private" in text and "list:" not in text
     assert "Renew the passport" in (wiki / "private/bob/_tasks/tasks.json").read_text(), text
-    assert json.loads(shared_tasks(wiki) or "[]") == []
+    assert '"id"' not in shared_tasks(wiki)
     # Nobody else sees them, whatever they ask for.
     sign_in(bob, "alice")
     for url in ("/api/tasks", "/api/tasks/export?list=inbox", "/api/tasks/export?mine=1", "/tasks?list=inbox", "/tasks"):
@@ -1342,11 +1365,11 @@ def test_an_assistants_task_for_someone_is_not_made_private(bob, wiki):
         text = mcp(bob, "create_task", title="Check the invoice", assignee="alice", token=token)
         assert "has to be in a shared list" in text and text.rstrip().endswith("Pass list: team"), text
         assert "secretlist" not in text
-    assert json.loads(shared_tasks(wiki) or "[]") == [] and not (wiki / "private/bob/_tasks").exists()
+    assert '"id"' not in shared_tasks(wiki) and not (wiki / "private/bob/_tasks").exists()
     assert "Check the invoice" not in (wiki / "private/alice/_tasks/tasks.json").read_text()
     # In a shared list it is made, and assigned.
     text = mcp(bob, "create_task", title="Sign the form", assignee="alice", list="team")
-    shared = {t["title"]: t for t in json.loads((wiki / "_tasks/tasks.json").read_text())}
+    shared = {t["title"]: t for t in json.loads((wiki / "_tasks/lists/team/tasks.json").read_text())}
     assert shared["Sign the form"]["list"] == "team" and shared["Sign the form"]["assignee"] == "alice", text
     # Without an assignee it is in the asker's Inbox.
     mcp(bob, "create_task", title="Wrap the gift", token="alice-token")
@@ -1365,7 +1388,7 @@ def test_deleting_a_private_list_keeps_its_tasks_private(alice, wiki):
     assert gone.status_code == 302 and "delete_error" not in gone.headers["Location"]
     assert "secretlist" not in (wiki / "private/alice/_tasks/lists.json").read_text()
     tasks = {t["id"]: t for t in json.loads(her_file.read_text())}
-    assert "list" not in tasks[TASK_ID] and json.loads(shared_tasks(wiki) or "[]") == []
+    assert "list" not in tasks[TASK_ID] and '"id"' not in shared_tasks(wiki)
     closed = json.loads((wiki / "private/alice/_tasks/closed.json").read_text())
     assert "list" not in closed[0] and closed[0]["id"] == DONE_ID
     mine = alice.get("/api/tasks/export?list=inbox", headers=HOST).get_json()["tasks"]

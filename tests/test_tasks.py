@@ -2363,8 +2363,9 @@ class TestLists:
         assert create_task(client, list="nope").status_code == 400
         # In the file after its tags, and only when it is in one.
         assert client.put(url, json={"list": "groceries"}).get_json()["list"] == "groceries"
-        text = (settings.ZONE_DATA / "_tasks/tasks.json").read_text()
+        text = (settings.ZONE_DATA / "_tasks/lists/groceries/tasks.json").read_text()       # in its list's folder
         assert '    "tags": [\n      "x"\n    ],\n    "list": "groceries",\n' in text and text.count('"list"') == 1
+        assert '"list"' not in (settings.ZONE_DATA / "_tasks/tasks.json").read_text()
 
     def test_embed_carries_list_and_the_lists(self, client, wiki_dir, shop):
         body = client.get("/page/shop").get_data(as_text=True)

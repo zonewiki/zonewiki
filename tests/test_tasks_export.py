@@ -37,7 +37,7 @@ def test_export_is_the_lists_tasks_open_and_completed(client, wiki_dir):
     assert export(client, list="nosuch").get_json()["tasks"] == []
     # A filter as an embed's tag=; neither: every task.
     assert [t["title"] for t in export(client, list="shop", tag="weekly").get_json()["tasks"]] == ["Milk"]
-    assert [t["title"] for t in export(client, tag="work|weekly").get_json()["tasks"]] == ["Milk", "Report"]
+    assert sorted(t["title"] for t in export(client, tag="work|weekly").get_json()["tasks"]) == ["Milk", "Report"]
     everything = export(client)
     assert len(everything.get_json()["tasks"]) == 3 and "zone-tasks-all-" in everything.headers["Content-Disposition"]
 

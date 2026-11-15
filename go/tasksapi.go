@@ -99,9 +99,9 @@ func jsonObject(r *http.Request) (jsonObj, error) {
 
 func tasksRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/tasks", tasksRoute(func(w http.ResponseWriter, r *http.Request) error {
-		// Zone-Tasks: the word of the tasks answered (taskfiles.Changes, read
+		// Zone-Tasks: the word of the tasks the page holds (tasksWord of ?held=, read
 		// before them: a write in between only shows as one more change).
-		w.Header().Set("Zone-Tasks", taskfiles.Changes())
+		w.Header().Set("Zone-Tasks", tasksWord(userOf(r), heldScopes(r)...))
 		// ?list=, ?lists=, ?mine=1: the tasks a view of that scope shows
 		// (queryScope), which is what a task list asks for; without, all.
 		user := userOf(r)
@@ -157,13 +157,14 @@ func tasksRoutes(mux *http.ServeMux) {
 	}))
 	mux.HandleFunc("GET /api/tasks/due-count", func(w http.ResponseWriter, r *http.Request) {
 		// ?places=1: also each place's counts, for the list switcher.
-		// Zone-Tasks: a word that changes with every write of tasks or lists
-		// (taskfiles.Changes). A page knows the word of the tasks it holds
+		// Zone-Tasks: a word that changes with every write to the lists the
+		// page holds (?held=: tasksWord). A page knows the word of the tasks it holds
 		// (GET /api/tasks answers it too, and the tasks a page brings along
 		// have it), asks here every minute, and loads its lists again when
-		// the word is another one: someone else changed a task
-		// (js/chrome.js). It says nothing of what changed, or whose.
-		w.Header().Set("Zone-Tasks", taskfiles.Changes())
+		// the word is another one: someone else changed a task there
+		// (js/chrome.js). A write to a list the page doesn't show, or to
+		// another user's own tasks, leaves the word as it is.
+		w.Header().Set("Zone-Tasks", tasksWord(userOf(r), heldScopes(r)...))
 		rq := newReq(r)
 		if r.URL.Query().Get("places") == "" {
 			writeJSON(w, http.StatusOK, taskCounts(rq))

@@ -356,7 +356,7 @@ func TestTaskInAList(t *testing.T) {
 	if milk.List != "shop" || milk.Owner != "" || cake.List != "gifts" || cake.Owner != "alice" || loose.List != "" || loose.Owner != "alice" {
 		t.Fatalf("milk %+v, cake %+v, loose %+v", milk, cake, loose)
 	}
-	if !strings.Contains(fileText(t, taskFiles.OpenPath("alice")), "Cake") || strings.Contains(fileText(t, taskFiles.OpenPath("")), "Cake") {
+	if !strings.Contains(fileText(t, taskFiles.PathIn("alice", "gifts", "tasks.json")), "Cake") || strings.Contains(fileText(t, taskFiles.PathIn("", "shop", "tasks.json")), "Cake") {
 		t.Error("the private list's task isn't in her files")
 	}
 	set := func(id string, kv ...any) error {

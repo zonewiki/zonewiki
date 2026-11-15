@@ -763,6 +763,10 @@ func renameListOp(user, ref, newName, suffix string, check ...func(pages []strin
 			written = append(written, w.path)
 		}
 	}
+	if failed == nil {
+		// The list's tasks say its new name: into the folder of that name.
+		written = append(written, taskFiles.FileByListLocked([]string{l.Owner})...)
+	}
 	for _, o := range owners {
 		if failed != nil {
 			break

@@ -8,6 +8,17 @@
 // their pages. A task's file says whose it is (Task.Owner, "" the shared
 // ones), and a write files it there.
 //
+// Each list has its files in a folder of its own, lists/<name>/ in its
+// owner's _tasks/ (the same three kinds of file); the tasks in no list (an
+// Inbox's) are in _tasks/ itself. So a write costs what its list weighs,
+// not what the wiki weighs: a file is written whole and kept whole in git
+// at every change. Which list a task is in is the task's to say (its
+// `list`), as ever: the folder is where a write files it (dirOf), a read
+// takes every folder, and a task found in another list's folder (a file
+// moved by hand, a list renamed, a wiki from before the folders) is filed
+// where it belongs by the next write of its owner's tasks, or at start
+// (ArchiveOldClosed).
+//
 // A Store knows nothing of Zone's process: the wiki's folder, its users,
 // the clock, who may write and how a write is committed are handed to it.
 package taskfiles
@@ -24,7 +35,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 	"zonewiki/internal/atomicfile"
 	"zonewiki/internal/taskmodel"
@@ -83,18 +93,58 @@ func (s *Store) Dir(owner string) string {
 	return filepath.Join(base, DirName)
 }
 
-// OpenPath: owner's open tasks; ClosedPath: this month's closed ones (and
-// those without a usable date).
-func (s *Store) OpenPath(owner string) string { return filepath.Join(s.Dir(owner), "tasks.json") }
-func (s *Store) ClosedPath(owner string) string {
-	return filepath.Join(s.Dir(owner), "closed.json")
+// ListsDirName: the folder of the lists' folders, in an owner's Dir.
+const ListsDirName = "lists"
+
+// listDirRE: a list's name that is its folder's name as it is: lowercase
+// words as cleanList leaves them. Any other name (a dot first, a path
+// separator: none a list has, but a file edited by hand may) has no folder,
+// and its tasks are kept with the Inbox's.
+var listDirRE = regexp.MustCompile(`^[^./\\\x00][^/\\\x00]{0,99}$`)
+
+// dirOf: the folder of the files a task of owner's in list is kept in:
+// the list's own, or owner's Dir for the tasks in no list.
+func (s *Store) dirOf(owner, list string) string {
+	if list == "" || !listDirRE.MatchString(list) {
+		return s.Dir(owner)
+	}
+	return filepath.Join(s.Dir(owner), ListsDirName, list)
 }
 
-// ArchivePath: owner's archive of a month ("2026-03": closed-2026-03.json;
-// until 2026-11 a year's, "2025": closed-2025.json).
-func (s *Store) ArchivePath(owner, period string) string {
-	return filepath.Join(s.Dir(owner), "closed-"+period+".json")
+// dirs: the folders that hold task files of owner's: their Dir, then each
+// list's that is there, A–Z.
+func (s *Store) dirs(owner string) []string {
+	out := []string{s.Dir(owner)}
+	entries, _ := os.ReadDir(filepath.Join(s.Dir(owner), ListsDirName))
+	for _, e := range entries {
+		if e.IsDir() {
+			out = append(out, filepath.Join(s.Dir(owner), ListsDirName, e.Name()))
+		}
+	}
+	return out
 }
+
+// The files of one folder: its open tasks, this month's closed ones (and
+// those without a usable date), and an archive of a month ("2026-03":
+// closed-2026-03.json; until 2026-11 a year's, "2025": closed-2025.json).
+func openIn(dir string) string            { return filepath.Join(dir, "tasks.json") }
+func closedIn(dir string) string          { return filepath.Join(dir, "closed.json") }
+func archiveIn(dir, period string) string { return filepath.Join(dir, "closed-"+period+".json") }
+
+// OpenPath: the open tasks of owner's that are in no list (the Inbox's).
+func (s *Store) OpenPath(owner string) string { return openIn(s.Dir(owner)) }
+
+// ClosedPath, ArchivePath: the same of their closed ones: this month's, and
+// a month's archive. PathIn: one of those files' names in the folder of
+// owner's list.
+func (s *Store) ClosedPath(owner string) string          { return closedIn(s.Dir(owner)) }
+func (s *Store) ArchivePath(owner, period string) string { return archiveIn(s.Dir(owner), period) }
+func (s *Store) PathIn(owner, list, file string) string {
+	return filepath.Join(s.dirOf(owner, list), file)
+}
+
+// Archives: every archive of owner's, of every folder.
+func (s *Store) Archives(owner string) []string { return s.archives(owner) }
 
 // An archive's name: closed-YYYY-MM.json, a month's; closed-YYYY.json, a
 // year's, from before the months (its tasks are filed by month at the next
@@ -104,31 +154,94 @@ var archiveNameRE = regexp.MustCompile(`^closed-(\d{4})(-\d{2})?\.json$`)
 // archiveYear: the year an archive file is of.
 func archiveYear(path string) string { return archiveNameRE.FindStringSubmatch(filepath.Base(path))[1] }
 
-// Archives: owner's archives (closed-2026-03.json …, closed-2025.json), sorted.
-func (s *Store) Archives(owner string) []string {
-	entries, _ := os.ReadDir(s.Dir(owner))
+// archivesIn: a folder's archives (closed-2026-03.json …, closed-2025.json), sorted.
+func archivesIn(dir string) []string {
+	entries, _ := os.ReadDir(dir)
 	var out []string
 	for _, e := range entries {
-		if archiveNameRE.MatchString(e.Name()) {
-			out = append(out, filepath.Join(s.Dir(owner), e.Name()))
+		if !e.IsDir() && archiveNameRE.MatchString(e.Name()) {
+			out = append(out, filepath.Join(dir, e.Name()))
 		}
 	}
 	sort.Strings(out)
 	return out
 }
 
+// archives: every archive of owner's, of every folder.
+func (s *Store) archives(owner string) []string {
+	var out []string
+	for _, d := range s.dirs(owner) {
+		out = append(out, archivesIn(d)...)
+	}
+	return out
+}
+
 // File: a task file and whose it is ("" the shared ones).
 type File struct{ Path, Owner string }
 
-// Files: every task file of owners: open, closed, archives.
+// Files: every task file of owners, of every folder: open, closed, archives.
 func (s *Store) Files(owners []string) []File {
 	var out []File
 	for _, o := range owners {
-		for _, p := range append([]string{s.OpenPath(o), s.ClosedPath(o)}, s.Archives(o)...) {
-			out = append(out, File{p, o})
+		for _, d := range s.dirs(o) {
+			for _, p := range append([]string{openIn(d), closedIn(d)}, archivesIn(d)...) {
+				out = append(out, File{p, o})
+			}
 		}
 	}
 	return out
+}
+
+// unique: tasks without those whose id an earlier one has. One task in two
+// files is a write that stopped between them (a task moves to another
+// list's folder: its new file is written first, so nothing is lost); the
+// first read is kept, the next write of these tasks drops the other.
+func unique(tasks []*Task) []*Task {
+	seen := make(map[string]bool, len(tasks))
+	out := tasks[:0]
+	for _, t := range tasks {
+		if t.ID != "" && seen[t.ID] {
+			continue
+		}
+		seen[t.ID] = true
+		out = append(out, t)
+	}
+	return out
+}
+
+// openOf, closedOf, archivedOf: owner's open tasks, their closed ones of
+// the current files, and their archived ones, of every folder. strict: for
+// a write, where a file that is there but unreadable is ErrCorrupt.
+func (s *Store) openOf(owner string, strict bool) ([]*Task, error) {
+	tasks, err := s.readEach(owner, strict, func(dir string) []string { return []string{openIn(dir)} })
+	// In the order they were made, as one file kept them (a new task is
+	// its file's last): what shows tasks newest first goes by this order
+	// where two were made in the same second.
+	slices.SortStableFunc(tasks, func(a, b *Task) int { return cmp.Compare(a.CreatedAt, b.CreatedAt) })
+	return tasks, err
+}
+func (s *Store) closedOf(owner string, strict bool) ([]*Task, error) {
+	return s.readEach(owner, strict, func(dir string) []string { return []string{closedIn(dir)} })
+}
+func (s *Store) archivedOf(owner string, strict bool) ([]*Task, error) {
+	return s.readEach(owner, strict, archivesIn)
+}
+func (s *Store) readEach(owner string, strict bool, files func(dir string) []string) ([]*Task, error) {
+	tasks := []*Task{}
+	for _, d := range s.dirs(owner) {
+		for _, p := range files(d) {
+			if !strict {
+				tasks = append(tasks, ReadLenient(p)...)
+				continue
+			}
+			l, err := ReadStrict(p)
+			if err != nil {
+				return nil, err
+			}
+			tasks = append(tasks, l...)
+		}
+	}
+	return unique(tasks), nil
 }
 
 // ---- whose files ----
@@ -252,7 +365,7 @@ func writeTasks(path string, tasks []*Task, text string) error {
 	parsed.Lock()
 	defer parsed.Unlock()
 	delete(parsed.files, path)
-	changes.Add(1)
+	changed(path)
 	if err := atomicfile.Write(path, text); err != nil {
 		return err
 	}
@@ -274,7 +387,7 @@ func forget(path string) {
 	parsed.Lock()
 	delete(parsed.files, path)
 	parsed.Unlock()
-	changes.Add(1)
+	changed(path)
 }
 
 func exists(path string) bool { _, err := os.Stat(path); return err == nil }
@@ -305,17 +418,59 @@ func holds(path string, tasks []*Task) bool {
 }
 
 // changes counts the writes of task files and registries since Zone
-// started, so that a page can ask whether its tasks are still what the
-// server has (Changes) without fetching them.
-var (
-	changes atomic.Int64
-	started = time.Now().UnixNano()
-)
+// started, each under the folder it is in (a list's, an owner's _tasks/;
+// a registry under its own path), so that a page can ask whether the tasks
+// it holds are still what the server has (Word) without fetching them, and
+// isn't told of a write to a list it doesn't show.
+var changes = struct {
+	sync.Mutex
+	in map[string]int64
+}{in: map[string]int64{}}
 
-// Changes: a word that is another one after any write of a task file or a
-// lists' registry, and after a restart. Not after a file changed by hand.
-func Changes() string {
-	return strconv.FormatInt(started, 36) + "-" + strconv.FormatInt(changes.Load(), 10)
+var started = time.Now().UnixNano()
+
+// changed: a file at path was written or removed.
+func changed(path string) {
+	changes.Lock()
+	changes.in[filepath.Dir(path)]++
+	changes.Unlock()
+}
+
+// Place: tasks a view holds: owner's in one list ("" none: an Inbox), or
+// with Every all of owner's.
+type Place struct {
+	Owner, List string
+	Every       bool
+}
+
+// Word: a word that is another one after any write of a task file of
+// places or of their owners' registries, and after a restart. Not after a
+// file changed by hand, nor after a write to a list that isn't among them.
+func (s *Store) Word(places []Place) string {
+	changes.Lock()
+	defer changes.Unlock()
+	var n int64
+	counted := map[string]bool{}
+	add := func(dir string) {
+		if !counted[dir] {
+			counted[dir] = true
+			n += changes.in[dir]
+		}
+	}
+	for _, p := range places {
+		base := s.Dir(p.Owner)
+		add(base) // the owner's registry is there, and their tasks in no list
+		if !p.Every {
+			add(s.dirOf(p.Owner, p.List))
+			continue
+		}
+		for dir := range changes.in {
+			if strings.HasPrefix(dir, base+string(filepath.Separator)) {
+				add(dir)
+			}
+		}
+	}
+	return strconv.FormatInt(started, 36) + "-" + strconv.FormatInt(n, 10)
 }
 
 // ---- years ----
@@ -368,7 +523,7 @@ func (s *Store) currentMonth() string { return s.Now().Format("2006-01") }
 func (s *Store) ReadOpenStrict(user string) ([]*Task, error) {
 	var err error
 	tasks := eachOwner(s.Owners(user), func(o string) []*Task {
-		l, e := ReadStrict(s.OpenPath(o))
+		l, e := s.openOf(o, true)
 		err = cmp.Or(err, e)
 		return l
 	})
@@ -377,25 +532,31 @@ func (s *Store) ReadOpenStrict(user string) ([]*Task, error) {
 
 // readOpen: the open tasks user sees (shared and their own).
 func (s *Store) readOpen(user string) []*Task {
-	return eachOwner(s.Owners(user), func(o string) []*Task { return ReadLenient(s.OpenPath(o)) })
+	return eachOwner(s.Owners(user), s.lenient(s.openOf))
 }
 
 // readClosed: the closed tasks user sees that are in closed.json: this
 // month's (and, until the next write, an earlier month's).
 func (s *Store) readClosed(user string) []*Task {
-	return eachOwner(s.Owners(user), func(o string) []*Task { return ReadLenient(s.ClosedPath(o)) })
+	return eachOwner(s.Owners(user), s.lenient(s.closedOf))
 }
 
 // readArchived: the archived tasks (earlier months') of owners.
 func (s *Store) readArchived(owners []string) []*Task {
-	return eachOwner(owners, func(o string) []*Task {
-		var tasks []*Task
-		for _, p := range s.Archives(o) {
-			tasks = append(tasks, ReadLenient(p)...)
-		}
-		return tasks
-	})
+	return eachOwner(owners, s.lenient(s.archivedOf))
 }
+
+// lenient: read as a reader takes it: what can't be read is no task.
+func (s *Store) lenient(read func(owner string, strict bool) ([]*Task, error)) func(string) []*Task {
+	return func(owner string) []*Task {
+		tasks, _ := read(owner, false)
+		return tasks
+	}
+}
+
+// OpenOf: owner's open tasks, read without the lock (the user commands,
+// which have no running Zone).
+func (s *Store) OpenOf(owner string) []*Task { return s.lenient(s.openOf)(owner) }
 
 // Open: the open tasks user sees, under the lock: a task made private or
 // shared moves between two files, and a read between their writes would
@@ -423,8 +584,7 @@ func (s *Store) Every() []*Task {
 
 func (s *Store) EveryLocked() []*Task {
 	owners := s.EveryOwner()
-	return slices.Concat(eachOwner(owners, func(o string) []*Task { return ReadLenient(s.OpenPath(o)) }),
-		eachOwner(owners, func(o string) []*Task { return ReadLenient(s.ClosedPath(o)) }),
+	return slices.Concat(eachOwner(owners, s.lenient(s.openOf)), eachOwner(owners, s.lenient(s.closedOf)),
 		s.readArchived(owners))
 }
 
@@ -448,7 +608,7 @@ func (s *Store) ClosedInYear(user, year string) []*Task {
 	tasks := s.readClosed(user)
 	tasks = append(tasks, eachOwner(s.Owners(user), func(o string) []*Task {
 		var l []*Task
-		for _, p := range s.Archives(o) {
+		for _, p := range s.archives(o) {
 			if archiveYear(p) == year {
 				l = append(l, ReadLenient(p)...)
 			}
@@ -477,7 +637,7 @@ func (s *Store) ClosedYears(user string, in func(*Task) bool) []string {
 		}
 	}
 	for _, o := range s.Owners(user) {
-		for _, p := range s.Archives(o) {
+		for _, p := range s.archives(o) {
 			for _, t := range ReadLenient(p) {
 				if t.Owner = o; in(t) {
 					years[archiveYear(p)] = true
@@ -497,25 +657,21 @@ func (s *Store) ClosedYears(user string, in func(*Task) bool) []string {
 // readClosedAllStrict: every closed task of owner's, the archives
 // first, for a write (writeClosed files each by month again).
 func (s *Store) readClosedAllStrict(owner string) ([]*Task, error) {
-	var tasks []*Task
-	for _, p := range s.Archives(owner) {
-		l, err := ReadStrict(p)
-		if err != nil {
-			return nil, err
-		}
-		tasks = append(tasks, l...)
-	}
-	l, err := ReadStrict(s.ClosedPath(owner))
+	tasks, err := s.archivedOf(owner, true)
 	if err != nil {
 		return nil, err
 	}
-	return append(tasks, l...), nil
+	l, err := s.closedOf(owner, true)
+	if err != nil {
+		return nil, err
+	}
+	return unique(append(tasks, l...)), nil
 }
 
 // readOwnerStrict: owner's open tasks and every closed one, read for a
 // write (ErrCorrupt when a file is unreadable), marked as owner's.
 func (s *Store) readOwnerStrict(owner string) (active, closed []*Task, err error) {
-	if active, err = ReadStrict(s.OpenPath(owner)); err != nil {
+	if active, err = s.openOf(owner, true); err != nil {
 		return nil, nil, err
 	}
 	if closed, err = s.readClosedAllStrict(owner); err != nil {
@@ -560,9 +716,44 @@ func (s *Store) byOwner(user string, tasks []*Task) (map[string][]*Task, error) 
 	return out, nil
 }
 
-// writeOpenLocked writes the open tasks into their owners' files, those
-// whose tasks changed (and the shared one when it is missing); returns
-// their paths.
+// byDir: owner's tasks by the folder each is kept in (dirOf), with every
+// folder of theirs that is there: one whose last task left has its file
+// taken away. The folders in the order they are written: those that gain a
+// task first (a list's new folder, a task moved there), so a write that
+// stops halfway leaves a task in two files, never in none; then the others.
+func (s *Store) byDir(owner string, tasks []*Task) (order []string, in map[string][]*Task) {
+	in = map[string][]*Task{}
+	have := s.dirs(owner)
+	for _, d := range have {
+		in[d] = []*Task{}
+	}
+	for _, t := range tasks {
+		d := s.dirOf(owner, t.List)
+		if _, ok := in[d]; !ok {
+			order = append(order, d) // a folder that isn't there yet
+		}
+		in[d] = append(in[d], t)
+	}
+	return append(order, have...), in
+}
+
+// emptiesLast: the files (or folders) that keep tasks before those left
+// without any, in their order otherwise.
+func emptiesLast(order []string, tasks map[string][]*Task) {
+	slices.SortStableFunc(order, func(a, b string) int {
+		switch ea, eb := len(tasks[a]) == 0, len(tasks[b]) == 0; {
+		case ea == eb:
+			return 0
+		case ea:
+			return 1
+		}
+		return -1
+	})
+}
+
+// writeOpenLocked writes the open tasks into their owners' files, each
+// list's into its folder, those whose tasks changed (and the shared one of
+// no list when it is missing); returns their paths.
 func (s *Store) writeOpenLocked(user string, tasks []*Task) ([]string, error) {
 	if err := s.MayWrite(user); err != nil {
 		return nil, err
@@ -573,50 +764,88 @@ func (s *Store) writeOpenLocked(user string, tasks []*Task) ([]string, error) {
 	}
 	var changed []string
 	for _, o := range s.Owners(user) {
-		if holds(s.OpenPath(o), split[o]) {
-			continue
-		}
-		text, err := taskmodel.Encode(split[o])
+		more, err := s.writeOpenOf(o, split[o], false)
+		changed = append(changed, more...)
 		if err != nil {
 			return changed, err
 		}
-		raw, rerr := os.ReadFile(s.OpenPath(o))
-		if rerr == nil && string(raw) == text || errors.Is(rerr, os.ErrNotExist) && o != "" && len(split[o]) == 0 {
-			continue
-		}
-		if err := writeTasks(s.OpenPath(o), split[o], text); err != nil {
-			return changed, err
-		}
-		changed = append(changed, s.OpenPath(o))
 	}
 	return changed, nil
 }
 
-// writeClosed writes owner's closed tasks filed by month (this month's, and
-// those without a usable date, into closed.json, earlier ones into
-// closed-YYYY-MM.json); only files whose tasks change (with reformat also
-// those in another format). An archive left without a task is removed: a
-// year's file from before the months (closed-YYYY.json), whose tasks are in
-// their months' files from the first write on. Returns the paths written
-// and removed, for the commit.
+// writeOpenOf writes owner's open tasks, each folder's file when its tasks
+// changed (reformat: also when it is in another format); returns the paths
+// written and removed. A list's file left without a task is removed, and
+// its folder when nothing else is in it; the file of the tasks in no list
+// stays, empty (the shared one is written even when it wasn't there).
+func (s *Store) writeOpenOf(owner string, tasks []*Task, reformat bool) ([]string, error) {
+	var changed []string
+	order, in := s.byDir(owner, tasks)
+	// A list's emptied file goes last: a task that left it for another
+	// folder is in that one by then.
+	emptiesLast(order, in)
+	for _, d := range order {
+		p, own := openIn(d), d == s.Dir(owner)
+		if !reformat && holds(p, in[d]) {
+			continue
+		}
+		raw, rerr := os.ReadFile(p)
+		if len(in[d]) == 0 && !own {
+			if rerr == nil && os.Remove(p) == nil {
+				forget(p)
+				changed = append(changed, p)
+			}
+			_ = os.Remove(d) // when nothing else is in it
+			continue
+		}
+		text, err := taskmodel.Encode(in[d])
+		if err != nil {
+			return changed, err
+		}
+		if rerr == nil && string(raw) == text || errors.Is(rerr, os.ErrNotExist) && (owner != "" || reformat) && len(in[d]) == 0 {
+			continue
+		}
+		if err := writeTasks(p, in[d], text); err != nil {
+			return changed, err
+		}
+		changed = append(changed, p)
+	}
+	return changed, nil
+}
+
+// writeClosed writes owner's closed tasks, each list's in its folder, filed
+// by month (this month's, and those without a usable date, into
+// closed.json, earlier ones into closed-YYYY-MM.json); only files whose
+// tasks change (with reformat also those in another format). An archive
+// left without a task is removed: a year's file from before the months
+// (closed-YYYY.json), whose tasks are in their months' files from the first
+// write on; and so is a list's closed.json (that of the tasks in no list
+// stays). Returns the paths written and removed, for the commit.
 func (s *Store) writeClosed(owner string, closed []*Task, reformat bool) ([]string, error) {
 	current := s.currentMonth()
-	order := []string{s.ClosedPath(owner)}
-	byPath := map[string][]*Task{s.ClosedPath(owner): {}}
-	for _, p := range s.Archives(owner) {
-		order = append(order, p)
-		byPath[p] = []*Task{}
+	var order []string
+	byPath := map[string][]*Task{}
+	for _, d := range s.dirs(owner) {
+		for _, p := range append([]string{closedIn(d)}, archivesIn(d)...) {
+			order = append(order, p)
+			byPath[p] = []*Task{}
+		}
 	}
+	var fresh []string // files that aren't there yet: written first (byDir)
 	for _, t := range closed {
-		p := s.ClosedPath(owner)
+		d := s.dirOf(owner, t.List)
+		p := closedIn(d)
 		if m := pastMonthOf(t, current); m != "" {
-			p = s.ArchivePath(owner, m)
+			p = archiveIn(d, m)
 		}
 		if _, ok := byPath[p]; !ok {
-			order = append(order, p)
+			fresh = append(fresh, p)
 		}
 		byPath[p] = append(byPath[p], t)
 	}
+	order = append(fresh, order...)
+	emptiesLast(order, byPath)
+	keep := closedIn(s.Dir(owner))
 	var changed []string
 	for _, p := range order {
 		tasks := byPath[p]
@@ -627,13 +856,15 @@ func (s *Store) writeClosed(owner string, closed []*Task, reformat bool) ([]stri
 		if errors.Is(err, os.ErrNotExist) && len(tasks) == 0 {
 			continue // no file for no tasks
 		}
-		// An archive that holds no task anymore goes: a year's, whose tasks
-		// are filed by month now; a month's whose tasks were all reopened.
-		if err == nil && len(tasks) == 0 && p != s.ClosedPath(owner) {
+		// A file that holds no task anymore goes: a year's archive, whose
+		// tasks are filed by month now; a month's whose tasks were all
+		// reopened; a list's closed.json.
+		if err == nil && len(tasks) == 0 && p != keep {
 			if os.Remove(p) == nil {
 				forget(p)
 				changed = append(changed, p)
 			}
+			_ = os.Remove(filepath.Dir(p)) // a list's folder, when nothing else is in it
 			continue
 		}
 		text, encErr := taskmodel.Encode(tasks)
@@ -739,7 +970,7 @@ func (s *Store) renameOldClosed(owner string) []string {
 func (s *Store) ArchiveOldClosed() {
 	s.Lock()
 	defer s.Unlock()
-	moved, renamed := false, false
+	moved, renamed, filed := false, false, false
 	var changed []string
 	for _, o := range s.EveryOwner() {
 		if old := s.renameOldClosed(o); len(old) > 0 {
@@ -750,20 +981,27 @@ func (s *Store) ArchiveOldClosed() {
 			continue
 		}
 		for _, t := range closed {
-			moved = moved || pastMonthOf(t, s.currentMonth()) != "" && !exists(s.ArchivePath(o, pastMonthOf(t, s.currentMonth())))
+			moved = moved || pastMonthOf(t, s.currentMonth()) != "" && !exists(archiveIn(s.dirOf(o, t.List), pastMonthOf(t, s.currentMonth())))
 		}
-		if raw, err := os.ReadFile(s.OpenPath(o)); err == nil {
-			if text, err := taskmodel.Encode(active); err == nil && string(raw) != text && writeTasks(s.OpenPath(o), active, text) == nil {
-				changed = append(changed, s.OpenPath(o))
+		// A task in another folder than its list's (a wiki from before the
+		// folders: every task that is in a list): filed where it belongs.
+		for _, f := range s.Files([]string{o}) {
+			for _, t := range ReadLenient(f.Path) {
+				filed = filed || filepath.Dir(f.Path) != s.dirOf(o, t.List)
 			}
 		}
-		more, _ := s.writeClosed(o, closed, true)
+		more, _ := s.writeOpenOf(o, active, true)
+		changed = append(changed, more...)
+		more, _ = s.writeClosed(o, closed, true)
 		changed = append(changed, more...)
 	}
 	if len(changed) == 0 {
 		return
 	}
 	msg := "Write the task files in Zone's format"
+	if filed {
+		msg = "File the tasks by list"
+	}
 	if moved {
 		msg = "Archive closed tasks"
 	}
@@ -771,6 +1009,36 @@ func (s *Store) ArchiveOldClosed() {
 		msg = "Name the task files of closed tasks closed"
 	}
 	_ = s.Commit("", msg, changed...)
+}
+
+// FileByList files every owner's tasks that are in another folder than
+// their list's where they belong, in one commit (at start, after what gave
+// tasks another list in the files they were in: the lists' migrations).
+func (s *Store) FileByList() {
+	s.Lock()
+	defer s.Unlock()
+	if changed := s.FileByListLocked(s.EveryOwner()); len(changed) > 0 {
+		_ = s.Commit("", "File the tasks by list", changed...)
+	}
+}
+
+// FileByListLocked files every task of owners' that is in another folder
+// than its list's where it belongs (after a write that put tasks back into
+// the files they were read from with another list: a list renamed), and
+// returns the paths written and removed, for that write's commit.
+func (s *Store) FileByListLocked(owners []string) []string {
+	var changed []string
+	for _, o := range owners {
+		active, closed, err := s.readOwnerStrict(o)
+		if err != nil {
+			continue
+		}
+		more, _ := s.writeOpenOf(o, active, false)
+		changed = append(changed, more...)
+		more, _ = s.writeClosed(o, closed, false)
+		changed = append(changed, more...)
+	}
+	return changed
 }
 
 // Snapshot: the open tasks user sees and every closed one (this month's

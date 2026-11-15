@@ -696,7 +696,7 @@ class TestAuthors:
         assert comment["by"] == "alice"
         resp = client.put(f"/api/tasks/{task['id']}/comments/{comment['id']}", json={"text": "Called"}, headers=HOST)
         assert resp.get_json()["comments"][0]["by"] == "alice"   # an edit keeps the author
-        assert '"by": "alice"' in (git_wiki_dir / "_tasks" / "tasks.json").read_text()
+        assert '"by": "alice"' in "".join(p.read_text() for p in (git_wiki_dir / "_tasks").rglob("tasks.json"))
         client.post("/logout", headers=HOST)
         text = mcp(client, "alice-token", "search_tasks", query="Sam").get_json()["result"]["content"][0]["text"]
         assert "(alice): Called" in text

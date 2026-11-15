@@ -6,7 +6,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"regexp"
 	"slices"
 	"strconv"
@@ -403,12 +402,7 @@ func applyAssignee(user string, t *Task, data jsonObj) error {
 // from the file (the user commands have no running Zone).
 func assignedOpen() map[string]int {
 	n := map[string]int{}
-	raw, err := os.ReadFile(taskFiles.OpenPath(""))
-	if err != nil {
-		return n
-	}
-	tasks, _ := taskmodel.Parse(raw)
-	for _, t := range tasks {
+	for _, t := range taskFiles.OpenOf("") {
 		if t.Assignee != "" && t.IsOpen() {
 			n[t.Assignee]++
 		}

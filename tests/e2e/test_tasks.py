@@ -1461,7 +1461,8 @@ def test_selection_bar_moves_tasks_to_a_list(page, wiki):
         page.request.put(f"/api/tasks/{task_by_title(page, title)['id']}", data=fields)
     page.reload()
     card(page, "Saw").locator(".task-title").click()
-    card(page, "Nuts").locator(".task-title").click(modifiers=["Shift"])     # Saw, Glue, Nuts
+    for title in ("Glue", "Nuts"):          # by name: tasks made in one second have no order across lists
+        card(page, title).locator(".task-title").click(modifiers=["Control"])
     page.locator("#task-selbar [data-sel='list']").click()
     dlg = page.locator(".bulk-list-modal")
     expect(dlg.locator(".modal-label")).to_have_text("Move 3 tasks to a list")
@@ -1476,7 +1477,7 @@ def test_selection_bar_moves_tasks_to_a_list(page, wiki):
     wait_for_field(page, "Nuts", "list", "work")
     assert task_by_title(page, "Saw")["tags"] == ["tools"] and task_by_title(page, "Glue")["list"] == "work"
     assert "list" not in task_by_title(page, "Bolts")
-    assert selected_titles(page) == ["Saw", "Glue", "Nuts"]
+    assert sorted(selected_titles(page)) == ["Glue", "Nuts", "Saw"]
     # Now all three are in work: its row is ticked.
     page.locator("#task-selbar [data-sel='list']").click()
     expect(dlg.locator(".bulk-list-row[aria-current='true']")).to_have_text("✓work")
@@ -2473,7 +2474,7 @@ def test_a_task_in_a_private_list_is_private(page, wiki, monkeypatch):
     page.locator("#task-edit-form button[type=submit]").click()
     expect(card(page, "Gift for Bob").locator(".task-private")).to_be_visible()
     wait_for_field(page, "Gift for Bob", "private", True)
-    assert "Gift for Bob" in (wiki.root / "private/alice/_tasks/tasks.json").read_text()
+    assert "Gift for Bob" in (wiki.root / "private/alice/_tasks/lists/mine/tasks.json").read_text()
 
     page.keyboard.press("Enter")   # the new task is selected: edit it
     expect(lists).to_have_value("mine")
@@ -2492,9 +2493,9 @@ def test_a_task_in_a_private_list_is_private(page, wiki, monkeypatch):
     page.goto("/tasks?view=open")
     expect(card(page, "Gift for Bob")).to_be_visible()
     expect(card(page, "Gift for Bob").locator(".task-private")).to_have_count(0)
-    assert "Gift for Bob" in (wiki.root / "_tasks/tasks.json").read_text()
+    assert "Gift for Bob" in (wiki.root / "_tasks/lists/team/tasks.json").read_text()
     # No undo of a share: the toast that says where it went has none to take it back.
-    assert "Gift for Bob" not in (wiki.root / "private/alice/_tasks/tasks.json").read_text()
+    assert not (wiki.root / "private/alice/_tasks/lists/mine/tasks.json").exists()
     # A shared task doesn't go back: neither her list nor her Inbox is offered.
     open_edit(page, "Gift for Bob")
     expect(lists.locator("option[value=mine]")).to_have_attribute("disabled", "")

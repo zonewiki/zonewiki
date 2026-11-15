@@ -182,7 +182,7 @@ func TestWriteFilesByOwnerAndMonth(t *testing.T) {
 		"private/alice/_tasks/closed-2025-01.json", "private/alice/_tasks/tasks.json"}) {
 		t.Errorf("the files: %v", got)
 	}
-	want := "alice|Write|_tasks/tasks.json private/alice/_tasks/tasks.json _tasks/closed.json _tasks/closed-2026-03.json _tasks/closed-2024-05.json private/alice/_tasks/closed-2025-01.json"
+	want := "alice|Write|_tasks/tasks.json private/alice/_tasks/tasks.json _tasks/closed-2026-03.json _tasks/closed-2024-05.json _tasks/closed.json private/alice/_tasks/closed-2025-01.json"
 	if len(f.commits) != 1 || f.commits[0] != want {
 		t.Errorf("commits %q,\nwant one: %q", f.commits, want)
 	}
@@ -321,7 +321,7 @@ func TestAMonthAndAYearEnd(t *testing.T) {
 			t.Errorf("%s: %q, want only %s", rel, got, want)
 		}
 	}
-	if want := []string{"|Close|_tasks/tasks.json _tasks/closed.json _tasks/closed-2026-12.json"}; !reflect.DeepEqual(f.commits, want) {
+	if want := []string{"|Close|_tasks/tasks.json _tasks/closed-2026-12.json _tasks/closed.json"}; !reflect.DeepEqual(f.commits, want) {
 		t.Errorf("commits %q, want %q", f.commits, want)
 	}
 	if got := ids(f.ClosedInYear("", "2027")); !reflect.DeepEqual(got, []string{"open"}) {
@@ -334,7 +334,7 @@ func TestAMonthAndAYearEnd(t *testing.T) {
 	f.now = time.Date(2027, 2, 1, 0, 0, 0, 0, time.UTC)
 	f.commits = nil
 	f.ArchiveOldClosed()
-	if want := []string{"|Archive closed tasks|_tasks/closed.json _tasks/closed-2027-01.json"}; !reflect.DeepEqual(f.commits, want) {
+	if want := []string{"|Archive closed tasks|_tasks/closed-2027-01.json _tasks/closed.json"}; !reflect.DeepEqual(f.commits, want) {
 		t.Errorf("a start in february: %q, want %q", f.commits, want)
 	}
 	if f.text(t, "_tasks/closed.json") != "[]\n" || !strings.Contains(f.text(t, "_tasks/closed-2027-01.json"), `"id": "open"`) {
@@ -390,8 +390,9 @@ func TestAYearsFileIsTakenOverAtStart(t *testing.T) {
 			t.Errorf("%sclosed-2025.json is still there (%v)", dir, err)
 		}
 	}
-	want := "|Archive closed tasks|_tasks/closed.json _tasks/closed-2025.json _tasks/closed-2025-02.json _tasks/closed-2025-12.json _tasks/closed-2026-05.json" +
-		" private/alice/_tasks/closed.json private/alice/_tasks/closed-2025.json private/alice/_tasks/closed-2025-02.json private/alice/_tasks/closed-2025-12.json private/alice/_tasks/closed-2026-05.json"
+	// The files that take tasks first, those left without any after them.
+	want := "|Archive closed tasks|_tasks/closed-2025-02.json _tasks/closed-2025-12.json _tasks/closed-2026-05.json _tasks/closed.json _tasks/closed-2025.json" +
+		" private/alice/_tasks/closed-2025-02.json private/alice/_tasks/closed-2025-12.json private/alice/_tasks/closed-2026-05.json private/alice/_tasks/closed.json private/alice/_tasks/closed-2025.json"
 	if len(f.commits) != 1 || f.commits[0] != want {
 		t.Errorf("commits %q,\nwant one: %q", f.commits, want)
 	}
@@ -436,8 +437,8 @@ func TestAYearsFileIsTakenOverByAWrite(t *testing.T) {
 	if got := f.ids(t, "_tasks/closed-2025-03.json"); !reflect.DeepEqual(got, []string{"s-mar0", "s-mar"}) {
 		t.Errorf("march: %v", got)
 	}
-	want := "alice|Retitle|_tasks/tasks.json _tasks/closed-2025-03.json _tasks/closed-2025.json _tasks/closed-2025-02.json" +
-		" private/alice/_tasks/closed-2024.json private/alice/_tasks/closed-2024-02.json"
+	want := "alice|Retitle|_tasks/tasks.json _tasks/closed-2025-02.json _tasks/closed-2025-03.json _tasks/closed-2025.json" +
+		" private/alice/_tasks/closed-2024-02.json private/alice/_tasks/closed-2024.json"
 	if len(f.commits) != 1 || f.commits[0] != want {
 		t.Errorf("commits %q,\nwant one: %q", f.commits, want)
 	}
@@ -909,8 +910,8 @@ func TestArchiveOldClosed(t *testing.T) {
 			t.Errorf("%s: %v, want %v", rel, got, want)
 		}
 	}
-	want := "|Archive closed tasks|_tasks/closed.json _tasks/closed-2025-02.json _tasks/closed-2026-02.json" +
-		" private/alice/_tasks/closed.json private/alice/_tasks/closed-2025-02.json private/alice/_tasks/closed-2026-02.json"
+	want := "|Archive closed tasks|_tasks/closed-2025-02.json _tasks/closed-2026-02.json _tasks/closed.json" +
+		" private/alice/_tasks/closed-2025-02.json private/alice/_tasks/closed-2026-02.json private/alice/_tasks/closed.json"
 	if len(f.commits) != 1 || f.commits[0] != want {
 		t.Errorf("commits: %q,\nwant one: %q", f.commits, want)
 	}
@@ -1046,5 +1047,124 @@ func TestReadsAreCopiesOfAFileParsedOnce(t *testing.T) {
 	}
 	if got, err := ReadStrict(path); err != nil || len(got) != 0 {
 		t.Errorf("a missing file: %+v, %v", got, err)
+	}
+}
+
+// in: a task of owner's in a list.
+func in(list string, t *Task) *Task {
+	t.List = list
+	return t
+}
+
+// Each list's tasks are in a folder of its own, lists/<name>/, the same
+// three kinds of file; the tasks in no list stay in _tasks/ itself. A write
+// touches the files of the lists it changes and no other; a task that moves
+// to another list moves between two files in one commit; a list's file left
+// without a task goes, and its folder with it.
+func TestAListsTasksAreInItsFolder(t *testing.T) {
+	f := newStore(t, "alice")
+	f.write(t, "alice", []*Task{task("i1", "", ""), in("shop", task("s1", "", "")), in("shop", task("s2", "", "")),
+		in("team", task("t1", "", "")), in("diary", task("d1", "alice", ""))},
+		[]*Task{in("shop", task("s3", "", "2026-06-01T09:00:00")), in("shop", task("s4", "", "2025-02-01T09:00:00"))}, "Write")
+	for rel, want := range map[string][]string{"_tasks/tasks.json": {"i1"}, "_tasks/lists/shop/tasks.json": {"s1", "s2"},
+		"_tasks/lists/team/tasks.json": {"t1"}, "_tasks/lists/shop/closed.json": {"s3"}, "_tasks/lists/shop/closed-2025-02.json": {"s4"},
+		"private/alice/_tasks/lists/diary/tasks.json": {"d1"}} {
+		if got := f.ids(t, rel); !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: %v, want %v", rel, got, want)
+		}
+	}
+	if got := ids(f.Open("alice")); len(got) != 5 {
+		t.Errorf("alice's open tasks: %v", got)
+	}
+	if _, closed := f.Snapshot("alice"); len(closed) != 2 {
+		t.Errorf("the closed tasks: %v", ids(closed))
+	}
+	// One task of one list changes: one file.
+	f.commits = nil
+	f.rewrite(t, "alice", "Retitle", func(active, closed []*Task) ([]*Task, []*Task) {
+		for _, x := range active {
+			if x.ID == "t1" {
+				x.Title = "Another"
+			}
+		}
+		return active, closed
+	})
+	if want := []string{"alice|Retitle|_tasks/lists/team/tasks.json"}; !reflect.DeepEqual(f.commits, want) {
+		t.Errorf("commits %q, want %q", f.commits, want)
+	}
+	// A task moves to another list: the file that takes it is written
+	// first; the last task of a list leaves: its file and folder go.
+	f.commits = nil
+	f.rewrite(t, "alice", "Move", func(active, closed []*Task) ([]*Task, []*Task) {
+		for _, x := range active {
+			if x.ID == "t1" {
+				x.List = "shop"
+			}
+		}
+		return active, closed
+	})
+	if want := []string{"alice|Move|_tasks/lists/shop/tasks.json _tasks/lists/team/tasks.json"}; !reflect.DeepEqual(f.commits, want) {
+		t.Errorf("commits %q, want %q", f.commits, want)
+	}
+	if _, err := os.Stat(filepath.Join(f.root, "_tasks/lists/team")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the emptied list's folder is still there (%v)", err)
+	}
+	if got := f.ids(t, "_tasks/lists/shop/tasks.json"); !reflect.DeepEqual(got, []string{"s1", "s2", "t1"}) {
+		t.Errorf("shop: %v", got)
+	}
+}
+
+// A wiki from before the folders has every task in _tasks/: the start
+// files each where its list is, in one commit, and a second start changes
+// nothing. A task that is in two files (a write that stopped between them)
+// is one task to every reader.
+func TestAStartFilesTheTasksByList(t *testing.T) {
+	f := newStore(t, "alice")
+	f.put(t, "_tasks/tasks.json", `[{"id":"i1","title":"Inbox"},{"id":"s1","title":"Milk","list":"shop"}]`)
+	f.put(t, "_tasks/closed.json", `[{"id":"s2","title":"Eggs","list":"shop","closed_at":"2026-06-01T09:00:00"}]`)
+	f.put(t, "private/alice/_tasks/tasks.json", `[{"id":"d1","title":"Dear diary","list":"diary"}]`)
+	if got := ids(f.Open("alice")); !reflect.DeepEqual(got, []string{"i1", "s1", "d1"}) {
+		t.Fatalf("read before the start: %v", got)
+	}
+	f.ArchiveOldClosed()
+	if len(f.commits) != 1 || !strings.HasPrefix(f.commits[0], "|File the tasks by list|") {
+		t.Fatalf("commits %q", f.commits)
+	}
+	for rel, want := range map[string][]string{"_tasks/tasks.json": {"i1"}, "_tasks/lists/shop/tasks.json": {"s1"},
+		"_tasks/lists/shop/closed.json": {"s2"}, "_tasks/closed.json": {}, "private/alice/_tasks/lists/diary/tasks.json": {"d1"},
+		"private/alice/_tasks/tasks.json": {}} {
+		if got := f.ids(t, rel); !reflect.DeepEqual(got, want) && !(len(got) == 0 && len(want) == 0) {
+			t.Errorf("%s: %v, want %v", rel, got, want)
+		}
+	}
+	f.commits = nil
+	forgetAll()
+	f.ArchiveOldClosed()
+	if len(f.commits) != 0 {
+		t.Errorf("a second start: %q", f.commits)
+	}
+	// One task in two files: read once, and the next write of these tasks
+	// leaves it where its list is.
+	f.put(t, "_tasks/tasks.json", `[{"id":"i1","title":"Inbox"},{"id":"s1","title":"Milk","list":"shop"}]`)
+	forgetAll()
+	if got := ids(f.Open("")); !reflect.DeepEqual(got, []string{"i1", "s1"}) {
+		t.Errorf("read with a task in two files: %v", got)
+	}
+	f.rewrite(t, "", "Touch", func(active, closed []*Task) ([]*Task, []*Task) { return active, closed })
+	if got := f.ids(t, "_tasks/tasks.json"); !reflect.DeepEqual(got, []string{"i1"}) {
+		t.Errorf("after a write: %v", got)
+	}
+}
+
+// A list's name that is no folder's name (a file edited by hand) never
+// leaves the tasks' folder: its tasks are kept with those of no list.
+func TestAListNameThatIsNoFolder(t *testing.T) {
+	f := newStore(t)
+	f.write(t, "", []*Task{in("../../etc", task("x1", "", "")), in(".hidden", task("x2", "", ""))}, nil, "Write")
+	if got := f.names(t); !reflect.DeepEqual(got, []string{"_tasks/tasks.json"}) {
+		t.Errorf("the files: %v", got)
+	}
+	if got := ids(f.Open("")); !reflect.DeepEqual(got, []string{"x1", "x2"}) {
+		t.Errorf("read back: %v", got)
 	}
 }
