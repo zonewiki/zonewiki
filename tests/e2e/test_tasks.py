@@ -860,6 +860,17 @@ def test_a_link_names_the_tab_and_how_open_shows_its_tasks(page, wiki):
         expect(active).to_have_text(["Today"])
 
 
+def test_today_of_one_person_without_lists_has_no_grouping_to_choose(page, wiki):
+    """Today offers one list where there is nobody to group by and no list;
+    the control shows on the Open tab, which has List and Plan."""
+    page.request.post("/api/tasks", data={"title": "One", "start_date": date.today().isoformat()})
+    page.goto("/tasks?view=today")
+    expect(card(page, "One")).to_be_visible()
+    expect(page.locator(".tasks-cut")).to_be_hidden()
+    page.locator('#tasks-tabs [data-view="open"]').click()
+    expect(page.locator(".tasks-cut button:visible")).to_have_text(["List", "Plan"])
+
+
 def test_save_writes_only_what_was_changed_in_the_dialog(page, wiki):
     """Two people on one task: Save sends the fields changed in this dialog,
     so what someone else changed meanwhile stays; a text both changed is

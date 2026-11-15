@@ -64,15 +64,17 @@ const sortKey = () => 'zone-tasks-sort:' + [location.pathname, app.appEl?.datase
 let sortModes = {};   // view → 'due' | 'created'; missing: manual
 try { sortModes = JSON.parse(localStorage.getItem(sortKey())) || {}; } catch (_) {}
 // The shown tab's sort, when not the manual order.
-const activeSort = () => (st.activeView === 'open' || st.activeView === 'plan') && SORTS[sortModes[st.activeView]]
+// (Today has none: it is the day's manual order, worked top to bottom.)
+const sorts = () => !st.today && (st.activeView === 'open' || st.activeView === 'plan');
+const activeSort = () => sorts() && SORTS[sortModes[st.activeView]]
   ? sortModes[st.activeView] : null;
 function applySort() {
   if (!app.sortSel) return;
-  app.sortSel.hidden = st.activeView !== 'open' && st.activeView !== 'plan';
+  app.sortSel.hidden = !sorts();
   app.sortSel.value = activeSort() || 'manual';
 }
 function setSort(mode) {
-  if (st.activeView !== 'open' && st.activeView !== 'plan') return;
+  if (!sorts()) return;
   if (SORTS[mode]) sortModes[st.activeView] = mode; else delete sortModes[st.activeView];
   try { localStorage.setItem(sortKey(), JSON.stringify(sortModes)); } catch (_) {}
   applySort();
@@ -98,35 +100,37 @@ app.sortSel?.addEventListener('change', () => setSort(app.sortSel.value));
 // (sessionStorage), as the active tab is, so a fresh load is back at the
 // default.
 const isOpenTab = view => view === 'open' || view === 'plan';
-const groupKey = () => 'zone-tasks-group:' + [location.pathname, app.appEl?.dataset.initList || '',
-  app.appEl?.dataset.initTag || '', app.instanceId].join('|');
+// A tab's choice is remembered for itself: Today's and Open's.
+const groupKey = (today = st.today) => 'zone-tasks-group:' + [location.pathname, app.appEl?.dataset.initList || '',
+  app.appEl?.dataset.initTag || '', app.instanceId].join('|') + (today ? '|today' : '');
 const initGroup = app.appEl?.dataset.initGroup || '';   // [[tasks: group=none|day|person|list]]
 // What the session remembers, by the control's names ('days' and 'list'
 // are from when it was the Plan switch).
 const STORED = { list: 'none', days: 'day', person: 'person', lists: 'list' };
 const storedAs = group => Object.keys(STORED).find(k => STORED[k] === group);
-// The choices this view offers: List and Plan always; By person where
-// tasks have assignees (with users, not in My tasks, a list of the user's
-// own or their Inbox, where every task is theirs); By list where the view
-// holds several lists (My tasks, All tasks) and the wiki has one.
-function groupsOffered() {
+// The choices this view offers: List always, Plan (by day) on the Open tab
+// (on Today every task is today's); By person where tasks have assignees
+// (with users, not in My tasks, a list of the user's own or their Inbox,
+// where every task is theirs); By list where the view holds several lists
+// (My tasks, All tasks) and the wiki has one.
+function groupsOffered(today = st.today) {
   const own = app.initMine || (app.inboxView ? app.inboxPrivate : !!app.initList && app.isPrivateList(app.initList));
   const several = app.initMine || (!app.initList && !app.inboxView);
-  return ['none', 'day',
+  return ['none', ...(today ? [] : ['day']),
     ...((people.users ? people.users.size : document.body.dataset.users === '1') && !own ? ['person'] : []),
     ...(several && app.listSet.size ? ['list'] : [])];
 }
-// The grouping the Open tab opens with: what this browser tab chose, else
-// the view's own (group=), else Plan; one this view doesn't offer is Plan.
-function defaultGroup() {
+// The grouping a tab opens with: what this browser tab chose there, else
+// the view's own (group=), else Plan; one the tab doesn't offer is Plan on
+// Open and one list on Today.
+function defaultGroup(today = false) {
   let stored = null;
-  try { stored = sessionStorage.getItem(groupKey()); } catch (_) {}
+  try { stored = sessionStorage.getItem(groupKey(today)); } catch (_) {}
   const group = STORED[stored] || initGroup || 'day';
-  return groupsOffered().includes(group) ? group : 'day';
+  return groupsOffered(today).includes(group) ? group : today ? 'none' : 'day';
 }
 const viewOf = group => group === 'none' ? 'open' : 'plan';
-// What the board's sections stand for; set whenever the Open tab is shown
-// grouped.
+// What the board's sections stand for; set whenever a tab is shown grouped.
 st.cut = 'day';
 // openView: the view the Open tab opens with, without opening it.
 const openView = () => viewOf(defaultGroup());
@@ -135,11 +139,21 @@ function openGroup() {
   if (group !== 'none') st.cut = group;
   return viewOf(group);
 }
+// todayView: how the Today tab draws its tasks (and the board's sections
+// with it): its own choice, a link's ?view=today&group=, the view's group=.
+function todayView(group = defaultGroup(true)) {
+  if (!groupsOffered(true).includes(group)) group = 'none';
+  if (group !== 'none') st.cut = group;
+  return viewOf(group);
+}
 function applyGroup() {
   if (!app.cutEl) return;
-  app.cutEl.hidden = !isOpenTab(st.activeView);
   const offered = groupsOffered();
-  if (st.activeView === 'plan' && !offered.includes(st.cut)) st.cut = 'day';
+  // Not where there is nothing to choose: Today of one person without lists.
+  app.cutEl.hidden = !isOpenTab(st.activeView) || offered.length < 2;
+  if (st.activeView === 'plan' && !offered.includes(st.cut)) {
+    if (st.today) st.activeView = 'open'; else st.cut = 'day';
+  }
   const now = st.activeView === 'plan' ? st.cut : 'none';
   for (const b of app.cutEl.querySelectorAll('[data-group]')) {
     b.hidden = !offered.includes(b.dataset.group);
@@ -151,7 +165,11 @@ function setGroup(group) {
   if (!isOpenTab(st.activeView) || !groupsOffered().includes(group)) return;
   try { sessionStorage.setItem(groupKey(), storedAs(group)); } catch (_) {}
   if (group !== 'none') st.cut = group;
-  app.switchTab(viewOf(group));
+  app.switchTab(viewOf(group), true);
+}
+// setGroupOf: a tab's choice, without showing the tab.
+function setGroupOf(today, group) {
+  try { sessionStorage.setItem(groupKey(today), storedAs(group)); } catch (_) {}
 }
 // d: the next choice (with two, it flips, as the Plan switch did).
 function cycleGroup() {
@@ -163,16 +181,16 @@ app.cutEl?.addEventListener('click', e => {
   const btn = e.target.closest('[data-group]');
   if (btn) setGroup(btn.dataset.group);
 });
-// The page opened on the board (the embed's view, with its group=; a
-// reload): its sections are what group= or this browser tab says. A link
-// says by what (?view=open&group=person), where the view offers it.
+// The page opened on the Open tab's board (the embed's view, with its
+// group=; a reload): its sections are what group= or this browser tab says.
+// A link says by what (?view=open&group=person), where the view offers it.
 function initCut(byLink, linkGroup = '') {
-  const group = byLink ? (groupsOffered().includes(linkGroup) ? linkGroup : 'day') : defaultGroup();
+  const group = byLink ? (groupsOffered(false).includes(linkGroup) ? linkGroup : 'day') : defaultGroup();
   st.cut = group === 'none' ? 'day' : group;
 }
-// The view a tab opens: Open its remembered grouping (unless already on
-// one of them: a click on the active tab changes nothing).
-const tabView = tab => tab === 'open' && !isOpenTab(st.activeView) ? openGroup() : tab;
+// The view a tab opens: Open its remembered grouping; Today is asked for
+// as 'focus' (switchTab). A click on the tab shown changes nothing.
+const tabView = tab => tab !== 'open' ? tab : !st.today && isOpenTab(st.activeView) ? st.activeView : openGroup();
 
 // Every task is one line (title, then tags, markers and dates; notes and
 // comments hidden). One task at a time is expanded: the selected one (a
@@ -274,5 +292,5 @@ function finishCollapse() {
   }
 }
 
-return { foldId, toggleFold, unfoldFor, SORT_TITLES, activeSort, applySort, cycleSort, isOpenTab, groupKey, applyGroup, setGroup, cycleGroup, initCut, tabView, openView, collapseAll, EXPAND_ICON, MORE_ICON, setExpanded, toggleDetails, expandSelected };
+return { foldId, toggleFold, unfoldFor, SORT_TITLES, activeSort, applySort, cycleSort, isOpenTab, groupKey, applyGroup, setGroup, cycleGroup, setGroupOf, initCut, tabView, openView, todayView, collapseAll, EXPAND_ICON, MORE_ICON, setExpanded, toggleDetails, expandSelected };
 }

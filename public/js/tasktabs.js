@@ -1,6 +1,6 @@
 // A task app's tabs and its filter field (tasks.js initTasksInstance): Open
-// (as the Plan board or one list) and Focus, the Closed view behind its
-// link, and the filter's chips and text. What it uses of the app comes in
+// and Today (Open with a filter), each as one list or a board, the Closed
+// view behind its link, and the filter's chips and text. What it uses of the app comes in
 // app (its state in app.st).
 
 import TasksCore from '../tasks-core.js';
@@ -15,7 +15,16 @@ const { st } = app;
 // Segmented control: one button per view, data-view = the view's name.
 
 const tabButtons = () => Array.from(app.tabsEl.querySelectorAll('[data-view]'));
+// A view is two things, as view= and group= say them: which tasks (st.today:
+// only those to do now, the Today tab; else every open one, the Open tab)
+// and how they are drawn (st.activeView: 'open' one list, 'plan' the board
+// by what st.cut says, 'closed' the Closed view). Today is Open with a
+// filter: both tabs draw the same way, grouped or not. A tab is asked for,
+// and remembered, by a word: 'focus' Today, 'open' or 'plan' the Open tab
+// drawn that way, 'closed'.
 const VIEWS = ['open', 'plan', 'focus', 'closed'];
+// shown: the word of what is shown now.
+const shown = () => st.activeView !== 'closed' && st.today ? 'focus' : st.activeView;
 // The tab to return to from Closed (the link's "back" state).
 st.lastTab = 'focus';
 
@@ -40,7 +49,7 @@ function markActiveTab(view) {
   // Closed: the lines above the list that are about its open tasks ("4
   // unassigned", Given to others, what the view is for) aren't shown (CSS).
   app.appEl?.closest('.page-content')?.classList.toggle('tasks-shows-closed', view === 'closed');
-  const tab = view === 'plan' ? 'open' : view;   // Open grouped by day
+  const tab = view === 'closed' ? view : st.today ? 'focus' : 'open';
   tabButtons().forEach(b => {
     const on = b.dataset.view === tab;
     b.classList.toggle('active', on);
@@ -48,11 +57,21 @@ function markActiveTab(view) {
   });
 }
 
-function switchTab(view) {
+// switchTab('focus'): the Today tab, drawn as its grouping says;
+// switchTab('open' | 'plan'): the Open tab, drawn that way; 'closed': the
+// Closed view. keepTab: only how the tab shown draws its tasks changes (the
+// grouping control).
+function switchTab(view, keepTab = false) {
   if (!VIEWS.includes(view)) return;
   if (st.selectMode) app.exitSelectMode();
-  if (view !== 'closed') st.lastTab = view;
+  if (view === 'focus') {
+    st.today = true;
+    view = app.todayView();
+  } else if (view !== 'closed' && !keepTab) {
+    st.today = false;
+  }
   st.activeView = view;
+  if (view !== 'closed') st.lastTab = shown();
   app.collapseAll();
   app.applySort();
   app.applyGroup();
@@ -63,9 +82,9 @@ function switchTab(view) {
   // Keyboard focus follows the active view (Tab-cycling from a focused tab
   // would otherwise leave the focus ring on the previous one).
   if (app.tabsEl.contains(document.activeElement)) {
-    app.tabsEl.querySelector(`[data-view="${view === 'plan' ? 'open' : view}"]`)?.focus();
+    app.tabsEl.querySelector(`[data-view="${st.today ? 'focus' : 'open'}"]`)?.focus();
   }
-  app.saveActiveTab(st.activeView);
+  app.saveActiveTab(shown());
   if (st.activeView === 'closed') app.fetchClosed();
   app.render();
 }
@@ -137,5 +156,5 @@ if (app.filterSearch) {
   });
 }
 
-return { tabButtons, VIEWS, syncClosedLink, markActiveTab, switchTab, embedFilterWords, filterChips, filterQuery, userFiltering };
+return { tabButtons, VIEWS, syncClosedLink, markActiveTab, switchTab, embedFilterWords, filterChips, filterQuery, userFiltering, shown };
 }

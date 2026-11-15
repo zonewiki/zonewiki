@@ -775,7 +775,7 @@ function openEditModal(taskId, opts) {
   setNotesPreview(false, false);
   document.getElementById('task-edit-due' + app.sfx).value = task ? task.due_date || '' : '';
   document.getElementById('task-edit-start' + app.sfx).value = task ? task.start_date || ''
-    : opts && 'start_date' in opts ? opts.start_date || '' : (st.activeView === 'focus' ? dateOffset(0) : '');
+    : opts && 'start_date' in opts ? opts.start_date || '' : (st.today && st.activeView !== 'closed' ? dateOffset(0) : '');
   const startTags = task ? task.tags || []
     : givenTags ? defaultTags.split(',').map(cleanTag).filter(Boolean) : app.filterDefaultTags();
   editChips.set(startTags, true);

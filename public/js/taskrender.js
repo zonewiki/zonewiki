@@ -56,7 +56,7 @@ function inViewOrder(filtered) {
   // My tasks' Focus: the tasks with news for the user (TasksCore.newsFor)
   // are on top, under Updates, whatever their dates, and in neither section.
   let updates = [];
-  if (st.activeView === 'focus' && app.initMine) {
+  if (st.today && st.activeView === 'open' && app.initMine) {
     const given = t => !!TasksCore.newsFor(t, people.me);
     updates = [...filtered].reverse().filter(given);
     orderedTasks = orderedTasks.filter(t => !given(t));
@@ -68,7 +68,7 @@ function inViewOrder(filtered) {
 // A tab with nothing to show says so (Focus offers the Plan board).
 function renderEmpty() {
   if (st.selectedIds.size) app.clearSelection();
-  if (st.activeView === 'focus') {
+  if (st.today && st.activeView !== 'closed') {
     app.listEl.innerHTML = '<li class="tasks-empty">Nothing planned for today. ' +
       '<button type="button" class="btn btn-sm" data-goto-tab="plan">Plan your day</button></li>';
     app.listEl.querySelector('[data-goto-tab]').addEventListener('click', () => { st.cut = 'day'; app.switchTab('plan'); });
@@ -299,7 +299,7 @@ function planHTML(filtered) {
 function listHTML(orderedTasks, newTasks, updates = []) {
   let html = '';
   let truncated = false;
-  if (st.activeView === 'focus') {
+  if (st.today && st.activeView === 'open') {
     const inFocus = orderedTasks.length + newTasks.length;
     if (app.LIMIT && inFocus >= app.LIMIT) {
       html += `<li class="focus-stale-bar focus-over-limit">` +
@@ -497,9 +497,15 @@ function render() {
   app.applyGroup();   // who can be assigned may have arrived since
   app.syncClosedLink();
   syncUpdatesNote();
-  const filtered = app.filterTasks();
+  let filtered = app.filterTasks();
+  // Today as a board: the tasks to do now in their sections. Those My tasks
+  // holds for its Updates alone are listed where Today is one list (the
+  // line above the list leads there: syncUpdatesNote).
+  if (st.today && st.activeView === 'plan') filtered = filtered.filter(t => !t.extra && TasksCore.isFocus(t, todayStr()));
   const { orderedTasks, newTasks, updates } = inViewOrder(filtered);
-  if (st.activeView !== 'plan' && orderedTasks.length === 0 && newTasks.length === 0 && updates.length === 0) {
+  const nothing = st.activeView === 'plan' ? st.today && !filtered.length
+    : orderedTasks.length === 0 && newTasks.length === 0 && updates.length === 0;
+  if (nothing) {
     renderEmpty();
     return;
   }
@@ -508,18 +514,18 @@ function render() {
   wireListHandlers();
 }
 
-// My tasks' Open tab: the tasks with news for the user are listed on Today,
-// under Updates; here a line above the list says that there are some and
-// leads there, so the count on the Tasks links is never of something the
+// The tasks with news for the user are listed on My tasks' Today, as one
+// list, under Updates; on its Open tab, and on Today as a board, a line
+// above the list says that there are some and leads there, so the count on the Tasks links is never of something the
 // page doesn't show.
 function syncUpdatesNote() {
-  const n = app.initMine && (st.activeView === 'open' || st.activeView === 'plan') ? app.updatesNow().length : 0;
+  const n = app.initMine && st.activeView !== 'closed' && !(st.today && st.activeView === 'open') ? app.updatesNow().length : 0;
   let note = app.appEl.querySelector('.tasks-updates-note');
   if (n && !note) {
     note = document.createElement('p');
     note.className = 'tasks-updates-note';
     note.innerHTML = '<button type="button" class="btn btn-sm"></button>';
-    note.firstChild.addEventListener('click', () => app.switchTab('focus'));
+    note.firstChild.addEventListener('click', () => { app.setGroupOf(true, 'none'); app.switchTab('focus'); });
     app.listEl.before(note);
   }
   if (!note) return;

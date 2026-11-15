@@ -98,7 +98,7 @@ document.addEventListener('keydown', async e => {
   }
 
   // 'o' cycles the Open tab's order: manual, by deadline, newest first
-  if (e.key === 'o' && !e.ctrlKey && !e.metaKey && !e.altKey && (st.activeView === 'open' || st.activeView === 'plan')) {
+  if (e.key === 'o' && !e.ctrlKey && !e.metaKey && !e.altKey && !st.today && (st.activeView === 'open' || st.activeView === 'plan')) {
     e.preventDefault();
     app.cycleSort();
     return;
@@ -151,7 +151,7 @@ document.addEventListener('keydown', async e => {
     // Only the tabs: Closed (reached by its link) is not in the cycle,
     // and from there Tab goes to the first tab, Shift+Tab to the last.
     const views = app.tabButtons().map(b => b.dataset.view);
-    const i = views.indexOf(st.activeView === 'plan' ? 'open' : st.activeView);
+    const i = views.indexOf(st.activeView === 'closed' ? 'closed' : st.today ? 'focus' : 'open');
     const n = views.length;
     app.switchTab(app.tabView(views[i < 0 ? (e.shiftKey ? n - 1 : 0) : e.shiftKey ? (i - 1 + n) % n : (i + 1) % n]));
     return;

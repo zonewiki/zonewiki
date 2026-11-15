@@ -825,3 +825,47 @@ def test_my_tasks_open_tab_says_that_there_are_updates(alice):
     alice.goto("/tasks?list=team&view=open&group=none")
     expect(card(alice, "From bob")).to_be_visible()
     expect(alice.locator(".tasks-updates-note")).to_have_count(0)      # a list's view has none
+
+
+def test_today_is_open_with_a_filter_and_groups_as_open_does(alice):
+    """The Today tab shows the tasks to do now, drawn as the Open tab draws
+    its own: as one list, or in sections by person or by list (not by day:
+    they are all today's). Each tab keeps its own choice; a link names it."""
+    today = date.today().isoformat()
+    new(alice, "Mine today", assignee="alice", start_date=today)
+    new(alice, "Bob's today", assignee="bob", start_date=today)
+    new(alice, "No one's today", start_date=today)
+    new(alice, "Bob's later", assignee="bob")
+    alice.goto("/tasks?list=team&view=today")
+    active = alice.locator("#tasks-tabs .active")
+    expect(active).to_have_text(["Today"])
+    cut = alice.locator(".tasks-cut")
+    expect(cut.locator("button:visible")).to_have_text(["List", "By person"])
+    expect(cut.locator("[aria-pressed='true']")).to_have_text(["List"])
+    expect(alice.locator(".task-item")).to_have_count(3)
+    cut.get_by_role("button", name="By person").click()
+    expect(active).to_have_text(["Today"])
+    heads = alice.locator(".board-day-divider .board-day-label")
+    expect(heads).to_have_text(["Unassigned", "You", "@bob"])
+    expect(alice.locator(".task-item")).to_have_count(3)
+    expect(card(alice, "Bob's later")).to_have_count(0)
+    # A new task made there starts today, as on Today as one list.
+    alice.locator("#task-add-btn").click()
+    modal = alice.locator("#task-edit-modal")
+    expect(modal).to_be_visible()
+    expect(modal.locator("#task-edit-start")).to_have_value(today)
+    alice.keyboard.press("Escape")
+    # The Open tab keeps its own: the board by day; back on Today, by person still.
+    alice.locator('#tasks-tabs [data-view="open"]').click()
+    expect(cut.locator("[aria-pressed='true']")).to_have_text(["Plan"])
+    expect(card(alice, "Bob's later")).to_be_visible()
+    alice.locator('#tasks-tabs [data-view="focus"]').click()
+    expect(cut.locator("[aria-pressed='true']")).to_have_text(["By person"])
+    expect(heads).to_have_text(["Unassigned", "You", "@bob"])
+    # A link says it too.
+    alice.evaluate("sessionStorage.clear()")
+    alice.goto("/tasks?list=team&view=today&group=person")
+    expect(active).to_have_text(["Today"])
+    expect(heads).to_have_text(["Unassigned", "You", "@bob"])
+    alice.goto("/tasks?list=team&view=today&group=day")            # by day is no choice of Today's
+    expect(cut.locator("[aria-pressed='true']")).to_have_text(["List"])

@@ -200,19 +200,19 @@ Recurring instances keep the gap between the two dates, but a new instance's sta
 
 **A view says which tasks it shows and how the Open tab shows them**, and has one name for each: `view=` is `today` (what is to do now), `open` (every open task) or `closed`; `group=` is `none`, `day`, `person` or `list`. These are the names in embeds, in links (`/tasks?view=open&group=person`), in the registries and in the settings dialog.
 (Until 2026-11 there were four: `view=focus|open|plan`, where `open` and `plan` also said how Open showed its tasks, `group=`, and `plan=on|off` from before that. A wiki from then is taken over once, when Zone starts (`migrateViewsLocked` in `go/viewsmigrate.go`, after the lists' migrations; one commit, "Name the tasks' views Today and Open"): each `[[tasks: …]]` on a page and each registry's settings are rewritten so that every view shows what it showed (`view=focus` is `view=today`; `view=plan` is `view=open group=day`; `view=open`, which was the one list, is `view=open group=none`; `plan=on|off` is `group=day|none`; of three `labels` the first and the last stay), and the registries say `version` 3; a wiki without a registry keeps a mark in Zone's folder. From then on the old names are no view's: a link with `view=focus` or `view=plan` opens the default tab.)
-In the browser a view is kept by what it draws (`st.activeView` in `tasks.js`: `focus`, `open` the one list, `plan` the board, `closed`); `namedView` turns the names into that where a page opens.
+**Today is Open with a filter** (`st.today` in `js/tasktabs.js`): the Today tab shows the Open tab's tasks that are to do now, and draws them as the Open tab draws its own (`st.activeView`: `open` one list, `plan` the board by what `st.cut` says, `closed`), so the grouping below works on both tabs, each keeping its own choice. What is Today's alone is a rule on the filter, not a view of its own: a new task there starts today, the limit's warning, My tasks' Updates, the empty state, no Order (Today is in the manual order), which way a swipe goes. (Until 2026-11 Today was a view of its own, a list that could not be grouped.) A tab is asked for and remembered by a word (`focus` Today, `open` or `plan` the Open tab drawn that way, `closed`); `namedView` turns the names of links and embeds into that where a page opens.
 
 A segmented control (`.view-tabs`, one `<button data-view>` each) in the order **Open · Today** (`data-view` `open`/`focus`).
-The Open tab shows its tasks one of a few ways (`activeView` and `st.cut` in `tasks.js`): as one list, or in sections (the board): by start date, by person or by list.
-The control right after the tabs picks one (`.tasks-cut`, a segmented control of `<button data-group>`, the current one `aria-pressed`; outside the toolbar: it modifies the Open tab;
-shown on the Open tab;
+A tab shows its tasks one of a few ways (`activeView` and `st.cut` in `tasks.js`): as one list, or in sections (the board): by start date, by person or by list.
+The control right after the tabs picks one (`.tasks-cut`, a segmented control of `<button data-group>`, the current one `aria-pressed`; outside the toolbar: it modifies the tab shown;
+shown on the Open tab and on Today, where there is something to choose (Today of one person without lists is one list, and has no control);
 **d** goes through its choices;
 not `p`, which starts presentation mode on a page with an embedded tasks):
 
 | Choice | `group` | Sections | A drop on a section | Offered |
 |--------|---------|----------|---------------------|---------|
 | **List** | `none` | Unsorted, Sorted | ranks | always |
-| **Plan** | `day` | Unplanned, Today, Tomorrow, the weekdays, Later (the board, below) | sets the start date | always |
+| **Plan** | `day` | Unplanned, Today, Tomorrow, the weekdays, Later (the board, below) | sets the start date | on the Open tab (on Today every task is today's) |
 | **By person** | `person` | Unassigned, You, then everyone else who has tasks here, A–Z | assigns | with users, where tasks have assignees: not in My tasks, a private list or your Inbox |
 | **By list** | `list` | Inbox, then each list with tasks here, your own before the shared ones | moves the task there | where the view holds several lists (My tasks, All tasks, a tag's view) and the wiki has a list |
 
@@ -228,6 +228,7 @@ On a phone the control shares the tabs' row while it has two choices and takes a
 What is the day's alone stays the day's: the WIP limit's flag, the due and carried counts, Later's date picker.
 **1**–**7** and **0** plan the selected tasks there as on every tab; dragging onto a day needs Plan.
 
+- **On Today** a section holds the tasks of the day: By person is who does what today, a team's morning; By list what each list has on. `[[tasks: view=today group=person]]` and `/tasks?view=today&group=person` open it; a view's `group=day` is one list there.
 - **By person**: **Unassigned** (what no one has, a former assignee's included: `assigneeIs` `none`) and **You** (the tasks assigned to you, and your private ones) are always there, as where a task is let go and taken; then a section for each other user who has tasks in the view, `@name`.
   A card dropped on a section's header is that user's (`dropWrite` → `assignTasks`, the function the Assign… dialog uses: one `batch-update`, a toast "1 task assigned to bob" with an undo that leaves no trace; the mail goes as for any assignment); on Unassigned, no one's.
   Dropped on a card there, it is assigned and takes that place in the manual order, as a drop on another day's card starts the task there.

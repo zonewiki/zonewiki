@@ -41,8 +41,9 @@ function swipeActions(task) {
   // On Plan a carried-over task (started earlier, still open) starts today:
   // committing to it again, which takes its "since" badge away.
   const carried = TasksCore.isCarried(task, today) ? 'start' : null;
+  if (st.activeView === 'closed') return { right: null, left: null };
+  if (st.today) return { right: null, left: unplan };   // Today, however it is drawn
   if (st.activeView === 'open') return { right: start, left: null };
-  if (st.activeView === 'focus') return { right: null, left: unplan };
   if (st.activeView === 'plan') return { right: start || carried, left: unplan };
   return { right: null, left: null };
 }

@@ -173,7 +173,8 @@ const app = {
 
 st.tasks = [];
 st.closedLoaded = false;   // the closed tasks are among st.tasks
-st.activeView = 'focus';
+st.activeView = 'open';   // how the tab shown draws its tasks: 'open', 'plan', 'closed' (tasktabs.js)
+st.today = true;           // the Today tab: the Open tab's tasks filtered
 st.draggedId = null;
 st.selectedId  = null;
 st.selectedIds = new Set();
@@ -489,8 +490,8 @@ function editPrivate() { return isPrivateList(listSelect?.value || ''); }
 // ?view= / [[tasks: view=…]] pick the tab, by the views' names: today,
 // open, closed, and with open group= how it shows its tasks (none, day,
 // person, list; without it as the view's own group= says). The app keeps a
-// view by what it draws (namedView: 'focus', 'open' the one list, 'plan'
-// the board, 'closed'); any other name is none.
+// tab by a word (namedView: 'focus' Today, 'open' the Open tab as one list,
+// 'plan' as the board, 'closed'; tasktabs.js); any other name is none.
 const urlViewName = urlParams.get('view') || '';   // explicit per-navigation override
 const urlGroup = urlParams.get('group') || '';
 const embedViewName = appEl?.dataset.initView || '';   // [[tasks: view=…]] — always wins when specified
@@ -538,7 +539,8 @@ const { headerTasksMenu, confirmDeadlineMove } = app;
 // `query` defaults to the filter field; the tag autocomplete passes the
 // field minus the word being typed.
 function filterTasks(query = filterQuery()) {
-  return tasksInView(st.tasks, parseFilter(query, people), st.activeView, todayStr(), initMine ? people.me : '');
+  // Today is Open with a filter (tasktabs.js): 'focus' is the word for it.
+  return tasksInView(st.tasks, parseFilter(query, people), app.shown(), todayStr(), initMine ? people.me : '');
 }
 
 Object.assign(app, initTaskOrder(app));
@@ -634,13 +636,20 @@ const namedView = (name, group) => name === 'today' ? 'focus' : name === 'closed
   : group === 'none' ? 'open' : ['day', 'person', 'list'].includes(group) ? 'plan' : app.openView();
 const urlView = namedView(urlViewName, urlGroup);
 const embedView = namedView(embedViewName, appEl?.dataset.initGroup || '');
-st.activeView = [isReload && loadShownTab(), urlView, embedView, loadActiveTab(),
+const asked = [isReload && loadShownTab(), urlView, embedView, loadActiveTab(),
   namedView(appEl?.dataset.defaultView || '', appEl?.dataset.initGroup || '')].find(v => VIEWS.includes(v)) || 'focus';
-saveShownTab(st.activeView);
-// The board's sections: what a link's ?view=open&group= says, else what the
-// view or this browser tab says.
-initCut(urlView === 'plan' && ['day', 'person', 'list'].includes(urlGroup) && !(isReload && VIEWS.includes(loadShownTab())), urlGroup);
-if (st.activeView !== 'closed') st.lastTab = st.activeView;
+// The board's sections on the Open tab: what a link's ?view=open&group=
+// says, else what the view or this browser tab says.
+const byLink = !(isReload && VIEWS.includes(loadShownTab()));
+initCut(urlView === 'plan' && ['day', 'person', 'list'].includes(urlGroup) && byLink, urlGroup);
+// Today is the Open tab's tasks filtered (st.today), drawn as its own
+// grouping says: a link's ?view=today&group=, else this browser tab's or
+// the view's.
+st.today = asked === 'focus';
+st.activeView = !st.today ? asked
+  : urlView === 'focus' && byLink && ['none', 'person', 'list'].includes(urlGroup) ? app.todayView(urlGroup) : app.todayView();
+saveShownTab(app.shown());
+if (st.activeView !== 'closed') st.lastTab = app.shown();
 applySort();
 applyGroup();
 markActiveTab(st.activeView);
@@ -651,7 +660,7 @@ syncClosedLink();
 // and briefly highlighted. By id, not by title: a title can be shared, or
 // contain a #word the filter field would read as a tag.
 // Not after a reload on another tab than the link's: the user has moved on.
-const initTaskId = isReload && VIEWS.includes(urlView) && st.activeView !== urlView ? '' : urlParams.get('task') || '';
+const initTaskId = isReload && VIEWS.includes(urlView) && app.shown() !== urlView ? '' : urlParams.get('task') || '';
 function revealTask(id) {
   if (!st.tasks.some(t => t.id === id)) {
     // Deleted (or in another list). One notice per page.
