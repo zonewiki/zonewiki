@@ -30,6 +30,7 @@ func adminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/users", usersPage)
 	mux.HandleFunc("POST /admin/users/{name}/role", adminOnly(userRoleRoute))
 	mux.HandleFunc("POST /admin/users/{name}/groups", adminOnly(userGroupsRoute))
+	mux.HandleFunc("POST /admin/groups/includes", adminOnly(groupIncludesRoute))
 	mux.HandleFunc("POST /admin/users/{name}/disable", adminOnly(userDisableRoute))
 	mux.HandleFunc("POST /admin/users/{name}/enable", adminOnly(userDisableRoute))
 	mux.HandleFunc("POST /admin/users/{name}/remove", adminOnly(userRemoveRoute))
@@ -60,10 +61,12 @@ type usersView struct {
 	Done  string // what the last change did ("" none), said above the list
 	Error string // why the last change was refused
 	Roles []string
-	// Groups: every group a user is in, for the Groups fields to complete from.
+	// Groups: every group there is, for the Groups fields to complete from.
 	Groups []string
-	Tabs   []adminTab // the admin page's section tabs
-	Tab    string     // the one shown
+	// GroupRows: the groups as the Groups part lists them.
+	GroupRows []groupRow
+	Tabs      []adminTab // the admin page's section tabs
+	Tab       string     // the one shown
 	// The module switcher and Admin › Users, as on every view, so the top
 	// row stays put; not in the navigation trail.
 	BreadcrumbHTML template.HTML
@@ -82,13 +85,21 @@ type usersView struct {
 type userRow struct {
 	Name, Role      string
 	Email           string
-	Groups          string // the groups they are in, "dev, hiring"
+	Groups          string // the groups their section names, "dev, hiring"
+	Also            string // the groups they are in by way of those ("product"), "" none
 	Token, Disabled bool
 	Pending         bool // signed up, waiting for approval
 	Me, Private     bool // the admin themselves; has a private folder
 	// Tasks: the open tasks still assigned to a user who can't be given
 	// any (disabled, a viewer): to hand on.
 	Tasks int
+}
+
+// groupRow: a group as the Users tab's Groups part lists it: who is in it
+// now, and the groups it is made of (the field's value, "dev, design").
+type groupRow struct {
+	Name, Includes string
+	Members        []string
 }
 
 // adminTab: a section tab of the admin page.
@@ -106,7 +117,19 @@ func usersPage(w http.ResponseWriter, r *http.Request) {
 	}
 	done := ""
 	name := r.URL.Query().Get("user")
-	if r.URL.Query().Get("done") == "revoke" && userNameRE.MatchString(name) {
+	if group := r.URL.Query().Get("group"); r.URL.Query().Get("done") == "includes" && groupNameRE.MatchString(group) {
+		done = groupLine(latestSettings(), group) + "."
+		// Only users' names: a link can't make the page say anything else.
+		var left []string
+		for _, n := range strings.Split(r.URL.Query().Get("left"), ",") {
+			if latestSettings().Users[n] != nil {
+				left = append(left, n)
+			}
+		}
+		if len(left) > 0 {
+			done += " No longer in it: " + strings.Join(left, ", ") + ". What is for @" + group + " they no longer see."
+		}
+	} else if r.URL.Query().Get("done") == "revoke" && userNameRE.MatchString(name) {
 		done = "Revoked the link for " + name + ": it no longer works."
 	} else if u := latestSettings().Users[name]; u != nil {
 		switch r.URL.Query().Get("done") {
@@ -147,10 +170,14 @@ func usersData(r *http.Request) *usersView {
 	v := &usersView{Me: me, Roles: roles, Groups: s.groups(), Links: openLinks(), Tabs: adminTabs, Tab: "users",
 		Signup: signupOn(s), SignupRole: s.SignupRole, SignupDomains: s.SignupDomains, SignupApproval: s.SignupApproval,
 		BreadcrumbHTML: breadcrumb(newReq(r), []crumb{{"Admin", "/admin"}, {"Users", ""}}, "", false, "", "")}
+	for _, g := range s.groups() {
+		v.GroupRows = append(v.GroupRows, groupRow{Name: g, Includes: strings.Join(s.Includes[g], ", "), Members: s.groupMembers(g)})
+	}
 	assigned := assignedOpen()
 	for _, name := range sortedKeys(s.Users) {
 		u := s.Users[name]
 		row := userRow{Name: name, Role: u.Role, Email: u.Email, Groups: strings.Join(u.Groups, ", "), Token: u.MCPToken != "",
+			Also:     strings.Join(slices.DeleteFunc(slices.Clone(u.In), func(g string) bool { return slices.Contains(u.Groups, g) }), ", "),
 			Disabled: u.Disabled, Pending: u.Pending,
 			Me: name == me, Private: isDir(filepath.Join(cfg.Data, privateDir, name))}
 		if !s.assignable(name) {
@@ -263,6 +290,40 @@ func userGroupsRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	afterChange(w, r, "groups", u.Name)
+}
+
+// groupIncludesRoute: POST /admin/groups/includes: the groups the group
+// `group` is made of from now, as the field names them (dev, design; empty:
+// none, the group is its name on users again). Who is in one of them is in
+// it (Groups in docs/spec/users.md). The answer says who is in it now, and
+// who no longer is.
+func groupIncludesRoute(w http.ResponseWriter, r *http.Request) {
+	named, bad := parseGroups(r.PostFormValue("group"))
+	if bad != "" || len(named) != 1 {
+		refuseChange(w, r, fmt.Errorf("%q isn't a group's name: lowercase letters, digits and hyphens.", r.PostFormValue("group")))
+		return
+	}
+	group := named[0]
+	includes, bad := parseGroups(r.PostFormValue("includes"))
+	if bad != "" {
+		refuseChange(w, r, fmt.Errorf("%q isn't a group's name: lowercase letters, digits and hyphens.", bad))
+		return
+	}
+	before := latestSettings()
+	if err := changeSettings(userOf(r), func(f *settingsfile.File) error {
+		setIncludes(f, group, includes)
+		return nil
+	}); err != nil {
+		refuseChange(w, r, err)
+		return
+	}
+	// Who left it, by name.
+	to := "/admin/users?done=includes&group=" + url.QueryEscape(group) +
+		"&left=" + url.QueryEscape(strings.Join(leftGroup(before, latestSettings(), group), ","))
+	if !latestSettings().isAdmin(userOf(r)) {
+		to = "/"
+	}
+	http.Redirect(w, r, to, http.StatusSeeOther)
 }
 
 // userDisableRoute: POST /admin/users/{name}/disable or /enable.

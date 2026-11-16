@@ -1530,6 +1530,8 @@ kbd {
 .users-table form { display: inline-flex; gap: .3rem; align-items: center; margin: 0; }
 .user-name { font-weight: 500; }
 .user-you, .users-help { color: var(--muted); font-weight: normal; }
+.user-also { display: block; color: var(--muted); font-size: .8rem; margin-top: .15rem; }
+.groups-new { margin-top: .75rem; }
 .user-fact { font-size: .7rem; padding: 0 .3rem; border: 1px solid var(--border); border-radius: 4px; color: var(--muted); font-weight: normal; }
 .user-email { font-size: .8rem; color: var(--muted); font-weight: normal; }
 .user-disabled .user-name { color: var(--muted); text-decoration: line-through; }

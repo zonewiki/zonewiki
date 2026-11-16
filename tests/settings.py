@@ -21,6 +21,9 @@ MCP_TOKEN = ""
 USERS: dict[str, tuple[str, str]] = {}
 # More of a user's settings (role, disabled): name → {key: value}.
 USER_SETTINGS: dict[str, dict[str, str]] = {}
+# Groups made of groups: group → what it includes ("dev, design"), a
+# [group …] section each, after the users.
+GROUPS: dict[str, str] = {}
 # More of the settings file's text (after the settings above, before the
 # users).
 CONFIG_FILE = ""

@@ -100,17 +100,17 @@ Auth is optional (a password, or users; see Key Constraints).
 ├── .forgejo/issue_template/   # Issue templates: bug.md, feature.md
 ├── go/                     # The server: package main, a file per area; pure code without Zone's state in go/internal/
 │   ├── go.mod, go.sum      # Go modules, exact versions (goldmark, x/text, onnxruntime_go)
-│   ├── server.go           # main: flags, start-up, the routes' mux, the request checks around them; zonewiki eval, zonewiki health, zonewiki user, zonewiki config
+│   ├── server.go           # main: flags, start-up, the routes' mux, the request checks around them; zonewiki eval, zonewiki health, zonewiki user, zonewiki group, zonewiki config
 │   ├── login.go            # The login gate's routes: /login, /logout
 │   ├── static.go           # public/ served as it is (gzipped, kept by the browser), a file sent with its type
 │   ├── uploads.go          # Uploads: _assets/ served, POST /api/upload
 │   ├── config.go           # What is fixed for the process, from the environment (read once into cfg)
 │   ├── configfile.go       # The settings file .zone/config: its keys, Settings (settings(), reloaded when the file changes), the line edits
 │   ├── storage.go          # upload-max and storage-max: sizes (25MB), what the wiki holds (not .git/, .zone/), checkRoom
-│   ├── commands.go         # zonewiki user (add, passwd, token, role, group, disable, enable, invite, reset, remove, list) and zonewiki config (check, set, unset, passwd, token), which edit the settings file (filelock_*.go: one at a time)
+│   ├── commands.go         # zonewiki user (add, passwd, token, role, group, disable, enable, invite, reset, remove, list), zonewiki group (includes, list) and zonewiki config (check, set, unset, passwd, token), which edit the settings file (filelock_*.go: one at a time)
 │   ├── security.go         # Host and Origin checks, the page policy, login, signed session (and its user), throttles
-│   ├── users.go            # Users: roles, password hashes, sign-in, the password prompt, who a task can be assigned to (assignable, the reserved names me and none)
-│   ├── admin.go            # The admin page (/admin, admins), its Users tab: roles, disable, remove, writing the settings file as the commands do
+│   ├── users.go            # Users: roles, groups (who is in which, also by way of a group made of groups), password hashes, sign-in, the password prompt, who a task can be assigned to (assignable, the reserved names me and none)
+│   ├── admin.go            # The admin page (/admin, admins), its Users tab: roles, groups and the groups made of groups, disable, remove, writing the settings file as the commands do
 │   ├── links.go            # Invite and reset links: .zone/links, /welcome/<token>
 │   ├── signup.go           # Sign-up: /signup, the mail with its link, the account a sign-up link makes
 │   ├── mail.go             # Mail through the deployment's SMTP server (ZONE_SMTP_*), for sign-up and assigned tasks
@@ -154,7 +154,7 @@ Auth is optional (a password, or users; see Key Constraints).
 │   ├── internal/gitrepo/   # Package gitrepo: git run in a repository, a process a call, under a time limit and a context, pathspecs literal, no detached maintenance and none inside a commit (Zone packs in the background: `go/gitstore.go`)
 │   ├── internal/textsearch/  # Package textsearch, no globals: BM25 ranking (stemming, fuzzy, excerpts), the query syntax, rank fusion, difflib's ratio (search.go, difflib.go); the index in a file, mapped (indexfile.go, mmap_unix.go, mmap_other.go)
 │   ├── internal/mdtext/    # Package mdtext, no globals: markdown source text (frontmatter, fences, code and math masking, headings and anchors, wikilink syntax, the splice of a section's text, checkboxes, slugs)
-│   ├── internal/settingsfile/  # Package settingsfile: the settings file's format (the strict parser, line edits keeping comments, the owner-only write); what its keys mean stays in configfile.go
+│   ├── internal/settingsfile/  # Package settingsfile: the settings file's format ([user …] and [group …] sections; the strict parser, line edits keeping comments, the owner-only write); what its keys mean stays in configfile.go
 │   ├── internal/tokenizer/ # Package tokenizer: the embedding model's tokenizer (byte-level BPE from its tokenizer.json)
 │   ├── retrieval.go        # Search and LLM retrieval (BM25 + optional semantic index), the query log
 │   ├── embed.go            # Optional semantic search: section embeddings, the index and its cache, Related pages
@@ -202,6 +202,7 @@ It lives in the host directory pointed to by `ZONE_DATA` (default: `~/zonewiki`)
 ./run.sh screenshots  # redo the README's screenshots from a sample wiki
 ./run.sh eval [FILE]  # measure retrieval on your wiki (questions in FILE, default _eval/retrieval.json in the wiki)
 ./run.sh user add|passwd|token|role|group|disable|enable|remove NAME, user list  # the users in the wiki's settings file (.zone/config)
+./run.sh group includes NAME [+G] [-G], group list  # groups made of groups ([group NAME] in the settings file)
 ./run.sh config check|set|unset|passwd|token  # the wiki's settings file: check it, set a key, password and MCP token without users
 ```
 

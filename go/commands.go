@@ -1,5 +1,6 @@
 // The settings file's commands (docs/spec/users.md): zonewiki user adds,
-// changes and removes users, zonewiki config checks the settings, sets the
+// changes and removes users, zonewiki group makes a group of groups,
+// zonewiki config checks the settings, sets the
 // wiki's password and token, and moves settings out of the environment.
 // They edit .zone/config in the wiki ZONE_DATA names, keeping its comments,
 // and refuse a change that would leave settings Zone doesn't start with; a
@@ -35,6 +36,12 @@ const userUsage = `Usage: zonewiki user COMMAND
   remove NAME             remove a user (their private pages and tasks stay); the last one only
     [--password|--open]   with the wiki's password instead (asks for it), or with no login
   list                    the users, their roles, and whether each has an MCP token`
+
+const groupUsage = `Usage: zonewiki group COMMAND
+  includes NAME [+G] [-G]  make the group NAME of other groups: who is in G is in NAME too (+dev),
+                           or no longer by way of it (-dev); alone: what NAME includes, and who is in it
+  list                     the groups: what each includes, and who is in it
+A user is put in a group with: zonewiki user group NAME +GROUP`
 
 const configUsage = `Usage: zonewiki config COMMAND
   check            check the settings and show those in effect
@@ -407,6 +414,110 @@ func setGroups(f *settingsfile.File, name string, groups []string) {
 	}
 }
 
+// groupMain: zonewiki group includes NAME +dev -design, zonewiki group list
+// (Groups in docs/spec/users.md: a group made of groups).
+func groupMain(args []string, getenv func(string) string, stdout, stderr io.Writer) int {
+	fail := func(format string, a ...any) int {
+		fmt.Fprintf(stderr, "zonewiki group: "+format+"\n", a...)
+		return 1
+	}
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, groupUsage)
+		return 2
+	}
+	if isHelp(args[0]) {
+		fmt.Fprintln(stdout, groupUsage)
+		return 0
+	}
+	list := args[0] == "list" && len(args) == 1
+	includes := args[0] == "includes" && len(args) >= 2 && !strings.HasPrefix(args[1], "-") && !strings.HasPrefix(args[1], "+")
+	if !list && !includes {
+		fmt.Fprintln(stderr, groupUsage)
+		return 2
+	}
+	f, err := openConfig(getenv)
+	if err != nil {
+		return fail("%v", err)
+	}
+	if list {
+		s := settingsOf(f.Read)
+		if len(s.groups()) == 0 {
+			fmt.Fprintln(stdout, "No groups. Put a user in one with: zonewiki user group NAME +GROUP")
+		}
+		for _, g := range s.groups() {
+			fmt.Fprintln(stdout, "  "+groupLine(s, g))
+		}
+		return 0
+	}
+	named, bad := parseGroups(args[1])
+	if bad != "" || len(named) != 1 {
+		return fail("%q isn't a group's name: lowercase letters, digits and hyphens.", args[1])
+	}
+	name := named[0]
+	before := settingsOf(f.Read)
+	now := slices.Clone(before.Includes[name])
+	for _, arg := range args[2:] {
+		add, out := strings.HasPrefix(arg, "+"), strings.HasPrefix(arg, "-")
+		g, bad := parseGroups(arg[min(1, len(arg)):])
+		if !add && !out || bad != "" || len(g) != 1 {
+			return fail("%q isn't +GROUP or -GROUP (a group's name: lowercase letters, digits and hyphens).", arg)
+		}
+		now = slices.DeleteFunc(now, func(in string) bool { return in == g[0] })
+		if add {
+			now = append(now, g[0])
+		}
+	}
+	slices.Sort(now)
+	s := before
+	if len(args) > 2 {
+		setIncludes(f, name, now)
+		if err := saveConfig(f); err != nil {
+			return fail("%v", err)
+		}
+		s = settingsOf(f.Text())
+	}
+	fmt.Fprintln(stdout, groupLine(s, name)+".")
+	if left := leftGroup(before, s, name); len(left) > 0 {
+		fmt.Fprintf(stdout, "No longer in %s: %s. What is for @%s they no longer see.\n", name, strings.Join(left, ", "), name)
+	}
+	return 0
+}
+
+// setIncludes writes what a group includes in the settings file (nothing:
+// no section, the group is its name on users again).
+func setIncludes(f *settingsfile.File, name string, includes []string) {
+	if len(includes) == 0 {
+		f.RemoveGroup(name)
+	} else {
+		f.SetGroup(name, "includes", strings.Join(includes, ", "))
+	}
+}
+
+// groupLine: a group as the commands and the admin page say it: "product
+// includes dev, design: alice, bob", "dev: alice", "old: nobody is in it".
+func groupLine(s *Settings, group string) string {
+	line := group
+	if in := s.Includes[group]; len(in) > 0 {
+		line += " includes " + strings.Join(in, ", ")
+	}
+	if members := s.groupMembers(group); len(members) > 0 {
+		return line + ": " + strings.Join(members, ", ")
+	}
+	return line + ": nobody is in it"
+}
+
+// leftGroup: who was in group with the settings before and is no longer,
+// A–Z: whom a narrowing takes its lists and pages from.
+func leftGroup(before, now *Settings, group string) []string {
+	var left []string
+	for _, name := range before.groupMembers(group) {
+		if !now.memberOf(name, group) {
+			left = append(left, name)
+		}
+	}
+	return left
+}
+
 // setDisabled: disable NAME and enable NAME.
 func (c *userCommand) setDisabled() int {
 	disable := c.cmd == "disable"
@@ -489,8 +600,8 @@ func userLine(u *User) string {
 	if u.MCPToken != "" {
 		facts = append(facts, "MCP token")
 	}
-	if len(u.Groups) > 0 {
-		facts = append(facts, "in "+strings.Join(u.Groups, ", "))
+	if len(u.In) > 0 {
+		facts = append(facts, "in "+strings.Join(u.In, ", "))
 	}
 	switch {
 	case u.Pending:

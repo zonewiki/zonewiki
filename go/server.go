@@ -39,6 +39,7 @@ const usage = `Usage: zonewiki [--addr ADDRESS] [--public FOLDER] [--docs FOLDER
 
 Commands:
   user COMMAND               the wiki's users (add, passwd, token, remove, list)
+  group COMMAND              the wiki's groups made of groups (includes, list)
   config COMMAND             the wiki's settings file .zone/config (check, set, unset, passwd, token)
   eval [--k N] [--new] FILE  measure search_wiki's retrieval against the questions in FILE
   health [ADDR]              whether a Zone running here answers (the container's healthcheck)
@@ -118,6 +119,8 @@ func main() {
 			code := userMain(os.Args[2:], environ, os.Stdin, os.Stdout, os.Stderr)
 			restore()
 			os.Exit(code)
+		case "group":
+			os.Exit(groupMain(os.Args[2:], environ, os.Stdout, os.Stderr))
 		case "config":
 			restore := echoOff()
 			code := configMain(os.Args[2:], environ, os.Stdin, os.Stdout, os.Stderr)

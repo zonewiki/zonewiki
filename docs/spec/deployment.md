@@ -69,7 +69,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
   in the wiki,
   kept out of git (it holds the users: back it up with the data folder),
   reloaded when it changes,
-  edited by hand or with `./run.sh user …`/`./run.sh config …` (The settings file in `docs/spec/users.md`).
+  edited by hand or with `./run.sh user …`/`./run.sh group …`/`./run.sh config …` (The settings file in `docs/spec/users.md`).
 
 ## Commands
 
@@ -86,6 +86,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 ./run.sh screenshots  # redo the README's screenshots (docs/screenshots/*.png) from a sample wiki, in the tools image; compressed with pngquant (the README shows phone.png at 640px)
 ./run.sh eval [FILE]  # measure retrieval on your wiki (see Measuring retrieval in search.md), in the app image, with semantic search as ZONE_SEMANTIC_SEARCH says
 ./run.sh user add|passwd|token|role|disable|enable|remove NAME, user list  # the users in the wiki's settings file, zonewiki user in a one-off container (compose run; see users.md)
+./run.sh group includes NAME [+G] [-G], group list  # groups made of groups, in the wiki's settings file (zonewiki group)
 ./run.sh config check|set|unset|passwd|token  # the wiki's settings file: check it, set a key, the password and MCP token without users (zonewiki config)
 ```
 

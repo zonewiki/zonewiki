@@ -499,6 +499,169 @@ func TestUserRoles(t *testing.T) {
 	}
 }
 
+// A group made of groups (docs/spec/users.md, Groups): [group product]
+// includes = dev, design; who is in dev or in design is in product, and so
+// on through what those include.
+func TestGroupsOfGroups(t *testing.T) {
+	user := func(name, more string) string {
+		return "[user " + name + "]\npassword = " + hashPassword("p") + "\n" + more
+	}
+	text := user("alice", "groups = dev\nrole = admin\n") + user("bob", "groups = design\n") + user("carol", "groups = sales, product\n") +
+		user("dan", "groups = dev\ndisabled = yes\n") + user("eve", "") +
+		"[group product]\nincludes = Dev, @design\n[group company]\nincludes = product, nobody-yet\n"
+	f, err := parseConfig(text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := loadSettings(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(s.Includes["product"], []string{"design", "dev"}) || !slices.Equal(s.Users["alice"].Groups, []string{"dev"}) ||
+		!slices.Equal(s.Users["alice"].In, []string{"company", "dev", "product"}) ||
+		!slices.Equal(s.Users["carol"].In, []string{"company", "product", "sales"}) || len(s.Users["eve"].In) != 0 {
+		t.Errorf("includes %v, alice in %v, carol in %v", s.Includes, s.Users["alice"].In, s.Users["carol"].In)
+	}
+	for _, c := range []struct {
+		user, group string
+		want        bool
+	}{
+		{"alice", "dev", true}, {"alice", "product", true}, {"alice", "company", true}, {"alice", "design", false},
+		{"bob", "product", true}, {"bob", "company", true}, {"bob", "dev", false},
+		{"carol", "product", true}, {"carol", "dev", false}, // named on her: not in what it is made of
+		{"dan", "dev", false}, {"dan", "product", false}, // disabled: in none
+		{"eve", "product", false}, {"eve", "company", false},
+		{"alice", "nobody-yet", false}, // an admin is in no group by being admin, and nobody is in this one
+	} {
+		if got := s.memberOf(c.user, c.group); got != c.want {
+			t.Errorf("memberOf(%s, %s) = %v", c.user, c.group, got)
+		}
+	}
+	if got := s.groups(); !slices.Equal(got, []string{"company", "design", "dev", "product", "sales"}) {
+		t.Errorf("groups %v", got)
+	}
+	if got := s.groupMembers("product"); !slices.Equal(got, []string{"alice", "bob", "carol"}) {
+		t.Errorf("members of product %v", got)
+	}
+	if got := s.groupMembers("nobody-yet"); got != nil {
+		t.Errorf("members of an empty group %v", got)
+	}
+	// The log says what changed.
+	old, _ := loadSettings(mustParse(t, user("alice", "groups = dev\n")+"[group product]\nincludes = dev\n[group old]\nincludes = dev\n"))
+	if got := settingsChange(old, s); !strings.Contains(got, "company includes nobody-yet, product") ||
+		!strings.Contains(got, "product includes design, dev") || !strings.Contains(got, "old includes no group") {
+		t.Errorf("the change's line: %s", got)
+	}
+	// What the file can't say: a group that includes itself, by whatever way
+	// round; a name that is no group's; a key a group doesn't have.
+	for more, want := range map[string]string{
+		"[group a]\nincludes = a\n":                                                      "line 4: [group a] includes itself.",
+		"[group a]\nincludes = b\n[group b]\nincludes = a\n":                             "line 4: [group a] includes itself, by way of b",
+		"[group a]\nincludes = x, b\n[group b]\nincludes = c\n[group c]\nincludes = a\n": "line 4: [group a] includes itself, by way of b, c",
+		"[group a]\nincludes = dev, Not_One\n":                                           "line 4: [group a] includes Not_One, which isn't a group's name",
+		"[group a]\nmembers = alice\n":                                                   "line 4: \"members\" isn't a group's setting",
+		"[group A B]\n":                                                                  "line 3: \"A B\" isn't a group's name",
+	} {
+		f, err := parseConfig(user("alice", "") + more)
+		if err == nil {
+			_, err = loadSettings(f)
+		}
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: %v, want %q", more, err, want)
+		}
+	}
+	// A group with a section and nothing in it is a group nobody is in.
+	if s := settingsOf(user("alice", "") + "[group a]\n"); s.Users == nil || s.memberOf("alice", "a") || !slices.Equal(s.groups(), []string{"a"}) {
+		t.Error("an empty section")
+	}
+}
+
+func mustParse(t *testing.T, text string) *settingsfile.File {
+	t.Helper()
+	f, err := parseConfig(text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return f
+}
+
+// zonewiki group includes NAME +dev -design, zonewiki group list.
+func TestGroupCommand(t *testing.T) {
+	wiki := t.TempDir()
+	env := map[string]string{"ZONE_DATA": wiki}
+	getenv := func(k string) string { return env[k] }
+	path := filepath.Join(wiki, ".zone", "config")
+	run := func(args ...string) (int, string, string) {
+		t.Helper()
+		var out, errs bytes.Buffer
+		code := groupMain(args, getenv, &out, &errs)
+		return code, out.String(), errs.String()
+	}
+	user := func(input string, args ...string) {
+		t.Helper()
+		var out, errs bytes.Buffer
+		if code := userMain(args, getenv, strings.NewReader(input), &out, &errs); code != 0 {
+			t.Fatalf("user %v: %s", args, errs.String())
+		}
+	}
+	if code, out, _ := run("list"); code != 0 || !strings.Contains(out, "No groups") {
+		t.Errorf("list without groups: %d %q", code, out)
+	}
+	user("pw\npw\n", "add", "alice")
+	user("pw\npw\n", "add", "bob")
+	user("pw\npw\n", "add", "carol")
+	user("", "group", "alice", "+dev")
+	user("", "group", "bob", "+design")
+	if code, out, errs := run("includes", "Product", "+dev", "+@design"); code != 0 || out != "product includes design, dev: alice, bob.\n" ||
+		!strings.Contains(readFile(t, path), "\n[group product]\nincludes = design, dev\n") {
+		t.Errorf("includes +: %d %q %q\n%s", code, out, errs, readFile(t, path))
+	}
+	if st, err := os.Stat(path); err != nil || st.Mode().Perm() != 0o600 {
+		t.Errorf("the file's mode: %v %v", st, err)
+	}
+	if code, out, _ := run("includes", "product"); code != 0 || out != "product includes design, dev: alice, bob.\n" {
+		t.Errorf("includes alone: %q", out)
+	}
+	if code, out, _ := run("includes", "dev"); code != 0 || out != "dev: alice.\n" {
+		t.Errorf("a plain group: %q", out)
+	}
+	if code, out, _ := run("includes", "nothing"); code != 0 || out != "nothing: nobody is in it.\n" {
+		t.Errorf("no group: %q", out)
+	}
+	if code, out, _ := run("list"); code != 0 || out != "  design: bob\n  dev: alice\n  product includes design, dev: alice, bob\n" {
+		t.Errorf("list: %q", out)
+	}
+	var out, errs bytes.Buffer
+	if userMain([]string{"list"}, getenv, strings.NewReader(""), &out, &errs); !strings.Contains(out.String(), "  bob (in design, product)\n") {
+		t.Errorf("user list: %q", out.String())
+	}
+	// A group that would include itself is refused, and the file stays.
+	before := readFile(t, path)
+	if code, _, errs := run("includes", "dev", "+product"); code != 1 || !strings.Contains(errs, "not changed") ||
+		!strings.Contains(errs, "includes itself") || readFile(t, path) != before {
+		t.Errorf("a round: %d %q", code, errs)
+	}
+	for _, bad := range [][]string{{"includes"}, {"includes", "+dev"}, {"includes", "product", "dev"}, {"includes", "product", "+Dev Ops"},
+		{"includes", "Pro duct", "+dev"}, {"list", "x"}, {"rename", "a", "b"}, {}} {
+		if code, _, _ := run(bad...); code == 0 || readFile(t, path) != before {
+			t.Errorf("%v went through", bad)
+		}
+	}
+	if code, out, _ := run("--help"); code != 0 || !strings.Contains(out, "includes NAME") {
+		t.Errorf("help: %d %q", code, out)
+	}
+	// Taking a group out says who is no longer in the larger one; the last
+	// one out takes the section with it.
+	if code, out, _ := run("includes", "product", "-design"); code != 0 ||
+		out != "product includes dev: alice.\nNo longer in product: bob. What is for @product they no longer see.\n" {
+		t.Errorf("includes -: %q", out)
+	}
+	if code, out, _ := run("includes", "product", "-dev"); code != 0 || !strings.HasPrefix(out, "product: nobody is in it.\nNo longer in product: alice.") ||
+		strings.Contains(readFile(t, path), "group") && strings.Contains(readFile(t, path), "[group") {
+		t.Errorf("the last one out: %q\n%s", out, readFile(t, path))
+	}
+}
+
 func TestUserLinks(t *testing.T) {
 	wiki := t.TempDir()
 	env := map[string]string{"ZONE_DATA": wiki}
@@ -593,15 +756,6 @@ func TestRolesInTheFile(t *testing.T) {
 	if got := settingsChange(old, now); got != "Change settings: disable a" {
 		t.Errorf("change: %q", got)
 	}
-}
-
-func mustParse(t *testing.T, text string) *settingsfile.File {
-	t.Helper()
-	f, err := parseConfig(text)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return f
 }
 
 func TestConfigCommands(t *testing.T) {

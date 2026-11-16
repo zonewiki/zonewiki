@@ -32,13 +32,18 @@ type User struct {
 	Disabled                     bool     // can't sign in; sessions and token refused
 	Pending                      bool     // made by sign-up, waiting for an admin's approval (Disabled too)
 	Email                        string   // their mail address, lowercase; "": none known
-	Groups                       []string // the groups they are in (groups = dev, hiring), A–Z
+	Groups                       []string // the groups their section names (groups = dev, hiring), A–Z
+	// In: every group they are in, A–Z: those their section names, and the
+	// groups made of those ([group product] includes = dev: joinGroups).
+	In []string
 }
 
-// Groups (docs/spec/users.md): who belongs together is said once, on the
-// users (groups in a user's section), for whatever is for some and not for
-// all: a task list for a group today. A group is its name; one nobody is in
-// has no members, and is no error.
+// Groups (docs/spec/users.md): who belongs together is said once, for
+// whatever is for some and not for all (a task list for a group, a group's
+// folder of pages): on the users (groups in a user's section), or by the
+// groups a group is made of ([group product] includes = dev, design: who is
+// in dev or in design is in product, and so on through what those include).
+// A group is its name; one nobody is in has no members, and is no error.
 var groupNameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,39}$`)
 
 // parseGroups: the groups a groups value names (commas or spaces between
@@ -58,23 +63,60 @@ func parseGroups(value string) (groups []string, bad string) {
 	return groups, ""
 }
 
-// memberOf: user is in group, and can use the wiki (not disabled).
+// memberOf: user is in group (named on them, or by way of a group it is
+// made of), and can use the wiki (not disabled).
 func (s *Settings) memberOf(user, group string) bool {
 	u := s.Users[user]
-	return u != nil && !u.Disabled && slices.Contains(u.Groups, group)
+	return u != nil && !u.Disabled && slices.Contains(u.In, group)
 }
 
-// groups: every group a user is in, A–Z.
-func (s *Settings) groups() []string {
-	var out []string
+// joinGroups works out, once for these settings, which groups each user is
+// in (User.In): canSee and a list's members ask for every page and task.
+func (s *Settings) joinGroups() {
+	// madeOf: the groups that include a group, directly.
+	madeOf := map[string][]string{}
+	for _, g := range sortedKeys(s.Includes) {
+		for _, in := range s.Includes[g] {
+			madeOf[in] = append(madeOf[in], g)
+		}
+	}
 	for _, u := range s.Users {
-		for _, g := range u.Groups {
+		in := slices.Clone(u.Groups)
+		for i := 0; i < len(in); i++ { // in grows while it is walked
+			for _, g := range madeOf[in[i]] {
+				if !slices.Contains(in, g) {
+					in = append(in, g)
+				}
+			}
+		}
+		slices.Sort(in)
+		u.In = in
+	}
+}
+
+// groups: every group there is, A–Z: those a user is in, and those the
+// settings file has a section for.
+func (s *Settings) groups() []string {
+	out := sortedKeys(s.Includes)
+	for _, u := range s.Users {
+		for _, g := range u.In {
 			if !slices.Contains(out, g) {
 				out = append(out, g)
 			}
 		}
 	}
 	slices.Sort(out)
+	return out
+}
+
+// groupMembers: the users in group who can use the wiki, A–Z.
+func (s *Settings) groupMembers(group string) []string {
+	var out []string
+	for _, name := range sortedKeys(s.Users) {
+		if s.memberOf(name, group) {
+			out = append(out, name)
+		}
+	}
 	return out
 }
 

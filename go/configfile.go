@@ -53,7 +53,13 @@ var userKeys = []string{"password", "mcp-token", "role", "disabled", "email", "p
 func knownKey(key string) bool { return slices.Contains(configKeys, key) }
 
 // settingsKeys: what the file may set (settingsfile.Parse).
-var settingsKeys = settingsfile.Keys{Top: configKeys, User: userKeys, UserName: userNameRE}
+// groupKeys: the keys of a [group …] section. One so far: a file from
+// before can't have meant anything by another (members, owners, readers are
+// what may come: docs/spec/users.md, Groups).
+var groupKeys = []string{"includes"}
+
+var settingsKeys = settingsfile.Keys{Top: configKeys, User: userKeys, UserName: userNameRE,
+	Group: groupKeys, GroupName: groupNameRE}
 
 // parseConfig reads the settings file's text (settingsfile.Parse).
 func parseConfig(text string) (*settingsfile.File, error) {
@@ -90,11 +96,12 @@ func warnReadable(path string) {
 // Settings: what the file sets, reloaded when it changes; settings() is
 // the current one.
 type Settings struct {
-	PasswordHash     string           // the login gate without users
-	MCPToken         string           // /mcp's token without users, as kept (tokenMatches); "": /mcp is off
-	Users            map[string]*User // users.go; nil: no users
-	BaseURL          string           // Zone's address as the user's browser knows it
-	QueryLog         bool             // keep search_wiki's queries in .zone/queries.jsonl
+	PasswordHash     string              // the login gate without users
+	MCPToken         string              // /mcp's token without users, as kept (tokenMatches); "": /mcp is off
+	Users            map[string]*User    // users.go; nil: no users
+	Includes         map[string][]string // the groups made of groups ([group product] includes = dev, design): what each includes, A–Z
+	BaseURL          string              // Zone's address as the user's browser knows it
+	QueryLog         bool                // keep search_wiki's queries in .zone/queries.jsonl
 	GitRemote        string
 	Hosts            map[string]bool // names besides localhost, without port, lowercase
 	NoshareTags      map[string]bool
@@ -260,6 +267,10 @@ func loadSettings(f *settingsfile.File) (*Settings, error) {
 	if s.Users, err = fileUsers(f); err != nil {
 		return nil, err
 	}
+	if s.Includes, err = fileGroups(f); err != nil {
+		return nil, err
+	}
+	s.joinGroups()
 	if s.Users != nil {
 		// With users each has their own password and token: a shared one
 		// would make the user unknown.
@@ -331,6 +342,58 @@ func fileUsers(f *settingsfile.File) (map[string]*User, error) {
 			Email: strings.ToLower(email.Value), Groups: groups}
 	}
 	return users, nil
+}
+
+// fileGroups: the file's [group …] sections: what each group includes
+// (nil without any). A group that includes itself, by whatever way round,
+// is an error naming the line: who is in it would have no answer.
+func fileGroups(f *settingsfile.File) (map[string][]string, error) {
+	if len(f.Groups) == 0 {
+		return nil, nil
+	}
+	includes := map[string][]string{}
+	for _, g := range f.Groups {
+		v := g.Values["includes"]
+		named, bad := parseGroups(v.Value)
+		if bad != "" {
+			return nil, lineError(v.Line, "[group %s] includes %s, which isn't a group's name: lowercase letters, "+
+				"digits and hyphens (includes = dev, design).", g.Name, bad)
+		}
+		includes[g.Name] = named
+	}
+	for _, g := range f.Groups {
+		if round := includesItself(includes, g.Name); round != nil {
+			line := g.Values["includes"].Line
+			if len(round) == 2 {
+				return nil, lineError(line, "[group %s] includes itself.", g.Name)
+			}
+			return nil, lineError(line, "[group %s] includes itself, by way of %s: a group is made of other groups.",
+				g.Name, strings.Join(round[1:len(round)-1], ", "))
+		}
+	}
+	return includes, nil
+}
+
+// includesItself: the way from group back to itself through what the groups
+// include (group, …, group), nil if there is none.
+func includesItself(includes map[string][]string, group string) []string {
+	seen := map[string]bool{}
+	var walk func(g string, way []string) []string
+	walk = func(g string, way []string) []string {
+		for _, in := range includes[g] {
+			if in == group {
+				return append(way, in)
+			}
+			if !seen[in] {
+				seen[in] = true
+				if round := walk(in, append(way, in)); round != nil {
+					return round
+				}
+			}
+		}
+		return nil
+	}
+	return walk(group, []string{group})
 }
 
 // MCP tokens: in the settings file only as "sha256:" and the token's
@@ -601,6 +664,20 @@ func settingsChange(old, s *Settings) string {
 				changes = append(changes, "disable "+name)
 			default:
 				changes = append(changes, "enable "+name)
+			}
+		}
+	}
+	for _, g := range sortedKeys(old.Includes) {
+		if _, still := s.Includes[g]; !still && len(old.Includes[g]) > 0 {
+			changes = append(changes, g+" includes no group")
+		}
+	}
+	for _, g := range sortedKeys(s.Includes) {
+		if now := s.Includes[g]; !slices.Equal(old.Includes[g], now) {
+			if len(now) == 0 {
+				changes = append(changes, g+" includes no group")
+			} else {
+				changes = append(changes, g+" includes "+strings.Join(now, ", "))
 			}
 		}
 	}

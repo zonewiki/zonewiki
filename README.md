@@ -261,6 +261,7 @@ away, which Zone takes only at one). Set them with `run.sh`, or edit the file:
 |---------|------|
 | `password` | A login gate (`./run.sh config passwd`). Sessions survive restarts: Zone keeps its own key in `.zone/` (never in git) |
 | `[user NAME]` | Several users instead of one password, each with a `password`, maybe an `mcp-token`, a `role` (admin, editor, viewer) and `disabled` (`./run.sh user …`, or the admin page); changes are committed in their name (see [`docs/spec/users.md`](docs/spec/users.md)) |
+| `[group NAME]` | A group made of other groups: `includes = dev, design` puts whoever is in one of them in it, for a task list two teams share (`./run.sh group includes NAME +dev`) |
 | `mcp-token` | Turns on `/mcp` (`./run.sh config token`; see [Connect an AI assistant](#connect-an-ai-assistant)) |
 | `hosts` | Names Zone may be reached by besides localhost, e.g. `wiki.example.org` behind a reverse proxy (see Security) |
 | `base-url` | Zone's address as your browser knows it, for links handed to AI clients |
@@ -490,6 +491,7 @@ files that any editor opens, with their history in git.
 ./run.sh screenshots   # redo the screenshots above (docs/screenshots/)
 ./run.sh eval     # measure how well search finds answers in your wiki
 ./run.sh user …        # the users in the settings file (add, passwd, token, remove, list)
+./run.sh group …       # groups made of groups (includes, list)
 ./run.sh config …      # the settings file (check, set, unset, passwd, token, import)
 ```
 

@@ -838,7 +838,7 @@ Among a hundred people a list isn't everyone's to rename or delete, as it was un
 A list from before owners has none: it is the admins' ("#old is changed by an admin of this wiki …").
 A private list is its user's. Without users, and in a wiki that has no admin (from before roles), whoever may write manages, as before.
 
-**Lists for some** (with users): a shared list is for everyone, or for the groups and users it names, its **members** (`"for": ["@hiring", "anna"]` in its entry: `@name` a group, Groups in `docs/spec/users.md`; a bare name a user; `List.For`, `ListInfo.For`, `listMember` in `go/access.go`).
+**Lists for some** (with users): a shared list is for everyone, or for the groups and users it names, its **members** (`"for": ["@hiring", "anna"]` in its entry: `@name` a group, which may be one made of other groups, `@product` for who is in dev or in design (Groups in `docs/spec/users.md`); a bare name a user; `List.For`, `ListInfo.For`, `listMember` in `go/access.go`).
 
 - **Members see the list and its tasks, and change them. To anyone else it is no list**, as another user's private list is: no pill, no entry under More, no task of it in All tasks, My tasks, a tag's view, the counts, search, Linked tasks, a `[[task:…]]` chip, an export, the history, or an assistant's answers; its address (`/tasks?list=<name>`) and an embed of it say what they say of a name no list has, and a write that names it or one of its tasks finds nothing.
   An admin is no member by being admin, as an admin sees no private page; they can put themselves in a group, which the settings' log shows.

@@ -10,6 +10,7 @@ the group; bob is an editor and dana an admin, neither of them a member."""
 import json
 import re
 import subprocess
+import time
 
 import pytest
 
@@ -495,3 +496,42 @@ def test_a_follower_who_no_longer_sees_the_list_is_told_nothing(client, wiki):
     client.post("/tasks/list-for", data={"list": "team", "for": "alice, bob, carol", "confirm": "1"}, headers=HOST)
     sign_in(client, "bob")
     assert count() == 1                                                         # the comment made meanwhile
+
+
+def test_a_list_for_a_group_made_of_groups(client, wiki, monkeypatch):
+    """A group can be made of groups ([group product] includes = dev, design:
+    Groups in docs/spec/users.md): a list for @product is for who is in dev or
+    in design, with nobody named twice; a group taken out of it takes the
+    list from its people at their next request."""
+    config = wiki / ".zone" / "config"
+    text = config.read_text().replace("[user bob]\n", "[user bob]\ngroups = dev\n")
+    config.write_text(text + "\n[group product]\nincludes = dev, design\n")
+    sign_in(client, "alice")
+    client.post("/tasks/list-for", data={"list": LIST, "for": "@product alice", "confirm": "1"}, headers=HOST)
+    assert json.loads((wiki / f"_tasks/lists/{LIST}/list.json").read_text())["for"] == ["@product", "alice"]
+    sign_in(client, "bob")              # in dev, so in product
+    for _ in range(50):       # the settings are taken within the second
+        if SECRET in client.get("/api/tasks", headers=HOST).get_data(as_text=True):
+            break
+        time.sleep(0.1)
+    assert SECRET in client.get("/api/tasks", headers=HOST).get_data(as_text=True)
+    assert "Offer for the" in client.get("/search", query_string={"q": SECRET}, headers=HOST).get_data(as_text=True)
+    assert SECRET in mcp(client, "bob", "search_tasks", list=LIST)
+    task = next(t for t in client.get("/api/tasks", query_string={"list": LIST}, headers=HOST).get_json() if "Offer" in t["title"])
+    assert client.put(f"/api/tasks/{task['id']}", json={"assignee": "bob"}, headers=HOST).status_code == 200   # a member: can be given it
+    sign_in(client, "carol")            # named on the list before, in neither group now
+    assert SECRET not in client.get("/api/tasks", headers=HOST).get_data(as_text=True)
+    sign_in(client, "dana")             # an admin is in no group by being admin
+    assert SECRET not in client.get("/api/tasks", headers=HOST).get_data(as_text=True)
+    # dev taken out of product: bob no longer sees the list, and his task there is no one's.
+    config.write_text(config.read_text().replace("includes = dev, design", "includes = design"))
+    sign_in(client, "bob")
+    for _ in range(50):
+        if SECRET not in client.get("/api/tasks", headers=HOST).get_data(as_text=True):
+            break
+        time.sleep(0.1)
+    assert SECRET not in client.get("/api/tasks", headers=HOST).get_data(as_text=True)
+    assert "Offer for the" not in client.get("/search", query_string={"q": SECRET}, headers=HOST).get_data(as_text=True)
+    assert SECRET not in mcp(client, "bob", "search_tasks", list=LIST)
+    sign_in(client, "alice")
+    assert f"Offer for the {SECRET}" in mcp(client, "alice", "search_tasks", assignee="none", list=LIST)

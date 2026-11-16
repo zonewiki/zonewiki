@@ -249,8 +249,8 @@ case "${1:-up}" in
       -e "ZONE_SEMANTIC_SEARCH=$semantic" -- \
       /app/zonewiki eval "/wiki-data/$file" "${@:3}"
     ;;
-  user|config)
-    # The settings file's commands (zonewiki user …, zonewiki config …; see
+  user|group|config)
+    # The settings file's commands (zonewiki user …, zonewiki group …, zonewiki config …; see
     # docs/spec/users.md), in a one-off container of the app's image, with
     # .env and the wiki as up gives them, so the file is written as Zone's
     # user and import sees .env. A running Zone takes the change itself.
@@ -275,7 +275,7 @@ case "${1:-up}" in
     compose run --rm --no-deps "${tty[@]}" zonewiki /app/zonewiki "$@"
     ;;
   *)
-    echo "Usage: $0 [build|up|down|logs|test|e2e|bench|leaks|screenshots|eval|user|config]"
+    echo "Usage: $0 [build|up|down|logs|test|e2e|bench|leaks|screenshots|eval|user|group|config]"
     echo "  build  - build the container image only"
     echo "  up     - build and start Zone (default)"
     echo "  down   - stop Zone"
@@ -287,6 +287,7 @@ case "${1:-up}" in
     echo "  screenshots - redo the README's screenshots (docs/screenshots/)"
     echo "  eval [FILE] - measure search on your wiki against questions in FILE (in the wiki)"
     echo "  user add|passwd|token|role|group|disable|enable|remove NAME, user list - the users in the wiki's settings file"
+    echo "  group includes NAME [+G] [-G], group list - groups made of groups, in the wiki's settings file"
     echo "  config check|set|unset|passwd|token - the wiki's settings file: check it, set a key, the password"
     echo "                and MCP token without users"
     exit 1

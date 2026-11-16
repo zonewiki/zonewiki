@@ -48,6 +48,7 @@
         <input type="text" name="groups" value="{{.Groups}}" aria-label="Groups of {{.Name}}" placeholder="none" list="user-groups" autocomplete="off" spellcheck="false" size="12">
         <button type="submit" class="btn">Set</button>
       </form>
+      {{- with .Also}}<span class="user-also" title="By way of a group they are in (Groups, below)">also in {{.}}</span>{{end}}
     </td>
     <td>{{if .Pending}}Waiting for approval{{else if .Disabled}}Disabled{{else}}Active{{end}}
       {{- /* Tasks still assigned to someone who can't be given any: to hand on. */}}
@@ -76,6 +77,36 @@
   {{- end}}
   </tbody>
 </table>
+<h2 id="groups">Groups</h2>
+{{- /* A group made of groups (docs/spec/users.md, Groups): who is in dev or
+    in design is in product. What is for a group (a task list, a folder of
+    pages) is for whoever is in it, by whatever way. */}}
+{{- if .GroupRows}}
+<table class="users-table groups-table">
+  <thead><tr><th>Group</th><th>Who is in it</th><th>Includes</th></tr></thead>
+  <tbody>
+  {{- range .GroupRows}}
+  <tr>
+    <td class="user-name">{{.Name}}</td>
+    <td>{{range $i, $m := .Members}}{{if $i}}, {{end}}{{$m}}{{else}}<span class="user-you">nobody</span>{{end}}</td>
+    <td>
+      <form method="post" action="/admin/groups/includes" class="user-role-form user-groups-form">
+        <input type="hidden" name="group" value="{{.Name}}">
+        <input type="text" name="includes" value="{{.Includes}}" aria-label="Groups that {{.Name}} includes" placeholder="none" list="user-groups" autocomplete="off" spellcheck="false" size="16">
+        <button type="submit" class="btn">Set</button>
+      </form>
+    </td>
+  </tr>
+  {{- end}}
+  </tbody>
+</table>
+{{- end}}
+<form method="post" action="/admin/groups/includes" class="users-invite groups-new">
+  <input type="text" name="group" placeholder="Group" required pattern="@?[a-z0-9][a-z0-9-]*" title="Lowercase letters, digits and hyphens" autocapitalize="none" autocorrect="off" spellcheck="false" aria-label="Group">
+  <input type="text" name="includes" placeholder="includes: dev, design" required list="user-groups" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="The groups it includes">
+  <button type="submit" class="btn">Make a group of groups</button>
+</form>
+<p class="users-help">A user is put in a group in the list above. A group can also be made of other groups: whoever is in one of them is in it, so a task list for two teams is for one group, and who joins a team later is in it at once. Taking a group out takes what is for the larger group from its people.</p>
 <h2>Invite someone</h2>
 <form method="post" action="/admin/users/invite" class="users-invite">
   <input type="text" name="name" placeholder="User name" required pattern="[a-z0-9]+(-[a-z0-9]+)*" title="Lowercase letters, digits and hyphens" autocapitalize="none" autocorrect="off" spellcheck="false" aria-label="User name">

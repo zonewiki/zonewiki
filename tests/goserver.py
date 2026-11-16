@@ -97,6 +97,8 @@ def config_text() -> str:
             text += f"mcp-token = {token_hash(token)}\n"
         for key, value in settings.USER_SETTINGS.get(name, {}).items():
             text += f"{key} = {value}\n"
+    for group, includes in settings.GROUPS.items():
+        text += f"\n[group {group}]\nincludes = {includes}\n"
     return text
 
 

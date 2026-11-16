@@ -61,7 +61,7 @@ class TestWhoSeesIt:
         assert resp.status_code == 302 and resp.headers["Location"] == "/admin/users"
 
     @pytest.mark.parametrize("path", ["/admin/users/bob/role", "/admin/users/bob/disable", "/admin/users/bob/enable",
-                                      "/admin/users/bob/remove", "/admin/users/bob/groups"])
+                                      "/admin/users/bob/remove", "/admin/users/bob/groups", "/admin/groups/includes"])
     def test_anyone_else_gets_a_404_and_nothing_changes(self, client, users, git_wiki_dir, path):
         login(client, "bob")
         before = config(git_wiki_dir)
@@ -110,6 +110,47 @@ class TestChanges:
         resp = post(admin, "/admin/users/bob/groups", groups="")
         assert "groups" not in section(git_wiki_dir, "bob")
         assert "bob is in no group now." in admin.get(resp.headers["Location"], headers=HOST).data.decode()
+
+    def test_a_group_made_of_groups(self, admin, client, git_wiki_dir):
+        # Groups, below the users: a group can be made of other groups, and
+        # who is in one of them is in it (docs/spec/users.md, Groups).
+        post(admin, "/admin/users/bob/groups", groups="dev")
+        post(admin, "/admin/users/carol/groups", groups="design")
+        resp = post(admin, "/admin/groups/includes", group="@Product", includes="Dev, @design")
+        assert resp.status_code == 303 and resp.headers["Location"].startswith("/admin/users?done=includes&group=product")
+        assert "\n[group product]\nincludes = design, dev\n" in config(git_wiki_dir)
+        assert oct((git_wiki_dir / ".zone" / "config").stat().st_mode & 0o777) == "0o600"
+        page = admin.get(resp.headers["Location"], headers=HOST).data.decode()
+        assert "product includes design, dev: bob, carol." in page
+        assert 'name="includes" value="design, dev" aria-label="Groups that product includes"' in page
+        row = re.search(r'<td class="user-name">product</td>\s*<td>(.*?)</td>', page, re.S).group(1)
+        assert row == "bob, carol"
+        assert '<span class="user-also" title="By way of a group they are in (Groups, below)">also in product</span>' in page
+        assert '<option value="product">' in page                      # the fields complete it too
+        for _ in range(50):
+            if "product includes design, dev (by alice)" in client.live.log.read_text():
+                break
+            time.sleep(.05)
+        assert "Change settings: product includes design, dev (by alice)" in client.live.log.read_text()
+        # What the file can't say is refused, and nothing changes.
+        before = config(git_wiki_dir)
+        for data, why in (({"group": "dev", "includes": "product"}, "includes itself"),
+                          ({"group": "product", "includes": "dev ops!"}, "isn&#39;t a group&#39;s name"),
+                          ({"group": "Pro duct", "includes": "dev"}, "isn&#39;t a group&#39;s name"),
+                          ({"group": "", "includes": "dev"}, "isn&#39;t a group&#39;s name")):
+            resp = post(admin, "/admin/groups/includes", **data)
+            assert resp.status_code == 409 and why in resp.data.decode(), data
+            assert config(git_wiki_dir) == before
+        # Taking a group out says whom that takes the larger group from; with
+        # nothing left the section goes.
+        resp = post(admin, "/admin/groups/includes", group="product", includes="dev")
+        page = admin.get(resp.headers["Location"], headers=HOST).data.decode()
+        assert "product includes dev: bob. No longer in it: carol. What is for @product they no longer see." in page
+        page = admin.get("/admin/users?done=includes&group=product&left=mallory,carol", headers=HOST).data.decode()
+        assert "No longer in it: carol." in page and "mallory" not in page    # only users' names
+        resp = post(admin, "/admin/groups/includes", group="product", includes="")
+        assert "[group" not in config(git_wiki_dir)
+        assert "product: nobody is in it. No longer in it: bob." in admin.get(resp.headers["Location"], headers=HOST).data.decode()
 
     def test_disable_and_enable(self, admin, client, git_wiki_dir):
         assert post(admin, "/admin/users/bob/disable").status_code == 303

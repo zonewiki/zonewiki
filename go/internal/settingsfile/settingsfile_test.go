@@ -9,7 +9,8 @@ import (
 )
 
 var testKeys = Keys{Top: []string{"locale", "noshare", "hosts"}, User: []string{"password", "mcp-token"},
-	UserName: regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)}
+	UserName: regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`),
+	Group:    []string{"includes"}, GroupName: regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,39}$`)}
 
 func parse(text string) (*File, error) { return Parse("config", text, testKeys) }
 
@@ -28,7 +29,12 @@ func TestParseConfig(t *testing.T) {
 	}
 	for text, want := range map[string]string{
 		"locale = de\npasword = x":           "line 2: \"pasword\" isn't a setting",
-		"[group admins]":                     "line 1: [group admins] isn't a section",
+		"[team admins]":                      "line 1: [team admins] isn't a section",
+		"[group Admins]":                     "line 1: \"Admins\" isn't a group's name",
+		"[group a]\n[group a]":               "line 2: [group a] is there twice (line 1)",
+		"[group a]\nmembers = x":             "line 2: \"members\" isn't a group's setting. A group has includes",
+		"[user a]\n[group a]\npassword = x":  "line 3: \"password\" isn't a group's setting",
+		"[group a]\n[user a]\nincludes = x":  "line 3: \"includes\" isn't a user's setting",
 		"[user Alice]":                       "line 1: \"Alice\" isn't a user name",
 		"[user]":                             "line 1: \"\" isn't a user name",
 		"[user a]\n[user a]":                 "line 2: [user a] is there twice (line 1)",
@@ -103,5 +109,36 @@ func TestWriteConfig(t *testing.T) {
 	entries, _ := os.ReadDir(filepath.Dir(path))
 	if st.Mode().Perm() != 0o600 || string(b) != "locale = en\n" || len(entries) != 1 {
 		t.Errorf("%o %q %d files", st.Mode().Perm(), b, len(entries))
+	}
+}
+
+// A [group NAME] section: read beside the users, and edited as a user's is,
+// keeping the comments and the lines an edit doesn't change.
+func TestGroupSections(t *testing.T) {
+	f, err := parse("locale = de\n\n[user alice]\npassword = h\n\n# Two teams\n[group product]\nincludes = dev, design\n\n[user bob]\npassword = h\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Groups) != 1 || f.Group("product") == nil || f.Group("product").Values["includes"] != (Value{"dev, design", 8}) ||
+		f.Group("dev") != nil || len(f.Users) != 2 {
+		t.Fatalf("groups %+v users %+v", f.Groups, f.Users)
+	}
+	// A group and a user of one name are two sections.
+	f.Set("product", "password", "p")
+	f.SetGroup("product", "includes", "dev")
+	f.SetGroup("all", "includes", "product")
+	want := "locale = de\n\n[user alice]\npassword = h\n\n# Two teams\n[group product]\nincludes = dev\n\n[user bob]\npassword = h\n\n" +
+		"[user product]\npassword = p\n\n[group all]\nincludes = product\n"
+	if f.Text() != want {
+		t.Errorf("set:\n%s", f.Text())
+	}
+	if _, err := parse(f.Text()); err != nil {
+		t.Errorf("what the edits wrote: %v", err)
+	}
+	f.RemoveGroup("product") // with the comment about it; the user of that name stays
+	f.RemoveGroup("none")
+	want = "locale = de\n\n[user alice]\npassword = h\n\n[user bob]\npassword = h\n\n[user product]\npassword = p\n\n[group all]\nincludes = product\n"
+	if f.Text() != want {
+		t.Errorf("remove:\n%s", f.Text())
 	}
 }

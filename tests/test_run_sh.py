@@ -315,13 +315,13 @@ def test_eval_mounts_the_wiki_read_only_and_builds_with_the_model(sandbox, tmp_p
 
 
 def test_user_and_config_run_zonewiki_in_a_one_off_container(sandbox, tmp_path):
-    """./run.sh user …/config … run the binary through compose, with .env
+    """./run.sh user …/group …/config … run the binary through compose, with .env
     and the wiki as up has them; -T when stdin isn't a terminal."""
     repo, env, log = sandbox
     wiki = tmp_path / "wiki"
     wiki.mkdir()
     (repo / ".env").write_text(f"ZONE_DATA={wiki}\n")
-    for args in (["user", "add", "alice", "--mcp-token"], ["config", "check"]):
+    for args in (["user", "add", "alice", "--mcp-token"], ["group", "list"], ["config", "check"]):
         r = subprocess.run(["./run.sh", *args], cwd=repo, env=env, capture_output=True, text=True,
                            stdin=subprocess.DEVNULL)
         assert r.returncode == 0, r.stderr

@@ -167,6 +167,7 @@ WRITES = [
     ("POST /api/upload", "POST", "/api/upload", {"data": lambda: {"file": (BytesIO(b"c"), "c.png"), "page": "{note}"}}),
     ("POST /admin/users/{name}/role", "POST", "/admin/users/carol/role", {"data": {"role": "admin"}}),
     ("POST /admin/users/{name}/groups", "POST", "/admin/users/carol/groups", {"data": {"groups": "dev"}}),
+    ("POST /admin/groups/includes", "POST", "/admin/groups/includes", {"data": {"group": "product", "includes": "dev"}}),
     ("POST /admin/users/invite", "POST", "/admin/users/invite", {"data": {"name": "dave", "role": "admin"}}),
 ]
 

@@ -25,7 +25,7 @@ In a public wiki (`ZONE_PUBLIC`; Public wikis in `docs/spec/security.md`) a visi
 | POST   | `/oauth/register`, `/oauth/token` | An MCP client registers, and turns a code or a refresh token into tokens (no login, any origin) |
 | GET, POST | `/oauth/authorize`       | An assistant asks to connect: whoever is signed in allows it, with their password, or denies it |
 | GET, POST | `/password`              | Change password: whoever is signed in sets a new one (without users, the wiki's), with the one they have (Signing in in `docs/spec/users.md`); 404 without a login |
-| POST   | `/admin/users/<name>/role`, `/disable`, `/enable`, `/remove`, `/reset`, `/revoke`; `/admin/users/invite` | The Users tab's changes, admins only (404 for anyone else) |
+| POST   | `/admin/users/<name>/role`, `/groups`, `/disable`, `/enable`, `/remove`, `/reset`, `/revoke`; `/admin/users/invite`; `/admin/groups/includes` | The Users tab's changes, admins only (404 for anyone else) |
 | GET/POST | `/welcome/<token>`  | An invite or reset link's page: choose a password, once (no login needed) |
 | GET    | `/search?q=...`       | Full-text search results page (up to 50, with a count; `&unlinked=1` as for the API) |
 | GET    | `/api/search?q=...`   | JSON search results (used by the search UI); `&unlinked=1`: only pages nothing links to, no tasks; `&notes=1`: only notes (Notes page's filter; then `limit` goes up to 1000); `&limit=N` (default 15, max 100) |

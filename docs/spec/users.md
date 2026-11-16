@@ -42,7 +42,11 @@ role = admin
 
 [user bob]
 password = pbkdf2-sha256:600000:<salt>:<hash>
+groups = dev
 disabled = yes
+
+[group product]
+includes = dev, design
 ```
 
 | Key | Does | Default |
@@ -67,7 +71,8 @@ disabled = yes
 | `signup-role` | The role an account made by sign-up gets: `viewer` or `editor` (never `admin`) | `viewer` |
 | `signup-approval` | `yes`: an account made by sign-up can't sign in until an admin approves it | no |
 
-- **Format**: `key = value` (spaces optional), the wiki's settings before the first section, a `[user NAME]` section per user with `password`, `mcp-token`, `role`, `disabled`, `email` and `pending` (`configKeys`, `userKeys`; Roles and Sign-up, below).
+- **Format**: `key = value` (spaces optional), the wiki's settings before the first section, a `[user NAME]` section per user with `password`, `mcp-token`, `role`, `groups`, `disabled`, `email` and `pending` (`configKeys`, `userKeys`; Roles and Sign-up, below),
+  and a `[group NAME]` section for a group made of other groups, with `includes` (`groupKeys`; Groups, below).
   `#` starts a comment only at the start of a line, so `noshare = #noshare` is a value.
 - **Sizes** (`upload-max`, `storage-max`; `parseSize` in `go/storage.go`): bytes (`300`), or a number with KB, MB, GB or TB, any case, a space optional, decimals too (`1.5GB`).
   They count by 1024, as Zone's caps always have (100 MB is 100 × 1024 × 1024 bytes).
@@ -84,8 +89,9 @@ disabled = yes
 - **Errors name their line** (`.zone/config line 3: "pasword" isn't a setting Zone knows.`),
   and Zone won't start on one: a key it doesn't know (a typo shouldn't leave Zone on a default),
   a value that doesn't check (`localeRE`, `parseNoshare` …; `query-log` takes yes/no, 1/0, true/false),
-  a section other than `[user NAME]`,
+  a section other than `[user NAME]` and `[group NAME]`,
   a user's key outside a section or the wiki's inside one,
+  a group that includes itself,
   a key or a section given twice,
   a line that isn't `key = value`,
   `password` or `mcp-token` of the wiki together with users (each has their own; a shared one would make the user unknown).
@@ -145,6 +151,8 @@ The file can be edited by hand, or with the commands; a running Zone takes each 
 ./run.sh user add carol --role viewer   # admin, editor (the default) or viewer; the first user is an admin
 ./run.sh user role carol editor        # change a role
 ./run.sh user group carol +dev -hiring # put her in the group dev, take her out of hiring; alone: her groups
+./run.sh group includes product +dev +design  # a group made of groups: who is in dev or design is in product; -dev takes one out
+./run.sh group list                    # the groups: what each includes, and who is in it
 ./run.sh user disable bob              # he can't sign in, his token stops; user enable bob undoes it
 ./run.sh user remove bob               # his private pages and tasks stay on disk
 ./run.sh user remove alice --password  # the last user: the wiki's password instead (or --open: no login)
@@ -156,7 +164,7 @@ The file can be edited by hand, or with the commands; a running Zone takes each 
 ./run.sh config check                  # what's wrong, or each setting in effect and where it comes from
 ```
 
-- Without the container it is `zonewiki user …`, `zonewiki config …` with `ZONE_DATA` set (`go/commands.go`: `userMain`, `configMain`); on a NAS, through the container: `docker compose -f compose.nas.yaml run --rm zonewiki /app/zonewiki user add alice`.
+- Without the container it is `zonewiki user …`, `zonewiki group …`, `zonewiki config …` with `ZONE_DATA` set (`go/commands.go`: `userMain`, `groupMain`, `configMain`); on a NAS, through the container: `docker compose -f compose.nas.yaml run --rm zonewiki /app/zonewiki user add alice`.
   `run.sh` runs the binary in a one-off container of the app's image (`compose build -q zonewiki`, its output only on failure, then `compose run --rm --no-deps zonewiki /app/zonewiki …`), with `.env` and the wiki mounted as `up` has them, so the file is written as Zone's user;
   the password prompt's echo is off (`echoOff`, the container has a terminal; `-T` when stdin isn't one).
 - They refuse a change Zone wouldn't start with ("not changed: …", the file as it was): a user who is there already (add) or isn't (the others),
@@ -236,14 +244,36 @@ Each user has a role, `role` in their section (`roles`, `User.Role` in `go/users
 
 ### Groups
 
-**Who belongs together is said once, on the users**: `groups = dev, hiring` in a user's section (`User.Groups`, `parseGroups` in `go/users.go`; commas or spaces between them, a leading `@` allowed, written A–Z).
+**Who belongs together is said once**: on the users, or by the groups a group is made of.
+
+`groups = dev, hiring` in a user's section puts them in groups (`User.Groups`, `parseGroups` in `go/users.go`; commas or spaces between them, a leading `@` allowed, written A–Z).
 A group is its name (lowercase letters, digits, hyphens; `groupNameRE`): there is no list of groups to keep, a group exists while someone is in it (`Settings.groups`), and one nobody is in has no members, which is no error.
 A name that is none is an error of the settings file, which then keeps the settings from before.
 
 - **Set them** with `zonewiki user group NAME +dev -hiring` (alone it says which groups the user is in; `user list` names them: `bob (in dev, hiring)`), in the Users tab's **Groups** field (below), or by hand in the file.
 - **What a group is for**: what is for some and not for all. `memberOf(user, group)` asks; a disabled user is a member of none.
-  A task list can be for groups (`"for": ["@hiring"]`: Lists for some, in `docs/spec/tasks.md`), and a user put in a group or taken out sees its lists, or no longer, at their next request; page folders for a group are a plan of their own.
+  A task list can be for groups (`"for": ["@hiring"]`: Lists for some, in `docs/spec/tasks.md`), and a user put in a group or taken out sees its lists, or no longer, at their next request.
 - **A role is not a group**: an admin is in no group by being admin, and sees nothing of a group they are not in. They may put themselves in one, which the log of the settings shows ("alice's groups").
+
+**A group made of groups**: when two teams share something, don't name everyone twice. Give the larger group a section that says which groups it is made of:
+
+```ini
+[group product]
+includes = dev, design
+```
+
+Whoever is in `dev` or in `design` is in `product`, at once and for as long as they are, so someone who joins `dev` next month has what is for `@product` without anyone thinking of it.
+A list for both teams is then for one group (`"for": ["@product"]`).
+
+- **It goes through**: `company` may include `product`, and whoever is in `dev` is in all three. Who has `product` named on them (`groups = product`) is in it as before, and not thereby in `dev`.
+- **A group that includes itself**, directly or by way of others, is an error of the file naming its line ("[group a] includes itself, by way of b"; `includesItself` in `go/configfile.go`), as is a name in `includes` that is no group's.
+  A name nobody is in is none: a group made of empty groups has no members.
+- **The section has the one key `includes`** (`groupKeys`), and any other is an error. A group without a section is its name on users, as above.
+- **Set it** with `zonewiki group includes product +dev +design` (`-dev` takes one out; alone it says what the group includes and who is in it now; `zonewiki group list` says it of every group: `product includes design, dev: alice, bob`; `groupMain` in `go/commands.go`), in the Users tab's **Groups** part (Managing users, below), or by hand in the file.
+  Taking the last group out removes the section. The settings' log says it ("product includes design, dev").
+- **Taking a group out is a narrowing**, like taking a user out of a group: its people no longer see what is for the larger group at their next request, and their tasks in its lists count as no one's (Lists for some in `docs/spec/tasks.md`).
+  The command and the page say who that was ("No longer in product: bob. What is for @product they no longer see."); putting the group back gives it all back.
+- **How it is kept**: `Settings.Includes` is what each section says; `joinGroups` works out once, when the settings are read, every group each user is in (`User.In`), and `memberOf` looks there, so asking costs what it did.
 
 ### Viewers
 
@@ -305,12 +335,17 @@ It has section tabs (`adminTabs`), of which **Users** (`/admin/users`, `users.ht
   Then the invite form, the open links (Invite and reset links, below) and what the roles mean.
 - **Per user**: change their role (a select and Change),
   set their **groups** (a field with the groups as the file writes them, `dev, hiring`, completing from the groups there are; **Set**; empty takes them out of every group; `POST /admin/users/{name}/groups`, `userGroupsRoute`; a name that is no group's is refused and nothing changes),
+  below the field, "also in product" names the groups they are in by way of those (`userRow.Also`);
   **Disable** or **Enable**,
   **Reset password** (makes a link),
   **Remove…** (a dialog that says what happens, as deleting a page does, then **Remove NAME**;
   `js/admin.js` opens it with what the row's `<details>` holds, and without JavaScript the `<details>` unfolds instead: their private pages, notes and tasks stay in `private/NAME/`, seen by no one, and someone added again under that name gets them back;
   an open link of theirs goes too).
   There is no field to type another user's password: the admin never knows it.
+- **Groups** (below the users, `#groups`): every group there is, who is in it now, and a field with the groups it includes (`dev, design`; **Set**; empty: none, and the section goes).
+  **Make a group of groups** below it takes a new group's name and what it includes.
+  Both are `POST /admin/groups/includes` (`group`, `includes`; `groupIncludesRoute`): a group that would include itself, or a name that is no group's, is refused and nothing changes.
+  Done, the page says who is in the group now, and who no longer is (`?done=includes&group=…&left=…`, of which it says only users' names).
 - **Not yourself**: the admin's own row ("(you)") has no Disable or Remove…, and a POST that disables or removes the admin themselves is refused ("you can't … yourself here. Another admin can.").
   A slip there would lock them out of the wiki, and it would only be allowed with another admin left, who can do it.
   They can still change their own role, to step down while another admin remains.
