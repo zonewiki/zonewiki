@@ -29,8 +29,7 @@ func isQuicknote(slug string) bool {
 	if !strings.HasPrefix(slug, privateDir+"/") {
 		return true
 	}
-	owner, _ := pageOwner(slug)
-	return owner != ""
+	return placeOf(slug).user() != ""
 }
 
 // noteDate: the day a note was created (YYYY-MM-DD).

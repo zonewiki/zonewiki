@@ -51,15 +51,15 @@ func wikilinker(rq *Req, slugs map[string]bool, from string) func(inner string) 
 			return `<span class="wikilink-hidden">`, label, `</span>`
 		}
 		css, query, title := "wikilink", "", ""
-		_, targetPrivate := pageOwner(slug)
-		_, fromPrivate := pageOwner(from)
+		target, source := placeOf(slug), placeOf(from)
 		if !slugs[slug] {
 			css += " wikilink-missing"
-			if from != "" && fromPrivate && !targetPrivate {
+			if from != "" && !source.shared() && target.shared() {
 				css += " wikilink-shared-new"
 				query, title = "?from=private", ` title="Creates a shared page"`
 			}
-		} else if from != "" && !fromPrivate && targetPrivate {
+		} else if from != "" && !source.within(target) {
+			// Not every reader of this page sees the target: marked for who does.
 			css += " wikilink-private"
 			title = ` title="Links to a private page: others see plain text"`
 		}

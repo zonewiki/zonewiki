@@ -970,10 +970,7 @@ const sharedStaysShared = "it is shared, and others have seen it: a shared page 
 func sharedIntoPrivate(moves map[string]string) []string {
 	var out []string
 	for _, o := range sortedKeys(moves) {
-		if _, wasPrivate := pageOwner(o); wasPrivate {
-			continue
-		}
-		if _, nowPrivate := pageOwner(moves[o]); nowPrivate {
+		if placeOf(o).shared() && !placeOf(moves[o]).shared() {
 			out = append(out, o)
 		}
 	}

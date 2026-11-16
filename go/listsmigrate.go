@@ -234,7 +234,7 @@ func migrateListsLocked() error {
 	var pinPages []PageFile
 	pages := sortedPages()
 	for _, p := range pages {
-		o, private := pageOwner(p.Slug)
+		o, private := placeOf(p.Slug).user(), !placeOf(p.Slug).shared()
 		if private && (o == "" || regs[o] == nil) {
 			continue // a folder in private/ that is no user's
 		}
@@ -430,7 +430,7 @@ func migrateListsLocked() error {
 	newText := map[string]string{}
 	var pagePaths []string
 	for _, p := range pages {
-		o, private := pageOwner(p.Slug)
+		o, private := placeOf(p.Slug).user(), !placeOf(p.Slug).shared()
 		if private && (o == "" || regs[o] == nil) {
 			continue
 		}

@@ -221,9 +221,8 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 		article = htmlOf(renderMd(rq, mdtext.StripH1(content), RenderOpts{Page: slug, HideTags: true, HideTldr: true,
 			EditSlug: slug, SectionKeys: sectionKeys(content, headings), SectionTasks: tasks}))
 	}
-	_, private := pageOwner(slug)
 	page(w, rq, http.StatusOK, "view.html", title, shell{wide: true}, &pageView{Title: title, Slug: slug,
-		FromUncommitted: fromUncommitted, Private: private, ReadOnly: readOnly(rq.user, slug), TaskKeys: strings.Join(mdtext.TaskLineKeys(content), ","),
+		FromUncommitted: fromUncommitted, Private: !placeOf(slug).shared(), ReadOnly: readOnly(rq.user, slug), TaskKeys: strings.Join(mdtext.TaskLineKeys(content), ","),
 		BreadcrumbHTML: bc, DeleteDialogHTML: buildDeleteDialog(slug, title), RailTocHTML: railTocItems(string(article)),
 		MetaRowHTML: metaRow, ArticleHTML: article, LinkSections: sections, Outlinks: outlinks(rq, slug, path), Menu: menu})
 }
@@ -843,7 +842,7 @@ func apiPagesList(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
-		_, private := pageOwner(p.Slug) // not hidden above: the user's own
+		private := !placeOf(p.Slug).shared() // not hidden above: the user's own
 		pages = append(pages, M{"slug": p.Slug, "title": title, "links": counts[p.Slug], "private": private,
 			"mtime": st.ModTime().Unix(), "created": fmtDate(changeTime(st)), "edited": fmtDate(st.ModTime())})
 	}

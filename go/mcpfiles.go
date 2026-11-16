@@ -79,11 +79,7 @@ func uploadFileTool(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// A file for a page in the user's private folder goes in theirs.
-	owner := ""
-	if o, private := pageOwner(strings.Trim(page, "/")); private && o != "" && o == user {
-		owner = o
-	}
+	owner := uploadOwner(user, strings.Trim(page, "/"))
 	name = freeUploadName(owner, name)
 	if err := storeUpload(user, owner, name, bytes.NewReader(data), " (MCP)"); err != nil {
 		return "", err
@@ -102,7 +98,7 @@ func uploadFileTool(args jsonObj, base, user string) (string, error) {
 
 var (
 	sharedUploadRE  = regexp.MustCompile(`^/_assets/([^/\\]+)$`)
-	privateUploadRE = regexp.MustCompile(`^/` + privateDir + `/([^/\\]+)/_assets/([^/\\]+)$`)
+	privateUploadRE = regexp.MustCompile(`^/(?:` + keptDirs + `)/([^/\\]+)/_assets/([^/\\]+)$`)
 )
 
 // uploadFile: the file a link's target names (as a page has it:

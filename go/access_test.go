@@ -21,7 +21,7 @@ func withUsers(t *testing.T, names ...string) {
 func TestAccessWithoutUsers(t *testing.T) {
 	testWiki(t, nil)
 	for _, slug := range []string{"index", "private/alice/diary", "private/x"} {
-		if o, p := pageOwner(slug); o != "" || p || !canSee("", slug) || !canWrite("", slug) {
+		if p := placeOf(slug); p.user() != "" || !p.shared() || !canSee("", slug) || !canWrite("", slug) {
 			t.Errorf("%s: private without users", slug)
 		}
 	}
@@ -55,8 +55,8 @@ func TestAccessWithUsers(t *testing.T) {
 		{"notes/../private/alice/x", "alice", true, true, false},
 		{"private/alice/../../index", "", false, true, true},
 	} {
-		if o, p := pageOwner(c.slug); o != c.owner || p != c.private {
-			t.Errorf("pageOwner(%s) = %q %v", c.slug, o, p)
+		if p := placeOf(c.slug); p.user() != c.owner || p.shared() == c.private {
+			t.Errorf("placeOf(%s) = %+v", c.slug, p)
 		}
 		if canSee("alice", c.slug) != c.alice || canSee("bob", c.slug) != c.bob || canWrite("alice", c.slug) != c.alice {
 			t.Errorf("%s: alice %v bob %v", c.slug, canSee("alice", c.slug), canSee("bob", c.slug))
@@ -209,5 +209,30 @@ func TestPrivateHomeDoesntWaitForWrites(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("waited for pagesMu")
+	}
+}
+
+// A place and the places within it: who sees one sees the other.
+func TestPlaceWithin(t *testing.T) {
+	testWiki(t, nil)
+	withUsers(t, "alice", "bob")
+	shared, alice, bob, none := placeOf("notes/x"), placeOf("private/alice/x"), placeOf("private/bob/x"), placeOf("private/carol/x")
+	if !shared.shared() || alice.user() != "alice" || !alice.own("alice") || alice.own("bob") || none.user() != "" || none.shared() ||
+		none.sees("alice") || none.sees("") || shared.own("alice") {
+		t.Errorf("places %+v %+v %+v", shared, alice, none)
+	}
+	for _, c := range []struct {
+		name string
+		p, q place
+		want bool
+	}{
+		{"shared in shared", shared, shared, true}, {"alice in shared", alice, shared, true}, {"no one's in shared", none, shared, true},
+		{"alice in alice", alice, placeOf("private/alice/deep/y"), true},
+		{"shared in alice", shared, alice, false}, {"alice in bob", alice, bob, false}, {"alice in no one's", alice, none, false},
+		{"shared in no one's", shared, none, false},
+	} {
+		if got := c.p.within(c.q); got != c.want {
+			t.Errorf("%s: %v", c.name, got)
+		}
 	}
 }

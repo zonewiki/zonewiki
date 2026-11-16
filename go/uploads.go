@@ -36,6 +36,15 @@ func uploadDir(owner string) string {
 	return filepath.Join(cfg.Data, privateDir, owner, "_assets")
 }
 
+// uploadOwner: whose uploads a file that user uploads for page goes to:
+// their own for a page in their private folder, else the shared ones ("").
+func uploadOwner(user, page string) string {
+	if placeOf(page).own(user) {
+		return user
+	}
+	return ""
+}
+
 // uploadURL: the URL of file in owner's uploads, as a markdown link takes
 // it: percent-encoded (pathURL), since a space in a link's target ends the
 // link and a bracket may ("My Deck (v2).pdf").
@@ -51,7 +60,7 @@ func uploadURL(owner, file string) string {
 // link. The editor wrote such links for every attached file with a space in
 // its name, until uploadURL encoded them. Group 2 is the target, up to the
 // file's extension before the closing bracket.
-var spacedUploadRE = regexp.MustCompile(`(\]\()(/(?:` + privateDir + `/[a-z0-9-]+/)?_assets/[^\n<>"]*?\.[A-Za-z0-9]{1,8})(\))`)
+var spacedUploadRE = regexp.MustCompile(`(\]\()(/(?:(?:` + keptDirs + `)/[a-z0-9-]+/)?_assets/[^\n<>"]*?\.[A-Za-z0-9]{1,8})(\))`)
 
 // encodeUploadLinks: text with such links' targets percent-encoded, so they
 // are links (code aside). The text on disk stays as written.
@@ -183,11 +192,7 @@ func apiUpload(w http.ResponseWriter, r *http.Request) {
 	if originalName == "" {
 		originalName = "upload" + uploadExt(fileType)
 	}
-	// An upload for a page in the user's private folder goes in theirs.
-	owner := ""
-	if o, private := pageOwner(r.FormValue("page")); private && o != "" && o == userOf(r) {
-		owner = o
-	}
+	owner := uploadOwner(userOf(r), r.FormValue("page"))
 	if settings().isViewer(userOf(r)) {
 		http.Error(w, readOnlyMsg, http.StatusForbidden)
 		return

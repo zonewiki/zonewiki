@@ -29,7 +29,7 @@ func privateHomeSlug(user string) string {
 // isPrivateHome: slug is some user's private home (never renamed or deleted,
 // like the wiki's own home). Without users private/ is an ordinary folder.
 func isPrivateHome(slug string) bool {
-	owner, _ := pageOwner(slug)
+	owner := placeOf(slug).user()
 	return owner != "" && slug == privateHomeSlug(owner)
 }
 
@@ -91,7 +91,7 @@ func sharedMove(user, slug string) (target string, ok bool) {
 	if folder == "" || isProtected(slug) || isQuicknote(slug) || !canWrite(user, slug) {
 		return "", false
 	}
-	if _, private := pageOwner(slug); !private {
+	if placeOf(slug).shared() {
 		return "", false
 	}
 	rest := strings.TrimPrefix(slug, folder+"/")
@@ -107,7 +107,7 @@ func sharedNewOffer(user, slug string, fromPrivate bool) string {
 	if folder == "" || !fromPrivate {
 		return ""
 	}
-	if _, private := pageOwner(slug); private {
+	if !placeOf(slug).shared() {
 		return ""
 	}
 	target := folder + "/" + slug
@@ -119,7 +119,7 @@ func sharedNewOffer(user, slug string, fromPrivate bool) string {
 
 // ownUploadRE: a link to a user's private upload (uploadURL), in a page's
 // text: group 1 the owner, group 2 the file.
-var ownUploadRE = regexp.MustCompile(`/` + privateDir + `/([a-z0-9-]+)/_assets/([^\s)"'<>/]+)`)
+var ownUploadRE = regexp.MustCompile(`/(?:` + keptDirs + `)/([a-z0-9-]+)/_assets/([^\s)"'<>/]+)`)
 
 // shareUploads: oldSlug moved to newSlug (newPath). A page taken out of a
 // user's private folder takes the private uploads it shows with it, since
@@ -128,8 +128,8 @@ var ownUploadRE = regexp.MustCompile(`/` + privateDir + `/([a-z0-9-]+)/_assets/(
 // different file there gets a number. Returns the files written, for the
 // move's commit.
 func shareUploads(oldSlug, newSlug, newPath string) []string {
-	owner, _ := pageOwner(oldSlug)
-	if newOwner, _ := pageOwner(newSlug); owner == "" || newOwner == owner {
+	owner := placeOf(oldSlug).user()
+	if owner == "" || placeOf(newSlug).user() == owner {
 		return nil
 	}
 	text, err := readText(newPath)

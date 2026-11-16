@@ -848,7 +848,7 @@ func renameListOp(user, ref, newName, suffix string, check ...func(pages []strin
 	}
 	var pages []pageWrite
 	for _, p := range iterPages() {
-		o, private := pageOwner(p.Slug)
+		o, private := placeOf(p.Slug).user(), !placeOf(p.Slug).shared()
 		if private && !slices.Contains(owners, o) || l.Private() && o != l.Owner {
 			continue
 		}

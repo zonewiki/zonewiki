@@ -51,38 +51,76 @@ func publicMode() string {
 // visitorMsg: what a visitor is told about what only users do.
 const visitorMsg = "Sign in to do this: without an account you can only read this wiki."
 
-// ownerIn: a path inside a user's folder below folder (slash-separated,
-// relative; "private/alice/x"): (that user, true); below folder but in no
-// user's folder ("private/carol/x", "private/alice" itself): ("", true);
-// elsewhere: ("", false). Without users nothing is private. rel is judged
-// as safePath opens it, cleaned: "private/bob/../alice/x" is alice's.
-func ownerIn(folder, rel string) (owner string, private bool) {
+// keptDirs: the folders whose first level names who sees what is kept in
+// them (private/<user>/), as a pattern: what spells such a path in a text
+// (an upload's link, a commit message) is made from it.
+const keptDirs = privateDir
+
+// place: whose a page or a file is, which its path alone says (where
+// something is kept is who sees it): everyone's, one user's, or no one's.
+// Every question about who sees what is asked of a place, so a new kind of
+// folder (a group's) changes the answers here and nowhere else.
+type place struct {
+	kind placeKind
+	name string // the user whose it is (ofUser), else ""
+}
+
+type placeKind int
+
+const (
+	ofEveryone placeKind = iota // shared: outside private/, or a wiki without users
+	ofUser                      // in private/<user>/
+	ofNoOne                     // in private/ but in no user's folder: "private/carol/x", "private/alice" itself
+)
+
+// placeOf: the place of the page slug, or of the file rel (slash-separated,
+// relative to the wiki): private/<user>/… is that user's, anything else in
+// private/ no one's, the rest everyone's. Without users nothing is
+// private. It is judged as safePath opens it, cleaned ("private/bob/../
+// alice/x" is alice's), and in lower case.
+func placeOf(rel string) place {
 	users := settings().Users
 	if users == nil {
-		return "", false
+		return place{}
 	}
-	rest, found := strings.CutPrefix(strings.ToLower(path.Clean(rel)), folder+"/")
+	rest, found := strings.CutPrefix(strings.ToLower(path.Clean(rel)), privateDir+"/")
 	if !found {
-		return "", false
+		return place{}
 	}
 	name, _, inside := strings.Cut(rest, "/")
 	if !inside || users[name] == nil {
-		return "", true
+		return place{kind: ofNoOne}
 	}
-	return name, true
+	return place{ofUser, name}
 }
 
-// pageOwner: the user whose private page slug is ("" for a shared page),
-// and whether it is private at all (a private page may have no owner).
-func pageOwner(slug string) (owner string, private bool) {
-	return ownerIn(privateDir, slug)
+// shared: everyone's.
+func (p place) shared() bool { return p.kind == ofEveryone }
+
+// user: the one user whose place it is, "" for any other place.
+func (p place) user() string {
+	if p.kind == ofUser {
+		return p.name
+	}
+	return ""
+}
+
+// own: it is user's own, and theirs alone.
+func (p place) own(user string) bool { return p.kind == ofUser && p.name == user }
+
+// sees: user sees what is kept there.
+func (p place) sees(user string) bool { return p.shared() || p.own(user) }
+
+// within: everyone who sees what is kept at p sees what is kept at q too:
+// q is the same place or a wider one. What a link's mark asks (does every
+// reader of this page see its target), and a move (does it take the page
+// from anyone).
+func (p place) within(q place) bool {
+	return q.shared() || p.kind == ofUser && q == p
 }
 
 // canSee: user may see the page slug: a shared page, or one of their own.
-func canSee(user, slug string) bool {
-	owner, private := pageOwner(slug)
-	return !private || owner != "" && owner == user
-}
+func canSee(user, slug string) bool { return placeOf(slug).sees(user) }
 
 // canWrite: user may change (create, edit, rename, delete) the page slug:
 // the pages they may see, since everything shared is editable, but for a
@@ -104,7 +142,7 @@ func adminsOnly(user, slug string) bool {
 	if s.Users == nil || s.isAdmin(user) {
 		return false
 	}
-	if _, private := pageOwner(slug); private {
+	if !placeOf(slug).shared() {
 		return false
 	}
 	return guidePage(slug)
@@ -309,10 +347,7 @@ func mayWriteTasks(user string) error {
 
 // ownPrivate: slug is a page in user's own private folder (where a new
 // task defaults to private).
-func ownPrivate(user, slug string) bool {
-	owner, _ := pageOwner(slug)
-	return owner != "" && owner == user
-}
+func ownPrivate(user, slug string) bool { return placeOf(slug).own(user) }
 
 // inQuicknote: slug is a note in user's Notes: any note without
 // users or for Zone itself (user ""), with users only one in their own folder
@@ -343,8 +378,8 @@ func canSeePath(user, rel string) bool {
 	if strings.HasPrefix(rel, ".") && strings.Contains(rel, "/") || strings.Contains(rel, "/.") {
 		return false
 	}
-	if owner, private := ownerIn(privateDir, rel); private {
-		return owner != "" && owner == user
+	if p := placeOf(rel); !p.shared() {
+		return p.sees(user)
 	}
 	// A list for some: its folder's files (the tasks, the list's entry) are
 	// its members', also what it left there when it was deleted or renamed.
@@ -401,7 +436,7 @@ func visibleSlugs(user string) map[string]bool {
 // names it ("Move private/alice/2026-…_idea into the wiki as ideas/x"), at
 // the start of a path, not inside one ("notprivate/x", "notes/private/x"):
 // group 2, after group 1.
-var privateNameRE = regexp.MustCompile(`(^|[^\w./-])(` + privateDir + `/[\w./-]*[\w/])`)
+var privateNameRE = regexp.MustCompile(`(^|[^\w./-])((?:` + keptDirs + `)/[\w./-]*[\w/])`)
 
 // hideNames: a commit message for user, the paths in it user may not see
 // as "a private page": a commit that moved a page out of a private folder,

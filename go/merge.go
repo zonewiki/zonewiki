@@ -99,7 +99,7 @@ func commitOthersDrafts(user string) error {
 	// commit per owner.
 	byOwner := map[string][]string{}
 	for _, f := range gitUncommittedFiles(privateDir) {
-		if owner, private := ownerIn(privateDir, f.Filepath); private && owner != "" && owner != user {
+		if owner := placeOf(f.Filepath).user(); owner != "" && owner != user {
 			byOwner[owner] = append(byOwner[owner], f.Filepath)
 		}
 	}

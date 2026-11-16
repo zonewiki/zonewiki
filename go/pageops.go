@@ -437,7 +437,7 @@ func checkTagRename(user, tag, newName string, merge bool) (*tagPlan, error) {
 			return nil, refuse("Nothing was renamed: a page can't be read (Zone's log says which)")
 		}
 		texts[i] = text
-		_, private := pageOwner(p.Slug)
+		private := !placeOf(p.Slug).shared()
 		for _, params := range pageTasksEmbeds(text) {
 			if embedUsesTag(params, old) {
 				seen = seen || canSee(user, p.Slug)

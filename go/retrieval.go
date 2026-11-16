@@ -394,8 +394,7 @@ func taskRefsAsTitles(slug, content string) string {
 	for i, m := range ms {
 		refs[i] = strings.ToLower(m[1])
 	}
-	owner, _ := pageOwner(slug)
-	tasks := resolveTaskRefs(owner, refs)
+	tasks := resolveTaskRefs(placeOf(slug).user(), refs)
 	return taskRefRE.ReplaceAllStringFunc(content, func(s string) string {
 		if t := tasks[strings.ToLower(taskRefRE.FindStringSubmatch(s)[1])]; t != nil {
 			return mdtext.PlainTaskTitle(t.Title)
@@ -864,8 +863,7 @@ func docShared(d *SearchDoc) bool {
 	if d.isTask() {
 		return d.Task.Owner == ""
 	}
-	_, private := pageOwner(d.Slug)
-	return !private
+	return placeOf(d.Slug).shared()
 }
 
 // usersKey: which users there are; what is private depends on it (nothing is
@@ -1522,7 +1520,7 @@ func resultMeta(d *SearchDoc, names map[string]ListInfo) string {
 	}
 	edited := "edited " + fmtDate(d.Mtime)
 	lock := ""
-	if _, private := pageOwner(d.Slug); private {
+	if !placeOf(d.Slug).shared() {
 		lock = "🔒 " // a user's own private page: no result shows another's
 	}
 	if i := strings.LastIndex(d.Slug, "/"); i >= 0 {

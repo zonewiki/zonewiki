@@ -569,7 +569,7 @@ A new page is made private from the start (below).
   nor in the vocabulary that prefix and typo matching draw on (else a typo that stops matching would tell that a word is in a private page).
   The semantic index holds every page's vectors, but a search looks only at the visible ones (pages, sections, tasks, Related, and the pages a new page is compared with).
   The query log (`query-log`) is the wiki owner's file in `.zone/`, never shown in Zone: with users it holds every user's queries and the private pages they found.
-- **The rule lives in one place** (`go/access.go`): `pageOwner(slug)` (the user, and whether the page is private at all),
+- **The rule lives in one place** (`go/access.go`): `placeOf(slug)` (the page's place: everyone's, one user's or no one's; `place.sees`, `place.own`, and `place.within`: whoever sees this place sees that one, which a link's mark and a move ask),
   `canSee(user, slug)`,
   `canWrite(user, slug)` (the same pages: everything shared is editable),
   `canSeePath(user, rel)` for files as git names them (pages, and a user's uploads and tasks in `private/<user>/_assets/` and `_tasks/`, which the private folder covers).
