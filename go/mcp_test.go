@@ -116,7 +116,7 @@ func TestMCPToolDefinitions(t *testing.T) {
 	if len(names) != len(mcpToolTable) || names[0] != "search_wiki" || names[len(names)-1] != "update_task" {
 		t.Errorf("tools: %q", names)
 	}
-	if len(mcpToolsJSON) > 33600 {
+	if len(mcpToolsJSON) > 33800 {
 		t.Errorf("the definitions grew to %d bytes: every session loads them", len(mcpToolsJSON))
 	}
 }

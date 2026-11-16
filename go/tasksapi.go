@@ -53,7 +53,7 @@ func apiNewList(w http.ResponseWriter, r *http.Request) {
 	var ref string
 	const pin = true
 	if err == nil {
-		ref, err = createListOp(user, name, private, pin, "")
+		ref, err = createListOp(user, name, private, pin, "", "")
 	}
 	rf, refused := refusalOf(err)
 	switch {

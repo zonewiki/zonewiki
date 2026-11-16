@@ -811,15 +811,22 @@ func createTaskListTool(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	who, err := strArg(args, "for", false)
+	if err != nil {
+		return "", err
+	}
 	suffix, err := msgSuffix(args)
 	if err != nil {
 		return "", err
 	}
-	ref, err := createListOp(user, name, private, true, suffix)
+	ref, err := createListOp(user, name, private, true, who, suffix)
 	if err != nil {
 		return "", err
 	}
 	kind := "shared: everyone who uses the wiki sees it and its tasks"
+	if l, ok := resolveList(ref, taskLists(user)); ok && len(l.For) > 0 {
+		kind = "for " + forWords(l.For) + ": only they see it and its tasks, and its tasks are given only to them"
+	}
 	if private {
 		kind = "private: only the user sees it and its tasks"
 	}

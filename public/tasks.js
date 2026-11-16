@@ -141,7 +141,7 @@ const app = {
   boardDivider, clearBoardDropOver, dropOnBucket, dropWrite, planOnDay,
   taskList,
   filterTasks, boardBuckets,
-  refreshOtherInstances, listTooltip, inScope, listName, editPrivate, newTaskList,
+  refreshOtherInstances, listTooltip, listMembers, assignableIn, inScope, listName, editPrivate, newTaskList,
 
   flashTask,
 
@@ -433,12 +433,22 @@ document.addEventListener('zone:list-made', e => {
   listSet.add(ref);
   if (isPrivate) privateLists.add(ref);
 });
+// A list for some: its members, who its tasks can be given to (a Set of
+// names); null for a list that is for everyone, where that is whoever can
+// be given tasks (people.users).
+function listMembers(ref) {
+  const members = listChoices.find(l => l.ref === ref)?.members;
+  return members ? new Set(members) : null;
+}
+// Who a task in the list ref can be given to.
+function assignableIn(ref) { return listMembers(ref) || people.users || new Set(); }
 // A list's name, as its chip and the dialogs show it.
 function listName(ref) { return String(ref).replace(/^shared\//, ''); }
 // The tooltip of a list's chip (cards, the filter).
 function listTooltip(ref) {
   const r = String(ref).replace(/^-?list:/, '').toLowerCase();
   if ((r === 'inbox' || r === 'none') && !listSet.has(r)) return inboxPrivate ? 'In your Inbox: only you see it' : 'In the Inbox: in no list';
+  if (listMembers(r)) return `List (for some: ${[...listMembers(r)].join(', ')})`;
   return privateLists.has(r) ? 'List (private: only you see it)' : 'List';
 }
 // The tabs' names: Open/Plan/Focus, or an embed's own (`labels=`, rendered

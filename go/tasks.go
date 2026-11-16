@@ -410,6 +410,10 @@ func applyAssignee(user string, t *Task, data jsonObj) error {
 		return refuse("A private task is yours alone. Put it in a shared list to assign it (list)")
 	case !s.assignable(name) && !hadAssignee(t, name):
 		return refuse(s.notAssignable(name))
+	case !taskFiles.SeesList(name, t.List) && !hadAssignee(t, name):
+		// A list for some: a task there is given only to one of them (anyone
+		// else wouldn't see it).
+		return refuse(name + " isn't one of those the list #" + t.List + " is for: a task there is given to one of them")
 	}
 	logEvent(t, user, "assigned", t.Assignee, name)
 	t.Assignee = name

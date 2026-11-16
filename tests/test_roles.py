@@ -120,6 +120,7 @@ WRITES = [
     ("POST /tasks/delete-list", "POST", "/tasks/delete-list", {"data": {"list": "team", "to": ""}}),
     ("POST /tasks/delete-list", "POST", "/tasks/delete-list", {"data": {"list": "carols-own", "to": "", "share": "1"}}),
     ("POST /tasks/share-list", "POST", "/tasks/share-list", {"data": {"list": "carols-own"}}),
+    ("POST /tasks/list-for", "POST", "/tasks/list-for", {"data": {"list": "team", "for": "carol"}}),
     ("POST /tasks/pin-list", "POST", "/tasks/pin-list", {"data": {"list": "team", "pin": "1"}}),
     ("POST /tasks/pin-list", "POST", "/tasks/pin-list", {"data": {"mine": "1"}}),
     ("POST /tasks/pin-order", "POST", "/tasks/pin-order", {"data": {"list": "team"}}),

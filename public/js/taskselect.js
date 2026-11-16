@@ -8,6 +8,8 @@ import { putTask } from './util.js';
 import { attachTagAc, esc, formatDate, noSpacesInTags, noticeFromResponse, people, showNotice, startsAfterDeadline, tagWordOf, todayStr } from './taskutil.js';
 
 const { tagCounts, selectionTags, bulkTagChange, rankTags } = TasksCore;
+// Past this many people the Assign… dialog has a field to find one.
+const MANY_PEOPLE = 12;
 
 export function initTaskSelect(app) {
 const { st } = app;
@@ -320,7 +322,10 @@ function openBulkAssignModal(ids) {
   const chosen = st.tasks.filter(t => idSet.has(t.id) && !t.private);
   if (!chosen.length) { if (ids.length) showNotice('A private task has no assignee'); return; }
   const count = chosen.length;
-  const names = [...people.users].sort((a, b) => (b === people.me) - (a === people.me) || a.localeCompare(b));
+  // Who every chosen task can be given to: in a list for some its members
+  // (the server refuses anyone else), yourself first.
+  const allowed = name => chosen.every(t => app.assignableIn(app.taskList(t) || '').has(name));
+  const names = [...people.users].filter(allowed).sort((a, b) => (b === people.me) - (a === people.me) || a.localeCompare(b));
   const has = name => chosen.filter(t => (t.assignee || '') === name).length;
   const row = (name, label, n) => {
     const all = n === count;
@@ -333,6 +338,8 @@ function openBulkAssignModal(ids) {
   dlg.className = 'modal bulk-tag-modal bulk-list-modal bulk-assign-modal';
   dlg.innerHTML = `
     <p class="modal-label">Assign ${count} task${count > 1 ? 's' : ''}</p>
+    ${names.length > MANY_PEOPLE ? `<div class="task-field"><input type="search" id="bulk-assign-find" autocomplete="off" spellcheck="false"
+      aria-label="Find a person" placeholder="Find a person…"></div>` : ''}
     <ul class="bulk-tag-list">${names.map(name => row(name, '@' + esc(name), has(name))).join('')}${row('', 'No one', has(''))}</ul>
     <div class="modal-actions">
       <button type="button" class="btn" id="bulk-assign-cancel">Cancel</button>
@@ -342,13 +349,30 @@ function openBulkAssignModal(ids) {
   dlg.addEventListener('close', () => dlg.remove());
   dlg.querySelector('#bulk-assign-cancel').addEventListener('click', close);
   dlg.addEventListener('click', ev => { if (ev.target === dlg) close(); });
-  const rows = [...dlg.querySelectorAll('.bulk-list-row')];
+  const all = [...dlg.querySelectorAll('.bulk-list-row')];
+  const shown = () => all.filter(r => !r.closest('li').hidden);
+  // Many people: a field finds the one meant (the rows it leaves are the
+  // names that hold what is typed; Enter takes the first, ↓ goes into them).
+  const find = dlg.querySelector('#bulk-assign-find');
+  find?.addEventListener('input', () => {
+    const q = find.value.trim().replace(/^@/, '').toLowerCase();
+    for (const r of all) r.closest('li').hidden = !!q && !!r.dataset.assignee && !r.dataset.assignee.includes(q);
+  });
+  find?.addEventListener('keydown', ev => {
+    if (ev.key !== 'Enter') return;
+    ev.preventDefault();
+    if (find.value.trim()) shown()[0]?.click();
+  });
   dlg.addEventListener('keydown', ev => {
     if (ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp') return;
     ev.preventDefault();
+    const rows = shown();
     const i = rows.indexOf(document.activeElement);
+    if (i < 0) { rows[ev.key === 'ArrowDown' ? 0 : rows.length - 1]?.focus(); return; }
+    if (find && (i === 0 && ev.key === 'ArrowUp' || i === rows.length - 1 && ev.key === 'ArrowDown')) { find.focus(); return; }
     rows[(i + (ev.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length].focus();
   });
+  const rows = all;
   dlg.querySelector('.bulk-tag-list').addEventListener('click', async ev => {
     const btn = ev.target.closest('.bulk-list-row');
     if (!btn) return;
@@ -356,7 +380,8 @@ function openBulkAssignModal(ids) {
     assignTasks(chosen, btn.dataset.assignee);
   });
   dlg.showModal();
-  (rows.find(r => r.getAttribute('aria-current') === 'true') || rows[0]).focus({ preventScroll: true });
+  if (find && st.lastPointerType !== 'touch') find.focus();
+  else (rows.find(r => r.getAttribute('aria-current') === 'true') || rows[0]).focus({ preventScroll: true });
 }
 
 // Add and remove tags on the tasks `ids` (batch-tag), with one undo that

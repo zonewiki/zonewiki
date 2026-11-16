@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 	"zonewiki/internal/mdtext"
 	"zonewiki/internal/taskfiles"
 )
@@ -42,6 +43,7 @@ type ListInfo struct {
 	Params  TasksParams // its settings as an embed's params, with list=<Ref>
 	NoShare bool        // left out in sharing mode
 	Owners  []string    // a shared list's owners (canManageList); none: a list from before owners
+	For     []string    // who a shared list is for (@group, a user's name); none: everyone
 }
 
 // Private: only its owner sees the list and the tasks in it.
@@ -66,7 +68,7 @@ func listInfo(l *taskfiles.List, ref string) ListInfo {
 		}
 	}
 	return ListInfo{Ref: ref, Name: l.Name, Owner: l.Owner, Params: parseTasksParams(strings.Join(args, " ")),
-		NoShare: isTrue(l.Settings["noshare"]), Owners: l.Owners()}
+		NoShare: isTrue(l.Settings["noshare"]), Owners: l.Owners(), For: l.For()}
 }
 
 // listRegistries: the registries user reads: the shared one and, with
@@ -98,7 +100,10 @@ func taskLists(user string) map[string]ListInfo {
 		if _, twin := out[ref]; twin {
 			ref = sharedRef + l.Name
 		}
-		out[ref] = listInfo(l, ref)
+		// A list for some is no list to anyone else.
+		if info := listInfo(l, ref); canSeeList(user, info) {
+			out[ref] = info
+		}
 	}
 	return out
 }
@@ -324,7 +329,7 @@ func setMineParams(user, was string, set map[string]string) error {
 	if err != nil {
 		return err
 	}
-	return commitLists(user, "Change the settings of My tasks", []string{path})
+	return commitLists(user, "Change the settings of My tasks", path)
 }
 
 // mineOrder: the manual order of user's My tasks, task ids first to last.
@@ -383,7 +388,7 @@ func setMineOrder(user string, ids []string) error {
 	if err != nil {
 		return err
 	}
-	return commitLists(user, "Reorder My tasks", []string{path})
+	return commitLists(user, "Reorder My tasks", path)
 }
 
 // ---- operations ----
@@ -502,11 +507,51 @@ func pinOwner(user string) string {
 	return ""
 }
 
+// cleanFor: who a shared list is for, as a "for" names them (words apart
+// by commas or spaces: @group, a user's name; "everyone" or nothing: no one
+// in particular), groups first, each once; or why that can't be. Whoever
+// sets it is one of them: a list they wouldn't see is one they couldn't
+// widen again.
+func cleanFor(user, text string) ([]string, error) {
+	s := settings()
+	var groups, names []string
+	for _, w := range strings.FieldsFunc(strings.ToLower(text), func(r rune) bool { return r == ',' || unicode.IsSpace(r) }) {
+		switch group, isGroup := strings.CutPrefix(w, "@"); {
+		case w == "everyone":
+		case s.Users == nil:
+			return nil, refuse("A list for some needs users: this wiki has none")
+		case isGroup && groupNameRE.MatchString(group):
+			if !slices.Contains(groups, w) {
+				groups = append(groups, w)
+			}
+		case isGroup:
+			return nil, refuse(strconv.Quote(w) + " is no group's name")
+		case s.Users[w] == nil:
+			return nil, refuse("There is no user " + strconv.Quote(w) + " (a group is @name)")
+		default:
+			if !slices.Contains(names, w) {
+				names = append(names, w)
+			}
+		}
+	}
+	slices.Sort(groups)
+	slices.Sort(names)
+	who := append(groups, names...)
+	if len(who) > 0 && !listMember(user, who) {
+		return nil, refuse("You wouldn't see the list yourself: add your name, or a group you are in")
+	}
+	return who, nil
+}
+
+// forWords: who a list is for, as it is said: "@dev, anna"; "" everyone.
+func forWords(who []string) string { return strings.Join(who, ", ") }
+
 // createListOp makes a list called name, shared or (private) user's own;
 // returns how user names it. A name of a list they see is refused. pin:
 // the new list is pinned for user, last (it would else be out of sight
-// under More), in the same commit.
-func createListOp(user, name string, private, pin bool, suffix string) (string, error) {
+// under More), in the same commit. who: whom a shared list is for (cleanFor;
+// "": everyone).
+func createListOp(user, name string, private, pin bool, who, suffix string) (string, error) {
 	if listsUnmigrated {
 		return "", errListsUnmigrated
 	}
@@ -517,10 +562,17 @@ func createListOp(user, name string, private, pin bool, suffix string) (string, 
 	if err != nil {
 		return "", err
 	}
+	listFor, err := cleanFor(user, who)
+	if err != nil {
+		return "", err
+	}
 	owner := ""
 	if private {
 		if privateFolder(user) == "" {
 			return "", refuse("A private list needs users: this wiki has none")
+		}
+		if len(listFor) > 0 {
+			return "", refuse("A private list is yours alone: a list for some is a shared one")
 		}
 		owner = user
 	}
@@ -542,6 +594,7 @@ func createListOp(user, name string, private, pin bool, suffix string) (string, 
 	if owner == "" && privateFolder(user) != "" {
 		made.SetOwners([]string{user})
 	}
+	made.SetFor(listFor)
 	reg.Lists = append(reg.Lists, made)
 	// The pin is in the user's registry, which is the list's own unless the
 	// list is shared and the wiki has users.
@@ -559,19 +612,19 @@ func createListOp(user, name string, private, pin bool, suffix string) (string, 
 	if err != nil {
 		return "", err
 	}
-	paths := []string{path}
+	paths := path
 	if pins != reg {
 		if path, err = taskFiles.WriteListsLocked(user, pinOwner(user), pins); err != nil {
 			return "", err
 		}
-		paths = append(paths, path)
+		paths = append(paths, path...)
 	}
 	return list, commitLists(user, "Create list #"+list+suffix, paths)
 }
 
 // ensureGeneralLocked: the shared list "general", made when there is none
 // of that name: where a shared task goes that loses its list (with users).
-// Returns the registry's path when it was written.
+// Returns the registry's path when it was written, "" when it wasn't.
 func ensureGeneralLocked() (string, error) {
 	reg, err := taskFiles.ReadListsStrict("")
 	if err != nil {
@@ -581,7 +634,11 @@ func ensureGeneralLocked() (string, error) {
 		return "", nil
 	}
 	reg.Lists = append(reg.Lists, &taskfiles.List{Name: generalListName, Settings: map[string]string{}})
-	return taskFiles.WriteListsOf("", reg)
+	paths, err := taskFiles.WriteListsOf("", reg)
+	if err != nil || len(paths) == 0 {
+		return "", err
+	}
+	return taskFiles.ListsPath(""), nil
 }
 
 // renameRefs: a registry's pins with the refs rename changes renamed;
@@ -808,10 +865,9 @@ func renameListOp(user, ref, newName, suffix string, check ...func(pages []strin
 		if o == l.Owner {
 			renameRefs(regs[o], renameFor(o))
 		}
-		var path string
-		if path, failed = taskFiles.WriteListsOf(o, regs[o]); path != "" {
-			written = append(written, path)
-		}
+		var path []string
+		path, failed = taskFiles.WriteListsOf(o, regs[o])
+		written = append(written, path...)
 	}
 	if len(written) > 0 {
 		failed = errors.Join(failed, notCommitted(gitCommit(user, "Rename list #"+l.Name+" to #"+name+suffix, written...)))
@@ -938,7 +994,7 @@ func deleteListOp(user, ref, to string, share, wontDo bool, suffix string) (int,
 		if err != nil {
 			return 0, err
 		}
-		paths = append(paths, path)
+		paths = append(paths, path...)
 	}
 	return n, taskFiles.WriteBothLocked(user, active, closed, "Delete list #"+l.Name+suffix, nonEmpty(paths)...)
 }
@@ -987,9 +1043,7 @@ func shareListOp(user, ref, suffix string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if path != "" {
-			paths = append(paths, path)
-		}
+		paths = append(paths, path...)
 	}
 	slices.Sort(paths)
 	return l.Name, taskFiles.WriteBothLocked(user, active, closed, "Share list #"+l.Name+suffix, paths...)
@@ -1040,7 +1094,7 @@ func pinListOp(user, ref, pin string) error {
 	if err != nil {
 		return err
 	}
-	return commitLists(user, msg, []string{path})
+	return commitLists(user, msg, path)
 }
 
 // pinOrderOp puts user's pinned lists in the order refs names them (the
@@ -1084,7 +1138,49 @@ func pinOrderOp(user string, refs []string) error {
 	if err != nil {
 		return err
 	}
-	return commitLists(user, "Reorder the pinned lists", []string{path})
+	return commitLists(user, "Reorder the pinned lists", path)
+}
+
+// setListForOp says whom the shared list user names ref is for (cleanFor;
+// "": everyone), for its owners. Its tasks stay where they are and as they
+// are: narrowed, they are its members' to see from then on, and one given
+// to someone who is none of them keeps the name (to them it is gone, as the
+// list is).
+func setListForOp(user, ref, who string) error {
+	taskFiles.Lock()
+	defer taskFiles.Unlock()
+	l, err := listForManage(user, ref, taskLists(user))
+	if err != nil {
+		return err
+	}
+	if l.Private() {
+		return refuse("#" + l.Name + " is private, yours alone: make it shared first")
+	}
+	listFor, err := cleanFor(user, who)
+	if err != nil {
+		return err
+	}
+	if slices.Equal(listFor, l.For) {
+		return refuseAs(refusedUnchanged, "#"+l.Name+" is for them already")
+	}
+	reg, err := taskFiles.ReadListsStrict("")
+	if err != nil {
+		return err
+	}
+	entry := reg.Find(l.Name)
+	if entry == nil {
+		return refuseAs(refusedConflict, "The lists have changed since. Reload and try again.")
+	}
+	entry.SetFor(listFor)
+	paths, err := taskFiles.WriteListsLocked(user, "", reg)
+	if err != nil {
+		return err
+	}
+	msg := "List #" + l.Name + " is for everyone"
+	if len(listFor) > 0 {
+		msg = "List #" + l.Name + " is for " + forWords(listFor)
+	}
+	return commitLists(user, msg, paths)
 }
 
 // setListSettingsOp changes the settings of the list user names ref: set
@@ -1119,5 +1215,5 @@ func setListSettingsOp(user, ref string, set map[string]string) error {
 	if err != nil {
 		return err
 	}
-	return commitLists(user, "Change the settings of list #"+l.Name, []string{path})
+	return commitLists(user, "Change the settings of list #"+l.Name, path)
 }

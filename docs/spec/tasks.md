@@ -814,8 +814,8 @@ Cards mark keep tasks with ⟲ (`.task-keep`).
 Five sentences say all of it:
 
 1. A task is in one list.
-2. A list is yours (private) or everyone's (shared); everyone has one list built in, the **Inbox**, where a new task goes unless it is made in a list or names one.
-3. A shared task can be assigned to one person.
+2. A list is **for** someone: you alone (private), a group, or everyone (shared); everyone has one list built in, the **Inbox**, where a new task goes unless it is made in a list or names one.
+3. A shared task can be assigned to one person, a member of its list.
 4. **My tasks** is what is yours: the tasks in your own lists, and the shared tasks assigned to you.
 5. A pin is a shortcut: a pill in your list switcher.
 
@@ -832,6 +832,24 @@ Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged
 Among a hundred people a list isn't everyone's to rename or delete, as it was until 2026-11.
 A list from before owners has none: it is the admins' ("#old is changed by an admin of this wiki …").
 A private list is its user's. Without users, and in a wiki that has no admin (from before roles), whoever may write manages, as before.
+
+**Lists for some** (with users): a shared list is for everyone, or for the groups and users it names, its **members** (`"for": ["@hiring", "anna"]` in its entry: `@name` a group, Groups in `docs/spec/users.md`; a bare name a user; `List.For`, `ListInfo.For`, `listMember` in `go/access.go`).
+
+- **Members see the list and its tasks, and change them. To anyone else it is no list**, as another user's private list is: no pill, no entry under More, no task of it in All tasks, My tasks, a tag's view, the counts, search, Linked tasks, a `[[task:…]]` chip, an export, the history, or an assistant's answers; its address (`/tasks?list=<name>`) and an embed of it say what they say of a name no list has, and a write that names it or one of its tasks finds nothing.
+  An admin is no member by being admin, as an admin sees no private page; they can put themselves in a group, which the settings' log shows.
+- **You say whom it is for** when you make it (**New list…**: the **For** field, "everyone" when empty, completing the groups there are; an assistant's `create_task_list` with `for`), and its owners change it with **Who it is for…** in its ⋯ menu (`#list-for-dialog`, `POST /tasks/list-for`, `setListForOp`; a commit "List #hiring is for @hiring, anna" or "… is for everyone").
+  The words are groups and users, commas or spaces between them (`cleanFor`): a name that is no user, or no group's name, is refused, and **you are one of them**: "You wouldn't see the list yourself: add your name, or a group you are in".
+  A private list is for one; a list for some is a shared one.
+- **Its tasks are given only to its members** (`applyAssignee`: "bob isn't one of those the list #hiring is for"): Assign…, the Assignee field and the title's `@name` offer them (`members` in the lists a page carries, `assignableIn` in `tasks.js`), and a mention of anyone else is text: no news, no mail.
+  Narrowing a list unassigns nobody: a task keeps the name it has, and to who is no member now it is gone, as the list is.
+- **The heading says it**: a 🔒 beside the list's name, "For @hiring, anna: only they see this list and its tasks (anna, bo, …)", and a list chip's tooltip names its members.
+- **Who sees a task is decided by where it is kept** (Storage, above): the list's entry is not in `_tasks/lists.json`, which everyone reads, but in the list's own folder, `_tasks/lists/<name>/list.json` (one entry, as a line of the registry is), and that file is what tells every read of the tasks there whom they are for.
+  The store leaves the folder out for anyone else (`Store.dirs(who, owner)`, `Member`): every reader of a user's tasks, and every write, which therefore never touches the files of a list its user doesn't see (a task that names such a list is refused by the store itself, `byOwner`).
+  What holds every user's tasks (the search index, a task found by its id) asks `canSeeTask`, which asks the same file (`taskFiles.SeesList`); `canSeePath` hides the folder's files in the history.
+  A list narrowed gets its file before it leaves the registry; one for everyone again loses the file and is back in the registry.
+  **Renamed or deleted, its old folder keeps the file, marked gone** (`{"name": "hiring", "for": […], "gone": true}`): no list anymore, and the folder's history is still only its members' to see.
+- **Its name is taken for everyone**: two shared lists can't have one folder, so New list… with that name says "There is a list #hiring already" to who doesn't see it. That a name is taken is the one thing anyone else can learn.
+- Not yet: a question before a task moves out of a list for some into one for everyone, the count of tasks a narrowing takes out of others' sight, lists you are a member of as pills without pinning them. (`docs/plans/tasks-6-sound-at-100.md`, step 7.)
 
 (Until 2026-11 a list was a tag a page declared with `[[tasks: list=<tag>]]`: a task could be in two, a list ended with its page, and a task moved by a change of its tags. A wiki from then is taken over once, when Zone starts: The migration, below.
 Later in 2026-11 came the Inbox: until then a task could be in no list, which with users was everyone's; a pin also put a list's tasks in My tasks, and the first pinned list took new tasks. The Inbox's migration, below.)

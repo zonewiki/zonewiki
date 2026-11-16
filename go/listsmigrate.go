@@ -413,7 +413,7 @@ func migrateListsLocked() error {
 		if err != nil {
 			return err
 		}
-		written = append(written, path)
+		written = append(written, path...)
 	}
 	if errAll == nil {
 		if err := os.Remove(oldAllTasksFile()); err == nil {
@@ -638,7 +638,7 @@ func migrateInboxLocked(checked bool) error {
 		if err != nil {
 			return err
 		}
-		written = append(written, path)
+		written = append(written, path...)
 	}
 	if written = nonEmpty(written); len(written) == 0 {
 		return nil

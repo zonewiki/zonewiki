@@ -902,6 +902,7 @@ WRITES = [
     ("POST /tasks/rename-list", "POST", "/tasks/rename-list", {"data": {"list": "secretlist", "new_name": "stolen"}}),
     ("POST /tasks/delete-list", "POST", "/tasks/delete-list", {"data": {"list": "secretlist", "to": "", "share": "1"}}),
     ("POST /tasks/share-list", "POST", "/tasks/share-list", {"data": {"list": "secretlist"}}),
+    ("POST /tasks/list-for", "POST", "/tasks/list-for", {"data": {"list": "secretlist", "for": "bob"}}),
     ("POST /tasks/pin-list", "POST", "/tasks/pin-list", {"data": {"list": "secretlist", "pin": "1"}}),
     ("POST /tasks/pin-order", "POST", "/tasks/pin-order", {"data": {"list": "secretlist"}}),
     ("POST /api/tasks/settings", "POST", "/api/tasks/settings", {"json": {"list": "secretlist", "set": {"limit": "3"}}}),

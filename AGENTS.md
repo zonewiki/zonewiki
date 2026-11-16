@@ -81,7 +81,7 @@ Auth is optional (a password, or users; see Key Constraints).
 ├── LICENSE                 # AGPL-3.0-or-later
 ├── THIRD_PARTY_LICENSES    # Licenses of Go, the Go modules and the embedding model (the vendored libraries' are next to them)
 ├── docs/spec/              # The feature spec, one file per area (see Spec)
-├── docs/plans/             # Working plans for changes in progress, deleted when done (`mcp-oauth.md`, `tasks-5-members.md`, `tasks-6-sound-at-100.md`)
+├── docs/plans/             # Working plans for changes in progress, deleted when done (`mcp-oauth.md`, `tasks-6-sound-at-100.md`)
 ├── docs/licenses/mermaid_notices.py  # Writes public/vendor/mermaid/THIRD_PARTY_LICENSES from the bundle's source map
 ├── docs/screenshots/       # The README's screenshots + make_screenshots.py (./run.sh screenshots)
 ├── Containerfile           # The image: a Go build stage, onnxruntime + the model (opt-in), an Ubuntu 26.04 LTS runtime (also ships README.md and docs/spec/ for zone_help)
@@ -144,7 +144,7 @@ Auth is optional (a password, or users; see Key Constraints).
 │   ├── tasksapi.go         # The /api/tasks routes
 │   ├── tasksembed.go       # The [[tasks:]] embed: its HTML, its settings dialog, the counts the Tasks links show
 │   ├── tasklogic.go        # What Zone does with tasks beyond keeping them: a series' next occurrence, completing, history, comments, backlinks, [[task:…]] references; taskFiles, the store, wired to the wiki here
-│   ├── internal/taskfiles/ # Package taskfiles, no globals: the tasks on disk: _tasks/ files (users' private ones in private/<user>/_tasks/) read and written under one lock, filed by owner and month (parsed once, and a file a write didn't touch skipped), and the lists' registries beside them (lists.json: lists.go); a Store is handed the wiki's folder, its users, the clock, who may write and how a write is committed
+│   ├── internal/taskfiles/ # Package taskfiles, no globals: the tasks on disk: _tasks/ files (users' private ones in private/<user>/_tasks/) read and written under one lock, filed by owner and month (parsed once, and a file a write didn't touch skipped), a list for some's folder left out for who is none of its members (`dirs`), and the lists' registries beside them (lists.json: lists.go); a Store is handed the wiki's folder, its users, the clock, who may write and how a write is committed
 │   ├── internal/atomicfile/ # Package atomicfile: a file written so that no reader sees half of it (pages, task files)
 │   ├── taskby.go           # Comments and history a client sends whole: nobody writes under another's name
 │   ├── taskseen.go         # What each user has seen of the tasks' news: .zone/seen/<user>.json, read into a task's history for the news' rule and the API
@@ -314,6 +314,7 @@ and commit the new pins.
   - **Private pages and tasks** (`private/<user>/`, tasks and private lists in `private/<user>/_tasks/`, with users): every route and tool that shows, lists or changes a page asks `go/access.go` (`canSee`, `canWrite`, `canSeePath`; `hiddenPage`/`refusePage` in the routes);
     every read of tasks takes the user (`taskFiles.Open(user)` …, shared + their own files), and what holds every user's tasks (the search index) filters with `canSeeTask`.
     A task is private by its list (`applyList` in `go/tasks.go`: a private list's task is in its user's files): a shared task never goes into a private list, and a private one leaves for a shared place only with `share`. Lists are read with `taskLists(user)`, which gives only those a user sees, and a write to a list or a task in it asks `canWriteList`: don't read another user's registry for them.
+    **A shared list can be for some** (`"for"` in its entry, which is in the list's own folder, `_tasks/lists/<name>/list.json`; Lists for some in `docs/spec/tasks.md`): the store leaves that folder out for anyone else (`Store.dirs(who, owner)`: pass the user, `taskfiles.Everyone` only for what Zone does over all the tasks and filters later), `canSeeTask` and `canSeePath` ask `taskFiles.SeesList`, and a task there is given only to a member. Code that reads task files itself, or shows a shared task or list to "everyone signed in", must ask them too; `tests/test_list_members.py` probes the routes.
     A new route gets a probe in `tests/test_privacy.py`, which fails until it has one.
     A path handed to git names one file, never a pattern (`GIT_LITERAL_PATHSPECS` in package `gitrepo`'s environment): don't turn that off for a call that takes a page's name.
   - **Guides are an admin's** (with users): `canWrite` is false for anyone else on `wiki-guide`, a folder's `AGENTS.md`/`CLAUDE.md` and the pages they pull in (`adminsOnly`, Guides in `docs/spec/users.md`): every user's assistant follows them.

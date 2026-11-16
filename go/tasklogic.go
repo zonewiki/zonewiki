@@ -34,6 +34,7 @@ func init() {
 		Private:    func(user string) bool { return privateFolder(user) != "" },
 		NoTasks:    func(user string) bool { return user == visitor },
 		MayWrite:   mayWriteTasks,
+		Member:     listMember,
 		Commit:     gitCommit,
 		Now:        func() time.Time { return now() },
 	}
@@ -345,7 +346,9 @@ func logMentions(t *Task, user, before, text string) []string {
 	had := mentionsOf(before)
 	var named []string
 	for _, name := range mentionsOf(text) {
-		if name != user && !slices.Contains(had, name) {
+		// (In a list for some, a name that is none of them is text: they
+		// don't see the task.)
+		if name != user && !slices.Contains(had, name) && taskFiles.SeesList(name, t.List) {
 			logEvent(t, user, "mentioned", "", name)
 			named = append(named, name)
 		}

@@ -201,8 +201,11 @@ const cleanName = v => v.trim().replace(/^@/, '').toLowerCase();
 // The user a typed name means ('' none): a user who can be assigned, or me.
 function userNamed(typed) {
   const name = cleanName(typed) === 'me' ? people.me : cleanName(typed);
-  return people.users?.has(name) ? name : '';
+  return people.users?.has(name) && assignableHere().has(name) ? name : '';
 }
+// Who the task can be given to where the List field has it: a list for
+// some's members, else whoever can be given tasks.
+const assignableHere = () => app.assignableIn(app.listSelect?.value || '');
 const assigneeChip = assigneeInput && app.chipField(assigneeInput, {
   onChange: () => { byHand('assignee'); syncTarget(); },   // the chip taken off
   label: n => '@' + n,
@@ -275,7 +278,7 @@ const assigneeAc = assigneeInput && attachTagAc(assigneeInput, {
   word: () => assigneeInput.value.trim() ? { partial: cleanName(assigneeInput.value) } : null,
   suggest: w => {
     const counts = {};
-    for (const name of people.users || []) counts[name] = 1;
+    for (const name of assignableHere()) counts[name] = 1;
     for (const t of st.tasks) if (t.assignee in counts) counts[t.assignee]++;
     if (people.me in counts) counts[people.me] += st.tasks.length + 1;   // yourself first
     delete counts[assigneeChip.words()[0]];
@@ -303,7 +306,10 @@ if (assigneeInput) {
   });
 }
 function refuseAssignee() {
-  assigneeInput.setCustomValidity(`“${assigneeInput.value.trim()}” is no user a task can be assigned to`);
+  const typed = cleanName(assigneeInput.value), list = app.listSelect?.value || '';
+  assigneeInput.setCustomValidity(people.users?.has(typed) && app.listMembers(list)
+    ? `${typed} isn’t one of those the list ${app.listName(list)} is for`
+    : `“${assigneeInput.value.trim()}” is no user a task can be assigned to`);
   assigneeInput.reportValidity();
 }
 
@@ -322,7 +328,7 @@ if (app.titleInput && assigneeInput) attachTagAc(app.titleInput, {
     ? null : hashWordAtCaret(app.titleInput, '@'),
   suggest: w => {
     const counts = {};
-    for (const name of people.users) counts[name] = 1;
+    for (const name of assignableHere()) counts[name] = 1;
     for (const t of st.tasks) if (t.assignee in counts) counts[t.assignee]++;
     if (people.me in counts) counts[people.me] += st.tasks.length + 1;
     return rankTags(w.partial, counts);
@@ -350,7 +356,12 @@ function quickParse() {
 }
 // Whom the shorthand's @name may name: no one on a private task, nor
 // without users.
-const quickPeople = () => assigning() ? people : null;
+const quickPeople = () => {
+  if (!assigning()) return null;
+  // (In a list for some, only its members: anyone else's name is text.)
+  const members = app.listMembers(app.listSelect?.value || '');
+  return members && people.users ? { me: people.me, users: new Set([...people.users].filter(n => members.has(n))) } : people;
+};
 // The shorthand's #words: one that names a list (the first) is the task's
 // list, the others its tags.
 function quickList(q) {

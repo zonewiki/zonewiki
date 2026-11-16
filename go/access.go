@@ -209,18 +209,63 @@ const readOnlyMsg = "You can read this wiki but not change it: you are a viewer.
 // errReadOnly: a viewer's change to something shared, refused.
 var errReadOnly = refuseAs(refusedReadOnly, readOnlyMsg)
 
-// canSeeTask: user may see the task t: a shared one, or one of their own
-// private ones.
+// canSeeTask: user may see the task t: one of their own private ones, or a
+// shared one, unless its list is for some and they are none of them (the
+// list's folder says for whom: taskFiles.SeesList, which the store's own
+// readers ask too; this is for what holds every user's tasks, the search
+// index and a task found by its id).
 // A visitor sees no task.
 func canSeeTask(user string, t *Task) bool {
-	return user != visitor && (t.Owner == "" || t.Owner == user)
+	if user == visitor {
+		return false
+	}
+	if t.Owner != "" {
+		return t.Owner == user
+	}
+	return taskFiles.SeesList(user, t.List)
 }
 
-// canSeeList: user may see the list l and the tasks in it: a shared list,
-// or their own private one. A visitor sees no list. What lists, counts or
-// names a list asks (taskLists gives only these).
+// canSeeList: user may see the list l and the tasks in it: their own
+// private one, or a shared list, unless it is for some (ListInfo.For) and
+// they are none of them: to anyone else such a list is no list, as another
+// user's private one. A visitor sees no list. What lists, counts or names a
+// list asks (taskLists gives only these).
 func canSeeList(user string, l ListInfo) bool {
-	return user != visitor && (l.Owner == "" || l.Owner == user)
+	if user == visitor {
+		return false
+	}
+	if l.Owner != "" {
+		return l.Owner == user
+	}
+	return len(l.For) == 0 || listMember(user, l.For)
+}
+
+// listMember: user is one of those a list is for: named, or in a group it
+// names (@dev: Groups in docs/spec/users.md). A user who can't use the
+// wiki (disabled, removed) is none; nor is an admin by being admin, as an
+// admin sees no private page.
+func listMember(user string, who []string) bool {
+	s := settings()
+	if u := s.Users[user]; u == nil || u.Disabled {
+		return false
+	}
+	for _, w := range who {
+		if group, ok := strings.CutPrefix(w, "@"); ok && s.memberOf(user, group) || w == user {
+			return true
+		}
+	}
+	return false
+}
+
+// listMembers: the users a list for who is for, A–Z.
+func listMembers(who []string) []string {
+	var out []string
+	for _, name := range sortedKeys(settings().Users) {
+		if listMember(name, who) {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 // canWriteList: user may change the list l (rename, delete, its settings)
@@ -300,6 +345,13 @@ func canSeePath(user, rel string) bool {
 	}
 	if owner, private := ownerIn(privateDir, rel); private {
 		return owner != "" && owner == user
+	}
+	// A list for some: its folder's files (the tasks, the list's entry) are
+	// its members', also what it left there when it was deleted or renamed.
+	if rest, ok := strings.CutPrefix(rel, taskfiles.DirName+"/"+taskfiles.ListsDirName+"/"); ok {
+		if name, _, inFolder := strings.Cut(rest, "/"); inFolder && !taskFiles.SeesList(user, name) {
+			return false
+		}
 	}
 	// A visitor sees no task, so no task file's history either.
 	return user != visitor || !strings.HasPrefix(rel, taskfiles.DirName+"/")

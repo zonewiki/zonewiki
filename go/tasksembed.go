@@ -159,10 +159,16 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, p
 	type listChoice struct {
 		Ref     string `json:"ref"`
 		Private bool   `json:"private"`
+		// A list for some: its members, who its tasks can be given to.
+		Members []string `json:"members,omitempty"`
 	}
 	choices := []listChoice{}
 	for _, ref := range sortedKeys(lists) {
-		choices = append(choices, listChoice{ref, lists[ref].Private()})
+		c := listChoice{Ref: ref, Private: lists[ref].Private()}
+		if len(lists[ref].For) > 0 {
+			c.Members = listMembers(lists[ref].For)
+		}
+		choices = append(choices, c)
 	}
 	scope := paramsScope(params)
 	sfx := ""
@@ -278,7 +284,7 @@ func setAllTasksParams(user, was string, set map[string]string) error {
 	if err != nil {
 		return err
 	}
-	return commitLists(user, "Change the settings of All tasks", []string{path})
+	return commitLists(user, "Change the settings of All tasks", path)
 }
 
 // setEmbedParamsOp changes the params of the index-th [[tasks: …]] of the

@@ -879,3 +879,84 @@ def test_today_is_open_with_a_filter_and_groups_as_open_does(alice):
     expect(heads).to_have_text(["Unassigned", "You", "@bob"])
     alice.goto("/tasks?list=team&view=today&group=day")            # by day is no choice of Today's
     expect(cut.locator("[aria-pressed='true']")).to_have_text(["List"])
+
+
+# ── Lists for some ───────────────────────────────────────────────────────────
+
+def test_a_list_for_some_is_made_and_its_tasks_go_to_its_members(page, wiki, monkeypatch):
+    """New list… says whom a shared list is for; the heading says it, Who it
+    is for… changes it, and Assign…, the Assignee field and the title's @name
+    offer its members only."""
+    monkeypatch.setattr(settings, "USERS", {name: ("pw", "") for name in ("alice", "bob", "carol", "dave")})
+    monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}, "carol": {"groups": "hiring"}})
+    page.request.post("/login", form={"username": "alice", "password": "pw"})
+    make_list(page, "team")
+    page.goto("/tasks")
+    page.locator(".page-menu-btn").click()
+    page.locator("#list-new-btn").click()
+    dialog = page.locator("#list-new-dialog")
+    dialog.locator("input[name=name]").fill("hiring")
+    assert "@hiring" in dialog.locator("#list-for-words option").evaluate_all("os => os.map(o => o.value)")
+    dialog.locator("#list-new-for").fill("@hiring")           # she is none of them: she wouldn't see it
+    dialog.locator("#list-new-submit").click()
+    expect(dialog.locator(".rename-error")).to_contain_text("You wouldn't see the list yourself")
+    dialog.locator("input[name=name]").fill("hiring")
+    dialog.locator("#list-new-for").fill("@hiring, alice")
+    dialog.locator("#list-new-submit").click()
+    page.wait_for_url(re.compile(r"/tasks\?list=hiring$"))
+    lock = page.locator("h1 .list-for")
+    expect(lock).to_have_attribute("title", "For @hiring, alice: only they see this list and its tasks (alice, carol)")
+
+    # A task there: the title's @name and the Assignee field know its members.
+    page.locator("#task-add-btn").click()
+    modal = page.locator("#task-edit-modal")
+    title = modal.locator("#task-edit-title")
+    title.type("Call Zed @")
+    expect(modal.locator(".tag-ac-item")).to_have_text(["@alice", "@carol"])
+    title.fill("Call Zed @bob")                               # none of them: text
+    expect(modal.locator("#task-edit-quick")).to_be_hidden()
+    title.fill("Call Zed @carol")
+    expect(modal.locator(".task-field-assignee .tag-chip-label")).to_have_text(["@carol"])
+    modal.get_by_role("button", name="Save").click()
+    wait_for_assignee(page, "Call Zed", "carol")
+    # Assign…: its members, and no one.
+    card(page, "Call Zed").locator(".task-title").click(button="right")
+    page.get_by_role("menuitem", name="Assign…").click()
+    rows = page.locator(".bulk-assign-modal .bulk-list-row")
+    expect(rows).to_have_text(["@alice", re.compile("@carol"), "No one"])
+    rows.first.click()
+    wait_for_assignee(page, "Call Zed", "alice")
+
+    # Who it is for…: everyone again.
+    page.locator(".page-menu-btn").click()
+    page.locator("#list-for-btn").click()
+    who = page.locator("#list-for-dialog")
+    expect(who.locator("#list-for-input")).to_have_value("@hiring, alice")
+    who.locator("#list-for-input").fill("")
+    who.locator("#list-for-submit").click()
+    page.wait_for_url(re.compile(r"/tasks\?list=hiring$"))
+    expect(page.locator("h1 .list-for")).to_have_count(0)
+    card(page, "Call Zed").locator(".task-title").click(button="right")
+    page.get_by_role("menuitem", name="Assign…").click()
+    expect(page.locator(".bulk-assign-modal .bulk-list-row")).to_have_text([re.compile("@alice"), "@bob", "@carol", "@dave", "No one"])
+
+
+def test_many_people_are_found_by_typing(page, wiki, monkeypatch):
+    """Past twelve people Assign… has a field: what is typed leaves the names
+    that hold it, and Enter takes the first."""
+    names = ["alice"] + [f"user{i:02d}" for i in range(14)] + ["zoe"]
+    monkeypatch.setattr(settings, "USERS", {name: ("pw", "") for name in names})
+    page.request.post("/login", form={"username": "alice", "password": "pw"})
+    make_list(page, "team")
+    new(page, "Hand me on")
+    page.goto("/tasks?list=team&view=open")
+    card(page, "Hand me on").locator(".task-title").click(button="right")
+    page.get_by_role("menuitem", name="Assign…").click()
+    dlg = page.locator(".bulk-assign-modal")
+    find = dlg.locator("#bulk-assign-find")
+    expect(find).to_be_focused()
+    expect(dlg.locator(".bulk-list-row:visible")).to_have_count(17)
+    find.fill("zo")
+    expect(dlg.locator(".bulk-list-row:visible")).to_have_text(["@zoe", re.compile("No one")])
+    find.press("Enter")
+    wait_for_assignee(page, "Hand me on", "zoe")

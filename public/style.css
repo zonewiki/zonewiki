@@ -1942,6 +1942,11 @@ body.editor-page main {
 /* Move to wiki (a note's ⋯ menu) */
 .promote-field { display: flex; flex-direction: column; gap: .25rem; font-size: .8rem; color: var(--muted); }
 .promote-check { display: flex; align-items: center; gap: .4rem; font-size: .875rem; }
+/* New list…: whom a shared list is for (a field beside its word). */
+.list-for-field { display: flex; align-items: center; gap: .5rem; font-size: .875rem; margin-top: .5rem; }
+.list-for-field > input { flex: 1; min-width: 0; }
+/* A list for some: the lock beside its name. */
+.list-for { cursor: help; }
 .promote-preview { margin: 0; font-size: .8rem; color: var(--muted); overflow-wrap: anywhere; }
 .promote-preview code { font-size: inherit; }
 /* The editor's hint after Move to wiki: the link to paste. One row: icon,

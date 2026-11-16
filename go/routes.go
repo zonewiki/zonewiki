@@ -48,6 +48,7 @@ func pageRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /tasks/rename-list", writesPages(renameListRoute))
 	mux.HandleFunc("POST /tasks/delete-list", writesPages(deleteListRoute))
 	mux.HandleFunc("POST /tasks/share-list", writesPages(shareListRoute))
+	mux.HandleFunc("POST /tasks/list-for", listForRoute)
 	mux.HandleFunc("POST /tasks/pin-list", writesPages(pinListRoute))
 	mux.HandleFunc("POST /tasks/pin-order", writesPages(pinOrderRoute))
 	mux.HandleFunc("GET /api/search", apiSearch)
@@ -937,7 +938,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	v := &tasksPageView{Heading: heading, Missing: missing,
 		Menu: !rq.sharing && !listsUnmigrated && mayWriteTasks(rq.who()) == nil, Users: privateFolder(rq.user) != "",
 		Mine: mine, MineAssigns: mine && mineAssigns(rq.who()), Inbox: inbox, InboxPrivate: inbox && inboxOwner(rq.who()) != "",
-		NewListName: q.Get("newlist_name"), NewListError: q.Get("newlist_error"),
+		Groups: settings().groups(), NewListName: q.Get("newlist_name"), NewListError: q.Get("newlist_error"),
 		Places: places, More: more, TasksHTML: htmlOf(tasksHTML), LinkSections: sections,
 		BreadcrumbHTML: breadcrumb(rq, crumbs, key, true, title, chip)}
 	if mine {
@@ -949,6 +950,8 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	if list != nil {
 		v.List = list
 		v.Manage = canManageList(rq.who(), *list)
+		v.ForWords, v.ForError = firstNonEmpty(q.Get("for_words"), forWords(list.For)), q.Get("for_error")
+		v.Members, v.ForNow = listMembers(list.For), forWords(list.For)
 		v.ListRenameName, v.ListRenameError = firstNonEmpty(q.Get("rename_name"), list.Name), q.Get("rename_error")
 		v.DeleteError, v.ShareError = q.Get("delete_error"), q.Get("share_error")
 		for i, p := range rq.pinnedLists() {
@@ -1057,7 +1060,7 @@ func listRefused(w http.ResponseWriter, r *http.Request, err error, ref, param s
 func newListRoute(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.PostFormValue("name"))
 	user := userOf(r)
-	ref, err := createListOp(user, name, r.PostFormValue("private") != "", r.PostFormValue("pin") != "0", "")
+	ref, err := createListOp(user, name, r.PostFormValue("private") != "", r.PostFormValue("pin") != "0", r.PostFormValue("for"), "")
 	if err != nil {
 		if pe, ok := refusalOf(err); ok && (pe.kind == refusedInvalid || pe.kind == refusedExists) {
 			http.Redirect(w, r, "/tasks?newlist_name="+url.QueryEscape(name)+"&newlist_error="+url.QueryEscape(pe.msg), http.StatusFound)
@@ -1108,6 +1111,16 @@ func deleteListRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/tasks", http.StatusFound)
+}
+
+// listForRoute: a shared list's Who it is for… dialog (its owners').
+func listForRoute(w http.ResponseWriter, r *http.Request) {
+	ref := cleanList(r.PostFormValue("list"))
+	if err := setListForOp(userOf(r), ref, r.PostFormValue("for")); err != nil {
+		listRefused(w, r, err, ref, "for_error", "for_words", r.PostFormValue("for"))
+		return
+	}
+	http.Redirect(w, r, listHref(ref), http.StatusFound)
 }
 
 // shareListRoute: a private list's Make shared… dialog.
@@ -1162,18 +1175,25 @@ type tasksPageView struct {
 	DeleteError, ShareError         string
 	Menu, Users                     bool
 	Manage                          bool // the list is the user's to rename, delete and set (canManageList)
-	Mine, MineAssigns               bool
-	NewListName, NewListError       string
-	Places                          []TaskPlace
-	More                            *TasksMore
-	Inbox, InboxPrivate             bool
-	LeftOutLists                    []listLink
-	Unassigned                      int
-	GivenHref                       string
-	Given                           int // My tasks: the open tasks the user made that someone else has (givenToOthers)
-	LeftOut, DeleteToGeneral        bool
-	LinkSections                    []linkSection
-	TasksHTML, BreadcrumbHTML       template.HTML
+	// A shared list for some: whom it is for as the dialog's field says it
+	// ("@dev, anna"; a refused one as it was typed), why the dialog came
+	// back, and its members by name; Groups: the groups there are, to
+	// complete from.
+	ForWords, ForError        string
+	ForNow                    string // whom it is for now, "@dev, anna"
+	Members, Groups           []string
+	Mine, MineAssigns         bool
+	NewListName, NewListError string
+	Places                    []TaskPlace
+	More                      *TasksMore
+	Inbox, InboxPrivate       bool
+	LeftOutLists              []listLink
+	Unassigned                int
+	GivenHref                 string
+	Given                     int // My tasks: the open tasks the user made that someone else has (givenToOthers)
+	LeftOut, DeleteToGeneral  bool
+	LinkSections              []linkSection
+	TasksHTML, BreadcrumbHTML template.HTML
 }
 
 func apiToggleCheckbox(w http.ResponseWriter, r *http.Request) {

@@ -44,7 +44,7 @@ func refsOf(lists []ListInfo) []string {
 // mustList makes a list, unpinned (as an assistant's create_task_list does).
 func mustList(t *testing.T, user, name string, private bool) string {
 	t.Helper()
-	ref, err := createListOp(user, name, private, false, "")
+	ref, err := createListOp(user, name, private, false, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -298,7 +298,7 @@ func TestListsNotTakenOverFromABrokenWiki(t *testing.T) {
 	if text, _ := readText(safePath("shop")); !strings.Contains(text, "pin=1") {
 		t.Error("the page lost its pin")
 	}
-	if _, err := createListOp("", "x", false, false, ""); err == nil {
+	if _, err := createListOp("", "x", false, false, "", ""); err == nil {
 		t.Error("a list made in a wiki not taken over")
 	}
 	if err := pinListOp("", "shop", "1"); err == nil {
@@ -321,7 +321,7 @@ func TestCreateList(t *testing.T) {
 		t.Error("bob sees alice's list")
 	}
 	for _, bad := range []string{"", "  ", "a,b", "a|b", "a=b", "a[b", `a"b`, "a/b", "none", " #None ", "inbox", " #Inbox "} {
-		if _, err := createListOp("alice", bad, false, false, ""); !refusedWith(err, refusedInvalid) {
+		if _, err := createListOp("alice", bad, false, false, "", ""); !refusedWith(err, refusedInvalid) {
 			t.Errorf("%q: %v", bad, err)
 		}
 	}
@@ -330,7 +330,7 @@ func TestCreateList(t *testing.T) {
 		name    string
 		private bool
 	}{{"Shop-List", false}, {"shop-list", true}, {"gifts", false}, {"gifts", true}} {
-		if _, err := createListOp("alice", c.name, c.private, false, ""); !refusedWith(err, refusedExists) {
+		if _, err := createListOp("alice", c.name, c.private, false, "", ""); !refusedWith(err, refusedExists) {
 			t.Errorf("%+v: %v", c, err)
 		}
 	}
@@ -339,7 +339,7 @@ func TestCreateList(t *testing.T) {
 	if got := sortedKeys(taskLists("alice")); !slices.Equal(got, []string{"gifts", "shared/gifts", "shop-list"}) {
 		t.Errorf("alice's lists %v", got)
 	}
-	if _, err := createListOp("vera", "x", false, false, ""); !refusedWith(err, refusedReadOnly) {
+	if _, err := createListOp("vera", "x", false, false, "", ""); !refusedWith(err, refusedReadOnly) {
 		t.Errorf("a viewer made a list: %v", err)
 	}
 }
@@ -957,7 +957,7 @@ func TestANewListIsPinnedForWhoMadeIt(t *testing.T) {
 	pins := func(u string) []string { return refsOf(pinnedLists(u, taskLists(u))) }
 	make := func(user, name string, private bool) {
 		t.Helper()
-		if _, err := createListOp(user, name, private, true, ""); err != nil {
+		if _, err := createListOp(user, name, private, true, "", ""); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -986,7 +986,7 @@ func TestANewListIsPinnedForWhoMadeIt(t *testing.T) {
 func TestPinOrder(t *testing.T) {
 	testWiki(t, nil)
 	for _, n := range []string{"a", "b", "c", "d"} {
-		if _, err := createListOp("", n, false, n != "d", ""); err != nil {
+		if _, err := createListOp("", n, false, n != "d", "", ""); err != nil {
 			t.Fatal(err)
 		}
 	}

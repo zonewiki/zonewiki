@@ -242,7 +242,7 @@ A name that is none is an error of the settings file, which then keeps the setti
 
 - **Set them** with `zonewiki user group NAME +dev -hiring` (alone it says which groups the user is in; `user list` names them: `bob (in dev, hiring)`), in the Users tab's **Groups** field (below), or by hand in the file.
 - **What a group is for**: what is for some and not for all. `memberOf(user, group)` asks; a disabled user is a member of none.
-  A task list can be for groups (Lists for some, in `docs/spec/tasks.md`); page folders for a group are a plan of their own.
+  A task list can be for groups (`"for": ["@hiring"]`: Lists for some, in `docs/spec/tasks.md`), and a user put in a group or taken out sees its lists, or no longer, at their next request; page folders for a group are a plan of their own.
 - **A role is not a group**: an admin is in no group by being admin, and sees nothing of a group they are not in. They may put themselves in one, which the log of the settings shows ("alice's groups").
 
 ### Viewers

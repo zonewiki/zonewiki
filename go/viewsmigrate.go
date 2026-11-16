@@ -171,7 +171,7 @@ func migrateViewsLocked() error {
 		if err != nil {
 			return err
 		}
-		written = append(written, path)
+		written = append(written, path...)
 	}
 	newText := map[string]string{}
 	var pagePaths []string

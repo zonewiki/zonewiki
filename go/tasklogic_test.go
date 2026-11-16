@@ -72,7 +72,7 @@ func TestParseTasksParams(t *testing.T) {
 func ownList(t *testing.T, user string) string {
 	t.Helper()
 	if _, ok := taskLists(user)["own"]; !ok {
-		if _, err := createListOp(user, "own", true, false, ""); err != nil {
+		if _, err := createListOp(user, "own", true, false, "", ""); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -83,7 +83,7 @@ func ownList(t *testing.T, user string) string {
 func teamList(t *testing.T, user string) string {
 	t.Helper()
 	if _, ok := resolveList("team", taskLists(user)); !ok {
-		if _, err := createListOp(user, "team", false, false, ""); err != nil {
+		if _, err := createListOp(user, "team", false, false, "", ""); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -282,7 +282,7 @@ func TestReadsSeeAMovingTask(t *testing.T) {
 // JSON is as before (no "private"). private is no field of a write.
 func TestNoPrivateTasksWithoutUsers(t *testing.T) {
 	testWiki(t, nil)
-	if _, err := createListOp("", "mine", true, false, ""); err == nil {
+	if _, err := createListOp("", "mine", true, false, "", ""); err == nil {
 		t.Error("a private list without users")
 	}
 	data := jsonObj{}

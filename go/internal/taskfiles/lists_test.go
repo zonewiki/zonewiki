@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"zonewiki/internal/taskmodel"
@@ -153,7 +154,8 @@ func TestListsPerOwner(t *testing.T) {
 	if err1 != nil || err2 != nil {
 		t.Fatal(err1, err2)
 	}
-	if p1 != filepath.Join(f.root, "_tasks", "lists.json") || p2 != filepath.Join(f.root, "private", "alice", "_tasks", "lists.json") {
+	if !slices.Equal(p1, []string{filepath.Join(f.root, "_tasks", "lists.json")}) ||
+		!slices.Equal(p2, []string{filepath.Join(f.root, "private", "alice", "_tasks", "lists.json")}) {
 		t.Errorf("written to %q and %q", p1, p2)
 	}
 	if l := f.ReadLists("alice").Find("gifts"); l == nil || l.Owner != "alice" || l.Settings["view"] != "open" {
@@ -166,7 +168,7 @@ func TestListsPerOwner(t *testing.T) {
 		t.Error("bob has alice's list")
 	}
 	// Written again unchanged: no file to commit.
-	if p, err := f.WriteListsLocked("alice", "alice", own); p != "" || err != nil {
+	if p, err := f.WriteListsLocked("alice", "alice", own); len(p) != 0 || err != nil {
 		t.Errorf("an unchanged registry written: %q, %v", p, err)
 	}
 }
