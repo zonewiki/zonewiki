@@ -92,7 +92,7 @@ func writablePage(user, slug string) (string, error) {
 // answers as missing, with msg.
 func notWritable(user, slug, msg string) error {
 	if readOnly(user, slug) && safePath(slug) != "" {
-		return refuseAs(refusedReadOnly, readOnlyWhy(user))
+		return refuseAs(refusedReadOnly, readOnlyWhy(user, slug))
 	}
 	return refuseAs(refusedNotFound, msg)
 }
@@ -161,7 +161,7 @@ func createPageOp(user, slug, content, suffix string) error {
 	case path == "":
 		return refuse("“" + slug + "”: pages can't go in folders starting with '_' or '.'")
 	case !canWrite(user, slug):
-		return notWritable(user, slug, "“"+slug+"”: that folder is another user's")
+		return notWritable(user, slug, "“"+slug+"”: "+notYoursFolder(slug))
 	case exists(path):
 		return refuseAs(refusedExists, "A page named "+strconv.Quote(slug)+" already exists")
 	}
@@ -253,17 +253,18 @@ func checkRename(user, slug, newSlug string) (path, newPath string, err error) {
 }
 
 // checkTarget: why the page slug can't move to newSlug, a new name for
-// it, if not: a folder Zone skips, another user's folder, a page there
-// already, or a shared page into a private folder.
+// it, if not: a folder Zone skips, another user's folder or a group's the
+// user isn't in, a page there already, or a move that takes the page from
+// someone who sees it (a shared page into a private or a group's folder).
 func checkTarget(user, slug, newSlug string) error {
 	newPath := safePath(newSlug)
 	switch {
 	case newPath == "":
 		return refuse("“" + newSlug + "”: pages can't go in folders starting with '_' or '.'")
 	case readOnly(user, newSlug):
-		return refuseAs(refusedReadOnly, readOnlyWhy(user))
+		return refuseAs(refusedReadOnly, readOnlyWhy(user, newSlug))
 	case !canWrite(user, newSlug):
-		return refuse("“" + newSlug + "”: that folder is another user's")
+		return refuse("“" + newSlug + "”: " + notYoursFolder(newSlug))
 	case exists(newPath):
 		return refuseAs(refusedExists, "A page named "+strconv.Quote(newSlug)+" already exists")
 	}
@@ -309,7 +310,7 @@ func checkFolderMove(user, folder, newFolder string) ([]string, error) {
 		if !canWrite(user, p.Slug) || !canWrite(user, n) {
 			// private/ itself, say: it holds other users' folders.
 			return nil, refuse("Nothing was moved: " + folder + "/ holds pages that aren't yours to move, " +
-				"or they would land in a private folder not yours. Move the pages one by one.")
+				"or they would land in a private folder not yours, or in the folder of a group you aren't in. Move the pages one by one.")
 		}
 		if np := safePath(n); np != "" && exists(np) {
 			taken = append(taken, n)
@@ -437,7 +438,9 @@ func checkTagRename(user, tag, newName string, merge bool) (*tagPlan, error) {
 			return nil, refuse("Nothing was renamed: a page can't be read (Zone's log says which)")
 		}
 		texts[i] = text
-		private := !placeOf(p.Slug).shared()
+		// A group's page shows shared tasks, as a shared page does: only a
+		// user's own page makes a tag theirs alone.
+		private := placeOf(p.Slug).kind == ofUser || placeOf(p.Slug).kind == ofNoOne
 		for _, params := range pageTasksEmbeds(text) {
 			if embedUsesTag(params, old) {
 				seen = seen || canSee(user, p.Slug)

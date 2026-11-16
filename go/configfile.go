@@ -100,6 +100,7 @@ type Settings struct {
 	MCPToken         string              // /mcp's token without users, as kept (tokenMatches); "": /mcp is off
 	Users            map[string]*User    // users.go; nil: no users
 	Includes         map[string][]string // the groups made of groups ([group product] includes = dev, design): what each includes, A–Z
+	partOf           map[string][]string // a group, and every group it is in by way of those (joinGroups; groupIn)
 	BaseURL          string              // Zone's address as the user's browser knows it
 	QueryLog         bool                // keep search_wiki's queries in .zone/queries.jsonl
 	GitRemote        string

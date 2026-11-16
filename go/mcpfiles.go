@@ -79,7 +79,7 @@ func uploadFileTool(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	owner := uploadOwner(user, strings.Trim(page, "/"))
+	owner := uploadPlace(user, strings.Trim(page, "/"))
 	name = freeUploadName(owner, name)
 	if err := storeUpload(user, owner, name, bytes.NewReader(data), " (MCP)"); err != nil {
 		return "", err
@@ -89,8 +89,11 @@ func uploadFileTool(args jsonObj, base, user string) (string, error) {
 		link = "!" + link
 	}
 	where := "everyone who uses the wiki can open it"
-	if owner != "" {
-		where = "private: only " + owner + " can open it"
+	switch owner.kind {
+	case ofUser:
+		where = "private: only " + owner.name + " can open it"
+	case ofGroup:
+		where = "the group's: only who is in @" + owner.name + " can open it"
 	}
 	return "Uploaded " + name + " (" + formatSize(int64(len(data))) + "; " + where + "). " +
 		"It shows on a page or in a task once linked there, as markdown:\n" + link, nil
@@ -98,22 +101,25 @@ func uploadFileTool(args jsonObj, base, user string) (string, error) {
 
 var (
 	sharedUploadRE  = regexp.MustCompile(`^/_assets/([^/\\]+)$`)
-	privateUploadRE = regexp.MustCompile(`^/(?:` + keptDirs + `)/([^/\\]+)/_assets/([^/\\]+)$`)
+	privateUploadRE = regexp.MustCompile(`^/(` + keptDirs + `)/([^/\\]+)/_assets/([^/\\]+)$`)
 )
 
 // uploadFile: the file a link's target names (as a page has it:
 // "/_assets/My%20Deck.pdf", with or without the wiki's address before it),
-// for user: a shared upload, or one of their own private ones. ok false:
-// no such file, as for one that isn't theirs.
+// for user: a shared upload, one of their own private ones, or one of a
+// group they are in. ok false: no such file, as for one that isn't theirs.
 func uploadFile(target, user string) (path, name string, ok bool) {
 	if u, err := url.Parse(strings.TrimSpace(target)); err == nil {
 		target = u.Path // unescaped, without address, query and fragment
 	}
-	owner := ""
+	var owner place
 	if m := sharedUploadRE.FindStringSubmatch(target); m != nil {
 		name = m[1]
-	} else if m := privateUploadRE.FindStringSubmatch(target); m != nil && m[1] == user && settings().Users[user] != nil {
-		owner, name = m[1], m[2]
+	} else if m := privateUploadRE.FindStringSubmatch(target); m != nil {
+		// Its place as its path says it (the name as written: "Alice" is no one's folder here).
+		if p := placeOf(m[1] + "/" + m[2] + "/_assets"); p.name == m[2] && (p.own(user) || p.kind == ofGroup && p.sees(user)) {
+			owner, name = p, m[3]
+		}
 	}
 	if name == "" || strings.HasPrefix(name, ".") {
 		return "", "", false

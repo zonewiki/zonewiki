@@ -140,7 +140,7 @@ func checkGuides(args jsonObj, slugs []string, user string) error {
 	// read and the call sent again.
 	for _, slug := range slugs {
 		if readOnly(user, slug) && safePath(slug) != "" {
-			return toolErr(readOnlyWhy(user))
+			return toolErr(readOnlyWhy(user, slug))
 		}
 	}
 	given, err := idsArg(args, "guides", "guides must be a list of guide ids")

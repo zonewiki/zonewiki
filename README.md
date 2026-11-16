@@ -163,6 +163,8 @@ Done tasks go to a monthly archive. Beyond that:
   name and password, their changes are committed in their name, and each has
   a private folder (`private/<name>/`), private notes, private tasks
   (their Inbox and the tasks in a private list of theirs, 🔒 on their cards) and their own pinned lists.
+  A team has a folder of its own too: the pages in `groups/<group>/` are seen and changed by
+  the people in that group, and by no one else (an admin puts people in groups; a task list can be for a group as well).
   A shared task can be assigned to a user (`@anna` in its title or its dialog);
   `@me` in the filter, or a page with `[[tasks: assignee=me]]`, shows everyone their own.
   Everything else is shared. Each has a role: **admin** (the first user;
@@ -428,7 +430,7 @@ Also know this:
   is set: its first page asks for a password, or set one with
   `./run.sh config passwd` or `./run.sh user add NAME`. For a wiki open to
   your network on purpose: `./run.sh config set no-login yes`. Every user can read
-  everything except other users' private pages and tasks (and all but viewers
+  everything except other users' private pages and tasks and the pages of groups they aren't in (and all but viewers
   can change it), so give access to no one you wouldn't hand the shared files to.
 - **Private means private inside Zone.** Another user's private pages and
   tasks are hidden from you and your assistant, but not encrypted: whoever

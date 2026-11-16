@@ -12,14 +12,14 @@ Without them none of this applies: one password (or none) and one MCP token, and
 
 Three rules; the rest of this file is how they are kept.
 
-1. **Your folder is yours.** `private/<you>/` holds your private pages, your uploads (`_assets/`) and your private tasks (`_tasks/`).
-   No one else sees it in Zone, in search, in history, or through their assistant.
-   Everything outside it is shared, and every user may change it, but a viewer, who changes nothing (Roles, below).
+1. **A folder is yours, a group's, or everyone's.** `private/<you>/` holds your private pages, your uploads (`_assets/`) and your private tasks (`_tasks/`): no one else sees it in Zone, in search, in history, or through their assistant.
+   `groups/<group>/` holds a group's pages and their uploads: its members see and change them, and to anyone else they are not there (Group pages, below).
+   Everything outside the two is shared, and every user may change it, but a viewer, who changes nothing (Roles, below).
    (Hidden inside Zone, not encrypted: whoever has the wiki's folder or git repository has it all.)
 2. **Where something is kept is who sees it.** Not its tags, not its links, not its name.
-   A new page starts where it is made: from a link to `private/<you>/…`. A task is kept where its list is: one in a private list of yours in your folder, any other with the shared tasks.
-3. **Private can be shared; shared stays shared.** A private page goes public by Make shared (a rename out of the folder), a private task by moving it out of its private list (or making that list shared).
-   Never the other way: others have seen a shared page or task, link to it and have comments on it, so Zone refuses to take one into a private folder or tasks (the error says to make a new private one and copy the text).
+   A new page starts where it is made: from a link to `private/<you>/…` or `groups/<group>/…`. A task is kept where its list is: one in a private list of yours in your folder, any other with the shared tasks.
+3. **To more people, never to fewer.** A private page goes to a group you are in or to everyone, a group's page to a group that includes its own or to everyone, by a rename out of the folder; a private task by moving it out of its private list (or making that list shared).
+   Never the other way: others have seen a shared page or task, link to it and have comments on it, so Zone refuses to take one into a private folder or tasks, or a group's page from its group (the error says so).
    Making a page shared takes the uploads it shows with it.
    Nothing else moves anything.
 
@@ -318,6 +318,8 @@ whether it is there yet or not (`guidePage`, `guideImports` in `go/access.go`; t
   Ask an admin of this wiki." (`guideMsg`, `readOnlyWhy`).
   An MCP write is refused with it before the guides are asked for (`checkGuides`); `replace_in_pages` leaves the guides out.
 - **A guide in a user's private folder is theirs**: only their own assistant reads it.
+  **A guide in a group's folder** (`groups/dev/AGENTS.md`, and what it pulls in) steers the assistant of everyone in the group, so it is an admin's too, and of the admins only one who is in the group sees it: the others in the group read it and are told "Only an admin of this wiki who is in the group can change this page … Ask an admin to join the group." (`groupGuideMsg`).
+  A group with no admin in it has guides nobody changes until one joins.
   **Without users** there are no admins: the wiki's one user writes its guides.
   A wiki with users but no admin (from before roles) has no one who can, until `zonewiki user role NAME admin`.
 - **What still reaches a guide**: a page rename re-points the links in it, and a tag's rename the `[[tasks: …]]` on it, in the renamer's commit; neither writes words of the renamer's own choosing beyond the new name.
@@ -572,7 +574,7 @@ A new page is made private from the start (below).
 - **The rule lives in one place** (`go/access.go`): `placeOf(slug)` (the page's place: everyone's, one user's or no one's; `place.sees`, `place.own`, and `place.within`: whoever sees this place sees that one, which a link's mark and a move ask),
   `canSee(user, slug)`,
   `canWrite(user, slug)` (the same pages: everything shared is editable),
-  `canSeePath(user, rel)` for files as git names them (pages, and a user's uploads and tasks in `private/<user>/_assets/` and `_tasks/`, which the private folder covers).
+  `canSeePath(user, rel)` for files as git names them (pages, a user's uploads and tasks in `private/<user>/_assets/` and `_tasks/`, which the private folder covers, and a group's pages and uploads in `groups/<group>/`: Group pages, below).
   Names compare in lower case, and a path is judged as it is opened, cleaned (`private/bob/../alice/x` is alice's).
   Without users nothing is private, and `private/` is an ordinary folder.
 - **No one's pages**: anything under `private/` outside a user's folder (a page in `private/` itself, `private/alice.md` beside the folder, the folder of a user no longer there) is seen by no one; Zone logs each such entry when it starts (`strayPrivate`), so the admin can move it.
@@ -616,6 +618,42 @@ A new page is made private from the start (below).
   and every write route and MCP write tool (her files and the commits must stay as they were);
   a route Zone registers, and an MCP tool, must be probed or listed as exempt there (`test_every_route_is_covered`, `test_every_tool_is_covered`).
   Further tests there cover what alice does with her own (notes, uploads, a new private page, history, Commit all, private tasks and their defaults); the Go tests in `go/tasklogic_test.go` the per-user task files.
+
+## Group pages
+
+Pages in `groups/<group>/` (and its subfolders) are that group's: whoever is in the group sees and changes them, and to anyone else there is no such page, as with another user's private page.
+A team inside a larger wiki keeps there what only the team should read.
+
+**To use it**: an admin puts the people in a group (`zonewiki user group anna +dev`, or the Users tab; a group can be made of other groups, so `groups/product/` is for whoever is in dev or in design: Groups, above).
+From then on `groups/dev/` is theirs: make a page there from a link (`[[groups/dev/roadmap]]`), with New page, by renaming one of your private pages into it, or through an assistant (`write_page` with that slug).
+There is nothing to set up for the folder itself: it is the folder of the group `dev` whether or not a page is in it yet.
+
+- **Who sees it** (`placeOf`, `place.sees` in `go/access.go`): the group's members now, `memberOf(user, group)`.
+  Put in the group, you see its folder at your next request; taken out, or disabled, you no longer do.
+  **An admin is no member by being admin** and sees nothing of the folder, as an admin sees no private page; they can put themselves in the group, which the settings' log shows.
+  A viewer in the group reads and changes nothing. A visitor of a public wiki is in no group.
+- **To anyone else it isn't there**: opening or changing a page of the group (view, editor, history, a version, a diff, the preview, a save, a rename into or out of it, a delete, a restore) is a 404, as for no page at all, by every route and MCP tool.
+  Its pages are left out of search, the page list, Deleted Pages, the uncommitted list, Backlinks, Links to and Related, and a link to one renders as its words; a commit message that names one says "a group's page" (`hideNames`).
+  A rename or a new page aimed at a group you aren't in is refused with "that folder is a group's you aren't in", which says nothing of whether there is such a group.
+- **The folder is the group's whoever is in it**: `groups/nobody/`, of a group nobody is in, is seen by no one, and so is anything in `groups/` outside a group's folder (a page in `groups/` itself, a folder no group can be named as).
+  Zone logs each such entry when it starts (`strayGroups`).
+  So emptying a group never publishes its pages, and what is shared doesn't depend on who is in which group.
+  **A wiki that already had a folder `groups/`** when it got users, or when Zone got group folders, finds its pages there seen only by the groups of those names, or by no one: move them out on disk, or put people in a group of the folder's name.
+  Without users `groups/` is an ordinary folder.
+- **To more people, never to fewer** (`place.within`, `sharedIntoPrivate` in `go/pages.go`): one of your private pages moves into a group you are in, a group's page into the folder of a group that includes its own (`groups/dev/x` → `groups/product/x` while product includes dev) or out to everyone.
+  A shared page doesn't move into a group's folder ("a shared page stays shared"), nor a group's page into a private folder or another group's ("its group has seen it: it stays with at least them"). Between groups it goes by how they are made, not by who happens to be in them.
+- **Uploads** for a group's page are the group's: the file is kept in `groups/<group>/_assets/` (`uploadPlace`, `uploadDir`; URL `/groups/<group>/_assets/<file>`) and served to its members only, 404 for anyone else and for any other subfolder (`serveGroupUpload`); an assistant reads and adds them with `read_file` and `upload_file` (`page`), or over HTTP with its user's token.
+  A page that leaves the folder for more people takes the uploads it shows with it (`shareUploads`), as one that leaves a private folder does.
+- **Search**: the keyword index of the shared pages has nothing of a group's; its pages are added for its members as their own private ones are (`docShared`, `Index.WithExtra`), so a group's words, counts and lengths take part in no one else's ranking, and a typo of a word only the group has suggests nothing to anyone else.
+  A member's index is put together when they first search after a change: with 2,000 pages in the group, some 40 ms (measured 2026-11-16, `TestAMembersIndexOfALargeGroup`).
+- **A group's guides are an admin's who is in the group** (`adminsOnly`): `groups/dev/AGENTS.md` and what it pulls in steer the assistant of everyone in dev, so the others in the group read them and don't change them (Guides, above).
+- **Tasks are not kept there**: a group's tasks are a list for the group (`"for": ["@dev"]`, Lists for some in `docs/spec/tasks.md`), which a page in the folder can show (`[[tasks: list=dev]]`).
+  A `[[task:…]]` on a group's page counts as its title in search only for a task everyone sees, as on a shared page.
+- **What Zone didn't see saved** in a group's folder (written on disk) has no known author: before a write by someone who isn't in the group re-points links there, it is committed as Zone's ("Save 3 files in groups/dev"), so nobody's commit carries text they don't see (`commitOthersDrafts`).
+- **What it is not**: encrypted, or hidden from whoever has the wiki's folder or its repository (as private pages).
+  Not a folder for named people, or one whose readers some of its members only are: a group is who it is for.
+- **Tests**: `tests/test_group_pages.py` gives the group dev a page (committed, deleted, uncommitted), an upload and a guide holding a word no answer to anyone else may contain, and runs the probes of `tests/test_privacy.py`, aimed at the group's folder, as an editor and as an admin who are not in it: every route and MCP read tool, and every write (the folder's files stay byte for byte).
+  A route or tool probed there is probed here; further tests cover its members, a viewer among them, joining and leaving without a restart, a group made of groups, the moves, uploads, the guide, the history and a folder of no group. `TestGroupFolders` in `go/access_test.go` has the rule's table, `TestAGroupsPagesAreInItsMembersIndexAlone` the search.
 
 ## Private tasks
 

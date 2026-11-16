@@ -97,10 +97,31 @@ func commitOthersDrafts(user string) error {
 	// What Zone didn't see saved (written on disk, or before a restart) has no
 	// known author, but in a private folder the folder says whose it is: one
 	// commit per owner.
-	byOwner := map[string][]string{}
-	for _, f := range gitUncommittedFiles(privateDir) {
-		if owner := placeOf(f.Filepath).user(); owner != "" && owner != user {
+	// In a group's folder it says whose it is not: what a writer who isn't in
+	// the group would commit there is committed first, as Zone's (one commit
+	// per group), so no one's commit carries text they don't see.
+	byOwner, byGroup := map[string][]string{}, map[string][]string{}
+	for _, f := range gitUncommittedFiles(privateDir, groupsDir) {
+		p := placeOf(f.Filepath)
+		if owner := p.user(); owner != "" && owner != user {
 			byOwner[owner] = append(byOwner[owner], f.Filepath)
+		}
+		if p.kind == ofGroup && !p.sees(user) {
+			byGroup[p.name] = append(byGroup[p.name], f.Filepath)
+		}
+	}
+	for _, group := range sortedKeys(byGroup) {
+		files := byGroup[group]
+		msg := commitMessage(files[0])
+		if len(files) > 1 {
+			msg = fmt.Sprintf("Save %d files in %s/%s", len(files), groupsDir, group)
+		}
+		paths := make([]string, len(files))
+		for i, fp := range files {
+			paths[i] = filepath.Join(cfg.Data, filepath.FromSlash(fp))
+		}
+		if err := gitCommit("", msg, paths...); err != nil {
+			return writeFailed(fmt.Sprintf("nothing was changed: the changes in a group's folder couldn't be committed first"), err)
 		}
 	}
 	for _, owner := range sortedKeys(byOwner) {

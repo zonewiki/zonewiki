@@ -666,3 +666,99 @@ func TestRebuildReadsOnlyChanges(t *testing.T) {
 		t.Error("not as if built afresh")
 	}
 }
+
+// A group's pages are in no index but its members' (docs/spec/users.md,
+// Group pages): to anyone else the search is, to the last number, that of a
+// wiki without the folder, so neither a ranking nor a typo's suggestion
+// tells that a word is in there.
+func TestAGroupsPagesAreInItsMembersIndexAlone(t *testing.T) {
+	testWiki(t, nil)
+	withGroups(t, map[string][]string{"product": {"dev"}}, "alice:dev", "bob", "carol:dev")
+	shared := []*SearchDoc{
+		{Slug: "p1", Tokens: fixedTokens("apple", "pear", "roadmap")}, {Slug: "p2", Tokens: fixedTokens("pear", "pear", "plum")},
+		{Slug: "p3", Tokens: fixedTokens("apple", "ocelotharq")},
+	}
+	groups := []*SearchDoc{
+		{Slug: "groups/dev/a", Tokens: fixedTokens("ocelotharp", "apple", "apple", "apple")},
+		{Slug: "groups/dev/b", Tokens: fixedTokens("ocelotharp", "pear", "pear", "pear", "pear", "pear", "pear")},
+		{Slug: "groups/product/c", Tokens: fixedTokens("ocelotharp", "plum")},
+		{Slug: "groups/nobody/d", Tokens: fixedTokens("ocelotharp")},
+	}
+	docs := slices.Concat(shared[:2], groups, shared[2:])
+	var c indexCache
+	bob, alice, carol := c.get(&Req{user: "bob"}, docs), c.get(&Req{user: "alice"}, docs), c.get(&Req{user: "carol"}, docs)
+	if !slices.Equal(bob.docs, shared) {
+		t.Fatalf("bob's index has %d docs, want the %d shared ones", len(bob.docs), len(shared))
+	}
+	if len(alice.docs) != 6 || !slices.Equal(alice.docs, carol.docs) {
+		t.Errorf("alice's index has %d docs, carol's %d: the shared ones and their groups' three", len(alice.docs), len(carol.docs))
+	}
+	without := newDocIndex(shared)
+	for _, q := range []string{"apple", "pear", "plum", "ocelotharp", "ocelothar", "ocelotharq", "apple pear", "roadmap"} {
+		got, want := bob.search(q, 10), without.search(q, 10)
+		if !slices.Equal(got, want) {
+			t.Errorf("%q for bob: %d hits, in a wiki without the folder %d", q, len(got), len(want))
+		}
+	}
+	// His typo of the group's word still finds his own page: the word is in no vocabulary of his.
+	if hits := bob.search("ocelotharp", 10); len(hits) != 1 || hits[0].Slug != "p3" {
+		t.Errorf("bob's search for the group's word: %d hits", len(hits))
+	}
+	if hits := alice.search("ocelotharp", 10); len(hits) != 3 {
+		t.Errorf("alice's search for the group's word: %d hits, want her groups' three", len(hits))
+	}
+	// Zone itself has every doc.
+	if all := c.get(nil, docs); len(all.docs) != len(docs) {
+		t.Errorf("Zone's own index has %d docs", len(all.docs))
+	}
+}
+
+// How long a member's index takes to put together when their group's folder
+// is large (the plan group-folders, step 2: 2,000 pages in a group of
+// twenty); it says the time, and fails only where it is far off.
+func TestAMembersIndexOfALargeGroup(t *testing.T) {
+	if testing.Short() {
+		t.Skip("a measurement")
+	}
+	testWiki(t, nil)
+	users := []string{"outsider"}
+	for i := 0; i < 20; i++ {
+		users = append(users, fmt.Sprintf("m%d:dev", i))
+	}
+	withGroups(t, nil, users...)
+	r := rand.New(rand.NewSource(7))
+	text := func() []string {
+		out := make([]string, 300)
+		for i := range out {
+			out[i] = fmt.Sprintf("w%d", r.Intn(5000))
+		}
+		return out
+	}
+	var docs []*SearchDoc
+	for i := 0; i < 4000; i++ {
+		slug := fmt.Sprintf("p%d", i)
+		if i%2 == 0 {
+			slug = "groups/dev/" + slug
+		}
+		docs = append(docs, &SearchDoc{Slug: slug, Tokens: fixedTokens(text()...)})
+	}
+	var c indexCache
+	start := time.Now()
+	c.get(&Req{user: "outsider"}, docs)
+	base := time.Since(start)
+	start = time.Now()
+	first := c.get(&Req{user: "m0"}, docs)
+	view := time.Since(start)
+	start = time.Now()
+	for i := 1; i < 20; i++ {
+		c.get(&Req{user: fmt.Sprintf("m%d", i)}, docs)
+	}
+	others := time.Since(start) / 19
+	start = time.Now()
+	hits := first.search("w17 w4242", 15)
+	t.Logf("2,000 shared pages and 2,000 of a group, 300 words each: the shared index %v, a member's view %v, each further member's %v, a search in it %v (%d hits)",
+		base, view, others, time.Since(start), len(hits))
+	if len(first.docs) != 4000 || view > 5*time.Second {
+		t.Errorf("a member's view: %d docs in %v", len(first.docs), view)
+	}
+}

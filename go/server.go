@@ -165,6 +165,11 @@ func main() {
 	case cfg.Public == publicEdit:
 		logf("this wiki is public: anyone reads and edits its shared pages without signing in (ZONE_PUBLIC=edit)")
 	}
+	for _, p := range strayGroups() {
+		logf("%s is in %s/ but the folder of no group anyone is in: no one sees it. %s/<group>/ holds the pages of a "+
+			"group's members: put someone in the group (zonewiki user group NAME +GROUP), or move it out of %s/.",
+			p, groupsDir, groupsDir, groupsDir)
+	}
 	for _, p := range strayPrivate() {
 		logf("%s is in %s/ but no user's folder there: no one sees it (a removed user's?). "+
 			"Move it to a user's folder (%s/<name>/) or out of %s/.", p, privateDir, privateDir, privateDir)
@@ -480,6 +485,7 @@ func newHandler() http.Handler {
 	mux.HandleFunc("GET /public/{path...}", servePublic)
 	mux.HandleFunc("GET /_assets/{path...}", serveUpload)
 	mux.HandleFunc("GET /private/{user}/_assets/{file}", servePrivateUpload)
+	mux.HandleFunc("GET /groups/{group}/_assets/{file}", serveGroupUpload)
 	mux.HandleFunc("/mcp", mcpEndpoint)
 	pageRoutes(mux)
 	historyRoutes(mux)

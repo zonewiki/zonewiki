@@ -117,20 +117,25 @@ func sharedNewOffer(user, slug string, fromPrivate bool) string {
 	return target
 }
 
-// ownUploadRE: a link to a user's private upload (uploadURL), in a page's
-// text: group 1 the owner, group 2 the file.
-var ownUploadRE = regexp.MustCompile(`/(?:` + keptDirs + `)/([a-z0-9-]+)/_assets/([^\s)"'<>/]+)`)
+// ownUploadRE: a link to an upload kept in a user's or a group's folder
+// (uploadURL), in a page's text: group 1 the folder of folders (private,
+// groups), group 2 the user or group, group 3 the file.
+var ownUploadRE = regexp.MustCompile(`/(` + keptDirs + `)/([a-z0-9-]+)/_assets/([^\s)"'<>/]+)`)
 
-// shareUploads: oldSlug moved to newSlug (newPath). A page taken out of a
-// user's private folder takes the private uploads it shows with it, since
-// the others can't open them: each is copied to _assets/ (the user's other
-// pages keep theirs) and the page points at the copy. A name taken by a
-// different file there gets a number. Returns the files written, for the
-// move's commit.
+// shareUploads: oldSlug moved to newSlug (newPath), to more people (a page
+// out of a user's private folder, or out of a group's). It takes the
+// uploads it shows with it, since the others can't open them: each file
+// kept where the page was is copied to where it is now (_assets/, or the
+// group's; the other pages there keep theirs) and the page points at the
+// copy. A name taken by a different file there gets a number. Returns the
+// files written, for the move's commit.
 func shareUploads(oldSlug, newSlug, newPath string) []string {
-	owner := placeOf(oldSlug).user()
-	if owner == "" || placeOf(newSlug).user() == owner {
+	from, to := placeOf(oldSlug), placeOf(newSlug)
+	if from.folder() == "" || to == from {
 		return nil
+	}
+	if to.kind == ofNoOne || to.kind == ofUser {
+		to = place{} // not a move Zone makes; were it one, the files stay where everyone finds them
 	}
 	text, err := readText(newPath)
 	if err != nil {
@@ -140,14 +145,14 @@ func shareUploads(oldSlug, newSlug, newPath string) []string {
 	masked, stash := mdtext.MaskCode(text)
 	masked = ownUploadRE.ReplaceAllStringFunc(masked, func(m string) string {
 		sub := ownUploadRE.FindStringSubmatch(m)
-		if sub[1] != owner {
+		if sub[1]+"/"+sub[2] != from.folder() {
 			return m
 		}
-		file, err := url.PathUnescape(sub[2]) // the link has the name percent-encoded (uploadURL)
+		file, err := url.PathUnescape(sub[3]) // the link has the name percent-encoded (uploadURL)
 		if err != nil || strings.ContainsAny(file, `/\`) {
 			return m
 		}
-		src := filepath.Join(uploadDir(owner), file)
+		src := filepath.Join(uploadDir(from), file)
 		data, err := os.ReadFile(src)
 		if err != nil {
 			return m
@@ -156,12 +161,12 @@ func shareUploads(oldSlug, newSlug, newPath string) []string {
 		if i := strings.LastIndex(name, "."); i > 0 {
 			name, ext = name[:i], name[i:]
 		}
-		dest := filepath.Join(uploadDir(""), file)
+		dest := filepath.Join(uploadDir(to), file)
 		for n := 2; ; n++ {
 			if have, err := os.ReadFile(dest); err != nil || bytes.Equal(have, data) {
 				break
 			}
-			dest = filepath.Join(uploadDir(""), name+"-"+strconv.Itoa(n)+ext)
+			dest = filepath.Join(uploadDir(to), name+"-"+strconv.Itoa(n)+ext)
 		}
 		if !exists(dest) {
 			if os.MkdirAll(filepath.Dir(dest), 0o777) != nil || os.WriteFile(dest, data, 0o666) != nil {
@@ -169,7 +174,7 @@ func shareUploads(oldSlug, newSlug, newPath string) []string {
 			}
 			written = append(written, dest)
 		}
-		return uploadURL("", filepath.Base(dest))
+		return uploadURL(to, filepath.Base(dest))
 	})
 	if len(written) > 0 || masked != text {
 		if n := mdtext.UnmaskCode(masked, stash); n != text && writeText(newPath, n) == nil {

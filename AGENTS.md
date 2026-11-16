@@ -103,7 +103,7 @@ Auth is optional (a password, or users; see Key Constraints).
 │   ├── server.go           # main: flags, start-up, the routes' mux, the request checks around them; zonewiki eval, zonewiki health, zonewiki user, zonewiki group, zonewiki config
 │   ├── login.go            # The login gate's routes: /login, /logout
 │   ├── static.go           # public/ served as it is (gzipped, kept by the browser), a file sent with its type
-│   ├── uploads.go          # Uploads: _assets/ served, POST /api/upload
+│   ├── uploads.go          # Uploads: _assets/ served (a private page's and a group's from their folders), POST /api/upload
 │   ├── config.go           # What is fixed for the process, from the environment (read once into cfg)
 │   ├── configfile.go       # The settings file .zone/config: its keys, Settings (settings(), reloaded when the file changes), the line edits
 │   ├── storage.go          # upload-max and storage-max: sizes (25MB), what the wiki holds (not .git/, .zone/), checkRoom
@@ -122,7 +122,7 @@ Auth is optional (a password, or users; see Key Constraints).
 │   ├── signout.go          # Sessions signed out: .zone/signed-out
 │   ├── stalls.go           # A request body or response that stands still for a minute fails (noStalls)
 │   ├── setup.go            # The first-run page: /setup, a first login for a wiki other devices reach
-│   ├── access.go           # Who may see and change what: private/<user>/ (canSee, canWrite, canSeePath)
+│   ├── access.go           # Who may see and change what: a page's place (placeOf: everyone's, private/<user>/, groups/<group>/), canSee, canWrite, canSeePath
 │   ├── private.go          # The private home private/<user>/index: /private, its template, its protection
 │   ├── routes.go           # The wiki's routes: pages, the editor, notes, search, previews
 │   ├── pageops.go          # Page writes the routes and the MCP tools share (delete, rename, restore, create, save): checks, text not yet in git kept
@@ -317,7 +317,9 @@ and commit the new pins.
     every read of tasks takes the user (`taskFiles.Open(user)` …, shared + their own files), and what holds every user's tasks (the search index) filters with `canSeeTask`.
     A task is private by its list (`applyList` in `go/tasks.go`: a private list's task is in its user's files): a shared task never goes into a private list, and a private one leaves for a shared place only with `share`. Lists are read with `taskLists(user)`, which gives only those a user sees, and a write to a list or a task in it asks `canWriteList`: don't read another user's registry for them.
     **A shared list can be for some** (`"for"` in its entry, which is in the list's own folder, `_tasks/lists/<name>/list.json`; Lists for some in `docs/spec/tasks.md`): the store leaves that folder out for anyone else (`Store.dirs(who, owner)`: pass the user, `taskfiles.Everyone` only for what Zone does over all the tasks and filters later), `canSeeTask` and `canSeePath` ask `taskFiles.SeesList`, and a task there is given only to a member. Code that reads task files itself, or shows a shared task or list to "everyone signed in", must ask them too; `tests/test_list_members.py` probes the routes.
-    A new route gets a probe in `tests/test_privacy.py`, which fails until it has one.
+    **A group's pages** (`groups/<group>/`, with users; Group pages in `docs/spec/users.md`) are its members': the same functions answer (`placeOf` gives a page's place: everyone's, a user's, a group's, no one's), so code that asks `canSee`/`canSeePath` holds for them, and code that asks "is this private" must say which it means (`place.shared`, `place.own`, `place.within`).
+    A group's folder is its group's whoever is in it (a group nobody is in: seen by no one), and a page moves to more people, never to fewer (`sharedIntoPrivate`).
+    A new route gets a probe in `tests/test_privacy.py`, which fails until it has one; `tests/test_group_pages.py` runs the same probes against a group's folder.
     A path handed to git names one file, never a pattern (`GIT_LITERAL_PATHSPECS` in package `gitrepo`'s environment): don't turn that off for a call that takes a page's name.
   - **Guides are an admin's** (with users): `canWrite` is false for anyone else on `wiki-guide`, a folder's `AGENTS.md`/`CLAUDE.md` and the pages they pull in (`adminsOnly`, Guides in `docs/spec/users.md`): every user's assistant follows them.
   - **First run** (`go/setup.go`): a wiki other devices can reach (`ZONE_ALLOW_REMOTE`, `hosts`, `ZONE_BIND` beyond localhost) with no login answers only `/setup` until one is set, unless `no-login = yes`.

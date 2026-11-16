@@ -5,6 +5,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"path"
 	"regexp"
 	"slices"
 	"sort"
@@ -207,7 +208,7 @@ func newSlug(raw, user string) (string, error) {
 		return "", toolErr(strconv.Quote(slug) + ": pages can't go in folders starting with '_' or '.'")
 	}
 	if readOnly(user, slug) {
-		return "", toolErr(readOnlyWhy(user))
+		return "", toolErr(readOnlyWhy(user, slug))
 	}
 	if !canWrite(user, slug) {
 		return "", toolErr(notYours(slug, user))
@@ -283,8 +284,16 @@ func pageOrNewSlug(raw, user string) (string, error) {
 }
 
 // notYours: the refusal of a page in private/ that isn't in user's own
-// folder (which says nothing of whether it exists).
+// folder, or in groups/ and in no folder of a group they are in (which
+// says nothing of whether it exists).
 func notYours(slug, user string) string {
+	if dir, _, _ := strings.Cut(strings.ToLower(path.Clean(slug)), "/"); dir == groupsDir && settings().Users != nil {
+		if in := settings().Users[user]; in != nil && len(in.In) > 0 {
+			return strconv.Quote(slug) + ": of " + groupsDir + "/, only the folders of the groups you are in are yours to read or write (" +
+				groupsDir + "/" + strings.Join(in.In, "/, "+groupsDir+"/") + "/)"
+		}
+		return strconv.Quote(slug) + ": " + groupsDir + "/ holds the groups' folders, which only a group's members see, and you are in no group"
+	}
 	if own := privateFolder(user); own != "" {
 		return strconv.Quote(slug) + ": of private/, only your own folder " + own + "/ is yours to read or write"
 	}

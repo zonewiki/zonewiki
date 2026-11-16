@@ -80,8 +80,10 @@ func (s *Settings) joinGroups() {
 			madeOf[in] = append(madeOf[in], g)
 		}
 	}
-	for _, u := range s.Users {
-		in := slices.Clone(u.Groups)
+	// through: groups, and every group that includes one of them, by
+	// whatever way.
+	through := func(groups []string) []string {
+		in := slices.Clone(groups)
 		for i := 0; i < len(in); i++ { // in grows while it is walked
 			for _, g := range madeOf[in[i]] {
 				if !slices.Contains(in, g) {
@@ -90,8 +92,22 @@ func (s *Settings) joinGroups() {
 			}
 		}
 		slices.Sort(in)
-		u.In = in
+		return in
 	}
+	for _, u := range s.Users {
+		u.In = through(u.Groups)
+	}
+	s.partOf = map[string][]string{}
+	for g := range madeOf {
+		s.partOf[g] = through([]string{g})
+	}
+}
+
+// groupIn: the group outer includes the group inner, directly or by way of
+// others, so whoever is in inner is in outer, now and whoever joins (a
+// group is not in itself).
+func (s *Settings) groupIn(inner, outer string) bool {
+	return inner != outer && slices.Contains(s.partOf[inner], outer)
 }
 
 // groups: every group there is, A–Z: those a user is in, and those the

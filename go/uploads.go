@@ -1,4 +1,5 @@
-// Uploads: _assets/ (a private page's in private/<user>/_assets/), served
+// Uploads: _assets/ (a private page's in private/<user>/_assets/, a
+// group's in groups/<group>/_assets/), served
 // and saved (POST /api/upload).
 package main
 
@@ -25,34 +26,43 @@ import (
 // when the file is opened directly.
 const svgCSP = "sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline'"
 
-// uploadDir: where owner's uploads are kept: _assets/ for the shared ones
-// (owner ""), private/<owner>/_assets/ for a user's private ones, in their
-// folder like their pages. Their URLs follow the folders: /_assets/<file>
-// and /private/<owner>/_assets/<file>.
-func uploadDir(owner string) string {
-	if owner == "" {
-		return cfg.Uploads
+// uploadDir: where the uploads of a place are kept: _assets/ for the shared
+// ones, private/<user>/_assets/ for a user's private ones and
+// groups/<group>/_assets/ for a group's, in the folder like its pages. Their
+// URLs follow the folders: /_assets/<file>, /private/<user>/_assets/<file>,
+// /groups/<group>/_assets/<file>.
+func uploadDir(p place) string {
+	if folder := p.folder(); folder != "" {
+		return filepath.Join(cfg.Data, filepath.FromSlash(folder), "_assets")
 	}
-	return filepath.Join(cfg.Data, privateDir, owner, "_assets")
+	return cfg.Uploads
 }
 
-// uploadOwner: whose uploads a file that user uploads for page goes to:
-// their own for a page in their private folder, else the shared ones ("").
-func uploadOwner(user, page string) string {
-	if placeOf(page).own(user) {
-		return user
+// uploadPlace: where a file that user uploads for page is kept: with the
+// page, when it is in their own private folder or in a group's they are in
+// (a file is seen by who sees the page it is for), else with the shared
+// ones.
+func uploadPlace(user, page string) place {
+	if p := placeOf(page); p.own(user) || p.kind == ofGroup && p.sees(user) {
+		return p
 	}
-	return ""
+	return place{}
 }
 
-// uploadURL: the URL of file in owner's uploads, as a markdown link takes
+// uploadRel: file in a place's uploads, as its path in the wiki
+// ("groups/dev/_assets/a.png").
+func uploadRel(p place, file string) string {
+	if folder := p.folder(); folder != "" {
+		return folder + "/_assets/" + file
+	}
+	return "_assets/" + file
+}
+
+// uploadURL: the URL of file in a place's uploads, as a markdown link takes
 // it: percent-encoded (pathURL), since a space in a link's target ends the
 // link and a bracket may ("My Deck (v2).pdf").
-func uploadURL(owner, file string) string {
-	if owner == "" {
-		return pathURL("_assets", file)
-	}
-	return pathURL(privateDir, owner, "_assets", file)
+func uploadURL(p place, file string) string {
+	return pathURL(strings.Split(uploadRel(p, file), "/")...)
 }
 
 // A link to an upload written with the file's name as it is, spaces and
@@ -104,7 +114,18 @@ func servePrivateUpload(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	serveUploadFile(w, r, uploadDir(owner), r.PathValue("file"))
+	serveUploadFile(w, r, uploadDir(place{ofUser, owner}), r.PathValue("file"))
+}
+
+// serveGroupUpload: a group's upload, to its members only (404 for anyone
+// else, as for a file that isn't there, and for a group that isn't).
+func serveGroupUpload(w http.ResponseWriter, r *http.Request) {
+	p := placeOf(groupsDir + "/" + r.PathValue("group") + "/_assets")
+	if p.kind != ofGroup || p.name != r.PathValue("group") || !p.sees(userOf(r)) {
+		http.NotFound(w, r)
+		return
+	}
+	serveUploadFile(w, r, uploadDir(p), r.PathValue("file"))
 }
 
 // serveUploadFile: filename in dir, inline only when the browser treats it
@@ -192,7 +213,7 @@ func apiUpload(w http.ResponseWriter, r *http.Request) {
 	if originalName == "" {
 		originalName = "upload" + uploadExt(fileType)
 	}
-	owner := uploadOwner(userOf(r), r.FormValue("page"))
+	owner := uploadPlace(userOf(r), r.FormValue("page"))
 	if settings().isViewer(userOf(r)) {
 		http.Error(w, readOnlyMsg, http.StatusForbidden)
 		return
@@ -241,7 +262,7 @@ func apiUpload(w http.ResponseWriter, r *http.Request) {
 var uploadMu sync.Mutex
 
 // saveUpload: storeUpload for the route, which answers what went wrong.
-func saveUpload(w http.ResponseWriter, r *http.Request, src io.ReadSeeker, owner, filename string) bool {
+func saveUpload(w http.ResponseWriter, r *http.Request, src io.ReadSeeker, owner place, filename string) bool {
 	err := storeUpload(userOf(r), owner, filename, src, "")
 	if pe, ok := refusalOf(err); ok {
 		http.Error(w, pe.msg, http.StatusInsufficientStorage)
@@ -255,10 +276,10 @@ func saveUpload(w http.ResponseWriter, r *http.Request, src io.ReadSeeker, owner
 	return true
 }
 
-// storeUpload writes an upload to owner's uploads (uploadDir) and commits
+// storeUpload writes an upload to a place's uploads (uploadDir) and commits
 // it as user, the commit's message ending with via (" (MCP)" for a tool's).
 // A wiki with no room for it refuses (checkRoom).
-func storeUpload(user, owner, filename string, src io.ReadSeeker, via string) error {
+func storeUpload(user string, owner place, filename string, src io.ReadSeeker, via string) error {
 	dest := filepath.Join(uploadDir(owner), filename)
 	uploadMu.Lock()
 	defer uploadMu.Unlock()
@@ -288,8 +309,8 @@ func storeUpload(user, owner, filename string, src io.ReadSeeker, via string) er
 		return err
 	}
 	name := filename
-	if owner != "" {
-		name = privateDir + "/" + owner + "/_assets/" + filename
+	if !owner.shared() {
+		name = uploadRel(owner, filename)
 	}
 	added(size)
 	gitCommit(user, "Upload "+name+via, dest)
@@ -297,9 +318,9 @@ func storeUpload(user, owner, filename string, src io.ReadSeeker, via string) er
 }
 
 // freeUploadName: filename, or with a number before its extension
-// (deck-2.pdf, deck-3.pdf …) when owner's uploads have a file of that name:
+// (deck-2.pdf, deck-3.pdf …) when the place's uploads have a file of that name:
 // an upload that asks nobody (an assistant's) never replaces a file.
-func freeUploadName(owner, filename string) string {
+func freeUploadName(owner place, filename string) string {
 	stem, ext := filename, suffix(filename)
 	stem = strings.TrimSuffix(stem, ext)
 	name := filename

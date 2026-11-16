@@ -51,47 +51,61 @@ func publicMode() string {
 // visitorMsg: what a visitor is told about what only users do.
 const visitorMsg = "Sign in to do this: without an account you can only read this wiki."
 
+// groupsDir is the folder of the groups' folders: groups/<group>/ holds
+// the pages (and their uploads) of the group's members (docs/spec/users.md,
+// Group pages).
+const groupsDir = "groups"
+
 // keptDirs: the folders whose first level names who sees what is kept in
-// them (private/<user>/), as a pattern: what spells such a path in a text
-// (an upload's link, a commit message) is made from it.
-const keptDirs = privateDir
+// them (private/<user>/, groups/<group>/), as a pattern: what spells such a
+// path in a text (an upload's link, a commit message) is made from it.
+const keptDirs = privateDir + "|" + groupsDir
 
 // place: whose a page or a file is, which its path alone says (where
-// something is kept is who sees it): everyone's, one user's, or no one's.
-// Every question about who sees what is asked of a place, so a new kind of
-// folder (a group's) changes the answers here and nowhere else.
+// something is kept is who sees it): everyone's, one user's, a group's, or
+// no one's. Every question about who sees what is asked of a place, so the
+// answers are here and nowhere else.
 type place struct {
 	kind placeKind
-	name string // the user whose it is (ofUser), else ""
+	name string // the user (ofUser) or the group (ofGroup) whose it is, else ""
 }
 
 type placeKind int
 
 const (
-	ofEveryone placeKind = iota // shared: outside private/, or a wiki without users
+	ofEveryone placeKind = iota // shared: outside private/ and groups/, or a wiki without users
 	ofUser                      // in private/<user>/
-	ofNoOne                     // in private/ but in no user's folder: "private/carol/x", "private/alice" itself
+	ofGroup                     // in groups/<group>/: its members', whoever they are now (nobody, too)
+	ofNoOne                     // in private/ but in no user's folder, or in groups/ but in no group's: "private/carol/x", "private/alice" itself, "groups/x"
 )
 
 // placeOf: the place of the page slug, or of the file rel (slash-separated,
-// relative to the wiki): private/<user>/… is that user's, anything else in
-// private/ no one's, the rest everyone's. Without users nothing is
-// private. It is judged as safePath opens it, cleaned ("private/bob/../
-// alice/x" is alice's), and in lower case.
+// relative to the wiki): private/<user>/… is that user's, groups/<group>/…
+// that group's, anything else in private/ or groups/ no one's, the rest
+// everyone's. A group's folder is its group's whether or not anyone is in
+// the group: so what is shared never depends on who is in which group, and
+// emptying a group publishes nothing. Without users nothing is private. It
+// is judged as safePath opens it, cleaned ("private/bob/../alice/x" is
+// alice's), and in lower case.
 func placeOf(rel string) place {
 	users := settings().Users
 	if users == nil {
 		return place{}
 	}
-	rest, found := strings.CutPrefix(strings.ToLower(path.Clean(rel)), privateDir+"/")
-	if !found {
+	dir, rest, found := strings.Cut(strings.ToLower(path.Clean(rel)), "/")
+	if !found || dir != privateDir && dir != groupsDir {
 		return place{}
 	}
 	name, _, inside := strings.Cut(rest, "/")
-	if !inside || users[name] == nil {
+	switch {
+	case !inside:
 		return place{kind: ofNoOne}
+	case dir == privateDir && users[name] != nil:
+		return place{ofUser, name}
+	case dir == groupsDir && groupNameRE.MatchString(name):
+		return place{ofGroup, name}
 	}
-	return place{ofUser, name}
+	return place{kind: ofNoOne}
 }
 
 // shared: everyone's.
@@ -105,21 +119,65 @@ func (p place) user() string {
 	return ""
 }
 
+// group: the group whose place it is, "" for any other place.
+func (p place) group() string {
+	if p.kind == ofGroup {
+		return p.name
+	}
+	return ""
+}
+
+// folder: the place's folder ("private/alice", "groups/dev"), "" for the
+// shared pages (the wiki itself) and for no one's.
+func (p place) folder() string {
+	switch p.kind {
+	case ofUser:
+		return privateDir + "/" + p.name
+	case ofGroup:
+		return groupsDir + "/" + p.name
+	}
+	return ""
+}
+
 // own: it is user's own, and theirs alone.
 func (p place) own(user string) bool { return p.kind == ofUser && p.name == user }
 
-// sees: user sees what is kept there.
-func (p place) sees(user string) bool { return p.shared() || p.own(user) }
+// sees: user sees what is kept there: everyone what is shared, a user their
+// own, a group's members what is the group's (an admin who is none of them
+// doesn't, as an admin sees no private page; nor a visitor, who is in no
+// group).
+func (p place) sees(user string) bool {
+	switch p.kind {
+	case ofEveryone:
+		return true
+	case ofUser:
+		return p.name == user
+	case ofGroup:
+		return settings().memberOf(user, p.name)
+	}
+	return false
+}
 
 // within: everyone who sees what is kept at p sees what is kept at q too:
 // q is the same place or a wider one. What a link's mark asks (does every
 // reader of this page see its target), and a move (does it take the page
-// from anyone).
+// from anyone). Between groups it goes by how they are made, not by who
+// happens to be in them: dev is within product while product includes dev,
+// and two groups of the same people are two.
 func (p place) within(q place) bool {
-	return q.shared() || p.kind == ofUser && q == p
+	switch {
+	case q.shared():
+		return true
+	case p.kind == ofUser:
+		return q == p || q.kind == ofGroup && settings().memberOf(p.name, q.name)
+	case p.kind == ofGroup:
+		return q.kind == ofGroup && (q.name == p.name || settings().groupIn(p.name, q.name))
+	}
+	return false
 }
 
-// canSee: user may see the page slug: a shared page, or one of their own.
+// canSee: user may see the page slug: a shared page, one of their own, or
+// one of a group they are in.
 func canSee(user, slug string) bool { return placeOf(slug).sees(user) }
 
 // canWrite: user may change (create, edit, rename, delete) the page slug:
@@ -142,7 +200,10 @@ func adminsOnly(user, slug string) bool {
 	if s.Users == nil || s.isAdmin(user) {
 		return false
 	}
-	if !placeOf(slug).shared() {
+	// A group's guide steers the assistant of every member, as a shared one
+	// does everyone's: an admin's too, and of those only one who is in the
+	// group sees it at all (canSee).
+	if p := placeOf(slug); !p.shared() && p.kind != ofGroup {
 		return false
 	}
 	return guidePage(slug)
@@ -202,6 +263,8 @@ func guideImports() map[string]bool {
 		}
 		if d.IsDir() {
 			name := d.Name()
+			// Not private/: a guide there is its user's. groups/ is walked: a
+			// group's guides, and what they pull in, are admins' too.
 			if p != root && (strings.HasPrefix(name, "_") || strings.HasPrefix(name, ".") ||
 				filepath.Dir(p) == root && strings.EqualFold(name, privateDir)) {
 				return filepath.SkipDir
@@ -221,15 +284,23 @@ func guideImports() map[string]bool {
 const guideMsg = "Only an admin of this wiki can change this page: it is a guide, which every user's assistant " +
 	"follows (or a page a guide pulls in). Ask an admin of this wiki."
 
+// groupGuideMsg: the same of a group's guide, which only an admin who is in
+// the group changes.
+const groupGuideMsg = "Only an admin of this wiki who is in the group can change this page: it is a guide, which the " +
+	"assistant of everyone in the group follows (or a page a guide pulls in). Ask an admin to join the group."
+
 // readOnlyWhy: why user, who sees slug, may not change it (readOnly): a
 // visitor of a wiki that is public to read signs in first, a viewer changes
 // nothing, anyone else no guide.
-func readOnlyWhy(user string) string {
+func readOnlyWhy(user, slug string) string {
 	if user == visitor && settings().isViewer(user) {
 		return visitorMsg
 	}
 	if settings().isViewer(user) {
 		return readOnlyMsg
+	}
+	if placeOf(slug).kind == ofGroup {
+		return groupGuideMsg
 	}
 	return guideMsg
 }
@@ -412,6 +483,28 @@ func strayPrivate() []string {
 	return stray
 }
 
+// strayGroups: what lies in groups/ that no one sees, for a warning at
+// start (and for a wiki that had a folder groups/ before group folders:
+// docs/spec/users.md, Group pages): the folder of a group nobody is in, a
+// folder no group can be named as, a page put in groups/ itself.
+func strayGroups() []string {
+	s := settings()
+	if s.Users == nil {
+		return nil
+	}
+	entries, _ := os.ReadDir(filepath.Join(cfg.Data, groupsDir))
+	var stray []string
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		if !e.IsDir() || len(s.groupMembers(strings.ToLower(e.Name()))) == 0 {
+			stray = append(stray, groupsDir+"/"+e.Name())
+		}
+	}
+	return stray
+}
+
 // visiblePages: the pages user may see, as iterPages lists them.
 func visiblePages(user string) []PageFile {
 	var out []PageFile
@@ -442,7 +535,7 @@ var privateNameRE = regexp.MustCompile(`(^|[^\w./-])((?:` + keptDirs + `)/[\w./-
 // as "a private page": a commit that moved a page out of a private folder,
 // or rewrote links in one, is in the shared page's history too.
 func hideNames(user, msg string) string {
-	if settings().Users == nil || !strings.Contains(msg, privateDir+"/") {
+	if settings().Users == nil || !strings.Contains(msg, privateDir+"/") && !strings.Contains(msg, groupsDir+"/") {
 		return msg
 	}
 	var out strings.Builder
@@ -450,9 +543,12 @@ func hideNames(user, msg string) string {
 	for _, m := range privateNameRE.FindAllStringSubmatchIndex(msg, -1) {
 		name := msg[m[4]:m[5]]
 		out.WriteString(msg[last:m[4]])
-		if canSeePath(user, strings.TrimSuffix(name, ".md")) {
+		switch {
+		case canSeePath(user, strings.TrimSuffix(name, ".md")):
 			out.WriteString(name)
-		} else {
+		case strings.HasPrefix(name, groupsDir+"/"):
+			out.WriteString("a group's page")
+		default:
 			out.WriteString("a private page")
 		}
 		last = m[5]

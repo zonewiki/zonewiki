@@ -412,7 +412,7 @@ func noDeltaForUploads(wiki string) {
 	}
 	text, have := string(b), strings.Split(string(b), "\n")
 	var add []string
-	for _, line := range gitrepo.NoDeltaAttributes("_assets", privateDir+"/*/_assets") {
+	for _, line := range gitrepo.NoDeltaAttributes("_assets", privateDir+"/*/_assets", groupsDir+"/*/_assets") {
 		if !slices.Contains(have, line) {
 			add = append(add, line)
 		}

@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -435,7 +436,7 @@ func refusePage(w http.ResponseWriter, r *http.Request, rq *Req, slug string) bo
 func refuseWrite(w http.ResponseWriter, r *http.Request, slug string) bool {
 	switch {
 	case readOnly(userOf(r), slug):
-		http.Error(w, readOnlyWhy(userOf(r)), http.StatusForbidden)
+		http.Error(w, readOnlyWhy(userOf(r), slug), http.StatusForbidden)
 		return true
 	case !canWrite(userOf(r), slug):
 		http.NotFound(w, r)
@@ -965,29 +966,57 @@ func partly(err error) (note string, _ error) {
 // seen it, and links to it are theirs too).
 const sharedStaysShared = "it is shared, and others have seen it: a shared page stays shared. For a private page, make a new one in your private folder and copy the text over"
 
+// groupStaysGroups: nor does a group's page go to fewer people than its
+// group.
+const groupStaysGroups = "its group has seen it: it stays with at least them. It can go to a group that includes this one, or to everyone"
+
+// notYoursFolder: what is said of a folder a page can't go to because its
+// place isn't the user's: another user's folder, or a group's they aren't in
+// (which says nothing of whether there is such a group).
+func notYoursFolder(slug string) string {
+	if dir, _, _ := strings.Cut(strings.ToLower(path.Clean(slug)), "/"); dir == groupsDir && settings().Users != nil {
+		return "that folder is a group's you aren't in"
+	}
+	return "that folder is another user's"
+}
+
 // sharedIntoPrivate: of the moves (old → new slug), the old slugs of the
-// shared pages that would land in a private folder, A–Z.
+// pages that would go to fewer people (place.within: a page goes to more
+// people, never to fewer), A–Z: a shared page into a private or a group's
+// folder, a group's page into a private folder or another group's that
+// doesn't include its own.
 func sharedIntoPrivate(moves map[string]string) []string {
 	var out []string
 	for _, o := range sortedKeys(moves) {
-		if placeOf(o).shared() && !placeOf(moves[o]).shared() {
+		if !placeOf(o).within(placeOf(moves[o])) {
 			out = append(out, o)
 		}
 	}
 	return out
 }
 
-// refuseMakingPrivate: the message of a move that would take a shared page
-// into a private folder ("" if none does).
+// refuseMakingPrivate: the message of a move that would take a page from
+// people who see it ("" if none does).
 func refuseMakingPrivate(moves map[string]string) string {
-	shared := sharedIntoPrivate(moves)
-	switch len(shared) {
-	case 0:
+	narrowed := sharedIntoPrivate(moves)
+	if len(narrowed) == 0 {
 		return ""
-	case 1:
-		return "“" + shared[0] + "”: " + sharedStaysShared
 	}
-	return fmt.Sprintf("%d of the pages are shared, and others have seen them: a shared page stays shared (%s …)", len(shared), shared[0])
+	groups := 0
+	for _, o := range narrowed {
+		if placeOf(o).kind == ofGroup {
+			groups++
+		}
+	}
+	switch {
+	case len(narrowed) == 1 && groups == 1:
+		return "“" + narrowed[0] + "”: " + groupStaysGroups
+	case len(narrowed) == 1:
+		return "“" + narrowed[0] + "”: " + sharedStaysShared
+	case groups == len(narrowed):
+		return fmt.Sprintf("%d of the pages are a group's, and its members have seen them: they stay with at least them (%s …)", len(narrowed), narrowed[0])
+	}
+	return fmt.Sprintf("%d of the pages are shared, and others have seen them: a shared page stays shared (%s …)", len(narrowed), narrowed[0])
 }
 
 // rebaseLinks re-points the links in text, written by page source, for a

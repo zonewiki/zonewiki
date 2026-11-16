@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -234,5 +235,120 @@ func TestPlaceWithin(t *testing.T) {
 		if got := c.p.within(c.q); got != c.want {
 			t.Errorf("%s: %v", c.name, got)
 		}
+	}
+}
+
+// withGroups: users as "name" or "name:group,group", and the groups made of
+// groups (group → what it includes), as a settings file would give them.
+func withGroups(t *testing.T, includes map[string][]string, users ...string) {
+	t.Helper()
+	s := settings()
+	s.Users, s.Includes = map[string]*User{}, includes
+	for _, u := range users {
+		name, groups, _ := strings.Cut(u, ":")
+		s.Users[name] = &User{Name: name}
+		if groups != "" {
+			s.Users[name].Groups = strings.Split(groups, ",")
+		}
+	}
+	s.joinGroups()
+}
+
+// A group's folder (docs/spec/users.md, Group pages): groups/<group>/ is
+// its members', whoever they are now; anything else in groups/ no one's.
+func TestGroupFolders(t *testing.T) {
+	testWiki(t, nil)
+	withGroups(t, map[string][]string{"product": {"dev", "design"}}, "alice:dev", "bob:design", "carol", "dana:ops", "eve:dev")
+	settings().Users["dana"].Role = roleAdmin
+	settings().Users["eve"].Disabled = true
+	for _, c := range []struct {
+		slug               string
+		kind               placeKind
+		group              string
+		alice, bob, others bool
+	}{
+		{"groups/dev/roadmap", ofGroup, "dev", true, false, false},
+		{"Groups/Dev/Roadmap", ofGroup, "dev", true, false, false},
+		{"groups/dev/deep/down/x", ofGroup, "dev", true, false, false},
+		{"groups/design/x", ofGroup, "design", false, true, false},
+		{"groups/product/x", ofGroup, "product", true, true, false}, // by way of dev, of design
+		{"groups/nobody/x", ofGroup, "nobody", false, false, false}, // a group nobody is in: its folder all the same
+		{"groups/dev", ofNoOne, "", false, false, false},            // a page beside the folders
+		{"groups/Not_A_Group/x", ofNoOne, "", false, false, false},
+		{"groups/ops/../dev/x", ofGroup, "dev", true, false, false}, // judged as it is opened, cleaned
+		{"groups/dev/../../index", ofEveryone, "", true, true, true},
+		{"groups", ofEveryone, "", true, true, true}, // a page named groups
+		{"notes/groups/dev/x", ofEveryone, "", true, true, true},
+		{"private/groups/dev/x", ofNoOne, "", false, false, false},
+	} {
+		p := placeOf(c.slug)
+		if p.kind != c.kind || p.group() != c.group || p.user() != "" {
+			t.Errorf("placeOf(%s) = %+v", c.slug, p)
+		}
+		if canSee("alice", c.slug) != c.alice || canSee("bob", c.slug) != c.bob {
+			t.Errorf("%s: alice %v bob %v", c.slug, canSee("alice", c.slug), canSee("bob", c.slug))
+		}
+		// carol is in no group, dana an admin in another, eve disabled, a visitor and Zone's own "" in none.
+		for _, who := range []string{"carol", "dana", "eve", visitor, "", "nobody"} {
+			if canSee(who, c.slug) != c.others || canWrite(who, c.slug) && !c.others {
+				t.Errorf("%s: %q sees %v", c.slug, who, canSee(who, c.slug))
+			}
+		}
+	}
+	for path, want := range map[string]bool{
+		"groups/dev/roadmap.md": true, "groups/dev/_assets/a.png": true, "groups/design/_assets/a.png": false,
+		"groups/_assets/a.png": false, "groups/product/x.md": true, "groups/nobody/x.md": false, "groups/loose.md": false,
+	} {
+		if canSeePath("alice", path) != want {
+			t.Errorf("canSeePath(alice, %s) != %v", path, want)
+		}
+		if canSeePath("carol", path) || canSeePath(visitor, path) {
+			t.Errorf("%s: seen by someone in no group", path)
+		}
+	}
+	// Whoever sees one place sees the other: to more people, never to fewer.
+	shared, hers, dev, design, product, ops := placeOf("x"), placeOf("private/alice/x"), placeOf("groups/dev/x"), placeOf("groups/design/x"),
+		placeOf("groups/product/x"), placeOf("groups/ops/x")
+	for _, c := range []struct {
+		name string
+		p, q place
+		want bool
+	}{
+		{"hers in her group's", hers, dev, true}, {"hers in a group that includes hers", hers, product, true},
+		{"hers in a group she isn't in", hers, design, false}, {"hers in shared", hers, shared, true},
+		{"dev in shared", dev, shared, true}, {"dev in dev", dev, placeOf("groups/dev/sub/y"), true},
+		{"dev in product", dev, product, true}, {"design in product", design, product, true},
+		{"product in dev", product, dev, false}, {"dev in design", dev, design, false}, {"dev in ops", dev, ops, false},
+		{"dev in hers", dev, hers, false}, {"shared in dev", shared, dev, false}, {"shared in product", shared, product, false},
+		{"no one's in dev", placeOf("groups/loose"), dev, false},
+	} {
+		if got := c.p.within(c.q); got != c.want {
+			t.Errorf("%s: %v", c.name, got)
+		}
+	}
+	// A commit message names no page of a group to who isn't in it.
+	msg := "Rename groups/dev/roadmap to roadmap, and notgroups/dev/x"
+	if got := hideNames("carol", msg); got != "Rename a group's page to roadmap, and notgroups/dev/x" {
+		t.Errorf("hideNames for carol: %q", got)
+	}
+	if got := hideNames("alice", msg); got != msg {
+		t.Errorf("hideNames for alice: %q", got)
+	}
+	// A group's guide is an admin's who is in the group; the others in it read it.
+	withGroups(t, nil, "alice:dev", "dana:dev", "frank")
+	settings().Users["dana"].Role, settings().Users["frank"].Role = roleAdmin, roleAdmin
+	for who, want := range map[string]bool{"alice": false, "dana": true, "frank": false} {
+		if canWrite(who, "groups/dev/AGENTS") != want || canWrite(who, "groups/dev/sub/claude") != want {
+			t.Errorf("%s writes the group's guide: %v", who, !want)
+		}
+	}
+	if !canSee("alice", "groups/dev/AGENTS") || !readOnly("alice", "groups/dev/AGENTS") || readOnly("frank", "groups/dev/AGENTS") ||
+		!canWrite("alice", "groups/dev/roadmap") || readOnlyWhy("alice", "groups/dev/AGENTS") != groupGuideMsg {
+		t.Error("the group's guide for an editor in it")
+	}
+	// Without users groups/ is an ordinary folder.
+	settings().Users = nil
+	if p := placeOf("groups/dev/x"); !p.shared() || !canSee("", "groups/dev/x") {
+		t.Error("groups/ without users")
 	}
 }

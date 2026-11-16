@@ -222,7 +222,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 			EditSlug: slug, SectionKeys: sectionKeys(content, headings), SectionTasks: tasks}))
 	}
 	page(w, rq, http.StatusOK, "view.html", title, shell{wide: true}, &pageView{Title: title, Slug: slug,
-		FromUncommitted: fromUncommitted, Private: !placeOf(slug).shared(), ReadOnly: readOnly(rq.user, slug), TaskKeys: strings.Join(mdtext.TaskLineKeys(content), ","),
+		FromUncommitted: fromUncommitted, Private: placeOf(slug).user() != "", ReadOnly: readOnly(rq.user, slug), TaskKeys: strings.Join(mdtext.TaskLineKeys(content), ","),
 		BreadcrumbHTML: bc, DeleteDialogHTML: buildDeleteDialog(slug, title), RailTocHTML: railTocItems(string(article)),
 		MetaRowHTML: metaRow, ArticleHTML: article, LinkSections: sections, Outlinks: outlinks(rq, slug, path), Menu: menu})
 }
@@ -798,7 +798,7 @@ func appendPage(w http.ResponseWriter, r *http.Request) {
 		targetPath = safePath(target)
 	}
 	if target != "" && readOnly(userOf(r), target) {
-		http.Redirect(w, r, back+quote(readOnlyWhy(userOf(r))), http.StatusFound)
+		http.Redirect(w, r, back+quote(readOnlyWhy(userOf(r), target)), http.StatusFound)
 		return
 	}
 	if raw != "" && (targetPath == "" || !exists(targetPath)) {
@@ -842,7 +842,7 @@ func apiPagesList(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
-		private := !placeOf(p.Slug).shared() // not hidden above: the user's own
+		private := placeOf(p.Slug).user() != "" // not hidden above: the user's own
 		pages = append(pages, M{"slug": p.Slug, "title": title, "links": counts[p.Slug], "private": private,
 			"mtime": st.ModTime().Unix(), "created": fmtDate(changeTime(st)), "edited": fmtDate(st.ModTime())})
 	}
