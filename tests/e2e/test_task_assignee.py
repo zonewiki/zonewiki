@@ -960,3 +960,62 @@ def test_many_people_are_found_by_typing(page, wiki, monkeypatch):
     expect(dlg.locator(".bulk-list-row:visible")).to_have_text(["@zoe", re.compile("No one")])
     find.press("Enter")
     wait_for_assignee(page, "Hand me on", "zoe")
+
+
+def test_a_task_leaving_a_list_for_some_says_who_will_see_it(page, wiki, monkeypatch):
+    """Out of a list for some into one for everyone: the move dialog's row
+    and the edit dialog's line say it, and a drop asks, as sharing a private
+    task does. The For field completes groups and people, word by word."""
+    monkeypatch.setattr(settings, "USERS", {name: ("pw", "") for name in ("alice", "bob", "carol")})
+    monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}, "carol": {"groups": "hiring"}})
+    page.request.post("/login", form={"username": "alice", "password": "pw"})
+    make_list(page, "team")
+    page.goto("/tasks")
+    page.locator(".page-menu-btn").click()
+    page.locator("#list-new-btn").click()
+    dialog = page.locator("#list-new-dialog")
+    dialog.locator("input[name=name]").fill("hiring")
+    field = dialog.locator("#list-new-for")
+    offered = lambda: page.locator("#list-for-words option").evaluate_all("os => os.map(o => o.value)")
+    field.type("@h")
+    assert offered() == ["@hiring"]
+    field.fill("")
+    field.type("@hiring, c")                                  # the next word: people too, what is named left out
+    assert offered() == ["@hiring, carol"]
+    field.fill("")
+    field.type("alice ")
+    assert offered() == ["alice @hiring", "alice bob", "alice carol"]
+    field.fill("@hiring, alice")
+    dialog.locator("#list-new-submit").click()
+    page.wait_for_url(re.compile(r"/tasks\?list=hiring$"))
+    new(page, "Offer", list="hiring")
+    new(page, "Other", list="hiring")
+    new(page, "Chairs")                                       # in team: By list has its section
+
+    # The move dialog's row says what the move does.
+    page.goto("/tasks?list=hiring&view=open")
+    card(page, "Offer").locator(".task-title").click()
+    page.keyboard.press("m")
+    row = page.locator(".bulk-list-modal .bulk-list-row[data-list=team]")
+    expect(row.locator(".bulk-tag-count")).to_have_text("everyone will see it")
+    page.keyboard.press("Escape")
+    # The edit dialog's line too.
+    modal = open_edit(page, "Offer")
+    note = modal.locator("#task-edit-list-note")
+    expect(note).to_be_hidden()
+    modal.locator("#task-edit-list").select_option("team")
+    expect(note).to_have_text("Everyone who uses the wiki will see and change this task. Now only those the list hiring is for do.")
+    modal.locator("#task-edit-list").select_option("hiring")
+    expect(note).to_be_hidden()
+    page.keyboard.press("Escape")
+
+    # A drop asks.
+    page.goto("/tasks?view=open&group=list")
+    card(page, "Other").drag_to(section(page, "l:team"))
+    ask = page.locator("#task-share-modal")
+    expect(ask).to_contain_text("everyone who uses the wiki will see and change it. Now only those the list “hiring” is for do.")
+    ask.locator("#task-share-cancel").click()
+    assert task(page, "Other")["list"] == "hiring"
+    card(page, "Other").drag_to(section(page, "l:team"))
+    ask.locator("#task-share-confirm").click()
+    wait_until(page, lambda: task(page, "Other")["list"] == "team")

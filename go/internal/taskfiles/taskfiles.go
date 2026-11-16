@@ -565,8 +565,10 @@ type Place struct {
 
 // Word: a word that is another one after any write of a task file of
 // places or of their owners' registries, and after a restart. Not after a
-// file changed by hand, nor after a write to a list that isn't among them.
-func (s *Store) Word(places []Place) string {
+// file changed by hand, nor after a write to a list that isn't among them,
+// nor (for who reads: Every counts the folders they see) after one to a
+// list for some that they are none of: their browser has nothing to load.
+func (s *Store) Word(who string, places []Place) string {
 	changes.Lock()
 	defer changes.Unlock()
 	var n int64
@@ -585,7 +587,7 @@ func (s *Store) Word(places []Place) string {
 			continue
 		}
 		for dir := range changes.in {
-			if strings.HasPrefix(dir, base+string(filepath.Separator)) {
+			if strings.HasPrefix(dir, base+string(filepath.Separator)) && (p.Owner != "" || who == Everyone || s.seesDir(who, dir)) {
 				add(dir)
 			}
 		}
@@ -624,7 +626,7 @@ func (s *Store) Stamp(user string) string {
 	}
 	// Zone's own writes by their count too (Word): two of them within one
 	// tick of the file system's clock that leave a file its size are two.
-	return b.String() + s.Word(places)
+	return b.String() + s.Word(user, places)
 }
 
 // ---- years ----

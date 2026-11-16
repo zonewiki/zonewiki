@@ -90,6 +90,9 @@
 .lists-more-item[hidden] { display: none; }
 .lists-more-name { overflow: hidden; text-overflow: ellipsis; }
 .lists-more-rule { width: 100%; margin: .3rem 0; border: 0; border-top: 1px solid var(--border); }
+/* With users: Your lists, Other lists. */
+.lists-more-head { margin: .35rem .6rem .1rem; font-size: .7rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.lists-more-head[hidden] { display: none; }
 .lists-more-filter { margin: .1rem .1rem .3rem; padding: .3rem .5rem; font: inherit; font-size: .875rem; }
 /* A list this browser hasn't shown before (someone else made it): "new"
    beside its name, and a dot on More until it has been opened. */

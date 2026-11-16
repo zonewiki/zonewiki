@@ -533,7 +533,7 @@ func tasksMtimes() string {
 	for _, o := range taskFiles.EveryOwner() {
 		every = append(every, taskfiles.Place{Owner: o, Every: true})
 	}
-	return b.String() + taskFiles.Word(every)
+	return b.String() + taskFiles.Word(taskfiles.Everyone, every)
 }
 
 var taskDocs struct {

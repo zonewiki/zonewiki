@@ -10,12 +10,14 @@ package main
 
 import (
 	"cmp"
+	"encoding/json"
 	"errors"
 	"net/url"
 	"slices"
 	"strconv"
 	"strings"
 	"unicode"
+	"zonewiki/internal/jsonobj"
 	"zonewiki/internal/mdtext"
 	"zonewiki/internal/taskfiles"
 )
@@ -219,7 +221,37 @@ func pinnedLists(user string, lists map[string]ListInfo) []ListInfo {
 			out = append(out, l)
 		}
 	}
+	// A list for some that the user is one of is a pill for them without a
+	// pin, after their pins, A–Z, until they unpin it (unpinned): it was made
+	// for them, and under More nobody would find it.
+	if own != nil {
+		gone := unpinned(own)
+		var theirs []ListInfo
+		for _, l := range lists {
+			if len(l.For) > 0 && !seen[l.Ref] && !slices.Contains(gone, l.Ref) {
+				theirs = append(theirs, l)
+			}
+		}
+		slices.SortFunc(theirs, func(a, b ListInfo) int { return strings.Compare(a.Ref, b.Ref) })
+		out = append(out, theirs...)
+	}
 	return out
+}
+
+// unpinned: the lists for some that a user took out of their pills
+// ("unpinned" in their registry): a list they are a member of is a pill
+// until then (pinnedLists).
+func unpinned(reg *taskfiles.Registry) []string { return jsonobj.TextList(reg.Extra["unpinned"]) }
+
+func setUnpinned(reg *taskfiles.Registry, refs []string) {
+	if len(refs) == 0 {
+		delete(reg.Extra, "unpinned")
+		return
+	}
+	if reg.Extra == nil {
+		reg.Extra = map[string]json.RawMessage{}
+	}
+	reg.Extra["unpinned"] = json.RawMessage(strings.ReplaceAll(jsonobj.Text(refs), ",", ", "))
 }
 
 // ---- My tasks ----
@@ -650,6 +682,13 @@ func renameRefs(reg *taskfiles.Registry, rename func(ref string) string) bool {
 			reg.Pinned[i], changed = n, true
 		}
 	}
+	gone := unpinned(reg)
+	for i, ref := range gone {
+		if n := rename(ref); n != ref {
+			gone[i], changed = n, true
+			setUnpinned(reg, gone)
+		}
+	}
 	return changed
 }
 
@@ -657,7 +696,10 @@ func renameRefs(reg *taskfiles.Registry, rename func(ref string) string) bool {
 func dropRefs(reg *taskfiles.Registry, drop func(ref string) bool) bool {
 	n := len(reg.Pinned)
 	reg.Pinned = slices.DeleteFunc(reg.Pinned, drop)
-	return len(reg.Pinned) != n
+	gone := unpinned(reg)
+	kept := slices.DeleteFunc(slices.Clone(gone), drop)
+	setUnpinned(reg, kept)
+	return len(reg.Pinned) != n || len(kept) != len(gone)
 }
 
 // renameListInText: page or task text with the lists its [[tasks: list=…]]
@@ -1052,8 +1094,10 @@ func shareListOp(user, ref, suffix string) (string, error) {
 // pinListOp pins the list user names ref ("1": last), makes it their first
 // pinned list ("first"), or unpins it ("0"). The pins are the
 // user's own (their registry); without users the wiki's. A user who has set
-// none starts from the wiki's.
-func pinListOp(user, ref, pin string) error {
+// none starts from the wiki's. everyone (with users): the wiki's pins
+// instead, what a user who has set none has, for who manages the list
+// (canManageList): Pin for everyone.
+func pinListOp(user, ref, pin string, everyone bool) error {
 	if listsUnmigrated {
 		return errListsUnmigrated
 	}
@@ -1067,28 +1111,47 @@ func pinListOp(user, ref, pin string) error {
 	if !ok {
 		return refuseAs(refusedNotFound, "No list #"+cleanList(ref))
 	}
-	owner := pinOwner(user)
+	owner, find, name, forAll := pinOwner(user), resolveList, l.Ref, ""
+	if everyone = everyone && owner != ""; everyone {
+		if l.Private() {
+			return refuse("#" + l.Name + " is private, yours alone: only a shared list is pinned for everyone")
+		}
+		if !canManageList(user, l) {
+			return refuseAs(refusedReadOnly, notOwnerMsg(l))
+		}
+		// The wiki's pins name the shared lists by their names.
+		owner, find, name, forAll = "", sharedList, l.Name, " for everyone"
+	}
 	reg, err := taskFiles.ReadListsStrict(owner)
 	if err != nil {
 		return err
 	}
 	seedPins(user, owner, reg, lists)
 	// Without users the registry's names are the refs.
-	is := func(r string) bool { x, ok := resolveList(r, lists); return ok && x.Ref == l.Ref }
-	msg := "Pin list #" + l.Name
+	is := func(r string) bool { x, ok := find(r, lists); return ok && x.Ref == l.Ref }
+	// A list for some is a pill of its members' without a pin: unpinned, their
+	// registry says so; pinned again, no longer.
+	gone := slices.DeleteFunc(unpinned(reg), is)
+	msg := "Pin list #" + l.Name + forAll
 	switch pin {
 	case "0":
 		reg.Pinned = slices.DeleteFunc(reg.Pinned, is)
-		msg = "Unpin list #" + l.Name
+		msg = "Unpin list #" + l.Name + forAll
+		if len(l.For) > 0 && !everyone {
+			gone = append(gone, l.Ref)
+		}
 	case "1":
 		if !slices.ContainsFunc(reg.Pinned, is) {
-			reg.Pinned = append(reg.Pinned, l.Ref)
+			reg.Pinned = append(reg.Pinned, name)
 		}
 	case "first":
-		reg.Pinned = append([]string{l.Ref}, slices.DeleteFunc(reg.Pinned, is)...)
-		msg = "Pin list #" + l.Name + " first"
+		reg.Pinned = append([]string{name}, slices.DeleteFunc(reg.Pinned, is)...)
+		msg = "Pin list #" + l.Name + " first" + forAll
 	default:
 		return refuse("pin is 0, 1 or first")
+	}
+	if !everyone {
+		setUnpinned(reg, gone)
 	}
 	path, err := taskFiles.WriteListsLocked(user, owner, reg)
 	if err != nil {
@@ -1145,8 +1208,9 @@ func pinOrderOp(user string, refs []string) error {
 // "": everyone), for its owners. Its tasks stay where they are and as they
 // are: narrowed, they are its members' to see from then on, and one given
 // to someone who is none of them keeps the name (to them it is gone, as the
-// list is).
-func setListForOp(user, ref, who string) error {
+// list is): when there are such open tasks the change asks first (askError,
+// which says how many and whose), and goes through once confirmed.
+func setListForOp(user, ref, who string, confirmed bool) error {
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
 	l, err := listForManage(user, ref, taskLists(user))
@@ -1162,6 +1226,29 @@ func setListForOp(user, ref, who string) error {
 	}
 	if slices.Equal(listFor, l.For) {
 		return refuseAs(refusedUnchanged, "#"+l.Name+" is for them already")
+	}
+	if len(listFor) > 0 && !confirmed {
+		open, err := taskFiles.ReadOpenStrict(user)
+		if err != nil {
+			return err
+		}
+		n, names := 0, []string{}
+		for _, t := range open {
+			if t.Owner == "" && t.List == l.Name && t.Assignee != "" && !listMember(t.Assignee, listFor) {
+				if n++; !slices.Contains(names, t.Assignee) {
+					names = append(names, t.Assignee)
+				}
+			}
+		}
+		if n > 0 {
+			slices.Sort(names)
+			tasks := strconv.Itoa(n) + " open tasks here are"
+			if n == 1 {
+				tasks = "1 open task here is"
+			}
+			return &askError{tasks + " assigned to " + strings.Join(names, ", ") + ", who will no longer see the list. " +
+				"Nobody is unassigned: the tasks keep their names, and to them they are gone. Save again to go on."}
+		}
 	}
 	reg, err := taskFiles.ReadListsStrict("")
 	if err != nil {
@@ -1182,6 +1269,12 @@ func setListForOp(user, ref, who string) error {
 	}
 	return commitLists(user, msg, paths)
 }
+
+// askError: an operation that wants a yes first: what it would do, said;
+// the door asks, and calls again confirmed.
+type askError struct{ msg string }
+
+func (e *askError) Error() string { return e.msg }
 
 // setListSettingsOp changes the settings of the list user names ref: set
 // maps a setting (listSettingKeys) to its value, "" taking it out.

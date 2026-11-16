@@ -68,17 +68,17 @@ func tasksWord(user string, scopes ...string) string {
 		case scope != "" && isInbox(scope, lists):
 			places = append(places, taskfiles.Place{Owner: inboxOwner(user)})
 		default:
-			return taskFiles.Word(every)
+			return taskFiles.Word(user, every)
 		}
 	}
 	if len(places) == 0 {
-		return taskFiles.Word(every)
+		return taskFiles.Word(user, every)
 	}
 	// The registries the user reads, whatever the lists: a list made, a pin.
 	for _, o := range taskFiles.Owners(user) {
 		places = append(places, taskfiles.Place{Owner: o})
 	}
-	return taskFiles.Word(places)
+	return taskFiles.Word(user, places)
 }
 
 // heldScopes: the scopes of the lists a page holds, as its requests name

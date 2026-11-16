@@ -715,7 +715,12 @@ type TasksMore struct {
 	Label        string
 	Current, All bool
 	Lists        []TaskPlace
-	Filter       bool
+	// Others (with users): the lists for everyone that the user has nothing
+	// in; Lists are then theirs: their private ones, those for some that
+	// they are one of, and those for everyone with a task assigned to them.
+	// Among forty lists of a company the few that are one's own come first.
+	Others []TaskPlace
+	Filter bool
 }
 
 // moreFilterFrom: how many lists More holds before it has a filter field.
@@ -751,18 +756,33 @@ func (rq *Req) taskMore(place string) *TasksMore {
 		}
 		return strings.Compare(a.Ref, b.Ref) // the user's own before the shared one of that name
 	})
+	// With users: which of them are the user's.
+	user := rq.who()
+	var has map[string]bool
+	if privateFolder(user) != "" {
+		has = map[string]bool{}
+		for _, t := range rq.openTasks() {
+			if t.Owner == "" && t.Assignee == user {
+				has[taskList(t, lists)] = true
+			}
+		}
+	}
 	for _, l := range rest {
 		p := TaskPlace{Key: "list:" + l.Ref, Label: l.Name, Title: "List #" + l.Name, Href: listHref(l.Ref),
 			Private: l.Private(), Current: place == "list:"+l.Ref}
 		if p.Current {
 			more.Label, more.Current = l.Name, true
 		}
-		more.Lists = append(more.Lists, p)
+		if has == nil || l.Private() || len(l.For) > 0 || has[l.Ref] {
+			more.Lists = append(more.Lists, p)
+		} else {
+			more.Others = append(more.Others, p)
+		}
 	}
 	if place == "all" {
 		more.Label, more.Current, more.All = "All tasks", true, true
 	}
-	more.Filter = len(more.Lists) >= moreFilterFrom
+	more.Filter = len(more.Lists)+len(more.Others) >= moreFilterFrom
 	return more
 }
 

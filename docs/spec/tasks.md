@@ -849,7 +849,11 @@ A private list is its user's. Without users, and in a wiki that has no admin (fr
   A list narrowed gets its file before it leaves the registry; one for everyone again loses the file and is back in the registry.
   **Renamed or deleted, its old folder keeps the file, marked gone** (`{"name": "hiring", "for": […], "gone": true}`): no list anymore, and the folder's history is still only its members' to see.
 - **Its name is taken for everyone**: two shared lists can't have one folder, so New list… with that name says "There is a list #hiring already" to who doesn't see it. That a name is taken is the one thing anyone else can learn.
-- Not yet: a question before a task moves out of a list for some into one for everyone, the count of tasks a narrowing takes out of others' sight, lists you are a member of as pills without pinning them. (`docs/plans/tasks-6-sound-at-100.md`, step 7.)
+- **Narrowing asks when it takes tasks out of someone's sight** (`askError` from `setListForOp`): with open tasks there assigned to people who would be no members, the dialog comes back saying so, "3 open tasks here are assigned to bob, dana, who will no longer see the list. Nobody is unassigned: the tasks keep their names, and to them they are gone. Save again to go on." (`for_confirm`, a hidden `confirm` in the form); Save again narrows it. With nobody's task at stake it asks nothing.
+- **A task that leaves it for a list for everyone says who will see it** (`widens` in `tasks.js`), as sharing a private task does: the move dialog's row reads "everyone will see it", the edit dialog's line "Everyone who uses the wiki will see and change this task. Now only those the list hiring is for do.", and a drop on the other list's section (By list) asks first (`confirmShare` with the list it leaves). Into another list for some it moves without a word.
+- **It is a pill of its members without a pin** (`pinnedLists`): after your pins, A–Z, until you unpin it, which your registry keeps (`"unpinned": ["hiring"]`, following a rename, gone with the list); pinned again it is a pin like any other. A list made for you is in your row the day it is made: under More nobody would look for it.
+- **The For field completes word by word** (`js/listsrow.js`, the words in `data-words` of `#list-for-words`): the groups and the people who can be given tasks, those already named left out; the browser's own datalist would take the whole field for one word. Without the script it offers the groups for the first word.
+- **The tasks' word leaves it out** for anyone else (`Store.Word(who, …)`): a write to it doesn't make their browser load its lists again.
 
 (Until 2026-11 a list was a tag a page declared with `[[tasks: list=<tag>]]`: a task could be in two, a list ended with its page, and a task moved by a change of its tags. A wiki from then is taken over once, when Zone starts: The migration, below.
 Later in 2026-11 came the Inbox: until then a task could be in no list, which with users was everyone's; a pin also put a list's tasks in My tasks, and the first pinned list took new tasks. The Inbox's migration, below.)
@@ -945,6 +949,7 @@ Later in 2026-11 came the Inbox: until then a task could be in no list, which wi
   The pinned lists carry a pin (`.tasks-place-pin`, tooltip "Pinned list #<name>"), a private list a lock (tooltip "… (only you see it)").
   - **More** (`.lists-more`, a `<details>`; its pill is the summary, `.lists-more-btn`): a click opens a panel under it (`.lists-more-panel`) of links, a line each:
     **each list you see and haven't pinned**, A–Z by name (your own before the shared one of that name), a private one with a lock,
+    with users in two groups, each under its word when there are both (`TasksMore.Lists` and `Others`, `.lists-more-head`): **Your lists** (your private ones, the lists for some that you are one of, and the lists for everyone that hold an open task assigned to you), then **Other lists** (for everyone, the rest): among forty lists of a company the few that are yours come first, and the find field goes over both (a group's word goes with its last list);
     then **All tasks** (`/tasks`: every task you see, in whatever list).
     No counts on the lists in it, and **no number on the pill**: what is yours to do is in My tasks.
     Escape and a click elsewhere close it.
@@ -976,7 +981,7 @@ Later in 2026-11 came the Inbox: until then a task could be in no list, which wi
   **A list you make starts pinned**, last, wherever it is made: New list…, the List field, the move dialog, an assistant's `create_task_list`.
   **Pins are the user's own**: in their registry (`pinned`, in order); a user who has set none has the wiki's (the shared registry's, which are everyone's without users), and starts from those with their first pin.
   One who unpinned everything has none (`"pinned": []`), not the wiki's again.
-  With users the wiki's pins are set in `_tasks/lists.json` by hand.
+  **Pin for everyone** / **Unpin for everyone** (with users, in a shared list's ⋯ menu, for who manages it: `canManageList`; `POST /tasks/pin-list` with `everyone=1`, a commit "Pin list #team for everyone") sets the wiki's pins: the pills of everyone who has pinned nothing themselves. (Until 2026-11 they were set in `_tasks/lists.json` by hand.)
   (Until 2026-11 a pin was `pin=1` or `pin=default` in an embed, and a page's pin pinned for everyone.
   Then, until the Inbox, a pin also put a list's tasks in My tasks, and the first pinned list took the new tasks; with nothing pinned they went to a private list `private`, which counted as pinned.
   A registry that names a `default` list reads as that list pinned first (`ParseRegistry`), and is written without the key.)

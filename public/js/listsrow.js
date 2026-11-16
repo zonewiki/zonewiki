@@ -46,6 +46,12 @@ if (more) {
     const apply = () => {
       const q = filter.value.trim().toLowerCase().replace(/^#/, '');
       for (const a of items) a.hidden = q !== '' && !a.dataset.list.toLowerCase().includes(q);
+      // A group's word (Your lists, Other lists) goes with its last list.
+      for (const head of more.querySelectorAll('.lists-more-head')) {
+        let el = head.nextElementSibling, any = false;
+        for (; el && el.matches('.lists-more-item[data-list]'); el = el.nextElementSibling) any = any || !el.hidden;
+        head.hidden = !any;
+      }
     };
     filter.addEventListener('input', apply);
     filter.addEventListener('keydown', e => {
@@ -158,3 +164,26 @@ document.addEventListener('zone:list-made', async e => {
     initRow();
   } catch (_) {}
 });
+
+// A For field (New list…, Who it is for…): whom a shared list is for, groups
+// (@dev) and people, commas or spaces between them. The browser's own
+// completion (a datalist) takes the whole field for one word, so its
+// choices are made here: what is typed so far, and each group and person
+// not yet named that holds the last word. The words come with the page
+// (data-words on the datalist); without this script the groups are offered
+// for the first word.
+const forWords = document.getElementById('list-for-words');
+if (forWords) {
+  const all = (forWords.dataset.words || '').split(' ').filter(Boolean);
+  document.addEventListener('input', e => {
+    if (e.target.getAttribute?.('list') !== 'list-for-words') return;
+    const value = e.target.value;
+    const cut = Math.max(value.lastIndexOf(','), value.lastIndexOf(' ')) + 1;
+    const head = value.slice(0, cut), last = value.slice(cut).toLowerCase();
+    const named = new Set(head.toLowerCase().split(/[\s,]+/).filter(Boolean));
+    const lead = head && !/\s$/.test(head) ? head + ' ' : head;
+    forWords.replaceChildren(...all
+      .filter(w => !named.has(w) && (last ? w.replace(/^@/, '').startsWith(last.replace(/^@/, '')) && (!last.startsWith('@') || w.startsWith('@')) : true))
+      .map(w => new Option('', lead + w)));
+  });
+}

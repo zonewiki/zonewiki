@@ -627,7 +627,9 @@ function syncListNote() {
   // A new task says who sees it under its title (syncTarget): once is enough.
   const isNew = !document.getElementById('task-edit-id' + app.sfx).value;
   const text = isNew ? '' : isPrivate ? 'Private: only you see this task.'
-    : privateWas ? 'Everyone who uses the wiki will see and change this task. It can’t be made private again.' : '';
+    : privateWas ? 'Everyone who uses the wiki will see and change this task. It can’t be made private again.'
+    : listTask && app.widens(listTask, app.listSelect.value)
+      ? `Everyone who uses the wiki will see and change this task. Now only those the list ${app.listName(app.taskList(listTask))} is for do.` : '';
   app.listNote.hidden = !users || !text;
   app.listNote.textContent = text;
 }

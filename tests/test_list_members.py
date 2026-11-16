@@ -77,7 +77,7 @@ def test_its_members_see_it(client, wiki, member):
     sign_in(client, member)
     page = client.get(f"/tasks?list={LIST}", headers=HOST).get_data(as_text=True)
     assert f"<h1>List: {LIST}" in page and "For @hiring, alice: only they see this list" in page and "(alice, carol)" in page
-    assert f'data-place="list:{LIST}"' in client.get("/tasks", headers=HOST).get_data(as_text=True) or member == "carol"
+    assert f'class="tasks-place" data-place="list:{LIST}"' in client.get("/tasks", headers=HOST).get_data(as_text=True)   # a pill
     titles = [t["title"] for t in client.get("/api/tasks", headers=HOST).get_json()]
     assert f"Offer for the {SECRET}" in titles and "Order chairs" in titles
     assert SECRET in client.get("/search", query_string={"q": SECRET}, headers=HOST).get_data(as_text=True)
@@ -157,7 +157,7 @@ def test_anyone_elses_counts_and_views_leave_it_out(client, wiki, who):
     # Its address says what it says of a name no list has, word for word.
     page = client.get(f"/tasks?list={LIST}", headers=HOST).get_data(as_text=True)
     none = client.get("/tasks?list=nosuch", headers=HOST).get_data(as_text=True)
-    words = lambda html: re.sub(r'<datalist id="list-for-words">.*?</datalist>', "", html)   # the groups there are: one is called hiring
+    words = lambda html: re.sub(r'<datalist id="list-for-words".*?</datalist>', "", html)   # the groups there are: one is called hiring
     assert words(page).replace(LIST, "nosuch") == words(none) and 'id="list-rename-btn"' not in page
     assert f'data-place="list:{LIST}"' not in client.get("/tasks", headers=HOST).get_data(as_text=True)
     # The embed on a shared page says what it says of a name no list has.
@@ -332,3 +332,128 @@ def test_a_list_for_some_needs_users_and_is_no_private_list(client, git_wiki_dir
     sign_in(client, "carol")
     resp = client.post("/tasks/new-list", data={"name": "deals"}, headers=HOST)
     assert "newlist_error=" in resp.headers["Location"]
+
+
+def places(client):
+    """The switcher as the Tasks page has it: (the pills' keys, More's heads and lists in order)."""
+    html = client.get("/tasks", headers=HOST).get_data(as_text=True)
+    pills = re.findall(r'class="tasks-place" data-place="([^"]+)"', html)
+    more = re.findall(r'class="lists-more-head">([^<]+)<|class="lists-more-item" data-list="([^"]+)"', html)
+    return pills, [head or name for head, name in more]
+
+
+def test_a_list_you_are_one_of_is_a_pill_until_you_unpin_it(client, wiki):
+    # carol pinned nothing: the list made for her group is in her row all the
+    # same (under More nobody would find it), until she takes it out.
+    sign_in(client, "carol")
+    pills, more = places(client)
+    assert pills == ["mine", "inbox", f"list:{LIST}"] and more == ["team"]
+    page = client.get(f"/tasks?list={LIST}", headers=HOST).get_data(as_text=True)
+    assert 'id="list-unpin-btn"' in page and 'id="list-pin-btn"' not in page
+    assert client.post("/tasks/pin-list", data={"list": LIST, "pin": "0"}, headers=HOST).status_code == 302
+    own = json.loads((wiki / "private/carol/_tasks/lists.json").read_text())
+    assert own["unpinned"] == [LIST] and own["pinned"] == []
+    pills, more = places(client)
+    assert pills == ["mine", "inbox"] and more == ["Your lists", LIST, "Other lists", "team"]
+    # Pinned again, it is a pin like any other.
+    assert client.post("/tasks/pin-list", data={"list": LIST, "pin": "1"}, headers=HOST).status_code == 302
+    own = json.loads((wiki / "private/carol/_tasks/lists.json").read_text())
+    assert "unpinned" not in own and own["pinned"] == [LIST]
+    assert places(client)[0] == ["mine", "inbox", f"list:{LIST}"]
+    # Renamed, what she unpinned stays unpinned under its new name.
+    client.post("/tasks/pin-list", data={"list": LIST, "pin": "0"}, headers=HOST)
+    sign_in(client, "alice")
+    assert client.post("/tasks/rename-list", data={"list": LIST, "new_name": "recruiting"}, headers=HOST).status_code == 302
+    sign_in(client, "carol")
+    assert json.loads((wiki / "private/carol/_tasks/lists.json").read_text())["unpinned"] == ["recruiting"]
+    assert places(client)[0] == ["mine", "inbox"]
+
+
+def test_more_has_your_lists_before_the_others(client, wiki):
+    sign_in(client, "alice")
+    for name in ("archive", "misc"):
+        assert client.post("/tasks/new-list", data={"name": name, "pin": "0"}, headers=HOST).status_code == 302
+    client.post("/api/tasks", json={"title": "Bob's", "list": "misc", "assignee": "bob"}, headers=HOST)
+    assert client.post("/tasks/new-list", data={"name": "bobs", "for": "alice, bob", "pin": "0"}, headers=HOST).status_code == 302
+    sign_in(client, "bob")
+    client.post("/tasks/new-list", data={"name": "own", "private": "1", "pin": "0"}, headers=HOST)
+    client.post("/tasks/pin-list", data={"list": "bobs", "pin": "0"}, headers=HOST)
+    # His: the private one, the one for him, the one with a task of his; the rest are other lists.
+    pills, more = places(client)
+    assert pills == ["mine", "inbox"]
+    assert more == ["Your lists", "bobs", "misc", "own", "Other lists", "archive", "team"]
+    # Without the others there is no word over his.
+    sign_in(client, "alice")
+    for name in ("archive", "team"):
+        client.post("/tasks/list-for", data={"list": name, "for": "alice", "confirm": "1"}, headers=HOST)
+    sign_in(client, "bob")
+    assert places(client)[1] == ["bobs", "misc", "own"]
+
+
+def test_pin_for_everyone_sets_the_wikis_pins(client, wiki):
+    # What a user who has pinned nothing has: an owner's to set, in the list's menu.
+    sign_in(client, "bob")
+    assert places(client)[0] == ["mine", "inbox"]
+    assert 'id="list-pin-all-btn"' not in client.get("/tasks?list=team", headers=HOST).get_data(as_text=True)
+    before = (wiki / "_tasks/lists.json").read_text()
+    assert client.post("/tasks/pin-list", data={"list": "team", "pin": "1", "everyone": "1"}, headers=HOST).status_code == 403
+    assert (wiki / "_tasks/lists.json").read_text() == before
+    sign_in(client, "alice")
+    assert 'id="list-pin-all-btn"' in client.get("/tasks?list=team", headers=HOST).get_data(as_text=True)
+    assert client.post("/tasks/pin-list", data={"list": "team", "pin": "1", "everyone": "1"}, headers=HOST).status_code == 302
+    assert json.loads((wiki / "_tasks/lists.json").read_text())["pinned"] == ["team"]
+    assert git(wiki, "log", "-1", "--format=%s").strip() == "Pin list #team for everyone"
+    assert 'id="list-unpin-all-btn"' in client.get("/tasks?list=team", headers=HOST).get_data(as_text=True)
+    sign_in(client, "bob")
+    assert places(client)[0] == ["mine", "inbox", "list:team"]
+    # And taken back.
+    sign_in(client, "alice")
+    assert client.post("/tasks/pin-list", data={"list": "team", "pin": "0", "everyone": "1"}, headers=HOST).status_code == 302
+    assert "pinned" not in json.loads((wiki / "_tasks/lists.json").read_text()) or json.loads((wiki / "_tasks/lists.json").read_text())["pinned"] == []
+    sign_in(client, "bob")
+    assert places(client)[0] == ["mine", "inbox"]
+
+
+def test_narrowing_says_whose_tasks_leave_their_sight(client, wiki):
+    sign_in(client, "alice")
+    for title, who in (("One", "bob"), ("Two", "bob"), ("Three", "dana"), ("Hers", "alice")):
+        assert client.post("/api/tasks", json={"title": title, "list": "team", "assignee": who}, headers=HOST).status_code == 201
+    resp = client.post("/tasks/list-for", data={"list": "team", "for": "alice, carol"}, headers=HOST)
+    assert resp.status_code == 302 and "for_confirm=1" in resp.headers["Location"]
+    assert not (wiki / "_tasks/lists/team/list.json").exists()                 # asked, not done
+    page = client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True)
+    assert "3 open tasks here are assigned to bob, dana, who will no longer see the list." in page
+    assert '<input type="hidden" name="confirm" value="1">' in page and 'value="alice, carol"' in page
+    # Save again: narrowed, and nobody unassigned.
+    resp = client.post("/tasks/list-for", data={"list": "team", "for": "alice, carol", "confirm": "1"}, headers=HOST)
+    assert resp.headers["Location"] == "/tasks?list=team"
+    assert json.loads((wiki / "_tasks/lists/team/list.json").read_text())["for"] == ["alice", "carol"]
+    who = {t["title"]: t.get("assignee") for t in client.get("/api/tasks", query_string={"list": "team"}, headers=HOST).get_json()}
+    assert who["One"] == "bob" and who["Three"] == "dana"
+    sign_in(client, "bob")
+    assert client.get("/api/tasks", query_string={"mine": "1"}, headers=HOST).get_json() == []
+    # Nothing to say when nobody loses a task: no question.
+    sign_in(client, "alice")
+    resp = client.post("/tasks/list-for", data={"list": "team", "for": "alice, bob, carol, dana"}, headers=HOST)
+    assert resp.headers["Location"] == "/tasks?list=team"
+
+
+def test_anyone_elses_word_stays_when_the_list_is_written(client, wiki):
+    # The word a browser asks for every minute, to load its lists again when
+    # it is another one: a write to a list for some is none of bob's.
+    word = lambda: client.get("/api/tasks/due-count", headers=HOST).headers["Zone-Tasks"]
+    sign_in(client, "bob")
+    before = word()
+    sign_in(client, "alice")
+    assert client.put(f"/api/tasks/{IDS['open']}", json={"title": "Changed"}, headers=HOST).status_code == 200
+    sign_in(client, "bob")
+    assert word() == before
+    sign_in(client, "carol")
+    carols = word()
+    sign_in(client, "alice")
+    client.put(f"/api/tasks/{IDS['open']}", json={"title": "Changed again"}, headers=HOST)
+    client.put(f"/api/tasks/{IDS['shared']}", json={"title": "Order more chairs"}, headers=HOST)
+    sign_in(client, "carol")
+    assert word() != carols
+    sign_in(client, "bob")
+    assert word() != before          # team is his too

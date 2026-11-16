@@ -301,7 +301,7 @@ func TestListsNotTakenOverFromABrokenWiki(t *testing.T) {
 	if _, err := createListOp("", "x", false, false, "", ""); err == nil {
 		t.Error("a list made in a wiki not taken over")
 	}
-	if err := pinListOp("", "shop", "1"); err == nil {
+	if err := pinListOp("", "shop", "1", false); err == nil {
 		t.Error("a pin set in a wiki not taken over")
 	}
 }
@@ -443,11 +443,11 @@ func TestRenameList(t *testing.T) {
 	cake := newTestTask(t, "alice", "Cake", false, "list", "gifts")
 	bobs := newTestTask(t, "bob", "Bob's", false, "list", "gifts")
 	for _, u := range []string{"alice", "bob"} {
-		if err := pinListOp(u, "shop", "first"); err != nil {
+		if err := pinListOp(u, "shop", "first", false); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := pinListOp("alice", "gifts", "1"); err != nil {
+	if err := pinListOp("alice", "gifts", "1", false); err != nil {
 		t.Fatal(err)
 	}
 	pagesMu.Lock()
@@ -516,7 +516,7 @@ func TestDeleteList(t *testing.T) {
 	}
 	milk := newTestTask(t, "alice", "Milk", false, "list", "shop")
 	cake := newTestTask(t, "alice", "Cake", false, "list", "gifts")
-	if err := pinListOp("bob", "shop", "1"); err != nil {
+	if err := pinListOp("bob", "shop", "1", false); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := deleteListOp("alice", "shop", "gifts", false, false, ""); err == nil {
@@ -648,10 +648,10 @@ func TestPins(t *testing.T) {
 	testWiki(t, nil)
 	mustList(t, "", "shop", false)
 	mustList(t, "", "work", false)
-	if err := pinListOp("", "shop", "1"); err != nil {
+	if err := pinListOp("", "shop", "1", false); err != nil {
 		t.Fatal(err)
 	}
-	if err := pinListOp("", "work", "1"); err != nil {
+	if err := pinListOp("", "work", "1", false); err != nil {
 		t.Fatal(err)
 	}
 	withUsers(t, "alice", "bob")
@@ -660,30 +660,30 @@ func TestPins(t *testing.T) {
 	if got := pins("bob"); !slices.Equal(got, []string{"shop", "work"}) {
 		t.Errorf("bob has the wiki's pins: %v", got)
 	}
-	if err := pinListOp("alice", "gifts", "first"); err != nil {
+	if err := pinListOp("alice", "gifts", "first", false); err != nil {
 		t.Fatal(err)
 	}
 	if got := pins("alice"); !slices.Equal(got, []string{"gifts", "shop", "work"}) {
 		t.Errorf("alice's pins %v", got)
 	}
-	if err := pinListOp("alice", "shop", "0"); err != nil {
+	if err := pinListOp("alice", "shop", "0", false); err != nil {
 		t.Fatal(err)
 	}
 	if got := pins("alice"); !slices.Equal(got, []string{"gifts", "work"}) || !slices.Equal(pins("bob"), []string{"shop", "work"}) {
 		t.Errorf("after her unpin: alice %v, bob %v", got, pins("bob"))
 	}
 	for _, r := range []string{"gifts", "work"} {
-		if err := pinListOp("alice", r, "0"); err != nil {
+		if err := pinListOp("alice", r, "0", false); err != nil {
 			t.Fatal(err)
 		}
 	}
 	if got := pins("alice"); len(got) != 0 {
 		t.Errorf("she unpinned everything, and has %v", got)
 	}
-	if err := pinListOp("bob", "gifts", "1"); !refusedWith(err, refusedNotFound) {
+	if err := pinListOp("bob", "gifts", "1", false); !refusedWith(err, refusedNotFound) {
 		t.Errorf("bob pinned alice's list: %v", err)
 	}
-	if err := pinListOp("alice", "work", "maybe"); !refusedWith(err, refusedInvalid) {
+	if err := pinListOp("alice", "work", "maybe", false); !refusedWith(err, refusedInvalid) {
 		t.Errorf("pin=maybe: %v", err)
 	}
 }
@@ -754,7 +754,7 @@ func TestMyTasks(t *testing.T) {
 	if got := all(""); !slices.Equal(got, []string{"Loose", "Milk", "Report"}) {
 		t.Errorf("nothing pinned: %v", got)
 	}
-	if err := pinListOp("", "work", "1"); err != nil {
+	if err := pinListOp("", "work", "1", false); err != nil {
 		t.Fatal(err)
 	}
 	if got := all(""); !slices.Equal(got, []string{"Loose", "Milk", "Report"}) {
@@ -802,7 +802,7 @@ func TestMyTasks(t *testing.T) {
 	// Pins change nothing.
 	for _, pin := range []string{"1", "0"} {
 		for _, ref := range []string{"diary", "someday", "shop"} {
-			if err := pinListOp("alice", ref, pin); err != nil {
+			if err := pinListOp("alice", ref, pin, false); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1380,7 +1380,7 @@ func TestInboxMigrationLeavesOutWhatWasNotPinned(t *testing.T) {
 	}
 	startAgain(t)
 	// Unpinned after the migration: not left out by the next start.
-	if err := pinListOp("", "work", "0"); err != nil {
+	if err := pinListOp("", "work", "0", false); err != nil {
 		t.Fatal(err)
 	}
 	migrateLists(false)
@@ -1430,7 +1430,7 @@ func TestSharedTasksWithoutAListGoToGeneral(t *testing.T) {
 	startAgain(t)
 	// A stray that turns up later (a file edited by hand, an older Zone)
 	// goes there too; the list is there, and an unpin of it stays.
-	if err := pinListOp("", generalListName, "0"); err != nil {
+	if err := pinListOp("", generalListName, "0", false); err != nil {
 		t.Fatal(err)
 	}
 	writeTasks(t, "", append(taskFiles.Open(""), oldTask("9", "Stray"))...)

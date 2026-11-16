@@ -141,7 +141,7 @@ const app = {
   boardDivider, clearBoardDropOver, dropOnBucket, dropWrite, planOnDay,
   taskList,
   filterTasks, boardBuckets,
-  refreshOtherInstances, listTooltip, listMembers, assignableIn, inScope, listName, editPrivate, newTaskList,
+  refreshOtherInstances, listTooltip, listMembers, assignableIn, widens, inScope, listName, editPrivate, newTaskList,
 
   flashTask,
 
@@ -245,6 +245,7 @@ async function dropWrite(id, div) {
   if (dropList(div) !== undefined) {
     const ref = dropList(div), toPrivate = isPrivateList(ref);
     if (task.private && !toPrivate && !await app.confirmShare(task, listName(ref))) return false;
+    if (widens(task, ref) && !await app.confirmShare(task, listName(ref), listName(taskList(task)))) return false;
     return app.moveTasks([task], ref, toPrivate, false);
   }
   return app.startOn([id], div.dataset.dropDay);
@@ -439,6 +440,11 @@ document.addEventListener('zone:list-made', e => {
 function listMembers(ref) {
   const members = listChoices.find(l => l.ref === ref)?.members;
   return members ? new Set(members) : null;
+}
+// The task would leave a list for some for a shared list that is for
+// everyone: more people see it than now (the dialogs say so, a drop asks).
+function widens(task, ref) {
+  return !task.private && !!listMembers(taskList(task) || '') && !isPrivateList(ref) && !listMembers(ref);
 }
 // Who a task in the list ref can be given to.
 function assignableIn(ref) { return listMembers(ref) || people.users || new Set(); }

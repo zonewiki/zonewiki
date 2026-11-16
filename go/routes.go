@@ -938,7 +938,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	v := &tasksPageView{Heading: heading, Missing: missing,
 		Menu: !rq.sharing && !listsUnmigrated && mayWriteTasks(rq.who()) == nil, Users: privateFolder(rq.user) != "",
 		Mine: mine, MineAssigns: mine && mineAssigns(rq.who()), Inbox: inbox, InboxPrivate: inbox && inboxOwner(rq.who()) != "",
-		Groups: settings().groups(), NewListName: q.Get("newlist_name"), NewListError: q.Get("newlist_error"),
+		Groups: settings().groups(), People: settings().assignableUsers(), NewListName: q.Get("newlist_name"), NewListError: q.Get("newlist_error"),
 		Places: places, More: more, TasksHTML: htmlOf(tasksHTML), LinkSections: sections,
 		BreadcrumbHTML: breadcrumb(rq, crumbs, key, true, title, chip)}
 	if mine {
@@ -952,6 +952,14 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 		v.Manage = canManageList(rq.who(), *list)
 		v.ForWords, v.ForError = firstNonEmpty(q.Get("for_words"), forWords(list.For)), q.Get("for_error")
 		v.Members, v.ForNow = listMembers(list.For), forWords(list.For)
+		v.ForConfirm = q.Get("for_confirm") != "" && v.ForError != ""
+		// The wiki's pins (Pin for everyone): what a user who has set none has.
+		if !list.Private() && privateFolder(rq.user) != "" {
+			v.WikiPins = true
+			for _, name := range taskFiles.ReadLists("").Pinned {
+				v.WikiPinned = v.WikiPinned || name == list.Name
+			}
+		}
 		v.ListRenameName, v.ListRenameError = firstNonEmpty(q.Get("rename_name"), list.Name), q.Get("rename_error")
 		v.DeleteError, v.ShareError = q.Get("delete_error"), q.Get("share_error")
 		for i, p := range rq.pinnedLists() {
@@ -1116,7 +1124,13 @@ func deleteListRoute(w http.ResponseWriter, r *http.Request) {
 // listForRoute: a shared list's Who it is for… dialog (its owners').
 func listForRoute(w http.ResponseWriter, r *http.Request) {
 	ref := cleanList(r.PostFormValue("list"))
-	if err := setListForOp(userOf(r), ref, r.PostFormValue("for")); err != nil {
+	err := setListForOp(userOf(r), ref, r.PostFormValue("for"), r.PostFormValue("confirm") != "")
+	if ask := (*askError)(nil); errors.As(err, &ask) {
+		// What it would take out of others' sight, said in the dialog: Save again goes on.
+		listBack(w, r, ref, "for_error", ask.msg, "for_words", r.PostFormValue("for"), "for_confirm", "1")
+		return
+	}
+	if err != nil {
 		listRefused(w, r, err, ref, "for_error", "for_words", r.PostFormValue("for"))
 		return
 	}
@@ -1138,7 +1152,7 @@ func shareListRoute(w http.ResponseWriter, r *http.Request) {
 // settings dialog's pin): pin is 1, first or 0. Back to the list.
 func pinListRoute(w http.ResponseWriter, r *http.Request) {
 	ref := cleanList(r.PostFormValue("list"))
-	if err := pinListOp(userOf(r), ref, r.PostFormValue("pin")); err != nil {
+	if err := pinListOp(userOf(r), ref, r.PostFormValue("pin"), r.PostFormValue("everyone") != ""); err != nil {
 		pageFailed(w, r, err)
 		return
 	}
@@ -1179,8 +1193,14 @@ type tasksPageView struct {
 	// ("@dev, anna"; a refused one as it was typed), why the dialog came
 	// back, and its members by name; Groups: the groups there are, to
 	// complete from.
-	ForWords, ForError        string
-	ForNow                    string // whom it is for now, "@dev, anna"
+	ForWords, ForError string
+	ForNow             string // whom it is for now, "@dev, anna"
+	ForConfirm         bool   // the dialog is back to ask: Save again goes on (confirm)
+	// WikiPins: the list can be pinned for everyone (a shared one, with
+	// users), by who manages it; WikiPinned: it is. People: who a For field
+	// can name, beside the groups.
+	WikiPins, WikiPinned      bool
+	People                    []string
 	Members, Groups           []string
 	Mine, MineAssigns         bool
 	NewListName, NewListError string
