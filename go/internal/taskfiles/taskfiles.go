@@ -958,13 +958,26 @@ func (s *Store) byOwner(user string, tasks []*Task) (map[string][]*Task, error) 
 	for _, o := range s.Owners(user) {
 		out[o] = []*Task{}
 	}
+	// Each list is asked about once, not once per task: SeesList looks at
+	// the list's folder (a stat), and a write hands over every open task its
+	// user sees (at a team's size 5,000 stats for 40 lists, a third of what
+	// a change cost Zone itself).
+	sees := map[string]bool{}
+	seesList := func(name string) bool {
+		ok, asked := sees[name]
+		if !asked {
+			ok = s.SeesList(user, name)
+			sees[name] = ok
+		}
+		return ok
+	}
 	for _, t := range tasks {
 		if _, ok := out[t.Owner]; !ok {
 			return nil, errors.New("tasks: a task of " + t.Owner + "'s in a write by " + user)
 		}
 		// A list for some that user is none of: its folder wasn't read for
 		// them, so a task written there would be written over the ones it has.
-		if t.Owner == "" && !s.SeesList(user, t.List) {
+		if t.Owner == "" && !seesList(t.List) {
 			return nil, errors.New("tasks: a task of a list " + user + " doesn't see in a write by them")
 		}
 		out[t.Owner] = append(out[t.Owner], t)
