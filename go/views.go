@@ -555,8 +555,10 @@ type pageMenuView struct {
 	Quicknote               bool // a note: Move to wiki…, Append to page…
 	Renamable               bool // Rename…, Delete…
 	RenameError, RenameName string
-	SharedTarget            string // Make shared…: where the private page would go ("": not offered)
-	Date                    string // the note's date, to keep in front of its name
+	SharedTarget            string        // Make shared…: where the private page would go ("": not offered, or there are several places)
+	ShareTargets            []shareTarget // Share…: the places the page can go to, more than one, or from a group's folder
+	ShareFrom               string        // the group whose page it is ("": the user's own private page)
+	Date                    string        // the note's date, to keep in front of its name
 	Folders                 []string
 	PromoteError            string
 	AppendError             string
@@ -570,8 +572,12 @@ func pageMenu(rq *Req, slug, title, renameError, promoteError, appendError, rena
 	m := &pageMenuView{Slug: slug, Title: title, Git: cfg.GitEnabled, Quicknote: isQuicknote(slug) && !visits,
 		Renamable: !isProtected(slug) && canWrite(rq.who(), slug) && !visits, RenameError: renameError,
 		RenameName: renameName}
-	if target, ok := sharedMove(rq.who(), slug); ok {
-		m.SharedTarget = target
+	// A private page with nowhere to go but to everyone keeps the plain
+	// Make shared…; with groups to go to, or from a group's folder, Share….
+	if targets := shareTargets(rq.who(), slug); len(targets) == 1 && targets[0].Group == "" && placeOf(slug).kind == ofUser {
+		m.SharedTarget = targets[0].Slug
+	} else if len(targets) > 0 {
+		m.ShareTargets, m.ShareFrom = targets, placeOf(slug).group()
 	}
 	if m.Quicknote {
 		var wiki []PageRef

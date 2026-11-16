@@ -450,3 +450,71 @@ def test_a_write_of_someone_else_commits_what_lay_there_as_zones(client, wiki):
     log = git(wiki, "log", "--format=%an|%s", "-n3")
     assert f"|Save {GROUP}/draft" in log and f"bob|Save {GROUP}/draft" not in log
     assert "draft.md" not in git(wiki, "show", "--stat", "--format=", "HEAD")
+
+
+# ── Share… ───────────────────────────────────────────────────────────────────
+
+def test_share_offers_the_places_a_page_can_go_to(client, wiki):
+    """The page menu: a private page goes to a group you are in or to
+    everyone, a group's page to a group that includes its own or to everyone;
+    each choice is the ordinary rename."""
+    (wiki / "private/alice/notes").mkdir(parents=True)
+    (wiki / "private/alice/notes/idea.md").write_text("# Idea\n\n![a](/private/alice/_assets/a.png) and [[plans]].\n")
+    (wiki / "private/alice/_assets").mkdir()
+    (wiki / "private/alice/_assets/a.png").write_bytes(b"hers")
+    git(wiki, "add", "-A")
+    git(wiki, "commit", "-q", "-m", "Hers")
+    sign_in(client, "alice")
+    _set_config(wiki, lambda t: t + "\n[group product]\nincludes = dev\n\n[group other]\nincludes = design\n")
+    choices = lambda slug: re.findall(r'name="new_name" value="([^"]+)"', client.get(f"/page/{slug}", headers=HOST).get_data(as_text=True))  # noqa: E731
+    assert _until(lambda: "groups/product/notes/idea" in choices("private/alice/notes/idea"))
+    body = client.get("/page/private/alice/notes/idea", headers=HOST).get_data(as_text=True)
+    # The rename dialog's own field aside: her groups, A–Z, then everyone.
+    assert choices("private/alice/notes/idea")[:3] == ["groups/dev/notes/idea", "groups/product/notes/idea", "notes/idea"]
+    assert 'data-action="privacy">Share…</button>' in body and "Make shared…" not in body
+    assert "<strong>@dev</strong>: alice, carol, vera" in body and "<strong>Everyone</strong> who uses this wiki" in body
+    assert "moves out of your private folder" in body
+    # Into the group: its members see it, with the file it shows.
+    assert client.post("/rename/private/alice/notes/idea", data={"from": "page", "new_name": "groups/dev/notes/idea"},
+                       headers=HOST).status_code == 302
+    assert "/groups/dev/_assets/a.png" in (wiki / "groups/dev/notes/idea.md").read_text()
+    assert (wiki / "groups/dev/_assets/a.png").read_bytes() == b"hers" and (wiki / "private/alice/_assets/a.png").exists()
+    sign_in(client, "carol")
+    assert client.get("/groups/dev/_assets/a.png", headers=HOST).data == b"hers"
+    # From the group's folder: the groups that include it, and everyone.
+    body = client.get("/page/groups/dev/notes/idea", headers=HOST).get_data(as_text=True)
+    assert choices("groups/dev/notes/idea")[:2] == ["groups/product/notes/idea", "notes/idea"]
+    assert "moves out of the folder of @dev" in body and "groups/other" not in body
+    assert client.post("/rename/groups/dev/notes/idea", data={"from": "page", "new_name": "notes/idea"}, headers=HOST).status_code == 302
+    assert "(/_assets/a.png)" in (wiki / "notes/idea.md").read_text() and (wiki / "_assets/a.png").read_bytes() == b"hers"
+    # Shared, it goes nowhere else; a viewer, an outsider and a guide's reader are offered nothing.
+    assert "Share…" not in client.get("/page/notes/idea", headers=HOST).get_data(as_text=True)
+    assert "Share…" not in client.get(f"/page/{GROUP}/AGENTS", headers=HOST).get_data(as_text=True)
+    sign_in(client, "vera")
+    assert "Share…" not in client.get(f"/page/{DIARY}", headers=HOST).get_data(as_text=True)
+
+
+def test_a_private_page_of_someone_in_no_group_keeps_make_shared(client, wiki):
+    (wiki / "private/bob").mkdir(parents=True)
+    (wiki / "private/bob/x.md").write_text("# X\n")
+    sign_in(client, "bob")
+    body = client.get("/page/private/bob/x", headers=HOST).get_data(as_text=True)
+    assert "Make shared…" in body and "Share…" not in body and 'name="new_name" value="x"' in body
+
+
+def test_a_note_is_filed_into_a_groups_folder(client, wiki):
+    """Move to wiki offers the folders of your groups, also one with no
+    page in it yet; the note is the group's from then on."""
+    sign_in(client, "alice")
+    _set_config(wiki, lambda t: t.replace("groups = dev\n", "groups = dev, fresh\n", 1))
+    note = client.post("/api/notes", data={"title": "Standup"}, headers=HOST).get_json()["slug"]
+    folders = lambda: re.findall(r'<option value="([^"]*)"', client.get(f"/page/{note}", headers=HOST).get_data(as_text=True))  # noqa: E731
+    assert _until(lambda: "groups/fresh/" in folders())
+    assert "groups/dev/" in folders() and "groups/" not in folders() and "groups/ops/" not in folders()
+    resp = client.post(f"/promote/{note}", data={"folder": "groups/fresh", "name": "standup"}, headers=HOST)
+    assert resp.status_code == 302 and (wiki / "groups/fresh/standup.md").exists()
+    sign_in(client, "carol")            # in dev, not in fresh
+    assert client.get("/page/groups/fresh/standup", headers=HOST).status_code == 404
+    sign_in(client, "bob")
+    assert "groups/" not in " ".join(re.findall(r'<option value="([^"]*)"', client.get(
+        "/page/" + client.post("/api/notes", data={"title": "His"}, headers=HOST).get_json()["slug"], headers=HOST).get_data(as_text=True)))

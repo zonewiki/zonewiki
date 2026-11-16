@@ -80,22 +80,49 @@ func privateRoute(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, pathURL("page", slug), http.StatusFound)
 }
 
-// sharedMove: where Make shared would move slug for user: their own private
-// page out of their folder (the same path without it). ok false: not offered
-// (no users, not their own private page, a private home, a note,
-// which Move to wiki takes out of the folder). There is no Make private for
-// a shared page: others have seen it, and its links on shared pages would
-// have to go; a new page is made private from the start (sharedNewOffer).
-func sharedMove(user, slug string) (target string, ok bool) {
-	folder := privateFolder(user)
-	if folder == "" || isProtected(slug) || isQuicknote(slug) || !canWrite(user, slug) {
-		return "", false
+// shareTarget: a place a page can be shared to, as the page menu's dialog
+// offers it: the name it would have there, and who sees it then.
+type shareTarget struct {
+	Slug  string   // where the page goes ("groups/dev/notes/x", "notes/x")
+	Group string   // the group it is then for; "": everyone
+	Who   []string // the group's members now
+}
+
+// shareTargets: where the page menu's Share… would move slug for user, to
+// more people (docs/spec/users.md: to more people, never to fewer): their
+// own private page into the folder of each group they are in, a group's
+// page into that of each group that includes its own, and either out to
+// everyone, each time the same path below the folder. None: not offered (no
+// users, a shared page, someone else's, a viewer's, a guide not theirs to
+// change, a private home, or a note, which Move to wiki takes out of the
+// folder). There is no way back: others have seen the page then, and its
+// links on their pages would have to go; a new page is made where it
+// belongs from the start (sharedNewOffer).
+func shareTargets(user, slug string) []shareTarget {
+	s := settings()
+	from := placeOf(slug)
+	u := s.Users[user]
+	if u == nil || from.folder() == "" || !from.sees(user) || isProtected(slug) || isQuicknote(slug) || !canWrite(user, slug) {
+		return nil
 	}
-	if placeOf(slug).shared() {
-		return "", false
+	rest := strings.TrimPrefix(slug, from.folder()+"/")
+	if rest == slug || rest == "" {
+		return nil
 	}
-	rest := strings.TrimPrefix(slug, folder+"/")
-	return rest, rest != slug && rest != "" && canWrite(user, rest) // not a viewer's
+	var out []shareTarget
+	offer := func(t shareTarget) {
+		// Not onto a page that is there, nor where they may not write (a guide's name).
+		if p := safePath(t.Slug); p != "" && !exists(p) && canWrite(user, t.Slug) {
+			out = append(out, t)
+		}
+	}
+	for _, g := range u.In {
+		if to := (place{ofGroup, g}); to != from && from.within(to) {
+			offer(shareTarget{to.folder() + "/" + rest, g, s.groupMembers(g)})
+		}
+	}
+	offer(shareTarget{Slug: rest})
+	return out
 }
 
 // sharedNewOffer: a new page opened from a link on one of the user's private

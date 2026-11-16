@@ -538,7 +538,7 @@ A new page is made private from the start (below).
   Signed out it goes to the login; without users there is no private home (404, and `private/<x>/index` is an ordinary page).
 
 - **Lock** (🔒, `.lock`): a private page shows it beside its title, in the search modal's page list (`private` in `/api/pages-list`) and on its search results (the result's meta starts with 🔒, `resultMeta`); shared pages and wikis without users show none.
-- **Make shared** (the ⋯ menu of your own private page, `sharedMove` in `go/private.go`, `#page-privacy-dialog`): moves it out of your folder (`private/alice/notes/x` → `notes/x`).
+- **Make shared** (the ⋯ menu of your own private page, `shareTargets` in `go/private.go`, `#page-privacy-dialog`): moves it out of your folder (`private/alice/notes/x` → `notes/x`). In a group, the entry is **Share…** and offers your groups' folders too (Group pages, below).
   The dialog says where it goes and that everyone who uses the wiki then sees and changes it,
   and submits the ordinary rename (`POST /rename/<slug>` with `from=page`: links re-point on pages and in tasks, the uploads it shows are copied to `_assets/` (Uploads, below), one commit `Rename <old> to <new>`; a refusal such as "A page named … already exists" comes back in the Rename dialog).
   Not offered without users, for a shared page, another user's page, the wiki's home or a private home, or a note (Move to wiki takes those out of the folder).
@@ -642,6 +642,10 @@ There is nothing to set up for the folder itself: it is the folder of the group 
   Without users `groups/` is an ordinary folder.
 - **To more people, never to fewer** (`place.within`, `sharedIntoPrivate` in `go/pages.go`): one of your private pages moves into a group you are in, a group's page into the folder of a group that includes its own (`groups/dev/x` → `groups/product/x` while product includes dev) or out to everyone.
   A shared page doesn't move into a group's folder ("a shared page stays shared"), nor a group's page into a private folder or another group's ("its group has seen it: it stays with at least them"). Between groups it goes by how they are made, not by who happens to be in them.
+- **Share…** (the ⋯ menu, `shareTargets` in `go/private.go`, `#page-privacy-dialog`): on one of your private pages it offers each group you are in and everyone, on a group's page the groups that include its own and everyone, each with who sees the page then and where it goes (the same path below the folder: `private/alice/notes/x` → `groups/dev/notes/x` → `notes/x`).
+  The choice submits the ordinary rename: links re-point, the files it shows go with it, one commit. It can't be taken back.
+  A private page of someone in no group keeps the plain **Make shared…**; a viewer, a shared page, a private home, a note and a guide that isn't yours to change are offered nothing.
+  **A note** is filed into a group's folder with Move to wiki: its folder field offers the folders of your groups, also one with no page in it yet (`pageFolders`), and not `groups/` itself.
 - **Uploads** for a group's page are the group's: the file is kept in `groups/<group>/_assets/` (`uploadPlace`, `uploadDir`; URL `/groups/<group>/_assets/<file>`) and served to its members only, 404 for anyone else and for any other subfolder (`serveGroupUpload`); an assistant reads and adds them with `read_file` and `upload_file` (`page`), or over HTTP with its user's token.
   A page that leaves the folder for more people takes the uploads it shows with it (`shareUploads`), as one that leaves a private folder does.
 - **Search**: the keyword index of the shared pages has nothing of a group's; its pages are added for its members as their own private ones are (`docShared`, `Index.WithExtra`), so a group's words, counts and lengths take part in no one else's ranking, and a typo of a word only the group has suggests nothing to anyone else.

@@ -1124,6 +1124,18 @@ func pageFolders(rq *Req) []string {
 			set[strings.Join(parts[:i], "/")] = true
 		}
 	}
+	// The folders of the user's groups are there before a page is.
+	if rq != nil && !rq.sharing {
+		if u := settings().Users[rq.user]; u != nil {
+			for _, g := range u.In {
+				set[groupsDir+"/"+g] = true
+			}
+		}
+	}
+	// groups/ itself is no place for a page: what is put there no one sees.
+	if settings().Users != nil {
+		delete(set, groupsDir)
+	}
 	return sortedKeys(set)
 }
 

@@ -55,6 +55,7 @@
 <button type="button" role="menuitem" data-action="print">Print…</button>
 {{- if .Quicknote}}<button type="button" role="menuitem" data-action="promote">Move to wiki…</button><button type="button" role="menuitem" data-action="append">Append to page…</button>{{end}}
 {{- if .SharedTarget}}<button type="button" role="menuitem" data-action="privacy">Make shared…</button>{{end -}}
+{{- if .ShareTargets}}<button type="button" role="menuitem" data-action="privacy">Share…</button>{{end -}}
 {{- if .Renamable}}<button type="button" role="menuitem" data-action="rename">Rename…</button><button type="button" role="menuitem" data-action="delete" class="danger">Delete…<kbd class="menu-key">Ctrl+Del</kbd></button>{{end -}}
 </div>
 {{- if .Quicknote}}
@@ -66,6 +67,18 @@
 <dialog id="page-privacy-dialog" class="modal"><p class="modal-label">Make shared</p>
 <p class="modal-desc">“{{.Title}}” moves out of your private folder, to <code>{{.SharedTarget}}</code>. Everyone who uses this wiki will see and be able to change it. Links to it follow.</p>
 <form method="post" action="{{url "rename" .Slug}}"><input type="hidden" name="from" value="page"><input type="hidden" name="new_name" value="{{.SharedTarget}}"><div class="modal-actions"><button type="submit" class="btn btn-primary">Make shared</button><button type="button" class="btn" id="page-privacy-cancel">Cancel</button></div></form></dialog>
+{{- end}}
+{{- if .ShareTargets}}
+{{- /* Share…: to more people, never to fewer (docs/spec/users.md): a private
+    page to a group you are in or to everyone, a group's page to a group
+    that includes its own or to everyone. Each choice is the ordinary rename. */}}
+<dialog id="page-privacy-dialog" class="modal"><p class="modal-label">Share</p>
+<p class="modal-desc">“{{.Title}}” moves out of {{if .ShareFrom}}the folder of @{{.ShareFrom}}{{else}}your private folder{{end}}, and whoever you share it with sees and changes it from then on. Links to it follow, and so do the files it shows. It can't be taken back from them.</p>
+<form method="post" action="{{url "rename" .Slug}}" class="share-form"><input type="hidden" name="from" value="page">
+{{- range $i, $t := .ShareTargets}}
+<label class="share-choice"><input type="radio" name="new_name" value="{{$t.Slug}}"{{if eq $i 0}} checked{{end}}> <span>{{if $t.Group}}<strong>@{{$t.Group}}</strong>: {{range $j, $w := $t.Who}}{{if $j}}, {{end}}{{$w}}{{end}}{{else}}<strong>Everyone</strong> who uses this wiki{{end}} <code>{{$t.Slug}}</code></span></label>
+{{- end}}
+<div class="modal-actions"><button type="submit" class="btn btn-primary">Share</button><button type="button" class="btn" id="page-privacy-cancel">Cancel</button></div></form></dialog>
 {{- end}}
 {{- if .Renamable}}
 <dialog id="page-rename-dialog" class="modal"{{if .RenameError}} data-open{{end}}><p class="modal-label">Rename page</p><form method="post" action="{{url "rename" .Slug}}"><input type="hidden" name="from" value="page"><input type="text" name="new_name" id="page-rename-input" value="{{or .RenameName .Slug}}" aria-label="New name for “{{.Title}}”" autocomplete="off" spellcheck="false" required>{{template "error" (dict "message" .RenameError)}}<div class="modal-actions"><button type="submit" class="btn btn-primary">Rename</button><button type="button" class="btn" id="page-rename-cancel">Cancel</button></div></form></dialog>
