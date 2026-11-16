@@ -2,6 +2,7 @@ package gitrepo
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"os"
 	"os/exec"
@@ -238,18 +239,35 @@ func TestPack(t *testing.T) {
 	if res := r.Pack(ctx, time.Minute); res.Code != 0 {
 		t.Fatalf("pack of many: %+v", res)
 	}
-	// Many by now: Join makes them one (and removes what is loose and packed).
-	if !r.ManyPacks() {
-		t.Fatalf("%d packs are not many", len(pack()))
+	// Many by now, and as heavy as the first: time to join. Join writes the
+	// one pack and removes nothing (a commit may run); what is committed
+	// before the old ones are dropped stays.
+	if !r.TimeToJoin() {
+		t.Fatalf("%d packs of a size are not to be joined", len(pack()))
 	}
-	if res := r.Join(ctx, time.Minute); res.Code != 0 {
-		t.Fatalf("join: %+v", res)
+	many := pack()
+	old, res := r.Join(ctx, time.Minute)
+	if res.Code != 0 || len(old) != len(many) {
+		t.Fatalf("join: %+v, %d packs to drop of %d", res, len(old), len(many))
 	}
-	if r.ManyPacks() {
-		t.Error("still many packs after Join")
+	if got := pack(); len(got) != len(many)+1 {
+		t.Errorf("after the join, before the drop: %d packs, were %d", len(got), len(many))
 	}
-	if l, p := objects(t, r); l != 0 || p != 1 {
-		t.Errorf("after many packs: %d loose objects, %d packs", l, p)
+	commitFiles(t, r, Call{}, 1000+commits, 1)
+	commits++
+	whole("joined, not dropped", commits)
+	r.Drop(old)
+	if res := r.Prune(ctx, time.Minute); res.Code != 0 {
+		t.Fatalf("prune: %+v", res)
+	}
+	if r.TimeToJoin() {
+		t.Error("still to be joined after Join")
+	}
+	if l, p := objects(t, r); l != 3 || p != 1 {
+		t.Errorf("after many packs: %d loose objects (want the 3 of the commit beside the join), %d packs", l, p)
+	}
+	if left, _ := filepath.Glob(filepath.Join(r.Dir, ".git", "objects", "pack", "*")); len(left) > 3 {
+		t.Errorf("files of dropped packs are left: %v", left)
 	}
 	whole("many packs made one", commits)
 	// Their time limits hold.
@@ -269,4 +287,97 @@ func slicesContain(l []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// The packs are joined by their weight, not by their number alone: beside
+// a large pack the small ones wait until they are many (packsMost). A pack
+// kept by hand stays, and what git left half written long ago goes.
+func TestTimeToJoin(t *testing.T) {
+	r := repo(t)
+	ctx := context.Background()
+	packs := func() []string {
+		l, _ := filepath.Glob(filepath.Join(r.Dir, ".git", "objects", "pack", "*.pack"))
+		return l
+	}
+	step := func(i int) {
+		t.Helper()
+		commitFiles(t, r, Call{}, i, 1)
+		if res := r.Pack(ctx, time.Minute); res.Code != 0 {
+			t.Fatalf("pack: %+v", res)
+		}
+		if res := r.Prune(ctx, time.Minute); res.Code != 0 {
+			t.Fatalf("prune: %+v", res)
+		}
+	}
+	// A large pack: a file nothing compresses.
+	big := make([]byte, 300_000)
+	_, _ = rand.Read(big)
+	if err := os.WriteFile(filepath.Join(r.Dir, "big.bin"), big, 0o666); err != nil {
+		t.Fatal(err)
+	}
+	step(0)
+	kept := packs()
+	for i := 1; len(packs()) <= packsMany+2; i++ {
+		step(i)
+		if r.TimeToJoin() {
+			t.Fatalf("%d packs, the small ones a fraction of the large: not to be joined", len(packs()))
+		}
+	}
+	for i := 100; len(packs()) <= packsMost; i++ {
+		if r.TimeToJoin() {
+			t.Fatalf("%d packs are not yet too many", len(packs()))
+		}
+		step(i)
+	}
+	if !r.TimeToJoin() {
+		t.Fatalf("%d packs are too many", len(packs()))
+	}
+	// A pack kept by hand is none of those to drop, and git leaves its
+	// objects out of the new one.
+	if err := os.WriteFile(strings.TrimSuffix(kept[0], ".pack")+".keep", nil, 0o666); err != nil {
+		t.Fatal(err)
+	}
+	stale := filepath.Join(r.Dir, ".git", "objects", "pack", "tmp_pack_left")
+	fresh := filepath.Join(r.Dir, ".git", "objects", "pack", ".tmp-1-pack-being-written")
+	for _, f := range []string{stale, fresh} {
+		if err := os.WriteFile(f, []byte("x"), 0o666); err != nil {
+			t.Fatal(err)
+		}
+	}
+	long := time.Now().Add(-2 * tempsStale)
+	if err := os.Chtimes(stale, long, long); err != nil {
+		t.Fatal(err)
+	}
+	before := len(packs())
+	old, res := r.Join(ctx, time.Minute)
+	if res.Code != 0 || len(old) != before-1 || slicesContain(old, kept[0]) {
+		t.Fatalf("join beside a kept pack: %+v, %d to drop of %d, the kept one among them: %v", res, len(old), before, slicesContain(old, kept[0]))
+	}
+	r.Drop(old)
+	if got := packs(); len(got) != 2 || !slicesContain(got, kept[0]) {
+		t.Errorf("after the drop: %d packs, the kept one there: %v", len(got), slicesContain(got, kept[0]))
+	}
+	if _, err := os.Stat(stale); err == nil {
+		t.Error("a pack left half written long ago is still there")
+	}
+	if _, err := os.Stat(fresh); err != nil {
+		t.Error("a pack being written was removed")
+	}
+	if res := r.Run(ctx, Call{Timeout: time.Minute}, "fsck", "--full", "--strict"); res.Code != 0 {
+		t.Errorf("fsck: %s%s", res.Stderr, res.Stdout)
+	}
+	if got := must(t, r, Call{}, "show", "HEAD:f1.txt"); got != "file 1\n" {
+		t.Errorf("a file of an early commit: %q", got)
+	}
+	// Nothing new: git writes no pack that wasn't there, and nothing is to drop.
+	if old, res := r.Join(ctx, time.Minute); res.Code != 0 || len(old) != 0 {
+		t.Errorf("a join of nothing new: %+v, %d to drop", res, len(old))
+	}
+	if got := packs(); len(got) != 2 {
+		t.Errorf("after a join of nothing new: %d packs", len(got))
+	}
+	// Its time limit holds, and nothing is dropped then.
+	if old, res := r.Join(ctx, time.Nanosecond); res.Code != TimedOut || len(old) != 0 {
+		t.Errorf("a join out of time: %+v, %d to drop", res, len(old))
+	}
 }

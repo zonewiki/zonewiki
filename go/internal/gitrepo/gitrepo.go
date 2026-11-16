@@ -11,7 +11,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -37,7 +39,7 @@ const TimedOut = 124
 // A commit doesn't pack: git's own maintenance after a commit (gc.auto) runs
 // inside it, and when its turn comes that one commit, and the request that
 // made it, waits for the whole repository's loose objects to be packed.
-// Whoever commits packs when it suits them (Pack, Prune).
+// Whoever commits packs when it suits them (Pack, Prune, Join, Drop).
 var baseEnv = append(os.Environ(),
 	"GIT_LITERAL_PATHSPECS=1",
 	"GIT_CONFIG_COUNT=4",
@@ -57,26 +59,115 @@ func (r Repo) Pack(ctx context.Context, timeout time.Duration) Result {
 	return r.Run(ctx, Call{Timeout: timeout}, "repack", "-l", "-q")
 }
 
-// ManyPacks: the repository has more packs than packsMany: time for Join.
-func (r Repo) ManyPacks() bool {
-	packs, _ := filepath.Glob(filepath.Join(r.Dir, ".git", "objects", "pack", "*.pack"))
-	return len(packs) > packsMany
+// packDir: where the repository's packs are.
+func (r Repo) packDir() string { return filepath.Join(r.Dir, ".git", "objects", "pack") }
+
+// packs: the repository's packs (their .pack files).
+func (r Repo) packs() []string {
+	packs, _ := filepath.Glob(filepath.Join(r.packDir(), "*.pack"))
+	return packs
 }
 
-// Join makes the repository's packs one (git repack -a -d -l), with the
-// differences between a file's versions computed anew (-f, in a window of
-// 50). Without -f git keeps the differences the packs have, and a pack of
-// what was loose holds each file it touches whole once more: measured on
-// 5,000 tasks in 40 files (2026-11-15), 10,000 changes took 57 MB packed in
-// steps, 52 MB joined without -f and 8 MB joined with it, in under a
-// second. So a change costs what it changed (about 0.4 KB with its commit
-// and trees) once it is joined, and a task file needs no other format for
-// that. Like Prune not beside a commit: it removes loose objects' folders
-// too. It reads every object, so it takes as long as the repository is
-// large; uploads are left out of the comparing (NoDeltaAttributes), which
-// is what would make it slow.
-func (r Repo) Join(ctx context.Context, timeout time.Duration) Result {
-	return r.Run(ctx, Call{Timeout: timeout}, "repack", "-a", "-d", "-l", "-q", "-f", "--window=50")
+// TimeToJoin: the repository's packs are to be made one (Join): there are
+// more than packsMany, and those beside the largest outweigh half of it, or
+// there are more than packsMost. By their weight and not by their number
+// alone: a join reads the whole history, so one every so many commits costs
+// more each time, for ever (measured 2026-11-16 on 40 task files: 3 s at
+// 50,000 commits, 23 s at 200,000, on 16 cores), while one that waits until
+// the new packs are half of what is joined costs a share of the history
+// that stays the same, and the repository is at most half again its joined
+// size meanwhile. packsMost bounds their number where the largest pack is
+// mostly uploads, which no number of changes outweighs.
+func (r Repo) TimeToJoin() bool {
+	packs := r.packs()
+	if len(packs) <= packsMany {
+		return false
+	}
+	var largest, all int64
+	for _, p := range packs {
+		if info, err := os.Stat(p); err == nil {
+			all += info.Size()
+			largest = max(largest, info.Size())
+		}
+	}
+	return (all-largest)*2 > largest || len(packs) > packsMost
+}
+
+// Join writes one pack of everything the repository's packs and loose
+// objects hold (git repack -a -l), with the differences between a file's
+// versions computed anew (-f, in a window of 50), and returns the packs it
+// stands for now, for Drop. Without -f git keeps the differences the packs
+// have, and a pack of what was loose holds each file it touches whole once
+// more: measured on 5,000 tasks in 40 files (2026-11-15), 10,000 changes
+// took 57 MB packed in steps, 52 MB joined without -f and 8 MB joined with
+// it. So a change costs what it changed (about 0.4 KB with its commit and
+// trees) once it is joined, and a task file needs no other format for that.
+//
+// Beside commits, like Pack: it removes nothing (no -d), so nobody waits
+// for it, however long the history is; what is committed meanwhile stays
+// loose, for the next Pack. It reads every object, so it takes as long as
+// the repository is large, on half of the machine's processors (the other
+// half answers requests); uploads are left out of the comparing
+// (NoDeltaAttributes). A pack that is kept by hand (a .keep file beside it)
+// is left out by git and is none of those returned. No packs are returned
+// when it failed, or when git wrote no pack that wasn't there (nothing to
+// join): there is nothing to drop then.
+func (r Repo) Join(ctx context.Context, timeout time.Duration) (old []string, res Result) {
+	r.removeStaleTemps()
+	for _, p := range r.packs() {
+		if _, err := os.Stat(strings.TrimSuffix(p, ".pack") + ".keep"); err != nil {
+			old = append(old, p)
+		}
+	}
+	before := r.packs()
+	threads := strconv.Itoa(max(1, runtime.NumCPU()/2))
+	res = r.Run(ctx, Call{Timeout: timeout}, "-c", "pack.threads="+threads, "repack", "-a", "-l", "-q", "-f", "--window=50")
+	if res.Code != 0 {
+		return nil, res
+	}
+	fresh := 0
+	for _, p := range r.packs() {
+		if !slices.Contains(before, p) {
+			fresh++
+		}
+	}
+	if fresh == 0 {
+		return nil, res
+	}
+	return old, res
+}
+
+// Drop removes packs that another pack stands for (Join's), each with the
+// files that belong to it; its index first, as git does, so that no git
+// finds a pack that is half gone. A git that is reading one of them looks
+// for its objects again and finds them in the pack that stands for it (as
+// beside git's own repack -d). Quick: it reads no object.
+func (r Repo) Drop(packs []string) {
+	for _, p := range packs {
+		stem := strings.TrimSuffix(p, ".pack")
+		for _, ext := range []string{".idx", ".rev", ".bitmap", ".mtimes", ".pack"} {
+			_ = os.Remove(stem + ext)
+		}
+	}
+}
+
+// tempsStale: how old a pack that git was writing is before it counts as
+// left behind (removeStaleTemps): longer than any Pack or Join runs.
+const tempsStale = 24 * time.Hour
+
+// removeStaleTemps removes the packs git was writing when it was stopped (a
+// Join out of time, a Zone that ended): git leaves them where they are, as
+// large as they got, and nothing else of Zone's would take them away.
+func (r Repo) removeStaleTemps() {
+	entries, _ := os.ReadDir(r.packDir())
+	for _, e := range entries {
+		if !strings.HasPrefix(e.Name(), "tmp_") && !strings.HasPrefix(e.Name(), ".tmp-") {
+			continue
+		}
+		if info, err := e.Info(); err == nil && !info.IsDir() && time.Since(info.ModTime()) > tempsStale {
+			_ = os.Remove(filepath.Join(r.packDir(), e.Name()))
+		}
+	}
 }
 
 // NoDeltaAttributes: lines for the repository's .git/info/attributes that
@@ -102,11 +193,14 @@ func (r Repo) Prune(ctx context.Context, timeout time.Duration) Result {
 	return r.Run(ctx, Call{Timeout: timeout}, "prune-packed", "-q")
 }
 
-// packsMany: more packs than this are made one: after a few packs (some
-// hundred commits), so what is packed in steps, each step holding the files
-// it touched whole, doesn't add up (it was 20 until Join computed the
-// differences anew: joining then gained little).
-const packsMany = 4
+// packsMany: with no more packs than this nothing is joined (TimeToJoin):
+// a few packs cost nothing, and a young repository joins as it did when
+// this number alone decided. packsMost: more are joined whatever they weigh
+// (git's own limit, gc.autoPackLimit, is 50 too).
+const (
+	packsMany = 4
+	packsMost = 50
+)
 
 // Repo is a repository's working tree.
 type Repo struct{ Dir string }

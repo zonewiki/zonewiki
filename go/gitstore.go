@@ -237,6 +237,7 @@ const (
 	packEvery   = 50
 	packLoose   = 4 * packEvery // loose objects, about what packEvery commits of a task leave
 	packTimeout = 10 * time.Minute
+	joinTimeout = 2 * time.Hour // the whole history, on half the processors, beside everything else
 )
 
 var packing struct {
@@ -277,11 +278,19 @@ func looseObjects() int {
 	return n
 }
 
+// packingNow: a pack or a join runs.
+func packingNow() bool {
+	packing.Lock()
+	defer packing.Unlock()
+	return packing.running
+}
+
 // packNow packs the wiki's repository (packSoon; packAtStart: only with
 // atLeast loose objects). The pack is made beside whatever commits; the
 // loose objects it made superfluous are removed while no commit runs
 // (commitMu): removing them takes their folders along, and a git add that
-// is writing into one just then fails.
+// is writing into one just then fails. When the packs have become many or
+// heavy (Repo.TimeToJoin) they are made one, joinPacks.
 func packNow(atLeast int) {
 	defer func() {
 		packing.Lock()
@@ -296,16 +305,32 @@ func packNow(atLeast int) {
 	if r.Code == 0 {
 		commitMu.Lock()
 		r = repo.Prune(context.Background(), gitTimeout)
-		// Once in many packs (some thousand commits) they are made one, also
-		// while no commit runs: a commit then waits for it.
-		if r.Code == 0 && repo.ManyPacks() {
-			r = repo.Join(context.Background(), packTimeout)
-		}
 		commitMu.Unlock()
+	}
+	if r.Code == 0 && repo.TimeToJoin() {
+		r = joinPacks(repo)
 	}
 	if r.Code != 0 {
 		logf("git: packing failed (the repository stays as it is, only larger): %s", strings.TrimSpace(r.Stderr+" "+r.Stdout))
 	}
+}
+
+// joinPacks makes the repository's packs one. The pack is written beside
+// whatever commits (Repo.Join: it reads the whole history, minutes in a
+// repository of some hundred thousand commits), and no commit waits for
+// it; only the packs it stands for, and what is loose and packed now, are
+// removed while no commit runs, which reads no object. (Until 2026-11-16
+// all of it ran under commitMu: every save of the wiki waited for the
+// join, as long as the history made it.)
+func joinPacks(repo gitrepo.Repo) gitrepo.Result {
+	old, r := repo.Join(context.Background(), joinTimeout)
+	if r.Code != 0 || len(old) == 0 {
+		return r
+	}
+	commitMu.Lock()
+	defer commitMu.Unlock()
+	repo.Drop(old)
+	return repo.Prune(context.Background(), gitTimeout)
 }
 
 // excludeState keeps Zone's folder .zone/ out of git, all of it: the

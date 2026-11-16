@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"zonewiki/internal/gitrepo"
 )
 
 func TestRelativeTime(t *testing.T) {
@@ -272,6 +273,39 @@ func TestPackSoon(t *testing.T) {
 	}
 	if r := runGit("status", "--porcelain", "--", "p1.md", fmt.Sprintf("p%d.md", n)); strings.TrimSpace(r.Stdout) != "" {
 		t.Errorf("status: %q", r.Stdout)
+	}
+	// A join doesn't wait for a commit, nor a commit for it: with a commit
+	// under way (its lock held) the one pack is written, and the packs it
+	// stands for stay until the commit has ended.
+	commit()
+	set(0, true)
+	go packNow(0)
+	if !packed(30*time.Second) || wikiRepo().TimeToJoin() {
+		t.Fatal("five packs of a size are to be joined, and were not")
+	}
+	if l, p := gitObjects(t); l != 0 || p != 1 {
+		t.Errorf("after the join: %d loose objects, %d packs", l, p)
+	}
+	commit()
+	commitMu.Lock()
+	joined := make(chan gitrepo.Result, 1)
+	go func() { joined <- joinPacks(wikiRepo()) }()
+	for end := time.Now().Add(30 * time.Second); time.Now().Before(end); time.Sleep(5 * time.Millisecond) {
+		if _, p := gitObjects(t); p == 2 {
+			break
+		}
+	}
+	time.Sleep(100 * time.Millisecond)
+	l, p = gitObjects(t)
+	commitMu.Unlock()
+	if p != 2 || l < 3 || len(joined) != 0 {
+		t.Errorf("a join beside a commit: %d loose objects, %d packs, ended %v", l, p, len(joined) != 0)
+	}
+	if r := <-joined; r.Code != 0 {
+		t.Errorf("the join: %+v", r)
+	}
+	if l, p := gitObjects(t); l != 0 || p != 1 {
+		t.Errorf("after the commit: %d loose objects, %d packs", l, p)
 	}
 	// A wiki without git packs nothing, at the start or later.
 	cfg.GitEnabled = false

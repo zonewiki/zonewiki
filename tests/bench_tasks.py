@@ -1,7 +1,8 @@
 """How Zone's tasks hold at a team's size (docs/spec/testing.md, The bench):
 a generated wiki of 100 users, 40 shared lists, 5,000 open tasks and 25,000
 closed ones, in git, and what a page view, a list, a write and a search cost
-on it, and how the repository grows. Not part of the suites (its name is no test module's): run it with
+on it, how the repository grows, and what a write waits beside a join of
+its packs once it has a history. Not part of the suites (its name is no test module's): run it with
 
     ./run.sh test tests/bench_tasks.py -n 0 -s
 
@@ -67,7 +68,13 @@ BUDGETS = {
     "beside writes: the due count, slowest (ms)": 250,
     "beside writes: My tasks, slowest (ms)": 250,
     "beside writes: a task changed, slowest (ms)": 2500,
+    # Beside a join of the packs (test_a_write_beside_a_join): a write never
+    # waits for it, however long the history makes it.
+    "beside a join: a task changed, slowest (ms)": 250,
 }
+
+# How many commits the history has that a join is measured on (AGED).
+AGED = {"small": 2000, "team": 20000}[os.environ.get("ZONE_BENCH_SIZE", "team")]
 
 WORDS = ("review the draft of the offer for the customer and send it back with notes call about invoice "
          "plan sprint fix login bug write tests deploy release update docs order parts check budget").split()
@@ -224,6 +231,88 @@ def test_reads_beside_writes(team, client):
     print(f"\n\nReads beside writes: {READERS} readers, {WRITERS} writers, {SECONDS} s; "
           + ", ".join(f"{len(v)} × {name}" for name, v in times.items()) + "\n")
     report(got)
+
+
+def age(root, users, lists, commits):
+    """Gives the wiki's repository a history of `commits` changes to 40 files
+    of tasks (which its last commit removes: the wiki is as it was), in one
+    pack, and 55 small packs after it: more than Zone leaves beside each
+    other (packsMost in package gitrepo), so its next pack is followed by a
+    join, which reads all of that history."""
+    rng = random.Random(11)
+    git = lambda *args, **kw: subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True, **kw)
+    ref = git("symbolic-ref", "HEAD", text=True).stdout.strip().encode()
+    files = [[task(rng, users, lists) for _ in range(30)] for _ in range(40)]
+    when = 1_780_000_000
+
+    def commit(out, first, change):
+        nonlocal when
+        when += 1
+        out.write(b"commit %s\ncommitter bench <bench@example.org> %d +0000\ndata 6\nChange\n" % (ref, when))
+        if first:
+            out.write(b"from %s^0\n" % ref)
+        out.write(change + b"\n")
+
+    def blob(path, text):
+        data = text.encode()
+        return b"M 644 inline %s\ndata %d\n%s" % (path.encode(), len(data), data)
+
+    imp = subprocess.Popen(["git", "-C", str(root), "fast-import", "--quiet"], stdin=subprocess.PIPE)
+    for c in range(commits):
+        i = rng.randrange(len(files))
+        rng.choice(files[i])["title"] = text(rng, 6)
+        commit(imp.stdin, c == 0, blob(f"_bench/list{i:02d}.json", json.dumps(files[i], indent=2) + "\n"))
+    commit(imp.stdin, False, b"D _bench")
+    imp.stdin.close()
+    assert imp.wait() == 0
+    git("repack", "-a", "-d", "-q")
+    for n in range(55):
+        change = blob("_bench/tick", f"{n}\n") if n < 54 else b"D _bench"
+        imp = subprocess.Popen(["git", "-C", str(root), "-c", "fastimport.unpackLimit=0", "fast-import", "--quiet"],
+                               stdin=subprocess.PIPE)
+        commit(imp.stdin, True, change)
+        imp.stdin.close()
+        assert imp.wait() == 0
+    assert git("status", "--porcelain", text=True).stdout == "", "the wiki's files are as they were"
+
+
+def test_a_write_beside_a_join(team, client):
+    """What a write waits while Zone joins the packs of a repository with a
+    history (AGED commits; Zone packs the repository itself, in
+    docs/spec/rendering.md): the join reads all of it, for seconds here and
+    for minutes after a team's year, and until 2026-11-16 every save of the
+    wiki waited for it. One user changes a task again and again; the fiftieth
+    commit starts Zone's pack, the join follows, and each write beside it is
+    timed."""
+    root, users, lists = team
+    age(root, users, lists, AGED)
+    packs = lambda: len(list((root / ".git/objects/pack").glob("*.pack")))
+    before = packs()
+    assert client.post("/login", data={"username": users[0], "password": "pw"}, headers=HOST).status_code == 302
+    shared = [t for t in client.get("/api/tasks?mine=1", headers=HOST).get_json() if not t.get("private")]
+    beside, began, ended, writes = [], None, None, 0
+    stop = time.monotonic() + 600
+    while time.monotonic() < stop:
+        writes += 1
+        start = time.perf_counter()
+        resp = client.put(f"/api/tasks/{shared[writes % len(shared)]['id']}", json={"title": f"Changed {writes}"}, headers=HOST)
+        ms = (time.perf_counter() - start) * 1000
+        assert resp.status_code == 200
+        n = packs()
+        if began is None and n > before:
+            began = time.monotonic()         # Zone's pack is there: the join is next
+        elif began is not None:
+            beside.append(ms)
+            if n < before:                   # the packs it stands for are gone
+                ended = time.monotonic()
+                break
+    assert ended is not None, f"no join after {writes} writes ({packs()} packs, {before} before)"
+    fsck = subprocess.run(["git", "-C", str(root), "fsck", "--full", "--strict"], capture_output=True, text=True)
+    assert fsck.returncode == 0, fsck.stderr
+    print(f"\n\nA write beside a join: a history of {AGED} commits, joined in {ended - began:.1f} s, "
+          f"{len(beside)} writes meanwhile (median {statistics.median(beside):.0f} ms)\n")
+    report({"beside a join: a task changed, slowest (ms)": max(beside)})
+    assert len(beside) >= 10, f"only {len(beside)} writes went through beside the join: they waited for it, or it was too short to say"
 
 
 def test_the_tasks_at_a_teams_size(team, client):

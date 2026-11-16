@@ -210,4 +210,19 @@ func TestIdleLongEnough(t *testing.T) {
 	if !idleLongEnough(after) {
 		t.Error("not idle after the right password cleared the client")
 	}
+	// Nor while the repository is packed: a join stopped halfway starts anew.
+	setPacking := func(on bool) {
+		packing.Lock()
+		packing.running = on
+		packing.Unlock()
+	}
+	setPacking(true)
+	t.Cleanup(func() { setPacking(false) })
+	if idleLongEnough(after) {
+		t.Error("idle while the repository is packed")
+	}
+	setPacking(false)
+	if !idleLongEnough(after) {
+		t.Error("not idle after the pack ended")
+	}
 }
