@@ -6,10 +6,12 @@ import { toSlug } from './mdtext.js';
 // `tasks: true`, the editor) and `[text](` pages as /page/ links. One
 // implementation for the editor and the task app's task fields (tasks.js). `page`
 // (its slug, or a function giving it; '' for text that is on no page, such as
-// a shared task's; null: unknown) says where the text is. On a page in a private folder `[[` also offers a new
-// page in that folder: wikilinks are absolute, so the private page is named
-// in full, `[[private/alice/idea|Idea]]`. On a shared page private pages
-// aren't offered at all: others couldn't follow a link to one.
+// a shared task's; null: unknown) says where the text is. On a page in a private folder, or in a group's
+// (groups/<group>/), `[[` also offers a new page in that folder: wikilinks
+// are absolute, so the page is named in full, `[[private/alice/idea|Idea]]`.
+// What is offered is what every reader of the text sees: on a shared page no
+// private page and no group's, on a group's page that group's and the shared
+// ones: the others couldn't follow a link to anything else.
 
 let wikiPages = null;   // page slugs, fetched once when first needed
 
@@ -156,30 +158,36 @@ export function linkAutocomplete(ta, { tasks = false, page = null } = {}) {
   // without, it is an ordinary folder.
   const users = () => document.body.dataset.users === '1';
 
-  // Page slugs to offer: not private ones where the text is shared.
+  // Page slugs to offer: those every reader of the text sees. On a private
+  // page all the user sees; on a group's page the shared ones and that
+  // group's; on a shared page (or text on no page) the shared ones.
   function offered() {
     const slug = typeof page === 'function' ? page() : page;
-    return users() && slug !== null && !slug.startsWith('private/') ? wikiPages.filter(p => !p.startsWith('private/')) : wikiPages;
+    if (!users() || slug === null || slug.startsWith('private/')) return wikiPages;
+    const own = privateFolder();   // a group's folder here, or ''
+    return wikiPages.filter(p => !/^(private|groups)\//.test(p) || own && p.startsWith(own + '/'));
   }
 
-  // The folder of the private page being edited ("private/alice"), or ''.
+  // The folder of the private or the group's page being edited
+  // ("private/alice", "groups/dev"), or ''.
   function privateFolder() {
     if (!users()) return '';
     const slug = typeof page === 'function' ? page() : page;
-    const m = /^private\/[^/]+(?=\/)/.exec(slug || '');
+    const m = /^(?:private|groups)\/[^/]+(?=\/)/.exec(slug || '');
     return m ? m[0] : '';
   }
 
-  // `[[idea` on a private page: a new page in its folder. It comes first (so
+  // `[[idea` on a private page or a group's: a new page in its folder. It comes first (so
   // Enter makes it), unless what is typed names a page exactly: then that
   // page stays first and the offer follows. Left out for a name that exists
   // in the folder.
   function newPrivate(q, found) {
     const folder = privateFolder(), name = q.trim();
-    if (!folder || !name || /[|#]/.test(name) || /^private\//i.test(name)) return found;
+    if (!folder || !name || /[|#]/.test(name) || /^(private|groups)\//i.test(name)) return found;
     const slug = `${folder}/${toSlug(name)}`;
     if (slug === `${folder}/` || wikiPages.includes(slug)) return found;
-    const offer = { value: `${slug}|${name}`, label: `New private page: ${name}`, meta: slug };
+    const group = folder.startsWith('groups/') ? folder.slice('groups/'.length) : '';
+    const offer = { value: `${slug}|${name}`, label: group ? `New page for @${group}: ${name}` : `New private page: ${name}`, meta: slug };
     const exact = toSlug(name);
     return found.includes(exact) ? [exact, offer, ...found.filter(p => p !== exact)] : [offer, ...found];
   }

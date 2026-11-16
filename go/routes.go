@@ -31,7 +31,11 @@ func pageRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /edit/{slug...}", writesPages(savePage))
 	mux.HandleFunc("POST /api/save/{slug...}", writesPages(apiSave))
 	mux.HandleFunc("GET /new", func(w http.ResponseWriter, r *http.Request) {
-		page(w, newReq(r), http.StatusOK, "new.html", "New Page", shell{}, nil)
+		var groups []string
+		if u := settings().Users[userOf(r)]; u != nil && !settings().isViewer(u.Name) {
+			groups = u.In
+		}
+		page(w, newReq(r), http.StatusOK, "new.html", "New Page", shell{}, &newPageView{Groups: groups})
 	})
 	mux.HandleFunc("POST /new", writesPages(createPage))
 	mux.HandleFunc("POST /rename/{slug...}", writesPages(renamePage))
@@ -152,8 +156,8 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		to := pathURL("edit", slug)
-		if r.URL.Query().Get("from") == "private" {
-			to += "?from=private" // the link was on a private page (processWikilinks)
+		if from := r.URL.Query().Get("from"); newFromRE.MatchString(from) {
+			to += "?from=" + from // the link was on a private page, or a group's (wikilinker)
 		}
 		http.Redirect(w, r, to, http.StatusFound)
 		return
@@ -261,7 +265,8 @@ type editView struct {
 	CanRename, CanDelete        bool
 	Git                         bool
 	RenameError, RenameName     string
-	PrivateOffer                string // a new shared page from a private one: the private slug to link instead
+	PrivateOffer                string // a new shared page from a private one, or a group's: the slug in that folder to link instead
+	OfferGroup                  string // the group whose folder PrivateOffer is in ("": the user's own)
 	LeftDraft                   *leftDraftView
 	Paste                       *pasteHintView // after Move to wiki (pasteHint)
 	TaskLists                   []string       // the lists there are, for the Task list dialog
@@ -363,10 +368,11 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 	if !isNew && !hasSection {
 		fileHash = mdtext.ContentHash(content)
 	}
-	// A new page from a link on a private page: shared, unless made private.
-	privateOffer := ""
+	// A new page from a link on a private page, or a group's: shared, unless
+	// it is made in that folder.
+	privateOffer, offerGroup := "", ""
 	if isNew && !hasSection {
-		privateOffer = sharedNewOffer(rq.user, slug, q.Get("from") == "private")
+		privateOffer, offerGroup = sharedNewOffer(rq.user, slug, q.Get("from"))
 	}
 	extra := crumb{"Edit", ""}
 	if hasSection {
@@ -378,7 +384,7 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 		// A visitor (a public wiki) edits and makes pages, and moves none.
 		CanRename: editable && !isProtected(slug) && rq.user != visitor, CanDelete: editable && !isProtected(slug) && rq.user != visitor,
 		Git: cfg.GitEnabled, RenameError: q.Get("rename_error"), RenameName: q.Get("rename_name"), LeftDraft: left,
-		PrivateOffer: privateOffer, Paste: pasteHint(rq, q.Get("paste"), q.Get("copied") == "1"),
+		PrivateOffer: privateOffer, OfferGroup: offerGroup, Paste: pasteHint(rq, q.Get("paste"), q.Get("copied") == "1"),
 		TaskLists:      slices.Sorted(maps.Keys(rq.taskLists())),
 		BreadcrumbHTML: buildBreadcrumb(rq, slug, title, "", "", extra),
 		TasksHTML:      editorTasksHTML(rq, slug)})
@@ -666,15 +672,28 @@ func keepLeftDraft(r *http.Request, s *editorSave) {
 	leaveDraft(userOf(r), s.path, whole, base)
 }
 
+// newPageView: /new (new.html): the groups the user is in, whose folders a
+// new page can be made in.
+type newPageView struct {
+	view
+	Groups []string
+}
+
 // createPage: /new, the form for a new page's name (pages are made from
-// links to them; this is its form without JavaScript); private=1 puts
-// the page in the user's private folder.
+// links to them; this is its form without JavaScript); private=1 (or
+// for=private) puts the page in the user's private folder, for=group:<name>
+// in the folder of a group they are in.
 func createPage(w http.ResponseWriter, r *http.Request) {
 	raw := r.PostFormValue("slug")
 	slug := mdtext.ToSlug(raw)
-	if own := privateFolder(userOf(r)); own != "" && slug != "" && r.PostFormValue("private") == "1" &&
+	who := r.PostFormValue("for")
+	if own := privateFolder(userOf(r)); own != "" && slug != "" && (r.PostFormValue("private") == "1" || who == "private") &&
 		!strings.HasPrefix(slug, own+"/") {
 		slug = own + "/" + slug
+	}
+	if g, ok := strings.CutPrefix(who, "group:"); ok && slug != "" && newFromRE.MatchString(who) &&
+		settings().memberOf(userOf(r), g) && !strings.HasPrefix(slug, groupsDir+"/"+g+"/") {
+		slug = groupsDir + "/" + g + "/" + slug
 	}
 	if slug == "" {
 		badRequestPage(w)

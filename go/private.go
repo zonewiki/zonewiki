@@ -125,23 +125,39 @@ func shareTargets(user, slug string) []shareTarget {
 	return out
 }
 
+// newFrom: how a link to a new page says where it was (?from=…): "private"
+// on one of the user's private pages, "group:<name>" on a group's.
+func newFrom(source place) string {
+	if g := source.group(); g != "" {
+		return "group:" + g
+	}
+	return "private"
+}
+
+// newFromRE: a ?from= a link to a new page carries.
+var newFromRE = regexp.MustCompile(`^(?:private|group:[a-z0-9][a-z0-9-]{0,39})$`)
+
 // sharedNewOffer: a new page opened from a link on one of the user's private
-// pages (?from=private) that would be shared: the private slug a link could
-// name instead (the editor's note says so), "" when there is nothing to offer (not from a private
-// page, no users, the page is private already, or that private page exists).
-func sharedNewOffer(user, slug string, fromPrivate bool) string {
-	folder := privateFolder(user)
-	if folder == "" || !fromPrivate {
-		return ""
+// pages (?from=private) or on a page of a group they are in
+// (?from=group:<name>) that would be shared: the slug in that folder a link
+// could name instead (the editor's note says so), and the group it would be
+// for ("" for the user's own). "" when there is nothing to offer (not from
+// such a page, no users, the page isn't a shared one, or that page exists).
+func sharedNewOffer(user, slug, from string) (target, group string) {
+	folder := ""
+	if g, ok := strings.CutPrefix(from, "group:"); ok && newFromRE.MatchString(from) && settings().memberOf(user, g) {
+		folder, group = groupsDir+"/"+g, g
+	} else if from == "private" {
+		folder = privateFolder(user)
 	}
-	if !placeOf(slug).shared() {
-		return ""
+	if folder == "" || !placeOf(slug).shared() {
+		return "", ""
 	}
-	target := folder + "/" + slug
+	target = folder + "/" + slug
 	if p := safePath(target); p == "" || exists(p) {
-		return ""
+		return "", ""
 	}
-	return target
+	return target, group
 }
 
 // ownUploadRE: a link to an upload kept in a user's or a group's folder

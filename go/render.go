@@ -19,12 +19,14 @@ import (
 // [[Page#Section]], [[#Section]] as links; to a missing page with class
 // wikilink-missing, to a page hidden in sharing mode as its label only.
 // slugs: the wiki's pages (nil: listed now). from: the page the text is on
-// ("" for none, a task's notes): on one of the user's own private pages a
-// link to a missing page that would be shared is marked
-// (wikilink-shared-new) and carries ?from=private, so the editor it opens
-// warns that the new page is shared and offers it as a private one; on a
-// shared page a link to the user's private page is marked
-// (wikilink-private), since others see it as plain text. A section's
+// ("" for none, a task's notes): on one of the user's own private pages, or
+// a page of a group, a link to a missing page that would be shared is marked
+// (wikilink-shared-new) and carries ?from=private or ?from=group:<name>, so
+// the editor it opens warns that the new page is shared and offers it in
+// that folder; a link to a page not every reader of this one sees (from a
+// shared page to the user's private page or a group's, from a group's page
+// to another group's) is marked (wikilink-private), since the others see it
+// as plain text. A section's
 // anchor is made from its code as written ([[Page#Run `make` now]]).
 func wikilinker(rq *Req, slugs map[string]bool, from string) func(inner string) (open, label, close string) {
 	if slugs == nil {
@@ -56,12 +58,15 @@ func wikilinker(rq *Req, slugs map[string]bool, from string) func(inner string) 
 			css += " wikilink-missing"
 			if from != "" && !source.shared() && target.shared() {
 				css += " wikilink-shared-new"
-				query, title = "?from=private", ` title="Creates a shared page"`
+				query, title = "?from="+newFrom(source), ` title="Creates a shared page"`
 			}
 		} else if from != "" && !source.within(target) {
 			// Not every reader of this page sees the target: marked for who does.
 			css += " wikilink-private"
 			title = ` title="Links to a private page: others see plain text"`
+			if g := target.group(); g != "" {
+				title = ` title="Links to a page of @` + g + `: others see plain text"`
+			}
 		}
 		return `<a href="` + pathURL("page", slug) + query + anchor + `" class="` + css + `"` + title + `>`, label, `</a>`
 	}

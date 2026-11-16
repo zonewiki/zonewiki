@@ -518,3 +518,73 @@ def test_a_note_is_filed_into_a_groups_folder(client, wiki):
     sign_in(client, "bob")
     assert "groups/" not in " ".join(re.findall(r'<option value="([^"]*)"', client.get(
         "/page/" + client.post("/api/notes", data={"title": "His"}, headers=HOST).get_json()["slug"], headers=HOST).get_data(as_text=True)))
+
+
+# ── Links and new pages ──────────────────────────────────────────────────────
+
+def test_a_link_is_marked_where_not_every_reader_of_the_page_sees_its_target(client, wiki):
+    """For who does see it: a 🔒 and the words that the others see plain
+    text. From a shared page to a group's, from a group's to a private one
+    or to another group's; not within the group, and not into a group that
+    includes it."""
+    (wiki / "private/alice").mkdir(parents=True)
+    (wiki / "private/alice/own.md").write_text("# Own\n")
+    (wiki / "groups/product").mkdir()
+    (wiki / "groups/product/wide.md").write_text("# Wide\n")
+    (wiki / "groups/ops").mkdir()
+    (wiki / "groups/ops/other.md").write_text("# Other\n")
+    sign_in(client, "alice")
+    _set_config(wiki, lambda t: t.replace("groups = dev\n", "groups = dev, ops\n", 1) + "\n[group product]\nincludes = dev\n")
+    links = "[[groups/dev/diary]] [[private/alice/own]] [[groups/product/wide]] [[groups/ops/other]] [[plans]] [[Brand New]]"
+
+    def marks(page):
+        html = client.post("/api/preview", query_string={"page": page} if page else {}, data=links, headers=HOST).get_data(as_text=True)
+        return {m[0].rsplit("/", 1)[-1].split("?")[0]: (m[1].replace("wikilink", "").strip(), m[2])
+                for m in re.findall(r'<a href="/page/([^"]+)" class="([^"]+)"(?: title="([^"]*)")?', html)}
+    assert _until(lambda: "wide" in marks("groups/dev/standup") and "other" in marks("groups/dev/standup"))
+    plain, private = ("", ""), ("-private", "Links to a private page: others see plain text")
+    of = lambda g: ("-private", f"Links to a page of @{g}: others see plain text")  # noqa: E731
+    new = ("-missing -shared-new", "Creates a shared page")
+    assert marks("plans") == {"diary": of("dev"), "own": private, "wide": of("product"), "other": of("ops"), "plans": plain,
+                              "brand-new": ("-missing", "")}
+    assert set(marks("").values()) == {plain, ("-missing", "")}              # text on no page (a task's): nothing is marked
+    assert marks("groups/dev/standup") == {"diary": plain, "own": private, "wide": plain, "other": of("ops"), "plans": plain,
+                                           "brand-new": new}
+    assert marks("groups/product/x") == {"diary": of("dev"), "own": private, "wide": plain, "other": of("ops"), "plans": plain,
+                                         "brand-new": new}
+    assert marks("private/alice/x") == {"diary": plain, "own": plain, "wide": plain, "other": plain, "plans": plain, "brand-new": new}
+    # The new page's link says where it was, and the editor offers the page in that folder.
+    html = client.post("/api/preview", query_string={"page": "groups/dev/standup"}, data="[[Brand New]]", headers=HOST).get_data(as_text=True)
+    assert 'href="/page/brand-new?from=group:dev"' in html
+    assert client.get("/page/brand-new?from=group:dev", headers=HOST).headers["Location"] == "/edit/brand-new?from=group:dev"
+    body = client.get("/edit/brand-new?from=group:dev", headers=HOST).get_data(as_text=True)
+    assert "For a page of @dev, link to <code>groups/dev/brand-new</code> instead" in body
+    for url in ("/edit/brand-new?from=group:design", "/edit/brand-new?from=group:", "/edit/plans?from=group:dev",
+                "/edit/groups/dev/brand-new?from=group:dev"):                # not her group; no group; a page that is there; the group's already
+        assert "shared-new-banner" not in client.get(url, headers=HOST).get_data(as_text=True), url
+    assert client.get("/page/brand-new?from=group:Dev%20x", headers=HOST).headers["Location"] == "/edit/brand-new"
+    sign_in(client, "bob")              # to who doesn't see them, the targets are words
+    html = client.post("/api/preview", data=links, headers=HOST).get_data(as_text=True)
+    assert html.count('class="wikilink-hidden"') == 4 and 'href="/page/groups' not in html and 'href="/page/private' not in html
+
+
+def test_new_page_asks_whom_it_is_for(client, wiki):
+    """/new, the form without JavaScript: someone in a group chooses
+    everyone, one of their groups or only themselves; the page is made in
+    that folder."""
+    sign_in(client, "alice")
+    form = client.get("/new", headers=HOST).get_data(as_text=True)
+    select = re.search(r'<select id="page-for" name="for">(.*?)</select>', form, re.S).group(1)
+    assert re.findall(r'<option value="([^"]*)"', select) == ["", "group:dev", "private"] and 'name="private"' not in form
+    assert client.post("/new", data={"slug": "Retro Notes", "for": "group:dev"}, headers=HOST).headers["Location"] == "/edit/groups/dev/retro-notes"
+    assert (wiki / "groups/dev/retro-notes.md").exists()
+    assert client.post("/new", data={"slug": "Mine", "for": "private"}, headers=HOST).headers["Location"] == "/edit/private/alice/mine"
+    assert client.post("/new", data={"slug": "Open", "for": ""}, headers=HOST).headers["Location"] == "/edit/open"
+    # A group she isn't in, or no group's name: the page is a shared one, as typed.
+    assert client.post("/new", data={"slug": "Sneak", "for": "group:ops"}, headers=HOST).headers["Location"] == "/edit/sneak"
+    assert not (wiki / "groups/ops").exists()
+    sign_in(client, "bob")              # in no group: the Private box, as before
+    form = client.get("/new", headers=HOST).get_data(as_text=True)
+    assert 'name="private"' in form and 'name="for"' not in form
+    assert client.post("/new", data={"slug": "X", "for": "group:dev"}, headers=HOST).headers["Location"] == "/edit/x"
+    assert not (wiki / "groups/dev/x.md").exists()

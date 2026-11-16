@@ -6,11 +6,11 @@
 <div class="editor-wrap">
   <div class="editor-pane">
     {{.BreadcrumbHTML}}
-    {{- /* A new page from a link on a private page would be shared: say so,
-        and say how to make it private (js/editor.js dismisses the note). */}}
+    {{- /* A new page from a link on a private page, or a group's, would be
+        shared: say so, and say how to make it there (js/editor.js dismisses the note). */}}
     {{- if .PrivateOffer}}
     <div class="shared-new-banner" id="shared-new-banner" role="note">
-      <span>🌐 This new page is shared: everyone who uses the wiki will see it. For a private page, link to <code>{{.PrivateOffer}}</code> instead.</span>
+      <span>🌐 This new page is shared: everyone who uses the wiki will see it. For a {{if .OfferGroup}}page of @{{.OfferGroup}}{{else}}private page{{end}}, link to <code>{{.PrivateOffer}}</code> instead.</span>
       <span class="conflict-actions"><button type="button" class="btn btn-small" id="shared-new-keep">Keep shared</button></span>
     </div>
     {{- end}}

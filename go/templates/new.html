@@ -5,8 +5,20 @@
   <label for="page-name">Page name</label>
   <input type="text" id="page-name" name="slug"
          placeholder="e.g. My New Page" autofocus required>
+  {{- if and .Shell.User .Groups}}
+  {{- /* In a group: who the page is for is where it is kept. */}}
+  <label for="page-for">For</label>
+  <select id="page-for" name="for">
+    <option value="">Everyone who uses this wiki</option>
+    {{- range .Groups}}
+    <option value="group:{{.}}">@{{.}}: in groups/{{.}}/, its members see it</option>
+    {{- end}}
+    <option value="private">Only you: in private/{{.Shell.User}}/</option>
+  </select>
+  {{- else}}
   {{- with .Shell.User}}
   <label class="promote-check"><input type="checkbox" name="private" value="1"> Private: in private/{{.}}/, only you see it</label>
+  {{- end}}
   {{- end}}
   <button type="submit" class="btn btn-primary">Create</button>
 </form>
