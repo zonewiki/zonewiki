@@ -20,6 +20,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // User: one of the users, with the hash of their password and their MCP
@@ -27,10 +28,54 @@ import (
 // role and whether they are disabled (role, disabled in their section).
 type User struct {
 	Name, PasswordHash, MCPToken string
-	Role                         string // roleAdmin, roleEditor or roleViewer
-	Disabled                     bool   // can't sign in; sessions and token refused
-	Pending                      bool   // made by sign-up, waiting for an admin's approval (Disabled too)
-	Email                        string // their mail address, lowercase; "": none known
+	Role                         string   // roleAdmin, roleEditor or roleViewer
+	Disabled                     bool     // can't sign in; sessions and token refused
+	Pending                      bool     // made by sign-up, waiting for an admin's approval (Disabled too)
+	Email                        string   // their mail address, lowercase; "": none known
+	Groups                       []string // the groups they are in (groups = dev, hiring), A–Z
+}
+
+// Groups (docs/spec/users.md): who belongs together is said once, on the
+// users (groups in a user's section), for whatever is for some and not for
+// all: a task list for a group today. A group is its name; one nobody is in
+// has no members, and is no error.
+var groupNameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,39}$`)
+
+// parseGroups: the groups a groups value names (commas or spaces between
+// them, a leading @ allowed), cleaned, A–Z, each once; the first word that
+// is no group's name as bad.
+func parseGroups(value string) (groups []string, bad string) {
+	for _, w := range strings.FieldsFunc(value, func(r rune) bool { return r == ',' || unicode.IsSpace(r) }) {
+		name := strings.ToLower(strings.TrimPrefix(w, "@"))
+		if !groupNameRE.MatchString(name) {
+			return nil, w
+		}
+		if !slices.Contains(groups, name) {
+			groups = append(groups, name)
+		}
+	}
+	slices.Sort(groups)
+	return groups, ""
+}
+
+// memberOf: user is in group, and can use the wiki (not disabled).
+func (s *Settings) memberOf(user, group string) bool {
+	u := s.Users[user]
+	return u != nil && !u.Disabled && slices.Contains(u.Groups, group)
+}
+
+// groups: every group a user is in, A–Z.
+func (s *Settings) groups() []string {
+	var out []string
+	for _, u := range s.Users {
+		for _, g := range u.Groups {
+			if !slices.Contains(out, g) {
+				out = append(out, g)
+			}
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // The roles (docs/spec/users.md): an admin manages the users and does what

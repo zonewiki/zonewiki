@@ -48,7 +48,7 @@ var configKeys = []string{"password", "mcp-token", "hosts", "base-url", "git-rem
 	"external-content", "no-login", "mcp-oauth", "signup-domains", "signup-role", "signup-approval"}
 
 // userKeys: the keys of a [user …] section.
-var userKeys = []string{"password", "mcp-token", "role", "disabled", "email", "pending"}
+var userKeys = []string{"password", "mcp-token", "role", "disabled", "email", "pending", "groups"}
 
 func knownKey(key string) bool { return slices.Contains(configKeys, key) }
 
@@ -319,11 +319,16 @@ func fileUsers(f *settingsfile.File) (map[string]*User, error) {
 		if email.Value != "" && !validEmail(email.Value) {
 			return nil, lineError(email.Line, "%s's email %s isn't a mail address.", u.Name, email.Value)
 		}
+		groups, bad := parseGroups(u.Values["groups"].Value)
+		if bad != "" {
+			return nil, lineError(u.Values["groups"].Line, "%s's group %s isn't a group's name: lowercase letters, "+
+				"digits and hyphens (groups = dev, hiring).", u.Name, bad)
+		}
 		// Waiting for approval, a user is disabled too: every check that
 		// keeps a disabled user out keeps them out.
 		users[u.Name] = &User{Name: u.Name, PasswordHash: hash.Value, MCPToken: token.Value, Role: role,
 			Disabled: truthy(disabled.Value) || truthy(pending.Value), Pending: truthy(pending.Value),
-			Email: strings.ToLower(email.Value)}
+			Email: strings.ToLower(email.Value), Groups: groups}
 	}
 	return users, nil
 }
@@ -584,6 +589,9 @@ func settingsChange(old, s *Settings) string {
 		}
 		if was != nil && was.Role != now.Role {
 			changes = append(changes, name+"'s role")
+		}
+		if was != nil && !slices.Equal(was.Groups, now.Groups) {
+			changes = append(changes, name+"'s groups")
 		}
 		if was != nil && was.Disabled != now.Disabled {
 			switch {

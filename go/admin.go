@@ -11,11 +11,13 @@
 package main
 
 import (
+	"fmt"
 	"html/template"
 	"net/http"
 	"net/url"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"time"
 	"zonewiki/internal/settingsfile"
@@ -27,6 +29,7 @@ func adminRoutes(mux *http.ServeMux) {
 	}))
 	mux.HandleFunc("GET /admin/users", usersPage)
 	mux.HandleFunc("POST /admin/users/{name}/role", adminOnly(userRoleRoute))
+	mux.HandleFunc("POST /admin/users/{name}/groups", adminOnly(userGroupsRoute))
 	mux.HandleFunc("POST /admin/users/{name}/disable", adminOnly(userDisableRoute))
 	mux.HandleFunc("POST /admin/users/{name}/enable", adminOnly(userDisableRoute))
 	mux.HandleFunc("POST /admin/users/{name}/remove", adminOnly(userRemoveRoute))
@@ -57,8 +60,10 @@ type usersView struct {
 	Done  string // what the last change did ("" none), said above the list
 	Error string // why the last change was refused
 	Roles []string
-	Tabs  []adminTab // the admin page's section tabs
-	Tab   string     // the one shown
+	// Groups: every group a user is in, for the Groups fields to complete from.
+	Groups []string
+	Tabs   []adminTab // the admin page's section tabs
+	Tab    string     // the one shown
 	// The module switcher and Admin › Users, as on every view, so the top
 	// row stays put; not in the navigation trail.
 	BreadcrumbHTML template.HTML
@@ -77,6 +82,7 @@ type usersView struct {
 type userRow struct {
 	Name, Role      string
 	Email           string
+	Groups          string // the groups they are in, "dev, hiring"
 	Token, Disabled bool
 	Pending         bool // signed up, waiting for approval
 	Me, Private     bool // the admin themselves; has a private folder
@@ -106,6 +112,10 @@ func usersPage(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Query().Get("done") {
 		case "role":
 			done = name + " is " + withArticle(u.Role) + " now."
+		case "groups":
+			if done = name + " is in no group now."; len(u.Groups) > 0 {
+				done = name + " is in " + strings.Join(u.Groups, ", ") + " now."
+			}
 		case "disable":
 			done = "Disabled " + name + ": they can't sign in, and their MCP token no longer works. Their files stay."
 		case "enable":
@@ -134,13 +144,13 @@ func showUsers(w http.ResponseWriter, r *http.Request, status int, done, refused
 // usersData: what the Users tab lists, the users and the open links.
 func usersData(r *http.Request) *usersView {
 	s, me := latestSettings(), userOf(r)
-	v := &usersView{Me: me, Roles: roles, Links: openLinks(), Tabs: adminTabs, Tab: "users",
+	v := &usersView{Me: me, Roles: roles, Groups: s.groups(), Links: openLinks(), Tabs: adminTabs, Tab: "users",
 		Signup: signupOn(s), SignupRole: s.SignupRole, SignupDomains: s.SignupDomains, SignupApproval: s.SignupApproval,
 		BreadcrumbHTML: breadcrumb(newReq(r), []crumb{{"Admin", "/admin"}, {"Users", ""}}, "", false, "", "")}
 	assigned := assignedOpen()
 	for _, name := range sortedKeys(s.Users) {
 		u := s.Users[name]
-		row := userRow{Name: name, Role: u.Role, Email: u.Email, Token: u.MCPToken != "",
+		row := userRow{Name: name, Role: u.Role, Email: u.Email, Groups: strings.Join(u.Groups, ", "), Token: u.MCPToken != "",
 			Disabled: u.Disabled, Pending: u.Pending,
 			Me: name == me, Private: isDir(filepath.Join(cfg.Data, privateDir, name))}
 		if !s.assignable(name) {
@@ -231,6 +241,28 @@ func userRoleRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	afterChange(w, r, "role", u.Name)
+}
+
+// userGroupsRoute: POST /admin/users/{name}/groups: the groups the user is
+// in from now, as the field names them (groups = dev, hiring; empty: none).
+func userGroupsRoute(w http.ResponseWriter, r *http.Request) {
+	u := targetUser(w, r)
+	if u == nil {
+		return
+	}
+	groups, bad := parseGroups(r.PostFormValue("groups"))
+	if bad != "" {
+		refuseChange(w, r, fmt.Errorf("%q isn't a group's name: lowercase letters, digits and hyphens.", bad))
+		return
+	}
+	if err := changeSettings(userOf(r), func(f *settingsfile.File) error {
+		setGroups(f, u.Name, groups)
+		return nil
+	}); err != nil {
+		refuseChange(w, r, err)
+		return
+	}
+	afterChange(w, r, "groups", u.Name)
 }
 
 // userDisableRoute: POST /admin/users/{name}/disable or /enable.

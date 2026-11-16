@@ -1141,7 +1141,7 @@ EXEMPT = {
     "POST /api/notes",              # makes bob's own note
     "GET /private",                 # redirects to the caller's own private home (test_users.py)
     # The admin page: admins only, names and roles, no page (test_admin.py)
-    "GET /admin", "GET /admin/users", "POST /admin/users/{name}/role", "POST /admin/users/{name}/disable", "POST /admin/users/{name}/enable",
+    "GET /admin", "GET /admin/users", "POST /admin/users/{name}/role", "POST /admin/users/{name}/groups", "POST /admin/users/{name}/disable", "POST /admin/users/{name}/enable",
     "POST /admin/users/{name}/remove", "POST /admin/users/invite", "POST /admin/users/{name}/reset", "POST /admin/users/{name}/revoke",
     "GET /welcome/{token}", "POST /welcome/{token}",   # a link's own page: sets one password (test_admin.py)
     "GET /signup", "POST /signup",  # asks for an account by mail, signed out (test_signup.py)

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -434,6 +435,39 @@ func TestUserRoles(t *testing.T) {
 	}
 	if code, _, _ := run("", "enable", "bob"); code != 0 || users()["bob"].Disabled || strings.Contains(readFile(t, path), "disabled") {
 		t.Error("enable")
+	}
+	// Groups: who belongs together, said on the users.
+	if code, out, _ := run("", "group", "bob", "+Hiring", "+dev"); code != 0 || out != "bob is in: dev, hiring.\n" ||
+		!slices.Equal(users()["bob"].Groups, []string{"dev", "hiring"}) || !strings.Contains(readFile(t, path), "groups = dev, hiring") {
+		t.Errorf("group +: %d %q", code, out)
+	}
+	if code, out, _ := run("", "group", "bob"); code != 0 || out != "bob is in: dev, hiring.\n" {
+		t.Errorf("group alone: %q", out)
+	}
+	if code, out, _ := run("", "list"); code != 0 || !strings.Contains(out, "  bob (in dev, hiring)\n") {
+		t.Errorf("list with groups: %q", out)
+	}
+	if s := settingsOf(readFile(t, path)); !s.memberOf("bob", "dev") || s.memberOf("carol", "dev") || s.memberOf("bob", "ops") ||
+		!slices.Equal(s.groups(), []string{"dev", "hiring"}) {
+		t.Error("memberOf")
+	}
+	for _, bad := range [][]string{{"group", "bob", "dev"}, {"group", "bob", "+Dev Ops"}, {"group", "bob", "+"}, {"group", "nobody", "+dev"}, {"group"}} {
+		if code, _, _ := run("", bad...); code == 0 {
+			t.Errorf("%v went through", bad)
+		}
+	}
+	if code, out, _ := run("", "group", "bob", "-dev", "-hiring"); code != 0 || out != "bob is in no group.\n" ||
+		strings.Contains(readFile(t, path), "groups") {
+		t.Errorf("group -: %d %q", code, out)
+	}
+	// A disabled user is in no group for what a group is for, and a name that is none is an error of the file.
+	if s := settingsOf("[user x]\npassword = " + hashPassword("p") + "\ngroups = @dev ops\ndisabled = yes\n"); s == nil ||
+		!slices.Equal(s.Users["x"].Groups, []string{"dev", "ops"}) || s.memberOf("x", "dev") {
+		t.Error("groups of a disabled user")
+	}
+	badGroups, _ := parseConfig("[user x]\npassword = " + hashPassword("p") + "\ngroups = dev, Not_A_Group\n")
+	if _, err := loadSettings(badGroups); err == nil || !strings.Contains(err.Error(), "Not_A_Group") {
+		t.Errorf("a bad group's name: %v", err)
 	}
 	// Never back to no admin: the last one can't be demoted, disabled or removed.
 	before := readFile(t, path)

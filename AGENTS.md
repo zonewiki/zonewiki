@@ -107,7 +107,7 @@ Auth is optional (a password, or users; see Key Constraints).
 │   ├── config.go           # What is fixed for the process, from the environment (read once into cfg)
 │   ├── configfile.go       # The settings file .zone/config: its keys, Settings (settings(), reloaded when the file changes), the line edits
 │   ├── storage.go          # upload-max and storage-max: sizes (25MB), what the wiki holds (not .git/, .zone/), checkRoom
-│   ├── commands.go         # zonewiki user (add, passwd, token, role, disable, enable, invite, reset, remove, list) and zonewiki config (check, set, unset, passwd, token), which edit the settings file (filelock_*.go: one at a time)
+│   ├── commands.go         # zonewiki user (add, passwd, token, role, group, disable, enable, invite, reset, remove, list) and zonewiki config (check, set, unset, passwd, token), which edit the settings file (filelock_*.go: one at a time)
 │   ├── security.go         # Host and Origin checks, the page policy, login, signed session (and its user), throttles
 │   ├── users.go            # Users: roles, password hashes, sign-in, the password prompt, who a task can be assigned to (assignable, the reserved names me and none)
 │   ├── admin.go            # The admin page (/admin, admins), its Users tab: roles, disable, remove, writing the settings file as the commands do
@@ -200,7 +200,7 @@ It lives in the host directory pointed to by `ZONE_DATA` (default: `~/zonewiki`)
 ./run.sh leaks      # scan the git history for secrets (gitleaks, in the tools image)
 ./run.sh screenshots  # redo the README's screenshots from a sample wiki
 ./run.sh eval [FILE]  # measure retrieval on your wiki (questions in FILE, default _eval/retrieval.json in the wiki)
-./run.sh user add|passwd|token|role|disable|enable|remove NAME, user list  # the users in the wiki's settings file (.zone/config)
+./run.sh user add|passwd|token|role|group|disable|enable|remove NAME, user list  # the users in the wiki's settings file (.zone/config)
 ./run.sh config check|set|unset|passwd|token  # the wiki's settings file: check it, set a key, password and MCP token without users
 ```
 

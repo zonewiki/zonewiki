@@ -27,6 +27,7 @@ const userUsage = `Usage: zonewiki user COMMAND
   passwd NAME             set a user's password (asks for it)
   token NAME              give a user a new MCP token (the old one stops working)
   role NAME ROLE          change a user's role: admin, editor or viewer
+  group NAME [+G] [-G]    put a user in a group (+dev) or take them out (-dev); alone: their groups
   disable NAME            stop a user signing in (their files stay); enable NAME undoes it
   invite NAME             a link for a new user to choose their password, for 7 days (shown once)
     [--role ROLE]         their role: admin, editor (the default) or viewer
@@ -165,6 +166,8 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 		return c.newToken()
 	case "role":
 		return c.setRole()
+	case "group":
+		return c.setGroups()
 	case "disable", "enable":
 		return c.setDisabled()
 	}
@@ -176,7 +179,8 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 // returns the exit code.
 type userCommand struct {
 	cmd, name    string
-	role         string // --role ROLE, or role's second argument
+	role         string   // --role ROLE, or role's second argument
+	groupArgs    []string // group NAME's +GROUP and -GROUP words
 	roleFlag     bool
 	tokenFlag    bool // --mcp-token (add)
 	passwordFlag bool // --password (remove)
@@ -196,6 +200,14 @@ func (c *userCommand) fail(format string, a ...any) int {
 // of the usage's forms.
 func (c *userCommand) parse(cmd string, args []string) bool {
 	c.cmd = cmd
+	// group NAME +dev -hiring: what follows the name are groups, no flags.
+	if cmd == "group" {
+		if len(args) == 0 || strings.HasPrefix(args[0], "-") || strings.HasPrefix(args[0], "+") {
+			return false
+		}
+		c.name, c.groupArgs = strings.ToLower(strings.TrimSpace(args[0])), args[1:]
+		return true
+	}
 	flag := func(name string) bool { // --name, or -name as Go's flags take it
 		is := func(a string) bool { return a == name || a == name[1:] }
 		found := slices.ContainsFunc(args, is)
@@ -214,7 +226,7 @@ func (c *userCommand) parse(cmd string, args []string) bool {
 	case "role":
 		wantArgs = 2
 	}
-	if !slices.Contains([]string{"add", "passwd", "token", "role", "disable", "enable", "invite", "reset",
+	if !slices.Contains([]string{"add", "passwd", "token", "role", "group", "disable", "enable", "invite", "reset",
 		"remove", "list"}, cmd) ||
 		len(args) != wantArgs || c.tokenFlag && cmd != "add" || c.roleFlag && cmd != "add" && cmd != "invite" ||
 		(c.passwordFlag || c.openFlag) && cmd != "remove" || c.passwordFlag && c.openFlag ||
@@ -356,6 +368,45 @@ func (c *userCommand) setRole() int {
 	return 0
 }
 
+// setGroups: group NAME +dev -hiring puts the user in groups and takes
+// them out; without a group it says which they are in.
+func (c *userCommand) setGroups() int {
+	groups, _ := parseGroups(c.f.User(c.name).Values["groups"].Value)
+	for _, arg := range c.groupArgs {
+		add, out := strings.HasPrefix(arg, "+"), strings.HasPrefix(arg, "-")
+		named, bad := parseGroups(arg[min(1, len(arg)):])
+		if !add && !out || bad != "" || len(named) != 1 {
+			return c.fail("%q isn't +GROUP or -GROUP (a group's name: lowercase letters, digits and hyphens).", arg)
+		}
+		groups = slices.DeleteFunc(groups, func(g string) bool { return g == named[0] })
+		if add {
+			groups = append(groups, named[0])
+		}
+	}
+	slices.Sort(groups)
+	if len(c.groupArgs) > 0 {
+		setGroups(c.f, c.name, groups)
+		if !c.save() {
+			return 1
+		}
+	}
+	if len(groups) == 0 {
+		fmt.Fprintf(c.stdout, "%s is in no group.\n", c.name)
+	} else {
+		fmt.Fprintf(c.stdout, "%s is in: %s.\n", c.name, strings.Join(groups, ", "))
+	}
+	return 0
+}
+
+// setGroups writes a user's groups in the settings file (none: no key).
+func setGroups(f *settingsfile.File, name string, groups []string) {
+	if len(groups) == 0 {
+		f.Unset(name, "groups")
+	} else {
+		f.Set(name, "groups", strings.Join(groups, ", "))
+	}
+}
+
 // setDisabled: disable NAME and enable NAME.
 func (c *userCommand) setDisabled() int {
 	disable := c.cmd == "disable"
@@ -437,6 +488,9 @@ func userLine(u *User) string {
 	}
 	if u.MCPToken != "" {
 		facts = append(facts, "MCP token")
+	}
+	if len(u.Groups) > 0 {
+		facts = append(facts, "in "+strings.Join(u.Groups, ", "))
 	}
 	switch {
 	case u.Pending:

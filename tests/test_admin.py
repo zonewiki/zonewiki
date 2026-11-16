@@ -61,7 +61,7 @@ class TestWhoSeesIt:
         assert resp.status_code == 302 and resp.headers["Location"] == "/admin/users"
 
     @pytest.mark.parametrize("path", ["/admin/users/bob/role", "/admin/users/bob/disable", "/admin/users/bob/enable",
-                                      "/admin/users/bob/remove"])
+                                      "/admin/users/bob/remove", "/admin/users/bob/groups"])
     def test_anyone_else_gets_a_404_and_nothing_changes(self, client, users, git_wiki_dir, path):
         login(client, "bob")
         before = config(git_wiki_dir)
@@ -92,6 +92,24 @@ class TestChanges:
         post(admin, "/admin/users/bob/role", role="editor")   # the default: the line goes
         assert "role" not in section(git_wiki_dir, "bob")
         assert post(admin, "/admin/users/bob/role", role="boss").status_code == 400
+
+    def test_groups(self, admin, git_wiki_dir):
+        # Who belongs together is said on the users: the Groups field sets a
+        # user's groups (cleaned, A–Z), empty takes them out of every one.
+        resp = post(admin, "/admin/users/bob/groups", groups="Hiring, @dev")
+        assert resp.status_code == 303 and resp.headers["Location"].startswith("/admin/users?done=groups")
+        assert "groups = dev, hiring" in section(git_wiki_dir, "bob")
+        page = admin.get(resp.headers["Location"], headers=HOST).data.decode()
+        assert "bob is in dev, hiring now." in page
+        assert 'name="groups" value="dev, hiring" aria-label="Groups of bob"' in page
+        assert '<datalist id="user-groups"><option value="dev"><option value="hiring"></datalist>' in page
+        before = config(git_wiki_dir)
+        resp = post(admin, "/admin/users/bob/groups", groups="dev ops!")       # no group's name: nothing changes
+        assert resp.status_code == 409 and "isn&#39;t a group&#39;s name" in resp.data.decode()
+        assert config(git_wiki_dir) == before
+        resp = post(admin, "/admin/users/bob/groups", groups="")
+        assert "groups" not in section(git_wiki_dir, "bob")
+        assert "bob is in no group now." in admin.get(resp.headers["Location"], headers=HOST).data.decode()
 
     def test_disable_and_enable(self, admin, client, git_wiki_dir):
         assert post(admin, "/admin/users/bob/disable").status_code == 303

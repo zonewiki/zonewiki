@@ -24,8 +24,9 @@
   <code class="users-link">{{.}}</code>
 </div>
 {{- end}}
+<datalist id="user-groups">{{range .Groups}}<option value="{{.}}">{{end}}</datalist>
 <table class="users-table">
-  <thead><tr><th>Name</th><th>Role</th><th>Status</th><th></th></tr></thead>
+  <thead><tr><th>Name</th><th>Role</th><th>Groups</th><th>Status</th><th></th></tr></thead>
   <tbody>
   {{- range .Users}}
   <tr{{if .Disabled}} class="user-disabled"{{end}}>
@@ -39,6 +40,13 @@
           {{- end}}
         </select>
         <button type="submit" class="btn">Change</button>
+      </form>
+    </td>
+    <td>
+      {{- /* Who belongs together: what is for a group (a task list) is theirs. */}}
+      <form method="post" action="/admin/users/{{.Name}}/groups" class="user-role-form user-groups-form">
+        <input type="text" name="groups" value="{{.Groups}}" aria-label="Groups of {{.Name}}" placeholder="none" list="user-groups" autocomplete="off" spellcheck="false" size="12">
+        <button type="submit" class="btn">Set</button>
       </form>
     </td>
     <td>{{if .Pending}}Waiting for approval{{else if .Disabled}}Disabled{{else}}Active{{end}}

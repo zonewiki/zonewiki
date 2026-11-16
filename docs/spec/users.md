@@ -144,6 +144,7 @@ The file can be edited by hand, or with the commands; a running Zone takes each 
 ./run.sh user token bob                # a new token; the old one stops working at once
 ./run.sh user add carol --role viewer   # admin, editor (the default) or viewer; the first user is an admin
 ./run.sh user role carol editor        # change a role
+./run.sh user group carol +dev -hiring # put her in the group dev, take her out of hiring; alone: her groups
 ./run.sh user disable bob              # he can't sign in, his token stops; user enable bob undoes it
 ./run.sh user remove bob               # his private pages and tasks stay on disk
 ./run.sh user remove alice --password  # the last user: the wiki's password instead (or --open: no login)
@@ -233,6 +234,17 @@ Each user has a role, `role` in their section (`roles`, `User.Role` in `go/users
   Enabled again, they sign in as before, and a session from before not yet expired works again: disabling isn't how to end a stolen session, a new password is (Signing in, below).
   A disabled admin counts as no admin.
 
+### Groups
+
+**Who belongs together is said once, on the users**: `groups = dev, hiring` in a user's section (`User.Groups`, `parseGroups` in `go/users.go`; commas or spaces between them, a leading `@` allowed, written A–Z).
+A group is its name (lowercase letters, digits, hyphens; `groupNameRE`): there is no list of groups to keep, a group exists while someone is in it (`Settings.groups`), and one nobody is in has no members, which is no error.
+A name that is none is an error of the settings file, which then keeps the settings from before.
+
+- **Set them** with `zonewiki user group NAME +dev -hiring` (alone it says which groups the user is in; `user list` names them: `bob (in dev, hiring)`), in the Users tab's **Groups** field (below), or by hand in the file.
+- **What a group is for**: what is for some and not for all. `memberOf(user, group)` asks; a disabled user is a member of none.
+  A task list can be for groups (Lists for some, in `docs/spec/tasks.md`); page folders for a group are a plan of their own.
+- **A role is not a group**: an admin is in no group by being admin, and sees nothing of a group they are not in. They may put themselves in one, which the log of the settings shows ("alice's groups").
+
 ### Viewers
 
 A viewer reads everything shared (pages, tasks, history, search) and changes nothing: no page, note, upload, checkbox or task, not even a private one of their own, no tag rename, no Commit.
@@ -292,6 +304,7 @@ It has section tabs (`adminTabs`), of which **Users** (`/admin/users`, `users.ht
 - **The list**: each user's name, "(you)", "MCP" if they have a token, their role, and Active or Disabled.
   Then the invite form, the open links (Invite and reset links, below) and what the roles mean.
 - **Per user**: change their role (a select and Change),
+  set their **groups** (a field with the groups as the file writes them, `dev, hiring`, completing from the groups there are; **Set**; empty takes them out of every group; `POST /admin/users/{name}/groups`, `userGroupsRoute`; a name that is no group's is refused and nothing changes),
   **Disable** or **Enable**,
   **Reset password** (makes a link),
   **Remove…** (a dialog that says what happens, as deleting a page does, then **Remove NAME**;
