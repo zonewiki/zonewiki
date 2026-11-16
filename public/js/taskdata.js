@@ -318,6 +318,18 @@ async function updateTask(id, data) {
   return null;
 }
 
+// Follow the task, or no longer: the user is told of its news from now on
+// (a comment, closed, reopened, given on) without it being theirs to do.
+// Saved at once, with an undo; the task as it is then, or null.
+async function setFollow(id, follow) {
+  const updated = await updateTask(id, { follow });
+  if (updated) {
+    showUndo(follow ? `You follow “${plainTitle(updated.title)}”: its news is under Updates in My tasks` : `You no longer follow “${plainTitle(updated.title)}”`,
+      () => updateTask(id, { follow: !follow }));
+  }
+  return updated;
+}
+
 // A task saved out of a list view, into another list or none; say where it went.
 function listMovedNotice(task) {
   const ref = app.taskList(task);
@@ -496,5 +508,5 @@ async function wontDoMany(ids) {
   showUndo(`${open.length} tasks marked won't do`, () => completeTasks(open, false));
 }
 
-return { dismissUndo, showUndo, triggerUndo, fetchTasks, refresh, fetchClosed, setClosedYear, createTask, updateTask, markSeen, updatesNow, markAllSeen, closedStale, leftViewMessage, tickTask, cancelPendingComplete, keepSnapshot, completeTasks, afterBatchWrite, oldHistory, markWontDo, wontDoMany, skipOccurrence, setStart };
+return { dismissUndo, showUndo, triggerUndo, fetchTasks, refresh, fetchClosed, setClosedYear, createTask, updateTask, setFollow, markSeen, updatesNow, markAllSeen, closedStale, leftViewMessage, tickTask, cancelPendingComplete, keepSnapshot, completeTasks, afterBatchWrite, oldHistory, markWontDo, wontDoMany, skipOccurrence, setStart };
 }

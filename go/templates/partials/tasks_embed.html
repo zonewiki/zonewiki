@@ -23,7 +23,7 @@
     <div class="tasks-toolbar">
       {{- /* On a phone the filter field is behind this (tasks.css, js/tasktabs.js): the list starts under the tabs. */}}
       <button type="button" class="btn tasks-search-btn" aria-label="Search and filter" aria-expanded="false" title="Search and filter (/)">{{template "icon_search"}}</button>
-      <input type="text" id="task-filter-search{{.Sfx}}" placeholder="Search… #tag" title="Text searches title and description · #tag filters by tag · #a #b = both tags · #a|b = either · -#tag = without · list:name = in that list (list:inbox) · !high, !low = that importance" autocomplete="off">
+      <input type="text" id="task-filter-search{{.Sfx}}" placeholder="Search… #tag" title="Text searches title and description · #tag filters by tag · #a #b = both tags · #a|b = either · -#tag = without · list:name = in that list (list:inbox) · !high, !low = that importance{{if .CanAssign}} · is:updated = with news for you · is:following = what you follow{{end}}" autocomplete="off">
       <select class="tasks-sort" id="task-sort{{.Sfx}}" aria-label="Order" title="Order (o)" hidden><option value="manual">Manual</option><option value="due">Due date</option><option value="created">Created</option></select>
       {{- /* The list's ⋯ menu (js/tasksettings.js): List settings… (the dialog where this app's params can be changed), and its tasks as a file, Export and Import…. */}}
       {{if .Settings}}<button type="button" class="btn tasks-more-btn" id="task-more-btn{{.Sfx}}" aria-haspopup="menu" aria-label="More" title="More: list settings, export, import">⋯</button>{{end}}
@@ -173,6 +173,10 @@
       <button type="button" class="task-add-field" id="task-edit-more-keep{{.Sfx}}" data-more="keep" title="Ticking it off sends it back to Open instead of archiving it, e.g. a staple on a shopping list">Keep after done</button>
     </div>
     <div class="task-edit-extras">
+    <p class="task-edit-follow" id="task-edit-follow{{.Sfx}}" hidden>
+      <span id="task-edit-followers{{.Sfx}}"></span>
+      <button type="button" class="task-follow-btn" id="task-edit-follow-btn{{.Sfx}}" title="Be told of its news (a comment, closed, given on) without it being yours to do"></button>
+    </p>
     <details class="task-edit-links task-edit-history" id="task-edit-history{{.Sfx}}" hidden>
       <summary tabindex="-1">History<span class="task-edit-links-summary" id="task-edit-history-count{{.Sfx}}"></span></summary>
       <ul class="task-history" id="task-edit-history-list{{.Sfx}}"></ul>
@@ -293,7 +297,7 @@
       <legend>Mail me when</legend>
       <label class="task-settings-check"><input type="checkbox" id="task-settings-mail-assigned{{.Sfx}}" name="mail_assigned"> a task is given to me</label>
       <label class="task-settings-check"><input type="checkbox" id="task-settings-mail-mentioned{{.Sfx}}" name="mail_mentioned"> someone mentions me (@name)</label>
-      <label class="task-settings-check"><input type="checkbox" id="task-settings-mail-comments{{.Sfx}}" name="mail_comments"> someone comments on a task I have or gave</label>
+      <label class="task-settings-check"><input type="checkbox" id="task-settings-mail-comments{{.Sfx}}" name="mail_comments"> someone comments on a task I have, gave or follow</label>
     </fieldset>
     {{- end}}
     <label class="task-settings-check task-settings-list" data-field="home" hidden><input type="checkbox" id="task-settings-home{{.Sfx}}" name="homeout"> Leave its tasks out of My tasks</label>

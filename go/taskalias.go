@@ -24,13 +24,16 @@ func (a apiTask) MarshalJSON() ([]byte, error) {
 		// and in its history who looked at it (historyWithSeen).
 		t := *a.Task
 		t.CreatedBy, t.History = a.Maker(), historyWithSeen(a.Task)
+		if len(t.Followers) > 0 {
+			t.Followers = followersSeen(a.Task) // those who see it: the others are told nothing
+		}
 		return t.JSON(true)
 	}
-	if a.Assignee == "" {
+	if a.Assignee == "" && len(a.Followers) == 0 {
 		return a.JSON(false)
 	}
 	t := *a.Task
-	t.Assignee = ""
+	t.Assignee, t.Followers = "", nil
 	return t.JSON(false)
 }
 

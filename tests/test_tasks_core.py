@@ -310,7 +310,17 @@ class TestFilterField:
     def test_parse(self, q, expected):
         assert run_core(f"TasksCore.parseFilter({json.dumps(q)})") == {
             **expected, "assigneeGroups": [], "excludeAssignees": [], "listGroups": [], "excludeLists": [],
-            "fromGroups": [], "excludeFrom": [], "updated": False}
+            "fromGroups": [], "excludeFrom": [], "updated": False, "following": False}
+
+    def test_is_following_keeps_what_the_user_follows(self):
+        """is:following: the tasks whose followers name the user (with users)."""
+        got = run_core("""(() => {
+          const f = TasksCore.parseFilter('is:following', {me: 'anna', users: new Set(['anna', 'bob'])});
+          const tasks = [{id: 'a', followers: ['bob', 'anna']}, {id: 'b', followers: ['bob']}, {id: 'c'}];
+          return [f.following, TasksCore.filterActive(f), tasks.filter(t => TasksCore.matchesFilter(t, f)).map(t => t.id),
+                  tasks.filter(t => TasksCore.matchesFilter(t, TasksCore.parseFilter('is:following'))).length];
+        })()""")
+        assert got == [True, True, ["a"], 0]
 
     @pytest.mark.parametrize("q,groups,excluded,text", [
         ("list:Shop", [["shop"]], [], ""),

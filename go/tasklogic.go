@@ -175,8 +175,9 @@ const (
 // newsFor: what a shared task has for user that they haven't seen (Updates
 // in docs/spec/tasks.md): its mark on their cards, and what the Tasks links
 // count (TaskCounts.New). From the task and from when user last looked at
-// it (taskseen.go). User has to do with a task they are assigned or that they made; a
-// mention reaches them whatever the task. What counts is someone else's and
+// it (taskseen.go). User has to do with a task they are assigned, that they
+// made or that they follow (Task.Followers: who follows is told what who
+// made it is told); a mention reaches them whatever the task. What counts is someone else's and
 // after the last thing user did on the task (anything of theirs in its
 // history, or their look at it, "seen", which is noted when they open the
 // task: markSeen; or a comment of theirs):
@@ -186,28 +187,35 @@ const (
 //   - a mention of them ("mentioned", logged with the comment or the
 //     description that names them);
 //   - it was closed, or reopened;
-//   - for who made it: it was given to someone else.
+//   - for who made it or follows it: it was given to someone else.
 //
 // Not a date, a tag, the title or the order. No time takes news away: a
 // task given a week ago and not looked at is the one that needs the mark.
 // The latest of them is the news. History entries are in order, comments
 // are, and between the two the minute decides: within one minute a comment
 // of the user's own, or their look at the task ("seen"), counts as the
-// later one. The browser has the same rule
+// later one. A look says which comment was the last one then (its "to": a
+// comment's id, noComment for none; taskseen.go), and every comment after
+// that one is news, whatever the minute: one written a moment after the
+// look is not lost. A look that doesn't say (from before 2026-11-16) goes
+// by the minute. The browser has the same rule
 // (TasksCore.newsFor; go/testdata/news_cases.json runs through both).
 func newsFor(t *Task, user string) News {
 	if user == "" || t.Owner != "" {
 		return News{}
 	}
 	minute := func(at string) string { return runePrefix(at, 16) }
-	has, made := t.Assignee == user, t.Maker() == user
-	mine, myAct, sawIt := -1, "", false
+	has, made := t.Assignee == user, t.Maker() == user || slices.Contains(t.Followers, user)
+	mine, myAct, sawIt, sawComment := -1, "", false, ""
 	lastAssigned := -1
 	// With who looked at it (taskseen.go): a look is the user's, not the task's.
 	history := historyWithSeen(t)
 	for i, e := range history {
 		if e.By == user {
-			mine, myAct, sawIt = i, minute(e.At), e.Event == "seen"
+			mine, myAct, sawIt, sawComment = i, minute(e.At), e.Event == "seen", ""
+			if sawIt {
+				sawComment = e.To
+			}
 		}
 		if e.Event == "assigned" {
 			lastAssigned = i
@@ -258,8 +266,14 @@ func newsFor(t *Task, user string) News {
 		}
 	}
 	if has || made {
-		for _, c := range t.Comments[myComment+1:] {
-			if at := minute(c.At); c.By != "" && c.By != user && (myAct == "" || at > myAct || at == myAct && !sawIt) {
+		// after: the look named the last comment it saw, and the task still
+		// has it (or had none then): what comes after it is news.
+		from, after := myComment+1, sawComment == noComment
+		if i := slices.IndexFunc(t.Comments, func(c Comment) bool { return c.ID != "" && c.ID == sawComment }); i >= 0 {
+			from, after = max(from, i+1), true
+		}
+		for _, c := range t.Comments[from:] {
+			if at := minute(c.At); c.By != "" && c.By != user && (after || myAct == "" || at > myAct || at == myAct && !sawIt) {
 				take(newsComment, c.By, at)
 			}
 		}
@@ -451,7 +465,8 @@ func spawnRecurring(user string, task *Task, active []*Task, skip bool) *Task {
 	spawned.Recurrence, spawned.SpawnedFrom = nextRec, task.ID
 	spawned.Owner, spawned.List = task.Owner, task.List // a series stays in its list (a private one private)
 	spawned.Assignee = task.Assignee
-	spawned.CreatedBy = task.Maker() // the series' maker
+	spawned.CreatedBy = task.Maker()                 // the series' maker
+	spawned.Followers = slices.Clone(task.Followers) // who follows the series follows on
 	// The next occurrence carries the series' history on (it is capped:
 	// capHistory), so the series reads as one log. Not its comments: they
 	// have no cap, and each occurrence was a copy more of all of them (a

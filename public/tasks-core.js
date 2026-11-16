@@ -128,8 +128,10 @@ function parseFilter(q, people) {
   const users = !!people?.users;
   let importance = '';
   let updated = false;   // is:updated: the tasks with news for the user
+  let following = false; // is:following: the tasks the user follows
   for (const w of words) {
     if (/^is:updated$/i.test(w)) updated = true;
+    else if (/^is:following$/i.test(w)) following = true;
     else if (importanceWord(w)) importance = importanceWord(w);
     else if (/^-list:./i.test(w)) excludeLists.push(...listsOf(w.slice(1)));
     else if (/^list:./i.test(w)) listGroups.push(listsOf(w));
@@ -147,14 +149,14 @@ function parseFilter(q, people) {
       text.push(w);
     }
   }
-  return { text: text.join(' ').toLowerCase(), tagGroups, excludeTags, importance, assigneeGroups, excludeAssignees, listGroups, excludeLists, fromGroups, excludeFrom, updated, people };
+  return { text: text.join(' ').toLowerCase(), tagGroups, excludeTags, importance, assigneeGroups, excludeAssignees, listGroups, excludeLists, fromGroups, excludeFrom, updated, following, people };
 }
 
 // Whether a filter (parseFilter) leaves anything out.
 function filterActive(f) {
   return !!(f.text || f.tagGroups.length || f.excludeTags.length || f.importance ||
     f.assigneeGroups?.length || f.excludeAssignees?.length || f.listGroups?.length || f.excludeLists?.length ||
-    f.fromGroups?.length || f.excludeFrom?.length || f.updated);
+    f.fromGroups?.length || f.excludeFrom?.length || f.updated || f.following);
 }
 
 // The task's assignee no longer has it: someone who can no longer be given
@@ -198,29 +200,33 @@ function inMine(t, out, who) {
 // What a shared task has for the user that they haven't seen (newsFor in
 // go/tasklogic.go, which counts such tasks on the Tasks links;
 // go/testdata/news_cases.json runs through both): { kind, by, at }, or
-// null. The user has to do with a task they are assigned or that they made
-// (created_by); a mention reaches them whatever the task. What counts is
+// null. The user has to do with a task they are assigned, that they made
+// (created_by) or that they follow (followers: who follows is told what
+// who made it is told); a mention reaches them whatever the task. What counts is
 // someone else's and after the last thing the user did on the task
 // (anything of theirs in its history, "seen" among it, which the app logs
 // when they open the task: markSeen in js/taskdata.js; or a comment of
 // theirs): it was given to them ('given': its card says "new"), a comment
 // ('comment'), a mention of them ('mention'), it was closed or reopened
-// ('closed', 'reopened'), and for who made it that it was given to someone
-// else ('handed'). Not a date, a tag, the title or the order; no time takes
+// ('closed', 'reopened'), and for who made it or follows it that it was
+// given to someone else ('handed'). Not a date, a tag, the title or the order; no time takes
 // it away. The latest is the news. History entries are in order, comments
 // are, and between the two the minute decides: within one minute a comment
 // of the user's own, or their look at the task ("seen"), counts as the
-// later one.
+// later one. A look says which comment was the last one then (its `to`: a
+// comment's id, '-' for none), and every comment after that one is news,
+// whatever the minute; a look that doesn't say goes by the minute.
 function newsFor(t, me) {
   if (!me || !t || t.private) return null;
   const minute = at => String(at || '').slice(0, 16);
   const history = t.history || [], comments = t.comments || [];
   const open = !t.closed_at;
   const has = (t.assignee || '').toLowerCase() === me;
-  const made = (t.created_by || (history.find(e => e.event === 'created') || {}).by || '') === me;
-  let mine = -1, myAct = '', sawIt = false, lastAssigned = -1;
+  const made = (t.created_by || (history.find(e => e.event === 'created') || {}).by || '') === me ||
+    (t.followers || []).includes(me);
+  let mine = -1, myAct = '', sawIt = false, sawComment = '', lastAssigned = -1;
   history.forEach((e, i) => {
-    if (e.by === me) { mine = i; myAct = minute(e.at); sawIt = e.event === 'seen'; }
+    if (e.by === me) { mine = i; myAct = minute(e.at); sawIt = e.event === 'seen'; sawComment = sawIt ? e.to || '' : ''; }
     if (e.event === 'assigned') lastAssigned = i;
   });
   let myComment = -1, said = '';
@@ -245,9 +251,12 @@ function newsFor(t, me) {
     }
   }
   if (has || made) {
-    for (const c of comments.slice(myComment + 1)) {
+    let from = myComment + 1, after = sawComment === '-';
+    const saw = sawComment ? comments.findIndex(c => c.id && c.id === sawComment) : -1;
+    if (saw >= 0) { from = Math.max(from, saw + 1); after = true; }
+    for (const c of comments.slice(from)) {
       const at = minute(c.at);
-      if (c.by && c.by !== me && (!myAct || at > myAct || (at === myAct && !sawIt))) take('comment', c.by, at);
+      if (c.by && c.by !== me && (after || !myAct || at > myAct || (at === myAct && !sawIt))) take('comment', c.by, at);
     }
   }
   return news;
@@ -271,6 +280,7 @@ function importanceWord(w) {
 function matchesFilter(t, f) {
   if (f.importance && (t.importance || '') !== f.importance) return false;
   if (f.updated && !newsFor(t, f.people?.me)) return false;
+  if (f.following && !(f.people?.me && (t.followers || []).includes(f.people.me))) return false;
   if (f.text && !(t.title || '').toLowerCase().includes(f.text) &&
       !(t.description || '').toLowerCase().includes(f.text)) return false;
   const tags = (t.tags || []).map(tg => tg.toLowerCase());

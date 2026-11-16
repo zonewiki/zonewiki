@@ -47,11 +47,16 @@ function openTaskMenu(id, anchor, at) {
   if (!task) return;
   // A closed task can be deleted for good by who made it, or an admin (a
   // task of one's own, and without users any: mayDeleteTask in go/tasks.go).
+  // With users, a shared task: follow it, to be told of its news without it
+  // being yours (applyFollow in go/tasks.go).
+  const follow = document.body.dataset.users === '1' && !task.private && !!people.me &&
+    ((task.followers || []).includes(people.me) ? ['unfollow', 'Unfollow'] : ['follow', 'Follow']);
   const mayDelete = document.body.dataset.users !== '1' || document.body.dataset.admin === '1' ||
     task.private || !task.created_by || task.created_by === people.me;
   const items = task.closed_at ? [
     ['edit', 'Edit…'],
     ['reopen', 'Reopen'],
+    follow,
     ['copylink', 'Copy link'],
     ['select', 'Select several'],
     mayDelete && ['delete', 'Delete for good…'],
@@ -66,6 +71,7 @@ function openTaskMenu(id, anchor, at) {
     ['list', 'Move to list…'],
     // With users, a shared task: who has it (a private one is its user's).
     document.body.dataset.users === '1' && !task.private && ['assign', 'Assign…'],
+    follow,
     ['wontdo', "Won't do"],
     ['copylink', 'Copy link'],
     ['select', 'Select several'],
@@ -150,6 +156,7 @@ function runTaskAction(task, action, anchor) {
     }
     case 'list':     app.openBulkListModal([id]); break;
     case 'assign':   app.openBulkAssignModal([id]); break;
+    case 'follow': case 'unfollow': app.setFollow(id, action === 'follow'); break;
     case 'wontdo':   app.markWontDo(id); break;
     case 'reopen':
       app.updateTask(id, { completed: false });

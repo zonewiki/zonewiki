@@ -116,7 +116,7 @@ It says nothing of what changed in those lists. (Until 2026-11 there was one wor
 - The files are JSON (`go/internal/taskmodel`): a list of tasks,
   two spaces of indent,
   text as written (no `\u` escapes but those JSON needs),
-  each task's fields in one order (`id`, `title`, `description`, `tags`, `list` (only when it is in one), `assignee` (only when it has one), `created_by` (only when it says), `start_date`, `due_date`, `created_at`, `closed_at`, `wont_do`, `keep`, `importance` (only when it isn't normal), `last_done`, `sort_order`, `recurrence`, `spawned_from`, `history`, `comments`),
+  each task's fields in one order (`id`, `title`, `description`, `tags`, `list` (only when it is in one), `assignee` (only when it has one), `created_by` (only when it says), `followers` (only when it has some), `start_date`, `due_date`, `created_at`, `closed_at`, `wont_do`, `keep`, `importance` (only when it isn't normal), `last_done`, `sort_order`, `recurrence`, `spawned_from`, `history`, `comments`),
   every field written,
   also when empty (`null`, `[]`, `false`),
   then any keys Zone doesn't know (from an older version or a hand edit),
@@ -185,6 +185,7 @@ Recurring instances keep the gap between the two dates, but a new instance's sta
 | `tags` | string[] | One word each. `cleanTags()` on every write/read/restore: inner whitespace → `-`, leading `#` dropped, empties removed, case-insensitive duplicates collapsed. Tag inputs sanitize as you type (`TasksCore.sanitizeTagInput`), leaving deletions alone. A tag sorts tasks; it never puts one in a list. |
 | `list` | string | The list the task is in, by its name; no key at all when it is in the Inbox (see Lists). Which list of that name is the task's file's to say: a task in a user's files is in one of their private lists (without `list`: in their Inbox), any other in a shared one. A write takes a list as the user names it (its name, or `shared/<name>`: Lists → Names), `""`, `null` or `inbox` for the Inbox (with users not for a shared task, which is always in a list: 400); a name no list has is a 400. With users the API also answers `"private": true|false`, from where the task is kept; `private` in a write is a 400 that points to `list`. |
 | `assignee` | string | The user the task is assigned to (with users; Assigning tasks in `docs/spec/users.md`). No key at all when there is none: in the file and in the API's answers, so a wiki that assigns nothing keeps its files as they were. A write takes a user's name, `me` (whoever writes) or `""`/`null`/`none` (no one); a leading `@` and the case don't matter. |
+| `followers` | `["dan", "alice"]` | The users who follow the task (with users; Following a task in `docs/spec/users.md`): told of its news as who made it is, without it being theirs to do. In the order they came; no key at all without one. No field of a write: `follow: true\|false` in a write adds or removes whoever writes. The API answers those who see the task. |
 | `created_by` | string | The user who made the task (with users; `Task.CreatedBy`, set by `createTask`, carried on by a series' next occurrence). No key in the file without one: a task from before the field, or a wiki without users. The API answers it for those too, from the history's `created` entry (`Task.Maker`), so no file is rewritten for it. Not taken from a write. |
 | `due_date` | `"YYYY-MM-DD"` / `null` | Deadline |
 | `start_date` | `"YYYY-MM-DD"` / `null` | Start date (see Dates) |
@@ -198,7 +199,7 @@ Recurring instances keep the gap between the two dates, but a new instance's sta
 | `importance` | `"high"`, `"low"` | How much the task matters (see Importance). Normal, what a task is unless said, is no key at all: in the file and in the API's answers, so a wiki that sets none keeps its files as they were |
 | `last_done` | `"YYYY-MM-DD"` / `null` | A keep task's last completion, shown on its card as "✓ Sep 21" |
 | `comments` | `[{ id, at, by, text }]` | The user's comments, oldest first, uncapped (see Comments); `by` only with users. |
-| `history` | `[{ at, event, by?, from?, to? }]` | What happened to the task, oldest first, capped at 30 (`historyLimit`) beside the entries a task is read by for good, which are never dropped: `created`, the last `assigned` and the last `shared` (`capHistory`: who made it, who has it, who shared it): `created`, `start`/`due` (with `from`/`to` dates), `done`, `reopened`, `wontdo`, `skipped`, `repeat` (`to` = the next occurrence's date), `assigned` (with `from`/`to` user names, `null` no one), `seen` (a user looked at its news: answered by the API from what each user has seen, not kept in the task's file; What happens on your tasks is told to you, in `docs/spec/users.md`). `at` is `YYYY-MM-DDTHH:MM`; `by` the user who did it, only with users. See History. |
+| `history` | `[{ at, event, by?, from?, to? }]` | What happened to the task, oldest first, capped at 30 (`historyLimit`) beside the entries a task is read by for good, which are never dropped: `created`, the last `assigned` and the last `shared` (`capHistory`: who made it, who has it, who shared it): `created`, `start`/`due` (with `from`/`to` dates), `done`, `reopened`, `wontdo`, `skipped`, `repeat` (`to` = the next occurrence's date), `assigned` (with `from`/`to` user names, `null` no one), `seen` (a user looked at its news: answered by the API from what each user has seen, with the last comment the look saw as `to`, not kept in the task's file; What happens on your tasks is told to you, in `docs/spec/users.md`). `at` is `YYYY-MM-DDTHH:MM`; `by` the user who did it, only with users. See History. |
 
 ### Views
 
@@ -337,7 +338,7 @@ On phones the control spans the full width.
   It was called Completed: a wiki from then is renamed when Zone starts (`renameOldClosed`: `completed.json` and `completed-YYYY.json` become `closed.json` and `closed-YYYY.json`, never over a file that is there; a task's `completed_at` is read where it has no `closed_at`, and the files are written again with the new field), in one commit, "Name the task files of closed tasks closed".
   Nothing else is kept of the old names: a page's `view=completed`, a link with it and a client asking the old routes get what an unknown view or route gets.
   In Closed, the link reads `← Back to <tab>`, naming the tab it returns to.
-  While the filter has any word (`TasksCore.filterActive`: text, a tag, a name, `list:`, `from:`, `!`, `is:updated`) or the embed a tag, the link has no number (`Closed →`): the total would read as what the filter leaves.
+  While the filter has any word (`TasksCore.filterActive`: text, a tag, a name, `list:`, `from:`, `!`, `is:updated`, `is:following`) or the embed a tag, the link has no number (`Closed →`): the total would read as what the filter leaves.
   While a filter is on (text or a tag in the field, an embed's `tag=`) it reads `Closed →`, without a number: the total would read as what the filter leaves.
   The filter carries over into Closed, so a click shows the closed tasks it matches.
   (The link once counted them, `2 matches in Closed →`. That took every closed task of the year and its texts' HTML, loaded behind each filtered list right after it was drawn, and a second draw of the list when they arrived: too much for a number.)
@@ -486,7 +487,7 @@ Each with a dark-mode value.
 
 ### Interaction
 
-- **Filter field** (`#task-filter-search`, `TasksCore.parseFilter`/`matchesFilter`): `#words` filter by tag (all must match; `#a|b` = any), `-#word` excludes a tag (`-#a|b`: neither), `is:updated` shows the tasks with news for you, `list:shop` shows the tasks in that list (`list:a|b` either, `-list:shop` not in it, `list:inbox` in no list, the Inbox, as `list:none` says too; a list is no tag, so `#shop` doesn't find it), `!high` (or `!`) and `!low` show the tasks of that importance, the rest searches title and description.
+- **Filter field** (`#task-filter-search`, `TasksCore.parseFilter`/`matchesFilter`): `#words` filter by tag (all must match; `#a|b` = any), `-#word` excludes a tag (`-#a|b`: neither), `is:updated` shows the tasks with news for you, `is:following` those you follow (Following a task in `docs/spec/users.md`), `list:shop` shows the tasks in that list (`list:a|b` either, `-list:shop` not in it, `list:inbox` in no list, the Inbox, as `list:none` says too; a list is no tag, so `#shop` doesn't find it), `!high` (or `!`) and `!low` show the tasks of that importance, the rest searches title and description.
   `/` focuses it, `#` focuses it and starts a tag.
   Its tooltip lists the syntax (with users the `@` words too).
   While it holds something of yours (text, or a chip the page didn't set) an **×** at its end (`.chip-input-clear`, "Clear the filter") empties it: the text and your chips go, a page's locked chips stay, and the cursor stays in the field.
@@ -599,6 +600,7 @@ Each with a dark-mode value.
   also **right-click** on a card, `openTaskMenu(id, anchor, {x, y})` at the pointer, selecting the card, a link in the card keeping the browser's menu;
   from the keyboard the menu key or **Shift+F10** on the selected card): all card actions (Edit…, Start today/tomorrow, Pick start date…, Unplan, Skip, Importance…, Won't do, Copy link, Select several;
   for closed tasks Edit…, Reopen, Copy link, Select several).
+  With users, a shared task's menu, open or closed, has **Follow**, or **Unfollow** when you follow it (`setFollow` in `js/taskdata.js`; Following a task in `docs/spec/users.md`); its dialog has the same button above History, with who follows ("👁 Followed by you, bob"; `renderFollow` in `js/taskmodal.js`), saved at once as a comment is.
   **Copy link** puts the task's full URL in the clipboard (`taskHref`, as `taskLink` builds it: `/tasks?task=<id>&view=open`, `view=closed` (with `&year=` from an earlier year's archive) for a done task, `&list=` for a task in a list); opening it selects and flashes the task (see `?task=`).
   Paste it anywhere: chat, mail, a page.
   A popover with ↑/↓/Enter/Esc on desktop (tasks shortcuts suspended while open), a bottom sheet at ≤640px.

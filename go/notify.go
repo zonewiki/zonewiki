@@ -72,8 +72,8 @@ func tellMentioned(by string, t *Task, named []string, text ...string) {
 	}
 }
 
-// tellComment mails a comment by on a shared task to who has it and who
-// made it (not to its author, nor to one the comment names: they get the
+// tellComment mails a comment by on a shared task to who has it, who made
+// it and who follows it (not to its author, nor to one the comment names: they get the
 // mention's mail), those who turned that mail on; and the mention's mail to
 // who it names.
 func tellComment(by string, t *Task, text string, named []string) {
@@ -83,7 +83,7 @@ func tellComment(by string, t *Task, text string, named []string) {
 	}
 	tellMentioned(by, t, named, text)
 	var told []string
-	for _, name := range []string{t.Assignee, t.Maker()} {
+	for _, name := range append([]string{t.Assignee, t.Maker()}, t.Followers...) {
 		// (Who made it or has it may be none of its list's members by now: a
 		// list narrowed since. They don't see the task, so no mail tells them.)
 		if name == "" || name == by || slices.Contains(named, name) || slices.Contains(told, name) || !mails(s, name, "comments") ||
@@ -92,7 +92,7 @@ func tellComment(by string, t *Task, text string, named []string) {
 		}
 		told = append(told, name)
 		taskMail(s, name, by+" commented: "+oneLine(t.Title), by+" commented on this task on "+appName+":", t, text,
-			"when someone comments on a task you have or gave")
+			"when someone comments on a task you have, gave or follow")
 	}
 }
 

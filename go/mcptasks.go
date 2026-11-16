@@ -58,6 +58,9 @@ func mcpTaskText(t *Task, base, user string) string {
 			newsClosed: "closed it", newsReopened: "reopened it", newsHandedOn: "gave it to someone else"}[news.Kind]
 		facts = append(facts, "update: "+news.By+" "+what+" ("+strings.Replace(news.At, "T", " ", 1)+")")
 	}
+	if settings().Users != nil && slices.Contains(t.Followers, user) {
+		facts = append(facts, "the user follows it")
+	}
 	if maker := t.Maker(); maker != "" && maker != t.Assignee && settings().Users != nil {
 		if maker == user {
 			maker += " (the user)"
@@ -430,7 +433,7 @@ func taskFields(args jsonObj, task *Task) (jsonObj, error) {
 		}
 		data.Set("list", strings.TrimLeft(strings.TrimSpace(s), "#"))
 	}
-	for _, f := range []string{"keep", "share"} {
+	for _, f := range []string{"keep", "share", "follow"} {
 		if args.Has(f) {
 			b, ok := jsonobj.As[bool](args[f])
 			if !ok {

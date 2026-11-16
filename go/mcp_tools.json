@@ -1057,6 +1057,10 @@
      "type": "boolean",
      "description": "true: the move may take it out of a private list, for everyone to see."
     },
+    "follow": {
+     "type": "boolean",
+     "description": "The user follows the task: told of its news (comments, closed), not theirs to do; false: no longer."
+    },
     "add_tags": {
      "type": "array",
      "items": {

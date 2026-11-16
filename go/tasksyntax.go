@@ -546,11 +546,11 @@ type taskFilter struct {
 	listGroups, fromGroups      [][]string
 	excludeTags, excludeLists   []string
 	excludeAssignees, excludeBy []string
-	updated                     bool
+	updated, following          bool
 }
 
 // parseTaskFilter: the filter the words of q make: #tag (#a|b either),
-// -#tag, list:name, -list:name, !high and !low, is:updated, with users
+// -#tag, list:name, -list:name, !high and !low, is:updated, is:following, with users
 // @name and from:name (and their -), the rest text.
 func parseTaskFilter(q string) taskFilter {
 	users := settings().Users != nil
@@ -591,6 +591,8 @@ func parseTaskFilter(q string) taskFilter {
 		switch {
 		case low == "is:updated":
 			f.updated = true
+		case low == "is:following":
+			f.following = true
 		case low == "!" || low == "!high":
 			f.importance = "high"
 		case low == "!low":
@@ -630,6 +632,9 @@ func (f taskFilter) matches(t *Task, user string) bool {
 		return false
 	}
 	if f.updated && newsFor(t, user).Kind == "" {
+		return false
+	}
+	if f.following && !slices.Contains(t.Followers, user) {
 		return false
 	}
 	if f.text != "" && !strings.Contains(strings.ToLower(t.Title), f.text) && !strings.Contains(strings.ToLower(t.Description), f.text) {

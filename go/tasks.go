@@ -183,6 +183,7 @@ func applyTaskFields(user string, t *Task, data jsonObj, fresh bool) error {
 		func() error { return applyOrder(t, data) },
 		func() error { return applyList(user, t, data, fresh) },
 		func() error { return applyAssignee(user, t, data) }, // after its list: a private task has none
+		func() error { return applyFollow(user, t, data) },   // after its list too: only a shared task is followed
 		func() error { return applyDate(user, t, data, "last_done", "", &t.LastDone) },
 		func() error { return applyDate(user, t, data, "start_date", "start", &t.StartDate) },
 		func() error { return applyRecurrence(t, data, oldDue, oldStart, oldRec) },
@@ -418,6 +419,58 @@ func applyAssignee(user string, t *Task, data jsonObj) error {
 	logEvent(t, user, "assigned", t.Assignee, name)
 	t.Assignee = name
 	return nil
+}
+
+// applyFollow: a write's follow: true, who writes follows the task from now
+// on; false, no longer. To follow a task is to be told of its news as who
+// made it is (newsFor, tellComment), without it being one's own to do: it
+// is in no My tasks for it. Only oneself, as nobody writes under another's
+// name (taskby.go): the write names no one. Only a shared task, with users:
+// a private one has nobody else. Who follows is the task's (Followers, in
+// its file): the news' rule and the mail read the task alone.
+//
+// Following is a look at the task: what was said before is no news to who
+// starts to follow now, so their look is noted (markSeen), which writes no
+// task. Nothing in the history: that someone follows is news to no one.
+func applyFollow(user string, t *Task, data jsonObj) error {
+	if !data.Has("follow") {
+		return nil
+	}
+	follow, err := asBool(data["follow"], "follow")
+	if err != nil {
+		return err
+	}
+	has := slices.Contains(t.Followers, user)
+	switch {
+	case follow == has:
+	case !follow:
+		t.Followers = slices.DeleteFunc(slices.Clone(t.Followers), func(n string) bool { return n == user })
+		if len(t.Followers) == 0 {
+			t.Followers = nil
+		}
+	case settings().Users == nil || user == "":
+		return refuse("This wiki has no users, so nobody follows a task")
+	case t.Owner != "":
+		return refuse("A private task is yours alone: there is no one else's news to follow. Put it in a shared list first (list)")
+	default:
+		t.Followers = append(slices.Clone(t.Followers), user)
+		markSeen(user, t)
+	}
+	return nil
+}
+
+// followersSeen: of the task's followers those who see it (canSeeTask):
+// who is told of its news, and whose names are shown. One who no longer
+// sees its list (a list narrowed, a group left) stays in the file and is
+// told nothing, as an assignee who doesn't (assigneeGone).
+func followersSeen(t *Task) []string {
+	var out []string
+	for _, name := range t.Followers {
+		if canSeeTask(name, t) && settings().Users[name] != nil {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 // assignedOpen: how many open shared tasks each name is assigned, read

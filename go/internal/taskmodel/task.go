@@ -34,6 +34,10 @@ type Task struct {
 	// file): a task from before the field, or a wiki without users. Maker
 	// answers for those too.
 	CreatedBy string
+	// Followers: the users who follow the task (no key in the file when
+	// there are none): they are told of its news as who made it is, without
+	// it being theirs to do. Names, each once, in the order they came.
+	Followers []string
 	// Dates as YYYY-MM-DD, timestamps as YYYY-MM-DDTHH:MM:SS; "" is none
 	// (null in the file).
 	StartDate, DueDate  string
@@ -60,6 +64,7 @@ type Task struct {
 func (t *Task) Clone() *Task {
 	c := *t
 	c.Tags = slices.Clone(t.Tags)
+	c.Followers = slices.Clone(t.Followers)
 	c.History = slices.Clone(t.History)
 	c.Comments = slices.Clone(t.Comments)
 	c.Extra = maps.Clone(t.Extra)
@@ -85,7 +90,8 @@ func (t *Task) Same(o *Task) bool {
 	if t.ID != o.ID || t.Title != o.Title || t.Description != o.Description || t.List != o.List ||
 		t.Assignee != o.Assignee || t.CreatedBy != o.CreatedBy || t.StartDate != o.StartDate || t.DueDate != o.DueDate ||
 		t.CreatedAt != o.CreatedAt || t.ClosedAt != o.ClosedAt || t.WontDo != o.WontDo || t.Keep != o.Keep ||
-		t.Importance != o.Importance || t.LastDone != o.LastDone || t.SpawnedFrom != o.SpawnedFrom {
+		t.Importance != o.Importance || t.LastDone != o.LastDone || t.SpawnedFrom != o.SpawnedFrom ||
+		!slices.Equal(t.Followers, o.Followers) {
 		return false
 	}
 	if (t.SortOrder == nil) != (o.SortOrder == nil) || t.SortOrder != nil && *t.SortOrder != *o.SortOrder {
@@ -142,7 +148,7 @@ func CleanImportance(s string) string {
 // missing, never written (so not kept as an unknown key either).
 const oldClosedAtKey = "completed_at"
 
-var taskKeys = map[string]bool{oldClosedAtKey: true, "id": true, "title": true, "description": true, "tags": true, "list": true, "assignee": true,
+var taskKeys = map[string]bool{oldClosedAtKey: true, "id": true, "title": true, "description": true, "tags": true, "list": true, "assignee": true, "created_by": true, "followers": true,
 	"start_date": true, "due_date": true, "created_at": true, "closed_at": true, "wont_do": true,
 	"keep": true, "importance": true, "last_done": true, "sort_order": true, "recurrence": true, "spawned_from": true,
 	"history": true, "comments": true, "private": true}
@@ -164,6 +170,7 @@ func FromJSON(o jsonobj.Obj) *Task {
 	t.List = strings.ToLower(strings.TrimSpace(o.Str("list")))
 	t.Assignee = CleanAssignee(o.Str("assignee"))
 	t.CreatedBy = CleanAssignee(o.Str("created_by"))
+	t.Followers = CleanFollowers(jsonobj.TextList(o["followers"]))
 	if f, ok := jsonobj.As[float64](o["sort_order"]); ok {
 		t.SortOrder = &f
 	}
@@ -226,11 +233,18 @@ func (r *Recurrence) MarshalJSON() ([]byte, error) {
 // users keeps its files as they were.
 func (e HistoryEntry) MarshalJSON() ([]byte, error) {
 	if !DatedEvents[e.Event] && !NamedEvents[e.Event] {
+		// to: only a look's ("seen", as the API answers it: the last comment
+		// it saw, which the browser's news rule reads); no file has one.
+		to := ""
+		if e.Event == "seen" {
+			to = e.To
+		}
 		return jsonobj.MarshalText(struct {
 			At    string `json:"at"`
 			Event string `json:"event"`
 			By    string `json:"by,omitempty"`
-		}{e.At, e.Event, e.By})
+			To    string `json:"to,omitempty"`
+		}{e.At, e.Event, e.By, to})
 	}
 	return jsonobj.MarshalText(struct {
 		At    string  `json:"at"`
@@ -285,6 +299,7 @@ func (t *Task) JSON(private bool) ([]byte, error) {
 		List        string         `json:"list,omitempty"`
 		Assignee    string         `json:"assignee,omitempty"`
 		CreatedBy   string         `json:"created_by,omitempty"`
+		Followers   []string       `json:"followers,omitempty"`
 		StartDate   *string        `json:"start_date"`
 		DueDate     *string        `json:"due_date"`
 		CreatedAt   *string        `json:"created_at"`
@@ -298,7 +313,7 @@ func (t *Task) JSON(private bool) ([]byte, error) {
 		SpawnedFrom *string        `json:"spawned_from"`
 		History     []HistoryEntry `json:"history"`
 		Comments    []Comment      `json:"comments"`
-	}{t.ID, t.Title, t.Description, tags, t.List, t.Assignee, t.CreatedBy, jsonobj.Nullable(t.StartDate), jsonobj.Nullable(t.DueDate),
+	}{t.ID, t.Title, t.Description, tags, t.List, t.Assignee, t.CreatedBy, t.Followers, jsonobj.Nullable(t.StartDate), jsonobj.Nullable(t.DueDate),
 		jsonobj.Nullable(t.CreatedAt), jsonobj.Nullable(t.ClosedAt), t.WontDo, t.Keep, t.Importance, jsonobj.Nullable(t.LastDone),
 		t.SortOrder, t.Recurrence, jsonobj.Nullable(t.SpawnedFrom), history, comments})
 	if err == nil && private {
@@ -388,6 +403,18 @@ func (t *Task) Maker() string {
 		}
 	}
 	return ""
+}
+
+// CleanFollowers: followers as they are kept: names as CleanAssignee leaves
+// them, each once, in their order; nil for none.
+func CleanFollowers(names []string) []string {
+	var out []string
+	for _, n := range names {
+		if n = CleanAssignee(n); n != "" && !slices.Contains(out, n) {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 // CleanAssignee: an assignee as it is kept: a user's name is lowercase,

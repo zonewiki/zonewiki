@@ -3,6 +3,7 @@ package taskmodel
 import (
 	"encoding/json"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"zonewiki/internal/jsonobj"
@@ -151,6 +152,7 @@ func TestSame(t *testing.T) {
 	full := func() *Task {
 		order, lead := 1.5, 2
 		return &Task{ID: "a1", Title: "One", Description: "Notes", Tags: []string{"a", "b"}, List: "shop", Assignee: "bob",
+			CreatedBy: "carl", Followers: []string{"dora", "emil"},
 			StartDate: "2026-01-01", DueDate: "2026-01-02", CreatedAt: "2026-01-01T10:00:00", ClosedAt: "2026-01-03T10:00:00",
 			WontDo: true, Keep: true, Importance: "high", LastDone: "2026-01-02T10:00:00", SortOrder: &order,
 			Recurrence:  &Recurrence{Type: "monthly", Interval: 2, From: "due", Day: 3, Lead: &lead},
@@ -166,7 +168,9 @@ func TestSame(t *testing.T) {
 		"ID": func(x *Task) { x.ID = "a2" }, "Title": func(x *Task) { x.Title = "one" }, "Description": func(x *Task) { x.Description += " " },
 		"Tags": func(x *Task) { x.Tags[1] = "c" }, "List": func(x *Task) { x.List = "" }, "Assignee": func(x *Task) { x.Assignee = "" },
 		"CreatedBy": func(x *Task) { x.CreatedBy = "zed" },
-		"StartDate": func(x *Task) { x.StartDate = "" }, "DueDate": func(x *Task) { x.DueDate = "2026-01-03" },
+		"Followers": func(x *Task) { x.Followers[0] = "zed" }, "a follower less": func(x *Task) { x.Followers = x.Followers[:1] },
+		"no followers": func(x *Task) { x.Followers = nil },
+		"StartDate":    func(x *Task) { x.StartDate = "" }, "DueDate": func(x *Task) { x.DueDate = "2026-01-03" },
 		"CreatedAt": func(x *Task) { x.CreatedAt = "" }, "ClosedAt": func(x *Task) { x.ClosedAt = "" },
 		"WontDo": func(x *Task) { x.WontDo = false }, "Keep": func(x *Task) { x.Keep = false }, "Importance": func(x *Task) { x.Importance = "" },
 		"LastDone": func(x *Task) { x.LastDone = "" }, "SortOrder": func(x *Task) { *x.SortOrder = 2 }, "Recurrence": func(x *Task) { x.Recurrence = nil },
@@ -240,5 +244,34 @@ func TestSame(t *testing.T) {
 	text, _ := Encode([]*Task{full(), bare})
 	if read, ok := Parse([]byte(text)); !ok || !read[0].Same(full()) || !read[1].Same(bare) || read[0].Same(read[1]) {
 		t.Errorf("read again: %+v", read)
+	}
+}
+
+// A key Zone knows is written once: who made a task (created_by) and who
+// follows it (followers) are fields, not keys kept as the file had them.
+// (Until 2026-11-16 created_by was both, and a task read from its file was
+// written with the key twice.)
+func TestKnownKeysWrittenOnce(t *testing.T) {
+	tasks, ok := Parse([]byte(`[{"id": "a", "title": "One", "created_by": "Anna", "followers": ["Bob", "bob", "", "carl"], "zz": 7}]`))
+	if !ok || len(tasks) != 1 {
+		t.Fatal("not read")
+	}
+	x := tasks[0]
+	if x.CreatedBy != "anna" || !slices.Equal(x.Followers, []string{"bob", "carl"}) {
+		t.Errorf("read: created_by %q, followers %q", x.CreatedBy, x.Followers)
+	}
+	if len(x.Extra) != 1 || x.Extra["zz"] == nil {
+		t.Errorf("kept as unknown keys: %v", x.Extra)
+	}
+	text, _ := Encode(tasks)
+	for _, key := range []string{`"created_by"`, `"followers"`, `"zz"`} {
+		if n := strings.Count(text, key); n != 1 {
+			t.Errorf("%s is written %d times:\n%s", key, n, text)
+		}
+	}
+	// No followers: no key, as a task without an assignee has none.
+	x.Followers = nil
+	if text, _ := Encode(tasks); strings.Contains(text, "followers") {
+		t.Errorf("a task without followers is written with the key:\n%s", text)
 	}
 }

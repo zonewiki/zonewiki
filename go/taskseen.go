@@ -44,11 +44,18 @@ func lookAfter(taskID string, e HistoryEntry) string { return sha1Hex(historyKey
 // no news anymore are taken out (canHaveNews).
 const seenKept = 300
 
-// look: when a user looked at a task, and the last entry its history had.
+// look: when a user looked at a task, the last entry its history had, and
+// the last comment it had (its id; noComment when it had none; "" a look
+// from before 2026-11-16, which didn't say): a comment's time is to the
+// minute too, and one written after a look within its minute is news.
 type look struct {
-	At    string `json:"at"`
-	After string `json:"after,omitempty"`
+	At      string `json:"at"`
+	After   string `json:"after,omitempty"`
+	Comment string `json:"comment,omitempty"`
 }
+
+// noComment: what a look names as the last comment of a task without one.
+const noComment = "-"
 
 func seenDir() string { return statePath("seen") }
 
@@ -128,6 +135,10 @@ func markSeen(user string, t *Task) {
 	at := look{At: now().Format("2006-01-02T15:04")}
 	if n := len(t.History); n > 0 {
 		at.After = lookAfter(t.ID, t.History[n-1])
+	}
+	at.Comment = noComment
+	if n := len(t.Comments); n > 0 && t.Comments[n-1].ID != "" {
+		at.Comment = t.Comments[n-1].ID
 	}
 	ids := []string{t.ID}
 	seenWrite.Lock()
@@ -218,7 +229,8 @@ func historyWithSeen(t *Task) []HistoryEntry {
 		return cmp.Or(cmp.Compare(seen[users[i]].At, seen[users[j]].At), cmp.Compare(users[i], users[j])) < 0
 	})
 	for _, user := range users {
-		at, e := seen[user], HistoryEntry{At: seen[user].At, Event: "seen", By: user}
+		// To: the last comment the look saw, which the news' rule reads.
+		at, e := seen[user], HistoryEntry{At: seen[user].At, Event: "seen", By: user, To: seen[user].Comment}
 		// Right after the entry that was the last when they looked, when the
 		// history still has it; else where its time puts it.
 		i := -1

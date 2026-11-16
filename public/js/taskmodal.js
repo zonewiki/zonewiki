@@ -724,6 +724,30 @@ function renderHistory(task) {
     `${esc(HISTORY_TEXT[e.event](e))}</li>`).join('') + before;
 }
 
+// The modal's Follow line (with users, a shared task that is there): who
+// follows it, and the button that makes the user one of them or no longer.
+// Saved at once, as a comment is (app.setFollow): it is no field of the form.
+const followLine = document.getElementById('task-edit-follow' + app.sfx);
+const followBtn = document.getElementById('task-edit-follow-btn' + app.sfx);
+function renderFollow(task) {
+  const shows = !!task && !task.private && document.body.dataset.users === '1' && !!people.me;
+  followLine.hidden = !shows;
+  if (!shows) return;
+  const names = task.followers || [], mine = names.includes(people.me);
+  const others = names.filter(n => n !== people.me);
+  const who = [...(mine ? ['you'] : []), ...others];
+  document.getElementById('task-edit-followers' + app.sfx).textContent =
+    who.length ? `👁 Followed by ${who.join(', ')}` : '';
+  followBtn.textContent = mine ? 'Unfollow' : 'Follow';
+  followBtn.dataset.follow = mine ? '0' : '1';
+}
+followBtn?.addEventListener('click', async () => {
+  const id = document.getElementById('task-edit-id' + app.sfx).value;
+  if (!id) return;
+  const updated = await app.setFollow(id, followBtn.dataset.follow === '1');
+  if (updated && app.modal.open && document.getElementById('task-edit-id' + app.sfx).value === id) renderFollow(updated);
+});
+
 // The modal's Comments: markdown, a line or several, newest first. They are
 // saved at once through their own routes (not with Save), so a comment is
 // never lost to Cancel. Hidden for a new task. "Write a comment…" shows the field
@@ -902,6 +926,7 @@ function openEditModal(taskId, opts) {
   editChips.set(startTags, true);
   editTagsInput.value = '';
   renderHistory(task);
+  renderFollow(task);
   closeCommentBox();
   renderComments(task);
   app.titleInput.placeholder = task ? '' : 'e.g. Call Bob tomorrow #work due:fri';

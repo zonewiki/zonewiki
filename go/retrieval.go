@@ -104,6 +104,7 @@ func taskRecord(t *Task, owner string) *Task {
 	r.Description, r.History, r.Comments, r.Extra = "", nil, nil, nil
 	r.List, r.Assignee, r.CreatedBy, r.Importance = same(t.List), same(t.Assignee), same(t.CreatedBy), same(t.Importance)
 	r.StartDate, r.DueDate, r.LastDone = same(t.StartDate), same(t.DueDate), same(t.LastDone)
+	r.Followers = slices.Clone(t.Followers)
 	r.Tags = nil
 	for _, tag := range t.Tags {
 		r.Tags = append(r.Tags, same(tag))

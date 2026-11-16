@@ -476,7 +476,7 @@ def test_my_tasks_settings_turn_the_mails_on(page, wiki, monkeypatch):
     dialog = page.locator("#task-settings-modal")
     box = dialog.locator("[name=mail_assigned]")
     expect(dialog.locator(".task-settings-mail label")).to_have_text(
-        ["a task is given to me", "someone mentions me (@name)", "someone comments on a task I have or gave"])
+        ["a task is given to me", "someone mentions me (@name)", "someone comments on a task I have, gave or follow"])
     for name in ("mail_assigned", "mail_mentioned", "mail_comments"):
         expect(dialog.locator(f"[name={name}]")).not_to_be_checked()
     box.check()
@@ -1059,3 +1059,48 @@ def test_who_no_longer_sees_a_list_no_longer_has_its_tasks(page, wiki, monkeypat
     wait_for_assignee(page, "Bob's", "carol")
     page.reload()                                             # the list's line is the page's
     expect(page.locator(".tasks-unassigned")).to_have_count(0)
+
+
+def test_follow_a_task_and_its_news_is_under_updates(alice, new_page):
+    """Follow in a shared task's menu (docs/spec/users.md, What happens on
+    your tasks is told to you): the task is not yours to do, and what
+    happens on it is under My tasks' Updates; the dialog says who follows
+    and unfollows; is:following lists what you follow."""
+    t = new(alice, "Bob's work", assignee="bob")
+    new(alice, "Nobody follows", assignee="bob")
+    alice.goto("/tasks?list=team")
+    card(alice, "Bob's work").locator(".task-title").click(button="right")
+    alice.get_by_role("menuitem", name="Follow", exact=True).click()
+    wait_until(alice, lambda: task(alice, "Bob's work").get("followers") == ["alice"])
+    # The menu offers the other way now, and the filter's word finds it.
+    card(alice, "Bob's work").locator(".task-title").click(button="right")
+    expect(alice.get_by_role("menuitem", name="Unfollow", exact=True)).to_be_visible()
+    alice.keyboard.press("Escape")
+    alice.locator("#task-filter-search").fill("is:following")
+    expect(alice.locator(".task-item .task-title")).to_have_text(["Bob's work"])
+    # Not hers to do: My tasks has nothing of it, until bob comments.
+    alice.goto("/tasks?mine=1")
+    expect(card(alice, "Bob's work")).to_have_count(0)
+    bob = new_page()
+    bob.request.post("/login", form={"username": "bob", "password": "pw"})
+    assert bob.request.post(f"/api/tasks/{t['id']}/comments", data={"text": "Half done"}).ok
+    alice.goto("/tasks?mine=1")
+    expect(alice.locator(".task-item.task-update .task-title")).to_have_text(["Bob's work"])
+    expect(card(alice, "Bob's work").locator(".task-update-mark")).to_have_text("bob commented")
+    expect(alice.locator('.module-link[data-module="tasks"] .module-new').first).to_have_text("1")
+    # Its dialog says who follows, and unfollows: saved at once.
+    modal = open_edit(alice, "Bob's work")
+    expect(modal.locator("#task-edit-followers")).to_have_text("👁 Followed by you")
+    modal.locator("#task-edit-follow-btn").click()
+    expect(modal.locator("#task-edit-follow-btn")).to_have_text("Follow")
+    expect(modal.locator("#task-edit-followers")).to_have_text("")
+    wait_until(alice, lambda: "followers" not in task(alice, "Bob's work"))
+    # A private task has no such line, and no Follow in its menu.
+    alice.keyboard.press("Escape")
+    new(alice, "My own", list=None)
+    alice.goto("/tasks?list=inbox")
+    card(alice, "My own").locator(".task-title").click(button="right")
+    expect(alice.get_by_role("menuitem", name="Edit…")).to_be_visible()
+    expect(alice.get_by_role("menuitem", name="Follow", exact=True)).to_have_count(0)
+    alice.get_by_role("menuitem", name="Edit…").click()
+    expect(alice.locator("#task-edit-follow")).to_be_hidden()

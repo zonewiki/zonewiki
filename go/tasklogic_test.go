@@ -399,6 +399,7 @@ func TestNewsCases(t *testing.T) {
 		Task struct {
 			Assignee  string
 			CreatedBy string `json:"created_by"`
+			Followers []string
 			ClosedAt  string `json:"closed_at"`
 			Private   bool
 			History   []HistoryEntry
@@ -411,7 +412,7 @@ func TestNewsCases(t *testing.T) {
 	}
 	// anna asks.
 	for _, c := range cases {
-		task := &Task{Assignee: c.Task.Assignee, CreatedBy: c.Task.CreatedBy, ClosedAt: c.Task.ClosedAt, History: c.Task.History, Comments: c.Task.Comments}
+		task := &Task{Assignee: c.Task.Assignee, CreatedBy: c.Task.CreatedBy, Followers: c.Task.Followers, ClosedAt: c.Task.ClosedAt, History: c.Task.History, Comments: c.Task.Comments}
 		if c.Task.Private {
 			task.Owner = "anna"
 		}

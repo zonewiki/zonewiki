@@ -472,3 +472,26 @@ def test_anyone_elses_word_stays_when_the_list_is_written(client, wiki):
     assert word() != carols
     sign_in(client, "bob")
     assert word() != before          # team is his too
+
+
+def test_a_follower_who_no_longer_sees_the_list_is_told_nothing(client, wiki):
+    """Who follows a task and is none of its list's members anymore stays in
+    its file, is not named to those who see it, and has no news of it; among
+    them again, they follow as before."""
+    count = lambda: client.get("/api/tasks/due-count", headers=HOST).get_json().get("new", 0)
+    sign_in(client, "bob")
+    assert client.put(f"/api/tasks/{IDS['shared']}", json={"follow": True}, headers=HOST).get_json()["followers"] == ["bob"]
+    sign_in(client, "alice")
+    client.post("/tasks/list-for", data={"list": "team", "for": "alice, carol", "confirm": "1"}, headers=HOST)
+    assert client.post(f"/api/tasks/{IDS['shared']}/comments", json={"text": "Chairs ordered"}, headers=HOST).status_code == 201
+    (task,) = [t for t in client.get("/api/tasks", query_string={"list": "team"}, headers=HOST).get_json() if t["id"] == IDS["shared"]]
+    assert "followers" not in task                                              # not named: he is told nothing
+    assert '"followers": [\n      "bob"' in (wiki / "_tasks/lists/team/tasks.json").read_text()   # kept
+    sign_in(client, "bob")
+    assert count() == 0
+    assert client.put(f"/api/tasks/{IDS['shared']}", json={"follow": False}, headers=HOST).status_code == 404
+    assert "the user follows it" not in mcp(client, "bob", "search_tasks")
+    sign_in(client, "alice")
+    client.post("/tasks/list-for", data={"list": "team", "for": "alice, bob, carol", "confirm": "1"}, headers=HOST)
+    sign_in(client, "bob")
+    assert count() == 1                                                         # the comment made meanwhile
