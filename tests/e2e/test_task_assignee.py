@@ -1104,3 +1104,20 @@ def test_follow_a_task_and_its_news_is_under_updates(alice, new_page):
     expect(alice.get_by_role("menuitem", name="Follow", exact=True)).to_have_count(0)
     alice.get_by_role("menuitem", name="Edit…").click()
     expect(alice.locator("#task-edit-follow")).to_be_hidden()
+
+
+def test_many_updates_show_their_first_and_a_row_for_the_rest(alice, new_page):
+    """Updates is above what is yours to do today: of many it draws the first
+    seven and Show N more (docs/spec/tasks.md, A long section draws its top)."""
+    bob = new_page()
+    bob.request.post("/login", form={"username": "bob", "password": "pw"})
+    for i in range(9):
+        assert bob.request.post("/api/tasks", data={"title": f"From bob {i}", "list": "team", "assignee": "alice"}).ok
+    new(alice, "Own, today", assignee="alice", start_date=date.today().isoformat())
+    alice.goto("/tasks?mine=1")
+    expect(alice.locator(".updates-heading .board-day-count")).to_have_text("9")
+    expect(alice.locator(".task-item.task-update")).to_have_count(7)
+    expect(card(alice, "Own, today")).to_be_visible()
+    alice.get_by_role("button", name="Show 2 more").click()
+    expect(alice.locator(".task-item.task-update")).to_have_count(9)
+    expect(alice.get_by_role("button", name="Show 2 more")).to_have_count(0)

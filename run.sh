@@ -167,6 +167,19 @@ case "${1:-up}" in
        [ -n "$paths" ] || set -- tests --ignore=tests/e2e --ignore=tests/test_tasks_core.py "$@"
        python3 -m pytest -q -p no:cacheprovider -n auto "$@"' -- "${@:2}"
     ;;
+  bench)
+    # The tasks at a team's size (tests/bench_tasks.py: 100 users, 40 lists,
+    # 5,000 open and 25,000 closed tasks), in the tools image: its table, and
+    # a failure where a budget is passed; then once more against a server
+    # built with the race detector, for what that reports (no budgets: it is
+    # several times slower). ZONE_BENCH_SLACK=3 allows three times the time
+    # budgets (CI's runners are slower and noisier than a desk's machine).
+    image=$(build_image zonewiki-tools -f Containerfile.tools)
+    in_image "$image" ${ZONE_BENCH_SLACK:+-e ZONE_BENCH_SLACK="$ZONE_BENCH_SLACK"} ${ZONE_BENCH_SIZE:+-e ZONE_BENCH_SIZE="$ZONE_BENCH_SIZE"} -- sh -c \
+      'python3 -m pytest -q -p no:cacheprovider -n 0 -s tests/bench_tasks.py "$@" || exit 1
+       echo; echo "The same against a server built with the race detector (no budgets):"
+       ZONE_TEST_RACE=1 python3 -m pytest -q -p no:cacheprovider -n 0 tests/bench_tasks.py "$@"' -- "${@:2}"
+    ;;
   e2e)
     # Browser tests (headless Chromium via Playwright) plus the Node-run
     # tasks-core.js tests, in the tools image (Containerfile.tools).
@@ -262,13 +275,14 @@ case "${1:-up}" in
     compose run --rm --no-deps "${tty[@]}" zonewiki /app/zonewiki "$@"
     ;;
   *)
-    echo "Usage: $0 [build|up|down|logs|test|e2e|leaks|screenshots|eval|user|config]"
+    echo "Usage: $0 [build|up|down|logs|test|e2e|bench|leaks|screenshots|eval|user|config]"
     echo "  build  - build the container image only"
     echo "  up     - build and start Zone (default)"
     echo "  down   - stop Zone"
     echo "  logs   - follow container logs"
     echo "  test   - gofmt, go vet, go test -race and the unit/API tests in the tools image (extra args go to pytest)"
     echo "  e2e    - run browser and tasks-core tests in the tools image (extra args go to pytest)"
+    echo "  bench  - measure the tasks at a team's size against their budgets, then under the race detector"
     echo "  leaks  - scan the git history for secrets (extra args go to gitleaks git)"
     echo "  screenshots - redo the README's screenshots (docs/screenshots/)"
     echo "  eval [FILE] - measure search on your wiki against questions in FILE (in the wiki)"

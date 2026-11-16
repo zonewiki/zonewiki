@@ -348,6 +348,7 @@ On phones the control spans the full width.
   `?year=YYYY` opens that year (search links to archived tasks carry it), and going back to a tab returns to this year (`setClosedYear`).
 
 **A long section draws its top** (`windowed`, `DRAW` = 200 in `js/taskrender.js`): a section of more than 200 cards (Unsorted, Sorted, a sort's group, a Plan section) draws its first 200 and a row **Show N more** (`[data-draw-more]`), which shows that section whole from then on (`st.drawAll`).
+**Updates draws its first seven** (`UPDATES_DRAW`), the latest news first, and the same row: it is above what is yours to do today, and in a team someone back from a week away has dozens (seen with the bench's hundred users: 52 updates before the first task of the day). Its heading counts them all; Mark all read sees them all.
 The section's count is of all its tasks, the filter searches all of them, and a task that has to be seen (a `?task=` link's, a new one: `unfoldFor`, `st.mustDraw`) shows its section whole.
 All tasks of a large wiki is thousands of cards, and a list is read from its top.
 

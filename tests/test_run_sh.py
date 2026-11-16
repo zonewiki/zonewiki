@@ -241,6 +241,15 @@ def test_test_checks_the_server_then_runs_pytest_against_it(sandbox):
     assert run.rstrip().endswith("tests/test_routes.py -k Auth")
 
 
+def test_bench_measures_then_runs_under_the_race_detector(sandbox):
+    repo, env, log = sandbox
+    r = subprocess.run(["./run.sh", "bench"], cwd=repo, env={**env, "ZONE_BENCH_SLACK": "3"}, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    (run,) = [l for l in log.read_text().split("\nrun ") if "bench_tasks.py" in l]
+    assert "-e ZONE_BENCH_SLACK=3" in run and run.count("tests/bench_tasks.py") == 2
+    assert "ZONE_TEST_RACE=1 python3 -m pytest" in run and "-n 0 -s tests/bench_tasks.py" in run
+
+
 def test_a_failed_build_shows_its_output_and_runs_nothing(sandbox):
     repo, env, log = sandbox
     env["FAKE_BUILD_FAILS"] = "1"

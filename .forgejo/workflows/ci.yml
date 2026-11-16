@@ -53,6 +53,24 @@ jobs:
           ZONE_COPY_REPO: 1
         run: ./run.sh ${{ matrix.check }}
 
+  bench:
+    # The tasks at a team's size against their budgets, then under the race
+    # detector (./run.sh bench; The bench in docs/spec/testing.md). A job of
+    # its own, which the image doesn't wait for. Three times the time
+    # budgets: a runner is slower and noisier than the machine they were set on.
+    runs-on: docker
+    container:
+      image: docker:29.9.3-cli@sha256:2357639ad1ea7d0194134bf3292622fd4e562483966ed674e5d7c945b5f3b28d
+    steps:
+      - name: Install system packages
+        run: apk add --no-cache nodejs git bash
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: ./run.sh bench
+        env:
+          ZONE_COPY_REPO: 1
+          ZONE_BENCH_SLACK: 3
+        run: ./run.sh bench
+
   image:
     needs: [checks]
     # Only with a registry to push to (forks and clones without one just test).

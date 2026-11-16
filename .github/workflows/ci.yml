@@ -48,6 +48,20 @@ jobs:
       - name: ./run.sh ${{ matrix.check }}
         run: ./run.sh ${{ matrix.check }}
 
+  bench:
+    # The tasks at a team's size against their budgets, then under the race
+    # detector (./run.sh bench; The bench in docs/spec/testing.md). A job of
+    # its own, which the image doesn't wait for: a slow runner fails it, and
+    # that is looked at, not a release held up. Three times the time budgets:
+    # the runners are slower and noisier than the machine they were set on.
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: ./run.sh bench
+        env:
+          ZONE_BENCH_SLACK: 3
+        run: ./run.sh bench
+
   image:
     # One image per architecture, each on a runner of its own (no emulation:
     # the arm64 build compiles with cgo and fetches onnxruntime's arm64

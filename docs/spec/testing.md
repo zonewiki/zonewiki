@@ -306,6 +306,7 @@ in a git worktree it mounts the repo's `.git` at its own path, read-only, and pa
 copy mode creates the container with `--rm`,
 a build's output stays hidden unless it fails (then nothing runs) and a first build says so,
 `test` runs go vet and go test (under the race detector) before pytest,
+`bench` runs the bench twice, the second time against a race-built server, and hands `ZONE_BENCH_SLACK` on,
 `test` and `e2e` run pytest in parallel (pytest-xdist),
 `eval` refuses a missing questions file and builds with `ZONE_SEMANTIC_SEARCH` and mounts the wiki read-only,
 and the hook scans the temporary index of `commit -a` and `commit <path>`,
@@ -327,9 +328,11 @@ Workers are separate processes: each has its own temp wikis, servers (`base_url`
 
 ## The bench
 
-`tests/bench_tasks.py` measures the tasks at a team's size and is no part of the suites (its name is no test module's): `./run.sh test tests/bench_tasks.py -n 0 -s`.
+`tests/bench_tasks.py` measures the tasks at a team's size and is no part of the suites (its name is no test module's): `./run.sh bench`, which is also a job of CI's (or `./run.sh test tests/bench_tasks.py -n 0 -s` for the table alone).
+`./run.sh bench` runs it twice: with its budgets, and then against a server built with the race detector (`ZONE_TEST_RACE=1`, without budgets), which is the only run of several clients at once on the real server under the detector.
 It generates a wiki in git (100 users with ten Inbox tasks each, 40 shared lists, 5,000 open and 25,000 closed tasks, most assigned), signs in as one user and takes the median over HTTP of: a page without tasks, My tasks, one list, All tasks (time and size), the due count, a task changed, a task completed, My tasks reordered, a search right after a write, and how much the repository grows per 100 writes, before and after a pack.
-It prints the table and fails where a number is over its budget (`BUDGETS`, set for the tools image on a developer's machine): run it before and after a change to how tasks are read, written or sent.
+It prints the table and fails where a number is over its budget (`BUDGETS`): run it before and after a change to how tasks are read, written or sent.
+**A budget guards a design, not a millisecond**: a time's budget is about twice what the tools image measured on a developer's machine on 2026-11-16 (the measure is beside it in the file), so a busy machine passes, and a read that waits for a commit again (1,100 ms where 80 are allowed) or a write that reads the wiki again does not. (Until then some were within noise, a page without tasks 40 ms where a loaded machine measured 42, and others so wide that they guarded nothing: All tasks 1,500 ms for 17.) `ZONE_BENCH_SLACK` multiplies the time budgets, for a slower machine: CI runs with 3. Sizes and counts are the same on any machine and have no slack.
 The numbers are the server's alone; no browser draws anything.
 **Reads beside writes** (`test_reads_beside_writes`) is the part with several clients at once: six who open a page without tasks, My tasks and the due count without a pause, and four who each change a task four times a second, for fifteen seconds; it takes the 95th percentile and the slowest of each.
 Measured on 2026-11-15, before and after readers stopped taking the writes' lock: a page without tasks 46 → 31 ms at the 95th percentile and 1,101 → 60 ms at the slowest (the second a write waits for the packing was every reader's too), My tasks 1,119 → 59 ms at the slowest.

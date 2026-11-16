@@ -5,10 +5,16 @@ on it, and how the repository grows. Not part of the suites (its name is no test
 
     ./run.sh test tests/bench_tasks.py -n 0 -s
 
-It prints a table and fails where a budget is passed (BUDGETS, set for the
-tools image on a developer's machine; ZONE_BENCH_SIZE=small|team, team by
-default). The numbers are of the server alone, over HTTP on loopback: no
-browser draws anything.
+or, with the run against a race-built server after it, ./run.sh bench (CI's
+job). It prints a table and fails where a budget is passed (BUDGETS;
+ZONE_BENCH_SIZE=small|team, team by default). The numbers are of the server
+alone, over HTTP on loopback: no browser draws anything.
+
+A budget guards a design, not a millisecond: a time is about twice what the
+tools image measures on a developer's machine (2026-11-16), so a busy
+machine passes and a read that waits for a commit again, or a write that
+reads the wiki again, does not. ZONE_BENCH_SLACK multiplies the time budgets
+(CI: 3; its runners are slower); sizes and counts are the same anywhere.
 """
 
 import json
@@ -29,32 +35,34 @@ SIZES = {"small": (10, 5, 300, 1000), "team": (100, 40, 5000, 25000)}
 USERS, LISTS, OPEN, CLOSED = SIZES[os.environ.get("ZONE_BENCH_SIZE", "team")]
 
 # Median milliseconds (or bytes, files) a measure may take at the team's size.
+SLACK = float(os.environ.get("ZONE_BENCH_SLACK", "1"))
+
 BUDGETS = {
-    "a page without tasks (ms)": 40,
-    "My tasks (ms)": 150,
+    "a page without tasks (ms)": 50,            # measured 19
+    "My tasks (ms)": 50,                        # 24
     "My tasks (KB)": 400,
-    "one list (ms)": 200,
-    "All tasks (ms)": 1500,
+    "one list (ms)": 50,                        # 21
+    "All tasks (ms)": 50,                       # 17: the page without its tasks
     "All tasks (KB)": 100,
-    "All tasks' tasks, gzipped (ms)": 300,
+    "All tasks' tasks, gzipped (ms)": 100,      # 41
     "All tasks' tasks, gzipped (KB)": 700,
-    "the due count (ms)": 40,
-    "a task changed (ms)": 80,
-    "a task completed (ms)": 90,
-    "My tasks reordered (ms)": 300,
-    "a search after a write (ms)": 1500,
-    "the repository per 100 writes (MB)": 10,
-    "the same, packed (MB)": 1.5,
+    "the due count (ms)": 40,                   # 15
+    "a task changed (ms)": 60,                  # 29
+    "a task completed (ms)": 70,                # 32
+    "My tasks reordered (ms)": 50,              # 16
+    "a search after a write (ms)": 250,         # 118
+    "the repository per 100 writes (MB)": 7,    # 3.4
+    "the same, packed (MB)": 1.2,               # 0.6
     "the same, joined (MB)": 0.15,
     "the server's memory (MB)": 210,
-    "joining the packs (ms)": 3000,
+    "joining the packs (ms)": 3500,             # 1,727
     # Beside writes (test_reads_beside_writes): the 95th percentile, and the
     # slowest. A read never waits for a write's commit, nor for the packing
     # a commit now and then waits for (which is the slowest write).
-    "beside writes: a page without tasks, p95 (ms)": 60,
-    "beside writes: the due count, p95 (ms)": 60,
-    "beside writes: My tasks, p95 (ms)": 100,
-    "beside writes: a task changed, p95 (ms)": 150,
+    "beside writes: a page without tasks, p95 (ms)": 90,     # 42
+    "beside writes: the due count, p95 (ms)": 90,            # 43
+    "beside writes: My tasks, p95 (ms)": 90,                 # 38
+    "beside writes: a task changed, p95 (ms)": 100,          # 49
     "beside writes: a page without tasks, slowest (ms)": 250,
     "beside writes: the due count, slowest (ms)": 250,
     "beside writes: My tasks, slowest (ms)": 250,
@@ -137,6 +145,8 @@ def report(got):
     over = []
     for name, value in got.items():
         budget = BUDGETS.get(name)
+        if budget is not None and name.endswith("(ms)"):
+            budget *= SLACK
         flag = ""
         if budget is not None and value > budget and (USERS, OPEN) == SIZES["team"][:1] + SIZES["team"][2:3]:
             flag = f"   over the budget of {budget}"

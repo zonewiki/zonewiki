@@ -58,7 +58,9 @@ function inViewOrder(filtered) {
   let updates = [];
   if (st.today && st.activeView === 'open' && app.initMine) {
     const given = t => !!TasksCore.newsFor(t, people.me);
-    updates = [...filtered].reverse().filter(given);
+    // The latest news first: of many, the top is what just happened.
+    const at = t => TasksCore.newsFor(t, people.me).at;
+    updates = [...filtered].reverse().filter(given).sort((a, b) => at(b).localeCompare(at(a)));
     orderedTasks = orderedTasks.filter(t => !given(t));
     newTasks = newTasks.filter(t => !given(t));
   }
@@ -221,11 +223,13 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
 // be seen, a link's, a new one, which their section then shows whole): All
 // tasks of a large wiki is thousands of cards, and a list is read from its
 // top. The filter still searches every task, and counts are of all.
-const DRAW = 200;
-function windowed(key, tasks) {
-  if (tasks.length <= DRAW || st.drawAll.has(key) || tasks.slice(DRAW).some(t => st.mustDraw.has(t.id))) return [tasks, ''];
-  return [tasks.slice(0, DRAW), `<li class="tasks-show-more tasks-draw-more"><button type="button" class="btn" ` +
-    `data-draw-more="${esc(key)}">Show ${tasks.length - DRAW} more</button></li>`];
+// Updates draws UPDATES_DRAW: it is above what is yours to do today, and in
+// a team someone back from a week away has dozens.
+const DRAW = 200, UPDATES_DRAW = 7;
+function windowed(key, tasks, draw = DRAW) {
+  if (tasks.length <= draw || st.drawAll.has(key) || tasks.slice(draw).some(t => st.mustDraw.has(t.id))) return [tasks, ''];
+  return [tasks.slice(0, draw), `<li class="tasks-show-more tasks-draw-more"><button type="button" class="btn" ` +
+    `data-draw-more="${esc(key)}">Show ${tasks.length - draw} more</button></li>`];
 }
 
 // The Plan board: one section per day, whose dividers double as drop
@@ -346,7 +350,7 @@ function listHTML(orderedTasks, newTasks, updates = []) {
     // drop target and nothing ranks there (data-updates: sectionList).
     if (updates.length) {
       html += `<li class="plan-subdivider updates-heading"><span>Updates</span><span class="board-day-count">${updates.length}</span></li>` +
-        updates.map(t => taskHTML(t, false, 'task-update')).join('');
+        (([shown, more]) => shown.map(t => taskHTML(t, false, 'task-update')).join('') + more)(windowed('updates', updates, UPDATES_DRAW));
     }
     const [fresh, moreFresh] = windowed(st.activeView + ':unsorted', newTasks);
     html += app.sectionHTML('unsorted', 'Unsorted', newTasks.length);
