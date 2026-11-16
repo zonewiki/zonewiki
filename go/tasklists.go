@@ -41,6 +41,7 @@ type ListInfo struct {
 	Owner   string      // whose private list; "" a shared one
 	Params  TasksParams // its settings as an embed's params, with list=<Ref>
 	NoShare bool        // left out in sharing mode
+	Owners  []string    // a shared list's owners (canManageList); none: a list from before owners
 }
 
 // Private: only its owner sees the list and the tasks in it.
@@ -65,7 +66,7 @@ func listInfo(l *taskfiles.List, ref string) ListInfo {
 		}
 	}
 	return ListInfo{Ref: ref, Name: l.Name, Owner: l.Owner, Params: parseTasksParams(strings.Join(args, " ")),
-		NoShare: isTrue(l.Settings["noshare"])}
+		NoShare: isTrue(l.Settings["noshare"]), Owners: l.Owners()}
 }
 
 // listRegistries: the registries user reads: the shared one and, with
@@ -435,6 +436,28 @@ func listForWrite(user, ref string, lists map[string]ListInfo) (ListInfo, error)
 	return l, nil
 }
 
+// listForManage: the list ref names for user, which they may rename,
+// delete and set (canManageList): its owners and the admins, for a shared
+// list with users.
+func listForManage(user, ref string, lists map[string]ListInfo) (ListInfo, error) {
+	l, err := listForWrite(user, ref, lists)
+	if err != nil {
+		return l, err
+	}
+	if !canManageList(user, l) {
+		return ListInfo{}, refuseAs(refusedReadOnly, notOwnerMsg(l))
+	}
+	return l, nil
+}
+
+// notOwnerMsg: why a member who is no owner can't change the list itself.
+func notOwnerMsg(l ListInfo) string {
+	if len(l.Owners) == 0 {
+		return "#" + l.Name + " is changed by an admin of this wiki: its tasks are yours to change, the list itself (its name, its settings, deleting it) is not."
+	}
+	return "#" + l.Name + " is " + strings.Join(l.Owners, "'s and ") + "'s list: its tasks are yours to change, the list itself (its name, its settings, deleting it) is theirs and an admin's."
+}
+
 // nameTaken: user sees a list called name.
 func nameTaken(name string, lists map[string]ListInfo) bool {
 	_, own := lists[name]
@@ -514,7 +537,12 @@ func createListOp(user, name string, private, pin bool, suffix string) (string, 
 	if reg.Find(list) != nil {
 		return "", refuseAs(refusedExists, "There is a list #"+list+" already")
 	}
-	reg.Lists = append(reg.Lists, &taskfiles.List{Name: list, Settings: map[string]string{}, Owner: owner})
+	made := &taskfiles.List{Name: list, Settings: map[string]string{}, Owner: owner}
+	// A shared list belongs to who made it (with users).
+	if owner == "" && privateFolder(user) != "" {
+		made.SetOwners([]string{user})
+	}
+	reg.Lists = append(reg.Lists, made)
 	// The pin is in the user's registry, which is the list's own unless the
 	// list is shared and the wiki has users.
 	pins := reg
@@ -632,7 +660,7 @@ type listRename struct {
 // stops the rename (an assistant's guides, checkGuides).
 func renameListOp(user, ref, newName, suffix string, check ...func(pages []string) error) (*listRename, error) {
 	lists := taskLists(user)
-	l, err := listForWrite(user, ref, lists)
+	l, err := listForManage(user, ref, lists)
 	if err != nil {
 		return nil, err
 	}
@@ -836,7 +864,7 @@ func deleteListOp(user, ref, to string, share, wontDo bool, suffix string) (int,
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
 	lists := taskLists(user)
-	l, err := listForWrite(user, ref, lists)
+	l, err := listForManage(user, ref, lists)
 	if err != nil {
 		return 0, err
 	}
@@ -949,6 +977,7 @@ func shareListOp(user, ref, suffix string) (string, error) {
 	}
 	own.Lists = slices.DeleteFunc(own.Lists, func(x *taskfiles.List) bool { return x.Name == l.Name })
 	entry.Owner = ""
+	entry.SetOwners([]string{user}) // shared now, and theirs to manage
 	shared.Lists = append(shared.Lists, entry)
 	dest := ListInfo{Name: l.Name}
 	moveListTasks(user, slices.Concat(active, closed), l, &dest)
@@ -1067,7 +1096,7 @@ func setListSettingsOp(user, ref string, set map[string]string) error {
 	}
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
-	l, err := listForWrite(user, ref, taskLists(user))
+	l, err := listForManage(user, ref, taskLists(user))
 	if err != nil {
 		return err
 	}

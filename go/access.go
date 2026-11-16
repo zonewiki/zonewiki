@@ -12,6 +12,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -228,6 +229,24 @@ func canSeeList(user string, l ListInfo) bool {
 // list change this and canSeeList, and nothing else.
 func canWriteList(user string, l ListInfo) bool {
 	return canSeeList(user, l) && mayWriteTasks(user) == nil
+}
+
+// canManageList: user may change the list itself: rename it, delete it,
+// set its settings. A private list is its user's; a shared one, with users,
+// its owners' (who made it: ListInfo.Owners) and every admin's. Whoever may
+// write its tasks (canWriteList) and is neither leaves the list as it is:
+// among a hundred people a list isn't everyone's to rename or delete.
+// Without users, and in a wiki that has no admin (from before roles),
+// whoever may write may manage, as before.
+func canManageList(user string, l ListInfo) bool {
+	if !canWriteList(user, l) {
+		return false
+	}
+	s := settings()
+	if l.Private() || s.Users == nil || !s.hasAdmin() {
+		return true
+	}
+	return slices.Contains(l.Owners, user) || s.isAdmin(user)
 }
 
 // mayWriteTasks: user may write the task files: anyone but a viewer. Every

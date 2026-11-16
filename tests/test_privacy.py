@@ -867,7 +867,7 @@ def test_a_private_new_list_is_its_makers_alone(alice, client, wiki):
     sign_in(client, "bob")
     assert 'data-place="list:gifts"' not in client.get("/tasks", headers=HOST).get_data(as_text=True)
     assert client.post("/tasks/new-list", data={"name": "gifts"}, headers=HOST).headers["Location"] == "/tasks?list=gifts"
-    assert '{"name": "gifts"}' in (wiki / "_tasks/lists.json").read_text()
+    assert '{"name": "gifts", "owners": ["bob"]}' in (wiki / "_tasks/lists.json").read_text()
     sign_in(client, "alice")
     page = client.get("/tasks", headers=HOST).get_data(as_text=True)
     assert 'data-place="list:gifts"' in page and 'data-place="list:shared/gifts"' in page

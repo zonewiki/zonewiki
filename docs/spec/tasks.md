@@ -826,6 +826,13 @@ You make one with **New list…** on the Tasks page (or in the dialog that moves
 A page shows a list; it doesn't make one: editing the embed away, or deleting the page, changes nothing of the list, and a list is deleted only by **Delete…**, which asks where its tasks go.
 Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged so, whatever list it is in.
 
+**A shared list has owners** (with users; `"owners": ["anna"]` in its entry, `List.Owners` in package `taskfiles`, `ListInfo.Owners`): who made it, with **New list…** or by making a private list shared.
+**Owners and admins manage the list**: rename it, delete it, set its settings (`canManageList` in `go/access.go`; `listForManage` in the operations).
+**Everyone else who may write tasks changes its tasks and leaves the list as it is** (`canWriteList`): its ⋯ menu has no Rename…, Delete… or List settings… for them, and the routes and tools answer 403, "#ops is bob's list: its tasks are yours to change, the list itself (its name, its settings, deleting it) is theirs and an admin's."
+Among a hundred people a list isn't everyone's to rename or delete, as it was until 2026-11.
+A list from before owners has none: it is the admins' ("#old is changed by an admin of this wiki …").
+A private list is its user's. Without users, and in a wiki that has no admin (from before roles), whoever may write manages, as before.
+
 (Until 2026-11 a list was a tag a page declared with `[[tasks: list=<tag>]]`: a task could be in two, a list ended with its page, and a task moved by a change of its tags. A wiki from then is taken over once, when Zone starts: The migration, below.
 Later in 2026-11 came the Inbox: until then a task could be in no list, which with users was everyone's; a pin also put a list's tasks in My tasks, and the first pinned list took new tasks. The Inbox's migration, below.)
 

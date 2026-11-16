@@ -59,6 +59,23 @@ type Registry struct {
 	Extra    map[string]json.RawMessage
 }
 
+// Owners: the users a shared list belongs to ("owners": ["anna"] in its
+// entry): who may rename it, delete it and set its settings. None: a list
+// from before lists had owners.
+func (l *List) Owners() []string { return jsonobj.TextList(l.Extra["owners"]) }
+
+// SetOwners: the list's owners from now (none: no key).
+func (l *List) SetOwners(names []string) {
+	if len(names) == 0 {
+		delete(l.Extra, "owners")
+		return
+	}
+	if l.Extra == nil {
+		l.Extra = map[string]json.RawMessage{}
+	}
+	l.Extra["owners"] = json.RawMessage(strings.ReplaceAll(jsonobj.Text(names), ",", ", "))
+}
+
 // Find: the list named name (as the file has it), nil when there is none.
 func (r *Registry) Find(name string) *List {
 	for _, l := range r.Lists {

@@ -118,7 +118,7 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, p
 		default:
 			at = nil
 		}
-		if shown && canWriteList(user, list) {
+		if shown && canManageList(user, list) {
 			if at == nil {
 				at = &embedSettingsAt{Index: -1}
 			}

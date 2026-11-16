@@ -948,6 +948,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	}
 	if list != nil {
 		v.List = list
+		v.Manage = canManageList(rq.who(), *list)
 		v.ListRenameName, v.ListRenameError = firstNonEmpty(q.Get("rename_name"), list.Name), q.Get("rename_error")
 		v.DeleteError, v.ShareError = q.Get("delete_error"), q.Get("share_error")
 		for i, p := range rq.pinnedLists() {
@@ -1160,6 +1161,7 @@ type tasksPageView struct {
 	ListRenameName, ListRenameError string
 	DeleteError, ShareError         string
 	Menu, Users                     bool
+	Manage                          bool // the list is the user's to rename, delete and set (canManageList)
 	Mine, MineAssigns               bool
 	NewListName, NewListError       string
 	Places                          []TaskPlace
