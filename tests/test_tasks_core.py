@@ -626,6 +626,26 @@ class TestAssignee:
         return run_core(f"TasksCore.tasksInView({json.dumps(self.TASKS)}, "
                         f"TasksCore.parseFilter({json.dumps(query)}, {people}), 'open', '{TODAY}').map(t => t.id)")
 
+    def test_who_is_none_of_a_lists_members_no_longer_has_its_task(self):
+        # A list for some (people.members, by the list's ref): the task of
+        # someone who is none of its members counts as no one's, and is
+        # still found by the name; in any other list it is theirs.
+        people = "{me: 'alice', users: new Set(['alice', 'bob']), members: {hiring: ['alice']}}"
+        tasks = [{"id": "h", "title": "In hiring", "assignee": "bob", "list": "hiring"},
+                 {"id": "a", "title": "Alice's", "assignee": "alice", "list": "hiring"},
+                 {"id": "t", "title": "In team", "assignee": "bob", "list": "team"}]
+        gone = run_core(f"{json.dumps(tasks)}.map(t => TasksCore.assigneeGone(t, {people}))")
+        assert gone == [True, False, False]
+        ids = lambda q: run_core(f"TasksCore.tasksInView({json.dumps(tasks)}, TasksCore.parseFilter({json.dumps(q)}, {people}), "
+                                 f"'open', '{TODAY}').map(t => t.id)")
+        assert ids("@none") == ["h"] and ids("@bob") == ["h", "t"] and ids("@alice") == ["a"]
+        # By person: under Unassigned, not under a name.
+        heads = run_core(f"TasksCore.personBuckets({json.dumps(tasks)}, '{TODAY}', '', {people}).map(b => [b.label, b.tasks.map(t => t.id)])")
+        assert heads == [["Unassigned", ["h"]], ["You", ["a"]], ["@bob", ["t"]]]
+        # Without the lists' members known, and without users, nobody is gone.
+        assert run_core(f"TasksCore.assigneeGone({json.dumps(tasks[0])}, {self.PEOPLE})") is False
+        assert run_core(f"TasksCore.assigneeGone({json.dumps(tasks[0])}, undefined)") is False
+
     def test_the_filter_reads_the_words(self):
         f = run_core(f"(f => [f.assigneeGroups, f.excludeAssignees, f.tagGroups, f.text])"
                      f"(TasksCore.parseFilter('@Anna @bob|carol -@Dan|eve #work call @', {self.PEOPLE}))")

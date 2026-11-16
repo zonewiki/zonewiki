@@ -46,6 +46,8 @@ func mcpTaskText(t *Task, base, user string) string {
 			who += " (the user)"
 		} else if !s.assignable(t.Assignee) {
 			who += " (who can no longer be given tasks: it counts as no one's)"
+		} else if assigneeGone(t) {
+			who += " (who doesn't see its list anymore: it counts as no one's)"
 		}
 		facts = append(facts, who)
 	}

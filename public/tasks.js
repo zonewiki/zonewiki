@@ -422,6 +422,9 @@ const inboxPrivate = appEl?.dataset.inboxPrivate === '1';
 let listChoices = [];
 try { listChoices = JSON.parse(appEl?.dataset.lists || '[]'); } catch (_) {}
 const listSet = new Set(listChoices.map(l => l.ref));
+// The members of the lists for some, where the rules ask who has a task
+// (TasksCore.assigneeGone): the page's lists are every task app's.
+people.members = { ...people.members, ...Object.fromEntries(listChoices.filter(l => l.members).map(l => [l.ref, l.members])) };
 const privateLists = new Set(listChoices.filter(l => l.private).map(l => l.ref));
 // A list made while the page is open (New list… in the dialog that moves
 // tasks to a list, js/taskselect.js, which says so to every task app of the

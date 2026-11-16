@@ -1207,8 +1207,8 @@ func pinOrderOp(user string, refs []string) error {
 // setListForOp says whom the shared list user names ref is for (cleanFor;
 // "": everyone), for its owners. Its tasks stay where they are and as they
 // are: narrowed, they are its members' to see from then on, and one given
-// to someone who is none of them keeps the name (to them it is gone, as the
-// list is): when there are such open tasks the change asks first (askError,
+// to someone who is none of them keeps the name and counts as no one's
+// (assigneeGone; to them it is gone, as the list is): when there are such open tasks the change asks first (askError,
 // which says how many and whose), and goes through once confirmed.
 func setListForOp(user, ref, who string, confirmed bool) error {
 	taskFiles.Lock()
@@ -1247,7 +1247,7 @@ func setListForOp(user, ref, who string, confirmed bool) error {
 				tasks = "1 open task here is"
 			}
 			return &askError{tasks + " assigned to " + strings.Join(names, ", ") + ", who will no longer see the list. " +
-				"Nobody is unassigned: the tasks keep their names, and to them they are gone. Save again to go on."}
+				"The tasks keep their names and count as unassigned here, to hand on; for them again, they are theirs as before. Save again to go on."}
 		}
 	}
 	reg, err := taskFiles.ReadListsStrict("")

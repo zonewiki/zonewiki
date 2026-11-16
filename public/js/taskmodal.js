@@ -210,9 +210,13 @@ const assigneeChip = assigneeInput && app.chipField(assigneeInput, {
   onChange: () => { byHand('assignee'); syncTarget(); },   // the chip taken off
   label: n => '@' + n,
   mark: (chip, n) => {
-    if (!people.users || people.users.has(n)) return;
+    if (!people.users) return;
+    // (Read when the chip is drawn: the List field is filled before the name.)
+    const list = app.listSelect?.value || '';
+    if (people.users.has(n) && assignableHere().has(n)) return;
     chip.classList.add('tag-chip-former');
-    chip.title = `${n} can no longer be given tasks`;
+    chip.title = people.users.has(n) ? `${n} isn’t one of those the list ${app.listName(list)} is for: the task counts as no one’s`
+      : `${n} can no longer be given tasks`;
   },
 });
 function setAssignee(name) {

@@ -157,15 +157,27 @@ function filterActive(f) {
     f.fromGroups?.length || f.excludeFrom?.length || f.updated);
 }
 
+// The task's assignee no longer has it: someone who can no longer be given
+// tasks (disabled, removed, a viewer now), or who is none of those its list
+// is for (people.members: a list for some's members by the list's ref; a
+// list narrowed since, a group they left): they don't see the task. The
+// name stays on it, so when they are back it is theirs as before.
+function assigneeGone(t, people) {
+  const a = (t.assignee || '').toLowerCase();
+  if (!a || !people?.users) return false;
+  const members = people.members?.[t.list || ''];
+  return !people.users.has(a) || !!members && !members.includes(a);
+}
+
 // Whether the task's assignee is what a filter word names: a user, `me`
-// (the signed-in user) or `none`. A task whose assignee can no longer be
-// given tasks (disabled, removed, a viewer now) counts as no one's too, so
-// it comes up where the team looks for what nobody has; it still matches
-// the name, so it can be found and handed on.
+// (the signed-in user) or `none`. A task whose assignee no longer has it
+// (assigneeGone) counts as no one's too, so it comes up where the team
+// looks for what nobody has; it still matches the name, so it can be found
+// and handed on.
 function assigneeIs(t, word, people) {
   const a = (t.assignee || '').toLowerCase();
   // A private task has no assignee and is its user's own: theirs, not no one's.
-  if (word === 'none') return !t.private && (!a || !!people?.users && !people.users.has(a));
+  if (word === 'none') return !t.private && (!a || assigneeGone(t, people));
   if (word === 'me') return !!people?.me && (a === people.me || !!t.private);
   return a === word;
 }
@@ -680,7 +692,7 @@ function dropQuickWord(input, today, people, field, value) {
 const TasksCore = {
   dateToStr, addDays, isOverdue, isFocus, isCarried, byOpenOrder, byDeadline, byCreated, SORTS, placeInOrder, tagMatchScore, tagCounts, selectionTags, bulkTagChange,
   rankTags, sanitizeTagInput,
-  parseFilter, matchesFilter, filterActive, assigneeIs, inMine, newsFor, givenToMe, orderMoves, tasksInView, tagParamToQuery, importanceWord,
+  parseFilter, matchesFilter, filterActive, assigneeIs, assigneeGone, inMine, newsFor, givenToMe, orderMoves, tasksInView, tagParamToQuery, importanceWord,
   bucketKey, fullDayLabel, boardBuckets, personBuckets, listBuckets, parseQuickAdd, dropQuickWord,
   dateSettings, localeDate, shortDate, longDayLabel, weekStart, weekdayNames, monthTitle,
 };

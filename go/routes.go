@@ -973,7 +973,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 		for _, t := range rq.openTasks() {
 			if t.List == list.Name && t.Owner == list.Owner {
 				v.OpenInList++
-				if assigns && !settings().assignable(t.Assignee) {
+				if assigns && (t.Assignee == "" || assigneeGone(t)) {
 					v.Unassigned++
 				}
 			}

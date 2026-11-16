@@ -148,7 +148,8 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
   // Who has it, after the tags: your own name set apart, the name of
   // someone who can no longer be given tasks struck through.
   const assignee = task.assignee || '';
-  const formerAssignee = !!assignee && !!people.users && !people.users.has(assignee);
+  const formerAssignee = TasksCore.assigneeGone(task, people);
+  const leftList = formerAssignee && !!people.users?.has(assignee);   // none of the list's members now
   // What the task has for you that you haven't seen (TasksCore.newsFor): a
   // task someone gave you is marked new, any other news says what it is.
   const news = TasksCore.newsFor(task, people.me);
@@ -163,7 +164,8 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
   // In My tasks every shared task is yours: its card doesn't say so.
   const assigneeDisplay = !assignee || sectionSays || (app.initMine && assignee === people.me) ? newDisplay
     : `${newDisplay}<span class="task-assignee${assignee === people.me ? ' task-assignee-me' : ''}${formerAssignee ? ' task-assignee-former' : ''}" title="${
-        esc(formerAssignee ? `Was assigned to ${assignee}, who can no longer be given tasks`
+        esc(leftList ? `Assigned to ${assignee}, who doesn’t see this list anymore: it counts as no one’s`
+          : formerAssignee ? `Was assigned to ${assignee}, who can no longer be given tasks`
           : assignee === people.me ? 'Assigned to you' : `Assigned to ${assignee}`)}">@${esc(assignee)}</span>`;
   const tagsRight = tags || assigneeDisplay ? `<span class="task-tags-right">${tags}${assigneeDisplay}</span>` : '';
   const privateDisplay = task.private

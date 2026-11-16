@@ -389,6 +389,15 @@ func tagParamMatches(t *Task, raw string) bool {
 	return true
 }
 
+// assigneeGone: the shared task's assignee no longer has it
+// (TasksCore.assigneeGone): someone who can no longer be given tasks, or
+// who is none of those its list is for (a list narrowed since, a group
+// they left) and so doesn't see it. The name stays on the task: back among
+// them, it is theirs as before; until then it counts as no one's.
+func assigneeGone(t *Task) bool {
+	return t.Assignee != "" && (!settings().assignable(t.Assignee) || !taskFiles.SeesList(t.Assignee, t.List))
+}
+
 // assigneeIs: t's assignee is what word names, for user: a user's name,
 // "me" (user) or "none": no one, or someone who can no longer be given
 // tasks (TasksCore.assigneeIs). A private task has no assignee and is its
@@ -396,7 +405,7 @@ func tagParamMatches(t *Task, raw string) bool {
 func assigneeIs(t *Task, word, user string) bool {
 	switch word {
 	case "none":
-		return t.Owner == "" && (t.Assignee == "" || !settings().assignable(t.Assignee))
+		return t.Owner == "" && (t.Assignee == "" || assigneeGone(t))
 	case "me":
 		return user != "" && (t.Assignee == user || t.Owner == user)
 	}

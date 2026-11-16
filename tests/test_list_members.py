@@ -423,6 +423,7 @@ def test_narrowing_says_whose_tasks_leave_their_sight(client, wiki):
     assert not (wiki / "_tasks/lists/team/list.json").exists()                 # asked, not done
     page = client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True)
     assert "3 open tasks here are assigned to bob, dana, who will no longer see the list." in page
+    assert "keep their names and count as unassigned here" in page
     assert '<input type="hidden" name="confirm" value="1">' in page and 'value="alice, carol"' in page
     # Save again: narrowed, and nobody unassigned.
     resp = client.post("/tasks/list-for", data={"list": "team", "for": "alice, carol", "confirm": "1"}, headers=HOST)
@@ -430,6 +431,20 @@ def test_narrowing_says_whose_tasks_leave_their_sight(client, wiki):
     assert json.loads((wiki / "_tasks/lists/team/list.json").read_text())["for"] == ["alice", "carol"]
     who = {t["title"]: t.get("assignee") for t in client.get("/api/tasks", query_string={"list": "team"}, headers=HOST).get_json()}
     assert who["One"] == "bob" and who["Three"] == "dana"
+    # To its members they count as no one's: the list's line, the closed view's @none, an assistant's answer.
+    page = client.get("/tasks?list=team", headers=HOST).get_data(as_text=True)
+    assert re.search(r'class="tasks-unassigned"[^>]*>4 unassigned', page)          # the three, and the one nobody had
+    assert '"members":["alice","carol"]' in page.replace("&#34;", '"')
+    out = mcp(client, "alice", "search_tasks", list="team")
+    assert out.count("who doesn't see its list anymore: it counts as no one's") == 3
+    none = mcp(client, "alice", "search_tasks", list="team", assignee="none")
+    assert "One" in none and "Three" in none and "Hers" not in none
+    # Among them again, the tasks are theirs as before.
+    client.post("/tasks/list-for", data={"list": "team", "for": "alice, bob, carol", "confirm": "1"}, headers=HOST)   # dana still none
+    sign_in(client, "bob")
+    assert sorted(t["title"] for t in client.get("/api/tasks", query_string={"mine": "1"}, headers=HOST).get_json()) == ["One", "Two"]
+    sign_in(client, "alice")
+    client.post("/tasks/list-for", data={"list": "team", "for": "alice, carol", "confirm": "1"}, headers=HOST)
     sign_in(client, "bob")
     assert client.get("/api/tasks", query_string={"mine": "1"}, headers=HOST).get_json() == []
     # Nothing to say when nobody loses a task: no question.

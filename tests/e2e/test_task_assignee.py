@@ -1019,3 +1019,43 @@ def test_a_task_leaving_a_list_for_some_says_who_will_see_it(page, wiki, monkeyp
     card(page, "Other").drag_to(section(page, "l:team"))
     ask.locator("#task-share-confirm").click()
     wait_until(page, lambda: task(page, "Other")["list"] == "team")
+
+
+def test_who_no_longer_sees_a_list_no_longer_has_its_tasks(page, wiki, monkeypatch):
+    """A list narrowed: the task of someone who is none of its members now
+    keeps the name, struck through, and counts as no one's (the filter's
+    @none, By person's Unassigned), so it is found and handed on."""
+    monkeypatch.setattr(settings, "USERS", {name: ("pw", "") for name in ("alice", "bob", "carol")})
+    monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}})
+    page.request.post("/login", form={"username": "alice", "password": "pw"})
+    make_list(page, "team")
+    new(page, "Bob's", assignee="bob")
+    new(page, "Carol's", assignee="carol")
+    assert page.request.post("/tasks/list-for", form={"list": "team", "for": "alice, carol", "confirm": "1"}).ok
+    page.goto("/tasks?list=team&view=open&group=none")
+    name = card(page, "Bob's").locator(".task-assignee")
+    expect(name).to_have_class(re.compile(r"\btask-assignee-former\b"))
+    expect(name).to_have_attribute("title", "Assigned to bob, who doesn’t see this list anymore: it counts as no one’s")
+    expect(card(page, "Carol's").locator(".task-assignee")).not_to_have_class(re.compile(r"\btask-assignee-former\b"))
+    expect(page.locator(".tasks-unassigned")).to_contain_text("1 unassigned")
+    search = page.locator("#task-filter-search")
+    search.fill("@none")
+    expect(page.locator(".task-item .task-title")).to_have_text(["Bob's"])
+    search.fill("@bob")
+    expect(page.locator(".task-item .task-title")).to_have_text(["Bob's"])
+    search.fill("")
+    page.locator(".tasks-cut [data-group=person]").click()
+    expect(section(page, "p:").locator("~ .task-item .task-title").first).to_have_text("Bob's")
+    # The dialog says why the name is struck, and it is handed on to a member.
+    page.locator(".tasks-cut [data-group=none]").click()
+    modal = open_edit(page, "Bob's")
+    chip = modal.locator(".task-field-assignee .tag-chip")
+    expect(chip).to_have_class(re.compile(r"\btag-chip-former\b"))
+    expect(chip).to_have_attribute("title", "bob isn’t one of those the list team is for: the task counts as no one’s")
+    page.keyboard.press("Escape")
+    card(page, "Bob's").locator(".task-title").click(button="right")
+    page.get_by_role("menuitem", name="Assign…").click()
+    page.locator(".bulk-assign-modal .bulk-list-row", has_text="@carol").click()
+    wait_for_assignee(page, "Bob's", "carol")
+    page.reload()                                             # the list's line is the page's
+    expect(page.locator(".tasks-unassigned")).to_have_count(0)
