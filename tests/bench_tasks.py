@@ -143,7 +143,9 @@ def report(got):
             over.append(name)
         print(f"  {name:48s} {value:10.1f}{flag}")
     print()
-    assert not over, f"over budget: {over}"
+    # Under the race detector (ZONE_TEST_RACE) the server is several times
+    # slower: the run is for what it reports, not for the budgets.
+    assert not over or os.environ.get("ZONE_TEST_RACE"), f"over budget: {over}"
 
 
 READERS, WRITERS, SECONDS, PAUSE = 6, 4, 15, 0.25

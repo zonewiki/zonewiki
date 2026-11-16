@@ -5,8 +5,9 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 
-# Set by run.sh or the build, not by the user: .env.example needn't list them.
-INTERNAL = {"ZONE_BUILD", "ZONE_HOST_DATA", "ZONE_COPY_REPO", "ZONE_MODEL_DIR"}
+# Set by run.sh or the build, not by the user, or said to a test run
+# (ZONE_TEST_RACE): .env.example needn't list them.
+INTERNAL = {"ZONE_BUILD", "ZONE_HOST_DATA", "ZONE_COPY_REPO", "ZONE_MODEL_DIR", "ZONE_TEST_RACE"}
 
 def _example_keys() -> set[str]:
     text = (REPO / ".env.example").read_text(encoding="utf-8")

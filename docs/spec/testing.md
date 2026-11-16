@@ -304,7 +304,7 @@ so it needs no engine: `leaks` passes a temporary `GIT_INDEX_FILE` in as a `/rep
 in a git worktree it mounts the repo's `.git` at its own path, read-only, and passes the worktree's index by that path,
 copy mode creates the container with `--rm`,
 a build's output stays hidden unless it fails (then nothing runs) and a first build says so,
-`test` runs go vet and go test before pytest,
+`test` runs go vet and go test (under the race detector) before pytest,
 `test` and `e2e` run pytest in parallel (pytest-xdist),
 `eval` refuses a missing questions file and builds with `ZONE_SEMANTIC_SEARCH` and mounts the wiki read-only,
 and the hook scans the temporary index of `commit -a` and `commit <path>`,
@@ -313,6 +313,12 @@ in a worktree as in the repo.
 The hook tests skip when a local gitleaks is on PATH beside bash; one in a folder of its own (the tools image's) is left off the scratch repo's PATH, so they run there and in CI.
 
 To run the suite without a local Go or venv: `./run.sh test` (gofmt, go vet, go test, then pytest, inside the tools image with the repo mounted).
+
+**The Go tests run under the race detector** (`CGO_ENABLED=1 go test -race ./...` in `run.sh`; about a minute): two requests that read and write the same memory without a lock fail the run, where they would otherwise be a wrong answer once in a while.
+The detector needs cgo, so the tools image has `gcc` and `libc6-dev`; it sets `CGO_ENABLED=0` for everything else, so the server the tests build is without semantic search's library, as before.
+What it can see is what the tests run at once: `TestReadersBesideWriters` in `go/internal/taskfiles/concurrent_test.go` is the task store's test for it (writers that change, close, reopen and move tasks between lists beside readers of every kind: each reader sees every task once, and a reader's change of what it was handed is nobody else's).
+**The server itself under the detector**: `ZONE_TEST_RACE=1 ./run.sh test …` builds the server the API tests start with `-race` (`tests/goserver.py`), and a race ends that server (`GORACE=halt_on_error=1`), so the test that met it fails and the server's log says where.
+It is several times slower, so it is no part of a plain run: run it with the bench (`ZONE_TEST_RACE=1 ./run.sh test tests/bench_tasks.py -n 0 -s`, whose budgets it then passes over) after a change to what requests share (the task store's locks, the kept counts, the search's records).
 
 Both `./run.sh test` and `./run.sh e2e` run in parallel with pytest-xdist: `test` with `-n auto` (a worker per CPU), `e2e` with a worker per two CPUs (each runs its own Chromium; at one per CPU the browsers starve and timing-sensitive tests fail).
 An `-n` in the extra args overrides it (`-n 0`: one process).

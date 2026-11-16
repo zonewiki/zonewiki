@@ -19,8 +19,9 @@ FROM mcr.microsoft.com/playwright/python:v1.63.0-noble@sha256:72bd171a9ffc2b4b59
 
 # Node runs tests/test_tasks_core.py (the pure tasks logic in tasks-core.js);
 # curl fetches gitleaks below; pngquant compresses the README's screenshots
-# (docs/screenshots/make_screenshots.py).
-RUN apt-get update && apt-get install -y --no-install-recommends nodejs git curl ca-certificates pngquant \
+# (docs/screenshots/make_screenshots.py); gcc and libc6-dev are what Go's race
+# detector takes (go test -race needs cgo: ./run.sh test).
+RUN apt-get update && apt-get install -y --no-install-recommends nodejs git curl ca-certificates pngquant gcc libc6-dev \
  && rm -rf /var/lib/apt/lists/*
 
 # gitleaks, a pinned release checked against its published checksums. To
@@ -55,7 +56,10 @@ RUN case "$TARGETARCH" in \
  && echo "$sum  /tmp/go.tgz" | sha256sum -c - \
  && tar -xzf /tmp/go.tgz -C /usr/local \
  && rm /tmp/go.tgz
-ENV PATH=/usr/local/go/bin:$PATH GOTOOLCHAIN=local
+# Without cgo, as before the image had a C compiler: the server the tests
+# build searches by keywords (go/embed_nocgo.go), and so does CI's. Only the
+# race detector's run turns it on (run.sh).
+ENV PATH=/usr/local/go/bin:$PATH GOTOOLCHAIN=local CGO_ENABLED=0
 # The server's modules (go.sum checks them), so a test run fetches nothing.
 COPY go/go.mod go/go.sum /tmp/gomod/
 RUN cd /tmp/gomod && go mod download && rm -rf /tmp/gomod

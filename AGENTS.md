@@ -88,7 +88,7 @@ Auth is optional (a password, or users; see Key Constraints).
 ├── compose.yaml            # Builds and runs the image (run.sh drives it)
 ├── compose.podman.yaml     # Rootless podman only: userns keep-id (run.sh adds it)
 ├── compose.nas.yaml        # NAS/server: runs the prebuilt ghcr.io image, no build (see docs/spec/deployment.md)
-├── Containerfile.tools     # Tools image: Go, Playwright + Chromium, the tests' Python packages, Node for tasks-core tests, gitleaks, git, pngquant
+├── Containerfile.tools     # Tools image: Go (and gcc, for its race detector), Playwright + Chromium, the tests' Python packages, Node for tasks-core tests, gitleaks, git, pngquant
 ├── run.sh                  # Helper script: build/up/down/logs, user/config (via compose), test/e2e/leaks (CI runs these too); bash 3.2-compatible (macOS)
 ├── .githooks/pre-commit    # Refuses a commit with a secret in it (gitleaks); on with git config core.hooksPath .githooks
 ├── .gitleaks.toml          # gitleaks: the default rules; the generic key rule skips public/vendor/ (minified names)
@@ -195,7 +195,7 @@ It lives in the host directory pointed to by `ZONE_DATA` (default: `~/zonewiki`)
 ```bash
 ./run.sh            # build the image and start Zone (default: "up"), via compose
 ./run.sh build|up|down|logs
-./run.sh test       # gofmt + go vet + go test, then the unit/API tests, in the tools image (extra args go to pytest)
+./run.sh test       # gofmt + go vet + go test -race, then the unit/API tests, in the tools image (extra args go to pytest)
 ./run.sh e2e        # browser tests + tasks-core.js (Node) tests in the tools image
 ./run.sh leaks      # scan the git history for secrets (gitleaks, in the tools image)
 ./run.sh screenshots  # redo the README's screenshots from a sample wiki
@@ -244,7 +244,7 @@ Flags are written with two dashes everywhere (`--addr :8080`, `user add NAME --m
 A feature or fix is not complete until it has test coverage.
 
 ```bash
-./run.sh test                         # gofmt, go vet, go test, then the unit/API tests (pytest over HTTP), in the tools image
+./run.sh test                         # gofmt, go vet, go test -race, then the unit/API tests (pytest over HTTP), in the tools image
 ./run.sh test tests/test_mcp.py -n 0  # one module, in one process
 ./run.sh e2e                          # browser tests (Playwright) and tasks-core.js under Node
 (cd go && go test ./...)              # the server's own tests, with a local Go

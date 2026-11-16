@@ -34,7 +34,8 @@ _binary: Path | None = None
 def binary() -> Path:
     """The server, built once per test run: by the first process (pytest's,
     or with xdist its controller, before the workers start), which hands its
-    path on in ZONE_TEST_BINARY."""
+    path on in ZONE_TEST_BINARY. With ZONE_TEST_RACE it is built with Go's race
+    detector (which needs cgo and a C compiler), and a race ends it."""
     global _binary
     if _binary is None:
         if os.environ.get("ZONE_TEST_BINARY"):
@@ -42,7 +43,11 @@ def binary() -> Path:
         else:
             out = Path(tempfile.mkdtemp(prefix="zonewiki_go_")) / "zonewiki"
             go = shutil.which("go") or "go"
-            subprocess.run([go, "build", "-o", str(out), "."], cwd=REPO / "go", check=True)
+            race = bool(os.environ.get("ZONE_TEST_RACE"))
+            subprocess.run([go, "build", *(["-race"] if race else []), "-o", str(out), "."], cwd=REPO / "go", check=True,
+                           env={**os.environ, **({"CGO_ENABLED": "1"} if race else {})})
+            if race:
+                os.environ.setdefault("GORACE", "halt_on_error=1")
             os.environ["ZONE_TEST_BINARY"] = str(out)
             _binary = out
     return _binary

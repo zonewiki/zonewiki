@@ -30,6 +30,8 @@ class SocketConnection(http.client.HTTPConnection):
 
     def connect(self):
         self.sock = socket.socket(socket.AF_UNIX)
+        if isinstance(self.timeout, (int, float)):
+            self.sock.settimeout(self.timeout)
         self.sock.connect(self.path)
 
 
@@ -96,12 +98,18 @@ def held(wiki_dir, tmp_path, monkeypatch):
         shutil.rmtree(folder)
 
 
-def get(path, url):
+def get(path, url, timeout=None):
+    """The status of a GET over the socket; None when nothing answers within
+    timeout seconds (no Zone is listening: the request waits in the socket)."""
     conn = SocketConnection(path)
-    conn.request("GET", url)
-    status = conn.getresponse().status
-    conn.close()
-    return status
+    conn.timeout = timeout
+    try:
+        conn.request("GET", url)
+        return conn.getresponse().status
+    except TimeoutError:
+        return None
+    finally:
+        conn.close()
 
 
 def test_zone_exits_when_nobody_asks_and_the_next_request_waits(held):
@@ -117,7 +125,9 @@ def test_zone_exits_when_nobody_asks_and_the_next_request_waits(held):
     # The healthcheck alone doesn't: it exits, with 0, and leaves the socket.
     until = time.monotonic() + 10
     while server.proc.poll() is None and time.monotonic() < until:
-        assert get(path, "/api/health") == 200
+        # One sent as Zone goes is answered by nobody (it waits in the socket,
+        # as the request below does): it must not wait for ever.
+        assert get(path, "/api/health", timeout=2) in (200, None)
         time.sleep(0.2)
     assert server.proc.wait(10) == 0
     # A request that comes now waits in the socket, and the next Zone answers it.

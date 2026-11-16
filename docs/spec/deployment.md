@@ -79,7 +79,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 ./run.sh up         # build and start in detached mode (compose up -d --build)
 ./run.sh down       # stop and remove the container (compose down)
 ./run.sh logs       # follow container logs
-./run.sh test       # gofmt, go vet, go test, then the unit/API tests, in the tools image (extra args go to pytest; a tests/… path replaces the default whole suite but the browser tests)
+./run.sh test       # gofmt, go vet, go test -race, then the unit/API tests, in the tools image (extra args go to pytest; a tests/… path replaces the default whole suite but the browser tests)
 ./run.sh e2e        # run browser tests + tasks-core.js (Node) tests in the tools image (extra args go to pytest)
 ./run.sh leaks      # scan the git history for secrets with gitleaks, in the tools image (extra args go to `gitleaks git`; a leak exits with 3)
 ./run.sh screenshots  # redo the README's screenshots (docs/screenshots/*.png) from a sample wiki, in the tools image; compressed with pngquant (the README shows phone.png at 640px)
