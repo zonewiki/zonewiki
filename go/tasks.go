@@ -859,7 +859,7 @@ func deleteTask(user, id, message string) error {
 }
 
 func deleteTasksLocked(user string, ids map[string]bool, message string) error {
-	active, closed, err := taskFiles.ReadForWriteLocked(user)
+	active, closed, err := taskFiles.ReadTasksForWriteLocked(user, ids)
 	if err != nil {
 		return err
 	}
@@ -906,7 +906,7 @@ func tagTasks(user string, ids, add, remove []string, message string) ([]*Task, 
 	}
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
-	active, closed, err := taskFiles.ReadForWriteLocked(user)
+	active, closed, err := taskFiles.ReadTasksForWriteLocked(user, set)
 	if err != nil {
 		return nil, err
 	}

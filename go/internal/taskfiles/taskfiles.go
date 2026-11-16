@@ -87,7 +87,7 @@ type Store struct {
 	// locked: mu is held (a write is in progress); held: it holds view.
 	locked, held bool
 	// scope: the closed files the write in progress read
-	// (ReadTaskForWriteLocked), which are the only ones it may write whole;
+	// (ReadTasksForWriteLocked), which are the only ones it may write whole;
 	// nil: it read every one (ReadForWriteLocked). Lives as long as the lock
 	// is held.
 	scope map[string]bool
@@ -854,17 +854,23 @@ func (s *Store) ReadForWriteLocked(user string) (active, closed []*Task, err err
 	return active, closed, nil
 }
 
-// ReadTaskForWriteLocked: what a write of the one task id needs: the open
-// tasks user sees and, of the closed ones, those of the file that holds the
-// task (none when it is open, or when no file has it). A change of a task
-// then reads and copies its own file, not every closed task of the wiki's
-// years; the write that follows (WriteBothLocked) writes whole only the
-// closed files read here, and reads any other it has to put a task into
-// (writeClosed).
+// ReadTaskForWriteLocked: what a write of the one task id needs
+// (ReadTasksForWriteLocked with that one id).
 func (s *Store) ReadTaskForWriteLocked(user, id string) (active, closed []*Task, err error) {
+	return s.ReadTasksForWriteLocked(user, map[string]bool{id: true})
+}
+
+// ReadTasksForWriteLocked: what a write of the tasks ids needs: the open
+// tasks user sees and, of the closed ones, those of the files that hold one
+// of the tasks (none when they are all open, or when no file has them). A
+// change of tasks then reads and copies their own files, not every closed
+// task of the wiki's years; the write that follows (WriteBothLocked) writes
+// whole only the closed files read here, and reads any other it has to put
+// a task into (writeClosed).
+func (s *Store) ReadTasksForWriteLocked(user string, ids map[string]bool) (active, closed []*Task, err error) {
 	// Closed tasks that wait to be filed (a month has ended, a year's file
 	// from before the months): this write reads everything and files them,
-	// as every write did; the next one reads its own file again.
+	// as every write did; the next one reads its own files again.
 	if s.unfiled(user) {
 		return s.ReadForWriteLocked(user)
 	}
@@ -872,13 +878,19 @@ func (s *Store) ReadTaskForWriteLocked(user, id string) (active, closed []*Task,
 	if active, err = s.ReadOpenStrict(user); err != nil {
 		return nil, nil, err
 	}
+	closed = []*Task{}
+	found := map[string]bool{} // an id counts once, wherever else it is too
 	for _, t := range active {
-		if t.ID == id {
-			return active, []*Task{}, nil
+		if ids[t.ID] {
+			found[t.ID] = true
 		}
 	}
-	// A closed one: this month's files first, then the archives, the
-	// newest first (what is changed is mostly what was closed lately).
+	if len(found) >= len(ids) {
+		return active, closed, nil
+	}
+	// Closed ones: this month's files first, then the archives, the
+	// newest first (what is changed is mostly what was closed lately),
+	// until each task is found.
 	type file struct{ path, owner string }
 	var current, archives []file
 	for _, o := range s.Owners(user) {
@@ -891,20 +903,27 @@ func (s *Store) ReadTaskForWriteLocked(user, id string) (active, closed []*Task,
 	}
 	sort.SliceStable(archives, func(i, j int) bool { return filepath.Base(archives[i].path) > filepath.Base(archives[j].path) })
 	for _, f := range append(current, archives...) {
+		if len(found) >= len(ids) {
+			break
+		}
 		kept, _, ok := peekFile(f.path)
-		if !ok || !slices.ContainsFunc(kept, func(t *Task) bool { return t.ID == id }) {
+		if !ok || !slices.ContainsFunc(kept, func(t *Task) bool { return ids[t.ID] && !found[t.ID] }) {
 			continue
 		}
-		if closed, err = ReadStrict(f.path); err != nil {
+		tasks, err := ReadStrict(f.path)
+		if err != nil {
 			return nil, nil, err
 		}
-		for _, t := range closed {
+		for _, t := range tasks {
 			t.Owner = f.owner
+			if ids[t.ID] {
+				found[t.ID] = true
+			}
 		}
+		closed = append(closed, tasks...)
 		s.scope[f.path] = true
-		return active, closed, nil
 	}
-	return active, []*Task{}, nil
+	return active, closed, nil
 }
 
 // unfiled: a closed task user sees is not in its month's file: a year's
@@ -1105,7 +1124,7 @@ func (s *Store) writeClosed(who, owner string, closed []*Task, reformat bool) ([
 			}
 		}
 	} else {
-		// A write that read some closed files (ReadTaskForWriteLocked):
+		// A write that read some closed files (ReadTasksForWriteLocked):
 		// those are the ones it writes whole; any other stays as it is.
 		for p := range s.scope {
 			if strings.HasPrefix(p, s.Dir(owner)+string(filepath.Separator)) {

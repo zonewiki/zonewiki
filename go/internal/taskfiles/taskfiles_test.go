@@ -1305,6 +1305,110 @@ func TestAWriteOfOneTaskReadsItsOwnFile(t *testing.T) {
 	}
 }
 
+// A write of several tasks (a batch, a delete) reads the open tasks and the
+// closed files that hold one of them, each once: no other closed file is
+// read or written, so an archive that can't be read doesn't stop it.
+func TestAWriteOfSeveralTasksReadsTheirFiles(t *testing.T) {
+	f := newStore(t, "alice")
+	f.write(t, "alice", []*Task{in("shop", task("o1", "", "")), task("i1", "", ""), task("mine", "alice", "")},
+		[]*Task{in("shop", task("c-now", "", "2026-06-01T09:00:00")), in("shop", task("c-may", "", "2026-05-02T09:00:00")),
+			in("shop", task("c-may2", "", "2026-05-03T09:00:00")), in("shop", task("c-apr", "", "2026-04-02T09:00:00")),
+			in("team", task("c-old", "", "2025-01-02T09:00:00")), task("mine-old", "alice", "2025-03-02T09:00:00")}, "Write")
+	f.put(t, "_tasks/lists/team/closed-2024-01.json", "not json")
+	some := func(message string, named []string, want []string, change func(active, closed []*Task) ([]*Task, []*Task)) {
+		t.Helper()
+		f.commits = nil
+		f.Lock()
+		defer f.Unlock()
+		set := map[string]bool{}
+		for _, id := range named {
+			set[id] = true
+		}
+		active, closed, err := f.ReadTasksForWriteLocked("alice", set)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := ids(closed); !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: closed tasks read %v, want %v", message, got, want)
+		}
+		active, closed = change(active, closed)
+		if err := f.WriteBothLocked("alice", active, closed, message); err != nil {
+			t.Fatal(err)
+		}
+	}
+	retitle := func(named ...string) func(active, closed []*Task) ([]*Task, []*Task) {
+		return func(active, closed []*Task) ([]*Task, []*Task) {
+			for _, x := range slices.Concat(active, closed) {
+				if slices.Contains(named, x.ID) {
+					x.Title = "Another"
+				}
+			}
+			return active, closed
+		}
+	}
+	// Open tasks only, of two owners: no closed file is read.
+	some("Open ones", []string{"o1", "mine"}, []string{}, retitle("o1", "mine"))
+	if want := []string{"alice|Open ones|_tasks/lists/shop/tasks.json private/alice/_tasks/tasks.json"}; !reflect.DeepEqual(f.commits, want) {
+		t.Errorf("commits %q, want %q", f.commits, want)
+	}
+	// An open one, two of one archive, one of another owner's and one nobody
+	// has: each file once, April's and the unreadable one not at all.
+	some("Mixed", []string{"i1", "c-may", "c-may2", "mine-old", "nope"}, []string{"c-may", "c-may2", "mine-old"},
+		retitle("i1", "c-may", "c-may2", "mine-old"))
+	if want := []string{"alice|Mixed|_tasks/tasks.json _tasks/lists/shop/closed-2026-05.json private/alice/_tasks/closed-2025-03.json"}; !reflect.DeepEqual(f.commits, want) {
+		t.Errorf("commits %q, want %q", f.commits, want)
+	}
+	// Tasks of two files are deleted: both files written without them, and
+	// the one left without a task removed.
+	some("Delete", []string{"c-now", "c-may"}, []string{"c-now", "c-may", "c-may2"}, func(active, closed []*Task) ([]*Task, []*Task) {
+		return active, slices.DeleteFunc(closed, func(x *Task) bool { return x.ID == "c-now" || x.ID == "c-may" })
+	})
+	if got := f.ids(t, "_tasks/lists/shop/closed-2026-05.json"); !reflect.DeepEqual(got, []string{"c-may2"}) {
+		t.Errorf("May's archive: %v", got)
+	}
+	if _, err := os.Stat(filepath.Join(f.root, "_tasks/lists/shop/closed.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the list's emptied closed.json is still there (%v)", err)
+	}
+	// One is closed and one reopened in one write: this month's file takes
+	// the one, the archive loses the other.
+	some("Both ways", []string{"o1", "c-may2"}, []string{"c-may2"}, func(active, closed []*Task) ([]*Task, []*Task) {
+		var a, c []*Task
+		for _, x := range slices.Concat(active, closed) {
+			switch x.ID {
+			case "o1":
+				x.ClosedAt = "2026-06-01T10:00:00"
+				c = append(c, x)
+			case "c-may2":
+				x.ClosedAt = ""
+				a = append(a, x)
+			default:
+				if x.ClosedAt == "" {
+					a = append(a, x)
+				} else {
+					c = append(c, x)
+				}
+			}
+		}
+		return a, c
+	})
+	if got := f.ids(t, "_tasks/lists/shop/closed.json"); !reflect.DeepEqual(got, []string{"o1"}) {
+		t.Errorf("this month's closed tasks: %v", got)
+	}
+	if got := f.ids(t, "_tasks/lists/shop/tasks.json"); !reflect.DeepEqual(got, []string{"c-may2"}) {
+		t.Errorf("the open tasks: %v", got)
+	}
+	// What the writes didn't name is as it was.
+	if got := f.ids(t, "_tasks/lists/shop/closed-2026-04.json"); !reflect.DeepEqual(got, []string{"c-apr"}) {
+		t.Errorf("April's archive: %v", got)
+	}
+	if got := f.ids(t, "_tasks/lists/team/closed-2025-01.json"); !reflect.DeepEqual(got, []string{"c-old"}) {
+		t.Errorf("another list's archive: %v", got)
+	}
+	if f.text(t, "_tasks/lists/team/closed-2024-01.json") != "not json" {
+		t.Error("the unreadable archive was written")
+	}
+}
+
 // An archive nobody read for a while is no longer kept parsed; the open
 // tasks and this month's closed ones stay.
 func TestIdleArchivesAreForgotten(t *testing.T) {

@@ -51,6 +51,7 @@ BUDGETS = {
     "a task changed (ms)": 60,                  # 29
     "a task completed (ms)": 70,                # 32
     "My tasks reordered (ms)": 50,              # 16
+    "ten tasks tagged at once (ms)": 80,        # 41
     "a search after a write (ms)": 250,         # 118
     "the repository per 100 writes (MB)": 7,    # 3.4
     "the same, packed (MB)": 1.2,               # 0.6
@@ -385,6 +386,18 @@ def test_the_tasks_at_a_teams_size(team, client):
     subprocess.run(join, check=True, capture_output=True)
     got["joining the packs (ms)"] = (time.perf_counter() - start) * 1000
     got["the same, joined (MB)"] = (repo_mb(root) - before) / writes * 100
+
+    # A batch: ten open tasks tagged at once, which reads no closed file
+    # (after the repository's growth is measured: that is of single writes).
+    ten = [t["id"] for t in shared[20:30]]
+    assert len(ten) == 10, "the bench's user has thirty shared tasks"
+    batches = 0
+    def tag():
+        nonlocal batches
+        batches += 1
+        return client.post("/api/tasks/batch-tag", json={"ids": ten, "add": [f"batch{batches}"]}, headers=HOST)
+    got["ten tasks tagged at once (ms)"], resp = timed(tag, n=7)
+    assert resp.status_code == 200 and len(resp.get_json()) == 10
 
     # What the Zone process holds after all of that (its resident memory):
     # the tasks it keeps parsed and the search index's, not every closed

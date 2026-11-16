@@ -655,7 +655,7 @@ func apiBatchComplete(w http.ResponseWriter, r *http.Request) error {
 	set := idSet(ids)
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
-	active, closed, err := taskFiles.ReadForWriteLocked(userOf(r))
+	active, closed, err := taskFiles.ReadTasksForWriteLocked(userOf(r), set)
 	if err != nil {
 		return err
 	}
@@ -885,9 +885,15 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 	}
+	named := map[string]bool{}
+	for _, c := range changes {
+		if id, ok := jsonobj.As[string](c["id"]); ok {
+			named[id] = true
+		}
+	}
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
-	active, closed, err := taskFiles.ReadForWriteLocked(userOf(r))
+	active, closed, err := taskFiles.ReadTasksForWriteLocked(userOf(r), named)
 	if err != nil {
 		return err
 	}

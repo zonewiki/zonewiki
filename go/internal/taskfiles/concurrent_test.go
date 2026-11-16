@@ -125,6 +125,40 @@ func TestReadersBesideWriters(t *testing.T) {
 		}()
 	}
 
+	// A write of several tasks, as a batch does it: what holds them read,
+	// each changed, written in one.
+	writers.Add(1)
+	go func() {
+		defer writers.Done()
+		for i := range rounds {
+			set := map[string]bool{own[i%len(own)]: true}
+			for k := range 4 {
+				set[shared[(i*5+k*13)%len(shared)]] = true
+			}
+			func() {
+				s.Lock()
+				defer s.Unlock()
+				active, closed, err := s.ReadTasksForWriteLocked("anna", set)
+				if err != nil {
+					fail("read for a batch: %v", err)
+					return
+				}
+				n := 0
+				for _, x := range slices.Concat(active, closed) {
+					if set[x.ID] {
+						x.Tags, n = []string{fmt.Sprintf("batch-%d", i)}, n+1
+					}
+				}
+				if n != len(set) {
+					fail("a batch of %d tasks finds %d", len(set), n)
+				}
+				if err := s.WriteBothLocked("anna", active, closed, "batch"); err != nil {
+					fail("write of a batch: %v", err)
+				}
+			}()
+		}
+	}()
+
 	// once: tasks has every task user sees, each once.
 	once := func(what, user string, tasks []*Task) {
 		ids := map[string]bool{}

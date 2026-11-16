@@ -1874,6 +1874,39 @@ class TestClosedArchive:
         results = client.get("/api/search?q=zephyrscale").get_json()
         assert any(r.get("type") == "task" for r in results)
 
+    def test_a_batch_reads_the_files_of_its_tasks(self, client, wiki_dir):
+        """A batch (tag, complete, update, delete) reads the open tasks and the
+        closed files that hold its tasks, not every archive: one that can't be
+        read doesn't stop it, and isn't written."""
+        year = date.today().year
+        write_closed(wiki_dir, f"closed-{year-1}-06.json", [
+            {"id": "old", "title": "Old", "closed_at": f"{year-1}-06-15T10:00:00"},
+            {"id": "old2", "title": "Beside it", "closed_at": f"{year-1}-06-16T10:00:00"}])
+        write_closed(wiki_dir, f"closed-{year-2}-05.json", [])
+        broken = wiki_dir / "_tasks" / f"closed-{year-2}-05.json"
+        broken.write_text("not json", encoding="utf-8")
+        a, b = (create_task(client, title=t).get_json()["id"] for t in ("One", "Two"))
+        post = lambda route, **body: client.post(f"/api/tasks/{route}", json=body)
+
+        resp = post("batch-tag", ids=[a, b, "old"], add=["seen"])
+        assert resp.status_code == 200, resp.get_data(as_text=True)
+        assert sorted(t["id"] for t in resp.get_json()) == sorted([a, b, "old"])
+        resp = post("batch-update", tasks=[{"id": a, "title": "One, again"}, {"id": "old", "title": "Old, again"}])
+        assert resp.status_code == 200 and len(resp.get_json()) == 2
+        assert post("batch-complete", ids=[a, b], completed=True).status_code == 200
+        assert post("batch-complete", ids=[a, "old"], completed=False).status_code == 200
+        assert post("batch-delete", ids=[b, "nobody-has-this"]).status_code == 204
+
+        open_now = {t["id"]: t for t in client.get("/api/tasks").get_json()}
+        assert set(open_now) == {a, "old"}
+        assert open_now["old"]["title"] == "Old, again" and open_now["old"]["tags"] == ["seen"]
+        assert open_now[a]["title"] == "One, again"
+        # The archive keeps the task the batches didn't name; the broken one is as it was.
+        held = lambda name: [t["id"] for t in json.loads((wiki_dir / "_tasks" / name).read_text(encoding="utf-8"))]
+        assert held(f"closed-{year-1}-06.json") == ["old2"]
+        assert held("closed.json") == []
+        assert broken.read_text(encoding="utf-8") == "not json"
+
 
 class TestClosedByYear:
     """Earlier months' closed tasks (the archives) are shown by year in
