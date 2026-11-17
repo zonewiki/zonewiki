@@ -181,3 +181,46 @@ def test_the_phones_bar_has_groups(alice, wiki):
     assert last["x"] + last["width"] <= box["x"] + box["width"] + 1 and box["width"] <= 391     # nothing pushed off the screen
     alice.locator('.action-buttons .action-module[data-module="groups"]').click()
     alice.wait_for_url("**/page/groups/dev/index")
+
+
+# ── A group of your own ──────────────────────────────────────────────────────
+
+def test_make_a_group_say_who_is_in_it_and_rename_it(page, wiki, monkeypatch):
+    """Someone in no group makes one from the user menu's Groups, is in it
+    and owns it; under Manage… they say who else is in it and what it is
+    called, and its page goes along with a new name."""
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "t1"), "bob": ("pw", "t2"), "carol": ("pw", "t3")})
+    page.request.post("/login", form={"username": "bob", "password": "pw"})
+    page.goto("/page/index")
+    expect(page.locator('.module-switch .module-link[data-module="groups"]')).to_have_count(0)     # in no group: no pill
+    page.locator(".top-user").click()
+    page.get_by_role("menuitem", name="Groups").click()
+    page.wait_for_url("**/groups")
+    expect(page.locator(".groups-none")).to_have_text("You are in no group.")
+    page.get_by_label("The group's name").fill("apollo")
+    page.get_by_label("Who else is in it").fill("alice")
+    page.get_by_role("button", name="Make the group").click()
+    expect(page.locator(".users-done")).to_contain_text("Made the group apollo")
+    row = page.locator('.groups-list li[data-group="apollo"]')
+    expect(row.locator(".group-who")).to_contain_text("alice, bob")
+    expect(row.locator(".group-who")).to_contain_text("owned by bob")
+    expect(page.locator('.module-switch .module-link[data-module="groups"] .module-label')).to_have_text("apollo")   # the pill, by its name
+    # Its home, and a page there.
+    row.get_by_role("link", name="apollo").click()
+    page.wait_for_url("**/page/groups/apollo/index")
+    wiki.write("groups/apollo/roadmap", "# Roadmap\n")
+    # Manage…: carol in, alice out; then another name.
+    page.goto("/groups")
+    row.locator("summary").click()
+    row.get_by_label("People").fill("bob, carol")
+    row.get_by_role("button", name="Save").click()
+    expect(page.locator(".users-done")).to_contain_text("No longer in it: alice")
+    expect(row.locator(".group-who")).to_contain_text("bob, carol")
+    row.locator("summary").click()
+    row.get_by_label("Name").fill("artemis")
+    row.get_by_role("button", name="Rename").click()
+    expect(page.locator(".users-done")).to_contain_text("The group is called artemis now")
+    expect(page.locator(".groups-list .group-name")).to_have_text(["👥 artemis"])
+    assert (wiki.root / "groups/artemis/roadmap.md").exists() and not (wiki.root / "groups/apollo").exists()
+    page.goto("/page/groups/artemis/roadmap")
+    expect(page.locator("h1 .group-mark")).to_have_text("👥 artemis")

@@ -601,7 +601,8 @@ def test_a_groups_home_is_made_by_a_member_and_stays(client, wiki):
     for who in OUTSIDERS + ("vera",):       # vera is in the group, and a viewer: she makes nothing
         sign_in(client, who)
         assert client.get("/groups/dev", headers=HOST).status_code == 404
-        assert client.get("/groups", headers=HOST).status_code == (302 if who == "vera" else 404)
+        body = client.get("/groups", headers=HOST).get_data(as_text=True)   # their groups: vera's one, the others' none
+        assert ("👥 dev" in body) == (who == "vera") and SECRET not in body
     assert not (wiki / GROUP / "index.md").exists()
     sign_in(client, "carol")
     resp = client.get("/groups/dev", headers=HOST)
@@ -611,7 +612,7 @@ def test_a_groups_home_is_made_by_a_member_and_stays(client, wiki):
     assert git(wiki, "log", "-n1", "--format=%an|%s") == "carol|Create groups/dev/index"
     assert client.get("/groups/dev", headers=HOST).headers["Location"] == "/page/groups/dev/index"     # there: nothing made
     assert git(wiki, "log", "-n1", "--format=%s") == "Create groups/dev/index"
-    assert client.get("/groups", headers=HOST).headers["Location"] == "/groups/dev"                    # her one group
+    assert re.findall(r'<a href="/groups/([\w-]+)"><span class="group-name">', client.get("/groups", headers=HOST).get_data(as_text=True)) == ["dev"]
     body = client.get("/page/groups/dev/index", headers=HOST).get_data(as_text=True)
     assert "Rename…" not in body and "Share…" not in body
     assert client.post("/delete/groups/dev/index", headers=HOST).status_code == 400

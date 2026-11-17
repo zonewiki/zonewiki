@@ -10,7 +10,7 @@ import (
 
 var testKeys = Keys{Top: []string{"locale", "noshare", "hosts"}, User: []string{"password", "mcp-token"},
 	UserName: regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`),
-	Group:    []string{"includes"}, GroupName: regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,39}$`)}
+	Group:    []string{"includes", "owners"}, GroupName: regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,39}$`)}
 
 func parse(text string) (*File, error) { return Parse("config", text, testKeys) }
 
@@ -140,5 +140,24 @@ func TestGroupSections(t *testing.T) {
 	want = "locale = de\n\n[user alice]\npassword = h\n\n[user bob]\npassword = h\n\n[user product]\npassword = p\n\n[group all]\nincludes = product\n"
 	if f.Text() != want {
 		t.Errorf("remove:\n%s", f.Text())
+	}
+}
+
+func TestGroupEdits(t *testing.T) {
+	f, err := parse("[user alice]\npassword = h\n\n# The project\n[group apollo]\nincludes = dev\n# who says who is in it\nowners = alice\n\n[group all]\nincludes = apollo\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.UnsetGroup("apollo", "includes")
+	f.UnsetGroup("apollo", "nothing")
+	f.UnsetGroup("none", "includes")
+	f.RenameGroup("apollo", "artemis") // the header's line alone
+	f.RenameGroup("none", "other")
+	want := "[user alice]\npassword = h\n\n# The project\n[group artemis]\n# who says who is in it\nowners = alice\n\n[group all]\nincludes = apollo\n"
+	if f.Text() != want {
+		t.Errorf("edits:\n%s", f.Text())
+	}
+	if again, err := parse(f.Text()); err != nil || again.Group("artemis") == nil || again.Group("apollo") != nil {
+		t.Errorf("what the edits wrote: %v", err)
 	}
 }

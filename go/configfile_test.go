@@ -622,6 +622,20 @@ func TestGroupCommand(t *testing.T) {
 	if code, out, _ := run("includes", "product"); code != 0 || out != "product includes design, dev: alice, bob.\n" {
 		t.Errorf("includes alone: %q", out)
 	}
+	// Owners: who says who is in it, in the browser.
+	if code, out, errs := run("owners", "dev", "+alice", "+bob", "-bob"); code != 0 || !strings.HasPrefix(out, "dev's owners: alice.") ||
+		!strings.Contains(readFile(t, path), "\n[group dev]\nowners = alice\n") {
+		t.Errorf("owners +: %d %q %q\n%s", code, out, errs, readFile(t, path))
+	}
+	if code, out, _ := run("list"); code != 0 || !strings.Contains(out, "  dev (owners: alice): alice\n") {
+		t.Errorf("list with owners: %q", out)
+	}
+	if code, _, errs := run("owners", "dev", "+nobody"); code != 1 || !strings.Contains(errs, "no user") {
+		t.Errorf("an owner who is no user: %d %q", code, errs)
+	}
+	if code, out, _ := run("owners", "dev", "-alice"); code != 0 || !strings.Contains(out, "no owner") || strings.Contains(readFile(t, path), "[group dev]") {
+		t.Errorf("owners -: %q\n%s", out, readFile(t, path))
+	}
 	if code, out, _ := run("includes", "dev"); code != 0 || out != "dev: alice.\n" {
 		t.Errorf("a plain group: %q", out)
 	}
@@ -920,5 +934,69 @@ func TestTrustedProxies(t *testing.T) {
 	f := &settingsfile.File{Top: map[string]settingsfile.Value{"trusted-proxies": {Value: "my-proxy", Line: 3}}}
 	if _, err := loadSettings(f); err == nil || !strings.Contains(err.Error(), "line 3: trusted-proxies = my-proxy isn't an IP address") {
 		t.Errorf("a name: %v", err)
+	}
+}
+
+func TestGroupOwners(t *testing.T) {
+	user := func(name, more string) string {
+		return "[user " + name + "]\npassword = " + hashPassword("p") + "\n" + more
+	}
+	text := user("alice", "groups = apollo\n") + user("bob", "groups = apollo, dev\n") + user("carol", "role = viewer\n") +
+		user("dan", "disabled = yes\n") + user("eve", "role = admin\n") +
+		"[group apollo]\nowners = Alice, @carol, dan, gone\n[group all]\nincludes = apollo\nowners = bob\n"
+	f, err := parseConfig(text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := loadSettings(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(s.Owners["apollo"], []string{"alice", "carol", "dan", "gone"}) || !slices.Equal(s.Owners["all"], []string{"bob"}) ||
+		!slices.Equal(s.groups(), []string{"all", "apollo", "dev"}) || !slices.Equal(s.directMembers("apollo"), []string{"alice", "bob"}) ||
+		len(s.directMembers("all")) != 0 {
+		t.Errorf("owners %v groups %v", s.Owners, s.groups())
+	}
+	for _, c := range []struct {
+		user, group    string
+		owner, manages bool
+	}{
+		{"alice", "apollo", true, true},
+		{"bob", "apollo", false, false},  // in it, not its owner
+		{"carol", "apollo", true, false}, // a viewer changes nothing
+		{"dan", "apollo", false, false},  // disabled
+		{"gone", "apollo", false, false}, // no user (removed): no error, and no owner
+		{"eve", "apollo", false, true},   // an admin says it of any group
+		{"eve", "dev", false, true},
+		{"bob", "all", true, true},
+		{"alice", "all", false, false},
+		{"alice", "dev", false, false}, // a group without owners is an admin's
+	} {
+		if s.ownerOf(c.user, c.group) != c.owner || s.managesGroup(c.user, c.group) != c.manages {
+			t.Errorf("%s and %s: owner %v, manages %v", c.user, c.group, s.ownerOf(c.user, c.group), s.managesGroup(c.user, c.group))
+		}
+	}
+	if _, err := parseConfig(user("alice", "") + "[group apollo]\nmembers = alice\n"); err == nil {
+		t.Error("a key a group's section doesn't have is an error")
+	}
+	if bad, _ := parseConfig(user("alice", "") + "[group apollo]\nowners = alice, no_name\n"); bad != nil {
+		if _, err := loadSettings(bad); err == nil || !strings.Contains(err.Error(), "no_name") {
+			t.Errorf("an owner that is no user's name: %v", err)
+		}
+	}
+	// The line edits: a key that goes leaves the section while it says something else.
+	setIncludes(f, "all", nil)
+	setOwners(f, "apollo", []string{"alice"})
+	dropOwner(f, "bob")
+	if strings.Contains(f.Text(), "[group all]") || !strings.Contains(f.Text(), "[group apollo]\nowners = alice\n") {
+		t.Errorf("after the edits:\n%s", f.Text())
+	}
+	// A rename: on the users, in what includes it, its section.
+	f, _ = parseConfig(text)
+	renameGroupInFile(f, settingsOf(f.Text()), "apollo", "zeus")
+	now := settingsOf(f.Text())
+	if !slices.Equal(now.Users["bob"].Groups, []string{"dev", "zeus"}) || !slices.Equal(now.Includes["all"], []string{"zeus"}) ||
+		!slices.Equal(now.Owners["zeus"], []string{"alice", "carol", "dan", "gone"}) || slices.Contains(now.groups(), "apollo") {
+		t.Errorf("after the rename:\n%s", f.Text())
 	}
 }

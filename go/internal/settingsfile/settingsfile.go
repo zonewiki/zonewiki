@@ -249,6 +249,17 @@ func (f *File) set(section, key, value string) {
 // Unset takes key's line out of user's section ("": the top).
 func (f *File) Unset(user, key string) { f.unset(header(user), key) }
 
+// UnsetGroup: Unset, in the section of the group name.
+func (f *File) UnsetGroup(name, key string) { f.unset("group "+name, key) }
+
+// RenameGroup gives the section of the group old the name name (its header's
+// line alone: what names the group elsewhere is the caller's).
+func (f *File) RenameGroup(old, name string) {
+	if start, _ := f.sectionRange("group " + old); start >= 0 {
+		f.Lines[start] = "[group " + name + "]"
+	}
+}
+
 func (f *File) unset(section, key string) {
 	start, end := f.sectionRange(section)
 	for i := max(start, 0); start >= 0 && i < end; i++ {

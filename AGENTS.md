@@ -107,9 +107,10 @@ Auth is optional (a password, or users; see Key Constraints).
 │   ├── config.go           # What is fixed for the process, from the environment (read once into cfg)
 │   ├── configfile.go       # The settings file .zone/config: its keys, Settings (settings(), reloaded when the file changes), the line edits
 │   ├── storage.go          # upload-max and storage-max: sizes (25MB), what the wiki holds (not .git/, .zone/), checkRoom
-│   ├── commands.go         # zonewiki user (add, passwd, token, role, group, disable, enable, invite, reset, remove, list), zonewiki group (includes, list) and zonewiki config (check, set, unset, passwd, token), which edit the settings file (filelock_*.go: one at a time)
+│   ├── commands.go         # zonewiki user (add, passwd, token, role, group, disable, enable, invite, reset, remove, list), zonewiki group (includes, owners, list) and zonewiki config (check, set, unset, passwd, token), which edit the settings file (filelock_*.go: one at a time)
 │   ├── security.go         # Host and Origin checks, the page policy, login, signed session (and its user), throttles
 │   ├── users.go            # Users: roles, groups (who is in which, also by way of a group made of groups), password hashes, sign-in, the password prompt, who a task can be assigned to (assignable, the reserved names me and none)
+│   ├── groups.go           # Groups in the browser (/groups): a group made by whoever may write, who owns it; its owners say who is in it (written on the users, as an admin's change); a group renamed, its folder, the lists for it and the settings along
 │   ├── admin.go            # The admin page (/admin, admins), its Users tab: roles, groups and the groups made of groups, disable, remove, writing the settings file as the commands do
 │   ├── links.go            # Invite and reset links: .zone/links, /welcome/<token>
 │   ├── signup.go           # Sign-up: /signup, the mail with its link, the account a sign-up link makes
@@ -202,7 +203,7 @@ It lives in the host directory pointed to by `ZONE_DATA` (default: `~/zonewiki`)
 ./run.sh screenshots  # redo the README's screenshots from a sample wiki
 ./run.sh eval [FILE]  # measure retrieval on your wiki (questions in FILE, default _eval/retrieval.json in the wiki)
 ./run.sh user add|passwd|token|role|group|disable|enable|remove NAME, user list  # the users in the wiki's settings file (.zone/config)
-./run.sh group includes NAME [+G] [-G], group list  # groups made of groups ([group NAME] in the settings file)
+./run.sh group includes NAME [+G] [-G], group owners NAME [+U] [-U], group list  # groups made of groups and a group's owners ([group NAME] in the settings file)
 ./run.sh config check|set|unset|passwd|token  # the wiki's settings file: check it, set a key, password and MCP token without users
 ```
 
@@ -319,6 +320,7 @@ and commit the new pins.
     **A shared list can be for some** (`"for"` in its entry, which is in the list's own folder, `_tasks/lists/<name>/list.json`; Lists for some in `docs/spec/tasks.md`): the store leaves that folder out for anyone else (`Store.dirs(who, owner)`: pass the user, `taskfiles.Everyone` only for what Zone does over all the tasks and filters later), `canSeeTask` and `canSeePath` ask `taskFiles.SeesList`, and a task there is given only to a member. Code that reads task files itself, or shows a shared task or list to "everyone signed in", must ask them too; `tests/test_list_members.py` probes the routes.
     **A group's pages** (`groups/<group>/`, with users; Group pages in `docs/spec/users.md`) are its members': the same functions answer (`placeOf` gives a page's place: everyone's, a user's, a group's, no one's), so code that asks `canSee`/`canSeePath` holds for them, and code that asks "is this private" must say which it means (`place.shared`, `place.own`, `place.within`).
     A group's folder is its group's whoever is in it (a group nobody is in: seen by no one), and a page moves to more people, never to fewer (`sharedIntoPrivate`).
+    **A group can be made by anyone who may write** (`go/groups.go`, A group of your own in `docs/spec/users.md`), who owns it: what a non-admin changes in the settings file is one group's name on the users and that group's `owners`, for a group they own, and a new group never takes a name that something goes by (`groupNameTaken`: a group, a folder in `groups/`, a list's `for`), or it would be handed that folder or list. Don't widen either.
     A new route gets a probe in `tests/test_privacy.py`, which fails until it has one; `tests/test_group_pages.py` runs the same probes against a group's folder.
     A path handed to git names one file, never a pattern (`GIT_LITERAL_PATHSPECS` in package `gitrepo`'s environment): don't turn that off for a call that takes a page's name.
   - **Guides are an admin's** (with users): `canWrite` is false for anyone else on `wiki-guide`, a folder's `AGENTS.md`/`CLAUDE.md` and the pages they pull in (`adminsOnly`, Guides in `docs/spec/users.md`): every user's assistant follows them.

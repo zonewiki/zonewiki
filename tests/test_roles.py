@@ -169,6 +169,9 @@ WRITES = [
     ("POST /admin/users/{name}/groups", "POST", "/admin/users/carol/groups", {"data": {"groups": "dev"}}),
     ("POST /admin/groups/includes", "POST", "/admin/groups/includes", {"data": {"group": "product", "includes": "dev"}}),
     ("POST /admin/users/invite", "POST", "/admin/users/invite", {"data": {"name": "dave", "role": "admin"}}),
+    ("POST /groups", "POST", "/groups", {"data": {"name": "carols", "people": "alice"}}),
+    ("POST /groups/{group}/people", "POST", "/groups/dev/people", {"data": {"people": "carol", "owners": "carol"}}),
+    ("POST /groups/{group}/rename", "POST", "/groups/dev/rename", {"data": {"name": "carols"}}),
 ]
 
 # Writes that change nothing shared, or are someone else's to check.

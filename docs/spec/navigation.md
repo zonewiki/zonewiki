@@ -64,9 +64,10 @@ Tasks is in neither a shared nor a private group: it shows the shared tasks and 
 The groups were Wiki · Tasks and Private · Notes,
 by who sees them,
 until 2026-11. Who is signed in,
+**Groups** (your groups, and where you make one: `/groups`, Groups in `docs/spec/users.md`),
 **Connect an assistant** (your MCP token, `/assistant`, `docs/spec/mcp.md`),
 **Change password** (`/password`, Signing in in `docs/spec/users.md`) and Sign out are in the **user menu**,
-opened by the **user button** at the top right on desktop (phones have Sign out in the page's top row, and both pages' links in the shortcuts dialog).
+opened by the **user button** at the top right on desktop (phones have Sign out in the page's top row, and the three pages' links in the shortcuts dialog).
 Without users there is one pill, Wiki · Tasks · Notes.
 The Tasks link goes to **My tasks** (`/tasks?mine=1`; Lists → My tasks in `docs/spec/tasks.md`): one task app of what is yours: the tasks in your own lists (your Inbox, your private lists) and the shared tasks assigned to you; without users every task but those of a list left out.
 In a wiki without lists the link goes to `/tasks`, which is the same tasks (`tasksLinkHref`, `moduleLinks`).

@@ -72,7 +72,7 @@ includes = dev, design
 | `signup-approval` | `yes`: an account made by sign-up can't sign in until an admin approves it | no |
 
 - **Format**: `key = value` (spaces optional), the wiki's settings before the first section, a `[user NAME]` section per user with `password`, `mcp-token`, `role`, `groups`, `disabled`, `email` and `pending` (`configKeys`, `userKeys`; Roles and Sign-up, below),
-  and a `[group NAME]` section for a group made of other groups, with `includes` (`groupKeys`; Groups, below).
+  and a `[group NAME]` section for a group that says more than its name: `includes`, the groups it is made of, and `owners`, the users who say who is in it (`groupKeys`; Groups, below).
   `#` starts a comment only at the start of a line, so `noshare = #noshare` is a value.
 - **Sizes** (`upload-max`, `storage-max`; `parseSize` in `go/storage.go`): bytes (`300`), or a number with KB, MB, GB or TB, any case, a space optional, decimals too (`1.5GB`).
   They count by 1024, as Zone's caps always have (100 MB is 100 × 1024 × 1024 bytes).
@@ -152,7 +152,8 @@ The file can be edited by hand, or with the commands; a running Zone takes each 
 ./run.sh user role carol editor        # change a role
 ./run.sh user group carol +dev -hiring # put her in the group dev, take her out of hiring; alone: her groups
 ./run.sh group includes product +dev +design  # a group made of groups: who is in dev or design is in product; -dev takes one out
-./run.sh group list                    # the groups: what each includes, and who is in it
+./run.sh group owners apollo +anna -bo  # who says who is in the group, in the browser (Groups); alone: its owners
+./run.sh group list                    # the groups: what each includes, its owners, and who is in it
 ./run.sh user disable bob              # he can't sign in, his token stops; user enable bob undoes it
 ./run.sh user remove bob               # his private pages and tasks stay on disk
 ./run.sh user remove alice --password  # the last user: the wiki's password instead (or --open: no login)
@@ -254,6 +255,7 @@ A name that is none is an error of the settings file, which then keeps the setti
 - **What a group is for**: what is for some and not for all. `memberOf(user, group)` asks; a disabled user is a member of none.
   A task list can be for groups (`"for": ["@hiring"]`: Lists for some, in `docs/spec/tasks.md`), and a user put in a group or taken out sees its lists, or no longer, at their next request.
 - **A role is not a group**: an admin is in no group by being admin, and sees nothing of a group they are not in. They may put themselves in one, which the log of the settings shows ("alice's groups").
+- **Who makes one**: an admin, as above, or anyone who may write, in the browser (A group of your own, below).
 
 **A group made of groups**: when two teams share something, don't name everyone twice. Give the larger group a section that says which groups it is made of:
 
@@ -268,11 +270,33 @@ A list for both teams is then for one group (`"for": ["@product"]`).
 - **It goes through**: `company` may include `product`, and whoever is in `dev` is in all three. Who has `product` named on them (`groups = product`) is in it as before, and not thereby in `dev`.
 - **A group that includes itself**, directly or by way of others, is an error of the file naming its line ("[group a] includes itself, by way of b"; `includesItself` in `go/configfile.go`), as is a name in `includes` that is no group's.
   A name nobody is in is none: a group made of empty groups has no members.
-- **The section has the one key `includes`** (`groupKeys`), and any other is an error. A group without a section is its name on users, as above.
+- **The section has the keys `includes` and `owners`** (`groupKeys`; owners: A group of your own, below), and any other is an error. A group without a section is its name on users, as above.
 - **Set it** with `zonewiki group includes product +dev +design` (`-dev` takes one out; alone it says what the group includes and who is in it now; `zonewiki group list` says it of every group: `product includes design, dev: alice, bob`; `groupMain` in `go/commands.go`), in the Users tab's **Groups** part (Managing users, below), or by hand in the file.
-  Taking the last group out removes the section. The settings' log says it ("product includes design, dev").
+  Taking the last group out removes the key, and the section when it says nothing else (`setGroupKey`). The settings' log says it ("product includes design, dev").
 - **Taking a group out is a narrowing**, like taking a user out of a group: its people no longer see what is for the larger group at their next request, and their tasks in its lists count as no one's (Lists for some in `docs/spec/tasks.md`).
   The command and the page say who that was ("No longer in product: bob. What is for @product they no longer see."); putting the group back gives it all back.
+**A group of your own** (`go/groups.go`, `groups.html`): a project is six names from three teams, and nobody should wait for an admin to have a place for it.
+On **Groups** (`/groups`: the user menu's entry, **All your groups** in the pill's menu, a link in the shortcuts dialog) whoever may write makes a group: a name, and who else is in it.
+They are in it and are its **owner**; from the next request `groups/<name>/` is its people's and a task list can be for `@<name>`, as with any group.
+
+- **Who is in it is still said on the users**: making the group writes its name into the `groups` of each of its people, and `owners = <you>` into a section `[group <name>]` (`makeGroupOp`, `setMembers`). So `memberOf`, a group made of groups and the Users tab's Groups field hold for it unchanged, and an admin sees and sets it like any other.
+- **Its owners say who is in it** (`Settings.Owners`, `ownerOf`, `managesGroup`): on `/groups` a group you own has **Manage…**, with **People** (the users named on it, `directMembers`; who is in it by way of a group it includes isn't listed and isn't this field's), **Owners**, and **Save** (`POST /groups/<group>/people`, `groupPeopleOp`).
+  An owner's change touches that one name on the users and the group's `owners`, nothing else of the settings file.
+  Taking someone out is a narrowing, as an admin's is: they no longer see the group's pages and lists at their next request, and the page says who that was.
+  A group keeps an owner (the last can't take themselves out; they name who takes it over first). An owner needn't be in the group: they then see none of its pages.
+  A removed user owns nothing (`dropOwner`), and a name in `owners` that is no user is none.
+- **An admin manages every group**, owned or not: the Users tab says "owned by anna" beside it, the admin's Groups field on a user works as before, and `zonewiki group owners NAME +anna -bo` gives a group owners or takes them (none left: the group is an admin's alone again, as one made on the host).
+- **A name that is taken is refused** (`groupNameTaken`): a group there is, a name a group is said to include, a folder in `groups/` (a group nobody is in keeps its folder, and a new group of that name would get its pages), or a name a task list is for.
+  The groups' names are no secret among a wiki's users (a list's Who it is for… completes from them), so "taken" tells nothing new.
+- **Not for a viewer** (who changes nothing: 403), a visitor, or a wiki without users (404).
+- **What it doesn't do**: change what a group includes (an admin's), or let a member leave by themselves (they ask an owner).
+
+**A group renamed** (`renameGroupOp`): **Rename** under Manage… on `/groups`, for its owners, and a Name field per group in the Users tab, for an admin (`POST /groups/<group>/rename`, `name`; `from=admin` answers on the admin page).
+What is the group's by its name goes along, so nobody loses anything: the lists that are for `@old` are for `@new`; the folder `groups/old/` becomes `groups/new/`, every link to its pages re-pointed on pages and in tasks, the files its pages show and those no page shows along, and a home that still says what Zone wrote says the new name; then the settings name it anew, on the users, in the groups that include it and its own section.
+The order is that one: until the settings change nobody is in the new name's group, so what has moved is seen by no one for that moment and never by more; a step that fails puts the ones before it back.
+It is up to three commits (the lists, the folder with its links, the files no page shows), by whoever renamed it; an admin who is not in the group moves its pages without seeing any.
+The new name must be free, as a new group's. There is no command for it: a rename writes pages and task files, which only the running server does (One process, in `AGENTS.md`).
+
 - **How it is kept**: `Settings.Includes` is what each section says; `joinGroups` works out once, when the settings are read, every group each user is in (`User.In`), and `memberOf` looks there, so asking costs what it did.
 
 ### Viewers
@@ -345,6 +369,7 @@ It has section tabs (`adminTabs`), of which **Users** (`/admin/users`, `users.ht
   an open link of theirs goes too).
   There is no field to type another user's password: the admin never knows it.
 - **Groups** (below the users, `#groups`): every group there is, who is in it now, and a field with the groups it includes (`dev, design`; **Set**; empty: none, and the section goes).
+  Beside a group's name: "pages" when its folder is there, and "owned by anna" when it has owners (who say who is in it on their Groups page: A group of your own, above); a **Name** field renames it, its pages and lists along (`POST /groups/<group>/rename` with `from=admin`: A group renamed, above).
   **Make a group of groups** below it takes a new group's name and what it includes.
   Both are `POST /admin/groups/includes` (`group`, `includes`; `groupIncludesRoute`): a group that would include itself, or a name that is no group's, is refused and nothing changes.
   Done, the page says who is in the group now, and who no longer is (`?done=includes&group=…&left=…`, of which it says only users' names).
@@ -625,7 +650,7 @@ A new page is made private from the start (below).
 Pages in `groups/<group>/` (and its subfolders) are that group's: whoever is in the group sees and changes them, and to anyone else there is no such page, as with another user's private page.
 A team inside a larger wiki keeps there what only the team should read.
 
-**To use it**: an admin puts the people in a group (`zonewiki user group anna +dev`, or the Users tab; a group can be made of other groups, so `groups/product/` is for whoever is in dev or in design: Groups, above).
+**To use it**: make a group on **Groups** (`/groups`, in the user menu: a name and who is in it; you own it and say who else joins), or have an admin put the people in one (`zonewiki user group anna +dev`, or the Users tab; a group can be made of other groups, so `groups/product/` is for whoever is in dev or in design: Groups, above).
 From then on `groups/dev/` is theirs: make a page there from a link (`[[groups/dev/roadmap]]`), with New page, by renaming one of your private pages into it, or through an assistant (`write_page` with that slug).
 There is nothing to set up for the folder itself: it is the folder of the group `dev` whether or not a page is in it yet.
 
@@ -646,7 +671,7 @@ There is nothing to set up for the folder itself: it is the folder of the group 
 - **The way in** (`go/private.go`): a pill in the switcher, for whoever is in a group (Modules in `docs/spec/navigation.md`; **g g**): called by the group for who is in one, **Groups** with a menu of them for who is in several.
   `/groups/<group>` opens the group's home, `groups/<group>/index`, and makes it on the first visit of someone in the group who may write, from a small template (`# dev`, a line that the pages in this folder are seen and changed by whoever is in the group, a `## Links` heading; committed in their name, `Create groups/dev/index`).
   It is an ordinary page of the group; like the wiki's home and a private one it can't be renamed or deleted (`isGroupHome`, `isProtected`). To anyone not in the group the address is a 404 that makes nothing.
-  `/groups` lists the groups of someone in several: who is in each, the groups it is made of, how many pages its folder holds.
+  `/groups` lists your groups, those you are in and those you own: who is in each (by name up to eight, a larger one by its number), the groups it is made of, its owners, how many pages its folder holds; and it is where a group is made, managed and renamed (A group of your own, above).
 - **The mark**: a group's page shows **👥 dev** beside its title (`.group-mark`, a link to the group's home; its tooltip says who sees the page: "@dev: anna, bo and carol see this page", a group of more than eight by its number), 👥 in the search modal's page list (`group` in `/api/pages-list`), on a search result (`resultMeta`: "👥 groups/dev · edited …") and before a group's page in `[[` completion.
   🔒 stays what is yours alone; a shared page has no mark.
   **The breadcrumb names the place, not the path** (`buildBreadcrumb`): "👥 dev › Roadmap" and "🔒 Private › Diary", the first crumb leading to the place's home (in a browser the navigation trail takes the crumbs' place: `docs/spec/navigation.md`).
@@ -673,7 +698,7 @@ There is nothing to set up for the folder itself: it is the folder of the group 
 - **Assistants** (`docs/spec/mcp.md`): a group's page is a page at a path, so there is nothing new to call: `write_page` with `groups/dev/…` makes one, `rename_page` moves one (to more people, never to fewer), `upload_file` with `page` keeps a file with it.
   An assistant is told who sees a page with every answer about one that isn't everyone's ("seen by: the group @dev only …"), and the instructions name the folders of the groups its user is in.
 - **What it is not**: encrypted, or hidden from whoever has the wiki's folder or its repository (as private pages).
-  Not a folder for named people, or one whose readers some of its members only are: a group is who it is for.
+  Not a folder whose readers some of its members only are: a group is who it is for. (A folder for named people is the folder of a group they make: A group of your own, above.)
 - **Tests**: `tests/test_group_pages.py` gives the group dev a page (committed, deleted, uncommitted), an upload and a guide holding a word no answer to anyone else may contain, and runs the probes of `tests/test_privacy.py`, aimed at the group's folder, as an editor and as an admin who are not in it: every route and MCP read tool, and every write (the folder's files stay byte for byte).
   A route or tool probed there is probed here; further tests cover its members, a viewer among them, joining and leaving without a restart, a group made of groups, the moves, uploads, the guide, the history and a folder of no group. `TestGroupFolders` in `go/access_test.go` has the rule's table, `TestAGroupsPagesAreInItsMembersIndexAlone` the search.
 

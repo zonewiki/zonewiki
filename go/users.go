@@ -63,6 +63,50 @@ func parseGroups(value string) (groups []string, bad string) {
 	return groups, ""
 }
 
+// parseNames: the users a value names (commas or spaces between them, a
+// leading @ allowed), lowercase, A–Z, each once; the first word that is no
+// user's name as bad. Whether there is such a user is the caller's.
+func parseNames(value string) (names []string, bad string) {
+	for _, w := range strings.FieldsFunc(value, func(r rune) bool { return r == ',' || unicode.IsSpace(r) }) {
+		name := strings.ToLower(strings.TrimPrefix(w, "@"))
+		if !userNameRE.MatchString(name) {
+			return nil, w
+		}
+		if !slices.Contains(names, name) {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+	return names, ""
+}
+
+// ownerOf: user is an owner of group (owners in its section), and can use
+// the wiki.
+func (s *Settings) ownerOf(user, group string) bool {
+	u := s.Users[user]
+	return u != nil && !u.Disabled && slices.Contains(s.Owners[group], user)
+}
+
+// managesGroup: user says who is in group, and what it is called: its
+// owners, and every admin (who sets any user's groups anyway). Not a
+// viewer, who changes nothing.
+func (s *Settings) managesGroup(user, group string) bool {
+	return (s.ownerOf(user, group) || s.isAdmin(user)) && !s.isViewer(user)
+}
+
+// directMembers: the users whose section names group (not those in it by
+// way of a group it is made of), disabled ones too, A–Z: what an owner's
+// field lists and sets.
+func (s *Settings) directMembers(group string) []string {
+	var out []string
+	for _, name := range sortedKeys(s.Users) {
+		if slices.Contains(s.Users[name].Groups, group) {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
 // memberOf: user is in group (named on them, or by way of a group it is
 // made of), and can use the wiki (not disabled).
 func (s *Settings) memberOf(user, group string) bool {

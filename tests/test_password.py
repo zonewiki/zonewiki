@@ -54,7 +54,7 @@ class TestWithUsers:
     def test_the_menu_and_the_help_dialog_offer_it(self, bob):
         body = bob.get("/page/index", headers=HOST).data.decode()
         assert '<a href="/password" role="menuitem" class="menu-password">Change password</a>' in body
-        assert '· <a href="/password">Change password</a></p>' in body
+        assert '· <a href="/password">Change password</a> · <a href="/groups">Groups</a></p>' in body
         resp = bob.get("/password", headers=HOST)
         body = resp.data.decode()
         assert resp.status_code == 200 and "<h1>Change your password</h1>" in body

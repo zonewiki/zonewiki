@@ -287,7 +287,7 @@ case "${1:-up}" in
     echo "  screenshots - redo the README's screenshots (docs/screenshots/)"
     echo "  eval [FILE] - measure search on your wiki against questions in FILE (in the wiki)"
     echo "  user add|passwd|token|role|group|disable|enable|remove NAME, user list - the users in the wiki's settings file"
-    echo "  group includes NAME [+G] [-G], group list - groups made of groups, in the wiki's settings file"
+    echo "  group includes NAME [+G] [-G], group owners NAME [+U] [-U], group list - groups made of groups and a group's owners, in the wiki's settings file"
     echo "  config check|set|unset|passwd|token - the wiki's settings file: check it, set a key, the password"
     echo "                and MCP token without users"
     exit 1

@@ -103,7 +103,8 @@ type userRow struct {
 type groupRow struct {
 	Name, Includes string
 	Members        []string
-	Folder         bool // groups/<name>/ is there: the group has pages
+	Owners         []string // who says who is in it, in the browser (groups.go); none: an admin
+	Folder         bool     // groups/<name>/ is there: the group has pages
 }
 
 // adminTab: a section tab of the admin page.
@@ -133,6 +134,8 @@ func usersPage(w http.ResponseWriter, r *http.Request) {
 		if len(left) > 0 {
 			done += " No longer in it: " + strings.Join(left, ", ") + ". What is for @" + group + " they no longer see."
 		}
+	} else if group := r.URL.Query().Get("group"); r.URL.Query().Get("done") == "renamed" && groupNameRE.MatchString(group) {
+		done = groupsDone("renamed", group, "")
 	} else if r.URL.Query().Get("done") == "revoke" && userNameRE.MatchString(name) {
 		done = "Revoked the link for " + name + ": it no longer works."
 	} else if u := latestSettings().Users[name]; u != nil {
@@ -181,7 +184,7 @@ func usersData(r *http.Request) *usersView {
 		Signup: signupOn(s), SignupRole: s.SignupRole, SignupDomains: s.SignupDomains, SignupApproval: s.SignupApproval,
 		BreadcrumbHTML: breadcrumb(newReq(r), []crumb{{"Admin", "/admin"}, {"Users", ""}}, "", false, "", "")}
 	for _, g := range s.groups() {
-		v.GroupRows = append(v.GroupRows, groupRow{Name: g, Includes: strings.Join(s.Includes[g], ", "), Members: s.groupMembers(g),
+		v.GroupRows = append(v.GroupRows, groupRow{Name: g, Includes: strings.Join(s.Includes[g], ", "), Members: s.groupMembers(g), Owners: s.Owners[g],
 			Folder: isDir(filepath.Join(cfg.Data, groupsDir, g))})
 	}
 	v.Stray = append(strayGroups(), strayPrivate()...)
@@ -384,6 +387,7 @@ func userRemoveRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := changeSettings(userOf(r), func(f *settingsfile.File) error {
+		dropOwner(f, u.Name)
 		f.RemoveUser(u.Name)
 		return nil
 	})

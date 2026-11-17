@@ -1540,12 +1540,31 @@ kbd {
 .user-name { font-weight: 500; }
 .user-you, .users-help { color: var(--muted); font-weight: normal; }
 .groups-list { list-style: none; padding: 0; margin: 1rem 0 0; }
-.groups-list li { display: grid; grid-template-columns: minmax(8rem, 1fr) 2fr auto; gap: .25rem 1rem; align-items: baseline; padding: .6rem 0; border-top: 1px solid var(--border); }
+.groups-list li { display: grid; grid-template-columns: minmax(8rem, 1fr) 2fr 7rem; gap: .25rem 1rem; align-items: baseline; padding: .6rem 0; border-top: 1px solid var(--border); }
 .groups-list a { color: var(--accent); text-decoration: none; }
 .groups-list a:hover { text-decoration: underline; }
 .groups-list .group-name { font-weight: 600; }
 .groups-list + p, h1 + .users-help { margin-top: .5rem; }
 .groups-list .group-who, .groups-list .group-pages { color: var(--muted); font-size: .9rem; }
+/* Who manages a group (its owners): its people, owners and name, folded. */
+.group-manage { grid-column: 1 / -1; }
+.group-manage > summary { display: inline-block; font-size: .8rem; cursor: pointer; list-style: none; }
+.group-manage > summary::-webkit-details-marker { display: none; }
+.group-form { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: center; margin: .6rem 0 0; }
+.group-form label { display: flex; align-items: center; gap: .4rem; font-size: .85rem; color: var(--muted); flex: 1 1 14rem; }
+.group-form input { flex: 1; min-width: 8rem; font: inherit; font-size: .9rem; padding: .3rem .5rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); }
+.group-form .users-help { flex-basis: 100%; margin: 0; }
+.groups-list .group-pages { text-align: right; }
+.groups-page :is(.users-done, .users-error) { margin: .75rem 0; font-size: .95rem; }
+.group-manage { margin-top: .25rem; }
+.groups-none { color: var(--muted); }
+@media (max-width: 640px) {
+  .groups-list li { grid-template-columns: 1fr auto; }
+  .groups-list .group-who { grid-column: 1 / -1; grid-row: 2; }
+  .groups-list .group-pages { grid-column: 2; grid-row: 1; }
+  .group-manage { grid-row: 3; }
+  .group-form input { font-size: 16px; }
+}
 .group-mark { text-decoration: none; white-space: nowrap; }
 .group-mark-name { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: .6em; font-weight: 600; color: var(--muted); vertical-align: middle; }
 .group-mark:hover .group-mark-name { color: var(--accent); }
@@ -2251,7 +2270,7 @@ body.editor-page main {
   .breadcrumb .module-link:not([data-module="wiki"]), .breadcrumb .module-label,
   .breadcrumb .module-group + .module-group,
   .breadcrumb .module-menu-btn { display: none; }
-  .module-menu :is(.menu-who, .menu-signout, .menu-admin, .menu-assistant, .menu-password) { display: none; }
+  .module-menu :is(.menu-who, .menu-signout, .menu-admin, .menu-assistant, .menu-password, .menu-groups) { display: none; }
   .module-menu-backdrop { background: rgba(0, 0, 0, .35); }
   /* Keep the end of the page and the toasts clear of the bar. */
   body:has(.action-buttons) main { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }

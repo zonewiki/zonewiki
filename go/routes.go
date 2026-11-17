@@ -23,7 +23,7 @@ import (
 
 func pageRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /private", privateRoute) // pagesMu only to make the home (privateRoute)
-	mux.HandleFunc("GET /groups", groupsRoute)
+	groupsRoutes(mux)
 	mux.HandleFunc("GET /groups/{group}", groupRoute) // pagesMu only to make the home (groupRoute)
 	mux.HandleFunc("GET /notes", notesPage)
 	mux.HandleFunc("GET /page/{slug...}", viewPage)

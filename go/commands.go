@@ -40,8 +40,11 @@ const userUsage = `Usage: zonewiki user COMMAND
 const groupUsage = `Usage: zonewiki group COMMAND
   includes NAME [+G] [-G]  make the group NAME of other groups: who is in G is in NAME too (+dev),
                            or no longer by way of it (-dev); alone: what NAME includes, and who is in it
-  list                     the groups: what each includes, and who is in it
-A user is put in a group with: zonewiki user group NAME +GROUP`
+  owners NAME [+USER] [-USER]  the users who say who is in the group NAME, and rename it, in the
+                           browser (Groups); alone: its owners
+  list                     the groups: what each includes, its owners, and who is in it
+A user is put in a group with: zonewiki user group NAME +GROUP
+A group is renamed in the browser (Groups, or the admin page): its pages and lists follow.`
 
 const configUsage = `Usage: zonewiki config COMMAND
   check            check the settings and show those in effect
@@ -431,7 +434,8 @@ func groupMain(args []string, getenv func(string) string, stdout, stderr io.Writ
 	}
 	list := args[0] == "list" && len(args) == 1
 	includes := args[0] == "includes" && len(args) >= 2 && !strings.HasPrefix(args[1], "-") && !strings.HasPrefix(args[1], "+")
-	if !list && !includes {
+	owners := args[0] == "owners" && len(args) >= 2 && !strings.HasPrefix(args[1], "-") && !strings.HasPrefix(args[1], "+")
+	if !list && !includes && !owners {
 		fmt.Fprintln(stderr, groupUsage)
 		return 2
 	}
@@ -455,6 +459,36 @@ func groupMain(args []string, getenv func(string) string, stdout, stderr io.Writ
 	}
 	name := named[0]
 	before := settingsOf(f.Read)
+	if owners {
+		now := slices.Clone(before.Owners[name])
+		for _, arg := range args[2:] {
+			add, out := strings.HasPrefix(arg, "+"), strings.HasPrefix(arg, "-")
+			u, bad := parseNames(arg[min(1, len(arg)):])
+			if !add && !out || bad != "" || len(u) != 1 {
+				return fail("%q isn't +USER or -USER.", arg)
+			}
+			if add && before.Users[u[0]] == nil {
+				return fail("no user %q. See them with: zonewiki user list", u[0])
+			}
+			now = slices.DeleteFunc(now, func(o string) bool { return o == u[0] })
+			if add {
+				now = append(now, u[0])
+			}
+		}
+		slices.Sort(now)
+		if len(args) > 2 {
+			setOwners(f, name, now)
+			if err := saveConfig(f); err != nil {
+				return fail("%v", err)
+			}
+		}
+		if len(now) == 0 {
+			fmt.Fprintf(stdout, "%s has no owner: an admin says who is in it.\n", name)
+		} else {
+			fmt.Fprintf(stdout, "%s's owners: %s. They say who is in it, in the browser (Groups).\n", name, strings.Join(now, ", "))
+		}
+		return 0
+	}
 	now := slices.Clone(before.Includes[name])
 	for _, arg := range args[2:] {
 		add, out := strings.HasPrefix(arg, "+"), strings.HasPrefix(arg, "-")
@@ -484,12 +518,29 @@ func groupMain(args []string, getenv func(string) string, stdout, stderr io.Writ
 }
 
 // setIncludes writes what a group includes in the settings file (nothing:
-// no section, the group is its name on users again).
+// no key, and no section when it says nothing else: the group is its name
+// on users again).
 func setIncludes(f *settingsfile.File, name string, includes []string) {
-	if len(includes) == 0 {
-		f.RemoveGroup(name)
-	} else {
-		f.SetGroup(name, "includes", strings.Join(includes, ", "))
+	setGroupKey(f, name, "includes", includes)
+}
+
+// setOwners writes a group's owners in the settings file (none: no key).
+func setOwners(f *settingsfile.File, name string, owners []string) {
+	setGroupKey(f, name, "owners", owners)
+}
+
+// setGroupKey writes a key of a group's section (no values: the key goes,
+// and with its last key the section).
+func setGroupKey(f *settingsfile.File, name, key string, values []string) {
+	if len(values) > 0 {
+		f.SetGroup(name, key, strings.Join(values, ", "))
+		return
+	}
+	f.UnsetGroup(name, key)
+	if parsed, err := parseConfig(f.Text()); err == nil {
+		if g := parsed.Group(name); g != nil && len(g.Values) == 0 {
+			f.RemoveGroup(name)
+		}
 	}
 }
 
@@ -499,6 +550,9 @@ func groupLine(s *Settings, group string) string {
 	line := group
 	if in := s.Includes[group]; len(in) > 0 {
 		line += " includes " + strings.Join(in, ", ")
+	}
+	if owners := s.Owners[group]; len(owners) > 0 {
+		line += " (owners: " + strings.Join(owners, ", ") + ")"
 	}
 	if members := s.groupMembers(group); len(members) > 0 {
 		return line + ": " + strings.Join(members, ", ")
@@ -552,6 +606,7 @@ func (c *userCommand) remove() int {
 	case !last && (c.passwordFlag || c.openFlag):
 		return c.fail("--password and --open are for the last user; there are others.")
 	}
+	dropOwner(c.f, c.name)
 	c.f.RemoveUser(c.name)
 	if c.passwordFlag {
 		password, ok := askPassword(c.stdin, c.stderr)

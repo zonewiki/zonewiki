@@ -17,7 +17,10 @@ In a public wiki (`ZONE_PUBLIC`; Public wikis in `docs/spec/security.md`) a visi
 | GET    | `/new`                | A form for a new page's name (without JavaScript; pages are made from links to them) |
 | POST   | `/new`                | Create `<slug>.md` and redirect to it; `private=1` (with users): in your private folder |
 | GET    | `/private`            | With users: your private home `private/<you>/index` (made on the first visit); 404 without users |
-| GET    | `/groups`             | The groups you are in: the one group's home for who is in one, the list of them for who is in several; 404 for who is in none |
+| GET    | `/groups`             | Your groups: those you are in and those you own, with who is in each; the form that makes one, and Manage… for those you own (Groups in `docs/spec/users.md`); 404 without users |
+| POST   | `/groups`             | Makes a group (`name`, `people`): you are in it and own it; refused for a name that is taken, 403 for a viewer |
+| POST   | `/groups/<group>/people` | Who is in the group by name, and its owners (`people`, `owners`), for its owners and admins; 404 for anyone else |
+| POST   | `/groups/<group>/rename` | The group's new name (`name`): its folder, the links to its pages, the lists for it and the settings follow; for its owners and admins, 404 for anyone else |
 | GET    | `/groups/<group>`     | A group's home `groups/<group>/index` (made on the first visit of someone in the group who may write); 404 for anyone not in it |
 | GET    | `/admin`, `/admin/users`    | The admin page, for admins (Managing users in `docs/spec/users.md`): `/admin` opens its first tab, Users; 404 for everyone else |
 | GET    | `/assistant`                | Connect an assistant: the MCP token of whoever is signed in (without users, the wiki's), made and revoked in the browser (`docs/spec/mcp.md`) |

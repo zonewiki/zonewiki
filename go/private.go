@@ -5,7 +5,6 @@ package main
 
 import (
 	"bytes"
-	"html/template"
 	"net/http"
 	"net/url"
 	"os"
@@ -133,45 +132,6 @@ func groupRoute(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	http.Redirect(w, r, pathURL("page", slug), http.StatusFound)
-}
-
-// groupsRoute: GET /groups, where the switcher's Groups goes: the one
-// group's home for who is in one, the list of their groups' homes for who is
-// in several; 404 for who is in none (and without users).
-func groupsRoute(w http.ResponseWriter, r *http.Request) {
-	s := settings()
-	u := s.Users[userOf(r)]
-	if u == nil || u.Disabled || len(u.In) == 0 {
-		http.NotFound(w, r)
-		return
-	}
-	if len(u.In) == 1 {
-		http.Redirect(w, r, "/"+groupsDir+"/"+u.In[0], http.StatusFound)
-		return
-	}
-	rq := newReq(r)
-	v := &groupsView{BreadcrumbHTML: breadcrumb(rq, []crumb{{"Groups", ""}}, "/groups", true, "Groups", "")}
-	for _, g := range u.In {
-		v.Groups = append(v.Groups, groupLink{Name: g, Who: s.groupMembers(g), Includes: s.Includes[g],
-			Pages: len(pagesIn(rq, groupsDir+"/"+g))})
-	}
-	page(w, rq, http.StatusOK, "groups.html", "Groups", shell{}, v)
-}
-
-// groupsView: /groups (groups.html): the groups the user is in.
-type groupsView struct {
-	view
-	BreadcrumbHTML template.HTML
-	Groups         []groupLink
-}
-
-// groupLink: a group as /groups lists it: who is in it, the groups it is
-// made of, how many pages its folder holds.
-type groupLink struct {
-	Name     string
-	Who      []string
-	Includes []string
-	Pages    int
 }
 
 // pagesIn: the pages in folder the request may see.
