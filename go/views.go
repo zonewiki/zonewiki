@@ -185,6 +185,11 @@ type moduleLink struct {
 	Own              bool
 	Menu             bool
 	Tip              string // the Groups link's tooltip: the group, or the groups
+	// The Groups link, in the switcher: Name, the one group the user is in,
+	// which the pill is called by; Groups, the several they are in, which
+	// the pill opens as a menu (the tab bar says Groups and goes to /groups).
+	Name   string
+	Groups []string
 }
 
 func moduleLinks(rq *Req) []moduleLink {
@@ -218,9 +223,10 @@ func moduleLinks(rq *Req) []moduleLink {
 		link := moduleLink{Key: m[0], Label: m[1], Href: href, Current: current == m[0], Group: group, Own: own}
 		if m[0] == "groups" {
 			// One group: its home, under its name. Several: the list of them.
-			link.Tip = "Your groups: " + strings.Join(groups, ", ")
+			link.Tip, link.Groups = "Your groups: "+strings.Join(groups, ", "), groups
 			if len(groups) == 1 {
 				link.Href, link.Tip = "/"+groupsDir+"/"+groups[0], "@"+groups[0]+": "+groupWho(groups[0])+" its pages"
+				link.Name, link.Groups = groups[0], nil
 			}
 		}
 		if m[0] == "tasks" {

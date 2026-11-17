@@ -642,7 +642,7 @@ There is nothing to set up for the folder itself: it is the folder of the group 
   Without users `groups/` is an ordinary folder.
 - **To more people, never to fewer** (`place.within`, `sharedIntoPrivate` in `go/pages.go`): one of your private pages moves into a group you are in, a group's page into the folder of a group that includes its own (`groups/dev/x` → `groups/product/x` while product includes dev) or out to everyone.
   A shared page doesn't move into a group's folder ("a shared page stays shared"), nor a group's page into a private folder or another group's ("its group has seen it: it stays with at least them"). Between groups it goes by how they are made, not by who happens to be in them.
-- **The way in** (`go/private.go`): **Groups** in the switcher, for whoever is in a group (Modules in `docs/spec/navigation.md`; **g g**).
+- **The way in** (`go/private.go`): a pill in the switcher, for whoever is in a group (Modules in `docs/spec/navigation.md`; **g g**): called by the group for who is in one, **Groups** with a menu of them for who is in several.
   `/groups/<group>` opens the group's home, `groups/<group>/index`, and makes it on the first visit of someone in the group who may write, from a small template (`# dev`, a line that the pages in this folder are seen and changed by whoever is in the group, a `## Links` heading; committed in their name, `Create groups/dev/index`).
   It is an ordinary page of the group; like the wiki's home and a private one it can't be renamed or deleted (`isGroupHome`, `isProtected`). To anyone not in the group the address is a 404 that makes nothing.
   `/groups` lists the groups of someone in several: who is in each, the groups it is made of, how many pages its folder holds.

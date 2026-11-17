@@ -656,11 +656,18 @@ def test_the_place_is_named_not_the_path(client, wiki):
     assert [m for m, _ in nav(body)] == ["wiki", "groups", "private", "tasks", "notes"]
     assert 'href="/groups/dev" class="module-link" data-module="groups" title="@dev: alice, carol and vera see its pages" aria-current="page"' in body
     assert 'data-module="groups"' in plans and 'data-module="groups" title="@dev: alice, carol and vera see its pages" aria-current' not in plans
+    # One group: the pill is called by it, and there is no menu.
+    switch = plans.split('class="breadcrumb-home', 1)[1].split("</nav>", 1)[0]
+    assert '<span class="module-label">dev</span>' in switch and "groups-menu" not in switch
+    assert '<span class="action-label">Groups</span>' in plans              # the phone's tab keeps the word
     # In several groups, Groups goes to the list of them.
     _set_config(wiki, lambda t: t.replace("groups = dev\n", "groups = dev, ops\n", 1) + "\n[group product]\nincludes = dev\n")
     assert _until(lambda: 'href="/groups" class="module-link" data-module="groups" title="Your groups: dev, ops, product"' in client.get(
         "/page/plans", headers=HOST).get_data(as_text=True))
     body = client.get("/groups", headers=HOST).get_data(as_text=True)
+    switch = body.split('class="breadcrumb-home', 1)[1].split("</nav>", 1)[0]
+    assert '<span class="module-label">Groups</span>' in switch              # several: the pill says Groups, and has them as a menu
+    assert re.findall(r'<a href="(/groups[^"]*)" role="menuitem"', switch) == ["/groups/dev", "/groups/ops", "/groups/product", "/groups"]
     assert re.findall(r'<a href="/groups/([\w-]+)"><span class="group-name">', body) == ["dev", "ops", "product"]
     assert "alice, carol, vera" in body and "(whoever is in dev)" in body and "5 pages" in body and "no page yet" in body
     assert 'data-module="groups" title="Your groups: dev, ops, product" aria-current="page"' in body

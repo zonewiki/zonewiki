@@ -56,8 +56,10 @@ and your tools,
 **Tasks · Notes** (`group` in `moduleLinks`; on the phone's tab bar a divider between them).
 Private and Notes each carry a lock (`.module-lock` in the link, tooltip "Private: only you see it", "Notes: only you see it"; `own` in `moduleLinks`).
 **Groups** stands between Wiki and Private for whoever is in a group (Group pages in `docs/spec/users.md`): Wiki · Groups · Private.
-With one group it goes to that group's home (`/groups/<group>`, tooltip "@dev: anna, bo and carol see its pages"), with several to `/groups`, the list of your groups with who is in each and the way to its home (`groupsRoute`, `groups.html`).
-A page in a group's folder makes it the current module; **g g** goes where the link goes; the phone's tab bar has it too.
+**With one group the pill is called by the group** ("dev", a small people icon before it; a long name is cut with an ellipsis at 9rem) and goes to that group's home (`/groups/<group>`, tooltip "@dev: anna, bo and carol see its pages").
+**With several it says Groups and opens them as a menu** (`.groups-menu`, `popoverMenu` in `js/chrome.js`, the user menu's code: under the pill, ↑/↓ move, Esc closes and returns the focus; each group's home, then **All your groups**).
+The link itself goes to `/groups`, the list of your groups with who is in each and the way to its home (`groupsRoute`, `groups.html`): what Ctrl+click, **g g**, the phone's tab and a browser without JavaScript get.
+A page in a group's folder makes it the current module; the phone's tab bar has the tab too, always under the word Groups.
 Tasks is in neither a shared nor a private group: it shows the shared tasks and your own private ones, and its home may be in your folder.
 The groups were Wiki · Tasks and Private · Notes,
 by who sees them,

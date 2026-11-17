@@ -10,7 +10,8 @@
 {{- /* The root of every breadcrumb: the Z logo with "Wiki" (the home page),
     then Tasks and Notes; with users Wiki and Private, then Tasks and Notes,
     each group a pill of its own (.module-group), Private and Notes with a
-    lock (only you see them). Phones and the editor show the logo only
+    lock (only you see them); Groups, for who is in a group, between Wiki
+    and Private. Phones and the editor show the logo only
     (style.css). The trail code in js/chrome.js keeps it as the first crumb. */}}
 {{define "module_switch" -}}
 <nav class="breadcrumb-home module-switch" aria-label="{{.app_name}}">
@@ -22,10 +23,18 @@
 {{- if ne .Group $open}}{{if ge $open 0}}</span>{{end}}<span class="module-group">{{$open = .Group}}{{end -}}
 <a href="{{.Href}}" class="module-link" data-module="{{.Key}}"{{with .Counts}} title="{{.Title}}"{{end}}{{if .Own}} title="{{.Label}}: only you see it"{{end}}{{with .Tip}} title="{{.}}"{{end}}{{if .Current}} aria-current="page"{{end}}
 {{- if eq .Key "wiki"}} aria-label="{{.Label}} ({{$.app_name}} home)">{{template "icon_zone"}}{{else}}>{{end -}}
-{{if .Own}}<span class="module-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="module-label">{{.Label}}</span>{{with .Counts}}{{template "module_counts" .}}{{end}}</a>
+{{if .Own}}<span class="module-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}
+{{- /* Groups: one group's pill is called by the group; several open as a menu (js/chrome.js), and without JavaScript the link goes to their list. */ -}}
+{{if eq .Key "groups"}}<span class="module-lock" aria-hidden="true">{{template "icon_people"}}</span>{{end}}<span class="module-label">{{or .Name .Label}}</span>{{with .Counts}}{{template "module_counts" .}}{{end}}</a>
 {{- end -}}
 {{- end -}}
 {{- if ge $open 0}}</span>{{end -}}
+{{- range .links}}{{if .Groups}}
+<div class="groups-menu-backdrop module-menu-backdrop" hidden></div><div class="groups-menu module-menu page-menu" role="menu" aria-label="Your groups" hidden>
+{{- range .Groups}}<a href="/groups/{{.}}" role="menuitem">👥 {{.}}</a>{{end -}}
+<a href="/groups" role="menuitem" class="groups-menu-all">All your groups</a>
+</div>
+{{- end}}{{end -}}
 </nav>
 {{- end}}
 

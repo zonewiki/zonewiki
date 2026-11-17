@@ -1157,6 +1157,12 @@ main > .sheet > h2 { font-family: var(--serif); font-size: 1.45rem; font-weight:
   }
   /* The lock before Private and Notes: only you see these. */
   .module-lock { display: inline-flex; align-items: center; margin-right: -.15rem; color: var(--muted); }
+  /* A group's name is as long as its admin made it: the pill keeps its place in the row. */
+  .module-switch .module-link[data-module="groups"] .module-label {
+    max-width: 9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    /* The label's box is trimmed to its capitals (below): room for what is cut off above and below them. */
+    padding-block: .35em; margin-block: -.35em;
+  }
   /* A fixed height with the content centred, the label's box trimmed to its
      capitals: the letters sit in the middle whatever the font's metrics
      (padding tuned for one font, Segoe UI, put them high with another).
@@ -1193,6 +1199,7 @@ main > .sheet > h2 { font-family: var(--serif); font-size: 1.45rem; font-weight:
 .module-menu-backdrop { position: fixed; inset: 0; z-index: 999; }
 .module-menu-backdrop[hidden], .module-menu[hidden] { display: none !important; }
 .module-menu .menu-icon { margin-right: .5rem; }
+.groups-menu .groups-menu-all { margin-top: .2rem; padding-top: .5rem; border-top: 1px solid var(--border); border-radius: 0 0 4px 4px; color: var(--muted); }
 /* Who is signed in and Sign out: desktop only (a phone has them in the page's top row). */
 .module-menu .menu-who { padding: .35rem .8rem .45rem; font-size: .8rem; color: var(--muted); border-bottom: 1px solid var(--border); margin-bottom: .2rem; }
 .module-menu .menu-who strong { color: var(--fg); }

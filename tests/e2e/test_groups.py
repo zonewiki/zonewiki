@@ -96,11 +96,13 @@ def test_a_new_shared_page_from_a_groups_page_says_so(alice, wiki):
 # ── The way in ───────────────────────────────────────────────────────────────
 
 def test_groups_in_the_switcher_leads_to_the_groups_home(alice, wiki):
-    """One group: Groups goes to its home, made on the first visit; g g
-    does too; the mark beside a page's title names the group and leads back."""
+    """One group: its pill is called by the group and goes to its home, made
+    on the first visit; g g does too; the mark beside a page's title names
+    the group and leads back."""
     alice.goto("/page/index")
     switch = alice.locator(".module-switch .module-link")
-    expect(switch).to_have_text(["Wiki", "Groups", "Private", "Tasks", "Notes"])
+    expect(switch).to_have_text(["Wiki", "dev", "Private", "Tasks", "Notes"])
+    expect(alice.locator(".groups-menu")).to_have_count(0)
     switch.nth(1).click()
     alice.wait_for_url("**/page/groups/dev/index")
     expect(alice.locator("h1")).to_contain_text("dev")
@@ -135,7 +137,31 @@ def test_several_groups_are_listed(page, wiki, monkeypatch):
     monkeypatch.setattr(settings, "GROUPS", {"product": "dev, design"})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
     page.goto("/page/index")
+    # Several groups: the pill says Groups and opens them as a menu.
+    pill = page.locator('.module-switch .module-link[data-module="groups"]')
+    menu = page.locator(".groups-menu")
+    expect(pill).to_have_text("Groups")
+    expect(menu).to_be_hidden()
+    pill.click()
+    expect(menu).to_be_visible()
+    expect(pill).to_have_attribute("aria-expanded", "true")
+    expect(menu.get_by_role("menuitem")).to_have_text(["👥 dev", "👥 ops", "👥 product", "All your groups"])
+    expect(menu.get_by_role("menuitem").first).to_be_focused()
+    b, m = pill.bounding_box(), menu.bounding_box()
+    assert m["y"] >= b["y"] + b["height"] and abs(m["x"] - b["x"]) < 4      # under the pill
+    page.keyboard.press("ArrowDown")
+    expect(menu.get_by_role("menuitem", name="👥 ops")).to_be_focused()
+    page.keyboard.press("Escape")
+    expect(menu).to_be_hidden()
+    expect(pill).to_be_focused()
+    assert page.url.endswith("/page/index")
+    pill.click()
+    menu.get_by_role("menuitem", name="👥 ops").click()
+    page.wait_for_url("**/page/groups/ops/index")
+    expect(page.locator(".module-switch .module-link[data-module='groups']")).to_have_attribute("aria-current", "page")
+    # The list of them is the menu's last entry (and where g g, a phone's tab and a browser without JavaScript go).
     page.locator('.module-switch .module-link[data-module="groups"]').click()
+    menu.get_by_role("menuitem", name="All your groups").click()
     page.wait_for_url("**/groups")
     expect(page.locator(".groups-list .group-name")).to_have_text(["👥 dev", "👥 ops", "👥 product"])
     expect(page.locator(".groups-list li").last).to_contain_text("alice, bob")
@@ -149,6 +175,7 @@ def test_the_phones_bar_has_groups(alice, wiki):
     alice.goto("/page/index")
     bar = alice.locator(".action-buttons .action-module")
     expect(bar).to_have_count(5)
+    expect(bar.nth(1)).to_have_text("Groups")          # the tab's word stays short, whatever the group is called
     box = alice.locator(".action-buttons").bounding_box()
     last = alice.locator(".action-buttons .action-search").bounding_box()
     assert last["x"] + last["width"] <= box["x"] + box["width"] + 1 and box["width"] <= 391     # nothing pushed off the screen

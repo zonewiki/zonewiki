@@ -324,14 +324,15 @@ if (tasksLinks.length) {
   window.addEventListener('pageshow', e => { if (e.persisted) refreshDueBadge(); });
 }
 
-// ── The user menu ────────────────────────────────────────────────────────────
-// With users the user button at the top right opens a menu (who is signed in,
-// Sign out). One menu (.module-menu, rendered hidden): a popover under the
-// pressed button. ↑/↓ move, Esc closes and returns focus.
-(function () {
-  const menu = document.querySelector('.module-menu');
-  const backdrop = document.querySelector('.module-menu-backdrop');
-  const buttons = document.querySelectorAll('.module-menu-btn');
+// ── The user menu, and the groups' ───────────────────────────────────────────
+// A menu rendered hidden, opened as a popover under the button that was
+// pressed. ↑/↓ move, Esc closes and returns focus. With users the user
+// button at the top right opens one (.module-menu: who is signed in, Sign
+// out); for who is in several groups the switcher's Groups pill opens
+// another (.groups-menu: each group's home), where a click on the link
+// itself would go to the list of them (/groups, which is what a phone's tab
+// and a browser without JavaScript get).
+function popoverMenu(menu, backdrop, buttons) {
   if (!menu || !backdrop || !buttons.length) return;
   let opener = null;
   const items = () => [...menu.querySelectorAll('[role="menuitem"]')];
@@ -366,7 +367,12 @@ if (tasksLinks.length) {
     }
   }
   buttons.forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', e => {
+      // A link that opens a menu: with Ctrl, Shift or the middle button it is a link.
+      if (btn.tagName === 'A') {
+        if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+      }
       const again = opener === btn;
       close(false);
       if (!again) open(btn);
@@ -378,4 +384,14 @@ if (tasksLinks.length) {
   });
   backdrop.addEventListener('click', () => close(false));
   menu.addEventListener('click', () => close(false));
+}
+popoverMenu(document.querySelector('.module-menu:not(.groups-menu)'),
+  document.querySelector('.module-menu-backdrop:not(.groups-menu-backdrop)'), document.querySelectorAll('.module-menu-btn'));
+(function () {
+  const pill = document.querySelector('.module-switch .module-link[data-module="groups"]');
+  const menu = document.querySelector('.groups-menu');
+  if (!pill || !menu) return;
+  pill.setAttribute('aria-haspopup', 'menu');
+  pill.setAttribute('aria-expanded', 'false');
+  popoverMenu(menu, document.querySelector('.groups-menu-backdrop'), [pill]);
 }());
