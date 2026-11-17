@@ -23,6 +23,8 @@ import (
 
 func pageRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /private", privateRoute) // pagesMu only to make the home (privateRoute)
+	mux.HandleFunc("GET /groups", groupsRoute)
+	mux.HandleFunc("GET /groups/{group}", groupRoute) // pagesMu only to make the home (groupRoute)
 	mux.HandleFunc("GET /notes", notesPage)
 	mux.HandleFunc("GET /page/{slug...}", viewPage)
 	mux.HandleFunc("GET /api/page-preview/{slug...}", apiPagePreview)
@@ -226,7 +228,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 			EditSlug: slug, SectionKeys: sectionKeys(content, headings), SectionTasks: tasks}))
 	}
 	page(w, rq, http.StatusOK, "view.html", title, shell{wide: true}, &pageView{Title: title, Slug: slug,
-		FromUncommitted: fromUncommitted, Private: placeOf(slug).user() != "", ReadOnly: readOnly(rq.user, slug), TaskKeys: strings.Join(mdtext.TaskLineKeys(content), ","),
+		FromUncommitted: fromUncommitted, Private: placeOf(slug).user() != "", Group: placeOf(slug).group(), GroupTitle: groupTitle(slug), ReadOnly: readOnly(rq.user, slug), TaskKeys: strings.Join(mdtext.TaskLineKeys(content), ","),
 		BreadcrumbHTML: bc, DeleteDialogHTML: buildDeleteDialog(slug, title), RailTocHTML: railTocItems(string(article)),
 		MetaRowHTML: metaRow, ArticleHTML: article, LinkSections: sections, Outlinks: outlinks(rq, slug, path), Menu: menu})
 }
@@ -237,6 +239,7 @@ type pageView struct {
 	Title, Slug                                                             string
 	FromUncommitted                                                         bool   // opened from the uncommitted list: Commit instead of Edit
 	Private                                                                 bool   // in a private folder (the lock)
+	Group, GroupTitle                                                       string // in a group's folder: the group, and what its mark says (who sees the page)
 	ReadOnly                                                                bool   // a viewer's view of a shared page: no Edit, ✎ or ticks
 	TaskKeys                                                                string // a key per checkbox line (mdtext.TaskLineKeys), comma-separated
 	BreadcrumbHTML, DeleteDialogHTML, RailTocHTML, MetaRowHTML, ArticleHTML template.HTML
@@ -863,6 +866,7 @@ func apiPagesList(w http.ResponseWriter, r *http.Request) {
 		}
 		private := placeOf(p.Slug).user() != "" // not hidden above: the user's own
 		pages = append(pages, M{"slug": p.Slug, "title": title, "links": counts[p.Slug], "private": private,
+			"group": placeOf(p.Slug).group(), // a group's page (not hidden above: one of the user's groups)
 			"mtime": st.ModTime().Unix(), "created": fmtDate(changeTime(st)), "edited": fmtDate(st.ModTime())})
 	}
 	sort.SliceStable(pages, func(i, j int) bool {

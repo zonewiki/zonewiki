@@ -8,7 +8,7 @@
 {{template "rail_toc" .RailTocHTML}}
 <div class="page-col{{if .ReadOnly}} read-only{{end}}">
 <header class="page-header">
-  <h1>{{.Title}}{{if .Private}} <span class="lock" title="Private: only you see this page" aria-label="Private">🔒</span>{{end}}</h1>
+  <h1>{{.Title}}{{if .Private}} <span class="lock" title="Private: only you see this page" aria-label="Private">🔒</span>{{end}}{{if .Group}} <a class="lock group-mark" href="/groups/{{.Group}}" title="{{.GroupTitle}}" aria-label="A page of the group {{.Group}}">👥 <span class="group-mark-name">{{.Group}}</span></a>{{end}}</h1>
   <div class="page-header-actions">
   {{- if .FromUncommitted}}
     {{template "commit_form" (dict "filepath" (print .Slug ".md") "title" .Title "on_success" "/uncommitted")}}

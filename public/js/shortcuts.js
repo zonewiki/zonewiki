@@ -90,6 +90,9 @@ document.addEventListener('keydown', e => {
     resetPrefix();
     const dest = { h: '/page/index', n: '/notes', a: '/tasks', t: tasksLinkHref() };
     if (document.querySelector('.module-link[data-module="private"]')) dest.p = '/private';
+    // gg=your group's home (the list of them, with several): for who is in a group.
+    const groups = document.querySelector('.module-link[data-module="groups"]');
+    if (groups) dest.g = groups.getAttribute('href');
     if (dest[e.key]) { e.preventDefault(); window.location.href = dest[e.key]; }
     return;
   }

@@ -112,6 +112,8 @@ READS = [(route, method, aimed(path), aimed(kwargs)) for route, method, path, kw
     ("GET /groups/{group}/_assets/{file}", "GET", "/groups/ops/../dev/_assets/photo.png", {}),
     ("GET /_assets/{path...}", "GET", "/_assets/../groups/dev/_assets/photo.png", {}),
     ("GET /private/{user}/_assets/{file}", "GET", "/private/dev/_assets/photo.png", {}),
+    ("GET /groups/{group}", "GET", "/groups/dev", {}),
+    ("GET /groups/{group}", "GET", "/groups/Dev", {}),
     ("GET /page/{slug...}", "GET", f"/page/{GROUP}/AGENTS", {}),
     ("GET /page/{slug...}", "GET", f"/page/{GROUP}/index", {}),
     ("GET /history/{slug...}", "GET", "/history/plans", {}),
@@ -588,3 +590,113 @@ def test_new_page_asks_whom_it_is_for(client, wiki):
     assert 'name="private"' in form and 'name="for"' not in form
     assert client.post("/new", data={"slug": "X", "for": "group:dev"}, headers=HOST).headers["Location"] == "/edit/x"
     assert not (wiki / "groups/dev/x.md").exists()
+
+
+# ── The way in, and the marks ────────────────────────────────────────────────
+
+def test_a_groups_home_is_made_by_a_member_and_stays(client, wiki):
+    """/groups/dev opens groups/dev/index, made on the first visit of
+    someone in the group who may write; to anyone else it is a 404 that
+    makes nothing; the home is not renamed or deleted."""
+    for who in OUTSIDERS + ("vera",):       # vera is in the group, and a viewer: she makes nothing
+        sign_in(client, who)
+        assert client.get("/groups/dev", headers=HOST).status_code == 404
+        assert client.get("/groups", headers=HOST).status_code == (302 if who == "vera" else 404)
+    assert not (wiki / GROUP / "index.md").exists()
+    sign_in(client, "carol")
+    resp = client.get("/groups/dev", headers=HOST)
+    assert resp.status_code == 302 and resp.headers["Location"] == "/page/groups/dev/index"
+    text = (wiki / GROUP / "index.md").read_text()
+    assert text.startswith("# dev\n") and "whoever is in the group @dev" in text and "## Links" in text
+    assert git(wiki, "log", "-n1", "--format=%an|%s") == "carol|Create groups/dev/index"
+    assert client.get("/groups/dev", headers=HOST).headers["Location"] == "/page/groups/dev/index"     # there: nothing made
+    assert git(wiki, "log", "-n1", "--format=%s") == "Create groups/dev/index"
+    assert client.get("/groups", headers=HOST).headers["Location"] == "/groups/dev"                    # her one group
+    body = client.get("/page/groups/dev/index", headers=HOST).get_data(as_text=True)
+    assert "Rename…" not in body and "Share…" not in body
+    assert client.post("/delete/groups/dev/index", headers=HOST).status_code == 400
+    assert client.post("/rename/groups/dev/index", data={"new_name": "groups/dev/start"}, headers=HOST).status_code == 400
+    assert "can't be" in rename(client, "carol", "groups/dev/index", "groups/dev/start") and (wiki / GROUP / "index.md").exists()
+    sign_in(client, "vera")                 # now it is there, she reads it
+    assert client.get("/groups/dev", headers=HOST).headers["Location"] == "/page/groups/dev/index"
+    for bad in ("/groups/nobody", "/groups/Dev", "/groups/dev%2F..", "/groups/_x"):
+        assert client.get(bad, headers=HOST).status_code in (400, 404), bad
+
+
+def crumbs(html):
+    crumb = re.search(r'<div class="breadcrumb".*?</div>', html, re.S).group(0)
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", crumb.split("</nav>", 1)[1])).strip()
+
+
+def test_the_place_is_named_not_the_path(client, wiki):
+    """The mark beside the title, the breadcrumb, the page list, a search
+    result and the switcher say whose a page is: a group's (👥 and the
+    group), yours alone (🔒), or the wiki's (nothing)."""
+    (wiki / "private/alice/notes").mkdir(parents=True)
+    (wiki / "private/alice/notes/own.md").write_text(f"# Own\n\n{QUERY}\n")
+    sign_in(client, "alice")
+    body = client.get(f"/page/{DIARY}", headers=HOST).get_data(as_text=True)
+    assert ('<a class="lock group-mark" href="/groups/dev" title="@dev: alice, carol and vera see this page" '
+            'aria-label="A page of the group dev">👥 <span class="group-mark-name">dev</span></a>') in body and 'title="Private: only you see this page"' not in body
+    assert crumbs(body).startswith(f"› 👥 dev › Diary {SECRET}")                 # then the backlinks' chip
+    assert '<a href="/groups/dev">👥 dev</a>' in body
+    assert crumbs(client.get(f"/page/{GROUP}/deck", headers=HOST).get_data(as_text=True)).startswith("› 👥 dev › Tasks")
+    body = client.get("/page/private/alice/notes/own", headers=HOST).get_data(as_text=True)
+    assert crumbs(body).startswith("› 🔒 Private › Notes › Own") and '<a href="/private">🔒 Private</a>' in body
+    assert "group-mark" not in body and 'title="Private: only you see this page"' in body
+    plans = client.get("/page/plans", headers=HOST).get_data(as_text=True)
+    assert crumbs(plans).startswith("› Plans") and "group-mark" not in plans
+    listed = {p["slug"]: (p.get("private"), p.get("group")) for p in client.get("/api/pages-list", headers=HOST).get_json()}
+    assert listed[DIARY] == (False, "dev") and listed["private/alice/notes/own"] == (True, "") and listed["plans"] == (False, "")
+    results = client.get("/search", query_string={"q": QUERY}, headers=HOST).get_data(as_text=True)
+    assert "👥 groups/dev" in results and "🔒 private/alice/notes" in results
+    # The switcher: Groups, between Wiki and Private; on a group's page it is where you are.
+    nav = lambda html: re.findall(r'data-module="(\w+)"[^>]*?(aria-current="page")?[ >]', html.split('class="breadcrumb-home', 1)[1].split("</nav>", 1)[0])  # noqa: E731
+    body = client.get(f"/page/{DIARY}", headers=HOST).get_data(as_text=True)
+    assert [m for m, _ in nav(body)] == ["wiki", "groups", "private", "tasks", "notes"]
+    assert 'href="/groups/dev" class="module-link" data-module="groups" title="@dev: alice, carol and vera see its pages" aria-current="page"' in body
+    assert 'data-module="groups"' in plans and 'data-module="groups" title="@dev: alice, carol and vera see its pages" aria-current' not in plans
+    # In several groups, Groups goes to the list of them.
+    _set_config(wiki, lambda t: t.replace("groups = dev\n", "groups = dev, ops\n", 1) + "\n[group product]\nincludes = dev\n")
+    assert _until(lambda: 'href="/groups" class="module-link" data-module="groups" title="Your groups: dev, ops, product"' in client.get(
+        "/page/plans", headers=HOST).get_data(as_text=True))
+    body = client.get("/groups", headers=HOST).get_data(as_text=True)
+    assert re.findall(r'<a href="/groups/([\w-]+)"><span class="group-name">', body) == ["dev", "ops", "product"]
+    assert "alice, carol, vera" in body and "(whoever is in dev)" in body and "5 pages" in body and "no page yet" in body
+    assert 'data-module="groups" title="Your groups: dev, ops, product" aria-current="page"' in body
+    # Who is in no group has no Groups, and a page of a group's name tells them nothing.
+    sign_in(client, "bob")
+    body = client.get("/page/plans", headers=HOST).get_data(as_text=True)
+    assert 'data-module="groups"' not in body and "👥" not in body
+    assert "👥" not in client.get("/search", query_string={"q": QUERY}, headers=HOST).get_data(as_text=True)
+
+
+def test_filing_a_note_names_your_places_first(client, wiki):
+    (wiki / "projects").mkdir()
+    (wiki / "projects/x.md").write_text("# X\n")
+    sign_in(client, "alice")
+    client.get("/private", headers=HOST)
+    note = client.post("/api/notes", data={"title": "Standup"}, headers=HOST).get_json()["slug"]
+    body = client.get(f"/page/{note}", headers=HOST).get_data(as_text=True)
+    options = re.findall(r'<option value="([^"]*)"(?: label="([^"]*)")?>', body.split('id="promote-folders">', 1)[1].split("</datalist>", 1)[0])
+    assert options == [("groups/dev/", "👥 dev"), ("private/alice/", "🔒 Private"), ("projects/", "")]
+
+
+def test_the_admin_page_names_the_folders_no_one_sees(client, wiki):
+    """An admin sees no page of a group they aren't in, but which folders
+    there are that nobody sees, and which groups have pages."""
+    (wiki / "groups/ghosts").mkdir()
+    (wiki / "groups/ghosts/x.md").write_text("# X\n")
+    (wiki / "private/gone").mkdir(parents=True)
+    (wiki / "private/gone/y.md").write_text("# Y\n")
+    sign_in(client, "dana")
+    body = client.get("/admin/users", headers=HOST).get_data(as_text=True)
+    assert "<strong>Seen by no one:</strong> <code>groups/ghosts</code>, <code>private/gone</code>" in body
+    assert re.search(r'<td class="user-name">dev <span class="user-fact"[^>]*>pages</span></td>', body) and SECRET not in body
+    # Emptying a group says what stays.
+    for who in ("alice", "carol"):
+        client.post(f"/admin/users/{who}/groups", data={"groups": ""}, headers=HOST)
+    resp = client.post("/admin/users/vera/groups", data={"groups": ""}, headers=HOST)
+    body = client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True)
+    assert "Nobody is in dev now: its pages stay in the wiki, in groups/dev/, seen by no one." in body
+    assert "<code>groups/dev</code>" in body

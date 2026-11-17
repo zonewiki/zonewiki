@@ -182,8 +182,10 @@ func pathURL(parts ...string) string {
 	return b.String()
 }
 
-// isProtected: the home page and a user's private home, never renamed or deleted.
-func isProtected(slug string) bool { return slug == "index" || isPrivateHome(slug) }
+// isProtected: the home page, a user's private home and a group's home, never renamed or deleted.
+func isProtected(slug string) bool {
+	return slug == "index" || isPrivateHome(slug) || isGroupHome(slug)
+}
 
 // safePath is the page's file when it is inside the wiki and not in a
 // folder iterPages skips (_assets, _tasks, .leaf, .git …: no pages there,
@@ -1108,6 +1110,34 @@ func rewriteMovedLinks(moves map[string]string) ([]string, error) {
 		add(c)
 	}
 	return modified, linkErrors(append(errs, err))
+}
+
+// folderChoice: a folder as a field suggests it: its path, and for the
+// user's private folder and their groups' the place's name ("👥 dev").
+type folderChoice struct{ Path, Label string }
+
+// folderChoices: pageFolders, with the user's own places first and named:
+// their private folder and the folders of their groups, then what is in
+// them, then the wiki's folders, each A–Z. What is typed and saved is the
+// path all the same.
+func folderChoices(rq *Req) []folderChoice {
+	var own, wiki []folderChoice
+	for _, f := range pageFolders(rq) {
+		p := placeOf(f + "/x")
+		switch {
+		case p.kind == ofUser && p.own(rq.who()) && f == p.folder():
+			own = append(own, folderChoice{f, "🔒 Private"})
+		case p.kind == ofGroup && f == p.folder():
+			own = append(own, folderChoice{f, "👥 " + p.name})
+		case p.shared():
+			wiki = append(wiki, folderChoice{Path: f})
+		case p.kind == ofNoOne:
+			// private/ itself: what is put there no one sees.
+		default:
+			own = append(own, folderChoice{Path: f})
+		}
+	}
+	return append(own, wiki...)
 }
 
 // pageFolders: the folders that hold pages, A–Z, for filing a note

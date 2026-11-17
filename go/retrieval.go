@@ -1520,8 +1520,8 @@ func resultMeta(d *SearchDoc, names map[string]ListInfo) string {
 	}
 	edited := "edited " + fmtDate(d.Mtime)
 	lock := ""
-	if placeOf(d.Slug).user() != "" {
-		lock = "🔒 " // a user's own private page: no result shows another's
+	if icon, _ := placeMark(placeOf(d.Slug)); icon != "" {
+		lock = icon + " " // a user's own private page, or one of a group of theirs: no result shows another's
 	}
 	if i := strings.LastIndex(d.Slug, "/"); i >= 0 {
 		return lock + d.Slug[:i] + " · " + edited

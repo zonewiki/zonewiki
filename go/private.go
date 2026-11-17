@@ -5,9 +5,11 @@ package main
 
 import (
 	"bytes"
+	"html/template"
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -78,6 +80,153 @@ func privateRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, pathURL("page", slug), http.StatusFound)
+}
+
+// groupHomeText is what a new group's home holds.
+func groupHomeText(group string) string {
+	return "# " + group + "\n\nPages in this folder are seen and changed by whoever is in the group @" + group +
+		", and by no one else in this wiki.\n\n## Links\n\n"
+}
+
+// groupHomeSlug: the home of a group's folder ("groups/dev/index").
+func groupHomeSlug(group string) string { return groupsDir + "/" + group + "/index" }
+
+// isGroupHome: slug is a group's home (never renamed or deleted, like the
+// wiki's own home and a private one). Without users groups/ is an ordinary
+// folder.
+func isGroupHome(slug string) bool {
+	g := placeOf(slug).group()
+	return g != "" && strings.EqualFold(path.Clean(slug), groupHomeSlug(g))
+}
+
+// groupRoute: GET /groups/<group> opens the group's home, groups/<group>/
+// index, and makes it on the first visit of someone in the group who may
+// write (committed in their name); 404 to anyone who isn't in the group,
+// as for a group that isn't, and without users. Only a visit that makes
+// the home takes pagesMu, as a page write.
+func groupRoute(w http.ResponseWriter, r *http.Request) {
+	user, group := userOf(r), r.PathValue("group")
+	slug := groupHomeSlug(group)
+	if p := placeOf(slug); p.group() != group || !p.sees(user) {
+		http.NotFound(w, r)
+		return
+	}
+	file := safePath(slug)
+	if file == "" || !exists(file) {
+		if !canWrite(user, slug) {
+			http.NotFound(w, r) // a viewer makes nothing: no home until someone else made it
+			return
+		}
+		pagesMu.Lock()
+		var err error
+		if !exists(file) {
+			if err = os.MkdirAll(filepath.Dir(file), 0o777); err == nil {
+				if err = writeText(file, groupHomeText(group)); err == nil {
+					err = notCommitted(gitCommit(user, "Create "+slug, file))
+				}
+			}
+		}
+		pagesMu.Unlock()
+		if err != nil {
+			serverError(w, r, err)
+			return
+		}
+	}
+	http.Redirect(w, r, pathURL("page", slug), http.StatusFound)
+}
+
+// groupsRoute: GET /groups, where the switcher's Groups goes: the one
+// group's home for who is in one, the list of their groups' homes for who is
+// in several; 404 for who is in none (and without users).
+func groupsRoute(w http.ResponseWriter, r *http.Request) {
+	s := settings()
+	u := s.Users[userOf(r)]
+	if u == nil || u.Disabled || len(u.In) == 0 {
+		http.NotFound(w, r)
+		return
+	}
+	if len(u.In) == 1 {
+		http.Redirect(w, r, "/"+groupsDir+"/"+u.In[0], http.StatusFound)
+		return
+	}
+	rq := newReq(r)
+	v := &groupsView{BreadcrumbHTML: breadcrumb(rq, []crumb{{"Groups", ""}}, "/groups", true, "Groups", "")}
+	for _, g := range u.In {
+		v.Groups = append(v.Groups, groupLink{Name: g, Who: s.groupMembers(g), Includes: s.Includes[g],
+			Pages: len(pagesIn(rq, groupsDir+"/"+g))})
+	}
+	page(w, rq, http.StatusOK, "groups.html", "Groups", shell{}, v)
+}
+
+// groupsView: /groups (groups.html): the groups the user is in.
+type groupsView struct {
+	view
+	BreadcrumbHTML template.HTML
+	Groups         []groupLink
+}
+
+// groupLink: a group as /groups lists it: who is in it, the groups it is
+// made of, how many pages its folder holds.
+type groupLink struct {
+	Name     string
+	Who      []string
+	Includes []string
+	Pages    int
+}
+
+// pagesIn: the pages in folder the request may see.
+func pagesIn(rq *Req, folder string) []PageFile {
+	var out []PageFile
+	for _, p := range rq.pageFiles() {
+		if strings.HasPrefix(p.Slug, folder+"/") && !hiddenPage(rq, p.Slug) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// placeMark: the mark a page in a place that isn't everyone's carries beside
+// its name, and what it says: 🔒 for the user's own private page, 👥 and
+// the group for a group's ("@dev: anna, bo and carol see this page"; a large
+// group is said by its number).
+func placeMark(p place) (icon, title string) {
+	switch p.kind {
+	case ofUser:
+		return "🔒", "Private: only you see this page"
+	case ofGroup:
+		return "👥", "@" + p.name + ": " + groupWho(p.name) + " this page"
+	}
+	return "", ""
+}
+
+// groupTitle: what the 👥 beside the title of a group's page says ("" for
+// any other page).
+func groupTitle(slug string) string {
+	if p := placeOf(slug); p.kind == ofGroup {
+		_, title := placeMark(p)
+		return title
+	}
+	return ""
+}
+
+// groupWho: who is in a group, as a sentence's start: "anna, bo and carol
+// see", "anna sees", "14 people (dev, design) see", "nobody sees".
+func groupWho(group string) string {
+	s := settings()
+	who := s.groupMembers(group)
+	switch {
+	case len(who) == 0:
+		return "nobody sees"
+	case len(who) == 1:
+		return who[0] + " sees"
+	case len(who) > 8:
+		made := ""
+		if in := s.Includes[group]; len(in) > 0 {
+			made = " (" + strings.Join(in, ", ") + ")"
+		}
+		return itoa(len(who)) + " people" + made + " see"
+	}
+	return strings.Join(who[:len(who)-1], ", ") + " and " + who[len(who)-1] + " see"
 }
 
 // shareTarget: a place a page can be shared to, as the page menu's dialog

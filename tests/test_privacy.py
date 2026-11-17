@@ -172,6 +172,8 @@ READS = [
     ("GET /_assets/{path...}", "GET", "/_assets/private/alice/photo.png", {}),
     ("GET /private/{user}/_assets/{file}", "GET", "/private/alice/_assets/photo.png", {}),
     ("GET /groups/{group}/_assets/{file}", "GET", "/groups/alice/_assets/photo.png", {}),   # no group's folder (test_group_pages.py)
+    ("GET /groups", "GET", "/groups", {}),                       # the groups bob is in: none
+    ("GET /groups/{group}", "GET", "/groups/alice", {}),         # a group's home: no group of his (test_group_pages.py)
     ("GET /tasks", "GET", "/tasks", {}),
     ("GET /api/tasks", "GET", "/api/tasks", {}),
     ("GET /api/tasks/closed", "GET", "/api/tasks/closed", {}),

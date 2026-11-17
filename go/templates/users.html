@@ -87,7 +87,7 @@
   <tbody>
   {{- range .GroupRows}}
   <tr>
-    <td class="user-name">{{.Name}}</td>
+    <td class="user-name">{{.Name}}{{if .Folder}} <span class="user-fact" title="The group has pages: its folder groups/{{.Name}}/, which only its members see">pages</span>{{end}}</td>
     <td>{{range $i, $m := .Members}}{{if $i}}, {{end}}{{$m}}{{else}}<span class="user-you">nobody</span>{{end}}</td>
     <td>
       <form method="post" action="/admin/groups/includes" class="user-role-form user-groups-form">
@@ -107,6 +107,9 @@
   <button type="submit" class="btn">Make a group of groups</button>
 </form>
 <p class="users-help">A user is put in a group in the list above. A group can also be made of other groups: whoever is in one of them is in it, so a task list for two teams is for one group, and who joins a team later is in it at once. Taking a group out takes what is for the larger group from its people.</p>
+{{- with .Stray}}
+<p class="users-help groups-stray" role="note"><strong>Seen by no one:</strong> {{range $i, $p := .}}{{if $i}}, {{end}}<code>{{$p}}</code>{{end}}. A folder in <code>groups/</code> is for the group of its name, one in <code>private/</code> for the user of its name: put someone in that group, add that user, or move the folder on the host.</p>
+{{- end}}
 <h2>Invite someone</h2>
 <form method="post" action="/admin/users/invite" class="users-invite">
   <input type="text" name="name" placeholder="User name" required pattern="[a-z0-9]+(-[a-z0-9]+)*" title="Lowercase letters, digits and hyphens" autocapitalize="none" autocorrect="off" spellcheck="false" aria-label="User name">

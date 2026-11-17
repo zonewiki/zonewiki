@@ -55,6 +55,9 @@ each a pill of its own: the pages,
 and your tools,
 **Tasks · Notes** (`group` in `moduleLinks`; on the phone's tab bar a divider between them).
 Private and Notes each carry a lock (`.module-lock` in the link, tooltip "Private: only you see it", "Notes: only you see it"; `own` in `moduleLinks`).
+**Groups** stands between Wiki and Private for whoever is in a group (Group pages in `docs/spec/users.md`): Wiki · Groups · Private.
+With one group it goes to that group's home (`/groups/<group>`, tooltip "@dev: anna, bo and carol see its pages"), with several to `/groups`, the list of your groups with who is in each and the way to its home (`groupsRoute`, `groups.html`).
+A page in a group's folder makes it the current module; **g g** goes where the link goes; the phone's tab bar has it too.
 Tasks is in neither a shared nor a private group: it shows the shared tasks and your own private ones, and its home may be in your folder.
 The groups were Wiki · Tasks and Private · Notes,
 by who sees them,
@@ -233,7 +236,7 @@ Bare-key shortcuts are suppressed when focus is inside an `input`, `textarea`, `
 | Shortcut | Context | Action |
 |----------|---------|--------|
 | **Ctrl/⌘+P** | anywhere | Open search modal |
-| **g** then **h/n/a/t/p** | anywhere | Navigate: Home / Notes / all tasks (`/tasks`) / Tasks (its home) / your private home (with users). |
+| **g** then **h/n/a/t/p/g** | anywhere | Navigate: Home / Notes / all tasks (`/tasks`) / Tasks (its home) / your private home (with users) / your group's home, or the list of your groups (in a group). |
 | **c** then **n/t** | anywhere | Create: note / task in your Inbox, starting today. |
 | **F2** | editor | Toggle preview pane |
 | **Ctrl/⌘+S** | editor | Done — commit and go to page view |

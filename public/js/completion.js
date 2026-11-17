@@ -239,6 +239,10 @@ export function linkAutocomplete(ta, { tasks = false, page = null } = {}) {
       const value = typeof m === 'string' ? m : m.value;
       item.dataset.value = value;
       item.textContent = typeof m === 'string' ? m : m.label;
+      // A page of a group: its mark before the slug.
+      if (typeof m === 'string' && users() && mode !== 'emoji' && mode !== 'task' && /^groups\/[^/]+\//.test(m)) {
+        item.textContent = `👥 ${m}`;
+      }
       if (m.meta) {
         const meta = document.createElement('span');
         meta.className = 'wikilink-ac-meta';

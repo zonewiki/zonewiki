@@ -20,7 +20,7 @@
 {{- /* with users: the user button at the top right (top_actions) */ -}}
 {{- else -}}
 {{- if ne .Group $open}}{{if ge $open 0}}</span>{{end}}<span class="module-group">{{$open = .Group}}{{end -}}
-<a href="{{.Href}}" class="module-link" data-module="{{.Key}}"{{with .Counts}} title="{{.Title}}"{{end}}{{if .Own}} title="{{.Label}}: only you see it"{{end}}{{if .Current}} aria-current="page"{{end}}
+<a href="{{.Href}}" class="module-link" data-module="{{.Key}}"{{with .Counts}} title="{{.Title}}"{{end}}{{if .Own}} title="{{.Label}}: only you see it"{{end}}{{with .Tip}} title="{{.}}"{{end}}{{if .Current}} aria-current="page"{{end}}
 {{- if eq .Key "wiki"}} aria-label="{{.Label}} ({{$.app_name}} home)">{{template "icon_zone"}}{{else}}>{{end -}}
 {{if .Own}}<span class="module-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="module-label">{{.Label}}</span>{{with .Counts}}{{template "module_counts" .}}{{end}}</a>
 {{- end -}}
@@ -55,7 +55,7 @@
 {{- /* the user button is the desktop's (top_actions) */ -}}
 {{- else -}}
 {{- if ne .Group $group}}<span class="action-sep" aria-hidden="true"></span>{{$group = .Group}}{{end -}}
-<a href="{{.Href}}" class="action-module module-link" data-module="{{.Key}}"{{with .Counts}} title="{{.Title}}"{{end}}{{if .Current}} aria-current="page"{{end}}>{{template "icon_module" .Key}}{{if and (eq .Key "notes") .Own}}<span class="action-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="action-label">{{.Label}}</span>{{with .Counts}}{{template "module_counts" .}}{{end}}</a>
+<a href="{{.Href}}" class="action-module module-link" data-module="{{.Key}}"{{with .Counts}} title="{{.Title}}"{{end}}{{with .Tip}} title="{{.}}"{{end}}{{if .Current}} aria-current="page"{{end}}>{{template "icon_module" .Key}}{{if and (eq .Key "notes") .Own}}<span class="action-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="action-label">{{.Label}}</span>{{with .Counts}}{{template "module_counts" .}}{{end}}</a>
 {{- end -}}
 {{- end -}}
 <span class="action-sep" aria-hidden="true"></span>

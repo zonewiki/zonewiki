@@ -67,7 +67,7 @@ def test_completion_offers_what_every_reader_of_the_page_sees(alice, wiki):
     alice.goto("/edit/groups/dev/standup")
     alice.keyboard.press("Control+End")
     alice.keyboard.type("[[secret")
-    expect(items).to_have_text([re.compile("^New page for @dev: secret"), "groups/dev/secretroadmap", "secretplans"])
+    expect(items).to_have_text([re.compile("^New page for @dev: secret"), "👥 groups/dev/secretroadmap", "secretplans"])
     alice.keyboard.press("Enter")
     expect(alice.locator("#editor-textarea")).to_have_value(re.compile(r"\[\[groups/dev/secret\|secret\]\]"))
     alice.goto("/edit/notes")
@@ -77,7 +77,7 @@ def test_completion_offers_what_every_reader_of_the_page_sees(alice, wiki):
     alice.goto("/edit/private/alice/secretdiary")       # hers alone: all she sees
     alice.keyboard.press("Control+End")
     alice.keyboard.type("[[secretr")
-    expect(items).to_have_text([re.compile("^New private page: secretr"), "groups/dev/secretroadmap"])
+    expect(items).to_have_text([re.compile("^New private page: secretr"), "👥 groups/dev/secretroadmap"])
 
 
 def test_a_new_shared_page_from_a_groups_page_says_so(alice, wiki):
@@ -91,3 +91,66 @@ def test_a_new_shared_page_from_a_groups_page_says_so(alice, wiki):
     expect(banner).to_contain_text("For a page of @dev, link to groups/dev/garden instead")
     banner.get_by_role("button", name="Keep shared").click()
     expect(banner).to_have_count(0)
+
+
+# ── The way in ───────────────────────────────────────────────────────────────
+
+def test_groups_in_the_switcher_leads_to_the_groups_home(alice, wiki):
+    """One group: Groups goes to its home, made on the first visit; g g
+    does too; the mark beside a page's title names the group and leads back."""
+    alice.goto("/page/index")
+    switch = alice.locator(".module-switch .module-link")
+    expect(switch).to_have_text(["Wiki", "Groups", "Private", "Tasks", "Notes"])
+    switch.nth(1).click()
+    alice.wait_for_url("**/page/groups/dev/index")
+    expect(alice.locator("h1")).to_contain_text("dev")
+    expect(alice.locator('.module-switch .module-link[data-module="groups"]')).to_have_attribute("aria-current", "page")
+    expect(alice.locator('.module-switch .module-link[data-module="wiki"]')).not_to_have_attribute("aria-current", "page")
+    wiki.write("groups/dev/roadmap", "# Roadmap\n\nQ1.\n")
+    alice.goto("/page/groups/dev/roadmap")
+    mark = alice.locator("h1 .group-mark")
+    expect(mark).to_have_text("👥 dev")
+    expect(mark).to_have_attribute("title", "@dev: alice and carol see this page")
+    mark.click()
+    alice.wait_for_url("**/page/groups/dev/index")
+    alice.goto("/page/index")
+    alice.keyboard.press("g"); alice.keyboard.press("g")
+    alice.wait_for_url("**/page/groups/dev/index")
+
+
+def test_no_groups_for_who_is_in_none(page, wiki, monkeypatch):
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "t1"), "bob": ("pw", "t2")})
+    monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"groups": "dev"}})
+    page.request.post("/login", form={"username": "bob", "password": "pw"})
+    page.goto("/page/index")
+    expect(page.locator(".module-switch .module-link")).to_have_text(["Wiki", "Private", "Tasks", "Notes"])
+    page.keyboard.press("g"); page.keyboard.press("g")
+    page.wait_for_timeout(300)
+    assert page.url.endswith("/page/index")
+
+
+def test_several_groups_are_listed(page, wiki, monkeypatch):
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "t1"), "bob": ("pw", "t2")})
+    monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"groups": "dev, ops"}, "bob": {"groups": "design"}})
+    monkeypatch.setattr(settings, "GROUPS", {"product": "dev, design"})
+    page.request.post("/login", form={"username": "alice", "password": "pw"})
+    page.goto("/page/index")
+    page.locator('.module-switch .module-link[data-module="groups"]').click()
+    page.wait_for_url("**/groups")
+    expect(page.locator(".groups-list .group-name")).to_have_text(["👥 dev", "👥 ops", "👥 product"])
+    expect(page.locator(".groups-list li").last).to_contain_text("alice, bob")
+    page.locator(".groups-list a").last.click()
+    page.wait_for_url("**/page/groups/product/index")
+    expect(page.locator("h1 .group-mark")).to_have_text("👥 product")
+
+
+def test_the_phones_bar_has_groups(alice, wiki):
+    alice.set_viewport_size({"width": 390, "height": 800})
+    alice.goto("/page/index")
+    bar = alice.locator(".action-buttons .action-module")
+    expect(bar).to_have_count(5)
+    box = alice.locator(".action-buttons").bounding_box()
+    last = alice.locator(".action-buttons .action-search").bounding_box()
+    assert last["x"] + last["width"] <= box["x"] + box["width"] + 1 and box["width"] <= 391     # nothing pushed off the screen
+    alice.locator('.action-buttons .action-module[data-module="groups"]').click()
+    alice.wait_for_url("**/page/groups/dev/index")

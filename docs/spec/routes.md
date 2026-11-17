@@ -17,6 +17,8 @@ In a public wiki (`ZONE_PUBLIC`; Public wikis in `docs/spec/security.md`) a visi
 | GET    | `/new`                | A form for a new page's name (without JavaScript; pages are made from links to them) |
 | POST   | `/new`                | Create `<slug>.md` and redirect to it; `private=1` (with users): in your private folder |
 | GET    | `/private`            | With users: your private home `private/<you>/index` (made on the first visit); 404 without users |
+| GET    | `/groups`             | The groups you are in: the one group's home for who is in one, the list of them for who is in several; 404 for who is in none |
+| GET    | `/groups/<group>`     | A group's home `groups/<group>/index` (made on the first visit of someone in the group who may write); 404 for anyone not in it |
 | GET    | `/admin`, `/admin/users`    | The admin page, for admins (Managing users in `docs/spec/users.md`): `/admin` opens its first tab, Users; 404 for everyone else |
 | GET    | `/assistant`                | Connect an assistant: the MCP token of whoever is signed in (without users, the wiki's), made and revoked in the browser (`docs/spec/mcp.md`) |
 | POST   | `/assistant/token`, `/assistant/revoke` | Make a new token (with the password again; shown once) or take it away |

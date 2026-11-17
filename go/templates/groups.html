@@ -1,0 +1,17 @@
+{{- /* /groups: the groups the user is in, each with the way to its folder's
+    home (private.go: groupsRoute; docs/spec/users.md, Group pages). Who is
+    in one group never sees this: the switcher's Groups goes to its home. */ -}}
+{{define "body"}}
+{{.BreadcrumbHTML}}
+<div class="sheet">
+<h1>Groups</h1>
+<p class="users-help">The groups you are in. A group's pages are in its folder: whoever is in the group sees and changes them, and no one else in this wiki.</p>
+<ul class="groups-list">
+  {{- range .Groups}}
+  <li><a href="/groups/{{.Name}}"><span class="group-name">👥 {{.Name}}</span></a>
+    <span class="group-who">{{range $i, $w := .Who}}{{if $i}}, {{end}}{{$w}}{{end}}{{with .Includes}} <span class="user-you">(whoever is in {{range $i, $g := .}}{{if $i}} or {{end}}{{$g}}{{end}})</span>{{end}}</span>
+    <span class="group-pages">{{if .Pages}}{{.Pages}} page{{if ne .Pages 1}}s{{end}}{{else}}no page yet{{end}}</span></li>
+  {{- end}}
+</ul>
+</div>
+{{end}}

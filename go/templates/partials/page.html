@@ -25,7 +25,7 @@
 {{define "promote_dialog" -}}
 <dialog id="page-promote-dialog" class="modal promote-modal" data-title="{{.Title}}"{{if .PromoteError}} data-open{{end}}><p class="modal-label">Move to wiki</p><form method="post" action="{{url "promote" .Slug}}">
 <label class="promote-field">Folder<input type="text" name="folder" id="promote-folder" list="promote-folders" placeholder="(top level)" autocomplete="off" spellcheck="false"></label>
-<datalist id="promote-folders">{{range .Folders}}<option value="{{.}}/">{{end}}</datalist>
+<datalist id="promote-folders">{{range .Folders}}<option value="{{.Path}}/"{{with .Label}} label="{{.}}"{{end}}>{{end}}</datalist>
 <label class="promote-field">Name<input type="text" name="name" id="promote-name" value="{{.Title}}" autocomplete="off" spellcheck="false" required></label>
 <label class="promote-check"><input type="checkbox" name="keep_date" id="promote-keep-date" value="{{.Date}}"> Keep the date ({{.Date}})</label>
 <p class="promote-preview" aria-live="polite">/page/<code id="promote-slug"></code></p>

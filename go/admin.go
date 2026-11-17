@@ -65,8 +65,11 @@ type usersView struct {
 	Groups []string
 	// GroupRows: the groups as the Groups part lists them.
 	GroupRows []groupRow
-	Tabs      []adminTab // the admin page's section tabs
-	Tab       string     // the one shown
+	// Stray: what lies in groups/ and private/ that no one sees (the folder
+	// of a group nobody is in, of a user who is gone), by its path alone.
+	Stray []string
+	Tabs  []adminTab // the admin page's section tabs
+	Tab   string     // the one shown
 	// The module switcher and Admin › Users, as on every view, so the top
 	// row stays put; not in the navigation trail.
 	BreadcrumbHTML template.HTML
@@ -100,6 +103,7 @@ type userRow struct {
 type groupRow struct {
 	Name, Includes string
 	Members        []string
+	Folder         bool // groups/<name>/ is there: the group has pages
 }
 
 // adminTab: a section tab of the admin page.
@@ -139,6 +143,12 @@ func usersPage(w http.ResponseWriter, r *http.Request) {
 			if done = name + " is in no group now."; len(u.Groups) > 0 {
 				done = name + " is in " + strings.Join(u.Groups, ", ") + " now."
 			}
+			// A group this left empty keeps its folder, which no one sees then.
+			for _, p := range strayGroups() {
+				if g := strings.TrimPrefix(p, groupsDir+"/"); g != p && groupNameRE.MatchString(g) && isDir(filepath.Join(cfg.Data, p)) {
+					done += " Nobody is in " + g + " now: its pages stay in the wiki, in " + p + "/, seen by no one."
+				}
+			}
 		case "disable":
 			done = "Disabled " + name + ": they can't sign in, and their MCP token no longer works. Their files stay."
 		case "enable":
@@ -171,8 +181,10 @@ func usersData(r *http.Request) *usersView {
 		Signup: signupOn(s), SignupRole: s.SignupRole, SignupDomains: s.SignupDomains, SignupApproval: s.SignupApproval,
 		BreadcrumbHTML: breadcrumb(newReq(r), []crumb{{"Admin", "/admin"}, {"Users", ""}}, "", false, "", "")}
 	for _, g := range s.groups() {
-		v.GroupRows = append(v.GroupRows, groupRow{Name: g, Includes: strings.Join(s.Includes[g], ", "), Members: s.groupMembers(g)})
+		v.GroupRows = append(v.GroupRows, groupRow{Name: g, Includes: strings.Join(s.Includes[g], ", "), Members: s.groupMembers(g),
+			Folder: isDir(filepath.Join(cfg.Data, groupsDir, g))})
 	}
+	v.Stray = append(strayGroups(), strayPrivate()...)
 	assigned := assignedOpen()
 	for _, name := range sortedKeys(s.Users) {
 		u := s.Users[name]

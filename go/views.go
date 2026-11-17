@@ -73,7 +73,7 @@ func init() {
 	for _, name := range []string{"login.html", "view.html", "edit.html", "new.html", "notes.html",
 		"hidden.html", "deleted_page.html", "tasks_page.html", "search.html", "history/deleted.html",
 		"history/diff.html", "history/diff_uncommitted.html", "history/history.html",
-		"history/revision.html", "history/uncommitted.html", "users.html", "welcome.html", "signup.html", "assistant.html",
+		"history/revision.html", "history/uncommitted.html", "users.html", "groups.html", "welcome.html", "signup.html", "assistant.html",
 		"password.html", "oauth.html",
 		"setup.html"} {
 		views[name] = template.Must(template.Must(partials.Clone()).ParseFS(templateFS, "templates/"+name))
@@ -125,7 +125,7 @@ func diffLines(diff string) []diffLine {
 // With users the switcher has two groups by kind, the pages (Wiki, Private)
 // and your tools (Tasks, Notes); Private and Notes carry a lock, as only you
 // see them. Without users one group.
-var modules = [][3]string{{"wiki", "Wiki", "/"}, {"private", "Private", "/private"}, {"tasks", "Tasks", "/tasks"}, {"notes", "Notes", "/notes"}}
+var modules = [][3]string{{"wiki", "Wiki", "/"}, {"groups", "Groups", "/groups"}, {"private", "Private", "/private"}, {"tasks", "Tasks", "/tasks"}, {"notes", "Notes", "/notes"}}
 
 // taskCountsTitle: the Tasks links' tooltip, "Tasks: 5 in Focus · 1 overdue
 // · 1 due today" (js/chrome.js taskCountsTitle builds the same).
@@ -184,6 +184,7 @@ type moduleLink struct {
 	Group            int
 	Own              bool
 	Menu             bool
+	Tip              string // the Groups link's tooltip: the group, or the groups
 }
 
 func moduleLinks(rq *Req) []moduleLink {
@@ -191,9 +192,16 @@ func moduleLinks(rq *Req) []moduleLink {
 	users := privateFolder(rq.who()) != ""
 	viewer := settings().isViewer(rq.who())
 	var out []moduleLink
+	var groups []string // the groups the user is in: Groups, for who is in one
+	if u := settings().Users[rq.who()]; u != nil && !u.Disabled {
+		groups = u.In
+	}
 	for _, m := range modules {
 		if m[0] == "private" && !users || viewer && (m[0] == "private" || m[0] == "notes") {
 			continue // a viewer makes nothing: no private pages, no notes
+		}
+		if m[0] == "groups" && len(groups) == 0 {
+			continue
 		}
 		if rq.who() == visitor && m[0] != "wiki" {
 			continue // a visitor has the wiki's pages alone
@@ -208,6 +216,13 @@ func moduleLinks(rq *Req) []moduleLink {
 		}
 		own := users && (m[0] == "private" || m[0] == "notes")
 		link := moduleLink{Key: m[0], Label: m[1], Href: href, Current: current == m[0], Group: group, Own: own}
+		if m[0] == "groups" {
+			// One group: its home, under its name. Several: the list of them.
+			link.Tip = "Your groups: " + strings.Join(groups, ", ")
+			if len(groups) == 1 {
+				link.Href, link.Tip = "/"+groupsDir+"/"+groups[0], "@"+groups[0]+": "+groupWho(groups[0])+" its pages"
+			}
+		}
 		if m[0] == "tasks" {
 			counts := rq.taskCounts()
 			link.Counts = &counts
@@ -235,6 +250,8 @@ func currentModule(rq *Req) string {
 		return "tasks"
 	case "/notes":
 		return "notes"
+	case "/groups":
+		return "groups"
 	case "/search", "/login", "/assistant", "/password", "/oauth/authorize":
 		return ""
 	}
@@ -250,6 +267,9 @@ func currentModule(rq *Req) string {
 	}
 	if m != nil && ownPrivate(rq.who(), m[1]) {
 		return "private"
+	}
+	if m != nil && placeOf(m[1]).kind == ofGroup && canSee(rq.who(), m[1]) {
+		return "groups"
 	}
 	return "wiki"
 }
@@ -277,10 +297,26 @@ func breadcrumb(rq *Req, crumbs []crumb, key string, hasKey bool, title string, 
 // buildBreadcrumb: a page's breadcrumb: its folders, the page, and extra
 // crumbs after it. The page is a link when more follows or with a query
 // (added to it, e.g. "?tag=task").
+//
+// A page in a private or a group's folder names its place, not its path:
+// "🔒 Private › Diary" and "👥 dev › Roadmap", the first crumb leading to
+// the place's home, so such a folder is never taken for one of the wiki's.
 func buildBreadcrumb(rq *Req, slug, title string, right template.HTML, query string, extra ...crumb) template.HTML {
 	parts := strings.Split(slug, "/")
 	var crumbs []crumb
+	first := 0
+	if rq != nil {
+		switch p := placeOf(slug); {
+		case p.own(rq.who()) && len(parts) > 2:
+			crumbs, first = append(crumbs, crumb{"🔒 Private", "/private"}), 2
+		case p.kind == ofGroup && p.sees(rq.who()) && len(parts) > 2:
+			crumbs, first = append(crumbs, crumb{"👥 " + p.name, "/" + groupsDir + "/" + p.name}), 2
+		}
+	}
 	for i, part := range parts[:len(parts)-1] {
+		if i < first {
+			continue
+		}
 		crumbs = append(crumbs, crumb{mdtext.TitleWords(strings.ReplaceAll(part, "-", " ")), pathURL("page", strings.Join(parts[:i+1], "/"))})
 	}
 	href := ""
@@ -559,7 +595,7 @@ type pageMenuView struct {
 	ShareTargets            []shareTarget // Share…: the places the page can go to, more than one, or from a group's folder
 	ShareFrom               string        // the group whose page it is ("": the user's own private page)
 	Date                    string        // the note's date, to keep in front of its name
-	Folders                 []string
+	Folders                 []folderChoice
 	PromoteError            string
 	AppendError             string
 	AppendHeading           string
@@ -594,7 +630,7 @@ func pageMenu(rq *Req, slug, title, renameError, promoteError, appendError, rena
 			return wiki[i].Title < wiki[j].Title
 		})
 		m.Date = noteDate(slug)
-		m.Folders = pageFolders(rq)
+		m.Folders = folderChoices(rq)
 		m.PromoteError, m.AppendError = promoteError, appendError
 		m.AppendHeading = appendHeading(slug, title)
 		m.WikiPages = wiki
