@@ -369,7 +369,8 @@ It has section tabs (`adminTabs`), of which **Users** (`/admin/users`, `users.ht
   an open link of theirs goes too).
   There is no field to type another user's password: the admin never knows it.
 - **Groups** (below the users, `#groups`): every group there is, who is in it now, and a field with the groups it includes (`dev, design`; **Save**; empty: none, and the section goes).
-  Beside a group's name: "pages" when its folder is there, and "owned by anna" when it has owners (who say who is in it on their Groups page: A group of your own, above); a **Name** field renames it, its pages and lists along (`POST /groups/<group>/rename` with `from=admin`: A group renamed, above).
+  The columns say what a field is for, read on from the one before: **Group**, **Who is in it**, **And whoever is in** (the groups it includes), **Rename to**.
+  Beside a group's name: "pages" when its folder is there, and "owned by anna" when it has owners (who say who is in it on their Groups page: A group of your own, above); the field under **Rename to** renames it, its pages and lists along (`POST /groups/<group>/rename` with `from=admin`: A group renamed, above).
   **Make a group of groups** below it takes a new group's name and what it includes.
   Both are `POST /admin/groups/includes` (`group`, `includes`; `groupIncludesRoute`): a group that would include itself, or a name that is no group's, is refused and nothing changes.
   Done, the page says who is in the group now, and who no longer is (`?done=includes&group=…&left=…`, of which it says only users' names).

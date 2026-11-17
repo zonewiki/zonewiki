@@ -123,6 +123,8 @@ class TestChanges:
         page = admin.get(resp.headers["Location"], headers=HOST).data.decode()
         assert "product includes design, dev: bob, carol." in page
         assert 'name="includes" value="design, dev" aria-label="Groups that product includes"' in page
+        # the columns say what their fields are for (not "Includes" and "Name")
+        assert "<th>Group</th><th>Who is in it</th><th>And whoever is in</th><th>Rename to</th>" in page
         row = re.search(r'<td class="user-name">product</td>\s*<td>(.*?)</td>', page, re.S).group(1)
         assert row == "bob, carol"
         assert '<span class="user-also" title="By way of a group they are in (Groups, below)">also in product</span>' in page
