@@ -85,9 +85,15 @@ def test_save_shows_once_a_field_is_edited(admin, wiki):
     row.locator('button[aria-label="Save the role of bob"]').click()
     admin.wait_for_url("**/admin/users?done=role**")
     assert "role = viewer" in (wiki.root / ".zone" / "config").read_text()
-    # The Groups part's fields do the same; making a new group of groups keeps its button.
+    # The Groups part shows text and buttons: a field opens on its button, with the cursor in it.
     includes = admin.locator(".groups-table tr", has_text="dev")
-    expect(includes.locator('button[aria-label="Save what dev includes"]')).to_be_hidden()
-    includes.locator('input[name="includes"]').fill("ops")
+    field = includes.locator('input[name="includes"]')
+    expect(field).to_be_hidden()
+    expect(includes.locator('input[name="name"]')).to_be_hidden()
+    includes.get_by_text("Add a group…").click()
+    expect(field).to_be_focused()
     expect(includes.locator('button[aria-label="Save what dev includes"]')).to_be_visible()
+    includes.get_by_text("Rename…").click()
+    expect(includes.locator('input[name="name"]')).to_be_focused()
+    expect(includes.locator('input[name="name"]')).to_have_value("dev")
     expect(admin.get_by_role("button", name="Make a group of groups")).to_be_visible()

@@ -44,3 +44,14 @@ for (const form of document.querySelectorAll('.user-role-form')) {
   field.addEventListener('change', show);
   show();   // a value the browser kept from before a reload
 }
+
+// A group's Add a group… and Rename… open their field: the cursor goes into
+// it, at the end of what it holds.
+for (const details of document.querySelectorAll('.group-edit')) {
+  details.addEventListener('toggle', () => {
+    const field = details.querySelector('input[type=text]');
+    if (!details.open || !field) return;
+    field.focus();
+    field.setSelectionRange(field.value.length, field.value.length);
+  });
+}

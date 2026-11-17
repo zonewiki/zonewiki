@@ -84,7 +84,7 @@
     pages) is for whoever is in it, by whatever way. */}}
 {{- if .GroupRows}}
 <table class="users-table groups-table">
-  <thead><tr><th>Group</th><th>Who is in it</th><th>And whoever is in</th><th>Rename to</th></tr></thead>
+  <thead><tr><th>Group</th><th>Who is in it</th><th>Includes</th><th></th></tr></thead>
   <tbody>
   {{- range .GroupRows}}
   <tr>
@@ -92,18 +92,26 @@
       {{- with .Owners}} <span class="user-you group-owners" title="They say who is in the group, on their Groups page">owned by {{range $i, $o := .}}{{if $i}}, {{end}}{{$o}}{{end}}</span>{{end}}</td>
     <td>{{range $i, $m := .Members}}{{if $i}}, {{end}}{{$m}}{{else}}<span class="user-you">nobody</span>{{end}}</td>
     <td>
-      <form method="post" action="/admin/groups/includes" class="user-role-form user-groups-form">
-        <input type="hidden" name="group" value="{{.Name}}">
-        <input type="text" name="includes" value="{{.Includes}}" aria-label="Groups that {{.Name}} includes" placeholder="none" list="user-groups" autocomplete="off" spellcheck="false" size="16">
-        <button type="submit" class="btn" aria-label="Save what {{.Name}} includes">Save</button>
-      </form>
+      {{- /* The groups it includes are text; the field to change them opens on its button. */}}
+      {{- with .Includes}}<span class="group-includes">{{.}}</span> {{end}}
+      <details class="group-edit group-includes-edit">
+        <summary class="btn" title="Whoever is in a group that {{.Name}} includes is in {{.Name}}">{{if .Includes}}Change…{{else}}Add a group…{{end}}</summary>
+        <form method="post" action="/admin/groups/includes" class="user-groups-form">
+          <input type="hidden" name="group" value="{{.Name}}">
+          <input type="text" name="includes" value="{{.Includes}}" aria-label="Groups that {{.Name}} includes" placeholder="dev, design" list="user-groups" autocomplete="off" spellcheck="false" size="16">
+          <button type="submit" class="btn" aria-label="Save what {{.Name}} includes">Save</button>
+        </form>
+      </details>
     </td>
     <td>
-      <form method="post" action="/groups/{{.Name}}/rename" class="user-role-form user-groups-form group-rename-form">
-        <input type="hidden" name="from" value="admin">
-        <input type="text" name="name" value="{{.Name}}" aria-label="The name of the group {{.Name}}" required pattern="@?[a-z0-9][a-z0-9-]*" title="Lowercase letters, digits and hyphens. Its pages, and the lists that are for it, follow." autocomplete="off" autocapitalize="none" spellcheck="false" size="12">
-        <button type="submit" class="btn">Rename</button>
-      </form>
+      <details class="group-edit group-rename-edit">
+        <summary class="btn" title="Its pages, and the lists that are for it, follow">Rename…</summary>
+        <form method="post" action="/groups/{{.Name}}/rename" class="user-groups-form group-rename-form">
+          <input type="hidden" name="from" value="admin">
+          <input type="text" name="name" value="{{.Name}}" aria-label="The new name of the group {{.Name}}" required pattern="@?[a-z0-9][a-z0-9-]*" title="Lowercase letters, digits and hyphens. Its pages, and the lists that are for it, follow." autocomplete="off" autocapitalize="none" spellcheck="false" size="12">
+          <button type="submit" class="btn">Rename</button>
+        </form>
+      </details>
     </td>
   </tr>
   {{- end}}

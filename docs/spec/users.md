@@ -368,9 +368,10 @@ It has section tabs (`adminTabs`), of which **Users** (`/admin/users`, `users.ht
   `js/admin.js` opens it with what the row's `<details>` holds, and without JavaScript the `<details>` unfolds instead: their private pages, notes and tasks stay in `private/NAME/`, seen by no one, and someone added again under that name gets them back;
   an open link of theirs goes too).
   There is no field to type another user's password: the admin never knows it.
-- **Groups** (below the users, `#groups`): every group there is, who is in it now, and a field with the groups it includes (`dev, design`; **Save**; empty: none, and the section goes).
-  The columns say what a field is for, read on from the one before: **Group**, **Who is in it**, **And whoever is in** (the groups it includes), **Rename to**.
-  Beside a group's name: "pages" when its folder is there, and "owned by anna" when it has owners (who say who is in it on their Groups page: A group of your own, above); the field under **Rename to** renames it, its pages and lists along (`POST /groups/<group>/rename` with `from=admin`: A group renamed, above).
+- **Groups** (below the users, `#groups`): every group there is, who is in it now, and the groups it includes (`dev, design`), as text.
+  **Add a group…** beside them (**Change…** when it includes some) opens the field with them and **Save** (empty: none, and the section goes); **Rename…** at the row's end opens the field with the group's name and **Rename**, which takes its pages and lists along (`POST /groups/<group>/rename` with `from=admin`: A group renamed, above).
+  A row is text and two buttons until one is clicked, so no field stands under a heading that has to explain it; the fields open without JavaScript too (`<details>`), and with it the cursor goes into the field.
+  Beside a group's name: "pages" when its folder is there, and "owned by anna" when it has owners (who say who is in it on their Groups page: A group of your own, above).
   **Make a group of groups** below it takes a new group's name and what it includes.
   Both are `POST /admin/groups/includes` (`group`, `includes`; `groupIncludesRoute`): a group that would include itself, or a name that is no group's, is refused and nothing changes.
   Done, the page says who is in the group now, and who no longer is (`?done=includes&group=…&left=…`, of which it says only users' names).
