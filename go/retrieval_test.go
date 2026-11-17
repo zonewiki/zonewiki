@@ -87,19 +87,19 @@ func TestIndexCacheFollowsTheUsers(t *testing.T) {
 	}
 	var c indexCache
 	bob := &Req{user: "bob"}
-	if got := c.get(bob, docs); len(got.docs) != 2 {
-		t.Fatalf("without users everything is shared: %d docs", len(got.docs))
+	if got := c.get(bob, docs); got.count() != 2 {
+		t.Fatalf("without users everything is shared: %d docs", got.count())
 	}
 	withUsers(t, "alice", "bob")
-	if got := c.get(bob, docs); len(got.docs) != 1 || got.docs[0].Slug != "plans" || got.ix.Search("secretword", 5) != nil {
-		t.Errorf("after users were added bob's index holds %d docs, and finds secretword: %v", len(got.docs), got.ix.Search("secretword", 5))
+	if got := c.get(bob, docs); got.count() != 1 || docsOf(got)[0].Slug != "plans" || got.ix.Search("secretword", 5) != nil {
+		t.Errorf("after users were added bob's index holds %d docs, and finds secretword: %v", got.count(), got.ix.Search("secretword", 5))
 	}
-	if got := c.get(&Req{user: "alice"}, docs); len(got.docs) != 2 || len(got.ix.Search("secretword", 5)) != 1 {
+	if got := c.get(&Req{user: "alice"}, docs); got.count() != 2 || len(got.ix.Search("secretword", 5)) != 1 {
 		t.Errorf("alice's own page is missing from her index")
 	}
 	settings().Users = nil
-	if got := c.get(bob, docs); len(got.docs) != 2 {
-		t.Errorf("after the users were removed everything is shared again: %d docs", len(got.docs))
+	if got := c.get(bob, docs); got.count() != 2 {
+		t.Errorf("after the users were removed everything is shared again: %d docs", got.count())
 	}
 }
 
@@ -116,7 +116,7 @@ func TestIndexCacheStaysAsIfBuiltAfresh(t *testing.T) {
 
 func indexCacheStaysAsIfBuiltAfresh(t *testing.T, file string) {
 	testWiki(t, nil)
-	withUsers(t, "alice", "bob")
+	withGroups(t, map[string][]string{"all": {"dev"}}, "alice:dev", "bob", "carol:dev")
 	r := rand.New(rand.NewSource(5))
 	words := strings.Fields("apple apples applet banana bananas cherry cherries date fig grape grapes kiwi lemon lime mango melon nectar orange papaya peach pear plum quince raisin")
 	tokens := func() []string {
@@ -129,7 +129,10 @@ func indexCacheStaysAsIfBuiltAfresh(t *testing.T, file string) {
 	serial := 0
 	newDoc := func() *SearchDoc {
 		serial++
-		switch r.Intn(6) {
+		switch r.Intn(8) {
+		case 6: // a group's page, a group's that includes it, a group's nobody is in, no one's
+			folder := []string{"groups/dev", "groups/all", "groups/empty", "private/nobody"}[r.Intn(4)]
+			return &SearchDoc{Slug: fmt.Sprintf("%s/g%d", folder, serial), Tokens: fixedTokens(tokens()...)}
 		case 0:
 			return &SearchDoc{Slug: fmt.Sprintf("private/alice/a%d", serial), Tokens: fixedTokens(tokens()...)}
 		case 1:
@@ -154,7 +157,7 @@ func indexCacheStaysAsIfBuiltAfresh(t *testing.T, file string) {
 		keyed(docs[i])
 	}
 	queries := []string{"apple", "banana cherry", "grap", "aple", "bananna", "pech", "zzzz", "kiwi lemon lime", "nectar orange papaya"}
-	viewers := map[string]*Req{"alice": {user: "alice"}, "bob": {user: "bob"}, "leaf": nil}
+	viewers := map[string]*Req{"alice": {user: "alice"}, "bob": {user: "bob"}, "carol": {user: "carol"}, "leaf": nil}
 	c := &indexCache{file: file}
 	rebuilds, corrected, starts := 0, 0, 0
 	var lastBase *docIndex
@@ -202,12 +205,15 @@ func indexCacheStaysAsIfBuiltAfresh(t *testing.T, file string) {
 					}
 				}
 			}
-			if !slices.Equal(got.docs, visible) {
+			if !slices.Equal(docsOf(got), visible) {
 				t.Fatalf("round %d %s: the docs differ from what the viewer may see", round, name)
 			}
-			for i, d := range got.docs {
-				if got.byID[got.idAt(i)] != d {
-					t.Fatalf("round %d %s: doc %d has another's number in the index", round, name, i)
+			if got.count() != len(visible) {
+				t.Fatalf("round %d %s: counts %d docs, has %d", round, name, got.count(), len(visible))
+			}
+			for id, d := range got.all() {
+				if got.doc(id) != d {
+					t.Fatalf("round %d %s: %s has another's number in the index", round, name, label(d))
 				}
 			}
 		}
@@ -313,11 +319,11 @@ func TestUsersWithNothingPrivateShareAnIndex(t *testing.T) {
 	if len(c.dead)+len(c.delta) == 0 {
 		t.Fatal("the base should have changes")
 	}
-	if bob != carol {
-		t.Error("bob and carol have nothing private and should share an index")
+	if !slices.Equal(docsOf(bob), docsOf(carol)) || len(c.places) != 1 {
+		t.Errorf("bob and carol have nothing private: the same docs, and one place beside them (%d)", len(c.places))
 	}
-	if alice == bob || len(alice.docs) != 3 || len(bob.docs) != 2 {
-		t.Errorf("alice has a private page: her index is her own (%d docs), bob's has %d", len(alice.docs), len(bob.docs))
+	if alice.count() != 3 || bob.count() != 2 {
+		t.Errorf("alice has a private page: her index has %d docs, bob's %d", alice.count(), bob.count())
 	}
 }
 
@@ -465,7 +471,7 @@ func TestSectionDocsReadWhatTheyShow(t *testing.T) {
 	title, body := semanticText(page, "garden")
 	want := chunkSections(body, maxChunkChars)
 	var docs []*SearchDoc
-	for _, d := range chunkIndex(nil).docs {
+	for _, d := range chunkIndex(nil).all() {
 		if d.Slug == "garden" {
 			docs = append(docs, d)
 		}
@@ -550,7 +556,7 @@ func TestStartReadsNoPages(t *testing.T) {
 		pages, chunks := searchIndex(nil), chunkIndex(nil)
 		for _, q := range queries {
 			for _, x := range []*docIndex{pages, chunks} {
-				fresh := newDocIndex(x.docs)
+				fresh := newDocIndex(docsOf(x))
 				if a, b := targets(x.search(q, 100)), targets(fresh.search(q, 100)); !slices.Equal(a, b) {
 					t.Errorf("%s %q: %v, want %v", label, q, a, b)
 				}
@@ -570,10 +576,10 @@ func TestStartReadsNoPages(t *testing.T) {
 	if n := pageReads.Load() - before; n != 1 {
 		t.Errorf("a start read %d pages, want 1 (the one with [[task:…]])", n)
 	}
-	if len(pagesIx.docs) != len(pages) || len(chunksIx.docs) < 3*30 {
-		t.Fatalf("%d page docs, %d section docs", len(pagesIx.docs), len(chunksIx.docs))
+	if pagesIx.count() != len(pages) || chunksIx.count() < 3*30 {
+		t.Fatalf("%d page docs, %d section docs", pagesIx.count(), chunksIx.count())
 	}
-	for _, d := range chunksIx.docs {
+	for _, d := range chunksIx.all() {
 		if d.Slug == "notes/p07" && d.heading() == "Über" {
 			if body, ok := d.body(); !ok || body != "Plums." || d.anchor() != "#über" || d.path() != "Page 7 › Pears › Über" && d.path() != "Pears › Über" {
 				t.Errorf("a section from the file: %q %v %q %q", body, ok, d.anchor(), d.path())
@@ -687,11 +693,22 @@ func TestAGroupsPagesAreInItsMembersIndexAlone(t *testing.T) {
 	docs := slices.Concat(shared[:2], groups, shared[2:])
 	var c indexCache
 	bob, alice, carol := c.get(&Req{user: "bob"}, docs), c.get(&Req{user: "alice"}, docs), c.get(&Req{user: "carol"}, docs)
-	if !slices.Equal(bob.docs, shared) {
-		t.Fatalf("bob's index has %d docs, want the %d shared ones", len(bob.docs), len(shared))
+	if !slices.Equal(docsOf(bob), shared) {
+		t.Fatalf("bob's index has %d docs, want the %d shared ones", bob.count(), len(shared))
 	}
-	if len(alice.docs) != 6 || !slices.Equal(alice.docs, carol.docs) {
-		t.Errorf("alice's index has %d docs, carol's %d: the shared ones and their groups' three", len(alice.docs), len(carol.docs))
+	if alice.count() != 6 || !slices.Equal(docsOf(alice), docsOf(carol)) {
+		t.Errorf("alice's index has %d docs, carol's %d: the shared ones and their groups' three", alice.count(), carol.count())
+	}
+	// A group's pages are indexed once, for whoever is in it: two layers
+	// made (dev's and product's), none for the folder nobody is in.
+	made := 0
+	for _, l := range c.places {
+		if l.layer != nil {
+			made++
+		}
+	}
+	if dev := c.places[docPlace{place: place{ofGroup, "dev"}}]; made != 2 || len(c.places) != 3 || dev == nil || dev.layer == nil {
+		t.Errorf("%d layers made of %d places, want dev's and product's of three", made, len(c.places))
 	}
 	without := newDocIndex(shared)
 	for _, q := range []string{"apple", "pear", "plum", "ocelotharp", "ocelothar", "ocelotharq", "apple pear", "roadmap"} {
@@ -708,8 +725,8 @@ func TestAGroupsPagesAreInItsMembersIndexAlone(t *testing.T) {
 		t.Errorf("alice's search for the group's word: %d hits, want her groups' three", len(hits))
 	}
 	// Zone itself has every doc.
-	if all := c.get(nil, docs); len(all.docs) != len(docs) {
-		t.Errorf("Zone's own index has %d docs", len(all.docs))
+	if all := c.get(nil, docs); all.count() != len(docs) {
+		t.Errorf("Zone's own index has %d docs", all.count())
 	}
 }
 
@@ -758,7 +775,16 @@ func TestAMembersIndexOfALargeGroup(t *testing.T) {
 	hits := first.search("w17 w4242", 15)
 	t.Logf("2,000 shared pages and 2,000 of a group, 300 words each: the shared index %v, a member's view %v, each further member's %v, a search in it %v (%d hits)",
 		base, view, others, time.Since(start), len(hits))
-	if len(first.docs) != 4000 || view > 5*time.Second {
-		t.Errorf("a member's view: %d docs in %v", len(first.docs), view)
+	if first.count() != 4000 || view > 5*time.Second {
+		t.Errorf("a member's view: %d docs in %v", first.count(), view)
 	}
+}
+
+// docsOf: the docs an index is over, in order.
+func docsOf(x *docIndex) []*SearchDoc {
+	var docs []*SearchDoc
+	for _, d := range x.all() {
+		docs = append(docs, d)
+	}
+	return docs
 }

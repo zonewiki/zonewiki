@@ -593,7 +593,7 @@ A new page is made private from the start (below).
 - **What "private" means**: hidden inside Zone, from other users and their assistants.
   Not encrypted, and not hidden from whoever has the wiki's folder or its git repository: the files, their history and a git remote hold everything.
   Search's keyword index (BM25) is made of the shared pages and tasks alone (`indexCache`);
-  a user's own private ones are added to it for them (`Index.WithExtra`: their document count, frequencies and lengths join the shared ones at query time, so they rank exactly as if one index held what they see),
+  what isn't everyone's is searched along with it by those who see it, place by place (a user's private pages, their private tasks, a group's folder: `textsearch.Layer`, `Index.View`; their document count, frequencies and lengths join the shared ones at query time, so they rank exactly as if one index held what the viewer sees),
   while another user's words,
   counts and lengths take no part in anyone's ranking,
   nor in the vocabulary that prefix and typo matching draw on (else a typo that stops matching would tell that a word is in a private page).
@@ -691,8 +691,8 @@ There is nothing to set up for the folder itself: it is the folder of the group 
   **`/new`** (the form without JavaScript) asks someone in a group whom the page is **For**: everyone, one of their groups, only them (`for=group:<name>`, `for=private`; `createPage`); someone in no group has the Private box, as before.
 - **Uploads** for a group's page are the group's: the file is kept in `groups/<group>/_assets/` (`uploadPlace`, `uploadDir`; URL `/groups/<group>/_assets/<file>`) and served to its members only, 404 for anyone else and for any other subfolder (`serveGroupUpload`); an assistant reads and adds them with `read_file` and `upload_file` (`page`), or over HTTP with its user's token.
   A page that leaves the folder for more people takes the uploads it shows with it (`shareUploads`), as one that leaves a private folder does.
-- **Search**: the keyword index of the shared pages has nothing of a group's; its pages are added for its members as their own private ones are (`docShared`, `Index.WithExtra`), so a group's words, counts and lengths take part in no one else's ranking, and a typo of a word only the group has suggests nothing to anyone else.
-  A member's index is put together when they first search after a change: with 2,000 pages in the group, some 40 ms (measured 2026-11-16, `TestAMembersIndexOfALargeGroup`).
+- **Search**: the keyword index of the shared pages has nothing of a group's; its pages are one layer, searched along with the shared ones by its members and nobody else, as a user's private pages are by them (`docShared`, `docPlace`, `Index.View`), so a group's words, counts and lengths take part in no one else's ranking, and a typo of a word only the group has suggests nothing to anyone else.
+  The layer is made when a member first searches after a change in the folder, for all of them: with 2,000 pages in the group some 40 ms, and every further member's search finds it there (measured 2026-11-17, `TestAMembersIndexOfALargeGroup`).
 - **A group's guides are an admin's who is in the group** (`adminsOnly`): `groups/dev/AGENTS.md` and what it pulls in steer the assistant of everyone in dev, so the others in the group read them and don't change them (Guides, above).
 - **Tasks are not kept there**: a group's tasks are a list for the group (`"for": ["@dev"]`, Lists for some in `docs/spec/tasks.md`), which a page in the folder can show (`[[tasks: list=dev]]`).
   A `[[task:…]]` on a group's page counts as its title in search only for a task everyone sees, as on a shared page.

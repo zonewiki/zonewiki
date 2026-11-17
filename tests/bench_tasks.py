@@ -453,21 +453,21 @@ def paged(team, monkeypatch):
 
 
 BUDGETS.update({
-    "a group's page (ms)": 50,                                  # measured 23
+    "a group's page (ms)": 50,                                  # measured 22
     "the page list (ms)": 50,                                   # 24
     "the page list (KB)": 500,
     "a search, the same person again (ms)": 150,                # 71
-    # Past the indexes the server keeps (maxViews: 8), a search puts its
-    # person's together again: some 45 ms more, and one at a time. With 32
-    # kept it was 70 ms in turn and 87 at once, for 230 MB more memory
-    # (2026-11-17): what these two guard is that it gets no worse.
-    f"a search, {SEARCHERS} people in turn (ms)": 250,          # 118
-    f"{SEARCHERS} people searching at once, p95 (ms)": 1200,    # 559
+    # Nothing is kept per searcher: who sees a place searches its one layer
+    # (indexCache in go/retrieval.go), so thirty in turn take what one does
+    # again, and at once they wait for no index to be made. (With an index
+    # per viewer, eight of them kept: 118 ms in turn, 559 at once.)
+    f"a search, {SEARCHERS} people in turn (ms)": 150,          # 70
+    f"{SEARCHERS} people searching at once, p95 (ms)": 250,     # 84
     # A page's view asks whether its reader may change it, which walks the
     # wiki's guides at most once a second (guideImports): it doesn't show.
     "a page beside them, p95 (ms)": 80,                         # 37
     "a page beside them, slowest (ms)": 250,                    # 39
-    "the server's memory with pages (MB)": 500,                 # 331
+    "the server's memory with pages (MB)": 500,                 # 306
 })
 
 

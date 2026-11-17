@@ -388,25 +388,134 @@ type Index struct {
 	base  store
 	n     int // the base's documents
 	avgdl float64
-	over  *overlay // changes to the documents, searched along with them (With)
+	over  *overlay // changes to the documents, searched along with them (View)
 }
 
-// overlay: changes to an Index's documents that leave it as it is (With):
-// some of its documents left out, others added after them (numbered from
-// ix.n). A search with them uses the statistics of the documents that are
-// left, as if one index were built over those alone; the Index itself, which
-// others search, never learns of them.
+// overlay: changes to an Index's documents that leave it as it is (View):
+// some of its documents left out (rm), others added after them in layers,
+// each layer's numbered on from the one before (the first from ix.n). A
+// search with them uses the statistics of the documents that are left, as
+// if one index were built over those alone; the Index itself, which others
+// search, never learns of them. It holds no document's words itself: what
+// is left out and each layer are made once and shared by every overlay that
+// names them, so an overlay costs a few words, whatever the index's size.
 type overlay struct {
-	lens     []int                // the added documents'
-	postings map[string][]posting // what they hold
-	vocab    []string             // their terms, sorted
-	newVocab []string             // those the Index doesn't have
-	dead     []bool               // the Index's documents left out (nil: none)
-	deadDF   map[string]int       // for each term, how many of those hold it
-	gone     map[string]bool      // terms of the Index no document left holds
-	n, total int                  // the documents left, their tokens
-	avgdl    float64
-	pos      []int32 // each document's place in the order ties go by (nil: its number)
+	rm       *Removed  // the Index's documents left out (nil: none)
+	layers   []LayerAt // the documents added
+	first    []int     // each layer's first document's number
+	end      int       // one past the last document's number
+	n, total int       // the documents left, their tokens
+	pos      []int32   // each of the Index's documents' place in the order ties go by (nil: its number)
+}
+
+// Layer: documents to search along with an Index's (View), numbered among
+// themselves from 0: their lengths and what they hold. Made once from their
+// tokens and only read after, so any number of views, of any number of
+// viewers, share one: a group's pages are one layer for all its members.
+type Layer struct {
+	lens     []int
+	total    int
+	postings map[string][]posting
+	vocab    []string // sorted
+
+	mu     sync.Mutex
+	newFor newKey   // which Index, and what is left out of it, newTo is for
+	newTo  []string // the terms no document left of that Index holds
+}
+
+type newKey struct {
+	base store
+	rm   *Removed
+}
+
+// LayerAt: a layer in a view, with each of its documents' place in the
+// order ties go by (nil: its number).
+type LayerAt struct {
+	Layer *Layer
+	Pos   []int32
+}
+
+// NewLayer: the layer of n documents, asking for each one's tokens in turn.
+func NewLayer(n int, tokensOf func(i int) []string) *Layer {
+	l := &Layer{postings: map[string][]posting{}, lens: make([]int, 0, n)}
+	for i := range n {
+		toks := tokensOf(i)
+		tf, order := map[string]int{}, []string{}
+		for _, t := range toks {
+			if tf[t] == 0 {
+				order = append(order, t)
+			}
+			tf[t]++
+		}
+		l.lens = append(l.lens, len(toks))
+		l.total += len(toks)
+		for _, t := range order {
+			l.postings[t] = append(l.postings[t], posting{int32(i), int32(tf[t])})
+		}
+	}
+	l.vocab = slices.Sorted(maps.Keys(l.postings))
+	return l
+}
+
+// Len: how many documents the layer has.
+func (l *Layer) Len() int { return len(l.lens) }
+
+// newTerms: the layer's terms that no document left of the index with base
+// (without rm) holds: what typo matching looks through beside the index's
+// own. Worked out once for an index and what is left out of it.
+func (l *Layer) newTerms(base store, rm *Removed) []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if key := (newKey{base, rm}); l.newFor != key {
+		var out []string
+		for _, t := range l.vocab {
+			if base.df(t) == 0 || rm != nil && rm.gone[t] {
+				out = append(out, t)
+			}
+		}
+		l.newFor, l.newTo = key, out
+	}
+	return l.newTo
+}
+
+// Removed: documents of an Index left out of a search (View): which, and
+// what that takes from the index's statistics. Made once (Without) and only
+// read after.
+type Removed struct {
+	dead   []bool          // by the document's number
+	df     map[string]int  // for each term, how many of them hold it
+	gone   map[string]bool // terms no document left holds
+	count  int
+	tokens int // their lengths together
+}
+
+// Without: the documents dead names, as what a view of ix leaves out. Nil
+// for none. One pass over all of ix's postings (the tokens aren't kept),
+// once per change, not per search or viewer.
+func (ix *Index) Without(dead map[int]bool) *Removed {
+	if len(dead) == 0 {
+		return nil
+	}
+	rm := &Removed{dead: make([]bool, ix.n), df: map[string]int{}, gone: map[string]bool{}, count: len(dead)}
+	for id := range dead {
+		rm.dead[id] = true
+		rm.tokens += ix.base.docLen(id)
+	}
+	for t, ps := range ix.base.all() {
+		n := 0
+		for _, p := range ps {
+			if rm.dead[p.doc] {
+				n++
+			}
+		}
+		if n > 0 {
+			rm.df[t] = n
+			if n == len(ps) {
+				rm.gone[t] = true
+			}
+		}
+	}
+	return rm
 }
 
 // idf: a term's weight, from how many of n documents hold it.
@@ -429,94 +538,77 @@ func NewIndex(tokens [][]string) *Index {
 // NewIndexOf: the index of n documents, asking for each one's tokens in turn
 // and keeping none of them: they'd be many times what the index holds.
 func NewIndexOf(n int, tokensOf func(i int) []string) *Index {
-	m := &mapStore{byTerm: map[string][]posting{}, lens: make([]int, 0, n)}
-	for i := range n {
-		toks := tokensOf(i)
-		tf, order := map[string]int{}, []string{}
-		for _, t := range toks {
-			if tf[t] == 0 {
-				order = append(order, t)
-			}
-			tf[t]++
-		}
-		m.lens = append(m.lens, len(toks))
-		m.total += len(toks)
-		for _, t := range order {
-			m.byTerm[t] = append(m.byTerm[t], posting{int32(i), int32(tf[t])})
-		}
-	}
-	m.vocab = slices.Sorted(maps.Keys(m.byTerm))
-	return newIndex(m)
+	l := NewLayer(n, tokensOf)
+	return newIndex(&mapStore{total: l.total, lens: l.lens, byTerm: l.postings, vocab: l.vocab})
 }
 
 // WithExtra: ix with more documents, numbered after its own.
 func (ix *Index) WithExtra(tokens [][]string) *Index { return ix.With(nil, tokens, nil) }
 
-// With: ix without the documents dead names (number → its tokens) and with
-// the extra ones, numbered from ix.n, searched as if one index were built
-// over the documents left: the same scores, the same hits. pos is each
-// document's place among them (by number, the extra ones after ix's), which
-// equal scores are ordered by; nil: the number. ix is not changed; what the
-// result shares with it is only read.
+// With: ix without the documents dead names and with the extra ones (their
+// tokens), numbered from ix.n, searched as if one index were built over the
+// documents left: the same scores, the same hits. pos is each document's
+// place among them (by number, the extra ones after ix's), which equal
+// scores are ordered by; nil: the number. View, for one layer made here.
 func (ix *Index) With(dead map[int]bool, extra [][]string, pos []int32) *Index {
-	if len(dead) == 0 && len(extra) == 0 && pos == nil {
+	var layers []LayerAt
+	var basePos []int32
+	if pos != nil {
+		basePos = pos[:ix.n]
+	}
+	if len(extra) > 0 {
+		at := LayerAt{Layer: NewLayer(len(extra), func(i int) []string { return extra[i] })}
+		if pos != nil {
+			at.Pos = pos[ix.n:]
+		}
+		layers = []LayerAt{at}
+	}
+	return ix.View(ix.Without(dead), basePos, layers)
+}
+
+// View: ix (an index as it was built or opened, not itself a view) without
+// the documents rm leaves out and with the layers' documents, the first
+// layer's numbered from ix.n and each next one's on from there, searched as
+// if one index were built over the documents left: the same scores, the
+// same hits. pos is each of ix's documents' place in the order equal scores
+// go by, and a layer's Pos its documents' (nil: the number). ix, rm and the
+// layers are not changed, only read: a view is made per search where the
+// viewers differ, and costs nothing that grows with the index.
+func (ix *Index) View(rm *Removed, pos []int32, layers []LayerAt) *Index {
+	if rm == nil && len(layers) == 0 && pos == nil {
 		return ix
 	}
-	o := &overlay{postings: map[string][]posting{}, pos: pos}
-	o.n, o.total = ix.n+len(extra)-len(dead), ix.base.tokenCount()
-	for i, toks := range extra {
-		tf, order := map[string]int{}, []string{}
-		for _, t := range toks {
-			if tf[t] == 0 {
-				order = append(order, t)
-			}
-			tf[t]++
-		}
-		o.lens = append(o.lens, len(toks))
-		o.total += len(toks)
-		for _, t := range order {
-			o.postings[t] = append(o.postings[t], posting{int32(ix.n + i), int32(tf[t])})
-		}
+	o := &overlay{rm: rm, layers: layers, pos: pos, n: ix.n, total: ix.base.tokenCount(), end: ix.n}
+	if rm != nil {
+		o.n, o.total = o.n-rm.count, o.total-rm.tokens
 	}
-	if len(dead) > 0 {
-		o.dead, o.deadDF, o.gone = make([]bool, ix.n), map[string]int{}, map[string]bool{}
-		for id := range dead {
-			o.dead[id] = true
-			o.total -= ix.base.docLen(id)
-		}
-		// What they held, from the postings: the tokens aren't kept. One pass
-		// over all of them, once per change, not per search.
-		for t, ps := range ix.base.all() {
-			n := 0
-			for _, p := range ps {
-				if o.dead[p.doc] {
-					n++
-				}
-			}
-			if n > 0 {
-				o.deadDF[t] = n
-				if n == len(ps) {
-					o.gone[t] = true
-				}
-			}
-		}
-	}
-	for t := range o.postings {
-		o.vocab = append(o.vocab, t)
-		if ix.base.df(t) == 0 || o.gone[t] { // not in ix's terms to look through
-			o.newVocab = append(o.newVocab, t)
-		}
-	}
-	sort.Strings(o.vocab)
-	sort.Strings(o.newVocab)
-	if o.n > 0 {
-		o.avgdl = float64(o.total) / float64(o.n)
+	for _, at := range layers {
+		o.first = append(o.first, o.end)
+		o.end += at.Layer.Len()
+		o.n += at.Layer.Len()
+		o.total += at.Layer.total
 	}
 	cp := *ix
 	cp.over = o
-	cp.avgdl = o.avgdl
+	cp.avgdl = 0
+	if o.n > 0 {
+		cp.avgdl = float64(o.total) / float64(o.n)
+	}
 	return &cp
 }
+
+// layerOf: which layer the document numbered doc (not one of the Index's
+// own) is in, and its number there.
+func (o *overlay) layerOf(doc int) (LayerAt, int) {
+	k := len(o.first) - 1
+	for k > 0 && doc < o.first[k] {
+		k--
+	}
+	return o.layers[k], doc - o.first[k]
+}
+
+// isDead: the Index's document doc is left out.
+func (o *overlay) isDead(doc int) bool { return o != nil && o.rm != nil && o.rm.dead[doc] }
 
 // DocsWith: the documents holding the term, those With left out too, which no
 // search reaches.
@@ -526,8 +618,10 @@ func (ix *Index) DocsWith(t string) []int {
 		docs = append(docs, int(p.doc))
 	}
 	if ix.over != nil {
-		for _, p := range ix.over.postings[t] {
-			docs = append(docs, int(p.doc))
+		for k, at := range ix.over.layers {
+			for _, p := range at.Layer.postings[t] {
+				docs = append(docs, ix.over.first[k]+int(p.doc))
+			}
 		}
 	}
 	return docs
@@ -535,10 +629,16 @@ func (ix *Index) DocsWith(t string) []int {
 
 // df: how many documents hold the term.
 func (ix *Index) df(t string) int {
-	if ix.over == nil {
-		return ix.base.df(t)
+	df := ix.base.df(t)
+	if o := ix.over; o != nil {
+		if o.rm != nil {
+			df -= o.rm.df[t]
+		}
+		for _, at := range o.layers {
+			df += len(at.Layer.postings[t])
+		}
 	}
-	return ix.base.df(t) - ix.over.deadDF[t] + len(ix.over.postings[t])
+	return df
 }
 
 // idfOf: a term's weight, from its document frequency among the documents
@@ -556,7 +656,24 @@ func (ix *Index) docLen(doc int) int {
 	if doc < ix.n {
 		return ix.base.docLen(doc)
 	}
-	return ix.over.lens[doc-ix.n]
+	at, i := ix.over.layerOf(doc)
+	return at.Layer.lens[i]
+}
+
+// place: where the document comes in the order equal scores go by.
+func (ix *Index) place(doc int) int {
+	switch o := ix.over; {
+	case o == nil:
+	case doc < ix.n:
+		if o.pos != nil {
+			return int(o.pos[doc])
+		}
+	default:
+		if at, i := o.layerOf(doc); at.Pos != nil {
+			return int(at.Pos[i])
+		}
+	}
+	return doc
 }
 
 // before: a ranks ahead of b: the higher score, else the document that comes
@@ -565,10 +682,7 @@ func (ix *Index) before(a, b Hit) bool {
 	if a.Score != b.Score {
 		return a.Score > b.Score
 	}
-	if ix.over != nil && ix.over.pos != nil {
-		return ix.over.pos[a.Doc] < ix.over.pos[b.Doc]
-	}
-	return a.Doc < b.Doc
+	return ix.place(a.Doc) < ix.place(b.Doc)
 }
 
 type weighted struct {
@@ -584,13 +698,21 @@ func (ix *Index) fuzzyTerms() iter.Seq[string] {
 	}
 	return func(yield func(string) bool) {
 		for t := range ix.base.terms("") {
-			if !o.gone[t] && !yield(t) {
+			if (o.rm == nil || !o.rm.gone[t]) && !yield(t) {
 				return
 			}
 		}
-		for _, t := range o.newVocab {
-			if !yield(t) {
-				return
+		for k, at := range o.layers {
+		terms:
+			for _, t := range at.Layer.newTerms(ix.base, o.rm) {
+				for _, earlier := range o.layers[:k] {
+					if _, has := earlier.Layer.postings[t]; has {
+						continue terms // said already
+					}
+				}
+				if !yield(t) {
+					return
+				}
 			}
 		}
 	}
@@ -619,20 +741,32 @@ func (ix *Index) expand(qTokens []string) []weighted {
 			matched = true
 		}
 		if RuneLen(t) >= 3 {
-			prefixed := func(terms iter.Seq[string]) {
+			// The words starting with it, the index's and each layer's, in
+			// the order of one index over them all.
+			var found []string
+			starting := func(terms iter.Seq[string]) {
 				for v := range terms {
 					if !strings.HasPrefix(v, t) {
 						return
 					}
-					if v != t && ix.hasTerm(v) {
-						bump(v, prefixWeight)
-						matched = true
+					if v != t {
+						found = append(found, v)
 					}
 				}
 			}
-			prefixed(ix.base.terms(t))
-			if ix.over != nil {
-				prefixed(slices.Values(ix.over.vocab[sort.SearchStrings(ix.over.vocab, t):]))
+			starting(ix.base.terms(t))
+			if ix.over != nil && len(ix.over.layers) > 0 {
+				for _, at := range ix.over.layers {
+					starting(slices.Values(at.Layer.vocab[sort.SearchStrings(at.Layer.vocab, t):]))
+				}
+				sort.Strings(found)
+				found = slices.Compact(found)
+			}
+			for _, v := range found {
+				if ix.hasTerm(v) {
+					bump(v, prefixWeight)
+					matched = true
+				}
 			}
 		}
 		if !matched && RuneLen(t) >= 4 {
@@ -688,15 +822,17 @@ func (ix *Index) SearchWhere(query string, limit int, accept func(doc int) bool)
 	}
 	var asked []int8 // per document: 0 not asked yet, 1 accepted, 2 refused
 	if accept != nil {
-		asked = make([]int8, ix.n+ix.over.addedCount())
+		asked = make([]int8, ix.numbers())
 	}
 	scores := map[int]float64{}
 	for _, tw := range ix.expand(qTokens) {
 		idf := ix.idfOf(tw.term)
-		score := func(postings []posting) {
+		// first: the number of the postings' document 0 (a layer's; the
+		// index's own, which may be left out, are numbered from 0).
+		score := func(postings []posting, first int) {
 			for _, p := range postings {
-				doc := int(p.doc)
-				if ix.over != nil && doc < ix.n && ix.over.dead != nil && ix.over.dead[doc] {
+				doc := first + int(p.doc)
+				if first == 0 && ix.over.isDead(doc) {
 					continue
 				}
 				if accept != nil {
@@ -715,9 +851,11 @@ func (ix *Index) SearchWhere(query string, limit int, accept func(doc int) bool)
 				scores[doc] += tw.weight * idf * (f * (bm25K1 + 1) / denom)
 			}
 		}
-		score(ix.base.postings(tw.term))
+		score(ix.base.postings(tw.term), 0)
 		if ix.over != nil {
-			score(ix.over.postings[tw.term])
+			for k, at := range ix.over.layers {
+				score(at.Layer.postings[tw.term], ix.over.first[k])
+			}
 		}
 	}
 	hits := make([]Hit, 0, len(scores))
@@ -753,10 +891,10 @@ func (ix *Index) HaveAll(query string, docs []int) map[int]bool {
 		found[d] = 0
 	}
 	for i, t := range tokens {
-		mark := func(postings []posting) {
+		mark := func(postings []posting, first int) {
 			for _, p := range postings {
-				if n, ok := found[int(p.doc)]; ok && n == i {
-					found[int(p.doc)] = i + 1
+				if n, ok := found[first+int(p.doc)]; ok && n == i {
+					found[first+int(p.doc)] = i + 1
 				}
 			}
 		}
@@ -764,9 +902,11 @@ func (ix *Index) HaveAll(query string, docs []int) map[int]bool {
 			if tw.weight <= fuzzyWeight { // a typo's guess, not the word
 				continue
 			}
-			mark(ix.base.postings(tw.term))
+			mark(ix.base.postings(tw.term), 0)
 			if ix.over != nil {
-				mark(ix.over.postings[tw.term])
+				for k, at := range ix.over.layers {
+					mark(at.Layer.postings[tw.term], ix.over.first[k])
+				}
 			}
 		}
 	}
@@ -779,12 +919,12 @@ func (ix *Index) HaveAll(query string, docs []int) map[int]bool {
 	return all
 }
 
-// addedCount: how many documents the overlay adds (o may be nil).
-func (o *overlay) addedCount() int {
-	if o == nil {
-		return 0
+// numbers: one past the highest number a document has.
+func (ix *Index) numbers() int {
+	if ix.over != nil {
+		return ix.over.end
 	}
-	return len(o.lens)
+	return ix.n
 }
 
 // docCount: how many documents a search is over.

@@ -13,6 +13,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"iter"
 	"maps"
 	"math"
 	"net/url"
@@ -748,24 +749,94 @@ func forgetArchiveDocs(path string) {
 	}
 }
 
-// docIndex is BM25 over docs.
+// docIndex is BM25 over docs: an index, and which doc each of its numbers
+// is. A viewer's (indexCache.get) is put together from parts others share:
+// the docs everyone sees, and those of each place the viewer sees.
 type docIndex struct {
-	docs []*SearchDoc // the docs it is over, in order
-	byID []*SearchDoc // by the number the index gives them (docs, but for an index with changes)
-	ids  []int        // each of docs' number in ix (nil: its place in docs)
-	ix   *textsearch.Index
+	ix    *textsearch.Index
+	own   []*SearchDoc // the docs of ix itself (not a view's layers), by number
+	added []*SearchDoc // a view's: the shared docs added since (the delta), numbered on from own
+	parts []docPart    // every doc it is over: the first part's, and what is beside them
+}
+
+// docPart: docs of an index, in the order they come in among all docs.
+type docPart struct {
+	docs  []*SearchDoc
+	ids   []int32 // each one's number in the index (nil: first + its place here)
+	first int
+	pos   []int32 // each one's place among all the docs (nil: the only part)
+}
+
+func (p *docPart) id(i int) int {
+	if p.ids != nil {
+		return int(p.ids[i])
+	}
+	return p.first + i
 }
 
 func newDocIndex(docs []*SearchDoc) *docIndex {
-	return &docIndex{docs: docs, byID: docs, ix: textsearch.NewIndexOf(len(docs), func(i int) []string { return docs[i].tokens() })}
+	return &docIndex{own: docs, parts: []docPart{{docs: docs}}, ix: textsearch.NewIndexOf(len(docs), func(i int) []string { return docs[i].tokens() })}
 }
 
-// idAt: the number in ix of docs[i].
-func (x *docIndex) idAt(i int) int {
-	if x.ids == nil {
-		return i
+// count: how many docs it is over.
+func (x *docIndex) count() int {
+	n := 0
+	for i := range x.parts {
+		n += len(x.parts[i].docs)
 	}
-	return x.ids[i]
+	return n
+}
+
+// doc: the doc numbered id.
+func (x *docIndex) doc(id int) *SearchDoc {
+	if id < len(x.own) {
+		return x.own[id]
+	}
+	if i := id - len(x.own); i < len(x.added) {
+		return x.added[i]
+	}
+	// One of a place's docs: the parts after the first, each numbered on
+	// from the one before.
+	i := len(x.parts) - 1
+	for i > 1 && id < x.parts[i].first {
+		i--
+	}
+	return x.parts[i].docs[id-x.parts[i].first]
+}
+
+// all: every doc it is over with its number, in the order the docs come in
+// (pages, then tasks; what a search without words keeps). The parts are
+// each in that order: they are merged by their docs' places.
+func (x *docIndex) all() iter.Seq2[int, *SearchDoc] {
+	return func(yield func(int, *SearchDoc) bool) {
+		if len(x.parts) == 1 {
+			p := &x.parts[0]
+			for i, d := range p.docs {
+				if !yield(p.id(i), d) {
+					return
+				}
+			}
+			return
+		}
+		at := make([]int, len(x.parts))
+		for {
+			next := -1
+			for k := range x.parts {
+				p := &x.parts[k]
+				if at[k] < len(p.docs) && (next < 0 || p.pos[at[k]] < x.parts[next].pos[at[next]]) {
+					next = k
+				}
+			}
+			if next < 0 {
+				return
+			}
+			p := &x.parts[next]
+			if !yield(p.id(at[next]), p.docs[at[next]]) {
+				return
+			}
+			at[next]++
+		}
+	}
 }
 
 // search: the best `limit` docs for the query text.
@@ -785,30 +856,40 @@ func (x *docIndex) searchWhere(text string, limit int, accept func(*SearchDoc) b
 func (x *docIndex) searchWhereID(text string, limit int, accept func(id int, d *SearchDoc) bool) []*SearchDoc {
 	var ok func(int) bool
 	if accept != nil {
-		ok = func(i int) bool { return accept(i, x.byID[i]) }
+		ok = func(i int) bool { return accept(i, x.doc(i)) }
 	}
 	hits := x.ix.SearchWhere(text, limit, ok)
 	out := make([]*SearchDoc, len(hits))
 	for i, h := range hits {
-		out[i] = x.byID[h.Doc]
+		out[i] = x.doc(h.Doc)
 	}
 	return out
 }
 
 // indexCache keeps the BM25 indexes over the current docs.
 //
-// With users, what is private is in no one's index but its owner's: an index
-// is made from the shared docs, and a user's own private docs are added to it
-// for them (Index.With), so another user's words, counts and lengths take no
-// part in the ranking (document frequencies, lengths and the vocabulary
-// typo matching draws on would otherwise show through).
+// With users, what is not everyone's is in no one's index but those who see
+// it: an index is made from the shared docs (base), and the docs of each
+// place a viewer sees (their private pages, their private tasks, a group's
+// folder) are searched along with it (textsearch.View), so the words,
+// counts and lengths of what a viewer doesn't see take no part in their
+// ranking (document frequencies, lengths and the vocabulary typo matching
+// draws on would otherwise show through).
 //
-// A change to a page or task doesn't build the index again: it keeps the one
-// made at the last rebuild (base), leaves out the docs that are gone from it
-// (dead) and adds the new ones (delta), searched with the statistics of what
-// is left, exactly as an index built over that would. Only when the changes
-// pass a few percent of the docs (maxChanges) is it built again. Docs don't
-// keep their tokens, so a change and a rebuild work out the ones they need.
+// A place's docs are one layer (textsearch.Layer), made once from their
+// tokens and kept until one of them changes: every viewer who sees the
+// place searches the same layer, so a group's pages are indexed once, not
+// once per member, and nothing is kept per viewer. A search puts its view
+// together from what is there, which costs a few words: no viewer waits for
+// an index to be made because others searched since.
+//
+// A change to a shared page or task doesn't build the index again: it keeps
+// the one made at the last rebuild (base), leaves out the docs that are gone
+// from it (dead) and adds the new ones (delta, one more layer, everyone's),
+// searched with the statistics of what is left, exactly as an index built
+// over that would. Only when the changes pass a few percent of the docs
+// (maxChanges) is it built again. Docs don't keep their tokens, so a change
+// and a rebuild work out the ones they need.
 //
 // The base is a file in .zone/index/ (file), mapped into memory rather than
 // read into Go's heap, and written anew by a rebuild. A start finds it there:
@@ -826,33 +907,57 @@ type indexCache struct {
 	users     string            // who the docs were split for (usersKey)
 	all       []*SearchDoc
 	shared    []*SearchDoc // the shared docs now
-	private   []*SearchDoc
-	sharedGen int       // counts the changes to shared
-	base      *docIndex // over the shared docs as they were at the last rebuild
+	base      *docIndex    // over the shared docs as they were at the last rebuild
 	baseID    map[*SearchDoc]int
-	reordered bool         // base's docs (from its file) are in another order than now: ties go by the view's
+	reordered bool         // base's docs (from its file) are in another order than now: ties go by the order now
 	dead      []int        // base docs no longer shared docs, by number
 	delta     []*SearchDoc // shared docs that are not in base, in order
-	views     map[string]*indexView
-	asked     int // counts get's calls for a view, for which was asked for last
+
+	// What every viewer's index is put together from, made when a doc
+	// changes (arrange), not when someone searches.
+	removed     *textsearch.Removed // dead, as the views leave them out (nil: none)
+	removedOf   *docIndex           // the base and the dead docs removed was made for
+	removedDead []int
+	changes     *docLayer // delta
+	basePos     []int32   // each base doc's place among all the docs, by number
+	common      docPart   // the shared docs in order, with their numbers
+	places      map[docPlace]*docLayer
+	order       []docPlace // places' keys, in the order their first docs come
 }
 
-// indexView: the index of one viewer, with their own private docs.
-type indexView struct {
-	base *docIndex
-	gen  int
-	own  []*SearchDoc
-	idx  *docIndex
-	used int // when it was last asked for (indexCache.asked)
+// docPlace: whose docs that aren't everyone's are: the place of a page
+// (a user's private folder, a group's, no one's), or a user's private
+// tasks. Who sees one doc of a place sees them all (canSee asks the place
+// alone, canSeeTask of a private task its owner), so a place's docs are
+// indexed together and searched by whoever sees the place.
+type docPlace struct {
+	place
+	tasks bool
 }
 
-// maxViews: how many viewers' indexes are kept. A view numbers every doc
-// of the wiki for its viewer (a few bytes each, three times over): with
-// 80,000 tasks about 2 MB a user, 63 MB for thirty users who had searched
-// (measured 2026-11-15), and more with every user. So the viewers who
-// searched last keep theirs, and another's is made again when they come
-// back, which takes a few milliseconds.
-const maxViews = 8
+func placeOfDoc(d *SearchDoc) docPlace {
+	if d.isTask() {
+		return docPlace{place{ofUser, d.Task.Owner}, true}
+	}
+	return docPlace{place: placeOf(d.Slug)}
+}
+
+// docLayer: the docs of a place (or the delta), in order, with their layer:
+// made when someone who sees them first searches, kept while the docs are
+// the same ones. pos is each one's place among all the docs now.
+type docLayer struct {
+	docs  []*SearchDoc
+	pos   []int32
+	layer *textsearch.Layer
+}
+
+// index: the layer over the docs, made on first use (under the cache's lock).
+func (l *docLayer) index() *textsearch.Layer {
+	if l.layer == nil {
+		l.layer = textsearch.NewLayer(len(l.docs), func(i int) []string { return viewTokens.of(l.docs[i]) })
+	}
+	return l.layer
+}
 
 // maxChanges: how many docs may differ from the base before it is built
 // again; more only slow every search down, fewer rebuild too often.
@@ -877,7 +982,9 @@ func usersKey() string {
 	return "users:" + strings.Join(sortedKeys(users), ",")
 }
 
-// get: the index rq searches (nil: Zone itself, over everything).
+// get: the index rq searches (nil: Zone itself, over everything): the base,
+// and when docs changed since it was built or the viewer sees places that
+// aren't everyone's, a view of it with those. Nothing is kept of a view.
 func (c *indexCache) get(rq *Req, docs []*SearchDoc) *docIndex {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -885,69 +992,96 @@ func (c *indexCache) get(rq *Req, docs []*SearchDoc) *docIndex {
 	usersChanged := c.base == nil || key != c.users
 	if usersChanged || !slices.Equal(c.all, docs) {
 		c.users, c.all = key, slices.Clone(docs)
-		var shared, private []*SearchDoc
+		var shared []*SearchDoc
 		for _, d := range docs {
 			if docShared(d) {
 				shared = append(shared, d)
-			} else {
-				private = append(private, d)
 			}
 		}
-		c.private = private
 		if usersChanged || !slices.Equal(c.shared, shared) {
 			c.shared = shared
-			c.sharedGen++
 			c.update(usersChanged)
 		}
+		c.arrange()
 	}
-	var own []*SearchDoc
-	user := ""
-	if rq != nil {
-		user = rq.user
+	var layers []textsearch.LayerAt
+	parts := []docPart{c.common}
+	next := len(c.base.own)
+	add := func(l *docLayer) {
+		layers = append(layers, textsearch.LayerAt{Layer: l.index(), Pos: l.pos})
+		next += len(l.docs)
 	}
-	for _, d := range c.private {
-		if rq == nil || docVisible(user, d) {
-			own = append(own, d)
+	if c.changes != nil {
+		add(c.changes) // its docs are among the shared ones (common), numbered there
+	}
+	for _, p := range c.order {
+		l := c.places[p]
+		if rq != nil && !docVisible(rq.user, l.docs[0]) {
+			continue
 		}
+		parts = append(parts, docPart{docs: l.docs, first: next, pos: l.pos})
+		add(l)
 	}
-	if len(own) == 0 && len(c.dead) == 0 && len(c.delta) == 0 && !c.reordered {
+	if len(layers) == 0 && c.removed == nil && !c.reordered {
 		return c.base
 	}
-	viewKey := "user:" + user
-	if rq == nil {
-		viewKey = "zone"
-	} else if len(own) == 0 {
-		viewKey = "shared" // the same for everyone with nothing private of their own
+	return &docIndex{ix: c.base.ix.View(c.removed, c.basePos, layers), own: c.base.own, added: c.delta, parts: parts}
+}
+
+// arrange: what the views are put together from, for the docs as they are
+// now (c.all, and the base, dead and delta that update found): each doc's
+// place in the order, the shared docs with their numbers, and the docs that
+// aren't everyone's by their places. A place whose docs are the same ones
+// keeps its layer; one pass over the docs, once per change.
+func (c *indexCache) arrange() {
+	n := len(c.base.own)
+	c.basePos = make([]int32, n)
+	c.common = docPart{docs: make([]*SearchDoc, 0, len(c.shared)), ids: make([]int32, 0, len(c.shared)), pos: make([]int32, 0, len(c.shared))}
+	deltaID := make(map[*SearchDoc]int, len(c.delta))
+	for i, d := range c.delta {
+		deltaID[d] = n + i
 	}
-	c.asked++
-	if v := c.views[viewKey]; v != nil && v.base == c.base && v.gen == c.sharedGen && slices.Equal(v.own, own) {
-		v.used = c.asked
-		return v.idx
-	}
-	if c.views == nil {
-		c.views = map[string]*indexView{}
-	}
-	// Room for it: the views of an index that is no longer the one (they
-	// are never asked for again) go, and past maxViews the one asked for
-	// longest ago.
-	delete(c.views, viewKey)
-	for key, v := range c.views {
-		if v.base != c.base || v.gen != c.sharedGen {
-			delete(c.views, key)
+	var changes *docLayer
+	if len(c.delta) > 0 {
+		changes = &docLayer{docs: c.delta, pos: make([]int32, 0, len(c.delta))}
+		if c.changes != nil && slices.Equal(c.changes.docs, c.delta) {
+			changes.layer = c.changes.layer
 		}
 	}
-	for len(c.views) >= maxViews {
-		oldest := ""
-		for key, v := range c.views {
-			if oldest == "" || v.used < c.views[oldest].used {
-				oldest = key
+	places, order := map[docPlace]*docLayer{}, []docPlace(nil)
+	for i, d := range c.all {
+		at := int32(i)
+		if id, ok := c.baseID[d]; ok {
+			c.basePos[id] = at
+			c.common.docs, c.common.ids, c.common.pos = append(c.common.docs, d), append(c.common.ids, int32(id)), append(c.common.pos, at)
+		} else if id, ok := deltaID[d]; ok {
+			changes.pos = append(changes.pos, at)
+			c.common.docs, c.common.ids, c.common.pos = append(c.common.docs, d), append(c.common.ids, int32(id)), append(c.common.pos, at)
+		} else {
+			p := placeOfDoc(d)
+			l := places[p]
+			if l == nil {
+				l = &docLayer{}
+				places[p], order = l, append(order, p)
 			}
+			l.docs, l.pos = append(l.docs, d), append(l.pos, at)
 		}
-		delete(c.views, oldest)
 	}
-	idx := c.view(own)
-	c.views[viewKey] = &indexView{c.base, c.sharedGen, own, idx, c.asked}
-	return idx
+	for p, l := range places {
+		if old := c.places[p]; old != nil && slices.Equal(old.docs, l.docs) {
+			l.layer = old.layer
+		}
+	}
+	c.changes, c.places, c.order = changes, places, order
+	// What the dead docs take from the base's statistics: a pass over its
+	// postings, so only when they are other docs than last time.
+	if c.removedOf != c.base || !slices.Equal(c.removedDead, c.dead) {
+		dead := make(map[int]bool, len(c.dead))
+		for _, id := range c.dead {
+			dead[id] = true
+		}
+		c.removed, c.removedOf, c.removedDead = c.base.ix.Without(dead), c.base, c.dead
+	}
 }
 
 // update: the shared docs are c.shared now. Finds what differs from the base,
@@ -963,7 +1097,7 @@ func (c *indexCache) update(rebuild bool) {
 			inShared[d] = true
 		}
 		var dead []int
-		for id, d := range c.base.docs {
+		for id, d := range c.base.own {
 			if !inShared[d] {
 				dead = append(dead, id)
 			}
@@ -974,7 +1108,7 @@ func (c *indexCache) update(rebuild bool) {
 				delta = append(delta, d)
 			}
 		}
-		if len(dead)+len(delta) <= maxChanges(len(c.base.docs)) {
+		if len(dead)+len(delta) <= maxChanges(len(c.base.own)) {
 			c.dead, c.delta = dead, delta
 			return
 		}
@@ -1041,7 +1175,7 @@ func (c *indexCache) load() bool {
 			docs[id] = goneDoc
 		}
 	}
-	c.base, c.baseID, c.dead, c.delta = &docIndex{docs: docs, byID: docs, ix: ix}, baseID, nil, nil
+	c.base, c.baseID, c.dead, c.delta = &docIndex{own: docs, parts: []docPart{{docs: docs}}, ix: ix}, baseID, nil, nil
 	c.reordered = reordered
 	return true
 }
@@ -1093,7 +1227,7 @@ func (c *indexCache) build() {
 	if ix == nil {
 		ix = textsearch.NewIndexOf(len(docs), func(i int) []string { return docs[i].tokens() })
 	}
-	c.base, c.reordered = &docIndex{docs: docs, byID: docs, ix: ix}, false
+	c.base, c.reordered = &docIndex{own: docs, parts: []docPart{{docs: docs}}, ix: ix}, false
 	c.baseID = make(map[*SearchDoc]int, len(docs))
 	for id, d := range docs {
 		c.baseID[d] = id
@@ -1101,45 +1235,11 @@ func (c *indexCache) build() {
 	c.dead, c.delta = nil, nil
 }
 
-// view: the index of a viewer whose private docs are own: the base without
-// its dead docs, with the delta and own docs added, the docs in the order
-// they come in (c.all), as a fresh index over them would have them.
-func (c *indexCache) view(own []*SearchDoc) *docIndex {
-	n := len(c.base.byID)
-	extra := slices.Concat(c.delta, own)
-	extraID := make(map[*SearchDoc]int, len(extra))
-	tokens := make([][]string, len(extra))
-	for i, d := range extra {
-		extraID[d] = n + i
-		tokens[i] = viewTokens.of(d)
-	}
-	dead := make(map[int]bool, len(c.dead))
-	for _, id := range c.dead {
-		dead[id] = true
-	}
-	pos := make([]int32, n+len(extra))
-	live := make([]*SearchDoc, 0, n-len(dead)+len(extra))
-	ids := make([]int, 0, cap(live))
-	for _, d := range c.all {
-		id, ok := c.baseID[d]
-		if !ok {
-			id, ok = extraID[d]
-		}
-		if !ok {
-			continue // another user's
-		}
-		pos[id] = int32(len(live))
-		live = append(live, d)
-		ids = append(ids, id)
-	}
-	return &docIndex{docs: live, byID: slices.Concat(c.base.byID, extra), ids: ids, ix: c.base.ix.With(dead, tokens, pos)}
-}
-
-// viewTokens: the tokens of the task docs a viewer's index adds to the
-// base (view): a user's own private tasks, which are in no index file, and
-// what changed since the base was written. A view is made again whenever a
-// shared doc changes, and a task's tokens come from its file: without this
-// each of them read a user's private archives again. Kept by the docs' keys
+// viewTokens: the tokens of the task docs the layers add to the base
+// (docLayer): a user's own private tasks, which are in no index file, and
+// what changed since the base was written. A layer is made again whenever
+// one of its docs changes, and a task's tokens come from its file: without
+// this each of them read a user's private archives again. Kept by the docs' keys
 // (what their tokens are made from), up to viewTokensMax tokens; past it,
 // it starts over.
 var viewTokens tokenCache
@@ -1231,7 +1331,7 @@ func (x *docIndex) filter(q *textsearch.Query, keep func(*SearchDoc) bool) func(
 	excluded := map[*SearchDoc]bool{}
 	for _, stem := range q.ExcludeStems {
 		for _, id := range x.ix.DocsWith(stem) {
-			excluded[x.byID[id]] = true
+			excluded[x.doc(id)] = true
 		}
 	}
 	filtered := q.HasFilters()
@@ -1252,7 +1352,7 @@ func phraseFirst(ranked []*SearchDoc, q *textsearch.Query, x *docIndex, keep fun
 	var hits []*SearchDoc
 	first := map[*SearchDoc]bool{}
 	passes := x.filter(q, keep)
-	for _, d := range x.searchWhereID(q.RankingText(), len(x.docs), func(id int, d *SearchDoc) bool {
+	for _, d := range x.searchWhereID(q.RankingText(), x.count(), func(id int, d *SearchDoc) bool {
 		return passes(id, d) && x.hasPhrase(id, d, phrase)
 	}) {
 		hits = append(hits, d)
@@ -1303,14 +1403,14 @@ func hybrid(ranked []*SearchDoc, hits []docScore, q *textsearch.Query, x *docInd
 		byWord[d] = true
 	}
 	var ids []int
-	for i, d := range x.docs {
+	for id, d := range x.all() {
 		if byWord[d] {
-			ids = append(ids, x.idAt(i))
+			ids = append(ids, id)
 		}
 	}
 	first := map[*SearchDoc]bool{}
 	for id := range x.ix.HaveAll(text, ids) {
-		first[x.byID[id]] = true
+		first[x.doc(id)] = true
 	}
 	if len(first) == 0 {
 		return fused
@@ -1380,8 +1480,8 @@ func rankedDocs(q *textsearch.Query, x *docIndex, keep func(*SearchDoc) bool, li
 		// newest first. There are no words to rank by.
 		var docs []*SearchDoc
 		passes := x.filter(q, keep)
-		for i, d := range x.docs {
-			if passes(x.idAt(i), d) {
+		for id, d := range x.all() {
+			if passes(id, d) {
 				docs = append(docs, d)
 			}
 		}
@@ -1400,8 +1500,8 @@ func rankedDocs(q *textsearch.Query, x *docIndex, keep func(*SearchDoc) bool, li
 	semantic.poke()
 	pages, tasks := map[string]*SearchDoc{}, map[string]*SearchDoc{}
 	passes := x.filter(q, keep)
-	for i, d := range x.docs {
-		if !passes(x.idAt(i), d) {
+	for id, d := range x.all() {
+		if !passes(id, d) {
 			continue
 		}
 		if d.isTask() {
@@ -1431,7 +1531,7 @@ func rankedDocs(q *textsearch.Query, x *docIndex, keep func(*SearchDoc) bool, li
 func bestSections(rq *Req, q *textsearch.Query, slugs map[string]bool) map[string]*SearchDoc {
 	text := q.RankingText()
 	x := chunkIndex(rq)
-	ranked := x.searchWhere(text, len(x.docs), func(d *SearchDoc) bool { return !d.isTask() && slugs[d.Slug] })
+	ranked := x.searchWhere(text, x.count(), func(d *SearchDoc) bool { return !d.isTask() && slugs[d.Slug] })
 	best := map[string]*SearchDoc{}
 	own := func(d *SearchDoc) string { // the section's own text
 		body, _ := d.body()
@@ -1457,7 +1557,7 @@ func bestSections(rq *Req, q *textsearch.Query, slugs map[string]bool) map[strin
 			}
 		}
 		byKey := map[string]*SearchDoc{}
-		for _, d := range x.docs {
+		for _, d := range x.all() {
 			if !d.isTask() && rest[d.Slug] {
 				byKey[d.semKey()] = d
 			}
@@ -1729,9 +1829,9 @@ func retrieve(rq *Req, raw string, limit int, under string, quicknote bool) []*S
 		text := q.RankingText()
 		bySlug, slugs, tasks := map[string][]*SearchDoc{}, map[string]bool{}, map[string]*SearchDoc{}
 		passes := x.filter(q, nil)
-		for i, d := range x.docs {
+		for id, d := range x.all() {
 			switch {
-			case !passes(x.idAt(i), d):
+			case !passes(id, d):
 			case !d.isTask() && pageOK(d.Slug):
 				bySlug[d.Slug], slugs[d.Slug] = append(bySlug[d.Slug], d), true
 			case d.isTask() && !pagesOnly && !hiddenDoc(rq, d):

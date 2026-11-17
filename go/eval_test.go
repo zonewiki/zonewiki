@@ -27,7 +27,7 @@ func evalWiki(t *testing.T) {
 func TestEvalRank(t *testing.T) {
 	evalWiki(t)
 	byHeading := map[string]*SearchDoc{}
-	for _, d := range chunkIndex(nil).docs {
+	for _, d := range docsOf(chunkIndex(nil)) {
 		if d.Slug == "golf" {
 			byHeading[d.heading()] = d
 		}

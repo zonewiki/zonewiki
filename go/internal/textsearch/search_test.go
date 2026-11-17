@@ -542,26 +542,81 @@ func TestWithChangesIsAsIfBuiltOverWhatIsLeft(t *testing.T) {
 			labelOf[e.id] = e.label
 			freshTokens[k] = e.tokens
 		}
-		got, whole := NewIndex(base).With(dead, extra, pos), NewIndex(freshTokens)
-		for _, q := range queries {
-			for _, limit := range []int{3, 1000} {
-				var a, b []labelled
-				for _, h := range got.Search(q, limit) {
-					a = append(a, labelled{labelOf[h.Doc], h})
-				}
-				for _, h := range whole.Search(q, limit) {
-					b = append(b, labelled{live[h.Doc].label, h})
-				}
-				if len(a) != len(b) {
-					t.Fatalf("round %d %q top %d: %d hits, want %d", round, q, limit, len(a), len(b))
-				}
-				for i := range a {
-					if a[i].label != b[i].label || a[i].hit.Score != b[i].hit.Score {
-						t.Fatalf("round %d %q top %d, hit %d: %s %v, want %s %v", round, q, limit, i, a[i].label, a[i].hit.Score, b[i].label, b[i].hit.Score)
+		// The same as one layer and as several (a viewer's places), which
+		// hold some of the same words.
+		ix := NewIndex(base)
+		var layers []LayerAt
+		for from := 0; from < len(extra); {
+			to := from + 1 + r.Intn(len(extra)-from)
+			layers = append(layers, LayerAt{NewLayer(to-from, func(i int) []string { return extra[from+i] }), pos[nb+from : nb+to]})
+			from = to
+		}
+		whole := NewIndex(freshTokens)
+		for _, got := range []*Index{ix.With(dead, extra, pos), ix.View(ix.Without(dead), pos[:nb], layers)} {
+			for _, q := range queries {
+				for _, limit := range []int{3, 1000} {
+					var a, b []labelled
+					for _, h := range got.Search(q, limit) {
+						a = append(a, labelled{labelOf[h.Doc], h})
+					}
+					for _, h := range whole.Search(q, limit) {
+						b = append(b, labelled{live[h.Doc].label, h})
+					}
+					if len(a) != len(b) {
+						t.Fatalf("round %d %q top %d: %d hits, want %d", round, q, limit, len(a), len(b))
+					}
+					for i := range a {
+						if a[i].label != b[i].label || a[i].hit.Score != b[i].hit.Score {
+							t.Fatalf("round %d %q top %d, hit %d: %s %v, want %s %v", round, q, limit, i, a[i].label, a[i].hit.Score, b[i].label, b[i].hit.Score)
+						}
 					}
 				}
 			}
 		}
+	}
+}
+
+// A layer is only read by a view: two views of two viewers share it, each
+// with its own other layers, and neither finds the other's documents.
+func TestViewsShareALayer(t *testing.T) {
+	ix := NewIndex([][]string{{"apple", "pear"}, {"plum"}})
+	group := NewLayer(2, func(i int) []string { return [][]string{{"apple", "ocelot"}, {"ocelot", "harp"}}[i] })
+	anna := NewLayer(1, func(int) []string { return []string{"ocelot", "annasword"} })
+	bo := NewLayer(1, func(int) []string { return []string{"bosword", "apple"} })
+	a := ix.View(nil, nil, []LayerAt{{Layer: group}, {Layer: anna}})
+	b := ix.View(nil, nil, []LayerAt{{Layer: bo}, {Layer: group}})
+	docs := func(hits []Hit) (out []int) {
+		for _, h := range hits {
+			out = append(out, h.Doc)
+		}
+		slices.Sort(out)
+		return
+	}
+	if got := docs(a.Search("ocelot", 10)); !slices.Equal(got, []int{2, 3, 4}) {
+		t.Errorf("anna: ocelot in %v", got)
+	}
+	if got := docs(b.Search("ocelot", 10)); !slices.Equal(got, []int{3, 4}) { // the group's are numbered after bo's one
+		t.Errorf("bo: ocelot in %v", got)
+	}
+	if a.Search("bosword", 10) != nil || a.Search("boswor", 10) != nil || a.Search("bosworx", 10) != nil {
+		t.Error("anna finds bo's word, by itself, its start or a typo")
+	}
+	if b.Search("annasword", 10) != nil || len(b.Search("bosworx", 10)) != 1 {
+		t.Error("bo finds anna's word, or not their own by a typo")
+	}
+	// The same as an index over each one's documents.
+	for name, pair := range map[string][2]*Index{
+		"anna": {a, NewIndex([][]string{{"apple", "pear"}, {"plum"}, {"apple", "ocelot"}, {"ocelot", "harp"}, {"ocelot", "annasword"}})},
+		"bo":   {b, NewIndex([][]string{{"apple", "pear"}, {"plum"}, {"bosword", "apple"}, {"apple", "ocelot"}, {"ocelot", "harp"}})},
+	} {
+		for _, q := range []string{"apple", "ocelot harp", "ocel", "plum apple", "harq"} {
+			if got, want := pair[0].Search(q, 10), pair[1].Search(q, 10); !slices.Equal(got, want) {
+				t.Errorf("%s %q: %v, an index over their documents %v", name, q, got, want)
+			}
+		}
+	}
+	if ix.Search("ocelot", 10) != nil {
+		t.Error("the index itself learned of a layer")
 	}
 }
 

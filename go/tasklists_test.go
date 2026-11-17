@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 	"zonewiki/internal/taskfiles"
+	"zonewiki/internal/textsearch"
 )
 
 // writeTasks writes owner's open tasks as a wiki from before has them.
@@ -1712,14 +1714,13 @@ func TestTheSearchKeepsRecordsOfTasks(t *testing.T) {
 	}
 }
 
-// The search keeps the indexes of the viewers who searched last, not every
-// user's: a view numbers every doc of the wiki for its viewer. One who
-// comes back after others gets theirs made again, with their own private
-// tasks in it and nobody else's.
-func TestTheSearchKeepsTheLastViewersIndexes(t *testing.T) {
+// The search keeps nothing per viewer: each user's private tasks are one
+// layer, made once and kept while they are the same tasks, however many
+// others search in between, and everyone finds their own and nobody else's.
+func TestTheSearchKeepsNothingPerViewer(t *testing.T) {
 	testWiki(t, nil)
 	var names []string
-	for i := 0; i < maxViews+4; i++ {
+	for i := 0; i < 12; i++ {
 		names = append(names, "user"+string(rune('a'+i)))
 	}
 	withUsers(t, names...)
@@ -1739,6 +1740,24 @@ func TestTheSearchKeepsTheLastViewersIndexes(t *testing.T) {
 		}
 		return
 	}
+	// The layers made, of whichever index the search asks (the sections').
+	layers := func() map[docPlace]*textsearch.Layer {
+		made := map[docPlace]*textsearch.Layer{}
+		for _, c := range []*indexCache{&searchIndexCache, &chunkIndexCache} {
+			c.mu.Lock()
+			for p, l := range c.places {
+				if l.layer != nil {
+					if made[p] != nil {
+						t.Fatal("both indexes are asked: tell them apart here")
+					}
+					made[p] = l.layer
+				}
+			}
+			c.mu.Unlock()
+		}
+		return made
+	}
+	var first map[docPlace]*textsearch.Layer
 	for round := 0; round < 2; round++ {
 		for _, u := range names {
 			if own, others := finds(u); own != 1 || others != 0 {
@@ -1747,31 +1766,39 @@ func TestTheSearchKeepsTheLastViewersIndexes(t *testing.T) {
 			if got := retrieve(&Req{user: u}, "zephyrscale", 5, "", false); len(got) != 1 {
 				t.Fatalf("%s finds %d shared tasks", u, len(got))
 			}
-			for _, c := range []*indexCache{&searchIndexCache, &chunkIndexCache} {
-				c.mu.Lock()
-				n := len(c.views)
-				c.mu.Unlock()
-				if n > maxViews {
-					t.Fatalf("%d views kept, more than %d", n, maxViews)
-				}
+		}
+		if round == 0 {
+			first = layers()
+			if len(first) != len(names) {
+				t.Fatalf("%d layers made, want one for each of the %d users' tasks", len(first), len(names))
 			}
 		}
 	}
-	// The last viewers' are the ones kept.
-	kept := 0
-	for _, c := range []*indexCache{&searchIndexCache, &chunkIndexCache} {
-		c.mu.Lock()
-		_, last := c.views["user:"+names[len(names)-1]]
-		_, first := c.views["user:"+names[0]]
-		if len(c.views) > 0 {
-			kept += len(c.views)
-			if !last || first {
-				t.Errorf("kept: the last viewer's %v, the first one's %v (%d views)", last, first, len(c.views))
+	// The second round made none anew: every viewer's is still the one.
+	if again := layers(); !maps.Equal(first, again) {
+		t.Error("a layer was made again though its tasks are the same")
+	}
+	// One user's new private task makes their layer anew, and only theirs.
+	newTestTask(t, names[3], "Own quillfeather again", true)
+	for _, u := range names {
+		want := 1
+		if u == names[3] {
+			want = 2
+		}
+		if own, others := finds(u); own != want || others != 0 {
+			t.Fatalf("after a new task, %s finds %d of their own and %d of others", u, own, others)
+		}
+	}
+	changed := 0
+	for p, l := range layers() {
+		if first[p] != l {
+			changed++
+			if p.name != names[3] {
+				t.Errorf("the layer of %s was made again for a task of %s", p.name, names[3])
 			}
 		}
-		c.mu.Unlock()
 	}
-	if kept == 0 {
-		t.Error("no view kept at all: the test looks at the wrong place")
+	if changed != 1 {
+		t.Errorf("%d layers made anew, want the one whose tasks changed", changed)
 	}
 }

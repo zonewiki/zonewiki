@@ -208,7 +208,7 @@ func TestSemanticCacheOfAnOlderChunking(t *testing.T) {
 		t.Errorf("embedded %q: the texts are unchanged", r.calls)
 	}
 	keys := map[string]bool{}
-	for _, d := range chunkIndex(nil).docs {
+	for _, d := range chunkIndex(nil).all() {
 		keys[d.semKey()] = true
 	}
 	hits := fresh.searchChunks("car repair", nil, 30)
