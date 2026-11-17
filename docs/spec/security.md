@@ -5,6 +5,33 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 How Zone protects the wiki: the login gate, the MCP token, the Host and Origin checks, framing, HTTPS cookies and throttling.
 Each rule has tests in `tests/test_routes.py` or `tests/test_mcp.py`, and `go/security_test.go`.
 
+## Principles
+
+These are the rules the sections below follow (Goals & Principles in `AGENTS.md`).
+A new feature is checked against them, and a protection that breaks one is a bug.
+
+- **Closed until opened on purpose.**
+  Every door (the browser, MCP, the files, mail links) refuses until a rule lets the request in, and a new door adds no way around a rule that holds at another.
+- **Least privilege.**
+  A token, an invite or reset link, or a user can do what it was given and no more.
+  A leaked one is limited, expires or can be revoked: tokens are per user, links carry a token that is used up or times out, and a user's token goes with the user.
+- **Input is untrusted.**
+  It is checked on arrival and escaped on output; what Zone shows from elsewhere (images, frames, links) is limited to what the wiki allows (`external-content`).
+- **Secrets stay out of git, logs and error messages.**
+  The key, the tokens and the password hashes are files with mode 0600 or settings that git doesn't see; see No secrets in the repo, below.
+- **One permission model.**
+  Who may read, write or administer a page, a task, a list or a folder is decided in one place that every door asks: the web UI, the MCP tools, search, history, exports and mail.
+  A door never works out access itself, so two doors never disagree.
+- **Deny by default.**
+  What no rule allows is refused, and a missing or unreadable setting never grants more than its absence.
+- **An agent acts for a user and has no more than that user.**
+  An MCP token is a user's, so a tool sees and changes what its user may (Several users in `docs/spec/users.md`).
+- **What you may not see is not there.**
+  It is not in a search result, a count, a link's preview, a history or a diff, a mail, or the wording of an error: a refusal for a page you may not read looks the same as a page that doesn't exist.
+- **Each rule is tested at each door**, including that a denied thing is really denied (the tests named above).
+
+## Protections
+
 - Optional password auth: `./run.sh config passwd` (a hash as `password` in the settings file, `.zone/config`) enables a login gate.
   If unset, no auth is required.
   Zone makes a key once and keeps it in `$ZONE_DATA/.zone/secret_key` (mode 0600, listed in `.git/info/exclude` so it never reaches git or a git remote; `secretKey()`), so restarts don't sign anyone out.
