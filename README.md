@@ -1,14 +1,17 @@
 # Zone
 
-**Wiki, notes and tasks for you, your small team, and your AI agents.**
+**What you, your small team and your AI assistants know, in one place you own: a wiki with notes and tasks.**
 
-A self-hosted wiki with built-in tasks and quick notes. Your pages are plain
-Markdown files in a folder you choose; Zone renders them in the browser, lets
-you edit them there or in any editor, searches them, and keeps every version
-in git. No database, no frontend build, no cloud: run it on your machine, or
-self-host it behind HTTPS. Alone it needs no accounts; for a small team, add
-users, with private pages and tasks for each. AI assistants work in it too,
-over [MCP](#connect-an-ai-assistant), and every edit they make is a git commit.
+A self-hosted wiki with built-in tasks and quick notes, made to be read and
+written by you and by your AI assistants alike. Your pages are plain Markdown
+files in a folder you choose, so any assistant of any maker can work with
+them, over [MCP](#connect-an-ai-assistant) as you: it sees and changes what
+you may, no more, and every edit it makes is a git commit you can review and
+undo. Zone renders the pages in the browser, lets you edit them there or in
+any editor, searches them, and keeps every version in git. No database, no
+frontend build, no cloud: run it on your machine, or self-host it behind
+HTTPS. Alone it needs no accounts; for a small team, add users, with private
+pages and tasks for each.
 
 ![A wiki page in Zone: the page in the middle, its table of contents on the left, backlinks and linked tasks on the right](docs/screenshots/page.png)
 
@@ -20,6 +23,13 @@ and edits them, but nothing is locked inside it: open the folder in any
 editor, grep it, back it up with `git push`, or stop using Zone and keep
 everything as it is. Search indexes and caches are rebuilt from the files.
 
+- **A memory for your AI assistants, under your rules.** Through its
+  [MCP server](#connect-an-ai-assistant), an AI assistant can do everything
+  you can: search, read, create, edit, rename and restore pages, file
+  notes, and manage tasks. It acts as you and never sees more than you do;
+  its edits land as git commits marked `(MCP)` that you can review, diff or
+  undo. Zone brings no model of its own: the assistant is yours, whichever
+  you use, and what it learns stays in your files, not in its maker's cloud.
 - **Pages, notes and tasks in one place.** The wiki, Tasks and Notes share links,
   search and history. A page can show a task as a chip, and a task can link to
   a page, with no plugins to combine.
@@ -33,11 +43,6 @@ everything as it is. Search indexes and caches are rebuilt from the files.
 - **Your server, no cloud.** Runs on your machine by default, with no account
   and nothing loaded from other hosts. To reach it from elsewhere, put it
   behind HTTPS with a password (see [Security](#security)).
-- **Supports AI-first workflows.** Through its
-  [MCP server](#connect-an-ai-assistant), an AI assistant can do everything
-  you can: search, read, create, edit, rename and restore pages, file
-  notes, and manage tasks. Its edits land as git commits marked `(MCP)` that
-  you can review, diff or undo.
 
 Zone is for one person's pages and tasks on a server you run, or a small
 team's (or a household's) who share one wiki, each with their own login,
