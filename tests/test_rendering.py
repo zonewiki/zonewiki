@@ -66,6 +66,16 @@ class TestWikilinks:
         assert '<nav class="toc">' not in result
         assert 'href="/page/toc" class="wikilink wikilink-missing"' in result
 
+    def test_a_heading_that_starts_or_ends_with_a_sign_has_the_id_its_links_name(self, client, wiki_dir):
+        """One function gives a heading's id (mdtext.HeadingID) and a
+        [[page#Section]] link's anchor: "& more" is more on the page as in
+        the link, where the page's own had a hyphen for the sign."""
+        write_page(wiki_dir, "faq", "# FAQ\n\n## & more\n\nx\n\n## What now ?\n\ny\n")
+        html = client.get("/page/faq", headers=HOST).get_data(as_text=True)
+        assert '<h2 id="more">' in html and '<h2 id="what-now">' in html
+        link = preview(client, "[[faq#& more]] [[faq#What now ?]]")
+        assert 'href="/page/faq#more"' in link and 'href="/page/faq#what-now"' in link
+
     def test_section_links(self, client, wiki_dir):
         """[[Page#Section]]: a link to a heading on that page; [[#Section]]
         to one on this page."""

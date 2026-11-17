@@ -747,3 +747,23 @@ def test_a_list_for_some_carries_the_people_sign(client, wiki):
     assert "tasks-place-for" in pill and "(for @hiring, alice)" in pill
     team = body.split('data-place="list:team"', 1)
     assert len(team) == 1 or "tasks-place-for" not in team[1].split("</a>", 1)[0]
+
+
+def test_a_batch_update_changes_fields_as_one_tasks_update_does(client, wiki):
+    """The batch door (several tasks in one request) is the single update's
+    in a loop: a mention added there is logged (and told), and a text that
+    someone changed meanwhile is a conflict, with nothing written."""
+    sign_in(client, "alice")
+    batch = lambda *tasks: client.post("/api/tasks/batch-update", json={"tasks": list(tasks)}, headers=HOST)
+    resp = batch({"id": IDS["open"], "description": "Ask @carol about it"}, {"id": IDS["shared"], "description": "And @bob here"})
+    assert resp.status_code == 200
+    by_id = {t["id"]: t for t in resp.get_json()}
+    assert [e["to"] for e in by_id[IDS["open"]]["history"] if e["event"] == "mentioned"] == ["carol"]
+    assert [e["to"] for e in by_id[IDS["shared"]]["history"] if e["event"] == "mentioned"] == ["bob"]
+    # Started from a text that is another one by now: refused whole.
+    resp = batch({"id": IDS["shared"], "title": "Order tables", "was": {"title": "Order chairs, not this"}},
+                 {"id": IDS["open"], "title": "Changed too"})
+    assert resp.status_code == 409 and "Someone changed this task" in resp.get_data(as_text=True)
+    titles = {t["id"]: t["title"] for t in client.get("/api/tasks", headers=HOST).get_json()}
+    assert titles[IDS["shared"]] == "Order chairs" and titles[IDS["open"]] == f"Offer for the {SECRET}"
+    assert batch({"id": IDS["shared"], "title": "Order tables", "was": {"title": "Order chairs"}}).status_code == 200

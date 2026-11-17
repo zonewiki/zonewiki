@@ -14,6 +14,7 @@
 // is one that is put there, and by one place only.
 
 import TasksCore from './tasks-core.js';
+import { cleanList } from './js/mdtext.js';
 import { linkAutocomplete } from './js/completion.js';
 import { openLightbox } from './js/page.js';
 import { pasteUrlAsLink } from './js/util.js';
@@ -481,10 +482,6 @@ Object.assign(app, initTaskView(app));
 const { toggleFold, unfoldFor, activeSort, applySort, groupKey, applyGroup, expandSelected } = app;
 const { initCut } = app;
 
-function cleanList(name) {
-  return String(name || '').trim().replace(/^#/, '').trim().toLowerCase()
-    .replace(/\s+/g, '-').replace(/^-+|-+$/g, '');
-}
 // The list a task is in, as a ref (taskList in go/tasklists.go): its `list`
 // names it, and `private` says which of two lists of one name; null for
 // none (and for a list this user doesn't see).

@@ -17,6 +17,15 @@ export function toSlug(name) {
     .join('/');
 }
 
+// cleanList (go/tasksyntax.go): a task list's name as stored and matched:
+// trimmed, lowercase, one word (spaces a hyphen), no leading "#"; '' for no
+// list. One copy for the task app and its settings dialog; the server's is
+// held to the same answers (tests/test_text_parity.py).
+export function cleanList(name) {
+  return String(name ?? '').trim().replace(/^#+/, '').trim().toLowerCase()
+    .replace(/[\s\v\p{Z}\u0085]+/gu, '-').replace(/^-+|-+$/g, '');
+}
+
 // mdtext.HeadingID, a heading's id as rendered: letters, digits, _ and -
 // kept, lowercase, spaces → hyphens.
 export const headingId = text => text.replace(/[^\p{L}\p{N}_\- ]+/gu, '').trim().toLowerCase().replace(/ /g, '-');

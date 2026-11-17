@@ -668,6 +668,7 @@ A new page is made private from the start (below).
   is copied to `_assets/` (your other pages keep their own; a name taken by a different file there gets `-2`, `-3` …) and the page points at the copy.
 - **History and commits**: a page's history, its versions and diffs leave out versions from when the page was another user's private page, before a rename (`pageLog`, `canSeePath` on the version's path).
   The uncommitted list shows, and Commit all commits, only files you may see (`visibleUncommitted`): another user's draft stays uncommitted until they commit it.
+  A commit puts a page's text in the history under a name, so it is a write: a page you may not write (a guide, for an editor) is not yours to commit (`mayCommit`): Commit answers 403 with why, and Commit all leaves it.
 - **Everywhere else** another user's private pages are left out as sharing mode leaves out pages not for sharing (`hiddenPage(rq, slug)`, which checks both; see Sharing mode in `docs/spec/navigation.md`): search,
   the search modal's list,
   Notes,

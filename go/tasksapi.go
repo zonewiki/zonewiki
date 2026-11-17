@@ -1,5 +1,9 @@
-// The tasks API: the /api/tasks routes. Each reads its request and answers;
-// the writes themselves are in tasks.go, which the MCP tools share.
+// The tasks API: the /api/tasks routes. Each reads its request and answers.
+// The writes of one task (create, change, comment, tag, delete) are in
+// tasks.go, which the MCP tools share; the routes that write several at
+// once and have no tool (batch complete, batch update, reorder, import,
+// restore, a comment's edit) put theirs together here from the same parts
+// (changeTaskFields, completeTask, keepDone, uncompleteTask …).
 package main
 
 import (
@@ -902,6 +906,7 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 		byID[t.ID] = t
 	}
 	updated := []*Task{}
+	mentioned := map[*Task][]string{}
 	before := assignedBefore{}
 	for _, change := range changes {
 		id, _ := jsonobj.As[string](change["id"])
@@ -912,21 +917,27 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 		if _, seen := before[id]; !seen {
 			before[id] = t.Assignee
 		}
-		rememberBy(t)
-		if err := applyTaskFields(userOf(r), t, change, false); err != nil {
+		// As one task's update changes its fields (changeTaskFields): a text
+		// that changed meanwhile is a conflict, and who a description names
+		// now is logged and told.
+		who, err := changeTaskFields(userOf(r), t, change)
+		if err != nil {
 			return err
 		}
-		if change.Has("history") {
-			t.History = sentHistory(cleanHistory(change["history"]), t.History)
-			checkBy(userOf(r), t)
+		sentBack(userOf(r), t, change)
+		if _, twice := mentioned[t]; !twice {
+			updated = append(updated, t)
 		}
-		updated = append(updated, t)
+		mentioned[t] = append(mentioned[t], who...)
 	}
 	if len(updated) > 0 {
 		if err := taskFiles.WriteBothLocked(userOf(r), active, closed, "Update tasks"); err != nil {
 			return err
 		}
 		tellAssigned(userOf(r), before, updated...)
+		for _, t := range updated {
+			tellMentioned(userOf(r), t, mentioned[t])
+		}
 	}
 	writeJSON(w, http.StatusOK, apiTasks(updated))
 	return nil

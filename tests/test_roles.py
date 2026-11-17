@@ -423,6 +423,20 @@ class TestGuidesAreAnAdmins:
         assert client.post("/api/save/private/bob/AGENTS", data={"content": "# Mine\n"}, headers=HOST).status_code == 200
         assert (guides / "private/bob/AGENTS.md").read_text() == "# Mine\n"
 
+    def test_an_editor_commits_no_guide(self, client, guides):
+        """A commit puts a page's text in the history under a name: a guide
+        changed on disk is an admin's to commit, by Commit and by Commit all."""
+        (guides / "wiki-guide.md").write_text("# Guide\n\nchanged by hand\n")
+        (guides / "tickets/t1.md").write_text("# T1\n\nchanged by hand too\n")
+        resp = client.post("/api/commit-file", json={"filepath": "wiki-guide.md"}, headers=HOST)
+        assert resp.status_code == 403 and "admin" in resp.get_json()["error"]
+        assert client.post("/api/commit-all", headers=HOST).get_json()["files"] == ["tickets/t1.md"]
+        assert "wiki-guide.md" in git(guides, "status", "--porcelain")
+        client.post("/logout", headers=HOST)
+        client.post("/login", data={"username": "alice", "password": "alice-pw"}, headers=HOST)
+        assert client.post("/api/commit-file", json={"filepath": "wiki-guide.md"}, headers=HOST).status_code == 200
+        assert git(guides, "status", "--porcelain") == ""
+
     def test_an_admin_writes_them(self, client, guides):
         login_as = lambda name: client.post("/login", data={"username": name, "password": f"{name}-pw"}, headers=HOST)
         client.post("/logout", headers=HOST)

@@ -11,6 +11,7 @@
 // Only what was changed is sent, so the other settings stay as written.
 // The menu's other items: the list's tasks as a file, Export and Import….
 import { closeOnBackdropClick } from './util.js';
+import { cleanList as listName } from './mdtext.js';
 import { showNotice } from './taskutil.js';
 import { refreshDueBadge } from './chrome.js';
 
@@ -61,9 +62,9 @@ function fieldsOf(p, defaultView = 'today') {
   };
 }
 
-// cleanList (go/tasksyntax.go): a list's name is one lowercase word.
-const cleanList = name => name.replace(/[[\]`]/g, '').trim().replace(/^#+/, '').trim().toLowerCase()
-  .replace(/\s+/g, '-').replace(/^-+|-+$/g, '');
+// A list's name as the dialog's field gives it: what a [[tasks: …]] can't
+// hold taken out, then the name as everywhere (cleanList in js/mdtext.js).
+const cleanList = name => listName(name.replace(/[[\]`]/g, ''));
 
 // A tab's name as labels= takes it: no commas or brackets, "_" for a space.
 const labelWord = s => s.replace(/[,[\]`_]/g, ' ').trim().replace(/\s+/g, '_');

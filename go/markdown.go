@@ -15,7 +15,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"unicode"
 	"zonewiki/internal/mdtext"
 
 	"github.com/yuin/goldmark"
@@ -278,7 +277,7 @@ func (t *zoneTransformer) Transform(doc *ast.Document, reader text.Reader, pc pa
 			t.external(n, n.URL(src))
 		case *ast.Heading:
 			if n.Level <= 3 {
-				n.SetAttributeString("id", uniqueSlug(slugify(headingTitle(n, src)), slugs))
+				n.SetAttributeString("id", uniqueSlug(mdtext.HeadingID(headingTitle(n, src)), slugs))
 			}
 		case *ast.Text:
 			if t.env.LineBreaks && n.SoftLineBreak() {
@@ -381,15 +380,6 @@ func headingTitle(h ast.Node, src []byte) string {
 		return ast.WalkContinue, nil
 	})
 	return b.String()
-}
-
-// slugify is the one mdtext.SectionAnchor mirrors
-// for [[Page#Section]] (\w here: Unicode letters, digits and _).
-var slugStripRE = regexp.MustCompile(`[^\p{L}\p{N}_\x{4e00}-\x{9fff}\- ]`)
-
-func slugify(title string) string {
-	s := strings.ReplaceAll(strings.ToLower(strings.TrimFunc(title, unicode.IsSpace)), " ", "-")
-	return slugStripRE.ReplaceAllString(s, "")
 }
 
 func uniqueSlug(slug string, seen map[string]bool) string {

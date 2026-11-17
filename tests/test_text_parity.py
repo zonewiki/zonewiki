@@ -28,7 +28,8 @@ OTHER_LINE_ENDS = set("\r\v\f\x1c\x1d\x1e\x85  ")
 SCRIPT = """
 import { readFileSync, writeFileSync } from 'node:fs';
 import * as T from %(module)s;
-const { now, texts } = JSON.parse(readFileSync(%(input)s, 'utf8'));
+import * as C from %(core)s;
+const { now, today, texts } = JSON.parse(readFileSync(%(input)s, 'utf8'));
 const out = texts.map(text => {
   const w = T.splitWikilink(text);
   return {
@@ -39,6 +40,8 @@ const out = texts.map(text => {
     toggle: [0, 1, 2, 3].map(i => T.toggleCheckboxText(text, i, true, now)),
     toggle_notes: [0, 1].map(i => T.toggleCheckboxText(text, i, false, now)),
     query_words: T.queryWords(text),
+    clean_list: T.cleanList(text) || null,
+    parse_date_word: C.default.parseDateWord(text, today) || null,
   };
 });
 writeFileSync(%(output)s, JSON.stringify(out));
@@ -55,9 +58,11 @@ def answers():
     # that extension (there is no package.json to say so).
     module = work / "mdtext.mjs"
     module.write_text((REPO / "public" / "js" / "mdtext.js").read_text(encoding="utf-8"), encoding="utf-8")
-    (work / "in.json").write_text(json.dumps({"now": golden["now"], "texts": [c["text"] for c in golden["cases"]]}),
-                                  encoding="utf-8")
-    script = SCRIPT % {"module": json.dumps(module.as_uri()), "input": json.dumps(str(work / "in.json")),
+    core = work / "tasks-core.mjs"                 # the task app's pure logic: a date word as quick-add reads one
+    core.write_text((REPO / "public" / "tasks-core.js").read_text(encoding="utf-8"), encoding="utf-8")
+    (work / "in.json").write_text(json.dumps({"now": golden["now"], "today": golden["today"],
+                                              "texts": [c["text"] for c in golden["cases"]]}), encoding="utf-8")
+    script = SCRIPT % {"module": json.dumps(module.as_uri()), "core": json.dumps(core.as_uri()), "input": json.dumps(str(work / "in.json")),
                        "output": json.dumps(str(work / "out.json"))}
     run = subprocess.run(["node", "--input-type=module", "-e", script], capture_output=True, text=True)
     assert run.returncode == 0, run.stderr
@@ -100,4 +105,13 @@ def test_a_querys_words_agree(answers):
     their place, so they are compared as sets of words."""
     diffs = _differences(answers, "query_words", want=lambda c, _: sorted(c["query_text"].split()),
                          got=lambda j, k: sorted(j[k].split()))
+    assert not diffs, _report(diffs)
+
+
+@pytest.mark.parametrize("key", ["clean_list", "parse_date_word"])
+def test_a_lists_name_and_a_date_word_agree(answers, key):
+    """A task list's name as stored (cleanList: one copy in js/mdtext.js for
+    the task app and its settings), and a date as quick-add reads one
+    (parseDateWord in tasks-core.js): the server's answers."""
+    diffs = _differences(answers, key, want=lambda case, k: case.get(k))      # none: the key is left out
     assert not diffs, _report(diffs)

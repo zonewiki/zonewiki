@@ -356,8 +356,17 @@ func visibleUncommitted(rq *Req, files []UncommittedFile) []UncommittedFile {
 	return out
 }
 
-// apiCommitAll commits every uncommitted file the user may see, one commit
-// each.
+// mayCommit: user may commit the uncommitted file f: a page they may write
+// (a commit puts its text in the history under a name, so it is a write:
+// not a guide's by an editor, canWrite), any other file they see (uploads,
+// task files: canSeePath, which visibleUncommitted asked).
+func mayCommit(user string, f UncommittedFile) bool {
+	slug, page := strings.CutSuffix(f.Filepath, ".md")
+	return !page || safePath(slug) == "" || canWrite(user, slug)
+}
+
+// apiCommitAll commits every uncommitted file the user may see and, a page,
+// may write (mayCommit), one commit each.
 func apiCommitAll(w http.ResponseWriter, r *http.Request) {
 	if !cfg.GitEnabled {
 		writeJSON(w, http.StatusBadRequest, M{"error": "Git not enabled"})
@@ -365,6 +374,9 @@ func apiCommitAll(w http.ResponseWriter, r *http.Request) {
 	}
 	committed := []string{}
 	for _, f := range visibleUncommitted(&Req{user: userOf(r)}, gitUncommittedFiles()) {
+		if !mayCommit(userOf(r), f) {
+			continue
+		}
 		path := filepath.Join(cfg.Data, f.Filepath)
 		if err := gitCommit(commitAuthorOf(path, userOf(r)), commitMessage(f.Filepath), path); err != nil {
 			writeJSON(w, http.StatusInternalServerError, M{"error": err.Error(), "committed": len(committed), "files": committed})
@@ -391,6 +403,10 @@ func apiCommitFile(w http.ResponseWriter, r *http.Request) {
 	found := false
 	for _, f := range visibleUncommitted(&Req{user: userOf(r)}, gitUncommittedFiles()) {
 		if f.Filepath == fp {
+			if !mayCommit(userOf(r), f) {
+				writeJSON(w, http.StatusForbidden, M{"error": readOnlyWhy(userOf(r), strings.TrimSuffix(f.Filepath, ".md"))})
+				return
+			}
 			found = true
 		}
 	}

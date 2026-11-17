@@ -666,6 +666,32 @@ func updateTask(user, id string, data jsonObj, suffix string) (*Task, error) {
 	return updateTaskLocked(user, id, data, suffix)
 }
 
+// changeTaskFields: the fields in data on the task t, as every write that
+// changes a task's fields makes them, one task's (updateTaskLocked) or
+// several's (the batch update): the text is the one the change started
+// from (textUnchanged: or it is a conflict), the fields are applied, and
+// who the description names now is logged. Returns them, to be told once
+// the task is written (tellMentioned).
+func changeTaskFields(user string, t *Task, data jsonObj) (named []string, err error) {
+	rememberBy(t) // an undo sends its comments and history back (taskby.go)
+	if err := textUnchanged(t, data); err != nil {
+		return nil, err
+	}
+	described := t.Description
+	if err := applyTaskFields(user, t, data, false); err != nil {
+		return nil, err
+	}
+	return logMentions(t, user, described, t.Description), nil
+}
+
+// sentBack: an undo sends the old history back with the old fields.
+func sentBack(user string, t *Task, data jsonObj) {
+	if data.Has("history") {
+		t.History = sentHistory(cleanHistory(data["history"]), t.History)
+		checkBy(user, t)
+	}
+}
+
 func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, error) {
 	var status [3]bool
 	for i, k := range []string{"skip", "wont_do", "completed"} {
@@ -679,11 +705,7 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 	if err != nil {
 		return nil, err
 	}
-	rememberBy(t) // an undo sends its comments and history back (taskby.go)
 	before := assignedBefore{t.ID: t.Assignee}
-	if err := textUnchanged(t, data); err != nil {
-		return nil, err
-	}
 	// seen: the user opened a task that has news for them (the browser says
 	// so: markSeen in js/taskdata.js). Noted once, so it is no longer new to
 	// them, and whoever gave it reads in its History that it arrived. For any
@@ -697,11 +719,10 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 		// writes no task and commits nothing.
 		markSeen(user, t)
 	}
-	described := t.Description
-	if err := applyTaskFields(user, t, data, false); err != nil {
+	named, err := changeTaskFields(user, t, data)
+	if err != nil {
 		return nil, err
 	}
-	named := logMentions(t, user, described, t.Description) // who the description names now
 	didSkip := skip && t.IsOpen()
 	switch {
 	case didSkip:
@@ -747,11 +768,7 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 			active = append(active, t)
 		}
 	}
-	// An undo sends the old history back with the old fields.
-	if data.Has("history") {
-		t.History = sentHistory(cleanHistory(data["history"]), t.History)
-		checkBy(user, t)
-	}
+	sentBack(user, t, data)
 	msg := "Update task"
 	switch {
 	case didSkip:

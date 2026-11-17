@@ -609,7 +609,7 @@ function listBuckets(list, today, sort, lists, listOf) {
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
 function parseDateWord(word, today) {
-  const w = word.toLowerCase();
+  const w = word.trim().toLowerCase();
   if (w === 'today') return today;
   if (w === 'tomorrow' || w === 'tmrw') return addDays(today, 1);
   let m = w.match(/^\+(\d{1,3})([dw]?)$/);
@@ -703,7 +703,7 @@ const TasksCore = {
   dateToStr, addDays, isOverdue, isFocus, isCarried, byOpenOrder, byDeadline, byCreated, SORTS, placeInOrder, tagMatchScore, tagCounts, selectionTags, bulkTagChange,
   rankTags, sanitizeTagInput,
   parseFilter, matchesFilter, filterActive, assigneeIs, assigneeGone, inMine, newsFor, givenToMe, orderMoves, tasksInView, tagParamToQuery, importanceWord,
-  bucketKey, fullDayLabel, boardBuckets, personBuckets, listBuckets, parseQuickAdd, dropQuickWord,
+  bucketKey, fullDayLabel, boardBuckets, personBuckets, listBuckets, parseQuickAdd, dropQuickWord, parseDateWord,
   dateSettings, localeDate, shortDate, longDayLabel, weekStart, weekdayNames, monthTitle,
 };
 
