@@ -667,3 +667,37 @@ def test_without_users_a_list_for_some_is_everyones(client, git_wiki_dir):
     assert "Left behind" in client.get("/api/tasks", headers=HOST).get_data(as_text=True)
     assert "Left behind" in client.get("/tasks", query_string={"list": "old"}, headers=HOST).get_data(as_text=True)
     assert "Left behind" in client.get("/search", query_string={"q": "behind"}, headers=HOST).get_data(as_text=True)
+
+
+def test_a_task_of_it_in_another_folder_is_its_members_too(client, wiki):
+    """A task that names the list but lies in another folder (a file moved
+    by hand, a merge) is shown to the list's members only, until a write
+    files it."""
+    team = wiki / "_tasks/lists/team/tasks.json"
+    tasks = json.loads(team.read_text())
+    tasks.append({"id": "0a1b2c3d-0000-4000-8000-00000000beef", "title": f"Call the {SECRET} oncemore", "list": LIST,
+                  "created_at": "2026-01-01T10:00:00"})
+    team.write_text(json.dumps(tasks, indent=2) + "\n")
+    assert "oncemore" in sign_in(client, "carol").get("/api/tasks", headers=HOST).get_data(as_text=True)
+    for who in ("bob", "dana"):
+        sign_in(client, who)
+        for path in ("/api/tasks", "/tasks", "/tasks?list=team", "/api/search?q=" + SECRET):
+            body = client.get(path, headers=HOST).get_data(as_text=True)
+            assert "oncemore" not in body and "beef" not in body, path
+        assert "Order chairs" in client.get("/api/tasks", headers=HOST).get_data(as_text=True)
+
+
+def test_an_entry_in_the_registry_too_makes_it_no_one_elses(client, wiki):
+    """The list's entry is in its folder; one of its name in the registry
+    everyone reads (a merge, a hand edit) doesn't make it a list everyone is
+    shown: its folder says whom it is for."""
+    reg = wiki / "_tasks/lists.json"
+    data = json.loads(reg.read_text())
+    data["lists"].append({"name": LIST})
+    reg.write_text(json.dumps(data, indent=2) + "\n")
+    assert f"list={LIST}" in sign_in(client, "carol").get("/tasks", headers=HOST).get_data(as_text=True)
+    for who in ("bob", "dana"):
+        sign_in(client, who)
+        assert f"list={LIST}" not in client.get("/tasks", headers=HOST).get_data(as_text=True)
+        body = client.get("/tasks", query_string={"list": LIST}, headers=HOST).get_data(as_text=True)
+        assert not any(m in body for m in MARKS) and SECRET not in body

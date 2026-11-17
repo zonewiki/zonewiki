@@ -293,10 +293,32 @@ func (s *Store) archivedOf(who, owner string, strict bool) ([]*Task, error) {
 }
 func (s *Store) readEach(who, owner string, strict bool, files func(dir string) []string) ([]*Task, error) {
 	tasks := []*Task{}
+	// A task of a list for some that lies in another folder (a file moved by
+	// hand, a merge; the next write files it) is its list's members' all the
+	// same: a read to show tasks leaves it out for anyone else, as it leaves
+	// out the list's folder, so the folder and the task's own word never
+	// disagree about who sees it. A read for a write takes what the files
+	// hold (byOwner refuses the write).
+	sees := map[string]bool{}
+	theirs := func(t *Task) bool {
+		if owner != "" || who == Everyone || t.List == "" {
+			return true
+		}
+		ok, asked := sees[t.List]
+		if !asked {
+			ok = s.SeesList(who, t.List)
+			sees[t.List] = ok
+		}
+		return ok
+	}
 	for _, d := range s.dirs(who, owner) {
 		for _, p := range files(d) {
 			if !strict {
-				tasks = append(tasks, ReadLenient(p)...)
+				for _, t := range ReadLenient(p) {
+					if theirs(t) {
+						tasks = append(tasks, t)
+					}
+				}
 				continue
 			}
 			l, err := ReadStrict(p)

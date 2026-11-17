@@ -398,7 +398,17 @@ func (s *Store) withListFiles(r *Registry) *Registry {
 			continue
 		}
 		l := listFile(filepath.Join(s.Dir(""), ListsDirName, e.Name()))
-		if l == nil || l.Gone() || l.Name != e.Name() || len(l.For()) == 0 || r.Find(l.Name) != nil {
+		if l == nil || l.Gone() || l.Name != e.Name() || len(l.For()) == 0 {
+			continue
+		}
+		// The registry has an entry of that name too (a merge, a file edited
+		// by hand): the folder's file is what the reads of its tasks go by,
+		// so the list is for whom it says: never a list everyone is shown
+		// whose tasks only some see.
+		if have := r.Find(l.Name); have != nil {
+			if len(have.For()) == 0 {
+				have.SetFor(l.For())
+			}
 			continue
 		}
 		r.Lists = append(r.Lists, l)
