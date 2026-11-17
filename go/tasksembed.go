@@ -667,6 +667,7 @@ func countTasks(user string, tasks []*Task, lists map[string]ListInfo, params ..
 type TaskPlace struct {
 	Key, Label, Title, Href  string
 	Pinned, Private, Current bool
+	For                      string // a list for some: whom it is for ("@dev, anna"), for its 👥 and tooltip
 	Counts                   TaskCounts
 }
 
@@ -695,7 +696,7 @@ func (rq *Req) taskPlaces() []TaskPlace {
 			continue
 		}
 		out = append(out, TaskPlace{Key: "list:" + l.Ref, Label: l.Name, Title: "Pinned list #" + l.Name, Href: listHref(l.Ref),
-			Pinned: true, Private: l.Private(),
+			Pinned: true, Private: l.Private(), For: forWords(l.For),
 			Counts: rq.keptCounts("list:"+l.Ref, func() TaskCounts { return countTasks(user, rq.openTasks(), lists, l.Params) })})
 	}
 	return out
@@ -769,7 +770,7 @@ func (rq *Req) taskMore(place string) *TasksMore {
 	}
 	for _, l := range rest {
 		p := TaskPlace{Key: "list:" + l.Ref, Label: l.Name, Title: "List #" + l.Name, Href: listHref(l.Ref),
-			Private: l.Private(), Current: place == "list:"+l.Ref}
+			Private: l.Private(), For: forWords(l.For), Current: place == "list:"+l.Ref}
 		if p.Current {
 			more.Label, more.Current = l.Name, true
 		}

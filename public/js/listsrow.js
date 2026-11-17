@@ -187,3 +187,23 @@ if (forWords) {
       .map(w => new Option('', lead + w)));
   });
 }
+
+// New list…: a private list is for one, a list for some is a shared one, so
+// the two fields exclude each other on the screen as they do on the server:
+// Private ticked turns For off (and empties it), a For that names someone
+// turns Private off.
+{
+  const priv = document.getElementById('list-new-private'), who = document.getElementById('list-new-for');
+  if (priv && who) {
+    const sync = () => {
+      who.disabled = priv.checked;
+      if (priv.checked) who.value = '';
+      priv.disabled = !priv.checked && !!who.value.trim();
+      who.closest('label')?.classList.toggle('field-off', who.disabled);
+      priv.closest('label')?.classList.toggle('field-off', priv.disabled);
+    };
+    priv.addEventListener('change', sync);
+    who.addEventListener('input', sync);
+    sync();
+  }
+}

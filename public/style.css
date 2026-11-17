@@ -1440,6 +1440,9 @@ html:not(.sharing) .breadcrumb > .trail-off { display: none; }
 
 .modal-actions { display: flex; gap: .5rem; justify-content: flex-end; }
 .modal-desc { font-size: .875rem; color: var(--muted); margin: 0; }
+/* Who sees a page that isn't everyone's, in words, where its mark's tooltip can't show (no hover: a phone). */
+.page-seen { display: none; font-size: .85rem; color: var(--muted); margin: -1rem 0 1rem; }
+@media (hover: none) { .page-seen { display: block; } }
 /* A rename to other readers asks first: who will see the page, who no longer will. */
 .rename-ask { font-size: .875rem; color: var(--fg); }
 .modal .rename-ask { margin: .6rem 0 0; }

@@ -95,7 +95,7 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
   const listRef = app.taskList(task);
   // nor By list, where its section does.
   const listChip = listRef && listRef !== app.initList && !(st.activeView === 'plan' && st.cut === 'list')
-    ? `<span class="task-tag task-tag-list" title="${esc(app.listTooltip(listRef))}">${esc(app.listName(listRef))}</span>` : '';
+    ? `<span class="task-tag task-tag-list" title="${esc(app.listTooltip(listRef))}">${app.listMembers(listRef) ? '👥 ' : ''}${esc(app.listName(listRef))}</span>` : '';
   const tags = listChip + (task.tags || []).map(t => `<span class="task-tag">#${esc(t)}</span>`).join('');
   const recIcon = task.recurrence ? '<span class="task-recurring" title="Recurring">↻</span>'
     : task.keep ? `<span class="task-recurring task-keep" title="Keep: back to ${esc(app.tabLabel('open'))} when ticked off">⟲</span>` : '';

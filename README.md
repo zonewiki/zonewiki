@@ -48,9 +48,8 @@ so it isn't a plugin platform. That keeps it small and readable.
 ## How Zone is organised
 
 Zone has three modules: the **Wiki** for your pages, **Tasks** for your
-tasks, and **Notes** for quick capture (with several users, **Private**
-joins Notes in a group of its own: your private home, the start page of
-your own private pages). You switch between them in the top
+tasks, and **Notes** for quick capture (with several users, **Private** stands beside the Wiki: your private home, the start page of
+your own private pages; and **Groups**, or the name of the one group you are in, for a team's pages). You switch between them in the top
 left corner (on a phone, in the tab bar at the bottom), and **New** creates
 whatever the module you're in holds: a page, a note, a task. Search,
 history, keyboard shortcuts and AI access work across all three.
@@ -164,7 +163,7 @@ Done tasks go to a monthly archive. Beyond that:
   a private folder (`private/<name>/`), private notes, private tasks
   (their Inbox and the tasks in a private list of theirs, 🔒 on their cards) and their own pinned lists.
   A team has a folder of its own too: the pages in `groups/<group>/` are seen and changed by
-  the people in that group, and by no one else (an admin puts people in groups; a task list can be for a group as well).
+  the people in that group, and by no one else (anyone who may write makes a group on Groups and says who is in it; a task list can be for a group as well).
   A shared task can be assigned to a user (`@anna` in its title or its dialog);
   `@me` in the filter, or a page with `[[tasks: assignee=me]]`, shows everyone their own.
   Everything else is shared. Each has a role: **admin** (the first user;

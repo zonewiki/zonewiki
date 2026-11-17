@@ -23,6 +23,9 @@
   {{- end}}
   </div>
 </header>
+{{- /* Who sees the page, in words: the mark's tooltip, for a screen that has no hover (CSS). */}}
+{{- if .Private}}<p class="page-seen">🔒 Only you see this page.</p>{{end}}
+{{- with .GroupTitle}}<p class="page-seen">👥 {{.}}.</p>{{end}}
 {{.MetaRowHTML}}
 {{- /* A key per checkbox line: a tick from this view finds its item even
     after the page changed (apiToggleCheckbox). */}}

@@ -90,7 +90,7 @@
 </ul>
 {{- end}}
 <h2 id="of-groups">A group of groups</h2>
-<form method="post" action="/groups/includes" class="users-invite groups-new">
+<form method="post" action="/groups/includes" class="users-invite groups-new"><input type="hidden" name="new" value="1">
   <input type="text" name="group" placeholder="Name" required pattern="@?[a-z0-9][a-z0-9-]*" maxlength="41" title="Lowercase letters, digits and hyphens" autocapitalize="none" autocorrect="off" spellcheck="false" aria-label="The group's name">
   <input type="text" name="includes" placeholder="everyone in: dev, design" required list="all-groups" data-pick="groups" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="The groups it includes">
   <button type="submit" class="btn">Make a group of groups</button>

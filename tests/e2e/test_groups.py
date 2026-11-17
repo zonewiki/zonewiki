@@ -273,6 +273,11 @@ def test_make_a_group_say_who_is_in_it_and_rename_it(page, wiki, monkeypatch):
     people.press("Enter")
     expect(row.locator("label", has_text="People").locator(".pick-pill")).to_have_count(2)
     row.get_by_role("button", name="Save").first.click()
+    # Taking someone out takes the group's pages and lists from them: Save says whom first, and the second click saves.
+    sure = row.get_by_role("button", name="Yes, take out alice")
+    expect(sure).to_be_visible()
+    assert "apollo" in (wiki.root / ".zone" / "config").read_text().split("[user alice]")[1].split("[")[0]
+    sure.click()
     expect(page.locator(".users-done")).to_contain_text("No longer in it: alice")
     expect(row.locator(".group-who")).to_contain_text("bob, carol")
     row.locator("summary").click()

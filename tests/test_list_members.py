@@ -734,3 +734,16 @@ def test_a_task_goes_to_a_list_fewer_people_see_by_its_maker_or_an_admin(client,
             break
         time.sleep(0.1)
     assert client.put(f"/api/tasks/{his}", json={"list": LIST}, headers=HOST).status_code == 200
+
+
+def test_a_list_for_some_carries_the_people_sign(client, wiki):
+    """As a group's page does: 👥 beside its heading and in its pill, not the
+    lock of what is yours alone."""
+    body = sign_in(client, "alice").get("/tasks", query_string={"list": LIST}, headers=HOST).get_data(as_text=True)
+    head = body.split('<header class="page-header">', 1)[1].split("</header>", 1)[0]
+    assert 'class="lock list-for"' in head and "👥" in head and "🔒" not in head
+    assert "For @hiring, alice: only they see this list and its tasks" in head
+    pill = body.split(f'data-place="list:{LIST}"', 1)[1].split("</a>", 1)[0]
+    assert "tasks-place-for" in pill and "(for @hiring, alice)" in pill
+    team = body.split('data-place="list:team"', 1)
+    assert len(team) == 1 or "tasks-place-for" not in team[1].split("</a>", 1)[0]

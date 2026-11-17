@@ -162,6 +162,17 @@ class TestChanges:
             resp = post(admin, "/groups/includes", **data)
             assert resp.status_code in (400, 409) and why in resp.data.decode(), data
             assert config(git_wiki_dir) == before
+        # The form that makes a group of groups makes one: it changes no group there is (Manage… does), and
+        # takes no name something goes by.
+        for name, why in (("product", "There is a group product already"), ("dev", "There is a group dev already")):
+            resp = post(admin, "/groups/includes", group=name, includes="design", new="1")
+            assert resp.status_code in (400, 409) and why in resp.data.decode(), name
+            assert config(git_wiki_dir) == before
+        (git_wiki_dir / "groups/ghosts").mkdir(parents=True)
+        (git_wiki_dir / "groups/ghosts/x.md").write_text("# X\n")
+        resp = post(admin, "/groups/includes", group="ghosts", includes="dev", new="1")
+        assert resp.status_code in (400, 409) and "is taken" in resp.data.decode() and config(git_wiki_dir) == before
+        assert 'name="new" value="1"' in admin.get("/groups", headers=HOST).data.decode()
         # Taking a group out says whom that takes the larger group from; with
         # nothing left the section goes.
         resp = post(admin, "/groups/includes", group="product", includes="dev")

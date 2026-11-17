@@ -37,9 +37,10 @@
     js/listsrow.js, which also closes More, filters it and marks lists new
     to this browser). */}}
 {{- if .More}}<nav class="tasks-places" aria-label="Task lists"{{if .Menu}} data-reorder{{end}}><div class="tasks-places-group">
-{{- range .Places}}<a href="{{.Href}}" class="tasks-place" data-place="{{.Key}}" title="{{.Title}}{{if .Private}} (only you see it){{end}}"{{if .Current}} aria-current="page"{{end}}>
+{{- range .Places}}<a href="{{.Href}}" class="tasks-place" data-place="{{.Key}}" title="{{.Title}}{{if .Private}} (only you see it){{end}}{{with .For}} (for {{.}}){{end}}"{{if .Current}} aria-current="page"{{end}}>
 {{- if .Pinned}}<span class="tasks-place-pin" aria-hidden="true">{{template "icon_pin"}}</span>{{end}}
-{{- if .Private}}<span class="tasks-place-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="tasks-place-label">{{.Label}}</span>{{template "module_counts" .Counts}}</a>
+{{- /* Whose it is, as on a page: a lock for what is yours alone, people for what is some's. */}}
+{{- if .Private}}<span class="tasks-place-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}{{if .For}}<span class="tasks-place-lock tasks-place-for" aria-hidden="true">{{template "icon_people"}}</span>{{end}}<span class="tasks-place-label">{{.Label}}</span>{{template "module_counts" .Counts}}</a>
 {{- end}}
 {{- with .More}}<details class="lists-more"><summary class="tasks-place lists-more-btn" title="{{if .Current}}{{.Label}}: one of the lists you haven't pinned and all tasks{{else}}The lists you haven't pinned, and all tasks{{end}}"{{if .Current}} aria-current="page"{{end}}><span class="tasks-place-label">{{.Label}}</span><span class="lists-more-caret" aria-hidden="true">▾</span></summary>
 <div class="lists-more-panel">
@@ -52,7 +53,7 @@
 {{- if or .Lists .Others}}<hr class="lists-more-rule">{{end}}
 <a href="/tasks" class="lists-more-item lists-more-all" title="Every task you see, in whatever list"{{if .All}} aria-current="page"{{end}}><span class="lists-more-name">All tasks</span></a>
 </div></details>{{end}}</div></nav>{{end}}
-<header class="page-header"><h1>{{.Heading}}{{with .List}}{{if .Private}} <span class="lock" title="A private list: only you see it and its tasks">🔒</span>{{end}}{{if .For}} <span class="lock list-for" title="For {{$.ForNow}}: only they see this list and its tasks ({{range $i, $m := $.Members}}{{if $i}}, {{end}}{{$m}}{{end}})">🔒</span>{{end}}{{end}}{{if .InboxPrivate}} <span class="lock" title="Your Inbox: only you see its tasks">🔒</span>{{end}}</h1>
+<header class="page-header"><h1>{{.Heading}}{{with .List}}{{if .Private}} <span class="lock" title="A private list: only you see it and its tasks">🔒</span>{{end}}{{if .For}} <span class="lock list-for" title="For {{$.ForNow}}: only they see this list and its tasks ({{range $i, $m := $.Members}}{{if $i}}, {{end}}{{$m}}{{end}})">👥</span>{{end}}{{end}}{{if .InboxPrivate}} <span class="lock" title="Your Inbox: only you see its tasks">🔒</span>{{end}}</h1>
 {{- if .Menu}}<div class="page-header-actions"><button type="button" class="btn page-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="page-menu" title="More: settings, new list{{if .List}}, rename, pin, delete{{end}}{{if .Tag}}, rename the tag{{end}}, export, import" aria-label="More actions">⋯</button></div>{{end}}</header>
 {{- if .Menu}}
 <div class="page-menu-backdrop" hidden></div><div class="page-menu" id="page-menu" role="menu" aria-label="Task list actions" hidden>
@@ -118,5 +119,5 @@
 {{- end}}
 {{- /* What a For field completes from: the groups there are. */}}
 {{define "list_for_words"}}<datalist id="list-for-words" data-words="{{range .Groups}}@{{.}} {{end}}{{range .People}}{{.}} {{end}}">{{range .Groups}}<option value="@{{.}}">{{end}}</datalist>{{end}}
-{{define "lists_more_item"}}<a href="{{.Href}}" class="lists-more-item" data-list="{{.Label}}" data-place="{{.Key}}" title="{{.Title}}{{if .Private}} (only you see it){{end}}"{{if .Current}} aria-current="page"{{end}}>
-{{- if .Private}}<span class="tasks-place-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}<span class="lists-more-name">{{.Label}}</span></a>{{end}}
+{{define "lists_more_item"}}<a href="{{.Href}}" class="lists-more-item" data-list="{{.Label}}" data-place="{{.Key}}" title="{{.Title}}{{if .Private}} (only you see it){{end}}{{with .For}} (for {{.}}){{end}}"{{if .Current}} aria-current="page"{{end}}>
+{{- if .Private}}<span class="tasks-place-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}{{if .For}}<span class="tasks-place-lock tasks-place-for" aria-hidden="true">{{template "icon_people"}}</span>{{end}}<span class="lists-more-name">{{.Label}}</span></a>{{end}}

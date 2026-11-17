@@ -468,7 +468,7 @@ function listName(ref) { return String(ref).replace(/^shared\//, ''); }
 function listTooltip(ref) {
   const r = String(ref).replace(/^-?list:/, '').toLowerCase();
   if ((r === 'inbox' || r === 'none') && !listSet.has(r)) return inboxPrivate ? 'In your Inbox: only you see it' : 'In the Inbox: in no list';
-  if (listMembers(r)) return `List (for some: ${[...listMembers(r)].join(', ')})`;
+  if (listMembers(r)) return `List for some: only ${[...listMembers(r)].join(', ')} see it and its tasks`;
   return privateLists.has(r) ? 'List (private: only you see it)' : 'List';
 }
 // The tabs' names: Open/Plan/Focus, or an embed's own (`labels=`, rendered

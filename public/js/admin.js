@@ -45,3 +45,36 @@ for (const form of document.querySelectorAll('.user-role-form')) {
   field.addEventListener('change', show);
   show();   // a value the browser kept from before a reload
 }
+
+// Taking someone out of a group takes its pages and lists from them at once,
+// as leaving one does (which asks): a Save that takes names out says whom
+// on its button first, and the second click saves. People of a group
+// (Groups: Manage…), a user's groups (the admin page).
+for (const field of document.querySelectorAll('.group-form input[name="people"], .user-groups-form input[name="groups"]')) {
+  const form = field.form, button = form?.querySelector('[type=submit]');
+  if (!form || !button) continue;
+  const names = text => text.split(/[\s,]+/).map(n => n.replace(/^@/, '').toLowerCase()).filter(Boolean);
+  const was = names(field.defaultValue), label = button.textContent, spoken = button.getAttribute('aria-label');
+  const people = field.name === 'people';
+  let asked = '';
+  const reset = () => {
+    asked = '';
+    button.textContent = label;
+    button.classList.remove('btn-danger');
+    if (spoken) button.setAttribute('aria-label', spoken);
+  };
+  form.addEventListener('input', reset);
+  form.addEventListener('change', reset);
+  form.addEventListener('submit', e => {
+    if (e.defaultPrevented) return;
+    const now = new Set(names(field.value)), gone = was.filter(n => !now.has(n));
+    if (!gone.length || asked === gone.join(',')) return;
+    e.preventDefault();
+    asked = gone.join(',');
+    const who = form.action.match(/\/admin\/users\/([^/]+)\/groups$/)?.[1];
+    button.textContent = people ? `Yes, take out ${gone.join(', ')}` : `Yes, take ${decodeURIComponent(who || 'them')} out of ${gone.join(', ')}`;
+    if (spoken) button.setAttribute('aria-label', button.textContent);
+    button.classList.add('btn-danger');
+    form.classList.add('edited');
+  });
+}

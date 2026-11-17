@@ -293,6 +293,7 @@ They are in it and are its **owner**; from the next request `groups/<name>/` is 
   Taking someone out is a narrowing, as an admin's is: they no longer see the group's pages and lists at their next request, and the page says who that was.
   A group keeps an owner (the last can't take themselves out; they name who takes it over first). An owner needn't be in the group: they then see none of its pages.
   A removed user owns nothing (`dropOwner`), and a name in `owners` that is no user is none.
+- **Taking someone out says whom first** (`js/admin.js`): a Save that takes names out of People (Manage…), or groups off a user (the admin page), turns into "Yes, take out bob" and the second click saves, as Leave… asks; what is for the group is theirs no longer at once. Without the script the line under the field says it.
 - **An admin manages every group**, owned or not (An admin on Groups, below), the admin's Groups field on a user works as before, and `zonewiki group owners NAME +anna -bo` gives a group owners or takes them (none left: the group is an admin's alone again, as one made on the host).
 - **A name that is taken is refused** (`groupNameTaken`): a group there is, a name a group is said to include, a folder in `groups/` (a group nobody is in keeps its folder, and a new group of that name would get its pages), or a name a task list is for.
   **And a name a group went by before**: the history of `groups/<name>/` (the versions and deleted pages of a group renamed since, which are read under that path by who is in a group of that name) and a deleted list that was for it stay its former group's, so a new group of the name would be shown them: the name stays taken.
@@ -310,7 +311,7 @@ They are in it and are its **owner**; from the next request `groups/<name>/` is 
 - **Other groups** (`#others`), under their own: every other group there is (`knownGroups`: someone is in it, it has a section, or a group includes it), each with who is in it and by which way, "owned by anna" when it has owners, "has pages" when its folder is there, and **Manage…**.
   The admin sees who is in them, not their pages: there is no link to a group's home they aren't in.
 - **Manage…** of every group has, beside People, Owners and Name, **Everyone in**: the groups it includes (pills of the groups there are, not itself; empty: none, and the key goes), **Save** (`POST /groups/includes`, `group`, `includes`; `groupIncludesRoute`, admins only, 404 for anyone else).
-- **A group of groups** below: a new group's name and the groups it includes (**Make a group of groups**, the same route).
+- **A group of groups** below: a new group's name and the groups it includes (**Make a group of groups**, the same route with `new=1`). It makes a group and changes none: a name a group has is refused ("There is a group product already. What it includes is under its Manage…."), as is one that is taken (`groupNameTaken`).
   A group that would include itself, or a name that is no group's, is refused and nothing changes.
   Done, the page says who is in the group now, and who no longer is (`?done=includes&group=…&left=…`, of which it says only users' names).
 - **Seen by no one**: the folders in `groups/` of a group nobody is in (`strayGroups`); putting someone in that group (their Groups field on the admin page) gives the folder its people again.
@@ -615,6 +616,7 @@ A new page is made private from the start (below).
   No note when the page is private already, a private page of that name exists, there are no users, or the link was on a shared page.
 - **Private** is a module (`docs/spec/navigation.md`, Modules): in the switcher's first pill, Wiki · Private (the pages; Tasks · Notes, the tools, are the second), with a small lock as Notes has (`.module-lock`, tooltip "Private: only you see it"), and a tab on phones; **g p** goes to Private home.
   Private views (a page in your folder, the home included) make it current, notes make Notes current.
+  **Who sees a page that isn't everyone's is its mark's tooltip** (🔒 "Private: only you see this page", 👥 "@dev: anna, bo see this page"), and where there is no hover (a phone) a line under the title says it in words (`.page-seen`).
   **The user menu** holds who is signed in and **Sign out** (desktop; phones have them in the page's top row, where the name opens the menu's other entries).
   It opens from the **user button** (`.top-user`, a round initial with the name as its tooltip) at the top right, after Search.
 - **What "private" means**: hidden inside Zone, from other users and their assistants.
