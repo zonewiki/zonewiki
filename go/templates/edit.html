@@ -40,13 +40,16 @@
     <form id="delete-form" method="post" action="{{url "delete" .Slug}}" style="display:none"></form>
     {{- end}}
     {{- if .CanRename}}
-    <div class="rename-bar{{if not .RenameError}} hidden{{end}}" id="rename-bar">
+    <div class="rename-bar{{if not (or .RenameError .RenameAsk)}} hidden{{end}}" id="rename-bar">
       <form method="post" action="{{url "rename" .Slug}}" class="rename-form">
         <label>New name</label>
         <input type="text" name="new_name" id="rename-input" value="{{or .RenameName .Slug}}" autocomplete="off">
-        <button type="submit" class="btn btn-primary">Rename</button>
+        {{- /* A move to other readers asks first: sent again with that name, it is confirmed. */}}
+        {{- if .RenameAsk}}<input type="hidden" name="confirmed" value="{{.RenameName}}">{{end}}
+        <button type="submit" class="btn btn-primary">{{if .RenameAsk}}Yes, move it{{else}}Rename{{end}}</button>
         <button type="button" class="btn" id="rename-cancel">Cancel</button>
         {{template "error" (dict "message" .RenameError "tag" "span")}}
+        {{- with .RenameAsk}}<span class="rename-ask" role="alert">{{.}}</span>{{end}}
       </form>
     </div>
     {{- end}}

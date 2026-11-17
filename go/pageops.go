@@ -276,7 +276,7 @@ func changePageOp(user, slug, action, suffix string, change func(old string) (st
 
 // checkRename: why user can't rename slug to newSlug, if not; else the
 // files of both. The MCP tool asks it before it asks for the guides.
-func checkRename(user, slug, newSlug string) (path, newPath string, err error) {
+func checkRename(user, slug, newSlug string, sure moveSure) (path, newPath string, err error) {
 	if path, err = writablePage(user, slug); err != nil {
 		return "", "", err
 	}
@@ -286,16 +286,17 @@ func checkRename(user, slug, newSlug string) (path, newPath string, err error) {
 	case newSlug == slug:
 		err = refuseAs(refusedUnchanged, "The page is already called "+slug)
 	default:
-		err = checkTarget(user, slug, newSlug)
+		err = checkTarget(user, slug, newSlug, sure)
 	}
 	return path, newPath, err
 }
 
 // checkTarget: why the page slug can't move to newSlug, a new name for
 // it, if not: a folder Zone skips, another user's folder or a group's the
-// user isn't in, a page there already, or a move that takes the page from
-// someone who sees it (a shared page into a private or a group's folder).
-func checkTarget(user, slug, newSlug string) error {
+// user isn't in, a page there already, or a move to other readers that
+// isn't the user's to make, or that the door hasn't asked about yet
+// (checkReaders: an askError then).
+func checkTarget(user, slug, newSlug string, sure moveSure) error {
 	newPath := safePath(newSlug)
 	switch {
 	case newPath == "":
@@ -307,17 +308,14 @@ func checkTarget(user, slug, newSlug string) error {
 	case exists(newPath):
 		return refuseAs(refusedExists, "A page named "+strconv.Quote(newSlug)+" already exists")
 	}
-	if msg := refuseMakingPrivate(map[string]string{slug: newSlug}); msg != "" {
-		return refuse(msg)
-	}
-	return nil
+	return checkReaders(user, map[string]string{slug: newSlug}, sure)
 }
 
 // renamePageOp renames the page, links to it following (movePage); what
 // it held uncommitted is committed first, so the rename's commit only
 // moves it. changed: the files whose links were re-pointed.
-func renamePageOp(user, slug, newSlug, suffix string) (changed []string, kept bool, err error) {
-	path, newPath, err := checkRename(user, slug, newSlug)
+func renamePageOp(user, slug, newSlug, suffix string, sure moveSure) (changed []string, kept bool, err error) {
+	path, newPath, err := checkRename(user, slug, newSlug, sure)
 	if err != nil {
 		return nil, false, err
 	}
@@ -330,7 +328,7 @@ func renamePageOp(user, slug, newSlug, suffix string) (changed []string, kept bo
 
 // checkFolderMove: why user can't move folder to newFolder, if not; else
 // the files of the pages in it.
-func checkFolderMove(user, folder, newFolder string) ([]string, error) {
+func checkFolderMove(user, folder, newFolder string, sure moveSure) ([]string, error) {
 	switch {
 	case newFolder == folder:
 		return nil, refuseAs(refusedUnchanged, "The folder is already called "+folder)
@@ -363,8 +361,11 @@ func checkFolderMove(user, folder, newFolder string) ([]string, error) {
 	if len(taken) > 0 {
 		return nil, refuseAs(refusedExists, "These pages already exist, so nothing was moved: "+strings.Join(taken, ", "))
 	}
-	if msg := refuseMakingPrivate(moved); msg != "" {
-		return nil, refuse("Nothing was moved: " + msg)
+	if err := checkReaders(user, moved, sure); err != nil {
+		if pe, ok := refusalOf(err); ok {
+			return nil, refuse("Nothing was moved: " + pe.msg)
+		}
+		return nil, err
 	}
 	return paths, nil
 }
@@ -373,8 +374,8 @@ func checkFolderMove(user, folder, newFolder string) ([]string, error) {
 // commit (moveFolder); what they held uncommitted is committed first.
 // Returns the (slug, new slug) moves, the files whose links changed, and
 // how many pages had text kept.
-func moveFolderOp(user, folder, newFolder, suffix string) (moves [][2]string, changed []string, kept int, err error) {
-	paths, err := checkFolderMove(user, folder, newFolder)
+func moveFolderOp(user, folder, newFolder, suffix string, sure moveSure) (moves [][2]string, changed []string, kept int, err error) {
+	paths, err := checkFolderMove(user, folder, newFolder, sure)
 	if err != nil {
 		return nil, nil, 0, err
 	}

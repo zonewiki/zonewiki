@@ -154,7 +154,8 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 - The editor toolbar includes a "Rename" button that reveals an inline rename form (hidden by default); the page view's ⋯ menu has **Rename…**, which opens a dialog (`#page-rename-dialog`) with the same form plus `from=page`.
 - The form has a single text input pre-filled with the current slug, and a "Rename" submit button.
 - On submit, POSTs to `POST /rename/<slug>` with field `new_name` (human-readable name accepted, converted to slug server-side).
-- Server renames the file (`<old>.md` → `<new>.md`), re-points every link to it (see Links below; a shared page can't be renamed into a private folder: it is refused, `docs/spec/users.md`), then redirects to `/page/<new-slug>`.
+- Server renames the file (`<old>.md` → `<new>.md`), re-points every link to it (see Links below), then redirects to `/page/<new-slug>`.
+- **A name in another place changes who sees the page** (with users: a private folder, a group's, the wiki), and asks first: the form comes back with the question in place of an error (`?rename_name=…&rename_ask=…`: who will see it, or who no longer will), and **Yes, move it** sends it again with `confirmed=<that name>`. To fewer people it is an admin's move, or that of whoever shared the page while nobody else changed it; anyone else is refused (Who may move a page to other readers in `docs/spec/users.md`).
 - Renaming `index` is forbidden — the server returns 400 if the old slug is `index`.
 - If the new slug already exists, nothing is overwritten: the server redirects back with `?rename_name=…&rename_error=…` (to the editor, which shows the rename bar with the error and the name typed, or with `from=page` to the page view, whose rename dialog reopens with them);
   so does a name in a folder Zone skips (`_…`, `.…`) or another user's private folder.

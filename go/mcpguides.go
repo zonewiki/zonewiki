@@ -364,7 +364,7 @@ func groupsNote(user string) string {
 	return "\n\nWhere a page is kept is who sees it: " + privateDir + "/" + user + "/ only this user, " +
 		strings.Join(folders, ", ") + " the people in that group, anywhere else everyone who uses the wiki. " +
 		"File what is meant for a group in its folder, and don't copy from a narrower place into a wider one unless the user says so; " +
-		"a page moves to more people, never back."
+		"a page moves to more people; back to fewer only by an admin."
 }
 
 // instructionsFor: base (the server's instructions, with what holds for

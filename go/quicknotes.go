@@ -119,8 +119,10 @@ func moveQuicknote(user, slug, folder, name string, keepDate bool, suffix string
 	if isQuicknote(newSlug) {
 		return "", false, refuse("That name would still be a note")
 	}
-	// A shared note (one from before users) can't be taken into a private folder.
-	if err := checkTarget(user, slug, newSlug); err != nil {
+	// Move to wiki says where the note goes, and that is what was asked:
+	// nothing more to ask (a shared note, one from before users, goes into a
+	// private folder only by who may take a page from others: checkReaders).
+	if err := checkTarget(user, slug, newSlug, sure); err != nil {
 		return "", false, err
 	}
 	kept, err := keepPending(oldPath, slug)

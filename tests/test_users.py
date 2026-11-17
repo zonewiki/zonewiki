@@ -311,7 +311,9 @@ class TestMakeShared:
         assert "Make shared" not in self.view(client, "private/alice/index")
 
     def test_a_shared_page_cannot_be_renamed_into_the_folder(self, alice, git_wiki_dir):
-        """Others have seen it, and link to it: shared stays shared. Nothing changes."""
+        """Others have seen it, and link to it: it isn't one editor's to take
+        from them (an admin's, or whoever shared it while nobody else
+        changed it: tests/test_narrow.py). Nothing changes."""
         before = (git_wiki_dir / "plans.md").read_text()
         head = authors(git_wiki_dir)[0]
         for url, back in (("/rename/ideas", "/edit/ideas"), ("/rename/ideas", "/page/ideas")):
@@ -321,7 +323,7 @@ class TestMakeShared:
             resp = alice.post(url, data=data, headers=HOST)
             loc = resp.headers["Location"]
             assert resp.status_code == 302 and loc.startswith(back + "?rename_name=private/alice/ideas&rename_error=")
-            assert "stays+shared" in loc or "stays%20shared" in loc
+            assert "Ask+an+admin" in loc or "Ask%20an%20admin" in loc
         assert (git_wiki_dir / "ideas.md").exists() and not (git_wiki_dir / "private/alice/ideas.md").exists()
         assert (git_wiki_dir / "plans.md").read_text() == before and authors(git_wiki_dir)[0] == head
         body = alice.get("/page/ideas?rename_error=x&rename_name=private/alice/ideas", headers=HOST).get_data(as_text=True)
@@ -343,7 +345,7 @@ class TestMakeShared:
         (git_wiki_dir / "private/alice/other.md").write_text("# Other\n\n![a](/private/alice/_assets/a.png)\n")
         subprocess.run(["git", "add", "-A"], cwd=git_wiki_dir, check=True, env=settings.GIT_ENV)
         subprocess.run(["git", "commit", "-qm", "Her pages"], cwd=git_wiki_dir, check=True, env=settings.GIT_ENV)
-        resp = alice.post("/rename/private/alice/trip", data={"from": "page", "new_name": "trip"}, headers=HOST)
+        resp = alice.post("/rename/private/alice/trip", data={"from": "page", "new_name": "trip", "confirmed": "share"}, headers=HOST)
         assert resp.headers["Location"] == "/page/trip"
         assert (git_wiki_dir / "trip.md").read_text() == (
             "# Trip\n\n![a](/_assets/a.png) ![b](/_assets/b-2.png)\n`/private/alice/_assets/a.png`\n"
@@ -368,7 +370,7 @@ class TestMakeShared:
         (git_wiki_dir / "plans.md").write_text("# Plans\n\n" + links)
         alice.post("/tasks/new-list", data={"name": "own", "private": "1"}, headers=HOST)
         mine = alice.post("/api/tasks", json={"title": "Think about [[private/alice/ideas]]", "list": "own"}).get_json()["id"]
-        alice.post("/rename/private/alice/ideas", data={"from": "page", "new_name": "shared-ideas"}, headers=HOST)
+        alice.post("/rename/private/alice/ideas", data={"from": "page", "new_name": "shared-ideas", "confirmed": "share"}, headers=HOST)
         want = "# {}\n\n[[shared-ideas]] [[shared-ideas|Our ideas]] [x](/page/shared-ideas) `[[private/alice/ideas]]`\n"
         assert (git_wiki_dir / "private/alice/diary.md").read_text() == want.format("Diary")
         assert (git_wiki_dir / "plans.md").read_text() == want.format("Plans")
@@ -573,11 +575,18 @@ class TestSharedNewPage:
     def test_the_editor_does_not_warn_without_users(self, client, wiki_dir):
         assert "shared-new-banner" not in client.get("/edit/garden?from=private", headers=HOST).data.decode()
 
-    def test_a_saved_shared_page_cannot_be_made_private(self, alice, git_wiki_dir):
-        """There is no button for it: once saved, the page is shared for good."""
+    def test_a_saved_shared_page_is_its_makers_to_take_back(self, alice, git_wiki_dir):
+        """Saved, the page is shared; who made it takes it into their folder
+        while nobody else has changed it (Rename asks first), not after."""
         alice.post("/api/save/garden", data={"content": "# Garden\n\nbeds\n"}, headers=HOST)
         resp = alice.post("/rename/garden", data={"new_name": "private/alice/garden"}, headers=HOST)
-        assert "rename_error=" in resp.headers["Location"]
+        assert "rename_ask=" in resp.headers["Location"] and "bob" in resp.headers["Location"]
+        assert (git_wiki_dir / "garden.md").exists() and not (git_wiki_dir / "private/alice/garden.md").exists()
+        login(alice, "bob", "bob-pw")
+        alice.post("/api/save/garden", data={"content": "# Garden\n\nbeds and bob's\n"}, headers=HOST)
+        login(alice, "alice", "alice-pw")
+        resp = alice.post("/rename/garden", data={"new_name": "private/alice/garden", "confirmed": "private/alice/garden"}, headers=HOST)
+        assert "rename_error=" in resp.headers["Location"] and "Ask" in resp.headers["Location"]
         assert (git_wiki_dir / "garden.md").exists() and not (git_wiki_dir / "private/alice/garden.md").exists()
 
 

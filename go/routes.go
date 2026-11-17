@@ -225,7 +225,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 		}
 		bc = buildBreadcrumb(rq, slug, title, chip, qs)
 		q := r.URL.Query()
-		menu = pageMenu(rq, slug, title, q.Get("rename_error"), q.Get("promote_error"), q.Get("append_error"), q.Get("rename_name"))
+		menu = pageMenu(rq, slug, title, q.Get("rename_error"), q.Get("promote_error"), q.Get("append_error"), q.Get("rename_name"), q.Get("rename_ask"))
 		changed, commit := lastChanged(slug, path, title)
 		if rq.user == visitor {
 			commit = nil // a visitor commits nothing
@@ -285,6 +285,7 @@ type editView struct {
 	CanRename, CanDelete        bool
 	Git                         bool
 	RenameError, RenameName     string
+	RenameAsk                   string // a rename to other readers, asked first: what it would do (the form then confirms that name)
 	PrivateOffer                string // a new shared page from a private one, or a group's: the slug in that folder to link instead
 	OfferGroup                  string // the group whose folder PrivateOffer is in ("": the user's own)
 	OfferOn                     string // the page whose link led here, when Make it … can point that link at PrivateOffer ("": the note only says how)
@@ -410,7 +411,7 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 		HasSection: hasSection, Section: section, SectionHeading: heading, StartChar: start, EndChar: end, FileHash: fileHash,
 		// A visitor (a public wiki) edits and makes pages, and moves none.
 		CanRename: editable && !isProtected(slug) && rq.user != visitor, CanDelete: editable && !isProtected(slug) && rq.user != visitor,
-		Git: cfg.GitEnabled, RenameError: q.Get("rename_error"), RenameName: q.Get("rename_name"), LeftDraft: left,
+		Git: cfg.GitEnabled, RenameError: q.Get("rename_error"), RenameName: q.Get("rename_name"), RenameAsk: q.Get("rename_ask"), LeftDraft: left,
 		PrivateOffer: privateOffer, OfferGroup: offerGroup, OfferOn: offerOn, Paste: pasteHint(rq, q.Get("paste"), q.Get("copied") == "1"),
 		TaskLists:      slices.Sorted(maps.Keys(rq.taskLists())),
 		BreadcrumbHTML: buildBreadcrumb(rq, slug, title, "", "", extra),
@@ -763,7 +764,17 @@ func renamePage(w http.ResponseWriter, r *http.Request) {
 	if newSlug == "" {
 		newSlug = slug
 	}
-	_, _, err := renamePageOp(userOf(r), slug, newSlug, "")
+	// confirmed: a move to other readers was asked about and answered: the
+	// name the question was about (the rename dialog, asked again below), or
+	// "share" from Share… and Make shared…, which say who will see the page
+	// (to more people only).
+	confirmed := r.PostFormValue("confirmed")
+	asked := moveSure{wider: confirmed == newSlug || confirmed == "share", narrower: confirmed == newSlug}
+	_, _, err := renamePageOp(userOf(r), slug, newSlug, "", asked)
+	if ask := (*askError)(nil); errors.As(err, &ask) {
+		http.Redirect(w, r, back+"?rename_name="+quote(newSlug)+"&rename_ask="+url.QueryEscape(ask.msg), http.StatusFound)
+		return
+	}
 	if _, err = partly(err); err != nil {
 		switch pe, ok := refusalOf(err); {
 		case !ok || pe.kind == refusedNotFound || pe.kind == refusedProtected || pe.kind == refusedReadOnly:

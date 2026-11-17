@@ -66,22 +66,24 @@
 {{- if .SharedTarget}}
 <dialog id="page-privacy-dialog" class="modal"><p class="modal-label">Make shared</p>
 <p class="modal-desc">“{{.Title}}” moves out of your private folder, to <code>{{.SharedTarget}}</code>. Everyone who uses this wiki will see and be able to change it. Links to it follow.</p>
-<form method="post" action="{{url "rename" .Slug}}"><input type="hidden" name="from" value="page"><input type="hidden" name="new_name" value="{{.SharedTarget}}"><div class="modal-actions"><button type="submit" class="btn btn-primary">Make shared</button><button type="button" class="btn" id="page-privacy-cancel">Cancel</button></div></form></dialog>
+<form method="post" action="{{url "rename" .Slug}}"><input type="hidden" name="from" value="page"><input type="hidden" name="confirmed" value="share"><input type="hidden" name="new_name" value="{{.SharedTarget}}"><div class="modal-actions"><button type="submit" class="btn btn-primary">Make shared</button><button type="button" class="btn" id="page-privacy-cancel">Cancel</button></div></form></dialog>
 {{- end}}
 {{- if .ShareTargets}}
 {{- /* Share…: to more people, never to fewer (docs/spec/users.md): a private
     page to a group you are in or to everyone, a group's page to a group
     that includes its own or to everyone. Each choice is the ordinary rename. */}}
 <dialog id="page-privacy-dialog" class="modal"><p class="modal-label">Share</p>
-<p class="modal-desc">“{{.Title}}” moves out of {{if .ShareFrom}}the folder of @{{.ShareFrom}}{{else}}your private folder{{end}}, and whoever you share it with sees and changes it from then on. Links to it follow, and so do the files it shows. It can't be taken back from them.</p>
-<form method="post" action="{{url "rename" .Slug}}" class="share-form"><input type="hidden" name="from" value="page">
+<p class="modal-desc">“{{.Title}}” moves out of {{if .ShareFrom}}the folder of @{{.ShareFrom}}{{else}}your private folder{{end}}, and whoever you share it with sees and changes it from then on. Links to it follow, and so do the files it shows. Taking it back from them is an admin's, or yours while nobody else has changed it.</p>
+<form method="post" action="{{url "rename" .Slug}}" class="share-form"><input type="hidden" name="from" value="page"><input type="hidden" name="confirmed" value="share">
 {{- range $i, $t := .ShareTargets}}
 <label class="share-choice"><input type="radio" name="new_name" value="{{$t.Slug}}"{{if eq $i 0}} checked{{end}}> <span>{{if $t.Group}}<strong>@{{$t.Group}}</strong>: {{range $j, $w := $t.Who}}{{if $j}}, {{end}}{{$w}}{{end}}{{else}}<strong>Everyone</strong> who uses this wiki{{end}} <code>{{$t.Slug}}</code></span></label>
 {{- end}}
 <div class="modal-actions"><button type="submit" class="btn btn-primary">Share</button><button type="button" class="btn" id="page-privacy-cancel">Cancel</button></div></form></dialog>
 {{- end}}
 {{- if .Renamable}}
-<dialog id="page-rename-dialog" class="modal"{{if .RenameError}} data-open{{end}}><p class="modal-label">Rename page</p><form method="post" action="{{url "rename" .Slug}}"><input type="hidden" name="from" value="page"><input type="text" name="new_name" id="page-rename-input" value="{{or .RenameName .Slug}}" aria-label="New name for “{{.Title}}”" autocomplete="off" spellcheck="false" required>{{template "error" (dict "message" .RenameError)}}<div class="modal-actions"><button type="submit" class="btn btn-primary">Rename</button><button type="button" class="btn" id="page-rename-cancel">Cancel</button></div></form></dialog>
+{{- /* A rename to another place (a group's folder, a private one, the wiki) changes who sees the page: it asks
+    first, saying who will and who no longer will, and the form sent again with that name is the yes. */}}
+<dialog id="page-rename-dialog" class="modal"{{if or .RenameError .RenameAsk}} data-open{{end}}><p class="modal-label">Rename page</p><form method="post" action="{{url "rename" .Slug}}"><input type="hidden" name="from" value="page">{{if .RenameAsk}}<input type="hidden" name="confirmed" value="{{.RenameName}}">{{end}}<input type="text" name="new_name" id="page-rename-input" value="{{or .RenameName .Slug}}" aria-label="New name for “{{.Title}}”" autocomplete="off" spellcheck="false" required>{{template "error" (dict "message" .RenameError)}}{{with .RenameAsk}}<p class="modal-desc rename-ask" role="alert">{{.}}</p>{{end}}<div class="modal-actions"><button type="submit" class="btn btn-primary">{{if .RenameAsk}}Yes, move it{{else}}Rename{{end}}</button><button type="button" class="btn" id="page-rename-cancel">Cancel</button></div></form></dialog>
 {{- end}}
 {{- end}}
 

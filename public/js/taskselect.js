@@ -160,7 +160,8 @@ function openBulkListModal(ids) {
     const isPrivate = app.isPrivateList(ref);
     const off = isPrivate && anyShared;
     const note = off ? 'a shared task stays shared' : anyPrivate && !isPrivate && !all ? (people.users?.has(people.me) ? 'shares it with everyone, assigned to you' : 'shares it with everyone')
-      : chosen.some(t => app.widens(t, ref)) ? 'everyone will see it' : '';
+      : chosen.some(t => app.widens(t, ref)) ? 'everyone will see it'
+      : chosen.some(t => app.narrows(t, ref)) ? 'fewer people will see it' : '';
     const part = note ? `<span class="bulk-tag-count">${note}</span>`
       : n && !all ? `<span class="bulk-tag-count">${n} of ${count}</span>` : '';
     const tip = ref ? ` title="${esc(app.listTooltip(ref))}"` : '';

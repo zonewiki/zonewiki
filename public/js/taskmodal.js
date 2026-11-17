@@ -634,6 +634,12 @@ app.listSelect?.addEventListener('change', () => {
   syncMore();   // the field shows now: no "+ Assignee" beside it
 });
 app.listSelect?.addEventListener('change', () => app.listSelect.setCustomValidity(''));
+// A task moved to a list fewer people see: who loses it, and whose move it is.
+const lostNote = (lost, may) => {
+  const who = lost.length > 3 ? `${lost.slice(0, 3).join(', ')} and ${lost.length - 3} others` : lost.join(', ');
+  return may ? `${who} will no longer see this task: the list is for fewer people.`
+    : `${who} would no longer see this task: only who made it, or an admin, moves it to a list for fewer people.`;
+};
 function syncListNote() {
   if (!app.listNote) return;
   const users = document.body.dataset.users === '1';
@@ -643,7 +649,9 @@ function syncListNote() {
   const text = isNew ? '' : isPrivate ? 'Private: only you see this task.'
     : privateWas ? 'Everyone who uses the wiki will see and change this task. It can’t be made private again.'
     : listTask && app.widens(listTask, app.listSelect.value)
-      ? `Everyone who uses the wiki will see and change this task. Now only those the list ${app.listName(app.taskList(listTask))} is for do.` : '';
+      ? `Everyone who uses the wiki will see and change this task. Now only those the list ${app.listName(app.taskList(listTask))} is for do.`
+    : listTask && app.narrows(listTask, app.listSelect.value)
+      ? lostNote(app.narrows(listTask, app.listSelect.value), app.mayNarrow(listTask)) : '';
   app.listNote.hidden = !users || !text;
   app.listNote.textContent = text;
 }

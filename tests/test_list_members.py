@@ -701,3 +701,36 @@ def test_an_entry_in_the_registry_too_makes_it_no_one_elses(client, wiki):
         assert f"list={LIST}" not in client.get("/tasks", headers=HOST).get_data(as_text=True)
         body = client.get("/tasks", query_string={"list": LIST}, headers=HOST).get_data(as_text=True)
         assert not any(m in body for m in MARKS) and SECRET not in body
+
+
+def test_a_task_goes_to_a_list_fewer_people_see_by_its_maker_or_an_admin(client, wiki):
+    """As a page goes to fewer people: a shared task moves into a list that
+    some who see it now are none of only by who made it, or an admin; to
+    more people by whoever may write it."""
+    sign_in(client, "bob")
+    his = client.post("/api/tasks", json={"title": "Bob's chairs", "list": "team"}, headers=HOST).get_json()["id"]
+    sign_in(client, "carol")                                   # in @hiring, an editor: not her task
+    resp = client.put(f"/api/tasks/{his}", json={"list": LIST}, headers=HOST)
+    assert resp.status_code == 403 and "bob, dana would no longer see the task" in resp.get_data(as_text=True), resp.get_data(as_text=True)
+    out = mcp(client, "carol", "update_task", id=his, list=LIST)
+    assert "would no longer see the task" in out
+    assert client.post("/api/tasks/batch-update", json={"tasks": [{"id": his, "list": LIST}]}, headers=HOST).status_code == 403
+    sign_in(client, "bob")
+    assert [t["list"] for t in client.get("/api/tasks", headers=HOST).get_json() if t["id"] == his] == ["team"]
+    # Her own task she moves there, and back out to everyone.
+    sign_in(client, "carol")
+    hers = client.post("/api/tasks", json={"title": "Carol's desk", "list": "team"}, headers=HOST).get_json()["id"]
+    assert client.put(f"/api/tasks/{hers}", json={"list": LIST}, headers=HOST).status_code == 200
+    assert client.put(f"/api/tasks/{hers}", json={"list": "team"}, headers=HOST).status_code == 200
+    # Between lists the same people see nothing is lost: anyone's move.
+    assert client.put(f"/api/tasks/{IDS['open']}", json={"list": "team"}, headers=HOST).status_code == 200   # to everyone
+    # An admin who is in the list moves anyone's task there.
+    config = wiki / ".zone" / "config"
+    config.write_text(config.read_text().replace("[user dana]\n", "[user dana]\ngroups = hiring\n"))
+    sign_in(client, "dana")
+    for _ in range(50):
+        if client.get("/tasks", query_string={"list": LIST}, headers=HOST).status_code == 200 and \
+                f"list={LIST}" in client.get("/tasks", headers=HOST).get_data(as_text=True):
+            break
+        time.sleep(0.1)
+    assert client.put(f"/api/tasks/{his}", json={"list": LIST}, headers=HOST).status_code == 200

@@ -5,7 +5,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"io/fs"
 	"net/http"
 	"os"
@@ -964,14 +963,6 @@ func partly(err error) (note string, _ error) {
 	return "", err
 }
 
-// sharedStaysShared: a shared page can't be made private (others have
-// seen it, and links to it are theirs too).
-const sharedStaysShared = "it is shared, and others have seen it: a shared page stays shared. For a private page, make a new one in your private folder and copy the text over"
-
-// groupStaysGroups: nor does a group's page go to fewer people than its
-// group.
-const groupStaysGroups = "its group has seen it: it stays with at least them. It can go to a group that includes this one, or to everyone"
-
 // notYoursFolder: what is said of a folder a page can't go to because its
 // place isn't the user's: another user's folder, or a group's they aren't in
 // (which says nothing of whether there is such a group).
@@ -982,12 +973,22 @@ func notYoursFolder(slug string) string {
 	return "that folder is another user's"
 }
 
-// sharedIntoPrivate: of the moves (old → new slug), the old slugs of the
-// pages that would go to fewer people (place.within: a page goes to more
-// people, never to fewer), A–Z: a shared page into a private or a group's
-// folder, a group's page into a private folder or another group's that
-// doesn't include its own.
-func sharedIntoPrivate(moves map[string]string) []string {
+// moveSure: what the door has asked already, of a move that changes who
+// sees a page (docs/spec/users.md, Who may move a page to other readers):
+// wider, that more people will see it; narrower, that some no longer will.
+// A door that hasn't asked gets the question back (askError) and asks.
+type moveSure struct{ wider, narrower bool }
+
+// sure: nothing is left to ask (what Zone itself moves, and an assistant's
+// move to more people, which its user asked for).
+var sure = moveSure{wider: true, narrower: true}
+
+// narrowedBy, widenedBy: of the moves (old → new slug), the old slugs of the
+// pages that would be seen by fewer people (place.within: someone who sees
+// the page now wouldn't: a shared page into a private or a group's folder,
+// a group's page into a private folder or another group's that doesn't
+// include its own), and of those that would be seen by more, A–Z.
+func narrowedBy(moves map[string]string) []string {
 	var out []string
 	for _, o := range sortedKeys(moves) {
 		if !placeOf(o).within(placeOf(moves[o])) {
@@ -997,28 +998,170 @@ func sharedIntoPrivate(moves map[string]string) []string {
 	return out
 }
 
-// refuseMakingPrivate: the message of a move that would take a page from
-// people who see it ("" if none does).
-func refuseMakingPrivate(moves map[string]string) string {
-	narrowed := sharedIntoPrivate(moves)
-	if len(narrowed) == 0 {
-		return ""
-	}
-	groups := 0
-	for _, o := range narrowed {
-		if placeOf(o).kind == ofGroup {
-			groups++
+func widenedBy(moves map[string]string) []string {
+	var out []string
+	for _, o := range sortedKeys(moves) {
+		if from, to := placeOf(o), placeOf(moves[o]); from != to && from.within(to) {
+			out = append(out, o)
 		}
 	}
-	switch {
-	case len(narrowed) == 1 && groups == 1:
-		return "“" + narrowed[0] + "”: " + groupStaysGroups
-	case len(narrowed) == 1:
-		return "“" + narrowed[0] + "”: " + sharedStaysShared
-	case groups == len(narrowed):
-		return fmt.Sprintf("%d of the pages are a group's, and its members have seen them: they stay with at least them (%s …)", len(narrowed), narrowed[0])
+	return out
+}
+
+// checkReaders: the moves (old → new slug) as far as they change who sees
+// the pages, for user. **To more people: whoever may write, asked first. To
+// fewer: an admin, or whoever shared the page while nobody else changed it
+// (mayNarrow), asked first; anyone else is refused.** One rule for a
+// rename, a folder's move, Share…, a note's move and an assistant's
+// rename_page; what the door asked already is in sure.
+func checkReaders(user string, moves map[string]string, sure moveSure) error {
+	if narrow := narrowedBy(moves); len(narrow) > 0 {
+		for _, o := range narrow {
+			if !mayNarrow(user, o, moves[o]) {
+				return refuse(narrowRefused(narrow, moves))
+			}
+		}
+		if !sure.narrower {
+			return &askError{narrowAsk(narrow, moves)}
+		}
 	}
-	return fmt.Sprintf("%d of the pages are shared, and others have seen them: a shared page stays shared (%s …)", len(narrowed), narrowed[0])
+	if wide := widenedBy(moves); len(wide) > 0 && !sure.wider {
+		return &askError{widenAsk(wide, moves)}
+	}
+	return nil
+}
+
+// mayNarrow: user may move the page old to newSlug, where fewer people see
+// it: an admin, who moves it only where they may write themselves
+// (checkTarget: a group they are in, their own folder); or whoever put it
+// where it is, while nobody else has changed it since (tookBack). In a
+// wiki without an admin (from before roles) only the latter: nobody stood
+// for the others there before either.
+func mayNarrow(user, old, newSlug string) bool {
+	return settings().isAdmin(user) || tookBack(user, old, newSlug)
+}
+
+// tookBackMost: how far back tookBack reads a page's commits.
+const tookBackMost = 50
+
+// tookBack: the page old is user's to take back to newSlug: every commit of
+// it since it came to where it is (the move that shared it, or its first
+// commit) is theirs, nothing of anyone else's is in it uncommitted, and
+// newSlug's place is the one it came from or wider: the mistake of a
+// minute ago is undone, and nobody's work is taken from them.
+func tookBack(user, old, newSlug string) bool {
+	path := safePath(old)
+	if path == "" || !cfg.GitEnabled {
+		return false
+	}
+	draft := draftAuthor(path)
+	if draft != "" && draft != user {
+		return false
+	}
+	entries := gitLog(path, tookBackMost)
+	if len(entries) == 0 {
+		return draft == user // not in git yet: theirs if they are who wrote it
+	}
+	for i, e := range entries {
+		if e.Author != user {
+			return false
+		}
+		if i+1 < len(entries) && entries[i+1].Path != e.Path {
+			// This commit moved it here, from there.
+			return placeOf(strings.TrimSuffix(entries[i+1].Path, ".md")).within(placeOf(newSlug))
+		}
+	}
+	return true // made here by them, and theirs alone since
+}
+
+// placeSeers: the users who see what is kept at p, A–Z (who can sign in).
+func placeSeers(p place) []string {
+	var out []string
+	s := settings()
+	for _, name := range sortedKeys(s.Users) {
+		if !s.Users[name].Disabled && p.sees(name) {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+// placeWho: who sees what is kept at p, in words: "everyone who uses this
+// wiki", "@dev (anna, bo)", "only alice", "nobody".
+func placeWho(p place) string {
+	switch p.kind {
+	case ofEveryone:
+		return "everyone who uses this wiki"
+	case ofUser:
+		return "only " + p.name
+	case ofGroup:
+		return "@" + p.name + " (" + namesOr(placeSeers(p), 8, "nobody") + ")"
+	}
+	return "nobody"
+}
+
+// namesOr: names in a row, the first most of them and how many more
+// ("anna, bo and 12 others"); none: the word given.
+func namesOr(names []string, most int, none string) string {
+	switch {
+	case len(names) == 0:
+		return none
+	case len(names) > most:
+		return strings.Join(names[:most], ", ") + " and " + itoa(len(names)-most) + " others"
+	}
+	return strings.Join(names, ", ")
+}
+
+// losers: who sees the page at from and wouldn't at to.
+func losers(from, to place) []string {
+	var out []string
+	for _, name := range placeSeers(from) {
+		if !to.sees(name) {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+// narrowAsk, widenAsk, narrowRefused: what a move to other readers says
+// before it is made, and what it says to who may not make it.
+func narrowAsk(narrow []string, moves map[string]string) string {
+	o := narrow[0]
+	from, to := placeOf(o), placeOf(moves[o])
+	what := "“" + o + "”"
+	if len(narrow) > 1 {
+		what = itoa(len(narrow)) + " pages (" + o + " …)"
+	}
+	lost := losers(from, to)
+	if len(lost) == 0 {
+		// Nobody loses it today (the same people see both places), but who comes later will.
+		return what + " will be for fewer people: there " + placeWho(to) + " sees it, now " + placeWho(from) +
+			" does. Nobody who sees it now loses it; who joins later may not get it."
+	}
+	return namesOr(lost, 3, "") + " will no longer see " + what + ": there " + placeWho(to) +
+		" sees it. They keep its versions up to now in the history, and links to it on pages they see become plain text."
+}
+
+func widenAsk(wide []string, moves map[string]string) string {
+	o := wide[0]
+	what := "“" + o + "”"
+	if len(wide) > 1 {
+		what = itoa(len(wide)) + " pages (" + o + " …)"
+	}
+	return what + " will be seen and changed by " + placeWho(placeOf(moves[o])) + ". Now " + placeWho(placeOf(o)) + " sees it."
+}
+
+func narrowRefused(narrow []string, moves map[string]string) string {
+	o := narrow[0]
+	from, to := placeOf(o), placeOf(moves[o])
+	what := "“" + moves[o] + "” is seen by fewer people than “" + o + "” is now"
+	if len(narrow) > 1 {
+		what = itoa(len(narrow)) + " of the pages would be seen by fewer people (" + o + " …)"
+	}
+	if lost := losers(from, to); len(lost) > 0 {
+		what += " (" + namesOr(lost, 3, "") + " would no longer see it)"
+	}
+	return what + ". A page goes to fewer people by an admin, or by whoever shared it while nobody else has changed it. Ask an admin."
 }
 
 // rebaseLinks re-points the links in text, written by page source, for a

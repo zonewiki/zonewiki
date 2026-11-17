@@ -52,6 +52,37 @@ def test_share_a_private_page_with_a_group(alice, wiki):
     expect(alice.get_by_role("menuitem", name="Share…")).to_have_count(0)
 
 
+def test_rename_to_other_readers_asks_first(alice, wiki):
+    """Rename… into another place changes who sees the page: the dialog comes
+    back saying who will, and the second click is the yes."""
+    wiki.write("groups/dev/roadmap", "# Roadmap\n\nNext.\n")
+    wiki.git("add", "-A")
+    wiki.git("commit", "-qm", "seed")
+    alice.goto("/page/groups/dev/roadmap")
+    alice.locator(".page-menu-btn").first.click()
+    alice.get_by_role("menuitem", name="Rename…").click()
+    dialog = alice.locator("#page-rename-dialog")
+    dialog.locator("#page-rename-input").fill("roadmap")
+    dialog.get_by_role("button", name="Rename").click()
+    alice.wait_for_url("**/page/groups/dev/roadmap?**")
+    expect(dialog).to_be_visible()
+    expect(dialog.locator(".rename-ask")).to_contain_text("will be seen and changed by everyone who uses this wiki")
+    expect(dialog.locator(".rename-ask")).to_contain_text("Now @dev (alice, carol) sees it")
+    assert (wiki.root / "groups/dev/roadmap.md").exists()
+    dialog.get_by_role("button", name="Yes, move it").click()
+    alice.wait_for_url("**/page/roadmap")
+    assert (wiki.root / "roadmap.md").exists()
+    # Back is to fewer people: hers to take back, as she shared it and nobody changed it since; asked first.
+    alice.locator(".page-menu-btn").first.click()
+    alice.get_by_role("menuitem", name="Rename…").click()
+    dialog.locator("#page-rename-input").fill("groups/dev/roadmap")
+    dialog.get_by_role("button", name="Rename").click()
+    expect(dialog).to_be_visible()
+    expect(dialog.locator(".rename-ask")).to_contain_text("bob will no longer see “roadmap”")
+    dialog.get_by_role("button", name="Yes, move it").click()
+    alice.wait_for_url("**/page/groups/dev/roadmap")
+
+
 # ── [[ completion ────────────────────────────────────────────────────────────
 
 def test_completion_offers_what_every_reader_of_the_page_sees(alice, wiki):

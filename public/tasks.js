@@ -141,7 +141,7 @@ const app = {
   boardDivider, clearBoardDropOver, dropOnBucket, dropWrite, planOnDay,
   taskList,
   filterTasks, boardBuckets,
-  refreshOtherInstances, listTooltip, listMembers, assignableIn, widens, inScope, listName, editPrivate, newTaskList,
+  refreshOtherInstances, listTooltip, listMembers, assignableIn, widens, narrows, mayNarrow, inScope, listName, editPrivate, newTaskList,
 
   flashTask,
 
@@ -449,6 +449,17 @@ function listMembers(ref) {
 function widens(task, ref) {
   return !task.private && !!listMembers(taskList(task) || '') && !isPrivateList(ref) && !listMembers(ref);
 }
+// The task would go to a list that some who see it now are none of: fewer
+// people see it than now. Their names (null: none lose it); the dialogs say
+// so, and only who made the task or an admin moves it there (applyList).
+function narrows(task, ref) {
+  const to = listMembers(ref);
+  if (task.private || isPrivateList(ref) || !to || (taskList(task) || '') === ref) return null;
+  const now = listMembers(taskList(task) || '') || people.users || new Set();
+  const lost = [...now].filter(name => !to.has(name));
+  return lost.length ? lost : null;
+}
+function mayNarrow(task) { return document.body.dataset.admin === '1' || !task.created_by || task.created_by === people.me; }
 // Who a task in the list ref can be given to.
 function assignableIn(ref) { return listMembers(ref) || people.users || new Set(); }
 // A list's name, as its chip and the dialogs show it.

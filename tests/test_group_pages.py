@@ -74,10 +74,16 @@ def mcp(client, who, tool, **args):
     return "".join(c.get("text", "") for c in resp.get_json()["result"]["content"])
 
 
-def rename(client, who, slug, new_slug):
+def rename(client, who, slug, new_slug, **more):
     """rename_page as who's assistant, the guides of both folders read."""
     ids = sorted({g for s in (slug, new_slug) for g in re.findall(r"[\w/-]+:[0-9a-f]{8}", mcp(client, who, "read_guides", slug=s))})
-    return mcp(client, who, "rename_page", slug=slug, new_slug=new_slug, guides=ids)
+    return mcp(client, who, "rename_page", slug=slug, new_slug=new_slug, guides=ids, **more)
+
+
+def placeof(slug):
+    """Whose a page is, by its path: ("private", user), ("groups", group) or ()."""
+    parts = slug.split("/")
+    return tuple(parts[:2]) if parts[0] in ("private", "groups") and len(parts) > 2 else ()
 
 
 # ── The probes: test_privacy's, aimed at the group's folder ──────────────────
@@ -387,18 +393,18 @@ def test_a_groups_guide_is_an_admins_who_is_in_the_group(client, wiki):
     assert resp.status_code in (200, 302) and "Short sentences" in (wiki / GROUP / "AGENTS.md").read_text()
 
 
-# ── To more people, never to fewer ───────────────────────────────────────────
+# ── To more people whoever may write; to fewer an admin (tests/test_narrow.py) ─
 
 @pytest.mark.parametrize("old,new,why", [
     ("private/alice/mine", "groups/dev/mine", ""),            # hers, to a group she is in
     (DIARY, "shared-diary", ""),                               # the group's, to everyone
     (DIARY, "groups/dev/sub/diary", ""),                       # within the group's folder
-    ("plans", "groups/dev/plans", "a shared page stays shared"),
-    (DIARY, "private/alice/diary", "its group has seen it"),   # the group's stays with the group
+    ("plans", "groups/dev/plans", "Ask an admin"),             # from everyone: not an editor's to take
+    (DIARY, "private/alice/diary", "Ask an admin"),            # the group's stays with the group
     (DIARY, "groups/ops/diary", "groups you are in"),          # not hers to move into
     ("private/alice/mine", "groups/ops/mine", "groups you are in"),
 ])
-def test_a_page_moves_to_more_people_never_to_fewer(client, wiki, old, new, why):
+def test_a_page_moves_to_more_people_and_not_to_fewer_by_an_editor(client, wiki, old, new, why):
     ok = not why
     (wiki / "private/alice").mkdir(parents=True)
     (wiki / "private/alice/mine.md").write_text("# Mine\n")
@@ -406,6 +412,10 @@ def test_a_page_moves_to_more_people_never_to_fewer(client, wiki, old, new, why)
     git(wiki, "commit", "-q", "-m", "Hers")
     sign_in(client, "alice")
     resp = client.post(f"/rename/{old}", data={"new_name": new}, headers=HOST)
+    if ok and placeof(old) != placeof(new):
+        # To more people: Rename says who will see it, and asks; sent again with that name it moves.
+        assert "rename_ask=" in resp.headers["Location"] and (wiki / f"{old}.md").exists(), resp.headers["Location"]
+        resp = client.post(f"/rename/{old}", data={"new_name": new, "confirmed": new}, headers=HOST)
     assert (wiki / f"{new}.md").exists() == ok and (wiki / f"{old}.md").exists() != ok, resp.get_data(as_text=True)[:300]
     if not ok:
         out = rename(client, "alice", old, new)
@@ -418,11 +428,15 @@ def test_a_group_s_page_moves_to_a_group_that_includes_it(client, wiki):
     moved = wiki / "groups/product/diary.md"
     out = []
     assert _until(lambda: moved.exists() or (out.append(rename(client, "alice", DIARY, "groups/product/diary")), moved.exists())[1]), out[-1]
-    # Back is to fewer people; so is a group that merely has her in it too.
-    out = rename(client, "alice", "groups/product/diary", DIARY)
-    assert "its group has seen it" in out and (wiki / "groups/product/diary.md").exists()
+    # A group that merely has her in it too is to other people: not an editor's move.
     out = rename(client, "alice", "groups/product/diary", "groups/ops/diary")
-    assert "its group has seen it" in out and not (wiki / "groups/ops").exists()
+    assert "Ask an admin" in out and not (wiki / "groups/ops").exists()
+    # Back is to fewer people: she put it there and nobody else changed it since, so it is hers to take
+    # back, and the tool asks first (narrow).
+    out = rename(client, "alice", "groups/product/diary", DIARY)
+    assert "will be for fewer people" in out and "narrow=true" in out and (wiki / "groups/product/diary.md").exists()
+    out = rename(client, "alice", "groups/product/diary", DIARY, narrow=True)
+    assert "Renamed" in out and (wiki / f"{DIARY}.md").exists() and not moved.exists(), out
 
 
 # ── History ──────────────────────────────────────────────────────────────────
@@ -430,7 +444,7 @@ def test_a_group_s_page_moves_to_a_group_that_includes_it(client, wiki):
 def test_the_history_names_no_page_of_the_group_to_anyone_else(client, wiki):
     before = sha(wiki)
     sign_in(client, "alice")
-    assert client.post(f"/rename/{DIARY}", data={"new_name": "open-diary"}, headers=HOST).status_code == 302
+    assert client.post(f"/rename/{DIARY}", data={"new_name": "open-diary", "confirmed": "open-diary"}, headers=HOST).status_code == 302
     sign_in(client, "bob")
     body = client.get("/history/open-diary", headers=HOST).get_data(as_text=True)
     assert "groups/dev" not in body and "a group&#39;s page" in body
@@ -477,8 +491,9 @@ def test_share_offers_the_places_a_page_can_go_to(client, wiki):
     assert "<strong>@dev</strong>: alice, carol, vera" in body and "<strong>Everyone</strong> who uses this wiki" in body
     assert "moves out of your private folder" in body
     # Into the group: its members see it, with the file it shows.
-    assert client.post("/rename/private/alice/notes/idea", data={"from": "page", "new_name": "groups/dev/notes/idea"},
-                       headers=HOST).status_code == 302
+    assert 'name="confirmed" value="share"' in body                # Share… says who will see it: no second question
+    assert client.post("/rename/private/alice/notes/idea", data={"from": "page", "new_name": "groups/dev/notes/idea",
+                                                                 "confirmed": "share"}, headers=HOST).status_code == 302
     assert "/groups/dev/_assets/a.png" in (wiki / "groups/dev/notes/idea.md").read_text()
     assert (wiki / "groups/dev/_assets/a.png").read_bytes() == b"hers" and (wiki / "private/alice/_assets/a.png").exists()
     sign_in(client, "carol")
@@ -487,7 +502,8 @@ def test_share_offers_the_places_a_page_can_go_to(client, wiki):
     body = client.get("/page/groups/dev/notes/idea", headers=HOST).get_data(as_text=True)
     assert choices("groups/dev/notes/idea")[:2] == ["groups/product/notes/idea", "notes/idea"]
     assert "moves out of the folder of @dev" in body and "groups/other" not in body
-    assert client.post("/rename/groups/dev/notes/idea", data={"from": "page", "new_name": "notes/idea"}, headers=HOST).status_code == 302
+    assert client.post("/rename/groups/dev/notes/idea", data={"from": "page", "new_name": "notes/idea", "confirmed": "share"},
+                       headers=HOST).status_code == 302
     assert "(/_assets/a.png)" in (wiki / "notes/idea.md").read_text() and (wiki / "_assets/a.png").read_bytes() == b"hers"
     # Shared, it goes nowhere else; a viewer, an outsider and a guide's reader are offered nothing.
     assert "Share…" not in client.get("/page/notes/idea", headers=HOST).get_data(as_text=True)
@@ -737,7 +753,7 @@ def test_an_assistant_is_told_who_sees_a_page(client, wiki):
         return resp.get_json()["result"]["instructions"]
     said = instructions("alice")
     assert ("Where a page is kept is who sees it: private/alice/ only this user, groups/dev/ the people in that group, "
-            "anywhere else everyone who uses the wiki.") in said and "never back" in said
+            "anywhere else everyone who uses the wiki.") in said and "back to fewer only by an admin" in said
     assert "groups/" not in instructions("bob") and "groups/" not in instructions("dana")
     line = "seen by: the group @dev only (alice, carol and vera; its folder is groups/dev/). Not for a page or task outside the group"
     assert line in mcp(client, "alice", "read_page", slug=DIARY)
@@ -751,14 +767,14 @@ def test_an_assistant_is_told_who_sees_a_page(client, wiki):
     # Moved out to everyone, the line goes; its refusal the other way says why.
     moved = rename(client, "alice", f"{GROUP}/retro", "retro")
     assert "Renamed page" in moved and "seen by" not in moved
-    assert "a shared page stays shared" in rename(client, "alice", "retro", f"{GROUP}/retro")
+    assert "will no longer see" in rename(client, "alice", "retro", f"{GROUP}/retro")      # hers to take back: asked first
     # Who isn't in the group is told what is theirs, not what there is.
     refused = mcp(client, "bob", "write_page", slug=f"{GROUP}/sneak", content="# Sneak\n")
     assert "you are in no group" in refused and not (wiki / GROUP / "sneak.md").exists()
     tools = client.post("/mcp", headers={**HOST, "Authorization": "Bearer alice-token"}, json={
         "jsonrpc": "2.0", "id": 1, "method": "tools/list"}).get_json()["result"]["tools"]
     described = {t["name"]: json.dumps(t) for t in tools}
-    assert "A page moves to more people, never to fewer." in described["rename_page"]
+    assert "A move to fewer readers: an admin, with narrow." in described["rename_page"]
 
 
 def test_a_group_has_ways_to_start_a_page_and_a_list(client, wiki):

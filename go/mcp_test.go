@@ -116,7 +116,10 @@ func TestMCPToolDefinitions(t *testing.T) {
 	if len(names) != len(mcpToolTable) || names[0] != "search_wiki" || names[len(names)-1] != "update_task" {
 		t.Errorf("tools: %q", names)
 	}
-	if len(mcpToolsJSON) > 34000 {
+	// Raised from 34000 for rename_page's narrow (2026-11): a move that takes
+	// a page from readers wants its own yes. tests/test_mcp.py caps what is
+	// served (the same list, compact).
+	if len(mcpToolsJSON) > 34200 {
 		t.Errorf("the definitions grew to %d bytes: every session loads them", len(mcpToolsJSON))
 	}
 }

@@ -398,13 +398,13 @@ def test_move_to_wiki_makes_a_private_note_shared(alice, wiki):
 
 def test_an_old_shared_note_cannot_be_moved_into_private(alice, wiki):
     """A note from before users is a shared page: Move to wiki into
-    private/alice would make a shared page private, so it is refused and
-    nothing moves."""
+    private/alice would take it from everyone else, which isn't an editor's
+    to do: refused, and nothing moves."""
     note = "2026-01-01_10-00-00_old"
     (wiki / f"{note}.md").write_text("# Old\n")
     (wiki / "log.md").write_text(f"# Log\n\nSee [[{note}]].\n")
     resp = alice.post(f"/promote/{note}", data={"folder": "private/alice", "name": "old"}, headers=HOST)
-    assert "promote_error=" in resp.headers["Location"] and "stays shared" in unquote(resp.headers["Location"])
+    assert "promote_error=" in resp.headers["Location"] and "Ask an admin" in unquote(resp.headers["Location"])
     assert (wiki / f"{note}.md").exists() and f"[[{note}]]" in (wiki / "log.md").read_text()
     # Into a shared folder it goes, links following.
     alice.post(f"/promote/{note}", data={"folder": "notes", "name": "old"}, headers=HOST)
@@ -470,7 +470,7 @@ def test_rename_into_another_users_folder_is_refused(bob, wiki):
 
 
 def test_history_leaves_out_versions_from_before_a_page_was_shared(alice, wiki):
-    alice.post(f"/rename/{DIARY}", data={"new_name": "diary"}, headers=HOST)
+    alice.post(f"/rename/{DIARY}", data={"new_name": "diary", "confirmed": "diary"}, headers=HOST)
     shas = git(wiki, "log", "--follow", "--format=%h", "--", "diary.md").split()
     assert len(shas) == 2   # the rename, and alice's commit before it
     sign_in(alice, "bob")
@@ -1110,17 +1110,18 @@ def test_a_path_through_his_own_folder_stays_in_it(bob, wiki):
 
 
 def test_an_assistant_cannot_make_a_shared_page_private(alice, wiki):
-    """A shared page stays shared: renaming it, or a folder of shared pages,
-    into alice's folder is refused and nothing moves, linked or not."""
+    """A shared page isn't an editor's to take from the others: renaming it,
+    or a folder of shared pages, into alice's folder is refused and nothing
+    moves, linked or not."""
     (wiki / "toy.md").write_text("# Toy\n")
     (wiki / "games.md").write_text("# Games\n\nSee [[toy]].\n")
     out = mcp(alice, "rename_page", token="alice-token", slug="toy", new_slug="private/alice/toy")
-    assert "Not renamed" in out and "stays shared" in out
+    assert "Not renamed" in out and "Ask an admin" in out
     assert (wiki / "toy.md").exists() and "[[toy]]" in (wiki / "games.md").read_text()
     (wiki / "stuff").mkdir()
     (wiki / "stuff/a.md").write_text("# A\n")
     out = mcp(alice, "rename_page", token="alice-token", slug="stuff/", new_slug="private/alice/stuff")
-    assert "Nothing was moved" in out and "stays shared" in out and (wiki / "stuff/a.md").exists()
+    assert "Nothing was moved" in out and "Ask an admin" in out and (wiki / "stuff/a.md").exists()
     # Her own private page may go out, and back within her folder.
     assert "Renamed page" in mcp(alice, "rename_page", token="alice-token", slug=DIARY, new_slug="private/alice/journal")
 

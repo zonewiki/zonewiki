@@ -659,7 +659,7 @@
  {
   "name": "rename_page",
   "title": "Rename or move a page",
-  "description": "Rename a page or move it to another folder. Every link to it, on pages and in tasks, is changed to the new name. A folder ('projects/', with the slash) moves with all its pages and subfolders, in one commit. A page moves to more people, never to fewer.",
+  "description": "Rename a page or move it to another folder. Every link to it, on pages and in tasks, is changed to the new name. A folder ('projects/', with the slash) moves with all its pages and subfolders, in one commit. A move to fewer readers: an admin, with narrow.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -670,6 +670,10 @@
     "new_slug": {
      "type": "string",
      "description": "The new slug, e.g. 'projects/leaf/mcp'; for a folder, the folder's new path."
+    },
+    "narrow": {
+     "type": "boolean",
+     "description": "Fewer people will see it, and the user said so."
     },
     "summary": {
      "type": "string",

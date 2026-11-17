@@ -943,7 +943,7 @@ def test_heading_links_copy_page_and_section_urls(page, wiki):
 
 
 def test_rename_into_private_is_refused(page, wiki, monkeypatch):
-    # A shared page stays shared: the dialog comes back with the reason.
+    # A shared page isn't an editor's to take from the others: the dialog comes back with the reason.
     monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "token")})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
     wiki.write("ideas", "# Ideas\n")
@@ -954,7 +954,7 @@ def test_rename_into_private_is_refused(page, wiki, monkeypatch):
     dialog.locator("#page-rename-input").fill("private/alice/ideas")
     dialog.get_by_role("button", name="Rename").click()
     expect(dialog).to_be_visible()
-    expect(dialog).to_contain_text("stays shared")
+    expect(dialog).to_contain_text("Ask an admin")
     expect(dialog.locator("#page-rename-input")).to_have_value("private/alice/ideas")
     expect(page).not_to_have_url(re.compile("rename_"))
     assert (wiki.root / "ideas.md").exists()

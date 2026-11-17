@@ -18,7 +18,10 @@ Three rules; the rest of this file is how they are kept.
    (Hidden inside Zone, not encrypted: whoever has the wiki's folder or git repository has it all.)
 2. **Where something is kept is who sees it.** Not its tags, not its links, not its name.
    A new page starts where it is made: from a link to `private/<you>/…` or `groups/<group>/…`. A task is kept where its list is: one in a private list of yours in your folder, any other with the shared tasks.
-3. **To more people, never to fewer.** A private page goes to a group you are in or to everyone, a group's page to a group that includes its own or to everyone, by a rename out of the folder; a private task by moving it out of its private list (or making that list shared).
+3. **To more people by whoever may write; to fewer by an admin.** A private page goes to a group you are in or to everyone, a group's page to a group that includes its own or to everyone, by a rename out of the folder (Share…); a private task by moving it out of its private list (or making that list shared).
+   The screen says who will see it, and asks.
+   The other way takes something from people who have it, so it is not everyone's move: a page goes to fewer people by an admin, or by whoever shared it while nobody else has changed it (the mistake of a minute ago); a task into a list fewer people see by who made it, or an admin; a list is narrowed by its owners, or an admin.
+   The screen names who will no longer see it, and asks (Who may move a page to other readers, below).
    Never the other way: others have seen a shared page or task, link to it and have comments on it, so Zone refuses to take one into a private folder or tasks, or a group's page from its group (the error says so).
    Making a page shared takes the uploads it shows with it.
    Nothing else moves anything.
@@ -572,7 +575,7 @@ Pages in `private/<name>/` (and its subfolders) are that user's: only they see a
 Make one from a link to it (`[[private/alice/diary]]` on one of your pages: the missing link opens its editor), by moving a note there (Move to wiki, folder `private/alice`), or by linking to it from a private page (below);
 on a private page `[[` completion offers a new private page (Wikilink autocomplete in `docs/spec/editor.md`); `/new` (the form without JavaScript) has a **Private** box too (`private=1` puts the slug in your folder; the box shows only with users).
 Rename it out of the folder, or use **Make shared** in its ⋯ menu, to share it.
-**There is no way to make a shared page private** (rename, Move to wiki, `rename_page` and a folder move all refuse: "a shared page stays shared"): others have seen it, and the pages that link to it would lose their links.
+**A shared page is made private only by an admin, or by whoever shared it while nobody else has changed it** (Who may move a page to other readers, below): others have seen it, and the pages that link to it would lose their links.
 Create a new page in your folder and copy the text.
 A new page is made private from the start (below).
 
@@ -588,14 +591,19 @@ A new page is made private from the start (below).
   The dialog says where it goes and that everyone who uses the wiki then sees and changes it,
   and submits the ordinary rename (`POST /rename/<slug>` with `from=page`: links re-point on pages and in tasks, the uploads it shows are copied to `_assets/` (Uploads, below), one commit `Rename <old> to <new>`; a refusal such as "A page named … already exists" comes back in the Rename dialog).
   Not offered without users, for a shared page, another user's page, the wiki's home or a private home, or a note (Move to wiki takes those out of the folder).
-- **Shared stays shared** (`refuseMakingPrivate`, `sharedIntoPrivate` in `go/pages.go`): a rename,
-  Move to wiki (also of an old shared note from before users),
-  an assistant's `rename_page`,
-  a folder move,
-  that would put a shared page into a private folder (yours, or no one's: `private/carol/…`) is refused before anything moves,
-  with "it is shared,
-  and others have seen it: a shared page stays shared".
-  In the browser the rename dialog (and the editor's rename bar) comes back with the name typed and that error.
+- **Who may move a page to other readers** (`checkReaders`, `mayNarrow`, `tookBack` in `go/pages.go`; one rule for a rename, Share…, Move to wiki, a folder move and an assistant's `rename_page`):
+  a move is to more people when everyone who sees the page now still does (`place.within`), to fewer when someone no longer would.
+  - **To more people: whoever may write the page, asked first.** Share… says who will see it. A rename that takes the page to another place comes back with the question, "“groups/dev/roadmap” will be seen and changed by everyone who uses this wiki. Now @dev (anna, bo) sees it.", and **Yes, move it** (`rename_ask`; the form sent again with `confirmed=<that name>` is the yes, and a yes to one name is none to another).
+    An assistant's move to more people isn't asked again: its user asked for it.
+  - **To fewer people: an admin, asked first.** "bob, erin will no longer see “plans”: there @dev (alice, carol, dana) sees it. They keep its versions up to now in the history, and links to it on pages they see become plain text." An admin moves a page only where they may write themselves: into a group they are in, or their own folder (an admin who is no member sees nothing of a group).
+    An assistant passes `narrow=true` for it, after the same question as its refusal.
+  - **Whoever shared a page takes it back while nobody else has changed it**: every commit of the page since it came to where it is (the move that shared it, or its first save) is theirs, nothing of anyone else's is in it uncommitted, and it goes back to where it came from or to a place at least that wide. Asked first, as an admin is.
+  - **Anyone else is refused**, and told whose move it is: "“groups/dev/plans” is seen by fewer people than “plans” is now (bob, erin would no longer see it). A page goes to fewer people by an admin, or by whoever shared it while nobody else has changed it. Ask an admin."
+    In the browser the rename dialog (and the editor's rename bar) comes back with the name typed and that message.
+  - **What those left out keep** is what they had: the page's history is read by its path, so its versions up to the move are theirs to read (and a link to it on a page they see is plain text from then on); nothing written after reaches them.
+  - **Why not everyone, with a question**: a delete is seen and undone by everyone (Deleted Pages) and costs the deleter the page too; a move into one's own group is neither seen nor undone by those left out, and costs the mover nothing.
+    **Why not no one**: a wiki that starts with everything shared is sorted into team folders later, and a page shared by mistake is taken back.
+  - **Who may delete or manage is per kind, on purpose**: a page by whoever may write it; a task by who made it or an admin; a list by its owners or an admin; a comment by its author; a guide by an admin.
   Links therefore never have to be unlinked: a move *out* of a private folder re-points the links of your own pages and tasks, and of the shared pages that linked to it (marked 🔒 for you, below), in the rename's one commit.
 - **A link from a shared page to your private page** (typed or pasted) is allowed, but marked for you (`.wikilink-private`: a 🔒 after it, tooltip "Links to a private page: others see plain text"; the live preview too): other users see plain text there.
   `[[` completion on a shared page, and in a shared task's title or notes, doesn't offer your private pages (a private task's does).
@@ -629,12 +637,12 @@ A new page is made private from the start (below).
   Sharing mode's "Hidden page" stays for pages `noshare` hides.
 - **Changing another user's page** is refused the same way, 404 (`canWrite`; `refuseWrite` in the routes): save and auto-save, new page, rename, delete, restore a version, toggle a checkbox, commit one file.
   Renaming a page *into* another user's folder goes back to the dialog with an error ("that folder is another user's"), as does Move to wiki into one; Append to page and Move to wiki's "Link from" take only pages you may change ("There is no page …").
-  Renaming a shared page to another shared place re-points links on every page, other users' private ones too, in one commit (Rename in `docs/spec/editor.md`); renaming one into your private folder is refused (Shared stays shared, above).
+  Renaming a shared page to another shared place re-points links on every page, other users' private ones too, in one commit (Rename in `docs/spec/editor.md`); renaming one into your private folder is an admin's, or yours while it is yours alone (Who may move a page to other readers, above).
 - **Notes are private**: with users the New note dialog says "New private note" and "Only you see it, until you move it to the wiki";
   a new note goes to the top of your folder, `private/<you>/<timestamp>_<name>` (`createQuicknote`, `privateFolder`);
   Notes lists only yours, under a 🔒 like a private page (an empty Notes says "Notes are private: only you see them, until you move one to the wiki"; `listQuicknote`, `inQuicknote`; so do Notes filter and `list_pages`/`search_wiki` with `notes`).
   A top-level note from before users stays a shared page: it opens by its link and shows in search and the page list, but is not in anyone's Notes (move it into your folder, or use Move to wiki).
-  Move to wiki and Append to page take a note out of your folder (to the folder you name, the top level by default; to the page); an old shared note (from before users) Move to wiki'd into your private folder is refused, like a rename (Shared stays shared, above).
+  Move to wiki and Append to page take a note out of your folder (to the folder you name, the top level by default; to the page); an old shared note (from before users) goes into your private folder by Move to wiki as by a rename (Who may move a page to other readers, above).
   `isQuicknote` takes a note at the top of a user's folder (not deeper, not in no one's folder, and without users only top-level notes).
 - **Uploads** for a private page are private: the editor sends the page's slug with an upload (`page`, `markdownEditor`'s `page` option), and a file for a page in your own folder is kept in `private/<you>/_assets/` (`uploadDir`; URL `/private/<you>/_assets/<file>`, the folder's own path);
   any other page's uploads go to `_assets/` as before.
@@ -688,8 +696,8 @@ There is nothing to set up for the folder itself: it is the folder of the group 
   So emptying a group never publishes its pages, and what is shared doesn't depend on who is in which group.
   **A wiki that already had a folder `groups/`** when it got users, or when Zone got group folders, finds its pages there seen only by the groups of those names, or by no one: move them out on disk, or put people in a group of the folder's name.
   Without users `groups/` is an ordinary folder.
-- **To more people, never to fewer** (`place.within`, `sharedIntoPrivate` in `go/pages.go`): one of your private pages moves into a group you are in, a group's page into the folder of a group that includes its own (`groups/dev/x` → `groups/product/x` while product includes dev) or out to everyone.
-  A shared page doesn't move into a group's folder ("a shared page stays shared"), nor a group's page into a private folder or another group's ("its group has seen it: it stays with at least them"). Between groups it goes by how they are made, not by who happens to be in them.
+- **To more people by whoever may write, to fewer by an admin** (`place.within`, `checkReaders` in `go/pages.go`; Who may move a page to other readers, under Private pages): one of your private pages moves into a group you are in, a group's page into the folder of a group that includes its own (`groups/dev/x` → `groups/product/x` while product includes dev) or out to everyone.
+  A shared page into a group's folder, and a group's page into a private folder or another group's, is to fewer people: an admin's move (into a group they are in), or that of whoever shared it while nobody else changed it. Between groups it goes by how they are made, not by who happens to be in them.
 - **The way in** (`go/private.go`): a pill in the switcher, for whoever is in a group (Modules in `docs/spec/navigation.md`; **g g**): called by the group for who is in one, **Groups** with a menu of them for who is in several.
   `/groups/<group>` opens the group's home, `groups/<group>/index`, and makes it on the first visit of someone in the group who may write, from a small template (`# dev`, a line that the pages in this folder are seen and changed by whoever is in the group, a `## Links` heading; committed in their name, `Create groups/dev/index`).
   It is an ordinary page of the group; like the wiki's home and a private one it can't be renamed or deleted (`isGroupHome`, `isProtected`). To anyone not in the group the address is a 404 that makes nothing.
@@ -717,7 +725,7 @@ There is nothing to set up for the folder itself: it is the folder of the group 
 - **Tasks are not kept there**: a group's tasks are a list for the group (`"for": ["@dev"]`, Lists for some in `docs/spec/tasks.md`), which a page in the folder can show (`[[tasks: list=dev]]`).
   A `[[task:…]]` on a group's page counts as its title in search only for a task everyone sees, as on a shared page.
 - **What Zone didn't see saved** in a group's folder (written on disk) has no known author: before a write by someone who isn't in the group re-points links there, it is committed as Zone's ("Save 3 files in groups/dev"), so nobody's commit carries text they don't see (`commitOthersDrafts`).
-- **Assistants** (`docs/spec/mcp.md`): a group's page is a page at a path, so there is nothing new to call: `write_page` with `groups/dev/…` makes one, `rename_page` moves one (to more people, never to fewer), `upload_file` with `page` keeps a file with it.
+- **Assistants** (`docs/spec/mcp.md`): a group's page is a page at a path, so there is nothing new to call: `write_page` with `groups/dev/…` makes one, `rename_page` moves one (to fewer people only by an admin, with `narrow`), `upload_file` with `page` keeps a file with it.
   An assistant is told who sees a page with every answer about one that isn't everyone's ("seen by: the group @dev only …"), and the instructions name the folders of the groups its user is in.
 - **What it is not**: encrypted, or hidden from whoever has the wiki's folder or its repository (as private pages).
   Not a folder whose readers some of its members only are: a group is who it is for. (A folder for named people is the folder of a group they make: A group of your own, above.)

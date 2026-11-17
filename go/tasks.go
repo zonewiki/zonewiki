@@ -372,9 +372,40 @@ func applyList(user string, t *Task, data jsonObj, fresh bool) error {
 	case owner == "" && t.Owner != "":
 		t.Owner = owner
 		sharedBy(t, user, !data.Has("assignee"))
+	case owner == "":
+		// Between shared lists: to a list fewer people see only by who made
+		// the task or an admin, as a page goes to fewer people (checkReaders).
+		if lost := taskLosers(t.List, name); len(lost) > 0 && !mayNarrowTask(user, t) {
+			return refuseAs(refusedReadOnly, namesOr(lost, 3, "")+" would no longer see the task: #"+name+" is for fewer people than it is seen by now. "+
+				"Only who made a task, or an admin, moves it there")
+		}
 	}
 	t.List, t.Owner = name, owner
 	return nil
+}
+
+// taskLosers: who sees a shared task in the list from and wouldn't in the
+// list to (a list for some that they are none of), A–Z; none without
+// users, and when to is for everyone.
+func taskLosers(from, to string) []string {
+	s := settings()
+	if s.Users == nil || len(taskFiles.ForOfList(to)) == 0 {
+		return nil
+	}
+	var out []string
+	for _, name := range sortedKeys(s.Users) {
+		if !s.Users[name].Disabled && taskFiles.SeesList(name, from) && !taskFiles.SeesList(name, to) {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+// mayNarrowTask: user may move the shared task t to a list fewer people
+// see: who made it (a task nobody is known to have made: anyone, as for
+// deleting it), or an admin.
+func mayNarrowTask(user string, t *Task) bool {
+	return t.Maker() == user || t.Maker() == "" || settings().isAdmin(user)
 }
 
 // sharedBy: the private task t (its Owner set to none already) is shared

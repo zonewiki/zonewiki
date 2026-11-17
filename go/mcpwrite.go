@@ -8,6 +8,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -403,8 +404,12 @@ func renameFolder(folder string, args jsonObj, base, user string) (string, error
 	if err != nil {
 		return "", err
 	}
-	if _, err := checkFolderMove(user, folder, newFolder); err != nil {
+	asked, err := moveArg(args)
+	if err != nil {
 		return "", err
+	}
+	if _, err := checkFolderMove(user, folder, newFolder, asked); err != nil {
+		return "", narrowHint(err)
 	}
 	if err := checkGuides(args, []string{folder + "/page", newFolder + "/page"}, user); err != nil {
 		return "", err
@@ -413,7 +418,7 @@ func renameFolder(folder string, args jsonObj, base, user string) (string, error
 	if err != nil {
 		return "", err
 	}
-	moves, changed, kept, err := moveFolderOp(user, folder, newFolder, suffix)
+	moves, changed, kept, err := moveFolderOp(user, folder, newFolder, suffix, asked)
 	left, err := partly(err)
 	if err != nil {
 		return "", err
@@ -472,6 +477,22 @@ func renameTaskTag(args jsonObj, base, user string) (string, error) {
 	return out + ".", nil
 }
 
+// moveArg: what a rename_page has been asked already: a move to more people
+// is what its user asked for; one to fewer wants narrow=true, said by who
+// knows whom it takes the page from (the refusal names them).
+func moveArg(args jsonObj) (moveSure, error) {
+	narrow, err := boolArg(args, "narrow")
+	return moveSure{wider: true, narrower: narrow}, err
+}
+
+// narrowHint: a move that asks first (askError), as a tool says it.
+func narrowHint(err error) error {
+	if ask := (*askError)(nil); errors.As(err, &ask) {
+		return toolErr("Not moved: " + ask.msg + " To move it all the same, ask the user, then call again with narrow=true.")
+	}
+	return err
+}
+
 func renamePageTool(args jsonObj, base, user string) (string, error) {
 	raw, err := strArg(args, "slug", true)
 	if err != nil {
@@ -492,11 +513,15 @@ func renamePageTool(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if _, _, err := checkRename(user, slug, newS); err != nil {
+	asked, err := moveArg(args)
+	if err != nil {
+		return "", err
+	}
+	if _, _, err := checkRename(user, slug, newS, asked); err != nil {
 		if pe, ok := refusalOf(err); ok {
 			return "", toolErr("Not renamed: " + pe.msg)
 		}
-		return "", err
+		return "", narrowHint(err)
 	}
 	if err := checkGuides(args, []string{slug, newS}, user); err != nil {
 		return "", err
@@ -505,7 +530,7 @@ func renamePageTool(args jsonObj, base, user string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	changed, kept, err := renamePageOp(user, slug, newS, suffix)
+	changed, kept, err := renamePageOp(user, slug, newS, suffix, asked)
 	left, err := partly(err)
 	if err != nil {
 		return "", err
