@@ -49,6 +49,12 @@ Markdown joins the lines when it renders them.
 - **Conceptually sound and clean** — a few ideas that hold everywhere (a page's place, a list's members, who may write), each said once and used by every door; a new feature fits them or the ideas change, never a special case beside them.
 - **Nice looking** — clean typography, readable line lengths, good contrast
 - **Searchable** — server-side full-text search across all pages
+- **Secure by default** — a wiki holds what people would not publish, so every door (browser, MCP, files, mail links) is closed until it is opened on purpose, and a new feature adds no way around a rule that holds elsewhere.
+  Least privilege: a token, link or user can do what it was given and no more, and a leaked one is limited, expiring or revocable.
+  Input is untrusted (escaped on output, checked on arrival), secrets stay out of git and logs, and `docs/spec/security.md` says what each protection is and tests prove it.
+- **One robust permission model** — who may read, write or administer a page, a task, a list or a folder is decided in one place that every door asks (the web UI, MCP tools, search, history, exports, mail digests), never re-implemented per feature.
+  It denies by default, is the same for a person and for an AI agent acting for them (an agent never has more than its user), and what a user may not see doesn't appear in a search result, a count, a link preview or an error message.
+  A rule is easy to read and to change, and tested at each door, including that a denied thing is really denied.
 - **Scalable** — a wiki stays fast as it grows in pages, tasks and users (tens of thousands of pages, a team of a hundred):
   a request doesn't cost in proportion to the whole wiki where an index can answer it,
   and what is said about size is measured, not assumed.
