@@ -456,13 +456,13 @@ BUDGETS.update({
     "a group's page (ms)": 50,                                  # measured 22
     "the page list (ms)": 50,                                   # 24
     "the page list (KB)": 500,
-    "a search, the same person again (ms)": 150,                # 71
+    "a search, the same person again (ms)": 150,                # 38 (71 when each task's list was looked at)
     # Nothing is kept per searcher: who sees a place searches its one layer
     # (indexCache in go/retrieval.go), so thirty in turn take what one does
     # again, and at once they wait for no index to be made. (With an index
     # per viewer, eight of them kept: 118 ms in turn, 559 at once.)
-    f"a search, {SEARCHERS} people in turn (ms)": 150,          # 70
-    f"{SEARCHERS} people searching at once, p95 (ms)": 250,     # 84
+    f"a search, {SEARCHERS} people in turn (ms)": 150,          # 41
+    f"{SEARCHERS} people searching at once, p95 (ms)": 250,     # 42
     # A page's view asks whether its reader may change it, which walks the
     # wiki's guides at most once a second (guideImports): it doesn't show.
     "a page beside them, p95 (ms)": 80,                         # 37

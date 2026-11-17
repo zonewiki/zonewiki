@@ -152,7 +152,9 @@ as on your machine: **test** (gofmt, go vet, go test, the unit/API tests),
 **e2e** (browser and Node tasks-core tests) and **leaks** (gitleaks over every commit; the checkout fetches the full history),
 all in the tools image (`Containerfile.tools`).
 So CI keeps no package lists or test commands of its own.
-A **bench** job beside them runs `./run.sh bench` with `ZONE_BENCH_SLACK=3` (The bench in `docs/spec/testing.md`); the image job doesn't wait for it, so a slow runner fails a job that is looked at and holds up no image. GitHub's workflow has the same job.
+A **bench** job after them runs `./run.sh bench` with `ZONE_BENCH_SLACK=3` (The bench in `docs/spec/testing.md`); the image job doesn't wait for it, so a slow runner fails a job that is looked at and holds up no image.
+It waits for the checks because the jobs share the host's engine: beside test's worker per CPU and e2e's browsers, the bench's clients at once measured the CPU they waited for (a page beside thirty searches seven times slower than alone, where the slack allows three).
+GitHub's workflow has the same job, beside the checks, since each of its jobs has a machine of its own.
 `run.sh` builds each image quietly (the build's output, which podman's `-q` doesn't hide for `RUN` steps, goes to a log shown only when the build fails; a first build, with no image of that tag yet, prints one line saying so) and runs it by ID, so parallel jobs on one engine can't swap a shared tag.
 With `ZONE_COPY_REPO=1` (set by CI) it copies the repo into the container (`create --rm`, `cp`, `start -a`; the engine removes the container even when a cancelled job kills `run.sh`) instead of bind-mounting it, since the checkout lives in the job container while the engine is the host's;
 nothing the command writes comes back.

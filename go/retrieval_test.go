@@ -791,6 +791,47 @@ func TestAListForSomesTasksAreInItsMembersIndexAlone(t *testing.T) {
 	}
 }
 
+// A search asks about each list once (docHider) and leaves out what
+// hiddenDoc does, for each user: a list for some's tasks to who is none of
+// them, another's private task and pages; and the next search sees a list
+// narrowed in the meantime.
+func TestASearchHidesWhatHiddenDocDoes(t *testing.T) {
+	testWiki(t, nil)
+	withGroups(t, nil, "alice:hiring", "bob", "carol:hiring")
+	dir := filepath.Join(cfg.Data, "_tasks", "lists", "hiring")
+	if err := os.MkdirAll(dir, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "list.json"), []byte(`{"name": "hiring", "for": ["@hiring"]}`), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	task := func(id, owner, list string) *SearchDoc {
+		return &SearchDoc{Slug: "task:" + id, Task: &Task{ID: id, Owner: owner, List: list}}
+	}
+	docs := []*SearchDoc{
+		task("t1", "", ""), task("t2", "", "team"), task("h1", "", "hiring"), task("t3", "", "team"),
+		task("h2", "", "hiring"), task("a1", "alice", ""), task("b1", "bob", "mine"),
+		{Slug: "p1"}, {Slug: "private/alice/notes"}, {Slug: "groups/hiring/plan"},
+	}
+	for _, rq := range []*Req{nil, {user: "alice"}, {user: "bob"}, {user: "carol"}, {user: visitor}} {
+		hidden := docHider(rq)
+		for _, d := range docs {
+			if got, want := hidden(d), hiddenDoc(rq, d); got != want {
+				t.Errorf("%v: %s hidden %v, hiddenDoc says %v", rq, d.Slug, got, want)
+			}
+		}
+	}
+	if hidden := docHider(&Req{user: "bob"}); !hidden(docs[2]) || hidden(docs[1]) {
+		t.Errorf("bob sees the list for @hiring's task, or not the team's")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "list.json"), []byte(`{"name": "hiring", "for": ["alice"]}`), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	if hidden := docHider(&Req{user: "carol"}); !hidden(docs[2]) {
+		t.Errorf("the list narrowed to alice: carol's next search still has its task")
+	}
+}
+
 // How long a member's index takes to put together when their group's folder
 // is large (the plan group-folders, step 2: 2,000 pages in a group of
 // twenty); it says the time, and fails only where it is far off.

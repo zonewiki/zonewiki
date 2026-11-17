@@ -1599,6 +1599,28 @@ func hiddenDoc(rq *Req, d *SearchDoc) bool {
 	return hiddenPage(rq, d.Slug) || visitorSkips(rq, d.Slug)
 }
 
+// docHider: hiddenDoc for the docs of one search, asking about each list
+// once. Who sees a task depends on its owner and its list alone
+// (canSeeTask), and a shared list's answer looks at its folder (forOf: a
+// stat of its list.json under a lock all share); asked per task it was half
+// of a search's time at a team's size, and searches at once queued on it.
+// Not for more than one search: a list narrowed meanwhile counts from the
+// next. Not safe for use by several goroutines.
+func docHider(rq *Req) func(*SearchDoc) bool {
+	byList := map[string]bool{} // a shared task's list: hidden
+	return func(d *SearchDoc) bool {
+		if !d.isTask() || rq == nil || d.Task.Owner != "" {
+			return hiddenDoc(rq, d) // a page, or a private task: no folder looked at
+		}
+		hidden, ok := byList[d.Task.List]
+		if !ok {
+			hidden = hiddenDoc(rq, d)
+			byList[d.Task.List] = hidden
+		}
+		return hidden
+	}
+}
+
 // visitorSkips: search leaves the page slug out for rq, a public wiki's
 // visitor: it refers to tasks ([[task:…]]), and search reads such a page
 // with the tasks' titles in their place (taskRefsAsTitles), which a match
@@ -1679,7 +1701,8 @@ func doSearch(rq *Req, raw string, unlinked bool, limit int, quicknote bool) []M
 		tests = append(tests, func(d *SearchDoc) bool { return !d.isTask() && inQuicknote(rq.user, d.Slug) })
 	}
 	if rq.sharing || settings().Users != nil {
-		tests = append(tests, func(d *SearchDoc) bool { return !hiddenDoc(rq, d) })
+		hidden := docHider(rq)
+		tests = append(tests, func(d *SearchDoc) bool { return !hidden(d) })
 	}
 	var keep func(*SearchDoc) bool
 	if tests != nil {
@@ -1836,10 +1859,11 @@ func retrieve(rq *Req, raw string, limit int, under string, quicknote bool) []*S
 	pageOK := func(slug string) bool {
 		return inFolder(slug, under) && (!quicknote || inQuicknote(rq.who(), slug)) && !hiddenPage(rq, slug) && !visitorSkips(rq, slug)
 	}
+	hidden := docHider(rq)
 	var keep func(*SearchDoc) bool
 	if pagesOnly || rq != nil && settings().Users != nil {
 		keep = func(d *SearchDoc) bool {
-			return d.isTask() && !pagesOnly && !hiddenDoc(rq, d) || !d.isTask() && pageOK(d.Slug)
+			return d.isTask() && !pagesOnly && !hidden(d) || !d.isTask() && pageOK(d.Slug)
 		}
 	}
 	ranked := bm25(x, q, fuseDepth, keep)
@@ -1853,7 +1877,7 @@ func retrieve(rq *Req, raw string, limit int, under string, quicknote bool) []*S
 			case !passes(id, d):
 			case !d.isTask() && pageOK(d.Slug):
 				bySlug[d.Slug], slugs[d.Slug] = append(bySlug[d.Slug], d), true
-			case d.isTask() && !pagesOnly && !hiddenDoc(rq, d):
+			case d.isTask() && !pagesOnly && !hidden(d):
 				tasks[d.taskID()] = d
 			}
 		}

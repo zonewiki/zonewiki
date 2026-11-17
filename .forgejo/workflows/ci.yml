@@ -58,6 +58,11 @@ jobs:
     # detector (./run.sh bench; The bench in docs/spec/testing.md). A job of
     # its own, which the image doesn't wait for. Three times the time
     # budgets: a runner is slower and noisier than the machine they were set on.
+    # After the checks: the jobs share the host's engine, and beside test's
+    # worker per CPU and e2e's browsers the bench's clients at once measured
+    # the CPU they waited for (a page beside 30 searches 7 times slower than
+    # alone, where the slack allows 3).
+    needs: [checks]
     runs-on: docker
     container:
       image: docker:29.9.3-cli@sha256:2357639ad1ea7d0194134bf3292622fd4e562483966ed674e5d7c945b5f3b28d
