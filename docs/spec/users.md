@@ -294,7 +294,7 @@ They are in it and are its **owner**; from the next request `groups/<name>/` is 
 - **A name that is taken is refused** (`groupNameTaken`): a group there is, a name a group is said to include, a folder in `groups/` (a group nobody is in keeps its folder, and a new group of that name would get its pages), or a name a task list is for.
   **And a name a group went by before**: the history of `groups/<name>/` (the versions and deleted pages of a group renamed since, which are read under that path by who is in a group of that name) and a deleted list that was for it stay its former group's, so a new group of the name would be shown them: the name stays taken.
   The group that went by it takes it back (`was = apollo` in its section, which a rename writes: the names it had), so a rename can be undone.
-  An admin who gives someone a group by typing its name in the Users tab is not asked this (Managing users).
+  On the host nobody is asked: `zonewiki user group` and a hand edit of the file make a group of any name.
   The groups' names are no secret among a wiki's users (a list's Who it is for… completes from them), so "taken" tells nothing new.
 - **Not for a viewer** (who changes nothing: 403), a visitor, or a wiki without users (404).
 - **A member leaves by themselves** (`mayLeave`, `leaveGroupOp`; `POST /groups/<group>/leave`): on `/groups` a group that is named on you and that you don't manage has **Leave…**, which asks first and then takes the group's name from your groups, yours alone.
