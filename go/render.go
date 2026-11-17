@@ -25,8 +25,9 @@ import (
 // the editor it opens warns that the new page is shared and offers it in
 // that folder; a link to a page not every reader of this one sees (from a
 // shared page to the user's private page or a group's, from a group's page
-// to another group's) is marked (wikilink-private), since the others see it
-// as plain text. A section's
+// to another group's) is marked (wikilink-private with 🔒 for a private
+// target, wikilink-group with 👥 for a group's), since the others see it as
+// plain text. A section's
 // anchor is made from its code as written ([[Page#Run `make` now]]).
 func wikilinker(rq *Req, slugs map[string]bool, from string) func(inner string) (open, label, close string) {
 	if slugs == nil {
@@ -62,9 +63,11 @@ func wikilinker(rq *Req, slugs map[string]bool, from string) func(inner string) 
 			}
 		} else if from != "" && !source.within(target) {
 			// Not every reader of this page sees the target: marked for who does.
+			// 🔒 is what is the reader's alone, 👥 a group's, as on the pages.
 			css += " wikilink-private"
 			title = ` title="Links to a private page: others see plain text"`
 			if g := target.group(); g != "" {
+				css = "wikilink wikilink-group"
 				title = ` title="Links to a page of @` + g + `: others see plain text"`
 			}
 		}

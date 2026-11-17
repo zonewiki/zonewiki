@@ -545,7 +545,7 @@ def test_a_link_is_marked_where_not_every_reader_of_the_page_sees_its_target(cli
                 for m in re.findall(r'<a href="/page/([^"]+)" class="([^"]+)"(?: title="([^"]*)")?', html)}
     assert _until(lambda: "wide" in marks("groups/dev/standup") and "other" in marks("groups/dev/standup"))
     plain, private = ("", ""), ("-private", "Links to a private page: others see plain text")
-    of = lambda g: ("-private", f"Links to a page of @{g}: others see plain text")  # noqa: E731
+    of = lambda g: ("-group", f"Links to a page of @{g}: others see plain text")  # noqa: E731
     new = ("-missing -shared-new", "Creates a shared page")
     assert marks("plans") == {"diary": of("dev"), "own": private, "wide": of("product"), "other": of("ops"), "plans": plain,
                               "brand-new": ("-missing", "")}

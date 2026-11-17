@@ -1,9 +1,11 @@
-// Who may see and change what (docs/spec/users.md): with users, everything
-// is shared but private/<user>/, which only that user sees; anything else
-// under private/ (a page in private/ itself, a folder of no user) is seen
-// by no one. Without users everyone sees everything, and private/ is an
-// ordinary folder. Every route and tool that shows or changes a page asks
-// here, so the rule lives in one place.
+// Who may see and change what (docs/spec/users.md): with users, a folder is
+// one user's (private/<user>/, which only that user sees), a group's
+// (groups/<group>/, which whoever is in the group sees) or everyone's
+// (anything else); what else lies under private/ or groups/ (a page in
+// private/ itself, a folder of no user, of no group's name) is seen by no
+// one. Without users everyone sees everything, and private/ and groups/ are
+// ordinary folders. Every route and tool that shows or changes a page asks
+// here (place, canSee, canWrite, canSeePath), so the rule lives in one place.
 package main
 
 import (
