@@ -53,11 +53,13 @@ def test_a_reset_link_works_in_a_browser(admin, wiki):
     expect(admin.locator(".top-user")).to_have_attribute("title", "bob")
 
 
-def test_change_and_set_show_once_a_field_is_edited(admin, wiki):
+def test_save_shows_once_a_field_is_edited(admin, wiki):
     """An untouched row has no buttons beside its role and its groups; an
     edit shows the one beside it, and taking the edit back hides it again."""
     row = admin.locator("tr", has_text="bob")
-    change, set_ = row.get_by_role("button", name="Change", exact=True), row.get_by_role("button", name="Set", exact=True)
+    change, set_ = row.locator('button[aria-label="Save the role of bob"]'), row.locator('button[aria-label="Save the groups of bob"]')
+    expect(change).to_have_text("Save")
+    expect(set_).to_have_text("Save")
     expect(change).to_be_hidden()
     expect(set_).to_be_hidden()
     before = row.bounding_box()
@@ -78,14 +80,14 @@ def test_change_and_set_show_once_a_field_is_edited(admin, wiki):
     admin.wait_for_url("**/admin/users?done=groups**")
     assert "groups = dev" in (wiki.root / ".zone" / "config").read_text()
     row = admin.locator("tr", has_text="bob").first
-    expect(row.get_by_role("button", name="Set", exact=True)).to_be_hidden()
+    expect(row.locator('button[aria-label="Save the groups of bob"]')).to_be_hidden()
     row.locator("select").select_option("viewer")
-    row.get_by_role("button", name="Change", exact=True).click()
+    row.locator('button[aria-label="Save the role of bob"]').click()
     admin.wait_for_url("**/admin/users?done=role**")
     assert "role = viewer" in (wiki.root / ".zone" / "config").read_text()
     # The Groups part's fields do the same; making a new group of groups keeps its button.
     includes = admin.locator(".groups-table tr", has_text="dev")
-    expect(includes.get_by_role("button", name="Set", exact=True)).to_be_hidden()
+    expect(includes.locator('button[aria-label="Save what dev includes"]')).to_be_hidden()
     includes.locator('input[name="includes"]').fill("ops")
-    expect(includes.get_by_role("button", name="Set", exact=True)).to_be_visible()
+    expect(includes.locator('button[aria-label="Save what dev includes"]')).to_be_visible()
     expect(admin.get_by_role("button", name="Make a group of groups")).to_be_visible()

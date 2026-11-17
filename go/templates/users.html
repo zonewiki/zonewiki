@@ -40,14 +40,14 @@
           <option value="{{.}}"{{if eq . $role}} selected{{end}}>{{.}}</option>
           {{- end}}
         </select>
-        <button type="submit" class="btn">Change</button>
+        <button type="submit" class="btn" aria-label="Save the role of {{.Name}}">Save</button>
       </form>
     </td>
     <td>
       {{- /* Who belongs together: what is for a group (a task list) is theirs. */}}
       <form method="post" action="/admin/users/{{.Name}}/groups" class="user-role-form user-groups-form">
         <input type="text" name="groups" value="{{.Groups}}" aria-label="Groups of {{.Name}}" placeholder="none" list="user-groups" autocomplete="off" spellcheck="false" size="12">
-        <button type="submit" class="btn">Set</button>
+        <button type="submit" class="btn" aria-label="Save the groups of {{.Name}}">Save</button>
       </form>
       {{- with .Also}}<span class="user-also" title="By way of a group they are in (Groups, below)">also in {{.}}</span>{{end}}
     </td>
@@ -95,7 +95,7 @@
       <form method="post" action="/admin/groups/includes" class="user-role-form user-groups-form">
         <input type="hidden" name="group" value="{{.Name}}">
         <input type="text" name="includes" value="{{.Includes}}" aria-label="Groups that {{.Name}} includes" placeholder="none" list="user-groups" autocomplete="off" spellcheck="false" size="16">
-        <button type="submit" class="btn">Set</button>
+        <button type="submit" class="btn" aria-label="Save what {{.Name}} includes">Save</button>
       </form>
     </td>
     <td>

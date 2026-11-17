@@ -359,8 +359,8 @@ It has section tabs (`adminTabs`), of which **Users** (`/admin/users`, `users.ht
 - **The top row** is every view's: the module switcher and `Admin › Users` (`breadcrumb`, not in the navigation trail), then the heading and the tabs.
 - **The list**: each user's name, "(you)", "MCP" if they have a token, their role, and Active or Disabled.
   Then the invite form, the open links (Invite and reset links, below) and what the roles mean.
-- **Per user**: change their role (a select and Change),
-  set their **groups** (a field with the groups as the file writes them, `dev, hiring`, completing from the groups there are; **Set**; empty takes them out of every group; `POST /admin/users/{name}/groups`, `userGroupsRoute`; a name that is no group's is refused and nothing changes),
+- **Per user**: change their role (a select and Save),
+  set their **groups** (a field with the groups as the file writes them, `dev, hiring`, completing from the groups there are; **Save**; empty takes them out of every group; `POST /admin/users/{name}/groups`, `userGroupsRoute`; a name that is no group's is refused and nothing changes),
   below the field, "also in product" names the groups they are in by way of those (`userRow.Also`);
   **Disable** or **Enable**,
   **Reset password** (makes a link),
@@ -368,7 +368,7 @@ It has section tabs (`adminTabs`), of which **Users** (`/admin/users`, `users.ht
   `js/admin.js` opens it with what the row's `<details>` holds, and without JavaScript the `<details>` unfolds instead: their private pages, notes and tasks stay in `private/NAME/`, seen by no one, and someone added again under that name gets them back;
   an open link of theirs goes too).
   There is no field to type another user's password: the admin never knows it.
-- **Groups** (below the users, `#groups`): every group there is, who is in it now, and a field with the groups it includes (`dev, design`; **Set**; empty: none, and the section goes).
+- **Groups** (below the users, `#groups`): every group there is, who is in it now, and a field with the groups it includes (`dev, design`; **Save**; empty: none, and the section goes).
   Beside a group's name: "pages" when its folder is there, and "owned by anna" when it has owners (who say who is in it on their Groups page: A group of your own, above); a **Name** field renames it, its pages and lists along (`POST /groups/<group>/rename` with `from=admin`: A group renamed, above).
   **Make a group of groups** below it takes a new group's name and what it includes.
   Both are `POST /admin/groups/includes` (`group`, `includes`; `groupIncludesRoute`): a group that would include itself, or a name that is no group's, is refused and nothing changes.
@@ -378,7 +378,7 @@ It has section tabs (`adminTabs`), of which **Users** (`/admin/users`, `users.ht
   They can still change their own role, to step down while another admin remains.
   As the last user is always the admin themselves, this is also why the last user can't be removed here.
 - **Plain forms**: each change is a POST (behind the Origin check, like every write), and the page works without JavaScript, which opens the Remove dialog and keeps the list quiet:
-  **a row's Change and Set show once the field beside them is edited** (`js/admin.js`, `.saves-when-edited`; hidden, not gone, so nothing moves), and hide again when the edit is taken back. Picking a role saves nothing by itself; Enter in a field saves as its button does. Without JavaScript the buttons are there all along.
+  **a row's Save buttons show once the field beside them is edited** (`js/admin.js`, `.saves-when-edited`; hidden, not gone, so nothing moves), and hide again when the edit is taken back. Picking a role saves nothing by itself; Enter in a field saves as its button does. Without JavaScript the buttons are there all along.
   Done, it answers with a redirect to `/admin/users?done=…&user=…`, and the page says what was done from a fixed set of messages, so a link can't make it say anything else.
   Refused, the page comes back (409) saying why.
   An admin who demoted themselves is sent to the home page.
