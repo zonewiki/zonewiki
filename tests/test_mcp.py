@@ -525,6 +525,16 @@ class TestBaseUrl:
         assert "url: http://host.containers.internal:5000/page/golf\n" in \
             resp.get_json()["result"]["content"][0]["text"]
 
+    def test_links_are_https_behind_a_proxy_that_says_so(self, client, pages, monkeypatch):
+        # A hosted wiki: Caddy ends TLS and reaches Zone over a socket, saying
+        # X-Forwarded-Proto: https. The links were http:// there until 2026-11.
+        monkeypatch.setattr(settings, "BASE_URL", "")
+        resp = client.post("/mcp", headers={"Host": "wiki.example.org", "X-Forwarded-Proto": "https", **AUTH}, json={
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": "read_page", "arguments": {"slug": "golf"}}})
+        assert "url: https://wiki.example.org/page/golf\n" in \
+            resp.get_json()["result"]["content"][0]["text"]
+
     def test_base_url_wins(self, client, pages, monkeypatch):
         monkeypatch.setattr(settings, "BASE_URL", "http://wiki.example.org:5000")
         assert "url: http://wiki.example.org:5000/page/golf\n" in call(client, "read_page", slug="golf")[0]

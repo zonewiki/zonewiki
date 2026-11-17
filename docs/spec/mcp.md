@@ -226,7 +226,7 @@ Uploads (`_assets/`, File paste and drag & drop in `docs/spec/editor.md`) are re
   The token opens these routes only: a page, the task API or any other route with a bearer token and no session goes to the login as ever.
   Both tools' refusals name the two `curl` commands (`fileRoutesHint`).
 
-**Links** in tool results start with `base-url` from the settings file (e.g. `http://localhost:5000`, Zone's address as your browser knows it) when set, else with the address the request came in on.
+**Links** in tool results start with `base-url` from the settings file (e.g. `http://localhost:5000`, Zone's address as your browser knows it) when set, else with the address the request came in on (`siteURL`, as the page and OAuth's addresses: https when Zone's own connection is, or a proxy's `X-Forwarded-Proto: https` says so; until 2026-11 the tools asked only Zone's own connection, so a hosted wiki's links were `http://`).
 A client in a container reaches Zone as `host.containers.internal`, and links with that host don't open in the browser on the host.
 **File paths** (`file:`, `hostFile`: search_wiki's sections, read_page) are the host's wiki folder plus `<slug>.md` (a slug is the file's path relative to the wiki, unchanged): `ZONE_HOST_DATA`, which `run.sh` sets to `ZONE_DATA`'s host path, since inside the container the wiki is only `/wiki-data`;
 unset (no container), `ZONE_DATA` resolved.

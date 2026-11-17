@@ -705,16 +705,10 @@ var mcpToolTable = map[string]mcpTool{
 func writeTool(name string) bool { return mcpToolTable[name].writes != toolWritesNothing }
 
 // callMCPTool runs a tool for the request r, as its token's user: links in
-// its answer use base-url (the settings file), else the address the client reached Zone at.
+// its answer use base-url (the settings file), else the address the client reached Zone at,
+// https behind a proxy that says so (siteURL, as every other address Zone hands out).
 func callMCPTool(r *http.Request, name string, args jsonObj) ([]toolContent, error) {
-	base := settings().BaseURL
-	if base == "" {
-		scheme := "http"
-		if r.TLS != nil {
-			scheme = "https"
-		}
-		base = scheme + "://" + r.Host
-	}
+	base := siteURL(settings().BaseURL, r, "")
 	tool, ok := mcpToolTable[name]
 	if !ok {
 		return nil, toolErr("Unknown tool: " + name)
