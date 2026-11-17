@@ -297,7 +297,7 @@ Inside the container it is always mounted at `/wiki-data`.
 Layout:
 - `$ZONE_DATA/*.md` — markdown files live directly in the data directory (edit on the host; changes are live immediately)
 - `$ZONE_DATA/private/<user>/` — with users, each user's private pages (`docs/spec/users.md`); without users an ordinary folder
-- `$ZONE_DATA/_assets/` — uploaded images, served at `/_assets/<filename>` (created automatically); a group's page's in `groups/<group>/_assets/`, a private page's in `private/<user>/_assets/`
+- `$ZONE_DATA/_assets/` — uploaded images, served at `/_assets/<filename>` (created automatically); a group's page's in `groups/<group>/_assets/`, a private page's in `private/<user>/_assets/`, a task's (with users) in `_tasks/files/<task id>/_assets/`
 - `$ZONE_DATA/_tasks/` — the tasks (`tasks.json`, `closed.json`, `closed-YYYY-MM.json`, each list's in `lists/<name>/`, and `settings.json` for the settings of All tasks; see Storage in `docs/spec/tasks.md`); each user's private tasks in `private/<user>/_tasks/`
 - `$ZONE_DATA/.zone/` — Zone's own state: none of it in git: `config` (the settings file: the wiki's settings and users, `docs/spec/users.md`), `secret_key` (session key), `signed-out` (the sessions signed out, `docs/spec/security.md`), `seen/` (what each user has seen of the tasks' news, `docs/spec/users.md`) and `index/` (the semantic search cache, rebuildable)
 

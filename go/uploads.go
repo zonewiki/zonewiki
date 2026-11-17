@@ -1,5 +1,6 @@
 // Uploads: _assets/ (a private page's in private/<user>/_assets/, a
-// group's in groups/<group>/_assets/), served
+// group's in groups/<group>/_assets/, a task's in
+// _tasks/files/<id>/_assets/), served
 // and saved (POST /api/upload).
 package main
 
@@ -47,6 +48,21 @@ func uploadPlace(user, page string) place {
 		return p
 	}
 	return place{}
+}
+
+// taskUploadPlace: where a file that user uploads for the task id is kept:
+// with the task (taskPlace), when the wiki has users and they see it (a new
+// task's id is the one its dialog made up, which the task then gets);
+// without users with the shared ones, as nothing is anyone's. ok false: not
+// a task's id, or a task they don't see.
+func taskUploadPlace(user, id string) (p place, ok bool) {
+	if !taskFolderRE.MatchString(id) || !seesTaskFiles(user, id) {
+		return place{}, false
+	}
+	if settings().Users == nil {
+		return place{}, true
+	}
+	return taskPlace(id), true
 }
 
 // uploadRel: file in a place's uploads, as its path in the wiki
@@ -122,6 +138,17 @@ func servePrivateUpload(w http.ResponseWriter, r *http.Request) {
 func serveGroupUpload(w http.ResponseWriter, r *http.Request) {
 	p := placeOf(groupsDir + "/" + r.PathValue("group") + "/_assets")
 	if p.kind != ofGroup || p.name != r.PathValue("group") || !p.sees(userOf(r)) {
+		http.NotFound(w, r)
+		return
+	}
+	serveUploadFile(w, r, uploadDir(p), r.PathValue("file"))
+}
+
+// serveTaskUpload: a task's file, to who sees the task (404 for anyone
+// else, as for a file that isn't there).
+func serveTaskUpload(w http.ResponseWriter, r *http.Request) {
+	p := taskPlace(r.PathValue("task"))
+	if !p.sees(userOf(r)) {
 		http.NotFound(w, r)
 		return
 	}
@@ -214,6 +241,14 @@ func apiUpload(w http.ResponseWriter, r *http.Request) {
 		originalName = "upload" + uploadExt(fileType)
 	}
 	owner := uploadPlace(userOf(r), r.FormValue("page"))
+	// task: the file is for a task (its id; the dialog's, for a new one).
+	if id := r.FormValue("task"); id != "" {
+		var ok bool
+		if owner, ok = taskUploadPlace(userOf(r), id); !ok {
+			http.Error(w, "No such task", http.StatusNotFound)
+			return
+		}
+	}
 	if settings().isViewer(userOf(r)) {
 		http.Error(w, readOnlyMsg, http.StatusForbidden)
 		return

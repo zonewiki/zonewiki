@@ -486,6 +486,7 @@ func newHandler() http.Handler {
 	mux.HandleFunc("GET /_assets/{path...}", serveUpload)
 	mux.HandleFunc("GET /private/{user}/_assets/{file}", servePrivateUpload)
 	mux.HandleFunc("GET /groups/{group}/_assets/{file}", serveGroupUpload)
+	mux.HandleFunc("GET /_tasks/files/{task}/_assets/{file}", serveTaskUpload)
 	mux.HandleFunc("/mcp", mcpEndpoint)
 	pageRoutes(mux)
 	historyRoutes(mux)

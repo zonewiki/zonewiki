@@ -20,7 +20,7 @@ import { taskCheckboxOffsets } from './mdtext.js';
 
 export function markdownEditor(textarea, { bar = null, attachInput = null, onChange = () => {},
                                           onEnter = null, formats = {}, tabIndents = true,
-                                          page = '' } = {}) {
+                                          page = '', task = null } = {}) {
   // Page and task completion; its keys (↑/↓, Enter, Tab) come first.
   const linkAc = linkAutocomplete(textarea, { tasks: true, page });
 
@@ -103,6 +103,9 @@ export function markdownEditor(textarea, { bar = null, attachInput = null, onCha
     // The page the file goes in: a private page's uploads are private too.
     const into = typeof page === 'function' ? page() : page;
     if (into) fd.append('page', into);
+    // The task the file is for (its id): a task's files are seen by who sees it.
+    const forTask = task?.();
+    if (forTask) fd.append('task', forTask);
     try {
       const res = await fetch('/api/upload', { method: 'POST', body: fd });
       if (res.status === 409) {

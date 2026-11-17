@@ -410,3 +410,28 @@ def test_ranking_in_my_tasks_leaves_the_lists_order_alone(alice):
     # bob's My tasks has his own order: nothing of alice's.
     page.request.post("/login", form={"username": "bob", "password": "pw"})
     assert page.request.get("/api/tasks?with=order").json()["order"] == []
+
+
+def test_a_file_attached_in_the_dialog_is_the_tasks(alice, wiki):
+    """A file attached to a new task is uploaded for an id the dialog makes
+    up, and the task is created with that id: its files are kept by the task
+    (_tasks/files/<id>/), so they are seen by who sees it. An existing task's
+    go by its id."""
+    alice.goto("/tasks?list=team")
+    alice.keyboard.press("c")
+    alice.keyboard.press("t")
+    modal = alice.locator("#task-edit-modal")
+    expect(modal).to_be_visible()
+    modal.locator("#task-edit-title").fill("With a file")
+    modal.locator("#task-edit-attach").set_input_files({"name": "notes.txt", "mimeType": "text/plain", "buffer": b"hello"})
+    notes = modal.locator("#task-edit-desc")
+    expect(notes).to_have_value(re.compile(r"^\[notes\.txt\]\(/_tasks/files/[0-9a-f-]{36}/_assets/notes\.txt\)$"))
+    id = re.search(r"files/([0-9a-f-]{36})/", notes.input_value()).group(1)
+    modal.get_by_role("button", name="Save").click()
+    wait_for(alice, "With a file", id=id)
+    assert (wiki.root / "_tasks/files" / id / "_assets/notes.txt").read_bytes() == b"hello"
+    # An edited task's files go by its id.
+    alice.goto("/tasks?view=open&group=none")
+    modal = open_edit(alice, "With a file")
+    modal.locator("#task-edit-attach").set_input_files({"name": "more.txt", "mimeType": "text/plain", "buffer": b"more"})
+    expect(modal.locator("#task-edit-desc")).to_have_value(re.compile(rf"/_tasks/files/{id}/_assets/more\.txt"))

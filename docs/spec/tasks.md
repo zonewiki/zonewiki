@@ -725,7 +725,7 @@ A task's description is markdown, edited and rendered as a page's text.
   It has the page editor's markdown helpers (`markdownEditor` in `js/mdedit.js`): its formatting bar (`#task-edit-format`, without Make task, which is the editor's; shown only while the field has the focus, in the place of the "Description" label on the line above the field, which is as tall as the bar, so nothing moves; in a narrow dialog (≤640px) or under a finger on a line of its own under the label, where it scrolls sideways),
   Ctrl+B/I/K,
   Ctrl+Shift+X,
-  `[[` / `[[task:` / `[text](` completion, snippets (`/date` + Tab), list continuation on Enter, Enter on a selection makes it a wikilink, file paste, drop and attach (uploads to `_assets/`, as in the editor), URL paste. Tab moves on to the next field unless it expands a snippet (the editor's Tab indents; a modal needs Tab between its fields). The modal's Save and Cancel stay: nothing is saved while typing.
+  `[[` / `[[task:` / `[text](` completion, snippets (`/date` + Tab), list continuation on Enter, Enter on a selection makes it a wikilink, file paste, drop and attach (an upload as in the editor, kept by the task: A task's files, below), URL paste. Tab moves on to the next field unless it expands a snippet (the editor's Tab indents; a modal needs Tab between its fields). The modal's Save and Cancel stay: nothing is saved while typing.
 - **Edit | Preview** (two buttons at the right of the line above the field, or **F2** in the modal; `setNotesPreview`; not shown for an empty description that isn't being written in, which has nothing to preview): Preview shows the description as the card will (`/api/render-notes`) in place of the field, no shorter than it and as tall as what it shows, up to the field's 45% of the window, where it scrolls.
   Tinted, outlined and labelled PREVIEW at its top (stays while it scrolls), so it is never taken for the field.
   Ticking a box in it ticks the item in the text and records when, as on the card (`toggleCheckboxText` in `js/mdtext.js`, mirroring `mdtext.ToggleNthCheckbox`; local time), so the preview shows the date chip; unticking takes the date out.
@@ -837,6 +837,15 @@ Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged
 Among a hundred people a list isn't everyone's to rename or delete, as it was until 2026-11.
 A list from before owners has none: it is the admins' ("#old is changed by an admin of this wiki …").
 A private list is its user's. Without users, and in a wiki that has no admin (from before roles), whoever may write manages, as before.
+
+**A task's files** (with users): a file pasted, dropped or attached in a task's dialog (its description, a comment) is the task's: kept in `_tasks/files/<task id>/_assets/`, at `/_tasks/files/<id>/_assets/<file>`, and **seen by who sees the task** (`taskPlace`, `seesTaskFiles` in `go/access.go`; `serveTaskUpload`), 404 for anyone else as for a file that isn't there.
+Nothing moves with a task: a private task's file is its owner's alone, shared with the task it is everyone's or its list's members', and a task that goes to another list, or whose list is narrowed, widened or renamed, takes its files along by being the same task.
+The dialog sends the task's id with an upload (`task`, `markdownEditor`'s `task` option); for a new task it makes one up (a version 4 UUID) and creates the task with it (`id` in `POST /api/tasks`: only an id of that form that no task has), so the files pasted before the first Save are the task's from the start.
+Until there is a task of that id (the dialog is open), and once there is none (deleted for good; the files stay, for the undo), its files open for whoever signed in knows the id, which is 122 random bits said only to the task's readers; never for a visitor.
+An assistant's `upload_file` takes a task's id as `page`.
+A file's history is its task's readers' (`canSeePath`).
+Without users a task's file goes to `_assets/` like any other.
+A file attached before this (in `_assets/`, or in `private/<you>/_assets/` for a private task) stays where it is.
 
 **Lists for some** (with users): a shared list is for everyone, or for the groups and users it names, its **members** (`"for": ["@hiring", "anna"]` in its entry: `@name` a group, which may be one made of other groups, `@product` for who is in dev or in design (Groups in `docs/spec/users.md`); a bare name a user; `List.For`, `ListInfo.For`, `listMember` in `go/access.go`).
 

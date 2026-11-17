@@ -128,7 +128,7 @@ def request_for(route, wiki):
     sha = git(wiki, "rev-parse", "HEAD")
     for part, value in (("{$}", ""), ("{slug...}", "garden"), ("{rest...}", f"garden/{sha}"), ("{path...}", "plan.png"),
                         ("{id}", TASK_ID), ("{cid}", "c0ffee01"), ("{name}", "bob"), ("{token}", "nosuchtoken"),
-                        ("{user}", "alice"), ("{group}", "dev"), ("{file}", "photo.png")):
+                        ("{user}", "alice"), ("{group}", "dev"), ("{file}", "photo.png"), ("{task}", TASK_ID)):
         path = path.replace(part, value)
     assert "{" not in path, route
     return method or "POST", path

@@ -69,7 +69,7 @@ const keptDirs = privateDir + "|" + groupsDir
 // answers are here and nowhere else.
 type place struct {
 	kind placeKind
-	name string // the user (ofUser) or the group (ofGroup) whose it is, else ""
+	name string // the user (ofUser), the group (ofGroup) or the task (ofTask, its id) whose it is, else ""
 }
 
 type placeKind int
@@ -79,7 +79,41 @@ const (
 	ofUser                      // in private/<user>/
 	ofGroup                     // in groups/<group>/: its members', whoever they are now (nobody, too)
 	ofNoOne                     // in private/ but in no user's folder, or in groups/ but in no group's: "private/carol/x", "private/alice" itself, "groups/x"
+	ofTask                      // a task's files, in _tasks/files/<id>/: whoever sees the task (taskPlace; no page is there, so placeOf never says it)
 )
+
+// taskFilesDir: the folder of the tasks' files, a folder a task
+// (_tasks/files/<id>/_assets/<file>): a file attached to a task is kept by
+// the task, not by its list or its owner, so it is seen by who sees the
+// task wherever the task goes (another list, a list narrowed or renamed, a
+// private task shared) and nothing has to move with it.
+const taskFilesDir = taskfiles.DirName + "/files"
+
+// taskFolderRE: a task's id as a folder's name: a uuid as Zone makes them, or
+// what an import brought, as long as it is one plain word.
+var taskFolderRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
+
+// taskPlace: the place of the files of the task id.
+func taskPlace(id string) place { return place{ofTask, id} }
+
+// seesTaskFiles: user sees the files of the task id: who sees the task. A
+// task there isn't (yet: its dialog is open and its first file is pasted;
+// or no more: deleted) has files only who knows its id finds, and no
+// visitor: an id is 122 random bits, said to nobody but the task's readers.
+func seesTaskFiles(user, id string) bool {
+	if user == visitor || !taskFolderRE.MatchString(id) {
+		return false
+	}
+	if s := settings(); s.Users != nil {
+		if u := s.Users[user]; u == nil || u.Disabled {
+			return false
+		}
+	}
+	if t := taskFiles.Find(id); t != nil {
+		return canSeeTask(user, t)
+	}
+	return true
+}
 
 // placeOf: the place of the page slug, or of the file rel (slash-separated,
 // relative to the wiki): private/<user>/… is that user's, groups/<group>/…
@@ -137,6 +171,8 @@ func (p place) folder() string {
 		return privateDir + "/" + p.name
 	case ofGroup:
 		return groupsDir + "/" + p.name
+	case ofTask:
+		return taskFilesDir + "/" + p.name
 	}
 	return ""
 }
@@ -156,6 +192,8 @@ func (p place) sees(user string) bool {
 		return p.name == user
 	case ofGroup:
 		return settings().memberOf(user, p.name)
+	case ofTask:
+		return seesTaskFiles(user, p.name)
 	}
 	return false
 }
@@ -458,6 +496,12 @@ func canSeePath(user, rel string) bool {
 	// its members', also what it left there when it was deleted or renamed.
 	if rest, ok := strings.CutPrefix(rel, taskfiles.DirName+"/"+taskfiles.ListsDirName+"/"); ok {
 		if name, _, inFolder := strings.Cut(rest, "/"); inFolder && !taskFiles.SeesList(user, name) {
+			return false
+		}
+	}
+	// A task's files: who sees the task.
+	if rest, ok := strings.CutPrefix(rel, taskFilesDir+"/"); ok {
+		if id, _, inFolder := strings.Cut(rest, "/"); inFolder && !seesTaskFiles(user, id) {
 			return false
 		}
 	}

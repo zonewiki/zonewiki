@@ -744,6 +744,27 @@ func (s *Store) EveryLocked() []*Task {
 		s.readArchived(Everyone, owners))
 }
 
+// Find: the task id among every owner's (Task.Owner says whose; the caller
+// asks who may see it), nil for none: the open and this month's closed ones
+// first, the archives only for one that isn't there.
+func (s *Store) Find(id string) *Task {
+	s.view.RLock()
+	defer s.view.RUnlock()
+	owners := s.EveryOwner()
+	for _, read := range []func() []*Task{
+		func() []*Task { return eachOwner(owners, s.lenient(Everyone, s.openOf)) },
+		func() []*Task { return eachOwner(owners, s.lenient(Everyone, s.closedOf)) },
+		func() []*Task { return s.readArchived(Everyone, owners) },
+	} {
+		for _, t := range read() {
+			if t.ID == id {
+				return t
+			}
+		}
+	}
+	return nil
+}
+
 // IDsLocked: the ids of every owner's tasks, so a restored task never takes
 // one another file has.
 func (s *Store) IDsLocked() map[string]bool {

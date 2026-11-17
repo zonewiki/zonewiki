@@ -80,11 +80,21 @@ notesPreview?.addEventListener('change', async e => {
 // Tab goes from field to field (Title, Description, Tags, the dates …):
 // the formatting bar's buttons are a click or Ctrl+B/I/K away, not a Tab.
 notesBar?.querySelectorAll('button').forEach(b => { b.tabIndex = -1; });
+// The task a pasted or attached file is for: the one being edited, or the
+// new one, by an id made up here that the task then gets (so its files are
+// kept by the task: seen by who sees it, wherever it goes). Without
+// crypto.randomUUID (a page over plain http) the id is put together.
+let newTaskId = '';
+const uuid4 = () => crypto.randomUUID?.() || '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, c =>
+  (+c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> +c / 4).toString(16));
+// A new task takes the id its files were uploaded for, when there are any.
+const withId = data => newTaskId ? { ...data, id: newTaskId } : data;
+const uploadTask = () => document.getElementById('task-edit-id' + app.sfx).value || (newTaskId ||= uuid4());
 if (app.descTextarea) {
-  // A private task's files go where a private page's do (the user's folder).
+  // page: what the link completion offers (a private task: private pages too).
   const privateDir = app.appEl?.dataset.privateFolder;
   markdownEditor(app.descTextarea, { bar: notesBar, attachInput: document.getElementById('task-edit-attach' + app.sfx),
-                                 tabIndents: false, page: () => app.editPrivate() ? privateDir + '/task' : '' });
+                                 tabIndents: false, page: () => app.editPrivate() ? privateDir + '/task' : '', task: uploadTask });
 }
 
 const importanceSelect = document.getElementById('task-edit-importance' + app.sfx);
@@ -867,7 +877,7 @@ async function saveComment() {
 }
 // The page editor's markdown helpers: lists go on, [[ completes pages, a
 // pasted URL asks for its name, a pasted or dropped file is uploaded.
-markdownEditor(commentInput, { tabIndents: false, page: () => app.editPrivate() ? app.appEl?.dataset.privateFolder + '/task' : '' });
+markdownEditor(commentInput, { tabIndents: false, page: () => app.editPrivate() ? app.appEl?.dataset.privateFolder + '/task' : '', task: uploadTask });
 commentInput.addEventListener('keydown', e => {
   if (e.defaultPrevented || e.isComposing) return;   // the completion's key
   // Esc puts the field away, not the modal.
@@ -915,6 +925,7 @@ function openEditModal(taskId, opts) {
   onCreated = !task && opts?.onCreated || null;
   setBatch(!task && opts?.titles);
   document.getElementById('task-edit-id' + app.sfx).value = task ? task.id : '';
+  newTaskId = '';
   document.getElementById('task-edit-title' + app.sfx).value = task ? task.title : opts?.title || '';
   document.getElementById('task-edit-desc' + app.sfx).value = task ? task.description || '' : opts?.description || '';
   setNotesPreview(false, false);
@@ -1230,13 +1241,13 @@ app.form.addEventListener('submit', async e => {
   onCreated = null;
   app.modal.close();
   if (created) {
-    const task = await app.createTask(data);
+    const task = await app.createTask(withId(data));
     if (task) created(task);
   } else {
     // Select the new task so it is easy to find wherever the view sorts it
     // (on Focus it lands at the end, possibly below the fold). A view that
     // doesn't show it (another list, a filter) leaves the selection alone.
-    const task = await app.createTask(data);
+    const task = await app.createTask(withId(data));
     if (task) app.unfoldFor(task.id);
     const el = task && app.listEl.querySelector(`.task-item[data-id="${CSS.escape(task.id)}"]`);
     if (el) {

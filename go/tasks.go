@@ -147,6 +147,22 @@ func createTask(user string, data jsonObj, message string) (*Task, error) {
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
 	t := newTask()
+	// id: the id its dialog made up, so that the files pasted there before
+	// it was saved are its files (taskUploadPlace). One of Zone's form, that
+	// no task has.
+	if data.Has("id") && !data.Null("id") {
+		id, err := asStr(data["id"], "id")
+		if err != nil {
+			return nil, err
+		}
+		if !uuid4RE.MatchString(id) {
+			return nil, refuse("id must be a new task's id as Zone makes them (a version 4 UUID); leave it out")
+		}
+		if taskFiles.IDsLocked()[id] {
+			return nil, refuseAs(refusedExists, "There is a task with this id already")
+		}
+		t.ID = id
+	}
 	if err := applyTaskFields(user, t, data, true); err != nil {
 		return nil, err
 	}

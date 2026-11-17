@@ -71,6 +71,9 @@ def wiki(git_wiki_dir, monkeypatch):
     (w / "private/alice/old.md").write_text(f"# Old {SECRET}\n\n{QUERY} {SECRET}\n")
     (w / f"{NOTE}.md").write_text(f"# Idea {SECRET}\n\n{QUERY} {SECRET}\n")
     (w / "private/alice/_assets/photo.png").write_bytes(SECRET.encode())
+    # A file of one of her tasks: kept by the task, seen by who sees it.
+    (w / f"_tasks/files/{TASK_ID}/_assets").mkdir(parents=True)
+    (w / f"_tasks/files/{TASK_ID}/_assets/photo.png").write_bytes(SECRET.encode())
     (w / "plans.md").write_text(f"# Plans\n\nSee [[{DIARY}]] and [[{DIARY}|my diary]].\n\n- [[task:{TASK_ID[:8]}]]\n")
     # Her tasks: a private list of hers, pinned, a page that shows it and
     # one of her tags, her tasks in that list, and one in her Inbox (in no
@@ -172,6 +175,7 @@ READS = [
     ("GET /_assets/{path...}", "GET", "/_assets/private/alice/photo.png", {}),
     ("GET /private/{user}/_assets/{file}", "GET", "/private/alice/_assets/photo.png", {}),
     ("GET /groups/{group}/_assets/{file}", "GET", "/groups/alice/_assets/photo.png", {}),   # no group's folder (test_group_pages.py)
+    ("GET /_tasks/files/{task}/_assets/{file}", "GET", f"/_tasks/files/{TASK_ID}/_assets/photo.png", {}),
     ("GET /groups", "GET", "/groups", {}),                       # the groups bob is in: none
     ("GET /groups/{group}", "GET", "/groups/alice", {}),         # a group's home: no group of his (test_group_pages.py)
     ("GET /tasks", "GET", "/tasks", {}),
@@ -767,6 +771,7 @@ MCP_READS = [
     ("search_tasks", {"assignee": "none", "status": "all"}),
     ("replace_in_pages", {"find": QUERY, "replace": "x"}),       # a dry run
     ("read_file", {"url": "/private/alice/_assets/photo.png"}),
+    ("read_file", {"url": f"/_tasks/files/{TASK_ID}/_assets/photo.png"}),
     ("read_file", {"url": "/private/bob/../alice/_assets/photo.png"}),
     ("read_file", {"url": "/_assets/../private/alice/_assets/photo.png"}),
     ("read_file", {"url": "/_assets/..%2Fprivate%2Falice%2Fdiary.md"}),

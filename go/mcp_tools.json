@@ -630,7 +630,7 @@
    "properties": {
     "filename": {
      "type": "string",
-     "description": "Its name, e.g. 'report.pdf'."
+     "description": "Its name: 'report.pdf'."
     },
     "text": {
      "type": "string",
@@ -642,7 +642,7 @@
     },
     "page": {
      "type": "string",
-     "description": "The page it is for: a private page's file is private too."
+     "description": "The page or task id it is for: its readers alone see the file."
     }
    },
    "required": [

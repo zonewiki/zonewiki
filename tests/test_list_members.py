@@ -7,6 +7,7 @@ answer. An admin is none by being admin.
 alice made the list hiring for the group @hiring and herself; carol is in
 the group; bob is an editor and dana an admin, neither of them a member."""
 
+import io
 import json
 import re
 import subprocess
@@ -535,3 +536,84 @@ def test_a_list_for_a_group_made_of_groups(client, wiki, monkeypatch):
     assert SECRET not in mcp(client, "bob", "search_tasks", list=LIST)
     sign_in(client, "alice")
     assert f"Offer for the {SECRET}" in mcp(client, "alice", "search_tasks", assignee="none", list=LIST)
+
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 16
+
+
+def upload(client, **form):
+    return client.post("/api/upload", data={"file": (io.BytesIO(PNG), "offer.png"), **form},
+                       content_type="multipart/form-data", headers=HOST)
+
+
+def test_a_tasks_files_are_seen_by_who_sees_the_task(client, wiki):
+    """A file attached to a task is kept by the task (_tasks/files/<id>/):
+    its members open it, nobody else does, and it is not among the shared
+    uploads."""
+    sign_in(client, "alice")
+    url = upload(client, task=IDS["open"]).get_json()["url"]
+    assert url == f"/_tasks/files/{IDS['open']}/_assets/offer.png"
+    assert (wiki / url[1:]).read_bytes() == PNG and not (wiki / "_assets/offer.png").exists()
+    assert client.get(url, headers=HOST).data == PNG
+    assert sign_in(client, "carol").get(url, headers=HOST).status_code == 200      # in @hiring
+    assert "image" in str(client.post("/mcp", headers={**HOST, "Authorization": f"Bearer {USERS['carol'][1]}"}, json={
+        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+        "params": {"name": "read_file", "arguments": {"url": url}}}).get_json()["result"]["content"])
+    for who in ("bob", "dana"):                                                    # dana: an admin, no member
+        sign_in(client, who)
+        assert client.get(url, headers=HOST).status_code == 404
+        assert upload(client, task=IDS["open"]).status_code == 404, "nor a file of theirs put there"
+        assert "No such file" in mcp(client, who, "read_file", url=url)
+        assert "No task" in mcp(client, who, "upload_file", filename="x.txt", text="x", page=IDS["open"])
+        assert "offer.png" not in mcp(client, who, "history")
+    assert "offer.png" in mcp(client, "carol", "history")
+    # An assistant's file for the task is the task's too.
+    said = mcp(client, "carol", "upload_file", filename="notes.txt", text="hers", page=IDS["open"])
+    assert f"(/_tasks/files/{IDS['open']}/_assets/notes.txt)" in said and "who sees the task" in said
+
+
+def test_a_tasks_files_go_where_the_task_goes(client, wiki):
+    """Nothing moves with a task: its files are seen by who sees it now."""
+    sign_in(client, "alice")
+    url = upload(client, task=IDS["open"]).get_json()["url"]
+    assert sign_in(client, "bob").get(url, headers=HOST).status_code == 404
+    sign_in(client, "alice")
+    assert client.put(f"/api/tasks/{IDS['open']}", json={"list": "team"}, headers=HOST).status_code == 200
+    assert sign_in(client, "bob").get(url, headers=HOST).status_code == 200        # everyone's now
+    # And a private task shared: the file was its owner's alone.
+    sign_in(client, "alice")
+    own = client.post("/api/tasks", json={"title": "Mine"}, headers=HOST).get_json()
+    assert own["private"] is True
+    url = upload(client, task=own["id"]).get_json()["url"]
+    assert sign_in(client, "carol").get(url, headers=HOST).status_code == 404
+    sign_in(client, "alice")
+    assert client.put(f"/api/tasks/{own['id']}", json={"list": LIST, "share": True}, headers=HOST).status_code == 200
+    assert sign_in(client, "carol").get(url, headers=HOST).status_code == 200
+    assert sign_in(client, "bob").get(url, headers=HOST).status_code == 404
+
+
+def test_a_new_tasks_files_are_its_own_from_the_first(client, wiki):
+    """The dialog of a new task makes up its id, uploads for it and creates
+    the task with it: the file is the task's as soon as there is one."""
+    sign_in(client, "alice")
+    id = "0a1b2c3d-0000-4000-8000-00000000abcd"
+    url = upload(client, task=id).get_json()["url"]
+    assert url == f"/_tasks/files/{id}/_assets/offer.png"
+    assert client.get(url, headers=HOST).status_code == 200                        # the dialog's preview
+    made = client.post("/api/tasks", json={"title": "With a file", "list": LIST, "id": id,
+                                           "description": f"![]({url})"}, headers=HOST)
+    assert made.status_code == 201 and made.get_json()["id"] == id
+    assert sign_in(client, "bob").get(url, headers=HOST).status_code == 404
+    assert sign_in(client, "carol").get(url, headers=HOST).status_code == 200
+    # An id is taken once, and is one of Zone's form.
+    again = client.post("/api/tasks", json={"title": "Again", "id": id}, headers=HOST)
+    assert again.status_code in (400, 409) and "already" in again.get_data(as_text=True)
+    for bad in ("../../x", "notes", "0A1B2C3D-0000-4000-8000-00000000ABCD", 7):
+        assert client.post("/api/tasks", json={"title": "Bad", "id": bad}, headers=HOST).status_code == 400
+    for bad in ("../x", "a/b", "..", ".git"):
+        assert upload(client, task=bad).status_code == 404
+
+
+def test_without_users_a_tasks_file_is_with_the_others(client, git_wiki_dir):
+    made = client.post("/api/tasks", json={"title": "Alone"}, headers=HOST).get_json()
+    assert upload(client, task=made["id"]).get_json()["url"] == "/_assets/offer.png"

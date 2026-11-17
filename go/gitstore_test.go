@@ -509,7 +509,7 @@ func TestNoDeltaForUploads(t *testing.T) {
 	noDeltaForUploads(cfg.Data)
 	noDeltaForUploads(cfg.Data)
 	b, _ := os.ReadFile(path)
-	if want := "*.psd binary\n_assets/** -delta\nprivate/*/_assets/** -delta\ngroups/*/_assets/** -delta\n"; string(b) != want {
+	if want := "*.psd binary\n_assets/** -delta\nprivate/*/_assets/** -delta\ngroups/*/_assets/** -delta\n_tasks/files/*/_assets/** -delta\n"; string(b) != want {
 		t.Errorf("attributes: %q, want %q", b, want)
 	}
 	if out := runGitEnv(gitTimeout, "", []string{"GIT_LITERAL_PATHSPECS=0"}, "check-attr", "delta", "--", "_assets/photo.png", "private/anna/_assets/a.pdf", "p.md").Stdout; !strings.Contains(out, "_assets/photo.png: delta: unset") ||

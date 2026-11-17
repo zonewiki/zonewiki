@@ -112,7 +112,7 @@ A new feature is checked against them, and a protection that breaks one is a bug
 - `/mcp` requires a token: an MCP token, `mcp-token` in the settings file (a bearer token, kept there as its hash; with users, a user's own, and the tools act as that user), or the access token of a connection a signed-in user allowed (OAuth, below).
   Without a login and without a token set it is off (403), because its tools write pages and tasks; with a login it answers 401 and says where to sign in. Nothing is reached without a token someone signed in made or allowed.
   Don't make it open again (see Auth in `docs/spec/mcp.md`).
-  The same token, sent as a bearer token, also uploads and downloads files (`POST /api/upload`, `GET /_assets/…`, `/private/<user>/_assets/…` and `/groups/<group>/_assets/…`), as its user and throttled like `/mcp`, and nothing else: every other route still wants a session (Files in `docs/spec/mcp.md`).
+  The same token, sent as a bearer token, also uploads and downloads files (`POST /api/upload`, `GET /_assets/…`, `/private/<user>/_assets/…`, `/groups/<group>/_assets/…` and `/_tasks/files/<id>/_assets/…`), as its user and throttled like `/mcp`, and nothing else: every other route still wants a session (Files in `docs/spec/mcp.md`).
   A token is made on the host (`zonewiki config token`, `zonewiki user token`) or in the browser by whoever is signed in, for themselves only and with their password again, so a stolen session alone makes none (`/assistant`, Connect an assistant in `docs/spec/mcp.md`).
 - **OAuth for `/mcp`** (`go/oauth.go`, Connecting with OAuth in `docs/spec/mcp.md`; only with a login, off with `mcp-oauth = no`): an assistant is let in by its user, in the browser, with their password again.
   What keeps it safe, and isn't to be weakened:
@@ -129,7 +129,7 @@ A new feature is checked against them, and a protection that breaks one is a bug
   `_tasks/` and every other folder starting with `_` or `.` hold no pages,
   and `safePath()` refuses slugs in them,
   so no page route reads or writes there (Routes in `docs/spec/routes.md`).
-  Uploads are served only from `_assets/` by name (`/_assets/<filename>`, `/private/<user>/_assets/<filename>` to that user only, and `/groups/<group>/_assets/<filename>` to the group's members only), the client code only from `public/`.
+  Uploads are served only from `_assets/` by name (`/_assets/<filename>`, `/private/<user>/_assets/<filename>` to that user only, `/groups/<group>/_assets/<filename>` to the group's members only, and `/_tasks/files/<task id>/_assets/<filename>` to who sees the task), the client code only from `public/`.
 - The request checks around every route (`checks` in `go/server.go`) first validate the `Host` header (`hostAllowed`) against `allowedHosts` (`localhost`, `127.0.0.1`, `[::1]`) plus the names in `hosts` (the settings file; comma-separated),
   each at any port (Zone may listen on another, `--addr :8080`) and without case (`hostName`),
   defeating DNS rebinding attacks (a rebinding page's `Host` is its own name).

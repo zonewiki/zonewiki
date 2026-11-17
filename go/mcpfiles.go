@@ -29,7 +29,7 @@ const (
 // fileRoutesHint: how an assistant with a shell moves a file of any size.
 func fileRoutesHint(base string) string {
 	return "With a shell, a file of any size goes over HTTP with your MCP token: upload with " +
-		"`curl -H 'Authorization: Bearer <token>' -F file=@NAME " + base + "/api/upload` (add `-F page=SLUG` for a private page's; " +
+		"`curl -H 'Authorization: Bearer <token>' -F file=@NAME " + base + "/api/upload` (add `-F page=SLUG` for a private page's, `-F task=ID` for a task's; " +
 		"the answer is {\"url\": …}), download with `curl -H 'Authorization: Bearer <token>' -o NAME " + base + "<url>`."
 }
 
@@ -80,6 +80,13 @@ func uploadFileTool(args jsonObj, base, user string) (string, error) {
 		return "", err
 	}
 	owner := uploadPlace(user, strings.Trim(page, "/"))
+	// page names a task by its id: the file is the task's.
+	if id := strings.TrimSpace(page); uuid4RE.MatchString(id) {
+		var ok bool
+		if owner, ok = taskUploadPlace(user, id); !ok {
+			return "", toolErr("No task with this id")
+		}
+	}
 	name = freeUploadName(owner, name)
 	if err := storeUpload(user, owner, name, bytes.NewReader(data), " (MCP)"); err != nil {
 		return "", err
@@ -94,6 +101,8 @@ func uploadFileTool(args jsonObj, base, user string) (string, error) {
 		where = "private: only " + owner.name + " can open it"
 	case ofGroup:
 		where = "the group's: only who is in @" + owner.name + " can open it"
+	case ofTask:
+		where = "the task's: who sees the task can open it"
 	}
 	return "Uploaded " + name + " (" + formatSize(int64(len(data))) + "; " + where + "). " +
 		"It shows on a page or in a task once linked there, as markdown:\n" + link, nil
@@ -102,6 +111,7 @@ func uploadFileTool(args jsonObj, base, user string) (string, error) {
 var (
 	sharedUploadRE  = regexp.MustCompile(`^/_assets/([^/\\]+)$`)
 	privateUploadRE = regexp.MustCompile(`^/(` + keptDirs + `)/([^/\\]+)/_assets/([^/\\]+)$`)
+	taskUploadRE    = regexp.MustCompile(`^/` + taskFilesDir + `/([^/\\]+)/_assets/([^/\\]+)$`)
 )
 
 // uploadFile: the file a link's target names (as a page has it:
@@ -119,6 +129,10 @@ func uploadFile(target, user string) (path, name string, ok bool) {
 		// Its place as its path says it (the name as written: "Alice" is no one's folder here).
 		if p := placeOf(m[1] + "/" + m[2] + "/_assets"); p.name == m[2] && (p.own(user) || p.kind == ofGroup && p.sees(user)) {
 			owner, name = p, m[3]
+		}
+	} else if m := taskUploadRE.FindStringSubmatch(target); m != nil {
+		if p := taskPlace(m[1]); p.sees(user) {
+			owner, name = p, m[2]
 		}
 	}
 	if name == "" || strings.HasPrefix(name, ".") {
@@ -202,7 +216,7 @@ func tokenForFiles(r *http.Request) bool {
 	case http.MethodPost:
 		return p == "/api/upload"
 	case http.MethodGet, http.MethodHead:
-		return sharedUploadRE.MatchString(p) || privateUploadRE.MatchString(p)
+		return sharedUploadRE.MatchString(p) || privateUploadRE.MatchString(p) || taskUploadRE.MatchString(p)
 	}
 	return false
 }
