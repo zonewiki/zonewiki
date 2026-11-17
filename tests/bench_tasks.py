@@ -2,7 +2,8 @@
 a generated wiki of 100 users, 40 shared lists, 5,000 open tasks and 25,000
 closed ones, in git, and what a page view, a list, a write and a search cost
 on it, how the repository grows, and what a write waits beside a join of
-its packs once it has a history. Not part of the suites (its name is no test module's): run it with
+its packs once it has a history; and its pages for some (the last test: ten
+groups' folders beside 2,000 shared pages, thirty people searching). Not part of the suites (its name is no test module's): run it with
 
     ./run.sh test tests/bench_tasks.py -n 0 -s
 
@@ -409,4 +410,166 @@ def test_the_tasks_at_a_teams_size(team, client):
           f"{sum(p.stat().st_size for p in (root / '_tasks').rglob('tasks.json')) / 1e6:.1f} MB open, "
           f"{sum(p.stat().st_size for p in (root / '_tasks').rglob('closed*.json')) / 1e6:.1f} MB closed, "
           f"in {len(list((root / '_tasks').rglob('*.json')))} files\n")
+    report(got)
+
+
+# ── Pages and groups ─────────────────────────────────────────────────────────
+
+# Groups, shared pages, and pages in each group's folder.
+GROUPS, SHARED_PAGES, GROUP_PAGES = {"small": (3, 200, 20), "team": (10, 2000, 200)}[os.environ.get("ZONE_BENCH_SIZE", "team")]
+# People who search: more than the server keeps indexes for (maxViews in go/retrieval.go).
+SEARCHERS = 30
+
+
+@pytest.fixture()
+def paged(team, monkeypatch):
+    """The team's wiki with pages: SHARED_PAGES for everyone, GROUP_PAGES in
+    the folder of each of GROUPS groups (300 words each, of a vocabulary of
+    5,000), every user in one group and every fifth in a second, one group
+    made of three others, and a guide that pulls a page in."""
+    root, users, lists = team
+    rng = random.Random(13)
+    groups = [f"team{i}" for i in range(GROUPS)]
+    in_groups = {u: sorted({groups[i % GROUPS]} | ({groups[(i + 3) % GROUPS]} if i % 5 == 0 else set()))
+                 for i, u in enumerate(users)}
+    monkeypatch.setattr(settings, "USER_SETTINGS", {u: {"groups": ", ".join(g)} for u, g in in_groups.items()})
+    monkeypatch.setattr(settings, "GROUPS", {"division": ", ".join(groups[:3])})
+    vocabulary = WORDS + ["".join(rng.choice("abcdefghijklmnoprstuvw") for _ in range(rng.randint(4, 9))) for _ in range(5000)]
+    page = lambda title, extra="": f"# {title}\n\n" + "\n\n".join(
+        " ".join(rng.choice(vocabulary) for _ in range(60)).capitalize() + "." for _ in range(5)) + f"\n\n{extra}\n"
+    for i in range(SHARED_PAGES):
+        path = root / f"area{i % 20:02d}/page{i:04d}.md"
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(page(f"Page {i}", "[[plain]]"), encoding="utf-8")
+    for g in groups:
+        (root / "groups" / g).mkdir(parents=True)
+        for i in range(GROUP_PAGES):
+            (root / f"groups/{g}/note{i:03d}.md").write_text(page(f"{g} note {i}", f"Only for {g}: word{g}."), encoding="utf-8")
+    (root / "AGENTS.md").write_text("# Guide\n\n@area00/page0000.md\n", encoding="utf-8")
+    git = lambda *args: subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+    git("add", "-A")
+    git("-c", "user.name=bench", "-c", "user.email=bench@example.org", "commit", "-q", "-m", "The bench's pages")
+    return root, users, groups, in_groups
+
+
+BUDGETS.update({
+    "a group's page (ms)": 50,                                  # measured 23
+    "the page list (ms)": 50,                                   # 24
+    "the page list (KB)": 500,
+    "a search, the same person again (ms)": 150,                # 71
+    # Past the indexes the server keeps (maxViews: 8), a search puts its
+    # person's together again: some 45 ms more, and one at a time. With 32
+    # kept it was 70 ms in turn and 87 at once, for 230 MB more memory
+    # (2026-11-17): what these two guard is that it gets no worse.
+    f"a search, {SEARCHERS} people in turn (ms)": 250,          # 118
+    f"{SEARCHERS} people searching at once, p95 (ms)": 1200,    # 559
+    # A page's view asks whether its reader may change it, which walks the
+    # wiki's guides at most once a second (guideImports): it doesn't show.
+    "a page beside them, p95 (ms)": 80,                         # 37
+    "a page beside them, slowest (ms)": 250,                    # 39
+    "the server's memory with pages (MB)": 500,                 # 331
+})
+
+
+def test_pages_and_groups_at_a_teams_size(paged, client):
+    """Pages for some at a team's size: what a member's page, the page list
+    and a search cost with GROUPS group folders beside the shared pages, and
+    what a search costs when more people search than the server keeps
+    indexes for (SEARCHERS, in turn and at once): each of them has an index
+    of their own, the shared pages' plus their groups' and their private
+    ones (Search in docs/spec/users.md, Group pages)."""
+    import threading
+    from tests.goserver import GoClient
+    root, users, groups, in_groups = paged
+
+    def signed_in(user):
+        c = GoClient.__new__(GoClient)
+        c.live, c.cookies = client.live, {}
+        assert c.post("/login", data={"username": user, "password": "pw"}, headers=HOST).status_code == 302
+        return c
+
+    people = [signed_in(u) for u in users[:min(SEARCHERS, len(users))]]
+    me, mine = people[1], in_groups[users[1]][0]
+    other = next(g for g in groups if g not in in_groups[users[1]] and g not in groups[:3])
+    got = {}
+    search = lambda c, q: c.get(f"/api/search?q={q}", headers=HOST)
+
+    start = time.perf_counter()
+    assert search(me, "invoice+budget").status_code == 200
+    got["the first search: the index made (ms)"] = (time.perf_counter() - start) * 1000
+    # A group's word is found by who is in the group, and by nobody else.
+    assert any(r.get("slug", "").startswith(f"groups/{mine}/") for r in search(me, f"word{mine}").get_json())
+    assert not [r for r in search(me, f"word{other}").get_json() if r.get("slug", "").startswith(f"groups/{other}/")]
+    assert me.get(f"/page/groups/{other}/note000", headers=HOST).status_code == 404
+
+    get = lambda url: (lambda: me.get(url, headers=HOST))
+    ms, resp = timed(get(f"/page/groups/{mine}/note000"))
+    assert resp.status_code == 200
+    got["a group's page (ms)"] = ms
+    ms, resp = timed(get("/api/pages-list"))
+    assert resp.status_code == 200
+    got["the page list (ms)"], got["the page list (KB)"] = ms, len(resp.get_data()) / 1024
+    got["a search, the same person again (ms)"], _ = timed(lambda: search(me, "invoice+budget"), n=15)
+
+    # In turn: each search is by another person than the one before, so past
+    # the indexes the server keeps every one is put together again.
+    for c in people:
+        search(c, "invoice+budget")
+    times = []
+    for _ in range(3):
+        for c in people:
+            start = time.perf_counter()
+            assert search(c, "invoice+budget").status_code == 200
+            times.append((time.perf_counter() - start) * 1000)
+    got[f"a search, {len(people)} people in turn (ms)"] = statistics.median(times)
+    got[f"a search, {len(people)} people in turn, slowest (ms)"] = max(times)
+
+    # At once: everyone searches twice a second (as someone who types), for
+    # ten seconds, while one of them opens pages: a page's view asks whether
+    # its reader may change it, which walks the wiki's guides once a second.
+    times, views, failed, stop = [], [], [], time.monotonic() + 10
+    lock = threading.Lock()
+
+    def searcher(c, n):
+        time.sleep(n * 0.5 / len(people))
+        i = n
+        while time.monotonic() < stop:
+            start = time.perf_counter()
+            resp = search(c, ["invoice+budget", "release+notes", "sprint+plan"][i % 3])
+            with lock:
+                times.append((time.perf_counter() - start) * 1000)
+                if resp.status_code != 200:
+                    failed.append(resp.status_code)
+            i += 1
+            time.sleep(0.5)
+
+    def viewer():
+        i = 0
+        while time.monotonic() < stop:
+            start = time.perf_counter()
+            resp = me.get(f"/page/area{i % 20:02d}/page{i % 20:04d}", headers=HOST)
+            with lock:
+                views.append((time.perf_counter() - start) * 1000)
+                if resp.status_code != 200:
+                    failed.append(resp.status_code)
+            i += 1
+            time.sleep(0.1)
+
+    threads = [threading.Thread(target=searcher, args=(c, n)) for n, c in enumerate(people)] + [threading.Thread(target=viewer)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert not failed, failed[:5]
+    p95 = lambda values: sorted(values)[int(len(values) * 0.95)]
+    got[f"{len(people)} people searching at once, p95 (ms)"] = p95(times)
+    got[f"{len(people)} people searching at once, slowest (ms)"] = max(times)
+    got["a page beside them, p95 (ms)"] = p95(views)
+    got["a page beside them, slowest (ms)"] = max(views)
+    status = Path(f"/proc/{client.live.ensure().proc.pid}/status").read_text()
+    got["the server's memory with pages (MB)"] = int(status.split("VmRSS:")[1].split()[0]) / 1024
+
+    print(f"\n\nPages and groups at a team's size: {len(users)} users, {GROUPS} groups, {SHARED_PAGES} shared pages and "
+          f"{GROUP_PAGES} in each group's folder; {len(people)} people search ({len(times)} searches at once in 10 s, "
+          f"{len(views)} page views beside them)\n")
     report(got)
