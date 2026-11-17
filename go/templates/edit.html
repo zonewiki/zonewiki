@@ -10,8 +10,14 @@
         shared: say so, and say how to make it there (js/editor.js dismisses the note). */}}
     {{- if .PrivateOffer}}
     <div class="shared-new-banner" id="shared-new-banner" role="note">
+      {{- if .OfferOn}}
+      {{- /* One click makes it there: the link that led here is pointed at it (POST /link-new). */}}
+      <span>🌐 This new page is shared: everyone who uses the wiki will see it.</span>
+      <form method="post" action="/link-new" class="conflict-actions"><input type="hidden" name="slug" value="{{.Slug}}"><input type="hidden" name="on" value="{{.OfferOn}}"><button type="submit" class="btn btn-small btn-primary" id="shared-new-there">{{if .OfferGroup}}Make it a page of @{{.OfferGroup}}{{else}}Make it private{{end}}</button><button type="button" class="btn btn-small" id="shared-new-keep">Keep shared</button></form>
+      {{- else}}
       <span>🌐 This new page is shared: everyone who uses the wiki will see it. For a {{if .OfferGroup}}page of @{{.OfferGroup}}{{else}}private page{{end}}, link to <code>{{.PrivateOffer}}</code> instead.</span>
       <span class="conflict-actions"><button type="button" class="btn btn-small" id="shared-new-keep">Keep shared</button></span>
+      {{- end}}
     </div>
     {{- end}}
     <div class="editor-toolbar">

@@ -11,13 +11,13 @@
   <select id="page-for" name="for">
     <option value="">Everyone who uses this wiki</option>
     {{- range .Groups}}
-    <option value="group:{{.}}">@{{.}}: in groups/{{.}}/, its members see it</option>
+    <option value="group:{{.}}"{{if eq $.For (print "group:" .)}} selected{{end}}>@{{.}}: its members see it (in groups/{{.}}/)</option>
     {{- end}}
-    <option value="private">Only you: in private/{{.Shell.User}}/</option>
+    <option value="private"{{if eq .For "private"}} selected{{end}}>Only you (in private/{{.Shell.User}}/)</option>
   </select>
   {{- else}}
   {{- with .Shell.User}}
-  <label class="promote-check"><input type="checkbox" name="private" value="1"> Private: in private/{{.}}/, only you see it</label>
+  <label class="promote-check"><input type="checkbox" name="private" value="1"{{if eq $.For "private"}} checked{{end}}> Private: only you see it (in private/{{.}}/)</label>
   {{- end}}
   {{- end}}
   <button type="submit" class="btn btn-primary">Create</button>

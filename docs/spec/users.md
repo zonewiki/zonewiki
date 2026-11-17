@@ -523,7 +523,7 @@ signup-approval = yes                    # an admin approves each account; defau
     The MCP token and the connections are left as they are: an assistant stays connected (revoke the token, end a connection, on Connect an assistant).
   - Tests: `tests/test_password.py`, and from the menu in a browser in `tests/e2e/test_private.py`.
 - **The request knows its user**: the request checks (`checks` in `go/server.go`) put the session's user into the request's context (`withUser`), `userOf(r)` reads it, and `newReq` keeps it as `rq.user`. "" means no users (or no one signed in).
-- The user's name is shown beside Sign out (`.signout-user`, "Signed in as alice") on phones, in the page's top row.
+- The user's name is shown beside Sign out (`.signout-user`, "Signed in as alice") on phones, in the page's top row, and **opens the account menu there** (Groups, Connect an assistant, Change password: what the row itself doesn't have; so a group is made, a token made and a password changed from a phone too).
   On desktop both are in the user menu (below): the form is hidden there (`.signout-user-menu`).
 
 ## MCP
@@ -601,12 +601,13 @@ A new page is made private from the start (below).
   `[[` completion on a shared page, and in a shared task's title or notes, doesn't offer your private pages (a private task's does).
 - **A new shared page from a private page** (`processWikilinks`' `from`, `sharedNewOffer` in `go/private.go`): on a page in your private folder a link to a page that doesn't exist and isn't private is marked (`.wikilink-shared-new`: a 🌐 after it, tooltip "Creates a shared page";
   the live preview marks them too, the editor sending `?page=` to `/api/preview`) and carries `?from=private` (`/page/<slug>?from=private`, kept by the redirect to `/edit/<slug>?from=private`).
-  That editor (a new page only) shows a note above the text, **🌐 This new page is shared: everyone who uses the wiki will see it. For a private page, link to `private/<you>/<name>` instead.**, with **Keep shared** (just dismisses it, not remembered).
-  To make it private, change the link (`[[` completion on a private page offers a new private page, or write the path); there is no button that moves a shared page in, because a page never saved has nothing to move and the link you clicked would stay.
+  The link also says which page it is on (`&on=<slug>`), so that editor (a new page only) shows a note above the text, **🌐 This new page is shared: everyone who uses the wiki will see it.**, with **Make it private** and **Keep shared** (just dismisses it, not remembered).
+  **Make it private** (`POST /link-new` with `slug` and `on`; `linkNewOp` in `go/pageops.go`) points the link you clicked at the page in your folder (`[[Garden]]` becomes `[[private/<you>/garden|Garden]]`, every link to it on that page, one commit "Link to private/<you>/garden on <page>") and opens the editor for that page, which is made when it is first saved. Nothing of the shared name was written, so nothing moves.
+  Without a page it can point (the link carries none, or one that isn't yours to change) the note says how instead: "For a private page, link to `private/<you>/<name>` instead."
   No note when the page is private already, a private page of that name exists, there are no users, or the link was on a shared page.
 - **Private** is a module (`docs/spec/navigation.md`, Modules): in the switcher's first pill, Wiki · Private (the pages; Tasks · Notes, the tools, are the second), with a small lock as Notes has (`.module-lock`, tooltip "Private: only you see it"), and a tab on phones; **g p** goes to Private home.
   Private views (a page in your folder, the home included) make it current, notes make Notes current.
-  **The user menu** holds who is signed in and **Sign out** (desktop; phones have them in the page's top row).
+  **The user menu** holds who is signed in and **Sign out** (desktop; phones have them in the page's top row, where the name opens the menu's other entries).
   It opens from the **user button** (`.top-user`, a round initial with the name as its tooltip) at the top right, after Search.
 - **What "private" means**: hidden inside Zone, from other users and their assistants.
   Not encrypted, and not hidden from whoever has the wiki's folder or its git repository: the files, their history and a git remote hold everything.
@@ -671,7 +672,8 @@ Pages in `groups/<group>/` (and its subfolders) are that group's: whoever is in 
 A team inside a larger wiki keeps there what only the team should read.
 
 **To use it**: make a group on **Groups** (`/groups`, in the user menu: a name and who is in it; you own it and say who else joins), or have an admin put the people in one (`zonewiki user group anna +dev`, or the Users tab; a group can be made of other groups, so `groups/product/` is for whoever is in dev or in design: Groups, above).
-From then on `groups/dev/` is theirs: make a page there from a link (`[[groups/dev/roadmap]]`), with New page, by renaming one of your private pages into it, or through an assistant (`write_page` with that slug).
+From then on `groups/dev/` is theirs: make a page there with **New page** on the group's home or beside the group on Groups (`/new` with For at the group), from a link on one of its pages (`[[` offers "New page for @dev"; a link to a page there isn't asks, Make it a page of @dev), by sharing one of your private pages with it (Share…), or through an assistant (`write_page` with that slug).
+**New list** beside the group on Groups opens New list… with For at the group (`/tasks?newlist_for=@dev`).
 There is nothing to set up for the folder itself: it is the folder of the group `dev` whether or not a page is in it yet.
 
 - **Who sees it** (`placeOf`, `place.sees` in `go/access.go`): the group's members now, `memberOf(user, group)`.
@@ -704,7 +706,7 @@ There is nothing to set up for the folder itself: it is the folder of the group 
   **A note** is filed into a group's folder with Move to wiki: its folder field offers the folders of your groups, also one with no page in it yet (`pageFolders`), and not `groups/` itself.
 - **A link whose target not every reader of the page sees** is marked for who does see it (a link to a group's page `.wikilink-group`: a 👥 after it, "Links to a page of @dev: others see plain text"; one to your private page `.wikilink-private` with its 🔒, as from a shared page; `place.within` in `wikilinker`; the live preview too): from a shared page to a group's, from a group's page to one of your private pages or to another group's.
   Not within the group, and not into a group that includes it. To the others the link is its words.
-- **A new page from a group's page** (`newFrom`, `sharedNewOffer`): a link there to a page that doesn't exist and would be shared is marked 🌐 ("Creates a shared page") and carries `?from=group:<name>`; the editor it opens says **🌐 This new page is shared … For a page of @dev, link to `groups/dev/<name>` instead**, with **Keep shared**, as from a private page.
+- **A new page from a group's page** (`newFrom`, `sharedNewOffer`): a link there to a page that doesn't exist and would be shared is marked 🌐 ("Creates a shared page") and carries `?from=group:<name>`; the editor it opens says **🌐 This new page is shared …**, with **Make it a page of @dev** (the link is pointed at `groups/dev/<name>` and the editor opens for that page) and **Keep shared**, as from a private page.
   **`[[` completion** on a group's page offers a new page in the group's folder first ("New page for @dev: …"), and of the pages there are those every reader of the page sees: the shared ones and that group's, not your private ones nor another group's; on a shared page nothing of a group's (`js/completion.js`).
   **`/new`** (the form without JavaScript) asks someone in a group whom the page is **For**: everyone, one of their groups, only them (`for=group:<name>`, `for=private`; `createPage`); someone in no group has the Private box, as before.
 - **Uploads** for a group's page are the group's: the file is kept in `groups/<group>/_assets/` (`uploadPlace`, `uploadDir`; URL `/groups/<group>/_assets/<file>`) and served to its members only, 404 for anyone else and for any other subfolder (`serveGroupUpload`); an assistant reads and adds them with `read_file` and `upload_file` (`page`), or over HTTP with its user's token.

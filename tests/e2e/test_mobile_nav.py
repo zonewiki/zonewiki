@@ -727,3 +727,25 @@ def test_breadcrumb_crumbs_wait_for_the_trail_so_they_dont_jump(page, wiki):
     expect(page.locator(".breadcrumb")).not_to_have_class(re.compile(r"\btrail-ready\b"))
     assert title.evaluate("el => getComputedStyle(el).visibility") == "hidden"
     expect(title).to_be_visible(timeout=3000)   # the fallback shows it after a second
+
+
+def test_the_name_opens_the_account_menu_on_a_phone(new_page, wiki, monkeypatch):
+    """On a phone the account menu is behind the name beside Sign out: Groups
+    (also for who is in none: that is where one is made), Connect an
+    assistant, Change password. Admin and Sign out are in the row itself."""
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "")})
+    phone = new_page(**TOUCH_PHONE)
+    phone.request.post("/login", form={"username": "alice", "password": "pw"})
+    phone.goto("/page/index")
+    expect(phone.locator('.action-buttons [data-module="groups"]')).to_have_count(0)   # in no group: no tab
+    name = phone.locator(".signout-user")
+    expect(name).to_be_visible()
+    name.tap()
+    menu = phone.locator(".module-menu:not(.groups-menu)")
+    expect(menu).to_be_visible()
+    expect(menu.locator('[role="menuitem"]:visible')).to_have_text(["Groups", "Connect an assistant", "Change password"])
+    box = menu.bounding_box()
+    assert box["x"] >= 0 and box["x"] + box["width"] <= phone.viewport_size["width"]
+    menu.get_by_role("menuitem", name="Groups").tap()
+    phone.wait_for_url("**/groups")
+    expect(phone.get_by_role("button", name="Make the group")).to_be_visible()

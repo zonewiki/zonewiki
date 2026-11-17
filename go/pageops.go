@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"zonewiki/internal/mdtext"
 	"zonewiki/internal/taskfiles"
 	"zonewiki/internal/taskmodel"
 )
@@ -173,6 +174,44 @@ func createPageOp(user, slug, content, suffix string) error {
 	}
 	added(int64(len(content)))
 	return notCommitted(gitCommit(user, "Create "+slug+suffix, path))
+}
+
+// linkNewOp: the page slug, which isn't there yet and would be a shared one,
+// is to be made in the folder of the page on instead (on: one of user's
+// private pages, or a page of a group they are in, with a link to slug: the
+// link that led to the new page's editor). Every link to slug on that page
+// points at the page in the folder from now (one commit); the page itself
+// is made when its editor first saves. Returns that page's slug.
+func linkNewOp(user, on, slug string) (target string, err error) {
+	on, slug = mdtext.ToSlug(on), mdtext.ToSlug(slug)
+	p := placeOf(on)
+	if on == "" || slug == "" || !canSee(user, on) || p.shared() {
+		return "", refuseAs(refusedNotFound, "No page "+strconv.Quote(on))
+	}
+	if target, _ = sharedNewOffer(user, slug, newFrom(p)); target == "" {
+		return "", refuse("There is nothing to make there: the page is there already, or it isn't a shared page's name")
+	}
+	if !canWrite(user, target) {
+		return "", notWritable(user, target, "No page "+strconv.Quote(target))
+	}
+	_, _, _, err = changePageOp(user, on, "Link to "+target+" on", "", func(old string) (string, error) {
+		// The link keeps its words: [[Garden]] reads Garden, not the folder's path.
+		masked, stash := mdtext.MaskCode(old)
+		masked = mdtext.WikilinkRE.ReplaceAllStringFunc(masked, func(m string) string {
+			l := parseWikilink(m)
+			if page := strings.TrimSpace(l.page); !l.hasLabel && !l.hasSection && page != slug && mdtext.ToSlug(page) == slug {
+				l.label, l.hasLabel = page, true
+				return l.String()
+			}
+			return m
+		})
+		text := rewritePageLinks(mdtext.UnmaskCode(masked, stash), slug, target, on, "")
+		if text == old {
+			return "", refuse("“" + on + "” has no link to “" + slug + "”")
+		}
+		return text, nil
+	})
+	return target, err
 }
 
 // writeDraft writes the editor's text to the page (current: what it holds,

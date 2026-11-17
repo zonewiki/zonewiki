@@ -51,7 +51,7 @@ class TestLogin:
         resp = login(client, "Alice", "alice-pw")   # names are lowercase; case and spaces don't matter
         assert resp.status_code == 302
         body = client.get("/page/index", headers=HOST).data.decode()
-        assert '<span class="signout-user" title="Signed in as alice">alice</span>' in body
+        assert 'class="signout-user module-menu-btn"' in body and 'title="Signed in as alice"><span>alice</span>' in body
         client.post("/logout", headers=HOST)
         assert login(client, "bob", "bob-pw").status_code == 302
         assert ">bob</span>" in client.get("/page/index", headers=HOST).data.decode()
@@ -503,9 +503,10 @@ class TestSharedNewPage:
 
     def test_a_link_to_a_new_shared_page_is_marked(self, alice):
         body = self.view(alice, "private/alice/diary")
-        assert ('<a href="/page/garden?from=private" class="wikilink wikilink-missing wikilink-shared-new" '
+        on = "&amp;on=private%2Falice%2Fdiary"                  # the page the link is on (Make it private)
+        assert (f'<a href="/page/garden?from=private{on}" class="wikilink wikilink-missing wikilink-shared-new" '
                 'title="Creates a shared page">Garden</a>') in body
-        assert '<a href="/page/garden?from=private#beds" class="wikilink wikilink-missing wikilink-shared-new"' in body
+        assert f'<a href="/page/garden?from=private{on}#beds" class="wikilink wikilink-missing wikilink-shared-new"' in body
         # an existing page, a new private page, another user's: nothing to warn of
         assert '<a href="/page/plans" class="wikilink">Plans</a>' in body
         assert 'href="/page/private/alice/later" class="wikilink wikilink-missing">' in body
@@ -532,6 +533,32 @@ class TestSharedNewPage:
         assert resp.status_code == 302 and resp.headers["Location"] == "/edit/garden?from=private"
         assert alice.get("/page/garden", headers=HOST).headers["Location"] == "/edit/garden"
         assert alice.get("/page/garden?from=nonsense", headers=HOST).headers["Location"] == "/edit/garden"
+        resp = alice.get("/page/garden?from=private&on=private/alice/diary", headers=HOST)
+        assert resp.headers["Location"] == "/edit/garden?from=private&on=private%2Falice%2Fdiary"
+
+    def test_make_it_private_points_the_link_there(self, alice, git_wiki_dir):
+        """The editor of a new shared page, reached by a link on a private
+        page, makes it in that folder with one click: the link is pointed
+        at it (POST /link-new), and the editor opens for the private page."""
+        git = lambda *a: subprocess.run(["git", *a], cwd=git_wiki_dir, capture_output=True, text=True, check=True,
+                                        env=settings.GIT_ENV).stdout
+        body = alice.get("/edit/garden?from=private&on=private/alice/diary", headers=HOST).data.decode()
+        assert 'action="/link-new"' in body and 'name="on" value="private/alice/diary"' in body and "Make it private" in body
+        assert "<code>private/alice/garden</code>" not in body          # nothing to do by hand
+        # A page that isn't hers, a shared one, one that isn't there: the note only says how.
+        for on in ("private/bob/x", "plans", "private/alice/nope"):
+            body = alice.get(f"/edit/garden?from=private&on={on}", headers=HOST).data.decode()
+            assert 'action="/link-new"' not in body and "<code>private/alice/garden</code>" in body, on
+        resp = alice.post("/link-new", data={"slug": "garden", "on": "private/alice/diary"}, headers=HOST)
+        assert resp.status_code == 303 and resp.headers["Location"] == "/edit/private/alice/garden"
+        after = (git_wiki_dir / "private/alice/diary.md").read_text()
+        assert "[[Garden]]" not in after and "[[garden#" not in after and after.count("private/alice/garden") == 2, after
+        assert "[[Plans]]" in after and not (git_wiki_dir / "garden.md").exists()
+        assert "private/alice/garden" in git("log", "-1", "--format=%s")
+        assert "diary" not in git("status", "--porcelain")
+        # Nothing to point: refused, nothing written.
+        again = alice.post("/link-new", data={"slug": "garden", "on": "private/alice/diary"}, headers=HOST)
+        assert again.status_code == 400 and (git_wiki_dir / "private/alice/diary.md").read_text() == after
 
     def test_the_editor_warns_and_names_the_private_page(self, alice, git_wiki_dir):
         body = alice.get("/edit/garden?from=private", headers=HOST).data.decode()

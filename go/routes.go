@@ -37,9 +37,15 @@ func pageRoutes(mux *http.ServeMux) {
 		if u := settings().Users[userOf(r)]; u != nil && !settings().isViewer(u.Name) {
 			groups = u.In
 		}
-		page(w, newReq(r), http.StatusOK, "new.html", "New Page", shell{}, &newPageView{Groups: groups})
+		// for: where the page starts (the New page button of a group's home, of the private home).
+		who := r.URL.Query().Get("for")
+		if g, ok := strings.CutPrefix(who, "group:"); who != "private" && !(ok && slices.Contains(groups, g)) {
+			who = ""
+		}
+		page(w, newReq(r), http.StatusOK, "new.html", "New Page", shell{}, &newPageView{Groups: groups, For: who})
 	})
 	mux.HandleFunc("POST /new", writesPages(createPage))
+	mux.HandleFunc("POST /link-new", writesPages(linkNew))
 	mux.HandleFunc("POST /rename/{slug...}", writesPages(renamePage))
 	mux.HandleFunc("POST /promote/{slug...}", writesPages(promotePage))
 	mux.HandleFunc("POST /append/{slug...}", writesPages(appendPage))
@@ -160,6 +166,9 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 		to := pathURL("edit", slug)
 		if from := r.URL.Query().Get("from"); newFromRE.MatchString(from) {
 			to += "?from=" + from // the link was on a private page, or a group's (wikilinker)
+			if on := r.URL.Query().Get("on"); on != "" {
+				to += "&on=" + url.QueryEscape(on)
+			}
 		}
 		http.Redirect(w, r, to, http.StatusFound)
 		return
@@ -227,7 +236,14 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 		article = htmlOf(renderMd(rq, mdtext.StripH1(content), RenderOpts{Page: slug, HideTags: true, HideTldr: true,
 			EditSlug: slug, SectionKeys: sectionKeys(content, headings), SectionTasks: tasks}))
 	}
-	page(w, rq, http.StatusOK, "view.html", title, shell{wide: true}, &pageView{Title: title, Slug: slug,
+	// A place's home is where its pages are started: New page, with For at that place.
+	newFor := ""
+	if g := placeOf(slug).group(); g != "" && isGroupHome(slug) {
+		newFor = "group:" + g
+	} else if isPrivateHome(slug) && placeOf(slug).own(rq.user) {
+		newFor = "private"
+	}
+	page(w, rq, http.StatusOK, "view.html", title, shell{wide: true}, &pageView{Title: title, Slug: slug, NewPageFor: newFor,
 		FromUncommitted: fromUncommitted, Private: placeOf(slug).user() != "", Group: placeOf(slug).group(), GroupTitle: groupTitle(slug), ReadOnly: readOnly(rq.user, slug), TaskKeys: strings.Join(mdtext.TaskLineKeys(content), ","),
 		BreadcrumbHTML: bc, DeleteDialogHTML: buildDeleteDialog(slug, title), RailTocHTML: railTocItems(string(article)),
 		MetaRowHTML: metaRow, ArticleHTML: article, LinkSections: sections, Outlinks: outlinks(rq, slug, path), Menu: menu})
@@ -240,6 +256,7 @@ type pageView struct {
 	FromUncommitted                                                         bool   // opened from the uncommitted list: Commit instead of Edit
 	Private                                                                 bool   // in a private folder (the lock)
 	Group, GroupTitle                                                       string // in a group's folder: the group, and what its mark says (who sees the page)
+	NewPageFor                                                              string // a place's home: what /new's For starts at for its New page button ("group:<name>", "private"), else ""
 	ReadOnly                                                                bool   // a viewer's view of a shared page: no Edit, ✎ or ticks
 	TaskKeys                                                                string // a key per checkbox line (mdtext.TaskLineKeys), comma-separated
 	BreadcrumbHTML, DeleteDialogHTML, RailTocHTML, MetaRowHTML, ArticleHTML template.HTML
@@ -270,6 +287,7 @@ type editView struct {
 	RenameError, RenameName     string
 	PrivateOffer                string // a new shared page from a private one, or a group's: the slug in that folder to link instead
 	OfferGroup                  string // the group whose folder PrivateOffer is in ("": the user's own)
+	OfferOn                     string // the page whose link led here, when Make it … can point that link at PrivateOffer ("": the note only says how)
 	LeftDraft                   *leftDraftView
 	Paste                       *pasteHintView // after Move to wiki (pasteHint)
 	TaskLists                   []string       // the lists there are, for the Task list dialog
@@ -373,9 +391,15 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 	}
 	// A new page from a link on a private page, or a group's: shared, unless
 	// it is made in that folder.
-	privateOffer, offerGroup := "", ""
+	privateOffer, offerGroup, offerOn := "", "", ""
 	if isNew && !hasSection {
 		privateOffer, offerGroup = sharedNewOffer(rq.user, slug, q.Get("from"))
+		// The page the link is on, when it is one of that folder they may
+		// change: one click makes the new page there and points the link at it.
+		if on := q.Get("on"); privateOffer != "" && on == mdtext.ToSlug(on) && newFrom(placeOf(on)) == q.Get("from") &&
+			!placeOf(on).shared() && canWrite(rq.user, on) && safePath(on) != "" && exists(safePath(on)) {
+			offerOn = on
+		}
 	}
 	extra := crumb{"Edit", ""}
 	if hasSection {
@@ -387,7 +411,7 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 		// A visitor (a public wiki) edits and makes pages, and moves none.
 		CanRename: editable && !isProtected(slug) && rq.user != visitor, CanDelete: editable && !isProtected(slug) && rq.user != visitor,
 		Git: cfg.GitEnabled, RenameError: q.Get("rename_error"), RenameName: q.Get("rename_name"), LeftDraft: left,
-		PrivateOffer: privateOffer, OfferGroup: offerGroup, Paste: pasteHint(rq, q.Get("paste"), q.Get("copied") == "1"),
+		PrivateOffer: privateOffer, OfferGroup: offerGroup, OfferOn: offerOn, Paste: pasteHint(rq, q.Get("paste"), q.Get("copied") == "1"),
 		TaskLists:      slices.Sorted(maps.Keys(rq.taskLists())),
 		BreadcrumbHTML: buildBreadcrumb(rq, slug, title, "", "", extra),
 		TasksHTML:      editorTasksHTML(rq, slug)})
@@ -456,6 +480,19 @@ func readEditorSave(w http.ResponseWriter, r *http.Request) (*editorSave, bool) 
 // changedSince: the page changed since the editor loaded it (whole-page edits).
 func (s *editorSave) changedSince() bool {
 	return s.fileHash != "" && s.current != nil && mdtext.ContentHash(*s.current) != s.fileHash
+}
+
+// linkNew: POST /link-new: the new page slug, opened from a link on the
+// page on (one of the user's private pages, or a group's), is made in on's
+// folder instead of shared: the link on on points there, and the editor
+// opens for the page in that folder (linkNewOp).
+func linkNew(w http.ResponseWriter, r *http.Request) {
+	target, err := linkNewOp(userOf(r), r.PostFormValue("on"), r.PostFormValue("slug"))
+	if err != nil && !writtenAnyway(err) {
+		pageFailed(w, r, err)
+		return
+	}
+	http.Redirect(w, r, pathURL("edit", target), http.StatusSeeOther)
 }
 
 func savePage(w http.ResponseWriter, r *http.Request) {
@@ -680,6 +717,7 @@ func keepLeftDraft(r *http.Request, s *editorSave) {
 type newPageView struct {
 	view
 	Groups []string
+	For    string // what For starts at: "", "private", "group:<name>"
 }
 
 // createPage: /new, the form for a new page's name (pages are made from
@@ -960,7 +998,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	v := &tasksPageView{Heading: heading, Missing: missing,
 		Menu: !rq.sharing && !listsUnmigrated && mayWriteTasks(rq.who()) == nil, Users: privateFolder(rq.user) != "",
 		Mine: mine, MineAssigns: mine && mineAssigns(rq.who()), Inbox: inbox, InboxPrivate: inbox && inboxOwner(rq.who()) != "",
-		Groups: settings().groups(), People: settings().assignableUsers(), NewListName: q.Get("newlist_name"), NewListError: q.Get("newlist_error"),
+		Groups: settings().groups(), People: settings().assignableUsers(), NewListName: q.Get("newlist_name"), NewListError: q.Get("newlist_error"), NewListFor: q.Get("newlist_for"),
 		Places: places, More: more, TasksHTML: htmlOf(tasksHTML), LinkSections: sections,
 		BreadcrumbHTML: breadcrumb(rq, crumbs, key, true, title, chip)}
 	if mine {
@@ -1226,6 +1264,7 @@ type tasksPageView struct {
 	Members, Groups           []string
 	Mine, MineAssigns         bool
 	NewListName, NewListError string
+	NewListFor                string // what New list…'s For starts with, the dialog open (?newlist_for=@dev: New list on a group's entry of Groups)
 	Places                    []TaskPlace
 	More                      *TasksMore
 	Inbox, InboxPrivate       bool

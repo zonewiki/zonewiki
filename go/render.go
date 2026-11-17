@@ -59,7 +59,9 @@ func wikilinker(rq *Req, slugs map[string]bool, from string) func(inner string) 
 			css += " wikilink-missing"
 			if from != "" && !source.shared() && target.shared() {
 				css += " wikilink-shared-new"
-				query, title = "?from="+newFrom(source), ` title="Creates a shared page"`
+				// on: the page the link is on, so the new page's editor can offer
+				// to make it there and point this link at it (linkNewOp).
+				query, title = "?from="+newFrom(source)+"&amp;on="+url.QueryEscape(from), ` title="Creates a shared page"`
 			}
 		} else if from != "" && !source.within(target) {
 			// Not every reader of this page sees the target: marked for who does.

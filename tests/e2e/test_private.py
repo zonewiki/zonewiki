@@ -316,11 +316,10 @@ def test_the_link_is_marked_and_opens_a_warning_editor(diary):
     expect(link).to_have_attribute("title", "Creates a shared page")
     assert "\U0001F310" in link.evaluate("el => getComputedStyle(el, '::after').content")
     link.click()
-    diary.wait_for_url("**/edit/garden?from=private")
+    diary.wait_for_url("**/edit/garden?from=private&on=**")
     banner = diary.locator("#shared-new-banner")
     expect(banner).to_contain_text("This new page is shared")
-    expect(banner).to_contain_text("link to private/alice/garden instead")
-    expect(banner.get_by_role("button")).to_have_text(["Keep shared"])
+    expect(banner.get_by_role("button")).to_have_text(["Make it private", "Keep shared"])
     # Keep shared: the banner goes, the page stays shared.
     banner.get_by_role("button", name="Keep shared").click()
     expect(banner).to_have_count(0)

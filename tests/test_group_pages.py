@@ -557,10 +557,18 @@ def test_a_link_is_marked_where_not_every_reader_of_the_page_sees_its_target(cli
     assert marks("private/alice/x") == {"diary": plain, "own": plain, "wide": plain, "other": plain, "plans": plain, "brand-new": new}
     # The new page's link says where it was, and the editor offers the page in that folder.
     html = client.post("/api/preview", query_string={"page": "groups/dev/standup"}, data="[[Brand New]]", headers=HOST).get_data(as_text=True)
-    assert 'href="/page/brand-new?from=group:dev"' in html
+    assert 'href="/page/brand-new?from=group:dev&amp;on=groups%2Fdev%2Fstandup"' in html
     assert client.get("/page/brand-new?from=group:dev", headers=HOST).headers["Location"] == "/edit/brand-new?from=group:dev"
     body = client.get("/edit/brand-new?from=group:dev", headers=HOST).get_data(as_text=True)
     assert "For a page of @dev, link to <code>groups/dev/brand-new</code> instead" in body
+    # With the page the link is on, one click makes it the group's (POST /link-new).
+    (wiki / "groups/dev/standup.md").write_text("# Standup\n\nSee [[Brand New]] and [[plans]].\n")
+    body = client.get("/edit/brand-new?from=group:dev&on=groups/dev/standup", headers=HOST).get_data(as_text=True)
+    assert 'action="/link-new"' in body and "Make it a page of @dev" in body
+    assert 'action="/link-new"' not in client.get("/edit/brand-new?from=group:dev&on=groups/ops/x", headers=HOST).get_data(as_text=True)
+    resp = client.post("/link-new", data={"slug": "brand-new", "on": "groups/dev/standup"}, headers=HOST)
+    assert resp.status_code == 303 and resp.headers["Location"] == "/edit/groups/dev/brand-new"
+    assert "groups/dev/brand-new" in (wiki / "groups/dev/standup.md").read_text()
     for url in ("/edit/brand-new?from=group:design", "/edit/brand-new?from=group:", "/edit/plans?from=group:dev",
                 "/edit/groups/dev/brand-new?from=group:dev"):                # not her group; no group; a page that is there; the group's already
         assert "shared-new-banner" not in client.get(url, headers=HOST).get_data(as_text=True), url
@@ -751,3 +759,31 @@ def test_an_assistant_is_told_who_sees_a_page(client, wiki):
         "jsonrpc": "2.0", "id": 1, "method": "tools/list"}).get_json()["result"]["tools"]
     described = {t["name"]: json.dumps(t) for t in tools}
     assert "A page moves to more people, never to fewer." in described["rename_page"]
+
+
+def test_a_group_has_ways_to_start_a_page_and_a_list(client, wiki):
+    """Where a group's page and its list are started: New page on the
+    group's home and beside it on Groups (/new with For at the group), New
+    list on Groups (the dialog open, For at the group). A viewer and who is
+    not in the group have none."""
+    sign_in(client, "alice")
+    home = client.get("/page/groups/dev/index", headers=HOST)
+    if home.status_code != 200:                                  # made on the first visit
+        client.get("/groups/dev", headers=HOST)
+        home = client.get("/page/groups/dev/index", headers=HOST)
+    assert 'href="/new?for=group%3adev" class="btn new-page-here">New page</a>' in home.get_data(as_text=True), re.findall(r'<a[^>]*new-page-here[^>]*>', home.get_data(as_text=True))
+    assert "new-page-here" not in client.get("/page/groups/dev/diary", headers=HOST).get_data(as_text=True)   # the home only
+    form = client.get("/new?for=group:dev", headers=HOST).get_data(as_text=True)
+    assert '<option value="group:dev" selected>' in form
+    for other in ("group:ops", "group:nosuch", "nonsense"):       # not her group: For starts at everyone
+        assert " selected>" not in client.get(f"/new?for={other}", headers=HOST).get_data(as_text=True)
+    assert '<option value="private" selected>' in client.get("/new?for=private", headers=HOST).get_data(as_text=True)
+    groups = client.get("/groups", headers=HOST).get_data(as_text=True)
+    assert 'href="/new?for=group:dev"' in groups and 'href="/tasks?newlist_for=@dev"' in groups
+    tasks = client.get("/tasks?newlist_for=@dev", headers=HOST).get_data(as_text=True)
+    assert 'data-params="newlist_error newlist_name newlist_for" data-open' in tasks and 'id="list-new-for" value="@dev"' in tasks
+    # Her private home starts a private page.
+    client.get("/private", headers=HOST)
+    assert 'href="/new?for=private"' in client.get("/page/private/alice/index", headers=HOST).get_data(as_text=True)
+    sign_in(client, "bob")                                        # in no group
+    assert "/new?for=group:dev" not in client.get("/groups", headers=HOST).get_data(as_text=True)

@@ -98,6 +98,7 @@ WRITES = [
     ("POST /edit/{slug...}", "POST", "/edit/plans", {"data": {"content": "# Carol\n"}}),
     ("POST /api/save/{slug...}", "POST", "/api/save/plans", {"data": {"content": "# Carol\n"}}),
     ("POST /new", "POST", "/new", {"data": {"slug": "carols-shared"}}),
+    ("POST /link-new", "POST", "/link-new", {"data": {"slug": "garden", "on": "plans"}}),
     ("POST /rename/{slug...}", "POST", "/rename/plans", {"data": {"new_name": "renamed"}}),
     ("POST /rename/{slug...}", "POST", "/rename/plans", {"data": {"new_name": "private/carol/plans"}}),
     ("POST /delete/{slug...}", "POST", "/delete/plans", {}),

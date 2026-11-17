@@ -81,16 +81,38 @@ def test_completion_offers_what_every_reader_of_the_page_sees(alice, wiki):
 
 
 def test_a_new_shared_page_from_a_groups_page_says_so(alice, wiki):
-    wiki.write("groups/dev/standup", "# Standup\n\nSee [[Garden]].\n")
+    """A link on a group's page to a page there isn't opens the editor of a
+    shared page, which says so and makes it the group's with one click: the
+    link is pointed at the page in the group's folder."""
+    wiki.write("groups/dev/standup", "# Standup\n\nSee [[Garden]] and [[Orchard]].\n")
     alice.goto("/page/groups/dev/standup")
-    link = alice.locator("a.wikilink-shared-new")
+    link = alice.locator("a.wikilink-shared-new").first
     expect(link).to_have_attribute("title", "Creates a shared page")
     link.click()
-    alice.wait_for_url("**/edit/garden?from=group:dev")
+    alice.wait_for_url("**/edit/garden?from=group:dev&on=groups%2Fdev%2Fstandup")
     banner = alice.locator("#shared-new-banner")
-    expect(banner).to_contain_text("For a page of @dev, link to groups/dev/garden instead")
+    expect(banner).to_contain_text("This new page is shared")
+    banner.get_by_role("button", name="Make it a page of @dev").click()
+    alice.wait_for_url("**/edit/groups/dev/garden")
+    expect(alice.locator("#shared-new-banner")).to_have_count(0)
+    assert wiki.read("groups/dev/standup") == "# Standup\n\nSee [[groups/dev/garden|Garden]] and [[Orchard]].\n"
+    # Keep shared: the note goes, the page is everyone's.
+    alice.goto("/page/groups/dev/standup")
+    alice.locator("a.wikilink-shared-new").click()
+    alice.wait_for_url("**/edit/orchard?**")
+    banner = alice.locator("#shared-new-banner")
     banner.get_by_role("button", name="Keep shared").click()
     expect(banner).to_have_count(0)
+
+
+def test_new_page_on_a_groups_home_starts_a_page_of_the_group(alice, wiki):
+    alice.goto("/groups/dev")
+    alice.get_by_role("link", name="New page", exact=True).click()
+    alice.wait_for_url("**/new?for=group**")
+    expect(alice.locator("#page-for")).to_have_value("group:dev")
+    alice.locator("#page-name").fill("Road Map")
+    alice.get_by_role("button", name="Create").click()
+    alice.wait_for_url("**/edit/groups/dev/road-map")
 
 
 # ── The way in ───────────────────────────────────────────────────────────────
@@ -165,7 +187,7 @@ def test_several_groups_are_listed(page, wiki, monkeypatch):
     page.wait_for_url("**/groups")
     expect(page.locator(".groups-list .group-name")).to_have_text(["👥 dev", "👥 ops", "👥 product"])
     expect(page.locator(".groups-list li").last).to_contain_text("everyone in design (bob) and dev (alice)")   # by which way
-    page.locator(".groups-list a").last.click()
+    page.locator(".groups-list li").last.locator("a").first.click()
     page.wait_for_url("**/page/groups/product/index")
     expect(page.locator("h1 .group-mark")).to_have_text("👥 product")
 

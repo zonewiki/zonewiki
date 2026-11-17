@@ -596,7 +596,7 @@ def test_new_list_refuses_a_list_there_is_and_no_name(client, shop):
     resp = client.post("/tasks/new-list", data={"name": "Shop"}, headers=HOST)
     assert "newlist_error" in resp.headers["Location"]
     page = client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True)
-    assert 'id="list-new-dialog" class="modal" data-params="newlist_error newlist_name" data-open' in page    # the dialog again, saying why
+    assert 'id="list-new-dialog" class="modal" data-params="newlist_error newlist_name newlist_for" data-open' in page    # the dialog again, saying why
     assert "There is a list #shop already" in page and 'value="Shop"' in page
     for name in ("", "  ", "#", "a,b", "x=y", "[x]", "a/b", "inbox", " #Inbox ", "none"):
         assert new_list(client, name) is None, name

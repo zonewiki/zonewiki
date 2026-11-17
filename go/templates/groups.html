@@ -18,6 +18,10 @@
       {{- else if not .G.Direct}}nobody{{end}}
       {{- end}}{{with .G.Owners}} <span class="user-you group-owners">· owned by {{range $i, $o := .}}{{if $i}}, {{end}}{{$o}}{{end}}</span>{{end}}</span>
     <span class="group-pages">{{if not .G.Member}}{{if .G.Folder}}<span title="Its folder groups/{{.G.Name}}/, which only its members see">has pages</span>{{end}}{{else if .G.Pages}}{{.G.Pages}} page{{if ne .G.Pages 1}}s{{end}}{{else}}no page yet{{end}}</span>
+    {{- /* What a group is for: a page only its members see, a task list only they see. */}}
+    {{- if and .G.Member .Writes}}
+    <span class="group-new"><a class="btn" href="/new?for=group:{{.G.Name}}" title="A page only {{.G.Name}} sees">New page</a> <a class="btn" href="/tasks?newlist_for=@{{.G.Name}}" title="A task list only {{.G.Name}} sees">New list</a></span>
+    {{- end}}
     {{- if .G.Leaves}}
     <details class="group-manage group-leave">
       <summary class="btn">Leave…</summary>
@@ -62,7 +66,7 @@
 <p class="users-help">The groups you are in. A group's pages are in its folder: whoever is in the group sees and changes them, and no one else in this wiki. A task list can be for a group too.</p>
 {{- if .Groups}}
 <ul class="groups-list">
-  {{- range .Groups}}{{template "group" (dict "G" . "Admin" $.Admin)}}{{end}}
+  {{- range .Groups}}{{template "group" (dict "G" . "Admin" $.Admin "Writes" $.MayMake)}}{{end}}
 </ul>
 {{- else}}
 <p class="groups-none">You are in no group.</p>
@@ -82,7 +86,7 @@
 <h2 id="others">Other groups</h2>
 <p class="users-help">As an admin you manage every group, also those you are not in: you see who is in them, not their pages.</p>
 <ul class="groups-list">
-  {{- range .Others}}{{template "group" (dict "G" . "Admin" $.Admin)}}{{end}}
+  {{- range .Others}}{{template "group" (dict "G" . "Admin" $.Admin "Writes" $.MayMake)}}{{end}}
 </ul>
 {{- end}}
 <h2 id="of-groups">A group of groups</h2>

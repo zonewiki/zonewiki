@@ -1521,7 +1521,10 @@ kbd {
 }
 
 /* Who is signed in (with users), beside Sign out. */
-.signout-user { color: var(--muted); font-size: .85rem; }
+/* On a phone the name opens the account menu (Groups, Connect an assistant,
+   Change password): the desktop's is behind the user button. */
+.signout-user { color: var(--muted); font-size: .85rem; background: none; border: 0; padding: .35rem .25rem; font-family: inherit; cursor: pointer; }
+.signout-user:focus-visible { outline: 2px solid var(--btn-primary); outline-offset: 1px; border-radius: 4px; }
 /* With users, desktop has the name and Sign out in the user menu instead. */
 @media (min-width: 641px) { .signout-form.signout-user-menu { display: none; } }
 .signout-admin { text-decoration: none; }
@@ -2309,7 +2312,8 @@ body.editor-page main {
   .breadcrumb .module-link:not([data-module="wiki"]), .breadcrumb .module-label,
   .breadcrumb .module-group + .module-group,
   .breadcrumb .module-menu-btn { display: none; }
-  .module-menu :is(.menu-who, .menu-signout, .menu-admin, .menu-assistant, .menu-password, .menu-groups) { display: none; }
+  /* The account menu, opened by the name beside Sign out: what that row doesn't have. */
+  .module-menu :is(.menu-who, .menu-signout, .menu-admin) { display: none; }
   .module-menu-backdrop { background: rgba(0, 0, 0, .35); }
   /* Keep the end of the page and the toasts clear of the bar. */
   body:has(.action-buttons) main { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
