@@ -90,7 +90,7 @@ def test_save_shows_once_a_field_is_edited(admin, wiki):
     field = includes.locator('input[name="includes"]')
     expect(field).to_be_hidden()
     expect(includes.locator('input[name="name"]')).to_be_hidden()
-    includes.get_by_text("Add a group…").click()
+    includes.get_by_text("Add a whole group…").click()
     expect(field).to_be_focused()
     expect(includes.locator('button[aria-label="Save what dev includes"]')).to_be_visible()
     includes.get_by_text("Rename…").click()

@@ -99,12 +99,20 @@ type userRow struct {
 }
 
 // groupRow: a group as the Users tab's Groups part lists it: who is in it
-// now, and the groups it is made of (the field's value, "dev, design").
+// now and by which way (named on them: Direct; by way of a group it is made
+// of: Via), and the groups it is made of as the field has them ("dev, design").
 type groupRow struct {
 	Name, Includes string
-	Members        []string
-	Owners         []string // who says who is in it, in the browser (groups.go); none: an admin
-	Folder         bool     // groups/<name>/ is there: the group has pages
+	Direct         []string   // in it by its name on them
+	Via            []groupVia // the groups it includes, each with who is in it
+	Owners         []string   // who says who is in it, in the browser (groups.go); none: an admin
+	Folder         bool       // groups/<name>/ is there: the group has pages
+}
+
+// groupVia: a group another includes, and who is in it now.
+type groupVia struct {
+	Name    string
+	Members []string
 }
 
 // adminTab: a section tab of the admin page.
@@ -184,8 +192,17 @@ func usersData(r *http.Request) *usersView {
 		Signup: signupOn(s), SignupRole: s.SignupRole, SignupDomains: s.SignupDomains, SignupApproval: s.SignupApproval,
 		BreadcrumbHTML: breadcrumb(newReq(r), []crumb{{"Admin", "/admin"}, {"Users", ""}}, "", false, "", "")}
 	for _, g := range s.groups() {
-		v.GroupRows = append(v.GroupRows, groupRow{Name: g, Includes: strings.Join(s.Includes[g], ", "), Members: s.groupMembers(g), Owners: s.Owners[g],
-			Folder: isDir(filepath.Join(cfg.Data, groupsDir, g))})
+		row := groupRow{Name: g, Includes: strings.Join(s.Includes[g], ", "), Owners: s.Owners[g],
+			Folder: isDir(filepath.Join(cfg.Data, groupsDir, g))}
+		for _, name := range s.groupMembers(g) {
+			if slices.Contains(s.Users[name].Groups, g) {
+				row.Direct = append(row.Direct, name)
+			}
+		}
+		for _, in := range s.Includes[g] {
+			row.Via = append(row.Via, groupVia{in, s.groupMembers(in)})
+		}
+		v.GroupRows = append(v.GroupRows, row)
 	}
 	v.Stray = append(strayGroups(), strayPrivate()...)
 	assigned := assignedOpen()

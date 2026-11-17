@@ -84,26 +84,27 @@
     pages) is for whoever is in it, by whatever way. */}}
 {{- if .GroupRows}}
 <table class="users-table groups-table">
-  <thead><tr><th>Group</th><th>Who is in it</th><th>Includes</th><th></th></tr></thead>
+  <thead><tr><th>Group</th><th>Who is in it</th><th></th></tr></thead>
   <tbody>
   {{- range .GroupRows}}
   <tr>
     <td class="user-name">{{.Name}}{{if .Folder}} <span class="user-fact" title="The group has pages: its folder groups/{{.Name}}/, which only its members see">pages</span>{{end}}
       {{- with .Owners}} <span class="user-you group-owners" title="They say who is in the group, on their Groups page">owned by {{range $i, $o := .}}{{if $i}}, {{end}}{{$o}}{{end}}</span>{{end}}</td>
-    <td>{{range $i, $m := .Members}}{{if $i}}, {{end}}{{$m}}{{else}}<span class="user-you">nobody</span>{{end}}</td>
-    <td>
-      {{- /* The groups it includes are text; the field to change them opens on its button. */}}
-      {{- with .Includes}}<span class="group-includes">{{.}}</span> {{end}}
+    {{- /* Who is in it, and by which way: the people named on it, then each group it includes with its people. */}}
+    <td class="group-who">
+      {{- range $i, $m := .Direct}}{{if $i}}, {{end}}{{$m}}{{end}}
+      {{- if .Via}}{{if .Direct}}, and {{end}}everyone in {{range $i, $v := .Via}}{{if $i}} and {{end}}<span class="group-via">{{$v.Name}}</span> <span class="user-you">({{range $k, $m := $v.Members}}{{if $k}}, {{end}}{{$m}}{{else}}nobody{{end}})</span>{{end}}
+      {{- else if not .Direct}}<span class="user-you">nobody</span>{{end -}}
+    </td>
+    <td><div class="user-actions">
       <details class="group-edit group-includes-edit">
-        <summary class="btn" title="Whoever is in a group that {{.Name}} includes is in {{.Name}}">{{if .Includes}}Change…{{else}}Add a group…{{end}}</summary>
+        <summary class="btn" title="Everyone in a group you add here is in {{.Name}}, also who joins it later">{{if .Includes}}Change the groups…{{else}}Add a whole group…{{end}}</summary>
         <form method="post" action="/admin/groups/includes" class="user-groups-form">
           <input type="hidden" name="group" value="{{.Name}}">
           <input type="text" name="includes" value="{{.Includes}}" aria-label="Groups that {{.Name}} includes" placeholder="dev, design" list="user-groups" autocomplete="off" spellcheck="false" size="16">
           <button type="submit" class="btn" aria-label="Save what {{.Name}} includes">Save</button>
         </form>
       </details>
-    </td>
-    <td>
       <details class="group-edit group-rename-edit">
         <summary class="btn" title="Its pages, and the lists that are for it, follow">Rename…</summary>
         <form method="post" action="/groups/{{.Name}}/rename" class="user-groups-form group-rename-form">
@@ -112,7 +113,7 @@
           <button type="submit" class="btn">Rename</button>
         </form>
       </details>
-    </td>
+    </div></td>
   </tr>
   {{- end}}
   </tbody>
@@ -123,7 +124,7 @@
   <input type="text" name="includes" placeholder="includes: dev, design" required list="user-groups" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="The groups it includes">
   <button type="submit" class="btn">Make a group of groups</button>
 </form>
-<p class="users-help">A user is put in a group in the list above; anyone who may write also makes groups of their own on their <a href="/groups">Groups</a> page, and says who is in those (their owners). A group can also be made of other groups: whoever is in one of them is in it, so a task list for two teams is for one group, and who joins a team later is in it at once. Taking a group out takes what is for the larger group from its people.</p>
+<p class="users-help">A user is put in a group in the list above (their Groups field); anyone who may write also makes groups of their own on their <a href="/groups">Groups</a> page, and says who is in those (their owners). A group can also be made of other groups: whoever is in one of them is in it, so a task list for two teams is for one group, and who joins a team later is in it at once. Taking a group out takes what is for the larger group from its people.</p>
 {{- with .Stray}}
 <p class="users-help groups-stray" role="note"><strong>Seen by no one:</strong> {{range $i, $p := .}}{{if $i}}, {{end}}<code>{{$p}}</code>{{end}}. A folder in <code>groups/</code> is for the group of its name, one in <code>private/</code> for the user of its name: put someone in that group, add that user, or move the folder on the host.</p>
 {{- end}}
