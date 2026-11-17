@@ -49,6 +49,9 @@ Markdown joins the lines when it renders them.
 - **Conceptually sound and clean** — a few ideas that hold everywhere (a page's place, a list's members, who may write), each said once and used by every door; a new feature fits them or the ideas change, never a special case beside them.
 - **Nice looking** — clean typography, readable line lengths, good contrast
 - **Searchable** — server-side full-text search across all pages
+- **Scalable** — a wiki stays fast as it grows in pages, tasks and users (tens of thousands of pages, a team of a hundred):
+  a request doesn't cost in proportion to the whole wiki where an index can answer it,
+  and what is said about size is measured, not assumed.
 
 ---
 
