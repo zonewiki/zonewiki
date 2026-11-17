@@ -289,11 +289,16 @@ They are in it and are its **owner**; from the next request `groups/<name>/` is 
 - **A name that is taken is refused** (`groupNameTaken`): a group there is, a name a group is said to include, a folder in `groups/` (a group nobody is in keeps its folder, and a new group of that name would get its pages), or a name a task list is for.
   The groups' names are no secret among a wiki's users (a list's Who it is for… completes from them), so "taken" tells nothing new.
 - **Not for a viewer** (who changes nothing: 403), a visitor, or a wiki without users (404).
-- **What it doesn't do**: change what a group includes (an admin's), or let a member leave by themselves (they ask an owner).
+- **A member leaves by themselves** (`mayLeave`, `leaveGroupOp`; `POST /groups/<group>/leave`): on `/groups` a group that is named on you and that you don't manage has **Leave…**, which asks first and then takes the group's name from your groups, yours alone.
+  You no longer see its pages and lists from your next request; its owners can put you back.
+  Not a group without owners (it is an admin's, and who is in it is the admin's to say), not one you are in only by way of a group it includes (there is nothing of it on you to take off: you leave that one), and not for who manages it (Manage… is their way, where a group keeps an owner).
+- **What it doesn't do**: change what a group includes (an admin's).
 
 **A group renamed** (`renameGroupOp`): **Rename** under Manage… on `/groups`, for its owners, and a Name field per group in the Users tab, for an admin (`POST /groups/<group>/rename`, `name`; `from=admin` answers on the admin page).
 What is the group's by its name goes along, so nobody loses anything: the lists that are for `@old` are for `@new`; the folder `groups/old/` becomes `groups/new/`, every link to its pages re-pointed on pages and in tasks, the files its pages show and those no page shows along, and a home that still says what Zone wrote says the new name; then the settings name it anew, on the users, in the groups that include it and its own section.
-The order is that one: until the settings change nobody is in the new name's group, so what has moved is seen by no one for that moment and never by more; a step that fails puts the ones before it back.
+The order is that one: until the settings change nobody is in the new name's group, so what has moved is seen by no one for that moment and never by more.
+**A step that fails** puts the ones before it back and the rename stops, everything as it was (a page of the group with text not in git yet that can't be committed first: the lists, which were for the new name already, are for the old one again).
+**A step that is made but for its commit** counts as made (`writtenAnyway`): the rename goes on to the settings, or the group's pages were in a folder no group is named as, seen by no one. The page then says both, that the group has its new name and that the change is written but not committed (500), and the files are in the Uncommitted list, as after any write whose commit failed.
 It is up to three commits (the lists, the folder with its links, the files no page shows), by whoever renamed it; an admin who is not in the group moves its pages without seeing any.
 The new name must be free, as a new group's. There is no command for it: a rename writes pages and task files, which only the running server does (One process, in `AGENTS.md`).
 

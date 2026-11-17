@@ -294,3 +294,104 @@ def test_who_is_in_a_group_says_by_which_way_and_a_large_one_is_counted(client, 
     body = page(sign_in(client, "carol"))
     assert who(body, "dev") == "9 people" and "u3" not in body.split('data-group="dev"', 1)[1].split("</li>", 1)[0].split("<details", 1)[0]
     assert who(body, "product") == "9 people (everyone in design and dev, and 1 named on it)"
+
+
+def test_a_member_leaves_a_group(client, wiki):
+    """Who is in a group someone owns takes themselves out on /groups: only
+    themselves, only a group named on them, and not one an admin keeps."""
+    leave = lambda group: client.post(f"/groups/{group}/leave", headers=HOST)
+    sign_in(client, "alice")
+    make(client, "apollo", "bob, carol")
+    assert 'action="/groups/apollo/leave"' not in page(client)           # its owner has Manage…, where a group keeps an owner
+    assert leave("apollo").status_code == 404
+    sign_in(client, "bob")
+    assert until(lambda: 'action="/groups/apollo/leave"' in page(client))
+    assert client.get("/groups/apollo", headers=HOST).status_code == 302
+    before = config(wiki)
+    assert leave("nosuch").status_code == 404 and leave("dev").status_code == 404   # not his; and dev is an admin's
+    assert config(wiki) == before
+    resp = leave("apollo")
+    assert resp.status_code == 303 and resp.headers["Location"] == "/groups?done=left&group=apollo"
+    assert section(wiki, "user bob") == [] and section(wiki, "user carol") == ["groups = apollo, dev"]   # himself alone
+    assert section(wiki, "group apollo") == ["owners = alice"]
+    body = html.unescape(page(client, resp.headers["Location"]))
+    assert "You are no longer in apollo" in body and 'data-group="apollo"' not in body
+    assert until(lambda: client.get("/groups/apollo", headers=HOST).status_code == 404)
+    assert leave("apollo").status_code == 404                            # not twice
+    # The message is said to nobody it isn't true of.
+    sign_in(client, "carol")
+    assert "You are no longer in" not in page(client, "/groups?done=left&group=apollo")
+    # dev has no owner: carol is in it by an admin's word, and stays.
+    assert 'action="/groups/dev/leave"' not in page(client) and leave("dev").status_code == 404
+    # In a group by way of one it includes: there is nothing of it on her to take off.
+    assert 'data-group="product"' in page(client) and leave("product").status_code == 404
+    # Its owner puts bob back.
+    sign_in(client, "alice")
+    assert client.post("/groups/apollo/people", data={"people": "alice, bob, carol", "owners": "alice"}, headers=HOST).status_code == 303
+    assert section(wiki, "user bob") == ["groups = apollo"]
+    # A viewer changes nothing, this neither.
+    assert client.post("/groups/apollo/people", data={"people": "alice, bob, carol, vera", "owners": "alice"}, headers=HOST).status_code == 303
+    sign_in(client, "vera")
+    assert until(lambda: 'data-group="apollo"' in page(client))
+    assert 'action="/groups/apollo/leave"' not in page(client) and leave("apollo").status_code in (403, 404)
+    assert "groups = apollo" in section(wiki, "user vera")
+
+
+def no_commits_of_the_groups_pages(wiki):
+    """From now on git refuses a commit that holds a page of a group's:
+    what a full disk or a broken repository does to one step of a write."""
+    hook = wiki / ".git/hooks/pre-commit"
+    hook.parent.mkdir(exist_ok=True)
+    hook.write_text("#!/bin/sh\nif git diff --cached --name-only | grep -q '^groups/'; then echo 'no room' >&2; exit 1; fi\n")
+    hook.chmod(0o755)
+    return hook
+
+
+def test_a_rename_whose_commit_fails_is_made_all_the_same(client, wiki, apollo):
+    """The folder's move is made but git doesn't take it: the rename goes on
+    to the settings, or the pages were in a folder of no group, seen by no
+    one. It says that the change isn't committed."""
+    hook = no_commits_of_the_groups_pages(wiki)
+    resp = client.post("/groups/apollo/rename", data={"name": "artemis"}, headers=HOST)
+    body = html.unescape(resp.get_data(as_text=True))
+    assert resp.status_code == 500 and "The group is called artemis now" in body and "written but not committed" in body
+    assert section(wiki, "user bob") == ["groups = artemis"] and section(wiki, "group artemis") == ["owners = alice"]
+    assert not (wiki / "groups/apollo").exists() and (wiki / "groups/artemis/roadmap.md").exists()
+    assert (wiki / "plans.md").read_text() == "# Plans\n\nSee [[groups/artemis/roadmap]].\n"
+    assert "groups/artemis/roadmap.md" in git(wiki, "status", "--porcelain")     # in the Uncommitted list
+    for who in ("alice", "bob"):                                         # its people see all of it, under the new name
+        sign_in(client, who)
+        assert until(lambda: client.get("/page/groups/artemis/roadmap", headers=HOST).status_code == 200)
+        assert client.get("/groups/artemis/_assets/spare.png", headers=HOST).data == b"spare"
+        assert "For @artemis" in page(client, "/tasks?list=launch")
+    sign_in(client, "carol")
+    assert client.get("/page/groups/artemis/roadmap", headers=HOST).status_code == 404
+    # Once git works again the next write there commits it.
+    hook.unlink()
+    sign_in(client, "alice")
+    assert client.post("/api/save/groups/artemis/notes", data={"content": "# Notes\n\nmore\n"}, headers=HOST).status_code == 200
+    git(wiki, "add", "-A")
+    git(wiki, "commit", "-q", "-m", "What was left")
+    assert git(wiki, "status", "--porcelain") == ""
+
+
+def test_a_rename_that_cannot_move_the_folder_puts_the_lists_back(client, wiki, apollo):
+    """A page of the group has text not in git yet, and git doesn't take it:
+    nothing may move. The lists, which were for the new name already, are
+    for the old one again, and everything is as it was."""
+    (wiki / "groups/apollo/notes.md").write_text("# Notes\n\nnot in git yet\n")
+    no_commits_of_the_groups_pages(wiki)
+    before = config(wiki)
+    resp = client.post("/groups/apollo/rename", data={"name": "artemis"}, headers=HOST)
+    assert resp.status_code >= 400 and "nothing was changed" in html.unescape(resp.get_data(as_text=True))
+    assert config(wiki) == before
+    assert (wiki / "groups/apollo/roadmap.md").exists() and not (wiki / "groups/artemis").exists()
+    assert (wiki / "groups/apollo/notes.md").read_text() == "# Notes\n\nnot in git yet\n"
+    assert (wiki / "plans.md").read_text() == "# Plans\n\nSee [[groups/apollo/roadmap]].\n"
+    # The lists went there and back: two commits, and they are for @apollo.
+    assert [s for s in git(wiki, "log", "-n2", "--format=%s").splitlines()] == [
+        "The group artemis is called apollo: the lists for it", "The group apollo is called artemis: the lists for it"]
+    for who in ("alice", "bob"):
+        sign_in(client, who)
+        assert "For @apollo" in page(client, "/tasks?list=launch")
+        assert client.get("/page/groups/apollo/roadmap", headers=HOST).status_code == 200

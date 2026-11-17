@@ -587,16 +587,18 @@ func keepPending(path, slug string) (bool, error) {
 // writeError: a write that failed part way: its own commit failed, or one
 // that had to come first (keepPending), or a rename's links couldn't all be
 // re-pointed; msg says what that left. A 500 from a route, a tool error the
-// assistant reads from an MCP tool (handleMCP).
+// assistant reads from an MCP tool (handleMCP). written: the change itself
+// is made, on disk, and what failed is only its commit (notCommitted).
 type writeError struct {
-	msg string
-	err error
+	msg     string
+	err     error
+	written bool
 }
 
 func (e *writeError) Error() string { return e.msg + ": " + e.err.Error() }
 func (e *writeError) Unwrap() error { return e.err }
 
-func writeFailed(msg string, err error) error { return &writeError{msg, err} }
+func writeFailed(msg string, err error) error { return &writeError{msg: msg, err: err} }
 
 // notCommitted: a write's own commit failed (gitCommit): the change is on
 // disk, in the Uncommitted list, but not in the history.
@@ -604,7 +606,16 @@ func notCommitted(err error) error {
 	if err == nil {
 		return nil
 	}
-	return writeFailed("the change is written but not committed", err)
+	return &writeError{msg: "the change is written but not committed", err: err, written: true}
+}
+
+// writtenAnyway: err says a change that is made, with something left to
+// do about it (its commit: notCommitted), not one that wasn't made. What a
+// write of several steps asks before it undoes the steps before: a step
+// that is made is not undone for its commit.
+func writtenAnyway(err error) bool {
+	var we *writeError
+	return errors.As(err, &we) && we.written
 }
 
 // keepPendingPages: keepPending for a write to many pages: those with

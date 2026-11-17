@@ -23,6 +23,15 @@
       {{- else if not .Direct}}nobody{{end}}
       {{- end}}{{with .Owners}} <span class="user-you group-owners">· owned by {{range $i, $o := .}}{{if $i}}, {{end}}{{$o}}{{end}}</span>{{end}}</span>
     <span class="group-pages">{{if not .Member}}{{else if .Pages}}{{.Pages}} page{{if ne .Pages 1}}s{{end}}{{else}}no page yet{{end}}</span>
+    {{- if .Leaves}}
+    <details class="group-manage group-leave">
+      <summary class="btn">Leave…</summary>
+      <form method="post" action="/groups/{{.Name}}/leave" class="group-form">
+        <p class="users-help">Leave {{.Name}}? You no longer see its pages and the lists that are for it, at once. Its owners can put you back.</p>
+        <button type="submit" class="btn btn-danger">Leave {{.Name}}</button>
+      </form>
+    </details>
+    {{- end}}
     {{- if .Manages}}
     <details class="group-manage">
       <summary class="btn">Manage…</summary>

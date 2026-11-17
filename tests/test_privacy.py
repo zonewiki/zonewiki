@@ -1151,7 +1151,7 @@ EXEMPT = {
     "GET /signup", "POST /signup",  # asks for an account by mail, signed out (test_signup.py)
     # The caller's groups: making one, and who is in one they own. A rename moves a group's pages: its own
     # tests ask it as someone who doesn't manage the group, and as an admin who isn't in it (test_groups_own.py)
-    "POST /groups", "POST /groups/{group}/people", "POST /groups/{group}/rename",
+    "POST /groups", "POST /groups/{group}/people", "POST /groups/{group}/rename", "POST /groups/{group}/leave",
     "GET /assistant", "POST /assistant/token", "POST /assistant/revoke",   # the caller's own MCP token, no page (test_assistant.py)
     "GET /password", "POST /password",   # the caller's own password, no page (test_password.py)
     # OAuth: the caller's own connections, no page (test_oauth.py)

@@ -25,6 +25,7 @@ func groupsRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /groups", newGroupRoute)
 	mux.HandleFunc("POST /groups/{group}/people", groupPeopleRoute)
 	mux.HandleFunc("POST /groups/{group}/rename", writesPages(groupRenameRoute))
+	mux.HandleFunc("POST /groups/{group}/leave", groupLeaveRoute)
 }
 
 // namedMost: up to how many people a group is said by their names; a
@@ -60,6 +61,7 @@ type groupLink struct {
 	Member   bool // the user is in it (an owner may be none: no way to its pages then)
 	Owners   []string
 	Manages  bool
+	Leaves   bool // they may take themselves out (mayLeave)
 	// The fields: who is in it by name (not by way of a group it includes),
 	// and its owners.
 	PeopleText, OwnersText string
@@ -75,7 +77,11 @@ func groupsRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	showGroups(w, r, http.StatusOK, groupsDone(q.Get("done"), q.Get("group"), q.Get("left")), "", "", "")
+	done := groupsDone(q.Get("done"), q.Get("group"), q.Get("left"))
+	if g := q.Get("group"); q.Get("done") == "left" && groupNameRE.MatchString(g) && !latestSettings().memberOf(userOf(r), g) {
+		done = "You are no longer in " + g + ": what is for @" + g + " you no longer see. Its owners can put you back."
+	}
+	showGroups(w, r, http.StatusOK, done, "", "", "")
 }
 
 // groupsDone: what the change before did, from a fixed set and names that
@@ -125,7 +131,7 @@ func showGroups(w http.ResponseWriter, r *http.Request, status int, done, refuse
 	for _, g := range mine {
 		who := s.groupMembers(g)
 		link := groupLink{Name: g, Count: len(who), Includes: s.Includes[g], Owners: s.Owners[g],
-			Member: s.memberOf(user, g), Manages: s.managesGroup(user, g)}
+			Member: s.memberOf(user, g), Manages: s.managesGroup(user, g), Leaves: mayLeave(s, user, g)}
 		for _, name := range who {
 			if slices.Contains(s.Users[name].Groups, g) {
 				link.Direct = append(link.Direct, name)
@@ -332,6 +338,34 @@ func groupPeopleOp(user, group, people, owners string) (left []string, err error
 	return leftGroup(before, latestSettings(), group), nil
 }
 
+// mayLeave: user may take themselves out of group: its name is on them
+// (who is in it by way of a group it includes leaves that one), it has
+// owners (a group without is an admin's, and who is in it is the admin's
+// to say), and they don't manage it (who does has Manage…, where a group
+// keeps an owner). A viewer changes nothing.
+func mayLeave(s *Settings, user, group string) bool {
+	u := s.Users[user]
+	return u != nil && !u.Disabled && !s.isViewer(user) && slices.Contains(u.Groups, group) &&
+		len(s.Owners[group]) > 0 && !s.managesGroup(user, group)
+}
+
+// leaveGroupOp takes user out of group, for themselves: the group's name
+// goes from their groups, and with it what is the group's from their sight
+// (to fewer, and only for the one who asks). Its owners put them back.
+func leaveGroupOp(user, group string) error {
+	if !groupNameRE.MatchString(group) || !mayLeave(latestSettings(), user, group) {
+		return errNotFound
+	}
+	return changeSettings(user, func(f *settingsfile.File) error {
+		now := settingsOf(f.Text())
+		if !mayLeave(now, user, group) {
+			return errNotFound
+		}
+		setGroups(f, user, slices.DeleteFunc(slices.Clone(now.Users[user].Groups), func(g string) bool { return g == group }))
+		return nil
+	})
+}
+
 // renameGroupInFile gives the group old the name name wherever the settings
 // file f (whose settings are s) names it: on the users, in the groups that
 // include it, and its own section.
@@ -367,8 +401,10 @@ func renameGroupInFile(f *settingsfile.File, s *Settings, old, name string) {
 // files no page shows), and then the settings name it anew (the users, the
 // groups that include it, its section). Until that last step nobody is in
 // the new name's group, so what has moved is seen by no one for that
-// moment, never by more. A step that fails puts the ones before it back.
-// The caller holds pagesMu.
+// moment, never by more. A step that fails puts the ones before it back;
+// one that is made but for its commit counts as made, and the rename goes
+// on to the settings: it returns the new name with that error, and the
+// change is in the Uncommitted list. The caller holds pagesMu.
 func renameGroupOp(user, old, nameText string) (string, error) {
 	s := latestSettings()
 	if !groupNameRE.MatchString(old) || !slices.Contains(s.groups(), old) || !s.managesGroup(user, old) {
@@ -397,29 +433,40 @@ func renameGroupOp(user, old, nameText string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// A step that fails undoes the ones before it and stops. One that is
+	// made but for its commit (writtenAnyway) is made: the rename goes on,
+	// since stopping there would leave the group's lists or pages under a
+	// name the settings don't know, seen by no one, and says so at the end.
+	var uncommitted error
 	if err := renameGroupInLists(user, old, name); err != nil {
-		return "", err
+		if !writtenAnyway(err) {
+			return "", err
+		}
+		uncommitted = err
 	}
 	if err := moveGroupFolder(user, old, name); err != nil {
-		if back := renameGroupInLists(user, name, old); back != nil {
-			logf("renaming the group %s to %s failed (%v), and its lists are for @%s still: %v", old, name, err, name, back)
+		if !writtenAnyway(err) {
+			if back := renameGroupInLists(user, name, old); back != nil && !writtenAnyway(back) {
+				logf("renaming the group %s to %s failed (%v), and its lists are for @%s still: %v", old, name, err, name, back)
+			}
+			return "", err
 		}
-		return "", err
+		uncommitted = errOr(uncommitted, err)
 	}
 	err = changeSettings(user, func(f *settingsfile.File) error {
 		renameGroupInFile(f, settingsOf(f.Text()), old, name)
 		return nil
 	})
 	if err != nil {
-		if back := moveGroupFolder(user, name, old); back != nil {
+		if back := moveGroupFolder(user, name, old); back != nil && !writtenAnyway(back) {
 			logf("renaming the group %s to %s failed (%v), and its pages are in %s/%s still: %v", old, name, err, groupsDir, name, back)
 		}
-		if back := renameGroupInLists(user, name, old); back != nil {
+		if back := renameGroupInLists(user, name, old); back != nil && !writtenAnyway(back) {
 			logf("renaming the group %s to %s failed (%v), and its lists are for @%s still: %v", old, name, err, name, back)
 		}
 		return "", err
 	}
-	return name, nil
+	return name, uncommitted
 }
 
 // errOr: err, or other when there is none.
@@ -480,14 +527,18 @@ func moveGroupFolder(user, old, name string) error {
 		}
 	}
 	what := "The group " + old + " is called " + name
+	var after error // the pages moved, but not all of it is committed
 	if len(paths) > 0 {
 		if _, err := keepPendingPages(paths, folder+"/"); err != nil {
 			return err
 		}
 		if _, _, err := moveFolder(user, folder, newFolder, what+": "+folder+"/ is "+newFolder+"/"); err != nil {
-			if _, linksOnly := err.(*linksLeft); !linksOnly {
-				return err
+			if _, linksOnly := err.(*linksLeft); !linksOnly && !writtenAnyway(err) {
+				return err // nothing moved
 			}
+			// The pages moved: the rest of the folder follows them, and what
+			// went wrong (a link, the commit) is said after.
+			after = err
 			logf("renaming the group %s to %s: %v", old, name, err)
 		}
 	}
@@ -541,7 +592,14 @@ func moveGroupFolder(user, old, name string) error {
 			return err
 		}
 	}
-	return moveErr
+	if writtenAnyway(after) {
+		return after
+	}
+	if moveErr != nil {
+		// The pages are in the new folder: the group has moved, but for a file.
+		return &writeError{msg: "the group's pages are in " + newFolder + "/, but a file stayed in " + folder + "/", err: moveErr, written: true}
+	}
+	return nil
 }
 
 // noGroupsHere: the request is by no user who can use the wiki (a wiki
@@ -595,6 +653,20 @@ func groupPeopleRoute(w http.ResponseWriter, r *http.Request) {
 		http.StatusSeeOther)
 }
 
+// groupLeaveRoute: POST /groups/{group}/leave: whoever asks is no longer
+// in the group (leaveGroupOp).
+func groupLeaveRoute(w http.ResponseWriter, r *http.Request) {
+	if noGroupsHere(w, r) {
+		return
+	}
+	group := r.PathValue("group")
+	if err := leaveGroupOp(userOf(r), group); err != nil {
+		refuseGroups(w, r, err, "", "")
+		return
+	}
+	http.Redirect(w, r, "/groups?done=left&group="+url.QueryEscape(group), http.StatusSeeOther)
+}
+
 // groupRenameRoute: POST /groups/{group}/rename: the group's new name
 // (renameGroupOp). from=admin goes back to the admin page, where an admin
 // renames a group they are not in.
@@ -603,6 +675,16 @@ func groupRenameRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name, err := renameGroupOp(userOf(r), r.PathValue("group"), r.PostFormValue("name"))
+	if err != nil && name != "" {
+		// Renamed, but not all of it is committed: the page says both.
+		done := groupsDone("renamed", name, "")
+		if r.PostFormValue("from") == "admin" && settings().isAdmin(userOf(r)) {
+			showUsers(w, r, http.StatusInternalServerError, done, err.Error())
+			return
+		}
+		showGroups(w, r, http.StatusInternalServerError, done, err.Error(), "", "")
+		return
+	}
 	if err != nil {
 		if r.PostFormValue("from") == "admin" && settings().isAdmin(userOf(r)) {
 			if ref, ok := refusalOf(err); !ok || ref.kind != refusedNotFound {
