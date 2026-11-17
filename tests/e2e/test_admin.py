@@ -51,3 +51,41 @@ def test_a_reset_link_works_in_a_browser(admin, wiki):
     admin.locator("input[name=again]").fill("a new password")
     admin.get_by_role("button", name="Set the password").click()
     expect(admin.locator(".top-user")).to_have_attribute("title", "bob")
+
+
+def test_change_and_set_show_once_a_field_is_edited(admin, wiki):
+    """An untouched row has no buttons beside its role and its groups; an
+    edit shows the one beside it, and taking the edit back hides it again."""
+    row = admin.locator("tr", has_text="bob")
+    change, set_ = row.get_by_role("button", name="Change", exact=True), row.get_by_role("button", name="Set", exact=True)
+    expect(change).to_be_hidden()
+    expect(set_).to_be_hidden()
+    before = row.bounding_box()
+    row.locator("select").select_option("viewer")
+    expect(change).to_be_visible()
+    expect(set_).to_be_hidden()
+    assert row.bounding_box() == before                      # the button had its place: nothing moves
+    assert "role" not in (wiki.root / ".zone" / "config").read_text().split("[user bob]")[1]   # picking saved nothing
+    row.locator("select").select_option("editor")
+    expect(change).to_be_hidden()
+    groups = row.locator('input[name="groups"]')
+    groups.fill("dev")
+    expect(set_).to_be_visible()
+    groups.fill("")
+    expect(set_).to_be_hidden()
+    groups.fill("dev")
+    groups.press("Enter")                                     # Enter saves, as the button does
+    admin.wait_for_url("**/admin/users?done=groups**")
+    assert "groups = dev" in (wiki.root / ".zone" / "config").read_text()
+    row = admin.locator("tr", has_text="bob").first
+    expect(row.get_by_role("button", name="Set", exact=True)).to_be_hidden()
+    row.locator("select").select_option("viewer")
+    row.get_by_role("button", name="Change", exact=True).click()
+    admin.wait_for_url("**/admin/users?done=role**")
+    assert "role = viewer" in (wiki.root / ".zone" / "config").read_text()
+    # The Groups part's fields do the same; making a new group of groups keeps its button.
+    includes = admin.locator(".groups-table tr", has_text="dev")
+    expect(includes.get_by_role("button", name="Set", exact=True)).to_be_hidden()
+    includes.locator('input[name="includes"]').fill("ops")
+    expect(includes.get_by_role("button", name="Set", exact=True)).to_be_visible()
+    expect(admin.get_by_role("button", name="Make a group of groups")).to_be_visible()

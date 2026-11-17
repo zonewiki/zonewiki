@@ -1551,6 +1551,8 @@ kbd {
 .share-form { display: flex; flex-direction: column; gap: .5rem; }
 .share-choice { display: flex; gap: .5rem; align-items: baseline; cursor: pointer; }
 .share-choice code { display: block; font-size: .8rem; color: var(--muted); background: none; padding: 0; }
+/* The admin page's Change and Set: there once the field beside them is edited (js/admin.js). */
+.saves-when-edited:not(.edited) [type=submit] { visibility: hidden; }
 .user-also { display: block; color: var(--muted); font-size: .8rem; margin-top: .15rem; }
 .groups-new { margin-top: .75rem; }
 .user-fact { font-size: .7rem; padding: 0 .3rem; border: 1px solid var(--border); border-radius: 4px; color: var(--muted); font-weight: normal; }

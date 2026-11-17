@@ -352,7 +352,8 @@ It has section tabs (`adminTabs`), of which **Users** (`/admin/users`, `users.ht
   A slip there would lock them out of the wiki, and it would only be allowed with another admin left, who can do it.
   They can still change their own role, to step down while another admin remains.
   As the last user is always the admin themselves, this is also why the last user can't be removed here.
-- **Plain forms**: each change is a POST (behind the Origin check, like every write), and the page works without JavaScript, which only opens the Remove dialog.
+- **Plain forms**: each change is a POST (behind the Origin check, like every write), and the page works without JavaScript, which opens the Remove dialog and keeps the list quiet:
+  **a row's Change and Set show once the field beside them is edited** (`js/admin.js`, `.saves-when-edited`; hidden, not gone, so nothing moves), and hide again when the edit is taken back. Picking a role saves nothing by itself; Enter in a field saves as its button does. Without JavaScript the buttons are there all along.
   Done, it answers with a redirect to `/admin/users?done=…&user=…`, and the page says what was done from a fixed set of messages, so a link can't make it say anything else.
   Refused, the page comes back (409) saying why.
   An admin who demoted themselves is sent to the home page.

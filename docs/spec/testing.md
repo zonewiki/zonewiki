@@ -198,7 +198,7 @@ a refusal that tells nothing of another user's folder,
 and the interface (no Edit, ✎ or Rename, the editor 403, no Private or Notes, no writing tools in `tools/list`).
 `tests/test_admin.py` covers the admin page and its Users tab (only admins, `/admin` opening the first tab, 404 for everyone else and without users, the Origin check, role, groups, a group made of groups (set, refused where it would include itself, who is no longer in it said), disable, enable, remove, refusals: the last admin, the last user, disabling or removing yourself, a change meanwhile kept;
 the commit's author;
-the top row) and `tests/e2e/test_admin.py` the Remove dialog and your own row in the browser,
+the top row) and `tests/e2e/test_admin.py` the Remove dialog, your own row and the buttons that show once a field is edited, in the browser,
 and invite and reset links (the welcome page changes nothing until its form, once only, a role, a reset ending the old sessions, revoke, replacing, expiry, throttling, the cap per admin);
 `go/configfile_test.go`'s `TestUserRoles`, `TestUserLinks` and `TestRolesInTheFile` the commands and the keys;
 `go/gitstore_test.go`'s `TestMissingUsers` the start-up guard.

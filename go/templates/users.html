@@ -1,6 +1,7 @@
 {{- /* /admin/users: the admin page's Users tab (admin.go, docs/spec/users.md).
     Plain forms: each change is a POST, and the page comes back saying what
-    it did or why it didn't. Remove asks first: in the dialog at the end
+    it did or why it didn't. A row's Change and Set show once its field is
+    edited (js/admin.js); without JavaScript they are there all along. Remove asks first: in the dialog at the end
     (js/admin.js), or without JavaScript in its <details>. */ -}}
 {{define "body"}}
 {{.BreadcrumbHTML}}

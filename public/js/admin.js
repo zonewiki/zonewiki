@@ -24,3 +24,23 @@ if (dialog) {
   document.getElementById('user-remove-cancel').addEventListener('click', () => dialog.close());
   closeOnBackdropClick(dialog);
 }
+
+// A row's Change and Set show once its field says something else than the
+// file does: an untouched list is names, roles and groups, no buttons. The
+// button keeps its place (hidden, not gone), so the table doesn't move, and
+// a change still takes a second step: picking a role saves nothing by
+// itself. Enter in a field saves as before. Without JavaScript the buttons
+// are there all along.
+for (const form of document.querySelectorAll('.user-role-form')) {
+  const field = form.querySelector('select, input[type=text]');
+  const button = form.querySelector('[type=submit]');
+  if (!field || !button) continue;
+  const saved = field.tagName === 'SELECT'
+    ? [...field.options].find(o => o.defaultSelected)?.value ?? field.value
+    : field.defaultValue;
+  const show = () => form.classList.toggle('edited', field.value.trim() !== saved.trim());
+  form.classList.add('saves-when-edited');
+  field.addEventListener('input', show);
+  field.addEventListener('change', show);
+  show();   // a value the browser kept from before a reload
+}
