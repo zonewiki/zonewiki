@@ -164,7 +164,7 @@ def test_several_groups_are_listed(page, wiki, monkeypatch):
     menu.get_by_role("menuitem", name="All your groups").click()
     page.wait_for_url("**/groups")
     expect(page.locator(".groups-list .group-name")).to_have_text(["👥 dev", "👥 ops", "👥 product"])
-    expect(page.locator(".groups-list li").last).to_contain_text("alice, bob")
+    expect(page.locator(".groups-list li").last).to_contain_text("everyone in design (bob) and dev (alice)")   # by which way
     page.locator(".groups-list a").last.click()
     page.wait_for_url("**/page/groups/product/index")
     expect(page.locator("h1 .group-mark")).to_have_text("👥 product")

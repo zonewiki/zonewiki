@@ -670,7 +670,9 @@ def test_the_place_is_named_not_the_path(client, wiki):
     assert '<span class="module-label">Groups</span>' in switch              # several: the pill says Groups, and has them as a menu
     assert re.findall(r'<a href="(/groups[^"]*)" role="menuitem"', switch) == ["/groups/dev", "/groups/ops", "/groups/product", "/groups"]
     assert re.findall(r'<a href="/groups/([\w-]+)"><span class="group-name">', body) == ["dev", "ops", "product"]
-    assert "alice, carol, vera" in body and "(whoever is in dev)" in body and "5 pages" in body and "no page yet" in body
+    who = lambda g: " ".join(re.sub(r"<[^>]+>", "", body.split('data-group="%s"' % g, 1)[1].split('<span class="group-who">', 1)[1].split('<span class="group-pages">', 1)[0]).split())
+    assert who("dev") == "alice, carol, vera" and who("product") == "everyone in dev (alice, carol, vera)"   # by which way
+    assert "5 pages" in body and "no page yet" in body
     assert 'data-module="groups" title="Your groups: dev, ops, product" aria-current="page"' in body
     # Who is in no group has no Groups, and a page of a group's name tells them nothing.
     sign_in(client, "bob")

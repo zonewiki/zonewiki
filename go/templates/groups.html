@@ -15,7 +15,13 @@
   {{- range .Groups}}
   <li data-group="{{.Name}}">
     {{- if .Member}}<a href="/groups/{{.Name}}"><span class="group-name">👥 {{.Name}}</span></a>{{else}}<span class="group-name" title="You own this group and are not in it: you don't see its pages">👥 {{.Name}}</span>{{end}}
-    <span class="group-who">{{if .Who}}{{range $i, $w := .Who}}{{if $i}}, {{end}}{{$w}}{{end}}{{else if .Count}}{{.Count}} people{{else}}nobody{{end}}{{with .Includes}} <span class="user-you">(whoever is in {{range $i, $g := .}}{{if $i}} or {{end}}{{$g}}{{end}})</span>{{end}}{{with .Owners}} <span class="user-you group-owners">· owned by {{range $i, $o := .}}{{if $i}}, {{end}}{{$o}}{{end}}</span>{{end}}</span>
+    <span class="group-who">
+      {{- $named := .Named}}{{if .Counted}}{{.Count}} people{{with .Includes}} <span class="user-you">(everyone in {{range $i, $g := .}}{{if $i}} and {{end}}{{$g}}{{end}}{{if $named}}, and {{$named}} named on it{{end}})</span>{{end}}
+      {{- else}}
+      {{- range $i, $w := .Direct}}{{if $i}}, {{end}}{{$w}}{{end}}
+      {{- if .Via}}{{if .Direct}}, and {{end}}everyone in {{range $i, $v := .Via}}{{if $i}} and {{end}}<span class="group-via">{{$v.Name}}</span> <span class="user-you">({{range $k, $m := $v.Members}}{{if $k}}, {{end}}{{$m}}{{else}}nobody{{end}})</span>{{end}}
+      {{- else if not .Direct}}nobody{{end}}
+      {{- end}}{{with .Owners}} <span class="user-you group-owners">· owned by {{range $i, $o := .}}{{if $i}}, {{end}}{{$o}}{{end}}</span>{{end}}</span>
     <span class="group-pages">{{if not .Member}}{{else if .Pages}}{{.Pages}} page{{if ne .Pages 1}}s{{end}}{{else}}no page yet{{end}}</span>
     {{- if .Manages}}
     <details class="group-manage">

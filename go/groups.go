@@ -43,13 +43,18 @@ type groupsView struct {
 	NewName, NewPeople string
 }
 
-// groupLink: a group as /groups lists it: who is in it (by name up to
-// namedMost, else Count alone), the groups it is made of, how many pages
-// its folder holds, its owners, and for who manages it the fields' values.
+// groupLink: a group as /groups lists it: who is in it and by which way (up
+// to namedMost by name: those it is named on, Direct, then each group it
+// includes with its people, Via; a larger one by Count, with how many it is
+// named on), the groups it is made of, how many pages its folder holds, its
+// owners, and for who manages it the fields' values.
 type groupLink struct {
 	Name     string
-	Who      []string
-	Count    int
+	Direct   []string
+	Via      []groupVia
+	Count    int  // everyone in it, by whatever way
+	Named    int  // of them, those it is named on
+	Counted  bool // too many to name: Count says it
 	Includes []string
 	Pages    int
 	Member   bool // the user is in it (an owner may be none: no way to its pages then)
@@ -121,8 +126,18 @@ func showGroups(w http.ResponseWriter, r *http.Request, status int, done, refuse
 		who := s.groupMembers(g)
 		link := groupLink{Name: g, Count: len(who), Includes: s.Includes[g], Owners: s.Owners[g],
 			Member: s.memberOf(user, g), Manages: s.managesGroup(user, g)}
+		for _, name := range who {
+			if slices.Contains(s.Users[name].Groups, g) {
+				link.Direct = append(link.Direct, name)
+			}
+		}
+		link.Named = len(link.Direct)
 		if len(who) <= namedMost {
-			link.Who = who
+			for _, in := range s.Includes[g] {
+				link.Via = append(link.Via, groupVia{in, s.groupMembers(in)})
+			}
+		} else {
+			link.Direct, link.Counted = nil, true
 		}
 		if link.Member {
 			link.Pages = len(pagesIn(rq, groupsDir+"/"+g))

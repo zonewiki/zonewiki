@@ -275,3 +275,22 @@ def test_a_rename_is_its_owners_and_an_admins(client, wiki, apollo):
     assert resp.status_code == 409 and "is taken" in resp.get_data(as_text=True) and "Admin" in resp.get_data(as_text=True)
     sign_in(client, "carol")
     assert until(lambda: "onlydev" in page(client, "/page/groups/core/notes"))
+
+
+def test_who_is_in_a_group_says_by_which_way_and_a_large_one_is_counted(client, wiki, monkeypatch):
+    """/groups names the people a group is named on, then each group it
+    includes with its people; past eight it says how many, and how."""
+    who = lambda body, g: " ".join(re.sub(r"<[^>]+>", "", body.split(f'data-group="{g}"', 1)[1].split(
+        '<span class="group-who">', 1)[1].split('<span class="group-pages">', 1)[0]).split())
+    monkeypatch.setattr(settings, "USER_SETTINGS", {"carol": {"groups": "dev, product"}, "bob": {"groups": "design"},
+                                                    "alice": {"groups": "dev"}, "dana": {"role": "admin"}})
+    body = page(sign_in(client, "carol"))
+    assert who(body, "dev") == "alice, carol"
+    assert who(body, "product") == "carol, and everyone in design (bob) and dev (alice, carol)"
+    many = {f"u{n}": (f"u{n}-pw", f"u{n}-token") for n in range(8)}
+    monkeypatch.setattr(settings, "USERS", {**USERS, **many})
+    monkeypatch.setattr(settings, "USER_SETTINGS", {"carol": {"groups": "dev, product"}, "dana": {"role": "admin"},
+                                                    **{name: {"groups": "dev"} for name in many}})
+    body = page(sign_in(client, "carol"))
+    assert who(body, "dev") == "9 people" and "u3" not in body.split('data-group="dev"', 1)[1].split("</li>", 1)[0].split("<details", 1)[0]
+    assert who(body, "product") == "9 people (everyone in design and dev, and 1 named on it)"

@@ -1587,7 +1587,7 @@ kbd {
 .group-edit { display: inline-block; vertical-align: top; }
 .group-edit > summary { font-size: .8rem; cursor: pointer; }
 .group-edit[open] > form { margin-top: .4rem; }
-.users-table .group-via { font-weight: 600; }
+.users-table .group-via, .groups-list .group-via { font-weight: 600; }
 .user-remove-body { margin-top: .4rem; max-width: 22rem; font-size: .9rem; }
 .users-done, .users-error { padding: .5rem .75rem; border-radius: 6px; }
 .users-done { background: var(--code-bg); }
