@@ -700,3 +700,38 @@ def test_the_admin_page_names_the_folders_no_one_sees(client, wiki):
     body = client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True)
     assert "Nobody is in dev now: its pages stay in the wiki, in groups/dev/, seen by no one." in body
     assert "<code>groups/dev</code>" in body
+
+
+# ── Assistants ───────────────────────────────────────────────────────────────
+
+def test_an_assistant_is_told_who_sees_a_page(client, wiki):
+    """With the instructions, for a user in a group, and with every answer
+    about a page that isn't everyone's: the folder decides who reads it."""
+    def instructions(who):
+        resp = client.post("/mcp", headers={**HOST, "Authorization": f"Bearer {USERS[who][1]}"}, json={
+            "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {}}})
+        return resp.get_json()["result"]["instructions"]
+    said = instructions("alice")
+    assert ("Where a page is kept is who sees it: private/alice/ only this user, groups/dev/ the people in that group, "
+            "anywhere else everyone who uses the wiki.") in said and "never back" in said
+    assert "groups/" not in instructions("bob") and "groups/" not in instructions("dana")
+    line = "seen by: the group @dev only (alice, carol and vera; its folder is groups/dev/). Not for a page or task outside the group"
+    assert line in mcp(client, "alice", "read_page", slug=DIARY)
+    ids = re.findall(r"[\w/-]+:[0-9a-f]{8}", mcp(client, "alice", "read_guides", slug=f"{GROUP}/retro"))
+    made = mcp(client, "alice", "write_page", slug=f"{GROUP}/retro", content="# Retro\n\nWent well.\n", guides=ids)
+    assert "Created page groups/dev/retro." in made and line in made
+    assert (wiki / GROUP / "retro.md").exists() and git(wiki, "log", "-n1", "--format=%an") == "alice"
+    assert "seen by" not in mcp(client, "alice", "read_page", slug="plans")
+    hers = mcp(client, "alice", "write_page", slug="private/alice/own", content="# Own\n")
+    assert "seen by: only alice (a private page, in private/alice/)" in hers
+    # Moved out to everyone, the line goes; its refusal the other way says why.
+    moved = rename(client, "alice", f"{GROUP}/retro", "retro")
+    assert "Renamed page" in moved and "seen by" not in moved
+    assert "a shared page stays shared" in rename(client, "alice", "retro", f"{GROUP}/retro")
+    # Who isn't in the group is told what is theirs, not what there is.
+    refused = mcp(client, "bob", "write_page", slug=f"{GROUP}/sneak", content="# Sneak\n")
+    assert "you are in no group" in refused and not (wiki / GROUP / "sneak.md").exists()
+    tools = client.post("/mcp", headers={**HOST, "Authorization": "Bearer alice-token"}, json={
+        "jsonrpc": "2.0", "id": 1, "method": "tools/list"}).get_json()["result"]["tools"]
+    described = {t["name"]: json.dumps(t) for t in tools}
+    assert "A page moves to more people, never to fewer." in described["rename_page"]

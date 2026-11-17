@@ -669,6 +669,8 @@ There is nothing to set up for the folder itself: it is the folder of the group 
 - **Tasks are not kept there**: a group's tasks are a list for the group (`"for": ["@dev"]`, Lists for some in `docs/spec/tasks.md`), which a page in the folder can show (`[[tasks: list=dev]]`).
   A `[[task:…]]` on a group's page counts as its title in search only for a task everyone sees, as on a shared page.
 - **What Zone didn't see saved** in a group's folder (written on disk) has no known author: before a write by someone who isn't in the group re-points links there, it is committed as Zone's ("Save 3 files in groups/dev"), so nobody's commit carries text they don't see (`commitOthersDrafts`).
+- **Assistants** (`docs/spec/mcp.md`): a group's page is a page at a path, so there is nothing new to call: `write_page` with `groups/dev/…` makes one, `rename_page` moves one (to more people, never to fewer), `upload_file` with `page` keeps a file with it.
+  An assistant is told who sees a page with every answer about one that isn't everyone's ("seen by: the group @dev only …"), and the instructions name the folders of the groups its user is in.
 - **What it is not**: encrypted, or hidden from whoever has the wiki's folder or its repository (as private pages).
   Not a folder for named people, or one whose readers some of its members only are: a group is who it is for.
 - **Tests**: `tests/test_group_pages.py` gives the group dev a page (committed, deleted, uncommitted), an upload and a guide holding a word no answer to anyone else may contain, and runs the probes of `tests/test_privacy.py`, aimed at the group's folder, as an editor and as an admin who are not in it: every route and MCP read tool, and every write (the folder's files stay byte for byte).

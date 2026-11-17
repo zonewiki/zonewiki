@@ -173,7 +173,7 @@ func handleMCP(message json.RawMessage, user string, callTool func(name string, 
 			res.ProtocolVersion = v
 		}
 		res.ServerInfo.Name, res.ServerInfo.Title, res.ServerInfo.Version = "zonewiki", "Zone wiki", version
-		res.Instructions = instructionsWithGuide()
+		res.Instructions = instructionsWithGuide(user)
 		return rpcResult(id, res), nil
 	case "ping":
 		return rpcResult(id, struct{}{}), nil

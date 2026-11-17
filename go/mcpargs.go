@@ -173,7 +173,21 @@ func hostFile(slug string) string {
 }
 
 func pageInfo(slug, base string) string {
-	return "url: " + base + pathURL("page", slug) + "\nfile: " + hostFile(slug)
+	return "url: " + base + pathURL("page", slug) + "\nfile: " + hostFile(slug) + pageSeenBy(slug)
+}
+
+// pageSeenBy: a line saying who sees the page slug, when it isn't everyone
+// ("" for a shared page): what an assistant must know before it quotes the
+// page elsewhere, or links to it from a page more people read.
+func pageSeenBy(slug string) string {
+	switch p := placeOf(slug); p.kind {
+	case ofUser:
+		return "\nseen by: only " + p.name + " (a private page, in " + p.folder() + "/)"
+	case ofGroup:
+		return "\nseen by: the group @" + p.name + " only (" + strings.TrimSuffix(strings.TrimSuffix(groupWho(p.name), " sees"), " see") +
+			"; its folder is " + p.folder() + "/). Not for a page or task outside the group"
+	}
+	return ""
 }
 
 // readPageText: a page's text, undecodable bytes as U+FFFD.

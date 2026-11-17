@@ -659,7 +659,7 @@
  {
   "name": "rename_page",
   "title": "Rename or move a page",
-  "description": "Rename a page or move it to another folder. Every link to it, on pages and in tasks, is changed to the new name. A folder ('projects/', with the slash) moves with all its pages and subfolders, in one commit.",
+  "description": "Rename a page or move it to another folder. Every link to it, on pages and in tasks, is changed to the new name. A folder ('projects/', with the slash) moves with all its pages and subfolders, in one commit. A page moves to more people, never to fewer.",
   "inputSchema": {
    "type": "object",
    "properties": {

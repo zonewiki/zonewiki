@@ -125,7 +125,7 @@ func TestLongGuidesAreCut(t *testing.T) {
 	testWiki(t, map[string]string{"wiki-guide": "# Wiki guide\n\n" + strings.Repeat("x", 100),
 		"tickets/CLAUDE": "# Tickets\n\nOne folder per ticket.\n", "tickets/bug-1": "# Bug\n"})
 	set(t, &guideChars, 20)
-	if got := instructionsWithGuide(); !strings.HasSuffix(got, "\n\n# Wiki guide\n\nxxxxxx\n\n[… cut here: read_page \"wiki-guide\" for the rest]") {
+	if got := instructionsWithGuide(""); !strings.HasSuffix(got, "\n\n# Wiki guide\n\nxxxxxx\n\n[… cut here: read_page \"wiki-guide\" for the rest]") {
 		t.Errorf("instructions: %q", got[len(got)-100:])
 	}
 	set(t, &folderGuideChars, 10)

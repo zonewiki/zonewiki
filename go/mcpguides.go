@@ -345,7 +345,31 @@ func guideNote(slug, user string) string {
 
 // instructionsWithGuide: the server's instructions for initialize, plus the
 // wiki's guide, or, without one, a nudge to start it.
-func instructionsWithGuide() string {
+func instructionsWithGuide(user string) string {
+	return instructionsFor(mcpInstructions + groupsNote(user))
+}
+
+// groupsNote: for a user who is in a group, where its pages are and who
+// sees them, said with the instructions: an assistant that files a page
+// must know that the folder decides who reads it.
+func groupsNote(user string) string {
+	u := settings().Users[user]
+	if u == nil || len(u.In) == 0 {
+		return ""
+	}
+	folders := make([]string, len(u.In))
+	for i, g := range u.In {
+		folders[i] = groupsDir + "/" + g + "/"
+	}
+	return "\n\nWhere a page is kept is who sees it: " + privateDir + "/" + user + "/ only this user, " +
+		strings.Join(folders, ", ") + " the people in that group, anywhere else everyone who uses the wiki. " +
+		"File what is meant for a group in its folder, and don't copy from a narrower place into a wider one unless the user says so; " +
+		"a page moves to more people, never back."
+}
+
+// instructionsFor: base (the server's instructions, with what holds for
+// this user) and the wiki's guide, or the nudge to start one.
+func instructionsFor(base string) string {
 	guide := ""
 	if p := safePath(guideSlug); p != "" {
 		if text, err := readPageText(p); err == nil {
@@ -353,7 +377,7 @@ func instructionsWithGuide() string {
 		}
 	}
 	if guide == "" {
-		return mcpInstructions + "\n\nThis wiki has no guide yet. When the user tells you " +
+		return base + "\n\nThis wiki has no guide yet. When the user tells you " +
 			"how they want it kept (where things go, which tags, page layouts, what stays " +
 			"private), offer to write that down on the page 'wiki-guide': it is shown to " +
 			"you at the start of every session."
@@ -361,7 +385,7 @@ func instructionsWithGuide() string {
 	guide = cutRunes(guide, guideChars, "\n\n[… cut here: read_page \"wiki-guide\" for the rest]")
 	// Some clients cut the instructions (Claude Code at about 2 KB), and so
 	// the guide; the instructions point to read_guides, which gives it whole.
-	return mcpInstructions + "\n\nThe user's guide for this wiki (the page 'wiki-guide'; " +
+	return base + "\n\nThe user's guide for this wiki (the page 'wiki-guide'; " +
 		"read_guides gives it too if this is cut). Follow it; where it differs from the advice " +
 		"above, it wins. When the user settles a new convention, offer to add it there.\n\n" + guide
 }
