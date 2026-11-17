@@ -174,6 +174,7 @@ WRITES = [
     ("POST /groups/{group}/people", "POST", "/groups/dev/people", {"data": {"people": "carol", "owners": "carol"}}),
     ("POST /groups/{group}/rename", "POST", "/groups/dev/rename", {"data": {"name": "carols"}}),
     ("POST /groups/{group}/leave", "POST", "/groups/dev/leave", {}),
+    ("POST /groups/{group}/remove", "POST", "/groups/dev/remove", {"data": {"pages": "delete"}}),
 ]
 
 # Writes that change nothing shared, or are someone else's to check.

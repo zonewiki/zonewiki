@@ -339,3 +339,26 @@ def test_a_name_field_takes_only_users_and_groups_there_are(page, wiki, monkeypa
     row.locator('form[action="/groups/includes"]').get_by_role("button", name="Save").click()
     expect(page.locator(".users-done")).to_contain_text("dev includes design")
     assert "[group dev]\nincludes = design" in (wiki.root / ".zone/config").read_text()
+
+
+def test_remove_a_group_and_move_its_pages_to_the_wiki(page, wiki, monkeypatch):
+    """Remove, under Manage… of a group you own: with pages it asks what
+    becomes of them, and moved they are in a folder of the wiki for everyone."""
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "t1"), "bob": ("pw", "t2")})
+    page.request.post("/login", form={"username": "alice", "password": "pw"})
+    assert page.request.post("/groups", form={"name": "apollo", "people": "bob"}).ok
+    page.goto("/groups/apollo")                               # its home, made on the first visit
+    page.wait_for_url("**/page/groups/apollo/index")
+    page.goto("/groups")
+    row = page.locator('.groups-list li[data-group="apollo"]')
+    row.locator("summary").click()                            # Manage…
+    form = row.locator(".group-remove form")
+    expect(form).to_contain_text("1 page will be seen and changed by everyone who uses this wiki")
+    form.get_by_role("button", name="Remove apollo").click()   # nothing chosen: the browser keeps the form
+    assert "[group apollo]" in (wiki.root / ".zone" / "config").read_text()
+    form.get_by_role("radio").first.check()
+    form.get_by_label("The folder the pages go to").fill("space")
+    form.get_by_role("button", name="Remove apollo").click()
+    expect(page.locator(".users-done")).to_contain_text("Removed the group apollo: its pages are in space/ now")
+    expect(page.locator('.groups-list li[data-group="apollo"]')).to_have_count(0)
+    assert (wiki.root / "space/index.md").exists() and not (wiki.root / "groups/apollo").exists()

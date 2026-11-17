@@ -439,3 +439,130 @@ def test_a_rename_that_cannot_move_the_folder_puts_the_lists_back(client, wiki, 
         sign_in(client, who)
         assert "For @apollo" in page(client, "/tasks?list=launch")
         assert client.get("/page/groups/apollo/roadmap", headers=HOST).status_code == 200
+
+
+# ── A group ended ────────────────────────────────────────────────────────────
+
+def remove(client, group, **data):
+    return client.post(f"/groups/{group}/remove", data=data, headers=HOST)
+
+
+def said(resp):
+    return html.unescape(resp.get_data(as_text=True))
+
+
+def test_a_list_for_the_group_keeps_it(client, wiki, apollo):
+    """A list has its own owners and its own For: the group isn't removed
+    while one is for it, and nothing changes."""
+    before, head = config(wiki), git(wiki, "rev-parse", "HEAD")
+    resp = remove(client, "apollo", pages="delete")
+    assert resp.status_code == 409 and "A task list is for @apollo (#launch)" in said(resp)
+    assert "A task list is for @apollo (#launch)" in page(client)          # said under Manage… too
+    assert config(wiki) == before and git(wiki, "rev-parse", "HEAD") == head and (wiki / "groups/apollo/roadmap.md").exists()
+
+
+@pytest.fixture()
+def free(client, wiki, apollo):
+    """apollo with nothing left that keeps it: its list is for everyone, and program no longer includes it."""
+    assert client.post("/tasks/list-for", data={"list": "launch", "for": ""}, headers=HOST).status_code == 302
+    sign_in(client, "dana")
+    assert client.post("/groups/includes", data={"group": "program", "includes": ""}, headers=HOST).status_code == 303
+    sign_in(client, "alice")
+    assert until(lambda: 'action="/groups/apollo/remove"' in page(client))
+
+
+def test_a_group_with_pages_asks_what_becomes_of_them(client, wiki, free):
+    body = page(client)
+    assert 'name="pages" value="move" required' in body and 'name="pages" value="delete" required' in body
+    assert 'name="folder" value="apollo"' in body and "3 pages will be seen and changed by everyone" in body
+    before, head = config(wiki), git(wiki, "rev-parse", "HEAD")
+    resp = remove(client, "apollo")
+    assert resp.status_code == 400 and "say what becomes of them" in said(resp)
+    # Where they can't go: a folder there is, one that isn't the shared wiki's, one Zone skips.
+    (wiki / "taken").mkdir()
+    (wiki / "taken/x.md").write_text("# X\n")
+    for folder, why in (("taken", "There is a folder"), ("private/alice/apollo", "no folder of the shared wiki"),
+                        ("groups/dev/apollo", "no folder of the shared wiki"), ("_hidden", "can't go in folders")):
+        resp = remove(client, "apollo", pages="move", folder=folder)
+        assert resp.status_code in (400, 409) and why in said(resp), folder
+    assert config(wiki) == before and git(wiki, "rev-parse", "HEAD") == head and (wiki / "groups/apollo/roadmap.md").exists()
+
+
+def test_its_pages_go_to_the_wiki(client, wiki, free):
+    """Moved: the pages are in a folder of the shared wiki, the home too,
+    links to them follow, the file a page shows goes along, and everyone
+    sees them; the group is gone from the settings, and its name stays its
+    own (its folder has a history)."""
+    resp = remove(client, "apollo", pages="move", folder="")
+    assert resp.status_code == 303 and resp.headers["Location"] == "/groups?done=removed&group=apollo&folder=apollo&pages="
+    assert "Removed the group apollo: its pages are in apollo/ now, for everyone" in page(client, resp.headers["Location"])
+    assert "[group apollo]" not in config(wiki) and section(wiki, "user alice") == [] and section(wiki, "user bob") == []
+    assert not (wiki / "groups/apollo").exists()
+    assert (wiki / "apollo/roadmap.md").read_text() == "# Roadmap\n\n![plan](/_assets/plan.png) [[apollo/notes]]\n"
+    assert (wiki / "apollo/index.md").exists() and (wiki / "_assets/plan.png").read_bytes() == b"plan"
+    assert (wiki / "plans.md").read_text() == "# Plans\n\nSee [[apollo/roadmap]].\n"
+    assert git(wiki, "status", "--porcelain") == ""
+    sign_in(client, "carol")                                              # was no member: sees them now
+    assert until(lambda: client.get("/page/apollo/roadmap", headers=HOST).status_code == 200)
+    assert client.get("/page/groups/apollo/roadmap", headers=HOST).status_code in (302, 404)
+    assert "apollo" not in page(client)
+    resp = make(client, "apollo")
+    assert resp.status_code in (400, 409) and "is taken" in said(resp)
+
+
+def test_its_pages_are_deleted(client, wiki, free):
+    resp = remove(client, "apollo", pages="delete")
+    assert resp.status_code == 303
+    assert "deleted its pages (they are in git still" in page(client, resp.headers["Location"])
+    assert not (wiki / "groups/apollo").exists() and not (wiki / "apollo").exists()
+    assert "[group apollo]" not in config(wiki) and section(wiki, "user bob") == []
+    assert git(wiki, "status", "--porcelain") == ""
+    log = git(wiki, "log", "-3", "--format=%s")
+    assert "Remove the group apollo: its pages" in log
+    assert "Roadmap" in git(wiki, "log", "-p", "-3", "--", "groups/apollo/roadmap.md")
+    # The link to it is a link to a page there isn't.
+    assert (wiki / "plans.md").read_text() == "# Plans\n\nSee [[groups/apollo/roadmap]].\n"
+
+
+def test_a_group_without_pages_is_removed_without_a_question(client, wiki):
+    sign_in(client, "alice")
+    make(client, "mistake", "bob")
+    assert until(lambda: 'action="/groups/mistake/remove"' in page(client))
+    assert "It has no pages." in page(client)
+    assert remove(client, "mistake").status_code == 303
+    assert "mistake" not in config(wiki)
+    assert make(client, "mistake").status_code == 303                     # never had a folder: free again
+
+
+def test_who_removes_a_group(client, wiki, free):
+    before = config(wiki)
+    for who in ("bob", "carol", "vera"):                                  # a member, someone else, a viewer
+        sign_in(client, who)
+        assert remove(client, "apollo", pages="delete").status_code in (403, 404)
+    sign_in(client, "carol")
+    assert remove(client, "dev", pages="delete").status_code == 404      # in dev, which is an admin's
+    assert remove(client, "nosuch").status_code == 404
+    assert config(wiki) == before and (wiki / "groups/apollo/roadmap.md").exists()
+    # A group another is made of: an owner asks an admin; an admin removes it, and it is out of the larger one.
+    sign_in(client, "dana")
+    assert client.post("/groups/includes", data={"group": "program", "includes": "apollo, design"}, headers=HOST).status_code == 303
+    sign_in(client, "alice")
+    assert until(lambda: "is made of apollo" in page(client))
+    resp = remove(client, "apollo", pages="delete")
+    assert resp.status_code == 409 and "The group program is made of apollo" in said(resp)
+    sign_in(client, "dana")
+    assert remove(client, "apollo", pages="move", folder="space/apollo").status_code == 303
+    assert section(wiki, "group program") == ["includes = design"] and (wiki / "space/apollo/roadmap.md").exists()
+
+
+def test_a_removal_whose_commit_fails_is_made_all_the_same(client, wiki, free):
+    """The pages moved but git doesn't take the commit: the removal goes on
+    to the settings, or the pages were in the wiki while the group they came
+    from was still there, and says that the change isn't committed."""
+    hook = wiki / ".git/hooks/pre-commit"
+    hook.write_text("#!/bin/sh\nif git diff --cached --name-only | grep -q '^apollo/'; then echo 'no room' >&2; exit 1; fi\n")
+    hook.chmod(0o755)
+    resp = remove(client, "apollo", pages="move")
+    body = said(resp)
+    assert resp.status_code == 500 and "Removed the group apollo" in body and "written but not committed" in body, body[:400]
+    assert "[group apollo]" not in config(wiki) and (wiki / "apollo/roadmap.md").exists() and not (wiki / "groups/apollo").exists()

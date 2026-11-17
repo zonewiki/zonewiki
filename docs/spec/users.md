@@ -324,6 +324,20 @@ The order is that one: until the settings change nobody is in the new name's gro
 It is up to three commits (the lists, the folder with its links, the files no page shows), by whoever renamed it; an admin who is not in the group moves its pages without seeing any.
 The new name must be free, as a new group's, or one the group went by before (`was`, which the rename keeps: A name that is taken, above). There is no command for it: a rename writes pages and task files, which only the running server does (One process, in `AGENTS.md`).
 
+**A group ended** (`removeGroupOp` in `go/groups.go`): **Remove** at the foot of Manage… on `/groups`, for its owners and an admin (`POST /groups/<group>/remove`).
+A group that was made by mistake, or has done its work, goes: its name comes off its people, out of the groups made of it, and its section goes.
+**Its pages can't stay where no one would see them**, so with anything in its folder Remove asks what becomes of it, and one of the two is chosen before the button does anything:
+- **Move the pages to the wiki** (`pages=move`, `folder`): `groups/dev/…` becomes `dev/…`, a folder of the shared wiki whose name can be typed (the group's by default; `groups/dev/roadmap` → `dev/roadmap`, the home → `dev/index`), every link to the pages re-pointed and the files they show copied along (`moveFolder`, `shareUploads`). The form says how many pages everyone who uses the wiki will see: it is a move to more people, asked as such.
+  A folder of that name in the wiki already is refused ("give the pages' folder another name"), as is one in `private/` or `groups/`, or one Zone skips.
+  Files in the folder that no page shows go with the folder; they stay in git.
+- **Delete the pages** (`pages=delete`): the pages and their files are deleted, in one commit ("Remove the group dev: its pages"). They can't be brought back in the browser (Deleted Pages goes by the path, and nobody is in a group of that name), and stay in git on the host. Links to them are links to pages there aren't.
+
+A group without a folder is removed without a question.
+**A task list that is for the group keeps it** (`groupKept`): a list has its own owners and its own For, so the page names the lists (those you see; the others counted) and says to change whom they are for, or delete them, first. **A group that another is made of** is an admin's to remove (what a group is made of is an admin's): an owner is told so.
+**The order** is the pages first, the settings last, so nothing is in a folder no group is named as while the group is still there. A step that is made but for its commit counts as made (`writtenAnyway`): the removal goes on, and the page says both that the group is removed and that a change isn't committed.
+**Its name stays taken** while its folder has a history (A name that is taken, above): a group that never had a page frees its name.
+There is no command for it, as for a rename.
+
 - **How it is kept**: `Settings.Includes` is what each section says; `joinGroups` works out once, when the settings are read, every group each user is in (`User.In`), and `memberOf` looks there, so asking costs what it did.
 
 ### Viewers

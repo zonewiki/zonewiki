@@ -1159,6 +1159,7 @@ EXEMPT = {
     # The caller's groups: making one, and who is in one they own. A rename moves a group's pages: its own
     # tests ask it as someone who doesn't manage the group, and as an admin who isn't in it (test_groups_own.py)
     "POST /groups", "POST /groups/{group}/people", "POST /groups/{group}/rename", "POST /groups/{group}/leave",
+    "POST /groups/{group}/remove",  # ends a group and moves or deletes its pages: asked as who doesn't manage it (test_groups_own.py)
     "POST /groups/includes",        # an admin's: what a group is made of, names only, no page (test_groups_own.py)
     "GET /assistant", "POST /assistant/token", "POST /assistant/revoke",   # the caller's own MCP token, no page (test_assistant.py)
     "GET /password", "POST /password",   # the caller's own password, no page (test_password.py)

@@ -53,6 +53,24 @@
         <button type="submit" class="btn">Rename</button>
         <p class="users-help">Its pages move to the folder of the new name, links to them follow, and the lists that are for it are for the new name.</p>
       </form>
+      {{- /* Remove: the group ends. Its pages can't stay where no one would see them: they go to the wiki, or are
+          deleted, as who removes it says. A list that is for it keeps it. */}}
+      <div class="group-remove">
+      {{- if .G.KeptBy}}
+      <p class="users-help" role="note"><strong>Remove the group:</strong> {{.G.KeptBy}}</p>
+      {{- else}}
+      <form method="post" action="/groups/{{.G.Name}}/remove" class="group-form">
+        {{- if .G.Folder}}
+        <p class="users-help"><strong>Remove the group.</strong> Nobody is in it then, so its pages can't stay in its folder:</p>
+        <label class="share-choice"><input type="radio" name="pages" value="move" required> <span><strong>Move the pages to the wiki</strong>, into the folder <input type="text" name="folder" value="{{.G.Name}}" size="12" aria-label="The folder the pages go to" autocomplete="off" autocapitalize="none" spellcheck="false">: {{if .G.Pages}}{{.G.Pages}} page{{if ne .G.Pages 1}}s{{end}}{{else}}its pages{{end}} will be seen and changed by everyone who uses this wiki. Links to them follow.</span></label>
+        <label class="share-choice"><input type="radio" name="pages" value="delete" required> <span><strong>Delete the pages</strong> and their files. They can't be brought back in the browser; they stay in git, on the host.</span></label>
+        {{- else}}
+        <p class="users-help"><strong>Remove the group.</strong> Its people are no longer in it. It has no pages.</p>
+        {{- end}}
+        <button type="submit" class="btn btn-danger">Remove {{.G.Name}}</button>
+      </form>
+      {{- end}}
+      </div>
     </details>
     {{- end}}
   </li>

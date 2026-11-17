@@ -23,6 +23,7 @@ In a public wiki (`ZONE_PUBLIC`; Public wikis in `docs/spec/security.md`) a visi
 | POST   | `/groups/includes`    | What a group includes (`group`, `includes`: groups there are; a new `group` makes a group of groups); admins only, 404 for anyone else |
 | POST   | `/groups/<group>/people` | Who is in the group by name, and its owners (`people`, `owners`), for its owners and admins; 404 for anyone else |
 | POST   | `/groups/<group>/rename` | The group's new name (`name`): its folder, the links to its pages, the lists for it and the settings follow; for its owners and admins, 404 for anyone else |
+| POST   | `/groups/<group>/remove` | Ends the group, for its owners and an admin: `pages=move` with `folder` takes its pages to a folder of the shared wiki, `pages=delete` deletes them (one of the two when its folder holds anything); refused while a task list is for it (A group ended in `docs/spec/users.md`) |
 | POST   | `/groups/<group>/leave` | Whoever asks is no longer in the group: its name goes from their groups (a group named on them that has owners and that they don't manage; 404 otherwise) |
 | GET    | `/groups/<group>`     | A group's home `groups/<group>/index` (made on the first visit of someone in the group who may write); 404 for anyone not in it |
 | GET    | `/admin`, `/admin/users`    | The admin page, for admins (Managing users in `docs/spec/users.md`): `/admin` opens its first tab, Users; 404 for everyone else |

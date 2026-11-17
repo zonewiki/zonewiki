@@ -18,7 +18,9 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+	"zonewiki/internal/mdtext"
 	"zonewiki/internal/settingsfile"
 )
 
@@ -29,6 +31,7 @@ func groupsRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /groups/{group}/people", groupPeopleRoute)
 	mux.HandleFunc("POST /groups/{group}/rename", writesPages(groupRenameRoute))
 	mux.HandleFunc("POST /groups/{group}/leave", groupLeaveRoute)
+	mux.HandleFunc("POST /groups/{group}/remove", writesPages(groupRemoveRoute))
 }
 
 // namedMost: up to how many people a group is said by their names; a
@@ -71,6 +74,9 @@ type groupLink struct {
 	Owners   []string
 	Manages  bool
 	Leaves   bool // they may take themselves out (mayLeave)
+	// Remove…, for who manages it: why it can't be removed yet ("": it can:
+	// a list is for it, or a group includes it and the user is no admin).
+	KeptBy string
 	// The fields: who is in it by name (not by way of a group it includes),
 	// its owners, and (an admin's) the groups it includes.
 	PeopleText, OwnersText, IncludesText string
@@ -95,6 +101,9 @@ func groupsRoute(w http.ResponseWriter, r *http.Request) {
 	done := groupsDone(q.Get("done"), q.Get("group"), q.Get("left"))
 	if g := q.Get("group"); q.Get("done") == "left" && groupNameRE.MatchString(g) && !latestSettings().memberOf(userOf(r), g) {
 		done = "You are no longer in " + g + ": what is for @" + g + " you no longer see. Its owners can put you back."
+	}
+	if q.Get("done") == "removed" {
+		done = groupRemoved(q.Get("group"), q.Get("folder"), q.Get("pages"))
 	}
 	showGroups(w, r, http.StatusOK, done, "", "", "")
 }
@@ -192,6 +201,9 @@ func groupLinks(rq *Req, s *Settings, user string, groups []string) []groupLink 
 			link.Pages = len(pagesIn(rq, groupsDir+"/"+g))
 		}
 		if link.Manages {
+			if err := groupKept(s, user, g); err != nil {
+				link.KeptBy = err.Error()
+			}
 			link.PeopleText, link.OwnersText = strings.Join(s.directMembers(g), ", "), strings.Join(s.Owners[g], ", ")
 			link.IncludesText = strings.Join(s.Includes[g], ", ")
 		}
@@ -579,6 +591,218 @@ func renameGroupOp(user, old, nameText string) (string, error) {
 		return "", err
 	}
 	return name, uncommitted
+}
+
+// groupKept: why the group can't be removed by user yet (nil: it can): a
+// task list is for it (a list has its own owners and its own For: theirs to
+// change or delete first), or another group includes it and user is no
+// admin (what a group is made of is an admin's). The lists user doesn't see
+// are counted, not named.
+func groupKept(s *Settings, user, group string) error {
+	var named []string
+	hidden := 0
+	for _, l := range taskFiles.ReadLists("").Lists {
+		if !slices.Contains(l.For(), "@"+group) {
+			continue
+		}
+		if taskFiles.SeesList(user, l.Name) {
+			named = append(named, "#"+l.Name)
+		} else {
+			hidden++
+		}
+	}
+	if len(named)+hidden > 0 {
+		what := strings.Join(named, ", ")
+		if hidden > 0 && what != "" {
+			what += " and " + itoa(hidden) + " you don't see"
+		} else if hidden > 0 {
+			what = itoa(hidden) + " you don't see"
+		}
+		return refuseAs(refusedConflict, "A task list is for @"+group+" ("+what+"): its owners say whom it is for instead, or delete it, first.")
+	}
+	if s.isAdmin(user) {
+		return nil
+	}
+	for _, g := range sortedKeys(s.Includes) {
+		if slices.Contains(s.Includes[g], group) {
+			return refuseAs(refusedConflict, "The group "+g+" is made of "+group+" among others: an admin takes it out of "+g+" first, or removes it.")
+		}
+	}
+	return nil
+}
+
+// removeGroupInFile takes the group name out of the settings file f (whose
+// settings are s): off the users, out of the groups that include it, and
+// its section.
+func removeGroupInFile(f *settingsfile.File, s *Settings, name string) {
+	without := func(groups []string) []string {
+		return slices.DeleteFunc(slices.Clone(groups), func(g string) bool { return g == name })
+	}
+	for _, u := range sortedKeys(s.Users) {
+		if groups := s.Users[u].Groups; slices.Contains(groups, name) {
+			setGroups(f, u, without(groups))
+		}
+	}
+	for _, g := range sortedKeys(s.Includes) {
+		if in := s.Includes[g]; g != name && slices.Contains(in, name) {
+			setIncludes(f, g, without(in))
+		}
+	}
+	f.RemoveGroup(name)
+}
+
+// The answers to what becomes of a removed group's pages.
+const (
+	pagesMove   = "move"
+	pagesDelete = "delete"
+)
+
+// removeGroupOp ends the group, for one who manages it. What is in its
+// folder goes first, as pages says: **move** takes the pages to the folder
+// folderText of the shared wiki (the group's name when empty: groups/dev/x
+// is dev/x, its home dev/index), with every link re-pointed and the files
+// they show, so everyone who uses the wiki sees them; **delete** deletes
+// the pages and their files (they stay in git). A folder with anything in
+// it wants one of the two. Then the settings forget the group: off its
+// people, out of the groups made of it, its section. In that order, so
+// nothing is in a folder no group is named as while the group is still
+// there; a step that is made but for its commit counts as made
+// (writtenAnyway), and the removal goes on and says so. A list that is for
+// the group keeps it (groupKept). Returns the folder the pages are in now
+// ("" when none moved). The caller holds pagesMu.
+func removeGroupOp(user, group, pages, folderText string) (folder string, err error) {
+	s := latestSettings()
+	if !groupNameRE.MatchString(group) || !slices.Contains(knownGroups(s), group) || !s.managesGroup(user, group) {
+		return "", errNotFound
+	}
+	if err := groupKept(s, user, group); err != nil {
+		return "", err
+	}
+	from := groupsDir + "/" + group
+	dir := filepath.Join(cfg.Data, groupsDir, group)
+	var paths []string
+	for _, p := range sortedPages() {
+		if strings.HasPrefix(p.Slug, from+"/") {
+			paths = append(paths, p.Path)
+		}
+	}
+	holds := false // anything at all in the folder: pages, files
+	_ = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			holds = true
+		}
+		return nil
+	})
+	var uncommitted error
+	switch {
+	case !holds:
+	case pages == pagesMove:
+		if folder = mdtext.ToSlug(strings.Trim(strings.TrimSpace(folderText), "/")); folder == "" {
+			folder = group
+		}
+		switch {
+		case safePath(folder+"/page") == "":
+			return "", refuse(strconv.Quote(folder) + ": pages can't go in folders starting with '_' or '.'")
+		case !placeOf(folder + "/page").shared():
+			return "", refuse(strconv.Quote(folder) + " is no folder of the shared wiki: the pages go where everyone sees them")
+		case exists(filepath.Join(cfg.Data, filepath.FromSlash(folder))):
+			return "", refuseAs(refusedExists, "There is a folder "+strconv.Quote(folder)+" in the wiki already: give the pages' folder another name.")
+		}
+		if len(paths) > 0 {
+			if _, err := keepPendingPages(paths, from+"/"); err != nil {
+				return "", err
+			}
+			if _, _, err := moveFolder(user, from, folder, "Remove the group "+group+": "+from+"/ is "+folder+"/"); err != nil {
+				if _, linksOnly := err.(*linksLeft); !linksOnly && !writtenAnyway(err) {
+					return "", err // nothing moved
+				}
+				uncommitted = err
+				logf("removing the group %s: %v", group, err)
+			}
+		}
+		// What no page shows goes with the folder (it stays in git).
+		if err := removeGroupFolder(user, group, "the files no page showed"); err != nil {
+			uncommitted = errOr(uncommitted, err)
+		}
+	case pages == pagesDelete:
+		if _, err := keepPendingPages(paths, from+"/"); err != nil {
+			return "", err
+		}
+		if err := removeGroupFolder(user, group, "its pages"); err != nil {
+			if !writtenAnyway(err) {
+				return "", err
+			}
+			uncommitted = err
+		}
+	default:
+		return "", refuse("The group has pages: say what becomes of them, move them to the wiki or delete them.")
+	}
+	if err := changeSettings(user, func(f *settingsfile.File) error {
+		now := settingsOf(f.Text())
+		if !now.managesGroup(user, group) {
+			return errNotFound
+		}
+		removeGroupInFile(f, now, group)
+		return nil
+	}); err != nil {
+		return folder, err
+	}
+	return folder, uncommitted
+}
+
+// removeGroupFolder deletes what is left of the group's folder (pages,
+// files), in one commit that says what.
+func removeGroupFolder(user, group, what string) error {
+	dir := filepath.Join(cfg.Data, groupsDir, group)
+	if !isDir(dir) {
+		return nil
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		return err
+	}
+	forgetUsage()
+	return notCommitted(gitCommit(user, "Remove the group "+group+": "+what, dir))
+}
+
+// groupRemoveRoute: POST /groups/{group}/remove: the group ends, and its
+// pages go to the wiki (pages=move, folder) or are deleted (pages=delete)
+// (removeGroupOp).
+func groupRemoveRoute(w http.ResponseWriter, r *http.Request) {
+	if noGroupsHere(w, r) {
+		return
+	}
+	group := r.PathValue("group")
+	folder, err := removeGroupOp(userOf(r), group, r.PostFormValue("pages"), r.PostFormValue("folder"))
+	pages := ""
+	if folder == "" && r.PostFormValue("pages") == pagesDelete {
+		pages = pagesDelete
+	}
+	if err != nil && writtenAnyway(err) {
+		// Removed, but not all of it is committed: the page says both.
+		showGroups(w, r, http.StatusInternalServerError, groupRemoved(group, folder, pages), err.Error(), "", "")
+		return
+	}
+	if err != nil {
+		refuseGroups(w, r, err, "", "")
+		return
+	}
+	http.Redirect(w, r, "/groups?done=removed&group="+url.QueryEscape(group)+"&folder="+url.QueryEscape(folder)+"&pages="+pages, http.StatusSeeOther)
+}
+
+// groupRemoved: what a removal did, from names that are a group's and a
+// folder's (a link can't make the page say anything else): "" unless the
+// group is gone, and the folder named is one of the wiki's.
+func groupRemoved(group, folder, pages string) string {
+	if !groupNameRE.MatchString(group) || slices.Contains(knownGroups(latestSettings()), group) {
+		return ""
+	}
+	switch {
+	case folder != "" && folder == mdtext.ToSlug(folder) && placeOf(folder+"/page").shared() && isDir(filepath.Join(cfg.Data, filepath.FromSlash(folder))):
+		return "Removed the group " + group + ": its pages are in " + folder + "/ now, for everyone who uses the wiki."
+	case pages == pagesDelete:
+		return "Removed the group " + group + ", and deleted its pages (they are in git still, on the host)."
+	}
+	return "Removed the group " + group + "."
 }
 
 // errOr: err, or other when there is none.
