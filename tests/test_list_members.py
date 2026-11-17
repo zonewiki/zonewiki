@@ -617,3 +617,16 @@ def test_a_new_tasks_files_are_its_own_from_the_first(client, wiki):
 def test_without_users_a_tasks_file_is_with_the_others(client, git_wiki_dir):
     made = client.post("/api/tasks", json={"title": "Alone"}, headers=HOST).get_json()
     assert upload(client, task=made["id"]).get_json()["url"] == "/_assets/offer.png"
+
+
+def test_its_words_suggest_nothing_to_anyone_else(client, wiki):
+    """The list's tasks are in its members' search index alone: a typo of a
+    word only the list has finds it for a member and suggests nothing to
+    anyone else."""
+    typo = SECRET[:-1] + "x"
+    found = sign_in(client, "carol").get("/api/search", query_string={"q": typo}, headers=HOST).get_data(as_text=True)
+    assert SECRET in found
+    for who in ("bob", "dana"):
+        sign_in(client, who)
+        for path in ("/api/search", "/search"):
+            assert SECRET not in client.get(path, query_string={"q": typo}, headers=HOST).get_data(as_text=True)

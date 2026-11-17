@@ -177,6 +177,20 @@ func (s *Store) ForOfList(name string) []string {
 	return forOf(s.dirOf("", name))
 }
 
+// ForSome: the names of the shared lists whose folders are for some now,
+// A–Z: a look at each list's folder (forOf keeps what it read), no read of
+// a task.
+func (s *Store) ForSome() []string {
+	var names []string
+	entries, _ := os.ReadDir(filepath.Join(s.Dir(""), ListsDirName))
+	for _, e := range entries {
+		if e.IsDir() && len(forOf(filepath.Join(s.Dir(""), ListsDirName, e.Name()))) > 0 {
+			names = append(names, e.Name())
+		}
+	}
+	return names
+}
+
 // Find: the list named name (as the file has it), nil when there is none.
 func (r *Registry) Find(name string) *List {
 	for _, l := range r.Lists {

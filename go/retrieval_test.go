@@ -730,6 +730,67 @@ func TestAGroupsPagesAreInItsMembersIndexAlone(t *testing.T) {
 	}
 }
 
+// A list for some is a place too: its tasks are in its members' index alone,
+// and a list narrowed or widened splits the docs again though no task
+// changed.
+func TestAListForSomesTasksAreInItsMembersIndexAlone(t *testing.T) {
+	testWiki(t, nil)
+	withGroups(t, nil, "alice:hiring", "bob", "carol:hiring")
+	dir := filepath.Join(cfg.Data, "_tasks", "lists", "hiring")
+	entry := filepath.Join(dir, "list.json")
+	if err := os.MkdirAll(dir, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(entry, []byte(`{"name": "hiring", "for": ["@hiring"]}`), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	task := func(id, list string, words ...string) *SearchDoc {
+		return &SearchDoc{Slug: "task:" + id, Task: &Task{ID: id, List: list}, Tokens: fixedTokens(words...)}
+	}
+	shared := []*SearchDoc{
+		{Slug: "p1", Tokens: fixedTokens("apple", "pear")}, task("t1", "team", "pear", "plum"),
+		{Slug: "p3", Tokens: fixedTokens("apple", "ocelotharq")},
+	}
+	theirs := []*SearchDoc{
+		task("h1", "hiring", "ocelotharp", "apple", "apple"), task("h2", "hiring", "ocelotharp", "pear", "pear", "pear"),
+	}
+	docs := slices.Concat(shared[:2], theirs, shared[2:])
+	var c indexCache
+	bob, alice := c.get(&Req{user: "bob"}, docs), c.get(&Req{user: "alice"}, docs)
+	if !slices.Equal(docsOf(bob), shared) {
+		t.Fatalf("bob's index has %d docs, want the %d shared ones", bob.count(), len(shared))
+	}
+	if alice.count() != 5 || !slices.Equal(docsOf(alice), docsOf(c.get(&Req{user: "carol"}, docs))) {
+		t.Errorf("alice's index has %d docs, want the shared ones and the list's two", alice.count())
+	}
+	without := newDocIndex(shared)
+	for _, q := range []string{"apple", "pear", "plum", "ocelotharp", "ocelothar", "ocelotharq", "apple pear"} {
+		if got, want := bob.search(q, 10), without.search(q, 10); !slices.Equal(got, want) {
+			t.Errorf("%q for bob: %d hits, in a wiki without the list %d", q, len(got), len(want))
+		}
+	}
+	if hits := bob.search("ocelotharp", 10); len(hits) != 1 || hits[0].Slug != "p3" {
+		t.Errorf("bob's search for the list's word: %d hits, want his own page by the typo", len(hits))
+	}
+	if hits := alice.search("ocelotharp", 10); len(hits) != 2 {
+		t.Errorf("alice's search for the list's word: %d hits, want the list's two", len(hits))
+	}
+	// Widened, with no task changed: everyone's.
+	if err := os.Remove(entry); err != nil {
+		t.Fatal(err)
+	}
+	if bob := c.get(&Req{user: "bob"}, docs); bob.count() != 5 || len(bob.search("ocelotharp", 10)) != 2 {
+		t.Errorf("the list widened: bob's index has %d docs", bob.count())
+	}
+	// And narrowed again.
+	if err := os.WriteFile(entry, []byte(`{"name": "hiring", "for": ["alice"]}`), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	if bob, carol := c.get(&Req{user: "bob"}, docs), c.get(&Req{user: "carol"}, docs); bob.count() != 3 || carol.count() != 3 {
+		t.Errorf("the list narrowed to alice: bob's index has %d docs, carol's %d", bob.count(), carol.count())
+	}
+}
+
 // How long a member's index takes to put together when their group's folder
 // is large (the plan group-folders, step 2: 2,000 pages in a group of
 // twenty); it says the time, and fails only where it is far off.

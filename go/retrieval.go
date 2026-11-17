@@ -871,7 +871,7 @@ func (x *docIndex) searchWhereID(text string, limit int, accept func(id int, d *
 // With users, what is not everyone's is in no one's index but those who see
 // it: an index is made from the shared docs (base), and the docs of each
 // place a viewer sees (their private pages, their private tasks, a group's
-// folder) are searched along with it (textsearch.View), so the words,
+// folder, the tasks of a list they are one of) are searched along with it (textsearch.View), so the words,
 // counts and lengths of what a viewer doesn't see take no part in their
 // ranking (document frequencies, lengths and the vocabulary typo matching
 // draws on would otherwise show through).
@@ -926,18 +926,23 @@ type indexCache struct {
 }
 
 // docPlace: whose docs that aren't everyone's are: the place of a page
-// (a user's private folder, a group's, no one's), or a user's private
-// tasks. Who sees one doc of a place sees them all (canSee asks the place
-// alone, canSeeTask of a private task its owner), so a place's docs are
-// indexed together and searched by whoever sees the place.
+// (a user's private folder, a group's, no one's), a user's private tasks,
+// or the tasks of a shared list that is for some (list). Who sees one doc
+// of a place sees them all (canSee asks the place alone, canSeeTask of a
+// private task its owner and of a shared one its list), so a place's docs
+// are indexed together and searched by whoever sees the place.
 type docPlace struct {
 	place
 	tasks bool
+	list  string
 }
 
 func placeOfDoc(d *SearchDoc) docPlace {
+	if d.isTask() && d.Task.Owner == "" {
+		return docPlace{tasks: true, list: d.Task.List}
+	}
 	if d.isTask() {
-		return docPlace{place{ofUser, d.Task.Owner}, true}
+		return docPlace{place: place{ofUser, d.Task.Owner}, tasks: true}
 	}
 	return docPlace{place: placeOf(d.Slug)}
 }
@@ -963,12 +968,23 @@ func (l *docLayer) index() *textsearch.Layer {
 // again; more only slow every search down, fewer rebuild too often.
 func maxChanges(n int) int { return max(32, n/50) }
 
-// docShared: d is in no private folder or tasks (always, without users).
-func docShared(d *SearchDoc) bool {
+// docShared: d is everyone's: a page in no private or group's folder, a
+// task that is not private and in no list for some (forSome: those lists'
+// names, listsForSome). Always, without users.
+func docShared(d *SearchDoc, forSome []string) bool {
 	if d.isTask() {
-		return d.Task.Owner == ""
+		return d.Task.Owner == "" && !slices.Contains(forSome, d.Task.List)
 	}
 	return placeOf(d.Slug).shared()
+}
+
+// listsForSome: the shared lists that are for some now (none without
+// users): their tasks are their members', in search as everywhere.
+func listsForSome() []string {
+	if settings().Users == nil {
+		return nil
+	}
+	return taskFiles.ForSome()
 }
 
 // usersKey: which users there are; what is private depends on it (nothing is
@@ -988,13 +1004,16 @@ func usersKey() string {
 func (c *indexCache) get(rq *Req, docs []*SearchDoc) *docIndex {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	key := usersKey()
+	// Who the docs are split for: the users, and the lists that are for
+	// some (a list narrowed or widened changes no task, so no doc).
+	forSome := listsForSome()
+	key := usersKey() + "\x00" + strings.Join(forSome, "\x00")
 	usersChanged := c.base == nil || key != c.users
 	if usersChanged || !slices.Equal(c.all, docs) {
 		c.users, c.all = key, slices.Clone(docs)
 		var shared []*SearchDoc
 		for _, d := range docs {
-			if docShared(d) {
+			if docShared(d, forSome) {
 				shared = append(shared, d)
 			}
 		}
