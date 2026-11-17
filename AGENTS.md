@@ -45,6 +45,8 @@ Markdown joins the lines when it renders them.
 - **Markdown is the source of truth** — `.md` files in the data directory (`$ZONE_DATA`) are the wiki content.
   Deliberate exception: Tasks live in `_tasks/tasks.json`/`_tasks/closed.json` (a list's in `_tasks/lists/<name>/`) and their lists in `_tasks/lists.json` (structured fields, concurrency-safe writes) — still plain files, still git-versioned, but not markdown.
 - **Editable two ways** — edit files in any text editor, or click "Edit" in the browser
+- **Good UX** — a feature is done when it is easy to use, not when it works: few steps, the obvious thing where a person looks for it, and nothing to learn that the screen could say.
+- **Conceptually sound and clean** — a few ideas that hold everywhere (a page's place, a list's members, who may write), each said once and used by every door; a new feature fits them or the ideas change, never a special case beside them.
 - **Nice looking** — clean typography, readable line lengths, good contrast
 - **Searchable** — server-side full-text search across all pages
 
