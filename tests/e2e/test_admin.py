@@ -55,7 +55,10 @@ def test_a_reset_link_works_in_a_browser(admin, wiki):
 
 def test_save_shows_once_a_field_is_edited(admin, wiki):
     """An untouched row has no buttons beside its role and its groups; an
-    edit shows the one beside it, and taking the edit back hides it again."""
+    edit shows the one beside it, and taking the edit back hides it again.
+    The groups are pills, of the groups there are."""
+    admin.request.post("/groups", form={"name": "dev", "people": ""})     # alice makes dev on Groups
+    admin.goto("/admin/users")
     row = admin.locator("tr", has_text="bob")
     change, set_ = row.locator('button[aria-label="Save the role of bob"]'), row.locator('button[aria-label="Save the groups of bob"]')
     expect(change).to_have_text("Save")
@@ -70,30 +73,29 @@ def test_save_shows_once_a_field_is_edited(admin, wiki):
     assert "role" not in (wiki.root / ".zone" / "config").read_text().split("[user bob]")[1]   # picking saved nothing
     row.locator("select").select_option("editor")
     expect(change).to_be_hidden()
-    groups = row.locator('input[name="groups"]')
-    groups.fill("dev")
+    groups = row.get_by_role("combobox", name="Groups of bob")
+    groups.fill("de")
+    expect(row.locator(".pick-option")).to_have_text(["👥 dev"])
+    groups.press("Enter")
+    expect(row.locator(".pick-pill")).to_have_attribute("data-name", "dev")
     expect(set_).to_be_visible()
-    groups.fill("")
+    row.get_by_role("button", name="Take out dev").click()
+    expect(row.locator(".pick-pill")).to_have_count(0)
     expect(set_).to_be_hidden()
     groups.fill("dev")
-    groups.press("Enter")                                     # Enter saves, as the button does
+    groups.press("Enter")
+    expect(set_).to_be_visible()
+    groups.press("Enter")                                     # with nothing typed, Enter saves, as the button does
     admin.wait_for_url("**/admin/users?done=groups**")
-    assert "groups = dev" in (wiki.root / ".zone" / "config").read_text()
+    assert "groups = dev" in (wiki.root / ".zone" / "config").read_text().split("[user bob]")[1]
     row = admin.locator("tr", has_text="bob").first
     expect(row.locator('button[aria-label="Save the groups of bob"]')).to_be_hidden()
     row.locator("select").select_option("viewer")
     row.locator('button[aria-label="Save the role of bob"]').click()
     admin.wait_for_url("**/admin/users?done=role**")
     assert "role = viewer" in (wiki.root / ".zone" / "config").read_text()
-    # The Groups part shows text and buttons: a field opens on its button, with the cursor in it.
-    includes = admin.locator(".groups-table tr", has_text="dev")
-    field = includes.locator('input[name="includes"]')
-    expect(field).to_be_hidden()
-    expect(includes.locator('input[name="name"]')).to_be_hidden()
-    includes.get_by_text("Add a whole group…").click()
-    expect(field).to_be_focused()
-    expect(includes.locator('button[aria-label="Save what dev includes"]')).to_be_visible()
-    includes.get_by_text("Rename…").click()
-    expect(includes.locator('input[name="name"]')).to_be_focused()
-    expect(includes.locator('input[name="name"]')).to_have_value("dev")
+    # Groups are made and changed on Groups, which the page links to.
+    expect(admin.get_by_role("button", name="Make a group of groups")).to_have_count(0)
+    admin.locator('.sheet a[href="/groups"]').click()
+    admin.wait_for_url("**/groups")
     expect(admin.get_by_role("button", name="Make a group of groups")).to_be_visible()

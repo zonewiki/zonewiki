@@ -1,7 +1,9 @@
 // Groups in the browser (docs/spec/users.md, Groups): /groups lists the
 // groups a user is in and lets whoever may write make one, of named people,
 // without an admin: they are its owner (owners in its [group …] section),
-// and its owners say who is in it and what it is called. Who is in a group
+// and its owners say who is in it and what it is called. An admin sees every
+// group there and manages each, also what it includes (a group made of
+// groups) and the folders in groups/ no one sees. Who is in a group
 // is still said in one place, on the users (groups in their sections): an
 // owner's change writes it there, for their group alone, as an admin's
 // does for any. A rename takes the group's folder, the lists that are for
@@ -23,6 +25,7 @@ import (
 func groupsRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /groups", groupsRoute)
 	mux.HandleFunc("POST /groups", newGroupRoute)
+	mux.HandleFunc("POST /groups/includes", adminOnly(groupIncludesRoute))
 	mux.HandleFunc("POST /groups/{group}/people", groupPeopleRoute)
 	mux.HandleFunc("POST /groups/{group}/rename", writesPages(groupRenameRoute))
 	mux.HandleFunc("POST /groups/{group}/leave", groupLeaveRoute)
@@ -32,14 +35,19 @@ func groupsRoutes(mux *http.ServeMux) {
 // larger one by their number ("14 people").
 const namedMost = 8
 
-// groupsView: /groups (groups.html): the groups the user is in or owns.
+// groupsView: /groups (groups.html): the groups the user is in or owns, and
+// for an admin every other group too.
 type groupsView struct {
 	view
 	BreadcrumbHTML template.HTML
 	Groups         []groupLink
-	MayMake        bool     // the user may write: the form that makes a group
-	People         []string // the wiki's users, for the fields to complete from
-	Done, Error    string   // what the last change did, or why it was refused
+	Others         []groupLink // an admin's: the groups they are in nor own
+	Admin          bool        // the fields only an admin has: what a group includes, a group of groups
+	MayMake        bool        // the user may write: the form that makes a group
+	People         []string    // the wiki's users, for the fields to choose from
+	AllGroups      []string    // every group there is, for an admin's fields to choose from
+	Stray          []string    // an admin's: folders in groups/ that no one sees
+	Done, Error    string      // what the last change did, or why it was refused
 	// What the form that makes a group held when it was refused.
 	NewName, NewPeople string
 }
@@ -58,13 +66,20 @@ type groupLink struct {
 	Counted  bool // too many to name: Count says it
 	Includes []string
 	Pages    int
+	Folder   bool // groups/<name>/ is there (said to an admin who isn't in it)
 	Member   bool // the user is in it (an owner may be none: no way to its pages then)
 	Owners   []string
 	Manages  bool
 	Leaves   bool // they may take themselves out (mayLeave)
 	// The fields: who is in it by name (not by way of a group it includes),
-	// and its owners.
-	PeopleText, OwnersText string
+	// its owners, and (an admin's) the groups it includes.
+	PeopleText, OwnersText, IncludesText string
+}
+
+// groupVia: a group another includes, and who is in it now.
+type groupVia struct {
+	Name    string
+	Members []string
 }
 
 // groupsRoute: GET /groups: the groups the signed-in user is in, and those
@@ -88,7 +103,8 @@ func groupsRoute(w http.ResponseWriter, r *http.Request) {
 // are a group's and users' (a link can't make the page say anything else).
 func groupsDone(done, group, left string) string {
 	s := latestSettings()
-	if !groupNameRE.MatchString(group) || !slices.Contains(s.groups(), group) {
+	// A group an admin made of no groups any more may be gone: that is said.
+	if !groupNameRE.MatchString(group) || (done != "includes" && !slices.Contains(knownGroups(s), group)) {
 		return ""
 	}
 	switch done {
@@ -96,7 +112,7 @@ func groupsDone(done, group, left string) string {
 		return "Made the group " + group + ": its pages go in " + groupsDir + "/" + group + "/, and a task list can be for @" + group + "."
 	case "renamed":
 		return "The group is called " + group + " now: its pages are in " + groupsDir + "/" + group + "/, and what was for it is for @" + group + "."
-	case "people":
+	case "people", "includes":
 		out := groupLine(s, group) + "."
 		var gone []string
 		for _, n := range strings.Split(left, ",") {
@@ -116,8 +132,9 @@ func groupsDone(done, group, left string) string {
 func showGroups(w http.ResponseWriter, r *http.Request, status int, done, refused, newName, newPeople string) {
 	s, user := latestSettings(), userOf(r)
 	rq := newReq(r)
+	admin := s.isAdmin(user) && !s.isViewer(user)
 	v := &groupsView{BreadcrumbHTML: breadcrumb(rq, []crumb{{"Groups", ""}}, "/groups", true, "Groups", ""),
-		MayMake: mayMakeGroup(s, user), Done: done, Error: refused, NewName: newName, NewPeople: newPeople}
+		MayMake: mayMakeGroup(s, user), Admin: admin, Done: done, Error: refused, NewName: newName, NewPeople: newPeople}
 	var mine []string
 	if u := s.Users[user]; u != nil && !u.Disabled {
 		mine = slices.Clone(u.In)
@@ -128,9 +145,35 @@ func showGroups(w http.ResponseWriter, r *http.Request, status int, done, refuse
 		}
 	}
 	slices.Sort(mine)
-	for _, g := range mine {
+	v.Groups = groupLinks(rq, s, user, mine)
+	if admin {
+		var others []string
+		for _, g := range knownGroups(s) {
+			if !slices.Contains(mine, g) {
+				others = append(others, g)
+			}
+		}
+		v.Others = groupLinks(rq, s, user, others)
+		v.AllGroups = knownGroups(s)
+		v.Stray = strayGroups()
+	}
+	if v.MayMake {
+		for _, name := range sortedKeys(s.Users) {
+			if u := s.Users[name]; !u.Disabled {
+				v.People = append(v.People, name)
+			}
+		}
+	}
+	page(w, rq, status, "groups.html", "Groups", shell{}, v)
+}
+
+// groupLinks: the groups named, as /groups lists them for user.
+func groupLinks(rq *Req, s *Settings, user string, groups []string) []groupLink {
+	var out []groupLink
+	for _, g := range groups {
 		who := s.groupMembers(g)
 		link := groupLink{Name: g, Count: len(who), Includes: s.Includes[g], Owners: s.Owners[g],
+			Folder: isDir(filepath.Join(cfg.Data, groupsDir, g)),
 			Member: s.memberOf(user, g), Manages: s.managesGroup(user, g), Leaves: mayLeave(s, user, g)}
 		for _, name := range who {
 			if slices.Contains(s.Users[name].Groups, g) {
@@ -150,17 +193,58 @@ func showGroups(w http.ResponseWriter, r *http.Request, status int, done, refuse
 		}
 		if link.Manages {
 			link.PeopleText, link.OwnersText = strings.Join(s.directMembers(g), ", "), strings.Join(s.Owners[g], ", ")
+			link.IncludesText = strings.Join(s.Includes[g], ", ")
 		}
-		v.Groups = append(v.Groups, link)
+		out = append(out, link)
 	}
-	if v.MayMake {
-		for _, name := range sortedKeys(s.Users) {
-			if u := s.Users[name]; !u.Disabled {
-				v.People = append(v.People, name)
-			}
+	return out
+}
+
+// knownGroups: every group there is: someone is in it, it has a section
+// (what it includes, its owners, even with nobody in it), or a group is
+// said to include it. What a field takes as a group's name is one of these
+// (groupsNamed).
+func knownGroups(s *Settings) []string {
+	out := s.groups()
+	more := sortedKeys(s.Owners)
+	for _, in := range s.Includes {
+		more = append(more, in...)
+	}
+	for _, g := range more {
+		if !slices.Contains(out, g) {
+			out = append(out, g)
 		}
 	}
-	page(w, rq, status, "groups.html", "Groups", shell{}, v)
+	slices.Sort(out)
+	return out
+}
+
+// strayGroupNames: the groups whose folder in groups/ no one sees, by the
+// folder's name: an admin puts someone in one of them, and the folder is
+// that group's again.
+func strayGroupNames() []string {
+	var out []string
+	for _, p := range strayGroups() {
+		if g := strings.ToLower(strings.TrimPrefix(p, groupsDir+"/")); groupNameRE.MatchString(g) && isDir(filepath.Join(cfg.Data, p)) {
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
+// groupsNamed: the groups text names, each one of those given (a field
+// takes only a group there is), or why not.
+func groupsNamed(text string, known []string) ([]string, error) {
+	named, bad := parseGroups(text)
+	if bad != "" {
+		return nil, refuse(`"` + bad + `" isn't a group's name: lowercase letters, digits and hyphens.`)
+	}
+	for _, g := range named {
+		if !slices.Contains(known, g) {
+			return nil, refuse(`There is no group called ` + g + `. A group is made on Groups first.`)
+		}
+	}
+	return named, nil
 }
 
 // refuseGroups: the change wasn't made; /groups again, saying why (a
@@ -309,7 +393,7 @@ func makeGroupOp(user, nameText, people string) (string, error) {
 // then, as a group made on the host). Returns who is no longer in it.
 func groupPeopleOp(user, group, people, owners string) (left []string, err error) {
 	before := latestSettings()
-	if !groupNameRE.MatchString(group) || !slices.Contains(before.groups(), group) || !before.managesGroup(user, group) {
+	if !groupNameRE.MatchString(group) || !slices.Contains(knownGroups(before), group) || !before.managesGroup(user, group) {
 		return nil, errNotFound
 	}
 	members, err := usersNamed(before, people)
@@ -407,7 +491,7 @@ func renameGroupInFile(f *settingsfile.File, s *Settings, old, name string) {
 // change is in the Uncommitted list. The caller holds pagesMu.
 func renameGroupOp(user, old, nameText string) (string, error) {
 	s := latestSettings()
-	if !groupNameRE.MatchString(old) || !slices.Contains(s.groups(), old) || !s.managesGroup(user, old) {
+	if !groupNameRE.MatchString(old) || !slices.Contains(knownGroups(s), old) || !s.managesGroup(user, old) {
 		return "", errNotFound
 	}
 	name, err := oneGroupName(nameText)
@@ -667,9 +751,38 @@ func groupLeaveRoute(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/groups?done=left&group="+url.QueryEscape(group), http.StatusSeeOther)
 }
 
+// groupIncludesRoute: POST /groups/includes, an admin's: the groups the
+// group `group` is made of from now, as the field names them (dev, design;
+// empty: none, the group is its name on users again), each a group there
+// is. `group` may be a new name: a group made of groups. Who is in one of
+// them is in it (Groups in docs/spec/users.md). The answer says who is in
+// it now, and who no longer is.
+func groupIncludesRoute(w http.ResponseWriter, r *http.Request) {
+	group, err := oneGroupName(r.PostFormValue("group"))
+	if err != nil {
+		refuseGroups(w, r, err, "", "")
+		return
+	}
+	before := latestSettings()
+	includes, err := groupsNamed(r.PostFormValue("includes"), knownGroups(before))
+	if err != nil {
+		refuseGroups(w, r, err, "", "")
+		return
+	}
+	if err := changeSettings(userOf(r), func(f *settingsfile.File) error {
+		setIncludes(f, group, includes)
+		return nil
+	}); err != nil {
+		refuseGroups(w, r, err, "", "")
+		return
+	}
+	// Who left it, by name.
+	http.Redirect(w, r, "/groups?done=includes&group="+url.QueryEscape(group)+
+		"&left="+url.QueryEscape(strings.Join(leftGroup(before, latestSettings(), group), ",")), http.StatusSeeOther)
+}
+
 // groupRenameRoute: POST /groups/{group}/rename: the group's new name
-// (renameGroupOp). from=admin goes back to the admin page, where an admin
-// renames a group they are not in.
+// (renameGroupOp).
 func groupRenameRoute(w http.ResponseWriter, r *http.Request) {
 	if noGroupsHere(w, r) {
 		return
@@ -677,27 +790,12 @@ func groupRenameRoute(w http.ResponseWriter, r *http.Request) {
 	name, err := renameGroupOp(userOf(r), r.PathValue("group"), r.PostFormValue("name"))
 	if err != nil && name != "" {
 		// Renamed, but not all of it is committed: the page says both.
-		done := groupsDone("renamed", name, "")
-		if r.PostFormValue("from") == "admin" && settings().isAdmin(userOf(r)) {
-			showUsers(w, r, http.StatusInternalServerError, done, err.Error())
-			return
-		}
-		showGroups(w, r, http.StatusInternalServerError, done, err.Error(), "", "")
+		showGroups(w, r, http.StatusInternalServerError, groupsDone("renamed", name, ""), err.Error(), "", "")
 		return
 	}
 	if err != nil {
-		if r.PostFormValue("from") == "admin" && settings().isAdmin(userOf(r)) {
-			if ref, ok := refusalOf(err); !ok || ref.kind != refusedNotFound {
-				refuseChange(w, r, err)
-				return
-			}
-		}
 		refuseGroups(w, r, err, "", "")
 		return
 	}
-	to := "/groups?done=renamed&group=" + url.QueryEscape(name)
-	if r.PostFormValue("from") == "admin" && settings().isAdmin(userOf(r)) {
-		to = "/admin/users?done=renamed&group=" + url.QueryEscape(name)
-	}
-	http.Redirect(w, r, to, http.StatusSeeOther)
+	http.Redirect(w, r, "/groups?done=renamed&group="+url.QueryEscape(name), http.StatusSeeOther)
 }

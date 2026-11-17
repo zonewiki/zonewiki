@@ -14,7 +14,8 @@ import './js/editor.js';      // the editor
 import './js/page.js';        // the page view: checkboxes, task chips, tables, lightbox
 import './js/fold.js';        // folding sections
 import './js/present.js';     // presentation mode
-import './js/admin.js';       // the admin page: the Remove dialog, Change and Set shown once a field is edited
+import './js/admin.js';       // the admin page: the Remove dialog, Save shown once a field is edited
+import './js/namepick.js';    // fields that take users or groups: those there are, as pills (Groups, the admin page)
 import './js/copyline.js';    // lines to copy: their Copy buttons
 import './tasks.js';           // tasks apps on the page
 

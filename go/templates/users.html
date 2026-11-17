@@ -1,7 +1,8 @@
 {{- /* /admin/users: the admin page's Users tab (admin.go, docs/spec/users.md).
     Plain forms: each change is a POST, and the page comes back saying what
-    it did or why it didn't. A row's Change and Set show once its field is
-    edited (js/admin.js); without JavaScript they are there all along. Remove asks first: in the dialog at the end
+    it did or why it didn't. A row's Save shows once its field is
+    edited (js/admin.js); the Groups field takes groups there are, as pills
+    (js/namepick.js); without JavaScript they are there all along. Remove asks first: in the dialog at the end
     (js/admin.js), or without JavaScript in its <details>. */ -}}
 {{define "body"}}
 {{.BreadcrumbHTML}}
@@ -46,10 +47,10 @@
     <td>
       {{- /* Who belongs together: what is for a group (a task list) is theirs. */}}
       <form method="post" action="/admin/users/{{.Name}}/groups" class="user-role-form user-groups-form">
-        <input type="text" name="groups" value="{{.Groups}}" aria-label="Groups of {{.Name}}" placeholder="none" list="user-groups" autocomplete="off" spellcheck="false" size="12">
+        <input type="text" name="groups" value="{{.Groups}}" aria-label="Groups of {{.Name}}" placeholder="none" list="user-groups" data-pick="groups" autocomplete="off" spellcheck="false" size="12">
         <button type="submit" class="btn" aria-label="Save the groups of {{.Name}}">Save</button>
       </form>
-      {{- with .Also}}<span class="user-also" title="By way of a group they are in (Groups, below)">also in {{.}}</span>{{end}}
+      {{- with .Also}}<span class="user-also" title="By way of a group they are in (on Groups)">also in {{.}}</span>{{end}}
     </td>
     <td>{{if .Pending}}Waiting for approval{{else if .Disabled}}Disabled{{else}}Active{{end}}
       {{- /* Tasks still assigned to someone who can't be given any: to hand on. */}}
@@ -78,55 +79,9 @@
   {{- end}}
   </tbody>
 </table>
-<h2 id="groups">Groups</h2>
-{{- /* A group made of groups (docs/spec/users.md, Groups): who is in dev or
-    in design is in product. What is for a group (a task list, a folder of
-    pages) is for whoever is in it, by whatever way. */}}
-{{- if .GroupRows}}
-<table class="users-table groups-table">
-  <thead><tr><th>Group</th><th>Who is in it</th><th></th></tr></thead>
-  <tbody>
-  {{- range .GroupRows}}
-  <tr>
-    <td class="user-name">{{.Name}}{{if .Folder}} <span class="user-fact" title="The group has pages: its folder groups/{{.Name}}/, which only its members see">pages</span>{{end}}
-      {{- with .Owners}} <span class="user-you group-owners" title="They say who is in the group, on their Groups page">owned by {{range $i, $o := .}}{{if $i}}, {{end}}{{$o}}{{end}}</span>{{end}}</td>
-    {{- /* Who is in it, and by which way: the people named on it, then each group it includes with its people. */}}
-    <td class="group-who">
-      {{- range $i, $m := .Direct}}{{if $i}}, {{end}}{{$m}}{{end}}
-      {{- if .Via}}{{if .Direct}}, and {{end}}everyone in {{range $i, $v := .Via}}{{if $i}} and {{end}}<span class="group-via">{{$v.Name}}</span> <span class="user-you">({{range $k, $m := $v.Members}}{{if $k}}, {{end}}{{$m}}{{else}}nobody{{end}})</span>{{end}}
-      {{- else if not .Direct}}<span class="user-you">nobody</span>{{end -}}
-    </td>
-    <td><div class="user-actions">
-      <details class="group-edit group-includes-edit">
-        <summary class="btn" title="Everyone in a group you add here is in {{.Name}}, also who joins it later">{{if .Includes}}Change the groups…{{else}}Add a whole group…{{end}}</summary>
-        <form method="post" action="/admin/groups/includes" class="user-groups-form">
-          <input type="hidden" name="group" value="{{.Name}}">
-          <input type="text" name="includes" value="{{.Includes}}" aria-label="Groups that {{.Name}} includes" placeholder="dev, design" list="user-groups" autocomplete="off" spellcheck="false" size="16">
-          <button type="submit" class="btn" aria-label="Save what {{.Name}} includes">Save</button>
-        </form>
-      </details>
-      <details class="group-edit group-rename-edit">
-        <summary class="btn" title="Its pages, and the lists that are for it, follow">Rename…</summary>
-        <form method="post" action="/groups/{{.Name}}/rename" class="user-groups-form group-rename-form">
-          <input type="hidden" name="from" value="admin">
-          <input type="text" name="name" value="{{.Name}}" aria-label="The new name of the group {{.Name}}" required pattern="@?[a-z0-9][a-z0-9-]*" title="Lowercase letters, digits and hyphens. Its pages, and the lists that are for it, follow." autocomplete="off" autocapitalize="none" spellcheck="false" size="12">
-          <button type="submit" class="btn">Rename</button>
-        </form>
-      </details>
-    </div></td>
-  </tr>
-  {{- end}}
-  </tbody>
-</table>
-{{- end}}
-<form method="post" action="/admin/groups/includes" class="users-invite groups-new">
-  <input type="text" name="group" placeholder="Group" required pattern="@?[a-z0-9][a-z0-9-]*" title="Lowercase letters, digits and hyphens" autocapitalize="none" autocorrect="off" spellcheck="false" aria-label="Group">
-  <input type="text" name="includes" placeholder="includes: dev, design" required list="user-groups" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="The groups it includes">
-  <button type="submit" class="btn">Make a group of groups</button>
-</form>
-<p class="users-help">A user is put in a group in the list above (their Groups field); anyone who may write also makes groups of their own on their <a href="/groups">Groups</a> page, and says who is in those (their owners). A group can also be made of other groups: whoever is in one of them is in it, so a task list for two teams is for one group, and who joins a team later is in it at once. Taking a group out takes what is for the larger group from its people.</p>
+<p class="users-help">A user's Groups field takes the groups there are; groups are made, renamed and made of other groups on <a href="/groups">Groups</a>, where you manage every group.</p>
 {{- with .Stray}}
-<p class="users-help groups-stray" role="note"><strong>Seen by no one:</strong> {{range $i, $p := .}}{{if $i}}, {{end}}<code>{{$p}}</code>{{end}}. A folder in <code>groups/</code> is for the group of its name, one in <code>private/</code> for the user of its name: put someone in that group, add that user, or move the folder on the host.</p>
+<p class="users-help groups-stray" role="note"><strong>Seen by no one:</strong> {{range $i, $p := .}}{{if $i}}, {{end}}<code>{{$p}}</code>{{end}}. A folder in <code>private/</code> is for the user of its name: add that user, or move the folder on the host.</p>
 {{- end}}
 <h2>Invite someone</h2>
 <form method="post" action="/admin/users/invite" class="users-invite">

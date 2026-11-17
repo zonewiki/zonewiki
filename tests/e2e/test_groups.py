@@ -198,7 +198,9 @@ def test_make_a_group_say_who_is_in_it_and_rename_it(page, wiki, monkeypatch):
     page.wait_for_url("**/groups")
     expect(page.locator(".groups-none")).to_have_text("You are in no group.")
     page.get_by_label("The group's name").fill("apollo")
-    page.get_by_label("Who else is in it").fill("alice")
+    page.get_by_role("combobox", name="Who else is in it").fill("ali")
+    page.get_by_role("combobox", name="Who else is in it").press("Enter")              # the user offered: a pill
+    expect(page.locator(".groups-new .pick-pill")).to_have_attribute("data-name", "alice")
     page.get_by_role("button", name="Make the group").click()
     expect(page.locator(".users-done")).to_contain_text("Made the group apollo")
     row = page.locator('.groups-list li[data-group="apollo"]')
@@ -212,8 +214,12 @@ def test_make_a_group_say_who_is_in_it_and_rename_it(page, wiki, monkeypatch):
     # Manage…: carol in, alice out; then another name.
     page.goto("/groups")
     row.locator("summary").click()
-    row.get_by_label("People").fill("bob, carol")
-    row.get_by_role("button", name="Save").click()
+    people = row.get_by_role("combobox", name="People")
+    row.get_by_role("button", name="Take out alice").click()
+    people.fill("carol")
+    people.press("Enter")
+    expect(row.locator("label", has_text="People").locator(".pick-pill")).to_have_count(2)
+    row.get_by_role("button", name="Save").first.click()
     expect(page.locator(".users-done")).to_contain_text("No longer in it: alice")
     expect(row.locator(".group-who")).to_contain_text("bob, carol")
     row.locator("summary").click()
@@ -224,3 +230,54 @@ def test_make_a_group_say_who_is_in_it_and_rename_it(page, wiki, monkeypatch):
     assert (wiki.root / "groups/artemis/roadmap.md").exists() and not (wiki.root / "groups/apollo").exists()
     page.goto("/page/groups/artemis/roadmap")
     expect(page.locator("h1 .group-mark")).to_have_text("👥 artemis")
+
+
+def test_a_name_field_takes_only_users_and_groups_there_are(page, wiki, monkeypatch):
+    """The fields that take users or groups are pills, chosen from those
+    there are: typing offers them, what names nobody is marked and the form
+    isn't sent with it, Backspace takes the last pill out, a pasted list
+    becomes pills; an admin's Everyone in offers groups, not the group
+    itself."""
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "t1"), "bob": ("pw", "t2"), "carol": ("pw", "t3")})
+    monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin", "groups": "dev"}, "bob": {"groups": "design"}})
+    page.request.post("/login", form={"username": "alice", "password": "pw"})
+    page.goto("/groups")
+    form = page.locator(".groups-new").first
+    field = form.get_by_role("combobox", name="Who else is in it")
+    field.fill("x")
+    expect(form.locator(".pick-none")).to_have_text("No user called x")
+    field.press("Enter")
+    expect(field).to_have_attribute("aria-invalid", "")
+    form.get_by_label("The group's name").fill("apollo")
+    form.get_by_role("button", name="Make the group").click()
+    page.wait_for_timeout(300)
+    assert page.url.endswith("/groups") and "[group apollo]" not in (wiki.root / ".zone/config").read_text()   # not sent
+    field.fill("")
+    field.fill("bob, carol, zed ")                         # a pasted list: who there is becomes a pill
+    expect(form.locator(".pick-pill")).to_have_count(2)
+    expect(field).to_have_value("zed")
+    expect(field).to_have_attribute("aria-invalid", "")
+    field.fill("")
+    field.press("Backspace")                               # the last pill goes
+    expect(form.locator(".pick-pill")).to_have_count(1)
+    field.press("ArrowDown")                               # the menu: who is not chosen yet
+    expect(form.locator(".pick-option")).to_have_text(["alice", "carol"])
+    field.press("ArrowDown")
+    field.press("Enter")
+    expect(form.locator(".pick-pill")).to_have_count(2)
+    assert form.locator('input[name="people"]').input_value() == "bob, carol"
+    form.get_by_role("button", name="Make the group").click()
+    expect(page.locator(".users-done")).to_contain_text("Made the group apollo")
+    assert "groups = apollo" in (wiki.root / ".zone/config").read_text().split("[user carol]")[1]
+    # An admin's Everyone in: the groups there are, less the group itself.
+    row = page.locator('.groups-list li[data-group="dev"]')
+    row.locator("summary").click()
+    everyone = row.get_by_role("combobox", name="Everyone in")
+    everyone.focus()
+    expect(row.locator(".pick-option")).to_have_text(["👥 apollo", "👥 design"])
+    everyone.fill("des")
+    everyone.press("Tab")
+    expect(row.locator('form[action="/groups/includes"] .pick-pill')).to_have_attribute("data-name", "design")
+    row.locator('form[action="/groups/includes"]').get_by_role("button", name="Save").click()
+    expect(page.locator(".users-done")).to_contain_text("dev includes design")
+    assert "[group dev]\nincludes = design" in (wiki.root / ".zone/config").read_text()

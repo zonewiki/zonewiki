@@ -252,6 +252,7 @@ A group is its name (lowercase letters, digits, hyphens; `groupNameRE`): there i
 A name that is none is an error of the settings file, which then keeps the settings from before.
 
 - **Set them** with `zonewiki user group NAME +dev -hiring` (alone it says which groups the user is in; `user list` names them: `bob (in dev, hiring)`), in the Users tab's **Groups** field (below), or by hand in the file.
+  The field takes only groups there are (and the name of a folder in `groups/` no one sees, which gives it its people again); a new group is made on **Groups** (A group of your own, below).
 - **What a group is for**: what is for some and not for all. `memberOf(user, group)` asks; a disabled user is a member of none.
   A task list can be for groups (`"for": ["@hiring"]`: Lists for some, in `docs/spec/tasks.md`), and a user put in a group or taken out sees its lists, or no longer, at their next request.
 - **A role is not a group**: an admin is in no group by being admin, and sees nothing of a group they are not in. They may put themselves in one, which the log of the settings shows ("alice's groups").
@@ -271,7 +272,7 @@ A list for both teams is then for one group (`"for": ["@product"]`).
 - **A group that includes itself**, directly or by way of others, is an error of the file naming its line ("[group a] includes itself, by way of b"; `includesItself` in `go/configfile.go`), as is a name in `includes` that is no group's.
   A name nobody is in is none: a group made of empty groups has no members.
 - **The section has the keys `includes` and `owners`** (`groupKeys`; owners: A group of your own, below), and any other is an error. A group without a section is its name on users, as above.
-- **Set it** with `zonewiki group includes product +dev +design` (`-dev` takes one out; alone it says what the group includes and who is in it now; `zonewiki group list` says it of every group: `product includes design, dev: alice, bob`; `groupMain` in `go/commands.go`), in the Users tab's **Groups** part (Managing users, below), or by hand in the file.
+- **Set it** with `zonewiki group includes product +dev +design` (`-dev` takes one out; alone it says what the group includes and who is in it now; `zonewiki group list` says it of every group: `product includes design, dev: alice, bob`; `groupMain` in `go/commands.go`), on **Groups**, for an admin (An admin on Groups, below), or by hand in the file.
   Taking the last group out removes the key, and the section when it says nothing else (`setGroupKey`). The settings' log says it ("product includes design, dev").
 - **Taking a group out is a narrowing**, like taking a user out of a group: its people no longer see what is for the larger group at their next request, and their tasks in its lists count as no one's (Lists for some in `docs/spec/tasks.md`).
   The command and the page say who that was ("No longer in product: bob. What is for @product they no longer see."); putting the group back gives it all back.
@@ -280,12 +281,16 @@ On **Groups** (`/groups`: the user menu's entry, **All your groups** in the pill
 They are in it and are its **owner**; from the next request `groups/<name>/` is its people's and a task list can be for `@<name>`, as with any group.
 
 - **Who is in it is still said on the users**: making the group writes its name into the `groups` of each of its people, and `owners = <you>` into a section `[group <name>]` (`makeGroupOp`, `setMembers`). So `memberOf`, a group made of groups and the Users tab's Groups field hold for it unchanged, and an admin sees and sets it like any other.
+- **Names are chosen, not typed blind** (`js/namepick.js`): **People**, **Owners**, **Who else is in it** and an admin's group fields are pills, one per name, with × to take one out.
+  Typing offers the users (or groups) there are that start with what is typed, then those that hold it; Enter, Tab, a comma or a click picks the one marked, ↑/↓ move, Backspace in an empty box takes the last pill out, and a pasted list becomes pills.
+  What names nobody stays in the box, marked ("No user called x"), and the form isn't sent with it.
+  The field itself is hidden and holds the names (`anna, bo`), so the form sends what it always did; without JavaScript it is a text field, and the server refuses a name that is no user's or no group's either (`usersNamed`, `groupsNamed`, against `knownGroups`).
 - **Its owners say who is in it** (`Settings.Owners`, `ownerOf`, `managesGroup`): on `/groups` a group you own has **Manage…**, with **People** (the users named on it, `directMembers`; who is in it by way of a group it includes isn't listed and isn't this field's), **Owners**, and **Save** (`POST /groups/<group>/people`, `groupPeopleOp`).
   An owner's change touches that one name on the users and the group's `owners`, nothing else of the settings file.
   Taking someone out is a narrowing, as an admin's is: they no longer see the group's pages and lists at their next request, and the page says who that was.
   A group keeps an owner (the last can't take themselves out; they name who takes it over first). An owner needn't be in the group: they then see none of its pages.
   A removed user owns nothing (`dropOwner`), and a name in `owners` that is no user is none.
-- **An admin manages every group**, owned or not: the Users tab says "owned by anna" beside it, the admin's Groups field on a user works as before, and `zonewiki group owners NAME +anna -bo` gives a group owners or takes them (none left: the group is an admin's alone again, as one made on the host).
+- **An admin manages every group**, owned or not (An admin on Groups, below), the admin's Groups field on a user works as before, and `zonewiki group owners NAME +anna -bo` gives a group owners or takes them (none left: the group is an admin's alone again, as one made on the host).
 - **A name that is taken is refused** (`groupNameTaken`): a group there is, a name a group is said to include, a folder in `groups/` (a group nobody is in keeps its folder, and a new group of that name would get its pages), or a name a task list is for.
   The groups' names are no secret among a wiki's users (a list's Who it is for… completes from them), so "taken" tells nothing new.
 - **Not for a viewer** (who changes nothing: 403), a visitor, or a wiki without users (404).
@@ -294,7 +299,17 @@ They are in it and are its **owner**; from the next request `groups/<name>/` is 
   Not a group without owners (it is an admin's, and who is in it is the admin's to say), not one you are in only by way of a group it includes (there is nothing of it on you to take off: you leave that one), and not for who manages it (Manage… is their way, where a group keeps an owner).
 - **What it doesn't do**: change what a group includes (an admin's).
 
-**A group renamed** (`renameGroupOp`): **Rename** under Manage… on `/groups`, for its owners, and a Name field per group in the Users tab, for an admin (`POST /groups/<group>/rename`, `name`; `from=admin` answers on the admin page).
+**An admin on Groups**: `/groups` is the one page for groups, and an admin's shows more (`groupsView.Admin`).
+
+- **Other groups** (`#others`), under their own: every other group there is (`knownGroups`: someone is in it, it has a section, or a group includes it), each with who is in it and by which way, "owned by anna" when it has owners, "has pages" when its folder is there, and **Manage…**.
+  The admin sees who is in them, not their pages: there is no link to a group's home they aren't in.
+- **Manage…** of every group has, beside People, Owners and Name, **Everyone in**: the groups it includes (pills of the groups there are, not itself; empty: none, and the key goes), **Save** (`POST /groups/includes`, `group`, `includes`; `groupIncludesRoute`, admins only, 404 for anyone else).
+- **A group of groups** below: a new group's name and the groups it includes (**Make a group of groups**, the same route).
+  A group that would include itself, or a name that is no group's, is refused and nothing changes.
+  Done, the page says who is in the group now, and who no longer is (`?done=includes&group=…&left=…`, of which it says only users' names).
+- **Seen by no one**: the folders in `groups/` of a group nobody is in (`strayGroups`); putting someone in that group (their Groups field on the admin page) gives the folder its people again.
+
+**A group renamed** (`renameGroupOp`): **Rename** under Manage… on `/groups`, for its owners and an admin (`POST /groups/<group>/rename`, `name`).
 What is the group's by its name goes along, so nobody loses anything: the lists that are for `@old` are for `@new`; the folder `groups/old/` becomes `groups/new/`, every link to its pages re-pointed on pages and in tasks, the files its pages show and those no page shows along, and a home that still says what Zone wrote says the new name; then the settings name it anew, on the users, in the groups that include it and its own section.
 The order is that one: until the settings change nobody is in the new name's group, so what has moved is seen by no one for that moment and never by more.
 **A step that fails** puts the ones before it back and the rename stops, everything as it was (a page of the group with text not in git yet that can't be committed first: the lists, which were for the new name already, are for the old one again).
@@ -365,7 +380,7 @@ It has section tabs (`adminTabs`), of which **Users** (`/admin/users`, `users.ht
 - **The list**: each user's name, "(you)", "MCP" if they have a token, their role, and Active or Disabled.
   Then the invite form, the open links (Invite and reset links, below) and what the roles mean.
 - **Per user**: change their role (a select and Save),
-  set their **groups** (a field with the groups as the file writes them, `dev, hiring`, completing from the groups there are; **Save**; empty takes them out of every group; `POST /admin/users/{name}/groups`, `userGroupsRoute`; a name that is no group's is refused and nothing changes),
+  set their **groups** (pills of the groups there are, as on Groups, `js/namepick.js`; **Save**; none takes them out of every group; `POST /admin/users/{name}/groups`, `userGroupsRoute`, the field `groups` as the file writes them, `dev, hiring`; a name that is no group there is, or a folder in `groups/` no one sees, is refused and nothing changes: a new group is made on Groups),
   below the field, "also in product" names the groups they are in by way of those (`userRow.Also`);
   **Disable** or **Enable**,
   **Reset password** (makes a link),
@@ -373,19 +388,14 @@ It has section tabs (`adminTabs`), of which **Users** (`/admin/users`, `users.ht
   `js/admin.js` opens it with what the row's `<details>` holds, and without JavaScript the `<details>` unfolds instead: their private pages, notes and tasks stay in `private/NAME/`, seen by no one, and someone added again under that name gets them back;
   an open link of theirs goes too).
   There is no field to type another user's password: the admin never knows it.
-- **Groups** (below the users, `#groups`): every group there is, and under **Who is in it** its people by the way they are in it: those it is named on, then each group it includes with that group's people ("anna, and everyone in dev (alice, carol) and design (bob)"), so one sees why someone is in a group that isn't in their Groups field.
-  **Add a whole group…** at the row's end (**Change the groups…** when it includes some) opens the field with the groups it includes and **Save** (empty: none, and the section goes); **Rename…** opens the field with the group's name and **Rename**, which takes its pages and lists along (`POST /groups/<group>/rename` with `from=admin`: A group renamed, above).
-  A row is text and two buttons until one is clicked, so no field stands under a heading that has to explain it, and there is no column of included groups beside the people, which read as a second, unrelated list; the fields open without JavaScript too (`<details>`), and with it the cursor goes into the field.
-  Beside a group's name: "pages" when its folder is there, and "owned by anna" when it has owners (who say who is in it on their Groups page: A group of your own, above).
-  **Make a group of groups** below it takes a new group's name and what it includes.
-  Both are `POST /admin/groups/includes` (`group`, `includes`; `groupIncludesRoute`): a group that would include itself, or a name that is no group's, is refused and nothing changes.
-  Done, the page says who is in the group now, and who no longer is (`?done=includes&group=…&left=…`, of which it says only users' names).
+- **Groups are on Groups**: below the users a line says that a user's Groups field takes the groups there are, and that groups are made, renamed and made of other groups on **Groups** (`/groups`), where an admin manages every group (An admin on Groups, above).
+  The "Seen by no one" note here names the folders in `private/` of a user who is gone (`strayPrivate`); those in `groups/` are on Groups.
 - **Not yourself**: the admin's own row ("(you)") has no Disable or Remove…, and a POST that disables or removes the admin themselves is refused ("you can't … yourself here. Another admin can.").
   A slip there would lock them out of the wiki, and it would only be allowed with another admin left, who can do it.
   They can still change their own role, to step down while another admin remains.
   As the last user is always the admin themselves, this is also why the last user can't be removed here.
 - **Plain forms**: each change is a POST (behind the Origin check, like every write), and the page works without JavaScript, which opens the Remove dialog and keeps the list quiet:
-  **a row's Save buttons show once the field beside them is edited** (`js/admin.js`, `.saves-when-edited`; hidden, not gone, so nothing moves), and hide again when the edit is taken back. Picking a role saves nothing by itself; Enter in a field saves as its button does. Without JavaScript the buttons are there all along.
+  **a row's Save buttons show once the field beside them is edited** (`js/admin.js`, `.saves-when-edited`; hidden, not gone, so nothing moves), and hide again when the edit is taken back (a pill picked or taken out counts). Picking a role saves nothing by itself; Enter in a field saves as its button does (in the Groups box, Enter with nothing typed). Without JavaScript the buttons are there all along.
   Done, it answers with a redirect to `/admin/users?done=…&user=…`, and the page says what was done from a fixed set of messages, so a link can't make it say anything else.
   Refused, the page comes back (409) saying why.
   An admin who demoted themselves is sent to the home page.

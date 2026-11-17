@@ -61,7 +61,7 @@ class TestWhoSeesIt:
         assert resp.status_code == 302 and resp.headers["Location"] == "/admin/users"
 
     @pytest.mark.parametrize("path", ["/admin/users/bob/role", "/admin/users/bob/disable", "/admin/users/bob/enable",
-                                      "/admin/users/bob/remove", "/admin/users/bob/groups", "/admin/groups/includes"])
+                                      "/admin/users/bob/remove", "/admin/users/bob/groups", "/groups/includes"])
     def test_anyone_else_gets_a_404_and_nothing_changes(self, client, users, git_wiki_dir, path):
         login(client, "bob")
         before = config(git_wiki_dir)
@@ -95,69 +95,82 @@ class TestChanges:
 
     def test_groups(self, admin, git_wiki_dir):
         # Who belongs together is said on the users: the Groups field sets a
-        # user's groups (cleaned, A–Z), empty takes them out of every one.
+        # user's groups (cleaned, A–Z), empty takes them out of every one. It
+        # takes the groups there are: a new one is made on Groups.
+        (git_wiki_dir / "groups" / "ghosts").mkdir(parents=True)       # a folder nobody sees: its group can be given
+        resp = post(admin, "/admin/users/carol/groups", groups="Ghosts, @ghosts")
+        assert resp.status_code == 303 and "groups = ghosts" in section(git_wiki_dir, "carol")
+        post(admin, "/admin/users/carol/groups", groups="")
+        assert post(admin, "/groups", name="dev", people="").status_code == 303       # made on Groups, by alice
+        assert post(admin, "/groups", name="hiring", people="").status_code == 303
         resp = post(admin, "/admin/users/bob/groups", groups="Hiring, @dev")
         assert resp.status_code == 303 and resp.headers["Location"].startswith("/admin/users?done=groups")
         assert "groups = dev, hiring" in section(git_wiki_dir, "bob")
         page = admin.get(resp.headers["Location"], headers=HOST).data.decode()
         assert "bob is in dev, hiring now." in page
-        assert 'name="groups" value="dev, hiring" aria-label="Groups of bob"' in page
-        assert '<datalist id="user-groups"><option value="dev"><option value="hiring"></datalist>' in page
+        assert 'name="groups" value="dev, hiring" aria-label="Groups of bob"' in page and 'data-pick="groups"' in page
+        assert '<datalist id="user-groups"><option value="dev"><option value="ghosts"><option value="hiring"></datalist>' in page
+        assert 'href="/groups"' in page and "Make a group of groups" not in page    # groups are made and changed on Groups
         before = config(git_wiki_dir)
-        resp = post(admin, "/admin/users/bob/groups", groups="dev ops!")       # no group's name: nothing changes
-        assert resp.status_code == 409 and "isn&#39;t a group&#39;s name" in resp.data.decode()
-        assert config(git_wiki_dir) == before
+        for groups, why in (("dev ops!", "isn&#39;t a group&#39;s name"), ("dev, ops", "There is no group called ops")):
+            resp = post(admin, "/admin/users/bob/groups", groups=groups)       # nothing changes
+            assert resp.status_code in (400, 409) and why in resp.data.decode(), groups
+            assert config(git_wiki_dir) == before
         resp = post(admin, "/admin/users/bob/groups", groups="")
         assert "groups" not in section(git_wiki_dir, "bob")
         assert "bob is in no group now." in admin.get(resp.headers["Location"], headers=HOST).data.decode()
 
     def test_a_group_made_of_groups(self, admin, client, git_wiki_dir):
-        # Groups, below the users: a group can be made of other groups, and
-        # who is in one of them is in it (docs/spec/users.md, Groups).
-        post(admin, "/admin/users/bob/groups", groups="dev")
-        post(admin, "/admin/users/carol/groups", groups="design")
-        resp = post(admin, "/admin/groups/includes", group="@Product", includes="Dev, @design")
-        assert resp.status_code == 303 and resp.headers["Location"].startswith("/admin/users?done=includes&group=product")
+        # On Groups an admin makes a group of other groups, and who is in one
+        # of them is in it (docs/spec/users.md, Groups). dev and design are
+        # made there by alice, who then leaves them to bob and carol.
+        assert post(admin, "/groups", name="dev", people="bob").status_code == 303
+        assert post(admin, "/groups", name="design", people="carol").status_code == 303
+        post(admin, "/admin/users/alice/groups", groups="")
+        resp = post(admin, "/groups/includes", group="@Product", includes="Dev, @design")
+        assert resp.status_code == 303 and resp.headers["Location"].startswith("/groups?done=includes&group=product")
         assert "\n[group product]\nincludes = design, dev\n" in config(git_wiki_dir)
         assert oct((git_wiki_dir / ".zone" / "config").stat().st_mode & 0o777) == "0o600"
         page = admin.get(resp.headers["Location"], headers=HOST).data.decode()
         assert "product includes design, dev: bob, carol." in page
-        assert 'name="includes" value="design, dev" aria-label="Groups that product includes"' in page
-        # who is in it says by which way; the fields open on their buttons
-        assert ">Change the groups…</summary>" in page and ">Add a whole group…</summary>" in page and ">Rename…</summary>" in page
-        who = lambda g: re.sub(r"<[^>]+>", "", re.search(r'<td class="user-name">%s</td>\s*<td class="group-who">(.*?)</td>' % g, page, re.S).group(1)).strip()
-        assert who("product") == "everyone in design (carol) and dev (bob)"
-        assert who("dev") == "bob"
+        assert 'name="includes" value="design, dev" list="all-groups" data-pick="groups" data-pick-not="product"' in page
+        assert '<datalist id="all-groups"><option value="design"><option value="dev"><option value="product"></datalist>' in page
+        who = lambda g: " ".join(re.sub(r"<[^>]+>", "", page.split(f'data-group="{g}"', 1)[1].split(
+            '<span class="group-who">', 1)[1].split('<span class="group-pages">', 1)[0]).split())
+        assert who("product") == "everyone in design (carol) and dev (bob)"    # Other groups: she is in none of them
+        assert who("dev") == "bob · owned by alice"
+        assert ">Other groups</h2>" in page and ">Make a group of groups</button>" in page
         post(admin, "/admin/users/alice/groups", groups="product")         # named on it, beside the groups
-        page = admin.get("/admin/users", headers=HOST).data.decode()
+        page = admin.get("/groups", headers=HOST).data.decode()
         assert who("product") == "alice, and everyone in design (carol) and dev (bob)"
         post(admin, "/admin/users/alice/groups", groups="")
         page = admin.get("/admin/users", headers=HOST).data.decode()
-        assert '<span class="user-also" title="By way of a group they are in (Groups, below)">also in product</span>' in page
-        assert '<option value="product">' in page                      # the fields complete it too
+        assert '<span class="user-also" title="By way of a group they are in (on Groups)">also in product</span>' in page
+        assert '<option value="product">' in page                      # the fields offer it too
         for _ in range(50):
             if "product includes design, dev (by alice)" in client.live.log.read_text():
                 break
             time.sleep(.05)
         assert "Change settings: product includes design, dev (by alice)" in client.live.log.read_text()
-        # What the file can't say is refused, and nothing changes.
+        # What the file can't say, or a group there isn't, is refused, and nothing changes.
         before = config(git_wiki_dir)
         for data, why in (({"group": "dev", "includes": "product"}, "includes itself"),
                           ({"group": "product", "includes": "dev ops!"}, "isn&#39;t a group&#39;s name"),
+                          ({"group": "product", "includes": "dev, ops"}, "There is no group called ops"),
                           ({"group": "Pro duct", "includes": "dev"}, "isn&#39;t a group&#39;s name"),
                           ({"group": "", "includes": "dev"}, "isn&#39;t a group&#39;s name")):
-            resp = post(admin, "/admin/groups/includes", **data)
-            assert resp.status_code == 409 and why in resp.data.decode(), data
+            resp = post(admin, "/groups/includes", **data)
+            assert resp.status_code in (400, 409) and why in resp.data.decode(), data
             assert config(git_wiki_dir) == before
         # Taking a group out says whom that takes the larger group from; with
         # nothing left the section goes.
-        resp = post(admin, "/admin/groups/includes", group="product", includes="dev")
+        resp = post(admin, "/groups/includes", group="product", includes="dev")
         page = admin.get(resp.headers["Location"], headers=HOST).data.decode()
         assert "product includes dev: bob. No longer in it: carol. What is for @product they no longer see." in page
-        page = admin.get("/admin/users?done=includes&group=product&left=mallory,carol", headers=HOST).data.decode()
+        page = admin.get("/groups?done=includes&group=product&left=mallory,carol", headers=HOST).data.decode()
         assert "No longer in it: carol." in page and "mallory" not in page    # only users' names
-        resp = post(admin, "/admin/groups/includes", group="product", includes="")
-        assert "[group" not in config(git_wiki_dir)
+        resp = post(admin, "/groups/includes", group="product", includes="")
+        assert "[group product]" not in config(git_wiki_dir)
         assert "product: nobody is in it. No longer in it: bob." in admin.get(resp.headers["Location"], headers=HOST).data.decode()
 
     def test_disable_and_enable(self, admin, client, git_wiki_dir):

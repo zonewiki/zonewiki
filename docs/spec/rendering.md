@@ -109,7 +109,8 @@ They share code by `import`, not through `window`:
 | `js/figures.js` | `renderFigures`: math (KaTeX) and Mermaid diagrams, loading each library on first use (Math and diagrams) |
 | `js/fold.js` | Folding a page view's sections (`foldAll`, `revealElement`) |
 | `js/present.js` | Presentation mode |
-| `js/admin.js` | The admin page's Remove dialog (Managing users in `users.md`) |
+| `js/admin.js` | The admin page's Remove dialog, its Save shown once a field is edited (Managing users in `users.md`) |
+| `js/namepick.js` | Fields that take users or groups (`data-pick`): those there are, as pills (A group of your own in `users.md`) |
 | `js/copyline.js` | Lines to copy (`.copy-line`: Connect an assistant's address, token and commands): shows each one's Copy button and copies its text (`copyText`) |
 | `js/taskutil.js` | What `tasks.js`'s task apps use that holds no state of an app's own: date formatting and classes (`formatDate`, `shortDate`, `dueDateClass`, `urgencyClass`, `todayStr`), `DATES`/`LOCALE`, notices and the toast's place, `esc`, the tag autocomplete (`attachTagAc`) and `#` words at the caret, links in a title (`linkifyTitle`, `plainTitle`), comment stamps |
 | `js/tasktexts.js` | Task descriptions and comments rendered as pages are, for every task app on the page: the HTML the server made of each text (`POST /api/render-notes`), kept per text and fetched once (`renderTexts`, `renderedHtml`, `textsOf`) |

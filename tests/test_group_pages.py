@@ -602,7 +602,9 @@ def test_a_groups_home_is_made_by_a_member_and_stays(client, wiki):
         sign_in(client, who)
         assert client.get("/groups/dev", headers=HOST).status_code == 404
         body = client.get("/groups", headers=HOST).get_data(as_text=True)   # their groups: vera's one, the others' none
-        assert ("👥 dev" in body) == (who == "vera") and SECRET not in body
+        mine, others = (body.split('id="others"', 1) + [""])[:2]
+        assert ("👥 dev" in mine) == (who == "vera") and SECRET not in body
+        assert ('<a href="/groups/dev">' in others) is False and ("👥 dev" in others) == (who == "dana")   # an admin's Other groups: no way in
     assert not (wiki / GROUP / "index.md").exists()
     sign_in(client, "carol")
     resp = client.get("/groups/dev", headers=HOST)
@@ -692,24 +694,28 @@ def test_filing_a_note_names_your_places_first(client, wiki):
     assert options == [("groups/dev/", "👥 dev"), ("private/alice/", "🔒 Private"), ("projects/", "")]
 
 
-def test_the_admin_page_names_the_folders_no_one_sees(client, wiki):
+def test_an_admin_is_told_of_the_folders_no_one_sees(client, wiki):
     """An admin sees no page of a group they aren't in, but which folders
-    there are that nobody sees, and which groups have pages."""
+    there are that nobody sees (a group's on Groups, a user's on the admin
+    page), and which groups have pages."""
     (wiki / "groups/ghosts").mkdir()
     (wiki / "groups/ghosts/x.md").write_text("# X\n")
     (wiki / "private/gone").mkdir(parents=True)
     (wiki / "private/gone/y.md").write_text("# Y\n")
     sign_in(client, "dana")
     body = client.get("/admin/users", headers=HOST).get_data(as_text=True)
-    assert "<strong>Seen by no one:</strong> <code>groups/ghosts</code>, <code>private/gone</code>" in body
-    assert re.search(r'<td class="user-name">dev <span class="user-fact"[^>]*>pages</span></td>', body) and SECRET not in body
+    assert "<strong>Seen by no one:</strong> <code>private/gone</code>." in body and "groups/ghosts" not in body
+    body = client.get("/groups", headers=HOST).get_data(as_text=True)
+    assert "<strong>Seen by no one:</strong> <code>groups/ghosts</code>." in body and "private/gone" not in body
+    dev = body.split('data-group="dev"', 1)[1].split("</li>", 1)[0]
+    assert re.search(r'<span class="group-pages"><span title="[^"]*">has pages</span></span>', dev) and SECRET not in body
     # Emptying a group says what stays.
     for who in ("alice", "carol"):
         client.post(f"/admin/users/{who}/groups", data={"groups": ""}, headers=HOST)
     resp = client.post("/admin/users/vera/groups", data={"groups": ""}, headers=HOST)
     body = client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True)
     assert "Nobody is in dev now: its pages stay in the wiki, in groups/dev/, seen by no one." in body
-    assert "<code>groups/dev</code>" in body
+    assert "<code>groups/dev</code>" in client.get("/groups", headers=HOST).get_data(as_text=True)
 
 
 # ── Assistants ───────────────────────────────────────────────────────────────

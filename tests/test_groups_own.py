@@ -99,6 +99,38 @@ def test_whoever_may_write_makes_a_group(client, wiki):
     assert 'action="/groups/dev/people"' not in page(client)             # dev has no owner: an admin's
 
 
+def test_groups_is_where_an_admin_manages_every_group(client, wiki):
+    """Groups is the one page for groups: someone else sees their own; an
+    admin also every other group, with what it includes, the form for a
+    group of groups and the folders no one sees. Fields that take users or
+    groups say so (data-pick: pills in the browser) and offer only those
+    there are."""
+    sign_in(client, "alice")
+    make(client, "apollo", "bob")
+    body = page(client)
+    assert 'id="others"' not in body and 'action="/groups/includes"' not in body and "Seen by no one" not in body
+    assert 'name="people" value="alice, bob" list="group-people" data-pick="users"' in body
+    assert 'name="owners" value="alice" list="group-people" data-pick="users"' in body
+    assert '<datalist id="group-people"><option value="alice"><option value="bob"><option value="carol"><option value="dana"><option value="vera"></datalist>' in body
+    assert client.post("/groups/includes", data={"group": "apollo", "includes": "dev"}, headers=HOST).status_code == 404
+    sign_in(client, "dana")
+    body = page(client)
+    mine, others = body.split('id="others"', 1)
+    assert "You are in no group." in mine
+    for g in ("apollo", "design", "dev", "product"):                      # every group, each managed by her
+        assert f'data-group="{g}"' in others and f'action="/groups/{g}/people"' in others and f'action="/groups/{g}/rename"' in others
+    assert others.count('action="/groups/includes"') == 5                 # each group's (design: one included, with nobody in it), and a group of groups
+    assert 'name="includes" value="design, dev" list="all-groups" data-pick="groups" data-pick-not="product"' in others
+    assert '<datalist id="all-groups"><option value="apollo"><option value="design"><option value="dev"><option value="product"></datalist>' in others
+    assert "<strong>Seen by no one:</strong> <code>groups/ghosts</code>." in others
+    assert '<a href="/groups/' not in others                               # not her groups: no way to their pages
+    # A group named that there isn't is refused, by whatever door.
+    before = config(wiki)
+    resp = client.post("/groups/includes", data={"group": "program", "includes": "apollo, nosuch"}, headers=HOST)
+    assert resp.status_code in (400, 409) and "There is no group called nosuch" in resp.get_data(as_text=True)
+    assert config(wiki) == before
+
+
 @pytest.mark.parametrize("name,people,says", [
     ("dev", "", "is taken"),              # a group there is
     ("product", "", "is taken"),          # one made of groups
@@ -164,8 +196,9 @@ def test_its_owners_say_who_is_in_it(client, wiki):
     assert until(lambda: "apollo" not in page(client))
     # An admin says it of any group, and may leave one without an owner: it is an admin's then.
     sign_in(client, "dana")
-    assert "apollo" not in page(client)                                  # not in it: not among her groups
-    assert "owned by carol" in page(client, "/admin/users")
+    mine = page(client).split('id="others"', 1)[0]
+    assert "apollo" not in mine                                          # not in it: not among her groups,
+    assert "owned by carol" in page(client).split('id="others"', 1)[1]   # but among the others, which she manages
     assert people(people="bob", owners="").status_code == 303
     assert "[group apollo]" not in config(wiki) and section(wiki, "user bob") == ["groups = apollo"]
     assert client.post("/groups/dev/people", data={"people": "carol, alice", "owners": "alice"}, headers=HOST).status_code == 303
@@ -176,7 +209,7 @@ def test_a_removed_user_owns_nothing(client, wiki):
     sign_in(client, "alice")
     make(client, "apollo", "bob")
     sign_in(client, "dana")
-    assert until(lambda: "owned by alice" in page(client, "/admin/users"))
+    assert until(lambda: "owned by alice" in page(client))
     assert client.post("/admin/users/alice/remove", headers=HOST).status_code == 303
     assert "[user alice]" not in config(wiki) and "[group apollo]" not in config(wiki)
     assert section(wiki, "user bob") == ["groups = apollo"]              # the group is there, an admin's now
@@ -201,7 +234,7 @@ def apollo(client, wiki):
     assert client.post("/tasks/new-list", data={"name": "launch", "for": "@apollo"}, headers=HOST).status_code == 302
     task = client.post("/api/tasks", json={"title": "Read [[groups/apollo/roadmap]]", "list": "launch"}, headers=HOST).get_json()
     sign_in(client, "dana")
-    assert client.post("/admin/groups/includes", data={"group": "program", "includes": "apollo"}, headers=HOST).status_code == 303
+    assert client.post("/groups/includes", data={"group": "program", "includes": "apollo"}, headers=HOST).status_code == 303
     git(wiki, "add", "-A")
     git(wiki, "commit", "-q", "-m", "The group's files")
     sign_in(client, "alice")
@@ -260,19 +293,20 @@ def test_a_rename_is_its_owners_and_an_admins(client, wiki, apollo):
     assert rename("dev", "theirs").status_code == 404                    # carol is in dev, which is an admin's
     assert rename("nosuch", "theirs").status_code == 404
     assert files() == before and git(wiki, "rev-parse", "HEAD") == head and config(wiki) == settings_before
-    # An admin renames any group, from the admin page, and sees nothing of its pages by it.
+    # An admin renames any group, on Groups, and sees nothing of its pages by it.
     sign_in(client, "dana")
-    body = page(client, "/admin/users")
+    body = page(client)
     assert 'action="/groups/apollo/rename"' in body and 'action="/groups/dev/rename"' in body
-    resp = rename("dev", "core", **{"from": "admin"})
-    assert resp.status_code == 303 and resp.headers["Location"] == "/admin/users?done=renamed&group=core"
+    assert 'action="/groups/dev/rename"' not in page(client, "/admin/users")   # not on the admin page any more
+    resp = rename("dev", "core")
+    assert resp.status_code == 303 and resp.headers["Location"] == "/groups?done=renamed&group=core"
     assert "The group is called core now" in page(client, resp.headers["Location"])
     assert section(wiki, "user carol") == ["groups = core"] and section(wiki, "group product") == ["includes = core, design"]
     assert (wiki / "groups/core/notes.md").read_text() == "# Dev notes\n\nonlydev\n" and not (wiki / "groups/dev").exists()
     assert client.get("/page/groups/core/notes", headers=HOST).status_code == 404
     assert "Dev notes" not in page(client, "/search?q=onlydev")
-    resp = rename("core", "apollo", **{"from": "admin"})                 # refused on the admin page, which says why
-    assert resp.status_code == 409 and "is taken" in resp.get_data(as_text=True) and "Admin" in resp.get_data(as_text=True)
+    resp = rename("core", "apollo")                                      # refused on Groups, which says why
+    assert resp.status_code in (400, 409) and "is taken" in resp.get_data(as_text=True) and "<h1>Groups</h1>" in resp.get_data(as_text=True)
     sign_in(client, "carol")
     assert until(lambda: "onlydev" in page(client, "/page/groups/core/notes"))
 

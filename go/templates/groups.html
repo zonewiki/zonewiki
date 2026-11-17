@@ -1,8 +1,58 @@
 {{- /* /groups: the groups the user is in or owns, each with the way to its
     folder's home; for who manages one (its owners, an admin) the fields
     that say who is in it, who owns it and what it is called; and for who
-    may write the form that makes a group (groups.go; docs/spec/users.md,
-    Groups). */ -}}
+    may write the form that makes a group. An admin sees every group here
+    (Other groups), says what a group includes and makes a group of groups,
+    and is told of folders in groups/ no one sees (groups.go;
+    docs/spec/users.md, Groups). A field that takes users or groups offers
+    only those there are, as pills (js/namepick.js); without JavaScript it
+    is text, and the server takes nothing else either. */ -}}
+{{define "group"}}
+  <li data-group="{{.G.Name}}">
+    {{- if .G.Member}}<a href="/groups/{{.G.Name}}"><span class="group-name">👥 {{.G.Name}}</span></a>{{else}}<span class="group-name" title="You are not in this group: you don't see its pages">👥 {{.G.Name}}</span>{{end}}
+    <span class="group-who">
+      {{- $named := .G.Named}}{{if .G.Counted}}{{.G.Count}} people{{with .G.Includes}} <span class="user-you">(everyone in {{range $i, $g := .}}{{if $i}} and {{end}}{{$g}}{{end}}{{if $named}}, and {{$named}} named on it{{end}})</span>{{end}}
+      {{- else}}
+      {{- range $i, $w := .G.Direct}}{{if $i}}, {{end}}{{$w}}{{end}}
+      {{- if .G.Via}}{{if .G.Direct}}, and {{end}}everyone in {{range $i, $v := .G.Via}}{{if $i}} and {{end}}<span class="group-via">{{$v.Name}}</span> <span class="user-you">({{range $k, $m := $v.Members}}{{if $k}}, {{end}}{{$m}}{{else}}nobody{{end}})</span>{{end}}
+      {{- else if not .G.Direct}}nobody{{end}}
+      {{- end}}{{with .G.Owners}} <span class="user-you group-owners">· owned by {{range $i, $o := .}}{{if $i}}, {{end}}{{$o}}{{end}}</span>{{end}}</span>
+    <span class="group-pages">{{if not .G.Member}}{{if .G.Folder}}<span title="Its folder groups/{{.G.Name}}/, which only its members see">has pages</span>{{end}}{{else if .G.Pages}}{{.G.Pages}} page{{if ne .G.Pages 1}}s{{end}}{{else}}no page yet{{end}}</span>
+    {{- if .G.Leaves}}
+    <details class="group-manage group-leave">
+      <summary class="btn">Leave…</summary>
+      <form method="post" action="/groups/{{.G.Name}}/leave" class="group-form">
+        <p class="users-help">Leave {{.G.Name}}? You no longer see its pages and the lists that are for it, at once. Its owners can put you back.</p>
+        <button type="submit" class="btn btn-danger">Leave {{.G.Name}}</button>
+      </form>
+    </details>
+    {{- end}}
+    {{- if .G.Manages}}
+    <details class="group-manage">
+      <summary class="btn">Manage…</summary>
+      <form method="post" action="/groups/{{.G.Name}}/people" class="group-form">
+        <label>People <input type="text" name="people" value="{{.G.PeopleText}}" list="group-people" data-pick="users" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="anna, bo"></label>
+        <label>Owners <input type="text" name="owners" value="{{.G.OwnersText}}" list="group-people" data-pick="users" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="who says who is in it"></label>
+        <button type="submit" class="btn btn-primary">Save</button>
+        <p class="users-help">Whoever you take out no longer sees the group's pages and lists, at once{{with .G.Includes}}; whoever is in {{range $i, $g := .}}{{if $i}} or {{end}}{{$g}}{{end}} is in it without being named here{{end}}.</p>
+      </form>
+      {{- if .Admin}}
+      <form method="post" action="/groups/includes" class="group-form">
+        <input type="hidden" name="group" value="{{.G.Name}}">
+        <label>Everyone in <input type="text" name="includes" value="{{.G.IncludesText}}" list="all-groups" data-pick="groups" data-pick-not="{{.G.Name}}" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="dev, design"></label>
+        <button type="submit" class="btn">Save</button>
+        <p class="users-help">Whoever is in one of these groups is in {{.G.Name}}, also who joins one later.</p>
+      </form>
+      {{- end}}
+      <form method="post" action="/groups/{{.G.Name}}/rename" class="group-form">
+        <label>Name <input type="text" name="name" value="{{.G.Name}}" required pattern="@?[a-z0-9][a-z0-9-]*" title="Lowercase letters, digits and hyphens" autocomplete="off" autocapitalize="none" spellcheck="false"></label>
+        <button type="submit" class="btn">Rename</button>
+        <p class="users-help">Its pages move to the folder of the new name, links to them follow, and the lists that are for it are for the new name.</p>
+      </form>
+    </details>
+    {{- end}}
+  </li>
+{{- end}}
 {{define "body"}}
 {{.BreadcrumbHTML}}
 <div class="sheet groups-page">
@@ -12,44 +62,7 @@
 <p class="users-help">The groups you are in. A group's pages are in its folder: whoever is in the group sees and changes them, and no one else in this wiki. A task list can be for a group too.</p>
 {{- if .Groups}}
 <ul class="groups-list">
-  {{- range .Groups}}
-  <li data-group="{{.Name}}">
-    {{- if .Member}}<a href="/groups/{{.Name}}"><span class="group-name">👥 {{.Name}}</span></a>{{else}}<span class="group-name" title="You own this group and are not in it: you don't see its pages">👥 {{.Name}}</span>{{end}}
-    <span class="group-who">
-      {{- $named := .Named}}{{if .Counted}}{{.Count}} people{{with .Includes}} <span class="user-you">(everyone in {{range $i, $g := .}}{{if $i}} and {{end}}{{$g}}{{end}}{{if $named}}, and {{$named}} named on it{{end}})</span>{{end}}
-      {{- else}}
-      {{- range $i, $w := .Direct}}{{if $i}}, {{end}}{{$w}}{{end}}
-      {{- if .Via}}{{if .Direct}}, and {{end}}everyone in {{range $i, $v := .Via}}{{if $i}} and {{end}}<span class="group-via">{{$v.Name}}</span> <span class="user-you">({{range $k, $m := $v.Members}}{{if $k}}, {{end}}{{$m}}{{else}}nobody{{end}})</span>{{end}}
-      {{- else if not .Direct}}nobody{{end}}
-      {{- end}}{{with .Owners}} <span class="user-you group-owners">· owned by {{range $i, $o := .}}{{if $i}}, {{end}}{{$o}}{{end}}</span>{{end}}</span>
-    <span class="group-pages">{{if not .Member}}{{else if .Pages}}{{.Pages}} page{{if ne .Pages 1}}s{{end}}{{else}}no page yet{{end}}</span>
-    {{- if .Leaves}}
-    <details class="group-manage group-leave">
-      <summary class="btn">Leave…</summary>
-      <form method="post" action="/groups/{{.Name}}/leave" class="group-form">
-        <p class="users-help">Leave {{.Name}}? You no longer see its pages and the lists that are for it, at once. Its owners can put you back.</p>
-        <button type="submit" class="btn btn-danger">Leave {{.Name}}</button>
-      </form>
-    </details>
-    {{- end}}
-    {{- if .Manages}}
-    <details class="group-manage">
-      <summary class="btn">Manage…</summary>
-      <form method="post" action="/groups/{{.Name}}/people" class="group-form">
-        <label>People <input type="text" name="people" value="{{.PeopleText}}" list="group-people" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="anna, bo"></label>
-        <label>Owners <input type="text" name="owners" value="{{.OwnersText}}" list="group-people" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="who says who is in it"></label>
-        <button type="submit" class="btn btn-primary">Save</button>
-        <p class="users-help">Names with commas between them. Whoever you take out no longer sees the group's pages and lists, at once{{with .Includes}}; whoever is in {{range $i, $g := .}}{{if $i}} or {{end}}{{$g}}{{end}} is in it without being named here{{end}}.</p>
-      </form>
-      <form method="post" action="/groups/{{.Name}}/rename" class="group-form">
-        <label>Name <input type="text" name="name" value="{{.Name}}" required pattern="@?[a-z0-9][a-z0-9-]*" title="Lowercase letters, digits and hyphens" autocomplete="off" autocapitalize="none" spellcheck="false"></label>
-        <button type="submit" class="btn">Rename</button>
-        <p class="users-help">Its pages move to the folder of the new name, links to them follow, and the lists that are for it are for the new name.</p>
-      </form>
-    </details>
-    {{- end}}
-  </li>
-  {{- end}}
+  {{- range .Groups}}{{template "group" (dict "G" . "Admin" $.Admin)}}{{end}}
 </ul>
 {{- else}}
 <p class="groups-none">You are in no group.</p>
@@ -58,11 +71,31 @@
 <h2 id="new">Make a group</h2>
 <form method="post" action="/groups" class="users-invite groups-new">
   <input type="text" name="name" value="{{.NewName}}" placeholder="Name" required pattern="@?[a-z0-9][a-z0-9-]*" maxlength="41" title="Lowercase letters, digits and hyphens" autocapitalize="none" autocorrect="off" spellcheck="false" aria-label="The group's name">
-  <input type="text" name="people" value="{{.NewPeople}}" placeholder="with: anna, bo" list="group-people" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="Who else is in it">
+  <input type="text" name="people" value="{{.NewPeople}}" placeholder="with: anna, bo" list="group-people" data-pick="users" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="Who else is in it">
   <button type="submit" class="btn btn-primary">Make the group</button>
 </form>
 <p class="users-help">For a project or a few people: you are in it and own it, so you say who else is, and can hand it on. Its pages go in <code>groups/&lt;name&gt;/</code>.</p>
 <datalist id="group-people">{{range .People}}<option value="{{.}}">{{end}}</datalist>
+{{- end}}
+{{- if .Admin}}
+{{- if .Others}}
+<h2 id="others">Other groups</h2>
+<p class="users-help">As an admin you manage every group, also those you are not in: you see who is in them, not their pages.</p>
+<ul class="groups-list">
+  {{- range .Others}}{{template "group" (dict "G" . "Admin" $.Admin)}}{{end}}
+</ul>
+{{- end}}
+<h2 id="of-groups">A group of groups</h2>
+<form method="post" action="/groups/includes" class="users-invite groups-new">
+  <input type="text" name="group" placeholder="Name" required pattern="@?[a-z0-9][a-z0-9-]*" maxlength="41" title="Lowercase letters, digits and hyphens" autocapitalize="none" autocorrect="off" spellcheck="false" aria-label="The group's name">
+  <input type="text" name="includes" placeholder="everyone in: dev, design" required list="all-groups" data-pick="groups" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="The groups it includes">
+  <button type="submit" class="btn">Make a group of groups</button>
+</form>
+<p class="users-help">Whoever is in one of its groups is in it, so a task list for two teams is for one group, and who joins a team later is in it at once. Taking a group out takes what is for the larger group from its people.</p>
+<datalist id="all-groups">{{range .AllGroups}}<option value="{{.}}">{{end}}</datalist>
+{{- with .Stray}}
+<p class="users-help groups-stray" role="note"><strong>Seen by no one:</strong> {{range $i, $p := .}}{{if $i}}, {{end}}<code>{{$p}}</code>{{end}}. A folder in <code>groups/</code> is for the group of its name: put someone in that group (their Groups field on the <a href="/admin/users">admin page</a>), or move the folder on the host.</p>
+{{- end}}
 {{- end}}
 </div>
 {{end}}

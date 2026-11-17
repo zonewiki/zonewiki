@@ -17,8 +17,9 @@ In a public wiki (`ZONE_PUBLIC`; Public wikis in `docs/spec/security.md`) a visi
 | GET    | `/new`                | A form for a new page's name (without JavaScript; pages are made from links to them) |
 | POST   | `/new`                | Create `<slug>.md` and redirect to it; `private=1` (with users): in your private folder |
 | GET    | `/private`            | With users: your private home `private/<you>/index` (made on the first visit); 404 without users |
-| GET    | `/groups`             | Your groups: those you are in and those you own, with who is in each; the form that makes one, and Manage… for those you own (Groups in `docs/spec/users.md`); 404 without users |
+| GET    | `/groups`             | Your groups: those you are in and those you own, with who is in each; the form that makes one, and Manage… for those you own; for an admin also every other group, what each includes, the form for a group of groups and the folders no one sees (Groups in `docs/spec/users.md`); 404 without users |
 | POST   | `/groups`             | Makes a group (`name`, `people`): you are in it and own it; refused for a name that is taken, 403 for a viewer |
+| POST   | `/groups/includes`    | What a group includes (`group`, `includes`: groups there are; a new `group` makes a group of groups); admins only, 404 for anyone else |
 | POST   | `/groups/<group>/people` | Who is in the group by name, and its owners (`people`, `owners`), for its owners and admins; 404 for anyone else |
 | POST   | `/groups/<group>/rename` | The group's new name (`name`): its folder, the links to its pages, the lists for it and the settings follow; for its owners and admins, 404 for anyone else |
 | POST   | `/groups/<group>/leave` | Whoever asks is no longer in the group: its name goes from their groups (a group named on them that has owners and that they don't manage; 404 otherwise) |
@@ -31,7 +32,7 @@ In a public wiki (`ZONE_PUBLIC`; Public wikis in `docs/spec/security.md`) a visi
 | POST   | `/oauth/register`, `/oauth/token` | An MCP client registers, and turns a code or a refresh token into tokens (no login, any origin) |
 | GET, POST | `/oauth/authorize`       | An assistant asks to connect: whoever is signed in allows it, with their password, or denies it |
 | GET, POST | `/password`              | Change password: whoever is signed in sets a new one (without users, the wiki's), with the one they have (Signing in in `docs/spec/users.md`); 404 without a login |
-| POST   | `/admin/users/<name>/role`, `/groups`, `/disable`, `/enable`, `/remove`, `/reset`, `/revoke`; `/admin/users/invite`; `/admin/groups/includes` | The Users tab's changes, admins only (404 for anyone else) |
+| POST   | `/admin/users/<name>/role`, `/groups`, `/disable`, `/enable`, `/remove`, `/reset`, `/revoke`; `/admin/users/invite` | The Users tab's changes, admins only (404 for anyone else) |
 | GET/POST | `/welcome/<token>`  | An invite or reset link's page: choose a password, once (no login needed) |
 | GET    | `/search?q=...`       | Full-text search results page (up to 50, with a count; `&unlinked=1` as for the API) |
 | GET    | `/api/search?q=...`   | JSON search results (used by the search UI); `&unlinked=1`: only pages nothing links to, no tasks; `&notes=1`: only notes (Notes page's filter; then `limit` goes up to 1000); `&limit=N` (default 15, max 100) |

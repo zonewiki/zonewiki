@@ -25,14 +25,15 @@ if (dialog) {
   closeOnBackdropClick(dialog);
 }
 
-// A row's Change and Set show once its field says something else than the
-// file does: an untouched list is names, roles and groups, no buttons. The
+// A row's Save shows once its field says something else than the file
+// does: an untouched list is names, roles and groups, no buttons. The
 // button keeps its place (hidden, not gone), so the table doesn't move, and
 // a change still takes a second step: picking a role saves nothing by
 // itself. Enter in a field saves as before. Without JavaScript the buttons
-// are there all along.
+// are there all along. The Groups field is pills (js/namepick.js): its
+// value is the hidden field's, which says when it changes.
 for (const form of document.querySelectorAll('.user-role-form')) {
-  const field = form.querySelector('select, input[type=text]');
+  const field = form.querySelector('select, input[data-pick], input[type=text]');
   const button = form.querySelector('[type=submit]');
   if (!field || !button) continue;
   const saved = field.tagName === 'SELECT'
@@ -43,15 +44,4 @@ for (const form of document.querySelectorAll('.user-role-form')) {
   field.addEventListener('input', show);
   field.addEventListener('change', show);
   show();   // a value the browser kept from before a reload
-}
-
-// A group's Add a group… and Rename… open their field: the cursor goes into
-// it, at the end of what it holds.
-for (const details of document.querySelectorAll('.group-edit')) {
-  details.addEventListener('toggle', () => {
-    const field = details.querySelector('input[type=text]');
-    if (!details.open || !field) return;
-    field.focus();
-    field.setSelectionRange(field.value.length, field.value.length);
-  });
 }
