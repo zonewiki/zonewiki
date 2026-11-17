@@ -18,6 +18,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 	"zonewiki/internal/mdtext"
 	"zonewiki/internal/taskfiles"
 )
@@ -395,6 +397,9 @@ func canSeeList(user string, l ListInfo) bool {
 // admin sees no private page.
 func listMember(user string, who []string) bool {
 	s := settings()
+	if s.Users == nil {
+		return true // without users everyone sees everything: a list for some from when there were users, too
+	}
 	if u := s.Users[user]; u == nil || u.Disabled {
 		return false
 	}
@@ -509,6 +514,21 @@ func canSeePath(user, rel string) bool {
 	return user != visitor || !strings.HasPrefix(rel, taskfiles.DirName+"/")
 }
 
+// namesList: msg names the list name as commit messages do ("#hiring"), as
+// a whole word ("#hiring-2" is another list).
+func namesList(msg, name string) bool {
+	for rest := msg; ; {
+		i := strings.Index(rest, "#"+name)
+		if i < 0 {
+			return false
+		}
+		rest = rest[i+1+len(name):]
+		if r, _ := utf8.DecodeRuneInString(rest); rest == "" || !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_') {
+			return true
+		}
+	}
+}
+
 // strayPrivate: what lies in private/ outside every user's folder (seen by
 // no one), for a warning at start: a user's folder whose user was removed,
 // or a page put in private/ itself.
@@ -580,8 +600,23 @@ var privateNameRE = regexp.MustCompile(`(^|[^\w./-])((?:` + keptDirs + `)/[\w./-
 // hideNames: a commit message for user, the paths in it user may not see
 // as "a private page": a commit that moved a page out of a private folder,
 // or rewrote links in one, is in the shared page's history too.
+//
+// Nor does it name a list for some to who is none of its members: a commit
+// that narrowed one ("List #hiring is for @hiring, anna"), pinned it for
+// everyone or renamed it writes the registry everyone reads, so it is in
+// everyone's history; to anyone else it says only that a list changed.
 func hideNames(user, msg string) string {
-	if settings().Users == nil || !strings.Contains(msg, privateDir+"/") && !strings.Contains(msg, groupsDir+"/") {
+	if settings().Users == nil {
+		return msg
+	}
+	if strings.Contains(msg, "#") {
+		for _, name := range taskFiles.ForSome() {
+			if namesList(msg, name) && !taskFiles.SeesList(user, name) {
+				return "A list for some changed"
+			}
+		}
+	}
+	if !strings.Contains(msg, privateDir+"/") && !strings.Contains(msg, groupsDir+"/") {
 		return msg
 	}
 	var out strings.Builder

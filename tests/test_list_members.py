@@ -630,3 +630,40 @@ def test_its_words_suggest_nothing_to_anyone_else(client, wiki):
         sign_in(client, who)
         for path in ("/api/search", "/search"):
             assert SECRET not in client.get(path, query_string={"q": typo}, headers=HOST).get_data(as_text=True)
+
+
+def test_a_commit_about_it_names_it_to_its_members_only(client, wiki):
+    """Narrowing a list, pinning it for everyone and renaming it write the
+    registry everyone reads: the commit is in everyone's history, and says
+    the list's name and whom it is for only to its members."""
+    sign_in(client, "alice")
+    assert client.post("/tasks/list-for", data={"list": LIST, "for": "@hiring, alice, carol"}, headers=HOST).status_code == 302
+    assert client.post("/tasks/pin-list", data={"list": LIST, "pin": "1", "everyone": "1"}, headers=HOST).status_code == 302
+    subjects = git(wiki, "log", "-2", "--format=%s")
+    assert f"List #{LIST} is for @hiring, alice, carol" in subjects and f"Pin list #{LIST} for everyone" in subjects
+    theirs = mcp(client, "carol", "history")
+    assert f"List #{LIST} is for" in theirs and f"Pin list #{LIST}" in theirs
+    for who in ("bob", "dana"):
+        said = mcp(client, who, "history")
+        assert LIST not in said and "carol" not in said, said
+        assert "A list for some changed" in said
+    # A list for everyone is named to everyone, one whose name only starts like it too.
+    assert client.post("/tasks/new-list", data={"name": LIST + "-2"}, headers=HOST).status_code == 302
+    assert client.post("/tasks/pin-list", data={"list": "team", "pin": "1", "everyone": "1"}, headers=HOST).status_code == 302
+    said = mcp(client, "bob", "history")
+    assert "Pin list #team for everyone" in said
+
+
+def test_without_users_a_list_for_some_is_everyones(client, git_wiki_dir):
+    """A list for some left from when the wiki had users: without users
+    nothing is anyone's, so its tasks are there, as a group's folder is an
+    ordinary one then."""
+    folder = git_wiki_dir / "_tasks/lists/old"
+    folder.mkdir(parents=True)
+    (folder / "list.json").write_text('{"name": "old", "for": ["@hiring", "anna"]}\n')
+    (folder / "tasks.json").write_text(json.dumps([{"id": "0a1b2c3d-0000-4000-8000-000000000001", "title": "Left behind",
+                                                    "list": "old", "created_at": "2026-01-01T10:00:00"}]) + "\n")
+    (folder / "closed.json").write_text("[]\n")
+    assert "Left behind" in client.get("/api/tasks", headers=HOST).get_data(as_text=True)
+    assert "Left behind" in client.get("/tasks", query_string={"list": "old"}, headers=HOST).get_data(as_text=True)
+    assert "Left behind" in client.get("/search", query_string={"q": "behind"}, headers=HOST).get_data(as_text=True)
