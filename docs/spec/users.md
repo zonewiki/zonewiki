@@ -72,7 +72,7 @@ includes = dev, design
 | `signup-approval` | `yes`: an account made by sign-up can't sign in until an admin approves it | no |
 
 - **Format**: `key = value` (spaces optional), the wiki's settings before the first section, a `[user NAME]` section per user with `password`, `mcp-token`, `role`, `groups`, `disabled`, `email` and `pending` (`configKeys`, `userKeys`; Roles and Sign-up, below),
-  and a `[group NAME]` section for a group that says more than its name: `includes`, the groups it is made of, and `owners`, the users who say who is in it (`groupKeys`; Groups, below).
+  and a `[group NAME]` section for a group that says more than its name: `includes`, the groups it is made of, `owners`, the users who say who is in it, and `was`, the names it went by before, which Zone writes (`groupKeys`; Groups, below).
   `#` starts a comment only at the start of a line, so `noshare = #noshare` is a value.
 - **Sizes** (`upload-max`, `storage-max`; `parseSize` in `go/storage.go`): bytes (`300`), or a number with KB, MB, GB or TB, any case, a space optional, decimals too (`1.5GB`).
   They count by 1024, as Zone's caps always have (100 MB is 100 × 1024 × 1024 bytes).
@@ -271,7 +271,7 @@ A list for both teams is then for one group (`"for": ["@product"]`).
 - **It goes through**: `company` may include `product`, and whoever is in `dev` is in all three. Who has `product` named on them (`groups = product`) is in it as before, and not thereby in `dev`.
 - **A group that includes itself**, directly or by way of others, is an error of the file naming its line ("[group a] includes itself, by way of b"; `includesItself` in `go/configfile.go`), as is a name in `includes` that is no group's.
   A name nobody is in is none: a group made of empty groups has no members.
-- **The section has the keys `includes` and `owners`** (`groupKeys`; owners: A group of your own, below), and any other is an error. A group without a section is its name on users, as above.
+- **The section has the keys `includes`, `owners` and `was`** (`groupKeys`; owners and was: A group of your own, below), and any other is an error. A group without a section is its name on users, as above.
 - **Set it** with `zonewiki group includes product +dev +design` (`-dev` takes one out; alone it says what the group includes and who is in it now; `zonewiki group list` says it of every group: `product includes design, dev: alice, bob`; `groupMain` in `go/commands.go`), on **Groups**, for an admin (An admin on Groups, below), or by hand in the file.
   Taking the last group out removes the key, and the section when it says nothing else (`setGroupKey`). The settings' log says it ("product includes design, dev").
 - **Taking a group out is a narrowing**, like taking a user out of a group: its people no longer see what is for the larger group at their next request, and their tasks in its lists count as no one's (Lists for some in `docs/spec/tasks.md`).
@@ -292,6 +292,9 @@ They are in it and are its **owner**; from the next request `groups/<name>/` is 
   A removed user owns nothing (`dropOwner`), and a name in `owners` that is no user is none.
 - **An admin manages every group**, owned or not (An admin on Groups, below), the admin's Groups field on a user works as before, and `zonewiki group owners NAME +anna -bo` gives a group owners or takes them (none left: the group is an admin's alone again, as one made on the host).
 - **A name that is taken is refused** (`groupNameTaken`): a group there is, a name a group is said to include, a folder in `groups/` (a group nobody is in keeps its folder, and a new group of that name would get its pages), or a name a task list is for.
+  **And a name a group went by before**: the history of `groups/<name>/` (the versions and deleted pages of a group renamed since, which are read under that path by who is in a group of that name) and a deleted list that was for it stay its former group's, so a new group of the name would be shown them: the name stays taken.
+  The group that went by it takes it back (`was = apollo` in its section, which a rename writes: the names it had), so a rename can be undone.
+  An admin who gives someone a group by typing its name in the Users tab is not asked this (Managing users).
   The groups' names are no secret among a wiki's users (a list's Who it is for… completes from them), so "taken" tells nothing new.
 - **Not for a viewer** (who changes nothing: 403), a visitor, or a wiki without users (404).
 - **A member leaves by themselves** (`mayLeave`, `leaveGroupOp`; `POST /groups/<group>/leave`): on `/groups` a group that is named on you and that you don't manage has **Leave…**, which asks first and then takes the group's name from your groups, yours alone.
@@ -315,7 +318,7 @@ The order is that one: until the settings change nobody is in the new name's gro
 **A step that fails** puts the ones before it back and the rename stops, everything as it was (a page of the group with text not in git yet that can't be committed first: the lists, which were for the new name already, are for the old one again).
 **A step that is made but for its commit** counts as made (`writtenAnyway`): the rename goes on to the settings, or the group's pages were in a folder no group is named as, seen by no one. The page then says both, that the group has its new name and that the change is written but not committed (500), and the files are in the Uncommitted list, as after any write whose commit failed.
 It is up to three commits (the lists, the folder with its links, the files no page shows), by whoever renamed it; an admin who is not in the group moves its pages without seeing any.
-The new name must be free, as a new group's. There is no command for it: a rename writes pages and task files, which only the running server does (One process, in `AGENTS.md`).
+The new name must be free, as a new group's, or one the group went by before (`was`, which the rename keeps: A name that is taken, above). There is no command for it: a rename writes pages and task files, which only the running server does (One process, in `AGENTS.md`).
 
 - **How it is kept**: `Settings.Includes` is what each section says; `joinGroups` works out once, when the settings are read, every group each user is in (`User.In`), and `memberOf` looks there, so asking costs what it did.
 

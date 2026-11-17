@@ -57,7 +57,11 @@ func knownKey(key string) bool { return slices.Contains(configKeys, key) }
 // the users who say who is in it (owners: a group made in the browser,
 // groups.go). Any other is an error, so a file from before can't have meant
 // anything by one that comes later (readers: docs/spec/users.md, Groups).
-var groupKeys = []string{"includes", "owners"}
+//
+// was: the names the group went by before a rename (Zone writes it): its
+// folder's history under those names is its own, so it may take one of
+// them back, which no other group may (groupNameTaken).
+var groupKeys = []string{"includes", "owners", "was"}
 
 var settingsKeys = settingsfile.Keys{Top: configKeys, User: userKeys, UserName: userNameRE,
 	Group: groupKeys, GroupName: groupNameRE}
@@ -103,6 +107,7 @@ type Settings struct {
 	Includes         map[string][]string // the groups made of groups ([group product] includes = dev, design): what each includes, A–Z
 	partOf           map[string][]string // a group, and every group it is in by way of those (joinGroups; groupIn)
 	Owners           map[string][]string // a group's owners ([group apollo] owners = anna), A–Z: they say who is in it (groups.go)
+	Was              map[string][]string // the names a group went by before ([group artemis] was = apollo): its own to take back
 	BaseURL          string              // Zone's address as the user's browser knows it
 	QueryLog         bool                // keep search_wiki's queries in .zone/queries.jsonl
 	GitRemote        string
@@ -270,7 +275,7 @@ func loadSettings(f *settingsfile.File) (*Settings, error) {
 	if s.Users, err = fileUsers(f); err != nil {
 		return nil, err
 	}
-	if s.Includes, s.Owners, err = fileGroups(f); err != nil {
+	if s.Includes, s.Owners, s.Was, err = fileGroups(f); err != nil {
 		return nil, err
 	}
 	s.joinGroups()
@@ -352,27 +357,36 @@ func fileUsers(f *settingsfile.File) (map[string]*User, error) {
 // whatever way round, is an error naming the line: who is in it would have
 // no answer. An owner who is no user (removed since) is none, and no error:
 // removing a user doesn't have to know the groups.
-func fileGroups(f *settingsfile.File) (includes, owners map[string][]string, err error) {
+func fileGroups(f *settingsfile.File) (includes, owners, was map[string][]string, err error) {
 	if len(f.Groups) == 0 {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
-	includes, owners = map[string][]string{}, map[string][]string{}
+	includes, owners, was = map[string][]string{}, map[string][]string{}, map[string][]string{}
 	for _, g := range f.Groups {
 		v := g.Values["includes"]
 		named, bad := parseGroups(v.Value)
 		if bad != "" {
-			return nil, nil, lineError(v.Line, "[group %s] includes %s, which isn't a group's name: lowercase letters, "+
+			return nil, nil, nil, lineError(v.Line, "[group %s] includes %s, which isn't a group's name: lowercase letters, "+
 				"digits and hyphens (includes = dev, design).", g.Name, bad)
 		}
 		includes[g.Name] = named
 		if v, set := g.Values["owners"]; set {
 			names, bad := parseNames(v.Value)
 			if bad != "" {
-				return nil, nil, lineError(v.Line, "[group %s] has the owner %s, which isn't a user's name (owners = anna, bo).",
+				return nil, nil, nil, lineError(v.Line, "[group %s] has the owner %s, which isn't a user's name (owners = anna, bo).",
 					g.Name, bad)
 			}
 			if len(names) > 0 {
 				owners[g.Name] = names
+			}
+		}
+		if v, set := g.Values["was"]; set {
+			names, bad := parseGroups(v.Value)
+			if bad != "" {
+				return nil, nil, nil, lineError(v.Line, "[group %s] was %s, which isn't a group's name (was = apollo).", g.Name, bad)
+			}
+			if len(names) > 0 {
+				was[g.Name] = names
 			}
 		}
 	}
@@ -380,13 +394,13 @@ func fileGroups(f *settingsfile.File) (includes, owners map[string][]string, err
 		if round := includesItself(includes, g.Name); round != nil {
 			line := g.Values["includes"].Line
 			if len(round) == 2 {
-				return nil, nil, lineError(line, "[group %s] includes itself.", g.Name)
+				return nil, nil, nil, lineError(line, "[group %s] includes itself.", g.Name)
 			}
-			return nil, nil, lineError(line, "[group %s] includes itself, by way of %s: a group is made of other groups.",
+			return nil, nil, nil, lineError(line, "[group %s] includes itself, by way of %s: a group is made of other groups.",
 				g.Name, strings.Join(round[1:len(round)-1], ", "))
 		}
 	}
-	return includes, owners, nil
+	return includes, owners, was, nil
 }
 
 // includesItself: the way from group back to itself through what the groups

@@ -246,7 +246,7 @@ def test_a_rename_takes_what_is_the_groups_along(client, wiki, apollo):
     assert resp.status_code == 303 and resp.headers["Location"] == "/groups?done=renamed&group=artemis"
     # The settings: the users, its section, the group that includes it.
     assert section(wiki, "user alice") == ["groups = artemis"] and section(wiki, "user bob") == ["groups = artemis"]
-    assert section(wiki, "group artemis") == ["owners = alice"] and "[group apollo]" not in config(wiki)
+    assert section(wiki, "group artemis") == ["owners = alice", "was = apollo"] and "[group apollo]" not in config(wiki)
     assert section(wiki, "group program") == ["includes = artemis"]
     # The folder, with the file its page shows and the one none shows; the links.
     assert not (wiki / "groups/apollo").exists(), sorted(p.as_posix() for p in (wiki / "groups").rglob("*"))
@@ -272,8 +272,18 @@ def test_a_rename_takes_what_is_the_groups_along(client, wiki, apollo):
     assert client.get("/page/groups/artemis/roadmap", headers=HOST).status_code == 404
     assert client.get("/groups/artemis/_assets/plan.png", headers=HOST).status_code == 404
     assert client.get("/tasks?list=launch", headers=HOST).status_code in (302, 404) or "For @artemis" not in page(client, "/tasks?list=launch")
-    # The old name is free again.
-    assert make(client, "apollo").status_code == 303
+    # The old name stays the group's: its folder's history is read under it, by who is in a group of that
+    # name, so nobody else makes one (they would be shown the pages as they were) ...
+    resp = make(client, "apollo")
+    assert resp.status_code in (400, 409) and "is taken" in html.unescape(resp.get_data(as_text=True))
+    assert section(wiki, "group artemis") == ["owners = alice", "was = apollo"]
+    # ... and the group takes it back, and may go by the other again.
+    sign_in(client, "alice")
+    assert client.post("/groups/artemis/rename", data={"name": "apollo"}, headers=HOST).status_code == 303
+    assert section(wiki, "group apollo") == ["owners = alice", "was = artemis"]
+    assert until(lambda: client.get("/page/groups/apollo/roadmap", headers=HOST).status_code == 200)
+    assert client.post("/groups/apollo/rename", data={"name": "artemis"}, headers=HOST).status_code == 303
+    assert section(wiki, "group artemis") == ["owners = alice", "was = apollo"]
 
 
 def test_a_rename_is_its_owners_and_an_admins(client, wiki, apollo):
@@ -389,7 +399,7 @@ def test_a_rename_whose_commit_fails_is_made_all_the_same(client, wiki, apollo):
     resp = client.post("/groups/apollo/rename", data={"name": "artemis"}, headers=HOST)
     body = html.unescape(resp.get_data(as_text=True))
     assert resp.status_code == 500 and "The group is called artemis now" in body and "written but not committed" in body
-    assert section(wiki, "user bob") == ["groups = artemis"] and section(wiki, "group artemis") == ["owners = alice"]
+    assert section(wiki, "user bob") == ["groups = artemis"] and section(wiki, "group artemis") == ["owners = alice", "was = apollo"]
     assert not (wiki / "groups/apollo").exists() and (wiki / "groups/artemis/roadmap.md").exists()
     assert (wiki / "plans.md").read_text() == "# Plans\n\nSee [[groups/artemis/roadmap]].\n"
     assert "groups/artemis/roadmap.md" in git(wiki, "status", "--porcelain")     # in the Uncommitted list

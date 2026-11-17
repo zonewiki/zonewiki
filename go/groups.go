@@ -276,7 +276,31 @@ func mayMakeGroup(s *Settings, user string) bool {
 // too). The names of the groups are no secret among a wiki's users (a
 // list's Who it is for… completes from them), so saying "taken" tells
 // nothing new.
-func groupNameTaken(s *Settings, name string) bool {
+//
+// And what a group of that name left behind: its folder's history (a group
+// renamed or ended: its pages' versions are still read at groups/<name>/…,
+// by who is in a group of that name) and a deleted list that was for it
+// (whose folder's history is its members'). A new group of the name would
+// be shown both, so the name stays taken; but for the group that went by it
+// (as: the group being renamed, whose was names it), which takes its own
+// name back.
+func groupNameTaken(s *Settings, name, as string) bool {
+	if groupNameUsed(s, name) {
+		return true
+	}
+	if as != "" && slices.Contains(s.Was[as], name) {
+		return false
+	}
+	for _, list := range taskFiles.ForSome() { // also the folders deleted and renamed lists left
+		if slices.Contains(taskFiles.ForOfList(list), "@"+name) {
+			return true
+		}
+	}
+	return cfg.GitEnabled && strings.TrimSpace(runGit("log", "-1", "--format=%H", "--", groupsDir+"/"+name).Stdout) != ""
+}
+
+// groupNameUsed: something goes by the name now (groupNameTaken).
+func groupNameUsed(s *Settings, name string) bool {
 	if slices.Contains(s.groups(), name) {
 		return true
 	}
@@ -301,7 +325,7 @@ func groupNameTaken(s *Settings, name string) bool {
 
 // groupTakenMsg: what who asks for a name that is taken is told.
 func groupTakenMsg(name string) string {
-	return "The name " + name + " is taken (by a group, a folder in " + groupsDir + "/ or a task list that is for it). Choose another."
+	return "The name " + name + " is taken (by a group, a folder in " + groupsDir + "/ or a task list that is for it, now or before). Choose another."
 }
 
 // oneGroupName: the one group's name text names, or why it is none.
@@ -372,7 +396,7 @@ func makeGroupOp(user, nameText, people string) (string, error) {
 		// Judged on the file as it is read for the change, not as it was a
 		// moment ago: two who make the same group don't both get it.
 		now := settingsOf(f.Text())
-		if groupNameTaken(now, name) {
+		if groupNameTaken(now, name, "") {
 			return refuseAs(refusedExists, groupTakenMsg(name))
 		}
 		for _, m := range members {
@@ -475,6 +499,10 @@ func renameGroupInFile(f *settingsfile.File, s *Settings, old, name string) {
 		}
 	}
 	f.RenameGroup(old, name)
+	// The names it went by: its folder's history under them is its own.
+	was := slices.DeleteFunc(append(slices.Clone(s.Was[old]), old), func(g string) bool { return g == name })
+	slices.Sort(was)
+	setGroupKey(f, name, "was", slices.Compact(was))
 }
 
 // renameGroupOp gives the group old the name nameText, for one who manages
@@ -501,7 +529,7 @@ func renameGroupOp(user, old, nameText string) (string, error) {
 	if name == old {
 		return "", refuseAs(refusedUnchanged, "The group is called "+old+" already.")
 	}
-	if groupNameTaken(s, name) {
+	if groupNameTaken(s, name, old) {
 		return "", refuseAs(refusedExists, groupTakenMsg(name))
 	}
 	// The settings as they will be are good, before anything moves.
