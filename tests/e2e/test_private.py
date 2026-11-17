@@ -104,6 +104,17 @@ def test_the_menu_leads_to_connect_an_assistant(alice, wiki):
                               data={"jsonrpc": "2.0", "id": 1, "method": "tools/list"}).status == 401
 
 
+def test_a_copy_button_without_its_script_is_not_shown(alice):
+    """The page sends the Copy buttons hidden (js/copyline.js shows them): hidden
+    they aren't there to click, although they are .btn."""
+    alice.goto("/assistant")
+    shown = alice.locator(".copy-line .copy-btn:visible")
+    expect(shown).not_to_have_count(0)
+    n = shown.count()
+    alice.locator(".copy-line .copy-btn").first.evaluate("b => { b.hidden = true; }")
+    expect(shown).to_have_count(n - 1)
+
+
 def test_the_menu_leads_to_change_password(alice, wiki):
     """The password is changed with the one she has; she stays signed in (/password)."""
     alice.goto("/page/index")

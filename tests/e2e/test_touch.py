@@ -115,6 +115,8 @@ def test_menu_is_a_bottom_sheet_with_context_items(phone):
 def test_menu_plan_and_unplan(phone):
     open_menu(phone, "Weekly review").get_by_role("menuitem", name="Start tomorrow").tap()
     wait_until(phone, lambda: tasks_by_title(phone)["Weekly review"]["start_date"] == day(1))
+    # The card has it too: the menu goes by what the page holds, not the server.
+    expect(card(phone, "Weekly review").locator(".task-start-info")).to_contain_text("Tomorrow")
     menu = open_menu(phone, "Weekly review")
     menu.get_by_role("menuitem", name="Unplan").tap()
     wait_until(phone, lambda: tasks_by_title(phone)["Weekly review"]["start_date"] is None)

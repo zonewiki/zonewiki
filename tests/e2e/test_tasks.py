@@ -1701,6 +1701,7 @@ def test_selection_bar_moves_tasks_to_a_list(page, wiki):
     wait_for_field(page, "Saw", "list", "shop")
     wait_for_field(page, "Nuts", "list", None)
     assert task_by_title(page, "Glue")["list"] == "work"
+    expect(card(page, "Nuts").locator(".task-tag-list")).to_have_count(0)   # the page has them again: the move counts what it holds
     # The Inbox: out of every list. The menu of a selected card offers the move too.
     card(page, "Glue").locator(".task-title").click(button="right")
     page.locator(".task-menu").get_by_role("menuitem", name="Move to list…").click()
@@ -1857,6 +1858,7 @@ def test_selection_bar_unplan_with_undo(page, wiki):
     toast.locator(".task-undo-btn").click()
     wait_for_field(page, "Glue", "start_date", later)
     wait_for_field(page, "Nuts", "start_date", today)
+    expect(unplan).to_be_visible()   # the page has loaded them again: its menu goes by what it holds
     # The menu of a selected card offers it too.
     card(page, "Glue").locator(".task-title").click(button="right")
     page.locator(".task-menu").get_by_role("menuitem", name="Unplan").click()

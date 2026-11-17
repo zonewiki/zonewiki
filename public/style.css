@@ -1621,6 +1621,8 @@ kbd {
 .copy-line { display: flex; align-items: flex-start; gap: .5rem; padding: .5rem .5rem .5rem .75rem; background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; }
 .copy-line code { flex: 1; min-width: 0; padding: .1rem 0; background: none; font-size: .85rem; line-height: 1.5; overflow-wrap: anywhere; user-select: all; }
 .copy-line .copy-btn { flex: none; padding: .3rem .55rem; }
+/* Hidden until its script is there (js/copyline.js): .btn's display would show it. */
+.copy-line .copy-btn[hidden] { display: none; }
 /* A token just made, shown once: set off in the accent, its lines on the page's colour. */
 .assistant-token { margin: 1.25rem 0; padding: .6rem 1rem 1rem; border: 1px solid var(--accent); border-radius: 10px; background: color-mix(in srgb, var(--accent) 7%, var(--bg)); }
 .assistant-token p { margin: .7rem 0 .3rem; }
