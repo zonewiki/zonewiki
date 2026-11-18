@@ -1407,16 +1407,25 @@ const lookupWords = 3
 // question's words first lost answers on a test set: ./run.sh eval). A
 // lookup of a word the wiki doesn't have ("Ferien" for a page about
 // vacation) keeps every meaning hit: they are all there is.
+//
+// Docs the fusion scores the same (ranks swapped between the two rankings,
+// first and second or second and third; the best by words alone and the
+// best by meaning alone) go by meaning for a question, by BM25 for a
+// lookup: each by the ranking that kind of query trusts. A question's
+// words are in many docs, in an order that says little (four sections of
+// one page, each with the page's title and nothing else of the question,
+// ranked by their lengths), and on the sample wiki meaning alone has the
+// answer first for 53 of 68 questions, BM25 for 44 (tests/retrieval).
 func hybrid(ranked []*SearchDoc, hits []docScore, q *textsearch.Query, x *docIndex) []*SearchDoc {
 	meaning := make([]*SearchDoc, len(hits))
 	for i, h := range hits {
 		meaning[i] = h.doc
 	}
-	fused := textsearch.Fuse([][]*SearchDoc{ranked, meaning})
 	text := q.RankingText()
 	if len(textsearch.Tokenize(text)) > lookupWords {
-		return fused
+		return textsearch.Fuse([][]*SearchDoc{meaning, ranked})
 	}
+	fused := textsearch.Fuse([][]*SearchDoc{ranked, meaning})
 	byWord := make(map[*SearchDoc]bool, len(ranked))
 	for _, d := range ranked {
 		byWord[d] = true

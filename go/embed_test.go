@@ -567,6 +567,38 @@ func TestFuse(t *testing.T) {
 	}
 }
 
+// A question's docs that the fusion scores the same go by meaning: ranks
+// swapped between the two rankings, and the best by words alone against the
+// best by meaning alone. A doc high in both still comes first.
+func TestAQuestionsTiesGoByMeaning(t *testing.T) {
+	a, b, c, d := &SearchDoc{Slug: "a"}, &SearchDoc{Slug: "b"}, &SearchDoc{Slug: "c"}, &SearchDoc{Slug: "d"}
+	slugs := func(docs []*SearchDoc) string {
+		var out []string
+		for _, d := range docs {
+			out = append(out, d.Slug)
+		}
+		return strings.Join(out, " ")
+	}
+	q := textsearch.ParseQuery("what stays out of the compost heap")
+	for _, c := range []struct {
+		name            string
+		ranked, meaning []*SearchDoc
+		want            string
+	}{
+		{"swapped ranks", []*SearchDoc{a, b, c, d}, []*SearchDoc{d, c, b, a}, "d a c b"},
+		{"each ranking's own best", []*SearchDoc{a}, []*SearchDoc{b}, "b a"},
+		{"in both beats one's best", []*SearchDoc{a, b}, []*SearchDoc{c, a}, "a c b"},
+	} {
+		var hits []docScore
+		for i, d := range c.meaning {
+			hits = append(hits, docScore{d, 0.9 - float64(i)/10})
+		}
+		if got := slugs(hybrid(c.ranked, hits, q, nil)); got != c.want {
+			t.Errorf("%s: %s, want %s", c.name, got, c.want)
+		}
+	}
+}
+
 // .zone/ (the cache, the session key, the settings file) is in
 // .git/info/exclude, once.
 func TestExcludeFromGit(t *testing.T) {
