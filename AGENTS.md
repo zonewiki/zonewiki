@@ -99,6 +99,7 @@ Auth is optional (a password, or users; see Key Constraints).
 ├── AGENTS.md               # This file (how to work on Zone; the index of the spec)
 ├── README.md               # For people who find the repo: what Zone is, features, quick start
 ├── CONTRIBUTING.md         # Bug reports, feature requests, how a change gets in (points to this file)
+├── SECURITY.md             # How to report a vulnerability (privately, GitHub's advisories), what counts
 ├── LICENSE                 # AGPL-3.0-or-later
 ├── THIRD_PARTY_LICENSES    # Licenses of Go, the Go modules and the embedding model (the vendored libraries' are next to them)
 ├── docs/spec/              # The feature spec, one file per area (see Spec)
@@ -118,6 +119,7 @@ Auth is optional (a password, or users; see Key Constraints).
 ├── .forgejo/workflows/ci.yml  # Forgejo Actions: checks (run.sh test, e2e, leaks), the bench (run.sh bench), search's floor (run.sh retrieval), build + push the image
 ├── .github/workflows/ci.yml   # GitHub Actions: the same checks, the image for amd64 + arm64 to ghcr.io
 ├── .forgejo/issue_template/   # Issue templates: bug.md, feature.md
+├── .github/ISSUE_TEMPLATE/    # The same two for GitHub, and config.yml (a security problem goes to a private report)
 ├── go/                     # The server: package main, a file per area; pure code without Zone's state in go/internal/
 │   ├── go.mod, go.sum      # Go modules, exact versions (goldmark, x/text, onnxruntime_go)
 │   ├── server.go           # main: flags, start-up, the routes' mux, the request checks around them; zonewiki eval, zonewiki health, zonewiki user, zonewiki group, zonewiki config

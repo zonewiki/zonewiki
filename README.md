@@ -160,6 +160,11 @@ Done tasks go to a monthly archive. Beyond that:
   `"exact phrase"`, `-word`, `#tag`, `edited:2026-09`, `after:` / `before:`.
 - **Semantic search** (optional) with a local embedding model, mixed into the
   keyword ranking. Nothing leaves your machine.
+  Paused for now: onnxruntime, which runs the model, had its GitHub
+  repository taken private on 2026-11-18, so the prebuilt image searches by
+  keywords, and a build with `ZONE_SEMANTIC_SEARCH=on` fails without a cached
+  layer ("Semantic search paused" in
+  [`docs/spec/deployment.md`](docs/spec/deployment.md)).
 - **Git underneath**: every finished edit (Done or Ctrl+S; auto-save doesn't
   commit), task change and rename is a commit, so history, restore and
   `git push` backups come for free.
@@ -250,7 +255,7 @@ except `ZONE_DATA`:
 |---------|------|
 | `ZONE_DATA` | The wiki folder (default `~/zonewiki`) |
 | `ZONE_ALLOW_REMOTE=1` | Listen on the LAN (e.g. for your phone); by default only localhost |
-| `ZONE_SEMANTIC_SEARCH=on` | Semantic search with a local model (adds about 0.7 GB to the image) |
+| `ZONE_SEMANTIC_SEARCH=on` | Semantic search with a local model (adds about 0.7 GB to the image; paused for now, see Across Zone) |
 | `TZ` | The timezone for "today", e.g. `Europe/Berlin` (default: the host's with `run.sh`, else UTC) |
 
 ### The settings file
@@ -535,7 +540,8 @@ where you can check them:
 
 Found a bug or have an idea? Open an issue; there are templates for both.
 [CONTRIBUTING.md](CONTRIBUTING.md) says what a bug report needs and how a
-change gets in.
+change gets in. A security problem goes not into an issue but to a private
+report: [SECURITY.md](SECURITY.md) says how.
 
 ## License
 

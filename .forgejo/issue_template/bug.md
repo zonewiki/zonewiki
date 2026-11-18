@@ -19,4 +19,4 @@ labels:
 **What happened** (with the server log around an error, `./run.sh logs`)
 
 <!-- Leave out passwords, tokens and private notes. Security problems: don't
-report them here, contact the maintainer directly. -->
+report them here, report them privately (SECURITY.md). -->
