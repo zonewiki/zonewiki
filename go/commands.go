@@ -365,12 +365,30 @@ func (c *userCommand) newToken() int {
 	return 0
 }
 
-func (c *userCommand) setRole() int {
-	if c.role == roleEditor {
-		c.f.Unset(c.name, "role") // the default
+// setUserRole writes a user's role in the settings file (editor, the
+// default: no key). One edit for the command and the admin page.
+func setUserRole(f *settingsfile.File, name, role string) {
+	if role == roleEditor {
+		f.Unset(name, "role")
 	} else {
-		c.f.Set(c.name, "role", c.role)
+		f.Set(name, "role", role)
 	}
+}
+
+// setUserDisabled writes whether a user is disabled; enabled, they are
+// approved too (pending goes: a sign-up waiting for an admin). One edit
+// for the command and the admin page.
+func setUserDisabled(f *settingsfile.File, name string, disabled bool) {
+	if disabled {
+		f.Set(name, "disabled", "yes")
+		return
+	}
+	f.Unset(name, "disabled")
+	f.Unset(name, "pending")
+}
+
+func (c *userCommand) setRole() int {
+	setUserRole(c.f, c.name, c.role)
 	if !c.save() {
 		return 1
 	}
@@ -575,12 +593,7 @@ func leftGroup(before, now *Settings, group string) []string {
 // setDisabled: disable NAME and enable NAME.
 func (c *userCommand) setDisabled() int {
 	disable := c.cmd == "disable"
-	if disable {
-		c.f.Set(c.name, "disabled", "yes")
-	} else {
-		c.f.Unset(c.name, "disabled")
-		c.f.Unset(c.name, "pending") // approved
-	}
+	setUserDisabled(c.f, c.name, disable)
 	if !c.save() {
 		return 1
 	}

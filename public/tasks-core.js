@@ -17,7 +17,9 @@ function addDays(dateStr, n) {
 //   due_date   — the deadline; only a past due date makes a task overdue.
 //   start_date — the day the task becomes available; a past one just means
 //                "available since", never overdue.
-// Client-only: the server has no say in which tasks a view shows.
+// The server counts by the same rule (taskFocus, taskOverdue in
+// go/tasksembed.go, for the Tasks links); both run through
+// go/testdata/focus_cases.json.
 
 function isOverdue(t, today) {
   return !!t.due_date && t.due_date < today;

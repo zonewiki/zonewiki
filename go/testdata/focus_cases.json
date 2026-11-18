@@ -1,0 +1,14 @@
+[
+  {"name": "no dates", "today": "2026-07-26", "task": {}, "focus": false, "overdue": false},
+  {"name": "starts today", "today": "2026-07-26", "task": {"start_date": "2026-07-26"}, "focus": true, "overdue": false},
+  {"name": "started before", "today": "2026-07-26", "task": {"start_date": "2026-07-01"}, "focus": true, "overdue": false},
+  {"name": "starts tomorrow", "today": "2026-07-26", "task": {"start_date": "2026-07-27"}, "focus": false, "overdue": false},
+  {"name": "due today", "today": "2026-07-26", "task": {"due_date": "2026-07-26"}, "focus": true, "overdue": false},
+  {"name": "due yesterday", "today": "2026-07-26", "task": {"due_date": "2026-07-25"}, "focus": true, "overdue": true},
+  {"name": "due tomorrow", "today": "2026-07-26", "task": {"due_date": "2026-07-27"}, "focus": false, "overdue": false},
+  {"name": "starts later, due before: overdue wherever its start puts it", "today": "2026-07-26", "task": {"start_date": "2026-08-01", "due_date": "2026-07-20"}, "focus": true, "overdue": true},
+  {"name": "started, due later", "today": "2026-07-26", "task": {"start_date": "2026-07-20", "due_date": "2026-08-01"}, "focus": true, "overdue": false},
+  {"name": "starts and is due later", "today": "2026-07-26", "task": {"start_date": "2026-07-28", "due_date": "2026-08-01"}, "focus": false, "overdue": false},
+  {"name": "a past start is never overdue", "today": "2026-07-26", "task": {"start_date": "2020-01-01"}, "focus": true, "overdue": false},
+  {"name": "the year turns", "today": "2026-07-26", "task": {"due_date": "2025-12-31"}, "focus": true, "overdue": true}
+]

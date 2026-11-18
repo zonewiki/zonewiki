@@ -156,6 +156,8 @@ func TestHideNames(t *testing.T) {
 		"Upload private/alice/_assets/photo.png": "Upload a private page",
 		"Move (private/alice/a) to x":            "Move (a private page) to x",
 		"private/alice/a, private/bob/b":         "a private page, private/bob/b",
+		// A folder made by hand in another case is the same user's (placeOf).
+		"Rename Private/alice/a to x": "Rename a private page to x",
 	} {
 		if got := hideNames("bob", msg); got != want {
 			t.Errorf("%q: %q", msg, got)

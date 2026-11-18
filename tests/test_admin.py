@@ -231,7 +231,7 @@ class TestRefused:
         before = config(git_wiki_dir)
         resp = post(admin, f"/admin/users/alice/{action}")
         body = resp.data.decode()
-        assert resp.status_code == 409 and f"you can&#39;t {action} yourself here" in body
+        assert resp.status_code == 400 and f"you can&#39;t {action} yourself here" in body
         assert config(git_wiki_dir) == before
 
     def test_your_own_row_offers_no_disable_or_remove(self, admin):
@@ -251,7 +251,7 @@ class TestRefused:
         monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}})
         login(client, "alice")
         resp = post(client, "/admin/users/alice/remove")
-        assert resp.status_code == 409 and "zonewiki user remove alice" in resp.data.decode()
+        assert resp.status_code == 400 and "zonewiki user remove alice" in resp.data.decode()
         assert section(git_wiki_dir, "alice") is not None
 
     def test_demoting_yourself_with_another_admin_leads_home(self, admin, git_wiki_dir):

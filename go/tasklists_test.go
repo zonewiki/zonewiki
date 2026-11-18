@@ -720,6 +720,67 @@ func TestInMineCases(t *testing.T) {
 	}
 }
 
+// What is for today and what is overdue, case by case: the cases the
+// browser's rule runs through too (TasksCore.isFocus, isOverdue).
+func TestFocusCases(t *testing.T) {
+	raw, err := os.ReadFile("testdata/focus_cases.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cases []struct {
+		Name, Today string
+		Task        struct {
+			StartDate string `json:"start_date"`
+			DueDate   string `json:"due_date"`
+		}
+		Focus, Overdue bool
+	}
+	if err := json.Unmarshal(raw, &cases); err != nil || len(cases) < 10 {
+		t.Fatalf("the cases: %v (%d)", err, len(cases))
+	}
+	for _, c := range cases {
+		task := &Task{StartDate: c.Task.StartDate, DueDate: c.Task.DueDate}
+		if f, o := taskFocus(task, c.Today), taskOverdue(task, c.Today); f != c.Focus || o != c.Overdue {
+			t.Errorf("%s: focus %v overdue %v, want %v %v", c.Name, f, o, c.Focus, c.Overdue)
+		}
+	}
+}
+
+// The filter, case by case: the cases the browser's filter runs through too
+// (TasksCore.parseFilter and matchesFilter, tests/test_tasks_core.py). anna
+// asks, in a wiki with anna and bob.
+func TestFilterCases(t *testing.T) {
+	testWiki(t, nil)
+	withUsers(t, "anna", "bob")
+	raw, err := os.ReadFile("testdata/filter_cases.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cases []struct {
+		Name, Q string
+		Task    struct {
+			Title, Description, List, Assignee, Importance string
+			CreatedBy                                      string `json:"created_by"`
+			Tags, Followers                                []string
+			Private                                        bool
+		}
+		Want bool
+	}
+	if err := json.Unmarshal(raw, &cases); err != nil || len(cases) < 40 {
+		t.Fatalf("the cases: %v (%d)", err, len(cases))
+	}
+	for _, c := range cases {
+		task := &Task{Title: c.Task.Title, Description: c.Task.Description, List: c.Task.List, Assignee: c.Task.Assignee,
+			Importance: c.Task.Importance, CreatedBy: c.Task.CreatedBy, Tags: c.Task.Tags, Followers: c.Task.Followers}
+		if c.Task.Private {
+			task.Owner = "anna"
+		}
+		if got := parseTaskFilter(c.Q).matches(task, "anna"); got != c.Want {
+			t.Errorf("%s (%q): %v, want %v", c.Name, c.Q, got, c.Want)
+		}
+	}
+}
+
 // My tasks on a wiki: what is the user's: their own tasks (the Inbox, their
 // private lists) and the shared ones assigned to them; without users every
 // task. A list left out (home=off) is out of it; pins change nothing. Its

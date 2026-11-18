@@ -608,14 +608,14 @@ func apiSave(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	write := writeDraft
 	if isForce || r.PostFormValue("overwrite") == "1" {
 		// Keep mine: whatever the page holds, but never what was never in git.
-		if _, err := keepPending(s.path, s.slug); err != nil {
-			serverError(w, r, err)
-			return
+		write = func(user, slug, path string, current *string, text string, _ bool) error {
+			return keepMineOp(user, slug, path, current, text)
 		}
 	}
-	if err := writeDraft(userOf(r), s.slug, s.path, s.current, content, false); err != nil {
+	if err := write(userOf(r), s.slug, s.path, s.current, content, false); err != nil {
 		pageFailed(w, r, err)
 		return
 	}
@@ -663,29 +663,10 @@ func setAside(w http.ResponseWriter, r *http.Request, s *editorSave, section int
 		writeJSON(w, http.StatusOK, M{"set_aside": false})
 		return
 	}
-	user := userOf(r)
-	if _, err := keepPending(s.path, s.slug); err != nil { // theirs, if never in git
-		serverError(w, r, err)
+	if err := setAsideOp(userOf(r), s.slug, mine, theirs); err != nil {
+		pageFailed(w, r, err)
 		return
 	}
-	if err := writeText(s.path, mine); err != nil {
-		serverError(w, r, err)
-		return
-	}
-	if err := gitCommit(user, "Set aside an edit of "+s.slug, s.path); err != nil {
-		// Not in git: putting theirs back would lose it.
-		serverError(w, r, err)
-		return
-	}
-	if err := writeText(s.path, theirs); err != nil {
-		serverError(w, r, err)
-		return
-	}
-	if err := gitCommit(user, "Reload "+s.slug, s.path); err != nil {
-		serverError(w, r, err)
-		return
-	}
-	dropDraft(user, s.path)
 	writeJSON(w, http.StatusOK, M{"set_aside": true})
 }
 

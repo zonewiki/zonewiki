@@ -382,19 +382,15 @@ func replaceInPages(args jsonObj, base, user string) (string, error) {
 		return "", err
 	}
 	what := fmt.Sprintf("%d pages", len(hits))
-	keptPages, err := keepPendingPages(paths, what)
+	pages := make([]pageNewText, len(hits))
+	for i, h := range hits {
+		pages[i] = pageNewText{h.slug, h.path, h.new}
+	}
+	keptPages, err := replacePagesOp(user, pages, msg, what)
 	if err != nil {
 		return "", err
 	}
 	pending := pendingPagesNote(keptPages, what)
-	for _, h := range hits {
-		if err := writeText(h.path, h.new); err != nil {
-			return "", err
-		}
-	}
-	if err := notCommitted(gitCommit(user, msg, paths...)); err != nil {
-		return "", err
-	}
 	all := slugSet()
 	brokenSet := map[string]bool{}
 	for _, h := range hits {

@@ -241,7 +241,11 @@ func afterChange(w http.ResponseWriter, r *http.Request, done, name string) {
 
 // refuseChange: the change wasn't made; the list again, saying why.
 func refuseChange(w http.ResponseWriter, r *http.Request, err error) {
-	showUsers(w, r, http.StatusConflict, "", err.Error())
+	status := http.StatusConflict // what the settings file itself refuses (saveConfig): no refusal of a kind
+	if ref, ok := refusalOf(err); ok {
+		status = ref.kind.status()
+	}
+	showUsers(w, r, status, "", err.Error())
 }
 
 func userRoleRoute(w http.ResponseWriter, r *http.Request) {
@@ -255,11 +259,7 @@ func userRoleRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := changeSettings(userOf(r), func(f *settingsfile.File) error {
-		if role == roleEditor {
-			f.Unset(u.Name, "role")
-		} else {
-			f.Set(u.Name, "role", role)
-		}
+		setUserRole(f, u.Name, role)
 		return nil
 	})
 	if err != nil {
@@ -305,12 +305,7 @@ func userDisableRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := changeSettings(userOf(r), func(f *settingsfile.File) error {
-		if disable {
-			f.Set(u.Name, "disabled", "yes")
-		} else {
-			f.Unset(u.Name, "disabled")
-			f.Unset(u.Name, "pending") // approved
-		}
+		setUserDisabled(f, u.Name, disable)
 		return nil
 	})
 	if err != nil {

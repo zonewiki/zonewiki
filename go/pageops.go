@@ -174,6 +174,75 @@ func createPageOp(user, slug, content, suffix string) error {
 	return notCommitted(gitCommit(user, "Create "+slug+suffix, path))
 }
 
+// pageNewText: a page and the text it is to hold (replacePagesOp).
+type pageNewText struct{ slug, path, text string }
+
+// replacePagesOp writes each page's new text, all in one commit message;
+// what the pages held uncommitted is committed first (keepPendingPages:
+// what, as the note about it names the pages), so the commit holds only
+// the replacement. Every page must be one user may write: one that isn't
+// refuses the whole of it, with nothing written. Returns how many pages
+// had text kept.
+func replacePagesOp(user string, pages []pageNewText, message, what string) (kept int, err error) {
+	paths := make([]string, len(pages))
+	for i, p := range pages {
+		if _, err := writablePage(user, p.slug); err != nil {
+			return 0, err
+		}
+		paths[i] = p.path
+	}
+	if kept, err = keepPendingPages(paths, what); err != nil {
+		return 0, err
+	}
+	for _, p := range pages {
+		if err := writeText(p.path, p.text); err != nil {
+			return kept, err
+		}
+	}
+	return kept, notCommitted(gitCommit(user, message, paths...))
+}
+
+// setAsideOp: the editor's text mine, which lost to theirs (what the page
+// holds: a conflict's Reload theirs), is committed as user's and the page
+// put back as it is, so what was typed is in the page's history and not
+// lost: two commits, "Set aside an edit of <slug>" and "Reload <slug>".
+// What the page held that was never in git is committed first. A commit
+// that fails stops it there: putting theirs back would lose the text.
+func setAsideOp(user, slug, mine, theirs string) error {
+	path, err := writablePage(user, slug)
+	if err != nil {
+		return err
+	}
+	if _, err := keepPending(path, slug); err != nil {
+		return err
+	}
+	if err := writeText(path, mine); err != nil {
+		return err
+	}
+	if err := gitCommit(user, "Set aside an edit of "+slug, path); err != nil {
+		return err
+	}
+	if err := writeText(path, theirs); err != nil {
+		return err
+	}
+	if err := gitCommit(user, "Reload "+slug, path); err != nil {
+		return err
+	}
+	dropDraft(user, path)
+	return nil
+}
+
+// keepMineOp: the editor's Keep mine after a conflict: whatever the page
+// holds is replaced, but never what was never in git, which is committed
+// first (keepPending); then the text is the user's draft, as any save
+// (writeDraft).
+func keepMineOp(user, slug, path string, current *string, text string) error {
+	if _, err := keepPending(path, slug); err != nil {
+		return err
+	}
+	return writeDraft(user, slug, path, current, text, false)
+}
+
 // linkNewOp: the page slug, which isn't there yet and would be a shared one,
 // is to be made in the folder of the page on instead (on: one of user's
 // private pages, or a page of a group they are in, with a link to slug: the

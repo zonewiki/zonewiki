@@ -644,13 +644,12 @@ func countTasks(user string, tasks []*Task, lists map[string]ListInfo, params ..
 		if !shows(t) {
 			continue
 		}
-		due, start := t.DueDate, t.StartDate
-		if start != "" && start <= day || due != "" && due <= day {
+		if taskFocus(t, day) {
 			c.Focus++
 		}
-		if due != "" && due < day {
+		if taskOverdue(t, day) {
 			c.Overdue++
-		} else if due == day {
+		} else if t.DueDate == day {
 			c.Today++
 		}
 		if newsFor(t, user).Kind != "" {
@@ -660,6 +659,16 @@ func countTasks(user string, tasks []*Task, lists map[string]ListInfo, params ..
 	c.Count = c.Overdue + c.Today
 	return c
 }
+
+// taskFocus: the task is for today (the Today tab, the Tasks links' count):
+// started, or due today or earlier. taskOverdue: its due date has passed.
+// The browser's rule is TasksCore.isFocus and isOverdue: both run through
+// go/testdata/focus_cases.json.
+func taskFocus(t *Task, day string) bool {
+	return t.StartDate != "" && t.StartDate <= day || t.DueDate != "" && t.DueDate <= day
+}
+
+func taskOverdue(t *Task, day string) bool { return t.DueDate != "" && t.DueDate < day }
 
 // TaskPlace is an entry of the task list switcher (tasks_page.html): a
 // list, or My tasks. Key names it for the counts' refresh (js/chrome.js):

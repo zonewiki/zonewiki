@@ -882,3 +882,29 @@ class TestGroups:
                        ".map(s => [s.key, s.label, s.list, s.tasks.map(t => t.id).sort()])")
         # The Inbox first, with what is in no list the user sees; then the lists with tasks, as given.
         assert got == [["l:", "Inbox", "", ["b", "d"]], ["l:team", "team", "team", ["c"]], ["l:shop", "shop", "shop", ["a"]]]
+
+
+class TestFilterCases:
+    """The filter, case by case: the cases the server's filter runs through
+    too (parseTaskFilter and matches in go/tasksyntax.go, TestFilterCases;
+    go/testdata/filter_cases.json). anna asks, in a wiki with anna and bob."""
+
+    CASES = json.loads((CORE.parent.parent / "go" / "testdata" / "filter_cases.json").read_text(encoding="utf-8"))
+    PEOPLE = "{me: 'anna', users: new Set(['anna', 'bob'])}"
+
+    def test_the_cases_the_server_has(self):
+        got = run_core(f"{json.dumps(self.CASES)}.map(c => TasksCore.matchesFilter(c.task, TasksCore.parseFilter(c.q, {self.PEOPLE})))")
+        wrong = [(c["name"], c["q"], g) for c, g in zip(self.CASES, got) if g != c["want"]]
+        assert not wrong and len(got) > 40
+
+
+class TestFocusCases:
+    """For today, and overdue, case by case: the cases the server's rule
+    runs through too (taskFocus, taskOverdue; go/testdata/focus_cases.json)."""
+
+    CASES = json.loads((CORE.parent.parent / "go" / "testdata" / "focus_cases.json").read_text(encoding="utf-8"))
+
+    def test_the_cases_the_server_has(self):
+        got = run_core(f"{json.dumps(self.CASES)}.map(c => [TasksCore.isFocus(c.task, c.today), TasksCore.isOverdue(c.task, c.today)])")
+        wrong = [(c["name"], g) for c, g in zip(self.CASES, got) if g != [c["focus"], c["overdue"]]]
+        assert not wrong and len(got) >= 10

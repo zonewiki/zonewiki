@@ -603,7 +603,9 @@ func visibleSlugs(user string) map[string]bool {
 // names it ("Move private/alice/2026-…_idea into the wiki as ideas/x"), at
 // the start of a path, not inside one ("notprivate/x", "notes/private/x"):
 // group 2, after group 1.
-var privateNameRE = regexp.MustCompile(`(^|[^\w./-])((?:` + keptDirs + `)/[\w./-]*[\w/])`)
+// In any case: placeOf judges a path in lower case, so "Private/alice/x" (a
+// folder made by hand) is alice's too, and is named to no one else either.
+var privateNameRE = regexp.MustCompile(`(?i)(^|[^\w./-])((?:` + keptDirs + `)/[\w./-]*[\w/])`)
 
 // hideNames: a commit message for user, the paths in it user may not see
 // as "a private page": a commit that moved a page out of a private folder,
@@ -624,7 +626,7 @@ func hideNames(user, msg string) string {
 			}
 		}
 	}
-	if !strings.Contains(msg, privateDir+"/") && !strings.Contains(msg, groupsDir+"/") {
+	if low := strings.ToLower(msg); !strings.Contains(low, privateDir+"/") && !strings.Contains(low, groupsDir+"/") {
 		return msg
 	}
 	var out strings.Builder
@@ -635,7 +637,7 @@ func hideNames(user, msg string) string {
 		switch {
 		case canSeePath(user, strings.TrimSuffix(name, ".md")):
 			out.WriteString(name)
-		case strings.HasPrefix(name, groupsDir+"/"):
+		case strings.HasPrefix(strings.ToLower(name), groupsDir+"/"):
 			out.WriteString("a group's page")
 		default:
 			out.WriteString("a private page")
