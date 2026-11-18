@@ -114,3 +114,16 @@ def test_the_binary_is_zonewiki():
     assert 'CMD ["/app/zonewiki"]' in final
     for compose in ("compose.yaml", "compose.nas.yaml"):
         assert '"/app/zonewiki", "health"' in (REPO / compose).read_text(encoding="utf-8")
+
+
+def test_ci_publishes_no_onnxruntime_while_it_is_paused():
+    # Semantic search paused (docs/spec/deployment.md): since 2026-11-18,
+    # Microsoft has onnxruntime's repository private "while we investigate
+    # malicious content". Neither CI builds an image with it or runs the
+    # retrieval job, which runs it; lift both together, on purpose.
+    for path in (".github/workflows/ci.yml", ".forgejo/workflows/ci.yml"):
+        ci = (REPO / path).read_text(encoding="utf-8")
+        assert "ZONE_SEMANTIC_SEARCH=off" in ci and "ZONE_SEMANTIC_SEARCH=on" not in ci, path
+        job = ci[ci.index("\n  retrieval:\n"):]
+        job = job[:job.index("\n  image:\n")]
+        assert "\n    if: false\n" in job, path

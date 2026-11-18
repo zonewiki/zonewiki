@@ -106,7 +106,8 @@ The wiki is untouched by an update; it lives in the folder `ZONE_DATA` names.
 - `ZONE_UID`, `ZONE_GID`: the owner of that folder (`id -u` and `id -g` as that user, or `ls -nd <folder>`).
   Zone runs as that user and writes the wiki as it.
 - `TZ`, e.g. `Europe/Vienna`, so "today" is your day (else UTC).
-- Optional: `ZONE_PORT` (the host's port, default 5080), `ZONE_SEMANTIC_SEARCH=on` (semantic search: the model is in the image; plan on roughly 1 GB more RAM).
+- Optional: `ZONE_PORT` (the host's port, default 5080).
+  `ZONE_SEMANTIC_SEARCH=on` does nothing with the prebuilt image for now: it has no semantic search since 2026-11-18 (Semantic search paused, below), so Zone searches by keywords.
 
 The wiki's own settings go in its settings file (`.zone/config`, `docs/spec/users.md`), through the container, in the folder of `compose.nas.yaml` and `.env` (no repo needed):
 
@@ -146,6 +147,13 @@ With Container Manager (DSM 7.2 or newer; Docker on older DSM works the same ove
 
 Updates: over SSH, `docker compose pull && docker compose up -d` in the project folder (Container Manager's Image list may also offer the update for `ghcr.io/zonewiki/zonewiki`).
 
+### Semantic search paused
+
+Since 2026-11-18 the images CI publishes have no semantic search (`ZONE_SEMANTIC_SEARCH=off` at build time), and CI's **retrieval** job is skipped (`if: false`),
+because Microsoft took onnxruntime's GitHub repository private "while we investigate malicious content", and both would run onnxruntime.
+Its release downloads are gone with it, so a build with `ZONE_SEMANTIC_SEARCH=on` fails where its layer isn't cached.
+They come back, as they were, once Microsoft has said what happened and onnxruntime has a source that can be trusted again.
+
 ## CI (Forgejo Actions)
 
 `.forgejo/workflows/ci.yml` runs on every push and pull request a **checks** job per `run.sh` command,
@@ -156,14 +164,14 @@ So CI keeps no package lists or test commands of its own.
 A **bench** job after them runs `./run.sh bench` with `ZONE_BENCH_SLACK=3` (The bench in `docs/spec/testing.md`); the image job doesn't wait for it, so a slow runner fails a job that is looked at and holds up no image.
 It waits for the checks because the jobs share the host's engine: beside test's worker per CPU and e2e's browsers, the bench's clients at once measured the CPU they waited for (a page beside thirty searches seven times slower than alone, where the slack allows three).
 GitHub's workflow has the same job, beside the checks, since each of its jobs has a machine of its own.
-A **retrieval** job, likewise after the checks, runs `./run.sh retrieval`: search's quality on the sample wiki against its floor (Measuring retrieval in `docs/spec/search.md`). It builds the app's image with the model, under a tag of its own (`zonewiki-retrieval`), from the engine's cache unless the code or the model changed.
+A **retrieval** job, likewise after the checks, runs `./run.sh retrieval` (skipped for now: Semantic search paused): search's quality on the sample wiki against its floor (Measuring retrieval in `docs/spec/search.md`). It builds the app's image with the model, under a tag of its own (`zonewiki-retrieval`), from the engine's cache unless the code or the model changed.
 `run.sh` builds each image quietly (the build's output, which podman's `-q` doesn't hide for `RUN` steps, goes to a log shown only when the build fails; a first build, with no image of that tag yet, prints one line saying so) and runs it by ID, so parallel jobs on one engine can't swap a shared tag.
 With `ZONE_COPY_REPO=1` (set by CI) it copies the repo into the container (`create --rm`, `cp`, `start -a`; the engine removes the container even when a cancelled job kills `run.sh`) instead of bind-mounting it, since the checkout lives in the job container while the engine is the host's;
 nothing the command writes comes back.
 Only **leaks** fetches the full history; the others check out the last commit.
 On `main` and `v*` tags,
 once all three pass,
-**image** builds the `Containerfile` with `ZONE_SEMANTIC_SEARCH=on` and the `ZONE_BUILD` string `run.sh` would compute,
+**image** builds the `Containerfile` with `ZONE_SEMANTIC_SEARCH=off` (on until 2026-11-18: Semantic search paused) and the `ZONE_BUILD` string `run.sh` would compute,
 and pushes it to the Forgejo registry as `<REGISTRY>/<owner>/<repo>:<short-sha>` (the repository's name, lowercase;
 repo variable `REGISTRY`, Forgejo's public host, e.g. `git.example.org`: the host's engine pushes, and the runner's server URL is the internal `http://web:3000`;
 without the variable the image job is skipped, so forks just test),
@@ -183,8 +191,8 @@ Repo settings: variable `REGISTRY` (the registry host; required for the image), 
 `.github/workflows/ci.yml` runs the same **checks** (`./run.sh test`, `e2e`, `leaks`) on GitHub's `ubuntu-26.04` runners, through `run.sh` (with podman, which the runners have and `run.sh` prefers; the checkout is on the runner, so no `ZONE_COPY_REPO`).
 On `main` and `v*` tags,
 once they pass,
-it publishes the image `compose.nas.yaml` runs: **image** builds the `Containerfile` (`ZONE_SEMANTIC_SEARCH=on`, the `ZONE_BUILD` string) once per architecture,
-each natively on its own runner (`ubuntu-26.04` for amd64, `ubuntu-26.04-arm` for arm64; no emulation, so the arm64 build compiles with cgo and fetches onnxruntime's arm64 build and the model as fast as the other),
+it publishes the image `compose.nas.yaml` runs: **image** builds the `Containerfile` (`ZONE_SEMANTIC_SEARCH=off`, the `ZONE_BUILD` string) once per architecture,
+each natively on its own runner (`ubuntu-26.04` for amd64, `ubuntu-26.04-arm` for arm64; no emulation, so the arm64 build compiles with cgo, and, with semantic search, fetches onnxruntime's arm64 build and the model as fast as the other),
 pushes it to `ghcr.io/<owner>/zonewiki` by digest only (cached between runs in GitHub's cache, a scope per architecture),
 and **manifest** joins the two digests under the tags: `latest` (main),
 the short commit hash,
