@@ -55,12 +55,13 @@ for (const field of document.querySelectorAll('.group-form input[name="people"],
   if (!form || !button) continue;
   const names = text => text.split(/[\s,]+/).map(n => n.replace(/^@/, '').toLowerCase()).filter(Boolean);
   const was = names(field.defaultValue), label = button.textContent, spoken = button.getAttribute('aria-label');
-  const people = field.name === 'people';
+  const people = field.name === 'people', primary = button.classList.contains('btn-primary');
   let asked = '';
   const reset = () => {
     asked = '';
     button.textContent = label;
     button.classList.remove('btn-danger');
+    button.classList.toggle('btn-primary', primary);
     if (spoken) button.setAttribute('aria-label', spoken);
   };
   form.addEventListener('input', reset);
@@ -74,6 +75,7 @@ for (const field of document.querySelectorAll('.group-form input[name="people"],
     const who = form.action.match(/\/admin\/users\/([^/]+)\/groups$/)?.[1];
     button.textContent = people ? `Yes, take out ${gone.join(', ')}` : `Yes, take ${decodeURIComponent(who || 'them')} out of ${gone.join(', ')}`;
     if (spoken) button.setAttribute('aria-label', button.textContent);
+    button.classList.remove('btn-primary');   // its white text would be lost on the danger button's ground
     button.classList.add('btn-danger');
     form.classList.add('edited');
   });
