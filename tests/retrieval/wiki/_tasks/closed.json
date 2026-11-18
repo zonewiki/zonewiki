@@ -1,0 +1,42 @@
+[
+  {
+    "id": "00000001-0000-4000-8000-000000000001",
+    "title": "File the 2024 tax return",
+    "description": "Submitted through the portal.",
+    "tags": [
+      "admin"
+    ],
+    "start_date": null,
+    "due_date": "2025-06-30",
+    "created_at": "2026-03-01T10:00:00",
+    "closed_at": "2025-06-12T09:00:00",
+    "wont_do": false,
+    "keep": false,
+    "last_done": null,
+    "sort_order": null,
+    "recurrence": null,
+    "spawned_from": null,
+    "history": [],
+    "comments": []
+  },
+  {
+    "id": "00000001-0000-4000-8000-000000000001",
+    "title": "Fix the booking form's confirmation mail",
+    "description": "See WEB-118.",
+    "tags": [
+      "radwerk"
+    ],
+    "start_date": null,
+    "due_date": null,
+    "created_at": "2026-03-01T10:00:00",
+    "closed_at": "2026-03-31T16:00:00",
+    "wont_do": false,
+    "keep": false,
+    "last_done": null,
+    "sort_order": null,
+    "recurrence": null,
+    "spawned_from": null,
+    "history": [],
+    "comments": []
+  }
+]

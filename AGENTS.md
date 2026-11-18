@@ -110,13 +110,13 @@ Auth is optional (a password, or users; see Key Constraints).
 ├── compose.podman.yaml     # Rootless podman only: userns keep-id (run.sh adds it)
 ├── compose.nas.yaml        # NAS/server: runs the prebuilt ghcr.io image, no build (see docs/spec/deployment.md)
 ├── Containerfile.tools     # Tools image: Go (and gcc, for its race detector), Playwright + Chromium, the tests' Python packages, Node for tasks-core tests, gitleaks, git, pngquant
-├── run.sh                  # Helper script: build/up/down/logs, user/config (via compose), test/e2e/bench/leaks (CI runs these too); bash 3.2-compatible (macOS)
+├── run.sh                  # Helper script: build/up/down/logs, user/config (via compose), test/e2e/bench/retrieval/leaks (CI runs these too); bash 3.2-compatible (macOS)
 ├── .githooks/pre-commit    # Refuses a commit with a secret in it (gitleaks); on with git config core.hooksPath .githooks
 ├── .gitleaks.toml          # gitleaks: the default rules; the generic key rule skips public/vendor/ (minified names)
 ├── .gitattributes          # LF line endings for *.sh and .githooks/* (Windows checkouts)
 ├── .env.example            # Template for .env: every setting, commented
 ├── .env                    # Your settings (gitignored; copy of .env.example)
-├── .forgejo/workflows/ci.yml  # Forgejo Actions: checks (run.sh test, e2e, leaks), the bench (run.sh bench), build + push the image
+├── .forgejo/workflows/ci.yml  # Forgejo Actions: checks (run.sh test, e2e, leaks), the bench (run.sh bench), search's floor (run.sh retrieval), build + push the image
 ├── .github/workflows/ci.yml   # GitHub Actions: the same checks, the image for amd64 + arm64 to ghcr.io
 ├── .forgejo/issue_template/   # Issue templates: bug.md, feature.md
 ├── go/                     # The server: package main, a file per area; pure code without Zone's state in go/internal/
@@ -190,7 +190,7 @@ Auth is optional (a password, or users; see Key Constraints).
 │   ├── eval.go             # zonewiki eval: measures search_wiki's retrieval on your wiki against your questions (./run.sh eval)
 │   ├── embedtest.go        # The tests' fake embedder (--semantic-test)
 │   └── *_test.go, testdata/  # Go tests (go test ./...)
-├── tests/                  # pytest over HTTP against the server (conftest.py, goserver.py, settings.py); e2e/ in a browser; bench_tasks.py measures the tasks at a team's size (not in the suites: ./run.sh bench, a job of CI's)
+├── tests/                  # pytest over HTTP against the server (conftest.py, goserver.py, settings.py); e2e/ in a browser; bench_tasks.py measures the tasks at a team's size (not in the suites: ./run.sh bench, a job of CI's); retrieval/ a sample wiki, questions and the least search must find for them (its README.md)
 └── public/                 # The browser code, served as it is
     ├── style.css           # The styling: the look's tokens (:root), pages, the editor, search, dialogs, phones
     ├── tasks.css           # The task app's styling, loaded after style.css
@@ -222,6 +222,7 @@ It lives in the host directory pointed to by `ZONE_DATA` (default: `~/zonewiki`)
 ./run.sh test       # gofmt + go vet + go test -race, then the unit/API tests, in the tools image (extra args go to pytest)
 ./run.sh e2e        # browser tests + tasks-core.js (Node) tests in the tools image
 ./run.sh bench      # the tasks at a team's size against their budgets, then under the race detector (CI's bench job)
+./run.sh retrieval  # search on the sample wiki (tests/retrieval) against its floor, by keywords and by meaning (CI's retrieval job)
 ./run.sh leaks      # scan the git history for secrets (gitleaks, in the tools image)
 ./run.sh screenshots  # redo the README's screenshots from a sample wiki
 ./run.sh eval [FILE]  # measure retrieval on your wiki (questions in FILE, default _eval/retrieval.json in the wiki)
@@ -265,6 +266,8 @@ Flags are written with two dashes everywhere (`--addr :8080`, `user add NAME --m
 ## Tests
 
 **Always run the full test suite before and after making changes to the server (`go/`).**
+
+**A change to search (chunking, tokens, ranking, the model) is held to the retrieval floor** (`tests/retrieval/`, its `README.md`): `./run.sh test` fails when the keyword ranking finds less, or more, than `floors.json` says, `./run.sh retrieval` measures the hybrid ranking too. Raise the floor with a gain, in the same commit; never tune the sample wiki to a question.
 
 **Always add tests as part of the same change** — whenever a new feature is implemented or a bug is fixed, add tests covering the new behavior (and, for bugs, a regression test that fails without the fix).
 A feature or fix is not complete until it has test coverage.

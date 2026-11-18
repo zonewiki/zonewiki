@@ -76,6 +76,25 @@ jobs:
           ZONE_BENCH_SLACK: 3
         run: ./run.sh bench
 
+  retrieval:
+    # Search's quality against its floor (./run.sh retrieval; Measuring
+    # retrieval in docs/spec/search.md): the sample wiki's questions, by
+    # keywords and by meaning, in the app's image with the model. A job of
+    # its own after the checks, as the bench: it builds that image (from the
+    # host's cache, unless the code or the model changed).
+    needs: [checks]
+    runs-on: docker
+    container:
+      image: docker:29.9.3-cli@sha256:2357639ad1ea7d0194134bf3292622fd4e562483966ed674e5d7c945b5f3b28d
+    steps:
+      - name: Install system packages
+        run: apk add --no-cache nodejs git bash
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: ./run.sh retrieval
+        env:
+          ZONE_COPY_REPO: 1
+        run: ./run.sh retrieval
+
   image:
     needs: [checks]
     # Only with a registry to push to (forks and clones without one just test).

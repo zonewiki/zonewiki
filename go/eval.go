@@ -31,6 +31,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"zonewiki/internal/jsonobj"
@@ -47,11 +48,12 @@ func evalMain(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	k := fs.Int("k", 8, "`N` results per question, as search_wiki gives")
 	newOnly := fs.Bool("new", false, "list logged search_wiki queries not in the file yet, as stubs to paste")
+	floorFile := fs.String("floor", "", "`FILE` of the least each mode must reach (JSON); exit 1 when one falls under it")
 	// The wiki stays as it is (Read-only, docs/spec/search.md).
 	defer func(was bool) { writeIndexFiles = was }(writeIndexFiles)
 	writeIndexFiles = false
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: zonewiki eval [--k N] [--new] QUESTIONS.json")
+		fmt.Fprintln(stderr, "Usage: zonewiki eval [--k N] [--new] [--floor FLOORS.json] QUESTIONS.json")
 		printFlags(fs)
 	}
 	// Flags before or after the file.
@@ -100,7 +102,14 @@ func evalMain(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return fail(err)
 	}
-	if bad := unknownTargets(questions); len(bad) > 0 {
+	var floors evalFloors
+	if *floorFile != "" {
+		if floors, err = loadFloors(*floorFile); err != nil {
+			return fail(err)
+		}
+	}
+	bad := unknownTargets(questions)
+	if len(bad) > 0 {
 		fmt.Fprintln(stderr, "Not in the wiki:\n  "+strings.Join(bad, "\n  ")+"\n")
 	}
 	modes := []string{"keyword"}
@@ -116,7 +125,99 @@ func evalMain(args []string, stdout, stderr io.Writer) int {
 	if open > 0 {
 		fmt.Fprintf(stdout, "\n%d question(s) without targets skipped.\n", open)
 	}
+	if floors == nil {
+		return 0
+	}
+	// Against a floor a target that names nothing is a failure: its
+	// question would count as not found, and lower the numbers unseen.
+	under, over := floors.check(modes, byMode, *k)
+	if len(bad) > 0 {
+		under = append(under, fmt.Sprintf("%d target(s) name nothing in the wiki", len(bad)))
+	}
+	if len(over) > 0 {
+		fmt.Fprintln(stdout, "\nAbove the floor (raise it in "+filepath.Base(*floorFile)+", so it is kept):\n  "+strings.Join(over, "\n  "))
+	}
+	if len(under) > 0 {
+		fmt.Fprintln(stdout, "\nUnder the floor ("+filepath.Base(*floorFile)+"):\n  "+strings.Join(under, "\n  "))
+		return 1
+	}
+	fmt.Fprintln(stdout, "\nNo mode is under its floor.")
 	return 0
+}
+
+// evalFloors: the least each mode must reach, by measure ("hit@1", "hit@3",
+// "hit@8" as counts of questions, "MRR"), as a floor file has it:
+// {"keyword": {"hit@1": 44, …}, "hybrid": {…}}. A change to chunking,
+// ranking or the model that takes a mode under its floor is one that lost
+// answers.
+type evalFloors map[string]map[string]float64
+
+func loadFloors(path string) (evalFloors, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("Can't read %s: %v", path, err)
+	}
+	var floors evalFloors
+	if err := json.Unmarshal(b, &floors); err != nil || len(floors) == 0 {
+		return nil, fmt.Errorf("%s: expected {\"keyword\": {\"hit@1\": N, …}, …}", path)
+	}
+	return floors, nil
+}
+
+// evalNumbers: evalSummary's measures as numbers: the hits as counts.
+func evalNumbers(ranks []int, k int) map[string]float64 {
+	out := map[string]float64{"hit@1": 0, "hit@3": 0, fmt.Sprintf("hit@%d", k): 0, "MRR": 0}
+	for _, r := range ranks {
+		if r <= 0 {
+			continue
+		}
+		for _, m := range []int{1, 3, k} {
+			if r <= m {
+				out[fmt.Sprintf("hit@%d", m)]++
+			}
+		}
+		out["MRR"] += 1 / float64(r)
+	}
+	if k == 1 || k == 3 { // counted twice above, as the same measure
+		out[fmt.Sprintf("hit@%d", k)] /= 2
+	}
+	if len(ranks) > 0 {
+		out["MRR"] /= float64(len(ranks))
+	}
+	return out
+}
+
+// check: what is under its floor, and what is above it, each a line. A
+// mode with a floor that didn't run (hybrid without its model) is under it:
+// a floor nobody measured holds nothing.
+func (f evalFloors) check(modes []string, byMode map[string][]int, k int) (under, over []string) {
+	for _, mode := range sortedKeys(f) {
+		if !slices.Contains(modes, mode) {
+			under = append(under, mode+" didn't run (semantic search needs ZONE_SEMANTIC_SEARCH and its model)")
+			continue
+		}
+		got := evalNumbers(byMode[mode], k)
+		for _, measure := range sortedKeys(f[mode]) {
+			floor, have, known := f[mode][measure], got[measure], false
+			if _, known = got[measure]; !known {
+				under = append(under, fmt.Sprintf("%s %s: not a measure of this run (hit@1, hit@3, hit@%d, MRR)", mode, measure, k))
+				continue
+			}
+			show := func(x float64) string {
+				if measure == "MRR" {
+					return fmt.Sprintf("%.2f", x)
+				}
+				return fmt.Sprintf("%.0f", x)
+			}
+			switch {
+			case have < floor-1e-9:
+				under = append(under, fmt.Sprintf("%s %s: %s, the floor is %s", mode, measure, show(have), show(floor)))
+			case measure == "MRR" && have >= floor+0.005 || measure != "MRR" && have > floor:
+				over = append(over, fmt.Sprintf("%s %s: %s, the floor is %s", mode, measure, show(have), show(floor)))
+			}
+		}
+	}
+	return under, over
 }
 
 // loadQuestions: the questions with targets, and how many have none yet.

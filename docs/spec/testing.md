@@ -344,6 +344,14 @@ Both `./run.sh test` and `./run.sh e2e` run in parallel with pytest-xdist: `test
 An `-n` in the extra args overrides it (`-n 0`: one process).
 Workers are separate processes: each has its own temp wikis, servers (`base_url`) and browser, so the fixtures need no locking; a test must keep its files under `tmp_path`.
 
+## The retrieval floor
+
+`tests/retrieval/` holds a sample wiki, questions and the least search must find for them (its `README.md`; Measuring retrieval in `docs/spec/search.md`).
+`TestRetrievalHoldsItsFloor` (Go, in `./run.sh test`) runs `zonewiki eval --floor` on a copy of it by keywords, and fails under the floor or above it (a gain is kept by raising the floor in the same change).
+`./run.sh retrieval` measures the hybrid ranking too, in the app's image with the model; it is CI's `retrieval` job and no part of the suites.
+`TestEvalFloors` and `TestEvalCommandHoldsAFloor` cover the floor itself: the measures as numbers, what is under and over, a mode that didn't run, a measure the run doesn't have, a target that names nothing.
+`tests/test_run_sh.py` holds `./run.sh retrieval` to the app's image built with the model and the three files.
+
 ## The bench
 
 `tests/bench_tasks.py` measures the tasks at a team's size and is no part of the suites (its name is no test module's): `./run.sh bench`, which is also a job of CI's (or `./run.sh test tests/bench_tasks.py -n 0 -s` for the table alone).

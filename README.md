@@ -501,6 +501,7 @@ files that any editor opens, with their history in git.
 ```bash
 ./run.sh test     # go vet, go test, then the API tests (pytest)
 ./run.sh e2e      # browser tests (Playwright) and the task logic tests (Node)
+./run.sh retrieval  # search's quality on a sample wiki against its floor
 ./run.sh leaks    # scan the git history for secrets (gitleaks)
 ./run.sh screenshots   # redo the screenshots above (docs/screenshots/)
 ./run.sh eval     # measure how well search finds answers in your wiki

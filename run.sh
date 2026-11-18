@@ -193,6 +193,19 @@ case "${1:-up}" in
        python3 -m pytest tests/e2e tests/test_tasks_core.py -v -p no:cacheprovider \
          -n "$n" "$@"' -- "${@:2}"
     ;;
+  retrieval)
+    # Search's quality against its floor (tests/retrieval: a sample wiki, the
+    # questions asked of it and the least each ranking must find; Measuring
+    # retrieval in docs/spec/search.md), in the app's image with the model
+    # baked in, whatever .env says: the hybrid ranking can't be measured
+    # without it. A tag of its own, so the image up runs stays as .env built
+    # it. Fails when a ranking finds less than its floor; the keyword
+    # ranking's floor is held by ./run.sh test too (TestRetrievalHoldsItsFloor).
+    image=$(build_image zonewiki-retrieval -f Containerfile --build-arg "ZONE_BUILD=$ZONE_BUILD" \
+      --build-arg ZONE_SEMANTIC_SEARCH=on)
+    in_image "$image" -e ZONE_DATA=/repo/tests/retrieval/wiki -e ZONE_SEMANTIC_SEARCH=on -- \
+      /app/zonewiki eval --floor /repo/tests/retrieval/floors.json /repo/tests/retrieval/questions.json "${@:2}"
+    ;;
   leaks)
     # Secrets in the git history (gitleaks, in the tools image); extra args
     # go to `gitleaks git`, e.g. --pre-commit --staged for staged changes
@@ -275,7 +288,7 @@ case "${1:-up}" in
     compose run --rm --no-deps "${tty[@]}" zonewiki /app/zonewiki "$@"
     ;;
   *)
-    echo "Usage: $0 [build|up|down|logs|test|e2e|bench|leaks|screenshots|eval|user|group|config]"
+    echo "Usage: $0 [build|up|down|logs|test|e2e|bench|retrieval|leaks|screenshots|eval|user|group|config]"
     echo "  build  - build the container image only"
     echo "  up     - build and start Zone (default)"
     echo "  down   - stop Zone"
@@ -283,6 +296,7 @@ case "${1:-up}" in
     echo "  test   - gofmt, go vet, go test -race and the unit/API tests in the tools image (extra args go to pytest)"
     echo "  e2e    - run browser and tasks-core tests in the tools image (extra args go to pytest)"
     echo "  bench  - measure the tasks at a team's size against their budgets, then under the race detector"
+    echo "  retrieval - measure search on the sample wiki (tests/retrieval) against its floor, by keywords and by meaning"
     echo "  leaks  - scan the git history for secrets (extra args go to gitleaks git)"
     echo "  screenshots - redo the README's screenshots (docs/screenshots/)"
     echo "  eval [FILE] - measure search on your wiki against questions in FILE (in the wiki)"

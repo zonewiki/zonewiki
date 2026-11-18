@@ -250,6 +250,18 @@ def test_bench_measures_then_runs_under_the_race_detector(sandbox):
     assert "ZONE_TEST_RACE=1 python3 -m pytest" in run and "-n 0 -s tests/bench_tasks.py" in run
 
 
+def test_retrieval_measures_the_sample_wiki_in_the_apps_image_with_the_model(sandbox):
+    repo, env, log = sandbox
+    r = subprocess.run(["./run.sh", "retrieval", "--k", "5"], cwd=repo, env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    logged = log.read_text()
+    (build,) = [l for l in logged.split("\n") if l.startswith("build ") and "zonewiki-retrieval" in l]
+    assert "-f Containerfile " in build and "--build-arg ZONE_SEMANTIC_SEARCH=on" in build
+    (run,) = [l for l in logged.split("\nrun ") if "zonewiki eval" in l]
+    assert "-e ZONE_DATA=/repo/tests/retrieval/wiki" in run and "-e ZONE_SEMANTIC_SEARCH=on" in run
+    assert run.rstrip().endswith("/app/zonewiki eval --floor /repo/tests/retrieval/floors.json /repo/tests/retrieval/questions.json --k 5")
+
+
 def test_a_failed_build_shows_its_output_and_runs_nothing(sandbox):
     repo, env, log = sandbox
     env["FAKE_BUILD_FAILS"] = "1"

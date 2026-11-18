@@ -82,6 +82,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 ./run.sh test       # gofmt, go vet, go test -race, then the unit/API tests, in the tools image (extra args go to pytest; a tests/… path replaces the default whole suite but the browser tests)
 ./run.sh e2e        # run browser tests + tasks-core.js (Node) tests in the tools image (extra args go to pytest)
 ./run.sh bench      # the tasks at a team's size against their budgets (tests/bench_tasks.py), then once more against a server built with the race detector; ZONE_BENCH_SLACK=3 allows three times the time budgets (The bench in docs/spec/testing.md)
+./run.sh retrieval  # search on the sample wiki (tests/retrieval) against its floor, by keywords and by meaning, in the app's image with the model
 ./run.sh leaks      # scan the git history for secrets with gitleaks, in the tools image (extra args go to `gitleaks git`; a leak exits with 3)
 ./run.sh screenshots  # redo the README's screenshots (docs/screenshots/*.png) from a sample wiki, in the tools image; compressed with pngquant (the README shows phone.png at 640px)
 ./run.sh eval [FILE]  # measure retrieval on your wiki (see Measuring retrieval in search.md), in the app image, with semantic search as ZONE_SEMANTIC_SEARCH says
@@ -155,6 +156,7 @@ So CI keeps no package lists or test commands of its own.
 A **bench** job after them runs `./run.sh bench` with `ZONE_BENCH_SLACK=3` (The bench in `docs/spec/testing.md`); the image job doesn't wait for it, so a slow runner fails a job that is looked at and holds up no image.
 It waits for the checks because the jobs share the host's engine: beside test's worker per CPU and e2e's browsers, the bench's clients at once measured the CPU they waited for (a page beside thirty searches seven times slower than alone, where the slack allows three).
 GitHub's workflow has the same job, beside the checks, since each of its jobs has a machine of its own.
+A **retrieval** job, likewise after the checks, runs `./run.sh retrieval`: search's quality on the sample wiki against its floor (Measuring retrieval in `docs/spec/search.md`). It builds the app's image with the model, under a tag of its own (`zonewiki-retrieval`), from the engine's cache unless the code or the model changed.
 `run.sh` builds each image quietly (the build's output, which podman's `-q` doesn't hide for `RUN` steps, goes to a log shown only when the build fails; a first build, with no image of that tag yet, prints one line saying so) and runs it by ID, so parallel jobs on one engine can't swap a shared tag.
 With `ZONE_COPY_REPO=1` (set by CI) it copies the repo into the container (`create --rm`, `cp`, `start -a`; the engine removes the container even when a cancelled job kills `run.sh`) instead of bind-mounting it, since the checkout lives in the job container while the engine is the host's;
 nothing the command writes comes back.

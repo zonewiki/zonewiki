@@ -62,6 +62,16 @@ jobs:
           ZONE_BENCH_SLACK: 3
         run: ./run.sh bench
 
+  retrieval:
+    # Search's quality against its floor (./run.sh retrieval; Measuring
+    # retrieval in docs/spec/search.md): the sample wiki's questions, by
+    # keywords and by meaning, in the app's image with the model.
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: ./run.sh retrieval
+        run: ./run.sh retrieval
+
   image:
     # One image per architecture, each on a runner of its own (no emulation:
     # the arm64 build compiles with cgo and fetches onnxruntime's arm64

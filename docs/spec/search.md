@@ -205,6 +205,12 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 - **New questions from the log**: `./run.sh eval FILE --new` (or `zonewiki eval --new FILE`) prints the logged queries FILE doesn't have yet (case and spacing ignored), newest first, each once, as stubs `{"q", "expect": [], "results"}`, separated by commas to paste into FILE's list.
   `results` (the first 5) is what the search found then: a hint for `expect`, not the answer.
   A question whose `expect` is empty is skipped, and the report counts them, so stubs can sit in FILE until you fill them in.
+- **A floor** (`--floor FILE`): the least each mode must reach, a JSON file `{"keyword": {"hit@1": 44, "hit@3": 51, "hit@8": 56, "MRR": 0.70}, "hybrid": {…}}` (the hits as counts of questions).
+  After the report the command says what is under its floor and exits 1, or "No mode is under its floor."; what is above is listed too ("raise it …, so it is kept").
+  A mode with a floor that didn't run (hybrid without its model) is under it, and so is a run with a target that names nothing: its question would count as not found, and lower the numbers unseen.
+- **Zone's own floor** (`tests/retrieval/`, its `README.md`): a sample wiki (54 pages and 12 tasks of a made-up household and the bike workshop in its yard, a third of it German: projects, recipes, how-tos, meeting notes with the same headings, tickets with ids, people), 68 questions (in other words than the page's, by id and name, German and English, and across the two) and `floors.json`, set to what was measured.
+  So a change to chunking, the tokens, the ranking or the model that loses an answer fails: the keyword ranking in `./run.sh test` (`TestRetrievalHoldsItsFloor`, no model needed; it fails as well when the ranking got better than its floor, until the floor is raised), both rankings in `./run.sh retrieval` (the app's image with the model; CI's `retrieval` job).
+  The floor says what search does, not what it should: on 2026-11-18 keywords answer 44 of 68 first and 56 in the first eight, the hybrid ranking 52 and 67. One question keywords find (third) the hybrid ranking loses from the first eight ("what must not go on the compost heap"): open.
 - **Read-only**: the semantic cache is read from the wiki (`.zone/index/embeddings.json`), sections changed since are embedded into a temporary copy, never written back (`semanticFromEnv`, the index without its worker).
   The keyword indexes' files are read, never written: a rebuild stays in memory (`writeIndexFiles`).
 
