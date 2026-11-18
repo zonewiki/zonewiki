@@ -29,7 +29,8 @@ everything as it is. Search indexes and caches are rebuilt from the files.
   notes, and manage tasks. It acts as you and never sees more than you do,
   and you can connect one that only reads, or one that is kept out of your
   private pages or given only some of your groups;
-  its edits land as git commits marked `(MCP)` and named after the assistant,
+  its edits land as git commits marked `(MCP)` and named after the assistant
+  (and after where it took the text from, when it says),
   listed under Changes, where you review them and undo one or a whole run
   of them. Zone brings no model of its own: the assistant is yours, whichever
   you use, and what it learns stays in your files, not in its maker's cloud.

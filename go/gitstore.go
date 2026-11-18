@@ -542,6 +542,9 @@ func numstatPath(p string) string {
 // alone, on one line (the first, should a commit have several).
 const viaFormat = "%(trailers:key=" + viaTrailerKey + ",valueonly,separator=%x20)"
 
+// sourceFormat: its Source trailer, likewise.
+const sourceFormat = "%(trailers:key=" + sourceTrailerKey + ",valueonly,separator=%x20)"
+
 // GitEntry is a commit of a page: its sha, day, relative date, time
 // (YYYY-MM-DD HH:MM), message, author (commitAuthor), lines added and
 // deleted, and the file's path at that commit (relative to the wiki;
@@ -549,6 +552,7 @@ const viaFormat = "%(trailers:key=" + viaTrailerKey + ",valueonly,separator=%x20
 type GitEntry struct {
 	Sha, Date, Rel, Time, Msg, Author string
 	Via                               string // which assistant wrote it (viaOfCommit), "" for none or not said
+	Source                            string // where its text is from (sourceOfCommit), "" when not said
 	Added, Deleted                    int
 	Path                              string
 }
@@ -568,18 +572,18 @@ func gitLog(path string, max int) []GitEntry {
 		args = append(args, "-n", strconv.Itoa(max))
 	}
 	args = append(args, "--numstat", "--date=format:%Y-%m-%d %H:%M",
-		"--format=\x1e%H\x1f%as\x1f%ar\x1f%ad\x1f%an\x1f"+viaFormat+"\x1f%s", "--", rel)
+		"--format=\x1e%H\x1f%as\x1f%ar\x1f%ad\x1f%an\x1f"+viaFormat+"\x1f"+sourceFormat+"\x1f%s", "--", rel)
 	r := runGit(args...)
 	var entries []GitEntry
 	records := strings.Split(r.Stdout, "\x1e")
 	for _, record := range records[1:] {
 		head, stats, _ := strings.Cut(record, "\n")
-		parts := strings.SplitN(head, "\x1f", 7)
-		if len(parts) != 7 {
+		parts := strings.SplitN(head, "\x1f", 8)
+		if len(parts) != 8 {
 			continue
 		}
 		e := GitEntry{Sha: parts[0], Date: parts[1], Rel: parts[2], Time: parts[3], Author: commitAuthor(parts[4]),
-			Msg: parts[6], Via: viaOfCommit(parts[6], parts[5]), Path: rel}
+			Msg: parts[7], Via: viaOfCommit(parts[7], parts[5]), Source: sourceOfCommit(parts[7], parts[6]), Path: rel}
 		for _, line := range mdtext.SplitLines(stats) {
 			cols := strings.SplitN(mdtext.LineBody(line), "\t", 3)
 			if len(cols) == 3 {
@@ -605,6 +609,7 @@ func gitLog(path string, max int) []GitEntry {
 type LogEntry struct {
 	Sha, Time, Rel, Msg, Author string
 	Via                         string // which assistant wrote it (viaOfCommit), "" for none or not said
+	Source                      string // where its text is from (sourceOfCommit), "" when not said
 	Files                       []string
 	Kinds                       string
 	Hidden                      int
@@ -629,7 +634,7 @@ func gitLogAll(since, under string, limit int, see func(path string) bool, keep 
 	var entries []LogEntry
 	for skip := 0; len(entries) < limit; skip, batch = skip+batch, 2*batch {
 		args := []string{"log", "-n", strconv.Itoa(batch), "--skip", strconv.Itoa(skip), "--name-status", "--no-renames",
-			"--date=format:%Y-%m-%d %H:%M", "--format=\x1e%H\x1f%ad\x1f%ar\x1f%an\x1f" + viaFormat + "\x1f%s"}
+			"--date=format:%Y-%m-%d %H:%M", "--format=\x1e%H\x1f%ad\x1f%ar\x1f%an\x1f" + viaFormat + "\x1f" + sourceFormat + "\x1f%s"}
 		if since != "" {
 			args = append(args, "--since="+since+" 00:00")
 		}
@@ -639,12 +644,12 @@ func gitLogAll(since, under string, limit int, see func(path string) bool, keep 
 		records := strings.Split(runGit(args...).Stdout, "\x1e")[1:]
 		for _, record := range records {
 			head, names, _ := strings.Cut(record, "\n")
-			parts := strings.SplitN(head, "\x1f", 6)
-			if len(parts) != 6 {
+			parts := strings.SplitN(head, "\x1f", 7)
+			if len(parts) != 7 {
 				continue
 			}
-			e := LogEntry{Sha: parts[0], Time: parts[1], Rel: parts[2], Author: commitAuthor(parts[3]), Msg: parts[5],
-				Via: viaOfCommit(parts[5], parts[4])}
+			e := LogEntry{Sha: parts[0], Time: parts[1], Rel: parts[2], Author: commitAuthor(parts[3]), Msg: parts[6],
+				Via: viaOfCommit(parts[6], parts[4]), Source: sourceOfCommit(parts[6], parts[5])}
 			for _, line := range mdtext.SplitLines(names) {
 				kind, n, _ := strings.Cut(mdtext.LineBody(line), "\t")
 				switch {

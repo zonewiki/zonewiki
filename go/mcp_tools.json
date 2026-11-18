@@ -361,6 +361,10 @@
      "type": "string",
      "description": "The git commit message, a few words ('add findings from BUG-1234')."
     },
+    "source": {
+     "type": "string",
+     "description": "Where the text is from, if not the user: a URL, 'mail from Bob'."
+    },
     "guides": {
      "type": "array",
      "items": {
@@ -431,6 +435,10 @@
     "summary": {
      "type": "string",
      "description": "The git commit message, a few words ('add findings from BUG-1234')."
+    },
+    "source": {
+     "type": "string",
+     "description": "Where the text is from, if not the user: a URL, 'mail from Bob'."
     },
     "guides": {
      "type": "array",
@@ -545,6 +553,10 @@
     "summary": {
      "type": "string",
      "description": "The git commit message, a few words ('add findings from BUG-1234')."
+    },
+    "source": {
+     "type": "string",
+     "description": "Where the text is from, if not the user: a URL, 'mail from Bob'."
     },
     "guides": {
      "type": "array",
@@ -996,6 +1008,10 @@
     "summary": {
      "type": "string",
      "description": "The git commit message, a few words ('add findings from BUG-1234')."
+    },
+    "source": {
+     "type": "string",
+     "description": "Where the text is from, if not the user: a URL, 'mail from Bob'."
     }
    },
    "required": [
@@ -1132,6 +1148,10 @@
     "summary": {
      "type": "string",
      "description": "The git commit message, a few words ('add findings from BUG-1234')."
+    },
+    "source": {
+     "type": "string",
+     "description": "Where the text is from, if not the user: a URL, 'mail from Bob'."
     }
    }
   },

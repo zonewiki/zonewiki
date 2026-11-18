@@ -119,8 +119,10 @@ func TestMCPToolDefinitions(t *testing.T) {
 	// Raised from 34000 for rename_page's narrow (2026-11): a move that takes
 	// a page from readers wants its own yes; from 34200 for undo_changes
 	// (2026-11): what the browser's Changes undoes an assistant undoes too.
+	// From 35100 for source on the tools that write text (2026-11): where an
+	// assistant's words are from, when not from its user.
 	// tests/test_mcp.py caps what is served (the same list, compact).
-	if len(mcpToolsJSON) > 35100 {
+	if len(mcpToolsJSON) > 35800 {
 		t.Errorf("the definitions grew to %d bytes: every session loads them", len(mcpToolsJSON))
 	}
 }

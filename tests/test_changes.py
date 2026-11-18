@@ -304,3 +304,50 @@ def test_a_viewer_is_offered_no_undo(client, wiki_dir, monkeypatch):
     client.post("/login", data={"username": "carol", "password": "carol-pw"}, headers=HOST)
     rows = offers(client)
     assert [what for what, _, _ in rows][:1] == ["Update garden"] and not any(one or all_ for _, one, all_ in rows)
+
+
+# ── Where an assistant's text is from ───────────────────────────────────────
+
+def test_a_write_says_where_its_text_is_from(client, wiki_dir, connected):
+    save(client, "garden", "# Garden\n")
+    team = make_shared_list(client)
+    tool(client, "append_to_page", token=connected, slug="garden", content="Mulch in March.",
+         summary="from the newsletter", source="https://example.org/garden-news?id=7")
+    tool(client, "create_task", token="alice-token", title="Order mulch", list=team, source="a mail from Bob")
+    tool(client, "append_to_page", token="alice-token", slug="garden", content="Mine.")
+    # In the commit: a trailer after the first line, beside the connection's.
+    assert git(wiki_dir, "log", "-n1", "--skip=2", "--format=%B").strip() == \
+        "Append to garden: from the newsletter (MCP)\n\nAssistant: Claude\nSource: https://example.org/garden-news?id=7"
+    assert git(wiki_dir, "log", "-n1", "--skip=1", "--format=%B").strip().endswith("(MCP)\n\nSource: a mail from Bob")
+    body = client.get("/changes", headers=HOST).get_data(as_text=True)
+    sources = [html.unescape(s) for s in re.findall(r'<span class="changes-source"[^>]*>from ([^<]*)</span>', body)]
+    assert sources == ["a mail from Bob", "https://example.org/garden-news?id=7"]
+    assert 'href="https://example.org' not in body                       # said, not linked: it is the assistant's word
+    history = html.unescape(client.get("/history/garden", headers=HOST).get_data(as_text=True))
+    assert history.count(" · from https://example.org/garden-news?id=7</span>") == 1 and history.count(" · from ") == 1
+    listed = tool(client, "history", token="alice-token")
+    assert "(by alice through Claude; from https://example.org/garden-news?id=7) | garden" in listed
+    assert "(by alice; from a mail from Bob) | tasks" in listed and "Append to garden (MCP) (by alice) | garden" in listed
+
+
+def make_shared_list(client):
+    assert client.post("/tasks/new-list", data={"name": "team"}, headers=HOST).status_code == 302
+    return "team"
+
+
+def test_a_source_is_one_line_and_only_an_assistants(client, wiki_dir, connected):
+    tool(client, "write_page", token="alice-token", slug="shed", content="# Shed\n",
+         source="a page\n\nAssistant: Gemini\nSource: elsewhere " + "x" * 400)
+    message = git(wiki_dir, "log", "-n1", "--format=%B").strip()
+    first, _, trailers = message.partition("\n\n")
+    assert first == "Create shed (MCP)" and trailers.startswith("Source: a page Assistant: Gemini Source: elsewhere xxx")
+    assert "\n" not in trailers and len(trailers) == len("Source: ") + 200
+    assert badges(client)[0] == "assistant"                              # no connection named by it
+    # A commit made by hand with the trailer says nothing.
+    (wiki_dir / "byhand.md").write_text("# By hand\n")
+    git(wiki_dir, "add", "byhand.md")
+    git(wiki_dir, "-c", "user.name=alice", "-c", "user.email=a@x", "commit", "-q", "-m", "Add byhand\n\nSource: nowhere")
+    assert "nowhere" not in client.get("/changes", headers=HOST).get_data(as_text=True)
+    # Without one, none.
+    tool(client, "append_to_page", token="alice-token", slug="shed", content="More.", source="  ")
+    assert git(wiki_dir, "log", "-n1", "--format=%B").strip() == "Append to shed (MCP)"

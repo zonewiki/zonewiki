@@ -220,7 +220,7 @@ func handleMCP(message json.RawMessage, user asker, callTool func(name string, a
 // the wiki, password or not. user: who asks with the token: its user, with
 // what the connection it is of was given less (an MCP token is of none:
 // the user with all they may). via: that connection's name, for what it
-// writes (viaTrailer). The one place a token becomes an asker.
+// writes (commitTrailers). The one place a token becomes an asker.
 func mcpAuthorized(r *http.Request) (user asker, via string, ok bool) {
 	auth := r.Header.Get("Authorization")
 	if !strings.HasPrefix(auth, "Bearer ") {

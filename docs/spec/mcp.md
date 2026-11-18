@@ -184,6 +184,10 @@ Every write tool takes an optional `summary`; the commit message is the action, 
 `callMCPTool` hands it to the tool with its arguments (`viaArg`, a name no client can send: what one sends there is dropped), and a summary is one line, so neither names an assistant.
 A write with an MCP token has no trailer: a token names no client.
 The history shows it beside who the commit is by, as the client's claim it is: "alice through Claude" on Changes and a page's History, `(by alice through Claude)` in the tool `history` (`viaOfCommit`: only for a commit whose first line ends in `(MCP)`, so a trailer typed by hand says nothing).
+**Where the text is from**: the tools that write text (`write_page`, `edit_page`, `append_to_page`, `create_task`, `update_task`) take an optional `source`: where the words are from when not from the user, as the assistant says it (a URL, "a mail from Bob").
+It is kept as a second trailer, `Source: …` (`commitTrailers`; one line, at most 200 characters, so it adds no trailer of its own), and shown where the commit is: "from https://…" on its row of Changes and in a page's History, `(by alice through Claude; from https://…)` in the tool `history`.
+It is said, not linked: it is the assistant's word, and what it tells a reader is that nobody here wrote this text, so it may be wrong, or written to steer an assistant (Pages can carry instructions in the README).
+It is the write's, in the history; a page's own `sources:` in its frontmatter is the page's, for its readers. Not yet: `read_page` saying which passages came from outside (`docs/plans/assistants-first.md`, part 4).
 Tools that only add are annotated `destructiveHint: false`, those that change or remove `true`, so a client can ask before those.
 The token `/mcp` requires (below) guards writes as it guards reads, and git keeps every change undoable.
 

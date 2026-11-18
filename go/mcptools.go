@@ -350,7 +350,7 @@ func history(args jsonObj, base string, user asker) (string, error) {
 	var rows []string
 	for _, e := range entries[:min(limit, len(entries))] {
 		rows = append(rows, fmt.Sprintf("%s | %s | +%d -%d | %s", runePrefix(e.Sha, 7), e.Time, e.Added, e.Deleted,
-			e.Msg+byAuthor(e.Author, e.Via)))
+			e.Msg+byAuthor(e.Author, e.Via, e.Source)))
 	}
 	shown := fmt.Sprintf("all %d", len(entries))
 	if len(rows) < len(entries) {
@@ -368,16 +368,18 @@ func history(args jsonObj, base string, user asker) (string, error) {
 }
 
 // byAuthor: " (by alice)" after a commit's message, " (by alice through
-// Claude)" for what an assistant wrote through a connection; nothing for
-// Zone's own.
-func byAuthor(author, via string) string {
-	switch {
-	case author != "":
-		return " (by " + author + throughWhom(via) + ")"
-	case via != "":
-		return " (" + strings.TrimSpace(throughWhom(via)) + ")"
+// Claude)" for what an assistant wrote through a connection, "; from
+// https://…" added where the write said where its text is from; nothing
+// for Zone's own.
+func byAuthor(author, via, source string) string {
+	who := strings.TrimSpace(throughWhom(via))
+	if author != "" {
+		who = "by " + author + throughWhom(via)
 	}
-	return ""
+	if who += fromWhere(source); who == "" {
+		return ""
+	}
+	return " (" + strings.TrimPrefix(who, "; ") + ")"
 }
 
 func versionOf(entries []GitEntry, version string) int {
@@ -436,7 +438,7 @@ func recentChanges(since, under string, limit int, user asker) string {
 				labels = append(labels, l)
 			}
 		}
-		rows = append(rows, e.Time+" | "+runePrefix(e.Sha, 7)+" | "+e.Msg+byAuthor(e.Author, e.Via)+" | "+
+		rows = append(rows, e.Time+" | "+runePrefix(e.Sha, 7)+" | "+e.Msg+byAuthor(e.Author, e.Via, e.Source)+" | "+
 			strings.Join(labels, ", "))
 	}
 	theLimit := ""

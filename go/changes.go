@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // assistantMark ends the message of a commit an assistant made (msgSuffix).
@@ -27,13 +28,54 @@ func byAssistant(msg string) bool { return strings.HasSuffix(msg, assistantMark)
 // (grants.go). The name is the client's claim, and shown as one.
 const viaTrailerKey = "Assistant"
 
-// viaTrailer: what follows the first line of such a commit's message; ""
-// for no connection, and for a client that gave no name.
-func viaTrailer(via string) string {
-	if via = clientName(via); via == noClientName {
+// sourceTrailerKey names the trailer that says where an assistant's write
+// has its text from, when not from its user: a web page, a mail, a file
+// (the write tools' source). It is what the assistant says, and shown as
+// that; what it tells a reader is that nobody here wrote these words.
+const sourceTrailerKey = "Source"
+
+// commitTrailers: what follows the first line of an assistant's commit
+// message: which connection it came through (none for no connection, and
+// for a client that gave no name) and where its text is from, each a line;
+// "" for neither.
+func commitTrailers(via, source string) string {
+	var lines []string
+	if via = clientName(via); via != noClientName {
+		lines = append(lines, viaTrailerKey+": "+via)
+	}
+	if source = onOneLine(source, sourceMax); source != "" {
+		lines = append(lines, sourceTrailerKey+": "+source)
+	}
+	if len(lines) == 0 {
 		return ""
 	}
-	return "\n\n" + viaTrailerKey + ": " + via
+	return "\n\n" + strings.Join(lines, "\n")
+}
+
+// sourceMax: how long a write's source may be, in characters.
+const sourceMax = 200
+
+// onOneLine: s on one line, without control characters, at most max characters.
+func onOneLine(s string, max int) string {
+	s = strings.Join(strings.FieldsFunc(s, func(r rune) bool { return unicode.IsControl(r) || unicode.IsSpace(r) }), " ")
+	return cutRunes(s, max, "")
+}
+
+// sourceOfCommit: where a commit says its text is from: its trailer, when
+// its message is an assistant's (as viaOfCommit).
+func sourceOfCommit(msg, trailer string) string {
+	if !byAssistant(msg) {
+		return ""
+	}
+	return onOneLine(trailer, sourceMax)
+}
+
+// fromWhere: "; from https://…" after who a commit is by; "" for none.
+func fromWhere(source string) string {
+	if source == "" {
+		return ""
+	}
+	return "; from " + source
 }
 
 // viaOfCommit: which assistant a commit says it was written through: its
@@ -195,6 +237,7 @@ type changeRow struct {
 	Time, Rel, What, Author string
 	Assistant               bool
 	Via                     string // which assistant, when the commit says
+	Source                  string // where its text is from, when the assistant said
 	Items                   []changeItem
 	undoOffer
 }
@@ -377,7 +420,7 @@ func changeDays(entries []LogEntry, now time.Time, offers map[string]undoOffer) 
 			}
 			days, last = append(days, changeDay{Label: label}), day
 		}
-		row := changeRow{Time: clock, Rel: e.Rel, Author: e.Author, Assistant: byAssistant(e.Msg), Via: e.Via, undoOffer: offers[e.Sha],
+		row := changeRow{Time: clock, Rel: e.Rel, Author: e.Author, Assistant: byAssistant(e.Msg), Via: e.Via, Source: e.Source, undoOffer: offers[e.Sha],
 			What: strings.TrimSpace(strings.TrimSuffix(e.Msg, assistantMark)), Items: changeItems(e)}
 		days[len(days)-1].Rows = append(days[len(days)-1].Rows, row)
 	}

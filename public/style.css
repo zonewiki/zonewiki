@@ -2175,6 +2175,7 @@ body.editor-page main {
   padding: .05rem .45rem; border-radius: 99px; font-size: .72rem; white-space: nowrap;
   color: var(--muted); border: 1px solid var(--border);
 }
+.changes-source { font-size: .8rem; color: var(--muted); overflow-wrap: anywhere; }
 .changes-items { flex: 0 1 auto; max-width: 100%; display: flex; flex-wrap: wrap; gap: .1rem .75rem; font-size: .8rem; overflow-wrap: anywhere; }
 .changes-items a { color: var(--link); text-decoration: none; }
 .changes-items a:hover { text-decoration: underline; }
