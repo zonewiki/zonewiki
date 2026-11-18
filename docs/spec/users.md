@@ -515,6 +515,7 @@ signup-approval = yes                    # an admin approves each account; defau
 - The login page asks for the user name and the password (`login.html`; the name field only with users).
   The name is compared in lower case, without surrounding spaces.
   A wrong name or password says "Incorrect user name or password." (not which one), keeps the name typed, and costs the same time either way: an unknown name is checked against a dummy hash (`authenticate`), so timing doesn't tell which names exist.
+  The dummy hash has a real one's iterations but zeros for salt and key (`dummyHash`), so Zone doesn't spend the 600,000 rounds making it at every start.
   Wrong tries are throttled per client as with the wiki's one password (`loginThrottle`, see `docs/spec/security.md`); not per user name, which would let anyone lock a user out.
 - **The session names its user** (`session.User` in the signed cookie, `signedIn`).
   With users, a session must name one of them; without, it must name no one.

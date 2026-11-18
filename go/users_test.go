@@ -37,3 +37,20 @@ func TestAuthenticate(t *testing.T) {
 		t.Error("let in")
 	}
 }
+
+// An unknown name costs what a wrong password does: the dummy hash it is
+// checked against parses, with a real hash's iterations and key length, and
+// matches no password, the empty one included.
+func TestDummyHash(t *testing.T) {
+	iterations, salt, key, err := parseHash(dummyHash)
+	if err != nil || iterations != hashIterations || len(salt) != 16 || len(key) != hashLen {
+		t.Fatalf("dummyHash %q: %d iterations, salt %d, key %d, %v", dummyHash, iterations, len(salt), len(key), err)
+	}
+	_, _, realKey, _ := parseHash(hashPassword("pw"))
+	if len(realKey) != len(key) {
+		t.Errorf("key %d bytes, a real hash's %d", len(key), len(realKey))
+	}
+	if checkPassword("", dummyHash) || checkPassword("pw", dummyHash) {
+		t.Error("the dummy hash matches")
+	}
+}

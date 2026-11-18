@@ -335,8 +335,12 @@ func checkPassword(password, hash string) bool {
 }
 
 // A wrong user name costs the same time as a wrong password, so timing
-// doesn't tell which names exist.
-var dummyHash = hashPassword("")
+// doesn't tell which names exist. Only its iterations make that time, so its
+// salt and key are zeros: made by hashPassword, it cost every start of Zone
+// the 600,000 rounds, most of a sleeping tenant's wake.
+var dummyHash = fmt.Sprintf("%s:%d:%s:%s", hashScheme, hashIterations,
+	base64.RawStdEncoding.EncodeToString(make([]byte, 16)),
+	base64.RawStdEncoding.EncodeToString(make([]byte, hashLen)))
 
 // authenticate: the user name and password belong together; the user, or
 // nil. A disabled user is returned too: the login says they are disabled
