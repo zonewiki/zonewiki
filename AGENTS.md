@@ -376,7 +376,7 @@ and commit the new pins.
 - **Writes stay inside the wiki**: resolve the path and check it with `safePath()` (inside the wiki; it also refuses folders starting with `_` or `.`, so nothing reads or writes pages in `.zone/`, `.git/`, `_tasks/` …) before reading or writing;
   create parent folders (`os.MkdirAll`);
   write UTF-8 (`writeText`).
-- **A page write is an operation in `go/pageops.go`** (delete, rename, restore, create, a save, a task tag's rename;
+- **A page write is an operation in `go/pageops.go`** (delete, rename, restore, create, a save, Keep mine and Set aside after a conflict, a replace across pages, a link pointed at a new page's folder, a task tag's rename;
   a note's move and append in `quicknotes.go`): it checks access itself and keeps text not yet in git (`keepPending` before a write that replaces or removes a page's text, `commitOthersDraft` before one that continues it),
   and the routes and MCP tools only parse their input and turn the result or the refusal into their answer.
   A new write gets an operation there and a test through each door in `tests/test_page_writes.py`.
