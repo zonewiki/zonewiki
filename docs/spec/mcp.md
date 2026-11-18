@@ -55,7 +55,7 @@ A viewer may make one too: their assistant reads, and its writing tools are refu
   It reads as its user does, and changes nothing: `tools/list` gives it the tools that write nothing (as a viewer's), a writing tool called all the same is refused before it runs (`callMCPTool`, by the table every tool's writing is in: "This connection only reads: whoever connected you chose that. Nothing was changed. …", so the assistant says what it would have written), and an upload with its token is 403.
   It stays read-only through every refresh of its tokens. The same user's other connections, and their MCP token, are as they were.
   A connection kept from before there was a choice reads and changes, as it did.
-  Not yet: a token that only reads (`docs/plans/assistants-first.md`, part 2).
+  Not yet: a token that only reads.
 - **Connections given less to see** (`less` on the grant: `no_private`, `groups` in `.zone/grants`; `asker.NoPrivate`, `asker.OnlyGroups`; with users): a connection can be given only some of its user's places.
   The places are the ones the wiki has: **the shared wiki** (always: the pages and tasks everyone sees), **the user's private place** (their private pages, notes, private lists and the Inbox), and **each group** they are in (its pages, and the lists for it).
   The question asks **What may it see?**, a box each, all ticked; what is unticked isn't there for the assistant.
@@ -113,7 +113,7 @@ Zone is its own authorization server, on the same address, as the MCP authorizat
 - **What ends a connection**: End on Connect an assistant; its refresh token expiring or being used twice; its user being removed (the Users tab, `zonewiki user remove`); its user setting a new password by a **reset link** (they may have lost the account to someone; the welcome page says so).
   A disabled user's are refused while they are disabled, and work again after.
   An ordinary new password (Change password, `zonewiki user passwd`) leaves them, as it leaves a static token.
-- **Not yet**: Client ID Metadata Documents, CORS for clients that run in a browser, a read-only connection for an editor, `/oauth/revoke` (a client's "disconnect" doesn't end the connection in Zone: End does). Tested against real clients so far: Claude (`docs/plans/mcp-oauth.md`, phase 3).
+- **Not yet**: Client ID Metadata Documents, CORS for clients that run in a browser, a read-only connection for an editor, `/oauth/revoke` (a client's "disconnect" doesn't end the connection in Zone: End does). Tested against real clients so far: Claude.
 - Tests: `tests/test_oauth.py` plays the client over HTTP; `tests/e2e/test_oauth.py` holds that Allow and Deny get the browser back to the client under the page policy.
 
 **The wiki's guide**: the page `wiki-guide` (`guideSlug`) holds the user's conventions for keeping the wiki: where things go, tags, page layouts, what stays private.
@@ -187,7 +187,7 @@ The history shows it beside who the commit is by, as the client's claim it is: "
 **Where the text is from**: the tools that write text (`write_page`, `edit_page`, `append_to_page`, `create_task`, `update_task`) take an optional `source`: where the words are from when not from the user, as the assistant says it (a URL, "a mail from Bob").
 It is kept as a second trailer, `Source: …` (`commitTrailers`; one line, at most 200 characters, so it adds no trailer of its own), and shown where the commit is: "from https://…" on its row of Changes and in a page's History, `(by alice through Claude; from https://…)` in the tool `history`.
 It is said, not linked: it is the assistant's word, and what it tells a reader is that nobody here wrote this text, so it may be wrong, or written to steer an assistant (Pages can carry instructions in the README).
-It is the write's, in the history; a page's own `sources:` in its frontmatter is the page's, for its readers. Not yet: `read_page` saying which passages came from outside (`docs/plans/assistants-first.md`, part 4).
+It is the write's, in the history; a page's own `sources:` in its frontmatter is the page's, for its readers. Not yet: `read_page` saying which passages came from outside.
 Tools that only add are annotated `destructiveHint: false`, those that change or remove `true`, so a client can ask before those.
 The token `/mcp` requires (below) guards writes as it guards reads, and git keeps every change undoable.
 

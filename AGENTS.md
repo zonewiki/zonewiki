@@ -52,7 +52,7 @@ Markdown joins the lines when it renders them.
   what a person does in the browser an assistant can do over MCP, through the same operations (never a second implementation) and never with more than its user;
   what an assistant did is seen, told apart from its user's own work and undone as easily as it was done;
   and the wiki stays plain files that any model, tool or person reads without Zone.
-  Zone is the memory and the rules, not the assistant: it brings no model of its own to chat with (`docs/plans/assistants-first.md`).
+  Zone is the memory and the rules, not the assistant: it brings no model of its own to chat with.
 - **Good UX** — a feature is done when it is easy to use, not when it works: few steps, the obvious thing where a person looks for it, and nothing to learn that the screen could say.
 - **Conceptually sound and clean** — a few ideas that hold everywhere (a page's place, a list's members, who may write), each said once and used by every door; a new feature fits them or the ideas change, never a special case beside them.
 - **Nice looking** — clean typography, readable line lengths, good contrast
@@ -102,7 +102,6 @@ Auth is optional (a password, or users; see Key Constraints).
 ├── LICENSE                 # AGPL-3.0-or-later
 ├── THIRD_PARTY_LICENSES    # Licenses of Go, the Go modules and the embedding model (the vendored libraries' are next to them)
 ├── docs/spec/              # The feature spec, one file per area (see Spec)
-├── docs/plans/             # Working plans for changes in progress, deleted when done (`mcp-oauth.md`, `tasks-6-sound-at-100.md`, `asker.md`, `assistants-first.md`)
 ├── docs/licenses/mermaid_notices.py  # Writes public/vendor/mermaid/THIRD_PARTY_LICENSES from the bundle's source map
 ├── docs/screenshots/       # The README's screenshots + make_screenshots.py (./run.sh screenshots)
 ├── Containerfile           # The image: a Go build stage, onnxruntime + the model (opt-in), an Ubuntu 26.04 LTS runtime (also ships README.md and docs/spec/ for zone_help)
@@ -340,7 +339,7 @@ and commit the new pins.
   - `password` in `.zone/config` (a hash) turns on a login gate; the session key is one Zone keeps in `.zone/secret_key` (0600, excluded from git).
     Signing out ends the session wherever a copy of its cookie is (`go/signout.go`: its id in `.zone/signed-out`); renew a session with `renewSession`, which keeps the id, never with `setSession`.
   - Users instead (`[user …]` in `.zone/config`): a login per user, passwords only as hashes (`docs/spec/users.md`); the session names its user, `userOf(r)` / `rq.user` give it, and a write passes it to `gitCommit(user, …)` as the commit's author.
-  - **Who asks is an asker, not a name** (`asker` in `go/access.go`, package `internal/asker`; `docs/plans/asker.md`): a function that answers who may see or change something, or reads for someone, takes an `asker` (a request's is `userOf(r)` / `rq.user`: the user, with what an assistant's connection was given less); one that only needs to know who someone is takes the name, `asker.Name` (a commit's author, whose folder, a settings lookup).
+  - **Who asks is an asker, not a name** (`asker` in `go/access.go`, package `internal/asker`): a function that answers who may see or change something, or reads for someone, takes an `asker` (a request's is `userOf(r)` / `rq.user`: the user, with what an assistant's connection was given less); one that only needs to know who someone is takes the name, `asker.Name` (a commit's author, whose folder, a settings lookup).
     Don't ask a permission with `asUser(name)` for a request: that is the person with all they may, for what Zone asks about a user it knows by name (whom a task is given to, who gets a mail). Don't put an asker where a name is written (JSON, a file, a message): its `Name`.
     `TestAskersAreMadeInFewPlaces` lists the functions that call `asUser` and the one that writes an asker out, and fails for `asUser(user.Name)`: a new use is added there after a look at where its name comes from.
   - **Private pages and tasks** (`private/<user>/`, tasks and private lists in `private/<user>/_tasks/`, with users): every route and tool that shows, lists or changes a page asks `go/access.go` (`canSee`, `canWrite`, `canSeePath`; `hiddenPage`/`refusePage` in the routes);

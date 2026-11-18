@@ -14,7 +14,7 @@ import (
 	"testing"
 )
 
-// Who asks is an asker (docs/plans/asker.md): the source is held to the
+// Who asks is an asker (AGENTS.md, Key Constraints): the source is held to the
 // three ways an asker comes to be, so that what a connection was given
 // less is never dropped on the way to a permission question.
 //
