@@ -96,7 +96,7 @@
   <input type="text" name="people" value="{{.NewPeople}}" placeholder="with: anna, bo" list="group-people" data-pick="users" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="Who else is in it">
   <button type="submit" class="btn btn-primary">Make the group</button>
 </form>
-<p class="users-help">For a project or a few people: you are in it and own it, so you say who else is, and can hand it on. Its pages go in <code>groups/&lt;name&gt;/</code>.</p>
+<p class="users-help">For a project or a few people: you are in it and own it, so you say who else is, and can hand it on. Only its people see its pages and the task lists that are for it (its folder is <code>groups/&lt;name&gt;/</code>).</p>
 <datalist id="group-people">{{range .People}}<option value="{{.}}">{{end}}</datalist>
 {{- end}}
 {{- if .Admin}}

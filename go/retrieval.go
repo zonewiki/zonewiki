@@ -1653,21 +1653,39 @@ func resultMeta(d *SearchDoc, names map[string]ListInfo) string {
 		if status != "open" {
 			status += " " + runePrefix(d.Task.ClosedAt, 10)
 		}
+		// Whose it is, as on its card and its list: 🔒 the user's own, 👥 a
+		// list for some's (no result shows a task of anyone else's).
 		where := "Tasks"
-		if l := taskList(d.Task, names); l != "" {
+		l := taskList(d.Task, names)
+		if l != "" {
 			where += " › " + l
+		}
+		switch {
+		case d.Task.Owner != "":
+			where = "🔒 " + where
+		case len(names[l].For) > 0:
+			where = "👥 " + where
 		}
 		return where + " · " + status
 	}
 	edited := "edited " + fmtDate(d.Mtime)
-	lock := ""
-	if icon, _ := placeMark(placeOf(d.Slug)); icon != "" {
-		lock = icon + " " // a user's own private page, or one of a group of theirs: no result shows another's
-	}
+	dir := ""
 	if i := strings.LastIndex(d.Slug, "/"); i >= 0 {
-		return lock + d.Slug[:i] + " · " + edited
+		dir = d.Slug[:i]
 	}
-	return lock + edited
+	// A user's own private page, or one of a group of theirs (no result
+	// shows another's): its sign and whose it is, then the folder inside
+	// that place: "👥 dev", "👥 dev/specs", "🔒 Private/notes".
+	switch p := placeOf(d.Slug); p.kind {
+	case ofUser:
+		dir = "🔒 Private" + strings.TrimPrefix(dir, p.folder())
+	case ofGroup:
+		dir = "👥 " + p.name + strings.TrimPrefix(dir, p.folder())
+	}
+	if dir != "" {
+		return dir + " · " + edited
+	}
+	return edited
 }
 
 const (

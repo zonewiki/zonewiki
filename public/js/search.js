@@ -60,7 +60,7 @@ function renderModalList(pages) {
   modalPageList.innerHTML = pages.map(p =>
     `<li class="page-list-item${p.special ? ' page-list-special' : ''}" data-title="${he(p.title.toLowerCase())}" data-slug="${he(p.slug)}" data-links="${p.links}" data-mtime="${p.mtime}">` +
     `<a href="${he(p.href || `/page/${p.slug}`)}">${he(p.title)}</a>` +
-    `<span class="page-item-right">${p.private ? '<span class="lock" title="Private: only you see this page">🔒</span>' : ''}${p.group ? `<span class="lock" title="A page of the group ${he(p.group)}: its members see it">👥</span>` : ''}<span class="page-slug">${he(p.slug)}</span></span></li>`
+    `<span class="page-item-right">${p.private ? '<span class="lock" title="Private: only you see this page">🔒</span>' : ''}${p.group ? `<span class="lock" title="@${he(p.group)}: its members see this page">👥</span>` : ''}<span class="page-slug">${he(p.slug)}</span></span></li>`
   ).join('');
 }
 

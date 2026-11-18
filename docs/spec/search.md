@@ -8,6 +8,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
   Pages and tasks are scored in **one combined index** so their relevance scores are directly comparable.
 - `GET /api/search?q=...` collects every page **and** all task titles/descriptions as documents, ranks them, and returns JSON: `[{ slug, title, excerpt, href, meta, type? }]`.
   `meta` (`resultMeta`) is the small line under a result's title in the modal and on `/search`, telling alike titles apart: a page's folder and last edit (`conversations/2026-07-08_alex-sam-debrief · edited 2026-10-02`), a task's list and status (`Tasks › zoo · done 2026-05-01`).
+  **It says whose a result is, by sign and name, not by path**: a page of a group of yours reads `👥 dev · edited …` (`👥 dev/specs` in a folder there), one of your private pages `🔒 Private/notes · …`, a task of a list for some `👥 Tasks › hiring · open`, a private task `🔒 Tasks › …`; what is everyone's has no sign.
   `href` is the server-computed destination URL for the result; task results have `type: "task"` and `task_id` fields.
 - **Multi-word queries** score each term independently (rarer terms weigh more via IDF); the whole phrase no longer has to appear verbatim.
 - **Exact phrase first** (`Phrase`, `phraseFirst`): a document containing the query's words as a phrase (case, accents and spacing ignored, stopwords included) moves to the front,

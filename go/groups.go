@@ -120,7 +120,7 @@ func groupsDone(done, group, left string) string {
 	case "made":
 		return "Made the group " + group + ": only its people see its pages and the task lists that are for it. New page and New list beside it start one."
 	case "renamed":
-		return "The group is called " + group + " now: its pages are in " + groupsDir + "/" + group + "/, and what was for it is for @" + group + "."
+		return "The group is called " + group + " now. Its people see its pages and its lists as before: what was for it is for @" + group + " (its folder is " + groupsDir + "/" + group + "/)."
 	case "people", "includes":
 		out := groupLine(s, group) + "."
 		var gone []string

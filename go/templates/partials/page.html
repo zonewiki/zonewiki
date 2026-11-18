@@ -65,7 +65,7 @@
 {{- end}}
 {{- if .SharedTarget}}
 <dialog id="page-privacy-dialog" class="modal"><p class="modal-label">Make shared</p>
-<p class="modal-desc">“{{.Title}}” moves out of your private folder, to <code>{{.SharedTarget}}</code>. Everyone who uses this wiki will see and be able to change it. Links to it follow.</p>
+<p class="modal-desc">Everyone who uses this wiki will see “{{.Title}}” and be able to change it. It moves out of your private folder, to <code>{{.SharedTarget}}</code>, and links to it follow.</p>
 <form method="post" action="{{url "rename" .Slug}}"><input type="hidden" name="from" value="page"><input type="hidden" name="confirmed" value="share"><input type="hidden" name="new_name" value="{{.SharedTarget}}"><div class="modal-actions"><button type="submit" class="btn btn-primary">Make shared</button><button type="button" class="btn" id="page-privacy-cancel">Cancel</button></div></form></dialog>
 {{- end}}
 {{- if .ShareTargets}}

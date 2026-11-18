@@ -676,7 +676,7 @@ def test_the_place_is_named_not_the_path(client, wiki):
     listed = {p["slug"]: (p.get("private"), p.get("group")) for p in client.get("/api/pages-list", headers=HOST).get_json()}
     assert listed[DIARY] == (False, "dev") and listed["private/alice/notes/own"] == (True, "") and listed["plans"] == (False, "")
     results = client.get("/search", query_string={"q": QUERY}, headers=HOST).get_data(as_text=True)
-    assert "👥 groups/dev" in results and "🔒 private/alice/notes" in results
+    assert "👥 dev" in results and "🔒 Private/notes" in results and "groups/dev ·" not in results
     # The switcher: Groups, between Wiki and Private; on a group's page it is where you are.
     nav = lambda html: re.findall(r'data-module="(\w+)"[^>]*?(aria-current="page")?[ >]', html.split('class="breadcrumb-home', 1)[1].split("</nav>", 1)[0])  # noqa: E731
     body = client.get(f"/page/{DIARY}", headers=HOST).get_data(as_text=True)
