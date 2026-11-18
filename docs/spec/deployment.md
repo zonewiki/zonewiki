@@ -38,7 +38,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
   log driver `json-file` (Docker's default, podman's alias for k8s-file, so `logs -f` works on both).
   It works on its own (`docker compose up -d --build`), with `unknown` as the build and UTC unless `.env` sets `TZ`.
   With docker compose the settings reach the container through the API; podman-compose turns `env_file` into `podman create -e KEY=value` arguments, so there the secrets are on a command line for that moment.
-- **`compose.nas.yaml`** — for a NAS or server without the repo: runs the prebuilt image `ghcr.io/gklingler/zonewiki:latest` (amd64 and arm64, built by GitHub's CI, see CI) instead of building it, so the machine needs only Docker with Compose.
+- **`compose.nas.yaml`** — for a NAS or server without the repo: runs the prebuilt image `ghcr.io/zonewiki/zonewiki:latest` (amd64 and arm64, built by GitHub's CI, see CI) instead of building it, so the machine needs only Docker with Compose.
   Unlike `compose.yaml`: no `build:`;
   `ZONE_DATA`, `ZONE_UID` and `ZONE_GID` are required (`${…:?message}`: compose stops with the message instead of guessing; a wrong UID would only show later as files Zone can't write);
   the port is `${ZONE_PORT:-5080}:5000` on every interface (not 5000 on the host: Synology's DSM uses it);
@@ -96,7 +96,7 @@ Zone is available at **http://localhost:5000** after `./run.sh up`.
 ## On a NAS or server
 
 Any machine with Docker and Compose (a NAS, a Raspberry Pi, a small server) can run Zone from the prebuilt image, without the repo, git or a build: `compose.nas.yaml` and a `.env` in one folder, then `docker compose -f compose.nas.yaml up -d`.
-The image is `ghcr.io/gklingler/zonewiki`, for amd64 and arm64 (Docker picks the right one): `latest` follows `main`, a version tag (`1.2.0`, `1.2`) stays put, a short commit hash names one build.
+The image is `ghcr.io/zonewiki/zonewiki`, for amd64 and arm64 (Docker picks the right one): `latest` follows `main`, a version tag (`1.2.0`, `1.2`) stays put, a short commit hash names one build.
 To update: `docker compose -f compose.nas.yaml pull`, then `up -d` again.
 The wiki is untouched by an update; it lives in the folder `ZONE_DATA` names.
 
@@ -144,7 +144,7 @@ With Container Manager (DSM 7.2 or newer; Docker on older DSM works the same ove
    The proxy reaches the container through Docker's network, so Zone sees it as the network's gateway (`172.17.0.1` or another in `172.16.0.0/12`);
    Zone's log names it on the first proxied request ("requests from … carry X-Forwarded-For"), and `config set trusted-proxies <that address>` lets Zone tell the proxy's clients apart when it throttles wrong passwords (without it they count as one).
 
-Updates: over SSH, `docker compose pull && docker compose up -d` in the project folder (Container Manager's Image list may also offer the update for `ghcr.io/gklingler/zonewiki`).
+Updates: over SSH, `docker compose pull && docker compose up -d` in the project folder (Container Manager's Image list may also offer the update for `ghcr.io/zonewiki/zonewiki`).
 
 ## CI (Forgejo Actions)
 
@@ -343,4 +343,4 @@ The rest is by hand:
 - Pages: `[[deck …]]` is `[[tasks: …]]` (in the wiki's folder: `grep -rlZi '\[\[deck' --include='*.md' . | xargs -0 sed -i -E 's/\[\[deck\]\]/[[tasks:]]/Ig; s/\[\[deck[[:space:]]+/[[tasks: /Ig'`, then commit), and `home=1` in one is `pin=1`.
 - Addresses: `/deck`, `/api/deck/…`, `/api/scratch` and `/page/_scratch` are `/tasks`, `/api/tasks/…`, `/api/notes` and `/notes`; the keys `g s`, `g d` and `c s` are `g n`, `g a` and `c n`.
 - MCP: the tools `leaf_help` and `file_scratch_note` are `zone_help` and `file_note`, and their `scratch` argument is `note` (write_page) or `notes` (search_wiki, list_pages).
-- The image is `ghcr.io/gklingler/zonewiki`, its binary `/app/zonewiki`.
+- The image is `ghcr.io/zonewiki/zonewiki`, its binary `/app/zonewiki`.

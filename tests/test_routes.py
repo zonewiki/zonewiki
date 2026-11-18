@@ -2415,7 +2415,7 @@ class TestVersion:
         # The AGPL's offer of the source to everyone using Zone over a network.
         for path in ("/page/index", "/tasks", "/edit/index"):
             body = client.get(path, headers=HOST).get_data(as_text=True)
-            assert ('<p class="zone-version"><a href="https://github.com/gklingler/zonewiki">Get the source code</a>'
+            assert ('<p class="zone-version"><a href="https://github.com/zonewiki/zonewiki">Get the source code</a>'
                     ' · AGPL-3.0-or-later</p>') in body, path
 
     def test_bottom_left_shows_version_and_short_hash(self, client, wiki_dir, monkeypatch):

@@ -221,7 +221,7 @@ it; Zone makes it a git repository (if it isn't one) and adds a home page.
 
 **On a NAS or server** (Synology, QNAP, a Raspberry Pi, …), you don't need
 the repository: `compose.nas.yaml` runs the prebuilt image
-`ghcr.io/gklingler/zonewiki` (amd64 and arm64). Put it next to a `.env` and run
+`ghcr.io/zonewiki/zonewiki` (amd64 and arm64). Put it next to a `.env` and run
 `docker compose -f compose.nas.yaml up -d`; Zone is then on port 5080, and
 the first page it shows asks for a password. What
 `.env` needs, and a step-by-step for Synology's Container Manager: "On a NAS

@@ -25,7 +25,7 @@ name: zonewiki
 
 services:
   zonewiki:
-    image: ghcr.io/gklingler/zonewiki:latest
+    image: ghcr.io/zonewiki/zonewiki:latest
     container_name: zonewiki
     # Not root: Zone writes the wiki as the folder's owner. No defaults: a
     # wrong guess would show up later as files Zone can't write.
