@@ -833,7 +833,7 @@ func TestASearchHidesWhatHiddenDocDoes(t *testing.T) {
 }
 
 // How long a member's index takes to put together when their group's folder
-// is large (the plan group-folders, step 2: 2,000 pages in a group of
+// is large (measured when group folders were built: 2,000 pages in a group of
 // twenty); it says the time, and fails only where it is far off.
 func TestAMembersIndexOfALargeGroup(t *testing.T) {
 	if testing.Short() {
