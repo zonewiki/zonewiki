@@ -217,40 +217,42 @@ func handleMCP(message json.RawMessage, user asker, callTool func(name string, a
 // token, or with users one user's token (configfile.go): the tools act
 // as that user. The tools write (pages, tasks), so /mcp is off until a
 // token is set: open, it would let anything that reaches the port change
-// the wiki, password or not. c: the connection the token is of (none for
-// an MCP token): its name, for what it writes (viaTrailer), and what its
-// user gave it less than they have themselves.
-func mcpAuthorized(r *http.Request) (user string, c connection, ok bool) {
+// the wiki, password or not. user: who asks with the token: its user, with
+// what the connection it is of was given less (an MCP token is of none:
+// the user with all they may). via: that connection's name, for what it
+// writes (viaTrailer). The one place a token becomes an asker.
+func mcpAuthorized(r *http.Request) (user asker, via string, ok bool) {
 	auth := r.Header.Get("Authorization")
 	if !strings.HasPrefix(auth, "Bearer ") {
-		return "", connection{}, false
+		return asker{}, "", false
 	}
 	given := strings.TrimSpace(auth[len("Bearer "):])
 	s := settings()
 	if s.Users == nil {
 		if tokenMatches(given, s.MCPToken) {
-			return "", connection{}, true
+			return asker{}, "", true
 		}
 		return connectionUser(s, given)
 	}
 	for _, u := range s.Users {
 		if !u.Disabled && tokenMatches(given, u.MCPToken) {
-			return u.Name, connection{}, true
+			return asUser(u.Name), "", true
 		}
 	}
 	return connectionUser(s, given)
 }
 
 // connectionUser: given is the access token of a connection (grants.go),
-// whose user may still have one.
-func connectionUser(s *Settings, given string) (user string, c connection, ok bool) {
+// whose user may still have one: that user, with what the connection was
+// given less, and the name its client gave.
+func connectionUser(s *Settings, given string) (user asker, via string, ok bool) {
 	if !oauthOn(s) {
-		return "", connection{}, false
+		return asker{}, "", false
 	}
 	if g := grantOf(given); g != nil && validGrantUser(s, g.User) {
-		return g.User, connection{name: g.Client, readOnly: g.ReadOnly}, true
+		return asker{Name: g.User, ReadOnly: g.ReadOnly}, g.Client, true
 	}
-	return "", connection{}, false
+	return asker{}, "", false
 }
 
 // mcpOn: some token is set, so /mcp answers.
@@ -294,9 +296,9 @@ func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized: wrong or missing bearer token"})
 		return
 	}
-	user, conn := "", connection{}
+	user, via := asker{}, ""
 	ok, wait := mcpThrottle.try(clientKey(r), func() (ok bool) {
-		user, conn, ok = mcpAuthorized(r)
+		user, via, ok = mcpAuthorized(r)
 		return ok
 	})
 	if wait > 0 {
@@ -309,7 +311,7 @@ func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized: wrong or missing bearer token"})
 		return
 	}
-	r = withConnection(withUser(r, user), conn)
+	r = withAsker(r, user, via)
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST")
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -328,7 +330,7 @@ func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 	if batch, ok := jsonobj.As[[]json.RawMessage](body); ok { // a batch (protocol 2025-03-26)
 		replies := []*rpcResponse{}
 		for _, m := range batch {
-			reply, err := handleMCP(m, userOf(r), call)
+			reply, err := handleMCP(m, user, call)
 			if err != nil {
 				serverError(w, r, err)
 				return
@@ -344,7 +346,7 @@ func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, replies)
 		return
 	}
-	reply, err := handleMCP(body, userOf(r), call)
+	reply, err := handleMCP(body, user, call)
 	if err != nil {
 		serverError(w, r, err)
 		return

@@ -8,6 +8,8 @@
 // rules are (go/access.go), so a limit holds at every door.
 package asker
 
+import "encoding/json"
+
 // Asker is whoever asks. Name is the user ("" in a wiki without users, and
 // for Zone itself). The rest is what it was given less than its user has,
 // each only ever taking away; all zero: the user themselves, with all they
@@ -27,3 +29,7 @@ func User(name string) Asker { return Asker{Name: name} }
 // String: the name, so a log line or a message that is handed an Asker
 // names the user.
 func (a Asker) String() string { return a.Name }
+
+// MarshalJSON: the name, so an Asker put into an answer by mistake reads as
+// what was meant, never as its fields.
+func (a Asker) MarshalJSON() ([]byte, error) { return json.Marshal(a.Name) }

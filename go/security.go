@@ -300,63 +300,54 @@ func writeSession(w http.ResponseWriter, r *http.Request, s session) {
 	})
 }
 
-// The user a request is made by (users.go): the checks put the session's
-// user, /mcp its token's, into the request's context. "": no users, or
-// none signed in.
-type userKey struct{}
+// Who asks with a request (asker): the checks put the session's user, /mcp
+// and the file routes their token's, into the request's context. A session
+// is its user with all they may; a token's asker is what mcpAuthorized
+// made of it, with whatever its connection was given less. The zero asker:
+// no users, or none signed in.
+type askerKey struct{}
 
-func withUser(r *http.Request, user string) *http.Request {
-	if user == "" {
+// withUser: r as asked by the user name themselves (a session; a visitor).
+func withUser(r *http.Request, name string) *http.Request {
+	if name == "" {
 		return r
 	}
-	return r.WithContext(context.WithValue(r.Context(), userKey{}, user))
+	return withAsker(r, asUser(name), "")
 }
 
-// connection: what a request to /mcp or a file route came through, when it
-// is a connection a user allowed (grants.go; the zero value: none, an MCP
-// token or a session): its name, as its client gave it, and readOnly: its
-// user let it read and change nothing. A connection has less than its
-// user or the same, never more.
-type connection struct {
-	name     string
-	readOnly bool
-}
+// viaKey: the name of the connection a request came through, as its client
+// gave it ("" for none: a session, an MCP token), for what it writes
+// (mcpMark).
+type viaKey struct{}
 
-type connectionKey struct{}
-
-func withConnection(r *http.Request, c connection) *http.Request {
-	if c == (connection{}) {
-		return r
+// withAsker: r as asked by user, through the connection called via.
+func withAsker(r *http.Request, user asker, via string) *http.Request {
+	ctx := context.WithValue(r.Context(), askerKey{}, user)
+	if via != "" {
+		ctx = context.WithValue(ctx, viaKey{}, via)
 	}
-	return r.WithContext(context.WithValue(r.Context(), connectionKey{}, c))
+	return r.WithContext(ctx)
 }
 
-func connectionOf(r *http.Request) connection {
-	c, _ := r.Context().Value(connectionKey{}).(connection)
-	return c
+// userOf: who asks with the request r (r nil: Zone itself).
+func userOf(r *http.Request) asker {
+	if r == nil {
+		return asker{}
+	}
+	user, _ := r.Context().Value(askerKey{}).(asker)
+	return user
 }
 
-// onlyReads: the request changes nothing in the wiki (changesNothing of who
-// asks with it). What the doors an assistant comes through ask first
-// (callMCPTool, the upload with a token), for an answer that says so; the
-// permission model refuses the same on its own (canWrite, mayWriteTasks).
-func onlyReads(r *http.Request) bool { return changesNothing(userOf(r)) }
+// viaOf: the name of the connection r came through, "" for none.
+func viaOf(r *http.Request) string {
+	via, _ := r.Context().Value(viaKey{}).(string)
+	return via
+}
 
 // readOnlyConnectionMsg: what an assistant is told when it tries to change
 // something through a connection that only reads.
 const readOnlyConnectionMsg = "This connection only reads: whoever connected you chose that. Nothing was changed. " +
 	"Tell them what you would have written; to let you write, they end this connection on Connect an assistant and connect you again."
-
-// userOf: who asks with the request r: its session's or its token's user
-// ("" without users; r nil: Zone itself), with what the connection it came
-// through was given less (withConnection).
-func userOf(r *http.Request) asker {
-	if r == nil {
-		return asker{}
-	}
-	u, _ := r.Context().Value(userKey{}).(string)
-	return asker{Name: u, ReadOnly: connectionOf(r).readOnly}
-}
 
 func clearSession(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1,

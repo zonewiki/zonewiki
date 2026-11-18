@@ -259,6 +259,19 @@ func changesNothing(user asker) bool {
 	return user.ReadOnly || settings().isViewer(user.Name)
 }
 
+// noChangeMsg: what user, who changes nothing, is told when they try: a
+// visitor signs in first, a viewer is one by their role, and otherwise it
+// is a connection that was let only read.
+func noChangeMsg(user asker) string {
+	switch {
+	case user.Name == visitor:
+		return visitorMsg
+	case settings().isViewer(user.Name):
+		return readOnlyMsg
+	}
+	return readOnlyConnectionMsg
+}
+
 // adminsOnly: slug is a shared guide (guidePage), which with users only an
 // admin changes, and user isn't one. A guide is what every user's assistant
 // is told to follow (mcptools.go: the wiki's guide in its instructions, a
@@ -365,14 +378,8 @@ const groupGuideMsg = "Only an admin of this wiki who is in the group can change
 // visitor of a wiki that is public to read signs in first, a viewer changes
 // nothing, nor does a connection that only reads, anyone else no guide.
 func readOnlyWhy(user asker, slug string) string {
-	if user.Name == visitor && settings().isViewer(user.Name) {
-		return visitorMsg
-	}
-	if settings().isViewer(user.Name) {
-		return readOnlyMsg
-	}
-	if user.ReadOnly {
-		return readOnlyConnectionMsg
+	if changesNothing(user) {
+		return noChangeMsg(user)
 	}
 	if placeOf(slug).kind == ofGroup {
 		return groupGuideMsg
@@ -489,11 +496,8 @@ func mayWriteTasks(user asker) error {
 	if user.Name == visitor {
 		return refuseAs(refusedReadOnly, visitorMsg)
 	}
-	if settings().isViewer(user.Name) {
-		return errReadOnly
-	}
-	if user.ReadOnly {
-		return refuseAs(refusedReadOnly, readOnlyConnectionMsg)
+	if changesNothing(user) {
+		return refuseAs(refusedReadOnly, noChangeMsg(user))
 	}
 	return nil
 }

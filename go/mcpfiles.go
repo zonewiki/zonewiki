@@ -233,9 +233,9 @@ func byToken(r *http.Request) bool {
 // a wrong one is 401 and counts against the client like a wrong password.
 // ok false: answered.
 func tokenRequest(w http.ResponseWriter, r *http.Request) (*http.Request, bool) {
-	user, conn := "", connection{}
+	user, via := asker{}, ""
 	ok, wait := mcpThrottle.try(clientKey(r), func() (ok bool) {
-		user, conn, ok = mcpAuthorized(r)
+		user, via, ok = mcpAuthorized(r)
 		return ok
 	})
 	if wait > 0 {
@@ -248,6 +248,6 @@ func tokenRequest(w http.ResponseWriter, r *http.Request) (*http.Request, bool) 
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized: wrong bearer token"})
 		return r, false
 	}
-	r = withConnection(withUser(r, user), conn)
+	r = withAsker(r, user, via)
 	return r.WithContext(context.WithValue(r.Context(), byTokenKey{}, true)), true
 }

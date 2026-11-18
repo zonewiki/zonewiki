@@ -730,17 +730,17 @@ func callMCPTool(r *http.Request, name string, args jsonObj) ([]toolContent, err
 		pagesMu.Lock()
 		defer pagesMu.Unlock()
 	}
-	if tool.writes != toolWritesNothing && onlyReads(r) {
-		if userOf(r).ReadOnly && !settings().isViewer(userOf(r).Name) {
-			return nil, toolErr(readOnlyConnectionMsg)
-		}
-		return nil, toolErr(readOnlyMsg)
+	// Asked here first, for an answer that says why before the tool looks
+	// at anything; the operations refuse the same on their own (canWrite,
+	// mayWriteTasks).
+	if tool.writes != toolWritesNothing && changesNothing(userOf(r)) {
+		return nil, toolErr(noChangeMsg(userOf(r)))
 	}
 	// Which connection the call came through goes with the arguments, for
 	// the commit's message (mcpMark); whatever a client sent under that
 	// name is replaced.
 	delete(args, viaArg)
-	if via := connectionOf(r).name; via != "" {
+	if via := viaOf(r); via != "" {
 		args[viaArg], _ = json.Marshal(via)
 	}
 	var out []toolContent

@@ -249,12 +249,8 @@ func apiUpload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if onlyReads(r) {
-		msg := readOnlyMsg
-		if !settings().isViewer(userOf(r).Name) {
-			msg = readOnlyConnectionMsg
-		}
-		http.Error(w, msg, http.StatusForbidden)
+	if changesNothing(userOf(r)) {
+		http.Error(w, noChangeMsg(userOf(r)), http.StatusForbidden)
 		return
 	}
 	// unique=1: a random file name (clipboard screenshots).

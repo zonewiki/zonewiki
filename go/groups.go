@@ -141,7 +141,7 @@ func groupsDone(done, group, left string) string {
 func showGroups(w http.ResponseWriter, r *http.Request, status int, done, refused, newName, newPeople string) {
 	s, user := latestSettings(), userOf(r)
 	rq := newReq(r)
-	admin := s.isAdmin(user.Name) && !s.isViewer(user.Name)
+	admin := s.isAdmin(user.Name) && !user.ReadOnly && !s.isViewer(user.Name)
 	v := &groupsView{BreadcrumbHTML: breadcrumb(rq, []crumb{{"Groups", ""}}, "/groups", true, "Groups", ""),
 		MayMake: mayMakeGroup(s, user), Admin: admin, Done: done, Error: refused, NewName: newName, NewPeople: newPeople}
 	mine := slices.Clone(s.groupsOf(user.Name))
@@ -274,7 +274,7 @@ func refuseGroups(w http.ResponseWriter, r *http.Request, err error, newName, ne
 // not disabled).
 func mayMakeGroup(s *Settings, user asker) bool {
 	u := s.Users[user.Name]
-	return u != nil && !u.Disabled && !s.isViewer(user.Name)
+	return u != nil && !u.Disabled && !user.ReadOnly && !s.isViewer(user.Name)
 }
 
 // groupNameTaken: something goes by the group name already, so a new group
@@ -462,7 +462,7 @@ func groupPeopleOp(user asker, group, people, owners string) (left []string, err
 // keeps an owner). A viewer changes nothing.
 func mayLeave(s *Settings, user asker, group string) bool {
 	u := s.Users[user.Name]
-	return u != nil && !u.Disabled && !s.isViewer(user.Name) && slices.Contains(u.Groups, group) &&
+	return u != nil && !u.Disabled && !user.ReadOnly && !s.isViewer(user.Name) && slices.Contains(u.Groups, group) &&
 		len(s.Owners[group]) > 0 && !s.managesGroup(user.Name, group)
 }
 
