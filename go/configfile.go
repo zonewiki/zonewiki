@@ -300,6 +300,12 @@ func fileUsers(f *settingsfile.File) (map[string]*User, error) {
 	users := map[string]*User{}
 	tokens := map[string]string{}
 	for _, u := range f.Users {
+		// No user is called by a word for a task's assignee: the one place
+		// every way into the file passes (the commands, the admin page, an
+		// invite taken, a sign-up, an edit by hand).
+		if reservedNames[u.Name] {
+			return nil, lineError(u.Line, "%s", reservedNameMsg(u.Name))
+		}
 		hash, ok := u.Values["password"]
 		if !ok || hash.Value == "" {
 			return nil, lineError(u.Line, "[user %s] has no password. Set one with: zonewiki user passwd %s",

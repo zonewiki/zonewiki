@@ -219,12 +219,14 @@ func (s *Settings) isViewer(name string) bool {
 	return u != nil && u.Role == roleViewer
 }
 
-// reservedNames: what no new user is called: where a task's assignee is
-// named, "me" is whoever is signed in and "none" no one (docs/spec/users.md,
-// Assigning tasks).
+// reservedNames: what no user is called: where a task's assignee is named,
+// "me" is whoever is signed in and "none" no one (docs/spec/users.md,
+// Assigning tasks). The settings file is refused with one (fileUsers); the
+// doors that take a new name say so before they write (zonewiki user add,
+// an invite, a sign-up, the first-run page).
 var reservedNames = map[string]bool{"me": true, "none": true}
 
-// reservedNameMsg: why name can't be a new user's.
+// reservedNameMsg: why name can't be a user's.
 func reservedNameMsg(name string) string {
 	return `"` + name + `" can't be a user name: for a task's assignee, "me" means whoever is signed in and "none" no one. Choose another.`
 }
@@ -234,7 +236,7 @@ func reservedNameMsg(name string) string {
 // isn't called by a reserved name.
 func (s *Settings) assignable(name string) bool {
 	u := s.Users[name]
-	return u != nil && !u.Disabled && !u.Pending && u.Role != roleViewer && !reservedNames[name]
+	return u != nil && !u.Disabled && !u.Pending && u.Role != roleViewer
 }
 
 // notAssignable: why a task can't be assigned to name.
@@ -243,9 +245,6 @@ func (s *Settings) notAssignable(name string) string {
 	switch {
 	case u == nil:
 		return `"` + name + `" is not a user of this wiki`
-	case reservedNames[name]:
-		return `The user "` + name + `" can't be given tasks: the name is the word for ` +
-			map[string]string{"me": "whoever is signed in", "none": "no one"}[name]
 	case u.Pending:
 		return name + "'s account is waiting for an admin's approval"
 	case u.Disabled:

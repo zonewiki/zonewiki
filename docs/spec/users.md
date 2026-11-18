@@ -185,7 +185,7 @@ The file can be edited by hand, or with the commands; a running Zone takes each 
   An edit by hand isn't checked: it stays the way out.
 - `config check` lists each setting, its value (passwords and tokens only as `(set)`) and where it comes from (`[line 3]`, `[default]`), and the users; it fails on an error in the file and on settings left in the environment.
 - **Names**: lowercase letters, digits and inner hyphens (`userNameRE`), since a name becomes a folder name.
-  `me` and `none` are reserved (`reservedNames`): no new user gets one, from `user add`, an invite, sign-up or the first-run page (Assigning tasks, below).
+  `me` and `none` are reserved (`reservedNames`): no user is called one. The settings file is refused with such a section, naming its line (`fileUsers`), and `user add`, an invite, sign-up and the first-run page say so before they write (Assigning tasks, below).
   A user's MCP token is optional: without one they have no MCP access.
 
 ### Reloading
@@ -809,8 +809,8 @@ What happens on a task you have to do with is told to you (below). Not there: a 
 - **Who can be assigned** (`assignable` in `go/users.go`): a user who is not disabled, not waiting for approval and not a viewer (who couldn't complete the task or comment on it).
   Any other name is refused with a 400 that says why (`notAssignable`: "… is not a user of this wiki", "…'s account is disabled", "… is a viewer, and a viewer can't change tasks"), and nothing of the write is kept.
 - **`me` and `none` are reserved names**, since they are the words for whoever is signed in and for no one.
-  No new user gets one (`zonewiki user add`, an invite, sign-up, the first-run page: "… can't be a user name").
-  A user who has such a name from before keeps their account (signing in, pages, private tasks) but can't be assigned, and Zone says so in its log at start.
+  No user has one: `zonewiki user add`, an invite, sign-up and the first-run page refuse it ("… can't be a user name"), and a settings file that has a `[user me]` or `[user none]` (written by hand) is refused like any other mistake in it: Zone doesn't start with it, and a running Zone keeps the settings it had.
+  (Until 2026-11 such a user from before the rule kept their account and couldn't be assigned.)
 - **A private task has no assignee**: it is its owner's, and nobody else sees it.
   `assignee` on a private task is a 400 ("A private task is yours alone. Put it in a shared list to assign it"); a write that shares a task (`list` with `share`) can assign it at once.
   So a task for someone is made in a shared list: the dialog moves a new task there when you name someone (Where a new task goes in `docs/spec/tasks.md`).

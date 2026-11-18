@@ -15,13 +15,12 @@ func TestAssignable(t *testing.T) {
 		"alice": {Name: "alice", Role: roleAdmin}, "bob": {Name: "bob", Role: roleEditor}, "ed": {Name: "ed"},
 		"carol": {Name: "carol", Role: roleViewer}, "dan": {Name: "dan", Disabled: true},
 		"eve": {Name: "eve", Disabled: true, Pending: true},
-		"me":  {Name: "me", Role: roleEditor}, "none": {Name: "none", Role: roleEditor},
 	}}
 	if got := strings.Join(s.assignableUsers(), " "); got != "alice bob ed" {
 		t.Errorf("assignableUsers: %q", got)
 	}
 	for name, why := range map[string]string{"zed": "is not a user", "carol": "is a viewer", "dan": "is disabled",
-		"eve": "waiting for an admin", "me": "whoever is signed in", "none": "no one"} {
+		"eve": "waiting for an admin"} {
 		if s.assignable(name) || !strings.Contains(s.notAssignable(name), why) {
 			t.Errorf("%s: assignable %v, %q", name, s.assignable(name), s.notAssignable(name))
 		}
@@ -55,6 +54,17 @@ func TestReservedUserNames(t *testing.T) {
 	}
 	if code, errs := run("pw\npw\n", "add", "men"); code != 0 {
 		t.Errorf("add men: %d %q", code, errs)
+	}
+	// Nor does a settings file written by hand have one: it is refused, naming the line.
+	hash := hashPassword("p")
+	for _, name := range []string{"me", "none"} {
+		f, err := parseConfig("[user alice]\npassword = " + hash + "\n\n[user " + name + "]\npassword = " + hash + "\n")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := loadSettings(f); err == nil || !strings.Contains(err.Error(), "can't be a user name") || !strings.Contains(err.Error(), "line 4") {
+			t.Errorf("a file with [user %s]: %v", name, err)
+		}
 	}
 }
 

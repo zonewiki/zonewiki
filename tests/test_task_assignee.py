@@ -205,18 +205,16 @@ class TestWhoCanBeAssigned:
         assert "assignee" not in put(client, task, title="Still Bob's").get_json()
         assert stored(wiki_dir, task)["assignee"] == "bob"
 
-    def test_a_user_named_me_or_none_cant_be_assigned(self, client, wiki_dir, monkeypatch):
-        monkeypatch.setattr(settings, "USERS", {**USERS, "me": ("me-pw", ""), "none": ("none-pw", "")})
+    def test_me_and_none_are_words_not_users(self, client, wiki_dir, monkeypatch):
+        """me is whoever is signed in and none no one; no user is called
+        either (a settings file with one is refused: TestReservedUserNames
+        in go/assignee_test.go)."""
+        monkeypatch.setattr(settings, "USERS", dict(USERS))
         monkeypatch.setattr(settings, "USER_SETTINGS", dict(USER_SETTINGS))
         login(client, "alice")
         team(client)
         assert new(client, assignee="me")["assignee"] == "alice"
         assert "assignee" not in new(client, assignee="none")
-        login(client, "me")       # the account still works
-        resp = client.post("/api/tasks", json={"title": "No", "list": "team", "assignee": "me"}, headers=HOST)
-        assert resp.status_code == 400 and "word for whoever is signed in" in resp.get_json()["error"]
-        names = client.get("/api/tasks/assignable", headers=HOST).get_json()
-        assert names == {"users": ["alice", "bob"], "me": "me"}
 
 
 class TestFormerAssignee:
