@@ -216,12 +216,12 @@ func resetRoute(w http.ResponseWriter, r *http.Request) {
 }
 
 func linkRoute(w http.ResponseWriter, r *http.Request, kind, name, role string) {
-	if !mayMakeLink(userOf(r)) {
+	if !mayMakeLink(userOf(r).Name) {
 		showUsers(w, r, http.StatusTooManyRequests, "", fmt.Sprintf("You made %d links in the last hour: "+
 			"try again later.", linksPerHour))
 		return
 	}
-	token, err := makeLink(latestSettings(), kind, name, role, userOf(r))
+	token, err := makeLink(latestSettings(), kind, name, role, userOf(r).Name)
 	if err != nil {
 		showUsers(w, r, http.StatusConflict, "", "not made: "+err.Error())
 		return

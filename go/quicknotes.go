@@ -49,7 +49,7 @@ func appendHeading(slug, title string) string { return title + " (" + noteDate(s
 // hyphen), with content, or just `# title`; returns its slug. With users
 // it goes in the user's private folder: notes are your own. Two notes of
 // one name in the same second: the second gets the next second's stamp.
-func createQuicknote(user, title string, content *string, suffix string) (string, error) {
+func createQuicknote(user asker, title string, content *string, suffix string) (string, error) {
 	if title = strings.TrimSpace(title); title == "" {
 		title = "Untitled"
 	}
@@ -84,11 +84,11 @@ func createQuicknote(user, title string, content *string, suffix string) (string
 		return "", err
 	}
 	added(int64(len(text)))
-	return slug, notCommitted(gitCommit(user, "Create "+slug+suffix, path))
+	return slug, notCommitted(gitCommit(user.Name, "Create "+slug+suffix, path))
 }
 
 // notePath: the file of a note user may change.
-func notePath(user, slug string) (string, error) {
+func notePath(user asker, slug string) (string, error) {
 	p, err := writablePage(user, slug)
 	if err != nil {
 		return "", refuseAs(refusedNotFound, "There is no note “"+slug+"”")
@@ -103,7 +103,7 @@ func notePath(user, slug string) (string, error) {
 // to folder/name, links following, with its own commit message, what the
 // note held uncommitted committed first (keepPending). Returns the new
 // slug, and whether it kept any.
-func moveQuicknote(user, slug, folder, name string, keepDate bool, suffix string) (string, bool, error) {
+func moveQuicknote(user asker, slug, folder, name string, keepDate bool, suffix string) (string, bool, error) {
 	oldPath, err := notePath(user, slug)
 	if err != nil {
 		return "", false, err
@@ -145,7 +145,7 @@ var headingTextRE = regexp.MustCompile(`(?m)^#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$`)
 // either door, so the commit holds only the append. Returns the section's
 // anchor, and whether it kept any of the note's (kept) and of the page's
 // (keptPage).
-func appendQuicknote(user, slug, target, heading, suffix string) (anchor string, kept, keptPage bool, err error) {
+func appendQuicknote(user asker, slug, target, heading, suffix string) (anchor string, kept, keptPage bool, err error) {
 	oldPath, err := notePath(user, slug)
 	if err != nil {
 		return "", false, false, err
@@ -202,7 +202,7 @@ func appendQuicknote(user, slug, target, heading, suffix string) (anchor string,
 		return "", false, false, err
 	}
 	refs, linkErr := updateReferences(slug, target, heading)
-	if err := notCommitted(gitCommit(user, "Append "+slug+" to "+target+suffix, append([]string{oldPath, targetPath}, refs...)...)); err != nil {
+	if err := notCommitted(gitCommit(user.Name, "Append "+slug+" to "+target+suffix, append([]string{oldPath, targetPath}, refs...)...)); err != nil {
 		return anchor, kept, keptPage, err
 	}
 	return anchor, kept, keptPage, linkErr

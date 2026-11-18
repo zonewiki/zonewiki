@@ -86,7 +86,7 @@ func TestIndexCacheFollowsTheUsers(t *testing.T) {
 		{Slug: "private/alice/diary", Tokens: fixedTokens("diary", "secretword")},
 	}
 	var c indexCache
-	bob := &Req{user: "bob"}
+	bob := &Req{user: asUser("bob")}
 	if got := c.get(bob, docs); got.count() != 2 {
 		t.Fatalf("without users everything is shared: %d docs", got.count())
 	}
@@ -94,7 +94,7 @@ func TestIndexCacheFollowsTheUsers(t *testing.T) {
 	if got := c.get(bob, docs); got.count() != 1 || docsOf(got)[0].Slug != "plans" || got.ix.Search("secretword", 5) != nil {
 		t.Errorf("after users were added bob's index holds %d docs, and finds secretword: %v", got.count(), got.ix.Search("secretword", 5))
 	}
-	if got := c.get(&Req{user: "alice"}, docs); got.count() != 2 || len(got.ix.Search("secretword", 5)) != 1 {
+	if got := c.get(&Req{user: asUser("alice")}, docs); got.count() != 2 || len(got.ix.Search("secretword", 5)) != 1 {
 		t.Errorf("alice's own page is missing from her index")
 	}
 	settings().Users = nil
@@ -157,7 +157,7 @@ func indexCacheStaysAsIfBuiltAfresh(t *testing.T, file string) {
 		keyed(docs[i])
 	}
 	queries := []string{"apple", "banana cherry", "grap", "aple", "bananna", "pech", "zzzz", "kiwi lemon lime", "nectar orange papaya"}
-	viewers := map[string]*Req{"alice": {user: "alice"}, "bob": {user: "bob"}, "carol": {user: "carol"}, "leaf": nil}
+	viewers := map[string]*Req{"alice": {user: asUser("alice")}, "bob": {user: asUser("bob")}, "carol": {user: asUser("carol")}, "leaf": nil}
 	c := &indexCache{file: file}
 	rebuilds, corrected, starts := 0, 0, 0
 	var lastBase *docIndex
@@ -313,9 +313,9 @@ func TestUsersWithNothingPrivateShareAnIndex(t *testing.T) {
 		{Slug: "private/alice/a", Tokens: fixedTokens("fig")},
 	}
 	var c indexCache
-	c.get(&Req{user: "bob"}, docs)
+	c.get(&Req{user: asUser("bob")}, docs)
 	docs[1] = &SearchDoc{Slug: "p2", Tokens: fixedTokens("pear", "plum")} // an edit: the base now has changes
-	bob, carol, alice := c.get(&Req{user: "bob"}, docs), c.get(&Req{user: "carol"}, docs), c.get(&Req{user: "alice"}, docs)
+	bob, carol, alice := c.get(&Req{user: asUser("bob")}, docs), c.get(&Req{user: asUser("carol")}, docs), c.get(&Req{user: asUser("alice")}, docs)
 	if len(c.dead)+len(c.delta) == 0 {
 		t.Fatal("the base should have changes")
 	}
@@ -692,7 +692,7 @@ func TestAGroupsPagesAreInItsMembersIndexAlone(t *testing.T) {
 	}
 	docs := slices.Concat(shared[:2], groups, shared[2:])
 	var c indexCache
-	bob, alice, carol := c.get(&Req{user: "bob"}, docs), c.get(&Req{user: "alice"}, docs), c.get(&Req{user: "carol"}, docs)
+	bob, alice, carol := c.get(&Req{user: asUser("bob")}, docs), c.get(&Req{user: asUser("alice")}, docs), c.get(&Req{user: asUser("carol")}, docs)
 	if !slices.Equal(docsOf(bob), shared) {
 		t.Fatalf("bob's index has %d docs, want the %d shared ones", bob.count(), len(shared))
 	}
@@ -756,11 +756,11 @@ func TestAListForSomesTasksAreInItsMembersIndexAlone(t *testing.T) {
 	}
 	docs := slices.Concat(shared[:2], theirs, shared[2:])
 	var c indexCache
-	bob, alice := c.get(&Req{user: "bob"}, docs), c.get(&Req{user: "alice"}, docs)
+	bob, alice := c.get(&Req{user: asUser("bob")}, docs), c.get(&Req{user: asUser("alice")}, docs)
 	if !slices.Equal(docsOf(bob), shared) {
 		t.Fatalf("bob's index has %d docs, want the %d shared ones", bob.count(), len(shared))
 	}
-	if alice.count() != 5 || !slices.Equal(docsOf(alice), docsOf(c.get(&Req{user: "carol"}, docs))) {
+	if alice.count() != 5 || !slices.Equal(docsOf(alice), docsOf(c.get(&Req{user: asUser("carol")}, docs))) {
 		t.Errorf("alice's index has %d docs, want the shared ones and the list's two", alice.count())
 	}
 	without := newDocIndex(shared)
@@ -779,14 +779,14 @@ func TestAListForSomesTasksAreInItsMembersIndexAlone(t *testing.T) {
 	if err := os.Remove(entry); err != nil {
 		t.Fatal(err)
 	}
-	if bob := c.get(&Req{user: "bob"}, docs); bob.count() != 5 || len(bob.search("ocelotharp", 10)) != 2 {
+	if bob := c.get(&Req{user: asUser("bob")}, docs); bob.count() != 5 || len(bob.search("ocelotharp", 10)) != 2 {
 		t.Errorf("the list widened: bob's index has %d docs", bob.count())
 	}
 	// And narrowed again.
 	if err := os.WriteFile(entry, []byte(`{"name": "hiring", "for": ["alice"]}`), 0o666); err != nil {
 		t.Fatal(err)
 	}
-	if bob, carol := c.get(&Req{user: "bob"}, docs), c.get(&Req{user: "carol"}, docs); bob.count() != 3 || carol.count() != 3 {
+	if bob, carol := c.get(&Req{user: asUser("bob")}, docs), c.get(&Req{user: asUser("carol")}, docs); bob.count() != 3 || carol.count() != 3 {
 		t.Errorf("the list narrowed to alice: bob's index has %d docs, carol's %d", bob.count(), carol.count())
 	}
 }
@@ -813,7 +813,7 @@ func TestASearchHidesWhatHiddenDocDoes(t *testing.T) {
 		task("h2", "", "hiring"), task("a1", "alice", ""), task("b1", "bob", "mine"),
 		{Slug: "p1"}, {Slug: "private/alice/notes"}, {Slug: "groups/hiring/plan"},
 	}
-	for _, rq := range []*Req{nil, {user: "alice"}, {user: "bob"}, {user: "carol"}, {user: visitor}} {
+	for _, rq := range []*Req{nil, {user: asUser("alice")}, {user: asUser("bob")}, {user: asUser("carol")}, {user: asUser(visitor)}} {
 		hidden := docHider(rq)
 		for _, d := range docs {
 			if got, want := hidden(d), hiddenDoc(rq, d); got != want {
@@ -821,13 +821,13 @@ func TestASearchHidesWhatHiddenDocDoes(t *testing.T) {
 			}
 		}
 	}
-	if hidden := docHider(&Req{user: "bob"}); !hidden(docs[2]) || hidden(docs[1]) {
+	if hidden := docHider(&Req{user: asUser("bob")}); !hidden(docs[2]) || hidden(docs[1]) {
 		t.Errorf("bob sees the list for @hiring's task, or not the team's")
 	}
 	if err := os.WriteFile(filepath.Join(dir, "list.json"), []byte(`{"name": "hiring", "for": ["alice"]}`), 0o666); err != nil {
 		t.Fatal(err)
 	}
-	if hidden := docHider(&Req{user: "carol"}); !hidden(docs[2]) {
+	if hidden := docHider(&Req{user: asUser("carol")}); !hidden(docs[2]) {
 		t.Errorf("the list narrowed to alice: carol's next search still has its task")
 	}
 }
@@ -863,14 +863,14 @@ func TestAMembersIndexOfALargeGroup(t *testing.T) {
 	}
 	var c indexCache
 	start := time.Now()
-	c.get(&Req{user: "outsider"}, docs)
+	c.get(&Req{user: asUser("outsider")}, docs)
 	base := time.Since(start)
 	start = time.Now()
-	first := c.get(&Req{user: "m0"}, docs)
+	first := c.get(&Req{user: asUser("m0")}, docs)
 	view := time.Since(start)
 	start = time.Now()
 	for i := 1; i < 20; i++ {
-		c.get(&Req{user: fmt.Sprintf("m%d", i)}, docs)
+		c.get(&Req{user: asUser(fmt.Sprintf("m%d", i))}, docs)
 	}
 	others := time.Since(start) / 19
 	start = time.Now()

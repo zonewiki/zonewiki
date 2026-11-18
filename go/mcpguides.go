@@ -54,7 +54,7 @@ var (
 // guideText: a guide file's text with its imports in place. Files in seen
 // (already part of another guide) are left out; an import that isn't a page
 // of the wiki, or one user may not see, stays as written.
-func guideText(path, user string, seen map[string]bool, depth int) string {
+func guideText(path string, user asker, seen map[string]bool, depth int) string {
 	seen[path] = true
 	text, err := readPageText(path)
 	if err != nil {
@@ -87,7 +87,7 @@ type guide struct{ id, slug, text string }
 // folderGuides: the guides for a page at slug: the wiki's first, then each
 // folder's on the way down to the page's. Those user may see: not the
 // guide in another user's private folder.
-func folderGuides(slug, user string) []guide {
+func folderGuides(slug string, user asker) []guide {
 	root := resolvePath(cfg.Data)
 	parts := strings.Split(slug, "/")
 	parts = parts[:len(parts)-1]
@@ -134,7 +134,7 @@ func cutGuide(g guide) string {
 
 // checkGuides refuses a write to these pages while a guide for them isn't
 // among the ids in args' guides: the error gives the missing guides' text.
-func checkGuides(args jsonObj, slugs []string, user string) error {
+func checkGuides(args jsonObj, slugs []string, user asker) error {
 	// A page user may read but not change (a viewer's, a guide for anyone
 	// but an admin) is refused here already: not after the guides were
 	// read and the call sent again.
@@ -189,7 +189,7 @@ func guideFolder(g string) string {
 
 // guidedFolders: the folders with a guide of their own, as (folder, the
 // guide's title), the root ("") first; those user may see.
-func guidedFolders(user string) [][2]string {
+func guidedFolders(user asker) [][2]string {
 	root := resolvePath(cfg.Data)
 	var folders []string
 	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
@@ -233,7 +233,7 @@ func guidedFolders(user string) [][2]string {
 // folders that have guides, so the model knows to read one before drafting
 // for it. readOnly (a viewer, a connection that only reads): without the
 // tools that write.
-func toolList(user string, readOnly bool) []map[string]any {
+func toolList(user asker, readOnly bool) []map[string]any {
 	all := mcpTools
 	if readOnly {
 		all = slices.DeleteFunc(slices.Clone(all), func(t map[string]any) bool { return writeTool(t["name"].(string)) })
@@ -264,7 +264,7 @@ func toolList(user string, readOnly bool) []map[string]any {
 	return tools
 }
 
-func readGuides(args jsonObj, base, user string) (string, error) {
+func readGuides(args jsonObj, base string, user asker) (string, error) {
 	raw, err := strArg(args, "slug", false)
 	if err != nil {
 		return "", err
@@ -318,7 +318,7 @@ func readGuides(args jsonObj, base, user string) (string, error) {
 // guideIDLine: for read_page of a whole guide, its id, as reading it counts
 // as reading the guide. Not when it imports other pages, which the model
 // hasn't seen then.
-func guideIDLine(slug, content, user string) string {
+func guideIDLine(slug, content string, user asker) string {
 	for _, g := range folderGuides(slug, user) {
 		if g.slug == slug {
 			if g.text != strings.TrimSpace(content) {
@@ -335,7 +335,7 @@ func guideIDLine(slug, content, user string) string {
 }
 
 // guideNote: after a write to a guide, its new id, which the next writes pass.
-func guideNote(slug, user string) string {
+func guideNote(slug string, user asker) string {
 	for _, g := range folderGuides(slug, user) {
 		if g.slug == slug {
 			return "\nNote: " + slug + " is a guide; its id is now " + g.id + ": pass that one from now on."
@@ -346,15 +346,15 @@ func guideNote(slug, user string) string {
 
 // instructionsWithGuide: the server's instructions for initialize, plus the
 // wiki's guide, or, without one, a nudge to start it.
-func instructionsWithGuide(user string) string {
+func instructionsWithGuide(user asker) string {
 	return instructionsFor(mcpInstructions + groupsNote(user))
 }
 
 // groupsNote: for a user who is in a group, where its pages are and who
 // sees them, said with the instructions: an assistant that files a page
 // must know that the folder decides who reads it.
-func groupsNote(user string) string {
-	in := settings().groupsOf(user)
+func groupsNote(user asker) string {
+	in := settings().groupsOf(user.Name)
 	if len(in) == 0 {
 		return ""
 	}
@@ -362,7 +362,7 @@ func groupsNote(user string) string {
 	for i, g := range in {
 		folders[i] = groupsDir + "/" + g + "/"
 	}
-	return "\n\nWhere a page is kept is who sees it: " + privateDir + "/" + user + "/ only this user, " +
+	return "\n\nWhere a page is kept is who sees it: " + privateDir + "/" + user.Name + "/ only this user, " +
 		strings.Join(folders, ", ") + " the people in that group, anywhere else everyone who uses the wiki. " +
 		"File what is meant for a group in its folder, and don't copy from a narrower place into a wider one unless the user says so; " +
 		"a page moves to more people; back to fewer only by an admin."

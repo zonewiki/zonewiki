@@ -340,7 +340,7 @@ func connectionOf(r *http.Request) connection {
 // or it came through a connection that only reads. What the doors an
 // assistant comes through ask (callMCPTool, the upload with a token).
 func onlyReads(r *http.Request) bool {
-	return settings().isViewer(userOf(r)) || connectionOf(r).readOnly
+	return settings().isViewer(userOf(r).Name) || connectionOf(r).readOnly
 }
 
 // readOnlyConnectionMsg: what an assistant is told when it tries to change
@@ -348,12 +348,14 @@ func onlyReads(r *http.Request) bool {
 const readOnlyConnectionMsg = "This connection only reads: whoever connected you chose that. Nothing was changed. " +
 	"Tell them what you would have written; to let you write, they end this connection on Connect an assistant and connect you again."
 
-func userOf(r *http.Request) string {
+// userOf: who asks with the request r: its session's or its token's user
+// ("" without users; r nil: Zone itself).
+func userOf(r *http.Request) asker {
 	if r == nil {
-		return ""
+		return asker{}
 	}
 	u, _ := r.Context().Value(userKey{}).(string)
-	return u
+	return asUser(u)
 }
 
 func clearSession(w http.ResponseWriter, r *http.Request) {

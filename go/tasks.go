@@ -133,7 +133,7 @@ func commentText(s string) (string, error) {
 
 // createTask: a new open task from the fields in data (as the API takes
 // them); the MCP tools share it.
-func createTask(user string, data jsonObj, message string) (*Task, error) {
+func createTask(user asker, data jsonObj, message string) (*Task, error) {
 	title := ""
 	if data.Has("title") {
 		var err error
@@ -167,9 +167,9 @@ func createTask(user string, data jsonObj, message string) (*Task, error) {
 		return nil, err
 	}
 	t.History = []HistoryEntry{} // its first dates are not changes
-	logEvent(t, user, "created", "", "")
+	logEvent(t, user.Name, "created", "", "")
 	if settings().Users != nil {
-		t.CreatedBy = user // who gave it, when it is someone else's to do
+		t.CreatedBy = user.Name // who gave it, when it is someone else's to do
 	}
 	named := logMentions(t, user, "", t.Description)
 	active, err := taskFiles.ReadOpenStrict(user)
@@ -179,14 +179,14 @@ func createTask(user string, data jsonObj, message string) (*Task, error) {
 	if err := taskFiles.WriteOpenLocked(user, append(active, t), message); err != nil {
 		return t, err
 	}
-	tellAssigned(user, nil, t)
-	tellMentioned(user, t, named)
+	tellAssigned(user.Name, nil, t)
+	tellMentioned(user.Name, t, named)
 	return t, nil
 }
 
 // applyTaskFields applies the field changes in data (not completion); fresh:
 // t is a task being created, the only time it may go into a private list.
-func applyTaskFields(user string, t *Task, data jsonObj, fresh bool) error {
+func applyTaskFields(user asker, t *Task, data jsonObj, fresh bool) error {
 	oldDue, oldStart, oldRec := t.DueDate, t.StartDate, t.Recurrence
 	if oldRec == nil {
 		oldRec = &Recurrence{}
@@ -217,7 +217,7 @@ func applyTaskFields(user string, t *Task, data jsonObj, fresh bool) error {
 }
 
 // applyText: a write's title, description, tags and comments.
-func applyText(user string, t *Task, data jsonObj) error {
+func applyText(user asker, t *Task, data jsonObj) error {
 	if data.Has("title") {
 		s, err := asStr(data["title"], "title")
 		if err != nil {
@@ -254,7 +254,7 @@ func applyText(user string, t *Task, data jsonObj) error {
 		}
 		old := t.Comments
 		t.Comments = cleanComments(data["comments"])
-		checkBy(user, t)
+		checkBy(user.Name, t)
 		if err := othersCommentsKept(user, old, t.Comments); err != nil {
 			t.Comments = old
 			return err
@@ -265,7 +265,7 @@ func applyText(user string, t *Task, data jsonObj) error {
 
 // applyDate: a write's date key into field; a change is logged as event
 // ("": not logged).
-func applyDate(user string, t *Task, data jsonObj, key, event string, field *string) error {
+func applyDate(user asker, t *Task, data jsonObj, key, event string, field *string) error {
 	if !data.Has(key) {
 		return nil
 	}
@@ -276,7 +276,7 @@ func applyDate(user string, t *Task, data jsonObj, key, event string, field *str
 	old := *field
 	*field = d
 	if event != "" && d != old {
-		logEvent(t, user, event, old, d)
+		logEvent(t, user.Name, event, old, d)
 	}
 	return nil
 }
@@ -324,7 +324,7 @@ func applyOrder(t *Task, data jsonObj) error {
 // list), and a private task leaves for a shared list only when the write
 // says share. Only a change is checked. private is no field of a write: a
 // task is private by its list.
-func applyList(user string, t *Task, data jsonObj, fresh bool) error {
+func applyList(user asker, t *Task, data jsonObj, fresh bool) error {
 	if data.Has("private") {
 		return refuse("private is not set on a task: a task is private when its list is. Give list")
 	}
@@ -371,7 +371,7 @@ func applyList(user string, t *Task, data jsonObj, fresh bool) error {
 		return shareNeeded("The task")
 	case owner == "" && t.Owner != "":
 		t.Owner = owner
-		sharedBy(t, user, !data.Has("assignee"))
+		sharedBy(t, user.Name, !data.Has("assignee"))
 	case owner == "":
 		// Between shared lists: to a list fewer people see only by who made
 		// the task or an admin, as a page goes to fewer people (checkReaders).
@@ -394,7 +394,7 @@ func taskLosers(from, to string) []string {
 	}
 	var out []string
 	for _, name := range sortedKeys(s.Users) {
-		if !s.Users[name].Disabled && taskFiles.SeesList(name, from) && !taskFiles.SeesList(name, to) {
+		if !s.Users[name].Disabled && taskFiles.SeesList(asUser(name), from) && !taskFiles.SeesList(asUser(name), to) {
 			out = append(out, name)
 		}
 	}
@@ -404,8 +404,8 @@ func taskLosers(from, to string) []string {
 // mayNarrowTask: user may move the shared task t to a list fewer people
 // see: who made it (a task nobody is known to have made: anyone, as for
 // deleting it), or an admin.
-func mayNarrowTask(user string, t *Task) bool {
-	return t.Maker() == user || t.Maker() == "" || settings().isAdmin(user)
+func mayNarrowTask(user asker, t *Task) bool {
+	return t.Maker() == user.Name || t.Maker() == "" || settings().isAdmin(user.Name)
 }
 
 // sharedBy: the private task t (its Owner set to none already) is shared
@@ -428,7 +428,7 @@ func sharedBy(t *Task, user string, takes bool) {
 // through every other edit; a private task has none. A name the task had
 // before (its history says so) is taken back as it is, so an undo of the
 // change that replaced a former assignee goes through.
-func applyAssignee(user string, t *Task, data jsonObj) error {
+func applyAssignee(user asker, t *Task, data jsonObj) error {
 	if !data.Has("assignee") {
 		return nil
 	}
@@ -443,8 +443,8 @@ func applyAssignee(user string, t *Task, data jsonObj) error {
 	switch {
 	case name == "none":
 		name = ""
-	case name == "me" && user != "":
-		name = user
+	case name == "me" && user.Name != "":
+		name = user.Name
 	}
 	if name == t.Assignee {
 		return nil
@@ -458,12 +458,12 @@ func applyAssignee(user string, t *Task, data jsonObj) error {
 		return refuse("A private task is yours alone. Put it in a shared list to assign it (list)")
 	case !s.assignable(name) && !hadAssignee(t, name):
 		return refuse(s.notAssignable(name))
-	case !taskFiles.SeesList(name, t.List) && !hadAssignee(t, name):
+	case !taskFiles.SeesList(asUser(name), t.List) && !hadAssignee(t, name):
 		// A list for some: a task there is given only to one of them (anyone
 		// else wouldn't see it).
 		return refuse(name + " isn't one of those the list #" + t.List + " is for: a task there is given to one of them")
 	}
-	logEvent(t, user, "assigned", t.Assignee, name)
+	logEvent(t, user.Name, "assigned", t.Assignee, name)
 	t.Assignee = name
 	return nil
 }
@@ -479,7 +479,7 @@ func applyAssignee(user string, t *Task, data jsonObj) error {
 // Following is a look at the task: what was said before is no news to who
 // starts to follow now, so their look is noted (markSeen), which writes no
 // task. Nothing in the history: that someone follows is news to no one.
-func applyFollow(user string, t *Task, data jsonObj) error {
+func applyFollow(user asker, t *Task, data jsonObj) error {
 	if !data.Has("follow") {
 		return nil
 	}
@@ -487,21 +487,21 @@ func applyFollow(user string, t *Task, data jsonObj) error {
 	if err != nil {
 		return err
 	}
-	has := slices.Contains(t.Followers, user)
+	has := slices.Contains(t.Followers, user.Name)
 	switch {
 	case follow == has:
 	case !follow:
-		t.Followers = slices.DeleteFunc(slices.Clone(t.Followers), func(n string) bool { return n == user })
+		t.Followers = slices.DeleteFunc(slices.Clone(t.Followers), func(n string) bool { return n == user.Name })
 		if len(t.Followers) == 0 {
 			t.Followers = nil
 		}
-	case settings().Users == nil || user == "":
+	case settings().Users == nil || user.Name == "":
 		return refuse("This wiki has no users, so nobody follows a task")
 	case t.Owner != "":
 		return refuse("A private task is yours alone: there is no one else's news to follow. Put it in a shared list first (list)")
 	default:
-		t.Followers = append(slices.Clone(t.Followers), user)
-		markSeen(user, t)
+		t.Followers = append(slices.Clone(t.Followers), user.Name)
+		markSeen(user.Name, t)
 	}
 	return nil
 }
@@ -513,7 +513,7 @@ func applyFollow(user string, t *Task, data jsonObj) error {
 func followersSeen(t *Task) []string {
 	var out []string
 	for _, name := range t.Followers {
-		if canSeeTask(name, t) && settings().Users[name] != nil {
+		if canSeeTask(asUser(name), t) && settings().Users[name] != nil {
 			out = append(out, name)
 		}
 	}
@@ -632,7 +632,7 @@ func firstNonEmpty(a, b string) string {
 // what a write of it takes: the open tasks user sees and, when it is a
 // closed one, the closed tasks of its file (taskFiles.ReadTaskForWriteLocked):
 // not every closed task of the wiki.
-func findForWriteLocked(user, id string) (active, closed []*Task, task *Task, err error) {
+func findForWriteLocked(user asker, id string) (active, closed []*Task, task *Task, err error) {
 	if active, closed, err = taskFiles.ReadTaskForWriteLocked(user, id); err != nil {
 		return
 	}
@@ -660,7 +660,7 @@ func withoutIDs(tasks []*Task, ids map[string]bool) []*Task {
 // updateTask changes a task's fields and status (complete, won't do, skip,
 // reopen) from data as the API takes it; suffix follows the commit message
 // (the MCP tools' summary).
-func updateTask(user, id string, data jsonObj, suffix string) (*Task, error) {
+func updateTask(user asker, id string, data jsonObj, suffix string) (*Task, error) {
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
 	return updateTaskLocked(user, id, data, suffix)
@@ -672,7 +672,7 @@ func updateTask(user, id string, data jsonObj, suffix string) (*Task, error) {
 // from (textUnchanged: or it is a conflict), the fields are applied, and
 // who the description names now is logged. Returns them, to be told once
 // the task is written (tellMentioned).
-func changeTaskFields(user string, t *Task, data jsonObj) (named []string, err error) {
+func changeTaskFields(user asker, t *Task, data jsonObj) (named []string, err error) {
 	rememberBy(t) // an undo sends its comments and history back (taskby.go)
 	if err := textUnchanged(t, data); err != nil {
 		return nil, err
@@ -685,14 +685,14 @@ func changeTaskFields(user string, t *Task, data jsonObj) (named []string, err e
 }
 
 // sentBack: an undo sends the old history back with the old fields.
-func sentBack(user string, t *Task, data jsonObj) {
+func sentBack(user asker, t *Task, data jsonObj) {
 	if data.Has("history") {
 		t.History = sentHistory(cleanHistory(data["history"]), t.History)
-		checkBy(user, t)
+		checkBy(user.Name, t)
 	}
 }
 
-func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, error) {
+func updateTaskLocked(user asker, id string, data jsonObj, suffix string) (*Task, error) {
 	var status [3]bool
 	for i, k := range []string{"skip", "wont_do", "completed"} {
 		var err error
@@ -717,7 +717,7 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 	if seen && newsFor(t, user).Kind != "" {
 		// Their look is theirs: kept beside the tasks (taskseen.go), so this
 		// writes no task and commits nothing.
-		markSeen(user, t)
+		markSeen(user.Name, t)
 	}
 	named, err := changeTaskFields(user, t, data)
 	if err != nil {
@@ -728,7 +728,7 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 	case didSkip:
 		// Skip this occurrence: archived as won't-do, the next one spawned
 		// (a plain won't-do ends the series).
-		logEvent(t, user, "skipped", "", "")
+		logEvent(t, user.Name, "skipped", "", "")
 		spawned := spawnRecurring(user, t, active, true)
 		t.ClosedAt = timestamp()
 		t.WontDo = true
@@ -742,7 +742,7 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 			// Won't do: to closed, abandoned; no next occurrence.
 			t.ClosedAt = timestamp()
 			t.WontDo = true
-			logEvent(t, user, "wontdo", "", "")
+			logEvent(t, user.Name, "wontdo", "", "")
 			active = without(active, id)
 			closed = append(closed, t)
 		} else if !wontDo && !t.IsOpen() {
@@ -787,8 +787,8 @@ func updateTaskLocked(user, id string, data jsonObj, suffix string) (*Task, erro
 	if err := taskFiles.WriteBothLocked(user, active, closed, msg+suffix); err != nil {
 		return t, err
 	}
-	tellAssigned(user, before, t)
-	tellMentioned(user, t, named)
+	tellAssigned(user.Name, before, t)
+	tellMentioned(user.Name, t, named)
 	return t, nil
 }
 
@@ -818,7 +818,7 @@ func textUnchanged(t *Task, data jsonObj) error {
 }
 
 // toggleNoteCheck ticks or unticks the Nth checkbox of a task's notes.
-func toggleNoteCheck(user, id string, idx int) (*Task, error) {
+func toggleNoteCheck(user asker, id string, idx int) (*Task, error) {
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
 	_, _, t, err := findForWriteLocked(user, id)
@@ -836,7 +836,7 @@ func toggleNoteCheck(user, id string, idx int) (*Task, error) {
 }
 
 // addComment adds a comment (a status line) to a task, open or done.
-func addComment(user, id string, text string, message string) (*Task, error) {
+func addComment(user asker, id string, text string, message string) (*Task, error) {
 	s, err := commentText(text)
 	if err != nil {
 		return nil, err
@@ -848,12 +848,12 @@ func addComment(user, id string, text string, message string) (*Task, error) {
 		return nil, err
 	}
 	t.Comments = append(cleanCommentList(t.Comments),
-		Comment{ID: newCommentID(), At: now().Format("2006-01-02T15:04"), By: user, Text: s})
+		Comment{ID: newCommentID(), At: now().Format("2006-01-02T15:04"), By: user.Name, Text: s})
 	named := logMentions(t, user, "", s)
 	if err := taskFiles.WriteBothLocked(user, active, closed, message); err != nil {
 		return t, err
 	}
-	tellComment(user, t, s, named)
+	tellComment(user.Name, t, s, named)
 	return t, nil
 }
 
@@ -906,23 +906,23 @@ func noteBrought(user string, ids []string) {
 // also what takes back a task just made: the editor's Make task); an admin
 // any; and what they imported, while Zone runs (the import's undo). A task
 // someone else made is closed (Won't do), not deleted: others have seen it.
-func mayDeleteTask(user string, t *Task) bool {
+func mayDeleteTask(user asker, t *Task) bool {
 	s := settings()
-	if s.Users == nil || t.Owner != "" || t.Maker() == user || t.Maker() == "" || s.isAdmin(user) {
+	if s.Users == nil || t.Owner != "" || t.Maker() == user.Name || t.Maker() == "" || s.isAdmin(user.Name) {
 		return true
 	}
 	brought.Lock()
 	defer brought.Unlock()
-	return brought.by[t.ID] == user
+	return brought.by[t.ID] == user.Name
 }
 
-func deleteTask(user, id, message string) error {
+func deleteTask(user asker, id, message string) error {
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
 	return deleteTasksLocked(user, map[string]bool{id: true}, message)
 }
 
-func deleteTasksLocked(user string, ids map[string]bool, message string) error {
+func deleteTasksLocked(user asker, ids map[string]bool, message string) error {
 	active, closed, err := taskFiles.ReadTasksForWriteLocked(user, ids)
 	if err != nil {
 		return err
@@ -962,7 +962,7 @@ func selectTasks(tasks []*Task, keep func(*Task) bool) ([]*Task, map[string]bool
 // tagTasks adds the tags add to the tasks ids and takes remove off them
 // (case ignored; a tag a task has keeps its spelling), open and closed,
 // in one commit; the batch-tag route and the MCP tools share it.
-func tagTasks(user string, ids, add, remove []string, message string) ([]*Task, error) {
+func tagTasks(user asker, ids, add, remove []string, message string) ([]*Task, error) {
 	set := idSet(ids)
 	addTags, removeTags := taskmodel.CleanTags(add), taskmodel.CleanTags(remove)
 	if len(set) == 0 || len(addTags) == 0 && len(removeTags) == 0 {

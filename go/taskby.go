@@ -27,9 +27,9 @@ func commentTextKey(c Comment) string { return "t\x00" + c.ID + "\x00" + c.By + 
 // mayChangeComment: with users a comment is its author's: only they edit or
 // delete it (an admin may delete any). One by no one (from before users)
 // is anyone's.
-func mayChangeComment(user string, c Comment, deleting bool) bool {
+func mayChangeComment(user asker, c Comment, deleting bool) bool {
 	s := settings()
-	return s.Users == nil || c.By == "" || c.By == user || deleting && s.isAdmin(user)
+	return s.Users == nil || c.By == "" || c.By == user.Name || deleting && s.isAdmin(user.Name)
 }
 
 // errNotYourComment: what a change to someone else's comment answers (403).
@@ -39,7 +39,7 @@ var errNotYourComment = refuseAs(refusedReadOnly, "Only its author changes a com
 // of a comment's delete or edit) changes only the sender's own: every
 // comment of someone else's was there with that text (in old, or taken out
 // before: rememberBy), and none of theirs is dropped, but by an admin.
-func othersCommentsKept(user string, old, now []Comment) error {
+func othersCommentsKept(user asker, old, now []Comment) error {
 	if settings().Users == nil {
 		return nil
 	}
@@ -50,7 +50,7 @@ func othersCommentsKept(user string, old, now []Comment) error {
 	sent := map[string]Comment{}
 	for _, c := range now {
 		sent[c.ID] = c
-		if _, there := was[c.ID]; there || c.By == "" || c.By == user {
+		if _, there := was[c.ID]; there || c.By == "" || c.By == user.Name {
 			continue
 		}
 		seenBy.Lock()
@@ -61,7 +61,7 @@ func othersCommentsKept(user string, old, now []Comment) error {
 		}
 	}
 	for _, c := range old {
-		if c.By == "" || c.By == user {
+		if c.By == "" || c.By == user.Name {
 			continue
 		}
 		if n, there := sent[c.ID]; !there && !mayChangeComment(user, c, true) || there && (n.By != c.By || n.Text != c.Text) {

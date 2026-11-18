@@ -329,11 +329,11 @@ func oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := userOf(r)
-	if !validGrantUser(s, user) {
+	if !validGrantUser(s, user.Name) {
 		http.NotFound(w, r)
 		return
 	}
-	v.User, v.Viewer = user, s.isViewer(user)
+	v.User, v.Viewer = user.Name, s.isViewer(user.Name)
 	v.ReadOnly = r.Method == http.MethodPost && r.PostFormValue("may") == "read"
 	if r.Method != http.MethodPost {
 		show(http.StatusOK)
@@ -350,7 +350,7 @@ func oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 	// of mustn't be enough to make one.
 	hash := s.PasswordHash
 	if s.Users != nil {
-		hash = s.Users[user].PasswordHash
+		hash = s.Users[user.Name].PasswordHash
 	}
 	right, wait := loginThrottle.try(clientKey(r), func() bool {
 		return checkPassword(r.PostFormValue("password"), hash)
@@ -364,7 +364,7 @@ func oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 		show(status)
 		return
 	}
-	code := newCode(authCode{user: user, client: q.client.Name, clientHash: hashToken(q.ClientID),
+	code := newCode(authCode{user: user.Name, client: q.client.Name, clientHash: hashToken(q.ClientID),
 		redirectURI: q.RedirectURI, redirectHost: to.Host, challenge: q.Challenge, readOnly: v.ReadOnly})
 	// Not a redirect: the page policy lets a form lead only to Zone itself
 	// (form-action 'self', which browsers hold a form's redirects to), so

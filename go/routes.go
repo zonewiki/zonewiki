@@ -34,8 +34,8 @@ func pageRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/save/{slug...}", writesPages(apiSave))
 	mux.HandleFunc("GET /new", func(w http.ResponseWriter, r *http.Request) {
 		var groups []string
-		if s := settings(); !s.isViewer(userOf(r)) { // a viewer makes no page
-			groups = s.groupsOf(userOf(r))
+		if s := settings(); !s.isViewer(userOf(r).Name) { // a viewer makes no page
+			groups = s.groupsOf(userOf(r).Name)
 		}
 		// for: where the page starts (the New page button of a group's home, of the private home).
 		who := r.URL.Query().Get("for")
@@ -212,7 +212,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 	chip := macro("backlinks_chip", pageLinks(backlinks))
 
 	// Viewing a page from the uncommitted-changes list: Commit instead of Edit.
-	fromUncommitted := r.URL.Query().Get("from") == "uncommitted" && cfg.GitEnabled && rq.user != visitor
+	fromUncommitted := r.URL.Query().Get("from") == "uncommitted" && cfg.GitEnabled && rq.user.Name != visitor
 	var bc, metaRow, article template.HTML
 	var menu *pageMenuView
 	if fromUncommitted {
@@ -227,7 +227,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		menu = pageMenu(rq, slug, title, q.Get("rename_error"), q.Get("promote_error"), q.Get("append_error"), q.Get("rename_name"), q.Get("rename_ask"))
 		changed, commit := lastChanged(slug, path, title)
-		if rq.user == visitor {
+		if rq.user.Name == visitor {
 			commit = nil // a visitor commits nothing
 		}
 		meta, _ := mdtext.ParseFrontmatter(content)
@@ -351,8 +351,8 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 	section, hasSection := intArg(q.Get("section"), q.Has("section"))
 	// Changes the user left here in conflict: offered on the whole page.
 	var left *leftDraftView
-	if d, ok := draftLeft(rq.user, path); ok && !isNew && d.Content == content {
-		dropDraft(rq.user, path) // the page holds it now: nothing to offer
+	if d, ok := draftLeft(rq.user.Name, path); ok && !isNew && d.Content == content {
+		dropDraft(rq.user.Name, path) // the page holds it now: nothing to offer
 	} else if ok && !isNew {
 		if hasSection {
 			http.Redirect(w, r, pathURL("edit", slug), http.StatusFound)
@@ -410,7 +410,7 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 		PageTitle: title, Content: content, OnlyTitle: onlyTitle,
 		HasSection: hasSection, Section: section, SectionHeading: heading, StartChar: start, EndChar: end, FileHash: fileHash,
 		// A visitor (a public wiki) edits and makes pages, and moves none.
-		CanRename: editable && !isProtected(slug) && rq.user != visitor, CanDelete: editable && !isProtected(slug) && rq.user != visitor,
+		CanRename: editable && !isProtected(slug) && rq.user.Name != visitor, CanDelete: editable && !isProtected(slug) && rq.user.Name != visitor,
 		Git: cfg.GitEnabled, RenameError: q.Get("rename_error"), RenameName: q.Get("rename_name"), RenameAsk: q.Get("rename_ask"), LeftDraft: left,
 		PrivateOffer: privateOffer, OfferGroup: offerGroup, OfferOn: offerOn, Paste: pasteHint(rq, q.Get("paste"), q.Get("copied") == "1"),
 		TaskLists:      slices.Sorted(maps.Keys(rq.taskLists())),
@@ -421,7 +421,7 @@ func editPage(w http.ResponseWriter, r *http.Request) {
 // editorTasksHTML: the editor's hidden task app, for Make task; none for a
 // public wiki's visitor, who makes no tasks.
 func editorTasksHTML(rq *Req, slug string) template.HTML {
-	if rq.user == visitor {
+	if rq.user.Name == visitor {
 		return ""
 	}
 	return htmlOf(buildTasksEmbed(rq, TasksParams{}, 0, true, ""))
@@ -527,7 +527,7 @@ func savePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	keepBase(content)
-	dropDraft(userOf(r), s.path)
+	dropDraft(userOf(r).Name, s.path)
 	http.Redirect(w, r, pathURL("page", s.slug), http.StatusFound)
 }
 
@@ -611,7 +611,7 @@ func apiSave(w http.ResponseWriter, r *http.Request) {
 	write := writeDraft
 	if isForce || r.PostFormValue("overwrite") == "1" {
 		// Keep mine: whatever the page holds, but never what was never in git.
-		write = func(user, slug, path string, current *string, text string, _ bool) error {
+		write = func(user asker, slug, path string, current *string, text string, _ bool) error {
 			return keepMineOp(user, slug, path, current, text)
 		}
 	}
@@ -619,7 +619,7 @@ func apiSave(w http.ResponseWriter, r *http.Request) {
 		pageFailed(w, r, err)
 		return
 	}
-	dropDraft(userOf(r), s.path)
+	dropDraft(userOf(r).Name, s.path)
 	keepBase(content)
 	switch {
 	case merged != nil:
@@ -691,7 +691,7 @@ func keepLeftDraft(r *http.Request, s *editorSave) {
 			return
 		}
 	}
-	leaveDraft(userOf(r), s.path, whole, base)
+	leaveDraft(userOf(r).Name, s.path, whole, base)
 }
 
 // newPageView: /new (new.html): the groups the user is in, whose folders a
@@ -715,7 +715,7 @@ func createPage(w http.ResponseWriter, r *http.Request) {
 		slug = own + "/" + slug
 	}
 	if g, ok := strings.CutPrefix(who, "group:"); ok && slug != "" && newFromRE.MatchString(who) &&
-		settings().memberOf(userOf(r), g) && !strings.HasPrefix(slug, groupsDir+"/"+g+"/") {
+		settings().memberOf(userOf(r).Name, g) && !strings.HasPrefix(slug, groupsDir+"/"+g+"/") {
 		slug = groupsDir + "/" + g + "/" + slug
 	}
 	if slug == "" {
@@ -902,7 +902,7 @@ func apiPagesList(w http.ResponseWriter, r *http.Request) {
 	sort.SliceStable(pages, func(i, j int) bool {
 		return strings.ToLower(pages[i]["title"].(string)) < strings.ToLower(pages[j]["title"].(string))
 	})
-	if rq.user == visitor {
+	if rq.user.Name == visitor {
 		// A public wiki's visitor: the pages, not the views that need an account.
 		writeJSON(w, http.StatusOK, pages)
 		return

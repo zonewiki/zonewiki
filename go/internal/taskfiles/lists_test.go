@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"zonewiki/internal/asker"
 	"zonewiki/internal/taskmodel"
 )
 
@@ -149,8 +150,8 @@ func TestListsPerOwner(t *testing.T) {
 	defer f.Unlock()
 	shared := &Registry{Lists: []*List{{Name: "shop"}}}
 	own := &Registry{Lists: []*List{{Name: "gifts", Settings: map[string]string{"view": "open"}}}}
-	p1, err1 := f.WriteListsLocked("alice", "", shared)
-	p2, err2 := f.WriteListsLocked("alice", "alice", own)
+	p1, err1 := f.WriteListsLocked(asker.User("alice"), "", shared)
+	p2, err2 := f.WriteListsLocked(asker.User("alice"), "alice", own)
 	if err1 != nil || err2 != nil {
 		t.Fatal(err1, err2)
 	}
@@ -168,7 +169,7 @@ func TestListsPerOwner(t *testing.T) {
 		t.Error("bob has alice's list")
 	}
 	// Written again unchanged: no file to commit.
-	if p, err := f.WriteListsLocked("alice", "alice", own); len(p) != 0 || err != nil {
+	if p, err := f.WriteListsLocked(asker.User("alice"), "alice", own); len(p) != 0 || err != nil {
 		t.Errorf("an unchanged registry written: %q, %v", p, err)
 	}
 }
@@ -179,10 +180,10 @@ func TestListsWriteRefused(t *testing.T) {
 	f.viewer = "bob"
 	f.Lock()
 	defer f.Unlock()
-	if _, err := f.WriteListsLocked("alice", "bob", &Registry{}); err == nil {
+	if _, err := f.WriteListsLocked(asker.User("alice"), "bob", &Registry{}); err == nil {
 		t.Error("alice wrote bob's lists")
 	}
-	if _, err := f.WriteListsLocked("bob", "", &Registry{}); err == nil {
+	if _, err := f.WriteListsLocked(asker.User("bob"), "", &Registry{}); err == nil {
 		t.Error("a viewer wrote the lists")
 	}
 	if _, err := os.Stat(f.ListsPath("bob")); !errors.Is(err, os.ErrNotExist) {

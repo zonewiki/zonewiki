@@ -71,8 +71,8 @@ func TestParseTasksParams(t *testing.T) {
 // ownList: user's private list "own", made when it isn't there.
 func ownList(t *testing.T, user string) string {
 	t.Helper()
-	if _, ok := taskLists(user)["own"]; !ok {
-		if _, err := createListOp(user, "own", true, false, "", ""); err != nil {
+	if _, ok := taskLists(asUser(user))["own"]; !ok {
+		if _, err := createListOp(asUser(user), "own", true, false, "", ""); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -82,8 +82,8 @@ func ownList(t *testing.T, user string) string {
 // teamList: the shared list "team", made when it isn't there.
 func teamList(t *testing.T, user string) string {
 	t.Helper()
-	if _, ok := resolveList("team", taskLists(user)); !ok {
-		if _, err := createListOp(user, "team", false, false, "", ""); err != nil {
+	if _, ok := resolveList("team", taskLists(asUser(user))); !ok {
+		if _, err := createListOp(asUser(user), "team", false, false, "", ""); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -101,13 +101,13 @@ func newTestTask(t *testing.T, user, title string, private bool, more ...string)
 	data.Set("title", title)
 	if private {
 		data.Set("list", ownList(t, user))
-	} else if inboxOwner(user) != "" && !slices.Contains(more, "list") {
+	} else if inboxOwner(asUser(user)) != "" && !slices.Contains(more, "list") {
 		data.Set("list", teamList(t, user))
 	}
 	for i := 0; i+1 < len(more); i += 2 {
 		data.Set(more[i], more[i+1])
 	}
-	task, err := createTask(user, data, "Create task")
+	task, err := createTask(asUser(user), data, "Create task")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,13 +143,13 @@ func TestPrivateTasksInTheirUsersFiles(t *testing.T) {
 	if mine.Owner != "alice" {
 		t.Fatalf("owner %q", mine.Owner)
 	}
-	if got := titles(taskFiles.Open("alice")); !reflect.DeepEqual(got, []string{"Alice's own", "Shared one"}) {
+	if got := titles(taskFiles.Open(asUser("alice"))); !reflect.DeepEqual(got, []string{"Alice's own", "Shared one"}) {
 		t.Errorf("alice sees %v", got)
 	}
-	if got := titles(taskFiles.Open("bob")); !reflect.DeepEqual(got, []string{"Shared one"}) {
+	if got := titles(taskFiles.Open(asUser("bob"))); !reflect.DeepEqual(got, []string{"Shared one"}) {
 		t.Errorf("bob sees %v", got)
 	}
-	if got := titles(taskFiles.Open("")); !reflect.DeepEqual(got, []string{"Shared one"}) {
+	if got := titles(taskFiles.Open(asker{})); !reflect.DeepEqual(got, []string{"Shared one"}) {
 		t.Errorf("Zone sees %v", got)
 	}
 	shared, own := fileText(t, taskFiles.PathIn("", teamList(t, "alice"), "tasks.json")), fileText(t, taskFiles.PathIn("alice", ownList(t, "alice"), "tasks.json"))
@@ -166,23 +166,23 @@ func TestPrivateTasksInTheirUsersFiles(t *testing.T) {
 	}
 	// Another user's private task is no task at all.
 	for _, err := range []error{
-		func() error { _, err := updateTask("bob", mine.ID, jsonObj{}, ""); return err }(),
-		func() error { _, err := addComment("bob", mine.ID, "hi", "c"); return err }(),
+		func() error { _, err := updateTask(asUser("bob"), mine.ID, jsonObj{}, ""); return err }(),
+		func() error { _, err := addComment(asUser("bob"), mine.ID, "hi", "c"); return err }(),
 	} {
 		if err != errNotFound {
 			t.Errorf("bob's write: %v", err)
 		}
 	}
-	if err := deleteTask("bob", mine.ID, "d"); err != nil || len(taskFiles.Open("alice")) != 2 {
+	if err := deleteTask(asUser("bob"), mine.ID, "d"); err != nil || len(taskFiles.Open(asUser("alice"))) != 2 {
 		t.Errorf("bob's delete took alice's task: %v", err)
 	}
-	if len(findTasks("bob", strings.ToLower(mine.ID[:8]))) != 0 || len(findTasks("alice", mine.ID)) != 1 {
+	if len(findTasks(asUser("bob"), strings.ToLower(mine.ID[:8]))) != 0 || len(findTasks(asUser("alice"), mine.ID)) != 1 {
 		t.Error("findTasks")
 	}
-	if refs := resolveTaskRefs("bob", []string{mine.ID[:8]}); refs[mine.ID[:8]] != nil {
+	if refs := resolveTaskRefs(asUser("bob"), []string{mine.ID[:8]}); refs[mine.ID[:8]] != nil {
 		t.Error("bob resolves alice's [[task:…]]")
 	}
-	if refs := resolveTaskRefs("alice", []string{mine.ID[:8]}); refs[mine.ID[:8]] == nil {
+	if refs := resolveTaskRefs(asUser("alice"), []string{mine.ID[:8]}); refs[mine.ID[:8]] == nil {
 		t.Error("alice doesn't resolve her own [[task:…]]")
 	}
 }
@@ -195,46 +195,46 @@ func TestPrivateTaskMovesAndCompletes(t *testing.T) {
 	testWiki(t, nil)
 	withUsers(t, "alice", "bob")
 	task := newTestTask(t, "alice", "Water plants", true, "due_date", isoDay(today()), "rec_type", "weekly")
-	if titles(taskFiles.Open("bob")); len(taskFiles.Open("bob")) != 0 || len(taskFiles.Open("alice")) != 1 {
-		t.Fatalf("after private: bob %v, alice %v", titles(taskFiles.Open("bob")), titles(taskFiles.Open("alice")))
+	if titles(taskFiles.Open(asUser("bob"))); len(taskFiles.Open(asUser("bob"))) != 0 || len(taskFiles.Open(asUser("alice"))) != 1 {
+		t.Fatalf("after private: bob %v, alice %v", titles(taskFiles.Open(asUser("bob"))), titles(taskFiles.Open(asUser("alice"))))
 	}
 	if strings.Contains(fileText(t, taskFiles.OpenPath("")), "Water") {
 		t.Error("still in the shared file")
 	}
 	done := jsonObj{}
 	done.Set("completed", true)
-	if _, err := updateTask("alice", task.ID, done, ""); err != nil {
+	if _, err := updateTask(asUser("alice"), task.ID, done, ""); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(fileText(t, taskFiles.PathIn("alice", ownList(t, "alice"), "closed.json")), task.ID) || strings.Contains(fileText(t, taskFiles.ClosedPath("")), "Water") {
 		t.Error("completed into the wrong file")
 	}
-	open := taskFiles.Open("alice")
-	if len(open) != 1 || open[0].SpawnedFrom != task.ID || open[0].Owner != "alice" || open[0].List != "own" || len(taskFiles.Open("bob")) != 0 {
+	open := taskFiles.Open(asUser("alice"))
+	if len(open) != 1 || open[0].SpawnedFrom != task.ID || open[0].Owner != "alice" || open[0].List != "own" || len(taskFiles.Open(asUser("bob"))) != 0 {
 		t.Errorf("next occurrence %+v", open)
 	}
-	if got := taskFiles.ClosedInYear("bob", taskFiles.CurrentYear()); len(got) != 0 {
+	if got := taskFiles.ClosedInYear(asUser("bob"), taskFiles.CurrentYear()); len(got) != 0 {
 		t.Errorf("bob's Completed %v", titles(got))
 	}
 	inbox := jsonObj{}
 	inbox.Set("list", "")
-	if got, err := updateTask("alice", open[0].ID, inbox, ""); err != nil || got.List != "" || got.Owner != "alice" {
+	if got, err := updateTask(asUser("alice"), open[0].ID, inbox, ""); err != nil || got.List != "" || got.Owner != "alice" {
 		t.Fatalf("into her Inbox: %+v, %v", got, err)
 	}
-	if len(taskFiles.Open("bob")) != 0 || !strings.Contains(fileText(t, taskFiles.OpenPath("alice")), "Water") || strings.Contains(fileText(t, taskFiles.OpenPath("")), "Water") {
+	if len(taskFiles.Open(asUser("bob"))) != 0 || !strings.Contains(fileText(t, taskFiles.OpenPath("alice")), "Water") || strings.Contains(fileText(t, taskFiles.OpenPath("")), "Water") {
 		t.Error("a task in her Inbox left her files")
 	}
 	shared := jsonObj{}
 	shared.Set("list", teamList(t, "alice"))
-	if _, err := updateTask("alice", open[0].ID, shared, ""); err == nil {
+	if _, err := updateTask(asUser("alice"), open[0].ID, shared, ""); err == nil {
 		t.Fatal("shared without saying so")
 	}
 	shared.Set("share", true)
-	if _, err := updateTask("alice", open[0].ID, shared, ""); err != nil {
+	if _, err := updateTask(asUser("alice"), open[0].ID, shared, ""); err != nil {
 		t.Fatal(err)
 	}
-	if len(taskFiles.Open("bob")) != 1 || fileText(t, taskFiles.OpenPath("alice")) != "[]\n" {
-		t.Errorf("back to shared: bob %v, alice's file %q", titles(taskFiles.Open("bob")), fileText(t, taskFiles.OpenPath("alice")))
+	if len(taskFiles.Open(asUser("bob"))) != 1 || fileText(t, taskFiles.OpenPath("alice")) != "[]\n" {
+		t.Errorf("back to shared: bob %v, alice's file %q", titles(taskFiles.Open(asUser("bob"))), fileText(t, taskFiles.OpenPath("alice")))
 	}
 }
 
@@ -242,7 +242,7 @@ func TestPrivateTaskMovesAndCompletes(t *testing.T) {
 // from a read (GET /api/tasks, allTasks): the move writes two files.
 func TestReadsSeeAMovingTask(t *testing.T) {
 	const n = 100
-	for name, read := range map[string]func(string) []*Task{"Open": taskFiles.Open, "All": taskFiles.All} {
+	for name, read := range map[string]func(asker) []*Task{"Open": taskFiles.Open, "All": taskFiles.All} {
 		testWiki(t, nil)
 		withUsers(t, "alice")
 		var ids []string
@@ -257,7 +257,7 @@ func TestReadsSeeAMovingTask(t *testing.T) {
 				data := jsonObj{}
 				data.Set("list", "team")
 				data.Set("share", true)
-				if _, err := updateTask("alice", id, data, ""); err != nil {
+				if _, err := updateTask(asUser("alice"), id, data, ""); err != nil {
 					t.Error(err)
 					return
 				}
@@ -270,7 +270,7 @@ func TestReadsSeeAMovingTask(t *testing.T) {
 				break reading
 			default:
 			}
-			if got := read("alice"); len(got) != n {
+			if got := read(asUser("alice")); len(got) != n {
 				<-stop
 				t.Fatalf("%s: %d tasks while they move", name, len(got))
 			}
@@ -282,13 +282,13 @@ func TestReadsSeeAMovingTask(t *testing.T) {
 // JSON is as before (no "private"). private is no field of a write.
 func TestNoPrivateTasksWithoutUsers(t *testing.T) {
 	testWiki(t, nil)
-	if _, err := createListOp("", "mine", true, false, "", ""); err == nil {
+	if _, err := createListOp(asker{}, "mine", true, false, "", ""); err == nil {
 		t.Error("a private list without users")
 	}
 	data := jsonObj{}
 	data.Set("title", "x")
 	data.Set("private", true)
-	if _, err := createTask("", data, "c"); err == nil {
+	if _, err := createTask(asker{}, data, "c"); err == nil {
 		t.Error("private taken as a field of a write")
 	}
 	task := newTestTask(t, "", "y", false)
@@ -309,7 +309,7 @@ func TestEveryUsersFiles(t *testing.T) {
 	}
 	last := jsonObj{}
 	last.Set("completed", true)
-	if _, err := updateTask("alice", mine.ID, last, ""); err != nil {
+	if _, err := updateTask(asUser("alice"), mine.ID, last, ""); err != nil {
 		t.Fatal(err)
 	}
 	// Closed years ago: the start of Zone files it into her archive, that month's.
@@ -346,10 +346,10 @@ func TestASharedTaskStaysShared(t *testing.T) {
 	task := newTestTask(t, "bob", "Errand", false)
 	private := jsonObj{}
 	private.Set("list", ownList(t, "alice"))
-	if _, err := updateTask("alice", task.ID, private, ""); err == nil {
+	if _, err := updateTask(asUser("alice"), task.ID, private, ""); err == nil {
 		t.Fatal("alice made bob's shared task private")
 	}
-	if got := titles(taskFiles.Open("bob")); !reflect.DeepEqual(got, []string{"Errand"}) || len(taskFiles.Open("alice")) != 1 {
+	if got := titles(taskFiles.Open(asUser("bob"))); !reflect.DeepEqual(got, []string{"Errand"}) || len(taskFiles.Open(asUser("alice"))) != 1 {
 		t.Errorf("bob sees %v", got)
 	}
 	mine := newTestTask(t, "alice", "Mine", true)
@@ -357,32 +357,32 @@ func TestASharedTaskStaysShared(t *testing.T) {
 	inbox := jsonObj{}
 	inbox.Set("list", nil)
 	inbox.Set("share", true)
-	if got, err := updateTask("alice", mine.ID, inbox, ""); err != nil || got.Owner != "alice" || len(taskFiles.Open("bob")) != 1 {
+	if got, err := updateTask(asUser("alice"), mine.ID, inbox, ""); err != nil || got.Owner != "alice" || len(taskFiles.Open(asUser("bob"))) != 1 {
 		t.Fatalf("into her Inbox with share: %+v, %v", got, err)
 	}
 	shared := jsonObj{}
 	shared.Set("list", "team")
 	shared.Set("share", true)
-	got, err := updateTask("alice", mine.ID, shared, "")
+	got, err := updateTask(asUser("alice"), mine.ID, shared, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Shared, and given to who shared it.
-	if len(taskFiles.Open("bob")) != 2 || got.History[len(got.History)-2].Event != "shared" || got.Assignee != "alice" {
-		t.Errorf("bob sees %v; history %+v", titles(taskFiles.Open("bob")), got.History)
+	if len(taskFiles.Open(asUser("bob"))) != 2 || got.History[len(got.History)-2].Event != "shared" || got.Assignee != "alice" {
+		t.Errorf("bob sees %v; history %+v", titles(taskFiles.Open(asUser("bob"))), got.History)
 	}
-	if _, err := updateTask("alice", mine.ID, private, ""); err == nil {
+	if _, err := updateTask(asUser("alice"), mine.ID, private, ""); err == nil {
 		t.Error("shared, then private again")
 	}
 	// Nor into an Inbox, hers or (asked by him) bob's: a shared task is
 	// always in a list.
 	for _, who := range []string{"alice", "bob"} {
-		if _, err := updateTask(who, mine.ID, inbox, ""); err != errSharedListed {
+		if _, err := updateTask(asUser(who), mine.ID, inbox, ""); err != errSharedListed {
 			t.Errorf("%s put a shared task into an Inbox: %v", who, err)
 		}
 	}
-	if len(taskFiles.Open("bob")) != 2 || len(taskFiles.Open("")) != 2 {
-		t.Errorf("bob sees %v", titles(taskFiles.Open("bob")))
+	if len(taskFiles.Open(asUser("bob"))) != 2 || len(taskFiles.Open(asker{})) != 2 {
+		t.Errorf("bob sees %v", titles(taskFiles.Open(asUser("bob"))))
 	}
 }
 
@@ -416,10 +416,10 @@ func TestNewsCases(t *testing.T) {
 		if c.Task.Private {
 			task.Owner = "anna"
 		}
-		if got := newsFor(task, "anna").Kind; got != c.Want {
+		if got := newsFor(task, asUser("anna")).Kind; got != c.Want {
 			t.Errorf("%s: %q, want %q", c.Name, got, c.Want)
 		}
-		if got := givenTo(task, "anna"); got != (c.Want == "given") {
+		if got := givenTo(task, asUser("anna")); got != (c.Want == "given") {
 			t.Errorf("%s: given %v", c.Name, got)
 		}
 	}

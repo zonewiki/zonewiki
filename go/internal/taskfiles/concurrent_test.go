@@ -6,6 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"zonewiki/internal/asker"
 )
 
 // Readers beside writers, as a team's requests are: what the store promises
@@ -27,7 +28,7 @@ func TestReadersBesideWriters(t *testing.T) {
 		t.Helper()
 		s.Lock()
 		defer s.Unlock()
-		active, closed, err := s.ReadForWriteLocked(user)
+		active, closed, err := s.ReadForWriteLocked(asker.User(user))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -38,7 +39,7 @@ func TestReadersBesideWriters(t *testing.T) {
 				closed = append(closed, x)
 			}
 		}
-		if err := s.WriteBothLocked(user, active, closed, "seed"); err != nil {
+		if err := s.WriteBothLocked(asker.User(user), active, closed, "seed"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -75,7 +76,7 @@ func TestReadersBesideWriters(t *testing.T) {
 	write := func(user, id string, change func(x *Task, active, closed []*Task) ([]*Task, []*Task)) {
 		s.Lock()
 		defer s.Unlock()
-		active, closed, err := s.ReadTaskForWriteLocked(user, id)
+		active, closed, err := s.ReadTaskForWriteLocked(asker.User(user), id)
 		if err != nil {
 			fail("read for write: %v", err)
 			return
@@ -83,7 +84,7 @@ func TestReadersBesideWriters(t *testing.T) {
 		for _, x := range slices.Concat(active, closed) {
 			if x.ID == id {
 				active, closed = change(x, active, closed)
-				if err := s.WriteBothLocked(user, active, closed, "change"); err != nil {
+				if err := s.WriteBothLocked(asker.User(user), active, closed, "change"); err != nil {
 					fail("write: %v", err)
 				}
 				return
@@ -138,7 +139,7 @@ func TestReadersBesideWriters(t *testing.T) {
 			func() {
 				s.Lock()
 				defer s.Unlock()
-				active, closed, err := s.ReadTasksForWriteLocked("anna", set)
+				active, closed, err := s.ReadTasksForWriteLocked(asker.User("anna"), set)
 				if err != nil {
 					fail("read for a batch: %v", err)
 					return
@@ -152,7 +153,7 @@ func TestReadersBesideWriters(t *testing.T) {
 				if n != len(set) {
 					fail("a batch of %d tasks finds %d", len(set), n)
 				}
-				if err := s.WriteBothLocked("anna", active, closed, "batch"); err != nil {
+				if err := s.WriteBothLocked(asker.User("anna"), active, closed, "batch"); err != nil {
 					fail("write of a batch: %v", err)
 				}
 			}()
@@ -184,26 +185,26 @@ func TestReadersBesideWriters(t *testing.T) {
 				}
 				switch (i + r) % 6 {
 				case 0:
-					once("All", user, s.All(user))
+					once("All", user, s.All(asker.User(user)))
 				case 1:
-					open, closed := s.Snapshot(user)
+					open, closed := s.Snapshot(asker.User(user))
 					once("Snapshot", user, append(open, closed...))
 				case 2:
 					// What a reader is handed is its own: changing it changes
 					// nobody else's.
-					for _, x := range s.Open(user) {
+					for _, x := range s.Open(asker.User(user)) {
 						x.Title, x.Tags = "a reader's", append(x.Tags, "mine")
 					}
 				case 3:
-					page, total := s.ClosedPage(user, "2026", func(*Task) bool { return true }, 5, "")
-					if n := s.CountClosedInYear(user, "2026", func(*Task) bool { return true }); len(page) > total || n < 0 {
+					page, total := s.ClosedPage(asker.User(user), "2026", func(*Task) bool { return true }, 5, "")
+					if n := s.CountClosedInYear(asker.User(user), "2026", func(*Task) bool { return true }); len(page) > total || n < 0 {
 						fail("ClosedPage: %d of %d", len(page), total)
 					}
-					s.RecentClosed(user, func(x *Task) bool { return x.List == "shop" })
+					s.RecentClosed(asker.User(user), func(x *Task) bool { return x.List == "shop" })
 				case 4:
-					s.Stamp(user)
-					s.Word(user, []Place{{Owner: "", Every: true}, {Owner: user, Every: true}})
-					s.ClosedYears(user, func(*Task) bool { return true })
+					s.Stamp(asker.User(user))
+					s.Word(asker.User(user), []Place{{Owner: "", Every: true}, {Owner: user, Every: true}})
+					s.ClosedYears(asker.User(user), func(*Task) bool { return true })
 				case 5:
 					// As the search does: every file looked through, nothing copied.
 					for _, file := range s.Files(s.EveryOwner()) {
@@ -222,7 +223,7 @@ func TestReadersBesideWriters(t *testing.T) {
 	}
 	// And after all of it nothing is lost, doubled or a reader's.
 	for _, user := range []string{"anna", "bob"} {
-		all := s.All(user)
+		all := s.All(asker.User(user))
 		once("All, at the end", user, all)
 		for _, x := range all {
 			if x.Title == "a reader's" || slices.Contains(x.Tags, "mine") {

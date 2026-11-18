@@ -36,7 +36,7 @@ func fileRoutesHint(base string) string {
 // uploadFileTool: a file into the uploads, from its text or its bytes as
 // base64; the answer is the markdown that links it. As the browser's upload
 // (apiUpload), but it asks nobody: a taken name gets a number.
-func uploadFileTool(args jsonObj, base, user string) (string, error) {
+func uploadFileTool(args jsonObj, base string, user asker) (string, error) {
 	name, err := strArg(args, "filename", true)
 	if err != nil {
 		return "", err
@@ -118,7 +118,7 @@ var (
 // "/_assets/My%20Deck.pdf", with or without the wiki's address before it),
 // for user: a shared upload, one of their own private ones, or one of a
 // group they are in. ok false: no such file, as for one that isn't theirs.
-func uploadFile(target, user string) (path, name string, ok bool) {
+func uploadFile(target string, user asker) (path, name string, ok bool) {
 	if u, err := url.Parse(strings.TrimSpace(target)); err == nil {
 		target = u.Path // unescaped, without address, query and fragment
 	}
@@ -151,7 +151,7 @@ var toolImages = map[string]bool{"image/png": true, "image/jpeg": true, "image/g
 // readFileTool: an upload for the assistant: an image as an image, a text
 // file as its text; anything else (a PDF, an archive) is only named, with
 // the way to fetch it.
-func readFileTool(args jsonObj, base, user string) ([]toolContent, error) {
+func readFileTool(args jsonObj, base string, user asker) ([]toolContent, error) {
 	target, err := strArg(args, "url", true)
 	if err != nil {
 		return nil, err

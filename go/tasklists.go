@@ -75,13 +75,13 @@ func listInfo(l *taskfiles.List, ref string) ListInfo {
 
 // listRegistries: the registries user reads: the shared one and, with
 // users, their own (nil without). A visitor sees no list.
-func listRegistries(user string) (shared, own *taskfiles.Registry) {
-	if user == visitor {
+func listRegistries(user asker) (shared, own *taskfiles.Registry) {
+	if user.Name == visitor {
 		return &taskfiles.Registry{}, nil
 	}
 	shared = taskFiles.ReadLists("")
 	if privateFolder(user) != "" {
-		own = taskFiles.ReadLists(user)
+		own = taskFiles.ReadLists(user.Name)
 	}
 	return shared, own
 }
@@ -89,7 +89,7 @@ func listRegistries(user string) (shared, own *taskfiles.Registry) {
 // taskLists: the lists user sees, by how they name them (ListInfo.Ref):
 // their private lists by name, the shared ones by name too, but for one
 // whose name a private list of theirs has (shared/<name>).
-func taskLists(user string) map[string]ListInfo {
+func taskLists(user asker) map[string]ListInfo {
 	shared, own := listRegistries(user)
 	out := map[string]ListInfo{}
 	if own != nil {
@@ -142,7 +142,7 @@ func sharedList(name string, lists map[string]ListInfo) (ListInfo, bool) {
 // their own private page (and off any page, page "") what the name is to
 // them; on any other page the shared list, so a shared page shows everyone
 // the same one.
-func listOnPage(name, page, user string, lists map[string]ListInfo) (ListInfo, bool) {
+func listOnPage(name, page string, user asker, lists map[string]ListInfo) (ListInfo, bool) {
 	if page != "" && !ownPrivate(user, page) && !strings.HasPrefix(cleanList(name), sharedRef) {
 		return sharedList(name, lists)
 	}
@@ -183,9 +183,9 @@ func isInbox(ref string, lists map[string]ListInfo) bool {
 
 // inboxOwner: whose files hold the tasks of user's Inbox: their own with
 // users, the shared ones without.
-func inboxOwner(user string) string {
+func inboxOwner(user asker) string {
 	if privateFolder(user) != "" {
-		return user
+		return user.Name
 	}
 	return ""
 }
@@ -207,7 +207,7 @@ func inScope(t *Task, scope string, lists map[string]ListInfo) bool {
 // pinnedLists: the lists user pinned, in order: the pills of their list
 // switcher, and nothing else. Their own pins when they have set some, else
 // the wiki's (the shared registry's, which are everyone's without users).
-func pinnedLists(user string, lists map[string]ListInfo) []ListInfo {
+func pinnedLists(user asker, lists map[string]ListInfo) []ListInfo {
 	shared, own := listRegistries(user)
 	from, find := shared, sharedList
 	if own != nil && own.PinsSet {
@@ -263,9 +263,9 @@ const mineScope = "|mine"
 // mineAssigns: tasks can be assigned to user, so assignment counts in their
 // My tasks. Not without users, nor for one no task can be given to (a
 // viewer): there no task is anyone's.
-func mineAssigns(user string) bool {
+func mineAssigns(user asker) bool {
 	s := settings()
-	return s.Users != nil && s.assignable(user)
+	return s.Users != nil && s.assignable(user.Name)
 }
 
 // mineFilter: My tasks, the home view the Tasks links open and count: what
@@ -276,7 +276,7 @@ func mineAssigns(user string) bool {
 // users; a viewer: mineAssigns) every list is the user's own: every task
 // but those of a list left out. The browser has the same rule
 // (TasksCore.inMine; go/testdata/mine_cases.json runs through both).
-func mineFilter(user string, lists map[string]ListInfo) func(*Task) bool {
+func mineFilter(user asker, lists map[string]ListInfo) func(*Task) bool {
 	assigns := mineAssigns(user)
 	return func(t *Task) bool {
 		ref := taskList(t, lists)
@@ -286,16 +286,16 @@ func mineFilter(user string, lists map[string]ListInfo) func(*Task) bool {
 
 // inMine: mineFilter's rule for one task: out, its list is left out of My
 // tasks; assigns, assignment counts for user (mineAssigns).
-func inMine(t *Task, out bool, user string, assigns bool) bool {
+func inMine(t *Task, out bool, user asker, assigns bool) bool {
 	if assigns && t.Owner == "" {
-		return t.Assignee == user
+		return t.Assignee == user.Name
 	}
 	return !out
 }
 
 // scopeFilter: the tasks a view of scope shows user: My tasks (mineScope),
 // or what inScope says of a list's ref, "none" or "".
-func scopeFilter(user, scope string, lists map[string]ListInfo) func(*Task) bool {
+func scopeFilter(user asker, scope string, lists map[string]ListInfo) func(*Task) bool {
 	if scope == mineScope {
 		return mineFilter(user, lists)
 	}
@@ -308,9 +308,9 @@ var mineSettingKeys = []string{"view", "group", "limit", "labels", "mail"}
 
 // mineOwner: whose registry holds user's settings of My tasks: their own,
 // without users the wiki's.
-func mineOwner(user string) string {
+func mineOwner(user asker) string {
 	if privateFolder(user) != "" {
-		return user
+		return user.Name
 	}
 	return ""
 }
@@ -318,7 +318,7 @@ func mineOwner(user string) string {
 // mineParams: the params of My tasks (/tasks?mine=1) for user: its own
 // settings ("mine" in mineOwner's registry: the tab, Plan, the limit, the
 // tabs' names), of the scope mine=1. None when they can't be read.
-func mineParams(user string) TasksParams {
+func mineParams(user asker) TasksParams {
 	set, err := checkEmbedSettings(taskFiles.ReadLists(mineOwner(user)).Mine, mineSettingKeys)
 	if err != nil {
 		logf("%s: %v", taskFiles.ListsPath(mineOwner(user)), err)
@@ -332,7 +332,7 @@ func mineParams(user string) TasksParams {
 
 // setMineParams writes user's settings of My tasks with those of set
 // changed, in a commit by user; was: the params as the dialog saw them.
-func setMineParams(user, was string, set map[string]string) error {
+func setMineParams(user asker, was string, set map[string]string) error {
 	if listsUnmigrated {
 		return errListsUnmigrated
 	}
@@ -369,7 +369,7 @@ func setMineParams(user, was string, set map[string]string) error {
 // wiki's): a list's order (Task.SortOrder) is the list's, for everyone who
 // looks at it, and what one ranks in My tasks, across lists, moves nothing
 // there. Until they rank something it is the lists' order of their tasks.
-func mineOrder(user string) []string {
+func mineOrder(user asker) []string {
 	if reg := taskFiles.ReadLists(mineOwner(user)); reg.OrderSet {
 		return append([]string{}, reg.Order...)
 	}
@@ -391,7 +391,7 @@ func mineOrder(user string) []string {
 // setMineOrder keeps ids as the manual order of user's My tasks: those of
 // open tasks they see, each once (so what is closed or gone drops out), in
 // a commit by user.
-func setMineOrder(user string, ids []string) error {
+func setMineOrder(user asker, ids []string) error {
 	if listsUnmigrated {
 		return errListsUnmigrated
 	}
@@ -459,7 +459,7 @@ func checkListName(name string) (string, error) {
 }
 
 // listForWrite: the list ref names for user, which they may change.
-func listForWrite(user, ref string, lists map[string]ListInfo) (ListInfo, error) {
+func listForWrite(user asker, ref string, lists map[string]ListInfo) (ListInfo, error) {
 	if listsUnmigrated {
 		return ListInfo{}, errListsUnmigrated
 	}
@@ -476,7 +476,7 @@ func listForWrite(user, ref string, lists map[string]ListInfo) (ListInfo, error)
 // listForManage: the list ref names for user, which they may rename,
 // delete and set (canManageList): its owners and the admins, for a shared
 // list with users.
-func listForManage(user, ref string, lists map[string]ListInfo) (ListInfo, error) {
+func listForManage(user asker, ref string, lists map[string]ListInfo) (ListInfo, error) {
 	l, err := listForWrite(user, ref, lists)
 	if err != nil {
 		return l, err
@@ -508,20 +508,20 @@ func nonEmpty(paths []string) []string {
 }
 
 // commitLists commits what a list operation wrote, by user.
-func commitLists(user, message string, paths []string) error {
+func commitLists(user asker, message string, paths []string) error {
 	paths = nonEmpty(paths)
 	if len(paths) == 0 {
 		return nil
 	}
 	// The files are written: no reader waits for the commit.
 	taskFiles.Release()
-	return notCommitted(gitCommit(user, message, paths...))
+	return notCommitted(gitCommit(user.Name, message, paths...))
 }
 
 // seedPins: a user's own registry that says nothing of pins yet gets the
 // wiki's, which they have seen as theirs until now: their first pin (or
 // unpin, or new order) starts from those.
-func seedPins(user, owner string, reg *taskfiles.Registry, lists map[string]ListInfo) {
+func seedPins(user asker, owner string, reg *taskfiles.Registry, lists map[string]ListInfo) {
 	if owner != "" && !reg.PinsSet {
 		for _, p := range pinnedLists(user, lists) {
 			reg.Pinned = append(reg.Pinned, p.Ref)
@@ -532,9 +532,9 @@ func seedPins(user, owner string, reg *taskfiles.Registry, lists map[string]List
 
 // pinOwner: whose registry holds user's pins: their own with users, else
 // the shared one.
-func pinOwner(user string) string {
+func pinOwner(user asker) string {
 	if privateFolder(user) != "" {
-		return user
+		return user.Name
 	}
 	return ""
 }
@@ -544,7 +544,7 @@ func pinOwner(user string) string {
 // in particular), groups first, each once; or why that can't be. Whoever
 // sets it is one of them: a list they wouldn't see is one they couldn't
 // widen again.
-func cleanFor(user, text string) ([]string, error) {
+func cleanFor(user asker, text string) ([]string, error) {
 	s := settings()
 	var groups, names []string
 	for _, w := range strings.FieldsFunc(strings.ToLower(text), func(r rune) bool { return r == ',' || unicode.IsSpace(r) }) {
@@ -583,7 +583,7 @@ func forWords(who []string) string { return strings.Join(who, ", ") }
 // the new list is pinned for user, last (it would else be out of sight
 // under More), in the same commit. who: whom a shared list is for (cleanFor;
 // "": everyone).
-func createListOp(user, name string, private, pin bool, who, suffix string) (string, error) {
+func createListOp(user asker, name string, private, pin bool, who, suffix string) (string, error) {
 	if listsUnmigrated {
 		return "", errListsUnmigrated
 	}
@@ -606,7 +606,7 @@ func createListOp(user, name string, private, pin bool, who, suffix string) (str
 		if len(listFor) > 0 {
 			return "", refuse("A private list is yours alone: a list for some is a shared one")
 		}
-		owner = user
+		owner = user.Name
 	}
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
@@ -624,7 +624,7 @@ func createListOp(user, name string, private, pin bool, who, suffix string) (str
 	made := &taskfiles.List{Name: list, Settings: map[string]string{}, Owner: owner}
 	// A shared list belongs to who made it (with users).
 	if owner == "" && privateFolder(user) != "" {
-		made.SetOwners([]string{user})
+		made.SetOwners([]string{user.Name})
 	}
 	made.SetFor(listFor)
 	reg.Lists = append(reg.Lists, made)
@@ -757,7 +757,7 @@ type listRename struct {
 // check (a door's own, optional) is asked before anything is written, with
 // the pages the rename will change as far as user sees them: its refusal
 // stops the rename (an assistant's guides, checkGuides).
-func renameListOp(user, ref, newName, suffix string, check ...func(pages []string) error) (*listRename, error) {
+func renameListOp(user asker, ref, newName, suffix string, check ...func(pages []string) error) (*listRename, error) {
 	lists := taskLists(user)
 	l, err := listForManage(user, ref, lists)
 	if err != nil {
@@ -912,7 +912,7 @@ func renameListOp(user, ref, newName, suffix string, check ...func(pages []strin
 		written = append(written, path...)
 	}
 	if len(written) > 0 {
-		failed = errors.Join(failed, notCommitted(gitCommit(user, "Rename list #"+l.Name+" to #"+name+suffix, written...)))
+		failed = errors.Join(failed, notCommitted(gitCommit(user.Name, "Rename list #"+l.Name+" to #"+name+suffix, written...)))
 	}
 	if ul := taskLists(user); failed == nil {
 		for r, x := range ul {
@@ -929,7 +929,7 @@ func renameListOp(user, ref, newName, suffix string, check ...func(pages []strin
 // Inbox: they stay private); a task that leaves a private list for a shared
 // one is shared, and its history says so and gives it to user (sharedBy).
 // Returns how many moved.
-func moveListTasks(user string, tasks []*Task, from ListInfo, to *ListInfo) int {
+func moveListTasks(user asker, tasks []*Task, from ListInfo, to *ListInfo) int {
 	n := 0
 	for _, t := range tasks {
 		if t.List != from.Name || t.Owner != from.Owner {
@@ -942,7 +942,7 @@ func moveListTasks(user string, tasks []*Task, from ListInfo, to *ListInfo) int 
 		}
 		if t.Owner != owner {
 			t.Owner = owner
-			sharedBy(t, user, true)
+			sharedBy(t, user.Name, true)
 		}
 	}
 	return n
@@ -958,7 +958,7 @@ func moveListTasks(user string, tasks []*Task, from ListInfo, to *ListInfo) int 
 // task too), so a list that is over leaves no open tasks behind; they can
 // be reopened from Closed. Pins of it go; embeds that name it stay, and say
 // that there is no such list.
-func deleteListOp(user, ref, to string, share, wontDo bool, suffix string) (int, error) {
+func deleteListOp(user asker, ref, to string, share, wontDo bool, suffix string) (int, error) {
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
 	lists := taskLists(user)
@@ -1014,7 +1014,7 @@ func deleteListOp(user, ref, to string, share, wontDo bool, suffix string) (int,
 		closing, closingIDs := selectTasks(active, func(t *Task) bool { return t.List == l.Name && t.Owner == l.Owner && t.IsOpen() })
 		for _, t := range closing {
 			t.ClosedAt, t.WontDo = stamp, true
-			logEvent(t, user, "wontdo", "", "")
+			logEvent(t, user.Name, "wontdo", "", "")
 		}
 		active = withoutIDs(active, closingIDs)
 		closed = append(closed, closing...)
@@ -1043,7 +1043,7 @@ func deleteListOp(user, ref, to string, share, wontDo bool, suffix string) (int,
 
 // shareListOp makes user's private list ref a shared one, its tasks with
 // it: everyone who uses the wiki then sees them. Never the other way.
-func shareListOp(user, ref, suffix string) (string, error) {
+func shareListOp(user asker, ref, suffix string) (string, error) {
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
 	lists := taskLists(user)
@@ -1054,7 +1054,7 @@ func shareListOp(user, ref, suffix string) (string, error) {
 	if !l.Private() {
 		return "", refuseAs(refusedUnchanged, "#"+l.Name+" is shared already")
 	}
-	own, err := taskFiles.ReadListsStrict(user)
+	own, err := taskFiles.ReadListsStrict(user.Name)
 	if err != nil {
 		return "", err
 	}
@@ -1075,12 +1075,12 @@ func shareListOp(user, ref, suffix string) (string, error) {
 	}
 	own.Lists = slices.DeleteFunc(own.Lists, func(x *taskfiles.List) bool { return x.Name == l.Name })
 	entry.Owner = ""
-	entry.SetOwners([]string{user}) // shared now, and theirs to manage
+	entry.SetOwners([]string{user.Name}) // shared now, and theirs to manage
 	shared.Lists = append(shared.Lists, entry)
 	dest := ListInfo{Name: l.Name}
 	moveListTasks(user, slices.Concat(active, closed), l, &dest)
 	var paths []string
-	for o, reg := range map[string]*taskfiles.Registry{"": shared, user: own} {
+	for o, reg := range map[string]*taskfiles.Registry{"": shared, user.Name: own} {
 		path, err := taskFiles.WriteListsLocked(user, o, reg)
 		if err != nil {
 			return "", err
@@ -1097,7 +1097,7 @@ func shareListOp(user, ref, suffix string) (string, error) {
 // none starts from the wiki's. everyone (with users): the wiki's pins
 // instead, what a user who has set none has, for who manages the list
 // (canManageList): Pin for everyone.
-func pinListOp(user, ref, pin string, everyone bool) error {
+func pinListOp(user asker, ref, pin string, everyone bool) error {
 	if listsUnmigrated {
 		return errListsUnmigrated
 	}
@@ -1164,7 +1164,7 @@ func pinListOp(user, ref, pin string, everyone bool) error {
 // row's pills, dragged): the pinned lists among refs first, as named, then
 // the pinned ones it leaves out, as they were. Nothing is pinned or unpinned by it; an order that is the one
 // they have writes nothing.
-func pinOrderOp(user string, refs []string) error {
+func pinOrderOp(user asker, refs []string) error {
 	if listsUnmigrated {
 		return errListsUnmigrated
 	}
@@ -1210,7 +1210,7 @@ func pinOrderOp(user string, refs []string) error {
 // to someone who is none of them keeps the name and counts as no one's
 // (assigneeGone; to them it is gone, as the list is): when there are such open tasks the change asks first (askError,
 // which says how many and whose), and goes through once confirmed.
-func setListForOp(user, ref, who string, confirmed bool) error {
+func setListForOp(user asker, ref, who string, confirmed bool) error {
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
 	l, err := listForManage(user, ref, taskLists(user))
@@ -1234,7 +1234,7 @@ func setListForOp(user, ref, who string, confirmed bool) error {
 		}
 		n, names := 0, []string{}
 		for _, t := range open {
-			if t.Owner == "" && t.List == l.Name && t.Assignee != "" && !listMember(t.Assignee, listFor) {
+			if t.Owner == "" && t.List == l.Name && t.Assignee != "" && !listMember(asUser(t.Assignee), listFor) {
 				if n++; !slices.Contains(names, t.Assignee) {
 					names = append(names, t.Assignee)
 				}
@@ -1278,7 +1278,7 @@ func (e *askError) Error() string { return e.msg }
 
 // setListSettingsOp changes the settings of the list user names ref: set
 // maps a setting (listSettingKeys) to its value, "" taking it out.
-func setListSettingsOp(user, ref string, set map[string]string) error {
+func setListSettingsOp(user asker, ref string, set map[string]string) error {
 	set, err := checkEmbedSettings(set, listSettingKeys)
 	if err != nil {
 		return err

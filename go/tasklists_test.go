@@ -29,7 +29,7 @@ func oldTask(id, title string, tags ...string) *Task {
 // openByID: the open tasks user sees, by id.
 func openByID(user string) map[string]*Task {
 	out := map[string]*Task{}
-	for _, t := range taskFiles.Open(user) {
+	for _, t := range taskFiles.Open(asUser(user)) {
 		out[t.ID] = t
 	}
 	return out
@@ -46,7 +46,7 @@ func refsOf(lists []ListInfo) []string {
 // mustList makes a list, unpinned (as an assistant's create_task_list does).
 func mustList(t *testing.T, user, name string, private bool) string {
 	t.Helper()
-	ref, err := createListOp(user, name, private, false, "", "")
+	ref, err := createListOp(asUser(user), name, private, false, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestListsTakenOverFromPages(t *testing.T) {
 	if listsUnmigrated {
 		t.Fatal("the migration failed")
 	}
-	lists := taskLists("")
+	lists := taskLists(asker{})
 	if got := sortedKeys(lists); !slices.Equal(got, []string{"chores", "groceries", "plans"}) {
 		t.Fatalf("lists %v", got)
 	}
@@ -105,7 +105,7 @@ func TestListsTakenOverFromPages(t *testing.T) {
 		}
 	}
 	// The pins: the default one first, then by name; code and a view that is no list aside.
-	if got := refsOf(pinnedLists("", lists)); !slices.Equal(got, []string{"chores", "groceries"}) {
+	if got := refsOf(pinnedLists(asker{}, lists)); !slices.Equal(got, []string{"chores", "groceries"}) {
 		t.Errorf("pinned %v", got)
 	}
 	for _, slug := range []string{"shop", "home", "me"} {
@@ -151,7 +151,7 @@ func TestListsTakenOverFromPages(t *testing.T) {
 	if after := fileText(t, taskFiles.OpenPath("")) + fileText(t, taskFiles.ListsPath("")); after != before {
 		t.Errorf("a second run changed the files:\n%s", after)
 	}
-	if _, ok := taskLists("")["typed-later"]; ok {
+	if _, ok := taskLists(asker{})["typed-later"]; ok {
 		t.Error("an embed typed after the migration made a list")
 	}
 }
@@ -180,7 +180,7 @@ func TestListsTakenOverPerUser(t *testing.T) {
 	if listsUnmigrated {
 		t.Fatal("the migration failed")
 	}
-	alice, bob := taskLists("alice"), taskLists("bob")
+	alice, bob := taskLists(asUser("alice")), taskLists(asUser("bob"))
 	if got := sortedKeys(alice); !slices.Equal(got, []string{"diary", "general", "gifts", "secret", "shared/gifts"}) {
 		t.Errorf("alice's lists %v", got)
 	}
@@ -216,13 +216,13 @@ func TestListsTakenOverPerUser(t *testing.T) {
 	// Alice's own pins first, then the wiki's. Bob had none and has the
 	// wiki's, #general with them. The lists "private" and their pins are gone; #general is
 	// pinned for the wiki.
-	if got := refsOf(pinnedLists("alice", alice)); !slices.Equal(got, []string{"secret", "shared/gifts"}) {
+	if got := refsOf(pinnedLists(asUser("alice"), alice)); !slices.Equal(got, []string{"secret", "shared/gifts"}) {
 		t.Errorf("alice's pins %v", got)
 	}
-	if got := refsOf(pinnedLists("bob", bob)); !slices.Equal(got, []string{"gifts", "general"}) {
+	if got := refsOf(pinnedLists(asUser("bob"), bob)); !slices.Equal(got, []string{"gifts", "general"}) {
 		t.Errorf("bob's pins %v", got)
 	}
-	if got := refsOf(pinnedLists("", taskLists(""))); !slices.Equal(got, []string{"gifts", "general"}) {
+	if got := refsOf(pinnedLists(asker{}, taskLists(asker{}))); !slices.Equal(got, []string{"gifts", "general"}) {
 		t.Errorf("the wiki's pins %v", got)
 	}
 	// Her private list she hadn't pinned stays out of her My tasks; a shared
@@ -230,7 +230,7 @@ func TestListsTakenOverPerUser(t *testing.T) {
 	if !alice["gifts"].LeftOut() || alice["secret"].LeftOut() || alice["diary"].LeftOut() || alice["shared/gifts"].LeftOut() {
 		t.Errorf("left out: %+v", alice)
 	}
-	mine := mineFilter("alice", alice)
+	mine := mineFilter(asUser("alice"), alice)
 	if !mine(a["a2"]) || !mine(a["a3"]) || mine(a["a1"]) || mine(a["s1"]) || mine(a["s2"]) {
 		t.Error("alice's My tasks after the migration")
 	}
@@ -252,13 +252,13 @@ func TestListsTakenOverPerUser(t *testing.T) {
 		t.Error("inScope")
 	}
 	// On a shared page a name is the shared list, on her own page hers.
-	if l, ok := listOnPage("gifts", "tasks/gifts", "alice", alice); !ok || l.Ref != "shared/gifts" {
+	if l, ok := listOnPage("gifts", "tasks/gifts", asUser("alice"), alice); !ok || l.Ref != "shared/gifts" {
 		t.Errorf("gifts on a shared page: %+v", l)
 	}
-	if l, ok := listOnPage("gifts", "private/alice/gifts", "alice", alice); !ok || l.Ref != "gifts" {
+	if l, ok := listOnPage("gifts", "private/alice/gifts", asUser("alice"), alice); !ok || l.Ref != "gifts" {
 		t.Errorf("gifts on her page: %+v", l)
 	}
-	if _, ok := listOnPage("secret", "tasks/gifts", "alice", alice); ok {
+	if _, ok := listOnPage("secret", "tasks/gifts", asUser("alice"), alice); ok {
 		t.Error("her private list on a shared page")
 	}
 }
@@ -300,10 +300,10 @@ func TestListsNotTakenOverFromABrokenWiki(t *testing.T) {
 	if text, _ := readText(safePath("shop")); !strings.Contains(text, "pin=1") {
 		t.Error("the page lost its pin")
 	}
-	if _, err := createListOp("", "x", false, false, "", ""); err == nil {
+	if _, err := createListOp(asker{}, "x", false, false, "", ""); err == nil {
 		t.Error("a list made in a wiki not taken over")
 	}
-	if err := pinListOp("", "shop", "1", false); err == nil {
+	if err := pinListOp(asker{}, "shop", "1", false); err == nil {
 		t.Error("a pin set in a wiki not taken over")
 	}
 }
@@ -316,14 +316,14 @@ func TestCreateList(t *testing.T) {
 	if ref := mustList(t, "alice", " #Shop List ", false); ref != "shop-list" {
 		t.Errorf("made %q", ref)
 	}
-	if ref := mustList(t, "alice", "gifts", true); ref != "gifts" || !taskLists("alice")["gifts"].Private() {
+	if ref := mustList(t, "alice", "gifts", true); ref != "gifts" || !taskLists(asUser("alice"))["gifts"].Private() {
 		t.Errorf("private list %q", ref)
 	}
-	if _, ok := taskLists("bob")["gifts"]; ok {
+	if _, ok := taskLists(asUser("bob"))["gifts"]; ok {
 		t.Error("bob sees alice's list")
 	}
 	for _, bad := range []string{"", "  ", "a,b", "a|b", "a=b", "a[b", `a"b`, "a/b", "none", " #None ", "inbox", " #Inbox "} {
-		if _, err := createListOp("alice", bad, false, false, "", ""); !refusedWith(err, refusedInvalid) {
+		if _, err := createListOp(asUser("alice"), bad, false, false, "", ""); !refusedWith(err, refusedInvalid) {
 			t.Errorf("%q: %v", bad, err)
 		}
 	}
@@ -332,16 +332,16 @@ func TestCreateList(t *testing.T) {
 		name    string
 		private bool
 	}{{"Shop-List", false}, {"shop-list", true}, {"gifts", false}, {"gifts", true}} {
-		if _, err := createListOp("alice", c.name, c.private, false, "", ""); !refusedWith(err, refusedExists) {
+		if _, err := createListOp(asUser("alice"), c.name, c.private, false, "", ""); !refusedWith(err, refusedExists) {
 			t.Errorf("%+v: %v", c, err)
 		}
 	}
 	// Bob doesn't see her gifts: his shared one is made, and she has two.
 	mustList(t, "bob", "gifts", false)
-	if got := sortedKeys(taskLists("alice")); !slices.Equal(got, []string{"gifts", "shared/gifts", "shop-list"}) {
+	if got := sortedKeys(taskLists(asUser("alice"))); !slices.Equal(got, []string{"gifts", "shared/gifts", "shop-list"}) {
 		t.Errorf("alice's lists %v", got)
 	}
-	if _, err := createListOp("vera", "x", false, false, "", ""); !refusedWith(err, refusedReadOnly) {
+	if _, err := createListOp(asUser("vera"), "x", false, false, "", ""); !refusedWith(err, refusedReadOnly) {
 		t.Errorf("a viewer made a list: %v", err)
 	}
 }
@@ -368,7 +368,7 @@ func TestTaskInAList(t *testing.T) {
 		for i := 0; i+1 < len(kv); i += 2 {
 			data.Set(kv[i].(string), kv[i+1])
 		}
-		_, err := updateTask("alice", id, data, "")
+		_, err := updateTask(asUser("alice"), id, data, "")
 		return err
 	}
 	if err := set(milk.ID, "list", "nope"); err == nil {
@@ -423,7 +423,7 @@ func TestTaskInAList(t *testing.T) {
 	data := jsonObj{}
 	data.Set("title", "Sneaky")
 	data.Set("list", "gifts")
-	if _, err := createTask("bob", data, "c"); err == nil {
+	if _, err := createTask(asUser("bob"), data, "c"); err == nil {
 		t.Error("bob made a task in alice's list")
 	}
 }
@@ -445,22 +445,22 @@ func TestRenameList(t *testing.T) {
 	cake := newTestTask(t, "alice", "Cake", false, "list", "gifts")
 	bobs := newTestTask(t, "bob", "Bob's", false, "list", "gifts")
 	for _, u := range []string{"alice", "bob"} {
-		if err := pinListOp(u, "shop", "first", false); err != nil {
+		if err := pinListOp(asUser(u), "shop", "first", false); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := pinListOp("alice", "gifts", "1", false); err != nil {
+	if err := pinListOp(asUser("alice"), "gifts", "1", false); err != nil {
 		t.Fatal(err)
 	}
 	pagesMu.Lock()
 	defer pagesMu.Unlock()
-	if _, err := renameListOp("alice", "shop", "gifts", ""); !refusedWith(err, refusedExists) {
+	if _, err := renameListOp(asUser("alice"), "shop", "gifts", ""); !refusedWith(err, refusedExists) {
 		t.Errorf("renamed onto a list she sees: %v", err)
 	}
-	if _, err := renameListOp("bob", "nope", "x", ""); !refusedWith(err, refusedNotFound) {
+	if _, err := renameListOp(asUser("bob"), "nope", "x", ""); !refusedWith(err, refusedNotFound) {
 		t.Errorf("a list that isn't there: %v", err)
 	}
-	done, err := renameListOp("alice", "shop", "Market", "")
+	done, err := renameListOp(asUser("alice"), "shop", "Market", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -482,12 +482,12 @@ func TestRenameList(t *testing.T) {
 		t.Errorf("her page: %s", text)
 	}
 	for _, u := range []string{"alice", "bob"} {
-		if pins := refsOf(pinnedLists(u, taskLists(u))); len(pins) == 0 || pins[0] != "market" {
+		if pins := refsOf(pinnedLists(asUser(u), taskLists(asUser(u)))); len(pins) == 0 || pins[0] != "market" {
 			t.Errorf("%s's pins %v", u, pins)
 		}
 	}
 	// Her private list: only hers, her pages, her pin.
-	if _, err := renameListOp("alice", "gifts", "presents", ""); err != nil {
+	if _, err := renameListOp(asUser("alice"), "gifts", "presents", ""); err != nil {
 		t.Fatal(err)
 	}
 	if openByID("alice")[cake.ID].List != "presents" || openByID("bob")[bobs.ID].List != "gifts" {
@@ -499,7 +499,7 @@ func TestRenameList(t *testing.T) {
 	if text, _ := readText(safePath("private/bob/gifts")); !strings.Contains(text, "list=gifts") {
 		t.Errorf("bob's page: %s", text)
 	}
-	if got := refsOf(pinnedLists("alice", taskLists("alice"))); !slices.Equal(got, []string{"market", "presents"}) {
+	if got := refsOf(pinnedLists(asUser("alice"), taskLists(asUser("alice")))); !slices.Equal(got, []string{"market", "presents"}) {
 		t.Errorf("her pins %v", got)
 	}
 }
@@ -518,36 +518,36 @@ func TestDeleteList(t *testing.T) {
 	}
 	milk := newTestTask(t, "alice", "Milk", false, "list", "shop")
 	cake := newTestTask(t, "alice", "Cake", false, "list", "gifts")
-	if err := pinListOp("bob", "shop", "1", false); err != nil {
+	if err := pinListOp(asUser("bob"), "shop", "1", false); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := deleteListOp("alice", "shop", "gifts", false, false, ""); err == nil {
+	if _, err := deleteListOp(asUser("alice"), "shop", "gifts", false, false, ""); err == nil {
 		t.Error("shared tasks moved into a private list")
 	}
-	if _, err := deleteListOp("alice", "shop", "shop", false, false, ""); err == nil {
+	if _, err := deleteListOp(asUser("alice"), "shop", "shop", false, false, ""); err == nil {
 		t.Error("moved into itself")
 	}
-	if _, err := deleteListOp("bob", "gifts", "", true, false, ""); !refusedWith(err, refusedNotFound) {
+	if _, err := deleteListOp(asUser("bob"), "gifts", "", true, false, ""); !refusedWith(err, refusedNotFound) {
 		t.Errorf("bob deleted alice's list: %v", err)
 	}
-	if n, err := deleteListOp("alice", "shop", "market", false, false, ""); err != nil || n != 1 {
+	if n, err := deleteListOp(asUser("alice"), "shop", "market", false, false, ""); err != nil || n != 1 {
 		t.Fatalf("delete: %d, %v", n, err)
 	}
-	if _, ok := taskLists("alice")["shop"]; ok || openByID("bob")[milk.ID].List != "market" {
+	if _, ok := taskLists(asUser("alice"))["shop"]; ok || openByID("bob")[milk.ID].List != "market" {
 		t.Error("shop is still there, or its task didn't move")
 	}
-	if got := pinnedLists("bob", taskLists("bob")); len(got) != 0 {
+	if got := pinnedLists(asUser("bob"), taskLists(asUser("bob"))); len(got) != 0 {
 		t.Errorf("bob still pins it: %v", refsOf(got))
 	}
 	// Her private list: to another of hers, no question.
-	if _, err := deleteListOp("alice", "gifts", "wishes", false, false, ""); err != nil {
+	if _, err := deleteListOp(asUser("alice"), "gifts", "wishes", false, false, ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := openByID("alice")[cake.ID]; got.List != "wishes" || got.Owner != "alice" {
 		t.Errorf("cake %+v", got)
 	}
 	// To no list: her Inbox. Its tasks stay hers alone, share or not.
-	if _, err := deleteListOp("alice", "wishes", "", false, false, ""); err != nil {
+	if _, err := deleteListOp(asUser("alice"), "wishes", "", false, false, ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := openByID("alice")[cake.ID]; got == nil || got.List != "" || got.Owner != "alice" || openByID("bob")[cake.ID] != nil {
@@ -556,27 +556,27 @@ func TestDeleteList(t *testing.T) {
 	if !strings.Contains(fileText(t, taskFiles.OpenPath("alice")), "Cake") || strings.Contains(fileText(t, taskFiles.OpenPath("")), "Cake") {
 		t.Error("cake left her file")
 	}
-	if _, ok := taskLists("alice")["wishes"]; ok {
+	if _, ok := taskLists(asUser("alice"))["wishes"]; ok {
 		t.Error("wishes is still there")
 	}
 	// A private list's tasks into a shared one: only when the delete says share.
 	mustList(t, "alice", "plans", true)
 	plan := newTestTask(t, "alice", "Plan", false, "list", "plans")
-	if _, err := deleteListOp("alice", "plans", "market", false, false, ""); err == nil {
+	if _, err := deleteListOp(asUser("alice"), "plans", "market", false, false, ""); err == nil {
 		t.Fatal("private tasks shared without saying so")
 	}
-	if _, err := deleteListOp("alice", "plans", "market", true, false, ""); err != nil {
+	if _, err := deleteListOp(asUser("alice"), "plans", "market", true, false, ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := openByID("bob")[plan.ID]; got == nil || got.List != "market" || got.Owner != "" || got.History[len(got.History)-2].Event != "shared" || got.Assignee != "alice" {
 		t.Errorf("plan after the delete: %+v", got)
 	}
 	// A shared list with no list named: its tasks go to #general, made for them.
-	if n, err := deleteListOp("bob", "market", "", false, false, ""); err != nil || n != 2 {
+	if n, err := deleteListOp(asUser("bob"), "market", "", false, false, ""); err != nil || n != 2 {
 		t.Fatalf("delete market: %d, %v", n, err)
 	}
-	if l, ok := taskLists("alice")[generalListName]; !ok || l.Private() {
-		t.Errorf("#general: %+v", taskLists("alice"))
+	if l, ok := taskLists(asUser("alice"))[generalListName]; !ok || l.Private() {
+		t.Errorf("#general: %+v", taskLists(asUser("alice")))
 	}
 	for _, id := range []string{milk.ID, plan.ID} {
 		if got := openByID("alice")[id]; got == nil || got.List != generalListName || got.Owner != "" {
@@ -584,11 +584,11 @@ func TestDeleteList(t *testing.T) {
 		}
 	}
 	// #general itself, while it has tasks, needs a list named; another takes them.
-	if _, err := deleteListOp("alice", generalListName, "", false, false, ""); !refusedWith(err, refusedInvalid) {
+	if _, err := deleteListOp(asUser("alice"), generalListName, "", false, false, ""); !refusedWith(err, refusedInvalid) {
 		t.Errorf("#general deleted into itself: %v", err)
 	}
 	mustList(t, "alice", "team", false)
-	if _, err := deleteListOp("alice", generalListName, "team", false, false, ""); err != nil {
+	if _, err := deleteListOp(asUser("alice"), generalListName, "team", false, false, ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := openByID("bob")[milk.ID]; got.List != "team" {
@@ -596,7 +596,7 @@ func TestDeleteList(t *testing.T) {
 	}
 	// An empty #general goes without a list named.
 	mustList(t, "alice", generalListName, false)
-	if _, err := deleteListOp("alice", generalListName, "", false, false, ""); err != nil {
+	if _, err := deleteListOp(asUser("alice"), generalListName, "", false, false, ""); err != nil {
 		t.Errorf("an empty #general: %v", err)
 	}
 }
@@ -606,11 +606,11 @@ func TestDeleteListWithoutUsers(t *testing.T) {
 	testWiki(t, nil)
 	mustList(t, "", "shop", false)
 	milk := newTestTask(t, "", "Milk", false, "list", "shop")
-	if n, err := deleteListOp("", "shop", "", false, false, ""); err != nil || n != 1 {
+	if n, err := deleteListOp(asker{}, "shop", "", false, false, ""); err != nil || n != 1 {
 		t.Fatalf("delete: %d, %v", n, err)
 	}
-	if got := openByID("")[milk.ID]; got == nil || got.List != "" || got.Owner != "" || len(taskLists("")) != 0 {
-		t.Errorf("milk %+v, lists %v", got, sortedKeys(taskLists("")))
+	if got := openByID("")[milk.ID]; got == nil || got.List != "" || got.Owner != "" || len(taskLists(asker{})) != 0 {
+		t.Errorf("milk %+v, lists %v", got, sortedKeys(taskLists(asker{})))
 	}
 }
 
@@ -621,16 +621,16 @@ func TestShareList(t *testing.T) {
 	mustList(t, "alice", "gifts", true)
 	mustList(t, "alice", "shop", false)
 	cake := newTestTask(t, "alice", "Cake", false, "list", "gifts")
-	if _, err := shareListOp("alice", "shop", ""); !refusedWith(err, refusedUnchanged) {
+	if _, err := shareListOp(asUser("alice"), "shop", ""); !refusedWith(err, refusedUnchanged) {
 		t.Errorf("a shared list shared: %v", err)
 	}
-	if _, err := shareListOp("bob", "gifts", ""); !refusedWith(err, refusedNotFound) {
+	if _, err := shareListOp(asUser("bob"), "gifts", ""); !refusedWith(err, refusedNotFound) {
 		t.Errorf("bob shared alice's list: %v", err)
 	}
-	if _, err := shareListOp("alice", "gifts", ""); err != nil {
+	if _, err := shareListOp(asUser("alice"), "gifts", ""); err != nil {
 		t.Fatal(err)
 	}
-	if l, ok := taskLists("bob")["gifts"]; !ok || l.Private() {
+	if l, ok := taskLists(asUser("bob"))["gifts"]; !ok || l.Private() {
 		t.Errorf("bob's view of it: %+v", l)
 	}
 	if got := openByID("bob")[cake.ID]; got == nil || got.List != "gifts" || got.Owner != "" {
@@ -639,7 +639,7 @@ func TestShareList(t *testing.T) {
 	// A name a shared list has already: hers stays hers.
 	mustList(t, "alice", "wishes", true)
 	mustList(t, "bob", "wishes", false)
-	if _, err := shareListOp("alice", "wishes", ""); !refusedWith(err, refusedExists) {
+	if _, err := shareListOp(asUser("alice"), "wishes", ""); !refusedWith(err, refusedExists) {
 		t.Errorf("shared onto a shared list's name: %v", err)
 	}
 }
@@ -650,42 +650,42 @@ func TestPins(t *testing.T) {
 	testWiki(t, nil)
 	mustList(t, "", "shop", false)
 	mustList(t, "", "work", false)
-	if err := pinListOp("", "shop", "1", false); err != nil {
+	if err := pinListOp(asker{}, "shop", "1", false); err != nil {
 		t.Fatal(err)
 	}
-	if err := pinListOp("", "work", "1", false); err != nil {
+	if err := pinListOp(asker{}, "work", "1", false); err != nil {
 		t.Fatal(err)
 	}
 	withUsers(t, "alice", "bob")
 	mustList(t, "alice", "gifts", true)
-	pins := func(u string) []string { return refsOf(pinnedLists(u, taskLists(u))) }
+	pins := func(u string) []string { return refsOf(pinnedLists(asUser(u), taskLists(asUser(u)))) }
 	if got := pins("bob"); !slices.Equal(got, []string{"shop", "work"}) {
 		t.Errorf("bob has the wiki's pins: %v", got)
 	}
-	if err := pinListOp("alice", "gifts", "first", false); err != nil {
+	if err := pinListOp(asUser("alice"), "gifts", "first", false); err != nil {
 		t.Fatal(err)
 	}
 	if got := pins("alice"); !slices.Equal(got, []string{"gifts", "shop", "work"}) {
 		t.Errorf("alice's pins %v", got)
 	}
-	if err := pinListOp("alice", "shop", "0", false); err != nil {
+	if err := pinListOp(asUser("alice"), "shop", "0", false); err != nil {
 		t.Fatal(err)
 	}
 	if got := pins("alice"); !slices.Equal(got, []string{"gifts", "work"}) || !slices.Equal(pins("bob"), []string{"shop", "work"}) {
 		t.Errorf("after her unpin: alice %v, bob %v", got, pins("bob"))
 	}
 	for _, r := range []string{"gifts", "work"} {
-		if err := pinListOp("alice", r, "0", false); err != nil {
+		if err := pinListOp(asUser("alice"), r, "0", false); err != nil {
 			t.Fatal(err)
 		}
 	}
 	if got := pins("alice"); len(got) != 0 {
 		t.Errorf("she unpinned everything, and has %v", got)
 	}
-	if err := pinListOp("bob", "gifts", "1", false); !refusedWith(err, refusedNotFound) {
+	if err := pinListOp(asUser("bob"), "gifts", "1", false); !refusedWith(err, refusedNotFound) {
 		t.Errorf("bob pinned alice's list: %v", err)
 	}
-	if err := pinListOp("alice", "work", "maybe", false); !refusedWith(err, refusedInvalid) {
+	if err := pinListOp(asUser("alice"), "work", "maybe", false); !refusedWith(err, refusedInvalid) {
 		t.Errorf("pin=maybe: %v", err)
 	}
 }
@@ -714,7 +714,7 @@ func TestInMineCases(t *testing.T) {
 		if c.Task.Private {
 			task.Owner = "anna"
 		}
-		if got := inMine(task, c.Out, "anna", c.Assigns); got != c.Want {
+		if got := inMine(task, c.Out, asUser("anna"), c.Assigns); got != c.Want {
 			t.Errorf("%s: %v, want %v", c.Name, got, c.Want)
 		}
 	}
@@ -775,7 +775,7 @@ func TestFilterCases(t *testing.T) {
 		if c.Task.Private {
 			task.Owner = "anna"
 		}
-		if got := parseTaskFilter(c.Q).matches(task, "anna"); got != c.Want {
+		if got := parseTaskFilter(c.Q).matches(task, asUser("anna")); got != c.Want {
 			t.Errorf("%s (%q): %v, want %v", c.Name, c.Q, got, c.Want)
 		}
 	}
@@ -791,8 +791,8 @@ func TestMyTasks(t *testing.T) {
 	// Without lists and users: every task.
 	newTestTask(t, "", "Loose", false, "due_date", day)
 	all := func(u string) []string {
-		in, out := mineFilter(u, taskLists(u)), []string{}
-		for _, task := range taskFiles.Open(u) {
+		in, out := mineFilter(asUser(u), taskLists(asUser(u))), []string{}
+		for _, task := range taskFiles.Open(asUser(u)) {
 			if in(task) {
 				out = append(out, task.Title)
 			}
@@ -802,7 +802,7 @@ func TestMyTasks(t *testing.T) {
 	}
 	off := func(u, ref, v string) {
 		t.Helper()
-		if err := setListSettingsOp(u, ref, map[string]string{"home": v}); err != nil {
+		if err := setListSettingsOp(asUser(u), ref, map[string]string{"home": v}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -817,7 +817,7 @@ func TestMyTasks(t *testing.T) {
 	if got := all(""); !slices.Equal(got, []string{"Loose", "Milk", "Report"}) {
 		t.Errorf("nothing pinned: %v", got)
 	}
-	if err := pinListOp("", "work", "1", false); err != nil {
+	if err := pinListOp(asker{}, "work", "1", false); err != nil {
 		t.Fatal(err)
 	}
 	if got := all(""); !slices.Equal(got, []string{"Loose", "Milk", "Report"}) {
@@ -834,7 +834,7 @@ func TestMyTasks(t *testing.T) {
 	if c := taskCounts(&Req{}); c.Count != 1 {
 		t.Errorf("the Tasks links count %+v, want the one due task not left out", c)
 	}
-	if err := setListSettingsOp("", "shop", map[string]string{"home": "maybe"}); !refusedWith(err, refusedInvalid) {
+	if err := setListSettingsOp(asker{}, "shop", map[string]string{"home": "maybe"}); !refusedWith(err, refusedInvalid) {
 		t.Errorf("home=maybe: %v", err)
 	}
 	// With users: a shared task is in My tasks of whom it is assigned to,
@@ -865,7 +865,7 @@ func TestMyTasks(t *testing.T) {
 	// Pins change nothing.
 	for _, pin := range []string{"1", "0"} {
 		for _, ref := range []string{"diary", "someday", "shop"} {
-			if err := pinListOp("alice", ref, pin, false); err != nil {
+			if err := pinListOp(asUser("alice"), ref, pin, false); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -879,10 +879,10 @@ func TestMyTasks(t *testing.T) {
 		t.Errorf("vera: %v", got)
 	}
 	// The scope by its name, as the routes and the counts ask for it.
-	if paramsScope(mineParams("alice")) != mineScope || paramsScope(mineScopeParams) != mineScope {
+	if paramsScope(mineParams(asUser("alice"))) != mineScope || paramsScope(mineScopeParams) != mineScope {
 		t.Error("mine=1 isn't the scope of My tasks")
 	}
-	in := scopeFilter("bob", mineScope, taskLists("bob"))
+	in := scopeFilter(asUser("bob"), mineScope, taskLists(asUser("bob")))
 	if in(&Task{List: "work"}) || !in(&Task{List: "work", Assignee: "bob"}) || in(&Task{List: "work", Assignee: "alice"}) {
 		t.Error("scopeFilter(mineScope)")
 	}
@@ -894,33 +894,33 @@ func TestMyTasksSettings(t *testing.T) {
 	testWiki(t, nil)
 	withUsers(t, "alice", "bob")
 	mustList(t, "alice", "work", false)
-	if p := mineParams("alice"); p.src == nil || p.src.raw != "" || p.Get("mine") != "1" {
+	if p := mineParams(asUser("alice")); p.src == nil || p.src.raw != "" || p.Get("mine") != "1" {
 		t.Fatalf("unset: %v %+v", p.m, p.src)
 	}
-	if err := setMineParams("alice", "", map[string]string{"view": "open", "limit": "5"}); err != nil {
+	if err := setMineParams(asUser("alice"), "", map[string]string{"view": "open", "limit": "5"}); err != nil {
 		t.Fatal(err)
 	}
-	p := mineParams("alice")
+	p := mineParams(asUser("alice"))
 	if p.Get("view") != "open" || p.Get("limit") != "5" || paramsScope(p) != mineScope {
 		t.Errorf("alice's: %v", p.m)
 	}
-	if q := mineParams("bob"); q.Has("view") || q.Has("limit") {
+	if q := mineParams(asUser("bob")); q.Has("view") || q.Has("limit") {
 		t.Errorf("bob has alice's settings: %v", q.m)
 	}
 	if !strings.Contains(fileText(t, taskFiles.ListsPath("alice")), `"mine": {"view": "open", "limit": "5"}`) {
 		t.Errorf("her registry:\n%s", fileText(t, taskFiles.ListsPath("alice")))
 	}
-	if err := setMineParams("alice", "", map[string]string{"limit": "9"}); err != errEmbedChanged {
+	if err := setMineParams(asUser("alice"), "", map[string]string{"limit": "9"}); err != errEmbedChanged {
 		t.Errorf("a save from an old dialog: %v", err)
 	}
-	if err := setMineParams("alice", p.src.raw, map[string]string{"limit": ""}); err != nil {
+	if err := setMineParams(asUser("alice"), p.src.raw, map[string]string{"limit": ""}); err != nil {
 		t.Fatal(err)
 	}
-	if p := mineParams("alice"); p.Has("limit") || p.Get("view") != "open" {
+	if p := mineParams(asUser("alice")); p.Has("limit") || p.Get("view") != "open" {
 		t.Errorf("after taking the limit out: %v", p.m)
 	}
 	for _, bad := range []map[string]string{{"new": "x"}, {"keep": "1"}, {"tag": "x"}, {"view": "week"}} {
-		if err := setMineParams("alice", mineParams("alice").src.raw, bad); !refusedWith(err, refusedInvalid) {
+		if err := setMineParams(asUser("alice"), mineParams(asUser("alice")).src.raw, bad); !refusedWith(err, refusedInvalid) {
 			t.Errorf("%v: %v", bad, err)
 		}
 	}
@@ -931,25 +931,25 @@ func TestMyTasksSettings(t *testing.T) {
 func TestListSettings(t *testing.T) {
 	testWiki(t, nil)
 	mustList(t, "", "shop", false)
-	if err := setListSettingsOp("", "shop", map[string]string{"limit": "8", "keep": "yes", "labels": "Catalogue,Shopping", "noshare": "1"}); err != nil {
+	if err := setListSettingsOp(asker{}, "shop", map[string]string{"limit": "8", "keep": "yes", "labels": "Catalogue,Shopping", "noshare": "1"}); err != nil {
 		t.Fatal(err)
 	}
-	l := taskLists("")["shop"]
+	l := taskLists(asker{})["shop"]
 	if l.Params.Get("limit") != "8" || l.Params.Get("keep") != "1" || l.Params.Get("labels") != "Catalogue,Shopping" || !l.NoShare {
 		t.Errorf("settings %v noshare %v", l.Params.m, l.NoShare)
 	}
-	if err := setListSettingsOp("", "shop", map[string]string{"limit": "", "noshare": ""}); err != nil {
+	if err := setListSettingsOp(asker{}, "shop", map[string]string{"limit": "", "noshare": ""}); err != nil {
 		t.Fatal(err)
 	}
-	if l := taskLists("")["shop"]; l.Params.Has("limit") || l.NoShare || l.Params.Get("keep") != "1" {
+	if l := taskLists(asker{})["shop"]; l.Params.Has("limit") || l.NoShare || l.Params.Get("keep") != "1" {
 		t.Errorf("after taking two out: %v", l.Params.m)
 	}
 	for _, bad := range []map[string]string{{"limit": "0"}, {"view": "week"}, {"tag": "x"}, {"list": "other"}, {"pin": "1"}} {
-		if err := setListSettingsOp("", "shop", bad); !refusedWith(err, refusedInvalid) {
+		if err := setListSettingsOp(asker{}, "shop", bad); !refusedWith(err, refusedInvalid) {
 			t.Errorf("%v: %v", bad, err)
 		}
 	}
-	if err := setListSettingsOp("", "nope", map[string]string{"limit": "3"}); !refusedWith(err, refusedNotFound) {
+	if err := setListSettingsOp(asker{}, "nope", map[string]string{"limit": "3"}); !refusedWith(err, refusedNotFound) {
 		t.Errorf("a list that isn't there: %v", err)
 	}
 	if !strings.Contains(fileText(t, filepath.Join(cfg.Data, "_tasks", "lists.json")), `{"name": "shop", "keep": "1", "labels": "Catalogue,Shopping"}`) {
@@ -977,10 +977,10 @@ func TestPlaceSnapshot(t *testing.T) {
 	}
 	check := func(user string, cases []place) {
 		t.Helper()
-		lists := taskLists(user)
+		lists := taskLists(asUser(user))
 		for _, c := range cases {
 			task := &Task{Assignee: "bob"}
-			general := placeSnapshot(user, task, snap(c.list, c.private), lists)
+			general := placeSnapshot(asUser(user), task, snap(c.list, c.private), lists)
 			if task.List != c.wantList || task.Owner != c.wantBy || general != c.general || (task.Owner != "") != (task.Assignee == "") {
 				t.Errorf("%q %+v: list %q owner %q general %v assignee %q", user, c, task.List, task.Owner, general, task.Assignee)
 			}
@@ -1008,7 +1008,7 @@ func TestPlaceSnapshot(t *testing.T) {
 		{"", false, generalListName, "", true},          // a shared task is always in a list
 	})
 	// No list is made for a user's private tasks any more.
-	if _, ok := taskLists("alice")[privateListName]; ok {
+	if _, ok := taskLists(asUser("alice"))[privateListName]; ok {
 		t.Error("a list private was made")
 	}
 }
@@ -1017,10 +1017,10 @@ func TestPlaceSnapshot(t *testing.T) {
 // own registry, started from the wiki's pins when they had set none.
 func TestANewListIsPinnedForWhoMadeIt(t *testing.T) {
 	testWiki(t, nil)
-	pins := func(u string) []string { return refsOf(pinnedLists(u, taskLists(u))) }
+	pins := func(u string) []string { return refsOf(pinnedLists(asUser(u), taskLists(asUser(u)))) }
 	make := func(user, name string, private bool) {
 		t.Helper()
-		if _, err := createListOp(user, name, private, true, "", ""); err != nil {
+		if _, err := createListOp(asUser(user), name, private, true, "", ""); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1049,23 +1049,23 @@ func TestANewListIsPinnedForWhoMadeIt(t *testing.T) {
 func TestPinOrder(t *testing.T) {
 	testWiki(t, nil)
 	for _, n := range []string{"a", "b", "c", "d"} {
-		if _, err := createListOp("", n, false, n != "d", "", ""); err != nil {
+		if _, err := createListOp(asker{}, n, false, n != "d", "", ""); err != nil {
 			t.Fatal(err)
 		}
 	}
-	pins := func(u string) []string { return refsOf(pinnedLists(u, taskLists(u))) }
-	if err := pinOrderOp("", []string{"c", "d", "nope", "a", "c"}); err != nil {
+	pins := func(u string) []string { return refsOf(pinnedLists(asUser(u), taskLists(asUser(u)))) }
+	if err := pinOrderOp(asker{}, []string{"c", "d", "nope", "a", "c"}); err != nil {
 		t.Fatal(err)
 	}
 	if got := pins(""); !slices.Equal(got, []string{"c", "a", "b"}) {
 		t.Errorf("pins %v", got)
 	}
-	if err := pinOrderOp("", []string{"c", "a"}); err != nil {
+	if err := pinOrderOp(asker{}, []string{"c", "a"}); err != nil {
 		t.Errorf("the same order: %v", err)
 	}
 	// With users the order is the user's own, started from the wiki's.
 	withUsers(t, "alice", "bob", "vera")
-	if err := pinOrderOp("alice", []string{"b"}); err != nil {
+	if err := pinOrderOp(asUser("alice"), []string{"b"}); err != nil {
 		t.Fatal(err)
 	}
 	if got := pins("alice"); !slices.Equal(got, []string{"b", "c", "a"}) || !slices.Equal(pins("bob"), []string{"c", "a", "b"}) {
@@ -1079,7 +1079,7 @@ func TestPinOrder(t *testing.T) {
 func TestInboxScope(t *testing.T) {
 	testWiki(t, nil)
 	mustList(t, "", "shop", false)
-	lists := taskLists("")
+	lists := taskLists(asker{})
 	filed, loose := &Task{ID: "1", Title: "Filed", List: "shop"}, &Task{ID: "2", Title: "Loose"}
 	if !isInbox(" Inbox ", lists) || !isInbox(" None ", lists) || isInbox("shop", lists) || isInbox("", lists) {
 		t.Error("isInbox")
@@ -1092,14 +1092,14 @@ func TestInboxScope(t *testing.T) {
 	if !inScope(filed, "shop", lists) || inScope(loose, "shop", lists) {
 		t.Error("inScope")
 	}
-	if c := countTasks("", []*Task{filed, loose, {ID: "3", Title: "Due", DueDate: isoDay(today())}}, lists, inboxParams()); c.Count != 1 || c.Focus != 1 {
+	if c := countTasks(asker{}, []*Task{filed, loose, {ID: "3", Title: "Due", DueDate: isoDay(today())}}, lists, inboxParams()); c.Count != 1 || c.Focus != 1 {
 		t.Errorf("the Inbox's counts %+v", c)
 	}
 	for _, name := range []string{"none", "inbox"} {
 		if err := os.WriteFile(taskFiles.ListsPath(""), []byte(`{"version": 2, "lists": [{"name": "`+name+`"}, {"name": "shop"}]}`), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		lists = taskLists("")
+		lists = taskLists(asker{})
 		own := &Task{ID: "4", Title: "In the list", List: name}
 		if isInbox(name, lists) || !inScope(own, name, lists) || inScope(loose, name, lists) {
 			t.Errorf("a list called %s is that list", name)
@@ -1112,7 +1112,7 @@ func TestInboxScope(t *testing.T) {
 // wiki's, in the shared file. A task there has no assignee.
 func TestInbox(t *testing.T) {
 	testWiki(t, nil)
-	if inboxOwner("") != "" {
+	if inboxOwner(asker{}) != "" {
 		t.Error("an Inbox owner without users")
 	}
 	loose := newTestTask(t, "", "Loose", false)
@@ -1121,7 +1121,7 @@ func TestInbox(t *testing.T) {
 	}
 	withUsers(t, "alice", "bob", "vera")
 	settings().Users["vera"].Role = roleViewer
-	if inboxOwner("alice") != "alice" || inboxOwner(visitor) != "" {
+	if inboxOwner(asUser("alice")) != "alice" || inboxOwner(asUser(visitor)) != "" {
 		t.Error("inboxOwner")
 	}
 	make := func(user string, kv ...any) (*Task, error) {
@@ -1129,7 +1129,7 @@ func TestInbox(t *testing.T) {
 		for i := 0; i+1 < len(kv); i += 2 {
 			data.Set(kv[i].(string), kv[i+1])
 		}
-		return createTask(user, data, "Create task")
+		return createTask(asUser(user), data, "Create task")
 	}
 	// No list, an empty one, null, "inbox" and "none": her Inbox.
 	for i, list := range []any{"-", "", nil, "inbox", " Inbox ", "none"} {
@@ -1145,7 +1145,7 @@ func TestInbox(t *testing.T) {
 		if _, sees := openByID("bob")[task.ID]; sees {
 			t.Errorf("list %v: bob sees alice's capture", list)
 		}
-		if !mineFilter("alice", taskLists("alice"))(task) {
+		if !mineFilter(asUser("alice"), taskLists(asUser("alice")))(task) {
 			t.Errorf("list %v: her capture isn't in her My tasks", list)
 		}
 	}
@@ -1153,8 +1153,8 @@ func TestInbox(t *testing.T) {
 		t.Error("her captures aren't in her files alone")
 	}
 	// No list is made for them, and nothing is pinned.
-	if len(taskLists("alice")) != 0 || len(pinnedLists("alice", taskLists("alice"))) != 0 || fileText(t, taskFiles.ListsPath("alice")) != "" {
-		t.Errorf("her lists %v", sortedKeys(taskLists("alice")))
+	if len(taskLists(asUser("alice"))) != 0 || len(pinnedLists(asUser("alice"), taskLists(asUser("alice")))) != 0 || fileText(t, taskFiles.ListsPath("alice")) != "" {
+		t.Errorf("her lists %v", sortedKeys(taskLists(asUser("alice"))))
 	}
 	// An Inbox task is nobody else's: no assignee, when made or later, not
 	// even oneself.
@@ -1166,17 +1166,17 @@ func TestInbox(t *testing.T) {
 	capture, _ := make("alice", "title", "Mine")
 	set := jsonObj{}
 	set.Set("assignee", "bob")
-	if _, err := updateTask("alice", capture.ID, set, ""); !refusedWith(err, refusedInvalid) {
+	if _, err := updateTask(asUser("alice"), capture.ID, set, ""); !refusedWith(err, refusedInvalid) {
 		t.Errorf("an Inbox task assigned: %v", err)
 	}
 	// Filed into a shared list with share, it can be, in the same write.
 	mustList(t, "alice", "team", false)
 	set.Set("list", "team")
-	if _, err := updateTask("alice", capture.ID, set, ""); err == nil {
+	if _, err := updateTask(asUser("alice"), capture.ID, set, ""); err == nil {
 		t.Error("filed without share")
 	}
 	set.Set("share", true)
-	if _, err := updateTask("alice", capture.ID, set, ""); err != nil {
+	if _, err := updateTask(asUser("alice"), capture.ID, set, ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := openByID("bob")[capture.ID]; got == nil || got.List != "team" || got.Owner != "" || got.Assignee != "bob" {
@@ -1251,7 +1251,7 @@ func TestInboxMigrationRenamesListsCalledInbox(t *testing.T) {
 	if listsUnmigrated {
 		t.Fatal("the migration failed")
 	}
-	alice, bob := taskLists("alice"), taskLists("bob")
+	alice, bob := taskLists(asUser("alice")), taskLists(asUser("bob"))
 	if got := sortedKeys(alice); !slices.Equal(got, []string{"inbox-list", "shared/inbox-list", "work"}) {
 		t.Errorf("alice's lists %v", got)
 	}
@@ -1268,13 +1268,13 @@ func TestInboxMigrationRenamesListsCalledInbox(t *testing.T) {
 	if openByID("bob")["a1"] != nil {
 		t.Error("bob sees alice's task")
 	}
-	if got := refsOf(pinnedLists("alice", alice)); !slices.Equal(got, []string{"inbox-list", "shared/inbox-list"}) {
+	if got := refsOf(pinnedLists(asUser("alice"), alice)); !slices.Equal(got, []string{"inbox-list", "shared/inbox-list"}) {
 		t.Errorf("alice's pins %v", got)
 	}
-	if got := refsOf(pinnedLists("bob", bob)); !slices.Equal(got, []string{"work", "inbox-list"}) {
+	if got := refsOf(pinnedLists(asUser("bob"), bob)); !slices.Equal(got, []string{"work", "inbox-list"}) {
 		t.Errorf("bob's pins %v", got)
 	}
-	if got := refsOf(pinnedLists("", taskLists(""))); !slices.Equal(got, []string{"inbox-list", "work"}) {
+	if got := refsOf(pinnedLists(asker{}, taskLists(asker{}))); !slices.Equal(got, []string{"inbox-list", "work"}) {
 		t.Errorf("the wiki's pins %v", got)
 	}
 	// The name is the Inbox's now.
@@ -1313,7 +1313,7 @@ func TestInboxMigrationTurnsThePrivateListIntoTheInbox(t *testing.T) {
 	if listsUnmigrated {
 		t.Fatal("the migration failed")
 	}
-	alice := taskLists("alice")
+	alice := taskLists(asUser("alice"))
 	if got := sortedKeys(alice); !slices.Equal(got, []string{"diary", "work"}) {
 		t.Errorf("alice's lists %v", got)
 	}
@@ -1327,17 +1327,17 @@ func TestInboxMigrationTurnsThePrivateListIntoTheInbox(t *testing.T) {
 	if strings.Contains(fileText(t, taskFiles.OpenPath("")), "Hers") {
 		t.Error("her task went into the shared file")
 	}
-	if got := refsOf(pinnedLists("alice", alice)); !slices.Equal(got, []string{"work"}) {
+	if got := refsOf(pinnedLists(asUser("alice"), alice)); !slices.Equal(got, []string{"work"}) {
 		t.Errorf("alice's pins %v", got)
 	}
 	// What was in her My tasks still is: the Inbox's task; her diary, which
 	// she hadn't pinned, stays out.
-	mine := mineFilter("alice", alice)
+	mine := mineFilter(asUser("alice"), alice)
 	if !mine(a["a1"]) || mine(a["a2"]) || !alice["diary"].LeftOut() {
 		t.Error("alice's My tasks")
 	}
 	for _, u := range []string{"bob", "carl", "dora"} {
-		lists := taskLists(u)
+		lists := taskLists(asUser(u))
 		l, ok := lists["private"]
 		task := openByID(u)[u+"1"]
 		if !ok || !l.Private() || task.List != "private" || task.Owner != u {
@@ -1345,16 +1345,16 @@ func TestInboxMigrationTurnsThePrivateListIntoTheInbox(t *testing.T) {
 			continue
 		}
 		// carl pinned his: in his My tasks as before; bob and dora had not.
-		if want := u != "carl"; l.LeftOut() != want || mineFilter(u, lists)(task) == want {
+		if want := u != "carl"; l.LeftOut() != want || mineFilter(asUser(u), lists)(task) == want {
 			t.Errorf("%s's list private left out: %v", u, l.LeftOut())
 		}
 	}
-	if l := taskLists("bob")["diary"]; l.LeftOut() {
+	if l := taskLists(asUser("bob"))["diary"]; l.LeftOut() {
 		t.Error("bob's pinned diary is left out")
 	}
 	// The shared list nobody of them pinned is not left out: with users a
 	// shared task is in My tasks by its assignee.
-	if taskLists("alice")["work"].LeftOut() {
+	if taskLists(asUser("alice"))["work"].LeftOut() {
 		t.Error("a shared list left out, with users")
 	}
 	startAgain(t)
@@ -1370,8 +1370,8 @@ func TestInboxMigrationOfAUserWhoPinnedNothing(t *testing.T) {
 	writeRegistry(t, "erin", `{"version": 1, "lists": [{"name": "private"}]}`)
 	writeTasks(t, "erin", inList("private", oldTask("e1", "Hers"))[0])
 	migrateLists(false)
-	if got := openByID("erin")["e1"]; got == nil || got.List != "" || got.Owner != "erin" || len(taskLists("erin")) != 0 || listsUnmigrated {
-		t.Errorf("erin's task %+v, lists %v", got, sortedKeys(taskLists("erin")))
+	if got := openByID("erin")["e1"]; got == nil || got.List != "" || got.Owner != "erin" || len(taskLists(asUser("erin"))) != 0 || listsUnmigrated {
+		t.Errorf("erin's task %+v, lists %v", got, sortedKeys(taskLists(asUser("erin"))))
 	}
 	startAgain(t)
 }
@@ -1391,13 +1391,13 @@ func TestInboxMigrationWithoutASharedRegistry(t *testing.T) {
 	if got := openByID("erin")["e1"]; got == nil || got.List != "" || got.Owner != "erin" || listsUnmigrated {
 		t.Errorf("erin's task %+v", got)
 	}
-	if l, ok := taskLists("erin")["someday"]; !ok || !l.LeftOut() || len(taskLists("erin")) != 1 {
-		t.Errorf("erin's lists %v", sortedKeys(taskLists("erin")))
+	if l, ok := taskLists(asUser("erin"))["someday"]; !ok || !l.LeftOut() || len(taskLists(asUser("erin"))) != 1 {
+		t.Errorf("erin's lists %v", sortedKeys(taskLists(asUser("erin"))))
 	}
 	if got := openByID("finn")["f1"]; got == nil || got.List != inboxListName {
 		t.Errorf("finn's task %+v", got)
 	}
-	if got := refsOf(pinnedLists("finn", taskLists("finn"))); !slices.Equal(got, []string{inboxListName}) {
+	if got := refsOf(pinnedLists(asUser("finn"), taskLists(asUser("finn")))); !slices.Equal(got, []string{inboxListName}) {
 		t.Errorf("finn's pins %v", got)
 	}
 	for _, u := range []string{"erin", "finn"} {
@@ -1420,12 +1420,12 @@ func TestInboxMigrationLeavesOutWhatWasNotPinned(t *testing.T) {
 	if listsUnmigrated {
 		t.Fatal("the migration failed")
 	}
-	lists := taskLists("")
+	lists := taskLists(asker{})
 	if lists["work"].LeftOut() || lists["shop"].LeftOut() || !lists["someday"].LeftOut() || lists["someday"].Params.Get("limit") != "3" {
 		t.Errorf("left out: %+v", lists)
 	}
-	in, got := mineFilter("", lists), []string{}
-	for _, task := range taskFiles.Open("") {
+	in, got := mineFilter(asker{}, lists), []string{}
+	for _, task := range taskFiles.Open(asker{}) {
 		if in(task) {
 			got = append(got, task.Title)
 		}
@@ -1443,11 +1443,11 @@ func TestInboxMigrationLeavesOutWhatWasNotPinned(t *testing.T) {
 	}
 	startAgain(t)
 	// Unpinned after the migration: not left out by the next start.
-	if err := pinListOp("", "work", "0", false); err != nil {
+	if err := pinListOp(asker{}, "work", "0", false); err != nil {
 		t.Fatal(err)
 	}
 	migrateLists(false)
-	if taskLists("")["work"].LeftOut() {
+	if taskLists(asker{})["work"].LeftOut() {
 		t.Error("a list unpinned later was left out")
 	}
 }
@@ -1466,8 +1466,8 @@ func TestSharedTasksWithoutAListGoToGeneral(t *testing.T) {
 	}
 	// Without users: nothing moves, and no list is made.
 	migrateLists(false)
-	if got := openByID("")["1"]; got.List != "" || len(taskLists("")) != 1 || listsUnmigrated {
-		t.Fatalf("without users: %+v, lists %v", got, sortedKeys(taskLists("")))
+	if got := openByID("")["1"]; got.List != "" || len(taskLists(asker{})) != 1 || listsUnmigrated {
+		t.Fatalf("without users: %+v, lists %v", got, sortedKeys(taskLists(asker{})))
 	}
 	startAgain(t)
 	// Users are turned on: the next start files them.
@@ -1484,24 +1484,24 @@ func TestSharedTasksWithoutAListGoToGeneral(t *testing.T) {
 	if text := fileText(t, taskFiles.ClosedPath("")); !strings.Contains(text, `"list": "general"`) {
 		t.Errorf("the closed task:\n%s", text)
 	}
-	if l, ok := taskLists("bob")[generalListName]; !ok || l.Private() || l.LeftOut() {
+	if l, ok := taskLists(asUser("bob"))[generalListName]; !ok || l.Private() || l.LeftOut() {
 		t.Errorf("#general: %+v", l)
 	}
-	if got := refsOf(pinnedLists("bob", taskLists("bob"))); !slices.Equal(got, []string{"work", generalListName}) {
+	if got := refsOf(pinnedLists(asUser("bob"), taskLists(asUser("bob")))); !slices.Equal(got, []string{"work", generalListName}) {
 		t.Errorf("the wiki's pins %v", got)
 	}
 	startAgain(t)
 	// A stray that turns up later (a file edited by hand, an older Zone)
 	// goes there too; the list is there, and an unpin of it stays.
-	if err := pinListOp("", generalListName, "0", false); err != nil {
+	if err := pinListOp(asker{}, generalListName, "0", false); err != nil {
 		t.Fatal(err)
 	}
-	writeTasks(t, "", append(taskFiles.Open(""), oldTask("9", "Stray"))...)
+	writeTasks(t, "", append(taskFiles.Open(asker{}), oldTask("9", "Stray"))...)
 	migrateLists(false)
 	if got := openByID("bob")["9"]; got == nil || got.List != generalListName {
 		t.Errorf("the stray: %+v", got)
 	}
-	if got := refsOf(pinnedLists("", taskLists(""))); !slices.Equal(got, []string{"work"}) {
+	if got := refsOf(pinnedLists(asker{}, taskLists(asker{}))); !slices.Equal(got, []string{"work"}) {
 		t.Errorf("#general was pinned again: %v", got)
 	}
 	startAgain(t)
@@ -1546,7 +1546,7 @@ func TestAStartReadsTheArchivesWhenItMust(t *testing.T) {
 	newTestTask(t, "alice", "Eggs", false, "list", "shop")
 	closeIt := jsonObj{}
 	closeIt.Set("completed", true)
-	if _, err := updateTask("alice", done.ID, closeIt, ""); err != nil {
+	if _, err := updateTask(asUser("alice"), done.ID, closeIt, ""); err != nil {
 		t.Fatal(err)
 	}
 	// Closed years ago: an archive.
@@ -1596,9 +1596,9 @@ func TestAStartReadsTheArchivesWhenItMust(t *testing.T) {
 	// Zone's own commit of a task file: the mark follows it.
 	title := jsonObj{}
 	title.Set("title", "Eggs, a dozen")
-	for _, x := range taskFiles.Open("alice") {
+	for _, x := range taskFiles.Open(asUser("alice")) {
 		if x.Title == "Eggs" {
-			if _, err := updateTask("alice", x.ID, title, ""); err != nil {
+			if _, err := updateTask(asUser("alice"), x.ID, title, ""); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1640,14 +1640,14 @@ func TestTheSearchKeepsRecordsOfTasks(t *testing.T) {
 	milk := newTestTask(t, "alice", "Milk", false, "list", "shop", "description", "Oat, the barista kind")
 	old := newTestTask(t, "alice", "Old errand", false, "list", "shop", "description", "Zephyrscale audit")
 	hers := newTestTask(t, "alice", "Dear diary", false, "list", "diary", "description", "Quillfeather notes")
-	if _, err := addComment("bob", milk.ID, "Two litres please", "Comment on task"); err != nil {
+	if _, err := addComment(asUser("bob"), milk.ID, "Two litres please", "Comment on task"); err != nil {
 		t.Fatal(err)
 	}
 	// Two closed years ago, a shared one and one of hers: archives.
 	closeIt := jsonObj{}
 	closeIt.Set("completed", true)
 	for _, id := range []string{old.ID, hers.ID} {
-		if _, err := updateTask("alice", id, closeIt, ""); err != nil {
+		if _, err := updateTask(asUser("alice"), id, closeIt, ""); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1690,7 +1690,7 @@ func TestTheSearchKeepsRecordsOfTasks(t *testing.T) {
 	// A change of one task: its file's docs anew, the others the docs they were.
 	title := jsonObj{}
 	title.Set("title", "Oat milk")
-	if _, err := updateTask("alice", milk.ID, title, ""); err != nil {
+	if _, err := updateTask(asUser("alice"), milk.ID, title, ""); err != nil {
 		t.Fatal(err)
 	}
 	after := byID()
@@ -1721,12 +1721,12 @@ func TestTheSearchKeepsRecordsOfTasks(t *testing.T) {
 	if raw, _ := os.ReadFile(archiveDocsPath(herArchive)); !strings.Contains(string(raw), "Dear diary") || strings.Contains(string(raw), "Quillfeather") {
 		t.Errorf("what is saved of her archive: %q", raw)
 	}
-	if !canSeeTask("alice", again[hers.ID].Task) || canSeeTask("bob", again[hers.ID].Task) {
+	if !canSeeTask(asUser("alice"), again[hers.ID].Task) || canSeeTask(asUser("bob"), again[hers.ID].Task) {
 		t.Error("who sees her archived task")
 	}
 	// A start's first search: by the index file, which has every task's
 	// words; an archive is read for a hit in it, not to search.
-	if got := retrieve(&Req{user: "alice"}, "barista", 5, "", false); len(got) == 0 {
+	if got := retrieve(&Req{user: asUser("alice")}, "barista", 5, "", false); len(got) == 0 {
 		t.Fatal("no hit before the start")
 	}
 	restartSearch()
@@ -1735,7 +1735,7 @@ func TestTheSearchKeepsRecordsOfTasks(t *testing.T) {
 	taskDocs.mu.Unlock()
 	taskfiles.ForgetParsed()
 	before := taskfiles.Parsed()
-	if got := retrieve(&Req{user: "alice"}, "barista", 5, "", false); len(got) == 0 || got[0].taskID() != milk.ID {
+	if got := retrieve(&Req{user: asUser("alice")}, "barista", 5, "", false); len(got) == 0 || got[0].taskID() != milk.ID {
 		t.Errorf("a start's search for an open task: %d hits", len(got))
 	}
 	// (Her own archive is read: what is private is in no index file, its
@@ -1743,13 +1743,13 @@ func TestTheSearchKeepsRecordsOfTasks(t *testing.T) {
 	if taskfiles.KeepsParsed(archive) {
 		t.Errorf("a start's first search read the shared archive (%d files parsed)", taskfiles.Parsed()-before)
 	}
-	if got := retrieve(&Req{user: "alice"}, "zephyrscale", 5, "", false); len(got) == 0 || got[0].taskID() != old.ID {
+	if got := retrieve(&Req{user: asUser("alice")}, "zephyrscale", 5, "", false); len(got) == 0 || got[0].taskID() != old.ID {
 		t.Errorf("a search for an archived task: %d hits", len(got))
 	}
-	if got := retrieve(&Req{user: "bob"}, "quillfeather", 5, "", false); len(got) != 0 {
+	if got := retrieve(&Req{user: asUser("bob")}, "quillfeather", 5, "", false); len(got) != 0 {
 		t.Errorf("bob finds her archived task: %d hits", len(got))
 	}
-	if got := retrieve(&Req{user: "alice"}, "quillfeather", 5, "", false); len(got) == 0 || got[0].taskID() != hers.ID {
+	if got := retrieve(&Req{user: asUser("alice")}, "quillfeather", 5, "", false); len(got) == 0 || got[0].taskID() != hers.ID {
 		t.Errorf("she doesn't find her archived task: %d hits", len(got))
 	}
 	// Her own archive was read for her index once; a change elsewhere makes
@@ -1757,17 +1757,17 @@ func TestTheSearchKeepsRecordsOfTasks(t *testing.T) {
 	taskfiles.ForgetParsed()
 	other := jsonObj{}
 	other.Set("title", "Oat milk, two litres")
-	if _, err := updateTask("alice", milk.ID, other, ""); err != nil {
+	if _, err := updateTask(asUser("alice"), milk.ID, other, ""); err != nil {
 		t.Fatal(err)
 	}
-	if got := retrieve(&Req{user: "alice"}, "litres", 5, "", false); len(got) == 0 || got[0].taskID() != milk.ID {
+	if got := retrieve(&Req{user: asUser("alice")}, "litres", 5, "", false); len(got) == 0 || got[0].taskID() != milk.ID {
 		t.Errorf("a search after a change: %d hits", len(got))
 	}
 	if taskfiles.KeepsParsed(herArchive) {
 		t.Error("her index made anew read her archive again")
 	}
 	// The archive changes: what was saved is of another file, and is not taken.
-	if _, err := updateTask("alice", old.ID, title, ""); err != nil {
+	if _, err := updateTask(asUser("alice"), old.ID, title, ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := byID()[old.ID]; got.Task.Title != "Oat milk" {
@@ -1792,7 +1792,7 @@ func TestTheSearchKeepsNothingPerViewer(t *testing.T) {
 	}
 	restartSearch()
 	finds := func(u string) (own, others int) {
-		for _, d := range retrieve(&Req{user: u}, "quillfeather", 50, "", false) {
+		for _, d := range retrieve(&Req{user: asUser(u)}, "quillfeather", 50, "", false) {
 			if d.Task.Owner == u {
 				own++
 			} else {
@@ -1824,7 +1824,7 @@ func TestTheSearchKeepsNothingPerViewer(t *testing.T) {
 			if own, others := finds(u); own != 1 || others != 0 {
 				t.Fatalf("round %d, %s finds %d of their own and %d of others", round, u, own, others)
 			}
-			if got := retrieve(&Req{user: u}, "zephyrscale", 5, "", false); len(got) != 1 {
+			if got := retrieve(&Req{user: asUser(u)}, "zephyrscale", 5, "", false); len(got) != 1 {
 				t.Fatalf("%s finds %d shared tasks", u, len(got))
 			}
 		}

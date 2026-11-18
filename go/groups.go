@@ -93,13 +93,13 @@ type groupVia struct {
 // its people, its owners and its name, and for who may write the form that
 // makes one. 404 without users (and for a visitor, who is no user).
 func groupsRoute(w http.ResponseWriter, r *http.Request) {
-	if u := latestSettings().Users[userOf(r)]; u == nil || u.Disabled {
+	if u := latestSettings().Users[userOf(r).Name]; u == nil || u.Disabled {
 		http.NotFound(w, r)
 		return
 	}
 	q := r.URL.Query()
 	done := groupsDone(q.Get("done"), q.Get("group"), q.Get("left"))
-	if g := q.Get("group"); q.Get("done") == "left" && groupNameRE.MatchString(g) && !latestSettings().memberOf(userOf(r), g) {
+	if g := q.Get("group"); q.Get("done") == "left" && groupNameRE.MatchString(g) && !latestSettings().memberOf(userOf(r).Name, g) {
 		done = "You are no longer in " + g + ": what is for @" + g + " you no longer see. Its owners can put you back."
 	}
 	if q.Get("done") == "removed" {
@@ -141,12 +141,12 @@ func groupsDone(done, group, left string) string {
 func showGroups(w http.ResponseWriter, r *http.Request, status int, done, refused, newName, newPeople string) {
 	s, user := latestSettings(), userOf(r)
 	rq := newReq(r)
-	admin := s.isAdmin(user) && !s.isViewer(user)
+	admin := s.isAdmin(user.Name) && !s.isViewer(user.Name)
 	v := &groupsView{BreadcrumbHTML: breadcrumb(rq, []crumb{{"Groups", ""}}, "/groups", true, "Groups", ""),
 		MayMake: mayMakeGroup(s, user), Admin: admin, Done: done, Error: refused, NewName: newName, NewPeople: newPeople}
-	mine := slices.Clone(s.groupsOf(user))
+	mine := slices.Clone(s.groupsOf(user.Name))
 	for _, g := range sortedKeys(s.Owners) {
-		if s.ownerOf(user, g) && !slices.Contains(mine, g) {
+		if s.ownerOf(user.Name, g) && !slices.Contains(mine, g) {
 			mine = append(mine, g)
 		}
 	}
@@ -174,13 +174,13 @@ func showGroups(w http.ResponseWriter, r *http.Request, status int, done, refuse
 }
 
 // groupLinks: the groups named, as /groups lists them for user.
-func groupLinks(rq *Req, s *Settings, user string, groups []string) []groupLink {
+func groupLinks(rq *Req, s *Settings, user asker, groups []string) []groupLink {
 	var out []groupLink
 	for _, g := range groups {
 		who := s.groupMembers(g)
 		link := groupLink{Name: g, Count: len(who), Includes: s.Includes[g], Owners: s.Owners[g],
 			Folder: isDir(filepath.Join(cfg.Data, groupsDir, g)),
-			Member: s.memberOf(user, g), Manages: s.managesGroup(user, g), Leaves: mayLeave(s, user, g)}
+			Member: s.memberOf(user.Name, g), Manages: s.managesGroup(user.Name, g), Leaves: mayLeave(s, user, g)}
 		for _, name := range who {
 			if slices.Contains(s.Users[name].Groups, g) {
 				link.Direct = append(link.Direct, name)
@@ -272,9 +272,9 @@ func refuseGroups(w http.ResponseWriter, r *http.Request, err error, newName, ne
 
 // mayMakeGroup: user may make a group: a user who may write (no viewer,
 // not disabled).
-func mayMakeGroup(s *Settings, user string) bool {
-	u := s.Users[user]
-	return u != nil && !u.Disabled && !s.isViewer(user)
+func mayMakeGroup(s *Settings, user asker) bool {
+	u := s.Users[user.Name]
+	return u != nil && !u.Disabled && !s.isViewer(user.Name)
 }
 
 // groupNameTaken: something goes by the group name already, so a new group
@@ -385,7 +385,7 @@ func setMembers(f *settingsfile.File, s *Settings, group string, members []strin
 // makeGroupOp makes the group name for user, who is in it and its owner,
 // with the people named (users of the wiki). Refused for who may not write,
 // and for a name that is taken (groupNameTaken).
-func makeGroupOp(user, nameText, people string) (string, error) {
+func makeGroupOp(user asker, nameText, people string) (string, error) {
 	s := latestSettings()
 	if !mayMakeGroup(s, user) {
 		return "", errReadOnly
@@ -398,10 +398,10 @@ func makeGroupOp(user, nameText, people string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if !slices.Contains(members, user) {
-		members = append(members, user)
+	if !slices.Contains(members, user.Name) {
+		members = append(members, user.Name)
 	}
-	return name, changeSettings(user, func(f *settingsfile.File) error {
+	return name, changeSettings(user.Name, func(f *settingsfile.File) error {
 		// Judged on the file as it is read for the change, not as it was a
 		// moment ago: two who make the same group don't both get it.
 		now := settingsOf(f.Text())
@@ -414,7 +414,7 @@ func makeGroupOp(user, nameText, people string) (string, error) {
 			}
 		}
 		setMembers(f, now, name, members)
-		setOwners(f, name, []string{user})
+		setOwners(f, name, []string{user.Name})
 		return nil
 	})
 }
@@ -424,9 +424,9 @@ func makeGroupOp(user, nameText, people string) (string, error) {
 // Who is in it by way of a group it includes is not this field's. A group
 // keeps an owner unless an admin takes the last out (it is an admin's
 // then, as a group made on the host). Returns who is no longer in it.
-func groupPeopleOp(user, group, people, owners string) (left []string, err error) {
+func groupPeopleOp(user asker, group, people, owners string) (left []string, err error) {
 	before := latestSettings()
-	if !groupNameRE.MatchString(group) || !slices.Contains(knownGroups(before), group) || !before.managesGroup(user, group) {
+	if !groupNameRE.MatchString(group) || !slices.Contains(knownGroups(before), group) || !before.managesGroup(user.Name, group) {
 		return nil, errNotFound
 	}
 	members, err := usersNamed(before, people)
@@ -437,12 +437,12 @@ func groupPeopleOp(user, group, people, owners string) (left []string, err error
 	if err != nil {
 		return nil, err
 	}
-	if len(own) == 0 && !before.isAdmin(user) {
+	if len(own) == 0 && !before.isAdmin(user.Name) {
 		return nil, refuse("A group keeps an owner: name who takes it over before you take yourself out.")
 	}
-	err = changeSettings(user, func(f *settingsfile.File) error {
+	err = changeSettings(user.Name, func(f *settingsfile.File) error {
 		now := settingsOf(f.Text())
-		if !now.managesGroup(user, group) {
+		if !now.managesGroup(user.Name, group) {
 			return errNotFound
 		}
 		setMembers(f, now, group, members)
@@ -460,25 +460,25 @@ func groupPeopleOp(user, group, people, owners string) (left []string, err error
 // owners (a group without is an admin's, and who is in it is the admin's
 // to say), and they don't manage it (who does has Manage…, where a group
 // keeps an owner). A viewer changes nothing.
-func mayLeave(s *Settings, user, group string) bool {
-	u := s.Users[user]
-	return u != nil && !u.Disabled && !s.isViewer(user) && slices.Contains(u.Groups, group) &&
-		len(s.Owners[group]) > 0 && !s.managesGroup(user, group)
+func mayLeave(s *Settings, user asker, group string) bool {
+	u := s.Users[user.Name]
+	return u != nil && !u.Disabled && !s.isViewer(user.Name) && slices.Contains(u.Groups, group) &&
+		len(s.Owners[group]) > 0 && !s.managesGroup(user.Name, group)
 }
 
 // leaveGroupOp takes user out of group, for themselves: the group's name
 // goes from their groups, and with it what is the group's from their sight
 // (to fewer, and only for the one who asks). Its owners put them back.
-func leaveGroupOp(user, group string) error {
+func leaveGroupOp(user asker, group string) error {
 	if !groupNameRE.MatchString(group) || !mayLeave(latestSettings(), user, group) {
 		return errNotFound
 	}
-	return changeSettings(user, func(f *settingsfile.File) error {
+	return changeSettings(user.Name, func(f *settingsfile.File) error {
 		now := settingsOf(f.Text())
 		if !mayLeave(now, user, group) {
 			return errNotFound
 		}
-		setGroups(f, user, slices.DeleteFunc(slices.Clone(now.Users[user].Groups), func(g string) bool { return g == group }))
+		setGroups(f, user.Name, slices.DeleteFunc(slices.Clone(now.Users[user.Name].Groups), func(g string) bool { return g == group }))
 		return nil
 	})
 }
@@ -526,9 +526,9 @@ func renameGroupInFile(f *settingsfile.File, s *Settings, old, name string) {
 // one that is made but for its commit counts as made, and the rename goes
 // on to the settings: it returns the new name with that error, and the
 // change is in the Uncommitted list. The caller holds pagesMu.
-func renameGroupOp(user, old, nameText string) (string, error) {
+func renameGroupOp(user asker, old, nameText string) (string, error) {
 	s := latestSettings()
-	if !groupNameRE.MatchString(old) || !slices.Contains(knownGroups(s), old) || !s.managesGroup(user, old) {
+	if !groupNameRE.MatchString(old) || !slices.Contains(knownGroups(s), old) || !s.managesGroup(user.Name, old) {
 		return "", errNotFound
 	}
 	name, err := oneGroupName(nameText)
@@ -574,7 +574,7 @@ func renameGroupOp(user, old, nameText string) (string, error) {
 		}
 		uncommitted = errOr(uncommitted, err)
 	}
-	err = changeSettings(user, func(f *settingsfile.File) error {
+	err = changeSettings(user.Name, func(f *settingsfile.File) error {
 		renameGroupInFile(f, settingsOf(f.Text()), old, name)
 		return nil
 	})
@@ -595,7 +595,7 @@ func renameGroupOp(user, old, nameText string) (string, error) {
 // change or delete first), or another group includes it and user is no
 // admin (what a group is made of is an admin's). The lists user doesn't see
 // are counted, not named.
-func groupKept(s *Settings, user, group string) error {
+func groupKept(s *Settings, user asker, group string) error {
 	var named []string
 	hidden := 0
 	for _, l := range taskFiles.ReadLists("").Lists {
@@ -617,7 +617,7 @@ func groupKept(s *Settings, user, group string) error {
 		}
 		return refuseAs(refusedConflict, "A task list is for @"+group+" ("+what+"): its owners say whom it is for instead, or delete it, first.")
 	}
-	if s.isAdmin(user) {
+	if s.isAdmin(user.Name) {
 		return nil
 	}
 	for _, g := range sortedKeys(s.Includes) {
@@ -667,9 +667,9 @@ const (
 // (writtenAnyway), and the removal goes on and says so. A list that is for
 // the group keeps it (groupKept). Returns the folder the pages are in now
 // ("" when none moved). The caller holds pagesMu.
-func removeGroupOp(user, group, pages, folderText string) (folder string, err error) {
+func removeGroupOp(user asker, group, pages, folderText string) (folder string, err error) {
 	s := latestSettings()
-	if !groupNameRE.MatchString(group) || !slices.Contains(knownGroups(s), group) || !s.managesGroup(user, group) {
+	if !groupNameRE.MatchString(group) || !slices.Contains(knownGroups(s), group) || !s.managesGroup(user.Name, group) {
 		return "", errNotFound
 	}
 	if err := groupKept(s, user, group); err != nil {
@@ -734,9 +734,9 @@ func removeGroupOp(user, group, pages, folderText string) (folder string, err er
 	default:
 		return "", refuse("The group has pages: say what becomes of them, move them to the wiki or delete them.")
 	}
-	if err := changeSettings(user, func(f *settingsfile.File) error {
+	if err := changeSettings(user.Name, func(f *settingsfile.File) error {
 		now := settingsOf(f.Text())
-		if !now.managesGroup(user, group) {
+		if !now.managesGroup(user.Name, group) {
 			return errNotFound
 		}
 		removeGroupInFile(f, now, group)
@@ -749,7 +749,7 @@ func removeGroupOp(user, group, pages, folderText string) (folder string, err er
 
 // removeGroupFolder deletes what is left of the group's folder (pages,
 // files), in one commit that says what.
-func removeGroupFolder(user, group, what string) error {
+func removeGroupFolder(user asker, group, what string) error {
 	dir := filepath.Join(cfg.Data, groupsDir, group)
 	if !isDir(dir) {
 		return nil
@@ -758,7 +758,7 @@ func removeGroupFolder(user, group, what string) error {
 		return err
 	}
 	forgetUsage()
-	return notCommitted(gitCommit(user, "Remove the group "+group+": "+what, dir))
+	return notCommitted(gitCommit(user.Name, "Remove the group "+group+": "+what, dir))
 }
 
 // groupRemoveRoute: POST /groups/{group}/remove: the group ends, and its
@@ -813,7 +813,7 @@ func errOr(err, other error) error {
 // renameGroupInLists: the shared lists that are for @old are for @name,
 // whoever sees them (the one who renames a group may be in none of them: it
 // is the group's name that changes, not who a list is for).
-func renameGroupInLists(user, old, name string) error {
+func renameGroupInLists(user asker, old, name string) error {
 	if err := mayWriteTasks(user); err != nil {
 		return err
 	}
@@ -847,7 +847,7 @@ func renameGroupInLists(user, old, name string) error {
 // show (moveFolder), then what else lies there (a file no page shows), and
 // a home that still says what Zone wrote says the new name. Nothing to do
 // for a group without a folder.
-func moveGroupFolder(user, old, name string) error {
+func moveGroupFolder(user asker, old, name string) error {
 	folder, newFolder := groupsDir+"/"+old, groupsDir+"/"+name
 	dir, newDir := filepath.Join(cfg.Data, groupsDir, old), filepath.Join(cfg.Data, groupsDir, name)
 	if !isDir(dir) {
@@ -921,7 +921,7 @@ func moveGroupFolder(user, old, name string) error {
 		}
 	}
 	if len(rest) > 0 {
-		if err := notCommitted(gitCommit(user, what+": the files in "+newFolder+"/", rest...)); err != nil {
+		if err := notCommitted(gitCommit(user.Name, what+": the files in "+newFolder+"/", rest...)); err != nil {
 			return err
 		}
 	}
@@ -938,7 +938,7 @@ func moveGroupFolder(user, old, name string) error {
 // noGroupsHere: the request is by no user who can use the wiki (a wiki
 // without users has no groups): answered 404, as GET /groups is.
 func noGroupsHere(w http.ResponseWriter, r *http.Request) bool {
-	if u := latestSettings().Users[userOf(r)]; u == nil || u.Disabled {
+	if u := latestSettings().Users[userOf(r).Name]; u == nil || u.Disabled {
 		http.NotFound(w, r)
 		return true
 	}
@@ -1031,7 +1031,7 @@ func groupIncludesRoute(w http.ResponseWriter, r *http.Request) {
 		refuseGroups(w, r, err, "", "")
 		return
 	}
-	if err := changeSettings(userOf(r), func(f *settingsfile.File) error {
+	if err := changeSettings(userOf(r).Name, func(f *settingsfile.File) error {
 		setIncludes(f, group, includes)
 		return nil
 	}); err != nil {

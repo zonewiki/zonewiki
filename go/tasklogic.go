@@ -31,8 +31,8 @@ func init() {
 		Root:       func() string { return cfg.Data },
 		PrivateDir: privateDir,
 		Users:      func() []string { return sortedKeys(settings().Users) },
-		Private:    func(user string) bool { return privateFolder(user) != "" },
-		NoTasks:    func(user string) bool { return user == visitor },
+		Private:    func(user asker) bool { return privateFolder(user) != "" },
+		NoTasks:    func(user asker) bool { return user.Name == visitor },
 		MayWrite:   mayWriteTasks,
 		Member:     listMember,
 		Commit:     gitCommit,
@@ -42,7 +42,7 @@ func init() {
 
 // closedYearsIn: the years with closed tasks in scope (a list, or ""
 // for all) that user sees, newest first; this year always.
-func closedYearsIn(user, scope string) []string {
+func closedYearsIn(user asker, scope string) []string {
 	lists := taskLists(user)
 	return taskFiles.ClosedYears(user, scopeFilter(user, scope, lists))
 }
@@ -53,7 +53,7 @@ func closedYearsIn(user, scope string) []string {
 // list none of them shows, nor to another user's own tasks. A scope that
 // is every task ("": All tasks, a tag's view), My tasks or several lists
 // takes every list the user sees; no scope at all is every task.
-func tasksWord(user string, scopes ...string) string {
+func tasksWord(user asker, scopes ...string) string {
 	every := []taskfiles.Place{}
 	for _, o := range taskFiles.Owners(user) {
 		every = append(every, taskfiles.Place{Owner: o, Every: true})
@@ -115,7 +115,7 @@ func queryScope(r *http.Request) string {
 // is always in a list; without users to no list, the wiki's Inbox. So a
 // snapshot never makes a shared task private nor a private one shared. A
 // private task has no assignee.
-func placeSnapshot(user string, t *Task, snap jsonObj, lists map[string]ListInfo) (general bool) {
+func placeSnapshot(user asker, t *Task, snap jsonObj, lists map[string]ListInfo) (general bool) {
 	private := jsonobj.True(snap["private"]) && privateFolder(user) != ""
 	name, _ := jsonobj.As[string](snap["list"])
 	name = cleanList(name)
@@ -129,7 +129,7 @@ func placeSnapshot(user string, t *Task, snap jsonObj, lists map[string]ListInfo
 	switch {
 	case found:
 	case private:
-		t.Owner = user
+		t.Owner = user.Name
 	case settings().Users != nil:
 		t.List, general = generalListName, true
 	}
@@ -142,10 +142,10 @@ func placeSnapshot(user string, t *Task, snap jsonObj, lists map[string]ListInfo
 // givenToOthers: how many of the open shared tasks user made someone else
 // has: what they gave away, and are waiting for. My tasks links to them
 // (givenHref): they are not the user's to do, so they are not in it.
-func givenToOthers(user string, open []*Task) int {
+func givenToOthers(user asker, open []*Task) int {
 	n := 0
 	for _, t := range open {
-		if t.Owner == "" && t.Assignee != "" && t.Assignee != user && t.Maker() == user {
+		if t.Owner == "" && t.Assignee != "" && t.Assignee != user.Name && t.Maker() == user.Name {
 			n++
 		}
 	}
@@ -200,18 +200,18 @@ const (
 // look is not lost. A look that doesn't say (from before 2026-11-16) goes
 // by the minute. The browser has the same rule
 // (TasksCore.newsFor; go/testdata/news_cases.json runs through both).
-func newsFor(t *Task, user string) News {
-	if user == "" || t.Owner != "" {
+func newsFor(t *Task, user asker) News {
+	if user.Name == "" || t.Owner != "" {
 		return News{}
 	}
 	minute := func(at string) string { return runePrefix(at, 16) }
-	has, made := t.Assignee == user, t.Maker() == user || slices.Contains(t.Followers, user)
+	has, made := t.Assignee == user.Name, t.Maker() == user.Name || slices.Contains(t.Followers, user.Name)
 	mine, myAct, sawIt, sawComment := -1, "", false, ""
 	lastAssigned := -1
 	// With who looked at it (taskseen.go): a look is the user's, not the task's.
 	history := historyWithSeen(t)
 	for i, e := range history {
-		if e.By == user {
+		if e.By == user.Name {
 			mine, myAct, sawIt, sawComment = i, minute(e.At), e.Event == "seen", ""
 			if sawIt {
 				sawComment = e.To
@@ -223,7 +223,7 @@ func newsFor(t *Task, user string) News {
 	}
 	myComment, said := -1, ""
 	for i, c := range t.Comments {
-		if c.By == user {
+		if c.By == user.Name {
 			myComment, said = i, minute(c.At)
 		}
 	}
@@ -236,15 +236,15 @@ func newsFor(t *Task, user string) News {
 	for i := mine + 1; i < len(history); i++ {
 		e := history[i]
 		at := minute(e.At)
-		if e.By == "" || e.By == user || said != "" && at <= said {
+		if e.By == "" || e.By == user.Name || said != "" && at <= said {
 			continue
 		}
 		to := strings.ToLower(e.To)
 		switch e.Event {
 		case "assigned":
-			if has && to == user && i == lastAssigned && t.IsOpen() {
+			if has && to == user.Name && i == lastAssigned && t.IsOpen() {
 				take(newsGiven, e.By, at)
-			} else if made && to != "" && to != user {
+			} else if made && to != "" && to != user.Name {
 				take(newsHandedOn, e.By, at)
 			}
 		case "created":
@@ -260,7 +260,7 @@ func newsFor(t *Task, user string) News {
 				take(newsReopened, e.By, at)
 			}
 		case "mentioned":
-			if to == user {
+			if to == user.Name {
 				take(newsMention, e.By, at)
 			}
 		}
@@ -273,7 +273,7 @@ func newsFor(t *Task, user string) News {
 			from, after = max(from, i+1), true
 		}
 		for _, c := range t.Comments[from:] {
-			if at := minute(c.At); c.By != "" && c.By != user && (after || myAct == "" || at > myAct || at == myAct && !sawIt) {
+			if at := minute(c.At); c.By != "" && c.By != user.Name && (after || myAct == "" || at > myAct || at == myAct && !sawIt) {
 				take(newsComment, c.By, at)
 			}
 		}
@@ -285,8 +285,8 @@ func newsFor(t *Task, user string) News {
 // they see, whatever list they are in, and of the closed ones of this month
 // and the last (a task they gave away that was done). What the Tasks links
 // count, and what My tasks shows under Updates.
-func updatesFor(user string, open, recentClosed []*Task) []*Task {
-	if user == "" || settings().Users == nil {
+func updatesFor(user asker, open, recentClosed []*Task) []*Task {
+	if user.Name == "" || settings().Users == nil {
 		return nil
 	}
 	var out []*Task
@@ -300,8 +300,8 @@ func updatesFor(user string, open, recentClosed []*Task) []*Task {
 
 // recentUpdates: the closed tasks of this month and the last that have news
 // for user (taskFiles.RecentClosed copies those alone).
-func recentUpdates(user string) []*Task {
-	if user == "" || settings().Users == nil {
+func recentUpdates(user asker) []*Task {
+	if user.Name == "" || settings().Users == nil {
 		return nil
 	}
 	return taskFiles.RecentClosed(user, func(t *Task) bool { return newsFor(t, user).Kind != "" })
@@ -311,7 +311,7 @@ func recentUpdates(user string) []*Task {
 // tasks with news for user that aren't among them: what they gave away,
 // what mentions them, what was closed. My tasks shows those under Updates
 // alone.
-func withUpdates(user string, tasks, open, recentClosed []*Task) []*Task {
+func withUpdates(user asker, tasks, open, recentClosed []*Task) []*Task {
 	have := make(map[string]bool, len(tasks))
 	for _, t := range tasks {
 		have[t.ID] = true
@@ -326,7 +326,7 @@ func withUpdates(user string, tasks, open, recentClosed []*Task) []*Task {
 
 // givenTo: someone else gave user this task and they haven't opened it: the
 // news its card calls "new".
-func givenTo(t *Task, user string) bool { return newsFor(t, user).Kind == newsGiven }
+func givenTo(t *Task, user asker) bool { return newsFor(t, user).Kind == newsGiven }
 
 // mentionRE: @name in a text: a user's name after a space, a bracket or the
 // text's start (not the @ of a mail address).
@@ -353,8 +353,8 @@ func mentionsOf(text string) []string {
 // (a comment: before is ""; a description: what it was), by user, on a
 // shared task: it is news to them (newsFor), and whoever turned it on is
 // mailed (tellMentioned). Not for naming oneself. Returns who was named.
-func logMentions(t *Task, user, before, text string) []string {
-	if t.Owner != "" || user == "" {
+func logMentions(t *Task, user asker, before, text string) []string {
+	if t.Owner != "" || user.Name == "" {
 		return nil
 	}
 	had := mentionsOf(before)
@@ -362,8 +362,8 @@ func logMentions(t *Task, user, before, text string) []string {
 	for _, name := range mentionsOf(text) {
 		// (In a list for some, a name that is none of them is text: they
 		// don't see the task.)
-		if name != user && !slices.Contains(had, name) && taskFiles.SeesList(name, t.List) {
-			logEvent(t, user, "mentioned", "", name)
+		if name != user.Name && !slices.Contains(had, name) && taskFiles.SeesList(asUser(name), t.List) {
+			logEvent(t, user.Name, "mentioned", "", name)
 			named = append(named, name)
 		}
 	}
@@ -414,7 +414,7 @@ func newTask() *Task {
 // today is today, and the series then remembers the gap (recurrence.lead).
 // skip catches up past today: a backlog of missed occurrences collapses
 // into the next one after today.
-func spawnRecurring(user string, task *Task, active []*Task, skip bool) *Task {
+func spawnRecurring(user asker, task *Task, active []*Task, skip bool) *Task {
 	rec := task.Recurrence
 	if rec == nil {
 		return nil
@@ -482,7 +482,7 @@ func spawnRecurring(user string, task *Task, active []*Task, skip bool) *Task {
 	if when == "" {
 		when = newStart
 	}
-	logEvent(spawned, user, "repeat", "", when)
+	logEvent(spawned, user.Name, "repeat", "", when)
 	return spawned
 }
 
@@ -634,20 +634,20 @@ func cleanCommentList(cs []Comment) []Comment {
 
 // keepDone completes a keep task: never archived, it returns to Open
 // without start or due date (it leaves Focus), the day kept in last_done.
-func keepDone(user string, t *Task) {
-	logEvent(t, user, "done", "", "")
+func keepDone(user asker, t *Task) {
+	logEvent(t, user.Name, "done", "", "")
 	t.LastDone = isoDay(today())
 	t.StartDate, t.DueDate = "", ""
 }
 
 // completeTask stamps a task done (by user, at at; "" now); returns
 // the spawned recurring instance, if any.
-func completeTask(user string, t *Task, at string, active []*Task) *Task {
+func completeTask(user asker, t *Task, at string, active []*Task) *Task {
 	if at == "" {
 		at = timestamp()
 	}
 	t.ClosedAt, t.WontDo = at, false
-	logEvent(t, user, "done", "", "")
+	logEvent(t, user.Name, "done", "", "")
 	return spawnRecurring(user, t, active, false)
 }
 
@@ -674,7 +674,7 @@ func untouchedSpawn(spawn, task *Task) bool {
 // uncompleteTask clears the completion and returns active without the
 // open instance spawned when it was closed, unless that was changed
 // since (untouchedSpawn); protect ids are never removed.
-func uncompleteTask(user string, t *Task, active []*Task, protect map[string]bool) []*Task {
+func uncompleteTask(user asker, t *Task, active []*Task, protect map[string]bool) []*Task {
 	if t.Recurrence != nil {
 		kept := active[:0:0]
 		for _, a := range active {
@@ -686,7 +686,7 @@ func uncompleteTask(user string, t *Task, active []*Task, protect map[string]boo
 		active = kept
 	}
 	t.ClosedAt, t.WontDo = "", false
-	logEvent(t, user, "reopened", "", "")
+	logEvent(t, user.Name, "reopened", "", "")
 	return active
 }
 
@@ -786,7 +786,7 @@ func findTaskBacklinks(open []*Task, slug string) []TaskLink {
 // the open ones and the closed ones. Only to read: they are the search's
 // own. What needs a task by its id asks here, so no closed task of the
 // wiki's years is read and copied to show a chip.
-func taskRecords(user string) (open, done []*SearchDoc) {
+func taskRecords(user asker) (open, done []*SearchDoc) {
 	for _, d := range taskSearchDocs() {
 		switch {
 		case !canSeeTask(user, d.Task):
@@ -805,7 +805,7 @@ func taskRecords(user string) (open, done []*SearchDoc) {
 // recurring task stands for its series: the reference follows
 // spawned_from to the occurrence current now. The tasks are records
 // (taskRecords): what a chip, a link or a line of facts shows, to read only.
-func resolveTaskRefs(user string, refs []string) map[string]*Task {
+func resolveTaskRefs(user asker, refs []string) map[string]*Task {
 	out := map[string]*Task{}
 	if len(refs) == 0 {
 		return out
@@ -844,7 +844,7 @@ func resolveTaskRefs(user string, refs []string) map[string]*Task {
 // findTasks: every task user sees whose id starts with prefix (lowercase);
 // only the one with exactly that id when there is one. Each whole, read
 // from its file.
-func findTasks(user, prefix string) []*Task {
+func findTasks(user asker, prefix string) []*Task {
 	var found, exact []*Task
 	open, done := taskRecords(user)
 	for _, d := range slices.Concat(open, done) {

@@ -61,11 +61,11 @@ func forgetDrafts(rels ...string) {
 // it, and not in user's commit. One person's own drafts stay uncommitted
 // (no commit per pause in typing). Without users there is one author. A
 // commit that fails stops the write, as keepPending's does.
-func commitOthersDraft(user, slug, path string) error {
+func commitOthersDraft(user asker, slug, path string) error {
 	if settings().Users == nil {
 		return nil
 	}
-	if author := draftAuthor(path); author != "" && author != user && isUncommitted(path) {
+	if author := draftAuthor(path); author != "" && author != user.Name && isUncommitted(path) {
 		if err := gitCommit(author, "Save "+slug, path); err != nil {
 			return writeFailed(fmt.Sprintf("nothing was changed: %s's draft of %s couldn't be committed first", author, slug), err)
 		}
@@ -76,14 +76,14 @@ func commitOthersDraft(user, slug, path string) error {
 // commitOthersDrafts: commitOthersDraft for every page, before a write
 // that may change many (a rename re-pointing links, a folder move, an
 // append): each other user's draft committed in their name first.
-func commitOthersDrafts(user string) error {
+func commitOthersDrafts(user asker) error {
 	if settings().Users == nil {
 		return nil
 	}
 	draftsMu.Lock()
 	var rels []string
 	for rel, author := range drafts {
-		if author != user {
+		if author != user.Name {
 			rels = append(rels, rel)
 		}
 	}
@@ -103,7 +103,7 @@ func commitOthersDrafts(user string) error {
 	byOwner, byGroup := map[string][]string{}, map[string][]string{}
 	for _, f := range gitUncommittedFiles(privateDir, groupsDir) {
 		p := placeOf(f.Filepath)
-		if owner := p.user(); owner != "" && owner != user {
+		if owner := p.user(); owner != "" && owner != user.Name {
 			byOwner[owner] = append(byOwner[owner], f.Filepath)
 		}
 		if p.kind == ofGroup && !p.sees(user) {
@@ -304,7 +304,7 @@ type mergeOutcome struct {
 // starts with. ok false when there is no merge to make: the file gone, the
 // base no longer kept (an old tab, a restart), no git, or (clean) the
 // section's heading not there exactly once.
-func mergeSave(s *editorSave, user string) (m mergeOutcome, ok bool) {
+func mergeSave(s *editorSave, user asker) (m mergeOutcome, ok bool) {
 	if s.current == nil || s.fileHash == "" {
 		return m, false
 	}
@@ -319,7 +319,7 @@ func mergeSave(s *editorSave, user string) (m mergeOutcome, ok bool) {
 			return m, false
 		}
 	}
-	m.by = otherAuthor(s.path, user)
+	m.by = otherAuthor(s.path, user.Name)
 	label := m.by
 	if label == "" {
 		label = "theirs"
@@ -447,14 +447,14 @@ func cleanLeftDrafts() {
 // model read it (base_hash, from read_page), merged as the editor's saves
 // are; an error the model sees when the lines clash (with them) or there
 // is nothing to merge from.
-func mergeWrite(slug, path, current, content, baseHash, user string) (string, error) {
+func mergeWrite(slug, path, current, content, baseHash string, user asker) (string, error) {
 	again := " Read it again with read_page and write from that, or change the lines you mean with edit_page."
 	base, kept := baseText(baseHash)
 	if !kept {
 		return "", toolErr("Nothing written: " + slug + " changed since you read it (hash " + baseHash +
 			"), and Zone no longer has that version to merge from." + again)
 	}
-	label := otherAuthor(path, user)
+	label := otherAuthor(path, user.Name)
 	if label == "" {
 		label = "theirs"
 	}

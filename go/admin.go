@@ -43,7 +43,7 @@ func adminRoutes(mux *http.ServeMux) {
 // a page that isn't there.
 func adminOnly(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !settings().isAdmin(userOf(r)) {
+		if !settings().isAdmin(userOf(r).Name) {
 			http.NotFound(w, r)
 			return
 		}
@@ -104,7 +104,7 @@ var adminTabs = []adminTab{{"users", "Users", "/admin/users"}}
 // usersPage: GET /admin/users, the list. ?done= says what the change before did,
 // from a fixed set (a link can't make the page say anything else).
 func usersPage(w http.ResponseWriter, r *http.Request) {
-	if !settings().isAdmin(userOf(r)) {
+	if !settings().isAdmin(userOf(r).Name) {
 		http.NotFound(w, r)
 		return
 	}
@@ -154,7 +154,7 @@ func showUsers(w http.ResponseWriter, r *http.Request, status int, done, refused
 // usersData: what the Users tab lists, the users and the open links.
 func usersData(r *http.Request) *usersView {
 	s, me := latestSettings(), userOf(r)
-	v := &usersView{Me: me, Roles: roles, Groups: groupChoices(s), Links: openLinks(), Tabs: adminTabs, Tab: "users",
+	v := &usersView{Me: me.Name, Roles: roles, Groups: groupChoices(s), Links: openLinks(), Tabs: adminTabs, Tab: "users",
 		Signup: signupOn(s), SignupRole: s.SignupRole, SignupDomains: s.SignupDomains, SignupApproval: s.SignupApproval,
 		BreadcrumbHTML: breadcrumb(newReq(r), []crumb{{"Admin", "/admin"}, {"Users", ""}}, "", false, "", "")}
 	v.Stray = strayPrivate()
@@ -164,7 +164,7 @@ func usersData(r *http.Request) *usersView {
 		row := userRow{Name: name, Role: u.Role, Email: u.Email, Groups: strings.Join(u.Groups, ", "), Token: u.MCPToken != "",
 			Also:     strings.Join(slices.DeleteFunc(slices.Clone(u.In), func(g string) bool { return slices.Contains(u.Groups, g) }), ", "),
 			Disabled: u.Disabled, Pending: u.Pending,
-			Me: name == me, Private: isDir(filepath.Join(cfg.Data, privateDir, name))}
+			Me: name == me.Name, Private: isDir(filepath.Join(cfg.Data, privateDir, name))}
 		if !s.assignable(name) {
 			row.Tasks = assigned[name]
 		}
@@ -233,7 +233,7 @@ func targetUser(w http.ResponseWriter, r *http.Request) *User {
 // list is no longer theirs.
 func afterChange(w http.ResponseWriter, r *http.Request, done, name string) {
 	to := "/admin/users?done=" + url.QueryEscape(done) + "&user=" + url.QueryEscape(name)
-	if !latestSettings().isAdmin(userOf(r)) {
+	if !latestSettings().isAdmin(userOf(r).Name) {
 		to = "/"
 	}
 	http.Redirect(w, r, to, http.StatusSeeOther)
@@ -258,7 +258,7 @@ func userRoleRoute(w http.ResponseWriter, r *http.Request) {
 		badRequestPage(w)
 		return
 	}
-	err := changeSettings(userOf(r), func(f *settingsfile.File) error {
+	err := changeSettings(userOf(r).Name, func(f *settingsfile.File) error {
 		setUserRole(f, u.Name, role)
 		return nil
 	})
@@ -283,7 +283,7 @@ func userGroupsRoute(w http.ResponseWriter, r *http.Request) {
 		refuseChange(w, r, err)
 		return
 	}
-	if err := changeSettings(userOf(r), func(f *settingsfile.File) error {
+	if err := changeSettings(userOf(r).Name, func(f *settingsfile.File) error {
 		setGroups(f, u.Name, groups)
 		return nil
 	}); err != nil {
@@ -300,11 +300,11 @@ func userDisableRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	disable := filepath.Base(r.URL.Path) == "disable"
-	if disable && u.Name == userOf(r) {
+	if disable && u.Name == userOf(r).Name {
 		refuseChange(w, r, refuse("not changed: you can't disable yourself here. Another admin can."))
 		return
 	}
-	err := changeSettings(userOf(r), func(f *settingsfile.File) error {
+	err := changeSettings(userOf(r).Name, func(f *settingsfile.File) error {
 		setUserDisabled(f, u.Name, disable)
 		return nil
 	})
@@ -324,7 +324,7 @@ func userRemoveRoute(w http.ResponseWriter, r *http.Request) {
 	if u == nil {
 		return
 	}
-	if u.Name == userOf(r) {
+	if u.Name == userOf(r).Name {
 		// Not here: a slip would lock the admin out, and whenever it would
 		// be allowed (another admin left) that admin can do it. The last
 		// user is always the admin themselves, so this also keeps the wiki
@@ -333,7 +333,7 @@ func userRemoveRoute(w http.ResponseWriter, r *http.Request) {
 			"or it's done on the host: zonewiki user remove "+u.Name+"."))
 		return
 	}
-	err := changeSettings(userOf(r), func(f *settingsfile.File) error {
+	err := changeSettings(userOf(r).Name, func(f *settingsfile.File) error {
 		dropOwner(f, u.Name)
 		f.RemoveUser(u.Name)
 		return nil

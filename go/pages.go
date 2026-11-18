@@ -28,7 +28,7 @@ import (
 // pages and then lists them would see the list from before: none does.
 type Req struct {
 	r          *http.Request
-	user       string // who is asking (userOf): "" without users
+	user       asker // who is asking (userOf): its Name "" without users
 	sharing    bool
 	stamp      string // taskFiles.Stamp of the user (tasksStamp)
 	pinnedDone bool
@@ -77,7 +77,7 @@ func (rq *Req) recentClosed() []*Task {
 
 func (rq *Req) openTasks() []*Task {
 	if rq == nil {
-		return taskFiles.Open("")
+		return taskFiles.Open(asker{})
 	}
 	if !rq.openRead {
 		rq.open, rq.openRead = taskFiles.Open(rq.user), true
@@ -139,7 +139,7 @@ func (rq *Req) slugSet() map[string]bool {
 // taskLists: taskLists for the user asking, once per request.
 func (rq *Req) taskLists() map[string]ListInfo {
 	if rq == nil {
-		return taskLists("")
+		return taskLists(asker{})
 	}
 	if rq.lists == nil {
 		rq.lists = taskLists(rq.user)
@@ -153,9 +153,9 @@ func newReq(r *http.Request) *Req {
 
 // who: the user asking, "" for none (rq nil: Zone itself, which has no
 // private tasks of its own).
-func (rq *Req) who() string {
+func (rq *Req) who() asker {
 	if rq == nil {
-		return ""
+		return asker{}
 	}
 	return rq.user
 }
@@ -448,7 +448,7 @@ func refuseWrite(w http.ResponseWriter, r *http.Request, slug string) bool {
 
 // pageTaskRefs: the ids of the tasks a page refers to with [[task:…]],
 // those user sees.
-func pageTaskRefs(user, content string) map[string]bool {
+func pageTaskRefs(user asker, content string) map[string]bool {
 	masked, _ := mdtext.MaskCode(content)
 	var refs []string
 	for _, m := range taskRefRE.FindAllStringSubmatch(masked, -1) {
@@ -709,7 +709,7 @@ func (rq *Req) listPages(ref string) []PageRef {
 // pinnedLists: the user's pinned lists (pinnedLists), once per request.
 func (rq *Req) pinnedLists() []ListInfo {
 	if rq == nil {
-		return pinnedLists("", taskLists(""))
+		return pinnedLists(asker{}, taskLists(asker{}))
 	}
 	if !rq.pinnedDone {
 		rq.pinned, rq.pinnedDone = pinnedLists(rq.user, rq.taskLists()), true
@@ -1014,7 +1014,7 @@ func widenedBy(moves map[string]string) []string {
 // (mayNarrow), asked first; anyone else is refused.** One rule for a
 // rename, a folder's move, Share…, a note's move and an assistant's
 // rename_page; what the door asked already is in sure.
-func checkReaders(user string, moves map[string]string, sure moveSure) error {
+func checkReaders(user asker, moves map[string]string, sure moveSure) error {
 	if narrow := narrowedBy(moves); len(narrow) > 0 {
 		for _, o := range narrow {
 			if !mayNarrow(user, o, moves[o]) {
@@ -1037,8 +1037,8 @@ func checkReaders(user string, moves map[string]string, sure moveSure) error {
 // where it is, while nobody else has changed it since (tookBack). In a
 // wiki without an admin (from before roles) only the latter: nobody stood
 // for the others there before either.
-func mayNarrow(user, old, newSlug string) bool {
-	return settings().isAdmin(user) || tookBack(user, old, newSlug)
+func mayNarrow(user asker, old, newSlug string) bool {
+	return settings().isAdmin(user.Name) || tookBack(user, old, newSlug)
 }
 
 // tookBackMost: how far back tookBack reads a page's commits.
@@ -1049,21 +1049,21 @@ const tookBackMost = 50
 // commit) is theirs, nothing of anyone else's is in it uncommitted, and
 // newSlug's place is the one it came from or wider: the mistake of a
 // minute ago is undone, and nobody's work is taken from them.
-func tookBack(user, old, newSlug string) bool {
+func tookBack(user asker, old, newSlug string) bool {
 	path := safePath(old)
 	if path == "" || !cfg.GitEnabled {
 		return false
 	}
 	draft := draftAuthor(path)
-	if draft != "" && draft != user {
+	if draft != "" && draft != user.Name {
 		return false
 	}
 	entries := gitLog(path, tookBackMost)
 	if len(entries) == 0 {
-		return draft == user // not in git yet: theirs if they are who wrote it
+		return draft == user.Name // not in git yet: theirs if they are who wrote it
 	}
 	for i, e := range entries {
-		if e.Author != user {
+		if e.Author != user.Name {
 			return false
 		}
 		if i+1 < len(entries) && entries[i+1].Path != e.Path {
@@ -1079,7 +1079,7 @@ func placeSeers(p place) []string {
 	var out []string
 	s := settings()
 	for _, name := range sortedKeys(s.Users) {
-		if !s.Users[name].Disabled && p.sees(name) {
+		if !s.Users[name].Disabled && p.sees(asUser(name)) {
 			out = append(out, name)
 		}
 	}
@@ -1116,7 +1116,7 @@ func namesOr(names []string, most int, none string) string {
 func losers(from, to place) []string {
 	var out []string
 	for _, name := range placeSeers(from) {
-		if !to.sees(name) {
+		if !to.sees(asUser(name)) {
 			out = append(out, name)
 		}
 	}
@@ -1299,7 +1299,7 @@ func pageFolders(rq *Req) []string {
 	}
 	// The folders of the user's groups are there before a page is.
 	if rq != nil && !rq.sharing {
-		for _, g := range settings().groupsOf(rq.user) {
+		for _, g := range settings().groupsOf(rq.user.Name) {
 			set[groupsDir+"/"+g] = true
 		}
 	}

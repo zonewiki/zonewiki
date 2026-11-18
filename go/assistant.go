@@ -65,7 +65,7 @@ func tokenOwner(r *http.Request) (s *Settings, name, kept string, ok bool) {
 	if s.Users == nil {
 		return s, "", s.MCPToken, true
 	}
-	u := s.Users[userOf(r)]
+	u := s.Users[userOf(r).Name]
 	if u == nil {
 		return s, "", "", false
 	}
@@ -110,7 +110,7 @@ func assistantPage(w http.ResponseWriter, r *http.Request) {
 
 // setToken writes the owner's token (hash; "": none) to the settings file.
 func setToken(r *http.Request, name, hash string) error {
-	return changeSettings(userOf(r), func(f *settingsfile.File) error {
+	return changeSettings(userOf(r).Name, func(f *settingsfile.File) error {
 		if hash == "" {
 			f.Unset(name, "mcp-token")
 		} else {

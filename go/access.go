@@ -20,9 +20,23 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+	askerpkg "zonewiki/internal/asker"
 	"zonewiki/internal/mdtext"
 	"zonewiki/internal/taskfiles"
 )
+
+// asker: who is asking (package asker): a user, or an assistant's
+// connection that was given less than its user has. Every function that
+// answers who may see or change something takes one, so a limit a
+// connection has holds wherever the question is asked; a function that
+// only needs to know who someone is (a commit's author, whose Inbox) takes
+// the name, asker.Name.
+type asker = askerpkg.Asker
+
+// asUser: the user name themselves, with all they may: what Zone asks
+// about a user it knows by name (whom a task is given to, who gets a mail),
+// never about a request, whose asker is userOf(r).
+func asUser(name string) asker { return askerpkg.User(name) }
 
 // privateDir is the folder of the users' private folders.
 const privateDir = "private"
@@ -102,12 +116,12 @@ func taskPlace(id string) place { return place{ofTask, id} }
 // task there isn't (yet: its dialog is open and its first file is pasted;
 // or no more: deleted) has files only who knows its id finds, and no
 // visitor: an id is 122 random bits, said to nobody but the task's readers.
-func seesTaskFiles(user, id string) bool {
-	if user == visitor || !taskFolderRE.MatchString(id) {
+func seesTaskFiles(user asker, id string) bool {
+	if user.Name == visitor || !taskFolderRE.MatchString(id) {
 		return false
 	}
 	if s := settings(); s.Users != nil {
-		if u := s.Users[user]; u == nil || u.Disabled {
+		if u := s.Users[user.Name]; u == nil || u.Disabled {
 			return false
 		}
 	}
@@ -180,20 +194,20 @@ func (p place) folder() string {
 }
 
 // own: it is user's own, and theirs alone.
-func (p place) own(user string) bool { return p.kind == ofUser && p.name == user }
+func (p place) own(user asker) bool { return p.kind == ofUser && p.name == user.Name }
 
 // sees: user sees what is kept there: everyone what is shared, a user their
 // own, a group's members what is the group's (an admin who is none of them
 // doesn't, as an admin sees no private page; nor a visitor, who is in no
 // group).
-func (p place) sees(user string) bool {
+func (p place) sees(user asker) bool {
 	switch p.kind {
 	case ofEveryone:
 		return true
 	case ofUser:
-		return p.name == user
+		return p.name == user.Name
 	case ofGroup:
-		return settings().memberOf(user, p.name)
+		return settings().memberOf(user.Name, p.name)
 	case ofTask:
 		return seesTaskFiles(user, p.name)
 	}
@@ -204,7 +218,7 @@ func (p place) sees(user string) bool {
 // folder, or one of a group they are in (not the shared wiki, which is
 // everyone's, nor a place that is no one's). Where an upload of theirs is
 // kept with its page, and which uploads they are served.
-func (p place) theirs(user string) bool {
+func (p place) theirs(user asker) bool {
 	return (p.kind == ofUser || p.kind == ofGroup) && p.sees(user)
 }
 
@@ -228,13 +242,13 @@ func (p place) within(q place) bool {
 
 // canSee: user may see the page slug: a shared page, one of their own, or
 // one of a group they are in.
-func canSee(user, slug string) bool { return placeOf(slug).sees(user) }
+func canSee(user asker, slug string) bool { return placeOf(slug).sees(user) }
 
 // canWrite: user may change (create, edit, rename, delete) the page slug:
 // the pages they may see, since everything shared is editable, but for a
 // viewer (users.go: roleViewer), who changes nothing.
-func canWrite(user, slug string) bool {
-	return canSee(user, slug) && !settings().isViewer(user) && !adminsOnly(user, slug)
+func canWrite(user asker, slug string) bool {
+	return canSee(user, slug) && !settings().isViewer(user.Name) && !adminsOnly(user, slug)
 }
 
 // adminsOnly: slug is a shared guide (guidePage), which with users only an
@@ -245,9 +259,9 @@ func canWrite(user, slug string) bool {
 // assistant copy private pages into the open. A guide in a user's own
 // private folder is theirs: only their assistant reads it. Without users
 // there are no admins, and the wiki's one user writes its guides.
-func adminsOnly(user, slug string) bool {
+func adminsOnly(user asker, slug string) bool {
 	s := settings()
-	if s.Users == nil || s.isAdmin(user) {
+	if s.Users == nil || s.isAdmin(user.Name) {
 		return false
 	}
 	// A group's guide steers the assistant of every member, as a shared one
@@ -342,11 +356,11 @@ const groupGuideMsg = "Only an admin of this wiki who is in the group can change
 // readOnlyWhy: why user, who sees slug, may not change it (readOnly): a
 // visitor of a wiki that is public to read signs in first, a viewer changes
 // nothing, anyone else no guide.
-func readOnlyWhy(user, slug string) string {
-	if user == visitor && settings().isViewer(user) {
+func readOnlyWhy(user asker, slug string) string {
+	if user.Name == visitor && settings().isViewer(user.Name) {
 		return visitorMsg
 	}
-	if settings().isViewer(user) {
+	if settings().isViewer(user.Name) {
 		return readOnlyMsg
 	}
 	if placeOf(slug).kind == ofGroup {
@@ -359,7 +373,7 @@ func readOnlyWhy(user, slug string) string {
 // anyone but an admin on a guide (adminsOnly; readOnlyWhy says which).
 // Refusals then say so (403, readOnlyMsg), as the page is there for them;
 // one they can't see stays a 404.
-func readOnly(user, slug string) bool { return canSee(user, slug) && !canWrite(user, slug) }
+func readOnly(user asker, slug string) bool { return canSee(user, slug) && !canWrite(user, slug) }
 
 // readOnlyMsg: what a viewer is told when they try to change something
 // shared.
@@ -374,12 +388,12 @@ var errReadOnly = refuseAs(refusedReadOnly, readOnlyMsg)
 // readers ask too; this is for what holds every user's tasks, the search
 // index and a task found by its id).
 // A visitor sees no task.
-func canSeeTask(user string, t *Task) bool {
-	if user == visitor {
+func canSeeTask(user asker, t *Task) bool {
+	if user.Name == visitor {
 		return false
 	}
 	if t.Owner != "" {
-		return t.Owner == user
+		return t.Owner == user.Name
 	}
 	return taskFiles.SeesList(user, t.List)
 }
@@ -389,12 +403,12 @@ func canSeeTask(user string, t *Task) bool {
 // they are none of them: to anyone else such a list is no list, as another
 // user's private one. A visitor sees no list. What lists, counts or names a
 // list asks (taskLists gives only these).
-func canSeeList(user string, l ListInfo) bool {
-	if user == visitor {
+func canSeeList(user asker, l ListInfo) bool {
+	if user.Name == visitor {
 		return false
 	}
 	if l.Owner != "" {
-		return l.Owner == user
+		return l.Owner == user.Name
 	}
 	return len(l.For) == 0 || listMember(user, l.For)
 }
@@ -403,16 +417,16 @@ func canSeeList(user string, l ListInfo) bool {
 // names (@dev: Groups in docs/spec/users.md). A user who can't use the
 // wiki (disabled, removed) is none; nor is an admin by being admin, as an
 // admin sees no private page.
-func listMember(user string, who []string) bool {
+func listMember(user asker, who []string) bool {
 	s := settings()
 	if s.Users == nil {
 		return true // without users everyone sees everything: a list for some from when there were users, too
 	}
-	if u := s.Users[user]; u == nil || u.Disabled {
+	if u := s.Users[user.Name]; u == nil || u.Disabled {
 		return false
 	}
 	for _, w := range who {
-		if group, ok := strings.CutPrefix(w, "@"); ok && s.memberOf(user, group) || w == user {
+		if group, ok := strings.CutPrefix(w, "@"); ok && s.memberOf(user.Name, group) || w == user.Name {
 			return true
 		}
 	}
@@ -423,7 +437,7 @@ func listMember(user string, who []string) bool {
 func listMembers(who []string) []string {
 	var out []string
 	for _, name := range sortedKeys(settings().Users) {
-		if listMember(name, who) {
+		if listMember(asUser(name), who) {
 			out = append(out, name)
 		}
 	}
@@ -434,7 +448,7 @@ func listMembers(who []string) []string {
 // and the tasks in it (make, change, move in or out): whoever sees it and
 // may write tasks at all. One place to ask, so that members or roles per
 // list change this and canSeeList, and nothing else.
-func canWriteList(user string, l ListInfo) bool {
+func canWriteList(user asker, l ListInfo) bool {
 	return canSeeList(user, l) && mayWriteTasks(user) == nil
 }
 
@@ -445,7 +459,7 @@ func canWriteList(user string, l ListInfo) bool {
 // among a hundred people a list isn't everyone's to rename or delete.
 // Without users, and in a wiki that has no admin (from before roles),
 // whoever may write may manage, as before.
-func canManageList(user string, l ListInfo) bool {
+func canManageList(user asker, l ListInfo) bool {
 	if !canWriteList(user, l) {
 		return false
 	}
@@ -453,17 +467,17 @@ func canManageList(user string, l ListInfo) bool {
 	if l.Private() || s.Users == nil || !s.hasAdmin() {
 		return true
 	}
-	return slices.Contains(l.Owners, user) || s.isAdmin(user)
+	return slices.Contains(l.Owners, user.Name) || s.isAdmin(user.Name)
 }
 
 // mayWriteTasks: user may write the task files: anyone but a viewer. Every
 // task write passes it (writeOpenLocked, writeBothLocked), so no route or
 // tool changes a task for a viewer, whatever it does.
-func mayWriteTasks(user string) error {
-	if user == visitor {
+func mayWriteTasks(user asker) error {
+	if user.Name == visitor {
 		return refuseAs(refusedReadOnly, visitorMsg)
 	}
-	if settings().isViewer(user) {
+	if settings().isViewer(user.Name) {
 		return errReadOnly
 	}
 	return nil
@@ -471,12 +485,12 @@ func mayWriteTasks(user string) error {
 
 // ownPrivate: slug is a page in user's own private folder (where a new
 // task defaults to private).
-func ownPrivate(user, slug string) bool { return placeOf(slug).own(user) }
+func ownPrivate(user asker, slug string) bool { return placeOf(slug).own(user) }
 
 // inQuicknote: slug is a note in user's Notes: any note without
 // users or for Zone itself (user ""), with users only one in their own folder
 // (a note from before users, at the top level, is a page like any other).
-func inQuicknote(user, slug string) bool {
+func inQuicknote(user asker, slug string) bool {
 	if !isQuicknote(slug) {
 		return false
 	}
@@ -485,11 +499,11 @@ func inQuicknote(user, slug string) bool {
 
 // privateFolder: user's private folder ("private/alice"), "" without
 // users (or for Zone itself, which has no user).
-func privateFolder(user string) string {
-	if settings().Users == nil || user == "" || user == visitor {
+func privateFolder(user asker) string {
+	if settings().Users == nil || user.Name == "" || user.Name == visitor {
 		return ""
 	}
-	return privateDir + "/" + user
+	return privateDir + "/" + user.Name
 }
 
 // canSeePath: user may see the file rel (relative to the wiki, slash-
@@ -498,7 +512,7 @@ func privateFolder(user string) string {
 // and _tasks/ too) like a page there. What lies in a hidden folder no one
 // sees in Zone: its own files in .zone/ (the settings file, with its
 // password hashes), and whatever else the history holds in one.
-func canSeePath(user, rel string) bool {
+func canSeePath(user asker, rel string) bool {
 	if strings.HasPrefix(rel, ".") && strings.Contains(rel, "/") || strings.Contains(rel, "/.") {
 		return false
 	}
@@ -519,7 +533,7 @@ func canSeePath(user, rel string) bool {
 		}
 	}
 	// A visitor sees no task, so no task file's history either.
-	return user != visitor || !strings.HasPrefix(rel, taskfiles.DirName+"/")
+	return user.Name != visitor || !strings.HasPrefix(rel, taskfiles.DirName+"/")
 }
 
 // namesList: msg names the list name as commit messages do ("#hiring"), as
@@ -580,7 +594,7 @@ func strayGroups() []string {
 }
 
 // visiblePages: the pages user may see, as iterPages lists them.
-func visiblePages(user string) []PageFile {
+func visiblePages(user asker) []PageFile {
 	var out []PageFile
 	for _, p := range iterPages() {
 		if canSee(user, p.Slug) {
@@ -591,7 +605,7 @@ func visiblePages(user string) []PageFile {
 }
 
 // visibleSlugs: the slugs of visiblePages, as a set.
-func visibleSlugs(user string) map[string]bool {
+func visibleSlugs(user asker) map[string]bool {
 	out := map[string]bool{}
 	for _, p := range visiblePages(user) {
 		out[p.Slug] = true
@@ -615,7 +629,7 @@ var privateNameRE = regexp.MustCompile(`(?i)(^|[^\w./-])((?:` + keptDirs + `)/[\
 // that narrowed one ("List #hiring is for @hiring, anna"), pinned it for
 // everyone or renamed it writes the registry everyone reads, so it is in
 // everyone's history; to anyone else it says only that a list changed.
-func hideNames(user, msg string) string {
+func hideNames(user asker, msg string) string {
 	if settings().Users == nil {
 		return msg
 	}

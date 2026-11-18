@@ -25,7 +25,7 @@ func set[T any](t *testing.T, v *T, to T) {
 // replyText: the reply to msg as JSON text ("null" for none).
 func replyText(t *testing.T, msg string, call func(string, jsonObj) ([]toolContent, error)) string {
 	t.Helper()
-	reply, err := handleMCP(json.RawMessage(msg), "", false, call)
+	reply, err := handleMCP(json.RawMessage(msg), asUser(""), false, call)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,11 +129,11 @@ func TestLongGuidesAreCut(t *testing.T) {
 	testWiki(t, map[string]string{"wiki-guide": "# Wiki guide\n\n" + strings.Repeat("x", 100),
 		"tickets/CLAUDE": "# Tickets\n\nOne folder per ticket.\n", "tickets/bug-1": "# Bug\n"})
 	set(t, &guideChars, 20)
-	if got := instructionsWithGuide(""); !strings.HasSuffix(got, "\n\n# Wiki guide\n\nxxxxxx\n\n[… cut here: read_page \"wiki-guide\" for the rest]") {
+	if got := instructionsWithGuide(asker{}); !strings.HasSuffix(got, "\n\n# Wiki guide\n\nxxxxxx\n\n[… cut here: read_page \"wiki-guide\" for the rest]") {
 		t.Errorf("instructions: %q", got[len(got)-100:])
 	}
 	set(t, &folderGuideChars, 10)
-	err := checkGuides(jsonObj{}, []string{"tickets/bug-1"}, "")
+	err := checkGuides(jsonObj{}, []string{"tickets/bug-1"}, asker{})
 	if err == nil || !strings.Contains(err.Error(), "# Tickets\n\n\n[… cut here: read_page \"tickets/CLAUDE\" for the rest]") {
 		t.Errorf("refusal: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestLongGuidesAreCut(t *testing.T) {
 func TestToolListNamesGuidedFolders(t *testing.T) {
 	testWiki(t, nil)
 	desc := func() string {
-		for _, tool := range toolList("", false) {
+		for _, tool := range toolList(asker{}, false) {
 			if tool["name"] == "read_guides" {
 				return tool["description"].(string)
 			}
@@ -162,7 +162,7 @@ func TestToolListNamesGuidedFolders(t *testing.T) {
 func TestLinkedFromIsCut(t *testing.T) {
 	testWiki(t, map[string]string{"golf": "# Golf\n", "c": "[[golf]]\n", "d": "[[golf]]\n", "e": "[[golf]]\n"})
 	set(t, &backlinksShown, 2)
-	if got := mcpPageLinks("golf", "# Golf\n", ""); !strings.HasSuffix(got, "Linked from (3): c, d, … and 1 more") {
+	if got := mcpPageLinks("golf", "# Golf\n", asker{}); !strings.HasSuffix(got, "Linked from (3): c, d, … and 1 more") {
 		t.Errorf("got %q", got)
 	}
 }
@@ -187,7 +187,7 @@ func TestCatastrophicRegexIsFast(t *testing.T) {
 	testWiki(t, map[string]string{"slow": "# Slow\n\n" + strings.Repeat("a", 5000) + "!\n"})
 	start := time.Now()
 	args, _ := jsonobj.Parse([]byte(`{"find": "(a+)+$", "replace": "x", "regex": true, "dry_run": false}`))
-	out, err := replaceInPages(args, "", "")
+	out, err := replaceInPages(args, "", asker{})
 	if err != nil || out != `Nothing matches "(a+)+$" outside code.` || time.Since(start) > 2*time.Second {
 		t.Errorf("%q %v in %v", out, err, time.Since(start))
 	}

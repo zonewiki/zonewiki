@@ -43,7 +43,7 @@ func uploadDir(p place) string {
 // page, when it is in their own private folder or in a group's they are in
 // (a file is seen by who sees the page it is for), else with the shared
 // ones.
-func uploadPlace(user, page string) place {
+func uploadPlace(user asker, page string) place {
 	if p := placeOf(page); p.theirs(user) {
 		return p
 	}
@@ -55,7 +55,7 @@ func uploadPlace(user, page string) place {
 // task's id is the one its dialog made up, which the task then gets);
 // without users with the shared ones, as nothing is anyone's. ok false: not
 // a task's id, or a task they don't see.
-func taskUploadPlace(user, id string) (p place, ok bool) {
+func taskUploadPlace(user asker, id string) (p place, ok bool) {
 	if !taskFolderRE.MatchString(id) || !seesTaskFiles(user, id) {
 		return place{}, false
 	}
@@ -126,7 +126,7 @@ func serveUpload(w http.ResponseWriter, r *http.Request) {
 // anyone else, as for a file that isn't there).
 func servePrivateUpload(w http.ResponseWriter, r *http.Request) {
 	owner := r.PathValue("user")
-	if owner == "" || owner != userOf(r) || settings().Users[owner] == nil {
+	if owner == "" || owner != userOf(r).Name || settings().Users[owner] == nil {
 		http.NotFound(w, r)
 		return
 	}
@@ -251,7 +251,7 @@ func apiUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	if onlyReads(r) {
 		msg := readOnlyMsg
-		if !settings().isViewer(userOf(r)) {
+		if !settings().isViewer(userOf(r).Name) {
 			msg = readOnlyConnectionMsg
 		}
 		http.Error(w, msg, http.StatusForbidden)
@@ -318,7 +318,7 @@ func saveUpload(w http.ResponseWriter, r *http.Request, src io.ReadSeeker, owner
 // storeUpload writes an upload to a place's uploads (uploadDir) and commits
 // it as user, the commit's message ending with via (" (MCP)" for a tool's).
 // A wiki with no room for it refuses (checkRoom).
-func storeUpload(user string, owner place, filename string, src io.ReadSeeker, via string) error {
+func storeUpload(user asker, owner place, filename string, src io.ReadSeeker, via string) error {
 	dest := filepath.Join(uploadDir(owner), filename)
 	uploadMu.Lock()
 	defer uploadMu.Unlock()
@@ -353,7 +353,7 @@ func storeUpload(user string, owner place, filename string, src io.ReadSeeker, v
 	}
 	added(size)
 	// Written; a commit that fails is said, as for any write (notCommitted).
-	return notCommitted(gitCommit(user, "Upload "+name+via, dest))
+	return notCommitted(gitCommit(user.Name, "Upload "+name+via, dest))
 }
 
 // freeUploadName: filename, or with a number before its extension

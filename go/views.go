@@ -195,9 +195,9 @@ type moduleLink struct {
 func moduleLinks(rq *Req) []moduleLink {
 	current := currentModule(rq)
 	users := privateFolder(rq.who()) != ""
-	viewer := settings().isViewer(rq.who())
+	viewer := settings().isViewer(rq.who().Name)
 	var out []moduleLink
-	groups := settings().groupsOf(rq.who()) // the groups the user is in: Groups, for who is in one
+	groups := settings().groupsOf(rq.who().Name) // the groups the user is in: Groups, for who is in one
 	for _, m := range modules {
 		if m[0] == "private" && !users || viewer && (m[0] == "private" || m[0] == "notes") {
 			continue // a viewer makes nothing: no private pages, no notes
@@ -205,7 +205,7 @@ func moduleLinks(rq *Req) []moduleLink {
 		if m[0] == "groups" && len(groups) == 0 {
 			continue
 		}
-		if rq.who() == visitor && m[0] != "wiki" {
+		if rq.who().Name == visitor && m[0] != "wiki" {
 			continue // a visitor has the wiki's pages alone
 		}
 		group := 0
@@ -262,7 +262,7 @@ func currentModule(rq *Req) string {
 		return ""
 	}
 	m := moduleViewRE.FindStringSubmatch(p)
-	if rq.who() == visitor {
+	if rq.who().Name == visitor {
 		return "wiki" // a public wiki's visitor has the pages alone
 	}
 	if m != nil && isQuicknote(m[1]) {
@@ -380,10 +380,10 @@ func page(w http.ResponseWriter, rq *Req, status int, name, title string, o shel
 		AppName: appName, Version: version, Build: cfg.Build, SourceURL: sourceURL, AllowRemote: cfg.AllowRemote,
 		Locale: s.Locale, DateFormat: s.DateFormat,
 		// Only signed in: the login page has no one to sign out.
-		SignOut: s.authOn() && isSignedIn(rq.r), User: rq.user, Users: s.Users != nil, Admin: s.isAdmin(rq.user),
-		Viewer: s.isViewer(rq.user),
+		SignOut: s.authOn() && isSignedIn(rq.r), User: rq.user.Name, Users: s.Users != nil, Admin: s.isAdmin(rq.user.Name),
+		Viewer: s.isViewer(rq.user.Name),
 	}
-	if rq.user == visitor {
+	if rq.user.Name == visitor {
 		// No name, nothing of users (private pages, assignees), nothing to
 		// make but, where visitors edit, pages.
 		sh.User, sh.Users, sh.Viewer, sh.Visitor = "", false, true, true
@@ -608,7 +608,7 @@ type pageMenuView struct {
 
 func pageMenu(rq *Req, slug, title, renameError, promoteError, appendError, renameName, renameAsk string) *pageMenuView {
 	// A visitor moves nothing: no Rename…, Delete… or Move to wiki….
-	visits := rq.who() == visitor
+	visits := rq.who().Name == visitor
 	m := &pageMenuView{Slug: slug, Title: title, Git: cfg.GitEnabled, Quicknote: isQuicknote(slug) && !visits,
 		Renamable: !isProtected(slug) && canWrite(rq.who(), slug) && !visits, RenameError: renameError,
 		RenameName: renameName, RenameAsk: renameAsk}

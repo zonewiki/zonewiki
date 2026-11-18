@@ -20,7 +20,7 @@ import (
 
 func unixNano(n int64) time.Time { return time.Unix(0, n) }
 
-func writePage(args jsonObj, base, user string) (string, error) {
+func writePage(args jsonObj, base string, user asker) (string, error) {
 	content, err := strArg(args, "content", true)
 	if err != nil {
 		return "", err
@@ -96,7 +96,7 @@ func writePage(args jsonObj, base, user string) (string, error) {
 
 // writeQuicknote: write_page with quicknote, a new note, named by slug
 // (any words; Zone puts the time in front) or else by the content's title.
-func writeQuicknote(args jsonObj, content, base, user string) (string, error) {
+func writeQuicknote(args jsonObj, content, base string, user asker) (string, error) {
 	if jsonobj.True(args["overwrite"]) {
 		return "", toolErr("A note is always a new one: overwrite doesn't apply. " +
 			"Change an existing note with edit_page.")
@@ -140,7 +140,7 @@ func writeQuicknote(args jsonObj, content, base, user string) (string, error) {
 
 // fileNote: the note's Move to wiki (name, folder,
 // keep_date) or Append to page (page, heading), as in the browser.
-func fileNote(args jsonObj, base, user string) (string, error) {
+func fileNote(args jsonObj, base string, user asker) (string, error) {
 	slug, path, err := existingPage(args, "slug", user)
 	if err != nil {
 		return "", err
@@ -248,7 +248,7 @@ func applyEdit(content, slug string, edit jsonObj, which string) (string, int, e
 	return strings.ReplaceAll(content, old, repl), count, nil
 }
 
-func editPageTool(args jsonObj, base, user string) (string, error) {
+func editPageTool(args jsonObj, base string, user asker) (string, error) {
 	slug, _, err := existingPage(args, "slug", user)
 	if err != nil {
 		return "", err
@@ -328,7 +328,7 @@ func appendAt(content, addition, heading string) (string, bool) {
 	return out, true
 }
 
-func appendToPage(args jsonObj, base, user string) (string, error) {
+func appendToPage(args jsonObj, base string, user asker) (string, error) {
 	slug, _, err := existingPage(args, "slug", user)
 	if err != nil {
 		return "", err
@@ -374,7 +374,7 @@ func appendToPage(args jsonObj, base, user string) (string, error) {
 // folderArg: the folder rename_page's slug names, if it names one: a
 // trailing "/" ("projects/"), or no page by that name but pages below it.
 // "" for a page.
-func folderArg(raw, user string) string {
+func folderArg(raw string, user asker) string {
 	folder := cleanFolder(raw)
 	if folder == "" || !strings.HasSuffix(strings.TrimSpace(raw), "/") && mcpPageSlug(raw, user) != "" {
 		return ""
@@ -390,7 +390,7 @@ func folderArg(raw, user string) string {
 // A list of moved pages in rename_page's result stops after this many.
 const movesShown = 20
 
-func renameFolder(folder string, args jsonObj, base, user string) (string, error) {
+func renameFolder(folder string, args jsonObj, base string, user asker) (string, error) {
 	raw, err := strArg(args, "new_slug", true)
 	if err != nil {
 		return "", err
@@ -433,7 +433,7 @@ func renameFolder(folder string, args jsonObj, base, user string) (string, error
 }
 
 // renameTaskTag: the Rename… of /tasks?list=<name>, a list or a plain tag.
-func renameTaskTag(args jsonObj, base, user string) (string, error) {
+func renameTaskTag(args jsonObj, base string, user asker) (string, error) {
 	tag, err := strArg(args, "tag", true)
 	if err != nil {
 		return "", err
@@ -488,7 +488,7 @@ func narrowHint(err error) error {
 	return err
 }
 
-func renamePageTool(args jsonObj, base, user string) (string, error) {
+func renamePageTool(args jsonObj, base string, user asker) (string, error) {
 	raw, err := strArg(args, "slug", true)
 	if err != nil {
 		return "", err
@@ -537,7 +537,7 @@ func renamePageTool(args jsonObj, base, user string) (string, error) {
 	return "Renamed page " + slug + " to " + newS + "." + refs + "\n" + pageInfo(newS, base) + pendingNote(slug, kept) + left, nil
 }
 
-func deletePageTool(args jsonObj, base, user string) (string, error) {
+func deletePageTool(args jsonObj, base string, user asker) (string, error) {
 	slug, _, err := existingPage(args, "slug", user)
 	if err != nil {
 		return "", err
@@ -577,7 +577,7 @@ func deletePageTool(args jsonObj, base, user string) (string, error) {
 	return out + pending, nil
 }
 
-func restorePage(args jsonObj, base, user string) (string, error) {
+func restorePage(args jsonObj, base string, user asker) (string, error) {
 	if !cfg.GitEnabled {
 		return "", noGit()
 	}
@@ -622,7 +622,7 @@ func restorePage(args jsonObj, base, user string) (string, error) {
 
 // undoChangesTool: undo_changes, the browser's Undo on Changes
 // (undoChangesOp): the changes named by their versions undone together.
-func undoChangesTool(args jsonObj, base, user string) (string, error) {
+func undoChangesTool(args jsonObj, base string, user asker) (string, error) {
 	if !cfg.GitEnabled {
 		return "", noGit()
 	}

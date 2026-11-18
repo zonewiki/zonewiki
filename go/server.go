@@ -525,7 +525,7 @@ var visitorEdits = map[string]bool{
 // them to sign in, before the route runs.
 func visitorGate(mux *http.ServeMux, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if userOf(r) == visitor {
+		if userOf(r).Name == visitor {
 			_, pattern := mux.Handler(r)
 			if !visitorRoutes[pattern] && !(publicMode() == publicEdit && visitorEdits[pattern]) {
 				toLogin(w, r)
@@ -567,7 +567,7 @@ func viewerGate(mux *http.ServeMux) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case "POST", "PUT", "PATCH", "DELETE":
-			if settings().isViewer(userOf(r)) {
+			if settings().isViewer(userOf(r).Name) {
 				if _, pattern := mux.Handler(r); pattern != "" && !viewerWrites[pattern] {
 					http.Error(w, readOnlyMsg, http.StatusForbidden)
 					return

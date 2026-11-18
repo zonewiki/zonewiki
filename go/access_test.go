@@ -22,12 +22,12 @@ func withUsers(t *testing.T, names ...string) {
 func TestAccessWithoutUsers(t *testing.T) {
 	testWiki(t, nil)
 	for _, slug := range []string{"index", "private/alice/diary", "private/x"} {
-		if p := placeOf(slug); p.user() != "" || !p.shared() || !canSee("", slug) || !canWrite("", slug) {
+		if p := placeOf(slug); p.user() != "" || !p.shared() || !canSee(asker{}, slug) || !canWrite(asker{}, slug) {
 			t.Errorf("%s: private without users", slug)
 		}
 	}
-	if !canSeePath("", "private/alice/_tasks/tasks.json") || !canSeePath("", "private/alice/_assets/a.png") ||
-		canSeePath("", ".leaf/config") || canSeePath("", ".zone/config") || canSeePath("", ".zone/secret_key") {
+	if !canSeePath(asker{}, "private/alice/_tasks/tasks.json") || !canSeePath(asker{}, "private/alice/_assets/a.png") ||
+		canSeePath(asker{}, ".leaf/config") || canSeePath(asker{}, ".zone/config") || canSeePath(asker{}, ".zone/secret_key") {
 		t.Error("paths")
 	}
 }
@@ -59,10 +59,10 @@ func TestAccessWithUsers(t *testing.T) {
 		if p := placeOf(c.slug); p.user() != c.owner || p.shared() == c.private {
 			t.Errorf("placeOf(%s) = %+v", c.slug, p)
 		}
-		if canSee("alice", c.slug) != c.alice || canSee("bob", c.slug) != c.bob || canWrite("alice", c.slug) != c.alice {
-			t.Errorf("%s: alice %v bob %v", c.slug, canSee("alice", c.slug), canSee("bob", c.slug))
+		if canSee(asUser("alice"), c.slug) != c.alice || canSee(asUser("bob"), c.slug) != c.bob || canWrite(asUser("alice"), c.slug) != c.alice {
+			t.Errorf("%s: alice %v bob %v", c.slug, canSee(asUser("alice"), c.slug), canSee(asUser("bob"), c.slug))
 		}
-		if canSee("", c.slug) != !c.private {
+		if canSee(asker{}, c.slug) != !c.private {
 			t.Errorf("%s: no user", c.slug)
 		}
 	}
@@ -72,7 +72,7 @@ func TestAccessWithUsers(t *testing.T) {
 		"private/_assets/a.png": false, "_tasks/tasks.json": true, "private/alice/_tasks/tasks.json": true,
 		"private/mary-ann/_tasks/tasks.json": false, "_tasks/users.json": true,
 	} {
-		if canSeePath("alice", path) != want {
+		if canSeePath(asUser("alice"), path) != want {
 			t.Errorf("canSeePath(alice, %s) != %v", path, want)
 		}
 	}
@@ -81,8 +81,8 @@ func TestAccessWithUsers(t *testing.T) {
 func TestHiddenPageAndSharing(t *testing.T) {
 	testWiki(t, map[string]string{"secret/x": "# X\n"}) // noshare secret/ (testWiki)
 	withUsers(t, "alice")
-	alice, aliceSharing := &Req{user: "alice"}, &Req{user: "alice", sharing: true}
-	if hiddenPage(alice, "private/alice/x") || !hiddenPage(&Req{user: "bob"}, "private/alice/x") {
+	alice, aliceSharing := &Req{user: asUser("alice")}, &Req{user: asUser("alice"), sharing: true}
+	if hiddenPage(alice, "private/alice/x") || !hiddenPage(&Req{user: asUser("bob")}, "private/alice/x") {
 		t.Error("private")
 	}
 	if hiddenPage(alice, "secret/x") || !hiddenPage(aliceSharing, "secret/x") || !hiddenPage(aliceSharing, "private/bob/x") {
@@ -116,7 +116,7 @@ func TestQuicknoteNotesInPrivateFolders(t *testing.T) {
 		isQuicknote("private/alice/x/2026-10-27_12-00-00_idea") || isQuicknote("notes/2026-10-27_12-00-00_idea") {
 		t.Error("with users: at the top of a user's folder")
 	}
-	if noteDate(note) != "2026-10-27" || privateFolder("alice") != "private/alice" || privateFolder("") != "" {
+	if noteDate(note) != "2026-10-27" || privateFolder(asUser("alice")) != "private/alice" || privateFolder(asker{}) != "" {
 		t.Error("noteDate, privateFolder")
 	}
 }
@@ -124,11 +124,11 @@ func TestQuicknoteNotesInPrivateFolders(t *testing.T) {
 func TestInQuicknote(t *testing.T) {
 	testWiki(t, nil)
 	old, mine, theirs := "2026-10-27_12-00-00_idea", "private/alice/2026-10-27_12-00-00_idea", "private/carol/2026-10-27_12-00-00_idea"
-	if !inQuicknote("", old) || inQuicknote("", "notes") {
+	if !inQuicknote(asker{}, old) || inQuicknote(asker{}, "notes") {
 		t.Error("without users: the top-level notes")
 	}
 	withUsers(t, "alice")
-	if !inQuicknote("alice", mine) || inQuicknote("alice", old) || inQuicknote("alice", theirs) || !inQuicknote("", old) {
+	if !inQuicknote(asUser("alice"), mine) || inQuicknote(asUser("alice"), old) || inQuicknote(asUser("alice"), theirs) || !inQuicknote(asker{}, old) {
 		t.Error("with users: only the user's own; Zone itself sees all")
 	}
 }
@@ -136,7 +136,7 @@ func TestInQuicknote(t *testing.T) {
 func TestHideNames(t *testing.T) {
 	testWiki(t, nil)
 	msg := "Promote private/alice/2026-10-27_12-00-00_idea to idea (MCP)"
-	if hideNames("bob", msg) != msg {
+	if hideNames(asUser("bob"), msg) != msg {
 		t.Error("without users nothing is private")
 	}
 	withUsers(t, "alice", "bob")
@@ -144,7 +144,7 @@ func TestHideNames(t *testing.T) {
 		"alice": msg,
 		"bob":   "Promote a private page to idea (MCP)",
 	} {
-		if got := hideNames(user, msg); got != want {
+		if got := hideNames(asUser(user), msg); got != want {
 			t.Errorf("%s: %q", user, got)
 		}
 	}
@@ -159,7 +159,7 @@ func TestHideNames(t *testing.T) {
 		// A folder made by hand in another case is the same user's (placeOf).
 		"Rename Private/alice/a to x": "Rename a private page to x",
 	} {
-		if got := hideNames("bob", msg); got != want {
+		if got := hideNames(asUser("bob"), msg); got != want {
 			t.Errorf("%q: %q", msg, got)
 		}
 	}
@@ -220,8 +220,8 @@ func TestPlaceWithin(t *testing.T) {
 	testWiki(t, nil)
 	withUsers(t, "alice", "bob")
 	shared, alice, bob, none := placeOf("notes/x"), placeOf("private/alice/x"), placeOf("private/bob/x"), placeOf("private/carol/x")
-	if !shared.shared() || alice.user() != "alice" || !alice.own("alice") || alice.own("bob") || none.user() != "" || none.shared() ||
-		none.sees("alice") || none.sees("") || shared.own("alice") {
+	if !shared.shared() || alice.user() != "alice" || !alice.own(asUser("alice")) || alice.own(asUser("bob")) || none.user() != "" || none.shared() ||
+		none.sees(asUser("alice")) || none.sees(asker{}) || shared.own(asUser("alice")) {
 		t.Errorf("places %+v %+v %+v", shared, alice, none)
 	}
 	for _, c := range []struct {
@@ -287,13 +287,13 @@ func TestGroupFolders(t *testing.T) {
 		if p.kind != c.kind || p.group() != c.group || p.user() != "" {
 			t.Errorf("placeOf(%s) = %+v", c.slug, p)
 		}
-		if canSee("alice", c.slug) != c.alice || canSee("bob", c.slug) != c.bob {
-			t.Errorf("%s: alice %v bob %v", c.slug, canSee("alice", c.slug), canSee("bob", c.slug))
+		if canSee(asUser("alice"), c.slug) != c.alice || canSee(asUser("bob"), c.slug) != c.bob {
+			t.Errorf("%s: alice %v bob %v", c.slug, canSee(asUser("alice"), c.slug), canSee(asUser("bob"), c.slug))
 		}
 		// carol is in no group, dana an admin in another, eve disabled, a visitor and Zone's own "" in none.
 		for _, who := range []string{"carol", "dana", "eve", visitor, "", "nobody"} {
-			if canSee(who, c.slug) != c.others || canWrite(who, c.slug) && !c.others {
-				t.Errorf("%s: %q sees %v", c.slug, who, canSee(who, c.slug))
+			if canSee(asUser(who), c.slug) != c.others || canWrite(asUser(who), c.slug) && !c.others {
+				t.Errorf("%s: %q sees %v", c.slug, who, canSee(asUser(who), c.slug))
 			}
 		}
 	}
@@ -301,10 +301,10 @@ func TestGroupFolders(t *testing.T) {
 		"groups/dev/roadmap.md": true, "groups/dev/_assets/a.png": true, "groups/design/_assets/a.png": false,
 		"groups/_assets/a.png": false, "groups/product/x.md": true, "groups/nobody/x.md": false, "groups/loose.md": false,
 	} {
-		if canSeePath("alice", path) != want {
+		if canSeePath(asUser("alice"), path) != want {
 			t.Errorf("canSeePath(alice, %s) != %v", path, want)
 		}
-		if canSeePath("carol", path) || canSeePath(visitor, path) {
+		if canSeePath(asUser("carol"), path) || canSeePath(asUser(visitor), path) {
 			t.Errorf("%s: seen by someone in no group", path)
 		}
 	}
@@ -330,27 +330,27 @@ func TestGroupFolders(t *testing.T) {
 	}
 	// A commit message names no page of a group to who isn't in it.
 	msg := "Rename groups/dev/roadmap to roadmap, and notgroups/dev/x"
-	if got := hideNames("carol", msg); got != "Rename a group's page to roadmap, and notgroups/dev/x" {
+	if got := hideNames(asUser("carol"), msg); got != "Rename a group's page to roadmap, and notgroups/dev/x" {
 		t.Errorf("hideNames for carol: %q", got)
 	}
-	if got := hideNames("alice", msg); got != msg {
+	if got := hideNames(asUser("alice"), msg); got != msg {
 		t.Errorf("hideNames for alice: %q", got)
 	}
 	// A group's guide is an admin's who is in the group; the others in it read it.
 	withGroups(t, nil, "alice:dev", "dana:dev", "frank")
 	settings().Users["dana"].Role, settings().Users["frank"].Role = roleAdmin, roleAdmin
 	for who, want := range map[string]bool{"alice": false, "dana": true, "frank": false} {
-		if canWrite(who, "groups/dev/AGENTS") != want || canWrite(who, "groups/dev/sub/claude") != want {
+		if canWrite(asUser(who), "groups/dev/AGENTS") != want || canWrite(asUser(who), "groups/dev/sub/claude") != want {
 			t.Errorf("%s writes the group's guide: %v", who, !want)
 		}
 	}
-	if !canSee("alice", "groups/dev/AGENTS") || !readOnly("alice", "groups/dev/AGENTS") || readOnly("frank", "groups/dev/AGENTS") ||
-		!canWrite("alice", "groups/dev/roadmap") || readOnlyWhy("alice", "groups/dev/AGENTS") != groupGuideMsg {
+	if !canSee(asUser("alice"), "groups/dev/AGENTS") || !readOnly(asUser("alice"), "groups/dev/AGENTS") || readOnly(asUser("frank"), "groups/dev/AGENTS") ||
+		!canWrite(asUser("alice"), "groups/dev/roadmap") || readOnlyWhy(asUser("alice"), "groups/dev/AGENTS") != groupGuideMsg {
 		t.Error("the group's guide for an editor in it")
 	}
 	// Without users groups/ is an ordinary folder.
 	settings().Users = nil
-	if p := placeOf("groups/dev/x"); !p.shared() || !canSee("", "groups/dev/x") {
+	if p := placeOf("groups/dev/x"); !p.shared() || !canSee(asker{}, "groups/dev/x") {
 		t.Error("groups/ without users")
 	}
 }

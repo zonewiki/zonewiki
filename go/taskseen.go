@@ -184,7 +184,7 @@ func markSeen(user string, t *Task) {
 func canHaveNews(user string) map[string]bool {
 	since := now().AddDate(0, -2, 0).Format(time.DateOnly)
 	keep := map[string]bool{}
-	open, done := taskRecords(user)
+	open, done := taskRecords(asUser(user))
 	for _, d := range open {
 		keep[d.Task.ID] = true
 	}

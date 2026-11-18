@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"zonewiki/internal/asker"
 	"zonewiki/internal/atomicfile"
 	"zonewiki/internal/jsonobj"
 )
@@ -154,14 +155,14 @@ func forOf(dir string) []string {
 
 // seesDir: user sees the tasks in the shared list's folder dir: a list for
 // everyone, or one they are among those it is for.
-func (s *Store) seesDir(user, dir string) bool {
+func (s *Store) seesDir(user asker.Asker, dir string) bool {
 	who := forOf(dir)
 	return len(who) == 0 || s.Member != nil && s.Member(user, who)
 }
 
 // SeesList: user sees the shared list named name and its tasks (seesDir);
 // the tasks in no list, and a name that has no folder, are everyone's.
-func (s *Store) SeesList(user, name string) bool {
+func (s *Store) SeesList(user asker.Asker, name string) bool {
 	if user == Everyone || name == "" || !listDirRE.MatchString(name) {
 		return true
 	}
@@ -524,12 +525,12 @@ func (s *Store) ReadListsStrict(owner string) (*Registry, error) {
 // WriteListsLocked writes owner's registry for user (who must be allowed
 // to write, and to write owner's files: the shared ones or their own);
 // returns the paths of the files that changed, for the commit.
-func (s *Store) WriteListsLocked(user, owner string, r *Registry) ([]string, error) {
+func (s *Store) WriteListsLocked(user asker.Asker, owner string, r *Registry) ([]string, error) {
 	if err := s.MayWrite(user); err != nil {
 		return nil, err
 	}
 	if !slices.Contains(s.Owners(user), owner) {
-		return nil, errors.New("tasks: the lists of " + owner + " in a write by " + user)
+		return nil, errors.New("tasks: the lists of " + owner + " in a write by " + user.Name)
 	}
 	return s.WriteListsOf(owner, r)
 }

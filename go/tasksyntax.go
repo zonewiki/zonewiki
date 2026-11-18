@@ -395,19 +395,19 @@ func tagParamMatches(t *Task, raw string) bool {
 // they left) and so doesn't see it. The name stays on the task: back among
 // them, it is theirs as before; until then it counts as no one's.
 func assigneeGone(t *Task) bool {
-	return t.Assignee != "" && (!settings().assignable(t.Assignee) || !taskFiles.SeesList(t.Assignee, t.List))
+	return t.Assignee != "" && (!settings().assignable(t.Assignee) || !taskFiles.SeesList(asUser(t.Assignee), t.List))
 }
 
 // assigneeIs: t's assignee is what word names, for user: a user's name,
 // "me" (user) or "none": no one, or someone who can no longer be given
 // tasks (TasksCore.assigneeIs). A private task has no assignee and is its
 // user's own: it is "me" to them, and not "none".
-func assigneeIs(t *Task, word, user string) bool {
+func assigneeIs(t *Task, word string, user asker) bool {
 	switch word {
 	case "none":
 		return t.Owner == "" && (t.Assignee == "" || assigneeGone(t))
 	case "me":
-		return user != "" && (t.Assignee == user || t.Owner == user)
+		return user.Name != "" && (t.Assignee == user.Name || t.Owner == user.Name)
 	}
 	return t.Assignee == word
 }
@@ -415,7 +415,7 @@ func assigneeIs(t *Task, word, user string) bool {
 // assigneeParamMatches: a task passes an embed's assignee= for user, read
 // as tag= is (tagParamMatches): `a|b` either's, else each word must hold,
 // `-a` not theirs. Without users every task passes.
-func assigneeParamMatches(t *Task, raw, user string) bool {
+func assigneeParamMatches(t *Task, raw string, user asker) bool {
 	raw = strings.ToLower(strings.TrimSpace(raw))
 	if raw == "" || settings().Users == nil {
 		return true
@@ -627,14 +627,14 @@ func parseTaskFilter(q string) taskFilter {
 
 // matches: the task passes the filter, for user (TasksCore.matchesFilter).
 // t is only read.
-func (f taskFilter) matches(t *Task, user string) bool {
+func (f taskFilter) matches(t *Task, user asker) bool {
 	if f.importance != "" && t.Importance != f.importance {
 		return false
 	}
 	if f.updated && newsFor(t, user).Kind == "" {
 		return false
 	}
-	if f.following && !slices.Contains(t.Followers, user) {
+	if f.following && !slices.Contains(t.Followers, user.Name) {
 		return false
 	}
 	if f.text != "" && !strings.Contains(strings.ToLower(t.Title), f.text) && !strings.Contains(strings.ToLower(t.Description), f.text) {
@@ -659,11 +659,11 @@ func (f taskFilter) matches(t *Task, user string) bool {
 	// Who made it: a private task is its user's own making.
 	maker := t.Maker()
 	if maker == "" && t.Owner != "" {
-		maker = user
+		maker = user.Name
 	}
 	by := func(w string) bool {
 		if w == "me" {
-			w = user
+			w = user.Name
 		}
 		return maker != "" && w == maker
 	}

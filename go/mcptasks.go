@@ -23,7 +23,7 @@ func shortID(id string) string { return runePrefix(id, shortIDLen) }
 // mcpTaskText: one task for user's LLM: title, a line of facts
 // (status, private, tags, dates, repeat, list), its link in the tasks, its
 // notes and comments.
-func mcpTaskText(t *Task, base, user string) string {
+func mcpTaskText(t *Task, base string, user asker) string {
 	status := taskStatus(t)
 	fact := "status: " + status
 	if status != "open" {
@@ -42,7 +42,7 @@ func mcpTaskText(t *Task, base, user string) string {
 	}
 	if s := settings(); t.Assignee != "" && s.Users != nil {
 		who := "assigned to: " + t.Assignee
-		if t.Assignee == user {
+		if t.Assignee == user.Name {
 			who += " (the user)"
 		} else if !s.assignable(t.Assignee) {
 			who += " (who can no longer be given tasks: it counts as no one's)"
@@ -58,11 +58,11 @@ func mcpTaskText(t *Task, base, user string) string {
 			newsClosed: "closed it", newsReopened: "reopened it", newsHandedOn: "gave it to someone else"}[news.Kind]
 		facts = append(facts, "update: "+news.By+" "+what+" ("+strings.Replace(news.At, "T", " ", 1)+")")
 	}
-	if settings().Users != nil && slices.Contains(t.Followers, user) {
+	if settings().Users != nil && slices.Contains(t.Followers, user.Name) {
 		facts = append(facts, "the user follows it")
 	}
 	if maker := t.Maker(); maker != "" && maker != t.Assignee && settings().Users != nil {
-		if maker == user {
+		if maker == user.Name {
 			maker += " (the user)"
 		}
 		facts = append(facts, "from: "+maker)
@@ -125,7 +125,7 @@ func mcpTaskText(t *Task, base, user string) string {
 
 // mcpTaskRefs: for read_page, what each [[task:…]] on the page stands for,
 // since the raw markdown holds only the id.
-func mcpTaskRefs(content, base, user string) string {
+func mcpTaskRefs(content, base string, user asker) string {
 	masked, _ := mdtext.MaskCode(content)
 	var refs []string
 	seen := map[string]bool{}
@@ -160,7 +160,7 @@ func mcpTaskRefs(content, base, user string) string {
 	return "\n\n---\nTasks referenced on this page ([[task:…]]):\n" + strings.Join(lines, "\n")
 }
 
-func searchTasks(args jsonObj, base, user string) (string, error) {
+func searchTasks(args jsonObj, base string, user asker) (string, error) {
 	query, err1 := strArg(args, "query", false)
 	tag, err2 := strArg(args, "tag", false)
 	assignee, err3 := strArg(args, "assignee", false)
@@ -336,7 +336,7 @@ var (
 // findTask: the task a reference names: its id or a prefix of it (the
 // 8-character short id the tools show), a [[task:…]] reference or a
 // /tasks?task=… link; of the tasks user sees.
-func findTask(raw, user string) (*Task, error) {
+func findTask(raw string, user asker) (*Task, error) {
 	raw = strings.ToLower(strings.TrimSpace(raw))
 	ref := raw
 	if m := taskLinkRE.FindStringSubmatch(raw); m != nil {
@@ -509,7 +509,7 @@ const (
 // (by its title and notes; open and done ones), most common first, which
 // it lacks, so the model can offer them; and its tags no other task or page
 // uses, which may be near-duplicates of existing ones.
-func tagHints(task *Task, user string) string {
+func tagHints(task *Task, user asker) string {
 	// The other tasks the user sees, by the wiki's search index (no task is
 	// read to find the ones like this one).
 	other := func(d *SearchDoc) bool { return d.isTask() && d.taskID() != task.ID && canSeeTask(user, d.Task) }
@@ -574,7 +574,7 @@ func tagHints(task *Task, user string) string {
 	return out
 }
 
-func createTaskTool(args jsonObj, base, user string) (string, error) {
+func createTaskTool(args jsonObj, base string, user asker) (string, error) {
 	if _, err := strArg(args, "title", true); err != nil {
 		return "", err
 	}
@@ -634,7 +634,7 @@ func otherArgs(args jsonObj, allowed ...string) []string {
 // updateTaskTool: one task's fields, status and comment; ids instead of id
 // tags several tasks (tagTasksTool). A task is never deleted: wont_do
 // closes one undone.
-func updateTaskTool(args jsonObj, base, user string) (string, error) {
+func updateTaskTool(args jsonObj, base string, user asker) (string, error) {
 	if args.Has("ids") {
 		if args.Has("id") {
 			return "", toolErr("Give id or ids, not both")
@@ -711,7 +711,7 @@ func updateTaskTool(args jsonObj, base, user string) (string, error) {
 // More ids than this in one call is likely a mistake (a whole tasks retagged).
 const tagTasksMax = 200
 
-func tagTasksTool(args jsonObj, user string) (string, error) {
+func tagTasksTool(args jsonObj, user asker) (string, error) {
 	ids, ok := jsonobj.As[[]json.RawMessage](args["ids"])
 	if !ok || len(ids) == 0 {
 		return "", toolErr("ids must be a non-empty list of task ids")
@@ -782,7 +782,7 @@ func tagTasksTool(args jsonObj, user string) (string, error) {
 
 // renameTaskListTool: a list renamed, with its tasks, the pins, and the
 // embeds and links on pages that name it (renameListOp).
-func renameTaskListTool(args jsonObj, base, user string) (string, error) {
+func renameTaskListTool(args jsonObj, base string, user asker) (string, error) {
 	ref, err := strArg(args, "list", true)
 	if err != nil {
 		return "", err
@@ -807,7 +807,7 @@ func renameTaskListTool(args jsonObj, base, user string) (string, error) {
 }
 
 // createTaskListTool: a new task list, shared or (private) the user's own.
-func createTaskListTool(args jsonObj, base, user string) (string, error) {
+func createTaskListTool(args jsonObj, base string, user asker) (string, error) {
 	name, err := strArg(args, "name", true)
 	if err != nil {
 		return "", err

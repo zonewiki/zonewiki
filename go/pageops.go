@@ -75,7 +75,7 @@ func pageFailed(w http.ResponseWriter, r *http.Request, err error) {
 
 // writablePage: the file of an existing page user may change; refused as
 // missing otherwise, as a page user may not see is.
-func writablePage(user, slug string) (string, error) {
+func writablePage(user asker, slug string) (string, error) {
 	p := ""
 	if canWrite(user, slug) {
 		p = safePath(slug)
@@ -89,7 +89,7 @@ func writablePage(user, slug string) (string, error) {
 // notWritable: the refusal of a change to slug user may not make: a
 // viewer's to a shared page says so (refusedReadOnly), anything else
 // answers as missing, with msg.
-func notWritable(user, slug, msg string) error {
+func notWritable(user asker, slug, msg string) error {
 	if readOnly(user, slug) && safePath(slug) != "" {
 		return refuseAs(refusedReadOnly, readOnlyWhy(user, slug))
 	}
@@ -98,7 +98,7 @@ func notWritable(user, slug, msg string) error {
 
 // deletePageOp deletes the page, what it held uncommitted committed first
 // (keepPending: Deleted Pages brings back its last text). kept: it did.
-func deletePageOp(user, slug, suffix string) (kept bool, err error) {
+func deletePageOp(user asker, slug, suffix string) (kept bool, err error) {
 	path, err := writablePage(user, slug)
 	if err != nil {
 		return false, err
@@ -113,13 +113,13 @@ func deletePageOp(user, slug, suffix string) (kept bool, err error) {
 		return kept, err
 	}
 	forgetUsage()
-	return kept, notCommitted(gitCommit(user, "Delete "+slug+suffix, path))
+	return kept, notCommitted(gitCommit(user.Name, "Delete "+slug+suffix, path))
 }
 
 // restorePageOp writes the page's text as of version sha (a commit in its
 // log; a deleted page comes back), what it held uncommitted committed
 // first. old: its text before, nil when it was deleted.
-func restorePageOp(user, slug, sha, suffix string) (old *string, kept bool, err error) {
+func restorePageOp(user asker, slug, sha, suffix string) (old *string, kept bool, err error) {
 	if !cfg.GitEnabled {
 		return nil, false, refuseAs(refusedNotFound, "There is no history: git isn't installed where Zone runs.")
 	}
@@ -148,13 +148,13 @@ func restorePageOp(user, slug, sha, suffix string) (old *string, kept bool, err 
 	if err := writeText(path, content); err != nil {
 		return old, kept, err
 	}
-	return old, kept, notCommitted(gitCommit(user, "Restore "+slug+" to "+short+suffix, path))
+	return old, kept, notCommitted(gitCommit(user.Name, "Restore "+slug+" to "+short+suffix, path))
 }
 
 // createPageOp makes the page slug with content; refused when it
 // exists, or can't be made there by user (another user's folder answers
 // as missing).
-func createPageOp(user, slug, content, suffix string) error {
+func createPageOp(user asker, slug, content, suffix string) error {
 	path := safePath(slug)
 	switch {
 	case path == "":
@@ -171,7 +171,7 @@ func createPageOp(user, slug, content, suffix string) error {
 		return err
 	}
 	added(int64(len(content)))
-	return notCommitted(gitCommit(user, "Create "+slug+suffix, path))
+	return notCommitted(gitCommit(user.Name, "Create "+slug+suffix, path))
 }
 
 // pageNewText: a page and the text it is to hold (replacePagesOp).
@@ -183,7 +183,7 @@ type pageNewText struct{ slug, path, text string }
 // the replacement. Every page must be one user may write: one that isn't
 // refuses the whole of it, with nothing written. Returns how many pages
 // had text kept.
-func replacePagesOp(user string, pages []pageNewText, message, what string) (kept int, err error) {
+func replacePagesOp(user asker, pages []pageNewText, message, what string) (kept int, err error) {
 	paths := make([]string, len(pages))
 	for i, p := range pages {
 		if _, err := writablePage(user, p.slug); err != nil {
@@ -199,7 +199,7 @@ func replacePagesOp(user string, pages []pageNewText, message, what string) (kep
 			return kept, err
 		}
 	}
-	return kept, notCommitted(gitCommit(user, message, paths...))
+	return kept, notCommitted(gitCommit(user.Name, message, paths...))
 }
 
 // setAsideOp: the editor's text mine, which lost to theirs (what the page
@@ -208,7 +208,7 @@ func replacePagesOp(user string, pages []pageNewText, message, what string) (kep
 // lost: two commits, "Set aside an edit of <slug>" and "Reload <slug>".
 // What the page held that was never in git is committed first. A commit
 // that fails stops it there: putting theirs back would lose the text.
-func setAsideOp(user, slug, mine, theirs string) error {
+func setAsideOp(user asker, slug, mine, theirs string) error {
 	path, err := writablePage(user, slug)
 	if err != nil {
 		return err
@@ -219,16 +219,16 @@ func setAsideOp(user, slug, mine, theirs string) error {
 	if err := writeText(path, mine); err != nil {
 		return err
 	}
-	if err := gitCommit(user, "Set aside an edit of "+slug, path); err != nil {
+	if err := gitCommit(user.Name, "Set aside an edit of "+slug, path); err != nil {
 		return err
 	}
 	if err := writeText(path, theirs); err != nil {
 		return err
 	}
-	if err := gitCommit(user, "Reload "+slug, path); err != nil {
+	if err := gitCommit(user.Name, "Reload "+slug, path); err != nil {
 		return err
 	}
-	dropDraft(user, path)
+	dropDraft(user.Name, path)
 	return nil
 }
 
@@ -236,7 +236,7 @@ func setAsideOp(user, slug, mine, theirs string) error {
 // holds is replaced, but never what was never in git, which is committed
 // first (keepPending); then the text is the user's draft, as any save
 // (writeDraft).
-func keepMineOp(user, slug, path string, current *string, text string) error {
+func keepMineOp(user asker, slug, path string, current *string, text string) error {
 	if _, err := keepPending(path, slug); err != nil {
 		return err
 	}
@@ -249,7 +249,7 @@ func keepMineOp(user, slug, path string, current *string, text string) error {
 // link that led to the new page's editor). Every link to slug on that page
 // points at the page in the folder from now (one commit); the page itself
 // is made when its editor first saves. Returns that page's slug.
-func linkNewOp(user, on, slug string) (target string, err error) {
+func linkNewOp(user asker, on, slug string) (target string, err error) {
 	on, slug = mdtext.ToSlug(on), mdtext.ToSlug(slug)
 	p := placeOf(on)
 	if on == "" || slug == "" || !canSee(user, on) || p.shared() {
@@ -288,7 +288,7 @@ func linkNewOp(user, on, slug string) (target string, err error) {
 // Either continues the writer's text, so only another user's draft there
 // is committed first (commitOthersDraft), not the writer's own. A page's
 // first save makes it, so it needs room (checkRoom); an edit never does.
-func writeDraft(user, slug, path string, current *string, text string, commit bool) error {
+func writeDraft(user asker, slug, path string, current *string, text string, commit bool) error {
 	if !canWrite(user, slug) || safePath(slug) != path {
 		return notWritable(user, slug, "No page "+strconv.Quote(slug))
 	}
@@ -309,9 +309,9 @@ func writeDraft(user, slug, path string, current *string, text string, commit bo
 		}
 	}
 	if commit {
-		return notCommitted(gitCommit(user, "Update "+slug, path))
+		return notCommitted(gitCommit(user.Name, "Update "+slug, path))
 	} else {
-		noteDraft(path, user)
+		noteDraft(path, user.Name)
 	}
 	return nil
 }
@@ -321,7 +321,7 @@ func writeDraft(user, slug, path string, current *string, text string, commit bo
 // committed first (keepPending), so the commit holds only this change. A
 // refusal from change leaves everything as it was. Returns the text before
 // and after.
-func changePageOp(user, slug, action, suffix string, change func(old string) (string, error)) (old, text string, kept bool, err error) {
+func changePageOp(user asker, slug, action, suffix string, change func(old string) (string, error)) (old, text string, kept bool, err error) {
 	path, err := writablePage(user, slug)
 	if err != nil {
 		return "", "", false, err
@@ -338,12 +338,12 @@ func changePageOp(user, slug, action, suffix string, change func(old string) (st
 	if err := writeText(path, text); err != nil {
 		return old, text, kept, err
 	}
-	return old, text, kept, notCommitted(gitCommit(user, action+" "+slug+suffix, path))
+	return old, text, kept, notCommitted(gitCommit(user.Name, action+" "+slug+suffix, path))
 }
 
 // checkRename: why user can't rename slug to newSlug, if not; else the
 // files of both. The MCP tool asks it before it asks for the guides.
-func checkRename(user, slug, newSlug string, sure moveSure) (path, newPath string, err error) {
+func checkRename(user asker, slug, newSlug string, sure moveSure) (path, newPath string, err error) {
 	if path, err = writablePage(user, slug); err != nil {
 		return "", "", err
 	}
@@ -363,7 +363,7 @@ func checkRename(user, slug, newSlug string, sure moveSure) (path, newPath strin
 // user isn't in, a page there already, or a move to other readers that
 // isn't the user's to make, or that the door hasn't asked about yet
 // (checkReaders: an askError then).
-func checkTarget(user, slug, newSlug string, sure moveSure) error {
+func checkTarget(user asker, slug, newSlug string, sure moveSure) error {
 	newPath := safePath(newSlug)
 	switch {
 	case newPath == "":
@@ -381,7 +381,7 @@ func checkTarget(user, slug, newSlug string, sure moveSure) error {
 // renamePageOp renames the page, links to it following (movePage); what
 // it held uncommitted is committed first, so the rename's commit only
 // moves it. changed: the files whose links were re-pointed.
-func renamePageOp(user, slug, newSlug, suffix string, sure moveSure) (changed []string, kept bool, err error) {
+func renamePageOp(user asker, slug, newSlug, suffix string, sure moveSure) (changed []string, kept bool, err error) {
 	path, newPath, err := checkRename(user, slug, newSlug, sure)
 	if err != nil {
 		return nil, false, err
@@ -395,7 +395,7 @@ func renamePageOp(user, slug, newSlug, suffix string, sure moveSure) (changed []
 
 // checkFolderMove: why user can't move folder to newFolder, if not; else
 // the files of the pages in it.
-func checkFolderMove(user, folder, newFolder string, sure moveSure) ([]string, error) {
+func checkFolderMove(user asker, folder, newFolder string, sure moveSure) ([]string, error) {
 	switch {
 	case newFolder == folder:
 		return nil, refuseAs(refusedUnchanged, "The folder is already called "+folder)
@@ -441,7 +441,7 @@ func checkFolderMove(user, folder, newFolder string, sure moveSure) ([]string, e
 // commit (moveFolder); what they held uncommitted is committed first.
 // Returns the (slug, new slug) moves, the files whose links changed, and
 // how many pages had text kept.
-func moveFolderOp(user, folder, newFolder, suffix string, sure moveSure) (moves [][2]string, changed []string, kept int, err error) {
+func moveFolderOp(user asker, folder, newFolder, suffix string, sure moveSure) (moves [][2]string, changed []string, kept int, err error) {
 	paths, err := checkFolderMove(user, folder, newFolder, sure)
 	if err != nil {
 		return nil, nil, 0, err
@@ -468,7 +468,7 @@ type tagPage struct {
 }
 
 // visibleSlugs: the pages of the plan user may see.
-func (p *tagPlan) visibleSlugs(user string) []string {
+func (p *tagPlan) visibleSlugs(user asker) []string {
 	var out []string
 	for _, page := range p.pages {
 		if canSee(user, page.Slug) {
@@ -498,7 +498,7 @@ func tagChange(t *Task, old, name string) (changed bool) {
 // private tag of that name is another tag. A tag user doesn't see at all is
 // refused as one that doesn't exist, and what user is told counts only what
 // they see, so it says nothing about another user's private files.
-func checkTagRename(user, tag, newName string, merge bool) (*tagPlan, error) {
+func checkTagRename(user asker, tag, newName string, merge bool) (*tagPlan, error) {
 	olds, names := taskmodel.CleanTags([]string{tag}), taskmodel.CleanTags([]string{newName})
 	if len(olds) == 0 {
 		return nil, refuse("Which tag? The name is empty")
@@ -528,7 +528,7 @@ func checkTagRename(user, tag, newName string, merge bool) (*tagPlan, error) {
 	taskFiles.Unlock()
 	seen, shared, taken := false, false, false
 	for _, f := range files {
-		visible := f.owner == "" || f.owner == user
+		visible := f.owner == "" || f.owner == user.Name
 		for _, t := range f.tasks {
 			tags := taskTagsLower(t)
 			seen = seen || visible && tags[old]
@@ -560,7 +560,7 @@ func checkTagRename(user, tag, newName string, merge bool) (*tagPlan, error) {
 	}
 	plan := &tagPlan{old: old, name: name, owners: []string{""}}
 	if privateFolder(user) != "" {
-		plan.owners = []string{user}
+		plan.owners = []string{user.Name}
 	}
 	if shared {
 		plan.owners = taskFiles.EveryOwner()
@@ -605,7 +605,7 @@ type tagRename struct {
 // when the new name is in use. Every tasks file is read before anything is
 // written, so one that can't be read changes nothing; text not yet in git is
 // committed first. Not the tags in pages' frontmatter: those sort pages.
-func renameTagOp(user, tag, newName string, merge bool, suffix string) (*tagRename, error) {
+func renameTagOp(user asker, tag, newName string, merge bool, suffix string) (*tagRename, error) {
 	if err := mayWriteTasks(user); err != nil { // a tag's rename writes tasks: whoever may write them
 		return nil, err
 	}
@@ -634,7 +634,7 @@ func renameTagOp(user, tag, newName string, merge bool, suffix string) (*tagRena
 		}
 		if n > 0 {
 			writes = append(writes, taskWrite{f.Path, tasks})
-			if f.Owner == "" || f.Owner == user {
+			if f.Owner == "" || f.Owner == user.Name {
 				done.Tasks += n
 			}
 		}
@@ -668,7 +668,7 @@ func renameTagOp(user, tag, newName string, merge bool, suffix string) (*tagRena
 		msg = "Merge tag #" + plan.old + " into #" + plan.name + suffix
 	}
 	if len(written) > 0 {
-		failed = errors.Join(failed, notCommitted(gitCommit(user, msg, written...)))
+		failed = errors.Join(failed, notCommitted(gitCommit(user.Name, msg, written...)))
 	}
 	return done, failed
 }
@@ -698,7 +698,7 @@ func (u *undone) pages() []string { return append(slices.Clone(u.back), u.gone..
 //
 // check, when given, is asked with the pages before anything is written
 // (the MCP tool's guides).
-func undoChangesOp(user string, versions []string, suffix string, check func(slugs []string) error) (*undone, error) {
+func undoChangesOp(user asker, versions []string, suffix string, check func(slugs []string) error) (*undone, error) {
 	if !cfg.GitEnabled {
 		return nil, refuseAs(refusedNotFound, "There is no history: git isn't installed where Zone runs.")
 	}
@@ -833,7 +833,7 @@ func undoChangesOp(user string, versions []string, suffix string, check func(slu
 		}
 	}
 	forgetUsage()
-	return done, notCommitted(gitCommit(user, message+suffix, paths...))
+	return done, notCommitted(gitCommit(user.Name, message+suffix, paths...))
 }
 
 // keepPending: before a write that replaces or removes the page at path,

@@ -20,7 +20,7 @@ import (
 const privateHomeText = "# Private\n\nPages in your private folder are hidden from the other users of this wiki.\n\n## Links\n\n"
 
 // privateHomeSlug: user's private home ("private/alice/index"), "" without users.
-func privateHomeSlug(user string) string {
+func privateHomeSlug(user asker) string {
 	if folder := privateFolder(user); folder != "" {
 		return folder + "/index"
 	}
@@ -31,12 +31,12 @@ func privateHomeSlug(user string) string {
 // like the wiki's own home). Without users private/ is an ordinary folder.
 func isPrivateHome(slug string) bool {
 	owner := placeOf(slug).user()
-	return owner != "" && slug == privateHomeSlug(owner)
+	return owner != "" && slug == privateHomeSlug(asUser(owner))
 }
 
 // ensurePrivateHome makes user's private home when it is missing (committed
 // in their name); returns its slug.
-func ensurePrivateHome(user string) (string, error) {
+func ensurePrivateHome(user asker) (string, error) {
 	slug := privateHomeSlug(user)
 	if slug == "" {
 		return "", nil
@@ -51,7 +51,7 @@ func ensurePrivateHome(user string) (string, error) {
 	if err := writeText(p, privateHomeText); err != nil {
 		return "", err
 	}
-	return slug, notCommitted(gitCommit(user, "Create "+slug, p))
+	return slug, notCommitted(gitCommit(user.Name, "Create "+slug, p))
 }
 
 // privateRoute: GET /private opens the signed-in user's private home; 404
@@ -59,7 +59,7 @@ func ensurePrivateHome(user string) (string, error) {
 // the home takes pagesMu, as a page write: the others don't wait for one.
 func privateRoute(w http.ResponseWriter, r *http.Request) {
 	user := userOf(r)
-	if settings().isViewer(user) {
+	if settings().isViewer(user.Name) {
 		http.NotFound(w, r) // a viewer makes nothing, so has no private home
 		return
 	}
@@ -121,7 +121,7 @@ func groupRoute(w http.ResponseWriter, r *http.Request) {
 		if !exists(file) {
 			if err = os.MkdirAll(filepath.Dir(file), 0o777); err == nil {
 				if err = writeText(file, groupHomeText(group)); err == nil {
-					err = notCommitted(gitCommit(user, "Create "+slug, file))
+					err = notCommitted(gitCommit(user.Name, "Create "+slug, file))
 				}
 			}
 		}
@@ -207,10 +207,10 @@ type shareTarget struct {
 // folder). There is no way back: others have seen the page then, and its
 // links on their pages would have to go; a new page is made where it
 // belongs from the start (sharedNewOffer).
-func shareTargets(user, slug string) []shareTarget {
+func shareTargets(user asker, slug string) []shareTarget {
 	s := settings()
 	from := placeOf(slug)
-	u := s.Users[user]
+	u := s.Users[user.Name]
 	if u == nil || from.folder() == "" || !from.sees(user) || isProtected(slug) || isQuicknote(slug) || !canWrite(user, slug) {
 		return nil
 	}
@@ -225,7 +225,7 @@ func shareTargets(user, slug string) []shareTarget {
 			out = append(out, t)
 		}
 	}
-	for _, g := range s.groupsOf(user) {
+	for _, g := range s.groupsOf(user.Name) {
 		if to := (place{ofGroup, g}); to != from && from.within(to) {
 			offer(shareTarget{to.folder() + "/" + rest, g, s.groupMembers(g)})
 		}
@@ -252,9 +252,9 @@ var newFromRE = regexp.MustCompile(`^(?:private|group:[a-z0-9][a-z0-9-]{0,39})$`
 // could name instead (the editor's note says so), and the group it would be
 // for ("" for the user's own). "" when there is nothing to offer (not from
 // such a page, no users, the page isn't a shared one, or that page exists).
-func sharedNewOffer(user, slug, from string) (target, group string) {
+func sharedNewOffer(user asker, slug, from string) (target, group string) {
 	folder := ""
-	if g, ok := strings.CutPrefix(from, "group:"); ok && newFromRE.MatchString(from) && settings().memberOf(user, g) {
+	if g, ok := strings.CutPrefix(from, "group:"); ok && newFromRE.MatchString(from) && settings().memberOf(user.Name, g) {
 		folder, group = groupsDir+"/"+g, g
 	} else if from == "private" {
 		folder = privateFolder(user)

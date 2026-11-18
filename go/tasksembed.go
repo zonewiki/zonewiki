@@ -112,7 +112,7 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, p
 			at.Page, at.Index, at.Raw, at.Embed = page, src.index, src.raw, true
 		case src != nil && src.index < 0 && page == "" && mayWriteTasks(user) == nil:
 			at.Raw, at.Mine = src.raw, paramsScope(params) == mineScope
-			if u := settings().Users[user]; at.Mine && cfg.Mail.Host != "" && u != nil && u.Email != "" && mineAssigns(user) {
+			if u := settings().Users[user.Name]; at.Mine && cfg.Mail.Host != "" && u != nil && u.Email != "" && mineAssigns(user) {
 				at.Mail = true
 			}
 		default:
@@ -259,7 +259,7 @@ func allTasksParams() TasksParams {
 
 // setAllTasksParams writes the settings of All tasks with those of set
 // changed, in a commit by user; was: the params as the dialog saw them.
-func setAllTasksParams(user, was string, set map[string]string) error {
+func setAllTasksParams(user asker, was string, set map[string]string) error {
 	if listsUnmigrated {
 		return errListsUnmigrated
 	}
@@ -289,7 +289,7 @@ func setAllTasksParams(user, was string, set map[string]string) error {
 
 // setEmbedParamsOp changes the params of the index-th [[tasks: …]] of the
 // page slug (setEmbedParams), in a commit by user.
-func setEmbedParamsOp(user, slug string, index int, was string, set map[string]string) error {
+func setEmbedParamsOp(user asker, slug string, index int, was string, set map[string]string) error {
 	set, err := checkEmbedSettings(set, embedSettingKeys)
 	if err != nil {
 		return err
@@ -365,7 +365,7 @@ func processTasksEmbeds(rq *Req, text, page string, settings bool) (string, []ta
 	}
 	lists := rq.taskLists()
 	var embeds []tasksEmbed
-	if rq.who() == visitor {
+	if rq.who().Name == visitor {
 		// A public wiki's visitor sees no task, so no task list: the page
 		// reads as without its embeds.
 		return tasksRE.ReplaceAllString(text, ""), nil
@@ -406,7 +406,7 @@ func assignablePeople(r *http.Request) map[string]any {
 	if !sharingOn(r) {
 		names = settings().assignableUsers()
 	}
-	return map[string]any{"users": names, "me": userOf(r)}
+	return map[string]any{"users": names, "me": userOf(r).Name}
 }
 
 // tasksInitial: what a page view with a task list brings along, so the list
@@ -474,7 +474,7 @@ const lazyTextsFrom = 150
 
 // scopedTasks: those of tasks that a view of any of scopes shows user
 // (scopeFilter); every task when one of them is "" (every task).
-func scopedTasks(user string, tasks []*Task, lists map[string]ListInfo, scopes ...string) []*Task {
+func scopedTasks(user asker, tasks []*Task, lists map[string]ListInfo, scopes ...string) []*Task {
 	if slices.Contains(scopes, "") {
 		return tasks
 	}
@@ -554,12 +554,12 @@ func (rq *Req) keptCounts(key string, count func() TaskCounts) TaskCounts {
 	user := rq.who()
 	// The stamp before the count: a write between the two gives counts kept
 	// under a stamp that is no longer the files', which are then counted anew.
-	stamp, day, set := rq.tasksStamp()+itoa(int(seenVersion(user))), isoDay(today()), settings()
+	stamp, day, set := rq.tasksStamp()+itoa(int(seenVersion(user.Name))), isoDay(today()), settings()
 	countsKept.Lock()
-	kept := countsKept.of[user]
+	kept := countsKept.of[user.Name]
 	if kept == nil || kept.stamp != stamp || kept.day != day || kept.set != set {
 		kept = &userCounts{stamp: stamp, day: day, set: set, counts: map[string]TaskCounts{}}
-		countsKept.of[user] = kept
+		countsKept.of[user.Name] = kept
 	}
 	c, ok := kept.counts[key]
 	countsKept.Unlock()
@@ -577,7 +577,7 @@ func (rq *Req) keptCounts(key string, count func() TaskCounts) TaskCounts {
 // request.
 func (rq *Req) tasksStamp() string {
 	if rq == nil {
-		return taskFiles.Stamp("")
+		return taskFiles.Stamp(asker{})
 	}
 	if rq.stamp == "" {
 		rq.stamp = taskFiles.Stamp(rq.user) + "."
@@ -624,7 +624,7 @@ func assigneeParam(p TasksParams) string {
 
 // countTasks: taskCounts of the open tasks the views with params show
 // user (any of them; none: every task); lists: those user sees.
-func countTasks(user string, tasks []*Task, lists map[string]ListInfo, params ...TasksParams) TaskCounts {
+func countTasks(user asker, tasks []*Task, lists map[string]ListInfo, params ...TasksParams) TaskCounts {
 	day := isoDay(today())
 	in := make([]func(*Task) bool, len(params))
 	for i, p := range params {
@@ -772,7 +772,7 @@ func (rq *Req) taskMore(place string) *TasksMore {
 	if privateFolder(user) != "" {
 		has = map[string]bool{}
 		for _, t := range rq.openTasks() {
-			if t.Owner == "" && t.Assignee == user {
+			if t.Owner == "" && t.Assignee == user.Name {
 				has[taskList(t, lists)] = true
 			}
 		}
@@ -801,7 +801,7 @@ func (rq *Req) taskMore(place string) *TasksMore {
 // what is private isn't shown.
 func (rq *Req) hasInbox() bool {
 	user := rq.who()
-	if user == visitor {
+	if user.Name == visitor {
 		return false
 	}
 	if inboxOwner(user) == "" {

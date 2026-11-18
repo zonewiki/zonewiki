@@ -431,7 +431,7 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 		if t == nil || existing[t.ID] {
 			continue
 		}
-		checkBy(user, t)
+		checkBy(user.Name, t)
 		general = placeSnapshot(user, t, snap, lists) || general
 		existing[t.ID] = true
 		if !t.IsOpen() {
@@ -574,8 +574,8 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 		}
 		// An admin's import keeps the file's names (a wiki moved, a
 		// backup put back); anyone else's only their own.
-		if !settings().isAdmin(user) {
-			checkBy(user, t)
+		if !settings().isAdmin(user.Name) {
+			checkBy(user.Name, t)
 		}
 		existing[t.ID] = true
 		if lost {
@@ -585,7 +585,7 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 		switch private := jsonobj.True(snap["private"]) && privateFolder(user) != ""; {
 		case intoInbox && privateFolder(user) != "":
 			// Into the Inbox: the importer's own, whatever the file says.
-			t.List, t.Owner, t.Assignee = "", user, ""
+			t.List, t.Owner, t.Assignee = "", user.Name, ""
 		case intoInbox:
 			t.List, t.Owner = "", ""
 		case into == nil:
@@ -593,7 +593,7 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 		case private && !into.Private():
 			// A task exported private stays private, wherever it is
 			// imported: in the importer's Inbox.
-			t.List, t.Owner, t.Assignee = "", user, ""
+			t.List, t.Owner, t.Assignee = "", user.Name, ""
 		default:
 			t.List, t.Owner = into.Name, into.Owner
 			if into.Private() {
@@ -607,7 +607,7 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 		}
 		ids = append(ids, t.ID)
 	}
-	noteBrought(user, ids) // the undo deletes them again (mayDeleteTask)
+	noteBrought(user.Name, ids) // the undo deletes them again (mayDeleteTask)
 	if len(ids) > 0 {
 		var also []string
 		if general {
@@ -669,7 +669,7 @@ func apiBatchComplete(w http.ResponseWriter, r *http.Request) error {
 		moving, movingIDs := selectTasks(active, func(t *Task) bool { return set[t.ID] && t.IsOpen() })
 		for _, t := range moving {
 			t.ClosedAt, t.WontDo = stamp, true
-			logEvent(t, userOf(r), "wontdo", "", "")
+			logEvent(t, userOf(r).Name, "wontdo", "", "")
 			updated = append(updated, t)
 		}
 		active = withoutIDs(active, movingIDs)
@@ -934,9 +934,9 @@ func apiBatchUpdate(w http.ResponseWriter, r *http.Request) error {
 		if err := taskFiles.WriteBothLocked(userOf(r), active, closed, "Update tasks"); err != nil {
 			return err
 		}
-		tellAssigned(userOf(r), before, updated...)
+		tellAssigned(userOf(r).Name, before, updated...)
 		for _, t := range updated {
-			tellMentioned(userOf(r), t, mentioned[t])
+			tellMentioned(userOf(r).Name, t, mentioned[t])
 		}
 	}
 	writeJSON(w, http.StatusOK, apiTasks(updated))

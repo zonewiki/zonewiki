@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"zonewiki/internal/asker"
 	"zonewiki/internal/taskmodel"
 )
 
@@ -32,8 +33,9 @@ func newStore(t *testing.T, users ...string) *fixture {
 		Root:       func() string { return f.root },
 		PrivateDir: "private",
 		Users:      func() []string { return users },
-		Private:    func(user string) bool { return slices.Contains(users, user) },
-		MayWrite: func(user string) error {
+		Private:    func(user asker.Asker) bool { return slices.Contains(users, user.Name) },
+		MayWrite: func(asks asker.Asker) error {
+			user := asks.Name
 			if user != "" && user == f.viewer {
 				return errors.New("read only")
 			}
@@ -135,7 +137,7 @@ func (f *fixture) write(t *testing.T, user string, active, closed []*Task, messa
 	t.Helper()
 	f.Lock()
 	defer f.Unlock()
-	if err := f.WriteBothLocked(user, active, closed, message); err != nil {
+	if err := f.WriteBothLocked(asker.User(user), active, closed, message); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -146,12 +148,12 @@ func (f *fixture) rewrite(t *testing.T, user, message string, change func(active
 	t.Helper()
 	f.Lock()
 	defer f.Unlock()
-	active, closed, err := f.ReadForWriteLocked(user)
+	active, closed, err := f.ReadForWriteLocked(asker.User(user))
 	if err != nil {
 		t.Fatal(err)
 	}
 	active, closed = change(active, closed)
-	if err := f.WriteBothLocked(user, active, closed, message); err != nil {
+	if err := f.WriteBothLocked(asker.User(user), active, closed, message); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -166,7 +168,7 @@ func TestWriteFilesByOwnerAndMonth(t *testing.T) {
 	active := []*Task{task("s1", "", ""), task("a1", "alice", "")}
 	closed := []*Task{task("s2", "", "2026-03-01T10:00:00"), task("s3", "", "2024-05-01T10:00:00"), task("a2", "alice", "2025-01-02T10:00:00"),
 		task("s4", "", "2026-06-01T09:00:00")}
-	err := f.WriteBothLocked("alice", active, closed, "Write")
+	err := f.WriteBothLocked(asker.User("alice"), active, closed, "Write")
 	f.Unlock()
 	if err != nil {
 		t.Fatal(err)
@@ -186,19 +188,19 @@ func TestWriteFilesByOwnerAndMonth(t *testing.T) {
 	if len(f.commits) != 1 || f.commits[0] != want {
 		t.Errorf("commits %q,\nwant one: %q", f.commits, want)
 	}
-	if got := ids(f.Open("alice")); !reflect.DeepEqual(got, []string{"s1", "a1"}) {
+	if got := ids(f.Open(asker.User("alice"))); !reflect.DeepEqual(got, []string{"s1", "a1"}) {
 		t.Errorf("alice's open tasks: %v", got)
 	}
-	if got := f.Open("alice"); got[0].Owner != "" || got[1].Owner != "alice" {
+	if got := f.Open(asker.User("alice")); got[0].Owner != "" || got[1].Owner != "alice" {
 		t.Errorf("owners: %q %q", got[0].Owner, got[1].Owner)
 	}
-	if got := ids(f.Open("bob")); !reflect.DeepEqual(got, []string{"s1"}) {
+	if got := ids(f.Open(asker.User("bob"))); !reflect.DeepEqual(got, []string{"s1"}) {
 		t.Errorf("bob sees alice's: %v", got)
 	}
-	if got := ids(f.All("alice")); !reflect.DeepEqual(got, []string{"s1", "a1", "s4", "s3", "s2", "a2"}) {
+	if got := ids(f.All(asker.User("alice"))); !reflect.DeepEqual(got, []string{"s1", "a1", "s4", "s3", "s2", "a2"}) {
 		t.Errorf("all of alice's: %v", got)
 	}
-	for _, x := range f.All("alice") {
+	for _, x := range f.All(asker.User("alice")) {
 		if want := map[bool]string{true: "alice", false: ""}[strings.HasPrefix(x.ID, "a")]; x.Owner != want {
 			t.Errorf("%s is %q's, want %q's", x.ID, x.Owner, want)
 		}
@@ -206,15 +208,15 @@ func TestWriteFilesByOwnerAndMonth(t *testing.T) {
 	if got := ids(f.Every()); len(got) != 6 {
 		t.Errorf("every owner's: %v", got)
 	}
-	open, done := f.Snapshot("bob")
+	open, done := f.Snapshot(asker.User("bob"))
 	if !reflect.DeepEqual(ids(open), []string{"s1"}) || !reflect.DeepEqual(ids(done), []string{"s4", "s3", "s2"}) {
 		t.Errorf("bob's snapshot: %v %v", ids(open), ids(done))
 	}
 	// Written again as it is: no file changes, nothing to commit.
 	f.Lock()
-	active, closed, err = f.ReadForWriteLocked("alice")
+	active, closed, err = f.ReadForWriteLocked(asker.User("alice"))
 	if err == nil {
-		err = f.WriteBothLocked("alice", active, closed, "Again")
+		err = f.WriteBothLocked(asker.User("alice"), active, closed, "Again")
 	}
 	f.Unlock()
 	if err != nil || len(f.commits) != 1 {
@@ -228,7 +230,7 @@ func TestWriteFilesByOwnerAndMonth(t *testing.T) {
 func TestClosedByYear(t *testing.T) {
 	f := newStore(t, "alice")
 	f.Lock()
-	_ = f.WriteBothLocked("alice", nil, []*Task{task("now", "", "2026-06-01T10:00:00"), task("spring", "", "2026-03-01T10:00:00"), task("undated", "", "x"),
+	_ = f.WriteBothLocked(asker.User("alice"), nil, []*Task{task("now", "", "2026-06-01T10:00:00"), task("spring", "", "2026-03-01T10:00:00"), task("undated", "", "x"),
 		task("old", "", "2024-05-01T10:00:00"), task("older", "", "2024-01-01T10:00:00"), task("hers", "alice", "2023-01-02T10:00:00")}, "Write")
 	f.Unlock()
 	// A year's file from before the months, beside a month's file of that
@@ -238,40 +240,40 @@ func TestClosedByYear(t *testing.T) {
 	f.put(t, "private/alice/_tasks/closed-2021.json", `[{"id": "h21", "title": "T", "closed_at": "2021-07-01T10:00:00"}]`)
 	for year, want := range map[string][]string{"2026": {"now", "undated", "spring"}, "2024": {"older", "old", "yearfile"}, "2023": {"hers"},
 		"2022": {"y22"}, "2021": {"h21"}, "2025": {}, "2027": {}} {
-		if got := ids(f.ClosedInYear("alice", year)); !reflect.DeepEqual(got, want) {
+		if got := ids(f.ClosedInYear(asker.User("alice"), year)); !reflect.DeepEqual(got, want) {
 			t.Errorf("%s: %v, want %v", year, got, want)
 		}
 	}
-	if got := ids(f.ClosedInYear("", "2023")); len(got) != 0 {
+	if got := ids(f.ClosedInYear(asker.User(""), "2023")); len(got) != 0 {
 		t.Errorf("alice's 2023 for someone else: %v", got)
 	}
-	if got := ids(f.ClosedInYear("", "2021")); len(got) != 0 {
+	if got := ids(f.ClosedInYear(asker.User(""), "2021")); len(got) != 0 {
 		t.Errorf("alice's 2021 for someone else: %v", got)
 	}
-	for _, x := range f.ClosedInYear("alice", "2021") {
+	for _, x := range f.ClosedInYear(asker.User("alice"), "2021") {
 		if x.Owner != "alice" {
 			t.Errorf("%s: %q's", x.ID, x.Owner)
 		}
 	}
 	every := func(*Task) bool { return true }
-	if got := f.ClosedYears("alice", every); !reflect.DeepEqual(got, []string{"2026", "2024", "2023", "2022", "2021"}) {
+	if got := f.ClosedYears(asker.User("alice"), every); !reflect.DeepEqual(got, []string{"2026", "2024", "2023", "2022", "2021"}) {
 		t.Errorf("alice's years: %v", got)
 	}
-	if got := f.ClosedYears("", every); !reflect.DeepEqual(got, []string{"2026", "2024", "2022"}) {
+	if got := f.ClosedYears(asker.User(""), every); !reflect.DeepEqual(got, []string{"2026", "2024", "2022"}) {
 		t.Errorf("without her own: %v", got)
 	}
-	if got := f.ClosedYears("alice", func(t *Task) bool { return t.ID == "hers" }); !reflect.DeepEqual(got, []string{"2026", "2023"}) {
+	if got := f.ClosedYears(asker.User("alice"), func(t *Task) bool { return t.ID == "hers" }); !reflect.DeepEqual(got, []string{"2026", "2023"}) {
 		t.Errorf("a scope: %v", got)
 	}
-	if got := f.ClosedYears("alice", func(t *Task) bool { return t.ID == "yearfile" }); !reflect.DeepEqual(got, []string{"2026", "2024"}) {
+	if got := f.ClosedYears(asker.User("alice"), func(t *Task) bool { return t.ID == "yearfile" }); !reflect.DeepEqual(got, []string{"2026", "2024"}) {
 		t.Errorf("a scope with a task in a year's file: %v", got)
 	}
 	// A scope asks whose a task is (a private list's): the archives' tasks
 	// say it, those Zone wrote (2023) and those it only read (2021).
-	if got := f.ClosedYears("alice", func(t *Task) bool { return t.Owner == "alice" }); !reflect.DeepEqual(got, []string{"2026", "2023", "2021"}) {
+	if got := f.ClosedYears(asker.User("alice"), func(t *Task) bool { return t.Owner == "alice" }); !reflect.DeepEqual(got, []string{"2026", "2023", "2021"}) {
 		t.Errorf("her own tasks' years: %v", got)
 	}
-	if got := f.ClosedYears("alice", func(t *Task) bool { return t.Owner == "" }); !reflect.DeepEqual(got, []string{"2026", "2024", "2022"}) {
+	if got := f.ClosedYears(asker.User("alice"), func(t *Task) bool { return t.Owner == "" }); !reflect.DeepEqual(got, []string{"2026", "2024", "2022"}) {
 		t.Errorf("the shared tasks' years: %v", got)
 	}
 	if f.PastYear(task("x", "", "2025-12-31T23:59:59")) != "2025" || f.PastYear(task("x", "", "2026-01-01T00:00:00")) != "" ||
@@ -298,13 +300,13 @@ func TestAMonthAndAYearEnd(t *testing.T) {
 	}
 	// The year turns; nothing is written.
 	f.now = time.Date(2027, 1, 1, 0, 0, 1, 0, time.UTC)
-	if got := ids(f.ClosedInYear("", "2027")); len(got) != 0 {
+	if got := ids(f.ClosedInYear(asker.User(""), "2027")); len(got) != 0 {
 		t.Errorf("2027, before anything was closed in it: %v", got)
 	}
-	if got := ids(f.ClosedInYear("", "2026")); !reflect.DeepEqual(got, []string{"dec", "nov"}) {
+	if got := ids(f.ClosedInYear(asker.User(""), "2026")); !reflect.DeepEqual(got, []string{"dec", "nov"}) {
 		t.Errorf("2026, seen from 2027: %v", got)
 	}
-	if got := f.ClosedYears("", func(*Task) bool { return true }); !reflect.DeepEqual(got, []string{"2027", "2026"}) {
+	if got := f.ClosedYears(asker.User(""), func(*Task) bool { return true }); !reflect.DeepEqual(got, []string{"2027", "2026"}) {
 		t.Errorf("the years: %v", got)
 	}
 	if f.PastYear(task("x", "", "2026-12-01T00:00:00")) != "2026" {
@@ -324,10 +326,10 @@ func TestAMonthAndAYearEnd(t *testing.T) {
 	if want := []string{"|Close|_tasks/tasks.json _tasks/closed-2026-12.json _tasks/closed.json"}; !reflect.DeepEqual(f.commits, want) {
 		t.Errorf("commits %q, want %q", f.commits, want)
 	}
-	if got := ids(f.ClosedInYear("", "2027")); !reflect.DeepEqual(got, []string{"open"}) {
+	if got := ids(f.ClosedInYear(asker.User(""), "2027")); !reflect.DeepEqual(got, []string{"open"}) {
 		t.Errorf("2027: %v", got)
 	}
-	if got := ids(f.ClosedInYear("", "2026")); !reflect.DeepEqual(got, []string{"nov", "dec"}) {
+	if got := ids(f.ClosedInYear(asker.User(""), "2026")); !reflect.DeepEqual(got, []string{"nov", "dec"}) {
 		t.Errorf("2026: %v", got)
 	}
 	// February: January's task is in closed.json until Zone starts.
@@ -340,7 +342,7 @@ func TestAMonthAndAYearEnd(t *testing.T) {
 	if f.text(t, "_tasks/closed.json") != "[]\n" || !strings.Contains(f.text(t, "_tasks/closed-2027-01.json"), `"id": "open"`) {
 		t.Errorf("after it: %q %q", f.text(t, "_tasks/closed.json"), f.text(t, "_tasks/closed-2027-01.json"))
 	}
-	if got := ids(f.ClosedInYear("", "2027")); !reflect.DeepEqual(got, []string{"open"}) {
+	if got := ids(f.ClosedInYear(asker.User(""), "2027")); !reflect.DeepEqual(got, []string{"open"}) {
 		t.Errorf("2027, from february: %v", got)
 	}
 	// The clock set back (a host's wrong date put right): January is this
@@ -356,7 +358,7 @@ func TestAMonthAndAYearEnd(t *testing.T) {
 	if got := f.names(t); !reflect.DeepEqual(got, []string{"_tasks/closed-2026-11.json", "_tasks/closed-2026-12.json", "_tasks/closed.json", "_tasks/tasks.json"}) {
 		t.Errorf("the files with the clock set back: %v", got)
 	}
-	if got := ids(f.ClosedInYear("", "2027")); !reflect.DeepEqual(got, []string{"open", "ahead"}) {
+	if got := ids(f.ClosedInYear(asker.User(""), "2027")); !reflect.DeepEqual(got, []string{"open", "ahead"}) {
 		t.Errorf("2027 with it: %v", got)
 	}
 }
@@ -376,7 +378,7 @@ func TestAYearsFileIsTakenOverAtStart(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	before := ids(f.All("alice"))
+	before := ids(f.All(asker.User("alice")))
 	f.ArchiveOldClosed()
 	for _, dir := range []string{"_tasks/", "private/alice/_tasks/"} {
 		id := map[string]string{"_tasks/": "s", "private/alice/_tasks/": "a"}[dir]
@@ -396,13 +398,13 @@ func TestAYearsFileIsTakenOverAtStart(t *testing.T) {
 	if len(f.commits) != 1 || f.commits[0] != want {
 		t.Errorf("commits %q,\nwant one: %q", f.commits, want)
 	}
-	after := ids(f.All("alice"))
+	after := ids(f.All(asker.User("alice")))
 	slices.Sort(before)
 	slices.Sort(after)
 	if !reflect.DeepEqual(before, after) || len(after) != 10 {
 		t.Errorf("tasks before %v, after %v", before, after)
 	}
-	if got := ids(f.ClosedInYear("alice", "2025")); !reflect.DeepEqual(got, []string{"s-feb", "s-feb2", "s-dec", "a-feb", "a-feb2", "a-dec"}) {
+	if got := ids(f.ClosedInYear(asker.User("alice"), "2025")); !reflect.DeepEqual(got, []string{"s-feb", "s-feb2", "s-dec", "a-feb", "a-feb2", "a-dec"}) {
 		t.Errorf("2025: %v", got)
 	}
 	files := f.names(t)
@@ -442,10 +444,10 @@ func TestAYearsFileIsTakenOverByAWrite(t *testing.T) {
 	if len(f.commits) != 1 || f.commits[0] != want {
 		t.Errorf("commits %q,\nwant one: %q", f.commits, want)
 	}
-	if got := ids(f.ClosedInYear("bob", "2024")); !reflect.DeepEqual(got, []string{"b-old"}) {
+	if got := ids(f.ClosedInYear(asker.User("bob"), "2024")); !reflect.DeepEqual(got, []string{"b-old"}) {
 		t.Errorf("bob's 2024, still in his year's file: %v", got)
 	}
-	if got := ids(f.ClosedInYear("alice", "2024")); !reflect.DeepEqual(got, []string{"a-old"}) {
+	if got := ids(f.ClosedInYear(asker.User("alice"), "2024")); !reflect.DeepEqual(got, []string{"a-old"}) {
 		t.Errorf("alice's 2024: %v", got)
 	}
 	// The next write has nothing to file.
@@ -496,10 +498,10 @@ func TestAnEmptiedArchiveIsRemoved(t *testing.T) {
 	if !reflect.DeepEqual(f.commits, want) {
 		t.Errorf("commits %q,\nwant %q", f.commits, want)
 	}
-	if got := ids(f.Open("alice")); !reflect.DeepEqual(got, []string{"s1", "s2", "s3", "a1"}) {
+	if got := ids(f.Open(asker.User("alice"))); !reflect.DeepEqual(got, []string{"s1", "s2", "s3", "a1"}) {
 		t.Errorf("open: %v", got)
 	}
-	if got := f.ClosedYears("alice", func(*Task) bool { return true }); !reflect.DeepEqual(got, []string{"2026"}) {
+	if got := f.ClosedYears(asker.User("alice"), func(*Task) bool { return true }); !reflect.DeepEqual(got, []string{"2026"}) {
 		t.Errorf("the years: %v", got)
 	}
 	// A removed file isn't remembered as it was: the same month again.
@@ -510,7 +512,7 @@ func TestAnEmptiedArchiveIsRemoved(t *testing.T) {
 	if got := f.ids(t, "_tasks/closed-2026-03.json"); !reflect.DeepEqual(got, []string{"s2"}) {
 		t.Errorf("march again: %v", got)
 	}
-	if got := ids(f.ClosedInYear("alice", "2026")); !reflect.DeepEqual(got, []string{"s2"}) {
+	if got := ids(f.ClosedInYear(asker.User("alice"), "2026")); !reflect.DeepEqual(got, []string{"s2"}) {
 		t.Errorf("2026: %v", got)
 	}
 	// An empty archive from before (Zone left one when its last task went) goes at the start.
@@ -608,10 +610,10 @@ func TestAWriteSkipsTheFilesItLeavesAlone(t *testing.T) {
 		f.rewrite(t, "alice", "Nothing", func(active, closed []*Task) ([]*Task, []*Task) { return active, closed })
 		check("nothing", before)
 		f.Lock()
-		active, err := f.ReadOpenStrict("alice")
+		active, err := f.ReadOpenStrict(asker.User("alice"))
 		if err == nil {
 			active[0].Title += "?"
-			err = f.WriteOpenLocked("alice", active, "Open only")
+			err = f.WriteOpenLocked(asker.User("alice"), active, "Open only")
 		}
 		f.Unlock()
 		if err != nil {
@@ -769,10 +771,10 @@ func TestAFileChangedByHand(t *testing.T) {
 		}
 	}
 	// What Zone knows of the files is what they hold.
-	forgetNothing := ids(f.All(""))
+	forgetNothing := ids(f.All(asker.User("")))
 	titles := func() []string {
 		var out []string
-		for _, x := range f.All("") {
+		for _, x := range f.All(asker.User("")) {
 			out = append(out, x.Title)
 		}
 		return out
@@ -796,7 +798,7 @@ func TestAFileChangedByHand(t *testing.T) {
 	// A hand edit that makes a file unusable refuses the next write.
 	f.put(t, march, "[{")
 	f.Lock()
-	_, _, err := f.ReadForWriteLocked("")
+	_, _, err := f.ReadForWriteLocked(asker.User(""))
 	f.Unlock()
 	if !errors.Is(err, ErrCorrupt) {
 		t.Errorf("an unusable archive, read for a write: %v", err)
@@ -837,15 +839,15 @@ func TestACorruptFileRefusesTheWrite(t *testing.T) {
 	for _, text := range []string{"", "{", `{"not": "a list"}`} {
 		_ = os.WriteFile(f.OpenPath(""), []byte(text), 0o666)
 		f.Lock()
-		_, _, err := f.ReadForWriteLocked("")
+		_, _, err := f.ReadForWriteLocked(asker.User(""))
 		f.Unlock()
 		if !errors.Is(err, ErrCorrupt) {
 			t.Errorf("%q read for a write: %v", text, err)
 		}
-		if _, err := f.ReadOpenStrict(""); !errors.Is(err, ErrCorrupt) {
+		if _, err := f.ReadOpenStrict(asker.User("")); !errors.Is(err, ErrCorrupt) {
 			t.Errorf("%q read strictly: %v", text, err)
 		}
-		if got := f.Open(""); len(got) != 0 {
+		if got := f.Open(asker.User("")); len(got) != 0 {
 			t.Errorf("%q read for showing: %v", text, got)
 		}
 		if got := f.text(t, "_tasks/tasks.json"); got != text {
@@ -854,7 +856,7 @@ func TestACorruptFileRefusesTheWrite(t *testing.T) {
 	}
 	// A file that isn't there is an empty list, also for a write.
 	_ = os.Remove(f.OpenPath(""))
-	if got, err := f.ReadOpenStrict(""); err != nil || len(got) != 0 {
+	if got, err := f.ReadOpenStrict(asker.User("")); err != nil || len(got) != 0 {
 		t.Errorf("no file: %v %v", got, err)
 	}
 }
@@ -867,24 +869,24 @@ func TestWhoMayWrite(t *testing.T) {
 	f.Lock()
 	defer f.Unlock()
 	for name, err := range map[string]error{
-		"open": f.WriteOpenLocked("carol", []*Task{task("c", "", "")}, "x"),
-		"both": f.WriteBothLocked("carol", []*Task{task("c", "", "")}, nil, "x"),
+		"open": f.WriteOpenLocked(asker.User("carol"), []*Task{task("c", "", "")}, "x"),
+		"both": f.WriteBothLocked(asker.User("carol"), []*Task{task("c", "", "")}, nil, "x"),
 	} {
 		if err == nil || err.Error() != "read only" {
 			t.Errorf("a viewer's write (%s): %v", name, err)
 		}
 	}
-	if err := f.WriteOpenLocked("bob", []*Task{task("a", "alice", "")}, "x"); err == nil || !strings.Contains(err.Error(), "alice") {
+	if err := f.WriteOpenLocked(asker.User("bob"), []*Task{task("a", "alice", "")}, "x"); err == nil || !strings.Contains(err.Error(), "alice") {
 		t.Errorf("alice's task in bob's write: %v", err)
 	}
 	if len(f.commits) != 0 || f.text(t, "_tasks/tasks.json") != "" || f.text(t, "private/alice/_tasks/tasks.json") != "" {
 		t.Errorf("something was written: %q", f.commits)
 	}
 	// Without users no one has files of their own.
-	if got := newStore(t).Owners("alice"); !reflect.DeepEqual(got, []string{""}) {
+	if got := newStore(t).Owners(asker.User("alice")); !reflect.DeepEqual(got, []string{""}) {
 		t.Errorf("owners without users: %v", got)
 	}
-	if got := f.Owners("alice"); !reflect.DeepEqual(got, []string{"", "alice"}) {
+	if got := f.Owners(asker.User("alice")); !reflect.DeepEqual(got, []string{"", "alice"}) {
 		t.Errorf("alice's owners: %v", got)
 	}
 	if got := f.EveryOwner(); !reflect.DeepEqual(got, []string{"", "alice", "bob", "carol"}) {
@@ -930,7 +932,7 @@ func TestArchiveOldClosed(t *testing.T) {
 		f.put(t, "_tasks/"+name, `[{"id": "stray", "title": "T", "closed_at": "2001-01-01T10:00:00"}]`)
 	}
 	f.ArchiveOldClosed()
-	if len(f.commits) != 1 || len(f.Archives("")) != 2 || slices.Contains(ids(f.All("")), "stray") {
+	if len(f.commits) != 1 || len(f.Archives("")) != 2 || slices.Contains(ids(f.All(asker.User(""))), "stray") {
 		t.Errorf("other files taken for archives: %q %v", f.commits, f.Archives(""))
 	}
 }
@@ -986,7 +988,7 @@ func TestOldCompletedFilesAreRenamed(t *testing.T) {
 			t.Errorf("%s isn't in the commit: %q", rel, f.commits[0])
 		}
 	}
-	if got := ids(f.All("alice")); len(got) != 6 {
+	if got := ids(f.All(asker.User("alice"))); len(got) != 6 {
 		t.Errorf("tasks afterwards: %v", got)
 	}
 	f.ArchiveOldClosed()
@@ -1073,10 +1075,10 @@ func TestAListsTasksAreInItsFolder(t *testing.T) {
 			t.Errorf("%s: %v, want %v", rel, got, want)
 		}
 	}
-	if got := ids(f.Open("alice")); len(got) != 5 {
+	if got := ids(f.Open(asker.User("alice"))); len(got) != 5 {
 		t.Errorf("alice's open tasks: %v", got)
 	}
-	if _, closed := f.Snapshot("alice"); len(closed) != 2 {
+	if _, closed := f.Snapshot(asker.User("alice")); len(closed) != 2 {
 		t.Errorf("the closed tasks: %v", ids(closed))
 	}
 	// One task of one list changes: one file.
@@ -1140,7 +1142,7 @@ func TestAStartFilesTheTasksByList(t *testing.T) {
 	f.put(t, "_tasks/tasks.json", `[{"id":"i1","title":"Inbox"},{"id":"s1","title":"Milk","list":"shop"}]`)
 	f.put(t, "_tasks/closed.json", `[{"id":"s2","title":"Eggs","list":"shop","closed_at":"2026-06-01T09:00:00"}]`)
 	f.put(t, "private/alice/_tasks/tasks.json", `[{"id":"d1","title":"Dear diary","list":"diary"}]`)
-	if got := ids(f.Open("alice")); !reflect.DeepEqual(got, []string{"i1", "s1", "d1"}) {
+	if got := ids(f.Open(asker.User("alice"))); !reflect.DeepEqual(got, []string{"i1", "s1", "d1"}) {
 		t.Fatalf("read before the start: %v", got)
 	}
 	f.ArchiveOldClosed()
@@ -1164,7 +1166,7 @@ func TestAStartFilesTheTasksByList(t *testing.T) {
 	// leaves it where its list is.
 	f.put(t, "_tasks/tasks.json", `[{"id":"i1","title":"Inbox"},{"id":"s1","title":"Milk","list":"shop"}]`)
 	forgetAll()
-	if got := ids(f.Open("")); !reflect.DeepEqual(got, []string{"i1", "s1"}) {
+	if got := ids(f.Open(asker.User(""))); !reflect.DeepEqual(got, []string{"i1", "s1"}) {
 		t.Errorf("read with a task in two files: %v", got)
 	}
 	f.rewrite(t, "", "Touch", func(active, closed []*Task) ([]*Task, []*Task) { return active, closed })
@@ -1181,7 +1183,7 @@ func TestAListNameThatIsNoFolder(t *testing.T) {
 	if got := f.names(t); !reflect.DeepEqual(got, []string{"_tasks/tasks.json"}) {
 		t.Errorf("the files: %v", got)
 	}
-	if got := ids(f.Open("")); !reflect.DeepEqual(got, []string{"x1", "x2"}) {
+	if got := ids(f.Open(asker.User(""))); !reflect.DeepEqual(got, []string{"x1", "x2"}) {
 		t.Errorf("read back: %v", got)
 	}
 }
@@ -1192,12 +1194,12 @@ func (f *fixture) one(t *testing.T, user, id, message string, change func(active
 	t.Helper()
 	f.Lock()
 	defer f.Unlock()
-	active, closed, err := f.ReadTaskForWriteLocked(user, id)
+	active, closed, err := f.ReadTaskForWriteLocked(asker.User(user), id)
 	if err != nil {
 		t.Fatal(err)
 	}
 	active, closed = change(active, closed)
-	if err := f.WriteBothLocked(user, active, closed, message); err != nil {
+	if err := f.WriteBothLocked(asker.User(user), active, closed, message); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -1291,14 +1293,14 @@ func TestAWriteOfOneTaskReadsItsOwnFile(t *testing.T) {
 	}
 	// A task no file has: nothing read for it but the open ones, and the caller finds none.
 	f.Lock()
-	_, closed, err := f.ReadTaskForWriteLocked("alice", "nope")
+	_, closed, err := f.ReadTaskForWriteLocked(asker.User("alice"), "nope")
 	f.Unlock()
 	if err != nil || len(closed) != 0 {
 		t.Errorf("a task that isn't there: %v, %v", ids(closed), err)
 	}
 	// A write that reads everything still refuses over the unreadable file.
 	f.Lock()
-	_, _, err = f.ReadForWriteLocked("alice")
+	_, _, err = f.ReadForWriteLocked(asker.User("alice"))
 	f.Unlock()
 	if !errors.Is(err, ErrCorrupt) {
 		t.Errorf("a full read beside an unreadable archive: %v", err)
@@ -1324,7 +1326,7 @@ func TestAWriteOfSeveralTasksReadsTheirFiles(t *testing.T) {
 		for _, id := range named {
 			set[id] = true
 		}
-		active, closed, err := f.ReadTasksForWriteLocked("alice", set)
+		active, closed, err := f.ReadTasksForWriteLocked(asker.User("alice"), set)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1332,7 +1334,7 @@ func TestAWriteOfSeveralTasksReadsTheirFiles(t *testing.T) {
 			t.Errorf("%s: closed tasks read %v, want %v", message, got, want)
 		}
 		active, closed = change(active, closed)
-		if err := f.WriteBothLocked("alice", active, closed, message); err != nil {
+		if err := f.WriteBothLocked(asker.User("alice"), active, closed, message); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1414,7 +1416,7 @@ func TestAWriteOfSeveralTasksReadsTheirFiles(t *testing.T) {
 func TestIdleArchivesAreForgotten(t *testing.T) {
 	f := newStore(t)
 	f.write(t, "", []*Task{task("o1", "", "")}, []*Task{task("c1", "", "2026-06-01T09:00:00"), task("c2", "", "2025-01-02T09:00:00")}, "Write")
-	_ = f.All("")
+	_ = f.All(asker.User(""))
 	kept := func() []string {
 		parsed.Lock()
 		defer parsed.Unlock()
@@ -1434,7 +1436,7 @@ func TestIdleArchivesAreForgotten(t *testing.T) {
 	if got := kept(); !reflect.DeepEqual(got, []string{"closed.json", "tasks.json"}) {
 		t.Errorf("kept after the archive was idle: %v", got)
 	}
-	if got := ids(f.ClosedInYear("", "2025")); !reflect.DeepEqual(got, []string{"c2"}) {
+	if got := ids(f.ClosedInYear(asker.User(""), "2025")); !reflect.DeepEqual(got, []string{"c2"}) {
 		t.Errorf("read again: %v", got)
 	}
 }
@@ -1452,13 +1454,13 @@ func TestAReadDoesntWaitForACommit(t *testing.T) {
 	go func() {
 		f.Lock()
 		defer f.Unlock()
-		if err := f.WriteBothLocked("", []*Task{task("o1", "", "")}, []*Task{task("c1", "", "2026-06-01T09:00:00")}, "Write"); err != nil {
+		if err := f.WriteBothLocked(asker.User(""), []*Task{task("o1", "", "")}, []*Task{task("c1", "", "2026-06-01T09:00:00")}, "Write"); err != nil {
 			t.Error(err)
 		}
 	}()
 	<-committing
 	read := make(chan []string)
-	go func() { read <- ids(f.All("")) }()
+	go func() { read <- ids(f.All(asker.User(""))) }()
 	select {
 	case got := <-read:
 		if !reflect.DeepEqual(got, []string{"o1", "c1"}) {
@@ -1479,7 +1481,7 @@ func TestAReadWaitsForAWritesFiles(t *testing.T) {
 	f.Lock()
 	f.Hold()
 	read := make(chan []string)
-	go func() { read <- ids(f.Open("")) }()
+	go func() { read <- ids(f.Open(asker.User(""))) }()
 	select {
 	case <-read:
 		t.Fatal("a read went on between a write's files")
@@ -1494,7 +1496,7 @@ func TestAReadWaitsForAWritesFiles(t *testing.T) {
 	f.Unlock()
 	// Without Lock nothing is held: a command without a running Zone.
 	f.Hold()
-	_ = f.Open("")
+	_ = f.Open(asker.User(""))
 }
 
 // Stamp is another word after a write of Zone's and after a file changed by
@@ -1503,26 +1505,26 @@ func TestAReadWaitsForAWritesFiles(t *testing.T) {
 func TestStamp(t *testing.T) {
 	f := newStore(t, "anna", "bob")
 	f.write(t, "", []*Task{task("o1", "", "")}, nil, "Write")
-	a := f.Stamp("anna")
-	if f.Stamp("anna") != a {
+	a := f.Stamp(asker.User("anna"))
+	if f.Stamp(asker.User("anna")) != a {
 		t.Error("the stamp changed with nothing written")
 	}
 	f.write(t, "bob", []*Task{task("o1", "", ""), task("p1", "bob", "")}, nil, "Write")
-	if f.Stamp("anna") != a {
+	if f.Stamp(asker.User("anna")) != a {
 		t.Error("bob's own task changed anna's stamp")
 	}
-	if f.Stamp("bob") == a {
+	if f.Stamp(asker.User("bob")) == a {
 		t.Error("bob's stamp is anna's")
 	}
 	f.write(t, "", []*Task{task("o1", "", ""), task("o2", "", "")}, nil, "Write")
-	b := f.Stamp("anna")
+	b := f.Stamp(asker.User("anna"))
 	if b == a {
 		t.Error("a write left the stamp")
 	}
 	if err := os.WriteFile(f.OpenPath(""), []byte("[]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if f.Stamp("anna") == b {
+	if f.Stamp(asker.User("anna")) == b {
 		t.Error("a change by hand left the stamp")
 	}
 }

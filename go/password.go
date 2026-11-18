@@ -36,7 +36,7 @@ func passwordOwner(r *http.Request) (name, hash string, ok bool) {
 	if s.Users == nil {
 		return "", s.PasswordHash, s.authOn()
 	}
-	u := s.Users[userOf(r)]
+	u := s.Users[userOf(r).Name]
 	if u == nil {
 		return "", "", false
 	}

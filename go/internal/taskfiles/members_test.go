@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"zonewiki/internal/asker"
 )
 
 // membersStore: alice, bob and carol; the shared list hiring is for alice
@@ -15,14 +16,15 @@ import (
 func membersStore(t *testing.T) *fixture {
 	t.Helper()
 	f := newStore(t, "alice", "bob", "carol")
-	f.Member = func(user string, who []string) bool {
+	f.Member = func(asks asker.Asker, who []string) bool {
+		user := asks.Name
 		return slices.Contains(who, user) || user == "carol" && slices.Contains(who, "@ops")
 	}
 	hiring := &List{Name: "hiring", Settings: map[string]string{"view": "open"}}
 	hiring.SetFor([]string{"@ops", "alice"})
 	hiring.SetOwners([]string{"alice"})
 	f.Lock()
-	if _, err := f.WriteListsLocked("alice", "", &Registry{Lists: []*List{{Name: "team"}, hiring}}); err != nil {
+	if _, err := f.WriteListsLocked(asker.User("alice"), "", &Registry{Lists: []*List{{Name: "team"}, hiring}}); err != nil {
 		t.Fatal(err)
 	}
 	f.Unlock()
@@ -56,7 +58,7 @@ func TestAListForSomeIsKeptInItsFolder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p, err := f.WriteListsLocked("bob", "", r); len(p) != 0 || err != nil {
+	if p, err := f.WriteListsLocked(asker.User("bob"), "", r); len(p) != 0 || err != nil {
 		t.Errorf("an unchanged registry written: %q, %v", p, err)
 	}
 }
@@ -73,25 +75,25 @@ func TestOnlyItsMembersReadAListForSome(t *testing.T) {
 				t.Errorf("%s, %s: %s there: %v", user, what, id, !sees)
 			}
 		}
-		has("Open", f.Open(user), "h1")
-		all := f.All(user)
+		has("Open", f.Open(asker.User(user)), "h1")
+		all := f.All(asker.User(user))
 		has("All", all, "h1")
 		has("All", all, "h2")
 		has("All", all, "h3")
-		has("RecentClosed", f.RecentClosed(user, any), "h2")
-		has("ClosedInYear", f.ClosedInYear(user, "2026"), "h3")
-		page, total := f.ClosedPage(user, "2026", any, 50, "")
+		has("RecentClosed", f.RecentClosed(asker.User(user), any), "h2")
+		has("ClosedInYear", f.ClosedInYear(asker.User(user), "2026"), "h3")
+		page, total := f.ClosedPage(asker.User(user), "2026", any, 50, "")
 		has("ClosedPage", page, "h2")
-		if n := f.CountClosedInYear(user, "2026", any); n != total || (n == 2) != sees {
+		if n := f.CountClosedInYear(asker.User(user), "2026", any); n != total || (n == 2) != sees {
 			t.Errorf("%s counts %d closed (the page %d)", user, n, total)
 		}
-		open, done := f.Snapshot(user)
+		open, done := f.Snapshot(asker.User(user))
 		has("Snapshot", append(open, done...), "h3")
-		if f.SeesList(user, "hiring") != sees || !f.SeesList(user, "team") || !f.SeesList(user, "") {
+		if f.SeesList(asker.User(user), "hiring") != sees || !f.SeesList(asker.User(user), "team") || !f.SeesList(asker.User(user), "") {
 			t.Errorf("SeesList for %s", user)
 		}
 		// What is for everyone is everyone's.
-		if got := ids(f.Open(user)); !slices.Contains(got, "t1") || !slices.Contains(got, "n1") {
+		if got := ids(f.Open(asker.User(user))); !slices.Contains(got, "t1") || !slices.Contains(got, "n1") {
 			t.Errorf("%s misses the shared tasks: %v", user, got)
 		}
 	}
@@ -100,7 +102,7 @@ func TestOnlyItsMembersReadAListForSome(t *testing.T) {
 		t.Errorf("Every: %v", got)
 	}
 	// The counts' stamp of someone who is none of them doesn't move with the list.
-	before, alices := f.Stamp("bob"), f.Stamp("alice")
+	before, alices := f.Stamp(asker.User("bob")), f.Stamp(asker.User("alice"))
 	f.one(t, "alice", "h1", "Change", func(active, closed []*Task) ([]*Task, []*Task) {
 		for _, x := range active {
 			if x.ID == "h1" {
@@ -109,10 +111,10 @@ func TestOnlyItsMembersReadAListForSome(t *testing.T) {
 		}
 		return active, closed
 	})
-	if f.Stamp("alice") == alices {
+	if f.Stamp(asker.User("alice")) == alices {
 		t.Error("alice's stamp stayed")
 	}
-	if strings.Split(f.Stamp("bob"), " ")[0] != strings.Split(before, " ")[0] || strings.Contains(before, "hiring") {
+	if strings.Split(f.Stamp(asker.User("bob")), " ")[0] != strings.Split(before, " ")[0] || strings.Contains(before, "hiring") {
 		t.Errorf("bob's stamp names or follows the list: %q", before)
 	}
 }
@@ -157,13 +159,13 @@ func TestAWriteByAnyoneElseLeavesAListForSomeAlone(t *testing.T) {
 	same("a write of one task")
 	// A task of bob's that names the list (it can't have been read for him): refused, nothing written.
 	f.Lock()
-	active, err := f.ReadOpenStrict("bob")
+	active, err := f.ReadOpenStrict(asker.User("bob"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	smuggled := task("x1", "", "")
 	smuggled.List = "hiring"
-	if err := f.WriteOpenLocked("bob", append(active, smuggled), "Smuggle"); err == nil {
+	if err := f.WriteOpenLocked(asker.User("bob"), append(active, smuggled), "Smuggle"); err == nil {
 		t.Error("a task written into a list its writer doesn't see")
 	}
 	f.Unlock()
@@ -201,7 +203,7 @@ func TestAListForSomeWidenedAndGone(t *testing.T) {
 			t.Fatal(err)
 		}
 		edit(r)
-		paths, err := f.WriteListsLocked("alice", "", r)
+		paths, err := f.WriteListsLocked(asker.User("alice"), "", r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -216,7 +218,7 @@ func TestAListForSomeWidenedAndGone(t *testing.T) {
 	if got := change(func(r *Registry) { r.Find("team").SetFor([]string{"alice"}) }); !slices.Equal(got, []string{"_tasks/lists/team/list.json", "_tasks/lists.json"}) {
 		t.Errorf("narrowing wrote %v", got)
 	}
-	if slices.Contains(ids(f.Open("bob")), "t1") || !slices.Contains(ids(f.Open("alice")), "t1") {
+	if slices.Contains(ids(f.Open(asker.User("bob"))), "t1") || !slices.Contains(ids(f.Open(asker.User("alice"))), "t1") {
 		t.Error("a narrowed list's tasks")
 	}
 	// And for everyone again.
@@ -226,7 +228,7 @@ func TestAListForSomeWidenedAndGone(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(f.root, "_tasks/lists/team/list.json")); err == nil || !strings.Contains(f.text(t, "_tasks/lists.json"), `{"name": "team"}`) {
 		t.Error("a widened list keeps its file, or isn't in the registry")
 	}
-	if !slices.Contains(ids(f.Open("bob")), "t1") {
+	if !slices.Contains(ids(f.Open(asker.User("bob"))), "t1") {
 		t.Error("a widened list's tasks")
 	}
 	// Gone: no list anymore, and its folder still its members'.
@@ -239,7 +241,7 @@ func TestAListForSomeWidenedAndGone(t *testing.T) {
 	if text := f.text(t, "_tasks/lists/hiring/list.json"); text != `{"name": "hiring", "for": ["@ops", "alice"], "gone": true}`+"\n" {
 		t.Errorf("what it left: %q", text)
 	}
-	if !slices.Equal(f.ForOfList("hiring"), []string{"@ops", "alice"}) || f.SeesList("bob", "hiring") || slices.Contains(ids(f.Open("bob")), "h1") {
+	if !slices.Equal(f.ForOfList("hiring"), []string{"@ops", "alice"}) || f.SeesList(asker.User("bob"), "hiring") || slices.Contains(ids(f.Open(asker.User("bob"))), "h1") {
 		t.Error("a deleted list's folder is everyone's")
 	}
 }

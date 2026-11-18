@@ -147,7 +147,7 @@ func knownTool(name string) bool {
 // body. callTool runs a tool, its error a toolError for the model; any
 // other error (a failed write) is returned, for a 500. readOnly: the
 // caller changes nothing (onlyReads), and is shown no tool that does.
-func handleMCP(message json.RawMessage, user string, readOnly bool, callTool func(name string, args jsonObj) ([]toolContent, error)) (*rpcResponse, error) {
+func handleMCP(message json.RawMessage, user asker, readOnly bool, callTool func(name string, args jsonObj) ([]toolContent, error)) (*rpcResponse, error) {
 	msg, ok := jsonobj.Parse(message)
 	if v, _ := jsonobj.As[string](msg["jsonrpc"]); !ok || v != "2.0" {
 		return rpcError(nil, -32600, "Invalid Request"), nil
@@ -329,7 +329,7 @@ func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 	if batch, ok := jsonobj.As[[]json.RawMessage](body); ok { // a batch (protocol 2025-03-26)
 		replies := []*rpcResponse{}
 		for _, m := range batch {
-			reply, err := handleMCP(m, user, onlyReads(r), call)
+			reply, err := handleMCP(m, asUser(user), onlyReads(r), call)
 			if err != nil {
 				serverError(w, r, err)
 				return
@@ -345,7 +345,7 @@ func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, replies)
 		return
 	}
-	reply, err := handleMCP(body, user, onlyReads(r), call)
+	reply, err := handleMCP(body, asUser(user), onlyReads(r), call)
 	if err != nil {
 		serverError(w, r, err)
 		return

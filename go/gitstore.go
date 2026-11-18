@@ -437,7 +437,7 @@ var committedRE = regexp.MustCompile(`^\[[^\]\n]* ([0-9a-f]{7,40})\]`)
 // movePage moves a page's file, points every link to it at the new slug,
 // and commits the move (by user) with the pages and tasks files whose links
 // changed.
-func movePage(user, oldPath, newPath, slug, newSlug, message string) ([]string, error) {
+func movePage(user asker, oldPath, newPath, slug, newSlug, message string) ([]string, error) {
 	// The page's, and those of the pages whose links follow.
 	if err := commitOthersDrafts(user); err != nil {
 		return nil, err
@@ -450,7 +450,7 @@ func movePage(user, oldPath, newPath, slug, newSlug, message string) ([]string, 
 	}
 	changed, linkErr := rewriteMovedLinks(map[string]string{slug: newSlug})
 	files := append([]string{oldPath, newPath}, shareUploads(slug, newSlug, newPath)...)
-	if err := notCommitted(gitCommit(user, message, append(files, changed...)...)); err != nil {
+	if err := notCommitted(gitCommit(user.Name, message, append(files, changed...)...)); err != nil {
 		return changed, err
 	}
 	return changed, linkErr
@@ -461,7 +461,7 @@ func movePage(user, oldPath, newPath, slug, newSlug, message string) ([]string, 
 // (slug, new slug) moves, A–Z, and the files whose links changed. The
 // caller checks that no target exists. Other files in the folder (images…)
 // stay; folders left empty go.
-func moveFolder(user, folder, newFolder, message string) ([][2]string, []string, error) {
+func moveFolder(user asker, folder, newFolder, message string) ([][2]string, []string, error) {
 	if err := commitOthersDrafts(user); err != nil {
 		return nil, nil, err
 	}
@@ -517,7 +517,7 @@ func moveFolder(user, folder, newFolder, message string) ([][2]string, []string,
 			still = append(still, p)
 		}
 	}
-	if err := notCommitted(gitCommit(user, message, commit...)); err != nil {
+	if err := notCommitted(gitCommit(user.Name, message, commit...)); err != nil {
 		return moves, still, err
 	}
 	return moves, still, linkErr

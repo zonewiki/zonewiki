@@ -210,7 +210,7 @@ type replaceSpec struct {
 
 // replaceArgs reads replace_in_pages' arguments, or says what is wrong
 // with them.
-func replaceArgs(args jsonObj, user string) (*replaceSpec, error) {
+func replaceArgs(args jsonObj, user asker) (*replaceSpec, error) {
 	spec := &replaceSpec{dryRun: true}
 	var err error
 	if spec.find, err = strArg(args, "find", true); err != nil {
@@ -272,7 +272,7 @@ func replaceArgs(args jsonObj, user string) (*replaceSpec, error) {
 
 // hits: the pages under spec.under that user may write and the replacement
 // changes, each with its new text, and how many occurrences in all.
-func (spec *replaceSpec) hits(user string) ([]replaceHit, int, error) {
+func (spec *replaceSpec) hits(user asker) ([]replaceHit, int, error) {
 	var parts []templatePart // parsed at the first match, as Python does
 	parsed := false
 	repl := func(body string, m []int) (string, error) {
@@ -341,7 +341,7 @@ func (spec *replaceSpec) dryRunReport(hits []replaceHit, what string) string {
 	return head + "\n" + strings.Join(out, "\n")
 }
 
-func replaceInPages(args jsonObj, base, user string) (string, error) {
+func replaceInPages(args jsonObj, base string, user asker) (string, error) {
 	spec, err := replaceArgs(args, user)
 	if err != nil {
 		return "", err
@@ -409,7 +409,7 @@ func replaceInPages(args jsonObj, base, user string) (string, error) {
 // closest to it in meaning, which a similar name doesn't catch (a crash
 // analysis written up anew when the ticket's page already covers it).
 // Pages it links to, or already named for a similar name, are left out.
-func closeInContent(slug, content string, named map[string]bool, user string) string {
+func closeInContent(slug, content string, named map[string]bool, user asker) string {
 	if semantic == nil {
 		return ""
 	}

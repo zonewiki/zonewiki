@@ -95,7 +95,7 @@ func TestMoveFolderFailingMovesBack(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(cfg.Data, "b", "two.md", "x"), 0o777); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := moveFolder("", "a", "b", "Move a/ to b/"); err == nil {
+	if _, _, err := moveFolder(asUser(""), "a", "b", "Move a/ to b/"); err == nil {
 		t.Fatal("no error")
 	}
 	for _, slug := range []string{"a/one", "a/two"} {

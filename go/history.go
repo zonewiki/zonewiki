@@ -28,12 +28,12 @@ func historyRoutes(mux *http.ServeMux) {
 
 // pageLog: a page's versions (gitLog) user may see: not those from when
 // it was another user's private page, before a rename.
-func pageLog(user, path string) []GitEntry {
+func pageLog(user asker, path string) []GitEntry {
 	var out []GitEntry
 	for _, e := range gitLog(path, 0) {
 		if canSeePath(user, e.Path) {
 			e.Msg = hideNames(user, e.Msg)
-			if user == visitor && e.Author != visitorAuthor {
+			if user.Name == visitor && e.Author != visitorAuthor {
 				e.Author = "" // a public wiki's visitor learns no user's name
 			}
 			out = append(out, e)
@@ -362,7 +362,7 @@ func visibleUncommitted(rq *Req, files []UncommittedFile) []UncommittedFile {
 // (a commit puts its text in the history under a name, so it is a write:
 // not a guide's by an editor, canWrite), any other file they see (uploads,
 // task files: canSeePath, which visibleUncommitted asked).
-func mayCommit(user string, f UncommittedFile) bool {
+func mayCommit(user asker, f UncommittedFile) bool {
 	slug, page := strings.CutSuffix(f.Filepath, ".md")
 	return !page || safePath(slug) == "" || canWrite(user, slug)
 }
@@ -380,7 +380,7 @@ func apiCommitAll(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		path := filepath.Join(cfg.Data, f.Filepath)
-		if err := gitCommit(commitAuthorOf(path, userOf(r)), commitMessage(f.Filepath), path); err != nil {
+		if err := gitCommit(commitAuthorOf(path, userOf(r).Name), commitMessage(f.Filepath), path); err != nil {
 			writeJSON(w, http.StatusInternalServerError, M{"error": err.Error(), "committed": len(committed), "files": committed})
 			return
 		}
@@ -417,7 +417,7 @@ func apiCommitFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path := filepath.Join(cfg.Data, fp)
-	if err := gitCommit(commitAuthorOf(path, userOf(r)), commitMessage(fp), path); err != nil {
+	if err := gitCommit(commitAuthorOf(path, userOf(r).Name), commitMessage(fp), path); err != nil {
 		writeJSON(w, http.StatusInternalServerError, M{"error": err.Error()})
 		return
 	}

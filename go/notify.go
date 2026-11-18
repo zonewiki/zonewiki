@@ -65,7 +65,7 @@ func tellMentioned(by string, t *Task, named []string, text ...string) {
 		return
 	}
 	for _, name := range named {
-		if name != by && mails(s, name, "mentioned") && canSeeTask(name, t) {
+		if name != by && mails(s, name, "mentioned") && canSeeTask(asUser(name), t) {
 			taskMail(s, name, by+" mentioned you: "+oneLine(t.Title), by+" mentioned you on "+appName+", in this task:", t,
 				strings.Join(text, ""), "when someone mentions you in a task")
 		}
@@ -87,7 +87,7 @@ func tellComment(by string, t *Task, text string, named []string) {
 		// (Who made it or has it may be none of its list's members by now: a
 		// list narrowed since. They don't see the task, so no mail tells them.)
 		if name == "" || name == by || slices.Contains(named, name) || slices.Contains(told, name) || !mails(s, name, "comments") ||
-			!canSeeTask(name, t) {
+			!canSeeTask(asUser(name), t) {
 			continue
 		}
 		told = append(told, name)
@@ -107,7 +107,7 @@ func tellAssigned(by string, before assignedBefore, tasks ...*Task) {
 	}
 	given := map[string][]*Task{}
 	for _, t := range tasks {
-		if to := t.Assignee; to != "" && to != by && to != before[t.ID] && t.IsOpen() && t.Owner == "" && canSeeTask(to, t) {
+		if to := t.Assignee; to != "" && to != by && to != before[t.ID] && t.IsOpen() && t.Owner == "" && canSeeTask(asUser(to), t) {
 			given[to] = append(given[to], t)
 		}
 	}

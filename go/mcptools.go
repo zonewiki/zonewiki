@@ -28,7 +28,7 @@ import (
 // mcpPageLinks: for read_page, the pages that link to it and its links that
 // lead nowhere, so the model sees where a page sits without reading others.
 // Of the pages user may see; a link to one they may not isn't broken.
-func mcpPageLinks(slug, content, user string) string {
+func mcpPageLinks(slug, content string, user asker) string {
 	var linking []string
 	for _, b := range findBacklinks(slug) {
 		if canSee(user, b.Slug) {
@@ -62,7 +62,7 @@ func mcpPageLinks(slug, content, user string) string {
 	return out
 }
 
-func readPage(args jsonObj, base, user string) (string, error) {
+func readPage(args jsonObj, base string, user asker) (string, error) {
 	raw, ok := jsonobj.As[string](args["slug"])
 	if !ok || strings.TrimSpace(raw) == "" {
 		return "", toolErr("slug must be a non-empty string")
@@ -103,7 +103,7 @@ func isOrphan(slug string, counts map[string]int) bool {
 	return counts[slug] == 0 && !isProtected(slug) && slug != guideSlug && !isQuicknote(slug)
 }
 
-func listPages(args jsonObj, base, user string) (string, error) {
+func listPages(args jsonObj, base string, user asker) (string, error) {
 	limit, err := mcpInt(args, "limit", 100, 1000)
 	if err != nil {
 		return "", err
@@ -178,7 +178,7 @@ func listPages(args jsonObj, base, user string) (string, error) {
 		"slug | title | last edit | pages linking to it:\n" + strings.Join(lines, "\n"), nil
 }
 
-func checkLinks(args jsonObj, base, user string) (string, error) {
+func checkLinks(args jsonObj, base string, user asker) (string, error) {
 	under, err := underArg(args)
 	if err != nil {
 		return "", err
@@ -232,7 +232,7 @@ const grepLineChars = 300
 
 func cutLine(line string) string { return cutRunes(strings.TrimSpace(line), grepLineChars, " …") }
 
-func grepWiki(args jsonObj, base, user string) (string, error) {
+func grepWiki(args jsonObj, base string, user asker) (string, error) {
 	pattern, ok := jsonobj.As[string](args["pattern"])
 	if !ok || strings.TrimSpace(pattern) == "" {
 		return "", toolErr("pattern must be a non-empty string")
@@ -304,7 +304,7 @@ func isTaskFile(fp string) bool {
 
 func noGit() error { return toolErr("There is no history: git isn't installed where Zone runs.") }
 
-func history(args jsonObj, base, user string) (string, error) {
+func history(args jsonObj, base string, user asker) (string, error) {
 	if !cfg.GitEnabled {
 		return "", noGit()
 	}
@@ -403,7 +403,7 @@ func pageChange(slug, path string, entries []GitEntry, version string) (string, 
 
 // recentChanges: the wiki's latest commits, as user sees them (wikiChanges),
 // after the files with changes not committed yet.
-func recentChanges(since, under string, limit int, user string) string {
+func recentChanges(since, under string, limit int, user asker) string {
 	entries := wikiChanges(user, changesOf{Since: since, Under: under}, limit)
 	var out, pending []string
 	for _, f := range gitUncommittedFiles() {
@@ -448,7 +448,7 @@ func recentChanges(since, under string, limit int, user string) string {
 	return strings.Join(out, "\n\n")
 }
 
-func listTags(args jsonObj, base, user string) (string, error) {
+func listTags(args jsonObj, base string, user asker) (string, error) {
 	counts := map[string]*[3]int{} // tag → pages, open tasks, done tasks
 	count := func(tag string, column int) {
 		if counts[tag] == nil {
@@ -495,7 +495,7 @@ func listTags(args jsonObj, base, user string) (string, error) {
 
 // mcpListsText: the task lists user sees, for list_tags: a list is where a
 // task is (create_task's and update_task's list), not a tag.
-func mcpListsText(user string) string {
+func mcpListsText(user asker) string {
 	lists := taskLists(user)
 	if len(lists) == 0 {
 		return ""
@@ -524,7 +524,7 @@ func mcpListsText(user string) string {
 
 // zoneHelp: Zone's documentation (manual.go), passages for a query, a doc
 // or one of its sections, or the list of docs with their headings.
-func zoneHelp(args jsonObj, base, user string) (string, error) {
+func zoneHelp(args jsonObj, base string, user asker) (string, error) {
 	var query, topic, heading string
 	for _, a := range []struct {
 		name string
@@ -607,7 +607,7 @@ func zoneHelp(args jsonObj, base, user string) (string, error) {
 	return strings.Join(out, "\n"), nil
 }
 
-func searchWiki(args jsonObj, base, user string) (string, error) {
+func searchWiki(args jsonObj, base string, user asker) (string, error) {
 	query, ok := jsonobj.As[string](args["query"])
 	if !ok || strings.TrimSpace(query) == "" {
 		return "", toolErr("query must be a non-empty string")
@@ -653,7 +653,7 @@ func searchWiki(args jsonObj, base, user string) (string, error) {
 	return strings.Join(out, "\n\n---\n\n"), nil
 }
 
-func anyPageIn(folder, user string) bool {
+func anyPageIn(folder string, user asker) bool {
 	for _, p := range visiblePages(user) {
 		if inFolder(p.Slug, folder) {
 			return true
@@ -678,10 +678,10 @@ const (
 // mcpTool: a tool's function and what it writes. A tool that writes is none
 // for a viewer, who isn't offered it either (toolList).
 type mcpTool struct {
-	run    func(args jsonObj, base, user string) (string, error)
+	run    func(args jsonObj, base string, user asker) (string, error)
 	writes toolWrites
 	// In place of run, for a tool whose answer isn't text alone (read_file: an image).
-	content func(args jsonObj, base, user string) ([]toolContent, error)
+	content func(args jsonObj, base string, user asker) ([]toolContent, error)
 }
 
 // mcpToolTable: every tool mcp_tools.json defines, by name.
@@ -731,7 +731,7 @@ func callMCPTool(r *http.Request, name string, args jsonObj) ([]toolContent, err
 		defer pagesMu.Unlock()
 	}
 	if tool.writes != toolWritesNothing && onlyReads(r) {
-		if !settings().isViewer(userOf(r)) {
+		if !settings().isViewer(userOf(r).Name) {
 			return nil, toolErr(readOnlyConnectionMsg)
 		}
 		return nil, toolErr(readOnlyMsg)

@@ -73,7 +73,7 @@ type changesOf struct {
 // commit that changed none of those, and its message without the names of
 // what they don't see (hideNames). In sharing mode a commit shows only
 // when all it changed shows: its message names what it changed.
-func wikiChanges(user string, of changesOf, limit int) []LogEntry {
+func wikiChanges(user asker, of changesOf, limit int) []LogEntry {
 	see := func(path string) bool {
 		if !canSeePath(user, path) {
 			return false
@@ -221,9 +221,9 @@ const sessionGap = 30 * time.Minute
 // what Changes offers to undo, by sha. It offers what undoChangesOp will
 // most likely do, cheaply, from what the list knows; the operation checks
 // again, and exactly.
-func undoOffers(user string, entries []LogEntry) map[string]undoOffer {
+func undoOffers(user asker, entries []LogEntry) map[string]undoOffer {
 	offers := map[string]undoOffer{}
-	if len(entries) == 0 || settings().isViewer(user) || user == visitor {
+	if len(entries) == 0 || settings().isViewer(user.Name) || user.Name == visitor {
 		return offers
 	}
 	latest := latestCommits(undoWindow)

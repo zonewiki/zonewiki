@@ -99,7 +99,7 @@ Auth is optional (a password, or users; see Key Constraints).
 ├── LICENSE                 # AGPL-3.0-or-later
 ├── THIRD_PARTY_LICENSES    # Licenses of Go, the Go modules and the embedding model (the vendored libraries' are next to them)
 ├── docs/spec/              # The feature spec, one file per area (see Spec)
-├── docs/plans/             # Working plans for changes in progress, deleted when done (`mcp-oauth.md`, `tasks-6-sound-at-100.md`, `assistants-first.md`)
+├── docs/plans/             # Working plans for changes in progress, deleted when done (`mcp-oauth.md`, `tasks-6-sound-at-100.md`, `asker.md`, `assistants-first.md`)
 ├── docs/licenses/mermaid_notices.py  # Writes public/vendor/mermaid/THIRD_PARTY_LICENSES from the bundle's source map
 ├── docs/screenshots/       # The README's screenshots + make_screenshots.py (./run.sh screenshots)
 ├── Containerfile           # The image: a Go build stage, onnxruntime + the model (opt-in), an Ubuntu 26.04 LTS runtime (also ships README.md and docs/spec/ for zone_help)
@@ -165,6 +165,7 @@ Auth is optional (a password, or users; see Key Constraints).
 │   ├── tasksembed.go       # The [[tasks:]] embed: its HTML, its settings dialog, the counts the Tasks links show
 │   ├── tasklogic.go        # What Zone does with tasks beyond keeping them: a series' next occurrence, completing, history, comments, backlinks, [[task:…]] references; taskFiles, the store, wired to the wiki here
 │   ├── internal/taskfiles/ # Package taskfiles, no globals: the tasks on disk: _tasks/ files (users' private ones in private/<user>/_tasks/) read and written under one lock, filed by owner and month (parsed once, and a file a write didn't touch skipped), a list for some's folder left out for who is none of its members (`dirs`), and the lists' registries beside them (lists.json: lists.go); a Store is handed the wiki's folder, its users, the clock, who may write and how a write is committed
+│   ├── internal/asker/     # Package asker: who is asking (Asker): a user, or an assistant's connection given less; what every permission question is asked for (`asker` in package main)
 │   ├── internal/atomicfile/ # Package atomicfile: a file written so that no reader sees half of it (pages, task files)
 │   ├── taskby.go           # Comments and history a client sends whole: nobody writes under another's name
 │   ├── taskseen.go         # What each user has seen of the tasks' news: .zone/seen/<user>.json, read into a task's history for the news' rule and the API
@@ -333,6 +334,8 @@ and commit the new pins.
   - `password` in `.zone/config` (a hash) turns on a login gate; the session key is one Zone keeps in `.zone/secret_key` (0600, excluded from git).
     Signing out ends the session wherever a copy of its cookie is (`go/signout.go`: its id in `.zone/signed-out`); renew a session with `renewSession`, which keeps the id, never with `setSession`.
   - Users instead (`[user …]` in `.zone/config`): a login per user, passwords only as hashes (`docs/spec/users.md`); the session names its user, `userOf(r)` / `rq.user` give it, and a write passes it to `gitCommit(user, …)` as the commit's author.
+  - **Who asks is an asker, not a name** (`asker` in `go/access.go`, package `internal/asker`; `docs/plans/asker.md`): a function that answers who may see or change something, or reads for someone, takes an `asker` (a request's is `userOf(r)` / `rq.user`: the user, with what an assistant's connection was given less); one that only needs to know who someone is takes the name, `asker.Name` (a commit's author, whose folder, a settings lookup).
+    Don't ask a permission with `asUser(name)` for a request: that is the person with all they may, for what Zone asks about a user it knows by name (whom a task is given to, who gets a mail). Don't put an asker where a name is written (JSON, a file, a message): its `Name`.
   - **Private pages and tasks** (`private/<user>/`, tasks and private lists in `private/<user>/_tasks/`, with users): every route and tool that shows, lists or changes a page asks `go/access.go` (`canSee`, `canWrite`, `canSeePath`; `hiddenPage`/`refusePage` in the routes);
     every read of tasks takes the user (`taskFiles.Open(user)` …, shared + their own files), and what holds every user's tasks (the search index) filters with `canSeeTask`.
     A task is private by its list (`applyList` in `go/tasks.go`: a private list's task is in its user's files): a shared task never goes into a private list, and a private one leaves for a shared place only with `share`. Lists are read with `taskLists(user)`, which gives only those a user sees, and a write to a list or a task in it asks `canWriteList`: don't read another user's registry for them.

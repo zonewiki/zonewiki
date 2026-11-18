@@ -135,7 +135,7 @@ func plural(n int, word string) string {
 // mcpPageSlug: the existing page a slug-ish string names (a slug,
 // "/page/<slug>", a full URL, "<slug>.md", or the page's name, "Git
 // Remote"); "" when none, or when user may not see it.
-func mcpPageSlug(raw, user string) string {
+func mcpPageSlug(raw string, user asker) string {
 	raw = strings.TrimSuffix(strings.Trim(slugInput(raw), "/"), ".md")
 	for _, slug := range []string{raw, mdtext.ToSlug(raw)} {
 		if slug == "" {
@@ -196,7 +196,7 @@ func readPageText(path string) (string, error) {
 	return strings.ToValidUTF8(text, "�"), err
 }
 
-func existingPage(args jsonObj, name, user string) (string, string, error) {
+func existingPage(args jsonObj, name string, user asker) (string, string, error) {
 	raw, err := strArg(args, name, true)
 	if err != nil {
 		return "", "", err
@@ -212,7 +212,7 @@ func existingPage(args jsonObj, name, user string) (string, string, error) {
 // 1234" → "tickets/bug-1234"), refused when it would be outside the wiki or
 // in a folder Zone skips (_assets, _tasks, .git …), or in private/ outside
 // user's own folder.
-func newSlug(raw, user string) (string, error) {
+func newSlug(raw string, user asker) (string, error) {
 	raw = strings.TrimSuffix(strings.Trim(slugInput(raw), "/"), ".md")
 	slug := mdtext.ToSlug(raw)
 	if slug == "" || slices.Contains(strings.Split(slug, "/"), "") {
@@ -234,7 +234,7 @@ func newSlug(raw, user string) (string, error) {
 // page: the [[wikilinks]] (as rendering decides it: the name as a slug,
 // else slugified) and the markdown links (mdLinkMisses). Each link as
 // written → the name or slug it was meant for, to suggest a near match.
-func missingLinks(content string, slugs map[string]bool, slug, user string) map[string]string {
+func missingLinks(content string, slugs map[string]bool, slug string, user asker) map[string]string {
 	masked, _ := mdtext.MaskCode(content)
 	masked = taskRefRE.ReplaceAllString(tasksRE.ReplaceAllString(masked, ""), "")
 	missing := map[string]string{}
@@ -258,7 +258,7 @@ func missingLinks(content string, slugs map[string]bool, slug, user string) map[
 }
 
 // newMissing: the links of missingLinks in new that old didn't have, A–Z.
-func newMissing(slug, old, new, user string, slugs map[string]bool) []string {
+func newMissing(slug, old, new string, user asker, slugs map[string]bool) []string {
 	before := missingLinks(old, slugs, slug, user)
 	var added []string
 	for k := range missingLinks(new, slugs, slug, user) {
@@ -272,7 +272,7 @@ func newMissing(slug, old, new, user string, slugs map[string]bool) []string {
 
 // linkWarning: a note on the links a write added that lead nowhere, so the
 // model can fix a typo or create the page.
-func linkWarning(slug, old, new, user string) string {
+func linkWarning(slug, old, new string, user asker) string {
 	added := newMissing(slug, old, new, user, slugSet())
 	if len(added) == 0 {
 		return ""
@@ -290,7 +290,7 @@ func lastPart(slug string) string { return slug[strings.LastIndex(slug, "/")+1:]
 
 // pageOrNewSlug: the existing page raw names, else the slug a new page of
 // that name would get (a deleted page's, say).
-func pageOrNewSlug(raw, user string) (string, error) {
+func pageOrNewSlug(raw string, user asker) (string, error) {
 	if slug := mcpPageSlug(raw, user); slug != "" {
 		return slug, nil
 	}
@@ -300,9 +300,9 @@ func pageOrNewSlug(raw, user string) (string, error) {
 // notYours: the refusal of a page in private/ that isn't in user's own
 // folder, or in groups/ and in no folder of a group they are in (which
 // says nothing of whether it exists).
-func notYours(slug, user string) string {
+func notYours(slug string, user asker) string {
 	if dir, _, _ := strings.Cut(strings.ToLower(path.Clean(slug)), "/"); dir == groupsDir && settings().Users != nil {
-		if in := settings().groupsOf(user); len(in) > 0 {
+		if in := settings().groupsOf(user.Name); len(in) > 0 {
 			return strconv.Quote(slug) + ": of " + groupsDir + "/, only the folders of the groups you are in are yours to read or write (" +
 				groupsDir + "/" + strings.Join(in, "/, "+groupsDir+"/") + "/)"
 		}
@@ -317,7 +317,7 @@ func notYours(slug, user string) string {
 // similarPages: existing pages whose title or file name is close to a new
 // page's, so the model notices it may be extending a page rather than
 // starting one.
-func similarPages(slug, title, user string) []PageRef {
+func similarPages(slug, title string, user asker) []PageRef {
 	norm := func(names ...string) []string {
 		var out []string
 		for _, n := range names {

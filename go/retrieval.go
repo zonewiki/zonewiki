@@ -395,7 +395,7 @@ func taskRefsAsTitles(slug, content string) string {
 	for i, m := range ms {
 		refs[i] = strings.ToLower(m[1])
 	}
-	tasks := resolveTaskRefs(placeOf(slug).user(), refs)
+	tasks := resolveTaskRefs(asUser(placeOf(slug).user()), refs)
 	return taskRefRE.ReplaceAllStringFunc(content, func(s string) string {
 		if t := tasks[strings.ToLower(taskRefRE.FindStringSubmatch(s)[1])]; t != nil {
 			return mdtext.PlainTaskTitle(t.Title)
@@ -1293,7 +1293,7 @@ func (c *tokenCache) of(d *SearchDoc) []string {
 }
 
 // docVisible: user may see the search doc d (a page's, or a task's).
-func docVisible(user string, d *SearchDoc) bool {
+func docVisible(user asker, d *SearchDoc) bool {
 	if d.isTask() {
 		return canSeeTask(user, d.Task)
 	}
@@ -1627,7 +1627,7 @@ func docHider(rq *Req) func(*SearchDoc) bool {
 // or an excerpt would give away to someone who sees no task. The page
 // itself they read, its references naming nothing.
 func visitorSkips(rq *Req, slug string) bool {
-	if rq == nil || rq.user != visitor {
+	if rq == nil || rq.user.Name != visitor {
 		return false
 	}
 	return pageMetaEntryOf(safePath(slug), slug).taskRefs
