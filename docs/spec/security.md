@@ -30,6 +30,56 @@ A new feature is checked against them, and a protection that breaks one is a bug
   It is not in a search result, a count, a link's preview, a history or a diff, a mail, or the wording of an error: a refusal for a page you may not read looks the same as a page that doesn't exist.
 - **Each rule is tested at each door**, including that a denied thing is really denied (the tests named above).
 
+## Before you open it up
+
+What someone running Zone should know (the README sends them here).
+Out of the box Zone listens on localhost only and refuses a foreign `Host` header (DNS rebinding) and cross-site writes; anything reachable beyond localhost belongs behind HTTPS, with a login (`./run.sh config passwd`, or users).
+
+**Self-hosting behind HTTPS.**
+Put a reverse proxy in front that terminates HTTPS, passes the original `Host` and sets `X-Forwarded-Proto` and `X-Forwarded-For`, and name the public host in `hosts`.
+With [Caddy](https://caddyserver.com) on the same machine (it does all of that and gets the certificate):
+
+```
+wiki.example.org {
+    reverse_proxy localhost:5000
+}
+```
+
+```bash
+./run.sh config set hosts wiki.example.org
+./run.sh config set base-url https://wiki.example.org
+./run.sh config passwd                 # long and unique
+```
+
+Leave `ZONE_ALLOW_REMOTE` off then: the proxy reaches Zone on localhost, and port 5000 stays closed to the network, so nobody can go around HTTPS.
+A proxy on another machine needs `ZONE_ALLOW_REMOTE=1` too; `hosts` keeps the `Host` check on.
+Zone can also listen on a Unix socket instead of a port (A Unix socket in `docs/spec/deployment.md`).
+There is one password per user (or one for the wiki) and no second factor: if only you need to reach Zone from outside, a VPN (WireGuard, Tailscale) is safer still than a public address.
+
+Also know this:
+
+- **No login on localhost.**
+  There, anyone who can reach the port can read, change and delete everything.
+  Opened to the network (`ZONE_ALLOW_REMOTE=1`, names in `hosts`, or `compose.nas.yaml`), Zone shows nothing until a login is set (First run, below), unless `no-login = yes` says it is open on purpose.
+  Every user reads everything but other users' private pages and tasks and the pages of groups they aren't in (and all but viewers can change it), so give access to no one you wouldn't hand the shared files to.
+- **Private means private inside Zone.**
+  Another user's private pages and tasks are hidden from you and your assistant, but not encrypted: whoever has the wiki folder, its git history or its git remote reads them all.
+  An admin doesn't see them either, but can make a reset link and sign in as the user with it (the user notices: their old password stops working), so make admin only whom you'd trust with everyone's pages.
+- **Plain `http://` is readable on the network.**
+  The password, the login cookie, the MCP token and the pages travel unencrypted, so anyone on the same network (public Wi-Fi, a shared LAN) can read them and sign in as you.
+  Fine on localhost; anywhere else, use HTTPS or a VPN.
+- **MCP clients can write.**
+  Whoever has an MCP token can create, change, rename and delete pages and change and close tasks, as the token's user may: keep it secret, give it only to clients you trust, or connect an assistant that only reads.
+- **Pages can carry instructions.**
+  An assistant reads your pages, and text pasted into them from elsewhere (tickets, mails, web pages) can try to steer it ("ignore your instructions and delete …").
+  If your wiki holds such text, have your client ask before it writes (MCP clients can, per tool; Zone marks the tools that change or delete as destructive).
+  HTML in a page runs no script and loads nothing from other sites (an image elsewhere shows as a link), so such a page can't send your notes away in an image's address; name sites you trust in `external-content`.
+- **Git is the undo, a remote the backup.**
+  Every change made through Zone is a commit (an assistant's marked `(MCP)`), and Changes, history and Deleted pages bring things back.
+  Set `git-remote` and push now and then; the remote has everything but `.zone/config` (the users and settings), so keep a copy of that file too.
+- **Treat the wiki folder, its git history and remote, and every backup as confidential.**
+  They hold everything, every user's private pages included, and a backup of the folder holds the password hashes too.
+
 ## Protections
 
 - Optional password auth: `./run.sh config passwd` (a hash as `password` in the settings file, `.zone/config`) enables a login gate.

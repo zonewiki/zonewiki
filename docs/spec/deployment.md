@@ -60,7 +60,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
   Platforms: Linux is the only tested one; meant to work also on macOS and, on Windows, in WSL2 (Docker Desktop and Podman run on it there).
   It sticks to bash 3.2 (macOS's stock bash: no `${x,,}`, no `declare -A`, no `mapfile`) and to options BSD tools share with GNU ones.
   `.gitattributes` keeps `*.sh` and `.githooks/*` at LF line endings, so a Windows checkout with `core.autocrlf` doesn't break them.
-  Without the container, Zone itself should run on any OS with Python and git (it uses no Unix-only modules), though only Linux is tested.
+  Without the container, Zone itself should run on any OS Go builds for, with git (Without a container, below), though only Linux is tested.
 - **`.env.example`** — the template for `.env` (`cp .env.example .env`): every setting with a comment, optional ones commented out, no real values.
   `tests/test_env_example.py` keeps it in step with the code: every `ZONE_*` name the source, `run.sh`, `compose.yaml` or `compose.nas.yaml` reads is in it, and nothing else is (a typo in `.env` is silently ignored).
 - **`.env`** — the deployment's settings, read by `run.sh`, compose and Zone at start: `ZONE_DATA` (default `~/zonewiki`), `ZONE_ALLOW_REMOTE`, `TZ`, `ZONE_SEMANTIC_SEARCH`, `ZONE_PUBLIC` (`view` or `edit`: the wiki is shown, or open to edits, without signing in; Public wikis in `docs/spec/security.md`), sign-up and its mail server (`ZONE_SIGNUP`, `ZONE_SMTP_*`, `ZONE_MAIL_FROM`; Mail, below), and for compose without `run.sh` `ZONE_BIND`, `ZONE_UID`/`ZONE_GID`, `ZONE_PORT` (`compose.nas.yaml`); gitignored.
@@ -92,6 +92,31 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 ```
 
 Zone is available at **http://localhost:5000** after `./run.sh up`.
+To update: `git pull && ./run.sh up`.
+To point Zone at an existing folder of Markdown notes, set `ZONE_DATA` to it: Zone makes it a git repository (if it isn't one) and adds a home page.
+
+## Without run.sh
+
+`run.sh` fills in what `compose.yaml` can't work out itself: the commit the image is built from, the timezone, the user ID and the address from `ZONE_ALLOW_REMOTE`.
+To run `docker compose up -d --build` directly, set in `.env`:
+`ZONE_DATA` as an absolute path (no `~`);
+`ZONE_BIND=0.0.0.0` together with `ZONE_ALLOW_REMOTE=1`, for network access;
+`ZONE_UID` and `ZONE_GID` (`id -u`, `id -g`) if they aren't 1000;
+`TZ`, or the container runs on UTC.
+With rootless Podman, add the file that keeps your user ID inside the container: `podman compose -f compose.yaml -f compose.podman.yaml up -d --build`.
+
+## Without a container
+
+With Go 1.27 or newer, a C compiler (for semantic search; `CGO_ENABLED=0` builds without it) and git:
+
+```bash
+(cd go && go build -o zonewiki .)
+ZONE_DATA=~/zonewiki go/zonewiki
+```
+
+In Windows PowerShell: `cd go; go build -o zonewiki.exe .; cd ..`, then `$env:ZONE_DATA="$HOME\zonewiki"; go\zonewiki.exe`.
+For semantic search, onnxruntime's library must be where the loader finds it (`docs/spec/search.md`).
+`zonewiki --help` lists the flags, the commands (`user`, `group`, `config`, `eval`, `health`; each takes `--help` too) and the environment.
 
 ## On a NAS or server
 

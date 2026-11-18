@@ -71,7 +71,7 @@ A viewer may make one too: their assistant reads, and its writing tools are refu
 ## Connecting with OAuth
 
 `go/oauth.go`, `go/grants.go`, `oauth.html`.
-What Claude's apps (web, Desktop, mobile: a "custom connector"), Claude Code and ChatGPT do with a remote MCP server: the user pastes the address of `/mcp`, a browser opens, they sign in to Zone and click Allow.
+What Claude's apps (web, Desktop, mobile: a "custom connector"), Claude Code (`claude mcp add --transport http zone <address>`, then `/mcp`) and ChatGPT (a connector, in developer mode) do with a remote MCP server: the user pastes the address of `/mcp`, a browser opens, they sign in to Zone and click Allow.
 Zone is its own authorization server, on the same address, as the MCP authorization spec (2025-11-25) has it; nothing but Go's standard library.
 
 - **Only with a login**: someone has to sign in and allow, so OAuth is on when the wiki has users or a password (`oauthOn`), and there is none in a wiki without a login (the routes below are a 404, `/mcp` answers as without it).
