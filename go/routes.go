@@ -35,7 +35,7 @@ func pageRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /new", func(w http.ResponseWriter, r *http.Request) {
 		var groups []string
 		if !changesNothing(userOf(r)) { // a viewer makes no page
-			groups = settings().groupsOf(userOf(r).Name)
+			groups = groupsFor(userOf(r))
 		}
 		// for: where the page starts (the New page button of a group's home, of the private home).
 		who := r.URL.Query().Get("for")
@@ -715,7 +715,7 @@ func createPage(w http.ResponseWriter, r *http.Request) {
 		slug = own + "/" + slug
 	}
 	if g, ok := strings.CutPrefix(who, "group:"); ok && slug != "" && newFromRE.MatchString(who) &&
-		settings().memberOf(userOf(r).Name, g) && !strings.HasPrefix(slug, groupsDir+"/"+g+"/") {
+		inGroup(userOf(r), g) && !strings.HasPrefix(slug, groupsDir+"/"+g+"/") {
 		slug = groupsDir + "/" + g + "/" + slug
 	}
 	if slug == "" {

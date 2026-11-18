@@ -126,7 +126,7 @@ func serveUpload(w http.ResponseWriter, r *http.Request) {
 // anyone else, as for a file that isn't there).
 func servePrivateUpload(w http.ResponseWriter, r *http.Request) {
 	owner := r.PathValue("user")
-	if owner == "" || owner != userOf(r).Name || settings().Users[owner] == nil {
+	if owner == "" || settings().Users[owner] == nil || !(place{ofUser, owner}).sees(userOf(r)) {
 		http.NotFound(w, r)
 		return
 	}

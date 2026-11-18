@@ -1669,6 +1669,7 @@ kbd {
 .oauth-may legend { padding: 0; margin-bottom: .35rem; font-weight: 600; }
 .oauth-may label { display: flex; gap: .5rem; align-items: baseline; min-width: 0; font-size: .9rem; line-height: 1.45; }
 .oauth-may label span { flex: 1; min-width: 0; }
+.oauth-may + .oauth-may { margin-top: .25rem; }
 
 .oauth-answers { display: flex; gap: .5rem; }
 .oauth-answers .btn { flex: 1; }
@@ -1706,6 +1707,7 @@ kbd {
 .assistant-connections td:first-child { font-weight: 500; }
 .assistant-connections :is(th, td):last-child { text-align: right; }
 .assistant-connections td { vertical-align: middle; }
+.assistant-sees { display: block; font-size: .8rem; color: var(--muted); }
 .assistant-conn-actions { white-space: nowrap; }
 .assistant-conn-actions form { display: inline-block; }
 /* The token: what there is and what to do about it, a row each, the action on the right. */

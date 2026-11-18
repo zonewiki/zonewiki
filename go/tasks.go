@@ -330,6 +330,9 @@ func applyList(user asker, t *Task, data jsonObj, fresh bool) error {
 	}
 	if !data.Has("list") {
 		if fresh {
+			if lacksPrivate(user) {
+				return refuse(noPrivateMsg)
+			}
 			t.List, t.Owner = "", inboxOwner(user)
 		}
 		return nil
@@ -360,6 +363,9 @@ func applyList(user asker, t *Task, data jsonObj, fresh bool) error {
 	}
 	if !fresh && name == t.List && owner == t.Owner {
 		return nil
+	}
+	if owner != "" && lacksPrivate(user) {
+		return refuse(noPrivateMsg) // into the Inbox: the lists it sees are shared ones
 	}
 	switch {
 	case fresh:

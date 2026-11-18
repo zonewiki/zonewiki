@@ -197,7 +197,7 @@ func moduleLinks(rq *Req) []moduleLink {
 	users := privateFolder(rq.who()) != ""
 	viewer := settings().isViewer(rq.who().Name)
 	var out []moduleLink
-	groups := settings().groupsOf(rq.who().Name) // the groups the user is in: Groups, for who is in one
+	groups := groupsFor(rq.who()) // the groups the user is in: Groups, for who is in one
 	for _, m := range modules {
 		if m[0] == "private" && !users || viewer && (m[0] == "private" || m[0] == "notes") {
 			continue // a viewer makes nothing: no private pages, no notes

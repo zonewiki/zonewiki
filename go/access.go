@@ -194,7 +194,9 @@ func (p place) folder() string {
 }
 
 // own: it is user's own, and theirs alone.
-func (p place) own(user asker) bool { return p.kind == ofUser && p.name == user.Name }
+func (p place) own(user asker) bool {
+	return p.kind == ofUser && p.name == user.Name && user.HasPrivate()
+}
 
 // sees: user sees what is kept there: everyone what is shared, a user their
 // own, a group's members what is the group's (an admin who is none of them
@@ -205,13 +207,33 @@ func (p place) sees(user asker) bool {
 	case ofEveryone:
 		return true
 	case ofUser:
-		return p.name == user.Name
+		return p.own(user)
 	case ofGroup:
-		return settings().memberOf(user.Name, p.name)
+		return inGroup(user, p.name)
 	case ofTask:
 		return seesTaskFiles(user, p.name)
 	}
 	return false
+}
+
+// inGroup: the group's place is user's: they are in the group, and an asker
+// that was given only some of its user's groups was given this one. Every
+// question "is this group's theirs" is asked here (and groupsFor lists
+// them), never of the settings with an asker's name: that would give a
+// narrowed asker its user's groups back.
+func inGroup(user asker, group string) bool {
+	return user.HasGroup(group) && settings().memberOf(user.Name, group)
+}
+
+// groupsFor: the groups whose places are user's (inGroup), A–Z.
+func groupsFor(user asker) []string {
+	var out []string
+	for _, g := range settings().groupsOf(user.Name) {
+		if user.HasGroup(g) {
+			out = append(out, g)
+		}
+	}
+	return out
 }
 
 // theirs: p is a user's or a group's place that user sees: their own
@@ -411,7 +433,7 @@ func canSeeTask(user asker, t *Task) bool {
 		return false
 	}
 	if t.Owner != "" {
-		return t.Owner == user.Name
+		return t.Owner == user.Name && user.HasPrivate()
 	}
 	return taskFiles.SeesList(user, t.List)
 }
@@ -426,7 +448,7 @@ func canSeeList(user asker, l ListInfo) bool {
 		return false
 	}
 	if l.Owner != "" {
-		return l.Owner == user.Name
+		return l.Owner == user.Name && user.HasPrivate()
 	}
 	return len(l.For) == 0 || listMember(user, l.For)
 }
@@ -444,7 +466,7 @@ func listMember(user asker, who []string) bool {
 		return false
 	}
 	for _, w := range who {
-		if group, ok := strings.CutPrefix(w, "@"); ok && s.memberOf(user.Name, group) || w == user.Name {
+		if group, ok := strings.CutPrefix(w, "@"); ok && inGroup(user, group) || w == user.Name {
 			return true
 		}
 	}
@@ -524,6 +546,23 @@ func privateFolder(user asker) string {
 	}
 	return privateDir + "/" + user.Name
 }
+
+// ownsTasks: the task files of owner (a user's name, as the store files
+// them: private/<owner>/_tasks/) are user's own, and there for them.
+func ownsTasks(user asker, owner string) bool {
+	return owner != "" && owner == user.Name && user.HasPrivate()
+}
+
+// lacksPrivate: user is a user of this wiki whose private place isn't there
+// for it (an assistant's connection that wasn't given it). Not the same as
+// a wiki without users, where nothing is private and privateFolder is "":
+// here the Inbox, the notes and the private lists are, and aren't its.
+func lacksPrivate(user asker) bool { return privateFolder(user) != "" && !user.HasPrivate() }
+
+// noPrivateMsg: what such an asker is told when it would make or change
+// something private.
+const noPrivateMsg = "This connection wasn't given your private pages, notes and tasks, so it can make none: " +
+	"what it made there it couldn't see again. Use a shared page or a shared list (a task without a list goes to the private Inbox)."
 
 // canSeePath: user may see the file rel (relative to the wiki, slash-
 // separated), as git names it in the history: a page by its slug, anything

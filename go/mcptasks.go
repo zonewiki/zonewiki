@@ -268,7 +268,7 @@ func searchTasks(args jsonObj, base string, user asker) (string, error) {
 			// lists (mineOrder): those first, as they stand there; then by
 			// the lists' order.
 			own := map[string]int{}
-			if reg := taskFiles.ReadLists(mineOwner(user)); reg.OrderSet {
+			if reg := mineRegistry(user); reg.OrderSet {
 				for i, id := range reg.Order {
 					own[id] = i + 1
 				}

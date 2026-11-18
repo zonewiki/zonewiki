@@ -27,7 +27,8 @@ everything as it is. Search indexes and caches are rebuilt from the files.
   [MCP server](#connect-an-ai-assistant), an AI assistant can do everything
   you can: search, read, create, edit, rename and restore pages, file
   notes, and manage tasks. It acts as you and never sees more than you do,
-  and you can connect one that only reads;
+  and you can connect one that only reads, or one that is kept out of your
+  private pages or given only some of your groups;
   its edits land as git commits marked `(MCP)` and named after the assistant,
   listed under Changes, where you review them and undo one or a whole run
   of them. Zone brings no model of its own: the assistant is yours, whichever

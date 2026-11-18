@@ -68,6 +68,14 @@ func createQuicknote(user asker, title string, content *string, suffix string) (
 		if path = safePath(slug); path == "" {
 			return "", refuse("'" + title + "' can't name a note")
 		}
+		// A note is a page in its user's folder, and made by who may write
+		// there: not a viewer, nor an asker that wasn't given the folder.
+		if !canWrite(user, slug) {
+			if lacksPrivate(user) {
+				return "", refuse(noPrivateMsg)
+			}
+			return "", notWritable(user, slug, "'"+title+"' can't be made a note")
+		}
 		if !exists(path) {
 			break
 		}

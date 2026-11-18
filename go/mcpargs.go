@@ -302,11 +302,14 @@ func pageOrNewSlug(raw string, user asker) (string, error) {
 // says nothing of whether it exists).
 func notYours(slug string, user asker) string {
 	if dir, _, _ := strings.Cut(strings.ToLower(path.Clean(slug)), "/"); dir == groupsDir && settings().Users != nil {
-		if in := settings().groupsOf(user.Name); len(in) > 0 {
+		if in := groupsFor(user); len(in) > 0 {
 			return strconv.Quote(slug) + ": of " + groupsDir + "/, only the folders of the groups you are in are yours to read or write (" +
 				groupsDir + "/" + strings.Join(in, "/, "+groupsDir+"/") + "/)"
 		}
 		return strconv.Quote(slug) + ": " + groupsDir + "/ holds the groups' folders, which only a group's members see, and you are in no group"
+	}
+	if lacksPrivate(user) {
+		return strconv.Quote(slug) + ": private/ holds the users' private folders, and this connection wasn't given yours"
 	}
 	if own := privateFolder(user); own != "" {
 		return strconv.Quote(slug) + ": of private/, only your own folder " + own + "/ is yours to read or write"

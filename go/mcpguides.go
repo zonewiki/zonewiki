@@ -354,7 +354,7 @@ func instructionsWithGuide(user asker) string {
 // sees them, said with the instructions: an assistant that files a page
 // must know that the folder decides who reads it.
 func groupsNote(user asker) string {
-	in := settings().groupsOf(user.Name)
+	in := groupsFor(user)
 	if len(in) == 0 {
 		return ""
 	}

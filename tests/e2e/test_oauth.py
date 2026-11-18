@@ -128,3 +128,45 @@ def test_only_read_is_chosen_on_the_question_and_said_on_the_page(page, wiki, mo
     expect(row.get_by_role("button", name="Make read-only")).to_have_count(0)
     page.screenshot(path=str(SCREENSHOT_DIR / "assistant-may.png"))
     assert page.csp_violations == []
+
+
+def test_what_it_sees_is_chosen_on_the_question(page, wiki, monkeypatch):
+    from tests.e2e.conftest import SCREENSHOT_DIR
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "")})
+    monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"groups": "dev, ops"}})
+    wiki.write("private/alice/diary", "# Diary\n\nwombatquill\n")
+    wiki.write("groups/dev/roadmap", "# Roadmap\n\nwombatquill\n")
+    wiki.write("groups/ops/runbook", "# Runbook\n\nwombatquill\n")
+    client_side(page)
+    _, address = ask(page)
+    page.goto(address)
+    page.get_by_placeholder("User name").fill("alice")
+    page.get_by_placeholder("Password").fill("pw")
+    page.get_by_role("button", name="Sign in").click()
+    expect(page.get_by_label("The shared wiki")).to_be_disabled()
+    for place in ("Your private pages, notes and tasks", "The group dev", "The group ops"):
+        expect(page.get_by_label(place)).to_be_checked()
+    page.get_by_label("Your private pages, notes and tasks").uncheck()
+    page.get_by_label("The group ops").uncheck()
+    page.screenshot(path=str(SCREENSHOT_DIR / "oauth-sees.png"), full_page=True)
+    page.set_viewport_size({"width": 375, "height": 700})
+    assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+    page.get_by_label("Password").fill("pw")
+    page.get_by_role("button", name="Allow").click()
+    page.wait_for_url(re.compile(r"^https://client\.example/callback\?"))
+    code = parse_qs(urlsplit(page.url).query)["code"][0]
+    client_id = parse_qs(urlsplit(address).query)["client_id"][0]
+    tokens = page.request.post("/oauth/token", form={
+        "grant_type": "authorization_code", "code": code, "client_id": client_id, "redirect_uri": CALLBACK,
+        "code_verifier": VERIFIER}).json()
+    found = page.request.post("/mcp", headers={"Authorization": f"Bearer {tokens['access_token']}"}, data={
+        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+        "params": {"name": "grep_wiki", "arguments": {"pattern": "wombatquill"}}}).json()["result"]["content"][0]["text"]
+    assert "groups/dev/roadmap" in found and "diary" not in found and "runbook" not in found
+    page.set_viewport_size({"width": 1280, "height": 800})
+    page.goto("/assistant")
+    expect(page.locator(".assistant-sees")).to_have_text("Sees only: the shared wiki; the group dev")
+    page.locator(".assistant-connections").screenshot(path=str(SCREENSHOT_DIR / "assistant-sees.png"))
+    page.set_viewport_size({"width": 375, "height": 700})
+    assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+    assert page.csp_violations == []

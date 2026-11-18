@@ -528,9 +528,9 @@ func checkTagRename(user asker, tag, newName string, merge bool) (*tagPlan, erro
 	taskFiles.Unlock()
 	seen, shared, taken := false, false, false
 	for _, f := range files {
-		visible := f.owner == "" || f.owner == user.Name
 		for _, t := range f.tasks {
-			tags := taskTagsLower(t)
+			// By the file's owner (a task read from its file doesn't say whose it is).
+			tags, visible := taskTagsLower(t), ownsTasks(user, f.owner) || f.owner == "" && taskFiles.SeesList(user, t.List)
 			seen = seen || visible && tags[old]
 			shared = shared || f.owner == "" && tags[old]
 			taken = taken || visible && tags[strings.ToLower(name)]
@@ -560,7 +560,10 @@ func checkTagRename(user asker, tag, newName string, merge bool) (*tagPlan, erro
 	}
 	plan := &tagPlan{old: old, name: name, owners: []string{""}}
 	if privateFolder(user) != "" {
-		plan.owners = []string{user.Name}
+		plan.owners = nil // a tag of their own alone: their own tasks, if those are there for them
+		if user.HasPrivate() {
+			plan.owners = []string{user.Name}
+		}
 	}
 	if shared {
 		plan.owners = taskFiles.EveryOwner()
@@ -634,7 +637,7 @@ func renameTagOp(user asker, tag, newName string, merge bool, suffix string) (*t
 		}
 		if n > 0 {
 			writes = append(writes, taskWrite{f.Path, tasks})
-			if f.Owner == "" || f.Owner == user.Name {
+			if f.Owner == "" || ownsTasks(user, f.Owner) {
 				done.Tasks += n
 			}
 		}

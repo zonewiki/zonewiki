@@ -256,11 +256,22 @@ type consentView struct {
 	Host     string // where the answer goes
 	Loopback bool   // to this machine: any program on it can ask
 	Viewer   bool
-	ReadOnly bool   // chosen: it reads and changes nothing
+	ReadOnly bool // chosen: it reads and changes nothing
+	Choose   bool // there is something to choose of what it sees (users)
+	Private  bool // chosen: the user's private place
+	Groups   []consentGroup
+	Sees     string // after Allow: what it sees, when that is less than the user does
 	Error    string // the password was wrong
 	Problem  string // the request can't be answered
 	Back     string // the address the answer goes to (after Allow or Deny, or with a problem the client can be told)
 	Allowed  bool
+}
+
+// consentGroup: one of the user's groups on the question, and whether its
+// place is given.
+type consentGroup struct {
+	Name  string
+	Given bool
 }
 
 // oauthAuthorize: GET /oauth/authorize asks whoever is signed in (the
@@ -335,6 +346,30 @@ func oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 	}
 	v.User, v.Viewer = user.Name, s.isViewer(user.Name)
 	v.ReadOnly = r.Method == http.MethodPost && r.PostFormValue("may") == "read"
+	// What it sees of the user's places (with users: without, all is
+	// shared): everything, unless the form came with its choices (choose)
+	// and one is left out. The shared wiki is always there.
+	given := less{ReadOnly: v.ReadOnly}
+	chosen := r.Method == http.MethodPost && r.PostFormValue("choose") != ""
+	v.Choose, v.Private = s.Users != nil, true
+	var groups []string
+	for _, g := range groupsFor(user) {
+		in := !chosen || slices.Contains(r.PostForm["see"], "group:"+g)
+		v.Groups = append(v.Groups, consentGroup{g, in})
+		if in {
+			groups = append(groups, g)
+		}
+	}
+	if chosen && v.Choose {
+		v.Private = slices.Contains(r.PostForm["see"], "private")
+		given.NoPrivate = !v.Private
+		if len(groups) != len(v.Groups) {
+			if groups == nil {
+				groups = []string{}
+			}
+			given.Groups = &groups
+		}
+	}
 	if r.Method != http.MethodPost {
 		show(http.StatusOK)
 		return
@@ -365,12 +400,12 @@ func oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	code := newCode(authCode{user: user.Name, client: q.client.Name, clientHash: hashToken(q.ClientID),
-		redirectURI: q.RedirectURI, redirectHost: to.Host, challenge: q.Challenge, readOnly: v.ReadOnly})
+		redirectURI: q.RedirectURI, redirectHost: to.Host, challenge: q.Challenge, less: given})
 	// Not a redirect: the page policy lets a form lead only to Zone itself
 	// (form-action 'self', which browsers hold a form's redirects to), so
 	// the answer is a page that sends the browser on, and shows the way as
 	// a link.
-	v.Back, v.Allowed = answer("code", code), true
+	v.Back, v.Allowed, v.Sees = answer("code", code), true, given.sees()
 	w.Header().Set("Refresh", "0; url="+v.Back)
 	show(http.StatusOK)
 }
@@ -397,7 +432,7 @@ func validGrantUser(s *Settings, user string) bool {
 // restart drops the few that are open).
 type authCode struct {
 	user, client, clientHash, redirectURI, redirectHost, challenge string
-	readOnly                                                       bool // what was allowed: reading only
+	less                                                           less // what was allowed less than the user has
 	expires                                                        time.Time
 }
 
@@ -504,7 +539,7 @@ func grantTokensFor(r *http.Request) (grantTokens, error) {
 		case !validGrantUser(s, c.user):
 			return none, &tokenRefusal{"invalid_grant", "Whoever allowed this can't sign in any more."}
 		}
-		return newGrant(c.user, c.client, c.clientHash, c.redirectHost, c.readOnly)
+		return newGrant(c.user, c.client, c.clientHash, c.redirectHost, c.less)
 	case "refresh_token":
 		tokens, _, err := refreshGrant(r.PostFormValue("refresh_token"), hashToken(clientID),
 			func(user string) bool { return validGrantUser(s, user) })

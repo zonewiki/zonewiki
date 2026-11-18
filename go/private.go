@@ -225,7 +225,7 @@ func shareTargets(user asker, slug string) []shareTarget {
 			out = append(out, t)
 		}
 	}
-	for _, g := range s.groupsOf(user.Name) {
+	for _, g := range groupsFor(user) {
 		if to := (place{ofGroup, g}); to != from && from.within(to) {
 			offer(shareTarget{to.folder() + "/" + rest, g, s.groupMembers(g)})
 		}
@@ -254,7 +254,7 @@ var newFromRE = regexp.MustCompile(`^(?:private|group:[a-z0-9][a-z0-9-]{0,39})$`
 // such a page, no users, the page isn't a shared one, or that page exists).
 func sharedNewOffer(user asker, slug, from string) (target, group string) {
 	folder := ""
-	if g, ok := strings.CutPrefix(from, "group:"); ok && newFromRE.MatchString(from) && settings().memberOf(user.Name, g) {
+	if g, ok := strings.CutPrefix(from, "group:"); ok && newFromRE.MatchString(from) && inGroup(user, g) {
 		folder, group = groupsDir+"/"+g, g
 	} else if from == "private" {
 		folder = privateFolder(user)

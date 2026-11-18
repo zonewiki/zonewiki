@@ -18,6 +18,7 @@
     {{- if .Allowed}}
     <h2>Connected</h2>
     <p><strong>{{.Client}}</strong> may now {{if .ReadOnly}}read{{else}}use{{end}} this wiki{{if .User}} as <strong>{{.User}}</strong>{{end}}{{if .ReadOnly}}: it changes nothing{{end}}. You are being sent back to it.</p>
+    {{- with .Sees}}<p class="welcome-note">It sees only: {{.}}.</p>{{end}}
     {{- else}}
     <h2>Not connected</h2>
     <p>Nothing was allowed. You are being sent back to {{.Client}}.</p>
@@ -34,6 +35,17 @@
       <label><input type="radio" name="may" value="write"{{if not .ReadOnly}} checked{{end}}> <span><strong>Read and change</strong>: {{if .User}}it sees and changes what you do, no more{{else}}it searches, reads and writes the pages and tasks{{end}}. What it changes is listed under Changes, where you can undo it.</span></label>
       <label><input type="radio" name="may" value="read"{{if .ReadOnly}} checked{{end}}> <span><strong>Only read</strong>: it searches and reads {{if .User}}what you see{{else}}the pages and tasks{{end}}, and changes nothing.</span></label>
     </fieldset>
+    {{- if .Choose}}
+    <fieldset class="oauth-may oauth-sees">
+      <legend>What may it see?</legend>
+      <input type="hidden" name="choose" value="1">
+      <label><input type="checkbox" checked disabled> <span><strong>The shared wiki</strong>: the pages and tasks everyone here sees.</span></label>
+      <label><input type="checkbox" name="see" value="private"{{if .Private}} checked{{end}}> <span><strong>Your private pages, notes and tasks</strong>, your Inbox among them.</span></label>
+      {{- range .Groups}}
+      <label><input type="checkbox" name="see" value="group:{{.Name}}"{{if .Given}} checked{{end}}> <span>The group <strong>{{.Name}}</strong>: its pages and its lists.</span></label>
+      {{- end}}
+    </fieldset>
+    {{- end}}
     {{- end}}
     <p class="welcome-note">That is the name it gave. Its answer goes to <strong class="oauth-host">{{.Host}}</strong>: allow it only if you just asked your assistant to connect, and that is where it lives.</p>
     {{- if .Loopback}}

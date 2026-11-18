@@ -80,7 +80,7 @@ func listRegistries(user asker) (shared, own *taskfiles.Registry) {
 		return &taskfiles.Registry{}, nil
 	}
 	shared = taskFiles.ReadLists("")
-	if privateFolder(user) != "" {
+	if privateFolder(user) != "" && user.HasPrivate() {
 		own = taskFiles.ReadLists(user.Name)
 	}
 	return shared, own
@@ -315,11 +315,21 @@ func mineOwner(user asker) string {
 	return ""
 }
 
+// mineRegistry: the registry My tasks' settings and order are in
+// (mineOwner's: the user's own with users), as user reads it: an empty one
+// for an asker its user's private place isn't there for.
+func mineRegistry(user asker) *taskfiles.Registry {
+	if lacksPrivate(user) {
+		return &taskfiles.Registry{}
+	}
+	return taskFiles.ReadLists(mineOwner(user))
+}
+
 // mineParams: the params of My tasks (/tasks?mine=1) for user: its own
 // settings ("mine" in mineOwner's registry: the tab, Plan, the limit, the
 // tabs' names), of the scope mine=1. None when they can't be read.
 func mineParams(user asker) TasksParams {
-	set, err := checkEmbedSettings(taskFiles.ReadLists(mineOwner(user)).Mine, mineSettingKeys)
+	set, err := checkEmbedSettings(mineRegistry(user).Mine, mineSettingKeys)
 	if err != nil {
 		logf("%s: %v", taskFiles.ListsPath(mineOwner(user)), err)
 		set = nil
@@ -370,7 +380,7 @@ func setMineParams(user asker, was string, set map[string]string) error {
 // looks at it, and what one ranks in My tasks, across lists, moves nothing
 // there. Until they rank something it is the lists' order of their tasks.
 func mineOrder(user asker) []string {
-	if reg := taskFiles.ReadLists(mineOwner(user)); reg.OrderSet {
+	if reg := mineRegistry(user); reg.OrderSet {
 		return append([]string{}, reg.Order...)
 	}
 	in := mineFilter(user, taskLists(user))
@@ -606,8 +616,14 @@ func createListOp(user asker, name string, private, pin bool, who, suffix string
 		if len(listFor) > 0 {
 			return "", refuse("A private list is yours alone: a list for some is a shared one")
 		}
+		if lacksPrivate(user) {
+			return "", refuse(noPrivateMsg)
+		}
 		owner = user.Name
 	}
+	// The pin is kept with the user's own lists: none for an asker those
+	// aren't there for.
+	pin = pin && !lacksPrivate(user)
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
 	lists := taskLists(user)

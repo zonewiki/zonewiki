@@ -31,7 +31,7 @@ func init() {
 		Root:       func() string { return cfg.Data },
 		PrivateDir: privateDir,
 		Users:      func() []string { return sortedKeys(settings().Users) },
-		Private:    func(user asker) bool { return privateFolder(user) != "" },
+		Private:    func(user asker) bool { return privateFolder(user) != "" && user.HasPrivate() },
 		NoTasks:    func(user asker) bool { return user.Name == visitor },
 		MayWrite:   mayWriteTasks,
 		Member:     listMember,

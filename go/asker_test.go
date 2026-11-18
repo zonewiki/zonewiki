@@ -5,8 +5,10 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -47,7 +49,7 @@ func TestAskersAreMadeInFewPlaces(t *testing.T) {
 		"mcpAuthorized",    // an MCP token's user: a token is of no connection
 	}
 	// Where an asker is written out as a literal with a name.
-	askerMakers := []string{"connectionUser"}
+	askerMakers := []string{"asker"} // less.asker: a connection's, from what its user gave it less
 
 	fset := token.NewFileSet()
 	files, _ := filepath.Glob("*.go")
@@ -95,6 +97,41 @@ func TestAskersAreMadeInFewPlaces(t *testing.T) {
 	}
 	if !reflect.DeepEqual(literals, askerMakers) {
 		t.Errorf("an asker is written out with its fields in %v, and the list here says %v: a request's asker is made where its token is checked", literals, askerMakers)
+	}
+}
+
+// What an asker was given less (docs/spec/mcp.md, Connections given less)
+// holds because the questions it changes are asked in go/access.go alone:
+// whose a private thing is (place.own, canSeeTask, canSeeList) and who is in
+// a group (inGroup, groupsFor). Elsewhere an owner compared with an
+// asker's name, or the settings asked for an asker's groups, would give a
+// narrowed asker its user's private place or groups back.
+func TestWhatIsTheirsIsAskedInOnePlace(t *testing.T) {
+	// file: the lines there that may, each said why.
+	allowed := map[string][]string{
+		"merge.go":      {`owner != "" && owner != user.Name`},                                                                 // whose a draft is: its author, for the commit
+		"tasksyntax.go": {`t.Assignee == user.Name || t.Owner == user.Name`},                                                   // "me" in a filter, of tasks already seen
+		"groups.go":     {"latestSettings().memberOf(userOf(r).Name, g)", "s.groupsOf(user.Name)", "s.memberOf(user.Name, g)"}, // the Groups page: who is in which, for the person in the browser
+	}
+	owner := regexp.MustCompile(`[Oo]wner [!=]= (user|rq\.user|rq\.who\(\)|userOf\(r\))\.Name|(user|rq\.user)\.Name [!=]= \w*[Oo]wner`)
+	groups := regexp.MustCompile(`(memberOf|groupsOf)\((user|rq\.user|rq\.who\(\)|userOf\(r\))\.Name`)
+	files, _ := filepath.Glob("*.go")
+	for _, name := range files {
+		if strings.HasSuffix(name, "_test.go") || name == "access.go" {
+			continue
+		}
+		src, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, line := range strings.Split(string(src), "\n") {
+			if !owner.MatchString(line) && !groups.MatchString(line) {
+				continue
+			}
+			if !slices.ContainsFunc(allowed[name], func(ok string) bool { return strings.Contains(line, ok) }) {
+				t.Errorf("%s:%d: whose it is, or who is in a group, asked outside access.go: %s", name, i+1, strings.TrimSpace(line))
+			}
+		}
 	}
 }
 

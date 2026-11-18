@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 	"zonewiki/internal/settingsfile"
@@ -31,11 +32,11 @@ const (
 // grant: a connection as .zone/grants keeps it.
 type grant struct {
 	ID             string    `json:"id"`
-	User           string    `json:"user"`            // whose it is; "": the wiki's (no users)
-	Client         string    `json:"client"`          // the client's name, as it gave it
-	ClientHash     string    `json:"client_hash"`     // hashToken of its client id: only it refreshes
-	Redirect       string    `json:"redirect"`        // the host its answer went to
-	ReadOnly       bool      `json:"read_only"`       // it reads and changes nothing: its user chose that
+	User           string    `json:"user"`        // whose it is; "": the wiki's (no users)
+	Client         string    `json:"client"`      // the client's name, as it gave it
+	ClientHash     string    `json:"client_hash"` // hashToken of its client id: only it refreshes
+	Redirect       string    `json:"redirect"`    // the host its answer went to
+	less                     // what its user gave it less than they have
 	Made           time.Time `json:"made"`            // when it was allowed
 	Used           string    `json:"used"`            // the day it last called /mcp or refreshed
 	Access         string    `json:"access"`          // hashToken of the access token
@@ -43,6 +44,46 @@ type grant struct {
 	Refresh        string    `json:"refresh"`         // hashToken of the refresh token
 	PrevRefresh    string    `json:"refresh_before"`  // the one before: seen again, it was copied
 	RefreshExpires time.Time `json:"refresh_expires"` //
+}
+
+// less: what a connection was given less than its user has, as its user
+// chose when they let it in (oauth.go): all zero, it acts as they do.
+type less struct {
+	ReadOnly  bool      `json:"read_only"`  // it reads and changes nothing
+	NoPrivate bool      `json:"no_private"` // their private pages, notes and tasks aren't there for it
+	Groups    *[]string `json:"groups"`     // of their groups only these (nil: all of them, also one they join later)
+}
+
+// asker: user through a connection that was given l less: who asks with
+// its token.
+func (l less) asker(user string) asker {
+	a := asker{Name: user, ReadOnly: l.ReadOnly, NoPrivate: l.NoPrivate}
+	if l.Groups != nil {
+		a = a.WithGroups(*l.Groups)
+	}
+	return a
+}
+
+// sees: what a connection that sees less than its user does see, in words
+// for the page ("the shared wiki, the group dev"); "" when it sees all
+// they do.
+func (l less) sees() string {
+	if !l.NoPrivate && l.Groups == nil {
+		return ""
+	}
+	parts := []string{"the shared wiki"}
+	if !l.NoPrivate {
+		parts = append(parts, "your private pages, notes and tasks")
+	}
+	switch {
+	case l.Groups == nil:
+		parts = append(parts, "your groups")
+	case len(*l.Groups) == 1:
+		parts = append(parts, "the group "+(*l.Groups)[0])
+	case len(*l.Groups) > 1:
+		parts = append(parts, "the groups "+strings.Join(*l.Groups, ", "))
+	}
+	return strings.Join(parts, "; ")
 }
 
 func grantsPath() string { return statePath("grants") }
@@ -150,9 +191,9 @@ func (g *grant) renew() grantTokens {
 }
 
 // newGrant: a connection of user's for the client (its name, the hash of
-// its id, the host its answer goes to; readOnly: one that changes nothing), and its first tokens.
-func newGrant(user, client, clientHash, redirect string, readOnly bool) (grantTokens, error) {
-	g := grant{ID: newToken()[:16], User: user, Client: client, ClientHash: clientHash, Redirect: redirect, ReadOnly: readOnly,
+// its id, the host its answer goes to; l: what it is given less than user has), and its first tokens.
+func newGrant(user, client, clientHash, redirect string, l less) (grantTokens, error) {
+	g := grant{ID: newToken()[:16], User: user, Client: client, ClientHash: clientHash, Redirect: redirect, less: l,
 		Made: now().UTC().Truncate(time.Second)}
 	t := g.renew()
 	g.PrevRefresh = ""
@@ -261,6 +302,7 @@ func revokeGrantsOf(user string) int {
 type grantRow struct {
 	ID, Client, Redirect, Made, Used string
 	ReadOnly                         bool
+	Sees                             string // what it sees, when that is less than its user does ("": all of it; less.sees)
 }
 
 // narrowGrant makes the connection id of user's read-only; false: none such.
@@ -292,7 +334,7 @@ func grantsOf(user string) []grantRow {
 				used = day.Format("2 Jan 2006")
 			}
 			rows = append(rows, grantRow{ID: g.ID, Client: g.Client, Redirect: g.Redirect,
-				Made: g.Made.Local().Format("2 Jan 2006"), Used: used, ReadOnly: g.ReadOnly})
+				Made: g.Made.Local().Format("2 Jan 2006"), Used: used, ReadOnly: g.ReadOnly, Sees: g.sees()})
 		}
 	}
 	return rows

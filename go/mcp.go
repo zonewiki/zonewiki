@@ -250,7 +250,7 @@ func connectionUser(s *Settings, given string) (user asker, via string, ok bool)
 		return asker{}, "", false
 	}
 	if g := grantOf(given); g != nil && validGrantUser(s, g.User) {
-		return asker{Name: g.User, ReadOnly: g.ReadOnly}, g.Client, true
+		return g.asker(g.User), g.Client, true
 	}
 	return asker{}, "", false
 }

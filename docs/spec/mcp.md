@@ -55,7 +55,17 @@ A viewer may make one too: their assistant reads, and its writing tools are refu
   It reads as its user does, and changes nothing: `tools/list` gives it the tools that write nothing (as a viewer's), a writing tool called all the same is refused before it runs (`callMCPTool`, by the table every tool's writing is in: "This connection only reads: whoever connected you chose that. Nothing was changed. …", so the assistant says what it would have written), and an upload with its token is 403.
   It stays read-only through every refresh of its tokens. The same user's other connections, and their MCP token, are as they were.
   A connection kept from before there was a choice reads and changes, as it did.
-  Not yet: a token that only reads, and a connection limited to a folder (`docs/plans/assistants-first.md`, part 2).
+  Not yet: a token that only reads (`docs/plans/assistants-first.md`, part 2).
+- **Connections given less to see** (`less` on the grant: `no_private`, `groups` in `.zone/grants`; `asker.NoPrivate`, `asker.OnlyGroups`; with users): a connection can be given only some of its user's places.
+  The places are the ones the wiki has: **the shared wiki** (always: the pages and tasks everyone sees), **the user's private place** (their private pages, notes, private lists and the Inbox), and **each group** they are in (its pages, and the lists for it).
+  The question asks **What may it see?**, a box each, all ticked; what is unticked isn't there for the assistant.
+  All groups ticked means every group of the user's, also one they join later; otherwise the ticked ones, and never a group the user isn't in (or has left).
+  A place that wasn't given is, to that connection, what another user's private folder or a group they aren't in is to anyone: no page, task, list, upload, search result, count, version or commit message names it, at any tool or route its token reaches.
+  It holds because the limit is in the questions everything asks (`place.sees`, `canSeeTask`, `canSeeList`, `inGroup` in `go/access.go`; the task store reads no private file for it), not in the tools.
+  **Without the private place** it makes nothing private either, since it couldn't see it again: a note, a page under `private/`, a private list, a task without a list (which would go to the Inbox) and a move into the Inbox are refused, saying so ("This connection wasn't given your private pages, notes and tasks …: use a shared page or a shared list"). A list it makes isn't pinned (pins are kept with the user's own lists), and My tasks' own order and settings aren't read.
+  A list that names the user themselves (`for = alice`) is theirs whatever groups the connection has; one for `@dev` goes with the group dev.
+  Connect an assistant says what such a connection sees ("Sees only: the shared wiki; the group dev"). It is changed by ending the connection and connecting again.
+  Not offered: a connection without the shared wiki, or with one folder or list of it. A shared folder is no place: commit messages, links and counts name shared pages to everyone who sees any; a folder or list for an assistant alone is made a group's.
   The static token is one per user and stays so: several assistants are several connections.
 
 ## Connecting with OAuth
@@ -78,6 +88,7 @@ Zone is its own authorization server, on the same address, as the MCP authorizat
   Other schemes (`cursor://` …) are refused for now.
   Client ID Metadata Documents aren't offered yet (the metadata doesn't advertise them, so clients register): they would have Zone fetch an address a stranger names.
 - **The question** (`GET /oauth/authorize`, signed in: anyone else goes through the login and comes back, the question kept in `next`): the page says who asks (the name the client gave: it is only a claim), where the answer goes (the redirect URI's host), as whom the assistant will act ("as you, alice"), and for an address on this computer that any program on it could ask in this name. **Allow** and **Deny**.
+  - **What may it see?** (`see` in the form, with `choose`; Connections given less to see, below): the shared wiki (always), the user's private pages, notes and tasks, and each group they are in, all ticked. Not asked in a wiki without users.
   - **What may it do?** (`may` in the form; Read-only connections, below): **Read and change** (the default: "it sees and changes what you do, no more") or **Only read** ("it searches and reads what you see, and changes nothing"). A viewer isn't asked: theirs reads only.
   - Before anything is shown, the client id and the redirect URI are checked: one Zone doesn't know is a page saying so (**400**), never a redirect. The answer goes only where the registration said: that address exactly, or for a program on this computer the same address at whatever port.
   - What else the client got wrong (no `response_type=code`, no PKCE challenge with `S256`, a `resource` that isn't this wiki's `/mcp`) is a page too (400), with a link back that tells the client (`error=…`).
@@ -96,7 +107,7 @@ Zone is its own authorization server, on the same address, as the MCP authorizat
   - What gets none is a **400** with `error`: `invalid_grant` (a code wrong, used, older than a minute, for another client or redirect URI, the wrong verifier; a refresh token wrong, used, expired or revoked; a user who can't sign in any more), `invalid_client`, `invalid_target` (another `resource`), `unsupported_grant_type`.
     Failures count against the client as wrong MCP tokens do (`mcpThrottle`: **429** with `Retry-After`).
 - **One scope**, `mcp`: what an assistant may do is its user's role, as with a static token.
-- **Connections are kept** in `.zone/grants` (`grants.go`): the id, the user ("" in a wiki without users: the wiki's), the client's name, the hash of its client id, the redirect host, whether it only reads, when it was made, the day it was last used, the token hashes and when they expire.
+- **Connections are kept** in `.zone/grants` (`grants.go`): the id, the user ("" in a wiki without users: the wiki's), the client's name, the hash of its client id, the redirect host, what it was given less than its user (whether it only reads, not their private place, only some of their groups), when it was made, the day it was last used, the token hashes and when they expire.
   Owner-only (0600), written whole, one change at a time (`changeGrants`: a lock in the process and `lockFile` on `.zone/grants.lock`, as a command writes it too), not committed (state, like `.zone/links`), read again when the file changed (`readGrants`).
   Not in the settings file: tokens change by the hour, and a change there is a change of the settings.
 - **What ends a connection**: End on Connect an assistant; its refresh token expiring or being used twice; its user being removed (the Users tab, `zonewiki user remove`); its user setting a new password by a **reset link** (they may have lost the account to someone; the welcome page says so).

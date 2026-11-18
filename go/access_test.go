@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -400,5 +401,62 @@ func TestAReadOnlyAskerChangesNothing(t *testing.T) {
 		if name := tool["name"].(string); writeTool(name) {
 			t.Errorf("an asker that only reads is given %s", name)
 		}
+	}
+}
+
+// An asker that was given less than its user sees: not their private place,
+// or only some of their groups. Each only ever takes away.
+func TestANarrowedAskerSeesLess(t *testing.T) {
+	testWiki(t, map[string]string{"plans": "# Plans\n", "private/alice/diary": "# Diary\n",
+		"groups/dev/roadmap": "# Roadmap\n", "groups/ops/runbook": "# Runbook\n", "groups/hr/files": "# Files\n"})
+	withUsers(t, "alice", "bob")
+	settings().Users["alice"].In = []string{"dev", "ops"}
+	alice := asUser("alice")
+	sees := func(user asker) string {
+		var out []string
+		for _, slug := range []string{"plans", "private/alice/diary", "groups/dev/roadmap", "groups/ops/runbook", "groups/hr/files"} {
+			if canSee(user, slug) != canWrite(user, slug) {
+				t.Errorf("%s: seen and written differ for %+v", slug, user)
+			}
+			if canSee(user, slug) != canSeePath(user, slug+".md") {
+				t.Errorf("%s: canSee and canSeePath differ for %+v", slug, user)
+			}
+			if canSee(user, slug) {
+				out = append(out, slug)
+			}
+		}
+		return strings.Join(out, " ")
+	}
+	for _, c := range []struct {
+		user asker
+		want string
+	}{
+		{alice, "plans private/alice/diary groups/dev/roadmap groups/ops/runbook"},
+		{asker{Name: "alice", NoPrivate: true}, "plans groups/dev/roadmap groups/ops/runbook"},
+		{alice.WithGroups([]string{"dev"}), "plans private/alice/diary groups/dev/roadmap"},
+		{alice.WithGroups(nil), "plans private/alice/diary"},
+		{alice.WithGroups([]string{"hr", "dev"}), "plans private/alice/diary groups/dev/roadmap"}, // given a group she isn't in: nothing
+		{asker{Name: "alice", NoPrivate: true}.WithGroups(nil), "plans"},
+	} {
+		if got := sees(c.user); got != c.want {
+			t.Errorf("%+v sees %q, want %q", c.user, got, c.want)
+		}
+	}
+	narrowed := asker{Name: "alice", NoPrivate: true}.WithGroups([]string{"dev"})
+	if got := groupsFor(narrowed); !reflect.DeepEqual(got, []string{"dev"}) {
+		t.Errorf("groupsFor: %v", got)
+	}
+	if !lacksPrivate(narrowed) || lacksPrivate(alice) || placeOf("private/alice/diary").own(narrowed) {
+		t.Error("the private place of an asker that wasn't given it")
+	}
+	// Lists and tasks follow the places: a private one with the private
+	// place, a list for a group with the group, one that names her always.
+	private, forDev, forOps, named := ListInfo{Name: "own", Owner: "alice"}, ListInfo{Name: "d", For: []string{"@dev"}},
+		ListInfo{Name: "o", For: []string{"@ops"}}, ListInfo{Name: "n", For: []string{"alice"}}
+	if canSeeList(narrowed, private) || !canSeeList(narrowed, forDev) || canSeeList(narrowed, forOps) || !canSeeList(narrowed, named) {
+		t.Error("lists for a narrowed asker")
+	}
+	if canSeeTask(narrowed, &Task{ID: "x", Owner: "alice"}) || !canSeeTask(alice, &Task{ID: "x", Owner: "alice"}) {
+		t.Error("a private task for an asker without the private place")
 	}
 }
