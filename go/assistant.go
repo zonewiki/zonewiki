@@ -37,6 +37,7 @@ type assistantView struct {
 	Done, Error    string // what the last change did, or why it wasn't made
 	OAuth          bool   // assistants can sign in through the browser (oauth.go)
 	Connections    []grantRow
+	Changes        string // where what assistants changed is listed (changes.go); "" without git
 }
 
 // siteURL: path as an address to copy: on base (the base-url setting), or
@@ -72,9 +73,13 @@ func tokenOwner(r *http.Request) (s *Settings, name, kept string, ok bool) {
 
 func assistantData(r *http.Request) *assistantView {
 	s, name, kept, _ := tokenOwner(r)
-	return &assistantView{URL: siteURL(s.BaseURL, r, "/mcp"), User: name, Has: kept != "",
+	v := &assistantView{URL: siteURL(s.BaseURL, r, "/mcp"), User: name, Has: kept != "",
 		AskPassword: s.authOn(), Viewer: s.isViewer(name), OAuth: oauthOn(s), Connections: grantsOf(name),
 		BreadcrumbHTML: breadcrumb(newReq(r), []crumb{{"Assistant", ""}}, "", false, "", "")}
+	if cfg.GitEnabled {
+		v.Changes = changesURL(changesOf{By: name, Assistant: true}, 0)
+	}
+	return v
 }
 
 func showAssistant(w http.ResponseWriter, r *http.Request, status int, v *assistantView) {

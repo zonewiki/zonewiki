@@ -898,8 +898,8 @@ func deletePage(w http.ResponseWriter, r *http.Request) {
 }
 
 // apiPagesList: every page for the search modal's list, and the built-in
-// ones: Tasks and Notes are modules (typing finds them); Deleted Pages is
-// pinned to the top of the empty query's list (special).
+// ones: Tasks and Notes are modules (typing finds them); Changes and
+// Deleted Pages are pinned to the top of the empty query's list (special).
 func apiPagesList(w http.ResponseWriter, r *http.Request) {
 	rq := newReq(r)
 	counts := allBacklinkCounts(rq)
@@ -928,7 +928,9 @@ func apiPagesList(w http.ResponseWriter, r *http.Request) {
 	}
 	out := []M{}
 	if cfg.GitEnabled {
-		out = append(out, M{"slug": "_deleted", "title": "Deleted Pages", "links": 0, "mtime": 0, "builtin": true, "special": true})
+		out = append(out,
+			M{"slug": "/changes", "title": "Changes", "href": "/changes", "links": 0, "mtime": 0, "builtin": true, "special": true},
+			M{"slug": "_deleted", "title": "Deleted Pages", "links": 0, "mtime": 0, "builtin": true, "special": true})
 	}
 	out = append(out, pages...)
 	out = append(out,

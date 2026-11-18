@@ -1,0 +1,30 @@
+{{- /* /changes: the wiki's commits a day at a time, newest first (changes.go):
+    when, what, who (and whether through an assistant), and what it changed:
+    a page opens what the commit changed on it. The filters are a GET form,
+    so a filtered list has an address. */ -}}
+{{define "body"}}
+{{.BreadcrumbHTML}}
+<div class="sheet">
+<header class="page-header"><h1>Changes</h1></header>
+<p class="hist-intro">What changed in this wiki, newest first: pages, tasks and files, by people and by their assistants. Open a page to see what a change did to it.</p>
+<form class="changes-filter" method="get" action="/changes">
+  {{- if .Users}}
+  <label>By <select name="user"><option value="">anyone</option>{{range .Users}}<option value="{{.}}"{{if eq . $.Of.By}} selected{{end}}>{{.}}</option>{{end}}</select></label>
+  {{- end}}
+  <label class="changes-check"><input type="checkbox" name="assistant" value="1"{{if .Of.Assistant}} checked{{end}}> Only by an assistant</label>
+  <label>In the folder <input type="text" name="under" value="{{.Of.Under}}" placeholder="any" autocomplete="off" spellcheck="false" size="12"></label>
+  <label>Since <input type="date" name="since" value="{{.Of.Since}}"></label>
+  <button type="submit" class="btn">Show</button>
+  {{- if .Filtered}} <a href="/changes" class="changes-all">All changes</a>{{end}}
+</form>
+{{- range .Days}}
+<h2 class="changes-day">{{.Label}}</h2>
+<ol class="hist-list changes-list">
+{{- range .Rows}}<li class="hist-row changes-row"><span class="hist-when" title="{{.Rel}}">{{.Time}}</span><span class="changes-what">{{.What}}{{with .Author}}<span class="hist-by"> · {{.}}</span>{{end}}{{if .Assistant}} <span class="changes-assistant" title="Written by an assistant{{with .Author}} acting for {{.}}{{end}}">assistant</span>{{end}}</span><span class="changes-items">{{range .Items}}{{if .Href}}<a href="{{.Href}}">{{.Label}}</a>{{else}}<span>{{.Label}}</span>{{end}}{{end}}</span></li>{{end -}}
+</ol>
+{{- else}}
+<p class="hist-empty">{{if .Filtered}}No changes like that.{{else}}No changes yet.{{end}}</p>
+{{- end}}
+{{- with .More}}<p class="changes-more"><a href="{{.}}" class="btn">Show more</a></p>{{end}}
+</div>
+{{end}}

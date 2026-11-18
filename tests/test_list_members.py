@@ -119,6 +119,7 @@ READS = [
     ("GET", "/uncommitted", {}),
     ("GET", "/api/uncommitted", {}),
     ("GET", "/history/plans", {}),
+    ("GET", "/changes", {}),
     ("POST", "/api/preview", {"data": "[[task:{open8}]] [[task:{done}]] [[tasks: list=" + LIST + "]]"}),
     ("POST", "/api/render-notes", {"json": {"notes": ["[[task:{open8}]]"], "comments": ["[[task:{done}]]"]}}),
 ]

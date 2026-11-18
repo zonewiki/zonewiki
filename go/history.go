@@ -13,6 +13,7 @@ import (
 
 func historyRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /page/_deleted", deletedPagesView)
+	mux.HandleFunc("GET /changes", changesView)
 	mux.HandleFunc("GET /history/{slug...}", historyView)
 	mux.HandleFunc("GET /revision/{rest...}", revisionView)
 	mux.HandleFunc("GET /diff/{rest...}", diffView)

@@ -27,8 +27,8 @@ everything as it is. Search indexes and caches are rebuilt from the files.
   [MCP server](#connect-an-ai-assistant), an AI assistant can do everything
   you can: search, read, create, edit, rename and restore pages, file
   notes, and manage tasks. It acts as you and never sees more than you do;
-  its edits land as git commits marked `(MCP)` that you can review, diff or
-  undo. Zone brings no model of its own: the assistant is yours, whichever
+  its edits land as git commits marked `(MCP)`, listed under Changes, that
+  you can review, diff or undo. Zone brings no model of its own: the assistant is yours, whichever
   you use, and what it learns stays in your files, not in its maker's cloud.
 - **Pages, notes and tasks in one place.** The wiki, Tasks and Notes share links,
   search and history. A page can show a task as a chip, and a task can link to
@@ -85,6 +85,9 @@ editor; a change on disk shows up immediately.
   tasks.
 - Every page's version history: what each save changed, any version, and
   one-click restore. Deleted pages can be brought back.
+- Changes: what changed across the wiki, newest first, by whom and whether
+  through an assistant; filter by person, by folder, by day, or to what
+  assistants wrote.
 - Present a page as slides, one per heading.
 - Print a page, or save it as a PDF (Print… in the page's menu: a print
   layout that shows the page alone, light even on a dark screen).
@@ -457,8 +460,8 @@ Also know this:
   text, have your client ask before it writes (MCP clients can, per tool;
   Zone marks the tools that change or delete as destructive).
 - **Git is the undo.** Every change made through Zone, by you or an assistant,
-  is a commit (an assistant's are marked `(MCP)`); history, restore and
-  Deleted Pages bring things back. Set `git-remote` and push now and then, so a
+  is a commit (an assistant's are marked `(MCP)`); Changes lists them,
+  and history, restore and Deleted Pages bring things back. Set `git-remote` and push now and then, so a
   copy lives elsewhere too. The remote has everything but `.zone/config`
   (the users and settings): keep a copy of that file as well.
 - **Treat the wiki folder, its git history and remote, and any backup as

@@ -177,17 +177,19 @@ def test_empty_query_lists_recently_edited_first_and_remembers_sort(page, wiki):
 
 def test_empty_query_pins_deleted_pages_and_leaves_out_modules(page, wiki):
     # Tasks and Notes are modules, in the module switcher: the empty-query
-    # list leaves them out, typing finds them. Deleted Pages stays pinned.
+    # list leaves them out, typing finds them. Changes and Deleted Pages stay pinned.
     seed(wiki)
     page.goto("/page/index")
     page.keyboard.press("Control+p")
     items = page.locator("#modal-page-list .page-list-item")
-    expect(items.nth(0).locator("a")).to_have_text("Deleted Pages")   # git is on
-    expect(items.nth(1)).not_to_have_class(re.compile(r"page-list-special"))
+    expect(items.nth(0).locator("a")).to_have_text("Changes")         # git is on
+    expect(items.nth(1).locator("a")).to_have_text("Deleted Pages")
+    expect(items.nth(2)).not_to_have_class(re.compile(r"page-list-special"))
     expect(items.locator("a", has_text=re.compile(r"^(Tasks|Notes)$"))).to_have_count(0)
     # Whatever the sort.
     page.locator("#modal-sort").select_option("title-desc")
-    expect(items.nth(0).locator("a")).to_have_text("Deleted Pages")
+    expect(items.nth(0).locator("a")).to_have_text("Changes")
+    expect(items.nth(1).locator("a")).to_have_text("Deleted Pages")
     # Typing matches the built-in pages like any other entry; "Unlinked
     # only" (orphan pages) leaves them out.
     page.locator("#modal-filter").fill("notes")

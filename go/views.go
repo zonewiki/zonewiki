@@ -71,7 +71,7 @@ func init() {
 	partials = template.Must(template.New("").Funcs(funcs).ParseFS(templateFS,
 		"templates/layout.html", "templates/partials/*.html"))
 	for _, name := range []string{"login.html", "view.html", "edit.html", "new.html", "notes.html",
-		"hidden.html", "deleted_page.html", "tasks_page.html", "search.html", "history/deleted.html",
+		"hidden.html", "deleted_page.html", "tasks_page.html", "search.html", "history/changes.html", "history/deleted.html",
 		"history/diff.html", "history/diff_uncommitted.html", "history/history.html",
 		"history/revision.html", "history/uncommitted.html", "users.html", "groups.html", "welcome.html", "signup.html", "assistant.html",
 		"password.html", "oauth.html",

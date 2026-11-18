@@ -592,32 +592,35 @@ func gitLog(path string, max int) []GitEntry {
 	return entries
 }
 
-// LogEntry is a commit of the wiki: sha, time (YYYY-MM-DD HH:MM), message,
-// author (commitAuthor) and the files it changed (relative to the wiki).
+// LogEntry is a commit of the wiki: sha, time (YYYY-MM-DD HH:MM), how long
+// ago, message, author (commitAuthor) and the files it changed (relative
+// to the wiki); Hidden: how many more it changed that see didn't take.
 type LogEntry struct {
-	Sha, Time, Msg, Author string
-	Files                  []string
+	Sha, Time, Rel, Msg, Author string
+	Files                       []string
+	Hidden                      int
 }
 
 // gitLogAll: the wiki's commits, newest first, at most limit; since a day
 // (YYYY-MM-DD, from its start), under a folder ("" for either: all). Of
 // each commit only the files see takes (nil: all), and a commit with none
-// of them is left out; git is asked for more until limit are found, twice
+// of them is left out, as is one keep refuses (nil: none; it is given the
+// commit with the files see took); git is asked for more until limit are found, twice
 // as many each time (each call walks the history from the start again, so
 // a fixed batch would cost quadratic time on a long history where see
-// takes few commits).
-func gitLogAll(since, under string, limit int, see func(path string) bool) []LogEntry {
+// and keep take few commits).
+func gitLogAll(since, under string, limit int, see func(path string) bool, keep func(LogEntry) bool) []LogEntry {
 	if !cfg.GitEnabled {
 		return nil
 	}
 	batch := limit
-	if see != nil {
+	if see != nil || keep != nil {
 		batch = max(2*limit, 50)
 	}
 	var entries []LogEntry
 	for skip := 0; len(entries) < limit; skip, batch = skip+batch, 2*batch {
 		args := []string{"log", "-n", strconv.Itoa(batch), "--skip", strconv.Itoa(skip), "--name-only",
-			"--date=format:%Y-%m-%d %H:%M", "--format=\x1e%H\x1f%ad\x1f%an\x1f%s"}
+			"--date=format:%Y-%m-%d %H:%M", "--format=\x1e%H\x1f%ad\x1f%ar\x1f%an\x1f%s"}
 		if since != "" {
 			args = append(args, "--since="+since+" 00:00")
 		}
@@ -627,17 +630,21 @@ func gitLogAll(since, under string, limit int, see func(path string) bool) []Log
 		records := strings.Split(runGit(args...).Stdout, "\x1e")[1:]
 		for _, record := range records {
 			head, names, _ := strings.Cut(record, "\n")
-			parts := strings.SplitN(head, "\x1f", 4)
-			if len(parts) != 4 {
+			parts := strings.SplitN(head, "\x1f", 5)
+			if len(parts) != 5 {
 				continue
 			}
-			e := LogEntry{Sha: parts[0], Time: parts[1], Author: commitAuthor(parts[2]), Msg: parts[3]}
+			e := LogEntry{Sha: parts[0], Time: parts[1], Rel: parts[2], Author: commitAuthor(parts[3]), Msg: parts[4]}
 			for _, n := range mdtext.SplitLines(names) {
-				if n = mdtext.LineBody(n); strings.TrimSpace(n) != "" && (see == nil || see(n)) {
+				switch n = mdtext.LineBody(n); {
+				case strings.TrimSpace(n) == "":
+				case see == nil || see(n):
 					e.Files = append(e.Files, n)
+				default:
+					e.Hidden++
 				}
 			}
-			if see == nil || len(e.Files) > 0 {
+			if (see == nil || len(e.Files) > 0) && (keep == nil || keep(e)) {
 				entries = append(entries, e)
 			}
 		}

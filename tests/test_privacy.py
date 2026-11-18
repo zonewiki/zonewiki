@@ -168,6 +168,9 @@ READS = [
     ("GET /pages", "GET", "/pages", {}),
     ("GET /notes", "GET", "/notes", {}),
     ("GET /page/_deleted", "GET", "/page/_deleted", {}),
+    ("GET /changes", "GET", "/changes", {}),
+    ("GET /changes", "GET", "/changes", {"query_string": {"under": "private/alice"}}),
+    ("GET /changes", "GET", "/changes", {"query_string": {"user": "alice", "n": "500"}}),
     ("GET /page/{slug...}", "GET", "/page/private/alice/old", {}),   # a deleted page offers restore
     ("GET /uncommitted", "GET", "/uncommitted", {}),
     ("GET /api/uncommitted", "GET", "/api/uncommitted", {}),

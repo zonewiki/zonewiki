@@ -44,6 +44,9 @@ after a deliberate change to one of those functions, `ZONE_GOLDEN_UPDATE=1 go te
 `TestLastChangedAsksGitOnce` (Go): a page view asks git about a page once, and again after Zone's commit, a change on disk and a commit by hand; without a reflog every time.
 
 `tests/test_git.py` uses `git_wiki_dir` and covers every git path (commit-on-write, history/revision/diff/restore, `_deleted`, uncommitted/commit endpoints, git-disabled fallbacks); it skips when git is not installed.
+`tests/test_changes.py` covers Changes (`/changes`): the commits newest first with what each changed, the assistant's mark, that the page and the tool `history` list the same commits, the filters (user, assistant, folder, day), Show more, sharing mode, where it is linked from, and no such page without git;
+`tests/e2e/test_changes.py` that it is found from the search list, filtered through its form, leads to a page's diff and fits a phone.
+What a user may not see there is probed with the other routes (`test_privacy.py`, `test_group_pages.py`, `test_list_members.py`, `test_public.py`).
 A server makes any wiki a repository when it starts, so the other modules' wikis are repositories too; `settings.GIT_ENABLED = False` gives the server a `PATH` without git, for the fallbacks.
 
 `tests/test_mcp.py` covers the MCP server (files: `upload_file` from text and base64, the name it gets, what it refuses, `read_file`'s image, text and other files and what it won't read, the file routes with the token and nothing else opened by it; with the fake semantic index too: read_page's related pages, a new page's pages close in content): the tool definitions (names, hints, their size, which take guides),

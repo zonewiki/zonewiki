@@ -2122,6 +2122,32 @@ body.editor-page main {
 }
 .hist-empty { color: var(--muted); font-size: .875rem; margin-top: 1rem; }
 
+/* Changes (/changes): the wiki's commits by day; a row is when, what (who,
+   and an assistant's mark), then what it changed. */
+.changes-filter {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem;
+  margin: 0 0 1rem; font-size: .875rem; color: var(--muted);
+}
+.changes-filter select, .changes-filter input[type="text"], .changes-filter input[type="date"] {
+  font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--border);
+  border-radius: 6px; padding: .2rem .4rem; max-width: 100%;
+}
+.changes-check { display: inline-flex; align-items: center; gap: .35rem; }
+.changes-all { color: var(--link); }
+.changes-day { font-size: 1rem; margin: 1.5rem 0 .25rem; }
+.changes-row { align-items: baseline; flex-wrap: wrap; gap: .1rem 1rem; padding: .5rem 0; }
+.changes-what { flex: 1 1 16rem; min-width: 0; font-size: .875rem; overflow-wrap: anywhere; }
+.changes-what .hist-by { color: var(--muted); }
+.changes-assistant {
+  padding: .05rem .45rem; border-radius: 99px; font-size: .72rem; white-space: nowrap;
+  color: var(--muted); border: 1px solid var(--border);
+}
+.changes-items { flex: 0 1 auto; max-width: 100%; display: flex; flex-wrap: wrap; gap: .1rem .75rem; font-size: .8rem; overflow-wrap: anywhere; }
+.changes-items a { color: var(--link); text-decoration: none; }
+.changes-items a:hover { text-decoration: underline; }
+.changes-items span { color: var(--muted); }
+.changes-more { margin-top: 1rem; }
+
 /* ── Diff view ───────────────────────────────────────────────────────────────── */
 
 .diff-view { font-size: .8rem; line-height: 1.5; overflow-x: auto; padding: 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }

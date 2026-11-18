@@ -295,7 +295,7 @@ def test_what_a_visitor_never_writes(client, wiki, edit):
             ("POST", "/tasks/new-list", {"data": {"name": "mine"}}),
             ("POST", "/api/tasks/lists", {"json": {"name": "mine"}}),
             ("GET", "/api/tasks", {}), ("GET", "/tasks", {}), ("GET", "/notes", {}), ("GET", "/uncommitted", {}),
-            ("GET", "/page/_deleted", {}), ("GET", "/admin", {}), ("GET", "/assistant", {}), ("GET", "/private", {})):
+            ("GET", "/page/_deleted", {}), ("GET", "/changes", {}), ("GET", "/admin", {}), ("GET", "/assistant", {}), ("GET", "/private", {})):
         assert to_login(client.open(path, method=method, headers=HOST, **kwargs)), path
     assert (wiki / "garden.md").exists() and not (wiki / "_assets/x.png").exists()
     assert TASKWORD in "".join(p.read_text() for p in (wiki / "_tasks").rglob("tasks.json")) and git(wiki, "rev-parse", "HEAD") == head

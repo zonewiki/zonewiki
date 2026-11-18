@@ -23,9 +23,9 @@ Part of Zone's spec (see `AGENTS.md` for the index).
     instead of alphabetically.
   - **Sort by** — Recently edited (default, so an empty query works as a quick switcher), Title A–Z, Title Z–A, Most linked.
     Applies while the query is empty; a sort picked by hand is remembered in `localStorage` (`zone-search-sort`).
-  - **Built-in pages** — `apiPagesList()` adds Tasks (`href: /tasks`), Notes and (git only) Deleted Pages, marked `builtin`.
-    Tasks and Notes are modules, linked from the module switcher, so the empty-query list leaves them out; Deleted Pages, also marked `special`, is pinned above the pages whatever the sort, set apart by a stronger rule (`.page-list-special`).
-    Typing matches all three like any other entry; "Unlinked only" leaves them out.
+  - **Built-in pages** — `apiPagesList()` adds Tasks (`href: /tasks`), Notes and (git only) Changes (`href: /changes`) and Deleted Pages, marked `builtin`.
+    Tasks and Notes are modules, linked from the module switcher, so the empty-query list leaves them out; Changes and Deleted Pages, also marked `special`, are pinned above the pages whatever the sort, set apart by a stronger rule (`.page-list-special`).
+    Typing matches all four like any other entry; "Unlinked only" leaves them out.
   - **Search mode** (`#search-mode`, right of the controls): whether Content matches are found by meaning too.
     A dot and a word: "Keywords + meaning" (dot in the accent colour), "Meaning: indexing…" (the wiki isn't embedded yet, e.g. after a start with a new model or chunking; dot faded), or "Keywords only" (semantic search off, or its model failing; grey); the tooltip says why and what turns it on.
     The page renders the state (`semanticStatus`: on, indexing, failed, off) as `data-state`, every `/api/search` response says the current one in `X-Zone-Semantic`, and `js/search.js` words it (`SEARCH_MODES`), so "indexing" turns into "on" with the next search.
@@ -164,7 +164,7 @@ Phones have no switch (no top actions).
   `is_noshare(slug)` (folders by slug, tags from the frontmatter, cached by mtime), `hidden_page(slug)` = sharing mode on and noshare.
   Such a page's view, editor, history, revisions and diffs (`/diff`, `/diff-uncommitted`) show "Hidden page" (`hiddenPageView()`: neither title nor text, no trail stop);
   `/api/page-preview` 404s;
-  search (`doSearch`: `/api/search`, `/search`, Notes filter), `/api/pages`, `/api/pages-list`, Notes list, Deleted Pages, the uncommitted list, Backlinks, Links to and Related leave them out;
+  search (`doSearch`: `/api/search`, `/search`, Notes filter), `/api/pages`, `/api/pages-list`, Notes list, Deleted Pages, the uncommitted list, Backlinks, Links to and Related leave them out, and Changes every commit that changed one;
   a wikilink to one renders as its words without the link (`<span class="wikilink-hidden">`).
   The MCP tools are not a browser and ignore sharing mode.
 

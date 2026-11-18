@@ -985,11 +985,11 @@ class TestApiPagesList:
 
     def test_built_in_pages_are_marked(self, client, wiki_dir):
         # Tasks and Notes are modules (the module switcher links to them), so
-        # only Deleted Pages is pinned (`special`, git only); all three are
-        # `builtin`, which the empty-query list and "Unlinked only" leave out.
+        # only Changes and Deleted Pages are pinned (`special`, git only); all
+        # four are `builtin`, which the empty-query list and "Unlinked only" leave out.
         write_page(wiki_dir, "aaa", "# AAA\n")
         pages = client.get("/api/pages-list", headers=HOST).get_json()
-        assert not [p for p in pages if p.get("special") and p["title"] != "Deleted Pages"]
+        assert not [p for p in pages if p.get("special") and p["title"] not in ("Changes", "Deleted Pages")]
         builtin = {p["title"]: p for p in pages if p.get("builtin")}
         assert {"Tasks", "Notes"} <= builtin.keys()
         assert builtin["Tasks"]["href"] == "/tasks"

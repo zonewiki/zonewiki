@@ -9,7 +9,7 @@
   {{template "hist_back" (dict "slug" .Slug "page_exists" .PageExists "to" "page")}}
 </header>
 {{- if .Rows}}
-<p class="hist-intro">Every saved version of this page, newest first. Open one to read it, step through older ones or bring it back.</p>
+<p class="hist-intro">Every saved version of this page, newest first. Open one to read it, step through older ones or bring it back. <a href="/changes">Changes across the wiki</a></p>
 <ol class="hist-list">
 {{- if .Uncommitted}}<li class="hist-row hist-current"><a class="hist-main" href="{{url "page" .Slug}}"><span class="hist-when">Now</span><span class="hist-what">Not committed yet</span></a><span class="hist-badge">Current</span></li>{{end -}}
 {{- range .Rows}}<li class="hist-row{{if .Current}} hist-current{{end}}"><a class="hist-main" href="{{.Href}}"><span class="hist-when">{{.E.Time}}<span class="hist-rel">{{.E.Rel}}</span></span><span class="hist-what">{{.Label}}{{with .E.Author}}<span class="hist-by"> · {{.}}</span>{{end}}</span><span class="hist-counts">{{template "hist_counts" .E}}</span></a>{{if .Current}}<span class="hist-badge">Current</span>{{end}}<a class="hist-changes" href="{{url "diff" $.Slug}}/{{.E.Sha}}" title="What this save changed">Changes</a></li>{{end -}}

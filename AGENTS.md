@@ -154,6 +154,7 @@ Auth is optional (a password, or users; see Key Constraints).
 │   ├── render.go           # A page's render: wikilinks, [[tasks:]], [[task:…]], frontmatter, sources
 │   ├── gitstore.go         # Git: setup, commits, moves, grep over pages, a page's log, versions, diffs, deleted pages
 │   ├── history.go          # History, revisions, diffs, restore, deleted pages, uncommitted changes
+│   ├── changes.go          # Changes (/changes): the wiki's commits as their reader may see them (wikiChanges, which the MCP tool history lists too), by day, filtered by user, assistant, folder and day
 │   ├── quicknotes.go       # Notes: create, Move to wiki, Append to page (the routes and MCP share it)
 │   ├── merge.go            # Several editors on one page: drafts' authors, the bases, the three-way merge, texts left in conflict
 │   ├── tasks.go            # Task writes (create, change, comment, tag, delete), as functions the routes and the MCP tools share

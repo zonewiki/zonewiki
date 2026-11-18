@@ -353,13 +353,13 @@ func TestGitLogAllFillsTheLimit(t *testing.T) {
 	}
 	see := func(path string) bool { return !strings.HasPrefix(path, "hidden/") }
 	var got []string
-	for _, e := range gitLogAll("", "", 3, see) {
+	for _, e := range gitLogAll("", "", 3, see, nil) {
 		got = append(got, e.Files...)
 	}
 	if !reflect.DeepEqual(got, want[:3]) {
 		t.Errorf("%v, want %v", got, want[:3])
 	}
-	if n := len(gitLogAll("", "", 10, see)); n != 5 { // and the initial import (index.md)
+	if n := len(gitLogAll("", "", 10, see, nil)); n != 5 { // and the initial import (index.md)
 		t.Errorf("all of them: %d", n)
 	}
 }

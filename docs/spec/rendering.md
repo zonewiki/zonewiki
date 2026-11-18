@@ -348,6 +348,21 @@ Nobody types ids: in the editor, `[[task:` (or the formatting bar's task button)
   No Restore there: a diff shows a change, not a version.
 - **Renames**: `gitLog` (`--follow`) records each commit's path for the file (`path`, from `--numstat`, `numstatPath` reading `old => new` and `dir/{old => new}.md`), and revision, diff and restore read a version under the name it had then (`versionPath`);
   before, a version from before a rename was a 404. The diff of a rename passes both names (`gitDiff(sha, paths…)`, `-M`), so a pure rename shows no change instead of the whole page as new.
+- **`/changes`** (Changes, `go/changes.go`) lists the wiki's commits, newest first, under a heading per day (Today, Yesterday, then the date; 50, **Show more** doubles them up to 500, `?n=`):
+  the time, what the commit says, who made it (with users) and an **assistant** mark where an assistant wrote it (a message ending in `(MCP)`, `byAssistant`; the mark replaces those words),
+  then what it changed: each page by its slug, a link to what the commit changed on it (`/diff/<slug>/<sha>`), **Tasks** for the task files, any other file (an upload) by its path.
+  It is the list the MCP tool `history` gives without a slug, from the same function (`wikiChanges`), so both doors show a commit alike:
+  only the files its reader may see (`canSeePath`), not a commit that changed none of them (it doesn't count toward the 50 either), and its message without the names of what they don't see (`hideNames`).
+  **Filters**, a GET form, so a filtered list has an address: **By** a user (with users; `?user=`, the commit's author; a name no user has is ignored),
+  **Only by an assistant** (`?assistant=1`),
+  **In the folder** (`?under=`, as the tools' `under`),
+  **Since** a day (`?since=YYYY-MM-DD`; anything else is ignored);
+  **All changes** drops them.
+  A filter is asked of each commit as it is read (`keep` in `gitLogAll`), so a filtered list is as long as an unfiltered one.
+  Found in the search modal's list (pinned above the pages, before Deleted Pages), from a page's History ("Changes across the wiki") and from Connect an assistant ("your assistants' changes": the list by you, only by an assistant).
+  In sharing mode a commit shows only when nothing it changed is hidden: its message names what it changed.
+  Not for a public wiki's visitor.
+  Not yet there: which assistant made a change, and undoing one from the list (`docs/plans/assistants-first.md`, part 1).
 
 ### Table of Contents
 

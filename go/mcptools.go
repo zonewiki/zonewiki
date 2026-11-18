@@ -289,10 +289,16 @@ func grepWiki(args jsonObj, base, user string) (string, error) {
 // fileLabel: a changed file as the model knows it, a page by its slug, the
 // task files as tasks.
 func fileLabel(fp string) string {
-	if strings.HasPrefix(fp, taskfiles.DirName+"/") || strings.Contains(fp, "/"+taskfiles.DirName+"/") {
+	if isTaskFile(fp) {
 		return "tasks"
 	}
 	return strings.TrimSuffix(fp, ".md")
+}
+
+// isTaskFile: a file (relative to the wiki) in a tasks folder, the shared
+// one or a user's.
+func isTaskFile(fp string) bool {
+	return strings.HasPrefix(fp, taskfiles.DirName+"/") || strings.Contains(fp, "/"+taskfiles.DirName+"/")
 }
 
 func noGit() error { return toolErr("There is no history: git isn't installed where Zone runs.") }
@@ -389,10 +395,10 @@ func pageChange(slug, path string, entries []GitEntry, version string) (string, 
 	return slug + ", version " + runePrefix(e.Sha, 7) + " of " + e.Time + ": " + e.Msg + "\n\n" + diff, nil
 }
 
-// recentChanges: the wiki's latest commits, as user sees them: only the
-// files they may see, without a commit that changed none of those.
+// recentChanges: the wiki's latest commits, as user sees them (wikiChanges),
+// after the files with changes not committed yet.
 func recentChanges(since, under string, limit int, user string) string {
-	entries := gitLogAll(since, under, limit, func(path string) bool { return canSeePath(user, path) })
+	entries := wikiChanges(user, changesOf{Since: since, Under: under}, limit)
 	var out, pending []string
 	for _, f := range gitUncommittedFiles() {
 		if !canSeePath(user, f.Filepath) {
@@ -424,7 +430,7 @@ func recentChanges(since, under string, limit int, user string) string {
 				labels = append(labels, l)
 			}
 		}
-		rows = append(rows, e.Time+" | "+runePrefix(e.Sha, 7)+" | "+hideNames(user, e.Msg)+byAuthor(e.Author)+" | "+
+		rows = append(rows, e.Time+" | "+runePrefix(e.Sha, 7)+" | "+e.Msg+byAuthor(e.Author)+" | "+
 			strings.Join(labels, ", "))
 	}
 	theLimit := ""
