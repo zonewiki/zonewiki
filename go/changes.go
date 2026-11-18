@@ -223,7 +223,7 @@ const sessionGap = 30 * time.Minute
 // again, and exactly.
 func undoOffers(user asker, entries []LogEntry) map[string]undoOffer {
 	offers := map[string]undoOffer{}
-	if len(entries) == 0 || settings().isViewer(user.Name) || user.Name == visitor {
+	if len(entries) == 0 || changesNothing(user) || user.Name == visitor {
 		return offers
 	}
 	latest := latestCommits(undoWindow)

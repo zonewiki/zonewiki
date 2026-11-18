@@ -336,12 +336,11 @@ func connectionOf(r *http.Request) connection {
 	return c
 }
 
-// onlyReads: the request changes nothing in the wiki: its user is a viewer,
-// or it came through a connection that only reads. What the doors an
-// assistant comes through ask (callMCPTool, the upload with a token).
-func onlyReads(r *http.Request) bool {
-	return settings().isViewer(userOf(r).Name) || connectionOf(r).readOnly
-}
+// onlyReads: the request changes nothing in the wiki (changesNothing of who
+// asks with it). What the doors an assistant comes through ask first
+// (callMCPTool, the upload with a token), for an answer that says so; the
+// permission model refuses the same on its own (canWrite, mayWriteTasks).
+func onlyReads(r *http.Request) bool { return changesNothing(userOf(r)) }
 
 // readOnlyConnectionMsg: what an assistant is told when it tries to change
 // something through a connection that only reads.
@@ -349,13 +348,14 @@ const readOnlyConnectionMsg = "This connection only reads: whoever connected you
 	"Tell them what you would have written; to let you write, they end this connection on Connect an assistant and connect you again."
 
 // userOf: who asks with the request r: its session's or its token's user
-// ("" without users; r nil: Zone itself).
+// ("" without users; r nil: Zone itself), with what the connection it came
+// through was given less (withConnection).
 func userOf(r *http.Request) asker {
 	if r == nil {
 		return asker{}
 	}
 	u, _ := r.Context().Value(userKey{}).(string)
-	return asUser(u)
+	return asker{Name: u, ReadOnly: connectionOf(r).readOnly}
 }
 
 func clearSession(w http.ResponseWriter, r *http.Request) {

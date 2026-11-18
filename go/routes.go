@@ -34,8 +34,8 @@ func pageRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/save/{slug...}", writesPages(apiSave))
 	mux.HandleFunc("GET /new", func(w http.ResponseWriter, r *http.Request) {
 		var groups []string
-		if s := settings(); !s.isViewer(userOf(r).Name) { // a viewer makes no page
-			groups = s.groupsOf(userOf(r).Name)
+		if !changesNothing(userOf(r)) { // a viewer makes no page
+			groups = settings().groupsOf(userOf(r).Name)
 		}
 		// for: where the page starts (the New page button of a group's home, of the private home).
 		who := r.URL.Query().Get("for")

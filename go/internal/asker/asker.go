@@ -9,10 +9,14 @@
 package asker
 
 // Asker is whoever asks. Name is the user ("" in a wiki without users, and
-// for Zone itself). The zero value beyond Name: the user themselves, with
-// all they may.
+// for Zone itself). The rest is what it was given less than its user has,
+// each only ever taking away; all zero: the user themselves, with all they
+// may.
 type Asker struct {
 	Name string
+	// ReadOnly: it reads what its user sees and changes nothing (an
+	// assistant's connection its user let only read).
+	ReadOnly bool
 }
 
 // User: the user name themselves, with all they may: a person in the

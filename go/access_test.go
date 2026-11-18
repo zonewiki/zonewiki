@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -352,5 +353,52 @@ func TestGroupFolders(t *testing.T) {
 	settings().Users = nil
 	if p := placeOf("groups/dev/x"); !p.shared() || !canSee(asker{}, "groups/dev/x") {
 		t.Error("groups/ without users")
+	}
+}
+
+// An asker that only reads (an assistant's read-only connection) sees what
+// its user sees and changes nothing: the permission model says so itself,
+// whichever door asks.
+func TestAReadOnlyAskerChangesNothing(t *testing.T) {
+	testWiki(t, map[string]string{"plans": "# Plans\n", "private/alice/diary": "# Diary\n", "private/bob/own": "# Own\n"})
+	withUsers(t, "alice", "bob")
+	alice, reading := asUser("alice"), asker{Name: "alice", ReadOnly: true}
+	for _, slug := range []string{"plans", "private/alice/diary"} {
+		if !canSee(reading, slug) || !canWrite(alice, slug) {
+			t.Errorf("%s: alice writes it, and reading she sees it", slug)
+		}
+		if canWrite(reading, slug) || !readOnly(reading, slug) {
+			t.Errorf("%s: written by an asker that only reads", slug)
+		}
+		if why := readOnlyWhy(reading, slug); why != readOnlyConnectionMsg {
+			t.Errorf("%s: told %q", slug, why)
+		}
+	}
+	if canSee(reading, "private/bob/own") {
+		t.Error("reading, alice sees bob's page")
+	}
+	if mayWriteTasks(alice) != nil {
+		t.Error("alice may not write tasks")
+	}
+	if rf, ok := refusalOf(mayWriteTasks(reading)); !ok || rf.kind != refusedReadOnly || rf.msg != readOnlyConnectionMsg {
+		t.Errorf("tasks for an asker that only reads: %v", mayWriteTasks(reading))
+	}
+	if !changesNothing(reading) || changesNothing(alice) {
+		t.Error("changesNothing")
+	}
+	// The operations refuse, not only the doors.
+	if err := createPageOp(reading, "new", "# New\n", ""); err == nil {
+		t.Error("a page made by an asker that only reads")
+	}
+	if _, _, _, err := changePageOp(reading, "plans", "Update", "", func(string) (string, error) { return "# Changed\n", nil }); err == nil {
+		t.Error("a page changed by an asker that only reads")
+	}
+	if _, err := createTask(reading, jsonObj{"title": json.RawMessage(`"x"`)}, "Create task"); err == nil {
+		t.Error("a task made by an asker that only reads")
+	}
+	for _, tool := range toolList(reading) {
+		if name := tool["name"].(string); writeTool(name) {
+			t.Errorf("an asker that only reads is given %s", name)
+		}
 	}
 }

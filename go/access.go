@@ -248,7 +248,15 @@ func canSee(user asker, slug string) bool { return placeOf(slug).sees(user) }
 // the pages they may see, since everything shared is editable, but for a
 // viewer (users.go: roleViewer), who changes nothing.
 func canWrite(user asker, slug string) bool {
-	return canSee(user, slug) && !settings().isViewer(user.Name) && !adminsOnly(user, slug)
+	return canSee(user, slug) && !changesNothing(user) && !adminsOnly(user, slug)
+}
+
+// changesNothing: user reads and changes nothing, whatever it is: a viewer
+// (the user's role), or an asker that was let only read (an assistant's
+// read-only connection). The one place that says so: canWrite and
+// mayWriteTasks ask it, so every write does.
+func changesNothing(user asker) bool {
+	return user.ReadOnly || settings().isViewer(user.Name)
 }
 
 // adminsOnly: slug is a shared guide (guidePage), which with users only an
@@ -355,13 +363,16 @@ const groupGuideMsg = "Only an admin of this wiki who is in the group can change
 
 // readOnlyWhy: why user, who sees slug, may not change it (readOnly): a
 // visitor of a wiki that is public to read signs in first, a viewer changes
-// nothing, anyone else no guide.
+// nothing, nor does a connection that only reads, anyone else no guide.
 func readOnlyWhy(user asker, slug string) string {
 	if user.Name == visitor && settings().isViewer(user.Name) {
 		return visitorMsg
 	}
 	if settings().isViewer(user.Name) {
 		return readOnlyMsg
+	}
+	if user.ReadOnly {
+		return readOnlyConnectionMsg
 	}
 	if placeOf(slug).kind == ofGroup {
 		return groupGuideMsg
@@ -470,7 +481,8 @@ func canManageList(user asker, l ListInfo) bool {
 	return slices.Contains(l.Owners, user.Name) || s.isAdmin(user.Name)
 }
 
-// mayWriteTasks: user may write the task files: anyone but a viewer. Every
+// mayWriteTasks: user may write the task files: anyone but a viewer and an
+// asker that only reads (changesNothing). Every
 // task write passes it (writeOpenLocked, writeBothLocked), so no route or
 // tool changes a task for a viewer, whatever it does.
 func mayWriteTasks(user asker) error {
@@ -479,6 +491,9 @@ func mayWriteTasks(user asker) error {
 	}
 	if settings().isViewer(user.Name) {
 		return errReadOnly
+	}
+	if user.ReadOnly {
+		return refuseAs(refusedReadOnly, readOnlyConnectionMsg)
 	}
 	return nil
 }

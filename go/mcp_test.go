@@ -25,7 +25,7 @@ func set[T any](t *testing.T, v *T, to T) {
 // replyText: the reply to msg as JSON text ("null" for none).
 func replyText(t *testing.T, msg string, call func(string, jsonObj) ([]toolContent, error)) string {
 	t.Helper()
-	reply, err := handleMCP(json.RawMessage(msg), asUser(""), false, call)
+	reply, err := handleMCP(json.RawMessage(msg), asker{}, call)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func TestLongGuidesAreCut(t *testing.T) {
 func TestToolListNamesGuidedFolders(t *testing.T) {
 	testWiki(t, nil)
 	desc := func() string {
-		for _, tool := range toolList(asker{}, false) {
+		for _, tool := range toolList(asker{}) {
 			if tool["name"] == "read_guides" {
 				return tool["description"].(string)
 			}

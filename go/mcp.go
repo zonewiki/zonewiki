@@ -145,9 +145,8 @@ func knownTool(name string) bool {
 // handleMCP answers one JSON-RPC message. Notifications and responses (no
 // id, or no method) get nil: the transport answers those with 202 and no
 // body. callTool runs a tool, its error a toolError for the model; any
-// other error (a failed write) is returned, for a 500. readOnly: the
-// caller changes nothing (onlyReads), and is shown no tool that does.
-func handleMCP(message json.RawMessage, user asker, readOnly bool, callTool func(name string, args jsonObj) ([]toolContent, error)) (*rpcResponse, error) {
+// other error (a failed write) is returned, for a 500.
+func handleMCP(message json.RawMessage, user asker, callTool func(name string, args jsonObj) ([]toolContent, error)) (*rpcResponse, error) {
 	msg, ok := jsonobj.Parse(message)
 	if v, _ := jsonobj.As[string](msg["jsonrpc"]); !ok || v != "2.0" {
 		return rpcError(nil, -32600, "Invalid Request"), nil
@@ -179,7 +178,7 @@ func handleMCP(message json.RawMessage, user asker, readOnly bool, callTool func
 	case "ping":
 		return rpcResult(id, struct{}{}), nil
 	case "tools/list":
-		return rpcResult(id, map[string]any{"tools": toolList(user, readOnly)}), nil
+		return rpcResult(id, map[string]any{"tools": toolList(user)}), nil
 	case "tools/call":
 		name, isStr := jsonobj.As[string](params["name"])
 		if !isStr || !knownTool(name) {
@@ -329,7 +328,7 @@ func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 	if batch, ok := jsonobj.As[[]json.RawMessage](body); ok { // a batch (protocol 2025-03-26)
 		replies := []*rpcResponse{}
 		for _, m := range batch {
-			reply, err := handleMCP(m, asUser(user), onlyReads(r), call)
+			reply, err := handleMCP(m, userOf(r), call)
 			if err != nil {
 				serverError(w, r, err)
 				return
@@ -345,7 +344,7 @@ func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, replies)
 		return
 	}
-	reply, err := handleMCP(body, asUser(user), onlyReads(r), call)
+	reply, err := handleMCP(body, userOf(r), call)
 	if err != nil {
 		serverError(w, r, err)
 		return

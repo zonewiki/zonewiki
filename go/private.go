@@ -59,7 +59,7 @@ func ensurePrivateHome(user asker) (string, error) {
 // the home takes pagesMu, as a page write: the others don't wait for one.
 func privateRoute(w http.ResponseWriter, r *http.Request) {
 	user := userOf(r)
-	if settings().isViewer(user.Name) {
+	if changesNothing(user) {
 		http.NotFound(w, r) // a viewer makes nothing, so has no private home
 		return
 	}

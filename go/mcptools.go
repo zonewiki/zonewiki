@@ -731,7 +731,7 @@ func callMCPTool(r *http.Request, name string, args jsonObj) ([]toolContent, err
 		defer pagesMu.Unlock()
 	}
 	if tool.writes != toolWritesNothing && onlyReads(r) {
-		if !settings().isViewer(userOf(r).Name) {
+		if userOf(r).ReadOnly && !settings().isViewer(userOf(r).Name) {
 			return nil, toolErr(readOnlyConnectionMsg)
 		}
 		return nil, toolErr(readOnlyMsg)
