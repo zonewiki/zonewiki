@@ -14,9 +14,9 @@ With users, pages and tasks can be private or a group's; assistants reach all of
 - **Keep this file and the spec up to date** — whenever the project structure, commands, constraints, or conventions change, update `AGENTS.md`; whenever a feature's behaviour changes, update its file in `docs/spec/` (see Spec).
   Do it in the same change.
   The README and the spec are also Zone's help: the MCP tool `zone_help` serves them to assistants answering users' questions about Zone, so a feature's spec should say how to use it, not only how it is built.
-- **Commit messages** — a short subject (at most 72 characters) that says what changed, a blank line, then the body: why, what was found on the way, what the tests cover, wrapped at about 72 columns.
+- **Commit messages** — a short subject (at most 72 characters) that says what the commit does, in the imperative ("Give shared lists owners", "Fix the tab bar's touch times"), a blank line, then the body: why, what was found on the way, what the tests cover, wrapped at about 72 columns.
   The explanation goes in the body, never in the subject: GitHub's commit list and blame cut a subject at about 70 characters.
-  Commits from before 2026-11-18 put it all in the subject; they stay as they are.
+  Older commits state the result instead ("A shared list has owners"); they stay as they are.
 
 ## Spec
 
