@@ -34,8 +34,8 @@ func pageRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/save/{slug...}", writesPages(apiSave))
 	mux.HandleFunc("GET /new", func(w http.ResponseWriter, r *http.Request) {
 		var groups []string
-		if u := settings().Users[userOf(r)]; u != nil && !settings().isViewer(u.Name) {
-			groups = u.In
+		if s := settings(); !s.isViewer(userOf(r)) { // a viewer makes no page
+			groups = s.groupsOf(userOf(r))
 		}
 		// for: where the page starts (the New page button of a group's home, of the private home).
 		who := r.URL.Query().Get("for")
@@ -95,12 +95,12 @@ func quote(s string) string { return pathURL(s)[1:] }
 // apiNewNote: a new note titled by the form's title; answers its slug.
 func apiNewNote(w http.ResponseWriter, r *http.Request) {
 	slug, err := createQuicknote(userOf(r), r.PostFormValue("title"), nil, "")
-	if pe, ok := refusalOf(err); ok && pe.kind == refusedFull {
-		http.Error(w, pe.msg, http.StatusInsufficientStorage)
+	if pe, ok := refusalOf(err); ok {
+		http.Error(w, pe.msg, pe.kind.status())
 		return
 	}
 	if err != nil {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
+		serverError(w, r, err) // not a refusal: a write or its commit that failed
 		return
 	}
 	writeJSON(w, http.StatusOK, M{"slug": slug})
@@ -876,7 +876,7 @@ func appendPage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, back+quote("There is no page “"+raw+"”"), http.StatusFound)
 		return
 	}
-	anchor, _, err := appendQuicknote(userOf(r), slug, target, r.PostFormValue("heading"), "")
+	anchor, _, _, err := appendQuicknote(userOf(r), slug, target, r.PostFormValue("heading"), "")
 	if _, err = partly(err); err != nil {
 		quicknoteFailed(w, r, back, err)
 		return

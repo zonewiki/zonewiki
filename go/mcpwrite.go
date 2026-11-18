@@ -184,17 +184,12 @@ func fileNote(args jsonObj, base, user string) (string, error) {
 		if err := checkGuides(args, []string{target}, user); err != nil {
 			return "", err
 		}
-		keptTarget, err := keepPending(safePath(target), target)
-		if err != nil {
-			return "", err
-		}
-		pending := pendingNote(target, keptTarget)
-		anchor, kept, err := appendQuicknote(user, slug, target, heading, suffix)
+		anchor, kept, keptTarget, err := appendQuicknote(user, slug, target, heading, suffix)
 		left, err := partly(err)
 		if err != nil {
 			return "", err
 		}
-		pending = pendingNote(slug, kept) + pending
+		pending := pendingNote(slug, kept) + pendingNote(target, keptTarget)
 		return "Appended note " + slug + " to " + target + " as the section “" + heading + "”, and deleted " +
 			"the note; links to it now point at that section.\nurl: " + base + pathURL("page", target) + "#" + anchor +
 			"\nfile: " + hostFile(target) + pending + left, nil

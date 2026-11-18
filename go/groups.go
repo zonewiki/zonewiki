@@ -144,10 +144,7 @@ func showGroups(w http.ResponseWriter, r *http.Request, status int, done, refuse
 	admin := s.isAdmin(user) && !s.isViewer(user)
 	v := &groupsView{BreadcrumbHTML: breadcrumb(rq, []crumb{{"Groups", ""}}, "/groups", true, "Groups", ""),
 		MayMake: mayMakeGroup(s, user), Admin: admin, Done: done, Error: refused, NewName: newName, NewPeople: newPeople}
-	var mine []string
-	if u := s.Users[user]; u != nil && !u.Disabled {
-		mine = slices.Clone(u.In)
-	}
+	mine := slices.Clone(s.groupsOf(user))
 	for _, g := range sortedKeys(s.Owners) {
 		if s.ownerOf(user, g) && !slices.Contains(mine, g) {
 			mine = append(mine, g)
@@ -249,7 +246,7 @@ func strayGroupNames() []string {
 func groupsNamed(text string, known []string) ([]string, error) {
 	named, bad := parseGroups(text)
 	if bad != "" {
-		return nil, refuse(`"` + bad + `" isn't a group's name: lowercase letters, digits and hyphens.`)
+		return nil, refuse(`"` + bad + `" isn't a group's name: ` + groupNameRule + ".")
 	}
 	for _, g := range named {
 		if !slices.Contains(known, g) {
@@ -344,7 +341,7 @@ func groupTakenMsg(name string) string {
 func oneGroupName(text string) (string, error) {
 	named, bad := parseGroups(text)
 	if bad != "" || len(named) != 1 {
-		return "", refuse(`"` + strings.TrimSpace(text) + `" isn't a group's name: lowercase letters, digits and hyphens, at most 40.`)
+		return "", refuse(`"` + strings.TrimSpace(text) + `" isn't a group's name: ` + groupNameRule + ".")
 	}
 	return named[0], nil
 }

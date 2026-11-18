@@ -876,6 +876,7 @@ What happens on a task you have to do with is told to you (below). Not there: a 
   Private tasks among the selection are left alone.
 - **Handing on** the tasks of someone who can no longer be given any: the admin page's Users tab says under a disabled user's (or a viewer's) status how many open tasks they still have, "2 open tasks to hand on", linked to `/tasks?view=open&assignee=<name>`; select them there and Assign….
   `zonewiki user disable` and `user remove` say the count too (`handOnNote`).
+  A removed user's open link (an invite not taken, a reset) goes with them, by the command as by the admin page's Remove (`revokeLink`): whoever is added by that name later doesn't get in by it.
   Until then they show under `@none`.
 - **The History** reads "Assigned to bob (was anna)" and "Unassigned (was bob)".
 - **The names** come with the page's tasks: a page view with a task list, and `/tasks`, carry them in the data block that brings the open tasks along (`"people"` in `tasksInitial`; `setPeople` in `js/taskutil.js`), so the list is drawn with no request.

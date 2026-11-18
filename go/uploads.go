@@ -44,7 +44,7 @@ func uploadDir(p place) string {
 // (a file is seen by who sees the page it is for), else with the shared
 // ones.
 func uploadPlace(user, page string) place {
-	if p := placeOf(page); p.own(user) || p.kind == ofGroup && p.sees(user) {
+	if p := placeOf(page); p.theirs(user) {
 		return p
 	}
 	return place{}
@@ -300,7 +300,7 @@ var uploadMu sync.Mutex
 func saveUpload(w http.ResponseWriter, r *http.Request, src io.ReadSeeker, owner place, filename string) bool {
 	err := storeUpload(userOf(r), owner, filename, src, "")
 	if pe, ok := refusalOf(err); ok {
-		http.Error(w, pe.msg, http.StatusInsufficientStorage)
+		http.Error(w, pe.msg, pe.kind.status())
 		return false
 	}
 	if err != nil {
@@ -348,8 +348,8 @@ func storeUpload(user string, owner place, filename string, src io.ReadSeeker, v
 		name = uploadRel(owner, filename)
 	}
 	added(size)
-	gitCommit(user, "Upload "+name+via, dest)
-	return nil
+	// Written; a commit that fails is said, as for any write (notCommitted).
+	return notCommitted(gitCommit(user, "Upload "+name+via, dest))
 }
 
 // freeUploadName: filename, or with a number before its extension

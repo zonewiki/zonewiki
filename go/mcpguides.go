@@ -353,12 +353,12 @@ func instructionsWithGuide(user string) string {
 // sees them, said with the instructions: an assistant that files a page
 // must know that the folder decides who reads it.
 func groupsNote(user string) string {
-	u := settings().Users[user]
-	if u == nil || len(u.In) == 0 {
+	in := settings().groupsOf(user)
+	if len(in) == 0 {
 		return ""
 	}
-	folders := make([]string, len(u.In))
-	for i, g := range u.In {
+	folders := make([]string, len(in))
+	for i, g := range in {
 		folders[i] = groupsDir + "/" + g + "/"
 	}
 	return "\n\nWhere a page is kept is who sees it: " + privateDir + "/" + user + "/ only this user, " +

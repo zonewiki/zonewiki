@@ -127,7 +127,7 @@ func uploadFile(target, user string) (path, name string, ok bool) {
 		name = m[1]
 	} else if m := privateUploadRE.FindStringSubmatch(target); m != nil {
 		// Its place as its path says it (the name as written: "Alice" is no one's folder here).
-		if p := placeOf(m[1] + "/" + m[2] + "/_assets"); p.name == m[2] && (p.own(user) || p.kind == ofGroup && p.sees(user)) {
+		if p := placeOf(m[1] + "/" + m[2] + "/_assets"); p.name == m[2] && p.theirs(user) {
 			owner, name = p, m[3]
 		}
 	} else if m := taskUploadRE.FindStringSubmatch(target); m != nil {

@@ -319,7 +319,7 @@ Nobody types ids: in the editor, `[[task:` (or the formatting bar's task button)
   On startup, `gitSetup()` initializes a bare repo in `ZONE_DATA` (if not already one), writes an empty `.gitignore`, and commits all existing files.
 - Every write operation (Done/save, create, rename, delete, restore, upload) calls `gitCommit()` (a rename or move through `movePage()`, with the pages and task files whose links changed) to stage and commit the change: only those paths (`git commit -- paths`),
   so what else is staged (a `git add` by hand) stays out of Zone's commit.
-  A commit that fails (a stale `index.lock`, a refusing hook) is logged and reported: the route answers 500 (Commit file and Commit all with `{"error": …}`), an MCP tool with a tool error, "the change is written but not committed";
+  A commit that fails (a stale `index.lock`, a refusing hook) is logged and reported (an upload's too, since 2026-11: `storeUpload` returned nothing of it): the route answers 500 (Commit file and Commit all with `{"error": …}`), an MCP tool with a tool error, "the change is written but not committed";
   the file stays in the Uncommitted list, its draft's author still known.
   A commit that has to come first (text not yet in git, `keepPending`; another user's draft) and fails stops the write, so that text is never lost.
   Pages are written atomically (a temp file renamed into place, the file's permissions kept), and writes to pages run one at a time (`pagesMu`, from the reads a write decides on to its commit: two writes at once, say an assistant's `append_to_page` and a ticked checkbox, both keep their change).

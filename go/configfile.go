@@ -340,8 +340,7 @@ func fileUsers(f *settingsfile.File) (map[string]*User, error) {
 		}
 		groups, bad := parseGroups(u.Values["groups"].Value)
 		if bad != "" {
-			return nil, lineError(u.Values["groups"].Line, "%s's group %s isn't a group's name: lowercase letters, "+
-				"digits and hyphens (groups = dev, hiring).", u.Name, bad)
+			return nil, lineError(u.Values["groups"].Line, "%s's group %s isn't a group's name: %s (groups = dev, hiring).", u.Name, bad, groupNameRule)
 		}
 		// Waiting for approval, a user is disabled too: every check that
 		// keeps a disabled user out keeps them out.
@@ -366,8 +365,7 @@ func fileGroups(f *settingsfile.File) (includes, owners, was map[string][]string
 		v := g.Values["includes"]
 		named, bad := parseGroups(v.Value)
 		if bad != "" {
-			return nil, nil, nil, lineError(v.Line, "[group %s] includes %s, which isn't a group's name: lowercase letters, "+
-				"digits and hyphens (includes = dev, design).", g.Name, bad)
+			return nil, nil, nil, lineError(v.Line, "[group %s] includes %s, which isn't a group's name: %s (includes = dev, design).", g.Name, bad, groupNameRule)
 		}
 		includes[g.Name] = named
 		if v, set := g.Values["owners"]; set {

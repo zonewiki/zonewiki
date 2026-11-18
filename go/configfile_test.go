@@ -731,6 +731,26 @@ func TestUserLinks(t *testing.T) {
 	if links, _ := readLinks(); len(links) != 2 {
 		t.Errorf("two links: %+v", links)
 	}
+	// A removed user's open link goes with them: whoever is added by that
+	// name later doesn't get in by it.
+	if code, _, errs := run("pw\npw\n", "add", "bob"); code != 0 {
+		t.Fatalf("add bob: %q", errs)
+	}
+	if code, _, errs := run("", "reset", "bob"); code != 0 {
+		t.Fatalf("reset bob: %q", errs)
+	}
+	if code, _, errs := run("", "remove", "bob"); code != 0 {
+		t.Fatalf("remove bob: %q", errs)
+	}
+	left, _ := readLinks()
+	for _, l := range left {
+		if l.User == "bob" {
+			t.Errorf("bob's link is still there after he was removed: %+v", left)
+		}
+	}
+	if len(left) != 2 {
+		t.Errorf("the others' links stay: %+v", left)
+	}
 }
 
 func TestRolesInTheFile(t *testing.T) {

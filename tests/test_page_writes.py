@@ -139,6 +139,23 @@ class TestTextNotInGit:
         assert "Only on disk." in (wiki / "plans.md").read_text()
         assert subjects(wiki)[1] == f"Save {note}"
 
+    def test_append_keeps_what_the_page_held_too(self, client, wiki, door):
+        """The page a note is appended to has text not in git yet: it gets
+        its own commit first, through either door, so the append's commit
+        holds only the append."""
+        commit(wiki, "plans", "# Plans\n")
+        write_page(wiki, "plans", "# Plans\n\nChanged on disk.\n")
+        note = client.post("/api/notes", data={"title": "Idea", "content": "A thought."}, headers=HOST).get_json()["slug"]
+        if door == "browser":
+            client.post(f"/append/{note}", data={"page": "plans", "heading": "Idea"}, headers=HOST)
+        else:
+            mcp(client, "file_note", slug=note, page="plans", heading="Idea")
+        assert "Changed on disk." in (wiki / "plans.md").read_text() and "## Idea" in (wiki / "plans.md").read_text()
+        assert "Save plans" in subjects(wiki)[:3], subjects(wiki)[:4]
+        shown = subprocess.run(["git", "show", "--format=", "HEAD", "--", "plans.md"], cwd=wiki, capture_output=True, text=True,
+                               env=settings.GIT_ENV).stdout
+        assert "+## Idea" in shown and "+Changed on disk." not in shown
+
 
 @pytest.mark.parametrize("door", DOORS)
 class TestRefused:

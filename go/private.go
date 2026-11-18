@@ -225,7 +225,7 @@ func shareTargets(user, slug string) []shareTarget {
 			out = append(out, t)
 		}
 	}
-	for _, g := range u.In {
+	for _, g := range s.groupsOf(user) {
 		if to := (place{ofGroup, g}); to != from && from.within(to) {
 			offer(shareTarget{to.folder() + "/" + rest, g, s.groupMembers(g)})
 		}

@@ -200,6 +200,14 @@ func (p place) sees(user string) bool {
 	return false
 }
 
+// theirs: p is a user's or a group's place that user sees: their own
+// folder, or one of a group they are in (not the shared wiki, which is
+// everyone's, nor a place that is no one's). Where an upload of theirs is
+// kept with its page, and which uploads they are served.
+func (p place) theirs(user string) bool {
+	return (p.kind == ofUser || p.kind == ofGroup) && p.sees(user)
+}
+
 // within: everyone who sees what is kept at p sees what is kept at q too:
 // q is the same place or a wider one. What a link's mark asks (does every
 // reader of this page see its target), and a move (does it take the page

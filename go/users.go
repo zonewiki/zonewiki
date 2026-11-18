@@ -46,6 +46,9 @@ type User struct {
 // A group is its name; one nobody is in has no members, and is no error.
 var groupNameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,39}$`)
 
+// groupNameRule: what a group's name is, as every refusal of one says it.
+const groupNameRule = "lowercase letters, digits and hyphens, at most 40"
+
 // parseGroups: the groups a groups value names (commas or spaces between
 // them, a leading @ allowed), cleaned, A–Z, each once; the first word that
 // is no group's name as bad.
@@ -107,11 +110,20 @@ func (s *Settings) directMembers(group string) []string {
 	return out
 }
 
+// groupsOf: the groups user is in, by whatever way (User.In), A–Z: none for
+// who is no user or can't use the wiki (disabled). What asks "which groups
+// are theirs" asks here, as memberOf answers for one.
+func (s *Settings) groupsOf(user string) []string {
+	if u := s.Users[user]; u != nil && !u.Disabled {
+		return u.In
+	}
+	return nil
+}
+
 // memberOf: user is in group (named on them, or by way of a group it is
 // made of), and can use the wiki (not disabled).
 func (s *Settings) memberOf(user, group string) bool {
-	u := s.Users[user]
-	return u != nil && !u.Disabled && slices.Contains(u.In, group)
+	return slices.Contains(s.groupsOf(user), group)
 }
 
 // joinGroups works out, once for these settings, which groups each user is

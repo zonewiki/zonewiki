@@ -386,7 +386,7 @@ func (c *userCommand) setGroups() int {
 		add, out := strings.HasPrefix(arg, "+"), strings.HasPrefix(arg, "-")
 		named, bad := parseGroups(arg[min(1, len(arg)):])
 		if !add && !out || bad != "" || len(named) != 1 {
-			return c.fail("%q isn't +GROUP or -GROUP (a group's name: lowercase letters, digits and hyphens).", arg)
+			return c.fail("%q isn't +GROUP or -GROUP (a group's name: %s).", arg, groupNameRule)
 		}
 		groups = slices.DeleteFunc(groups, func(g string) bool { return g == named[0] })
 		if add {
@@ -455,7 +455,7 @@ func groupMain(args []string, getenv func(string) string, stdout, stderr io.Writ
 	}
 	named, bad := parseGroups(args[1])
 	if bad != "" || len(named) != 1 {
-		return fail("%q isn't a group's name: lowercase letters, digits and hyphens.", args[1])
+		return fail("%q isn't a group's name: %s.", args[1], groupNameRule)
 	}
 	name := named[0]
 	before := settingsOf(f.Read)
@@ -494,7 +494,7 @@ func groupMain(args []string, getenv func(string) string, stdout, stderr io.Writ
 		add, out := strings.HasPrefix(arg, "+"), strings.HasPrefix(arg, "-")
 		g, bad := parseGroups(arg[min(1, len(arg)):])
 		if !add && !out || bad != "" || len(g) != 1 {
-			return fail("%q isn't +GROUP or -GROUP (a group's name: lowercase letters, digits and hyphens).", arg)
+			return fail("%q isn't +GROUP or -GROUP (a group's name: %s).", arg, groupNameRule)
 		}
 		now = slices.DeleteFunc(now, func(in string) bool { return in == g[0] })
 		if add {
@@ -626,6 +626,11 @@ func (c *userCommand) remove() int {
 		fmt.Fprintln(c.stdout, note+".")
 	}
 	revokeGrantsOf(c.name) // their assistants' connections (grants.go)
+	// An open link of theirs (an invite not taken, a reset) is no way in for
+	// whoever is added by that name later: gone, as the admin page's Remove does.
+	if _, err := revokeLink(c.name); err != nil {
+		fmt.Fprintf(c.stderr, "%s's open link couldn't be removed: %v\n", c.name, err)
+	}
 	switch {
 	case c.openFlag:
 		fmt.Fprintln(c.stdout, "No users and no password now: the wiki has no login, and private/ is an "+

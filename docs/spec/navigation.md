@@ -209,6 +209,7 @@ Phones have no switch (no top actions).
   It is a rename underneath: links to the note follow (`updateReferences`), one commit `Promote <old> to <new>` (text the note held that wasn't committed yet is committed first, `Save <note>`, as before a rename), which the history calls "Moved from Quicknote".
   An empty name, a taken one or one that would still be a quicknote name goes back to the note with `?promote_error=…` and the dialog open.
 - **Append to page** (the note's ⋯ menu, `#page-append-dialog`, `append_dialog` in `templates/partials/page.html`; `POST /append/<slug>`): for a note that belongs on an existing page (meeting notes on a person's page).
+  What the page held that wasn't in git yet gets its own commit first ("Save <page>"), as the note's does, by the dialog as by an assistant's `file_note` (`appendQuicknote` keeps both: `keepPending`), so the append's commit holds the append alone.
   The dialog asks for the page (the shared `#wiki-pages` suggestions) and the section heading (`Title (YYYY-MM-DD)`, `appendHeading`; `[`, `]` and `|` are dropped, they would break wikilinks to it).
   `mdtext.NoteAsSection()` makes the note a `## heading` section: its H1 goes, a tldr becomes an italic first paragraph (a line each), its sources a `Sources:` list at the section's end, its headings move down so the highest is `###` (fenced code untouched);
   its frontmatter tags join the page's (`mdtext.AddFrontmatterTags`, adding the line or block).

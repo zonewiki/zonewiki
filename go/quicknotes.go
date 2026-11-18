@@ -141,16 +141,18 @@ var headingTextRE = regexp.MustCompile(`(?m)^#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$`)
 // appendQuicknote appends a note to the page target as a `## heading`
 // section (its tags into the page's frontmatter) and deletes the note;
 // links to the note point at that section, all in one commit; what the
-// note held uncommitted is committed first (keepPending). Returns the
-// section's anchor, and whether it kept any.
-func appendQuicknote(user, slug, target, heading, suffix string) (anchor string, kept bool, err error) {
+// note and the page held uncommitted is committed first (keepPending), by
+// either door, so the commit holds only the append. Returns the section's
+// anchor, and whether it kept any of the note's (kept) and of the page's
+// (keptPage).
+func appendQuicknote(user, slug, target, heading, suffix string) (anchor string, kept, keptPage bool, err error) {
 	oldPath, err := notePath(user, slug)
 	if err != nil {
-		return "", false, err
+		return "", false, false, err
 	}
 	// The page's, and those whose links to the note follow.
 	if err := commitOthersDrafts(user); err != nil {
-		return "", false, err
+		return "", false, false, err
 	}
 	// [ ] | would break the wikilinks that now point at the section.
 	heading = strings.TrimSpace(mdtext.WikilinkBreakers.ReplaceAllString(heading, ""))
@@ -160,45 +162,48 @@ func appendQuicknote(user, slug, target, heading, suffix string) (anchor string,
 	}
 	if targetPath == "" || !exists(targetPath) {
 		if target == "" {
-			return "", false, refuse("Choose a page")
+			return "", false, false, refuse("Choose a page")
 		}
-		return "", false, refuse("There is no page “" + target + "”")
+		return "", false, false, refuse("There is no page “" + target + "”")
 	}
 	if target == slug {
-		return "", false, refuse("Choose another page than this note")
+		return "", false, false, refuse("Choose another page than this note")
 	}
 	if heading == "" {
-		return "", false, refuse("Give the section a heading")
+		return "", false, false, refuse("Give the section a heading")
 	}
 	pageText, err := readText(targetPath)
 	if err != nil {
-		return "", false, err
+		return "", false, false, err
 	}
 	anchor = mdtext.SectionAnchor(heading)
 	masked, stash := mdtext.MaskCode(pageText) // no headings in code; a heading's own code counts
 	for _, m := range headingTextRE.FindAllStringSubmatch(masked, -1) {
 		if mdtext.SectionAnchor(mdtext.UnmaskCode(m[1], stash)) == anchor {
-			return "", false, refuse("“" + target + "” already has a section “" + heading + "”")
+			return "", false, false, refuse("“" + target + "” already has a section “" + heading + "”")
 		}
 	}
+	if keptPage, err = keepPending(targetPath, target); err != nil {
+		return "", false, false, err
+	}
 	if kept, err = keepPending(oldPath, slug); err != nil {
-		return "", false, err
+		return "", false, false, err
 	}
 	note, err := readText(oldPath)
 	if err != nil {
-		return "", false, err
+		return "", false, false, err
 	}
 	section, tags := mdtext.NoteAsSection(note, heading)
 	pageText = mdtext.AddFrontmatterTags(pageText, tags)
 	if err := writeText(targetPath, trimNewlines(pageText)+"\n\n"+section); err != nil {
-		return "", false, err
+		return "", false, false, err
 	}
 	if err := os.Remove(oldPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return "", false, err
+		return "", false, false, err
 	}
 	refs, linkErr := updateReferences(slug, target, heading)
 	if err := notCommitted(gitCommit(user, "Append "+slug+" to "+target+suffix, append([]string{oldPath, targetPath}, refs...)...)); err != nil {
-		return anchor, kept, err
+		return anchor, kept, keptPage, err
 	}
-	return anchor, kept, linkErr
+	return anchor, kept, keptPage, linkErr
 }

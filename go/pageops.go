@@ -66,10 +66,8 @@ func pageFailed(w http.ResponseWriter, r *http.Request, err error) {
 		serverError(w, r, err)
 	case pe.kind == refusedNotFound:
 		http.NotFound(w, r)
-	case pe.kind == refusedFull:
-		http.Error(w, pe.msg, http.StatusInsufficientStorage)
-	case pe.kind == refusedReadOnly:
-		http.Error(w, pe.msg, http.StatusForbidden)
+	case pe.kind == refusedFull, pe.kind == refusedReadOnly, pe.kind == refusedConflict, pe.kind == refusedTooLarge:
+		http.Error(w, pe.msg, pe.kind.status()) // the status that says its kind (refusal.status)
 	default:
 		badRequestPage(w)
 	}
@@ -539,8 +537,8 @@ type tagRename struct {
 // written, so one that can't be read changes nothing; text not yet in git is
 // committed first. Not the tags in pages' frontmatter: those sort pages.
 func renameTagOp(user, tag, newName string, merge bool, suffix string) (*tagRename, error) {
-	if settings().isViewer(user) {
-		return nil, refuseAs(refusedReadOnly, readOnlyMsg)
+	if err := mayWriteTasks(user); err != nil { // a tag's rename writes tasks: whoever may write them
+		return nil, err
 	}
 	plan, err := checkTagRename(user, tag, newName, merge)
 	if err != nil {
