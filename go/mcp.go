@@ -145,8 +145,9 @@ func knownTool(name string) bool {
 // handleMCP answers one JSON-RPC message. Notifications and responses (no
 // id, or no method) get nil: the transport answers those with 202 and no
 // body. callTool runs a tool, its error a toolError for the model; any
-// other error (a failed write) is returned, for a 500.
-func handleMCP(message json.RawMessage, user string, callTool func(name string, args jsonObj) ([]toolContent, error)) (*rpcResponse, error) {
+// other error (a failed write) is returned, for a 500. readOnly: the
+// caller changes nothing (onlyReads), and is shown no tool that does.
+func handleMCP(message json.RawMessage, user string, readOnly bool, callTool func(name string, args jsonObj) ([]toolContent, error)) (*rpcResponse, error) {
 	msg, ok := jsonobj.Parse(message)
 	if v, _ := jsonobj.As[string](msg["jsonrpc"]); !ok || v != "2.0" {
 		return rpcError(nil, -32600, "Invalid Request"), nil
@@ -178,7 +179,7 @@ func handleMCP(message json.RawMessage, user string, callTool func(name string, 
 	case "ping":
 		return rpcResult(id, struct{}{}), nil
 	case "tools/list":
-		return rpcResult(id, map[string]any{"tools": toolList(user)}), nil
+		return rpcResult(id, map[string]any{"tools": toolList(user, readOnly)}), nil
 	case "tools/call":
 		name, isStr := jsonobj.As[string](params["name"])
 		if !isStr || !knownTool(name) {
@@ -217,39 +218,40 @@ func handleMCP(message json.RawMessage, user string, callTool func(name string, 
 // token, or with users one user's token (configfile.go): the tools act
 // as that user. The tools write (pages, tasks), so /mcp is off until a
 // token is set: open, it would let anything that reaches the port change
-// the wiki, password or not. via: the name of the connection the token is
-// of ("" for an MCP token, which has none), for what it writes (viaTrailer).
-func mcpAuthorized(r *http.Request) (user, via string, ok bool) {
+// the wiki, password or not. c: the connection the token is of (none for
+// an MCP token): its name, for what it writes (viaTrailer), and what its
+// user gave it less than they have themselves.
+func mcpAuthorized(r *http.Request) (user string, c connection, ok bool) {
 	auth := r.Header.Get("Authorization")
 	if !strings.HasPrefix(auth, "Bearer ") {
-		return "", "", false
+		return "", connection{}, false
 	}
 	given := strings.TrimSpace(auth[len("Bearer "):])
 	s := settings()
 	if s.Users == nil {
 		if tokenMatches(given, s.MCPToken) {
-			return "", "", true
+			return "", connection{}, true
 		}
 		return connectionUser(s, given)
 	}
 	for _, u := range s.Users {
 		if !u.Disabled && tokenMatches(given, u.MCPToken) {
-			return u.Name, "", true
+			return u.Name, connection{}, true
 		}
 	}
 	return connectionUser(s, given)
 }
 
 // connectionUser: given is the access token of a connection (grants.go),
-// whose user may still have one; via is the name its client gave.
-func connectionUser(s *Settings, given string) (user, via string, ok bool) {
+// whose user may still have one.
+func connectionUser(s *Settings, given string) (user string, c connection, ok bool) {
 	if !oauthOn(s) {
-		return "", "", false
+		return "", connection{}, false
 	}
 	if g := grantOf(given); g != nil && validGrantUser(s, g.User) {
-		return g.User, g.Client, true
+		return g.User, connection{name: g.Client, readOnly: g.ReadOnly}, true
 	}
-	return "", "", false
+	return "", connection{}, false
 }
 
 // mcpOn: some token is set, so /mcp answers.
@@ -293,9 +295,9 @@ func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized: wrong or missing bearer token"})
 		return
 	}
-	user, via := "", ""
+	user, conn := "", connection{}
 	ok, wait := mcpThrottle.try(clientKey(r), func() (ok bool) {
-		user, via, ok = mcpAuthorized(r)
+		user, conn, ok = mcpAuthorized(r)
 		return ok
 	})
 	if wait > 0 {
@@ -308,7 +310,7 @@ func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized: wrong or missing bearer token"})
 		return
 	}
-	r = withVia(withUser(r, user), via)
+	r = withConnection(withUser(r, user), conn)
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST")
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -327,7 +329,7 @@ func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 	if batch, ok := jsonobj.As[[]json.RawMessage](body); ok { // a batch (protocol 2025-03-26)
 		replies := []*rpcResponse{}
 		for _, m := range batch {
-			reply, err := handleMCP(m, user, call)
+			reply, err := handleMCP(m, user, onlyReads(r), call)
 			if err != nil {
 				serverError(w, r, err)
 				return
@@ -343,7 +345,7 @@ func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, replies)
 		return
 	}
-	reply, err := handleMCP(body, user, call)
+	reply, err := handleMCP(body, user, onlyReads(r), call)
 	if err != nil {
 		serverError(w, r, err)
 		return

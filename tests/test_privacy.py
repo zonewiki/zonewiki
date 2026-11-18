@@ -1174,6 +1174,7 @@ EXEMPT = {
     "GET /.well-known/oauth-protected-resource", "GET /.well-known/oauth-protected-resource/mcp",
     "GET /.well-known/oauth-authorization-server", "POST /oauth/register", "GET /oauth/authorize",
     "POST /oauth/authorize", "POST /oauth/token", "POST /assistant/connections/{id}/revoke",
+    "POST /assistant/connections/{id}/read-only",
     "GET /setup", "POST /setup",    # the first-run page: only while the wiki has no login (test_setup.py)
 }
 

@@ -467,7 +467,7 @@ class TestConnections:
     def test_a_viewers_assistant_only_reads(self, client, users, wiki_dir):
         login(client, "carol")
         client_id = register(client)
-        assert "You are a viewer: it reads, and changes nothing." in client.get(
+        assert "You are a viewer: it reads what you see, and changes nothing." in client.get(
             "/oauth/authorize?" + urlencode(asking(client_id)), headers=HOST).data.decode()
         _, tokens = connect(client, "carol-pw")
         assert mcp(client, tokens["access_token"], "read_page", slug="index")[0] == 200
@@ -518,7 +518,7 @@ class TestWithoutUsers:
         assert client.post("/login", data={"password": "one password"}, headers=HOST).status_code == 302
         client_id = register(client)
         body = client.get("/oauth/authorize?" + urlencode(asking(client_id)), headers=HOST).data.decode()
-        assert "asks to use this wiki: it will search, read and write its pages and tasks" in body
+        assert "asks to use this wiki." in body and "it searches, reads and writes the pages and tasks" in body
         assert allow(client, asking(client_id), "wrong")[0].status_code == 403
         _, tokens = connect(client, "one password")
         status, text = mcp(client, tokens["access_token"], "write_page", slug="from-claude", content="Hello\n")
@@ -529,3 +529,122 @@ class TestWithoutUsers:
         gid = grants(wiki_dir)[0]["id"]
         assert client.post(f"/assistant/connections/{gid}/revoke", headers=HOST).status_code == 303
         assert mcp(client, tokens["access_token"])[0] == 401
+
+
+def connect_to_read(client, password, name="Claude"):
+    """A new connection of whoever is signed in that only reads: its tokens."""
+    client_id = register(client, [CALLBACK], name)
+    resp, code = allow(client, {**asking(client_id), "may": "read"}, password)
+    assert resp.status_code == 200 and code, resp.data
+    assert "may now read this wiki" in resp.data.decode() and "it changes nothing" in resp.data.decode()
+    return client_id, exchange(client, client_id, code).get_json()
+
+
+def mcp_error(client, access, tool, **args):
+    """A tool's text, and whether it is an error."""
+    resp = client.post("/mcp", headers={**HOST, "Authorization": f"Bearer {access}"}, json={
+        "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": tool, "arguments": args}})
+    result = resp.get_json()["result"]
+    return result["content"][0]["text"], result["isError"]
+
+
+def tool_names(client, access):
+    resp = client.post("/mcp", headers={**HOST, "Authorization": f"Bearer {access}"},
+                       json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+    return [t["name"] for t in resp.get_json()["result"]["tools"]]
+
+
+def wiki_state(wiki):
+    """Every file of the wiki but its settings and state, and git's head."""
+    files = {str(p.relative_to(wiki)): p.read_bytes() for p in sorted(wiki.rglob("*"))
+             if p.is_file() and ".git" not in p.parts and ".zone" not in p.parts}
+    head = (wiki / ".git/HEAD").read_text() + "".join(p.read_text() for p in sorted((wiki / ".git/refs").rglob("*")) if p.is_file())
+    return files, head
+
+
+class TestReadOnly:
+    """A connection given less than its user: it reads, and changes nothing."""
+
+    def test_the_question_offers_it(self, bob):
+        client_id = register(bob)
+        body = bob.get("/oauth/authorize?" + urlencode(asking(client_id)), headers=HOST).data.decode()
+        assert 'name="may" value="write" checked' in body and 'name="may" value="read">' in body
+        assert "it sees and changes what you do, no more" in body and "and changes nothing" in body
+        # A wrong password keeps what was chosen.
+        resp, code = allow(bob, {**asking(client_id), "may": "read"}, "wrong")
+        assert code is None and 'name="may" value="read" checked' in resp.data.decode()
+
+    def test_it_reads_and_every_writing_tool_is_refused(self, bob, wiki_dir, git_wiki_dir):
+        (wiki_dir / "garden.md").write_text("# Garden\n\nBeds.\n")
+        _, full = connect(bob, "bob-pw", name="Full")
+        _, tokens = connect_to_read(bob, "bob-pw")
+        access = tokens["access_token"]
+        assert grants(wiki_dir)[-1]["read_only"] is True and grants(wiki_dir)[0]["read_only"] is False
+        text, refused = mcp_error(bob, access, "read_page", slug="garden")
+        assert not refused and "Beds." in text
+        assert not mcp_error(bob, access, "search_wiki", query="beds")[1]
+        # It is shown the tools that read, and those alone.
+        every, shown = tool_names(bob, full["access_token"]), tool_names(bob, access)
+        writing = [t for t in every if t not in shown]
+        assert "write_page" in writing and "undo_changes" in writing and "upload_file" in writing and len(writing) >= 14
+        assert {"search_wiki", "read_page", "history", "read_guides", "read_file"} <= set(shown)
+        # Called all the same, each is refused before it looks at anything, and nothing changes.
+        before = wiki_state(wiki_dir)
+        for name in writing:
+            text, refused = mcp_error(bob, access, name, slug="garden", content="x", title="x", versions="abcdef1",
+                                      new_slug="yard", find="Beds", replace="x", dry_run=False, tag="a", new_tag="b",
+                                      name="x", list="x", new_name="y", id="x", version="abcdef1", filename="x.txt",
+                                      content_base64="eA==", old_string="Beds", new_string="x")
+            assert refused and text.startswith("This connection only reads"), (name, text)
+        assert wiki_state(wiki_dir) == before
+        # The same user's other connection writes.
+        assert not mcp_error(bob, full["access_token"], "append_to_page", slug="garden", content="Paths.")[1]
+
+    def test_no_upload_with_its_token(self, bob, wiki_dir):
+        import io
+        _, tokens = connect_to_read(bob, "bob-pw")
+        bob.cookies.clear()                                        # the assistant has no session
+        resp = bob.post("/api/upload", headers={**HOST, "Authorization": f"Bearer {tokens['access_token']}"},
+                        data={"file": (io.BytesIO(b"x"), "x.png")})
+        assert resp.status_code == 403 and b"only reads" in resp.data
+        assert not (wiki_dir / "_assets/x.png").exists()
+
+    def test_it_stays_read_only_through_a_refresh(self, bob, wiki_dir):
+        client_id, tokens = connect_to_read(bob, "bob-pw")
+        fresh = token(bob, grant_type="refresh_token", refresh_token=tokens["refresh_token"], client_id=client_id).get_json()
+        assert mcp_error(bob, fresh["access_token"], "write_page", slug="x", content="x")[1]
+        assert "write_page" not in tool_names(bob, fresh["access_token"])
+
+    def test_the_page_says_what_each_may_do_and_narrows_one(self, bob, wiki_dir):
+        _, full = connect(bob, "bob-pw", name="Writer")
+        connect_to_read(bob, "bob-pw", name="Reader")
+        body = bob.get("/assistant", headers=HOST).data.decode()
+        rows = re.findall(r'<td>([^<]*)</td><td>[^<]*</td><td class="assistant-may">([^<]*)</td>', body)
+        assert rows == [("Reader", "Only read"), ("Writer", "Read and change")]
+        ids = re.findall(r'action="/assistant/connections/([0-9a-f]{16})/read-only"', body)
+        assert len(ids) == 1                                       # only the one that writes is offered it
+        resp = bob.post(f"/assistant/connections/{ids[0]}/read-only", headers=HOST)
+        assert resp.status_code == 303 and resp.headers["Location"] == "/assistant?done=read-only"
+        body = bob.get(resp.headers["Location"], headers=HOST).data.decode()
+        assert "only reads from now on" in body and "/read-only" not in body
+        text, refused = mcp_error(bob, full["access_token"], "write_page", slug="x", content="x")
+        assert refused and "only reads" in text and not (wiki_dir / "x.md").exists()
+        assert mcp(bob, full["access_token"], "read_page", slug="index")[0] == 200
+
+    def test_only_ones_own_is_narrowed(self, client, users, wiki_dir):
+        _, tokens = connect(login(client, "bob"), "bob-pw")
+        gid = grants(wiki_dir)[0]["id"]
+        login(client, "alice")
+        assert client.post(f"/assistant/connections/{gid}/read-only", headers=HOST).status_code == 404
+        assert client.post("/assistant/connections/nope/read-only", headers=HOST).status_code == 404
+        assert grants(wiki_dir)[0]["read_only"] is False
+        assert not mcp_error(client, tokens["access_token"], "write_page", slug="bobs", content="x")[1]
+
+    def test_a_connection_from_before_writes(self, bob, wiki_dir):
+        """A connection kept without the field (made before there was one) is as it was."""
+        _, tokens = connect(bob, "bob-pw")
+        all = grants(wiki_dir)
+        for g in all:
+            del g["read_only"]
+        (wiki_dir / ".zone" / "grants").write_text(json.dumps(all))
+        assert not mcp_error(bob, tokens["access_token"], "write_page", slug="x", content="x")[1]

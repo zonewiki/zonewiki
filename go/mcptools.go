@@ -730,14 +730,17 @@ func callMCPTool(r *http.Request, name string, args jsonObj) ([]toolContent, err
 		pagesMu.Lock()
 		defer pagesMu.Unlock()
 	}
-	if tool.writes != toolWritesNothing && settings().isViewer(userOf(r)) {
+	if tool.writes != toolWritesNothing && onlyReads(r) {
+		if !settings().isViewer(userOf(r)) {
+			return nil, toolErr(readOnlyConnectionMsg)
+		}
 		return nil, toolErr(readOnlyMsg)
 	}
 	// Which connection the call came through goes with the arguments, for
 	// the commit's message (mcpMark); whatever a client sent under that
 	// name is replaced.
 	delete(args, viaArg)
-	if via := viaOf(r); via != "" {
+	if via := connectionOf(r).name; via != "" {
 		args[viaArg], _ = json.Marshal(via)
 	}
 	var out []toolContent

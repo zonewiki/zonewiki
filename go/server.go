@@ -558,7 +558,7 @@ var viewerWrites = map[string]bool{
 	"POST /password": true, // their own password
 	// a connection of their own, whose writing tools are refused; the other two carry no session
 	"POST /oauth/authorize": true, "POST /oauth/token": true, "POST /oauth/register": true,
-	"POST /assistant/connections/{id}/revoke": true,
+	"POST /assistant/connections/{id}/revoke": true, "POST /assistant/connections/{id}/read-only": true,
 }
 
 // viewerGate refuses a viewer's write (POST, PUT, PATCH, DELETE) to a

@@ -122,6 +122,7 @@ A new feature is checked against them, and a protection that breaks one is a bug
   Allow takes the password again and is behind the Origin check; the consent page names the client only as a claim and shows where the answer goes.
   `/oauth/token`, `/oauth/register` and the metadata under `/.well-known/oauth-*` need no session and skip the Origin check (`oauthOpen`): a client's server calls them, and they act on nothing a cookie gives.
   Registration keeps nothing (the client id is signed), so strangers can't fill the wiki.
+  **Least privilege for a connection**: its user can let it only read (chosen on the consent page, or later on Connect an assistant, where a connection is only ever made narrower without the password); such a connection is refused every writing tool and the upload (`onlyReads`; Read-only connections in `docs/spec/mcp.md`).
   The page policy is unchanged: `form-action 'self'` stays, and the answer after Allow is a page with a `Refresh` header instead of a redirect.
   None of it answers during first run.
 - **Zone's own folders are not served**: `.zone/` (the session key, the settings file, the semantic cache),

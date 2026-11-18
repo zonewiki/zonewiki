@@ -35,6 +35,7 @@ type grant struct {
 	Client         string    `json:"client"`          // the client's name, as it gave it
 	ClientHash     string    `json:"client_hash"`     // hashToken of its client id: only it refreshes
 	Redirect       string    `json:"redirect"`        // the host its answer went to
+	ReadOnly       bool      `json:"read_only"`       // it reads and changes nothing: its user chose that
 	Made           time.Time `json:"made"`            // when it was allowed
 	Used           string    `json:"used"`            // the day it last called /mcp or refreshed
 	Access         string    `json:"access"`          // hashToken of the access token
@@ -149,9 +150,9 @@ func (g *grant) renew() grantTokens {
 }
 
 // newGrant: a connection of user's for the client (its name, the hash of
-// its id, the host its answer goes to), and its first tokens.
-func newGrant(user, client, clientHash, redirect string) (grantTokens, error) {
-	g := grant{ID: newToken()[:16], User: user, Client: client, ClientHash: clientHash, Redirect: redirect,
+// its id, the host its answer goes to; readOnly: one that changes nothing), and its first tokens.
+func newGrant(user, client, clientHash, redirect string, readOnly bool) (grantTokens, error) {
+	g := grant{ID: newToken()[:16], User: user, Client: client, ClientHash: clientHash, Redirect: redirect, ReadOnly: readOnly,
 		Made: now().UTC().Truncate(time.Second)}
 	t := g.renew()
 	g.PrevRefresh = ""
@@ -259,6 +260,22 @@ func revokeGrantsOf(user string) int {
 // grantRow: a connection as Connect an assistant lists it.
 type grantRow struct {
 	ID, Client, Redirect, Made, Used string
+	ReadOnly                         bool
+}
+
+// narrowGrant makes the connection id of user's read-only; false: none such.
+// Only ever narrower: one that only reads is made to write by ending it
+// and connecting again, which takes the password.
+func narrowGrant(user, id string) (found bool, err error) {
+	err = changeGrants(func(grants []grant) ([]grant, error) {
+		for i := range grants {
+			if grants[i].ID == id && grants[i].User == user {
+				grants[i].ReadOnly, found = true, true
+			}
+		}
+		return grants, nil
+	})
+	return found, err
 }
 
 // grantsOf: user's connections, for the page, newest first.
@@ -275,7 +292,7 @@ func grantsOf(user string) []grantRow {
 				used = day.Format("2 Jan 2006")
 			}
 			rows = append(rows, grantRow{ID: g.ID, Client: g.Client, Redirect: g.Redirect,
-				Made: g.Made.Local().Format("2 Jan 2006"), Used: used})
+				Made: g.Made.Local().Format("2 Jan 2006"), Used: used, ReadOnly: g.ReadOnly})
 		}
 	}
 	return rows

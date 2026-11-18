@@ -312,21 +312,41 @@ func withUser(r *http.Request, user string) *http.Request {
 	return r.WithContext(context.WithValue(r.Context(), userKey{}, user))
 }
 
-// viaKey: the name of the connection (grants.go) a request to /mcp came
-// through, "" for none.
-type viaKey struct{}
+// connection: what a request to /mcp or a file route came through, when it
+// is a connection a user allowed (grants.go; the zero value: none, an MCP
+// token or a session): its name, as its client gave it, and readOnly: its
+// user let it read and change nothing. A connection has less than its
+// user or the same, never more.
+type connection struct {
+	name     string
+	readOnly bool
+}
 
-func withVia(r *http.Request, via string) *http.Request {
-	if via == "" {
+type connectionKey struct{}
+
+func withConnection(r *http.Request, c connection) *http.Request {
+	if c == (connection{}) {
 		return r
 	}
-	return r.WithContext(context.WithValue(r.Context(), viaKey{}, via))
+	return r.WithContext(context.WithValue(r.Context(), connectionKey{}, c))
 }
 
-func viaOf(r *http.Request) string {
-	via, _ := r.Context().Value(viaKey{}).(string)
-	return via
+func connectionOf(r *http.Request) connection {
+	c, _ := r.Context().Value(connectionKey{}).(connection)
+	return c
 }
+
+// onlyReads: the request changes nothing in the wiki: its user is a viewer,
+// or it came through a connection that only reads. What the doors an
+// assistant comes through ask (callMCPTool, the upload with a token).
+func onlyReads(r *http.Request) bool {
+	return settings().isViewer(userOf(r)) || connectionOf(r).readOnly
+}
+
+// readOnlyConnectionMsg: what an assistant is told when it tries to change
+// something through a connection that only reads.
+const readOnlyConnectionMsg = "This connection only reads: whoever connected you chose that. Nothing was changed. " +
+	"Tell them what you would have written; to let you write, they end this connection on Connect an assistant and connect you again."
 
 func userOf(r *http.Request) string {
 	if r == nil {

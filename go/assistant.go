@@ -22,6 +22,7 @@ func assistantRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /assistant/token", assistantTokenRoute)
 	mux.HandleFunc("POST /assistant/revoke", assistantRevokeRoute)
 	mux.HandleFunc("POST /assistant/connections/{id}/revoke", assistantDisconnectRoute)
+	mux.HandleFunc("POST /assistant/connections/{id}/read-only", assistantNarrowRoute)
 }
 
 // assistantView: the page (assistant.html).
@@ -101,6 +102,8 @@ func assistantPage(w http.ResponseWriter, r *http.Request) {
 		v.Done = "Revoked the token: an assistant using it is refused from now on."
 	case done == "disconnect":
 		v.Done = "Ended the connection: that assistant is refused from now on."
+	case done == "read-only":
+		v.Done = "That assistant only reads from now on: what it tries to change is refused."
 	}
 	showAssistant(w, r, http.StatusOK, v)
 }
@@ -194,4 +197,25 @@ func assistantDisconnectRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/assistant?done=disconnect", http.StatusSeeOther)
+}
+
+// assistantNarrowRoute: POST /assistant/connections/{id}/read-only makes
+// one of the owner's connections read-only (no other's: 404). No password:
+// it only takes access away; the way back is to end it and connect again.
+func assistantNarrowRoute(w http.ResponseWriter, r *http.Request) {
+	_, name, _, ok := tokenOwner(r)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	found, err := narrowGrant(name, r.PathValue("id"))
+	if err != nil {
+		serverError(w, r, err)
+		return
+	}
+	if !found {
+		http.NotFound(w, r)
+		return
+	}
+	http.Redirect(w, r, "/assistant?done=read-only", http.StatusSeeOther)
 }

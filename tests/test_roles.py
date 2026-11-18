@@ -189,6 +189,7 @@ EXEMPT = {
     "POST /password",                                   # their own password (test_password.py)
     # OAuth (test_oauth.py): a connection of their own, read-only as their token; a client's calls carry no session
     "POST /oauth/authorize", "POST /oauth/token", "POST /oauth/register", "POST /assistant/connections/{id}/revoke",
+    "POST /assistant/connections/{id}/read-only",
     # admins only (test_admin.py); two are probed above
     "POST /admin/users/{name}/disable", "POST /admin/users/{name}/enable", "POST /admin/users/{name}/remove",
     "POST /admin/users/{name}/reset", "POST /admin/users/{name}/revoke",

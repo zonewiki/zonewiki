@@ -8,7 +8,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 Protocol in `go/mcp.go` (JSON-RPC; the tool definitions as clients see them in `go/mcp_tools.json`),
 route `mcpEndpoint`,
 tools in `go/mcp*.go` (those that read in `mcptools.go`, that write pages in `mcpwrite.go` and `mcpreplace.go`, the task tools in `mcptasks.go`, guides in `mcpguides.go`),
-each with what it writes in one table (`mcpToolTable`: nothing, tasks, or pages, which puts it under `pagesMu`; a tool that writes is refused to a viewer; a test holds the table against each definition's `readOnlyHint`, so a new writing tool can't be left out).
+each with what it writes in one table (`mcpToolTable`: nothing, tasks, or pages, which puts it under `pagesMu`; a tool that writes is refused to a viewer and to a connection that only reads; a test holds the table against each definition's `readOnlyHint`, so a new writing tool can't be left out).
 MCP's Streamable HTTP transport, reduced to what tools need: each POST carries one message (or a batch) and is answered with plain JSON; notifications get 202; no event stream (GET → 405), no sessions.
 `initialize` echoes the client's protocol version when it is in `protocolVersions`,
 else the newest,
@@ -47,8 +47,14 @@ A viewer may make one too: their assistant reads, and its writing tools are refu
   A token outlasts the session it was made in, and signing out or a new password doesn't end it, so a session someone else got hold of mustn't be enough to make one.
   A wrong password is a 403 ("Incorrect password: no token was made."), and counts against the client as a wrong login does (`loginThrottle`: 429 with the wait), so the page guesses a password no faster than the login page.
 - **Revoke the token** (`POST /assistant/revoke`, no password: it only ends access): the token is taken out of the settings file, the page says so (`?done=revoke`, said only when there is none), and `/mcp` answers 401 for it (403, off, when no token is left and OAuth is off).
-- **Connections** (with OAuth): the page says how an assistant signs in (the address to paste; the line for Claude Code, `claude mcp add --transport http zone <url>`), and lists the assistants its user allowed: the name each gave, the host its answer went to, since when, the day it was last used, newest first.
+- **Connections** (with OAuth): the page says how an assistant signs in (the address to paste; the line for Claude Code, `claude mcp add --transport http zone <url>`), and lists the assistants its user allowed: the name each gave, the host its answer went to, what it may do (Read and change, or Only read), since when, the day it was last used, newest first.
   **End** (`POST /assistant/connections/<id>/revoke`, no password) ends one: its tokens are refused from then on (`?done=disconnect`); another user's is a 404.
+  **Make read-only** (`POST /assistant/connections/<id>/read-only`, no password: it only takes access away; `?done=read-only`), on a connection that reads and changes: from then on it only reads. There is no way back but to end it and connect the assistant again, which takes the password.
+- **Read-only connections** (`ReadOnly` on the grant, `read_only` in `.zone/grants`; `connection.readOnly`, `onlyReads` in `go/security.go`): a connection given less than its user, chosen on the question or made so later.
+  It reads as its user does, and changes nothing: `tools/list` gives it the tools that write nothing (as a viewer's), a writing tool called all the same is refused before it runs (`callMCPTool`, by the table every tool's writing is in: "This connection only reads: whoever connected you chose that. Nothing was changed. …", so the assistant says what it would have written), and an upload with its token is 403.
+  It stays read-only through every refresh of its tokens. The same user's other connections, and their MCP token, are as they were.
+  A connection kept from before there was a choice reads and changes, as it did.
+  Not yet: a token that only reads, and a connection limited to a folder (`docs/plans/assistants-first.md`, part 2).
   The static token is one per user and stays so: several assistants are several connections.
 
 ## Connecting with OAuth
@@ -70,7 +76,8 @@ Zone is its own authorization server, on the same address, as the MCP authorizat
   A redirect URI is `https`, or `http` on `localhost`, `127.0.0.1` or `[::1]` (a program on the user's computer, RFC 8252), without a fragment or a user; one to ten of them (**400** `invalid_redirect_uri`).
   Other schemes (`cursor://` …) are refused for now.
   Client ID Metadata Documents aren't offered yet (the metadata doesn't advertise them, so clients register): they would have Zone fetch an address a stranger names.
-- **The question** (`GET /oauth/authorize`, signed in: anyone else goes through the login and comes back, the question kept in `next`): the page says who asks (the name the client gave: it is only a claim), where the answer goes (the redirect URI's host), as whom the assistant will act ("as you, alice: it will see and change what you do, no more"; a viewer's reads only), and for an address on this computer that any program on it could ask in this name. **Allow** and **Deny**.
+- **The question** (`GET /oauth/authorize`, signed in: anyone else goes through the login and comes back, the question kept in `next`): the page says who asks (the name the client gave: it is only a claim), where the answer goes (the redirect URI's host), as whom the assistant will act ("as you, alice"), and for an address on this computer that any program on it could ask in this name. **Allow** and **Deny**.
+  - **What may it do?** (`may` in the form; Read-only connections, below): **Read and change** (the default: "it sees and changes what you do, no more") or **Only read** ("it searches and reads what you see, and changes nothing"). A viewer isn't asked: theirs reads only.
   - Before anything is shown, the client id and the redirect URI are checked: one Zone doesn't know is a page saying so (**400**), never a redirect. The answer goes only where the registration said: that address exactly, or for a program on this computer the same address at whatever port.
   - What else the client got wrong (no `response_type=code`, no PKCE challenge with `S256`, a `resource` that isn't this wiki's `/mcp`) is a page too (400), with a link back that tells the client (`error=…`).
   - **Allow takes the password again** (`POST /oauth/authorize`), as making a token does and for the same reason: a connection outlasts the session, so a session someone else got hold of mustn't be enough.
@@ -88,7 +95,7 @@ Zone is its own authorization server, on the same address, as the MCP authorizat
   - What gets none is a **400** with `error`: `invalid_grant` (a code wrong, used, older than a minute, for another client or redirect URI, the wrong verifier; a refresh token wrong, used, expired or revoked; a user who can't sign in any more), `invalid_client`, `invalid_target` (another `resource`), `unsupported_grant_type`.
     Failures count against the client as wrong MCP tokens do (`mcpThrottle`: **429** with `Retry-After`).
 - **One scope**, `mcp`: what an assistant may do is its user's role, as with a static token.
-- **Connections are kept** in `.zone/grants` (`grants.go`): the id, the user ("" in a wiki without users: the wiki's), the client's name, the hash of its client id, the redirect host, when it was made, the day it was last used, the token hashes and when they expire.
+- **Connections are kept** in `.zone/grants` (`grants.go`): the id, the user ("" in a wiki without users: the wiki's), the client's name, the hash of its client id, the redirect host, whether it only reads, when it was made, the day it was last used, the token hashes and when they expire.
   Owner-only (0600), written whole, one change at a time (`changeGrants`: a lock in the process and `lockFile` on `.zone/grants.lock`, as a command writes it too), not committed (state, like `.zone/links`), read again when the file changed (`readGrants`).
   Not in the settings file: tokens change by the hour, and a change there is a change of the settings.
 - **What ends a connection**: End on Connect an assistant; its refresh token expiring or being used twice; its user being removed (the Users tab, `zonewiki user remove`); its user setting a new password by a **reset link** (they may have lost the account to someone; the welcome page says so).

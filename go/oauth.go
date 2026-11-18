@@ -256,6 +256,7 @@ type consentView struct {
 	Host     string // where the answer goes
 	Loopback bool   // to this machine: any program on it can ask
 	Viewer   bool
+	ReadOnly bool   // chosen: it reads and changes nothing
 	Error    string // the password was wrong
 	Problem  string // the request can't be answered
 	Back     string // the address the answer goes to (after Allow or Deny, or with a problem the client can be told)
@@ -333,6 +334,7 @@ func oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v.User, v.Viewer = user, s.isViewer(user)
+	v.ReadOnly = r.Method == http.MethodPost && r.PostFormValue("may") == "read"
 	if r.Method != http.MethodPost {
 		show(http.StatusOK)
 		return
@@ -363,7 +365,7 @@ func oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	code := newCode(authCode{user: user, client: q.client.Name, clientHash: hashToken(q.ClientID),
-		redirectURI: q.RedirectURI, redirectHost: to.Host, challenge: q.Challenge})
+		redirectURI: q.RedirectURI, redirectHost: to.Host, challenge: q.Challenge, readOnly: v.ReadOnly})
 	// Not a redirect: the page policy lets a form lead only to Zone itself
 	// (form-action 'self', which browsers hold a form's redirects to), so
 	// the answer is a page that sends the browser on, and shows the way as
@@ -395,6 +397,7 @@ func validGrantUser(s *Settings, user string) bool {
 // restart drops the few that are open).
 type authCode struct {
 	user, client, clientHash, redirectURI, redirectHost, challenge string
+	readOnly                                                       bool // what was allowed: reading only
 	expires                                                        time.Time
 }
 
@@ -501,7 +504,7 @@ func grantTokensFor(r *http.Request) (grantTokens, error) {
 		case !validGrantUser(s, c.user):
 			return none, &tokenRefusal{"invalid_grant", "Whoever allowed this can't sign in any more."}
 		}
-		return newGrant(c.user, c.client, c.clientHash, c.redirectHost)
+		return newGrant(c.user, c.client, c.clientHash, c.redirectHost, c.readOnly)
 	case "refresh_token":
 		tokens, _, err := refreshGrant(r.PostFormValue("refresh_token"), hashToken(clientID),
 			func(user string) bool { return validGrantUser(s, user) })

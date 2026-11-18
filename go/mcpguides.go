@@ -231,10 +231,11 @@ func guidedFolders(user string) [][2]string {
 
 // toolList: the tools for tools/list. read_guides' description names the
 // folders that have guides, so the model knows to read one before drafting
-// for it.
-func toolList(user string) []map[string]any {
+// for it. readOnly (a viewer, a connection that only reads): without the
+// tools that write.
+func toolList(user string, readOnly bool) []map[string]any {
 	all := mcpTools
-	if settings().isViewer(user) {
+	if readOnly {
 		all = slices.DeleteFunc(slices.Clone(all), func(t map[string]any) bool { return writeTool(t["name"].(string)) })
 	}
 	folders := guidedFolders(user)

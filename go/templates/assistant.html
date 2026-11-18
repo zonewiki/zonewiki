@@ -52,17 +52,17 @@
 <h2>Connections</h2>
 {{- if .Connections}}
 <table class="users-table assistant-connections">
-  <thead><tr><th>Assistant</th><th>Answers to</th><th>Since</th><th>Last used</th><th></th></tr></thead>
+  <thead><tr><th>Assistant</th><th>Answers to</th><th>May</th><th>Since</th><th>Last used</th><th></th></tr></thead>
   <tbody>
   {{- range .Connections}}
   <tr>
-    <td>{{.Client}}</td><td>{{.Redirect}}</td><td>{{.Made}}</td><td>{{.Used}}</td>
-    <td><form method="post" action="/assistant/connections/{{.ID}}/revoke"><button type="submit" class="btn">End</button></form></td>
+    <td>{{.Client}}</td><td>{{.Redirect}}</td><td class="assistant-may">{{if or .ReadOnly $.Viewer}}Only read{{else}}Read and change{{end}}</td><td>{{.Made}}</td><td>{{.Used}}</td>
+    <td class="assistant-conn-actions">{{if not (or .ReadOnly $.Viewer)}}<form method="post" action="/assistant/connections/{{.ID}}/read-only"><button type="submit" class="btn" title="From now on it reads and changes nothing">Make read-only</button></form> {{end}}<form method="post" action="/assistant/connections/{{.ID}}/revoke"><button type="submit" class="btn">End</button></form></td>
   </tr>
   {{- end}}
   </tbody>
 </table>
-<p class="users-help">An assistant whose connection is ended is refused from then on; it can ask again, and you allow it again.</p>
+<p class="users-help">An assistant whose connection is ended is refused from then on; it can ask again, and you allow it again. One that only reads is refused what it tries to change; to let it write again, end its connection and connect it once more.</p>
 {{- else}}
 <p class="assistant-none">{{if .User}}No assistant is connected as you this way{{else}}No assistant is connected this way{{end}}.</p>
 {{- end}}

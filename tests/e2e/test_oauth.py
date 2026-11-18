@@ -93,3 +93,38 @@ def test_deny_sends_the_browser_back_with_the_refusal(page, wiki, monkeypatch):
     query = parse_qs(urlsplit(page.url).query)
     assert query["error"] == ["access_denied"] and "code" not in query
     assert page.csp_violations == []
+
+
+def test_only_read_is_chosen_on_the_question_and_said_on_the_page(page, wiki, monkeypatch):
+    from tests.e2e.conftest import SCREENSHOT_DIR
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "")})
+    client_side(page)
+    _, address = ask(page)
+    page.goto(address)
+    page.get_by_placeholder("User name").fill("alice")
+    page.get_by_placeholder("Password").fill("pw")
+    page.get_by_role("button", name="Sign in").click()
+    expect(page.get_by_label("Read and change")).to_be_checked()
+    page.screenshot(path=str(SCREENSHOT_DIR / "oauth-may.png"))
+    page.set_viewport_size({"width": 375, "height": 700})
+    assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+    page.get_by_label("Only read").check()
+    page.get_by_label("Password").fill("pw")
+    page.get_by_role("button", name="Allow").click()
+    page.wait_for_url(re.compile(r"^https://client\.example/callback\?"))
+    code = parse_qs(urlsplit(page.url).query)["code"][0]
+    client_id = parse_qs(urlsplit(address).query)["client_id"][0]
+    tokens = page.request.post("/oauth/token", form={
+        "grant_type": "authorization_code", "code": code, "client_id": client_id, "redirect_uri": CALLBACK,
+        "code_verifier": VERIFIER}).json()
+    call = page.request.post("/mcp", headers={"Authorization": f"Bearer {tokens['access_token']}"}, data={
+        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+        "params": {"name": "write_page", "arguments": {"slug": "x", "content": "x"}}}).json()
+    assert call["result"]["isError"] and "only reads" in call["result"]["content"][0]["text"]
+    page.set_viewport_size({"width": 1280, "height": 800})
+    page.goto("/assistant")
+    row = page.locator(".assistant-connections tbody tr")
+    expect(row.locator(".assistant-may")).to_have_text("Only read")
+    expect(row.get_by_role("button", name="Make read-only")).to_have_count(0)
+    page.screenshot(path=str(SCREENSHOT_DIR / "assistant-may.png"))
+    assert page.csp_violations == []
