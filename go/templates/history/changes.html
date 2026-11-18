@@ -1,6 +1,8 @@
 {{- /* /changes: the wiki's commits a day at a time, newest first (changes.go):
     when, what, who (and whether through an assistant), and what it changed:
-    a page opens what the commit changed on it. The filters are a GET form,
+    a page opens what the commit changed on it. Undo puts a commit's pages
+    back (POST /changes/undo, undoChangesOp); on the latest of an assistant's
+    run of work, Undo all N takes the run back together, asked first. The filters are a GET form,
     so a filtered list has an address. */ -}}
 {{define "body"}}
 {{.BreadcrumbHTML}}
@@ -17,10 +19,16 @@
   <button type="submit" class="btn">Show</button>
   {{- if .Filtered}} <a href="/changes" class="changes-all">All changes</a>{{end}}
 </form>
+{{- with .Undone}}<p class="users-done" role="status">{{.}} The undo is the change at the top: undo it to have them back.</p>{{end}}
+{{- with .UndoError}}<p class="users-error" role="alert">Not undone. {{.}}</p>{{end}}
 {{- range .Days}}
 <h2 class="changes-day">{{.Label}}</h2>
 <ol class="hist-list changes-list">
-{{- range .Rows}}<li class="hist-row changes-row"><span class="hist-when" title="{{.Rel}}">{{.Time}}</span><span class="changes-what">{{.What}}{{with .Author}}<span class="hist-by"> · {{.}}</span>{{end}}{{if .Assistant}} <span class="changes-assistant" title="Written by an assistant{{with .Author}} acting for {{.}}{{end}}{{if .Via}}; {{.Via}} is the name it gave when it was connected{{end}}">{{if .Via}}through {{.Via}}{{else}}assistant{{end}}</span>{{end}}</span><span class="changes-items">{{range .Items}}{{if .Href}}<a href="{{.Href}}">{{.Label}}</a>{{else}}<span>{{.Label}}</span>{{end}}{{end}}</span></li>{{end -}}
+{{- range .Rows}}<li class="hist-row changes-row"><span class="hist-when" title="{{.Rel}}">{{.Time}}</span><span class="changes-what">{{.What}}{{with .Author}}<span class="hist-by"> · {{.}}</span>{{end}}{{if .Assistant}} <span class="changes-assistant" title="Written by an assistant{{with .Author}} acting for {{.}}{{end}}{{if .Via}}; {{.Via}} is the name it gave when it was connected{{end}}">{{if .Via}}through {{.Via}}{{else}}assistant{{end}}</span>{{end}}</span><span class="changes-items">{{range .Items}}{{if .Href}}<a href="{{.Href}}">{{.Label}}</a>{{else}}<span>{{.Label}}</span>{{end}}{{end}}</span>
+{{- if or .Undo .Session}}<span class="changes-undo">
+{{- if .Undo}}<form method="post" action="/changes/undo"><input type="hidden" name="sha" value="{{.Undo}}"><input type="hidden" name="back" value="{{$.Back}}"><button type="submit" class="btn btn-sm" title="Put what this changed back as it was before. The undo is a change too, and can be undone.">Undo</button></form>{{end}}
+{{- if .Session}}<form method="post" action="/changes/undo" data-confirm="Undo {{.SessionSays}}? Every page they changed goes back to what it was before them."><input type="hidden" name="back" value="{{$.Back}}">{{range .Session}}<input type="hidden" name="sha" value="{{.}}">{{end}}<button type="submit" class="btn btn-sm" title="Undo {{.SessionSays}}">Undo all {{len .Session}}</button></form>{{end}}
+</span>{{end}}</li>{{end -}}
 </ol>
 {{- else}}
 <p class="hist-empty">{{if .Filtered}}No changes like that.{{else}}No changes yet.{{end}}</p>

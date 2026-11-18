@@ -362,7 +362,16 @@ Nobody types ids: in the editor, `[[task:` (or the formatting bar's task button)
   Found in the search modal's list (pinned above the pages, before Deleted Pages), from a page's History ("Changes across the wiki") and from Connect an assistant ("your assistants' changes": the list by you, only by an assistant).
   In sharing mode a commit shows only when nothing it changed is hidden: its message names what it changed.
   Not for a public wiki's visitor.
-  Not yet there: undoing a change from the list (`docs/plans/assistants-first.md`, part 1).
+- **Undo** (on a row of Changes; `POST /changes/undo`, `undoChangesOp` in `go/pageops.go`; an assistant's `undo_changes`) takes a change back whole: every page it changed is as it was before it, a page it made is deleted again, a page it deleted is back, in one commit, "Undo 1a2b3c4: Update garden".
+  One click and no question: the undo is a change like any other, at the top of the list, and undoing it brings the change back. A page's History calls it "Undid the change of <time>".
+  **What can be undone**, and what the operation refuses otherwise, saying why:
+  a change of pages alone (one that changed tasks or files too is not: Undo doesn't put those back);
+  each page one its reader sees and may write (a guide: an admin; a viewer: none; a change they don't see all of is answered as no change at all, 404);
+  no page moved (a rename is undone by renaming back, which asks who may);
+  and no page changed again since, by a commit or by text not committed yet: the undo would take that along. The page's History restores any version instead.
+  **An assistant's run of work together**: the commits an assistant made for one user through one connection, none more than 30 minutes after the one before (`sessionGap`; other people's commits between them don't end it), are a run.
+  The latest of them offers **Undo all N** when the run can be undone as one: nothing but the run's own commits changed its pages since the first of them. It asks first, saying how many, by which assistant and from when to when; the result is one commit, "Undo 3 changes: …".
+  Changes shows the buttons from what the list knows (`undoOffers`: the kinds of files, who may write, the wiki's latest 1,000 commits for "changed again", `undoWindow`); the operation checks again, exactly, so an offer that no longer holds is refused and said ("Not undone. garden was changed again since …").
 
 ### Table of Contents
 

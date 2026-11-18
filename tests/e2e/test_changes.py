@@ -42,3 +42,30 @@ def test_fits_a_phone(new_page, wiki):
     expect(pg.locator(".changes-row")).to_have_count(4)   # and the wiki's first commit
     assert horizontal_overflow(pg) <= 0
     pg.screenshot(path=str(SCREENSHOT_DIR / "changes-phone.png"))
+
+
+def test_undo_one_change_and_an_assistants_run(page, wiki):
+    wiki.write("garden", "# Garden\n\nBeds.\n")
+    wiki.git("add", "-A")
+    wiki.git("commit", "-q", "-m", "Update garden")
+    for text, message in (("# Garden\n\nBeds.\n\nPaths.\n", "Append to garden (MCP)\n\nAssistant: Claude"),
+                          ("# Garden\n\nBeds.\n\nPaths.\n\nA pond.\n", "Append to garden: a pond (MCP)\n\nAssistant: Claude")):
+        wiki.write("garden", text)
+        wiki.git("commit", "-q", "-am", message)
+    page.goto("/changes")
+    rows = page.locator(".changes-row")
+    expect(rows.first.locator(".changes-assistant")).to_have_text("through Claude")
+    page.screenshot(path=str(SCREENSHOT_DIR / "changes-undo.png"))
+    # The assistant's run together: asked first.
+    said = []
+    page.once("dialog", lambda d: (said.append(d.message), d.accept()))
+    rows.first.get_by_role("button", name="Undo all 2").click()
+    page.wait_for_url("**/changes?undone=**")
+    assert "the 2 changes Claude made" in said[0]
+    expect(page.get_by_role("status")).to_contain_text("Undone: garden as before.")
+    assert wiki.read("garden") == "# Garden\n\nBeds.\n"
+    # One change, here the undo itself: no question, it is a change that can be undone too.
+    expect(rows.first).to_contain_text("Undo 2 changes")
+    rows.first.get_by_role("button", name="Undo", exact=True).click()
+    page.wait_for_url("**/changes?undone=**")
+    assert "A pond." in wiki.read("garden")

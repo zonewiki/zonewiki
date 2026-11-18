@@ -599,11 +599,14 @@ func gitLog(path string, max int) []GitEntry {
 
 // LogEntry is a commit of the wiki: sha, time (YYYY-MM-DD HH:MM), how long
 // ago, message, author (commitAuthor) and the files it changed (relative
-// to the wiki); Hidden: how many more it changed that see didn't take.
+// to the wiki) and what it did to each (Kinds, a letter a file: A added, M
+// changed, D deleted; a rename is a D and an A); Hidden: how many more it
+// changed that see didn't take.
 type LogEntry struct {
 	Sha, Time, Rel, Msg, Author string
 	Via                         string // which assistant wrote it (viaOfCommit), "" for none or not said
 	Files                       []string
+	Kinds                       string
 	Hidden                      int
 }
 
@@ -625,7 +628,7 @@ func gitLogAll(since, under string, limit int, see func(path string) bool, keep 
 	}
 	var entries []LogEntry
 	for skip := 0; len(entries) < limit; skip, batch = skip+batch, 2*batch {
-		args := []string{"log", "-n", strconv.Itoa(batch), "--skip", strconv.Itoa(skip), "--name-only",
+		args := []string{"log", "-n", strconv.Itoa(batch), "--skip", strconv.Itoa(skip), "--name-status", "--no-renames",
 			"--date=format:%Y-%m-%d %H:%M", "--format=\x1e%H\x1f%ad\x1f%ar\x1f%an\x1f" + viaFormat + "\x1f%s"}
 		if since != "" {
 			args = append(args, "--since="+since+" 00:00")
@@ -642,11 +645,13 @@ func gitLogAll(since, under string, limit int, see func(path string) bool, keep 
 			}
 			e := LogEntry{Sha: parts[0], Time: parts[1], Rel: parts[2], Author: commitAuthor(parts[3]), Msg: parts[5],
 				Via: viaOfCommit(parts[5], parts[4])}
-			for _, n := range mdtext.SplitLines(names) {
-				switch n = mdtext.LineBody(n); {
-				case strings.TrimSpace(n) == "":
+			for _, line := range mdtext.SplitLines(names) {
+				kind, n, _ := strings.Cut(mdtext.LineBody(line), "\t")
+				switch {
+				case strings.TrimSpace(n) == "" || kind == "":
 				case see == nil || see(n):
 					e.Files = append(e.Files, n)
+					e.Kinds += kind[:1]
 				default:
 					e.Hidden++
 				}
@@ -660,6 +665,62 @@ func gitLogAll(since, under string, limit int, see func(path string) bool, keep 
 		}
 	}
 	return entries[:min(limit, len(entries))]
+}
+
+// fileChange: a file a commit changed (relative to the wiki) and how: 'A'
+// added, 'M' changed, 'D' deleted.
+type fileChange struct {
+	Path string
+	Kind byte
+}
+
+// commitOf: the commit a version names (a sha or its start), whole, and
+// its message's first line; false for none.
+func commitOf(version string) (sha, subject string, ok bool) {
+	if !shaRE.MatchString(version) {
+		return "", "", false
+	}
+	r := runGit("log", "-n", "1", "--format=%H%x1f%s", version+"^{commit}", "--")
+	sha, subject, found := strings.Cut(strings.TrimRight(r.Stdout, "\n"), "\x1f")
+	return sha, subject, r.Code == 0 && found && shaRE.MatchString(sha)
+}
+
+// commitChanges: every file the commit changed, with how (a rename is a
+// deletion and an addition; a merge changed none).
+func commitChanges(sha string) []fileChange {
+	r := runGit("diff-tree", "--root", "--no-commit-id", "-r", "--name-status", "--no-renames", "-z", sha)
+	if r.Code != 0 {
+		return nil
+	}
+	var out []fileChange
+	parts := strings.Split(r.Stdout, "\x00")
+	for i := 0; i+1 < len(parts); i += 2 {
+		if parts[i] != "" && parts[i+1] != "" {
+			out = append(out, fileChange{Path: parts[i+1], Kind: parts[i][0]})
+		}
+	}
+	return out
+}
+
+// lastCommitsOf: the n latest commits that changed the file (relative to
+// the wiki), newest first; not across renames.
+func lastCommitsOf(rel string, n int) []string {
+	return strings.Fields(runGit("log", "-n", strconv.Itoa(n), "--format=%H", "--", rel).Stdout)
+}
+
+// latestCommits: for each file changed in the wiki's n latest commits,
+// those commits, newest first.
+func latestCommits(n int) map[string][]string {
+	out := map[string][]string{}
+	for _, record := range strings.Split(runGit("log", "-n", strconv.Itoa(n), "--name-only", "--no-renames", "--format=%x1e%H").Stdout, "\x1e")[1:] {
+		sha, names, _ := strings.Cut(record, "\n")
+		for _, name := range mdtext.SplitLines(names) {
+			if name = mdtext.LineBody(name); strings.TrimSpace(name) != "" {
+				out[name] = append(out[name], sha)
+			}
+		}
+	}
+	return out
 }
 
 // isUncommitted: the file differs from its last commit (or was never
@@ -980,6 +1041,8 @@ var (
 	promotedRE = regexp.MustCompile(`^Promote (\S+) to (\S+)$`)
 	appendedRE = regexp.MustCompile(`^Append (\S+) to (\S+)$`)
 	restoredRE = regexp.MustCompile(`^Restore \S+ to ([0-9a-f]{7,40})$`)
+	undoneRE   = regexp.MustCompile(`^Undo ([0-9a-f]{7,40}): `)
+	undoneNRE  = regexp.MustCompile(`^Undo (\d+) changes: `)
 )
 
 // versionLabel: what a commit did to the page, in words: Zone's own commit
@@ -1024,6 +1087,17 @@ func versionLabel(e GitEntry, entries []GitEntry) string {
 			}
 		}
 		return "Restored an older version"
+	}
+	if m := undoneRE.FindStringSubmatch(msg); m != nil {
+		for _, old := range entries {
+			if strings.HasPrefix(old.Sha, m[1]) {
+				return "Undid the change of " + old.Time
+			}
+		}
+		return "Undid a change"
+	}
+	if m := undoneNRE.FindStringSubmatch(msg); m != nil {
+		return "Undid " + m[1] + " changes"
 	}
 	return msg
 }

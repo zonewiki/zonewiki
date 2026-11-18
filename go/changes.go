@@ -4,6 +4,7 @@
 package main
 
 import (
+	"fmt"
 	"html/template"
 	"net/http"
 	"net/url"
@@ -121,7 +122,12 @@ func changesView(w http.ResponseWriter, r *http.Request) {
 		limit = min(max(n, 1), changesMost)
 	}
 	entries := wikiChanges(rq.user, of, limit)
-	v := &changesPageView{Of: of, Users: users, Days: changeDays(entries, time.Now()),
+	shown := 0 // in the list's address only when asked for
+	if limit != changesShown {
+		shown = limit
+	}
+	v := &changesPageView{Of: of, Users: users, Days: changeDays(entries, time.Now(), undoOffers(rq.user, entries)),
+		Back: changesURL(of, shown), Undone: q.Get("undone"), UndoError: q.Get("undo_error"),
 		Filtered:       of.Since != "" || of.Under != "" || of.By != "" || of.Assistant,
 		BreadcrumbHTML: breadcrumb(rq, []crumb{{"Changes", ""}}, "", false, "", "")}
 	if len(entries) == limit && limit < changesMost {
@@ -171,6 +177,9 @@ type changesPageView struct {
 	Days           []changeDay
 	Filtered       bool   // a filter is set
 	More           string // where the list goes on: the same with more commits
+	Back           string // this list's address, where an undo comes back to
+	Undone         string // what an undo just did, in words
+	UndoError      string // or why it didn't
 	BreadcrumbHTML template.HTML
 }
 
@@ -187,14 +196,172 @@ type changeRow struct {
 	Assistant               bool
 	Via                     string // which assistant, when the commit says
 	Items                   []changeItem
+	undoOffer
+}
+
+// undoOffer: what a row of Changes offers to undo. Undo: the commit
+// itself (its sha), "" when it can't be. Session: the commits of the
+// assistant's run of work this one is the latest of (itself among them),
+// when they can be undone together; SessionSays what that would do.
+type undoOffer struct {
+	Undo        string
+	Session     []string
+	SessionSays string
+}
+
+// undoWindow: how far back Changes looks for whether a page was changed
+// again: a commit older than the wiki's latest undoWindow offers no Undo
+// (a page's history restores any version).
+const undoWindow = 1000
+
+// sessionGap: an assistant's commits no further apart are one run of work.
+const sessionGap = 30 * time.Minute
+
+// undoOffers: for each of the commits (newest first, as user sees them)
+// what Changes offers to undo, by sha. It offers what undoChangesOp will
+// most likely do, cheaply, from what the list knows; the operation checks
+// again, and exactly.
+func undoOffers(user string, entries []LogEntry) map[string]undoOffer {
+	offers := map[string]undoOffer{}
+	if len(entries) == 0 || settings().isViewer(user) || user == visitor {
+		return offers
+	}
+	latest := latestCommits(undoWindow)
+	// pagesOnly: a commit of the kind an undo takes: pages alone, all of
+	// them seen and the user's to write, none moved.
+	pagesOnly := func(e LogEntry) bool {
+		if e.Hidden > 0 || len(e.Files) == 0 || strings.Contains(e.Kinds, "A") && strings.Contains(e.Kinds, "D") {
+			return false
+		}
+		for _, f := range e.Files {
+			slug, isPage := strings.CutSuffix(f, ".md")
+			if !isPage || safePath(slug) == "" || !canWrite(user, slug) || latest[f] == nil {
+				return false
+			}
+		}
+		return true
+	}
+	// together: nothing but these commits changed their pages since the
+	// oldest of them did.
+	together := func(run []LogEntry) bool {
+		touched := map[string]map[string]bool{} // file → the run's commits that changed it
+		for _, e := range run {
+			for _, f := range e.Files {
+				if touched[f] == nil {
+					touched[f] = map[string]bool{}
+				}
+				touched[f][e.Sha] = true
+			}
+		}
+		for f, ours := range touched {
+			if len(latest[f]) < len(ours) {
+				return false
+			}
+			for _, sha := range latest[f][:len(ours)] {
+				if !ours[sha] {
+					return false
+				}
+			}
+		}
+		return true
+	}
+	runs := map[string][]LogEntry{} // who and through what → their run of work being read
+	finish := func(key string) {
+		if run := runs[key]; len(run) > 1 && together(run) {
+			o := offers[run[0].Sha]
+			for _, e := range run {
+				o.Session = append(o.Session, e.Sha)
+			}
+			by := "an assistant"
+			if run[0].Via != "" {
+				by = run[0].Via
+			}
+			o.SessionSays = fmt.Sprintf("the %d changes %s made from %s to %s", len(run), by,
+				run[len(run)-1].Time, run[0].Time)
+			offers[run[0].Sha] = o
+		}
+		delete(runs, key)
+	}
+	for _, e := range entries {
+		if !pagesOnly(e) {
+			continue
+		}
+		if together([]LogEntry{e}) {
+			offers[e.Sha] = undoOffer{Undo: e.Sha}
+		}
+		if !byAssistant(e.Msg) {
+			continue
+		}
+		key := e.Author + "\x00" + e.Via
+		if run := runs[key]; len(run) > 0 && commitTime(run[len(run)-1]).Sub(commitTime(e)) > sessionGap {
+			finish(key)
+		}
+		runs[key] = append(runs[key], e)
+	}
+	for key := range runs {
+		finish(key)
+	}
+	return offers
+}
+
+// commitTime: when a commit was made, to the minute.
+func commitTime(e LogEntry) time.Time {
+	t, _ := time.Parse("2006-01-02 15:04", e.Time)
+	return t
+}
+
+// undoChangesRoute: POST /changes/undo: the changes named by sha (one, or
+// a session's) undone (undoChangesOp); back to the list it came from,
+// which says what was done or why not.
+func undoChangesRoute(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		badRequestPage(w)
+		return
+	}
+	// Back to the list as it was: only its own filters, read as it reads them.
+	back := url.Values{}
+	if u, err := url.Parse(r.PostForm.Get("back")); err == nil {
+		for _, key := range []string{"user", "under", "since", "assistant", "n"} {
+			if v := u.Query().Get(key); v != "" {
+				back.Set(key, v)
+			}
+		}
+	}
+	done, err := undoChangesOp(userOf(r), r.Form["sha"], "", nil)
+	if rf, refused := refusalOf(err); refused {
+		if rf.kind == refusedNotFound || rf.kind == refusedReadOnly {
+			pageFailed(w, r, err)
+			return
+		}
+		back.Set("undo_error", rf.msg)
+	} else if err != nil {
+		serverError(w, r, err)
+		return
+	} else {
+		back.Set("undone", undoneSays(done))
+	}
+	http.Redirect(w, r, "/changes?"+back.Encode(), http.StatusSeeOther)
+}
+
+// undoneSays: what an undo did, in a sentence.
+func undoneSays(u *undone) string {
+	var parts []string
+	if len(u.back) > 0 {
+		parts = append(parts, strings.Join(u.back, ", ")+" as before")
+	}
+	if len(u.gone) > 0 {
+		parts = append(parts, strings.Join(u.gone, ", ")+" deleted again")
+	}
+	return "Undone: " + strings.Join(parts, "; ") + "."
 }
 
 // changeItem: something a commit changed: a page (Href: what the commit
 // changed on it), the tasks, or another file by its path (no Href).
 type changeItem struct{ Label, Href string }
 
-// changeDays: commits, newest first, as the rows of their days.
-func changeDays(entries []LogEntry, now time.Time) []changeDay {
+// changeDays: commits, newest first, as the rows of their days, each with
+// what it offers to undo.
+func changeDays(entries []LogEntry, now time.Time, offers map[string]undoOffer) []changeDay {
 	today, yesterday := now.Format("2006-01-02"), now.AddDate(0, 0, -1).Format("2006-01-02")
 	var days []changeDay
 	last := ""
@@ -210,7 +377,7 @@ func changeDays(entries []LogEntry, now time.Time) []changeDay {
 			}
 			days, last = append(days, changeDay{Label: label}), day
 		}
-		row := changeRow{Time: clock, Rel: e.Rel, Author: e.Author, Assistant: byAssistant(e.Msg), Via: e.Via,
+		row := changeRow{Time: clock, Rel: e.Rel, Author: e.Author, Assistant: byAssistant(e.Msg), Via: e.Via, undoOffer: offers[e.Sha],
 			What: strings.TrimSpace(strings.TrimSuffix(e.Msg, assistantMark)), Items: changeItems(e)}
 		days[len(days)-1].Rows = append(days[len(days)-1].Rows, row)
 	}

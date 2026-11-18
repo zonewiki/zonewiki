@@ -287,6 +287,7 @@ def test_what_a_visitor_never_writes(client, wiki, edit):
             ("POST", "/rename/garden", {"data": {"new_name": "yard"}}),
             ("POST", "/delete/garden", {}),
             ("POST", f"/restore/garden/{head}", {}),
+            ("POST", "/changes/undo", {"data": {"sha": head}}),
             ("POST", "/api/commit-all", {}),
             ("POST", "/api/notes", {"data": {"title": "Mine"}}),
             ("POST", "/api/tasks", {"json": {"title": "Mine"}}),

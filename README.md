@@ -27,8 +27,9 @@ everything as it is. Search indexes and caches are rebuilt from the files.
   [MCP server](#connect-an-ai-assistant), an AI assistant can do everything
   you can: search, read, create, edit, rename and restore pages, file
   notes, and manage tasks. It acts as you and never sees more than you do;
-  its edits land as git commits marked `(MCP)`, listed under Changes, that
-  you can review, diff or undo. Zone brings no model of its own: the assistant is yours, whichever
+  its edits land as git commits marked `(MCP)` and named after the assistant,
+  listed under Changes, where you review them and undo one or a whole run
+  of them. Zone brings no model of its own: the assistant is yours, whichever
   you use, and what it learns stays in your files, not in its maker's cloud.
 - **Pages, notes and tasks in one place.** The wiki, Tasks and Notes share links,
   search and history. A page can show a task as a chip, and a task can link to
@@ -85,9 +86,10 @@ editor; a change on disk shows up immediately.
   tasks.
 - Every page's version history: what each save changed, any version, and
   one-click restore. Deleted pages can be brought back.
-- Changes: what changed across the wiki, newest first, by whom and whether
-  through an assistant; filter by person, by folder, by day, or to what
-  assistants wrote.
+- Changes: what changed across the wiki, newest first, by whom and through
+  which assistant; filter by person, by folder, by day, or to what
+  assistants wrote. Undo a change with one click, or everything an assistant
+  did in one go.
 - Present a page as slides, one per heading.
 - Print a page, or save it as a PDF (Print… in the page's menu: a print
   layout that shows the page alone, light even on a dark screen).

@@ -96,6 +96,7 @@ In a public wiki (`ZONE_PUBLIC`; Public wikis in `docs/spec/security.md`) a visi
 | GET    | `/diff/<slug>/<sha>`  | What one save changed in a page |
 | POST   | `/restore/<slug>/<sha>` | Restore a page to a prior version; creates a new commit |
 | GET    | `/changes`            | Changes: the wiki's commits, newest first, each as its reader may see it; `?user=`, `?assistant=1`, `?under=`, `?since=`, `?n=` (git only; see Version history) |
+| POST   | `/changes/undo`       | Undo changes: `sha` (one, or several: an assistant's run of work), `back` (the list's address); the pages they changed are as before them, in one commit; back to the list, which says what was done or why not (`?undone=`, `?undo_error=`) |
 | GET    | `/page/_deleted`      | Auto-generated list of pages deleted from git history, with one-click restore (git only) |
 
 A `<slug>` in a folder starting with `_` or `.` (`_assets/`, `_tasks/`, `.zone/`, `.git/`, `a/_drafts/` …) names no page: `safePath()` refuses it (also after `..`), so no route reads or writes a `.md` file there, even by direct URL (400, or 404 for the page preview).

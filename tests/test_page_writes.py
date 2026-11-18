@@ -3,8 +3,10 @@ tool, on the same wiki: the same checks and the same care for text not
 yet in git, whichever door it came through (go/pageops.go)."""
 
 import json
+import re
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 
@@ -866,3 +868,123 @@ def test_a_registry_naming_its_default_list_keeps_it_first(client, shop):
     assert client.post("/tasks/new-list", data={"name": "home"}, headers=HOST).status_code == 302
     text = registry.read_text()
     assert '"pinned": ["work", "shop", "home"]' in text and "default" not in text   # the new list pinned, last
+
+
+# ── Undo: changes of pages taken back whole (undoChangesOp) ─────────────────
+
+def undo(client, door, *shas, token=TOKEN):
+    """Undo the changes; True when done, else what the refusal said."""
+    if door == "browser":
+        resp = client.post("/changes/undo", data={"sha": list(shas)}, headers=HOST)
+        if resp.status_code != 303:
+            return f"{resp.status_code}"
+        said = parse_qs(urlparse(resp.headers["Location"]).query)
+        return True if "undone" in said else said["undo_error"][0]
+    text, refused = mcp(client, "undo_changes", token, versions=list(shas))
+    return text if refused else True
+
+
+@pytest.mark.parametrize("door", DOORS)
+class TestUndo:
+
+    def test_an_edit(self, client, wiki, door):
+        commit(wiki, "p", "# P\n\none\n")
+        v2 = commit(wiki, "p", "# P\n\ntwo\n", "Update p: second thoughts (MCP)")
+        assert undo(client, door, v2) is True
+        assert (wiki / "p.md").read_text() == "# P\n\none\n"
+        assert subjects(wiki)[0] == f"Undo {v2[:7]}: Update p: second thoughts" + (" (MCP)" if door == "mcp" else "")
+        assert git(wiki, "status", "--porcelain").strip() == ""
+        # The undo is a change: undone, the edit is back.
+        assert undo(client, door, git(wiki, "rev-parse", "HEAD").strip()) is True
+        assert (wiki / "p.md").read_text() == "# P\n\ntwo\n"
+
+    def test_a_new_page_goes_and_a_deleted_one_comes_back(self, client, wiki, door):
+        made = commit(wiki, "trips/rome", "# Rome\n")
+        assert undo(client, door, made) is True and not (wiki / "trips/rome.md").exists()
+        assert "trips/rome.md" not in git(wiki, "ls-files")
+        commit(wiki, "trips/oslo", "# Oslo\n")
+        git(wiki, "rm", "-q", "trips/oslo.md")
+        git(wiki, "commit", "-q", "-m", "Delete trips/oslo")
+        assert not (wiki / "trips").exists()
+        assert undo(client, door, git(wiki, "rev-parse", "HEAD").strip()) is True
+        assert (wiki / "trips/oslo.md").read_text() == "# Oslo\n"
+
+    def test_several_together_in_one_commit(self, client, wiki, door):
+        commit(wiki, "p", "# P\n\none\n")
+        v2 = commit(wiki, "p", "# P\n\ntwo\n")
+        other = commit(wiki, "elsewhere", "# Elsewhere\n")            # someone else's, in between
+        v3 = commit(wiki, "p", "# P\n\nthree\n")
+        q = commit(wiki, "q", "# Q\n")
+        before = len(subjects(wiki))
+        assert undo(client, door, q, v3, v2, v2) is True               # in any order, one named twice
+        assert (wiki / "p.md").read_text() == "# P\n\none\n" and not (wiki / "q.md").exists()
+        assert (wiki / "elsewhere.md").exists() and other
+        assert len(subjects(wiki)) == before + 1 and subjects(wiki)[0].startswith("Undo 3 changes: ")
+
+    def test_not_what_was_changed_again(self, client, wiki, door):
+        commit(wiki, "p", "# P\n\none\n")
+        v2 = commit(wiki, "p", "# P\n\ntwo\n")
+        commit(wiki, "p", "# P\n\nthree\n")
+        head = git(wiki, "rev-parse", "HEAD")
+        assert "changed again since" in undo(client, door, v2)
+        # Nor a page with text not committed yet.
+        v3 = head.strip()
+        (wiki / "p.md").write_text("# P\n\nthree and a half\n")
+        assert "not committed yet" in undo(client, door, v3)
+        assert (wiki / "p.md").read_text() == "# P\n\nthree and a half\n" and git(wiki, "rev-parse", "HEAD") == head
+
+    def test_only_changes_of_pages_alone_and_none_moved(self, client, wiki, door):
+        commit(wiki, "p", "# P\n")
+        assert rename(client, door, "p", "q")
+        assert "rename it back" in undo(client, door, git(wiki, "rev-parse", "HEAD").strip())
+        client.post("/api/tasks", json={"title": "A task"}, headers=HOST)
+        assert "changed tasks too" in undo(client, door, git(wiki, "rev-parse", "HEAD").strip())
+        (wiki / "_assets").mkdir(exist_ok=True)
+        (wiki / "_assets/x.txt").write_text("x")
+        mixed = commit(wiki, "r", "# R\n")                              # git add -A: the file with it
+        assert "changed files too" in undo(client, door, mixed)
+        head = git(wiki, "rev-parse", "HEAD")
+        for nothing in ("abcdef1", "not a version", ""):
+            assert undo(client, door, nothing) is not True
+        assert undo(client, door) is not True                            # none named
+        assert undo(client, door, *[f"{i:07x}" for i in range(60)]) is not True
+        assert (wiki / "q.md").exists() and (wiki / "r.md").exists() and git(wiki, "rev-parse", "HEAD") == head
+
+    def test_the_home_page_stays(self, client, wiki, door):
+        git(wiki, "rm", "-q", "--cached", "index.md")
+        git(wiki, "commit", "-q", "-m", "Forget index")
+        git(wiki, "add", "index.md")
+        git(wiki, "commit", "-q", "-m", "Add index")
+        assert "home page" in undo(client, door, git(wiki, "rev-parse", "HEAD").strip())
+        assert (wiki / "index.md").exists()
+
+
+class TestUndoAnothersPages:
+    """With users: a change is undone by who may write every page it changed."""
+
+    @pytest.fixture(autouse=True)
+    def users(self, client, wiki, monkeypatch):
+        monkeypatch.setattr(settings, "MCP_TOKEN", "")
+        monkeypatch.setattr(settings, "USERS", {"alice": ("alice-pw", "alice-token"), "bob": ("bob-pw", "bob-token")})
+        monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}})
+
+    @pytest.mark.parametrize("door", DOORS)
+    def test_a_guide_is_an_admins(self, client, wiki, door):
+        guide = commit(wiki, "wiki-guide", "# Wiki guide\n\nWrite short.\n")
+        shared = commit(wiki, "p", "# P\n")
+        client.post("/login", data={"username": "bob", "password": "bob-pw"}, headers=HOST)
+        assert undo(client, door, guide, token="bob-token") is not True and (wiki / "wiki-guide.md").exists()
+        if door == "browser":
+            assert undo(client, door, shared) is True
+        else:   # an assistant is given the guide first, and passes its id
+            text, refused = mcp(client, "undo_changes", "bob-token", versions=[shared])
+            assert refused and "Write short." in text
+            ids = re.findall(r"\(id ([^)]+)\)", text)
+            assert not mcp(client, "undo_changes", "bob-token", versions=[shared], guides=ids)[1]
+        assert not (wiki / "p.md").exists() and git(wiki, "log", "-n1", "--format=%an").strip() == "bob"
+        client.post("/login", data={"username": "alice", "password": "alice-pw"}, headers=HOST)
+        if door == "browser":
+            assert undo(client, door, guide) is True
+        else:
+            assert not mcp(client, "undo_changes", "alice-token", versions=[guide], guides=ids)[1]
+        assert not (wiki / "wiki-guide.md").exists()

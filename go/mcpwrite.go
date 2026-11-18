@@ -619,3 +619,36 @@ func restorePage(args jsonObj, base, user string) (string, error) {
 	return what + " " + slug + " as of version " + runePrefix(sha, 7) + " (" + entries[i].Time + ").\n" +
 		pageInfo(slug, base) + pendingNote(slug, kept) + linkWarning(slug, before, content, user) + guideNote(slug, user), nil
 }
+
+// undoChangesTool: undo_changes, the browser's Undo on Changes
+// (undoChangesOp): the changes named by their versions undone together.
+func undoChangesTool(args jsonObj, base, user string) (string, error) {
+	if !cfg.GitEnabled {
+		return "", noGit()
+	}
+	versions, err := listArg(args, "versions", "versions must be a list of versions, as history gives them",
+		func(s string) []string { return strings.Fields(strings.ReplaceAll(s, ",", " ")) })
+	if err != nil {
+		return "", err
+	}
+	if len(versions) == 0 {
+		return "", toolErr("versions: name the changes to undo, by their versions (history lists them)")
+	}
+	suffix, err := msgSuffix(args)
+	if err != nil {
+		return "", err
+	}
+	done, err := undoChangesOp(user, versions, suffix, func(slugs []string) error { return checkGuides(args, slugs, user) })
+	if err != nil {
+		return "", err
+	}
+	var lines []string
+	for _, slug := range done.back {
+		lines = append(lines, pageInfo(slug, base)+guideNote(slug, user))
+	}
+	out := undoneSays(done) + " The undo is a change itself (history), and can be undone."
+	if len(lines) > 0 {
+		out += "\n" + strings.Join(lines, "\n")
+	}
+	return out, nil
+}

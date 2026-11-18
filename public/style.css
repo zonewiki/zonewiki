@@ -2168,6 +2168,8 @@ body.editor-page main {
 .changes-items a:hover { text-decoration: underline; }
 .changes-items span { color: var(--muted); }
 .changes-more { margin-top: 1rem; }
+.changes-undo { display: flex; gap: .4rem; flex: 0 0 auto; }
+.changes-undo form { margin: 0; }
 
 /* ── Diff view ───────────────────────────────────────────────────────────────── */
 

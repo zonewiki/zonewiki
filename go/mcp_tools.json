@@ -773,6 +773,43 @@
   }
  },
  {
+  "name": "undo_changes",
+  "title": "Undo changes",
+  "description": "Undo changes (history lists them) whole: the pages they changed are as before them, in one commit. Only changes of pages alone, none moved, none changed since.",
+  "inputSchema": {
+   "type": "object",
+   "properties": {
+    "versions": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "The changes, e.g. ['1a2b3c4']."
+    },
+    "summary": {
+     "type": "string",
+     "description": "The git commit message, a few words ('add findings from BUG-1234')."
+    },
+    "guides": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "Every guide id you have (read_guides); a write under a guide is refused without its id."
+    }
+   },
+   "required": [
+    "versions"
+   ]
+  },
+  "annotations": {
+   "readOnlyHint": false,
+   "destructiveHint": true,
+   "idempotentHint": false,
+   "openWorldHint": false
+  }
+ },
+ {
   "name": "rename_task_tag",
   "title": "Rename a task tag",
   "description": "Rename a task tag: on all tasks, done ones too, and in embeds and /tasks links on pages, in one commit. Not pages' frontmatter tags, nor a list (no tag).",

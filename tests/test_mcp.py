@@ -58,7 +58,7 @@ class TestToolDefinitions:
             "search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links",
             "list_tags", "history", "zone_help", "read_guides", "read_file",
             "write_page", "edit_page", "replace_in_pages", "append_to_page", "file_note", "upload_file", "rename_page",
-            "delete_page", "restore_page", "rename_task_tag", "create_task_list", "rename_task_list", "create_task", "update_task"]
+            "delete_page", "restore_page", "undo_changes", "rename_task_tag", "create_task_list", "rename_task_list", "create_task", "update_task"]
         reading = {"search_wiki", "search_tasks", "grep_wiki", "read_page", "list_pages", "check_links",
                    "list_tags", "history", "zone_help", "read_guides", "read_file"}
         assert all(t["annotations"]["readOnlyHint"] == (t["name"] in reading) for t in tools)
@@ -71,8 +71,8 @@ class TestToolDefinitions:
         # Every session loads them all. Parameters many tools share keep
         # short descriptions; read_guides explains the gate once.
         tools = {t["name"]: t for t in self.tools(client)}
-        # (29250 until rename_page got narrow; go/mcp_test.go caps the file.)
-        assert len(json.dumps(list(tools.values()))) < 29400
+        # (29250 until rename_page got narrow, 29400 until undo_changes; go/mcp_test.go caps the file.)
+        assert len(json.dumps(list(tools.values()))) < 30200
         props = tools["write_page"]["inputSchema"]["properties"]
         assert len(props["summary"]["description"]) < 100 and len(props["guides"]["description"]) < 100
         assert "refused until its id" in tools["read_guides"]["description"]
@@ -80,7 +80,7 @@ class TestToolDefinitions:
 
     def test_the_writes_take_guides(self, client):
         writes = {"write_page", "edit_page", "replace_in_pages", "append_to_page", "rename_page",
-                  "delete_page", "restore_page", "read_guides", "file_note", "rename_task_tag", "rename_task_list"}
+                  "delete_page", "restore_page", "undo_changes", "read_guides", "file_note", "rename_task_tag", "rename_task_list"}
         for tool in self.tools(client):
             assert ("guides" in tool["inputSchema"]["properties"]) == (tool["name"] in writes), tool["name"]
 

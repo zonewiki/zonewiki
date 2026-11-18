@@ -922,6 +922,8 @@ WRITES = [
     ("POST /rename/{slug...}", "POST", "/rename/plans", {"data": {"new_name": "private/alice/plans"}}),
     ("POST /delete/{slug...}", "POST", f"/delete/{DIARY}", {}),
     ("POST /restore/{rest...}", "POST", "/restore/private/alice/old/{old}", {}),
+    ("POST /changes/undo", "POST", "/changes/undo?sha={old}", {}),          # the commit that deleted her page
+    ("POST /changes/undo", "POST", "/changes/undo?sha={sha}", {}),          # one that changed her pages and a shared one
     ("POST /promote/{slug...}", "POST", f"/promote/{NOTE}", {"data": {"folder": "", "name": "stolen"}}),
     ("POST /promote/{slug...}", "POST", "/promote/{bobs}", {"data": {"folder": "private/alice", "name": "x"}}),
     ("POST /promote/{slug...}", "POST", "/promote/{bobs}", {"data": {"folder": "", "name": "x", "link_from": DIARY}}),
@@ -1028,6 +1030,8 @@ MCP_WRITES = [
     ("delete_page", {"slug": DIARY}),
     ("restore_page", {"slug": "private/alice/old", "version": "{old}"}),
     ("restore_page", {"slug": DIARY, "version": "{sha}"}),
+    ("undo_changes", {"versions": "{old}"}),
+    ("undo_changes", {"versions": "{sha}"}),
     ("file_note", {"slug": NOTE, "name": "stolen"}),
     ("file_note", {"slug": "{bobs}", "page": DIARY}),
     ("file_note", {"slug": "{bobs}", "name": "x", "folder": "private/alice"}),

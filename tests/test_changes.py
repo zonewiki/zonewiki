@@ -214,3 +214,93 @@ def test_a_client_without_a_name_is_an_assistant(client, wiki_dir, monkeypatch):
     tool(client, "write_page", token=tokens["access_token"], slug="shed", content="# Shed\n")
     assert git(wiki_dir, "log", "-n1", "--format=%B").strip() == "Create shed (MCP)"
     assert badges(client)[0] == "assistant"
+
+
+# ── Undo from Changes ───────────────────────────────────────────────────────
+
+def offers(client, **query):
+    """What each row of /changes offers: (what it says, the shas Undo sends, those Undo all sends)."""
+    body = client.get("/changes", query_string=query, headers=HOST).get_data(as_text=True)
+    out = []
+    for row in re.findall(r'<li class="hist-row changes-row">(.*?)</li>', body, re.S):
+        what = html.unescape(re.search(r'<span class="changes-what">([^<]*)', row).group(1)).strip()
+        forms = re.findall(r'<form method="post" action="/changes/undo"( data-confirm="[^"]*")?>(.*?)</form>', row, re.S)
+        one = [re.findall(r'name="sha" value="(\w+)"', f) for confirm, f in forms if not confirm]
+        all_ = [re.findall(r'name="sha" value="(\w+)"', f) for confirm, f in forms if confirm]
+        out.append((what, one[0] if one else [], all_[0] if all_ else []))
+    return out
+
+
+def test_undo_is_offered_where_it_can_be_done(client, wiki_dir):
+    save(client, "garden", "# Garden\n\nBeds.\n")
+    save(client, "garden", "# Garden\n\nBeds and paths.\n")
+    create_task(client, title="Water")
+    save(client, "shed", "# Shed\n")
+    client.post("/rename/shed", data={"new_name": "barn"}, headers=HOST)
+    listed = offers(client)
+    garden = [one for what, one, _ in listed if what == "Update garden"]
+    assert garden == [[git(wiki_dir, "log", "-n1", "--format=%H", "--", "garden.md").strip()], []]   # the later save; the earlier was changed again
+    rows = {what: one for what, one, _ in listed if what != "Update garden"}
+    assert rows["Create task"] == [] and rows["Rename shed to barn"] == [] and rows["Update shed"] == []
+    assert rows["Initial import"] == []
+
+
+def test_undo_from_the_list_and_back_to_it(client, wiki_dir):
+    save(client, "garden", "# Garden\n\nBeds.\n")
+    save(client, "garden", "# Garden\n\nBeds and paths.\n")
+    sha = offers(client)[0][1][0]
+    resp = client.post("/changes/undo", data={"sha": sha, "back": "/changes?under=gar&n=7&x=1"}, headers=HOST)
+    assert resp.status_code == 303 and resp.headers["Location"].startswith("/changes?n=7&under=gar&undone=")
+    assert (wiki_dir / "garden.md").read_text() == "# Garden\n\nBeds.\n"
+    body = client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True)
+    assert "Undone: garden as before." in body and "undo it to have them back" in body
+    top = offers(client)[0]
+    assert top[0] == f"Undo {sha[:7]}: Update garden" and top[1]         # the undo, which can be undone
+    assert "Undid the change of" in client.get("/history/garden", headers=HOST).get_data(as_text=True)
+    # A refusal comes back to the list and says why; nothing changes.
+    resp = client.post("/changes/undo", data={"sha": sha}, headers=HOST)
+    assert resp.status_code == 303 and "undo_error=" in resp.headers["Location"]
+    body = client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True)
+    assert "Not undone. garden was changed again since" in body
+    assert client.post("/changes/undo", data={"sha": "abcdef1"}, headers=HOST).status_code == 404
+
+
+def test_an_assistants_run_of_work_is_undone_together(client, wiki_dir):
+    save(client, "garden", "# Garden\n\nBeds.\n")
+    tool(client, "append_to_page", slug="garden", content="Paths.")
+    tool(client, "write_page", slug="shed", content="# Shed\n")
+    save(client, "notes", "# Notes\n")                                  # the user's own, in between
+    tool(client, "append_to_page", slug="shed", content="Tools.")
+    rows = offers(client)
+    assert rows[0][0] == "Append to shed" and len(rows[0][2]) == 3      # the run's latest offers all three
+    assert all(not all_ for _, _, all_ in rows[1:])
+    body = client.get("/changes", headers=HOST).get_data(as_text=True)
+    assert "Undo all 3</button>" in body and "Undo the 3 changes an assistant made from " in body
+    resp = client.post("/changes/undo", data={"sha": rows[0][2]}, headers=HOST)
+    assert resp.status_code == 303
+    assert (wiki_dir / "garden.md").read_text() == "# Garden\n\nBeds.\n" and not (wiki_dir / "shed.md").exists()
+    assert (wiki_dir / "notes.md").exists()
+    assert git(wiki_dir, "log", "-n1", "--format=%s").startswith("Undo 3 changes: ")
+    said = client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True)
+    assert "Undone: garden as before; shed deleted again." in said
+
+
+def test_no_run_where_someone_else_changed_a_page_in_between(client, wiki_dir):
+    tool(client, "write_page", slug="shed", content="# Shed\n")
+    save(client, "shed", "# Shed\n\nMine.\n")
+    tool(client, "append_to_page", slug="shed", content="Tools.")
+    rows = offers(client)
+    assert rows[0][1] and not rows[0][2]                                # the last change alone, not the run
+
+
+def test_a_viewer_is_offered_no_undo(client, wiki_dir, monkeypatch):
+    monkeypatch.setattr(settings, "MCP_TOKEN", "")
+    monkeypatch.setattr(settings, "USERS", {"alice": ("alice-pw", ""), "carol": ("carol-pw", "")})
+    monkeypatch.setattr(settings, "USER_SETTINGS", {"carol": {"role": "viewer"}})
+    client.post("/login", data={"username": "alice", "password": "alice-pw"}, headers=HOST)
+    save(client, "garden", "# Garden\n")
+    save(client, "private/alice/diary", "# Diary\n")
+    assert offers(client)[0][1] and offers(client)[1][1]
+    client.post("/login", data={"username": "carol", "password": "carol-pw"}, headers=HOST)
+    rows = offers(client)
+    assert [what for what, _, _ in rows][:1] == ["Update garden"] and not any(one or all_ for _, one, all_ in rows)

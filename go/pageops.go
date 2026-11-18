@@ -673,6 +673,169 @@ func renameTagOp(user, tag, newName string, merge bool, suffix string) (*tagRena
 	return done, failed
 }
 
+// undoMost: how many changes one undo takes.
+const undoMost = 50
+
+// undone: what an undo did: the pages put back as they were (their text
+// before the changes, a deleted page brought back) and those taken away
+// (made by the changes), by slug.
+type undone struct{ back, gone []string }
+
+func (u *undone) pages() []string { return append(slices.Clone(u.back), u.gone...) }
+
+// undoChangesOp undoes changes of the wiki, commits by their versions:
+// every page they changed is as it was before them, in one commit ("Undo
+// <version>: <what it said>", "Undo N changes: …"), which is a change like
+// any other and can be undone too. A change is undone whole or not at all,
+// and only where that loses nothing and is the user's to do:
+//   - it changed only pages, each one user sees and may write (a change
+//     user doesn't see all of is no change to them: refused as missing);
+//   - it moved no page (a rename is undone by renaming back, which asks
+//     who may: checkReaders);
+//   - no page it changed was changed since by a commit that isn't among
+//     those undone, or holds text not committed yet: the undo would take
+//     that along.
+//
+// check, when given, is asked with the pages before anything is written
+// (the MCP tool's guides).
+func undoChangesOp(user string, versions []string, suffix string, check func(slugs []string) error) (*undone, error) {
+	if !cfg.GitEnabled {
+		return nil, refuseAs(refusedNotFound, "There is no history: git isn't installed where Zone runs.")
+	}
+	if len(versions) == 0 || len(versions) > undoMost {
+		return nil, refuse(fmt.Sprintf("Name one change to undo, or up to %d", undoMost))
+	}
+	// The changes, and for each file which of them changed it and how.
+	type commit struct{ sha, subject string }
+	var commits []commit
+	how := map[string]map[string]byte{} // file → commit → A, M or D
+	var files []string
+	for _, v := range versions {
+		none := refuseAs(refusedNotFound, "No change "+strconv.Quote(v)+"; history lists them.")
+		sha, subject, ok := commitOf(strings.ToLower(strings.TrimSpace(v)))
+		if !ok {
+			return nil, none
+		}
+		if slices.ContainsFunc(commits, func(c commit) bool { return c.sha == sha }) {
+			continue
+		}
+		changes := commitChanges(sha)
+		for _, c := range changes {
+			if !canSeePath(user, c.Path) {
+				return nil, none
+			}
+		}
+		short := runePrefix(sha, 7)
+		if len(changes) == 0 {
+			return nil, refuse("Change " + short + " changed no page: there is nothing to undo.")
+		}
+		kinds := ""
+		for _, c := range changes {
+			slug, isPage := strings.CutSuffix(c.Path, ".md")
+			if !isPage || safePath(slug) == "" {
+				what := "files"
+				if isTaskFile(c.Path) {
+					what = "tasks"
+				}
+				return nil, refuse("Change " + short + " changed " + what + " too, which Undo doesn't put back: only changes of pages alone are undone.")
+			}
+			if !canWrite(user, slug) {
+				return nil, notWritable(user, slug, "No change "+strconv.Quote(v)+"; history lists them.")
+			}
+			if how[c.Path] == nil {
+				how[c.Path] = map[string]byte{}
+				files = append(files, c.Path)
+			}
+			how[c.Path][sha] = c.Kind
+			kinds += string(c.Kind)
+		}
+		if strings.Contains(kinds, "A") && strings.Contains(kinds, "D") {
+			return nil, refuse("Change " + short + " moved a page: rename it back instead.")
+		}
+		commits = append(commits, commit{sha, subject})
+	}
+	// Each page: nothing but these changes since the oldest of them, and
+	// what it was before that one.
+	type step struct {
+		slug, path string
+		text       *string // nil: the page is taken away
+	}
+	var steps []step
+	done := &undone{}
+	for _, rel := range files {
+		slug, path := strings.TrimSuffix(rel, ".md"), filepath.Join(cfg.Data, rel)
+		ours := how[rel]
+		last := lastCommitsOf(rel, len(ours))
+		for _, sha := range last {
+			if _, is := ours[sha]; !is {
+				return nil, refuseAs(refusedConflict, slug+" was changed again since: undoing would take that along. Its history has every version.")
+			}
+		}
+		if len(last) != len(ours) {
+			return nil, refuseAs(refusedConflict, slug+": its history doesn't hold these changes anymore.")
+		}
+		if isUncommitted(path) {
+			return nil, refuseAs(refusedConflict, slug+" has changes not committed yet: commit them first (or undo them in its editor).")
+		}
+		oldest := last[len(last)-1]
+		current, err := currentText(path)
+		if err != nil {
+			return nil, err
+		}
+		if ours[oldest] == 'A' { // made by these changes: gone again
+			if current == nil {
+				continue
+			}
+			if isProtected(slug) {
+				return nil, refuseAs(refusedProtected, slug+" is the home page; it can't be deleted")
+			}
+			steps = append(steps, step{slug: slug, path: path})
+			done.gone = append(done.gone, slug)
+			continue
+		}
+		before, ok := gitShow(oldest+"^", path)
+		if !ok {
+			return nil, refuseAs(refusedConflict, slug+": its text before the change can't be read.")
+		}
+		if current != nil && *current == before {
+			continue
+		}
+		steps = append(steps, step{slug: slug, path: path, text: &before})
+		done.back = append(done.back, slug)
+	}
+	if len(steps) == 0 {
+		return nil, refuseAs(refusedUnchanged, "The pages already are as they were before.")
+	}
+	if check != nil {
+		if err := check(done.pages()); err != nil {
+			return nil, err
+		}
+	}
+	message := "Undo " + runePrefix(commits[0].sha, 7) + ": " + strings.TrimSpace(strings.TrimSuffix(commits[0].subject, assistantMark))
+	if len(commits) > 1 {
+		shas := make([]string, len(commits))
+		for i, c := range commits {
+			shas[i] = runePrefix(c.sha, 7)
+		}
+		message = fmt.Sprintf("Undo %d changes: %s", len(commits), strings.Join(shas, " "))
+	}
+	paths := make([]string, len(steps))
+	for i, s := range steps {
+		paths[i] = s.path
+		if s.text == nil {
+			if err := os.Remove(s.path); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if err := writeText(s.path, *s.text); err != nil {
+			return nil, err
+		}
+	}
+	forgetUsage()
+	return done, notCommitted(gitCommit(user, message+suffix, paths...))
+}
+
 // keepPending: before a write that replaces or removes the page at path,
 // what it holds uncommitted (an auto-save left, an edit on disk) is
 // committed first by whoever wrote it ("Save <slug>"; Zone if not known),
