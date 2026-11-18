@@ -18,8 +18,43 @@ import (
 // assistantMark ends the message of a commit an assistant made (msgSuffix).
 const assistantMark = "(MCP)"
 
-// byAssistant: the commit with this message was written by an assistant.
+// byAssistant: the commit with this message (its first line) was written by an assistant.
 func byAssistant(msg string) bool { return strings.HasSuffix(msg, assistantMark) }
+
+// viaTrailerKey names the trailer of a commit made through a connection: which
+// assistant wrote it, by the name its client gave when it was let in
+// (grants.go). The name is the client's claim, and shown as one.
+const viaTrailerKey = "Assistant"
+
+// viaTrailer: what follows the first line of such a commit's message; ""
+// for no connection, and for a client that gave no name.
+func viaTrailer(via string) string {
+	if via = clientName(via); via == noClientName {
+		return ""
+	}
+	return "\n\n" + viaTrailerKey + ": " + via
+}
+
+// viaOfCommit: which assistant a commit says it was written through: its
+// trailer, when its message is an assistant's ("" otherwise: the trailer
+// alone, in a commit made by hand, says nothing).
+func viaOfCommit(msg, trailer string) string {
+	if !byAssistant(msg) {
+		return ""
+	}
+	if via := clientName(trailer); via != noClientName {
+		return via
+	}
+	return ""
+}
+
+// throughWhom: " through Claude" after who a commit is by; "" for none.
+func throughWhom(via string) string {
+	if via == "" {
+		return ""
+	}
+	return " through " + via
+}
 
 // changesOf: which of the wiki's commits to list. Since a day (YYYY-MM-DD),
 // Under a folder, By a user (the commit's author), Assistant: only what an
@@ -150,6 +185,7 @@ type changeDay struct {
 type changeRow struct {
 	Time, Rel, What, Author string
 	Assistant               bool
+	Via                     string // which assistant, when the commit says
 	Items                   []changeItem
 }
 
@@ -174,7 +210,7 @@ func changeDays(entries []LogEntry, now time.Time) []changeDay {
 			}
 			days, last = append(days, changeDay{Label: label}), day
 		}
-		row := changeRow{Time: clock, Rel: e.Rel, Author: e.Author, Assistant: byAssistant(e.Msg),
+		row := changeRow{Time: clock, Rel: e.Rel, Author: e.Author, Assistant: byAssistant(e.Msg), Via: e.Via,
 			What: strings.TrimSpace(strings.TrimSuffix(e.Msg, assistantMark)), Items: changeItems(e)}
 		days[len(days)-1].Rows = append(days[len(days)-1].Rows, row)
 	}

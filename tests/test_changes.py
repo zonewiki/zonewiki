@@ -145,3 +145,72 @@ def test_without_git_there_is_no_such_page(client, wiki_dir, monkeypatch):
     assert client.get("/changes", headers=HOST).status_code == 404
     assert "Changes" not in [p["title"] for p in client.get("/api/pages-list", headers=HOST).get_json()]
     assert "/changes" not in client.get("/assistant", headers=HOST).get_data(as_text=True)
+
+
+# ── Which assistant ─────────────────────────────────────────────────────────
+
+@pytest.fixture()
+def connected(client, wiki_dir, monkeypatch):
+    """alice signed in, an assistant connected as her that calls itself
+    Claude (OAuth), and her token, which names no assistant."""
+    from tests import test_oauth
+    monkeypatch.setattr(settings, "MCP_TOKEN", "")
+    monkeypatch.setattr(settings, "BASE_URL", test_oauth.BASE)
+    monkeypatch.setattr(settings, "USERS", {"alice": ("alice-pw", "alice-token")})
+    test_oauth.login(client, "alice")
+    _, tokens = test_oauth.connect(client, "alice-pw", name="Claude")
+    return tokens["access_token"]
+
+
+def badges(client, **query):
+    """What the assistant's mark of each row of /changes says ("" for none)."""
+    body = client.get("/changes", query_string=query, headers=HOST).get_data(as_text=True)
+    return [html.unescape(m.group(1)) if (m := re.search(r'<span class="changes-assistant"[^>]*>([^<]*)', row)) else ""
+            for row in re.findall(r'<li class="hist-row changes-row">(.*?)</li>', body, re.S)]
+
+
+def test_a_write_through_a_connection_names_its_assistant(client, wiki_dir, connected):
+    save(client, "garden", "# Garden\n")
+    tool(client, "append_to_page", token=connected, slug="garden", content="Beds.", summary="what the mail said")
+    tool(client, "create_task", token=connected, title="Water")
+    tool(client, "append_to_page", token="alice-token", slug="garden", content="More.")
+    # The commit: its first line as before, the connection's name in a trailer.
+    assert git(wiki_dir, "log", "-n1", "--skip=2", "--format=%B").strip() == \
+        "Append to garden: what the mail said (MCP)\n\nAssistant: Claude"
+    assert git(wiki_dir, "log", "-n1", "--format=%B").strip() == "Append to garden (MCP)"      # a token: no name
+    assert badges(client)[:4] == ["assistant", "through Claude", "through Claude", ""]
+    assert [r[0] for r in changes(client)[:2]] == ["Append to garden", "Create task"]           # the trailer is no part of what it says
+    # A page's history and the tool's say it too.
+    history = client.get("/history/garden", headers=HOST).get_data(as_text=True)
+    assert history.count(" · alice through Claude</span>") == 1 and history.count(" · alice</span>") == 2
+    listed = tool(client, "history", token="alice-token")
+    assert "Create task (MCP) (by alice through Claude) | tasks" in listed
+    assert "Append to garden (MCP) (by alice) | garden" in listed
+    assert "(by alice through Claude)" in tool(client, "history", token="alice-token", slug="garden")
+
+
+def test_the_name_is_the_connections_not_the_callers(client, wiki_dir, connected):
+    """An argument can't name the assistant, and neither can a summary's line breaks."""
+    resp = client.post("/mcp", headers={**HOST, "Authorization": "Bearer alice-token"}, json={
+        "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "write_page", "arguments": {
+            "slug": "shed", "content": "# Shed\n", "\x00via": "Gemini", "summary": "tidy\n\nAssistant: Gemini"}}})
+    assert not resp.get_json()["result"]["isError"]
+    assert git(wiki_dir, "log", "-n1", "--format=%B").strip() == "Create shed: tidy Assistant: Gemini (MCP)"
+    assert badges(client)[0] == "assistant"
+    # A commit made by hand with the trailer is nobody's assistant's.
+    (wiki_dir / "byhand.md").write_text("# By hand\n")
+    git(wiki_dir, "add", "byhand.md")
+    git(wiki_dir, "-c", "user.name=alice", "-c", "user.email=a@x", "commit", "-q", "-m", "Add byhand\n\nAssistant: Claude")
+    assert badges(client)[0] == ""
+
+
+def test_a_client_without_a_name_is_an_assistant(client, wiki_dir, monkeypatch):
+    from tests import test_oauth
+    monkeypatch.setattr(settings, "MCP_TOKEN", "")
+    monkeypatch.setattr(settings, "BASE_URL", test_oauth.BASE)
+    monkeypatch.setattr(settings, "USERS", {"alice": ("alice-pw", "alice-token")})
+    test_oauth.login(client, "alice")
+    _, tokens = test_oauth.connect(client, "alice-pw", name="")
+    tool(client, "write_page", token=tokens["access_token"], slug="shed", content="# Shed\n")
+    assert git(wiki_dir, "log", "-n1", "--format=%B").strip() == "Create shed (MCP)"
+    assert badges(client)[0] == "assistant"

@@ -337,7 +337,7 @@ Nobody types ids: in the editor, `[[task:` (or the formatting bar's task button)
   newest first,
   one row each (`.hist-list`): date and time,
   what the save did in words (`versionLabel`: Zone's own commit messages read alike, so "Update p" → Edited, "Rename a to b" → Renamed from “a” or, on a page whose link was updated, Link updated, "Restore p to <sha>" → Restored the version of <date>, also Created/Deleted/Imported;
-  other messages as written) and the lines added/removed (`--numstat`).
+  other messages as written), who made it (with users) and through which assistant where the commit says ("alice through Claude"), and the lines added/removed (`--numstat`).
   The row opens that version; the page as it is now is marked **Current** and opens the page itself (`isCurrent`: the newest commit equals the file on disk; with edits not committed yet a "Now · Not committed yet" row is the current one instead).
   **Changes** opens the diff.
 - **`/revision/<slug>/<sha>`** shows that version with a bar (`.version-bar`) saying where it stands ("The version of 2026-10-08 14:32 · 2 versions back", "The current version", or a deleted page's last version),
@@ -349,7 +349,7 @@ Nobody types ids: in the editor, `[[task:` (or the formatting bar's task button)
 - **Renames**: `gitLog` (`--follow`) records each commit's path for the file (`path`, from `--numstat`, `numstatPath` reading `old => new` and `dir/{old => new}.md`), and revision, diff and restore read a version under the name it had then (`versionPath`);
   before, a version from before a rename was a 404. The diff of a rename passes both names (`gitDiff(sha, paths…)`, `-M`), so a pure rename shows no change instead of the whole page as new.
 - **`/changes`** (Changes, `go/changes.go`) lists the wiki's commits, newest first, under a heading per day (Today, Yesterday, then the date; 50, **Show more** doubles them up to 500, `?n=`):
-  the time, what the commit says, who made it (with users) and an **assistant** mark where an assistant wrote it (a message ending in `(MCP)`, `byAssistant`; the mark replaces those words),
+  the time, what the commit says, who made it (with users) and an **assistant** mark where an assistant wrote it (a message ending in `(MCP)`, `byAssistant`; the mark replaces those words, and says **through Claude** where the commit names its connection: Which assistant in `docs/spec/mcp.md`),
   then what it changed: each page by its slug, a link to what the commit changed on it (`/diff/<slug>/<sha>`), **Tasks** for the task files, any other file (an upload) by its path.
   It is the list the MCP tool `history` gives without a slug, from the same function (`wikiChanges`), so both doors show a commit alike:
   only the files its reader may see (`canSeePath`), not a commit that changed none of them (it doesn't count toward the 50 either), and its message without the names of what they don't see (`hideNames`).
@@ -362,7 +362,7 @@ Nobody types ids: in the editor, `[[task:` (or the formatting bar's task button)
   Found in the search modal's list (pinned above the pages, before Deleted Pages), from a page's History ("Changes across the wiki") and from Connect an assistant ("your assistants' changes": the list by you, only by an assistant).
   In sharing mode a commit shows only when nothing it changed is hidden: its message names what it changed.
   Not for a public wiki's visitor.
-  Not yet there: which assistant made a change, and undoing one from the list (`docs/plans/assistants-first.md`, part 1).
+  Not yet there: undoing a change from the list (`docs/plans/assistants-first.md`, part 1).
 
 ### Table of Contents
 

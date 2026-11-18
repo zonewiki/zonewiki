@@ -186,10 +186,13 @@ func clientName(name string) string {
 		name = string([]rune(name)[:80])
 	}
 	if name == "" {
-		return "An MCP client"
+		return noClientName
 	}
 	return name
 }
+
+// noClientName: what a client that gave no name is called.
+const noClientName = "An MCP client"
 
 // oauthRegister: POST /oauth/register (RFC 7591), for public clients:
 // the name and redirect URIs come back with a client id that holds them.

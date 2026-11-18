@@ -161,6 +161,10 @@ A task as the tools show it (`mcpTaskText`) includes `id:`, its 8-character shor
 
 The wiki is mostly written by LLMs, so they write through Zone rather than to the files: each write is a git commit (no `/uncommitted` pile), a rename re-points links, and the result tells the model what it would otherwise have to look up.
 Every write tool takes an optional `summary`; the commit message is the action, then the summary, then `(MCP)` (`commitMsg`: `Update tickets/bug-1: add findings (MCP)`, `Create task (MCP)`), so the history tells the model's changes from the user's.
+**Which assistant**: a write through a connection (OAuth, Connections below) names it in a trailer after that line, `Assistant: Claude` (`mcpMark`, `viaTrailer`): the name its client gave when the user let it in, one line.
+`callMCPTool` hands it to the tool with its arguments (`viaArg`, a name no client can send: what one sends there is dropped), and a summary is one line, so neither names an assistant.
+A write with an MCP token has no trailer: a token names no client.
+The history shows it beside who the commit is by, as the client's claim it is: "alice through Claude" on Changes and a page's History, `(by alice through Claude)` in the tool `history` (`viaOfCommit`: only for a commit whose first line ends in `(MCP)`, so a trailer typed by hand says nothing).
 Tools that only add are annotated `destructiveHint: false`, those that change or remove `true`, so a client can ask before those.
 The token `/mcp` requires (below) guards writes as it guards reads, and git keeps every change undoable.
 

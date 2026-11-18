@@ -538,12 +538,17 @@ func numstatPath(p string) string {
 	return after
 }
 
+// viaFormat: a commit's Assistant trailer in a git log format: its value
+// alone, on one line (the first, should a commit have several).
+const viaFormat = "%(trailers:key=" + viaTrailerKey + ",valueonly,separator=%x20)"
+
 // GitEntry is a commit of a page: its sha, day, relative date, time
 // (YYYY-MM-DD HH:MM), message, author (commitAuthor), lines added and
 // deleted, and the file's path at that commit (relative to the wiki;
 // another before a rename).
 type GitEntry struct {
 	Sha, Date, Rel, Time, Msg, Author string
+	Via                               string // which assistant wrote it (viaOfCommit), "" for none or not said
 	Added, Deleted                    int
 	Path                              string
 }
@@ -563,18 +568,18 @@ func gitLog(path string, max int) []GitEntry {
 		args = append(args, "-n", strconv.Itoa(max))
 	}
 	args = append(args, "--numstat", "--date=format:%Y-%m-%d %H:%M",
-		"--format=\x1e%H\x1f%as\x1f%ar\x1f%ad\x1f%an\x1f%s", "--", rel)
+		"--format=\x1e%H\x1f%as\x1f%ar\x1f%ad\x1f%an\x1f"+viaFormat+"\x1f%s", "--", rel)
 	r := runGit(args...)
 	var entries []GitEntry
 	records := strings.Split(r.Stdout, "\x1e")
 	for _, record := range records[1:] {
 		head, stats, _ := strings.Cut(record, "\n")
-		parts := strings.SplitN(head, "\x1f", 6)
-		if len(parts) != 6 {
+		parts := strings.SplitN(head, "\x1f", 7)
+		if len(parts) != 7 {
 			continue
 		}
 		e := GitEntry{Sha: parts[0], Date: parts[1], Rel: parts[2], Time: parts[3], Author: commitAuthor(parts[4]),
-			Msg: parts[5], Path: rel}
+			Msg: parts[6], Via: viaOfCommit(parts[6], parts[5]), Path: rel}
 		for _, line := range mdtext.SplitLines(stats) {
 			cols := strings.SplitN(mdtext.LineBody(line), "\t", 3)
 			if len(cols) == 3 {
@@ -597,6 +602,7 @@ func gitLog(path string, max int) []GitEntry {
 // to the wiki); Hidden: how many more it changed that see didn't take.
 type LogEntry struct {
 	Sha, Time, Rel, Msg, Author string
+	Via                         string // which assistant wrote it (viaOfCommit), "" for none or not said
 	Files                       []string
 	Hidden                      int
 }
@@ -620,7 +626,7 @@ func gitLogAll(since, under string, limit int, see func(path string) bool, keep 
 	var entries []LogEntry
 	for skip := 0; len(entries) < limit; skip, batch = skip+batch, 2*batch {
 		args := []string{"log", "-n", strconv.Itoa(batch), "--skip", strconv.Itoa(skip), "--name-only",
-			"--date=format:%Y-%m-%d %H:%M", "--format=\x1e%H\x1f%ad\x1f%ar\x1f%an\x1f%s"}
+			"--date=format:%Y-%m-%d %H:%M", "--format=\x1e%H\x1f%ad\x1f%ar\x1f%an\x1f" + viaFormat + "\x1f%s"}
 		if since != "" {
 			args = append(args, "--since="+since+" 00:00")
 		}
@@ -630,11 +636,12 @@ func gitLogAll(since, under string, limit int, see func(path string) bool, keep 
 		records := strings.Split(runGit(args...).Stdout, "\x1e")[1:]
 		for _, record := range records {
 			head, names, _ := strings.Cut(record, "\n")
-			parts := strings.SplitN(head, "\x1f", 5)
-			if len(parts) != 5 {
+			parts := strings.SplitN(head, "\x1f", 6)
+			if len(parts) != 6 {
 				continue
 			}
-			e := LogEntry{Sha: parts[0], Time: parts[1], Rel: parts[2], Author: commitAuthor(parts[3]), Msg: parts[4]}
+			e := LogEntry{Sha: parts[0], Time: parts[1], Rel: parts[2], Author: commitAuthor(parts[3]), Msg: parts[5],
+				Via: viaOfCommit(parts[5], parts[4])}
 			for _, n := range mdtext.SplitLines(names) {
 				switch n = mdtext.LineBody(n); {
 				case strings.TrimSpace(n) == "":

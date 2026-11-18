@@ -7,6 +7,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -349,7 +350,7 @@ func history(args jsonObj, base, user string) (string, error) {
 	var rows []string
 	for _, e := range entries[:min(limit, len(entries))] {
 		rows = append(rows, fmt.Sprintf("%s | %s | +%d -%d | %s", runePrefix(e.Sha, 7), e.Time, e.Added, e.Deleted,
-			e.Msg+byAuthor(e.Author)))
+			e.Msg+byAuthor(e.Author, e.Via)))
 	}
 	shown := fmt.Sprintf("all %d", len(entries))
 	if len(rows) < len(entries) {
@@ -366,12 +367,17 @@ func history(args jsonObj, base, user string) (string, error) {
 		"what it changed:\n" + strings.Join(rows, "\n"), nil
 }
 
-// byAuthor: " (by alice)" after a commit's message; nothing for Zone's own.
-func byAuthor(author string) string {
-	if author == "" {
-		return ""
+// byAuthor: " (by alice)" after a commit's message, " (by alice through
+// Claude)" for what an assistant wrote through a connection; nothing for
+// Zone's own.
+func byAuthor(author, via string) string {
+	switch {
+	case author != "":
+		return " (by " + author + throughWhom(via) + ")"
+	case via != "":
+		return " (" + strings.TrimSpace(throughWhom(via)) + ")"
 	}
-	return " (by " + author + ")"
+	return ""
 }
 
 func versionOf(entries []GitEntry, version string) int {
@@ -430,7 +436,7 @@ func recentChanges(since, under string, limit int, user string) string {
 				labels = append(labels, l)
 			}
 		}
-		rows = append(rows, e.Time+" | "+runePrefix(e.Sha, 7)+" | "+e.Msg+byAuthor(e.Author)+" | "+
+		rows = append(rows, e.Time+" | "+runePrefix(e.Sha, 7)+" | "+e.Msg+byAuthor(e.Author, e.Via)+" | "+
 			strings.Join(labels, ", "))
 	}
 	theLimit := ""
@@ -725,6 +731,13 @@ func callMCPTool(r *http.Request, name string, args jsonObj) ([]toolContent, err
 	}
 	if tool.writes != toolWritesNothing && settings().isViewer(userOf(r)) {
 		return nil, toolErr(readOnlyMsg)
+	}
+	// Which connection the call came through goes with the arguments, for
+	// the commit's message (mcpMark); whatever a client sent under that
+	// name is replaced.
+	delete(args, viaArg)
+	if via := viaOf(r); via != "" {
+		args[viaArg], _ = json.Marshal(via)
 	}
 	var out []toolContent
 	var err error

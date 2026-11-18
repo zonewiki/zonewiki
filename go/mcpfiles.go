@@ -88,7 +88,7 @@ func uploadFileTool(args jsonObj, base, user string) (string, error) {
 		}
 	}
 	name = freeUploadName(owner, name)
-	if err := storeUpload(user, owner, name, bytes.NewReader(data), " (MCP)"); err != nil {
+	if err := storeUpload(user, owner, name, bytes.NewReader(data), mcpMark(args)); err != nil {
 		return "", err
 	}
 	link := "[" + name + "](" + uploadURL(owner, name) + ")"
@@ -235,7 +235,7 @@ func byToken(r *http.Request) bool {
 func tokenRequest(w http.ResponseWriter, r *http.Request) (*http.Request, bool) {
 	user := ""
 	ok, wait := mcpThrottle.try(clientKey(r), func() (ok bool) {
-		user, ok = mcpAuthorized(r)
+		user, _, ok = mcpAuthorized(r)
 		return ok
 	})
 	if wait > 0 {

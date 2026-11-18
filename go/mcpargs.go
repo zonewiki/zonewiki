@@ -355,9 +355,22 @@ func similarPages(slug, title, user string) []PageRef {
 }
 
 // ── Committing ──────────────────────────────────────────────────────────────
-// Every write is its own git commit, its message ending in "(MCP)" so the
-// history tells the model's changes from the user's. The model's summary,
-// when given, says what changed.
+// Every write is its own git commit, its message's first line ending in
+// "(MCP)" so the history tells the model's changes from the user's. The
+// model's summary, when given, says what changed. A write through a
+// connection (grants.go) names it after that, in a trailer
+// ("Assistant: Claude", viaTrailer): which assistant it was.
+
+// viaArg: the argument callMCPTool sets to the name of the connection a
+// call came through. No client sets it: what one sends there is dropped.
+const viaArg = "\x00via"
+
+// mcpMark: what ends the message of a commit a tool makes: " (MCP)", and
+// the trailer naming its connection.
+func mcpMark(args jsonObj) string {
+	via, _ := jsonobj.As[string](args[viaArg])
+	return " " + assistantMark + viaTrailer(via)
+}
 
 func msgSuffix(args jsonObj) (string, error) {
 	s, err := strArg(args, "summary", false)
@@ -365,9 +378,9 @@ func msgSuffix(args jsonObj) (string, error) {
 		return "", err
 	}
 	if s = cutRunes(strings.Join(strings.Fields(s), " "), 200, ""); s != "" {
-		return ": " + s + " (MCP)", nil
+		return ": " + s + mcpMark(args), nil
 	}
-	return " (MCP)", nil
+	return mcpMark(args), nil
 }
 
 func commitMsg(action string, args jsonObj) (string, error) {

@@ -312,6 +312,22 @@ func withUser(r *http.Request, user string) *http.Request {
 	return r.WithContext(context.WithValue(r.Context(), userKey{}, user))
 }
 
+// viaKey: the name of the connection (grants.go) a request to /mcp came
+// through, "" for none.
+type viaKey struct{}
+
+func withVia(r *http.Request, via string) *http.Request {
+	if via == "" {
+		return r
+	}
+	return r.WithContext(context.WithValue(r.Context(), viaKey{}, via))
+}
+
+func viaOf(r *http.Request) string {
+	via, _ := r.Context().Value(viaKey{}).(string)
+	return via
+}
+
 func userOf(r *http.Request) string {
 	if r == nil {
 		return ""
