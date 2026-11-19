@@ -69,7 +69,8 @@
 <form method="post" action="{{url "rename" .Slug}}"><input type="hidden" name="from" value="page"><input type="hidden" name="confirmed" value="share"><input type="hidden" name="new_name" value="{{.SharedTarget}}"><div class="modal-actions"><button type="submit" class="btn btn-primary">Make shared</button><button type="button" class="btn" id="page-privacy-cancel">Cancel</button></div></form></dialog>
 {{- end}}
 {{- if .ShareTargets}}
-{{- /* Share…: to more people, never to fewer (docs/spec/users.md): a private
+{{- /* Share…: to more people (Who may move a page to other readers in
+    docs/spec/users.md; taking it back is mayNarrow's): a private
     page to a group you are in or to everyone, a group's page to a group
     that includes its own or to everyone. Each choice is the ordinary rename. */}}
 <dialog id="page-privacy-dialog" class="modal"><p class="modal-label">Share</p>

@@ -442,7 +442,7 @@ A Unix socket handed over is treated as one Zone opened (`--addr unix:PATH`, abo
 
 ## Mail
 
-Zone sends mail for sign-up (Sign-up in `docs/spec/users.md`) and to tell a user that someone gave them a task (Assigning tasks there; each user can turn that off),
+Zone sends mail for sign-up (Sign-up in `docs/spec/users.md`) and to tell a user that someone gave them a task (Assigning tasks there), mentions them or comments on a task of theirs (Mail in `docs/spec/tasks.md`; each kind only once the user turns it on),
 through an SMTP server the deployment names in `.env` (`go/mail.go`, Go's `net/smtp`; no dependency):
 
 ```bash

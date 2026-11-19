@@ -150,7 +150,7 @@ everything else answers 403 "This wiki has no login yet: open it in a browser an
 The settings file `.zone/config` holds password hashes and MCP tokens,
 the tokens only as SHA-256 hashes (`tokenMatches`): it is kept out of git with the rest of `.zone/`,
 the session key above all,
-also before a new wiki's first commit (account data stays out of git: Kept out of git in `docs/spec/users.md`; Zone takes it out of a wiki that committed it, and won't start on a clone whose history has users but no settings file),
+also before a new wiki's first commit (account data stays out of git: Kept out of git in `docs/spec/users.md`; Zone won't start on a clone whose history has users but no settings file),
 and Zone never shows it (`canSeePath` is false for `.zone/`, which also holds the editor's texts left in conflict, `.zone/drafts/<user>/`, shown only to their user in their editor: no history view, uncommitted list or MCP tool; `safePath` refuses it to every page route),
 written owner-only (0600) by `zonewiki user`/`zonewiki config` and the Users tab,
 and Zone logs a warning when others may read it.

@@ -302,8 +302,8 @@ func scopeFilter(user asker, scope string, lists map[string]ListInfo) func(*Task
 	return func(t *Task) bool { return inScope(t, scope, lists) }
 }
 
-// mineSettingKeys: what My tasks' settings dialog sets. mail ("off"): no
-// mail when a task is assigned to the user (mailsAssigned in notify.go).
+// mineSettingKeys: what My tasks' settings dialog sets. mail: the kinds of
+// mail about tasks the user turned on, "," between (mailKinds in notify.go).
 var mineSettingKeys = []string{"view", "group", "limit", "labels", "mail"}
 
 // mineOwner: whose registry holds user's settings of My tasks: their own,

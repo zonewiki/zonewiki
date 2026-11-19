@@ -198,15 +198,16 @@ type shareTarget struct {
 }
 
 // shareTargets: where the page menu's Share… would move slug for user, to
-// more people (docs/spec/users.md: to more people, never to fewer): their
+// more people (docs/spec/users.md, Who may move a page to other readers): their
 // own private page into the folder of each group they are in, a group's
 // page into that of each group that includes its own, and either out to
 // everyone, each time the same path below the folder. None: not offered (no
 // users, a shared page, someone else's, a viewer's, a guide not theirs to
 // change, a private home, or a note, which Move to wiki takes out of the
-// folder). There is no way back: others have seen the page then, and its
-// links on their pages would have to go; a new page is made where it
-// belongs from the start (sharedNewOffer).
+// folder). Taking it back is a move to fewer people (mayNarrow: an admin,
+// or whoever shared it while nobody else has changed it), never offered
+// here; a new page is made where it belongs from the start
+// (sharedNewOffer).
 func shareTargets(user asker, slug string) []shareTarget {
 	s := settings()
 	from := placeOf(slug)
