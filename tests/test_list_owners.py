@@ -1,4 +1,4 @@
-"""A shared list has owners (Lists for some, docs/spec/tasks.md): who made
+"""A shared list has owners (Who manages a list, docs/spec/tasks.md): who made
 it, and every admin. Owners rename it, delete it and set its settings;
 whoever else may write tasks makes and changes its tasks and leaves the
 list as it is. A list from before owners is its admins'; without users, and

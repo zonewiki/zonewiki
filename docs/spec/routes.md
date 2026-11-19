@@ -177,7 +177,7 @@ For an admin `/groups` also lists every other group, what each includes, the for
 | Method | Path                  | Description                                     |
 |--------|-----------------------|-------------------------------------------------|
 | GET    | `/tasks`              | The built-in tasks page (`tasksPage()`): every open task, or a list, the Inbox or My tasks; see The tasks page, below |
-| POST   | `/tasks/rename`       | Rename a task tag (fields `tag`, `new_name`, `merge`; the Rename tag… dialog of `/tasks?tag=<tag>`, Lists in `docs/spec/tasks.md`); see below |
+| POST   | `/tasks/rename`       | Rename a task tag (fields `tag`, `new_name`, `merge`; the Rename tag… dialog of `/tasks?tag=<tag>`, Renaming a tag in `docs/spec/tasks.md`); see below |
 | POST   | `/tasks/new-list`     | Make a task list, pinned for who makes it (fields `name`, `private`, `pin`: `0` leaves it unpinned); see below |
 | POST   | `/tasks/rename-list`  | Rename a list (fields `list`, `new_name`; its Rename… dialog): its tasks, the pins and the pages' embeds and links follow; see below |
 | POST   | `/tasks/delete-list`  | Delete a list (fields `list`, `to`, `share`, `close`; its Delete… dialog); see below |
@@ -308,7 +308,7 @@ The `Zone-Tasks` header is a word that changes with every write of tasks or list
 
 `POST /api/tasks/settings`: `{page, index, was, set}` rewrites the params of a page's `[[tasks: …]]`, `{list, set}` a list's own settings, `{all: true, was, set}` the settings of All tasks; `{ok}` or `{error}` (400, 403, 404, 409: Settings in `docs/spec/tasks.md`).
 
-`POST /api/tasks/lists` is New list… in the dialog that moves tasks to a list (Moving tasks to a list in `docs/spec/tasks.md`).
+`POST /api/tasks/lists` is New list… in the dialog that moves tasks to a list (A new list for the tasks in `docs/spec/tasks.md`).
 It answers 201 `{ref, private, pinned}` (pinned beside the user's other pins, never as their first), a refusal `{error}`.
 
 ### Closed tasks

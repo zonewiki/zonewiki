@@ -1108,7 +1108,7 @@ def test_follow_a_task_and_its_news_is_under_updates(alice, new_page):
 
 def test_many_updates_show_their_first_and_a_row_for_the_rest(alice, new_page):
     """Updates is above what is yours to do today: of many it draws the first
-    seven and Show N more (docs/spec/tasks.md, A long section draws its top)."""
+    seven and Show N more (docs/spec/tasks.md, Long sections)."""
     bob = new_page()
     bob.request.post("/login", form={"username": "bob", "password": "pw"})
     for i in range(9):

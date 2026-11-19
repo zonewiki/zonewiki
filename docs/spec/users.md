@@ -373,7 +373,7 @@ What an admin may do beyond an editor, each where it is described (the role is a
 | Guides | write `wiki-guide`, a folder's `AGENTS.md`/`CLAUDE.md` and what they pull in (`adminsOnly`); a group's guide only an admin who is in the group (Guides, below) |
 | Moves to fewer people | move a shared page to where fewer people see it, into a group they are in or their private folder (`mayNarrow` in `go/pages.go`), and a shared task into a list fewer people see (`mayNarrowTask` in `go/tasks.go`); anyone else only a page they shared themselves while nobody else has changed it, or a task they made (Who may move a page to other readers, below) |
 | Task lists | rename, delete, set the settings of, say whom it is for and pin for everyone any shared list they see, not only one they own (`canManageList` in `go/access.go`, Who manages a list in `docs/spec/tasks.md`) |
-| Tasks | delete any task for good (`mayDeleteTask`) and anyone's comment (`mayChangeComment`), and import a file with its comments' and history's names as they are (`checkBy` is skipped: a wiki moved, a backup put back; Quick actions and Comments in `docs/spec/tasks.md`) |
+| Tasks | delete any task for good (`mayDeleteTask`) and anyone's comment (`mayChangeComment`), and import a file with its comments' and history's names as they are (`checkBy` is skipped: a wiki moved, a backup put back; Deleting a task for good, Who may change a comment and Names in comments and history in `docs/spec/tasks.md`) |
 | Undo on Changes | undo a change to a guide, which others don't |
 
 No more than that: an admin sees no other user's private pages, tasks or notes, and nothing of a group they are not in (below).
@@ -1277,7 +1277,7 @@ a `[[task:…]]` to it renders as for a deleted task.
 A shared page that refers to a private task doesn't carry its title into the search index (`taskRefsAsTitles` resolves a page's references as its owner, or for a shared page as no one).
 
 **Another user's private list is no list**: it is in no switcher, no List field and no answer; its name on a shared page (`[[tasks: list=gifts]]`) is the shared list of that name or none ("There is no list #gifts"), to its owner too, so a shared page shows everyone the same.
-A name means the same registry for one user only: two users can each have a private `gifts`, and a shared one can exist beside them; whoever has both names the shared one `shared/gifts` (Making and naming in `docs/spec/tasks.md`).
+A name means the same registry for one user only: two users can each have a private `gifts`, and a shared one can exist beside them; whoever has both names the shared one `shared/gifts` (List names in `docs/spec/tasks.md`).
 Renaming, deleting, sharing, pinning or setting another user's list is refused as for a list that isn't there (404).
 
 **Pins are per user** (`pinned` in their registry): which lists are pills of their list switcher; one who has set none has the wiki's.

@@ -398,7 +398,7 @@ A move to more people is not asked about.
 
 #### `rename_task_tag`
 
-`renameTagOp`, as Rename tag… on `/tasks?tag=` (Lists in `docs/spec/tasks.md`): a task tag on all tasks, done ones too, and in embeds and `/tasks` links on pages, in one commit.
+`renameTagOp`, as Rename tag… on `/tasks?tag=` (Renaming a tag in `docs/spec/tasks.md`): a task tag on all tasks, done ones too, and in embeds and `/tasks` links on pages, in one commit.
 A `new_tag` in use is refused unless `merge` is true.
 Says how many tasks and which pages it changed, of those the user sees.
 Not pages' frontmatter tags.
@@ -428,7 +428,7 @@ A list is deleted in the browser.
 
 #### `rename_task_list`
 
-`renameListOp`, as Rename… on a list's Tasks page (Lists in `docs/spec/tasks.md`): the list's name, on its tasks, in the users' pins, and in the embeds and `/tasks` links on pages that name it, in one commit.
+`renameListOp`, as Rename… on a list's Tasks page (Renaming a list in `docs/spec/tasks.md`): the list's name, on its tasks, in the users' pins, and in the embeds and `/tasks` links on pages that name it, in one commit.
 A name of a list the user sees is a tool error (two lists are made one by deleting one into the other, in the browser).
 Says how many tasks and which pages it changed, of those the user sees; under a guide for one of those pages it needs the guide's id, as the page writes do.
 

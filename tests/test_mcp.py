@@ -1913,7 +1913,7 @@ class TestUpdateTask:
 
     def test_status_done_spawns_the_next_occurrence(self, client, wiki_dir):
         # Due 3 days ago: the next week's date is still to come (a date
-        # already past would be skipped, see tasks.md Completing).
+        # already past would be skipped, see tasks.md The next occurrence).
         due = (date.today() - timedelta(days=3)).isoformat()
         nxt = (date.today() + timedelta(days=4)).isoformat()
         tid = _task_id(call(client, "create_task", title="Backup", due=due, repeat="weekly")[0])

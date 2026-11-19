@@ -1,5 +1,5 @@
 // The tasks' views by their names of 2026-11: a wiki from before is taken
-// over once, when Zone starts (Views in docs/spec/tasks.md).
+// over once, when Zone starts (The views' names in docs/spec/tasks.md).
 package main
 
 import (
