@@ -1062,9 +1062,9 @@ def test_who_no_longer_sees_a_list_no_longer_has_its_tasks(page, wiki, monkeypat
 
 
 def test_follow_a_task_and_its_news_is_under_updates(alice, new_page):
-    """Follow in a shared task's menu (docs/spec/users.md, What happens on
-    your tasks is told to you): the task is not yours to do, and what
-    happens on it is under My tasks' Updates; the dialog says who follows
+    """Follow in a shared task's menu (docs/spec/tasks.md, News on your
+    tasks): the task is not yours to do, and what happens on it is under
+    My tasks' Updates; the dialog says who follows
     and unfollows; is:following lists what you follow."""
     t = new(alice, "Bob's work", assignee="bob")
     new(alice, "Nobody follows", assignee="bob")

@@ -1,7 +1,7 @@
-"""Following a task (docs/spec/users.md, What happens on your tasks is told
-to you): a third way to have to do with a shared task, beside having it and
-having made it. Who follows is told what who made it is told (a comment,
-closed, reopened, given on), in the app and by mail, without the task being
+"""Following a task (docs/spec/tasks.md, News on your tasks): a third
+way to have to do with a shared task, beside having it and having made it.
+Who follows is told what who made it is told (a comment, closed, reopened,
+given on), in the app and by mail, without the task being
 theirs to do. Kept in the task (followers); only oneself; only who sees it.
 The rule's cases are in go/testdata/news_cases.json, run through the server
 and the browser."""

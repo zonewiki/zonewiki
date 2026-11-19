@@ -889,7 +889,7 @@ class TestHandingOn:
 
 
 class TestTheWordOfWhatAPageHolds:
-    """Zone-Tasks (docs/spec/tasks.md, The task app): another word after a
+    """Zone-Tasks (docs/spec/tasks.md, Keeping lists current): another word after a
     write to a list the page holds (?held=), not after one elsewhere or
     to another user's own tasks."""
 

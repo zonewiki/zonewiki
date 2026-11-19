@@ -1,8 +1,10 @@
 # Tasks
 
 Part of Zone's spec (see `AGENTS.md` for the index).
+Each feature says first how it is used, then how it works.
+What the task app is built on (its code, how a page brings its tasks and keeps them current, its files) is under How it works, at the end.
 
-### Task list embed
+## Task list embed
 
 `[[tasks:]]` on a line by itself embeds the full task app (see Tasks) inline.
 Syntax: `[[tasks: param=value param2=value2]]`.
@@ -40,21 +42,7 @@ Case doesn't matter (`[[Tasks:]]`), nor a space after the colon (`[[tasks:list=s
 The params can be changed without editing the page: List settings… in the ⋯ menu of the embed's toolbar (see Settings).
 In the editor, the formatting bar's Task list button shows the same dialog, with which list the embed shows, to write the embed or change the one the cursor is on (Task list dialog in `docs/spec/editor.md`).
 
-**Headless instance**: `buildTasksEmbed(…, headless)` renders the app hidden, for pages that only need its edit modal (the editor's Make task, see Task references).
-`openEditModal(null, opts)` takes, besides `tags`, a starting `title`, `description`, `start_date` and an `onCreated(task)` callback; `titles` instead of `title` is batch mode (one task per title, the fields shared, `onCreated` gets the array).
-
-**Implementation** (`go/tasksyntax.go` for the syntax, `go/tasksembed.go` for the HTML): `tasksRE` finds the directive and `parseTasksParams()` parses its `key=value` pairs.
-`processTasksEmbeds()` swaps each one for a numbered placeholder before rendering, and `injectTasksEmbeds()` replaces each `<p>PLACEHOLDER</p>` with `buildTasksEmbed()`'s HTML (`templates/tasks_embed.html`) afterwards.
-The embed passes its params as `data-init-*` attributes; it carries no script: `tasks.js` (an ES module `zonewiki.js` imports on every page) starts every `.tasks-app` on load (`initTaskApps`, marking each `data-ready`).
-Element ids get a `-<n>` suffix after the first embed, so a page can hold several.
-**A page brings its tasks along**: a page view with a task list (and `/tasks`) carries, once, the open tasks its lists show (`scopedTasks`: those of any of the lists' scopes, so My tasks or one list doesn't carry every open task the user sees; a list of every task, All tasks or a tag's view, takes them all) as `GET /api/tasks` answers them
-and their notes' and comments' HTML as `POST /api/render-notes` would (`tasksInitial`: a `<script type="application/json" id="tasks-initial">` data block, which no browser runs; `<`, `>` and `&` in it are `\u` escapes, so no task's text ends it).
-**Up to 150 tasks** (`lazyTextsFrom`): a page whose lists show more brings none of them, and each list asks for its tasks when it starts, as below.
-A team's All tasks is megabytes of JSON; a page is sent as it is, while **what `GET /api/tasks…` answers goes gzipped** to a browser that takes it (`gzipTasks`, `writeJSON` in `go/server.go`: an answer of 1 KB or more; at a team's size All tasks' 3.3 MB are 0.65 MB on the wire, and real text compresses better than the bench's random words).
-Only those answers: they hold the user's text and nothing secret beside it (no token, no form's field), which is what compressing the two together would give away; pages go uncompressed.
-The lists the page starts with draw from it, each from its own copy, with no request (`initialTasks` in `js/taskdata.js`, `keepRendered` in `js/tasktexts.js`), so the list is there when the page is rather than two round trips later.
-Every later load asks the server for the list's scope (`GET /api/tasks?list=`, `?lists=`, `?mine=1`: `scopeQuery`; the server's rule is the one `inScope` has in the browser), and so does a list that starts later (a preview's, the hidden one a page without a list fetches for its dialog): `initTaskApps` forgets the tasks once the page's lists have started.
-`tasks.js` also reads `?tag=`, `?view=`, `?search=`, `?task=`, `?new=1` from the URL; `?new=1` opens the new-task modal in one embed only, one of My tasks or of the Inbox if the page has it, else the first.
+A task list also takes `?tag=`, `?view=`, `?search=`, `?task=`, `?new=1` from the URL (`tasks.js` reads them); `?new=1` opens the new-task modal in one embed only, one of My tasks or of the Inbox if the page has it, else the first.
 
 The Tasks page itself is `/tasks`; embeds are for custom views on ordinary pages (a tag's tasks, a list with notes around it).
 Nothing links to a `tasks.md` page.
@@ -66,75 +54,9 @@ There is no `page` field: `page` in embeds or API bodies is ignored.
 ## The task app
 
 A task app at `/tasks` (a built-in page, `tasksPage()`), also embeddable via `[[tasks:]]` (see Task list embed).
-Server side is `go/tasksapi.go` (the `/api/tasks/*` routes, `tasksRoutes`),
-`go/tasks.go` (the writes, which the MCP tools share) and `go/tasksembed.go` (the embed's HTML, `taskCounts`) on top of `go/internal/taskfiles` (the files: where they are, read and written under one lock), `go/internal/taskmodel` (a task and its file's format) and `go/tasklogic.go` (recurrence, completing, history, comments, task backlinks) and `go/tasksyntax.go` (the syntax in page text).
-Client side is `tasks.js` (DOM, one instance per embed) plus `tasks-core.js` (pure logic, tested under Node).
+Several task lists on one page work side by side, a list left open for days stays current, and what someone else changed shows within a minute (Keeping lists current, under How it works).
 
-Several embeds per page work: each instance keeps its own task array, and a write in one refreshes the others (`refreshOtherInstances`).
-Every instance also reloads on `visibilitychange` and bfcache `pageshow`, so a tab left open for days shows current tasks and today's day sections.
-`refreshIfIdle` skips the reload while a drag, swipe, completion grace period, ⋯ menu or edit modal is in progress.
-**What someone else changed shows within a minute**, without fetching tasks to find out: the server has a word for the tasks a page holds (`tasksWord`, `Store.Word`: the start's time and a count of the writes to those lists' files and to the registries the user reads; not a file changed by hand), which `GET /api/tasks` and `GET /api/tasks/due-count` answer in the `Zone-Tasks` header and a page's own tasks bring along (`"word"` in `tasksInitial`). **It is of what the page holds**: a page whose lists each show one list (or an Inbox) names them (`?held=a,b`, `pageScopes` in `js/chrome.js`), and a write to another list, or to another user's own tasks, leaves its word as it is; a page that holds more (My tasks, All tasks, a tag's view) has the word of every list its user sees. So among a hundred people a list isn't loaded again all day for writes it doesn't show.
-The page keeps the word of the tasks it holds (`<body data-tasks-word>`, `js/taskdata.js`); the due count it asks for every minute while it is used (`refreshDueBadge`, `whileUsed`) says the server's, and when that is another one the lists load again (`zone:tasks-changed`, `refreshIfIdle`; a list that was busy is told again the next minute).
-After the page's own write the word is taken as its own.
-**A long list of every task loads again at most every five minutes** (All tasks or a tag's view with more than 150 tasks; `EVERY_MS`, `holdsEvery` in `tasks.js`): in a team some task changes every minute, and such a list would load all of them again each time. It is told once and loads when five minutes have passed since it last did; coming back to the browser tab, and the page's own writes, load it at once, as any list.
-It says nothing of what changed in those lists. (Until 2026-11 there was one word for every write of any task file, so another user's private write loaded every open list again.)
-
-### Storage
-
-- `_tasks/lists.json` is the lists' registry: the shared lists with their settings, the wiki's pins and the settings of All tasks; with users each user's own in `private/<user>/_tasks/lists.json` (their private lists, their pins, their settings of My tasks). It is no tasks file (see Lists → The registry).
-  (Until 2026-11 the settings of All tasks were in `_tasks/settings.json`; the migration moved them.)
-- The tasks' files live in the `_tasks/` folder (with users each user's private tasks in `private/<user>/_tasks/`, the same files: Private tasks in `docs/spec/users.md`): open tasks in `tasks.json`,
-  closed ones in `closed.json` (flat JSON arrays, committed to git on change).
-  **Each list has its files in a folder of its own**, `lists/<name>/` in its owner's `_tasks/` (`_tasks/lists/shop/tasks.json`, `closed.json`, `closed-YYYY-MM.json`; `dirOf` in `go/internal/taskfiles`); the tasks in no list (an Inbox's) are in `_tasks/` itself.
-  A file is written whole and kept whole in git at every change, so a write costs what its list weighs, not what the wiki weighs: at a team's size (the bench in `docs/spec/testing.md`: 40 lists, 5,000 open tasks) a change took 112 ms and added 38 KB to the packed repository with one file for all, and takes 50 ms and 6 KB with a file per list (about 0.4 KB once Zone has joined its packs: Zone packs the repository itself, in `docs/spec/rendering.md`).
-  Which list a task is in is still the task's to say (its `list`); the folder is where a write files it. A read takes every folder of an owner (`dirs`), so a task found in another list's folder (a file moved by hand, a wiki from before the folders) is read all the same and filed where it belongs by the next write of its owner's tasks, or at start.
-  A task that moves to another list moves between two files in one commit; the file that takes it is written first, so a write that stops halfway leaves it in two files, never in none, and one task in two files is one task to every reader (`unique`).
-  A list's file left without a task is removed, and its folder with it; a list's rename files its tasks into the folder of the new name in the rename's commit (`FileByListLocked`).
-  A list's name that is no folder's name (a dot first, a path separator: none a list can be given, but a file edited by hand may say so) has no folder: its tasks stay with those of no list.
-  (Until 2026-11 every task of an owner was in `_tasks/tasks.json` and the closed files beside it. A wiki from then is taken over when Zone starts, in one commit, "File the tasks by list" (`ArchiveOldClosed`; also when the same start rolls months into archives: until 2026-11-15 a wiki with months already archived got that commit under the message "Archive closed tasks"); a second start changes nothing. Going back to an older Zone: revert that commit, or it reads only the tasks in no list.)
-  **Closed tasks are filed by month**: `closed.json` holds those closed in the current month (and any without a usable date), `closed-YYYY-MM.json` those of an earlier month (only such a name, and the older `closed-YYYY.json`, is an archive).
-  So completing a task writes a month's closed tasks, not a year's: a file is written whole and kept whole in git at every change, and in a large wiki a year's is megabytes.
-  `atomicfile.Write` creates the folder, so a new wiki gets it on the first write.
-  Write routes read every closed file (`readClosedAllStrict`) and `writeClosed` files each task by its completion month, writing only files whose tasks changed, and removing an archive left without a task; startup does the same (`ArchiveOldClosed`) for a month's end without writes.
-  So archived tasks can be edited, reopened and tagged like any other; Closed shows them by year (see Views), reading that year's files.
-  (Until 2026-11 the closed tasks were filed by year, `closed-YYYY.json`: such a file's tasks go to their months' files at the first start, and it is removed, in the commit "Archive closed tasks", or in "File the tasks by list" when the same start files tasks by list.)
-- **A start reads every task file when it has to** (`setUpTasks`, `tasksChecked` in `go/tasksetup.go`): filing closed tasks by month and tasks by list, writing a hand-edited file in Zone's format and giving a shared task its list all read and encode every task of the wiki's years, and a hosted wiki starts whenever someone comes back to it. So a start leaves a mark in Zone's folder (`.zone/tasks-checked`: the layout, whether the wiki has users, and the commit the task files were last Zone's at, which follows Zone's own commits of them: `noteTaskCommit`), and the next start does none of that while git says that nothing else wrote a task file since: none differs from what is committed, and no commit after the mark's touches one. A file edited by hand, a commit by hand or pulled from elsewhere, users turned on or off, no git or no mark: it reads them all, as every start did until 2026-11. What a month's end leaves to file is seen without that (`Unfiled`: the files' names and a look at this month's closed files) and done. At a team's size a start then takes 0.2 s and 50 MB, where it took 180 MB.
-- **A write of tasks reads their own files** (`ReadTasksForWriteLocked`; for one task `ReadTaskForWriteLocked`, `findForWriteLocked`: a change, a completion, a comment, a ticked subtask; for several a batch, `batch-update`, `batch-complete`, `batch-tag`, and a delete): the open tasks and, for the closed ones among them, the closed tasks of the files that hold them (this month's files are looked through first, then the archives, the newest first, until each task is found; a task no file has makes it look through them all, without copying them). It writes whole only the closed files it read; a file it has to put a task into (this month's, for one just completed) is read then, so nothing is written without what it held (`writeClosed`, the store's `scope`). So a change doesn't read and copy every closed task of the wiki's years, and an archive that can't be read stops only the writes that need it. While closed tasks wait to be filed (a month has ended, a year's file from before the months: `unfiled`), a write reads everything and files them, as every write did until 2026-11. What needs every task reads everything still: an import and the undo of a delete (for the ids there are), an export, a list's rename or delete, a private list shared.
-  (Until 2026-11-16 a batch and a delete did too: ten open tasks tagged at once took 70 ms at a team's size, and take 41 ms.)
-- **An archive nobody read for ten minutes is no longer kept parsed** (`archiveKept`, `forgetOldArchives`); the open tasks and this month's closed ones stay. The Closed link's number is counted by looking at what is parsed, without a copy of the year's tasks (`CountClosedInYear`, `lookAt`), and so are the closed tasks with news for a page's user (`RecentClosed`).
-- **A file whose tasks a write didn't touch costs a comparison** (`holds` in `go/internal/taskfiles`): the store knows each file's tasks as it parsed or wrote them (`writeTasks`), and a write compares what it would write with that (`Task.Same`) before it reads or encodes anything. Changing an open task doesn't read or encode the closed files.
-- **A write asks once per list whether its user sees it** (`byOwner` in `go/internal/taskfiles`): a write hands over every open task its user sees, and whom a list is for is a look at its folder (`SeesList`, `forOf`: a stat), so the answer is kept for the write. Until 2026-11-16 it was asked per task: at a team's size 5,000 stats for 40 lists, about 3 ms of a change's 29.
-- All mutations go through one lock (`taskFiles.Lock`, `go/internal/taskfiles`) and atomic writes (temp file + rename, `go/internal/atomicfile`); the server handles requests concurrently.
-  **A read waits for a write's files, never for its commit** (`Store.view`, `Hold`, `Release`): a write holds the lock from its read to its commit, one write at a time, as ever;
-  readers (`Open`, `All`, `Snapshot`, the Closed readers) don't take it.
-  They share a second lock, which a write holds alone from the first file it replaces to the last (every write of the store's takes it; code that writes a task file itself calls `Hold` first) and lets go before git runs (`CommitFiles`, `commitLists`; `Unlock` at the latest).
-  So a reader sees every file of a write or none (a task that moves between two files is never in neither), and a page view doesn't stand still while someone's task is committed, nor while a commit waits for the packing.
-  Until 2026-11 readers took the writes' lock: every page view computes the Tasks links' counts, so every page waited for whoever was saving a task.
-- **The counts are kept per user until the files change** (`keptCounts` in `go/tasksembed.go`, `Store.Stamp`): the Tasks links' counts, which every page view shows and every open page asks for once a minute, and the list switcher's, by place.
-  They are counted anew when a task file or registry the user reads is another one (its time and size, so a change by hand counts, and Zone's own writes by their number, so two within one tick of the clock are two), when the day is another one, or the settings are.
-  A look at each file (`Stamp`), not a read: until 2026-11 each page view copied every open task the user sees and ran the news' rule over each.
-- **A file is parsed once** (`readFile` in `go/internal/taskfiles`): every page view reads the open tasks (the Tasks links' count) and a write reads every file, so a file's tasks are kept as parsed and handed out as copies (`Task.Clone`: a reader may change its own) until the file is another one (its time, size or inode: Zone's own writes, which also forget it, `writeText`; a hand edit).
-  Write paths use a strict reader that fails with `taskfiles.ErrCorrupt` (503) on an unreadable file instead of treating it as empty and wiping every task.
-- The files are JSON (`go/internal/taskmodel`): a list of tasks,
-  two spaces of indent,
-  text as written (no `\u` escapes but those JSON needs),
-  each task's fields in one order (`id`, `title`, `description`, `tags`, `list` (only when it is in one), `assignee` (only when it has one), `created_by` (only when it says), `followers` (only when it has some), `start_date`, `due_date`, `created_at`, `closed_at`, `wont_do`, `keep`, `importance` (only when it isn't normal), `last_done`, `sort_order`, `recurrence`, `spawned_from`, `history`, `comments`),
-  every field written,
-  also when empty (`null`, `[]`, `false`),
-  then any keys Zone doesn't know (from an older version or a hand edit),
-  A–Z,
-  their values kept as they were.
-  A file is read leniently: a value of the wrong kind is its field's default (a number or a bool where text belongs is its JSON text, so an `id` of `7` is `"7"`; only `true` is true), so an odd file still reads and a write never refuses it for that.
-  A write changes only the files whose tasks changed, so commits show only what changed.
-  Files in another format (hand-edited: keys in another order, unknown keys not A–Z) are rewritten once when Zone starts, in a commit of their own ("Write the task files in Zone's format"); the tasks' values stay as they were (`1.0` reads `1`).
-- Request bodies are validated (`jsonObject`, `asStr`, `asInt`, `asStrList`, `idList`): bad input is a 400 with JSON `{ error }`, never a 500. Numeric strings are accepted for integers; `tags` may be a comma-separated string.
-- Reads clean the tags (`jsonobj.TextList`, `taskmodel.CleanTags`), since a file edited by hand may have `"local llm"` or `#work`.
-  Older data formats are no longer converted: the conversions (task files in the wiki's root,
-  closed tasks in `tasks.json`,
-  `focus_date`/`defer_days`/`recurrence.anchor`/`page`/`focus_order`,
-  spawns without `spawned_from`) were removed in 2026-10. A wiki last used before then must be opened once with an earlier Zone (git history) first.
-
-### Dates
+## Dates
 
 A task has two independent dates; changing one never moves the other.
 
@@ -143,6 +65,11 @@ A task has two independent dates; changing one never moves the other.
 - **`start_date`**: the day the task becomes available, and the commitment to work on it.
   Having one makes a task *planned*.
   A past start date is not overdue, it means "available since" (cards show "since Sep 21").
+
+The edit modal's "Days before due" is just another way to enter the start date (`start = due − N`) and is not stored; the dialog shows it once asked for ("+ Days before due", with a due date).
+Recurring instances keep the gap between the two dates, but a new instance's start date is never before today (it can't have been available before the previous one was done); when that clamps it, the series remembers the gap in `recurrence.lead` for the next instance.
+
+### A start after the deadline
 
 **A start after the deadline** is usually a slip, but not always (a late task planned for next week), so it is never forbidden, only questioned.
 **Every quick way to set a start date is one function**, `startOn(ids, day)` in `js/taskselect.js` (the Plan board's drop on a day, ⋯ Start today/tomorrow and Pick start date, the card's 📅 picker, **f**/**F**, **0**–**7**, the selection bar, a swipe): it takes one task or the selection,
@@ -156,6 +83,8 @@ An overdue task started today doesn't ask, on the board too: that is catching up
 The edit modal shows a hint under the dates instead (`syncDateWarning`): "Starts after its deadline", with a button that moves the other date (the deadline, or the start when Due was moved before it).
 It doesn't block saving.
 
+### Locale
+
 **Locale** (`locale` in the settings file, a BCP 47 tag like `de-AT` or `en-GB`): how dates read and the day weeks start on, in the browser's `Intl` (no locale data in Zone).
 `loadSettings` refuses a value that isn't a tag shape (`localeRE`);
 `layout.html` puts it on `<body data-locale>`,
@@ -168,16 +97,15 @@ Only dates: Today, Tomorrow, Tmrw, the shortcuts' labels and the rest of the UI 
 (Until 2026-11 a date further off was written `YYYY-MM-DD` on a card and in the edit modal's date buttons, beside "since Sep 21".)
 The task chips on pages are rendered by the server in US English inside `<time class="local-date" datetime>`, which `localizeDates` (`js/util.js`) rewrites in the locale: on the page view, a re-rendered chip, the editor's preview and the search modal's preview.
 
+### ISO dates
+
 **ISO dates** (`date-format = iso`, the only value; anything else is an error in the settings file): dates read `2026-10-05` (ISO 8601) wherever the locale would write them (`<body data-date-format="iso">`, `TasksCore.dateSettings` → `{ locale, iso }`): `shortDate` gives the date itself,
 always with its year;
 the Plan board's days and the picker's tooltips are the locale's short weekday and the date (`fullDayLabel`, `longDayLabel`: "Mi 2026-10-21").
 The calendar's month title, weekday heads and week start still follow the `locale` setting.
 The server writes the task chips' dates as ISO itself (`shortDate`), so `localizeDates` leaves them.
 
-The edit modal's "Days before due" is just another way to enter the start date (`start = due − N`) and is not stored; the dialog shows it once asked for ("+ Days before due", with a due date).
-Recurring instances keep the gap between the two dates, but a new instance's start date is never before today (it can't have been available before the previous one was done); when that clamps it, the series remembers the gap in `recurrence.lead` for the next instance.
-
-### Task fields
+## Task fields
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -187,7 +115,7 @@ Recurring instances keep the gap between the two dates, but a new instance's sta
 | `tags` | string[] | One word each. `taskmodel.CleanTags()` on every write/read/restore: inner whitespace → `-`, leading `#` dropped, empties removed, case-insensitive duplicates collapsed. Tag inputs sanitize as you type (`TasksCore.sanitizeTagInput`), leaving deletions alone. A tag sorts tasks; it never puts one in a list. |
 | `list` | string | The list the task is in, by its name; no key at all when it is in the Inbox (see Lists). Which list of that name is the task's file's to say: a task in a user's files is in one of their private lists (without `list`: in their Inbox), any other in a shared one. A write takes a list as the user names it (its name, or `shared/<name>`: Lists → Names), `""`, `null` or `inbox` for the Inbox (with users not for a shared task, which is always in a list: 400); a name no list has is a 400. With users the API also answers `"private": true|false`, from where the task is kept; `private` in a write is a 400 that points to `list`. |
 | `assignee` | string | The user the task is assigned to (with users; Assigning tasks in `docs/spec/users.md`). No key at all when there is none: in the file and in the API's answers, so a wiki that assigns nothing keeps its files as they were. A write takes a user's name, `me` (whoever writes) or `""`/`null`/`none` (no one); a leading `@` and the case don't matter. |
-| `followers` | `["dan", "alice"]` | The users who follow the task (with users; Following a task in `docs/spec/users.md`): told of its news as who made it is, without it being theirs to do. In the order they came; no key at all without one. No field of a write: `follow: true\|false` in a write adds or removes whoever writes. The API answers those who see the task. |
+| `followers` | `["dan", "alice"]` | The users who follow the task (with users; Following a task): told of its news as who made it is, without it being theirs to do. In the order they came; no key at all without one. No field of a write: `follow: true\|false` in a write adds or removes whoever writes. The API answers those who see the task. |
 | `created_by` | string | The user who made the task (with users; `Task.CreatedBy`, set by `createTask`, carried on by a series' next occurrence). No key in the file without one: a task from before the field, or a wiki without users. The API answers it for those too, from the history's `created` entry (`Task.Maker`), so no file is rewritten for it. Not taken from a write. |
 | `due_date` | `"YYYY-MM-DD"` / `null` | Deadline |
 | `start_date` | `"YYYY-MM-DD"` / `null` | Start date (see Dates) |
@@ -201,15 +129,18 @@ Recurring instances keep the gap between the two dates, but a new instance's sta
 | `importance` | `"high"`, `"low"` | How much the task matters (see Importance). Normal, what a task is unless said, is no key at all: in the file and in the API's answers, so a wiki that sets none keeps its files as they were |
 | `last_done` | `"YYYY-MM-DD"` / `null` | A keep task's last completion, shown on its card as "✓ Sep 21" |
 | `comments` | `[{ id, at, by, text }]` | The user's comments, oldest first, uncapped (see Comments); `by` only with users. |
-| `history` | `[{ at, event, by?, from?, to? }]` | What happened to the task, oldest first, capped at 30 (`historyLimit`) beside the entries a task is read by for good, which are never dropped: `created`, the last `assigned` and the last `shared` (`capHistory`: who made it, who has it, who shared it): `created`, `start`/`due` (with `from`/`to` dates), `done`, `reopened`, `wontdo`, `skipped`, `repeat` (`to` = the next occurrence's date), `assigned` (with `from`/`to` user names, `null` no one), `seen` (a user looked at its news: answered by the API from what each user has seen, with the last comment the look saw as `to`, not kept in the task's file; What happens on your tasks is told to you, in `docs/spec/users.md`). `at` is `YYYY-MM-DDTHH:MM`; `by` the user who did it, only with users. See History. |
+| `history` | `[{ at, event, by?, from?, to? }]` | What happened to the task, oldest first, capped at 30 (`historyLimit`) beside the entries a task is read by for good, which are never dropped: `created`, the last `assigned` and the last `shared` (`capHistory`: who made it, who has it, who shared it): the events are History's table: `created`, `start`/`due` (with `from`/`to` dates), `done`, `reopened`, `wontdo`, `skipped`, `repeat` (`to` = the next occurrence's date), `assigned` (with `from`/`to` user names, `null` no one), `mentioned` (`to` who was named), `shared`, `private` (older tasks), `seen` (a user looked at its news: answered by the API from what each user has seen, with the last comment the look saw as `to`, not kept in the task's file; News on your tasks). `at` is `YYYY-MM-DDTHH:MM`; `by` the user who did it, only with users. See History. |
 
-### Views
+## Views
 
 **A view says which tasks it shows and how the Open tab shows them**, and has one name for each: `view=` is `today` (what is to do now), `open` (every open task) or `closed`; `group=` is `none`, `day`, `person` or `list`. These are the names in embeds, in links (`/tasks?view=open&group=person`), in the registries and in the settings dialog.
 (Until 2026-11 there were four: `view=focus|open|plan`, where `open` and `plan` also said how Open showed its tasks, `group=`, and `plan=on|off` from before that. A wiki from then is taken over once, when Zone starts (`migrateViewsLocked` in `go/viewsmigrate.go`, after the lists' migrations; one commit, "Name the tasks' views Today and Open"): each `[[tasks: …]]` on a page and each registry's settings are rewritten so that every view shows what it showed (`view=focus` is `view=today`; `view=plan` is `view=open group=day`; `view=open`, which was the one list, is `view=open group=none`; `plan=on|off` is `group=day|none`; of three `labels` the first and the last stay), and the registries say `version` 3; a wiki without a registry keeps a mark in Zone's folder. From then on the old names are no view's: a link with `view=focus` or `view=plan` opens the default tab.)
 **Today is Open with a filter** (`st.today` in `js/tasktabs.js`): the Today tab shows the Open tab's tasks that are to do now, and draws them as the Open tab draws its own (`st.activeView`: `open` one list, `plan` the board by what `st.cut` says, `closed`), so the grouping below works on both tabs, each keeping its own choice. What is Today's alone is a rule on the filter, not a view of its own: a new task there starts today, the limit's warning, My tasks' Updates, the empty state, no Order (Today is in the manual order), which way a swipe goes. (Until 2026-11 Today was a view of its own, a list that could not be grouped.) A tab is asked for and remembered by a word (`focus` Today, `open` or `plan` the Open tab drawn that way, `closed`); `namedView` turns the names of links and embeds into that where a page opens.
 
+### The tabs and the Open tab's control
+
 A segmented control (`.view-tabs`, one `<button data-view>` each) in the order **Open · Today** (`data-view` `open`/`focus`).
+On phones the tabs' control spans the full width.
 A tab shows its tasks one of a few ways (`activeView` and `st.cut` in `tasks.js`): as one list, or in sections (the board): by start date, by person or by list.
 The control right after the tabs picks one (`.tasks-cut`, a segmented control of `<button data-group>`, the current one `aria-pressed`; outside the toolbar: it modifies the tab shown;
 shown on the Open tab and on Today, where there is something to choose (Today of one person without lists is one list, and has no control);
@@ -227,9 +158,11 @@ One person without lists sees List and Plan, and **d** flips between them.
 A control of named choices rather than a dropdown: each is one click, the one shown is seen at a glance, and "Plan" names what the board by day is for.
 (Until 2026-11 it was a switch, Plan, on or off.)
 Its default is the view's `group=` (Plan without it; `data-init-group`), set in the settings dialog (The Open tab shows).
-A choice is remembered for the browser tab only (`sessionStorage` `zone-tasks-group:<path>|<list>|<tag>|<instance>`: `list`, `days`, `person` or `lists`), as the active tab is, so a fresh load is back at the default, and the Open tab (a click, Tab) opens it (`tabView`, `openGroup`); one the view doesn't offer is Plan (`groupsOffered`, `defaultGroup`).
+A choice is remembered for the browser tab only (`sessionStorage` `zone-tasks-group:<path>|<list>|<tag>|<instance>`, with `|today` after it for Today's: `list`, `days`, `person` or `lists`), as the active tab is, so a fresh load is back at the default, and the Open tab (a click, Tab) opens it (`tabView`, `openGroup`); one the view doesn't offer is Plan (`groupsOffered`, `defaultGroup`).
 (Until 2026-11 the flip was kept in `localStorage` for good, and there was no default to set.)
-On a phone the control has the line under the tabs, with the Order (Header, below).
+On a phone the control has the line under the tabs, with the Order (The header, under Interaction).
+
+### By person and By list
 
 **By person and By list are the board with another key** (`TasksCore.personBuckets`, `listBuckets`; `boardBuckets` in `tasks.js` picks by `st.cut`): the same sections with counts, folding, Unsorted and Sorted labels, the manual order inside a section, Order's sorts and the 200-card window; a section's header says how many of its tasks are overdue, in red, with their list on a click.
 What is the day's alone stays the day's: the WIP limit's flag, the due and carried counts, Later's date picker.
@@ -247,7 +180,8 @@ What is the day's alone stays the day's: the WIP limit's flag, the due and carri
   a shared task is never taken by a private list or, with users, the Inbox ("A shared task stays shared": the section doesn't light up, `refusesDrop`).
   A card there has no list chip.
 
-(Plan was a tab of its own until 2026-10; with every section in the manual order and labelled Unsorted/Sorted, it had become Open grouped by day, and the List what's left of Open: ranking across days, and every new task in one Unsorted list.) **Tab**/**Shift+Tab** cycle the tabs: on the Tasks page, and on any page while a task is selected or the focus is in the list; a page that only embeds a list keeps Tab for the next link or field (until 2026-11 a list took it wherever the focus was).
+### Which tab a page opens on
+
 Initial view, when a page is opened: URL `?view=` > embed `view=` > tab remembered in `sessionStorage` > the view's default (`data-default-view`, `DefaultView` in `buildTasksEmbed`):
 **what is yours to do opens on Today, a place you look into on Open.** Today: My tasks, a list of your own (without users any list), a view of every task on a page, and `/tasks` where the Tasks links go there (a wiki without lists). Open: a shared list (with users: a team opens its list for the backlog and what no one has, which Today by its dates leaves out), the Inbox (what was captured, with or without a date), and All tasks beside My tasks.
 (Until 2026-11 the Inbox and All tasks opened on the tab then called Focus: of six captured tasks the Inbox showed the two with a date.)
@@ -255,104 +189,139 @@ Initial view, when a page is opened: URL `?view=` > embed `view=` > tab remember
 The tab the user chose is kept apart (`zone-tasks-tab:<path>#<instance>`): it is what a page without a `view` opens on, and a tab a link chose doesn't become that.
 So a task opened from a link (`/tasks?task=…&view=open`) and then left for Today is still on Today after F5; the link's task is then not selected again either.
 Opening the page anew (a link, the address bar, another browser tab) follows the URL and the embed as before.
-On phones the control spans the full width.
+**Tab**/**Shift+Tab** cycle the tabs: on the Tasks page, and on any page while a task is selected or the focus is in the list; a page that only embeds a list keeps Tab for the next link or field (until 2026-11 a list took it wherever the focus was).
 
-- **Open as one list** (List, `open`): every open task, in two sections: **Unsorted** (no `sort_order`, newest first; new tasks land here) above **Sorted** (manual order).
-  Open has no filter for unplanned tasks (an "Unplanned" toggle was removed): those are the Plan board's Unplanned section, where dragging to a day plans them.
-  So Unsorted means "not yet ranked" and Unplanned "not yet scheduled", each with one home.
-  A leftover `unplanned=` embed param is ignored.
-- **Sorting** (Open and Plan): an **Order** dropdown in the toolbar (`select.tasks-sort`, shown on Open and Plan) picks **Manual**, **Due date** or **Created**; **o** cycles them.
-  Due sorts by deadline, nearest first (overdue on top), tasks without one last, each in Open's order within (`TasksCore.byDeadline`); Created newest first (`TasksCore.byCreated`).
-  They answer "what is due soonest" and "what came in lately", which the manual order doesn't.
-  On Open a sorted list is flat: Due under **By deadline** and **No deadline**, Created under **Newest first**.
-  On Plan the sections stay (the board still places tasks by start date) and each is sorted inside; Unplanned's overdue and Today's carried-over lists stay by deadline and by start.
-  Nothing reorders in a sort, since the manual order is only edited where it is shown: Open doesn't drag, on Plan no section is `ordered`, so a card dropped on another card is a drop on its section (dragging between days still plans), and Ctrl+Shift+↑/↓ only says to press `o` until Manual.
-  Each tab's sort is remembered per task list in this browser (`localStorage` `zone-tasks-sort:<path>|<list>|<tag>|<instance>`, JSON `{"open": "due", "plan": "created"}`; missing means manual).
-  Today has none: it is the day's manual order, worked top to bottom.
-- **Open as the Plan board** (`view=open` with `group=day`, called Plan below): a day board grouped by start date (`TasksCore.bucketKey`): Unplanned (no start date), Today (with the tasks **carried over**: started on an earlier day and still open, `TasksCore.isCarried`), Tomorrow, the next weekdays, Later.
-  Unplanned is first because planning starts there: its cards are dragged onto the days just below, not up past the whole week.
-  **Overdue has no section**: a missed deadline shows on the card (red), and the task sits where its start date puts it (an earlier start or today: Today; a later one, accepted in the edit modal: that day).
-  Only a deadline today puts a task without a start date on Today.
-  Unplanned's header counts its overdue tasks in red (`· 2 overdue`, `.board-day-overdue`; `boardBuckets` gives Unplanned its `overdue` list), shown even when it is folded, so folding can't hide them.
-  Later and Unplanned always show.
-  Dropping a card on a day sets its start date, on Unplanned clears it, on Later opens a date picker (min today+7).
-  An empty section is only its dashed header row (min 1.9rem, 2.5rem on coarse pointers), which takes the drop; nothing grows when a drag starts.
-  Day headers show a count and turn amber at the limit.
-  Each day's header also says how many tasks are **due** that day, wherever their cards sit (`· 2 due`, muted, `.board-day-due`; `boardBuckets` gives each day its `due` list): the board places cards by start date, so without it a deadline would be invisible until its day.
-  A click (or tap) on it, or on Unplanned's overdue count, lists those tasks in a menu (a bottom sheet on phones; `headerTasksMenu`), and picking one selects its card; the tooltip names them too.
-  **Folding**: a section with cards folds from its header: a click anywhere on the header (`.board-day--foldable`, `data-fold`;
-  the label with its ▾ chevron is the button, `.board-day-fold` with `aria-expanded`, for the keyboard and screen readers;
-  only the due or overdue count opens its own list) hides its cards,
-  the header with its counts stays (`.board-day--folded`).
-  Typically Unplanned, so a long backlog doesn't push Today off the first screen.
-  A folded section still takes drops (its header is the drop target), and its cards aren't rendered, so j/k, Ctrl+A and the selection skip them.
-  Folding is remembered per task list in this browser (`localStorage` `zone-tasks-folded:<path>|<list>|<tag>|<instance>`, a JSON list of `foldId`s: a day by its distance from today, `day1` for Tomorrow, so it stays folded as the days pass; the other sections by name).
-  It never hides what you look for: while the viewer filters every section shows (without fold buttons; `userFiltering`: their own words, not the locked chips of a `list=` or `tag=` embed),
-  and a task that has to be seen unfolds its own section (`unfoldFor`): a `?task=` link,
-  a new task,
-  a pick in a header's due or overdue list.
-  **Order**: in Manual (see Sorting) inside every section tasks are in Open's order (`TasksCore.byOpenOrder`, shared with Open), and they can be reordered there, which edits that one order (there is no Plan order): plan tomorrow in the evening and put it in order on the spot.
-  A card dropped on a card of a day or Later (`data-ordered` on the header) lands above or below it by the pointer, a line showing where (`dropSide`, `.task-drop-before`/`-after`, mouse and touch);
-  on another day it also starts the task there (`planOnDay`, so a deadline it passes still asks), start date and place in one move.
-  Dropped on a Later card from elsewhere, it asks for the date as on Later's heading and lands where Open's order puts it.
-  Ctrl+Shift+↑/↓ moves the selection one place within its section, never out of it (`planKeyMove`), crossing the Unsorted/Sorted labels as on Open (below).
-  As on Today, only the moved tasks change place in the full order and hidden tasks keep theirs (`TasksCore.placeInOrder`).
-  **Unsorted / Sorted labels**: a section that holds both, Unsorted tasks (listed first) and Sorted ones, labels them **Unsorted** and **Sorted** (`.plan-subdivider`), as Open's sections do one level down;
-  a section without Unsorted tasks has no labels, and neither has one with nothing else (until 2026-11 it was headed Unsorted: in a team's list that nobody ranked, every section of By person said so), so most sections show none, and the labels appear where something is still to be ranked among what is (often Today: a task added on Today starts today, unsorted).
-  Lighter than the day headings on purpose: as headings, "Sorted" would read as another day.
-  Moves follow Open's rules, through Open's own code: `planSectionList` gives the section as Open lists its sections, `[#unsorted, …Unsorted ids, #sorted, …Sorted ids]`, and `applySectionList` / `sectionKeyMove` do the rest.
-  So a task dropped among the Unsorted ones leaves the order (Unsorted is newest first, nothing moves within it), one dropped among the Sorted ones takes that place, and no other task is ranked as a side effect;
-  Ctrl+Shift+↑ on the first Sorted task takes it into Unsorted, ↓ on an Unsorted one to the top of Sorted.
-  The **Sorted** label takes drops (`data-sub="sorted"`, mouse and touch): first among the sorted, as Open's Sorted heading; the Unsorted label doesn't (a drop on it is a drop on its section).
-  (Until 2026-10 a section had no labels, and a drop above an Unsorted task ranked it and every Unsorted task below it, so the day kept the order shown without a visible boundary.) **Unplanned** is the backlog, ranked while planning: it reorders like a day.
-  A card from elsewhere dropped on an Unplanned card unplans it (as on the heading) and lands where Open's order puts it.
-  Its header still counts the overdue tasks, most overdue first (Due date sorts the whole board by deadline).
-  It used to be sorted by deadline and not reorderable; that hid the backlog's manual ranking where it is planned.
-  A drop on a task's own heading does nothing, except Later's, which opens the date picker to choose another later date.
-  **Carried over has no section**: those tasks are on the Today tab already (a past start means available), so they are today's load, and the board's Today section holds them, in Open's order with the rest, so Today reads as Today does and its count and limit include them.
-  A slipped plan stays visible without a section of its own: on Plan a carried-over card's "since Mon" badge is amber (`.task-carried`),
-  and Today's header counts them,
-  amber,
-  before its due count (`· 3 carried`, `.board-day-carried`; `boardBuckets` gives Today its `carried` list, the longest-slipping first; a click lists them, `headerTasksMenu`, shown even folded).
-  Committing to one again is optional: dropping it on Today's heading (its own section, but `dropOnBucket` starts it today: `recommit`) or swiping it right starts it today, which takes the badge away.
-  (Carried over was a section of its own above Today until 2026-10;
-  it made Today's count and limit leave out part of the day's load and split one list, Today's, in two.) A drop on a day after the task's deadline (`planOnDay`, through `startsAfterDeadline`;
-  not an overdue task dropped on Today) asks "Move the deadline too?" (`#task-deadline-modal`): Move deadline sets start and due to that day,
-  with an undo toast restoring both;
-  Cancel writes nothing.
-  Wiring: `setupBoardDragAndDrop` per card plus list-level handlers attached once.
-- **Today** (the tab; called Focus until 2026-11, and `focus` in the code still): what you're working on now (`TasksCore.isFocus`: `start_date <= today`, or due today/overdue; on the board: Today, its carried-over tasks included, and overdue tasks wherever their start date puts them).
-  It is Open filtered: the same sections (Unsorted · Sorted) and the same order (`byOpenOrder`);
-  its section headings look the same as the Open list's: the light labels of the Plan board's Unsorted/Sorted (`sectionHTML`: `.plan-subdivider.list-section`, see Sections), so there is one manual order, and ordering on Today orders Open.
-  That fits a shopping list: Open is the shop's order, Today today's list, and an item added on Today (Unsorted) is dragged into place among today's items, which places it in the shop's order (see Sections).
-  Due and overdue tasks have no section of their own: they keep their place in the order, marked by their deadline colour.
-  The Tasks links (with the due count) open here unless another tab was used this session.
-  With a limit, a warning shows when Today reaches it.
-  Empty Today says "Nothing planned for today" and links to Plan.
-  New tasks created here get today as start date.
-  (Today once had its own order, the Lineup (`focus_order`) above Others; it was removed as a second commitment on top of the start date.)
-  **Updates** (My tasks' Today only; `.updates-heading`, cards `.task-update`; `inViewOrder` in `js/taskrender.js`, `tasksInView` given the user): above Unsorted, **the tasks with news for you** (`TasksCore.newsFor`: What happens on your tasks is told to you, in `docs/spec/users.md`), **whatever their dates**, each card saying what the news is. A task given to you often has no date, and was then on no tab the Tasks links open, while their count said it was there. Among them are tasks that aren't in My tasks otherwise: what you gave away (someone commented, it was done), what mentions you, a task closed this month or last; the server sends those along with My tasks (`withUpdates`: `GET /api/tasks?mine=1`, and the tasks a page of My tasks brings), the list holds them for Updates alone (`t.extra`) and no other tab shows them. A task there is in neither section below, nothing is dragged into Updates and nothing ranks there (`sectionList` leaves its cards out); opening the task, or doing something with it, takes it out: one of yours with a start date not after today is in Today below, else on Open.
-  **On My tasks' Open tab a line says that there are some** (`.tasks-updates-note`, `syncUpdatesNote` in `js/taskrender.js`: "2 updates for you →", which opens Today), so the Tasks links never count what the page doesn't show; the tasks themselves stay in their sections there.
-- **Closed** is not a tab but a link under the list (`#task-closed-link`, `Closed (N) →`, count from `/api/tasks/closed-count`, refreshed after every write): it is seldom looked at, and a tab would put it beside what is done every day.
-  While it shows, the lines above the list that are about its open tasks ("4 unassigned", Given to others, what the view is for) aren't (`.tasks-shows-closed`, `markActiveTab`).
-  It holds the tasks that are closed: done, and closed undone (won't do), which is why it isn't called Completed.
-  That is its name everywhere: where people read it (the link, the view's heading, the settings dialog), in the params (`view=closed`), the routes (`/api/tasks/closed`), the files (`closed.json`), a task's `closed_at` and the code.
-  It was called Completed: a wiki from then is renamed when Zone starts (`renameOldClosed`: `completed.json` and `completed-YYYY.json` become `closed.json` and `closed-YYYY.json`, never over a file that is there; a task's `completed_at` is read where it has no `closed_at`, and the files are written again with the new field), in one commit, "Name the task files of closed tasks closed".
-  Nothing else is kept of the old names: a page's `view=completed`, a link with it and a client asking the old routes get what an unknown view or route gets.
-  In Closed, the link reads `← Back to <tab>`, naming the tab it returns to.
-  While the filter has any word (`TasksCore.filterActive`: text, a tag, a name, `list:`, `from:`, `!`, `is:updated`, `is:following`) or the embed a tag, the link has no number (`Closed →`): the total would read as what the filter leaves.
-  While a filter is on (text or a tag in the field, an embed's `tag=`) it reads `Closed →`, without a number: the total would read as what the filter leaves.
-  The filter carries over into Closed, so a click shows the closed tasks it matches.
-  (The link once counted them, `2 matches in Closed →`. That took every closed task of the year and its texts' HTML, loaded behind each filtered list right after it was drawn, and a second draw of the list when they arrived: too much for a number.)
-  `/api/tasks` returns open tasks only, so closed tasks are fetched only when Closed is opened (`fetchClosed`, one request at a time); `tasksGen` refetches if `fetchTasks` replaced the list meanwhile.
-  **Closed shows a page, which the server answers** (`GET /api/tasks/closed?limit=`, `Store.ClosedPage`, `loadClosed` in `js/taskdata.js`): of the year's closed tasks of the list's scope that the filter field's words take, the latest closed first, the first 50, and how many there are (`{tasks, total}`); **Show more (N remaining)** asks for 50 more, a change of the filter asks again (a moment after the last key: `closedStale`), and a link to a closed task (`?task=`) gets that task among them however far down. The server reads the filter as the browser does (`parseTaskFilter`, `taskFilter.matches` in `go/tasksyntax.go`: `#tag`, `-#tag`, `list:`, `@name`, `from:`, `!high`, `is:updated`, text), and looks through the year's tasks without copying them, so it copies and sends the page. (Until 2026-11 it sent every closed task of the year and the browser showed the first 50: with a team's year of them the answer was tens of megabytes, and the process holding it passed 650 MB with 75,000.)
-  Closed's heading has a **year switcher** (`.closed-years`, years from `/api/tasks/closed-years`, shown when there is more than one) for the yearly archives;
-  `?year=YYYY` opens that year (search links to archived tasks carry it), and going back to a tab returns to this year (`setClosedYear`).
+### Open as one list
 
-**A long section draws its top** (`windowed`, `DRAW` = 200 in `js/taskrender.js`): a section of more than 200 cards (Unsorted, Sorted, a sort's group, a Plan section) draws its first 200 and a row **Show N more** (`[data-draw-more]`), which shows that section whole from then on (`st.drawAll`).
-**Updates draws its first seven** (`UPDATES_DRAW`), the latest news first, and the same row: it is above what is yours to do today, and in a team someone back from a week away has dozens (seen with the bench's hundred users: 52 updates before the first task of the day). Its heading counts them all; Mark all read sees them all.
-The section's count is of all its tasks, the filter searches all of them, and a task that has to be seen (a `?task=` link's, a new one: `unfoldFor`, `st.mustDraw`) shows its section whole.
-All tasks of a large wiki is thousands of cards, and a list is read from its top.
+**Open as one list** (List, `open`): every open task, in two sections: **Unsorted** (no `sort_order`, newest first; new tasks land here) above **Sorted** (manual order).
+Open has no filter for unplanned tasks (an "Unplanned" toggle was removed): those are the Plan board's Unplanned section, where dragging to a day plans them.
+So Unsorted means "not yet ranked" and Unplanned "not yet scheduled", each with one home.
+A leftover `unplanned=` embed param is ignored.
+
+### Sorting
+
+**Sorting** (Open and Plan): an **Order** dropdown in the toolbar (`select.tasks-sort`, shown on Open and Plan) picks **Manual**, **Due date** or **Created**; **o** cycles them.
+Due sorts by deadline, nearest first (overdue on top), tasks without one last, each in Open's order within (`TasksCore.byDeadline`); Created newest first (`TasksCore.byCreated`).
+They answer "what is due soonest" and "what came in lately", which the manual order doesn't.
+On Open a sorted list is flat: Due under **By deadline** and **No deadline**, Created under **Newest first**.
+On Plan the sections stay (the board still places tasks by start date) and each is sorted inside; Unplanned's overdue and Today's carried-over lists stay by deadline and by start.
+Nothing reorders in a sort, since the manual order is only edited where it is shown: Open doesn't drag, on Plan no section is `ordered`, so a card dropped on another card is a drop on its section (dragging between days still plans), and Ctrl+Shift+↑/↓ only says to press `o` until Manual.
+Each tab's sort is remembered per task list in this browser (`localStorage` `zone-tasks-sort:<path>|<list>|<tag>|<instance>`, JSON `{"open": "due", "plan": "created"}`; missing means manual).
+Today has none: it is the day's manual order, worked top to bottom.
+
+### The Plan board
+
+**Open as the Plan board** (`view=open` with `group=day`, called Plan below): a day board grouped by start date (`TasksCore.bucketKey`): Unplanned (no start date), Today (with the tasks **carried over**: started on an earlier day and still open, `TasksCore.isCarried`), Tomorrow, the next weekdays, Later.
+Unplanned is first because planning starts there: its cards are dragged onto the days just below, not up past the whole week.
+**Overdue has no section**: a missed deadline shows on the card (red), and the task sits where its start date puts it (an earlier start or today: Today; a later one, accepted in the edit modal: that day).
+Only a deadline today puts a task without a start date on Today.
+Unplanned's header counts its overdue tasks in red (`· 2 overdue`, `.board-day-overdue`; `boardBuckets` gives Unplanned its `overdue` list), shown even when it is folded, so folding can't hide them.
+Later and Unplanned always show.
+Dropping a card on a day sets its start date, on Unplanned clears it, on Later opens a date picker (min today+7).
+An empty section is only its dashed header row (min 1.9rem, 2.5rem on coarse pointers), which takes the drop; nothing grows when a drag starts.
+Day headers show a count and turn amber at the limit.
+Each day's header also says how many tasks are **due** that day, wherever their cards sit (`· 2 due`, muted, `.board-day-due`; `boardBuckets` gives each day its `due` list): the board places cards by start date, so without it a deadline would be invisible until its day.
+A click (or tap) on it, or on Unplanned's overdue count, lists those tasks in a menu (a bottom sheet on phones; `headerTasksMenu`), and picking one selects its card; the tooltip names them too.
+A drop on a task's own heading does nothing, except Later's, which opens the date picker to choose another later date.
+A drop on a day after the task's deadline (`planOnDay`, through `startsAfterDeadline`;
+not an overdue task dropped on Today) asks "Move the deadline too?" (`#task-deadline-modal`): Move deadline sets start and due to that day,
+with an undo toast restoring both;
+Cancel writes nothing.
+(Plan was a tab of its own until 2026-10; with every section in the manual order and labelled Unsorted/Sorted, it had become Open grouped by day, and the List what's left of Open: ranking across days, and every new task in one Unsorted list.)
+
+#### Folding
+
+**Folding**: a section with cards folds from its header: a click anywhere on the header (`.board-day--foldable`, `data-fold`;
+the label with its ▾ chevron is the button, `.board-day-fold` with `aria-expanded`, for the keyboard and screen readers;
+only the due or overdue count opens its own list) hides its cards,
+the header with its counts stays (`.board-day--folded`).
+Typically Unplanned, so a long backlog doesn't push Today off the first screen.
+A folded section still takes drops (its header is the drop target), and its cards aren't rendered, so j/k, Ctrl+A and the selection skip them.
+Folding is remembered per task list in this browser (`localStorage` `zone-tasks-folded:<path>|<list>|<tag>|<instance>`, a JSON list of `foldId`s: a day by its distance from today, `day1` for Tomorrow, so it stays folded as the days pass; the other sections by name).
+It never hides what you look for: while the viewer filters every section shows (without fold buttons; `userFiltering`: their own words, not the locked chips of a `list=` or `tag=` embed),
+and a task that has to be seen unfolds its own section (`unfoldFor`): a `?task=` link,
+a new task,
+a pick in a header's due or overdue list.
+
+#### Order on the board
+
+**Order**: in Manual (see Sorting) inside every section tasks are in Open's order (`TasksCore.byOpenOrder`, shared with Open), and they can be reordered there, which edits that one order (there is no Plan order): plan tomorrow in the evening and put it in order on the spot.
+A card dropped on a card of a day or Later (`data-ordered` on the header) lands above or below it by the pointer, a line showing where (`dropSide`, `.task-drop-before`/`-after`, mouse and touch);
+on another day it also starts the task there (`planOnDay`, so a deadline it passes still asks), start date and place in one move.
+Dropped on a Later card from elsewhere, it asks for the date as on Later's heading and lands where Open's order puts it.
+Ctrl+Shift+↑/↓ moves the selection one place within its section, never out of it (`planKeyMove`), crossing the Unsorted/Sorted labels as on Open (Unsorted and Sorted labels, below).
+As on Today, only the moved tasks change place in the full order and hidden tasks keep theirs (`TasksCore.placeInOrder`).
+
+#### Unsorted and Sorted labels
+
+**Unsorted / Sorted labels**: a section that holds both, Unsorted tasks (listed first) and Sorted ones, labels them **Unsorted** and **Sorted** (`.plan-subdivider`), as Open's sections do one level down;
+a section without Unsorted tasks has no labels, and neither has one with nothing else (until 2026-11 it was headed Unsorted: in a team's list that nobody ranked, every section of By person said so), so most sections show none, and the labels appear where something is still to be ranked among what is (often Today: a task added on Today starts today, unsorted).
+Lighter than the day headings on purpose: as headings, "Sorted" would read as another day.
+Moves follow Open's rules, through Open's own code: `planSectionList` gives the section as Open lists its sections, `[#unsorted, …Unsorted ids, #sorted, …Sorted ids]`, and `applySectionList` / `sectionKeyMove` do the rest.
+So a task dropped among the Unsorted ones leaves the order (Unsorted is newest first, nothing moves within it), one dropped among the Sorted ones takes that place, and no other task is ranked as a side effect;
+Ctrl+Shift+↑ on the first Sorted task takes it into Unsorted, ↓ on an Unsorted one to the top of Sorted.
+The **Sorted** label takes drops (`data-sub="sorted"`, mouse and touch): first among the sorted, as Open's Sorted heading; the Unsorted label doesn't (a drop on it is a drop on its section).
+(Until 2026-10 a section had no labels, and a drop above an Unsorted task ranked it and every Unsorted task below it, so the day kept the order shown without a visible boundary.)
+
+#### Unplanned
+
+**Unplanned** is the backlog, ranked while planning: it reorders like a day.
+A card from elsewhere dropped on an Unplanned card unplans it (as on the heading) and lands where Open's order puts it.
+Its header still counts the overdue tasks, most overdue first (Due date sorts the whole board by deadline).
+It used to be sorted by deadline and not reorderable; that hid the backlog's manual ranking where it is planned.
+
+#### Carried over
+
+**Carried over has no section**: those tasks are on the Today tab already (a past start means available), so they are today's load, and the board's Today section holds them, in Open's order with the rest, so Today reads as Today does and its count and limit include them.
+A slipped plan stays visible without a section of its own: on Plan a carried-over card's "since Mon" badge is amber (`.task-carried`),
+and Today's header counts them,
+amber,
+before its due count (`· 3 carried`, `.board-day-carried`; `boardBuckets` gives Today its `carried` list, the longest-slipping first; a click lists them, `headerTasksMenu`, shown even folded).
+Committing to one again is optional: dropping it on Today's heading (its own section, but `dropOnBucket` starts it today: `recommit`) or swiping it right starts it today, which takes the badge away.
+(Carried over was a section of its own above Today until 2026-10;
+it made Today's count and limit leave out part of the day's load and split one list, Today's, in two.)
+
+### Today
+
+**Today** (the tab; called Focus until 2026-11, and `focus` in the code still): what you're working on now (`TasksCore.isFocus`: `start_date <= today`, or due today/overdue; on the board: Today, its carried-over tasks included, and overdue tasks wherever their start date puts them).
+It is Open filtered: the same sections (Unsorted · Sorted) and the same order (`byOpenOrder`);
+its section headings look the same as the Open list's: the light labels of the Plan board's Unsorted/Sorted (`sectionHTML`: `.plan-subdivider.list-section`, see Sections), so there is one manual order, and ordering on Today orders Open.
+That fits a shopping list: Open is the shop's order, Today today's list, and an item added on Today (Unsorted) is dragged into place among today's items, which places it in the shop's order (see Sections).
+Due and overdue tasks have no section of their own: they keep their place in the order, marked by their deadline colour.
+The Tasks links (with the due count) open here unless another tab was used this session.
+With a limit, a warning shows when Today reaches it.
+Empty Today says "Nothing planned for today" and links to Plan.
+New tasks created here get today as start date.
+(Today once had its own order, the Lineup (`focus_order`) above Others; it was removed as a second commitment on top of the start date.)
+
+#### Updates
+
+**Updates** (My tasks' Today only; `.updates-heading`, cards `.task-update`; `inViewOrder` in `js/taskrender.js`, `tasksInView` given the user): above Unsorted, **the tasks with news for you** (`TasksCore.newsFor`: News on your tasks), **whatever their dates**, each card saying what the news is.
+A task given to you often has no date, and was then on no tab the Tasks links open, while their count said it was there.
+Among them are tasks that aren't in My tasks otherwise: what you gave away (someone commented, it was done), what mentions you, a task closed this month or last;
+the server sends those along with My tasks (`withUpdates`: `GET /api/tasks?mine=1`, and the tasks a page of My tasks brings), the list holds them for Updates alone (`t.extra`) and no other tab shows them.
+A task there is in neither section below, nothing is dragged into Updates and nothing ranks there (`sectionList` leaves its cards out);
+opening the task, or doing something with it, takes it out: one of yours with a start date not after today is in Today below, else on Open.
+**On My tasks' Open tab a line says that there are some** (`.tasks-updates-note`, `syncUpdatesNote` in `js/taskrender.js`: "2 updates for you →", which opens Today), so the Tasks links never count what the page doesn't show; the tasks themselves stay in their sections there.
+
+### Closed
+
+**Closed** is not a tab but a link under the list (`#task-closed-link`, `Closed (N) →`, count from `/api/tasks/closed-count`, refreshed after every write): it is seldom looked at, and a tab would put it beside what is done every day.
+While it shows, the lines above the list that are about its open tasks ("4 unassigned", Given to others, what the view is for) aren't (`.tasks-shows-closed`, `markActiveTab`).
+It holds the tasks that are closed: done, and closed undone (won't do), which is why it isn't called Completed.
+That is its name everywhere: where people read it (the link, the view's heading, the settings dialog), in the params (`view=closed`), the routes (`/api/tasks/closed`), the files (`closed.json`), a task's `closed_at` and the code.
+It was called Completed: a wiki from then is renamed when Zone starts (`renameOldClosed`: `completed.json` and `completed-YYYY.json` become `closed.json` and `closed-YYYY.json`, never over a file that is there; a task's `completed_at` is read where it has no `closed_at`, and the files are written again with the new field), in one commit, "Name the task files of closed tasks closed".
+Nothing else is kept of the old names: a page's `view=completed`, a link with it and a client asking the old routes get what an unknown view or route gets.
+In Closed, the link reads `← Back to <tab>`, naming the tab it returns to.
+While the filter has any word (`TasksCore.filterActive`: text, a tag, a name, `list:`, `from:`, `!`, `is:updated`, `is:following`) or the embed a tag, the link has no number (`Closed →`): the total would read as what the filter leaves.
+The filter carries over into Closed, so a click shows the closed tasks it matches.
+(The link once counted them, `2 matches in Closed →`. That took every closed task of the year and its texts' HTML, loaded behind each filtered list right after it was drawn, and a second draw of the list when they arrived: too much for a number.)
+`/api/tasks` returns open tasks only, so closed tasks are fetched only when Closed is opened (`fetchClosed`, one request at a time); `tasksGen` refetches if `fetchTasks` replaced the list meanwhile.
+**Closed shows a page, which the server answers** (`GET /api/tasks/closed?limit=`, `Store.ClosedPage`, `loadClosed` in `js/taskdata.js`): of the year's closed tasks of the list's scope that the filter field's words take, the latest closed first, the first 50, and how many there are (`{tasks, total}`); **Show more (N remaining)** asks for 50 more, a change of the filter asks again (a moment after the last key: `closedStale`), and a link to a closed task (`?task=`) gets that task among them however far down. The server reads the filter as the browser does (`parseTaskFilter`, `taskFilter.matches` in `go/tasksyntax.go`: `#tag`, `-#tag`, `list:`, `@name`, `from:`, `!high`, `is:updated`, text), and looks through the year's tasks without copying them, so it copies and sends the page. (Until 2026-11 it sent every closed task of the year and the browser showed the first 50: with a team's year of them the answer was tens of megabytes, and the process holding it passed 650 MB with 75,000.)
+Closed's heading has a **year switcher** (`.closed-years`, years from `/api/tasks/closed-years`, shown when there is more than one) for the yearly archives;
+`?year=YYYY` opens that year (search links to archived tasks carry it), and going back to a tab returns to this year (`setClosedYear`).
+
+### Sections
 
 **Sections** (Open and Today; `SECTIONS`, `sectionHTML`, `.list-section[data-section]`): Unsorted (no `sort_order`, newest first) above Sorted (`sort_order`).
 Both tabs head them alike, with the light label a Plan section uses for its Unsorted/Sorted (`.plan-subdivider`), not a day heading, so the labels look the same wherever they appear; Open's sort headings (By deadline, No deadline, Newest first) take the same label.
@@ -370,10 +339,19 @@ So a list that is stale in someone's browser doesn't put its old order back over
 My tasks' order, which is one user's own, is sent whole (Lists → My tasks).
 (Until 2026-11 every save sent the list's whole order, numbered from 0.)
 
+### Long sections
+
+**A long section draws its top** (`windowed`, `DRAW` = 200 in `js/taskrender.js`): a section of more than 200 cards (Unsorted, Sorted, a sort's group, a Plan section) draws its first 200 and a row **Show N more** (`[data-draw-more]`), which shows that section whole from then on (`st.drawAll`).
+**Updates draws its first seven** (`UPDATES_DRAW`), the latest news first, and the same row: it is above what is yours to do today, and in a team someone back from a week away has dozens (seen with the bench's hundred users: 52 updates before the first task of the day). Its heading counts them all; Mark all read sees them all.
+The section's count is of all its tasks, the filter searches all of them, and a task that has to be seen (a `?task=` link's, a new one: `unfoldFor`, `st.mustDraw`) shows its section whole.
+All tasks of a large wiki is thousands of cards, and a list is read from its top.
+
+### No hiding
+
 **No hiding**: every open task is always reachable from its own tasks (Open or Plan) and from search.
 Dates decide where a task appears, never whether.
 
-### Settings
+## Settings
 
 **List settings…**, the first item of the list's **⋯ menu** (on a wiki page the ⋯ of the embed's toolbar, `#task-more-btn`; on the Tasks page the page's own ⋯ beside the heading, which holds the list's actions too: Lists → The Tasks page's ⋯ menu), opens **List settings** (`#task-settings-modal`, `js/tasksettings.js`): what the list is and how it opens.
 A setting is kept where it belongs: a list's own with the list, how a page looks at a list in that page's `[[tasks: …]]`.
@@ -402,13 +380,13 @@ The line above Save says whose the settings are: the list's, for everyone (or "w
 
 **Where it writes** (`data-settings-*` on `.tasks-app`, from `buildTasksEmbed`: `-page`, `-index`, `-raw` and `-embed` for an embed's `[[tasks: …]]` on a page, as written there; `-list`, `-list-set` and `-pin` for the list shown: its ref, its own settings as JSON, and how you pinned it):
 
-- **A list's own settings**: the registry (Lists → The registry), wherever the dialog was opened: on `/tasks?list=<name>` or on a page that shows the list.
+- **A list's own settings**: the registry (The registry, under How it works), wherever the dialog was opened: on `/tasks?list=<name>` or on a page that shows the list.
   They hold wherever the list shows.
 - **An embed on a page**: that `[[tasks: …]]`: for a list the tab and the filter, for an embed of no list everything.
 - **All tasks** (`/tasks`): the shared registry's `all`, `"all": {"view": "open", "limit": "5"}` (`allTasksParams`), for everyone.
   It has no pin and no filter (`allSettingKeys`).
 - **My tasks** (`/tasks?mine=1`): your registry's `mine`, `"mine": {"view": "focus", "limit": "5"}` (`mineParams`, `setMineParams`, `mineSettingKeys`; without users the shared registry's), for you alone.
-  `"mail"` there names the kinds of mail you turned on (**Mail me when**: a task is given to me, someone mentions me, someone comments on a task I have or gave; three boxes, none ticked until you tick it, shown where Zone could mail you: `data-settings-mail`; What happens on your tasks is told to you, in `docs/spec/users.md`).
+  `"mail"` there names the kinds of mail you turned on (**Mail me when**: a task is given to me, someone mentions me, someone comments on a task I have, gave or follow; three boxes, none ticked until you tick it, shown where Zone could mail you: `data-settings-mail`; Mail, under News on your tasks).
   It has no pin and no filter, and the dialog says "For My tasks: yours alone."
   Unset, it opens on Today, with Plan on the Open tab and no limit.
   (Until 2026-11 the view, then called Pinned, showed its first pinned list's settings and had no dialog.)
@@ -431,7 +409,7 @@ When the `[[tasks: …]]` is no longer as the dialog saw it (the page was edited
 Reload it and try again." Other refusals: 400 with the reason, 403 for a viewer, 404 for a page or a list you can't see; the dialog shows the message.
 After a save the page reloads, and what the browser tab remembered (the active tab, a choice of the Open tab's control) is forgotten, so the list opens as just set (`forgetSession`).
 
-### Export and import
+## Export and import
 
 **A list's tasks as a file**, to keep a copy, move a list to another wiki or hand it to someone.
 **Export tasks** and **Import tasks…** are in the list's **⋯ menu** in the toolbar, under List settings… (`#task-more-btn`, `.tasks-more-btn`; the cards' menu, `showMenu` in `js/taskmenu.js`, a bottom sheet on phones; the code in `js/tasksettings.js`).
@@ -464,7 +442,7 @@ After a save the page reloads, and what the browser tab remembered (the active t
 
 The ⋯ menu is there where a list has settings (see Settings: not for a viewer, nor for a name no list has).
 
-### Look
+## Look
 
 Tasks have their own tones, set on `.tasks-app` (so a task card elsewhere keeps the page's): `--border` a step darker than the wiki's, which every line in it uses (cards, section headers, labels, fields), so cards and sections stand out;
 cards plain white on the warm paper of the page and on the white sheet,
@@ -489,17 +467,41 @@ bold, since in light mode it is about 3:1;
 the blue and green are at least 4.5:1, a darker shade in light mode and a brighter one in dark.
 Each with a dark-mode value.
 
-### Interaction
+## Interaction
 
-- **Filter field** (`#task-filter-search`, `TasksCore.parseFilter`/`matchesFilter`): `#words` filter by tag (all must match; `#a|b` = any), `-#word` excludes a tag (`-#a|b`: neither), `is:updated` shows the tasks with news for you, `is:following` those you follow (Following a task in `docs/spec/users.md`), `list:shop` shows the tasks in that list (`list:a|b` either, `-list:shop` not in it, `list:inbox` in no list, the Inbox, as `list:none` says too; a list is no tag, so `#shop` doesn't find it), `!high` (or `!`) and `!low` show the tasks of that importance, the rest searches title and description.
-  `/` focuses it, `#` focuses it and starts a tag.
-  Its tooltip lists the syntax (with users the `@` words too).
-  While it holds something of yours (text, or a chip the page didn't set) an **×** at its end (`.chip-input-clear`, "Clear the filter") empties it: the text and your chips go, a page's locked chips stay, and the cursor stays in the field.
-  With users, `from:anna` shows the tasks anna made (`created_by`; `from:me` your own, `from:a|b` either's, `-from:anna` not hers; a private task is its user's own making), and `/tasks?from=me` arrives as that word.
-  With users, `@words` filter by assignee the same way (`@anna`, `@anna|bob`, `-@anna`, `@me`, `@none`), `@` focuses the field and starts a name, and typing one suggests `me`, `none` and who has tasks here (Assigning tasks in `docs/spec/users.md`).
-  Typing a `#word` (or `-#word`) suggests tags of the tasks the other tag words leave visible (free text is ignored for this).
-  Embed `tag=`/`?tag=` become a query via `TasksCore.tagParamToQuery`.
-  New tasks get the filter's single tags.
+How a task list is worked with: its header, the filter, opening and editing a task, the quick actions on a card, selecting several, dragging, and the cards themselves.
+
+### The header
+
+**Header**: tabs, filter and **+ New** on one line on desktop (`.tasks-toolbar` `flex: 1 1 20rem`).
+**On a phone** (≤640px) the tabs share their line with a search button, ⋯ and a label-less "+" (accessible name "New task"); the line under it holds what the tab adds (how it shows its tasks, the Order), and **the filter field is behind the search button** (`.tasks-search-btn`, `showFilter` in `js/tasktabs.js`): it shows once asked for (the button, or `/`, `#`, `@`), is put away when left empty, and stays for as long as it filters (`.tasks-filtered`), so what narrows the list is never out of sight. Where nothing is grouped or filtered (Today, most days) the list starts right under the tabs. (Until 2026-11 the field had a line of its own on every tab.) A page's locked words (a list's name, an embed's `tag=`) are in the field, not on that line: the page's heading says what it shows.
+
+### Filtering
+
+The **filter field** (`#task-filter-search`, `TasksCore.parseFilter`/`matchesFilter`) narrows the list to what its words say:
+
+| Word | Shows |
+|------|-------|
+| text | the tasks with it in their title or description |
+| `#word` | the tasks with that tag; several `#words` must all match |
+| `#a\|b` | the tasks with either tag |
+| `-#word` | the tasks without that tag (`-#a\|b`: with neither) |
+| `list:shop` | the tasks in that list (`list:a\|b` either); a list is no tag, so `#shop` doesn't find it |
+| `-list:shop` | the tasks not in it |
+| `list:inbox` | the tasks in no list, the Inbox, as `list:none` says too |
+| `!high` (or `!`), `!low` | the tasks of that importance |
+| `is:updated` | the tasks with news for you |
+| `is:following` | the tasks you follow (Following a task) |
+| `from:anna` | with users: the tasks anna made (`created_by`); `from:me` your own, `from:a\|b` either's, `-from:anna` not hers; a private task is its user's own making |
+| `@anna` | with users: the tasks assigned to anna; `@anna\|bob` either's, `-@anna` not hers, `@me` yours, `@none` no one's (Assigning tasks in `docs/spec/users.md`) |
+
+- `/` focuses it, `#` focuses it and starts a tag; with users `@` focuses the field and starts a name, and typing one suggests `me`, `none` and who has tasks here.
+- Its tooltip lists the syntax (with users the `@` words too).
+- While it holds something of yours (text, or a chip the page didn't set) an **×** at its end (`.chip-input-clear`, "Clear the filter") empties it: the text and your chips go, a page's locked chips stay, and the cursor stays in the field.
+- `/tasks?from=me` arrives as that word.
+- Typing a `#word` (or `-#word`) suggests tags of the tasks the other tag words leave visible (free text is ignored for this).
+- Embed `tag=`/`?tag=` become a query via `TasksCore.tagParamToQuery`.
+- New tasks get the filter's single tags.
 - **Tag chips** (`chipField` in `js/taskchips.js`): in the filter field and the edit modal's Tags field a completed tag becomes a chip in front of the typed text (`.chip-input` box wrapping the input, `.tag-chip`).
   A chip can't be edited, only removed: Backspace at the start of the field removes the last one, its × any.
   Filter chips are whole filter words (`#a`, `-#b`, `#a|b`); the query is the chips plus the text (`filterQuery()`), and `?tag=`/`[[tasks: tag=…]]` arrive as chips.
@@ -512,50 +514,49 @@ Each with a dark-mode value.
   In the Tags field and the bulk tag dialog a tag may be typed with or without its `#` (`tagWordOf`): `#wo` and `wo` suggest the same tags, a lone `#` lists the most used, and the chip is the tag without it.
   Keys are handled in the capture phase.
   The dropdown is appended to the field's parent, since in a `<dialog>` only the top layer is visible.
-- **Selection** (`selectedId`, `selectedIds`, `anchorId`): a click (mouse) selects one task;
-  **Shift+click** or **Shift+↑/↓** (j/k) selects the range from the anchor;
-  **Ctrl/Cmd+click** adds or drops one task (and becomes the anchor);
-  **Ctrl/Cmd+A** with a task selected takes every task shown (what the filter leaves; without a selection it stays the page's select all);
-  **Esc** clears it (an expanded task collapses first).
-  A re-render keeps the selected tasks still shown.
-  On several selected tasks **Space** completes (or reopens) them all, **Delete** closes the open ones undone (won't do), **t**/**T** open the bulk tag dialog, and **Ctrl+Shift+↑/↓** moves them.
-- **Selection bar** (`#task-selbar`, `.tasks-selbar`, `syncSelBar`): while several tasks are selected,
-  a bar fixed at the bottom of the window: "N selected",
-  **All** (`selectAllVisible`; disabled when every task shown is selected),
-  **Tag…** (the bulk tag dialog),
-  **List…** (the list dialog, below),
-  **Assign…** (with users: who has them, Assigning tasks in `docs/spec/users.md`),
-  **Today** (start them today, `startToday`: one `batch-update` for the open ones not starting today, one undo putting back each one's start date and history; today is never after a deadline still to come, and starting an overdue task today is the catch-up case, so no deadline question),
-  **Unplan** (clear their start dates, `startOn(ids, null)`, as the **0** key: one `batch-update` for the open ones that have one, one undo putting them back; shown while an open selected task has a start date, `anyPlanned`),
-  **Done** (`completeMany`, as Space; **Reopen** when every selected task is closed, which also hides Today and Won't do),
-  **Won't do** (`wontDoMany`, as the Delete key) and ✕ (clear).
-  Toasts move up above it.
-  The **⋯ menu** of a card in the selection (its button, a right-click, which then keeps the selection, or Shift+F10) offers the same for all of them, titled "N tasks" (`runSelectionAction`).
-  With several task lists on a page only the active one's bar shows (`claimInstance`).
-  At ≤640px the bar spans the bottom edge in place of the phone tab bar (hidden while it shows): "N selected", All and ✕ on top, the actions as buttons sharing the width under them (on a second row when one doesn't hold them), ≥44px tall; the page end and toasts keep clear of it.
-- **Moving tasks to a list** (`openBulkListModal`, `.bulk-list-modal`; the selection bar's **List…**, **Move to list…** in a card's ⋯ menu, for the selection or that one task, and the **m** key on the selected tasks): the dialog, "Move 3 tasks to a list", lists every list you see (A–Z by name, a private one with 🔒, the shared one of a name you have a private list of as "name (shared)"), **Inbox** (with 🔒 with users) and **New list…**.
-  A click on a row moves the tasks at once (↑/↓ go through the rows, Enter picks, Esc or Cancel leaves).
-  The move sets each task's list in one `batch-update`; its tags stay.
-  The row of the list every selected task is in is ticked and has the focus; a list only some are in says how many ("1 of 3").
-  **A task is as private as its list** (Lists → Private lists): the rows of your private lists, and with users the Inbox's, are off while a shared task is selected ("a shared task stays shared"), and a row that would take a private task to a shared list says so ("shares it with everyone") and sends `share`; Zone gives it to you: a task of yours that you file stays in your My tasks (assign it to no one, or someone, afterwards).
-  One undo puts every task back in its list ("3 tasks moved to list “work”", "3 tasks moved to the Inbox"), but those that were private and are shared now: that can't be taken back, so a move of only such tasks has a notice and no undo.
-  The selection stays, as after Tag…; in a list's own view the moved tasks leave it.
-  **New list…**, the last row, makes a list and moves the tasks into it, so the dialog is there with no list too (then Inbox, ticked, and New list…).
-  The rows give way to the list's name (`.bulk-list-form`, `#bulk-list-name`), **Create and move** (or Enter) and **Back**; a name that won't do is said under it and the dialog stays ("There is a list #shop already").
-  With users it asks **Private: only you see it and its tasks** (`#bulk-list-private`): off and not to be ticked while a shared task is selected, ticked when every selected task is private, so no task is shared by not looking; unticked with a private task selected, a line says that everyone will see it and that it can't be made private again.
-  The list is made as New list… on the Tasks page makes it (`POST /api/tasks/lists`, `apiNewList`: `createListOp`), in a commit of its own before the move's, and the page stays: every task list on it knows the new list at once (the `zone:list-made` event, `tasks.js`), and on `/tasks` the list switcher is drawn again with it (`js/listsrow.js`).
-  **It is pinned, last, beside the lists you pinned, but it is never your first pin**: with nothing pinned it is under More, since a first pin changes where the Tasks links go and where new tasks land (New list…, Lists), which a list made to hold a few tasks shouldn't.
-  The toast says "3 tasks moved to the new list “shop”"; its undo takes the tasks back and leaves the list, which **Delete…** removes.
-- **Bulk tags** (`openBulkTagModal`, `.bulk-tag-modal`; **t**, or **T** to remove, on the selected tasks): the dialog lists every tag the selection carries (`TasksCore.selectionTags`, case ignored, most common first),
-  each a three-state box (`role="checkbox"`, `aria-checked`): on every task ✓,
-  on some – ("2 of 3", left as it is),
-  on none (struck through, the tag goes).
-  A click or tap cycles all → none → some, back to some only where the tag started so.
-  The field below adds tags as chips (`chipField`; completion from every tag in use, minus those every selected task has; a comma makes a chip).
-  Opened with T, the field has no chips: it completes to the selection's own tags and turns the completed one off.
-  Enter or Apply sends only the changed rows plus the typed tags (`TasksCore.bulkTagChange`) in one `batch-tag` request, a half-typed tag included; nothing changed sends nothing.
-  The toast names the change ("#work added to 3 tasks", "#old removed from 2 tasks", else "Tags changed on N tasks"; counting only tasks whose tags changed), or where tasks went if the change took them out of the view; its Undo puts back each changed task's tags in one `batch-update`.
-  On touch the field is not focused while there are rows to tick, so the keyboard waits until it is tapped.
+
+### Opening and editing
+
+- **Edit modal**: double-click anywhere on a card (title and description too; only its controls, the checkbox, buttons, links and date chips, keep their own) or Enter on desktop;
+  on touch the first tap selects the card (also showing a cut-off title whole, see One line per task) and a tap on the selected card opens it (`pressedSelected`, noted at `pointerdown`, since touch's compat mousedown selects before the click;
+  pointer type of the last `pointerdown`;
+  a double tap's `dblclick` is ignored, so it is just those two taps),
+  or Edit… in the menu.
+  Centred with `inset: 0; margin: auto` and **no transform** (a transform would clip `position: fixed` popups like the date picker), scrollable, sticky action bar.
+  At ≤640px full screen.
+
+**The fields**: Title, Description, Tags, then one line of small boxes that wraps (`.task-props`), each with its name inside, in grey before its value (`.task-prop`, a `<label>`, so a click anywhere in it reaches the field): List (while there are lists), Due, Start and Importance, which every task shows.
+
+| Field | Shows | |
+|-------|-------|---|
+| Title | always | Quick-add's shorthand at its end, on a new task (below) |
+| Description | always | Markdown, with Edit and Preview (Description) |
+| Tags | always | Chips (Tag chips, under Filtering) |
+| Assignee | with users: always on a shared task, empty reading "No one"; on a new task still in the Inbox only when set as the dialog opens or asked for ("+ Assignee") | A field of its own after Tags (Assigning tasks in `docs/spec/users.md`). Not offered for a task in a private list (it has none) |
+| List | while the wiki has a list you see | One choice (below) |
+| Due, Start | always | |
+| Importance | always | High, Normal, Low (Importance) |
+| Days before due | only when asked for ("+ Days before due"), never on opening; not offered without a due date | Another way to set Start, which shows the result (Dates) |
+| Keep after done | when set as the dialog opens, or asked for ("+ Keep after done", which ticks it) | Keep tasks |
+| Repeat | when set as the dialog opens, or asked for ("+ Repeat"); not offered for a keep task | Last, on a line of its own (`.task-prop-group`), so the two fields a chosen repeat adds come beside it and Repeat stays where it was clicked. Without a date it shows, but off, and the line under the boxes says why ("To repeat, a task needs a due or start date.", `#task-edit-rec-note`) |
+| Every … ("Every 2 weeks"), From done | only once a repeat is chosen | |
+
+Under the boxes a quiet line offers the ones not shown (`.task-add-fields`: "+ Assignee" with users, on a new task in the Inbox, "+ Repeat", "+ Days before due", "+ Keep after done"): a click shows the field and goes to it (`showField`), and ticks Keep, since asking for the box is asking for that.
+A field stays for as long as the dialog is open, also emptied again; a line with nothing left to offer is gone.
+
+**The List field** (`#task-edit-list`, `fillLists` in `js/taskmodal.js`) is one choice:
+
+- **Its choices**: the lists you see, A–Z as the server names them (a private one with 🔒, the shared one of a name you have a private list of as "name (shared)"), first **Inbox** (with 🔒 with users, where it is off for a shared task), and last **New list…**.
+- **New list…** asks for a name in a small dialog over this one (`.list-new-modal`, `openNewList`; with users **Private: only you see it and its tasks**, off for a shared task and ticked when the task is in a private list now) and makes the list at once (`POST /api/tasks/lists`, pinned as one made in the dialog that moves tasks: Moving tasks to a list); the field then names it, and the task goes into it with Save.
+  A name that won't do is said in that dialog; Cancel or Esc leaves the field as it was.
+- **When it shows**: once the wiki has a list you see; a first list is made with New list… on the Tasks page or Move to list….
+- **Where a task starts**: a new task starts in the list of the view it was made in, else in the Inbox; choosing another moves the task.
+- **Who sees the task**: a task is as private as its list (Private lists): for a shared task your private lists are off, and under the fields a line says who sees the task: "Private: only you see this task." in a private list or your Inbox, and for a private task about to leave for a shared list "Everyone who uses the wiki will see and change this task. It can’t be made private again."; Save then sends `share`.
+- **A shared list for a task of yours** also puts your name in Assignee, once (`sharedByEdit`): it stays in your My tasks unless you take the name off.
+
+- **Tab goes from field to field**: Title, Description, the comment field while it is shown (and its Add once something is written), Tags, Assignee when it is shown, List, Due, Start, Importance, the fields shown of Days before due, Keep and the repeat fields, the buttons of the line that offers the others, then Save, Cancel, Won't do.
+  What isn't a field of the task is no stop (`tabindex="-1"`) and has its own key or the mouse: Edit | Preview (F2), the formatting bar (Ctrl+B/I/K), Write a comment… (Alt+C) and the comment field's Cancel (Esc), a comment's ✎ and × and the links and boxes in comments, History.
+  Saving a task into another list removes it from a view of its old list, with a notice that says where it went.
 - **Quick-add** (new tasks only, `TasksCore.parseQuickAdd`): trailing shorthand like `Call Bob tomorrow #work due:fri`.
   Start: `today`, `tomorrow`/`tmrw`, a weekday (next one, never today), `+3`/`+3d`/`+2w`, `YYYY-MM-DD`; due: `due:` + the same; tags: `#tag` starting with a letter, of which the first that names a list you see puts the task in that list instead (`#shop`: `quickList` in `js/taskmodal.js`; the completion offers the lists with the tags); with users, the assignee: `@name` of a user who can be assigned, or `@me` (anything else stays in the title); importance: `!` (or `!high`) and `!low`, as words of their own ("Call Bob !", not "Call Bob!").
   Only trailing words count, and shorthand that would empty the title is ignored.
@@ -564,6 +565,35 @@ Each with a dark-mode value.
   (until 2026-11 the line under the title said "tomorrow" while the Start field below still said "Today").
   **A field changed by hand takes its word out of the title** (`byHand`, `TasksCore.dropQuickWord`) and keeps what the hand gave it: with "Call Bob tomorrow" typed, picking Friday in Start leaves "Call Bob".
   Tags stay words of the title until Save (the line under it names them): the Tags field holds the ones you put there.
+- **Date picker** (`openDatePicker`): a row of shortcuts above the month,
+  counted from today,
+  not from the current value: **Today**,
+  **Tmrw**,
+  **+2d**,
+  **Mon** (next Monday),
+  **+1w** (`QUICK`, `.dp-quick-btn`; short labels so all five fit one row, the accessible name and tooltip say it in full, e.g. "Next Monday: Mon, Oct 5", in the `locale` setting (see Dates); below the month only Clear; the current value marked, ones before the picker's `min` disabled).
+  They commit like a picked day, so the card's 📅 asks about the deadline as usual.
+  The month's title, weekday heads and first weekday follow the `locale` setting (see Dates; Monday without one).
+  Positioned after every `draw()` (below the anchor, else above, else inside the window; never past a screen edge).
+  A press outside only closes it: `pointerdown` in the capture phase, then `swallowNextClick` eats that press's mouse/click events, so a tap can't also hit what's underneath.
+- **`?task=<id>`** selects, scrolls to and flashes (`.task-flash`) that task; a missing task gets a notice.
+  A newly created task is flashed the same way when the view shows it.
+- **Two people on one task** (`changedFields`, `openedData` in `js/taskmodal.js`; `textUnchanged` in `go/tasks.go`): the dialog remembers the task as it opened and **Save sends only the fields changed in it** (the repeat's three together, `share` with the list), so a deadline, a tag or an assignee someone else set meanwhile is not written back as it was. Nothing changed, nothing is sent.
+  Fields merge that way; a text can't. A changed title or description goes with what it started from (`was: {title, description}`), and when the task's text is another one by now the write is refused whole (409, "Someone changed this task's description while you were editing it. …"): the dialog comes back with what was typed still in it, to copy.
+  `PUT /api/tasks/<id>` takes `was` from any client; without it a write is as it always was.
+- **Rejected writes** show the server's error as a toast (`showNotice`).
+- **Toasts and modals** (`placeToast`): a toast shown while a modal dialog is open goes into the dialog, since in `<body>` it would sit under the dialog's top layer and its Undo couldn't be clicked (deleting a comment showed that); when the dialog closes the toast moves back to `<body>`.
+
+### Quick actions
+
+- **⋯ menu** (the `.task-menu-btn`, always shown, three dots drawn as an SVG (`MORE_ICON`) so they sit on the line's centre in any font;
+  also **right-click** on a card, `openTaskMenu(id, anchor, {x, y})` at the pointer, selecting the card, a link in the card keeping the browser's menu;
+  from the keyboard the menu key or **Shift+F10** on the selected card): all card actions (Edit…, Start today/tomorrow, Pick start date…, Unplan, Skip, Importance…, Won't do, Copy link, Select several;
+  for closed tasks Edit…, Reopen, Copy link, Select several).
+  With users, a shared task's menu, open or closed, has **Follow**, or **Unfollow** when you follow it (`setFollow` in `js/taskdata.js`; Following a task); its dialog has the same button above History, with who follows ("👁 Followed by you, bob"; `renderFollow` in `js/taskmodal.js`), saved at once as a comment is.
+  **Copy link** puts the task's full URL in the clipboard (`taskHref`, as `taskLink` builds it: `/tasks?task=<id>&view=open`, `view=closed` (with `&year=` from an earlier year's archive) for a done task, `&list=` for a task in a list); opening it selects and flashes the task (see `?task=`).
+  Paste it anywhere: chat, mail, a page.
+  A popover with ↑/↓/Enter/Esc on desktop (tasks shortcuts suspended while open), a bottom sheet at ≤640px.
 - **Completing**: the checkbox completes after a cancellable grace period (struck through meanwhile; several ticked in a row each keep their tick and strike while an earlier one leaves the list).
   Completing a recurring task spawns the next instance, stepping from the previous primary date (or today with `from: completion`) until ≥ today, with its start date not before today (see Dates); month steps clamp to the month's last day.
   Un-completing removes the spawned instance while it is untouched (`untouchedSpawn`: its history ends with the `repeat`, and title, description, tags and comments are the reopened task's);
@@ -591,61 +621,62 @@ Each with a dark-mode value.
   **Who may** (`mayDeleteTask` in `go/tasks.go`; `DELETE /api/tasks/<id>` and `batch-delete` answer 403 "Only who made a task, or an admin, deletes it" otherwise): without users anyone; with users who made the task (`created_by`), an admin, its user for a private one, and anyone for a task nobody is known to have made (no `created_by`: one from before users, or written by hand). Others have seen a shared task, so anyone else closes it.
   The same routes take back what was just made: the tasks the page editor created (their maker's), and an import's (what a user imported is theirs to delete while Zone runs: `noteBrought`).
   An assistant (MCP) deletes no task.
-- **Planned cue**: a planned task's card gets a coloured left edge, the same on every tab for consistency: amber when it is in Today already (start today or earlier), blue when planned later (`task-planned-now`/`-later`).
-  On Open it tells decided tasks from undecided ones without changing the order.
-  A due/overdue urgency colour wins.
-  The 📅 date is coloured too: blue for a later start, amber for today, plain for a past start ("since …", never a warning).
 - **Inline dates**: the ⏰ (due) and 📅 (start) chips open a date picker. **f** starts the selected tasks today,
   **F** tomorrow. **1**–**7** start them on that day of the Plan board (1 today, 2 tomorrow, … 7 six days ahead; **1** is **f**, **2** is **F**),
   **0** unplans them,
   on every tab and for several selected tasks at once (`startOn`: one batch with one undo; a task whose deadline the day passes asks "Move the deadline too?" on its own, after the others).
   So planning works from the keyboard: walk Unplanned with j/k (Shift to take several) and press a day's number, however far the board puts it.
-- **⋯ menu** (the `.task-menu-btn`, always shown, three dots drawn as an SVG (`MORE_ICON`) so they sit on the line's centre in any font;
-  also **right-click** on a card, `openTaskMenu(id, anchor, {x, y})` at the pointer, selecting the card, a link in the card keeping the browser's menu;
-  from the keyboard the menu key or **Shift+F10** on the selected card): all card actions (Edit…, Start today/tomorrow, Pick start date…, Unplan, Skip, Importance…, Won't do, Copy link, Select several;
-  for closed tasks Edit…, Reopen, Copy link, Select several).
-  With users, a shared task's menu, open or closed, has **Follow**, or **Unfollow** when you follow it (`setFollow` in `js/taskdata.js`; Following a task in `docs/spec/users.md`); its dialog has the same button above History, with who follows ("👁 Followed by you, bob"; `renderFollow` in `js/taskmodal.js`), saved at once as a comment is.
-  **Copy link** puts the task's full URL in the clipboard (`taskHref`, as `taskLink` builds it: `/tasks?task=<id>&view=open`, `view=closed` (with `&year=` from an earlier year's archive) for a done task, `&list=` for a task in a list); opening it selects and flashes the task (see `?task=`).
-  Paste it anywhere: chat, mail, a page.
-  A popover with ↑/↓/Enter/Esc on desktop (tasks shortcuts suspended while open), a bottom sheet at ≤640px.
-- **Edit modal**: double-click anywhere on a card (title and description too; only its controls, the checkbox, buttons, links and date chips, keep their own) or Enter on desktop;
-  on touch the first tap selects the card (also showing a cut-off title whole, see One line per task) and a tap on the selected card opens it (`pressedSelected`, noted at `pointerdown`, since touch's compat mousedown selects before the click;
-  pointer type of the last `pointerdown`;
-  a double tap's `dblclick` is ignored, so it is just those two taps),
-  or Edit… in the menu.
-  Centred with `inset: 0; margin: auto` and **no transform** (a transform would clip `position: fixed` popups like the date picker), scrollable, sticky action bar.
-  At ≤640px full screen.
-  **The fields**: Title, Description, Tags, then one line of small boxes that wraps (`.task-props`), each with its name inside, in grey before its value (`.task-prop`, a `<label>`, so a click anywhere in it reaches the field): List (while there are lists), Due, Start and Importance, which every task shows.
-  **List** (`#task-edit-list`, `fillLists` in `js/taskmodal.js`) is one choice: the lists you see, A–Z as the server names them (a private one with 🔒, the shared one of a name you have a private list of as "name (shared)"), first **Inbox** (with 🔒 with users, where it is off for a shared task), and last **New list…**. New list… asks for a name in a small dialog over this one (`.list-new-modal`, `openNewList`; with users **Private: only you see it and its tasks**, off for a shared task and ticked when the task is in a private list now) and makes the list at once (`POST /api/tasks/lists`, pinned as one made in the dialog that moves tasks: Moving tasks to a list); the field then names it, and the task goes into it with Save. A name that won't do is said in that dialog; Cancel or Esc leaves the field as it was. The field shows once the wiki has a list you see: a first list is made with New list… on the Tasks page or Move to list…. A new task starts in the list of the view it was made in, else in the Inbox; choosing another moves the task. A task is as private as its list (Lists → Private lists): for a shared task your private lists are off, and under the fields a line says who sees the task: "Private: only you see this task." in a private list or your Inbox, and for a private task about to leave for a shared list "Everyone who uses the wiki will see and change this task. It can’t be made private again."; Save then sends `share`. Choosing a shared list for a task of yours also puts your name in Assignee, once (`sharedByEdit`): it stays in your My tasks unless you take the name off.
-  **Assignee** (with users; a field of its own after Tags; Assigning tasks in `docs/spec/users.md`) always shows on a shared task, empty reading "No one". **The rest shows only when set** as the dialog opens: Assignee on a new task still in the Inbox, Keep after done, and Repeat with "Every 2 weeks" and From done (the two only once a repeat is chosen). Repeat comes last, on a line of its own (`.task-prop-group`), so the two fields a chosen repeat adds come beside it and Repeat stays where it was clicked.
-  Under the boxes a quiet line offers the ones not shown (`.task-add-fields`: "+ Assignee" with users, on a new task in the Inbox, "+ Repeat", "+ Days before due", "+ Keep after done"): a click shows the field and goes to it (`showField`), and ticks Keep, since asking for the box is asking for that.
-  A field stays for as long as the dialog is open, also emptied again; a line with nothing left to offer is gone.
-  Not offered: Repeat for a keep task, Days before due without a due date (and it is never shown on opening: it is another way to set Start, which shows the result), Assignee for a task in a private list (it has none).
-  Repeat without a date shows, but off, and the line under the boxes says why ("To repeat, a task needs a due or start date.", `#task-edit-rec-note`).
-  **Tab goes from field to field**: Title, Description, the comment field while it is shown (and its Add once something is written), Tags, Assignee when it is shown, List, Due, Start, Importance, the fields shown of Days before due, Keep and the repeat fields, the buttons of the line that offers the others, then Save, Cancel, Won't do.
-  What isn't a field of the task is no stop (`tabindex="-1"`) and has its own key or the mouse: Edit | Preview (F2), the formatting bar (Ctrl+B/I/K), Write a comment… (Alt+C) and the comment field's Cancel (Esc), a comment's ✎ and × and the links and boxes in comments, History.
-  Saving a task into another list removes it from a view of its old list, with a notice that says where it went.
-- **Date picker** (`openDatePicker`): a row of shortcuts above the month,
-  counted from today,
-  not from the current value: **Today**,
-  **Tmrw**,
-  **+2d**,
-  **Mon** (next Monday),
-  **+1w** (`QUICK`, `.dp-quick-btn`; short labels so all five fit one row, the accessible name and tooltip say it in full, e.g. "Next Monday: Mon, Oct 5", in the `locale` setting (see Dates); below the month only Clear; the current value marked, ones before the picker's `min` disabled).
-  They commit like a picked day, so the card's 📅 asks about the deadline as usual.
-  The month's title, weekday heads and first weekday follow the `locale` setting (see Dates; Monday without one).
-  Positioned after every `draw()` (below the anchor, else above, else inside the window; never past a screen edge).
-  A press outside only closes it: `pointerdown` in the capture phase, then `swallowNextClick` eats that press's mouse/click events, so a tap can't also hit what's underneath.
-- **`?task=<id>`** selects, scrolls to and flashes (`.task-flash`) that task; a missing task gets a notice.
-  A newly created task is flashed the same way when the view shows it.
-- **Two people on one task** (`changedFields`, `openedData` in `js/taskmodal.js`; `textUnchanged` in `go/tasks.go`): the dialog remembers the task as it opened and **Save sends only the fields changed in it** (the repeat's three together, `share` with the list), so a deadline, a tag or an assignee someone else set meanwhile is not written back as it was. Nothing changed, nothing is sent.
-  Fields merge that way; a text can't. A changed title or description goes with what it started from (`was: {title, description}`), and when the task's text is another one by now the write is refused whole (409, "Someone changed this task's description while you were editing it. …"): the dialog comes back with what was typed still in it, to copy.
-  `PUT /api/tasks/<id>` takes `was` from any client; without it a write is as it always was.
-- **Rejected writes** show the server's error as a toast (`showNotice`).
-- **Toasts and modals** (`placeToast`): a toast shown while a modal dialog is open goes into the dialog, since in `<body>` it would sit under the dialog's top layer and its Undo couldn't be clicked (deleting a comment showed that); when the dialog closes the toast moves back to `<body>`.
 - **One undo at a time** (`showUndo`): only the latest action's undo is live,
   from its toast's Undo or Ctrl+Z. An action that saves first and arms its undo when the server answers (bulk start with **0**–**7**, Done/Reopen on a selection, bulk tags, Won't do on a selection, Move deadline, completing a keep task, deleting a comment) drops the previous undo as it starts saving (`dismissUndo`),
   so a quick Ctrl+Z in between does nothing instead of undoing the action before.
+
+### Selection and bulk
+
+- **Selection** (`selectedId`, `selectedIds`, `anchorId`): a click (mouse) selects one task;
+  **Shift+click** or **Shift+↑/↓** (j/k) selects the range from the anchor;
+  **Ctrl/Cmd+click** adds or drops one task (and becomes the anchor);
+  **Ctrl/Cmd+A** with a task selected takes every task shown (what the filter leaves; without a selection it stays the page's select all);
+  **Esc** clears it (an expanded task collapses first).
+  A re-render keeps the selected tasks still shown.
+  On several selected tasks **Space** completes (or reopens) them all, **Delete** closes the open ones undone (won't do), **t**/**T** open the bulk tag dialog, and **Ctrl+Shift+↑/↓** moves them.
+- **Selection bar** (`#task-selbar`, `.tasks-selbar`, `syncSelBar`): while several tasks are selected,
+  a bar fixed at the bottom of the window: "N selected",
+  **All** (`selectAllVisible`; disabled when every task shown is selected),
+  **Tag…** (the bulk tag dialog),
+  **List…** (the list dialog: Moving tasks between lists),
+  **Assign…** (with users: who has them, Assigning tasks in `docs/spec/users.md`),
+  **Today** (start them today, `startToday`: one `batch-update` for the open ones not starting today, one undo putting back each one's start date and history; today is never after a deadline still to come, and starting an overdue task today is the catch-up case, so no deadline question),
+  **Unplan** (clear their start dates, `startOn(ids, null)`, as the **0** key: one `batch-update` for the open ones that have one, one undo putting them back; shown while an open selected task has a start date, `anyPlanned`),
+  **Done** (`completeMany`, as Space; **Reopen** when every selected task is closed, which also hides Today and Won't do),
+  **Won't do** (`wontDoMany`, as the Delete key) and ✕ (clear).
+  Toasts move up above it.
+  The **⋯ menu** of a card in the selection (its button, a right-click, which then keeps the selection, or Shift+F10) offers the same for all of them, titled "N tasks" (`runSelectionAction`).
+  With several task lists on a page only the active one's bar shows (`claimInstance`).
+  At ≤640px the bar spans the bottom edge in place of the phone tab bar (hidden while it shows): "N selected", All and ✕ on top, the actions as buttons sharing the width under them (on a second row when one doesn't hold them), ≥44px tall; the page end and toasts keep clear of it.
+- **Bulk tags** (`openBulkTagModal`, `.bulk-tag-modal`; **t**, or **T** to remove, on the selected tasks): the dialog lists every tag the selection carries (`TasksCore.selectionTags`, case ignored, most common first),
+  each a three-state box (`role="checkbox"`, `aria-checked`): on every task ✓,
+  on some – ("2 of 3", left as it is),
+  on none (struck through, the tag goes).
+  A click or tap cycles all → none → some, back to some only where the tag started so.
+  The field below adds tags as chips (`chipField`; completion from every tag in use, minus those every selected task has; a comma makes a chip).
+  Opened with T, the field has no chips: it completes to the selection's own tags and turns the completed one off.
+  Enter or Apply sends only the changed rows plus the typed tags (`TasksCore.bulkTagChange`) in one `batch-tag` request, a half-typed tag included; nothing changed sends nothing.
+  The toast names the change ("#work added to 3 tasks", "#old removed from 2 tasks", else "Tags changed on N tasks"; counting only tasks whose tags changed), or where tasks went if the change took them out of the view; its Undo puts back each changed task's tags in one `batch-update`.
+  On touch the field is not focused while there are rows to tick, so the keyboard waits until it is tapped.
+- **Moving tasks to a list** (the selection bar's **List…**, **Move to list…** in a card's ⋯ menu, **m**): Moving tasks between lists, under Lists.
+
+### Drag and drop
+
+A card is dragged with the mouse, or on touch after a long press (Long-press drag, under Touch); where it is dropped says what changes:
+
+- on Open's and Today's sections, its place in the manual order (Sections);
+- on the Plan board, its start date, and within a section its place (The Plan board);
+- By person, who has it, and By list, its list (By person and By list).
+
+Wiring: `setupBoardDragAndDrop` per card plus list-level handlers attached once.
+
+### Cards and the one-line view
+
 - **Cards** (`taskHTML`, tasks.css "Cards"): one layout for every card.
   The first line: checkbox, title (as wide as it needs, at least 6rem, 4.5rem on phones; cut off with …, whole and wrapped on the expanded card), the tags right after it (pills), markers and dates at the right end (`.task-meta` sits in the line), ⋯ last.
   **Nothing jumps on hover**: what is always shown (markers, 📝, 💬, dates, ⋯) ends at the right and stays put; what hover adds (⏭, the empty ⏰ 📅, at 60% opacity, full on their own hover: at 30% they were hard to see) appears left of it (first in `.task-meta-right`, CSS `order`).
@@ -667,6 +698,10 @@ Each with a dark-mode value.
   and a card with none of them stays one line;
   rows are ≥44px as a whole.
   There every tag shows: the tags flow in that line (`display: contents`) and wrap onto more lines rather than drop out, the dates following the last tag at the right end, or on the next line when they don't fit beside it.
+- **Planned cue**: a planned task's card gets a coloured left edge, the same on every tab for consistency: amber when it is in Today already (start today or earlier), blue when planned later (`task-planned-now`/`-later`).
+  On Open it tells decided tasks from undecided ones without changing the order.
+  A due/overdue urgency colour wins.
+  The 📅 date is coloured too: blue for a later start, amber for today, plain for a past start ("since …", never a warning).
 - **One line per task**: every card is its first line (title cut off with …, description and comments hidden; 📝 says a line has a description, 💬 N that it has comments).
   It is the only way a list shows: there are no full cards, and no switch (`compact=1` in an embed and the **v** key, which once chose, do nothing).
   Tags that don't fit beside the title wrap onto a second line rather than drop out (see Cards).
@@ -696,16 +731,14 @@ Each with a dark-mode value.
   so a double-click's second click still lands on the card the first one selected.
   Each press of it selects that card again, which doesn't restart the wait.
   A pressed card is also not scrolled into view when it expands (`pressedCard`; it is in view already, and scrolling would move it from under the pointer).
-- **Header**: tabs, filter and **+ New** on one line on desktop (`.tasks-toolbar` `flex: 1 1 20rem`).
-  **On a phone** (≤640px) the tabs share their line with a search button, ⋯ and a label-less "+" (accessible name "New task"); the line under it holds what the tab adds (how it shows its tasks, the Order), and **the filter field is behind the search button** (`.tasks-search-btn`, `showFilter` in `js/tasktabs.js`): it shows once asked for (the button, or `/`, `#`, `@`), is put away when left empty, and stays for as long as it filters (`.tasks-filtered`), so what narrows the list is never out of sight. Where nothing is grouped or filtered (Today, most days) the list starts right under the tabs. (Until 2026-11 the field had a line of its own on every tab.) A page's locked words (a list's name, an embed's `tag=`) are in the field, not on that line: the page's heading says what it shows.
 
-### Title links
+## Title links
 
 A title can carry links: `[[wikilinks]]`, `[label](url)` and bare URLs show as links on the card (`linkifyTitle`; one to another site opens in a new tab, `class="task-link"`; a link to anything but the web, mail or the wiki, e.g. `javascript:`, stays text).
 **Pasting a URL into the title** asks for its name, as in the description and the editor (`pasteUrlAsLink`, the same dialog): a name makes `[name](url)`, none (or Cancel) the bare URL; pasted over selected text, the text becomes the label.
 `[[` and `[text](` complete pages there too, and `:name` emoji (see Emoji in `docs/spec/editor.md`). Where a title is plain text (the ⋯ menu, toasts, the subtasks and deadline dialogs: `plainTitle`; search results, task chips, Linked tasks: `mdtext.PlainTaskTitle`), links are reduced to their labels.
 
-### Description
+## Description
 
 A task's description is markdown, edited and rendered as a page's text.
 
@@ -734,19 +767,29 @@ A task's description is markdown, edited and rendered as a page's text.
   Edit goes back to the field, focused.
   The modal always opens in Edit.
 
-### History
+## History
 
-The server logs events on the task (`logEvent` in `go/tasklogic.go`): `created` (a new task, not a series' next occurrence, below; a new task's first dates are not changes),
-`start`/`due` whenever the date actually changes (`applyTaskFields`),
-`done` (also for a keep task, whose cleared start date is part of it),
-`reopened`,
-`wontdo`,
-`skipped`,
-and with users `seen` (a user opened the task while it had news for them: one a user, the latest; kept beside the tasks, in `.zone/seen/`, and answered as part of the history), `mentioned` (a comment or the description names a user with `@name`: `to` says who), `shared` (a private task made shared, by whoever did it: moved out of a private list, or its list made shared; older tasks may show `private` from when tasks could move the other way)
-and `assigned` (the assignee changed: `from` and `to` name the users, `null` no one; `applyAssignee`)
-(Assigning tasks in `docs/spec/users.md`).
+The server logs what happens to a task in its history (`logEvent` in `go/tasklogic.go`; the task's `history`, oldest first, capped: Task fields).
+Only these events; title, tag or order edits are not logged.
+
+| Event | Logged when | `by` (with users) | `from` / `to` |
+|-------|-------------|-------------------|---------------|
+| `created` | a new task; not a series' next occurrence, which carries the series' history on instead (below); a new task's first dates and first assignee are part of it, not changes | who made it | |
+| `start`, `due` | the date actually changes (`applyTaskFields`) | who changed it | the dates, `null` none |
+| `done` | the task is completed, a keep task too (whose cleared start date and deadline are part of it: `keepDone`) | who completed it | |
+| `reopened` | a closed task is reopened | who reopened it | |
+| `wontdo` | the task is closed undone: Won't do, the Delete key, a list deleted with its open tasks closed | who closed it | |
+| `skipped` | an occurrence of a series is skipped (⏭) | who skipped it | |
+| `repeat` | on a series' next occurrence, as the one before it is completed or skipped ("Repeats: next Oct 3") | whoever completed (or skipped) the occurrence before it | `to`: the next occurrence's date (its due date, else its start) |
+| `assigned` | with users, the assignee changed (`applyAssignee`), also when a task you share is given to you (`sharedBy`) | who assigned it | the users, `null` no one |
+| `mentioned` | with users, a comment or the description names a user with `@name`, on a shared task: a name the text didn't have before, not oneself, only one who sees the task's list (`logMentions`; Mentions) | who wrote the text | `to`: who was named |
+| `shared` | with users, a private task made shared: moved out of a private list, or its list made shared (`sharedBy`) | whoever did it | |
+| `private` | never now: older tasks may show it from when tasks could move the other way | | |
+| `seen` | with users, a user opened the task while it had news for them: one a user, the latest; kept beside the tasks, in `.zone/seen/`, not in the task's file, and answered as part of the history (What you have seen, under News on your tasks) | who looked | `to`: the last comment the look saw (a comment's id, `-` for a task without one) |
+
+(The events with users: Assigning tasks in `docs/spec/users.md`.)
+
 A recurring task's next occurrence carries the series' history on (with the `done` or `skipped` just logged) plus a `repeat` entry ("Repeats: next Oct 3"), so the series reads as one log; it gets no `created` of its own.
-Only these; title, tag or order edits are not logged.
 Undo must not leave a trace, so every undo that PUTs old fields also sends the task's old `history` (`oldHistory` in `js/taskdata.js`: start-date, won't-do, skip and keep undos), and the server applies a sent `history` last (`cleanHistory` validates it), replacing what that request logged.
 Restore snapshots keep it too.
 Reopen-undo and bulk-complete-undo go through `batch-complete` and do log (`done`/`reopened`).
@@ -758,7 +801,7 @@ The edit modal shows it in a closed **History** section (newest first, with a co
 Creation is the oldest entry; tasks from before the log get one from `created_at`.
 There is no separate "Created:" line.
 
-### Comments
+## Comments
 
 What happened on a task, dated: a quick status line ("called Bob, waiting", "Alex: 6 people") or several lines.
 A comment is markdown, rendered as the description is (see Description): paragraphs, lists, code, links, `[[task:…]]` chips.
@@ -788,7 +831,73 @@ Not part of the History: they are never capped, undo of other changes never touc
 - **They stay on their occurrence**: a recurring task's next occurrence starts without comments (the history is carried on, and capped; comments have no cap, and until 2026-11 every occurrence was a copy more of all of them). It names the occurrence before it (`spawned_from`), and its dialog's History ends with a link there, **The occurrence before →** (`.task-history-before`), where those comments are.
 - **Search and MCP**: comment text is part of a task's search text (`taskSearchDocs`, so semantic search too), a comment counts as activity for `edited:`/`after:`/`before:` (`lastActivity`), and `mcpTaskText` lists them after the description under "Comments:" (`- YYYY-MM-DD HH:MM: text`, a comment's following lines indented under its first).
 
-### Importance
+## News on your tasks
+
+**What happens on your tasks is told to you** (with users), in the app and, where you ask for it, by mail (`newsFor` in `go/tasklogic.go`, `TasksCore.newsFor` in the browser: one rule, `go/testdata/news_cases.json` runs through both; `go/notify.go`).
+
+### Whose news it is
+
+**You have to do with a task** that you are assigned, that you made (`created_by`) or that you follow (`followers`: Following a task, below); a mention reaches you whatever the task.
+Only shared tasks: a private one has nobody else.
+**A task has news for you** when the latest of these is someone else's and after the last thing you did on it (anything of yours in its history, or a comment of yours): it was given to you (the last `assigned` entry, or `created` for a task made with your name on it, while it is open); a comment; a mention of you; it was closed or reopened; and, for who made it or follows it, it was given to someone else.
+Not a date, a tag, the title or the order: they are noise.
+History entries are in order and comments are; between the two the minute decides, and within one minute a comment of your own or your look at the task counts as the later one.
+**A look names the last comment it saw** (`look.Comment`; the `seen` entry's `to` in the API's answers: a comment's id, `-` for a task without one), and every comment after that one is news, whatever the minute: one written a moment after you looked is not lost.
+(Until 2026-11-16 a look said only its minute, and a comment within that minute was taken as seen; a look from then still goes by the minute, and so does one whose comment is gone.)
+
+### Following a task
+
+**Following a task** (`applyFollow` in `go/tasks.go`, `Task.Followers`): **Follow** in a shared task's ⋯ menu and in its dialog (**Unfollow** the other way; a toast with Undo) makes you one of its followers, and from then on you are told what its maker is told: a comment, closed, reopened, given to someone else.
+It is not yours to do for that: it is in no My tasks, and with news it is under Updates there, as what you gave away is.
+At a team's size most of what matters to you is neither assigned to you nor made by you: a task your work waits for, one of your team's.
+Who follows is kept in the task (`"followers": ["dan", "alice"]`, in the order they came; no key without one), so the rule runs from the task alone, in the server and the browser, the mail asks the task whom to tell, and git keeps it; a follow is a write of the task's file and a commit, by who follows.
+**Only yourself**: a write says `follow: true` or `false` and names no one (`PUT /api/tasks/<id>`, `update_task`), as nobody writes under another's name; `followers` is no field of a write.
+Only a shared task (a private one has nobody else: 400), only with users, and not a viewer (403).
+**Following is a look**: what was said before is no news to who starts to follow, so their look is noted with it (`markSeen`).
+**Nothing in the history**: that someone follows is news to no one.
+**Nothing follows by itself**: not who commented, not a former assignee; a mention reaches whoever is named anyway.
+**Only who sees a task is told**: a follower who is none of its list's members anymore (a list narrowed, a group left) stays in the file, is not among the names the API answers (`followersSeen`), and has no news, count or mail of it; among them again, they follow as before.
+The dialog names the followers ("👁 Followed by you, bob").
+A series' next occurrence keeps them.
+`is:following` in the filter lists what you follow; an assistant's `search_tasks` says "the user follows it".
+
+### The marks and the counts
+
+**On its card: what it is** (before your name): **new** for a task just given to you (`.task-new`; its tooltip says who gave it and when), and in words for anything else, **bob commented**, **bob mentioned you**, **anna closed it**, **anna reopened it**, **anna gave it on** (`.task-update-mark`).
+**Opening the task takes it away** (`markSeen` in `js/taskdata.js`; `seen` in `PUT /api/tasks/<id>`, `updateTaskLocked`): when you open its dialog or its details, the browser says so and Zone notes your look.
+So the mark goes when you have looked, and whoever gave you the task reads in its History that it arrived ("Seen · anna").
+For a task that has no news for whoever opens it, `seen` notes nothing.
+**Mark all read**, in My tasks' ⋯ menu while there is news, sees them all.
+**No time takes it away**: a task given to you weeks ago and never opened is the one that needs the mark.
+(Until 2026-11 it faded after seven days, and only a task given to you had one.)
+**On the Tasks links: how many** (`TaskCounts.New`, `updatesFor`): the notifications badge of the tasks, a filled count in the accent beside the due and Today counts (`.module-new`), with "2 updates for you" in the link's tooltip, on every page and on My tasks' pill: every task with news for you, wherever it is, and also one closed this month or last (`Store.RecentClosed`: the current closed files and last month's archives, which a page view may read; an older archive is never read for it, so news on a task closed longer ago isn't told).
+A list's pill counts those in the list.
+A click goes to My tasks, whose Today tab lists them under **Updates** (Updates, under Views), the ones that aren't yours to do among them: what you gave away, what mentions you, what was closed.
+
+### Mentions
+
+**Mentions** (`mentionsOf`, `logMentions`): `@name` in a comment or a description, of a user who can be given tasks (not in code, not the `@` of a mail address), is logged in the task's history as `mentioned`, with who was named, by who wrote it; it is news to them, on a task they have nothing else to do with too.
+A description logs only the names it didn't have before.
+(Not built: the name as a chip in the text, and completing it while typing.)
+
+### Mail
+
+**By mail, where you asked for it** (`mails`, `mailKinds`): three kinds, each a box in My tasks' settings dialog (there where Zone could mail you: the deployment's mail server, `ZONE_SMTP_*`, Mail in `docs/spec/deployment.md`, and your `email` in `.zone/config`), **none ticked until you tick it**: **a task is given to me** (`tellAssigned`: "bob gave you a task: <title>", several given in one write one mail), **someone mentions me** (`tellMentioned`: "bob mentioned you: <title>", with the text), **someone comments on a task I have, gave or follow** (`tellComment`: "bob commented: <title>", with the comment; not to who it mentions, who gets that mail).
+Each with the task's link where Zone knows its address (`base-url`), sent in the background (a write doesn't wait for the mail server; a failure is in Zone's log), never for what you did yourself.
+Kept as `"mail": "assigned,comments"` in your registry's `mine` (the kinds turned on, in that order).
+(Until 2026-11 the one mail there was, about a task assigned to you, was on unless turned off with `"mail": "off"`, which now reads as none: nobody is mailed who didn't ask.)
+There is no digest and no mail about watched pages.
+
+### What you have seen
+
+**What you have seen is yours, not the task's** (`go/taskseen.go`): a look is kept in Zone's folder, `.zone/seen/<user>.json` (`{"<task id>": {"at": "2026-11-15T09:30", "after": "…"}}`: when, and which entry of the task's history was its last then, since a history's times are to the minute and what happens after a look within its minute is news), out of git, one look a user and task.
+It writes no task file, makes no commit and changes no list's word: nobody's list loads again because someone looked, and no reader is a commit's author.
+The news' rule reads the looks with the task's history (`historyWithSeen`), and the API answers them there as `seen` entries, so the browser's rule and the History are as they were; a history a client sends back (an undo) is kept without them (`sentHistory`).
+A file names at most 300 tasks before those that can have no news anymore go (gone, or closed for two months: `canHaveNews`).
+Lost with Zone's folder, tasks show their news again and nothing else happens.
+(Until 2026-11 a look was a `seen` entry in the task's own history, a write and a commit; such an entry is still read, and counts until its user looks again.)
+
+## Importance
 
 A task is of **high**, **normal** or **low** importance (`importance`, Task fields); normal is what a task is unless something says otherwise, and says nothing anywhere.
 
@@ -803,7 +912,7 @@ A task is of **high**, **normal** or **low** importance (`importance`, Task fiel
 - **Carried on**: a recurring task's next occurrence keeps it; so does an export.
 - **Assistants** (MCP): `create_task` and `update_task` take `importance`, and a task's line of facts says "importance: high" (or low).
 
-### Keep tasks
+## Keep tasks
 
 A task with `keep: true` is never archived: ticking it off means "done for now, back to the pool".
 It suits a shopping list used with the task app's views: Open is the catalogue of staples, starting items today puts them on Today (the actual shopping list), and ticking one off sends it back to Open.
@@ -814,7 +923,7 @@ Keep and Repeat both say what happens after done, so they exclude each other: `k
 Cards mark keep tasks with ⟲ (`.task-keep`).
 `[[tasks: keep=1]]` makes new tasks keep tasks.
 
-### Lists
+## Lists
 
 **A list is a place a task is in; a tag sorts tasks.** A task is in exactly one list and has any number of tags.
 Five sentences say all of it:
@@ -832,21 +941,50 @@ You make one with **New list…** on the Tasks page (or in the dialog that moves
 A page shows a list; it doesn't make one: editing the embed away, or deleting the page, changes nothing of the list, and a list is deleted only by **Delete…**, which asks where its tasks go.
 Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged so, whatever list it is in.
 
-**A shared list has owners** (with users; `"owners": ["anna"]` in its entry, `List.Owners` in package `taskfiles`, `ListInfo.Owners`): who made it, with **New list…** or by making a private list shared.
-**Owners and admins manage the list**: rename it, delete it, set its settings (`canManageList` in `go/access.go`; `listForManage` in the operations).
-**Everyone else who may write tasks changes its tasks and leaves the list as it is** (`canWriteList`): its ⋯ menu has no Rename…, Delete… or List settings… for them, and the routes and tools answer 403, "#ops is bob's list: its tasks are yours to change, the list itself (its name, its settings, deleting it) is theirs and an admin's."
-Among a hundred people a list isn't everyone's to rename or delete, as it was until 2026-11.
-A list from before owners has none: it is the admins' ("#old is changed by an admin of this wiki …").
-A private list is its user's. Without users, and in a wiki that has no admin (from before roles), whoever may write manages, as before.
+(Until 2026-11 a list was a tag a page declared with `[[tasks: list=<tag>]]`: a task could be in two, a list ended with its page, and a task moved by a change of its tags. A wiki from then is taken over once, when Zone starts: The lists' migration, below.
+Later in 2026-11 came the Inbox: until then a task could be in no list, which with users was everyone's; a pin also put a list's tasks in My tasks, and the first pinned list took new tasks. The Inbox's migration, below.)
 
-**A task's files** (with users): a file pasted, dropped or attached in a task's dialog (its description, a comment) is the task's: kept in `_tasks/files/<task id>/_assets/`, at `/_tasks/files/<id>/_assets/<file>`, and **seen by who sees the task** (`taskPlace`, `seesTaskFiles` in `go/access.go`; `serveTaskUpload`), 404 for anyone else as for a file that isn't there.
-Nothing moves with a task: a private task's file is its owner's alone, shared with the task it is everyone's or its list's members', and a task that goes to another list, or whose list is narrowed, widened or renamed, takes its files along by being the same task.
-The dialog sends the task's id with an upload (`task`, `markdownEditor`'s `task` option); for a new task it makes one up (a version 4 UUID) and creates the task with it (`id` in `POST /api/tasks`: only an id of that form that no task has), so the files pasted before the first Save are the task's from the start.
-Until there is a task of that id (the dialog is open), and once there is none (deleted for good; the files stay, for the undo), its files open for whoever signed in knows the id, which is 122 random bits said only to the task's readers; never for a visitor.
-An assistant's `upload_file` takes a task's id as `page`.
-A file's history is its task's readers' (`canSeePath`).
-Without users a task's file goes to `_assets/` like any other.
-A file attached before this (in `_assets/`, or in `private/<you>/_assets/` for a private task) stays where it is.
+### Making and naming
+
+- **New list…** (`#list-new-dialog`; `POST /tasks/new-list`, `createListOp` in `go/tasklists.go`): asks for the list's name and makes it: an entry in the registry, in one commit (`Create list #shop`).
+  No page is written.
+  **The new list is pinned for you**, last, in the same commit (a shared list with users: the shared registry and your own), so it is a pill at once and not out of sight under More; one who had set no pins starts from the wiki's, as with **Pin**.
+  Then the list opens (`/tasks?list=<name>`).
+  Nothing else changes by it: new tasks still go to the Inbox, and the tasks there stay.
+  (`pin=0` in the form leaves the list unpinned; no dialog sends it.)
+  With users the dialog has **Private: only you see it and its tasks**, which makes it a private list of yours.
+  Refused, back in the dialog with the reason: no name, a name with `[ ] , | = /` or `"`, a list you already see ("There is a list #shop already").
+  A tag of that name is a tag: making a list takes no task into it.
+  Under an embed of a list that isn't there, **Create the list #<name>** does the same.
+  An assistant makes a list with `create_task_list`, the same operation: the list is pinned for its user, last.
+- **Names** (`cleanList`, `checkListName`): one word, lowercase, spaces `-`, a leading `#` dropped, at most 60 characters, none of `[ ] , | = / "` (they mean something in an embed or a ref).
+  No list can be called `inbox` or `none`: they name the Inbox (below).
+  A name is unique among the shared lists and among one user's private lists.
+  A user can't make a list by a name of one they see ("There is a list #shop already"), private or shared; they can still end up with a private and a shared list of one name (the migration, or someone making the shared one later, who doesn't see theirs).
+  For them the plain name is their own list and the shared one is **`shared/<name>`**: that is a **ref**, how a list is named to one user (`ListInfo.Ref`, `taskLists(user)`, `resolveList`): in URLs (`/tasks?list=shared/gifts`), in pins, in the API's and the tools' `list`, in the browser.
+  On a page, `[[tasks: list=gifts]]` is the shared list unless the page is in your private folder (`listOnPage`), so a shared page shows everyone the same list.
+- **A task's list** is its `list`, the list's name (Task fields): `"list": "shop"` after its tags, no key when it is in the Inbox.
+  The task's file says which registry the name is in: a task in a user's files is in one of their private lists (or, without `list`, in their Inbox), a task in the shared files in a shared one (`taskList`).
+  So a name has to be unique only within one registry, and nobody learns another user's names from it.
+- **An embed of a list that isn't there** (`noListHTML`, `tasks_no_list`; also `/tasks?list=<name>`): in the app's place a line, "There is no list #<name>.", and for who may make lists **Create the list #<name>** and a link to the tasks tagged so (`/tasks?tag=<name>`).
+  Nothing else on the page changes.
+
+### Who sees a list
+
+With users a list is private (yours alone), for everyone, or for some: whoever sees a list sees its tasks.
+
+#### Private lists
+
+**Private lists** (with users; `docs/spec/users.md`, Private tasks): **private and shared are said of lists, not of tasks**. A task in a private list, or in your Inbox, is yours alone and is kept in your files; a task in a shared list is shared.
+**With users a shared task is always in a list**: there is no place that is everyone's and nobody's.
+A new task may start in any list.
+**A shared task never goes into a private list nor into an Inbox** ("A shared task stays shared": others have seen it), by any route or tool.
+**A private task leaves for a shared list** only when the write says `share`, which the browser sends after telling you that everyone will see it; its History then says `shared`.
+Out of a private list into your Inbox, or the other way, it stays private, and nothing is asked.
+A private list can be made shared with **Make shared…** (below), its tasks with it; a shared one never private.
+Every reader asks `canSeeList` (through `taskLists(user)`, which gives only the lists a user sees), every write to a list or to a task in it `canWriteList` (`go/access.go`): whoever sees a list and may write tasks changes its tasks, and the list itself (its name, its settings, deleting it) is its owners' and the admins' (`canManageList`; A shared list has owners, under Who manages a list, below).
+
+#### Lists for some
 
 **Lists for some** (with users): a shared list is for everyone, or for the groups and users it names, its **members** (`"for": ["@hiring", "anna"]` in its entry: `@name` a group, which may be one made of other groups, `@product` for who is in dev or in design (Groups in `docs/spec/users.md`); a bare name a user; `List.For`, `ListInfo.For`, `listMember` in `go/access.go`).
 
@@ -860,7 +998,7 @@ A file attached before this (in `_assets/`, or in `private/<you>/_assets/` for a
   **Who no longer sees the list no longer has its tasks** (`assigneeGone` in `go/tasksyntax.go`, `TasksCore.assigneeGone` with `people.members`): a list narrowed, a group someone left. The task keeps the name and **counts as no one's**, as the task of someone who can no longer be given tasks does: the name struck through on the card ("Assigned to bob, who doesn't see this list anymore: it counts as no one's") and in the dialog, under Unassigned By person, in the list's "N unassigned", found by `@none` and still by `@bob`, said so to an assistant; so it comes up where the team looks for what nobody has, and is handed on.
   Nobody is unassigned by it: among the list's members again, their tasks are theirs as before. (A name kept on a task its bearer can't see, and shown as theirs, would be a task that looks taken care of and isn't.)
 - **The heading says it**: 👥 beside the list's name, "For @hiring, anna: only they see this list and its tasks (anna, bo, …)", the sign a group's page has (🔒 is what is yours alone: a private list); its pill and its entry under More carry the people icon and say whom it is for (`TaskPlace.For`), a task's list chip on a card reads "👥 hiring", and its tooltip names its members.
-- **Who sees a task is decided by where it is kept** (Storage, above): the list's entry is not in `_tasks/lists.json`, which everyone reads, but in the list's own folder, `_tasks/lists/<name>/list.json` (one entry, as a line of the registry is), and that file is what tells every read of the tasks there whom they are for.
+- **Who sees a task is decided by where it is kept** (Storage, under How it works): the list's entry is not in `_tasks/lists.json`, which everyone reads, but in the list's own folder, `_tasks/lists/<name>/list.json` (one entry, as a line of the registry is), and that file is what tells every read of the tasks there whom they are for.
   The store leaves the folder out for anyone else (`Store.dirs(who, owner)`, `Member`): every reader of a user's tasks, and every write, which therefore never touches the files of a list its user doesn't see (a task that names such a list is refused by the store itself, `byOwner`).
   What holds every user's tasks (the search index, a task found by its id) asks `canSeeTask`, which asks the same file (`taskFiles.SeesList`); `canSeePath` hides the folder's files in the history.
   **In search its tasks are a layer of their own**, as a group's pages are (`docShared`, `placeOfDoc`, `listsForSome` in `go/retrieval.go`; Search under Group pages in `docs/spec/users.md`): they are in no index but its members', so their words, counts and lengths take part in no one else's ranking and a typo of a word only the list has suggests nothing to anyone else.
@@ -877,159 +1015,34 @@ A file attached before this (in `_assets/`, or in `private/<you>/_assets/` for a
 - **The For field completes word by word** (`js/listsrow.js`, the words in `data-words` of `#list-for-words`): the groups and the people who can be given tasks, those already named left out; the browser's own datalist would take the whole field for one word. Without the script it offers the groups for the first word.
 - **The tasks' word leaves it out** for anyone else (`Store.Word(who, …)`): a write to it doesn't make their browser load its lists again.
 
-(Until 2026-11 a list was a tag a page declared with `[[tasks: list=<tag>]]`: a task could be in two, a list ended with its page, and a task moved by a change of its tags. A wiki from then is taken over once, when Zone starts: The migration, below.
-Later in 2026-11 came the Inbox: until then a task could be in no list, which with users was everyone's; a pin also put a list's tasks in My tasks, and the first pinned list took new tasks. The Inbox's migration, below.)
+### Who manages a list
 
-- **The registry** (`go/internal/taskfiles/lists.go`; `ListsName`): the lists are in `lists.json` beside the task files, the shared ones in `_tasks/lists.json`, a user's private ones in `private/<user>/_tasks/lists.json`, read and written under the task files' lock, atomically, committed to git.
+**A shared list has owners** (with users; `"owners": ["anna"]` in its entry, `List.Owners` in package `taskfiles`, `ListInfo.Owners`): who made it, with **New list…** or by making a private list shared.
+**Owners and admins manage the list**: rename it, delete it, set its settings (`canManageList` in `go/access.go`; `listForManage` in the operations).
+**Everyone else who may write tasks changes its tasks and leaves the list as it is** (`canWriteList`): its ⋯ menu has no Rename…, Delete… or List settings… for them, and the routes and tools answer 403, "#ops is bob's list: its tasks are yours to change, the list itself (its name, its settings, deleting it) is theirs and an admin's."
+Among a hundred people a list isn't everyone's to rename or delete, as it was until 2026-11.
+A list from before owners has none: it is the admins' ("#old is changed by an admin of this wiki …").
+A private list is its user's. Without users, and in a wiki that has no admin (from before roles), whoever may write manages, as before.
 
-  ```json
-  {
-    "version": 3,
-    "lists": [
-      {"name": "shop", "view": "today", "limit": "8", "keep": "1", "labels": "Catalogue,Shopping", "home": "off"},
-      {"name": "task"}
-    ],
-    "pinned": ["task", "shop"],
-    "mine": {"view": "today"},
-    "all": {"view": "open"},
-    "order": ["0b7c…", "9e21…"]
-  }
-  ```
+| Action | Who may | In the browser | Route | MCP tool |
+|--------|---------|----------------|-------|----------|
+| Make a list | whoever may write tasks | New list… (the Tasks page's ⋯ menu, the List field, the move dialog), Create the list #<name> | `POST /tasks/new-list`; `POST /api/tasks/lists` (the List field and the move dialog) | `create_task_list` (with `private`, `for`) |
+| Rename it | its owners and admins (a private list: its user) | Rename… | `POST /tasks/rename-list` | `rename_task_list` |
+| Delete it | its owners and admins (a private list: its user) | Delete… | `POST /tasks/delete-list` | — |
+| Change its settings | its owners and admins (a private list: its user) | List settings… | `POST /api/tasks/settings` (`{list, set}`) | — |
+| Say whom it is for | a shared list's owners and admins | Who it is for… | `POST /tasks/list-for` | `create_task_list` with `for`, as it is made |
+| Make it shared | a private list's user | Make shared… | `POST /tasks/share-list` | — |
+| Pin or unpin it, for yourself | whoever sees it and may write tasks | Pin, Unpin | `POST /tasks/pin-list` (`pin`: `1`, `first`, `0`) | — (`create_task_list` pins the list it makes) |
+| Pin it for everyone | a shared list's owners and admins | Pin for everyone, Unpin for everyone | `POST /tasks/pin-list` with `everyone=1` | — |
+| Reorder the pins | whoever may write tasks | dragging the pills | `POST /tasks/pin-order` | — |
+| Change its tasks | whoever sees it and may write tasks (`canWriteList`) | the task app | `/api/tasks…` | `create_task`, `update_task` |
 
-  Each list is one line: its name and its settings (`view`, `limit`, `group`, `keep`, `labels`, `new`, `noshare`, `home`), their values text as an embed writes them, a setting that isn't set no key.
-  So a list can be added or changed by hand in one line, and a commit shows the list that changed.
-  `pinned` is whose registry it is: a user's own pins in theirs, the wiki's in the shared one (Pins, below); `all` (the shared one) the settings of All tasks, `mine` those of My tasks (a user's own; without users the shared one's), `order` the manual order of My tasks (task ids; the same owner).
-  (Until 2026-11 `"mine": true` in a user's registry narrowed their Pinned to their own tasks; it reads as no settings and is written back no more.)
-  It is read leniently (a value of another kind as text, a list without a name left out, a name twice once, unknown keys kept and written back A–Z) and written in one format; a file that is there but unreadable refuses every write (`ReadListsStrict`: never an empty registry, which would drop every list).
-  `version` says that the wiki's lists are kept here: a shared registry without it (or none) is a wiki to take over (The migration), one with `1` a wiki from before the Inbox (The Inbox's migration).
-  A registry keeps the version it has when it is written; a new one gets the current one, 3 (2 until the views got their names of 2026-11: Views).
-- **A task's list** is its `list`, the list's name (Task fields): `"list": "shop"` after its tags, no key when it is in the Inbox.
-  The task's file says which registry the name is in: a task in a user's files is in one of their private lists (or, without `list`, in their Inbox), a task in the shared files in a shared one (`taskList`).
-  So a name has to be unique only within one registry, and nobody learns another user's names from it.
-- **Names** (`cleanList`, `checkListName`): one word, lowercase, spaces `-`, a leading `#` dropped, at most 60 characters, none of `[ ] , | = / "` (they mean something in an embed or a ref).
-  No list can be called `inbox` or `none`: they name the Inbox (below).
-  A name is unique among the shared lists and among one user's private lists.
-  A user can't make a list by a name of one they see ("There is a list #shop already"), private or shared; they can still end up with a private and a shared list of one name (the migration, or someone making the shared one later, who doesn't see theirs).
-  For them the plain name is their own list and the shared one is **`shared/<name>`**: that is a **ref**, how a list is named to one user (`ListInfo.Ref`, `taskLists(user)`, `resolveList`): in URLs (`/tasks?list=shared/gifts`), in pins, in the API's and the tools' `list`, in the browser.
-  On a page, `[[tasks: list=gifts]]` is the shared list unless the page is in your private folder (`listOnPage`), so a shared page shows everyone the same list.
-- **Private lists** (with users; `docs/spec/users.md`, Private tasks): **private and shared are said of lists, not of tasks**. A task in a private list, or in your Inbox, is yours alone and is kept in your files; a task in a shared list is shared.
-  **With users a shared task is always in a list**: there is no place that is everyone's and nobody's.
-  A new task may start in any list.
-  **A shared task never goes into a private list nor into an Inbox** ("A shared task stays shared": others have seen it), by any route or tool.
-  **A private task leaves for a shared list** only when the write says `share`, which the browser sends after telling you that everyone will see it; its History then says `shared`.
-  Out of a private list into your Inbox, or the other way, it stays private, and nothing is asked.
-  A private list can be made shared with **Make shared…** (below), its tasks with it; a shared one never private.
-  Every reader asks `canSeeList` (through `taskLists(user)`, which gives only the lists a user sees), every write to a list or to a task in it `canWriteList` (`go/access.go`): whoever sees a list and may write tasks changes its tasks, and the list itself (its name, its settings, deleting it) is its owners' and the admins' (`canManageList`; A shared list has owners, above).
-- **The Inbox** (`inboxRef`, `isInbox`, `inboxOwner` in `go/tasklists.go`; `inboxView` in `tasks.js`): the list every user has without making it: **the tasks without a `list`**.
-  **A new task goes there unless it is made in a list's view or names a list**: from `c t`, New task, My tasks' **+ New**, an assistant's `create_task`, `POST /api/tasks` without `list`.
-  With users it is yours alone (the task is kept in your files, `private/<user>/_tasks/`): what you capture is seen by nobody until you file it.
-  Without users it is the wiki's: the tasks in no list, in the shared files, as they always were.
-  - **Filing** is moving a task to a list: the List field, **Move to list…**, `m`. Into a shared list that shares it (`share`), and Zone then **assigns it to you** unless the write says who has it (`sharedBy`, whatever door shares it: Sharing a task in `docs/spec/users.md`; the dialog shows the name, to be taken off; the move dialog sends it), so what was yours stays in your My tasks unless you say otherwise.
-  - **Its view** is `/tasks?list=inbox`, headed **Inbox** (with 🔒 with users), the second pill of the list switcher; a line under the heading says what it is for.
-    It is All tasks narrowed: All tasks' settings (the tab, Plan, the limit), no settings dialog of its own, a locked chip **Inbox** in the filter field (the filter word `list:inbox`), and a new task made there is in the Inbox.
-    A task filed from there leaves the view, with the notice a list's view has.
-    On a page, `[[tasks: list=inbox]]` shows whoever looks their own.
-  - **It can't be renamed, deleted, shared or pinned**, and has no entry in a registry.
-  - **`none`** names it too (`list=none`, `list:none`, `search_tasks(list="none")`): until 2026-11 that was the view of the tasks in no list.
-    In a wiki that has a list called `inbox` or `none` from before the names were kept, the name is that list's (the Inbox's migration renames a list `inbox`).
-  - **Not for a viewer** among users (they make no task), nor in sharing mode, where what is private isn't shown.
-  - **A shared task that loses its list** (with users) goes to the shared list **`general`**, made for it when there is none (`generalListName`, `ensureGeneralLocked`): a list deleted without naming another, a restored or imported task whose list is gone, and the tasks that were in no list before the Inbox. It is a list like any other.
-- **My tasks** (`/tasks?mine=1`; `mineFilter`, `inMine` in `go/tasklists.go`, `TasksCore.inMine` in the browser): your home view, the one the Tasks links open and their badge counts.
-  It shows **what is yours: the tasks in your own lists (your Inbox, your private lists), and the shared tasks assigned to you**, wherever they are.
-  - **An unassigned shared task is its list's**, not yours: it is in the list's view and in its pill's counts, and the list's heading says how many there are ("3 unassigned", a link to them; A list's backlog, below). Taking one (assigning it to yourself: `a`, Enter) puts it in My tasks.
-    So My tasks is as short for one of a hundred as for one alone, and nothing is in everyone's.
-  - **Assigned to you** is the task's `assignee`. An assignee who is no user anymore (or disabled, or a viewer now) is no one.
-  - **Leave out of My tasks** (`home=off`, a list's setting: List settings → "+ Leave out of My tasks"; `ListInfo.LeftOut`): a list of your own whose tasks don't belong there, a catalogue of staples, a someday list. Its tasks are in its own view only, and not in the Tasks links' count.
-    It counts for a list that is yours (a private one; without users any); a shared list's tasks are in My tasks by their assignee, so the dialog doesn't offer it there.
-  - **Without users**, and for one no task can be given to (a viewer; `mineAssigns`), every list is the user's own: My tasks is every task but those of a list left out.
-  - **With no list in the wiki** it is every task, and there is no such view: `/tasks?mine=1` goes to `/tasks`, where the Tasks links go then.
-  - **One task app**: the cards' list chips say where each task is (a task in the Inbox has none), and a new task there goes into the Inbox.
-    A task that leaves by a change of its assignee or its list gets the notice a list's view gives ("Saved; it no longer shows here.").
-  - **Given to others** (`.tasks-given`, in the line under the heading; `givenToOthers`, `givenHref` in `go/tasklogic.go`): "Given to others: 3" links to the open shared tasks you made that someone else has: All tasks filtered `from:me -@me -@none`, By person (`/tasks?view=open&group=person&from=me&assignee=-me,-none`; `?group=` names what the board's sections stand for, for a link). They are not yours to do, so they are not in My tasks nor in its counts; this is where you see what you are waiting for, who has it, and whether it arrived (its card says "new" until its assignee opened it). Not shown when there is none.
-  - **Under the heading** a line says what it holds: "Your own tasks and what is assigned to you.", without users "Every open task.", and the lists left out, as links (`leftOutLinks`).
-  - **Its settings are its own**, and yours (Settings, above): the tab, Plan, the limit, the tabs' names.
-  - **Its manual order is its own**, and yours (`mineOrder`, `setMineOrder` in `go/tasklists.go`; `own`, `setOwnOrder` in `tasks.js`): a list's order (a task's `sort_order`) is the list's, for everyone who looks at it, a team's ranking of its backlog; what you rank in My tasks, across lists, is your sequence and moves nothing in any list.
-    It is kept as task ids in your registry (`"order"`; without users the wiki's), written by `POST /api/tasks/reorder` with `mine: true` in a commit "Reorder My tasks": no task is written.
-    The view lays it over its own copies of the tasks (a task's place in it stands for its `sort_order` there, a task not in it is Unsorted), so Unsorted and Sorted, Today and the Plan board's sections work in My tasks as everywhere; it comes with the page's tasks (`"order"` in `tasksInitial`) and with `GET /api/tasks?with=order`.
-    A task new to My tasks (one just given to you, a capture) is Unsorted, at the top, until you place it.
-    Until you rank something there it is the lists' order of your tasks, so nothing moves on the day; ids of tasks that are closed or gone drop out at the next move.
-    (Until 2026-11 a move in My tasks numbered its tasks' `sort_order` from 0, which put them above everyone else's in their lists.)
-  - **The server and the browser have the same rule**: the page gets the lists left out and whether assignment counts (`data-init-out`, `data-init-mine`: `assign` or `lists`), the routes take the scope as `?mine=1` (the closed tasks' count and years, the export), and one table of cases runs through both (`go/testdata/mine_cases.json`).
-  - **On a page**: `[[tasks: mine=1]]` shows it to whoever looks.
-  - **Zone assigns nothing by itself**, but a task of your own that you share: it is yours to do unless you say otherwise.
-  - (Until 2026-11 My tasks was every task except one assigned to someone else, or in a list you hadn't pinned unless it was assigned to you: every unassigned task of a pinned list, and of no list, was in everyone's.
-    Before that the Tasks links opened the pinned lists as one, called Pinned and before that My lists, at `/tasks?pinned=1`, which is no address anymore.)
-- **A list's backlog** (a shared list, with users): under the list's heading, **N unassigned** (`.tasks-unassigned`; `tasksPageView.Unassigned`) links to the list filtered by `@none` (`/tasks?list=<ref>&assignee=none`): the open tasks no one has, a former assignee's included.
-  A list left out of My tasks says so there too.
-- **The list switcher** (`.tasks-places` in `templates/tasks_page.html`, `taskPlaces` and `taskMore` in `go/tasksembed.go`, `js/listsrow.js`): `/tasks` opens with a row of pills above its heading,
-  on the page's white sheet with it, looking as the module switcher at the top of the page does (`.tasks-places-group`: one white capsule with a border, the pills inside it without one, in its type and height, the current one shaded).
-  **My tasks is the first pill, the Inbox the second; a pinned list is a pill; a list that isn't pinned is under More.**
-  In order: **My tasks** (above), whenever there is a row;
-  **Inbox** (`data-place="inbox"`; for who has one, `hasInbox`: with a lock with users);
-  then **the pinned lists** in their order,
-  then **More ▾**.
-  The pinned lists carry a pin (`.tasks-place-pin`, tooltip "Pinned list #<name>"), a private list a lock (tooltip "… (only you see it)").
-  - **More** (`.lists-more`, a `<details>`; its pill is the summary, `.lists-more-btn`): a click opens a panel under it (`.lists-more-panel`) of links, a line each:
-    **each list you see and haven't pinned**, A–Z by name (your own before the shared one of that name), a private one with a lock,
-    with users in two groups, each under its word when there are both (`TasksMore.Lists` and `Others`, `.lists-more-head`): **Your lists** (your private ones, the lists for some that you are one of, and the lists for everyone that hold an open task assigned to you), then **Other lists** (for everyone, the rest): among forty lists of a company the few that are yours come first, and the find field goes over both (a group's word goes with its last list);
-    then **All tasks** (`/tasks`: every task you see, in whatever list).
-    No counts on the lists in it, and **no number on the pill**: what is yours to do is in My tasks.
-    Escape and a click elsewhere close it.
-    **It names the view the page shows when that is one of its own**: on an unpinned list the pill reads that list's name, on `/tasks` (and a tag's view, which is All tasks with a filter) "All tasks", and it is the shaded one; else it reads "More".
-    It is there for a viewer and in sharing mode too (the page's ⋯ menu isn't), so it is no menu of the page's but links.
-    On a narrow screen the panel is as wide as the row.
-  - **Finding a list** (`.lists-more-filter`, with `moreFilterFrom` = 8 lists or more under More): a field at the panel's top, focused when it opens; what is typed leaves the lists whose name has it (All tasks stays), and Enter opens the first.
-  - **A list new to you** (`.lists-more-new`; `zone_lists_seen` in the browser's `localStorage`): a list under More that this browser hasn't shown before, so one someone else made, or an assistant (a list you make in the browser is pinned), has "new" beside its name, and More a dot (`.has-new`) until it is opened.
-    The first visit knows every list; a list is known once it was a pill, was under More when More was opened, or was the page's view.
-    It is the browser's memory, not the wiki's: another browser marks it again.
-  - **Dragging the pills** (`data-reorder` on the row, for who may pin; `POST /tasks/pin-order`, `pinOrderOp`): a pinned list's pill dragged with the mouse to another place among the pinned lists puts the pins in that order, in one commit ("Reorder the pinned lists").
-    Let go outside the row, it goes back.
-    My tasks, the Inbox and More stay where they are.
-    With a finger there is no dragging (it scrolls and taps): **Unpin** and **Pin** again puts a list last.
-  The heading names what is shown: **List: <name>** (with 🔒 for a private one), **My tasks**, **Inbox** or **All tasks** (the window's title likewise).
-  Every list's pill or link goes to `/tasks?list=<ref>`: the list with its settings,
-  and as its **Backlinks** every page that embeds it (`listPages`: any `[[tasks: list=<name>]]` outside code on a page you may see that shows this list, A–Z by title; at the end, in the right column on big screens and as the breadcrumb's `← N` chip, as on a page view).
-  Each pill but More carries **one number: what is due today or overdue** there (a list's own, `countTasks` over the list: everyone's tasks in it), and how many of its tasks are new for you; the Today count is on the Tasks module links alone, where it is the day's load (`.tasks-place .module-focus` is not shown; until 2026-11 a pill had up to three numbers);
-  the current one is shaded (`aria-current`): My tasks on `?mine=1`, the Inbox on `?list=inbox`, the list on `?list=<ref>`, More for a view under it, none for a name no list has.
-  **Only `/tasks` has it**: a page that embeds a list shows the list, as any embed does, and no switcher, so the Tasks module and the wiki's pages stay apart; the pages are a list's Backlinks.
-  With no list there is no switcher.
-  Another user's private list is not in it; in sharing mode a list that hides when sharing (`noshare`) is left out of the pills and of More (on its own URL More then reads "More"), and the counts are hidden as on the module links.
-  `js/chrome.js` keeps the counts current with the Tasks link's (`refreshDueBadge`: `GET /api/tasks/due-count?places=1` adds `places`, each pill's counts by its key: `list:<ref>`, `mine`, `inbox`).
-  The pills wrap onto more lines on a narrow window and are finger-sized under `(pointer: coarse)`; **on a phone (≤640px) the row is one line that scrolls sideways**, the current pill brought into view (`js/listsrow.js`), and the line under the heading that only says what the view is isn't shown (one with a link in it, N unassigned or the lists left out, stays: `.tasks-list-home:not(:has(a))`), so the first tasks are on the first screen.
-  (Until 2026-11 every list was a pill, pinned or not, with an **All** pill last.)
-- **Pins** (`pinnedLists`, `pinListOp`; `POST /tasks/pin-list` with `list` and `pin`: `1`, `first` or `0`): **a pin is a shortcut**: the list is a pill of your list switcher, and nothing else.
-  It doesn't say what is in My tasks (that is whose a task is), nor where a new task goes (the Inbox, or the list in view).
-  You pin, unpin and reorder in a list's ⋯ menu on `/tasks?list=`: **Pin** puts it last, **Unpin** takes it out (until 2026-11 **Move first** put a pill at the front: dragging does that; `pin=first` is still the route's); the pills can be dragged too (the list switcher, above).
-  **A list you make starts pinned**, last, wherever it is made: New list…, the List field, the move dialog, an assistant's `create_task_list`.
-  **Pins are the user's own**: in their registry (`pinned`, in order); a user who has set none has the wiki's (the shared registry's, which are everyone's without users), and starts from those with their first pin.
-  One who unpinned everything has none (`"pinned": []`), not the wiki's again.
-  **Pin for everyone** / **Unpin for everyone** (with users, in a shared list's ⋯ menu, for who manages it: `canManageList`; `POST /tasks/pin-list` with `everyone=1`, a commit "Pin list #team for everyone") sets the wiki's pins: the pills of everyone who has pinned nothing themselves. (Until 2026-11 they were set in `_tasks/lists.json` by hand.)
-  (Until 2026-11 a pin was `pin=1` or `pin=default` in an embed, and a page's pin pinned for everyone.
-  Then, until the Inbox, a pin also put a list's tasks in My tasks, and the first pinned list took the new tasks; with nothing pinned they went to a private list `private`, which counted as pinned.
-  A registry that names a `default` list reads as that list pinned first (`ParseRegistry`), and is written without the key.)
-- **Where a new task goes** (`.task-edit-target`, `syncTarget` in `js/taskmodal.js`): the edit dialog of a new task says it under the title, and with users who sees it: "Adds to your Inbox: only you see it.", "Adds to the list team: everyone sees it.", "Adds to the list diary: only you see it."; without users "Adds to the Inbox." or "Adds to the list shop.".
-  It follows the List field, and a `#word` in the title that names a list (Quick-add: `#shop` puts the task in the list shop, the first such word; the others are tags).
-  Hidden when editing a task and for several titles at once.
-  **A task for someone needs a shared list** (with users; `autoInbox`, `sharedChoices`): the Inbox is yours alone, so on a new task still in the Inbox that nobody chose a list for, naming an assignee (the Assignee field, the title's `@name`, a view's `assignee=`) turns the line into a question: "A task for someone else needs a shared list:" and the shared lists, each a button (`.task-edit-target-list`), the one this browser last made a task in first (`localStorage` `zone-tasks-shared-list`), then A–Z; past six it says "or another in List.".
-  A click on one is choosing it in the List field. **Nothing is chosen for you**: until 2026-11 the List field moved by itself to the last used list (or the only one), and a task went where nobody had looked.
-  Taking the name away takes the question away.
-  **Your own name asks nothing**: a task in your Inbox is yours as it is (a view's `assignee=me`, the title's `@me`), so it stays there, private, and is saved without an assignee.
-  With no shared list the line reads "A task for someone else needs a shared list: choose one in List." (New list… in it makes one), and Save without one says so on the List field.
-  An assistant's `create_task` with an assignee and no shared list is refused, naming the shared lists; `POST /api/tasks` likewise answers 400 ("A private task is yours alone. Put it in a shared list to assign it").
-- **The Tasks page's ⋯ menu** (`.page-menu-btn` beside the heading of `/tasks`, on every view of it; the page's ⋯ menu, `#page-menu`, with `js/pagemenu.js`): **it is the page's one such menu**: the view's own actions are in it, **List settings…** first and **Mark all read**, **Export tasks** and **Import tasks…** last (`[data-tasks-action]`, shown and run by `js/tasksettings.js` where the view has them; the toolbar's ⋯ is not shown on this page. Until 2026-11 the page had two ⋯ menus with different things in them), and between them **New list…**; on a list **Rename…** (for who manages it), **Pin** / **Unpin**, **Pin for everyone** / **Unpin for everyone** (with users, a shared list, for who manages it), **Make shared…** (a private one), **Who it is for…** (with users, a shared list, for who manages it) and **Delete…** (for who manages it); on a tag's view (`/tasks?tag=<tag>`) **Rename tag…** (below).
+Without users, and in a wiki that has no admin, "its owners and admins" is whoever may write.
+A viewer does none of these.
+
+- **The Tasks page's ⋯ menu** (`.page-menu-btn` beside the heading of `/tasks`, on every view of it; the page's ⋯ menu, `#page-menu`, with `js/pagemenu.js`): **it is the page's one such menu**: the view's own actions are in it, **List settings…** first and **Mark all read**, **Export tasks** and **Import tasks…** last (`[data-tasks-action]`, shown and run by `js/tasksettings.js` where the view has them; the toolbar's ⋯ is not shown on this page. Until 2026-11 the page had two ⋯ menus with different things in them), and between them **New list…**; on a list **Rename…** (for who manages it), **Pin** / **Unpin**, **Pin for everyone** / **Unpin for everyone** (with users, a shared list, for who manages it), **Make shared…** (a private one), **Who it is for…** (with users, a shared list, for who manages it) and **Delete…** (for who manages it); on a tag's view (`/tasks?tag=<tag>`) **Rename tag…** (Renaming a tag).
   Each but the pins is a dialog with a form the server answers (`data-dialog` on the menu item; a refusal comes back with the message in the dialog).
   Not for a viewer, nor in sharing mode.
-- **New list…** (`#list-new-dialog`; `POST /tasks/new-list`, `createListOp` in `go/tasklists.go`): asks for the list's name and makes it: an entry in the registry, in one commit (`Create list #shop`).
-  No page is written.
-  **The new list is pinned for you**, last, in the same commit (a shared list with users: the shared registry and your own), so it is a pill at once and not out of sight under More; one who had set no pins starts from the wiki's, as with **Pin**.
-  Then the list opens (`/tasks?list=<name>`).
-  Nothing else changes by it: new tasks still go to the Inbox, and the tasks there stay.
-  (`pin=0` in the form leaves the list unpinned; no dialog sends it.)
-  With users the dialog has **Private: only you see it and its tasks**, which makes it a private list of yours.
-  Refused, back in the dialog with the reason: no name, a name with `[ ] , | = /` or `"`, a list you already see ("There is a list #shop already").
-  A tag of that name is a tag: making a list takes no task into it.
-  Under an embed of a list that isn't there, **Create the list #<name>** does the same.
-  An assistant makes a list with `create_task_list`, the same operation: the list is pinned for its user, last.
 - **Rename…** (`#list-rename-dialog`; `POST /tasks/rename-list` with `list` and `new_name`; `renameListOp`): in one commit (`Rename list #shop to #food`) the list's name in its registry, the `list` of its tasks (open, closed, archived), the users' pins of it, and where pages and tasks' text name it: the `list=` of `[[tasks: …]]` embeds and the `?list=` of links to `/tasks`.
   Code stays as written, and so do a tag of that name, `tag=` and `#word` in prose.
   An assistant renames a list with `rename_task_list`, the same operation.
@@ -1047,67 +1060,218 @@ Later in 2026-11 came the Inbox: until then a task could be in no list, which wi
 - **Make shared…** (a private list; `#list-share-dialog`; `POST /tasks/share-list`; `shareListOp`): the list moves to the shared registry and its tasks to the shared files, in one commit (`Share list #gifts`), each with `shared` in its History.
   Refused while a shared list has that name.
   There is no way back.
-- **Renaming a tag** (**Rename tag…** in the ⋯ menu of `/tasks?tag=<tag>`, `#tag-rename-dialog`; `POST /tasks/rename`; the MCP tool `rename_task_tag`; `renameTagOp` in `go/pageops.go`): in one commit it changes the tag on every task (open, closed, archived) and, on pages and in tasks' text, the `tag=` and `new=` of `[[tasks: …]]` embeds and the `?tag=` of links to `/tasks`.
-  A list is no tag: one of that name, its embeds and its links stay.
-  Code stays as written, and so do a `#word` in prose and the `tags:` in pages' frontmatter, which sort pages rather than tasks.
-  Case doesn't matter in matching: `Shop` and `shop` are one tag, and renaming a tag to its own name evens out how it is spelled.
-  - **A name already in use** (a task you see has that tag) merges the two, so it asks first: the dialog comes back saying so with a **Merge** button (editing the name takes that back), and the MCP tool wants `merge: true`.
-    A task with both tags ends up with one.
-  - **Refused**, with nothing changed: a tag you don't see anywhere, an empty name, a name with `[ ] , | =` (they mean something in an embed), or a tasks file or page that can't be read.
-    Text not yet in git is committed first (`keepPendingPages`).
-  - **With users**: a tag on anything shared (a shared task, an embed on a shared page) is one name for everyone, so the rename reaches every user's private tasks and pages too, as a page rename's links do.
-    A tag only you see stays yours: another user's private tag of that name is another tag and isn't touched.
-    A tag only someone else has is refused as if it didn't exist, a new name only they use is no merge for you, and the answer counts only the tasks and pages you see.
-- **Scopes** (`inScope`, `paramsScope`; `inScope` in `tasks.js`): a list view shows the tasks in that list;
-  the Inbox (`list=inbox`) those in none;
-  My tasks what its rule says (`mine=1`, `mineScope`; `scopeFilter` gives a scope's tasks for a user);
-  several lists as one those in any of them (`lists=a|b`, which the routes still take: what Pinned was until 2026-11);
-  the **main task list** (an embed with neither, including `/tasks`, URL `?tag=` notwithstanding) shows every task,
-  as do a `tag=` embed (a task tagged `sam` belongs on a Sam page whatever list it is in),
-  and the main Closed count.
-  The due count is My tasks'.
+
+### The Inbox
+
+**The Inbox** (`inboxRef`, `isInbox`, `inboxOwner` in `go/tasklists.go`; `inboxView` in `tasks.js`): the list every user has without making it: **the tasks without a `list`**.
+**A new task goes there unless it is made in a list's view or names a list**: from `c t`, New task, My tasks' **+ New**, an assistant's `create_task`, `POST /api/tasks` without `list`.
+With users it is yours alone (the task is kept in your files, `private/<user>/_tasks/`): what you capture is seen by nobody until you file it.
+Without users it is the wiki's: the tasks in no list, in the shared files, as they always were.
+
+- **Filing** is moving a task to a list: the List field, **Move to list…**, `m`. Into a shared list that shares it (`share`), and Zone then **assigns it to you** unless the write says who has it (`sharedBy`, whatever door shares it: Sharing a task in `docs/spec/users.md`; the dialog shows the name, to be taken off; the move dialog sends it), so what was yours stays in your My tasks unless you say otherwise.
+- **Its view** is `/tasks?list=inbox`, headed **Inbox** (with 🔒 with users), the second pill of the list switcher; a line under the heading says what it is for.
+  It is All tasks narrowed: All tasks' settings (the tab, Plan, the limit), no settings dialog of its own, a locked chip **Inbox** in the filter field (the filter word `list:inbox`), and a new task made there is in the Inbox.
+  A task filed from there leaves the view, with the notice a list's view has.
+  On a page, `[[tasks: list=inbox]]` shows whoever looks their own.
+- **It can't be renamed, deleted, shared or pinned**, and has no entry in a registry.
+- **`none`** names it too (`list=none`, `list:none`, `search_tasks(list="none")`): until 2026-11 that was the view of the tasks in no list.
+  In a wiki that has a list called `inbox` or `none` from before the names were kept, the name is that list's (the Inbox's migration renames a list `inbox`).
+- **Not for a viewer** among users (they make no task), nor in sharing mode, where what is private isn't shown.
+- **A shared task that loses its list** (with users) goes to the shared list **`general`**, made for it when there is none (`generalListName`, `ensureGeneralLocked`): a list deleted without naming another, a restored or imported task whose list is gone, and the tasks that were in no list before the Inbox. It is a list like any other.
+
+### My tasks
+
+**My tasks** (`/tasks?mine=1`; `mineFilter`, `inMine` in `go/tasklists.go`, `TasksCore.inMine` in the browser): your home view, the one the Tasks links open and their badge counts.
+It shows **what is yours: the tasks in your own lists (your Inbox, your private lists), and the shared tasks assigned to you**, wherever they are.
+
+- **An unassigned shared task is its list's**, not yours: it is in the list's view and in its pill's counts, and the list's heading says how many there are ("3 unassigned", a link to them; A list's backlog, below). Taking one (assigning it to yourself: `a`, Enter) puts it in My tasks.
+  So My tasks is as short for one of a hundred as for one alone, and nothing is in everyone's.
+- **Assigned to you** is the task's `assignee`. An assignee who is no user anymore (or disabled, or a viewer now) is no one.
+- **Leave out of My tasks** (`home=off`, a list's setting: List settings → "+ Leave out of My tasks"; `ListInfo.LeftOut`): a list of your own whose tasks don't belong there, a catalogue of staples, a someday list. Its tasks are in its own view only, and not in the Tasks links' count.
+  It counts for a list that is yours (a private one; without users any); a shared list's tasks are in My tasks by their assignee, so the dialog doesn't offer it there.
+- **Without users**, and for one no task can be given to (a viewer; `mineAssigns`), every list is the user's own: My tasks is every task but those of a list left out.
+- **With no list in the wiki** it is every task, and there is no such view: `/tasks?mine=1` goes to `/tasks`, where the Tasks links go then.
+- **One task app**: the cards' list chips say where each task is (a task in the Inbox has none), and a new task there goes into the Inbox.
+  A task that leaves by a change of its assignee or its list gets the notice a list's view gives ("Saved; it no longer shows here.").
+- **Given to others** (`.tasks-given`, in the line under the heading; `givenToOthers`, `givenHref` in `go/tasklogic.go`): "Given to others: 3" links to the open shared tasks you made that someone else has: All tasks filtered `from:me -@me -@none`, By person (`/tasks?view=open&group=person&from=me&assignee=-me,-none`; `?group=` names what the board's sections stand for, for a link). They are not yours to do, so they are not in My tasks nor in its counts; this is where you see what you are waiting for, who has it, and whether it arrived (its card says "new" until its assignee opened it). Not shown when there is none.
+- **Under the heading** a line says what it holds: "Your own tasks and what is assigned to you.", without users "Every open task.", and the lists left out, as links (`leftOutLinks`).
+- **Its settings are its own**, and yours (Settings, above): the tab, Plan, the limit, the tabs' names.
+- **Its manual order is its own**, and yours (`mineOrder`, `setMineOrder` in `go/tasklists.go`; `own`, `setOwnOrder` in `tasks.js`): a list's order (a task's `sort_order`) is the list's, for everyone who looks at it, a team's ranking of its backlog; what you rank in My tasks, across lists, is your sequence and moves nothing in any list.
+  It is kept as task ids in your registry (`"order"`; without users the wiki's), written by `POST /api/tasks/reorder` with `mine: true` in a commit "Reorder My tasks": no task is written.
+  The view lays it over its own copies of the tasks (a task's place in it stands for its `sort_order` there, a task not in it is Unsorted), so Unsorted and Sorted, Today and the Plan board's sections work in My tasks as everywhere; it comes with the page's tasks (`"order"` in `tasksInitial`) and with `GET /api/tasks?with=order`.
+  A task new to My tasks (one just given to you, a capture) is Unsorted, at the top, until you place it.
+  Until you rank something there it is the lists' order of your tasks, so nothing moves on the day; ids of tasks that are closed or gone drop out at the next move.
+  (Until 2026-11 a move in My tasks numbered its tasks' `sort_order` from 0, which put them above everyone else's in their lists.)
+- **The server and the browser have the same rule**: the page gets the lists left out and whether assignment counts (`data-init-out`, `data-init-mine`: `assign` or `lists`), the routes take the scope as `?mine=1` (the closed tasks' count and years, the export), and one table of cases runs through both (`go/testdata/mine_cases.json`).
+- **On a page**: `[[tasks: mine=1]]` shows it to whoever looks.
+- **Zone assigns nothing by itself**, but a task of your own that you share: it is yours to do unless you say otherwise.
+- (Until 2026-11 My tasks was every task except one assigned to someone else, or in a list you hadn't pinned unless it was assigned to you: every unassigned task of a pinned list, and of no list, was in everyone's.
+  Before that the Tasks links opened the pinned lists as one, called Pinned and before that My lists, at `/tasks?pinned=1`, which is no address anymore.)
+
+### The list switcher
+
+**The list switcher** (`.tasks-places` in `templates/tasks_page.html`, `taskPlaces` and `taskMore` in `go/tasksembed.go`, `js/listsrow.js`): `/tasks` opens with a row of pills above its heading,
+on the page's white sheet with it, looking as the module switcher at the top of the page does (`.tasks-places-group`: one white capsule with a border, the pills inside it without one, in its type and height, the current one shaded).
+**My tasks is the first pill, the Inbox the second; a pinned list is a pill; a list that isn't pinned is under More.**
+In order: **My tasks** (above), whenever there is a row;
+**Inbox** (`data-place="inbox"`; for who has one, `hasInbox`: with a lock with users);
+then **the pinned lists** in their order,
+then **More ▾**.
+The pinned lists carry a pin (`.tasks-place-pin`, tooltip "Pinned list #<name>"), a private list a lock (tooltip "… (only you see it)").
+
+- **More** (`.lists-more`, a `<details>`; its pill is the summary, `.lists-more-btn`): a click opens a panel under it (`.lists-more-panel`) of links, a line each:
+  **each list you see and haven't pinned**, A–Z by name (your own before the shared one of that name), a private one with a lock,
+  with users in two groups, each under its word when there are both (`TasksMore.Lists` and `Others`, `.lists-more-head`): **Your lists** (your private ones, the lists for some that you are one of, and the lists for everyone that hold an open task assigned to you), then **Other lists** (for everyone, the rest): among forty lists of a company the few that are yours come first, and the find field goes over both (a group's word goes with its last list);
+  then **All tasks** (`/tasks`: every task you see, in whatever list).
+  No counts on the lists in it, and **no number on the pill**: what is yours to do is in My tasks.
+  Escape and a click elsewhere close it.
+  **It names the view the page shows when that is one of its own**: on an unpinned list the pill reads that list's name, on `/tasks` (and a tag's view, which is All tasks with a filter) "All tasks", and it is the shaded one; else it reads "More".
+  It is there for a viewer and in sharing mode too (the page's ⋯ menu isn't), so it is no menu of the page's but links.
+  On a narrow screen the panel is as wide as the row.
+- **Finding a list** (`.lists-more-filter`, with `moreFilterFrom` = 8 lists or more under More): a field at the panel's top, focused when it opens; what is typed leaves the lists whose name has it (All tasks stays), and Enter opens the first.
+- **A list new to you** (`.lists-more-new`; `zone_lists_seen` in the browser's `localStorage`): a list under More that this browser hasn't shown before, so one someone else made, or an assistant (a list you make in the browser is pinned), has "new" beside its name, and More a dot (`.has-new`) until it is opened.
+  The first visit knows every list; a list is known once it was a pill, was under More when More was opened, or was the page's view.
+  It is the browser's memory, not the wiki's: another browser marks it again.
+- **Dragging the pills** (`data-reorder` on the row, for who may pin; `POST /tasks/pin-order`, `pinOrderOp`): a pinned list's pill dragged with the mouse to another place among the pinned lists puts the pins in that order, in one commit ("Reorder the pinned lists").
+  Let go outside the row, it goes back.
+  My tasks, the Inbox and More stay where they are.
+  With a finger there is no dragging (it scrolls and taps): **Unpin** and **Pin** again puts a list last.
+
+The heading names what is shown: **List: <name>** (with 🔒 for a private one), **My tasks**, **Inbox** or **All tasks** (the window's title likewise).
+Every list's pill or link goes to `/tasks?list=<ref>`: the list with its settings,
+and as its **Backlinks** every page that embeds it (`listPages`: any `[[tasks: list=<name>]]` outside code on a page you may see that shows this list, A–Z by title; at the end, in the right column on big screens and as the breadcrumb's `← N` chip, as on a page view).
+Each pill but More carries **one number: what is due today or overdue** there (a list's own, `countTasks` over the list: everyone's tasks in it), and how many of its tasks are new for you; the Today count is on the Tasks module links alone, where it is the day's load (`.tasks-place .module-focus` is not shown; until 2026-11 a pill had up to three numbers);
+the current one is shaded (`aria-current`): My tasks on `?mine=1`, the Inbox on `?list=inbox`, the list on `?list=<ref>`, More for a view under it, none for a name no list has.
+**Only `/tasks` has it**: a page that embeds a list shows the list, as any embed does, and no switcher, so the Tasks module and the wiki's pages stay apart; the pages are a list's Backlinks.
+With no list there is no switcher.
+Another user's private list is not in it; in sharing mode a list that hides when sharing (`noshare`) is left out of the pills and of More (on its own URL More then reads "More"), and the counts are hidden as on the module links.
+`js/chrome.js` keeps the counts current with the Tasks link's (`refreshDueBadge`: `GET /api/tasks/due-count?places=1` adds `places`, each pill's counts by its key: `list:<ref>`, `mine`, `inbox`).
+The pills wrap onto more lines on a narrow window and are finger-sized under `(pointer: coarse)`; **on a phone (≤640px) the row is one line that scrolls sideways**, the current pill brought into view (`js/listsrow.js`), and the line under the heading that only says what the view is isn't shown (one with a link in it, N unassigned or the lists left out, stays: `.tasks-list-home:not(:has(a))`), so the first tasks are on the first screen.
+(Until 2026-11 every list was a pill, pinned or not, with an **All** pill last.)
+
+### Pins
+
+**Pins** (`pinnedLists`, `pinListOp`; `POST /tasks/pin-list` with `list` and `pin`: `1`, `first` or `0`): **a pin is a shortcut**: the list is a pill of your list switcher, and nothing else.
+It doesn't say what is in My tasks (that is whose a task is), nor where a new task goes (the Inbox, or the list in view).
+You pin, unpin and reorder in a list's ⋯ menu on `/tasks?list=`: **Pin** puts it last, **Unpin** takes it out (until 2026-11 **Move first** put a pill at the front: dragging does that; `pin=first` is still the route's); the pills can be dragged too (the list switcher, above).
+**A list you make starts pinned**, last, wherever it is made: New list…, the List field, the move dialog, an assistant's `create_task_list`.
+**Pins are the user's own**: in their registry (`pinned`, in order); a user who has set none has the wiki's (the shared registry's, which are everyone's without users), and starts from those with their first pin.
+One who unpinned everything has none (`"pinned": []`), not the wiki's again.
+**Pin for everyone** / **Unpin for everyone** (with users, in a shared list's ⋯ menu, for who manages it: `canManageList`; `POST /tasks/pin-list` with `everyone=1`, a commit "Pin list #team for everyone") sets the wiki's pins: the pills of everyone who has pinned nothing themselves. (Until 2026-11 they were set in `_tasks/lists.json` by hand.)
+(Until 2026-11 a pin was `pin=1` or `pin=default` in an embed, and a page's pin pinned for everyone.
+Then, until the Inbox, a pin also put a list's tasks in My tasks, and the first pinned list took the new tasks; with nothing pinned they went to a private list `private`, which counted as pinned.
+A registry that names a `default` list reads as that list pinned first (`ParseRegistry`), and is written without the key.)
+
+### Where a new task goes
+
+**Where a new task goes** (`.task-edit-target`, `syncTarget` in `js/taskmodal.js`): the edit dialog of a new task says it under the title, and with users who sees it: "Adds to your Inbox: only you see it.", "Adds to the list team: everyone sees it.", "Adds to the list diary: only you see it."; without users "Adds to the Inbox." or "Adds to the list shop.".
+It follows the List field, and a `#word` in the title that names a list (Quick-add: `#shop` puts the task in the list shop, the first such word; the others are tags).
+Hidden when editing a task and for several titles at once.
+**A task for someone needs a shared list** (with users; `autoInbox`, `sharedChoices`): the Inbox is yours alone, so on a new task still in the Inbox that nobody chose a list for, naming an assignee (the Assignee field, the title's `@name`, a view's `assignee=`) turns the line into a question: "A task for someone else needs a shared list:" and the shared lists, each a button (`.task-edit-target-list`), the one this browser last made a task in first (`localStorage` `zone-tasks-shared-list`), then A–Z; past six it says "or another in List.".
+A click on one is choosing it in the List field. **Nothing is chosen for you**: until 2026-11 the List field moved by itself to the last used list (or the only one), and a task went where nobody had looked.
+Taking the name away takes the question away.
+**Your own name asks nothing**: a task in your Inbox is yours as it is (a view's `assignee=me`, the title's `@me`), so it stays there, private, and is saved without an assignee.
+With no shared list the line reads "A task for someone else needs a shared list: choose one in List." (New list… in it makes one), and Save without one says so on the List field.
+An assistant's `create_task` with an assignee and no shared list is refused, naming the shared lists; `POST /api/tasks` likewise answers 400 ("A private task is yours alone. Put it in a shared list to assign it").
+
+### Moving tasks between lists
+
+A task moves to another list with the List field of its dialog (Opening and editing), **Move to list…**, **m**, or a drop on a list's section By list; filing a task out of the Inbox is such a move (The Inbox).
+
+- **Moving tasks to a list** (`openBulkListModal`, `.bulk-list-modal`; the selection bar's **List…**, **Move to list…** in a card's ⋯ menu, for the selection or that one task, and the **m** key on the selected tasks): the dialog, "Move 3 tasks to a list", lists every list you see (A–Z by name, a private one with 🔒, the shared one of a name you have a private list of as "name (shared)"), **Inbox** (with 🔒 with users) and **New list…**.
+  A click on a row moves the tasks at once (↑/↓ go through the rows, Enter picks, Esc or Cancel leaves).
+  The move sets each task's list in one `batch-update`; its tags stay.
+  The row of the list every selected task is in is ticked and has the focus; a list only some are in says how many ("1 of 3").
+  **A task is as private as its list** (Lists → Private lists): the rows of your private lists, and with users the Inbox's, are off while a shared task is selected ("a shared task stays shared"), and a row that would take a private task to a shared list says so ("shares it with everyone") and sends `share`; Zone gives it to you: a task of yours that you file stays in your My tasks (assign it to no one, or someone, afterwards).
+  One undo puts every task back in its list ("3 tasks moved to list “work”", "3 tasks moved to the Inbox"), but those that were private and are shared now: that can't be taken back, so a move of only such tasks has a notice and no undo.
+  The selection stays, as after Tag…; in a list's own view the moved tasks leave it.
+  **New list…**, the last row, makes a list and moves the tasks into it, so the dialog is there with no list too (then Inbox, ticked, and New list…).
+  The rows give way to the list's name (`.bulk-list-form`, `#bulk-list-name`), **Create and move** (or Enter) and **Back**; a name that won't do is said under it and the dialog stays ("There is a list #shop already").
+  With users it asks **Private: only you see it and its tasks** (`#bulk-list-private`): off and not to be ticked while a shared task is selected, ticked when every selected task is private, so no task is shared by not looking; unticked with a private task selected, a line says that everyone will see it and that it can't be made private again.
+  The list is made as New list… on the Tasks page makes it (`POST /api/tasks/lists`, `apiNewList`: `createListOp`), in a commit of its own before the move's, and the page stays: every task list on it knows the new list at once (the `zone:list-made` event, `tasks.js`), and on `/tasks` the list switcher is drawn again with it (`js/listsrow.js`).
+  **It is pinned, last, beside the lists you pinned, but it is never your first pin**: with nothing pinned it is under More, since a first pin changes where the Tasks links go and where new tasks land (New list…, Lists), which a list made to hold a few tasks shouldn't.
+  The toast says "3 tasks moved to the new list “shop”"; its undo takes the tasks back and leaves the list, which **Delete…** removes.
+
+### A list on screen
+
 - **On screen**: a list is marked as one wherever it shows: a list icon (an SVG mask in CSS `::before`, `--list-icon`, in the accent colour), a faint blue tint and a tooltip ("List", "List (private: only you see it)", `listTooltip`).
   A card shows its list as such a chip before its tags (`.task-tag-list`), but in a view of that one list, where every card would say the same.
   In a list's view the filter field holds a chip without × for it (`list:<name>`, shown as its name; `chipField`'s `locked`, `.tag-chip-locked`; Backspace skips it), so the page always shows what it says; an embed's `tag=` and `assignee=` words are locked the same way, and a URL `?tag=` stays removable.
   A save that takes a task out of view says where it went: "Saved to list “…”." when it left for a list (`listMovedNotice`), else "Saved; it no longer shows here." (`leftViewMessage`).
   Both are undo toasts (`offerUndoLeave`): undo PUTs back everything the save could change (`editSnapshot`: fields, list, order, recurrence and the old history, so no trace; not the list of a task that was private, which may have been shared by the save) and reloads the tasks, since the task left `tasks`.
   A new task created out of view only gets the notice.
-- **An embed of a list that isn't there** (`noListHTML`, `tasks_no_list`; also `/tasks?list=<name>`): in the app's place a line, "There is no list #<name>.", and for who may make lists **Create the list #<name>** and a link to the tasks tagged so (`/tasks?tag=<name>`).
-  Nothing else on the page changes.
-- **The Inbox's migration** (`migrateInboxLocked` in `go/listsmigrate.go`, when Zone starts, after the migration below and under its locks; one commit, "Give every task a list: the Inbox").
-  Once for each registry that says `version` 1 (lists as places, from before the Inbox), the shared one and each user's own, which then says 2 (each for itself: a wiki whose users have lists and that never had a shared one has no shared registry):
-  1. A list called `inbox` is called `inbox-list` (its tasks and pins follow; embeds that name it show the Inbox from then on).
-  2. With users, a user's list `private` that has no settings and took their new tasks (they pinned it, or pinned nothing) becomes their **Inbox**: its tasks lose their list, the list and its pin go. Zone made that list.
-  3. **What wasn't in My tasks stays out of it**: the lists a user hadn't pinned are left out (`home=off`): without users any such list, with users each user's private ones.
-     A shared list's unassigned tasks, which a pin put in My tasks, are in the list alone now: that is the change.
+- **A list's backlog** (a shared list, with users): under the list's heading, **N unassigned** (`.tasks-unassigned`; `tasksPageView.Unassigned`) links to the list filtered by `@none` (`/tasks?list=<ref>&assignee=none`): the open tasks no one has, a former assignee's included.
+  A list left out of My tasks says so there too.
 
-  At every start, with users: **a shared task without a list goes to the shared list `general`**, made for it and pinned for the wiki. That takes over the tasks that were in no list, and a wiki whose users are turned on later (its one Inbox becomes `general`).
-  A task file or registry that can't be read stops it before anything is written, as below (`listsUnmigrated`).
-- **The migration** (`migrateLists` in `go/listsmigrate.go`, when Zone starts and no registry, the shared one or a user's, has a `version`): a wiki from before lists were places is taken over, in one commit ("Make task lists their own"), under the page and task locks.
-  It changes nobody's view of who sees what: no task changes its file.
-  1. **The lists**: each name a shared page declared (`[[tasks: list=<name>]]` outside code) becomes a shared list, with its first page's (A–Z) params as its settings (`view`, `plan`, `limit`, `labels`, `new`, `keep`; `noshare` when that page was not for sharing).
-     A name a user's private page declared becomes a private list of theirs, unless a shared page declares it too and they have no private task with that tag: their embed then shows the shared list.
-     Another page's embed that set a list's settings differently loses that difference: the params stay in its text and mean nothing.
-  2. **The tasks**, in every file of every owner (open, closed, archived): the first A–Z of a task's tags that names a list of its own kind (a shared task: the shared lists; a private task: its user's) becomes its `list`, and that tag goes.
-     Any other list's tag stays, as a plain tag, so the task still shows in a `tag=` view.
-     A private task without a list of its user's (it carried a shared list's tag, or none) is in their Inbox (until the Inbox it went to a private list `private` of theirs, made for it and pinned).
-     A shared task carrying the tag of someone's private list keeps the tag and is in no list.
-  3. **The pins**: `pin=1` and `pin=default` on shared pages become the wiki's (`pinned` in the shared registry), the default one first, then by name; those on a user's private pages theirs, followed by the wiki's, as before.
-     A pin of a view that is no list (`[[tasks: tag=me pin=1]]`) has nowhere to go: the log says so.
-     `pin=` is taken out of the pages' embeds.
-  4. **Views by a list's tag**: an embed without `list=` whose `tag=` asks for a list's former tag (`[[tasks: tag=shop,urgent]]`) shows the list from then on (`[[tasks: list=shop tag=urgent]]`),
-     and so does a link (`/tasks?tag=shop` becomes `/tasks?list=shop`),
-     since the tag left the list's tasks and the filter would find none of them.
-     A private page's embed names a list of its user's or a shared one.
-     `tag=-shop` and `tag=shop|work` stay as written and no longer find the list's tasks (the filter words `-list:shop` and `list:shop` do); text in code stays, and so do links in tasks.
-  5. **The settings of All tasks** move from `_tasks/settings.json` into the shared registry (`all`), and that file goes.
+### Migrations
 
-  The tasks are written first, then the users' registries, the shared one (whose `version` says "done") and last the pages, so a start that was interrupted runs again without harm: a task keeps the list it got.
-  A task file that can't be read stops it before anything is written; Zone then runs, says so in its log, and refuses every change to lists until a start succeeds (`listsUnmigrated`), since a registry written meanwhile would stand for "taken over".
-  A wiki with nothing to take over (no list declared, no pin, no private task, no `_tasks/settings.json`) gets no registry: its first list writes it.
-  Going back to an older Zone: revert that commit in the wiki's repository; without it the older Zone finds every list empty.
+#### The Inbox's migration
 
-### Touch
+**The Inbox's migration** (`migrateInboxLocked` in `go/listsmigrate.go`, when Zone starts, after the lists' migration below and under its locks; one commit, "Give every task a list: the Inbox").
+Once for each registry that says `version` 1 (lists as places, from before the Inbox), the shared one and each user's own, which then says 2 (each for itself: a wiki whose users have lists and that never had a shared one has no shared registry):
+
+1. A list called `inbox` is called `inbox-list` (its tasks and pins follow; embeds that name it show the Inbox from then on).
+2. With users, a user's list `private` that has no settings and took their new tasks (they pinned it, or pinned nothing) becomes their **Inbox**: its tasks lose their list, the list and its pin go. Zone made that list.
+3. **What wasn't in My tasks stays out of it**: the lists a user hadn't pinned are left out (`home=off`): without users any such list, with users each user's private ones.
+   A shared list's unassigned tasks, which a pin put in My tasks, are in the list alone now: that is the change.
+
+At every start, with users: **a shared task without a list goes to the shared list `general`**, made for it and pinned for the wiki. That takes over the tasks that were in no list, and a wiki whose users are turned on later (its one Inbox becomes `general`).
+A task file or registry that can't be read stops it before anything is written, as below (`listsUnmigrated`).
+
+#### The lists' migration
+
+**The migration** (`migrateLists` in `go/listsmigrate.go`, when Zone starts and no registry, the shared one or a user's, has a `version`): a wiki from before lists were places is taken over, in one commit ("Make task lists their own"), under the page and task locks.
+It changes nobody's view of who sees what: no task changes its file.
+
+1. **The lists**: each name a shared page declared (`[[tasks: list=<name>]]` outside code) becomes a shared list, with its first page's (A–Z) params as its settings (`view`, `plan`, `limit`, `labels`, `new`, `keep`; `noshare` when that page was not for sharing).
+   A name a user's private page declared becomes a private list of theirs, unless a shared page declares it too and they have no private task with that tag: their embed then shows the shared list.
+   Another page's embed that set a list's settings differently loses that difference: the params stay in its text and mean nothing.
+2. **The tasks**, in every file of every owner (open, closed, archived): the first A–Z of a task's tags that names a list of its own kind (a shared task: the shared lists; a private task: its user's) becomes its `list`, and that tag goes.
+   Any other list's tag stays, as a plain tag, so the task still shows in a `tag=` view.
+   A private task without a list of its user's (it carried a shared list's tag, or none) is in their Inbox (until the Inbox it went to a private list `private` of theirs, made for it and pinned).
+   A shared task carrying the tag of someone's private list keeps the tag and is in no list.
+3. **The pins**: `pin=1` and `pin=default` on shared pages become the wiki's (`pinned` in the shared registry), the default one first, then by name; those on a user's private pages theirs, followed by the wiki's, as before.
+   A pin of a view that is no list (`[[tasks: tag=me pin=1]]`) has nowhere to go: the log says so.
+   `pin=` is taken out of the pages' embeds.
+4. **Views by a list's tag**: an embed without `list=` whose `tag=` asks for a list's former tag (`[[tasks: tag=shop,urgent]]`) shows the list from then on (`[[tasks: list=shop tag=urgent]]`),
+   and so does a link (`/tasks?tag=shop` becomes `/tasks?list=shop`),
+   since the tag left the list's tasks and the filter would find none of them.
+   A private page's embed names a list of its user's or a shared one.
+   `tag=-shop` and `tag=shop|work` stay as written and no longer find the list's tasks (the filter words `-list:shop` and `list:shop` do); text in code stays, and so do links in tasks.
+5. **The settings of All tasks** move from `_tasks/settings.json` into the shared registry (`all`), and that file goes.
+
+The tasks are written first, then the users' registries, the shared one (whose `version` says "done") and last the pages, so a start that was interrupted runs again without harm: a task keeps the list it got.
+A task file that can't be read stops it before anything is written; Zone then runs, says so in its log, and refuses every change to lists until a start succeeds (`listsUnmigrated`), since a registry written meanwhile would stand for "taken over".
+A wiki with nothing to take over (no list declared, no pin, no private task, no `_tasks/settings.json`) gets no registry: its first list writes it.
+Going back to an older Zone: revert that commit in the wiki's repository; without it the older Zone finds every list empty.
+
+## A task's files
+
+**A task's files** (with users): a file pasted, dropped or attached in a task's dialog (its description, a comment) is the task's: kept in `_tasks/files/<task id>/_assets/`, at `/_tasks/files/<id>/_assets/<file>`, and **seen by who sees the task** (`taskPlace`, `seesTaskFiles` in `go/access.go`; `serveTaskUpload`), 404 for anyone else as for a file that isn't there.
+Nothing moves with a task: a private task's file is its owner's alone, shared with the task it is everyone's or its list's members', and a task that goes to another list, or whose list is narrowed, widened or renamed, takes its files along by being the same task.
+The dialog sends the task's id with an upload (`task`, `markdownEditor`'s `task` option); for a new task it makes one up (a version 4 UUID) and creates the task with it (`id` in `POST /api/tasks`: only an id of that form that no task has), so the files pasted before the first Save are the task's from the start.
+Until there is a task of that id (the dialog is open), and once there is none (deleted for good; the files stay, for the undo), its files open for whoever signed in knows the id, which is 122 random bits said only to the task's readers; never for a visitor.
+An assistant's `upload_file` takes a task's id as `page`.
+A file's history is its task's readers' (`canSeePath`).
+Without users a task's file goes to `_assets/` like any other.
+A file attached before this (in `_assets/`, or in `private/<you>/_assets/` for a private task) stays where it is.
+
+## Renaming a tag
+
+**Renaming a tag** (**Rename tag…** in the ⋯ menu of `/tasks?tag=<tag>`, `#tag-rename-dialog`; `POST /tasks/rename`; the MCP tool `rename_task_tag`; `renameTagOp` in `go/pageops.go`): in one commit it changes the tag on every task (open, closed, archived) and, on pages and in tasks' text, the `tag=` and `new=` of `[[tasks: …]]` embeds and the `?tag=` of links to `/tasks`.
+A list is no tag: one of that name, its embeds and its links stay.
+Code stays as written, and so do a `#word` in prose and the `tags:` in pages' frontmatter, which sort pages rather than tasks.
+Case doesn't matter in matching: `Shop` and `shop` are one tag, and renaming a tag to its own name evens out how it is spelled.
+
+- **A name already in use** (a task you see has that tag) merges the two, so it asks first: the dialog comes back saying so with a **Merge** button (editing the name takes that back), and the MCP tool wants `merge: true`.
+  A task with both tags ends up with one.
+- **Refused**, with nothing changed: a tag you don't see anywhere, an empty name, a name with `[ ] , | =` (they mean something in an embed), or a tasks file or page that can't be read.
+  Text not yet in git is committed first (`keepPendingPages`).
+- **With users**: a tag on anything shared (a shared task, an embed on a shared page) is one name for everyone, so the rename reaches every user's private tasks and pages too, as a page rename's links do.
+  A tag only you see stays yours: another user's private tag of that name is another tag and isn't touched.
+  A tag only someone else has is refused as if it didn't exist, a new name only they use is no merge for you, and the answer counts only the tasks and pages you see.
+
+## Touch
 
 - With a mouse (`hover: hover`) ⏭ shows only on hover, for the selected card, or with focus inside, left of the dates (right-click opens the menu too);
   under `(hover: none)` ⏭ is hidden (the ⋯ menu has it);
@@ -1141,24 +1305,184 @@ Later in 2026-11 came the Inbox: until then a task could be in no list, which wi
   A mostly sideways move (|dx| > 1.5·|dy|, over 10px) drags the card and reveals the label (`data-swipe-label`); past `min(110px, 30%)` it arms (`.task-swipe-armed`), and release runs `setStart` with an undo toast.
   Cards have `touch-action: pan-y` and `.tasks-list` `overflow-x: clip`.
 
-### Keyboard shortcuts
+## Keyboard shortcuts
 
-- **g a**: go to `/tasks`, all tasks; **g t**: go where the Tasks link goes (My tasks)
-- **j** / **↓**, **k** / **↑**: select the next / previous task (from the last back to the first); **Shift+j/k**, **Shift+↑/↓** take the tasks passed along (see Selection)
-- **Enter**: edit the selected task; **Space**: complete it, or reopen a closed one (on several selected, all of them); **Delete**: close the selected open tasks as won't do (a task is never deleted)
-- **Esc**: close the open description first, then clear the selection
-- **→** / **l**, **←** / **h**: open / close the selected task's description and comments; open, they stay open as j/k move on (see One line per task)
-- **o** (the Open tab): the order: manual, by deadline, newest first (see Sorting)
-- **d** (the Open tab): what it shows, in turn: one list, Plan, by person, by list, as far as the view offers them (see Views)
-- **Tab** / **Shift+Tab**: the next / previous tab (on the Tasks page, or on another page while a task is selected or the focus is in the list; Closed is not in the cycle)
-- **Ctrl+Shift+↑/↓** (or **Ctrl+Shift+J/K**): move the selected tasks within the manual order (in a sort, a notice says to press **o** until Manual; see Sections)
-- **Ctrl+Z**: undo what was just done to a task, while its notice shows (not inside the edit modal or a text field)
-- **f** / **F**: start the selected tasks today / tomorrow; **1**–**7**: on that day of the Plan board (1 today, 2 tomorrow …), **0**: unplan them; on every tab
-- **i**: the importance of the selected task, in turn high, low, normal; several selected all get what follows the first one's (see Importance)
-- **Shift+F10** / menu key: the selected task's ⋯ menu (on several selected tasks, the selection's)
-- **Shift+click**, **Ctrl/Cmd+click**, **Shift+↑/↓**, **Ctrl/Cmd+A**: select several tasks (see Selection); **t** / **T**: their tags; **m**: move them to a list
-- **/**: the filter field; **#**: the filter field, starting a tag; **@** (with users): the same, starting an assignee's name
-- **a** (with users): assign the selected tasks (see Assigning tasks in `docs/spec/users.md`)
-- In the edit modal: **Ctrl+Enter** or **Ctrl+S** saves the task (Ctrl+Enter in the comment field saves the comment), **Alt+C** goes to the comment field, **F2** switches the description between Edit and Preview, **Enter** in Tags or Assignee makes the typed word a chip rather than saving
-- **c t**: a new task in your Inbox, starting today: from any page and the same on every one (see Modules → New task from anywhere). **n** is the list's own + New.
-  The tasks' keydown runs before the page's shortcuts, so while a `g`/`c` prefix waits for its second key (`keyPrefix` in `js/util.js`) the tasks leaves that key alone: the t of **c t** or **g t** never opens the bulk tag dialog on a selected task
+| Keys | What they do |
+|------|--------------|
+| **g a** | Go to `/tasks`, all tasks |
+| **g t** | Go where the Tasks link goes (My tasks) |
+| **c t** | A new task in your Inbox, starting today: from any page and the same on every one (see Modules → New task from anywhere) |
+| **n** | The list's own + New |
+| **j** / **↓**, **k** / **↑** | Select the next / previous task (from the last back to the first) |
+| **Shift+j/k**, **Shift+↑/↓** | Take the tasks passed along (Selection) |
+| **Shift+click**, **Ctrl/Cmd+click** | Select several tasks: a range, one more (Selection) |
+| **Ctrl/Cmd+A** | With a task selected: every task shown (Selection) |
+| **Esc** | Close the open description first, then clear the selection (in selection mode: end it, Touch) |
+| **Enter** | Edit the selected task |
+| **Space** | Complete it, or reopen a closed one (on several selected, all of them) |
+| **Delete** | Close the selected open tasks as won't do (a task is never deleted) |
+| **→** / **l**, **←** / **h** | Open / close the selected task's description and comments; open, they stay open as j/k move on (One line per task) |
+| **f** / **F** | Start the selected tasks today / tomorrow, on every tab |
+| **1**–**7**, **0** | Start them on that day of the Plan board (1 today, 2 tomorrow …), unplan them; on every tab |
+| **i** | The importance of the selected task, in turn high, low, normal; several selected all get what follows the first one's (Importance) |
+| **t** / **T** | The selected tasks' tags: add, remove (Bulk tags) |
+| **m** | Move the selected tasks to a list |
+| **a** | With users: assign the selected tasks (Assigning tasks in `docs/spec/users.md`) |
+| **Shift+F10** / menu key | The selected task's ⋯ menu (on several selected tasks, the selection's) |
+| **Ctrl+Shift+↑/↓** (or **Ctrl+Shift+J/K**) | Move the selected tasks within the manual order (in a sort, a notice says to press **o** until Manual; Sections) |
+| **Ctrl+Z** | Undo what was just done to a task, while its notice shows (not inside the edit modal or a text field) |
+| **o** | On the Open tab: the order, manual, by deadline, newest first (Sorting) |
+| **d** | On the Open tab and on Today: how it shows its tasks, in turn: one list, Plan, by person, by list, as far as the view offers them (The tabs and the Open tab's control) |
+| **Tab** / **Shift+Tab** | The next / previous tab (on the Tasks page, or on another page while a task is selected or the focus is in the list; Closed is not in the cycle) |
+| **/** | The filter field |
+| **#** | The filter field, starting a tag |
+| **@** | With users: the filter field, starting an assignee's name |
+| In the edit modal: **Ctrl+Enter** or **Ctrl+S** | Save the task (Ctrl+Enter in the comment field saves the comment) |
+| In the edit modal: **Alt+C** | Go to the comment field |
+| In the edit modal: **F2** | Switch the description between Edit and Preview |
+| In the edit modal: **Enter** in Tags or Assignee | Make the typed word a chip rather than saving |
+| In the edit modal: **Tab** | The next field (Opening and editing) |
+
+The tasks' keydown runs before the page's shortcuts, so while a `g`/`c` prefix waits for its second key (`keyPrefix` in `js/util.js`) the tasks leaves that key alone: the t of **c t** or **g t** never opens the bulk tag dialog on a selected task.
+
+## How it works
+
+What the task app is built on: its code, how a page brings its tasks and keeps them current, which tasks a view takes, the lists' registry and the files.
+
+### The code
+
+Server side is `go/tasksapi.go` (the `/api/tasks/*` routes, `tasksRoutes`),
+`go/tasks.go` (the writes, which the MCP tools share) and `go/tasksembed.go` (the embed's HTML, `taskCounts`) on top of `go/internal/taskfiles` (the files: where they are, read and written under one lock), `go/internal/taskmodel` (a task and its file's format) and `go/tasklogic.go` (recurrence, completing, history, comments, task backlinks) and `go/tasksyntax.go` (the syntax in page text).
+Client side is `tasks.js` (DOM, one instance per embed) plus `tasks-core.js` (pure logic, tested under Node).
+
+### The embed's HTML
+
+**Implementation** (`go/tasksyntax.go` for the syntax, `go/tasksembed.go` for the HTML): `tasksRE` finds the directive and `parseTasksParams()` parses its `key=value` pairs.
+`processTasksEmbeds()` swaps each one for a numbered placeholder before rendering, and `injectTasksEmbeds()` replaces each `<p>PLACEHOLDER</p>` with `buildTasksEmbed()`'s HTML (`templates/tasks_embed.html`) afterwards.
+The embed passes its params as `data-init-*` attributes; it carries no script: `tasks.js` (an ES module `zonewiki.js` imports on every page) starts every `.tasks-app` on load (`initTaskApps`, marking each `data-ready`).
+Element ids get a `-<n>` suffix after the first embed, so a page can hold several.
+**Headless instance**: `buildTasksEmbed(…, headless)` renders the app hidden, for pages that only need its edit modal (the editor's Make task, see Task references).
+`openEditModal(null, opts)` takes, besides `tags`, a starting `title`, `description`, `start_date` and an `onCreated(task)` callback; `titles` instead of `title` is batch mode (one task per title, the fields shared, `onCreated` gets the array).
+
+### A page brings its tasks along
+
+**A page brings its tasks along**: a page view with a task list (and `/tasks`) carries, once, the open tasks its lists show (`scopedTasks`: those of any of the lists' scopes, so My tasks or one list doesn't carry every open task the user sees; a list of every task, All tasks or a tag's view, takes them all) as `GET /api/tasks` answers them
+and their notes' and comments' HTML as `POST /api/render-notes` would (`tasksInitial`: a `<script type="application/json" id="tasks-initial">` data block, which no browser runs; `<`, `>` and `&` in it are `\u` escapes, so no task's text ends it).
+**Up to 150 tasks** (`lazyTextsFrom`): a page whose lists show more brings none of them, and each list asks for its tasks when it starts, as below.
+A team's All tasks is megabytes of JSON; a page is sent as it is, while **what `GET /api/tasks…` answers goes gzipped** to a browser that takes it (`gzipTasks`, `writeJSON` in `go/server.go`: an answer of 1 KB or more; at a team's size All tasks' 3.3 MB are 0.65 MB on the wire, and real text compresses better than the bench's random words).
+Only those answers: they hold the user's text and nothing secret beside it (no token, no form's field), which is what compressing the two together would give away; pages go uncompressed.
+The lists the page starts with draw from it, each from its own copy, with no request (`initialTasks` in `js/taskdata.js`, `keepRendered` in `js/tasktexts.js`), so the list is there when the page is rather than two round trips later.
+Every later load asks the server for the list's scope (`GET /api/tasks?list=`, `?lists=`, `?mine=1`: `scopeQuery`; the server's rule is the one `inScope` has in the browser), and so does a list that starts later (a preview's, the hidden one a page without a list fetches for its dialog): `initTaskApps` forgets the tasks once the page's lists have started.
+
+### Keeping lists current
+
+Several embeds per page work: each instance keeps its own task array, and a write in one refreshes the others (`refreshOtherInstances`).
+Every instance also reloads on `visibilitychange` and bfcache `pageshow`, so a tab left open for days shows current tasks and today's day sections.
+`refreshIfIdle` skips the reload while a drag, swipe, completion grace period, ⋯ menu or edit modal is in progress.
+**What someone else changed shows within a minute**, without fetching tasks to find out: the server has a word for the tasks a page holds (`tasksWord`, `Store.Word`: the start's time and a count of the writes to those lists' files and to the registries the user reads; not a file changed by hand), which `GET /api/tasks` and `GET /api/tasks/due-count` answer in the `Zone-Tasks` header and a page's own tasks bring along (`"word"` in `tasksInitial`).
+**It is of what the page holds**: a page whose lists each show one list (or an Inbox) names them (`?held=a,b`, `pageScopes` in `js/chrome.js`), and a write to another list, or to another user's own tasks, leaves its word as it is; a page that holds more (My tasks, All tasks, a tag's view) has the word of every list its user sees.
+So among a hundred people a list isn't loaded again all day for writes it doesn't show.
+The page keeps the word of the tasks it holds (`<body data-tasks-word>`, `js/taskdata.js`); the due count it asks for every minute while it is used (`refreshDueBadge`, `whileUsed`) says the server's, and when that is another one the lists load again (`zone:tasks-changed`, `refreshIfIdle`; a list that was busy is told again the next minute).
+After the page's own write the word is taken as its own.
+**A long list of every task loads again at most every five minutes** (All tasks or a tag's view with more than 150 tasks; `EVERY_MS`, `holdsEvery` in `tasks.js`): in a team some task changes every minute, and such a list would load all of them again each time. It is told once and loads when five minutes have passed since it last did; coming back to the browser tab, and the page's own writes, load it at once, as any list.
+It says nothing of what changed in those lists. (Until 2026-11 there was one word for every write of any task file, so another user's private write loaded every open list again.)
+
+### Scopes
+
+**Scopes** (`inScope`, `paramsScope`; `inScope` in `tasks.js`): a list view shows the tasks in that list;
+the Inbox (`list=inbox`) those in none;
+My tasks what its rule says (`mine=1`, `mineScope`; `scopeFilter` gives a scope's tasks for a user);
+several lists as one those in any of them (`lists=a|b`, which the routes still take: what Pinned was until 2026-11);
+the **main task list** (an embed with neither, including `/tasks`, URL `?tag=` notwithstanding) shows every task,
+as do a `tag=` embed (a task tagged `sam` belongs on a Sam page whatever list it is in),
+and the main Closed count.
+The due count is My tasks'.
+
+### The registry
+
+**The registry** (`go/internal/taskfiles/lists.go`; `ListsName`): the lists are in `lists.json` beside the task files, the shared ones in `_tasks/lists.json`, a user's private ones in `private/<user>/_tasks/lists.json`, read and written under the task files' lock, atomically, committed to git.
+
+```json
+{
+  "version": 3,
+  "lists": [
+    {"name": "shop", "view": "today", "limit": "8", "keep": "1", "labels": "Catalogue,Shopping", "home": "off"},
+    {"name": "task"}
+  ],
+  "pinned": ["task", "shop"],
+  "mine": {"view": "today"},
+  "all": {"view": "open"},
+  "order": ["0b7c…", "9e21…"]
+}
+```
+
+Each list is one line: its name and its settings (`view`, `limit`, `group`, `keep`, `labels`, `new`, `noshare`, `home`), their values text as an embed writes them, a setting that isn't set no key.
+So a list can be added or changed by hand in one line, and a commit shows the list that changed.
+`pinned` is whose registry it is: a user's own pins in theirs, the wiki's in the shared one (Pins, under Lists); `all` (the shared one) the settings of All tasks, `mine` those of My tasks (a user's own; without users the shared one's), `order` the manual order of My tasks (task ids; the same owner).
+(Until 2026-11 `"mine": true` in a user's registry narrowed their Pinned to their own tasks; it reads as no settings and is written back no more.)
+It is read leniently (a value of another kind as text, a list without a name left out, a name twice once, unknown keys kept and written back A–Z) and written in one format; a file that is there but unreadable refuses every write (`ReadListsStrict`: never an empty registry, which would drop every list).
+`version` says that the wiki's lists are kept here: a shared registry without it (or none) is a wiki to take over (The lists' migration), one with `1` a wiki from before the Inbox (The Inbox's migration).
+A registry keeps the version it has when it is written; a new one gets the current one, 3 (2 until the views got their names of 2026-11: Views).
+
+### Storage
+
+#### The files
+
+- `_tasks/lists.json` is the lists' registry: the shared lists with their settings, the wiki's pins and the settings of All tasks; with users each user's own in `private/<user>/_tasks/lists.json` (their private lists, their pins, their settings of My tasks). It is no tasks file (see The registry, above).
+  (Until 2026-11 the settings of All tasks were in `_tasks/settings.json`; the migration moved them.)
+- The tasks' files live in the `_tasks/` folder (with users each user's private tasks in `private/<user>/_tasks/`, the same files: Private tasks in `docs/spec/users.md`): open tasks in `tasks.json`,
+  closed ones in `closed.json` (flat JSON arrays, committed to git on change).
+  **Each list has its files in a folder of its own**, `lists/<name>/` in its owner's `_tasks/` (`_tasks/lists/shop/tasks.json`, `closed.json`, `closed-YYYY-MM.json`; `dirOf` in `go/internal/taskfiles`); the tasks in no list (an Inbox's) are in `_tasks/` itself.
+  A file is written whole and kept whole in git at every change, so a write costs what its list weighs, not what the wiki weighs: at a team's size (the bench in `docs/spec/testing.md`: 40 lists, 5,000 open tasks) a change took 112 ms and added 38 KB to the packed repository with one file for all, and takes 50 ms and 6 KB with a file per list (about 0.4 KB once Zone has joined its packs: Zone packs the repository itself, in `docs/spec/rendering.md`).
+  Which list a task is in is still the task's to say (its `list`); the folder is where a write files it. A read takes every folder of an owner (`dirs`), so a task found in another list's folder (a file moved by hand, a wiki from before the folders) is read all the same and filed where it belongs by the next write of its owner's tasks, or at start.
+  A task that moves to another list moves between two files in one commit; the file that takes it is written first, so a write that stops halfway leaves it in two files, never in none, and one task in two files is one task to every reader (`unique`).
+  A list's file left without a task is removed, and its folder with it; a list's rename files its tasks into the folder of the new name in the rename's commit (`FileByListLocked`).
+  A list's name that is no folder's name (a dot first, a path separator: none a list can be given, but a file edited by hand may say so) has no folder: its tasks stay with those of no list.
+  (Until 2026-11 every task of an owner was in `_tasks/tasks.json` and the closed files beside it. A wiki from then is taken over when Zone starts, in one commit, "File the tasks by list" (`ArchiveOldClosed`; also when the same start rolls months into archives: until 2026-11-15 a wiki with months already archived got that commit under the message "Archive closed tasks"); a second start changes nothing. Going back to an older Zone: revert that commit, or it reads only the tasks in no list.)
+  **Closed tasks are filed by month**: `closed.json` holds those closed in the current month (and any without a usable date), `closed-YYYY-MM.json` those of an earlier month (only such a name, and the older `closed-YYYY.json`, is an archive).
+  So completing a task writes a month's closed tasks, not a year's: a file is written whole and kept whole in git at every change, and in a large wiki a year's is megabytes.
+  `atomicfile.Write` creates the folder, so a new wiki gets it on the first write.
+  Write routes read every closed file (`readClosedAllStrict`) and `writeClosed` files each task by its completion month, writing only files whose tasks changed, and removing an archive left without a task; startup does the same (`ArchiveOldClosed`) for a month's end without writes.
+  So archived tasks can be edited, reopened and tagged like any other; Closed shows them by year (see Closed, under Views), reading that year's files.
+  (Until 2026-11 the closed tasks were filed by year, `closed-YYYY.json`: such a file's tasks go to their months' files at the first start, and it is removed, in the commit "Archive closed tasks", or in "File the tasks by list" when the same start files tasks by list.)
+
+#### Reading and writing
+
+- **A start reads every task file when it has to** (`setUpTasks`, `tasksChecked` in `go/tasksetup.go`): filing closed tasks by month and tasks by list, writing a hand-edited file in Zone's format and giving a shared task its list all read and encode every task of the wiki's years, and a hosted wiki starts whenever someone comes back to it. So a start leaves a mark in Zone's folder (`.zone/tasks-checked`: the layout, whether the wiki has users, and the commit the task files were last Zone's at, which follows Zone's own commits of them: `noteTaskCommit`), and the next start does none of that while git says that nothing else wrote a task file since: none differs from what is committed, and no commit after the mark's touches one. A file edited by hand, a commit by hand or pulled from elsewhere, users turned on or off, no git or no mark: it reads them all, as every start did until 2026-11. What a month's end leaves to file is seen without that (`Unfiled`: the files' names and a look at this month's closed files) and done. At a team's size a start then takes 0.2 s and 50 MB, where it took 180 MB.
+- **A write of tasks reads their own files** (`ReadTasksForWriteLocked`; for one task `ReadTaskForWriteLocked`, `findForWriteLocked`: a change, a completion, a comment, a ticked subtask; for several a batch, `batch-update`, `batch-complete`, `batch-tag`, and a delete): the open tasks and, for the closed ones among them, the closed tasks of the files that hold them (this month's files are looked through first, then the archives, the newest first, until each task is found; a task no file has makes it look through them all, without copying them). It writes whole only the closed files it read; a file it has to put a task into (this month's, for one just completed) is read then, so nothing is written without what it held (`writeClosed`, the store's `scope`). So a change doesn't read and copy every closed task of the wiki's years, and an archive that can't be read stops only the writes that need it. While closed tasks wait to be filed (a month has ended, a year's file from before the months: `unfiled`), a write reads everything and files them, as every write did until 2026-11. What needs every task reads everything still: an import and the undo of a delete (for the ids there are), an export, a list's rename or delete, a private list shared.
+  (Until 2026-11-16 a batch and a delete did too: ten open tasks tagged at once took 70 ms at a team's size, and take 41 ms.)
+- **An archive nobody read for ten minutes is no longer kept parsed** (`archiveKept`, `forgetOldArchives`); the open tasks and this month's closed ones stay. The Closed link's number is counted by looking at what is parsed, without a copy of the year's tasks (`CountClosedInYear`, `lookAt`), and so are the closed tasks with news for a page's user (`RecentClosed`).
+- **A file whose tasks a write didn't touch costs a comparison** (`holds` in `go/internal/taskfiles`): the store knows each file's tasks as it parsed or wrote them (`writeTasks`), and a write compares what it would write with that (`Task.Same`) before it reads or encodes anything. Changing an open task doesn't read or encode the closed files.
+- **A write asks once per list whether its user sees it** (`byOwner` in `go/internal/taskfiles`): a write hands over every open task its user sees, and whom a list is for is a look at its folder (`SeesList`, `forOf`: a stat), so the answer is kept for the write. Until 2026-11-16 it was asked per task: at a team's size 5,000 stats for 40 lists, about 3 ms of a change's 29.
+- All mutations go through one lock (`taskFiles.Lock`, `go/internal/taskfiles`) and atomic writes (temp file + rename, `go/internal/atomicfile`); the server handles requests concurrently.
+  **A read waits for a write's files, never for its commit** (`Store.view`, `Hold`, `Release`): a write holds the lock from its read to its commit, one write at a time, as ever;
+  readers (`Open`, `All`, `Snapshot`, the Closed readers) don't take it.
+  They share a second lock, which a write holds alone from the first file it replaces to the last (every write of the store's takes it; code that writes a task file itself calls `Hold` first) and lets go before git runs (`CommitFiles`, `commitLists`; `Unlock` at the latest).
+  So a reader sees every file of a write or none (a task that moves between two files is never in neither), and a page view doesn't stand still while someone's task is committed, nor while a commit waits for the packing.
+  Until 2026-11 readers took the writes' lock: every page view computes the Tasks links' counts, so every page waited for whoever was saving a task.
+- **The counts are kept per user until the files change** (`keptCounts` in `go/tasksembed.go`, `Store.Stamp`): the Tasks links' counts, which every page view shows and every open page asks for once a minute, and the list switcher's, by place.
+  They are counted anew when a task file or registry the user reads is another one (its time and size, so a change by hand counts, and Zone's own writes by their number, so two within one tick of the clock are two), when the day is another one, or the settings are.
+  A look at each file (`Stamp`), not a read: until 2026-11 each page view copied every open task the user sees and ran the news' rule over each.
+- **A file is parsed once** (`readFile` in `go/internal/taskfiles`): every page view reads the open tasks (the Tasks links' count) and a write reads every file, so a file's tasks are kept as parsed and handed out as copies (`Task.Clone`: a reader may change its own) until the file is another one (its time, size or inode: Zone's own writes, which also forget it, `writeText`; a hand edit).
+  Write paths use a strict reader that fails with `taskfiles.ErrCorrupt` (503) on an unreadable file instead of treating it as empty and wiping every task.
+
+#### The files' format
+
+- The files are JSON (`go/internal/taskmodel`): a list of tasks,
+  two spaces of indent,
+  text as written (no `\u` escapes but those JSON needs),
+  each task's fields in one order (`id`, `title`, `description`, `tags`, `list` (only when it is in one), `assignee` (only when it has one), `created_by` (only when it says), `followers` (only when it has some), `start_date`, `due_date`, `created_at`, `closed_at`, `wont_do`, `keep`, `importance` (only when it isn't normal), `last_done`, `sort_order`, `recurrence`, `spawned_from`, `history`, `comments`),
+  every field written,
+  also when empty (`null`, `[]`, `false`),
+  then any keys Zone doesn't know (from an older version or a hand edit),
+  A–Z,
+  their values kept as they were.
+  A file is read leniently: a value of the wrong kind is its field's default (a number or a bool where text belongs is its JSON text, so an `id` of `7` is `"7"`; only `true` is true), so an odd file still reads and a write never refuses it for that.
+  A write changes only the files whose tasks changed, so commits show only what changed.
+  Files in another format (hand-edited: keys in another order, unknown keys not A–Z) are rewritten once when Zone starts, in a commit of their own ("Write the task files in Zone's format"); the tasks' values stay as they were (`1.0` reads `1`).
+- Request bodies are validated (`jsonObject`, `asStr`, `asInt`, `asStrList`, `idList`): bad input is a 400 with JSON `{ error }`, never a 500. Numeric strings are accepted for integers; `tags` may be a comma-separated string.
+- Reads clean the tags (`jsonobj.TextList`, `taskmodel.CleanTags`), since a file edited by hand may have `"local llm"` or `#work`.
+  Older data formats are no longer converted: the conversions (task files in the wiki's root,
+  closed tasks in `tasks.json`,
+  `focus_date`/`defer_days`/`recurrence.anchor`/`page`/`focus_order`,
+  spawns without `spawned_from`) were removed in 2026-10. A wiki last used before then must be opened once with an earlier Zone (git history) first.

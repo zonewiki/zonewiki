@@ -31,7 +31,7 @@ Read the file for the area you are working on before changing it:
 | `docs/spec/navigation.md` | Search modal (page list), modules and the module switcher, sharing mode, notes, keyboard shortcuts, presentation mode |
 | `docs/spec/search.md` | Full-text search: BM25, semantic search, query syntax, highlights, measuring retrieval |
 | `docs/spec/mcp.md` | The MCP server and its tools, `zone_help` (Zone's docs for assistants) |
-| `docs/spec/tasks.md` | Tasks: embed syntax, storage, dates, fields, views, interaction, cards, history, comments, keep tasks, lists, touch |
+| `docs/spec/tasks.md` | Tasks: embed syntax, dates, fields, views, settings, export and import, interaction (filter, editing, quick actions, selection, cards), history, comments, news on your tasks (following, mentions, mail), importance, keep tasks, lists (who sees and manages them, the Inbox, My tasks, pins), a task's files, renaming a tag, touch, keyboard shortcuts; how it works (the code, storage) |
 | `docs/spec/security.md` | Login and session key, the MCP token, the Host and Origin checks, framing, HTTPS cookies, throttling |
 | `docs/spec/users.md` | Several users: setup, the settings file `.zone/config` (its format and keys, reloading, `zonewiki user`/`zonewiki config`), password hashes, invite links, sign-up, signing in, per-user MCP tokens, private pages, private tasks, commit authors |
 | `docs/spec/deployment.md` | Containerfile, compose, `run.sh`, `.env`, a NAS or server (prebuilt image, Synology), CI (Forgejo, GitHub), mail (SMTP), network and phone access, the version string, the home-screen app, the data directory (all of `.zone/`), backups |

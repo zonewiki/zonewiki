@@ -344,7 +344,7 @@ Layout:
   - `links` — the open invite, reset and sign-up links, their tokens as hashes (`docs/spec/users.md`)
   - `grants` — the assistants' OAuth connections, their tokens as hashes (`docs/spec/mcp.md`)
   - `config.lock`, `links.lock`, `grants.lock` — empty files the writers of those three lock (`lockFile`, flock), so two writers take turns
-  - `seen/<user>.json` — what each user has seen of the tasks' news (What happens on your tasks is told to you, in `docs/spec/users.md`)
+  - `seen/<user>.json` — what each user has seen of the tasks' news (What you have seen, under News on your tasks in `docs/spec/tasks.md`)
   - `drafts/<user>/` — an editor's text left in a conflict when its tab closed, for its user's next edit, 30 days at most (`docs/spec/editor.md`)
   - `tmp/` — a three-way merge's scratch files, removed after each merge
   - `index/` — search's files: `pages.idx` and `sections.idx` (the BM25 indexes), `tasks/<hash>.gob` (each closed tasks' archive's search docs) and `embeddings.json` (the semantic search cache) (`docs/spec/search.md`)

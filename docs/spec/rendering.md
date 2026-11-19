@@ -18,7 +18,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
   There is no nav bar (see Modules).
 - `highlight.js` (vendored, see Dependencies) auto-highlights fenced code blocks client-side after load; math and Mermaid diagrams render client-side too (Math and diagrams).
 - **Task descriptions and comments** render with the same markdown (`renderNotes`, `POST /api/render-notes`): wikilinks, `[[task:…]]` chips, task-date chips, without what only a page has (frontmatter, `[[tasks:]]`, ✎ per section, heading ids).
-  See Notes in `docs/spec/tasks.md`.
+  See Description in `docs/spec/tasks.md`.
 - The shared shell renders the product brand as `Zone` (page titles, the switcher's accessible name), with a small green inline SVG Z logo (`site-logo` in `templates/partials/icons.html`) on the breadcrumb's Wiki link.
 
 ### Autolinks and callouts
