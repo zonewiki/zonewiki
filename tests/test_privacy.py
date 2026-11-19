@@ -71,6 +71,11 @@ def wiki(git_wiki_dir, monkeypatch):
     (w / "private/alice/old.md").write_text(f"# Old {SECRET}\n\n{QUERY} {SECRET}\n")
     (w / f"{NOTE}.md").write_text(f"# Idea {SECRET}\n\n{QUERY} {SECRET}\n")
     (w / "private/alice/_assets/photo.png").write_bytes(SECRET.encode())
+    # Names git quotes where it lists files without -z (a letter outside
+    # ASCII, a space): read as a path, such a quoted name named no private
+    # folder, and Changes showed it to everyone.
+    (w / f"private/alice/_assets/{SECRET} März.pdf").write_bytes(b"%PDF-1.4\n")
+    (w / f"private/alice/{SECRET}-geständnis.md").write_text(f"# Geständnis {SECRET}\n")
     # A file of one of her tasks: kept by the task, seen by who sees it.
     (w / f"_tasks/files/{TASK_ID}/_assets").mkdir(parents=True)
     (w / f"_tasks/files/{TASK_ID}/_assets/photo.png").write_bytes(SECRET.encode())
@@ -103,7 +108,7 @@ def wiki(git_wiki_dir, monkeypatch):
         json.dumps([private_task(OLD_ID, "Old", "2001-01-05T10:00:00")], indent=2) + "\n")
     git(w, "add", "-A")
     git(w, "commit", "-q", "-m", "Alice's pages")
-    git(w, "rm", "-q", "private/alice/old.md")
+    git(w, "rm", "-q", "private/alice/old.md", f"private/alice/{SECRET}-geständnis.md")
     git(w, "commit", "-q", "-m", "Delete private/alice/old")
     (w / "private/alice/draft.md").write_text(f"# Draft {SECRET}\n\n{QUERY} {SECRET}\n")
     # Changes she left on the shared page in conflict (the editor's save on leaving).
@@ -327,6 +332,17 @@ def test_alice_sees_her_own(client, wiki):
     assert "<h1>Inbox" in page and "Your Inbox: only you see its tasks" in page
     assert client.get("/api/tasks/due-count", headers=HOST).get_json()["count"] == 2      # both are overdue
     assert client.get("/api/tasks/due-count?places=1", headers=HOST).get_json()["places"]["inbox"]["count"] == 1
+
+
+def test_alice_sees_her_own_names_whole(client, wiki):
+    """Her files named with letters outside ASCII and spaces are hers, by
+    their own names: in Changes, in her assistant's history, among her
+    deleted pages (which left such a page out)."""
+    client.post("/login", data={"username": "alice", "password": "alice-pw"}, headers=HOST)
+    for text in (client.get("/changes", headers=HOST).get_data(as_text=True), mcp(client, "history", token="alice-token")):
+        assert f"private/alice/_assets/{SECRET} März.pdf" in text and "\\303" not in text
+    deleted = client.get("/page/_deleted", headers=HOST).get_data(as_text=True)
+    assert f"private/alice/{SECRET}-geständnis" in deleted and "Geständnis" in deleted
 
 
 def test_bobs_inbox_is_his_own(bob, wiki):

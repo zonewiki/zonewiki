@@ -51,6 +51,7 @@ def wiki(git_wiki_dir, monkeypatch):
     (w / GROUP / "deck.md").write_text(f"# Tasks {SECRET}\n\n[[tasks: list=team]]\n")
     (w / GROUP / "AGENTS.md").write_text(f"# How dev writes {SECRET}\n\nWrite {QUERY} {SECRET} everywhere.\n")
     (w / GROUP / "_assets/photo.png").write_bytes(SECRET.encode())
+    (w / GROUP / f"_assets/{SECRET} Größe.pdf").write_bytes(b"%PDF-1.4\n")   # a name git quotes without -z
     (w / "plans.md").write_text(f"# Plans\n\nSee [[{DIARY}]] and [[{DIARY}|the diary]].\n")
     (w / "_tasks").mkdir(exist_ok=True)
     (w / "_tasks/lists.json").write_text('{\n  "version": 3,\n  "lists": [\n    {"name": "team"}\n  ]\n}\n')

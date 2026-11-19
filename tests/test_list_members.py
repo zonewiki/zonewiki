@@ -68,6 +68,20 @@ def wiki(client, git_wiki_dir, monkeypatch):
     return git_wiki_dir
 
 
+def test_a_list_named_outside_ascii_is_named_to_no_one_else(client, wiki):
+    """git quotes a folder's name with a letter outside ASCII where it lists
+    files without -z; read as a path, the quoted name of such a list's folder
+    named no list, and Changes showed it to everyone."""
+    sign_in(client, "alice")
+    assert client.post("/tasks/new-list", data={"name": "gehälter", "for": "@hiring, alice"}, headers=HOST).status_code == 302
+    assert client.post("/api/tasks", json={"list": "gehälter", "title": "Raise"}, headers=HOST).status_code == 201
+    assert "_tasks/lists/gehälter/tasks.json" not in client.get("/changes", headers=HOST).get_data(as_text=True)  # Tasks, for her
+    for who in ("bob", "dana"):
+        sign_in(client, who)
+        for text in (client.get("/changes", headers=HOST).get_data(as_text=True), mcp(client, who, "history")):
+            assert "geh" not in text
+
+
 def test_its_entry_is_in_its_folder_not_in_the_registry(wiki):
     assert LIST not in (wiki / "_tasks/lists.json").read_text()
     entry = json.loads((wiki / f"_tasks/lists/{LIST}/list.json").read_text())

@@ -129,7 +129,7 @@ func wikiChanges(user asker, of changesOf, limit int) []LogEntry {
 	}
 	entries := gitLogAll(of.Since, of.Under, limit, see, keep)
 	for i := range entries {
-		entries[i].Msg = hideNames(user, entries[i].Msg)
+		entries[i].Msg = hideNames(user, entries[i].Msg, entries[i].hidden)
 	}
 	return entries
 }

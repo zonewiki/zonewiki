@@ -138,7 +138,7 @@ func TestInQuicknote(t *testing.T) {
 func TestHideNames(t *testing.T) {
 	testWiki(t, nil)
 	msg := "Promote private/alice/2026-10-27_12-00-00_idea to idea (MCP)"
-	if hideNames(asUser("bob"), msg) != msg {
+	if hideNames(asUser("bob"), msg, nil) != msg {
 		t.Error("without users nothing is private")
 	}
 	withUsers(t, "alice", "bob")
@@ -146,7 +146,7 @@ func TestHideNames(t *testing.T) {
 		"alice": msg,
 		"bob":   "Promote a private page to idea (MCP)",
 	} {
-		if got := hideNames(asUser(user), msg); got != want {
+		if got := hideNames(asUser(user), msg, nil); got != want {
 			t.Errorf("%s: %q", user, got)
 		}
 	}
@@ -160,9 +160,59 @@ func TestHideNames(t *testing.T) {
 		"private/alice/a, private/bob/b":         "a private page, private/bob/b",
 		// A folder made by hand in another case is the same user's (placeOf).
 		"Rename Private/alice/a to x": "Rename a private page to x",
+		// A name in any script, with spaces: hidden whole, up to what goes on
+		// with the message.
+		"Rename private/alice/gehälter-übersicht to notes":      "Rename a private page to notes",
+		"Upload private/alice/_assets/Arztbrief März.pdf":       "Upload a private page",
+		"Upload private/alice/_assets/Arztbrief März.pdf (MCP)": "Upload a private page (MCP)",
+		"Move private/alice/a b/ to private/alice/c d/":         "Move a private page to a private page",
+		"Rename private/alice/a to notes, then private/bob/b":   "Rename a private page to notes, then private/bob/b",
 	} {
-		if got := hideNames(asUser("bob"), msg); got != want {
+		if got := hideNames(asUser("bob"), msg, nil); got != want {
 			t.Errorf("%q: %q", msg, got)
+		}
+	}
+	// The commit's own files that bob may not see are taken out whole,
+	// whatever their names hold; a longer name isn't cut by a shorter one.
+	for _, c := range []struct {
+		msg    string
+		hidden []string
+		want   string
+	}{
+		{"Upload private/alice/_assets/Brief to Mom (Kopie).pdf", []string{"private/alice/_assets/Brief to Mom (Kopie).pdf"},
+			"Upload a private page"},
+		{"Rename private/alice/Brief, 1 to brief", []string{"private/alice/Brief, 1.md"}, "Rename a private page to brief"},
+		{"Rename private/alice/ab to private/alice/a", []string{"private/alice/a.md"}, "Rename a private page to a private page"},
+		{"Share groups/dev/plan (alt) to plan", []string{"groups/dev/plan (alt).md"}, "Share a group's page to plan"},
+	} {
+		if got := hideNames(asUser("bob"), c.msg, c.hidden); got != c.want {
+			t.Errorf("%q, %q: %q", c.msg, c.hidden, got)
+		}
+	}
+	// alice sees her own names.
+	if msg := "Upload private/alice/_assets/Arztbrief März.pdf"; hideNames(asUser("alice"), msg, nil) != msg {
+		t.Error("alice's own upload")
+	}
+}
+
+// What isn't a clean path, as git names a file with -z, is no one's to
+// see: git's quoting of a name it printed without -z (which named no
+// private folder), a backslash, a control character, a "." or ".." part.
+func TestCanSeePathOnlyOfCleanPaths(t *testing.T) {
+	testWiki(t, nil)
+	withUsers(t, "alice", "bob")
+	for path, want := range map[string]bool{
+		"private/alice/_assets/Arztbrief März.pdf": true, "private/alice/notes/": true, "notes/a b.md": true,
+		`_assets/Offer "final".pdf`: true, `"notes".md`: false,
+		`"private/alice/_assets/Arztbrief M\303\244rz.pdf"`: false, `"notes/K\303\274che.md"`: false,
+		`notes/a\b.md`: false, "notes/a\nb.md": false, "notes/a\x1eb.md": false, "notes/../private/alice/x.md": false,
+		"notes/./x.md": false, "/notes/x.md": false, "notes//x.md": false, "": false,
+	} {
+		if got := canSeePath(asUser("alice"), path); got != want {
+			t.Errorf("canSeePath(alice, %q) = %v", path, got)
+		}
+		if strings.HasPrefix(path, "private/alice") && canSeePath(asUser("bob"), path) {
+			t.Errorf("canSeePath(bob, %q)", path)
 		}
 	}
 }
@@ -332,10 +382,10 @@ func TestGroupFolders(t *testing.T) {
 	}
 	// A commit message names no page of a group to who isn't in it.
 	msg := "Rename groups/dev/roadmap to roadmap, and notgroups/dev/x"
-	if got := hideNames(asUser("carol"), msg); got != "Rename a group's page to roadmap, and notgroups/dev/x" {
+	if got := hideNames(asUser("carol"), msg, nil); got != "Rename a group's page to roadmap, and notgroups/dev/x" {
 		t.Errorf("hideNames for carol: %q", got)
 	}
-	if got := hideNames(asUser("alice"), msg); got != msg {
+	if got := hideNames(asUser("alice"), msg, nil); got != msg {
 		t.Errorf("hideNames for alice: %q", got)
 	}
 	// A group's guide is an admin's who is in the group; the others in it read it.

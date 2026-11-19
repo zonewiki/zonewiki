@@ -49,6 +49,11 @@ func TitleWords(s string) string {
 
 var toSlugRE = regexp.MustCompile(`[^a-z0-9_]+`)
 
+// BadNameRune: r has no place in a clean name of a file: a control
+// character or a backslash, which git escapes where it lists files without
+// -z (package main's cleanPath sees no file so named).
+func BadNameRune(r rune) bool { return unicode.IsControl(r) || r == '\\' }
+
 // ToSlug slugifies a name, keeping "/" between folders: each part
 // lowercased, runs of other characters a hyphen.
 func ToSlug(name string) string {

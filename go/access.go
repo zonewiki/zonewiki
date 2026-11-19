@@ -570,9 +570,11 @@ const noPrivateMsg = "This connection wasn't given your private pages, notes and
 // else in private/ (a user's uploads and tasks in private/<user>/_assets/
 // and _tasks/ too) like a page there. What lies in a hidden folder no one
 // sees in Zone: its own files in .zone/ (the settings file, with its
-// password hashes), and whatever else the history holds in one.
+// password hashes), and whatever else the history holds in one. Nor does
+// anyone see what isn't a clean path (cleanPath): a slip in reading git's
+// output hides a file rather than showing it.
 func canSeePath(user asker, rel string) bool {
-	if strings.HasPrefix(rel, ".") && strings.Contains(rel, "/") || strings.Contains(rel, "/.") {
+	if !cleanPath(rel) || strings.HasPrefix(rel, ".") && strings.Contains(rel, "/") || strings.Contains(rel, "/.") {
 		return false
 	}
 	if p := placeOf(rel); !p.shared() {
@@ -613,6 +615,31 @@ func seenFiles(user asker, files []string) []string {
 		}
 	}
 	return out
+}
+
+// cleanPath: rel is a path as git names a file with -z (a folder: with a
+// "/" after it): relative, no part between its slashes empty, "." or "..",
+// no control character or backslash in it (mdtext.BadNameRune) and no
+// double quote at its start. Without -z git quotes a name that holds a byte
+// outside ASCII, a quote, a backslash or a control character: in double
+// quotes, with backslashes ("private/alice/K\303\274ndigung.pdf"), and that
+// text, read as a path, starts with no private folder: Changes showed
+// other users' private files to everyone (2026-11).
+func cleanPath(rel string) bool {
+	if rel == "" || strings.HasPrefix(rel, "/") || strings.HasPrefix(rel, `"`) {
+		return false
+	}
+	for _, r := range rel {
+		if mdtext.BadNameRune(r) {
+			return false
+		}
+	}
+	for _, part := range strings.Split(strings.TrimSuffix(rel, "/"), "/") {
+		if part == "" || part == "." || part == ".." {
+			return false
+		}
+	}
+	return true
 }
 
 // namesList: msg names the list name as commit messages do ("#hiring"), as
@@ -728,20 +755,63 @@ func seenFolders(user asker) []string {
 // privateNameRE: a page's or file's path in private/ as a commit message
 // names it ("Move private/alice/2026-…_idea into the wiki as ideas/x"), at
 // the start of a path, not inside one ("notprivate/x", "notes/private/x"):
-// group 2, after group 1.
+// group 2, after group 1. Its letters are any script's ("Gehälter").
 // In any case: placeOf judges a path in lower case, so "Private/alice/x" (a
 // folder made by hand) is alice's too, and is named to no one else either.
-var privateNameRE = regexp.MustCompile(`(?i)(^|[^\w./-])((?:` + keptDirs + `)/[\w./-]*[\w/])`)
+var privateNameRE = regexp.MustCompile(`(?i)(^|[^` + nameClass + `./-])((?:` + keptDirs + `)/[` + nameClass + `./-]*[` + nameClass + `/])`)
+
+// nameClass: the letters, digits and marks of a path's name in a commit
+// message (inside a regex's brackets), with "_".
+const nameClass = `\p{L}\p{N}\p{M}_`
+
+// nameGoesOn: after a path privateNameRE found in a commit message, at a
+// space, the name goes on: an upload's name may hold spaces ("Upload
+// private/alice/_assets/Arztbrief März.pdf"), so the words after it are
+// its until one that goes on with Zone's message (" to ", " (MCP)" …).
+func nameGoesOn(rest string) bool {
+	if !strings.HasPrefix(rest, " ") || len(rest) < 2 {
+		return false
+	}
+	for _, w := range []string{"to ", "into ", "as ", "and ", "in ", "from ", "("} {
+		if strings.HasPrefix(rest[1:], w) {
+			return false
+		}
+	}
+	return true
+}
+
+// pathRune: r may be part of a path's name, as privateNameRE reads one.
+func pathRune(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsNumber(r) || unicode.IsMark(r) || strings.ContainsRune("_./-", r)
+}
+
+// namesKeptDir: msg may name a path in a private or a group's folder.
+func namesKeptDir(msg string) bool {
+	low := strings.ToLower(msg)
+	return strings.Contains(low, privateDir+"/") || strings.Contains(low, groupsDir+"/")
+}
+
+// hiddenAs: what a commit message says for a path user may not see.
+func hiddenAs(name string) string {
+	if strings.HasPrefix(strings.ToLower(name), groupsDir+"/") {
+		return "a group's page"
+	}
+	return "a private page"
+}
 
 // hideNames: a commit message for user, the paths in it user may not see
 // as "a private page": a commit that moved a page out of a private folder,
-// or rewrote links in one, is in the shared page's history too.
+// or rewrote links in one, is in the shared page's history too. hidden: the
+// names of the commit's files user may not see (canSeePath), as git gives
+// them, which are taken out whole whatever they hold (a space, a comma, a
+// parenthesis); then any other path in a private or a group's folder
+// (privateNameRE, its name going on past a space as nameGoesOn says).
 //
 // Nor does it name a list for some to who is none of its members: a commit
 // that narrowed one ("List #hiring is for @hiring, anna"), pinned it for
 // everyone or renamed it writes the registry everyone reads, so it is in
 // everyone's history; to anyone else it says only that a list changed.
-func hideNames(user asker, msg string) string {
+func hideNames(user asker, msg string, hidden []string) string {
 	if settings().Users == nil {
 		return msg
 	}
@@ -752,23 +822,64 @@ func hideNames(user asker, msg string) string {
 			}
 		}
 	}
-	if low := strings.ToLower(msg); !strings.Contains(low, privateDir+"/") && !strings.Contains(low, groupsDir+"/") {
+	if !namesKeptDir(msg) {
 		return msg
+	}
+	// Longest first, so that a name that starts another doesn't take part of it.
+	hidden = slices.Clone(hidden)
+	slices.SortFunc(hidden, func(a, b string) int { return len(b) - len(a) })
+	for _, f := range hidden {
+		if !placeOf(f).shared() {
+			for _, name := range []string{f, strings.TrimSuffix(f, ".md")} {
+				msg = replaceName(msg, name, hiddenAs(f))
+			}
+		}
 	}
 	var out strings.Builder
 	last := 0
 	for _, m := range privateNameRE.FindAllStringSubmatchIndex(msg, -1) {
-		name := msg[m[4]:m[5]]
-		out.WriteString(msg[last:m[4]])
-		switch {
-		case canSeePath(user, strings.TrimSuffix(name, ".md")):
-			out.WriteString(name)
-		case strings.HasPrefix(strings.ToLower(name), groupsDir+"/"):
-			out.WriteString("a group's page")
-		default:
-			out.WriteString("a private page")
+		if m[4] < last {
+			continue // in the words of a name before it
 		}
-		last = m[5]
+		name, end := msg[m[4]:m[5]], m[5]
+		out.WriteString(msg[last:m[4]])
+		if canSeePath(user, strings.TrimSuffix(name, ".md")) {
+			out.WriteString(name)
+		} else {
+			for nameGoesOn(msg[end:]) {
+				next := strings.IndexByte(msg[end+1:], ' ')
+				if next < 0 {
+					next = len(msg) - end - 1
+				}
+				end += 1 + next
+			}
+			out.WriteString(hiddenAs(name))
+		}
+		last = end
 	}
 	return out.String() + msg[last:]
+}
+
+// replaceName: msg with name, where it stands as a whole (no letter, digit,
+// ".", "-", "_" or "/" just before or after it), as as.
+func replaceName(msg, name, as string) string {
+	if name == "" {
+		return msg
+	}
+	var out strings.Builder
+	for {
+		i := strings.Index(msg, name)
+		if i < 0 {
+			break
+		}
+		before, _ := utf8.DecodeLastRuneInString(msg[:i])
+		after, _ := utf8.DecodeRuneInString(msg[i+len(name):])
+		if (i == 0 || !pathRune(before)) && (i+len(name) == len(msg) || !pathRune(after)) {
+			out.WriteString(msg[:i] + as)
+		} else {
+			out.WriteString(msg[:i+len(name)])
+		}
+		msg = msg[i+len(name):]
+	}
+	return out.String() + msg
 }

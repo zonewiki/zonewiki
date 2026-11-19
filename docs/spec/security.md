@@ -376,6 +376,15 @@ So every git Zone runs has `GIT_LITERAL_PATHSPECS=1` (git's `--literal-pathspecs
 Two calls turn it off: `grepPages`, whose `*.md` is Zone's own pattern, and `check-ignore`, which takes names as they are and refuses the setting.
 `tests/test_privacy.py` asks for the history, versions, changes and deleted page of names that match alice's files.
 
+### Git's lists of files are read as they are
+
+Where git lists the files of commits (Changes and the tool `history`, a page's history across a rename, the deleted pages, what Undo looks at), Zone has it print them with `-z` (`logRecords` in `go/gitstore.go`), so a name comes as the file's own, whatever it holds.
+Without it git quotes a name with a letter outside ASCII, a quote, a backslash or a control character (`"private/alice/_assets/K\303\274ndigung.pdf"`), and that text, read as a path, starts with no private folder: until 2026-11 Changes showed other users' private files, groups' files and the folders of lists for some so named to everyone.
+What isn't a clean path is no one's to see (`cleanPath` in `canSeePath`: relative, no part empty, `.` or `..`, no control character or backslash, not starting with a double quote), so a slip in reading git's output hides a file rather than showing it.
+A commit starts in that output only after a NUL, which no message holds, so a subject can't start another commit in the list.
+A commit message names a file its reader may not see as "a private page" or "a group's page", whole (`hideNames`): the commit's own such files by their names, whatever those hold (a space, a comma, a parenthesis), and any other path in such a folder in any script's letters, its name going on past a space until a word that goes on with the message (` to `, ` (MCP)` …).
+`tests/test_privacy.py`, `tests/test_group_pages.py` and `tests/test_list_members.py` hold such names in what they probe.
+
 ### A task snapshot's ids and times
 
 A task snapshot's ids and times are checked (`sanitizeSnapshot` in `go/tasklogic.go`; `POST /api/tasks/restore`, `/api/tasks/import`): an `id` or `spawned_from` only of letters,

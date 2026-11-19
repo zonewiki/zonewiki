@@ -523,19 +523,37 @@ func moveFolder(user asker, folder, newFolder, message string) ([][2]string, []s
 	return moves, still, linkErr
 }
 
-var renameBracesRE = regexp.MustCompile(`\{([^{}]*) => ([^{}]*)\}`)
+// logRecord: a commit in git log's output with -z and a format that starts
+// with \x1e: the format's text (head), and what git says of its files
+// (fields: --name-status's letter and name, --numstat's counts and name,
+// --name-only's names), each a field of its own. With -z a name is the
+// file's own, whatever it holds; without it git quotes a name with a byte
+// outside ASCII, a quote, a backslash or a control character
+// ("private/alice/K\303\274ndigung.pdf"), which read as a path is another
+// one: it named no private folder, and Changes showed it to everyone.
+type logRecord struct {
+	head   string
+	fields []string
+}
 
-// numstatPath: the path after a commit from a --numstat path, which for a
-// rename reads "old => new" or "dir/{old => new}.md".
-func numstatPath(p string) string {
-	if !strings.Contains(p, " => ") {
-		return p
+// logRecords: the commits of git log -z's output, as logRecord says. A
+// commit starts after a NUL (or at the start), which no message holds, so
+// a \x1e in a subject (a tag's name in "Rename tag #…") starts none.
+func logRecords(out string) []logRecord {
+	var records []logRecord
+	if !strings.HasPrefix(out, "\x1e") {
+		return nil
 	}
-	if strings.Contains(p, "{") {
-		return strings.ReplaceAll(renameBracesRE.ReplaceAllString(p, "$2"), "//", "/")
+	for _, record := range strings.Split(out[1:], "\x00\x1e") {
+		head, rest, _ := strings.Cut(record, "\x00")
+		rest = strings.TrimPrefix(rest, "\n")
+		var fields []string
+		if rest != "" {
+			fields = strings.Split(strings.TrimSuffix(rest, "\x00"), "\x00")
+		}
+		records = append(records, logRecord{head, fields})
 	}
-	_, after, _ := strings.Cut(p, " => ")
-	return after
+	return records
 }
 
 // viaFormat: a commit's Assistant trailer in a git log format: its value
@@ -571,29 +589,33 @@ func gitLog(path string, max int) []GitEntry {
 	if max > 0 {
 		args = append(args, "-n", strconv.Itoa(max))
 	}
-	args = append(args, "--numstat", "--date=format:%Y-%m-%d %H:%M",
+	args = append(args, "-z", "--numstat", "--date=format:%Y-%m-%d %H:%M",
 		"--format=\x1e%H\x1f%as\x1f%ar\x1f%ad\x1f%an\x1f"+viaFormat+"\x1f"+sourceFormat+"\x1f%s", "--", rel)
 	r := runGit(args...)
 	var entries []GitEntry
-	records := strings.Split(r.Stdout, "\x1e")
-	for _, record := range records[1:] {
-		head, stats, _ := strings.Cut(record, "\n")
-		parts := strings.SplitN(head, "\x1f", 8)
+	for _, record := range logRecords(r.Stdout) {
+		parts := strings.SplitN(record.head, "\x1f", 8)
 		if len(parts) != 8 {
 			continue
 		}
 		e := GitEntry{Sha: parts[0], Date: parts[1], Rel: parts[2], Time: parts[3], Author: commitAuthor(parts[4]),
 			Msg: parts[7], Via: viaOfCommit(parts[7], parts[5]), Source: sourceOfCommit(parts[7], parts[6]), Path: rel}
-		for _, line := range mdtext.SplitLines(stats) {
-			cols := strings.SplitN(mdtext.LineBody(line), "\t", 3)
-			if len(cols) == 3 {
-				if n, err := strconv.Atoi(cols[0]); err == nil {
-					e.Added += n
-				}
-				if n, err := strconv.Atoi(cols[1]); err == nil {
-					e.Deleted += n
-				}
-				e.Path = numstatPath(cols[2])
+		// "added\tdeleted\tname", or for a rename "added\tdeleted\t" and
+		// the old and the new name as fields of their own.
+		for i := 0; i < len(record.fields); i++ {
+			cols := strings.SplitN(record.fields[i], "\t", 3)
+			if len(cols) != 3 {
+				continue
+			}
+			if n, err := strconv.Atoi(cols[0]); err == nil {
+				e.Added += n
+			}
+			if n, err := strconv.Atoi(cols[1]); err == nil {
+				e.Deleted += n
+			}
+			e.Path = cols[2]
+			if cols[2] == "" && i+2 < len(record.fields) {
+				e.Path, i = record.fields[i+2], i+2
 			}
 		}
 		entries = append(entries, e)
@@ -605,7 +627,7 @@ func gitLog(path string, max int) []GitEntry {
 // ago, message, author (commitAuthor) and the files it changed (relative
 // to the wiki) and what it did to each (Kinds, a letter a file: A added, M
 // changed, D deleted; a rename is a D and an A); Hidden: how many more it
-// changed that see didn't take.
+// changed that see didn't take, hidden their names (for hideNames).
 type LogEntry struct {
 	Sha, Time, Rel, Msg, Author string
 	Via                         string // which assistant wrote it (viaOfCommit), "" for none or not said
@@ -613,6 +635,7 @@ type LogEntry struct {
 	Files                       []string
 	Kinds                       string
 	Hidden                      int
+	hidden                      []string
 }
 
 // gitLogAll: the wiki's commits, newest first, at most limit; since a day
@@ -633,7 +656,7 @@ func gitLogAll(since, under string, limit int, see func(path string) bool, keep 
 	}
 	var entries []LogEntry
 	for skip := 0; len(entries) < limit; skip, batch = skip+batch, 2*batch {
-		args := []string{"log", "-n", strconv.Itoa(batch), "--skip", strconv.Itoa(skip), "--name-status", "--no-renames",
+		args := []string{"log", "-z", "-n", strconv.Itoa(batch), "--skip", strconv.Itoa(skip), "--name-status", "--no-renames",
 			"--date=format:%Y-%m-%d %H:%M", "--format=\x1e%H\x1f%ad\x1f%ar\x1f%an\x1f" + viaFormat + "\x1f" + sourceFormat + "\x1f%s"}
 		if since != "" {
 			args = append(args, "--since="+since+" 00:00")
@@ -641,24 +664,24 @@ func gitLogAll(since, under string, limit int, see func(path string) bool, keep 
 		if under != "" {
 			args = append(args, "--", under+"/")
 		}
-		records := strings.Split(runGit(args...).Stdout, "\x1e")[1:]
+		records := logRecords(runGit(args...).Stdout)
 		for _, record := range records {
-			head, names, _ := strings.Cut(record, "\n")
-			parts := strings.SplitN(head, "\x1f", 7)
+			parts := strings.SplitN(record.head, "\x1f", 7)
 			if len(parts) != 7 {
 				continue
 			}
 			e := LogEntry{Sha: parts[0], Time: parts[1], Rel: parts[2], Author: commitAuthor(parts[3]), Msg: parts[6],
 				Via: viaOfCommit(parts[6], parts[4]), Source: sourceOfCommit(parts[6], parts[5])}
-			for _, line := range mdtext.SplitLines(names) {
-				kind, n, _ := strings.Cut(mdtext.LineBody(line), "\t")
+			for i := 0; i+1 < len(record.fields); i += 2 {
+				kind, n := record.fields[i], record.fields[i+1]
 				switch {
-				case strings.TrimSpace(n) == "" || kind == "":
+				case n == "" || kind == "":
 				case see == nil || see(n):
 					e.Files = append(e.Files, n)
 					e.Kinds += kind[:1]
 				default:
 					e.Hidden++
+					e.hidden = append(e.hidden, n)
 				}
 			}
 			if (see == nil || len(e.Files) > 0) && (keep == nil || keep(e)) {
@@ -717,11 +740,10 @@ func lastCommitsOf(rel string, n int) []string {
 // those commits, newest first.
 func latestCommits(n int) map[string][]string {
 	out := map[string][]string{}
-	for _, record := range strings.Split(runGit("log", "-n", strconv.Itoa(n), "--name-only", "--no-renames", "--format=%x1e%H").Stdout, "\x1e")[1:] {
-		sha, names, _ := strings.Cut(record, "\n")
-		for _, name := range mdtext.SplitLines(names) {
-			if name = mdtext.LineBody(name); strings.TrimSpace(name) != "" {
-				out[name] = append(out[name], sha)
+	for _, record := range logRecords(runGit("log", "-z", "-n", strconv.Itoa(n), "--name-only", "--no-renames", "--format=%x1e%H").Stdout) {
+		for _, name := range record.fields {
+			if name != "" {
+				out[name] = append(out[name], record.head)
 			}
 		}
 	}
@@ -995,23 +1017,23 @@ func listDeletedPages() []DeletedPage {
 	if !cfg.GitEnabled {
 		return nil
 	}
-	r := runGit("log", "--diff-filter=D", "--format=%H\t%P\t%as", "--name-only")
+	r := runGit("log", "-z", "--diff-filter=D", "--format=%x1e%H\t%P\t%as", "--name-only")
 	if r.Code != 0 {
 		return nil
 	}
 	existing := slugSet()
 	seen := map[string]bool{}
 	var out []DeletedPage
-	var sha, parent, date string
-	for _, raw := range mdtext.SplitLines(r.Stdout) {
-		line := mdtext.TrimRightSpace(raw)
-		if line == "" {
+	for _, record := range logRecords(r.Stdout) {
+		sha, parent, date := deletionCommit(record.head)
+		if parent == "" {
 			continue
 		}
-		if strings.Contains(line, "\t") {
-			sha, parent, date = deletionCommit(line)
-		} else if parent != "" && strings.HasSuffix(line, ".md") && !strings.HasPrefix(line, ".") {
-			slug := strings.TrimSuffix(line, ".md")
+		for _, name := range record.fields {
+			if !strings.HasSuffix(name, ".md") || strings.HasPrefix(name, ".") {
+				continue
+			}
+			slug := strings.TrimSuffix(name, ".md")
 			if existing[slug] || seen[slug] || strings.HasPrefix(slug, "_assets") {
 				continue
 			}

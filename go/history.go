@@ -32,7 +32,17 @@ func pageLog(user asker, path string) []GitEntry {
 	var out []GitEntry
 	for _, e := range gitLog(path, 0) {
 		if canSeePath(user, e.Path) {
-			e.Msg = hideNames(user, e.Msg)
+			// The names of the commit's files user may not see, for a message that
+			// may name one: asked of git only then.
+			var hidden []string
+			if namesKeptDir(e.Msg) {
+				for _, c := range commitChanges(e.Sha) {
+					if !canSeePath(user, c.Path) {
+						hidden = append(hidden, c.Path)
+					}
+				}
+			}
+			e.Msg = hideNames(user, e.Msg, hidden)
 			if user.Name == visitor && e.Author != visitorAuthor {
 				e.Author = "" // a public wiki's visitor learns no user's name
 			}

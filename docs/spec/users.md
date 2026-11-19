@@ -930,7 +930,7 @@ create_task's tag hints.
 `history` of a page lists it as `pageLog` gives it (versions from before a page was yours are left out);
 recent changes (`history` without a slug) show of each commit only the files you may see and leave out a commit with none of them, asking git for more until `limit` are found (`gitLogAll(…, see)`);
 the uncommitted files likewise.
-A commit message naming another user's private page (`Promote private/alice/…_idea to idea`) names it "a private page" (`hideNames`), here and in the browser's history; one naming a list for some its user isn't one of is "A list for some changed".
+A commit message naming another user's private page (`Promote private/alice/…_idea to idea`) names it "a private page" (`hideNames`), here and in the browser's history, whole whatever its name holds (Git's lists of files are read as they are in `docs/spec/security.md`); one naming a list for some its user isn't one of is "A list for some changed".
 `restore_page` takes only versions `pageLog` lists.
 
 ### An assistant's notes and guides

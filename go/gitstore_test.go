@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -361,6 +362,67 @@ func TestGitLogAllFillsTheLimit(t *testing.T) {
 	}
 	if n := len(gitLogAll("", "", 10, see, nil)); n != 5 { // and the initial import (index.md)
 		t.Errorf("all of them: %d", n)
+	}
+}
+
+// A name git would quote without -z (a letter outside ASCII, a space, a
+// comma, a quote) comes out of the history as the file's own: in the
+// wiki's log (Changes, which judged a quoted name a shared file's), across
+// a rename in a page's log, in the latest commits and among the deleted
+// pages (which left such a page out).
+func TestGitLogsNameFilesAsTheyAre(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	testWiki(t, nil)
+	cfg.GitEnabled = true
+	gitSetup()
+	odd := []string{"notes/Kündigung an Chef.md", "notes/Brief, Kopie (1).md", "_assets/Arztbrief März.pdf"}
+	for _, name := range odd {
+		writeTestPage(t, name)
+		gitCommit("", "Add "+name, filepath.Join(cfg.Data, name))
+	}
+	var files []string
+	for _, e := range gitLogAll("", "", 10, nil, nil) {
+		files = append(files, e.Files...)
+	}
+	for _, name := range odd {
+		if !slices.Contains(files, name) {
+			t.Errorf("gitLogAll: %q not in %q", name, files)
+		}
+		if latestCommits(10)[name] == nil {
+			t.Errorf("latestCommits: no %q", name)
+		}
+	}
+	old, renamed := filepath.Join(cfg.Data, odd[0]), filepath.Join(cfg.Data, "notes/Größe.md")
+	if err := os.Rename(old, renamed); err != nil {
+		t.Fatal(err)
+	}
+	gitCommit("", "Rename", old, renamed)
+	entries := gitLog(renamed, 0)
+	if len(entries) != 2 || entries[0].Path != "notes/Größe.md" || entries[1].Path != odd[0] {
+		t.Errorf("gitLog: %+v", entries)
+	}
+	if err := os.Remove(filepath.Join(cfg.Data, odd[1])); err != nil {
+		t.Fatal(err)
+	}
+	gitCommit("", "Delete", filepath.Join(cfg.Data, odd[1]))
+	if deleted := listDeletedPages(); len(deleted) != 1 || deleted[0].Slug != "notes/Brief, Kopie (1)" {
+		t.Errorf("listDeletedPages: %+v", deleted)
+	}
+}
+
+// A commit starts only after a NUL: a \x1e in a subject (a tag's name in
+// its rename's message) doesn't start another, whose author and files a
+// writer would choose.
+func TestLogRecordsStartAfterANul(t *testing.T) {
+	out := "\x1eaaa\x1falice\x1fRename tag #x\x1ebbb\x1fdana\x1fy\x00\nM\x00notes/a.md\x00\x1eccc\x1fbob\x1fEmpty\x00"
+	want := []logRecord{
+		{"aaa\x1falice\x1fRename tag #x\x1ebbb\x1fdana\x1fy", []string{"M", "notes/a.md"}},
+		{"ccc\x1fbob\x1fEmpty", nil},
+	}
+	if got := logRecords(out); !reflect.DeepEqual(got, want) {
+		t.Errorf("%q", got)
 	}
 }
 
