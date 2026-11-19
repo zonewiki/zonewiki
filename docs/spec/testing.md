@@ -2,10 +2,13 @@
 
 Part of Zone's spec (see `AGENTS.md` for the index).
 
-How the suite is set up and what each module covers.
+How the suite is set up, which tests guard against a forgotten step, where each area's tests live and how the suites run.
 The rules (run it, add tests with every change) are in `AGENTS.md`.
+What a test checks is said by its name and its docstring: this file names modules, not cases.
 
-## Shared setup
+## Harness
+
+### Fixtures and helpers
 
 `tests/conftest.py` holds the shared setup: every test gets a fresh temp wiki (`wiki_dir`: just `index.md`, `_assets/` and `_tasks/`; `git_wiki_dir`: the same set up as a git repository, as Zone does at start; `client`, a server on it),
 plus helpers that modules import from `tests.conftest`: `HOST`,
@@ -19,403 +22,47 @@ plus helpers that modules import from `tests.conftest`: `HOST`,
 `backlinks` and `task_backlinks` (a page's link sections).
 The browser tests' `wiki` fixture builds on `git_wiki_dir`.
 
-**The server under test** (`tests/goserver.py`): the binary is built once per run (`go build` in `go/`, by pytest's first process, which hands the path to the xdist workers in `ZONE_TEST_BINARY`).
+### The server under test
+
+`tests/goserver.py`: the binary is built once per run (`go build` in `go/`, by pytest's first process, which hands the path to the xdist workers in `ZONE_TEST_BINARY`).
 The `client` fixture is a `GoClient`: it takes the calls of Flask's test client (get/post/put/delete with headers, data, json, query_string; cookies) and sends them over HTTP to a server started on the test's wiki,
 answering with werkzeug's `TestResponse` (`get_json()`, `get_data(as_text=True)`, `status_code`, `headers`).
 The browser tests' `wiki` fixture starts one on a port fixed for the session.
+
 The settings a test changes in `tests/settings.py` (`monkeypatch.setattr(settings, "PASSWORD", …)`: `HOSTS`, `LOCALE`, `NOSHARE_TAGS`, `GIT_ENABLED` (a `PATH` without git) …) reach the server in its settings file,
 `.zone/config` (`config_text` in `goserver.py`: the settings that differ from Zone's defaults, passwords and tokens as their hashes, then `settings.CONFIG_FILE`, more of the file's text, then the users as `[user …]` sections;
 written before the server starts, and removed once the settings give none),
 the deployment's (`ZONE_ALLOW_REMOTE`, `settings.ENV`) as its environment): when they change,
 it restarts on the same wiki (and port) before the next request;
 the browser tests' server restarts the moment a test sets one (a `__setattr__` on the module), since requests made with `page.request` don't pass `_new_page`'s route.
-Zone's docs folder (`settings.DOCS`, which `TestZoneHelp` points elsewhere) reaches it as `--docs`;
-the semantic index (`settings.SEMANTIC`, a `tests/semantic.py` `FakeIndex`) as `--semantic-test`: the server gets the fake concept embedder and floors (`go/embedtest.go`), syncs once at start when the test called `sync()`, and restarts after each `sync()`, so it sees the wiki as it is then.
-A server makes the wiki a git repository at start (`gitSetup`), so `git_setup(tmp_path_factory)` (a server started and stopped) is how a test "restarts Zone" (start-up commits, `index.md`, the yearly archives).
-What no route reaches (text functions, search ranking, the index's cache, git helpers, the protocol's limits) has Go tests in `go/*_test.go`;
-(the index's cache among them: `TestIndexCacheStaysAsIfBuiltAfresh` in `go/retrieval_test.go` edits a wiki of shared, private and groups' docs at random and holds every viewer's search against an index built over what they see, `TestTheSearchKeepsNothingPerViewer` in `go/tasklists_test.go` that a place's layer is made once and again only when its docs change, `TestViewsShareALayer` and `TestWithChangesIsAsIfBuiltOverWhatIsLeft` in `go/internal/textsearch/search_test.go` the views of an index themselves);
-`go/testdata/golden.json.gz` holds the text functions' answers on every string in the tests of 2026-10 (recorded from the Python Zone then) and on edge cases added since,
-which `go/golden_test.go` checks the Go ones against,
-and `tests/test_text_parity.py` the browser's copies of them (`public/js/mdtext.js`, run in Node: slugs, heading ids, a wikilink's parts, the checkboxes of a text, a tick, a query's words),
-so the two sides can't drift apart: a case added for one is a case for both;
-after a deliberate change to one of those functions, `ZONE_GOLDEN_UPDATE=1 go test -run TestGolden` (in `go/`) logs every case that changed and writes the new answers.
-
-`tests/e2e/test_quiet_tab.py`: a tab nobody is at asks for neither the uncommitted count nor the Tasks counts through ten minutes, each is asked once after the pointer moved, and again when the tab comes back.
-`TestLastChangedAsksGitOnce` (Go): a page view asks git about a page once, and again after Zone's commit, a change on disk and a commit by hand; without a reflog every time.
-
-`tests/test_git.py` uses `git_wiki_dir` and covers every git path (commit-on-write, history/revision/diff/restore, `_deleted`, uncommitted/commit endpoints, git-disabled fallbacks); it skips when git is not installed.
-`tests/test_narrowed.py` is the leak test for a connection given less to see: the MCP probes of `test_privacy.py`, `test_group_pages.py` and `test_list_members.py` asked as the owner themselves through a connection without the private place, or without the group (129 probes; the answers must be a stranger's); that it makes nothing private and says why; that ordinary shared work goes on through every tool with no failure inside Zone; the file routes with its token; the question's boxes, a wrong password keeping them, a group named that isn't the user's; and what the page says.
-`TestANarrowedAskerSeesLess` (Go) has the rule's table; `TestWhatIsTheirsIsAskedInOnePlace` (`go/asker_test.go`) fails for an owner compared with an asker's name, or the settings asked for an asker's groups, outside `go/access.go`.
-It is a regex over the lines of `go/*.go`, so it catches only those written its way: `owner == user.Name` or `user.Name != t.Owner` (a name ending in `owner`/`Owner`, `==` or `!=`) and `memberOf(…)`/`groupsOf(…)`, each with the asker named `user`, `rq.user`, `rq.who()` or `userOf(r)`.
-It misses an asker under another name (`u.Name`, `who.Name`), its name copied first (`name := user.Name`), another way to compare (`slices.Contains(owners, user.Name)`, `strings.EqualFold`, a `switch`), another way into the settings (`s.Users[user.Name].Groups`, `groupMembers`), a line broken in two, and the packages in `go/internal/`: a review still has to look.
-`TestAReadOnlyAskerChangesNothing` (Go) holds that the permission model itself refuses an asker that only reads (pages, tasks, the tool list), not only the doors;
-`tests/test_oauth.py`'s `TestReadOnly` covers a connection that only reads: the question offers it and keeps the choice through a wrong password, it reads and is shown only the reading tools, every writing tool called all the same is refused with the wiki's files and git's head unchanged, no upload with its token, read-only through a refresh, the page saying what each may do and narrowing one (only one's own), and a connection kept without the field writing as before; the browser test picks Only read on the question.
-`tests/test_changes.py` covers Changes (`/changes`): the commits newest first with what each changed, the assistant's mark, that the page and the tool `history` list the same commits, the filters (user, assistant, folder, day), Show more, sharing mode, where it is linked from, no such page without git, and which assistant: a connection's write carries its name in a trailer, shown on Changes, a page's History and by the tool, a token's none, and neither an argument, a summary nor a trailer typed by hand names one; and a write's `source`: its trailer beside the connection's, shown on Changes, in History and by the tool, one line however it is sent, none for a commit made by hand;
-`tests/e2e/test_changes.py` that it is found from the search list, filtered through its form, leads to a page's diff and fits a phone.
-`tests/test_page_writes.py` has Undo through both doors (`TestUndo`: an edit and the undo undone, a made page gone and a deleted one back, several in one commit, refused for a page changed again or not committed, for tasks, files and a rename, the home page; a guide only by an admin, an assistant given the guide first), `tests/test_changes.py` what Changes offers (Undo where it can be done, an assistant's run and where another's change breaks it, none for a viewer) and the way back to the list with what was done or why not; the browser test clicks both.
-What a user may not see or undo there is probed with the other routes (`test_privacy.py`, `test_group_pages.py`, `test_list_members.py`, `test_public.py`).
-A server makes any wiki a repository when it starts, so the other modules' wikis are repositories too; `settings.GIT_ENABLED = False` gives the server a `PATH` without git, for the fallbacks.
-
-`tests/test_mcp.py` covers the MCP server (files: `upload_file` from text and base64, the name it gets, what it refuses, `read_file`'s image, text and other files and what it won't read, the file routes with the token and nothing else opened by it; with the fake semantic index too: read_page's related pages, a new page's pages close in content): the tool definitions (names, hints, their size, which take guides),
-the HTTP transport and auth,
-the wiki-guide page in the instructions,
-folder guides (a write refused until their ids are passed, imports, a changed guide's new id, every page write gated, dry runs not; read_guides for a page, a folder and the wiki, the guided folders in its description, read_page's guide id),
-the reading tools (tasks created through `/api/tasks`;
-with and without the fake semantic index from `test_semantic.py`;
-search_wiki's heading paths and its query log (only with `query-log`,
-rotation),
-read_page's links and one section,
-list_pages' link counts and orphans,
-check_links,
-list_tags,
-grep_wiki with regexes,
-limits,
-a bad pattern,
-the timeout and the no-git fallback,
-history: recent changes,
-a page's versions and a diff),
-and the writing tools: pages (create/overwrite,
-exact-text edit,
-find and replace across pages (dry run, code left alone, regex groups, a folder, the max_pages guard, a regex RE2 can't take refused),
-append under a heading,
-rename with links,
-a folder move (subfolders, links, a page of its name, refusals),
-delete,
-similar-name and broken-wikilink notes) and tasks (create,
-update fields and status,
-id prefixes,
-comment,
-delete),
-several edits at once,
-restore_page (a version, a deleted page),
-write_page's `base_hash` (merged with a change made since read_page, nothing written on a clash or an unknown hash),
-a page open in the editor (its auto-saved draft committed first as the user's, the editor's 409 after),
-plus one commit per write marked `(MCP)`;
-and zone_help over a small docs folder (passages for a query, a doc, a section, the topic list, testing.md left out, no docs installed) and over the real docs.
-The protocol's handling (versions, notifications, errors) and the limits long answers are cut at are `go/mcp_test.go`'s.
-
-`tests/test_task_refs.py` covers `[[task:…]]` references: chip rendering and badges (dates as `<time>` for the locale), done/won't-do/missing, recurring series, list rows, code, Linked tasks, search by task title and MCP `read_page`.
-`tests/e2e/test_task_refs.py` ticks chips (undo, keep tasks), the editor completion and Make task (the modal for one item, Cancel, batch mode for several lines with shared tags and per-line shorthand, headings skipped, inline selection, undo, the hidden tasks leaving the editor's keys alone).
-
-`tests/test_semantic.py` covers semantic search through the server with a fake embedder (words mapped to a few "concept" axes, `tests/semantic.py`),
-so it needs neither onnxruntime nor a model: the search dialog's mode (off, indexing, on, failed: rendered and in `X-Zone-Semantic`),
-hybrid `/api/search` and the Related section.
-The index itself (chunking with heading paths, a cache of an older chunking re-chunked with its vectors kept, the content-addressed cache, failure fallback, the worker, rank fusion, settings, the model's download) is covered by `go/embed_test.go`.
-
-`go/eval_test.go` covers `zonewiki eval`: a page target matching any section and a section target only its own,
-ranks by keywords on a temp wiki,
-targets naming nothing (page, section, task),
-the report's numbers per mode,
-the questions file's format (questions without targets skipped and counted),
-`--new`'s stubs from the query logs (known and repeated queries left out, newest first),
-and that the semantic index it builds never writes the wiki's cache.
-
-`tests/test_image.py` checks the Containerfiles: the model's revision and hashes are the ones `go/embed.go` checks,
-the semantic layer copies nothing from the repo (a code change mustn't download the model again),
-both images build with the same Go,
-and the image ships the browser code,
-the docs and the licenses.
-It also keeps the notices current: `THIRD_PARTY_LICENSES` names the pinned Go, Go modules and model, every library in `public/vendor/` has a `LICENSE`, and Mermaid's notices record the hash of the vendored `mermaid.min.js`.
-
-`tests/test_env_example.py` checks `.env.example` against the settings the source, `run.sh` and `compose.yaml` read (none missing, none unknown; the variables of settings that moved into the settings file, which the code names only to refuse and import them, don't count).
-
-`tests/test_page_writes.py`'s rename-tag tests cover renaming a tag through both doors (tasks, archives, embeds and links in one commit, a list of that name left alone; refusals; asking before a merge; text not yet in git; a corrupt tasks file writing nothing),
-its list tests New list… (a registry entry and no page), a list's rename (its tasks, the pins, the pages' embeds and links in one commit, a tag of that name left alone; its dialog's refusals; text not yet in git; a corrupt tasks file writing nothing), Delete… (its tasks moved, the pages' embeds saying there is no such list) and the pin's commits,
-`tests/test_privacy.py` what it does across users (and whose a new task is that names no list: its maker's, in their Inbox, with no list made for it; each user's Inbox, its pill and its view their own, none of a user's in sharing mode, the wiki's without users),
-`TestRenameTagInText` and `TestRenameListInText` in `go/pages_test.go` the rewriting of text,
-and `test_rename_and_delete_list_dialogs` in `tests/e2e/test_tasks.py` the dialogs.
-
-`TestListSwitcher` in `tests/test_tasks_embed.py` covers the Tasks page's row of lists (My tasks, the Inbox and the pinned lists as pills, the others and All tasks under More and what More names, each place's counts, a new list pinned for who made it, the pills' order by `POST /tasks/pin-order`, the filter field from eight lists, sharing mode),
-`TestANewListIsPinnedForWhoMadeIt` and `TestPinOrder` in `go/tasklists_test.go` whose registry a pin and an order are written to,
-`TestRegistryDefaultIsTheFirstPin` in `go/internal/taskfiles/lists_test.go` a registry from when a default list was named,
-and in `tests/e2e/test_tasks.py` More opening, closing and naming the view, the Tasks page's one ⋯ menu (List settings…, a list's Pin and Unpin: a pin is a pill and no more; Export, Import), a pill dragged to another place without the page loading again, the filter and the mark on a list new to the browser.
-**The Inbox** (a task in no list; with users its maker's own): `TestInbox` in `go/tasklists_test.go` covers where such a task is kept with and without users and that it has no assignee,
-`TestInboxScope` the names `inbox` and `none` where a list is named, and a list called so from before;
-`test_the_inbox_is_a_pill_and_a_view` in `tests/test_tasks_embed.py` its pill, its counts, its view and its line, the name refused for a list, and `test_my_tasks_and_the_inbox_have_none` that it has no backlinks;
-`TestASharedTaskIsInAList` in `tests/test_task_assignee.py` that with users a shared task never leaves its list for none, and goes to the shared list `general` where it would (its list deleted, a restore or an import whose list is gone, a task left without one when Zone starts), and a shared list's backlog counted on its page.
-The migration at start: `TestRegistryVersion` in `go/internal/taskfiles/lists_test.go` (a registry keeps the version it was read with; `home` is a setting like the others),
-`TestInboxMigrationRenamesListsCalledInbox`, `TestInboxMigrationTurnsThePrivateListIntoTheInbox`, `TestInboxMigrationOfAUserWhoPinnedNothing`, `TestInboxMigrationWithoutASharedRegistry` and `TestInboxMigrationLeavesOutWhatWasNotPinned` in `go/tasklists_test.go` (a list called inbox renamed, a user's list `private` that took their new tasks turned into their Inbox, the lists nobody had pinned left out of My tasks, once per registry),
-`TestSharedTasksWithoutAListGoToGeneral` and `TestGeneralInAWikiWithoutARegistry` (with users the shared tasks without a list go to `general` at every start, also in a wiki that never had a list).
-In the browser, `tests/e2e/test_tasks.py`: `test_the_inbox_has_a_pill_and_a_view_of_its_own` (without users: the pill, the view, its locked chip, a new task there, one filed leaving, `?list=none`),
-`test_c_t_makes_a_private_task_in_the_users_inbox` (with users: the line under the title, the task in her files, in My tasks and on her Inbox's pill, nothing of it for another user),
-`test_a_name_on_a_new_inbox_task_asks_for_a_shared_list` (the shared lists offered under the title, the one this browser last made a task in first, none chosen for the user; none: the warning and the refused Save), `test_a_new_tasks_fields_follow_its_title` (List, Start, Due, Importance and Assignee as the title is typed, back when a word goes, a field changed by hand takes its word out) and `test_a_name_typed_before_the_users_are_known_still_counts`,
-`test_a_shared_task_cant_go_into_a_private_list` (nor into the Inbox: the List field's options and the move dialog's rows, the API's 400);
-`tests/e2e/test_task_inbox.py`: an Inbox task filed into a shared list through the dialog (shared, assigned to its user, the name taken off) and through the move dialog (the row's note, no undo of a share), a shared list's "N unassigned" and its link, Leave out of My tasks in List settings (only on a list of one's own; without users any) with what it does to My tasks and the Tasks link, and where Delete… sends a list's tasks (a private list's to the Inbox, a shared one's to `general`, `general` as the only shared list).
-
-`TestInitialTasks` in `tests/test_tasks_embed.py` covers the tasks a page brings along (what the API would answer, once a page, a task's text not ending the block, none in a preview),
-and `test_a_page_draws_its_lists_without_asking_for_the_tasks` in `tests/e2e/test_tasks.py` that the lists draw from them with no request.
-
-`tests/test_routes.py`'s `TestMergeOnSave` covers merge on save over HTTP (different lines merged,
-the same lines 409 with the markers,
-the fallbacks,
-a section's new range,
-saving on from the text sent,
-set aside,
-Keep mine committing what was never in git,
-Done merging and committing,
-text left in conflict kept for the next visit and gone after a save or 30 days),
-and `TestApiToggleCheckbox` a tick from an older page view finding its item by its line (or refused),
-also after a tick found elsewhere;
-`tests/e2e/test_merge.py` two editors (alice and bob, two browser contexts) in the browser: a merge into the textarea (the note, the cursor, one undo),
-typing on while a merged answer comes back,
-and the banner's Merge by hand (auto-save waits for the markers),
-Reload theirs and Keep mine (saving on from it),
-also after Done,
-changes left in conflict offered on the next visit (also when leaving with the banner up or markers left),
-a merge arriving under a dialog,
-and `replaceChangedLines`' edge cases;
-`go/merge_test.go` covers `mergeText` (clean, the same change on both sides, no final newline, an empty base, conflict markers, no git) and the bases kept.
-`tests/test_page_writes.py` runs each page write (delete, rename, restore, create, a note's Move to wiki and Append) through both doors,
-the browser's route and the MCP tool,
-on the same wiki: text not yet in git kept before a write replaces it,
-the home page,
-an existing target,
-a missing page,
-a restore to the same text or to a version without text,
-and another user's private page (refused, with the answer a missing page gets).
-`tests/test_users.py` covers users: signing in per user (the name field, wrong name or password, throttling, a removed user and a switch from one password to users signed out),
-per-user MCP tokens,
-commit authors (browser, tasks, uploads, notes, MCP; Zone's own commits and a wiki without users),
-authors in the history and on tasks comments and History events (an undo keeps them),
-and another user's draft committed in their name before a save,
-Done,
-checkbox,
-delete,
-rename,
-Commit file/all or MCP write (`TestDrafts`).
-`TestDisabled` covers a disabled user (no sign-in, told only with the right password, the session stopped and going on once enabled, the token refused).
-`tests/test_task_assignee.py` covers a task's assignee: assigning, reassigning and unassigning through the API and `batch-update`, how a name and no one may be written, who can't be assigned and what the refusal says, private tasks (an Inbox task has none) and wikis without users, the reserved names `me` and `none`, a former assignee's name staying through edits and coming back only to a task that had it, the history and its undo, a series' next occurrence, restored and imported tasks, `GET /api/tasks/assignable` and the names in a page's task data, and `[[tasks: assignee=…]]` on the server (each user's counts, how the param is read, the export, the settings dialog's write, what New task gets), and the MCP tools (`TestAssistant`: assigning, the refusals as tool errors, `search_tasks`' `assignee`, a new task without a list in the Inbox)
-In the browser (`tests/e2e/test_task_assignee.py`): the name on the card, the dialog's field with its completion and its refusal of a name that is no user, `@name` in a new task's title (the List field moving to the shared list; not on a task in a private list or in the Inbox chosen by hand), the filter's names, `@me`, `@none` and the `@` key, a new task taking the filter's assignee, a former assignee struck through and counted as no one's, the undo that puts one back, a wiki without users, one `assignee=me` page showing two users their own tasks, the settings dialog's field, several selected tasks assigned at once with their undo, and what My tasks holds (`test_my_tasks_holds_what_is_mine`: her Inbox and her private lists but one left out, what is assigned to her wherever it is, not an unassigned task of a pinned list; a task given away leaving it and its count, one taken from a list's backlog coming in; its settings).
-`tests/test_tasks_core.py`'s `TestAssignee` covers the filter's and the title's `@` words in `tasks-core.js`.
-**My tasks** (the home view's rule): `go/testdata/mine_cases.json` is one table of cases that runs through the server's rule (`TestInMineCases` in `go/tasklists_test.go`) and the browser's (`TestMyTasks` in `tests/test_tasks_core.py`), so the two can't drift apart;
-`TestMyTasks` and `TestMyTasksSettings` in `go/tasklists_test.go` cover it on a wiki (without users every task; with users one's own tasks and the shared ones assigned to one; a list left out; pins changing nothing; its counts the Tasks links') and its settings in the registry (`TestRegistryMineWasAFlag` in `go/internal/taskfiles`: the old flag reads as nothing);
-`TestMyTasks` in `tests/test_task_assignee.py` what each user's holds (a pin changing nothing, a list left out, who can't be given tasks, a wiki without users), the settings each user's own, an assistant's new task in the Inbox;
-`TestListSwitcher` in `tests/test_tasks_embed.py` the view at `/tasks?mine=1` (its pill, its line with the lists left out, its counts, its settings dialog's route, a wiki without lists);
-`test_tasks_link_shows_my_tasks` in `tests/e2e/test_tasks.py` and `test_my_tasks_is_the_tasks_module` in `tests/e2e/test_mobile_nav.py` it in the browser without users (every task but a left-out list's, pinned or not; a new task there in the Inbox);
-`tests/test_task_notify.py` the mail about a task given to someone, against a fake SMTP server (`FakeSMTP` of `tests/test_signup.py`; the mail is sent in the background, so `mails(smtp, n)` waits for it): who gets one and who doesn't, one mail a user for several tasks, an assistant's assignment, the box that turns it off, none until it is turned on (mail is opt-in), no mail server; `TestGivenToMe` in `tests/test_tasks_core.py` the card's new mark, `go/testdata/news_cases.json` the rule's cases through the browser's (`TestNewsCases` there) and the server's (`TestNewsCases` in `go/tasklogic_test.go`), `test_opening_a_task_given_to_you_says_seen` here and `test_opening_a_task_given_to_you_takes_the_new_away` in `tests/e2e/test_task_assignee.py` the `seen` entry (logged once, only for who it is new to, the mark and the count gone, new again when given again), `test_the_tasks_links_count_what_is_new_for_you` here and `test_the_tasks_link_says_that_something_is_new_for_you` in `tests/e2e/test_task_assignee.py` the count on the Tasks links, `test_a_task_someone_gave_you_is_marked_new` and `test_my_tasks_settings_turn_the_mails_on` in `tests/e2e/test_task_assignee.py` both in the browser (the settings' boxes for the mails, none ticked: mail is opt-in);
-`tests/test_task_follow.py` following a task: kept in the task and gone with the last follower, no history entry; who follows is told what its maker is told (a comment, closed, reopened, given on; not a date) and it is not in their My tasks but for its Updates; what was said before is no news, and a comment in the minute of a look, after it, is; only oneself, only a shared task, no viewer, not without users; the comment's mail; a series' next occurrence; `is:following` and an assistant's `follow`. The rule's cases with followers and with looks that name a comment are in `go/testdata/news_cases.json`; `test_follow_a_task_and_its_news_is_under_updates` in `tests/e2e/test_task_assignee.py` is the menu, Updates and the dialog's line in the browser; `TestKnownKeysWrittenOnce` in `go/internal/taskmodel` that `created_by` and `followers` are written once.
-`tests/test_privacy.py` probes its scope on every route that takes it.
-`tests/test_list_members.py` is the leak test for lists for some: alice's list for a group and herself, probed as an editor and as an admin who are no members, on the routes that show tasks, lists, counts, search, pages with a `[[task:…]]` and an embed of it, the history, and through an assistant (nothing of its tasks, its ids or its name), and on every route that writes a task or a list (the list's files stay byte for byte, nothing of them is committed); its members see it; a typo of a word only the list has finds it for a member and suggests nothing to anyone else (its tasks are a layer of the index, `TestAListForSomesTasksAreInItsMembersIndexAlone` in `go/retrieval_test.go`); a commit about it (narrowed, pinned for everyone) names it to its members only; without users it is everyone's; a task's files are kept by the task and seen by who sees it (a member, not an editor or an admin who is none; through an assistant too), go where the task goes without moving, and are a new task's from the first by the id its dialog made up; a task there is given only to a member and a mention of anyone else is text; who it is for is its owners' to say, they stay among them, widened and narrowed it moves between its folder and the registry; a group changed shows at the next request; a list for a group made of groups is for who is in one of them, and no longer when that group is taken out, their task there no one's; renamed and deleted, its folders stay its members'; it is a pill of its members until they unpin it; More has your lists before the others; Pin for everyone sets the wiki's pins, for who manages the list; a narrowing says whose tasks leave their sight and waits for a second Save, the tasks then count as no one's (the list's line, `@none`, an assistant's answer) and are their assignees' again once they are members again; a follower who is no member anymore is not named and is told nothing; a write to it leaves anyone else's word as it is.
-`go/internal/taskfiles/members_test.go` the same in the store: every reader leaves the folder out, a write by anyone else leaves its files alone and a task smuggled into it is refused, a start's filing keeps them.
-`tests/e2e/test_task_assignee.py` its dialogs (New list…'s For, Who it is for…, the heading's lock) and that Assign…, the Assignee field and the title's `@name` offer its members; past twelve people Assign… has a field that finds one; a task leaving a list for some for one for everyone (the move dialog's row, the edit dialog's line, the question on a drop), and the For field's completion; the task of who no longer sees the list: the name struck through, under Unassigned, found by `@none`, handed on.
-`tests/test_list_owners.py`: a shared list is its maker's (the `owners` in its entry, also of a private list made shared); a member who is no owner changes its tasks and is refused at rename, delete and settings, by the routes and by an assistant's `rename_task_list`, and has none of them in the menu; its owner and an admin manage it; a list from before owners is its admins'; without an admin, and without users, whoever writes manages.
-`TestHandingOn` covers the Users tab's count of a disabled user's open tasks.
-(`go/assignee_test.go`: `assignable`, the reserved names in `zonewiki user add` and an invite, the count `user disable` and `user remove` print; the field in the file in `go/internal/taskmodel`).
-
-`tests/test_roles.py` covers viewers: every write route and MCP write tool is probed as a viewer on shared pages and tasks and on her own note and private task from before,
-and no file may change nor any commit be made (`test_every_write_route_is_probed` and `test_every_write_tool_is_probed` fail for a new one without a probe),
-with the message,
-a refusal that tells nothing of another user's folder,
-and the interface (no Edit, ✎ or Rename, the editor 403, no Private or Notes, no writing tools in `tools/list`).
-`tests/test_admin.py` covers the admin page and its Users tab (only admins, `/admin` opening the first tab, 404 for everyone else and without users, the Origin check, role, groups (only groups there are), a group made of groups on Groups (set, refused where it would include itself or name no group, who is no longer in it said), disable, enable, remove, refusals: the last admin, the last user, disabling or removing yourself, a change meanwhile kept;
-the commit's author;
-the top row) and `tests/e2e/test_admin.py` the Remove dialog, your own row and the buttons that show once a field is edited (a pill picked or taken out too), in the browser,
-and invite and reset links (the welcome page changes nothing until its form, once only, a role, a reset ending the old sessions, revoke, replacing, expiry, throttling, the cap per admin);
-`go/configfile_test.go`'s `TestUserRoles`, `TestUserLinks` and `TestRolesInTheFile` the commands and the keys;
-`go/gitstore_test.go`'s `TestMissingUsers` the start-up guard.
-`tests/test_signup.py` covers sign-up against a fake SMTP server in the test (`FakeSMTP`, `ZONE_SMTP_TLS=none`): off without the deployment, users or `base-url`, Zone not starting without a mail server, the whole way from the form through the mail's link to a signed-in viewer, a name taken or bad keeping the link, an address with an account getting its name, bad addresses, `signup-domains`, `signup-role`, the cap per client, a new ask replacing the link, the mail server down, the link dead once sign-up is off, and approval (waiting, the login's message, Approve on the Users tab);
-`go/mail_test.go` the SMTP client (`fakeSMTP`: the mail's headers and text, no mail without STARTTLS, a server that isn't there), the mail settings, `validEmail`, the sign-up keys and `pending`.
 `settings.USERS` maps a name to its password and token, `settings.USER_SETTINGS` a name to more of its section (`role`, `disabled`);
 `goserver.py` writes their hashes into the settings file (`password_hash`: a fixed salt and few iterations, so the server's settings stay the same between requests and logins are quick).
-`tests/test_public.py` is the test of public wikis (`ZONE_PUBLIC`): it asks every route Zone registers without a session, in both modes, and fails for one that answers and isn't on its lists, which must be the server's (`visitorRoutes`, `visitorEdits`); it looks for a task's or a private page's words in what a visitor reads, and checks what a visitor writes (pages, as anonymous) and never does (uploads, renames, deletes, tasks, notes, guides).
-`test_the_name_opens_the_account_menu_on_a_phone` in `tests/e2e/test_mobile_nav.py`: the name beside Sign out opens Groups, Connect an assistant and Change password on a phone, for who is in no group too.
-Where a group's page starts: `test_a_group_has_ways_to_start_a_page_and_a_list` in `tests/test_group_pages.py` (New page on the home and on Groups, `/new`'s For, New list), `POST /link-new` in `tests/test_users.py` (`test_make_it_private_points_the_link_there`) and in the browser in `tests/e2e/test_groups.py`.
-A list for some's people sign is in `tests/test_list_members.py` (`test_a_list_for_some_carries_the_people_sign`); A group of groups making and never replacing in `tests/test_admin.py`; Save saying whom it takes out in `tests/e2e/test_groups.py`.
-The task filter and what is for today or overdue run through shared cases on both sides (`go/testdata/filter_cases.json`, `focus_cases.json`: `TestFilterCases`, `TestFocusCases` in `go/tasklists_test.go` and in `tests/test_tasks_core.py`), as My tasks' rule and the news do.
-A rule written once: the batch update's mention and conflict in `tests/test_list_members.py` (`test_a_batch_update_changes_fields_as_one_tasks_update_does`), a list's name and a date word in the browser against the server's in `tests/test_text_parity.py`, a heading's id against its link's anchor in `tests/test_rendering.py`, an editor committing no guide in `tests/test_roles.py`.
-`tests/test_narrow.py` covers who may move a page to other readers: an admin to fewer people, asked first by name (a yes to one name is none to another), only where they may write; an editor refused by every door; whoever shared a page taking it back until someone else changes it; what those left out keep (the versions up to the move, nothing after); an admin's assistant asked too (`narrow`), a folder's pages asked once; a rename within a place asking nothing. `test_rename_to_other_readers_asks_first` in `tests/e2e/test_groups.py` has the dialog's question in the browser; a task into a list fewer people see is in `tests/test_list_members.py`.
-`tests/test_group_pages.py` is the leak test for a group's pages (`groups/<group>/`, Group pages in `docs/spec/users.md`): it runs `tests/test_privacy.py`'s probes, aimed at the group's folder, as an editor and as an admin who are not in the group, so a route or tool that gets a probe there is probed here too; then its members, a viewer among them, joining and leaving, a group made of groups, the moves (to more people asked first, to fewer not an editor's), Share… and a note filed into a group's folder (`tests/e2e/test_groups.py` has Share… in the browser, `[[` completion on a group's page, the note on a new shared page from one, the group's pill in the switcher (called by the one group; a menu of several) and the tab on the phone's bar, **g g**, the list of several groups), the marks of a link by who reads the page, `/new`'s For, the group's home (made by a member, a 404 that makes nothing for anyone else, never renamed or deleted), the place's name (the mark, the breadcrumb, the page list, a search result, the switcher with one group and with several, the folder field), the admin page's folders no one sees, what an assistant is told (the instructions' note, the `seen by` line), uploads, the guide, the history, a folder of no group, and `groups/` without users.
-`tests/test_groups_own.py` covers groups made in the browser (Groups in `docs/spec/users.md`): making one and the names that are taken, a renamed group's old name taken for anyone else and its own to take back, a group ended (a list for it keeps it; with pages it asks what becomes of them: moved to a folder of the wiki with links and files, or deleted and still in git; without pages no question; who may; a group another is made of; a removal whose commit fails made all the same), a viewer and a wiki without users, what its owners and an admin change and what a member, someone else and a viewer don't, a removed user's ownership, an admin's Groups (every group, what each includes, a group named that there isn't), a member leaving by themselves (only themselves, not an admin's group, not one they are in by way of another, not a viewer), and a rename (the settings, the folder with the file a page shows and the one none shows, the links on pages and in tasks, the list for the group, who sees what before and after; refused names, who may rename, an admin who is not in the group); `tests/e2e/test_groups.py` makes, manages and renames one in the browser, and the name fields' pills (only users and groups there are, a name that is none keeps the form from going, a pasted list, Backspace, the menu, an admin's Everyone in).
-A rename that fails part way is forced there with a `pre-commit` hook in the wiki's repository that refuses a commit holding a group's page (`no_commits_of_the_groups_pages`): a folder's move that is made but not committed (the rename goes on, and says so), and one that can't start because a page has text not in git yet (the lists are put back).
-`tests/test_privacy.py` is the leak test for private pages and tasks: alice's private page (committed, deleted, uncommitted),
-note,
-upload,
-pinned list,
-list and private tasks hold a word that no response to bob,
-signed in or through his MCP token,
-may contain,
-and bob's writes must leave her files alone.
-It probes every route and MCP tool; `test_every_route_is_covered` and `test_every_tool_is_covered` fail for a route Zone registers, or a tool it offers, that is neither probed nor exempt: a new one gets a probe there.
-`go/access_test.go` covers the rules themselves (`canSee`, `canSeePath`, `hiddenPage` with sharing mode, `strayPrivate`), `go/tasklogic_test.go` the per-user task files (`canSeeTask`, a shared task that stays shared: `TestASharedTaskStaysShared`).
-`go/users_test.go` covers the hash format and `authenticate`; `go/security_test.go` the session's user.
+The tests' server has `no-login = yes` (`settings.NO_LOGIN`), so the first-run page doesn't stand in the way.
+Zone looks at the settings file at most once a second, so a test that rewrites it while the server runs waits that out (`write` in `tests/test_config.py`) rather than polling logins, which the throttle would count.
 
-`go/sections_test.go` covers sections as the parser finds them: each ✎ opening its section (`TestEachPencilOpensItsSection`),
-the ✎s and the sections agreeing on random pages,
-finding a section by number and heading (`findSection`),
-the MCP tools' sections and search chunks going by the parser,
-pages with Windows line breaks.
-`tests/test_section_editing.py` covers the same over HTTP (a stale ✎, Keep mine with its section moved or gone).
+Zone's docs folder (`settings.DOCS`, which `TestZoneHelp` points elsewhere) reaches the server as `--docs`;
+the semantic index (`settings.SEMANTIC`, a `tests/semantic.py` `FakeIndex`: words mapped to a few "concept" axes, so no onnxruntime and no model) as `--semantic-test`: the server gets the fake concept embedder and floors (`go/embedtest.go`), syncs once at start when the test called `sync()`, and restarts after each `sync()`, so it sees the wiki as it is then.
 
-`go/math_test.go` and `tests/test_math.py` cover math: the parser (pandoc's rules, prices and escapes, `$$` blocks open, closed and on one line, ```` ```math ````, `\|` in table cells, inline content),
-and the source side agreeing with it (heading anchors, `$$` blocks no section or checkbox, wikilinks in math kept as TeX, section editing below a `$$` block).
-`test_routes.py` checks that the vendored libraries are served gzipped and kept a day, Zone's own code not.
+A server makes the wiki a git repository at start (`gitSetup`), so every module's wiki is a repository, and `git_setup(tmp_path_factory)` (a server started and stopped) is how a test "restarts Zone" (start-up commits, `index.md`, the yearly archives).
+`settings.GIT_ENABLED = False` gives the server a `PATH` without git, for the fallbacks; the git tests skip when git is not installed.
 
-`tests/test_users.py`'s `TestPrivateHome`,
-`TestMakeShared`,
-`TestSharedNewPage`,
-`TestLinkToPrivateFromShared` and `TestModuleMenu` cover the private home over HTTP (`/private` made once on the first visit, one per user, a login needed, 404 without users, never renamed or deleted by route or MCP tool, an ordinary page without users),
-Make shared (the menu's entry and target, not offered for shared pages, homes, notes or without users, a rename into the folder that is refused for shared pages (nothing changes), the links that follow a page made shared, committed by the user, the lock, the page list and search marks),
-the marked link from a shared page to a private one and the user menu's markup (the top-right user button, Sign out in it) (with users, without, the current module per view).
-The browser side is in `tests/e2e/test_private.py`: the user menu by click,
-keyboard and Esc,
-with Sign out,
-on a phone as a bottom sheet from the tab bar,
-Private home and `g p`,
-Make shared through the dialog,
-the locks in the search modal,
-`[[` completion's new private page, and a link from a private page to a new shared page (marked, the warning editor with Make it private and Keep shared).
+### Other test doubles
 
-`tests/test_password.py` covers Change password over HTTP (`/password`: a user changes their own password with the one they have, kept as its hash;
-the other sessions ended and this one going on as the same session;
-the MCP token left alone;
-a wrong current password, a short new one and two that differ refused, wrong ones throttled as at the login;
-a viewer's;
-signed out and cross-site refused;
-without users the wiki's password, and no page without a login).
-In the browser (`tests/e2e/test_private.py`): from the user menu to the page, a wrong password, the change, still signed in.
+- Mail: `FakeSMTP` in `tests/test_signup.py` is an SMTP server in the test (`ZONE_SMTP_TLS=none`); `tests/test_task_notify.py` uses it too.
+  Task mail is sent in the background, so `mails(smtp, n)` waits for it.
+  The Go side has `fakeSMTP` in `go/mail_test.go`.
+- A failed commit: `tests/test_groups_own.py` forces a rename to fail part way with a `pre-commit` hook in the wiki's repository that refuses a commit holding a group's page (`no_commits_of_the_groups_pages`).
+- `run.sh` without an engine: `tests/test_run_sh.py` puts a stub `podman` first on `PATH` (it logs its arguments; `run`/`start` exit with `FAKE_EXIT`), in a scratch git repo holding copies of `run.sh` and `.githooks/pre-commit`.
+  Its hook tests skip when a local gitleaks is on `PATH` beside bash; one in a folder of its own (the tools image's) is left off the scratch repo's `PATH`, so they run there and in CI.
+- A socket handed over as systemd would: `tests/test_socket.py` holds the socket itself and starts Zone with `--addr fd:N` (and `ZONE_IDLE_EXIT=1s`).
+- Node: `tests/test_tasks_core.py` and `tests/test_text_parity.py` run `public/tasks-core.js` and `public/js/mdtext.js` under Node (`node -e`) and skip without it; the tools image installs Ubuntu's `nodejs`.
+- The clock in the browser: Playwright's clock moves time where a test waits for a minute to pass (`test_tasks_show_what_someone_else_changed_within_a_minute`).
 
-`tests/test_oauth.py` plays an MCP client over HTTP (Connecting with OAuth in `docs/spec/mcp.md`): the 401 and the metadata, off without a login and with `mcp-oauth = no`;
-registration (what a redirect URI may be, nothing kept, a forged client id);
-the consent page (through the login and back, who asks and where the answer goes, the password and its throttle, Allow answering with a page and a `Refresh` header, Deny, an unregistered redirect URI, what a client got wrong, a program on this computer at any port, cross-site and signed out);
-tokens (the code once, with its verifier, client and redirect URI; refresh, a refresh token used twice, another client's, expiry by editing `.zone/grants`, the throttle);
-connections (listed and ended on Connect an assistant, only one's own, a viewer's, a disabled or removed user's, a reset link against an ordinary new password, a wiki with one password).
-In the browser (`tests/e2e/test_oauth.py`): from the login to Allow at phone width, Chromium following the answer to another origin under the page policy with no violation, the code turned into tokens, the connection ended on the page; Deny.
-
-`tests/test_assistant.py` covers Connect an assistant over HTTP (`/assistant`: a user makes their own token with their password, kept as its hash and shown once;
-a wrong password refused and throttled as at the login;
-a new token replacing the old one, revoking, the other users' tokens left alone;
-a viewer's assistant only reading;
-signed out and cross-site refused;
-without users the wiki's token, with the wiki's password or none;
-the address from `base-url`;
-the shortcuts dialog's link).
-In the browser (`tests/e2e/test_private.py`): from the user menu to the page, a wrong password, the token made and working, its Copy button, the page at phone width, revoking.
-
-`tests/test_socket.py` starts Zone on a Unix socket (`--addr unix:PATH`): `zonewiki health unix:PATH` answers over it and fails for a path nothing listens on,
-and five wrong passwords from one address in the proxy's `X-Forwarded-For` make that client wait and no other.
-On a socket the test holds, as systemd would (`--addr fd:N`, `ZONE_IDLE_EXIT=1s`): requests keep Zone up, the healthcheck alone doesn't and Zone exits with 0, a request sent then is answered by the next Zone started on the socket, a wrong password keeps Zone up until the right one, and the setting is ignored on a socket Zone opened itself.
-In Go (`TestListenOnAHandedSocket`, `TestIdleLongEnough`): the handed socket's file stays when the listener closes, what isn't a listening socket is refused, and the idle decision by the clock, a running request and the throttles; `TestCommitDrafts`: a draft committed in its author's name, as before an idle exit.
-In Go (`TestListenOnSocket`, `TestClientKeyOnSocket`): the socket's mode, a socket file left behind replaced, a live one and a plain file refused and left alone, and the socket's peer trusted whatever `trusted-proxies` holds.
-
-`tests/test_config.py` covers the settings file through the server: a new user signs in without a restart,
-a removed one is signed out,
-a changed password (ending the old one's sessions) and MCP token,
-a broken file keeping the settings from before (alice stays in, no one else gets in) and failing `/api/health` until it is fixed (the error itself only with a session),
-a file without users and password kept until a restart,
-other settings reloading,
-the wiki's password as a hash,
-the file kept out of git (a change logged by name and key only) and never served or shown in history and the uncommitted list,
-a clone whose history has users but no settings file refused at start (an empty file allowed),
-and a new wiki's first commit without the session key.
-Zone looks at the file at most once a second, so a test that rewrites it waits that out (`write`) rather than polling logins, which the throttle would count.
-`go/configfile_test.go` covers the parser (every error and its line),
-the settings from the file (defaults, every check),
-the reload (kept on an error, a removed file, at most once per `reloadEvery`, the noshare cache),
-the line edits keeping comments,
-the 0600 write,
-`zonewiki user` and `zonewiki config` on a temp wiki (`set`/`unset`, `passwd`, `token`, `import` from an older environment),
-token hashes,
-the log line (`settingsChange`),
-and `zonewiki health` failing on the error.
-`tests/test_routes.py`'s `TestUsage` runs the binary: `zonewiki --help` (also `-h`, `help`) names every command, the environment and the flags (with two dashes, as everywhere in the docs; one works too), and each command answers `--help` with its usage, exit code 0, without a wiki.
-
-`tests/test_run_sh.py` covers `run.sh`'s container calls and `.githooks/pre-commit` against a stub `podman` first on PATH (it logs its arguments; `run`/`start` exit with `FAKE_EXIT`),
-in a scratch git repo holding copies of both,
-so it needs no engine: `leaks` passes a temporary `GIT_INDEX_FILE` in as a `/repo/…` path (absolute or relative; outside the repo: exit 2),
-in a git worktree it mounts the repo's `.git` at its own path, read-only, and passes the worktree's index by that path,
-copy mode creates the container with `--rm`,
-a build's output stays hidden unless it fails (then nothing runs) and a first build says so,
-`test` runs go vet and go test (under the race detector) before pytest,
-`bench` runs the bench twice, the second time against a race-built server, and hands `ZONE_BENCH_SLACK` on,
-`test` and `e2e` run pytest in parallel (pytest-xdist),
-`eval` refuses a missing questions file and builds with `ZONE_SEMANTIC_SEARCH` and mounts the wiki read-only,
-and the hook scans the temporary index of `commit -a` and `commit <path>`,
-refuses a leak (exit 3) and only warns when the scan fails,
-in a worktree as in the repo.
-The hook tests skip when a local gitleaks is on PATH beside bash; one in a folder of its own (the tools image's) is left off the scratch repo's PATH, so they run there and in CI.
-
-To run the suite without a local Go or venv: `./run.sh test` (gofmt, go vet, go test, then pytest, inside the tools image with the repo mounted).
-
-**The Go tests run under the race detector** (`CGO_ENABLED=1 go test -race ./...` in `run.sh`; about a minute): two requests that read and write the same memory without a lock fail the run, where they would otherwise be a wrong answer once in a while.
-The detector needs cgo, so the tools image has `gcc` and `libc6-dev`; it sets `CGO_ENABLED=0` for everything else, so the server the tests build is without semantic search's library, as before.
-What it can see is what the tests run at once: `TestReadersBesideWriters` in `go/internal/taskfiles/concurrent_test.go` is the task store's test for it (writers that change, close, reopen and move tasks between lists, and one that changes five at once as a batch does, beside readers of every kind: each reader sees every task once, and a reader's change of what it was handed is nobody else's).
-**The server itself under the detector**: `ZONE_TEST_RACE=1 ./run.sh test …` builds the server the API tests start with `-race` (`tests/goserver.py`), and a race ends that server (`GORACE=halt_on_error=1`), so the test that met it fails and the server's log says where.
-It is several times slower, so it is no part of a plain run: run it with the bench (`ZONE_TEST_RACE=1 ./run.sh test tests/bench_tasks.py -n 0 -s`, whose budgets it then passes over) after a change to what requests share (the task store's locks, the kept counts, the search's records).
-
-Both `./run.sh test` and `./run.sh e2e` run in parallel with pytest-xdist: `test` with `-n auto` (a worker per CPU), `e2e` with a worker per two CPUs (each runs its own Chromium; at one per CPU the browsers starve and timing-sensitive tests fail).
-An `-n` in the extra args overrides it (`-n 0`: one process).
-Workers are separate processes: each has its own temp wikis, servers (`base_url`) and browser, so the fixtures need no locking; a test must keep its files under `tmp_path`.
-
-**More modules, a line each**:
-- `tests/test_setup.py`: the first-run page (every page leads to it, nothing read or written before, the browser code and healthcheck answer, another site can't send it, a password or a first user who is an admin, only once, `no-login`, what counts as reachable: localhost alone, a published port, `hosts`; the log at start).
-- `tests/test_tasks_export.py`: Export and Import tasks… (a list's tasks open and closed, its name kept out of the download's header, an export imported once, into another list or the Inbox, what is no export refused, an undone delete going back).
-- `tests/test_tasks_settings.py`: the task app's settings dialog and `POST /api/tasks/settings` (where an app has settings, the embed rewritten and nothing else, a changed page refused, bad values, a list's and All tasks' settings in the registry, one commit, a wiki from before the views' names).
-- `go/asker_test.go`: `TestAskersAreMadeInFewPlaces` reads the source (`go/ast`) and fails when the functions that call `asUser` aren't the ones it lists, for `asUser(user.Name)` (also `rq.user.Name`, `userOf(r).Name`: an asker made again from its name gets back what its connection was given less), and when an `asker{…}` is written out anywhere but where a connection's is made; `TestWhatIsTheirsIsAskedInOnePlace` (above); `TestAnAskerIsWrittenAsItsName`.
-- `go/bench_test.go`: the benchmarks behind How big a wiki can be in `docs/spec/deployment.md` (a page view, with tasks, `GET /api/tasks`, the page list); **nothing runs them**, neither `./run.sh test` (`go test` runs no benchmark without `-bench`) nor CI, so their numbers are as old as that table: `go test -run '^$' -bench . -benchtime 20x` in `go/`.
-- `go/markdown_test.go`: the renderer (checkboxes, line breaks, callouts, heading ids, images and external images, links, unsafe links, raw HTML defused, renders at once keeping their own state).
-- `go/mdtext_test.go` and `go/text_test.go`: wikilinks (in tables and headings), code masked, task lines, a checkbox ticked as the render numbers them, frontmatter and tags as HTML, section links.
-- `go/oauth_test.go`: OAuth's signed client ids, redirect URIs, PKCE and codes.
-- `go/server_test.go`: the healthcheck's address, a Unix socket and one handed over by systemd, the client on a socket, idle long enough to exit.
-- `go/stalls_test.go`: a body or response that stands still fails, a slow one that moves doesn't, nor a slow route (`noStalls`).
-- `go/storage_test.go`: sizes read and written, the size settings, what counts toward `storage-max`, `checkRoom`.
-- `go/tasksettings_test.go`: an embed's parameters set and checked by the settings dialog, the views' old names.
-- `go/views_test.go`: a page view and a search walk the wiki once.
-- `go/internal/gitrepo/gitrepo_test.go`: git run with its time limit, stopped by its context, no pack inside a commit, packing and joining.
-- `go/internal/jsonobj/jsonobj_test.go`, `go/internal/taskmodel/task_test.go`: JSON objects read a member at a time; a task read from odd values and written back in its key order, assignees and their events.
-- `go/internal/mdtext/mdtext_test.go`, `go/internal/mdtext/text_test.go`: frontmatter, lines, slugs, titles, wikilinks' parts, a section's splice by characters.
-- `go/internal/settingsfile/settingsfile_test.go`: the settings file parsed, edited line by line keeping comments, written owner-only, its group sections.
-- `go/internal/textsearch/difflib_test.go`, `indexfile_test.go`: typo matching's quick bounds change no answer; the index file is what was in memory, refuses bad and wrong files, survives being replaced during a search, and `MergeIndex` writes what `WriteIndex` would.
-- `go/internal/tokenizer/tokenizer_test.go`, `go/internal/atomicfile/atomicfile_unix_test.go`: the model's tokenizer; the atomic write (below).
-- `tests/e2e/test_public.py`: a public wiki in the browser (a visitor reads, signs in from a phone's top row, edits a page); the routes are `tests/test_public.py`'s.
-- `tests/e2e/test_sharing.py`: sharing mode (the surroundings hidden, search and the editor's page list empty until typed, no switch on phones, `noshare` pages hidden).
-- `tests/e2e/test_usability.py`: the task filter field and its tag completion, the commit link and editor toolbar on phones, card swipes, a checkbox's undo.
-- `tests/e2e/test_format_bar.py`, `test_tables.py`, `test_touch.py`: the editor's formatting bar, sortable tables, the task app on a touch phone (all in Coverage, below).
-
-## Secret scanning
-
-No secret goes into the repo (No secrets in the repo in `docs/spec/security.md`): `.env` (tokens, password) is gitignored, and gitleaks looks for the rest.
-
-- **The pre-commit hook** `.githooks/pre-commit` (on once per clone: `git config core.hooksPath .githooks`) runs gitleaks over the staged changes, with a local gitleaks or else `./run.sh leaks --pre-commit --staged` in the tools image; a leak (exit 3) refuses the commit, a scan that can't run only warns.
-  For `commit -a` and `commit <path>` git hands the hook a temporary index (`GIT_INDEX_FILE`, a host path); `run.sh leaks` passes it into the container as a `/repo/…` path, so those changes are scanned too (an index outside the repo: exit 2, a warning).
-  On the first run `run.sh` says it is building the tools image.
-- **In a git worktree** `.git` is a file that names the repo's own `.git` by its host path, where the worktree's index is too: `run.sh leaks` mounts that folder into the container at the same path, read-only, so the hook and the scan of the history work there as in the repo (until 2026-11 they didn't: a commit in a worktree went in unchecked, with a warning).
-- **CI's leaks job** scans every commit (`./run.sh leaks`). gitleaks is a pinned release, checked against its published checksums in `Containerfile.tools`.
-- Tests: `tests/test_run_sh.py` (above).
-
-## The retrieval floor
-
-`tests/retrieval/` holds a sample wiki, questions and the least search must find for them (its `README.md`; Measuring retrieval in `docs/spec/search.md`).
-`TestRetrievalHoldsItsFloor` (Go, in `./run.sh test`) runs `zonewiki eval --floor` on a copy of it by keywords, and fails under the floor or above it (a gain is kept by raising the floor in the same change).
-`./run.sh retrieval` measures the hybrid ranking too, in the app's image with the model; it is CI's `retrieval` job and no part of the suites.
-`TestEvalFloors` and `TestEvalCommandHoldsAFloor` cover the floor itself: the measures as numbers, what is under and over, a mode that didn't run, a measure the run doesn't have, a target that names nothing.
-`tests/test_run_sh.py` holds `./run.sh retrieval` to the app's image built with the model and the three files.
-
-## The bench
-
-`tests/bench_tasks.py` measures the tasks at a team's size and is no part of the suites (its name is no test module's): `./run.sh bench`, which is also a job of CI's (or `./run.sh test tests/bench_tasks.py -n 0 -s` for the table alone).
-`./run.sh bench` runs it twice: with its budgets, and then against a server built with the race detector (`ZONE_TEST_RACE=1`, without budgets), which is the only run of several clients at once on the real server under the detector.
-Its tasks' part generates a wiki in git (100 users with ten Inbox tasks each, 40 shared lists, 5,000 open and 25,000 closed tasks, most assigned), signs in as one user and takes the median over HTTP of: a page without tasks, My tasks, one list, All tasks (time and size), the due count, a task changed, a task completed, My tasks reordered, ten tasks tagged at once, a search right after a write, and how much the repository grows per 100 writes, before and after a pack; and, on a repository with a history, what a write waits beside a join of the packs.
-It prints the table and fails where a number is over its budget (`BUDGETS`): run it before and after a change to how tasks are read, written or sent.
-**A budget guards a design, not a millisecond**: a time's budget is about twice what the tools image measured on a developer's machine on 2026-11-16 (the measure is beside it in the file), so a busy machine passes, and a read that waits for a commit again (1,100 ms where 80 are allowed) or a write that reads the wiki again does not. (Until then some were within noise, a page without tasks 40 ms where a loaded machine measured 42, and others so wide that they guarded nothing: All tasks 1,500 ms for 17.) `ZONE_BENCH_SLACK` multiplies the time budgets, for a slower machine: CI runs with 3. Sizes and counts are the same on any machine and have no slack.
-The numbers are the server's alone; no browser draws anything.
-**Reads beside writes** (`test_reads_beside_writes`) is the part with several clients at once: six who open a page without tasks, My tasks and the due count without a pause, and four who each change a task four times a second, for fifteen seconds; it takes the 95th percentile and the slowest of each.
-Measured on 2026-11-15, before and after readers stopped taking the writes' lock: a page without tasks 46 → 31 ms at the 95th percentile and 1,101 → 60 ms at the slowest (the second a write waits for the packing was every reader's too), My tasks 1,119 → 59 ms at the slowest.
-It also reads the Zone process's memory at the end (its resident size: 171 MB at the team's size on 2026-11-15, in a run whose start files every task; it was 224 MB while the search kept a copy of every task, and a later start that finds the task files as Zone left them is at 50 MB before its first search and 150 MB after a search and 100 changes).
-**A write beside a join** (`test_a_write_beside_a_join`) gives the wiki's repository a history first (20,000 commits to 40 files of tasks, with `git fast-import`, and 55 small packs after it, so that Zone's next pack is followed by a join), then changes a task again and again and times each write while Zone joins the packs: the slowest has a budget of 250 ms. Measured on 2026-11-16: the join took 11.6 s, 315 writes went through meanwhile and the slowest took 43 ms; with the join under the commits' lock, as it was, one write took 22.9 s.
-**Pages and groups** (`test_pages_and_groups_at_a_teams_size`) adds pages to that wiki: 2,000 shared ones, 200 in the folder of each of ten groups (300 words a page), every user in one group and every fifth in two, a group made of three others, and a guide that pulls a page in.
-It measures a group's page, the page list, a search by the same person again, a search by thirty people in turn, and thirty people who search twice a second at once for ten seconds, with a page opened ten times a second beside them (a page view asks whether its reader may change it, which walks the wiki's guides at most once a second).
-Measured on 2026-11-17: a group's page 22 ms, the page list 24 ms, a search again 70 ms, in turn 70 ms, at once 84 ms at the 95th percentile and 112 at the slowest, the page beside them 35 ms and 37 at the slowest (the guides' walk doesn't show), the server at 306 MB.
-Then a search asked about each task's list once per list, not once per task (`docHider` in `go/retrieval.go`: who sees a shared list's task looks at the list's folder, a stat under a lock every request shares, which was half of the CPU while thirty searched and made searches at once wait for each other on a busy machine): a search again 70 → 38 ms, in turn 70 → 41, at once 84 → 42 at the 95th percentile.
-The two searches by thirty guard that nothing is made per searcher (Nothing is kept per viewer in `docs/spec/search.md`): with an index per viewer, eight of them kept, they were 118 ms in turn and 559 ms at once, each search past the eight putting its person's index together again, one at a time.
-The repository's growth is measured three ways: as the commits leave it, packed in steps as Zone packs every 50 commits, and joined as Zone joins its packs (with how long the join takes).
-Measured on 2026-11-15, before and after each list got a folder of its own (Storage in `docs/spec/tasks.md`): a task changed 112 → 50 ms, a task completed 276 → 54 ms, the repository per 100 writes 66 → 3.4 MB, packed 3.8 → 0.6 MB, and joined 0.1 MB (the join: 1.7 s); then, with a write of one task reading its own file, a task changed 50 → 24 ms and completed 54 → 29 ms; the reads as before (My tasks 25 ms and 106 KB, one list 26 ms, All tasks 44 ms and 3.3 MB).
-Then All tasks: its page 3.3 MB → 57 KB (a long list's tasks no longer come with the page), and its tasks asked for, gzipped, 0.65 MB in 40 ms.
-
-## Browser tests (`tests/e2e/`)
+### Browser tests (`tests/e2e/`)
 
 End-to-end tests drive the real app in headless Chromium via Playwright.
 They run in the tools image (`Containerfile.tools`, based on Microsoft's Playwright image; it also has Go, Node, gitleaks, and pngquant for the README's screenshots) so the app image stays browser-free and the app still has no build step or npm.
-`./run.sh e2e` builds that image (cached) and runs them in parallel (above) with the repo bind-mounted; extra args pass through to pytest (e.g. `./run.sh e2e -k tasks`).
+`./run.sh e2e` builds that image (cached) and runs them in parallel (Suites and runs, below) with the repo bind-mounted; extra args pass through to pytest (e.g. `./run.sh e2e -k tasks`).
 Without Playwright installed they skip, so plain `pytest tests/` is unaffected.
 
 - `conftest.py` starts a server per test on a fresh temp wiki with its own git repo (on a port fixed for the session); each test gets a fresh browser context.
@@ -423,36 +70,6 @@ Without Playwright installed they skip, so plain `pytest tests/` is unaffected.
   Tests of how the editor behaves over a slow connection (`test_editor.py`'s `slow_saves`) put a small proxy between the browser and the server that answers auto-saves 2.5 seconds late.
   A request to any other host is aborted (offline, deterministic) and fails the test: Zone loads nothing from a CDN.
   Uncaught page JS errors fail the test.
-- Coverage: Notes filter and the search dialog's mode indicator (its wording, its update from `X-Zone-Semantic`, fitting on a phone; `test_search.py`),
-  modules (breadcrumb switcher and current module, phone tab bar (a tap acts on the touch, no click of the browser's;
-  a tap below the bar's box, as Firefox lays it out, still reaches the tab), New per module, due count on the Tasks links, pinned lists, desktop top actions, New task/`c t` adding to the Inbox from any page (starting today, without a list's tags or keep), `g t` going to My tasks;
-  `test_mobile_nav.py`),
-  side columns (sticky TOC and links from 1320px, active section, code and tables growing only when needed, none below 1320px; `test_layout.py`),
-  editor (formatting bar and Ctrl+B/I/K, the Task list dialog writing and changing an embed, auto-save + unsaved dot, no commit on auto-save, Done/Ctrl+S commit, pagehide beacon, live preview/F2, list continuation),
-  search modal (Ctrl+P/Esc, fuzzy ranking with file names and its tie-break, content matches, query syntax, highlights on the opened page, arrow/Enter nav, unlinked filter),
-  tasks (an undo armed only after its own write,
-  Plan-board drag to a day and to Unplanned,
-  touch long-press drag via CDP touch events (board, Open-tab reorder, swipe still scrolls, a long press let go in place starts selection mode, also where nothing drags, and moving after the hold cancels it),
-  board grouping by start date,
-  modal "Days before due",
-  Plan board in Open's order with in-section drops ignored,
-  view tabs and the Open tab's control (List, Plan; By person and By list where offered, and their drops: a person's section assigns, a list's moves, a private task into a shared list asks),
-  start-date Today,
-  selection (Shift/Ctrl+click, Ctrl+A, the selection bar and the menu of a selection, the bulk tag dialog's three states and undo, moving the selection to a list),
-  touch: tap-to-edit,
-  ⋯ menu/bottom sheet,
-  selection mode (taps toggle, no drags, the bar in the tab bar's place, its ways out),
-  target sizes,
-  editor scrolling/compact phone layout,
-  date picker placement),
-  sortable tables (header click cycles ascending/descending/original, numeric columns, empty cells last, keyboard, not in the editor preview),
-  layout (no horizontal page scroll at 390px phone width on page/editor/tasks views, mobile Preview button, tldr toggle geometry (and the open text lined up with the row beside the side columns), the heading copy-link icons),
-  folding sections (a click,
-  nested folds,
-  Alt+click and `z`,
-  the wavy line and its "folded" that unfolds,
-  anchors/TOC/hashchange/`beforematch`/search highlights unfolding,
-  `]` skipping folded headings, presentation and print, the chevron's place on desktop and phones; `test_fold.py`; printing and Print…: the dialog named after the page, the page alone on the paper, light on a dark screen, a real PDF out of headless Chromium: `test_print.py`), math and Mermaid diagrams (rendered from the vendored copies on a page, in the editor preview, task notes and presentation slides; a page without them loads neither library; a broken diagram keeps its source; `test_figures.py`), the Content-Security-Policy (a page's `<script>`, `onerror=` and `javascript:` link and the editor preview's handler don't run, an uploaded `.js` doesn't run as a script; `test_security.py`).
 - A test that never ends: under load Playwright's driver or the browser sometimes dies (`new_page` fails with "Target crashed" or "Connection closed while reading from the driver"), and the next call of its sync API then waits forever, which nothing inside the test can interrupt.
   So `conftest.py` stops the process of a test that runs longer than `TEST_TIMEOUT` (120 s; the slowest takes under 10), setup and teardown included (`pytest_runtest_protocol`), after writing which test it was and where every thread stood.
   With pytest-xdist that process is one worker: the run reports the test as failed ("worker crashed while running …") and goes on with a new worker, instead of standing still until someone stops it.
@@ -469,31 +86,274 @@ Without Playwright installed they skip, so plain `pytest tests/` is unaffected.
   The page's address is asked with `expect(page).to_have_url(…)` / `not_to_have_url(…)`, not read from `page.url` right after the page changed it itself (`history.replaceState`): `page.url` is what Playwright last heard, which can be a moment behind what the page already shows.
   For what it can't watch (the API's answer, a file on disk, a request a route held back), `wait_until(page, predicate)` from `conftest.py`, which looks every 100 ms (as long as `expect`) through the page, so the page's routes and events go on meanwhile (`time.sleep` would stop them).
   A fixed `page.wait_for_timeout(…)` is only for showing that nothing happens (no request went out, a card stayed where it was) and for the pace of a gesture (a touch held, a drag's steps): never for something that is about to happen.
-- Touch: `new_page(**TOUCH_PHONE)` gives a phone context with touch input, `hover: none` and `pointer: coarse` (use `.tap()`). Full-page screenshots of such a context lose the touch/hover emulation (Playwright re-renders with changed device metrics), so assert on computed styles/sizes rather than on a full-page image.
+- Touch: `new_page(**TOUCH_PHONE)` gives a phone context with touch input, `hover: none` and `pointer: coarse` (use `.tap()`).
+  Long-press drags are sent as CDP touch events.
+  Full-page screenshots of such a context lose the touch/hover emulation (Playwright re-renders with changed device metrics), so assert on computed styles/sizes rather than on a full-page image.
 - `test_screenshots` writes full-page PNGs of each view at phone/desktop × light/dark to `tests/e2e/_screenshots/` (gitignored) for visual review.
   It asserts nothing about appearance.
 - Playwright's HTML5 drag cannot auto-scroll mid-drag, so drag tests must keep source and target on screen (e.g. enlarge the viewport).
 - Keep the `playwright==` pin in `tests/requirements.txt` equal to `Containerfile.tools`' image tag version.
 - Content-Security-Policy: Zone's pages run under `script-src 'self'` (The page policy in `docs/spec/security.md`).
   The harness collects the violations Chromium reports on the console (`page.csp_violations`) and fails a test that has any, so new code can't bring in an inline script or handler unnoticed; a test that blocks one on purpose (`test_security.py`) clears the list.
-  `test_security.py` also has what only a browser shows of the other rules: an iframe's `srcdoc` never frames a form, a link's `ping` deletes nothing when it is clicked, a page frames an upload but no view of Zone's, and a task's id is text on its card, not an element.
   Under that policy Playwright can't `eval` in the page: `page.wait_for_function` needs a function (`"() => scrollY > 0"`), as an expression string is evaluated with `eval`; `page.evaluate` works either way.
 
-`go/tasklists_test.go` covers lists as places: the migration at start (lists and pins taken over from pages, each task given its list, per user with private and shared lists of one name, a wiki with nothing to take over, one that can't be read), a list's name, a task going into a list and the rules of private lists (`applyList`), rename, delete (a private list's tasks to the Inbox, a shared one's with users to `general`) and share with their tasks, pins per user, a list's settings, the Inbox and its migration (above), and where an undo's or an import's task goes (`placeSnapshot`).
-`go/internal/taskfiles/lists_test.go` covers the registry file: its format read back as written, its version, a hand-edited one read leniently, each owner's own, who may write it, an unreadable one refusing a write, and a task's `list` in its file.
-`go/internal/taskfiles/taskfiles_test.go` covers the task files on a temp folder, without a wiki or a server: a write filed by owner and year in one commit and an unchanged one committing nothing, what each user reads, the Closed view by year and its years, a corrupt file refusing the write and staying as it is, who may write (`MayWrite`, a task of another user's refused), and the archive at start.
-There too: each list's tasks in its folder (a write touching only the files of the lists it changes, a task moving between two files in one commit, an emptied list's folder removed), a wiki from before the folders filed by list at start and a second start changing nothing, one task in two files read once, a list's name that is no folder's name; a write of one task reading and writing its own file alone (beside an archive that can't be read), a write of several the files that hold them (`TestAWriteOfSeveralTasksReadsTheirFiles`: open ones of two owners no closed file, tasks of two archives each once, a delete that empties a file, one closed and one reopened in one write), an archive idle for a while no longer kept parsed; in `go/tasklists_test.go` a start that reads the archives only when it must (`TestAStartReadsTheArchivesWhenItMust`: no mark, a file changed or committed by hand, users turned off, no git) and the search's records of tasks (`TestTheSearchKeepsRecordsOfTasks`: the record without what is long, the whole task and its words read from its file, one file's docs made anew at a change, an archive's docs kept in Zone's folder and taken at a start, whose they are by their folder, a start's first search reading no shared archive); back in `go/internal/taskfiles/taskfiles_test.go`, the closed tasks filed by month across a month's and a year's end, a year's file taken over into months and removed (at start and by a plain write), an emptied archive removed, the Closed view and its years over month files, year files and both, a second start changing nothing, `TestHolds` and `TestAFileChangedByHand` (a write that changes one open task writes only `tasks.json`; a file changed by hand is not skipped wrongly); `TestSame` in `go/internal/taskmodel` (it fails when a new field of a task has no case).
-`TestACommitDoesNotPack` and `TestPack` in `go/internal/gitrepo` and `TestPackSoon` in `go/gitstore_test.go` cover the packing (no pack inside a commit, Pack, Prune, Join and Drop, a commit beside a join kept, the attributes that leave uploads out of the comparing (`TestNoDeltaForUploads`), a pack after `packEvery` commits and never two at once, a join written while a commit's lock is held and its old packs removed after it, the start's threshold, the history whole afterwards); `TestTimeToJoin` there when the packs are joined (small packs beside a large one wait until they are more than `packsMost`), a pack kept by hand left alone, a pack left half written removed after a day, a join of nothing new and one out of time dropping nothing.
-`TestClosedByMonth` in `tests/test_tasks.py` covers the month files over HTTP, `test_a_batch_reads_the_files_of_its_tasks` there the batches and the delete beside an archive that can't be read, `test_her_archives_by_month_are_hers` in `tests/test_privacy.py` that they show to their user alone.
-`TestReadsAreCopiesOfAFileParsedOnce` there covers the parsed files: a read's changes show in no later read, and a file written by Zone, changed by hand, unusable or gone is read again.
-`TestTextChangedMeanwhile` in `tests/test_tasks.py` covers `was` (a text that is another one by now refuses the write whole) and `test_save_writes_only_what_was_changed_in_the_dialog` in `tests/e2e/test_tasks.py` the dialog (only the changed fields sent, nothing sent for nothing changed, a refused save back in the dialog).
-`test_a_page_brings_the_tasks_its_lists_show_and_no_others` in `tests/test_tasks_embed.py` covers the scoped tasks a page carries and `GET /api/tasks` with a scope.
-`tests/test_task_order.py` covers a list's order changed by moves (`moves` of `POST /api/tasks/reorder`: between two, first, last, several, a stale list's neighbours, the numbers running out, what is refused), `TestOrderMoves` in `tests/test_tasks_core.py` what the browser sends, and `test_a_long_section_draws_its_top_and_shows_the_rest_on_request` and `test_a_long_list_renders_a_description_when_it_is_opened` in `tests/e2e/test_tasks.py` a long list in the browser.
-`TestMyTasksOrder` in `tests/test_tasks.py` covers My tasks' own order (from the lists' until ranked, then its own; no task written; what is closed or no task dropped) and `test_ranking_in_my_tasks_leaves_the_lists_order_alone` in `tests/e2e/test_task_inbox.py` it in the browser, with users.
-`TestTasksChanged` in `tests/test_tasks.py` covers the `Zone-Tasks` word (another one after a write of a task or a list, the same without), `test_tasks_show_what_someone_else_changed_within_a_minute` in `tests/e2e/test_tasks.py` the lists loading again by it (Playwright's clock moves the minute; a busy list is told the next one).
-`go/internal/atomicfile` has the atomic write's (a new file's mode, an old one's kept, a link written through).
+## Guards
 
-`tests/test_task_app_wiring.py` reads the task app's sources (`public/tasks.js`, `public/js/task*.js`): every `app.name` a part uses is one `tasks.js` puts on `app` or a part returns, and no name is put there twice; a misspelled or moved function is found there, not in a browser when its line runs.
+Tests that fail when a change forgets a step elsewhere: a new route, tool, setting, field or dependency that the rest of the suite or the docs don't know of yet.
 
-`tests/test_tasks_core.py` exercises the pure client logic in `public/tasks-core.js` (the locale's date helpers too) by running it under Node (`node -e`); those tests skip automatically when Node is not installed.
-`./run.sh e2e` (and CI's e2e job) runs them, since the tools image (`Containerfile.tools`) installs Ubuntu's `nodejs`; `./run.sh test` leaves them to it.
+| Test | Enforces | When it fails |
+|------|----------|---------------|
+| `test_every_route_is_covered` (`tests/test_privacy.py`) | Every route Zone registers is probed for leaks of another user's private page and tasks, or exempt | Add a probe to `READS` or `WRITES` (or, with a reason, to `EXEMPT`) |
+| `test_every_tool_is_covered` (`tests/test_privacy.py`) | Every MCP tool is probed the same way | Add a probe to `MCP_READS` or `MCP_WRITES` |
+| `tests/test_group_pages.py` | The privacy probes, aimed at a group's folder, run as an editor and an admin outside the group | Nothing to add: it takes `test_privacy.py`'s probes; fix the leak |
+| `tests/test_list_members.py` | A list for some leaks nothing to non-members on the routes that show or write tasks and lists | No completeness check: add a probe to `READS`/`WRITES` for a new task or list route by hand |
+| `tests/test_narrowed.py` | The MCP probes of the three modules above, asked by the owner through a connection without the place, answer as to a stranger | Fix the door that asks a name instead of the asker (`go/access.go`) |
+| `test_every_write_route_is_probed` (`tests/test_roles.py`) | Every write route is refused to a viewer with nothing changed or committed | Add it to `WRITES` (or `EXEMPT`); a viewer's write goes in `viewerWrites` |
+| `test_every_write_tool_is_probed` (`tests/test_roles.py`) | Every writing MCP tool is refused to a viewer | Add it to `MCP_WRITES` |
+| `test_the_lists_are_the_servers` (`tests/test_public.py`) | The test's `VISITOR`/`EDITS` equal `visitorRoutes`/`visitorEdits` in `go/server.go`, and name routes that exist | List a new visitor route in both, after checking it shows no task, note or private page |
+| `test_every_route_is_a_visitors_or_closed` (`tests/test_public.py`) | Without a session every route sends to the login page unless it is a visitor's (or needs no login) | Close the route, or list it as above |
+| `tests/test_task_app_wiring.py` | Every `app.name` a task-app part uses is put on `app` by `tasks.js` or returned by a part, none twice | Fix the misspelled or moved name, or return it from its part |
+| `TestAskersAreMadeInFewPlaces` (`go/asker_test.go`) | Only the listed functions call `asUser`; no `asUser(user.Name)` (or `rq.user.Name`, `userOf(r).Name`); an `asker{…}` written only where a connection's is made | Pass the request's asker; a deliberate new `asUser` goes on the list after a look at where its name comes from |
+| `TestWhatIsTheirsIsAskedInOnePlace` (`go/asker_test.go`) | Owners and group membership are asked of an asker only in `go/access.go` | Ask `place.own`/`sees`, `canSeeTask`, `canSeeList`, `inGroup` or `groupsFor` instead |
+| `TestSame` (`go/internal/taskmodel/task_test.go`) | `Task.Same` notices every field of a task | Give a new field a case there (and in `Same`) |
+| `TestRetrievalHoldsItsFloor` (`go/eval_test.go`) | Keyword search on `tests/retrieval/` finds exactly what `floors.json` says, no less and no more | Fix the regression, or raise the floor in the same commit with a gain; never tune the sample wiki |
+| `TestGolden` (`go/golden_test.go`) | The Go text functions give `go/testdata/golden.json.gz`'s answers | After a deliberate change, update the file (Shared case files) |
+| `tests/test_text_parity.py` | The browser's copies in `public/js/mdtext.js` give the same answers | Change the JavaScript along with the Go |
+| `*_cases.json` runners (Shared case files) | The server's and the browser's task rules agree on one table | Change both sides, add the case to the table |
+| `tests/test_image.py` | Base images and CI actions pinned by hash; the model's revision and hashes are `go/embed.go`'s; both images build with the same Go; the image ships the browser code, docs and licenses; `THIRD_PARTY_LICENSES` names what is pinned; every `public/vendor/` library has a `LICENSE`; Mermaid's notices match the vendored bundle | Update the pin, hash or notice that drifted (Dependencies in `AGENTS.md`; for Mermaid `python3 docs/licenses/mermaid_notices.py VERSION`) |
+| `tests/test_env_example.py` | `.env.example` lists every setting the source, `run.sh` and `compose.yaml` read, and nothing else | Add the new variable to `.env.example`, or to `INTERNAL` if no user sets it (run, build, test or bench only) |
+| `TestUsage` (`tests/test_routes.py`) | `zonewiki --help` names its commands, environment and flags (with two dashes); each command answers `--help` with exit 0 and without a wiki | Fix the usage text; a new command goes in the test's list |
+| Browser harness (`tests/e2e/conftest.py`) | No request to another host, no uncaught JS error, no CSP violation | Load from `public/vendor/`, fix the error, move inline script into Zone's script files |
+
+`TestWhatIsTheirsIsAskedInOnePlace` is a regex over the lines of `go/*.go`, so it catches only those written its way: `owner == user.Name` or `user.Name != t.Owner` (a name ending in `owner`/`Owner`, `==` or `!=`) and `memberOf(…)`/`groupsOf(…)`, each with the asker named `user`, `rq.user`, `rq.who()` or `userOf(r)`.
+It misses an asker under another name (`u.Name`, `who.Name`), its name copied first (`name := user.Name`), another way to compare (`slices.Contains(owners, user.Name)`, `strings.EqualFold`, a `switch`), another way into the settings (`s.Users[user.Name].Groups`, `groupMembers`), a line broken in two, and the packages in `go/internal/`: a review still has to look.
+`TestAskersAreMadeInFewPlaces` reads the source with `go/ast`, so it is not fooled by formatting.
+
+## Where tests live
+
+Kinds: **Go** (`go test`, inside the server), **API** (pytest over HTTP against the real server), **browser** (Playwright), **Node** (pytest running browser code under Node).
+Prefer an API test when the behaviour shows through a route, a Go test when it doesn't.
+
+### Go
+
+| Module | Spec | Covers |
+|--------|------|--------|
+| `go/access_test.go` | users.md, mcp.md | The permission rules: `canSee`, `canSeePath`, `hiddenPage` with sharing mode, `strayPrivate`, group folders, narrowed and read-only askers |
+| `go/asker_test.go` | security.md | Guards (above); `TestAnAskerIsWrittenAsItsName` |
+| `go/assignee_test.go` | tasks.md, users.md | `assignable`, the reserved names in `zonewiki user add` and an invite, the open tasks `user disable`/`remove` count |
+| `go/bench_test.go` | deployment.md | Benchmarks behind How big a wiki can be (Suites and runs) |
+| `go/configfile_test.go` | users.md | The settings file: parser errors, keys and checks, reload, line edits, 0600 write, `zonewiki user`/`group`/`config` on a temp wiki, roles and links |
+| `go/embed_test.go` | search.md | The semantic index: chunking, its cache, failure fallback, the worker, rank fusion, the model's download |
+| `go/eval_test.go` | search.md | `zonewiki eval`, its report and `--new`; the retrieval floor (`TestEvalFloors`, `TestEvalCommandHoldsAFloor`, `TestRetrievalHoldsItsFloor`) |
+| `go/gitstore_test.go` | rendering.md, users.md | Git helpers: commits, log, diffs, hung git, `TestLastChangedAsksGitOnce`, packing's schedule, drafts committed, `TestMissingUsers` |
+| `go/golden_test.go` | rendering.md | The text functions against `golden.json.gz` |
+| `go/mail_test.go` | users.md, deployment.md | The SMTP client, mail settings, `validEmail`, sign-up keys, `pending` |
+| `go/markdown_test.go` | rendering.md | The renderer: checkboxes, callouts, heading ids, images, links, raw HTML defused, concurrent renders |
+| `go/math_test.go` | rendering.md | The math parser and the source side agreeing with it |
+| `go/mcp_test.go` | mcp.md | The protocol (versions, notifications, errors), tool definitions, cut answers, grep's timeouts, replace templates |
+| `go/mdtext_test.go`, `go/text_test.go` | rendering.md | Wikilinks, code masked, task lines, checkbox numbering, frontmatter and tags, section links |
+| `go/merge_test.go` | editor.md | `mergeText` and the bases kept |
+| `go/oauth_test.go` | security.md | OAuth's signed client ids, redirect URIs, PKCE, codes |
+| `go/pages_test.go` | editor.md, tasks.md | Links re-pointed on a rename, folder moves, tags and lists renamed in text, `iterPages` |
+| `go/retrieval_test.go` | search.md | Search's index: chunks, the cache by place (`TestIndexCacheStaysAsIfBuiltAfresh`), the index file at start, a group's and a list-for-some's docs in members' views alone |
+| `go/sections_test.go` | editor.md, mcp.md | Sections as the parser finds them: ✎s, `findSection`, MCP sections and search chunks, CRLF |
+| `go/security_test.go` | security.md | Throttles, client key, host names, the session key, signing out, the session's user |
+| `go/server_test.go` | deployment.md | Healthcheck address, Unix and handed sockets, idle exit |
+| `go/stalls_test.go` | security.md | `noStalls`: a stalled body or response fails, a slow one doesn't |
+| `go/storage_test.go` | security.md, users.md | Sizes, the size settings, what counts toward `storage-max`, `checkRoom` |
+| `go/tasklists_test.go` | tasks.md | Lists as places, the Inbox and the migrations at start, My tasks, pins, the case files, the search's task records, archives read at start |
+| `go/tasklogic_test.go` | tasks.md, users.md | Per-user task files, `canSeeTask`, a shared task staying shared, the news' cases |
+| `go/tasksettings_test.go` | tasks.md | An embed's parameters set by the settings dialog, the views' old names |
+| `go/users_test.go` | users.md | The hash format, `authenticate` |
+| `go/views_test.go` | routes.md | A page view and a search walk the wiki once |
+| `go/internal/atomicfile/atomicfile_unix_test.go` | tasks.md | The atomic write: a new file's mode, an old one's kept, a link written through |
+| `go/internal/gitrepo/gitrepo_test.go` | rendering.md | Git's time limit and context, no pack inside a commit, Pack, Prune, Join, Drop, when to join |
+| `go/internal/jsonobj/jsonobj_test.go` | mcp.md, tasks.md | JSON objects read a member at a time |
+| `go/internal/mdtext/mdtext_test.go`, `text_test.go`, `sections_test.go` | rendering.md, editor.md | Frontmatter, lines, slugs, titles, wikilinks' parts, a section's splice |
+| `go/internal/settingsfile/settingsfile_test.go` | users.md | The settings file parsed, edited keeping comments, written owner-only, group sections |
+| `go/internal/taskfiles/concurrent_test.go` | tasks.md | `TestReadersBesideWriters`, the store under the race detector |
+| `go/internal/taskfiles/lists_test.go` | tasks.md | The registry file: format, version, lenient reads, owners, who may write |
+| `go/internal/taskfiles/members_test.go` | tasks.md | A list for some in the store: readers leave its folder out, others' writes refused |
+| `go/internal/taskfiles/taskfiles_test.go` | tasks.md | Task files on disk: filing by owner, list and month, commits, corrupt files, parsed-once reads, `TestHolds` |
+| `go/internal/taskmodel/task_test.go` | tasks.md | A task read leniently and written in key order, assignees, `TestSame`, `TestKnownKeysWrittenOnce` |
+| `go/internal/textsearch/search_test.go` | search.md | BM25, stemming, fuzzy, query syntax, excerpts, an index's views and layers |
+| `go/internal/textsearch/difflib_test.go`, `indexfile_test.go` | search.md | Typo matching's bounds; the mapped index file, bad files, `MergeIndex` |
+| `go/internal/tokenizer/tokenizer_test.go` | search.md | The embedding model's tokenizer |
+
+### API (`tests/`)
+
+| Module | Spec | Covers |
+|--------|------|--------|
+| `tests/test_admin.py` | users.md | The admin page's Users tab, groups of groups, invite and reset links |
+| `tests/test_assistant.py` | mcp.md, security.md | Connect an assistant (`/assistant`): a token with the password, revoking |
+| `tests/test_changes.py` | rendering.md | Changes (`/changes`): filters, which assistant, `source`, what it offers to undo |
+| `tests/test_config.py` | users.md | The settings file through the server: reloads, a broken file, kept out of git |
+| `tests/test_env_example.py` | deployment.md | Guard (above) |
+| `tests/test_git.py` | rendering.md | Every git path: commit on write, history, diffs, restore, deleted pages, uncommitted, no git |
+| `tests/test_group_pages.py` | users.md | A group's pages: the privacy probes, members, moves, Share…, its home |
+| `tests/test_groups_own.py` | users.md | Groups made in the browser: names, owners, leaving, ending, renaming |
+| `tests/test_image.py` | deployment.md, security.md | Guard (above) |
+| `tests/test_list_members.py` | tasks.md | Lists for some: the leak probes, members, narrowing, the task's files |
+| `tests/test_list_owners.py` | tasks.md | A shared list's owners and what a member who is none may do |
+| `tests/test_math.py` | rendering.md | Math over HTTP, section editing below a `$$` block |
+| `tests/test_mcp.py` | mcp.md | The MCP tools over HTTP: files, guides, reading and writing tools, `zone_help` |
+| `tests/test_narrow.py` | users.md | Who may move a page to fewer readers, asked first |
+| `tests/test_narrowed.py` | mcp.md | Connections given less to see: the leak probes again, the consent page's boxes |
+| `tests/test_oauth.py` | mcp.md, security.md | OAuth as a client plays it: registration, consent, tokens, connections, `TestReadOnly` |
+| `tests/test_page_writes.py` | editor.md, mcp.md | Each page write through both doors, Undo, tag and list renames |
+| `tests/test_password.py` | users.md | Change password (`/password`) |
+| `tests/test_privacy.py` | users.md | Private pages and tasks: the leak probes on every route and tool |
+| `tests/test_public.py` | security.md | Public wikis (`ZONE_PUBLIC`): what a visitor reads and writes |
+| `tests/test_rendering.py` | rendering.md | Rendering through the server: wikilinks, image widths, callouts, autolinks, a heading's id and its link's anchor |
+| `tests/test_roles.py` | users.md | Viewers: every write refused, the interface; guides written by admins only |
+| `tests/test_routes.py` | routes.md, editor.md, security.md | The wiki's routes: pages, save and merge, uploads, search, Host and Origin checks, body limits, `TestUsage` |
+| `tests/test_run_sh.py` | deployment.md | `run.sh`'s container calls and the pre-commit hook against a stub engine |
+| `tests/test_section_editing.py` | editor.md | Section editing over HTTP: a stale ✎, Keep mine |
+| `tests/test_semantic.py` | search.md | Semantic search through the server with the fake embedder |
+| `tests/test_setup.py` | security.md | The first-run page (`/setup`) |
+| `tests/test_signup.py` | users.md | Sign-up against `FakeSMTP`, approval |
+| `tests/test_socket.py` | deployment.md | Zone on a Unix socket and one handed over, idle exit |
+| `tests/test_task_app_wiring.py` | rendering.md | Guard (above) |
+| `tests/test_task_assignee.py` | tasks.md | A task's assignee through API and MCP, My tasks per user, a shared task kept in a list |
+| `tests/test_task_follow.py` | tasks.md | Following a task and what a follower is told |
+| `tests/test_task_notify.py` | tasks.md | The mail about a task given to someone, the news' `seen` |
+| `tests/test_task_order.py` | tasks.md | A list's order by moves |
+| `tests/test_task_refs.py` | rendering.md, tasks.md | `[[task:…]]` references |
+| `tests/test_tasks.py` | tasks.md | The task API: fields, series, closed archives by month, batches, history, comments, `Zone-Tasks` |
+| `tests/test_tasks_embed.py` | tasks.md | The `[[tasks:]]` embed, the row of lists, the Inbox's pill, the tasks a page brings |
+| `tests/test_tasks_export.py` | tasks.md | Export and Import tasks… |
+| `tests/test_tasks_settings.py` | tasks.md | The task app's settings dialog and its route |
+| `tests/test_users.py` | users.md | Users: sign-in, tokens, commit authors, drafts, disabled users, the private home, Make shared |
+| `tests/test_tasks_core.py` (Node) | tasks.md | `public/tasks-core.js`: dates, filter, order, `@` words, the case files |
+| `tests/test_text_parity.py` (Node) | rendering.md | Guard (above) |
+
+`tests/bench_tasks.py` is no test module (Suites and runs).
+
+### Browser (`tests/e2e/`)
+
+| Module | Spec | Covers |
+|--------|------|--------|
+| `test_admin.py` | users.md | The Users tab's dialogs and buttons |
+| `test_changes.py` | rendering.md | Changes found, filtered, leading to a diff, on a phone |
+| `test_editor.py` | editor.md | Auto-save, Done, preview, list continuation, the Task list dialog, slow saves |
+| `test_figures.py` | rendering.md | Math and Mermaid from the vendored copies |
+| `test_fold.py` | rendering.md | Folding sections |
+| `test_format_bar.py` | editor.md | The formatting bar |
+| `test_groups.py` | users.md | Groups: Share…, the switcher, making and renaming, name pills, the narrowing question |
+| `test_layout.py` | routes.md | Side columns, no horizontal scroll at phone width, copy-link icons |
+| `test_merge.py` | editor.md | Two editors on one page: merges and the conflict banner |
+| `test_mobile_nav.py` | navigation.md | Modules, the tab bar, top actions, the account menu on a phone |
+| `test_oauth.py` | mcp.md | OAuth from login to Allow under the page policy |
+| `test_print.py` | rendering.md | Printing and PDF |
+| `test_private.py` | users.md, mcp.md | The user menu, private home, Make shared, Change password, Connect an assistant |
+| `test_public.py` | security.md | A public wiki in the browser |
+| `test_quiet_tab.py` | navigation.md | A tab nobody is at asks nothing until the pointer moves |
+| `test_search.py` | navigation.md, search.md | The search modal, Notes filter, the semantic mode indicator |
+| `test_security.py` | security.md | What only a browser shows: CSP, `srcdoc`, `ping`, framing, ids as text |
+| `test_sharing.py` | navigation.md | Sharing mode |
+| `test_tables.py` | rendering.md | Sortable tables |
+| `test_task_assignee.py` | tasks.md | Assignees, My tasks, news and following, lists for some's dialogs |
+| `test_task_inbox.py` | tasks.md | Filing Inbox tasks, Leave out of My tasks, where Delete… sends tasks |
+| `test_task_refs.py` | tasks.md | Ticking task chips, completion, Make task |
+| `test_tasks.py` | tasks.md | The task app: views, boards, selection, drag, lists' dialogs and pills, long lists |
+| `test_touch.py` | tasks.md, editor.md | The task app and the editor on a touch phone |
+| `test_usability.py` | tasks.md, editor.md | Filter field, phone toolbars, card swipes, a checkbox's undo |
+
+## Shared case files
+
+Some rules are written twice, once in Go and once in the browser's JavaScript; one file of cases runs through both, so they can't drift apart.
+A case added for one side is a case for both.
+
+| File | Server side | Browser side |
+|------|-------------|--------------|
+| `go/testdata/golden.json.gz` | `TestGolden` (`go/golden_test.go`) | `tests/test_text_parity.py` (`public/js/mdtext.js`: slugs, heading ids, a wikilink's parts, the checkboxes of a text, a tick, a query's words, a list's name, a date word) |
+| `go/testdata/mine_cases.json` | `TestInMineCases` (`go/tasklists_test.go`) | `TestMyTasks` (`tests/test_tasks_core.py`) |
+| `go/testdata/news_cases.json` | `TestNewsCases` (`go/tasklogic_test.go`) | `TestNewsCases` (`tests/test_tasks_core.py`) |
+| `go/testdata/filter_cases.json` | `TestFilterCases` (`go/tasklists_test.go`) | `TestFilterCases` (`tests/test_tasks_core.py`) |
+| `go/testdata/focus_cases.json` | `TestFocusCases` (`go/tasklists_test.go`) | `TestFocusCases` (`tests/test_tasks_core.py`) |
+
+`golden.json.gz` holds the text functions' answers on every string in the tests from when Zone was ported from Python (recorded from the Python Zone) and on edge cases added since.
+After a deliberate change to one of those functions, `ZONE_GOLDEN_UPDATE=1 go test -run TestGolden` (in `go/`) logs every case that changed and writes the new answers; then make the JavaScript give them too.
+The `*_cases.json` files are edited by hand: add the case, then change both sides until both pass.
+
+## Suites and runs
+
+### Commands
+
+| Command | Runs |
+|---------|------|
+| `./run.sh test` | gofmt, go vet, `go test -race ./...`, then the API tests (pytest), in the tools image with the repo mounted; extra args go to pytest |
+| `./run.sh e2e` | The browser tests and the Node tests (`tests/test_tasks_core.py`) in the tools image |
+| `./run.sh bench` | `tests/bench_tasks.py` with its budgets, then against a race-built server |
+| `./run.sh retrieval` | Search on `tests/retrieval/` by keywords and by meaning, in the app's image with the model |
+| `./run.sh leaks` | gitleaks over the git history |
+| `(cd go && go test ./...)` | The Go tests with a local Go |
+| `pytest tests/ --ignore=tests/e2e` | The API tests with a local Go and `pip install -r tests/requirements.txt` |
+
+`./run.sh test` leaves the Node tests to `./run.sh e2e`.
+
+### Parallelism
+
+Both `./run.sh test` and `./run.sh e2e` run in parallel with pytest-xdist: `test` with `-n auto` (a worker per CPU), `e2e` with a worker per two CPUs (each runs its own Chromium; at one per CPU the browsers starve and timing-sensitive tests fail).
+An `-n` in the extra args overrides it (`-n 0`: one process, e.g. to debug one test).
+Workers are separate processes: each has its own temp wikis, servers (`base_url`) and browser, so the fixtures need no locking; a test must keep its files under `tmp_path`.
+
+### The race detector
+
+**The Go tests run under the race detector** (`CGO_ENABLED=1 go test -race ./...` in `run.sh`): two requests that read and write the same memory without a lock fail the run, where they would otherwise be a wrong answer once in a while.
+The detector needs cgo, so the tools image has `gcc` and `libc6-dev`; it sets `CGO_ENABLED=0` for everything else, so the server the tests build is without semantic search's library.
+What it can see is what the tests run at once: `TestReadersBesideWriters` in `go/internal/taskfiles/concurrent_test.go` is the task store's test for it (writers that change, close, reopen and move tasks between lists, and one that changes five at once as a batch does, beside readers of every kind: each reader sees every task once, and a reader's change of what it was handed is nobody else's).
+
+**The server itself under the detector**: `ZONE_TEST_RACE=1 ./run.sh test …` builds the server the API tests start with `-race` (`tests/goserver.py`), and a race ends that server (`GORACE=halt_on_error=1`), so the test that met it fails and the server's log says where.
+It is several times slower, so it is no part of a plain run: run it with the bench (`ZONE_TEST_RACE=1 ./run.sh test tests/bench_tasks.py -n 0 -s`, whose budgets it then passes over) after a change to what requests share (the task store's locks, the kept counts, the search's records).
+
+### The retrieval floor
+
+`tests/retrieval/` holds a sample wiki, questions and the least search must find for them (its `README.md`; Measuring retrieval in `docs/spec/search.md`).
+`TestRetrievalHoldsItsFloor` (Go, in `./run.sh test`) runs `zonewiki eval --floor` on a copy of it by keywords, and fails under the floor or above it (a gain is kept by raising the floor in `floors.json` in the same change).
+`./run.sh retrieval` measures the hybrid ranking too, in the app's image with the model; it is CI's `retrieval` job and no part of the suites.
+`tests/test_run_sh.py` holds `./run.sh retrieval` to the app's image built with the model and the three files.
+
+### The bench
+
+`tests/bench_tasks.py` measures the tasks at a team's size and is no part of the suites (its name is no test module's): `./run.sh bench`, which is also a job of CI's (or `./run.sh test tests/bench_tasks.py -n 0 -s` for the table alone).
+`./run.sh bench` runs it twice: with its budgets, and then against a server built with the race detector (`ZONE_TEST_RACE=1`, without budgets), which is the only run of several clients at once on the real server under the detector.
+`ZONE_BENCH_SIZE=small|team` picks the wiki's size (team by default).
+It prints the table and fails where a number is over its budget (`BUDGETS`): run it before and after a change to how tasks are read, written or sent.
+The numbers are the server's alone, over HTTP on loopback; no browser draws anything.
+
+**A budget guards a design, not a millisecond**: a time's budget is about twice what the tools image measures on a developer's machine (the measure is beside it in the file), so a busy machine passes, and a read that waits for a commit again or a write that reads the wiki again does not.
+`ZONE_BENCH_SLACK` multiplies the time budgets, for a slower machine: CI runs with 3.
+Sizes and counts are the same on any machine and have no slack.
+
+Its parts:
+
+- **Tasks**: a generated wiki in git (100 users with ten Inbox tasks each, 40 shared lists, 5,000 open and 25,000 closed tasks, most assigned), signed in as one user, the median over HTTP of: a page without tasks, My tasks, one list, All tasks (time and size), the due count, a task changed, a task completed, My tasks reordered, ten tasks tagged at once, a search right after a write.
+  The repository's growth per 100 writes is measured three ways: as the commits leave it, packed in steps as Zone packs every 50 commits, and joined as Zone joins its packs (with how long the join takes).
+  It also reads the Zone process's resident memory at the end.
+- **Reads beside writes** (`test_reads_beside_writes`): six clients who open a page without tasks, My tasks and the due count without a pause, and four who each change a task four times a second, for fifteen seconds; the 95th percentile and the slowest of each.
+- **A write beside a join** (`test_a_write_beside_a_join`): the repository is given a history first (20,000 commits to 40 files of tasks, with `git fast-import`, and 55 small packs after it, so that Zone's next pack is followed by a join), then a task is changed again and again while Zone joins the packs; the slowest write has a budget of 250 ms.
+- **Pages and groups** (`test_pages_and_groups_at_a_teams_size`): 2,000 shared pages and 200 in the folder of each of ten groups (300 words a page), every user in one group and every fifth in two, a group made of three others, and a guide that pulls a page in.
+  It measures a group's page, the page list, a search by the same person again, a search by thirty people in turn, and thirty people who search twice a second at once for ten seconds, with a page opened ten times a second beside them (a page view asks whether its reader may change it, which walks the wiki's guides at most once a second).
+  The two searches by thirty guard that nothing is made per searcher (Nothing is kept per viewer in `docs/spec/search.md`).
+
+### Go benchmarks
+
+`go/bench_test.go` holds the benchmarks behind How big a wiki can be in `docs/spec/deployment.md` (a page view, with tasks, `GET /api/tasks`, the page list).
+**Nothing runs them**, neither `./run.sh test` (`go test` runs no benchmark without `-bench`) nor CI, so their numbers are as old as that table: `go test -run '^$' -bench . -benchtime 20x` in `go/`.
+
+### CI
+
+Forgejo and GitHub run the same `run.sh` commands in the image `Containerfile.tools` builds (CI in `docs/spec/deployment.md`): the checks (`test`, `e2e`, `leaks`), the bench (`./run.sh bench` with `ZONE_BENCH_SLACK=3`), the retrieval floor (`./run.sh retrieval`), and the image.
+A dependency or a test command changes in one place, `run.sh` or the tools image.
+
+## Secret scanning
+
+No secret goes into the repo (No secrets in the repo in `docs/spec/security.md`): `.env` (tokens, password) is gitignored, and gitleaks looks for the rest.
+
+- **The pre-commit hook** `.githooks/pre-commit` (on once per clone: `git config core.hooksPath .githooks`) runs gitleaks over the staged changes, with a local gitleaks or else `./run.sh leaks --pre-commit --staged` in the tools image; a leak (exit 3) refuses the commit, a scan that can't run only warns.
+  For `commit -a` and `commit <path>` git hands the hook a temporary index (`GIT_INDEX_FILE`, a host path); `run.sh leaks` passes it into the container as a `/repo/…` path, so those changes are scanned too (an index outside the repo: exit 2, a warning).
+  On the first run `run.sh` says it is building the tools image.
+- **In a git worktree** `.git` is a file that names the repo's own `.git` by its host path, where the worktree's index is too: `run.sh leaks` mounts that folder into the container at the same path, read-only, so the hook and the scan of the history work there as in the repo.
+- **CI's leaks job** scans every commit (`./run.sh leaks`). gitleaks is a pinned release, checked against its published checksums in `Containerfile.tools`.
+- Tests: `tests/test_run_sh.py` (Where tests live).
