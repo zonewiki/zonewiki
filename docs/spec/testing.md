@@ -465,7 +465,7 @@ Without Playwright installed they skip, so plain `pytest tests/` is unaffected.
 - Keep the `playwright==` pin in `tests/requirements.txt` equal to `Containerfile.tools`' image tag version.
 - Content-Security-Policy: Zone's pages run under `script-src 'self'` (Security in `docs/spec/security.md`).
   The harness collects the violations Chromium reports on the console (`page.csp_violations`) and fails a test that has any, so new code can't bring in an inline script or handler unnoticed; a test that blocks one on purpose (`test_security.py`) clears the list.
-  `test_security.py` also has what only a browser shows of the other rules: an iframe's `srcdoc` never frames a form, and a task's id is text on its card, not an element.
+  `test_security.py` also has what only a browser shows of the other rules: an iframe's `srcdoc` never frames a form, a link's `ping` deletes nothing when it is clicked, and a task's id is text on its card, not an element.
   Under that policy Playwright can't `eval` in the page: `page.wait_for_function` needs a function (`"() => scrollY > 0"`), as an expression string is evaluated with `eval`; `page.evaluate` works either way.
 
 `go/tasklists_test.go` covers lists as places: the migration at start (lists and pins taken over from pages, each task given its list, per user with private and shared lists of one name, a wiki with nothing to take over, one that can't be read), a list's name, a task going into a list and the rules of private lists (`applyList`), rename, delete (a private list's tasks to the Inbox, a shared one's with users to `general`) and share with their tasks, pins per user, a list's settings, the Inbox and its migration (above), and where an undo's or an import's task goes (`placeSnapshot`).

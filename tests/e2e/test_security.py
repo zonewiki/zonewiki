@@ -66,6 +66,23 @@ def test_a_page_frames_no_form(page, wiki):
         expect(page.frame_locator(f"#{frame}").locator("form")).to_have_count(0)
 
 
+def test_a_links_ping_posts_nothing(page, wiki):
+    # A link's ping is a POST the browser sends to each URL in it when the
+    # link is followed: same-origin, with the session's cookie, to a route
+    # that needs no body (a page's delete) it would act as the viewer.
+    wiki.write("victim", "# Victim\n\nStill here.\n")
+    wiki.write("pinger", "# Pinger\n\n"
+               '<a id="go" href="/page/index" ping="/delete/victim">Read on</a>\n\n'
+               'Inline <a id="go2" href="/page/index" PING = "/delete/victim">too</a>.\n')
+    page.goto("/page/pinger")
+    assert page.locator("#go").get_attribute("ping") is None
+    assert page.locator("#go2").get_attribute("ping") is None
+    page.locator("#go").click()
+    expect(page).to_have_url(re.compile(r"/page/index$"))
+    page.wait_for_timeout(500)
+    assert (wiki.root / "victim.md").exists()
+
+
 def test_a_tasks_id_is_text_on_its_card(page, wiki):
     # A tasks file written by hand (or by an older Zone) may hold any id:
     # the card shows the task, and the id makes no element of its own.

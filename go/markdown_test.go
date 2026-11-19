@@ -188,6 +188,24 @@ func TestRawHTMLDefused(t *testing.T) {
 	if got := markdown("<div>\nthe srcdoc attribute\n</div>\n", &Env{}, false); !strings.Contains(got, "the srcdoc attribute") {
 		t.Errorf("text: %s", got)
 	}
+	// A link's ping posts to its URLs when the link is followed: renamed,
+	// however it is written; a longer name ending in "ping" stays.
+	for _, src := range []string{
+		`<a href="/page/index" ping="/delete/x">go</a>`,
+		"<div>\n<a href=/x PING = '/delete/x'>go</a>\n</div>\n",
+		`text <a/ping=/delete/x href=/x>go</a> inline`,
+		`<a href="/x"ping="/delete/x">go</a>`,
+		"<a href=/x\nping\n=/delete/x>go</a>",
+	} {
+		got := markdown(src, &Env{}, false)
+		asText := !strings.Contains(got, "<a ") && strings.Contains(got, "&lt;a")
+		if !asText && (regexp.MustCompile(`(?i)(^|[^-])ping\s*=`).MatchString(got) || !strings.Contains(strings.ToLower(got), "data-defused-ping")) {
+			t.Errorf("%s:\n%s", src, got)
+		}
+	}
+	if got := markdown(`<span data-mapping="a" data-ping="b">shipping = free</span>`, &Env{}, false); !strings.Contains(got, `data-mapping="a" data-ping="b">shipping = free`) {
+		t.Errorf("other names: %s", got)
+	}
 }
 
 // Renders at once each keep their own Env and section numbers, though

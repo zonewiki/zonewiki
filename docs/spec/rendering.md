@@ -4,7 +4,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 
 ## Rendering
 
-- Raw HTML in a page is rendered as written (goldmark's `WithUnsafe`), but no script in it runs: the Content-Security-Policy allows only Zone's own script files (Scripts in pages don't run, `docs/spec/security.md`).
+- Raw HTML in a page is rendered as written (goldmark's `WithUnsafe`), but no script in it runs: the Content-Security-Policy allows only Zone's own script files (Scripts in pages don't run, `docs/spec/security.md`); nor does a form, an iframe's `srcdoc` or a link's `ping` (No form in a page posts to Zone either, there).
   Form controls, `<meta>` and `<base>` in it show as text (`defuseHTML`: a form in a page could post to Zone as the viewer).
   One goldmark set up with Zone's rules is built per kind (block, inline) and reused from a pool (`mdRenderer` in `go/markdown.go`), bound to one render's `Env` at a time;
   how headings carry their ids is the renderer's (`Env.HeadingIDs`: `id` on a page, `data-pid` in the search preview, none in task descriptions and comments), not a rewrite of its output.

@@ -213,6 +213,9 @@ Also know this:
   It is renamed wherever `srcdoc` is followed by `=` (or ends the raw HTML: what is rendered next may start with the `=`),
   not only inside what a pattern takes for a tag: a browser ends tags and quoted values by its own rules (in `<iframe a=b' srcdoc=…>` the quote belongs to `a`'s value),
   and a pattern that read it otherwise let the attribute through.
+  **A link's `ping` is renamed** (`data-defused-ping`) as well, wherever `ping` is a name of its own followed by `=` (not `data-ping=` or `mapping=`): a followed link posts to each URL in it (Chromium and Safari send pings by default), same-origin and with the viewer's cookie,
+  so `<a href="/page/index" ping="/delete/plans">Read on</a>` would delete a page with the click that reads on.
+  And the request checks refuse a ping that gets past the render (403 "A link's ping changes nothing"; `isPing` in `go/security.go`): a request with a `Ping-To` or `Ping-From` header, or of type `text/ping`.
   Zone's own checkboxes and controls aren't raw HTML and stay.
   The rest of a page's HTML (images, links, iframes, styles) stays allowed, as far as it loads from Zone itself (below).
   `X-Content-Type-Options: nosniff` on every response, so no JSON or text response runs as a script, and uploads not shown inline go out as `application/octet-stream` (`serveUpload`), so an uploaded `.js` can't be loaded by `<script src>` either, as `script-src 'self'` trusts Zone's own origin.

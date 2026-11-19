@@ -618,6 +618,10 @@ func checks(next http.Handler) http.Handler {
 			http.Error(w, "Cross-site request refused", http.StatusForbidden)
 			return
 		}
+		if isPing(r) {
+			http.Error(w, "A link's ping changes nothing", http.StatusForbidden)
+			return
+		}
 		limit := int64(bodyMax)
 		if r.URL.Path == "/api/upload" {
 			limit = settings().uploadMax()

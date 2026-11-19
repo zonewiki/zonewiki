@@ -2380,6 +2380,19 @@ class TestCrossSiteWrites:
         assert client.post("/delete/victim", headers={**HOST, "Origin": "null"}).status_code == 403
         assert (wiki_dir / "victim.md").exists()
 
+    def test_a_links_ping_is_refused(self, client, wiki_dir):
+        # A followed <a ping=…> posts same-origin with the session's cookie:
+        # the render renames the attribute, and the checks refuse a ping
+        # that got past it, by its headers or its type.
+        write_page(wiki_dir, "victim", "# Victim\n")
+        for headers, kind in (({"Ping-To": "http://localhost:5000/page/index"}, None),
+                              ({"Ping-From": "http://localhost:5000/page/x"}, None),
+                              ({}, "text/ping"), ({}, "Text/Ping; charset=x")):
+            resp = client.post("/delete/victim", headers={**self.SAME, **headers}, data=b"PING",
+                               content_type=kind or "application/octet-stream")
+            assert resp.status_code == 403 and b"ping" in resp.data, (headers, kind)
+        assert (wiki_dir / "victim.md").exists()
+
     def test_same_origin_and_originless_writes_work(self, client, wiki_dir):
         write_page(wiki_dir, "a", "# A\n")
         write_page(wiki_dir, "b", "# B\n")

@@ -70,6 +70,19 @@ func crossSite(r *http.Request) bool {
 	return err != nil || u.Host != r.Host
 }
 
+// isPing: the request is a link's ping (hyperlink auditing: a POST the
+// browser sends, same-origin and with the session's cookie, to each URL in
+// an <a ping=…> that is followed), which Zone answers with nothing. The
+// render renames the attribute in a page's raw HTML (pingRE); this holds
+// for one that gets past it. Browsers mark a ping by its headers and type.
+func isPing(r *http.Request) bool {
+	if r.Header.Get("Ping-To") != "" || r.Header.Get("Ping-From") != "" {
+		return true
+	}
+	mt, _, _ := strings.Cut(r.Header.Get("Content-Type"), ";")
+	return strings.EqualFold(strings.TrimSpace(mt), "text/ping")
+}
+
 // What a page may run and load. Pages render their raw HTML as written, and
 // pages are also written by AI clients (MCP), which may have read a prompt
 // injection: a <script>, an onerror= or a javascript: link in a page would

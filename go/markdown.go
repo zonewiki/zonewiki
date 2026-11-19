@@ -533,14 +533,24 @@ var defusedTagRE = regexp.MustCompile(`(?i)<(/?(?:form|input|button|select|texta
 // right after the name, as what is rendered next may start with the "="
 // (a list item's text after <pre></pre><iframe srcdoc). The word in a
 // sentence stays.
+//
+// pingRE: a link's ping attribute with a value, likewise wherever it is
+// followed by "=", but only as a name of its own (not "mapping=",
+// "data-ping="): a followed link posts to each URL in it, same-origin and
+// with the viewer's cookie, so <a ping="/delete/plans"> would delete a
+// page with the click that reads on (the request checks refuse a ping
+// too: notPing).
 var (
 	htmlTagRE = regexp.MustCompile(`<[A-Za-z](?:[^>"']|"[^"]*"|'[^']*')*`)
 	srcdocRE  = regexp.MustCompile(`(?i)srcdoc([\t\n\f\r ]*(?:=|$))`)
+	pingRE    = regexp.MustCompile(`(?i)(^|[^A-Za-z0-9_-])(ping[\t\n\f\r ]*(?:=|$))`)
 )
 
-// defuseHTML: raw HTML with defusedTagRE's tags as text and no srcdoc.
+// defuseHTML: raw HTML with defusedTagRE's tags as text and no srcdoc or
+// ping.
 func defuseHTML(raw []byte) []byte {
 	raw = srcdocRE.ReplaceAll(raw, []byte("data-defused-srcdoc$1"))
+	raw = pingRE.ReplaceAll(raw, []byte("${1}data-defused-$2"))
 	return defusedTagRE.ReplaceAll(raw, []byte("&lt;$1"))
 }
 
