@@ -552,7 +552,8 @@ Where it goes, by `page`:
 - with users, a file for a page in the user's private folder goes to `private/<user>/_assets/` and only they can open it;
 - one for a page of a group they are in to `groups/<group>/_assets/`, for the group;
 - a task's id as `page` makes it the task's file, in `_tasks/files/<id>/_assets/`, seen by who sees the task (A task's files in `docs/spec/tasks.md`; "No task with this id" for one the user doesn't see);
-- otherwise it is shared.
+- one for a shared page, or for none, is shared;
+- one for a page in a place that isn't the user's (another user's private folder, a group's they aren't in, one the connection wasn't given) is refused with which folders are theirs (`uploadPlace`), rather than left with everyone's: judged by the place alone, so it says nothing of whether the page is there.
 
 The task's id may be the 8-character short id the tools show (or more of it), a `[[task:…]]` reference or a `/tasks?task=…` link, when no page goes by that name (`uploadTaskRef`): it is found among the tasks the user sees, and an id that names none, or several, is refused rather than taken for a page's name, which would leave the task's file with everyone's.
 

@@ -159,8 +159,10 @@ def test_ordinary_work_on_what_is_shared_goes_on(client, private_wiki, without_p
     auth = {**HOST, "Authorization": f"Bearer {a}"}
     assert client.get("/private/alice/_assets/photo.png", headers=auth).status_code == 404
     assert client.get("/private/alice/_assets/photo.png", headers={**HOST, "Authorization": "Bearer alice-token"}).status_code == 200
-    errors(client, a, "upload_file", filename="smuggled.txt", text="x", page=P.DIARY)
+    text, refused = errors(client, a, "upload_file", filename="smuggled.txt", text="x", page=P.DIARY)
+    assert refused and "this connection wasn't given yours" in text, text
     assert not (private_wiki / "private/alice/_assets/smuggled.txt").exists()
+    assert not (private_wiki / "_assets/smuggled.txt").exists()     # nor left with everyone's
 
 
 def test_the_same_user_with_everything_reads_it(client, private_wiki):

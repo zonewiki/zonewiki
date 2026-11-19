@@ -41,13 +41,21 @@ func uploadDir(p place) string {
 
 // uploadPlace: where a file that user uploads for page is kept: with the
 // page, when it is in their own private folder or in a group's they are in
-// (a file is seen by who sees the page it is for), else with the shared
-// ones.
-func uploadPlace(user asker, page string) place {
-	if p := placeOf(page); p.theirs(user) {
-		return p
+// (a file is seen by who sees the page it is for), with the shared ones for
+// a shared page or none. ok false: page is in a place that isn't user's
+// (another user's private folder, a group's they aren't in, one their
+// assistant's connection wasn't given, no one's): the file is refused, as
+// left with the shared ones it would be everyone's, which whoever sent it
+// for that page didn't mean. Judged by the place alone, so a refusal says
+// nothing of whether the page is there.
+func uploadPlace(user asker, page string) (place, bool) {
+	switch p := placeOf(strings.Trim(page, "/")); {
+	case p.shared():
+		return place{}, true
+	case p.theirs(user):
+		return p, true
 	}
-	return place{}
+	return place{}, false
 }
 
 // taskUploadPlace: where a file that user uploads for the task id is kept:
@@ -241,7 +249,8 @@ func apiUpload(w http.ResponseWriter, r *http.Request) {
 	if originalName == "" {
 		originalName = "upload" + uploadExt(fileType)
 	}
-	owner := uploadPlace(userOf(r), r.FormValue("page"))
+	page := r.FormValue("page")
+	owner, ours := uploadPlace(userOf(r), page)
 	// task: the file is for a task (its id; the dialog's, for a new one).
 	if id := r.FormValue("task"); id != "" {
 		var ok bool
@@ -249,6 +258,9 @@ func apiUpload(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "No such task", http.StatusNotFound)
 			return
 		}
+	} else if !ours {
+		http.Error(w, notYours(strings.Trim(page, "/"), userOf(r)), http.StatusNotFound)
+		return
 	}
 	if changesNothing(userOf(r)) {
 		http.Error(w, noChangeMsg(userOf(r)), http.StatusForbidden)

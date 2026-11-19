@@ -439,7 +439,13 @@ def test_an_upload_for_a_private_page_is_private(alice, wiki):
     bob = alice
     assert bob.get("/private/alice/_assets/pic.png", headers=HOST).status_code == 404
     assert bob.get("/_assets/pic.png", headers=HOST).status_code == 200
-    assert upload(bob, DIARY, "b.png").get_json()["url"] == "/_assets/b.png"   # not into alice's folder
+    # Not into alice's folder, nor with everyone's, which his file for her page didn't mean.
+    resp = upload(bob, DIARY, "b.png")
+    assert resp.status_code == 404 and "only your own folder private/bob/" in resp.get_data(as_text=True)
+    assert not (wiki / "_assets/b.png").exists() and not (wiki / "private/alice/_assets/b.png").exists()
+    # The same for a page of hers that isn't there: the place alone decides.
+    none = upload(bob, "private/alice/none", "c.png")
+    assert none.status_code == 404 and none.get_data(as_text=True) == resp.get_data(as_text=True).replace("diary", "none")
 
 
 def test_assets_in_other_folders_are_not_served(alice, wiki):
@@ -806,7 +812,9 @@ def test_her_private_upload_is_hers_over_mcp_and_with_her_token(client, wiki):
     text = mcp(client, "upload_file", token="alice-token", filename="plan.txt", text="hers", page=DIARY)
     assert "[plan.txt](/private/alice/_assets/plan.txt)" in text and "only alice can open it" in text
     assert (wiki / "private/alice/_assets/plan.txt").read_text() == "hers"
-    assert "[bobs.txt](/_assets/bobs.txt)" in mcp(client, "upload_file", filename="bobs.txt", text="his", page=DIARY)
+    refused = rpc(client, "tools/call", {"name": "upload_file", "arguments": {"filename": "bobs.txt", "text": "his", "page": DIARY}})
+    assert refused["isError"] and "Nothing uploaded" in refused["content"][0]["text"]
+    assert not (wiki / "_assets/bobs.txt").exists()
     sent = client.post("/api/upload", data={"file": (BytesIO(b"hers too"), "plan.txt"), "page": DIARY},
                        content_type="multipart/form-data", headers={**HOST, "Authorization": "Bearer alice-token"})
     assert sent.get_json() == {"url": "/private/alice/_assets/plan-2.txt"}

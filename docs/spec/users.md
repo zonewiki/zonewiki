@@ -1025,7 +1025,8 @@ Move to wiki and Append to page take a note out of your folder (to the folder yo
 ### Private uploads
 
 Uploads for a private page are private: the editor sends the page's slug with an upload (`page`, `markdownEditor`'s `page` option), and a file for a page in your own folder is kept in `private/<you>/_assets/` (`uploadDir`; URL `/private/<you>/_assets/<file>`, the folder's own path);
-any other page's uploads go to `_assets/` as before.
+a shared page's uploads go to `_assets/` as before.
+A file sent for a page in a place that isn't yours (another user's private folder, a group's you aren't in, one your assistant's connection wasn't given) is refused, 404 with which folders are yours (`uploadPlace`), whether or not the page is there: kept with the shared ones it would be everyone's, which whoever sent it for that page didn't mean.
 `GET /_assets/<file>` serves `_assets/<file>` (a file straight in it, no subfolder), and `GET /private/<user>/_assets/<file>` only to that user (404 for anyone else, and for any other subfolder).
 
 **A page taken out of your folder takes the uploads it shows with it** (`shareUploads`, in the rename's commit): each `/private/<you>/_assets/<file>` it links,
@@ -1166,6 +1167,7 @@ To the others the link is its words.
 
 Uploads for a group's page are the group's: the file is kept in `groups/<group>/_assets/` (`uploadPlace`, `uploadDir`; URL `/groups/<group>/_assets/<file>`) and served to its members only, 404 for anyone else and for any other subfolder (`serveGroupUpload`);
 an assistant reads and adds them with `read_file` and `upload_file` (`page`), or over HTTP with its user's token.
+A file for a page of a group you aren't in is refused, as for another user's private page (Private uploads, above).
 A page that leaves the folder takes the uploads it shows with it (`shareUploads`), as one that leaves a private folder does: to `_assets/` for everyone, to another group's or a private folder's `_assets/` when it goes there (a move to fewer), never to more people than the page.
 
 ### A group's search, guides and tasks

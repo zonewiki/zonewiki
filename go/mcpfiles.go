@@ -79,7 +79,7 @@ func uploadFileTool(args jsonObj, base string, user asker) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	owner := uploadPlace(user, strings.Trim(page, "/"))
+	owner, ours := uploadPlace(user, page)
 	// page names a task by its id: the file is the task's.
 	if id, isTask, err := uploadTaskRef(user, page); err != nil {
 		return "", err
@@ -88,6 +88,8 @@ func uploadFileTool(args jsonObj, base string, user asker) (string, error) {
 		if owner, ok = taskUploadPlace(user, id); !ok {
 			return "", toolErr("No task with this id")
 		}
+	} else if !ours {
+		return "", toolErr("Nothing uploaded: " + notYours(strings.Trim(page, "/"), user))
 	}
 	name = freeUploadName(owner, name)
 	if err := storeUpload(user, owner, name, bytes.NewReader(data), mcpMark(args)); err != nil {

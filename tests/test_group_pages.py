@@ -292,9 +292,11 @@ def test_an_upload_for_a_groups_page_is_the_groups(client, wiki):
     assert git(wiki, "log", "-n1", "--format=%an|%s") == "alice|Upload groups/dev/_assets/plan.png"
     assert client.get("/groups/dev/_assets/plan.png", headers=HOST).data == b"plan"
     assert client.get("/groups/dev/sub/plan.png", headers=HOST).status_code == 404
-    # A file for a page of a group she isn't in goes with the shared ones, as for another user's page.
+    # A file for a page of a group she isn't in is refused, as for another
+    # user's page: left with the shared ones, it would be everyone's.
     resp = client.post("/api/upload", data={"file": (BytesIO(b"x"), "x.png"), "page": "groups/ops/y"}, headers=HOST)
-    assert resp.get_json() == {"url": "/_assets/x.png"}
+    assert resp.status_code == 404 and "only the folders of the groups you are in" in resp.get_data(as_text=True)
+    assert not (wiki / "_assets/x.png").exists()
     for who in OUTSIDERS:
         sign_in(client, who)
         assert client.get("/groups/dev/_assets/plan.png", headers=HOST).status_code == 404
@@ -302,7 +304,7 @@ def test_an_upload_for_a_groups_page_is_the_groups(client, wiki):
         client.post("/logout", headers=HOST)
         assert client.get("/groups/dev/_assets/plan.png", headers=token).status_code == 404
         resp = client.post("/api/upload", data={"file": (BytesIO(b"theirs"), "plan.png"), "page": DIARY}, headers=token)
-        assert "/groups/" not in resp.get_data(as_text=True)
+        assert resp.status_code == 404 and not (wiki / "_assets/plan.png").exists()
         assert (wiki / GROUP / "_assets/plan.png").read_bytes() == b"plan"
         assert "No such file" in mcp(client, who, "read_file", url="/groups/dev/_assets/plan.png")
     assert "plan.png (image/png" in mcp(client, "carol", "read_file", url="/groups/dev/_assets/plan.png")
