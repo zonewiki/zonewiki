@@ -853,7 +853,7 @@ Wrong tries are throttled per client as with the wiki's one password (`loginThro
 
 ### Who is signed in
 
-The user's name is shown beside Sign out (`.signout-user`, "Signed in as alice") on phones, in the page's top row, and opens the account menu there (Groups, Connect an assistant, Change password: what the row itself doesn't have; so a group is made, a token made and a password changed from a phone too).
+The user's name is shown beside Sign out (`.signout-user`, "Signed in as alice") on phones, in the page's top row, and opens the account menu there (Groups, Connect an assistant, Change password, Help: what the row itself doesn't have; so a group is made, a token made and a password changed from a phone too).
 On desktop both are in the user menu (Private pages, below): the form is hidden there (`.signout-user-menu`).
 
 ### Sessions and passwords

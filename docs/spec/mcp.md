@@ -263,13 +263,16 @@ Without git, a tool error.
 #### `zone_help`
 
 Zone's own documentation (`go/manual.go`), so the model answers how-to questions about Zone (how to rename a task list's tabs, a setting, the query syntax) from the docs instead of guessing.
-The docs are `README.md` (topic `readme`) and `docs/spec/*.md` (topic = file name), all but `testing.md`; the `Containerfile` copies them next to the browser code (`/app/public`), and `docsRoot` finds them there or in the checkout; without them the tool errors.
+The docs are the manual, `docs/manual/*.md` (topic `manual` for its contents, `README.md`, and `manual/<page>` for a page, in reading order: Help in `docs/spec/routes.md`), `README.md` (topic `readme`) and `docs/spec/*.md` (topic = file name), all but `testing.md`;
+the `Containerfile` copies them next to the browser code (`/app/public`), and `docsRoot` finds them there or in the checkout; without them the tool errors.
 
 - With `query`, the best passages by BM25 (`manualFind`: sections split by `chunkSections` into pieces of at most `manualChunkChars`, 1500, the doc's title, topic and heading weighted like a page title; the index is rebuilt when a doc file changes), each as `Title › heading` with its `topic:` and `heading:`.
+  The manual's best passages take the first half of the places (rounded up), the README's and the spec's the rest, each filling what the other leaves: the manual answers in a user's words, the spec has every rule.
+  Their scores aren't compared, since a spec section that lists files scores high on any word it names.
 - With `topic`, the whole doc (`tasks.md` and the case of the name are accepted); with `heading` too, one section, as read_page's `heading` (`sectionLines`), a missing one an error naming the doc's headings.
 - With neither, the list of topics with their `##`/`###` headings.
 
-The description tells the model the spec is written for developers, so it answers in what the user types or clicks.
+The description tells the model the manual is written for users and the spec for developers, so it answers in what the user types or clicks, and points the user to the manual's page in the browser (`/help/<page>`).
 
 #### `read_guides`
 

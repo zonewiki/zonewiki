@@ -2110,10 +2110,14 @@ class TestZoneHelp:
         assert err and "isn't installed" in text
 
     def test_the_real_docs(self, client):
-        """The checkout's README and spec, every spec file but testing.md."""
+        """The checkout's manual (in the order of its contents), README and
+        spec, every spec file but testing.md."""
         spec = settings.REPO / "docs" / "spec"
-        topics = re.findall(r"^(\w[\w-]*): ", call(client, "zone_help")[0], re.M)
-        assert topics == ["readme"] + sorted(p.stem for p in spec.glob("*.md") if p.stem != "testing")
+        contents = (settings.REPO / "docs" / "manual" / "README.md").read_text()
+        manual = list(dict.fromkeys(re.findall(r"\]\(([a-z-]+)\.md\)", contents)))
+        topics = re.findall(r"^(\w[\w/-]*): ", call(client, "zone_help")[0], re.M)
+        assert topics == (["manual"] + ["manual/" + m for m in manual] + ["readme"]
+                          + sorted(p.stem for p in spec.glob("*.md") if p.stem != "testing"))
         text, err = call(client, "zone_help", query="tasks tab names labels")
-        assert not err and "topic: tasks" in text
+        assert not err and "topic: manual/tasks" in text
 

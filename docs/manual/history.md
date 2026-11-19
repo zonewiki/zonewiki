@@ -1,0 +1,142 @@
+# History and undo
+
+Zone keeps every version of every page, so nothing you or anyone else writes is lost for good.
+This page shows how to look back at a page's versions, see what changed across the whole wiki,
+bring back an old version or a deleted page, and undo a change, including one made by an AI assistant.
+
+## Every change is a commit
+
+Your wiki is a git repository, and Zone records each change as a git **commit**: a saved version with a time, a short message and an author.
+These all make a commit:
+
+- **Done** in the editor
+- making, renaming, moving, deleting or restoring a page
+- uploading a file
+- an AI assistant's change
+- an undo
+
+With several users, each commit is made in the name of whoever made the change, and an assistant's in the name of the person it works for.
+In a wiki with a single login, commits carry no name.
+
+Two things write a page without a commit: auto-save while you type, and ticking a checkbox on a page.
+Those are kept as [uncommitted changes](#uncommitted-changes) until the next commit of the page.
+
+Because it's plain git, you can also read the history with any git tool, or back it all up with `git push` (see [Your data](your-data.md)).
+
+## A page's history
+
+Choose **History** in the page's ⋯ menu.
+It lists every saved version of the page, newest first, one row each:
+
+- the date and time;
+- what the save did: Created, Edited, Renamed from "…", Link updated (when a rename elsewhere changed a link on this page), Restored the version of …, Undid the change of …, Deleted;
+- who made it, and through which assistant, as in "Anna through Claude";
+- how many lines were added and removed.
+
+The page as it is now is marked **Current**.
+If it has changes not committed yet, a **Now · Not committed yet** row is the current one.
+The history follows a page across renames, so versions from before its old name are there too.
+
+### Reading an old version
+
+Click a row to open that version.
+A bar above it says which one it is, such as "The version of 2026-10-08 14:32 · 2 versions back".
+**← Older** and **Newer →** step through the versions; from the newest old version, **Current →** goes to the page itself.
+
+### Seeing what a save changed
+
+Click **Changes** on a row of the history, or **What this save changed** on a version.
+You see the lines that save took out in red and the lines it put in in green.
+**View this version** opens the whole page as that save left it.
+
+### Restoring a version
+
+On an old version, click **Restore this version** and confirm.
+The page becomes that version again, as a new commit.
+Nothing is thrown away: the page as it was before the restore stays in its history, so you can go back to it the same way.
+
+## Changes across the wiki
+
+**Changes** lists what changed in the whole wiki, newest first, grouped by day.
+Open it from the search dialog (Ctrl+P, where it's listed above the pages), or with **Changes across the wiki** on any page's history.
+
+Each row shows:
+
+- the time and what the change was;
+- who made it, with users;
+- an **assistant** mark if an AI assistant made it, or **through Claude** (the name it gave when it was connected);
+- **from …** with an address, if the assistant said where its text came from;
+- what it changed: each page as a link to what changed on it, **Tasks** for changes to tasks, and the names of other files such as uploads.
+
+**Show more** at the bottom loads older changes.
+You only see changes to pages and files you're allowed to see.
+
+### Filtering changes
+
+The filters above the list narrow it down; click **Show** to apply them.
+
+| Filter | Shows |
+|---|---|
+| **By** | the changes of one person (with users) |
+| **Only by an assistant** | the changes AI assistants made |
+| **In the folder** | changes to pages in one folder, such as `projects` |
+| **Since** | changes from that day on |
+
+**All changes** clears the filters.
+A filtered list has its own address, so you can bookmark "what my assistant did this week".
+**Connect an assistant** links straight to your assistants' changes.
+
+## Undoing a change
+
+A row in Changes can have an **Undo** button.
+Click it and every page that change touched goes back to how it was before it:
+an edited page gets its old text back, a page it made is deleted again, a page it deleted comes back.
+There's no question first, because the undo is itself a change at the top of the list, and undoing the undo brings the change back.
+A page's history calls it "Undid the change of …".
+
+**Undo** is offered only when it can be done cleanly:
+
+- the change touched only pages, not tasks or uploads;
+- you may edit every page it touched;
+- it didn't rename or move a page (rename it back instead);
+- none of its pages has changed since, by anyone.
+
+If a page changed again, restore the version you want from that page's history instead.
+When an undo is refused, Changes says why, such as "Not undone. garden was changed again since …".
+
+### Undoing an assistant's work
+
+When an AI assistant makes several changes for you in one go, the latest of them offers **Undo all 3** (with the number of changes).
+It asks first, saying which assistant made them and when, then takes them all back in one commit.
+It's offered as long as nobody else changed those pages in between.
+More about assistants and what they may do is in [AI assistants](assistants.md).
+
+## Deleted pages
+
+A deleted page stays in the history.
+To bring one back, open **Deleted Pages** from the search dialog (Ctrl+P).
+It lists every deleted page, most recently deleted first, with its name and the day it was deleted.
+
+- Click a page's title to read its last version.
+- Click **Restore** to bring it back as it was.
+
+If you open the address of a deleted page, Zone says "This page was deleted on …" and offers **Restore page**.
+
+## Uncommitted changes
+
+An **uncommitted change** is a page whose file differs from its last commit.
+It comes from:
+
+- auto-saved text you didn't finish with **Done**;
+- ticking a checkbox on a page;
+- editing the files directly on disk, with another editor or a script.
+
+When there are some, a badge with their number appears at the top left.
+Click it for **Uncommitted Changes**, the list of those files, with **Diff** to see the change and **View** to open the page.
+**Commit All** commits each file on its own.
+A page with an uncommitted change also says "— uncommitted" after **Last changed**, with a **Commit** link.
+
+You rarely need to do this yourself.
+When someone else saves, renames or deletes a page that holds your uncommitted text, Zone commits it first in your name,
+so your text is in the history under your name and never ends up in someone else's change.
+Text edited on disk has no known author, so it's committed by whoever commits it.

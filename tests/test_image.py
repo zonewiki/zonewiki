@@ -59,9 +59,10 @@ def test_both_images_build_with_the_same_go():
 
 
 def test_the_image_ships_the_docs_and_the_browser_code():
-    # zone_help finds README.md and docs/spec/ next to public/.
+    # Help and zone_help find README.md, docs/manual/, docs/spec/ and the screenshots next to public/.
     final = CONTAINERFILE[CONTAINERFILE.rindex("\nFROM "):]
-    for line in ("COPY public/ public/", "COPY README.md ./", "COPY docs/spec/ docs/spec/"):
+    for line in ("COPY public/ public/", "COPY README.md ./", "COPY docs/manual/ docs/manual/",
+                 "COPY docs/spec/ docs/spec/", "COPY docs/screenshots/*.png docs/screenshots/"):
         assert line in final
 
 

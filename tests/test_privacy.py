@@ -1176,6 +1176,7 @@ EXEMPT = {
     "POST /oauth/authorize", "POST /oauth/token", "POST /assistant/connections/{id}/revoke",
     "POST /assistant/connections/{id}/read-only",
     "GET /setup", "POST /setup",    # the first-run page: only while the wiki has no login (test_setup.py)
+    "GET /help", "GET /help/{name...}",   # Zone's manual and spec, from docs/: nothing of the wiki's (test_help.py)
 }
 
 

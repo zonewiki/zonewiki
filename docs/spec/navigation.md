@@ -70,12 +70,13 @@ The page renders the state (`semanticStatus`: on, indexing, failed, off) as `dat
 |-------|------------|------|
 | "Tasks" | slug shown as `/tasks`, `href: /tasks`: the built-in tasks page | always |
 | "Notes" | slug `/notes`, href `/notes` | always |
+| "Help" | slug `/help`, href `/help`: the manual (Help in `docs/spec/routes.md`) | always (not for a visitor) |
 | Changes | `href: /changes` | git only |
 | "Deleted Pages" | `_deleted` | git only |
 
-Tasks and Notes are modules, linked from the module switcher, so the empty-query list leaves them out (Notes is found by typing: it matches searches for "notes").
+Tasks and Notes are modules, linked from the module switcher, and Help is in the user menu and the shortcuts dialog, so the empty-query list leaves them out (each is found by typing: Notes matches searches for "notes").
 Changes and Deleted Pages, also marked `special`, are pinned above the pages whatever the sort, set apart by a stronger rule (`.page-list-special`).
-Typing matches all four like any other entry; "Unlinked only" leaves them out.
+Typing matches all five like any other entry; "Unlinked only" leaves them out.
 
 Special pages (starting with `_`) are not filtered out of the search modal or backlink counts but are treated as regular pages otherwise.
 
@@ -148,7 +149,8 @@ Your other lists and all tasks are one click from there, in the task app's **lis
 Who is signed in,
 **Groups** (your groups, and where you make one: `/groups`, Groups in `docs/spec/users.md`),
 **Connect an assistant** (your MCP token, `/assistant`, `docs/spec/mcp.md`),
-**Change password** (`/password`, Signing in in `docs/spec/users.md`) and Sign out are in the **user menu**,
+**Change password** (`/password`, Signing in in `docs/spec/users.md`),
+**Help** (the manual, `/help`: Help in `docs/spec/routes.md`) and Sign out are in the **user menu**,
 opened by the **user button** at the top right on desktop.
 Phones have Sign out in the page's top row, and the three pages' links in the shortcuts dialog.
 
@@ -457,7 +459,7 @@ It lists nothing the code doesn't answer, and leaves out what a wiki doesn't hav
 Its groups (Anywhere, Go to, Create, Page, Editor, Snippets, Presentation, Tasks: select, Tasks: act, Tasks: view, Tasks: plan, A task's dialog, Search) are short: key caps on the left, a few words on the right.
 They flow into as many columns of 15rem as the screen is wide (CSS `columns`, a group never split), up to 1480px, so on a desktop (1280×720 and up) the whole dialog fits on screen without scrolling.
 Where it doesn't fit (a phone, at most 640px wide: one column), the dialog stays inside the screen and scrolls within itself, its title and **×** staying at the top; Esc and a click on the backdrop close it too.
-At the bottom are Zone's version and build, and the links to Connect an AI assistant, Change password and Groups:
+At the bottom are Zone's version and build, and the links to Help (the manual), Connect an AI assistant, Change password and Groups:
 on phones these are the user menu's three pages (The user menu, above).
 
 ---

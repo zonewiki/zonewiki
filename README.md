@@ -64,7 +64,7 @@ Point `ZONE_DATA` at an existing folder of Markdown notes to use those.
 
 **On a NAS or server** (Synology, a Raspberry Pi, …) you don't need the repository: `compose.nas.yaml` runs the prebuilt image `ghcr.io/zonewiki/zonewiki` (amd64 and arm64).
 **Without a container**, build the Go binary.
-Both are described in [`docs/spec/deployment.md`](docs/spec/deployment.md).
+Both are described in [Running Zone yourself](docs/manual/self-hosting.md).
 
 Settings live in two places: `.env` for how Zone runs, and the wiki's `.zone/config` for users, the login and everything else (`./run.sh config check` shows what is in effect).
 See [`docs/spec/users.md`](docs/spec/users.md).
@@ -80,7 +80,7 @@ Then add an MCP server at `http://localhost:5000/mcp` with the header `Authoriza
 
 Write your conventions on a page called `wiki-guide` (where things go, what's private, how pages are tagged), and every assistant follows them.
 Assistants can also answer questions about Zone itself.
-Details: [`docs/spec/mcp.md`](docs/spec/mcp.md).
+Details: [AI assistants](docs/manual/assistants.md) in the manual.
 
 ## Security
 
@@ -91,7 +91,10 @@ Read [Before you open it up](docs/spec/security.md#before-you-open-it-up) before
 
 ## Documentation
 
-The full documentation is in [`docs/spec/`](docs/spec/), one file per area: [routes](docs/spec/routes.md), [rendering](docs/spec/rendering.md), [editor](docs/spec/editor.md), [navigation](docs/spec/navigation.md), [search](docs/spec/search.md), [tasks](docs/spec/tasks.md), [MCP](docs/spec/mcp.md), [users](docs/spec/users.md), [security](docs/spec/security.md), [deployment](docs/spec/deployment.md) and [testing](docs/spec/testing.md).
+**[The manual](docs/manual/README.md)** says how to use Zone, from [getting started](docs/manual/getting-started.md) to [connecting an assistant](docs/manual/assistants.md) and [running Zone yourself](docs/manual/self-hosting.md).
+It is also in Zone, under **Help**.
+
+The full rules for each feature, written for whoever builds Zone, are in the spec, [`docs/spec/`](docs/spec/), one file per area: [routes](docs/spec/routes.md), [rendering](docs/spec/rendering.md), [editor](docs/spec/editor.md), [navigation](docs/spec/navigation.md), [search](docs/spec/search.md), [tasks](docs/spec/tasks.md), [MCP](docs/spec/mcp.md), [users](docs/spec/users.md), [security](docs/spec/security.md), [deployment](docs/spec/deployment.md) and [testing](docs/spec/testing.md).
 
 ## How Zone is made
 

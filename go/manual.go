@@ -1,7 +1,9 @@
-// Zone's own documentation, for the MCP tool zone_help: the
-// README and the spec (docs/spec/*.md), searched by section with BM25, so
-// an assistant answers questions about Zone itself (how to rename a task list's
-// tabs, a setting, the query syntax) from the docs rather than from guesses.
+// Zone's own documentation, for the MCP tool zone_help: the manual
+// (docs/manual/*.md, for users), the README and the spec (docs/spec/*.md,
+// for whoever builds Zone), searched by section with BM25, so an assistant
+// answers questions about Zone itself (how to rename a task list's tabs, a
+// setting, the query syntax) from the docs rather than from guesses. The
+// manual's passages come first: they say it in a user's words.
 package main
 
 import (
@@ -41,14 +43,22 @@ func docsRoot() string {
 
 type manualTopic struct{ name, path string }
 
-// manualTopics: the docs by topic name, "readme", then each spec file's
-// name ("tasks", "editor", …), in that order.
+// manualTopics: the docs by topic name: the manual ("manual", its
+// contents, then "manual/tasks" … in reading order), "readme", then each
+// spec file's name ("tasks", "editor", …), in that order.
 func manualTopics() []manualTopic {
 	root := docsRoot()
 	if root == "" {
 		return nil
 	}
 	var found []manualTopic
+	for _, d := range manualPages() {
+		name := "manual"
+		if d.name != "" {
+			name += "/" + d.name
+		}
+		found = append(found, manualTopic{name, d.path})
+	}
 	if readme := filepath.Join(root, "README.md"); exists(readme) {
 		found = append(found, manualTopic{"readme", readme})
 	}
@@ -123,9 +133,25 @@ func manualFind(query string, limit int) []manualDoc {
 		}
 		manualIndex.key, manualIndex.docs, manualIndex.ix = key.String(), docs, textsearch.NewIndex(tokens)
 	}
+	// The manual's best passages first, in the first half of the places
+	// (rounded up), then the rest's (README, spec), each filling what the
+	// other leaves: a user's question gets the manual's answer first and
+	// the spec's details after it. Their scores aren't compared: a spec
+	// section that lists files scores high on any word it names.
+	isManual := func(doc int) bool { return isManualTopic(manualIndex.docs[doc].topic) }
+	manual := manualIndex.ix.SearchWhere(query, limit, isManual)
+	rest := manualIndex.ix.SearchWhere(query, limit, func(doc int) bool { return !isManual(doc) })
+	n := min(len(manual), max((limit+1)/2, limit-len(rest)))
 	var out []manualDoc
-	for _, h := range manualIndex.ix.Search(query, limit) {
+	for _, h := range append(manual[:n], rest...) {
+		if len(out) == limit {
+			break
+		}
 		out = append(out, manualIndex.docs[h.Doc])
 	}
 	return out
+}
+
+func isManualTopic(topic string) bool {
+	return topic == "manual" || strings.HasPrefix(topic, "manual/")
 }

@@ -13,7 +13,9 @@ With users, pages and tasks can be private or a group's; assistants reach all of
 
 - **Keep this file and the spec up to date** — whenever the project structure, commands, constraints, or conventions change, update `AGENTS.md`; whenever a feature's behaviour changes, update its file in `docs/spec/` (see Spec).
   Do it in the same change.
-  The README and the spec are also Zone's help: the MCP tool `zone_help` serves them to assistants answering users' questions about Zone, so a feature's spec should say how to use it, not only how it is built.
+- **Keep the manual up to date** — a change users see (a feature, a label, a step, a setting) updates its page in `docs/manual/` in the same change, as it updates the spec.
+  The manual is for users, the spec for whoever builds Zone: the manual says how to do things in what a user sees and clicks, briefly, and links to the spec for the full rules (see Manual).
+  The manual, the README and the spec are also Zone's help: `/help` shows the manual in the browser, and the MCP tool `zone_help` serves all three to assistants answering users' questions about Zone (the manual's passages first), so a feature's spec should say how to use it, not only how it is built.
 - **Commit messages** — a short subject (at most 72 characters) that says what the commit does, in the imperative ("Give shared lists owners", "Fix the tab bar's touch times"), a blank line, then the body: why, what was found on the way, what the tests cover, wrapped at about 72 columns.
   The explanation goes in the body, never in the subject: GitHub's commit list and blame cut a subject at about 70 characters.
   Older commits state the result instead ("A shared list has owners"); they stay as they are.
@@ -45,6 +47,14 @@ per feature, how to use it first (what a user sees and does), how it works after
 enumerations (routes, tools, keys, shortcuts, syntax) as tables, a cell a line or two, the detail in a section below;
 real headings, not long bullets with a bold label, and each heading unique in its file (`go/manual.go` finds a section by it);
 and the rule as it is now, not how it was measured: measurements and test results go in the commit message (a spec says where the current numbers live, as How big a wiki can be in `docs/spec/deployment.md` does).
+
+## Manual
+
+`docs/manual/` is Zone's manual, for users: `README.md` is its contents and fixes the reading order, one file per area (getting started, pages, writing, history, notes, tasks, search, getting around, teams, assistants, the wiki guide, your data, running Zone yourself).
+It is in the browser at `/help` (Help in `docs/spec/routes.md`), in `zone_help`, and on zonewiki.com (`zonewiki manual DIR` writes it out as HTML).
+It is written like the spec, a sentence a line, with headings unique in a file, but for a person in a browser: what to click or type and what happens, the words on the screen in **bold**, no function or file names of the code, only what is built.
+A page stays readable in a few minutes; the full rules are a link away (`../spec/tasks.md#views`).
+Links are written for the files (`tasks.md#lists`, `../screenshots/page.png`), and `tests/test_help.py` fails for one that leads nowhere, a heading renamed included.
 
 ---
 
@@ -108,10 +118,11 @@ Auth is optional (a password, or users; see Key Constraints).
 ├── SECURITY.md             # How to report a vulnerability (privately, GitHub's advisories), what counts
 ├── LICENSE                 # AGPL-3.0-or-later
 ├── THIRD_PARTY_LICENSES    # Licenses of Go, the Go modules and the embedding model (the vendored libraries' are next to them)
+├── docs/manual/            # The manual, for users (see Manual); /help shows it
 ├── docs/spec/              # The feature spec, one file per area (see Spec)
 ├── docs/licenses/mermaid_notices.py  # Writes public/vendor/mermaid/THIRD_PARTY_LICENSES from the bundle's source map
-├── docs/screenshots/       # The README's screenshots + make_screenshots.py (./run.sh screenshots)
-├── Containerfile           # The image: a Go build stage, onnxruntime + the model (opt-in), an Ubuntu 26.04 LTS runtime (also ships README.md and docs/spec/ for zone_help)
+├── docs/screenshots/       # The README's and the manual's screenshots + make_screenshots.py (./run.sh screenshots)
+├── Containerfile           # The image: a Go build stage, onnxruntime + the model (opt-in), an Ubuntu 26.04 LTS runtime (also ships README.md, docs/manual/, docs/spec/ and the screenshots for Help and zone_help)
 ├── compose.yaml            # Builds and runs the image (run.sh drives it)
 ├── compose.podman.yaml     # Rootless podman only: userns keep-id (run.sh adds it)
 ├── compose.nas.yaml        # NAS/server: runs the prebuilt ghcr.io image, no build (see docs/spec/deployment.md)
@@ -128,7 +139,7 @@ Auth is optional (a password, or users; see Key Constraints).
 ├── .github/ISSUE_TEMPLATE/    # The same two for GitHub, and config.yml (a security problem goes to a private report)
 ├── go/                     # The server: package main, a file per area; pure code without Zone's state in go/internal/
 │   ├── go.mod, go.sum      # Go modules, exact versions (goldmark, x/text, onnxruntime_go)
-│   ├── server.go           # main: flags, start-up, the routes' mux, the request checks around them; zonewiki eval, zonewiki health, zonewiki user, zonewiki group, zonewiki config
+│   ├── server.go           # main: flags, start-up, the routes' mux, the request checks around them; zonewiki eval, zonewiki health, zonewiki manual, zonewiki user, zonewiki group, zonewiki config
 │   ├── login.go            # The login gate's routes: /login, /logout
 │   ├── static.go           # public/ served as it is (gzipped, kept by the browser), a file sent with its type
 │   ├── uploads.go          # Uploads: _assets/ served (a private page's and a group's from their folders, a task's from _tasks/files/<id>/), POST /api/upload
@@ -193,7 +204,8 @@ Auth is optional (a password, or users; see Key Constraints).
 │   ├── mcp.go              # MCP protocol (JSON-RPC) for /mcp; mcp_tools.json the tool definitions
 │   ├── mcpfiles.go         # Uploads for assistants: read_file, upload_file, and the file routes taking the MCP token
 │   ├── mcptools.go         # The MCP tools that read, and the table of all tools with their dispatch (mcpToolTable); mcpwrite.go and mcpreplace.go those that write pages, mcptasks.go the task tools, mcpguides.go the guides, mcpargs.go what they share
-│   ├── manual.go           # Zone's own docs (README + docs/spec) searched by section, for the MCP tool zone_help
+│   ├── manual.go           # Zone's own docs (the manual, README, docs/spec) searched by section, for the MCP tool zone_help
+│   ├── help.go             # Help: the manual and the spec in the browser (/help), and zonewiki manual DIR (them as HTML for a website)
 │   ├── eval.go             # zonewiki eval: measures search_wiki's retrieval on your wiki against your questions (./run.sh eval)
 │   ├── embedtest.go        # The tests' fake embedder (--semantic-test)
 │   └── *_test.go, testdata/  # Go tests (go test ./...)

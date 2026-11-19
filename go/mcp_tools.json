@@ -252,7 +252,7 @@
  {
   "name": "zone_help",
   "title": "Zone's documentation",
-  "description": "Search Zone's own documentation (its README and its spec) for how Zone works: features, markdown syntax ([[tasks: …]] options, callouts, wikilinks, templates), the editor, search syntax, keyboard shortcuts, settings, setup, the MCP. Not the user's notes: search_wiki finds those. With query, the best passages; with topic (and heading), that doc or one section; with neither, the list of topics and their headings. The spec is written for Zone's developers: answer the user in terms of what they type or click, leaving out function and file names.",
+  "description": "Search Zone's own docs for how Zone works: features, markdown syntax ([[tasks: …]] options, callouts, wikilinks), the editor, search syntax, shortcuts, settings, setup, assistants. Not the user's notes (search_wiki). With query, the best passages, the manual's first; with topic (and heading), that doc or one section; with neither, the topics. The manual (manual/…) is for users, the spec for developers: answer in what the user types or clicks, no function or file names, and link the manual's page (/help/tasks for manual/tasks).",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -262,7 +262,7 @@
     },
     "topic": {
      "type": "string",
-     "description": "A doc to read, as the results name it: 'readme', 'tasks', 'editor', 'navigation', …"
+     "description": "A doc to read, as the results name it: 'manual/tasks', 'readme', 'tasks', …"
     },
     "heading": {
      "type": "string",

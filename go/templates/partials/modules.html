@@ -40,7 +40,7 @@
 
 {{- /* The user menu (with users, desktop): who is signed in, Connect an
     assistant (their MCP token, assistant.go), Change password (password.go),
-    Admin for an admin (the admin page), and Sign out (phones have Admin and Sign out in
+    Admin for an admin (the admin page), Help (the manual, help.go), and Sign out (phones have Admin and Sign out in
     the page's top row), opened by the top right's user button (js/chrome.js). Outside the tab bar's nav: its touch handling
     picks a tab by position. */}}
 {{define "module_menu" -}}
@@ -50,6 +50,7 @@
 {{- ""}}<a href="/assistant" role="menuitem" class="menu-assistant">Connect an assistant</a>
 {{- if .sign_out}}<a href="/password" role="menuitem" class="menu-password">Change password</a>{{end -}}
 {{- if .admin}}<a href="/admin" role="menuitem" class="menu-admin">Admin</a>{{end -}}
+{{- ""}}<a href="/help" role="menuitem" class="menu-help">Help</a>
 {{- if .sign_out}}<form method="post" action="/logout" class="menu-signout"><button type="submit" role="menuitem">Sign out</button></form>{{end -}}
 </div>
 {{- end}}

@@ -732,7 +732,7 @@ def test_breadcrumb_crumbs_wait_for_the_trail_so_they_dont_jump(page, wiki):
 def test_the_name_opens_the_account_menu_on_a_phone(new_page, wiki, monkeypatch):
     """On a phone the account menu is behind the name beside Sign out: Groups
     (also for who is in none: that is where one is made), Connect an
-    assistant, Change password. Admin and Sign out are in the row itself."""
+    assistant, Change password, Help. Admin and Sign out are in the row itself."""
     monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "")})
     phone = new_page(**TOUCH_PHONE)
     phone.request.post("/login", form={"username": "alice", "password": "pw"})
@@ -743,7 +743,7 @@ def test_the_name_opens_the_account_menu_on_a_phone(new_page, wiki, monkeypatch)
     name.tap()
     menu = phone.locator(".module-menu:not(.groups-menu)")
     expect(menu).to_be_visible()
-    expect(menu.locator('[role="menuitem"]:visible')).to_have_text(["Groups", "Connect an assistant", "Change password"])
+    expect(menu.locator('[role="menuitem"]:visible')).to_have_text(["Groups", "Connect an assistant", "Change password", "Help"])
     box = menu.bounding_box()
     assert box["x"] >= 0 and box["x"] + box["width"] <= phone.viewport_size["width"]
     menu.get_by_role("menuitem", name="Groups").tap()

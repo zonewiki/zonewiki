@@ -169,8 +169,28 @@ For an admin `/groups` also lists every other group, what each includes, the for
 | GET    | `/public/<file>`      | Zone's browser code, styles and vendored libraries, as they are in `public/` (no login needed) |
 | GET    | `/api/version`        | `{ version, build }`: Zone's version and build (see Version in `docs/spec/deployment.md`) |
 | GET    | `/api/health`         | `{ ok: true }`, or 503 `{ error }` while the settings file's last change wasn't taken (Reloading in `docs/spec/users.md`); no login needed, for `zonewiki health` |
+| GET    | `/help`               | Help: Zone's manual, its contents first (see Help below) |
+| GET    | `/help/<page>`        | A page of the manual (`docs/manual/<page>.md`) |
+| GET    | `/help/spec`, `/help/spec/<name>` | The spec's list, and a spec file (`docs/spec/<name>.md`), where the manual links for the full rules |
+| GET    | `/help/screenshots/<file>.png` | The screenshots the manual shows (`docs/screenshots/`) |
 
 `/api/health` gives the error itself only with a session (or without a login), else a pointer to the log, as it may name users.
+
+### Help
+
+Zone's manual, `docs/manual/`, is written for users: how to do things, in what they see and click, with links to the spec for the full rules.
+`/help` shows it in the browser (`go/help.go`, `help.html`), as a page is shown: the document's `#` heading as its title, its headings on the left on big screens, and at its end the pages before and after it.
+The reading order is the contents' (`docs/manual/README.md`): the pages in the order its links name them, then any it doesn't name.
+Links between the docs are written for the files (`tasks.md#views`, `../spec/users.md`, `../screenshots/page.png`, as they read on GitHub) and pointed at `/help/…` when shown.
+It is linked from the user menu, the search modal's page list (Help, beside Tasks and Notes) and the shortcuts dialog (`?`).
+Everyone who reaches the wiki reaches it, a public wiki's visitors too: it holds nothing of the wiki's.
+Without the docs (a binary run on its own), `/help` says so.
+
+`zonewiki manual DIR` writes the same documents out as HTML fragments for a website (zonewiki.com's `/docs`): each document's body without a page around it, the links between them relative, the screenshots, and `pages.json` listing them with their titles in reading order.
+The manual is also what `zone_help` searches first (`zone_help` in `docs/spec/mcp.md`).
+
+A change users see updates its manual page in the same commit, as it updates the spec (`AGENTS.md`).
+`tests/test_help.py` checks that every link in the manual leads to a document, a heading or a screenshot that is there.
 
 ### The tasks page and lists
 

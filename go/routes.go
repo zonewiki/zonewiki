@@ -916,7 +916,8 @@ func apiPagesList(w http.ResponseWriter, r *http.Request) {
 	out = append(out, pages...)
 	out = append(out,
 		M{"slug": "/tasks", "title": "Tasks", "href": "/tasks", "links": 0, "mtime": 0, "builtin": true},
-		M{"slug": "/notes", "title": "Notes", "href": "/notes", "links": 0, "mtime": 0, "builtin": true})
+		M{"slug": "/notes", "title": "Notes", "href": "/notes", "links": 0, "mtime": 0, "builtin": true},
+		M{"slug": "/help", "title": "Help", "href": "/help", "links": 0, "mtime": 0, "builtin": true})
 	writeJSON(w, http.StatusOK, out)
 }
 

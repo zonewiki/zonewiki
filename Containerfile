@@ -107,9 +107,11 @@ ENV ZONE_MODEL_DIR=/opt/zonewiki-model
 
 WORKDIR /app
 COPY public/ public/
-# Zone's documentation, for the MCP tool zone_help (found next to public/).
+# Zone's documentation, for Help (/help) and the MCP tool zone_help (found next to public/).
 COPY README.md ./
+COPY docs/manual/ docs/manual/
 COPY docs/spec/ docs/spec/
+COPY docs/screenshots/*.png docs/screenshots/
 # The licenses of what the image holds (public/vendor/ has the rest).
 COPY LICENSE THIRD_PARTY_LICENSES ./
 COPY --from=semantic /opt/onnxruntime-licenses/ licenses/onnxruntime/

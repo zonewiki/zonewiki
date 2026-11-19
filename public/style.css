@@ -538,6 +538,12 @@ main {
    them push the page wider than a phone viewport. Only kicks in when a word
    would otherwise overflow; <pre>/tables keep their own horizontal scroll. */
 .page-content { overflow-wrap: break-word; }
+/* Help (help.html): the document's own # heading is its title; at its end
+   the manual's pages before and after it. */
+.help-content > h1:first-child { margin-top: 0; font-size: 2rem; }
+.help-content img { max-width: 100%; height: auto; }
+.help-pager { display: flex; justify-content: space-between; gap: 1rem; margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+.help-pager .help-next { margin-left: auto; text-align: right; }
 .page-content h1 { font-family: var(--serif); font-size: 1.875rem; font-weight: 500; margin: 2rem 0 .875rem; padding-bottom: .35rem; border-bottom: 1px solid color-mix(in srgb, var(--muted) 60%, var(--border)); line-height: 1.25; letter-spacing: -.02em; }
 .page-content h2 { font-family: var(--serif); font-size: 1.45rem; font-weight: 500; margin: 0; padding-bottom: .1rem; border-bottom: 1px solid color-mix(in srgb, var(--muted) 30%, var(--border)); }
 .page-content h3 { font-family: var(--serif); font-size: 1.2rem; font-weight: 600; margin: 1.5rem 0 .5rem; width: fit-content; }

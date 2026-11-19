@@ -44,6 +44,7 @@ Commands:
   config COMMAND             the wiki's settings file .zone/config (check, set, unset, passwd, token)
   eval [--k N] [--new] FILE  measure search_wiki's retrieval against the questions in FILE
   health [ADDR]              whether a Zone running here answers (the container's healthcheck)
+  manual DIR                 write the manual and the spec to DIR as HTML fragments, for a website
   help                       this text; zonewiki COMMAND --help a command's
 
 Environment:
@@ -98,7 +99,7 @@ func isHelp(arg string) bool {
 func main() {
 	addr := flag.String("addr", ":5000", "the `address` to listen on (127.0.0.1:0: a free port; unix:PATH: a Unix socket; fd:3: the socket systemd hands over)")
 	public := flag.String("public", "", "the `folder` of the browser code (default: public/, found from the binary)")
-	flag.StringVar(&docsDir, "docs", "", "the `folder` of README.md and docs/spec/, for zone_help (default: found from --public)")
+	flag.StringVar(&docsDir, "docs", "", "the `folder` of README.md and docs/ (the manual, the spec), for /help and zone_help (default: found from --public)")
 	semanticTest := flag.String("semantic-test", "", "the tests' embedder and index state, as `JSON` (embedtest.go)")
 	flag.Usage = printUsage
 	if len(os.Args) > 1 {
@@ -109,6 +110,8 @@ func main() {
 			os.Exit(0)
 		case "eval":
 			os.Exit(evalMain(os.Args[2:], os.Stdout, os.Stderr))
+		case "manual":
+			os.Exit(manualMain(os.Args[2:], os.Stdout, os.Stderr))
 		case "health":
 			if len(os.Args) > 2 && isHelp(os.Args[2]) {
 				fmt.Println(healthUsage)
@@ -485,6 +488,7 @@ func newHandler() http.Handler {
 	mux.HandleFunc("GET /_tasks/files/{task}/_assets/{file}", serveTaskUpload)
 	mux.HandleFunc("/mcp", mcpEndpoint)
 	pageRoutes(mux)
+	helpRoutes(mux)
 	historyRoutes(mux)
 	tasksRoutes(mux)
 	adminRoutes(mux)
@@ -509,6 +513,7 @@ var visitorRoutes = map[string]bool{
 	"GET /search": true, "GET /api/search": true,
 	"GET /history/{slug...}": true, "GET /revision/{rest...}": true, "GET /diff/{rest...}": true,
 	"GET /_assets/{path...}": true, "GET /api/version": true,
+	"GET /help": true, "GET /help/{name...}": true,
 }
 
 // visitorEdits: what a visitor reaches besides, where the wiki is public to
