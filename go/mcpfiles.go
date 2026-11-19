@@ -81,7 +81,9 @@ func uploadFileTool(args jsonObj, base string, user asker) (string, error) {
 	}
 	owner := uploadPlace(user, strings.Trim(page, "/"))
 	// page names a task by its id: the file is the task's.
-	if id := strings.TrimSpace(page); uuid4RE.MatchString(id) {
+	if id, isTask, err := uploadTaskRef(user, page); err != nil {
+		return "", err
+	} else if isTask {
 		var ok bool
 		if owner, ok = taskUploadPlace(user, id); !ok {
 			return "", toolErr("No task with this id")
@@ -106,6 +108,33 @@ func uploadFileTool(args jsonObj, base string, user asker) (string, error) {
 	}
 	return "Uploaded " + name + " (" + formatSize(int64(len(data))) + "; " + where + "). " +
 		"It shows on a page or in a task once linked there, as markdown:\n" + link, nil
+}
+
+// shortTaskRefRE: what upload_file's page takes for a task's id short of
+// the whole one: the 8-character short id the tools show, or more of it.
+var shortTaskRefRE = regexp.MustCompile(`^[0-9a-f]{8}[0-9a-f-]{0,28}$`)
+
+// uploadTaskRef: the task upload_file's page names, if it names one: its
+// whole id; the short id the tools show (or more of the id), a
+// [[task:…]] reference or a /tasks?task=… link, when no page goes by the
+// name, resolved among the tasks user sees (none, or several, refused:
+// never a file for a task the assistant meant left with everyone's).
+func uploadTaskRef(user asker, page string) (id string, isTask bool, err error) {
+	ref := strings.ToLower(strings.TrimSpace(page))
+	if uuid4RE.MatchString(ref) {
+		return ref, true, nil
+	}
+	if !shortTaskRefRE.MatchString(ref) && !taskLinkRE.MatchString(ref) {
+		return "", false, nil
+	}
+	if p := safePath(strings.Trim(page, "/")); p != "" && exists(p) {
+		return "", false, nil // a page by that name: the file is for it
+	}
+	t, err := findTask(ref, user)
+	if err != nil {
+		return "", false, err
+	}
+	return t.ID, true, nil
 }
 
 var (

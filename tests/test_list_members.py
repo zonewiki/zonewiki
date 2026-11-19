@@ -573,6 +573,30 @@ def test_a_tasks_files_are_seen_by_who_sees_the_task(client, wiki):
     assert f"(/_tasks/files/{IDS['open']}/_assets/notes.txt)" in said and "who sees the task" in said
 
 
+def test_an_assistants_file_for_a_task_by_its_short_id_is_the_tasks(client, wiki):
+    """The tools show a task's 8-character id: upload_file takes it (and a
+    [[task:…]] reference) for the task, never as a page's name, which would
+    leave the file with everyone's."""
+    sign_in(client, "alice")
+    own = client.post("/api/tasks", json={"title": "Mine"}, headers=HOST).get_json()
+    assert own["private"] is True
+    short = own["id"][:8]
+    said = mcp(client, "alice", "upload_file", filename="hers.txt", text="hers", page=short)
+    assert f"(/_tasks/files/{own['id']}/_assets/hers.txt)" in said and "who sees the task" in said, said
+    said = mcp(client, "alice", "upload_file", filename="ref.txt", text="hers", page=f"[[task:{short}]]")
+    assert f"(/_tasks/files/{own['id']}/_assets/ref.txt)" in said, said
+    said = mcp(client, "carol", "upload_file", filename="c.txt", text="c", page=IDS["open"][:8])  # a member's, of a list for some
+    assert f"(/_tasks/files/{IDS['open']}/_assets/c.txt)" in said, said
+    # Who doesn't see the task is refused, as for a whole id; so is an id no task has.
+    assert "No task" in mcp(client, "bob", "upload_file", filename="x.txt", text="x", page=short)
+    assert "No task" in mcp(client, "bob", "upload_file", filename="x.txt", text="x", page=IDS["open"][:8])
+    assert "No task" in mcp(client, "alice", "upload_file", filename="x.txt", text="x", page="00000000")
+    assert not (wiki / "_assets").exists() or not any((wiki / "_assets").iterdir())
+    # A page that goes by such a name is still the page.
+    (wiki / "deadbeef.md").write_text("# Deadbeef\n")
+    assert "[d.txt](/_assets/d.txt)" in mcp(client, "alice", "upload_file", filename="d.txt", text="d", page="deadbeef")
+
+
 def test_a_tasks_files_go_where_the_task_goes(client, wiki):
     """Nothing moves with a task: its files are seen by who sees it now."""
     sign_in(client, "alice")
