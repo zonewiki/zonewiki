@@ -459,6 +459,7 @@ After a save the page reloads, and what the browser tab remembered (the active t
   One commit, "Import N tasks".
   The notice says what happened ("Imported 12 tasks; 3 already here.") and has **Undo** (also Ctrl+Z, for the few seconds it shows; `showUndo`): the tasks just added are deleted again (`/api/tasks/batch-delete` with the `ids` the import answered).
   A file that isn't an export (no `tasks` list, or a task without a title) is refused whole (the server's reason shows in the dialog), as is one with more than 10,000 tasks (`importMax`); a bare JSON list of tasks is taken too, so a file written by hand or by a script needs only `[{"title": "…"}]`.
+  **Names in comments and history** (with users; `checkBy` in `go/taskby.go`): a non-admin's import keeps their own name on a comment or a history entry and blanks everyone else's (by no one), as the file could say anything, unless Zone has seen that comment or entry under that name since it started (a task deleted and imported back); an admin's keeps the file's names (a wiki moved, a backup put back; Who made a change in `docs/spec/users.md`).
   A viewer can't import (403).
 
 The ⋯ menu is there where a list has settings (see Settings: not for a viewer, nor for a name no list has).
@@ -587,7 +588,7 @@ Each with a dark-mode value.
   A task that won't be done is closed undone with **Won't do**: it goes to Closed with "✗ won't do", and can be reopened from there.
   Won't do is in the ⋯ menu, in the edit modal (the button at the right of Save and Cancel, an open task's only; what was typed in the modal is dropped), on the **Delete** key and, for several selected tasks, in the selection bar and their menu (`wontDoMany`: one `batch-complete` with `wont_do`, one undo that reopens them; closed tasks in the selection stay as they are).
   **Delete for good…** is in a closed task's ⋯ menu (`mayDelete` in `js/taskmenu.js`): for a task made by mistake, or shared by mistake. It asks first, has no undo, and takes the task out of its file in a commit ("Delete task"); the wiki's git history keeps what it was, as it keeps a deleted page.
-  **Who may** (`mayDeleteTask` in `go/tasks.go`; `DELETE /api/tasks/<id>` and `batch-delete` answer 403 "Only who made a task, or an admin, deletes it" otherwise): without users anyone; with users who made the task (`created_by`), an admin, and its user for a private one. Others have seen a shared task, so anyone else closes it.
+  **Who may** (`mayDeleteTask` in `go/tasks.go`; `DELETE /api/tasks/<id>` and `batch-delete` answer 403 "Only who made a task, or an admin, deletes it" otherwise): without users anyone; with users who made the task (`created_by`), an admin, its user for a private one, and anyone for a task nobody is known to have made (no `created_by`: one from before users, or written by hand). Others have seen a shared task, so anyone else closes it.
   The same routes take back what was just made: the tasks the page editor created (their maker's), and an import's (what a user imported is theirs to delete while Zone runs: `noteBrought`).
   An assistant (MCP) deletes no task.
 - **Planned cue**: a planned task's card gets a coloured left edge, the same on every tab for consistency: amber when it is in Today already (start today or earlier), blue when planned later (`task-planned-now`/`-later`).

@@ -76,7 +76,7 @@ Also know this:
   HTML in a page runs no script and loads nothing from other sites (an image elsewhere shows as a link), so such a page can't send your notes away in an image's address; name sites you trust in `external-content`.
 - **Git is the undo, a remote the backup.**
   Every change made through Zone is a commit (an assistant's marked `(MCP)`), and Changes, history and Deleted pages bring things back.
-  Set `git-remote` and push now and then; the remote has everything but `.zone/config` (the users and settings), so keep a copy of that file too.
+  Set `git-remote` and push now and then; the remote has everything but `.zone/` (the users and settings in `config`, the session key, the assistants' connections), so keep a copy of that folder too (Backups in `docs/spec/deployment.md`).
 - **Treat the wiki folder, its git history and remote, and every backup as confidential.**
   They hold everything, every user's private pages included, and a backup of the folder holds the password hashes too.
 
@@ -89,12 +89,18 @@ Also know this:
   Routes `/login` (GET/POST) and `/logout` (POST) handle the session; `/welcome/<token>`, an invite or reset link's page, needs no login either (its token is the key: Invite and reset links in `docs/spec/users.md`), nor does `/signup` when sign-up is on (Sign-up there; its mail link only on `base-url`, never on the request's Host).
   A "Sign out" button is rendered in the bottom-right corner when auth is enabled and the visitor is signed in (not on the login page); on phones it sits in the status-badge row at the top, out of sight while typing (`visibility`, its place kept: taken out, the page would jump when a field loses the focus, and a tap on a form's button right after typing would miss it).
   With `ZONE_ALLOW_REMOTE`, the login page shows the 🌐 remote-access badge in its form's heading row (it has no breadcrumb for the badge to sit beside).
+- **The session cookie** (`session`, `writeSession` in `go/security.go`): signed with the session key (HMAC), `Path=/`, `HttpOnly` (no script reads it), `SameSite=Lax` (another site's form or request doesn't carry it; a link followed from elsewhere does), and `Secure` over HTTPS (below).
+  It lasts 30 days (`sessionLifetime`: its `Expires`, and the age the server accepts from the time signed into it), and a request with a session older than a day gets it anew with a fresh date (`renewSession`, same id), so someone who uses Zone at least once a month stays signed in, and a cookie left unused for 30 days no longer works.
+  It names the user, a stamp of their password and the session's id, never the password or anything private.
 - **Signing out ends the session** (`go/signout.go`): the session is a signed cookie, so a copy of it (taken from a shared computer, a backup of a browser profile, a proxy's log) would work on, and be renewed, long after its owner signed out.
   Each session has an id (`session.ID`, random, kept as the cookie is renewed: `renewSession`);
   `POST /logout` puts the id of the cookie it was sent (only one Zone signed) into `.zone/signed-out` (0600, not in git, like the session key: the id and until when, never the cookie), and `signedIn` refuses a session whose id is there.
   An id is kept for a session's lifetime (30 days: by then every cookie of it has expired), then dropped at the next sign-out.
   The user's other sessions, on other devices, go on; a new password ends them all.
   A new password is set on the host (`zonewiki user passwd`, `zonewiki config passwd`), by a reset link, or in the browser on Change password (`/password`, `go/password.go`), which takes the password one has, throttled as the login is: a stolen session alone doesn't take the account over (Signing in in `docs/spec/users.md`).
+  **A new password ends sessions, not assistants**: an MCP token and the OAuth connections a user allowed go on working after Change password, `zonewiki user passwd` or `zonewiki config passwd`, as a token outlasts the session it was made in (Connect an assistant in `docs/spec/mcp.md`).
+  So whoever fears an account was taken over also ends its assistants: Revoke the token and End each connection on Connect an assistant (`/assistant`), or have an admin send a reset link, whose new password ends the OAuth connections too (`revokeGrantsOf`; the static token stays even then, to be revoked there).
+  Disabling or removing a user stops both (a removed user's connections are ended, a disabled user's token and connections are refused).
   A session without an id (one from before ids) is refused (`readSession`), since it couldn't be signed out: its user signs in again.
   Tests: `TestSigningOut` in `go/security_test.go` and in `tests/test_users.py`.
 - **First run** (`go/setup.go`, `needsSetup`): a wiki that other devices can reach and that has no login shows and changes nothing until one is set: every page leads to `/setup` (302),
@@ -246,6 +252,10 @@ Also know this:
 - **Self-hosting behind HTTPS**: the session cookie is `Secure` when the request came over HTTPS, Zone's own or a proxy's `X-Forwarded-Proto: https` (`isHTTPS`); over plain http (localhost, LAN) it works as before.
   Wrong passwords and wrong MCP tokens are throttled per client (`Throttle`, `loginThrottle`/`mcpThrottle`, in memory): after 5 failures in a row each try waits 1 minute, doubling up to an hour, refused unchecked (429, the login page says how long; `/mcp` sends `Retry-After`);
   a success clears the client.
+  So a client that keeps guessing has 5 tries, then one after 1 minute, after 2, 4, 8, 16, 32, and from then on one an hour: about 35 guesses in the first day.
+  A client's wrong tries are forgotten a day after its last one (`Throttle.failed` sweeps them), and a restart forgets them all.
+  **Three counts** (`newThrottle`, the same numbers each): the password's (`loginThrottle`: the login page, Change password, a token made on Connect an assistant, Allow on OAuth's consent page), the token's (`mcpThrottle`: `/mcp`, the file routes with a token, OAuth's `/oauth/token`), so an assistant's mistakes don't lock its user's browser out, and the welcome links' (`welcomeThrottle`: a link that doesn't work, `/welcome/<token>`).
+  Sign-up has caps of its own (5 mails a client and 50 in all an hour; Sign-up in `docs/spec/users.md`).
   A client's tries are checked one at a time (`Throttle.try`: the wait, the check and the count as one step), so tries sent at once aren't all let in before the first counts as a failure (a hundred connections were a hundred guesses per wait).
   The client (`clientKey`) is the remote address,
   an IPv6 address by its /64 (`network`: a client has that whole network to take addresses from, and each would have five tries of its own),

@@ -45,7 +45,9 @@ after a deliberate change to one of those functions, `ZONE_GOLDEN_UPDATE=1 go te
 
 `tests/test_git.py` uses `git_wiki_dir` and covers every git path (commit-on-write, history/revision/diff/restore, `_deleted`, uncommitted/commit endpoints, git-disabled fallbacks); it skips when git is not installed.
 `tests/test_narrowed.py` is the leak test for a connection given less to see: the MCP probes of `test_privacy.py`, `test_group_pages.py` and `test_list_members.py` asked as the owner themselves through a connection without the private place, or without the group (129 probes; the answers must be a stranger's); that it makes nothing private and says why; that ordinary shared work goes on through every tool with no failure inside Zone; the file routes with its token; the question's boxes, a wrong password keeping them, a group named that isn't the user's; and what the page says.
-`TestANarrowedAskerSeesLess` (Go) has the rule's table; `TestWhatIsTheirsIsAskedInOnePlace` fails for an owner compared with an asker's name, or the settings asked for an asker's groups, outside `go/access.go`.
+`TestANarrowedAskerSeesLess` (Go) has the rule's table; `TestWhatIsTheirsIsAskedInOnePlace` (`go/asker_test.go`) fails for an owner compared with an asker's name, or the settings asked for an asker's groups, outside `go/access.go`.
+It is a regex over the lines of `go/*.go`, so it catches only those written its way: `owner == user.Name` or `user.Name != t.Owner` (a name ending in `owner`/`Owner`, `==` or `!=`) and `memberOf(…)`/`groupsOf(…)`, each with the asker named `user`, `rq.user`, `rq.who()` or `userOf(r)`.
+It misses an asker under another name (`u.Name`, `who.Name`), its name copied first (`name := user.Name`), another way to compare (`slices.Contains(owners, user.Name)`, `strings.EqualFold`, a `switch`), another way into the settings (`s.Users[user.Name].Groups`, `groupMembers`), a line broken in two, and the packages in `go/internal/`: a review still has to look.
 `TestAReadOnlyAskerChangesNothing` (Go) holds that the permission model itself refuses an asker that only reads (pages, tasks, the tool list), not only the doors;
 `tests/test_oauth.py`'s `TestReadOnly` covers a connection that only reads: the question offers it and keeps the choice through a wrong password, it reads and is shown only the reading tools, every writing tool called all the same is refused with the wiki's files and git's head unchanged, no upload with its token, read-only through a refresh, the page saying what each may do and narrowing one (only one's own), and a connection kept without the field writing as before; the browser test picks Only read on the question.
 `tests/test_changes.py` covers Changes (`/changes`): the commits newest first with what each changed, the assistant's mark, that the page and the tool `history` list the same commits, the filters (user, assistant, folder, day), Show more, sharing mode, where it is linked from, no such page without git, and which assistant: a connection's write carries its name in a trailer, shown on Changes, a page's History and by the tool, a token's none, and neither an argument, a summary nor a trailer typed by hand names one; and a write's `source`: its trailer beside the connection's, shown on Changes, in History and by the tool, one line however it is sent, none for a commit made by hand;
@@ -343,6 +345,31 @@ It is several times slower, so it is no part of a plain run: run it with the ben
 Both `./run.sh test` and `./run.sh e2e` run in parallel with pytest-xdist: `test` with `-n auto` (a worker per CPU), `e2e` with a worker per two CPUs (each runs its own Chromium; at one per CPU the browsers starve and timing-sensitive tests fail).
 An `-n` in the extra args overrides it (`-n 0`: one process).
 Workers are separate processes: each has its own temp wikis, servers (`base_url`) and browser, so the fixtures need no locking; a test must keep its files under `tmp_path`.
+
+**More modules, a line each**:
+- `tests/test_setup.py`: the first-run page (every page leads to it, nothing read or written before, the browser code and healthcheck answer, another site can't send it, a password or a first user who is an admin, only once, `no-login`, what counts as reachable: localhost alone, a published port, `hosts`; the log at start).
+- `tests/test_tasks_export.py`: Export and Import tasks… (a list's tasks open and closed, its name kept out of the download's header, an export imported once, into another list or the Inbox, what is no export refused, an undone delete going back).
+- `tests/test_tasks_settings.py`: the task app's settings dialog and `POST /api/tasks/settings` (where an app has settings, the embed rewritten and nothing else, a changed page refused, bad values, a list's and All tasks' settings in the registry, one commit, a wiki from before the views' names).
+- `go/asker_test.go`: `TestAskersAreMadeInFewPlaces` reads the source (`go/ast`) and fails when the functions that call `asUser` aren't the ones it lists, for `asUser(user.Name)` (also `rq.user.Name`, `userOf(r).Name`: an asker made again from its name gets back what its connection was given less), and when an `asker{…}` is written out anywhere but where a connection's is made; `TestWhatIsTheirsIsAskedInOnePlace` (above); `TestAnAskerIsWrittenAsItsName`.
+- `go/bench_test.go`: the benchmarks behind How big a wiki can be in `docs/spec/deployment.md` (a page view, with tasks, `GET /api/tasks`, the page list); **nothing runs them**, neither `./run.sh test` (`go test` runs no benchmark without `-bench`) nor CI, so their numbers are as old as that table: `go test -run '^$' -bench . -benchtime 20x` in `go/`.
+- `go/markdown_test.go`: the renderer (checkboxes, line breaks, callouts, heading ids, images and external images, links, unsafe links, raw HTML defused, renders at once keeping their own state).
+- `go/mdtext_test.go` and `go/text_test.go`: wikilinks (in tables and headings), code masked, task lines, a checkbox ticked as the render numbers them, frontmatter and tags as HTML, section links.
+- `go/oauth_test.go`: OAuth's signed client ids, redirect URIs, PKCE and codes.
+- `go/server_test.go`: the healthcheck's address, a Unix socket and one handed over by systemd, the client on a socket, idle long enough to exit.
+- `go/stalls_test.go`: a body or response that stands still fails, a slow one that moves doesn't, nor a slow route (`noStalls`).
+- `go/storage_test.go`: sizes read and written, the size settings, what counts toward `storage-max`, `checkRoom`.
+- `go/tasksettings_test.go`: an embed's parameters set and checked by the settings dialog, the views' old names.
+- `go/views_test.go`: a page view and a search walk the wiki once.
+- `go/internal/gitrepo/gitrepo_test.go`: git run with its time limit, stopped by its context, no pack inside a commit, packing and joining.
+- `go/internal/jsonobj/jsonobj_test.go`, `go/internal/taskmodel/task_test.go`: JSON objects read a member at a time; a task read from odd values and written back in its key order, assignees and their events.
+- `go/internal/mdtext/mdtext_test.go`, `go/internal/mdtext/text_test.go`: frontmatter, lines, slugs, titles, wikilinks' parts, a section's splice by characters.
+- `go/internal/settingsfile/settingsfile_test.go`: the settings file parsed, edited line by line keeping comments, written owner-only, its group sections.
+- `go/internal/textsearch/difflib_test.go`, `indexfile_test.go`: typo matching's quick bounds change no answer; the index file is what was in memory, refuses bad and wrong files, survives being replaced during a search, and `MergeIndex` writes what `WriteIndex` would.
+- `go/internal/tokenizer/tokenizer_test.go`, `go/internal/atomicfile/atomicfile_unix_test.go`: the model's tokenizer; the atomic write (below).
+- `tests/e2e/test_public.py`: a public wiki in the browser (a visitor reads, signs in from a phone's top row, edits a page); the routes are `tests/test_public.py`'s.
+- `tests/e2e/test_sharing.py`: sharing mode (the surroundings hidden, search and the editor's page list empty until typed, no switch on phones, `noshare` pages hidden).
+- `tests/e2e/test_usability.py`: the task filter field and its tag completion, the commit link and editor toolbar on phones, card swipes, a checkbox's undo.
+- `tests/e2e/test_format_bar.py`, `test_tables.py`, `test_touch.py`: the editor's formatting bar, sortable tables, the task app on a touch phone (all in Coverage, below).
 
 ## The retrieval floor
 

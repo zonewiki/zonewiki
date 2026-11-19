@@ -74,6 +74,29 @@ includes = dev, design
 | `signup-role` | The role an account made by sign-up gets: `viewer` or `editor` (never `admin`) | `viewer` |
 | `signup-approval` | `yes`: an account made by sign-up can't sign in until an admin approves it | no |
 
+A user's section, `[user NAME]` (the name: lowercase letters, digits and inner hyphens, `userNameRE`; not `me` or `none`), takes these keys (`userKeys`, checked in `fileUsers`):
+
+| Key | Does | Values | Default |
+|-----|------|--------|---------|
+| `password` | Their password, as its hash (`zonewiki user passwd`, a reset link, Change password) | `pbkdf2-sha256:<iterations>:<salt>:<hash>`; required | none: an error |
+| `mcp-token` | Their MCP token, as its hash (`zonewiki user token`, Connect an assistant) | `sha256:` and 64 lowercase hex digits, no other user's | no MCP token |
+| `role` | What they may do (Roles, below; `zonewiki user role`, the Users tab) | `admin`, `editor` or `viewer`, any case | `editor` |
+| `groups` | The groups they are in (Groups, below; `zonewiki user group`, the Users tab, Groups) | group names, by commas or spaces, a leading `@` allowed | none |
+| `disabled` | They can't sign in, their token is refused (`zonewiki user disable`, the Users tab) | `yes`/`no`, `true`/`false`, `1`/`0` | no |
+| `pending` | A sign-up waiting for an admin's approval: disabled until approved (Sign-up, below) | as `disabled` | no |
+| `email` | Their mail address: for task mails (Assigning tasks, below) and to tell sign-ups apart (Setting a user's address, below) | a bare address (`name@example.org`, `validEmail`) | none: no mail |
+
+A group's section, `[group NAME]` (the name: lowercase letters, digits and hyphens, starting with a letter or digit, at most 40, `groupNameRE`), takes these (`groupKeys`, checked in `fileGroups`):
+
+| Key | Does | Values | Default |
+|-----|------|--------|---------|
+| `includes` | The groups it is made of: who is in one of them is in this one (A group made of groups, below; `zonewiki group includes`) | group names, as `groups`; not itself, by whatever way round | none |
+| `owners` | The users who say who is in it, in the browser (A group of your own, below; `zonewiki group owners`) | user names, by commas or spaces; a name that is no user's counts as none | none: an admin's alone |
+| `was` | The names it went by before a rename, which only it may take back (Zone writes it) | group names | none |
+
+**Setting a user's address**: sign-up writes `email` (Sign-up, below); there is no command or field for it yet, so for anyone else an admin with access to the host adds the line to the user's section by hand (`email = bob@example.org` under `[user bob]`), and Zone takes it within a second, or refuses the file, naming the line, when it isn't an address.
+Without it the user gets no mail about tasks, whatever they tick in My tasks' settings (Assigning tasks, below).
+
 - **Format**: `key = value` (spaces optional), the wiki's settings before the first section, a `[user NAME]` section per user with `password`, `mcp-token`, `role`, `groups`, `disabled`, `email` and `pending` (`configKeys`, `userKeys`; Roles and Sign-up, below),
   and a `[group NAME]` section for a group that says more than its name: `includes`, the groups it is made of, `owners`, the users who say who is in it, and `was`, the names it went by before, which Zone writes (`groupKeys`; Groups, below).
   `#` starts a comment only at the start of a line, so `noshare = #noshare` is a value.
@@ -117,7 +140,7 @@ includes = dev, design
   so a wiki pushed where others can read it should get new passwords.
 - **Changes go to the log**, not the history: each reload that took a change logs what changed by name and key only, never a value (`settingsChange`: `Change settings: add user carol, alice's password, locale`), and who made it on the Users tab (`(by alice)`, `settingsAuthor`).
 - **Backups**: a backup of the data folder has the file; a clone of the git remote doesn't.
-  Back up `.zone/config` too where the git remote is the only copy, or add the users again after a restore.
+  Back up `.zone/config` too where the git remote is the only copy, or add the users again after a restore (Backups in `docs/spec/deployment.md`).
 - **A wiki that lost its users doesn't start open** (`missingUsers`): when there is no settings file but the history has commits by users (a clone of its git remote),
   Zone refuses to start,
   naming one of them,
@@ -221,10 +244,21 @@ Each user has a role, `role` in their section (`roles`, `User.Role` in `go/users
 
 | Role | Can |
 |------|-----|
-| `admin` | everything an editor can, and manage the users (`zonewiki user`, on the host) and write the guides (Guides, below) |
+| `admin` | everything an editor can, and manage the users and every group, write the guides, and settle what an editor leaves to others (What an admin may do, below) |
 | `editor` | change everything shared but the guides, as every user could before roles: the default, so a section without `role` is an editor's |
 | `viewer` | read what is shared; change nothing, not even private pages or notes of their own (Viewers, below) |
 
+- **What an admin may do** beyond an editor (each where it is described; the role is asked by `isAdmin` in `go/users.go`, and a disabled admin is none):
+  - **Users** (`/admin`, Managing users below): change a user's role and groups, disable, enable or approve them, make invite and reset links and take them back, remove a user.
+  - **Groups** (An admin on Groups, below): manage every group, owned or not (who is in it, its owners, its name, removing it, also one that others are made of), make a group of groups and say what a group includes, see the folders of groups nobody is in.
+  - **Guides** (Guides, below): write `wiki-guide`, a folder's `AGENTS.md`/`CLAUDE.md` and what they pull in (`adminsOnly`); a group's guide only an admin who is in the group.
+  - **Moves to fewer people**: move a shared page to where fewer people see it (into a group they are in, or their private folder; `mayNarrow` in `go/pages.go`: anyone else only a page they shared themselves, while nobody else has changed it), and a shared task into a list fewer people see (`mayNarrowTask` in `go/tasks.go`: anyone else only a task they made).
+  - **Task lists** (`canManageList` in `go/access.go`, Lists in `docs/spec/tasks.md`): rename, delete, set the settings of, say whom it is for and pin for everyone any shared list they see, not only one they own.
+  - **Tasks** (Who may in `docs/spec/tasks.md`): delete any task for good (`mayDeleteTask`) and anyone's comment (`mayChangeComment`), and import a file with its comments' and history's names as they are (`checkBy` is skipped: a wiki moved, a backup put back).
+  - **Undo on Changes** follows the same rules: an admin undoes a change to a guide, others don't.
+  No more than that: an admin sees no other user's private pages, tasks or notes, and nothing of a group they are not in (below).
+- **`zonewiki user`, `zonewiki group` and `zonewiki config` need access to the host, not the admin role**: they edit `.zone/config` directly (Commands, above), so whoever can run them there (a shell on the server, `docker compose run`, a NAS's container terminal) manages the users whatever their role in the wiki, and an admin without that access manages them on `/admin`.
+  The first user, made with `user add` or on the first-run page, is an admin so that someone can.
 - **The first user is an admin**: `user add` on a wiki without users writes `role = admin` and says so, unless `--role` says otherwise.
   So one person running their own wiki is its admin without doing anything.
   Every other user is an editor unless `--role` says otherwise.
@@ -746,7 +780,7 @@ There is nothing to set up for the folder itself: it is the folder of the group 
 - **Tasks are not kept there**: a group's tasks are a list for the group (`"for": ["@dev"]`, Lists for some in `docs/spec/tasks.md`), which a page in the folder can show (`[[tasks: list=dev]]`).
   A `[[task:…]]` on a group's page counts as its title in search only for a task everyone sees, as on a shared page.
 - **What Zone didn't see saved** in a group's folder (written on disk) has no known author: before a write by someone who isn't in the group re-points links there, it is committed as Zone's ("Save 3 files in groups/dev"), so nobody's commit carries text they don't see (`commitOthersDrafts`).
-- **Assistants** (`docs/spec/mcp.md`): a group's page is a page at a path, so there is nothing new to call: `write_page` with `groups/dev/…` makes one, `rename_page` moves one (to fewer people only by an admin, with `narrow`), `upload_file` with `page` keeps a file with it.
+- **Assistants** (`docs/spec/mcp.md`): a group's page is a page at a path, so there is nothing new to call: `write_page` with `groups/dev/…` makes one, `rename_page` moves one (to fewer people only by an admin or by whoever shared it while nobody else changed it, with `narrow`), `upload_file` with `page` keeps a file with it.
   An assistant is told who sees a page with every answer about one that isn't everyone's ("seen by: the group @dev only …"), and the instructions name the folders of the groups its user is in.
 - **What it is not**: encrypted, or hidden from whoever has the wiki's folder or its repository (as private pages).
   Not a folder whose readers some of its members only are: a group is who it is for. (A folder for named people is the folder of a group they make: A group of your own, above.)

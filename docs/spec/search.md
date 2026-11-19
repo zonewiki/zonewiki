@@ -22,6 +22,11 @@ Part of Zone's spec (see `AGENTS.md` for the index).
   Bare URLs in the text stay searchable.
 - **Stemming** (`stem`) collapses inflections (run/runs/running, database/databases) so word variations match.
 - **Partial words** match via prefix expansion; **typos** match via an edit-distance fuzzy fallback (`difflib`) only when a term has no exact/prefix hit.
+- **The numbers** (`go/internal/textsearch/search.go` unless said otherwise):
+  - BM25 with `k1 = 1.5` and `b = 0.75` (`bm25K1`, `bm25B`); a term's IDF is `ln(1 + (N − n + 0.5) / (n + 0.5))`.
+  - A query word counts with weight 1 where a doc has it (as its stem), 0.8 for each word it starts (`prefixWeight`; only for query words of 3 characters or more), and, only when it has neither, 0.5 for each of up to 3 close typos (`fuzzyWeight`; words of 4 characters or more, difflib's ratio at least 0.8, `closeMatchesIn`).
+  - A title's words count 3 more times (`TitleWeight`), a slug's words once.
+  - With semantic search: each ranking goes 30 deep into the fusion, or as deep as the list asked for (`fuseDepth` in `go/retrieval.go`), fused with `rrfK = 60`; sections longer than 800 characters are split at paragraphs (`maxChunkChars` in `go/embed.go`); the model reads at most 512 tokens and gives vectors of 768 dimensions (`maxTokens`, `embedDim` in `go/embed_onnx.go`); its floors are 0.25 for search and Related pages and 0.3 for tasks (`thresholds` in `go/embed.go`; 0.4 each for a model without its own).
 - **Memory**: a page's or section's doc keeps only what all of its page's docs share (slug, title, tags, mtime, its file) and, for a section, which of the page's sections it is: not its text, its tokens, nor a section's heading, path, anchor or semantic key.
   Those are read from its file again when asked for (`body`, `tokens`, `section`: a section's from its page split again),
   which a search does only for the docs it shows or checks,

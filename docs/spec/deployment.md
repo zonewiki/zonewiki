@@ -336,9 +336,42 @@ Layout:
 - `$ZONE_DATA/private/<user>/` — with users, each user's private pages (`docs/spec/users.md`); without users an ordinary folder
 - `$ZONE_DATA/_assets/` — uploaded images, served at `/_assets/<filename>` (created automatically); a group's page's in `groups/<group>/_assets/`, a private page's in `private/<user>/_assets/`, a task's (with users) in `_tasks/files/<task id>/_assets/`
 - `$ZONE_DATA/_tasks/` — the tasks (`tasks.json`, `closed.json`, `closed-YYYY-MM.json`, each list's in `lists/<name>/`, and `lists.json`, the lists' registry, with the settings of All tasks; see Storage in `docs/spec/tasks.md`); each user's private tasks in `private/<user>/_tasks/`
-- `$ZONE_DATA/.zone/` — Zone's own state: none of it in git: `config` (the settings file: the wiki's settings and users, `docs/spec/users.md`), `secret_key` (session key), `signed-out` (the sessions signed out, `docs/spec/security.md`), `links` (open invite and reset links), `grants` (the assistants' OAuth connections, their tokens as hashes), `seen/` (what each user has seen of the tasks' news, `docs/spec/users.md`), `drafts/` (an editor's text left in a conflict when its tab closed, for its user's next edit, 30 days at most), `tmp/` (a merge's scratch files), `index/` (the search index files, the closed tasks' search docs and the semantic search cache, all rebuildable), `queries.jsonl` (the query log, with `query-log = yes`) and the marks `tasks-checked` and `views-named` (that a start has checked the task files and rewritten the views' old names)
+- `$ZONE_DATA/.git/` — the wiki's history: Zone makes the folder a git repository at its first start (`gitSetup`) and commits every change made through it
+- `$ZONE_DATA/.zone/` — Zone's own state, none of it in git (`.git/info/exclude` has `/.zone/*`, `excludeState`; each file's name is `statePath(…)` in the code):
+  - `config` — the settings file: the wiki's settings and users, password and token hashes (`docs/spec/users.md`)
+  - `secret_key` — the key that signs the session cookies (0600; `secretKey`)
+  - `signed-out` — the ids of sessions signed out, until their cookies expire (`docs/spec/security.md`)
+  - `links` — the open invite, reset and sign-up links, their tokens as hashes (`docs/spec/users.md`)
+  - `grants` — the assistants' OAuth connections, their tokens as hashes (`docs/spec/mcp.md`)
+  - `config.lock`, `links.lock`, `grants.lock` — empty files the writers of those three lock (`lockFile`, flock), so two writers take turns
+  - `seen/<user>.json` — what each user has seen of the tasks' news (What happens on your tasks is told to you, in `docs/spec/users.md`)
+  - `drafts/<user>/` — an editor's text left in a conflict when its tab closed, for its user's next edit, 30 days at most (`docs/spec/editor.md`)
+  - `tmp/` — a three-way merge's scratch files, removed after each merge
+  - `index/` — search's files: `pages.idx` and `sections.idx` (the BM25 indexes), `tasks/<hash>.gob` (each closed tasks' archive's search docs) and `embeddings.json` (the semantic search cache) (`docs/spec/search.md`)
+  - `queries.jsonl` — the query log, only with `query-log = yes`
+  - `tasks-checked`, `views-named` — marks that a start has checked the task files, and rewritten the views' old names in the pages, so later starts skip it
 
 Uploaded image URLs use `/_assets/<filename>` (served by `serveUpload` from `cfg.Uploads`), not the static file path.
+
+### Backups
+
+**Back up the whole data directory** (`ZONE_DATA`): it is the wiki, and there is nothing of it anywhere else.
+The simplest backup is a copy of that folder taken while Zone is stopped (`./run.sh down`), or a snapshot of the file system it is on (a NAS's snapshots, ZFS, btrfs).
+Zone writes each file whole (a reader never sees half of one), but a copy taken file by file while Zone runs can catch a git commit or a task write half done across files.
+
+- **What git holds**: the pages, the uploads (`_assets/` and the private and groups' ones), the tasks and their lists (`_tasks/`, `private/<user>/_tasks/`), each with its history.
+  With `git-remote` set, `git -C "$ZONE_DATA" push origin` copies that elsewhere (Zone doesn't push by itself); a change made on disk and not committed yet is in no commit.
+- **What git doesn't hold, and a clone of the remote lacks**: `.zone/`, above all
+  `config` (the users, their roles, groups, mail addresses and password hashes, the MCP tokens' hashes and every setting: without it a clone of a wiki with users won't start, `missingUsers`),
+  `secret_key` (without it everyone signs in again),
+  `grants` (without it every assistant connected through OAuth connects again),
+  `links` (without it the open invite and reset links stop working)
+  and `signed-out` (without it a copy of a cookie signed out works again, until it expires).
+  Back these up with the folder; where the git remote is the only copy, keep a copy of `.zone/` beside it.
+  They hold password and token hashes and keys: keep the backup as confidential as the wiki (Before you open it up in `docs/spec/security.md`).
+- **What can be rebuilt, and needn't be backed up**: `.zone/index/` (Zone builds the search indexes again when they are first needed, which takes a while on a big wiki, and with semantic search embeds every section and task again in the background, which takes longer), `.zone/tmp/`, the lock files and the marks `tasks-checked` and `views-named` (a start without them looks the files through again and changes nothing that is right).
+  Lost, `seen/` shows each user the tasks' news again, `drafts/` loses only a text left in a conflict, and `queries.jsonl` is a log.
+- **Restoring**: put the folder back where `ZONE_DATA` points and start Zone; the files must belong to the user Zone runs as, and `.zone/config` and `secret_key` should stay readable by it alone (0600: Zone warns in its log when others may read the settings file).
 
 ## How big a wiki can be
 

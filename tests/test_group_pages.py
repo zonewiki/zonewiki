@@ -753,7 +753,7 @@ def test_an_assistant_is_told_who_sees_a_page(client, wiki):
         return resp.get_json()["result"]["instructions"]
     said = instructions("alice")
     assert ("Where a page is kept is who sees it: private/alice/ only this user, groups/dev/ the people in that group, "
-            "anywhere else everyone who uses the wiki.") in said and "back to fewer only by an admin" in said
+            "anywhere else everyone who uses the wiki.") in said and "back to fewer only by an admin, or by whoever shared it while nobody else has changed it." in said
     assert "groups/" not in instructions("bob") and "groups/" not in instructions("dana")
     line = "seen by: the group @dev only (alice, carol and vera; its folder is groups/dev/). Not for a page or task outside the group"
     assert line in mcp(client, "alice", "read_page", slug=DIARY)
@@ -774,7 +774,7 @@ def test_an_assistant_is_told_who_sees_a_page(client, wiki):
     tools = client.post("/mcp", headers={**HOST, "Authorization": "Bearer alice-token"}, json={
         "jsonrpc": "2.0", "id": 1, "method": "tools/list"}).get_json()["result"]["tools"]
     described = {t["name"]: json.dumps(t) for t in tools}
-    assert "A move to fewer readers: an admin, with narrow." in described["rename_page"]
+    assert "A move to fewer readers (an admin, or its sharer while unchanged): narrow." in described["rename_page"]
 
 
 def test_a_group_has_ways_to_start_a_page_and_a_list(client, wiki):
