@@ -5,9 +5,10 @@ import re
 import time
 from datetime import date
 
+import pytest
 from playwright.sync_api import expect
 
-from conftest import TOUCH_PHONE, list_page, make_list, open_tab, wait_until
+from conftest import TOUCH_PHONE, list_page, make_list, open_tab, still, wait_until
 from test_touch import touch_drag
 from tests import settings
 
@@ -669,6 +670,34 @@ def test_badges_do_not_cover_breadcrumb_on_phone(new_page, wiki):
     phone.goto("/page/draft")
     badge = phone.locator("#uncommitted-badge")
     expect(badge).to_be_visible()
+    assert not _overlap(badge.bounding_box(), phone.locator(".breadcrumb").bounding_box())
+
+
+
+@pytest.mark.parametrize("users", [False, True])
+def test_the_badge_coming_moves_nothing_on_phone(new_page, wiki, monkeypatch, users):
+    # Regression: the uncommitted badge comes with /api/uncommitted's answer,
+    # after the page is drawn. Without users its row appeared then and moved
+    # the page down 9.6px; with users (Sign out already in that row) main's
+    # top padding shrank as it came and moved the page up a whole rem.
+    if users:
+        monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "token")})
+    wiki.write("draft", "# Draft\n\nNot committed yet.\n")   # → uncommitted badge
+    phone = new_page(**TOUCH_PHONE)
+    if users:
+        phone.request.post("/login", form={"username": "alice", "password": "pw"})
+    held = []
+    phone.route("**/api/uncommitted", lambda route: held.append(route))
+    phone.goto("/page/draft", settled=False)
+    wait_until(phone, lambda: held, settled=False)
+    badge = phone.locator("#uncommitted-badge")
+    expect(badge).to_be_hidden()
+    before = {sel: phone.locator(sel).bounding_box()["y"] for sel in (".breadcrumb", "h1")}
+    held[0].continue_()
+    phone.unroute("**/api/uncommitted")
+    expect(badge).to_be_visible()
+    still(phone)
+    assert {sel: phone.locator(sel).bounding_box()["y"] for sel in (".breadcrumb", "h1")} == before
     assert not _overlap(badge.bounding_box(), phone.locator(".breadcrumb").bounding_box())
 
 

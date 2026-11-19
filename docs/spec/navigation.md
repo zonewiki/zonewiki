@@ -282,6 +282,8 @@ centred on the row (the breadcrumb keeps their room free; Sign out, though insid
 in the editor fixed at the top right, since its breadcrumb starts at the window's left edge.
 The row aligns to `main`'s side padding (`--main-pad`): the switcher starts on the content's left edge, the search pill ends on its right edge.
 At ≤640px they join the page flow above the breadcrumb, so they no longer cover it, Sign out on the right of that row (the bottom edge is the tab bar's), and 🌐 is hidden, since on a phone remote access is a given.
+That row keeps its height whether the uncommitted count shows or not: the count comes after the page is drawn, and a row that appeared (or a top padding that changed) with it moved the whole page under the reader's finger.
+Only a page with nothing that could show there (a visitor without Sign in) has no row.
 
 ---
 

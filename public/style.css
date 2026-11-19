@@ -2464,19 +2464,24 @@ body.editor-page main {
   body:has(:is(input, textarea, select, [contenteditable]):focus) .signout-form { visibility: hidden; }
 
   /* The status badges join the page flow instead of floating over the
-     breadcrumb. The container has no box of its own, so with no badge
-     showing it takes no space. 🌐 (remote access) goes: on a phone that is
-     a given. Sign out sits in the same row, on the right: the bottom edge
-     belongs to the bar. */
+     breadcrumb. 🌐 (remote access) goes: on a phone that is a given. Sign
+     out sits in the same row, on the right: the bottom edge belongs to the
+     bar. The row keeps its height whether the uncommitted badge shows or
+     not: the badge comes with an answer after the page is drawn, and a row
+     that appeared then moved the whole page down under the reader's
+     finger. Only a page with nothing that could show there (a visitor
+     without Sign in) has no row. */
   .top-badges { position: static; margin: 0; }
   .top-badges > * { margin-top: .1rem; }
+  .top-badges:has(> *) { min-height: 1.6rem; }
   .remote-badge { display: none; }
   .signout-form { position: static; margin-left: auto; }
   .top-actions { display: none; }
   main:has(> .top-actions) > .breadcrumb { min-height: 0; padding-right: 0; }
-  /* A showing badge (zonewiki.js sets inline-flex) already spaces the page from
-     the top edge, so main's own top padding shrinks. */
-  body:has(.top-badges > [style*="inline-flex"]) main { padding-top: .5rem; }
+  /* The badges' row already spaces the page from the top edge, so main's
+     own top padding shrinks: always, not when the badge shows (that moved
+     the page up as it came). */
+  body:has(.top-badges > *) main { padding-top: .5rem; }
 
   /* Bigger touch targets */
   .btn { padding: .45rem 1rem; }
