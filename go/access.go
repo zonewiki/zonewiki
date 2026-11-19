@@ -672,6 +672,39 @@ func visibleSlugs(user asker) map[string]bool {
 	return out
 }
 
+// seenFolders: the folders whose pages user sees, for what opens the files
+// itself rather than through visiblePages (grep_wiki's git grep, which is
+// told these and no other): "" for the wiki's top (a page there is
+// everyone's), each folder at the top that is everyone's, and in private/
+// and groups/ the folders of the places user sees (placeOf, which judges
+// in lower case: a hand-made Private/Alice/ is alice's, and only alice's).
+// Slash-separated, relative to the wiki, as they are on disk. Zone's own
+// folders (_…, .…) are none of them, and the caller leaves them out below
+// these too. Listed from what is there: a folder made since isn't searched,
+// rather than searched unasked.
+func seenFolders(user asker) []string {
+	out := []string{""}
+	top, _ := os.ReadDir(cfg.Data)
+	for _, e := range top {
+		name := e.Name()
+		if !e.IsDir() || strings.HasPrefix(name, "_") || strings.HasPrefix(name, ".") {
+			continue
+		}
+		if placeOf(name + "/page").shared() {
+			out = append(out, name)
+			continue
+		}
+		// private/ or groups/: its folders are places, each its own.
+		inside, _ := os.ReadDir(filepath.Join(cfg.Data, name))
+		for _, f := range inside {
+			if folder := name + "/" + f.Name(); f.IsDir() && placeOf(folder+"/page").sees(user) {
+				out = append(out, folder)
+			}
+		}
+	}
+	return out
+}
+
 // privateNameRE: a page's or file's path in private/ as a commit message
 // names it ("Move private/alice/2026-…_idea into the wiki as ideas/x"), at
 // the start of a path, not inside one ("notprivate/x", "notes/private/x"):

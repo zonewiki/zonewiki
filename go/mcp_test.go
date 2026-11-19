@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -201,8 +202,24 @@ func TestGrepTimeout(t *testing.T) {
 	testWiki(t, map[string]string{"a": "# A\n"})
 	cfg.GitEnabled = true
 	set(t, &grepTimeout, time.Nanosecond)
-	if _, err := grepPages("(a+)+$", false, nil); err == nil || !strings.Contains(err.Error(), "took longer than") {
+	if _, err := grepPages(asker{}, "(a+)+$", false); err == nil || !strings.Contains(err.Error(), "took longer than") {
 		t.Errorf("err %v", err)
+	}
+}
+
+// git grep is told folders as patterns: one whose name holds a wildcard is
+// itself, and what is below Zone's own folders (_…, .…) isn't searched.
+func TestGrepFoldersAreThemselves(t *testing.T) {
+	testWiki(t, map[string]string{"top": "needle", "a[1]*?/x": "needle", "a1/x": "hay", "notes/_drafts/y": "needle",
+		"notes/.old/z": "needle", "notes/n": "needle"})
+	cfg.GitEnabled = true
+	hits, err := grepPages(asker{}, "needle", false)
+	var slugs []string
+	for _, h := range hits {
+		slugs = append(slugs, h.Slug)
+	}
+	if sort.Strings(slugs); err != nil || strings.Join(slugs, " ") != "a[1]*?/x notes/n top" {
+		t.Errorf("%v %v", slugs, err)
 	}
 }
 

@@ -227,6 +227,17 @@ def test_their_assistants_change_nothing_of_it(client, wiki, who, tool, args):
         assert GROUP not in stat or author not in OUTSIDERS, stat
 
 
+@pytest.mark.parametrize("who", OUTSIDERS)
+def test_their_greps_read_none_of_it(client, wiki, who):
+    """grep_wiki's regex reads only what its asker sees (test_privacy.gives_up_on):
+    an outsider's, an admin's too, never the group's pages or uploads."""
+    (wiki / GROUP / "long.md").write_text(f"{SECRET}page{test_privacy.LONG}")
+    (wiki / GROUP / "_assets/notes.md").write_text(f"{SECRET}upload{test_privacy.LONG}")
+    for word in ("page", "upload"):
+        assert not test_privacy.grep_fails(client, SECRET + word, USERS[who][1]), word
+    assert test_privacy.grep_fails(client, SECRET + "page", USERS["carol"][1])
+
+
 def test_a_visitor_and_a_stranger_see_none_of_it(client, wiki):
     client.post("/logout", headers=HOST)
     for path in (f"/page/{DIARY}", "/groups/dev/_assets/photo.png", "/api/search?q=" + QUERY):

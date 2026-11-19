@@ -822,6 +822,45 @@ def test_alices_assistant_sees_her_own(client, wiki):
     assert "private" in mcp(client, "search_tasks", token="alice-token", query=QUERY).split("\n")[3]
 
 
+def gives_up_on(word):
+    """A regex that gives up on a line holding word (PCRE's match limit:
+    the line's characters taken two ways each) and finds nothing on any
+    other line: where grep_wiki's engine reads a line with word, the answer
+    is an error, so a word in a file bob may not see must never make one."""
+    return rf"^(?=.*{word})(?:.|.)*(*FAIL)"
+
+
+def grep_fails(client, word, token="bob-token"):
+    return rpc(client, "tools/call", {"name": "grep_wiki", "arguments": {"pattern": gives_up_on(word)}}, token)["isError"]
+
+
+LONG = " and some more words, so that the line is long enough to give up on\n"
+
+
+def test_grep_wiki_reads_no_file_he_may_not_see(client, wiki):
+    """grep_wiki's regex runs over what bob sees and nothing else: her
+    pages, her uploads, her task's files, a folder of hers made by hand in
+    capitals and Zone's own folders stay unread, so no error tells a word
+    of them."""
+    (wiki / "private/alice/_assets/keys.md").write_text(f"{SECRET}upload{LONG}")
+    (wiki / f"_tasks/files/{TASK_ID}/_assets/keys.md").write_text(f"{SECRET}taskfile{LONG}")
+    (wiki / "Private/Alice").mkdir(parents=True)
+    (wiki / "Private/Alice/by-hand.md").write_text(f"{SECRET}byhand{LONG}")
+    (wiki / ".zone/drafts/alice/left.md").write_text(f"{SECRET}draft{LONG}")
+    (wiki / "private/alice/long.md").write_text(f"{SECRET}page{LONG}")
+    (wiki / "notes").mkdir()
+    (wiki / "notes/shared.md").write_text(f"bobseesthis{LONG}")
+    assert grep_fails(client, "bobseesthis"), "the pattern gives up where it reads the word"
+    for word in ("page", "upload", "taskfile", "byhand", "draft"):
+        assert not grep_fails(client, SECRET + word), word
+    # She sees her own, by hand in capitals too (placeOf judges in lower case).
+    assert grep_fails(client, SECRET + "page", "alice-token") and grep_fails(client, SECRET + "byhand", "alice-token")
+    # A pattern git can't read is said; the regex giving up only that it did.
+    text = mcp(client, "grep_wiki", pattern="(")
+    assert "missing closing parenthesis" in text or "Unmatched (" in text
+    assert "pcre" not in mcp(client, "grep_wiki", pattern=gives_up_on("bobseesthis")).lower()
+
+
 def test_guides_in_private_folders_stay_private(client, wiki):
     """A guide in alice's folder, and a shared one importing her diary:
     bob's assistant gets neither her guide nor the diary's text."""

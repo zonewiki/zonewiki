@@ -754,6 +754,10 @@ var grepPerl struct {
 	known, perl bool
 }
 
+// globEscapeRE: what a pathspec with glob magic reads as a wildcard, or as
+// its escape, in a folder's name.
+var globEscapeRE = regexp.MustCompile(`[*?\[\]\\]`)
+
 // GrepHit is a line of a page that matched.
 type GrepHit struct {
 	Slug   string
@@ -761,15 +765,20 @@ type GrepHit struct {
 	Line   string
 }
 
-// grepPages: every line of every page matching a regex, in file order. git
-// matches (git grep --no-index, so pages not yet committed count too) in
-// its own process, which a timeout can kill. Without git, the pattern is
-// matched as plain text. Only the pages in slugs (nil: every page). A
-// pattern git refuses (bad syntax) or that takes too long is a refusal.
-func grepPages(pattern string, ignoreCase bool, slugs map[string]bool) ([]GrepHit, error) {
-	if slugs == nil {
-		slugs = slugSet()
-	}
+// grepPages: every line of every page user sees matching a regex, in file
+// order. git matches (git grep --no-index, so pages not yet committed count
+// too) in its own process, which a timeout can kill. Without git, the
+// pattern is matched as plain text. A pattern git refuses (bad syntax)
+// or that takes too long is a refusal.
+//
+// The regex never reads a file user may not see: git is given only the
+// folders of seenFolders, Zone's own (_…, .…) left out below them too.
+// Hits it doesn't return still tell: a pattern that gives up on a line
+// holding a word (PCRE's match limit, or the timeout) is an error only
+// where that word is, so a search over everything, its hits filtered
+// after, read other users' pages a guess at a time.
+func grepPages(user asker, pattern string, ignoreCase bool) ([]GrepHit, error) {
+	slugs := visibleSlugs(user)
 	var hits []GrepHit
 	if !cfg.GitEnabled {
 		needle := pattern
@@ -803,6 +812,16 @@ func grepPages(pattern string, ignoreCase bool, slugs map[string]bool) ([]GrepHi
 		tries = []bool{grepPerl.perl}
 	}
 	grepPerl.Unlock()
+	// The pathspecs are patterns (package gitrepo takes paths literally):
+	// git's, since Zone wrote them, a folder's name escaped.
+	specs := []string{":(exclude,glob)**/_*/**", ":(exclude,glob)**/.*/**"}
+	for _, folder := range seenFolders(user) {
+		if folder == "" {
+			specs = append(specs, ":(glob)*.md")
+		} else {
+			specs = append(specs, ":(glob)"+globEscapeRE.ReplaceAllString(folder, `\$0`)+"/**/*.md")
+		}
+	}
 	var r gitResult
 	for _, perl := range tries {
 		args := []string{"grep", "--no-index", "--no-color", "-I", "-n", "-z", "-E"}
@@ -812,8 +831,7 @@ func grepPages(pattern string, ignoreCase bool, slugs map[string]bool) ([]GrepHi
 		if ignoreCase {
 			args = append(args, "-i")
 		}
-		// "*.md" is a pattern (package gitrepo takes paths literally): git's, since Zone wrote it.
-		r = runGitEnv(grepTimeout, "", []string{"GIT_LITERAL_PATHSPECS=0"}, append(args, "-e", pattern, "--", "*.md")...)
+		r = runGitEnv(grepTimeout, "", []string{"GIT_LITERAL_PATHSPECS=0"}, append(append(args, "-e", pattern, "--"), specs...)...)
 		if r.Code == gitrepo.TimedOut {
 			return nil, refuse(fmt.Sprintf("the search took longer than %ds; try a simpler pattern", int(grepTimeout.Seconds())))
 		}
@@ -826,11 +844,15 @@ func grepPages(pattern string, ignoreCase bool, slugs map[string]bool) ([]GrepHi
 		break
 	}
 	if r.Code != 0 && r.Code != 1 {
-		msg := strings.TrimPrefix(strings.TrimSpace(r.Stderr), "fatal: ")
-		if msg == "" {
-			msg = fmt.Sprintf("git grep failed (%d)", r.Code)
+		// What is wrong with the pattern itself is the asker's to hear
+		// ("-e option, '(': missing closing parenthesis"); anything else
+		// (the regex giving up on a line) only that it failed.
+		stderr := strings.TrimSpace(r.Stderr)
+		if msg, ok := strings.CutPrefix(stderr, "fatal: -e option, "); ok {
+			return nil, refuse(msg)
 		}
-		return nil, refuse(msg)
+		logf("git grep failed (%d): %s", r.Code, stderr)
+		return nil, refuse("the search failed: the pattern is too hard to match; try a simpler one")
 	}
 	for _, row := range mdtext.SplitLines(strings.ToValidUTF8(r.Stdout, "\uFFFD")) {
 		parts := strings.SplitN(mdtext.LineBody(row), "\x00", 3)

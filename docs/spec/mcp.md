@@ -231,8 +231,13 @@ For exact text and all its occurrences (ticket ids, names, TODOs, a term to repl
 Pages only: no tasks, nothing in `_` folders.
 
 `grepPages` runs `git grep --no-index -P` (Perl-style; `-E`, extended regexes, when git is built without PCRE, found out once) in its own process, uncommitted pages included, with a 10s timeout (`grepTimeout`): a pattern that backtracks badly is killed rather than holding up the single server process, which Python's `re` couldn't be.
-A bad pattern or the timeout is a tool error.
+A bad pattern is a tool error that says what is wrong with it; the timeout, or the regex giving up on a line (PCRE's match limit), is one that says only that the search failed.
 Without git, the pattern is matched as plain text and the result says so.
+
+**The regex reads only what its asker sees.**
+git is given the folders of `seenFolders` (`go/access.go`) as pathspecs, and no other: the wiki's top, its shared folders, and in `private/` and `groups/` the folders of the places the asker sees (judged as `placeOf` judges, in lower case), with Zone's own folders (`_…`, `.…`) left out at every depth.
+A folder made since they were listed isn't searched.
+Filtering the hits afterwards wasn't enough: a pattern that gives up only on a line holding a word (`^(?=.*word)(?:.|.)*(*FAIL)`) failed only where that word was, so the error read other users' pages, uploads and drafts a guess at a time.
 
 #### `list_pages`
 

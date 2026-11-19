@@ -249,7 +249,7 @@ func grepWiki(args jsonObj, base string, user asker) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	found, err := grepPages(pattern, ignoreCase, visibleSlugs(user))
+	found, err := grepPages(user, pattern, ignoreCase)
 	if rf, ok := refusalOf(err); ok {
 		return "", toolErr("grep_wiki: " + rf.msg)
 	}

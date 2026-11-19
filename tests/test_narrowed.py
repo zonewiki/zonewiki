@@ -111,6 +111,12 @@ def test_it_makes_nothing_private_and_says_why(client, private_wiki, without_pri
     assert (private_wiki / "shed.md").exists() and P.git(private_wiki, "log", "-n1", "--format=%an") == "alice"
 
 
+def test_without_the_private_place_its_grep_reads_none_of_it(client, private_wiki, without_private):
+    (private_wiki / "private/alice/long.md").write_text(f"{P.SECRET}page{P.LONG}")
+    assert not P.grep_fails(client, P.SECRET + "page", without_private)
+    assert P.grep_fails(client, P.SECRET + "page", "alice-token")
+
+
 def errors(client, access, tool, **args):
     """A tool's text and whether it is an error; a failure inside Zone (a 500) fails the test."""
     resp = client.post("/mcp", headers={**HOST, "Authorization": f"Bearer {access}"}, json={
@@ -198,6 +204,12 @@ def test_without_the_group_it_changes_nothing_of_it(client, group_wiki, without_
     assert G.SECRET not in text
     for commit in G.git(group_wiki, "log", "--format=%H", f"{log.split()[0]}..HEAD").split():
         assert G.GROUP not in G.git(group_wiki, "show", "--stat", "--format=", commit)
+
+
+def test_without_the_group_its_grep_reads_none_of_it(client, group_wiki, without_the_group):
+    (group_wiki / G.GROUP / "long.md").write_text(f"{G.SECRET}page{P.LONG}")
+    assert not P.grep_fails(client, G.SECRET + "page", without_the_group)
+    assert P.grep_fails(client, G.SECRET + "page", "alice-token")
 
 
 def test_given_the_group_it_reads_it_and_is_told_of_no_other(client, group_wiki, monkeypatch):

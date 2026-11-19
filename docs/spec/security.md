@@ -393,6 +393,9 @@ The cards escape them as well (`esc()` in `public/js/taskrender.js`): a tasks fi
 Regexes from AI clients can't hang the server: `grep_wiki` runs `git grep` in its own process, killed after 10 s; `replace_in_pages` matches with Go's RE2, which takes time linear in the text (no backtracking, so no lookarounds or backreferences).
 `replace_in_pages` in `docs/spec/mcp.md`.
 
+Nor can they read what their asker may not see: whether a regex matches, fails or takes long tells what it read, so `grep_wiki`'s engine is handed only the folders its asker sees (`seenFolders`), never the whole wiki with the hits filtered after, and a failure while matching is said without git's words (`grep_wiki` in `docs/spec/mcp.md`).
+`replace_in_pages` reads only the pages its asker may write.
+
 ## Throttling
 
 Wrong passwords and wrong MCP tokens are throttled per client (`Throttle`, `loginThrottle`/`mcpThrottle`, in memory): after 5 failures in a row each try waits 1 minute, doubling up to an hour, refused unchecked (429, the login page says how long; `/mcp` sends `Retry-After`);
