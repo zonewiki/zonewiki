@@ -25,20 +25,26 @@ Read the file for the area you are working on before changing it:
 
 | File | Covers |
 |------|--------|
-| `docs/spec/routes.md` | Every route, what each page view includes, side columns on big screens |
-| `docs/spec/rendering.md` | Markdown → HTML: autolinks, callouts, math and Mermaid diagrams, sortable tables, folding sections, templates, client modules, page header, wikilinks, `[[task:…]]` references, image sizing, frontmatter, version history |
-| `docs/spec/editor.md` | The in-browser editor: auto-save, formatting bar, section editing, smart helpers, rename, file paste |
-| `docs/spec/navigation.md` | Search modal (page list), modules and the module switcher, sharing mode, notes, keyboard shortcuts, presentation mode |
-| `docs/spec/search.md` | Full-text search: BM25, semantic search, query syntax, highlights, who searches what (private and group pages), measuring retrieval |
-| `docs/spec/mcp.md` | The MCP server and its tools, `zone_help` (Zone's docs for assistants) |
+| `docs/spec/routes.md` | Every route by area, the task API, what a page view shows (breadcrumb, backlinks, related, linked tasks), side columns on big screens |
+| `docs/spec/rendering.md` | The page view (header, menu, copy link, folding sections, print), Zone's markdown (raw HTML, autolinks, callouts, image sizing), wikilinks, `[[task:…]]` references, frontmatter, math and Mermaid diagrams, sortable tables, version history (history, revisions, diffs, Changes, undo); how a page is rendered (templates), client code |
+| `docs/spec/editor.md` | The in-browser editor: opening it, saving (auto-save, Done), formatting bar, smart helpers (completion, emoji, snippets, the task list dialog, checkboxes), section editing, rename, file paste, the mobile editor, several editors (merge on save, conflicts); how it works |
+| `docs/spec/navigation.md` | Search modal (page list), deleted pages, modules (the module switcher, top actions, the phones' tab bar, the Tasks counts, status badges), sharing mode, notes, keyboard shortcuts, presentation mode |
+| `docs/spec/search.md` | Full-text search: query syntax, how words match, results and highlights, who searches what (private and group pages); indexing, BM25 ranking, semantic search and hybrid ranking, the index on disk, measuring retrieval |
+| `docs/spec/mcp.md` | The MCP server: connecting an assistant (a token, OAuth, connections given less), the tools (one section each), what every write does, guides, `zone_help` (Zone's docs for assistants); how it works (protocol, auth, OAuth) |
 | `docs/spec/tasks.md` | Tasks: embed syntax, dates, fields, views, settings, export and import, interaction (filter, editing, quick actions, selection, cards), history, comments, news on your tasks (following, mentions, mail), importance, keep tasks, lists (who sees and manages them, the Inbox, My tasks, pins), a task's files, renaming a tag, touch, keyboard shortcuts; how it works (the code, storage) |
 | `docs/spec/security.md` | Principles, before you open it up (HTTPS, what to know), login and sessions (the session cookie, signing out, first run), the settings file and Zone's folders, the permission model, public wikis (visitors), the MCP token and OAuth, the Host and Origin checks, the page policy (CSP, raw HTML defused, framing), untrusted input, throttling, limits, supply chain |
 | `docs/spec/users.md` | Several users: the settings file `.zone/config` (its keys, format, storage limit, password hashes, kept out of git, `zonewiki user`/`zonewiki group`/`zonewiki config`, reloading), roles (admins, disabled users, viewers, visitors, guides), groups (made of groups, of your own, owners, renamed, ended), managing users, invite links, sign-up, signing in, per-user MCP tokens, private pages, group pages, who may move a page to other readers, private tasks, assigning tasks, commit authors |
-| `docs/spec/deployment.md` | Containerfile, compose, `run.sh`, `.env`, a NAS or server (prebuilt image, Synology), CI (Forgejo, GitHub), mail (SMTP), network and phone access, the version string, the home-screen app, the data directory (all of `.zone/`), backups |
+| `docs/spec/deployment.md` | Containerfile, compose, `run.sh`, `.env`, a NAS or server (prebuilt image, Synology), CI (Forgejo, GitHub), mail (SMTP), network and phone access, the version string, the home-screen app, the data directory (all of `.zone/`), backups, packing the repository, how big a wiki can be |
 | `docs/spec/testing.md` | The test harness (fixtures, the server under test, the browser tests' gotchas), the guards that fail for a forgotten step, where each area's tests live, the shared case files, the suites and the bench, secret scanning (the pre-commit hook, CI's leaks job) |
 
 The spec and this file are written a sentence a line (a long sentence a clause a line; a list item's following lines indented under its text), so a change shows as the sentence that changed, not as its paragraph.
 Markdown joins the lines when it renders them.
+
+A spec file is Zone's help as much as its design (`zone_help` hands it out by section), so it is laid out for a reader:
+per feature, how to use it first (what a user sees and does), how it works after (the code, the files, the reasons);
+enumerations (routes, tools, keys, shortcuts, syntax) as tables, a cell a line or two, the detail in a section below;
+real headings, not long bullets with a bold label, and each heading unique in its file (`go/manual.go` finds a section by it);
+and the rule as it is now, not how it was measured: measurements and test results go in the commit message (a spec says where the current numbers live, as How big a wiki can be in `docs/spec/deployment.md` does).
 
 ---
 

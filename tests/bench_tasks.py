@@ -280,8 +280,8 @@ def age(root, users, lists, commits):
 
 def test_a_write_beside_a_join(team, client):
     """What a write waits while Zone joins the packs of a repository with a
-    history (AGED commits; Zone packs the repository itself, in
-    docs/spec/rendering.md): the join reads all of it, for seconds here and
+    history (AGED commits; Packing the repository in
+    docs/spec/deployment.md): the join reads all of it, for seconds here and
     for minutes after a team's year, and until 2026-11-16 every save of the
     wiki waited for it. One user changes a task again and again; the fiftieth
     commit starts Zone's pack, the join follows, and each write beside it is
