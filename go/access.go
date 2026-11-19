@@ -595,6 +595,26 @@ func canSeePath(user asker, rel string) bool {
 	return user.Name != visitor || !strings.HasPrefix(rel, taskfiles.DirName+"/")
 }
 
+// seesFile: user may see the file at path (in the wiki, as the code holds
+// it): canSeePath. What a write tells its user it changed, where it changed
+// files of others too (a rename's links on another user's private page, a
+// tag in a list for some), is counted with it.
+func seesFile(user asker, path string) bool {
+	rel, ok := relInside(cfg.Data, path)
+	return ok && canSeePath(user, filepath.ToSlash(rel))
+}
+
+// seenFiles: of files (paths in the wiki), those user sees (seesFile).
+func seenFiles(user asker, files []string) []string {
+	var out []string
+	for _, f := range files {
+		if seesFile(user, f) {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
 // namesList: msg names the list name as commit messages do ("#hiring"), as
 // a whole word ("#hiring-2" is another list).
 func namesList(msg, name string) bool {

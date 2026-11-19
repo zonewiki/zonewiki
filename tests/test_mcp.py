@@ -1629,7 +1629,7 @@ class TestWritesCommit:
         assert subjects()[:9] == [
             "Delete old-notes/mcp (MCP)",
             "Move notes/ to old-notes/ (MCP)",
-            'Replace "1st" on notes/mcp: spell out (MCP)',
+            'Replace "1st": spell out (MCP)',
             "Complete task (MCP)",
             "Create task: from chat (MCP)",
             "Rename mcp-notes to notes/mcp (MCP)",

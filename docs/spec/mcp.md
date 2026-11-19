@@ -379,7 +379,8 @@ Where it'd otherwise take grep_wiki plus an edit_page per page, or `sed` on the 
 **By default a dry run**: nothing is written, and the result lists each changed line as `  <line>: - old` / `  <line>: + new` under its page (the first `limit` lines, cut as grep_wiki cuts them), so the model (or the user) checks it before calling again with `dry_run=false`.
 A write changing more than `max_pages` pages (at most 1000) is refused, with nothing written; the dry run says so beforehand.
 
-A write first commits the pages' uncommitted changes as `Save N pages` (`keepPendingPages`; one commit per user who auto-saved them, Zone for the rest), then commits `Replace "<find>" on N pages` (or on `<slug>` for one), and names the pages changed and any wikilinks the replacement made that lead nowhere.
+A write first commits the pages' uncommitted changes as `Save pages before replacing "<find>"` (`keepPendingPages`; one commit per user who auto-saved them, Zone for the rest), then commits `Replace "<find>"`, and names the pages changed and any wikilinks the replacement made that lead nowhere.
+The commits name no page and no count: the pages may be the writer's private ones beside shared ones, and the history shows everyone else the pages of a commit they see, so a count would tell of the others.
 
 **A regex can't hang the server**: RE2 matches in time linear in the text (it never backtracks), so even `(a+)+$` runs in the server, without the process and timeout the Python Zone needed (whose regexes had lookarounds, at the price of a pattern backtracking for hours).
 
@@ -393,7 +394,7 @@ For logs: no read of the page first.
 
 #### `rename_page`
 
-`movePage`, as the editor's rename: links on pages and in tasks follow, and the page's own relative links are re-based for its new folder, all in one commit; the result says how many files changed.
+`movePage`, as the editor's rename: links on pages and in tasks follow, and the page's own relative links are re-based for its new folder, all in one commit; the result says how many files changed, of those the user sees (the links on other users' private pages, a group's they aren't in or a list for some follow too, but aren't counted to them).
 The home page can't be renamed, and an existing target is an error.
 
 **To fewer readers**: with users a move that takes a page (or a folder of them) from people who see it is an admin's, or that of whoever shared it while nobody else changed it (Who may move a page to other readers in `docs/spec/users.md`): it answers "Not moved: bob, erin will no longer see … call again with narrow=true" until `narrow` is true, and "Ask an admin" to anyone else.
@@ -404,7 +405,7 @@ A move to more people is not asked about.
 - Every page in it and its subfolders moves to `new_slug` + the rest of its slug, links to each following as for one page, all in one commit `Move <folder>/ to <new>/`, after the pages' uncommitted changes are committed as `Save <folder>/`.
 - Refused, before anything moves: a target page that exists (all named), a folder into itself (`tickets` → `tickets/old`), a target in a `_`/`.` folder.
 - Other files in the folder (images) stay where they are; subfolders left empty are removed.
-- The result lists the moves (the first 20).
+- The result lists the moves (the first 20), and counts the files whose links changed as for one page.
 
 #### `rename_task_tag`
 

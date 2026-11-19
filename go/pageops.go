@@ -380,7 +380,9 @@ func checkTarget(user asker, slug, newSlug string, sure moveSure) error {
 
 // renamePageOp renames the page, links to it following (movePage); what
 // it held uncommitted is committed first, so the rename's commit only
-// moves it. changed: the files whose links were re-pointed.
+// moves it. changed: the files whose links were re-pointed, of those user
+// sees (the links on everyone's pages follow, but what user is told of
+// counts nothing they may not see).
 func renamePageOp(user asker, slug, newSlug, suffix string, sure moveSure) (changed []string, kept bool, err error) {
 	path, newPath, err := checkRename(user, slug, newSlug, sure)
 	if err != nil {
@@ -390,7 +392,7 @@ func renamePageOp(user asker, slug, newSlug, suffix string, sure moveSure) (chan
 		return nil, false, err
 	}
 	changed, err = movePage(user, path, newPath, slug, newSlug, "Rename "+slug+" to "+newSlug+suffix)
-	return changed, kept, err
+	return seenFiles(user, changed), kept, err
 }
 
 // checkFolderMove: why user can't move folder to newFolder, if not; else
@@ -439,8 +441,8 @@ func checkFolderMove(user asker, folder, newFolder string, sure moveSure) ([]str
 
 // moveFolderOp moves every page in the folder, links following, in one
 // commit (moveFolder); what they held uncommitted is committed first.
-// Returns the (slug, new slug) moves, the files whose links changed, and
-// how many pages had text kept.
+// Returns the (slug, new slug) moves, the files whose links changed of
+// those user sees (as renamePageOp), and how many pages had text kept.
 func moveFolderOp(user asker, folder, newFolder, suffix string, sure moveSure) (moves [][2]string, changed []string, kept int, err error) {
 	paths, err := checkFolderMove(user, folder, newFolder, sure)
 	if err != nil {
@@ -450,7 +452,7 @@ func moveFolderOp(user asker, folder, newFolder, suffix string, sure moveSure) (
 		return nil, nil, 0, err
 	}
 	moves, changed, err = moveFolder(user, folder, newFolder, "Move "+folder+"/ to "+newFolder+"/"+suffix)
-	return moves, changed, kept, err
+	return moves, seenFiles(user, changed), kept, err
 }
 
 // tagPlan: what renaming a tag would change.
@@ -637,7 +639,7 @@ func renameTagOp(user asker, tag, newName string, merge bool, suffix string) (*t
 		}
 		if n > 0 {
 			writes = append(writes, taskWrite{f.Path, tasks})
-			if f.Owner == "" || ownsTasks(user, f.Owner) {
+			if seesFile(user, f.Path) { // not another user's, nor a list's for some user is none of
 				done.Tasks += n
 			}
 		}

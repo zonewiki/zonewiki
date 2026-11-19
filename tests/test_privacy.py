@@ -881,6 +881,32 @@ def test_read_guides_tells_no_folder_he_may_not_see(client, wiki):
                                                           slug="private/alice/jobsearch")
 
 
+def test_his_writes_count_none_of_her_files(client, wiki):
+    """A rename re-points the links on her pages and in her tasks too, a
+    replace changes his own private pages with shared ones: what bob is told,
+    and what the history says to her and anyone, counts only what each sees."""
+    text = mcp(client, "rename_page", slug="plans", new_slug="plans-2")
+    assert "Renamed page plans to plans-2." in text and "updated in" not in text
+    assert "[[plans-2]]" in (wiki / f"{DIARY}.md").read_text()    # hers follow all the same
+    (wiki / "notes.md").write_text("# Notes\n\n[[plans-2]]\n")
+    assert "Links to it were updated in 1 files." in mcp(client, "rename_page", slug="plans-2", new_slug="plans")
+    (wiki / "projects").mkdir()
+    (wiki / "projects/roadmap.md").write_text("# Roadmap\n")
+    (wiki / f"{DIARY}.md").write_text((wiki / f"{DIARY}.md").read_text() + "\n[[projects/roadmap]]\n")
+    text = mcp(client, "rename_page", slug="projects/", new_slug="work")
+    assert "Moved folder projects/ to work/: 1 pages." in text and "updated in" not in text
+    assert "[[work/roadmap]]" in (wiki / f"{DIARY}.md").read_text()
+    # His replace over his private pages and a shared one, not in git yet:
+    # neither commit says a count.
+    (wiki / "private/bob").mkdir(parents=True)
+    for slug in ("private/bob/a", "private/bob/b", "shed"):
+        (wiki / f"{slug}.md").write_text("# X\n\nfoobarbaz\n")
+    assert "on 3 pages" in mcp(client, "replace_in_pages", find="foobarbaz", replace="quux", dry_run=False)
+    assert git(wiki, "log", "-2", "--format=%s").splitlines() == [
+        'Replace "foobarbaz" (MCP)', 'Save pages before replacing "foobarbaz"']
+    assert "3 pages" not in mcp(client, "history", token="alice-token")
+
+
 def test_guides_in_private_folders_stay_private(client, wiki):
     """A guide in alice's folder, and a shared one importing her diary:
     bob's assistant gets neither her guide nor the diary's text."""

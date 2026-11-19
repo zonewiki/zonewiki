@@ -786,3 +786,13 @@ def test_a_batch_update_changes_fields_as_one_tasks_update_does(client, wiki):
     titles = {t["id"]: t["title"] for t in client.get("/api/tasks", headers=HOST).get_json()}
     assert titles[IDS["shared"]] == "Order chairs" and titles[IDS["open"]] == f"Offer for the {SECRET}"
     assert batch({"id": IDS["shared"], "title": "Order tables", "was": {"title": "Order chairs"}}).status_code == 200
+
+
+def test_a_tags_rename_counts_only_the_tasks_he_sees(client, wiki):
+    """A tag is one name for all, so bob's rename reaches the list's task
+    too, but what he is told counts only the task he sees."""
+    sign_in(client, "bob")
+    client.post("/api/tasks", json={"title": "Buy offers", "list": "team", "tags": ["offers"]}, headers=HOST)
+    out = mcp(client, "bob", "rename_task_tag", tag="offers", new_tag="deals")
+    assert "in one commit: 1 task." in out, out
+    assert "deals" in (wiki / f"_tasks/lists/{LIST}/tasks.json").read_text()

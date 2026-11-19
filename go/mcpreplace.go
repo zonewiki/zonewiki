@@ -373,15 +373,15 @@ func replaceInPages(args jsonObj, base string, user asker) (string, error) {
 	if err := checkGuides(args, slugs, user); err != nil {
 		return "", err
 	}
-	on := hits[0].slug
-	if len(hits) > 1 {
-		on = fmt.Sprintf("%d pages", len(hits))
-	}
-	msg, err := commitMsg("Replace "+strconv.Quote(cutRunes(spec.find, 60, "…"))+" on "+on, args)
+	// The commits name no page and no count: whoever reads the history sees
+	// the pages of them they may see, and how many there were in all would
+	// tell of the others.
+	find := strconv.Quote(cutRunes(spec.find, 60, "…"))
+	msg, err := commitMsg("Replace "+find, args)
 	if err != nil {
 		return "", err
 	}
-	what := fmt.Sprintf("%d pages", len(hits))
+	what := "pages before replacing " + find
 	pages := make([]pageNewText, len(hits))
 	for i, h := range hits {
 		pages[i] = pageNewText{h.slug, h.path, h.new}
