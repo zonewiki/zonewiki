@@ -402,6 +402,7 @@ The source-side text functions agree with the parser:
 ### Diagrams
 
 **Diagrams** (Mermaid): a ` ```mermaid ` fence becomes `<div class="mermaid-diagram">` with the SVG (`securityLevel: 'strict'`: no scripts or click handlers from a diagram's text), in Mermaid's `dark` theme when the browser prefers dark.
+A label's HTML (`<b>`, `<br>`) stays, but not what makes or submits a form, a refresh or a frame, nor ids and names: Mermaid cleans labels with DOMPurify's defaults, which keep form controls, so `js/figures.js` gives it its own list (`dompurifyConfig`, which a diagram's `%%{init}%%` can't change: `secure`) and takes those out of the drawn SVG before it goes into the page (`defuseDiagram`; No form in a page posts to Zone in `docs/spec/security.md`).
 A diagram that doesn't parse keeps its source, with a `.mermaid-error` line under it (`Diagram: <Mermaid's message>`).
 The SVGs are kept per source and theme (the last 50), so the editor's preview, redrawn as you type, doesn't flash the source.
 

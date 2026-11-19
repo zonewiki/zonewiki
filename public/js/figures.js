@@ -115,13 +115,36 @@ export async function diagramsForPaper(on) {
   await renderDiagrams(document, null);
 }
 
+// What a diagram's text may not make: Mermaid's labels are HTML, which strict
+// cleans with DOMPurify's defaults, and those keep form controls (a form in a
+// label posts to Zone as the reader, as one in a page would: defuseHTML in
+// go/markdown.go), refreshes and frames. So its labels go through DOMPurify
+// without them (dompurifyConfig, which a diagram's own %%{init}%% can't
+// change: secure), ids and names too (a label's element must not stand in for
+// one of Zone's, getElementById); and whatever of them is in the drawn SVG
+// anyway (a label Mermaid doesn't clean that way) is taken out before the
+// diagram goes into the page (defuseDiagram).
+const DIAGRAM_TAGS = ['form', 'input', 'button', 'select', 'textarea', 'option', 'optgroup', 'datalist',
+  'fieldset', 'keygen', 'isindex', 'meta', 'base', 'link', 'script', 'iframe', 'frame', 'frameset',
+  'object', 'embed'];
+const DIAGRAM_ATTRS = ['action', 'formaction', 'ping', 'srcdoc'];
+const DIAGRAM_PURIFY = { FORBID_TAGS: ['style', ...DIAGRAM_TAGS], FORBID_ATTR: [...DIAGRAM_ATTRS, 'id', 'name'] };
+function defuseDiagram(el) {
+  el.querySelectorAll(DIAGRAM_TAGS.join(',')).forEach(n => n.remove());
+  el.querySelectorAll(DIAGRAM_ATTRS.map(a => `[${a}]`).join(','))
+    .forEach(n => DIAGRAM_ATTRS.forEach(a => n.removeAttribute(a)));
+}
+
 async function renderDiagrams(root, anchor) {
   const codes = [...root.querySelectorAll('pre > code.language-mermaid')];
   if (!codes.length) return;
   try { await loadScript(MERMAID); } catch (_) { return; }
   const theme = !forPaper && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default';
   // strict: no scripts or click handlers from a diagram's text.
-  window.mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme, suppressErrorRendering: true });
+  window.mermaid.initialize({
+    startOnLoad: false, securityLevel: 'strict', theme, suppressErrorRendering: true, dompurifyConfig: DIAGRAM_PURIFY,
+    secure: ['secure', 'securityLevel', 'startOnLoad', 'maxTextSize', 'suppressErrorRendering', 'maxEdges', 'dompurifyConfig'],
+  });
   for (const code of codes) {
     const pre = code.parentElement;
     if (!pre.parentNode) continue;
@@ -148,6 +171,7 @@ async function renderDiagrams(root, anchor) {
     div.className = 'mermaid-diagram';
     div.dataset.source = src;
     div.innerHTML = svg;
+    defuseDiagram(div);
     keepInPlace(anchor, () => pre.replaceWith(div));
   }
 }

@@ -153,3 +153,27 @@ def test_task_comments_render_math(page, wiki):
     page.goto("/tasks?view=open&group=none")
     card = page.locator(".task-item").filter(has=page.get_by_text("Proof", exact=True))
     expect(card.locator(".task-card-comments .katex")).to_have_count(1)
+
+
+def test_a_diagram_makes_no_form(page, wiki):
+    # Mermaid's labels are HTML that strict cleans with DOMPurify's defaults,
+    # which keep form controls: a form in a label posted to Zone as the
+    # reader with one click. A diagram's own %%{init}%% can't put them back,
+    # and its labels keep the HTML they may have (bold, line breaks).
+    wiki.write("victim", "# Victim\n\nkeep me\n")
+    wiki.write("flow", "# Flow\n\n```mermaid\n"
+               '%%{init: {"dompurifyConfig": {"ADD_TAGS": ["form", "button"]}, "securityLevel": "loose"}}%%\n'
+               "flowchart TD\n"
+               "  A[\"<form method='post' action='/delete/victim'><button id='go'>Approve</button></form>\"]"
+               " --> B[\"<b>bold</b><br>two <input name='x' formaction='/delete/victim'>"
+               " <span id='tasks-app' name='n'>s</span>\"]\n"
+               "  B -- \"<button id='go2'>edge</button>\" --> C[\"<iframe srcdoc='x'></iframe>c\"]\n"
+               "```\n")
+    page.goto("/page/flow")
+    svg = page.locator("article.page-content .mermaid-diagram svg")
+    expect(svg).to_have_count(1)
+    expect(svg).to_contain_text("Approve")
+    expect(svg.locator("b")).to_have_text("bold")
+    expect(svg.locator("form, input, button, iframe, [action], [formaction], [srcdoc]")).to_have_count(0)
+    expect(page.locator("#go, #go2, #tasks-app, [name='n']")).to_have_count(0)
+    assert (wiki.root / "victim.md").exists()
