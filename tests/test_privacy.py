@@ -861,6 +861,26 @@ def test_grep_wiki_reads_no_file_he_may_not_see(client, wiki):
     assert "pcre" not in mcp(client, "grep_wiki", pattern=gives_up_on("bobseesthis")).lower()
 
 
+def test_read_guides_tells_no_folder_he_may_not_see(client, wiki):
+    """Whether a folder of hers is there, or a folder outside the wiki,
+    read_guides answers bob the same: a folder is one by the pages he sees
+    in it, never by the disk."""
+    (wiki / "private/alice/jobsearch").mkdir()
+    (wiki / "private/alice/jobsearch/acme.md").write_text("# Acme\n")
+    same = lambda there, none: mcp(client, "read_guides", slug=there).replace(there, "X") == \
+        mcp(client, "read_guides", slug=none).replace(none, "X")
+    assert same("private/alice/jobsearch", "private/alice/nothere")
+    assert same("private/alice/jobsearch/", "private/alice/nothere/")
+    up = "../" * 12
+    assert same(up + "etc", up + "nonexistent-folder")
+    assert "is no page or folder of this wiki" in mcp(client, "read_guides", slug=up + "etc")
+    assert "is no page or folder of this wiki" in mcp(client, "read_guides", slug="_tasks")
+    # Hers to her, as a folder.
+    (wiki / "private/alice/jobsearch/AGENTS.md").write_text("# How I keep my job search\n")
+    assert "guide private/alice/jobsearch/AGENTS" in mcp(client, "read_guides", token="alice-token",
+                                                          slug="private/alice/jobsearch")
+
+
 def test_guides_in_private_folders_stay_private(client, wiki):
     """A guide in alice's folder, and a shared one importing her diary:
     bob's assistant gets neither her guide nor the diary's text."""

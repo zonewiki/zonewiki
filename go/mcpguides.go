@@ -271,12 +271,20 @@ func readGuides(args jsonObj, base string, user asker) (string, error) {
 	}
 	raw = strings.TrimSuffix(slugInput(raw), ".md")
 	folder := strings.Trim(raw, "/")
+	// A folder is one by the pages user sees in it, never by what is on
+	// disk: whether another user's private folder, a group's they aren't
+	// in, or a folder outside the wiki is there is none of their business.
+	if folder != "" && safePath(folder+"/page") == "" {
+		return "", toolErr(strconv.Quote(folder) + " is no page or folder of this wiki")
+	}
 	var slug string
 	switch {
-	case strings.HasSuffix(raw, "/") || folder != "" && isDir(filepath.Join(cfg.Data, folder)):
-		slug = folder + "/page"
 	case folder == "":
 		slug = "page"
+	case strings.HasSuffix(raw, "/") || slices.ContainsFunc(visiblePages(user), func(p PageFile) bool {
+		return strings.HasPrefix(p.Slug, folder+"/")
+	}):
+		slug = folder + "/page"
 	default:
 		if slug, err = pageOrNewSlug(folder, user); err != nil {
 			return "", err

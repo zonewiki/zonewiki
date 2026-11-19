@@ -285,6 +285,7 @@ The description tells the model the manual is written for users and the spec for
 The guides for a page (also a new one) or a folder (`messages/`, or a folder's name without the slash), or without `slug` the whole wiki's (`readGuides`): each as `=== guide <slug> (id <id>) ===` and its text, the whole wiki's first, after a line with the ids to pass with writes.
 Ids in `guides` (ones the model already has) are named, not repeated.
 Reading them counts: a write with those ids goes through at once (The guide gate).
+A name without the slash is a folder when the asker sees a page in it, never by what is on disk, and what `safePath` refuses (a folder outside the wiki, Zone's own `_…` and `.…`) is refused before anything is looked at: so the answer tells nothing of another user's private folder, a group's the asker isn't in, or the server's folders.
 
 Its description tells the model to call it before drafting anything meant for the wiki, and ends with the folders that have a guide and each guide's title (`toolList`, built at each `tools/list`; at most `guidedShown`, 25, then "… and N more"), so the model knows from the start, before it writes a word, that `messages/` has instructions.
 Tool descriptions stay in the model's context like the instructions, but aren't cut at 2 KB.
