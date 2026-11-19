@@ -91,7 +91,7 @@ The question (`GET /oauth/authorize`, signed in: anyone else goes through the lo
 - **What may it see?** (`see` in the form, with `choose`; Connections given less to see, below): the shared wiki (always), the user's private pages, notes and tasks, and each group they are in, all ticked.
   Not asked in a wiki without users.
 - **What may it do?** (`may` in the form; Read-only connections, below): **Read and change** (the default: "it sees and changes what you do, no more") or **Only read** ("it searches and reads what you see, and changes nothing").
-  A viewer isn't asked: theirs reads only.
+  A viewer isn't asked: theirs reads only, and is kept as a connection that only reads, so it stays one if they are made an editor later.
 - **Allow takes the password again** (`POST /oauth/authorize`), as making a token does and for the same reason: a connection outlasts the session, so a session someone else got hold of mustn't be enough.
   A wrong one is a 403 ("Incorrect password: nothing was allowed.") and counts against the client as a wrong login (`loginThrottle`: 429).
 - After Allow the page says "Connected" and the browser goes on to the client; Deny goes back to it too (The answer is a page, under How OAuth works).

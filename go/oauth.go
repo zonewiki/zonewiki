@@ -345,7 +345,9 @@ func oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v.User, v.Viewer = user.Name, s.isViewer(user.Name)
-	v.ReadOnly = r.Method == http.MethodPost && r.PostFormValue("may") == "read"
+	// A viewer's reads only, and is kept so (the question says it changes
+	// nothing): made an editor later, they don't find it writing.
+	v.ReadOnly = v.Viewer || r.Method == http.MethodPost && r.PostFormValue("may") == "read"
 	// What it sees of the user's places (with users: without, all is
 	// shared): everything, unless the form came with its choices (choose)
 	// and one is left out. The shared wiki is always there.

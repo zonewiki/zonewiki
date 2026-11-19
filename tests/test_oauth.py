@@ -484,15 +484,23 @@ class TestConnections:
         assert client.post(f"/assistant/connections/{gid}/revoke", headers=HOST).status_code == 404
         assert mcp(client, tokens["access_token"])[0] == 200
 
-    def test_a_viewers_assistant_only_reads(self, client, users, wiki_dir):
+    def test_a_viewers_assistant_only_reads(self, client, users, wiki_dir, monkeypatch):
         login(client, "carol")
         client_id = register(client)
         assert "You are a viewer: it reads what you see, and changes nothing." in client.get(
             "/oauth/authorize?" + urlencode(asking(client_id)), headers=HOST).data.decode()
-        _, tokens = connect(client, "carol-pw")
+        resp, code = allow(client, asking(client_id), "carol-pw")
+        assert "may now read this wiki" in resp.data.decode() and "it changes nothing" in resp.data.decode()
+        tokens = exchange(client, client_id, code).get_json()
         assert mcp(client, tokens["access_token"], "read_page", slug="index")[0] == 200
         _, text = mcp(client, tokens["access_token"], "write_page", slug="carols", content="Hers\n")
         assert "you are a viewer" in text and not (wiki_dir / "carols.md").exists()
+        # What the question said holds: made an editor, she has an assistant that reads.
+        assert grants(wiki_dir)[0]["read_only"] is True
+        monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}})
+        _, text = mcp(client, tokens["access_token"], "write_page", slug="carols", content="Hers\n")
+        assert "This connection only reads" in text and not (wiki_dir / "carols.md").exists()
+        login(client, "carol")
         gid = grants(wiki_dir)[0]["id"]
         assert client.post(f"/assistant/connections/{gid}/revoke", headers=HOST).status_code == 303
 
