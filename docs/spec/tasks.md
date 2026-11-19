@@ -1001,7 +1001,7 @@ Every reader asks `canSeeList` (through `taskLists(user)`, which gives only the 
 - **Who sees a task is decided by where it is kept** (Storage, under How it works): the list's entry is not in `_tasks/lists.json`, which everyone reads, but in the list's own folder, `_tasks/lists/<name>/list.json` (one entry, as a line of the registry is), and that file is what tells every read of the tasks there whom they are for.
   The store leaves the folder out for anyone else (`Store.dirs(who, owner)`, `Member`): every reader of a user's tasks, and every write, which therefore never touches the files of a list its user doesn't see (a task that names such a list is refused by the store itself, `byOwner`).
   What holds every user's tasks (the search index, a task found by its id) asks `canSeeTask`, which asks the same file (`taskFiles.SeesList`); `canSeePath` hides the folder's files in the history.
-  **In search its tasks are a layer of their own**, as a group's pages are (`docShared`, `placeOfDoc`, `listsForSome` in `go/retrieval.go`; Search under Group pages in `docs/spec/users.md`): they are in no index but its members', so their words, counts and lengths take part in no one else's ranking and a typo of a word only the list has suggests nothing to anyone else.
+  **In search its tasks are a layer of their own**, as a group's pages are (`docShared`, `placeOfDoc`, `listsForSome` in `go/retrieval.go`; Who searches what in `docs/spec/search.md`): they are in no index but its members', so their words, counts and lengths take part in no one else's ranking and a typo of a word only the list has suggests nothing to anyone else.
   A list narrowed or widened splits the index again, though no task changed (the lists that are for some are part of what the split goes by, read from their folders at each search: a look per list).
   An entry of its name in the registry as well (a merge, a hand edit) doesn't make it everyone's list: the folder's file says whom it is for (`withListFiles`).
   A task that names the list but lies in another folder (a file moved by hand, a merge; the next write files it) is left out for anyone else too (`readEach`): the folder and the task's own `list` never disagree about who sees it.
@@ -1430,7 +1430,7 @@ A registry keeps the version it has when it is written; a new one gets the curre
 
 - `_tasks/lists.json` is the lists' registry: the shared lists with their settings, the wiki's pins and the settings of All tasks; with users each user's own in `private/<user>/_tasks/lists.json` (their private lists, their pins, their settings of My tasks). It is no tasks file (see The registry, above).
   (Until 2026-11 the settings of All tasks were in `_tasks/settings.json`; the migration moved them.)
-- The tasks' files live in the `_tasks/` folder (with users each user's private tasks in `private/<user>/_tasks/`, the same files: Private tasks in `docs/spec/users.md`): open tasks in `tasks.json`,
+- The tasks' files live in the `_tasks/` folder (with users each user's private tasks in `private/<user>/_tasks/`, the same files: Private tasks' files, below): open tasks in `tasks.json`,
   closed ones in `closed.json` (flat JSON arrays, committed to git on change).
   **Each list has its files in a folder of its own**, `lists/<name>/` in its owner's `_tasks/` (`_tasks/lists/shop/tasks.json`, `closed.json`, `closed-YYYY-MM.json`; `dirOf` in `go/internal/taskfiles`); the tasks in no list (an Inbox's) are in `_tasks/` itself.
   A file is written whole and kept whole in git at every change, so a write costs what its list weighs, not what the wiki weighs: at a team's size (the bench in `docs/spec/testing.md`: 40 lists, 5,000 open tasks) a change took 112 ms and added 38 KB to the packed repository with one file for all, and takes 50 ms and 6 KB with a file per list (about 0.4 KB once Zone has joined its packs: Zone packs the repository itself, in `docs/spec/rendering.md`).
@@ -1465,6 +1465,20 @@ A registry keeps the version it has when it is written; a new one gets the curre
   A look at each file (`Stamp`), not a read: until 2026-11 each page view copied every open task the user sees and ran the news' rule over each.
 - **A file is parsed once** (`readFile` in `go/internal/taskfiles`): every page view reads the open tasks (the Tasks links' count) and a write reads every file, so a file's tasks are kept as parsed and handed out as copies (`Task.Clone`: a reader may change its own) until the file is another one (its time, size or inode: Zone's own writes, which also forget it, `writeText`; a hand edit).
   Write paths use a strict reader that fails with `taskfiles.ErrCorrupt` (503) on an unreadable file instead of treating it as empty and wiping every task.
+
+#### Private tasks' files
+
+With users, a user's private tasks (Private tasks in `docs/spec/users.md`) are kept apart from the shared ones, and nothing reads them for anyone else.
+
+- **Storage**: shared tasks are in `_tasks/` (`tasks.json`, `closed.json`, `closed-YYYY-MM.json`, each list's in its folder `lists/<name>/`: The files, above); a user's private ones are in the same files and folders in `private/<user>/_tasks/` (`taskFiles.Dir(owner)`), created on their first private task, beside their lists' registry (`lists.json`: their private lists and their pins).
+  A task's file says whose it is: the task's `Owner` (`go/internal/taskmodel`) is not written into it, it is set from the folder a task was read from (`eachOwner`), and the API shows it as `"private": true|false` (only with users: without them the API's JSON is as before).
+  A write that puts a task in a list sets where it is kept (`applyList` in `go/tasks.go`), and the task moves between the files in one commit.
+  Ids are random UUIDs, unique across all files; restoring a deleted task (undo) never takes an id another file has (`taskFiles.IDsLocked`) and puts it back where it was (`placeSnapshot`, Private tasks in `docs/spec/users.md`).
+- **Reading and writing** (`go/internal/taskfiles`, the store `taskFiles` in `go/tasklogic.go`): every reader takes the user and reads the shared files and theirs (`Owners(user)`: `Open`, `All`, `Snapshot`, `ReadForWriteLocked`, `ClosedInYear`, `ClosedYears`, and on top of them `findTasks`, `resolveTaskRefs`, `findTaskBacklinks`);
+  Zone itself (`""`) reads only the shared ones.
+  A write splits the tasks by owner (`byOwner`) and writes the files that changed, all in one commit; a task can only be written by its own user, since another user's is never read for them.
+  One lock (`taskFiles.Lock`) for all files' writes, and a second one that readers share and a write holds while it replaces its files (`Open` for `GET /api/tasks`, `All`, `Snapshot`; Reading and writing, above): a task that is shared moves between two files, and a read between their writes would miss it.
+  What Zone does over every task list covers every user's files (`EveryOwner`): the closed tasks' filing by month at start (`ArchiveOldClosed`), the lists' migration, a rename's links in tasks (`renamePageRefs`), a shared list's rename, the search index (`Every`, filtered per user by `canSeeTask`, `hiddenDoc`).
 
 #### The files' format
 

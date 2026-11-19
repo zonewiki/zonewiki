@@ -194,6 +194,19 @@ Part of Zone's spec (see `AGENTS.md` for the index).
   Words that are also nouns or names (may, will, it, man) are not in the list.
   Excerpts don't mark them either; a phrase match still marks the whole phrase.
 
+## Who searches what
+
+With users, a search finds what its user may see and nothing else, and what they may not see takes no part in how their results rank (Private pages and Group pages in `docs/spec/users.md`).
+
+- **One index of what is shared, and a layer per place**: search's keyword index (BM25) is made of the shared pages and tasks alone (`indexCache`);
+  what isn't everyone's is searched along with it by those who see it, place by place (a user's private pages, their private tasks, a group's folder: `textsearch.Layer`, `Index.View`; their document count, frequencies and lengths join the shared ones at query time, so they rank exactly as if one index held what the viewer sees),
+  while another user's words,
+  counts and lengths take no part in anyone's ranking,
+  nor in the vocabulary that prefix and typo matching draw on (else a typo that stops matching would tell that a word is in a private page).
+- **A group's pages** are one layer: the keyword index of the shared pages has nothing of a group's; its pages are searched along with the shared ones by its members and nobody else, as a user's private pages are by them (`docShared`, `docPlace`, `Index.View`; a list for some's tasks likewise, Lists for some in `docs/spec/tasks.md`), so a group's words, counts and lengths take part in no one else's ranking, and a typo of a word only the group has suggests nothing to anyone else.
+  The layer is made when a member first searches after a change in the folder, for all of them: with 2,000 pages in the group some 40 ms, and every further member's search finds it there (measured 2026-11-17, `TestAMembersIndexOfALargeGroup`; `TestAGroupsPagesAreInItsMembersIndexAlone` in `go/retrieval_test.go`).
+- **The semantic index** holds every page's vectors, but a search looks only at the visible ones (pages, sections, tasks, Related, and the pages a new page is compared with).
+
 ## Measuring retrieval
 
 `zonewiki eval` (`go/eval.go`) measures how well `search_wiki`'s retrieval (`retrieve`, sections rather than pages) finds the answers in your own wiki, so a change to chunking, ranking or the model can be judged by numbers rather than by feel.

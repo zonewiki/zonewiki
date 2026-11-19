@@ -477,7 +477,7 @@ def test_pages_and_groups_at_a_teams_size(paged, client):
     what a search costs when more people search than the server keeps
     indexes for (SEARCHERS, in turn and at once): each of them has an index
     of their own, the shared pages' plus their groups' and their private
-    ones (Search in docs/spec/users.md, Group pages)."""
+    ones (Who searches what in docs/spec/search.md)."""
     import threading
     from tests.goserver import GoClient
     root, users, groups, in_groups = paged

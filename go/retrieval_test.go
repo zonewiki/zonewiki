@@ -673,8 +673,8 @@ func TestRebuildReadsOnlyChanges(t *testing.T) {
 	}
 }
 
-// A group's pages are in no index but its members' (docs/spec/users.md,
-// Group pages): to anyone else the search is, to the last number, that of a
+// A group's pages are in no index but its members' (docs/spec/search.md,
+// Who searches what): to anyone else the search is, to the last number, that of a
 // wiki without the folder, so neither a ranking nor a typo's suggestion
 // tells that a word is in there.
 func TestAGroupsPagesAreInItsMembersIndexAlone(t *testing.T) {

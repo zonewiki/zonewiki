@@ -29,13 +29,13 @@ Read the file for the area you are working on before changing it:
 | `docs/spec/rendering.md` | Markdown → HTML: autolinks, callouts, math and Mermaid diagrams, sortable tables, folding sections, templates, client modules, page header, wikilinks, `[[task:…]]` references, image sizing, frontmatter, version history |
 | `docs/spec/editor.md` | The in-browser editor: auto-save, formatting bar, section editing, smart helpers, rename, file paste |
 | `docs/spec/navigation.md` | Search modal (page list), modules and the module switcher, sharing mode, notes, keyboard shortcuts, presentation mode |
-| `docs/spec/search.md` | Full-text search: BM25, semantic search, query syntax, highlights, measuring retrieval |
+| `docs/spec/search.md` | Full-text search: BM25, semantic search, query syntax, highlights, who searches what (private and group pages), measuring retrieval |
 | `docs/spec/mcp.md` | The MCP server and its tools, `zone_help` (Zone's docs for assistants) |
 | `docs/spec/tasks.md` | Tasks: embed syntax, dates, fields, views, settings, export and import, interaction (filter, editing, quick actions, selection, cards), history, comments, news on your tasks (following, mentions, mail), importance, keep tasks, lists (who sees and manages them, the Inbox, My tasks, pins), a task's files, renaming a tag, touch, keyboard shortcuts; how it works (the code, storage) |
-| `docs/spec/security.md` | Login and session key, the MCP token, the Host and Origin checks, framing, HTTPS cookies, throttling |
-| `docs/spec/users.md` | Several users: setup, the settings file `.zone/config` (its format and keys, reloading, `zonewiki user`/`zonewiki config`), password hashes, invite links, sign-up, signing in, per-user MCP tokens, private pages, private tasks, commit authors |
+| `docs/spec/security.md` | Principles, before you open it up (HTTPS, what to know), login and sessions (the session cookie, signing out, first run), the settings file and Zone's folders, the permission model, public wikis (visitors), the MCP token and OAuth, the Host and Origin checks, the page policy (CSP, raw HTML defused, framing), untrusted input, throttling, limits, supply chain |
+| `docs/spec/users.md` | Several users: the settings file `.zone/config` (its keys, format, storage limit, password hashes, kept out of git, `zonewiki user`/`zonewiki group`/`zonewiki config`, reloading), roles (admins, disabled users, viewers, visitors, guides), groups (made of groups, of your own, owners, renamed, ended), managing users, invite links, sign-up, signing in, per-user MCP tokens, private pages, group pages, who may move a page to other readers, private tasks, assigning tasks, commit authors |
 | `docs/spec/deployment.md` | Containerfile, compose, `run.sh`, `.env`, a NAS or server (prebuilt image, Synology), CI (Forgejo, GitHub), mail (SMTP), network and phone access, the version string, the home-screen app, the data directory (all of `.zone/`), backups |
-| `docs/spec/testing.md` | The test setup (fixtures, the browser tests' harness and gotchas) and what each test module covers |
+| `docs/spec/testing.md` | The test setup (fixtures, the browser tests' harness and gotchas), what each test module covers, secret scanning (the pre-commit hook, CI's leaks job) |
 
 The spec and this file are written a sentence a line (a long sentence a clause a line; a list item's following lines indented under its text), so a change shows as the sentence that changed, not as its paragraph.
 Markdown joins the lines when it renders them.
@@ -295,7 +295,7 @@ Browser tests skip without Playwright, Node tests without Node.
 Before writing a browser test, read the harness notes in `docs/spec/testing.md` (offline, touch emulation, drag limits); keep the `playwright==` pin in `tests/requirements.txt` equal to `Containerfile.tools`' image tag.
 CI runs the same `run.sh` commands in the image `Containerfile.tools` builds, so a dependency or a test command changes in one place.
 
-**Secrets never go into the repo.** Turn on the pre-commit hook once per clone (`git config core.hooksPath .githooks`): it refuses a commit whose staged changes contain a secret (gitleaks); CI scans the whole history (`./run.sh leaks`).
+**Secrets never go into the repo.** Turn on the pre-commit hook once per clone (`git config core.hooksPath .githooks`): it refuses a commit whose staged changes contain a secret (gitleaks); CI scans the whole history (`./run.sh leaks`; Secret scanning in `docs/spec/testing.md`).
 
 ---
 
@@ -373,7 +373,7 @@ and commit the new pins.
     the commands write it 0600,
     and a reload with an error (or a removed file) keeps the settings from before,
     so a broken edit never opens the wiki.
-  - The Host check (`hostAllowed`) validates the `Host` header (localhost, plus `hosts` from the settings file) against DNS rebinding; `ZONE_ALLOW_REMOTE=1` without `hosts` skips it.
+  - The Host check (`hostAllowed`) validates the `Host` header (localhost, plus `hosts` from the settings file) against DNS rebinding; `ZONE_ALLOW_REMOTE=1` without `hosts` lets in any IP address (and names in `.internal`) too, but no other name.
   - The Origin check (`crossSite`) refuses cross-site writes (an `Origin` of another site, or `null`).
   - A page loads nothing from other hosts (`pageCSP`: `default-src 'self'`; images, media and frames also from the `external-content` setting's hosts; a markdown image elsewhere becomes a link): don't add a source to the policy.
   - Every response carries the page policy (`pageCSP`): only Zone's own script files run (`script-src 'self'`, so no inline `<script>`, `on…=` handler or `eval` in Zone's code, or the browser tests fail), no framing by other sites, `nosniff`.

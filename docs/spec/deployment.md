@@ -144,7 +144,7 @@ docker compose -f compose.nas.yaml run --rm zonewiki /app/zonewiki user add alic
 The login needs no command: opened in a browser, a wiki without one asks for a password first (First run in `docs/spec/security.md`; `compose.nas.yaml` tells Zone its port is on the LAN, `ZONE_BIND: 0.0.0.0`), and shows nothing before.
 The commands above set it just as well.
 
-`hosts` are the names and addresses you open Zone by (the Host check, Security in `docs/spec/security.md`); without them only localhost gets in, and a browser opening Zone by another name gets a 400 that says to add it (the log names it too).
+`hosts` are the names and addresses you open Zone by (The Host check in `docs/spec/security.md`); without them only localhost gets in, and a browser opening Zone by another name gets a 400 that says to add it (the log names it too).
 `ZONE_ALLOW_REMOTE=1` in `.env` instead lets in any IP address (`http://192.168.1.20:5000`) with nothing to set up; a name (`nas.local`) still goes in `hosts`.
 Until a login is set Zone shows only its first-run page (`no-login = yes` in the settings file turns that off, for a wiki open on purpose); `config token` (or `user token NAME`) makes a token for AI clients.
 
@@ -239,7 +239,7 @@ When `ZONE_ALLOW_REMOTE=1`, `run.sh` exports `ZONE_BIND=0.0.0.0` (LAN-accessible
 Caddy reaches it with `reverse_proxy unix//run/zone/zone.sock`, nginx with `proxy_pass http://unix:/run/zone/zone.sock:;`.
 Who may connect is who may reach the path: the socket itself is open to every local user (mode 0666, as a port on localhost is), so the folder it is in decides, and the proxy's user must be able to enter that folder.
 Zone replaces a socket file that a Zone that was killed left behind; it doesn't start when something still listens there, or when the path is a file of another kind (`listen` in `go/server.go`).
-Whoever connects has no address and is taken for the proxy: its `X-Forwarded-For` names the client, whatever `trusted-proxies` holds (the throttle in `docs/spec/security.md`).
+Whoever connects has no address and is taken for the proxy: its `X-Forwarded-For` names the client, whatever `trusted-proxies` holds (Throttling in `docs/spec/security.md`).
 `hosts` and the rest of a proxy's setup stay as with a port.
 The healthcheck over it: `zonewiki health unix:PATH`.
 
@@ -290,7 +290,7 @@ ZONE_MAIL_FROM=wiki@example.org
 
 ## Mobile / phone access
 
-Set `ZONE_ALLOW_REMOTE=1` in `.env` (and restart with `./run.sh up`) to bind on all interfaces — `run.sh` then maps `0.0.0.0:5000` and the server's host-header check is skipped.
+Set `ZONE_ALLOW_REMOTE=1` in `.env` (and restart with `./run.sh up`) to bind on all interfaces — `run.sh` then maps `0.0.0.0:5000` and the server's host-header check lets in any IP address (a name goes in `hosts`).
 Phones on the same network reach Zone at `http://<host-LAN-IP>:5000`.
 The UI is responsive down to phone widths and the editor works on mobile.
 The viewport meta sets `interactive-widget=resizes-content`, so on Android the on-screen keyboard shrinks the layout viewport rather than only the visual one.

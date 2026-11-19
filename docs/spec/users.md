@@ -52,29 +52,36 @@ disabled = yes
 includes = dev, design
 ```
 
-| Key | Does | Default |
-|-----|------|---------|
-| `password` | The login gate without users: a hash (`zonewiki config passwd`) | no login |
-| `mcp-token` | Turns on `/mcp` without users: the token's hash (`zonewiki config token`) | `/mcp` off |
-| `hosts` | Names Zone may be reached by besides localhost, comma-separated (the Host check, `docs/spec/security.md`) | localhost only |
-| `base-url` | Zone's address as the browser knows it, for links handed to AI clients (`docs/spec/mcp.md`) | the address the request came in on |
-| `git-remote` | A remote for the wiki's repository; `origin` is set to it (`setGitRemote`) | none |
-| `noshare` | Pages hidden in sharing mode: `#tags` and `folders/` (`docs/spec/navigation.md`); empty: none | `#noshare` |
-| `locale` | How dates read and the day weeks start on, a BCP 47 tag like `de-AT` (`docs/spec/tasks.md`) | US English dates, weeks from Monday |
-| `date-format` | `iso`: dates as `YYYY-MM-DD` | the locale's |
-| `query-log` | `yes`: keep `search_wiki`'s queries in `.zone/queries.jsonl` (`docs/spec/search.md`) | no |
-| `semantic-min-score` | How similar a passage must be to be a semantic hit, -1 to 1 (`searchFloor`, `docs/spec/search.md`) | the model's floor |
-| `trusted-proxies` | Reverse proxies whose `X-Forwarded-For` names the client, IP addresses or networks (`172.17.0.1, 10.0.0.0/8`), for the throttle on wrong passwords (`clientKey`, `docs/spec/security.md`); empty: none | loopback (`127.0.0.0/8, ::1`) |
-| `upload-max` | The biggest upload, a size (`25MB`; below) (`Settings.uploadMax`, `docs/spec/security.md`) | 100 MB |
-| `external-content` | Hosts a page may load images, media and frames from: `upload.wikimedia.org, *.example.org`; `*`: any (A page loads nothing from other hosts, `docs/spec/security.md`) | none: only Zone itself |
-| `no-login` | `yes`: the wiki has no login on purpose, though other devices reach it, so Zone shows no first-run page (First run, `docs/spec/security.md`) | no |
-| `mcp-oauth` | `no`: assistants connect with a static token only, not by signing in through the browser (Connecting with OAuth, `docs/spec/mcp.md`) | yes, with a login |
-| `storage-max` | How much the wiki may hold, a size (`5GB`): past it, nothing new is made (Storage limit, below) | no limit |
-| `signup-domains` | Sign-up takes only addresses at these domains, comma-separated (`example.org, example.net`; Sign-up, below) | any address |
-| `signup-role` | The role an account made by sign-up gets: `viewer` or `editor` (never `admin`) | `viewer` |
-| `signup-approval` | `yes`: an account made by sign-up can't sign in until an admin approves it | no |
+The file has three kinds of keys, each in a table below: the wiki's, before the first section (`configKeys`); a user's, in their `[user NAME]` section (`userKeys`); a group's, in a `[group NAME]` section for a group that says more than its name (`groupKeys`).
+Any other key is an error (Errors, below).
 
-A user's section, `[user NAME]` (the name: lowercase letters, digits and inner hyphens, `userNameRE`; not `me` or `none`), takes these keys (`userKeys`, checked in `fileUsers`):
+### The wiki's keys
+
+| Key | Does | Values | Default |
+|-----|------|--------|---------|
+| `password` | The login gate without users: a hash (`zonewiki config passwd`) | `pbkdf2-sha256:<iterations>:<salt>:<hash>` | no login |
+| `mcp-token` | Turns on `/mcp` without users: the token's hash (`zonewiki config token`) | `sha256:` and 64 lowercase hex digits | `/mcp` off |
+| `hosts` | Names Zone may be reached by besides localhost (the Host check, `docs/spec/security.md`) | host names, comma-separated | localhost only |
+| `base-url` | Zone's address as the browser knows it, for links handed to AI clients (`docs/spec/mcp.md`) | a URL (`https://wiki.example.org`) | the address the request came in on |
+| `git-remote` | A remote for the wiki's repository; `origin` is set to it (`setGitRemote`) | a git remote's URL | none |
+| `noshare` | Pages hidden in sharing mode (`docs/spec/navigation.md`) | `#tags` and `folders/`; empty: none | `#noshare` |
+| `locale` | How dates read and the day weeks start on (`docs/spec/tasks.md`) | a BCP 47 tag like `de-AT` | US English dates, weeks from Monday |
+| `date-format` | Dates as `YYYY-MM-DD` | `iso` | the locale's |
+| `query-log` | Keep `search_wiki`'s queries in `.zone/queries.jsonl` (`docs/spec/search.md`) | `yes`/`no` (or `1`/`0`, `true`/`false`) | no |
+| `semantic-min-score` | How similar a passage must be to be a semantic hit (`searchFloor`, `docs/spec/search.md`) | -1 to 1 | the model's floor |
+| `trusted-proxies` | Reverse proxies whose `X-Forwarded-For` names the client, for the throttle on wrong passwords (`clientKey`, `docs/spec/security.md`) | IP addresses or networks (`172.17.0.1, 10.0.0.0/8`); empty: none | loopback (`127.0.0.0/8, ::1`) |
+| `upload-max` | The biggest upload (`Settings.uploadMax`, `docs/spec/security.md`) | a size (`25MB`; Sizes, below) | 100 MB |
+| `external-content` | Hosts a page may load images, media and frames from (A page loads nothing from other hosts, `docs/spec/security.md`) | host names (`upload.wikimedia.org, *.example.org`); `*`: any | none: only Zone itself |
+| `no-login` | The wiki has no login on purpose, though other devices reach it, so Zone shows no first-run page (First run, `docs/spec/security.md`) | `yes`/`no` (as `query-log`) | no |
+| `mcp-oauth` | `no`: assistants connect with a static token only, not by signing in through the browser (Connecting with OAuth, `docs/spec/mcp.md`) | `yes`/`no` (as `query-log`) | yes, with a login |
+| `storage-max` | How much the wiki may hold: past it, nothing new is made (Storage limit, below) | a size (`5GB`) | no limit |
+| `signup-domains` | Sign-up takes only addresses at these domains (Sign-up, below) | domains, comma-separated (`example.org, example.net`) | any address |
+| `signup-role` | The role an account made by sign-up gets | `viewer` or `editor` (never `admin`) | `viewer` |
+| `signup-approval` | An account made by sign-up can't sign in until an admin approves it | `yes`/`no` (as `query-log`) | no |
+
+### A user's keys
+
+A user's section, `[user NAME]` (the name: lowercase letters, digits and inner hyphens, `userNameRE`; not `me` or `none`: Names, under Commands), takes these keys (`userKeys`, checked in `fileUsers`):
 
 | Key | Does | Values | Default |
 |-----|------|--------|---------|
@@ -84,34 +91,28 @@ A user's section, `[user NAME]` (the name: lowercase letters, digits and inner h
 | `groups` | The groups they are in (Groups, below; `zonewiki user group`, the Users tab, Groups) | group names, by commas or spaces, a leading `@` allowed | none |
 | `disabled` | They can't sign in, their token is refused (`zonewiki user disable`, the Users tab) | `yes`/`no`, `true`/`false`, `1`/`0` | no |
 | `pending` | A sign-up waiting for an admin's approval: disabled until approved (Sign-up, below) | as `disabled` | no |
-| `email` | Their mail address: for task mails (Assigning tasks, below) and to tell sign-ups apart (Setting a user's address, below) | a bare address (`name@example.org`, `validEmail`) | none: no mail |
-
-A group's section, `[group NAME]` (the name: lowercase letters, digits and hyphens, starting with a letter or digit, at most 40, `groupNameRE`), takes these (`groupKeys`, checked in `fileGroups`):
-
-| Key | Does | Values | Default |
-|-----|------|--------|---------|
-| `includes` | The groups it is made of: who is in one of them is in this one (A group made of groups, below; `zonewiki group includes`) | group names, as `groups`; not itself, by whatever way round | none |
-| `owners` | The users who say who is in it, in the browser (A group of your own, below; `zonewiki group owners`) | user names, by commas or spaces; a name that is no user's counts as none | none: an admin's alone |
-| `was` | The names it went by before a rename, which only it may take back (Zone writes it) | group names | none |
+| `email` | Their mail address: for task mails (Assigning tasks, below) and to tell sign-ups apart | a bare address (`name@example.org`, `validEmail`) | none: no mail |
 
 **Setting a user's address**: sign-up writes `email` (Sign-up, below); there is no command or field for it yet, so for anyone else an admin with access to the host adds the line to the user's section by hand (`email = bob@example.org` under `[user bob]`), and Zone takes it within a second, or refuses the file, naming the line, when it isn't an address.
 Without it the user gets no mail about tasks, whatever they tick in My tasks' settings (Assigning tasks, below).
 
-- **Format**: `key = value` (spaces optional), the wiki's settings before the first section, a `[user NAME]` section per user with `password`, `mcp-token`, `role`, `groups`, `disabled`, `email` and `pending` (`configKeys`, `userKeys`; Roles and Sign-up, below),
-  and a `[group NAME]` section for a group that says more than its name: `includes`, the groups it is made of, `owners`, the users who say who is in it, and `was`, the names it went by before, which Zone writes (`groupKeys`; Groups, below).
+### A group's keys
+
+A group's section, `[group NAME]` (the name: lowercase letters, digits and hyphens, starting with a letter or digit, at most 40, `groupNameRE`), takes these (`groupKeys`, checked in `fileGroups`); a group without a section is its name on users (Groups, below):
+
+| Key | Does | Values | Default |
+|-----|------|--------|---------|
+| `includes` | The groups it is made of: who is in one of them is in this one (A group made of groups, below; `zonewiki group includes`) | group names, as `groups`; not itself, by whatever way round | none |
+| `owners` | The users who say who is in it, in the browser (A group's owners, below; `zonewiki group owners`) | user names, by commas or spaces; a name that is no user's counts as none | none: an admin's alone |
+| `was` | The names it went by before a rename, which only it may take back (Zone writes it; A name that is taken, below) | group names | none |
+
+### Format, sizes and errors
+
+- **Format**: `key = value` (spaces optional), the wiki's settings before the first section, a `[user NAME]` section per user and a `[group NAME]` section for a group that says more than its name.
   `#` starts a comment only at the start of a line, so `noshare = #noshare` is a value.
 - **Sizes** (`upload-max`, `storage-max`; `parseSize` in `go/storage.go`): bytes (`300`), or a number with KB, MB, GB or TB, any case, a space optional, decimals too (`1.5GB`).
   They count by 1024, as Zone's caps always have (100 MB is 100 × 1024 × 1024 bytes).
   Empty is unset; 0, or a unit Zone doesn't know, is an error.
-- **Storage limit** (`storage-max`, `go/storage.go`): what counts is every file in the data directory but `.git/` and Zone's own `.zone/` (the settings file, the session key, the search cache): the user's pages, uploads (`_assets/`, `private/<user>/_assets/`), tasks and any other files there.
-  Not the history: a deleted file still in git frees its space, and the history, mostly text, is the host's to plan for.
-  Zone walks the directory only when a write asks for room, and then at most once a minute (`usedBytes`; a walk reads names and sizes, no contents: 20,000 files take about 10 ms); an upload or a new page adds its size at once (`added`), so uploads in a row can't slip past.
-  A figure that says full is walked again first, but at most every 5 seconds (`usageRecheck`), so a client asking over and over in a full wiki doesn't make a walk each time: a file deleted on disk counts within seconds, a page deleted through Zone at once (`forgetUsage`).
-  Refused once it would go past (`checkRoom`, `refusedFull`: 507 Insufficient Storage, "The wiki is full: 5.0 GB of 5 GB used. Delete pages or files to make room."; an MCP tool's error): an upload (its size, less the file's it replaces: a smaller file replacing one always fits),
-  a new page (`/new`, the editor opened on a page that doesn't exist yet, its first save, `write_page`),
-  a new note (`/api/notes`, `write_page` with `note`).
-  Never refused: an edit to a page, even one that grows it (typed text is never turned away), a restore, a rename or move, a delete, Move to wiki and Append to page (a note's text moves), tasks (small, and capped per request).
-  The browser shows the refusal of an upload or a new note (`alert`); the editor never opens on a new page, so nothing typed is refused.
 - **Errors name their line** (`.zone/config line 3: "pasword" isn't a setting Zone knows.`),
   and Zone won't start on one: a key it doesn't know (a typo shouldn't leave Zone on a default),
   a value that doesn't check (`localeRE`, `parseNoshare` …; `query-log` takes yes/no, 1/0, true/false),
@@ -122,12 +123,31 @@ Without it the user gets no mail about tasks, whatever they tick in My tasks' se
   a line that isn't `key = value`,
   `password` or `mcp-token` of the wiki together with users (each has their own; a shared one would make the user unknown).
   Messages never repeat a password or token.
+
+### Storage limit
+
+`storage-max` (`go/storage.go`): what counts is every file in the data directory but `.git/` and Zone's own `.zone/` (the settings file, the session key, the search cache): the user's pages, uploads (`_assets/`, `private/<user>/_assets/`), tasks and any other files there.
+Not the history: a deleted file still in git frees its space, and the history, mostly text, is the host's to plan for.
+
+- **Refused** once it would go past (`checkRoom`, `refusedFull`: 507 Insufficient Storage, "The wiki is full: 5.0 GB of 5 GB used. Delete pages or files to make room."; an MCP tool's error): an upload (its size, less the file's it replaces: a smaller file replacing one always fits),
+  a new page (`/new`, the editor opened on a page that doesn't exist yet, its first save, `write_page`),
+  a new note (`/api/notes`, `write_page` with `note`).
+- **Never refused**: an edit to a page, even one that grows it (typed text is never turned away), a restore, a rename or move, a delete, Move to wiki and Append to page (a note's text moves), tasks (small, and capped per request).
+- The browser shows the refusal of an upload or a new note (`alert`); the editor never opens on a new page, so nothing typed is refused.
+- **How it is counted**: Zone walks the directory only when a write asks for room, and then at most once a minute (`usedBytes`; a walk reads names and sizes, no contents: 20,000 files take about 10 ms); an upload or a new page adds its size at once (`added`), so uploads in a row can't slip past.
+  A figure that says full is walked again first, but at most every 5 seconds (`usageRecheck`), so a client asking over and over in a full wiki doesn't make a walk each time: a file deleted on disk counts within seconds, a page deleted through Zone at once (`forgetUsage`).
+
+### Passwords and tokens
+
 - **Passwords are kept as hashes**, never in plain text: PBKDF2-SHA256 with a random 16-byte salt and 600,000 iterations (`hashPassword`; Go's own `crypto/pbkdf2`), written `pbkdf2-sha256:<iterations>:<salt>:<hash>` (base64 without padding); checked at sign-in by `checkPassword`.
 - **MCP tokens are kept as hashes** too, `sha256:` and 64 lowercase hex digits (`hashToken`, `isTokenHash`): the commands make a token (32 random bytes, hex), show it once and keep only its hash; Zone compares the SHA-256 of the token a client sends (`tokenMatches`, constant time).
   A token is random, so its hash is no use to whoever has the repository.
   A plain token in the file is an error.
+
+### Kept out of git
+
 - **The file is kept out of git**, as all of `.zone/` is (the session key, caches, the query log): `.git/info/exclude` has `/.zone/*` (`excludeState`, also before a new wiki's first commit).
-  **Account data stays out of git**: the file holds the users,
+- **Account data stays out of git**: the file holds the users,
   their password and token hashes,
   roles,
   and whatever a later key adds about a person,
@@ -138,7 +158,6 @@ Without it the user gets no mail about tasks, whatever they tick in My tasks' se
   and its last release took it out at start: a wiki that never ran that release still tracks it (`git rm --cached .zone/config` and a commit take it out),
   and the history before holds it either way,
   so a wiki pushed where others can read it should get new passwords.
-- **Changes go to the log**, not the history: each reload that took a change logs what changed by name and key only, never a value (`settingsChange`: `Change settings: add user carol, alice's password, locale`), and who made it on the Users tab (`(by alice)`, `settingsAuthor`).
 - **Backups**: a backup of the data folder has the file; a clone of the git remote doesn't.
   Back up `.zone/config` too where the git remote is the only copy, or add the users again after a restore (Backups in `docs/spec/deployment.md`).
 - **A wiki that lost its users doesn't start open** (`missingUsers`): when there is no settings file but the history has commits by users (a clone of its git remote),
@@ -158,12 +177,16 @@ Without it the user gets no mail about tasks, whatever they tick in My tasks' se
   and `safePath` refuses it to every page route and MCP tool.
   Whoever has the file (a backup of the data folder, a hosted wiki's export) has the hashes: PBKDF2 at 600,000 rounds is made to withstand that, but a weak password can still be guessed offline.
   The git history and remote don't have them (above), but those of a wiki from before 2026-11 do.
+
+### Writing the file
+
 - **Writing**: the commands and the admin page's Users tab (Managing users, below) write it owner-only (0600),
   whole,
   to a temporary file in `.zone/` synced and renamed over it (a reload never reads half a file),
   one command at a time (`lockFile` on `.zone/config.lock`, flock) and only onto the file as the command read it (changed meanwhile, by another command or an editor: "not changed: … Run it again."),
   keeping the comments and order of the lines they don't change (`go/internal/settingsfile`: `File.Set`, `Unset`, `RemoveUser`, `Write`).
   Zone logs a warning when others may read it.
+- **Changes go to the log**, not the history: each reload that took a change logs what changed by name and key only, never a value (`settingsChange`: `Change settings: add user carol, alice's password, locale`), and who made it on the Users tab (`(by alice)`, `settingsAuthor`).
 
 ### Commands
 
@@ -214,6 +237,23 @@ The file can be edited by hand, or with the commands; a running Zone takes each 
 
 ### Reloading
 
+Zone looks at the file at most once a second and takes a change without a restart; a change takes effect between requests, so a request sees one set of settings from start to end (How reloading works, below).
+
+- **A file with an error** on reload: Zone keeps the settings it has,
+  logs the error with its line,
+  and `GET /api/health` answers 503 with it (without a session: only that there is one, see the log, as it may name users),
+  so `zonewiki health` (the container's healthcheck) fails until the file is fixed.
+  A broken edit never locks everyone out or opens the wiki.
+  A file removed while Zone runs counts the same (taking the users away would open the wiki): Zone keeps its settings until the file is back, or a restart.
+  So does a file that takes the login away, no users and no password where there were (by hand, `user remove --open` or `config unset password`): only a restart takes that, on purpose.
+- **What a reload changes**: a new user signs in at once; a removed or disabled user is signed out with their next request (the session must name a current user, not disabled); a new role applies from the user's next request; a changed MCP token takes effect at once, the old one refused.
+  A changed password ends the sessions signed in with the old one (`passwordStamp`, Signing in below), the user's own included.
+  Users ↔ no users signs everyone out, as `signedIn` checks.
+  A new `git-remote` re-points `origin` (`setGitRemote`); a new `noshare` clears its cache; the change is logged (Writing the file, above).
+  Throttles, caches and the search index stay.
+
+#### How reloading works
+
 The request checks (`checks` in `go/server.go`) call `reloadSettings`, which looks at the file at most once a second (`reloadEvery`: its time, size and whether it is still the same file, as an editor may replace it); a change reads it again.
 No file watcher.
 The work after a change (`applySettings`: the git remote; the log line) runs outside the lock (`takeSettings`), so the other requests don't wait for it.
@@ -225,34 +265,23 @@ until then requests go on with the settings before, so nothing waits for the cha
 So a request sees one set of settings from its session check to its answer: else one whose session was checked against the users before the change could be judged by the ones after (a switch from users to a password makes `private/` an ordinary folder, for a user who no longer has a login).
 A request still running after 10 s (`drainWait`: a slow download) doesn't hold the change up longer; the log says so.
 
-- **A file with an error** on reload: Zone keeps the settings it has,
-  logs the error with its line,
-  and `GET /api/health` answers 503 with it (without a session: only that there is one, see the log, as it may name users),
-  so `zonewiki health` (the container's healthcheck) fails until the file is fixed.
-  A broken edit never locks everyone out or opens the wiki.
-  A file removed while Zone runs counts the same (taking the users away would open the wiki): Zone keeps its settings until the file is back, or a restart.
-  So does a file that takes the login away, no users and no password where there were (by hand, `user remove --open` or `config unset password`): only a restart takes that, on purpose.
-- **What a reload changes**: a new user signs in at once; a removed or disabled user is signed out with their next request (the session must name a current user, not disabled); a new role applies from the user's next request; a changed MCP token takes effect at once, the old one refused.
-  A changed password ends the sessions signed in with the old one (`passwordStamp`, below), the user's own included.
-  Users ↔ no users signs everyone out, as `signedIn` checks.
-  A new `git-remote` re-points `origin` (`setGitRemote`); a new `noshare` clears its cache; the change is logged (above).
-  Throttles, caches and the search index stay.
-
 ## Roles
 
 Each user has a role, `role` in their section (`roles`, `User.Role` in `go/users.go`):
 
 | Role | Can |
 |------|-----|
-| `admin` | everything an editor can, and manage the users and every group, write the guides, and settle what an editor leaves to others (What an admin may do, below) |
+| `admin` | everything an editor can, and manage the users and every group, write the guides, and settle what an editor leaves to others (Admins, below) |
 | `editor` | change everything shared but the guides, as every user could before roles: the default, so a section without `role` is an editor's |
 | `viewer` | read what is shared; change nothing, not even private pages or notes of their own (Viewers, below) |
+
+### Admins
 
 - **What an admin may do** beyond an editor (each where it is described; the role is asked by `isAdmin` in `go/users.go`, and a disabled admin is none):
   - **Users** (`/admin`, Managing users below): change a user's role and groups, disable, enable or approve them, make invite and reset links and take them back, remove a user.
   - **Groups** (An admin on Groups, below): manage every group, owned or not (who is in it, its owners, its name, removing it, also one that others are made of), make a group of groups and say what a group includes, see the folders of groups nobody is in.
   - **Guides** (Guides, below): write `wiki-guide`, a folder's `AGENTS.md`/`CLAUDE.md` and what they pull in (`adminsOnly`); a group's guide only an admin who is in the group.
-  - **Moves to fewer people**: move a shared page to where fewer people see it (into a group they are in, or their private folder; `mayNarrow` in `go/pages.go`: anyone else only a page they shared themselves, while nobody else has changed it), and a shared task into a list fewer people see (`mayNarrowTask` in `go/tasks.go`: anyone else only a task they made).
+  - **Moves to fewer people** (Who may move a page to other readers, below): move a shared page to where fewer people see it (into a group they are in, or their private folder; `mayNarrow` in `go/pages.go`: anyone else only a page they shared themselves, while nobody else has changed it), and a shared task into a list fewer people see (`mayNarrowTask` in `go/tasks.go`: anyone else only a task they made).
   - **Task lists** (`canManageList` in `go/access.go`, Lists in `docs/spec/tasks.md`): rename, delete, set the settings of, say whom it is for and pin for everyone any shared list they see, not only one they own.
   - **Tasks** (Who may in `docs/spec/tasks.md`): delete any task for good (`mayDeleteTask`) and anyone's comment (`mayChangeComment`), and import a file with its comments' and history's names as they are (`checkBy` is skipped: a wiki moved, a backup put back).
   - **Undo on Changes** follows the same rules: an admin undoes a change to a guide, others don't.
@@ -274,106 +303,14 @@ Each user has a role, `role` in their section (`roles`, `User.Role` in `go/users
   It doesn't go unseen: a reset ends the user's sessions and their old password stops working, and the settings file's log line names the change.
   Whoever has the host reads everything anyway: private is hidden inside Zone, not encrypted (Private pages and tasks in `docs/spec/security.md`).
   The Users tab says so.
-- **Disabled** (`disabled = yes`, `zonewiki user disable NAME`): the user can't sign in (with the right password the login says "Your account is disabled. Ask an admin of this wiki.", with a wrong one the usual "Incorrect user name or password.", and both count as a wrong try for the throttle),
-  their sessions stop working at their next request (`signedIn`),
-  and their MCP token is refused (401; `mcpAuthorized`; a disabled user's token alone doesn't turn `/mcp` on).
-  Their pages, tasks and private folder stay as they are.
-  Enabled again, they sign in as before, and a session from before not yet expired works again: disabling isn't how to end a stolen session, a new password is (Signing in, below).
-  A disabled admin counts as no admin.
+### Disabled users
 
-### Groups
-
-**Who belongs together is said once**: on the users, or by the groups a group is made of.
-
-`groups = dev, hiring` in a user's section puts them in groups (`User.Groups`, `parseGroups` in `go/users.go`; commas or spaces between them, a leading `@` allowed, written A–Z).
-A group is its name (lowercase letters, digits, hyphens; `groupNameRE`): there is no list of groups to keep, a group exists while someone is in it (`Settings.groups`), and one nobody is in has no members, which is no error.
-A name that is none is an error of the settings file, which then keeps the settings from before.
-
-- **Set them** with `zonewiki user group NAME +dev -hiring` (alone it says which groups the user is in; `user list` names them: `bob (in dev, hiring)`), in the Users tab's **Groups** field (below), or by hand in the file.
-  The field takes only groups there are (and the name of a folder in `groups/` no one sees, which gives it its people again); a new group is made on **Groups** (A group of your own, below).
-- **What a group is for**: what is for some and not for all. `memberOf(user, group)` asks; a disabled user is a member of none.
-  A task list can be for groups (`"for": ["@hiring"]`: Lists for some, in `docs/spec/tasks.md`), and a user put in a group or taken out sees its lists, or no longer, at their next request.
-- **A role is not a group**: an admin is in no group by being admin, and sees nothing of a group they are not in. They may put themselves in one, which the log of the settings shows ("alice's groups").
-- **Who makes one**: an admin, as above, or anyone who may write, in the browser (A group of your own, below).
-
-**A group made of groups**: when two teams share something, don't name everyone twice. Give the larger group a section that says which groups it is made of:
-
-```ini
-[group product]
-includes = dev, design
-```
-
-Whoever is in `dev` or in `design` is in `product`, at once and for as long as they are, so someone who joins `dev` next month has what is for `@product` without anyone thinking of it.
-A list for both teams is then for one group (`"for": ["@product"]`).
-
-- **It goes through**: `company` may include `product`, and whoever is in `dev` is in all three. Who has `product` named on them (`groups = product`) is in it as before, and not thereby in `dev`.
-- **A group that includes itself**, directly or by way of others, is an error of the file naming its line ("[group a] includes itself, by way of b"; `includesItself` in `go/configfile.go`), as is a name in `includes` that is no group's.
-  A name nobody is in is none: a group made of empty groups has no members.
-- **The section has the keys `includes`, `owners` and `was`** (`groupKeys`; owners and was: A group of your own, below), and any other is an error. A group without a section is its name on users, as above.
-- **Set it** with `zonewiki group includes product +dev +design` (`-dev` takes one out; alone it says what the group includes and who is in it now; `zonewiki group list` says it of every group: `product includes design, dev: alice, bob`; `groupMain` in `go/commands.go`), on **Groups**, for an admin (An admin on Groups, below), or by hand in the file.
-  Taking the last group out removes the key, and the section when it says nothing else (`setGroupKey`). The settings' log says it ("product includes design, dev").
-- **Taking a group out is a narrowing**, like taking a user out of a group: its people no longer see what is for the larger group at their next request, and their tasks in its lists count as no one's (Lists for some in `docs/spec/tasks.md`).
-  The command and the page say who that was ("No longer in product: bob. What is for @product they no longer see."); putting the group back gives it all back.
-**A group of your own** (`go/groups.go`, `groups.html`): a project is six names from three teams, and nobody should wait for an admin to have a place for it.
-On **Groups** (`/groups`: the user menu's entry, **All your groups** in the pill's menu, a link in the shortcuts dialog) whoever may write makes a group: a name, and who else is in it.
-They are in it and are its **owner**; from the next request `groups/<name>/` is its people's and a task list can be for `@<name>`, as with any group.
-
-- **Who is in it is still said on the users**: making the group writes its name into the `groups` of each of its people, and `owners = <you>` into a section `[group <name>]` (`makeGroupOp`, `setMembers`). So `memberOf`, a group made of groups and the Users tab's Groups field hold for it unchanged, and an admin sees and sets it like any other.
-- **Names are chosen, not typed blind** (`js/namepick.js`): **People**, **Owners**, **Who else is in it** and an admin's group fields are pills, one per name, with × to take one out.
-  Typing offers the users (or groups) there are that start with what is typed, then those that hold it; Enter, Tab, a comma or a click picks the one marked, ↑/↓ move, Backspace in an empty box takes the last pill out, and a pasted list becomes pills.
-  What names nobody stays in the box, marked ("No user called x"), and the form isn't sent with it.
-  The field itself is hidden and holds the names (`anna, bo`), so the form sends what it always did; without JavaScript it is a text field, and the server refuses a name that is no user's or no group's either (`usersNamed`, `groupsNamed`, against `knownGroups`).
-- **Its owners say who is in it** (`Settings.Owners`, `ownerOf`, `managesGroup`): on `/groups` a group you own has **Manage…**, with **People** (the users named on it, `directMembers`; who is in it by way of a group it includes isn't listed and isn't this field's), **Owners**, and **Save** (`POST /groups/<group>/people`, `groupPeopleOp`).
-  An owner's change touches that one name on the users and the group's `owners`, nothing else of the settings file.
-  Taking someone out is a narrowing, as an admin's is: they no longer see the group's pages and lists at their next request, and the page says who that was.
-  A group keeps an owner (the last can't take themselves out; they name who takes it over first). An owner needn't be in the group: they then see none of its pages.
-  A removed user owns nothing (`dropOwner`), and a name in `owners` that is no user is none.
-- **Taking someone out says whom first** (`js/admin.js`): a Save that takes names out of People (Manage…), or groups off a user (the admin page), turns into "Yes, take out bob" and the second click saves, as Leave… asks; what is for the group is theirs no longer at once. Without the script the line under the field says it.
-- **An admin manages every group**, owned or not (An admin on Groups, below), the admin's Groups field on a user works as before, and `zonewiki group owners NAME +anna -bo` gives a group owners or takes them (none left: the group is an admin's alone again, as one made on the host).
-- **A name that is taken is refused** (`groupNameTaken`): a group there is, a name a group is said to include, a folder in `groups/` (a group nobody is in keeps its folder, and a new group of that name would get its pages), or a name a task list is for.
-  **And a name a group went by before**: the history of `groups/<name>/` (the versions and deleted pages of a group renamed since, which are read under that path by who is in a group of that name) and a deleted list that was for it stay its former group's, so a new group of the name would be shown them: the name stays taken.
-  The group that went by it takes it back (`was = apollo` in its section, which a rename writes: the names it had), so a rename can be undone.
-  On the host nobody is asked: `zonewiki user group` and a hand edit of the file make a group of any name.
-  The groups' names are no secret among a wiki's users (a list's Who it is for… completes from them), so "taken" tells nothing new.
-- **Not for a viewer** (who changes nothing: 403), a visitor, or a wiki without users (404).
-- **A member leaves by themselves** (`mayLeave`, `leaveGroupOp`; `POST /groups/<group>/leave`): on `/groups` a group that is named on you and that you don't manage has **Leave…**, which asks first and then takes the group's name from your groups, yours alone.
-  You no longer see its pages and lists from your next request; its owners can put you back.
-  Not a group without owners (it is an admin's, and who is in it is the admin's to say), not one you are in only by way of a group it includes (there is nothing of it on you to take off: you leave that one), and not for who manages it (Manage… is their way, where a group keeps an owner).
-- **What it doesn't do**: change what a group includes (an admin's).
-
-**An admin on Groups**: `/groups` is the one page for groups, and an admin's shows more (`groupsView.Admin`).
-
-- **Other groups** (`#others`), under their own: every other group there is (`knownGroups`: someone is in it, it has a section, or a group includes it), each with who is in it and by which way, "owned by anna" when it has owners, "has pages" when its folder is there, and **Manage…**.
-  The admin sees who is in them, not their pages: there is no link to a group's home they aren't in.
-- **Manage…** of every group has, beside People, Owners and Name, **Everyone in**: the groups it includes (pills of the groups there are, not itself; empty: none, and the key goes), **Save** (`POST /groups/includes`, `group`, `includes`; `groupIncludesRoute`, admins only, 404 for anyone else).
-- **A group of groups** below: a new group's name and the groups it includes (**Make a group of groups**, the same route with `new=1`). It makes a group and changes none: a name a group has is refused ("There is a group product already. What it includes is under its Manage…."), as is one that is taken (`groupNameTaken`).
-  A group that would include itself, or a name that is no group's, is refused and nothing changes.
-  Done, the page says who is in the group now, and who no longer is (`?done=includes&group=…&left=…`, of which it says only users' names).
-- **Seen by no one**: the folders in `groups/` of a group nobody is in (`strayGroups`); putting someone in that group (their Groups field on the admin page) gives the folder its people again.
-
-**A group renamed** (`renameGroupOp`): **Rename** under Manage… on `/groups`, for its owners and an admin (`POST /groups/<group>/rename`, `name`).
-What is the group's by its name goes along, so nobody loses anything: the lists that are for `@old` are for `@new`; the folder `groups/old/` becomes `groups/new/`, every link to its pages re-pointed on pages and in tasks, the files its pages show and those no page shows along, and a home that still says what Zone wrote says the new name; then the settings name it anew, on the users, in the groups that include it and its own section.
-The order is that one: until the settings change nobody is in the new name's group, so what has moved is seen by no one for that moment and never by more.
-**A step that fails** puts the ones before it back and the rename stops, everything as it was (a page of the group with text not in git yet that can't be committed first: the lists, which were for the new name already, are for the old one again).
-**A step that is made but for its commit** counts as made (`writtenAnyway`): the rename goes on to the settings, or the group's pages were in a folder no group is named as, seen by no one. The page then says both, that the group has its new name and that the change is written but not committed (500), and the files are in the Uncommitted list, as after any write whose commit failed.
-It is up to three commits (the lists, the folder with its links, the files no page shows), by whoever renamed it; an admin who is not in the group moves its pages without seeing any.
-The new name must be free, as a new group's, or one the group went by before (`was`, which the rename keeps: A name that is taken, above). There is no command for it: a rename writes pages and task files, which only the running server does (One process, in `AGENTS.md`).
-
-**A group ended** (`removeGroupOp` in `go/groups.go`): **Remove** at the foot of Manage… on `/groups`, for its owners and an admin (`POST /groups/<group>/remove`).
-A group that was made by mistake, or has done its work, goes: its name comes off its people, out of the groups made of it, and its section goes.
-**Its pages can't stay where no one would see them**, so with anything in its folder Remove asks what becomes of it, and one of the two is chosen before the button does anything:
-- **Move the pages to the wiki** (`pages=move`, `folder`): `groups/dev/…` becomes `dev/…`, a folder of the shared wiki whose name can be typed (the group's by default; `groups/dev/roadmap` → `dev/roadmap`, the home → `dev/index`), every link to the pages re-pointed and the files they show copied along (`moveFolder`, `shareUploads`). The form says how many pages everyone who uses the wiki will see: it is a move to more people, asked as such.
-  A folder of that name in the wiki already is refused ("give the pages' folder another name"), as is one in `private/` or `groups/`, or one Zone skips.
-  Files in the folder that no page shows go with the folder; they stay in git.
-- **Delete the pages** (`pages=delete`): the pages and their files are deleted, in one commit ("Remove the group dev: its pages"). They can't be brought back in the browser (Deleted Pages goes by the path, and nobody is in a group of that name), and stay in git on the host. Links to them are links to pages there aren't.
-
-A group without a folder is removed without a question.
-**A task list that is for the group keeps it** (`groupKept`): a list has its own owners and its own For, so the page names the lists (those you see; the others counted) and says to change whom they are for, or delete them, first. **A group that another is made of** is an admin's to remove (what a group is made of is an admin's): an owner is told so.
-**The order** is the pages first, the settings last, so nothing is in a folder no group is named as while the group is still there. A step that is made but for its commit counts as made (`writtenAnyway`): the removal goes on, and the page says both that the group is removed and that a change isn't committed.
-**Its name stays taken** while its folder has a history (A name that is taken, above): a group that never had a page frees its name.
-There is no command for it, as for a rename.
-
-- **How it is kept**: `Settings.Includes` is what each section says; `joinGroups` works out once, when the settings are read, every group each user is in (`User.In`), and `memberOf` looks there, so asking costs what it did.
+A disabled user (`disabled = yes`, `zonewiki user disable NAME`) can't sign in (with the right password the login says "Your account is disabled. Ask an admin of this wiki.", with a wrong one the usual "Incorrect user name or password.", and both count as a wrong try for the throttle),
+their sessions stop working at their next request (`signedIn`),
+and their MCP token is refused (401; `mcpAuthorized`; a disabled user's token alone doesn't turn `/mcp` on).
+Their pages, tasks and private folder stay as they are.
+Enabled again, they sign in as before, and a session from before not yet expired works again: disabling isn't how to end a stolen session, a new password is (Signing in, below).
+A disabled admin counts as no admin.
 
 ### Viewers
 
@@ -425,6 +362,129 @@ whether it is there yet or not (`guidePage`, `guideImports` in `go/access.go`; t
 - **What still reaches a guide**: a page rename re-points the links in it, and a tag's rename the `[[tasks: …]]` on it, in the renamer's commit; neither writes words of the renamer's own choosing beyond the new name.
   An admin's assistant is an admin: if it reads a prompt injection, it can write a guide.
 - **Tests**: `TestGuidesAreAnAdmins` in `tests/test_roles.py`.
+
+## Groups
+
+**Who belongs together is said once**: on the users, or by the groups a group is made of.
+
+`groups = dev, hiring` in a user's section puts them in groups (`User.Groups`, `parseGroups` in `go/users.go`; commas or spaces between them, a leading `@` allowed, written A–Z).
+A group is its name (lowercase letters, digits, hyphens; `groupNameRE`): there is no list of groups to keep, a group exists while someone is in it (`Settings.groups`), and one nobody is in has no members, which is no error.
+A name that is none is an error of the settings file, which then keeps the settings from before.
+
+### Who is in a group
+
+- **Set them** with `zonewiki user group NAME +dev -hiring` (alone it says which groups the user is in; `user list` names them: `bob (in dev, hiring)`), in the Users tab's **Groups** field (Managing users, below), or by hand in the file.
+  The field takes only groups there are (and the name of a folder in `groups/` no one sees, which gives it its people again); a new group is made on **Groups** (A group of your own, below).
+- **What a group is for**: what is for some and not for all. `memberOf(user, group)` asks; a disabled user is a member of none.
+  A task list can be for groups (`"for": ["@hiring"]`: Lists for some, in `docs/spec/tasks.md`), and a user put in a group or taken out sees its lists, or no longer, at their next request.
+- **A role is not a group**: an admin is in no group by being admin, and sees nothing of a group they are not in. They may put themselves in one, which the log of the settings shows ("alice's groups").
+- **Who makes one**: an admin, as above, or anyone who may write, in the browser (A group of your own, below).
+
+### A group made of groups
+
+When two teams share something, don't name everyone twice. Give the larger group a section that says which groups it is made of:
+
+```ini
+[group product]
+includes = dev, design
+```
+
+Whoever is in `dev` or in `design` is in `product`, at once and for as long as they are, so someone who joins `dev` next month has what is for `@product` without anyone thinking of it.
+A list for both teams is then for one group (`"for": ["@product"]`).
+
+- **It goes through**: `company` may include `product`, and whoever is in `dev` is in all three. Who has `product` named on them (`groups = product`) is in it as before, and not thereby in `dev`.
+- **A group that includes itself**, directly or by way of others, is an error of the file naming its line ("[group a] includes itself, by way of b"; `includesItself` in `go/configfile.go`), as is a name in `includes` that is no group's.
+  A name nobody is in is none: a group made of empty groups has no members.
+- **The section has the keys `includes`, `owners` and `was`** (`groupKeys`, A group's keys above; owners and was: A group's owners and A name that is taken, below), and any other is an error. A group without a section is its name on users, as above.
+- **Set it** with `zonewiki group includes product +dev +design` (`-dev` takes one out; alone it says what the group includes and who is in it now; `zonewiki group list` says it of every group: `product includes design, dev: alice, bob`; `groupMain` in `go/commands.go`), on **Groups**, for an admin (An admin on Groups, below), or by hand in the file.
+  Taking the last group out removes the key, and the section when it says nothing else (`setGroupKey`). The settings' log says it ("product includes design, dev").
+- **Taking a group out is a narrowing**, like taking a user out of a group: its people no longer see what is for the larger group at their next request, and their tasks in its lists count as no one's (Lists for some in `docs/spec/tasks.md`).
+  The command and the page say who that was ("No longer in product: bob. What is for @product they no longer see."); putting the group back gives it all back.
+
+### A group of your own
+
+A project is six names from three teams, and nobody should wait for an admin to have a place for it (`go/groups.go`, `groups.html`).
+On **Groups** (`/groups`: the user menu's entry, **All your groups** in the pill's menu, a link in the shortcuts dialog) whoever may write makes a group: a name, and who else is in it.
+They are in it and are its **owner**; from the next request `groups/<name>/` is its people's and a task list can be for `@<name>`, as with any group.
+
+- **Who is in it is still said on the users**: making the group writes its name into the `groups` of each of its people, and `owners = <you>` into a section `[group <name>]` (`makeGroupOp`, `setMembers`). So `memberOf`, a group made of groups and the Users tab's Groups field hold for it unchanged, and an admin sees and sets it like any other.
+- **Not for a viewer** (who changes nothing: 403), a visitor, or a wiki without users (404).
+- **What it doesn't do**: change what a group includes (an admin's).
+
+### Choosing names
+
+**Names are chosen, not typed blind** (`js/namepick.js`): **People**, **Owners**, **Who else is in it** and an admin's group fields are pills, one per name, with × to take one out.
+Typing offers the users (or groups) there are that start with what is typed, then those that hold it; Enter, Tab, a comma or a click picks the one marked, ↑/↓ move, Backspace in an empty box takes the last pill out, and a pasted list becomes pills.
+What names nobody stays in the box, marked ("No user called x"), and the form isn't sent with it.
+The field itself is hidden and holds the names (`anna, bo`), so the form sends what it always did; without JavaScript it is a text field, and the server refuses a name that is no user's or no group's either (`usersNamed`, `groupsNamed`, against `knownGroups`).
+
+### A group's owners
+
+- **Its owners say who is in it** (`Settings.Owners`, `ownerOf`, `managesGroup`): on `/groups` a group you own has **Manage…**, with **People** (the users named on it, `directMembers`; who is in it by way of a group it includes isn't listed and isn't this field's), **Owners**, and **Save** (`POST /groups/<group>/people`, `groupPeopleOp`).
+  An owner's change touches that one name on the users and the group's `owners`, nothing else of the settings file.
+  Taking someone out is a narrowing, as an admin's is: they no longer see the group's pages and lists at their next request, and the page says who that was.
+  A group keeps an owner (the last can't take themselves out; they name who takes it over first). An owner needn't be in the group: they then see none of its pages.
+  A removed user owns nothing (`dropOwner`), and a name in `owners` that is no user is none.
+- **Taking someone out says whom first** (`js/admin.js`): a Save that takes names out of People (Manage…), or groups off a user (the admin page), turns into "Yes, take out bob" and the second click saves, as Leave… asks; what is for the group is theirs no longer at once. Without the script the line under the field says it.
+- **An admin manages every group**, owned or not (An admin on Groups, below), the admin's Groups field on a user works as before, and `zonewiki group owners NAME +anna -bo` gives a group owners or takes them (none left: the group is an admin's alone again, as one made on the host).
+
+### Leaving a group
+
+**A member leaves by themselves** (`mayLeave`, `leaveGroupOp`; `POST /groups/<group>/leave`): on `/groups` a group that is named on you and that you don't manage has **Leave…**, which asks first and then takes the group's name from your groups, yours alone.
+You no longer see its pages and lists from your next request; its owners can put you back.
+Not a group without owners (it is an admin's, and who is in it is the admin's to say), not one you are in only by way of a group it includes (there is nothing of it on you to take off: you leave that one), and not for who manages it (Manage… is their way, where a group keeps an owner).
+
+### A name that is taken
+
+A new group's name is refused when it is taken (`groupNameTaken`): a group there is, a name a group is said to include, a folder in `groups/` (a group nobody is in keeps its folder, and a new group of that name would get its pages), or a name a task list is for.
+**And a name a group went by before**: the history of `groups/<name>/` (the versions and deleted pages of a group renamed since, which are read under that path by who is in a group of that name) and a deleted list that was for it stay its former group's, so a new group of the name would be shown them: the name stays taken.
+The group that went by it takes it back (`was = apollo` in its section, which a rename writes: the names it had), so a rename can be undone.
+On the host nobody is asked: `zonewiki user group` and a hand edit of the file make a group of any name.
+The groups' names are no secret among a wiki's users (a list's Who it is for… completes from them), so "taken" tells nothing new.
+
+### An admin on Groups
+
+`/groups` is the one page for groups, and an admin's shows more (`groupsView.Admin`).
+
+- **Other groups** (`#others`), under their own: every other group there is (`knownGroups`: someone is in it, it has a section, or a group includes it), each with who is in it and by which way, "owned by anna" when it has owners, "has pages" when its folder is there, and **Manage…**.
+  The admin sees who is in them, not their pages: there is no link to a group's home they aren't in.
+- **Manage…** of every group has, beside People, Owners and Name, **Everyone in**: the groups it includes (pills of the groups there are, not itself; empty: none, and the key goes), **Save** (`POST /groups/includes`, `group`, `includes`; `groupIncludesRoute`, admins only, 404 for anyone else).
+- **A group of groups** below: a new group's name and the groups it includes (**Make a group of groups**, the same route with `new=1`). It makes a group and changes none: a name a group has is refused ("There is a group product already. What it includes is under its Manage…."), as is one that is taken (`groupNameTaken`).
+  A group that would include itself, or a name that is no group's, is refused and nothing changes.
+  Done, the page says who is in the group now, and who no longer is (`?done=includes&group=…&left=…`, of which it says only users' names).
+- **Seen by no one**: the folders in `groups/` of a group nobody is in (`strayGroups`); putting someone in that group (their Groups field on the admin page) gives the folder its people again.
+
+### A group renamed
+
+**Rename** under Manage… on `/groups` renames a group (`renameGroupOp`), for its owners and an admin (`POST /groups/<group>/rename`, `name`).
+What is the group's by its name goes along, so nobody loses anything: the lists that are for `@old` are for `@new`; the folder `groups/old/` becomes `groups/new/`, every link to its pages re-pointed on pages and in tasks, the files its pages show and those no page shows along, and a home that still says what Zone wrote says the new name; then the settings name it anew, on the users, in the groups that include it and its own section.
+The order is that one: until the settings change nobody is in the new name's group, so what has moved is seen by no one for that moment and never by more.
+**A step that fails** puts the ones before it back and the rename stops, everything as it was (a page of the group with text not in git yet that can't be committed first: the lists, which were for the new name already, are for the old one again).
+**A step that is made but for its commit** counts as made (`writtenAnyway`): the rename goes on to the settings, or the group's pages were in a folder no group is named as, seen by no one. The page then says both, that the group has its new name and that the change is written but not committed (500), and the files are in the Uncommitted list, as after any write whose commit failed.
+It is up to three commits (the lists, the folder with its links, the files no page shows), by whoever renamed it; an admin who is not in the group moves its pages without seeing any.
+The new name must be free, as a new group's, or one the group went by before (`was`, which the rename keeps: A name that is taken, above). There is no command for it: a rename writes pages and task files, which only the running server does (One process, in `AGENTS.md`).
+
+### A group ended
+
+**Remove** at the foot of Manage… on `/groups` ends a group (`removeGroupOp` in `go/groups.go`), for its owners and an admin (`POST /groups/<group>/remove`).
+A group that was made by mistake, or has done its work, goes: its name comes off its people, out of the groups made of it, and its section goes.
+**Its pages can't stay where no one would see them**, so with anything in its folder Remove asks what becomes of it, and one of the two is chosen before the button does anything:
+
+- **Move the pages to the wiki** (`pages=move`, `folder`): `groups/dev/…` becomes `dev/…`, a folder of the shared wiki whose name can be typed (the group's by default; `groups/dev/roadmap` → `dev/roadmap`, the home → `dev/index`), every link to the pages re-pointed and the files they show copied along (`moveFolder`, `shareUploads`). The form says how many pages everyone who uses the wiki will see: it is a move to more people, asked as such.
+  A folder of that name in the wiki already is refused ("give the pages' folder another name"), as is one in `private/` or `groups/`, or one Zone skips.
+  Files in the folder that no page shows go with the folder; they stay in git.
+- **Delete the pages** (`pages=delete`): the pages and their files are deleted, in one commit ("Remove the group dev: its pages"). They can't be brought back in the browser (Deleted Pages goes by the path, and nobody is in a group of that name), and stay in git on the host. Links to them are links to pages there aren't.
+
+A group without a folder is removed without a question.
+**A task list that is for the group keeps it** (`groupKept`): a list has its own owners and its own For, so the page names the lists (those you see; the others counted) and says to change whom they are for, or delete them, first.
+**A group that another is made of** is an admin's to remove (what a group is made of is an admin's): an owner is told so.
+**The order** is the pages first, the settings last, so nothing is in a folder no group is named as while the group is still there. A step that is made but for its commit counts as made (`writtenAnyway`): the removal goes on, and the page says both that the group is removed and that a change isn't committed.
+**Its name stays taken** while its folder has a history (A name that is taken, above): a group that never had a page frees its name.
+There is no command for it, as for a rename.
+
+### How groups are kept
+
+`Settings.Includes` is what each section says; `joinGroups` works out once, when the settings are read, every group each user is in (`User.In`), and `memberOf` looks there, so asking costs what it did.
 
 ## Managing users
 
@@ -643,20 +703,7 @@ A new page is made private from the start (below).
   The dialog says where it goes and that everyone who uses the wiki then sees and changes it,
   and submits the ordinary rename (`POST /rename/<slug>` with `from=page`: links re-point on pages and in tasks, the uploads it shows are copied to `_assets/` (Uploads, below), one commit `Rename <old> to <new>`; a refusal such as "A page named … already exists" comes back in the Rename dialog).
   Not offered without users, for a shared page, another user's page, the wiki's home or a private home, or a note (Move to wiki takes those out of the folder).
-- **Who may move a page to other readers** (`checkReaders`, `mayNarrow`, `tookBack` in `go/pages.go`; one rule for a rename, Share…, Move to wiki, a folder move and an assistant's `rename_page`):
-  a move is to more people when everyone who sees the page now still does (`place.within`), to fewer when someone no longer would.
-  - **To more people: whoever may write the page, asked first.** Share… says who will see it. A rename that takes the page to another place comes back with the question, "“groups/dev/roadmap” will be seen and changed by everyone who uses this wiki. Now @dev (anna, bo) sees it.", and **Yes, move it** (`rename_ask`; the form sent again with `confirmed=<that name>` is the yes, and a yes to one name is none to another).
-    An assistant's move to more people isn't asked again: its user asked for it.
-  - **To fewer people: an admin, asked first.** "bob, erin will no longer see “plans”: there @dev (alice, carol, dana) sees it. They keep its versions up to now in the history, and links to it on pages they see become plain text." An admin moves a page only where they may write themselves: into a group they are in, or their own folder (an admin who is no member sees nothing of a group).
-    An assistant passes `narrow=true` for it, after the same question as its refusal.
-  - **Whoever shared a page takes it back while nobody else has changed it**: every commit of the page since it came to where it is (the move that shared it, or its first save) is theirs, nothing of anyone else's is in it uncommitted, and it goes back to where it came from or to a place at least that wide. Asked first, as an admin is.
-  - **Anyone else is refused**, and told whose move it is: "“groups/dev/plans” is seen by fewer people than “plans” is now (bob, erin would no longer see it). A page goes to fewer people by an admin, or by whoever shared it while nobody else has changed it. Ask an admin."
-    In the browser the rename dialog (and the editor's rename bar) comes back with the name typed and that message.
-  - **What those left out keep** is what they had: the page's history is read by its path, so its versions up to the move are theirs to read (and a link to it on a page they see is plain text from then on); nothing written after reaches them.
-  - **Why not everyone, with a question**: a delete is seen and undone by everyone (Deleted Pages) and costs the deleter the page too; a move into one's own group is neither seen nor undone by those left out, and costs the mover nothing.
-    **Why not no one**: a wiki that starts with everything shared is sorted into team folders later, and a page shared by mistake is taken back.
-  - **Who may delete or manage is per kind, on purpose**: a page by whoever may write it; a task by who made it or an admin; a list by its owners or an admin; a comment by its author; a guide by an admin.
-  Links therefore never have to be unlinked: a move *out* of a private folder re-points the links of your own pages and tasks, and of the shared pages that linked to it (marked 🔒 for you, below), in the rename's one commit.
+  Links never have to be unlinked: a move *out* of a private folder re-points the links of your own pages and tasks, and of the shared pages that linked to it (marked 🔒 for you, below), in the rename's one commit.
 - **A link from a shared page to your private page** (typed or pasted) is allowed, but marked for you (`.wikilink-private`: a 🔒 after it, tooltip "Links to a private page: others see plain text"; the live preview too): other users see plain text there.
   `[[` completion on a shared page, and in a shared task's title or notes, doesn't offer your private pages (a private task's does).
 - **A new shared page from a private page** (`processWikilinks`' `from`, `sharedNewOffer` in `go/private.go`): on a page in your private folder a link to a page that doesn't exist and isn't private is marked (`.wikilink-shared-new`: a 🌐 after it, tooltip "Creates a shared page";
@@ -672,12 +719,7 @@ A new page is made private from the start (below).
   It opens from the **user button** (`.top-user`, a round initial with the name as its tooltip) at the top right, after Search.
 - **What "private" means**: hidden inside Zone, from other users and their assistants.
   Not encrypted, and not hidden from whoever has the wiki's folder or its git repository: the files, their history and a git remote hold everything.
-  Search's keyword index (BM25) is made of the shared pages and tasks alone (`indexCache`);
-  what isn't everyone's is searched along with it by those who see it, place by place (a user's private pages, their private tasks, a group's folder: `textsearch.Layer`, `Index.View`; their document count, frequencies and lengths join the shared ones at query time, so they rank exactly as if one index held what the viewer sees),
-  while another user's words,
-  counts and lengths take no part in anyone's ranking,
-  nor in the vocabulary that prefix and typo matching draw on (else a typo that stops matching would tell that a word is in a private page).
-  The semantic index holds every page's vectors, but a search looks only at the visible ones (pages, sections, tasks, Related, and the pages a new page is compared with).
+  Search finds your private pages for you alone, and another user's words take no part in your ranking, nor in what a typo matches (Who searches what in `docs/spec/search.md`).
   The query log (`query-log`) is the wiki owner's file in `.zone/`, never shown in Zone: with users it holds every user's queries and the private pages they found.
 - **The rule lives in one place** (`go/access.go`): `placeOf(slug)` (the page's place: everyone's, one user's or no one's; `place.sees`, `place.own`, and `place.within`: whoever sees this place sees that one, which a link's mark and a move ask),
   `canSee(user, slug)`,
@@ -690,12 +732,12 @@ A new page is made private from the start (below).
   Sharing mode's "Hidden page" stays for pages `noshare` hides.
 - **Changing another user's page** is refused the same way, 404 (`canWrite`; `refuseWrite` in the routes): save and auto-save, new page, rename, delete, restore a version, toggle a checkbox, commit one file.
   Renaming a page *into* another user's folder goes back to the dialog with an error ("that folder is another user's"), as does Move to wiki into one; Append to page and Move to wiki's "Link from" take only pages you may change ("There is no page …").
-  Renaming a shared page to another shared place re-points links on every page, other users' private ones too, in one commit (Rename in `docs/spec/editor.md`); renaming one into your private folder is an admin's, or yours while it is yours alone (Who may move a page to other readers, above).
+  Renaming a shared page to another shared place re-points links on every page, other users' private ones too, in one commit (Rename in `docs/spec/editor.md`); renaming one into your private folder is an admin's, or yours while it is yours alone (Who may move a page to other readers, below).
 - **Notes are private**: with users the New note dialog says "New private note" and "Only you see it, until you move it to the wiki";
   a new note goes to the top of your folder, `private/<you>/<timestamp>_<name>` (`createQuicknote`, `privateFolder`);
   Notes lists only yours, under a 🔒 like a private page (an empty Notes says "Notes are private: only you see them, until you move one to the wiki"; `listQuicknote`, `inQuicknote`; so do Notes filter and `list_pages`/`search_wiki` with `notes`).
   A top-level note from before users stays a shared page: it opens by its link and shows in search and the page list, but is not in anyone's Notes (move it into your folder, or use Move to wiki).
-  Move to wiki and Append to page take a note out of your folder (to the folder you name, the top level by default; to the page); an old shared note (from before users) goes into your private folder by Move to wiki as by a rename (Who may move a page to other readers, above).
+  Move to wiki and Append to page take a note out of your folder (to the folder you name, the top level by default; to the page); an old shared note (from before users) goes into your private folder by Move to wiki as by a rename (Who may move a page to other readers, below).
   `isQuicknote` takes a note at the top of a user's folder (not deeper, not in no one's folder, and without users only top-level notes).
 - **Uploads** for a private page are private: the editor sends the page's slug with an upload (`page`, `markdownEditor`'s `page` option), and a file for a page in your own folder is kept in `private/<you>/_assets/` (`uploadDir`; URL `/private/<you>/_assets/<file>`, the folder's own path);
   any other page's uploads go to `_assets/` as before.
@@ -751,7 +793,7 @@ There is nothing to set up for the folder itself: it is the folder of the group 
   So emptying a group never publishes its pages, and what is shared doesn't depend on who is in which group.
   **A wiki that already had a folder `groups/`** when it got users, or when Zone got group folders, finds its pages there seen only by the groups of those names, or by no one: move them out on disk, or put people in a group of the folder's name.
   Without users `groups/` is an ordinary folder.
-- **To more people by whoever may write, to fewer by an admin** (`place.within`, `checkReaders` in `go/pages.go`; Who may move a page to other readers, under Private pages): one of your private pages moves into a group you are in, a group's page into the folder of a group that includes its own (`groups/dev/x` → `groups/product/x` while product includes dev) or out to everyone.
+- **To more people by whoever may write, to fewer by an admin** (`place.within`, `checkReaders` in `go/pages.go`; Who may move a page to other readers, below): one of your private pages moves into a group you are in, a group's page into the folder of a group that includes its own (`groups/dev/x` → `groups/product/x` while product includes dev) or out to everyone.
   A shared page into a group's folder, and a group's page into a private folder or another group's, is to fewer people: an admin's move (into a group they are in), or that of whoever shared it while nobody else changed it. Between groups it goes by how they are made, not by who happens to be in them.
 - **The way in** (`go/private.go`): a pill in the switcher, for whoever is in a group (Modules in `docs/spec/navigation.md`; **g g**): called by the group for who is in one, **Groups** with a menu of them for who is in several.
   `/groups/<group>` opens the group's home, `groups/<group>/index`, and makes it on the first visit of someone in the group who may write, from a small template (`# dev`, a line that the pages in this folder are seen and changed by whoever is in the group, a `## Links` heading; committed in their name, `Create groups/dev/index`).
@@ -774,8 +816,7 @@ There is nothing to set up for the folder itself: it is the folder of the group 
   **`/new`** (the form without JavaScript) asks someone in a group whom the page is **For**: everyone, one of their groups, only them (`for=group:<name>`, `for=private`; `createPage`); someone in no group has the Private box, as before.
 - **Uploads** for a group's page are the group's: the file is kept in `groups/<group>/_assets/` (`uploadPlace`, `uploadDir`; URL `/groups/<group>/_assets/<file>`) and served to its members only, 404 for anyone else and for any other subfolder (`serveGroupUpload`); an assistant reads and adds them with `read_file` and `upload_file` (`page`), or over HTTP with its user's token.
   A page that leaves the folder takes the uploads it shows with it (`shareUploads`), as one that leaves a private folder does: to `_assets/` for everyone, to another group's or a private folder's `_assets/` when it goes there (a move to fewer), never to more people than the page.
-- **Search**: the keyword index of the shared pages has nothing of a group's; its pages are one layer, searched along with the shared ones by its members and nobody else, as a user's private pages are by them (`docShared`, `docPlace`, `Index.View`; a list for some's tasks likewise, Lists for some in `docs/spec/tasks.md`), so a group's words, counts and lengths take part in no one else's ranking, and a typo of a word only the group has suggests nothing to anyone else.
-  The layer is made when a member first searches after a change in the folder, for all of them: with 2,000 pages in the group some 40 ms, and every further member's search finds it there (measured 2026-11-17, `TestAMembersIndexOfALargeGroup`).
+- **Search**: a group's pages are searched by its members and nobody else, as a user's private pages are by them, and a group's words take part in no one else's ranking (Who searches what in `docs/spec/search.md`).
 - **A group's guides are an admin's who is in the group** (`adminsOnly`): `groups/dev/AGENTS.md` and what it pulls in steer the assistant of everyone in dev, so the others in the group read them and don't change them (Guides, above).
 - **Tasks are not kept there**: a group's tasks are a list for the group (`"for": ["@dev"]`, Lists for some in `docs/spec/tasks.md`), which a page in the folder can show (`[[tasks: list=dev]]`).
   A `[[task:…]]` on a group's page counts as its title in search only for a task everyone sees, as on a shared page.
@@ -786,6 +827,24 @@ There is nothing to set up for the folder itself: it is the folder of the group 
   Not a folder whose readers some of its members only are: a group is who it is for. (A folder for named people is the folder of a group they make: A group of your own, above.)
 - **Tests**: `tests/test_group_pages.py` gives the group dev a page (committed, deleted, uncommitted), an upload and a guide holding a word no answer to anyone else may contain, and runs the probes of `tests/test_privacy.py`, aimed at the group's folder, as an editor and as an admin who are not in it: every route and MCP read tool, and every write (the folder's files stay byte for byte).
   A route or tool probed there is probed here; further tests cover its members, a viewer among them, joining and leaving without a restart, a group made of groups, the moves, uploads, the guide, the history and a folder of no group. `TestGroupFolders` in `go/access_test.go` has the rule's table, `TestAGroupsPagesAreInItsMembersIndexAlone` the search.
+
+## Who may move a page to other readers
+
+A page's place says who sees it (In short, above), so moving a page is how it goes to other readers, and one rule says who may: Private pages and Group pages, above, both follow it.
+It is one rule for a rename, Share…, Move to wiki, a folder move and an assistant's `rename_page` (`checkReaders`, `mayNarrow`, `tookBack` in `go/pages.go`):
+a move is to more people when everyone who sees the page now still does (`place.within`), to fewer when someone no longer would.
+
+- **To more people: whoever may write the page, asked first.** Share… says who will see it. A rename that takes the page to another place comes back with the question, "“groups/dev/roadmap” will be seen and changed by everyone who uses this wiki. Now @dev (anna, bo) sees it.", and **Yes, move it** (`rename_ask`; the form sent again with `confirmed=<that name>` is the yes, and a yes to one name is none to another).
+  An assistant's move to more people isn't asked again: its user asked for it.
+- **To fewer people: an admin, asked first.** "bob, erin will no longer see “plans”: there @dev (alice, carol, dana) sees it. They keep its versions up to now in the history, and links to it on pages they see become plain text." An admin moves a page only where they may write themselves: into a group they are in, or their own folder (an admin who is no member sees nothing of a group).
+  An assistant passes `narrow=true` for it, after the same question as its refusal.
+- **Whoever shared a page takes it back while nobody else has changed it**: every commit of the page since it came to where it is (the move that shared it, or its first save) is theirs, nothing of anyone else's is in it uncommitted, and it goes back to where it came from or to a place at least that wide. Asked first, as an admin is.
+- **Anyone else is refused**, and told whose move it is: "“groups/dev/plans” is seen by fewer people than “plans” is now (bob, erin would no longer see it). A page goes to fewer people by an admin, or by whoever shared it while nobody else has changed it. Ask an admin."
+  In the browser the rename dialog (and the editor's rename bar) comes back with the name typed and that message.
+- **What those left out keep** is what they had: the page's history is read by its path, so its versions up to the move are theirs to read (and a link to it on a page they see is plain text from then on); nothing written after reaches them.
+- **Why not everyone, with a question**: a delete is seen and undone by everyone (Deleted Pages) and costs the deleter the page too; a move into one's own group is neither seen nor undone by those left out, and costs the mover nothing.
+  **Why not no one**: a wiki that starts with everything shared is sorted into team folders later, and a page shared by mistake is taken back.
+- **Who may delete or manage is per kind, on purpose**: a page by whoever may write it; a task by who made it or an admin; a list by its owners or an admin; a comment by its author; a guide by an admin.
 
 ## Private tasks
 
@@ -799,17 +858,10 @@ The dialog says under its fields who sees the task ("Private: only you see this 
 Cards of private tasks show 🔒 (`.task-private`).
 Everything else (shared tasks) is everyone's to see and change, as shared pages are.
 
-- **Storage**: shared tasks are in `_tasks/` (`tasks.json`, `closed.json`, `closed-YYYY-MM.json`, each list's in its folder `lists/<name>/`: Storage in `docs/spec/tasks.md`); a user's private ones are in the same files and folders in `private/<user>/_tasks/` (`taskFiles.Dir(owner)`), created on their first private task, beside their lists' registry (`lists.json`: their private lists and their pins).
-  A task's file says whose it is: the task's `Owner` (`go/internal/taskmodel`) is not written into it, it is set from the folder a task was read from (`eachOwner`), and the API shows it as `"private": true|false` (only with users: without them the API's JSON is as before).
-  A write that puts a task in a list sets where it is kept (`applyList` in `go/tasks.go`), and the task moves between the files in one commit.
-  Ids are random UUIDs, unique across all files; restoring a deleted task (undo) never takes an id another file has (`taskFiles.IDsLocked`) and puts it back where it was (`placeSnapshot`: in its list, when you still have one of that name that is as private as the task was; a private task whose list is gone in your Inbox; a shared one whose list is gone in the shared list `general`, made for it; never a shared task into a private list, nor a private one into the open).
-- **Reading and writing** (`go/internal/taskfiles`, the store `taskFiles` in `go/tasklogic.go`): every reader takes the user and reads the shared files and theirs (`Owners(user)`: `Open`, `All`, `Snapshot`, `ReadForWriteLocked`, `ClosedInYear`, `ClosedYears`, and on top of them `findTasks`, `resolveTaskRefs`, `findTaskBacklinks`);
-  Zone itself (`""`) reads only the shared ones.
-  A write splits the tasks by owner (`byOwner`) and writes the files that changed, all in one commit; a task can only be written by its own user, since another user's is never read for them.
-  One lock (`taskFiles.Lock`) for all files' writes, and a second one that readers share and a write holds while it replaces its files (`Open` for `GET /api/tasks`, `All`, `Snapshot`; Storage in `docs/spec/tasks.md`): a task that is shared moves between two files, and a read between their writes would miss it.
-  What Zone does over every task list covers every user's files (`EveryOwner`): the closed tasks' filing by month at start (`ArchiveOldClosed`), the lists' migration, a rename's links in tasks (`renamePageRefs`), a shared list's rename, the search index (`Every`, filtered per user by `canSeeTask`, `hiddenDoc`).
-  A series' next occurrence stays in its list, so private (`spawnRecurring`).
-  A private task's pasted files are private too: a file pasted in a task's dialog is the task's, kept in `_tasks/files/<id>/_assets/` and seen by who sees the task (the editor sends the task's id with the upload, which wins over its page; A task's files in `docs/spec/tasks.md`).
+- **Where they are kept**: a user's private tasks are in `private/<user>/_tasks/`, in the same files and folders as the shared ones in `_tasks/`, beside their lists' registry; a write that puts a task in a list sets where it is kept (`applyList` in `go/tasks.go`), and the task moves between the files in one commit (Private tasks' files in `docs/spec/tasks.md`).
+- **Restoring a deleted task** (undo) puts it back where it was (`placeSnapshot`: in its list, when you still have one of that name that is as private as the task was; a private task whose list is gone in your Inbox; a shared one whose list is gone in the shared list `general`, made for it; never a shared task into a private list, nor a private one into the open).
+- **A series' next occurrence** stays in its list, so private (`spawnRecurring`).
+- **A private task's pasted files are private too**: a file pasted in a task's dialog is the task's, kept in `_tasks/files/<id>/_assets/` and seen by who sees the task (the editor sends the task's id with the upload, which wins over its page; A task's files in `docs/spec/tasks.md`).
 - **Another user's private task is no task**: by id the routes answer 404 as for an id no task has (`DELETE /api/tasks/<id>` of an unknown id stays a 204, as before);
   lists, counts, Closed and its years, the due count, Linked tasks and the section chips leave it out;
   a `[[task:…]]` to it renders as for a deleted task.
@@ -907,38 +959,46 @@ What happens on a task you have to do with is told to you (News on your tasks in
 
 ## Who made a change
 
-- **Commits**: every commit Zone makes for a user's action names them as its author, `alice <alice@zone>` (`gitCommit(user, …)`); the committer stays Zone.
-  Commits run one at a time (`commitMu` around `git add` and `git commit`), and each commits only its own paths, so one user's files never go into another's commit.
-  Commits Zone makes on its own (start-up, archiving the tasks) are Zone's: the wiki's git committer is `Zone <zone@localhost>` (`setCommitter`), and the history shows no name for its commits (`commitAuthor`).
-  **A draft is committed in its author's name**: Zone remembers who auto-saved a page's uncommitted text (`drafts` in `go/merge.go`, in memory: the editor's auto-save and a ticked checkbox note it, a commit of the file forgets it).
-  Before another user's save,
-  Done or checkbox tick on that page (and before a write that changes other pages on the way: a rename re-pointing links, a folder move, Append to page, `commitOthersDrafts`),
-  the draft is committed first as its author's `Save <slug>` (`commitOthersDraft`),
-  so it is in git under their name,
-  not in the other's commit;
-  one person's own auto-saves stay uncommitted.
-  A write that replaces or removes the page's text (a delete, rename or restore, Keep mine, Reload theirs, and every assistant's write) commits whatever the page holds uncommitted first,
-  the writer's own draft too,
-  so it is never lost and the write's own commit holds only its change (`keepPending`, `keepPendingPages` in `go/pageops.go`: one commit per author);
-  Commit file and Commit all commit a draft as its author too (`commitAuthorOf`).
-  Text whose author Zone doesn't know (edited on disk, or auto-saved before a restart) is committed as before: by the one committing, or by Zone for an assistant's write.
-  **In another user's private folder the folder says whose it is**: a rename,
-  folder move or Append that rewrites links first commits every uncommitted file there in its owner's name,
-  one commit per owner (`Save private/alice/diary`, or `Save 5 files in private/alice`; `commitOthersDrafts`),
-  so a rename of a shared page never carries their unfinished text in its commit.
-  Without users all commits are Zone's, as before.
-- **History**: a page's history shows the author after a version's label ("Edited · alice", `.hist-by`; `GitEntry.Author`, `commitAuthor`), and the MCP `history` tool adds "(by alice)" to a version's or a change's message.
-  Zone's own commits, and every commit in a wiki without users, show no name.
-- **Tasks**: comments and History events record who wrote or did them (`by`, see Comments and History in `docs/spec/tasks.md`): the cards and the edit modal show "12 Mar 09:30 · alice" (`commentStamp` in `tasks.js`), MCP's task text names a comment's author "(alice)".
-  Editing a comment keeps its author.
-  A comment is its author's: only they edit or delete it, and an admin may delete any (Comments in `docs/spec/tasks.md`); the task itself anyone who sees it may change.
-  **Nobody writes under another's name** (`go/taskby.go`): the routes that take comments or history whole (`PUT /api/tasks/<id>` and `batch-update` for an undo, `/api/tasks/restore`, `/api/tasks/import`) get them from the browser, which could say anything.
-  A `by` that is the sender's own stays;
-  another user's stays only on a comment (by its id) or a history entry (of that task, at that time, with those dates) Zone has seen under that name: it notes them as it deletes a task or a comment and before a request replaces a task's lists (`rememberBy`, in memory, the newest 20 000),
-  so the undo that sends them back is believed.
-  Any other name is dropped (`checkBy`: by no one), also an undo after a restart.
-  **A history sent for a task that is there** (an undo's) keeps only the entries Zone has had for that task (in its file, or noted before it was replaced; `knownHistory`), and always its `created` entry: so nobody writes an event that wasn't, such as a `created` in their own name (who made a task may delete it and move it to fewer people) or an `assigned` (a task goes back to whom its history says had it), and nobody makes a task no one's by dropping who made it.
-  Who made it is written on the task (`created_by`) before such a history replaces its own, for a task from before `created_by` was kept.
-  **A comment a whole-list write brings with no name** (sent so, or its name dropped), that the task didn't have and Zone never had by no one, is the sender's (`ownNewComments`): by no one it would be everyone's to change.
-  An admin's import keeps the file's names (a wiki moved, a backup put back).
-  `TestAuthors` in `tests/test_users.py`.
+### Commits
+
+Every commit Zone makes for a user's action names them as its author, `alice <alice@zone>` (`gitCommit(user, …)`); the committer stays Zone.
+Commits run one at a time (`commitMu` around `git add` and `git commit`), and each commits only its own paths, so one user's files never go into another's commit.
+Commits Zone makes on its own (start-up, archiving the tasks) are Zone's: the wiki's git committer is `Zone <zone@localhost>` (`setCommitter`), and the history shows no name for its commits (`commitAuthor`).
+**A draft is committed in its author's name**: Zone remembers who auto-saved a page's uncommitted text (`drafts` in `go/merge.go`, in memory: the editor's auto-save and a ticked checkbox note it, a commit of the file forgets it).
+Before another user's save,
+Done or checkbox tick on that page (and before a write that changes other pages on the way: a rename re-pointing links, a folder move, Append to page, `commitOthersDrafts`),
+the draft is committed first as its author's `Save <slug>` (`commitOthersDraft`),
+so it is in git under their name,
+not in the other's commit;
+one person's own auto-saves stay uncommitted.
+A write that replaces or removes the page's text (a delete, rename or restore, Keep mine, Reload theirs, and every assistant's write) commits whatever the page holds uncommitted first,
+the writer's own draft too,
+so it is never lost and the write's own commit holds only its change (`keepPending`, `keepPendingPages` in `go/pageops.go`: one commit per author);
+Commit file and Commit all commit a draft as its author too (`commitAuthorOf`).
+Text whose author Zone doesn't know (edited on disk, or auto-saved before a restart) is committed as before: by the one committing, or by Zone for an assistant's write.
+**In another user's private folder the folder says whose it is**: a rename,
+folder move or Append that rewrites links first commits every uncommitted file there in its owner's name,
+one commit per owner (`Save private/alice/diary`, or `Save 5 files in private/alice`; `commitOthersDrafts`),
+so a rename of a shared page never carries their unfinished text in its commit.
+Without users all commits are Zone's, as before.
+
+### In the history
+
+A page's history shows the author after a version's label ("Edited · alice", `.hist-by`; `GitEntry.Author`, `commitAuthor`), and the MCP `history` tool adds "(by alice)" to a version's or a change's message.
+Zone's own commits, and every commit in a wiki without users, show no name.
+
+### Comments and history of tasks
+
+Comments and History events record who wrote or did them (`by`, see Comments and History in `docs/spec/tasks.md`): the cards and the edit modal show "12 Mar 09:30 · alice" (`commentStamp` in `tasks.js`), MCP's task text names a comment's author "(alice)".
+Editing a comment keeps its author.
+A comment is its author's: only they edit or delete it, and an admin may delete any (Comments in `docs/spec/tasks.md`); the task itself anyone who sees it may change.
+**Nobody writes under another's name** (`go/taskby.go`): the routes that take comments or history whole (`PUT /api/tasks/<id>` and `batch-update` for an undo, `/api/tasks/restore`, `/api/tasks/import`) get them from the browser, which could say anything.
+A `by` that is the sender's own stays;
+another user's stays only on a comment (by its id) or a history entry (of that task, at that time, with those dates) Zone has seen under that name: it notes them as it deletes a task or a comment and before a request replaces a task's lists (`rememberBy`, in memory, the newest 20 000),
+so the undo that sends them back is believed.
+Any other name is dropped (`checkBy`: by no one), also an undo after a restart.
+**A history sent for a task that is there** (an undo's) keeps only the entries Zone has had for that task (in its file, or noted before it was replaced; `knownHistory`), and always its `created` entry: so nobody writes an event that wasn't, such as a `created` in their own name (who made a task may delete it and move it to fewer people) or an `assigned` (a task goes back to whom its history says had it), and nobody makes a task no one's by dropping who made it.
+Who made it is written on the task (`created_by`) before such a history replaces its own, for a task from before `created_by` was kept.
+**A comment a whole-list write brings with no name** (sent so, or its name dropped), that the task didn't have and Zone never had by no one, is the sender's (`ownNewComments`): by no one it would be everyone's to change.
+An admin's import keeps the file's names (a wiki moved, a backup put back).
+`TestAuthors` in `tests/test_users.py`.

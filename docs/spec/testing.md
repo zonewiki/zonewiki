@@ -371,6 +371,17 @@ Workers are separate processes: each has its own temp wikis, servers (`base_url`
 - `tests/e2e/test_usability.py`: the task filter field and its tag completion, the commit link and editor toolbar on phones, card swipes, a checkbox's undo.
 - `tests/e2e/test_format_bar.py`, `test_tables.py`, `test_touch.py`: the editor's formatting bar, sortable tables, the task app on a touch phone (all in Coverage, below).
 
+## Secret scanning
+
+No secret goes into the repo (No secrets in the repo in `docs/spec/security.md`): `.env` (tokens, password) is gitignored, and gitleaks looks for the rest.
+
+- **The pre-commit hook** `.githooks/pre-commit` (on once per clone: `git config core.hooksPath .githooks`) runs gitleaks over the staged changes, with a local gitleaks or else `./run.sh leaks --pre-commit --staged` in the tools image; a leak (exit 3) refuses the commit, a scan that can't run only warns.
+  For `commit -a` and `commit <path>` git hands the hook a temporary index (`GIT_INDEX_FILE`, a host path); `run.sh leaks` passes it into the container as a `/repo/…` path, so those changes are scanned too (an index outside the repo: exit 2, a warning).
+  On the first run `run.sh` says it is building the tools image.
+- **In a git worktree** `.git` is a file that names the repo's own `.git` by its host path, where the worktree's index is too: `run.sh leaks` mounts that folder into the container at the same path, read-only, so the hook and the scan of the history work there as in the repo (until 2026-11 they didn't: a commit in a worktree went in unchecked, with a warning).
+- **CI's leaks job** scans every commit (`./run.sh leaks`). gitleaks is a pinned release, checked against its published checksums in `Containerfile.tools`.
+- Tests: `tests/test_run_sh.py` (above).
+
 ## The retrieval floor
 
 `tests/retrieval/` holds a sample wiki, questions and the least search must find for them (its `README.md`; Measuring retrieval in `docs/spec/search.md`).
@@ -463,7 +474,7 @@ Without Playwright installed they skip, so plain `pytest tests/` is unaffected.
   It asserts nothing about appearance.
 - Playwright's HTML5 drag cannot auto-scroll mid-drag, so drag tests must keep source and target on screen (e.g. enlarge the viewport).
 - Keep the `playwright==` pin in `tests/requirements.txt` equal to `Containerfile.tools`' image tag version.
-- Content-Security-Policy: Zone's pages run under `script-src 'self'` (Security in `docs/spec/security.md`).
+- Content-Security-Policy: Zone's pages run under `script-src 'self'` (The page policy in `docs/spec/security.md`).
   The harness collects the violations Chromium reports on the console (`page.csp_violations`) and fails a test that has any, so new code can't bring in an inline script or handler unnoticed; a test that blocks one on purpose (`test_security.py`) clears the list.
   `test_security.py` also has what only a browser shows of the other rules: an iframe's `srcdoc` never frames a form, a link's `ping` deletes nothing when it is clicked, a page frames an upload but no view of Zone's, and a task's id is text on its card, not an element.
   Under that policy Playwright can't `eval` in the page: `page.wait_for_function` needs a function (`"() => scrollY > 0"`), as an expression string is evaluated with `eval`; `page.evaluate` works either way.
