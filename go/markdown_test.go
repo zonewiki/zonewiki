@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"zonewiki/internal/mdtext"
 )
 
 func render(t *testing.T, src string, env Env) string {
@@ -71,6 +72,15 @@ func TestAlerts(t *testing.T) {
 func TestHeadingIDs(t *testing.T) {
 	html := render(t, "# Über *alles*\n## Hello `code` & more ![x](i.png)\n## Hello `code` & more\n#### Deep\n", Env{})
 	expectIn(t, html, `<h1 id="über-alles">`, `<h2 id="hello-code--more">`, `<h2 id="hello-code--more-1">`, "<h4>Deep</h4>")
+}
+
+// A heading's quotes and dashes, curled by the typographer, leave its id as
+// a #Section link has it: "it's" is its, not itrsquos.
+func TestHeadingIDsOfTypography(t *testing.T) {
+	for _, heading := range []string{"An assistant's changes", `"Quoted" and 'single'`} {
+		html := render(t, "## "+heading+"\n", Env{})
+		expectIn(t, html, `<h2 id="`+mdtext.SectionAnchor(heading)+`">`)
+	}
 }
 
 func TestSections(t *testing.T) {

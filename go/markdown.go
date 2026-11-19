@@ -370,7 +370,10 @@ func headingTitle(h ast.Node, src []byte) string {
 			}
 			b.Write(v)
 		case *ast.String:
-			b.Write(n.Value)
+			// The typographer's quotes and dashes come as entities
+			// (&rsquo;): the character, which the id then drops, as a
+			// #Section link's id (mdtext.SectionAnchor) does.
+			b.Write(util.ResolveEntityNames(n.Value))
 		case *mathInline:
 			b.Write(n.TeX)
 		case *wikilinkNode:
