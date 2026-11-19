@@ -19,7 +19,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 - **Auto-save while typing** — debounced ~2s after the user stops typing, the editor silently POSTs to `POST /api/save/<slug>`, which writes the file to disk (no git commit, no redirect).
   An unsaved-changes indicator (`●` dot in the toolbar) appears while there are unsaved changes and disappears when auto-save completes.
 - **"Done" button** — POSTs to `POST /edit/<slug>`, which writes the file, creates a git commit, and redirects to `/page/<slug>`.
-  This is the only editor action that commits.
+  Of the saves it is the one that commits the page (auto-save doesn't; a conflict's Reload theirs and Keep mine commit too, below); renaming, an uploaded file and tasks made from lines are commits of their own.
   The toolbar has no Cancel button.
 - **Auto-save on navigate away** — on the `pagehide` event, if the textarea content differs from the last auto-saved content, a `fetch(…, { keepalive: true })` POSTs to `POST /api/save/<slug>`.
   This silently preserves edits when the user follows a link or presses the back button (no git commit).
@@ -132,19 +132,19 @@ Part of Zone's spec (see `AGENTS.md` for the index).
   Where the list's own dialog says which page it writes to, it shows the line it will write; **Insert** (or Enter) writes it, in one undo step, a blank line between it and text above; Cancel or Esc writes nothing; either way the cursor is back in the text.
   With the cursor on a line that is a `[[tasks: …]]` already, the dialog is **Change the task list**: the fields show that embed's params, and **Change** rewrites the line as the list's own dialog's Save rewrites the page (only what was changed; a param keeps its place, a new one goes last, an emptied one goes), so a param without a field stays as written (a `pin=` from before pins were the user's, too).
 - **A block from the bar** (table, code block, math, diagram, task list) goes on its own lines after the current one, with a blank line to the text above it also when the cursor is on an empty line right under text (`insertBlockAfterLine`): in the text's paragraph a table or an embed would be its words.
-- **Task list checkboxes** — `- [ ] task` and `- [x] task` render as interactive checkboxes in page view (rendered via `mdit-py-plugins` `tasklists_plugin` with `enabled=True`, so they are not disabled).
+- **Task list checkboxes** — `- [ ] task` and `- [x] task` render as interactive checkboxes in page view (Zone's `checkbox` node in `go/markdown.go`, rendered without `disabled`).
   Clicking a checkbox POSTs to `POST /api/toggle-checkbox/<path:slug>` with `idx` (0-based checkbox index), which toggles the `[ ]`/`[x]` in the `.md` file and answers the file's new hash (`{file_hash}`).
   **A page changed since the view loaded** (someone added an item above, an edit elsewhere): the article carries a key per checkbox line (`data-task-keys`: `mdtext.TaskLineKeys`, the line without its mark and the tick's stamps, so it stays the same once ticked),
   and a toggle sends its index and its key;
   the server ticks the item at that index if its line has that key, else the one item whose line has it (the page changed since the view loaded), and if none or several do, answers 409 and the toast says "The page changed: reload to tick this" with a Reload button (the checkbox goes back).
   The key is checked on every tick, so a tick after one found elsewhere still goes by its own line.
-  Ticking also records when: it appends `<!--d:YYYY-MM-DDTHH:MM:SS-->` (or adds ` d:…` to an existing `<!--t:<created>-->`), unticking takes it out again; the page shows these comments as small date chips (`render._render_task_dates`) (400 for a missing/non-integer/negative idx).
+  Ticking also records when: it appends `<!--d:YYYY-MM-DDTHH:MM:SS-->` (or adds ` d:…` to an existing `<!--t:<created>-->`), unticking takes it out again; the page shows these comments as small date chips (`taskDates` in `go/markdown.go`) (400 for a missing/non-integer/negative idx).
   In page view each toggle shows an **undo toast** ("Checked “…” · Undo"; undo is a second toggle).
   The toggle requests are chained (`toggleCheckboxOnServer`), so an undo can never overtake the toggle it reverts.
   In the editor, clicking a checkbox in the live preview edits the textarea via `execCommand('insertText')` (undoable, triggers preview/auto-save).
   - **Index mapping must match the renderer.** Only task-list items count: a list marker (`-`/`*`/`+`/`1.`/`1)`, optionally inside `>` blockquotes) followed by `[ ]`/`[x]`, whitespace and text.
     Fenced code and a leading frontmatter block are skipped; brackets in prose or later on the same line are not checkboxes.
-    Server: `taskItemRE` / `mdtext.TaskItemLines()`; client: `taskItemRE` / `taskCheckboxOffsets()` in `js/page.js`.
+    Server: `taskItemRE` / `mdtext.TaskItemLines()`; client: `taskCheckboxOffsets()` in `js/mdtext.js`.
     Keep the two in sync.
 - **Checkbox list continuation** — pressing Enter at the end of a `- [ ] task` or `- [x] task` line inserts `- [ ] ` on the next line (always unchecked).
   Pressing Enter on an empty checkbox item (`- [ ] ` with no text) exits the list.
@@ -184,6 +184,8 @@ Multiple files dropped at once are uploaded sequentially.
 The upload route uses the original filename when available (falling back to MIME-type guessing).
 The file keeps its name; the URL the route answers with has it percent-encoded (`uploadURL`: all but letters, digits and `_.-~`), `/_assets/My%20Deck%20%28v2%29.pdf` for "My Deck (v2).pdf", because a space in a markdown link's target ends the link and a bracket may.
 Links written before that, with the name as it is (`[Deck](/_assets/My Deck (v2).pdf)`, which markdown reads as text), are links all the same: the renderer encodes the target of a link to `/_assets/…` or `/private/<user>/_assets/…` that has a space in it, up to the file's extension before the closing bracket (`encodeUploadLinks` in `go/uploads.go`, for pages, previews, task notes and comments; code aside; the file on disk stays as written).
-If a file with that name already exists in `_assets/`, a numeric suffix is appended (`file-2.pdf`, `file-3.pdf`, …).
+A pasted image (a screenshot) gets a random name (`unique=1`), so it never clashes.
+If a file with that name already exists in the place's `_assets/`, the route answers 409 `{ conflict, filename }` and the editor asks (`askConflict` in `js/mdedit.js`): keep the name to overwrite the file (`overwrite=1`), type another (`filename`), or cancel.
+Only an assistant's upload with its token, which nobody can ask, gets a numeric suffix instead (`freeUploadName`: `file-2.pdf`, `file-3.pdf`, …); it never replaces a file.
 The editor sends the page's slug along (`page`): with users, a file for a page in your private folder is kept in `private/<you>/_assets/` and only you can open it (see `docs/spec/users.md`).
 A file over `upload-max` (413), or one the wiki has no room for under `storage-max` (507), is refused: the placeholder goes, and an alert shows the server's message (Storage limit in `docs/spec/users.md`).

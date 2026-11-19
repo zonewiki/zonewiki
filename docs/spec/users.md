@@ -184,7 +184,7 @@ The file can be edited by hand, or with the commands; a running Zone takes each 
   demotes or disables the last ("that leaves the wiki without an admin. Make another user admin first": `keepsAdmin`, in `saveConfig`, so every command keeps to it).
   Taking the last user out (`--password`, `--open`) is no such change: without users there is no one to manage.
   An edit by hand isn't checked: it stays the way out.
-- `config check` lists each setting, its value (passwords and tokens only as `(set)`) and where it comes from (`[line 3]`, `[default]`), and the users; it fails on an error in the file and on settings left in the environment.
+- `config check` lists each setting, its value (passwords and tokens only as `(set)`) and where it comes from (`[line 3]`, `[default]`), and the users; it fails on an error in the file.
 - **Names**: lowercase letters, digits and inner hyphens (`userNameRE`), since a name becomes a folder name.
   `me` and `none` are reserved (`reservedNames`): no user is called one. The settings file is refused with such a section, naming its line (`fileUsers`), and `user add`, an invite, sign-up and the first-run page say so before they write (Assigning tasks, below).
   A user's MCP token is optional: without one they have no MCP access.
@@ -233,13 +233,13 @@ Each user has a role, `role` in their section (`roles`, `User.Role` in `go/users
   Rule 1 above holds for everyone.
   **But an admin decides who a user is**,
   and that is a way in which Zone can't close,
-  as it sends no mail and the admin hands the links out: a reset link sets a user's password for whoever opens it,
+  as Zone mails no invite or reset link and the admin hands the links out: a reset link sets a user's password for whoever opens it,
   the admin too,
   and someone invited under a removed user's name gets that user's private folder (as Remove's dialog says).
   So private pages are private from an admin as long as the admin leaves the account alone, not against one who takes it over.
   It doesn't go unseen: a reset ends the user's sessions and their old password stops working, and the settings file's log line names the change.
-  Whoever has the host reads everything anyway (Security in the README).
-  The Users tab and the README say so.
+  Whoever has the host reads everything anyway: private is hidden inside Zone, not encrypted (Private pages and tasks in `docs/spec/security.md`).
+  The Users tab says so.
 - **Disabled** (`disabled = yes`, `zonewiki user disable NAME`): the user can't sign in (with the right password the login says "Your account is disabled. Ask an admin of this wiki.", with a wrong one the usual "Incorrect user name or password.", and both count as a wrong try for the throttle),
   their sessions stop working at their next request (`signedIn`),
   and their MCP token is refused (401; `mcpAuthorized`; a disabled user's token alone doesn't turn `/mcp` on).
@@ -727,7 +727,7 @@ There is nothing to set up for the folder itself: it is the folder of the group 
   🔒 stays what is yours alone; a shared page has no mark.
   **The breadcrumb names the place, not the path** (`buildBreadcrumb`): "👥 dev › Roadmap" and "🔒 Private › Diary", the first crumb leading to the place's home (in a browser the navigation trail takes the crumbs' place: `docs/spec/navigation.md`).
   **Where a folder is chosen** (Move to wiki's folder field: `folderChoices`) your places come first and are named, "👥 dev" for `groups/dev/` and "🔒 Private" for your own folder, then the wiki's folders; what is typed and saved is the path.
-- **The admin page** says of each group whether it has pages (its folder is there), and names the folders in `groups/` and `private/` that **no one sees**, by their paths alone (the folder of a group nobody is in, of a user who is gone): until then only the start's log said so.
+- **`/groups`** says of each group whether it has pages (its folder is there), and for an admin names the folders in `groups/` that **no one sees** (the folder of a group nobody is in); the admin page's Users tab names those in `private/` (the folder of a user who is gone), by their paths alone: until then only the start's log said so.
   Taking the last person out of a group says that its pages stay, seen by no one.
 - **Share…** (the ⋯ menu, `shareTargets` in `go/private.go`, `#page-privacy-dialog`): on one of your private pages it offers each group you are in and everyone, on a group's page the groups that include its own and everyone, each with who sees the page then and where it goes (the same path below the folder: `private/alice/notes/x` → `groups/dev/notes/x` → `notes/x`).
   The choice submits the ordinary rename: links re-point, the files it shows go with it, one commit. It can't be taken back.
@@ -809,8 +809,8 @@ What happens on a task you have to do with is told to you (below). Not there: a 
   A task without one has no such key.
 - **Assigning** is a task write like any other: `assignee` in `POST /api/tasks`, `PUT /api/tasks/<id>` or `batch-update` (`applyAssignee` in `go/tasks.go`).
   The value is a user's name, `me` for whoever writes, or `""`, `null` or `none` for no one; a leading `@` and the case don't matter (`taskmodel.CleanAssignee`).
-- **Who can be assigned** (`assignable` in `go/users.go`): a user who is not disabled, not waiting for approval and not a viewer (who couldn't complete the task or comment on it).
-  Any other name is refused with a 400 that says why (`notAssignable`: "… is not a user of this wiki", "…'s account is disabled", "… is a viewer, and a viewer can't change tasks"), and nothing of the write is kept.
+- **Who can be assigned** (`assignable` in `go/users.go`, `applyAssignee` in `go/tasks.go`): a user who is not disabled, not waiting for approval and not a viewer (who couldn't complete the task or comment on it), and, for a task in a list for some, one of those it is for (anyone else wouldn't see the task; Lists for some in `docs/spec/tasks.md`).
+  Any other name is refused with a 400 that says why (`notAssignable`: "… is not a user of this wiki", "…'s account is waiting for an admin's approval", "…'s account is disabled", "… is a viewer, and a viewer can't change tasks"; "… isn't one of those the list #… is for"), and nothing of the write is kept.
 - **`me` and `none` are reserved names**, since they are the words for whoever is signed in and for no one.
   No user has one: `zonewiki user add`, an invite, sign-up and the first-run page refuse it ("… can't be a user name"), and a settings file that has a `[user me]` or `[user none]` (written by hand) is refused like any other mistake in it: Zone doesn't start with it, and a running Zone keeps the settings it had.
   (Until 2026-11 such a user from before the rule kept their account and couldn't be assigned.)

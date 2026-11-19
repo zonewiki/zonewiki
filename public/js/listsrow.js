@@ -96,8 +96,8 @@ if (more) {
 }
 
 // Dragging a pinned list's pill puts the pins in the row's new order
-// (POST /tasks/pin-order), for who may pin (data-reorder). With the mouse:
-// a finger scrolls and taps here, and has Move first in the list's menu.
+// (POST /tasks/pin-order), for who may pin (data-reorder). With the mouse
+// only: a finger scrolls and taps here.
 if (nav?.hasAttribute('data-reorder')) {
   const group = nav.querySelector('.tasks-places-group');
   const pills = () => [...group.querySelectorAll('a.tasks-place[data-place^="list:"]')];

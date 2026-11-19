@@ -4,14 +4,19 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 
 ## Routes
 
-Every route but the login's own wants a session where the wiki has a login.
+Every route wants a session where the wiki has a login, but those that need none (`authExempt`): `/login`, `/logout`, `/setup`, `/signup`, `/welcome/<token>`, `/public/…`, `/api/health`, `/mcp` (its own token) and an MCP client's OAuth calls.
 In a public wiki (`ZONE_PUBLIC`; Public wikis in `docs/spec/security.md`) a visitor reaches the ones listed there without one: pages, the page list, search, history, uploads, and with `edit` the editor and a new page.
 
 | Method | Path                  | Description                                     |
 |--------|-----------------------|-------------------------------------------------|
 | GET    | `/`                   | Redirects to `/page/index`                      |
+| GET, POST | `/login`           | The login page and its form (`username` with users, `password`); `?next=` the local path to go to after; wrong passwords are throttled (429); without a login a redirect to `/` |
+| POST   | `/logout`             | Sign out: the session ends wherever a copy of its cookie is (`.zone/signed-out`); redirects to `/login` |
+| GET, POST | `/setup`           | First run: a wiki other devices reach with no login sets one here (`username`, empty for a password without users; `password`, `again`), then is signed in (First run in `docs/spec/security.md`; 400 for a form that won't do); once there is a login, a redirect to `/` |
+| GET, POST | `/signup`          | Sign-up (`email`): mails a link that makes the account (Sign-up in `docs/spec/users.md`); 404 while sign-up is off, a redirect to `/` for whoever is signed in |
+| GET    | `/public/<file>`      | Zone's browser code, styles and vendored libraries, as they are in `public/` (no login needed) |
 | GET    | `/page/<slug>`        | Render a wiki page (markdown → HTML)            |
-| GET    | `/tasks`               | The built-in tasks page (`tasksPage()`): the full main tasks (every open task, whatever list it is in), independent of the wiki's pages. `?list=<name>` shows that list instead (a ref: its name, or `shared/<name>`), with its own settings (keep, labels, limit, …), and the pages that embed the list as its Backlinks (with a page view's side columns on big screens); `?list=inbox` the Inbox, the tasks in no list, with users your own (Lists → The Inbox in `docs/spec/tasks.md`; `?list=none` too); a name no list has, a line that says so; the list switcher above the heading (My tasks, the Inbox and the pinned lists as pills, the others and All tasks under More; this view's the current one), which reads "All tasks", "My tasks" or "List: <name>"; `?made=1` on a list just made says what its being your first pinned list changes; `?mine=1` shows My tasks, your home view, as one task app (Lists → My tasks in `docs/spec/tasks.md`; in a wiki without lists a redirect to `/tasks`). `?view=`, `?task=`, `?tag=`, `?search=`, `?new=1` work as for any embed. Every link to "the tasks" goes here (the Tasks module links without a task list home, search results, Linked tasks, `g d`). |
+| GET    | `/tasks`               | The built-in tasks page (`tasksPage()`): the full main tasks (every open task, whatever list it is in), independent of the wiki's pages. `?list=<name>` shows that list instead (a ref: its name, or `shared/<name>`), with its own settings (keep, labels, limit, …), and the pages that embed the list as its Backlinks (with a page view's side columns on big screens); `?list=inbox` the Inbox, the tasks in no list, with users your own (Lists → The Inbox in `docs/spec/tasks.md`; `?list=none` too); a name no list has, a line that says so; the list switcher above the heading (My tasks, the Inbox and the pinned lists as pills, the others and All tasks under More; this view's the current one), which reads "All tasks", "My tasks" or "List: <name>"; `?mine=1` shows My tasks, your home view, as one task app (Lists → My tasks in `docs/spec/tasks.md`; in a wiki without lists a redirect to `/tasks`). `?view=`, `?task=`, `?tag=`, `?search=`, `?new=1` work as for any embed. Every link to "the tasks" goes here (the Tasks module links without a task list home, search results, Linked tasks, `g a`). |
 | GET    | `/edit/<slug>`        | Show the in-browser editor for a page           |
 | POST   | `/edit/<slug>`        | Save edited content to `<slug>.md`               |
 | GET    | `/new`                | A form for a new page's name and, with users, whom it is for (New page on a group's home and on the private home lead here; `for=group:<name>` or `for=private`: where For starts) |
@@ -43,16 +48,17 @@ In a public wiki (`ZONE_PUBLIC`; Public wikis in `docs/spec/security.md`) a visi
 | POST   | `/api/preview`        | Render posted markdown to HTML (for live editor preview); `?page=` the page being edited (your own private page: its links to new shared pages are marked) |
 | POST   | `/api/render-notes`   | Task descriptions and comments as HTML (`renderNotes`): body `{ notes: [...], comments: [...] }`, answer the same with HTML (see Description in `docs/spec/tasks.md`) |
 | GET    | `/api/pages`          | JSON list of all existing page slugs (for wikilink hints) |
+| GET    | `/api/pages-list`     | The search modal's page list: each page the user sees with `slug`, `title`, `links` (backlinks), `private`, `group`, `mtime`, `created`, `edited`, plus the built-in entries (Changes, Deleted Pages with git; Tasks, Notes), not for a visitor (Page List in `docs/spec/navigation.md`) |
 | POST   | `/mcp`                | MCP server for LLM clients (see MCP server). GET/DELETE → 405. |
 | GET    | `/api/version`        | `{ version, build }`: Zone's version and build (see Version in `docs/spec/deployment.md`) |
 | GET    | `/api/health`         | `{ ok: true }`, or 503 `{ error }` while the settings file's last change wasn't taken (Reloading in `docs/spec/users.md`); no login needed, for `zonewiki health`; the error itself only with a session (or without a login), else a pointer to the log, as it may name users |
-| POST   | `/api/upload`         | Upload a file; returns `{ url }` for insertion into markdown (the file's name percent-encoded); `page`: the page it is for (a private page's are kept in `private/<user>/_assets/`); `task`: the task it is for, by its id (kept in `_tasks/files/<id>/_assets/`; 404 for a task the user doesn't see) |
+| POST   | `/api/upload`         | Upload a file (multipart, `file`); returns `{ url }` for insertion into markdown (the file's name percent-encoded); `page`: the page it is for (a private page's are kept in `private/<user>/_assets/`, a group's in its folder's); `task`: the task it is for, by its id (kept in `_tasks/files/<id>/_assets/`; 404 for a task the user doesn't see); `unique=1`: a random name (a pasted screenshot); `filename`: the name to keep it under; a name already taken answers 409 `{ conflict: true, filename }` unless `overwrite=1` (an MCP token's upload gets a free name instead) |
 | GET    | `/_assets/<file>`     | A shared upload. This, the private one below and `POST /api/upload` also take an MCP token as a bearer token in place of a session (Files in `docs/spec/mcp.md`) |
 | GET    | `/private/<user>/_assets/<file>` | A private upload, for that user only (404 for anyone else) |
 | GET    | `/groups/<group>/_assets/<file>` | A group's upload, for its members only (404 for anyone else; Group pages in `docs/spec/users.md`); takes an MCP token as the other two do |
 | GET    | `/_tasks/files/<id>/_assets/<file>` | A task's file, for who sees the task only (404 for anyone else; A task's files in `docs/spec/tasks.md`); takes an MCP token too |
-| POST   | `/api/save/<slug>`    | Write page content to disk silently (no git commit, no redirect). For full-page edits returns 204; for section edits returns JSON `{ file_hash, start_char, end_char }` with updated anchors, or 409 on conflict. Used by auto-save. |
-| POST   | `/api/toggle-checkbox/<slug>` | Toggle the Nth checkbox (`idx` param, with its line's `key`) in a page; returns JSON `{ file_hash }`, or 409 when the page changed (Task list checkboxes in `docs/spec/editor.md`). |
+| POST   | `/api/save/<slug>`    | Write page content to disk silently (no git commit, no redirect). Returns 200 `{ file_hash }`; for section edits `{ file_hash, start_char, end_char }` with updated anchors; a clean merge with another's change (`merge=1`) adds `merged`, `by` and the merged `content`; a conflict is 409 `{ error: "file_changed", file_hash, by, conflict }` (Merge on save in `docs/spec/editor.md`). Used by auto-save. |
+| POST   | `/api/toggle-checkbox/<slug>` | Toggle the Nth checkbox (`idx` param, with its line's `key`: the item is found by it when the page changed since) in a page; returns 200 `{ file_hash }`, or 409 `{ error: "page_changed" }` when the line is no longer there once (Task list checkboxes in `docs/spec/editor.md`). |
 | GET    | `/api/tasks`           | JSON list of all open tasks (`_tasks/tasks.json` and each list's `_tasks/lists/<name>/tasks.json`); `?held=a,b`: the lists the page holds, for the `Zone-Tasks` word; `?list=<ref>`, `?lists=a\|b`, `?mine=1`: those a view of that scope shows (what a task list loads); `?with=order`: `{ tasks, order }`, with the user's own order of My tasks (task ids; Lists → My tasks in `docs/spec/tasks.md`). The `Zone-Tasks` header is the word of the tasks answered |
 | POST   | `/api/tasks`           | Create a task; returns JSON task object (201). |
 | PUT    | `/api/tasks/<id>`      | Update a task (title, tags, due_date, start_date, completed, recurrence via `rec_type`/`rec_interval`/`rec_from`, keep, last_done, wont_do, skip). The two dates are independent: setting one never moves the other. `wont_do: true` archives the task without spawning a recurring instance; `wont_do: false` reopens it (removing any skip-spawned instance). `skip: true` archives the occurrence as won't-do **and** spawns the next instance. `completed: true` on a keep task does not archive it (see Keep tasks). `completed`, `wont_do`, `skip` and `keep` are `true` or `false`, anything else is refused (400, "completed must be true or false"); a date is `YYYY-MM-DD`, `null` or `""` (none). |
@@ -99,6 +105,11 @@ In a public wiki (`ZONE_PUBLIC`; Public wikis in `docs/spec/security.md`) a visi
 | GET    | `/changes`            | Changes: the wiki's commits, newest first, each as its reader may see it; `?user=`, `?assistant=1`, `?under=`, `?since=`, `?n=` (git only; see Version history) |
 | POST   | `/changes/undo`       | Undo changes: `sha` (one, or several: an assistant's run of work), `back` (the list's address); the pages they changed are as before them, in one commit; back to the list, which says what was done or why not (`?undone=`, `?undo_error=`) |
 | GET    | `/page/_deleted`      | Auto-generated list of pages deleted from git history, with one-click restore (git only) |
+| GET    | `/uncommitted`        | Uncommitted Changes: the files changed since their last commit that the user sees (git only; 404 without) |
+| GET    | `/diff-uncommitted/<slug>` | What a page's uncommitted change is, against its last commit (git only) |
+| GET    | `/api/uncommitted`    | JSON `[{ slug, title, filepath }]`: the uncommitted files the user sees (the status badge's count) |
+| POST   | `/api/commit-all`     | Commit every uncommitted file the user may commit, each in its own commit; `{ committed, files }` (400 without git) |
+| POST   | `/api/commit-file`    | Commit one: body `{ filepath }`; `{ success: true }`, 400 for a file that isn't uncommitted, 403 for one the user may not write |
 
 A `<slug>` in a folder starting with `_` or `.` (`_assets/`, `_tasks/`, `.zone/`, `.git/`, `a/_drafts/` …) names no page: `safePath()` refuses it (also after `..`), so no route reads or writes a `.md` file there, even by direct URL (400, or 404 for the page preview).
 These are the folders `iterPages()` skips.
@@ -118,16 +129,16 @@ Every page view includes:
   Touch devices (`hover: none`) have no hover, so there a tap toggles the list (`.bl-open`, delegated click handler in `js/chrome.js`) instead of scrolling down.
   A second tap or a tap elsewhere closes it.
   The hover rules are wrapped in `@media (hover: hover)` because a tap leaves `:hover` stuck, which would fight the toggle.
-- **Related** — only with semantic search on (see Search → Semantic search): up to 5 pages closest in meaning, leaving out pages already linked either way (`build_related_html`).
+- **Related** — only with semantic search on (see Search → Semantic search): up to 5 pages closest in meaning, leaving out pages already linked either way (`relatedSection`).
   Absent when none clears the similarity floor.
 - **Linked tasks** — open tasks whose title/description link to the page.
   A task linking to a section (`[[Page#Section]]`, or `/page/<slug>#anchor`; `findTaskBacklinks` returns its `section` and `anchor`) names it after its title (`§ Section`, linking to the heading, named as the page's heading says),
-  and that heading gets a `☑ N` chip (`render_md(…, section_tasks=)`, a `<details>` after the heading, no JS) listing the section's tasks.
+  and that heading gets a `☑ N` chip (`RenderOpts.SectionTasks`, a `<details>` after the heading, no JS) listing the section's tasks.
   Each entry is a single link to that task in the tasks (`/tasks?task=<id>&view=open`, plus `&list=<name>` for a task in a separate list — `taskHref()`); links inside the task title are flattened to their labels (`mdtext.PlainTaskTitle`) so anchors are never nested.
 
 ### Side columns (big screens)
 
-From 1320px wide a page view (`viewPage`, `views.page(…, wide=True)` → `main.wide`) uses the room beside the text: three columns (`.page-grid`: 14rem · up to 60rem · 14rem, the side columns giving way down to 9rem so the middle one keeps the text at the width other views have;
+From 1320px wide a page view (`viewPage`, `shell{wide: true}` → `main.wide`) uses the room beside the text: three columns (`.page-grid`: 14rem · up to 60rem · 14rem, the side columns giving way down to 9rem so the middle one keeps the text at the width other views have;
 the page's sheet as wide as other views' unless the page has a table,
 code block or image wider than the text,
 then the whole middle column (`.sheet-wide`,
@@ -138,17 +149,17 @@ where the other views have theirs),
 both sides sticky.
 Every other view (tasks, notes, search) gets the same top row width at that size, its content centred at the text width (46rem), so the breadcrumb and top actions stay put when switching modules.
 
-- **Left** (`.rail-left`): "On this page" (`rail_toc_html`): the page's rendered `##`/`###` headings (frontmatter sources' "Sources" heading too, at the end) when there are at least `railTocMinHeadings` (3), links in them flattened.
+- **Left** (`.rail-left`): "On this page" (`railTocItems`): the page's rendered `##`/`###` headings (frontmatter sources' "Sources" heading too, at the end) when there are at least `railTocMinHeadings` (3), links in them flattened.
   Otherwise empty; the column stays so the page keeps its place.
   At its end **↑ Back to top** (`.rail-top`), shown once the page has scrolled a screen down; it scrolls up and drops a `#hash` from the URL.
   `js/chrome.js` marks the section being read (`.active`, `aria-current="location"`): the last heading scrolled past (120px from the top), at the end of the page the last one in view.
   A column taller than the window scrolls on its own: a fade marks the edge with more (`.rail-more-above`/`-below`, set by `js/chrome.js`, CSS `mask-image`), and the TOC scrolls its column (never the page) to keep the marked entry in view.
 - **Right** (`.rail-context`): Backlinks,
-  Linked tasks and Related (`rail_copy`: the same sections with their ids as `data-id`; the anchors stay with the originals in `.page-foot`),
-  and **Links to** (`outlinks_html`: the existing pages this page links to, A–Z by title; only in the column),
+  Linked tasks and Related (the `link_sections` template with `copy`: the same sections with their ids as `data-id`; the anchors stay with the originals in `.page-foot`),
+  and **Links to** (`outlinks`: the existing pages this page links to, A–Z by title; only in the column),
   so a page nothing links to still shows its connections.
 - **Middle** (`.page-col`, a size container): header, meta row and text keep the reading width (46rem, about 85 characters);
-  a code block, table or image alone in its paragraph (`<p class="img-block">`, marked on the parsed tokens by `imageWidths`) is as wide as the text unless its content needs more, then grows up to the middle column, centred on the text (`width: max-content; min-width: 100%; max-width: 100cqw`);
+  a code block, table or image alone in its paragraph (`<p class="img-block">`, marked on the parsed document by `zoneTransformer`) is as wide as the text unless its content needs more, then grows up to the middle column, centred on the text (`width: max-content; min-width: 100%; max-width: 100cqw`);
   an image within a sentence stays inside the text.
   A task list embed keeps the text width, like the tasks and notes pages.
   Text itself is never widened: longer lines read worse.

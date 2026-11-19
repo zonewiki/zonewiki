@@ -484,10 +484,11 @@ func listMembers(who []string) []string {
 	return out
 }
 
-// canWriteList: user may change the list l (rename, delete, its settings)
-// and the tasks in it (make, change, move in or out): whoever sees it and
-// may write tasks at all. One place to ask, so that members or roles per
-// list change this and canSeeList, and nothing else.
+// canWriteList: user may change the tasks in the list l (make, change, move
+// in or out): whoever sees it and may write tasks at all. The list itself
+// (rename, delete, its settings) is canManageList's. One place to ask, so
+// that members or roles per list change this and canSeeList, and nothing
+// else.
 func canWriteList(user asker, l ListInfo) bool {
 	return canSeeList(user, l) && mayWriteTasks(user) == nil
 }

@@ -1,7 +1,8 @@
 // The settings file's commands (docs/spec/users.md): zonewiki user adds,
-// changes and removes users, zonewiki group makes a group of groups,
-// zonewiki config checks the settings, sets the
-// wiki's password and token, and moves settings out of the environment.
+// changes and removes users and makes their invite and reset links,
+// zonewiki group says what a group includes and who owns it, zonewiki
+// config checks the settings, sets and unsets a key and the wiki's
+// password and token.
 // They edit .zone/config in the wiki ZONE_DATA names, keeping its comments,
 // and refuse a change that would leave settings Zone doesn't start with; a
 // running Zone takes the change within a second and logs it (the file is
@@ -44,7 +45,7 @@ const groupUsage = `Usage: zonewiki group COMMAND
                            browser (Groups); alone: its owners
   list                     the groups: what each includes, its owners, and who is in it
 A user is put in a group with: zonewiki user group NAME +GROUP
-A group is renamed in the browser (Groups, or the admin page): its pages and lists follow.`
+A group is renamed in the browser (Groups): its pages and lists follow.`
 
 const configUsage = `Usage: zonewiki config COMMAND
   check            check the settings and show those in effect

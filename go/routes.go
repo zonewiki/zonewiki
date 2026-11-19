@@ -1202,8 +1202,9 @@ func shareListRoute(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, listHref(name), http.StatusFound)
 }
 
-// pinListRoute: a list's Pin, Move first and Unpin (its ⋯ menu, the
-// settings dialog's pin): pin is 1, first or 0. Back to the list.
+// pinListRoute: a list's Pin and Unpin, and Pin or Unpin for everyone
+// (everyone=1), in its ⋯ menu: pin is 1, first (its pill first) or 0.
+// Back to the list.
 func pinListRoute(w http.ResponseWriter, r *http.Request) {
 	ref := cleanList(r.PostFormValue("list"))
 	if err := pinListOp(userOf(r), ref, r.PostFormValue("pin"), r.PostFormValue("everyone") != ""); err != nil {

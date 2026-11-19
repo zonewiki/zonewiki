@@ -38,8 +38,9 @@ const usage = `Usage: zonewiki [--addr ADDRESS] [--public FOLDER] [--docs FOLDER
   for a reverse proxy on this machine)
 
 Commands:
-  user COMMAND               the wiki's users (add, passwd, token, remove, list)
-  group COMMAND              the wiki's groups made of groups (includes, list)
+  user COMMAND               the wiki's users (add, passwd, token, role, group, disable, enable,
+                             invite, reset, remove, list)
+  group COMMAND              the wiki's groups: what one includes, its owners (includes, owners, list)
   config COMMAND             the wiki's settings file .zone/config (check, set, unset, passwd, token)
   eval [--k N] [--new] FILE  measure search_wiki's retrieval against the questions in FILE
   health [ADDR]              whether a Zone running here answers (the container's healthcheck)

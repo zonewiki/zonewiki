@@ -65,7 +65,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
   `tests/test_env_example.py` keeps it in step with the code: every `ZONE_*` name the source, `run.sh`, `compose.yaml` or `compose.nas.yaml` reads is in it, and nothing else is (a typo in `.env` is silently ignored).
 - **`.env`** — the deployment's settings, read by `run.sh`, compose and Zone at start: `ZONE_DATA` (default `~/zonewiki`), `ZONE_ALLOW_REMOTE`, `TZ`, `ZONE_SEMANTIC_SEARCH`, `ZONE_PUBLIC` (`view` or `edit`: the wiki is shown, or open to edits, without signing in; Public wikis in `docs/spec/security.md`), sign-up and its mail server (`ZONE_SIGNUP`, `ZONE_SMTP_*`, `ZONE_MAIL_FROM`; Mail, below), and for compose without `run.sh` `ZONE_BIND`, `ZONE_UID`/`ZONE_GID`, `ZONE_PORT` (`compose.nas.yaml`); gitignored.
   With rootless podman, keep-id (`compose.podman.yaml`) runs Zone as the host user, so files written to the mounted wiki directory are the host user's.
-- **`.zone/config`** — the wiki's own settings and its users (a password, MCP tokens, `hosts`, `base-url`, `git-remote`, `noshare`, `locale`, `date-format`, `query-log`, `semantic-min-score`, `trusted-proxies`, `upload-max`, `storage-max`, `signup-domains`, `signup-role`, `signup-approval`),
+- **`.zone/config`** — the wiki's own settings and its users (a password, MCP tokens, `hosts`, `base-url`, `git-remote`, `noshare`, `locale`, `date-format`, `query-log`, `semantic-min-score`, `trusted-proxies`, `upload-max`, `storage-max`, `external-content`, `no-login`, `mcp-oauth`, `signup-domains`, `signup-role`, `signup-approval`),
   in the wiki,
   kept out of git (it holds the users: back it up with the data folder),
   reloaded when it changes,
@@ -86,7 +86,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 ./run.sh leaks      # scan the git history for secrets with gitleaks, in the tools image (extra args go to `gitleaks git`; a leak exits with 3)
 ./run.sh screenshots  # redo the README's screenshots (docs/screenshots/*.png) from a sample wiki, in the tools image; compressed with pngquant (the README shows phone.png at 640px)
 ./run.sh eval [FILE]  # measure retrieval on your wiki (see Measuring retrieval in search.md), in the app image, with semantic search as ZONE_SEMANTIC_SEARCH says
-./run.sh user add|passwd|token|role|disable|enable|remove NAME, user list  # the users in the wiki's settings file, zonewiki user in a one-off container (compose run; see users.md)
+./run.sh user add|passwd|token|role|group|disable|enable|invite|reset|remove NAME, user list  # the users in the wiki's settings file, zonewiki user in a one-off container (compose run; see users.md)
 ./run.sh group includes NAME [+G] [-G], group owners NAME [+U] [-U], group list  # groups made of groups and a group's owners, in the wiki's settings file (zonewiki group)
 ./run.sh config check|set|unset|passwd|token  # the wiki's settings file: check it, set a key, the password and MCP token without users (zonewiki config)
 ```
@@ -181,7 +181,7 @@ They come back, as they were, once Microsoft has said what happened and onnxrunt
 
 ## CI (Forgejo Actions)
 
-`.forgejo/workflows/ci.yml` runs on every push and pull request a **checks** job per `run.sh` command,
+`.forgejo/workflows/ci.yml` runs on a push to `main` or a `v*` tag, on every pull request and when started by hand (`workflow_dispatch`; a newer run of the same branch or tag cancels the one before) a **checks** job per `run.sh` command,
 as on your machine: **test** (gofmt, go vet, go test, the unit/API tests),
 **e2e** (browser and Node tasks-core tests) and **leaks** (gitleaks over every commit; the checkout fetches the full history),
 all in the tools image (`Containerfile.tools`).
@@ -194,7 +194,7 @@ A **retrieval** job, likewise after the checks, runs `./run.sh retrieval` (skipp
 With `ZONE_COPY_REPO=1` (set by CI) it copies the repo into the container (`create --rm`, `cp`, `start -a`; the engine removes the container even when a cancelled job kills `run.sh`) instead of bind-mounting it, since the checkout lives in the job container while the engine is the host's;
 nothing the command writes comes back.
 Only **leaks** fetches the full history; the others check out the last commit.
-On `main` and `v*` tags,
+On a run that isn't a pull request's (a push to `main` or a `v*` tag, or one started by hand),
 once all three pass,
 **image** builds the `Containerfile` with `ZONE_SEMANTIC_SEARCH=off` (on until 2026-11-18: Semantic search paused) and the `ZONE_BUILD` string `run.sh` would compute,
 and pushes it to the Forgejo registry as `<REGISTRY>/<owner>/<repo>:<short-sha>` (the repository's name, lowercase;
@@ -213,8 +213,8 @@ Repo settings: variable `REGISTRY` (the registry host; required for the image), 
 
 ## CI (GitHub Actions)
 
-`.github/workflows/ci.yml` runs the same **checks** (`./run.sh test`, `e2e`, `leaks`) on GitHub's `ubuntu-26.04` runners, through `run.sh` (with podman, which the runners have and `run.sh` prefers; the checkout is on the runner, so no `ZONE_COPY_REPO`).
-On `main` and `v*` tags,
+`.github/workflows/ci.yml` runs the same **checks** (`./run.sh test`, `e2e`, `leaks`), on the same events, on GitHub's `ubuntu-26.04` runners, through `run.sh` (with podman, which the runners have and `run.sh` prefers; the checkout is on the runner, so no `ZONE_COPY_REPO`).
+On a run that isn't a pull request's,
 once they pass,
 it publishes the image `compose.nas.yaml` runs: **image** builds the `Containerfile` (`ZONE_SEMANTIC_SEARCH=off`, the `ZONE_BUILD` string) once per architecture,
 each natively on its own runner (`ubuntu-26.04` for amd64, `ubuntu-26.04-arm` for arm64; no emulation, so the arm64 build compiles with cgo, and, with semantic search, fetches onnxruntime's arm64 build and the model as fast as the other),
@@ -295,7 +295,7 @@ Phones on the same network reach Zone at `http://<host-LAN-IP>:5000`.
 The UI is responsive down to phone widths and the editor works on mobile.
 The viewport meta sets `interactive-widget=resizes-content`, so on Android the on-screen keyboard shrinks the layout viewport rather than only the visual one.
 Without it, full-screen views (the tasks edit modal, the mobile editor) keep their full height and their bottom bars end up behind the keyboard. iOS Safari ignores the setting.
-There is no auth by default — for LAN use set a password (`./run.sh config passwd`) or users (`./run.sh user add NAME`) to get a login gate.
+A wiki other devices can reach and that has no login yet answers only `/setup`, where the first login is chosen, unless `no-login = yes` says it is open on purpose (First run in `docs/spec/security.md`, `go/setup.go`); a password (`./run.sh config passwd`) or users (`./run.sh user add NAME`) set from the terminal do the same.
 
 ## Version
 
@@ -335,8 +335,8 @@ Layout:
 - `$ZONE_DATA/*.md` — markdown files live directly in the data directory (edit on the host; changes are live immediately)
 - `$ZONE_DATA/private/<user>/` — with users, each user's private pages (`docs/spec/users.md`); without users an ordinary folder
 - `$ZONE_DATA/_assets/` — uploaded images, served at `/_assets/<filename>` (created automatically); a group's page's in `groups/<group>/_assets/`, a private page's in `private/<user>/_assets/`, a task's (with users) in `_tasks/files/<task id>/_assets/`
-- `$ZONE_DATA/_tasks/` — the tasks (`tasks.json`, `closed.json`, `closed-YYYY-MM.json`, each list's in `lists/<name>/`, and `settings.json` for the settings of All tasks; see Storage in `docs/spec/tasks.md`); each user's private tasks in `private/<user>/_tasks/`
-- `$ZONE_DATA/.zone/` — Zone's own state: none of it in git: `config` (the settings file: the wiki's settings and users, `docs/spec/users.md`), `secret_key` (session key), `signed-out` (the sessions signed out, `docs/spec/security.md`), `seen/` (what each user has seen of the tasks' news, `docs/spec/users.md`) and `index/` (the semantic search cache, rebuildable)
+- `$ZONE_DATA/_tasks/` — the tasks (`tasks.json`, `closed.json`, `closed-YYYY-MM.json`, each list's in `lists/<name>/`, and `lists.json`, the lists' registry, with the settings of All tasks; see Storage in `docs/spec/tasks.md`); each user's private tasks in `private/<user>/_tasks/`
+- `$ZONE_DATA/.zone/` — Zone's own state: none of it in git: `config` (the settings file: the wiki's settings and users, `docs/spec/users.md`), `secret_key` (session key), `signed-out` (the sessions signed out, `docs/spec/security.md`), `links` (open invite and reset links), `grants` (the assistants' OAuth connections, their tokens as hashes), `seen/` (what each user has seen of the tasks' news, `docs/spec/users.md`), `drafts/` (an editor's text left in a conflict when its tab closed, for its user's next edit, 30 days at most), `tmp/` (a merge's scratch files), `index/` (the search index files, the closed tasks' search docs and the semantic search cache, all rebuildable), `queries.jsonl` (the query log, with `query-log = yes`) and the marks `tasks-checked` and `views-named` (that a start has checked the task files and rewritten the views' old names)
 
 Uploaded image URLs use `/_assets/<filename>` (served by `serveUpload` from `cfg.Uploads`), not the static file path.
 
@@ -364,7 +364,8 @@ Measured through the real handlers (`go/bench_test.go`; `go test -run '^$' -benc
 A personal or a small team's wiki is far below where this is felt; past some ten thousand pages or open tasks every view pays for it, and a NAS's disk and CPU bring that point closer.
 Page writes run one at a time (`pagesMu`), each with its git commit (a few git processes), so a wiki is not for many people saving at once.
 Closed tasks cost nothing until they are looked at: a page view doesn't read their files.
-What would lift the ceiling, when it is needed: the pages' mtimes taken from the walk instead of a `stat` each (`pageStats`), and the parsed task lists kept by their files' mtimes.
+What would lift the ceiling, when it is needed: the pages' mtimes taken from the walk instead of a `stat` each (`pageStats`).
+The task files are already parsed once and kept until a file's time, size or inode changes (`parsedFile` in `go/internal/taskfiles`).
 
 ## From Zone 1 (or Leaf)
 

@@ -95,7 +95,7 @@ Also know this:
   An id is kept for a session's lifetime (30 days: by then every cookie of it has expired), then dropped at the next sign-out.
   The user's other sessions, on other devices, go on; a new password ends them all.
   A new password is set on the host (`zonewiki user passwd`, `zonewiki config passwd`), by a reset link, or in the browser on Change password (`/password`, `go/password.go`), which takes the password one has, throttled as the login is: a stolen session alone doesn't take the account over (Signing in in `docs/spec/users.md`).
-  A session from before ids has the start of its signature as its id.
+  A session without an id (one from before ids) is refused (`readSession`), since it couldn't be signed out: its user signs in again.
   Tests: `TestSigningOut` in `go/security_test.go` and in `tests/test_users.py`.
 - **First run** (`go/setup.go`, `needsSetup`): a wiki that other devices can reach and that has no login shows and changes nothing until one is set: every page leads to `/setup` (302),
   everything else answers 403 "This wiki has no login yet: open it in a browser and set a password first." Only the form itself,
@@ -289,6 +289,7 @@ Also know this:
 - **What builds Zone is named by hash**: the base images by digest (`ARG UBUNTU=ubuntu:26.04@sha256:…` in the `Containerfile`, used by its three stages; the Playwright image in `Containerfile.tools`; the job container `docker:…-cli@sha256:…` in `.forgejo/workflows/ci.yml`),
   each the tag's multi-arch index,
   and every CI action by its commit (`uses: actions/checkout@<40 hex> # v4.4.0`, both workflows).
+  One thing is not: on GitHub `docker/setup-buildx-action` (pinned by its commit) starts BuildKit from the `moby/buildkit` image by its tag (`buildx-stable-1`, its default), so the builder of the published image is named by tag, not by hash.
   A tag is a name its publisher, or whoever took over their account, can move to other content; the CI that follows it builds and pushes the image every NAS pulls, with the registry's token.
   Go, gitleaks, onnxruntime and the model were pinned and checked already.
   A pin doesn't follow updates: bump the base images' digests now and then (the `Docker-Content-Digest` of the registry's manifest for the tag, or `skopeo inspect`), and an action's commit with its version comment.

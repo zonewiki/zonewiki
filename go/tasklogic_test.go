@@ -387,7 +387,7 @@ func TestASharedTaskStaysShared(t *testing.T) {
 }
 
 // The rule for a task someone gave a user, case by case: the cases the
-// browser's rule runs through too (TasksCore.givenToMe,
+// browser's rule runs through too (newsFor in tasks-core.js,
 // tests/test_tasks_core.py).
 func TestNewsCases(t *testing.T) {
 	raw, err := os.ReadFile("testdata/news_cases.json")

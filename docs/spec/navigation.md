@@ -32,7 +32,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
   - **Unlinked only** checkbox — pages with zero incoming wikilinks,
     in the title list and in the Content matches: the modal sends `/api/search?…&unlinked=1`,
     and the server keeps only such pages,
-    no tasks (`do_search(unlinked=True)`, same counts as the list's, `allBacklinkCounts`) before it cuts the results to 15. Toggling it re-runs the content search.
+    no tasks (`doSearch(…, unlinked=true, …)`, same counts as the list's, `allBacklinkCounts`) before it cuts the results to 15. Toggling it re-runs the content search.
   - First match is highlighted (with no title match, the first content match once it arrives); **↑/↓** moves the highlight across both page results and content match cards; **Enter** opens the highlighted item.
   - **Preview pane** (≥1100px; `showModalPreview` in `js/search.js`): the modal widens (up to 1180px, 76vh) into results on the left and the highlighted result on the right.
     A page comes from `GET /api/page-preview/<slug>` (`{title, html}`: rendered without its H1, heading ids as `data-pid` so they don't clash with the page underneath, task list embeds as *(tasks)*; cached per slug while the page is open),
@@ -75,7 +75,7 @@ Its counts are of My tasks.
 A new task goes to the **Inbox** (with users your own, private; The Inbox in `docs/spec/tasks.md`).
 The lists you pinned are pills of the list switcher, and nothing else (Pins in `docs/spec/tasks.md`; `pinnedLists`, from your pins in the lists' registry, the wiki's when you have set none, in their order; `rq.pinnedLists()` looks them up once per request).
 Your other lists and all tasks are one click from there, in the task app's **list switcher** (Lists in `docs/spec/tasks.md`).
-`/tasks` stays the view of every task that search results, task links and `g d` open.
+`/tasks` stays the view of every task that search results, task links and `g a` open.
 There is still no nav bar: the modules sit where the eye already goes.
 
 - **Current module**: `currentModule()` names each view's (`/tasks` → tasks; `/notes`, a note and its history → notes; with users a page in your own private folder, the private home included → private; `/search` and `/login` → none; everything else → wiki),
@@ -93,7 +93,7 @@ There is still no nav bar: the modules sit where the eye already goes.
   set apart by a divider (`.top-sep`) since it switches a mode;
   and **Search** (`.top-search`, Ctrl+P), the one used most, as a labelled pill with its shortcut (`.top-search-key`, `⌘P` on a Mac), white on the paper like the module switcher's pills.
   The icon is 2.25rem, muted, a background on hover; name and shortcut in tooltip and accessible name.
-  There are no "new" buttons on desktop: a new note is `c n` (or `c s`, `openNewNote`), a new task `c t` (`openDefaultTask`); the row stays calm, and phones have both in the action bar.
+  There are no "new" buttons on desktop: a new note is `c n` (`openNewNote`), a new task `c t` (`openDefaultTask`); the row stays calm, and phones have both in the action bar.
   (Until 2026-11 the row had New note and Add a task icons between the eye and Search.) The pill has a fixed width, so the row's width (`--top-actions-w`, which the breadcrumb's padding and the status badges' position use) doesn't depend on the font; its border ends on the content's right edge.
   Hidden at ≤640px.
   They replaced the round New and Search buttons in the bottom-right corner, so desktop toasts and Sign out have the bottom corners to themselves again.
@@ -105,7 +105,7 @@ There is still no nav bar: the modules sit where the eye already goes.
   Should loading fail, where the Tasks link goes (or `/tasks`) opens with `?new=1`.
   The dialog says which list the task goes to (Where a new task goes in `docs/spec/tasks.md`). **g t** goes where the Tasks link goes (`tasksLinkHref`: where the Tasks module link points, else `/tasks`).
 - **Action bar** (`action_bar` in `templates/partials/modules.html`, `nav.action-buttons`): the phone's: three groups set apart by dividers (`.action-sep`), as on desktop: the modules (`.action-module`; with users a divider between Wiki · Private and Tasks · Notes);
-  the two "new" actions (`icons.new_note`, `icons.new_task`; on desktop only their shortcuts), **Note** (`.action-new-note`, a new note, `openNewNote`, `c s`) and **Task** (`.action-task`, a new task);
+  the two "new" actions (`icon_new_note`, `icon_new_task`; on desktop only their shortcuts), **Note** (`.action-new-note`, a new note, `openNewNote`, `c n`) and **Task** (`.action-task`, a new task);
   and **Search** (`.action-search`, Ctrl+P, `openSearchModal`).
   Navigation and actions apart, so the "new" buttons say what they make instead of a bare +.
   Hidden on desktop (the top actions).
@@ -114,7 +114,7 @@ There is still no nav bar: the modules sit where the eye already goes.
   the current module in the accent green,
   each at least 44px.
   The Tasks tab's counts stand right of its icon, due above Today, centred on the icon; they may reach a little past the tab's edge, clear of the next tab's icon, and the tabs keep one width, the icons evenly spaced.
-  `views.page(…, action_buttons=False)` omits it, and the editor and the login page leave it out.
+  `shell{noActions: true}` omits it, and the editor and the login page leave it out.
   On phones it is hidden via CSS `:has()` whenever an input/textarea/select has focus, because the on-screen keyboard owns the bottom edge then, and `main` gets extra bottom space so the bar never covers the page's end.
   A tap on the bar acts on its `touchend` (`item.click()`) and cancels the browser's own click (`preventDefault`; a long press over 500ms or a move over 10px is left to the browser).
   Firefox for Android as an installed app, its toolbar scrolled away, draws the bar lower than it lays it out, so a tap on the strip under the labels landed below the bar's box, on the page (on the tasks a card, selected and scrolled into view).
@@ -161,7 +161,7 @@ Phones have no switch (no top actions).
   a bare word counts as a tag;
   unset: `#noshare`; set but empty (`noshare =`): nothing is hidden;
   don't quote the value).
-  `is_noshare(slug)` (folders by slug, tags from the frontmatter, cached by mtime), `hidden_page(slug)` = sharing mode on and noshare.
+  `isNoshare(slug)` (folders by slug, tags from the frontmatter, cached by mtime), `hiddenPage(rq, slug)` = sharing mode on and noshare.
   Such a page's view, editor, history, revisions and diffs (`/diff`, `/diff-uncommitted`) show "Hidden page" (`hiddenPageView()`: neither title nor text, no trail stop);
   `/api/page-preview` 404s;
   search (`doSearch`: `/api/search`, `/search`, Notes filter), `/api/pages`, `/api/pages-list`, Notes list, Deleted Pages, the uncommitted list, Backlinks, Links to and Related leave them out, and Changes every commit that changed one;
@@ -172,9 +172,9 @@ Phones have no switch (no top actions).
 
 - **Keybinding:** **c** then **n** creates a note (see Keyboard Shortcuts); so do the phone's action bar's Note (see Modules) and **+ New** in the Notes page's header (`.notes-new`, also when there are no notes yet; not shown to a viewer).
 - User types a title and submits → `POST /api/notes` → server creates `<YYYY-MM-DD_HH-MM-SS>_<slug>.md` (local time;
-  with users in your private folder, `private/<you>/…`, so notes are your own: see `docs/spec/users.md`) with `# Title\n\n` (`quicknote.create`;
+  with users in your private folder, `private/<you>/…`, so notes are your own: see `docs/spec/users.md`) with `# Title\n\n` (`createQuicknote`;
   a `/` in the title is a hyphen in the name, so it makes no folder, and a second note of the same name in the same second takes the next second) and returns `{ slug }` → browser navigates to `/edit/<slug>`.
-  The editor opens with the cursor under the title, ready for the body, as for a brand-new page: a page that holds only its `# Title` line (`only_title` in `edit_page`, `data-cursor="end"` on the textarea) starts with the cursor at its end; any other page at its start.
+  The editor opens with the cursor under the title, ready for the body, as for a brand-new page: a page that holds only its `# Title` line (`onlyTitle` in `editPage`, `data-cursor="end"` on the textarea) starts with the cursor at its end; any other page at its start.
 - A `<dialog id="shortcuts-modal">` lists all keybindings, opened with `?`.
 - **Assistants** (MCP) make, find and file notes too: `write_page` with `note`, `list_pages`/`search_wiki` with `notes`, `file_note` (see `mcp.md`).
   Creating, moving and appending live in `go/quicknotes.go`, shared by the routes and the MCP tools.
@@ -201,11 +201,11 @@ Phones have no switch (no top actions).
   empty means no link.
   With one,
   Move first copies the new page's link (`[[slug|Title]]`, `mdtext.PageWikilink`) to the clipboard (`copyText`: the Clipboard API, or the copy command where it isn't available, as on plain http on the LAN; the form's `copied` field says whether it worked),
-  and after the move that page opens in the editor (`/edit/<page>?paste=<slug>&copied=1`) with a hint (`.paste-hint`, `paste_hint_html`): one row of a clipboard icon,
+  and after the move that page opens in the editor (`/edit/<page>?paste=<slug>&copied=1`) with a hint (`.paste-hint`, `pasteHint`): one row of a clipboard icon,
   "Link copied.
   Paste it where it belongs on this page." over the link (one line, cut off with …), Copy and ×, so you paste it where it belongs; the page itself isn't changed.
   A page that already linked to the note (its link now following) opens the moved page instead.
-  The page fields of both dialogs suggest from one `<datalist id="wiki-pages">` (`wiki_pages` from `pageMenu`: every page but notes) and take a slug, `/page/<slug>` or a name (`pageFromInput`).
+  The page fields of both dialogs suggest from one `<datalist id="wiki-pages">` (`WikiPages` from `pageMenu`: every page but notes) and take a slug, `/page/<slug>` or a name (`pageFromInput`).
   It is a rename underneath: links to the note follow (`updateReferences`), one commit `Promote <old> to <new>` (text the note held that wasn't committed yet is committed first, `Save <note>`, as before a rename), which the history calls "Moved from Quicknote".
   An empty name, a taken one or one that would still be a quicknote name goes back to the note with `?promote_error=…` and the dialog open.
 - **Append to page** (the note's ⋯ menu, `#page-append-dialog`, `append_dialog` in `templates/partials/page.html`; `POST /append/<slug>`): for a note that belongs on an existing page (meeting notes on a person's page).
@@ -215,7 +215,7 @@ Phones have no switch (no top actions).
   its frontmatter tags join the page's (`mdtext.AddFrontmatterTags`, adding the line or block).
   The section goes at the end of the page,
   the note is deleted (so Deleted Pages can restore it),
-  and links to it point at the section (`update_references(old, new, section)` → `rewrite_page_links(…, section=)`: a link with its own `#anchor` keeps it, since the note's headings keep their text),
+  and links to it point at the section (`updateReferences(old, new, section)` → `rewritePageLinks(…, section)`: a link with its own `#anchor` keeps it, since the note's headings keep their text),
   pages and tasks alike,
   in one commit `Append <note> to <page>` (the note's text not committed yet first, `Save <note>`);
   the page's history calls it "Note appended".
@@ -264,12 +264,14 @@ Bare-key shortcuts are suppressed when focus is inside an `input`, `textarea`, `
 ## Presentation Mode
 
 - **Present** is in the page's ⋯ menu (see Page header) whenever the page has a heading.
-- Choosing Present (or pressing **`p`**) opens a fullscreen overlay (a white sheet filling the screen, in dark mode the sheet's dark tone; larger type, serif headings with a short accent bar, the progress in the accent), splitting the article into slides at each `<h2>` boundary.
-- Content before the first `<h2>` (if any) becomes an intro slide.
+- Choosing Present (or pressing **`p`**) opens a fullscreen overlay (a white sheet filling the screen, in dark mode the sheet's dark tone; larger type, serif headings with a short accent bar, the progress in the accent), splitting the article into slides at each `<h2>` and `<h3>` (`buildSlides` in `js/present.js`).
+- The first slide opens with the page's title, followed by any content before the first heading.
 - Folded sections (Folding sections in `docs/spec/rendering.md`) show on their slides.
-- Navigation: **← →** arrow keys, or click "← Prev" / "Next →" buttons.
+- Navigation: **→**, **↓** or **PgDn** for the next slide, **←**, **↑** or **PgUp** for the previous one, or the mouse wheel (one slide a turn); there are no Prev/Next buttons.
+  **e** (or the ✎ at the corner) edits the slide's section (the whole page for the first slide); after the save the presentation reopens at that slide.
   **Esc** exits.
-- The slide counter (`1 / N`) is shown in the centre of the control bar.
+- A reload reopens the presentation at the slide it was on (`localStorage` `zone_pres`, for that page only; Esc forgets it).
+- The slide counter (`1 / N`) and a progress bar are shown in the control bar.
 - Slide content re-uses `.page-content` CSS so typography, code blocks, and links render correctly inside the overlay; the overlay sets `--bg` to the sheet's `--surface`, so what paints itself in the page's colour matches.
 - Syntax highlighting is re-applied via `hljs.highlightElement` when each slide is shown.
 - The Present menu item is hidden (via JS, `syncPresentBtn`) on pages with no headings.

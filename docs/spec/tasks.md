@@ -40,7 +40,7 @@ Case doesn't matter (`[[Tasks:]]`), nor a space after the colon (`[[tasks:list=s
 The params can be changed without editing the page: List settings… in the ⋯ menu of the embed's toolbar (see Settings).
 In the editor, the formatting bar's Task list button shows the same dialog, with which list the embed shows, to write the embed or change the one the cursor is on (Task list dialog in `docs/spec/editor.md`).
 
-**Headless instance**: `build_tasks_embed(params, headless=True)` renders the app hidden, for pages that only need its edit modal (the editor's Make task, see Task references).
+**Headless instance**: `buildTasksEmbed(…, headless)` renders the app hidden, for pages that only need its edit modal (the editor's Make task, see Task references).
 `openEditModal(null, opts)` takes, besides `tags`, a starting `title`, `description`, `start_date` and an `onCreated(task)` callback; `titles` instead of `title` is batch mode (one task per title, the fields shared, `onCreated` gets the array).
 
 **Implementation** (`go/tasksyntax.go` for the syntax, `go/tasksembed.go` for the HTML): `tasksRE` finds the directive and `parseTasksParams()` parses its `key=value` pairs.
@@ -114,7 +114,7 @@ It says nothing of what changed in those lists. (Until 2026-11 there was one wor
   They are counted anew when a task file or registry the user reads is another one (its time and size, so a change by hand counts, and Zone's own writes by their number, so two within one tick of the clock are two), when the day is another one, or the settings are.
   A look at each file (`Stamp`), not a read: until 2026-11 each page view copied every open task the user sees and ran the news' rule over each.
 - **A file is parsed once** (`readFile` in `go/internal/taskfiles`): every page view reads the open tasks (the Tasks links' count) and a write reads every file, so a file's tasks are kept as parsed and handed out as copies (`Task.Clone`: a reader may change its own) until the file is another one (its time, size or inode: Zone's own writes, which also forget it, `writeText`; a hand edit).
-  Write paths use a strict reader that fails with `errTasksCorrupt` (503) on an unreadable file instead of treating it as empty and wiping every task.
+  Write paths use a strict reader that fails with `taskfiles.ErrCorrupt` (503) on an unreadable file instead of treating it as empty and wiping every task.
 - The files are JSON (`go/internal/taskmodel`): a list of tasks,
   two spaces of indent,
   text as written (no `\u` escapes but those JSON needs),
@@ -128,7 +128,7 @@ It says nothing of what changed in those lists. (Until 2026-11 there was one wor
   A write changes only the files whose tasks changed, so commits show only what changed.
   Files in another format (hand-edited: keys in another order, unknown keys not A–Z) are rewritten once when Zone starts, in a commit of their own ("Write the task files in Zone's format"); the tasks' values stay as they were (`1.0` reads `1`).
 - Request bodies are validated (`jsonObject`, `asStr`, `asInt`, `asStrList`, `idList`): bad input is a 400 with JSON `{ error }`, never a 500. Numeric strings are accepted for integers; `tags` may be a comma-separated string.
-- Reads clean the tags (`normalizeList`, `cleanTags`), since a file edited by hand may have `"local llm"` or `#work`.
+- Reads clean the tags (`jsonobj.TextList`, `taskmodel.CleanTags`), since a file edited by hand may have `"local llm"` or `#work`.
   Older data formats are no longer converted: the conversions (task files in the wiki's root,
   closed tasks in `tasks.json`,
   `focus_date`/`defer_days`/`recurrence.anchor`/`page`/`focus_order`,
@@ -184,7 +184,7 @@ Recurring instances keep the gap between the two dates, but a new instance's sta
 | `id` | UUID string | |
 | `title` | string | Required. Links in it work on the card (see Title links) |
 | `description` | string | Markdown, rendered as a page's text (see Description); `- [ ] item` lines are checkboxes |
-| `tags` | string[] | One word each. `cleanTags()` on every write/read/restore: inner whitespace → `-`, leading `#` dropped, empties removed, case-insensitive duplicates collapsed. Tag inputs sanitize as you type (`TasksCore.sanitizeTagInput`), leaving deletions alone. A tag sorts tasks; it never puts one in a list. |
+| `tags` | string[] | One word each. `taskmodel.CleanTags()` on every write/read/restore: inner whitespace → `-`, leading `#` dropped, empties removed, case-insensitive duplicates collapsed. Tag inputs sanitize as you type (`TasksCore.sanitizeTagInput`), leaving deletions alone. A tag sorts tasks; it never puts one in a list. |
 | `list` | string | The list the task is in, by its name; no key at all when it is in the Inbox (see Lists). Which list of that name is the task's file's to say: a task in a user's files is in one of their private lists (without `list`: in their Inbox), any other in a shared one. A write takes a list as the user names it (its name, or `shared/<name>`: Lists → Names), `""`, `null` or `inbox` for the Inbox (with users not for a shared task, which is always in a list: 400); a name no list has is a 400. With users the API also answers `"private": true|false`, from where the task is kept; `private` in a write is a 400 that points to `list`. |
 | `assignee` | string | The user the task is assigned to (with users; Assigning tasks in `docs/spec/users.md`). No key at all when there is none: in the file and in the API's answers, so a wiki that assigns nothing keeps its files as they were. A write takes a user's name, `me` (whoever writes) or `""`/`null`/`none` (no one); a leading `@` and the case don't matter. |
 | `followers` | `["dan", "alice"]` | The users who follow the task (with users; Following a task in `docs/spec/users.md`): told of its news as who made it is, without it being theirs to do. In the order they came; no key at all without one. No field of a write: `follow: true\|false` in a write adds or removes whoever writes. The API answers those who see the task. |
@@ -194,7 +194,7 @@ Recurring instances keep the gap between the two dates, but a new instance's sta
 | `created_at` | ISO datetime | |
 | `closed_at` | ISO datetime / `null` | |
 | `sort_order` | number / `null` | Position in the Sorted section (Open's and Today's, and inside Plan's days); `null` = Unsorted. Today and Plan have no order of their own. |
-| `recurrence` | `{ type, interval, from, day?, lead? }` / `null` | `type`: `daily`/`weekly`/`monthly`/`yearly`; `interval` 1–999 (`recIntervalMax`). Driven by the primary date (`due_date`, else `start_date`). `from`: `"due"` (default, calendar-aligned) or `"completion"`. `day` (monthly/yearly) is the series' day of month, so Jan 31 → Feb 28 → Mar 31; kept on re-save unless the type changes; moving the primary date re-anchors it, however it is moved (edit modal, date picker, a drag onto a day, MCP). An undo that moves a date back sends the old `recurrence` whole (`PUT`/`batch-update` take it, `cleanRecurrence`, applied after the date rules), so the series keeps its `day` and `lead`. `lead` is the start→due gap, stored only while a spawned start was clamped to today; editing either date drops it, an unchanged modal re-save keeps it. A keep task never has one (`keep` clears it). |
+| `recurrence` | `{ type, interval, from, day?, lead? }` / `null` | `type`: `daily`/`weekly`/`monthly`/`yearly`; `interval` 1–999 (`taskmodel.RecIntervalMax`). Driven by the primary date (`due_date`, else `start_date`). `from`: `"due"` (default, calendar-aligned) or `"completion"`. `day` (monthly/yearly) is the series' day of month, so Jan 31 → Feb 28 → Mar 31; kept on re-save unless the type changes; moving the primary date re-anchors it, however it is moved (edit modal, date picker, a drag onto a day, MCP). An undo that moves a date back sends the old `recurrence` whole (`PUT`/`batch-update` take it, `taskmodel.CleanRecurrence`, applied after the date rules), so the series keeps its `day` and `lead`. `lead` is the start→due gap, stored only while a spawned start was clamped to today; editing either date drops it, an unchanged modal re-save keeps it. A keep task never has one (`keep` clears it). |
 | `spawned_from` | string / `null` | Recurring instance: id of the completed task that spawned it, so undoing the completion removes exactly this instance |
 | `wont_do` | bool | Abandoned: archived like a completed task, shown with "✗ won't do", never spawns a recurring instance |
 | `keep` | bool | Keep task: completing it doesn't archive it (see Keep tasks) |
@@ -499,7 +499,7 @@ Each with a dark-mode value.
   Typing a `#word` (or `-#word`) suggests tags of the tasks the other tag words leave visible (free text is ignored for this).
   Embed `tag=`/`?tag=` become a query via `TasksCore.tagParamToQuery`.
   New tasks get the filter's single tags.
-- **Tag chips** (`chipField` in `tasks.js`): in the filter field and the edit modal's Tags field a completed tag becomes a chip in front of the typed text (`.chip-input` box wrapping the input, `.tag-chip`).
+- **Tag chips** (`chipField` in `js/taskchips.js`): in the filter field and the edit modal's Tags field a completed tag becomes a chip in front of the typed text (`.chip-input` box wrapping the input, `.tag-chip`).
   A chip can't be edited, only removed: Backspace at the start of the field removes the last one, its × any.
   Filter chips are whole filter words (`#a`, `-#b`, `#a|b`); the query is the chips plus the text (`filterQuery()`), and `?tag=`/`[[tasks: tag=…]]` arrive as chips.
   In the Tags field (and the bulk tag dialog's) a completion, a comma or a space (typed or pasted: `#a #b, c` gives three tags; `chipsOnSeparators`) makes a chip, with no separator left behind, so several tags go in at once;
@@ -580,7 +580,7 @@ Each with a dark-mode value.
   Completing a task with a subtask still open asks first ("“Plan trip” has 2 open subtasks.", **Complete anyway** or Cancel; `confirmOpenSubtasks`, `#task-subtasks-modal`): from the task's checkbox and Space (`tickTask`), and once for several selected tasks (Space, the selection bar's Done; `mayComplete`), where Cancel keeps the selection.
   Won't do, a task chip's checkbox on a page and an assistant (MCP) don't ask.
 - **Won't do** (⋯ menu, the edit modal, the Delete key; cards have no ✗ button any more) archives without spawning;
-  **Skip** (⏭, recurring only) archives as won't-do and spawns the next instance, the first occurrence after today (`spawn_recurring(skip=True)`): a daily task three days overdue comes back tomorrow, not as a card for today, so a skipped backlog leaves Today.
+  **Skip** (⏭, recurring only) archives as won't-do and spawns the next instance, the first occurrence after today (`spawnRecurring(…, skip)`): a daily task three days overdue comes back tomorrow, not as a card for today, so a skipped backlog leaves Today.
   Completing catches up to today instead.
   Both show an undo toast; reopening a skipped entry removes its spawn (while untouched, as for un-completing).
 - **A task is closed, not deleted; who made it can delete it for good.**
@@ -717,7 +717,7 @@ A task's description is markdown, edited and rendered as a page's text.
   Comments render the same way, in the cards and the modal (`.task-comment-body`, at the description's scale),
   but keep their lines: a line's end is a line break (`Env.LineBreaks`), so a comment typed on three lines shows on three.
   In the modal a line separates each comment from the one before it; on a card each comment hangs on a bar of its own down its left (`border-left` of `.task-card-comment`), with a gap before the next, so the bar's end shows where a comment ends.
-- **Where the HTML comes from** (`renderTexts`, `renderedHtml` in `tasks.js`): the tasks asks the server for the texts it hasn't rendered yet, in one request (`{ notes: [...], comments: [...] }`), and keeps the HTML per text for the page's life, shared by every task list app on it.
+- **Where the HTML comes from** (`renderTexts`, `renderedHtml` in `js/tasktexts.js`): the tasks asks the server for the texts it hasn't rendered yet, in one request (`{ notes: [...], comments: [...] }`), and keeps the HTML per text for the page's life, shared by every task list app on it.
   **A long list renders a text when it is opened** (over 150 tasks: `LAZY_FROM` in `js/taskdata.js`, `lazyTextsFrom` in `go/tasksembed.go`): the page brings such a list's tasks without their texts' HTML, and the list doesn't ask for all of them; a card's description and comments have their places empty and marked (`data-lazy`, not shown), and opening its details fetches that task's texts and draws the list again (`setExpanded` in `js/taskview.js`). So no card shows markdown as plain text, and All tasks of a large wiki doesn't render and carry every description to show a list of titles.
   Loading tasks (`fetchTasks`, Closed) and each write wait for it before drawing, so cards never flash plain text (the tasks a page brings along come with their HTML, see Task list embed); a text that arrives some other way shows as plain text until its HTML is there (`htmlOf`), and a failed request caches nothing.
   Code is highlighted once, when the HTML arrives.
@@ -746,7 +746,7 @@ and `assigned` (the assignee changed: `from` and `to` name the users, `null` no 
 (Assigning tasks in `docs/spec/users.md`).
 A recurring task's next occurrence carries the series' history on (with the `done` or `skipped` just logged) plus a `repeat` entry ("Repeats: next Oct 3"), so the series reads as one log; it gets no `created` of its own.
 Only these; title, tag or order edits are not logged.
-Undo must not leave a trace, so every undo that PUTs old fields also sends the task's old `history` (`oldHistory` in `tasks.js`: start-date, won't-do, skip and keep undos), and the server applies a sent `history` last (`cleanHistory` validates it), replacing what that request logged.
+Undo must not leave a trace, so every undo that PUTs old fields also sends the task's old `history` (`oldHistory` in `js/taskdata.js`: start-date, won't-do, skip and keep undos), and the server applies a sent `history` last (`cleanHistory` validates it), replacing what that request logged.
 Restore snapshots keep it too.
 Reopen-undo and bulk-complete-undo go through `batch-complete` and do log (`done`/`reopened`).
 
@@ -806,7 +806,7 @@ A task is of **high**, **normal** or **low** importance (`importance`, Task fiel
 
 A task with `keep: true` is never archived: ticking it off means "done for now, back to the pool".
 It suits a shopping list used with the task app's views: Open is the catalogue of staples, starting items today puts them on Today (the actual shopping list), and ticking one off sends it back to Open.
-Completing a keep task (`keep_done`, in `PUT` and in `batch-complete`) clears its start date and its deadline, and sets `last_done` to today; it stays in `_tasks/tasks.json` with the same id, tags, description and place in Open's order, and Closed stays empty.
+Completing a keep task (`keepDone`, in `PUT` and in `batch-complete`) clears its start date and its deadline, and sets `last_done` to today; it stays in `_tasks/tasks.json` with the same id, tags, description and place in Open's order, and Closed stays empty.
 Since Closed can't reopen it, the card shows an undo toast that restores the old fields (`keepSnapshot`).
 **Won't do** retires a staple.
 Keep and Repeat both say what happens after done, so they exclude each other: `keep` clears `recurrence`, and the edit modal doesn't offer Repeat while "Keep after done" is checked (a Repeat that shows is off, and the line under the fields says "A keep task does not repeat.").
@@ -1143,13 +1143,21 @@ Later in 2026-11 came the Inbox: until then a task could be in no list, which wi
 ### Keyboard shortcuts
 
 - **g a**: go to `/tasks`, all tasks; **g t**: go where the Tasks link goes (My tasks)
+- **j** / **↓**, **k** / **↑**: select the next / previous task (from the last back to the first); **Shift+j/k**, **Shift+↑/↓** take the tasks passed along (see Selection)
+- **Enter**: edit the selected task; **Space**: complete it, or reopen a closed one (on several selected, all of them); **Delete**: close the selected open tasks as won't do (a task is never deleted)
+- **Esc**: close the open description first, then clear the selection
 - **→** / **l**, **←** / **h**: open / close the selected task's description and comments; open, they stay open as j/k move on (see One line per task)
 - **o** (the Open tab): the order: manual, by deadline, newest first (see Sorting)
 - **d** (the Open tab): what it shows, in turn: one list, Plan, by person, by list, as far as the view offers them (see Views)
+- **Tab** / **Shift+Tab**: the next / previous tab (on the Tasks page, or on another page while a task is selected or the focus is in the list; Closed is not in the cycle)
+- **Ctrl+Shift+↑/↓** (or **Ctrl+Shift+J/K**): move the selected tasks within the manual order (in a sort, a notice says to press **o** until Manual; see Sections)
+- **Ctrl+Z**: undo what was just done to a task, while its notice shows (not inside the edit modal or a text field)
+- **f** / **F**: start the selected tasks today / tomorrow; **1**–**7**: on that day of the Plan board (1 today, 2 tomorrow …), **0**: unplan them; on every tab
 - **i**: the importance of the selected task, in turn high, low, normal; several selected all get what follows the first one's (see Importance)
 - **Shift+F10** / menu key: the selected task's ⋯ menu (on several selected tasks, the selection's)
 - **Shift+click**, **Ctrl/Cmd+click**, **Shift+↑/↓**, **Ctrl/Cmd+A**: select several tasks (see Selection); **t** / **T**: their tags; **m**: move them to a list
-- **@** (with users): the filter field, starting an assignee's name, as **#** starts a tag
+- **/**: the filter field; **#**: the filter field, starting a tag; **@** (with users): the same, starting an assignee's name
 - **a** (with users): assign the selected tasks (see Assigning tasks in `docs/spec/users.md`)
+- In the edit modal: **Ctrl+Enter** or **Ctrl+S** saves the task (Ctrl+Enter in the comment field saves the comment), **Alt+C** goes to the comment field, **F2** switches the description between Edit and Preview, **Enter** in Tags or Assignee makes the typed word a chip rather than saving
 - **c t**: a new task in your Inbox, starting today: from any page and the same on every one (see Modules → New task from anywhere). **n** is the list's own + New.
   The tasks' keydown runs before the page's shortcuts, so while a `g`/`c` prefix waits for its second key (`keyPrefix` in `js/util.js`) the tasks leaves that key alone: the t of **c t** or **g t** never opens the bulk tag dialog on a selected task
