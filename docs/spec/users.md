@@ -499,6 +499,8 @@ signup-approval = yes                    # an admin approves each account; defau
   A sign-up link stops working when sign-up is turned off.
 - **The link's page** (`/welcome/<token>`) says the address is confirmed and asks for a user name (as everywhere: lowercase letters, digits and inner hyphens) and a password twice (at least 8 characters).
   A name that is taken, by a user or an open invite, is refused there ("The user name alice is taken: choose another.") and the link stays good, as for any other mistake on the form.
+  So is the name of a user who was removed (`userNameHasHistory`): their private folder is there or in the history, or a commit names them as its author.
+  Removing a user keeps their private pages, tasks and lists, and their comments and history, so a stranger signing up under the name would get all of it; an admin may still give the name again (`user add`, an invite).
   Then the account is made in the settings file, as theirs in the log: their password's hash, `role` (`signup-role`; nothing for an editor, the default), `email` and, with `signup-approval`, `pending = yes`.
   Without approval they are signed in and go to the home page; with it, the page says their account waits for an admin.
 - **Approval** (`signup-approval = yes`): a `pending` user is disabled in every way a disabled user is (no sign-in, no session, no MCP token), and the login tells them, with the right password, "Your account waits for an admin of this wiki to approve it."

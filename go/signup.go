@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/mail"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -238,6 +239,23 @@ func orList(items []string) string {
 	return strings.Join(items[:len(items)-1], ", ") + " or " + items[len(items)-1]
 }
 
+// userNameHasHistory: a user went by name in this wiki before (one removed,
+// whose private folder, tasks and history Zone keeps): their private folder
+// is there, or was (in git), or a commit names them as its author. A
+// stranger who signs up never takes such a name: it would hand them the
+// removed user's private pages, tasks and lists, and their comments to
+// change. An admin may still give it again (user add, an invite).
+func userNameHasHistory(name string) bool {
+	if exists(filepath.Join(cfg.Data, privateDir, name)) {
+		return true
+	}
+	if !cfg.GitEnabled {
+		return false
+	}
+	return strings.TrimSpace(runGit("log", "-1", "--format=%H", "--", privateDir+"/"+name).Stdout) != "" ||
+		strings.TrimSpace(runGit("log", "-1", "--format=%H", "--fixed-strings", "--author=<"+name+"@zone>").Stdout) != ""
+}
+
 // useSignup: the account a sign-up link makes, named name with password,
 // in the settings file (logged as theirs), and the link gone. It returns
 // the password's hash, for the session, and whether the account waits for
@@ -251,7 +269,7 @@ func useSignup(link *welcomeLink, name, password string) (hash string, pending b
 		return "", false, refuse("Use lowercase letters, digits and hyphens for your user name (e.g. alice, mary-ann).")
 	case reservedNames[name]:
 		return "", false, refuse(reservedNameMsg(name))
-	case s.Users[name] != nil, linkFor(links, name) != nil:
+	case s.Users[name] != nil, linkFor(links, name) != nil, userNameHasHistory(name):
 		return "", false, refuse("The user name " + name + " is taken: choose another.")
 	}
 	hash, pending = hashPassword(password), s.SignupApproval

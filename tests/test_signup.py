@@ -6,6 +6,7 @@ name and password."""
 import re
 import socket
 import socketserver
+import subprocess
 import threading
 
 import pytest
@@ -171,6 +172,29 @@ class TestSignup:
         assert "differ" in resp.data.decode()
         assert section(wiki_dir, "ann") is None
         assert make(client, link, "ann").status_code == 303
+
+    def test_a_removed_users_name_is_taken(self, client, signup, git_wiki_dir):
+        """A user removed leaves their private folder, tasks and history: a
+        stranger signing up under the name would get them."""
+        w = git_wiki_dir
+        run = lambda *a: subprocess.run(["git", *a], cwd=w, check=True, capture_output=True, env=settings.GIT_ENV)
+        (w / "private/bo").mkdir(parents=True)                  # there now, not committed
+        (w / "private/bo/diary.md").write_text("# Diary\n")
+        (w / "private/cy").mkdir(parents=True)                  # deleted, in the history
+        (w / "private/cy/diary.md").write_text("# Diary\n")
+        run("add", "private/cy")
+        run("commit", "-qm", "cy's diary")
+        run("rm", "-rq", "private/cy")
+        run("commit", "-qm", "gone")
+        (w / "notes.md").write_text("# Notes\n")                 # a commit by dee, nothing private
+        run("add", "notes.md")
+        run("commit", "-qm", "Notes", "--author", "dee <dee@zone>")
+        ask(client, "ann@example.org")
+        link = signup.link()
+        for name in ("bo", "cy", "dee"):
+            assert f"The user name {name} is taken" in make(client, link, name).data.decode(), name
+            assert section(w, name) is None
+        assert make(client, link, "de").status_code == 303      # a name only like one is free
 
     def test_an_address_with_an_account_gets_its_name(self, client, signup, wiki_dir):
         resp = ask(client, "alice@example.org")
