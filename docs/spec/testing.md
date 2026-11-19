@@ -251,6 +251,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `test_search.py` | navigation.md, search.md | The search modal, Notes filter, the semantic mode indicator |
 | `test_security.py` | security.md | What only a browser shows: CSP, `srcdoc`, `ping`, framing, ids as text |
 | `test_sharing.py` | navigation.md | Sharing mode |
+| `test_shortcuts.py` | navigation.md | The shortcuts dialog: fits a desktop screen, scrolls inside a phone's, names every key the code answers |
 | `test_tables.py` | rendering.md | Sortable tables |
 | `test_task_assignee.py` | tasks.md | Assignees, My tasks, news and following, lists for some's dialogs |
 | `test_task_inbox.py` | tasks.md | Filing Inbox tasks, Leave out of My tasks, where Delete… sends tasks |

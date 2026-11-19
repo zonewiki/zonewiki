@@ -429,14 +429,14 @@ Bare-key shortcuts are suppressed when focus is inside an `input`, `textarea`, `
 | **Ctrl/⌘+B / I / K** | editor | Bold / italic / link (see Formatting bar) |
 | **Ctrl/⌘+Shift+X** | editor | Toggle checkbox on current line |
 | **Ctrl/⌘+Delete** | page view | Delete current page (confirmation dialog) |
-| **S** | anywhere | Sharing mode on/off (see Sharing mode) |
+| **Shift+S** | anywhere | Sharing mode on/off (see Sharing mode) |
 | **e** | page view | Navigate to edit mode |
 | **]** / **[** | page view | Next / previous section (`##`/`###`); see Next and previous section, below |
 | **z** | page view | Fold every section, or unfold them all when all are folded (see Folding sections in `docs/spec/rendering.md`) |
 | **p** | page view | Enter presentation mode |
 | **Ctrl/⌘+/** | anywhere | Show keyboard shortcuts and snippets (Vimium-safe) |
 | **?** | anywhere | Show keyboard shortcuts and snippets (fallback) |
-| **n** | tasks page | Open new task modal |
+| **n** | a task list | The list's own + New (the task app's keys: Keyboard shortcuts in `docs/spec/tasks.md`) |
 | **n** / **N** | page opened from search | Next / previous search highlight (wins over the task app's **n** while highlights show) |
 | **Esc** | page opened from search | Clear the search highlights |
 
@@ -449,8 +449,16 @@ The current one is the last heading scrolled past, as the side TOC marks it; `[`
 
 ### The shortcuts dialog
 
-A `<dialog id="shortcuts-modal">` lists all keybindings, opened with `?` (or **Ctrl/⌘+/**).
-On phones it also holds the links to the user menu's three pages (The user menu, above).
+A `<dialog id="shortcuts-modal">` (`templates/partials/shortcuts.html`), opened with `?` (or **Ctrl/⌘+/**), is a cheat sheet of every key Zone answers:
+the table above, the presentation's keys, the editor's (Formatting bar and Smart helpers in `docs/spec/editor.md`), the snippets, the task app's and its dialog's (Keyboard shortcuts in `docs/spec/tasks.md`) and the search syntax.
+It lists nothing the code doesn't answer, and leaves out what a wiki doesn't have: without users **g p**, **g g**, the tasks' **a** and **@**; for a viewer the Create group.
+`tests/e2e/test_shortcuts.py` checks that every key the keydown handlers compare with is on a key cap in it.
+
+Its groups (Anywhere, Go to, Create, Page, Editor, Snippets, Presentation, Tasks: select, Tasks: act, Tasks: view, Tasks: plan, A task's dialog, Search) are short: key caps on the left, a few words on the right.
+They flow into as many columns of 15rem as the screen is wide (CSS `columns`, a group never split), up to 1480px, so on a desktop (1280×720 and up) the whole dialog fits on screen without scrolling.
+Where it doesn't fit (a phone, at most 640px wide: one column), the dialog stays inside the screen and scrolls within itself, its title and **×** staying at the top; Esc and a click on the backdrop close it too.
+At the bottom are Zone's version and build, and the links to Connect an AI assistant, Change password and Groups:
+on phones these are the user menu's three pages (The user menu, above).
 
 ---
 

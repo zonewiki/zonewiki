@@ -1342,6 +1342,9 @@ Case doesn't matter in matching: `Shop` and `shop` are one tag, and renaming a t
 | In the edit modal: **F2** | Switch the description between Edit and Preview |
 | In the edit modal: **Enter** in Tags or Assignee | Make the typed word a chip rather than saving |
 | In the edit modal: **Tab** | The next field (Opening and editing) |
+| In the edit modal: **Esc** | Cancel: close without saving |
+
+The shortcuts dialog (`?`, The shortcuts dialog in `docs/spec/navigation.md`) lists these keys in four groups (select, act on the selected, plan the selected, view) and the edit modal's in a fifth; a key added here goes there too.
 
 The tasks' keydown runs before the page's shortcuts, so while a `g`/`c` prefix waits for its second key (`keyPrefix` in `js/util.js`) the tasks leaves that key alone: the t of **c t** or **g t** never opens the bulk tag dialog on a selected task.
 

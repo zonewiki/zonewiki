@@ -1,70 +1,165 @@
-{{- /* The ? / Ctrl+/ help: keyboard shortcuts, snippets, search syntax, and
-    Zone's version and build. */ -}}
+{{- /* The ? / Ctrl+/ help: a cheat sheet of every keyboard shortcut, the
+    snippets and the search syntax, in groups that flow into as many columns
+    as the screen is wide (style.css, Shortcuts modal); then Zone's version
+    and build. Keys only some wikis have (users) show only there. */ -}}
 {{define "shortcuts" -}}
-  <dialog id="shortcuts-modal" class="shortcuts-modal">
-    <p class="modal-label">Keyboard shortcuts</p>
-    <table class="shortcuts-table">
-      <tr><td><kbd>Ctrl+P</kbd></td><td>Open search</td></tr>
-      <tr><td><kbd>c n</kbd></td><td>New note</td></tr>
-      <tr><td><kbd>c t</kbd></td><td>New task (in your Inbox)</td></tr>
-      <tr><td><kbd>g h</kbd></td><td>Go to Home</td></tr>
-      <tr><td><kbd>g n</kbd></td><td>Go to Notes</td></tr>
-      <tr><td><kbd>g p</kbd></td><td>Go to your private home (with users)</td></tr>
-      <tr><td><kbd>g g</kbd></td><td>Go to your group's home (in a group)</td></tr>
-      <tr><td><kbd>g a</kbd></td><td>Go to all tasks</td></tr>
-      <tr><td><kbd>g t</kbd></td><td>Go to Tasks (My tasks)</td></tr>
-      <tr><td><kbd>F2</kbd></td><td>Toggle preview (editor)</td></tr>
-      <tr><td><kbd>Ctrl+Delete</kbd></td><td>Delete current page</td></tr>
-      <tr><td><kbd>Ctrl+S</kbd></td><td>Done / go to page view (editor)</td></tr>
-      <tr><td><kbd>Ctrl+B</kbd> / <kbd>Ctrl+I</kbd></td><td>Bold / italic (editor)</td></tr>
-      <tr><td><kbd>Ctrl+K</kbd></td><td>Link (editor)</td></tr>
-      <tr><td><kbd>Ctrl+Shift+X</kbd></td><td>Toggle checkbox (editor)</td></tr>
-      <tr><td><kbd>S</kbd></td><td>Sharing mode: hide what is around the page</td></tr>
-      <tr><td><kbd>e</kbd></td><td>Edit current page</td></tr>
-      <tr><td><kbd>]</kbd> / <kbd>[</kbd></td><td>Next / previous section</td></tr>
-      <tr><td><kbd>z</kbd></td><td>Fold / unfold every section</td></tr>
-      <tr><td><kbd>p</kbd></td><td>Enter presentation mode</td></tr>
-      <tr><td><kbd>Ctrl+/</kbd></td><td>Show this help</td></tr>
-      <tr><td><kbd>?</kbd></td><td>Show this help (alt)</td></tr>
-      <tr><td><kbd>n</kbd> / <kbd>N</kbd></td><td>Next / previous search highlight (page opened from search)</td></tr>
-      <tr><td><kbd>j</kbd> <kbd>k</kbd> / <kbd>↓</kbd> <kbd>↑</kbd></td><td>The next / previous task (tasks)</td></tr>
-      <tr><td><kbd>Enter</kbd> / <kbd>Space</kbd> / <kbd>Delete</kbd></td><td>Edit the selected task / complete it (or reopen) / close it as won't do (tasks)</td></tr>
-      <tr><td><kbd>/</kbd> <kbd>#</kbd> <kbd>@</kbd></td><td>The filter field: to search / starting a tag / starting a person's name (tasks)</td></tr>
-      <tr><td><kbd>Tab</kbd></td><td>The next tab (tasks: on the Tasks page, or with a task selected or the focus in the list)</td></tr>
-      <tr><td><kbd>a</kbd></td><td>Assign the selected tasks (tasks, with users)</td></tr>
-      <tr><td><kbd>Ctrl+Shift+↑↓</kbd></td><td>Move the selected tasks up / down in the manual order (tasks)</td></tr>
-      <tr><td><kbd>Ctrl+Z</kbd></td><td>Undo what was just done to a task, while its notice shows (tasks)</td></tr>
-      <tr><td><kbd>l</kbd> <kbd>h</kbd> / <kbd>→</kbd> <kbd>←</kbd></td><td>Open / close a one-line task's description and comments; they stay open as j/k move on (tasks)</td></tr>
-      <tr><td><kbd>o</kbd></td><td>Order: manual / by deadline / newest first (tasks, Open)</td></tr>
-      <tr><td><kbd>d</kbd></td><td>What the Open tab shows: one list, Plan, by person, by list (tasks)</td></tr>
-      <tr><td><kbd>i</kbd></td><td>Importance of the selected tasks: high, low, normal in turn (tasks)</td></tr>
-      <tr><td><kbd>Tab</kbd> / <kbd>Alt+C</kbd> / <kbd>F2</kbd></td><td>In a task's dialog: the next field / write a comment / the description's preview</td></tr>
-      <tr><td><kbd>Shift+F10</kbd> / menu key</td><td>Actions of the selected task (tasks; right-click too)</td></tr>
-      <tr><td><kbd>Shift+click</kbd> / <kbd>Ctrl+click</kbd></td><td>Select several tasks: a range / one more (tasks; <kbd>Shift+↑↓</kbd> too)</td></tr>
-      <tr><td><kbd>Ctrl+A</kbd></td><td>Select every task shown (tasks, with a task selected)</td></tr>
-      <tr><td><kbd>t</kbd> / <kbd>T</kbd></td><td>Add / remove tags of the selected tasks (tasks)</td></tr>
-      <tr><td><kbd>m</kbd></td><td>Move the selected tasks to a list (tasks)</td></tr>
-      <tr><td><kbd>f</kbd> / <kbd>F</kbd></td><td>Start the selected task today / tomorrow (tasks)</td></tr>
-      <tr><td><kbd>1</kbd>–<kbd>7</kbd> / <kbd>0</kbd></td><td>Start the selected tasks on that day (1 today, 2 tomorrow …) / unplan them (tasks)</td></tr>
-      <tr><td><kbd>Esc</kbd></td><td>Clear search highlights</td></tr>
-    </table>
-    <p class="modal-label">Snippets <span class="shortcuts-hint">(type trigger, press Tab)</span></p>
-    <table class="shortcuts-table">
-      <tr><td><kbd>/date</kbd></td><td>Insert current date</td></tr>
-      <tr><td><kbd>/time</kbd></td><td>Insert current time</td></tr>
-      <tr><td><kbd>/datetime</kbd></td><td>Insert current date and time</td></tr>
-    </table>
-    <p class="modal-label">Search syntax</p>
-    <table class="shortcuts-table">
-      <tr><td><kbd>"exact phrase"</kbd></td><td>Words in this order</td></tr>
-      <tr><td><kbd>-word</kbd></td><td>Leave out results with it (also <kbd>-"phrase"</kbd>)</td></tr>
-      <tr><td><kbd>#tag</kbd></td><td>Only pages and tasks with this tag</td></tr>
-      <tr><td><kbd>-#tag</kbd></td><td>None with this tag</td></tr>
-      <tr><td><kbd>edited:2026-09</kbd></td><td>Last edited then (year, month or day); alone: all of it, newest first</td></tr>
-      <tr><td><kbd>after:</kbd> / <kbd>before:</kbd></td><td>Edited on or after / before a day, month or year</td></tr>
-    </table>
-    <p class="zone-version">{{.AppName}} {{.Version}}{{if ne .Build "unknown"}} · {{text .Build}}{{end}}</p>
-    <p class="zone-version"><a href="/assistant">Connect an AI assistant</a>{{if .SignOut}} · <a href="/password">Change password</a>{{end}}{{if .User}} · <a href="/groups">Groups</a>{{end}}</p>
-    <p class="zone-version"><a href="{{.SourceURL}}">Get the source code</a> · AGPL-3.0-or-later</p>
+  <dialog id="shortcuts-modal" class="shortcuts-modal" aria-labelledby="shortcuts-title">
+    <div class="sc-top">
+      <p class="modal-label" id="shortcuts-title" tabindex="-1" autofocus>Keyboard shortcuts</p>
+      <form method="dialog"><button class="sc-close" aria-label="Close" title="Close (Esc)">×</button></form>
+    </div>
+    <div class="sc-grid">
+      <section class="sc-group">
+        <h3>Anywhere</h3>
+        <dl>
+          <dt><kbd>Ctrl+P</kbd></dt><dd>Search pages</dd>
+          <dt><kbd>?</kbd> <kbd>Ctrl+/</kbd></dt><dd>This help</dd>
+          <dt><kbd>S</kbd></dt><dd>Sharing mode</dd>
+        </dl>
+      </section>
+      <section class="sc-group">
+        <h3>Go to <span class="sc-hint"><kbd>g</kbd> then</span></h3>
+        <dl>
+          <dt><kbd>h</kbd></dt><dd>Home</dd>
+          <dt><kbd>n</kbd></dt><dd>Notes</dd>
+          <dt><kbd>t</kbd></dt><dd>Tasks (My tasks)</dd>
+          <dt><kbd>a</kbd></dt><dd>All tasks</dd>
+          {{- if .Users}}
+          <dt><kbd>p</kbd></dt><dd>Your private home</dd>
+          <dt><kbd>g</kbd></dt><dd>Your group's home <span class="sc-hint">(in a group)</span></dd>
+          {{- end}}
+        </dl>
+      </section>
+      {{- if not .Viewer}}
+      <section class="sc-group">
+        <h3>Create <span class="sc-hint"><kbd>c</kbd> then</span></h3>
+        <dl>
+          <dt><kbd>n</kbd></dt><dd>New note</dd>
+          <dt><kbd>t</kbd></dt><dd>New task in your Inbox</dd>
+        </dl>
+      </section>
+      {{- end}}
+      <section class="sc-group">
+        <h3>Page</h3>
+        <dl>
+          <dt><kbd>e</kbd></dt><dd>Edit</dd>
+          <dt><kbd>]</kbd> <kbd>[</kbd></dt><dd>Next / previous section</dd>
+          <dt><kbd>z</kbd></dt><dd>Fold / unfold all</dd>
+          <dt><kbd>p</kbd></dt><dd>Present</dd>
+          <dt><kbd>Ctrl+Delete</kbd></dt><dd>Delete the page</dd>
+          <dt><kbd>n</kbd> <kbd>N</kbd></dt><dd>Next / previous search match</dd>
+          <dt><kbd>Esc</kbd></dt><dd>Clear search matches</dd>
+        </dl>
+      </section>
+      <section class="sc-group">
+        <h3>Editor</h3>
+        <dl>
+          <dt><kbd>Ctrl+S</kbd></dt><dd>Done</dd>
+          <dt><kbd>F2</kbd></dt><dd>Preview on / off</dd>
+          <dt><kbd>Ctrl+B</kbd> <kbd>Ctrl+I</kbd></dt><dd>Bold / italic</dd>
+          <dt><kbd>Ctrl+K</kbd></dt><dd>Link</dd>
+          <dt><kbd>Ctrl+Shift+X</kbd></dt><dd>Tick / untick checkbox</dd>
+          <dt><kbd>Enter</kbd></dt><dd>Follow the <code>[[link]]</code> at the cursor</dd>
+          <dt></dt><dd>Selection → <code>[[link]]</code></dd>
+          <dt></dt><dd>In a list: next item</dd>
+          <dt><kbd>Tab</kbd></dt><dd>Indent, or expand a snippet</dd>
+        </dl>
+      </section>
+      <section class="sc-group">
+        <h3>Snippets <span class="sc-hint">type, then <kbd>Tab</kbd></span></h3>
+        <dl>
+          <dt><kbd>/date</kbd></dt><dd>Today's date</dd>
+          <dt><kbd>/time</kbd></dt><dd>The time</dd>
+          <dt><kbd>/datetime</kbd></dt><dd>Date and time</dd>
+        </dl>
+      </section>
+      <section class="sc-group">
+        <h3>Presentation</h3>
+        <dl>
+          <dt><kbd>→</kbd> <kbd>↓</kbd> <kbd>PgDn</kbd></dt><dd>Next slide</dd>
+          <dt><kbd>←</kbd> <kbd>↑</kbd> <kbd>PgUp</kbd></dt><dd>Previous slide</dd>
+          <dt><kbd>e</kbd></dt><dd>Edit this slide</dd>
+          <dt><kbd>Esc</kbd></dt><dd>Exit</dd>
+        </dl>
+      </section>
+      <section class="sc-group">
+        <h3>Tasks: select</h3>
+        <dl>
+          <dt><kbd>j</kbd> <kbd>k</kbd> <kbd>↓</kbd> <kbd>↑</kbd></dt><dd>Next / previous task</dd>
+          <dt><kbd>Shift+j/k</kbd> <kbd>Shift+↑↓</kbd></dt><dd>Select along</dd>
+          <dt><kbd>Shift+click</kbd> <kbd>Ctrl+click</kbd></dt><dd>A range / one more</dd>
+          <dt><kbd>Ctrl+A</kbd></dt><dd>Every task shown</dd>
+          <dt><kbd>l</kbd> <kbd>h</kbd> <kbd>→</kbd> <kbd>←</kbd></dt><dd>Open / close details</dd>
+          <dt><kbd>Esc</kbd></dt><dd>Close details, then deselect</dd>
+        </dl>
+      </section>
+      <section class="sc-group">
+        <h3>Tasks: act <span class="sc-hint">on the selected</span></h3>
+        <dl>
+          <dt><kbd>n</kbd></dt><dd>New task in this list</dd>
+          <dt><kbd>Enter</kbd></dt><dd>Edit</dd>
+          <dt><kbd>Space</kbd></dt><dd>Complete / reopen</dd>
+          <dt><kbd>Delete</kbd></dt><dd>Close as won't do</dd>
+          <dt><kbd>Ctrl+Shift+↑↓</kbd></dt><dd>Move up / down</dd>
+          <dt><kbd>Ctrl+Shift+J/K</kbd></dt><dd>The same</dd>
+          <dt><kbd>Shift+F10</kbd> <kbd>Menu</kbd></dt><dd>Its ⋯ menu</dd>
+          <dt><kbd>Ctrl+Z</kbd></dt><dd>Undo, while it says so</dd>
+        </dl>
+      </section>
+      <section class="sc-group">
+        <h3>Tasks: view</h3>
+        <dl>
+          <dt><kbd>Tab</kbd> <kbd>Shift+Tab</kbd></dt><dd>Next / previous tab</dd>
+          <dt><kbd>o</kbd></dt><dd>Order: manual, due, newest</dd>
+          <dt><kbd>d</kbd></dt><dd>List, Plan, by person, by list</dd>
+          <dt><kbd>/</kbd></dt><dd>Filter</dd>
+          <dt><kbd>#</kbd></dt><dd>Filter by a tag</dd>
+          {{- if .Users}}
+          <dt><kbd>@</kbd></dt><dd>Filter by a person</dd>
+          {{- end}}
+        </dl>
+      </section>
+      <section class="sc-group">
+        <h3>Tasks: plan <span class="sc-hint">the selected</span></h3>
+        <dl>
+          <dt><kbd>f</kbd> <kbd>F</kbd></dt><dd>Start today / tomorrow</dd>
+          <dt><kbd>1</kbd>–<kbd>7</kbd></dt><dd>Start on that day (1 today)</dd>
+          <dt><kbd>0</kbd></dt><dd>Unplan</dd>
+          <dt><kbd>i</kbd></dt><dd>Importance: high, low, normal</dd>
+          <dt><kbd>t</kbd> <kbd>T</kbd></dt><dd>Add / remove tags</dd>
+          <dt><kbd>m</kbd></dt><dd>Move to a list</dd>
+          {{- if .Users}}
+          <dt><kbd>a</kbd></dt><dd>Assign</dd>
+          {{- end}}
+        </dl>
+      </section>
+      <section class="sc-group">
+        <h3>A task's dialog</h3>
+        <dl>
+          <dt><kbd>Ctrl+Enter</kbd> <kbd>Ctrl+S</kbd></dt><dd>Save (task or comment)</dd>
+          <dt><kbd>Tab</kbd></dt><dd>Next field</dd>
+          <dt><kbd>Enter</kbd></dt><dd>In Tags{{if .Users}}, Assignee{{end}}: a chip</dd>
+          <dt><kbd>Alt+C</kbd></dt><dd>Write a comment</dd>
+          <dt><kbd>F2</kbd></dt><dd>Preview the description</dd>
+          <dt><kbd>Esc</kbd></dt><dd>Cancel</dd>
+        </dl>
+      </section>
+      <section class="sc-group">
+        <h3>Search</h3>
+        <dl>
+          <dt><kbd>↑</kbd> <kbd>↓</kbd> <kbd>Enter</kbd></dt><dd>Pick, open a result</dd>
+          <dt><kbd>"a phrase"</kbd></dt><dd>Words in this order</dd>
+          <dt><kbd>-word</kbd> <kbd>-"phrase"</kbd></dt><dd>Leave out</dd>
+          <dt><kbd>#tag</kbd> <kbd>-#tag</kbd></dt><dd>Only / not this tag</dd>
+          <dt><kbd>edited:2026-09</kbd></dt><dd>Edited that year, month or day</dd>
+          <dt><kbd>after:</kbd> <kbd>before:</kbd></dt><dd>Edited from / before</dd>
+        </dl>
+      </section>
+    </div>
+    <div class="sc-foot">
+      <p class="zone-version">{{.AppName}} {{.Version}}{{if ne .Build "unknown"}} · {{text .Build}}{{end}}</p>
+      <p class="zone-version"><a href="/assistant">Connect an AI assistant</a>{{if .SignOut}} · <a href="/password">Change password</a>{{end}}{{if .User}} · <a href="/groups">Groups</a>{{end}}</p>
+      <p class="zone-version"><a href="{{.SourceURL}}">Get the source code</a> · AGPL-3.0-or-later</p>
+    </div>
   </dialog>
 {{- end}}
