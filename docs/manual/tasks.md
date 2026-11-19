@@ -178,6 +178,7 @@ A task is in one list and can have any number of tags.
 
 The Tasks page has a row of pills at the top: **My tasks**, **Inbox**, your pinned lists, and **More ▾** with every other list and **All tasks**.
 Each pill counts what is due today or overdue there.
+The pill you pick is remembered: go to the wiki and click Tasks again, and you are back on it.
 
 ### Making a list
 

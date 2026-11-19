@@ -375,7 +375,7 @@ def test_my_tasks_holds_what_is_mine(alice, wiki):
     make_list(alice, "side")
     make_list(alice, "own", private=True)
     make_list(alice, "someday", private=True)
-    alice.request.post("/tasks/pin-list", form={"list": "team", "pin": "1"})
+    alice.request.post("/tasks/pin-list", form={"list": "team", "pin": "1"}, max_redirects=0)   # no visit to the list
     assert alice.request.post("/api/tasks/settings", data={"list": "someday", "set": {"home": "off"}}).ok
     today = date.today().isoformat()
     new(alice, "Alice's", assignee="alice", due_date=today)

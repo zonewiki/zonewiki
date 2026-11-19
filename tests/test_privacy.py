@@ -312,8 +312,10 @@ def test_alice_sees_her_own(client, wiki):
     # The tasks /tasks brings along are hers too (not bob's: the probes above).
     assert TASK_ID in client.get("/tasks", headers=HOST).data.decode().split('id="tasks-initial">', 1)[1].split("</script>", 1)[0]
     assert "2001" in client.get("/api/tasks/closed-years", headers=HOST).get_json()["years"]
-    # Her Tasks home is hers: the Tasks link goes to My tasks, which has
+    # Her Tasks home is hers: the Tasks link goes to My tasks (in a new
+    # browser session: /tasks above made it come back there), which has
     # her pinned private list's task.
+    client.delete_cookie("zone-tasks-place")
     assert 'href="/tasks?mine=1"' in client.get("/page/index", headers=HOST).data.decode()
     mine = client.get("/api/tasks/export?mine=1", headers=HOST).get_json()["tasks"]
     assert {TASK_ID, INBOX_ID} <= {t["id"] for t in mine}

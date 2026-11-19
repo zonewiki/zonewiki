@@ -140,9 +140,13 @@ _EMBED_RE = re.compile(r"\[\[tasks:\s*([^\]]*)\]\]", re.I)
 def make_list(page, name: str, private: bool = False, pin: bool = False):
     """Make a task list as New list… does (private: the signed-in user's
     own), through the route its dialog posts to; but not pinned (the dialog
-    pins the list it makes: pin=True), so a test pins what it means to."""
-    resp = page.request.post("/tasks/new-list", form={"name": name, "pin": "1" if pin else "0", **({"private": "1"} if private else {})})
-    assert resp.ok and "newlist_error" not in resp.url, resp.url
+    pins the list it makes: pin=True), so a test pins what it means to.
+    The redirect to the list isn't followed: the browser hasn't been on it,
+    so the Tasks links don't come back to it (zone-tasks-place)."""
+    resp = page.request.post("/tasks/new-list", form={"name": name, "pin": "1" if pin else "0", **({"private": "1"} if private else {})},
+                             max_redirects=0)
+    where = resp.headers.get("location", "")
+    assert resp.status == 302 and "newlist_error" not in where, where
     return resp
 
 
@@ -162,13 +166,15 @@ def list_page(page, wiki: "Wiki", slug: str, content: str) -> Path:
         name = p.get("list", "").strip("#").lower()
         if not name:
             continue
-        made = page.request.post("/tasks/new-list", form={"name": name, "pin": "0", **({"private": "1"} if slug.startswith("private/") else {})})
+        # Redirects not followed, as in make_list: the browser hasn't been on the list.
+        made = page.request.post("/tasks/new-list", form={"name": name, "pin": "0", **({"private": "1"} if slug.startswith("private/") else {})},
+                                 max_redirects=0)
         own = {k: p[k] for k in ("view", "keep", "limit", "plan", "labels", "new") if k in p}
-        if own and "newlist_error" not in made.url:
+        if own and "newlist_error" not in made.headers.get("location", ""):
             assert page.request.post("/api/tasks/settings", data={"list": name, "set": own}).ok
         if p.get("pin"):
             pin = "first" if p["pin"].lower() == "default" else "1"
-            assert page.request.post("/tasks/pin-list", form={"list": name, "pin": pin}).ok
+            assert page.request.post("/tasks/pin-list", form={"list": name, "pin": pin}, max_redirects=0).status == 302
     return path
 
 

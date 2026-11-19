@@ -43,6 +43,7 @@ type Req struct {
 	openRead   bool
 	recent     []*Task // recentClosed, once
 	recentRead bool
+	tasksPlace string // the view /tasks shows (tasksPage): where its Tasks links go
 }
 
 // pageFiles: iterPages, once per request (rq nil: listed now).

@@ -138,6 +138,35 @@ class TestViewPage:
         old = client.get("/tasks?pinned=1", headers=HOST).get_data(as_text=True)
         assert "<h1>My tasks</h1>" not in old and "data-init-mine" not in old
 
+    def test_the_tasks_links_go_back_to_the_view_shown_last(self, client, wiki_dir):
+        # Tasks → a list → the wiki → Tasks: back on that list, not on My
+        # tasks. The view /tasks showed last is remembered in a cookie of the
+        # browser's session, its own links name it at once.
+        list_page(client, wiki_dir, "work", "# Work\n\n[[tasks: list=work]]\n")
+        list_page(client, wiki_dir, "home", "# Home\n\n[[tasks: list=home]]\n")
+        links = lambda url="/page/work": self._tasks_links(client.get(url, headers=HOST).get_data(as_text=True))
+        assert links() == ["/tasks?mine=1"] * 2
+        for url, href in (("/tasks?list=home", "/tasks?list=home"), ("/tasks?list=inbox", "/tasks?list=inbox"),
+                          ("/tasks", "/tasks"), ("/tasks?list=work&view=closed", "/tasks?list=work"),
+                          ("/tasks?mine=1", "/tasks?mine=1"), ("/tasks?list=home", "/tasks?list=home")):
+            assert links(url) == [href] * 2, url   # the view's own switcher and tab bar
+            assert links() == [href] * 2, url      # any page after it
+        # A list that isn't there is no view to come back to: the last one stays.
+        links("/tasks?list=nosuch")
+        assert links() == ["/tasks?list=home"] * 2
+        # One left out in sharing mode, or deleted: My tasks again.
+        assert client.post("/api/tasks/settings", json={"list": "home", "set": {"noshare": "1"}},
+                           headers=HOST).status_code == 200
+        client.set_cookie("zone-sharing", "1")
+        assert links() == ["/tasks?mine=1"] * 2
+        client.delete_cookie("zone-sharing")
+        assert links() == ["/tasks?list=home"] * 2
+        assert client.post("/tasks/delete-list", data={"list": "home", "to": ""}, headers=HOST).status_code == 302
+        assert links() == ["/tasks?mine=1"] * 2
+        # Whatever the cookie says, only a view the user sees is linked.
+        client.set_cookie("zone-tasks-place", "list%3Asomeone-elses")
+        assert links() == ["/tasks?mine=1"] * 2
+
     def test_bottom_bar_lists_the_modules(self, client, wiki_dir):
         write_page(wiki_dir, "my-page", "# My Page\n")
         bar = client.get("/page/my-page", headers=HOST).get_data(as_text=True).split(

@@ -83,7 +83,8 @@ document.addEventListener('keydown', e => {
     return;
   }
 
-  // g-prefix navigation: gh=home, gn=Notes, ga=all tasks, gt=My tasks
+  // g-prefix navigation: gh=home, gn=Notes, ga=all tasks, gt=where the
+  // Tasks link goes (My tasks, or the view /tasks showed last)
   // (/tasks in a wiki without lists), gp=your private home (with users: the Private
   // pill).
   if (keyPrefix.key === 'g') {

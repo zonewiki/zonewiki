@@ -471,7 +471,8 @@ def test_g_t_goes_to_my_tasks(page, wiki):
     page.keyboard.press("t")
     page.wait_for_url(re.compile(r"/tasks\?mine=1$"))
     expect(page.locator("h1")).to_have_text("My tasks")
-    assert page.request.post("/tasks/pin-list", form={"list": "task", "pin": "0"}).ok   # none pinned any more
+    # None pinned any more (its redirect to the list not followed: no visit).
+    assert page.request.post("/tasks/pin-list", form={"list": "task", "pin": "0"}, max_redirects=0).status == 302
     page.goto("/page/garden")
     page.keyboard.press("g")
     page.keyboard.press("t")
@@ -598,6 +599,34 @@ def test_my_tasks_is_the_tasks_module(page, wiki):
     page.goto("/page/tasks")
     expect(page.locator("body")).to_have_attribute("data-module", "wiki")
     expect(tasks).not_to_have_attribute("aria-current", "page")
+
+
+def test_tasks_comes_back_to_the_list_chosen(page, wiki):
+    # Tasks, a list from the switcher, the wiki, Tasks again: the list, not
+    # My tasks; on the phone's tab bar and with g t as well.
+    make_list(page, "shop", pin=True)
+    make_list(page, "work")
+    wiki.write("garden", "# Garden\n")
+    page.goto("/page/garden")
+    tasks = page.locator(".breadcrumb .module-link[data-module=tasks]")
+    tasks.click()
+    page.wait_for_url(re.compile(r"/tasks\?mine=1$"))
+    page.locator('.tasks-place[data-place="list:shop"]').click()
+    page.wait_for_url(re.compile(r"/tasks\?list=shop$"))
+    page.locator(".breadcrumb .module-link[data-module=wiki]").click()
+    page.wait_for_url(re.compile(r"/$|/page/index$"))
+    tasks.click()
+    page.wait_for_url(re.compile(r"/tasks\?list=shop$"))
+    expect(page.locator(".page-header h1")).to_have_text("List: shop")
+    page.goto("/page/garden")
+    expect(page.locator(".action-buttons .module-link[data-module=tasks]")).to_have_attribute("href", "/tasks?list=shop")
+    page.keyboard.press("g")
+    page.keyboard.press("t")
+    page.wait_for_url(re.compile(r"/tasks\?list=shop$"))
+    # A new task from anywhere still goes to the Inbox.
+    page.goto("/page/garden")
+    new_task(page)
+    expect(page.locator(".task-edit-modal[open] select[id^=task-edit-list]")).to_have_value("")
 
 
 def test_editor_breadcrumb_keeps_only_the_logo(page, wiki):

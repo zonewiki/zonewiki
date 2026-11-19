@@ -974,6 +974,10 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 		crumbs = []crumb{{"Tasks", "/tasks"}, {"My tasks", ""}}
 		mine = true
 	}
+	if place != "" {
+		rq.tasksPlace = place
+		rememberTasksPlace(w, r, place)
+	}
 	var tasksHTML string
 	if missing != "" {
 		tasksHTML = noListHTML(rq, missing)

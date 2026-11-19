@@ -5130,7 +5130,8 @@ def test_new_list_from_the_tasks_pages_menu(page, wiki):
     expect(page.locator('.tasks-place[data-place="list:shop"]')).to_have_attribute("aria-current", "page")
     expect(page.locator('.tasks-place[data-place="list:shop"] .tasks-place-pin')).to_have_count(1)
     expect(page.locator(".tasks-made-first")).to_have_count(0)
-    expect(page.locator(".breadcrumb .module-link[data-module=tasks]")).to_have_attribute("href", "/tasks?mine=1")
+    # The Tasks link comes back to the view you are on: the new list.
+    expect(page.locator(".breadcrumb .module-link[data-module=tasks]")).to_have_attribute("href", "/tasks?list=shop")
     page.goto("/tasks?list=shop&view=open&group=none")
     expect(page.locator(".task-item")).to_have_count(0)                # a tag of that name is a tag: the list starts empty
     assert '{"name": "shop"}' in (wiki.root / "_tasks/lists.json").read_text()
@@ -5214,12 +5215,12 @@ def test_pin_and_move_first_from_a_lists_menu(page, wiki):
     page.goto("/tasks?list=shop")
     menu = page.locator("#page-menu")
     tasks = page.locator(".breadcrumb .module-link[data-module=tasks]")
-    expect(tasks).to_have_attribute("href", "/tasks?mine=1")
+    expect(tasks).to_have_attribute("href", "/tasks?list=shop")   # the view shown, pinned or not
     page.locator(".page-header .page-menu-btn").click()
     menu.get_by_role("menuitem", name="Pin").click()
     page.wait_for_url("**/tasks?list=shop")
     expect(page.locator('.tasks-place[data-place="list:shop"] .tasks-place-pin')).to_have_count(1)
-    expect(tasks).to_have_attribute("href", "/tasks?mine=1")
+    expect(tasks).to_have_attribute("href", "/tasks?list=shop")
     page.goto("/tasks?list=work")
     page.locator(".page-header .page-menu-btn").click()
     menu.get_by_role("menuitem", name="Pin").click()
@@ -5413,7 +5414,7 @@ def test_settings_dialog_changes_the_lists_settings_and_the_pages(page, wiki):
     open_list_settings(page)
     dialog.locator("[name=group]").select_option("day")
     # (The list is pinned meanwhile, as its ⋯ menu's Pin does: no setting of this dialog.)
-    assert page.request.post("/tasks/pin-list", form={"list": "shop", "pin": "1"}).ok
+    assert page.request.post("/tasks/pin-list", form={"list": "shop", "pin": "1"}, max_redirects=0).status == 302   # no visit
     with page.expect_navigation():
         dialog.get_by_role("button", name="Save").click()
     text = registry.read_text()

@@ -139,6 +139,16 @@ A page in a group's folder makes it the current module; the phone's tab bar has 
 The Tasks link goes to **My tasks** (`/tasks?mine=1`; Lists → My tasks in `docs/spec/tasks.md`): one task app of what is yours: the tasks in your own lists (your Inbox, your private lists) and the shared tasks assigned to you; without users every task but those of a list left out.
 In a wiki without lists the link goes to `/tasks`, which is the same tasks (`tasksLinkHref`, `moduleLinks`).
 Its counts are of My tasks (Counts, below).
+
+**Once you switched lists it comes back to the one you were on.**
+Open a list from the list switcher, go to the wiki, click Tasks: you are on that list again, not on My tasks.
+The link goes to the view of the list switcher `/tasks` showed last in this browser — My tasks, the Inbox, a list or All tasks, without the tab or filter it had — on every page, the phone's tab bar and **g t** too; the `/tasks` page's own link already names the view it shows.
+It goes to My tasks again in a new browser session, and whenever you no longer see that view there: a list deleted or no longer shared with you, one left out in sharing mode.
+A list's address that names no list (`/tasks?list=nosuch`) changes nothing.
+
+How it works: `tasksPage` sets the cookie `zone-tasks-place` (`rememberTasksPlace` in `go/views.go`; a session cookie, `HttpOnly`, `SameSite=Lax`, `Secure` over HTTPS) to the switcher's key of the view (`mine`, `inbox`, `list:<ref>`, `all`).
+The cookie holds nothing but that key, and `placeHref` asks each time whether the user sees the view now (`resolveList` on the lists they see, `listHidden`, `hasInbox`), so a cookie that names a list someone else's, or one gone, links nothing.
+A cookie, not the browser's storage: the server draws the link, so it is right at first paint and in a browser without JavaScript.
 A new task goes to the **Inbox** (with users your own, private; The Inbox in `docs/spec/tasks.md`).
 The lists you pinned are pills of the list switcher, and nothing else (Pins in `docs/spec/tasks.md`; `pinnedLists`, from your pins in the lists' registry, the wiki's when you have set none, in their order; `rq.pinnedLists()` looks them up once per request).
 Your other lists and all tasks are one click from there, in the task app's **list switcher** (Lists in `docs/spec/tasks.md`).

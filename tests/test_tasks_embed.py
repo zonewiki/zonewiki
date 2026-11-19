@@ -328,7 +328,8 @@ class TestListSwitcher:
         # Nothing pinned: the row is My tasks, the Inbox and More, which says All tasks.
         assert places(html) == [("mine", "My tasks", False), ("inbox", "Inbox", False)]
         assert more(html) == ("All tasks", True, [("/tasks?list=shop", "shop", False), ("/tasks", "All tasks", True)])
-        assert "tasks-place-pin" not in html and 'href="/tasks?mine=1" class="module-link" data-module="tasks"' in html
+        # The Tasks link goes where it would without the pin: the view shown.
+        assert "tasks-place-pin" not in html and 'href="/tasks" class="module-link" data-module="tasks"' in html
         # My tasks is every task all the same: a pin is a pill.
         line = self.get(client, "/tasks?mine=1").split('class="tasks-list-home tasks-mine-line">', 1)[1].split("</p>", 1)[0]
         assert line == "Every open task."
@@ -565,7 +566,8 @@ class TestListSwitcher:
         assert places(html) == [("mine", "My tasks", False), ("inbox", "Inbox", False), ("list:home", "home", True)]
         assert more(html)[:2] == ("More", False)
         assert "tasks-made-first" not in html and "New tasks go into this list" not in html
-        assert 'href="/tasks?mine=1" class="module-link" data-module="tasks"' in html and "data-tasks-list" not in html
+        # The Tasks link comes back to the view shown (not a list for new tasks).
+        assert 'href="/tasks?list=home" class="module-link" data-module="tasks"' in html and "data-tasks-list" not in html
         assert "list" not in create_task(client, title="After").get_json()
         # The tasks made before it stay where the Tasks link goes.
         assert client.get("/api/tasks/due-count?places=1").get_json()["places"]["mine"]["focus"] == 0

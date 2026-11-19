@@ -70,7 +70,8 @@ Point at the pill to read the details, such as "Tasks: 5 in Today Â· 1 overdue Â
 Nothing shows when there's nothing to say.
 
 The Tasks pill goes to **My tasks**: your own tasks, and the shared ones assigned to you.
-The counts are of these, and they update every minute while you use the page.
+Once you open another list on the Tasks page, the pill brings you back to that list instead, until you close the browser.
+The counts are of My tasks all the same, and they update every minute while you use the page.
 See [Tasks](tasks.md).
 
 ## Keyboard shortcuts
@@ -88,7 +89,7 @@ Where it says `g` then `h`, press the two keys one after the other.
 | `S` (Shift+s) | Sharing mode on and off |
 | `g` then `h` | Go to the home page |
 | `g` then `n` | Go to Notes |
-| `g` then `t` | Go to Tasks (My tasks) |
+| `g` then `t` | Go to Tasks (My tasks, or the list you were on last) |
 | `g` then `a` | Go to All tasks |
 | `g` then `p` | Go to your private home (with users) |
 | `g` then `g` | Go to your group's home (with users, in a group) |

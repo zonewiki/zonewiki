@@ -1560,7 +1560,7 @@ It is a list like any other.
 
 ### My tasks
 
-**My tasks** (`/tasks?mine=1`; `mineFilter`, `inMine` in `go/tasklists.go`, `TasksCore.inMine` in the browser) is your home view, the one the Tasks links open and their badge counts.
+**My tasks** (`/tasks?mine=1`; `mineFilter`, `inMine` in `go/tasklists.go`, `TasksCore.inMine` in the browser) is your home view, the one the Tasks links open (until you switch to another view: they come back to that one, The Tasks link in `docs/spec/navigation.md`) and their badge counts.
 It shows **what is yours: the tasks in your own lists (your Inbox, your private lists), and the shared tasks assigned to you**, wherever they are.
 Under the heading a line says what it holds: "Your own tasks and what is assigned to you.", without users "Every open task.", and the lists left out, as links (`leftOutLinks`).
 
@@ -1809,7 +1809,7 @@ Under `(pointer: coarse)` cards have `touch-action: pan-y`; `.tasks-list` has `o
 | Keys | What they do |
 |------|--------------|
 | **g a** | Go to `/tasks`, all tasks |
-| **g t** | Go where the Tasks link goes (My tasks) |
+| **g t** | Go where the Tasks link goes (My tasks, or the view you were on last) |
 | **c t** | A new task in your Inbox, starting today: from any page and the same on every one (Modules → New task from anywhere in `docs/spec/navigation.md`) |
 | **n** | The list's own + New |
 | **j** / **↓**, **k** / **↑** | Select the next / previous task (from the last back to the first) |

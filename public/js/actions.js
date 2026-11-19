@@ -19,8 +19,8 @@ export async function openDefaultTask() {
     try {
       await loadHeadlessTasks();
     } catch (err) {
-      const href = tasksLinkHref();
-      window.location.href = href + (href.includes('?') ? '&' : '?') + 'new=1';
+      // My tasks, whose New gives the Inbox, not the list the link came back to.
+      window.location.href = tasksLinkHref() === '/tasks' ? '/tasks?new=1' : '/tasks?mine=1&new=1';
       return;
     }
     opts.onCreated = task => {
@@ -44,8 +44,9 @@ function loadHeadlessTasks() {
   return headlessTasks;
 }
 
-// Where the Tasks module links go: My tasks (/tasks?mine=1), or /tasks in
-// a wiki without lists.
+// Where the Tasks module links go: the view /tasks showed last (the
+// server's zone-tasks-place cookie), else My tasks (/tasks?mine=1), or
+// /tasks in a wiki without lists.
 export const tasksLinkHref = () =>
   document.querySelector('.module-link[data-module="tasks"]')?.getAttribute('href') || '/tasks';
 

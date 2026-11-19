@@ -159,13 +159,63 @@ func (rq *Req) taskCounts() TaskCounts {
 	return *rq.counts
 }
 
-// tasksLinkHref: where the Tasks links go: My tasks (/tasks?mine=1); with
-// no list in the wiki /tasks, which is the same tasks.
+// tasksLinkHref: where the Tasks links go: back to the view of the list
+// switcher /tasks showed last in this browser (tasksPlaceCookie), while
+// the user still sees it there; else My tasks (/tasks?mine=1). With no
+// list in the wiki /tasks, which is the same tasks.
 func (rq *Req) tasksLinkHref() string {
 	if len(rq.taskLists()) == 0 {
 		return "/tasks"
 	}
+	place := rq.tasksPlace // on /tasks the view it shows, else the cookie's
+	if place == "" && rq.r != nil {
+		if c, err := rq.r.Cookie(tasksPlaceCookie); err == nil {
+			place, _ = url.QueryUnescape(c.Value)
+		}
+	}
+	if href := rq.placeHref(place); href != "" {
+		return href
+	}
 	return mineHref
+}
+
+// tasksPlaceCookie: the view /tasks showed last (a key of the list
+// switcher: "mine", "inbox", "list:<ref>", "all"), for the Tasks links to
+// go back to. A cookie of the browser's session: it holds nothing but the
+// key, and placeHref asks again whether the user sees that view.
+const tasksPlaceCookie = "zone-tasks-place"
+
+// rememberTasksPlace: /tasks shows place; the Tasks links go there from now.
+func rememberTasksPlace(w http.ResponseWriter, r *http.Request, place string) {
+	value := url.QueryEscape(place)
+	if c, err := r.Cookie(tasksPlaceCookie); err == nil && c.Value == value {
+		return
+	}
+	http.SetCookie(w, &http.Cookie{Name: tasksPlaceCookie, Value: value, Path: "/",
+		HttpOnly: true, Secure: isHTTPS(r), SameSite: http.SameSiteLaxMode})
+}
+
+// placeHref: where a view of the list switcher is, if the user sees it now
+// ("" if not: a list deleted or no longer theirs to see, one left out in
+// sharing mode, the Inbox where they have none).
+func (rq *Req) placeHref(place string) string {
+	switch place {
+	case "mine":
+		return mineHref
+	case "all":
+		return "/tasks"
+	case inboxRef:
+		if rq.hasInbox() {
+			return listHref(inboxRef)
+		}
+		return ""
+	}
+	if ref, ok := strings.CutPrefix(place, "list:"); ok {
+		if l, ok := resolveList(ref, rq.taskLists()); ok && l.Ref == ref && !rq.listHidden(l) {
+			return listHref(l.Ref)
+		}
+	}
+	return ""
 }
 
 // moduleLinks: the module links (where each goes, whether it is the current
