@@ -64,7 +64,8 @@ Links are written for the files (`tasks.md#lists`, `../screenshots/page.png`), a
 - **Markdown is the source of truth** — `.md` files in the data directory (`$ZONE_DATA`) are the wiki content.
   Deliberate exception: Tasks live in `_tasks/tasks.json`/`_tasks/closed.json` (a list's in `_tasks/lists/<name>/`) and their lists in `_tasks/lists.json` (structured fields, concurrency-safe writes) — still plain files, still git-versioned, but not markdown.
 - **Editable two ways** — edit files in any text editor, or click "Edit" in the browser
-- **For people and their assistants alike** — more and more of a wiki is read and written by an AI assistant acting for its user, so an assistant is a user's second pair of hands, not an add-on:
+- **First-class for people and for their assistants** — more and more of a wiki is read and written by an AI assistant acting for its user, so an assistant is a user's second pair of hands, not an add-on;
+  and a person's UX is never traded for an assistant's, nor the other way round (Zone must be as good in the browser as if no assistant ever used it):
   what a person does in the browser an assistant can do over MCP, through the same operations (never a second implementation) and never with more than its user;
   what an assistant did is seen, told apart from its user's own work and undone as easily as it was done;
   and the wiki stays plain files that any model, tool or person reads without Zone.

@@ -13,6 +13,7 @@ One Go binary, no database, no frontend build, no cloud.
 ## Why Zone
 
 - **Your files, not a silo.** Pages are Markdown, tasks are JSON beside them, history is git. Grep them, back them up with `git push`, or stop using Zone and keep everything.
+- **First-class for people and for AI.** A wiki you'd enjoy with no assistant at all: a quick editor with live preview, a Today view and a plan board, search as you type, on a laptop or a phone. And everything you do in the browser, your assistant can do too, through the same operations, never as an afterthought.
 - **A memory for your assistants, under your rules.** An assistant can do what you can, never more. You can connect one that only reads, or keep it out of your private pages. Its edits are commits you can undo one at a time or all at once. Zone brings no model of its own.
 - **Pages, notes and tasks in one place**, sharing links, search and history.
 - **Nothing gets lost.** Every version of every page, one-click restore, deleted pages brought back, and links that follow a rename.

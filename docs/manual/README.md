@@ -1,6 +1,7 @@
 # Zone's manual
 
 How to use Zone: a wiki with notes and tasks, for you, your team and your AI assistants.
+Zone is first-class for people and for assistants: it's made to be a pleasure to use in your browser, and your assistant can do everything you can, never more.
 It's also in Zone itself, under **Help**, and your assistant can look things up in it.
 
 New to Zone? Start with [Getting started](getting-started.md).
