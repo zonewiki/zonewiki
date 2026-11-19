@@ -520,7 +520,8 @@ function searchHighlightBar(article, params, marks, terms) {
     const qs = params.toString();
     history.replaceState(history.state, '', location.pathname + (qs ? `?${qs}` : '') + location.hash);
   };
-  // In the capture phase, so n doesn't also reach a task list embed's "new task".
+  // In the capture phase, so n doesn't also reach a task list embed's "new task",
+  // nor this Esc its "clear the selection": the first Esc clears only the highlights.
   const onKey = e => {
     if (e.ctrlKey || e.metaKey || e.altKey || document.querySelector('dialog[open], .presentation-overlay')) return;
     if (e.target.closest?.('input, textarea, select, [contenteditable]')) return;
@@ -529,6 +530,8 @@ function searchHighlightBar(article, params, marks, terms) {
       e.stopImmediatePropagation();
       show(current + (e.key === 'n' ? 1 : -1));
     } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
       clear();
     }
   };

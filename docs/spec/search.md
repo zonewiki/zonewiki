@@ -135,7 +135,7 @@ It starts at the first match inside the section the `#anchor` opened.
 | Key | Does |
 |-----|------|
 | **n** / **N** | Next / previous match (in the capture phase, so a task list embed's `n` doesn't also open a new task) |
-| **Esc** or × | Unmarks and drops `hl` from the URL (`history.replaceState`) |
+| **Esc** or × | Unmarks and drops `hl` from the URL (`history.replaceState`); this Esc goes no further, so a task list embed's selection stays until the next Esc |
 
 Listed in the `?` help.
 

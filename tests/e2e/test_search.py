@@ -340,6 +340,24 @@ def test_n_does_not_reach_the_tasks_while_highlighting(page, wiki):
     expect(page.locator("dialog[open]")).to_have_count(0)
 
 
+def test_first_esc_clears_only_the_highlights(page, wiki):
+    # A task list's Esc clears its selection; while highlights show, the first
+    # Esc is theirs alone, the second the task list's.
+    page.request.post("/api/tasks", data={"title": "Picked"})
+    wiki.write("tasks", "# Tasks\n\nzebra notes.\n\n[[tasks:]]\n")
+    page.goto("/page/tasks?view=open&group=none&hl=zebra")
+    expect(page.locator(".search-hl-bar")).to_contain_text("1 of 1")
+    picked = page.locator(".task-item", has_text="Picked")
+    picked.wait_for()
+    page.keyboard.press("j")
+    expect(picked).to_have_class(re.compile(r"\btask-selected\b"))
+    page.keyboard.press("Escape")
+    expect(page.locator(".search-hl-bar")).to_have_count(0)
+    expect(picked).to_have_class(re.compile(r"\btask-selected\b"))
+    page.keyboard.press("Escape")
+    expect(picked).not_to_have_class(re.compile(r"\btask-selected\b"))
+
+
 def test_search_result_opens_highlighted(page, wiki):
     seed(wiki)
     page.goto("/page/index")
