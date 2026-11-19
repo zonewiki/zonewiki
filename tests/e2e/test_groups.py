@@ -6,6 +6,7 @@ import re
 import pytest
 from playwright.sync_api import expect
 
+from conftest import wait_ready
 from tests import settings
 
 
@@ -326,6 +327,7 @@ def test_a_name_field_takes_only_users_and_groups_there_are(page, wiki, monkeypa
     assert form.locator('input[name="people"]').input_value() == "bob, carol"
     form.get_by_role("button", name="Make the group").click()
     expect(page.locator(".users-done")).to_contain_text("Made the group apollo")
+    wait_ready(page)   # the form's answer is a new page: its pickers take focus once its code runs
     assert "groups = apollo" in (wiki.root / ".zone/config").read_text().split("[user carol]")[1]
     # An admin's Everyone in: the groups there are, less the group itself.
     row = page.locator('.groups-list li[data-group="dev"]')
