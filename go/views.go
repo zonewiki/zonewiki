@@ -127,8 +127,9 @@ func diffLines(diff string) []diffLine {
 // see them. Without users one group.
 var modules = [][3]string{{"wiki", "Wiki", "/"}, {"groups", "Groups", "/groups"}, {"private", "Private", "/private"}, {"tasks", "Tasks", "/tasks"}, {"notes", "Notes", "/notes"}}
 
-// taskCountsTitle: the Tasks links' tooltip, "Tasks: 5 in Focus · 1 overdue
-// · 1 due today" (js/chrome.js taskCountsTitle builds the same).
+// taskCountsTitle: the Tasks links' tooltip, "Tasks: 2 updates for you · 5
+// for today · 1 overdue · 1 due today" (js/chrome.js taskCountsTitle builds
+// the same).
 func taskCountsTitle(c TaskCounts) string {
 	var parts []string
 	if c.New > 0 {

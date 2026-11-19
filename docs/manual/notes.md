@@ -71,7 +71,7 @@ Put the cursor where the link should go and paste.
 Zone doesn't change that page by itself: you decide where the link goes.
 
 Links that pointed to the note now point to the new page.
-The page's history shows the move as "Moved from Quicknote".
+The page's history shows the move as "Moved from Notes".
 
 With users, a note moved to a folder outside your private folder can be seen by more people:
 everyone for a shared folder, the members for a group's folder.

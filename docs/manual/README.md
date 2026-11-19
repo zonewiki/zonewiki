@@ -13,7 +13,7 @@ New to Zone? Start with [Getting started](getting-started.md).
 - [Writing](writing.md): the editor and Zone's Markdown
 - [History and undo](history.md): every version, Changes, restoring and undoing
 - [Notes](notes.md): write it down now, file it later
-- [Tasks](tasks.md): Today, Open and Plan, lists, dates, assigning, tasks on a page
+- [Tasks](tasks.md): Today, Open and the Plan board, lists, dates, assigning, tasks on a page
 - [Search](search.md): finding pages and tasks
 - [Getting around](navigation.md): the modules, keyboard shortcuts, phones, sharing and presenting
 

@@ -253,14 +253,14 @@ They replaced the separate due badge at the top left.
 |-------|-------|------|
 | Due | `.module-due`, orange | tasks due today or overdue |
 | Today | `.module-focus`, muted | tasks in Today (`TasksCore.isFocus`: started, or due today or earlier) |
-| New | `.module-new`, filled in the accent | with users, how many tasks someone else gave you that you haven't touched yet (Assigning tasks in `docs/spec/users.md`): such a task often has no date and is in neither of the others |
+| New | `.module-new`, filled in the accent | with users, how many tasks have news for you (`updatesFor`: given to you, commented on, a mention, closed or reopened …; News on your tasks in `docs/spec/tasks.md`), open or recently closed: such a task often has no date and is in neither of the others |
 
 `taskCounts()` counts My tasks (`mineFilter`), which is every task in a wiki without lists.
 
 #### How they show
 
 **They show one number and a dot** (CSS, `.module-link .module-focus`, `.module-new`): what is due, and a dot when there is news for you.
-How much is for today, and how many updates, are in the link's tooltip, like "Tasks: 5 in Today · 1 overdue · 1 due today", and the Today tab says its own.
+How much is for today, and how many updates, are in the link's tooltip, like "Tasks: 2 updates for you · 5 for today · 1 overdue · 1 due today" (`taskCountsTitle`), and the Today tab says its own.
 The other counts are still in the page, for the tooltip and the list switcher's pills, which keep their numbers.
 (Until 2026-11 the links showed up to three numbers without a word.)
 
@@ -388,7 +388,7 @@ A page that already linked to the note (its link now following) opens the moved 
 
 #### What the move does
 
-It is a rename underneath: links to the note follow (`updateReferences`), one commit `Promote <old> to <new>` (text the note held that wasn't committed yet is committed first, `Save <note>`, as before a rename), which the history calls "Moved from Quicknote".
+It is a rename underneath: links to the note follow (`updateReferences`), one commit `Promote <old> to <new>` (text the note held that wasn't committed yet is committed first, `Save <note>`, as before a rename), which the history calls "Moved from Notes".
 
 ### Append to page
 

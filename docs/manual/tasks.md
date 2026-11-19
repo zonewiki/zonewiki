@@ -48,7 +48,7 @@ A keep task can't repeat: both say what happens after done.
 - **c t** on any page opens a new task in your **Inbox**, starting today; you stay on the page.
   On a phone, the **Task** button in the bottom bar does the same.
 - **+ New** (or **n**) in a task list makes a task there: in that list, with its tags, and starting today when you are on the Today tab.
-- **Make task** in the editor's formatting bar turns lines of a page into tasks and puts references to them in their place, handy for action items in meeting notes ([Make task](../spec/rendering.md#make-task)).
+- **Make a task** in the editor's formatting bar turns lines of a page into tasks and puts references to them in their place, handy for action items in meeting notes ([Make task](../spec/rendering.md#make-task)).
 - Your assistant can make tasks too (see [AI assistants](assistants.md)).
 
 The dialog says under the title where the task goes, and with several users who will see it ("Adds to your Inbox: only you see it.").
@@ -262,7 +262,7 @@ You are told what happens on a task you are assigned, made, or follow: someone g
 
 - **On the card** a mark says what happened: **new**, **anna commented**, **ben closed it**.
   Opening the task takes the mark away.
-- **On the Tasks link** a filled number counts tasks with news, and My tasks' Today tab lists them first under **Updates**.
+- **On the Tasks link** a dot says there is news (pointing at it says how many tasks have some), and My tasks' Today tab lists them first under **Updates**.
   **Mark all read** in My tasks' ⋯ menu clears them all.
 - **Follow** in a shared task's ⋯ menu or dialog tells you its news without making it yours to do.
 - **Mentions**: `@name` in a comment or description tells that person, even on a task they have nothing else to do with.

@@ -36,7 +36,7 @@ At the top right of each page, on a computer:
 |--------|------|
 | The eye | Turns [Sharing mode](#sharing-mode) on and off |
 | **Search** | Opens the search, as `Ctrl+P` does (see [Search](search.md)) |
-| Your initial | With users: the user menu, with **Groups**, **Connect an assistant**, **Change password** and **Sign out** |
+| Your initial | With users: the user menu, with **Groups**, **Connect an assistant**, **Change password**, **Admin** (for admins) and **Sign out** |
 
 There are no "new" buttons here: a new note is `c n` and a new task `c t`.
 A new page comes from a link to it (see [Pages](pages.md)); the home page of a group and your private home also have a **New page** button.
@@ -64,9 +64,9 @@ The bar hides while you type, since the keyboard needs the room.
 The **Tasks** pill (and the Tasks tab on a phone) shows how your tasks stand, so you see it from any page:
 
 - **A number** is how many tasks are due today or overdue.
-- **A dot**, in a wiki with users, means someone gave you a task you haven't looked at yet.
+- **A dot**, in a wiki with users, means there is news on your tasks: one given to you, a comment, a mention ([News about your tasks](tasks.md#news-about-your-tasks)).
 
-Point at the pill to read the details, such as "Tasks: 5 in Today · 1 overdue · 1 due today".
+Point at the pill to read the details, such as "Tasks: 2 updates for you · 5 for today · 1 overdue · 1 due today".
 Nothing shows when there's nothing to say.
 
 The Tasks pill goes to **My tasks**: your own tasks, and the shared ones assigned to you.
@@ -239,8 +239,3 @@ In your phone's browser, open its menu and choose **Add to Home screen** (on an 
 
 On Android, Zone opens as an app of its own only when your wiki is reached over HTTPS;
 over plain `http://` the icon just opens a browser tab.
-
-## Deleted pages
-
-Deleted pages can be brought back.
-See [History and undo](history.md).

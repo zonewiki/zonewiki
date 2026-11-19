@@ -53,7 +53,7 @@ The full list is in [What is in .zone/](../spec/deployment.md#what-is-in-zone).
 
 When the wiki folder is new to it, Zone makes it a git repository and commits what is there.
 From then on every change made through Zone is a commit: clicking **Done** in the editor, a new page, a rename or move, a delete, an upload, a change to a task.
-With users, each commit is made in the name of whoever made the change, and an assistant's commits are marked `(MCP)`.
+With users, each commit is made in the name of whoever made the change, and an assistant's are marked as such: **assistant** or **through Claude** in Zone, a message ending in `(MCP)` in plain git.
 
 While you type, the editor saves your text every couple of seconds without committing it.
 **Done** (or Ctrl+S) makes the commit.
@@ -70,10 +70,7 @@ Zone reads the files from disk each time, so:
 - a new `.md` file is a new page, and shows in the page list and search;
 - a deleted file is gone from the wiki.
 
-Zone doesn't commit changes made outside it.
-Instead, a small clock badge with a number appears at the top of every page: the files changed since their last commit.
-Click it to open **Uncommitted Changes**, where each changed page has **Diff** (what changed) and **View**, and **Commit All** commits each file on its own.
-A page with uncommitted changes also says "— uncommitted" after **Last changed**, with a **Commit** link beside it.
+Zone doesn't commit changes made outside it: they show as [uncommitted changes](history.md#uncommitted-changes), which you commit from the badge at the top of every page.
 You can also commit yourself with `git` in the folder; Zone takes your commits as they are.
 
 > [!TIP]
@@ -139,8 +136,8 @@ See [Export and import](../spec/tasks.md#export-and-import) for the details.
 
 | Limit | Default | Set by |
 |-------|---------|--------|
-| One upload | 100 MB | `upload-max` in `.zone/config` (`25MB`) |
-| The whole wiki | No limit | `storage-max` in `.zone/config` (`5GB`) |
+| One upload | 100 MB | `upload-max` in `.zone/config`, such as `25MB` |
+| The whole wiki | No limit | `storage-max` in `.zone/config`, such as `5GB` |
 | A page, a task or an assistant's request | 16 MB | Fixed |
 
 `storage-max` counts every file in the folder but the history and `.zone/`.

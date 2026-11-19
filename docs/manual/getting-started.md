@@ -112,7 +112,7 @@ The most useful ones to start with:
 
 - [Pages](pages.md): links, folders, renaming, moving and deleting
 - [Writing](writing.md): the editor and Zone's Markdown
-- [Tasks](tasks.md): Today, Open and Plan, lists, dates and assigning
+- [Tasks](tasks.md): Today, Open and the Plan board, lists, dates and assigning
 - [Notes](notes.md): filing notes into the wiki
 - [Search](search.md): finding pages and tasks
 - [Getting around](navigation.md): the modules, shortcuts, phones, sharing and presenting

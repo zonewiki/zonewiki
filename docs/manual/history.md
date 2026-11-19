@@ -16,7 +16,7 @@ These all make a commit:
 - an undo
 
 With several users, each commit is made in the name of whoever made the change, and an assistant's in the name of the person it works for.
-In a wiki with a single login, commits carry no name.
+In a wiki without users, every commit is Zone's own and shows no person's name.
 
 Two things write a page without a commit: auto-save while you type, and ticking a checkbox on a page.
 Those are kept as [uncommitted changes](#uncommitted-changes) until the next commit of the page.
@@ -131,7 +131,7 @@ It comes from:
 - ticking a checkbox on a page;
 - editing the files directly on disk, with another editor or a script.
 
-When there are some, a badge with their number appears at the top left.
+When there are some, a badge with their number appears at the top right, next to **Search**.
 Click it for **Uncommitted Changes**, the list of those files, with **Diff** to see the change and **View** to open the page.
 **Commit All** commits each file on its own.
 A page with an uncommitted change also says "— uncommitted" after **Last changed**, with a **Commit** link.

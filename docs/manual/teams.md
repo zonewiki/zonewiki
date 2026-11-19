@@ -7,7 +7,7 @@ The second half is for admins: adding people, invite links, sign-up and a public
 ## One wiki, with or without users
 
 A wiki without users has one password for everyone, or no login at all.
-Everything in it is shared, and every change is saved in Zone's own name.
+Everything in it is shared, and every change is committed as Zone's own, with no person's name.
 
 A wiki with **users** gives each person their own user name and password.
 Their changes are committed in their name, so a page's history says who wrote what.
@@ -63,7 +63,7 @@ Link your private pages from it: a link to a page that doesn't exist yet opens t
 Other ways to make a private page:
 
 - Link to it by its path from any page you write, for example `[[private/anna/diary]]`.
-- On **New page** without JavaScript, choose **For** "Only you".
+- Click **New page** on your private home: it is set to make a page only you see (**For** "Only you", or the **Private** box if you're in no group).
 - File a note into your private folder ([Notes](notes.md)).
 
 On a private page, a link to a new page is marked 🌐 ("Creates a shared page"), because a page made from it would be shared.
@@ -292,18 +292,18 @@ Use `./run.sh user …` in the repository, or `zonewiki user …` without the co
 
 | Command | Does |
 |---------|------|
-| `./run.sh user add anna` | adds a user, asking for her password; the first user is an admin |
+| `./run.sh user add anna` | adds a user, asking for their password; the first user is an admin |
 | `./run.sh user add ben --role viewer` | adds a viewer (or `admin`, `editor`) |
 | `./run.sh user invite ben --role viewer` | prints an invite link |
 | `./run.sh user reset anna` | prints a reset link |
 | `./run.sh user passwd anna` | sets a new password |
 | `./run.sh user role ben editor` | changes a role |
-| `./run.sh user group ben +dev -design` | puts him in a group or takes him out |
-| `./run.sh user email ben ben@example.org` | sets his mail address (`--remove` takes it out) |
+| `./run.sh user group ben +dev -design` | puts them in a group or takes them out |
+| `./run.sh user email ben ben@example.org` | sets their mail address (`--remove` takes it out) |
 | `./run.sh group includes product +dev +design` | makes a group of groups |
 | `./run.sh group owners q3-plan +anna` | gives a group an owner |
-| `./run.sh user disable ben` | disables him (`user enable` undoes it) |
-| `./run.sh user remove ben` | removes him; his private files stay |
+| `./run.sh user disable ben` | disables them (`user enable` undoes it) |
+| `./run.sh user remove ben` | removes them; their private files stay |
 | `./run.sh user list` | lists users, roles and who is disabled |
 
 [Running Zone yourself](self-hosting.md) covers the settings file and the rest of the commands.
