@@ -388,6 +388,88 @@ func TestUserCommands(t *testing.T) {
 	}
 }
 
+// zonewiki user email sets, changes and takes out a user's address,
+// refusing what isn't one and one another user has, the file unchanged.
+func TestUserEmail(t *testing.T) {
+	wiki := t.TempDir()
+	env := map[string]string{"ZONE_DATA": wiki}
+	getenv := func(k string) string { return env[k] }
+	run := func(input string, args ...string) (int, string, string) {
+		t.Helper()
+		var out, errs bytes.Buffer
+		code := userMain(args, getenv, strings.NewReader(input), &out, &errs)
+		return code, out.String(), errs.String()
+	}
+	path := filepath.Join(wiki, ".zone", "config")
+	email := func(name string) string {
+		t.Helper()
+		f, err := readConfigFile(path)
+		if err != nil || f == nil || f.User(name) == nil {
+			t.Fatal(err)
+		}
+		return f.User(name).Values["email"].Value
+	}
+	for _, name := range []string{"alice", "bob"} {
+		if code, _, errs := run("password\npassword\n", "add", name); code != 0 {
+			t.Fatalf("add %s: %q", name, errs)
+		}
+	}
+	if code, out, _ := run("", "email", "bob"); code != 0 || !strings.Contains(out, "bob has no mail address") {
+		t.Errorf("alone, none: %d %q", code, out)
+	}
+	if code, out, errs := run("", "email", "bob", "bob@example.org"); code != 0 || email("bob") != "bob@example.org" ||
+		!strings.Contains(out, "bob's mail address is bob@example.org") {
+		t.Fatalf("set: %d %q %q", code, out, errs)
+	}
+	if code, out, _ := run("", "email", "bob"); code != 0 || out != "bob@example.org\n" {
+		t.Errorf("alone: %d %q", code, out)
+	}
+	if code, out, _ := run("", "list"); code != 0 || !strings.Contains(out, "bob@example.org") {
+		t.Errorf("list: %d %q", code, out)
+	}
+	if code, _, errs := run("", "email", "bob", "Bob@Example.net"); code != 0 || email("bob") != "Bob@Example.net" {
+		t.Errorf("change: %d %q", code, errs)
+	}
+	// His own address again is no clash.
+	if code, _, errs := run("", "email", "bob", "bob@example.net"); code != 0 || email("bob") != "bob@example.net" {
+		t.Errorf("own again: %d %q", code, errs)
+	}
+	before := readFile(t, path)
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"email", "alice", "BOB@example.net"}, "bob has the address BOB@example.net already"},
+		{[]string{"email", "alice", "not an address"}, "isn't a mail address"},
+		{[]string{"email", "alice", "Alice <alice@example.org>"}, "isn't a mail address"},
+		{[]string{"email", "alice", "alice@localhost"}, "isn't a mail address"},
+		{[]string{"email", "carol", "carol@example.org"}, "there is no user carol"},
+		{[]string{"email", "carol", "--remove"}, "there is no user carol"},
+		{[]string{"email"}, "Usage"},
+		{[]string{"email", "alice", "a@example.org", "--remove"}, "Usage"},
+		{[]string{"email", "alice", "a@example.org", "b@example.org"}, "Usage"},
+		{[]string{"passwd", "alice", "--remove"}, "Usage"},
+	} {
+		if code, _, errs := run("", c.args...); code == 0 || !strings.Contains(errs, c.want) {
+			t.Errorf("%v: %d %q", c.args, code, errs)
+		}
+	}
+	if readFile(t, path) != before {
+		t.Error("a refused command changed the file")
+	}
+	if code, out, _ := run("", "email", "bob", "--remove"); code != 0 || email("bob") != "" ||
+		!strings.Contains(out, "Took out bob's mail address") || strings.Contains(readFile(t, path), "email") {
+		t.Errorf("remove: %d %q", code, out)
+	}
+	if code, out, _ := run("", "email", "bob", "-remove"); code != 0 || !strings.Contains(out, "bob has no mail address") {
+		t.Errorf("remove, none: %d %q", code, out)
+	}
+	// Free again, the address can go to another.
+	if code, _, errs := run("", "email", "alice", "bob@example.net"); code != 0 || email("alice") != "bob@example.net" {
+		t.Errorf("after remove: %d %q", code, errs)
+	}
+}
+
 func TestUserRoles(t *testing.T) {
 	wiki := t.TempDir()
 	env := map[string]string{"ZONE_DATA": wiki}

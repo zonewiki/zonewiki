@@ -29,6 +29,8 @@ const userUsage = `Usage: zonewiki user COMMAND
   passwd NAME             set a user's password (asks for it)
   token NAME              give a user a new MCP token (the old one stops working)
   role NAME ROLE          change a user's role: admin, editor or viewer
+  email NAME ADDRESS      set a user's mail address, for task mails; --remove takes it out;
+                          alone: their address
   group NAME [+G] [-G]    put a user in a group (+dev) or take them out (-dev); alone: their groups
   disable NAME            stop a user signing in (their files stay); enable NAME undoes it
   invite NAME             a link for a new user to choose their password, for 7 days (shown once)
@@ -179,6 +181,8 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 		return c.setRole()
 	case "group":
 		return c.setGroups()
+	case "email":
+		return c.setEmail()
 	case "disable", "enable":
 		return c.setDisabled()
 	}
@@ -191,11 +195,13 @@ func userMain(args []string, getenv func(string) string, stdin io.Reader, stdout
 type userCommand struct {
 	cmd, name    string
 	role         string   // --role ROLE, or role's second argument
+	email        string   // email's second argument
 	groupArgs    []string // group NAME's +GROUP and -GROUP words
 	roleFlag     bool
 	tokenFlag    bool // --mcp-token (add)
 	passwordFlag bool // --password (remove)
 	openFlag     bool // --open (remove)
+	removeFlag   bool // --remove (email)
 	f            *settingsfile.File
 	stdin        io.Reader
 	stdout       io.Writer
@@ -226,6 +232,7 @@ func (c *userCommand) parse(cmd string, args []string) bool {
 		return found
 	}
 	c.tokenFlag, c.passwordFlag, c.openFlag = flag("--mcp-token"), flag("--password"), flag("--open")
+	c.removeFlag = flag("--remove")
 	if i := slices.IndexFunc(args, func(a string) bool { return a == "--role" || a == "-role" }); i >= 0 && i+1 < len(args) {
 		c.role, c.roleFlag = strings.ToLower(args[i+1]), true
 		args = slices.Delete(args, i, i+2)
@@ -236,16 +243,23 @@ func (c *userCommand) parse(cmd string, args []string) bool {
 		wantArgs = 0
 	case "role":
 		wantArgs = 2
+	case "email": // email NAME ADDRESS sets it; email NAME alone, or with --remove
+		if len(args) == 2 && !c.removeFlag {
+			wantArgs = 2
+		}
 	}
-	if !slices.Contains([]string{"add", "passwd", "token", "role", "group", "disable", "enable", "invite", "reset",
-		"remove", "list"}, cmd) ||
-		len(args) != wantArgs || c.tokenFlag && cmd != "add" || c.roleFlag && cmd != "add" && cmd != "invite" ||
+	if !slices.Contains([]string{"add", "passwd", "token", "role", "email", "group", "disable", "enable", "invite",
+		"reset", "remove", "list"}, cmd) ||
+		len(args) != wantArgs || c.removeFlag && cmd != "email" || c.tokenFlag && cmd != "add" || c.roleFlag && cmd != "add" && cmd != "invite" ||
 		(c.passwordFlag || c.openFlag) && cmd != "remove" || c.passwordFlag && c.openFlag ||
 		slices.ContainsFunc(args, func(a string) bool { return strings.HasPrefix(a, "-") }) {
 		return false
 	}
 	if cmd == "role" {
 		c.role, c.roleFlag = strings.ToLower(args[1]), true
+	}
+	if cmd == "email" && len(args) == 2 {
+		c.email = strings.TrimSpace(args[1])
 	}
 	if cmd != "list" {
 		c.name = strings.ToLower(strings.TrimSpace(args[0]))
@@ -394,6 +408,46 @@ func (c *userCommand) setRole() int {
 		return 1
 	}
 	fmt.Fprintf(c.stdout, "%s is %s now.\n", c.name, withArticle(c.role))
+	return 0
+}
+
+// setEmail: email NAME ADDRESS sets a user's address (refused when it
+// isn't one, or another user has it: an address is one person's, as
+// sign-up holds it); --remove takes it out; alone it says the address.
+func (c *userCommand) setEmail() int {
+	current := c.f.User(c.name).Values["email"].Value
+	switch {
+	case c.removeFlag:
+		if current == "" {
+			fmt.Fprintf(c.stdout, "%s has no mail address.\n", c.name)
+			return 0
+		}
+		c.f.Unset(c.name, "email")
+		if !c.save() {
+			return 1
+		}
+		fmt.Fprintf(c.stdout, "Took out %s's mail address: no task mails for them.\n", c.name)
+		return 0
+	case c.email == "":
+		if current == "" {
+			fmt.Fprintf(c.stdout, "%s has no mail address. Set one with: zonewiki user email %s ADDRESS\n", c.name, c.name)
+		} else {
+			fmt.Fprintln(c.stdout, current)
+		}
+		return 0
+	case !validEmail(c.email):
+		return c.fail("%q isn't a mail address (name@example.org).", c.email)
+	}
+	for _, u := range c.f.Users {
+		if u.Name != c.name && strings.EqualFold(u.Values["email"].Value, c.email) {
+			return c.fail("%s has the address %s already: an address is one user's.", u.Name, c.email)
+		}
+	}
+	c.f.Set(c.name, "email", c.email)
+	if !c.save() {
+		return 1
+	}
+	fmt.Fprintf(c.stdout, "%s's mail address is %s now.\n", c.name, c.email)
 	return 0
 }
 

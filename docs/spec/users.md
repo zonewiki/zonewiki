@@ -91,9 +91,12 @@ A user's section, `[user NAME]` (the name: lowercase letters, digits and inner h
 | `groups` | The groups they are in (Groups, below; `zonewiki user group`, the Users tab, Groups) | group names, by commas or spaces, a leading `@` allowed | none |
 | `disabled` | They can't sign in, their token is refused (`zonewiki user disable`, the Users tab) | `yes`/`no`, `true`/`false`, `1`/`0` | no |
 | `pending` | A sign-up waiting for an admin's approval: disabled until approved (Sign-up, below) | as `disabled` | no |
-| `email` | Their mail address: for task mails (Assigning tasks, below) and to tell sign-ups apart | a bare address (`name@example.org`, `validEmail`) | none: no mail |
+| `email` | Their mail address: for task mails (Assigning tasks, below) and to tell sign-ups apart (`zonewiki user email`, sign-up) | a bare address (`name@example.org`, `validEmail`) | none: no mail |
 
-**Setting a user's address**: sign-up writes `email` (Sign-up, below); there is no command or field for it yet, so for anyone else an admin with access to the host adds the line to the user's section by hand (`email = bob@example.org` under `[user bob]`), and Zone takes it within a second, or refuses the file, naming the line, when it isn't an address.
+**Setting a user's address**: sign-up writes `email` (Sign-up, below); for anyone else an admin with access to the host sets it with `zonewiki user email bob bob@example.org` (`./run.sh user email …`; there is no field for it in the browser yet).
+The command refuses what isn't a bare address and an address another user has already (case aside, as sign-up tells accounts apart by it), leaving the file as it was;
+`zonewiki user email bob --remove` takes the address out, and `zonewiki user email bob` alone says it.
+A hand edit works too (`email = bob@example.org` under `[user bob]`): Zone takes it within a second, or refuses the file, naming the line, when it isn't an address.
 Without it the user gets no mail about tasks, whatever they tick in My tasks' settings (Assigning tasks, below).
 
 ### A group's keys
@@ -199,6 +202,7 @@ The file can be edited by hand, or with the commands; a running Zone takes each 
 ./run.sh user token bob                # a new token; the old one stops working at once
 ./run.sh user add carol --role viewer   # admin, editor (the default) or viewer; the first user is an admin
 ./run.sh user role carol editor        # change a role
+./run.sh user email carol carol@example.org  # her address, for task mails; --remove takes it out, alone: says it
 ./run.sh user group carol +dev -hiring # put her in the group dev, take her out of hiring; alone: her groups
 ./run.sh group includes product +dev +design  # a group made of groups: who is in dev or design is in product; -dev takes one out
 ./run.sh group owners apollo +anna -bo  # who says who is in the group, in the browser (Groups); alone: its owners

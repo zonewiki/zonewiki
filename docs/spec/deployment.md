@@ -187,7 +187,7 @@ edited by hand or with `./run.sh user …`/`./run.sh group …`/`./run.sh config
 - `leaks`: extra args go to `gitleaks git`; a leak exits with 3.
 - `screenshots`: `docs/screenshots/*.png`, compressed with pngquant (the README shows phone.png at 640px).
 - `eval`: see Measuring retrieval in `docs/spec/search.md`; with semantic search as `ZONE_SEMANTIC_SEARCH` says.
-- `user`: `user add|passwd|token|role|group|disable|enable|invite|reset|remove NAME`, `user list`, in a one-off container (compose run; see `docs/spec/users.md`).
+- `user`: `user add|passwd|token|role|email|group|disable|enable|invite|reset|remove NAME`, `user list`, in a one-off container (compose run; see `docs/spec/users.md`).
 - `group`: `group includes NAME [+G] [-G]`, `group owners NAME [+U] [-U]`, `group list`.
 - `config`: `config check|set|unset|passwd|token`: check it, set a key, the password and MCP token without users.
 
