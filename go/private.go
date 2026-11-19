@@ -274,20 +274,20 @@ func sharedNewOffer(user asker, slug, from string) (target, group string) {
 // groups), group 2 the user or group, group 3 the file.
 var ownUploadRE = regexp.MustCompile(`/(` + keptDirs + `)/([a-z0-9-]+)/_assets/([^\s)"'<>/]+)`)
 
-// shareUploads: oldSlug moved to newSlug (newPath), to more people (a page
-// out of a user's private folder, or out of a group's). It takes the
-// uploads it shows with it, since the others can't open them: each file
-// kept where the page was is copied to where it is now (_assets/, or the
-// group's; the other pages there keep theirs) and the page points at the
-// copy. A name taken by a different file there gets a number. Returns the
-// files written, for the move's commit.
+// shareUploads: oldSlug moved to newSlug (newPath) out of a user's private
+// folder or a group's, to another place. It takes the uploads it shows with
+// it, since those who see it there may not open them where they were: each
+// file kept where the page was is copied to where it is now (_assets/, a
+// group's or a user's; the other pages there keep theirs) and the page
+// points at the copy. A file goes only where the page goes, never to more
+// people: a page taken back into a private folder or into a group's (a move
+// to fewer, by an admin or whoever shared it) takes its files there too.
+// A name taken by a different file there gets a number. Returns the files
+// written, for the move's commit.
 func shareUploads(oldSlug, newSlug, newPath string) []string {
 	from, to := placeOf(oldSlug), placeOf(newSlug)
-	if from.folder() == "" || to == from {
-		return nil
-	}
-	if to.kind == ofNoOne || to.kind == ofUser {
-		to = place{} // not a move Zone makes; were it one, the files stay where everyone finds them
+	if from.folder() == "" || to == from || to.kind == ofNoOne {
+		return nil // a place no one sees: the files stay where they are, seen by no more people than before
 	}
 	text, err := readText(newPath)
 	if err != nil {

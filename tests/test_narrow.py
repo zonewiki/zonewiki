@@ -168,6 +168,27 @@ def test_an_admins_assistant_is_asked_too(client, wiki):
     assert "Renamed page" in out and (wiki / "plans.md").exists()
 
 
+def test_a_page_moved_to_fewer_people_takes_its_files_there_not_to_everyone(client, wiki):
+    """A group's page taken into a private folder (or into another group's)
+    copies the files it shows to that folder's _assets/, never to the
+    shared one, where every user (and a visitor) could open them."""
+    (wiki / "groups/dev/_assets").mkdir(parents=True)
+    (wiki / "groups/dev/_assets/photo.png").write_bytes(b"dev's photo")
+    (wiki / "groups/dev/plans.md").write_text("# Plans\n\n![photo](/groups/dev/_assets/photo.png)\n")
+    git(wiki, "add", "-A")
+    git(wiki, "commit", "-qm", "dev's plans")
+    sign_in(client, "dana")
+    assert rename(client, "groups/dev/plans", "private/dana/plans", confirmed="private/dana/plans").headers["Location"] == "/page/private/dana/plans"
+    assert not (wiki / "_assets/photo.png").exists()
+    assert (wiki / "private/dana/_assets/photo.png").read_bytes() == b"dev's photo"
+    assert "/private/dana/_assets/photo.png" in (wiki / "private/dana/plans.md").read_text()
+    assert client.get("/private/dana/_assets/photo.png", headers=HOST).data == b"dev's photo"
+    assert "private/dana/_assets/photo.png" in git(wiki, "show", "--name-only", "--format=", "HEAD")    # in the move's commit
+    sign_in(client, "bob")
+    assert client.get("/_assets/photo.png", headers=HOST).status_code == 404
+    assert client.get("/private/dana/_assets/photo.png", headers=HOST).status_code == 404
+
+
 def test_a_rename_within_a_place_asks_nothing(client, wiki):
     sign_in(client, "alice")
     assert rename(client, "plans", "plans-2026").headers["Location"] == "/page/plans-2026"
