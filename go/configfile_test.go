@@ -293,18 +293,18 @@ func TestUserCommands(t *testing.T) {
 	if code, out, _ := run("", "list"); code != 0 || !strings.Contains(out, "No users") {
 		t.Errorf("list, none: %d %q", code, out)
 	}
-	code, out, errs := run("s3cret\ns3cret\n", "add", "alice")
+	code, out, errs := run("s3cret-pw\ns3cret-pw\n", "add", "alice")
 	if code != 0 || !strings.Contains(out, "Added alice") || strings.Contains(out, "token") {
 		t.Fatalf("add: %d %q %q", code, out, errs)
 	}
 	f := read()
-	if !strings.HasPrefix(f.Lines[0], "# ") || f.Lines[1] != "" || f.Lines[2] != "[user alice]" || !checkPassword("s3cret", f.User("alice").Values["password"].Value) {
+	if !strings.HasPrefix(f.Lines[0], "# ") || f.Lines[1] != "" || f.Lines[2] != "[user alice]" || !checkPassword("s3cret-pw", f.User("alice").Values["password"].Value) {
 		t.Fatalf("%q", f.Text())
 	}
 	if st, _ := os.Stat(filepath.Join(wiki, ".zone", "config")); st.Mode().Perm() != 0o600 {
 		t.Errorf("mode %o", st.Mode().Perm())
 	}
-	code, out, _ = run("pw\npw\n", "add", "bob", "--mcp-token")
+	code, out, _ = run("password\npassword\n", "add", "bob", "--mcp-token")
 	token := f.User("bob")
 	f = read()
 	if token = f.User("bob"); code != 0 || token == nil ||
@@ -316,8 +316,8 @@ func TestUserCommands(t *testing.T) {
 		read().User("bob").Values["mcp-token"].Value != hashToken(lastWord(out)) {
 		t.Errorf("token: %d %q", code, out)
 	}
-	if code, _, _ = run("new\nnew\n", "passwd", "alice"); code != 0 ||
-		!checkPassword("new", read().User("alice").Values["password"].Value) {
+	if code, _, _ = run("new-password\nnew-password\n", "passwd", "alice"); code != 0 ||
+		!checkPassword("new-password", read().User("alice").Values["password"].Value) {
 		t.Error("passwd")
 	}
 	if code, out, _ = run("", "list"); code != 0 || out != "  alice (admin)\n  bob (MCP token)\n" {
@@ -334,11 +334,11 @@ func TestUserCommands(t *testing.T) {
 		args  []string
 		want  string
 	}{
-		{"pw\npw\n", []string{"add", "alice"}, "alice is a user already"},
+		{"password\npassword\n", []string{"add", "alice"}, "alice is a user already"},
 		{"", []string{"passwd", "carol"}, "there is no user carol"},
 		{"", []string{"remove", "carol"}, "there is no user carol"},
 		{"", []string{"add", "Bad/Name"}, "isn't a user name"},
-		{"pw\nwp\n", []string{"add", "carol"}, "The passwords differ"},
+		{"password\nwordpass\n", []string{"add", "carol"}, "The passwords differ"},
 		{"", []string{"add"}, "Usage"},
 		{"", []string{"passwd", "alice", "--mcp-token"}, "Usage"},
 		{"", []string{"frobnicate", "x"}, "Usage"},
@@ -350,7 +350,7 @@ func TestUserCommands(t *testing.T) {
 	// A change Zone wouldn't start with is refused, the file left as it was.
 	path := filepath.Join(wiki, ".zone", "config")
 	_ = settingsfile.Write(path, before+"[user dave]\n")
-	if code, _, errs := run("pw\npw\n", "add", "carol"); code == 0 || !strings.Contains(errs, "not changed") {
+	if code, _, errs := run("password\npassword\n", "add", "carol"); code == 0 || !strings.Contains(errs, "not changed") {
 		t.Errorf("with a broken section: %d %q", code, errs)
 	}
 	if got := readFile(t, path); got != before+"[user dave]\n" {
@@ -362,8 +362,8 @@ func TestUserCommands(t *testing.T) {
 		read().User("alice") == nil {
 		t.Errorf("remove the last: %d %q", code, errs)
 	}
-	if code, out, _ := run("wiki\nwiki\n", "remove", "alice", "--password"); code != 0 ||
-		len(read().Users) != 0 || !checkPassword("wiki", read().Top["password"].Value) ||
+	if code, out, _ := run("wiki-password\nwiki-password\n", "remove", "alice", "--password"); code != 0 ||
+		len(read().Users) != 0 || !checkPassword("wiki-password", read().Top["password"].Value) ||
 		!strings.Contains(out, "password signs in") {
 		t.Errorf("remove the last, with a password: %d %q", code, out)
 	}
@@ -371,7 +371,7 @@ func TestUserCommands(t *testing.T) {
 	f = read()
 	f.Set("", "mcp-token", hashToken("t"))
 	_ = settingsfile.Write(path, f.Text())
-	if code, out, _ := run("pw\npw\n", "add", "carol"); code != 0 || read().Top["password"].Line != 0 ||
+	if code, out, _ := run("password\npassword\n", "add", "carol"); code != 0 || read().Top["password"].Line != 0 ||
 		read().Top["mcp-token"].Line != 0 || read().User("carol") == nil ||
 		!strings.Contains(out, "password no longer works") || !strings.Contains(out, "MCP token no longer works") {
 		t.Errorf("first user over the wiki's password: %d %q", code, out)
@@ -404,18 +404,18 @@ func TestUserRoles(t *testing.T) {
 		return settingsOf(readFile(t, path)).Users
 	}
 	// The first user is an admin; the others editors unless told.
-	if code, out, _ := run("pw\npw\n", "add", "alice"); code != 0 || !strings.Contains(out, "as an admin") ||
+	if code, out, _ := run("password\npassword\n", "add", "alice"); code != 0 || !strings.Contains(out, "as an admin") ||
 		users()["alice"].Role != roleAdmin || !strings.Contains(readFile(t, path), "role = admin") {
 		t.Fatalf("first: %d %q", code, out)
 	}
-	if code, _, _ := run("pw\npw\n", "add", "bob"); code != 0 || users()["bob"].Role != roleEditor ||
+	if code, _, _ := run("password\npassword\n", "add", "bob"); code != 0 || users()["bob"].Role != roleEditor ||
 		strings.Count(readFile(t, path), "role =") != 1 {
 		t.Fatalf("second: %d", code)
 	}
-	if code, _, errs := run("pw\npw\n", "add", "carol", "--role", "viewer"); code != 0 || users()["carol"].Role != roleViewer {
+	if code, _, errs := run("password\npassword\n", "add", "carol", "--role", "viewer"); code != 0 || users()["carol"].Role != roleViewer {
 		t.Fatalf("--role: %d %q", code, errs)
 	}
-	if code, _, errs := run("pw\npw\n", "add", "dave", "--role", "boss"); code == 0 || !strings.Contains(errs, "isn't a role") {
+	if code, _, errs := run("password\npassword\n", "add", "dave", "--role", "boss"); code == 0 || !strings.Contains(errs, "isn't a role") {
 		t.Errorf("a bad role: %d %q", code, errs)
 	}
 	// role: editor is the default, so its line goes.
@@ -607,9 +607,9 @@ func TestGroupCommand(t *testing.T) {
 	if code, out, _ := run("list"); code != 0 || !strings.Contains(out, "No groups") {
 		t.Errorf("list without groups: %d %q", code, out)
 	}
-	user("pw\npw\n", "add", "alice")
-	user("pw\npw\n", "add", "bob")
-	user("pw\npw\n", "add", "carol")
+	user("password\npassword\n", "add", "alice")
+	user("password\npassword\n", "add", "bob")
+	user("password\npassword\n", "add", "carol")
 	user("", "group", "alice", "+dev")
 	user("", "group", "bob", "+design")
 	if code, out, errs := run("includes", "Product", "+dev", "+@design"); code != 0 || out != "product includes design, dev: alice, bob.\n" ||
@@ -689,7 +689,7 @@ func TestUserLinks(t *testing.T) {
 	if code, _, errs := run("", "invite", "dave"); code == 0 || !strings.Contains(errs, "no users") {
 		t.Errorf("invite without users: %d %q", code, errs)
 	}
-	run("pw\npw\n", "add", "alice")
+	run("password\npassword\n", "add", "alice")
 	code, out, errs := run("", "invite", "dave", "--role", "viewer")
 	if code != 0 || !strings.Contains(out, "as a viewer") || !strings.Contains(out, "/welcome/") ||
 		!strings.Contains(out, "base-url") {
@@ -705,7 +705,7 @@ func TestUserLinks(t *testing.T) {
 		t.Errorf("mode %o", st.Mode().Perm())
 	}
 	// The name is taken while the invite is open.
-	if code, _, errs := run("pw\npw\n", "add", "dave"); code == 0 || !strings.Contains(errs, "open invite") {
+	if code, _, errs := run("password\npassword\n", "add", "dave"); code == 0 || !strings.Contains(errs, "open invite") {
 		t.Errorf("add over an invite: %d %q", code, errs)
 	}
 	for _, c := range []struct {
@@ -733,7 +733,7 @@ func TestUserLinks(t *testing.T) {
 	}
 	// A removed user's open link goes with them: whoever is added by that
 	// name later doesn't get in by it.
-	if code, _, errs := run("pw\npw\n", "add", "bob"); code != 0 {
+	if code, _, errs := run("password\npassword\n", "add", "bob"); code != 0 {
 		t.Fatalf("add bob: %q", errs)
 	}
 	if code, _, errs := run("", "reset", "bob"); code != 0 {
@@ -811,18 +811,18 @@ func TestConfigCommands(t *testing.T) {
 		!strings.Contains(out, "noshare            #noshare  [default]") || strings.Contains(out, "sha256") {
 		t.Errorf("check:\n%s", out)
 	}
-	if code, _, errs := run("pw\npw\n", "passwd"); code == 0 || !strings.Contains(errs, "zonewiki user passwd NAME") {
+	if code, _, errs := run("password\npassword\n", "passwd"); code == 0 || !strings.Contains(errs, "zonewiki user passwd NAME") {
 		t.Errorf("passwd with users: %q", errs)
 	}
 	// Without users: the wiki's password and token.
 	wiki2 := t.TempDir()
 	env = map[string]string{"ZONE_DATA": wiki2}
-	if code, out, errs := run("new\nnew\n", "passwd"); code != 0 || !strings.Contains(out, "Changed the wiki's password") {
+	if code, out, errs := run("new-password\nnew-password\n", "passwd"); code != 0 || !strings.Contains(out, "Changed the wiki's password") {
 		t.Fatal(errs)
 	}
 	code, out, _ = run("", "token")
 	f, _ := readConfigFile(filepath.Join(wiki2, ".zone", "config"))
-	if code != 0 || !checkPassword("new", f.Top["password"].Value) || f.Top["mcp-token"].Value != hashToken(lastWord(out)) {
+	if code != 0 || !checkPassword("new-password", f.Top["password"].Value) || f.Top["mcp-token"].Value != hashToken(lastWord(out)) {
 		t.Errorf("passwd, token: %q %s", out, f.Text())
 	}
 	if code, _, errs := run("", "set", "hosts", "nas.local,", "wiki.example.org"); code != 0 {
@@ -1018,5 +1018,55 @@ func TestGroupOwners(t *testing.T) {
 	if !slices.Equal(now.Users["bob"].Groups, []string{"dev", "zeus"}) || !slices.Equal(now.Includes["all"], []string{"zeus"}) ||
 		!slices.Equal(now.Owners["zeus"], []string{"alice", "carol", "dan", "gone"}) || slices.Contains(now.groups(), "apollo") {
 		t.Errorf("after the rename:\n%s", f.Text())
+	}
+}
+
+// TestCommandsAskForEightCharacters: a password set from the command line
+// (user add, user passwd, user remove --password, config passwd) has at least
+// passwordMin characters, as on the pages that set one; characters, not bytes.
+func TestCommandsAskForEightCharacters(t *testing.T) {
+	wiki := t.TempDir()
+	getenv := func(k string) string {
+		if k == "ZONE_DATA" {
+			return wiki
+		}
+		return ""
+	}
+	user := func(input string, args ...string) (int, string) {
+		var out, errs bytes.Buffer
+		return userMain(args, getenv, strings.NewReader(input), &out, &errs), errs.String()
+	}
+	config := func(input string, args ...string) (int, string) {
+		var out, errs bytes.Buffer
+		return configMain(args, getenv, strings.NewReader(input), &out, &errs), errs.String()
+	}
+	const short = "Choose a password of at least 8 characters."
+	if code, errs := config("seven-c\nseven-c\n", "passwd"); code == 0 || !strings.Contains(errs, short) {
+		t.Errorf("config passwd, 7 characters: %d %q", code, errs)
+	}
+	if f, _ := readConfigFile(filepath.Join(wiki, ".zone", "config")); f != nil && f.Top["password"].Value != "" {
+		t.Errorf("a short password was set: %q", f.Text())
+	}
+	if code, errs := config("äöüäöüäö\näöüäöüäö\n", "passwd"); code != 0 { // 8 characters, 16 bytes
+		t.Errorf("config passwd, 8 characters: %d %q", code, errs)
+	}
+	if code, errs := user("seven-c\nseven-c\n", "add", "alice"); code == 0 || !strings.Contains(errs, short) {
+		t.Errorf("user add, 7 characters: %d %q", code, errs)
+	}
+	if code, errs := user("eight-ch\neight-ch\n", "add", "alice"); code != 0 {
+		t.Fatalf("user add, 8 characters: %d %q", code, errs)
+	}
+	if code, errs := user("seven-c\nseven-c\n", "passwd", "alice"); code == 0 || !strings.Contains(errs, short) {
+		t.Errorf("user passwd, 7 characters: %d %q", code, errs)
+	}
+	f, _ := readConfigFile(filepath.Join(wiki, ".zone", "config"))
+	if f == nil || !checkPassword("eight-ch", f.User("alice").Values["password"].Value) {
+		t.Error("alice's password changed")
+	}
+	if code, errs := user("seven-c\nseven-c\n", "remove", "alice", "--password"); code == 0 || !strings.Contains(errs, short) {
+		t.Errorf("user remove --password, 7 characters: %d %q", code, errs)
+	}
+	if f, _ := readConfigFile(filepath.Join(wiki, ".zone", "config")); f == nil || f.User("alice") == nil {
+		t.Error("alice was removed")
 	}
 }

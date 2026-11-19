@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // User: one of the users, with the hash of their password and their MCP
@@ -357,7 +358,8 @@ func authenticate(name, password string) *User {
 }
 
 // askPassword asks for a new password twice; false (and why, on stderr) if
-// none was given or the two differ.
+// none was given, it is shorter than passwordMin (as on the pages that set
+// one) or the two differ.
 func askPassword(stdin io.Reader, stderr io.Writer) (string, bool) {
 	in := bufio.NewReader(stdin)
 	read := func(prompt string) (string, bool) {
@@ -372,6 +374,10 @@ func askPassword(stdin io.Reader, stderr io.Writer) (string, bool) {
 	password, ok := read("Password: ")
 	if !ok || password == "" {
 		fmt.Fprintln(stderr, "No password given.")
+		return "", false
+	}
+	if utf8.RuneCountInString(password) < passwordMin {
+		fmt.Fprintf(stderr, "Choose a password of at least %d characters.\n", passwordMin)
 		return "", false
 	}
 	if again, ok := read("Again: "); !ok || again != password {

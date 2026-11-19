@@ -113,7 +113,7 @@ Zone is its own authorization server, on the same address, as the MCP authorizat
 - **What ends a connection**: End on Connect an assistant; its refresh token expiring or being used twice; its user being removed (the Users tab, `zonewiki user remove`); its user setting a new password by a **reset link** (they may have lost the account to someone; the welcome page says so).
   A disabled user's are refused while they are disabled, and work again after.
   An ordinary new password (Change password, `zonewiki user passwd`) leaves them, as it leaves a static token.
-- **Not yet**: Client ID Metadata Documents, CORS for clients that run in a browser, a read-only connection for an editor, `/oauth/revoke` (a client's "disconnect" doesn't end the connection in Zone: End does). Tested against real clients so far: Claude.
+- **Not yet**: Client ID Metadata Documents, CORS for clients that run in a browser, `/oauth/revoke` (a client's "disconnect" doesn't end the connection in Zone: End does). Tested against real clients so far: Claude.
 - Tests: `tests/test_oauth.py` plays the client over HTTP; `tests/e2e/test_oauth.py` holds that Allow and Deny get the browser back to the client under the page policy.
 
 **The wiki's guide**: the page `wiki-guide` (`guideSlug`) holds the user's conventions for keeping the wiki: where things go, tags, page layouts, what stays private.
@@ -269,7 +269,9 @@ With users (`docs/spec/users.md`) each user has their own token instead (`mcp-to
 and the tools act as the token's user: their writes are committed in that user's name,
 `history` names authors,
 and another user's private pages don't exist for them (Private pages and MCP in `docs/spec/users.md`).
-Without a token set, `/mcp` is off: every request gets 403 with a hint to set one, with or without a password.
+Without a token set and without a login, `/mcp` is off: every request gets 403 with a hint to set one.
+With a login (users or a password) OAuth is on, and a request without a token is a 401 that says where to sign in (`/mcp` says where to sign in, above);
+there the 403 is only for a wiki with `mcp-oauth = no` and no token.
 The tools write, so an open `/mcp` would let anything that reaches the port change the wiki; a token is never optional.
 A wrong or missing bearer gets 401 (`WWW-Authenticate: Bearer`); wrong tokens are throttled per client like wrong passwords (`mcpThrottle`, its own count: after 5, 429 with `Retry-After`, waits doubling from 1 minute to an hour; see `docs/spec/security.md`).
 The Host and cross-site Origin checks apply as everywhere.

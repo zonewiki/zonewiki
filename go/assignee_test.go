@@ -41,18 +41,18 @@ func TestReservedUserNames(t *testing.T) {
 		code := userMain(args, getenv, strings.NewReader(input), &out, &errs)
 		return code, errs.String()
 	}
-	if code, errs := run("pw\npw\n", "add", "alice"); code != 0 {
+	if code, errs := run("password\npassword\n", "add", "alice"); code != 0 {
 		t.Fatalf("add alice: %d %q", code, errs)
 	}
 	for _, name := range []string{"me", "none"} {
-		if code, errs := run("pw\npw\n", "add", name); code == 0 || !strings.Contains(errs, "can't be a user name") {
+		if code, errs := run("password\npassword\n", "add", name); code == 0 || !strings.Contains(errs, "can't be a user name") {
 			t.Errorf("add %s: %d %q", name, code, errs)
 		}
 		if code, errs := run("", "invite", name); code == 0 || !strings.Contains(errs, "can't be a user name") {
 			t.Errorf("invite %s: %d %q", name, code, errs)
 		}
 	}
-	if code, errs := run("pw\npw\n", "add", "men"); code != 0 {
+	if code, errs := run("password\npassword\n", "add", "men"); code != 0 {
 		t.Errorf("add men: %d %q", code, errs)
 	}
 	// Nor does a settings file written by hand have one: it is refused, naming the line.
@@ -80,7 +80,7 @@ func TestUserCommandsNameTheTasksToHandOn(t *testing.T) {
 		return code, out.String() + errs.String()
 	}
 	for _, name := range []string{"alice", "bob", "carol"} {
-		if code, out := run("pw\npw\n", "add", name); code != 0 {
+		if code, out := run("password\npassword\n", "add", name); code != 0 {
 			t.Fatalf("add %s: %d %q", name, code, out)
 		}
 	}

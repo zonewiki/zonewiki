@@ -22,7 +22,7 @@ Three rules; the rest of this file is how they are kept.
    The screen says who will see it, and asks.
    The other way takes something from people who have it, so it is not everyone's move: a page goes to fewer people by an admin, or by whoever shared it while nobody else has changed it (the mistake of a minute ago); a task into a list fewer people see by who made it, or an admin; a list is narrowed by its owners, or an admin.
    The screen names who will no longer see it, and asks (Who may move a page to other readers, below).
-   Never the other way: others have seen a shared page or task, link to it and have comments on it, so Zone refuses to take one into a private folder or tasks, or a group's page from its group (the error says so).
+   One move stays refused to everyone: a shared task never goes into a private list or an Inbox (others have seen it and have comments on it; the error says so), and a page goes to fewer people only by the move above.
    Making a page shared takes the uploads it shows with it.
    Nothing else moves anything.
 
@@ -171,6 +171,7 @@ The file can be edited by hand, or with the commands; a running Zone takes each 
 - Without the container it is `zonewiki user …`, `zonewiki group …`, `zonewiki config …` with `ZONE_DATA` set (`go/commands.go`: `userMain`, `groupMain`, `configMain`); on a NAS, through the container: `docker compose -f compose.nas.yaml run --rm zonewiki /app/zonewiki user add alice`.
   `run.sh` runs the binary in a one-off container of the app's image (`compose build -q zonewiki`, its output only on failure, then `compose run --rm --no-deps zonewiki /app/zonewiki …`), with `.env` and the wiki mounted as `up` has them, so the file is written as Zone's user;
   the password prompt's echo is off (`echoOff`, the container has a terminal; `-T` when stdin isn't one).
+- **A password from a command has at least 8 characters** (`askPassword`, `passwordMin`), as on the pages that set one: `user add`, `user passwd`, `user remove … --password` and `config passwd` ask for it twice and refuse a shorter one ("Choose a password of at least 8 characters."), changing nothing.
 - They refuse a change Zone wouldn't start with ("not changed: …", the file as it was): a user who is there already (add) or isn't (the others),
   a value that doesn't check (or isn't one line),
   `config passwd`/`token` with users (each has their own),
@@ -353,7 +354,7 @@ They have no private folder in use (no Private, no Notes, `/private` is a 404); 
   Every task write passes `mayWriteTasks` (the store's `MayWrite`, asked in `WriteOpenLocked` and `WriteBothLocked` of `go/internal/taskfiles`), which refuses a viewer the same way (as JSON, so the task app shows it): no route or tool can change a task for them, whatever it does.
   Uploads and tag renames (`renameTagOp`) are refused too.
 - **The gate** (`viewerGate` in `go/server.go`): a viewer's POST, PUT, PATCH or DELETE to a route not listed in `viewerWrites` is refused (403) before the route runs, whatever it names (another user's folder answers as anywhere else).
-  Listed are only those that change nothing (sign in and out, the previews) and `/mcp`.
+  Listed are only those that change nothing of the wiki: sign in and out, the welcome link, the previews, `/mcp` (which refuses a viewer's writing tools itself), and what is the viewer's own: their password (`/password`), their MCP token (`/assistant/token`, `/assistant/revoke`) and their assistants' connections (OAuth's `/oauth/authorize`, `/oauth/token`, `/oauth/register`; End and Make read-only on Connect an assistant), whose writing tools are refused all the same.
   A new write route is so closed to viewers until it is listed.
 - **MCP**: a viewer's token works for reading: `tools/list` leaves out the tools that write (`writeTool`: those that write pages or tasks in `mcpToolTable`), and calling one answers with the message (`callMCPTool`).
 - **The interface**: no Edit, ✎s, Rename or Delete on a page, checkboxes that don't tick (`pageView.ReadOnly`, `.read-only`);
@@ -401,7 +402,7 @@ It has section tabs (`adminTabs`), of which **Users** (`/admin/users`, `users.ht
 - **The list**: each user's name, "(you)", "MCP" if they have a token, their role, and Active or Disabled.
   Then the invite form, the open links (Invite and reset links, below) and what the roles mean.
 - **Per user**: change their role (a select and Save),
-  set their **groups** (pills of the groups there are, as on Groups, `js/namepick.js`; **Save**; none takes them out of every group; `POST /admin/users/{name}/groups`, `userGroupsRoute`, the field `groups` as the file writes them, `dev, hiring`; a name that is no group there is, or a folder in `groups/` no one sees, is refused and nothing changes: a new group is made on Groups),
+  set their **groups** (pills of the groups there are, as on Groups, `js/namepick.js`; **Save**; none takes them out of every group; `POST /admin/users/{name}/groups`, `userGroupsRoute`, the field `groups` as the file writes them, `dev, hiring`; the groups there are and the folders in `groups/` no one sees, which gives such a folder its people again (`groupChoices`); any other name is refused and nothing changes: a new group is made on Groups),
   below the field, "also in product" names the groups they are in by way of those (`userRow.Also`);
   **Disable** or **Enable**,
   **Reset password** (makes a link),
@@ -462,7 +463,6 @@ Zone doesn't mail these: the admin copies the link and sends it any way they lik
   Its address holds the token, and no other site is told it (`Referrer-Policy: same-origin`, as every page).
   Not `no-referrer`, which the page sent until 2026-11: under it a browser sends the form with `Origin: null`, the Origin check refused that, and the links didn't work in a browser (`test_a_reset_link_works_in_a_browser` in `tests/e2e/test_admin.py`).
 - **A link that doesn't work**, wrong, used, expired or replaced, gets one page for all ("This link doesn't work", 404), and a client trying them is throttled as for wrong passwords (`welcomeThrottle`).
-- **No minimum length** for the password, as `user add` has none.
 
 ## Sign-up
 
@@ -775,7 +775,7 @@ Everything else (shared tasks) is everyone's to see and change, as shared pages 
   One lock (`taskFiles.Lock`) for all files' writes, and a second one that readers share and a write holds while it replaces its files (`Open` for `GET /api/tasks`, `All`, `Snapshot`; Storage in `docs/spec/tasks.md`): a task that is shared moves between two files, and a read between their writes would miss it.
   What Zone does over every task list covers every user's files (`EveryOwner`): the closed tasks' filing by month at start (`ArchiveOldClosed`), the lists' migration, a rename's links in tasks (`renamePageRefs`), a shared list's rename, the search index (`Every`, filtered per user by `canSeeTask`, `hiddenDoc`).
   A series' next occurrence stays in its list, so private (`spawnRecurring`).
-  A private task's pasted files are private too (the description's editor sends `private/<you>/…` as the upload's page).
+  A private task's pasted files are private too: a file pasted in a task's dialog is the task's, kept in `_tasks/files/<id>/_assets/` and seen by who sees the task (the editor sends the task's id with the upload, which wins over its page; A task's files in `docs/spec/tasks.md`).
 - **Another user's private task is no task**: by id the routes answer 404 as for an id no task has (`DELETE /api/tasks/<id>` of an unknown id stays a 204, as before);
   lists, counts, Closed and its years, the due count, Linked tasks and the section chips leave it out;
   a `[[task:…]]` to it renders as for a deleted task.

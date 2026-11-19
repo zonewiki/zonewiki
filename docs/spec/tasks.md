@@ -735,7 +735,7 @@ A task's description is markdown, edited and rendered as a page's text.
 
 ### History
 
-The server logs events on the task (`logEvent` in `go/tasklogic.go`): `created` (create and recurring spawn; a new task's first dates are not changes),
+The server logs events on the task (`logEvent` in `go/tasklogic.go`): `created` (a new task, not a series' next occurrence, below; a new task's first dates are not changes),
 `start`/`due` whenever the date actually changes (`applyTaskFields`),
 `done` (also for a keep task, whose cleared start date is part of it),
 `reopened`,
@@ -767,7 +767,7 @@ They are kept in `comments` (`[{ id, at, by, text }]`, oldest first;
 `by` the user who wrote it, written only when there is one (with users, `docs/spec/users.md`), so a wiki without users keeps its files as they were;
 an edit keeps it;
 shown after the time, "12 Mar 09:30 · alice", `commentStamp`).
-Not part of the History: they are never capped, undo of other changes never touches them, and adding one logs no event.
+Not part of the History: they are never capped, undo of other changes never touches them, and adding one logs no event of its own, only `mentioned` for each user it names with `@name` (History, above).
 
 - **Routes**: `POST /api/tasks/<id>/comments`, `PUT`/`DELETE …/comments/<cid>`, each returning the task, for open and closed tasks alike (`findForWriteLocked`).
   `PUT /api/tasks/<id>` with `comments` replaces the whole list, for undoing a delete; `cleanComments` validates it (and restore snapshots), dropping bad entries and renumbering duplicate ids.
@@ -918,7 +918,7 @@ Later in 2026-11 came the Inbox: until then a task could be in no list, which wi
   **A private task leaves for a shared list** only when the write says `share`, which the browser sends after telling you that everyone will see it; its History then says `shared`.
   Out of a private list into your Inbox, or the other way, it stays private, and nothing is asked.
   A private list can be made shared with **Make shared…** (below), its tasks with it; a shared one never private.
-  Every reader asks `canSeeList` (through `taskLists(user)`, which gives only the lists a user sees), every write to a list or to a task in it `canWriteList` (`go/access.go`): today whoever sees a list and may write tasks may change it; members or roles per list would change those two and nothing else.
+  Every reader asks `canSeeList` (through `taskLists(user)`, which gives only the lists a user sees), every write to a list or to a task in it `canWriteList` (`go/access.go`): whoever sees a list and may write tasks changes its tasks, and the list itself (its name, its settings, deleting it) is its owners' and the admins' (`canManageList`; A shared list has owners, above).
 - **The Inbox** (`inboxRef`, `isInbox`, `inboxOwner` in `go/tasklists.go`; `inboxView` in `tasks.js`): the list every user has without making it: **the tasks without a `list`**.
   **A new task goes there unless it is made in a list's view or names a list**: from `c t`, New task, My tasks' **+ New**, an assistant's `create_task`, `POST /api/tasks` without `list`.
   With users it is yours alone (the task is kept in your files, `private/<user>/_tasks/`): what you capture is seen by nobody until you file it.
@@ -1015,8 +1015,8 @@ Later in 2026-11 came the Inbox: until then a task could be in no list, which wi
   **Your own name asks nothing**: a task in your Inbox is yours as it is (a view's `assignee=me`, the title's `@me`), so it stays there, private, and is saved without an assignee.
   With no shared list the line reads "A task for someone else needs a shared list: choose one in List." (New list… in it makes one), and Save without one says so on the List field.
   An assistant's `create_task` with an assignee and no shared list is refused, naming the shared lists; `POST /api/tasks` likewise answers 400 ("A private task is yours alone. Put it in a shared list to assign it").
-- **The Tasks page's ⋯ menu** (`.page-menu-btn` beside the heading of `/tasks`, on every view of it; the page's ⋯ menu, `#page-menu`, with `js/pagemenu.js`): **it is the page's one such menu**: the view's own actions are in it, **List settings…** first and **Mark all read**, **Export tasks** and **Import tasks…** last (`[data-tasks-action]`, shown and run by `js/tasksettings.js` where the view has them; the toolbar's ⋯ is not shown on this page. Until 2026-11 the page had two ⋯ menus with different things in them), and between them **New list…**; on a list **Rename…**, **Pin** / **Move first** / **Unpin**, **Make shared…** (a private one) and **Delete…**; on a tag's view (`/tasks?tag=<tag>`) **Rename tag…** (below).
-  Each but the pin is a dialog with a form the server answers (`data-dialog` on the menu item; a refusal comes back with the message in the dialog).
+- **The Tasks page's ⋯ menu** (`.page-menu-btn` beside the heading of `/tasks`, on every view of it; the page's ⋯ menu, `#page-menu`, with `js/pagemenu.js`): **it is the page's one such menu**: the view's own actions are in it, **List settings…** first and **Mark all read**, **Export tasks** and **Import tasks…** last (`[data-tasks-action]`, shown and run by `js/tasksettings.js` where the view has them; the toolbar's ⋯ is not shown on this page. Until 2026-11 the page had two ⋯ menus with different things in them), and between them **New list…**; on a list **Rename…** (for who manages it), **Pin** / **Unpin**, **Pin for everyone** / **Unpin for everyone** (with users, a shared list, for who manages it), **Make shared…** (a private one), **Who it is for…** (with users, a shared list, for who manages it) and **Delete…** (for who manages it); on a tag's view (`/tasks?tag=<tag>`) **Rename tag…** (below).
+  Each but the pins is a dialog with a form the server answers (`data-dialog` on the menu item; a refusal comes back with the message in the dialog).
   Not for a viewer, nor in sharing mode.
 - **New list…** (`#list-new-dialog`; `POST /tasks/new-list`, `createListOp` in `go/tasklists.go`): asks for the list's name and makes it: an entry in the registry, in one commit (`Create list #shop`).
   No page is written.

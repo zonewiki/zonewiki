@@ -97,8 +97,8 @@ There is still no nav bar: the modules sit where the eye already goes.
   (Until 2026-11 the row had New note and Add a task icons between the eye and Search.) The pill has a fixed width, so the row's width (`--top-actions-w`, which the breadcrumb's padding and the status badges' position use) doesn't depend on the font; its border ends on the content's right edge.
   Hidden at ≤640px.
   They replaced the round New and Search buttons in the bottom-right corner, so desktop toasts and Sign out have the bottom corners to themselves again.
-- **New task from anywhere** (`openDefaultTask` in `js/actions.js`: `c t`, and the phone's **Task** tab): the task goes into your Inbox and starts today, so it is on My tasks' Today.
-  **It is the same on every page**: it presses no list's **+ New** (until 2026-11 it did on a page that shows My tasks or the Inbox, and what it made then depended on the tab that was open; a list's own new task is **n** or its + New).
+- **New task from anywhere** (`openDefaultTask` in `js/actions.js`: `c t`, and the phone's **Task** tab outside the tasks module, where it presses the view's + New: **Task**, below): the task goes into your Inbox and starts today, so it is on My tasks' Today.
+  **`c t` is the same on every page**: it presses no list's **+ New** (until 2026-11 it did on a page that shows My tasks or the Inbox, and what it made then depended on the tab that was open; a list's own new task is **n** or its + New).
   It opens a task list app's edit modal for a task in the Inbox (`openEditModal` takes `list`, `tags`, which replace the filter's even when empty, `keep` and `start_date`): the page's own task app (an embed, `/tasks`, the editor's hidden one),
   or on a page without one a hidden one loaded on demand (`loadHeadlessTasks`: `GET /api/tasks/headless`, the headless embed without its scripts, then `tasks-core.js` and `tasks.js`; once per page),
   so you stay on the page and a toast says "Added “…” to your tasks".
@@ -159,7 +159,7 @@ Phones have no switch (no top actions).
   The search modal lists nothing until something is typed (no recent pages; nothing for ↑/↓ or the preview to reach), and the editor's `[[` page and task completion waits for two letters.
 - **Pages not for sharing** (`noshare` in the settings file, `docs/spec/users.md`: comma-separated, `#tag` entries name frontmatter tags, `folder/` entries folders and everything below them, e.g. `noshare = #noshare, #people, people/, personal/`;
   a bare word counts as a tag;
-  unset or empty: `#noshare`;
+  unset: `#noshare`; set but empty (`noshare =`): nothing is hidden;
   don't quote the value).
   `is_noshare(slug)` (folders by slug, tags from the frontmatter, cached by mtime), `hidden_page(slug)` = sharing mode on and noshare.
   Such a page's view, editor, history, revisions and diffs (`/diff`, `/diff-uncommitted`) show "Hidden page" (`hiddenPageView()`: neither title nor text, no trail stop);

@@ -41,7 +41,8 @@ func setupExempt(r *http.Request) bool {
 	return false
 }
 
-// passwordMin: the fewest characters of a password set on the page.
+// passwordMin: the fewest characters of a password, set on a page or by a
+// command (askPassword).
 const passwordMin = 8
 
 // setupView: the first-run page (setup.html).
