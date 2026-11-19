@@ -605,7 +605,7 @@ func checks(next http.Handler) http.Handler {
 		beginRequest()
 		defer endRequest()
 		if !hostAllowed(r.Host) {
-			http.Error(w, "Bad Request", http.StatusBadRequest)
+			hostRefused(w, r.Host)
 			return
 		}
 		if dotSegments(r.URL.Path) {

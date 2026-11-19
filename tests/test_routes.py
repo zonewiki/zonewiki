@@ -1746,14 +1746,19 @@ class TestHostHeader:
         finally:
             settings.ZONE_ALLOW_REMOTE = old_allow_remote
 
-    def test_allow_remote_skips_check(self, client):
-        old = settings.ZONE_ALLOW_REMOTE
-        settings.ZONE_ALLOW_REMOTE = True
-        try:
-            resp = client.get("/page/index", headers={"Host": "any.host.example"})
-            assert resp.status_code != 400
-        finally:
-            settings.ZONE_ALLOW_REMOTE = old
+    def test_allow_remote_without_hosts_lets_in_addresses_not_names(self, client, monkeypatch):
+        # LAN access by IP needs nothing set up; a name could be an
+        # attacker's, rebound to the wiki's address (DNS rebinding).
+        monkeypatch.setattr(settings, "ZONE_ALLOW_REMOTE", True)
+        for host in ("192.168.1.10:5000", "10.0.0.7", "[fe80::1]:5000", "[2001:db8::5]", "localhost:5000",
+                     "host.containers.internal:5000", "host.docker.internal"):   # .internal: never anyone's
+            assert client.get("/page/index", headers={"Host": host}).status_code == 200, host
+        for host in ("evil.example:5000", "nas.local", "192.168.1.10.evil.example", "0x7f.1", "[evil]"):
+            resp = client.get("/page/index", headers={"Host": host})
+            assert resp.status_code == 400, host
+        # The refusal says how a name of the wiki's gets in.
+        body = client.get("/page/index", headers={"Host": "nas.local:5000"}).get_data(as_text=True)
+        assert '"nas.local"' in body and "hosts" in body
 
     def test_localhost_at_any_port(self, client, monkeypatch):
         # zonewiki --addr :8080: the browser sends localhost:8080.

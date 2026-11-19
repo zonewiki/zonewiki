@@ -144,8 +144,8 @@ docker compose -f compose.nas.yaml run --rm zonewiki /app/zonewiki user add alic
 The login needs no command: opened in a browser, a wiki without one asks for a password first (First run in `docs/spec/security.md`; `compose.nas.yaml` tells Zone its port is on the LAN, `ZONE_BIND: 0.0.0.0`), and shows nothing before.
 The commands above set it just as well.
 
-`hosts` are the names and addresses you open Zone by (the Host check, Security in `docs/spec/security.md`); without them only localhost gets in.
-`ZONE_ALLOW_REMOTE=1` in `.env` instead skips the check: quicker, but then any name reaches Zone, which DNS rebinding can exploit.
+`hosts` are the names and addresses you open Zone by (the Host check, Security in `docs/spec/security.md`); without them only localhost gets in, and a browser opening Zone by another name gets a 400 that says to add it (the log names it too).
+`ZONE_ALLOW_REMOTE=1` in `.env` instead lets in any IP address (`http://192.168.1.20:5000`) with nothing to set up; a name (`nas.local`) still goes in `hosts`.
 Until a login is set Zone shows only its first-run page (`no-login = yes` in the settings file turns that off, for a wiki open on purpose); `config token` (or `user token NAME`) makes a token for AI clients.
 
 Zone is then at `http://<nas>:5080`.
@@ -230,7 +230,7 @@ A new package on ghcr.io is private: make it public once in its settings on GitH
 
 `ZONE_ALLOW_REMOTE` is the single knob for network access (with `run.sh`).
 When unset, `run.sh` exports `ZONE_BIND=127.0.0.1`, so the container's port 5000 is only exposed on the host's loopback interface, and the host-header check rejects any `Host` header but localhost and the settings file's `hosts`.
-When `ZONE_ALLOW_REMOTE=1`, `run.sh` exports `ZONE_BIND=0.0.0.0` (LAN-accessible port binding) and the host-header check is skipped unless `hosts` is set.
+When `ZONE_ALLOW_REMOTE=1`, `run.sh` exports `ZONE_BIND=0.0.0.0` (LAN-accessible port binding), and without `hosts` the host-header check lets in any IP address too (and names in `.internal`), so the LAN reaches Zone by address; a name it is opened by goes in `hosts`.
 `compose.yaml` maps `${ZONE_BIND:-127.0.0.1}:5000:5000`; used without `run.sh`, `ZONE_BIND=0.0.0.0` must be set in `.env` alongside `ZONE_ALLOW_REMOTE=1`.
 
 ### A Unix socket

@@ -33,7 +33,7 @@ A new feature is checked against them, and a protection that breaks one is a bug
 ## Before you open it up
 
 What someone running Zone should know (the README sends them here).
-Out of the box Zone listens on localhost only and refuses a foreign `Host` header (DNS rebinding) and cross-site writes; anything reachable beyond localhost belongs behind HTTPS, with a login (`./run.sh config passwd`, or users).
+Out of the box (`run.sh`, compose) Zone listens on localhost only and refuses a foreign `Host` header (DNS rebinding) and cross-site writes (the binary run by hand listens on every interface, `--addr :5000`, but answers only a `Host` the check lets in); anything reachable beyond localhost belongs behind HTTPS, with a login (`./run.sh config passwd`, or users).
 
 **Self-hosting behind HTTPS.**
 Put a reverse proxy in front that terminates HTTPS, passes the original `Host` and sets `X-Forwarded-Proto` and `X-Forwarded-For`, and name the public host in `hosts`.
@@ -190,7 +190,10 @@ Also know this:
 - The request checks around every route (`checks` in `go/server.go`) first validate the `Host` header (`hostAllowed`) against `allowedHosts` (`localhost`, `127.0.0.1`, `[::1]`) plus the names in `hosts` (the settings file; comma-separated),
   each at any port (Zone may listen on another, `--addr :8080`) and without case (`hostName`),
   defeating DNS rebinding attacks (a rebinding page's `Host` is its own name).
-  `ZONE_ALLOW_REMOTE=1` (in `.env`) without `hosts` skips the check (LAN access by IP); with `hosts` set the check stays on.
+  `ZONE_ALLOW_REMOTE=1` (in `.env`) without `hosts` lets in any IP address as well (LAN access by IP, nothing to set up) and names in `.internal` (`host.containers.internal`, as an assistant in a container reaches Zone), but no other name: rebinding needs a name its attacker controls, and an address can't be rebound, nor a name in `.internal`, which is never handed out.
+  A name Zone is opened by (`nas.local`, the machine's) goes in `hosts` then; with `hosts` set, only localhost and those get in.
+  (Until 2026-11 `ZONE_ALLOW_REMOTE` without `hosts` skipped the check, so any website could reach a wiki that has no login, or take `/setup` on first run.)
+  **A refused `Host`** is answered 400 with how a name of the wiki's gets in ("Zone isn't reached by the name "nas.local". If it is this wiki's, an admin adds it to hosts …"), and the log names it, once a name (the first 20; `hostRefused`).
   Behind a reverse proxy on the same host, `hosts` alone is enough (the port stays on loopback).
 - **Scripts in pages don't run** (`pageCSP`): every response carries a `Content-Security-Policy` with `script-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'` (and what a page may load, below).
   Pages render their raw HTML as written,

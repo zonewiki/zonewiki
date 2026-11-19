@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -32,18 +33,48 @@ var now = time.Now
 // DNS rebinding: a page on evil.example whose name later resolves to
 // 127.0.0.1 reaches Zone with "Host: evil.example". Only localhost, and the
 // names in the hosts setting (a reverse proxy's public name), get in, at
-// any port (--addr). ZONE_ALLOW_REMOTE without hosts turns the check off
-// (LAN access by IP).
+// any port (--addr). ZONE_ALLOW_REMOTE without hosts lets in any IP
+// address too (LAN access by IP, nothing to set up): rebinding needs a
+// name its attacker controls, and an address can't be rebound; nor can a
+// name in .internal, which is never handed out (an assistant in a
+// container reaches Zone as host.containers.internal). Any other name
+// (nas.local, the machine's) then goes in hosts; the refusal says so.
 var allowedHosts = map[string]bool{"localhost": true, "127.0.0.1": true, "[::1]": true}
 
 func hostAllowed(host string) bool {
 	hosts := settings().Hosts
-	if cfg.AllowRemote && len(hosts) == 0 {
+	name := hostName(host)
+	if allowedHosts[name] || hosts[name] {
 		return true
 	}
-	name := hostName(host)
-	return allowedHosts[name] || hosts[name]
+	if cfg.AllowRemote && len(hosts) == 0 {
+		_, err := netip.ParseAddr(strings.TrimSuffix(strings.TrimPrefix(name, "["), "]"))
+		return err == nil || strings.HasSuffix(name, ".internal")
+	}
+	return false
 }
+
+// hostRefused: what a request whose Host isn't let in is answered (400),
+// and the log is told, once a name (the first hostsLogMax): the name to
+// put in the hosts setting if it is one of the wiki's.
+func hostRefused(w http.ResponseWriter, host string) {
+	name := hostName(host)
+	refusedHosts.Lock()
+	if !refusedHosts.seen[name] && len(refusedHosts.seen) < hostsLogMax {
+		refusedHosts.seen[name] = true
+		logf("refused a request for host %q: if Zone is reached by that name, add it to hosts in .zone/config (zonewiki config set hosts %s, with the names it has, comma-separated)", name, name)
+	}
+	refusedHosts.Unlock()
+	http.Error(w, "Bad Request: Zone isn't reached by the name "+strconv.Quote(name)+
+		". If it is this wiki's, an admin adds it to hosts in the wiki's settings file (zonewiki config set hosts …).", http.StatusBadRequest)
+}
+
+const hostsLogMax = 20
+
+var refusedHosts = struct {
+	sync.Mutex
+	seen map[string]bool
+}{seen: map[string]bool{}}
 
 // Cross-site request forgery: without it, any page open in the browser could
 // post a form to http://localhost:5000/delete/<page> (or /edit, or the tasks

@@ -14,7 +14,7 @@
 #
 # The wiki's own settings go in its settings file (.zone/config), through the
 # container; first of all the names you open Zone by (or ZONE_ALLOW_REMOTE=1
-# in .env):
+# in .env, to open it by its IP address with nothing set):
 #
 #   docker compose -f compose.nas.yaml run --rm zonewiki /app/zonewiki config set hosts nas.local
 #

@@ -530,6 +530,7 @@ class TestBaseUrl:
         # A hosted wiki: Caddy ends TLS and reaches Zone over a socket, saying
         # X-Forwarded-Proto: https. The links were http:// there until 2026-11.
         monkeypatch.setattr(settings, "BASE_URL", "")
+        monkeypatch.setattr(settings, "HOSTS", frozenset({"wiki.example.org"}))
         resp = client.post("/mcp", headers={"Host": "wiki.example.org", "X-Forwarded-Proto": "https", **AUTH}, json={
             "jsonrpc": "2.0", "id": 1, "method": "tools/call",
             "params": {"name": "read_page", "arguments": {"slug": "golf"}}})
