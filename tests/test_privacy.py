@@ -1376,7 +1376,7 @@ def test_a_list_called_private_is_an_ordinary_list(bob, wiki):
     assert bob.post("/tasks/pin-list", data={"list": "private", "pin": "0"}, headers=HOST).status_code == 302
     page = bob.get("/tasks?list=private", headers=HOST).get_data(as_text=True)
     assert "list-unpin-btn" not in page and "list-pin-btn" in page
-    assert 'data-place="list:private"' not in page.split('class="lists-more"', 1)[0]
+    assert 'data-place="list:private"' not in page.split('<nav class="tasks-places"', 1)[1].split('class="lists-more"', 1)[0]
     made = bob.post("/api/tasks", json={"title": "Call the bank"}, headers=HOST).get_json()
     assert made["private"] is True and "list" not in made
     # Unpinned, its tasks are in his My tasks all the same: a pin is a pill.

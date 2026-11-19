@@ -411,9 +411,14 @@ main {
     justify-self: center; width: 100%; max-width: calc(46rem + 2 * 2.25rem + 2px);
   }
   .page-grid > .page-col.sheet-wide { max-width: none; }
-  /* /tasks with side columns: the sheet fills the middle column, its text
-     at the reading width, as on a page. */
-  .page-col > .sheet > :is(.tasks-places, .page-header, .page-content) { max-width: 46rem; margin-inline: auto; }
+  /* /tasks (its lists in the left column): the sheet as wide as a page's,
+     centred in the middle column, so the heading sits where a page's does;
+     the row of pills hides, the column has the lists. */
+  .page-grid > .page-col:has(> .sheet) {
+    justify-self: center; width: 100%; max-width: calc(46rem + 2 * 2.25rem + 2px);
+  }
+  .page-col > .sheet > :is(.page-header, .page-content) { max-width: 46rem; margin-inline: auto; }
+  .page-grid .tasks-places { display: none; }
 }
 
 /* ── Page header ───────────────────────────────────────────────────────────── */

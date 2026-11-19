@@ -1057,7 +1057,8 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 		v.Tag = tags[0]
 		v.RenameName, v.RenameError, v.RenameMerge = firstNonEmpty(q.Get("rename_name"), v.Tag), q.Get("rename_error"), q.Get("rename_merge") != ""
 	}
-	page(w, rq, http.StatusOK, "tasks_page.html", title, shell{wide: sections != nil}, v)
+	// Wide: the side columns on big screens, the lists on the left.
+	page(w, rq, http.StatusOK, "tasks_page.html", title, shell{wide: true}, v)
 }
 
 func btoi(b bool) int {
@@ -1275,6 +1276,16 @@ type tasksPageView struct {
 	LeftOut, DeleteToGeneral  bool
 	LinkSections              []linkSection
 	TasksHTML, BreadcrumbHTML template.HTML
+}
+
+// HasPins: a pinned list is among the places (the left column's pins).
+func (v *tasksPageView) HasPins() bool {
+	for _, p := range v.Places {
+		if p.Pinned {
+			return true
+		}
+	}
+	return false
 }
 
 func apiToggleCheckbox(w http.ResponseWriter, r *http.Request) {

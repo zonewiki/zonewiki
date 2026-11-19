@@ -1603,7 +1603,7 @@ The page gets the lists left out and whether assignment counts (`data-init-out`,
 
 ### The list switcher
 
-`/tasks` opens with a row of pills above its heading (`.tasks-places` in `templates/tasks_page.html`, `taskPlaces` and `taskMore` in `go/tasksembed.go`, `js/listsrow.js`),
+`/tasks` opens with a row of pills above its heading (on a big screen the left column instead: The lists in the left column, below) (`.tasks-places` in `templates/tasks_page.html`, `taskPlaces` and `taskMore` in `go/tasksembed.go`, `js/listsrow.js`),
 on the page's white sheet with it, looking as the module switcher at the top of the page does (`.tasks-places-group`: one white capsule with a border, the pills inside it without one, in its type and height, the current one shaded).
 **My tasks is the first pill, the Inbox the second; a pinned list is a pill; a list that isn't pinned is under More.**
 In order: **My tasks** (above), whenever there is a row;
@@ -1655,6 +1655,22 @@ Let go outside the row, it goes back.
 My tasks, the Inbox and More stay where they are.
 With a finger there is no dragging (it scrolls and taps): **Unpin** and **Pin** again puts a list last.
 
+#### The lists in the left column
+
+**On a big screen (from 1320px wide, where pages get their side columns) the lists are the left column of `/tasks`, and the row of pills isn't shown**: the same entries, a line each, where there is room for all of them (`lists_rail` in `templates/tasks_page.html`, `.lists-rail`; the row stays for every narrower screen).
+From the top:
+**My tasks** and the **Inbox**;
+**the pinned lists** in their order, with their pins;
+**every other list**, A–Z, under **Lists** (with users under **Your lists** and **Other lists**, as in More), with the find field from 8 lists on;
+**All tasks** last.
+The current view's line is shaded.
+My tasks, the Inbox and the pins carry the pills' counts, kept current with them (`js/chrome.js` refreshes `.lists-rail-place` by `data-place` too); the other lists none, as under More.
+The pins can be dragged up and down with the mouse, for who may pin, as the pills can (Dragging the pills).
+A list new to this browser has "new" beside its name there as under More, and counts as seen once the column has shown it (More then gets no dot).
+The column starts level with the sheet's title and scrolls on its own when it is taller than the window; the sheet keeps a page's width, centred, so the heading is where a page's is.
+A list's Backlinks are the right column, as before.
+Below 1320px the column isn't there and the row of pills is, as above.
+
 ### Pins
 
 **A pin is a shortcut**: the list is a pill of your list switcher, and nothing else (`pinnedLists`, `pinListOp`; `POST /tasks/pin-list` with `list` and `pin`: `1`, `first` or `0`, anything else refused).
@@ -1703,7 +1719,7 @@ The selection stays, as after Tag…; in a list's own view the moved tasks leave
 **New list…**, the last row, makes a list and moves the tasks into it, so the dialog is there with no list too (then Inbox, ticked, and New list…).
 The rows give way to the list's name (`.bulk-list-form`, `#bulk-list-name`), **Create and move** (or Enter) and **Back**; a name that won't do is said under it and the dialog stays ("There is a list #shop already").
 With users it asks **Private: only you see it and its tasks** (`#bulk-list-private`): off and not to be ticked while a shared task is selected, ticked when every selected task is private, so no task is shared by not looking; unticked with a private task selected, a line says that everyone will see it and that it can't be made private again.
-The list is made as New list… on the Tasks page makes it (`POST /api/tasks/lists`, `apiNewList`: `createListOp`), pinned, last, in a commit of its own before the move's, and the page stays: every task list on it knows the new list at once (the `zone:list-made` event, `tasks.js`), and on `/tasks` the list switcher is drawn again with it (`js/listsrow.js`).
+The list is made as New list… on the Tasks page makes it (`POST /api/tasks/lists`, `apiNewList`: `createListOp`), pinned, last, in a commit of its own before the move's, and the page stays: every task list on it knows the new list at once (the `zone:list-made` event, `tasks.js`), and on `/tasks` the list switcher (the row and the left column) is drawn again with it (`js/listsrow.js`).
 The toast says "3 tasks moved to the new list “shop”"; its undo takes the tasks back and leaves the list, which **Delete…** removes.
 
 ### A list on screen

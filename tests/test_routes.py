@@ -432,9 +432,11 @@ class TestViewPage:
         assert re.findall(r'role="menuitem"[^>]*>([^<]+)', menu) == ["Present"] + ["History"] * settings.GIT_ENABLED + ["Print…"]
         assert 'id="page-rename-dialog"' not in body
 
-    def test_only_page_views_are_wide(self, client, wiki_dir):
+    def test_only_page_views_and_the_tasks_are_wide(self, client, wiki_dir):
+        # The Tasks page has its lists in the left column (docs/spec/tasks.md).
         write_page(wiki_dir, "garden", "# Garden\n")
-        for url in ("/tasks", "/notes", "/search?q=garden", "/edit/garden"):
+        assert 'class="wide"' in client.get("/tasks", headers=HOST).get_data(as_text=True)
+        for url in ("/notes", "/search?q=garden", "/edit/garden"):
             assert 'class="wide"' not in client.get(url, headers=HOST).get_data(as_text=True), url
 
 

@@ -219,6 +219,7 @@ Every link to "the tasks" goes here (the Tasks module links without a task list 
 - `?view=`, `?task=`, `?tag=`, `?search=`, `?new=1` work as for any embed.
 
 The list switcher sits above the heading: My tasks, the Inbox and the pinned lists as pills, the others and All tasks under More; this view's is the current one.
+On a big screen (from 1320px) it is the page's left column instead, every list a line (The lists in the left column in `docs/spec/tasks.md`).
 The heading reads "All tasks", "My tasks" or "List: <name>".
 
 #### The list forms
@@ -385,7 +386,8 @@ A page view (`viewPage`, `shell{wide: true}` → `main.wide`) has three columns 
 The page's sheet is as wide as other views' unless the page has a table, code block or image wider than the text;
 then it takes the whole middle column (`.sheet-wide`, `js/chrome.js`, measured after load and whenever the content's size changes).
 So the text sits in the middle of the window, where the other views have theirs.
-Every other view (tasks, notes, search) gets the same top row width at that size, its content centred at the text width (46rem), so the breadcrumb and top actions stay put when switching modules.
+The Tasks page (`/tasks`) has the three columns too, its task lists on the left (The lists in the left column in `docs/spec/tasks.md`), a list's Backlinks on the right, its sheet as wide as a page's.
+Every other view (notes, search) gets the same top row width at that size, its content centred at the text width (46rem), so the breadcrumb and top actions stay put when switching modules.
 
 ### Left: On this page
 

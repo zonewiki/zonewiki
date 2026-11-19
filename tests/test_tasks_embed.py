@@ -255,6 +255,35 @@ class TestListSwitcher:
         write_page(wiki_dir, "work", "# Work\n\n[[tasks: tag=work]]\n")
         html = self.get(client, "/tasks")
         assert places(html) == [] and more(html) is None and "lists-more" not in html
+        # The left column is there (empty), for the list a first one makes.
+        assert '<aside class="rail rail-left rail-lists"><a class="rail-top"' in html and 'class="lists-rail"' not in html
+
+    def test_the_lists_in_the_left_column(self, client, wiki_dir):
+        # On big screens the left column has every list, a line each: the
+        # places with their counts (My tasks, the Inbox, the pins), then
+        # the lists More holds, then All tasks; the same entries as the row.
+        self.wiki(client, wiki_dir)
+        create_task(client, title="Report", list="task", due_date=date.today().isoformat())
+        html = self.get(client, "/tasks?list=shop")
+        assert '<main class="wide">' in html
+        rail = html.split('<nav class="lists-rail"', 1)[1].split("</nav>", 1)[0]
+        lines = re.findall(r'<a href="([^"]+)" class="lists-rail-item[^"]*"(?: data-list="[^"]*")?(?: data-place="([^"]+)")?[^>]*?( aria-current="page")?>.*?<span class="lists-rail-name">([^<]*)</span>', rail, re.S)
+        assert [(href, key, name, cur != "") for href, key, cur, name in lines] == [
+            ("/tasks?mine=1", "mine", "My tasks", False), ("/tasks?list=inbox", "inbox", "Inbox", False),
+            ("/tasks?list=task", "list:task", "task", False),
+            ("/tasks?list=gifts", "list:gifts", "gifts", False), ("/tasks?list=shop", "list:shop", "shop", True),
+            ("/tasks", "", "All tasks", False)]
+        pins = rail.split('<div class="lists-rail-pins">', 1)[1].split("</div>", 1)[0]
+        assert re.search(r'class="module-due"[^>]*>1<', pins) and "tasks-place-pin" in pins
+        rest = rail.split('<div class="lists-rail-rest">', 1)[1]
+        assert "module-counts" not in rest and '<p class="rail-label lists-rail-head">Lists</p>' in rest
+        assert "lists-rail-filter" not in rail          # a find field from 8 lists
+        assert "data-reorder" in html.split('<nav class="lists-rail"', 1)[1].split(">", 1)[0]
+        # All tasks is the current line on /tasks; no pins, no pins' group.
+        client.post("/tasks/pin-list", data={"list": "task", "pin": "0"}, headers=HOST)
+        rail = self.get(client, "/tasks").split('<nav class="lists-rail"', 1)[1].split("</nav>", 1)[0]
+        assert "lists-rail-pins" not in rail
+        assert re.search(r'class="lists-rail-item lists-rail-all"[^>]*aria-current="page"', rail)
 
     def test_the_lists_and_all_above_the_heading(self, client, wiki_dir):
         self.wiki(client, wiki_dir)
@@ -642,7 +671,8 @@ class TestListBacklinks:
         write_page(wiki_dir, "desk", "# Desk\n\n[[tasks: mine=1]]\n\n[[tasks: list=inbox]]\n")
         for url in ("/tasks?mine=1", "/tasks?list=inbox"):
             html = client.get(url, headers=HOST).get_data(as_text=True)
-            assert 'id="backlinks"' not in html and "bl-count" not in html and '<main class="wide">' not in html, url
+            assert 'id="backlinks"' not in html and "bl-count" not in html, url
+            assert '<aside class="rail rail-context" aria-label="Links"></aside>' in html, url
             assert "tasks-pinned-lists" not in html, url
         # A list's own view has its Backlinks, and no line of My tasks.
         html = client.get("/tasks?list=shop", headers=HOST).get_data(as_text=True)

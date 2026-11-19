@@ -11,22 +11,52 @@
     with a form (js/pagemenu.js opens the one a menu item names with
     data-dialog; a refusal comes back with data-open). A list's Backlinks
     (the pages that embed it; My tasks: its lists') as on a page view: at the
-    end, on big screens in the right column. */ -}}
+    end, on big screens in the right column. On big screens the left column
+    holds the lists (lists_rail) and the row of pills hides. */ -}}
 {{define "body"}}
 {{.BreadcrumbHTML}}
-{{- if .LinkSections}}
 <div class="page-grid">
-{{template "rail_toc" ""}}
+<aside class="rail rail-left rail-lists">{{template "lists_rail" .}}<a class="rail-top" href="#" hidden>↑ Back to top</a></aside>
 <div class="page-col">
 {{template "tasks_main" .}}
+{{- if .LinkSections}}
 <div class="page-foot">{{template "link_sections" (dict "sections" .LinkSections)}}</div>
-</div>
-<aside class="rail rail-context" aria-label="Links">{{template "link_sections" (dict "sections" .LinkSections "copy" true)}}</aside>
-</div>
-{{- else}}
-{{template "tasks_main" .}}
 {{- end}}
+</div>
+<aside class="rail rail-context" aria-label="Links">{{if .LinkSections}}{{template "link_sections" (dict "sections" .LinkSections "copy" true)}}{{end}}</aside>
+</div>
 {{end}}
+
+{{- /* The lists in the left column (big screens, where the row of pills
+    hides): the switcher's places first, as the pills (My tasks, the Inbox,
+    then the pinned lists, each with its counts, which js/chrome.js
+    refreshes by data-place), then every list More holds (no counts; with
+    users Your lists and Other lists, each under its word when there are
+    both), then All tasks. The pins can be dragged up and down by who may
+    pin (data-reorder), and with many lists a field finds one
+    (js/listsrow.js). */}}
+{{define "lists_rail"}}
+{{- with .More}}<nav class="lists-rail" aria-label="Task lists"{{if $.Menu}} data-reorder{{end}}>
+<div class="lists-rail-places">
+{{- range $.Places}}{{if not .Pinned}}{{template "lists_rail_place" .}}{{end}}{{end}}</div>
+{{- if $.HasPins}}<div class="lists-rail-pins">
+{{- range $.Places}}{{if .Pinned}}{{template "lists_rail_place" .}}{{end}}{{end}}</div>{{end}}
+{{- if or .Lists .Others}}<div class="lists-rail-rest">
+{{- if and .Lists .Others}}<p class="rail-label lists-rail-head">Your lists</p>{{else}}<p class="rail-label lists-rail-head">Lists</p>{{end}}
+{{- if .Filter}}<input type="search" class="lists-rail-filter" placeholder="Find a list…" aria-label="Find a list" autocomplete="off" spellcheck="false">{{end}}
+{{- range .Lists}}{{template "lists_rail_item" .}}{{end}}
+{{- if and .Lists .Others}}<p class="rail-label lists-rail-head">Other lists</p>{{end}}
+{{- range .Others}}{{template "lists_rail_item" .}}{{end}}</div>{{end}}
+<div class="lists-rail-end"><a href="/tasks" class="lists-rail-item lists-rail-all" title="Every task you see, in whatever list"{{if .All}} aria-current="page"{{end}}><span class="lists-rail-name">All tasks</span></a></div>
+</nav>{{end}}
+{{- end}}
+{{define "lists_rail_place"}}<a href="{{.Href}}" class="lists-rail-item lists-rail-place" data-place="{{.Key}}" title="{{.Title}}{{if .Private}} (only you see it){{end}}{{with .For}} (for {{.}}){{end}}"{{if .Current}} aria-current="page"{{end}}>
+{{- if .Pinned}}<span class="tasks-place-pin" aria-hidden="true">{{template "icon_pin"}}</span>{{end}}
+{{- if .Private}}<span class="tasks-place-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}{{if .For}}<span class="tasks-place-lock tasks-place-for" aria-hidden="true">{{template "icon_people"}}</span>{{end}}<span class="lists-rail-name">{{.Label}}</span>{{template "module_counts" .Counts}}</a>
+{{- end}}
+{{define "lists_rail_item"}}<a href="{{.Href}}" class="lists-rail-item" data-list="{{.Label}}" data-place="{{.Key}}" title="{{.Title}}{{if .Private}} (only you see it){{end}}{{with .For}} (for {{.}}){{end}}"{{if .Current}} aria-current="page"{{end}}>
+{{- if .Private}}<span class="tasks-place-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}{{if .For}}<span class="tasks-place-lock tasks-place-for" aria-hidden="true">{{template "icon_people"}}</span>{{end}}<span class="lists-rail-name">{{.Label}}</span></a>
+{{- end}}
 
 {{define "tasks_main"}}
 {{- /* The switcher, the heading and the list on one sheet (style.css, The sheet). */}}
