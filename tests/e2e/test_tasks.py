@@ -5647,7 +5647,7 @@ def test_a_long_list_renders_a_description_when_it_is_opened(page, wiki):
     asked = []
     page.on("request", lambda r: asked.append(r.post_data_json) if r.url.endswith("/api/render-notes") else None)
     page.goto("/tasks?view=open&group=none")
-    assert "tasks" not in json.loads(page.locator("#tasks-initial").inner_text())    # the list asks for them
+    assert "tasks" not in json.loads(page.locator("script.tasks-initial").inner_text())    # the list asks for them
     row = card(page, "Task 220")
     expect(row).to_be_visible()
     expect(row.locator(".task-desc[data-lazy]")).to_have_count(1)
@@ -5666,5 +5666,5 @@ def test_a_long_list_renders_a_description_when_it_is_opened(page, wiki):
     # A short list has its descriptions with it, as always.
     _many_tasks(wiki, 3)
     page.goto("/tasks?view=open&group=none")
-    assert json.loads(page.locator("#tasks-initial").inner_text())["notes"] == ["<p>Some <strong>bold</strong> words</p>\n"]
+    assert json.loads(page.locator("script.tasks-initial").inner_text())["notes"] == ["<p>Some <strong>bold</strong> words</p>\n"]
     expect(card(page, "Task 000").locator(".task-desc strong")).to_have_count(1)

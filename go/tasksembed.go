@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"html/template"
 	"io"
 	"net/http"
 	"net/url"
@@ -42,6 +43,7 @@ type tasksEmbedView struct {
 	ListsJSON     string           // the lists the user sees, [{ref, private}], as JSON: the List field's choices
 	InboxPrivate  bool             // with users: a task without a list is in the user's Inbox, private
 	Settings      *embedSettingsAt // where the settings dialog writes; nil: no dialog (the ⋯ menu)
+	Data          template.HTML    // the page's data block of tasks (tasksInitial), as the first list's first child; "" none
 }
 
 // embedSettingsAt: where a task app's settings are written, for its
@@ -107,7 +109,7 @@ func paramsScope(p TasksParams) string {
 // (params.src), "" for none. It has the settings dialog (the ⋯ menu) where
 // something can be written: the page's embed, the list it shows, the
 // settings of All tasks; not for a viewer nor in sharing mode.
-func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, page string) string {
+func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, page, data string) string {
 	user := rq.who()
 	lists := rq.taskLists()
 	list, shown := resolveList(params.Get("list"), lists)
@@ -197,6 +199,7 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, p
 		PrivateFolder: privateFolder(user),
 		ListsJSON:     jsonobj.Text(choices),
 		InboxPrivate:  inboxOwner(user) != "",
+		Data:          template.HTML(data),
 	}
 	// What is yours to do opens on Today: My tasks, a list of your own, a
 	// view of every task where that is the Tasks links' (a wiki without
@@ -379,14 +382,18 @@ func processTasksEmbeds(rq *Req, text, page string, settings bool) (string, []ta
 		return tasksRE.ReplaceAllString(text, ""), nil
 	}
 	// What the page's lists show: the tasks it brings along are those
-	// (tasksInitial).
+	// (tasksInitial), in the first list's own element.
+	type embedded struct {
+		params  TasksParams
+		missing string // list=<name> that no list has
+	}
+	var found []embedded
 	var scopes []string
 	text = tasksRE.ReplaceAllStringFunc(text, func(m string) string {
 		g := tasksRE.FindStringSubmatch(m)
-		ph := tasksPlaceholder + "_" + strconv.Itoa(len(embeds))
+		ph := tasksPlaceholder + "_" + strconv.Itoa(len(found))
 		params := parseTasksParams(embedArgs(g))
-		params.src = &embedSrc{len(embeds), embedArgs(g)}
-		var html string
+		params.src = &embedSrc{len(found), embedArgs(g)}
 		if name := cleanList(params.Get("list")); name == "" || isInbox(name, lists) {
 			// No list=: All tasks, or My tasks with mine=1; list=inbox: the
 			// Inbox (the tasks in no list). Each with its own settings, as
@@ -399,20 +406,28 @@ func processTasksEmbeds(rq *Req, text, page string, settings bool) (string, []ta
 				shown = inboxParams()
 			}
 			shown = onPage(shown, params)
-			html = buildTasksEmbed(rq, shown, len(embeds), false, at)
+			found = append(found, embedded{params: shown})
 			scopes = append(scopes, paramsScope(shown))
 		} else if l, ok := listOnPage(name, page, rq.who(), lists); ok {
 			shown := listEmbedParams(l, params)
-			html = buildTasksEmbed(rq, shown, len(embeds), false, at)
+			found = append(found, embedded{params: shown})
 			scopes = append(scopes, paramsScope(shown))
 		} else {
-			html = noListHTML(rq, name)
+			found = append(found, embedded{missing: name})
 		}
-		embeds = append(embeds, tasksEmbed{ph, html})
 		return ph
 	})
-	if settings && len(embeds) > 0 {
-		embeds[0].html = tasksInitial(rq, scopes...) + embeds[0].html
+	data := ""
+	if settings && len(scopes) > 0 {
+		data = tasksInitial(rq, scopes...)
+	}
+	for i, e := range found {
+		html := noListHTML(rq, e.missing)
+		if e.missing == "" {
+			html = buildTasksEmbed(rq, e.params, i, false, at, data)
+			data = ""
+		}
+		embeds = append(embeds, tasksEmbed{tasksPlaceholder + "_" + strconv.Itoa(i), html})
 	}
 	return text, embeds
 }
@@ -474,14 +489,19 @@ func tasksInitial(rq *Req, scopes ...string) string {
 	return taskData(block)
 }
 
-// taskData: block as the page's data block of tasks (tasksInitial).
+// taskData: block as the page's data block of tasks (tasksInitial): a
+// <script> of JSON (no browser runs it) in the first list's own element
+// (buildTasksEmbed's data), where js/taskdata.js looks for it. Not found
+// by an id: a page's raw HTML could give one of its elements that id
+// first, with tasks of its own whose notes' "rendered HTML" would go
+// into the cards as it is, and it can't make a <script> (defuseHTML).
 func taskData(block map[string]any) string {
 	data, err := json.Marshal(block)
 	if err != nil {
 		logf("task list embed: %v", err)
 		return ""
 	}
-	return `<script type="application/json" id="tasks-initial">` + string(data) + `</script>`
+	return `<script type="application/json" class="tasks-initial">` + string(data) + `</script>`
 }
 
 // lazyTextsFrom: a page whose lists show more tasks than this doesn't bring

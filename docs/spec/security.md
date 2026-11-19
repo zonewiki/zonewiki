@@ -340,6 +340,7 @@ wrote (`<form method=post action="/delete/…">`, a `<button formaction=…>` or
 So in a page's raw HTML,
 and in task descriptions and comments,
 the tags that make or submit a form (`form`, `input`, `button`, `select`, `textarea`, `option`, `optgroup`, `datalist`, `fieldset`, `keygen`, `isindex`) and those that change what the page is (`meta`, a refresh to another site; `base`) show as text: their `<` is escaped.
+So does `script`: none in a page runs (Scripts in pages don't run, above), but a `<script type="application/json">` is data, and Zone's own scripts read such a block (the tasks a page brings along, A page brings its tasks along in `docs/spec/tasks.md`), so a script element in a page is always Zone's.
 Zone's own checkboxes and controls aren't raw HTML and stay.
 The rest of a page's HTML (images, links, iframes, styles) stays allowed, as far as it loads from Zone itself (below).
 

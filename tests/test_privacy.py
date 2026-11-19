@@ -344,7 +344,7 @@ def test_alice_sees_her_own(client, wiki):
     tasks = client.get("/api/tasks", headers=HOST).get_json()
     assert [t["private"] for t in tasks if t["id"] == TASK_ID] == [True]
     # The tasks /tasks brings along are hers too (not bob's: the probes above).
-    assert TASK_ID in client.get("/tasks", headers=HOST).data.decode().split('id="tasks-initial">', 1)[1].split("</script>", 1)[0]
+    assert TASK_ID in client.get("/tasks", headers=HOST).data.decode().split('class="tasks-initial">', 1)[1].split("</script>", 1)[0]
     assert "2001" in client.get("/api/tasks/closed-years", headers=HOST).get_json()["years"]
     # Her Tasks home is hers: the Tasks link goes to My tasks (in a new
     # browser session: /tasks above made it come back there), which has
@@ -357,7 +357,7 @@ def test_alice_sees_her_own(client, wiki):
     inbox = client.get("/api/tasks/export?list=inbox", headers=HOST).get_json()["tasks"]
     assert [(t["id"], t["private"]) for t in inbox] == [(INBOX_ID, True)]
     page = client.get("/tasks?list=inbox", headers=HOST).data.decode()
-    assert INBOX_ID in page.split('id="tasks-initial">', 1)[1].split("</script>", 1)[0]
+    assert INBOX_ID in page.split('class="tasks-initial">', 1)[1].split("</script>", 1)[0]
     assert "<h1>Inbox" in page and "Your Inbox: only you see its tasks" in page
     assert client.get("/api/tasks/due-count", headers=HOST).get_json()["count"] == 2      # both are overdue
     assert client.get("/api/tasks/due-count?places=1", headers=HOST).get_json()["places"]["inbox"]["count"] == 1
@@ -1521,7 +1521,7 @@ def test_the_inbox_is_a_pill_and_a_view(bob, wiki):
     assert "<h1>Inbox" in page and "Your Inbox: only you see its tasks" in page
     assert "New tasks land here, and only you see them." in page
     assert 'data-init-list="inbox"' in page
-    assert made["id"] in page.split('id="tasks-initial">', 1)[1].split("</script>", 1)[0]
+    assert made["id"] in page.split('class="tasks-initial">', 1)[1].split("</script>", 1)[0]
     # ?list=none is the same view.
     assert "<h1>Inbox" in bob.get("/tasks?list=none", headers=HOST).get_data(as_text=True)
     counts = lambda: bob.get("/api/tasks/due-count?places=1", headers=HOST).get_json()

@@ -131,7 +131,7 @@ func tasksRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/tasks/headless", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		rq := newReq(r)
-		_, _ = io.WriteString(w, buildTasksEmbed(rq, TasksParams{}, 0, true, ""))
+		_, _ = io.WriteString(w, buildTasksEmbed(rq, TasksParams{}, 0, true, "", ""))
 	})
 	// Who a task can be assigned to, and who asks ("me"): for the
 	// browser's completion and its @me. No names in sharing mode.

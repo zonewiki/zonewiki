@@ -1894,7 +1894,8 @@ Element ids get a `-<n>` suffix after the first embed, so a page can hold severa
 ### A page brings its tasks along
 
 A page view with a task list (and `/tasks`) carries, once, the open tasks its lists show (`scopedTasks`: those of any of the lists' scopes, so My tasks or one list doesn't carry every open task the user sees; a list of every task, All tasks or a tag's view, takes them all) as `GET /api/tasks` answers them
-and their notes' and comments' HTML as `POST /api/render-notes` would (`tasksInitial`: a `<script type="application/json" id="tasks-initial">` data block, which no browser runs; `<`, `>` and `&` in it are `\u` escapes, so no task's text ends it).
+and their notes' and comments' HTML as `POST /api/render-notes` would (`tasksInitial`: a `<script type="application/json" class="tasks-initial">` data block, which no browser runs; `<`, `>` and `&` in it are `\u` escapes, so no task's text ends it).
+The block is the first child of the page's first list's own element (`.tasks-app`), where `js/taskdata.js` looks for it: not by an id, which a page's raw HTML could give one of its elements first, handing the lists tasks of its own whose notes' "rendered HTML" would go into the cards as it is; and a page's raw HTML makes no `<script>` (Raw HTML in `docs/spec/rendering.md`).
 **Up to 150 tasks** (`lazyTextsFrom`): a page whose lists show more brings none of them, and each list asks for its tasks when it starts, as below.
 
 A team's All tasks is megabytes of JSON; a page is sent as it is, while **what `GET /api/tasks…` answers goes gzipped** to a browser that takes it (`gzipTasks`, `writeJSON` in `go/server.go`: an answer of 1 KB or more).

@@ -622,9 +622,12 @@ func taskDates(s string) string {
 // formaction=…> or <button form=…> using one of Zone's own forms) is
 // same-origin, so the Origin check lets it through, and one click on a page
 // another user (or an assistant that read a prompt injection) wrote would
-// delete or overwrite the viewer's pages. Their "<" is escaped, so they show
-// as text.
-var defusedTagRE = regexp.MustCompile(`(?i)<(/?(?:form|input|button|select|textarea|option|optgroup|datalist|fieldset|keygen|isindex|meta|base|link)(?:[\s/>]|$))`)
+// delete or overwrite the viewer's pages. And a <script>: none in a page
+// runs (script-src), but a <script type="application/json"> is data Zone's
+// own scripts may read (the task lists' tasks, taskData), so a page makes
+// none, and a script element in a page is always Zone's. Their "<" is
+// escaped, so they show as text.
+var defusedTagRE = regexp.MustCompile(`(?i)<(/?(?:form|input|button|select|textarea|option|optgroup|datalist|fieldset|keygen|isindex|meta|base|link|script)(?:[\s/>]|$))`)
 
 // htmlTagRE: a start tag, its quoted values whole (a ">" in one doesn't
 // end it), for wikilinksInHTML. srcdocRE: a srcdoc attribute with a value.

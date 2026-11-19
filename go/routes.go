@@ -425,7 +425,7 @@ func editorTasksHTML(rq *Req, slug string) template.HTML {
 	if rq.user.Name == visitor {
 		return ""
 	}
-	return htmlOf(buildTasksEmbed(rq, TasksParams{}, 0, true, ""))
+	return htmlOf(buildTasksEmbed(rq, TasksParams{}, 0, true, "", ""))
 }
 
 // postedContent: the editor's text, the browser's CRLF line ends as LF.
@@ -983,7 +983,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	if missing != "" {
 		tasksHTML = noListHTML(rq, missing)
 	} else {
-		tasksHTML = tasksInitial(rq, paramsScope(params)) + buildTasksEmbed(rq, params, 0, false, "")
+		tasksHTML = buildTasksEmbed(rq, params, 0, false, "", tasksInitial(rq, paramsScope(params)))
 	}
 	// The list switcher: the pills, this view's the current one; a view
 	// that has no pill is under More, which then names it.

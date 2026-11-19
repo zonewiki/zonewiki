@@ -700,8 +700,8 @@ class TestListBacklinks:
 
 
 def initial_tasks(html: str) -> list[dict]:
-    """The data blocks of a page's HTML (<script id="tasks-initial">), parsed."""
-    return [json.loads(m) for m in re.findall(r'<script type="application/json" id="tasks-initial">(.*?)</script>', html, re.S)]
+    """The data blocks of a page's HTML (<script class="tasks-initial">), parsed."""
+    return [json.loads(m) for m in re.findall(r'<script type="application/json" class="tasks-initial">(.*?)</script>', html, re.S)]
 
 
 class TestInitialTasks:
@@ -769,10 +769,29 @@ class TestInitialTasks:
         create_task(client, title=evil, description=evil, tags=["t"])
         write_page(wiki_dir, "shop", "# Shop\n\n[[tasks:]]\n")
         html = client.get("/page/shop", headers=HOST).get_data(as_text=True)
-        block = html.split('id="tasks-initial">', 1)[1].split("</script>", 1)[0]
+        block = html.split('class="tasks-initial">', 1)[1].split("</script>", 1)[0]
         assert "<" not in block and ">" not in block and "&" not in block
         (data,) = initial_tasks(html)
         assert data["tasks"][0]["title"] == evil and data["tasks"] == client.get("/api/tasks", headers=HOST).get_json()
+
+    def test_the_block_is_in_the_first_lists_own_element(self, client, wiki_dir):
+        # Found there by the lists (js/taskdata.js), never by an id a page's
+        # raw HTML could take; and a page's raw HTML makes no <script>, so a
+        # data block of its own before the list shows as text.
+        create_task(client, title="Buy milk", tags=["t"])
+        write_page(wiki_dir, "shop", "# Shop\n\n"
+                   '<script type="application/json" id="tasks-initial">{"tasks": []}</script>\n\n'
+                   "No list called nope: [[tasks: list=nope]]\n\n[[tasks: tag=t]]\n\n[[tasks:]]\n")
+        html = client.get("/page/shop", headers=HOST).get_data(as_text=True)
+        assert html.count("<script") == html.count("</script>") and len(initial_tasks(html)) == 1
+        assert re.search(r'<div class="tasks-app" id="tasks-app-1"[^>]*><script type="application/json" '
+                         r'class="tasks-initial">', html)
+        assert '&lt;script type="application/json" id="tasks-initial">{"tasks": []}&lt;/script>' in html
+        page_html = html.split('<article', 1)[1].split("</article>", 1)[0]
+        assert len(re.findall(r"<script\b", page_html)) == 1
+        tasks = client.get("/tasks", headers=HOST).get_data(as_text=True)
+        assert re.search(r'<div class="tasks-app" id="tasks-app"[^>]*><script type="application/json" '
+                         r'class="tasks-initial">', tasks)
 
     def test_only_a_page_view_with_a_list(self, client, wiki_dir):
         create_task(client, title="Buy milk")

@@ -43,11 +43,44 @@ def test_editor_preview_runs_no_handler(page, wiki):
 def test_uploaded_script_does_not_run(page, wiki):
     # script-src 'self' trusts Zone's origin, so an upload must not be
     # servable as a script: it comes as application/octet-stream with nosniff.
+    # A page's raw HTML makes no <script> (it shows as text), so the script
+    # element is made here as any other way into the page would.
     (wiki.root / "_assets" / "x.js").write_text("window.pwned = 'upload'\n")
     wiki.write("loader", '# Loader\n\n<script src="/_assets/x.js"></script>\n')
     page.goto("/page/loader")
+    expect(page.locator("article.page-content")).to_contain_text('<script src="/_assets/x.js"></script>')
+    expect(page.locator("article.page-content script")).to_have_count(0)
+    page.evaluate("() => { const s = document.createElement('script'); s.src = '/_assets/x.js'; document.body.append(s); }")
     page.wait_for_timeout(300)
     assert page.evaluate("window.pwned") is None
+
+
+def test_a_page_cannot_hand_the_task_lists_their_tasks(page, wiki):
+    # The task lists start from the tasks the page brings along, whose notes
+    # come as HTML the server rendered. A page's raw HTML that gave one of its
+    # elements the block's place (an id the lists once looked for, a <script>
+    # of JSON before the list) handed them tasks of its own, whose "rendered"
+    # notes went into the cards as they were: a live form posting to Zone.
+    import datetime
+    import json
+    today = datetime.date.today().isoformat()
+    fake = json.dumps({"tasks": [{"id": "deadbeef01", "title": "Fake task", "description": "see",
+                                  "created_at": today + "T09:00:00", "due_date": today}],
+                       "notes": ['<form id="evil" method="post" action="/delete/index"><button>x</button></form>'],
+                       "comments": []}).replace("<", "\\u003c").replace(">", "\\u003e")
+    wiki.write("plans", "# Plans\n\n"
+               f'<div id="tasks-initial" class="tasks-initial" hidden>{fake}</div>\n\n'
+               f'<script type="application/json" id="tasks-initial" class="tasks-initial">{fake}</script>\n\n'
+               "[[tasks: view=open]]\n")
+    (wiki.root / "_tasks").mkdir(exist_ok=True)
+    (wiki.root / "_tasks" / "tasks.json").write_text(json.dumps([{
+        "id": "real-1", "title": "Real task", "created_at": today + "T09:00:00", "due_date": today}]))
+    page.goto("/page/plans")
+    expect(page.locator(".tasks-app .task-item", has_text="Real task")).to_have_count(1)
+    expect(page.locator(".task-item", has_text="Fake task")).to_have_count(0)
+    expect(page.locator("#evil")).to_have_count(0)
+    expect(page.locator("article.page-content script")).to_have_count(1)   # the page's tasks, the list's own
+    expect(page.locator(".tasks-app > script.tasks-initial")).to_have_count(1)
 
 
 def test_a_page_frames_no_form(page, wiki):

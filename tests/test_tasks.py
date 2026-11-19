@@ -3099,7 +3099,7 @@ def test_a_page_brings_a_short_lists_tasks_only(client, wiki_dir):
     """A page view carries its lists' open tasks up to 150; a longer list
     asks for them (gzipped), so the page isn't megabytes."""
     block = lambda: json.loads(client.get("/tasks").get_data(as_text=True)
-                               .split('id="tasks-initial">', 1)[1].split("</script>", 1)[0])
+                               .split('class="tasks-initial">', 1)[1].split("</script>", 1)[0])
     tasks = [{"id": f"t{i}", "title": f"Task {i}", "created_at": "2026-01-01T09:00:00"} for i in range(150)]
     path = wiki_dir / "_tasks" / "tasks.json"
     path.parent.mkdir(exist_ok=True)

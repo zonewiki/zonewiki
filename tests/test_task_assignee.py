@@ -301,7 +301,7 @@ class TestNames:
         """The data block a page with a task list brings along."""
         (wiki_dir / "team.md").write_text("# Team\n\n[[tasks:]]\n")
         html = client.get("/page/team", headers=HOST).get_data(as_text=True)
-        return json.loads(html.split('id="tasks-initial">', 1)[1].split("</script>", 1)[0])
+        return json.loads(html.split('class="tasks-initial">', 1)[1].split("</script>", 1)[0])
 
     def test_a_page_with_a_task_list_brings_them_along(self, alice, wiki_dir):
         assert self.block(alice, wiki_dir)["people"] == {"users": ["alice", "bob"], "me": "alice"}

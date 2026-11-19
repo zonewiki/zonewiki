@@ -16,14 +16,19 @@ const { matchesFilter, parseFilter } = TasksCore;
 // draw from them, with no request. Each gets its own copy, as each would
 // from /api/tasks. Only at the page's start (tasks.js forgets them once its
 // lists have started): a list that starts later asks the server, which may
-// know more by then.
+// know more by then. The block is a <script> of JSON, the first child of the
+// first list's own element: never looked up by an id, which a page's raw HTML
+// could give one of its elements first (with "rendered" notes of its own,
+// which would go into the cards as HTML), and raw HTML makes no <script>
+// (go/markdown.go defuseHTML).
+const INITIAL = '.tasks-app > script.tasks-initial[type="application/json"]';
 let initialJSON;   // undefined: not looked for yet; '': none
 let initialOrder = null;   // with them: the user's own order of My tasks (ids)
 function initialTasks() {
   if (initialJSON === undefined) {
     initialJSON = '';
     try {
-      const data = JSON.parse(document.getElementById('tasks-initial').textContent);
+      const data = JSON.parse(document.querySelector(INITIAL).textContent);
       if (data.people) setPeople(data.people);
       if (data.word) document.body.dataset.tasksWord = data.word;
       if (Array.isArray(data.order)) initialOrder = data.order;
