@@ -131,27 +131,37 @@
 
 /* The lists in the left column (tasks_page.html .lists-rail; the side
    columns show from 1320px, where the row of pills hides): a line a list,
-   on the paper beside the sheet, in groups with a little room between them:
-   My tasks and the Inbox, the pins, the other lists (Your lists, Other
-   lists), All tasks. The counts at the line's end; the current one shaded
-   as a pill is. */
-.lists-rail { display: flex; flex-direction: column; gap: .9rem; font-size: .875rem; }
-.lists-rail > div { display: flex; flex-direction: column; }
-.lists-rail-head { margin: 0 .6rem .3rem; }
+   on the paper beside the sheet, in groups: the views (My tasks, the Inbox,
+   All tasks), Pinned, Lists (Your lists, Other lists). One rhythm: every
+   line as high, the same room before every group and heading, a heading
+   close to what it names, small, light and spaced so it reads as no list.
+   Names start in one line; a lock or people after the name, the counts at
+   the line's end; the current one shaded as a pill is. */
+.lists-rail { display: flex; flex-direction: column; font-size: .875rem; --rail-line: 1.9rem; }
+.lists-rail-group { display: flex; flex-direction: column; }
+.lists-rail-group + .lists-rail-group { margin-top: 1.4rem; }
+.lists-rail-head {
+  margin: 0; padding: 0 .6rem .25rem;
+  font-size: .6875rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
+  color: color-mix(in srgb, var(--muted) 75%, transparent);
+}
+/* Other lists, inside the group of Your lists: the room a group has. */
+.lists-rail-item + .lists-rail-head { margin-top: 1.4rem; }
 .lists-rail-item {
-  display: flex; align-items: center; gap: .4rem; min-width: 0;
-  padding: .28rem .6rem; border-radius: .4rem;
-  color: var(--fg); text-decoration: none; line-height: 1.35;
+  display: flex; align-items: center; gap: .35rem; min-width: 0; min-height: var(--rail-line);
+  padding: 0 .6rem; border-radius: .4rem;
+  color: var(--fg); text-decoration: none; line-height: 1.3;
 }
 .lists-rail-item:hover, .lists-rail-item:focus-visible { background: var(--btn-bg); color: var(--fg); text-decoration: none; }
 .lists-rail-item[aria-current] { font-weight: 600; background: color-mix(in srgb, var(--fg) 8%, var(--btn-bg)); }
 .lists-rail-item[hidden], .lists-rail-head[hidden] { display: none; }
 .lists-rail-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lists-rail-item .tasks-place-pin, .lists-rail-item .tasks-place-lock { color: var(--muted); flex: none; }
+.lists-rail-mark { display: inline-flex; flex: none; color: var(--muted); opacity: .7; }
+.lists-rail-mark svg { width: 11px; height: 11px; }
 .lists-rail-item .module-counts { margin-left: auto; flex: none; }
 .lists-rail-item .module-focus { display: none; }
 .lists-rail-item .lists-more-new { flex: none; }
-.lists-rail-filter { margin: 0 0 .3rem; padding: .25rem .5rem; font: inherit; font-size: .8125rem; }
+.lists-rail-filter { margin: 0 0 .25rem; padding: .25rem .5rem; font: inherit; font-size: .8125rem; }
 .lists-rail[data-reorder] .lists-rail-pins .lists-rail-item[draggable="true"] { cursor: grab; }
 .lists-rail .lists-rail-item.is-dragging { opacity: .45; }
 

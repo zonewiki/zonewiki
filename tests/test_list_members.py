@@ -768,10 +768,14 @@ def test_a_list_for_some_carries_the_people_sign(client, wiki):
     head = body.split('<header class="page-header">', 1)[1].split("</header>", 1)[0]
     assert 'class="lock list-for"' in head and "👥" in head and "🔒" not in head
     assert "For @hiring, alice: only they see this list and its tasks" in head
-    pill = body.split(f'data-place="list:{LIST}"', 1)[1].split("</a>", 1)[0]
+    row = body.split('<nav class="tasks-places"', 1)[1]
+    pill = row.split(f'data-place="list:{LIST}"', 1)[1].split("</a>", 1)[0]
     assert "tasks-place-for" in pill and "(for @hiring, alice)" in pill
-    team = body.split('data-place="list:team"', 1)
+    team = row.split('data-place="list:team"', 1)
     assert len(team) == 1 or "tasks-place-for" not in team[1].split("</a>", 1)[0]
+    # Its line in the left column: the people after its name.
+    line = body.split('<nav class="lists-rail"', 1)[1].split(f'data-place="list:{LIST}"', 1)[1].split("</a>", 1)[0]
+    assert "(for @hiring, alice)" in line and 'class="lists-rail-mark"' in line.split('class="lists-rail-name"', 1)[1]
 
 
 def test_a_batch_update_changes_fields_as_one_tasks_update_does(client, wiki):

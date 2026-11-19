@@ -28,34 +28,34 @@
 {{end}}
 
 {{- /* The lists in the left column (big screens, where the row of pills
-    hides): the switcher's places first, as the pills (My tasks, the Inbox,
-    then the pinned lists, each with its counts, which js/chrome.js
-    refreshes by data-place), then every list More holds (no counts; with
-    users Your lists and Other lists, each under its word when there are
-    both), then All tasks. The pins can be dragged up and down by who may
-    pin (data-reorder), and with many lists a field finds one
-    (js/listsrow.js). */}}
+    hides), in groups: the views (My tasks, the Inbox, All tasks), then
+    Pinned (the pins in their order), then every list More holds (Lists;
+    with users Your lists and Other lists when there are both). My tasks,
+    the Inbox and the pins carry the pills' counts, which js/chrome.js
+    refreshes by data-place; the others none. Names start in one line:
+    the only marks, a lock or people for whose a list is, come after the
+    name (the Inbox, always yours, has none here). The pins can be dragged
+    up and down by who may pin (data-reorder), and with many lists a field
+    finds one (js/listsrow.js). */}}
 {{define "lists_rail"}}
 {{- with .More}}<nav class="lists-rail" aria-label="Task lists"{{if $.Menu}} data-reorder{{end}}>
-<div class="lists-rail-places">
-{{- range $.Places}}{{if not .Pinned}}{{template "lists_rail_place" .}}{{end}}{{end}}</div>
-{{- if $.HasPins}}<div class="lists-rail-pins">
-{{- range $.Places}}{{if .Pinned}}{{template "lists_rail_place" .}}{{end}}{{end}}</div>{{end}}
-{{- if or .Lists .Others}}<div class="lists-rail-rest">
-{{- if and .Lists .Others}}<p class="rail-label lists-rail-head">Your lists</p>{{else}}<p class="rail-label lists-rail-head">Lists</p>{{end}}
+<div class="lists-rail-group lists-rail-places">
+{{- range $.Places}}{{if not .Pinned}}<a href="{{.Href}}" class="lists-rail-item lists-rail-place" data-place="{{.Key}}" title="{{.Title}}{{if .Private}} (only you see it){{end}}"{{if .Current}} aria-current="page"{{end}}><span class="lists-rail-name">{{.Label}}</span>{{template "module_counts" .Counts}}</a>{{end}}{{end}}
+<a href="/tasks" class="lists-rail-item lists-rail-all" title="Every task you see, in whatever list"{{if .All}} aria-current="page"{{end}}><span class="lists-rail-name">All tasks</span></a></div>
+{{- if $.HasPins}}<div class="lists-rail-group lists-rail-pins"><p class="lists-rail-head">Pinned</p>
+{{- range $.Places}}{{if .Pinned}}{{template "lists_rail_item" .}}{{end}}{{end}}</div>{{end}}
+{{- if or .Lists .Others}}<div class="lists-rail-group lists-rail-rest">
+{{- if and .Lists .Others}}<p class="lists-rail-head">Your lists</p>{{else}}<p class="lists-rail-head">Lists</p>{{end}}
 {{- if .Filter}}<input type="search" class="lists-rail-filter" placeholder="Find a list…" aria-label="Find a list" autocomplete="off" spellcheck="false">{{end}}
 {{- range .Lists}}{{template "lists_rail_item" .}}{{end}}
-{{- if and .Lists .Others}}<p class="rail-label lists-rail-head">Other lists</p>{{end}}
+{{- if and .Lists .Others}}<p class="lists-rail-head">Other lists</p>{{end}}
 {{- range .Others}}{{template "lists_rail_item" .}}{{end}}</div>{{end}}
-<div class="lists-rail-end"><a href="/tasks" class="lists-rail-item lists-rail-all" title="Every task you see, in whatever list"{{if .All}} aria-current="page"{{end}}><span class="lists-rail-name">All tasks</span></a></div>
 </nav>{{end}}
 {{- end}}
-{{define "lists_rail_place"}}<a href="{{.Href}}" class="lists-rail-item lists-rail-place" data-place="{{.Key}}" title="{{.Title}}{{if .Private}} (only you see it){{end}}{{with .For}} (for {{.}}){{end}}"{{if .Current}} aria-current="page"{{end}}>
-{{- if .Pinned}}<span class="tasks-place-pin" aria-hidden="true">{{template "icon_pin"}}</span>{{end}}
-{{- if .Private}}<span class="tasks-place-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}{{if .For}}<span class="tasks-place-lock tasks-place-for" aria-hidden="true">{{template "icon_people"}}</span>{{end}}<span class="lists-rail-name">{{.Label}}</span>{{template "module_counts" .Counts}}</a>
-{{- end}}
-{{define "lists_rail_item"}}<a href="{{.Href}}" class="lists-rail-item" data-list="{{.Label}}" data-place="{{.Key}}" title="{{.Title}}{{if .Private}} (only you see it){{end}}{{with .For}} (for {{.}}){{end}}"{{if .Current}} aria-current="page"{{end}}>
-{{- if .Private}}<span class="tasks-place-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}{{if .For}}<span class="tasks-place-lock tasks-place-for" aria-hidden="true">{{template "icon_people"}}</span>{{end}}<span class="lists-rail-name">{{.Label}}</span></a>
+{{- /* A list's line: a pin's has data-place's counts (lists-rail-place); any other has data-list, for the find field. */}}
+{{define "lists_rail_item"}}<a href="{{.Href}}" class="lists-rail-item{{if .Pinned}} lists-rail-place{{end}}"{{if not .Pinned}} data-list="{{.Label}}"{{end}} data-place="{{.Key}}" title="{{.Title}}{{if .Private}} (only you see it){{end}}{{with .For}} (for {{.}}){{end}}"{{if .Current}} aria-current="page"{{end}}><span class="lists-rail-name">{{.Label}}</span>
+{{- if .Private}}<span class="lists-rail-mark" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}{{if .For}}<span class="lists-rail-mark" aria-hidden="true">{{template "icon_people"}}</span>{{end}}
+{{- if .Pinned}}{{template "module_counts" .Counts}}{{end}}</a>
 {{- end}}
 
 {{define "tasks_main"}}

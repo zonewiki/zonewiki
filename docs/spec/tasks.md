@@ -1658,12 +1658,13 @@ With a finger there is no dragging (it scrolls and taps): **Unpin** and **Pin** 
 #### The lists in the left column
 
 **On a big screen (from 1320px wide, where pages get their side columns) the lists are the left column of `/tasks`, and the row of pills isn't shown**: the same entries, a line each, where there is room for all of them (`lists_rail` in `templates/tasks_page.html`, `.lists-rail`; the row stays for every narrower screen).
-From the top:
-**My tasks** and the **Inbox**;
-**the pinned lists** in their order, with their pins;
-**every other list**, A–Z, under **Lists** (with users under **Your lists** and **Other lists**, as in More), with the find field from 8 lists on;
-**All tasks** last.
+In three groups, from the top:
+**the views**, My tasks, the Inbox and All tasks (no list of their own);
+**Pinned**, the pinned lists in their order;
+**Lists**, every other list A–Z (with users **Your lists** and **Other lists**, as in More), with the find field from 8 lists on.
 The current view's line is shaded.
+It keeps one rhythm: every line as high, the same room before each group and heading, a heading small, light and spaced, close to the lists it names;
+the names start in one line, with no pin (the heading says it), and a list's lock or people after its name (the Inbox, always yours, has none there).
 My tasks, the Inbox and the pins carry the pills' counts, kept current with them (`js/chrome.js` refreshes `.lists-rail-place` by `data-place` too); the other lists none, as under More.
 The pins can be dragged up and down with the mouse, for who may pin, as the pills can (Dragging the pills).
 A list new to this browser has "new" beside its name there as under More, and counts as seen once the column has shown it (More then gets no dot).

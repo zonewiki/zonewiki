@@ -259,30 +259,33 @@ class TestListSwitcher:
         assert '<aside class="rail rail-left rail-lists"><a class="rail-top"' in html and 'class="lists-rail"' not in html
 
     def test_the_lists_in_the_left_column(self, client, wiki_dir):
-        # On big screens the left column has every list, a line each: the
-        # places with their counts (My tasks, the Inbox, the pins), then
-        # the lists More holds, then All tasks; the same entries as the row.
+        # On big screens the left column has every list, a line each, in
+        # groups: the views (My tasks and the Inbox with their counts, All
+        # tasks), Pinned (with counts), Lists (none); the same entries as
+        # the row. Names start in one line: no pin, marks after the name.
         self.wiki(client, wiki_dir)
         create_task(client, title="Report", list="task", due_date=date.today().isoformat())
         html = self.get(client, "/tasks?list=shop")
         assert '<main class="wide">' in html
         rail = html.split('<nav class="lists-rail"', 1)[1].split("</nav>", 1)[0]
-        lines = re.findall(r'<a href="([^"]+)" class="lists-rail-item[^"]*"(?: data-list="[^"]*")?(?: data-place="([^"]+)")?[^>]*?( aria-current="page")?>.*?<span class="lists-rail-name">([^<]*)</span>', rail, re.S)
+        lines = re.findall(r'<a href="([^"]+)" class="lists-rail-item[^"]*"(?: data-list="[^"]*")?(?: data-place="([^"]+)")?[^>]*?( aria-current="page")?><span class="lists-rail-name">([^<]*)</span>', rail)
         assert [(href, key, name, cur != "") for href, key, cur, name in lines] == [
             ("/tasks?mine=1", "mine", "My tasks", False), ("/tasks?list=inbox", "inbox", "Inbox", False),
+            ("/tasks", "", "All tasks", False),
             ("/tasks?list=task", "list:task", "task", False),
-            ("/tasks?list=gifts", "list:gifts", "gifts", False), ("/tasks?list=shop", "list:shop", "shop", True),
-            ("/tasks", "", "All tasks", False)]
-        pins = rail.split('<div class="lists-rail-pins">', 1)[1].split("</div>", 1)[0]
-        assert re.search(r'class="module-due"[^>]*>1<', pins) and "tasks-place-pin" in pins
-        rest = rail.split('<div class="lists-rail-rest">', 1)[1]
-        assert "module-counts" not in rest and '<p class="rail-label lists-rail-head">Lists</p>' in rest
+            ("/tasks?list=gifts", "list:gifts", "gifts", False), ("/tasks?list=shop", "list:shop", "shop", True)]
+        heads = re.findall(r'<p class="lists-rail-head">([^<]*)</p>', rail)
+        assert heads == ["Pinned", "Lists"]
+        pins = rail.split('<div class="lists-rail-group lists-rail-pins">', 1)[1].split("</div>", 1)[0]
+        assert re.search(r'class="module-due"[^>]*>1<', pins) and "<svg" not in pins   # no pin: the heading says it
+        rest = rail.split('<div class="lists-rail-group lists-rail-rest">', 1)[1]
+        assert "module-counts" not in rest
         assert "lists-rail-filter" not in rail          # a find field from 8 lists
         assert "data-reorder" in html.split('<nav class="lists-rail"', 1)[1].split(">", 1)[0]
-        # All tasks is the current line on /tasks; no pins, no pins' group.
+        # All tasks is the current line on /tasks; no pins, no Pinned.
         client.post("/tasks/pin-list", data={"list": "task", "pin": "0"}, headers=HOST)
         rail = self.get(client, "/tasks").split('<nav class="lists-rail"', 1)[1].split("</nav>", 1)[0]
-        assert "lists-rail-pins" not in rail
+        assert "lists-rail-pins" not in rail and ">Pinned<" not in rail
         assert re.search(r'class="lists-rail-item lists-rail-all"[^>]*aria-current="page"', rail)
 
     def test_the_lists_and_all_above_the_heading(self, client, wiki_dir):
