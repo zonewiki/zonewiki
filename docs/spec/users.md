@@ -1252,7 +1252,7 @@ The dialog says under its fields who sees the task ("Private: only you see this 
 Cards of private tasks show 🔒 (`.task-private`).
 
 **A new task is private until it is filed**: from New task, `c t` or an assistant's `create_task` without a list it is in its maker's Inbox (The Inbox in `docs/spec/tasks.md`).
-The dialog says so under the title: "Adds to your Inbox: only you see it.", and for a shared list "Adds to the list team: everyone sees it."
+The dialog says so under the title: "Adds to your Inbox: only you see it.", for a shared list "Adds to the list team: everyone sees it.", and for a list for some "Adds to the list hiring: only those it is for see it."
 
 **A shared task can't be made private**: your private lists and your Inbox are off in its List field, and the API and `update_task` answer 400, "A shared task stays shared" for a private list, "A shared task is always in a list: move it to another shared list" for the Inbox (`errSharedListed`).
 **A tag never moves a task**: adding a tag with a private list's name to a task, in the modal, a batch or `update_task`, leaves it where it is; such a tag on a shared task shows to everyone, as any tag.
@@ -1412,7 +1412,7 @@ An undo that sends the task's old `history` leaves no trace, as for the dates.
 **A series** carries its assignee on: a recurring task's next occurrence has the same one (`spawnRecurring`).
 
 **Restored and imported tasks** (`POST /api/tasks/restore`, `/api/tasks/import`; `sanitizeSnapshot`) have an assignee only as a write would take it: a name that can be assigned here, on a task that isn't private.
-So an export from another wiki doesn't bring its people along; the import's toast says how many tasks were assigned to people who can't be assigned here, though it calls them people who are not users of this wiki (`unassigned` in the route's answer).
+So an export from another wiki doesn't bring its people along; the import's toast says how many tasks were assigned to people who can't be given tasks here (`unassigned` in the route's answer).
 
 **Assistants** (`docs/spec/mcp.md`): `create_task` and `update_task` take `assignee` (a user name, `me` for the assistant's user, `none`), `search_tasks` filters by it (`assignee=me`: "what do I have to do"), and a task's text says who it is assigned to.
 

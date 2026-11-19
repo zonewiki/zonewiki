@@ -631,6 +631,29 @@ def test_long_press_then_move_where_nothing_drags_does_nothing(phone):
     expect(phone.locator("#task-selbar")).to_be_hidden()
 
 
+def test_a_sideways_move_where_nothing_swipes_is_no_long_press(phone):
+    """A finger that moves sideways on a card with nothing to swipe (a closed
+    task) before the long press is up has moved: the card is not held, and
+    no selection starts while it rests there."""
+    complete_one(phone)
+    open_tab(phone, "closed")
+    box = card(phone, "Old chore").bounding_box()
+    x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+    cdp = phone.context.new_cdp_session(phone)
+
+    def send(kind, points):
+        cdp.send("Input.dispatchTouchEvent", {"type": kind, "touchPoints": points})
+
+    send("touchStart", [{"x": x, "y": y}])
+    for i in range(1, 5):
+        send("touchMove", [{"x": x + 10 * i, "y": y}])
+        phone.wait_for_timeout(16)
+    phone.wait_for_timeout(600)                     # past the long press, the finger still down
+    expect(phone.locator(".tasks-app")).not_to_contain_class("tasks-selecting")
+    send("touchEnd", [])
+    expect(phone.locator("#task-selbar")).to_be_hidden()
+
+
 def test_touch_press_turns_off_native_drag(new_page, wiki):
     # Phone browsers start their own HTML5 drag on a long press of a
     # draggable="true" element, which cancelled the touch drag mid-gesture:

@@ -194,8 +194,10 @@ app.listEl.addEventListener('touchmove', e => {
       st.touchDrag.swiping = true;
       e.preventDefault();
       setSwipe(dx);
-    } else if (!sideways && Math.hypot(dx, dy) > 10) {
-      endTouchDrag(false);  // a vertical move: the page scrolls
+    } else if (Math.hypot(dx, dy) > 10) {
+      // A vertical move (the page scrolls), or a sideways one on a card
+      // with nothing to swipe: either way no long press.
+      endTouchDrag(false);
     }
     return;
   }

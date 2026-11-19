@@ -268,11 +268,16 @@ class TestSnapshots:
         assert "assignee" not in self.restore(alice, **fields)
 
     def test_an_import_drops_other_wikis_people(self, alice):
-        export = {"zone_tasks": 1, "tasks": [{"title": "Theirs", "assignee": "zed"}, {"title": "Ours", "assignee": "bob"}]}
+        """And those here who can't be given tasks, a viewer or a disabled
+        user: the toast counts them all as people who can't be given tasks
+        here, not as people who are not users of this wiki."""
+        export = {"zone_tasks": 1, "tasks": [{"title": "Theirs", "assignee": "zed"}, {"title": "Ours", "assignee": "bob"},
+                                             {"title": "Viewer's", "assignee": "carol"},
+                                             {"title": "Disabled's", "assignee": "dan"}]}
         resp = alice.post("/api/tasks/import", json={"file": export}, headers=HOST)
-        assert resp.status_code == 200 and resp.get_json()["unassigned"] == 1      # the toast says so
+        assert resp.status_code == 200 and resp.get_json()["unassigned"] == 3      # the toast says so
         got = {t["title"]: t.get("assignee") for t in alice.get("/api/tasks", headers=HOST).get_json()}
-        assert got == {"Theirs": None, "Ours": "bob"}
+        assert got == {"Theirs": None, "Ours": "bob", "Viewer's": None, "Disabled's": None}
 
 
 class TestNames:

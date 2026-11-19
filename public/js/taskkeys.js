@@ -26,6 +26,10 @@ function planKeyMove(direction) {
   app.sectionKeyMove(direction, app.planSectionList(div), app.OPEN_ORDER);
 }
 
+// An input whose text the browser's own Ctrl+Z undoes (not a checkbox or a
+// button).
+const typesText = el => el.matches('input') && !['checkbox', 'radio', 'button', 'submit', 'reset', 'range', 'color', 'file'].includes(el.type);
+
 document.addEventListener('keydown', async e => {
   // Only the active instance handles keyboard events (multi-embed safety)
   if (app.tasksInstances.length > 1 && app.activeTasksInstance !== app.instanceId) return;
@@ -35,11 +39,12 @@ document.addEventListener('keydown', async e => {
   // The ⋯ menu owns the keyboard while open (its buttons take Enter/Space)
   if (st.taskMenu) return;
 
-  // Ctrl+Z undo — works everywhere except inside the edit modal
+  // Ctrl+Z undo — works everywhere except inside the edit modal and where
+  // text is typed (the filter field undoes its own text)
   if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey && st.pendingUndo) {
     if (app.modal.open || app.deadlineModal.open) return;
     const focus = document.activeElement;
-    if (focus && focus.closest('textarea, [contenteditable]')) return;
+    if (focus && (focus.closest('textarea, [contenteditable]') || typesText(focus))) return;
     e.preventDefault();
     app.triggerUndo();
     return;

@@ -628,7 +628,7 @@ They go into the list the menu was opened in, whatever list they were exported f
 On All tasks (and a tag's embed) each goes where its own list says: the list of that name here, when there is one as private as the task was; else a private task into your Inbox, and a shared one, with users, into the shared list `general` (made for it; without users into the Inbox).
 Imported on the Inbox's view, every task goes into the Inbox: with users yours alone, without an assignee.
 A task exported private stays private, wherever it is imported: into a shared list it goes to your Inbox instead; into a private list of yours every imported task is private, as a new one is.
-With users, a task assigned to someone who can't be given tasks here comes in as no one's, and the toast says how many ("…; 2 were assigned to people who are not users of this wiki").
+With users, a task assigned to someone who can't be given tasks here comes in as no one's, and the toast says how many ("…; 2 were assigned to people who can't be given tasks here": not users of this wiki, or disabled or viewers).
 
 #### A task keeps its id
 
@@ -1669,7 +1669,7 @@ A registry that names a `default` list reads as that list pinned first (`ParseRe
 
 ### Where a new task goes
 
-The edit dialog of a new task says it under the title (`.task-edit-target`, `syncTarget` in `js/taskmodal.js`), and with users who sees it: "Adds to your Inbox: only you see it.", "Adds to the list team: everyone sees it.", "Adds to the list diary: only you see it."; without users "Adds to the Inbox." or "Adds to the list shop.".
+The edit dialog of a new task says it under the title (`.task-edit-target`, `syncTarget` in `js/taskmodal.js`), and with users who sees it: "Adds to your Inbox: only you see it.", "Adds to the list team: everyone sees it.", "Adds to the list hiring: only those it is for see it." (a list for some), "Adds to the list diary: only you see it."; without users "Adds to the Inbox." or "Adds to the list shop.".
 It follows the List field, and a `#word` in the title that names a list (Quick-add: `#shop` puts the task in the list shop, the first such word; the others are tags).
 Hidden when editing a task and for several titles at once.
 
@@ -1787,7 +1787,7 @@ A background reload keeps the selected tasks still shown.
 350 ms without moving over 10px picks a card up and selects it (without scrolling).
 A floating copy (`.task-touch-ghost`) follows the finger, the page auto-scrolls near the edges, and release drops through the same code as a mouse drop (`touchDrop` adapters registered by each render; list touch listeners attached once).
 A touch `pointerdown` sets the card's `draggable` to false (mouse sets it back; cards are marked `data-drag`), and native `dragstart` is cancelled for touch, because Android Chrome and iOS Safari otherwise start their own HTML5 drag mid-gesture.
-Moving up or down earlier is a normal scroll; a finished drag isn't a tap.
+Moving over 10px earlier is no long press: up or down a normal scroll, sideways a swipe where the card has one (Swipes) and nothing where it hasn't; a finished drag isn't a tap.
 Let go without having moved over 10px, the long press starts selection mode with that card instead of dropping it; where nothing drags (Closed, or a view without dragging) the press only selects the card (`holdCard`), letting go starts selection mode, and moving over 10px first cancels it.
 The browser's own long-press menu is suppressed on a card while a touch gesture runs.
 
@@ -1829,7 +1829,7 @@ Under `(pointer: coarse)` cards have `touch-action: pan-y`; `.tasks-list` has `o
 | **a** | With users: assign the selected tasks (Assigning tasks in `docs/spec/users.md`) |
 | **Shift+F10** / menu key | The selected task's ⋯ menu (on several selected tasks, the selection's) |
 | **Ctrl+Shift+↑/↓** (or **Ctrl+Shift+J/K**) | Move the selected tasks within the manual order (in a sort, a notice says to press **o** until Manual; Sections) |
-| **Ctrl+Z** | Undo what was just done to a task, while its notice shows (not in the edit modal, the deadline dialog or a text area; in the filter field it is the task's undo too) |
+| **Ctrl+Z** | Undo what was just done to a task, while its notice shows (not in the edit modal, the deadline dialog, a text area or a text field such as the filter, where Ctrl+Z undoes the typing) |
 | **o** | On the Open tab: the order, manual, by deadline, newest first (Sorting) |
 | **d** | On the Open tab and on Today: how it shows its tasks, in turn: one list, Plan, by person, by list, as far as the view offers them (The tabs and the Open tab's control) |
 | **Tab** / **Shift+Tab** | The next / previous tab (on the Tasks page, or on another page while a task is selected or the focus is in the list; Closed is not in the cycle) |

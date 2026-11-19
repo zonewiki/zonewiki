@@ -671,7 +671,8 @@ function syncTarget() {
   // private later.
   const users = document.body.dataset.users === '1';
   const where = ref ? `Adds to the list ${app.listName(ref)}` : users ? 'Adds to your Inbox' : 'Adds to the Inbox';
-  const who = !users ? '' : app.isPrivateList(ref) ? ': only you see it' : ': everyone sees it';
+  const who = !users ? '' : app.isPrivateList(ref) ? ': only you see it'
+    : app.listMembers(ref) ? ': only those it is for see it' : ': everyone sees it';
   targetEl.textContent = where + who + '.';
   // A task for someone, still in the Inbox nobody chose: it needs a shared
   // list. (In the Inbox the user chose, as in a private list, there is no

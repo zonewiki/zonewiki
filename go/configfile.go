@@ -255,7 +255,7 @@ func loadSettings(f *settingsfile.File) (*Settings, error) {
 		if v, where, set := get(size.key); set && v != "" {
 			n, err := parseSize(v)
 			if err != nil {
-				return nil, fmt.Errorf("%s%s isn't a size. Use bytes, or KB, MB, GB (e.g. 25MB or 5GB).", where, v)
+				return nil, fmt.Errorf("%s%s isn't a size. Use bytes, or KB, MB, GB, TB (e.g. 25MB or 5GB).", where, v)
 			}
 			*size.to = n
 		}

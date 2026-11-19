@@ -622,6 +622,12 @@ def test_number_keys_start_selected_tasks_on_that_day(page, wiki):
     # The undo is armed once the write's response is in, a moment after the
     # server has it: Ctrl+Z before that would undo the step before.
     expect(page.locator(".task-undo-toast")).to_contain_text("2 tasks unplanned")
+    # In the filter field Ctrl+Z is the field's own: the task stays as it is.
+    page.locator("#task-filter-search").focus()
+    page.keyboard.press("Control+z")
+    page.wait_for_timeout(300)
+    assert task_by_title(page, "Second")["start_date"] is None
+    page.locator("#task-filter-search").blur()
     page.keyboard.press("Control+z")
     wait_for_field(page, "Second", "start_date", tomorrow())
 

@@ -55,7 +55,7 @@ func TestSizeSettings(t *testing.T) {
 	}
 	for text, want := range map[string]string{
 		"upload-max = big":    ".zone/config line 1: upload-max = big isn't a size",
-		"\nstorage-max = 5PB": ".zone/config line 2: storage-max = 5PB isn't a size",
+		"\nstorage-max = 5PB": ".zone/config line 2: storage-max = 5PB isn't a size. Use bytes, or KB, MB, GB, TB",
 		"storage-max = 0":     "storage-max = 0 isn't a size",
 	} {
 		if _, err := load(text); err == nil || !strings.Contains(err.Error(), want) {
