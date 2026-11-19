@@ -103,11 +103,14 @@ func isPing(r *http.Request) bool {
 // hosts images, media and frames may come from all the same ("*": any,
 // as before). Links stay: following one is the reader's doing.
 //
-// Clickjacking: another site could load Zone invisibly in a frame and trick
-// a signed-in user into clicking Delete or Commit, so only Zone's own pages
-// may frame it (a page's raw HTML may show an upload in an <iframe>). A
-// response with its own policy (an SVG upload's) keeps it and gets only
-// frame-ancestors added.
+// Clickjacking: a site could load Zone invisibly in a frame and trick a
+// signed-in user into clicking Delete or Commit; and so could one of Zone's
+// own pages, whose raw HTML may hold an <iframe> and inline styles (a
+// transparent /admin or /changes over a decoy). So no response of Zone's
+// may be framed (frame-ancestors 'none'), but an upload, which a page may
+// show in an <iframe> (a PDF): it marks itself framable by Zone
+// (frameableBySelf). A response with its own policy (an SVG upload's)
+// keeps it and gets only frame-ancestors added.
 func pageCSP(s *Settings) string {
 	external := ""
 	if len(s.External) > 0 {
@@ -116,8 +119,12 @@ func pageCSP(s *Settings) string {
 	return "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
 		"img-src 'self' data: blob:" + external + "; media-src 'self' data: blob:" + external + "; " +
 		"frame-src 'self'" + external + "; font-src 'self' data:; connect-src 'self'; " +
-		"object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
+		"object-src 'none'; base-uri 'self'; form-action 'self'"
 }
+
+// frameableBySelf: the response may be framed by Zone's own pages (an
+// upload's, shown in a page's <iframe>); contentPolicy reads the mark.
+func frameableBySelf(h http.Header) { h.Set("X-Frame-Options", "SAMEORIGIN") }
 
 // externalRE: a host of the external-content setting, as a policy's source:
 // a name, with "*." for its subdomains, maybe a port; or "*", any host.
@@ -146,13 +153,18 @@ func (s *Settings) loadsFrom(host string) bool {
 }
 
 func contentPolicy(h http.Header) {
+	ancestors := "'none'"
+	if h.Get("X-Frame-Options") == "SAMEORIGIN" { // frameableBySelf
+		ancestors = "'self'"
+	} else {
+		h.Set("X-Frame-Options", "DENY") // browsers without CSP
+	}
 	csp := h.Get("Content-Security-Policy")
 	if csp == "" {
-		h.Set("Content-Security-Policy", pageCSP(settings()))
+		h.Set("Content-Security-Policy", pageCSP(settings())+"; frame-ancestors "+ancestors)
 	} else if !strings.Contains(csp, "frame-ancestors") {
-		h.Set("Content-Security-Policy", csp+"; frame-ancestors 'self'")
+		h.Set("Content-Security-Policy", csp+"; frame-ancestors "+ancestors)
 	}
-	h.Set("X-Frame-Options", "SAMEORIGIN") // browsers without CSP
 	// A JSON or text response is never run as a script (<script src=…>).
 	h.Set("X-Content-Type-Options", "nosniff")
 	// What a page does load from elsewhere (external-content) isn't told

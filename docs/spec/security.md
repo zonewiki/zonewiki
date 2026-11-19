@@ -192,7 +192,7 @@ Also know this:
   defeating DNS rebinding attacks (a rebinding page's `Host` is its own name).
   `ZONE_ALLOW_REMOTE=1` (in `.env`) without `hosts` skips the check (LAN access by IP); with `hosts` set the check stays on.
   Behind a reverse proxy on the same host, `hosts` alone is enough (the port stays on loopback).
-- **Scripts in pages don't run** (`pageCSP`): every response carries a `Content-Security-Policy` with `script-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'` (and what a page may load, below).
+- **Scripts in pages don't run** (`pageCSP`): every response carries a `Content-Security-Policy` with `script-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'` (and what a page may load, below).
   Pages render their raw HTML as written,
   and pages are also written by AI clients over MCP,
   which may have read a prompt injection in a mail or a web page: a `<script>`,
@@ -251,7 +251,8 @@ Also know this:
   Tests: `TestProduction` in `tests/test_routes.py`, `test_a_page_asks_no_other_host_for_anything` in `tests/e2e/test_security.py` (whose harness fails on any request to another host).
 - **Regexes from AI clients can't hang the server**: `grep_wiki` runs `git grep` in its own process, killed after 10 s; `replace_in_pages` matches with Go's RE2, which takes time linear in the text (no backtracking, so no lookarounds or backreferences).
   `replace_in_pages` in `docs/spec/mcp.md`.
-- **Clickjacking**: `frame-ancestors 'self'` in that policy (added to an existing one, e.g. an SVG upload's sandbox policy) and `X-Frame-Options: SAMEORIGIN` (`pageCSP`), so no other site can frame Zone.
+- **Clickjacking**: `frame-ancestors 'none'` in that policy (added to an existing one) and `X-Frame-Options: DENY` (`contentPolicy`), so nothing frames a view of Zone's: not another site, and not one of Zone's own pages, whose raw HTML may hold an `<iframe>` and inline styles (a transparent `/admin` or `/changes`, where one click removes a user or undoes a change, laid over a decoy).
+  Uploads are the exception (`frameableBySelf`, in `serveUploadFile`): a page may show a PDF, a picture or a text file in an `<iframe>`, so an upload's response has `frame-ancestors 'self'` and `X-Frame-Options: SAMEORIGIN` (an SVG's sandbox policy gets the same added).
 - **Self-hosting behind HTTPS**: the session cookie is `Secure` when the request came over HTTPS, Zone's own or a proxy's `X-Forwarded-Proto: https` (`isHTTPS`); over plain http (localhost, LAN) it works as before.
   Wrong passwords and wrong MCP tokens are throttled per client (`Throttle`, `loginThrottle`/`mcpThrottle`, in memory): after 5 failures in a row each try waits 1 minute, doubling up to an hour, refused unchecked (429, the login page says how long; `/mcp` sends `Retry-After`);
   a success clears the client.

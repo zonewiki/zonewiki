@@ -174,6 +174,7 @@ func serveUploadFile(w http.ResponseWriter, r *http.Request, dir, filename strin
 	if mimeType == "image/svg+xml" {
 		w.Header().Set("Content-Security-Policy", svgCSP)
 	}
+	frameableBySelf(w.Header()) // a page may show it in an <iframe>
 	serveFile(w, r, dir, filename, disposition)
 }
 

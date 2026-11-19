@@ -1910,11 +1910,17 @@ class TestStorageMax:
 
 class TestProduction:
 
-    def test_no_framing_by_other_sites(self, client, wiki_dir):
-        for path in ("/page/index", "/tasks", "/api/version", "/login"):
+    def test_no_framing_by_other_sites_or_by_zone(self, client, wiki_dir):
+        # A page's raw HTML may hold an <iframe>: of Zone's views none is
+        # framed, by another site or by Zone; an upload may be (a PDF in a page).
+        for path in ("/page/index", "/tasks", "/api/version", "/login", "/changes", "/public/style.css", "/nope"):
             resp = client.get(path, headers=HOST)
-            assert "frame-ancestors 'self'" in resp.headers["Content-Security-Policy"], path
-            assert resp.headers["X-Frame-Options"] == "SAMEORIGIN", path
+            assert resp.headers["Content-Security-Policy"].endswith("; frame-ancestors 'none'"), path
+            assert resp.headers["X-Frame-Options"] == "DENY", path
+        (wiki_dir / "_assets" / "a.pdf").write_bytes(b"%PDF-1.4\n")
+        resp = client.get("/_assets/a.pdf", headers=HOST)
+        assert resp.headers["Content-Security-Policy"].endswith("; frame-ancestors 'self'")
+        assert resp.headers["X-Frame-Options"] == "SAMEORIGIN"
 
     def test_only_zones_own_scripts_run(self, client, wiki_dir):
         # A page's raw HTML (written by an AI client after a prompt injection,

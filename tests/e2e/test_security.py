@@ -83,6 +83,25 @@ def test_a_links_ping_posts_nothing(page, wiki):
     assert (wiki.root / "victim.md").exists()
 
 
+def test_a_page_frames_no_page_of_zones(page, wiki):
+    # A page's raw HTML could lay a transparent frame of /admin or /changes
+    # (one click there removes a user or undoes a change) over a decoy: no
+    # view of Zone's may be framed, by another site or by Zone itself. An
+    # upload may: a page shows a PDF or a picture in an iframe.
+    (wiki.root / "_assets" / "note.txt").write_text("framed upload\n")
+    wiki.write("decoy", "# Decoy\n\n"
+               '<iframe id="zone" src="/page/index" style="opacity:0.01"></iframe>\n\n'
+               '<iframe id="tasks" src="/tasks"></iframe>\n\n'
+               '<iframe id="upload" src="/_assets/note.txt"></iframe>\n')
+    page.goto("/page/decoy")
+    expect(page.frame_locator("#upload").locator("body")).to_contain_text("framed upload")
+    page.wait_for_timeout(300)
+    for frame in ("zone", "tasks"):
+        expect(page.frame_locator(f"#{frame}").locator("article, .tasks-app, nav")).to_have_count(0)
+    page.csp_violations.clear()
+    page.js_errors.clear()
+
+
 def test_a_tasks_id_is_text_on_its_card(page, wiki):
     # A tasks file written by hand (or by an older Zone) may hold any id:
     # the card shows the task, and the id makes no element of its own.
