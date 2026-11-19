@@ -5,7 +5,7 @@ from datetime import date, timedelta
 
 from playwright.sync_api import expect
 
-from conftest import TOUCH_PHONE, wait_until
+from conftest import TOUCH_PHONE, quick_touch, still, wait_until
 
 
 def card(page, title):
@@ -144,6 +144,7 @@ def test_commit_link_shares_the_meta_line_on_phone(new_page, wiki):
     wiki.write("draft", "# Draft\n\nNot committed.\n")
     phone = new_page(**TOUCH_PHONE)
     phone.goto("/page/draft")
+    still(phone)
     meta = phone.locator(".page-meta").bounding_box()
     link = phone.locator(".commit-link").bounding_box()
     assert abs((link["y"] + link["height"] / 2) - (meta["y"] + meta["height"] / 2)) < 6
@@ -179,14 +180,16 @@ def test_desktop_editor_keeps_inline_buttons(page, wiki):
 
 def swipe(page, locator, dx, dy=0, steps=8, release=True):
     cdp = page.context.new_cdp_session(page)
+    expect(locator).to_be_visible()   # drawn again after a write: no box until it is back
     b = locator.bounding_box()
     x0, y0 = b["x"] + b["width"] / 2, b["y"] + b["height"] / 2
 
     def send(kind, points):
         cdp.send("Input.dispatchTouchEvent", {"type": kind, "touchPoints": points})
 
-    send("touchStart", [{"x": x0, "y": y0}])
-    for i in range(1, steps + 1):
+    quick_touch(page, cdp, (x0, y0), (x0 + dx / steps, y0 + dy / steps))
+    page.wait_for_timeout(16)
+    for i in range(2, steps + 1):
         send("touchMove", [{"x": x0 + dx * i / steps, "y": y0 + dy * i / steps}])
         page.wait_for_timeout(16)
     if release:

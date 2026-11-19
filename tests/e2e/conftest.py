@@ -17,6 +17,7 @@ import re
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -221,16 +222,71 @@ def _wait_when_there(page):
     ready before they return, so no test acts on a page whose code hasn't
     started: a click then did what the plain HTML does, or met a task list
     without its tasks. ready=False: return as Playwright does (a test that
-    holds a request back, or looks at the page while it loads)."""
+    holds a request back, or looks at the page while it loads).
+    goto and reload also settle (below) before they leave the page: a box
+    ticked and the page reloaded at once lost the tick, its request cut off.
+    settled=False: leave at once (a test that holds a request back)."""
     for name in ("goto", "reload", "wait_for_url"):
         plain = getattr(page, name)
 
-        def waiting(*args, ready=True, _plain=plain, **kwargs):
+        def waiting(*args, ready=True, settled=True, _plain=plain, _leaves=name != "wait_for_url", **kwargs):
+            if settled and _leaves:
+                settle(page)
             result = _plain(*args, **kwargs)
             if ready:
                 wait_ready(page)
             return result
         setattr(page, name, waiting)
+
+
+# Lets the page run what is queued: a fetch's answer handled, its rendering
+# done (a frame, then a task after it).
+_TURN_JS = "() => new Promise(r => requestAnimationFrame(() => setTimeout(r)))"
+
+
+def settle(page, timeout_ms: int = WAIT_MS):
+    """Wait until the page's own requests (fetch, XHR) have their answers
+    and the page has handled them. The server writes before it answers, so
+    a test that saw a change in the API (wait_until) or on disk could act on
+    the page before the page knew of it: a menu still offering Follow, a
+    dialog opened from the task as it was. Fails when a request never ends,
+    naming it; a test that holds one back on purpose doesn't settle."""
+    inflight = getattr(page, "inflight", None)
+    if inflight is None:
+        return
+    for _ in range(timeout_ms // 50):
+        if not inflight:
+            try:
+                page.evaluate(_TURN_JS)
+            except PlaywrightError:
+                return  # the page is going away: nothing left to wait for
+            if not inflight:  # its handling sent no request of its own
+                return
+        else:
+            page.wait_for_timeout(50)
+    raise AssertionError(f"the page's requests never finished: {sorted(r.url for r in inflight)}")
+
+
+# Whether the layout stands still: the fonts are in (a line's height changes
+# when the serif heading font arrives) and no transition or animation runs
+# (one that repeats forever is a spinner, not a move).
+_STILL_JS = """async () => {
+  await document.fonts.ready;
+  const moving = () => document.getAnimations().filter(a =>
+    a.playState === 'running' && a.effect?.getTiming().iterations !== Infinity);
+  for (let a; (a = moving()).length; ) await Promise.all(a.map(x => x.finished.catch(() => {})));
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+}"""
+
+
+def still(page):
+    """Wait until nothing on the page moves (its requests answered and
+    drawn, fonts loaded, transitions and animations done), for a test that
+    measures where things are: a box measured mid-transition, before the
+    heading font, or before a late answer drew a row above it, was a few
+    pixels off on a busy machine."""
+    settle(page)
+    page.evaluate(_STILL_JS)
 
 
 def more_menu(page):
@@ -243,16 +299,47 @@ def more_menu(page):
         page.locator("#task-more-btn").click()
 
 
-def wait_until(page, predicate, timeout_ms: int = WAIT_MS):
+def wait_until(page, predicate, timeout_ms: int = WAIT_MS, settled: bool = True):
     """Wait until predicate() holds, looking every 100 ms; fails when it
     never does. For what expect() can't watch: the API's answer, a file on
     disk, a request a route held back. It waits through the page, so the
-    page's routes and events go on meanwhile (time.sleep would stop them)."""
+    page's routes and events go on meanwhile (time.sleep would stop them).
+    Then it settles (the page has the answers to its requests), so the next
+    step meets a page that knows what the server has; settled=False for a
+    request a route holds back."""
     for _ in range(timeout_ms // 100):
         if predicate():
-            return
+            break
         page.wait_for_timeout(100)
-    assert predicate(), "condition not met in time"
+    else:
+        assert predicate(), "condition not met in time"
+    if settled:
+        settle(page, timeout_ms)
+
+
+# A touch held this long without moving picks the card up (LONG_PRESS_MS in
+# public/js/tasktouch.js).
+LONG_PRESS_MS = 350
+
+
+def quick_touch(page, cdp, start, first_move):
+    """Put a finger down at `start` and move it to `first_move` quicker than
+    a long press, as a swipe or a scroll does. Each event is a round trip
+    from this process, which a busy machine can stall for longer than a long
+    press: the card was then picked up, a drag instead of the swipe sent.
+    Such a start is taken back (touchCancel) and sent again, so the page
+    always meets the gesture the test means."""
+    def send(kind, points):
+        cdp.send("Input.dispatchTouchEvent", {"type": kind, "touchPoints": points})
+    for _ in range(5):
+        send("touchStart", [{"x": start[0], "y": start[1]}])
+        t0 = time.monotonic()
+        send("touchMove", [{"x": first_move[0], "y": first_move[1]}])
+        if (time.monotonic() - t0) * 1000 < LONG_PRESS_MS * 0.6:
+            return
+        send("touchCancel", [])
+        page.wait_for_timeout(LONG_PRESS_MS)
+    raise AssertionError("the machine is too busy to send a quick touch")
 
 
 def open_tab(page, view: str):
@@ -324,6 +411,21 @@ def _new_page(browser, base_url, *, viewport=DESKTOP, color_scheme="light", **co
     page.on("console", lambda msg: violations.append(msg.text)
             if "Content Security Policy" in msg.text else None)
     page.csp_violations = violations
+    # The page's own requests still waiting for their answer (settle): this
+    # page's, not another tab's of its context. A new document drops those
+    # of the one before: one left behind may never say it ended (Done's save
+    # as the editor leaves).
+    inflight = set()
+
+    def started(r):
+        if r.resource_type in ("fetch", "xhr"):
+            inflight.add(r)
+        elif r.resource_type == "document" and r.frame == page.main_frame:
+            inflight.clear()
+    page.on("request", started)
+    page.on("requestfinished", lambda r: inflight.discard(r))
+    page.on("requestfailed", lambda r: inflight.discard(r))
+    page.inflight = inflight
     _wait_when_there(page)
     return ctx, page
 

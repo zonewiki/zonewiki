@@ -3,12 +3,12 @@
 import json
 import re
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 from playwright.sync_api import expect
 
-from conftest import list_page, make_list, more_menu, open_tab, pick_date, wait_until
+from conftest import list_page, make_list, more_menu, open_tab, pick_date, still, wait_until
 from tests import settings
 
 
@@ -698,7 +698,7 @@ def test_undo_waits_for_the_write_it_belongs_to(page, wiki):
     held = []
     page.route("**/api/tasks/batch-update", lambda route: held.append(route))
     page.keyboard.press("0")
-    wait_until(page, lambda: held)
+    wait_until(page, lambda: held, settled=False)
     assert len(held) == 1
     page.keyboard.press("Control+z")
     page.wait_for_timeout(300)
@@ -2992,7 +2992,7 @@ def test_a_name_typed_before_the_users_are_known_still_counts(page, wiki, monkey
     lists = modal.locator("select[id^=task-edit-list]")
     title = modal.locator("[id^=task-edit-title]")
     title.fill("Ask about the loan @bob")
-    wait_until(page, lambda: len(held) > 0)
+    wait_until(page, lambda: len(held) > 0, settled=False)
     expect(lists).to_have_value("")                       # bob is no one yet
     expect(modal.locator("[id^=task-edit-quick]")).to_be_hidden()
     for route in held:
@@ -4663,6 +4663,11 @@ def test_line_double_click_below_expanded_opens_that_card(page, wiki):
     # double-click opens the card it started on, the other closes after.
     page.request.post("/api/tasks", data={"title": "Below", "description": "Some notes."})
     page.request.post("/api/tasks", data={"title": "Long notes", "description": "\n\n".join(f"Line {i}" for i in range(12))})
+    # The open card closes 400 ms after the first press (COLLAPSE_DELAY_MS
+    # in js/taskview.js), and this test looks twice in between: on a busy
+    # machine that took longer, and the card closed under the double-click.
+    # The page's clock stands still while the presses are looked at.
+    page.clock.install()
     page.goto("/tasks?view=open&group=none")
     long_notes, below = card(page, "Long notes"), card(page, "Below")
 
@@ -4672,12 +4677,13 @@ def test_line_double_click_below_expanded_opens_that_card(page, wiki):
         expect(item).to_have_class(DETAILS)
 
     open_details(long_notes)
-    page.wait_for_timeout(500)
     for _ in range(2):                       # every time, not just the first
+        still(page)
         box = below.locator(".task-content").bounding_box()
         page.mouse.move(box["x"] + 10, box["y"] + box["height"] / 2)
         # Each press of the double-click leaves the card where it was.
         top = box["y"]
+        page.clock.pause_at(datetime.fromtimestamp(page.evaluate("() => Date.now()") / 1000 + 0.001))
         page.mouse.down()
         page.mouse.up()
         assert below.locator(".task-content").bounding_box()["y"] == top
@@ -4686,6 +4692,7 @@ def test_line_double_click_below_expanded_opens_that_card(page, wiki):
         assert below.locator(".task-content").bounding_box()["y"] == top
         assert "task-details" in long_notes.get_attribute("class")
         page.mouse.up(click_count=2)
+        page.clock.resume()
         expect(page.locator(".task-edit-modal[open] [id^=task-edit-title]")).to_have_value("Below")
         page.keyboard.press("Escape")
         expect(long_notes).not_to_have_class(DETAILS)

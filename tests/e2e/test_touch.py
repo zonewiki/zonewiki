@@ -6,7 +6,7 @@ from datetime import date, timedelta
 import pytest
 from playwright.sync_api import expect
 
-from conftest import TOUCH_PHONE, make_list, open_tab, pick_date, wait_until
+from conftest import LONG_PRESS_MS, TOUCH_PHONE, make_list, open_tab, pick_date, quick_touch, still, wait_until
 
 
 def day(offset: int) -> str:
@@ -411,9 +411,11 @@ def test_card_date_picker_fits_on_phone(phone, field):
     # empty ones).
     title = "Water plants" if field == "start_date" else "Weekly review"
     chip = card(phone, title).locator(f".task-clickable-date[data-field='{field}']")
+    still(phone)
     chip.tap()
     picker = phone.locator(".tasks-datepicker")
     expect(picker).to_be_visible()
+    still(phone)
     pb, cb = picker.bounding_box(), chip.bounding_box()
     assert pb["x"] >= 0 and pb["x"] + pb["width"] <= 390, pb
     assert pb["y"] >= 0 and pb["y"] + pb["height"] <= 844, pb
@@ -505,10 +507,17 @@ def touch_drag(page, source, target, *, hold_ms=450, steps=8, release=True, at=0
     def send(kind, points):
         cdp.send("Input.dispatchTouchEvent", {"type": kind, "touchPoints": points})
 
-    send("touchStart", [{"x": x0, "y": y0}])
-    page.wait_for_timeout(hold_ms)
-    for i in range(1, steps + 1):
-        send("touchMove", [{"x": x0 + (x1 - x0) * i / steps, "y": y0 + (y1 - y0) * i / steps}])
+    move = lambda i: {"x": x0 + (x1 - x0) * i / steps, "y": y0 + (y1 - y0) * i / steps}  # noqa: E731
+    if hold_ms < LONG_PRESS_MS:     # a quick move: not held, however busy the machine
+        quick_touch(page, cdp, (x0, y0), (move(1)["x"], move(1)["y"]))
+        page.wait_for_timeout(16)
+        first = 2
+    else:
+        send("touchStart", [{"x": x0, "y": y0}])
+        page.wait_for_timeout(hold_ms)
+        first = 1
+    for i in range(first, steps + 1):
+        send("touchMove", [move(i)])
         page.wait_for_timeout(16)
     if release:
         send("touchEnd", [])
