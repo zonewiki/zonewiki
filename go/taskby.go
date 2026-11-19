@@ -5,7 +5,10 @@
 // sender's own stays only on what Zone itself has seen under that name.
 package main
 
-import "sync"
+import (
+	"slices"
+	"sync"
+)
 
 // seenBy: the comments and history entries Zone took out of the tasks'
 // files or was about to replace, as it had them, so the undo that sends
@@ -92,17 +95,15 @@ func rememberBy(tasks ...*Task) {
 			seenBy.order = append(seenBy.order, key)
 		}
 	}
+	// Those by no one too: an undo may send them back (knownHistory,
+	// ownNewComments), and nothing else may.
 	for _, t := range tasks {
 		for _, c := range t.Comments {
-			if c.By != "" {
-				add(commentKey(c))
-				add(commentTextKey(c))
-			}
+			add(commentKey(c))
+			add(commentTextKey(c))
 		}
 		for _, e := range t.History {
-			if e.By != "" {
-				add(historyKey(t.ID, e))
-			}
+			add(historyKey(t.ID, e))
 		}
 	}
 	if over := len(seenBy.order) - seenByMax; over > 0 {
@@ -110,6 +111,57 @@ func rememberBy(tasks ...*Task) {
 			delete(seenBy.set, key)
 		}
 		seenBy.order = append([]string(nil), seenBy.order[over:]...)
+	}
+}
+
+// knownHistory: with users, the history a client sent for the task id (an
+// undo sends an older one back whole) as it may replace had, the one its
+// file has: only entries Zone has had for the task (in had, or replaced
+// before: rememberBy), so nobody writes an event that wasn't, such as a
+// "created" in their own name (who made a task may delete it, Maker) or an
+// "assigned" that hands it to whom the history says had it (hadAssignee);
+// and its "created" entry stays, so nobody makes a task no one's by
+// dropping it.
+func knownHistory(id string, sent, had []HistoryEntry) []HistoryEntry {
+	if settings().Users == nil {
+		return sent
+	}
+	has := map[string]bool{}
+	for _, e := range had {
+		has[historyKey(id, e)] = true
+	}
+	seenBy.Lock()
+	out := slices.DeleteFunc(sent, func(e HistoryEntry) bool {
+		k := historyKey(id, e)
+		return !has[k] && !seenBy.set[k]
+	})
+	seenBy.Unlock()
+	for _, e := range had {
+		if e.Event == "created" && !slices.Contains(out, e) {
+			out = insertByTime(out, e)
+		}
+	}
+	return out
+}
+
+// ownNewComments: with users, a comment a whole-list write brings that the
+// task didn't have (by its id: old) and Zone never had by no one, but
+// with no name (sent so, or a name checkBy dropped), is the sender's: by
+// no one it would be everyone's to change (mayChangeComment).
+func ownNewComments(user string, old []Comment, t *Task) {
+	if settings().Users == nil {
+		return
+	}
+	had := map[string]bool{}
+	for _, c := range old {
+		had[c.ID] = true
+	}
+	seenBy.Lock()
+	defer seenBy.Unlock()
+	for i, c := range t.Comments {
+		if c.By == "" && !had[c.ID] && !seenBy.set[commentTextKey(c)] {
+			t.Comments[i].By = user
+		}
 	}
 }
 

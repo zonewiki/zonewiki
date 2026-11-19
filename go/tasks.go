@@ -255,6 +255,7 @@ func applyText(user asker, t *Task, data jsonObj) error {
 		old := t.Comments
 		t.Comments = cleanComments(data["comments"])
 		checkBy(user.Name, t)
+		ownNewComments(user.Name, old, t)
 		if err := othersCommentsKept(user, old, t.Comments); err != nil {
 			t.Comments = old
 			return err
@@ -690,10 +691,16 @@ func changeTaskFields(user asker, t *Task, data jsonObj) (named []string, err er
 	return logMentions(t, user, described, t.Description), nil
 }
 
-// sentBack: an undo sends the old history back with the old fields.
+// sentBack: an undo sends the old history back with the old fields: of
+// the entries Zone has had for the task (knownHistory). Who made it is
+// written on the task first (created_by, for a task from before it was),
+// so no history sent makes it anyone else's.
 func sentBack(user asker, t *Task, data jsonObj) {
 	if data.Has("history") {
-		t.History = sentHistory(cleanHistory(data["history"]), t.History)
+		if settings().Users != nil && t.CreatedBy == "" {
+			t.CreatedBy = t.Maker()
+		}
+		t.History = knownHistory(t.ID, sentHistory(cleanHistory(data["history"]), t.History), t.History)
 		checkBy(user.Name, t)
 	}
 }

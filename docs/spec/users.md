@@ -921,5 +921,8 @@ What happens on a task you have to do with is told to you (below). Not there: a 
   another user's stays only on a comment (by its id) or a history entry (of that task, at that time, with those dates) Zone has seen under that name: it notes them as it deletes a task or a comment and before a request replaces a task's lists (`rememberBy`, in memory, the newest 20 000),
   so the undo that sends them back is believed.
   Any other name is dropped (`checkBy`: by no one), also an undo after a restart.
+  **A history sent for a task that is there** (an undo's) keeps only the entries Zone has had for that task (in its file, or noted before it was replaced; `knownHistory`), and always its `created` entry: so nobody writes an event that wasn't, such as a `created` in their own name (who made a task may delete it and move it to fewer people) or an `assigned` (a task goes back to whom its history says had it), and nobody makes a task no one's by dropping who made it.
+  Who made it is written on the task (`created_by`) before such a history replaces its own, for a task from before `created_by` was kept.
+  **A comment a whole-list write brings with no name** (sent so, or its name dropped), that the task didn't have and Zone never had by no one, is the sender's (`ownNewComments`): by no one it would be everyone's to change.
   An admin's import keeps the file's names (a wiki moved, a backup put back).
   `TestAuthors` in `tests/test_users.py`.

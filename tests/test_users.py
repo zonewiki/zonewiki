@@ -765,11 +765,13 @@ class TestAuthors:
         task = client.post("/api/tasks", json={"title": "Budget"}, headers=HOST).get_json()
         put = client.put(f"/api/tasks/{task['id']}", json={"comments": [forged_c, own_c], "history": [forged_h]},
                          headers=HOST).get_json()
-        assert [(c["text"], c.get("by")) for c in put["comments"]] == [("I approve", None), ("Mine", "bob")]
-        assert [e.get("by") for e in put["history"]] == [None]
+        # The name goes: a new comment is the sender's (by no one it would be
+        # everyone's to change), an entry Zone never had is no entry.
+        assert [(c["text"], c.get("by")) for c in put["comments"]] == [("I approve", "bob"), ("Mine", "bob")]
+        assert [(e["event"], e.get("by")) for e in put["history"]] == [("created", "bob")]
         [batch] = client.post("/api/tasks/batch-update", json={"tasks": [{"id": task["id"], "history": [forged_h]}]},
                              headers=HOST).get_json()
-        assert [e.get("by") for e in batch["history"]] == [None]
+        assert [(e["event"], e.get("by")) for e in batch["history"]] == [("created", "bob")]
         snap = {"id": "restored-1", "title": "Restored", "comments": [forged_c], "history": [forged_h]}
         [restored] = client.post("/api/tasks/restore", json={"tasks": [snap]}, headers=HOST).get_json()
         assert "by" not in restored["comments"][0] and "by" not in restored["history"][0]
@@ -778,6 +780,57 @@ class TestAuthors:
         imported = [t for t in client.get("/api/tasks", headers=HOST).get_json() if t["title"] == "Restored"]
         assert len(imported) == 2
         assert all("by" not in t["comments"][0] and "by" not in t["history"][0] for t in imported)
+
+    @staticmethod
+    def without_created_by(wiki_dir, tid):
+        """The task as one from before created_by: its history says who made it."""
+        for p in (wiki_dir / "_tasks").rglob("*.json"):
+            data = json.loads(p.read_text())
+            if isinstance(data, list) and any(isinstance(t, dict) and t.get("id") == tid for t in data):
+                for t in data:
+                    if t.get("id") == tid:
+                        t.pop("created_by", None)
+                p.write_text(json.dumps(data, indent=2))
+
+    def test_a_sent_history_doesnt_change_who_made_a_task(self, client, users, wiki_dir):
+        """An undo sends a task's history back whole: one that drops its
+        "created" entry, or adds one or an "assigned" in the sender's name,
+        makes nobody else its maker (who may delete it, or move it to fewer
+        people) and gives it to nobody."""
+        login(client, "alice", "alice-pw")
+        task = self.shared_task(client, title="Budget")
+        self.without_created_by(wiki_dir, task["id"])
+        client.post("/logout", headers=HOST)
+        login(client, "bob", "bob-pw")
+        forged = [{"at": "2026-01-01T09:00", "event": "created", "by": "bob"},
+                  {"at": "2026-01-01T09:01", "event": "assigned", "by": "bob", "from": "", "to": "carol"}]
+        for sent in ([], forged):
+            put = client.put(f"/api/tasks/{task['id']}", json={"history": sent}, headers=HOST).get_json()
+            assert [(e["event"], e.get("by")) for e in put["history"]] == [("created", "alice")], put["history"]
+            [batch] = client.post("/api/tasks/batch-update", json={"tasks": [{"id": task["id"], "history": sent}]},
+                                 headers=HOST).get_json()
+            assert [(e["event"], e.get("by")) for e in batch["history"]] == [("created", "alice")]
+        assert client.delete(f"/api/tasks/{task['id']}", headers=HOST).status_code == 403
+        assert any(t["id"] == task["id"] for t in client.get("/api/tasks", headers=HOST).get_json())
+        # An undo of bob's own change still puts the history back as it was.
+        before = client.put(f"/api/tasks/{task['id']}", json={"due_date": "2030-01-02"}, headers=HOST).get_json()
+        client.put(f"/api/tasks/{task['id']}", json={"due_date": "2030-01-03"}, headers=HOST)
+        back = client.put(f"/api/tasks/{task['id']}", json={"due_date": "2030-01-02", "history": before["history"]},
+                          headers=HOST).get_json()
+        assert back["history"] == before["history"]
+
+    def test_a_comment_sent_without_a_name_is_the_senders(self, client, users):
+        """A whole-list write's new comment by no one would be everyone's to
+        change: it is its sender's."""
+        login(client, "bob", "bob-pw")
+        task = self.shared_task(client, title="Budget")
+        new = {"id": "c-new", "at": "2026-01-02T10:00", "text": "Nobody's"}
+        put = client.put(f"/api/tasks/{task['id']}", json={"comments": [new]}, headers=HOST).get_json()
+        assert put["comments"][0]["by"] == "bob"
+        client.post("/logout", headers=HOST)
+        login(client, "alice", "alice-pw")
+        assert client.put(f"/api/tasks/{task['id']}/comments/c-new", json={"text": "Mine now"},
+                          headers=HOST).status_code == 403
 
     def test_an_undo_keeps_the_names_zone_has_seen(self, client, users, monkeypatch):
         monkeypatch.setattr(settings, "USER_SETTINGS", {"bob": {"role": "admin"}})   # an admin deletes anyone's comment
@@ -799,7 +852,7 @@ class TestAuthors:
         # Seen as alice's is that comment, not another under its name.
         other = {**comment, "id": "c-other"}
         put = client.put(f"/api/tasks/{task['id']}", json={"comments": [restored["comments"][0], other]}, headers=HOST)
-        assert "by" not in put.get_json()["comments"][1]
+        assert put.get_json()["comments"][1]["by"] == "bob"      # its sender's
 
     def test_an_admins_import_keeps_the_files_names(self, client, users, monkeypatch):
         # A wiki moved or a backup put back: the admin's to do.
