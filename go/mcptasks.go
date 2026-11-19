@@ -619,11 +619,12 @@ var taskStatusFields = map[string]struct {
 	value bool
 }{"done": {"completed", true}, "open": {"completed", false}, "wont_do": {"wont_do", true}, "skip": {"skip", true}}
 
-// otherArgs: the arguments besides those named, A–Z.
+// otherArgs: the arguments the client sent besides those named, A–Z (not
+// the connection's name callMCPTool adds, viaArg: no client sent it).
 func otherArgs(args jsonObj, allowed ...string) []string {
 	var other []string
 	for k := range args {
-		if !slices.Contains(allowed, k) {
+		if k != viaArg && !slices.Contains(allowed, k) {
 			other = append(other, k)
 		}
 	}

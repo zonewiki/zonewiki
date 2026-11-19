@@ -346,6 +346,26 @@ class TestTokens:
         assert g["access"] == "sha256:" + hashlib.sha256(access.encode()).hexdigest()
         assert "grants" not in (wiki_dir / ".zone" / "config").read_text()
 
+    def test_tags_on_several_tasks_at_once(self, bob, wiki_dir):
+        """update_task with ids takes only the tag arguments, and the
+        connection's name Zone adds to every call through one (for the
+        commit's message) is none of the client's."""
+        _, tokens = connect(bob, "bob-pw")
+        bob.cookies.clear()
+        access = tokens["access_token"]
+        ids = []
+        for title in ("One", "Two"):
+            status, text = mcp(bob, access, "create_task", title=title)
+            assert status == 200 and "Created" in text, text
+            ids.append(re.search(r"id: ([0-9a-f]{8})", text).group(1))
+        status, text = mcp(bob, access, "update_task", ids=ids, add_tags=["batch"])
+        assert status == 200 and "With ids only" not in text, text
+        status, text = mcp(bob, access, "search_tasks", tag="batch")
+        assert "One" in text and "Two" in text, text
+        # Anything else the client sends with ids is still refused.
+        status, text = mcp(bob, access, "update_task", ids=ids, add_tags=["x"], title="No")
+        assert "With ids only add_tags and remove_tags work, not title" in text, text
+
     def test_the_token_call_needs_no_session_and_no_origin(self, bob):
         client_id = register(bob)
         _, code = allow(bob, asking(client_id), "bob-pw")
