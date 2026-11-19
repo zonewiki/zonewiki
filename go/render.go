@@ -86,7 +86,8 @@ type RenderOpts struct {
 	EditSlug           string
 	SectionKeys        []string // a key per section, for its ✎ link (sectionKeys)
 	SectionTasks       []TaskLink
-	HeadingIDs         headingIDs // as data-pid in a preview (Env.HeadingIDs)
+	HeadingIDs         headingIDs  // as data-pid in a preview (Env.HeadingIDs)
+	TOC                *[]tocEntry // where the ## and ### headings go, for the side column (railToc); nil: not wanted
 }
 
 // renderMd renders a page's markdown.
@@ -98,13 +99,41 @@ func renderMd(rq *Req, text string, o RenderOpts) string {
 	text, refs := maskTaskRefs(text)
 	text = mdtext.UnmaskCode(escapeWikilinkPipes(text), stash)
 	env := &Env{EditSlug: o.EditSlug, SectionKeys: o.SectionKeys, SectionChips: sectionTaskChips(rq, o.SectionTasks), Host: requestHost(rq),
-		HeadingIDs: o.HeadingIDs, Wikilink: wikilinker(rq, nil, o.Page)}
+		HeadingIDs: o.HeadingIDs, Wikilink: wikilinker(rq, nil, o.Page), TOC: o.TOC}
 	result := markdown(text, env, false)
 	result = injectTaskRefs(rq, result, refs)
+	if o.TOC != nil {
+		tocTaskRefs(rq, *o.TOC, refs)
+	}
 	if len(embeds) > 0 {
 		result = injectTasksEmbeds(result, embeds)
 	}
-	return fmHTML + result + renderSourcesHTML(rq, meta.Sources, result, o.HeadingIDs)
+	return fmHTML + result + renderSourcesHTML(rq, meta.Sources, result, o.HeadingIDs, o.TOC)
+}
+
+// tocTaskRefs: a [[task:…]] in a heading as its task's title in the side
+// column's label (the article has its chip), text that only looked like
+// a reference as it was written.
+func tocTaskRefs(rq *Req, toc []tocEntry, refs []string) {
+	for i, e := range toc {
+		if !taskRefTokenRE.MatchString(e.Label) {
+			continue
+		}
+		toc[i].Label = taskRefTokenRE.ReplaceAllStringFunc(e.Label, func(m string) string {
+			n, err := strconv.Atoi(taskRefTokenRE.FindStringSubmatch(m)[1])
+			if err != nil || n >= len(refs) {
+				return ""
+			}
+			ref := refs[n]
+			if strings.HasPrefix(ref, "\ue002") {
+				return html.EscapeString(ref)
+			}
+			if t := resolveTaskRefs(rq.who(), []string{ref})[ref]; t != nil {
+				return html.EscapeString(mdtext.PlainTaskTitle(t.Title))
+			}
+			return "task " + html.EscapeString(ref)
+		})
+	}
 }
 
 func requestHost(rq *Req) string {
@@ -361,8 +390,9 @@ func renderFrontmatterHTML(meta mdtext.Frontmatter, showTags, showTldr bool) str
 
 // renderSourcesHTML: frontmatter sources as a list at the article's end,
 // each inline markdown, under a ## heading with id "sources" (unless the
-// article has one of that id), carried as ids says (data-pid in a preview).
-func renderSourcesHTML(rq *Req, sources []string, article string, ids headingIDs) string {
+// article has one of that id), carried as ids says (data-pid in a preview),
+// and in toc after the article's headings.
+func renderSourcesHTML(rq *Req, sources []string, article string, ids headingIDs, toc *[]tocEntry) string {
 	if len(sources) == 0 {
 		return ""
 	}
@@ -380,6 +410,9 @@ func renderSourcesHTML(rq *Req, sources []string, article string, ids headingIDs
 	h2 := "<h2>"
 	if attr != "" {
 		h2 = `<h2 ` + attr + `="` + hid + `">`
+	}
+	if toc != nil && ids == headingAsID {
+		*toc = append(*toc, tocEntry{2, hid, "Sources"})
 	}
 	return `<section class="page-sources">` + h2 + `Sources</h2><ul>` + items.String() + `</ul></section>`
 }

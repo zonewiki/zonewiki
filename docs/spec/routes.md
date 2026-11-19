@@ -395,7 +395,11 @@ Every other view (notes, search) gets the same top row width at that size, its c
 
 ### Left: On this page
 
-The left column (`.rail-left`) holds "On this page" (`railTocItems`): the page's rendered `##`/`###` headings (frontmatter sources' "Sources" heading too, at the end) when there are at least `railTocMinHeadings` (3), links in them flattened.
+The left column (`.rail-left`) holds "On this page" (`railToc`): the page's `##`/`###` headings (frontmatter sources' "Sources" heading too, at the end) when there are at least `railTocMinHeadings` (3).
+An entry is made from the heading as the render parsed it (`Env.TOC`, `tocLabel` in `go/markdown.go`), never cut out of the rendered HTML:
+its text, its code, math, emphasis and strikethrough, a link as its text, a `[[task:…]]` as the task's title, images and raw HTML left out;
+a heading written as raw HTML (`<h2>` in an HTML block) is none.
+(Cut out of the article, with its links taken out by a pattern, a heading's raw HTML came out joined anew, past the defusing: `<<a>form` a form, No form in a page posts to Zone in `docs/spec/security.md`.)
 Otherwise it is empty; the column stays so the page keeps its place.
 At its end **↑ Back to top** (`.rail-top`), shown once the page has scrolled a screen down; it scrolls up and drops a `#hash` from the URL.
 `js/chrome.js` marks the section being read (`.active`, `aria-current="location"`): the last heading scrolled past (120px from the top), at the end of the page the last one in view.

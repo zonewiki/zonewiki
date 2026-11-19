@@ -14,8 +14,8 @@ from pathlib import Path
 import pytest
 
 from tests import settings
-from tests.conftest import (HOST, backlinks, content_hash, list_page, make_list, preview, section_fields, task_backlinks,
-                            write_page)
+from tests.conftest import (HOST, backlinks, content_hash, create_task, list_page, make_list, preview, section_fields,
+                            task_backlinks, write_page)
 from tests.goserver import binary
 
 
@@ -391,6 +391,33 @@ class TestViewPage:
         assert re.findall(r'href="(#[^"]+)"', left) == ["#beds", "#roses-and-tulips", "#paths"]
         assert '<li class="toc-h3"><a href="#roses-and-tulips">Roses and <code>tulips</code></a></li>' in left
         assert '<nav class="toc">' not in body
+
+    def test_side_toc_is_made_from_the_parsed_headings(self, client, wiki_dir):
+        # Regression: the column cut each heading out of the rendered article
+        # and took its links out with a pattern, which joined a heading's raw
+        # HTML anew past defuseHTML: "<<a>form" a <form> posting to Zone, a
+        # <meta> refresh to another site, an iframe's srcdoc, a <link>. Its
+        # entries are the parsed headings now: escaped text, code, math,
+        # emphasis; a heading of raw HTML isn't one.
+        tid = create_task(client, title="Order <b>seeds</b>").get_json()["id"]
+        write_page(wiki_dir, "garden", (
+            "# Garden\n\n"
+            '<h2 id="raw"><<a>form method="post" action="/delete/index"><<a>button>x</h2>\n'
+            '<h3 id="meta"><<a>meta http-equiv="refresh" content="0;url=https://evil.example/"></h3>\n'
+            '<h3 id="frame"><iframe src<a>doc="&lt;form&gt;"></iframe><<a>link rel="dns-prefetch" href="//evil.example"></h3>\n\n'
+            "## Beds <b>bold</b> <<a>form> and `<form>`\n\n"
+            "## *Soil* ~~sand~~ $x^2$ [link](/page/x) ![img](/i.png) <https://a.example>\n\n"
+            f"### Plan [[task:{tid}]]\n"))
+        body = client.get("/page/garden", headers=HOST).get_data(as_text=True)
+        left = body.split('<aside class="rail rail-left">', 1)[1].split("</aside>", 1)[0]
+        for live in ("<form", "<meta", "<link", "<iframe", "<button", "srcdoc", "<b>"):
+            assert live not in left, live
+        assert re.findall(r'href="(#[^"]+)"', left) == ["#beds-bold-aform-and-form", "#soil-sand-x2-link", "#plan-0"]
+        assert ('<li><a href="#beds-bold-aform-and-form">Beds bold &lt;&lt;a&gt;form&gt; and '
+                '<code>&lt;form&gt;</code></a></li>') in left
+        assert ('<li><a href="#soil-sand-x2-link"><em>Soil</em> <del>sand</del> '
+                '<span class="math math-inline">x^2</span> link  https://a.example</a></li>') in left
+        assert '<li class="toc-h3"><a href="#plan-0">Plan Order &lt;b&gt;seeds&lt;/b&gt;</a></li>' in left
 
     def test_side_column_lists_the_pages_linked_to(self, client, wiki_dir):
         # "Links to": existing pages only, A–Z by title, not the page itself;

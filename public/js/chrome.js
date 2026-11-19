@@ -140,7 +140,7 @@ import { whileUsed } from './util.js';
 }());
 
 // ── Side columns: the section being read ─────────────────────────────────────
-// On big screens a page's table of contents is the left column (railTocItems in
+// On big screens a page's table of contents is the left column (railToc in
 // go/views.go, templates/partials/page.html); it marks the section whose heading was scrolled past
 // last, and at the end of the page the last one that came into view.
 

@@ -350,6 +350,9 @@ The rest of a page's HTML (images, links, iframes, styles) stays allowed, as far
 - **A link's `ping` is renamed** (`data-defused-ping`) as well, wherever `ping` is a name of its own followed by `=` (not `data-ping=` or `mapping=`): a followed link posts to each URL in it (Chromium and Safari send pings by default), same-origin and with the viewer's cookie,
   so `<a href="/page/index" ping="/delete/plans">Read on</a>` would delete a page with the click that reads on.
   And the request checks refuse a ping that gets past the render (403 "A link's ping changes nothing"; `isPing` in `go/security.go`): a request with a `Ping-To` or `Ping-From` header, or of type `text/ping`.
+- **Nothing takes the rendered HTML apart and puts it together again.**
+  The defusing holds for the HTML as it is rendered; taking a tag out of it joins what was on either side, which the defusing never saw.
+  So the side column's table of contents is made from the parsed headings (`tocLabel`, Left: On this page in `docs/spec/routes.md`): cut out of the article with its links taken out by a pattern, `<<a>form` came out a form, `src<a>doc=` an `srcdoc`, `<<a>meta` a refresh to another site.
 
 ### A page loads nothing from other hosts
 

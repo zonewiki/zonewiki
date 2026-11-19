@@ -20,6 +20,7 @@ import (
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
+	extast "github.com/yuin/goldmark/extension/ast"
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/renderer"
 	"github.com/yuin/goldmark/renderer/html"
@@ -42,6 +43,17 @@ type Env struct {
 	// LineBreaks: a line's end inside a paragraph is a line break (a task's
 	// comment); without it lines in a row join, as on a page.
 	LineBreaks bool
+	// TOC: where the render puts the ## and ### headings it parses, for
+	// the side column's "On this page" (railToc); nil: nowhere.
+	TOC *[]tocEntry
+}
+
+// tocEntry: a ## or ### heading as the side column lists it: its level,
+// its id, and its label as HTML made from the parsed heading (tocLabel).
+type tocEntry struct {
+	Level int
+	ID    string
+	Label string
 }
 
 // headingIDs: how headings carry their ids: as id (a page), as data-pid
@@ -277,7 +289,11 @@ func (t *zoneTransformer) Transform(doc *ast.Document, reader text.Reader, pc pa
 			t.external(n, n.URL(src))
 		case *ast.Heading:
 			if n.Level <= 3 {
-				n.SetAttributeString("id", uniqueSlug(mdtext.HeadingID(headingTitle(n, src)), slugs))
+				id := uniqueSlug(mdtext.HeadingID(headingTitle(n, src)), slugs)
+				n.SetAttributeString("id", id)
+				if t.env.TOC != nil && n.Level >= 2 {
+					*t.env.TOC = append(*t.env.TOC, tocEntry{n.Level, id, tocLabel(n, src)})
+				}
 			}
 		case *ast.Text:
 			if t.env.LineBreaks && n.SoftLineBreak() {
@@ -383,6 +399,92 @@ func headingTitle(h ast.Node, src []byte) string {
 		return ast.WalkContinue, nil
 	})
 	return b.String()
+}
+
+// tocLabel: a heading's label for the side column, made from its parsed
+// nodes, never from the rendered HTML: its text escaped, its code as
+// <code>, its math as the article's math span (rendered in the browser),
+// emphasis and strikethrough kept; links flattened to their text, a
+// wikilink to its label as text, images and raw HTML left out. So nothing
+// but Zone's own few tags and escaped text is in it: cut out of the
+// article (with its links taken out by a pattern), a heading's raw HTML
+// came out joined anew ("<<a>form" a <form>, "src<a>doc=" an srcdoc)
+// past defuseHTML.
+func tocLabel(h ast.Node, src []byte) string {
+	var b strings.Builder
+	write := func(v []byte) { b.WriteString(gohtml.EscapeString(string(v))) }
+	_ = ast.Walk(h, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if n == h {
+			return ast.WalkContinue, nil
+		}
+		switch n := n.(type) {
+		case *ast.Image, *ast.RawHTML:
+			return ast.WalkSkipChildren, nil
+		case *ast.CodeSpan:
+			if entering {
+				b.WriteString("<code>")
+				for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+					if t, ok := c.(*ast.Text); ok {
+						write(bytes.ReplaceAll(t.Segment.Value(src), []byte("\n"), []byte(" ")))
+					}
+				}
+				b.WriteString("</code>")
+			}
+			return ast.WalkSkipChildren, nil
+		case *ast.Emphasis:
+			tag := "em"
+			if n.Level == 2 {
+				tag = "strong"
+			}
+			if entering {
+				b.WriteString("<" + tag + ">")
+			} else {
+				b.WriteString("</" + tag + ">")
+			}
+		case *extast.Strikethrough:
+			if entering {
+				b.WriteString("<del>")
+			} else {
+				b.WriteString("</del>")
+			}
+		case *ast.Text:
+			if entering {
+				write(util.ResolveNumericReferences(util.ResolveEntityNames(util.UnescapePunctuations(n.Segment.Value(src)))))
+				if n.SoftLineBreak() || n.HardLineBreak() {
+					b.WriteByte(' ')
+				}
+			}
+		case *ast.String:
+			if entering {
+				// The typographer's quotes and dashes come as entities.
+				write(util.ResolveEntityNames(n.Value))
+			}
+		case *ast.AutoLink:
+			if entering {
+				write(n.Label(src))
+			}
+			return ast.WalkSkipChildren, nil
+		case *mathInline:
+			if entering {
+				class := "math math-inline"
+				if n.Display {
+					class = "math math-display"
+				}
+				b.WriteString(`<span class="` + class + `">`)
+				write(n.TeX)
+				b.WriteString("</span>")
+			}
+			return ast.WalkSkipChildren, nil
+		case *wikilinkNode:
+			if entering {
+				_, _, label := mdtext.SplitWikilink(n.Inner)
+				b.WriteString(gohtml.EscapeString(mdtext.PlainHeading(label)))
+			}
+			return ast.WalkSkipChildren, nil
+		}
+		return ast.WalkContinue, nil
+	})
+	return strings.TrimSpace(b.String())
 }
 
 func uniqueSlug(slug string, seen map[string]bool) string {

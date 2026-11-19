@@ -543,38 +543,23 @@ func linkSections(rq *Req, backlinks []PageRef, tasks []TaskLink) []linkSection 
 
 // Big screens show a page in three columns: the table of contents on the
 // left, the page, and what links to it on the right.
-var tocHeadingRE = regexp.MustCompile(`<h([23]) id="([^"]+)">`)
-
-var anchorTagRE = regexp.MustCompile(`</?a\b[^>]*>`)
-
 const railTocMinHeadings = 3
 
-// railTocItems: the left column's "On this page": the page's ## and ###
-// headings when there are at least three ("" otherwise; the column stays).
-func railTocItems(article string) template.HTML {
-	var items []string
-	for i := 0; i < len(article); {
-		m := tocHeadingRE.FindStringSubmatchIndex(article[i:])
-		if m == nil {
-			break
-		}
-		level, id := article[i+m[2]:i+m[3]], article[i+m[4]:i+m[5]]
-		start := i + m[1]
-		end := strings.Index(article[start:], "</h"+level+">")
-		if end < 0 {
-			break
-		}
-		label := article[start : start+end]
-		i = start + end + len("</h1>")
-		// A heading's own links are flattened: no link inside a link.
+// railToc: the left column's "On this page": the page's ## and ###
+// headings as its render parsed them (Env.TOC, tocLabel: their links
+// flattened, no link inside a link) when there are at least three (""
+// otherwise; the column stays).
+func railToc(toc []tocEntry) template.HTML {
+	if len(toc) < railTocMinHeadings {
+		return ""
+	}
+	items := make([]string, len(toc))
+	for i, e := range toc {
 		cls := ""
-		if level == "3" {
+		if e.Level == 3 {
 			cls = ` class="toc-h3"`
 		}
-		items = append(items, `<li`+cls+`><a href="#`+id+`">`+strings.TrimSpace(anchorTagRE.ReplaceAllString(label, ""))+`</a></li>`)
-	}
-	if len(items) < railTocMinHeadings {
-		return ""
+		items[i] = `<li` + cls + `><a href="#` + html.EscapeString(e.ID) + `">` + e.Label + `</a></li>`
 	}
 	return template.HTML("<ul>\n" + strings.Join(items, "\n") + "\n</ul>")
 }

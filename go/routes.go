@@ -215,9 +215,10 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 	fromUncommitted := r.URL.Query().Get("from") == "uncommitted" && cfg.GitEnabled && rq.user.Name != visitor
 	var bc, metaRow, article template.HTML
 	var menu *pageMenuView
+	var toc []tocEntry
 	if fromUncommitted {
 		bc = buildBreadcrumb(rq, "uncommitted", "Uncommitted Changes", chip, "", crumb{title, ""})
-		article = htmlOf(renderMd(rq, mdtext.StripH1(content), RenderOpts{Page: slug}))
+		article = htmlOf(renderMd(rq, mdtext.StripH1(content), RenderOpts{Page: slug, TOC: &toc}))
 	} else {
 		qs := ""
 		if r.URL.RawQuery != "" {
@@ -234,7 +235,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 		metaRow = macro("meta_row", metaRowView{TagsHTML: htmlOf(renderTagsPillsHTML(meta.Tags)), Tldr: meta.Tldr,
 			Changed: changed, Commit: commit})
 		article = htmlOf(renderMd(rq, mdtext.StripH1(content), RenderOpts{Page: slug, HideTags: true, HideTldr: true,
-			EditSlug: slug, SectionKeys: sectionKeys(content, headings), SectionTasks: tasks}))
+			EditSlug: slug, SectionKeys: sectionKeys(content, headings), SectionTasks: tasks, TOC: &toc}))
 	}
 	// A place's home is where its pages are started: New page, with For at that place.
 	newFor := ""
@@ -245,7 +246,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 	}
 	page(w, rq, http.StatusOK, "view.html", title, shell{wide: true}, &pageView{Title: title, Slug: slug, NewPageFor: newFor,
 		FromUncommitted: fromUncommitted, Private: placeOf(slug).user() != "", Group: placeOf(slug).group(), GroupTitle: groupTitle(slug), ReadOnly: readOnly(rq.user, slug), TaskKeys: strings.Join(mdtext.TaskLineKeys(content), ","),
-		BreadcrumbHTML: bc, DeleteDialogHTML: buildDeleteDialog(slug, title), RailTocHTML: railTocItems(string(article)),
+		BreadcrumbHTML: bc, DeleteDialogHTML: buildDeleteDialog(slug, title), RailTocHTML: railToc(toc),
 		MetaRowHTML: metaRow, ArticleHTML: article, LinkSections: sections, Outlinks: outlinks(rq, slug, path), Menu: menu})
 }
 

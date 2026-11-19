@@ -171,9 +171,10 @@ func docLinks(html, folder string, to func(target, fragment string) string) stri
 	})
 }
 
-// renderHelp: a document's HTML, its links pointed by to (docLinks).
-func renderHelp(d helpDoc, text, host string, to func(target, fragment string) string) string {
-	html := markdown(text, &Env{Host: host, HeadingIDs: headingAsID}, false)
+// renderHelp: a document's HTML, its links pointed by to (docLinks), its
+// ## and ### headings in toc (nil: not wanted).
+func renderHelp(d helpDoc, text, host string, to func(target, fragment string) string, toc *[]tocEntry) string {
+	html := markdown(text, &Env{Host: host, HeadingIDs: headingAsID, TOC: toc}, false)
 	return docLinks(html, helpFolder(d), to)
 }
 
@@ -228,7 +229,8 @@ func helpPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	title := manualTitle(name, text)
-	article := renderHelp(d, text, r.Host, helpHref)
+	var toc []tocEntry
+	article := renderHelp(d, text, r.Host, helpHref, &toc)
 	crumbs := []crumb{{"Help", "/help"}}
 	if strings.HasPrefix(d.name, "spec/") {
 		crumbs = append(crumbs, crumb{"Spec", "/help/spec"})
@@ -239,7 +241,7 @@ func helpPage(w http.ResponseWriter, r *http.Request) {
 		crumbs = append(crumbs, crumb{title, ""})
 	}
 	v := &helpView{BreadcrumbHTML: breadcrumb(rq, crumbs, "", false, "", ""),
-		RailTocHTML: railTocItems(article), ArticleHTML: template.HTML(article)}
+		RailTocHTML: railToc(toc), ArticleHTML: template.HTML(article)}
 	v.Prev, v.Next = manualNeighbours(d.name, func(n string) string { return helpHref(n, "") })
 	page(w, rq, http.StatusOK, "help.html", title, shell{wide: true}, v)
 }
@@ -353,7 +355,7 @@ func manualMain(args []string, stdout, stderr io.Writer) int {
 				rel += "#" + fragment
 			}
 			return filepath.ToSlash(rel)
-		})
+		}, nil)
 		if err := writeOut(filepath.Join(out, file), []byte(html)); err != nil {
 			fmt.Fprintln(stderr, "zonewiki manual:", err)
 			return 1
