@@ -183,18 +183,23 @@ func (c oauthClient) allows(uri string) bool {
 }
 
 // clientName: the name a client gave, as Zone shows it: one line, short.
+// None, or what an MCP token's commits name (tokenVia), is noClientName:
+// a client can't make its changes read as a token's.
 func clientName(name string) string {
 	name = strings.Join(strings.FieldsFunc(name, func(r rune) bool {
 		return unicode.IsControl(r) || unicode.IsSpace(r)
 	}), " ")
-	if utf8.RuneCountInString(name) > 80 {
-		name = string([]rune(name)[:80])
+	if utf8.RuneCountInString(name) > clientNameMost {
+		name = string([]rune(name)[:clientNameMost])
 	}
-	if name == "" {
+	if name == "" || strings.EqualFold(name, tokenVia) {
 		return noClientName
 	}
 	return name
 }
+
+// clientNameMost: how long a client's name may be, in characters.
+const clientNameMost = 80
 
 // noClientName: what a client that gave no name is called.
 const noClientName = "An MCP client"

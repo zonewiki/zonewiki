@@ -23,9 +23,8 @@ import (
 // lastCommit: what a page's last commit says of who made it.
 type lastCommit struct {
 	author    string // the commit's author as git has it (commitAuthor says whether it is shown)
-	via       string // the assistant it names (viaOfCommit), "" for none
+	assistant string // the connection an assistant made it through (commitMark.Assistant), "" for none
 	at        int64  // when it was committed (the committer's time, unix seconds)
-	assistant bool   // an assistant made it (byAssistant)
 }
 
 // lastCommits: the pages' last commits by their paths in git, as of head.
@@ -58,8 +57,9 @@ var lastCommitWait = time.Second
 const scanTimeout = 10 * time.Minute
 
 // lastCommitFormat: what the scan and the moves read of a commit: its
-// author, its time, the assistant it names and its first line.
-const lastCommitFormat = "--format=\x1e%an\x1f%ct\x1f" + viaFormat + "\x1f%s"
+// author, its time and its trailers that say whether an assistant made it
+// and which (markFormat, commitMarkOf).
+const lastCommitFormat = "--format=\x1e%an\x1f%ct\x1f" + markFormat
 
 // lastCommitsSoon starts the scan of the history if it hasn't started (in
 // this wiki), without waiting for it: a search starts it before it ranks,
@@ -98,8 +98,8 @@ func whoChanged(rq *Req) func(slug string, mtime time.Time) string {
 }
 
 // changedBy: "by anna", "by anna through Claude" (an assistant whose
-// connection gave its name, worded as on Changes: throughWhom), "by anna's
-// assistant" (one that gave none), "by an assistant":
+// connection gave its name, worded as on Changes: commitMark.Via), "by
+// anna's assistant" (a token's, or one that gave none), "by an assistant":
 // who made the last commit of the page, as who may be told; "" when that
 // isn't known, when the file changed after it (text not committed, a
 // checkout: whose isn't known), or when there is nobody to name and no
@@ -119,14 +119,16 @@ func changedBy(who asker, slug string, mtime time.Time) string {
 	if who.Name == visitor && c.author != visitorAuthor {
 		name = ""
 	}
-	if c.assistant {
+	if m := (commitMark{Assistant: c.assistant}); m.ByAssistant() {
 		switch {
 		case name == "":
 			name = "an assistant"
-		case c.via == "":
+		case m.Via() == "":
 			name += "'s assistant"
 		}
-		name += throughWhom(c.via)
+		if m.Via() != "" {
+			name += " through " + m.Via()
+		}
 	}
 	if name == "" {
 		return ""
@@ -317,6 +319,7 @@ func lastCommitOf(head string, names map[string]string) (lastCommit, bool) {
 	if len(parts) != 4 {
 		return lastCommit{}, false
 	}
+	mark := commitMarkOf(parts[2], parts[3])
 	at, err := strconv.ParseInt(parts[1], 10, 64)
 	if err != nil {
 		return lastCommit{}, false
@@ -329,8 +332,7 @@ func lastCommitOf(head string, names map[string]string) (lastCommit, bool) {
 		names[s] = s
 		return s
 	}
-	return lastCommit{author: one(parts[0]), via: one(viaOfCommit(parts[3], parts[2])), at: at,
-		assistant: byAssistant(parts[3])}, true
+	return lastCommit{author: one(parts[0]), assistant: one(mark.Assistant), at: at}, true
 }
 
 // headOf: the commit a repository is at; "" for none yet.

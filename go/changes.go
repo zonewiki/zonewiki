@@ -17,16 +17,23 @@ import (
 	"unicode"
 )
 
-// assistantMark ends the message of a commit an assistant made (msgSuffix).
+// assistantMark ends the first line of a commit an assistant made (mcpMark),
+// for whoever reads the history with git. It says nothing to Zone: a page's
+// name can end in it too ("notes (MCP)"), so what an assistant wrote is told
+// by its trailer (commitMarkOf), and the mark is taken off only there.
 const assistantMark = "(MCP)"
 
-// byAssistant: the commit with this message (its first line) was written by an assistant.
-func byAssistant(msg string) bool { return strings.HasSuffix(msg, assistantMark) }
-
-// viaTrailerKey names the trailer of a commit made through a connection: which
-// assistant wrote it, by the name its client gave when it was let in
-// (grants.go). The name is the client's claim, and shown as one.
+// viaTrailerKey names the trailer every commit an assistant writes carries
+// (commitTrailers): which connection it came through, by the name its
+// client gave when it was let in (grants.go), tokenVia for an MCP token.
+// The name is the client's claim, and shown as one. A trailer is a line
+// after the first, which no name in a commit message reaches (A name holds
+// no line break in docs/spec/security.md).
 const viaTrailerKey = "Assistant"
+
+// tokenVia: what the Assistant trailer names for a write with an MCP token,
+// which names no client (clientName keeps a client from calling itself so).
+const tokenVia = "MCP token"
 
 // sourceTrailerKey names the trailer that says where an assistant's write
 // has its text from, when not from its user: a web page, a mail, a file
@@ -35,21 +42,31 @@ const viaTrailerKey = "Assistant"
 const sourceTrailerKey = "Source"
 
 // commitTrailers: what follows the first line of an assistant's commit
-// message: which connection it came through (none for no connection, and
-// for a client that gave no name) and where its text is from, each a line;
-// "" for neither.
+// message: which connection it came through (via, a client's name; "" an
+// MCP token) and where its text is from, each a line.
 func commitTrailers(via, source string) string {
-	var lines []string
-	if via = clientName(via); via != noClientName {
-		lines = append(lines, viaTrailerKey+": "+via)
+	name := tokenVia
+	if via != "" {
+		name = clientName(via)
 	}
+	lines := []string{viaTrailerKey + ": " + name}
 	if source = onOneLine(source, sourceMax); source != "" {
 		lines = append(lines, sourceTrailerKey+": "+source)
 	}
-	if len(lines) == 0 {
-		return ""
-	}
 	return "\n\n" + strings.Join(lines, "\n")
+}
+
+// withTrailers: a commit message with these trailer lines added to the ones
+// it has (Zone's messages are a first line and, for an assistant's, its
+// trailers: commitTrailers), or after it.
+func withTrailers(message string, lines []string) string {
+	if len(lines) == 0 {
+		return message
+	}
+	if strings.Contains(message, "\n\n") {
+		return message + "\n" + strings.Join(lines, "\n")
+	}
+	return message + "\n\n" + strings.Join(lines, "\n")
 }
 
 // sourceMax: how long a write's source may be, in characters.
@@ -61,13 +78,71 @@ func onOneLine(s string, max int) string {
 	return cutRunes(s, max, "")
 }
 
-// sourceOfCommit: where a commit says its text is from: its trailer, when
-// its message is an assistant's (as viaOfCommit).
-func sourceOfCommit(msg, trailer string) string {
-	if !byAssistant(msg) {
+// markFormat: a commit's Assistant and Source trailers in a git log format,
+// for commitMarkOf: each value alone, on one line (the first, should a
+// commit have several), with a \x1f between them.
+const markFormat = "%(trailers:key=" + viaTrailerKey + ",valueonly,separator=%x20)\x1f" +
+	"%(trailers:key=" + sourceTrailerKey + ",valueonly,separator=%x20)"
+
+// commitMark: what a commit says of an assistant's part in it, from its
+// trailers alone (commitMarkOf).
+type commitMark struct {
+	// Assistant: the connection an assistant wrote it through, as its
+	// Assistant trailer names it (a client's name, noClientName, tokenVia);
+	// "" for a commit no assistant wrote.
+	Assistant string
+	// Source: where its text is from, when the assistant said; "" for a
+	// commit no assistant wrote.
+	Source string
+}
+
+// commitMarkOf: the mark of a commit whose Assistant and Source trailers
+// have these values (as markFormat gives them). The one place that decides
+// whether an assistant wrote a commit: by the trailer that each of its
+// writes carries (commitTrailers), never by its message, which a page's
+// name can make read like one ("Update notes (MCP)"). A commit from before
+// 2026-11-20 has no such trailer when written with an MCP token, and is no
+// assistant's; one made by hand says what its author wrote, as its author
+// does.
+func commitMarkOf(assistant, source string) commitMark {
+	if assistant = onOneLine(assistant, clientNameMost); assistant == "" {
+		return commitMark{}
+	}
+	return commitMark{Assistant: assistant, Source: onOneLine(source, sourceMax)}
+}
+
+// ByAssistant: an assistant wrote the commit.
+func (m commitMark) ByAssistant() bool { return m.Assistant != "" }
+
+// Via: which assistant the commit names as its writer: its connection's
+// name; "" for none (no assistant's, an MCP token's, a client that gave no
+// name).
+func (m commitMark) Via() string {
+	if m.Assistant == tokenVia || m.Assistant == noClientName {
 		return ""
 	}
-	return onOneLine(trailer, sourceMax)
+	return m.Assistant
+}
+
+// through: " through Claude" after who a commit is by, " through an
+// assistant" for one that names none; "" for no assistant's.
+func (m commitMark) through() string {
+	switch {
+	case !m.ByAssistant():
+		return ""
+	case m.Via() != "":
+		return " through " + m.Via()
+	}
+	return " through an assistant"
+}
+
+// commitWhat: what a commit with this first line and mark says it did, as
+// the history shows it: an assistant's without assistantMark.
+func commitWhat(subject string, m commitMark) string {
+	if !m.ByAssistant() {
+		return subject
+	}
+	return strings.TrimSpace(strings.TrimSuffix(subject, assistantMark))
 }
 
 // fromWhere: "; from https://…" after who a commit is by; "" for none.
@@ -76,27 +151,6 @@ func fromWhere(source string) string {
 		return ""
 	}
 	return "; from " + source
-}
-
-// viaOfCommit: which assistant a commit says it was written through: its
-// trailer, when its message is an assistant's ("" otherwise: the trailer
-// alone, in a commit made by hand, says nothing).
-func viaOfCommit(msg, trailer string) string {
-	if !byAssistant(msg) {
-		return ""
-	}
-	if via := clientName(trailer); via != noClientName {
-		return via
-	}
-	return ""
-}
-
-// throughWhom: " through Claude" after who a commit is by; "" for none.
-func throughWhom(via string) string {
-	if via == "" {
-		return ""
-	}
-	return " through " + via
 }
 
 // changesOf: which of the wiki's commits to list. Since a day (YYYY-MM-DD),
@@ -124,7 +178,7 @@ func wikiChanges(user asker, of changesOf, limit int) []LogEntry {
 		return !(of.Sharing && isPage && isNoshare(slug))
 	}
 	keep := func(e LogEntry) bool {
-		return (of.By == "" || e.Author == of.By) && (!of.Assistant || byAssistant(e.Msg)) &&
+		return (of.By == "" || e.Author == of.By) && (!of.Assistant || e.ByAssistant()) &&
 			!(of.Sharing && e.Hidden > 0)
 	}
 	entries := gitLogAll(of.Since, of.Under, limit, see, keep)
@@ -316,8 +370,8 @@ func undoOffers(user asker, entries []LogEntry) map[string]undoOffer {
 				o.Session = append(o.Session, e.Sha)
 			}
 			by := "an assistant"
-			if run[0].Via != "" {
-				by = run[0].Via
+			if run[0].Via() != "" {
+				by = run[0].Via()
 			}
 			o.SessionSays = fmt.Sprintf("the %d changes %s made from %s to %s", len(run), by,
 				run[len(run)-1].Time, run[0].Time)
@@ -332,10 +386,10 @@ func undoOffers(user asker, entries []LogEntry) map[string]undoOffer {
 		if together([]LogEntry{e}) {
 			offers[e.Sha] = undoOffer{Undo: e.Sha}
 		}
-		if !byAssistant(e.Msg) {
+		if !e.ByAssistant() {
 			continue
 		}
-		key := e.Author + "\x00" + e.Via
+		key := e.Author + "\x00" + e.Assistant
 		if run := runs[key]; len(run) > 0 && commitTime(run[len(run)-1]).Sub(commitTime(e)) > sessionGap {
 			finish(key)
 		}
@@ -420,8 +474,8 @@ func changeDays(entries []LogEntry, now time.Time, offers map[string]undoOffer) 
 			}
 			days, last = append(days, changeDay{Label: label}), day
 		}
-		row := changeRow{Time: clock, Rel: e.Rel, Author: e.Author, Assistant: byAssistant(e.Msg), Via: e.Via, Source: e.Source, undoOffer: offers[e.Sha],
-			What: strings.TrimSpace(strings.TrimSuffix(e.Msg, assistantMark)), Items: changeItems(e)}
+		row := changeRow{Time: clock, Rel: e.Rel, Author: e.Author, Assistant: e.ByAssistant(), Via: e.Via(), Source: e.Source,
+			undoOffer: offers[e.Sha], What: commitWhat(e.Msg, e.commitMark), Items: changeItems(e)}
 		days[len(days)-1].Rows = append(days[len(days)-1].Rows, row)
 	}
 	return days

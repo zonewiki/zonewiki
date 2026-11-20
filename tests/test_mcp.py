@@ -1722,9 +1722,9 @@ class TestHistory:
         assert not err
         rows = text.splitlines()
         assert rows[0].startswith("Changes, newest first (")
-        assert re.fullmatch(r"\d{4}-\d\d-\d\d \d\d:\d\d \| [0-9a-f]{7} \| Create task \(MCP\) \| tasks", rows[1])
-        assert rows[2].endswith("| Create other (MCP) | other")
-        assert rows[4].endswith("| Create notes/p: first (MCP) | notes/p")
+        assert re.fullmatch(r"\d{4}-\d\d-\d\d \d\d:\d\d \| [0-9a-f]{7} \| Create task \(through an assistant\) \| tasks", rows[1])
+        assert rows[2].endswith("| Create other (through an assistant) | other")
+        assert rows[4].endswith("| Create notes/p: first (through an assistant) | notes/p")
         assert call(client, "history", under="notes")[0].count("\n") == 2
         from datetime import date, timedelta
         tomorrow = (date.today() + timedelta(days=1)).isoformat()
@@ -1741,7 +1741,7 @@ class TestHistory:
         assert not err
         rows = text.splitlines()
         assert rows[0].startswith("Versions of notes/p, newest first (all 2)")
-        assert rows[1].endswith("| +1 -1 | Update notes/p (MCP)")
+        assert rows[1].endswith("| +1 -1 | Update notes/p (through an assistant)")
         sha = rows[2].split(" | ")[0]
         diff = call(client, "history", slug="notes/p", version=sha)[0]
         assert diff.startswith(f"notes/p, version {sha} of ") and "+v1" in diff

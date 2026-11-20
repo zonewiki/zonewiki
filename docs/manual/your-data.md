@@ -64,7 +64,7 @@ Going back is in [The data format](../spec/deployment.md#the-data-format).
 
 When the wiki folder is new to it, Zone makes it a git repository and commits what is there.
 From then on every change made through Zone is a commit: clicking **Done** in the editor, a new page, a rename or move, a delete, an upload, a change to a task.
-With users, each commit is made in the name of whoever made the change, and an assistant's are marked as such: **assistant** or **through Claude** in Zone, a message ending in `(MCP)` in plain git.
+With users, each commit is made in the name of whoever made the change, and an assistant's are marked as such: **assistant** or **through Claude** in Zone; in plain git a message ending in `(MCP)` and a line `Assistant: Claude` (or `Assistant: MCP token`) below it, which is what Zone goes by.
 
 While you type, the editor saves your text every couple of seconds without committing it.
 **Done** (or Ctrl+S) makes the commit.

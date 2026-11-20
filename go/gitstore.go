@@ -596,21 +596,13 @@ func eachLogRecord(out io.Reader, each func(logRecord) bool) bool {
 // import of a large wiki is one commit of every page).
 const logRecordMax = 256 << 20
 
-// viaFormat: a commit's Assistant trailer in a git log format: its value
-// alone, on one line (the first, should a commit have several).
-const viaFormat = "%(trailers:key=" + viaTrailerKey + ",valueonly,separator=%x20)"
-
-// sourceFormat: its Source trailer, likewise.
-const sourceFormat = "%(trailers:key=" + sourceTrailerKey + ",valueonly,separator=%x20)"
-
 // GitEntry is a commit of a page: its sha, day, relative date, time
 // (YYYY-MM-DD HH:MM), message, author (commitAuthor), lines added and
 // deleted, and the file's path at that commit (relative to the wiki;
 // another before a rename).
 type GitEntry struct {
 	Sha, Date, Rel, Time, Msg, Author string
-	Via                               string // which assistant wrote it (viaOfCommit), "" for none or not said
-	Source                            string // where its text is from (sourceOfCommit), "" when not said
+	commitMark                        // whether an assistant wrote it, which, and where its text is from
 	Added, Deleted                    int
 	Path                              string
 }
@@ -630,7 +622,7 @@ func gitLog(path string, max int) []GitEntry {
 		args = append(args, "-n", strconv.Itoa(max))
 	}
 	args = append(args, "-z", "--numstat", "--date=format:%Y-%m-%d %H:%M",
-		"--format=\x1e%H\x1f%as\x1f%ar\x1f%ad\x1f%an\x1f"+viaFormat+"\x1f"+sourceFormat+"\x1f%s", "--", rel)
+		"--format=\x1e%H\x1f%as\x1f%ar\x1f%ad\x1f%an\x1f"+markFormat+"\x1f%s", "--", rel)
 	r := runGit(args...)
 	var entries []GitEntry
 	for _, record := range logRecords(r.Stdout) {
@@ -639,7 +631,7 @@ func gitLog(path string, max int) []GitEntry {
 			continue
 		}
 		e := GitEntry{Sha: parts[0], Date: parts[1], Rel: parts[2], Time: parts[3], Author: commitAuthor(parts[4]),
-			Msg: parts[7], Via: viaOfCommit(parts[7], parts[5]), Source: sourceOfCommit(parts[7], parts[6]), Path: rel}
+			Msg: parts[7], commitMark: commitMarkOf(parts[5], parts[6]), Path: rel}
 		// "added\tdeleted\tname", or for a rename "added\tdeleted\t" and
 		// the old and the new name as fields of their own.
 		for i := 0; i < len(record.fields); i++ {
@@ -670,8 +662,7 @@ func gitLog(path string, max int) []GitEntry {
 // changed that see didn't take, hidden their names (for hideNames).
 type LogEntry struct {
 	Sha, Time, Rel, Msg, Author string
-	Via                         string // which assistant wrote it (viaOfCommit), "" for none or not said
-	Source                      string // where its text is from (sourceOfCommit), "" when not said
+	commitMark                  // whether an assistant wrote it, which, and where its text is from
 	Files                       []string
 	Kinds                       string
 	Hidden                      int
@@ -697,7 +688,7 @@ func gitLogAll(since, under string, limit int, see func(path string) bool, keep 
 	var entries []LogEntry
 	for skip := 0; len(entries) < limit; skip, batch = skip+batch, 2*batch {
 		args := []string{"log", "-z", "-n", strconv.Itoa(batch), "--skip", strconv.Itoa(skip), "--name-status", "--no-renames",
-			"--date=format:%Y-%m-%d %H:%M", "--format=\x1e%H\x1f%ad\x1f%ar\x1f%an\x1f" + viaFormat + "\x1f" + sourceFormat + "\x1f%s"}
+			"--date=format:%Y-%m-%d %H:%M", "--format=\x1e%H\x1f%ad\x1f%ar\x1f%an\x1f" + markFormat + "\x1f%s"}
 		if since != "" {
 			args = append(args, "--since="+since+" 00:00")
 		}
@@ -711,7 +702,7 @@ func gitLogAll(since, under string, limit int, see func(path string) bool, keep 
 				continue
 			}
 			e := LogEntry{Sha: parts[0], Time: parts[1], Rel: parts[2], Author: commitAuthor(parts[3]), Msg: parts[6],
-				Via: viaOfCommit(parts[6], parts[4]), Source: sourceOfCommit(parts[6], parts[5])}
+				commitMark: commitMarkOf(parts[4], parts[5])}
 			for i := 0; i+1 < len(record.fields); i += 2 {
 				kind, n := record.fields[i], record.fields[i+1]
 				switch {
@@ -743,14 +734,18 @@ type fileChange struct {
 }
 
 // commitOf: the commit a version names (a sha or its start), whole, and
-// its message's first line; false for none.
-func commitOf(version string) (sha, subject string, ok bool) {
+// what it says it did (commitWhat: its first line, an assistant's without
+// its mark); false for none.
+func commitOf(version string) (sha, what string, ok bool) {
 	if !shaRE.MatchString(version) {
 		return "", "", false
 	}
-	r := runGit("log", "-n", "1", "--format=%H%x1f%s", version+"^{commit}", "--")
-	sha, subject, found := strings.Cut(strings.TrimRight(r.Stdout, "\n"), "\x1f")
-	return sha, subject, r.Code == 0 && found && shaRE.MatchString(sha)
+	r := runGit("log", "-n", "1", "--format=%H\x1f"+markFormat+"\x1f%s", version+"^{commit}", "--")
+	parts := strings.SplitN(strings.TrimRight(r.Stdout, "\n"), "\x1f", 4)
+	if r.Code != 0 || len(parts) != 4 || !shaRE.MatchString(parts[0]) {
+		return "", "", false
+	}
+	return parts[0], commitWhat(parts[3], commitMarkOf(parts[1], parts[2])), true
 }
 
 // commitChanges: every file the commit changed, with how (a rename is a
@@ -1141,7 +1136,7 @@ var (
 // versionLabel: what a commit did to the page, in words: Zone's own commit
 // messages read alike in a list, so they are named by kind; others as written.
 func versionLabel(e GitEntry, entries []GitEntry) string {
-	msg := e.Msg
+	msg := commitWhat(e.Msg, e.commitMark)
 	switch {
 	case editedRE.MatchString(msg):
 		return "Edited"

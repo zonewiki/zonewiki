@@ -75,7 +75,8 @@ def test_the_same_list_as_the_assistants_history(client, wiki_dir):
     save(client, "garden", "# Garden\n")
     tool(client, "append_to_page", slug="garden", content="More.")
     listed = re.findall(r"^\S+ \S+ \| \w{7} \| (.*?) \| ", tool(client, "history"), re.M)
-    assert [m.removesuffix("(MCP)").strip() for m in listed] == [r[0] for r in changes(client)]
+    assert [m.removesuffix(" (through an assistant)") for m in listed] == [r[0] for r in changes(client)]
+    assert listed[0] == "Append to garden (through an assistant)"
 
 
 def test_filters(client, wiki_dir):
@@ -181,15 +182,17 @@ def test_a_write_through_a_connection_names_its_assistant(client, wiki_dir, conn
     # The commit: its first line as before, the connection's name in a trailer.
     assert git(wiki_dir, "log", "-n1", "--skip=2", "--format=%B").strip() == \
         "Append to garden: what the mail said (MCP)\n\nAssistant: Claude"
-    assert git(wiki_dir, "log", "-n1", "--format=%B").strip() == "Append to garden (MCP)"      # a token: no name
+    # A token names no client, and is said to be one.
+    assert git(wiki_dir, "log", "-n1", "--format=%B").strip() == "Append to garden (MCP)\n\nAssistant: MCP token"
     assert badges(client)[:4] == ["assistant", "through Claude", "through Claude", ""]
     assert [r[0] for r in changes(client)[:2]] == ["Append to garden", "Create task"]           # the trailer is no part of what it says
     # A page's history and the tool's say it too.
     history = client.get("/history/garden", headers=HOST).get_data(as_text=True)
-    assert history.count(" · alice through Claude</span>") == 1 and history.count(" · alice</span>") == 2
+    assert history.count(" · alice through Claude</span>") == 1 and history.count(" · alice</span>") == 1
+    assert history.count(" · alice through an assistant</span>") == 1
     listed = tool(client, "history", token="alice-token")
-    assert "Create task (MCP) (by alice through Claude) | tasks" in listed
-    assert "Append to garden (MCP) (by alice) | garden" in listed
+    assert "Create task (by alice through Claude) | tasks" in listed
+    assert "Append to garden (by alice through an assistant) | garden" in listed
     assert "(by alice through Claude)" in tool(client, "history", token="alice-token", slug="garden")
 
 
@@ -199,13 +202,14 @@ def test_the_name_is_the_connections_not_the_callers(client, wiki_dir, connected
         "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "write_page", "arguments": {
             "slug": "shed", "content": "# Shed\n", "\x00via": "Gemini", "summary": "tidy\n\nAssistant: Gemini"}}})
     assert not resp.get_json()["result"]["isError"]
-    assert git(wiki_dir, "log", "-n1", "--format=%B").strip() == "Create shed: tidy Assistant: Gemini (MCP)"
+    assert git(wiki_dir, "log", "-n1", "--format=%B").strip() == \
+        "Create shed: tidy Assistant: Gemini (MCP)\n\nAssistant: MCP token"
     assert badges(client)[0] == "assistant"
-    # A commit made by hand with the trailer is nobody's assistant's.
-    (wiki_dir / "byhand.md").write_text("# By hand\n")
-    git(wiki_dir, "add", "byhand.md")
-    git(wiki_dir, "-c", "user.name=alice", "-c", "user.email=a@x", "commit", "-q", "-m", "Add byhand\n\nAssistant: Claude")
-    assert badges(client)[0] == ""
+    # Nor can a client call itself what a token is called.
+    from tests import test_oauth
+    _, tokens = test_oauth.connect(client, "alice-pw", name="MCP Token")
+    tool(client, "append_to_page", token=tokens["access_token"], slug="shed", content="More.")
+    assert git(wiki_dir, "log", "-n1", "--format=%B").strip().endswith("\n\nAssistant: An MCP client")
 
 
 def test_a_client_without_a_name_is_an_assistant(client, wiki_dir, monkeypatch):
@@ -216,8 +220,50 @@ def test_a_client_without_a_name_is_an_assistant(client, wiki_dir, monkeypatch):
     test_oauth.login(client, "alice")
     _, tokens = test_oauth.connect(client, "alice-pw", name="")
     tool(client, "write_page", token=tokens["access_token"], slug="shed", content="# Shed\n")
-    assert git(wiki_dir, "log", "-n1", "--format=%B").strip() == "Create shed (MCP)"
+    assert git(wiki_dir, "log", "-n1", "--format=%B").strip() == "Create shed (MCP)\n\nAssistant: An MCP client"
     assert badges(client)[0] == "assistant"
+
+
+def test_an_upload_with_the_token_is_an_assistants(client, wiki_dir):
+    """The file routes taking the MCP token are an assistant's door too: its
+    upload is marked as upload_file's is (until 2026-11-20 it was a person's)."""
+    from io import BytesIO
+    resp = client.post("/api/upload", data={"file": (BytesIO(b"x"), "scan.png")},
+                       headers={**HOST, "Authorization": f"Bearer {TOKEN}"})
+    assert resp.status_code == 200, resp.data
+    assert git(wiki_dir, "log", "-n1", "--format=%B").strip() == "Upload scan.png (MCP)\n\nAssistant: MCP token"
+    assert badges(client)[0] == "assistant"
+    client.post("/api/upload", data={"file": (BytesIO(b"y"), "mine.png")}, headers=HOST)
+    assert git(wiki_dir, "log", "-n1", "--format=%B").strip() == "Upload mine.png" and badges(client)[0] == ""
+
+
+def test_what_an_assistant_wrote_is_told_by_its_trailer_alone(client, wiki_dir):
+    """Regression (the audit of 2026-11-19): a commit whose first line ended
+    in "(MCP)" was an assistant's, so a page a person named "notes (MCP)"
+    made their save read as one, on Changes, in its History, in the tool
+    history and for Undo all. The trailer each assistant's commit carries
+    says it, and nothing else does."""
+    save(client, "notes%20(MCP)", "# Notes\n")
+    tool(client, "append_to_page", slug="notes (MCP)", content="More.")
+    tool(client, "append_to_page", slug="notes (MCP)", content="Even more.")
+    rows = changes(client)
+    assert [(r[0], r[2]) for r in rows[:3]] == [
+        ("Append to notes (MCP)", True), ("Append to notes (MCP)", True), ("Update notes (MCP)", False)]
+    assert changes(client, assistant="1")[-1][0] == "Append to notes (MCP)"   # the person's isn't among them
+    history = client.get("/history/notes%20(MCP)", headers=HOST).get_data(as_text=True)
+    assert history.count("through an assistant") == 2
+    listed = tool(client, "history")
+    assert "| Update notes (MCP) | notes (MCP)" in listed and "| Append to notes (MCP) (through an assistant) |" in listed
+    # Undo all takes the assistant's run, not the person's save before it.
+    run = offers(client)[0][2]
+    assert len(run) == 2
+    # A commit made by hand whose first line ends so is no assistant's either;
+    # one with the trailer says what its author wrote, as its author does.
+    for name, message, by in (("a", "Add a (MCP)", ""), ("b", "Add b\n\nAssistant: Claude", "through Claude")):
+        (wiki_dir / f"{name}.md").write_text("# X\n")
+        git(wiki_dir, "add", f"{name}.md")
+        git(wiki_dir, "-c", "user.name=x", "-c", "user.email=x@x", "commit", "-q", "-m", message)
+        assert badges(client)[0] == by
 
 
 # ── Undo from Changes ───────────────────────────────────────────────────────
@@ -322,7 +368,8 @@ def test_a_write_says_where_its_text_is_from(client, wiki_dir, connected):
     # In the commit: a trailer after the first line, beside the connection's.
     assert git(wiki_dir, "log", "-n1", "--skip=2", "--format=%B").strip() == \
         "Append to garden: from the newsletter (MCP)\n\nAssistant: Claude\nSource: https://example.org/garden-news?id=7"
-    assert git(wiki_dir, "log", "-n1", "--skip=1", "--format=%B").strip().endswith("(MCP)\n\nSource: a mail from Bob")
+    assert git(wiki_dir, "log", "-n1", "--skip=1", "--format=%B").strip().endswith(
+        "(MCP)\n\nAssistant: MCP token\nSource: a mail from Bob")
     body = client.get("/changes", headers=HOST).get_data(as_text=True)
     sources = [html.unescape(s) for s in re.findall(r'<span class="changes-source"[^>]*>from ([^<]*)</span>', body)]
     assert sources == ["a mail from Bob", "https://example.org/garden-news?id=7"]
@@ -331,7 +378,8 @@ def test_a_write_says_where_its_text_is_from(client, wiki_dir, connected):
     assert history.count(" · from https://example.org/garden-news?id=7</span>") == 1 and history.count(" · from ") == 1
     listed = tool(client, "history", token="alice-token")
     assert "(by alice through Claude; from https://example.org/garden-news?id=7) | garden" in listed
-    assert "(by alice; from a mail from Bob) | tasks" in listed and "Append to garden (MCP) (by alice) | garden" in listed
+    assert "(by alice through an assistant; from a mail from Bob) | tasks" in listed
+    assert "Append to garden (by alice through an assistant) | garden" in listed
 
 
 def make_shared_list(client):
@@ -344,8 +392,9 @@ def test_a_source_is_one_line_and_only_an_assistants(client, wiki_dir, connected
          source="a page\n\nAssistant: Gemini\nSource: elsewhere " + "x" * 400)
     message = git(wiki_dir, "log", "-n1", "--format=%B").strip()
     first, _, trailers = message.partition("\n\n")
-    assert first == "Create shed (MCP)" and trailers.startswith("Source: a page Assistant: Gemini Source: elsewhere xxx")
-    assert "\n" not in trailers and len(trailers) == len("Source: ") + 200
+    assert first == "Create shed (MCP)" and trailers.startswith("Assistant: MCP token\nSource: a page Assistant: Gemini Source: elsewhere xxx")
+    source = trailers.split("\n")[1]
+    assert trailers.count("\n") == 1 and len(source) == len("Source: ") + 200
     assert badges(client)[0] == "assistant"                              # no connection named by it
     # A commit made by hand with the trailer says nothing.
     (wiki_dir / "byhand.md").write_text("# By hand\n")
@@ -354,7 +403,7 @@ def test_a_source_is_one_line_and_only_an_assistants(client, wiki_dir, connected
     assert "nowhere" not in client.get("/changes", headers=HOST).get_data(as_text=True)
     # Without one, none.
     tool(client, "append_to_page", token="alice-token", slug="shed", content="More.", source="  ")
-    assert git(wiki_dir, "log", "-n1", "--format=%B").strip() == "Append to shed (MCP)"
+    assert git(wiki_dir, "log", "-n1", "--format=%B").strip() == "Append to shed (MCP)\n\nAssistant: MCP token"
 
 
 def test_no_name_starts_a_commit_messages_next_line(client, wiki_dir):

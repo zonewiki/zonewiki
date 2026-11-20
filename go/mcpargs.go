@@ -395,18 +395,20 @@ func similarPages(slug, title string, user asker) []PageRef {
 
 // ── Committing ──────────────────────────────────────────────────────────────
 // Every write is its own git commit, its message's first line ending in
-// "(MCP)" so the history tells the model's changes from the user's. The
-// model's summary, when given, says what changed. A write through a
-// connection (grants.go) names it after that, in a trailer
-// ("Assistant: Claude", commitTrailers): which assistant it was.
+// "(MCP)" for who reads git log. The model's summary, when given, says what
+// changed. After that line, a trailer names the connection the write came
+// through ("Assistant: Claude", "Assistant: MCP token": commitTrailers),
+// which is what tells the history the model's changes from the user's
+// (commitMarkOf).
 
 // viaArg: the argument callMCPTool sets to the name of the connection a
-// call came through. No client sets it: what one sends there is dropped.
+// call came through ("" none: an MCP token). No client sets it: what one
+// sends there is dropped.
 const viaArg = "\x00via"
 
 // mcpMark: what ends the message of a commit a tool makes: " (MCP)", and
-// the trailers naming its connection and, when the call says, where its
-// text is from (source).
+// the trailers naming its connection (or the token) and, when the call
+// says, where its text is from (source).
 func mcpMark(args jsonObj) string {
 	via, _ := jsonobj.As[string](args[viaArg])
 	source, _ := jsonobj.As[string](args["source"])

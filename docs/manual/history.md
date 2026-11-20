@@ -30,7 +30,7 @@ It lists every saved version of the page, newest first, one row each:
 
 - the date and time;
 - what the save did: Created, Edited, Renamed from "…", Link updated (when a rename elsewhere changed a link on this page), Restored the version of …, Undid the change of …, Deleted;
-- who made it, and through which assistant, as in "Anna through Claude";
+- who made it, and for an AI assistant's change through which assistant, as in "Anna through Claude" ("Anna through an assistant" when it used a token);
 - how many lines were added and removed.
 
 The page as it is now is marked **Current**.

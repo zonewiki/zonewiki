@@ -876,7 +876,7 @@ class TestUndo:
 
     def test_an_edit(self, client, wiki, door):
         commit(wiki, "p", "# P\n\none\n")
-        v2 = commit(wiki, "p", "# P\n\ntwo\n", "Update p: second thoughts (MCP)")
+        v2 = commit(wiki, "p", "# P\n\ntwo\n", "Update p: second thoughts (MCP)\n\nAssistant: Claude")
         assert undo(client, door, v2) is True
         assert (wiki / "p.md").read_text() == "# P\n\none\n"
         assert subjects(wiki)[0] == f"Undo {v2[:7]}: Update p: second thoughts" + (" (MCP)" if door == "mcp" else "")

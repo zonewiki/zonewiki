@@ -484,8 +484,14 @@ func apiUpload(w http.ResponseWriter, r *http.Request) {
 var uploadMu sync.Mutex
 
 // saveUpload: storeUpload for the route, which answers what went wrong.
+// An assistant's upload with its token is marked as an assistant's, as
+// upload_file's is (mcpMark).
 func saveUpload(w http.ResponseWriter, r *http.Request, src io.ReadSeeker, owner place, filename string) bool {
-	err := storeUpload(userOf(r), owner, filename, src, "")
+	via := ""
+	if byToken(r) {
+		via = " " + assistantMark + commitTrailers(viaOf(r), "")
+	}
+	err := storeUpload(userOf(r), owner, filename, src, via)
 	if pe, ok := refusalOf(err); ok {
 		http.Error(w, pe.msg, pe.kind.status())
 		return false

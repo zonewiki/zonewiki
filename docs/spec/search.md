@@ -127,7 +127,7 @@ The date is the file's (Date filters, above); the name is its last commit's, and
 so a draft auto-saved and not committed,
 an edit on disk or a checkout is never put in the name of whoever committed before.
 A rename is a change: a page's last commit is then its rename.
-Whether an assistant made it, and which, is asked of the commit as everywhere else (`byAssistant`, `viaOfCommit`), and the name is the one a page's history shows (`commitAuthor`: nobody without users, and not Zone).
+Whether an assistant made it, and which, is asked of the commit as everywhere else, by its `Assistant` trailer (`commitMarkOf`: Which assistant in `docs/spec/mcp.md`; a token's is "anna's assistant"), and the name is the one a page's history shows (`commitAuthor`: nobody without users, and not Zone).
 
 **Who learns it**: whoever finds the result, which shows only to who may see the page.
 A public wiki's visitor learns no user's name, as in a page's history (`pageLog`): an assistant's change says `by an assistant through Claude`, a visitor's `by anonymous`, a user's nothing more.

@@ -453,8 +453,8 @@ History is in the page view's ⋯ menu (and the breadcrumb of a revision or diff
 **`/history/<slug>`** lists the page's saved versions,
 newest first,
 one row each (`.hist-list`): date and time,
-what the save did in words (`versionLabel`: Zone's own commit messages read alike, so "Update p" → Edited, "Rename a to b" → Renamed from “a” or, on a page whose link was updated, Link updated, "Restore p to <sha>" → Restored the version of <date>, also Created/Deleted/Imported;
-other messages as written), who made it (with users) and through which assistant where the commit says ("alice through Claude"), and the lines added/removed (`--numstat`).
+what the save did in words (`versionLabel`, of the message as `commitWhat` gives it, an assistant's without its `(MCP)`: Zone's own commit messages read alike, so "Update p" → Edited, "Rename a to b" → Renamed from “a” or, on a page whose link was updated, Link updated, "Restore p to <sha>" → Restored the version of <date>, also Created/Deleted/Imported;
+other messages as written), who made it (with users) and, for an assistant's, through which ("alice through Claude"; "alice through an assistant" for a token's, or without a name: Which assistant in `docs/spec/mcp.md`), and the lines added/removed (`--numstat`).
 The row opens that version; the page as it is now is marked **Current** and opens the page itself (`isCurrent`: the newest commit equals the file on disk; with edits not committed yet a "Now · Not committed yet" row is the current one instead).
 **Changes** opens the diff.
 
@@ -482,7 +482,7 @@ The diff of a rename passes both names (`gitDiff(sha, paths…)`, `-M`), so a pu
 Each row shows:
 
 - the time, what the commit says, who made it (with users);
-- an **assistant** mark where an assistant wrote it (a message ending in `(MCP)`, `byAssistant`; the mark replaces those words, and says **through Claude** where the commit names its connection: Which assistant in `docs/spec/mcp.md`);
+- an **assistant** mark where an assistant wrote it (its `Assistant` trailer, `commitMarkOf`, never its message, which a page's name can end in `(MCP)` too; the mark replaces the `(MCP)` an assistant's message ends in, and says **through Claude** where the commit names its connection: Which assistant in `docs/spec/mcp.md`);
 - where its text is from when the assistant said ("from https://…": Where the text is from, there);
 - then what it changed: each page by its slug, a link to what the commit changed on it (`/diff/<slug>/<sha>`), **Tasks** for the task files, any other file (an upload) by its path.
 

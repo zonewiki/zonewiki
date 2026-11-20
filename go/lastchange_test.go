@@ -95,7 +95,8 @@ func TestWhoChangedAPage(t *testing.T) {
 	lastCommitsWiki(t, true)
 	commitPage(t, "p.md", "alice", "Update p")
 	commitPage(t, "q.md", "bob", "Update q (MCP)"+commitTrailers("Claude", ""))
-	commitPage(t, "r.md", "alice", "Update r (MCP)")
+	commitPage(t, "r.md", "alice", "Update r (MCP)"+commitTrailers("", ""))
+	commitPage(t, "s (MCP).md", "alice", "Update s (MCP)") // a person's: no trailer says an assistant's
 	commitPage(t, "z.md", "", "Update z")
 	byHand(t, "notes/h.md", "carol")
 	commitPage(t, "v.md", visitor, "Update v")
@@ -106,13 +107,13 @@ func TestWhoChangedAPage(t *testing.T) {
 	if err := os.Chtimes(later, soon, soon); err != nil {
 		t.Fatal(err)
 	}
-	slugs := []string{"p", "q", "r", "z", "notes/h", "v", "later", "new"}
+	slugs := []string{"p", "q", "r", "s (MCP)", "z", "notes/h", "v", "later", "new"}
 	wantWho(t, "alice", whoFor(t, asUser("alice"), slugs...), map[string]string{
-		"p": "by alice", "q": "by bob through Claude", "r": "by alice's assistant", "z": "",
+		"p": "by alice", "q": "by bob through Claude", "r": "by alice's assistant", "s (MCP)": "by alice", "z": "",
 		"notes/h": "by carol", "v": "by anonymous", "later": "", "new": "",
 	})
 	wantWho(t, "a visitor", whoFor(t, asUser(visitor), slugs...), map[string]string{
-		"p": "", "q": "by an assistant through Claude", "r": "by an assistant", "z": "",
+		"p": "", "q": "by an assistant through Claude", "r": "by an assistant", "s (MCP)": "", "z": "",
 		"notes/h": "", "v": "by anonymous", "later": "", "new": "",
 	})
 }

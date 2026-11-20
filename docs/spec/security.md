@@ -77,7 +77,7 @@ Behind the proxy the session cookie is `Secure` (The session cookie, below), and
   If your wiki holds such text, have your client ask before it writes (MCP clients can, per tool; Zone marks the tools that change or delete as destructive).
   HTML in a page runs no script and loads nothing from other sites (an image elsewhere shows as a link), so such a page can't send your notes away in an image's address; name sites you trust in `external-content`.
 - **Git is the undo, a remote the backup.**
-  Every change made through Zone is a commit (an assistant's marked `(MCP)`), and Changes, history and Deleted pages bring things back.
+  Every change made through Zone is a commit (an assistant's marked by its `Assistant` trailer), and Changes, history and Deleted pages bring things back.
   Set `git-remote` and push now and then; the remote has everything but `.zone/` (the users and settings in `config`, the session key, the assistants' connections), so keep a copy of that folder too (Backups in `docs/spec/deployment.md`).
 - **Treat the wiki folder, its git history and remote, and every backup as confidential.**
   They hold everything, every user's private pages included, and a backup of the folder holds the password hashes too.
@@ -426,6 +426,7 @@ Two calls turn it off: `grepPages`, whose `*.md` is Zone's own pattern, and `che
 
 A page's name may hold anything a file's may but a control character or a backslash, and doesn't start with a double quote (`safePath` refuses it to every route and tool, `mdtext.BadNameRune`); nor does an upload's name (`uploadName`) or a list's (`checkListName`).
 A name goes into a commit message as it is ("Update <slug>"), and a line break in it started the message's next lines, where git reads trailers: a page saved as `notes (MCP)⏎⏎Assistant: Claude` showed in Changes as an assistant's work through Claude.
+The trailer is what says that an assistant wrote a commit (Which assistant in `docs/spec/mcp.md`), as a name ending in `(MCP)`, which a page's may, no longer does.
 And git quotes such a name where it lists files, which the history's readers hide (Git's lists of files are read as they are, below).
 A page so named on disk, made by hand, isn't opened by Zone.
 `test_no_name_starts_a_commit_messages_next_line` in `tests/test_changes.py`.

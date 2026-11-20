@@ -244,13 +244,14 @@ func mcpAuthorized(r *http.Request) (user asker, via string, ok bool) {
 
 // connectionUser: given is the access token of a connection (grants.go),
 // whose user may still have one: that user, with what the connection was
-// given less, and the name its client gave.
+// given less, and the name its client gave (clientName: never "", which
+// is an MCP token's).
 func connectionUser(s *Settings, given string) (user asker, via string, ok bool) {
 	if !oauthOn(s) {
 		return asker{}, "", false
 	}
 	if g := grantOf(given); g != nil && validGrantUser(s, g.User) {
-		return g.asker(g.User), g.Client, true
+		return g.asker(g.User), clientName(g.Client), true
 	}
 	return asker{}, "", false
 }

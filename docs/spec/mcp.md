@@ -282,7 +282,7 @@ Git history, three ways:
 | `slug` | That page's versions (`gitLog`, across renames: `version \| when \| +added -removed \| message`), a deleted page's too, saying so, and saying when the page has uncommitted changes newer than the first one. |
 | `slug` and `version` | What that version changed, as `gitDiff` with the rename handling of the browser's Changes view. |
 
-`(MCP)` in a message marks an assistant's change (Which assistant).
+An assistant's change is marked after its message, `(by alice through Claude)`, `(through an assistant)` without users or a name (Which assistant); its message is shown without the `(MCP)` its first line ends in.
 Without git, a tool error.
 A page that isn't there (deleted) is named as `read_guides` names a page not yet written (`pageOrSeenSlug`): it asks only that the asker may see it, so a viewer and a connection that only reads read a deleted page's history too; one in a place they don't see is refused as a write there is, saying nothing of whether it was ever there.
 
@@ -579,12 +579,13 @@ Where it goes, by `page`:
 The task's id may be the 8-character short id the tools show (or more of it), a `[[task:…]]` reference or a `/tasks?task=…` link, when no page goes by that name (`uploadTaskRef`): it is found among the tasks the user sees, and an id that names none, or several, is refused rather than taken for a page's name, which would leave the task's file with everyone's.
 
 The answer is the markdown that links it (`![name](url)` for an image, `[name](url)` otherwise, the URL percent-encoded), since an upload shows nowhere until a page or task links it.
-It is saved as the browser's upload is (`storeUpload`: `storage-max`, a commit "Upload <name> (MCP)" by the user), and a viewer doesn't have the tool.
+It is saved as the browser's upload is (`storeUpload`: `storage-max`, a commit "Upload <name> (MCP)" by the user, with the trailer every assistant's write carries: Which assistant), and a viewer doesn't have the tool.
 
 #### Over HTTP with the token
 
 For an assistant with a shell and a file of any size: `POST /api/upload` (multipart, the field `file`, optionally `page`; the answer is `{"url": …}`) and `GET /_assets/<file>`, `/private/<user>/_assets/<file>`, `/groups/<group>/_assets/<file>` or `/_tasks/files/<id>/_assets/<file>` take the MCP token (or a connection's access token) as `Authorization: Bearer …` in place of a session (`tokenForFiles`, `tokenRequest` in the request checks).
 The token is checked as `/mcp` checks it: a wrong one is 401 and counts against the client (`mcpThrottle`); the request then runs as the token's user, so a viewer's upload is refused (403) and a private upload is its owner's.
+Its commit is an assistant's, as `upload_file`'s is (`saveUpload`: "Upload <name> (MCP)" and the `Assistant` trailer).
 An upload sent this way takes a free name like the tool's, whatever `overwrite` says (`byToken`).
 The token opens these routes only: a page, the task API or any other route with a bearer token and no session goes to the login as ever.
 Both tools' refusals name the two `curl` commands (`fileRoutesHint`).
@@ -593,19 +594,25 @@ Both tools' refusals name the two `curl` commands (`fileRoutesHint`).
 
 ### Commit message and summary
 
-Every write tool takes an optional `summary`; the commit message is the action, then the summary, then `(MCP)` (`commitMsg`: `Update tickets/bug-1: add findings (MCP)`, `Create task (MCP)`), so the history tells the model's changes from the user's.
+Every write tool takes an optional `summary`; the commit message's first line is the action, then the summary, then `(MCP)` (`commitMsg`: `Update tickets/bug-1: add findings (MCP)`, `Create task (MCP)`), for whoever reads the history with git.
+Zone doesn't go by that line: a page's name can end in `(MCP)` too.
+What tells the history the model's changes from the user's is the trailer after it (Which assistant).
 
 ### Which assistant
 
-A write through a connection (OAuth, Connections above) names it in a trailer after that line, `Assistant: Claude` (`mcpMark`, `viaTrailerKey`): the name its client gave when the user let it in, one line.
-`callMCPTool` hands it to the tool with its arguments (`viaArg`, a name no client can send: what one sends there is dropped), and a summary is one line, so neither names an assistant.
-A write with an MCP token has no trailer: a token names no client.
-The history shows it beside who the commit is by, as the client's claim it is: "alice through Claude" on Changes and a page's History, `(by alice through Claude)` in the tool `history`, "by alice through Claude" under a search result whose page it changed last (Who changed a page last in `search.md`) (`viaOfCommit`: only for a commit whose first line ends in `(MCP)`, so a trailer typed by hand says nothing).
+**Every write an assistant makes carries a trailer** after its first line that names its connection, `Assistant: Claude` (`mcpMark`, `commitTrailers`, `viaTrailerKey`): for a connection (OAuth, Connections above) the name its client gave when the user let it in, one line (`An MCP client` for one that gave none); for an MCP token, which names no client, `Assistant: MCP token` (`tokenVia`; a client that calls itself so is `An MCP client`: `clientName`).
+The task tools' writes carry it as the page tools' do, and so does an upload with the token over HTTP.
+`callMCPTool` hands the connection's name to the tool with its arguments (`viaArg`, a name no client can send: what one sends there is dropped), and a summary is one line, so neither names an assistant.
+
+**The trailer alone says that an assistant wrote a commit** (`commitMarkOf` in `go/changes.go`, the one place that decides it, on every commit the history reads: `GitEntry`, `LogEntry`, `commitOf`), for Changes and its filters, an assistant's run and Undo all, a page's History and the tool `history`.
+A line after the first is one no name in a commit message reaches (A name holds no line break in `docs/spec/security.md`), where a first line ending in `(MCP)` was one a person's page could have ("notes (MCP)"), so a person's save read as an assistant's (until 2026-11-20).
+A commit made by hand with the trailer says what its author wrote, as its author does; one from before 2026-11-20 written with an MCP token has no trailer, and shows as a person's.
+The history shows it beside who the commit is by, as the client's claim it is: "alice through Claude" on Changes and a page's History, `(by alice through Claude)` in the tool `history`, "by alice through Claude" under a search result whose page it changed last (Who changed a page last in `search.md`) (`commitMark.Via`); for a token or a client without a name **assistant** on Changes, "alice through an assistant" in a page's History and the tool, "by alice's assistant" under a search result.
 
 ### Where the text is from
 
 The tools that write text (`write_page`, `edit_page`, `append_to_page`, `create_task`, `update_task`) take an optional `source`: where the words are from when not from the user, as the assistant says it (a URL, "a mail from Bob").
-It is kept as a second trailer, `Source: …` (`commitTrailers`; one line, at most 200 characters, so it adds no trailer of its own), and shown where the commit is: "from https://…" on its row of Changes and in a page's History, `(by alice through Claude; from https://…)` in the tool `history`.
+It is kept as a second trailer, `Source: …` (`commitTrailers`; one line, at most 200 characters, so it adds no trailer of its own), shown only for a commit the `Assistant` trailer says an assistant wrote, where the commit is: "from https://…" on its row of Changes and in a page's History, `(by alice through Claude; from https://…)` in the tool `history`.
 It is said, not linked: it is the assistant's word, and what it tells a reader is that nobody here wrote this text, so it may be wrong, or written to steer an assistant (Pages can carry instructions in the README).
 It is the write's, in the history; a page's own `sources:` in its frontmatter is the page's, for its readers.
 Not yet: `read_page` saying which passages came from outside.

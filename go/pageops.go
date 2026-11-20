@@ -822,7 +822,7 @@ func undoChangesOp(user asker, versions []string, suffix string, check func(slug
 			return nil, err
 		}
 	}
-	message := "Undo " + runePrefix(commits[0].sha, 7) + ": " + strings.TrimSpace(strings.TrimSuffix(commits[0].subject, assistantMark))
+	message := "Undo " + runePrefix(commits[0].sha, 7) + ": " + commits[0].subject
 	if len(commits) > 1 {
 		shas := make([]string, len(commits))
 		for i, c := range commits {

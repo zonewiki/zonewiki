@@ -351,7 +351,7 @@ func history(args jsonObj, base string, user asker) (string, error) {
 	var rows []string
 	for _, e := range entries[:min(limit, len(entries))] {
 		rows = append(rows, fmt.Sprintf("%s | %s | +%d -%d | %s", runePrefix(e.Sha, 7), e.Time, e.Added, e.Deleted,
-			e.Msg+byAuthor(e.Author, e.Via, e.Source)))
+			commitWhat(e.Msg, e.commitMark)+byAuthor(e.Author, e.commitMark)))
 	}
 	shown := fmt.Sprintf("all %d", len(entries))
 	if len(rows) < len(entries) {
@@ -364,20 +364,21 @@ func history(args jsonObj, base string, user asker) (string, error) {
 		state = " (it has changes not committed yet, newer than the first version listed)"
 	}
 	return "Versions of " + slug + state + ", newest first (" + shown + "); version | when | lines added and " +
-		"removed | what (\"(MCP)\": written by an assistant). history with a version shows " +
+		"removed | what (\"through …\" after it: written by an assistant). history with a version shows " +
 		"what it changed:\n" + strings.Join(rows, "\n"), nil
 }
 
 // byAuthor: " (by alice)" after a commit's message, " (by alice through
-// Claude)" for what an assistant wrote through a connection, "; from
-// https://…" added where the write said where its text is from; nothing
-// for Zone's own.
-func byAuthor(author, via, source string) string {
-	who := strings.TrimSpace(throughWhom(via))
+// Claude)" for what an assistant wrote through a connection (" (by alice
+// through an assistant)" for one that names none, commitMark.through),
+// "; from https://…" added where the write said where its text is from;
+// nothing for Zone's own.
+func byAuthor(author string, m commitMark) string {
+	who := strings.TrimSpace(m.through())
 	if author != "" {
-		who = "by " + author + throughWhom(via)
+		who = "by " + author + m.through()
 	}
-	if who += fromWhere(source); who == "" {
+	if who += fromWhere(m.Source); who == "" {
 		return ""
 	}
 	return " (" + strings.TrimPrefix(who, "; ") + ")"
@@ -439,14 +440,14 @@ func recentChanges(since, under string, limit int, user asker) string {
 				labels = append(labels, l)
 			}
 		}
-		rows = append(rows, e.Time+" | "+runePrefix(e.Sha, 7)+" | "+e.Msg+byAuthor(e.Author, e.Via, e.Source)+" | "+
+		rows = append(rows, e.Time+" | "+runePrefix(e.Sha, 7)+" | "+commitWhat(e.Msg, e.commitMark)+byAuthor(e.Author, e.commitMark)+" | "+
 			strings.Join(labels, ", "))
 	}
 	theLimit := ""
 	if len(rows) == limit {
 		theLimit = ", the limit"
 	}
-	out = append(out, fmt.Sprintf("Changes%s%s, newest first (%d%s); when | version | what (\"(MCP)\": written by "+
+	out = append(out, fmt.Sprintf("Changes%s%s, newest first (%d%s); when | version | what (\"through …\" after it: written by "+
 		"an assistant) | pages:\n", where, when, len(rows), theLimit)+strings.Join(rows, "\n"))
 	return strings.Join(out, "\n\n")
 }

@@ -216,7 +216,7 @@
  {
   "name": "history",
   "title": "Show history",
-  "description": "The wiki's git history. Without slug: recent changes across the wiki (what, when, which pages; '(MCP)' marks an assistant's), plus pages with changes not committed yet. With slug: that page's versions. With slug and version: what that version changed, as a diff. restore_page goes back to a version.",
+  "description": "The wiki's git history. Without slug: recent changes across the wiki (what, when, which pages and tasks; 'through …' marks an assistant's), plus pages with changes not committed yet. With slug: that page's versions. With slug and version: what that version changed, as a diff. restore_page goes back to a version.",
   "inputSchema": {
    "type": "object",
    "properties": {
