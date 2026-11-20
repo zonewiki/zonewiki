@@ -68,19 +68,29 @@ func TestSetEmbedParams(t *testing.T) {
 }
 
 func TestCheckEmbedSettings(t *testing.T) {
-	got, err := checkEmbedSettings(map[string]string{"view": " Open ", "group": "NONE", "limit": "7",
-		"new": "#a,b", "tag": "a|b", "labels": "To_buy,Cart"}, embedSettingKeys)
-	want := map[string]string{"view": "open", "group": "none", "limit": "7", "new": "a,b",
-		"tag": "a|b", "labels": "To_buy,Cart"}
+	got, err := checkEmbedSettings(map[string]string{"view": " Open ", "group": "NONE", "tag": "a|b", "assignee": "me"}, embedSettingKeys)
+	want := map[string]string{"view": "open", "group": "none", "tag": "a|b", "assignee": "me"}
 	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Errorf("checkEmbedSettings = %v, %v, want %v", got, err, want)
 	}
+	// An embed says which tasks and how: what they are is set where they are.
 	for _, bad := range []map[string]string{
-		{"view": "week"}, {"view": "focus"}, {"view": "plan"}, {"plan": "off"}, {"group": "week"}, {"limit": "0"}, {"limit": "100"}, {"limit": "x"}, {"pin": "1"},
-		{"tag": "a b"}, {"tag": "a]]"}, {"labels": "a`b"}, {"keep": "1"}, {"list": "shop"},
+		{"view": "week"}, {"view": "focus"}, {"view": "plan"}, {"plan": "off"}, {"group": "week"}, {"pin": "1"},
+		{"tag": "a b"}, {"tag": "a]]"}, {"keep": "1"}, {"list": "shop"},
+		{"limit": "7"}, {"labels": "To_buy,Cart"}, {"new": "a"},
 	} {
 		if _, err := checkEmbedSettings(bad, embedSettingKeys); err == nil {
 			t.Errorf("checkEmbedSettings(%v) passed", bad)
+		}
+	}
+	got, err = checkEmbedSettings(map[string]string{"view": "open", "limit": "7", "new": "#a,b", "labels": "To_buy,Cart"}, allSettingKeys)
+	want = map[string]string{"view": "open", "limit": "7", "new": "a,b", "labels": "To_buy,Cart"}
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Errorf("checkEmbedSettings for All tasks = %v, %v, want %v", got, err, want)
+	}
+	for _, bad := range []map[string]string{{"limit": "0"}, {"limit": "100"}, {"limit": "x"}, {"labels": "a`b"}} {
+		if _, err := checkEmbedSettings(bad, allSettingKeys); err == nil {
+			t.Errorf("checkEmbedSettings(%v) passed for All tasks", bad)
 		}
 	}
 	// All tasks has no filter, list or pin.

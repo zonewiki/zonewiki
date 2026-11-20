@@ -2359,15 +2359,19 @@ def test_focus_limit_is_off_unless_set(page, wiki):
     open_tab(page, "plan")
     expect(page.locator(".board-day-divider", has_text="Today")).to_be_visible()
     expect(page.locator(".board-day--over")).to_have_count(0)
-    # ?limit= (the /tasks page) turns it on; the count includes Unsorted.
-    page.goto("/tasks?view=today&limit=5")
+    # All tasks' limit turns it on (no ?limit= in the address); the count
+    # includes Unsorted.
+    page.goto("/tasks?view=today&limit=2")
+    expect(page.locator(".today-over-limit")).to_have_count(0)
+    assert page.request.post("/api/tasks/settings", data={"all": True, "was": "", "set": {"limit": "5"}}).ok
+    page.goto("/tasks?view=today")
     expect(page.locator(".today-over-limit")).to_contain_text("5 tasks in Today (limit: 5)")
     open_tab(page, "plan")
     expect(page.locator(".board-day--over")).to_have_count(1)
-    # [[tasks: limit=N]] in an embed.
+    # An embed of every task has All tasks' limit; its own limit= is ignored.
     wiki.write("board", "# Board\n\n[[tasks: view=today limit=3]]\n")
     page.goto("/page/board")
-    expect(page.locator(".today-over-limit")).to_contain_text("(limit: 3)")
+    expect(page.locator(".today-over-limit")).to_contain_text("(limit: 5)")
 
 
 def test_task_added_on_focus_lands_in_unsorted(page, wiki):
@@ -5361,9 +5365,10 @@ def test_rename_tag_dialog(page, wiki):
 
 
 def test_settings_dialog_changes_the_lists_settings_and_the_pages(page, wiki):
-    """List settings… in the toolbar's ⋯ menu: Plan, the tabs' names, the
-    limit and the tags are the list's own, kept with the list; the tab a page
-    opens it on is the page's, written into its [[tasks: …]]; the pin is yours."""
+    """List settings… in the toolbar's ⋯ menu: the tabs' names, the limit
+    and the tags are the list's own, kept with the list; the tab and the
+    grouping a page opens it with are the page's, written into its
+    [[tasks: …]]; the pin is yours."""
     list_page(page, wiki, "shopping", "# Shopping\n\nBefore.\n\n[[tasks: list=shop keep=1]]\n\nAfter.\n")
     page.request.post("/api/tasks", data={"title": "Milk", "list": "shop"})
     registry = wiki.root / "_tasks/lists.json"
@@ -5399,9 +5404,9 @@ def test_settings_dialog_changes_the_lists_settings_and_the_pages(page, wiki):
     dialog.locator("[name=new]").fill("weekly, fresh")
     with page.expect_navigation():
         dialog.get_by_role("button", name="Save").click()
-    # The list's own to the registry; the tab, the page's, into its embed.
-    assert '{"name": "shop", "limit": "6", "group": "none", "keep": "1", "labels": "To_buy,Cart", "new": "weekly,fresh"}' in registry.read_text()
-    assert wiki.read("shopping") == "# Shopping\n\nBefore.\n\n[[tasks: list=shop keep=1 view=open]]\n\nAfter.\n"
+    # The list's own to the registry; the tab and the grouping, the page's, into its embed.
+    assert '{"name": "shop", "limit": "6", "keep": "1", "labels": "To_buy,Cart", "new": "weekly,fresh"}' in registry.read_text()
+    assert wiki.read("shopping") == "# Shopping\n\nBefore.\n\n[[tasks: list=shop keep=1 view=open group=none]]\n\nAfter.\n"
     # The page opens as set: the Open tab, by its new name, as one list.
     expect(page.locator("#tasks-tabs [role='tab']")).to_have_text(["To buy", "Cart"])
     expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["To buy"])
@@ -5425,8 +5430,9 @@ def test_settings_dialog_changes_the_lists_settings_and_the_pages(page, wiki):
     with page.expect_navigation():
         dialog.get_by_role("button", name="Save").click()
     text = registry.read_text()
-    assert '"group": "day"' in text and '"pinned": ["shop"]' in text and "default" not in text
-    assert "pin=" not in wiki.read("shopping")                       # the pin is no param of a page
+    assert '"group"' not in text and '"pinned": ["shop"]' in text and "default" not in text
+    assert wiki.read("shopping") == "# Shopping\n\nBefore.\n\n[[tasks: list=shop keep=1 view=open group=day]]\n\nAfter.\n"   # no pin=: the pin is no param of a page
+    before = registry.read_text(), wiki.read("shopping")
     expect(page.locator(".tasks-cut [data-group=day]")).to_have_attribute("aria-pressed", "true")
     expect(page.locator(".breadcrumb .module-link[data-module=tasks]")).to_have_attribute("href", "/tasks?mine=1")
 
@@ -5441,7 +5447,7 @@ def test_settings_dialog_changes_the_lists_settings_and_the_pages(page, wiki):
     with page.expect_navigation():
         dialog.get_by_role("button", name="Save").click()
     text = registry.read_text()
-    assert '{"name": "shop", "view": "open", "limit": "6", "group": "day"' in text and '"pinned": []' in text
+    assert '{"name": "shop", "view": "open", "limit": "6", "keep": "1"' in text and '"pinned": []' in text
     assert wiki.read("shopping") == before[1]                        # the page keeps its own tab
     expect(page.locator("#tasks-tabs [aria-selected='true']")).to_have_text(["To buy"])
     expect(page.locator(".tasks-place-pin")).to_have_count(0)

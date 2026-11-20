@@ -2263,6 +2263,6 @@ class TestZoneHelp:
         topics = re.findall(r"^(\w[\w/-]*): ", call(client, "zone_help")[0], re.M)
         assert topics == (["manual"] + ["manual/" + m for m in manual] + ["readme"]
                           + sorted(p.stem for p in spec.glob("*.md") if p.stem != "testing"))
-        text, err = call(client, "zone_help", query="tasks tab names labels")
+        text, err = call(client, "zone_help", query="tasks tab names catalogue shopping")
         assert not err and "topic: manual/tasks" in text
 

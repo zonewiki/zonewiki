@@ -386,9 +386,9 @@ const initTag = appEl?.dataset.initTag || urlParams.get('tag') || '';
 // [[tasks: assignee=…]] / ?assignee= (with users): whose tasks.
 const initAssignee = document.body.dataset.users === '1'
   ? appEl?.dataset.initAssignee || urlParams.get('assignee') || '' : '';
-// WIP limit: Focus warns and Plan flags a day at >= LIMIT tasks. Off unless
-// set: [[tasks: limit=N]], or ?limit=N (the built-in /tasks page has no embed).
-const LIMIT = parseInt(appEl?.dataset.initLimit || urlParams.get('limit'), 10) || null;
+// WIP limit: Today warns and Plan flags a day at >= LIMIT tasks. Off unless
+// the view shown has one: a list's, My tasks' or All tasks' limit.
+const LIMIT = parseInt(appEl?.dataset.initLimit, 10) || null;
 // Lists: a list is a place a task is in (its `list`; one, or none). A view
 // of a list ([[tasks: list=<name>]], /tasks?list=) shows its tasks, and a
 // new task there goes into it; My tasks (data-init-mine, with the lists

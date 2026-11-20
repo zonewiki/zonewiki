@@ -2,9 +2,9 @@
 // in the list's ⋯ menu in the toolbar. It changes the settings where they
 // are kept: a list's own (its limit, Plan, tab names, new tasks' tags, keep,
 // whether it hides in sharing mode) in the lists' registry, wherever the
-// list is shown; how a page looks at it (the tab it opens on, a filter) in
-// that page's [[tasks: …]]; an embed of no list all in its [[tasks: …]];
-// those of All tasks in the registry too. The pin is the user's own. The
+// list is shown; how a page looks at what it shows (the tab it opens on, the
+// grouping, a filter) in that page's [[tasks: …]], and nothing else there;
+// those of All tasks and My tasks in the registry too. The pin is the user's own. The
 // server names the places in data-settings-* (tasksembed.go
 // buildTasksEmbed) and writes them (POST /api/tasks/settings, POST
 // /tasks/pin-list); without them there is no ⋯ menu.
@@ -126,9 +126,12 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Tod
     // looks at the list (its tab, grouping and filter); the list's own
     // settings are set in the list's dialog, and written here they would
     // mean nothing.
-    if (LIST_OWN.includes(name) && f.list && cleanList(f.list.value)) return false;
+    // What the tasks shown are (a WIP limit, tab names, a new task's tags,
+    // keep) is said where they are: a list's, All tasks' or My tasks' own,
+    // never a page's [[tasks: …]], which the editor's dialog writes alone.
+    if (LIST_OWN.includes(name) && (f.list || (m.embed && !m.list))) return false;
     if (name === 'tag' || name === 'assignee') return !!f.list || m.embed;
-    if (name === 'keep') return !!f.list || m.list;
+    if (name === 'keep') return m.list;
     if (name === 'noshare') return m.list;
     // Left out of My tasks: on a list that is the user's own (a private
     // one; without users any), whose tasks are in My tasks by the list.
@@ -155,12 +158,6 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Tod
   // Wired once per form: the editor's dialog is opened again and again.
   if (!form.dataset.wired) {
     form.dataset.wired = '1';
-    // The List field named or emptied: the fields that are a list's own go or
-    // can be asked for again.
-    f.list?.addEventListener('input', () => {
-      for (const name of LIST_OWN) if (!has(name)) fieldEl(name).hidden = true;
-      syncMore();
-    });
     const changed = () => form.dispatchEvent(new Event('input', { bubbles: true }));   // the editor's preview follows
     moreEl.addEventListener('click', e => {
       const name = e.target.closest('[data-more]')?.dataset.more;
@@ -234,17 +231,17 @@ export function initTaskSettings(app) {
   const page = appEl.dataset.settingsPage || '';
   const index = parseInt(appEl.dataset.settingsIndex, 10);
   const raw = appEl.dataset.settingsRaw || '';
-  // What the dialog is for: a list (its own settings and the user's pin of
-  // it), an embed on a page (how the page looks at the list, or all of an
-  // embed of no list), All tasks, My tasks (the user's own).
+  // What the dialog is for: a list (its own settings), an embed on a page
+  // (how the page looks at what it shows; a list's own settings too, for who
+  // manages it), All tasks, My tasks (the user's own).
   const list = appEl.dataset.settingsList || '';
   const embed = appEl.dataset.settingsEmbed === '1';
   const all = !list && !embed;
   const mine = all && appEl.dataset.settingsMine === '1';
   let listSet = {};
   try { listSet = JSON.parse(appEl.dataset.settingsListSet || '{}'); } catch (_) {}
-  // What of a list's embed is the page's own: the tab and the filter.
-  const PAGE_KEYS = ['view', 'tag', 'assignee'];
+  // What of an embed is the page's own: the tab, the grouping and the filter.
+  const PAGE_KEYS = ['view', 'group', 'tag', 'assignee'];
   const written = parseParams(raw);
   // The params the fields start from: a list's settings, with the page's
   // own over them; else what the embed (or All tasks) has.
@@ -260,7 +257,7 @@ export function initTaskSettings(app) {
     const who = app.privateLists.has(list) ? 'which only you see' : 'for everyone';
     whereEl.textContent = mine ? (document.body.dataset.users === '1' ? 'For My tasks: yours alone.' : 'For My tasks.')
       : all ? 'For All tasks, for everyone.'
-      : list && embed ? `The list’s settings hold wherever it shows, ${who}; the tab and the filter are this page’s.`
+      : list && embed ? `The list’s settings hold wherever it shows, ${who}; the tab, the grouping and the filter are this page’s.`
       : list ? `For this list, ${who}.`
       : 'Written in this [[tasks: …]] on this page.';
     errorEl.hidden = true;
@@ -288,9 +285,8 @@ export function initTaskSettings(app) {
         message = await post(mine ? { mine: true, was: raw, set }
           : all ? { all: true, was: raw, set } : { page, index, was: raw, set });
       } else {
-        // A list: its own settings to the registry, the page's to its embed.
-        // The tab and Plan are said apart here: the tab is the page's (or
-        // the list's), Plan the list's.
+        // A list: its own settings to the registry, the page's to its embed
+        // (on the list's own page, /tasks?list=, all of them the list's).
         const ofPage = {}, ofList = {};
         for (const [k, v] of Object.entries(set)) (embed && PAGE_KEYS.includes(k) ? ofPage : ofList)[k] = v;
         if (Object.keys(ofList).length) message = await post({ list, set: ofList });

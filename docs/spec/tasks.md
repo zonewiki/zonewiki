@@ -26,9 +26,9 @@ Case doesn't matter (`[[Tasks:]]`), nor a space after the colon (`[[tasks:list=s
 [[tasks: tag=urgent view=open group=day]]
 [[tasks: view=open]]
 [[tasks: list=groceries tag=weekly]]
-[[tasks: view=today limit=5]]
+[[tasks: view=today]]
 [[tasks: list=groceries view=open]]
-[[tasks: tag=staple keep=1 labels=Catalogue,Shopping]]
+[[tasks: mine=1 group=list]]
 [[tasks: tag=work group=none]]
 [[tasks: list=team view=open group=person]]
 ```
@@ -40,12 +40,11 @@ Case doesn't matter (`[[Tasks:]]`), nor a space after the colon (`[[tasks:list=s
 | `tag` | comma-separated tags | — | Only tasks with these tags (Filtering an embed) |
 | `assignee` | `me`, a user's name, `none` | — | With users: only the tasks of that user (Filtering an embed) |
 | `view` | `today`, `open`, `closed` | by the view (Which tab a page opens on) | Which tab it opens on |
-| `group` | `none`, `day`, `person`, `list` | `day` | How the Open tab shows its tasks (Views) |
-| `limit` | integer 1–99 | none | WIP limit: Today warns at it, a Plan day is flagged amber |
-| `keep` | `1`/`true`/`yes` | — | New tasks here are keep tasks (Keep tasks) |
-| `new` | tags, comma-separated | — | The tags a new task here gets, in place of the filter's single tags |
-| `labels` | up to 2 comma-separated names | `Open,Today` | The embed's own names for the tabs (Tab names) |
-| `pin` | | — | Ignored: a pin is of a list and the user's own (Lists → Pins) |
+| `group` | `none`, `day`, `person`, `list` | by the view | How the Open tab shows its tasks (Views) |
+
+**An embed says which tasks it shows and how this page looks at them, nothing else** (`onPage` in `go/tasksembed.go`): which tasks by `list`, `mine`, `tag` and `assignee`; how by `view` and `group`.
+What the tasks shown are, their WIP limit, tab names, a new task's tags and keep (Settings), is said once, where they are: a list's in the list's settings, My tasks' in yours, the Inbox's and every other embed's in All tasks', as `/tasks` shows them.
+An embed's own `limit`, `labels`, `new`, `keep` or `pin` (from before) is ignored, and stays as written.
 
 The params can be changed without editing the page: List settings… in the ⋯ menu of the embed's toolbar (see Settings).
 In the editor, the formatting bar's Task list button shows the same dialog, with which list the embed shows, to write the embed or change the one the cursor is on (Task list dialog in `docs/spec/editor.md`).
@@ -59,8 +58,8 @@ A name no list has shows a line that says so, with a button that makes the list 
 `list=inbox` shows the Inbox, the tasks in no list: with users whoever looks their own (Lists → The Inbox; `list=none` says the same).
 The name is cleaned like tags, lowercased (`cleanList`).
 
-With `list=`, only `view`, `group`, `tag` and `assignee` of the embed count: they say how this page looks at the list; what the list is (`limit`, `keep`, `labels`, `new`) is set on the list.
-With `mine=1` the embed's `view`, `group`, `limit`, `labels`, `tag` and `assignee` count, as for an embed of no list, and a new task made there goes into the Inbox.
+`mine=1` shows My tasks, with your settings of it, and a new task made there goes into the Inbox; an embed of no list is All tasks, with its settings.
+Over the settings of what an embed shows, its `view`, `group`, `tag` and `assignee` are this page's.
 
 ### Filtering an embed
 
@@ -83,24 +82,9 @@ It says nothing of the tab: `view=open` alone opens the Open tab as `group=` say
 The control beside the tabs still changes it, for the browser tab.
 A view that doesn't offer the one named (By person without users) shows Plan on the Open tab and one list on Today.
 
-`limit=` is a WIP limit: Today warns at this many tasks ("⚠ 6 tasks in Today (limit: 5)"), and Plan day sections with at least this many are flagged amber, with a ⚠ titled "Over the limit (6/5)" (`.board-day--over`).
-An embed's number outside 1–99 is taken as the nearest of them.
-`?limit=N` works on `/tasks`.
-
-`keep=` makes new tasks created in the embed keep tasks (the edit modal's checkbox starts checked), e.g. a shopping list of staples; `new=` gives them its tags in place of the filter's single tags.
-For a list both are set on the list (List settings…).
-
-### Tab names
-
-`labels=` gives the embed its own names for the tabs, in on-screen order, e.g. `labels=Catalogue,Shopping` for a shopping list.
-Only the words change: views, `view=` values and links keep their names.
-An empty entry keeps the default, `_` stands for a space (params split on whitespace), and a name is cut to 30 characters.
-They are rendered into the tab buttons by `buildTasksEmbed`; `tasks.js` reads them back (`tabLabel`) for the "← Back to …" link, the limit warning and the ⟲ tooltip.
-For a list they are set on the list.
-
 ### The address of a task list
 
-A task list also takes `?tag=`, `?view=`, `?search=`, `?from=`, `?assignee=`, `?limit=`, `?task=`, `?new=1` from the URL (`tasks.js` reads them): `?tag=` and `?from=` arrive as chips of the filter field, `?search=` as its text; `?new` (whatever its value) opens the new-task modal in one embed only, one of My tasks or of the Inbox if the page has it, else the first.
+A task list also takes `?tag=`, `?view=`, `?search=`, `?from=`, `?assignee=`, `?task=`, `?new=1` from the URL (`tasks.js` reads them): `?tag=` and `?from=` arrive as chips of the filter field, `?search=` as its text; `?new` (whatever its value) opens the new-task modal in one embed only, one of My tasks or of the Inbox if the page has it, else the first.
 
 ### Tasks and pages
 
@@ -519,16 +503,16 @@ Dates decide where a task appears, never whether.
 ## Settings
 
 **List settings…**, the first item of the list's **⋯ menu** (on a wiki page the ⋯ of the embed's toolbar, `#task-more-btn`; on the Tasks page the page's own ⋯ beside the heading, which holds the list's actions too: The Tasks page's ⋯ menu), opens **List settings** (`#task-settings-modal`, `js/tasksettings.js`): what the list is and how it opens.
-A setting is kept where it belongs: a list's own with the list, how a page looks at a list in that page's `[[tasks: …]]`.
+A setting is kept where it belongs: what the tasks shown are with them (a list's own with the list, My tasks' with you, All tasks' for everyone), how a page looks at them in that page's `[[tasks: …]]`.
 
 | Field | Setting | Whose | |
 |-------|---------|-------|---|
 | Opens on | `view` | the page's embed; the list's on `/tasks?list=` | The Open or the Today tab (by their names here); Closed is offered only where the page says `view=closed` |
-| The Open tab shows | `group` | the list's | One list, Plan (the board by start date), By person or By list: those the view offers (and the one set) |
-| WIP limit (on request) | `limit` | the list's | 1–99, empty for none |
-| Tab names (on request) | `labels` | the list's | The Open tab's and the Today tab's; empty keeps Open and Today |
-| Tags of a new task (on request) | `new` | the list's | Comma-separated; empty: the single tags the view shows |
-| Keep tasks (on request) | `keep` | the list's | New tasks there are keep tasks |
+| The Open tab shows | `group` | the page's embed; the list's on `/tasks?list=` | One list, Plan (the board by start date), By person or By list: those the view offers (and the one set) |
+| WIP limit (on request) | `limit` | the list's | 1–99, empty for none (The WIP limit) |
+| Tab names (on request) | `labels` | the list's | The Open tab's and the Today tab's; empty keeps Open and Today (Tab names) |
+| Tags of a new task (on request) | `new` | the list's | Comma-separated, in place of the filter's single tags; empty: the single tags the view shows |
+| Keep tasks (on request) | `keep` | the list's | New tasks there are keep tasks: the edit modal's box starts ticked (Keep tasks) |
 | Hide when sharing (on request) | `noshare` | the list's | The list is left out of the list switcher in sharing mode |
 | Leave out of My tasks (on request) | `home` | the list's | `off`: its tasks are not in My tasks nor in the Tasks links' count (Leave out of My tasks). Offered on a list that is yours: a private one, without users any |
 | Shows only the tags (on request: Filter by tag) | `tag` | the page's embed | The filter: `a,b` both, `a\|b` either, `-a` without |
@@ -538,8 +522,8 @@ A setting is kept where it belongs: a list's own with the list, how a page looks
 
 | View | Fields | For whom |
 |------|--------|----------|
-| A list (`/tasks?list=`, or a page that shows it) | all but the filter on `/tasks?list=`; on a page the tab and the filter are the page's | everyone who sees the list, or only you for a private list |
-| An embed of no list (`[[tasks: tag=work]]`) | all but Keep tasks, Hide when sharing and Leave out of My tasks, written in its `[[tasks: …]]` | everyone who sees the page |
+| A list (`/tasks?list=`, or a page that shows it) | all but the filter on `/tasks?list=`; on a page the tab, the grouping and the filter are the page's (the list's own fields only for who manages it) | everyone who sees the list, or only you for a private list |
+| An embed of no list, of My tasks or of the Inbox (`[[tasks: tag=work]]`) | Opens on, The Open tab shows and the filter, written in its `[[tasks: …]]`; the rest is All tasks' (My tasks' for `mine=1`), set there | everyone who sees the page |
 | All tasks (`/tasks`) | Opens on, The Open tab shows, WIP limit, Tab names, Tags of a new task | everyone |
 | My tasks (`/tasks?mine=1`) | Opens on, The Open tab shows, WIP limit, Tab names, and **Mail me when** | you alone |
 
@@ -548,6 +532,18 @@ The other fields show only when set as the dialog opens (`[data-field]`, `showFi
 for the rest a line of quiet words under the fields offers each, "+ WIP limit", "+ Tab names", "+ Tags of a new task", "+ Filter by tag", "+ Filter by person", "+ Keep tasks", "+ Hide when sharing", "+ Leave out of My tasks" (`.task-add-fields`, as in the task dialog): a click shows the field and puts the cursor in it, and ticks a box (Keep tasks, Hide when sharing, Leave out of My tasks), since asking for it is asking for that.
 A list is pinned and unpinned in the Tasks page's ⋯ menu, where this dialog is opened too, not here (The Tasks page's ⋯ menu).
 The line above Save says whose the settings are: the list's, for everyone (or "which only you see" for a private list), or the page's.
+
+### The WIP limit
+
+`limit` is a work-in-progress limit: Today warns at this many tasks ("⚠ 6 tasks in Today (limit: 5)"), and Plan day sections with at least this many are flagged amber, with a ⚠ titled "Over the limit (6/5)" (`.board-day--over`).
+A number outside 1–99 is taken as the nearest of them.
+
+### Tab names
+
+`labels` gives the view its own names for the tabs, in on-screen order, e.g. `Catalogue,Shopping` for a shopping list.
+Only the words change: views, `view=` values and links keep their names.
+An empty entry keeps the default, `_` stands for a space (params split on whitespace), and a name is cut to 30 characters.
+They are rendered into the tab buttons by `buildTasksEmbed`; `tasks.js` reads them back (`tabLabel`) for the "← Back to …" link, the limit warning and the ⟲ tooltip.
 
 ### Not which list it shows
 
@@ -565,7 +561,7 @@ The app says where its settings go in `data-settings-*` on `.tasks-app`, from `b
 | What | Kept in | Example |
 |------|---------|---------|
 | A list's own settings | the registry (The registry), wherever the dialog was opened: on `/tasks?list=<name>` or on a page that shows the list; they hold wherever the list shows | `{"name": "shop", "limit": "8"}` |
-| An embed on a page | that `[[tasks: …]]`: for a list the tab and the filter, for an embed of no list everything | `[[tasks: tag=work view=open]]` |
+| An embed on a page | that `[[tasks: …]]`: the tab, the grouping and the filter, and nothing else | `[[tasks: tag=work view=open]]` |
 | All tasks (`/tasks`) | the shared registry's `all` (`allTasksParams`), for everyone; no pin and no filter (`allSettingKeys`) | `"all": {"view": "open", "limit": "5"}` |
 | My tasks (`/tasks?mine=1`) | your registry's `mine` (`mineParams`, `setMineParams`, `mineSettingKeys`; without users the shared registry's), for you alone; no pin and no filter | `"mine": {"view": "today", "limit": "5"}` |
 
@@ -592,7 +588,7 @@ An embed's params are rewritten in place (`setEmbedParams`, `setEmbedArgs`): a p
 a new one goes last,
 one written twice is written once;
 the rest of the page is untouched.
-Opens on is written as `view=` (`today`, `open`), and what the Open tab shows as `group=`: each when it was changed or was written already (`changedParams`); for a list the tab is the page's or the list's, and `group` the list's.
+Opens on is written as `view=` (`today`, `open`), and what the Open tab shows as `group=`: each when it was changed or was written already (`changedParams`); on a page both are the page's, on `/tasks?list=` the list's.
 
 A page is changed in one commit, "Change the task list's settings on <slug>" (`changePageOp`: what it held uncommitted is committed first), a list in "Change the settings of list #<name>", All tasks in "Change the settings of All tasks", My tasks in "Change the settings of My tasks".
 When the `[[tasks: …]]` is no longer as the dialog saw it (the page was edited meanwhile), nothing is written: 409, "The page has changed since.
@@ -1327,7 +1323,7 @@ A recurring task's next occurrence keeps it; so does an export.
 A task with `keep: true` is never archived: ticking it off means "done for now, back to the pool".
 It suits a shopping list used with the task app's views: Open is the catalogue of staples, starting items today puts them on Today (the actual shopping list), and ticking one off sends it back to Open.
 Cards mark keep tasks with ⟲ (`.task-keep`).
-`[[tasks: keep=1]]` makes new tasks keep tasks.
+A list's setting Keep tasks (`keep`, List settings…) makes new tasks there keep tasks.
 
 Completing a keep task (`keepDone`, in `PUT` and in `batch-complete`) clears its start date and its deadline, and sets `last_done` to today; it stays in the open tasks' file with the same id, tags, description and place in Open's order, and Closed stays empty.
 Since Closed can't reopen it, the card shows an undo toast that restores the old fields (`keepSnapshot`).

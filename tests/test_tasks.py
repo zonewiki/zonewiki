@@ -1674,8 +1674,16 @@ class TestLimitParam:
     def test_no_limit_by_default(self, client, wiki_dir):
         assert 'data-init-limit=""' in self._embed(client, wiki_dir, "[[tasks:]]")
 
-    def test_limit_lands_in_embed(self, client, wiki_dir):
-        assert 'data-init-limit="7"' in self._embed(client, wiki_dir, "[[tasks: limit=7]]")
+    def test_the_limit_is_of_what_it_shows(self, client, wiki_dir):
+        # An embed's own limit= is ignored: the limit is the list's, or All
+        # tasks' for an embed of no list (a tag's view of every task).
+        assert 'data-init-limit=""' in self._embed(client, wiki_dir, "[[tasks: limit=7]]")
+        assert client.post("/api/tasks/settings", json={"all": True, "was": "", "set": {"limit": "7"}}).status_code == 200
+        assert 'data-init-limit="7"' in self._embed(client, wiki_dir, "[[tasks: tag=work]]")
+        list_page(client, wiki_dir, "board", "# Board\n\n[[tasks: list=work limit=4]]\n")
+        assert 'data-init-limit="4"' in client.get("/page/board").get_data(as_text=True)
+        # A page can't set them in its embed.
+        assert client.post("/api/tasks/settings", json={"page": "board", "index": 0, "was": "list=work limit=4", "set": {"limit": "2"}}).status_code == 400
 
     def test_capacity_is_not_a_limit(self, client, wiki_dir):
         assert 'data-init-limit=""' in self._embed(client, wiki_dir, "[[tasks: capacity=4]]")
@@ -2593,9 +2601,9 @@ class TestKeep:
         body = client.get("/page/shop").get_data(as_text=True)
         assert 'data-init-keep="1"' in body
         assert 'id="task-edit-keep"' in body
-        # An embed of no list says it itself.
+        # An embed of no list can't: keep is a list's.
         (wiki_dir / "staples.md").write_text("# Staples\n\n[[tasks: tag=staple keep=1]]\n", encoding="utf-8")
-        assert 'data-init-keep="1"' in client.get("/page/staples").get_data(as_text=True)
+        assert 'data-init-keep=""' in client.get("/page/staples").get_data(as_text=True)
         (wiki_dir / "plain.md").write_text("# Plain\n\n[[tasks:]]\n", encoding="utf-8")
         assert 'data-init-keep=""' in client.get("/page/plain").get_data(as_text=True)
 
@@ -2661,14 +2669,25 @@ class TestEmbedLabels:
     def test_default_labels(self, client, wiki_dir):
         assert self._tabs(client, wiki_dir, "[[tasks:]]") == [("open", "Open"), ("focus", "Today")]
 
+    def _named(self, client, labels):
+        client.post("/tasks/new-list", data={"name": "shop", "pin": "0"})
+        assert client.post("/api/tasks/settings", json={"list": "shop", "set": {"labels": labels}}).status_code == 200
+
     def test_custom_labels_keep_the_views(self, client, wiki_dir):
-        assert self._tabs(client, wiki_dir, "[[tasks: labels=Catalogue,Shopping_list]]") == [
+        # The tab names are the list's, on every page that shows it; an
+        # embed's own labels= is ignored.
+        self._named(client, "Catalogue,Shopping_list")
+        assert self._tabs(client, wiki_dir, "[[tasks: list=shop]]") == [
             ("open", "Catalogue"), ("focus", "Shopping list")]
-        assert self._tabs(client, wiki_dir, "[[tasks: labels=,Shopping]]") == [
+        assert self._tabs(client, wiki_dir, "[[tasks: labels=Catalogue,Shopping]]") == [
+            ("open", "Open"), ("focus", "Today")]
+        self._named(client, ",Shopping")
+        assert self._tabs(client, wiki_dir, "[[tasks: list=shop]]") == [
             ("open", "Open"), ("focus", "Shopping")]
 
     def test_labels_are_escaped(self, client, wiki_dir):
-        tabs = self._tabs(client, wiki_dir, "[[tasks: labels=<b>x</b>]]")
+        self._named(client, "<b>x</b>")
+        tabs = self._tabs(client, wiki_dir, "[[tasks: list=shop]]")
         assert tabs[0] == ("open", "&lt;b&gt;x&lt;/b&gt;")
 
 

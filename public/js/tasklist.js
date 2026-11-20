@@ -3,8 +3,8 @@ import { changedParams, LIST_OWN, settingsForm } from './tasksettings.js';
 
 // ── The editor's Task list button ────────────────────────────────────────────
 // The formatting bar's Task list shows the list settings dialog, the one a
-// list's ⋯ menu shows (js/tasksettings.js; in the editor with List and keep,
-// which make a list), and writes the `[[tasks: …]]` line it makes into the
+// list's ⋯ menu shows (js/tasksettings.js; in the editor with List, and
+// only what a page says: which tasks, the tab, the grouping, a filter), and writes the `[[tasks: …]]` line it makes into the
 // text. With the cursor on a line that is one already it changes that one:
 // its params fill the fields, and only what was changed is written
 // (changedParams), so a param without a field stays as written. The menu's
@@ -56,11 +56,11 @@ export function taskListDialog(textarea, { replaceRange, insertBlockAfterLine })
   el('title').textContent = existing ? 'Change the task list' : 'Task list';
   el('save').textContent = existing ? 'Change' : 'Insert';
   el('error').hidden = true;
-  // With a list named, what is the list's own isn't written (a field filled
-  // in before the list was named); what the line had stays as written.
+  // What the tasks shown are (a list's own, All tasks', My tasks') isn't
+  // written in a page's line; what the line had stays as written.
   const result = () => {
     const now = read(), set = changedParams(was, now, written);
-    if (now.list) for (const k of LIST_OWN) delete set[k];
+    for (const k of LIST_OWN) delete set[k];
     return embedLine(params, set);
   };
   // In place of where the list's own dialog says it writes: the line this writes.

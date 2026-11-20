@@ -68,16 +68,21 @@ class TestSave:
         text = "# Lists\n\n```\n[[tasks: tag=code]]\n```\n\n[[tasks: tag=a]]\n\nBetween.\n\n[[tasks: tag=shop keep=1]]\n"
         path = write_page(wiki_dir, "lists", text)
         resp = save(client, page="lists", index=1, was="tag=shop keep=1",
-                    set={"view": "open", "limit": "5", "labels": "To_buy,Cart", "new": "weekly"})
+                    set={"view": "open", "group": "none", "assignee": "me"})
         assert resp.status_code == 200 and resp.get_json() == {"ok": True}
         assert path.read_text() == text.replace(
-            "[[tasks: tag=shop keep=1]]", "[[tasks: tag=shop keep=1 new=weekly view=open limit=5 labels=To_buy,Cart]]")
+            "[[tasks: tag=shop keep=1]]", "[[tasks: tag=shop keep=1 assignee=me view=open group=none]]")
+        # What the tasks shown are isn't the page's to say: the WIP limit, tab
+        # names and a new task's tags are All tasks' here, set on /tasks.
+        for own in ({"limit": "5"}, {"labels": "To_buy,Cart"}, {"new": "weekly"}):
+            assert save(client, page="lists", index=1, was="tag=shop keep=1 assignee=me view=open group=none", set=own).status_code == 400
+        assert save(client, all=True, was="", set={"limit": "5", "labels": "To_buy,Cart"}).status_code == 200
         html = client.get("/page/lists", headers=HOST).get_data(as_text=True)
         assert ">To buy</button>" in html and ">Cart</button>" in html and 'data-init-limit="5"' in html
 
     def test_an_empty_value_takes_the_param_out(self, client, wiki_dir):
-        path = write_page(wiki_dir, "lists", "[[tasks: tag=a view=open limit=3]]\n")
-        assert save(client, page="lists", index=0, was="tag=a view=open limit=3", set={"view": "", "limit": ""}).status_code == 200
+        path = write_page(wiki_dir, "lists", "[[tasks: tag=a view=open group=day]]\n")
+        assert save(client, page="lists", index=0, was="tag=a view=open group=day", set={"view": "", "group": ""}).status_code == 200
         assert path.read_text() == "[[tasks: tag=a]]\n"
 
     def test_a_changed_page_is_refused(self, client, wiki_dir):

@@ -159,13 +159,18 @@ func renameTagInText(text, old, name string) string {
 	return mdtext.UnmaskCode(masked, stash)
 }
 
-// The params the settings dialog sets on an embed (js/tasksettings.js), in
-// the order new ones are written; those of All tasks, which has no filter.
+// The params the settings dialog sets on an embed (js/tasksettings.js): how
+// the page looks at what it shows (the tab, the grouping, a filter); what
+// that is (its limit, tab names, new tasks' tags) is its own, the list's, My
+// tasks' or All tasks' (onPage). Those of All tasks, which has no filter.
 // Not list=: which list an embed shows is the page's to say, and a list is
 // renamed by renameListOp. A list's own settings are listSettingKeys.
+// paramOrder: the order new params are written in (setEmbedArgs), wherever
+// they are written: an embed, All tasks', My tasks' (mail is its own).
 var (
-	embedSettingKeys = []string{"tag", "assignee", "new", "view", "group", "limit", "labels"}
+	embedSettingKeys = []string{"tag", "assignee", "view", "group"}
 	allSettingKeys   = []string{"new", "view", "group", "limit", "labels"}
+	paramOrder       = []string{"tag", "assignee", "new", "view", "group", "limit", "labels", "mail"}
 	embedValueRE     = regexp.MustCompile(`^[^\[\]` + "`" + `]*$`)
 )
 
@@ -256,8 +261,7 @@ func setEmbedArgs(args string, set map[string]string) string {
 		}
 		done[key] = done[key] || ok && changes
 	}
-	// (mail: My tasks' own, mineSettingKeys.)
-	for _, k := range append(slices.Clone(embedSettingKeys), "mail") {
+	for _, k := range paramOrder {
 		if v := set[k]; v != "" && !done[k] {
 			out = append(out, k+"="+v)
 		}

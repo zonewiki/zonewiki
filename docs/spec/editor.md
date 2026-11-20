@@ -168,12 +168,10 @@ The formatting bar's Task list shows **List settings**, the dialog a list's ⋯ 
 
 - In the editor it has one field more, **List** first: which list the embed shows (the lists there are to choose from, `editView.TaskLists`; cleaned as `cleanList` does; none: all tasks).
   A name no list has is written as typed: the embed then says so on the page, with a button that makes the list.
-- It has no pin (a list is pinned on the Tasks page, by whoever pins it);
-  **New tasks are keep tasks** (`keep=1`) is one of the fields shown on request ("+ Keep tasks", ticked when asked for).
-- With a list named, only the tab, the grouping and the filter count on the page (Lists in `docs/spec/tasks.md`), and only those are offered:
-  the list's own settings (WIP limit, tab names, the tags of a new task, keep tasks: `LIST_OWN`) are set in its own dialog,
-  so their fields and + words go while the List field names a list, and one filled in before isn't written.
-  What a line says of them from before stays as written.
+- It has no pin (a list is pinned on the Tasks page, by whoever pins it).
+- Only what a page says is offered: which tasks, the tab, the grouping and the filter (Task list embed in `docs/spec/tasks.md`).
+  What the tasks shown are (WIP limit, tab names, the tags of a new task, keep tasks: `LIST_OWN`) is set in the dialog of the list, of My tasks or of All tasks, and never written into the line;
+  what a line says of them from before stays as written.
 - Where the list's own dialog says which page it writes to, it shows the line it will write;
   **Insert** (or Enter) writes it, in one undo step, a blank line between it and text above;
   Cancel or Esc writes nothing; either way the cursor is back in the text.

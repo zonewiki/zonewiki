@@ -67,9 +67,17 @@ type embedSettingsAt struct {
 // tab it opens on (view), how the Open tab shows its tasks (group) and a
 // filter (tag, assignee). What the list is (limit, keep, labels, new) is
 // said on the list alone.
-func listEmbedParams(l ListInfo, embed TasksParams) TasksParams {
-	p := l.Params
-	for _, k := range []string{"view", "group", "tag", "assignee"} {
+func listEmbedParams(l ListInfo, embed TasksParams) TasksParams { return onPage(l.Params, embed) }
+
+// onPage: what an embed on a page shows, with the settings of what it is
+// (shown: a list's, My tasks', the Inbox's or All tasks'), and the page's
+// own over them: the tab, the grouping, a filter (embedSettingKeys). An
+// embed says which tasks and how it looks at them; what they are (a WIP
+// limit, the tabs' names, keep and a new task's tags) is said once, where
+// they are.
+func onPage(shown, embed TasksParams) TasksParams {
+	p := shown
+	for _, k := range embedSettingKeys {
 		if embed.Has(k) {
 			p = p.With(k, embed.Get(k))
 		}
@@ -380,9 +388,19 @@ func processTasksEmbeds(rq *Req, text, page string, settings bool) (string, []ta
 		params.src = &embedSrc{len(embeds), embedArgs(g)}
 		var html string
 		if name := cleanList(params.Get("list")); name == "" || isInbox(name, lists) {
-			// No list=, or list=inbox (the tasks in no list): the embed's own params.
-			html = buildTasksEmbed(rq, params, len(embeds), false, at)
-			scopes = append(scopes, paramsScope(params))
+			// No list=: All tasks, or My tasks with mine=1; list=inbox: the
+			// Inbox (the tasks in no list). Each with its own settings, as
+			// /tasks shows it.
+			shown := allTasksParams()
+			switch {
+			case paramsScope(params) == mineScope:
+				shown = mineParams(rq.who())
+			case name != "":
+				shown = inboxParams()
+			}
+			shown = onPage(shown, params)
+			html = buildTasksEmbed(rq, shown, len(embeds), false, at)
+			scopes = append(scopes, paramsScope(shown))
 		} else if l, ok := listOnPage(name, page, rq.who(), lists); ok {
 			shown := listEmbedParams(l, params)
 			html = buildTasksEmbed(rq, shown, len(embeds), false, at)

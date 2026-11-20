@@ -238,6 +238,7 @@ Pins are your own: a list you make is pinned for you, and a list someone else ma
 | Leave out of My tasks | Your list's tasks stay out of My tasks and its count (a someday list) |
 
 Only the first two show at first; the others are offered as "+ WIP limit" and so on.
+On a wiki page that shows the list, **Opens on**, **The Open tab shows** and the filters are that page's own, written into its `[[tasks: …]]`; the rest is the list's wherever it shows.
 The same menu has **Rename…**, **Who it is for…** and **Delete…**, for the list's owners (who made it) and admins.
 Deleting a list keeps its tasks: the dialog asks which list they go to, or offers to close the open ones as won't do.
 
@@ -302,10 +303,8 @@ Parameters after the colon choose what it shows:
 | `assignee` | `assignee=me` | Tasks of that person; `me` is whoever looks, `none` no one |
 | `view` | `view=today` | Opens on `today`, `open` or `closed` |
 | `group` | `group=person` | How Open shows its tasks: `none`, `day`, `person`, `list` |
-| `limit` | `limit=5` | A WIP limit for Today |
-| `labels` | `labels=Catalogue,Shopping` | Names for the Open and Today tabs |
-| `keep` | `keep=1` | New tasks are keep tasks |
-| `new` | `new=garden` | The tags a new task here gets |
+
+The rest comes with what the list shows: a list's WIP limit, tab names, keep tasks and the tags of a new task are set in the list's **List settings…** and hold on every page that shows it; a list of no list or of My tasks takes those of All tasks or of your My tasks.
 
 For example:
 
