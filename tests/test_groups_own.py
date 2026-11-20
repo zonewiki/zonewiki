@@ -511,6 +511,26 @@ def test_its_pages_go_to_the_wiki(client, wiki, free):
     assert resp.status_code in (400, 409) and "is taken" in said(resp)
 
 
+def test_no_page_of_the_group_becomes_a_guide_by_its_move(client, wiki, free):
+    """Who manages a group moves its pages whoever wrote them, but none
+    lands where only an admin writes (adminsOnly): on a page a shared guide
+    pulls in, which every user's assistant would follow. Nor does a rename
+    take one there. Anywhere else they go."""
+    (wiki / "AGENTS.md").write_text("# How we write\n\n@space/roadmap.md\n@groups/artemis/roadmap.md\n")
+    git(wiki, "add", "-A")
+    git(wiki, "commit", "-q", "-m", "The guide")
+    time.sleep(1.1)                    # what the guides pull in is looked up at most once a second
+    before, head = config(wiki), git(wiki, "rev-parse", "HEAD")
+    resp = remove(client, "apollo", pages="move", folder="space")
+    assert resp.status_code == 403 and "space/roadmap" in said(resp) and "guide" in said(resp), said(resp)
+    resp = client.post("/groups/apollo/rename", data={"name": "artemis"}, headers=HOST)
+    assert resp.status_code == 403 and "groups/artemis/roadmap" in said(resp), said(resp)
+    assert config(wiki) == before and git(wiki, "rev-parse", "HEAD") == head
+    assert (wiki / "groups/apollo/roadmap.md").exists() and not (wiki / "space").exists() and not (wiki / "groups/artemis").exists()
+    assert remove(client, "apollo", pages="move", folder="elsewhere").status_code == 303
+    assert (wiki / "elsewhere/roadmap.md").exists()
+
+
 def test_its_pages_are_deleted(client, wiki, free):
     resp = remove(client, "apollo", pages="delete")
     assert resp.status_code == 303

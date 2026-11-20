@@ -624,6 +624,7 @@ the lists that are for `@old` are for `@new`;
 the folder `groups/old/` becomes `groups/new/`, every link to its pages re-pointed on pages and in tasks, the files its pages show and those no page shows along, and a home that still says what Zone wrote says the new name;
 then the settings name it anew, on the users, in the groups that include it and its own section.
 It is up to three commits (the lists, the folder with its links, the files no page shows), by whoever renamed it; an admin who is not in the group moves its pages without seeing any.
+Who manages a group moves its pages whoever wrote them, so where they come from isn't asked, but where they land is, as for any move: a page that would land where a shared guide pulls a page in (Guides, above), or where `safePath` opens no page, stops the rename before anything changes (`groupMoveRefused`).
 
 #### How a rename is ordered
 
@@ -656,6 +657,7 @@ Links to them are links to pages there aren't.
 
 **A task list that is for the group keeps it** (`groupKept`): a list has its own owners and its own For, so the page names the lists (those you see; the others counted) and says to change whom they are for, or delete them, first.
 **A group that another is made of** is an admin's to remove (what a group is made of is an admin's): an owner is told so.
+**No page becomes a guide by the move** (`groupMoveRefused`, as for a rename): a page that would land where a shared guide pulls a page in, which only an admin writes (Guides, above), stops the move with nothing moved (403), and the page asks for another folder or an admin; a guide of the group's own (its `AGENTS.md`) goes along, as it was an admin's already.
 
 #### How an end is ordered
 

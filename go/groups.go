@@ -541,6 +541,9 @@ func renameGroupOp(user asker, old, nameText string) (string, error) {
 	if groupNameTaken(s, name, old) {
 		return "", refuseAs(refusedExists, groupTakenMsg(name))
 	}
+	if err := groupMoveRefused(user, groupsDir+"/"+old, groupsDir+"/"+name); err != nil {
+		return "", err
+	}
 	// The settings as they will be are good, before anything moves.
 	f, err := readConfigFile(configPath())
 	if err != nil || f == nil {
@@ -588,6 +591,32 @@ func renameGroupOp(user asker, old, nameText string) (string, error) {
 		return "", err
 	}
 	return name, uncommitted
+}
+
+// groupMoveRefused: why the pages in the folder from can't move to to
+// (where they would be the same path below it) for user, who manages the
+// group: one would land where safePath opens no page (a link on the way),
+// or would become a guide there that wasn't one where it was (a page a
+// shared guide pulls in: only an admin writes those, adminsOnly, as every
+// user's assistant follows them). Who manages a group moves its pages
+// whoever wrote them, when it is renamed or ends, so where they come from
+// isn't asked, but where they land is, as a move asks it (checkTarget).
+func groupMoveRefused(user asker, from, to string) error {
+	for _, p := range sortedPages() {
+		rest, ok := strings.CutPrefix(p.Slug, from+"/")
+		if !ok {
+			continue
+		}
+		n := to + "/" + rest
+		switch {
+		case safePath(n) == "":
+			return refuse("Nothing was moved: " + n + " can't be a page (a folder on the way is a link, or a name the files can't have).")
+		case adminsOnly(user, n) && !adminsOnly(user, p.Slug):
+			return refuseAs(refusedReadOnly, "Nothing was moved: "+n+" would be a page a guide pulls in, which every user's assistant follows, "+
+				"so only an admin of this wiki changes it. Choose another name, or ask an admin.")
+		}
+	}
+	return nil
 }
 
 // groupKept: why the group can't be removed by user yet (nil: it can): a
@@ -704,6 +733,9 @@ func removeGroupOp(user asker, group, pages, folderText string) (folder string, 
 			return "", refuse(strconv.Quote(folder) + " is no folder of the shared wiki: the pages go where everyone sees them")
 		case exists(filepath.Join(cfg.Data, filepath.FromSlash(folder))):
 			return "", refuseAs(refusedExists, "There is a folder "+strconv.Quote(folder)+" in the wiki already: give the pages' folder another name.")
+		}
+		if err := groupMoveRefused(user, from, folder); err != nil {
+			return "", err
 		}
 		if len(paths) > 0 {
 			if _, err := keepPendingPages(paths, from+"/"); err != nil {

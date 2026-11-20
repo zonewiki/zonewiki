@@ -152,6 +152,7 @@ If the group has pages, you choose what becomes of them first:
   You can't bring them back in the browser; they stay in git on the server.
 
 A task list that is for the group must be changed or deleted first, and the page says which.
+If a page would land where a wiki guide pulls a page in, nothing moves: name another folder, or ask an admin.
 The name stays taken while the group's folder has a history.
 
 ### Groups made of groups
