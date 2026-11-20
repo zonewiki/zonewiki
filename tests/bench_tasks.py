@@ -2,8 +2,9 @@
 a generated wiki of 100 users, 40 shared lists, 5,000 open tasks and 25,000
 closed ones, in git, and what a page view, a list, a write and a search cost
 on it, how the repository grows, and what a write waits beside a join of
-its packs once it has a history; and its pages for some (the last test: ten
-groups' folders beside 2,000 shared pages, thirty people searching). Not part of the suites (its name is no test module's): run it with
+its packs once it has a history; its pages for some (ten groups' folders
+beside 2,000 shared pages, thirty people searching); and a page's history
+after a team's years (the last test: 100,000 commits). Not part of the suites (its name is no test module's): run it with
 
     ./run.sh test tests/bench_tasks.py -n 0 -s
 
@@ -572,4 +573,121 @@ def test_pages_and_groups_at_a_teams_size(paged, client):
     print(f"\n\nPages and groups at a team's size: {len(users)} users, {GROUPS} groups, {SHARED_PAGES} shared pages and "
           f"{GROUP_PAGES} in each group's folder; {len(people)} people search ({len(times)} searches at once in 10 s, "
           f"{len(views)} page views beside them)\n")
+    report(got)
+
+
+# How many commits a team's years leave (test_a_long_history): about a
+# hundred a working day for four years.
+HISTORY = {"small": 10000, "team": 100000}[os.environ.get("ZONE_BENCH_SIZE", "team")]
+
+BUDGETS.update({
+    # A log of one path asks the commit-graph's filters (WriteGraph in
+    # package gitrepo); without them, or with --follow, it reads every
+    # commit: 1 to 2 s at 200,000 (gitLog in go/gitstore.go).
+    "a page's history, long history (ms)": 200,                 # measured 82
+    "a renamed page's history (ms)": 200,                       # 99
+    "a page that isn't there (ms)": 100,                        # 42
+    # Every commit is read once for the deleted pages (0.6 s), and after
+    # that only what is new (deletions in go/gitstore.go).
+    "the deleted pages, again (ms)": 50,                        # 19
+    "the commit-graph written at the start (s)": 10,            # 1.2
+})
+
+
+@pytest.fixture()
+def long_history(git_wiki_dir):
+    """The wiki with a history of HISTORY commits, before its server starts
+    (an existing wiki that has no commit-graph yet): pages in folders
+    edited, made, deleted and renamed, and task-like files changed more
+    often than pages.
+    "projects/plan" is made first and edited throughout, "notes/draft"
+    renamed twice on the way to "archive/final"."""
+    root = git_wiki_dir
+    rng = random.Random(17)
+    folders = ["", "projects", "meetings", "howto", "customers", "projects/alpha"]
+    pages = {f"{rng.choice(folders) or 'top'}/page{i}.md": text(rng, 40) for i in range(300)}
+    pages["projects/plan.md"] = "# Plan\n\n" + text(rng, 40)
+    pages["notes/draft.md"] = "# Draft\n\n" + text(rng, 40)
+    lists = [[text(rng, 6) for _ in range(30)] for _ in range(40)]
+    fixed = {"projects/plan.md", "notes/draft.md"}
+    git = lambda *args, **kw: subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True, **kw)
+    ref = git("symbolic-ref", "HEAD", text=True).stdout.strip().encode()
+    when = 1_700_000_000
+    blob = lambda path, s: b"M 644 inline %s\ndata %d\n%s\n" % (path.encode(), len(s.encode()), s.encode())
+    imp = subprocess.Popen(["git", "-C", str(root), "fast-import", "--quiet"], stdin=subprocess.PIPE)
+
+    def commit(msg, *changes, first=False):
+        nonlocal when
+        when += 600
+        imp.stdin.write(b"commit %s\nauthor bench <bench@example.org> %d +0000\ncommitter Zone <zone@localhost> %d +0000\n"
+                        b"data %d\n%s\n" % (ref, when, when, len(msg), msg.encode()))
+        if first:
+            imp.stdin.write(b"from %s^0\n" % ref)
+        imp.stdin.write(b"".join(changes) + b"\n")
+
+    commit("Import", *(blob(p, s) for p, s in pages.items()), first=True)
+    renames = {HISTORY // 3: ("notes/draft.md", "notes/second.md"), 2 * HISTORY // 3: ("notes/second.md", "archive/final.md")}
+    made = 0
+    for c in range(HISTORY - 1):
+        if c in renames:
+            old, new = renames[c]
+            pages[new] = pages.pop(old)
+            fixed = (fixed - {old}) | {new}
+            commit(f"Rename {old[:-3]} to {new[:-3]}", b"D %s\n" % old.encode(), blob(new, pages[new]))
+            continue
+        r = rng.random()
+        if r < 0.55:
+            i = rng.randrange(len(lists))
+            lists[i][rng.randrange(30)] = text(rng, 6)
+            commit("Update task", blob(f"_bench/list{i:02d}.json", json.dumps(lists[i], indent=1)))
+        elif r < 0.93 or c % 300 == 0:
+            p = "projects/plan.md" if c % 300 == 0 else rng.choice(list(pages))
+            pages[p] += "\n\n" + text(rng, 12)
+            commit(f"Save {p}", blob(p, pages[p]))
+        elif r < 0.97:
+            made += 1
+            p = f"{rng.choice(folders) or 'top'}/new{made}.md"
+            pages[p] = text(rng, 40)
+            commit(f"Create {p}", blob(p, pages[p]))
+        else:
+            p = rng.choice(list(pages))
+            if p in fixed:
+                continue
+            del pages[p]
+            commit(f"Delete {p}", b"D %s\n" % p.encode())
+    imp.stdin.close()
+    assert imp.wait() == 0
+    git("checkout", "-q", "-f", "HEAD")
+    git("repack", "-a", "-d", "-q")
+    return root
+
+
+def test_a_long_history(long_history, client):
+    """What a page's history costs after a team's years (HISTORY commits;
+    Packing the repository in docs/spec/deployment.md): a page edited
+    throughout, one renamed twice, a link to a page that never was (Zone
+    asks whether it was deleted), the deleted pages; and how long Zone's
+    start takes to write the commit-graph these ask, in the background."""
+    root = long_history
+    graph = root / ".git/objects/info/commit-graphs/commit-graph-chain"
+    start = time.monotonic()
+    while not graph.exists() and time.monotonic() - start < 600:
+        time.sleep(0.05)
+    assert graph.exists(), "no commit-graph after the start"
+    got = {"the commit-graph written at the start (s)": time.monotonic() - start}
+    for name, path, must in [
+        ("a page's history, long history (ms)", "/history/projects/plan", b"projects/plan"),
+        ("a renamed page's history (ms)", "/history/archive/final", b"Renamed from"),
+        ("a page that isn't there (ms)", "/page/never/was-here", None),
+    ]:
+        ms, resp = timed(lambda: client.get(path, headers=HOST))
+        assert resp.status_code in (200, 302), (path, resp.status_code)
+        assert must is None or must in resp.data, (path, must)
+        got[name] = ms
+    first = time.perf_counter()
+    deleted = client.get("/page/_deleted", headers=HOST)
+    print(f"\n\nThe deleted pages, first look: {(time.perf_counter() - first) * 1000:.0f} ms")
+    assert deleted.status_code == 200 and b"Restore" in deleted.data
+    got["the deleted pages, again (ms)"], _ = timed(lambda: client.get("/page/_deleted", headers=HOST))
+    print(f"\nA long history: {HISTORY} commits\n")
     report(got)

@@ -347,6 +347,9 @@ Its parts:
 - **Pages and groups** (`test_pages_and_groups_at_a_teams_size`): 2,000 shared pages and 200 in the folder of each of ten groups (300 words a page), every user in one group and every fifth in two, a group made of three others, and a guide that pulls a page in.
   It measures a group's page, the page list, a search by the same person again, a search by thirty people in turn, and thirty people who search twice a second at once for ten seconds, with a page opened ten times a second beside them (a page view asks whether its reader may change it, which walks the wiki's guides at most once a second).
   The two searches by thirty guard that nothing is made per searcher (Nothing is kept per viewer in `docs/spec/search.md`).
+- **A long history** (`test_a_long_history`): a wiki given 100,000 commits before its server starts (with `git fast-import`: pages in folders edited, made and deleted, task-like files changed more often, a page renamed twice), so the start writes its commit-graph (The commit-graph in `docs/spec/deployment.md`).
+  It measures how long that takes, a page's history, a renamed page's, a link to a page that never was (Zone asks whether it was deleted) and the deleted pages a second time (the first look, which reads every commit, is printed).
+  A history read with `--follow`, or without the graph, passes the budgets many times over.
 
 ### Go benchmarks
 

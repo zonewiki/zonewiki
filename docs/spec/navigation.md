@@ -97,6 +97,8 @@ Only available when `cfg.GitEnabled`.
 Navigating to a deleted page's URL directly also shows a restore prompt instead of redirecting to the editor.
 It is in the search modal as "Deleted Pages" (Built-in pages, above).
 
+The list is read from the whole history once after Zone starts (every commit, which takes seconds in a long one), and after that only from what was committed since (`listDeletedPages`; a history rewritten is read anew); the titles, from each page's last version, are asked of git in one call and kept.
+
 ---
 
 ## Modules

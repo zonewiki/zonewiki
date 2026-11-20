@@ -60,6 +60,34 @@ func (r Repo) Pack(ctx context.Context, timeout time.Duration) Result {
 	return r.Run(ctx, Call{Timeout: timeout}, "repack", "-l", "-q")
 }
 
+// WriteGraph adds the commits that aren't in the repository's commit-graph
+// to it, with the paths each one changed (Bloom filters; their version 2,
+// which hashes names beyond ASCII right), as a layer of its own (--split:
+// it costs what is new, and git joins the layers as they grow). git's own
+// maintenance would write it (gc), but Zone turns that off (baseEnv), so
+// without this no wiki has one, and a log of one path (a page's history,
+// its latest change, whether a name was ever used) reads and compares every
+// commit of the history: measured 2026-11-19 on 200,000 commits, 0.4 to
+// 2.2 s, and 5 to 80 ms with the graph. The first write of a long history
+// takes seconds (4 s at 200,000 commits); a commit meanwhile is no matter,
+// git takes its lock only to put the new graph in place.
+func (r Repo) WriteGraph(ctx context.Context, timeout time.Duration) Result {
+	return r.Run(ctx, Call{Timeout: timeout}, "-c", "commitGraph.changedPathsVersion=2",
+		"commit-graph", "write", "--reachable", "--changed-paths", "--split")
+}
+
+// HasGraph: the repository has a commit-graph (WriteGraph), in one file or
+// in layers.
+func (r Repo) HasGraph() bool {
+	info := filepath.Join(r.Dir, ".git", "objects", "info")
+	for _, f := range []string{"commit-graph", filepath.Join("commit-graphs", "commit-graph-chain")} {
+		if _, err := os.Stat(filepath.Join(info, f)); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
 // packDir: where the repository's packs are.
 func (r Repo) packDir() string { return filepath.Join(r.Dir, ".git", "objects", "pack") }
 

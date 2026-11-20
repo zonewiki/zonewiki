@@ -787,6 +787,20 @@ since it runs inside the commit, and the request that made it, when its turn com
 - A pack is `git repack -l`, which leaves what is packed as it is.
 - Then, while no commit runs (`commitMu`), the loose objects that are packed now are removed
   (`git prune-packed`: beside a commit it would take away the folder a `git add` is writing into).
+- After each pack Zone adds the new commits to the commit-graph (below), and at the start it writes one for a wiki that has none.
+
+### The commit-graph
+
+git's own maintenance would write a commit-graph, and it is off, so Zone writes it (`writeGraph` in `go/gitstore.go`, `Repo.WriteGraph` in package `gitrepo`):
+`git commit-graph write --reachable --changed-paths --split`, in the background beside whatever commits.
+It holds, for each commit, a filter of the paths it changed (a Bloom filter, version 2 where git knows it),
+so a log of one path (a page's history, its last change on the page view, whether a page was deleted, whether a name was ever used) reads only the commits that may have touched it, not the whole history.
+`--split` writes what is new as a layer of its own, so a write costs the commits since the last one; git joins the layers as they grow.
+The first write of a long history takes a second or two at 100,000 commits; until it is there, and for the commits since the last pack, git reads the history as it did without it.
+It is a cache: the repository is whole without it, and git writes another from the commits.
+
+A page's history follows renames without `git log --follow`, which reads every commit whatever the graph holds (Renames in the history in `docs/spec/rendering.md`).
+A log of every path, as Changes, the deleted pages and who changed a page last read it, gets nothing from the filters: the deleted pages are read once and after that only from what was committed since (`listDeletedPages`).
 
 ### Joining the packs
 
@@ -855,6 +869,8 @@ Who changed a page last, which a search result says (Who changed a page last in 
 | A search when nothing moved | 20,000 pages | 7 µs |
 
 The pages' last commits take some 160 bytes a page in memory.
+
+A page's history, a link to a deleted page and the deleted pages in a long history (100,000 commits) are measured by the bench's `test_a_long_history` (The bench in `docs/spec/testing.md`), against the budgets in `tests/bench_tasks.py`: a page's history in some 0.1 s, as it is in a short one, with the commit-graph (above).
 Page writes run one at a time (`pagesMu`), each with its git commit (a few git processes), so a wiki is not for many people saving at once.
 Closed tasks cost nothing until they are looked at: a page view doesn't read their files.
 What would lift the ceiling, when it is needed: the pages' mtimes taken from the walk instead of a `stat` each (`pageStats`).

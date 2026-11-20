@@ -489,8 +489,13 @@ No Restore there: a diff shows a change, not a version.
 
 ### Renames in the history
 
-`gitLog` (`--follow`) records each commit's path for the file (`path`, from `--numstat`, `numstatPath` reading `old => new` and `dir/{old => new}.md`), and revision, diff and restore read a version under the name it had then (`versionPath`);
+A page's history goes on across renames, as `git log --follow` would have it, and records each commit's path for the file (`path`), so revision, diff and restore read a version under the name it had then (`versionPath`);
 before, a version from before a rename was a 404.
+`gitLog` doesn't ask `--follow`, which reads every commit of the history (2 s for a page at 200,000 commits):
+it reads the log of the page's own path, which the commit-graph's filters answer (The commit-graph in `docs/spec/deployment.md`),
+and where a commit made the file (`--raw`'s `A`) asks git whether that commit renamed another to it (`renamedTo`: `git diff-tree -M` on that one commit).
+The newest such commit ends what is the page's under this name, and its history goes on under the old name from the commit before;
+a commit that made the file anew (a page deleted and made again) is no end, as for `--follow`.
 The diff of a rename passes both names (`gitDiff(sha, paths…)`, `-M`), so a pure rename shows no change instead of the whole page as new.
 
 ### Changes (`/changes`)

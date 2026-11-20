@@ -296,10 +296,13 @@ func packNow(atLeast int) {
 		packing.running = false
 		packing.Unlock()
 	}()
+	repo := wikiRepo()
 	if atLeast > 0 && looseObjects() < atLeast {
+		if !repo.HasGraph() { // a wiki from before Zone wrote it
+			writeGraph(repo)
+		}
 		return
 	}
-	repo := wikiRepo()
 	r := repo.Pack(context.Background(), packTimeout)
 	if r.Code == 0 {
 		commitMu.Lock()
@@ -311,6 +314,17 @@ func packNow(atLeast int) {
 	}
 	if r.Code != 0 {
 		logf("git: packing failed (the repository stays as it is, only larger): %s", strings.TrimSpace(r.Stderr+" "+r.Stdout))
+	}
+	writeGraph(repo)
+}
+
+// writeGraph adds the commits since the last pack to the commit-graph,
+// which a log of one path asks (Repo.WriteGraph); without it git reads the
+// history as before, only slower.
+func writeGraph(repo gitrepo.Repo) {
+	if r := repo.WriteGraph(context.Background(), packTimeout); r.Code != 0 {
+		logf("git: writing the commit-graph failed (the history is read without it, more slowly): %s",
+			strings.TrimSpace(r.Stderr+" "+r.Stdout))
 	}
 }
 
@@ -605,10 +619,22 @@ type GitEntry struct {
 	commitMark                        // whether an assistant wrote it, which, and where its text is from
 	Added, Deleted                    int
 	Path                              string
+	created                           bool // the commit made the file (gitLog asks whether by a rename)
 }
 
-// gitLog: the commits of a file, newest first, across renames (--follow);
-// max 0: all.
+// followMost: how many renames a file's history (gitLog) follows back.
+const followMost = 100
+
+// gitLog: the commits of a file, newest first, across renames; max 0: all.
+// As git log --follow has them, but without it: --follow walks the whole
+// history and compares every commit's files (2 s for a page at 200,000
+// commits), where a log of one path asks the commit-graph's filters which
+// commits touched it (0.1 s; WriteGraph in package gitrepo). So the path's
+// own log is read, and where a commit created the file (--raw's A) git is
+// asked whether that commit renamed another to it (renamedTo); the newest
+// such commit ends what is the file's, and its history goes on under the
+// old name from the commit before. A creation that is no rename (a page
+// deleted and made again) goes on under the same name, as --follow does.
 func gitLog(path string, max int) []GitEntry {
 	if !cfg.GitEnabled {
 		return nil
@@ -617,42 +643,98 @@ func gitLog(path string, max int) []GitEntry {
 	if !ok {
 		return nil
 	}
-	args := []string{"log", "--follow"}
-	if max > 0 {
-		args = append(args, "-n", strconv.Itoa(max))
-	}
-	args = append(args, "-z", "--numstat", "--date=format:%Y-%m-%d %H:%M",
-		"--format=\x1e%H\x1f%as\x1f%ar\x1f%ad\x1f%an\x1f"+markFormat+"\x1f%s", "--", rel)
-	r := runGit(args...)
 	var entries []GitEntry
-	for _, record := range logRecords(r.Stdout) {
+	from, name := "HEAD", rel
+	for hops := 0; ; hops++ {
+		args := []string{"log"}
+		if max > 0 {
+			args = append(args, "-n", strconv.Itoa(max-len(entries)))
+		}
+		args = append(args, "-z", "--raw", "--numstat", "--date=format:%Y-%m-%d %H:%M",
+			"--format=\x1e%H\x1f%as\x1f%ar\x1f%ad\x1f%an\x1f"+markFormat+"\x1f%s", from, "--", name)
+		got := parseFileLog(runGit(args...).Stdout, name)
+		cut, old := -1, ""
+		for i := range got {
+			if !got[i].created {
+				continue
+			}
+			if added, deleted, src, ok := renamedTo(got[i].Sha, name); ok {
+				got[i].Added, got[i].Deleted = added, deleted
+				cut, old = i, src
+				break
+			}
+		}
+		if cut < 0 {
+			return append(entries, got...)
+		}
+		entries = append(entries, got[:cut+1]...)
+		if (max > 0 && len(entries) >= max) || hops == followMost {
+			return entries
+		}
+		from, name = got[cut].Sha+"^", old
+	}
+}
+
+// parseFileLog: gitLog's records of the file rel (git log -z --raw
+// --numstat with gitLog's format).
+func parseFileLog(out, rel string) []GitEntry {
+	var entries []GitEntry
+	for _, record := range logRecords(out) {
 		parts := strings.SplitN(record.head, "\x1f", 8)
 		if len(parts) != 8 {
 			continue
 		}
 		e := GitEntry{Sha: parts[0], Date: parts[1], Rel: parts[2], Time: parts[3], Author: commitAuthor(parts[4]),
 			Msg: parts[7], commitMark: commitMarkOf(parts[5], parts[6]), Path: rel}
-		// "added\tdeleted\tname", or for a rename "added\tdeleted\t" and
-		// the old and the new name as fields of their own.
+		// --raw: ":100644 100644 <sha> <sha> M" and the name, a field each
+		// (A: the commit made the file); --numstat: "added\tdeleted\tname".
+		// A log of one path: no rename in it.
 		for i := 0; i < len(record.fields); i++ {
-			cols := strings.SplitN(record.fields[i], "\t", 3)
-			if len(cols) != 3 {
+			field := record.fields[i]
+			if strings.HasPrefix(field, ":") {
+				f := strings.Fields(field)
+				e.created = e.created || (len(f) > 0 && strings.HasPrefix(f[len(f)-1], "A"))
+				i++ // its name
 				continue
 			}
-			if n, err := strconv.Atoi(cols[0]); err == nil {
-				e.Added += n
-			}
-			if n, err := strconv.Atoi(cols[1]); err == nil {
-				e.Deleted += n
-			}
-			e.Path = cols[2]
-			if cols[2] == "" && i+2 < len(record.fields) {
-				e.Path, i = record.fields[i+2], i+2
+			if cols := strings.SplitN(field, "\t", 3); len(cols) == 3 {
+				if n, err := strconv.Atoi(cols[0]); err == nil {
+					e.Added += n
+				}
+				if n, err := strconv.Atoi(cols[1]); err == nil {
+					e.Deleted += n
+				}
 			}
 		}
 		entries = append(entries, e)
 	}
 	return entries
+}
+
+// renamedTo: whether commit sha made rel by renaming another file (git's
+// rename detection, as --follow uses it, on that one commit), which, and the
+// lines the rename added and deleted.
+func renamedTo(sha, rel string) (added, deleted int, old string, ok bool) {
+	r := runGit("diff-tree", "-M", "-r", "--numstat", "-z", sha)
+	if r.Code != 0 {
+		return 0, 0, "", false
+	}
+	// -z: "added\tdeleted\tpath\0", a rename "added\tdeleted\t\0old\0new\0".
+	fields := strings.Split(r.Stdout, "\x00")
+	for i := 0; i < len(fields); i++ {
+		cols := strings.SplitN(fields[i], "\t", 3)
+		if len(cols) != 3 || cols[2] != "" || i+2 >= len(fields) {
+			continue
+		}
+		src, dst := fields[i+1], fields[i+2]
+		i += 2
+		if dst == rel {
+			added, _ = strconv.Atoi(cols[0])
+			deleted, _ = strconv.Atoi(cols[1])
+			return added, deleted, src, true
+		}
+	}
+	return 0, 0, "", false
 }
 
 // LogEntry is a commit of the wiki: sha, time (YYYY-MM-DD HH:MM), how long
@@ -1073,18 +1155,79 @@ func uncommittedEntries() []UncommittedFile {
 }
 
 // DeletedPage is a page in git history but not on disk.
-type DeletedPage struct{ Slug, Title, Sha, Date string }
+type DeletedPage struct {
+	Slug, Title, Sha, Date string
+	parent                 string // the commit before the deletion, which has the page's last text
+}
 
-// listDeletedPages: the deleted pages, newest deletion first.
+// deletions: every page's latest deletion in the history, newest first
+// (Sha the deleting commit, Title not yet known), as read up to the commit
+// head of the wiki's repository (wiki: cfg.Data then); and the titles found
+// so far, by parent and slug. listDeletedPages
+// reads the history once and after that only what was committed since: a
+// look for deletions reads every commit of it, which takes seconds in a
+// long one (3 s at 200,000 commits), and the commit-graph's filters can't
+// help a log of every path.
+var deletions struct {
+	sync.Mutex
+	wiki, head string
+	pages      []DeletedPage
+	titles     map[string]string
+}
+
+// listDeletedPages: the deleted pages (not on disk now), newest deletion
+// first.
 func listDeletedPages() []DeletedPage {
 	if !cfg.GitEnabled {
 		return nil
 	}
-	r := runGit("log", "-z", "--diff-filter=D", "--format=%x1e%H\t%P\t%as", "--name-only")
-	if r.Code != 0 {
+	head := strings.TrimSpace(runGit("rev-parse", "--verify", "-q", "HEAD").Stdout)
+	if head == "" {
 		return nil
 	}
+	deletions.Lock()
+	defer deletions.Unlock()
+	if deletions.wiki != cfg.Data {
+		deletions.wiki, deletions.head, deletions.pages, deletions.titles = cfg.Data, "", nil, nil
+	}
+	if head != deletions.head {
+		since := head
+		if deletions.head != "" && runGit("merge-base", "--is-ancestor", deletions.head, head).Code == 0 {
+			since = deletions.head + ".." + head
+		}
+		newer, ok := readDeletions(since)
+		if !ok {
+			return nil
+		}
+		if since == head { // the first look, or a history that was rewritten
+			deletions.pages = nil
+		}
+		taken := map[string]bool{}
+		for _, p := range newer {
+			taken[p.Slug] = true
+		}
+		deletions.pages = append(newer, slices.DeleteFunc(deletions.pages, func(p DeletedPage) bool { return taken[p.Slug] })...)
+		deletions.head = head
+	}
 	existing := slugSet()
+	var out []DeletedPage
+	for _, p := range deletions.pages {
+		if !existing[p.Slug] {
+			out = append(out, p)
+		}
+	}
+	addDeletedTitles(out)
+	return out
+}
+
+// readDeletions: the pages deleted in the commits of revs (git log's
+// range), each slug's latest deletion only, newest first, with the commit
+// before it (DeletedPage.parent: its tree has the last text).
+func readDeletions(revs string) ([]DeletedPage, bool) {
+	r := runGit("log", "--diff-filter=D", "--format=%x1e%H\t%P\t%as", "--name-only", "-z", revs)
+	if r.Code != 0 {
+		return nil, false
+	}
 	seen := map[string]bool{}
 	var out []DeletedPage
 	for _, record := range logRecords(r.Stdout) {
@@ -1097,14 +1240,58 @@ func listDeletedPages() []DeletedPage {
 				continue
 			}
 			slug := strings.TrimSuffix(name, ".md")
-			if existing[slug] || seen[slug] || strings.HasPrefix(slug, "_assets") {
+			if seen[slug] || strings.HasPrefix(slug, "_assets") {
 				continue
 			}
 			seen[slug] = true
-			out = append(out, DeletedPage{slug, deletedTitle(parent, slug), sha, date})
+			out = append(out, DeletedPage{Slug: slug, Sha: sha, Date: date, parent: parent})
 		}
 	}
-	return out
+	return out, true
+}
+
+// addDeletedTitles gives each page its title as its last version has it
+// (deletedTitle), those not known yet asked of git in one call; under
+// deletions' lock.
+func addDeletedTitles(pages []DeletedPage) {
+	if deletions.titles == nil {
+		deletions.titles = map[string]string{}
+	}
+	var ask []string
+	for _, p := range pages {
+		// A name with a line break can't be asked in a batch (a line a name).
+		if _, ok := deletions.titles[p.parent+":"+p.Slug]; !ok && !strings.ContainsAny(p.Slug, "\n\r") {
+			ask = append(ask, p.parent+":"+p.Slug+".md")
+		}
+	}
+	if len(ask) > 0 {
+		// cat-file --batch: "<sha> blob <size>\n<content>\n" an object, "<name> missing\n" for none.
+		out := runGitIn(gitTimeout, strings.Join(ask, "\n")+"\n", "cat-file", "--batch").Stdout
+		for _, name := range ask {
+			key := strings.TrimSuffix(name, ".md")
+			line, rest, _ := strings.Cut(out, "\n")
+			f := strings.Fields(line)
+			size, err := 0, error(nil)
+			if len(f) == 3 && f[1] == "blob" {
+				size, err = strconv.Atoi(f[2])
+			}
+			if len(f) != 3 || f[1] != "blob" || err != nil || size > len(rest) {
+				deletions.titles[key] = ""
+				out = rest
+				continue
+			}
+			_, slug, _ := strings.Cut(key, ":")
+			deletions.titles[key] = mdtext.PageTitle(rest[:size], slug)
+			out = strings.TrimPrefix(rest[size:], "\n")
+		}
+	}
+	for i := range pages {
+		if t := deletions.titles[pages[i].parent+":"+pages[i].Slug]; t != "" {
+			pages[i].Title = t
+		} else {
+			pages[i].Title = mdtext.SlugDisplayName(pages[i].Slug)
+		}
+	}
 }
 
 // deletionCommit: a commit as "%H\t%P\t%as" reads: its sha, its first

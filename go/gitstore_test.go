@@ -582,3 +582,220 @@ func TestNoDeltaForUploads(t *testing.T) {
 		t.Errorf("the attributes are in the work tree: %s", out)
 	}
 }
+
+// gitWrites: helpers that change the test wiki's pages and commit each
+// change, as Zone's page writes do (rel: a file's path in the wiki).
+type gitWrites struct{ t *testing.T }
+
+func (g gitWrites) at(rel string) string { return filepath.Join(cfg.Data, filepath.FromSlash(rel)) }
+
+func (g gitWrites) write(rel, text string) {
+	g.t.Helper()
+	if err := os.MkdirAll(filepath.Dir(g.at(rel)), 0o777); err != nil {
+		g.t.Fatal(err)
+	}
+	if err := os.WriteFile(g.at(rel), []byte(text), 0o666); err != nil {
+		g.t.Fatal(err)
+	}
+	if err := gitCommit("", "Save "+rel, g.at(rel)); err != nil {
+		g.t.Fatal(err)
+	}
+}
+
+func (g gitWrites) move(from, to string) {
+	g.t.Helper()
+	if err := os.MkdirAll(filepath.Dir(g.at(to)), 0o777); err != nil {
+		g.t.Fatal(err)
+	}
+	if err := os.Rename(g.at(from), g.at(to)); err != nil {
+		g.t.Fatal(err)
+	}
+	if err := gitCommit("", "Rename "+from, g.at(from), g.at(to)); err != nil {
+		g.t.Fatal(err)
+	}
+}
+
+func (g gitWrites) remove(rel string) {
+	g.t.Helper()
+	if err := os.Remove(g.at(rel)); err != nil {
+		g.t.Fatal(err)
+	}
+	if err := gitCommit("", "Delete "+rel, g.at(rel)); err != nil {
+		g.t.Fatal(err)
+	}
+}
+
+// gitLog follows renames itself (a log of one path, which the
+// commit-graph's filters answer, instead of --follow, which reads the whole
+// history) and has what git log --follow has: the same commits, the file's
+// name at each and the lines each added and deleted. Across a rename, one
+// with an edit, a move between folders, a page deleted and made again (its
+// older commits are the name's, as --follow has them) and a rename onto a
+// name a deleted page had (the deleted page's commits are not), with and
+// without a limit.
+func TestGitLogFollowsRenamesAsGitDoes(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	testWiki(t, nil)
+	cfg.GitEnabled = true
+	gitSetup()
+	g := gitWrites{t}
+	text := "# Page\n\none\ntwo\nthree\nfour\nfive\nsix\n"
+	g.write("a.md", text)
+	g.write("a.md", text+"seven\n")
+	g.move("a.md", "b.md")
+	g.write("b.md", text+"eight\n")
+	// A rename with an edit, then a move to another folder.
+	if err := os.WriteFile(g.at("b.md"), []byte(text+"eight\nnine\n"), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	g.move("b.md", "notes/c.md")
+	g.move("notes/c.md", "archive/c.md")
+	g.write("archive/c.md", text+"ten\n")
+	// Deleted and made again: one name's history.
+	g.write("d.md", "# D\n\nfirst life\n")
+	g.remove("d.md")
+	g.write("d.md", "# D\n\nsecond life\n")
+	g.write("d.md", "# D\n\nsecond life, edited\n")
+	// A rename onto a name a deleted page had.
+	g.write("e.md", "# E\n\nthe old e\n")
+	g.remove("e.md")
+	x := "# X\n\nx's own text, long enough to be found again\nline\nline\n"
+	g.write("x.md", x)
+	g.write("x.md", x+"more\n")
+	g.move("x.md", "e.md")
+	g.write("solo.md", "# Solo\n")
+
+	// What git log --follow says: a commit, the file's name there and its
+	// lines added and deleted.
+	follow := func(rel string) []string {
+		t.Helper()
+		var out []string
+		for _, record := range logRecords(runGit("log", "--follow", "-z", "--numstat", "--format=\x1e%H", "--", rel).Stdout) {
+			name, added, deleted := "", 0, 0
+			for i := 0; i < len(record.fields); i++ {
+				cols := strings.SplitN(record.fields[i], "\t", 3)
+				if len(cols) != 3 {
+					continue
+				}
+				added, _ = strconv.Atoi(cols[0])
+				deleted, _ = strconv.Atoi(cols[1])
+				if name = cols[2]; name == "" && i+2 < len(record.fields) {
+					name, i = record.fields[i+2], i+2 // a rename: the old name, the new
+				}
+			}
+			out = append(out, fmt.Sprintf("%s %s +%d -%d", record.head[:8], name, added, deleted))
+		}
+		return out
+	}
+	ours := func(rel string, max int) []string {
+		var out []string
+		for _, e := range gitLog(g.at(rel), max) {
+			out = append(out, fmt.Sprintf("%s %s +%d -%d", e.Sha[:8], e.Path, e.Added, e.Deleted))
+		}
+		return out
+	}
+	for rel, n := range map[string]int{"archive/c.md": 7, "d.md": 4, "e.md": 3, "solo.md": 1} {
+		want := follow(rel)
+		if len(want) != n {
+			t.Fatalf("%s: git log --follow has %d commits, the test meant %d: %q", rel, len(want), n, want)
+		}
+		if got := ours(rel, 0); !reflect.DeepEqual(got, want) {
+			t.Errorf("%s:\n got %q\nwant %q", rel, got, want)
+		}
+		for _, max := range []int{1, 3, 5} {
+			if got := ours(rel, max); !reflect.DeepEqual(got, want[:min(max, len(want))]) {
+				t.Errorf("%s, at most %d: %q, want %q", rel, max, got, want[:min(max, len(want))])
+			}
+		}
+	}
+}
+
+// The deleted pages are read from the whole history once, and after that
+// from what was committed since: a page deleted later is there too (once,
+// with its latest deletion), one made again is gone, and a history that was
+// rewritten is read anew. Each comes with its deleting commit and its title
+// as its last version has it.
+func TestDeletedPagesReadWhatIsNew(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	testWiki(t, nil)
+	cfg.GitEnabled = true
+	gitSetup()
+	g := gitWrites{t}
+	write := func(slug, title string) { g.write(slug+".md", "# "+title+"\n") }
+	remove := func(slug string) { g.remove(slug + ".md") }
+	list := func() []string {
+		var out []string
+		for _, p := range listDeletedPages() {
+			if _, subject, ok := commitOf(p.Sha); !ok || subject != "Delete "+p.Slug+".md" {
+				t.Errorf("%s: %q is not its deletion (%q)", p.Slug, p.Sha, subject)
+			}
+			out = append(out, p.Slug+": "+p.Title)
+		}
+		return out
+	}
+	write("one", "One")
+	write("two", "Two")
+	remove("one")
+	before := strings.TrimSpace(runGit("rev-parse", "HEAD").Stdout)
+	if got := list(); !reflect.DeepEqual(got, []string{"one: One"}) {
+		t.Fatalf("first: %q", got)
+	}
+	remove("two")
+	write("three", "Three")
+	write("three", "Three, changed")
+	remove("three")
+	if got := list(); !reflect.DeepEqual(got, []string{"three: Three, changed", "two: Two", "one: One"}) {
+		t.Errorf("after more deletions: %q", got)
+	}
+	write("one", "One again")
+	remove("one")
+	if got := list(); !reflect.DeepEqual(got, []string{"one: One again", "three: Three, changed", "two: Two"}) {
+		t.Errorf("deleted again: %q", got)
+	}
+	write("two", "Two again")
+	if got := list(); !reflect.DeepEqual(got, []string{"one: One again", "three: Three, changed"}) {
+		t.Errorf("made again: %q", got)
+	}
+	// The history rewritten: back to before, and another deletion on it.
+	if r := runGit("reset", "-q", "--hard", before); r.Code != 0 {
+		t.Fatal(r.Stderr)
+	}
+	write("four", "Four")
+	remove("four")
+	if got := list(); !reflect.DeepEqual(got, []string{"four: Four", "one: One"}) {
+		t.Errorf("rewritten: %q", got)
+	}
+}
+
+// Zone writes the commit-graph, with the paths each commit changed, when it
+// packs, and at the start for a wiki that has none (git's own maintenance,
+// which would write it, is off): a log of one path asks its filters.
+func TestTheCommitGraphIsWritten(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	testWiki(t, nil)
+	cfg.GitEnabled = true
+	gitSetup()
+	if !packed(10 * time.Second) {
+		t.Fatal("a pack runs before the test")
+	}
+	gitWrites{t}.write("p.md", "# P\n")
+	repo := wikiRepo()
+	if repo.HasGraph() {
+		t.Fatal("a graph before the start")
+	}
+	packAtStart()
+	if !packed(30*time.Second) || !repo.HasGraph() {
+		t.Fatal("no graph after the start")
+	}
+	r := repo.Run(t.Context(), gitrepo.Call{Timeout: time.Minute, Env: []string{"GIT_TRACE2_PERF=1"}},
+		"log", "--format=%H", "--", "index.md")
+	if !strings.Contains(r.Stderr, `"filter_not_present":0`) {
+		t.Errorf("the log didn't use the graph's filters: %s", r.Stderr)
+	}
+}
