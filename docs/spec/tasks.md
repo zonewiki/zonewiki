@@ -612,7 +612,7 @@ with its description,
 dates,
 recurrence,
 comments and history: `{"zone_tasks": 1, "list": "shop", "tag": "", "exported_at": "…", "tasks": […]}`; each task says the list it is in (`list`).
-With users it holds the shared tasks and your own private ones, marked `"private": true`.
+With users it holds the shared tasks and your own private ones, marked `"private": true`: what you see, read as any view reads them (`Store.ReadAllStrict`, which holds up no task write while it reads; a file that can't be read is a 503, never an export without its tasks).
 
 ### Import tasks
 
@@ -1451,7 +1451,7 @@ Who sees a task is decided by where it is kept (Storage): the list's entry is no
 The store leaves the folder out for anyone else (`Store.dirs(who, owner)`, `Member`): every reader of a user's tasks, and every write, which therefore never touches the files of a list its user doesn't see (a task that names such a list is refused by the store itself, `byOwner`).
 What holds every user's tasks (the search index, a task found by its id) asks `canSeeTask`, which asks the same file (`taskFiles.SeesList`); `canSeePath` hides the folder's files in the history.
 An entry of its name in the registry as well (a merge, a hand edit) doesn't make it everyone's list: the folder's file says whom it is for (`withListFiles`).
-A task that names the list but lies in another folder (a file moved by hand, a merge; the next write files it) is left out for anyone else too (`readEach`): the folder and the task's own `list` never disagree about who sees it.
+A task that names the list but lies in another folder (a file moved by hand, a merge; the next write files it) is left out for anyone else too, by every read that shows tasks (`Store.shows`: open and closed, a year's closed, their count, the years, the news, the export): the folder and the task's own `list` never disagree about who sees it.
 A list narrowed gets its file before it leaves the registry; one for everyone again loses the file and is back in the registry.
 Renamed or deleted, its old folder keeps the file, marked gone (`{"name": "hiring", "for": […], "gone": true}`): no list anymore, and the folder's history is still only its members' to see.
 

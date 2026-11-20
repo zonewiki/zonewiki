@@ -712,6 +712,40 @@ def test_its_words_suggest_nothing_to_anyone_else(client, wiki):
             assert SECRET not in client.get(path, query_string={"q": typo}, headers=HOST).get_data(as_text=True)
 
 
+def test_its_tasks_in_another_folder_are_still_its_members(client, wiki):
+    """A task of the list lying in a folder everyone reads (a file moved by
+    hand, a merge) is its members' all the same, in every view that reads
+    the files: open, closed, a year's closed, their count, the years, news
+    and the export."""
+    def stray(name, tasks):
+        path = wiki / "_tasks" / name
+        have = json.loads(path.read_text()) if path.exists() else []
+        path.write_text(json.dumps(have + tasks, indent=2) + "\n")
+    folder = wiki / f"_tasks/lists/{LIST}"
+    done = json.loads((folder / "closed.json").read_text())
+    (folder / "closed.json").write_text("[]\n")
+    for t in done:   # given to bob before the list was for some: news for him, if he saw it
+        t["assignee"] = "bob"
+    stray("closed.json", done)
+    old = {**done[0], "id": "0ff1ce00-0000-4000-8000-000000000001", "closed_at": "2020-03-01T10:00:00"}
+    stray("closed-2020-03.json", [old])
+    stray("tasks.json", json.loads((folder / "tasks.json").read_text()))
+    (folder / "tasks.json").write_text("[]\n")
+    sign_in(client, "bob")
+    for path, query in [("/api/tasks", {}), ("/api/tasks", {"mine": "1"}), ("/api/tasks/closed", {}),
+                        ("/api/tasks/closed", {"limit": "50"}), ("/api/tasks/closed", {"year": "2020"}),
+                        ("/api/tasks/closed", {"year": "2020", "limit": "50"}), ("/api/tasks/export", {})]:
+        body = client.get(path, query_string=query, headers=HOST).get_data(as_text=True)
+        assert SECRET not in body, (path, query)
+    assert client.get("/api/tasks/closed-count", headers=HOST).get_json()["count"] == 0
+    assert "2020" not in client.get("/api/tasks/closed-years", headers=HOST).get_json()["years"]
+    assert "new" not in client.get("/api/tasks/due-count", headers=HOST).get_json()
+    sign_in(client, "carol")   # a member sees them where they lie
+    assert SECRET in client.get("/api/tasks/closed", query_string={"limit": "50"}, headers=HOST).get_data(as_text=True)
+    assert SECRET in client.get("/api/tasks/export", headers=HOST).get_data(as_text=True)
+    assert "2020" in client.get("/api/tasks/closed-years", headers=HOST).get_json()["years"]
+
+
 def test_a_commit_about_it_names_it_to_its_members_only(client, wiki):
     """Narrowing a list for everyone writes the registry everyone reads: the
     commit is in everyone's history, and says the list's name and whom it is

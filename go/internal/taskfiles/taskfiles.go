@@ -293,15 +293,47 @@ func (s *Store) archivedOf(who asker.Asker, owner string, strict bool) ([]*Task,
 	return s.readEach(who, owner, strict, archivesIn)
 }
 func (s *Store) readEach(who asker.Asker, owner string, strict bool, files func(dir string) []string) ([]*Task, error) {
+	// A read for a write takes what the files hold (byOwner refuses the
+	// write of a task user doesn't see); a read to show tasks what who sees.
+	return s.readFiles(who, owner, strict, !strict, files)
+}
+
+// readFiles: the tasks of owner's files that files names in each folder who
+// reads (dirs), each once; strict: a file that is there but unreadable is
+// ErrCorrupt; shown: only those who sees (shows).
+func (s *Store) readFiles(who asker.Asker, owner string, strict, shown bool, files func(dir string) []string) ([]*Task, error) {
 	tasks := []*Task{}
-	// A task of a list for some that lies in another folder (a file moved by
-	// hand, a merge; the next write files it) is its list's members' all the
-	// same: a read to show tasks leaves it out for anyone else, as it leaves
-	// out the list's folder, so the folder and the task's own word never
-	// disagree about who sees it. A read for a write takes what the files
-	// hold (byOwner refuses the write).
+	theirs := s.shows(who, owner)
+	for _, d := range s.dirs(who, owner) {
+		for _, p := range files(d) {
+			var l []*Task
+			if strict {
+				var err error
+				if l, err = ReadStrict(p); err != nil {
+					return nil, err
+				}
+			} else {
+				l = ReadLenient(p)
+			}
+			for _, t := range l {
+				if !shown || theirs(t) {
+					tasks = append(tasks, t)
+				}
+			}
+		}
+	}
+	return unique(tasks), nil
+}
+
+// shows: whether a task read from a folder of owner's that who reads is one
+// who sees. A task of a list for some that lies in another folder (a file
+// moved by hand, a merge; the next write files it) is its list's members'
+// all the same: every read to show tasks leaves it out for anyone else, as
+// it leaves out the list's folder, so the folder and the task's own word
+// never disagree about who sees it. Each list is asked about once.
+func (s *Store) shows(who asker.Asker, owner string) func(t *Task) bool {
 	sees := map[string]bool{}
-	theirs := func(t *Task) bool {
+	return func(t *Task) bool {
 		if owner != "" || who == Everyone || t.List == "" {
 			return true
 		}
@@ -312,24 +344,6 @@ func (s *Store) readEach(who asker.Asker, owner string, strict bool, files func(
 		}
 		return ok
 	}
-	for _, d := range s.dirs(who, owner) {
-		for _, p := range files(d) {
-			if !strict {
-				for _, t := range ReadLenient(p) {
-					if theirs(t) {
-						tasks = append(tasks, t)
-					}
-				}
-				continue
-			}
-			l, err := ReadStrict(p)
-			if err != nil {
-				return nil, err
-			}
-			tasks = append(tasks, l...)
-		}
-	}
-	return unique(tasks), nil
 }
 
 // ---- whose files ----
@@ -807,12 +821,9 @@ func (s *Store) ClosedInYear(user asker.Asker, year string) []*Task {
 	// year's archives.
 	tasks := s.readClosed(user)
 	tasks = append(tasks, eachOwner(s.Owners(user), func(o string) []*Task {
-		var l []*Task
-		for _, p := range s.archives(user, o) {
-			if archiveYear(p) == year {
-				l = append(l, ReadLenient(p)...)
-			}
-		}
+		l, _ := s.readFiles(user, o, false, true, func(dir string) []string {
+			return slices.DeleteFunc(archivesIn(dir), func(p string) bool { return archiveYear(p) != year })
+		})
 		return l
 	})...)
 	s.view.RUnlock()
@@ -837,9 +848,10 @@ func (s *Store) ClosedYears(user asker.Asker, in func(*Task) bool) []string {
 		}
 	}
 	for _, o := range s.Owners(user) {
+		theirs := s.shows(user, o)
 		for _, p := range s.archives(user, o) {
 			for _, t := range ReadLenient(p) {
-				if t.Owner = o; in(t) {
+				if t.Owner = o; theirs(t) && in(t) {
 					years[archiveYear(p)] = true
 					break
 				}
@@ -1424,6 +1436,7 @@ func (s *Store) RecentClosed(user asker.Asker, keep func(*Task) bool) []*Task {
 	defer s.view.RUnlock()
 	out := []*Task{}
 	for _, o := range s.Owners(user) {
+		theirs := s.shows(user, o)
 		for _, d := range s.dirs(user, o) {
 			files := []string{closedIn(d)}
 			if p := filepath.Join(d, last); exists(p) {
@@ -1431,7 +1444,7 @@ func (s *Store) RecentClosed(user asker.Asker, keep func(*Task) bool) []*Task {
 			}
 			for _, p := range files {
 				lookAt(p, o, func(t *Task) {
-					if keep(t) {
+					if theirs(t) && keep(t) {
 						c := t.Clone()
 						out = append(out, c)
 					}
@@ -1471,6 +1484,7 @@ func (s *Store) ClosedPage(user asker.Asker, year string, keep func(*Task) bool,
 	s.view.RLock()
 	defer s.view.RUnlock()
 	for _, o := range s.Owners(user) {
+		theirs := s.shows(user, o)
 		for _, d := range s.dirs(user, o) {
 			files := []string{closedIn(d)}
 			for _, p := range archivesIn(d) {
@@ -1480,7 +1494,7 @@ func (s *Store) ClosedPage(user asker.Asker, year string, keep func(*Task) bool,
 			}
 			for _, p := range files {
 				lookAt(p, o, func(t *Task) {
-					if (year == current && pastYearOf(t, current) == "" || year != current && ClosedYear(t) == year) && keep(t) {
+					if (year == current && pastYearOf(t, current) == "" || year != current && ClosedYear(t) == year) && theirs(t) && keep(t) {
 						all = append(all, found{t.ClosedAt, t.ID, p, o})
 					}
 				})
@@ -1553,12 +1567,13 @@ func (s *Store) CountClosedInYear(user asker.Asker, year string, in func(*Task) 
 	s.view.RLock()
 	defer s.view.RUnlock()
 	n := 0
-	count := func(t *Task) {
-		if (year == current && pastYearOf(t, current) == "" || year != current && ClosedYear(t) == year) && in(t) {
-			n++
-		}
-	}
 	for _, o := range s.Owners(user) {
+		theirs := s.shows(user, o)
+		count := func(t *Task) {
+			if (year == current && pastYearOf(t, current) == "" || year != current && ClosedYear(t) == year) && theirs(t) && in(t) {
+				n++
+			}
+		}
 		for _, d := range s.dirs(user, o) {
 			lookAt(closedIn(d), o, count)
 			for _, p := range archivesIn(d) {
@@ -1569,6 +1584,33 @@ func (s *Store) CountClosedInYear(user asker.Asker, year string, in func(*Task) 
 		}
 	}
 	return n
+}
+
+// ReadAllStrict: the open tasks user sees and every closed one (this
+// month's and the archives'), read together as a reader takes them (what
+// user doesn't see left out: shows), but strictly: a file that is there and
+// can't be read is ErrCorrupt, so a copy of them (an export) never lacks a
+// file's tasks without a word. Under the readers' lock, not the write lock
+// (Lock): writes go on deciding meanwhile.
+func (s *Store) ReadAllStrict(user asker.Asker) (open, closed []*Task, err error) {
+	s.view.RLock()
+	defer s.view.RUnlock()
+	open, closed = []*Task{}, []*Task{}
+	for _, o := range s.Owners(user) {
+		a, err := s.readFiles(user, o, true, true, func(dir string) []string { return []string{openIn(dir)} })
+		if err != nil {
+			return nil, nil, err
+		}
+		c, err := s.readFiles(user, o, true, true, func(dir string) []string { return append(archivesIn(dir), closedIn(dir)) })
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, t := range slices.Concat(a, c) {
+			t.Owner = o
+		}
+		open, closed = append(open, a...), append(closed, c...)
+	}
+	return open, closed, nil
 }
 
 // Snapshot: the open tasks user sees and every closed one (this month's

@@ -472,9 +472,10 @@ func apiExport(w http.ResponseWriter, r *http.Request) error {
 	list, tag := queryScope(r), strings.TrimSpace(r.URL.Query().Get("tag"))
 	lists := taskLists(userOf(r))
 	assignee := r.URL.Query().Get("assignee")
-	taskFiles.Lock()
-	active, closed, err := taskFiles.ReadForWriteLocked(userOf(r))
-	taskFiles.Unlock()
+	// As a reader: what the user sees (a task of a list for some lying in
+	// another folder too), without the write lock, so an export of a
+	// team's years holds up no write while it reads.
+	active, closed, err := taskFiles.ReadAllStrict(userOf(r))
 	if err != nil {
 		return err
 	}
