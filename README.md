@@ -8,6 +8,12 @@ Edit them in the browser or in any editor.
 AI assistants of any maker work with them [over MCP](#connect-an-ai-assistant), acting as you: they see and change only what you may, and you can review and undo every edit they make.
 One Go binary, no database, no frontend build, no cloud.
 
+> [!NOTE]
+> **Zone is a beta (0.x).**
+> Your pages are plain Markdown files in git and stay readable without Zone, whatever happens.
+> Until 1.0, how tasks are stored, the settings file's keys, the MCP tools and URLs may still change; the release notes say what to do when they do.
+> 1.0 will promise that a newer Zone takes an older wiki over by itself.
+
 ![A wiki page in Zone: the page in the middle, its table of contents on the left, backlinks and linked tasks on the right](docs/screenshots/page.png)
 
 ## Why Zone

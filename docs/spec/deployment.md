@@ -577,13 +577,18 @@ iOS Safari ignores the setting.
 ## Version
 
 Zone's version is a semver constant, `version` in `go/config.go`, bumped by hand.
+Zone is a beta, so its version starts with 0:
+a release that changes something people rely on (how tasks are stored, the settings file's keys, the MCP tools, URLs) raises the minor number,
+a release of fixes the patch number.
+1.0 will promise that a newer Zone takes an older wiki over by itself (a step for each change of The data format, below) and that the MCP tools and settings don't break without notice.
+(The numbers 1.0 to 2.0 in the history from before Zone was published were never released.)
 Next to it the build is shown: the commit it was built from plus that commit's date, e.g. `c28ec9e 2026-09-26 19:22`, with ` +dirty` when `go/` or `public/` had uncommitted changes
 (a commit can't contain its own hash, so this part can't be a committed constant).
 
 | Where | What it shows |
 |-------|---------------|
-| The shortcuts modal (`?`) | Both (`Zone 1.0.0 · c28ec9e 2026-09-26 19:22`) |
-| Every page's bottom-left corner | The version and short hash (`Zone 1.0.0 · c28ec9e`, `+dirty` when so) |
+| The shortcuts modal (`?`) | Both (`Zone 0.5.0 · c28ec9e 2026-09-26 19:22`) |
+| Every page's bottom-left corner | The version and short hash (`Zone 0.5.0 · c28ec9e`, `+dirty` when so) |
 | The `<meta name="generator">` tag | The version |
 | `/api/version` | `{ version, build }` |
 
