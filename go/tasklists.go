@@ -479,6 +479,20 @@ func nameTaken(name string, lists map[string]ListInfo) bool {
 	return own || twin
 }
 
+// sharedNameTaken: a shared list for who (none: everyone) can't be called
+// name: a shared list has the name (reg: the shared registry, the lists for
+// some among them), or a list for some had it, deleted or renamed since,
+// whose folder keeps whom its history is for (forOf: its file marked gone),
+// and a list made there would be for them too, its tasks out of everyone
+// else's sight. A list for the very same people takes it back.
+func sharedNameTaken(reg *taskfiles.Registry, name string, who []string) bool {
+	if reg.Find(name) != nil {
+		return true
+	}
+	kept := taskFiles.ForOfList(name)
+	return len(kept) > 0 && !slices.Equal(kept, who)
+}
+
 // nonEmpty: paths without the empty ones (a file that didn't change).
 func nonEmpty(paths []string) []string {
 	return slices.DeleteFunc(paths, func(p string) bool { return p == "" })
@@ -589,7 +603,7 @@ func createListOp(user asker, name string, private, pin bool, who, suffix string
 	if err != nil {
 		return "", err
 	}
-	if reg.Find(list) != nil {
+	if reg.Find(list) != nil || owner == "" && sharedNameTaken(reg, list, listFor) {
 		return "", refuseAs(refusedExists, "There is a list #"+list+" already")
 	}
 	made := &taskfiles.List{Name: list, Settings: map[string]string{}, Owner: owner}
@@ -750,6 +764,9 @@ func renameListOp(user asker, ref, newName, suffix string, check ...func(pages [
 	entry := regs[l.Owner].Find(l.Name)
 	if entry == nil || regs[l.Owner].Find(name) != nil {
 		return nil, refuseAs(refusedConflict, "The lists have changed since. Reload and try again.")
+	}
+	if !l.Private() && sharedNameTaken(regs[l.Owner], name, l.For) {
+		return nil, refuseAs(refusedExists, "There is a list #"+name+" already")
 	}
 	// How the text of owner o (their pages, their tasks; "" the shared
 	// ones) names the list before and after: o's own list of a name comes
@@ -1049,7 +1066,7 @@ func shareListOp(user asker, ref, suffix string) (string, error) {
 	if entry == nil {
 		return "", refuseAs(refusedConflict, "The lists have changed since. Reload and try again.")
 	}
-	if shared.Find(l.Name) != nil {
+	if sharedNameTaken(shared, l.Name, nil) {
 		return "", refuseAs(refusedExists, "There is a shared list #"+l.Name+" already: rename yours first, or delete it and move its tasks there")
 	}
 	active, closed, err := taskFiles.ReadForWriteLocked(user)

@@ -375,6 +375,33 @@ def test_a_deleted_lists_tasks_go_to_fewer_people_as_any_task_does(client, wiki)
     assert "Carol's job" not in sign_in(client, "bob").get("/api/tasks", headers=HOST).get_data(as_text=True)
 
 
+def test_its_name_stays_taken_once_it_is_gone(client, wiki):
+    """Deleted or renamed, the list leaves its folder with whom its history
+    is for: no shared list takes its name, by New list…, a rename or Make
+    shared…, but one for the very same people."""
+    sign_in(client, "alice")
+    assert client.post("/tasks/delete-list", data={"list": LIST, "to": "team"}, headers=HOST).status_code == 302
+    sign_in(client, "bob")
+    resp = client.post("/tasks/new-list", data={"name": LIST}, headers=HOST)
+    assert "newlist_error=" in resp.headers["Location"] and "already" in resp.headers["Location"]
+    assert "already" in client.post("/api/tasks/lists", json={"name": LIST}, headers=HOST).get_json()["error"]
+    assert client.post("/tasks/new-list", data={"name": "ops"}, headers=HOST).status_code == 302
+    resp = client.post("/tasks/rename-list", data={"list": "ops", "new_name": LIST}, headers=HOST)
+    assert "rename_error=" in resp.headers["Location"]
+    assert client.post("/tasks/new-list", data={"name": LIST, "private": "1"}, headers=HOST).status_code == 302   # his own
+    resp = client.post("/tasks/share-list", data={"list": LIST}, headers=HOST)
+    assert "share_error=" in resp.headers["Location"]
+    assert not (wiki / f"_tasks/lists/{LIST}/tasks.json").exists() or SECRET not in (wiki / f"_tasks/lists/{LIST}/tasks.json").read_text()
+    # alice makes it again for the same people: it is theirs as it was.
+    sign_in(client, "alice")
+    assert client.post("/tasks/new-list", data={"name": LIST, "for": "alice, @hiring"}, headers=HOST).status_code == 302
+    assert json.loads((wiki / f"_tasks/lists/{LIST}/list.json").read_text())["for"] == ["@hiring", "alice"]
+    made = client.post("/api/tasks", json={"title": "Again", "list": LIST}, headers=HOST)
+    assert made.status_code == 201
+    sign_in(client, "bob")
+    assert "Again" not in client.get("/api/tasks", headers=HOST).get_data(as_text=True)
+
+
 def test_a_list_for_some_needs_users_and_is_no_private_list(client, git_wiki_dir, monkeypatch):
     resp = client.post("/tasks/new-list", data={"name": "x", "for": "anna"}, headers=HOST)
     assert "newlist_error=" in resp.headers["Location"]

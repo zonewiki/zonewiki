@@ -1414,6 +1414,7 @@ The For field completes word by word (`js/listsrow.js`, the words in `data-words
 Without the script it offers the groups for the first word.
 
 Its name is taken for everyone: two shared lists can't have one folder, so New list… with that name says "There is a list #hiring already" to who doesn't see it.
+It stays taken once the list is deleted or renamed (`sharedNameTaken` in `go/tasklists.go`): its folder keeps whom its history is for, and a shared list made there, by New list…, a rename or Make shared…, would be for them too, its tasks out of everyone else's sight; only a list for the very same people takes the name back (the list renamed back, or one made for them again).
 That a name is taken is the one thing anyone else can learn.
 
 #### Narrowing a list
@@ -1453,7 +1454,7 @@ What holds every user's tasks (the search index, a task found by its id) asks `c
 An entry of its name in the registry as well (a merge, a hand edit) doesn't make it everyone's list: the folder's file says whom it is for (`withListFiles`).
 A task that names the list but lies in another folder (a file moved by hand, a merge; the next write files it) is left out for anyone else too, by every read that shows tasks (`Store.shows`: open and closed, a year's closed, their count, the years, the news, the export): the folder and the task's own `list` never disagree about who sees it.
 A list narrowed gets its file before it leaves the registry; one for everyone again loses the file and is back in the registry.
-Renamed or deleted, its old folder keeps the file, marked gone (`{"name": "hiring", "for": […], "gone": true}`): no list anymore, and the folder's history is still only its members' to see.
+Renamed or deleted, its old folder keeps the file, marked gone (`{"name": "hiring", "for": […], "gone": true}`): no list anymore, and the folder's history is still only its members' to see, so its name is no other shared list's (Saying whom a list is for).
 
 In search its tasks are a layer of their own, as a group's pages are (`docShared`, `placeOfDoc`, `listsForSome` in `go/retrieval.go`; Who searches what in `docs/spec/search.md`): they are in no index but its members', so their words, counts and lengths take part in no one else's ranking and a typo of a word only the list has suggests nothing to anyone else.
 A list narrowed or widened splits the index again, though no task changed (the lists that are for some are part of what the split goes by, read from their folders at each search: a look per list).
