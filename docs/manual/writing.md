@@ -247,4 +247,6 @@ Links to other websites open in a new tab; links within Zone stay in the same ta
 ### Raw HTML
 
 You can write HTML in a page, and it's shown as written, with limits for safety:
-scripts don't run, forms don't work and show as text, and nothing is loaded from other websites unless the person running your Zone allowed that site.
+scripts and forms show as text, and nothing is loaded from other websites unless the person running your Zone allowed that site.
+An `id` or `name` you give gets `user-content-` in front: a link to `#note` still finds `<a name="note">`, but a `<style>` of your own selects it as `#user-content-note`.
+In a task's description or comment, a `<style>` shows as text ([Raw HTML](../spec/rendering.md#raw-html)).
