@@ -856,6 +856,39 @@ class TestAuthors:
         put = client.put(f"/api/tasks/{task['id']}", json={"comments": [restored["comments"][0], other]}, headers=HOST)
         assert put.get_json()["comments"][1]["by"] == "bob"      # its sender's
 
+    def test_a_comment_seen_as_someones_stays_on_its_task(self, client, users):
+        """Zone has seen alice's comment as hers: that comment, with its text,
+        on its task. Sent to another task, or with other words, by a restore,
+        an import or a whole-list write, it is not hers; nor is a task that
+        comes back under a deleted task's id with other words."""
+        login(client, "alice", "alice-pw")
+        x = self.shared_task(client, title="Pick a caterer")
+        x = client.post(f"/api/tasks/{x['id']}/comments", json={"text": "Fine by me"}, headers=HOST).get_json()
+        [said] = x["comments"]
+        gone = self.shared_task(client, title="Hire Sam")
+        gone = client.post(f"/api/tasks/{gone['id']}/comments", json={"text": "Agreed"}, headers=HOST).get_json()
+        assert client.delete(f"/api/tasks/{gone['id']}", headers=HOST).status_code == 204
+        client.post("/logout", headers=HOST)
+        login(client, "bob", "bob-pw")
+        assert client.put(f"/api/tasks/{x['id']}", json={}, headers=HOST).status_code == 200   # Zone reads X again
+        forged = {**said, "text": "I approve the budget"}
+        snap = {"title": "Budget", "list": "team", "comments": [forged]}
+        [restored] = client.post("/api/tasks/restore", json={"tasks": [snap]}, headers=HOST).get_json()
+        assert "by" not in restored["comments"][0]
+        imported = client.post("/api/tasks/import", json={"file": [{**snap, "title": "Budget 2"}], "list": "team"},
+                               headers=HOST).get_json()["ids"]
+        [budget2] = [t for t in client.get("/api/tasks", headers=HOST).get_json() if t["id"] in imported]
+        assert "by" not in budget2["comments"][0]
+        # Word for word, but on another task: the sender's.
+        y = self.shared_task(client, title="Sign the lease")
+        put = client.put(f"/api/tasks/{y['id']}", json={"comments": [said]}, headers=HOST).get_json()
+        assert put["comments"][0]["by"] == "bob"
+        # The deleted task's id with other words: neither its comment nor its
+        # history is alice's.
+        other = {**gone, "title": "Fire Sam"}
+        [back] = client.post("/api/tasks/restore", json={"tasks": [other]}, headers=HOST).get_json()
+        assert "by" not in back["comments"][0] and all("by" not in e for e in back["history"]), back
+
     def test_an_admins_import_keeps_the_files_names(self, client, users, monkeypatch):
         # A wiki moved or a backup put back: the admin's to do.
         monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}})

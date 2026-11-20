@@ -645,7 +645,7 @@ The dialog's field (optional; `also`) gives the imported tasks a tag too, on top
 
 #### Names in comments and history
 
-With users (`checkBy` in `go/taskby.go`) a non-admin's import keeps their own name on a comment or a history entry and blanks everyone else's (by no one), as the file could say anything, unless Zone has seen that comment or entry under that name since it started (a task deleted and imported back); an admin's keeps the file's names (a wiki moved, a backup put back; Who made a change in `docs/spec/users.md`).
+With users (`checkArrived` in `go/taskby.go`) a non-admin's import keeps their own name on a comment or a history entry and blanks everyone else's (by no one), as the file could say anything, unless Zone has seen that comment, with that text, or that entry under that name on that task since it started, and the task comes back as Zone had it (a task deleted and imported back, its title and description as they were); an admin's keeps the file's names (a wiki moved, a backup put back; Who made a change in `docs/spec/users.md`).
 
 ## Interaction
 

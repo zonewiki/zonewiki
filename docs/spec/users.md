@@ -1478,8 +1478,10 @@ A comment is its author's: only they edit or delete it, and an admin may delete 
 
 `go/taskby.go`: the routes that take comments or history whole (`PUT /api/tasks/<id>` and `batch-update` for an undo, `/api/tasks/restore`, `/api/tasks/import`) get them from the browser, which could say anything.
 A `by` that is the sender's own stays;
-another user's stays only on a comment (by its id) or a history entry (of that task, at that time, with those dates) Zone has seen under that name: it notes them as it deletes a task or a comment and before a request replaces a task's lists (`rememberBy`, in memory, the newest 20 000),
-so the undo that sends them back is believed.
+another user's stays only on a comment (that comment, by its id, with its text, of that task) or a history entry (of that task, at that time, with those dates) Zone has seen under that name: it notes them as it deletes a task or a comment and before a request replaces a task's lists (`rememberBy`, in memory, the newest 20 000),
+so the undo that sends them back is believed, and nothing else: a comment of alice's sent to another task, or with other words, is not hers.
+**A task that comes back from a snapshot** (`/api/tasks/restore`, a non-admin's import: `checkArrived`) keeps another's name only when it comes back as Zone had it (its id, title, description and when it was made, `taskKey`):
+a task deleted for good lends its id to no other task that would carry its people's names.
 Any other name is dropped (`checkBy`: by no one), also an undo after a restart.
 A write that sends a task's comments whole changes only the sender's own: another user's comment must come back as Zone has seen it, and only an admin drops one (`othersCommentsKept`; else 403 "Only its author changes a comment").
 **A history sent for a task that is there** (an undo's) keeps only the entries Zone has had for that task (in its file, or noted before it was replaced; `knownHistory`), and always its `created` entry:

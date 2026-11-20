@@ -431,7 +431,7 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 		if t == nil || existing[t.ID] {
 			continue
 		}
-		checkBy(user.Name, t)
+		checkArrived(user.Name, t)
 		general = placeSnapshot(user, t, snap, lists) || general
 		existing[t.ID] = true
 		if !t.IsOpen() {
@@ -575,7 +575,7 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 		// An admin's import keeps the file's names (a wiki moved, a
 		// backup put back); anyone else's only their own.
 		if !settings().isAdmin(user.Name) {
-			checkBy(user.Name, t)
+			checkArrived(user.Name, t)
 		}
 		existing[t.ID] = true
 		if lost {

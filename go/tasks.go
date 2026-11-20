@@ -275,7 +275,7 @@ func applyText(user asker, t *Task, data jsonObj) error {
 		t.Comments = cleanComments(data["comments"])
 		checkBy(user.Name, t)
 		ownNewComments(user.Name, old, t)
-		if err := othersCommentsKept(user, old, t.Comments); err != nil {
+		if err := othersCommentsKept(user, t.ID, old, t.Comments); err != nil {
 			t.Comments = old
 			return err
 		}

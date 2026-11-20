@@ -2,7 +2,10 @@
 // (docs/spec/users.md, Who made a change): the lists come back whole for an
 // undo (a deleted task restored, a comment's delete undone, an import), and
 // a client could write any name into them. So a name other than the
-// sender's own stays only on what Zone itself has seen under that name.
+// sender's own stays only on what Zone itself has seen under that name: that
+// comment, with that text, on that task; that entry of that task's history;
+// and on a task that comes back (restored, imported) only when it comes back
+// as Zone had it (checkArrived), not as another task under its id.
 package main
 
 import (
@@ -22,10 +25,19 @@ var seenBy struct {
 
 const seenByMax = 20000
 
-func commentKey(c Comment) string { return "c\x00" + c.ID + "\x00" + c.By }
+// commentKey: the comment c of the task id as Zone had it: its id, who
+// wrote it and its text, so neither moves to another task nor says another
+// thing under that name.
+func commentKey(id string, c Comment) string {
+	return "c\x00" + id + "\x00" + c.ID + "\x00" + c.By + "\x00" + c.Text
+}
 
-// commentTextKey: a comment with its text, for othersCommentsKept.
-func commentTextKey(c Comment) string { return "t\x00" + c.ID + "\x00" + c.By + "\x00" + c.Text }
+// taskKey: the task t as Zone had it, what it is to its readers (its id, title,
+// description, when it was made): a snapshot of another task under its id
+// (deleted, its id taken again) is not it (checkArrived).
+func taskKey(t *Task) string {
+	return "k\x00" + t.ID + "\x00" + t.Title + "\x00" + t.Description + "\x00" + t.CreatedAt
+}
 
 // mayChangeComment: with users a comment is its author's: only they edit or
 // delete it (an admin may delete any). One by no one (from before users)
@@ -38,11 +50,12 @@ func mayChangeComment(user asker, c Comment, deleting bool) bool {
 // errNotYourComment: what a change to someone else's comment answers (403).
 var errNotYourComment = refuseAs(refusedReadOnly, "Only its author changes a comment")
 
-// othersCommentsKept: a write that sends a task's comments whole (the undo
-// of a comment's delete or edit) changes only the sender's own: every
-// comment of someone else's was there with that text (in old, or taken out
-// before: rememberBy), and none of theirs is dropped, but by an admin.
-func othersCommentsKept(user asker, old, now []Comment) error {
+// othersCommentsKept: a write that sends the comments of the task id
+// whole (the undo of a comment's delete or edit) changes only the sender's
+// own: every comment of someone else's was there with that text (in old, or
+// taken out of that task before: rememberBy), and none of theirs is
+// dropped, but by an admin.
+func othersCommentsKept(user asker, id string, old, now []Comment) error {
 	if settings().Users == nil {
 		return nil
 	}
@@ -57,7 +70,7 @@ func othersCommentsKept(user asker, old, now []Comment) error {
 			continue
 		}
 		seenBy.Lock()
-		known := seenBy.set[commentTextKey(c)]
+		known := seenBy.set[commentKey(id, c)]
 		seenBy.Unlock()
 		if !known {
 			return errNotYourComment
@@ -98,9 +111,9 @@ func rememberBy(tasks ...*Task) {
 	// Those by no one too: an undo may send them back (knownHistory,
 	// ownNewComments), and nothing else may.
 	for _, t := range tasks {
+		add(taskKey(t))
 		for _, c := range t.Comments {
-			add(commentKey(c))
-			add(commentTextKey(c))
+			add(commentKey(t.ID, c))
 		}
 		for _, e := range t.History {
 			add(historyKey(t.ID, e))
@@ -159,7 +172,7 @@ func ownNewComments(user string, old []Comment, t *Task) {
 	seenBy.Lock()
 	defer seenBy.Unlock()
 	for i, c := range t.Comments {
-		if c.By == "" && !had[c.ID] && !seenBy.set[commentTextKey(c)] {
+		if c.By == "" && !had[c.ID] && !seenBy.set[commentKey(t.ID, c)] {
 			t.Comments[i].By = user
 		}
 	}
@@ -167,21 +180,42 @@ func ownNewComments(user string, old []Comment, t *Task) {
 
 // checkBy: with users, the names in a task's comments and history as
 // user's request sent them. Their own name stays, and another's on a
-// comment (by its id) or a history entry (of this task, at that time)
-// Zone has seen as theirs; any other name is dropped: by no one.
+// comment (of this task, with this text) or a history entry (of this task,
+// at that time) Zone has seen as theirs; any other name is dropped: by no
+// one.
 func checkBy(user string, t *Task) {
 	if settings().Users == nil {
 		return
 	}
 	seenBy.Lock()
 	defer seenBy.Unlock()
+	checkByLocked(user, t, true)
+}
+
+// checkArrived: checkBy for a task that comes back from a snapshot (an
+// undo's restore, an import), which may be any task under any id: names
+// other than user's stay only when it comes back as Zone had it (taskKey),
+// so a task deleted for good lends its id to no other task that would carry
+// its people's names.
+func checkArrived(user string, t *Task) {
+	if settings().Users == nil {
+		return
+	}
+	seenBy.Lock()
+	defer seenBy.Unlock()
+	checkByLocked(user, t, seenBy.set[taskKey(t)])
+}
+
+// checkByLocked: checkBy (seenBy locked); known false: Zone believes no
+// other name on t.
+func checkByLocked(user string, t *Task, known bool) {
 	for i, c := range t.Comments {
-		if c.By != "" && c.By != user && !seenBy.set[commentKey(c)] {
+		if c.By != "" && c.By != user && (!known || !seenBy.set[commentKey(t.ID, c)]) {
 			t.Comments[i].By = ""
 		}
 	}
 	for i, e := range t.History {
-		if e.By != "" && e.By != user && !seenBy.set[historyKey(t.ID, e)] {
+		if e.By != "" && e.By != user && (!known || !seenBy.set[historyKey(t.ID, e)]) {
 			t.History[i].By = ""
 		}
 	}
