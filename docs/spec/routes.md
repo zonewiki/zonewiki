@@ -316,12 +316,12 @@ Snapshots keep their original id/created_at/completion state, as far as those ar
 | Body | What it does |
 |------|--------------|
 | `{ mine: true, order: [ids] }` | Keeps the order as the user's own of My tasks and writes no task (204) |
-| `{ moves: [{id, after, before}] }` | Places each task between the two named, in the order the server has (what a list sends; Sections in `docs/spec/tasks.md`) |
+| `{ moves: [{id, after, before}] }` | Places each task between the two named, in the order the server has (what a list sends; The manual order in `docs/spec/tasks.md`) |
 | `{ order: [id1, id2, …] }` | Densely renumbers the given ids' `sort_order` to `0..n-1` |
-| `{ updates: [{ id, sort_order }, …] }` | Sets specific ids to specific (possibly fractional) values without touching any other task; a `null` value clears the field, taking the task out of the manual order |
+| `{ updates: [{ id, sort_order }, …] }` | Sets specific ids to specific (possibly fractional) values without touching any other task; a `null` value clears the field, leaving the task without a place (shown on top until a move places it) |
 
-The last two, as before, update `sort_order`, a list's manual order (Open's and Today's Sorted), and both may be sent together.
-Open and Today always send the whole order as `order`, tasks they don't show included (see Sections).
+The last two, as before, update `sort_order`, a list's manual order (Open's and Today's list), and both may be sent together; a task without a place is placed on top before `moves` are (`placeUnplaced`).
+Open, Today and the Plan board send `moves`; My tasks sends its whole order with `mine` (My tasks' own order in `docs/spec/tasks.md`).
 
 ### The due count
 

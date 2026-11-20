@@ -104,10 +104,11 @@ def test_view_tabs_segmented_control(page, wiki):
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Open"])
     expect(plan).to_have_attribute("aria-pressed", "true")
     expect(page.locator(".board-day-divider[data-drop-day]").first).to_be_visible()
-    # List: one list, Unsorted · Sorted; d goes back and forth.
+    # List: one list, the manual order; d goes back and forth.
     as_list.click()
     expect(plan).to_have_attribute("aria-pressed", "false")
-    expect(page.locator(".list-section[data-section='unsorted']")).to_be_visible()
+    expect(page.locator(".board-day-divider")).to_have_count(0)
+    expect(page.locator(".tasks-list > .task-item").first).to_be_visible()
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Open"])
     page.keyboard.press("d")
     expect(plan).to_have_attribute("aria-pressed", "true")
@@ -192,7 +193,7 @@ def test_tasks_link_counts_the_due_tasks_and_opens_focus(page, wiki):
     expect(page).to_have_url(re.compile(r"/tasks$"))
     expect(page.locator("#tasks-tabs .active")).to_have_text(["Today"])
     expect(page.locator(".task-inbox-divider--only")).to_have_count(0)   # no Due section
-    # All in Unsorted, in Open's order (newest first).
+    # In Open's order (newest first).
     expect(_focus_titles(page)).to_have_text(["Started, due later", "Started", "Due today", "Overdue"])
     expect(card(page, "Overdue")).to_have_class(re.compile(r"\btask-urg-overdue\b"))
     expect(card(page, "Due today")).to_have_class(re.compile(r"\btask-urg-today\b"))
@@ -833,25 +834,6 @@ def test_a_long_list_of_every_task_loads_again_every_five_minutes(page, wiki):
     expect(card(page, "Added elsewhere")).to_be_visible()
 
 
-def test_a_board_section_of_only_unsorted_tasks_has_no_labels(page, wiki):
-    """Unsorted and Sorted are labelled in a section that holds both; where
-    nothing is ranked yet (a team's list nobody ordered) the label would say
-    nothing, in every section. The cards are hollow all the same."""
-    ids = [page.request.post("/api/tasks", data={"title": t}).json()["id"] for t in ("One", "Two")]
-    page.goto("/tasks?view=open&group=day")
-    expect(card(page, "Two")).to_be_visible()
-    expect(page.locator(".plan-subdivider")).to_have_count(0)
-    expect(card(page, "One")).to_have_class(re.compile(r"\btask-inbox\b"))
-    page.request.post("/api/tasks/reorder", data={"order": ids[:1]})
-    page.reload()
-    expect(card(page, "Two")).to_be_visible()
-    expect(page.locator(".plan-subdivider")).to_have_text(["Unsorted1", "Sorted1"])
-    page.request.post("/api/tasks/reorder", data={"order": ids})
-    page.reload()
-    expect(card(page, "Two")).to_be_visible()
-    expect(page.locator(".plan-subdivider")).to_have_count(0)
-
-
 def test_a_closed_task_is_deleted_for_good_from_its_menu(page, wiki):
     """Delete for good… in a closed task's menu asks first and then takes
     the task out of the wiki; an open task has no such entry (Won't do
@@ -925,7 +907,7 @@ def test_a_link_names_the_tab_and_how_open_shows_its_tasks(page, wiki):
     page.goto("/tasks?view=open&group=none")
     expect(active).to_have_text(["Open"])
     expect(pressed).to_have_text(["List"])
-    expect(page.locator(".list-section[data-section]")).to_have_count(2)
+    expect(page.locator(".board-day-divider")).to_have_count(0)
     page.goto("/tasks?view=today")
     expect(active).to_have_text(["Today"])
     for old in ("focus", "plan", "week"):
@@ -2130,17 +2112,9 @@ def test_focus_is_open_filtered(page, wiki):
     page.request.post("/api/tasks/reorder", data={"order": list(reversed(ids))})
     page.request.post("/api/tasks", data={"title": "Unordered", "start_date": today})
     page.goto("/tasks?view=today")
-    # Open's sections and order, without the task planned later.
-    expect(_section(page, "unsorted")).to_have_text(re.compile("Unsorted"))
-    expect(_section(page, "sorted")).to_have_text(re.compile("Sorted"))
-    expect(_section(page, "lineup")).to_have_count(0)
-    expect(_section(page, "others")).to_have_count(0)
-    assert _open_titles(page, "unsorted") == ["Unordered"]
-    assert _open_titles(page, "sorted") == ["Charlie", "Bravo", "Alpha"]
-
-
-def _section(page, zone):
-    return page.locator(f".list-section[data-section='{zone}']")
+    # Open's order, without the task planned later; the new one on top.
+    assert _open_titles(page) == ["Unordered", "Charlie", "Bravo", "Alpha"]
+    expect(page.locator(".tasks-list .plan-subdivider")).to_have_count(0)
 
 
 def test_focus_drag_sorts_into_open_order(page, wiki):
@@ -2173,14 +2147,9 @@ def test_focus_drag_sorts_into_open_order(page, wiki):
     wait_until(page, lambda: _by_order(page, "sort_order") ==
                ["Eggs", "Apples", "Butter", "Bread", "Cheese", "Dates"])
 
-    # Onto the Unsorted heading: out of the order again.
-    card(page, "Butter").drag_to(_section(page, "unsorted"))
-    wait_for_field(page, "Butter", "sort_order", None)
-    expect(_focus_titles(page)).to_have_text(["Butter", "Eggs", "Apples", "Cheese"])
-
     # Open shows the same order.
     open_tab(page, "open")
-    assert _open_titles(page, "sorted") == ["Eggs", "Apples", "Bread", "Cheese", "Dates"]
+    assert _open_titles(page) == ["Eggs", "Apples", "Butter", "Bread", "Cheese", "Dates"]
 
 
 def _day_titles(page, day):
@@ -2208,21 +2177,13 @@ def test_board_reorders_a_day_in_open_order(page, wiki):
     assert _day_titles(page, today) == ["Newbie", "Alpha", "Bravo", "Charlie"]
 
     _drop(card(page, "Charlie"), card(page, "Alpha"), "before")
-    wait_until(page, lambda: _by_order(page, "sort_order") == ["Charlie", "Alpha", "Elsewhere", "Bravo"])
+    wait_until(page, lambda: _by_order(page, "sort_order") == ["Newbie", "Charlie", "Alpha", "Elsewhere", "Bravo"])
     assert _day_titles(page, today) == ["Newbie", "Charlie", "Alpha", "Bravo"]
-    assert task_by_title(page, "Newbie")["sort_order"] is None   # above it: stays Unsorted
-
-    # As on Open: dropped among the Unsorted tasks, a task leaves the order
-    # (Unsorted is newest first), and no other task is ranked by it.
+    # To the top of the day: before the new task, which stays where it was.
     _drop(card(page, "Bravo"), card(page, "Newbie"), "before")
-    wait_until(page, lambda: task_by_title(page, "Bravo")["sort_order"] is None)
-    assert _by_order(page, "sort_order") == ["Charlie", "Alpha", "Elsewhere"]
-    assert task_by_title(page, "Newbie")["sort_order"] is None
-    assert _day_titles(page, today) == ["Newbie", "Bravo", "Charlie", "Alpha"]
-    # Dropped on the Sorted label: first among the sorted ones.
-    card(page, "Newbie").drag_to(page.locator(f'.board-day-divider[data-drop-day="{today}"] ~ .plan-subdivider[data-sub="sorted"]').first)
-    wait_until(page, lambda: _by_order(page, "sort_order") == ["Newbie", "Charlie", "Alpha", "Elsewhere"])
+    wait_until(page, lambda: _by_order(page, "sort_order") == ["Bravo", "Newbie", "Charlie", "Alpha", "Elsewhere"])
     assert _day_titles(page, today) == ["Bravo", "Newbie", "Charlie", "Alpha"]
+    expect(page.locator(".plan-subdivider")).to_have_count(0)
 
 
 def test_board_drop_on_a_card_of_another_day_starts_and_places_it(page, wiki):
@@ -2256,16 +2217,16 @@ def test_board_keyboard_reorders_within_a_day_only(page, wiki):
     page.wait_for_timeout(300)
     assert writes == []
     assert task_by_title(page, "Alpha")["start_date"] == today
-    # First of its day, up: into Unsorted, as on Open, still on its day.
+    # First of its day: it doesn't leave it upwards either.
     card(page, "Bravo").click()
     page.keyboard.press("Control+Shift+ArrowUp")
-    wait_until(page, lambda: task_by_title(page, "Bravo")["sort_order"] is None)
-    assert task_by_title(page, "Bravo")["start_date"] == today
+    page.wait_for_timeout(300)
+    assert writes == []
     assert _day_titles(page, today) == ["Bravo", "Alpha"]
 
 
 def _unplanned_rows(page):
-    """Unplanned's labels ('# Unsorted') and card titles, top to bottom."""
+    """Unplanned's rows top to bottom: card titles, and any label ('# …')."""
     return page.evaluate("""() => {
         const out = [];
         let li = document.querySelector('.board-day-divider[data-drop-bucket="unplanned"]')?.nextElementSibling;
@@ -2276,7 +2237,7 @@ def _unplanned_rows(page):
     }""")
 
 
-def test_board_labels_unsorted_in_every_section_that_has_some(page, wiki):
+def test_board_sections_are_their_share_of_the_order_without_labels(page, wiki):
     today = date.today().isoformat()
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
     ranked = page.request.post("/api/tasks", data={"title": "Ranked", "start_date": today}).json()["id"]
@@ -2295,33 +2256,26 @@ def test_board_labels_unsorted_in_every_section_that_has_some(page, wiki):
                    : '# ' + li.firstElementChild.textContent.trim());
         return out;
     }""", day)
-    assert rows(today) == ["# Unsorted", "Added today", "# Sorted", "Ranked"]
-    # Nothing unsorted: no labels.
+    # The new task on top, as everywhere; no labels in a section.
+    assert rows(today) == ["Added today", "Ranked"]
     assert rows(tomorrow) == ["Tomorrow ranked"]
 
 
-def test_board_unplanned_shows_unsorted_apart_and_reorders(page, wiki):
+def test_board_unplanned_reorders(page, wiki):
     page.set_viewport_size({"width": 1280, "height": 1400})
     ids = [page.request.post("/api/tasks", data={"title": t}).json()["id"] for t in ("Alpha", "Bravo")]
     page.request.post("/api/tasks/reorder", data={"order": ids})
     page.request.post("/api/tasks", data={"title": "Fresh"})
     page.goto("/tasks?view=open&group=day")
     expect(card(page, "Fresh")).to_be_visible()
-    assert _unplanned_rows(page) == ["# Unsorted", "Fresh", "# Sorted", "Alpha", "Bravo"]
-    # Unsorted cards are hollow, as on Open and Focus; Sorted ones aren't.
-    expect(card(page, "Fresh")).to_have_class(re.compile(r"\btask-inbox\b"))
-    expect(card(page, "Alpha")).not_to_have_class(re.compile(r"\btask-inbox\b"))
-    # A drop within Sorted reorders it.
+    assert _unplanned_rows(page) == ["Fresh", "Alpha", "Bravo"]
     _drop(card(page, "Bravo"), card(page, "Alpha"), "before")
-    wait_until(page, lambda: _unplanned_rows(page) == ["# Unsorted", "Fresh", "# Sorted", "Bravo", "Alpha"])
-    # An Unsorted task dropped among the sorted ones is sorted there; no
-    # Unsorted left, no labels.
+    wait_until(page, lambda: _unplanned_rows(page) == ["Fresh", "Bravo", "Alpha"])
     _drop(card(page, "Fresh"), card(page, "Bravo"), "after")
     wait_until(page, lambda: _unplanned_rows(page) == ["Bravo", "Fresh", "Alpha"])
     page.reload()
     expect(card(page, "Fresh")).to_be_visible()
     assert _unplanned_rows(page) == ["Bravo", "Fresh", "Alpha"]
-    expect(card(page, "Fresh")).not_to_have_class(re.compile(r"\btask-inbox\b"))
     # Sorted by deadline (or creation), no labels and no reordering.
     page.locator("select.tasks-sort").select_option("due")
     expect(page.locator(".plan-subdivider")).to_have_count(0)
@@ -2365,32 +2319,24 @@ def test_focus_follows_open_order(page, wiki):
     expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha"])
 
 
-def test_focus_keyboard_crosses_the_sections(page, wiki):
+def test_focus_keyboard_moves_among_what_it_shows(page, wiki):
     today = date.today().isoformat()
-    page.request.post("/api/tasks", data={"title": "Deadline", "due_date": today})
-    ids = [page.request.post("/api/tasks", data={"title": t, "start_date": t2}).json()["id"]
-           for t, t2 in (("Bravo", today), ("Hidden", None), ("Alpha", today))]
+    ids = [page.request.post("/api/tasks", data={"title": t, "due_date" if t == "Deadline" else "start_date": t2}).json()["id"]
+           for t, t2 in (("Deadline", today), ("Bravo", today), ("Hidden", None), ("Alpha", today))]
     page.request.post("/api/tasks/reorder", data={"order": ids})
     page.goto("/tasks?view=today")
-    # Unsorted (the due task) above Sorted.
     expect(_focus_titles(page)).to_have_text(["Deadline", "Bravo", "Alpha"])
-    # Unsorted can't be reordered: ↑ does nothing, ↓ sorts the task in at the
-    # top of Sorted.
+    # ↑ on the first does nothing; ↓ moves one place.
     card(page, "Deadline").click()
     page.keyboard.press("Control+Shift+ArrowUp")
     expect(_focus_titles(page)).to_have_text(["Deadline", "Bravo", "Alpha"])
     page.keyboard.press("Control+Shift+ArrowDown")
-    wait_until(page, lambda: _by_order(page, "sort_order") == ["Deadline", "Bravo", "Hidden", "Alpha"])
-    expect(_section(page, "unsorted")).to_have_class(re.compile(r"\bboard-day--empty\b"))
-    # ↓ within Sorted: after Alpha, past the hidden task.
-    card(page, "Bravo").click()
+    expect(_focus_titles(page)).to_have_text(["Bravo", "Deadline", "Alpha"])
+    wait_until(page, lambda: _by_order(page, "sort_order") == ["Bravo", "Deadline", "Hidden", "Alpha"])
+    # ↓ again: after Alpha, past the task Today doesn't show.
     page.keyboard.press("Control+Shift+ArrowDown")
-    expect(_focus_titles(page)).to_have_text(["Deadline", "Alpha", "Bravo"])
-    wait_until(page, lambda: _by_order(page, "sort_order") == ["Deadline", "Hidden", "Alpha", "Bravo"])
-    # ↑ on the first sorted task takes it back to Unsorted.
-    card(page, "Deadline").click()
-    page.keyboard.press("Control+Shift+ArrowUp")
-    wait_for_field(page, "Deadline", "sort_order", None)
+    expect(_focus_titles(page)).to_have_text(["Bravo", "Alpha", "Deadline"])
+    wait_until(page, lambda: _by_order(page, "sort_order") == ["Bravo", "Hidden", "Alpha", "Deadline"])
 
 
 def test_focus_limit_is_off_unless_set(page, wiki):
@@ -2419,7 +2365,7 @@ def test_focus_limit_is_off_unless_set(page, wiki):
     expect(page.locator(".today-over-limit")).to_contain_text("(limit: 5)")
 
 
-def test_task_added_on_focus_lands_in_unsorted(page, wiki):
+def test_task_added_on_focus_is_on_top(page, wiki):
     today = date.today().isoformat()
     ids = [page.request.post("/api/tasks", data={"title": t, "start_date": today}).json()["id"]
            for t in ("Alpha", "Bravo")]
@@ -2430,7 +2376,8 @@ def test_task_added_on_focus_lands_in_unsorted(page, wiki):
     page.locator("#task-edit-modal").get_by_role("button", name="Save").click()
     expect(_focus_titles(page)).to_have_text(["Added now", "Alpha", "Bravo"])
     page.reload()
-    assert _open_titles(page, "unsorted") == ["Added now"]
+    assert _open_titles(page) == ["Added now", "Alpha", "Bravo"]
+    assert _by_order(page, "sort_order") == ["Added now", "Alpha", "Bravo"]
 
 
 def test_new_task_is_selected_and_scrolled_into_view(page, wiki):
@@ -2449,28 +2396,25 @@ def test_new_task_is_selected_and_scrolled_into_view(page, wiki):
     expect(page.locator(".task-item.task-selected")).to_have_count(1)
 
 
-def _open_titles(page, zone):
-    """Titles of the tasks in one Open section, in order."""
-    page.wait_for_selector(f".list-section[data-section='{zone}']")
-    return page.evaluate(f"""() => {{
-      const out = []; let el = document.querySelector(".list-section[data-section='{zone}']");
-      while ((el = el.nextElementSibling) && el.classList.contains('task-item'))
-        out.push(el.querySelector('.task-title').textContent);
-      return out; }}""")
+def _open_titles(page):
+    """Titles of the list's tasks (not Updates'), top to bottom."""
+    page.wait_for_selector(".tasks-list > .task-item")
+    return page.evaluate("""() => [...document.querySelectorAll('.tasks-list > .task-item:not(.task-update)')]
+      .map(el => el.querySelector('.task-title').textContent)""")
 
 
-def test_open_has_unsorted_and_sorted_sections(page, wiki):
+def test_open_is_one_list_with_new_tasks_on_top(page, wiki):
     ids = [page.request.post("/api/tasks", data={"title": t}).json()["id"] for t in ("Alpha", "Bravo")]
     page.request.post("/api/tasks/reorder", data={"order": ids})
     for t in ("Old new", "Fresh"):
         page.request.post("/api/tasks", data={"title": t})
     page.request.post("/api/tasks", data={"title": "Overdue", "due_date": "2020-01-01"})
     page.goto("/tasks?view=open&group=none")
-    expect(_section(page, "unsorted")).to_have_text(re.compile("Unsorted"))
-    expect(_section(page, "sorted")).to_have_text(re.compile("Sorted"))
-    # Unsorted: newest first. No Due section on Open: a due task sits in its section.
-    assert _open_titles(page, "unsorted") == ["Overdue", "Fresh", "Old new"]
-    assert _open_titles(page, "sorted") == ["Alpha", "Bravo"]
+    # One manual order, no sections: a new task on top, newest first. No Due
+    # section either: a due task sits where the order puts it.
+    assert _open_titles(page) == ["Overdue", "Fresh", "Old new", "Alpha", "Bravo"]
+    expect(page.locator(".tasks-list .plan-subdivider")).to_have_count(0)
+    expect(page.locator(".task-item.task-inbox")).to_have_count(0)
     # No "Move to New" checkbox.
     card(page, "Alpha").dblclick()
     expect(page.locator("#task-edit-modal")).to_be_visible()
@@ -2500,77 +2444,65 @@ def _drop(source, target, side):
                                             "y": box["height"] * (0.25 if side == "before" else 0.75)})
 
 
-def test_open_drag_between_unsorted_and_sorted(page, wiki):
+def test_open_drag_places_a_task_and_writes_no_other(page, wiki):
     page.set_viewport_size({"width": 1000, "height": 1200})
     ids = [page.request.post("/api/tasks", data={"title": t}).json()["id"] for t in ("Alpha", "Bravo")]
     page.request.post("/api/tasks/reorder", data={"order": ids})
     for t in ("One", "Two"):
         page.request.post("/api/tasks", data={"title": t})
     page.goto("/tasks?view=open&group=none")
-    assert _open_titles(page, "unsorted") == ["Two", "One"]
-    # Within Unsorted nothing moves (newest first).
-    card(page, "Two").drag_to(card(page, "One"))
-    assert _open_titles(page, "unsorted") == ["Two", "One"]
-    # Onto a sorted task: where the pointer is, here its lower half, so after it.
+    assert _open_titles(page) == ["Two", "One", "Alpha", "Bravo"]
+    before = {t["title"]: t["sort_order"] for t in page.request.get("/api/tasks").json()}
+    # Onto a task: where the pointer is, here its lower half, so after it.
     _drop(card(page, "One"), card(page, "Alpha"), "after")
-    wait_until(page, lambda: _open_titles(page, "sorted") == ["Alpha", "One", "Bravo"])
-    # (The numbers are whatever places them so: a move writes the moved task alone.)
-    wait_until(page, lambda: _by_order(page, "sort_order") == ["Alpha", "One", "Bravo"])
-    assert task_by_title(page, "Two")["sort_order"] is None
-    # Onto the Sorted heading: first in Sorted.
-    card(page, "Two").drag_to(_section(page, "sorted"))
+    wait_until(page, lambda: _open_titles(page) == ["Two", "Alpha", "One", "Bravo"])
     wait_until(page, lambda: _by_order(page, "sort_order") == ["Two", "Alpha", "One", "Bravo"])
-    expect(_section(page, "unsorted")).to_have_class(re.compile(r"\bboard-day--empty\b"))
-    # A sorted task onto the Sorted heading (from below) or the Unsorted
-    # heading goes back to Unsorted.
-    card(page, "Bravo").drag_to(_section(page, "sorted"))
-    wait_for_field(page, "Bravo", "sort_order", None)
-    card(page, "Alpha").drag_to(_section(page, "unsorted"))
-    wait_for_field(page, "Alpha", "sort_order", None)
-    assert _open_titles(page, "sorted") == ["Two", "One"]
-    assert [t["title"] for t in sorted(
-        (t for t in page.request.get("/api/tasks").json() if t["sort_order"] is not None),
-        key=lambda t: t["sort_order"])] == ["Two", "One"]
+    # (The number is whatever places it so: a move writes the moved task alone.)
+    after = {t["title"]: t["sort_order"] for t in page.request.get("/api/tasks").json()}
+    assert {t for t in after if after[t] != before[t]} == {"One"}
+    # Up to the top, onto the first task's upper half.
+    _drop(card(page, "Bravo"), card(page, "Two"), "before")
+    wait_until(page, lambda: _by_order(page, "sort_order") == ["Bravo", "Two", "Alpha", "One"])
+    assert _open_titles(page) == ["Bravo", "Two", "Alpha", "One"]
 
 
 def test_drop_lands_where_the_pointer_is_from_anywhere(page, wiki):
-    # Regression: a task from Unsorted landed after the task dropped on,
-    # one from within Sorted (moving up) before it. Now the pointer decides,
-    # the same from either section: upper half before, lower half after.
+    # Regression: a new task landed after the task dropped on, one from
+    # within the order (moving up) before it. Now the pointer decides, the
+    # same from anywhere: upper half before, lower half after.
     page.set_viewport_size({"width": 1000, "height": 1200})
     ids = [page.request.post("/api/tasks", data={"title": t}).json()["id"] for t in ("Alpha", "Bravo", "Charlie")]
     page.request.post("/api/tasks/reorder", data={"order": ids})
     page.request.post("/api/tasks", data={"title": "New"})
     page.goto("/tasks?view=open&group=none")
-    _drop(card(page, "New"), card(page, "Bravo"), "before")          # from Unsorted
-    wait_until(page, lambda: _open_titles(page, "sorted") == ["Alpha", "New", "Bravo", "Charlie"])
-    _drop(card(page, "Charlie"), card(page, "Alpha"), "before")      # within Sorted, up
-    wait_until(page, lambda: _open_titles(page, "sorted") == ["Charlie", "Alpha", "New", "Bravo"])
-    _drop(card(page, "Charlie"), card(page, "New"), "after")         # within Sorted, down
-    wait_until(page, lambda: _open_titles(page, "sorted") == ["Alpha", "New", "Charlie", "Bravo"])
-    _drop(card(page, "Bravo"), card(page, "Alpha"), "after")         # within Sorted, up
-    wait_until(page, lambda: _open_titles(page, "sorted") == ["Alpha", "Bravo", "New", "Charlie"])
+    assert _open_titles(page) == ["New", "Alpha", "Bravo", "Charlie"]
+    _drop(card(page, "New"), card(page, "Bravo"), "before")          # down
+    wait_until(page, lambda: _open_titles(page) == ["Alpha", "New", "Bravo", "Charlie"])
+    _drop(card(page, "Charlie"), card(page, "Alpha"), "before")      # up
+    wait_until(page, lambda: _open_titles(page) == ["Charlie", "Alpha", "New", "Bravo"])
+    _drop(card(page, "Charlie"), card(page, "New"), "after")         # down
+    wait_until(page, lambda: _open_titles(page) == ["Alpha", "New", "Charlie", "Bravo"])
+    _drop(card(page, "Bravo"), card(page, "Alpha"), "after")         # up
+    wait_until(page, lambda: _open_titles(page) == ["Alpha", "Bravo", "New", "Charlie"])
     wait_until(page, lambda: _by_order(page, "sort_order") == ["Alpha", "Bravo", "New", "Charlie"])
 
 
-def test_open_keyboard_crosses_the_sections(page, wiki):
+def test_open_keyboard_moves_a_task_one_place(page, wiki):
     ids = [page.request.post("/api/tasks", data={"title": t}).json()["id"] for t in ("Alpha", "Bravo")]
     page.request.post("/api/tasks/reorder", data={"order": ids})
     for t in ("One", "Two"):
         page.request.post("/api/tasks", data={"title": t})
     page.goto("/tasks?view=open&group=none")
-    # ↓ on any unsorted task (not just the last) puts it first in Sorted.
     card(page, "Two").click()
     page.keyboard.press("Control+Shift+ArrowDown")
-    wait_until(page, lambda: _by_order(page, "sort_order") == ["Two", "Alpha", "Bravo"])
-    assert _open_titles(page, "sorted") == ["Two", "Alpha", "Bravo"]
-    # ↑ on the first sorted task sends it back to Unsorted.
+    wait_until(page, lambda: _by_order(page, "sort_order") == ["One", "Two", "Alpha", "Bravo"])
+    assert _open_titles(page) == ["One", "Two", "Alpha", "Bravo"]
     page.keyboard.press("Control+Shift+ArrowUp")
-    wait_for_field(page, "Two", "sort_order", None)
-    # ↑ within Unsorted does nothing.
-    card(page, "One").click()
+    wait_until(page, lambda: _by_order(page, "sort_order") == ["Two", "One", "Alpha", "Bravo"])
+    # ↑ on the first task does nothing.
     page.keyboard.press("Control+Shift+ArrowUp")
-    assert _open_titles(page, "unsorted") == ["Two", "One"]
+    assert _open_titles(page) == ["Two", "One", "Alpha", "Bravo"]
+    assert _by_order(page, "sort_order") == ["Two", "One", "Alpha", "Bravo"]
 
 
 def test_open_reorder_under_a_filter_keeps_hidden_tasks_in_place(page, wiki):
@@ -2578,9 +2510,9 @@ def test_open_reorder_under_a_filter_keeps_hidden_tasks_in_place(page, wiki):
            for t, tags in (("A1", "a"), ("B1", "b"), ("A2", "a"), ("B2", "b"))]
     page.request.post("/api/tasks/reorder", data={"order": ids})
     page.goto("/tasks?view=open&group=none&tag=a")
-    assert _open_titles(page, "sorted") == ["A1", "A2"]
-    card(page, "A2").drag_to(card(page, "A1"))
-    wait_until(page, lambda: _open_titles(page, "sorted") == ["A2", "A1"])
+    assert _open_titles(page) == ["A1", "A2"]
+    _drop(card(page, "A2"), card(page, "A1"), "before")
+    wait_until(page, lambda: _open_titles(page) == ["A2", "A1"])
     # Only the dragged task moves (right before A1); A1 doesn't jump past B1.
     wait_until(page, lambda: _by_order(page, "sort_order") == ["A2", "A1", "B1", "B2"])
 
@@ -3639,15 +3571,15 @@ def test_planned_tasks_are_marked_on_every_tab(page, wiki):
 
 
 def test_due_colour_is_the_same_on_every_tab(page, wiki):
-    # Regression: Open's Unsorted cards had a grey background that painted
-    # over the deadline colour, so a task due today looked different on Open
-    # than on Focus.
+    # Regression: Open's new cards had a grey background that painted over
+    # the deadline colour, so a task due today looked different on Open than
+    # on Focus.
     today = date.today().isoformat()
     page.request.post("/api/tasks", data={"title": "Due now", "due_date": today, "start_date": today})
     page.goto("/tasks?view=open&group=none")
     looks = lambda: card(page, "Due now").evaluate(
         "el => { const s = getComputedStyle(el); return [s.backgroundColor, s.borderTopColor]; }")
-    expect(card(page, "Due now")).to_have_class(re.compile(r"\btask-inbox\b"))   # in Unsorted
+    expect(card(page, "Due now")).to_be_visible()
     on_open = looks()
     for tab in ("focus", "plan"):
         open_tab(page, tab)
@@ -3656,18 +3588,17 @@ def test_due_colour_is_the_same_on_every_tab(page, wiki):
 
 
 def test_due_date_does_not_affect_order(page, wiki):
-    # A deadline marks a task (its colour), it never moves it: Open's Unsorted
-    # stays newest first, Sorted stays in its order, on Open and on Focus.
+    # A deadline marks a task (its colour), it never moves it: the manual
+    # order stays as it is, on Open and on Focus.
     today = date.today().isoformat()
     page.request.post("/api/tasks", data={"title": "Old, due", "due_date": "2020-01-01", "start_date": today})
     page.request.post("/api/tasks", data={"title": "New", "start_date": today})
-    ids = [page.request.post("/api/tasks", data={"title": t, "start_date": today,
-                                                "due_date": due}).json()["id"]
-           for t, due in (("Ranked first", None), ("Ranked second, due", today))]
-    page.request.post("/api/tasks/reorder", data={"order": ids})
+    for t, due in (("Ranked first", None), ("Ranked second, due", today)):
+        page.request.post("/api/tasks", data={"title": t, "start_date": today, "due_date": due})
+    ids = {t["title"]: t["id"] for t in page.request.get("/api/tasks").json()}
+    page.request.post("/api/tasks/reorder", data={"order": [ids[t] for t in ("New", "Old, due", "Ranked first", "Ranked second, due")]})
     page.goto("/tasks?view=open&group=none")
-    assert _open_titles(page, "unsorted") == ["New", "Old, due"]
-    assert _open_titles(page, "sorted") == ["Ranked first", "Ranked second, due"]
+    assert _open_titles(page) == ["New", "Old, due", "Ranked first", "Ranked second, due"]
     open_tab(page, "focus")
     expect(_focus_titles(page)).to_have_text(["New", "Old, due", "Ranked first", "Ranked second, due"])
 
@@ -5153,7 +5084,7 @@ def test_open_sorts_by_deadline_then_created_and_remembers_it(page, wiki):
     # o goes on to the manual order.
     page.keyboard.press("o")
     expect(sel).to_have_value("manual")
-    assert _list_rows(page)[0] == "# Unsorted"
+    assert _list_rows(page) == ["Fresh", "Plain", "Later due", "Soon due"]   # one list, a new task on top
 
 
 def test_open_by_deadline_does_not_reorder(page, wiki):
@@ -5696,7 +5627,6 @@ def test_a_long_section_draws_its_top_and_shows_the_rest_on_request(page, wiki):
     tasks = _many_tasks(wiki, 230)
     page.goto("/tasks?view=open&group=none")
     expect(page.locator(".task-item")).to_have_count(200)
-    expect(page.locator(".list-section[data-section=unsorted] .board-day-count")).to_have_text("230")
     more = page.locator("[data-draw-more]")
     expect(more).to_have_text("Show 30 more")
     expect(card(page, "Task 229")).to_be_visible()          # newest first

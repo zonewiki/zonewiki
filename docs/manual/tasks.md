@@ -52,6 +52,7 @@ A keep task can't repeat: both say what happens after done.
 - Your assistant can make tasks too (see [AI assistants](assistants.md)).
 
 The dialog says under the title where the task goes, and with several users who will see it ("Adds to your Inbox: only you see it.").
+A new task goes on top of the list, where you see it; drag it (or press **Ctrl+Shift+↓**) to where it belongs.
 
 ### Quick-add
 
@@ -92,7 +93,7 @@ The control next to the tabs (or **d**) picks how the tasks are grouped:
 
 | Choice | Shows | Dragging a card onto a section |
 |--------|-------|-------------------------------|
-| **List** | One list: **Unsorted** (new tasks, newest first) above **Sorted** (your order) | ranks it |
+| **List** | One list in your order, a new task on top | puts it there in the order |
 | **Plan** | A board by start date: Unplanned, Today, Tomorrow, the next days, Later (Open tab only) | sets its start date |
 | **By person** | A section per assignee: Unassigned, You, then everyone else (with several users) | assigns it |
 | **By list** | A section per list, the Inbox first (where a view holds several lists) | moves it to that list |

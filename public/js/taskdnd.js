@@ -11,14 +11,12 @@ const { st } = app;
 // (attached once at init) re-plan the task to the section it's dropped on.
 // A drop on a card in a section (`data-ordered`) lands above or below it,
 // as on Open: on another day it also starts the task there (another
-// person's section assigns it, another list's moves it: dropWrite). A drop on a
-// section's Sorted label puts it first among the sorted ones, as Open's
-// Sorted heading does. Elsewhere a drop on a card is a drop on its section.
+// person's section assigns it, another list's moves it: dropWrite).
+// Elsewhere a drop on a card is a drop on its section.
 const orderedCard = item => !!app.boardDivider(item)?.dataset.ordered;
 function setupBoardDragAndDrop() {
   async function executeBoardItemDrop(target, side) {
-    const label = !target.classList.contains('task-item');   // a Sorted label
-    const targetId = label ? null : target.dataset.id;
+    const targetId = target.dataset.id;
     if (!st.draggedId || targetId === st.draggedId) return;
     const id = st.draggedId;
     const draggedEl = app.listEl.querySelector(`.task-item[data-id="${CSS.escape(id)}"]`);
@@ -34,44 +32,23 @@ function setupBoardDragAndDrop() {
       if (!same) app.dropOnBucket(id, targetDiv);
       return;
     }
-    const list = app.planSectionList(targetDiv).filter(x => x !== id);
-    list.splice(label ? list.indexOf(app.sectionKey('sorted')) + 1
-      : list.indexOf(targetId) + (side === 'after' ? 1 : 0), 0, id);
+    const list = app.planSectionIds(targetDiv).filter(x => x !== id);
+    list.splice(list.indexOf(targetId) + (side === 'after' ? 1 : 0), 0, id);
     if (!same && !await app.dropWrite(id, targetDiv)) return;
-    app.applySectionList(list, [id], app.OPEN_ORDER);
+    app.placeShown(list, [id]);
   }
-  const SORTED_LABEL = '.plan-subdivider[data-sub="sorted"]';
 
   st.touchDrop = {
     sided: t => t.classList.contains('task-item') && orderedCard(t),
     target: el => {
       const item = el.closest('.task-item');
       if (item) return item.dataset.id === st.draggedId ? null : item;
-      const label = el.closest(SORTED_LABEL);
-      if (label) return label;
       const div = app.boardDivider(el);
       return div && div.dataset.dropBucket ? div : null;
     },
-    drop: (target, side) => target.classList.contains('task-item') || target.matches(SORTED_LABEL)
+    drop: (target, side) => target.classList.contains('task-item')
       ? executeBoardItemDrop(target, side) : app.dropOnBucket(st.draggedId, target),
   };
-
-  app.listEl.querySelectorAll(SORTED_LABEL).forEach(label => {
-    label.addEventListener('dragover', e => {
-      if (!st.draggedId) return;
-      e.preventDefault();
-      e.stopPropagation();  // not the section's highlight: this is a place in it
-      app.clearBoardDropOver();
-      label.classList.add('task-drag-over');
-    });
-    label.addEventListener('dragleave', () => label.classList.remove('task-drag-over'));
-    label.addEventListener('drop', e => {
-      e.preventDefault();
-      e.stopPropagation();
-      label.classList.remove('task-drag-over');
-      executeBoardItemDrop(label);
-    });
-  });
 
   app.listEl.querySelectorAll('.task-item[data-drag]').forEach(item => {
     item.addEventListener('dragstart', e => {
@@ -110,22 +87,19 @@ function setupBoardDragAndDrop() {
   });
 }
 
-const DIVIDER_TARGETS = '.list-section';
+// Open and Today: a card dropped on a card lands above or below it.
 function setupDragAndDrop() {
   function executeDrop(targetId, side) {
     if (!st.draggedId || targetId === st.draggedId) return;
-    app.sectionDrop(targetId, side);
+    app.orderDrop(targetId, side);
   }
-  const dropOnDivider = div => executeDrop(app.sectionKey(div.dataset.section));
   st.touchDrop = {
     sided: true,
     target: el => {
       const item = el.closest('.task-item[data-drag]');
-      if (item) return item.dataset.id === st.draggedId ? null : item;
-      return el.closest(DIVIDER_TARGETS);
+      return item && item.dataset.id !== st.draggedId ? item : null;
     },
-    drop: (target, side) => target.classList.contains('task-item')
-      ? executeDrop(target.dataset.id, side) : dropOnDivider(target),
+    drop: (target, side) => executeDrop(target.dataset.id, side),
   };
 
   const items = app.listEl.querySelectorAll('.task-item[data-drag]');
@@ -158,22 +132,6 @@ function setupDragAndDrop() {
       e.preventDefault();
       item.classList.remove('task-drop-before', 'task-drop-after');
       executeDrop(item.dataset.id, app.dropSide(item, e.clientY));
-    });
-  });
-
-  // Section dividers are also drop targets (dropOnDivider).
-  app.listEl.querySelectorAll(DIVIDER_TARGETS).forEach(div => {
-    const overCls = div.classList.contains('board-day-divider') ? 'board-drop-over' : 'task-drag-over';
-    div.addEventListener('dragover', e => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      div.classList.add(overCls);
-    });
-    div.addEventListener('dragleave', () => div.classList.remove(overCls));
-    div.addEventListener('drop', e => {
-      e.preventDefault();
-      div.classList.remove(overCls);
-      dropOnDivider(div);
     });
   });
 }

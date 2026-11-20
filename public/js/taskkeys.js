@@ -13,7 +13,7 @@ const { st } = app;
 function reorderSelected(direction) {
   if (!st.selectedIds.size) return;
   if (app.activeSort()) showNotice(`Sorted ${app.SORT_TITLES[app.activeSort()]}: press o until Manual to reorder`);
-  else if (app.SECTIONS[st.activeView]) app.sectionKeyMove(direction);
+  else if (app.ORDERED[st.activeView]) app.orderKeyMove(direction);
   else if (st.activeView === 'plan') planKeyMove(direction);
 }
 // Plan: Ctrl+Shift+↑/↓ moves the selection one place within its day or
@@ -23,7 +23,7 @@ function planKeyMove(direction) {
   if (els.some(el => !el)) return;
   const div = app.boardDivider(els[0]);
   if (!div?.dataset.ordered || els.some(el => app.boardDivider(el) !== div)) return;
-  app.sectionKeyMove(direction, app.planSectionList(div), app.OPEN_ORDER);
+  app.orderKeyMove(direction, app.planSectionIds(div));
 }
 
 // An input whose text the browser's own Ctrl+Z undoes (not a checkbox or a

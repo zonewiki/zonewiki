@@ -158,7 +158,7 @@ The server writes the task chips' dates as ISO itself (`shortDate`), so `localiz
 | `start_date` | `"YYYY-MM-DD"` / `null` | Start date (Dates) |
 | `created_at` | ISO datetime | |
 | `closed_at` | ISO datetime / `null` | |
-| `sort_order` | number / `null` | Place in the manual order; `null` = Unsorted (Sections) |
+| `sort_order` | number / `null` | Place in the manual order (The manual order); a new task gets one on top |
 | `recurrence` | `{ type, interval, from, day?, lead? }` / `null` | The series (Repeating tasks) |
 | `spawned_from` | string / `null` | A series' occurrence: the id of the completed task that spawned it |
 | `wont_do` | bool | Closed undone: archived like a completed task, shown with "✗ won't do", never spawns a next occurrence |
@@ -168,7 +168,7 @@ The server writes the task chips' dates as ISO itself (`shortDate`), so `localiz
 | `comments` | `[{ id, at, by, text }]` | Oldest first, uncapped; `by` only with users (Comments) |
 | `history` | `[{ at, event, by?, from?, to? }]` | What happened, oldest first, capped (History) |
 
-`sort_order` is the place in the Sorted section (Open's and Today's, and inside Plan's days); Today and Plan have no order of their own.
+`sort_order` is the place in the manual order (Open's list, Today's, and inside Plan's sections); Today and Plan have no order of their own.
 `spawned_from` lets undoing a completion remove exactly the occurrence it spawned.
 
 ### Tags
@@ -262,7 +262,7 @@ not `p`, which starts presentation mode on a page with an embedded tasks.
 
 | Choice | `group` | Sections | A drop on a section | Offered |
 |--------|---------|----------|---------------------|---------|
-| **List** | `none` | Unsorted, Sorted | ranks | always |
+| **List** | `none` | none: one list, the manual order | ranks | always |
 | **Plan** | `day` | Unplanned, Today, Tomorrow, the weekdays, Later (the board, below) | sets the start date | on the Open tab (on Today every task is today's) |
 | **By person** | `person` | Unassigned, You, then everyone else who has tasks here, A–Z | assigns | with users, where tasks have assignees: not in My tasks, a private list or your Inbox |
 | **By list** | `list` | Inbox, then each list with tasks here, your own before the shared ones | moves the task there | where the view holds several lists (My tasks, All tasks, a tag's view) and the wiki has a list |
@@ -292,9 +292,8 @@ Opening the page anew (a link, the address bar, another browser tab) follows the
 
 ### Open as one list
 
-**List** (`open`) shows every open task in two sections: **Unsorted** (no `sort_order`, newest first; new tasks land here) above **Sorted** (manual order).
+**List** (`open`) shows every open task as one list, in the manual order (The manual order): a new task on top, where you see it, and wherever you drag it, there it stays.
 Open has no filter for unplanned tasks: those are the Plan board's Unplanned section, where dragging to a day plans them.
-So Unsorted means "not yet ranked" and Unplanned "not yet scheduled", each with one home.
 A leftover `unplanned=` embed param is ignored.
 
 ### Sorting
@@ -332,7 +331,7 @@ Day headers show a count and turn amber at the limit.
 Each day's header also says how many tasks are **due** that day, wherever their cards sit (`· 2 due`, muted, `.board-day-due`; `boardBuckets` gives each day its `due` list): the board places cards by start date, so without it a deadline would be invisible until its day.
 A click (or tap) on it, or on Unplanned's overdue count, lists those tasks in a menu (a bottom sheet on phones; `headerTasksMenu`), and picking one selects its card; the tooltip names them too.
 
-The board is Open grouped by day: every section is in the manual order and labelled Unsorted/Sorted where it needs to be, and the List is what's left of Open: ranking across days, and every new task in one Unsorted list.
+The board is Open grouped by day: every section is its share of the manual order, and the List is what's left of Open: ranking across days.
 
 #### Folding
 
@@ -355,19 +354,8 @@ In Manual (see Sorting) inside every section tasks are in Open's order (`TasksCo
 A card dropped on a card of a day or Later (`data-ordered` on the header) lands above or below it by the pointer, a line showing where (`dropSide`, `.task-drop-before`/`-after`, mouse and touch);
 on another day it also starts the task there (`planOnDay`, so a deadline it passes still asks), start date and place in one move.
 Dropped on a Later card from elsewhere, it asks for the date as on Later's heading and lands where Open's order puts it.
-Ctrl+Shift+↑/↓ moves the selection one place within its section, never out of it (`planKeyMove`), crossing the Unsorted/Sorted labels as on Open (Unsorted and Sorted labels, below).
-As on Today, only the moved tasks change place in the full order and hidden tasks keep theirs (`TasksCore.placeInOrder`).
-
-#### Unsorted and Sorted labels
-
-A section that holds both, Unsorted tasks (listed first) and Sorted ones, labels them **Unsorted** and **Sorted** (`.plan-subdivider`), as Open's sections do one level down;
-a section without Unsorted tasks has no labels, and neither has one with nothing else, so most sections show none, and the labels appear where something is still to be ranked among what is (often Today: a task added on Today starts today, unsorted).
-Lighter than the day headings on purpose: as headings, "Sorted" would read as another day.
-
-Moves follow Open's rules, through Open's own code: `planSectionList` gives the section as Open lists its sections, `[#unsorted, …Unsorted ids, #sorted, …Sorted ids]`, and `applySectionList` / `sectionKeyMove` do the rest.
-So a task dropped among the Unsorted ones leaves the order (Unsorted is newest first, nothing moves within it), one dropped among the Sorted ones takes that place, and no other task is ranked as a side effect;
-Ctrl+Shift+↑ on the first Sorted task takes it into Unsorted, ↓ on an Unsorted one to the top of Sorted.
-The **Sorted** label takes drops (`data-sub="sorted"`, mouse and touch): first among the sorted, as Open's Sorted heading; the Unsorted label doesn't (a drop on it is a drop on its section).
+Ctrl+Shift+↑/↓ moves the selection one place within its section, never out of it (`planKeyMove`).
+Moves follow Open's rules, through Open's own code (`planSectionIds`, `placeShown`, `orderKeyMove`): as on Today, only the moved tasks change place in the full order and hidden tasks keep theirs (`TasksCore.placeInOrder`).
 
 #### Unplanned
 
@@ -386,7 +374,7 @@ Committing to one again is optional: dropping it on Today's heading (its own sec
 
 ### By person and By list
 
-By person and By list are the board with another key (`TasksCore.personBuckets`, `listBuckets`; `boardBuckets` in `tasks.js` picks by `st.cut`): the same sections with counts, folding, Unsorted and Sorted labels, the manual order inside a section, Order's sorts and the 200-card window; a section's header says how many of its tasks are overdue, in red, with their list on a click.
+By person and By list are the board with another key (`TasksCore.personBuckets`, `listBuckets`; `boardBuckets` in `tasks.js` picks by `st.cut`): the same sections with counts, folding, the manual order inside a section, Order's sorts and the 200-card window; a section's header says how many of its tasks are overdue, in red, with their list on a click.
 What is the day's alone stays the day's: the WIP limit's flag, the due and carried counts, Later's date picker.
 **1**–**7** and **0** plan the selected tasks there as on every tab; dragging onto a day needs Plan.
 
@@ -413,9 +401,8 @@ A card there has no list chip.
 ### Today
 
 **Today** (the tab; `focus` in the code) is what you're working on now (`TasksCore.isFocus`: `start_date <= today`, or due today/overdue; on the board: Today, its carried-over tasks included, and overdue tasks wherever their start date puts them).
-It is Open filtered: the same sections (Unsorted · Sorted) and the same order (`byOpenOrder`);
-its section headings look the same as the Open list's: the light labels of the Plan board's Unsorted/Sorted (`sectionHTML`: `.plan-subdivider.list-section`, see Sections), so there is one manual order, and ordering on Today orders Open.
-That fits a shopping list: Open is the shop's order, Today today's list, and an item added on Today (Unsorted) is dragged into place among today's items, which places it in the shop's order (see Sections).
+It is Open filtered: one list in the same order (`byOpenOrder`), so there is one manual order, and ordering on Today orders Open (The manual order).
+That fits a shopping list: Open is the shop's order, Today today's list, and an item added on Today (on top) is dragged into place among today's items, which places it in the shop's order.
 Due and overdue tasks have no section of their own: they keep their place in the order, marked by their deadline colour.
 Today has no order of its own besides the start date: a start date is the one commitment.
 
@@ -426,16 +413,16 @@ New tasks created here get today as start date.
 
 #### Updates
 
-**Updates** (My tasks' Today only; `.updates-heading`, cards `.task-update`; `inViewOrder` in `js/taskrender.js`, `tasksInView` given the user) lists above Unsorted **the tasks with news for you** (`TasksCore.newsFor`: News on your tasks), **whatever their dates**, each card saying what the news is.
+**Updates** (My tasks' Today only; `.updates-heading`, cards `.task-update`; `inViewOrder` in `js/taskrender.js`, `tasksInView` given the user) lists above the tab's tasks **the tasks with news for you** (`TasksCore.newsFor`: News on your tasks), **whatever their dates**, each card saying what the news is.
 A task given to you often has no date, and would otherwise be on no tab the Tasks links open, while their count says it is there.
 
 Among them are tasks that aren't in My tasks otherwise: what you gave away (someone commented, it was done), what mentions you, a task closed this month or last;
 the server sends those along with My tasks (`withUpdates`: `GET /api/tasks?mine=1`, and the tasks a page of My tasks brings), the list holds them for Updates alone (`t.extra`) and no other tab shows them.
-A task there is in neither section below, nothing is dragged into Updates and nothing ranks there (`sectionList` leaves its cards out);
+A task there is not in the list below (headed by the tab's name, `.list-heading`, while Updates shows), nothing is dragged into Updates and nothing ranks there (`shownIds` leaves its cards out);
 opening the task, or doing something with it, takes it out: one of yours with a start date not after today is in Today below, else on Open.
 Updates draws its first seven (Long sections); its heading counts them all, and **Mark all read** in the ⋯ menu sees them all.
 
-On My tasks' Open tab a line says that there are some (`.tasks-updates-note`, `syncUpdatesNote` in `js/taskrender.js`: "2 updates for you →", which opens Today), so the Tasks links never count what the page doesn't show; the tasks themselves stay in their sections there.
+On My tasks' Open tab a line says that there are some (`.tasks-updates-note`, `syncUpdatesNote` in `js/taskrender.js`: "2 updates for you →", which opens Today), so the Tasks links never count what the page doesn't show; the tasks themselves stay in the list there.
 
 ### Closed
 
@@ -460,20 +447,18 @@ Without `?limit=` the route still answers every closed task of the year the user
 Closed's heading has a **year switcher** (`.closed-years`, years from `/api/tasks/closed-years`, shown when there is more than one) for the yearly archives;
 `?year=YYYY` opens that year (search links to archived tasks carry it), and going back to a tab returns to this year (`setClosedYear`).
 
-### Sections
+### The manual order
 
-The sections of Open and Today (`SECTIONS`, `sectionHTML`, `.list-section[data-section]`) are Unsorted (no `sort_order`, newest first) above Sorted (`sort_order`).
-Both tabs head them alike, with the light label a Plan section uses for its Unsorted/Sorted (`.plan-subdivider`), not a day heading, so the labels look the same wherever they appear; Open's sort headings (By deadline, No deadline, Newest first) take the same label.
-A heading is also an empty section's drop target, so it is at least 1.6rem tall (2.5rem on coarse pointers).
+**Every open task has one place in one manual order** (`sort_order`), which Open's list, Today and every Plan section show (`ORDERED` in `js/taskorder.js`, `TasksCore.byOpenOrder`): **a new task goes on top** (`createTask` in `go/tasks.go` gives it the place above every task, `position: top`), so what was just captured is where you look, and it stays where you put it.
+There is no state of "not ranked yet" and no label in the list: a list reads top to bottom, and a task is moved where it belongs.
 
-Moves treat both headings as slots in the visible list (`sectionList`, `applySectionList(list, moved)`): which side of the Sorted heading a task lands on decides its section;
-a task dropped on a task lands where the pointer is: above it on its upper half, below it on the lower half, from Unsorted and within Sorted alike, a line on that edge showing it while dragging (`dropSide`, `.task-drop-before`/`-after`, mouse and touch; `sectionDrop`);
-dropping on the Sorted heading moves the task to its top;
-reordering within Unsorted does nothing;
-leaving Sorted sets `sort_order` to `null`.
-Ctrl+Shift+↑/↓ moves one slot, headings counting.
-Only the moved tasks change place in the full order: each goes right after the visible task now above it (or right before the one below, when first), and every task the view or filter hides keeps its place.
+A task dropped on a task lands where the pointer is: above it on its upper half, below it on the lower half, a line on that edge showing it while dragging (`dropSide`, `.task-drop-before`/`-after`, mouse and touch; `orderDrop`).
+Ctrl+Shift+↑/↓ moves the selection one place (`orderKeyMove`).
+Only the moved tasks change place in the full order: each goes right after the visible task now above it (or right before the one below, when first), and every task the view or filter hides keeps its place (`placeShown`, `TasksCore.placeInOrder`).
 So on Today, sorting in one item never shuffles the catalogue around it.
+
+A task without a place (`sort_order` null: a file edited by hand, an import, an older Zone) shows on top, newest first, and the next move places it there for good (`placeUnplaced` in `go/tasks.go`), before the move itself, so nothing jumps.
+`search_tasks` with `order="manual"` reads the order the same way (`manualBefore`).
 
 #### A move is saved as a move
 
@@ -484,16 +469,16 @@ My tasks' order, which is one user's own, is sent whole (My tasks' own order).
 #### A position in the order
 
 A task can also be given its place by naming it: `position` on `POST /api/tasks` and `PUT /api/tasks/<id>` (Updating a task in `docs/spec/routes.md`), and an assistant's `create_task` and `update_task` (`position`, `after`, `before`; `create_task` in `docs/spec/mcp.md`).
-`top` puts the task above the first ranked task, `bottom` below the last, `{after: id}` and `{before: id}` right next to that task: the server finds the neighbour on the other side in the order it has, and the task gets the number between the two as a drop does (`movesTo`, then `placeTasks`), in the write's own commit.
+`top` puts the task above the first task, `bottom` below the last, `{after: id}` and `{before: id}` right next to that task: the server finds the neighbour on the other side in the order it has, and the task gets the number between the two as a drop does (`movesTo`, then `placeTasks`), in the write's own commit.
 Several tasks given one position (an assistant's `update_task` with `ids`) go there one after the other, in the order given, as a drop of several selected tasks.
-The task to put it by must be open and ranked, and one the user sees: one they don't is refused in the words for a task that isn't there.
+The task to put it by must be open, and one the user sees: one they don't is refused in the words for a task that isn't there.
 The order is one for all tasks, so the place holds in every view that shows both tasks; My tasks' own order is left as it is, as a drop in a list's view leaves it.
 
 ### Long sections
 
-A long section draws its top (`windowed`, `DRAW` = 200 in `js/taskrender.js`): a section of more than 200 cards (Unsorted, Sorted, a sort's group, a Plan section) draws its first 200 and a row **Show N more** (`[data-draw-more]`), which shows that section whole from then on (`st.drawAll`).
+A long section draws its top (`windowed`, `DRAW` = 200 in `js/taskrender.js`): a list or section of more than 200 cards (Open's or Today's list, a sort's group, a Plan section) draws its first 200 and a row **Show N more** (`[data-draw-more]`), which shows that section whole from then on (`st.drawAll`).
 **Updates draws its first seven** (`UPDATES_DRAW`), the latest news first, and the same row: it is above what is yours to do today, and in a team someone back from a week away has dozens.
-The section's count is of all its tasks, the filter searches all of them, and a task that has to be seen (a `?task=` link's, a new one: `unfoldFor`, `st.mustDraw`) shows its section whole.
+A section's count is of all its tasks, the filter searches all of them, and a task that has to be seen (a `?task=` link's, a new one: `unfoldFor`, `st.mustDraw`) shows its section whole.
 All tasks of a large wiki is thousands of cards, and a list is read from its top.
 
 ### No hiding
@@ -956,7 +941,7 @@ A card is dragged with the mouse, or on touch after a long press (Long-press dra
 
 | Dropped on | Changes |
 |------------|---------|
-| Open's and Today's sections | its place in the manual order (Sections) |
+| a card on Open or Today | its place in the manual order (The manual order) |
 | a day of the Plan board | its start date, and within a section its place (The Plan board) |
 | a section By person | who has it (Sections by person) |
 | a section By list | its list (Sections by list) |
@@ -1052,11 +1037,7 @@ the day headers are lighter, a heading on a line rather than a filled bar, an em
 
 A card's coloured left edge (3px; The planned cue) never shifts its content: a card without one makes up the 2px in padding, so checkboxes and titles line up on every card and every tab.
 Titles are bold and tags plain muted words (the list's chip has its tint and icon), so the cards' urgency colours stand out.
-Unsorted cards are hollow,
-on Open,
-Today and in a Plan section with Unsorted/Sorted labels alike (`.task-inbox`; not in a sorted view, which has no Unsorted section): a dashed frame in a firmer grey than a card's border,
-no fill and no shadow (they read as not placed yet; a grey fill took the code blocks' beige),
-urgency colours their tint.
+Every card of a list looks alike: a new one is told by its place, on top, not by a frame of its own.
 
 Dates as text take readable shades (`--amber-text` for a start today and the carried-over badge and count: `#d97706`, the Today limit warning's amber, in both modes;
 bold, since in light mode it is about 3:1;
@@ -1606,8 +1587,8 @@ Not shown when there is none.
 
 My tasks' manual order is its own, and yours (`mineOrder`, `setMineOrder` in `go/tasklists.go`; `own`, `setOwnOrder` in `tasks.js`): a list's order (a task's `sort_order`) is the list's, for everyone who looks at it, a team's ranking of its backlog; what you rank in My tasks, across lists, is your sequence and moves nothing in any list.
 It is kept as task ids in your registry (`"order"`; without users the wiki's), written by `POST /api/tasks/reorder` with `mine: true` in a commit "Reorder My tasks": no task is written.
-The view lays it over its own copies of the tasks (a task's place in it stands for its `sort_order` there, a task not in it is Unsorted), so Unsorted and Sorted, Today and the Plan board's sections work in My tasks as everywhere; it comes with the page's tasks (`"order"` in `tasksInitial`) and with `GET /api/tasks?with=order`.
-A task new to My tasks (one just given to you, a capture) is Unsorted, at the top, until you place it.
+The view lays it over its own copies of the tasks (a task's place in it stands for its `sort_order` there; a task not in it has none there, so it is on top, newest first), so the list, Today and the Plan board's sections work in My tasks as everywhere; it comes with the page's tasks (`"order"` in `tasksInitial`) and with `GET /api/tasks?with=order`.
+A task new to My tasks (one just given to you, a capture) is at the top until you place it.
 An assistant's position (A position in the order) is in the lists' order, not in this one.
 Until you rank something there it is the lists' order of your tasks, so nothing moves on the day; ids of tasks that are closed or gone drop out at the next move.
 

@@ -32,10 +32,12 @@ function isFocus(t, today) {
   return (!!t.start_date && t.start_date <= today) || (!!t.due_date && t.due_date <= today);
 }
 
-// Open's order, also Focus's (Open filtered) and the order inside every
-// Plan-board section: Unsorted (no sort_order) first, newest
-// first, then Sorted in sort_order. Every view that reorders edits this one
-// order (placeInOrder).
+// The manual order: Open's, also Focus's (Open filtered) and the order
+// inside every Plan-board section. A task not yet placed (no sort_order: a
+// file edited by hand, an import; a new task is placed on top when it is
+// made) first, newest first, as the server places it at the next move
+// (placeUnplaced in go/tasks.go), then by sort_order. Every view that
+// reorders edits this one order (placeInOrder).
 function byOpenOrder(a, b) {
   if (a.sort_order == null && b.sort_order == null) return (b.created_at || '').localeCompare(a.created_at || '');
   if (a.sort_order == null) return -1;
@@ -52,7 +54,7 @@ function byDeadline(a, b) {
 
 // Newest first: the Created sort of Open and Plan. Tasks created in the
 // same second (created_at has no finer resolution) keep the order they
-// come in, so callers reverse the list first, as for Unsorted.
+// come in, so callers reverse the list first, as for the manual order.
 function byCreated(a, b) {
   return (b.created_at || '').localeCompare(a.created_at || '');
 }
@@ -540,9 +542,8 @@ function boardBuckets(list, today, sort, dates) {
   // only drop targets for "start beyond this week" and "unplan", so hiding
   // them when empty would strand every task on a dated day.
   sections.push({ key: 'later', label: 'Later', date: null, droppable: true, ordered: !by, tasks: (groups['later'] || []).sort(by || byOpenOrder) });
-  // Unplanned: in Open's order like a day, its Unsorted tasks first (under
-  // their own label on the board, as in every section), and reorderable:
-  // it is the backlog, ranked while planning. Its overdue tasks are named in its
+  // Unplanned: in Open's order like a day, and reorderable: it is the
+  // backlog, ranked while planning. Its overdue tasks are named in its
   // header (`overdue`), the most overdue first.
   // Unplanned goes first: it is where planning starts (cards are dragged
   // from it onto the days), so it sits next to them, not past Later.

@@ -409,7 +409,8 @@ const initOut = (appEl?.dataset.initOut || '').split('|').filter(Boolean);
 // go/tasklists.go): a list's order (a task's sort_order) is the list's, for
 // everyone who looks at it, and ranking across lists in My tasks moves
 // nothing there. The view lays its order over its own copies of the tasks
-// (own: a task's place in it as its sort_order, none: Unsorted), so the
+// (own: a task's place in it as its sort_order, none: not placed there
+// yet, on top, newest first), so the
 // rest of the app orders as it does everywhere; a move saves the order as
 // the user's (postReorder) and writes no task.
 let ownOrder = null;

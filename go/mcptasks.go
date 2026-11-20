@@ -318,17 +318,15 @@ func searchTasks(args jsonObj, base string, user asker) (string, error) {
 }
 
 // manualBefore: a comes before b in search_tasks' manual order, where the
-// user ranked neither in My tasks: the tasks ranked in their lists
-// (sort_order) top to bottom, then
-// those not yet ranked, newest first. (The Open view shows the unranked
-// above, as new ones wait there to be ranked; for "what first" they come
-// after.)
+// user ranked neither in My tasks: as the views show it (TasksCore.
+// byOpenOrder), a task not yet placed (no sort_order: a file edited by
+// hand, an import) on top, newest first, then the others top to bottom.
 func manualBefore(a, b *Task) bool {
 	switch {
 	case a.SortOrder != nil && b.SortOrder != nil:
 		return *a.SortOrder < *b.SortOrder
 	case a.SortOrder != nil || b.SortOrder != nil:
-		return a.SortOrder != nil
+		return a.SortOrder == nil
 	}
 	return a.CreatedAt > b.CreatedAt
 }
@@ -607,8 +605,8 @@ func createTaskTool(args jsonObj, base string, user asker) (string, error) {
 			return "", toolErr("A task assigned to someone has to be in a shared list (without one it is in the user's Inbox, which only they see). Pass list: " + strings.Join(shared, ", "))
 		}
 	}
-	// A position in the manual order, in the same commit; without, it is
-	// unranked, on top as a new task is.
+	// A position in the manual order, in the same commit; without, on top,
+	// as a new task goes.
 	pos, err := positionArg(args, user)
 	if err != nil {
 		return "", err

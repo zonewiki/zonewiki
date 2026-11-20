@@ -1,77 +1,57 @@
 // The order of a task app's list (tasks.js initTasksInstance): each tab's
-// sort, the manual order with its sections (Unsorted above Sorted, on Open
-// and Focus; a day's on the Plan board), and a task moved in it by a drop or
-// a key. What it uses of the app comes in app (its state in app.st).
+// sort, the manual order (one list on Open and Today; a day's share of it
+// on the Plan board), and a task moved in it by a drop or a key. What it
+// uses of the app comes in app (its state in app.st).
 
 import TasksCore from '../tasks-core.js';
 
-const { placeInOrder } = TasksCore;
+const { placeInOrder, byOpenOrder } = TasksCore;
 
 export function initTaskOrder(app) {
 const { st } = app;
 
 // ── Sorting ────────────────────────────────────────────────────────────────
 
-// Per-tab sort comparators. Open and Focus sort with TasksCore.byOpenOrder
+// Per-tab sort comparators. Open and Today sort with TasksCore.byOpenOrder
 // in render(), and Plan with TasksCore.boardBuckets.
 const TAB_SORT = {
   closed: (a, b) => (b.closed_at || '').localeCompare(a.closed_at || ''),
 };
 
-// Open and Focus share one manual order, sort_order: Focus is Open
-// filtered to what is in Focus, so both have the same two sections under a
-// heading (sectionHTML): Unsorted (no sort_order, newest first) · Sorted
-// (sort_order). A move works on the visible list with both headings as
-// slots in it (sectionList): the side of the Sorted heading a task lands on
-// decides its section. So dropping on that heading moves a task across it,
-// and moves within Unsorted change nothing.
-const SECTIONS = {
-  open:  { field: 'sort_order', top: 'unsorted', bottom: 'sorted' },
-  focus: { field: 'sort_order', top: 'unsorted', bottom: 'sorted' },
-};
-const sectionKey = zone => '#' + zone;  // a heading's slot (task ids never start with #)
-// Every task in the manual order, including ones the view or filter hides.
-function manualOrderIds(s) {
-  return st.tasks.filter(t => !t.closed_at && t[s.field] != null)
-    .sort((a, b) => a[s.field] - b[s.field]).map(t => t.id);
+// The tabs that show the manual order as one list, where it is edited: Open
+// and Today (Open filtered). A new task is at its top; a move places the
+// task among what is shown, and every other task keeps its place.
+const ORDERED = { open: true, focus: true };
+
+// Every open task in the manual order, the ones the view or filter hides
+// too (not Updates' extras, which are in no order here): byOpenOrder, a task
+// not yet placed (no sort_order) on top, newest first.
+function manualOrderIds() {
+  return [...st.tasks].filter(t => !t.closed_at && !t.extra).reverse().sort(byOpenOrder).map(t => t.id);
 }
-function sectionList() {
-  const s = SECTIONS[st.activeView];
+// The tasks the list shows, top to bottom (not Updates, which ranks nothing).
+function shownIds() {
+  return app.visibleItems().filter(el => !el.classList.contains('task-update')).map(el => el.dataset.id);
+}
+// Save the shown tasks `shown`, rearranged so that the tasks `moved` changed
+// place (TasksCore.placeInOrder: every other task keeps its place, hidden
+// ones too). The server is told the moves, not the order: each moved task
+// with the task now before it and the next one that didn't move
+// (TasksCore.orderMoves), so it places them in the order it has by then, a
+// task not yet placed where it is shown, and a list that is stale here
+// (someone ranked meanwhile) doesn't put its old order back.
+function placeShown(shown, moved) {
+  const old = manualOrderIds();
+  const order = placeInOrder(old, shown, moved);
+  if (order.join() === old.join()) return;
   const byId = new Map(st.tasks.map(t => [t.id, t]));
-  const ids = app.visibleItems().filter(el => !el.classList.contains('task-update')).map(el => el.dataset.id);
-  const manual = ids.filter(id => byId.get(id)[s.field] != null);
-  const fixed = ids.filter(id => byId.get(id)[s.field] == null);
-  return [sectionKey(s.top), ...fixed, sectionKey(s.bottom), ...manual];
-}
-// Save a rearranged sectionList() in which the tasks `moved` changed place
-// (TasksCore.placeInOrder: every other task keeps its place, hidden ones too).
-function applySectionList(list, moved, s = SECTIONS[st.activeView]) {
-  const cut = list.indexOf(sectionKey(s.bottom));
-  saveOrder(s, placeInOrder(manualOrderIds(s), list.slice(cut + 1), moved), moved);
-}
-// Save the manual order `order`, in which the tasks `moved` changed place;
-// tasks of the old order missing from it become Unsorted. The server is
-// told the moves, not the order: each moved task with the task now before
-// it and the next one that didn't move (TasksCore.orderMoves), so it places
-// them in the order it has by then, and a list that is stale here (someone
-// ranked meanwhile) doesn't put its old order back.
-function saveOrder(s, order, moved = []) {
-  const old = manualOrderIds(s);
-  const kept = new Set(order);
-  const removed = old.filter(id => !kept.has(id));
-  if (!removed.length && order.join() === old.join()) return;
-  const byId = new Map(st.tasks.map(t => [t.id, t]));
-  order.forEach((id, i) => { byId.get(id)[s.field] = i; });
-  removed.forEach(id => { byId.get(id)[s.field] = null; });
-  app.postReorder({ order, moves: TasksCore.orderMoves(order, moved), updates: removed.map(id => ({ id, [s.field]: null })) });
+  order.forEach((id, i) => { byId.get(id).sort_order = i; });
+  app.postReorder({ order, moves: TasksCore.orderMoves(order, moved) });
   app.render();
 }
 
-// Plan: every section (`data-ordered`, in the manual order) shows Open's
-// order, its Unsorted tasks first under their label, and moves in it follow
-// Open's rules: planSectionList is the section as Open lists its sections,
-// and applySectionList / sectionKeyMove do the rest.
-const OPEN_ORDER = SECTIONS.open;
+// Plan: every section (`data-ordered`) shows its share of the manual order,
+// and moves in it place a task among the section's tasks as on Open.
 function planSectionIds(div) {
   const ids = [];
   for (let el = div.nextElementSibling; el && !el.classList.contains('board-day-divider'); el = el.nextElementSibling) {
@@ -79,60 +59,32 @@ function planSectionIds(div) {
   }
   return ids;
 }
-// A Plan section as Open lists its sections, the labels' slots included:
-// [#unsorted, …its Unsorted ids, #sorted, …its Sorted ids]. What follows
-// #sorted is the section's share of the manual order (applySectionList):
-// a task moved there is ranked, one moved above it leaves the order.
-function planSectionList(div) {
-  const byId = new Map(st.tasks.map(t => [t.id, t]));
-  const ids = planSectionIds(div);
-  return [sectionKey('unsorted'), ...ids.filter(id => byId.get(id)?.sort_order == null),
-          sectionKey('sorted'), ...ids.filter(id => byId.get(id)?.sort_order != null)];
+// Drop `draggedId` on the task `key`, before or after it (`side`, by the
+// pointer: dropSide).
+function orderDrop(key, side) {
+  const list = shownIds();
+  if (!list.includes(st.draggedId) || !list.includes(key) || key === st.draggedId) return;
+  list.splice(list.indexOf(st.draggedId), 1);
+  list.splice(list.indexOf(key) + (side === 'after' ? 1 : 0), 0, st.draggedId);
+  placeShown(list, [st.draggedId]);
 }
-// Drop `draggedId` on a task (`key`, `side`: before or after it, by the
-// pointer, dropSide) or on a section heading (no side: it takes the
-// heading's slot, so dropping on the Sorted heading puts it first there).
-function sectionDrop(key, side) {
-  const list = sectionList();
-  const from = list.indexOf(st.draggedId), at = list.indexOf(key);
-  if (from === -1 || at === -1 || from === at) return;
-  list.splice(from, 1);
-  const to = side ? list.indexOf(key) + (side === 'after' ? 1 : 0) : at;
-  list.splice(to, 0, st.draggedId);
-  applySectionList(list, [st.draggedId]);
-}
-// Ctrl+Shift+↑/↓: the selection moves one slot, the headings counting as
-// slots, so the top task of Sorted crosses into Unsorted. Unsorted tasks
-// can't move within it; moving down takes them straight across the heading.
-function sectionKeyMove(direction, list = sectionList(), s = SECTIONS[st.activeView]) {
-  const byId = new Map(st.tasks.map(t => [t.id, t]));
+// Ctrl+Shift+↑/↓: the selection moves one place among `list` (what the list
+// shows, or a Plan section's tasks).
+function orderKeyMove(direction, list = shownIds()) {
   const idxs = list.map((id, i) => st.selectedIds.has(id) ? i : -1).filter(i => i >= 0);
   if (!idxs.length) return;
   const group = idxs.map(i => list[i]);
   const rest = list.filter(id => !st.selectedIds.has(id));
-  if (group.every(id => byId.get(id)[s.field] == null)) {
-    if (direction === 'up') return;  // away from the manual order
-    rest.splice(rest.indexOf(sectionKey(s.bottom)) + 1, 0, ...group);
-  } else if (direction === 'up') {
+  if (direction === 'up') {
     const above = list[idxs[0] - 1];
-    if (above === undefined || above === sectionKey(s.top)) return;
+    if (above === undefined) return;
     rest.splice(rest.indexOf(above), 0, ...group);
   } else {
     const below = list[idxs[idxs.length - 1] + 1];
     if (below === undefined) return;
     rest.splice(rest.indexOf(below) + 1, 0, ...group);
   }
-  applySectionList(rest, group, s);
-}
-
-// A section heading on Open and Focus: the light label of a Plan section's
-// Unsorted / Sorted (.plan-subdivider), so the two tabs look the same and the
-// labels never read as a day heading. It takes drops: an empty section is
-// only this row.
-function sectionHTML(zone, label, count) {
-  const empty = count ? '' : ' board-day--empty';
-  return `<li class="plan-subdivider list-section${empty}" data-section="${zone}">` +
-    `<span>${label}</span><span class="board-day-count">${count}</span></li>`;
+  placeShown(rest, group);
 }
 
 function sortTasks(tasksArr) {
@@ -140,5 +92,5 @@ function sortTasks(tasksArr) {
   return fixed ? [...tasksArr].sort(fixed) : [...tasksArr];
 }
 
-return { SECTIONS, sectionKey, applySectionList, OPEN_ORDER, planSectionList, sectionDrop, sectionKeyMove, sectionHTML, sortTasks };
+return { ORDERED, placeShown, planSectionIds, orderDrop, orderKeyMove, sortTasks };
 }

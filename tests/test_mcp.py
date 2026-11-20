@@ -454,7 +454,7 @@ class TestSearchTasks:
         assert entries(text.split(":\n\n", 1)[1]) == ["Task: Soon", "Task: Later", "Task: Undated"]
 
     def test_open_in_the_users_order(self, client, wiki_dir):
-        """order=manual: ranked tasks top to bottom, deadlines aside; the unranked after."""
+        """order=manual: the manual order top to bottom, deadlines aside; a new task on top."""
         task(client, title="Unranked", tags=["leaf"], due_date="2026-09-01")
         task(client, title="Second", tags=["leaf"], sort_order=2, due_date="2026-10-01")
         task(client, title="First", tags=["leaf"], sort_order=1.5)
@@ -463,7 +463,7 @@ class TestSearchTasks:
         close(client, done["id"], completed=True)
         text, err = call(client, "search_tasks", tag="leaf", order="manual")
         assert not err
-        assert entries(text.split(":\n\n", 1)[1]) == ["Task: First", "Task: Second", "Task: Third", "Task: Unranked"]
+        assert entries(text.split(":\n\n", 1)[1]) == ["Task: Unranked", "Task: First", "Task: Second", "Task: Third"]
         assert entries(call(client, "search_tasks", tag="leaf")[0].split(":\n\n", 1)[1])[0] == "Task: Unranked"
         text, err = call(client, "search_tasks", order="priority")
         assert err and "order must be deadline or manual" in text
@@ -2048,7 +2048,7 @@ class TestTaskPosition:
 
     def test_bottom_keeps_tasks_in_the_order_made(self, client, git_wiki_dir):
         """The assistant that made a list most important first: without a
-        position each new task is unranked, newest on top, so the list came
+        position each new task goes on top, newest first, so the list came
         out the wrong way round."""
         make_list(client, "plan", headers=HOST)
         before = len(self_log(git_wiki_dir))
@@ -2060,14 +2060,14 @@ class TestTaskPosition:
         assert self._order(client, "plan") == ["First", "Second", "Third"]
         log = self_log(git_wiki_dir)
         assert len(log) == before + 3 and log[0] == "Create task (MCP)"   # one commit each, as without
-        call(client, "create_task", title="Unranked", list="plan")
+        call(client, "create_task", title="Newest", list="plan")
         tasks = self._tasks(client)
-        assert tasks["Unranked"]["sort_order"] is None
+        assert tasks["Newest"]["sort_order"] < tasks["First"]["sort_order"]   # placed on top, as made
         text, _ = call(client, "create_task", title="Zeroth", list="plan", position="top")
-        assert "it comes first, before “First”." in text
+        assert "it comes first, before “Newest”." in text
         call(client, "create_task", title="After first", list="plan", after=tasks["First"]["id"][:8])
         call(client, "create_task", title="Before third", list="plan", before=f"[[task:{tasks['Third']['id'][:8]}]]")
-        assert self._order(client, "plan") == ["Zeroth", "First", "After first", "Second", "Before third", "Third", "Unranked"]
+        assert self._order(client, "plan") == ["Zeroth", "Newest", "First", "After first", "Second", "Before third", "Third"]
 
     def test_update_task_moves_one_as_a_drop_does(self, client, git_wiki_dir):
         ids = self._ranked(client, "A", "B", "C", "D")
@@ -2145,13 +2145,11 @@ class TestTaskPosition:
             ({"id": ids["A"], "position": "middle"}, "position must be top or bottom"),
             ({"id": ids["A"], "after": "deadbeef"}, 'No task with id "deadbeef"'),
             ({"id": ids["A"], "after": done}, "“Done” is closed: only open tasks have a position"),
-            ({"id": ids["A"], "after": loose}, "“Loose” isn't in the manual order yet"),
             ({"id": ids["A"], "after": ids["A"]}, "A task can't be put after or before itself"),
             ({"id": done, "position": "top"}, "Only an open task has a position in the manual order"),
             ({"id": done, "title": "Done!", "position": "top"}, "Only an open task has a position in the manual order"),
             ({"ids": [ids["A"], done], "position": "top", "add_tags": ["x"]}, "“Done” is closed"),
             ({"ids": [ids["A"], ids["B"]], "after": ids["B"], "add_tags": ["x"]}, "A task can't be put after or before itself"),
-            ({"title": "New", "after": loose}, "“Loose” isn't in the manual order yet"),
         ):
             text, err = call(client, "create_task" if "title" in args and "id" not in args else "update_task", **args)
             assert err and says in text, (args, text)

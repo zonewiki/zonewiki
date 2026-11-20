@@ -228,7 +228,7 @@ def test_select_mode_has_no_swipes_or_drags(selecting):
     pg.wait_for_timeout(200)
     expect(pg.locator(".task-touch-ghost")).to_have_count(0)
     expect(pg.locator(".task-item .task-title")).to_have_text(["Saw", "Glue", "Nuts", "Bolts"])
-    assert all(t["sort_order"] is None for t in tasks_by_title(pg).values())
+    assert sorted(tasks_by_title(pg), key=lambda t: tasks_by_title(pg)[t]["sort_order"]) == ["Saw", "Glue", "Nuts", "Bolts"]
 
 
 def test_select_mode_tag_keeps_the_mode(selecting):
@@ -688,19 +688,18 @@ def test_touch_press_turns_off_native_drag(new_page, wiki):
     assert card(pg, "Two").evaluate("el => el.draggable")
 
 
-def test_touch_drag_across_focus_sections(new_page, wiki):
+def test_touch_drag_reorders_focus(new_page, wiki):
     pg = new_page(**TOUCH_PHONE)
-    for t in ("Alpha", "Bravo"):
+    for t in ("Alpha", "Bravo", "Charlie"):
         pg.request.post("/api/tasks", data={"title": t, "start_date": day(0)})
     wiki.write("tasks", "# Tasks\n\n[[tasks:]]\n")
     pg.goto("/tasks?view=today")
-    sorted_ = pg.locator(".list-section[data-section='sorted']")
-    unsorted = pg.locator(".list-section[data-section='unsorted']")
-    touch_drag(pg, card(pg, "Bravo"), sorted_)
-    wait_until(pg, lambda: tasks_by_title(pg)["Bravo"]["sort_order"] == 0)
-    assert tasks_by_title(pg)["Alpha"]["sort_order"] is None
-    touch_drag(pg, card(pg, "Bravo"), unsorted)
-    wait_until(pg, lambda: tasks_by_title(pg)["Bravo"]["sort_order"] is None)
+    order = lambda: sorted(tasks_by_title(pg), key=lambda t: tasks_by_title(pg)[t]["sort_order"])
+    assert order() == ["Charlie", "Bravo", "Alpha"]
+    # Onto Alpha's lower half: after it.
+    touch_drag(pg, card(pg, "Charlie"), card(pg, "Alpha"), at=0.75)
+    wait_until(pg, lambda: order() == ["Bravo", "Alpha", "Charlie"])
+    expect(pg.locator(".task-item .task-title")).to_have_text(["Bravo", "Alpha", "Charlie"])
 
 
 def test_tap_outside_only_closes_the_card_date_picker(phone):

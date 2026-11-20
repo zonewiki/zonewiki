@@ -387,26 +387,27 @@ def test_ranking_in_my_tasks_leaves_the_lists_order_alone(alice):
     page = alice
     for title in ("One", "Two"):
         new(page, title, list="team", assignee="alice")
+    titles = page.locator(".tasks-list > .task-item .task-title")
     page.goto("/tasks?mine=1&view=open&group=none")
-    expect(card(page, "One")).to_be_visible()
+    expect(titles).to_have_text(["Two", "One"])           # the list's order until ranked here
+    one, two = task(page, "One")["id"], task(page, "Two")["id"]
     card(page, "One").locator(".task-title").click()
     with page.expect_request(lambda r: r.url.endswith("/api/tasks/reorder")) as sent:
-        page.keyboard.press("Control+Shift+ArrowDown")    # out of Unsorted: first of Sorted
-    assert sent.value.post_data_json == {"mine": True, "order": [task(page, "One")["id"]]}
-    wait_until(page, lambda: page.request.get("/api/tasks?with=order").json()["order"] == [task(page, "One")["id"]])
-    # No task was written: in the list both are unranked still.
-    assert [t["sort_order"] for t in page.request.get("/api/tasks").json()] == [None, None]
+        page.keyboard.press("Control+Shift+ArrowUp")
+    assert sent.value.post_data_json == {"mine": True, "order": [one, two]}
+    wait_until(page, lambda: page.request.get("/api/tasks?with=order").json()["order"] == [one, two])
+    # No task was written: the list's order is as it was.
+    assert {t["title"]: t["sort_order"] for t in page.request.get("/api/tasks").json()} == {"One": 0, "Two": -1}
     page.goto("/tasks?list=team&view=open&group=none")
-    expect(page.locator(".list-section[data-section=unsorted] .board-day-count")).to_have_text("2")
+    expect(titles).to_have_text(["Two", "One"])
     # Back in My tasks, One is where it was put.
     page.goto("/tasks?mine=1&view=open&group=none")
-    expect(page.locator(".list-section[data-section=unsorted] .board-day-count")).to_have_text("1")
-    expect(page.locator(".list-section[data-section=sorted] .board-day-count")).to_have_text("1")
+    expect(titles).to_have_text(["One", "Two"])
     # A change to the task keeps its place (the answer's sort_order is the list's).
-    page.request.put(f"/api/tasks/{task(page, 'One')['id']}", data={"due_date": "2031-01-01"})
+    page.request.put(f"/api/tasks/{one}", data={"due_date": "2031-01-01"})
     page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
     expect(card(page, "One").locator(".task-due, [class*=due]").first).to_be_visible()
-    expect(page.locator(".list-section[data-section=sorted] .board-day-count")).to_have_text("1")
+    expect(titles).to_have_text(["One", "Two"])
     # bob's My tasks has his own order: nothing of alice's.
     page.request.post("/login", form={"username": "bob", "password": "pw"})
     assert page.request.get("/api/tasks?with=order").json()["order"] == []

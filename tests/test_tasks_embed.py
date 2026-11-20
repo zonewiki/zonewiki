@@ -725,8 +725,11 @@ class TestInitialTasks:
         # Once a page, whatever its lists show, and on /tasks.
         # With them the word of these tasks, as GET /api/tasks answers it.
         word = client.get("/api/tasks", headers=HOST).headers["Zone-Tasks"]
+        # My tasks' order, until ranked there the lists' (a new task on top).
+        order = [t["id"] for t in sorted(tasks, key=lambda t: t["sort_order"])]
+        assert [t["title"] for t in sorted(tasks, key=lambda t: t["sort_order"])] == ["No notes", "Buy milk"]
         for url in ("/page/shop", "/tasks", "/tasks?tag=shop"):
-            assert initial_tasks(client.get(url, headers=HOST).get_data(as_text=True)) == [{"word": word, "order": [], "tasks": tasks, **html}], url
+            assert initial_tasks(client.get(url, headers=HOST).get_data(as_text=True)) == [{"word": word, "order": order, "tasks": tasks, **html}], url
 
     def test_a_page_brings_the_tasks_its_lists_show_and_no_others(self, client, wiki_dir):
         """My tasks or one list doesn't carry every open task: the block
@@ -756,7 +759,8 @@ class TestInitialTasks:
         assert api("?mine=1") == ["Loose", "Milk", "Report"] and api("") == ["Later", "Loose", "Milk", "Report"]
         assert api("?list=nope") == []
         got = client.get("/api/tasks?mine=1&with=order", headers=HOST).get_json()
-        assert sorted(t["title"] for t in got["tasks"]) == ["Loose", "Milk", "Report"] and got["order"] == []
+        title = {t["id"]: t["title"] for t in got["tasks"]}
+        assert sorted(title.values()) == ["Loose", "Milk", "Report"] and [title[i] for i in got["order"]] == ["Loose", "Report", "Milk"]
 
     def test_no_tasks(self, client, wiki_dir):
         write_page(wiki_dir, "shop", "# Shop\n\n[[tasks:]]\n")

@@ -201,7 +201,7 @@ With `status="updated"` a task's line of facts says what is new, "update: bob co
 
 With a query (at most 500 characters, as `search_wiki`'s), ranked by BM25 within the filter (fused with semantic hits: Retrieval).
 Without, open tasks by deadline, then start date, then title, done ones newest first.
-`order="manual"` lists the open ones in the user's own order instead (`sort_order`, the Open view's Sorted section, top first: their priority), the tasks not yet ranked after them, newest first (`manualBefore`; the Open view shows those above, as they wait to be ranked).
+`order="manual"` lists the open ones in the manual order instead (`sort_order`, the Open view's list, top first: their priority; `manualBefore`), as the Open view shows it: a new task on top.
 What the user ranked in My tasks (My tasks' own order in `docs/spec/tasks.md`) comes first, as it stands there; with `list`, the list's order alone, as its view shows it, so what `update_task`'s `position` did reads back.
 The result starts with "Today is …" so the model can tell overdue from upcoming.
 
@@ -468,14 +468,15 @@ A name no list has is a tool error.
 `update_task` moves a task with `list`: never a shared task into a private list, and a private one to a shared place only with `share: true`.
 `private` is no argument anymore: given, the tool says to give `list`.
 
-**A task's place in the order**: without `position`, `after` or `before` a new task is unranked, as one made in the browser is: on top of its list's view, newest first (Sections in `docs/spec/tasks.md`).
+**A task's place in the order**: without `position`, `after` or `before` a new task goes on top of the manual order, as one made in the browser does (The manual order in `docs/spec/tasks.md`).
 So tasks made one after the other came out the wrong way round there, the last one first; `position: "bottom"` on each keeps them in the order they were made, and the description says so.
 The place is the `position` field of the write (`positionField`, `moveTo` in `go/tasks.go`), in its commit, and the same operation as a drop in a list's view (`placeTasks`, the moves of `POST /api/tasks/reorder`):
 
-- `top` puts the task above the first ranked task, `bottom` below the last, `after`/`before` right next to that task, between it and its neighbour (`movesTo`): a number between theirs (`sort_order`), so no other task is written.
+- `top` puts the task above the first task, `bottom` below the last, `after`/`before` right next to that task, between it and its neighbour (`movesTo`): a number between theirs (`sort_order`), so no other task is written.
 - The manual order is one for all tasks, so a place between two tasks is between them in every view that shows both: their list's, All tasks, `search_tasks` with `order="manual"`.
   My tasks' own order, the user's alone once they rank there (My tasks' own order in `docs/spec/tasks.md`), is another one: a position leaves it as it is, as a drop in a list's view does.
-- The task to put it by is one the user sees (`findTask`: a task they don't see is "No task with id …", word for word as one that isn't there), open, and ranked; a closed one, an unranked one ("isn't in the manual order yet": give it a position first) and the task itself are tool errors, with nothing written.
+- The task to put it by is one the user sees (`findTask`: a task they don't see is "No task with id …", word for word as one that isn't there), and open; a closed one and the task itself are tool errors, with nothing written.
+  A task with no place yet (a file edited by hand, an import) is placed first where it is shown (`placeUnplaced`), as for a drop.
 - The result says where the task is now in its list's order: "In the manual order of #plan it comes after “A” and before “B”." (`positionText`).
 
 **A date is the deadline**: the field descriptions send a date the user gives the task ("tomorrow", "by Friday") to `due`, and `start` only to a stated start ("start Monday", "work on it tomorrow"); the model had put "for tomorrow" in start.

@@ -89,7 +89,7 @@ app.sortSel?.addEventListener('change', () => setSort(app.sortSel.value));
 
 // The Open tab shows every open task one of a few ways, which the control
 // beside the tabs picks (.tasks-cut; d goes through them): as one list
-// (List: view 'open', Unsorted · Sorted, where the manual order is ranked
+// (List: view 'open', the manual order, where it is ranked
 // across everything), or in sections (view 'plan', the board), by what
 // st.cut says: by start date (Plan: 'day'), a section per assignee (By
 // person: 'person') or per list (By list: 'list'). A drop on a section

@@ -186,8 +186,11 @@ func createTask(user asker, data jsonObj, message string) (*Task, error) {
 		return nil, err
 	}
 	active = append(active, t)
-	// position: where it goes in the manual order; without, it is
-	// unranked, on top of its list as a new task is.
+	// position: where it goes in the manual order; without, at the top, as
+	// a new task goes (unless the write gives it a sort_order itself).
+	if !positioned && t.SortOrder == nil {
+		pos, positioned = orderPos{At: "top"}, true
+	}
 	if positioned {
 		if err := moveTo(active, []string{t.ID}, pos); err != nil {
 			return nil, err
@@ -1040,8 +1043,13 @@ type taskMove struct{ ID, After, Before string }
 // its place between its two (placeBetween), one after the other, in the
 // order the server has by then: so a list that is stale in a browser
 // doesn't put its old order back over what someone ranked meanwhile. A
-// task or neighbour that isn't among active counts as none.
+// task or neighbour that isn't among active counts as none. A task not yet
+// placed is placed first where it is shown (placeUnplaced).
 func placeTasks(active []*Task, moves []taskMove) {
+	if len(moves) == 0 {
+		return
+	}
+	placeUnplaced(active)
 	byID := make(map[string]*Task, len(active))
 	for _, t := range active {
 		byID[t.ID] = t
@@ -1050,6 +1058,32 @@ func placeTasks(active []*Task, moves []taskMove) {
 		if t := byID[m.ID]; t != nil {
 			placeBetween(active, t, byID[m.After], byID[m.Before])
 		}
+	}
+}
+
+// placeUnplaced gives each task of active that has no place in the manual
+// order (no sort_order: a task from a file edited by hand, an import, an
+// older Zone; a new one is placed when it is made) the place it is shown
+// at: above every placed task, newest first, as the views list them
+// (TasksCore.byOpenOrder, which reverses the list first, so of two made at
+// the same moment the later in the file comes first). So a move, or a
+// position, lands where it was asked for, and nothing jumps.
+func placeUnplaced(active []*Task) {
+	var unplaced []*Task
+	top, placed := 0.0, false
+	for _, t := range active {
+		switch {
+		case t.SortOrder == nil:
+			unplaced = append(unplaced, t)
+		case !placed || *t.SortOrder < top:
+			top, placed = *t.SortOrder, true
+		}
+	}
+	slices.Reverse(unplaced)
+	slices.SortStableFunc(unplaced, func(a, b *Task) int { return strings.Compare(b.CreatedAt, a.CreatedAt) })
+	for i, t := range unplaced {
+		f := top - float64(len(unplaced)-i)
+		t.SortOrder = &f
 	}
 }
 
@@ -1145,8 +1179,9 @@ func positionField(data jsonObj) (pos orderPos, has bool, err error) {
 
 // movesTo: the moves (placeTasks) that put the tasks ids, in that order, at
 // pos in the manual order of active, the open tasks the user sees: the
-// first right after pos's task, right before it, above the first ranked
-// task or below the last; each next one right after the one before it.
+// first right after pos's task, right before it, above the first task or
+// below the last; each next one right after the one before it. Every task
+// of active has its place (moveTo places the unplaced first).
 // The manual order is one for all tasks (sort_order), so a position
 // between two tasks there is between them in every view that shows both:
 // their list's, All tasks, search_tasks'. My tasks' own order, the user's
@@ -1190,8 +1225,6 @@ func movesTo(active []*Task, ids []string, pos orderPos) ([]taskMove, error) {
 			return nil, refuse("The task to put it after or before is closed or not there: only open tasks have a position in the manual order")
 		case moving[by.ID]:
 			return nil, refuse("A task can't be put after or before itself")
-		case by.SortOrder == nil:
-			return nil, refuse("“" + by.Title + "” isn't in the manual order yet (unranked, as a new task is): give it a position first, top or bottom")
 		}
 		// Its neighbour on that side: the nearest task with another number
 		// (there is no number between two of the same).
@@ -1229,6 +1262,7 @@ func movesTo(active []*Task, ids []string, pos orderPos) ([]taskMove, error) {
 // moveTo puts the tasks ids, in that order, at pos in the manual order of
 // active (movesTo, placeTasks), or refuses with nothing changed.
 func moveTo(active []*Task, ids []string, pos orderPos) error {
+	placeUnplaced(active)
 	moves, err := movesTo(active, ids, pos)
 	if err == nil {
 		placeTasks(active, moves)

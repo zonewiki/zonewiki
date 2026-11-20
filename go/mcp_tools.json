@@ -1011,7 +1011,7 @@
       "top",
       "bottom"
      ],
-     "description": "Its place in the manual order (search_tasks order=manual). Without: unranked, newest on top; bottom keeps several in the order made."
+     "description": "Its place in the manual order (search_tasks order=manual). Without: on top, newest first; bottom keeps several in the order made."
     },
     "after": {
      "type": "string",

@@ -24,7 +24,15 @@ class TestCRUD:
         assert data["title"] == "Buy milk"
         assert data["id"]
         assert data["closed_at"] is None
-        assert data["sort_order"] is None
+        assert data["sort_order"] == 0           # the top of the manual order, the first there
+
+    def test_a_new_task_goes_on_top_of_the_manual_order(self, client):
+        first = create_task(client, title="First").get_json()
+        second = create_task(client, title="Second").get_json()
+        assert second["sort_order"] < first["sort_order"]
+        # One the write gives a place keeps it.
+        placed = create_task(client, title="Placed", sort_order=5).get_json()
+        assert placed["sort_order"] == 5
 
     def test_read_tasks_empty(self, client):
         resp = client.get("/api/tasks")
@@ -686,11 +694,11 @@ class TestReorder:
         })
         assert resp.status_code == 204
         tasks = client.get("/api/tasks").get_json()
-        assert tasks[0]["sort_order"] is None
+        assert tasks[0]["sort_order"] == t1["sort_order"]
 
     def test_reorder_updates_can_clear_the_field(self, client):
-        """Dragging a task out of Sorted (on Open or Focus) clears its
-        sort_order (null) in the same request that renumbers the rest."""
+        """updates can clear a task's sort_order (null: no place, shown on
+        top), in the same request that renumbers the rest."""
         t1 = create_task(client, title="First").get_json()
         t2 = create_task(client, title="Second").get_json()
         client.post("/api/tasks/reorder", json={"order": [t1["id"], t2["id"]]})
@@ -1367,7 +1375,7 @@ class TestCreateFieldParity:
         assert t["due_date"] == "2026-08-01"
         assert t["start_date"] == "2026-08-01"
         assert t["recurrence"] == {"type": "weekly", "interval": 3, "from": "due"}
-        assert t["sort_order"] is None
+        assert t["sort_order"] == 0              # on top of the manual order
         assert t["closed_at"] is None
         assert t["wont_do"] is False
 
@@ -3035,16 +3043,16 @@ class TestMyTasksOrder:
         for title in ("A", "B", "C"):
             create_task(client, title=title, list="work")
         a, b, c = self._ids(client, "A", "B", "C")
-        # The list's order: C, A (B not ranked).
-        assert client.post("/api/tasks/reorder", json={"order": [c, a]}).status_code == 204
+        # The list's order: C, A, B.
+        assert client.post("/api/tasks/reorder", json={"order": [c, a, b]}).status_code == 204
         got = client.get("/api/tasks?with=order").get_json()
-        assert got["order"] == [c, a] and {t["title"] for t in got["tasks"]} == {"A", "B", "C"}
+        assert got["order"] == [c, a, b] and {t["title"] for t in got["tasks"]} == {"A", "B", "C"}
         # Ranked in My tasks: its own order from then on …
         assert client.post("/api/tasks/reorder", json={"mine": True, "order": [b, a, c]}).status_code == 204
         assert client.get("/api/tasks?with=order").get_json()["order"] == [b, a, c]
         # … and no task was written: the list's order is as it was.
         order = {t["title"]: t["sort_order"] for t in client.get("/api/tasks").get_json()}
-        assert order == {"A": 1, "B": None, "C": 0}
+        assert order == {"A": 1, "B": 2, "C": 0}
         # The list ranked again changes nothing of My tasks'.
         assert client.post("/api/tasks/reorder", json={"order": [a, b, c]}).status_code == 204
         assert client.get("/api/tasks?with=order").get_json()["order"] == [b, a, c]

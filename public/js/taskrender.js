@@ -35,26 +35,24 @@ function htmlOf(kind, text) {
   return plainHtml(text);
 }
 
-// The shown tab's tasks in its order. Open and Focus have the same two
-// sections (SECTIONS): Unsorted (newTasks) above Sorted (orderedTasks);
-// Focus is Open filtered. A due task has no section of its own: it keeps
-// its place in the order, and its urgency colour marks it.
+// The shown tab's tasks in its order. Open and Focus show the manual order
+// as one list (ORDERED), Focus being Open filtered. A due task has no
+// section of its own: it keeps its place in the order, and its urgency
+// colour marks it.
 function inViewOrder(filtered) {
-  let orderedTasks, newTasks = [];
+  let orderedTasks;
   if (st.activeView === 'open' && app.activeSort()) {
     orderedTasks = [...filtered].reverse().sort(SORTS[app.activeSort()]);
-  } else if (app.SECTIONS[st.activeView]) {
+  } else if (app.ORDERED[st.activeView]) {
     // TasksCore.byOpenOrder, which the Plan board uses too. Reversed first,
     // so tasks created in the same second (created_at has no finer
     // resolution) keep newest-first.
-    const sorted = [...filtered].reverse().sort(byOpenOrder);
-    orderedTasks = sorted.filter(t => t.sort_order != null);
-    newTasks     = sorted.filter(t => t.sort_order == null);
+    orderedTasks = [...filtered].reverse().sort(byOpenOrder);
   } else {
     orderedTasks = app.sortTasks(filtered);
   }
   // My tasks' Focus: the tasks with news for the user (TasksCore.newsFor)
-  // are on top, under Updates, whatever their dates, and in neither section.
+  // are on top, under Updates, whatever their dates, and not in the list below.
   let updates = [];
   if (st.today && st.activeView === 'open' && app.initMine) {
     const given = t => !!TasksCore.newsFor(t, people.me);
@@ -62,9 +60,8 @@ function inViewOrder(filtered) {
     const at = t => TasksCore.newsFor(t, people.me).at;
     updates = [...filtered].reverse().filter(given).sort((a, b) => at(b).localeCompare(at(a)));
     orderedTasks = orderedTasks.filter(t => !given(t));
-    newTasks = newTasks.filter(t => !given(t));
   }
-  return { orderedTasks, newTasks, updates };
+  return { orderedTasks, updates };
 }
 
 // A tab with nothing to show says so (Focus offers the Plan board).
@@ -81,7 +78,7 @@ function renderEmpty() {
 
 // A task's card. draggable: it can be picked up (the tabs in the manual
 // order); extraClass: more classes for its <li>.
-function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = '') {
+function taskHTML(task, draggable = !!app.ORDERED[st.activeView], extraClass = '') {
   // A task ticked but not yet done stays ticked when another completion
   // re-renders the list.
   const pending = app.pendingCompletions.has(task.id);
@@ -276,37 +273,23 @@ function planHTML(filtered) {
     // An empty section is just its header row, which is itself the drop
     // target (styled tall enough to hit). Nothing grows when a drag
     // starts, so the section you aim at never moves under the pointer.
-    // A section with Unsorted tasks (listed first, in the manual order)
-    // labels them and the Sorted ones below, as Open's sections do, one
-    // level down: so you see what is still to be ranked, and moves follow
-    // Open's rules (planSectionList). The labels are no sections
-    // (.plan-subdivider, not .board-day-divider); Sorted takes drops, as
-    // Open's heading does. Only where a section holds both: with no
-    // Unsorted task, or nothing but Unsorted ones (a team's list that nobody
-    // ranked: every section of By person), the label says nothing.
-    const unsorted = s.ordered ? s.tasks.filter(t => t.sort_order == null).length : 0;
-    const labels = unsorted > 0 && unsorted < s.tasks.length;
-    const sub = (label, n) => `<li class="plan-subdivider" data-sub="${label.toLowerCase()}">` +
-      `<span>${label}</span><span class="board-day-count">${n}</span></li>`;
+    // A section's tasks are its share of the manual order (where it is
+    // `ordered`), placed among each other as on Open.
     // A carried-over card's "since" badge is amber here (task-carried):
-    // on Today it is a slipped plan, not just an available task. Unsorted
-    // cards are hollow (task-inbox), as on Open and Focus.
+    // on Today it is a slipped plan, not just an available task.
     const [shown, more] = isFolded ? [[], ''] : windowed('plan:' + s.key, s.tasks);
-    const body = shown.map((t, i) =>
-      (labels && i === 0 ? sub('Unsorted', unsorted) : '') +
-      (labels && i === unsorted ? sub('Sorted', s.tasks.length - unsorted) : '') +
-      taskHTML(t, true, 'board-item' + (i < unsorted ? ' task-inbox' : '') +
-        (s.date && TasksCore.isCarried(t, today) ? ' task-carried' : ''))).join('') + more;
+    const body = shown.map(t =>
+      taskHTML(t, true, 'board-item' + (s.date && TasksCore.isCarried(t, today) ? ' task-carried' : ''))).join('') + more;
     return header + body;
   }).join('');
 }
 
 // Focus, Open and Closed: the list's HTML.
-function listHTML(orderedTasks, newTasks, updates = []) {
+function listHTML(orderedTasks, updates = []) {
   let html = '';
   let truncated = false;
   if (st.today && st.activeView === 'open') {
-    const inFocus = orderedTasks.length + newTasks.length;
+    const inFocus = orderedTasks.length;
     if (app.LIMIT && inFocus >= app.LIMIT) {
       html += `<li class="today-limit-bar today-over-limit">` +
         `<span>⚠ ${inFocus} tasks in ${esc(app.tabLabel('focus'))} (limit: ${app.LIMIT})</span></li>`;
@@ -343,21 +326,20 @@ function listHTML(orderedTasks, newTasks, updates = []) {
       : group('Newest first', displayTasks);
     displayTasks = [];
   }
-  // Open and Focus: both sections always have a heading, even when empty,
-  // because the heading is where a task is dropped to enter an empty section.
-  else if (app.SECTIONS[st.activeView]) {
-    // Updates (My tasks' Focus): no section of the manual order, so no
-    // drop target and nothing ranks there (data-updates: sectionList).
+  // Open and Focus: the manual order, one list, a new task on top.
+  else if (app.ORDERED[st.activeView]) {
+    // Updates (My tasks' Focus): in no order, so nothing is dropped or
+    // ranked there (shownIds leaves it out); the tab's own tasks follow
+    // under the tab's name.
     if (updates.length) {
       html += `<li class="plan-subdivider updates-heading"><span>Updates</span><span class="board-day-count">${updates.length}</span></li>` +
         (([shown, more]) => shown.map(t => taskHTML(t, false, 'task-update')).join('') + more)(windowed('updates', updates, UPDATES_DRAW));
+      if (displayTasks.length) {
+        html += `<li class="plan-subdivider list-heading"><span>${esc(app.tabLabel('focus'))}</span><span class="board-day-count">${displayTasks.length}</span></li>`;
+      }
     }
-    const [fresh, moreFresh] = windowed(st.activeView + ':unsorted', newTasks);
-    html += app.sectionHTML('unsorted', 'Unsorted', newTasks.length);
-    html += fresh.map(t => taskHTML(t, undefined, 'task-inbox')).join('') + moreFresh;
-    html += app.sectionHTML('sorted', 'Sorted', orderedTasks.length);
-    const [ranked, moreRanked] = windowed(st.activeView + ':sorted', displayTasks);
-    html += ranked.map(t => taskHTML(t)).join('') + moreRanked;
+    const [shown, more] = windowed(st.activeView + ':list', displayTasks);
+    html += shown.map(t => taskHTML(t)).join('') + more;
     displayTasks = [];
   }
   html += displayTasks.map(t => taskHTML(t)).join('');
@@ -463,7 +445,7 @@ function wireListHandlers() {
   st.touchDrop = null;
   if (st.activeView === 'plan') {
     app.setupBoardDragAndDrop();
-  } else if (app.SECTIONS[st.activeView] && !app.activeSort()) {
+  } else if (app.ORDERED[st.activeView] && !app.activeSort()) {
     app.setupDragAndDrop();
   }
 
@@ -509,14 +491,14 @@ function render() {
   // holds for its Updates alone are listed where Today is one list (the
   // line above the list leads there: syncUpdatesNote).
   if (st.today && st.activeView === 'plan') filtered = filtered.filter(t => !t.extra && TasksCore.isFocus(t, todayStr()));
-  const { orderedTasks, newTasks, updates } = inViewOrder(filtered);
+  const { orderedTasks, updates } = inViewOrder(filtered);
   const nothing = st.activeView === 'plan' ? st.today && !filtered.length
-    : orderedTasks.length === 0 && newTasks.length === 0 && updates.length === 0;
+    : orderedTasks.length === 0 && updates.length === 0;
   if (nothing) {
     renderEmpty();
     return;
   }
-  app.listEl.innerHTML = st.activeView === 'plan' ? planHTML(filtered) : listHTML(orderedTasks, newTasks, updates);
+  app.listEl.innerHTML = st.activeView === 'plan' ? planHTML(filtered) : listHTML(orderedTasks, updates);
   highlightIn(app.listEl);
   renderFigures(app.listEl);
   wireListHandlers();

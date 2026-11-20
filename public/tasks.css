@@ -9,7 +9,7 @@
 /* The tasks' own tones: its lines and frames a step darker than the wiki's
    (cards, section headers, labels, fields: all use --border), cards on a
    faint tint with a soft resting shadow, and section headers a shade deeper
-   than the cards (--section-bg; unsorted cards are hollow), so a card stands out from the page and from its section.
+   than the cards (--section-bg), so a card stands out from the page and from its section.
    Inside .tasks-app only; a card elsewhere falls back to the page's. */
 .tasks-app {
   --border: #d6d3ca;
@@ -1052,9 +1052,8 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 .board-day-due.board-day-carried { color: var(--amber-text, #d97706); }
 .task-carried .task-start-info { color: var(--amber-text, #d97706); }
 
-/* Unsorted / Sorted, the same light label in a Plan section, on the Open
-   list and on Focus (where it is also a drop target), and the Open list's
-   sort headings */
+/* A light label in a list: the Open list's sort headings, and Updates
+   with the tab's own tasks under it on My tasks' Today */
 .plan-subdivider {
   list-style: none; display: flex; align-items: center; gap: .5rem;
   margin: .7rem 0 .55rem; padding: 0 .25rem;
@@ -1063,11 +1062,6 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 .plan-subdivider::after { content: ''; flex: 1; border-top: 1px solid var(--border); order: 1; }
 .plan-subdivider .board-day-count { order: 2; font-weight: 400; letter-spacing: 0; }
 .plan-subdivider:first-child { margin-top: .2rem; }
-.plan-subdivider.task-drag-over, .plan-subdivider.board-drop-over { color: var(--link); }
-.plan-subdivider:is(.task-drag-over, .board-drop-over)::after { border-top: 2px solid var(--link); }
-/* Open and Focus: a label is also an empty section's drop target, so tall enough to hit */
-.plan-subdivider.list-section { min-height: 1.6rem; }
-@media (pointer: coarse) { .plan-subdivider.list-section { min-height: 2.5rem; } }
 
 .task-inbox-divider {
   list-style: none;
@@ -1115,24 +1109,6 @@ body:has(.tasks-selbar:not([hidden])) .raw-toast { bottom: 5.5rem; }
 
 
 
-/* Open's Unsorted cards: hollow, a dashed frame with no fill and no shadow,
-   so they read as not placed yet, on the sheet and on the paper alike (a
-   grey fill took the code blocks' beige, off next to the cards). Only
-   without a deadline colour, which must look the same on every tab (it used
-   to paint over it). */
-.task-item.task-inbox { border-style: dashed; }
-.task-item.task-inbox:not(.task-urg-overdue):not(.task-urg-today):not(.task-urg-soon):not(.task-urg-upcoming) {
-  background: transparent; box-shadow: none;
-  /* With no fill the frame is all there is: a firmer grey than a card's.
-     Not the left side, which may carry a planned task's coloured edge. */
-  border-top-color: color-mix(in srgb, var(--muted) 30%, var(--border));
-  border-right-color: color-mix(in srgb, var(--muted) 30%, var(--border));
-  border-bottom-color: color-mix(in srgb, var(--muted) 30%, var(--border));
-}
-.task-item.task-inbox:not(.task-urg-overdue):not(.task-urg-today):not(.task-urg-soon):not(.task-urg-upcoming):hover { box-shadow: var(--shadow); }
-.task-item.task-inbox:not(.task-urg-overdue):not(.task-urg-today):not(.task-urg-soon):not(.task-urg-upcoming):not(.task-planned-now):not(.task-planned-later) {
-  border-left-color: color-mix(in srgb, var(--muted) 30%, var(--border));
-}
 
 /* My tasks' Open tab: there are updates, on Today (js/taskrender.js). */
 .tasks-updates-note { margin: .2rem 0 .6rem; }

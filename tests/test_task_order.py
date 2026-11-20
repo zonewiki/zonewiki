@@ -1,4 +1,4 @@
-"""A list's manual order, changed by moves (docs/spec/tasks.md, Sections):
+"""A list's manual order, changed by moves (docs/spec/tasks.md, The manual order):
 POST /api/tasks/reorder with `moves` places each moved task between the
 tasks that are before and after it, in the order the server has, and writes
 no other task."""
@@ -39,7 +39,9 @@ def test_a_move_places_a_task_between_two_and_writes_no_other(client):
     assert _ranked(client) == ["C", "A", "D", "B"]
     assert _move(client, [{"id": ids["C"], "after": ids["B"], "before": None}]).status_code == 204
     assert _ranked(client) == ["A", "D", "B", "C"]
+    # A new task is on top, as it is made.
     create_task(client, title="New")
+    assert _ranked(client) == ["New", "A", "D", "B", "C"]
     new = _tasks(client)["New"]["id"]
     assert _move(client, [{"id": new, "after": ids["D"], "before": ids["B"]}]).status_code == 204
     assert _ranked(client) == ["A", "D", "New", "B", "C"]
@@ -47,10 +49,12 @@ def test_a_move_places_a_task_between_two_and_writes_no_other(client):
     assert _move(client, [{"id": ids["B"], "after": None, "before": ids["A"]},
                           {"id": ids["C"], "after": ids["B"], "before": ids["A"]}]).status_code == 204
     assert _ranked(client) == ["B", "C", "A", "D", "New"]
-    # The only ranked task: a place of its own.
+    # Tasks with no place (a file edited by hand) are shown on top, newest
+    # first; a move places them there first, so it lands where it was shown.
     assert client.post("/api/tasks/reorder", json={"updates": [{"id": i, "sort_order": None} for i in list(ids.values()) + [new]]}).status_code == 204
-    assert _move(client, [{"id": ids["A"], "after": None, "before": None}]).status_code == 204
-    assert _ranked(client) == ["A"]
+    assert _ranked(client) == []
+    assert _move(client, [{"id": ids["A"], "after": None, "before": new}]).status_code == 204
+    assert _ranked(client) == ["A", "New", "D", "C", "B"]
 
 
 def test_a_stale_list_does_not_put_its_old_order_back(client):
@@ -66,14 +70,15 @@ def test_a_stale_list_does_not_put_its_old_order_back(client):
     # Neighbours that are the other way round by now leave "after" to say where.
     assert _move(client, [{"id": ids["D"], "after": ids["B"], "before": ids["A"]}]).status_code == 204
     assert _ranked(client)[-1] == "D"
-    # A neighbour that is gone from the order, or no task: as if not named.
+    # A neighbour with no place (a file edited by hand) is placed where it
+    # is shown, on top, first; one that is no task counts as not named.
     assert client.post("/api/tasks/reorder", json={"updates": [{"id": ids["A"], "sort_order": None}]}).status_code == 204
     assert _move(client, [{"id": ids["B"], "after": ids["A"], "before": ids["C"]}]).status_code == 204
-    assert _ranked(client) == ["B", "C", "D"]
+    assert _ranked(client) == ["A", "B", "C", "D"]
     assert _move(client, [{"id": ids["D"], "after": "no-such-task", "before": ids["B"]}]).status_code == 204
-    assert _ranked(client) == ["D", "B", "C"]
+    assert _ranked(client) == ["D", "A", "B", "C"]
     assert _move(client, [{"id": "no-such-task", "after": ids["B"], "before": ids["C"]}]).status_code == 204
-    assert _ranked(client) == ["D", "B", "C"]
+    assert _ranked(client) == ["D", "A", "B", "C"]
 
 
 def test_many_moves_into_one_place_keep_their_order(client):
@@ -117,7 +122,7 @@ def test_a_new_or_changed_task_takes_a_position(client):
 def test_what_a_position_refuses(client):
     """Refused with nothing written: what isn't a position, a task to put it
     by that is closed or not there (in the same words: it may be another
-    user's), one that isn't ranked yet, and a task closed by the write."""
+    user's), and a task closed by the write."""
     ids = _setup(client, "A", "B")
     loose = create_task(client, title="Loose").get_json()["id"]
     done = create_task(client, title="Done").get_json()["id"]
@@ -129,7 +134,6 @@ def test_what_a_position_refuses(client):
     gone = create_task(client, title="New", position={"after": done}).get_json()["error"]
     assert gone == create_task(client, title="New", position={"after": "no-such-task"}).get_json()["error"]
     assert "closed or not there" in gone
-    assert "isn't in the manual order yet" in create_task(client, title="New", position={"after": loose}).get_json()["error"]
     resp = client.put(f"/api/tasks/{ids['A']}", json={"completed": True, "position": "top"})
     assert resp.status_code == 400 and "Only an open task" in resp.get_json()["error"]
     assert {t: v["sort_order"] for t, v in _tasks(client).items()} == before
