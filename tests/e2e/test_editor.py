@@ -259,6 +259,44 @@ def test_url_paste_in_task_notes_undoes(page, wiki):
     expect(notes).to_have_value("read ")
 
 
+PASTE_FILE = """(name) => {
+    const dt = new DataTransfer();
+    dt.items.add(new File(['hello'], name, {type: 'text/plain'}));
+    document.activeElement.dispatchEvent(new ClipboardEvent('paste', {clipboardData: dt, bubbles: true, cancelable: true}));
+}"""
+
+
+def undo_until(page, textarea, value, tries=5):
+    """Ctrl+Z until the textarea holds value (an upload is two steps: its
+    link, then the placeholder before it); whether it got there."""
+    for _ in range(tries):
+        page.keyboard.press("Control+z")
+        if textarea.input_value() == value:
+            return True
+    return False
+
+
+@pytest.mark.parametrize("how", ["paste", "attach"])
+def test_an_upload_keeps_the_undo_history(page, wiki, how):
+    # Paste, drop and attach once set the textarea's value: the link went
+    # in, and Ctrl+Z had nothing left to undo, the typing before it neither.
+    wiki.write("files", "# Files\n\n")
+    page.goto("/edit/files")
+    textarea = page.locator("#editor-textarea")
+    page.keyboard.press("Control+End")
+    page.keyboard.type("see")
+    typed = textarea.input_value()
+    if how == "paste":
+        page.evaluate(PASTE_FILE, "notes.txt")
+    else:
+        page.locator("#fmt-attach-input").set_input_files({"name": "notes.txt", "mimeType": "text/plain", "buffer": b"hello"})
+    expect(textarea).to_have_value(typed + "[notes.txt](/_assets/notes.txt)")
+    expect(textarea).to_be_focused()
+    assert undo_until(page, textarea, typed)
+    page.keyboard.press("Control+z")                 # the typing before it, too
+    expect(textarea).not_to_have_value(typed)
+
+
 def test_preview_grows_on_very_wide_screens(new_page, wiki):
     # From 1800px the preview may be 1100px wide (the writing pane stays
     # 800px); its text keeps the reading width, a wide table uses the rest.

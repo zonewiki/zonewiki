@@ -203,7 +203,7 @@ Which item an index means is the renderer's count (Checkbox index mapping, under
 
 ### Undo
 
-All programmatic text insertions (list continuation, formatting bar, snippets, wikilink autocomplete, etc.) use `document.execCommand('insertText')` so they integrate correctly with the browser's native undo stack.
+All programmatic text insertions (list continuation, formatting bar, snippets, wikilink autocomplete, URL paste, uploads (Undoing an upload), etc.) use `document.execCommand('insertText')` so they integrate correctly with the browser's native undo stack.
 
 ## Section editing
 
@@ -276,6 +276,13 @@ the bar's Attach button does the same from a file picker.
 All file types are accepted.
 Images are inserted as `![name](url)`; other files as `[name](url)`.
 Multiple files dropped at once are uploaded sequentially.
+
+### Undoing an upload
+
+While the file uploads a placeholder stands where it goes (`![uploading…]()`, or `[name]()`), and the link takes its place when the upload answers.
+Both go in as typing does (`putText` in `js/mdedit.js`: `execCommand('insertText')`), so Ctrl+Z takes the link back to the placeholder, a second one takes that out, and what was typed before stays undoable; it once set `textarea.value`, which wiped the undo history.
+The placeholder is looked for where it was put, then anywhere, since text typed before it meanwhile moves it.
+Only where the browser can't insert (the textarea no longer shown, the focus elsewhere) is the text set directly, without an undo step.
 
 ### Names and clashes
 

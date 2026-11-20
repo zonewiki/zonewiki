@@ -8,7 +8,8 @@ import { taskCheckboxOffsets } from './mdtext.js';
 // completion, the formatting bar and its shortcuts, snippets, list
 // continuation, file paste/drop/attach, URL paste. Every change goes through
 // execCommand('insertText'), so Ctrl+Z undoes it in one step and the input
-// event follows as for typing; uploads, which set the value, call onChange.
+// event follows as for typing; uploads too (putText), which call onChange as
+// well.
 //
 // opts: bar (the formatting bar, partials/format_bar.html), attachInput (its
 // file input), onChange, onEnter(e) (runs before list continuation; may
@@ -88,13 +89,34 @@ export function markdownEditor(textarea, { bar = null, attachInput = null, onCha
 
   // ── Uploads: paste, drop, attach ──────────────────────────────────────────
 
+  // An upload's text (its placeholder, then its link) put in as typing is,
+  // not by setting the value, which wiped the undo history: Ctrl+Z undoes
+  // the link, then the placeholder, and what was typed before stays
+  // undoable. Only where the browser can't (the textarea no longer shown,
+  // the focus elsewhere) is the value set.
+  function putText(from, to, text) {
+    textarea.focus();
+    textarea.setSelectionRange(from, to);
+    if (document.activeElement === textarea &&
+        (text ? document.execCommand('insertText', false, text) : from === to || document.execCommand('delete'))) return;
+    textarea.setRangeText(text, from, to, 'end');
+  }
+
   async function uploadFileAtCursor(file, filenameOverride, overwrite, unique) {
     const start = textarea.selectionStart, end = textarea.selectionEnd;
     const isImage = file.type.startsWith('image/');
     const name = filenameOverride || file.name || 'file';
     const placeholder = isImage ? '![uploading…]()' : `[${name}]()`;
-    textarea.value = textarea.value.slice(0, start) + placeholder + textarea.value.slice(end);
-    textarea.selectionStart = textarea.selectionEnd = start + placeholder.length;
+    putText(start, end, placeholder);
+    // Where the placeholder is now: where it was put, unless text typed
+    // before it meanwhile moved it (gone: nothing there to replace).
+    const at = () => {
+      const v = textarea.value;
+      if (v.startsWith(placeholder, start)) return start;
+      const i = v.indexOf(placeholder);
+      return i < 0 ? Math.min(start, v.length) : i;
+    };
+    const replacePlaceholder = text => { const i = at(); putText(i, textarea.value.startsWith(placeholder, i) ? i + placeholder.length : i, text); };
     const fd = new FormData();
     fd.append('file', file, file.name || 'upload');
     if (unique) fd.append('unique', '1');
@@ -111,8 +133,7 @@ export function markdownEditor(textarea, { bar = null, attachInput = null, onCha
       if (res.status === 409) {
         const { filename } = await res.json();
         // Remove placeholder while dialog is open
-        textarea.value = textarea.value.slice(0, start) + textarea.value.slice(start + placeholder.length);
-        textarea.selectionStart = textarea.selectionEnd = start;
+        replacePlaceholder('');
         onChange();
         const choice = await askConflict(filename);
         if (choice) await uploadFileAtCursor(file, choice.name, choice.overwrite);
@@ -122,11 +143,9 @@ export function markdownEditor(textarea, { bar = null, attachInput = null, onCha
       if (res.status === 413 || res.status === 507) alert(await res.text());
       if (!res.ok) throw new Error();
       const { url } = await res.json();
-      const md = isImage ? `![${name}](${url})` : `[${name}](${url})`;
-      textarea.value = textarea.value.slice(0, start) + md + textarea.value.slice(start + placeholder.length);
-      textarea.selectionStart = textarea.selectionEnd = start + md.length;
+      replacePlaceholder(isImage ? `![${name}](${url})` : `[${name}](${url})`);
     } catch (_) {
-      textarea.value = textarea.value.slice(0, start) + textarea.value.slice(start + placeholder.length);
+      replacePlaceholder('');
     }
     onChange();
   }
