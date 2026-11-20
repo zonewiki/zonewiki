@@ -107,21 +107,3 @@ func TestOnlyAGroupsMembersReadItsTasks(t *testing.T) {
 		t.Errorf("the group's tasks after: %v", got)
 	}
 }
-
-// A former list for some's old folder (until 2026-11-20: its list.json said
-// whom it was for) is read by no one: what a start couldn't move into a
-// group's folder is out of everyone's sight, not in it.
-func TestAFormerListForSomesFolderIsReadByNoOne(t *testing.T) {
-	f := groupsStore(t)
-	f.put(t, "_tasks/lists/old/list.json", `{"name": "old", "for": ["@ops"]}`+"\n")
-	f.put(t, "_tasks/lists/old/tasks.json", `[{"id": "o1", "title": "Old", "list": "old", "created_at": "2026-01-01T10:00:00"}]`+"\n")
-	forgetAll()
-	for _, user := range []string{"alice", "bob"} {
-		if slices.ContainsFunc(f.Open(asker.User(user)), func(t *Task) bool { return t.ID == "o1" }) {
-			t.Errorf("%s reads the old folder's task", user)
-		}
-	}
-	if slices.ContainsFunc(f.Every(), func(t *Task) bool { return t.ID == "o1" }) {
-		t.Error("Zone reads the old folder's task")
-	}
-}

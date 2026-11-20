@@ -194,7 +194,7 @@ func main() {
 	noDeltaForUploads(cfg.Data)
 	ensureHomePage()
 	cleanLeftDrafts()
-	setUpTasks(format) // the task files as this Zone keeps them (tasksetup.go)
+	setUpTasks() // the task files as this Zone keeps them (tasksetup.go)
 	noteWikiFormat(format)
 	packAtStart() // the repository's loose objects, in the background (gitstore.go)
 	// The semantic index's worker reads tasks: after the task files are set up.

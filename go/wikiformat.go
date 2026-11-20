@@ -22,10 +22,6 @@ import (
 // older format refuses the wiki instead of misreading it (checkWikiFormat).
 const wikiFormat = 1
 
-// firstFormat: the format the steps from before .zone-format leave a wiki
-// in (migrateLists' steps, which look at the registries' versions instead).
-const firstFormat = 1
-
 // formatFileName: the file at the wiki's root that says which format its
 // files are in. It is in git, beside the files it speaks for: a revert, a
 // pull or a checkout moves it along with them, which .zone/ (out of git)
@@ -38,8 +34,8 @@ func formatPath() string { return filepath.Join(cfg.Data, formatFileName) }
 var formatRE = regexp.MustCompile(`^[0-9]{1,9}$`)
 
 // readWikiFormat: the format the wiki's files are in; 0 for a wiki without
-// .zone-format (from before it, or new), whose files the steps from before
-// look through. An error for a file that says anything but a number.
+// .zone-format (a new one), which a start notes as this Zone's
+// (noteWikiFormat). An error for a file that says anything but a number.
 func readWikiFormat() (int, error) {
 	b, err := os.ReadFile(formatPath())
 	if errors.Is(err, fs.ErrNotExist) {
@@ -63,8 +59,8 @@ func checkWikiFormat() (int, error) {
 	n, err := readWikiFormat()
 	if err != nil {
 		return 0, fmt.Errorf("%s can't be read (%v). It says which format the wiki's files are in: take it back "+
-			"from the history (git checkout -- %s) or, if no newer Zone ran on this wiki, remove it, and Zone looks "+
-			"the files through again", formatFileName, err, formatFileName)
+			"from the history (git checkout -- %s) or, if no newer Zone ran on this wiki, remove it, and Zone writes "+
+			"it again", formatFileName, err, formatFileName)
 	}
 	if n > wikiFormat {
 		return 0, fmt.Errorf("the wiki's files are in format %d (%s), which a newer Zone wrote; this one (%s) knows "+
@@ -81,19 +77,15 @@ func writeWikiFormat(n int) (string, error) {
 	return path, atomicfile.Write(path, strconv.Itoa(n)+"\n")
 }
 
-// noteWikiFormat: after the steps from before .zone-format took a wiki
-// without it (from 0) over, it says firstFormat from then on, in a commit
-// of its own; later starts leave those steps out. Not while the lists
-// couldn't be set up: the next start tries their steps again.
+// noteWikiFormat: a wiki without .zone-format (from 0: a new one) says this
+// Zone's format from then on, in a commit of its own.
 func noteWikiFormat(from int) {
-	if from >= firstFormat || listsUnmigrated {
+	if from != 0 {
 		return
 	}
-	// The views' migration's mark, which the file replaces.
-	_ = os.Remove(statePath("views-named"))
-	path, err := writeWikiFormat(firstFormat)
+	path, err := writeWikiFormat(wikiFormat)
 	if err != nil {
-		logf("%s couldn't be written (the next start looks the wiki's files through again): %v", formatFileName, err)
+		logf("%s couldn't be written (the next start tries again): %v", formatFileName, err)
 		return
 	}
 	_ = gitCommit("", "Note the format of the wiki's files", path)

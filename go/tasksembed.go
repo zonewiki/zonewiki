@@ -258,7 +258,7 @@ func noListHTML(rq *Req, name string, instance int) string {
 	}
 	var b bytes.Buffer
 	err := partials.ExecuteTemplate(&b, "tasks_no_list", map[string]any{
-		"Name": name, "Sfx": sfx, "Create": rq != nil && !rq.sharing && !listsUnmigrated && mayWriteTasks(rq.who()) == nil})
+		"Name": name, "Sfx": sfx, "Create": rq != nil && !rq.sharing && mayWriteTasks(rq.who()) == nil})
 	if err != nil {
 		logf("task list embed: %v", err)
 	}
@@ -282,9 +282,6 @@ func allTasksParams() TasksParams {
 // setAllTasksParams writes the settings of All tasks with those of set
 // changed, in a commit by user; was: the params as the dialog saw them.
 func setAllTasksParams(user asker, was string, set map[string]string) error {
-	if listsUnmigrated {
-		return errListsUnmigrated
-	}
 	if err := mayWriteTasks(user); err != nil {
 		return err
 	}

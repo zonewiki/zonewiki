@@ -58,9 +58,8 @@ class TestViewAndGroup:
         assert 'data-init-view="today" data-init-group="day"' in preview(client, "[[tasks: view=today group=day]]\n")
 
     def test_the_names_of_before_are_unknown(self, client, wiki_dir):
-        """view=focus, view=plan and plan=on|off said this until 2026-11: a
-        wiki from then is rewritten when Zone starts (go/viewsmigrate.go),
-        and from then on they are names no view has."""
+        """view=focus, view=plan and plan=on|off said this until 2026-11:
+        they are names no view has."""
         for old in ("view=focus", "view=plan", "plan=off", "plan=on", "view=plan plan=off"):
             assert 'data-init-view="" data-init-group=""' in preview(client, f"[[tasks: {old}]]\n"), old
 
@@ -143,7 +142,6 @@ class TestSave:
         assert save(client, all=True, was="view=open limit=4 labels=Backlog,Now", set={"tag": "a"}).status_code == 400
         assert save(client, all=True, was="view=open limit=4 labels=Backlog,Now", set={"view": "", "limit": ""}).status_code == 200
         assert '  "all": {"labels": "Backlog,Now"}\n' in registry.read_text()
-        assert not (wiki_dir / "_tasks" / "settings.json").exists()
         # The tasks are as they were.
         assert client.get("/api/tasks", headers=HOST).get_json() == []
 
@@ -187,78 +185,3 @@ def test_a_save_is_one_commit(client, git_wiki_dir):
     head = log()
     assert save(client, page="lists", index=0, was="tag=a group=none", set={"group": "none"}).status_code == 200
     assert log() == head
-
-
-def test_a_wiki_from_before_is_taken_over_to_the_views_names(git_wiki_dir, tmp_path_factory):
-    """view=focus, view=plan and plan= of before 2026-11 are rewritten when
-    Zone starts, once, in one commit: embeds on pages and the registries'
-    settings, so that every view shows what it showed; code stays."""
-    import subprocess
-
-    from tests import settings
-    from tests.goserver import GoClient
-    root = git_wiki_dir
-    write_page(root, "home", "# Home\n\n[[tasks: view=focus]]\n\n[[tasks: tag=a view=plan]]\n\n`[[tasks: view=plan]]`\n\n"
-                             "[[tasks: list=shop view=open]]\n\n[[tasks: plan=off labels=A,B,C]]\n")
-    (root / "_tasks").mkdir(exist_ok=True)
-    (root / "_tasks" / "lists.json").write_text(
-        '{"version": 2, "lists": [{"name": "shop", "view": "plan", "plan": "on"}, {"name": "b", "view": "focus"}],'
-        ' "mine": {"view": "open"}, "all": {"plan": "off"}}')
-    git = lambda *args: subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, check=True, env=settings.GIT_ENV).stdout
-    (root / ".zone-format").unlink()   # a wiki from before has none (The data format in deployment.md)
-    git("add", "-A")
-    git("commit", "-q", "-m", "Before")
-    with GoClient(tmp_path_factory.mktemp("go") / "server.log") as c:
-        c.live.ensure()
-        assert (root / "home.md").read_text() == (
-            "# Home\n\n[[tasks: view=today]]\n\n[[tasks: tag=a view=open group=day]]\n\n`[[tasks: view=plan]]`\n\n"
-            "[[tasks: list=shop view=open group=none]]\n\n[[tasks: labels=A,C group=none]]\n")
-        registry = (root / "_tasks" / "lists.json").read_text()
-        assert '"version": 3' in registry and '{"name": "shop", "view": "open", "group": "day"}' in registry
-        assert '{"name": "b", "view": "today"}' in registry
-        assert '"mine": {"view": "open", "group": "none"}' in registry and '"all": {"group": "none"}' in registry
-        assert git("log", "-2", "--format=%s").splitlines() == [
-            "Note the format of the wiki's files", "Name the tasks' views Today and Open"]
-        html = c.get("/page/home", headers=HOST).get_data(as_text=True)
-        assert 'data-init-view="today"' in html and 'data-init-view="open" data-init-group="day"' in html
-    # A second start changes nothing; neither does a view=open written since.
-    write_page(root, "later", "[[tasks: view=open]]\n")
-    with GoClient(tmp_path_factory.mktemp("go") / "server.log") as c:
-        c.live.ensure()
-        assert (root / "later.md").read_text() == "[[tasks: view=open]]\n"
-        assert git("log", "-1", "--format=%s").strip() == "Note the format of the wiki's files"
-
-
-def test_a_wiki_the_inbox_took_past_the_views_names_is_taken_over(git_wiki_dir, tmp_path_factory):
-    """Until 2026-11-20 the Inbox's migration wrote version 3, and the views'
-    migration skipped such a wiki. At a start its registry at version 3 with
-    a name only the old Zone wrote is rewritten, as is a page with one; what
-    has none (view=open alone is the board now) stays."""
-    import subprocess
-
-    from tests import settings
-    from tests.goserver import GoClient
-    root = git_wiki_dir
-    write_page(root, "home", "# Home\n\n[[tasks: view=focus]]\n\n[[tasks: list=shop view=open]]\n")
-    write_page(root, "board", "# Board\n\n[[tasks: list=shop view=open]]\n")
-    (root / "_tasks").mkdir(exist_ok=True)
-    (root / "_tasks" / "lists.json").write_text(
-        '{"version": 3, "lists": [{"name": "shop", "view": "plan", "plan": "on"}, {"name": "b", "view": "open"}], "all": {"plan": "off"}}')
-    git = lambda *args: subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, check=True, env=settings.GIT_ENV).stdout
-    (root / ".zone-format").unlink()   # a wiki from before has none: the first start (git_setup) wrote it
-    git("add", "-A")
-    git("commit", "-q", "-m", "Before")
-    with GoClient(tmp_path_factory.mktemp("go") / "server.log") as c:
-        c.live.ensure()
-        registry = (root / "_tasks" / "lists.json").read_text()
-        assert '{"name": "shop", "view": "open", "group": "day"}' in registry and '{"name": "b", "view": "open", "group": "none"}' in registry
-        assert '"all": {"group": "none"}' in registry
-        assert (root / "home.md").read_text() == "# Home\n\n[[tasks: view=today]]\n\n[[tasks: list=shop view=open group=none]]\n"
-        assert (root / "board.md").read_text() == "# Board\n\n[[tasks: list=shop view=open]]\n"
-        assert git("log", "-2", "--format=%s").splitlines() == [
-            "Note the format of the wiki's files", "Name the tasks' views Today and Open"]
-    # Once.
-    head = git("rev-parse", "HEAD")
-    with GoClient(tmp_path_factory.mktemp("go") / "server.log") as c:
-        c.live.ensure()
-        assert git("rev-parse", "HEAD") == head

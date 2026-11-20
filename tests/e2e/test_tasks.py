@@ -3697,10 +3697,10 @@ def test_unplanned_overdue_count_lists_them_even_folded(page, wiki):
 
 
 def test_completed_shows_earlier_years(page, wiki):
-    """Earlier years' completed tasks (the yearly archives) are one click
-    away in Completed, and a search link to one opens its year."""
+    """Earlier years' closed tasks (the months' archives) are one click
+    away in Closed, and a search link to one opens its year."""
     year = date.today().year
-    (wiki.root / "_tasks" / f"closed-{year-1}.json").write_text(
+    (wiki.root / "_tasks" / f"closed-{year-1}-05.json").write_text(
         '[{"id": "old", "title": "Old done", "closed_at": "%d-05-01T10:00:00"}]' % (year - 1),
         encoding="utf-8")
     tid = page.request.post("/api/tasks", data={"title": "New done"}).json()["id"]

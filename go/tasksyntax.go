@@ -318,8 +318,7 @@ func setEmbedParams(text string, n int, was string, set map[string]string) (stri
 var tasksGroups = []string{"none", "day", "person", "list"}
 
 // embedGroup: what a view says its Open tab shows: its group=, "" when it
-// says none (the board by day then). (Until 2026-11 view=open|plan and
-// plan=on|off said it too: migrateViewsLocked rewrote those.)
+// says none (the board by day then).
 func embedGroup(p TasksParams) string {
 	if v := strings.ToLower(strings.TrimSpace(p.Get("group"))); slices.Contains(tasksGroups, v) {
 		return v

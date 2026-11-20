@@ -25,15 +25,10 @@ import (
 // of that name (shared/gifts); their own is the bare name.
 const sharedRef = "shared/"
 
-// privateListName: the list the first migration made for a user's private
-// tasks without one, and until 2026-11 the list a new task went to when
-// nothing was pinned. The Inbox took its place (migrateInbox).
-const privateListName = "private"
-
 // generalListName: the shared list that takes a shared task that loses its
-// list (with users a shared task is always in one): the tasks that were in
-// no list before the Inbox, a deleted list's when no other is named, a
-// restored task whose list is gone. Made when first needed.
+// list (with users a shared task is always in one): one in no list at start
+// (fileInGeneral), a deleted list's when no other is named, a restored task
+// whose list is gone. Made when first needed.
 const generalListName = "general"
 
 // ListInfo: a list as one user sees it.
@@ -342,9 +337,6 @@ func mineParams(user asker) TasksParams {
 // setMineParams writes user's settings of My tasks with those of set
 // changed, in a commit by user; was: the params as the dialog saw them.
 func setMineParams(user asker, was string, set map[string]string) error {
-	if listsUnmigrated {
-		return errListsUnmigrated
-	}
 	if err := mayWriteTasks(user); err != nil {
 		return err
 	}
@@ -401,9 +393,6 @@ func mineOrder(user asker) []string {
 // open tasks they see, each once (so what is closed or gone drops out), in
 // a commit by user.
 func setMineOrder(user asker, ids []string) error {
-	if listsUnmigrated {
-		return errListsUnmigrated
-	}
 	if err := mayWriteTasks(user); err != nil {
 		return err
 	}
@@ -433,13 +422,6 @@ func setMineOrder(user asker, ids []string) error {
 }
 
 // ---- operations ----
-
-// listsUnmigrated: the lists couldn't be taken over from the pages at
-// start (migrateLists failed): no list is made or changed until a start
-// succeeds, since a registry written now would stand for "taken over".
-var listsUnmigrated bool
-
-var errListsUnmigrated = refuse("The task lists couldn't be set up when Zone started (its log says why): nothing about lists can be changed until that is mended and Zone restarted")
 
 // shareNeeded: a write would make private tasks shared, and didn't say so.
 func shareNeeded(what string) error {
@@ -471,9 +453,6 @@ func checkListName(name string) (string, error) {
 
 // listForWrite: the list ref names for user, which they may change.
 func listForWrite(user asker, ref string, lists map[string]ListInfo) (ListInfo, error) {
-	if listsUnmigrated {
-		return ListInfo{}, errListsUnmigrated
-	}
 	if err := mayWriteTasks(user); err != nil {
 		return ListInfo{}, err
 	}
@@ -550,13 +529,6 @@ func sharedNameTaken(name string, except ...string) bool {
 			return true
 		}
 	}
-	// A former list for some's old folder keeps its name: its history is
-	// its members' (formerListFor), a new list's would be too.
-	for _, other := range formerListNames() {
-		if listNameKey(other) == key && !slices.Contains(except, other) {
-			return true
-		}
-	}
 	return false
 }
 
@@ -610,9 +582,6 @@ func cleanGroup(user asker, text string) (string, error) {
 // under More), in the same commit. group: a group user is in whose list it
 // is (cleanGroup; "": a shared list, for everyone), kept in its folder.
 func createListOp(user asker, name string, private, pin bool, group, suffix string) (string, error) {
-	if listsUnmigrated {
-		return "", errListsUnmigrated
-	}
 	if err := mayWriteTasks(user); err != nil {
 		return "", err
 	}
@@ -1159,9 +1128,6 @@ func shareListOp(user asker, ref, group, suffix string) (string, error) {
 // pinned list ("first"), or unpins it ("0"). The pins are the user's own
 // (their registry); without users the wiki's.
 func pinListOp(user asker, ref, pin string) error {
-	if listsUnmigrated {
-		return errListsUnmigrated
-	}
 	if err := mayWriteTasks(user); err != nil {
 		return err
 	}
@@ -1209,9 +1175,6 @@ func pinListOp(user asker, ref, pin string) error {
 // the pinned ones it leaves out, as they were. Nothing is pinned or unpinned by it; an order that is the one
 // they have writes nothing.
 func pinOrderOp(user asker, refs []string) error {
-	if listsUnmigrated {
-		return errListsUnmigrated
-	}
 	if err := mayWriteTasks(user); err != nil {
 		return err
 	}

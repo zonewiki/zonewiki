@@ -13,7 +13,6 @@ import (
 )
 
 const registryText = `{
-  "version": 1,
   "lists": [
     {"name": "shop", "view": "focus", "limit": "8", "keep": "1", "labels": "Catalogue,Shopping"},
     {"name": "task"}
@@ -43,29 +42,19 @@ func TestRegistryRoundTrips(t *testing.T) {
 	}
 }
 
-// A registry keeps the version it was read with (a start takes an older
-// one over, and says so by writing the next); one without a version, or a
-// new one, is written with this Zone's. home, a list's being left out of My
+// A registry has no version: .zone-format says the format of the wiki's
+// files. One written before 2026-11-20 says one, which is dropped, not
+// kept as a key Zone doesn't know. home, a list's being left out of My
 // tasks, is a setting like the others.
-func TestRegistryVersion(t *testing.T) {
-	for text, want := range map[string]string{
-		`{"version": 1, "lists": []}`: `"version": 1`,
-		`{"version": 2, "lists": []}`: `"version": 2`,
-		`{"lists": []}`:               `"version": 3`,
-	} {
-		r, ok := ParseRegistry([]byte(text))
-		if !ok || !strings.Contains(r.Encode(), want) {
-			t.Errorf("%s written as\n%s", text, r.Encode())
-		}
-	}
-	if got := (&Registry{}).Encode(); !strings.Contains(got, `"version": 3`) || ListsVersion != 3 {
+func TestRegistryHasNoVersion(t *testing.T) {
+	if got := (&Registry{}).Encode(); strings.Contains(got, "version") {
 		t.Errorf("a new registry:\n%s", got)
 	}
 	r, _ := ParseRegistry([]byte(`{"version": 2, "lists": [{"home": "off", "name": "someday", "limit": 3}]}`))
-	if l := r.Find("someday"); l == nil || l.Settings["home"] != "off" || len(l.Extra) != 0 {
-		t.Fatalf("someday = %+v", l)
+	if l := r.Find("someday"); l == nil || l.Settings["home"] != "off" || len(l.Extra) != 0 || len(r.Extra) != 0 {
+		t.Fatalf("someday = %+v, extra %v", l, r.Extra)
 	}
-	if got := r.Encode(); !strings.Contains(got, `{"name": "someday", "limit": "3", "home": "off"}`) {
+	if got := r.Encode(); got != "{\n  \"lists\": [\n    {\"name\": \"someday\", \"limit\": \"3\", \"home\": \"off\"}\n  ]\n}\n" {
 		t.Errorf("written as\n%s", got)
 	}
 }
@@ -73,7 +62,7 @@ func TestRegistryVersion(t *testing.T) {
 // "mine" was true, until 2026-11, for a user whose Pinned showed only their
 // own tasks: that reads as no settings of My tasks, and isn't written back.
 func TestRegistryMineWasAFlag(t *testing.T) {
-	r, ok := ParseRegistry([]byte(`{"version": 1, "pinned": ["a"], "mine": true}`))
+	r, ok := ParseRegistry([]byte(`{"pinned": ["a"], "mine": true}`))
 	if !ok || len(r.Mine) != 0 {
 		t.Fatalf("read as %v (ok %v)", r.Mine, ok)
 	}
@@ -116,11 +105,7 @@ func TestRegistryReadLeniently(t *testing.T) {
 	if !ok {
 		t.Fatal("not read")
 	}
-	if r.Version != 0 {
-		t.Errorf("version %d: a file without one is from before the lists", r.Version)
-	}
 	want := `{
-  "version": 3,
   "lists": [
     {"name": "shop", "limit": "8", "keep": "true", "colour": "red"},
     {"name": "b"}
@@ -143,7 +128,7 @@ func TestRegistryReadLeniently(t *testing.T) {
 // each list says whose it is.
 func TestListsPerOwner(t *testing.T) {
 	f := newStore(t, "alice", "bob")
-	if r := f.ReadLists(""); r.Version != 0 || len(r.Lists) != 0 {
+	if r := f.ReadLists(""); r.PinsSet || len(r.Lists) != 0 {
 		t.Errorf("no file: %+v", r)
 	}
 	f.Lock()
@@ -207,7 +192,7 @@ func TestListsCorruptRefusesWrite(t *testing.T) {
 	if r := f.ReadLists(""); len(r.Lists) != 0 {
 		t.Errorf("read: %+v", r)
 	}
-	if r, err := f.ReadListsStrict("nobody"); err != nil || r.Version != 0 {
+	if r, err := f.ReadListsStrict("nobody"); err != nil || len(r.Lists) != 0 {
 		t.Errorf("no file, read for a write: %+v, %v", r, err)
 	}
 }

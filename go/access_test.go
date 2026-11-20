@@ -524,31 +524,6 @@ func TestANarrowedAskerSeesLess(t *testing.T) {
 	}
 }
 
-// A former list for some's old folder (until 2026-11-20): git keeps its
-// history at the old paths, which stays whom its mark says it was for.
-func TestAFormerListForSomesHistoryIsItsMembers(t *testing.T) {
-	testWiki(t, nil)
-	withGroups(t, nil, "alice:hiring", "bob", "carol")
-	dir := filepath.Join(cfg.Data, "_tasks", "lists", "offers")
-	if err := os.MkdirAll(dir, 0o777); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "list.json"), []byte(`{"name": "offers", "for": ["@hiring", "carol"], "gone": true, "group": "offers"}`), 0o666); err != nil {
-		t.Fatal(err)
-	}
-	for user, sees := range map[string]bool{"alice": true, "carol": true, "bob": false} {
-		if got := canSeePath(asUser(user), "_tasks/lists/offers/tasks.json"); got != sees {
-			t.Errorf("%s sees the old folder's tasks: %v", user, got)
-		}
-	}
-	if !canSeePath(asUser("bob"), "_tasks/lists/team/tasks.json") {
-		t.Error("a shared list's folder")
-	}
-	if !sharedNameTaken("offers") || !groupNameTaken(settings(), "hiring", "") {
-		t.Error("the name of a former list for some, or of the group it was for, is free")
-	}
-}
-
 // What safePath opens is the file the slug names, which placeOf judged: no
 // symlink on the way to it (a shared name linking to a private page, a
 // folder linking to a private folder, a link out of the wiki), no name a

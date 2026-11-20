@@ -25,12 +25,6 @@ import (
 // ListsName: the registry's file in a tasks folder.
 const ListsName = "lists.json"
 
-// ListsVersion: the format this Zone writes. A registry without a version
-// (or no file) is a wiki from before lists were kept here; version 1 is
-// one from before the Inbox (a task without a list is in its user's Inbox,
-// and with users a shared task is always in a list).
-const ListsVersion = 3
-
 // ListSettings: a list's settings, in the order its line keeps them. Their
 // values are text, as an embed writes them (limit "8", keep "1").
 // home "off": the list's tasks are left out of My tasks.
@@ -47,7 +41,6 @@ type List struct {
 
 // Registry: a lists.json.
 type Registry struct {
-	Version int
 	Lists   []*List
 	Pinned  []string          // the pinned lists' names, in order: the pills of the list switcher
 	PinsSet bool              // the file says which are pinned, be it none ("pinned": [])
@@ -89,7 +82,9 @@ func (r *Registry) Find(name string) *List {
 }
 
 // registryKeys: the keys Zone reads. "default" (until 2026-11 the list a new
-// task goes to, now the first pinned one) is read and no longer written.
+// task goes to, now the first pinned one) is read and no longer written;
+// "version" (until 2026-11-20 the registry's format, which .zone-format
+// says now) is no longer read or written.
 // "mine" holds the settings of My tasks; until 2026-11 it was true for a
 // user whose Pinned showed only their own tasks, which reads as no settings.
 var registryKeys = map[string]bool{"version": true, "lists": true, "pinned": true, "default": true, "mine": true, "all": true, "order": true}
@@ -119,9 +114,6 @@ func ParseRegistry(raw []byte) (*Registry, bool) {
 		if id = strings.TrimSpace(id); id != "" && !slices.Contains(r.Order, id) {
 			r.Order = append(r.Order, id)
 		}
-	}
-	if n, ok := jsonobj.WholeNumber(o["version"]); ok && n > 0 {
-		r.Version = n
 	}
 	seen := map[string]bool{}
 	for _, lo := range jsonobj.List(o["lists"]) {
@@ -212,19 +204,12 @@ func textObject(order []string, m map[string]string, extra map[string]json.RawMe
 	return b.Bytes()
 }
 
-// Encode: the registry's text: the version, then each list on a line of
-// its own (so a list is added or changed by hand in one line, and a commit
+// Encode: the registry's text: each list on a line of its own (so a list is added or changed by hand in one line, and a commit
 // shows the list that changed), the pins, the settings of All tasks, and
 // the keys Zone doesn't know, A–Z. What is empty has no key.
 func (r *Registry) Encode() string {
 	var b bytes.Buffer
-	version := r.Version // a registry keeps its version: a start takes an older one over
-	if version <= 0 {
-		version = ListsVersion
-	}
-	b.WriteString("{\n  \"version\": ")
-	b.WriteString(jsonobj.Text(version))
-	b.WriteString(",\n  \"lists\": [")
+	b.WriteString("{\n  \"lists\": [")
 	n := 0
 	for _, l := range r.Lists {
 		if n++; n > 1 {
@@ -281,7 +266,7 @@ func (r *Registry) own(owner string) *Registry {
 	return r
 }
 
-// ReadLists: owner's registry, for reading: an empty one (version 0) when
+// ReadLists: owner's registry, for reading: an empty one when
 // there is no file or it can't be read.
 func (s *Store) ReadLists(owner string) *Registry {
 	r := &Registry{}
@@ -326,7 +311,7 @@ func (s *Store) WriteListsLocked(user asker.Asker, owner string, r *Registry) ([
 }
 
 // WriteListsOf writes owner's registry, whoever asks: for what Zone does
-// over every owner's files (a migration at start). Returns the paths of the
+// over every owner's files (a start's #general). Returns the paths of the
 // files that changed.
 func (s *Store) WriteListsOf(owner string, r *Registry) ([]string, error) {
 	s.Hold()

@@ -996,7 +996,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	v := &tasksPageView{Heading: heading, Missing: missing,
-		Menu: !rq.sharing && !listsUnmigrated && (missing == "" || mayWriteTasks(rq.who()) == nil), Write: mayWriteTasks(rq.who()) == nil, Users: privateFolder(rq.user) != "",
+		Menu: !rq.sharing && (missing == "" || mayWriteTasks(rq.who()) == nil), Write: mayWriteTasks(rq.who()) == nil, Users: privateFolder(rq.user) != "",
 		Mine: mine, MineAssigns: mine && mineAssigns(rq.who()), Inbox: inbox, InboxPrivate: inbox && inboxOwner(rq.who()) != "",
 		Groups: groupsFor(rq.who()), NewListName: q.Get("newlist_name"), NewListError: q.Get("newlist_error"), NewListFor: forValue(q.Get("newlist_for")),
 		Places: places, More: more, TasksHTML: htmlOf(tasksHTML), LinkSections: sections,

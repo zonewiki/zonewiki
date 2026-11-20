@@ -265,8 +265,7 @@ func userNameHasHistory(name string) bool {
 		strings.TrimSpace(runGit("log", "-1", "--format=%H", "--fixed-strings", "--author=<"+name+"@zone>").Stdout) != ""
 }
 
-// namedInTasks: a shared or a group's list names name among its owners, a
-// former list for some among whom it was for (what its old folder keeps), or
+// namedInTasks: a shared or a group's list names name among its owners, or
 // a task as its assignee or a follower: what a user is named in that others
 // wrote.
 func namedInTasks(name string) bool {
@@ -279,11 +278,6 @@ func namedInTasks(name string) bool {
 			if slices.Contains(l.Owners(), name) {
 				return true
 			}
-		}
-	}
-	for _, list := range formerListNames() {
-		if slices.Contains(formerListFor(list), name) {
-			return true
 		}
 	}
 	for _, t := range taskFiles.Every() {

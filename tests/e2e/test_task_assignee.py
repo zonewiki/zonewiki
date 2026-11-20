@@ -912,7 +912,7 @@ def test_today_is_open_with_a_filter_and_groups_as_open_does(alice):
     expect(cut.locator("[aria-pressed='true']")).to_have_text(["List"])
 
 
-# ── Lists for some ───────────────────────────────────────────────────────────
+# ── A group's lists ──────────────────────────────────────────────────────────
 
 def test_a_groups_list_is_made_and_its_tasks_go_to_its_members(page, wiki, monkeypatch):
     """New list… makes a group's list (For: a group she is in); the heading

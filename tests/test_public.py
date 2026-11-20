@@ -85,7 +85,7 @@ def wiki(git_wiki_dir, monkeypatch):
     (w / "private/alice/diary.md").write_text(f"# Diary {SECRET}\n\n{SECRET} about the [[garden]].\n")
     (w / "private/alice/_tasks").mkdir()
     (w / "private/alice/_tasks/tasks.json").write_text(json.dumps([task(MINE_ID, f"Mine {SECRET}", ["shop"])]) + "\n")
-    (w / "_tasks/lists.json").write_text('{"version": 3, "lists": [{"name": "shop"}], "pinned": ["shop"]}\n')
+    (w / "_tasks/lists.json").write_text('{"lists": [{"name": "shop"}], "pinned": ["shop"]}\n')
     (w / "_tasks/lists/shop").mkdir(parents=True)
     (w / "_tasks/lists/shop/tasks.json").write_text(
         json.dumps([{**task(TASK_ID, f"Buy {TASKWORD}", [TASKWORD]), "list": "shop"}]) + "\n")

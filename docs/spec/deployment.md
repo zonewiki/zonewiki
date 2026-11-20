@@ -664,16 +664,18 @@ Zone's own state, none of it in git (`.git/info/exclude` has `/.zone/*`, `exclud
 ### The data format
 
 `.zone-format` at the wiki's root says which format the wiki's files are in: a number and a newline (`1`).
-Zone writes it at the first start that took the wiki over, in a commit of its own ("Note the format of the wiki's files");
-a wiki without it is from before it (or new), and its start runs every step that takes an older wiki over (Migrations at start in `docs/spec/tasks.md`) before it writes the file.
+Zone writes it at a wiki's first start, in a commit of its own ("Note the format of the wiki's files").
+A wiki without it is taken for a new one: Zone takes nothing over from an older Zone's files (what Zone wrote before the file is no longer converted), and writes the file.
 
 | The file says | Zone |
 |---------------|------|
-| Nothing (no file) | Runs the steps from before the file, which look at the files for what they need, then writes it |
-| Its own format | Runs none of those steps |
+| Nothing (no file) | Writes its own format |
+| Its own format | Starts |
 | An older format | Runs the steps from that format on, each writing its number in its own commit |
 | A newer format | Doesn't start: "the wiki's files are in format 2 (.zone-format), which a newer Zone wrote" |
 | Anything but a number | Doesn't start, and says how to mend it |
+
+Format 1 is the first, so there are no steps yet: the row for an older format is for when a change raises the number.
 
 **Why it is refused**: a newer Zone changed files in ways this one would misread and then write over (an image rolled back after an upgrade).
 Start the newer Zone again, or go back: revert, newest first, the commits that raised the number (`git log -- .zone-format`), and with them the steps they wrote.
@@ -684,7 +686,7 @@ a number in `.zone/` would still say the newer format, so the older Zone would r
 A backup or a copy of the folder has the file either way, and a clone of the remote has it too.
 No route or tool reads or writes it (`safePath` takes only a page's `.md`).
 
-**How it works** (`go/wikiformat.go`): `checkWikiFormat` reads the file before anything at start writes, `setUpTasks` runs the steps the format needs, and `noteWikiFormat` writes the first number after the steps from before the file (not while the lists couldn't be set up, `listsUnmigrated`: the next start runs them again).
+**How it works** (`go/wikiformat.go`): `checkWikiFormat` reads the file before anything at start writes, and `noteWikiFormat` writes the number into a wiki that has none, after the task files are set up (`setUpTasks`).
 A change to what Zone keeps in git that an older Zone would misread raises `wikiFormat`, with a step at start that takes a wiki of the format before over and writes the new number into the same commit (`writeWikiFormat`).
 Readers stay lenient all the same: the number says which steps Zone ran, not that every file is as Zone wrote it (a file edited by hand or pulled from elsewhere is read as before).
 The settings file and the rest of `.zone/` aren't covered: they are no wiki data (What is in .zone/, above).

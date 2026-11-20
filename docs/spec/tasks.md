@@ -2,7 +2,7 @@
 
 Part of Zone's spec (see `AGENTS.md` for the index).
 Each feature says first how it is used, then how it works.
-What the task app is built on (its code, how a page brings its tasks and keeps them current, its files, what Zone takes over from an older wiki at start) is under How it works, at the end.
+What the task app is built on (its code, how a page brings its tasks and keeps them current, its files, what a start does over them) is under How it works, at the end.
 
 ## The task app
 
@@ -241,7 +241,7 @@ one you changed since stays, and completing the reopened task again then spawns 
 
 A view says which tasks it shows and how the Open tab shows them, and has one name for each: `view=` is `today` (what is to do now), `open` (every open task) or `closed`; `group=` is `none`, `day`, `person` or `list`.
 These are the names in embeds, in links (`/tasks?view=open&group=person`), in the registries and in the settings dialog.
-Embeds and registries that still use the older names are rewritten once at start (The views' names, under Migrations at start); a link with `view=focus` or `view=plan` opens the default tab.
+The names of before 2026-11 (`view=focus`, `view=plan`, `plan=on|off`) are no view's: an embed or a link with one opens the default tab, and a registry's setting with one is left out (The registry).
 
 | Tab or view | Shows | Section |
 |-------------|-------|---------|
@@ -436,7 +436,7 @@ In Closed, the link reads `← Back to <tab>`, naming the tab it returns to.
 
 It holds the tasks that are closed: done, and closed undone (won't do), which is why it isn't called Completed.
 That is its name everywhere: where people read it (the link, the view's heading, the settings dialog), in the params (`view=closed`), the routes (`/api/tasks/closed`), the files (`closed.json`), a task's `closed_at` and the code.
-A wiki whose files still have the older name is renamed at start (Closed tasks' old name, under Migrations at start); nothing else is kept of that name: a page's `view=completed`, a link with it and a client asking the old routes get what an unknown view or route gets.
+Nothing is kept of the older name: `completed.json` and `completed_at` are no task file and no field of Zone's, and a page's `view=completed`, a link with it and a client asking the old routes get what an unknown view or route gets.
 
 While the filter has any word (`TasksCore.filterActive`: text, a tag, a name, `list:`, `from:`, `!`, `is:updated`, `is:following`) or the embed a tag, the link has no number (`Closed →`): the total would read as what the filter leaves, and counting the matches would take every closed task of the year to the browser for a number.
 The view's own list, the locked `list:` chip of a list's view, of a page's embed of it or of the Inbox, is no such word: the count is of that list already (`scopeQuery`), so the link has its number (`scopeWord` in `js/tasktabs.js`).
@@ -1340,7 +1340,6 @@ A list has a name, an entry in the list switcher with its counts (below), settin
 You make one with **New list…** on the Tasks page (or in the dialog that moves tasks to a list, or in a task's List field), put a task in it with the **List** field of its dialog (or **Move to list…**), and show it on any page with `[[tasks: list=<name>]]`.
 A page shows a list; it doesn't make one: editing the embed away, or deleting the page, changes nothing of the list, and a list is deleted only by **Delete…**, which asks where its tasks go.
 Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged so, whatever list it is in.
-A wiki from before lists were places, or from before the Inbox, is taken over once at start (Migrations at start).
 
 ### Making a list
 
@@ -1366,7 +1365,7 @@ No list can be called `inbox` or `none`: they name the Inbox (below).
 A new name is kept composed (NFC: `café` typed with a combining accent is the `café` of a keyboard that has é).
 A name is unique among the shared lists and among one user's private lists, and so is its look: names that are one in their compatibility form, in lower case (NFKC, `listNameKey`: a full-width `ｔｅａｍ` is `team`, `ﬁ` is `fi`), are one name, so New list…, a rename or Make shared… refuses a name that looks like a list's there ("There is a list #team already").
 A shared list's name is no group's list's either, and no group's list's another's (`sharedNameTaken`): a name names one list to all who see it, whatever groups they are in, so it is refused to who doesn't see the list too; that a name is taken is all anyone else learns of it.
-A user can't make a list by a name of one they see ("There is a list #shop already"), private or shared; they can still end up with a private and a shared list of one name (the migration, or someone making the shared one later, who doesn't see theirs).
+A user can't make a list by a name of one they see ("There is a list #shop already"), private or shared; they can still end up with a private and a shared list of one name (someone making the shared one later, who doesn't see theirs).
 For them the plain name is their own list and the shared one is **`shared/<name>`**: that is a **ref**, how a list is named to one user (`ListInfo.Ref`, `taskLists(user)`, `resolveList`): in URLs (`/tasks?list=shared/gifts`), in pins, in the API's and the tools' `list`, in the browser.
 On a page, `[[tasks: list=gifts]]` is the shared list unless the page is in your private folder (`listOnPage`), so a shared page shows everyone the same list.
 A task's `list` is the list's name (A task's list).
@@ -1442,13 +1441,6 @@ In search its tasks are the group's layer, as its pages are (`docShared`, `place
 
 A commit about it that writes what everyone sees too (a list moved into the group writes the shared registry; a rename the pages that show it) names it to its members only (`hideNames` in `go/access.go`): to anyone else it reads "A group's list changed".
 The tasks' word leaves it out for anyone else (`Store.Word(who, …)`): a write to it doesn't make their browser load its lists again.
-
-#### Lists for some, until 2026-11-20
-
-A shared list could say whom it was for, groups and people (`"for": ["@hiring", "anna"]`), its entry in its folder's `list.json`.
-A start moves each such list into a group's folder (`migrateListsForSomeLocked` in `go/listsmigrate.go`, a commit by Zone "Move the list for some #hiring to the group hiring"): the one group it was for, or a group made for it, named after the list, of the groups (`includes`) and people it named, its owners the list's.
-Its old folder keeps its `list.json`, marked gone (`{"name": …, "for": […], "gone": true, "group": …}`: `taskfiles.FormerListFile`): the store reads no folder that has one (a list a start couldn't move is out of everyone's sight, not in it), git's history of the old paths stays whom it was for (`formerListFor` in `canSeePath`), and no list or group takes its name (`sharedNameTaken`, `groupNameTaken`).
-Without users it waits for users.
 
 ### Who manages a list
 
@@ -1543,7 +1535,7 @@ On a page, `[[tasks: list=inbox]]` shows whoever looks their own.
 
 It can't be renamed, deleted, shared or pinned, and has no entry in a registry.
 **`none`** names it too (`list=none`, `list:none`, `search_tasks(list="none")`).
-In a wiki that has a list called `inbox` or `none` from before the names were kept, the name is that list's (the Inbox's migration renames a list `inbox`).
+In a wiki that has a list called `inbox` or `none` (written by hand into a registry), the name is that list's.
 With users there is no Inbox for a viewer (they make no task), nor in sharing mode, where what is private isn't shown.
 
 #### The list general
@@ -1868,7 +1860,7 @@ The tasks' keydown runs before the page's shortcuts, so while a `g`/`c` prefix w
 
 ## How it works
 
-What the task app is built on: its code, how a page brings its tasks and keeps them current, which tasks a view takes, the lists' registry, the files, and what Zone takes over from an older wiki when it starts.
+What the task app is built on: its code, how a page brings its tasks and keeps them current, which tasks a view takes, the lists' registry, the files, and what a start does over them.
 
 ### The code
 
@@ -1957,7 +1949,6 @@ So a list can be added or changed by hand in one line, and a commit shows the li
 
 | Key | Holds |
 |-----|-------|
-| `version` | That the wiki's lists are kept here: none, a wiki to take over (The lists' migration); `1`, a wiki from before the Inbox (The Inbox's migration); `2`, from before the views' names of 2026-11 (The views' names); the current one is 3. Read only in a wiki without `.zone-format` |
 | `lists` | The lists, a line each |
 | `pinned` | A user's pins in theirs; without users the wiki's in the shared one (Pins) |
 | `mine` | The settings of My tasks (a user's own; without users the shared one's) |
@@ -1981,7 +1972,7 @@ The tasks are plain JSON files in the wiki, committed to git; this is where they
 - **Each list has its files in a folder of its own**, `lists/<name>/` in its owner's `_tasks/` (`_tasks/lists/shop/tasks.json`, `closed.json`, `closed-YYYY-MM.json`; `dirOf` in `go/internal/taskfiles`); the tasks in no list (an Inbox's) are in `_tasks/` itself.
   A file is written whole and kept whole in git at every change, so a write costs what its list weighs, not what the wiki weighs (the bench, `tests/bench_tasks.py`: The bench in `docs/spec/testing.md`, measures it at a team's size; Packing the repository in `docs/spec/deployment.md` keeps the repository small).
 - Which list a task is in is still the task's to say (its `list`); the folder is where a write files it.
-  A read takes every folder of an owner (`dirs`), so a task found in another list's folder (a file moved by hand, a wiki from before the folders) is read all the same and filed where it belongs by the next write of its owner's tasks, or at start.
+  A read takes every folder of an owner (`dirs`), so a task found in another list's folder (a file moved by hand) is read all the same and filed where it belongs by the next write of its owner's tasks, or at start.
 - A task that moves to another list moves between two files in one commit; the file that takes it is written first, so a write that stops halfway leaves it in two files, never in none, and one task in two files is one task to every reader (`unique`).
 - A list's file left without a task is removed, and its folder with it; a list's rename files its tasks into the folder of the new name in the rename's commit (`FileByListLocked`).
   A list's name that is no folder's name (a dot first, a path separator: none a list can be given, but a file edited by hand may say so) has no folder: its tasks stay with those of no list.
@@ -1989,7 +1980,7 @@ The tasks are plain JSON files in the wiki, committed to git; this is where they
 
 #### Closed tasks by month
 
-`closed.json` holds those closed in the current month (and any without a usable date), `closed-YYYY-MM.json` those of an earlier month (only such a name, and the older `closed-YYYY.json`, is an archive).
+`closed.json` holds those closed in the current month (and any without a usable date), `closed-YYYY-MM.json` those of an earlier month (only such a name is an archive).
 So completing a task writes a month's closed tasks, not a year's: a file is written whole and kept whole in git at every change, and in a large wiki a year's is megabytes.
 Write routes read the closed files they need (Reading and writing) and `writeClosed` files each task by its completion month, writing only files whose tasks changed, and removing an archive left without a task; startup does the same (`ArchiveOldClosed`) for a month's end without writes.
 So archived tasks can be edited, reopened and tagged like any other; Closed shows them by year (see Closed), reading that year's files.
@@ -2005,7 +1996,7 @@ So a reader sees every file of a write or none (a task that moves between two fi
 **A write of tasks reads their own files** (`ReadTasksForWriteLocked`; for one task `ReadTaskForWriteLocked`, `findForWriteLocked`: a change, a completion, a comment, a ticked subtask; for several a batch, `batch-update`, `batch-complete`, `batch-tag`, and a delete): the open tasks and, for the closed ones among them, the closed tasks of the files that hold them (this month's files are looked through first, then the archives, the newest first, until each task is found; a task no file has makes it look through them all, without copying them).
 It writes whole only the closed files it read; a file it has to put a task into (this month's, for one just completed) is read then, so nothing is written without what it held (`writeClosed`, the store's `scope`).
 So a change doesn't read and copy every closed task of the wiki's years, and an archive that can't be read stops only the writes that need it.
-While closed tasks wait to be filed (a month has ended, a year's file from before the months: `unfiled`), a write reads every closed file (`readClosedAllStrict`) and files them.
+While closed tasks wait to be filed (a month has ended: `unfiled`), a write reads every closed file (`readClosedAllStrict`) and files them.
 What needs every task reads everything still: an import and the undo of a delete (for the ids there are), an export, a list's rename or delete, a private list shared.
 
 **A write writes only its user's places** (`byOwner` in `go/internal/taskfiles`): a write hands over every open task its user sees, each with its owner, and one of an owner that isn't the user's (`Store.Owners`: the shared files, their own, their groups') is refused: no question per list.
@@ -2043,7 +2034,7 @@ Every reader takes the user and reads the shared files and theirs (`go/internal/
 Zone itself (`""`) reads only the shared ones.
 A write splits the tasks by owner (`byOwner`) and writes the files that changed, all in one commit; a task can only be written by its own user, since another user's is never read for them.
 One lock (`taskFiles.Lock`) for all files' writes, and a second one that readers share and a write holds while it replaces its files (`Open` for `GET /api/tasks`, `All`, `Snapshot`; Reading and writing, above): a task that is shared moves between two files, and a read between their writes would miss it.
-What Zone does over every task list covers every user's files (`EveryOwner`): the closed tasks' filing by month at start (`ArchiveOldClosed`), the lists' migration, a rename's links in tasks (`renamePageRefs`), a shared list's rename, the search index (`Every`, filtered per user by `canSeeTask`, `hiddenDoc`).
+What Zone does over every task list covers every user's files (`EveryOwner`): the closed tasks' filing by month at start (`ArchiveOldClosed`), a rename's links in tasks (`renamePageRefs`), a shared list's rename, the search index (`Every`, filtered per user by `canSeeTask`, `hiddenDoc`).
 
 #### The files' format
 
@@ -2064,106 +2055,24 @@ Request bodies are validated (`jsonObject`, `asStr`, `asInt`, `asStrList`, `idLi
 Numeric strings are accepted for integers; `tags` may be a comma-separated string.
 Reads clean the tags (`jsonobj.TextList`, `taskmodel.CleanTags`), since a file edited by hand may have `"local llm"` or `#work`.
 
-### Migrations at start
+### What a start does
 
-A wiki from an older Zone is taken over when Zone starts, once, each step in a commit of its own; a second start changes nothing.
-These steps are from before `.zone-format`, the file that says which format the wiki's files are in (The data format in `docs/spec/deployment.md`):
-the first three, the task files', run whenever the task files may have changed (`tasks-checked`), since a file edited by hand or pulled from elsewhere can need them at any time;
-the last three, the lists' and the views', run for a wiki without that file, each looking at the registries for whether it is needed, and a start writes the file after them, so a wiki that has it is past them.
-A step after them raises the number in `.zone-format`, in its own commit.
-Going back to the older Zone means reverting the step's commit in the wiki's repository;
-going back to a Zone from before `.zone-format`, revert the commit that wrote it too ("Note the format of the wiki's files"), or a later start finds it and leaves out the step the revert took back.
+When the task files may have changed (What a start reads), a start sets them up as Zone keeps them (`setUpTasks` in `go/tasksetup.go`); a second start changes nothing.
 
-| Step | Takes over | Commit |
-|------|------------|--------|
-| Closed tasks' old name | `completed*.json` files and `completed_at` | "Name the task files of closed tasks closed" |
-| Tasks filed by list | every task of an owner in one `tasks.json` | "File the tasks by list" |
-| Closed tasks by year | closed tasks filed by year | "Archive closed tasks" |
-| The lists' migration | lists that pages declared, pins in embeds | "Make task lists their own" |
-| The Inbox's migration | registries from before the Inbox | "Give every task a list: the Inbox" |
-| The views' names | `view=focus\|open\|plan`, `plan=on\|off` | "Name the tasks' views Today and Open" |
+| Step | Does | Commit |
+|------|------|--------|
+| Closed tasks by month | Files the closed tasks of a month that has ended into its archive (Closed tasks by month) | "Archive closed tasks" |
+| Tasks by list | Files a task found in another folder than its list's (a file moved by hand) in its list's | "Write the task files in Zone's format" |
+| Zone's format | Writes a file in another format (edited by hand) as Zone writes it (The files' format) | "Write the task files in Zone's format" |
+| `general` | With users, puts a shared task in no list into the shared list `general`, made for it and pinned for the wiki, and files it in its folder | "Put the shared tasks without a list in #general" |
 
-#### Closed tasks' old name
+The first three are one commit over every owner's files (`ArchiveOldClosed`), named "Archive closed tasks" when a month was archived.
+**With users a shared task is always in a list** (`fileInGeneral`): a wiki whose users were turned on later, or a file edited by hand, can have one in none; `general` takes it, as it takes a deleted list's tasks when no other list is named.
+A task file that can't be read stops it before anything is written: Zone runs, its log says so, and the start leaves no mark, so the next one tries again.
 
-The view of closed tasks was called Completed: a wiki from then is renamed when Zone starts (`renameOldClosed`: `completed.json` and `completed-YYYY.json` become `closed.json` and `closed-YYYY.json`, never over a file that is there; a task's `completed_at` is read where it has no `closed_at`, and the files are written again with the new field), in one commit, "Name the task files of closed tasks closed".
-When the same start renames files, files tasks by list and rolls months into archives, that message names the commit.
+#### Older data
 
-#### Tasks filed by list
-
-A wiki whose owners had every task in `_tasks/tasks.json` and the closed files beside it is filed by list at start, in one commit, "File the tasks by list" (`ArchiveOldClosed`, which also rolls months into archives then).
-Going back to an older Zone: revert that commit, or it reads only the tasks in no list.
-
-#### Closed tasks by year
-
-Closed tasks filed by year, `closed-YYYY.json`, go to their months' files at the first start, and the year's file is removed, in the commit "Archive closed tasks", or in "File the tasks by list" when the same start files tasks by list.
-A month that ends is rolled into its archive the same way at the next start without writes.
-
-#### The lists' migration
-
-When Zone starts on a wiki without `.zone-format` and no registry, the shared one or a user's, has a `version` (`migrateLists` in `go/listsmigrate.go`), a wiki from before lists were places is taken over, in one commit ("Make task lists their own"), under the page and task locks.
-There a list was a tag a page declared with `[[tasks: list=<tag>]]`: a task could be in two, a list ended with its page, and a task moved by a change of its tags.
-It changes nobody's view of who sees what: no task changes its file.
-
-1. **The lists**: each name a shared page declared (`[[tasks: list=<name>]]` outside code) becomes a shared list, with its first page's (A–Z) params as its settings (the list settings: `view`, `group`, `limit`, `labels`, `new`, `keep`, `home`; `noshare` when that page was not for sharing).
-   The page was written with the views' old names, so they are read as The views' names rewrites them (`listSettingsOf` asks `oldViewNames`: `view=focus` is `view=today`, `view=plan` is `view=open group=day`, `view=open` is `view=open group=none`, `plan=on|off` is `group=day|none`, of three `labels` the first and the last): the list shows what the embed showed, and nothing of it is dropped.
-   A name a user's private page declared becomes a private list of theirs, unless a shared page declares it too and they have no private task with that tag: their embed then shows the shared list.
-   Another page's embed that set a list's settings differently loses that difference: the params stay in its text and mean nothing.
-2. **The tasks**, in every file of every owner (open, closed, archived): the first A–Z of a task's tags that names a list of its own kind (a shared task: the shared lists; a private task: its user's) becomes its `list`, and that tag goes.
-   Any other list's tag stays, as a plain tag, so the task still shows in a `tag=` view.
-   A private task without a list of its user's (it carried a shared list's tag, or none) is in their Inbox.
-   A shared task carrying the tag of someone's private list keeps the tag and is in no list.
-3. **The pins**: `pin=1` and `pin=default` on shared pages become the wiki's (`pinned` in the shared registry), the default one first, then by name; those on a user's private pages theirs, followed by the wiki's.
-   A pin of a view that is no list (`[[tasks: tag=me pin=1]]`) has nowhere to go: the log says so.
-   `pin=` is taken out of the pages' embeds.
-4. **Views by a list's tag**: an embed without `list=` whose `tag=` asks for a list's former tag (`[[tasks: tag=shop,urgent]]`) shows the list from then on (`[[tasks: list=shop tag=urgent]]`),
-   and so does a link (`/tasks?tag=shop` becomes `/tasks?list=shop`),
-   since the tag left the list's tasks and the filter would find none of them.
-   A private page's embed names a list of its user's or a shared one.
-   `tag=-shop` and `tag=shop|work` stay as written and no longer find the list's tasks (the filter words `-list:shop` and `list:shop` do); text in code stays, and so do links in tasks.
-5. **The settings of All tasks** move from `_tasks/settings.json` into the shared registry (`all`), and that file goes.
-
-The tasks are written first, then the users' registries, the shared one (whose `version` says "done") and last the pages, so a start that was interrupted runs again without harm: a task keeps the list it got.
-A task file that can't be read stops it before anything is written; Zone then runs, says so in its log, and refuses every change to lists until a start succeeds (`listsUnmigrated`), since a registry written meanwhile would stand for "taken over".
-A wiki with nothing to take over (no list declared, no pin, no private task, no `_tasks/settings.json`) gets no registry: its first list writes it.
-Going back to an older Zone: revert that commit in the wiki's repository; without it the older Zone finds every list empty.
-
-#### The Inbox's migration
-
-After the lists' migration and under its locks (`migrateInboxLocked` in `go/listsmigrate.go`; one commit, "Give every task a list: the Inbox"), in a wiki without `.zone-format`, once for each registry that says `version` 1 (lists as places, from before the Inbox), the shared one and each user's own, which then says 2 (`inboxListsVersion`; The views' names takes it to 3 in the same start; each for itself: a wiki whose users have lists and that never had a shared one has no shared registry).
-Before the Inbox a task could be in no list, which with users was everyone's; a pin also put a list's tasks in My tasks, and the first pinned list took new tasks (with nothing pinned they went to a private list `private`, which counted as pinned).
-
-1. A list called `inbox` is called `inbox-list` (its tasks and pins follow; embeds that name it show the Inbox from then on).
-2. With users, a user's list `private` that has no settings and took their new tasks (they pinned it, or pinned nothing) becomes their **Inbox**: its tasks lose their list, the list and its pin go. Zone made that list.
-3. **What wasn't in My tasks stays out of it**: the lists a user hadn't pinned are left out (`home=off`): without users any such list, with users each user's private ones.
-   A shared list's unassigned tasks, which a pin put in My tasks, are in the list alone now: that is the change.
-
-With users, **a shared task without a list goes to the shared list `general`**, made for it and pinned for the wiki, at a start that reads the task files (What a start reads: not when they are as Zone left them with users on).
-That takes over the tasks that were in no list, and a wiki whose users are turned on later (its one Inbox becomes `general`).
-A task file or registry that can't be read stops it before anything is written, as above (`listsUnmigrated`).
-
-#### The views' names
-
-The views had four names, `view=focus|open|plan`, where `open` and `plan` also said how Open showed its tasks, beside `group=`, and `plan=on|off` from before that.
-A wiki from then is taken over once, when Zone starts (`migrateViewsLocked` in `go/viewsmigrate.go`, after the lists' migrations; one commit, "Name the tasks' views Today and Open"): each `[[tasks: …]]` on a page and each registry's settings are rewritten so that every view shows what it showed
-(`view=focus` is `view=today`;
-`view=plan` is `view=open group=day`;
-`view=open`, which was the one list, is `view=open group=none`;
-`plan=on|off` is `group=day|none`;
-of three `labels` the first and the last stay),
-and the registries say `version` 3;
-a wiki without a registry has `.zone-format` to say it, which the start writes after this step.
-From then on the old names are no view's: a link with `view=focus` or `view=plan` opens the default tab.
-
-Until 2026-11-20 the Inbox's migration wrote version 3 itself, so a wiki that went from before the Inbox straight to a Zone with these names was taken for renamed: its registries kept the old names, and its pages too.
-Such a wiki (a shared registry at version 3, and no `.zone-format` yet: the step runs only then) is looked through once more, at its next start, in the same commit's name: **a registry or a page is rewritten only when it says a name only the old Zone wrote** (`view=focus`, `view=plan`, or `plan=` at all: `oldOnlyViewName`), and then wholly, as above.
-One at version 3 without such a name comes through as it is, since it may be by today's names (a fresh registry, one made by hand, a page written since), where `view=open` alone is the Open tab as the view's group says, not the one list: a list of then whose only old word was `view=open` keeps the board.
-A wiki that a Zone with `.zone-format` but without this mend started on is past the step, and keeps its old names.
-The lists such a start took over from pages (The lists' migration) dropped `view=focus`, `view=plan` and `plan=` from their settings then; the settings can't be told from the pages afterwards, and stay as they are.
-
-#### Older formats
-
-Older data formats are no longer converted: the conversions (task files in the wiki's root,
-closed tasks in `tasks.json`,
-`focus_date`/`defer_days`/`recurrence.anchor`/`page`/`focus_order`,
-spawns without `spawned_from`) were removed in 2026-10.
-A wiki last used before then must be opened once with an earlier Zone (git history) first.
+Zone takes nothing over from what an older Zone wrote: no task file, registry or page is renamed or rewritten at start for it.
+Until 2026-11-20 starts did: closed tasks' `completed.json`, `completed-YYYY.json` and `completed_at`; a year's archive, `closed-YYYY.json`; lists declared by pages (`[[tasks: list=…]]`) and pinned by `pin=`, and All tasks' `_tasks/settings.json`; the Inbox (a list `private` that took new tasks, one called `inbox`); the views' names of before 2026-11; a registry's `version`; lists for some (`"for": […]` in a list's `list.json`).
+Such files are no longer read as they were (a `closed-YYYY.json` is no archive, a `completed_at` no field of Zone's, a registry's `version` is dropped).
+A wiki last run by a Zone of then is started once with Zone 1caf0d78 or older (its git history) first.

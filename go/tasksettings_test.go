@@ -100,33 +100,3 @@ func TestCheckEmbedSettings(t *testing.T) {
 		}
 	}
 }
-
-// The views' names of before 2026-11, as they are rewritten once
-// (oldViewNames, renameViewsInText): what a view showed stays what it was.
-func TestOldViewNames(t *testing.T) {
-	for old, want := range map[string]string{
-		"[[tasks:]]":                                  "[[tasks:]]",
-		"[[tasks: view=focus]]":                       "[[tasks: view=today]]",
-		"[[tasks: view=plan]]":                        "[[tasks: view=open group=day]]",
-		"[[tasks: tag=a view=plan group=person]]":     "[[tasks: tag=a view=open group=person]]",
-		"[[tasks: view=open]]":                        "[[tasks: view=open group=none]]",
-		"[[tasks: view=open plan=on]]":                "[[tasks: view=open group=day]]",
-		"[[tasks: plan=off limit=3]]":                 "[[tasks: limit=3 group=none]]",
-		"[[tasks: plan=on group=list]]":               "[[tasks: group=list]]",
-		"[[tasks: list=shop view=open]]":              "[[tasks: list=shop view=open group=none]]",
-		"[[tasks: view=focus labels=A,B,C]]":          "[[tasks: view=today labels=A,C]]",
-		"[[tasks: view=today]] [[tasks: tag=x]]":      "[[tasks: view=today]] [[tasks: tag=x]]",
-		"`[[tasks: view=plan]]` [[Tasks: View=Plan]]": "`[[tasks: view=plan]]` [[Tasks: view=open group=day]]",
-	} {
-		if got := renameViewsInText(old); got != want {
-			t.Errorf("%s: %s, want %s", old, got, want)
-		}
-	}
-	settings := map[string]string{"view": "plan", "plan": "on", "limit": "3"}
-	if !renameViewsInSettings(settings) || !reflect.DeepEqual(settings, map[string]string{"view": "open", "group": "day", "limit": "3"}) {
-		t.Errorf("a list's settings: %v", settings)
-	}
-	if now := map[string]string{"view": "today", "group": "person"}; renameViewsInSettings(now) {
-		t.Errorf("settings by today's names were changed: %v", now)
-	}
-}

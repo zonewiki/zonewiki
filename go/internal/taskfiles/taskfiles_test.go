@@ -225,7 +225,7 @@ func TestWriteFilesByOwnerAndMonth(t *testing.T) {
 }
 
 // The Closed view of a year, and the years there are: over the months'
-// files, a year's file from before the months, both, and what is still in
+// files, those Zone wrote and those put there by hand, and what is still in
 // closed.json.
 func TestClosedByYear(t *testing.T) {
 	f := newStore(t, "alice")
@@ -233,11 +233,11 @@ func TestClosedByYear(t *testing.T) {
 	_ = f.WriteBothLocked(asker.User("alice"), nil, []*Task{task("now", "", "2026-06-01T10:00:00"), task("spring", "", "2026-03-01T10:00:00"), task("undated", "", "x"),
 		task("old", "", "2024-05-01T10:00:00"), task("older", "", "2024-01-01T10:00:00"), task("hers", "alice", "2023-01-02T10:00:00")}, "Write")
 	f.Unlock()
-	// A year's file from before the months, beside a month's file of that
-	// year, and another year only in such a file; not Zone's writes.
-	f.put(t, "_tasks/closed-2024.json", `[{"id": "yearfile", "title": "T", "closed_at": "2024-07-01T10:00:00"}]`)
-	f.put(t, "_tasks/closed-2022.json", `[{"id": "y22", "title": "T", "closed_at": "2022-07-01T10:00:00"}]`)
-	f.put(t, "private/alice/_tasks/closed-2021.json", `[{"id": "h21", "title": "T", "closed_at": "2021-07-01T10:00:00"}]`)
+	// A month's file put there by hand, beside Zone's of that year, and
+	// another year only in such files; not Zone's writes.
+	f.put(t, "_tasks/closed-2024-07.json", `[{"id": "yearfile", "title": "T", "closed_at": "2024-07-01T10:00:00"}]`)
+	f.put(t, "_tasks/closed-2022-07.json", `[{"id": "y22", "title": "T", "closed_at": "2022-07-01T10:00:00"}]`)
+	f.put(t, "private/alice/_tasks/closed-2021-07.json", `[{"id": "h21", "title": "T", "closed_at": "2021-07-01T10:00:00"}]`)
 	for year, want := range map[string][]string{"2026": {"now", "undated", "spring"}, "2024": {"older", "old", "yearfile"}, "2023": {"hers"},
 		"2022": {"y22"}, "2021": {"h21"}, "2025": {}, "2027": {}} {
 		if got := ids(f.ClosedInYear(asker.User("alice"), year)); !reflect.DeepEqual(got, want) {
@@ -266,7 +266,7 @@ func TestClosedByYear(t *testing.T) {
 		t.Errorf("a scope: %v", got)
 	}
 	if got := f.ClosedYears(asker.User("alice"), func(t *Task) bool { return t.ID == "yearfile" }); !reflect.DeepEqual(got, []string{"2026", "2024"}) {
-		t.Errorf("a scope with a task in a year's file: %v", got)
+		t.Errorf("a scope with a task in a file put by hand: %v", got)
 	}
 	// A scope asks whose a task is (a private list's): the archives' tasks
 	// say it, those Zone wrote (2023) and those it only read (2021).
@@ -363,103 +363,6 @@ func TestAMonthAndAYearEnd(t *testing.T) {
 	}
 }
 
-// A year's file from before the months (closed-2025.json): the start files
-// its tasks under their months and removes it, every owner's in one commit
-// that has the removal; a second start changes nothing.
-func TestAYearsFileIsTakenOverAtStart(t *testing.T) {
-	f := newStore(t, "alice")
-	f.put(t, "_tasks/tasks.json", "[]\n")
-	for owner, id := range map[string]string{"": "s", "alice": "a"} {
-		if err := Write(f.ArchivePath(owner, "2025"), []*Task{task(id+"-feb", owner, "2025-02-03T10:00:00"), task(id+"-feb2", owner, "2025-02-20T10:00:00"),
-			task(id+"-dec", owner, "2025-12-31T23:59:59")}); err != nil {
-			t.Fatal(err)
-		}
-		if err := Write(f.ClosedPath(owner), []*Task{task(id+"-may", owner, "2026-05-03T10:00:00"), task(id+"-new", owner, "2026-06-01T10:00:00")}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	before := ids(f.All(asker.User("alice")))
-	f.ArchiveOldClosed()
-	for _, dir := range []string{"_tasks/", "private/alice/_tasks/"} {
-		id := map[string]string{"_tasks/": "s", "private/alice/_tasks/": "a"}[dir]
-		for name, want := range map[string][]string{"closed.json": {id + "-new"}, "closed-2025-02.json": {id + "-feb", id + "-feb2"},
-			"closed-2025-12.json": {id + "-dec"}, "closed-2026-05.json": {id + "-may"}} {
-			if got := f.ids(t, dir+name); !reflect.DeepEqual(got, want) {
-				t.Errorf("%s: %v, want %v", dir+name, got, want)
-			}
-		}
-		if _, err := os.Stat(filepath.Join(f.root, dir+"closed-2025.json")); !errors.Is(err, os.ErrNotExist) {
-			t.Errorf("%sclosed-2025.json is still there (%v)", dir, err)
-		}
-	}
-	// The files that take tasks first, those left without any after them.
-	want := "|Archive closed tasks|_tasks/closed-2025-02.json _tasks/closed-2025-12.json _tasks/closed-2026-05.json _tasks/closed.json _tasks/closed-2025.json" +
-		" private/alice/_tasks/closed-2025-02.json private/alice/_tasks/closed-2025-12.json private/alice/_tasks/closed-2026-05.json private/alice/_tasks/closed.json private/alice/_tasks/closed-2025.json"
-	if len(f.commits) != 1 || f.commits[0] != want {
-		t.Errorf("commits %q,\nwant one: %q", f.commits, want)
-	}
-	after := ids(f.All(asker.User("alice")))
-	slices.Sort(before)
-	slices.Sort(after)
-	if !reflect.DeepEqual(before, after) || len(after) != 10 {
-		t.Errorf("tasks before %v, after %v", before, after)
-	}
-	if got := ids(f.ClosedInYear(asker.User("alice"), "2025")); !reflect.DeepEqual(got, []string{"s-feb", "s-feb2", "s-dec", "a-feb", "a-feb2", "a-dec"}) {
-		t.Errorf("2025: %v", got)
-	}
-	files := f.names(t)
-	f.ArchiveOldClosed()
-	if len(f.commits) != 1 || !reflect.DeepEqual(f.names(t), files) {
-		t.Errorf("a second start: commits %q, files %v", f.commits, f.names(t))
-	}
-	if got := f.Files([]string{""}); len(got) != 5 || got[2].Path != f.ArchivePath("", "2025-02") || got[0].Owner != "" {
-		t.Errorf("the shared files: %+v", got)
-	}
-}
-
-// Without a start: the first write by a user files their year's files (the
-// shared one and their own) under the months and removes them, in that
-// write's commit; another user's is left for theirs. A year's file with a
-// month's file of that year beside it goes into it.
-func TestAYearsFileIsTakenOverByAWrite(t *testing.T) {
-	f := newStore(t, "alice", "bob")
-	f.put(t, "_tasks/tasks.json", `[{"id": "open", "title": "Open"}]`)
-	f.put(t, "_tasks/closed-2025.json", `[{"id": "s-feb", "title": "T", "closed_at": "2025-02-03T10:00:00"}, {"id": "s-mar", "title": "T", "closed_at": "2025-03-03T10:00:00"}]`)
-	f.put(t, "_tasks/closed-2025-03.json", `[{"id": "s-mar0", "title": "T", "closed_at": "2025-03-01T10:00:00"}]`)
-	f.put(t, "private/alice/_tasks/closed-2024.json", `[{"id": "a-old", "title": "T", "closed_at": "2024-02-03T10:00:00"}]`)
-	f.put(t, "private/bob/_tasks/closed-2024.json", `[{"id": "b-old", "title": "T", "closed_at": "2024-02-03T10:00:00"}]`)
-	f.rewrite(t, "alice", "Retitle", func(active, closed []*Task) ([]*Task, []*Task) {
-		active[0].Title = "Changed"
-		return active, closed
-	})
-	if got := f.names(t); !reflect.DeepEqual(got, []string{"_tasks/closed-2025-02.json", "_tasks/closed-2025-03.json", "_tasks/tasks.json",
-		"private/alice/_tasks/closed-2024-02.json", "private/bob/_tasks/closed-2024.json"}) {
-		t.Errorf("the files: %v", got)
-	}
-	if got := f.ids(t, "_tasks/closed-2025-03.json"); !reflect.DeepEqual(got, []string{"s-mar0", "s-mar"}) {
-		t.Errorf("march: %v", got)
-	}
-	want := "alice|Retitle|_tasks/tasks.json _tasks/closed-2025-02.json _tasks/closed-2025-03.json _tasks/closed-2025.json" +
-		" private/alice/_tasks/closed-2024-02.json private/alice/_tasks/closed-2024.json"
-	if len(f.commits) != 1 || f.commits[0] != want {
-		t.Errorf("commits %q,\nwant one: %q", f.commits, want)
-	}
-	if got := ids(f.ClosedInYear(asker.User("bob"), "2024")); !reflect.DeepEqual(got, []string{"b-old"}) {
-		t.Errorf("bob's 2024, still in his year's file: %v", got)
-	}
-	if got := ids(f.ClosedInYear(asker.User("alice"), "2024")); !reflect.DeepEqual(got, []string{"a-old"}) {
-		t.Errorf("alice's 2024: %v", got)
-	}
-	// The next write has nothing to file.
-	f.rewrite(t, "alice", "Again", func(active, closed []*Task) ([]*Task, []*Task) {
-		active[0].Title = "Changed again"
-		return active, closed
-	})
-	if len(f.commits) != 2 || f.commits[1] != "alice|Again|_tasks/tasks.json" {
-		t.Errorf("the next write: %q", f.commits)
-	}
-}
-
 // An archive whose last task is reopened (or deleted) is removed, and the
 // removal is in the write's commit; closed.json stays, empty; closed again
 // later, the task is this month's.
@@ -516,14 +419,14 @@ func TestAnEmptiedArchiveIsRemoved(t *testing.T) {
 		t.Errorf("2026: %v", got)
 	}
 	// An empty archive from before (Zone left one when its last task went) goes at the start.
-	f.put(t, "_tasks/closed-2020.json", "[]\n")
+	f.put(t, "_tasks/closed-2020-01.json", "[]\n")
 	f.put(t, "private/alice/_tasks/closed-2019-04.json", "[]")
 	f.commits = nil
 	f.ArchiveOldClosed()
-	if got := f.names(t); slices.Contains(got, "_tasks/closed-2020.json") || slices.Contains(got, "private/alice/_tasks/closed-2019-04.json") {
+	if got := f.names(t); slices.Contains(got, "_tasks/closed-2020-01.json") || slices.Contains(got, "private/alice/_tasks/closed-2019-04.json") {
 		t.Errorf("empty archives after a start: %v", got)
 	}
-	if len(f.commits) != 1 || !strings.HasSuffix(f.commits[0], "|_tasks/closed-2020.json private/alice/_tasks/closed-2019-04.json") {
+	if len(f.commits) != 1 || !strings.HasSuffix(f.commits[0], "|_tasks/closed-2020-01.json private/alice/_tasks/closed-2019-04.json") {
 		t.Errorf("commits: %q", f.commits)
 	}
 }
@@ -927,79 +830,13 @@ func TestArchiveOldClosed(t *testing.T) {
 	if got := f.Files([]string{"alice"}); len(got) != 4 || got[1].Path != f.ClosedPath("alice") || got[3].Owner != "alice" {
 		t.Errorf("alice's files: %+v", got)
 	}
-	// Only closed-YYYY-MM.json and closed-YYYY.json are archives.
-	for _, name := range []string{"closed-backup.json", "closed-2025-2.json", "closed-2025-02-01.json", "closed-25.json", "xclosed-2025.json", "closed-2025.json.bak"} {
+	// Only closed-YYYY-MM.json are archives.
+	for _, name := range []string{"closed-2025.json", "completed.json", "closed-backup.json", "closed-2025-2.json", "closed-2025-02-01.json", "closed-25.json", "xclosed-2025.json", "closed-2025.json.bak"} {
 		f.put(t, "_tasks/"+name, `[{"id": "stray", "title": "T", "closed_at": "2001-01-01T10:00:00"}]`)
 	}
 	f.ArchiveOldClosed()
 	if len(f.commits) != 1 || len(f.Archives("")) != 2 || slices.Contains(ids(f.All(asker.User(""))), "stray") {
 		t.Errorf("other files taken for archives: %q %v", f.commits, f.Archives(""))
-	}
-}
-
-// A wiki from before the files and the field were renamed (completed.json,
-// completed-YYYY.json, completed_at): at start they get their new names and
-// are written with closed_at, every owner's in one commit, and nothing is
-// lost. A file is never renamed over one that is there.
-func TestOldCompletedFilesAreRenamed(t *testing.T) {
-	f := newStore(t, "alice")
-	old := func(id, at string) string {
-		return `{"id": "` + id + `", "title": "Task ` + id + `", "completed_at": ` + at + `, "wont_do": false}`
-	}
-	write := func(rel, text string) {
-		t.Helper()
-		p := filepath.Join(f.root, rel)
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	write("_tasks/tasks.json", "["+old("open", "null")+"]")
-	write("_tasks/completed.json", "["+old("new", `"2026-02-03T10:00:00"`)+", "+old("last", `"2025-12-30T10:00:00"`)+", "+old("now", `"2026-06-01T10:00:00"`)+"]")
-	write("_tasks/completed-2024.json", "["+old("old", `"2024-05-06T10:00:00"`)+"]")
-	write("private/alice/_tasks/completed.json", "["+old("hers", `"2026-03-04T10:00:00"`)+"]")
-	f.ArchiveOldClosed()
-	for rel, want := range map[string]string{"_tasks/closed.json": `"closed_at": "2026-06-01T10:00:00"`, "_tasks/closed-2026-02.json": `"closed_at": "2026-02-03T10:00:00"`,
-		"_tasks/closed-2025-12.json": `"closed_at": "2025-12-30T10:00:00"`, "_tasks/closed-2024-05.json": `"closed_at": "2024-05-06T10:00:00"`,
-		"private/alice/_tasks/closed-2026-03.json": `"closed_at": "2026-03-04T10:00:00"`, "_tasks/tasks.json": `"closed_at": null`} {
-		if got := f.text(t, rel); !strings.Contains(got, want) || strings.Count(got, `"id"`) != 1 || strings.Contains(got, "completed_at") {
-			t.Errorf("%s: %q", rel, got)
-		}
-	}
-	// The old names are gone, and the year's file a rename made (its tasks
-	// are in their month's); her closed.json, without a task of this month, is empty.
-	for _, rel := range []string{"_tasks/completed.json", "_tasks/completed-2024.json", "private/alice/_tasks/completed.json", "_tasks/closed-2024.json"} {
-		if _, err := os.Stat(filepath.Join(f.root, rel)); !errors.Is(err, os.ErrNotExist) {
-			t.Errorf("%s is still there", rel)
-		}
-	}
-	if got := f.text(t, "private/alice/_tasks/closed.json"); got != "[]\n" {
-		t.Errorf("alice's closed.json: %q", got)
-	}
-	if len(f.commits) != 1 || !strings.HasPrefix(f.commits[0], "|Name the task files of closed tasks closed|") {
-		t.Fatalf("commits: %q", f.commits)
-	}
-	for _, rel := range []string{"_tasks/completed.json", "_tasks/closed.json", "_tasks/completed-2024.json", "_tasks/closed-2024.json", "_tasks/closed-2024-05.json",
-		"_tasks/closed-2025-12.json", "_tasks/closed-2026-02.json", "_tasks/tasks.json", "private/alice/_tasks/completed.json", "private/alice/_tasks/closed.json",
-		"private/alice/_tasks/closed-2026-03.json"} {
-		if !strings.Contains(f.commits[0]+" ", " "+rel+" ") && !strings.Contains(f.commits[0], "|"+rel+" ") {
-			t.Errorf("%s isn't in the commit: %q", rel, f.commits[0])
-		}
-	}
-	if got := ids(f.All(asker.User("alice"))); len(got) != 6 {
-		t.Errorf("tasks afterwards: %v", got)
-	}
-	f.ArchiveOldClosed()
-	if len(f.commits) != 1 {
-		t.Errorf("a second run committed: %q", f.commits)
-	}
-	// Both names there: the new one is the wiki's, the old one is left alone.
-	write("_tasks/completed.json", "["+old("stray", `"2026-01-01T10:00:00"`)+"]")
-	f.ArchiveOldClosed()
-	if len(f.commits) != 1 || !strings.Contains(f.text(t, "_tasks/completed.json"), "stray") || strings.Contains(f.text(t, "_tasks/closed.json"), "stray") {
-		t.Errorf("a file was renamed over another: %q", f.commits)
 	}
 }
 
@@ -1116,26 +953,9 @@ func TestAListsTasksAreInItsFolder(t *testing.T) {
 	}
 }
 
-// A wiki from before the folders with months already archived: the start
-// moves the archives into their lists' folders, and the commit says that it
-// filed the tasks, not that it archived any: it is the one to revert for
-// an older Zone.
-func TestAStartThatFilesArchivesSaysItFiled(t *testing.T) {
-	f := newStore(t, "alice")
-	f.put(t, "_tasks/tasks.json", `[{"id":"s1","title":"Milk","list":"shop"}]`)
-	f.put(t, "_tasks/closed-2020-03.json", `[{"id":"s2","title":"Eggs","list":"shop","closed_at":"2020-03-01T09:00:00"}]`)
-	f.ArchiveOldClosed()
-	if len(f.commits) != 1 || !strings.HasPrefix(f.commits[0], "|File the tasks by list|") {
-		t.Fatalf("commits %q", f.commits)
-	}
-	if got := f.ids(t, "_tasks/lists/shop/closed-2020-03.json"); !reflect.DeepEqual(got, []string{"s2"}) {
-		t.Errorf("the archive in its list's folder: %v", got)
-	}
-}
-
-// A wiki from before the folders has every task in _tasks/: the start
-// files each where its list is, in one commit, and a second start changes
-// nothing. A task that is in two files (a write that stopped between them)
+// Tasks in another folder than their list's (files moved or written by
+// hand, every task in _tasks/): the start files each where its list is, in
+// one commit, and a second start changes nothing. A task that is in two files (a write that stopped between them)
 // is one task to every reader.
 func TestAStartFilesTheTasksByList(t *testing.T) {
 	f := newStore(t, "alice")
@@ -1146,7 +966,7 @@ func TestAStartFilesTheTasksByList(t *testing.T) {
 		t.Fatalf("read before the start: %v", got)
 	}
 	f.ArchiveOldClosed()
-	if len(f.commits) != 1 || !strings.HasPrefix(f.commits[0], "|File the tasks by list|") {
+	if len(f.commits) != 1 || !strings.HasPrefix(f.commits[0], "|Write the task files in Zone's format|") {
 		t.Fatalf("commits %q", f.commits)
 	}
 	for rel, want := range map[string][]string{"_tasks/tasks.json": {"i1"}, "_tasks/lists/shop/tasks.json": {"s1"},

@@ -3,8 +3,10 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,24 +15,89 @@ import (
 )
 
 // setUpTasks: what a start does over the task files: closed tasks filed by
-// month and by list and files written in Zone's format (ArchiveOldClosed),
-// the lists' migrations (migrateLists), and a task those gave another list
-// filed in that list's folder (FileByList). All of that reads and encodes
-// every task of the wiki's years, so it is done when something may need
-// it, not at every start: when the task files are as a start left them
-// (tasksChecked) only what a month's end leaves to file is done
-// (taskFiles.Unfiled), and the lists' migrations look at their registries.
-// format: the wiki's (.zone-format), which says which of those it needs.
-func setUpTasks(format int) {
+// month, tasks filed by list and files written in Zone's format
+// (ArchiveOldClosed), and with users a shared task in no list given the
+// list "general" (fileInGeneral). All of that reads and encodes every task
+// of the wiki's years, so it is done when something may need it, not at
+// every start: when the task files are as a start left them (tasksChecked)
+// only what a month's end leaves to file is done (taskFiles.Unfiled).
+func setUpTasks() {
 	checked := tasksChecked()
 	if !checked || taskFiles.Unfiled() {
 		taskFiles.ArchiveOldClosed()
 	}
-	migrateLists(checked, format)
+	ok := true
 	if !checked {
-		taskFiles.FileByList()
+		if err := fileInGeneral(); err != nil {
+			ok = false
+			logf("The shared tasks without a list couldn't be given the list #%s (the next start tries again): %v", generalListName, err)
+		}
 	}
-	markTasksChecked()
+	markTasksChecked(ok)
+}
+
+// fileInGeneral: with users a shared task is always in a list. One in none
+// (a wiki whose users were turned on later, a file edited by hand) goes to
+// the shared list "general", made for it and pinned for the wiki, and is
+// filed in its folder, in one commit by Zone. A task file that can't be
+// read stops it before anything is written.
+func fileInGeneral() error {
+	if settings().Users == nil {
+		return nil
+	}
+	taskFiles.Lock()
+	defer taskFiles.Unlock()
+	type taskFile struct {
+		path    string
+		tasks   []*Task
+		changed bool
+	}
+	var files []*taskFile
+	moved := 0
+	for _, f := range taskFiles.Files([]string{""}) {
+		tasks, err := taskfiles.ReadStrict(f.Path)
+		if err != nil {
+			return errors.New(f.Path + ": " + err.Error())
+		}
+		tf := &taskFile{path: f.Path, tasks: tasks}
+		for _, t := range tasks {
+			if t.List == "" {
+				t.List, tf.changed, moved = generalListName, true, moved+1
+			}
+		}
+		files = append(files, tf)
+	}
+	if moved == 0 {
+		return nil
+	}
+	shared, err := taskFiles.ReadListsStrict("")
+	if err != nil {
+		return err
+	}
+	taskFiles.Hold()
+	var written []string
+	for _, f := range files {
+		if f.changed {
+			if err := taskfiles.Write(f.path, f.tasks); err != nil {
+				return err
+			}
+			written = append(written, f.path)
+		}
+	}
+	if shared.Find(generalListName) == nil {
+		shared.Lists = append(shared.Lists, &taskfiles.List{Name: generalListName, Settings: map[string]string{}})
+		if !slices.Contains(shared.Pinned, generalListName) {
+			shared.Pinned, shared.PinsSet = append(shared.Pinned, generalListName), true
+		}
+		path, err := taskFiles.WriteListsOf("", shared)
+		if err != nil {
+			return err
+		}
+		written = append(written, path...)
+	}
+	written = append(written, taskFiles.FileByListLocked([]string{""})...)
+	logf("lists: %d shared tasks without a list are in #%s", moved, generalListName)
+	return commitLists(asker{}, "Put the shared tasks without a list in #"+generalListName, written)
 }
 
 // tasksCheckedPath: the mark that the task files are as a start of this
@@ -141,10 +208,10 @@ func noteTaskCommit(changed []string, sha string) {
 }
 
 // markTasksChecked notes that this start left the task files as it leaves
-// them (tasksChecked), at the commit the repository is at; not while the
-// lists couldn't be set up.
-func markTasksChecked() {
-	if listsUnmigrated {
+// them (tasksChecked), at the commit the repository is at; not when it
+// couldn't (ok false): the next start reads them again.
+func markTasksChecked(ok bool) {
+	if !ok {
 		_ = os.Remove(tasksCheckedPath())
 		return
 	}

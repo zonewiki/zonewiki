@@ -889,65 +889,6 @@ def test_a_shared_list_of_its_name_shows_none_of_its_tasks(client, wiki):
         assert not any(m in body for m in MARKS) and SECRET not in body
 
 
-def old_list_for_some(wiki, name, who, owners=("alice",)):
-    """A list for some as a Zone before 2026-11-20 kept it: its entry in its
-    folder's list.json, and its tasks there."""
-    folder = wiki / "_tasks/lists" / name
-    folder.mkdir(parents=True)
-    (folder / "list.json").write_text(json.dumps({"name": name, "view": "open", "for": list(who), "owners": list(owners)}) + "\n")
-    (folder / "tasks.json").write_text(json.dumps([{"id": "0a1b2c3d-0000-4000-8000-0000000000" + str(len(name)).zfill(2),
-                                                    "title": f"Old {name} {SECRET}", "list": name, "created_at": "2026-01-01T10:00:00"}]) + "\n")
-    git(wiki, "add", "-A")
-    git(wiki, "commit", "-qm", f"Old list {name}")
-
-
-def test_a_list_for_some_moves_into_its_groups_folder_at_start(client, git_wiki_dir, monkeypatch):
-    """Lists for some (until 2026-11-20): a start moves each into a group's
-    folder, the one group it was for or one made for it of the groups and
-    people it named, its owners the list's; its old folder keeps a mark, so
-    its history stays its members' and no list or group takes its name."""
-    monkeypatch.setattr(settings, "USERS", dict(USERS))
-    monkeypatch.setattr(settings, "USER_SETTINGS", {"carol": {"groups": "hiring"}})
-    old_list_for_some(git_wiki_dir, "offers", ["@hiring"])
-    old_list_for_some(git_wiki_dir, "deals", ["@hiring", "bob"])
-    sign_in(client, "carol")
-    # The one group it was for: its folder.
-    assert "Old offers" in (git_wiki_dir / "groups/hiring/_tasks/lists/offers/tasks.json").read_text()
-    entry = next(l for l in json.loads((git_wiki_dir / "groups/hiring/_tasks/lists.json").read_text())["lists"] if l["name"] == "offers")
-    assert entry == {"name": "offers", "view": "open", "owners": ["alice"]}
-    mark = json.loads((git_wiki_dir / "_tasks/lists/offers/list.json").read_text())
-    assert mark["gone"] is True and mark["for"] == ["@hiring"] and mark["group"] == "hiring"
-    assert not (git_wiki_dir / "_tasks/lists/offers/tasks.json").exists()
-    assert "Move the list for some #offers to the group hiring" in git(git_wiki_dir, "log", "--format=%s")
-    # Groups and people: a group made for it, named after it.
-    config = (git_wiki_dir / ".zone/config").read_text()
-    assert "[group deals]" in config and "includes = hiring" in config
-    assert "Old deals" in (git_wiki_dir / "groups/deals/_tasks/lists/deals/tasks.json").read_text()
-    titles = [t["title"] for t in client.get("/api/tasks", headers=HOST).get_json()]
-    assert any("Old offers" in t for t in titles) and any("Old deals" in t for t in titles)     # carol: in hiring
-    sign_in(client, "bob")                     # named on deals, in none of hiring
-    titles = [t["title"] for t in client.get("/api/tasks", headers=HOST).get_json()]
-    assert any("Old deals" in t for t in titles) and not any("Old offers" in t for t in titles)
-    sign_in(client, "dana")                    # nobody's: neither
-    assert SECRET not in client.get("/api/tasks", headers=HOST).get_data(as_text=True)
-    # The old folder's history stays its members' (canSeePath: TestAFormerListForSomesHistoryIsItsMembers).
-    assert "Old list offers" not in mcp(client, "dana", "history")
-    # Its name stays taken: no shared list, no group of it.
-    sign_in(client, "dana")
-    resp = client.post("/tasks/new-list", data={"name": "offers"}, headers=HOST)
-    assert "newlist_error=" in resp.headers["Location"]
-
-
-def test_without_users_an_old_list_for_some_is_read_by_no_one(client, git_wiki_dir):
-    """Without users nothing is anyone's: an old list for some waits until
-    there are users again, and meanwhile its folder is read by no one, not
-    shown to everyone."""
-    old_list_for_some(git_wiki_dir, "old", ["@hiring", "anna"])
-    assert SECRET not in client.get("/api/tasks", headers=HOST).get_data(as_text=True)
-    assert "Old old" not in client.get("/search", query_string={"q": SECRET}, headers=HOST).get_data(as_text=True)
-    assert (git_wiki_dir / "_tasks/lists/old/tasks.json").exists()
-
-
 def test_a_task_goes_to_a_list_fewer_people_see_by_its_maker_or_an_admin(client, wiki):
     """As a page goes to fewer people: a shared task moves into a list that
     some who see it now are none of only by who made it, or an admin; to

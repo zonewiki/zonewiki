@@ -589,7 +589,7 @@ and not for who manages it (Manage… is their way, where a group keeps an owner
 ### A name that is taken
 
 A new group's name is refused when it is taken (`groupNameTaken`): a group there is, a name a group is said to include, or a folder in `groups/` (a group nobody is in keeps its folder, and a new group of that name would get its pages and its task lists).
-**And a name a group went by before**: the history of `groups/<name>/` (the versions and deleted pages and tasks of a group renamed since, which are read under that path by who is in a group of that name), and a former list for some that was for it (Lists for some, until 2026-11-20 in `docs/spec/tasks.md`), stay its former group's, so a new group of the name would be shown them: the name stays taken.
+**And a name a group went by before**: the history of `groups/<name>/` (the versions and deleted pages and tasks of a group renamed since, which are read under that path by who is in a group of that name) stays its former group's, so a new group of the name would be shown it: the name stays taken.
 The group that went by it takes it back (`was = apollo` in its section, which a rename writes: the names it had), so a rename can be undone.
 **A name in a group's `was` is taken for every other group**, whether its folder has a history yet or not: a group renamed before it had a page would otherwise leave the name to the next group, and take it back, with that group's past, once that one moved on.
 Two groups that went by one name (a wiki from before this rule) take it back neither.
@@ -833,7 +833,7 @@ So is the name of a user who was removed (`userNameHasHistory`):
 Zone noted them removed (`.zone/removed-users`, written by the Users tab's Remove and by `zonewiki user remove`),
 their private folder is there or in the history, a commit names them as its author,
 Zone keeps a draft of theirs or what news they had seen (`.zone/drafts/<name>/`, `.zone/seen/<name>.json`),
-or a list or a task names them: a list's owners (a shared or a group's list), whom a former list for some was for, a task's assignee or follower, which is all a member who only read leaves.
+or a list or a task names them: a list's owners (a shared or a group's list), a task's assignee or follower, which is all a member who only read leaves.
 An address that got an account meanwhile is refused too ("There is an account with your address already: sign in with it.").
 Removing a user keeps their private pages, tasks and lists, and their comments and history, so a stranger signing up under the name would get all of it; an admin may still give the name again (`user add`, an invite).
 Then the account is made in the settings file, as theirs in the log: their password's hash, `role` (`signup-role`; nothing for an editor, the default), `email` and, with `signup-approval`, `pending = yes`.

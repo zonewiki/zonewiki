@@ -15,9 +15,8 @@
 // at every change. Which list a task is in is the task's to say (its
 // `list`), as ever: the folder is where a write files it (dirOf), a read
 // takes every folder, and a task found in another list's folder (a file
-// moved by hand, a list renamed, a wiki from before the folders) is filed
-// where it belongs by the next write of its owner's tasks, or at start
-// (ArchiveOldClosed).
+// moved by hand, a list renamed) is filed where it belongs by the next
+// write of its owner's tasks, or at start (ArchiveOldClosed).
 //
 // A Store knows nothing of Zone's process: the wiki's folder, its users,
 // the clock, who may write and how a write is committed are handed to it.
@@ -194,22 +193,16 @@ func (s *Store) dirs(who asker.Asker, owner string) []string {
 	entries, _ := os.ReadDir(filepath.Join(s.Dir(owner), ListsDirName))
 	for _, e := range entries {
 		dir := filepath.Join(s.Dir(owner), ListsDirName, e.Name())
-		if e.IsDir() && !exists(filepath.Join(dir, FormerListFile)) {
+		if e.IsDir() {
 			out = append(out, dir)
 		}
 	}
 	return out
 }
 
-// FormerListFile: the mark of a former list for some in its old folder
-// (until 2026-11-20 a shared list could name whom it was for there). A
-// folder that has one is read by no one: what a start couldn't move into a
-// group's folder is out of everyone's sight, never in it.
-const FormerListFile = "list.json"
-
 // The files of one folder: its open tasks, this month's closed ones (and
 // those without a usable date), and an archive of a month ("2026-03":
-// closed-2026-03.json; until 2026-11 a year's, "2025": closed-2025.json).
+// closed-2026-03.json).
 func openIn(dir string) string            { return filepath.Join(dir, "tasks.json") }
 func closedIn(dir string) string          { return filepath.Join(dir, "closed.json") }
 func archiveIn(dir, period string) string { return filepath.Join(dir, "closed-"+period+".json") }
@@ -229,15 +222,14 @@ func (s *Store) PathIn(owner, list, file string) string {
 // Archives: every archive of owner's, of every folder.
 func (s *Store) Archives(owner string) []string { return s.archives(Everyone, owner) }
 
-// An archive's name: closed-YYYY-MM.json, a month's; closed-YYYY.json, a
-// year's, from before the months (its tasks are filed by month at the next
-// start). The year is the first group.
-var archiveNameRE = regexp.MustCompile(`^closed-(\d{4})(-\d{2})?\.json$`)
+// An archive's name: closed-YYYY-MM.json, a month's. The year is the
+// first group.
+var archiveNameRE = regexp.MustCompile(`^closed-(\d{4})-\d{2}\.json$`)
 
 // archiveYear: the year an archive file is of.
 func archiveYear(path string) string { return archiveNameRE.FindStringSubmatch(filepath.Base(path))[1] }
 
-// archivesIn: a folder's archives (closed-2026-03.json …, closed-2025.json), sorted.
+// archivesIn: a folder's archives (closed-2026-03.json …), sorted.
 func archivesIn(dir string) []string {
 	entries, _ := os.ReadDir(dir)
 	var out []string
@@ -936,8 +928,8 @@ func (s *Store) ReadTaskForWriteLocked(user asker.Asker, id string) (active, clo
 // whole only the closed files read here, and reads any other it has to put
 // a task into (writeClosed).
 func (s *Store) ReadTasksForWriteLocked(user asker.Asker, ids map[string]bool) (active, closed []*Task, err error) {
-	// Closed tasks that wait to be filed (a month has ended, a year's file
-	// from before the months): this write reads everything and files them,
+	// Closed tasks that wait to be filed (a month has ended): this write
+	// reads everything and files them,
 	// as every write did; the next one reads its own files again.
 	if s.unfiled(user) {
 		return s.ReadForWriteLocked(user)
@@ -994,37 +986,20 @@ func (s *Store) ReadTasksForWriteLocked(user asker.Asker, ids map[string]bool) (
 	return active, closed, nil
 }
 
-// unfiled: a closed task user sees is not in its month's file: a year's
-// file from before the months is there, or a closed.json holds a task of
-// an earlier month. Found by the files' names and a look at this month's
-// files, which are parsed anyway.
+// unfiled: a closed task user sees is not in its month's file: a
+// closed.json holds a task of an earlier month. Found by a look at this
+// month's files, which are parsed anyway.
 func (s *Store) unfiled(user asker.Asker) bool { return s.unfiledOf(user, s.Owners(user)) }
 
-// Unfiled: any owner's closed tasks wait to be filed (unfiled), or a task
-// file still has its name from before they were called closed: what a
+// Unfiled: any owner's closed tasks wait to be filed (unfiled): what a
 // start has to do something about (ArchiveOldClosed), found without
 // reading the archives.
-func (s *Store) Unfiled() bool {
-	for _, o := range s.EveryOwner() {
-		entries, _ := os.ReadDir(s.Dir(o))
-		for _, e := range entries {
-			if !e.IsDir() && oldClosedNameRE.MatchString(e.Name()) {
-				return true
-			}
-		}
-	}
-	return s.unfiledOf(Everyone, s.EveryOwner())
-}
+func (s *Store) Unfiled() bool { return s.unfiledOf(Everyone, s.EveryOwner()) }
 
 func (s *Store) unfiledOf(who asker.Asker, owners []string) bool {
 	current := s.currentMonth()
 	for _, o := range owners {
 		for _, d := range s.dirs(who, o) {
-			for _, p := range archivesIn(d) {
-				if !monthRE.MatchString(strings.TrimSuffix(strings.TrimPrefix(filepath.Base(p), "closed-"), ".json")) {
-					return true // closed-YYYY.json
-				}
-			}
 			old := false
 			lookAt(closedIn(d), o, func(t *Task) { old = old || pastMonthOf(t, current) != "" })
 			if old {
@@ -1157,10 +1132,8 @@ func (s *Store) writeOpenOf(who asker.Asker, owner string, tasks []*Task, reform
 // by month (this month's, and those without a usable date, into
 // closed.json, earlier ones into closed-YYYY-MM.json); only files whose
 // tasks change (with reformat also those in another format). An archive
-// left without a task is removed: a year's file from before the months
-// (closed-YYYY.json), whose tasks are in their months' files from the first
-// write on; and so is a list's closed.json (that of the tasks in no list
-// stays). Returns the paths written and removed, for the commit.
+// left without a task is removed, and so is a list's closed.json (that of
+// the tasks in no list stays). Returns the paths written and removed, for the commit.
 func (s *Store) writeClosed(who asker.Asker, owner string, closed []*Task, reformat bool) ([]string, error) {
 	s.Hold()
 	current := s.currentMonth()
@@ -1227,9 +1200,8 @@ func (s *Store) writeClosed(who asker.Asker, owner string, closed []*Task, refor
 		if errors.Is(err, os.ErrNotExist) && len(tasks) == 0 {
 			continue // no file for no tasks
 		}
-		// A file that holds no task anymore goes: a year's archive, whose
-		// tasks are filed by month now; a month's whose tasks were all
-		// reopened; a list's closed.json.
+		// A file that holds no task anymore goes: a month's whose tasks were
+		// all reopened; a list's closed.json.
 		if err == nil && len(tasks) == 0 && p != keep {
 			if os.Remove(p) == nil {
 				forget(p)
@@ -1304,63 +1276,25 @@ func (s *Store) WriteBothLocked(user asker.Asker, active, closed []*Task, messag
 	return err
 }
 
-// Until the files were named after what they hold (closed: done or won't
-// do), they were completed.json and completed-YYYY.json, and a task had
-// completed_at.
-var oldClosedNameRE = regexp.MustCompile(`^completed(-\d{4})?\.json$`)
-
-// renameOldClosed gives owner's task files of the old names their new ones
-// (never over a file that is there), and returns both paths of each: the
-// one that went and the one that came. FromJSON reads the old field, and
-// ArchiveOldClosed then writes the files as Zone writes them now.
-func (s *Store) renameOldClosed(owner string) []string {
-	entries, _ := os.ReadDir(s.Dir(owner))
-	var changed []string
-	for _, e := range entries {
-		m := oldClosedNameRE.FindStringSubmatch(e.Name())
-		if m == nil || e.IsDir() {
-			continue
-		}
-		from, to := filepath.Join(s.Dir(owner), e.Name()), filepath.Join(s.Dir(owner), "closed"+m[1]+".json")
-		if _, err := os.Lstat(to); err == nil {
-			continue
-		}
-		if os.Rename(from, to) == nil {
-			changed = append(changed, from, to)
-		}
-	}
-	return changed
-}
-
 // ArchiveOldClosed rolls earlier months' closed tasks into their
-// archives (at start; every write files by month too), gives files of the
-// old names their new ones (renameOldClosed), and writes files in
-// another format (a hand-edited file) as Zone writes them, so later commits
-// show only what changed; every owner's files, in one commit. An unreadable
+// archives (at start; every write files by month too), files a task found
+// in another folder than its list's there, and writes files in another
+// format (a hand-edited file) as Zone writes them, so later commits show
+// only what changed; every owner's files, in one commit. An unreadable
 // file is left alone (its owner's files are): this is never worth failing
 // over.
 func (s *Store) ArchiveOldClosed() {
 	s.Lock()
 	defer s.Unlock()
-	moved, renamed, filed := false, false, false
+	moved := false
 	var changed []string
 	for _, o := range s.EveryOwner() {
-		if old := s.renameOldClosed(o); len(old) > 0 {
-			changed, renamed = append(changed, old...), true
-		}
 		active, closed, err := s.readOwnerStrict(Everyone, o)
 		if err != nil {
 			continue
 		}
 		for _, t := range closed {
 			moved = moved || pastMonthOf(t, s.currentMonth()) != "" && !exists(archiveIn(s.dirOf(o, t.List), pastMonthOf(t, s.currentMonth())))
-		}
-		// A task in another folder than its list's (a wiki from before the
-		// folders: every task that is in a list): filed where it belongs.
-		for _, f := range s.Files([]string{o}) {
-			for _, t := range ReadLenient(f.Path) {
-				filed = filed || filepath.Dir(f.Path) != s.dirOf(o, t.List)
-			}
 		}
 		more, _ := s.writeOpenOf(Everyone, o, active, true, false)
 		changed = append(changed, more...)
@@ -1374,32 +1308,13 @@ func (s *Store) ArchiveOldClosed() {
 	if moved {
 		msg = "Archive closed tasks"
 	}
-	// Filing comes first: an archive in another folder than its list's looks
-	// like a month still to roll (its list's folder has none), and the commit
-	// that filed a wiki is the one to revert for an older Zone, so it says so.
-	if filed {
-		msg = "File the tasks by list"
-	}
-	if renamed {
-		msg = "Name the task files of closed tasks closed"
-	}
 	_ = s.Commit("", msg, changed...)
-}
-
-// FileByList files every owner's tasks that are in another folder than
-// their list's where they belong, in one commit (at start, after what gave
-// tasks another list in the files they were in: the lists' migrations).
-func (s *Store) FileByList() {
-	s.Lock()
-	defer s.Unlock()
-	if changed := s.FileByListLocked(s.EveryOwner()); len(changed) > 0 {
-		_ = s.Commit("", "File the tasks by list", changed...)
-	}
 }
 
 // FileByListLocked files every task of owners' that is in another folder
 // than its list's where it belongs (after a write that put tasks back into
-// the files they were read from with another list: a list renamed), and
+// the files they were read from with another list: a list renamed, the
+// shared tasks a start put in #general), and
 // returns the paths written and removed, for that write's commit.
 func (s *Store) FileByListLocked(owners []string) []string {
 	s.Hold()
@@ -1547,8 +1462,8 @@ func TaskIn(path, id, owner string) *Task {
 	return nil
 }
 
-// IsArchive: path is an archive, an earlier month's closed tasks (or a
-// year's, from before the months): a file that rarely changes.
+// IsArchive: path is an archive, an earlier month's closed tasks: a file
+// that rarely changes.
 func IsArchive(path string) bool { return archiveNameRE.MatchString(filepath.Base(path)) }
 
 // CountClosedInYear: how many of the closed tasks of a year user sees in

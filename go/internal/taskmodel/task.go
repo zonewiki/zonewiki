@@ -144,11 +144,7 @@ func CleanImportance(s string) string {
 	return ""
 }
 
-// oldClosedAtKey: what closed_at was called; read where closed_at is
-// missing, never written (so not kept as an unknown key either).
-const oldClosedAtKey = "completed_at"
-
-var taskKeys = map[string]bool{oldClosedAtKey: true, "id": true, "title": true, "description": true, "tags": true, "list": true, "assignee": true, "created_by": true, "followers": true,
+var taskKeys = map[string]bool{"id": true, "title": true, "description": true, "tags": true, "list": true, "assignee": true, "created_by": true, "followers": true,
 	"start_date": true, "due_date": true, "created_at": true, "closed_at": true, "wont_do": true,
 	"keep": true, "importance": true, "last_done": true, "sort_order": true, "recurrence": true, "spawned_from": true,
 	"history": true, "comments": true, "private": true}
@@ -163,9 +159,6 @@ func FromJSON(o jsonobj.Obj) *Task {
 		WontDo: jsonobj.True(o["wont_do"]), Keep: jsonobj.True(o["keep"]), LastDone: o.Str("last_done"),
 		Importance:  CleanImportance(o.Str("importance")),
 		SpawnedFrom: o.Str("spawned_from"), History: []HistoryEntry{}, Comments: []Comment{}}
-	if !o.Has("closed_at") {
-		t.ClosedAt = o.Str(oldClosedAtKey) // a file from before the field was renamed
-	}
 	t.Tags = CleanTags(jsonobj.TextList(o["tags"])) // "local llm", "#work" from a file edited by hand
 	t.List = strings.ToLower(strings.TrimSpace(o.Str("list")))
 	t.Assignee = CleanAssignee(o.Str("assignee"))

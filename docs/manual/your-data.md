@@ -53,7 +53,7 @@ The full list is in [What is in .zone/](../spec/deployment.md#what-is-in-zone).
 ### The format file
 
 `.zone-format` holds one number: the format the wiki's files are in.
-Zone reads it when it starts, to know whether the files still need bringing up to date from an older Zone.
+Zone reads it when it starts, to know that it can read them, and writes it into a new wiki.
 It is committed with the files, so going back in the history takes it back with them.
 Leave it as it is.
 

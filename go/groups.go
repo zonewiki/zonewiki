@@ -289,9 +289,8 @@ func mayMakeGroup(s *Settings, user asker) bool {
 //
 // And what a group of that name left behind: its folder's history (a group
 // renamed or ended: its pages' versions are still read at groups/<name>/…,
-// by who is in a group of that name) and a deleted list that was for it
-// (whose folder's history is its members'). A new group of the name would
-// be shown both, so the name stays taken; but for the group that went by it
+// by who is in a group of that name). A new group of the name would be
+// shown it, so the name stays taken; but for the group that went by it
 // (as: the group being renamed, whose was names it), which takes its own
 // name back, and which alone does: a name in any group's was is taken for
 // every other.
@@ -312,13 +311,6 @@ func groupNameTaken(s *Settings, name, as string) bool {
 	}
 	if as != "" && slices.Contains(s.Was[as], name) {
 		return false
-	}
-	// A former list for some that was for the group (its old folder's
-	// history is the group's members').
-	for _, list := range formerListNames() {
-		if slices.Contains(formerListFor(list), "@"+name) {
-			return true
-		}
 	}
 	return cfg.GitEnabled && strings.TrimSpace(runGit("log", "-1", "--format=%H", "--", groupsDir+"/"+name).Stdout) != ""
 }

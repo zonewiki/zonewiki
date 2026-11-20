@@ -604,15 +604,6 @@ func canSeePath(user asker, rel string) bool {
 	if p := placeOf(rel); !p.shared() {
 		return p.sees(user)
 	}
-	// A former list for some's old folder (its history, which git keeps at
-	// the old paths): its members' (formerListFor).
-	if rest, ok := strings.CutPrefix(rel, taskfiles.DirName+"/"+taskfiles.ListsDirName+"/"); ok {
-		if name, _, inFolder := strings.Cut(rest, "/"); inFolder {
-			if who := formerListFor(name); len(who) > 0 && !formerMember(user, who) {
-				return false
-			}
-		}
-	}
 	// A task's files: who sees the task.
 	if rest, ok := strings.CutPrefix(rel, taskFilesDir+"/"); ok {
 		if id, _, inFolder := strings.Cut(rest, "/"); inFolder && !seesTaskFiles(user, id) {

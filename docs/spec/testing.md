@@ -169,20 +169,20 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `go/server_test.go` | deployment.md | Healthcheck address, Unix and handed sockets, idle exit |
 | `go/stalls_test.go` | security.md | `noStalls`: a stalled body or response fails, a slow one doesn't |
 | `go/storage_test.go` | security.md, users.md | Sizes, the size settings, what counts toward `storage-max`, `checkRoom` |
-| `go/tasklists_test.go` | tasks.md | Lists as places, the Inbox and the migrations at start, My tasks, pins, the case files, the search's task records, archives read at start |
+| `go/tasklists_test.go` | tasks.md | Lists as places, the Inbox, a start's #general, My tasks, pins, the case files, the search's task records, archives read at start |
 | `go/tasklogic_test.go` | tasks.md, users.md | Per-user task files, `canSeeTask`, a shared task staying shared, the news' cases |
-| `go/tasksettings_test.go` | tasks.md | An embed's parameters set by the settings dialog, the views' old names |
+| `go/tasksettings_test.go` | tasks.md | An embed's parameters set by the settings dialog |
 | `go/users_test.go` | users.md | The hash format, `authenticate` |
 | `go/views_test.go` | routes.md | A page view and a search walk the wiki once |
-| `go/wikiformat_test.go` | deployment.md, tasks.md | `.zone-format`: what it may say, a newer format refused, written once after the steps from before it, which a wiki with it leaves out |
+| `go/wikiformat_test.go` | deployment.md, tasks.md | `.zone-format`: what it may say, a newer format refused, written once into a new wiki, which a start takes nothing over in |
 | `go/internal/atomicfile/atomicfile_unix_test.go` | tasks.md | The atomic write: a new file's mode, an old one's kept, a link written through |
 | `go/internal/gitrepo/gitrepo_test.go` | rendering.md | Git's time limit and context, no pack inside a commit, Pack, Prune, Join, Drop, when to join |
 | `go/internal/jsonobj/jsonobj_test.go` | mcp.md, tasks.md | JSON objects read a member at a time |
 | `go/internal/mdtext/mdtext_test.go`, `text_test.go`, `sections_test.go` | rendering.md, editor.md | Frontmatter, lines, slugs, titles, wikilinks' parts, a section's splice |
 | `go/internal/settingsfile/settingsfile_test.go` | users.md | The settings file parsed, edited keeping comments, written owner-only, group sections |
 | `go/internal/taskfiles/concurrent_test.go` | tasks.md | `TestReadersBesideWriters`, the store under the race detector |
-| `go/internal/taskfiles/lists_test.go` | tasks.md | The registry file: format, version, lenient reads, owners, who may write |
-| `go/internal/taskfiles/members_test.go` | tasks.md | A group's tasks in the store: in its folder, read by its members only, others' writes refused; a former list for some's folder read by no one |
+| `go/internal/taskfiles/lists_test.go` | tasks.md | The registry file: format, no version, lenient reads, owners, who may write |
+| `go/internal/taskfiles/members_test.go` | tasks.md | A group's tasks in the store: in its folder, read by its members only, others' writes refused |
 | `go/internal/taskfiles/taskfiles_test.go` | tasks.md | Task files on disk: filing by owner, list and month, commits, corrupt files, parsed-once reads, `TestHolds` |
 | `go/internal/taskmodel/task_test.go` | tasks.md | A task read leniently and written in key order, assignees, `TestSame`, `TestKnownKeysWrittenOnce` |
 | `go/internal/textsearch/search_test.go` | search.md | BM25, stemming, fuzzy, query syntax, excerpts, an index's views and layers |
@@ -202,7 +202,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `tests/test_group_pages.py` | users.md | A group's pages: the privacy probes, members, moves, Share…, its home |
 | `tests/test_groups_own.py` | users.md | Groups made in the browser: names, owners, leaving, ending, renaming |
 | `tests/test_image.py` | deployment.md, security.md | Guard (above) |
-| `tests/test_group_lists.py` | tasks.md | A group's lists: the leak probes, members, moving a list to or from a group, the task's files, the migration of lists for some |
+| `tests/test_group_lists.py` | tasks.md | A group's lists: the leak probes, members, moving a list to or from a group, the task's files |
 | `tests/test_list_owners.py` | tasks.md | A shared list's owners and what a member who is none may do |
 | `tests/test_math.py` | rendering.md | Math over HTTP, section editing below a `$$` block |
 | `tests/test_mcp.py` | mcp.md | The MCP tools over HTTP: files, guides, reading and writing tools, `zone_help` |

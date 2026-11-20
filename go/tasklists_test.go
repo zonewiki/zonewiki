@@ -14,7 +14,7 @@ import (
 	"zonewiki/internal/textsearch"
 )
 
-// writeTasks writes owner's open tasks as a wiki from before has them.
+// writeTasks writes owner's open tasks as a file edited by hand has them.
 func writeTasks(t *testing.T, owner string, tasks ...*Task) {
 	t.Helper()
 	if err := taskfiles.Write(taskFiles.OpenPath(owner), tasks); err != nil {
@@ -56,264 +56,6 @@ func mustList(t *testing.T, user, name string, private bool) string {
 func refusedWith(err error, kind refusal) bool {
 	rf, ok := refusalOf(err)
 	return ok && rf.kind == kind
-}
-
-// A wiki from before lists were places: each list a page declared (outside
-// code) becomes a list with its first page's settings, each task gets the
-// first A–Z of its tags that is a list as its list and loses that tag, the
-// pins move to the registry and leave the pages.
-func TestListsTakenOverFromPages(t *testing.T) {
-	testWiki(t, map[string]string{
-		"shop":        "# Shop\n\n[[tasks: list=Groceries keep=1 labels=Catalogue,,Shopping limit=8 tag=weekly pin=1]]\n",
-		"a-list":      "# A\n\n[[tasks: list=groceries view=open]]\n", // first A–Z: its settings count
-		"code":        "# Code\n\n`[[tasks: list=nope]]`\n\n```\n[[tasks: list=nada pin=1]]\n```\n",
-		"home":        "# Home\n\n[[tasks: list=chores pin=default view=plan]]\n", // a view's name of before 2026-11
-		"secret/plan": "# Plan\n\n[[tasks: list=plans]]\n",                        // a page not for sharing
-		"me":          "# Me\n\n[[tasks: tag=me pin=1]]\n",                        // a pinned view that is no list
-		// Views by a list's tag, which its tasks lose: they show the list.
-		"views": "# Views\n\n[[tasks: tag=Groceries]]\n\n[[tasks: tag=weekly,#groceries view=open]]\n\n" +
-			"[[tasks: tag=-chores]] [[tasks: tag=chores|work]] [[tasks: tag=work]] `[[tasks: tag=chores]]`\n\n" +
-			"[Chores](/tasks?tag=chores&view=open), [both](/tasks?tag=chores%2Cwork), [work](/tasks?tag=work), [set](/tasks?list=plans&tag=chores)\n",
-	})
-	writeTasks(t, "",
-		oldTask("1", "Milk", "Groceries", "weekly"),
-		oldTask("2", "Both", "groceries", "chores"),
-		oldTask("3", "Plain", "work"),
-		&Task{ID: "4", Title: "Stale", List: "long-gone", Tags: []string{"x"}})
-	if err := os.WriteFile(oldAllTasksFile(), []byte(`{"all": {"view": "open", "limit": "5"}}`), 0o666); err != nil {
-		t.Fatal(err)
-	}
-	migrateLists(false, 0)
-	if listsUnmigrated {
-		t.Fatal("the migration failed")
-	}
-	lists := taskLists(asker{})
-	if got := sortedKeys(lists); !slices.Equal(got, []string{"chores", "groceries", "plans"}) {
-		t.Fatalf("lists %v", got)
-	}
-	g := lists["groceries"].Params
-	if g.Get("view") != "open" || g.Get("group") != "none" || g.Get("keep") != "" || g.Get("limit") != "" || g.Get("list") != "groceries" {
-		t.Errorf("groceries has %v: the first page A–Z is a-list, whose view=open was the one list", g.m)
-	}
-	// A view's old name is taken as the views' migration reads it, not dropped.
-	if c := lists["chores"].Params; c.Get("view") != "open" || c.Get("group") != "day" {
-		t.Errorf("chores has %v: view=plan was the Open tab as the board", c.m)
-	}
-	if !lists["plans"].NoShare || lists["chores"].NoShare {
-		t.Error("noshare: a list whose page was not for sharing stays out of sharing mode")
-	}
-	tasks := openByID("")
-	for id, want := range map[string][2]string{"1": {"groceries", "weekly"}, "2": {"chores", "groceries"}, "3": {"", "work"}, "4": {"", "x"}} {
-		if got := tasks[id]; got.List != want[0] || strings.Join(got.Tags, ",") != want[1] {
-			t.Errorf("task %s: list %q tags %v, want %v", id, got.List, got.Tags, want)
-		}
-	}
-	// The pins: the default one first, then by name; code and a view that is no list aside.
-	if got := refsOf(pinnedLists(asker{}, lists)); !slices.Equal(got, []string{"chores", "groceries"}) {
-		t.Errorf("pinned %v", got)
-	}
-	for _, slug := range []string{"shop", "home", "me"} {
-		if text, _ := readText(safePath(slug)); strings.Contains(text, "pin=") {
-			t.Errorf("%s keeps its pin=: %q", slug, text)
-		}
-	}
-	if text, _ := readText(safePath("code")); !strings.Contains(text, "list=nada pin=1") {
-		t.Error("code was rewritten")
-	}
-	// The views' migration ran in the same start: the pages' old names are rewritten too.
-	if text, _ := readText(safePath("shop")); !strings.Contains(text, "[[tasks: list=Groceries keep=1 labels=Catalogue,Shopping limit=8 tag=weekly]]") {
-		t.Errorf("shop: %q", text)
-	}
-	if text, _ := readText(safePath("home")); !strings.Contains(text, "[[tasks: list=chores view=open group=day]]") {
-		t.Errorf("home: %q", text)
-	}
-	wantViews := "# Views\n\n[[tasks: list=groceries]]\n\n[[tasks: list=groceries tag=weekly view=open group=none]]\n\n" +
-		"[[tasks: tag=-chores]] [[tasks: tag=chores|work]] [[tasks: tag=work]] `[[tasks: tag=chores]]`\n\n" +
-		"[Chores](/tasks?list=chores&view=open), [both](/tasks?list=chores&tag=work), [work](/tasks?tag=work), [set](/tasks?list=plans&tag=chores)\n"
-	if text, _ := readText(safePath("views")); text != wantViews {
-		t.Errorf("views: %q", text)
-	}
-	// All tasks' settings moved into the registry.
-	if p := allTasksParams(); p.Get("view") != "open" || p.Get("group") != "none" || p.Get("limit") != "5" {
-		t.Errorf("All tasks: %v", p.m)
-	}
-	if _, err := os.Stat(oldAllTasksFile()); err == nil {
-		t.Error("settings.json is still there")
-	}
-	// The Inbox's migration ran after it (migrateInboxLocked): the list
-	// nobody pinned, whose tasks were not in My tasks, is left out of it.
-	if !strings.Contains(fileText(t, taskFiles.ListsPath("")), `"version": 3`) {
-		t.Errorf("the registry's version:\n%s", fileText(t, taskFiles.ListsPath("")))
-	}
-	if !lists["plans"].LeftOut() || lists["chores"].LeftOut() || lists["groceries"].LeftOut() {
-		t.Errorf("left out of My tasks: plans %v, chores %v, groceries %v", lists["plans"].LeftOut(), lists["chores"].LeftOut(), lists["groceries"].LeftOut())
-	}
-	// Without users a task without a list stays one: it is in the Inbox.
-	if tasks["3"].List != "" || len(lists) != 3 {
-		t.Error("a list was made for the tasks in none")
-	}
-	// Run again (the next start): nothing changes.
-	before := fileText(t, taskFiles.OpenPath("")) + fileText(t, taskFiles.ListsPath(""))
-	putPage(t, "later", "# Later\n\n[[tasks: list=typed-later pin=1]]\n")
-	migrateLists(false, 0)
-	if after := fileText(t, taskFiles.OpenPath("")) + fileText(t, taskFiles.ListsPath("")); after != before {
-		t.Errorf("a second run changed the files:\n%s", after)
-	}
-	if _, ok := taskLists(asker{})["typed-later"]; ok {
-		t.Error("an embed typed after the migration made a list")
-	}
-}
-
-// With users: a private page's list is its user's own, unless a shared page
-// declares the name too and they have no private task with it; private
-// tasks stay private, in a list of their user's; a shared task never gets a
-// private list. A user's pins come before the wiki's. The Inbox's migration
-// runs after it, in the same start: a private task without a list (which
-// the first step puts into a list "private") is in its user's Inbox, a
-// shared one without a list in #general.
-func TestListsTakenOverPerUser(t *testing.T) {
-	testWiki(t, map[string]string{
-		"tasks/gifts":         "# Gifts\n\n[[tasks: list=gifts pin=1]]\n",
-		"tasks/diary":         "# Diary\n\n[[tasks: list=diary]]\n",
-		"private/alice/gifts": "# My gifts\n\n[[tasks: list=gifts]]\n",
-		"private/alice/diary": "# Diary\n\n[[tasks: list=diary]]\n", // she has no private diary task: the shared list
-		"private/alice/mine":  "# Mine\n\n[[tasks: list=secret pin=1]]\n",
-		"private/bob/nothing": "# Nothing\n",
-	})
-	withUsers(t, "alice", "bob")
-	writeTasks(t, "", oldTask("s1", "Scarf", "gifts"), oldTask("s2", "Hers, shared", "secret"))
-	writeTasks(t, "alice", oldTask("a1", "Cake", "Gifts"), oldTask("a2", "Loose"), oldTask("a3", "Hidden", "secret"))
-	writeTasks(t, "bob", oldTask("b1", "Bob's", "gifts"))
-	migrateLists(false, 0)
-	if listsUnmigrated {
-		t.Fatal("the migration failed")
-	}
-	alice, bob := taskLists(asUser("alice")), taskLists(asUser("bob"))
-	if got := sortedKeys(alice); !slices.Equal(got, []string{"diary", "general", "gifts", "secret", "shared/gifts"}) {
-		t.Errorf("alice's lists %v", got)
-	}
-	if !alice["gifts"].Private() || alice["shared/gifts"].Private() || alice["diary"].Private() || !alice["secret"].Private() {
-		t.Errorf("alice's lists %+v", alice)
-	}
-	// Bob declared nothing: his private task with the shared list's tag has
-	// no list of his own to be in, so it is in his Inbox.
-	if got := sortedKeys(bob); !slices.Equal(got, []string{"diary", "general", "gifts"}) {
-		t.Errorf("bob's lists %v", got)
-	}
-	a := openByID("alice")
-	for id, want := range map[string][3]string{
-		"s1": {"gifts", "", "shared/gifts"}, "s2": {"general", "", "general"}, // a shared task with her private list's tag: no list of its own, so #general; the tag stays
-		"a1": {"gifts", "alice", "gifts"}, "a2": {"", "alice", ""}, "a3": {"secret", "alice", "secret"},
-	} {
-		got := a[id]
-		if got == nil || got.List != want[0] || got.Owner != want[1] || taskList(got, alice) != want[2] {
-			t.Errorf("task %s: %+v, want list %q owner %q ref %q", id, got, want[0], want[1], want[2])
-		}
-	}
-	if tags := a["s2"].Tags; !slices.Equal(tags, []string{"secret"}) {
-		t.Errorf("s2's tags %v", tags)
-	}
-	b := openByID("bob")
-	if b["b1"].List != "" || b["b1"].Owner != "bob" || !slices.Equal(b["b1"].Tags, []string{"gifts"}) || b["a1"] != nil {
-		t.Errorf("bob's task %+v", b["b1"])
-	}
-	// No task changed its file: nobody sees more or less than before.
-	if strings.Contains(fileText(t, taskFiles.OpenPath("")), "Cake") || strings.Contains(fileText(t, taskFiles.OpenPath("alice")), "Scarf") {
-		t.Error("a task moved between files")
-	}
-	// Alice's own pins first, then the wiki's. Bob had none and has none:
-	// pins are a user's own. The lists "private" and their pins are gone;
-	// #general is pinned in the shared registry, which no user reads pins from.
-	if got := refsOf(pinnedLists(asUser("alice"), alice)); !slices.Equal(got, []string{"secret", "shared/gifts"}) {
-		t.Errorf("alice's pins %v", got)
-	}
-	if got := refsOf(pinnedLists(asUser("bob"), bob)); len(got) != 0 {
-		t.Errorf("bob's pins %v", got)
-	}
-	if got := taskFiles.ReadLists("").Pinned; !slices.Equal(got, []string{"gifts", "general"}) {
-		t.Errorf("the shared registry's pins %v", got)
-	}
-	// Her private list she hadn't pinned stays out of her My tasks; a shared
-	// list is never left out (a shared task is in My tasks by its assignee).
-	if !alice["gifts"].LeftOut() || alice["secret"].LeftOut() || alice["diary"].LeftOut() || alice["shared/gifts"].LeftOut() {
-		t.Errorf("left out: %+v", alice)
-	}
-	mine := mineFilter(asUser("alice"), alice)
-	if !mine(a["a2"]) || !mine(a["a3"]) || mine(a["a1"]) || mine(a["s1"]) || mine(a["s2"]) {
-		t.Error("alice's My tasks after the migration")
-	}
-	// A second start changes nothing.
-	files := func() (out string) {
-		for _, o := range []string{"", "alice", "bob"} {
-			out += fileText(t, taskFiles.OpenPath(o)) + fileText(t, taskFiles.ListsPath(o))
-		}
-		return out
-	}
-	before := files()
-	migrateLists(false, 0)
-	if files() != before || listsUnmigrated {
-		t.Errorf("a second start changed the files:\n%s", files())
-	}
-	// Scopes tell the two lists of one name apart.
-	if !inScope(a["a1"], "gifts", alice) || inScope(a["s1"], "gifts", alice) || !inScope(a["s1"], "shared/gifts", alice) ||
-		!inScope(a["s1"], "secret|shared/gifts", alice) || inScope(a["a2"], "gifts|secret", alice) || !inScope(a["a2"], "", alice) {
-		t.Error("inScope")
-	}
-	// On a shared page a name is the shared list, on her own page hers.
-	if l, ok := listOnPage("gifts", "tasks/gifts", asUser("alice"), alice); !ok || l.Ref != "shared/gifts" {
-		t.Errorf("gifts on a shared page: %+v", l)
-	}
-	if l, ok := listOnPage("gifts", "private/alice/gifts", asUser("alice"), alice); !ok || l.Ref != "gifts" {
-		t.Errorf("gifts on her page: %+v", l)
-	}
-	if _, ok := listOnPage("secret", "tasks/gifts", asUser("alice"), alice); ok {
-		t.Error("her private list on a shared page")
-	}
-}
-
-// A wiki that never had lists gets no registry at start; its first list
-// makes it.
-func TestNothingToTakeOver(t *testing.T) {
-	testWiki(t, map[string]string{"index": "# Home\n\n[[tasks:]]\n"})
-	writeTasks(t, "", oldTask("1", "Plain", "work"))
-	before := fileText(t, taskFiles.OpenPath(""))
-	migrateLists(false, 0)
-	if _, err := os.Stat(taskFiles.ListsPath("")); err == nil || fileText(t, taskFiles.OpenPath("")) != before || listsUnmigrated {
-		t.Error("a wiki without lists was changed")
-	}
-	mustList(t, "", "shop", false)
-	if !strings.Contains(fileText(t, taskFiles.ListsPath("")), `"version": 3`) {
-		t.Errorf("the registry: %s", fileText(t, taskFiles.ListsPath("")))
-	}
-}
-
-// A task file that can't be read stops the migration before anything is
-// written, and no list is made or changed until a start succeeds.
-func TestListsNotTakenOverFromABrokenWiki(t *testing.T) {
-	testWiki(t, map[string]string{"shop": "# Shop\n\n[[tasks: list=shop pin=1]]\n"})
-	t.Cleanup(func() { listsUnmigrated = false })
-	if err := os.MkdirAll(taskFiles.Dir(""), 0o777); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(taskFiles.OpenPath(""), []byte("[ half"), 0o666); err != nil {
-		t.Fatal(err)
-	}
-	migrateLists(false, 0)
-	if !listsUnmigrated {
-		t.Fatal("migrated over a file that can't be read")
-	}
-	if _, err := os.Stat(taskFiles.ListsPath("")); err == nil {
-		t.Error("a registry was written")
-	}
-	if text, _ := readText(safePath("shop")); !strings.Contains(text, "pin=1") {
-		t.Error("the page lost its pin")
-	}
-	if _, err := createListOp(asker{}, "x", false, false, "", ""); err == nil {
-		t.Error("a list made in a wiki not taken over")
-	}
-	if err := pinListOp(asker{}, "shop", "1"); err == nil {
-		t.Error("a pin set in a wiki not taken over")
-	}
 }
 
 // A list's name: one word, as an embed can write it; one a user sees is taken.
@@ -1025,7 +767,7 @@ func TestPlaceSnapshot(t *testing.T) {
 		{"", false, generalListName, "", true},          // a shared task is always in a list
 	})
 	// No list is made for a user's private tasks any more.
-	if _, ok := taskLists(asUser("alice"))[privateListName]; ok {
+	if _, ok := taskLists(asUser("alice"))["private"]; ok {
 		t.Error("a list private was made")
 	}
 }
@@ -1213,13 +955,15 @@ func TestInbox(t *testing.T) {
 	if got := openByID("bob")[loose.ID]; got == nil || got.Owner != "" || got.List != "" {
 		t.Errorf("the task from before: %+v", got)
 	}
-	migrateLists(false, 0)
-	if got := openByID("bob")[loose.ID]; got == nil || got.Owner != "" || got.List != generalListName || listsUnmigrated {
+	if err := fileInGeneral(); err != nil {
+		t.Fatal(err)
+	}
+	if got := openByID("bob")[loose.ID]; got == nil || got.Owner != "" || got.List != generalListName {
 		t.Errorf("the task from before, after a start: %+v", got)
 	}
 }
 
-// writeRegistry writes owner's lists.json as a wiki from before has it.
+// writeRegistry writes owner's lists.json as written by hand.
 func writeRegistry(t *testing.T, owner, text string) {
 	t.Helper()
 	if err := os.MkdirAll(taskFiles.Dir(owner), 0o777); err != nil {
@@ -1245,8 +989,10 @@ func taskFilesText(t *testing.T) string {
 func startAgain(t *testing.T) {
 	t.Helper()
 	before := taskFilesText(t)
-	migrateLists(false, 0)
-	if after := taskFilesText(t); after != before || listsUnmigrated {
+	if err := fileInGeneral(); err != nil {
+		t.Fatal(err)
+	}
+	if after := taskFilesText(t); after != before {
 		t.Errorf("a second start changed the files:\n%s", after)
 	}
 }
@@ -1258,351 +1004,47 @@ func inList(list string, tasks ...*Task) []*Task {
 	return tasks
 }
 
-// The Inbox's migration, step 1: a list called "inbox" (the name is the
-// Inbox's from now on) is called "inbox-list", on its tasks and in the pins
-// that name it; a user's own and the shared one are told apart.
-func TestInboxMigrationRenamesListsCalledInbox(t *testing.T) {
-	testWiki(t, nil)
-	withUsers(t, "alice", "bob")
-	writeRegistry(t, "", `{"version": 1, "lists": [{"name": "inbox", "limit": "5"}, {"name": "work"}], "pinned": ["inbox", "work"]}`)
-	writeRegistry(t, "alice", `{"version": 1, "lists": [{"name": "inbox"}], "pinned": ["inbox", "shared/inbox"]}`)
-	writeRegistry(t, "bob", `{"version": 1, "lists": [], "pinned": ["work", "inbox"]}`)
-	writeTasks(t, "", inList("inbox", oldTask("s1", "Shared"))[0], inList("work", oldTask("s2", "Work"))[0])
-	writeTasks(t, "alice", inList("inbox", oldTask("a1", "Hers"))[0])
-	migrateLists(false, 0)
-	if listsUnmigrated {
-		t.Fatal("the migration failed")
-	}
-	alice, bob := taskLists(asUser("alice")), taskLists(asUser("bob"))
-	if got := sortedKeys(alice); !slices.Equal(got, []string{"inbox-list", "shared/inbox-list", "work"}) {
-		t.Errorf("alice's lists %v", got)
-	}
-	if got := sortedKeys(bob); !slices.Equal(got, []string{"inbox-list", "work"}) {
-		t.Errorf("bob's lists %v", got)
-	}
-	if !alice["inbox-list"].Private() || alice["shared/inbox-list"].Private() || alice["shared/inbox-list"].Params.Get("limit") != "5" {
-		t.Errorf("alice's lists %+v", alice)
-	}
-	a := openByID("alice")
-	if a["s1"].List != "inbox-list" || a["s1"].Owner != "" || a["a1"].List != "inbox-list" || a["a1"].Owner != "alice" || a["s2"].List != "work" {
-		t.Errorf("the tasks: %+v %+v %+v", a["s1"], a["a1"], a["s2"])
-	}
-	if openByID("bob")["a1"] != nil {
-		t.Error("bob sees alice's task")
-	}
-	if got := refsOf(pinnedLists(asUser("alice"), alice)); !slices.Equal(got, []string{"inbox-list", "shared/inbox-list"}) {
-		t.Errorf("alice's pins %v", got)
-	}
-	if got := refsOf(pinnedLists(asUser("bob"), bob)); !slices.Equal(got, []string{"work", "inbox-list"}) {
-		t.Errorf("bob's pins %v", got)
-	}
-	if got := taskFiles.ReadLists("").Pinned; !slices.Equal(got, []string{"inbox-list", "work"}) {
-		t.Errorf("the shared registry's pins %v", got)
-	}
-	// The name is the Inbox's now.
-	if !isInbox("inbox", alice) || !isInbox("inbox", bob) {
-		t.Error("inbox still names a list")
-	}
-	if !strings.Contains(fileText(t, taskFiles.ListsPath("")), `"version": 3`) {
-		t.Errorf("the registry:\n%s", fileText(t, taskFiles.ListsPath("")))
-	}
-	startAgain(t)
-}
-
-// Step 2: a user's list "private" that Zone made for their tasks without a
-// list, and that took their new ones (they pinned it, or pinned nothing
-// while the wiki pinned nothing), is their Inbox: its tasks, open and
-// closed, lose their list and stay theirs; the list and its pin go. One
-// with settings of its own, or that they left unpinned beside other pins,
-// is an ordinary list and stays (step 3 then leaves it out of My tasks).
-func TestInboxMigrationTurnsThePrivateListIntoTheInbox(t *testing.T) {
-	testWiki(t, nil)
-	withUsers(t, "alice", "bob", "carl", "dora")
-	writeRegistry(t, "", `{"version": 1, "lists": [{"name": "work"}], "pinned": ["work"]}`)
-	writeRegistry(t, "alice", `{"version": 1, "lists": [{"name": "private"}, {"name": "diary"}], "pinned": ["work", "private"]}`)
-	writeRegistry(t, "bob", `{"version": 1, "lists": [{"name": "private"}, {"name": "diary"}], "pinned": ["diary"]}`)
-	writeRegistry(t, "carl", `{"version": 1, "lists": [{"name": "private", "view": "open"}], "pinned": ["private"]}`)
-	writeRegistry(t, "dora", `{"version": 1, "lists": [{"name": "private"}]}`) // no pins of her own: the wiki's
-	writeTasks(t, "", inList("work", oldTask("s1", "Work"))[0])
-	writeTasks(t, "alice", inList("private", oldTask("a1", "Hers"))[0], inList("diary", oldTask("a2", "Entry"))[0])
-	if err := taskfiles.Write(taskFiles.ClosedPath("alice"), inList("private", &Task{ID: "a3", Title: "Done", ClosedAt: "2026-02-01T10:00:00", CreatedAt: "2026-01-01T10:00:00"})); err != nil {
-		t.Fatal(err)
-	}
-	for _, u := range []string{"bob", "carl", "dora"} {
-		writeTasks(t, u, inList("private", oldTask(u+"1", u+"'s"))[0])
-	}
-	migrateLists(false, 0)
-	if listsUnmigrated {
-		t.Fatal("the migration failed")
-	}
-	alice := taskLists(asUser("alice"))
-	if got := sortedKeys(alice); !slices.Equal(got, []string{"diary", "work"}) {
-		t.Errorf("alice's lists %v", got)
-	}
-	a := openByID("alice")
-	if a["a1"].List != "" || a["a1"].Owner != "alice" || a["a2"].List != "diary" || a["s1"].List != "work" {
-		t.Errorf("alice's tasks: %+v %+v", a["a1"], a["a2"])
-	}
-	if text := fileText(t, taskFiles.ClosedPath("alice")); !strings.Contains(text, "Done") || strings.Contains(text, `"list"`) {
-		t.Errorf("her closed task keeps the list:\n%s", text)
-	}
-	if strings.Contains(fileText(t, taskFiles.OpenPath("")), "Hers") {
-		t.Error("her task went into the shared file")
-	}
-	if got := refsOf(pinnedLists(asUser("alice"), alice)); !slices.Equal(got, []string{"work"}) {
-		t.Errorf("alice's pins %v", got)
-	}
-	// What was in her My tasks still is: the Inbox's task; her diary, which
-	// she hadn't pinned, stays out.
-	mine := mineFilter(asUser("alice"), alice)
-	if !mine(a["a1"]) || mine(a["a2"]) || !alice["diary"].LeftOut() {
-		t.Error("alice's My tasks")
-	}
-	for _, u := range []string{"bob", "carl", "dora"} {
-		lists := taskLists(asUser(u))
-		l, ok := lists["private"]
-		task := openByID(u)[u+"1"]
-		if !ok || !l.Private() || task.List != "private" || task.Owner != u {
-			t.Errorf("%s's list private: %+v, task %+v", u, l, task)
-			continue
-		}
-		// carl pinned his: in his My tasks as before; bob and dora had not.
-		if want := u != "carl"; l.LeftOut() != want || mineFilter(asUser(u), lists)(task) == want {
-			t.Errorf("%s's list private left out: %v", u, l.LeftOut())
-		}
-	}
-	if l := taskLists(asUser("bob"))["diary"]; l.LeftOut() {
-		t.Error("bob's pinned diary is left out")
-	}
-	// The shared list nobody of them pinned is not left out: with users a
-	// shared task is in My tasks by its assignee.
-	if taskLists(asUser("alice"))["work"].LeftOut() {
-		t.Error("a shared list left out, with users")
-	}
-	startAgain(t)
-}
-
-// Step 2, for a user who pinned nothing in a wiki that pinned nothing: their
-// list "private" counted as pinned and took their new tasks, so it is their
-// Inbox.
-func TestInboxMigrationOfAUserWhoPinnedNothing(t *testing.T) {
-	testWiki(t, nil)
-	withUsers(t, "erin")
-	writeRegistry(t, "", `{"version": 1, "lists": []}`)
-	writeRegistry(t, "erin", `{"version": 1, "lists": [{"name": "private"}]}`)
-	writeTasks(t, "erin", inList("private", oldTask("e1", "Hers"))[0])
-	migrateLists(false, 0)
-	if got := openByID("erin")["e1"]; got == nil || got.List != "" || got.Owner != "erin" || len(taskLists(asUser("erin"))) != 0 || listsUnmigrated {
-		t.Errorf("erin's task %+v, lists %v", got, sortedKeys(taskLists(asUser("erin"))))
-	}
-	startAgain(t)
-}
-
-// A wiki whose users have lists and that never had a shared one has no
-// shared registry: each registry says for itself that it is from before the
-// Inbox, so the list "private" the fallback made there is the Inbox too,
-// and a list of the user's called inbox gets out of its way.
-func TestInboxMigrationWithoutASharedRegistry(t *testing.T) {
-	testWiki(t, nil)
-	withUsers(t, "erin", "finn")
-	writeRegistry(t, "erin", `{"version": 1, "lists": [{"name": "private"}, {"name": "someday"}]}`)
-	writeRegistry(t, "finn", `{"version": 1, "lists": [{"name": "inbox"}], "pinned": ["inbox"]}`)
-	writeTasks(t, "erin", inList("private", oldTask("e1", "Hers"))[0], inList("someday", oldTask("e2", "Later"))[0])
-	writeTasks(t, "finn", inList("inbox", oldTask("f1", "His"))[0])
-	migrateLists(false, 0)
-	if got := openByID("erin")["e1"]; got == nil || got.List != "" || got.Owner != "erin" || listsUnmigrated {
-		t.Errorf("erin's task %+v", got)
-	}
-	if l, ok := taskLists(asUser("erin"))["someday"]; !ok || !l.LeftOut() || len(taskLists(asUser("erin"))) != 1 {
-		t.Errorf("erin's lists %v", sortedKeys(taskLists(asUser("erin"))))
-	}
-	if got := openByID("finn")["f1"]; got == nil || got.List != inboxListName {
-		t.Errorf("finn's task %+v", got)
-	}
-	if got := refsOf(pinnedLists(asUser("finn"), taskLists(asUser("finn")))); !slices.Equal(got, []string{inboxListName}) {
-		t.Errorf("finn's pins %v", got)
-	}
-	for _, u := range []string{"erin", "finn"} {
-		if text := fileText(t, taskFiles.ListsPath(u)); !strings.Contains(text, `"version": 3`) {
-			t.Errorf("%s's registry:\n%s", u, text)
-		}
-	}
-	startAgain(t)
-}
-
-// Step 3: the lists whose tasks were not in My tasks, since nobody had
-// pinned them, are left out of it (home=off); once: a list unpinned later
-// isn't.
-func TestInboxMigrationLeavesOutWhatWasNotPinned(t *testing.T) {
-	testWiki(t, nil)
-	writeRegistry(t, "", `{"version": 1, "lists": [{"name": "work"}, {"name": "someday", "limit": "3"}, {"name": "shop"}], "pinned": ["shop", "work"], "all": {"view": "open"}}`)
-	writeTasks(t, "", oldTask("1", "Loose"), inList("work", oldTask("2", "Report"))[0], inList("someday", oldTask("3", "Maybe"))[0])
-	before := fileText(t, taskFiles.OpenPath(""))
-	migrateLists(false, 0)
-	if listsUnmigrated {
-		t.Fatal("the migration failed")
-	}
-	lists := taskLists(asker{})
-	if lists["work"].LeftOut() || lists["shop"].LeftOut() || !lists["someday"].LeftOut() || lists["someday"].Params.Get("limit") != "3" {
-		t.Errorf("left out: %+v", lists)
-	}
-	in, got := mineFilter(asker{}, lists), []string{}
-	for _, task := range taskFiles.Open(asker{}) {
-		if in(task) {
-			got = append(got, task.Title)
-		}
-	}
-	if slices.Sort(got); !slices.Equal(got, []string{"Loose", "Report"}) {
-		t.Errorf("My tasks: %v", got)
-	}
-	// Without users no task moves: one without a list is in the Inbox.
-	if fileText(t, taskFiles.OpenPath("")) != before {
-		t.Error("the tasks were rewritten")
-	}
-	text := fileText(t, taskFiles.ListsPath(""))
-	// The views' migration ran after it: view=open, from when it was the one list, says so.
-	if !strings.Contains(text, `"version": 3`) || !strings.Contains(text, `{"name": "someday", "limit": "3", "home": "off"}`) || !strings.Contains(text, `"all": {"view": "open", "group": "none"}`) {
-		t.Errorf("the registry:\n%s", text)
-	}
-	startAgain(t)
-	// Unpinned after the migration: not left out by the next start.
-	if err := pinListOp(asker{}, "work", "0"); err != nil {
-		t.Fatal(err)
-	}
-	migrateLists(false, 0)
-	if taskLists(asker{})["work"].LeftOut() {
-		t.Error("a list unpinned later was left out")
-	}
-}
-
-// A wiki from before the Inbox is taken over to the views' names of 2026-11
-// in the same start: the Inbox's migration says version 2, the views'
-// migration then rewrites the registries (each user's too) and the pages,
-// and says 3.
-func TestTheViewsAreRenamedAfterTheInbox(t *testing.T) {
-	testWiki(t, map[string]string{"home": "# Home\n\n[[tasks: view=focus]]\n\n[[tasks: list=shop view=open]]\n"})
-	withUsers(t, "alice")
-	writeRegistry(t, "", `{"version": 1, "lists": [{"name": "shop", "view": "plan", "plan": "on"}, {"name": "b", "view": "focus", "labels": "A,B,C"}], "pinned": ["shop", "b"], "all": {"plan": "off"}}`)
-	writeRegistry(t, "alice", `{"version": 1, "lists": [{"name": "diary", "view": "open"}], "pinned": ["diary"], "mine": {"view": "focus"}}`)
-	migrateLists(true, 0)
-	if listsUnmigrated {
-		t.Fatal("the migration failed")
-	}
-	shared := fileText(t, taskFiles.ListsPath(""))
-	for _, want := range []string{`"version": 3`, `{"name": "shop", "view": "open", "group": "day"}`, `{"name": "b", "view": "today", "labels": "A,C"}`, `"all": {"group": "none"}`} {
-		if !strings.Contains(shared, want) {
-			t.Errorf("the shared registry lacks %s:\n%s", want, shared)
-		}
-	}
-	own := fileText(t, taskFiles.ListsPath("alice"))
-	for _, want := range []string{`"version": 3`, `{"name": "diary", "view": "open", "group": "none"}`, `"mine": {"view": "today"}`} {
-		if !strings.Contains(own, want) {
-			t.Errorf("alice's registry lacks %s:\n%s", want, own)
-		}
-	}
-	if text, _ := readText(safePath("home")); text != "# Home\n\n[[tasks: view=today]]\n\n[[tasks: list=shop view=open group=none]]\n" {
-		t.Errorf("home: %q", text)
-	}
-	startAgain(t)
-}
-
-// Until 2026-11-20 the Inbox's migration wrote version 3 itself, and the
-// views' migration took such a wiki for renamed. A registry at version 3
-// that still has a name only the old Zone wrote (view=focus, view=plan,
-// plan=), in a wiki without .zone-format (where the step runs), is
-// rewritten once, and so is a page that has one; what has none comes
-// through as it is, since view=open alone means the board now, and a
-// fresh registry is by today's names.
-func TestTheViewsAreRenamedWhereTheInboxSkippedThem(t *testing.T) {
-	testWiki(t, map[string]string{
-		"old":   "# Old\n\n[[tasks: view=focus]]\n\n[[tasks: list=shop view=open]]\n",
-		"fresh": "# Fresh\n\n[[tasks: list=shop view=open]]\n",
-	})
-	withUsers(t, "alice", "bob")
-	writeRegistry(t, "", `{"version": 3, "lists": [{"name": "shop", "view": "plan", "plan": "on"}, {"name": "list", "view": "open"}], "pinned": ["shop"], "all": {"plan": "off"}}`)
-	writeRegistry(t, "alice", `{"version": 3, "lists": [{"name": "diary", "labels": "A,B,C"}], "mine": {"view": "focus"}}`)
-	fresh := `{"version": 3, "lists": [{"name": "board", "view": "open"}], "mine": {"view": "open"}}`
-	writeRegistry(t, "bob", fresh)
-	migrateLists(true, 0)
-	if listsUnmigrated {
-		t.Fatal("the migration failed")
-	}
-	shared := fileText(t, taskFiles.ListsPath(""))
-	for _, want := range []string{`{"name": "shop", "view": "open", "group": "day"}`, `{"name": "list", "view": "open", "group": "none"}`, `"all": {"group": "none"}`} {
-		if !strings.Contains(shared, want) {
-			t.Errorf("the shared registry lacks %s:\n%s", want, shared)
-		}
-	}
-	if own := fileText(t, taskFiles.ListsPath("alice")); !strings.Contains(own, `{"name": "diary", "labels": "A,C"}`) || !strings.Contains(own, `"mine": {"view": "today"}`) {
-		t.Errorf("alice's registry:\n%s", own)
-	}
-	if got := fileText(t, taskFiles.ListsPath("bob")); got != fresh {
-		t.Errorf("bob's registry, by today's names, was rewritten:\n%s", got)
-	}
-	if text, _ := readText(safePath("old")); text != "# Old\n\n[[tasks: view=today]]\n\n[[tasks: list=shop view=open group=none]]\n" {
-		t.Errorf("old: %q", text)
-	}
-	if text, _ := readText(safePath("fresh")); text != "# Fresh\n\n[[tasks: list=shop view=open]]\n" {
-		t.Errorf("fresh: %q", text)
-	}
-	startAgain(t)
-	// Once: a start that has .zone-format (which this one writes after it)
-	// leaves a name of then written by hand later as it is.
-	late := `{"version": 3, "lists": [{"name": "board", "view": "focus"}]}`
-	writeRegistry(t, "bob", late)
-	migrateLists(true, firstFormat)
-	if got := fileText(t, taskFiles.ListsPath("bob")); got != late {
-		t.Errorf("a wiki past the step was looked through again:\n%s", got)
-	}
-}
-
-// A wiki without .zone-format whose registries are by today's names (a
-// fresh one, one written by hand or a script) comes through a start as it
-// is.
-func TestAFreshRegistryIsNoOldOne(t *testing.T) {
-	testWiki(t, map[string]string{"page": "# Page\n\n[[tasks: list=shop view=open]] [[tasks: view=today labels=A,B,C]]\n"})
-	reg := `{"version": 3, "lists": [{"name": "shop", "view": "open", "labels": "A,B,C"}], "all": {"view": "open"}}`
-	writeRegistry(t, "", reg)
-	migrateLists(false, 0)
-	if got := fileText(t, taskFiles.ListsPath("")); got != reg || listsUnmigrated {
-		t.Errorf("the registry:\n%s", got)
-	}
-	if text, _ := readText(safePath("page")); text != "# Page\n\n[[tasks: list=shop view=open]] [[tasks: view=today labels=A,B,C]]\n" {
-		t.Errorf("page: %q", text)
-	}
-}
-
-// With users a shared task is always in a list: at every start the shared
-// tasks without one, open and closed, go to #general, made for them and
-// pinned for the wiki. That takes over the tasks that were in no list, and a
-// wiki whose users were turned on later. A user's own tasks without a list
+// With users a shared task is always in a list: a start that reads the task
+// files puts the shared tasks without one, open and closed, in #general,
+// made for them and pinned for the wiki, and files them in its folder (a
+// wiki whose users were turned on later). A user's own tasks without a list
 // are their Inbox and stay.
 func TestSharedTasksWithoutAListGoToGeneral(t *testing.T) {
 	testWiki(t, nil)
-	writeRegistry(t, "", `{"version": 1, "lists": [{"name": "work"}], "pinned": ["work"]}`)
+	writeRegistry(t, "", `{"lists": [{"name": "work"}], "pinned": ["work"]}`)
 	writeTasks(t, "", oldTask("1", "Loose"), inList("work", oldTask("2", "Report"))[0])
 	if err := taskfiles.Write(taskFiles.ClosedPath(""), []*Task{{ID: "3", Title: "Done", ClosedAt: "2026-02-01T10:00:00", CreatedAt: "2026-01-01T10:00:00"}}); err != nil {
 		t.Fatal(err)
 	}
 	// Without users: nothing moves, and no list is made.
-	migrateLists(false, 0)
-	if got := openByID("")["1"]; got.List != "" || len(taskLists(asker{})) != 1 || listsUnmigrated {
+	if err := fileInGeneral(); err != nil {
+		t.Fatal(err)
+	}
+	if got := openByID("")["1"]; got.List != "" || len(taskLists(asker{})) != 1 {
 		t.Fatalf("without users: %+v, lists %v", got, sortedKeys(taskLists(asker{})))
 	}
 	startAgain(t)
 	// Users are turned on: the next start files them.
 	withUsers(t, "alice", "bob")
 	writeTasks(t, "alice", oldTask("a1", "Hers"))
-	migrateLists(false, 0)
-	if listsUnmigrated {
-		t.Fatal("the migration failed")
+	if err := fileInGeneral(); err != nil {
+		t.Fatal(err)
 	}
 	a := openByID("alice")
 	if a["1"].List != generalListName || a["1"].Owner != "" || a["2"].List != "work" || a["a1"].List != "" || a["a1"].Owner != "alice" {
 		t.Errorf("the tasks: %+v %+v %+v", a["1"], a["2"], a["a1"])
 	}
-	if text := fileText(t, taskFiles.ClosedPath("")); !strings.Contains(text, `"list": "general"`) {
-		t.Errorf("the closed task:\n%s", text)
+	general := ""
+	for _, f := range taskFiles.Files([]string{""}) {
+		if filepath.Dir(f.Path) == filepath.Dir(taskFiles.PathIn("", generalListName, "tasks.json")) {
+			general += fileText(t, f.Path)
+		}
+	}
+	if !strings.Contains(general, `"title": "Done"`) || !strings.Contains(general, `"title": "Loose"`) {
+		t.Errorf("the tasks aren't filed in #general's folder:\n%s", general)
+	}
+	if text := fileText(t, taskFiles.OpenPath("")); strings.Contains(text, "Loose") {
+		t.Errorf("the open task is still in no list's file:\n%s", text)
 	}
 	if l, ok := taskLists(asUser("bob"))[generalListName]; !ok || l.Private() || l.LeftOut() {
 		t.Errorf("#general: %+v", l)
@@ -1611,13 +1053,15 @@ func TestSharedTasksWithoutAListGoToGeneral(t *testing.T) {
 		t.Errorf("the shared registry's pins %v", got)
 	}
 	startAgain(t)
-	// A stray that turns up later (a file edited by hand, an older Zone)
-	// goes there too; the list is there, and an unpin of it stays.
+	// A stray that turns up later (a file edited by hand) goes there too;
+	// the list is there, and an unpin of it stays.
 	if err := pinListOp(asker{}, generalListName, "0"); err != nil {
 		t.Fatal(err)
 	}
-	writeTasks(t, "", append(taskFiles.Open(asker{}), oldTask("9", "Stray"))...)
-	migrateLists(false, 0)
+	writeTasks(t, "", oldTask("9", "Stray"))
+	if err := fileInGeneral(); err != nil {
+		t.Fatal(err)
+	}
 	if got := openByID("bob")["9"]; got == nil || got.List != generalListName {
 		t.Errorf("the stray: %+v", got)
 	}
@@ -1625,6 +1069,33 @@ func TestSharedTasksWithoutAListGoToGeneral(t *testing.T) {
 		t.Errorf("#general was pinned again: %v", got)
 	}
 	startAgain(t)
+}
+
+// A shared task file that can't be read stops the start's #general before
+// anything is written, and the start leaves no mark, so the next one reads
+// the task files again.
+func TestGeneralStopsAtAFileItCantRead(t *testing.T) {
+	testWiki(t, nil)
+	withUsers(t, "alice")
+	writeTasks(t, "", oldTask("1", "Loose"))
+	broken := taskFiles.PathIn("", "work", "tasks.json")
+	if err := os.MkdirAll(filepath.Dir(broken), 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(broken, []byte("[ half"), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	before := fileText(t, taskFiles.OpenPath(""))
+	if err := fileInGeneral(); err == nil || !strings.Contains(err.Error(), broken) {
+		t.Errorf("the error: %v", err)
+	}
+	if fileText(t, taskFiles.OpenPath("")) != before || exists(taskFiles.ListsPath("")) {
+		t.Error("something was written")
+	}
+	setUpTasks()
+	if exists(tasksCheckedPath()) {
+		t.Error("the start left its mark")
+	}
 }
 
 // A wiki with users that never had a list or a registry: its shared tasks
@@ -1636,11 +1107,13 @@ func TestGeneralInAWikiWithoutARegistry(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeTasks(t, "", oldTask("1", "Loose"))
-	migrateLists(false, 0)
-	if got := openByID("alice")["1"]; got == nil || got.List != generalListName || got.Owner != "" || listsUnmigrated {
+	if err := fileInGeneral(); err != nil {
+		t.Fatal(err)
+	}
+	if got := openByID("alice")["1"]; got == nil || got.List != generalListName || got.Owner != "" {
 		t.Errorf("the task: %+v", got)
 	}
-	if text := fileText(t, taskFiles.ListsPath("")); !strings.Contains(text, `"version": 3`) || !strings.Contains(text, `"pinned": ["general"]`) {
+	if text := fileText(t, taskFiles.ListsPath("")); strings.Contains(text, "version") || !strings.Contains(text, `"pinned": ["general"]`) {
 		t.Errorf("the registry:\n%s", text)
 	}
 	startAgain(t)
@@ -1680,7 +1153,7 @@ func TestAStartReadsTheArchivesWhenItMust(t *testing.T) {
 	start := func() (parsed int64, readArchive bool) {
 		taskfiles.ForgetParsed()
 		before := taskfiles.Parsed()
-		setUpTasks(0)
+		setUpTasks()
 		return taskfiles.Parsed() - before, taskfiles.KeepsParsed(archive)
 	}
 	if tasksChecked() {
