@@ -4718,7 +4718,11 @@ def test_line_double_click_below_expanded_opens_that_card(page, wiki):
         page.mouse.move(box["x"] + 10, box["y"] + box["height"] / 2)
         # Each press of the double-click leaves the card where it was.
         top = box["y"]
-        page.clock.pause_at(datetime.fromtimestamp(page.evaluate("() => Date.now()") / 1000 + 0.001))
+        # pause_at refuses a time the clock has passed, and it runs on while
+        # the call travels: half a second ahead, not a millisecond (CI's
+        # runner took longer). Nothing waits on a timer here, so the jump
+        # changes nothing.
+        page.clock.pause_at(datetime.fromtimestamp(page.evaluate("() => Date.now()") / 1000 + 0.5))
         page.mouse.down()
         page.mouse.up()
         assert below.locator(".task-content").bounding_box()["y"] == top
