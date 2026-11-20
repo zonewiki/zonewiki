@@ -632,11 +632,12 @@ They go into the list the menu was opened in, whatever list they were exported f
 On All tasks (and a tag's embed) each goes where its own list says: the list of that name here, when there is one as private as the task was; else a private task into your Inbox, and a shared one, with users, into the shared list `general` (made for it; without users into the Inbox).
 Imported on the Inbox's view, every task goes into the Inbox: with users yours alone, without an assignee.
 A task exported private stays private, wherever it is imported: into a shared list it goes to your Inbox instead; into a private list of yours every imported task is private, as a new one is.
-With users, a task assigned to someone who can't be given tasks here comes in as no one's, and the toast says how many ("…; 2 were assigned to people who can't be given tasks here": not users of this wiki, or disabled or viewers).
+With users, a task assigned to someone who can't be given tasks here comes in as no one's, and the toast says how many ("…; 2 were assigned to people who can't be given tasks here": not users of this wiki, or disabled or viewers, or none of those a list for some it goes into is for).
 
 #### A task keeps its id
 
 One whose id is in the wiki already is skipped: importing the same file twice adds nothing, and a file exported here brings back only what was deleted since (an id that isn't a UUID is replaced).
+It keeps the occurrence before it (`spawned_from`) only when it comes back as Zone had it (a task deleted since; an admin's import keeps the file's), else a `[[task:…]]` of a closed task would stand for it (Names in comments and history).
 So a list can't be duplicated within one wiki this way.
 
 #### A tag of your own

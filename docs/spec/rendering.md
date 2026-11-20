@@ -232,6 +232,7 @@ Unknown id: a red dashed `task <id>?` (`.task-ref-missing`).
 A reference alone in a list item makes that `<li class="task-ref-item">`, a checklist row without the chip's box.
 
 A completed recurring task stands for its series: the reference follows `spawned_from` to the current occurrence, so ticking it and reloading shows the next one.
+That link is Zone's own: a task restored or imported keeps `spawned_from` only when it comes back as Zone had it (the undo of its delete; Who made a change in `docs/spec/users.md`), so nobody makes a reference to a closed task stand for a task of theirs.
 
 ### Ticking a chip
 

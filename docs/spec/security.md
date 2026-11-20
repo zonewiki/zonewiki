@@ -436,7 +436,8 @@ digits,
 `created_at` and `closed_at` only as `timestamp()` writes them or a day alone (else now),
 a comment's id likewise (else a new one),
 and `by` on a comment or history entry only what could be a user's name (else no one).
-With users, a `by` other than the sender's own stays only on what Zone has seen under that name (`checkBy` in `go/taskby.go`; Who made a change in `docs/spec/users.md`): else a user could restore or import a task with a comment "by" a colleague.
+With users, a `by` other than the sender's own stays only on what Zone has seen under that name (`checkBy`, `checkArrived` in `go/taskby.go`; Who made a change in `docs/spec/users.md`): else a user could restore or import a task with a comment "by" a colleague.
+Nor does a snapshot bring anyone in that Zone hasn't seen there: its assignee is one of its list's members, as for any write; a history entry Zone hasn't had for the task names no one but the sender (not whom it was given to, which would let it be given to them again, `hadAssignee`); and its `spawned_from` stays only when the task comes back as Zone had it (the undo of a delete), as a `[[task:…]]` of a closed task stands for the task that names it as the occurrence before.
 The browser builds the task cards from these, so markup in them would be an element on every user's task list, a form among them (the same one click as a form in a page).
 The cards escape them as well (`esc()` in `public/js/taskrender.js`): a tasks file written by hand may hold anything.
 

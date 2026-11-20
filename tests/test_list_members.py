@@ -793,6 +793,39 @@ def test_its_words_suggest_nothing_to_anyone_else(client, wiki):
             assert SECRET not in client.get(path, query_string={"q": typo}, headers=HOST).get_data(as_text=True)
 
 
+def test_a_task_that_comes_back_brings_no_one_in(client, wiki):
+    """A snapshot (an undo's restore, an import) is whatever its sender made
+    it: its assignee is one of the list's members, as for any write, and the
+    names in its history (who had it) and its series (spawned_from) are what
+    Zone had for that task, or nothing."""
+    sign_in(client, "alice")
+    closed_one = IDS["done"]
+    forged = {"title": "Smuggled", "list": LIST, "assignee": "bob", "spawned_from": closed_one,
+              "history": [{"at": "2026-01-01T09:00", "event": "assigned", "by": "alice", "from": "", "to": "bob"},
+                          {"at": "2026-01-01T09:01", "event": "assigned", "by": "carol", "from": "bob", "to": "carol"}]}
+    [back] = client.post("/api/tasks/restore", json={"tasks": [forged]}, headers=HOST).get_json()
+    imported = client.post("/api/tasks/import", json={"file": [{**forged, "title": "Smuggled too"}], "list": LIST},
+                           headers=HOST).get_json()
+    assert imported["unassigned"] == 1
+    [again] = [t for t in client.get("/api/tasks", headers=HOST).get_json() if t["id"] in imported["ids"]]
+    for t in (back, again):
+        assert t.get("assignee") is None and t.get("spawned_from") is None, t
+        assert [(e.get("from"), e.get("to")) for e in t["history"] if e["event"] == "assigned"] == [(None, None), (None, None)], t["history"]
+        # bob had it, the history said: no longer a way to give it to him.
+        resp = client.put(f"/api/tasks/{t['id']}", json={"assignee": "bob"}, headers=HOST)
+        assert resp.status_code == 400 and "isn't one of those the list #hiring is for" in resp.get_json()["error"]
+    # A [[task:…]] of the closed task stands for itself, not for the smuggled one.
+    chips = client.post("/api/render-notes", json={"notes": [f"[[task:{closed_one[:8]}]]"]}, headers=HOST).get_data(as_text=True)
+    assert "Smuggled" not in chips
+    # The undo of a delete brings the task back as it was: its series too.
+    hers = client.get("/api/tasks", headers=HOST).get_json()
+    spawn = next(t for t in hers if t["id"] == IDS["hers"])
+    assert client.delete(f"/api/tasks/{spawn['id']}", headers=HOST).status_code == 204
+    [undone] = client.post("/api/tasks/restore", json={"tasks": [spawn]}, headers=HOST).get_json()
+    assert undone["assignee"] == "carol" and [e.get("to") for e in undone["history"] if e["event"] == "assigned"] == \
+        [e.get("to") for e in spawn["history"] if e["event"] == "assigned"]
+
+
 def test_its_tasks_in_another_folder_are_still_its_members(client, wiki):
     """A task of the list lying in a folder everyone reads (a file moved by
     hand, a merge) is its members' all the same, in every view that reads

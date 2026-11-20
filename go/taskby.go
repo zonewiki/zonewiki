@@ -11,6 +11,7 @@ package main
 import (
 	"slices"
 	"sync"
+	"zonewiki/internal/taskmodel"
 )
 
 // seenBy: the comments and history entries Zone took out of the tasks'
@@ -33,10 +34,23 @@ func commentKey(id string, c Comment) string {
 }
 
 // taskKey: the task t as Zone had it, what it is to its readers (its id, title,
-// description, when it was made): a snapshot of another task under its id
-// (deleted, its id taken again) is not it (checkArrived).
+// description, when it was made, who has it, the occurrence before it): a
+// snapshot of another task under its id (deleted, its id taken again), or
+// of it given to another or put in another series, is not it
+// (checkArrived).
 func taskKey(t *Task) string {
-	return "k\x00" + t.ID + "\x00" + t.Title + "\x00" + t.Description + "\x00" + t.CreatedAt
+	return "k\x00" + t.ID + "\x00" + t.Title + "\x00" + t.Description + "\x00" + t.CreatedAt + "\x00" + t.Assignee + "\x00" + t.SpawnedFrom
+}
+
+// knownTask: with users, t comes back from a snapshot as Zone had it
+// (taskKey): the undo of its delete, or an import of it deleted since.
+func knownTask(t *Task) bool {
+	if settings().Users == nil {
+		return false
+	}
+	seenBy.Lock()
+	defer seenBy.Unlock()
+	return seenBy.set[taskKey(t)]
 }
 
 // mayChangeComment: with users a comment is its author's: only they edit or
@@ -196,14 +210,21 @@ func checkBy(user string, t *Task) {
 // undo's restore, an import), which may be any task under any id: names
 // other than user's stay only when it comes back as Zone had it (taskKey),
 // so a task deleted for good lends its id to no other task that would carry
-// its people's names.
-func checkArrived(user string, t *Task) {
+// its people's names; nor does it keep a series it says it is in
+// (spawned_from), which would make a [[task:…]] of a closed task stand for
+// it (resolveTaskRefs). Returns whether it came back as Zone had it.
+func checkArrived(user string, t *Task) bool {
 	if settings().Users == nil {
-		return
+		return false
 	}
 	seenBy.Lock()
 	defer seenBy.Unlock()
-	checkByLocked(user, t, seenBy.set[taskKey(t)])
+	known := seenBy.set[taskKey(t)]
+	checkByLocked(user, t, known)
+	if !known {
+		t.SpawnedFrom = ""
+	}
+	return known
 }
 
 // checkByLocked: checkBy (seenBy locked); known false: Zone believes no
@@ -214,9 +235,23 @@ func checkByLocked(user string, t *Task, known bool) {
 			t.Comments[i].By = ""
 		}
 	}
+	// An entry Zone hasn't had keeps no one else in it: not who did it, nor
+	// whom it was given to (an "assigned" to bob says he had it, and who had
+	// a task may be given it again: hadAssignee).
 	for i, e := range t.History {
-		if e.By != "" && e.By != user && (!known || !seenBy.set[historyKey(t.ID, e)]) {
+		if known && seenBy.set[historyKey(t.ID, e)] {
+			continue
+		}
+		if e.By != user {
 			t.History[i].By = ""
+		}
+		if taskmodel.NamedEvents[e.Event] {
+			if e.From != user {
+				t.History[i].From = ""
+			}
+			if e.To != user {
+				t.History[i].To = ""
+			}
 		}
 	}
 }

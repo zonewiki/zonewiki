@@ -431,8 +431,13 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 		if t == nil || existing[strings.ToLower(t.ID)] {
 			continue
 		}
-		checkArrived(user.Name, t)
+		known := checkArrived(user.Name, t)
 		general = placeSnapshot(user, t, snap, lists) || general
+		// Its assignee as any write takes one: one of its list's members,
+		// unless it comes back as Zone had it (the undo of a delete).
+		if !known && t.Owner == "" && assigneeGone(t) {
+			t.Assignee = ""
+		}
 		existing[strings.ToLower(t.ID)] = true
 		if !t.IsOpen() {
 			closed = append(closed, t)
@@ -573,15 +578,13 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 			skipped++
 			continue
 		}
-		// An admin's import keeps the file's names (a wiki moved, a
-		// backup put back); anyone else's only their own.
+		// An admin's import keeps the file's names and series (a wiki
+		// moved, a backup put back); anyone else's only their own.
+		known := knownTask(t)
 		if !settings().isAdmin(user.Name) {
 			checkArrived(user.Name, t)
 		}
 		existing[strings.ToLower(t.ID)] = true
-		if lost {
-			unassigned++
-		}
 		t.Tags = retag(t.Tags, add, nil)
 		switch private := jsonobj.True(snap["private"]) && privateFolder(user) != ""; {
 		case intoInbox && privateFolder(user) != "":
@@ -600,6 +603,14 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 			if into.Private() {
 				t.Assignee = "" // a private task has no assignee
 			}
+		}
+		// Its assignee as any write takes one: one of its list's members,
+		// unless it comes back as Zone had it.
+		if !known && t.Owner == "" && assigneeGone(t) {
+			t.Assignee, lost = "", true
+		}
+		if lost {
+			unassigned++
 		}
 		if t.IsOpen() {
 			active = append(active, t)
