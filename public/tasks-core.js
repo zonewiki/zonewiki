@@ -219,15 +219,14 @@ function inMine(t, out, who) {
 // of the user's own, or their look at the task ("seen"), counts as the
 // later one. A look says which comment was the last one then (its `to`: a
 // comment's id, '-' for none), and every comment after that one is news,
-// whatever the minute; a look that doesn't say goes by the minute.
+// whatever the minute; a look whose comment is gone goes by the minute.
 function newsFor(t, me) {
   if (!me || !t || t.private) return null;
   const minute = at => String(at || '').slice(0, 16);
   const history = t.history || [], comments = t.comments || [];
   const open = !t.closed_at;
   const has = (t.assignee || '').toLowerCase() === me;
-  const made = (t.created_by || (history.find(e => e.event === 'created') || {}).by || '') === me ||
-    (t.followers || []).includes(me);
+  const made = (t.created_by || '') === me || (t.followers || []).includes(me);
   let mine = -1, myAct = '', sawIt = false, sawComment = '', lastAssigned = -1;
   history.forEach((e, i) => {
     if (e.by === me) { mine = i; myAct = minute(e.at); sawIt = e.event === 'seen'; sawComment = sawIt ? e.to || '' : ''; }

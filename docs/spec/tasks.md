@@ -197,8 +197,7 @@ No key at all when there is none: in the file and in the API's answers, so a wik
 A write takes a user's name, `me` (whoever writes) or `""`/`null`/`none` (no one); a leading `@` and the case don't matter.
 
 `created_by` is the user who made the task (`Task.CreatedBy`, set by `createTask`, carried on by a series' next occurrence).
-No key in the file without one: a task from before the field, or a wiki without users.
-The API answers it for those too, from the history's `created` entry (`Task.Maker`), so no file is rewritten for it.
+No key in the file without one: a wiki without users, or a task written by hand.
 It is not taken from a write.
 
 `followers` are the users who follow the task (Following a task): told of its news as who made it is, without it being theirs to do.
@@ -877,7 +876,7 @@ Both show an undo toast; reopening a skipped entry removes its spawn (while unto
 Who made a task can delete it for good: **Delete for good…** is in a closed task's ⋯ menu (`mayDelete` in `js/taskmenu.js`), for a task made by mistake, or shared by mistake.
 It asks first, has no undo, and takes the task out of its file in a commit ("Delete task"); the wiki's git history keeps what it was, as it keeps a deleted page.
 
-Who may (`mayDeleteTask` in `go/tasks.go`; `DELETE /api/tasks/<id>` and `batch-delete` answer 403 "Only who made a task, or an admin, deletes it" otherwise): without users anyone; with users who made the task (`created_by`), an admin, its user for a private one, and anyone for a task nobody is known to have made (no `created_by`: one from before users, or written by hand).
+Who may (`mayDeleteTask` in `go/tasks.go`; `DELETE /api/tasks/<id>` and `batch-delete` answer 403 "Only who made a task, or an admin, deletes it" otherwise): without users anyone; with users who made the task (`created_by`), an admin, its user for a private one, and anyone for a task nobody is known to have made (no `created_by`: one made without users, or written by hand).
 Others have seen a shared task, so anyone else closes it.
 The same routes take back what was just made: the tasks the page editor created (their maker's), and an import's (what a user imported is theirs to delete while Zone runs: `noteBrought`).
 An assistant (MCP) deletes no task.
@@ -1090,7 +1089,7 @@ The modal's Save and Cancel stay: nothing is saved while typing.
 Two buttons at the right of the line above the field, or **F2** in the modal (`setNotesPreview`; not shown for an empty description that isn't being written in, which has nothing to preview), switch between the field and a preview.
 Preview shows the description as the card will (`/api/render-notes`) in place of the field, no shorter than it and as tall as what it shows, up to the field's 45% of the window, where it scrolls.
 It is tinted, outlined and labelled PREVIEW at its top (stays while it scrolls), so it is never taken for the field.
-Ticking a box in it ticks the item in the text and records when, as on the card (`toggleCheckboxText` in `js/mdtext.js`, mirroring `mdtext.ToggleNthCheckbox`; local time), so the preview shows the date chip; unticking takes the date out.
+Ticking a box in it ticks the item in the text, at the mark the server said that box is at, and records when, as on the card (`toggleCheckboxText` in `js/mdtext.js`, mirroring `mdtext.ToggleCheckbox`; local time; Checkbox index mapping in `docs/spec/editor.md`), so the preview shows the date chip; unticking takes the date out.
 The hidden field can't take the browser's undo; unticking undoes it.
 Edit goes back to the field, focused.
 The modal always opens in Edit.
@@ -1275,7 +1274,7 @@ Mail goes where you asked for it (`mails`, `mailKinds`): three kinds, each a box
 | someone comments on a task I have, gave or follow | `tellComment`: "bob commented: <title>" | with the comment; not to who it mentions, who gets that mail |
 
 Each comes with the task's link where Zone knows its address (`base-url`), sent in the background (a write doesn't wait for the mail server; a failure is in Zone's log), never for what you did yourself.
-The kinds are kept as `"mail": "assigned,comments"` in your registry's `mine` (the kinds turned on, in that order); `"mail": "off"` reads as none.
+The kinds are kept as `"mail": "assigned,comments"` in your registry's `mine` (the kinds turned on, in that order).
 There is no digest and no mail about watched pages.
 
 ### What you have seen
@@ -1285,7 +1284,7 @@ It writes no task file, makes no commit and changes no list's word: nobody's lis
 The news' rule reads the looks with the task's history (`historyWithSeen`), and the API answers them there as `seen` entries, so the browser's rule and the History are as they were; a history a client sends back (an undo) is kept without them (`sentHistory`).
 A file names at most 300 tasks before those that can have no news anymore go (gone, or closed for two months: `canHaveNews`).
 Lost with Zone's folder, tasks show their news again and nothing else happens.
-A `seen` entry in a task's own history (from older tasks) is still read, and counts until its user looks again.
+A `seen` entry in a task's own file (written by hand) is none: looks are only those in `.zone/seen/`.
 
 ## Importance
 
@@ -1669,7 +1668,6 @@ You pin and unpin in a list's ⋯ menu on `/tasks?list=`: **Pin** puts it last, 
 With users nobody pins for anyone else: a user who has pinned nothing has no pins, and finds their lists under More (Your lists first) or in the left column.
 A connection not given its user's private place pins nothing (its user's pins are kept with their own lists).
 Pins in the shared registry from before the wiki had users (or from an older Zone's "Pin for everyone") are no one's: no user reads them.
-A registry that names a `default` list reads as that list pinned first (`ParseRegistry`), and is written without the key.
 
 ### Where a new task goes
 
@@ -1932,7 +1930,6 @@ A group's lists are in its folder's own registry, `groups/<group>/_tasks/lists.j
 
 ```json
 {
-  "version": 3,
   "lists": [
     {"name": "shop", "view": "today", "limit": "8", "keep": "1", "labels": "Catalogue,Shopping", "home": "off"},
     {"name": "task"}
@@ -1987,7 +1984,7 @@ So archived tasks can be edited, reopened and tagged like any other; Closed show
 
 All mutations go through one lock (`taskFiles.Lock`, `go/internal/taskfiles`) and atomic writes (temp file + rename, `go/internal/atomicfile`); the server handles requests concurrently.
 **A read waits for a write's files, never for its commit** (`Store.view`, `Hold`, `Release`): a write holds the lock from its read to its commit, one write at a time;
-readers (`Open`, `All`, `Snapshot`, the Closed readers) don't take it.
+readers (`Open`, `All`, the Closed readers) don't take it.
 They share a second lock, which a write holds alone from the first file it replaces to the last (every write of the store's takes it; code that writes a task file itself calls `Hold` first) and lets go before git runs (`CommitFiles`, `commitLists`; `Unlock` at the latest).
 So a reader sees every file of a write or none (a task that moves between two files is never in neither), and a page view doesn't stand still while someone's task is committed, nor while a commit waits for the packing: every page view computes the Tasks links' counts.
 
@@ -2028,10 +2025,10 @@ A task's file says whose it is: the task's `Owner` (`go/internal/taskmodel`) is 
 A write that puts a task in a list sets where it is kept (`applyList` in `go/tasks.go`), and the task moves between the files in one commit.
 Ids are random UUIDs, unique across all files; restoring a deleted task (undo) never takes an id another file has (`taskFiles.IDsLocked`) and puts it back where it was (`placeSnapshot`, Private tasks in `docs/spec/users.md`).
 
-Every reader takes the user and reads the shared files and theirs (`go/internal/taskfiles`, the store `taskFiles` in `go/tasklogic.go`; `Owners(user)`: `Open`, `All`, `Snapshot`, `ReadForWriteLocked`, `ClosedInYear`, `ClosedYears`, and on top of them `findTasks`, `resolveTaskRefs`, `findTaskBacklinks`);
+Every reader takes the user and reads the shared files and theirs (`go/internal/taskfiles`, the store `taskFiles` in `go/tasklogic.go`; `Owners(user)`: `Open`, `All`, `ReadForWriteLocked`, `ClosedInYear`, `ClosedYears`, and on top of them `findTasks`, `resolveTaskRefs`, `findTaskBacklinks`);
 Zone itself (`""`) reads only the shared ones.
 A write splits the tasks by owner (`byOwner`) and writes the files that changed, all in one commit; a task can only be written by its own user, since another user's is never read for them.
-One lock (`taskFiles.Lock`) for all files' writes, and a second one that readers share and a write holds while it replaces its files (`Open` for `GET /api/tasks`, `All`, `Snapshot`; Reading and writing, above): a task that is shared moves between two files, and a read between their writes would miss it.
+One lock (`taskFiles.Lock`) for all files' writes, and a second one that readers share and a write holds while it replaces its files (`Open` for `GET /api/tasks`, `All`; Reading and writing, above): a task that is shared moves between two files, and a read between their writes would miss it.
 What Zone does over every task list covers every user's files (`EveryOwner`): the closed tasks' filing by month at start (`ArchiveOldClosed`), a rename's links in tasks (`renamePageRefs`), a shared list's rename, the search index (`Every`, filtered per user by `canSeeTask`, `hiddenDoc`).
 
 #### The files' format

@@ -403,6 +403,39 @@ def test_emoji_completion_in_task_title(page, wiki):
     expect(page.locator(".task-item .task-title", has_text="Ship it 🚀")).to_be_visible()
 
 
+HIDDEN_TASKS = (
+    "# Häkchen 🎉\n\n"
+    "<!--\n- [ ] in a comment\n-->\n\n"
+    "<div>\n- [ ] in raw HTML\n</div>\n\n"
+    "Text.\n\n    - [ ] indented code\n\n"
+    "- [ ] first ✓\n"
+    "- [ ] second\n"
+)
+
+
+def test_preview_ticks_the_box_the_server_rendered(page, wiki):
+    """The preview shows the boxes the server's parser finds, and a click
+    ticks the line of that box (the server says where each one is): a
+    "- [ ]" in a comment, raw HTML or indented code shows none and moves
+    nothing, and letters outside ASCII before it don't either."""
+    wiki.write("hidden", HIDDEN_TASKS)
+    page.goto("/edit/hidden")
+    boxes = page.locator("#editor-preview .task-list-item-checkbox")
+    expect(boxes).to_have_count(2)
+    boxes.nth(0).click()
+    textarea = page.locator("#editor-textarea")
+    expect(textarea).to_have_value(HIDDEN_TASKS.replace("- [ ] first", "- [x] first"))
+    expect(boxes.nth(0)).to_be_checked()            # the preview that follows the text
+    boxes.nth(1).click()
+    expect(textarea).to_have_value(HIDDEN_TASKS.replace("- [ ] first", "- [x] first").replace("- [ ] second", "- [x] second"))
+    # A text changed since the preview: the click changes nothing until it follows.
+    page.evaluate("""() => { const ta = document.getElementById('editor-textarea');
+        ta.value = ta.value + 'x'; }""")
+    boxes.nth(0).click()
+    expect(boxes.nth(0)).to_be_checked()
+    assert "- [x] first" in textarea.input_value()
+
+
 def test_checkbox_after_inline_code_at_a_lines_start(page, wiki):
     # ```x``` is inline code, no fence: the box below it counts, here as on the server.
     text = "# T\n\n```x``` y\n\n- [ ] box\n"

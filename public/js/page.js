@@ -86,8 +86,13 @@ document.addEventListener('change', e => {
 
   const textarea = document.getElementById('editor-textarea');
   if (textarea) {
-    // Editor: toggle the Nth checkbox in the textarea (js/mdedit.js).
-    toggleCheckboxInTextarea(textarea, idx);
+    // Editor: tick the box in the textarea where the server said it is in
+    // the text the preview shows (js/mdedit.js); a text changed since waits
+    // for the preview that follows it.
+    const shown = document.getElementById('editor-preview')?.zoneMarks;
+    if (!shown || shown.text !== textarea.value) { e.target.checked = !e.target.checked; return; }
+    toggleCheckboxInTextarea(textarea, shown.marks[idx]);
+    shown.text = textarea.value;   // a tick changes one character: the marks still hold
   } else {
     // Page view: persist the toggle, with an undo toast — a mis-tap on a
     // phone otherwise edits the file silently. Undo is a second toggle.

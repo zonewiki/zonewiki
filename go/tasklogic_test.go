@@ -416,11 +416,12 @@ func TestNewsCases(t *testing.T) {
 		if c.Task.Private {
 			task.Owner = "anna"
 		}
-		if got := newsFor(task, asUser("anna")).Kind; got != c.Want {
-			t.Errorf("%s: %q, want %q", c.Name, got, c.Want)
+		news := newsFor(task, asUser("anna"))
+		if !task.Private() {
+			news = newsIn(task, task.History, asUser("anna")) // the looks are in the case's history
 		}
-		if got := givenTo(task, asUser("anna")); got != (c.Want == "given") {
-			t.Errorf("%s: given %v", c.Name, got)
+		if got := news.Kind; got != c.Want {
+			t.Errorf("%s: %q, want %q", c.Name, got, c.Want)
 		}
 	}
 }

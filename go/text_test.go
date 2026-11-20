@@ -69,7 +69,7 @@ func TestMaskLookalikes(t *testing.T) {
 	}
 }
 func TestToggleCheckboxCases(t *testing.T) {
-	toggle := func(content string, idx int) string { return mdtext.ToggleNthCheckbox(content, idx, true, now()) }
+	toggle := func(content string, idx int) string { return toggleNthCheckbox(content, idx, true, now()) }
 	// Ticking stamps the day, unticking takes it off; the created date stays.
 	expectIn(t, toggle("- [ ] task\n", 0), "<!--d:")
 	if got := toggle("- [x] task <!--d:2026-01-10T09:00:00-->\n", 0); strings.Contains(got, "<!--d:") || !strings.Contains(got, "[ ]") {
@@ -142,5 +142,5 @@ func TestToggleMatchesRenderedCheckboxes(t *testing.T) {
 	}
 }
 func toggle1(content string, idx int) string {
-	return mdtext.ToggleNthCheckbox(content, idx, true, now())
+	return toggleNthCheckbox(content, idx, true, now())
 }

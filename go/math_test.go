@@ -85,7 +85,7 @@ func TestMathBlockIsAFence(t *testing.T) {
 	if got := len(pageSections(text)); got != 3 { // the intro, One, Two
 		t.Errorf("%d sections, want 3: %q", got, pageSections(text))
 	}
-	if got := len(mdtext.TaskItemLines(mdtext.SplitLines(text), false)); got != 1 {
+	if got := len(taskItems(text, false)); got != 1 {
 		t.Errorf("%d task lines, want 1", got)
 	}
 	html := render(t, text, Env{})

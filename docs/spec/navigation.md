@@ -125,7 +125,6 @@ and your tools,
 **Groups** stands between Wiki and Private for whoever is in a group: Wiki · Groups · Private.
 Private and Notes each carry a lock (`.module-lock` in the link, tooltip "Private: only you see it", "Notes: only you see it"; `own` in `moduleLinks`).
 Tasks is in neither a shared nor a private group: it shows the shared tasks and your own private ones, and its home may be in your folder.
-(Until 2026-11 the groups were by who sees them: Wiki · Tasks and Private · Notes.)
 
 ### The Groups pill
 
@@ -192,7 +191,6 @@ in two groups:
 
 The icon is 2.25rem, muted, a background on hover; name and shortcut in tooltip and accessible name.
 There are no "new" buttons on desktop: a new note is `c n` (`openNewNote`), a new task `c t` (`openDefaultTask`); the row stays calm, and phones have both in the action bar.
-(Until 2026-11 the row had New note and Add a task icons between the eye and Search.)
 The pill has a fixed width, so the row's width (`--top-actions-w`, which the breadcrumb's padding and the status badges' position use) doesn't depend on the font; its border ends on the content's right edge.
 Hidden at ≤640px.
 They replaced the round New and Search buttons in the bottom-right corner, so desktop toasts and Sign out have the bottom corners to themselves again.
@@ -200,7 +198,7 @@ They replaced the round New and Search buttons in the bottom-right corner, so de
 ### New task from anywhere
 
 `openDefaultTask` in `js/actions.js` (`c t`, and the phone's **Task** tab outside the tasks module, where it presses the view's + New: The Task tab, below): the task goes into your Inbox and starts today, so it is on My tasks' Today.
-**`c t` is the same on every page**: it presses no list's **+ New** (until 2026-11 it did on a page that shows My tasks or the Inbox, and what it made then depended on the tab that was open; a list's own new task is **n** or its + New).
+**`c t` is the same on every page**: it presses no list's **+ New** (a list's own new task is **n** or its + New).
 It opens a task list app's edit modal for a task in the Inbox (`openEditModal` takes `list`, `tags`, which replace the filter's even when empty, `keep` and `start_date`): the page's own task app (an embed, `/tasks`, the editor's hidden one),
 or on a page without one a hidden one loaded on demand (`loadHeadlessTasks`: `GET /api/tasks/headless`, the headless embed without its scripts, then `tasks-core.js` and `tasks.js`; once per page),
 so you stay on the page and a toast says "Added “…” to your tasks".
@@ -211,7 +209,7 @@ The dialog says which list the task goes to (Where a new task goes in `docs/spec
 ### New pages
 
 A new page comes from a link to it (a missing wikilink opens its editor, `docs/spec/rendering.md`), so every page is linked from somewhere; or from a note and its **Move to wiki**, which asks what links to it.
-There is no New page button in the bar and no shortcut (Ctrl+N was one until 2026-10, but browsers keep it for a new window).
+There is no New page button in the bar and no shortcut (browsers keep Ctrl+N for a new window).
 **A place's home has New page** (a group's home, your private home; `NewPageFor`): `/new` with **For** at that place, since a page of a group or a private one has to say whose it is, which a link from a shared page doesn't.
 
 ### Action bar
@@ -262,7 +260,6 @@ They replaced the separate due badge at the top left.
 **They show one number and a dot** (CSS, `.module-link .module-focus`, `.module-new`): what is due, and a dot when there is news for you.
 How much is for today, and how many updates, are in the link's tooltip, like "Tasks: 2 updates for you · 5 for today · 1 overdue · 1 due today" (`taskCountsTitle`), and the Today tab says its own.
 The other counts are still in the page, for the tooltip and the list switcher's pills, which keep their numbers.
-(Until 2026-11 the links showed up to three numbers without a word.)
 
 #### How they stay current
 

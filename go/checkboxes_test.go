@@ -7,9 +7,8 @@ import (
 
 // The boxes the server ticks are the boxes the page shows: the Nth tick
 // changes the line of the Nth box rendered, whatever "- [ ]" lines the
-// render shows no box for (each case's "hidden" one). The lines' count
-// (mdtext.TaskItemLines) took those for boxes, so a tick went to the line
-// before the one ticked.
+// render shows no box for (each case's "hidden" one). A count by lines
+// took those for boxes, so a tick went to the line before the one ticked.
 func TestCheckboxesAreThoseRendered(t *testing.T) {
 	testWiki(t, nil)
 	hidden := map[string]string{

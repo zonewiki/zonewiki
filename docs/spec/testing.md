@@ -277,7 +277,7 @@ A case added for one side is a case for both.
 
 | File | Server side | Browser side |
 |------|-------------|--------------|
-| `go/testdata/golden.json.gz` | `TestGolden` (`go/golden_test.go`) | `tests/test_text_parity.py` (`public/js/mdtext.js`: slugs, heading ids, a wikilink's parts, the checkboxes of a text, a tick, a query's words, a list's name, a date word) |
+| `go/testdata/golden.json.gz` | `TestGolden` (`go/golden_test.go`) | `tests/test_text_parity.py` (`public/js/mdtext.js`: slugs, heading ids, a wikilink's parts, the checkboxes of a text and a tick (the browser's alone: no Go function gives them now), a query's words, a list's name, a date word) |
 | `go/testdata/mine_cases.json` | `TestInMineCases` (`go/tasklists_test.go`) | `TestMyTasks` (`tests/test_tasks_core.py`) |
 | `go/testdata/news_cases.json` | `TestNewsCases` (`go/tasklogic_test.go`) | `TestNewsCases` (`tests/test_tasks_core.py`) |
 | `go/testdata/filter_cases.json` | `TestFilterCases` (`go/tasklists_test.go`) | `TestFilterCases` (`tests/test_tasks_core.py`) |

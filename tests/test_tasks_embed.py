@@ -721,6 +721,7 @@ class TestInitialTasks:
         texts = {"notes": [t["description"] for t in tasks if t["description"]],
                  "comments": [c["text"] for t in tasks for c in t["comments"]]}
         html = client.post("/api/render-notes", json=texts, headers=HOST).get_json()
+        del html["marks"]   # for a preview's ticks: the page's block has no preview
         assert 'href="/page/plans"' in html["notes"][0] and "<strong>called</strong>" in html["comments"][0]
         # Once a page, whatever its lists show, and on /tasks.
         # With them the word of these tasks, as GET /api/tasks answers it.

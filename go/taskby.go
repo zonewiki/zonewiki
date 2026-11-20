@@ -145,7 +145,7 @@ func rememberBy(tasks ...*Task) {
 // undo sends an older one back whole) as it may replace had, the one its
 // file has: only entries Zone has had for the task (in had, or replaced
 // before: rememberBy), so nobody writes an event that wasn't, such as a
-// "created" in their own name (who made a task may delete it, Maker) or an
+// "created" in their own name (who made a task may delete it, created_by) or an
 // "assigned" that hands it to whom the history says had it (hadAssignee);
 // and its "created" entry stays, so nobody makes a task no one's by
 // dropping it.

@@ -269,7 +269,7 @@ A task's fields, views and lists are in `docs/spec/tasks.md`.
 | GET    | `/api/tasks/assignable` | `{ users, me }`: the users a task can be assigned to, A–Z, and who asks (Assigning tasks in `docs/spec/users.md`). `users` is empty without users and in sharing mode. |
 | GET    | `/api/tasks/closed-years` | `{ years }`: years with closed tasks, newest first, this year always included (Closed's year switcher). `?list=<name>` and `?mine=1` as for the count. |
 | GET    | `/api/tasks/closed-count` | `{ count }` of tasks in the Closed view (current year), for its link. `?list=<name>` counts that list's, `?mine=1` My tasks'; without them, every task's (a leftover `?all=1` changes nothing). |
-| POST   | `/api/render-notes`    | Task descriptions and comments as HTML (`renderNotes`): body `{ notes: [...], comments: [...] }`, answer the same with HTML (see Description in `docs/spec/tasks.md`) |
+| POST   | `/api/render-notes`    | Task descriptions and comments as HTML (`renderNotes`): body `{ notes: [...], comments: [...] }`, answer the same with HTML, and `marks`: where each note's boxes are (Checkbox index mapping in `docs/spec/editor.md`; see Description in `docs/spec/tasks.md`) |
 
 Comments, Keep tasks and Sections, which the rows and sections here name, are in `docs/spec/tasks.md`.
 

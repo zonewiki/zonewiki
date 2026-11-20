@@ -1418,6 +1418,31 @@ class TestSearch:
 # api_toggle_checkbox
 # ===========================================================================
 
+class TestPreviewMarks:
+    """The previews say where the boxes they show are in the text (as the
+    browser counts its characters), so an editor ticks the box a reader
+    clicked: a "- [ ]" the render shows no box for counts for nothing."""
+
+    TEXT = "---\ntags: [a]\n---\n# Ä 🎉\n\n<!--\n- [ ] hidden\n-->\n\n- [ ] one\n- [x] two\n"
+
+    @staticmethod
+    def units(text, char_index):
+        return len(text[:char_index].encode("utf-16-le")) // 2
+
+    def test_the_editors_preview(self, client):
+        resp = client.post("/api/preview", data=self.TEXT.encode("utf-8"), headers=HOST)
+        assert resp.get_data(as_text=True).count('class="task-list-item-checkbox"') == 2
+        marks = [int(n) for n in resp.headers["Zone-Task-Marks"].split(",")]
+        want = [self.units(self.TEXT, self.TEXT.index("- [ ] one") + 3), self.units(self.TEXT, self.TEXT.index("- [x] two") + 3)]
+        assert marks == want
+        assert client.post("/api/preview", data=b"no boxes", headers=HOST).headers["Zone-Task-Marks"] == ""
+
+    def test_a_tasks_notes(self, client):
+        notes = "<!--\n- [ ] hidden\n-->\n\n- [ ] ü\n"
+        got = client.post("/api/render-notes", json={"notes": [notes, "x"], "comments": ["- [ ] c"]}, headers=HOST).get_json()
+        assert got["marks"] == [[notes.index("- [ ] ü") + 3], []]
+
+
 class TestApiToggleCheckbox:
 
     def test_toggles_unchecked_to_checked(self, client, wiki_dir):

@@ -216,11 +216,10 @@ func checkEmbedSettings(set map[string]string, keys []string) (map[string]string
 					return nil, refuse("home is off (the list's tasks are left out of My tasks) or not set")
 				}
 			case "mail":
-				// The kinds of mail turned on, "," between (mailKinds);
-				// "off" from before they were opt-in reads as none.
+				// The kinds of mail turned on, "," between (mailKinds).
 				asked := strings.Split(strings.ToLower(v), ",")
 				for _, k := range asked {
-					if k != "" && k != "off" && !slices.Contains(mailKinds, k) {
+					if k != "" && !slices.Contains(mailKinds, k) {
 						return nil, bad()
 					}
 				}
@@ -328,8 +327,7 @@ func embedGroup(p TasksParams) string {
 
 // The tasks' views, by the names [[tasks: view=…]] and ?view= use: which
 // tasks a view shows. Today: what is to do now; open: every open task (how,
-// group= says); closed: the closed ones. (Until 2026-11 today was called
-// focus, and plan was the Open tab as a board.)
+// group= says); closed: the closed ones.
 var tasksViews = []string{"today", "open", "closed"}
 
 // embedView: the view an embed opens on, "" for the default or an unknown name.
@@ -678,7 +676,7 @@ func (f taskFilter) matches(t *Task, user asker) bool {
 		}
 	}
 	// Who made it: a private task is its user's own making.
-	maker := t.Maker()
+	maker := t.CreatedBy
 	if maker == "" && t.Private() {
 		maker = user.Name
 	}

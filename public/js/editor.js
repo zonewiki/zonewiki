@@ -513,12 +513,16 @@ async function fetchPreview() {
   try {
     // The page, so the preview knows where its links are (a private page's).
     const page = (document.getElementById('editor-form')?.getAttribute('action') || '').replace(/^\/edit\//, '');
+    const text = textarea.value;
     const res = await fetch(page ? `/api/preview?page=${encodeURIComponent(decodeURIComponent(page))}` : '/api/preview', {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
-      body: textarea.value,
+      body: text,
     });
     previewPane.innerHTML = await res.text();
+    // Where its boxes are in the text it shows (js/page.js ticks there).
+    const marks = res.headers.get('Zone-Task-Marks') || '';
+    previewPane.zoneMarks = { text, marks: marks ? marks.split(',').map(Number) : [] };
     localizeDates(previewPane);
     if (window.hljs) previewPane.querySelectorAll(HIGHLIGHT_CODE).forEach(el => hljs.highlightElement(el));
     renderFigures(previewPane);

@@ -103,24 +103,15 @@ func TestGolden(t *testing.T) {
 		check("mask_code", text, []any{masked, stash}, c["mask_code"])
 		check("page_title", text, mdtext.PageTitle(text, "some-slug"), c["page_title"])
 		check("strip_h1", text, mdtext.StripH1(text), c["strip_h1"])
-		var toggles, notes []string
-		for i := range 4 {
-			toggles = append(toggles, mdtext.ToggleNthCheckbox(text, i, true, now()))
-		}
-		for i := range 2 {
-			notes = append(notes, mdtext.ToggleNthCheckbox(text, i, false, now()))
-		}
-		check("toggle", text, toggles, c["toggle"])
-		check("toggle_notes", text, notes, c["toggle_notes"])
+		// checkboxes, toggle and toggle_notes are the browser's alone (its
+		// count by lines, for a card's subtasks): tests/test_text_parity.py.
 		check("to_slug", text, mdtext.ToSlug(text), c["to_slug"])
 		check("section_anchor", text, mdtext.SectionAnchor(text), c["section_anchor"])
 		// What the browser has too (js/mdtext.js): a heading's id, a
-		// wikilink's parts, how many checkboxes, a query's words.
+		// wikilink's parts, a query's words.
 		check("heading_id", text, mdtext.HeadingID(text), c["heading_id"])
 		wlPage, wlSection, wlLabel := mdtext.SplitWikilink(text)
 		check("split_wikilink", text, []string{wlPage, wlSection, wlLabel}, c["split_wikilink"])
-		lines := mdtext.SplitLines(text)
-		check("checkboxes", text, []int{len(mdtext.TaskItemLines(lines, true)), len(mdtext.TaskItemLines(lines, false))}, c["checkboxes"])
 		check("query_text", text, textsearch.ParseQuery(text).Text, c["query_text"])
 		check("plain_task_title", text, mdtext.PlainTaskTitle(text), c["plain_task_title"])
 		check("slug_display_name", text, mdtext.SlugDisplayName(text), c["slug_display_name"])

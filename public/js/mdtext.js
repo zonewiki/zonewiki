@@ -104,12 +104,12 @@ export function opensCodeFence(t) {
 // ── Checkboxes ───────────────────────────────────────────────────────────────
 
 // Character offsets of the mark inside each task-list checkbox ("[ ]"/"[x]"),
-// in rendered order, by lines as mdtext.TaskItemLines (and its taskItemRE)
-// counts them: only list items whose text starts with the box; fenced code,
-// display math and (in a page, `frontmatter`) a leading frontmatter block
-// are skipped. The editor's previews tick by it. The server ticks the boxes
-// its parser finds (go/checkboxes.go), which also leaves out a line in a
-// comment, raw HTML, indented code or a fence in a quote.
+// counted by lines: only list items whose text starts with the box; fenced
+// code, display math and (in a page, `frontmatter`) a leading frontmatter
+// block are skipped. A card's count of subtasks is by it (js/taskutil.js).
+// What is ticked goes by the boxes the server's parser finds
+// (go/checkboxes.go), which also leaves out a line in a comment, raw HTML,
+// indented code or a fence in a quote: the previews have their marks.
 const TASK_ITEM_RE = /^([ \t]*(?:>[ \t]?)*[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+\[)([ xX])\](?=[ \t]+\S)/;
 
 export function taskCheckboxOffsets(text, frontmatter = true) {
@@ -152,15 +152,14 @@ export function localStamp(d = new Date()) {
   return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}T${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`;
 }
 
-// The text with its Nth checkbox ticked or unticked, recording when as the
-// server does (mdtext.ToggleNthCheckbox): ticking adds
+// The text with the checkbox whose mark is at `at` ticked or unticked,
+// recording when as the server does (mdtext.ToggleCheckbox): ticking adds
 // <!--d:YYYY-MM-DDTHH:MM:SS--> (or the d: of an item's <!--t:…-->), shown
 // as a date chip; unticking takes it out. `now`: the stamp (localStamp).
 const TASK_META_RE = /<!--t:(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\s+d:\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)?-->/;
 const TASK_DONE_RE = /<!--d:\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d-->/;
-export function toggleCheckboxText(text, idx, frontmatter = true, now = localStamp()) {
-  const at = taskCheckboxOffsets(text, frontmatter)[idx];
-  if (at === undefined) return text;
+export function toggleCheckboxText(text, at, now = localStamp()) {
+  if (at === undefined || (text[at] !== ' ' && text[at] !== 'x' && text[at] !== 'X')) return text;
   const checking = text[at] === ' ';
   const start = text.lastIndexOf('\n', at) + 1;
   let end = text.indexOf('\n', at);

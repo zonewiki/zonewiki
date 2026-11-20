@@ -445,52 +445,9 @@ func closingRun(s string, from, n int) int {
 
 // ---- checkboxes ----
 
-// A task-list item by its line: a list marker (maybe inside blockquotes),
-// then "[ ]"/"[x]" followed by whitespace and text. The editor in the
-// browser counts checkboxes so (js/mdtext.js taskCheckboxOffsets mirrors
-// it); the server ticks the boxes the parser finds (taskItems in
-// go/checkboxes.go), which knows what a line can't tell: a comment, raw
-// HTML, indented code, a fence in a quote. The lookahead (?=[ \t]+\S) is
-// checked after the match.
-var taskItemRE = regexp.MustCompile(`^[ \t]*(?:>[ \t]?)*[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+\[([ xX])\]`)
-
-// taskItem: the byte range of the line's [ ]/[x] mark, when it is a task item.
-func taskItem(line string) (start, end int, ok bool) {
-	m := taskItemRE.FindStringSubmatchIndex(line)
-	if m == nil {
-		return 0, 0, false
-	}
-	rest := line[m[1]:]
-	after := strings.TrimLeft(rest, " \t")
-	if len(after) == len(rest) || after == "" {
-		return 0, 0, false
-	}
-	if r, _ := utf8.DecodeRuneInString(after); unicode.IsSpace(r) {
-		return 0, 0, false
-	}
-	return m[2], m[3], true
-}
-
+// TaskLine: a checkbox where the parser found it (taskItems in
+// go/checkboxes.go): its line (SplitLines) and the bytes of its mark there.
 type TaskLine struct{ Index, Start, End int }
-
-// TaskItemLines: every checkbox line, skipping fenced code and, in a page
-// (frontmatter), a leading frontmatter block.
-func TaskItemLines(lines []string, frontmatter bool) []TaskLine {
-	start := 0
-	if frontmatter {
-		start = bodyStart(lines)
-	}
-	var found []TaskLine
-	for i, l := range FencedLines(lines) {
-		if i < start || l.InFence {
-			continue
-		}
-		if s, e, ok := taskItem(l.Line); ok {
-			found = append(found, TaskLine{i, s, e})
-		}
-	}
-	return found
-}
 
 // TaskLineKeys: a key per task-list item of a page (items: where they are,
 // in rendered order): its line without the checkbox's mark and the tick's
@@ -509,19 +466,8 @@ func TaskLineKeys(content string, items []TaskLine) []string {
 	return keys
 }
 
-// ToggleNthCheckbox ticks or unticks the Nth checkbox (0-based, in rendered
-// order), recording when it was done (at). A task's notes have no
-// frontmatter (frontmatter false): a leading --- block there is text.
-func ToggleNthCheckbox(content string, idx int, frontmatter bool, at time.Time) string {
-	items := TaskItemLines(SplitLines(content), frontmatter)
-	if idx >= len(items) {
-		return content
-	}
-	return ToggleCheckbox(content, items[idx], at)
-}
-
-// ToggleCheckbox ticks or unticks the checkbox it (of TaskItemLines, or
-// of the parser's), recording when it was done (at).
+// ToggleCheckbox ticks or unticks the checkbox it, recording when it was
+// done (at).
 func ToggleCheckbox(content string, it TaskLine, at time.Time) string {
 	lines := SplitLines(content)
 	line := lines[it.Index]

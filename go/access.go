@@ -572,12 +572,6 @@ func privateFolder(user asker) string {
 	return privateDir + "/" + user.Name
 }
 
-// ownsTasks: the task files of owner (a user's name, as the store files
-// them: private/<owner>/_tasks/) are user's own, and there for them.
-func ownsTasks(user asker, owner string) bool {
-	return owner != "" && owner == user.Name && user.HasPrivate()
-}
-
 // lacksPrivate: user is a user of this wiki whose private place isn't there
 // for it (an assistant's connection that wasn't given it). Not the same as
 // a wiki without users, where nothing is private and privateFolder is "":

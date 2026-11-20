@@ -5,12 +5,15 @@ package main
 // here by construction, so a tick and the page view's keys go to the box
 // the reader sees. A "- [ ]" line the render shows no box for (in an HTML
 // comment, raw HTML, indented code, a fence in a quote or a list) shifts no
-// number. (mdtext.TaskItemLines counts by lines, as the browser's editor
-// does: js/mdtext.js taskCheckboxOffsets.)
+// number. The editor's previews tick by the same marks
+// (taskMarkOffsets); only a card's count of subtasks counts by lines, in
+// the browser (js/mdtext.js taskCheckboxOffsets).
 
 import (
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf16"
 
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/text"
@@ -68,6 +71,32 @@ func taskItems(content string, frontmatter bool) []mdtext.TaskLine {
 		start += len(line)
 	}
 	return items
+}
+
+// taskMarkOffsets: where content's checkboxes' marks are, in rendered
+// order, as the browser counts a text's characters (UTF-16 code units): an
+// editor's preview ticks the Nth box it shows at the Nth of them
+// (js/mdedit.js toggleCheckboxInTextarea, js/taskmodal.js).
+func taskMarkOffsets(content string, frontmatter bool) []int {
+	lines := mdtext.SplitLines(content)
+	out := []int{}
+	units, line := 0, 0 // the units before line
+	for _, it := range taskItems(content, frontmatter) {
+		for ; line < it.Index; line++ {
+			units += len(utf16.Encode([]rune(lines[line])))
+		}
+		out = append(out, units+len(utf16.Encode([]rune(lines[line][:it.Start]))))
+	}
+	return out
+}
+
+// joinInts: numbers as "1,2,3", for a header.
+func joinInts(ns []int) string {
+	parts := make([]string, len(ns))
+	for i, n := range ns {
+		parts[i] = strconv.Itoa(n)
+	}
+	return strings.Join(parts, ",")
 }
 
 // taskLineKeys: a key per checkbox of a page, in rendered order, for the

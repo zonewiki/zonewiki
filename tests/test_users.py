@@ -813,17 +813,6 @@ class TestAuthors:
         assert len(imported) == 2
         assert all("by" not in t["comments"][0] and "by" not in t["history"][0] for t in imported)
 
-    @staticmethod
-    def without_created_by(wiki_dir, tid):
-        """The task as one from before created_by: its history says who made it."""
-        for p in (wiki_dir / "_tasks").rglob("*.json"):
-            data = json.loads(p.read_text())
-            if isinstance(data, list) and any(isinstance(t, dict) and t.get("id") == tid for t in data):
-                for t in data:
-                    if t.get("id") == tid:
-                        t.pop("created_by", None)
-                p.write_text(json.dumps(data, indent=2))
-
     def test_a_sent_history_doesnt_change_who_made_a_task(self, client, users, wiki_dir):
         """An undo sends a task's history back whole: one that drops its
         "created" entry, or adds one or an "assigned" in the sender's name,
@@ -831,7 +820,6 @@ class TestAuthors:
         people) and gives it to nobody."""
         login(client, "alice", "alice-pw")
         task = self.shared_task(client, title="Budget")
-        self.without_created_by(wiki_dir, task["id"])
         client.post("/logout", headers=HOST)
         login(client, "bob", "bob-pw")
         forged = [{"at": "2026-01-01T09:00", "event": "created", "by": "bob"},

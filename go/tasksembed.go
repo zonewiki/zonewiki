@@ -548,7 +548,7 @@ type TaskCounts struct {
 	Today   int `json:"today"`
 	Focus   int `json:"focus"`
 	// New: the open tasks someone else gave the user that they haven't
-	// touched yet (givenTo). Such a task often has no date, so it is in
+	// touched yet (newsFor: newsGiven). Such a task often has no date, so it is in
 	// neither of the counts above; without this one, nothing outside My
 	// tasks would say that it is there.
 	New   int    `json:"new,omitempty"`

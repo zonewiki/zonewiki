@@ -1375,6 +1375,8 @@ func apiPreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// Where the boxes it shows are in the text: the editor ticks there.
+	w.Header().Set("Zone-Task-Marks", joinInts(taskMarkOffsets(string(body), true)))
 	// ?page=: the page being edited, for what depends on where the text is
 	// (a private folder, or shared); only pages the user may see count.
 	rq := newReq(r)
@@ -1406,6 +1408,14 @@ func apiRenderNotes(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		out[key] = renderNotes(rq, texts, key == "comments")
+		if key == "notes" {
+			// Where each one's boxes are in its text: the dialog ticks there.
+			marks := make([][]int, len(texts))
+			for i, text := range texts {
+				marks[i] = taskMarkOffsets(text, false)
+			}
+			out["marks"] = marks
+		}
 	}
 	writeJSON(w, http.StatusOK, out)
 }

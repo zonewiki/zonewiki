@@ -2909,7 +2909,7 @@ class TestNotes:
         assert "tasks-app" not in note
 
     def test_render_notes_validates(self, client):
-        assert client.post("/api/render-notes", json={}).get_json() == {"notes": [], "comments": []}
+        assert client.post("/api/render-notes", json={}).get_json() == {"notes": [], "comments": [], "marks": []}
         assert client.post("/api/render-notes", json={"notes": "x"}).status_code == 400
         assert client.post("/api/render-notes", json={"notes": [1]}).status_code == 400
         assert client.post("/api/render-notes", data="x").status_code == 400

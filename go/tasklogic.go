@@ -159,7 +159,7 @@ func placeSnapshot(user asker, t *Task, snap jsonObj, lists map[string]ListInfo)
 func givenToOthers(user asker, open []*Task) int {
 	n := 0
 	for _, t := range open {
-		if !t.Private() && t.Assignee != "" && t.Assignee != user.Name && t.Maker() == user.Name {
+		if !t.Private() && t.Assignee != "" && t.Assignee != user.Name && t.CreatedBy == user.Name {
 			n++
 		}
 	}
@@ -211,19 +211,24 @@ const (
 // later one. A look says which comment was the last one then (its "to": a
 // comment's id, noComment for none; taskseen.go), and every comment after
 // that one is news, whatever the minute: one written a moment after the
-// look is not lost. A look that doesn't say (from before 2026-11-16) goes
-// by the minute. The browser has the same rule
+// look is not lost. A look whose comment is gone goes by the minute. The
+// browser has the same rule
 // (TasksCore.newsFor; go/testdata/news_cases.json runs through both).
 func newsFor(t *Task, user asker) News {
 	if user.Name == "" || t.Private() {
 		return News{}
 	}
+	// With who looked at it (taskseen.go): a look is the user's, not the task's.
+	return newsIn(t, historyWithSeen(t), user)
+}
+
+// newsIn: newsFor over a history that has the looks in it, as the API
+// answers it (and the shared cases write it).
+func newsIn(t *Task, history []HistoryEntry, user asker) News {
 	minute := func(at string) string { return runePrefix(at, 16) }
-	has, made := t.Assignee == user.Name, t.Maker() == user.Name || slices.Contains(t.Followers, user.Name)
+	has, made := t.Assignee == user.Name, t.CreatedBy == user.Name || slices.Contains(t.Followers, user.Name)
 	mine, myAct, sawIt, sawComment := -1, "", false, ""
 	lastAssigned := -1
-	// With who looked at it (taskseen.go): a look is the user's, not the task's.
-	history := historyWithSeen(t)
 	for i, e := range history {
 		if e.By == user.Name {
 			mine, myAct, sawIt, sawComment = i, minute(e.At), e.Event == "seen", ""
@@ -337,10 +342,6 @@ func withUpdates(user asker, tasks, open, recentClosed []*Task) []*Task {
 	}
 	return tasks
 }
-
-// givenTo: someone else gave user this task and they haven't opened it: the
-// news its card calls "new".
-func givenTo(t *Task, user asker) bool { return newsFor(t, user).Kind == newsGiven }
 
 // mentionRE: @name in a text: a user's name after a space, a bracket or the
 // text's start (not the @ of a mail address).
@@ -482,12 +483,12 @@ func spawnRecurring(user asker, task *Task, active []*Task, skip bool) *Task {
 	spawned.Recurrence, spawned.SpawnedFrom = nextRec, task.ID
 	spawned.Owner, spawned.List = task.Owner, task.List // a series stays in its list (a private one private)
 	spawned.Assignee = task.Assignee
-	spawned.CreatedBy = task.Maker()                 // the series' maker
+	spawned.CreatedBy = task.CreatedBy               // the series' maker
 	spawned.Followers = slices.Clone(task.Followers) // who follows the series follows on
 	// The next occurrence carries the series' history on (it is capped:
 	// capHistory), so the series reads as one log. Not its comments: they
-	// have no cap, and each occurrence was a copy more of all of them (a
-	// daily task with ten comments: ten more a day, for good, until 2026-11).
+	// have no cap, and each occurrence would be a copy more of all of them (a
+	// daily task with ten comments: ten more a day, for good).
 	// They stay on the occurrence they were written on, which this one names
 	// (spawned_from; its dialog links to it).
 	spawned.History = append([]HistoryEntry{}, task.History...)

@@ -11,7 +11,6 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -36,7 +35,6 @@ type Req struct {
 	counts     *TaskCounts
 	files      []PageFile // iterPages, once
 	stats      []pageStat // the same with their mtimes, once
-	sorted     []PageFile // the same, by slug
 	slugs      map[string]bool
 	lists      map[string]ListInfo
 	open       []*Task // openTasks, once
@@ -110,17 +108,6 @@ func (rq *Req) pageStats() []pageStat {
 		rq.stats = out
 	}
 	return out
-}
-
-// sortedPageFiles: sortedPages, once per request.
-func (rq *Req) sortedPageFiles() []PageFile {
-	if rq == nil {
-		return sortedPages()
-	}
-	if rq.sorted == nil {
-		rq.sorted = sortPages(slices.Clone(rq.pageFiles()))
-	}
-	return rq.sorted
 }
 
 // slugSet: every page's slug (slugSet), once per request.

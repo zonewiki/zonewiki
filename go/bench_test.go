@@ -227,7 +227,7 @@ func benchHistory(b *testing.B, pages, commits int) {
 		fmt.Fprintf(&stream, "M 100644 inline %s\n", name(page))
 		data(fmt.Sprintf("# Page %d\n\nChange %d.\n", page, c))
 	}
-	if r := runGitInput(stream.String(), "fast-import", "--quiet"); r.Code != 0 {
+	if r := runGitIn(gitTimeout, stream.String(), "fast-import", "--quiet"); r.Code != 0 {
 		b.Fatal(r.Stderr)
 	}
 	if r := runGit("checkout", "-q", "-f", "main"); r.Code != 0 {

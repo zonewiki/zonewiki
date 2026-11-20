@@ -35,7 +35,9 @@ async function fetchNotesPreview() {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes: [text] }),
     });
     if (res.ok && app.descTextarea.value.trim() === text) {
-      notesPreview.innerHTML = (await res.json()).notes[0];
+      const got = await res.json();
+      notesPreview.innerHTML = got.notes[0];
+      notesPreview.zoneMarks = { text, marks: got.marks?.[0] || [] };   // where its boxes are in the text
       highlightIn(notesPreview);
       renderFigures(notesPreview);
     }
@@ -74,7 +76,11 @@ notesModeBtns.forEach(b => b.addEventListener('click', () => setNotesPreview(b.d
 notesPreview?.addEventListener('change', async e => {
   if (!e.target.matches('.task-list-item-checkbox')) return;
   const idx = [...notesPreview.querySelectorAll('.task-list-item-checkbox')].indexOf(e.target);
-  app.descTextarea.value = toggleCheckboxText(app.descTextarea.value, idx, false);
+  const value = app.descTextarea.value, shown = notesPreview.zoneMarks;
+  if (!shown || shown.text !== value.trim()) { e.target.checked = !e.target.checked; return; }
+  // The preview's text is the field's trimmed: its marks count from there.
+  const lead = value.length - value.trimStart().length;
+  app.descTextarea.value = toggleCheckboxText(value, lead + shown.marks[idx]);
   await fetchNotesPreview();
   notesPreview.focus({ preventScroll: true });
 });

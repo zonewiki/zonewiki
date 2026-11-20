@@ -167,9 +167,6 @@ func TestInlineCodeAtALinesStartIsNoFence(t *testing.T) {
 	if got := PageTitle(text, "slug"); got != "Title" {
 		t.Errorf("title %q", got)
 	}
-	if got := len(TaskItemLines(SplitLines(text), false)); got != 1 {
-		t.Errorf("%d task lines", got)
-	}
 	for line, inFence := range map[string]bool{"```": true, "``` go": true, "```` x`": false, "```a`b": false, "~~~ a`b": true, "``": false} {
 		if got := FencedLines([]string{line + "\n"})[0].InFence; got != inFence {
 			t.Errorf("%q: in a fence %v", line, got)

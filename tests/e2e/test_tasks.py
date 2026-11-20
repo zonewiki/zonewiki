@@ -3439,6 +3439,21 @@ def test_notes_editor_has_the_bar_and_a_preview(page, wiki):
     expect(preview).to_be_hidden()
 
 
+def test_notes_preview_ticks_the_box_the_server_rendered(page, wiki):
+    # A "- [ ]" in a comment shows no box: ticking the box after it ticks its line.
+    notes = "  Ünterwegs:\n\n<!--\n- [ ] hidden\n-->\n\n- [ ] tent"
+    page.request.post("/api/tasks", data={"title": "Pack", "description": notes})
+    page.goto("/tasks?view=open&group=none")
+    card(page, "Pack").dblclick()
+    page.locator("#task-edit-preview-btn").click()
+    preview = page.locator("#task-edit-preview")
+    expect(preview.locator(".task-list-item-checkbox")).to_have_count(1)
+    preview.locator(".task-list-item-checkbox").check()
+    expect(preview.locator(".task-date-done")).to_have_count(1)
+    value = page.locator("#task-edit-desc").input_value()
+    assert "- [ ] hidden" in value and re.search(r"- \[x\] tent <!--d:", value)
+
+
 def test_page_and_tasks_checkboxes_stay_apart(page, wiki):
     # A page with its own checklist and a task list: ticking one never ticks
     # the other, though both render the same checkboxes.

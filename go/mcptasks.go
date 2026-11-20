@@ -62,7 +62,7 @@ func mcpTaskText(t *Task, base string, user asker) string {
 	if settings().Users != nil && slices.Contains(t.Followers, user.Name) {
 		facts = append(facts, "the user follows it")
 	}
-	if maker := t.Maker(); maker != "" && maker != t.Assignee && settings().Users != nil {
+	if maker := t.CreatedBy; maker != "" && maker != t.Assignee && settings().Users != nil {
 		if maker == user.Name {
 			maker += " (the user)"
 		}

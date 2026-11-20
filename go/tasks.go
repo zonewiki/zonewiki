@@ -447,7 +447,7 @@ func taskLosers(from, to string) []string {
 // see: who made it (a task nobody is known to have made: anyone, as for
 // deleting it), or an admin.
 func mayNarrowTask(user asker, t *Task) bool {
-	return t.Maker() == user.Name || t.Maker() == "" || settings().isAdmin(user.Name)
+	return t.CreatedBy == user.Name || t.CreatedBy == "" || settings().isAdmin(user.Name)
 }
 
 // sharedBy: the private task t (its Owner set to none already) is shared
@@ -729,13 +729,9 @@ func changeTaskFields(user asker, t *Task, data jsonObj) (named []string, err er
 
 // sentBack: an undo sends the old history back with the old fields: of
 // the entries Zone has had for the task (knownHistory). Who made it is
-// written on the task first (created_by, for a task from before it was),
-// so no history sent makes it anyone else's.
+// the task's created_by, which no history sent changes.
 func sentBack(user asker, t *Task, data jsonObj) {
 	if data.Has("history") {
-		if settings().Users != nil && t.CreatedBy == "" {
-			t.CreatedBy = t.Maker()
-		}
 		t.History = knownHistory(t.ID, sentHistory(cleanHistory(data["history"]), t.History), t.History)
 		checkBy(user.Name, t)
 	}
@@ -968,7 +964,7 @@ func noteBrought(user string, ids []string) {
 // someone else made is closed (Won't do), not deleted: others have seen it.
 func mayDeleteTask(user asker, t *Task) bool {
 	s := settings()
-	if s.Users == nil || privateOwner(t.Owner) || t.Maker() == user.Name || t.Maker() == "" || s.isAdmin(user.Name) {
+	if s.Users == nil || privateOwner(t.Owner) || t.CreatedBy == user.Name || t.CreatedBy == "" || s.isAdmin(user.Name) {
 		return true
 	}
 	brought.Lock()

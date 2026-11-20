@@ -108,14 +108,9 @@ func validName(name string) bool {
 	return true
 }
 
-// serveFile serves name from dir (a file, never a folder or anything
-// outside dir); a disposition ("attachment") makes it a download.
-func serveFile(w http.ResponseWriter, r *http.Request, dir, name, disposition string) {
-	serveFS(w, r, os.DirFS(dir), name, disposition)
-}
-
-// serveFS serves name from files, a folder's (os.DirFS) or the binary's,
-// as serveFile does.
+// serveFS serves name from files, a folder's (os.DirFS) or the binary's (a
+// file, never a folder or anything outside it); a disposition
+// ("attachment") makes it a download.
 func serveFS(w http.ResponseWriter, r *http.Request, files fs.FS, name, disposition string) {
 	if !validName(name) {
 		http.NotFound(w, r)

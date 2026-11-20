@@ -57,8 +57,8 @@ function fieldsOf(p, defaultView = 'today') {
     noshare: isTrue(p.noshare),
     // home=off: the list's tasks are left out of My tasks.
     home: String(p.home || '').toLowerCase() === 'off',
-    // My tasks: the kinds of mail the user turned on (none until they do;
-    // "off", from when one mail was on by itself, is none), in MAIL's order.
+    // My tasks: the kinds of mail the user turned on (none until they do),
+    // in MAIL's order.
     mail: MAIL.filter(k => (p.mail || '').toLowerCase().split(',').includes(k)).join(','),
   };
 }

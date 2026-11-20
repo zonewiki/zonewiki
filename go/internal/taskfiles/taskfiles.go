@@ -1518,11 +1518,3 @@ func (s *Store) ReadAllStrict(user asker.Asker) (open, closed []*Task, err error
 	}
 	return open, closed, nil
 }
-
-// Snapshot: the open tasks user sees and every closed one (this month's
-// and the archives'), read together.
-func (s *Store) Snapshot(user asker.Asker) (open, done []*Task) {
-	s.view.RLock()
-	defer s.view.RUnlock()
-	return s.readOpen(user), append(s.readClosed(user), s.readArchived(user, s.Owners(user))...)
-}

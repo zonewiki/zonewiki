@@ -39,9 +39,6 @@ func runGitFor(timeout time.Duration, args ...string) gitResult {
 	return runGitIn(timeout, "", args...)
 }
 
-// runGitInput: runGit with input on git's stdin.
-func runGitInput(input string, args ...string) gitResult { return runGitIn(gitTimeout, input, args...) }
-
 func runGitIn(timeout time.Duration, input string, args ...string) gitResult {
 	return runGitEnv(timeout, input, nil, args...)
 }
@@ -115,9 +112,8 @@ func setCommitter() {
 }
 
 // commitAuthor: who a commit is by, as the history shows it, with users: a
-// user's name, or whoever committed by hand; "" for Zone's own (also those
-// from before Leaf was called Zone), and without users, so a wiki without
-// them shows no names.
+// user's name, or whoever committed by hand; "" for Zone's own, and
+// without users, so a wiki without them shows no names.
 func commitAuthor(name string) string {
 	if settings().Users == nil || name == appName {
 		return ""
@@ -322,9 +318,9 @@ func packNow(atLeast int) {
 // whatever commits (Repo.Join: it reads the whole history, minutes in a
 // repository of some hundred thousand commits), and no commit waits for
 // it; only the packs it stands for, and what is loose and packed now, are
-// removed while no commit runs, which reads no object. (Until 2026-11-16
-// all of it ran under commitMu: every save of the wiki waited for the
-// join, as long as the history made it.)
+// removed while no commit runs, which reads no object: under commitMu all
+// of it, every save of the wiki would wait for the join, as long as the
+// history makes it.
 func joinPacks(repo gitrepo.Repo) gitrepo.Result {
 	old, r := repo.Join(context.Background(), joinTimeout)
 	if r.Code != 0 || len(old) == 0 {

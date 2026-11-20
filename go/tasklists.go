@@ -196,7 +196,7 @@ func taskList(t *Task, lists map[string]ListInfo) string {
 // list:inbox). With users those are each user's own, private: a new task
 // goes there unless it is made in a list or names one, and a shared task is
 // always in a list. Without users they are the wiki's. No list is called so
-// (checkListName). "none" named them until 2026-11 and still does.
+// (checkListName). "none" names them too.
 const inboxRef = "inbox"
 
 // isInbox: ref names the Inbox: "inbox" or "none", but for a user who sees

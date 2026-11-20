@@ -545,8 +545,6 @@ how headings carry their ids is the renderer's (`Env.HeadingIDs`: `id` on a page
 
 **A heading's id is `mdtext.HeadingID`** of its text, the same function a `[[page#Section]]` link's anchor comes from (`SectionAnchor`) and the browser's `headingId` is held to (`tests/test_text_parity.py`):
 what is no letter, digit, `_`, `-` or space goes, then the ends are trimmed, so "& more" is `more`.
-(Until 2026-11 the renderer had a function of its own, which trimmed first: a heading that starts or ends with a sign and a space had a hyphen there, `-more`, and a link to it led nowhere.
-A link written to such an id by hand no longer matches.)
 
 ### Section headings and HTML post-processing
 
@@ -606,8 +604,8 @@ They share code by `import`, not through `window`:
 
 ### Shared text functions
 
-`js/mdtext.js` holds the text functions the browser shares with the server, each the copy of a Go one: `toSlug`, `headingId`, `splitWikilink`/`wikilinkHref`, `queryWords`, `mathFence`, `opensCodeFence`, `taskCheckboxOffsets`, `toggleCheckboxText`.
-No DOM and no imports, so Node runs them: `tests/test_text_parity.py` holds them to the answers the Go functions are held to (`go/testdata/golden.json.gz`).
+`js/mdtext.js` holds the text functions the browser shares with the server, most the copy of a Go one: `toSlug`, `headingId`, `splitWikilink`/`wikilinkHref`, `queryWords`, `mathFence`, `opensCodeFence`, `toggleCheckboxText` (`mdtext.ToggleCheckbox`), and `taskCheckboxOffsets`, the browser's own count by lines for a card's subtasks.
+No DOM and no imports, so Node runs them: `tests/test_text_parity.py` holds them to the answers in `go/testdata/golden.json.gz`, which the Go functions are held to too (the checkboxes' and the ticks' answers are the browser's alone).
 
 ### The task app's helpers
 

@@ -22,9 +22,6 @@ import (
 // the task's history had then (lookAfter): a history says its times to the
 // minute, and what happens within the minute of a look, after it, is news. It is the user's state, not the task's: a look
 // writes no task file, makes no commit, and loads nobody's list again.
-// (Until 2026-11 a look was a "seen" entry in the task's history: a write
-// of a file everyone reads, committed under the name of who looked. Such
-// an entry is still read: it counts until the user's file has a newer one.)
 // Lost with Zone's folder, the tasks show their news again, and nothing
 // else happens. Read once (every user's: a task's History says who saw it),
 // written when a user looks.
@@ -45,8 +42,8 @@ func lookAfter(taskID string, e HistoryEntry) string { return sha1Hex(historyKey
 const seenKept = 300
 
 // look: when a user looked at a task, the last entry its history had, and
-// the last comment it had (its id; noComment when it had none; "" a look
-// from before 2026-11-16, which didn't say): a comment's time is to the
+// the last comment it had (its id; noComment when it had none): a
+// comment's time is to the
 // minute too, and one written after a look within its minute is news.
 type look struct {
 	At      string `json:"at"`
@@ -199,27 +196,22 @@ func canHaveNews(user string) map[string]bool {
 // historyWithSeen: the task's history with who looked at it (seenStore), as
 // "seen" entries where their time puts them: what the news' rule reads
 // (newsFor) and what the API answers, so the browser's rule and a task's
-// History ("Seen · anna") have them as they always did. A "seen" entry the
-// task's file still has (from before the looks were kept apart) stays
-// unless its user has looked since.
+// History ("Seen · anna") have them as they always did. A "seen" entry in
+// the task's file (written there by hand or by an import) is none.
 func historyWithSeen(t *Task) []HistoryEntry {
 	if t.Private() {
 		return t.History
 	}
 	seen := seenOf(t.ID)
-	if len(seen) == 0 {
+	isSeen := func(e HistoryEntry) bool { return e.Event == "seen" }
+	if len(seen) == 0 && !slices.ContainsFunc(t.History, isSeen) {
 		return t.History
 	}
 	out := make([]HistoryEntry, 0, len(t.History)+len(seen))
 	for _, e := range t.History {
-		if e.Event == "seen" {
-			if at, ok := seen[e.By]; ok && at.At >= e.At {
-				continue // looked since
-			} else if ok {
-				delete(seen, e.By)
-			}
+		if !isSeen(e) {
+			out = append(out, e)
 		}
-		out = append(out, e)
 	}
 	users := make([]string, 0, len(seen))
 	for user := range seen {

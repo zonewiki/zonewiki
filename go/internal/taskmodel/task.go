@@ -31,8 +31,7 @@ type Task struct {
 	// assigned: the server decides what a name that isn't counts as.
 	Assignee string
 	// CreatedBy: the user who made the task, "" unknown (and no key in the
-	// file): a task from before the field, or a wiki without users. Maker
-	// answers for those too.
+	// file): a wiki without users, or a task written by hand.
 	CreatedBy string
 	// Followers: the users who follow the task (no key in the file when
 	// there are none): they are told of its news as who made it is, without
@@ -386,21 +385,6 @@ var DatedEvents = map[string]bool{"start": true, "due": true, "repeat": true}
 
 // NamedEvents: the history events that say from and to which user.
 var NamedEvents = map[string]bool{"assigned": true, "mentioned": true}
-
-// Maker: the user who made the task: its CreatedBy, and for a task from
-// before that field whoever its history's "created" entry is by; "" when
-// neither says (no users then, or the entry left the capped history).
-func (t *Task) Maker() string {
-	if t.CreatedBy != "" {
-		return t.CreatedBy
-	}
-	for _, e := range t.History {
-		if e.Event == "created" {
-			return e.By
-		}
-	}
-	return ""
-}
 
 // CleanFollowers: followers as they are kept: names as CleanAssignee leaves
 // them, each once, in their order; nil for none.

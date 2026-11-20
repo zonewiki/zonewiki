@@ -223,18 +223,13 @@ def test_opening_a_task_given_to_you_says_seen(alice, smtp):
 
 
 def test_no_mail_until_it_is_turned_on(alice, smtp, wiki_dir):
-    """Mail is opt-in: someone who never opened the settings gets none, and
-    "off" from when the one mail was on by itself reads as none."""
+    """Mail is opt-in: someone who never opened the settings gets none, nor
+    who turned it off again."""
     new(alice, title="For carol's colleague", assignee="bob")
     mails(smtp, 1)                                             # bob turned it on (the fixture)
     smtp.mails.clear()
     mail_on(alice, "bob", "", was="mail=assigned")
     new(alice, title="Quiet", assignee="bob")
-    mails(smtp, 0)
-    registry = wiki_dir / "private/bob/_tasks/lists.json"
-    registry.write_text(registry.read_text().replace('"lists": [', '"mine": {"mail": "off"},\n  "lists": [') if '"mine"' not in registry.read_text()
-                        else registry.read_text())
-    new(alice, title="Still quiet", assignee="bob")
     mails(smtp, 0)
 
 
@@ -300,8 +295,7 @@ def test_a_look_is_the_users_not_the_tasks(alice, wiki_dir, smtp):
     opening a task with news writes no task file and changes no list's word,
     so nobody's list loads again for a look; the API still answers who saw
     it, in the task's history; an undo that sends the history back writes no
-    look into the task; and a "seen" entry a task's file has from before
-    counts until its user looks again."""
+    look into the task; and a "seen" entry in a task's file is no look."""
     import json
     task = new(alice, title="Check the invoice", assignee="bob", due_date="2030-01-01")
     url = f"/api/tasks/{task['id']}"
@@ -325,7 +319,7 @@ def test_a_look_is_the_users_not_the_tasks(alice, wiki_dir, smtp):
     assert alice.put(url, json={"due_date": "2030-01-01", "history": seen["history"]}, headers=HOST).status_code == 200
     assert '"seen"' not in path.read_text() and [e["event"] for e in changed["history"]] == ["created", "seen", "due"]
     assert [e["event"] for e in alice.get("/api/tasks", headers=HOST).get_json()[0]["history"]] == ["created", "seen"]
-    # From before the looks were kept apart: a task whose file says that carol... dan saw it.
+    # A task whose file says that dan saw it: he hasn't, as far as Zone knows.
     other = new(alice, title="An old one", assignee="dan")
     tasks = json.loads(path.read_text())
     for t in tasks:
@@ -333,7 +327,9 @@ def test_a_look_is_the_users_not_the_tasks(alice, wiki_dir, smtp):
             t["history"].append({"at": "2030-01-01T10:00", "event": "seen", "by": "dan"})
     path.write_text(json.dumps(tasks))
     login(alice, "dan")
-    assert "new" not in alice.get("/api/tasks/due-count", headers=HOST).get_json()
+    assert alice.get("/api/tasks/due-count", headers=HOST).get_json()["new"] == 1
+    [old] = [t for t in alice.get("/api/tasks", headers=HOST).get_json() if t["id"] == other["id"]]
+    assert "seen" not in [e["event"] for e in old["history"]]
 
 
 def test_the_history_keeps_who_made_a_task_and_who_has_it(alice, smtp):

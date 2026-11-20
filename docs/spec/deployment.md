@@ -830,22 +830,5 @@ The task files are already parsed once and kept until a file's time, size or ino
 
 ## From Zone 1 (or Leaf)
 
-Zone 2 reads only today's names; what Zone 1 still answered to from before its renames (Leaf, Deck, Scratch) is gone.
-Start the last Zone 1 release once on the wiki first: it moves `.leaf/` to `.zone/` and `_deck/` to `_tasks/`, and takes the settings file out of git.
-The rest is by hand:
-
-| What | Before | Now |
-|------|--------|-----|
-| `.env` | `LEAF_…` variables | `ZONE_…`; the wiki's settings (password, users, hosts …) are in `.zone/config`, not there |
-| Pages | `[[deck …]]`, `home=1` | `[[tasks: …]]`, `pin=1` |
-| Addresses | `/deck`, `/api/deck/…`, `/api/scratch`, `/page/_scratch` | `/tasks`, `/api/tasks/…`, `/api/notes`, `/notes` |
-| Keys | `g s`, `g d`, `c s` | `g n`, `g a`, `c n` |
-| MCP tools | `leaf_help`, `file_scratch_note` | `zone_help`, `file_note` |
-| MCP argument | `scratch` | `note` (write_page) or `notes` (search_wiki, list_pages) |
-| The image | | `ghcr.io/zonewiki/zonewiki`, its binary `/app/zonewiki` |
-
-To rewrite the embeds, in the wiki's folder, then commit:
-
-```bash
-grep -rlZi '\[\[deck' --include='*.md' . | xargs -0 sed -i -E 's/\[\[deck\]\]/[[tasks:]]/Ig; s/\[\[deck[[:space:]]+/[[tasks: /Ig'
-```
+Zone takes nothing over from an older Zone's files (Older data in `docs/spec/tasks.md`).
+A wiki last run by Zone 1 (or Leaf) is started once with the last Zone 1 release (it moves `.leaf/` to `.zone/` and `_deck/` to `_tasks/`), then once with Zone 1caf0d78 or older, which takes its lists and views over, before this one; `[[deck …]]` embeds and Zone 1's names (`/deck`, `leaf_help`, `LEAF_…` in `.env`) are rewritten by hand.

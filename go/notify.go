@@ -22,8 +22,7 @@ type assignedBefore map[string]string
 // The kinds of mail about tasks a user can turn on (My tasks' settings):
 // a task given to them, a mention of them, a comment on a task they have or
 // gave. "mail" in their registry's mine names those turned on, "," between.
-// None is turned on until they do it: "" and "off" (what turned the one
-// mail off until 2026-11, when it was on by itself) are none.
+// None is turned on until they do it.
 var mailKinds = []string{"assigned", "mentioned", "comments"}
 
 // mails: user gets the mails of kind: the deployment sends mail, they have
@@ -83,7 +82,7 @@ func tellComment(by string, t *Task, text string, named []string) {
 	}
 	tellMentioned(by, t, named, text)
 	var told []string
-	for _, name := range append([]string{t.Assignee, t.Maker()}, t.Followers...) {
+	for _, name := range append([]string{t.Assignee, t.CreatedBy}, t.Followers...) {
 		// (Who made it or has it may be none of its list's members by now: a
 		// list narrowed since. They don't see the task, so no mail tells them.)
 		if name == "" || name == by || slices.Contains(named, name) || slices.Contains(told, name) || !mails(s, name, "comments") ||

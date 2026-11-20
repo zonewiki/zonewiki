@@ -20,10 +20,9 @@ type apiTask struct{ *Task }
 
 func (a apiTask) MarshalJSON() ([]byte, error) {
 	if settings().Users != nil {
-		// created_by for every task, also one from before the field (Maker),
-		// and in its history who looked at it (historyWithSeen).
+		// In its history who looked at it (historyWithSeen).
 		t := *a.Task
-		t.CreatedBy, t.History = a.Maker(), historyWithSeen(a.Task)
+		t.History = historyWithSeen(a.Task)
 		if len(t.Followers) > 0 {
 			t.Followers = followersSeen(a.Task) // those who see it: the others are told nothing
 		}

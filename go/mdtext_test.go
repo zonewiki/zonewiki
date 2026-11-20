@@ -183,12 +183,12 @@ func TestTaskLineKeys(t *testing.T) {
 }
 func TestToggleNthCheckbox(t *testing.T) {
 	text := "---\n- [ ] not one\n---\n- [ ] a\n```\n- [ ] code\n```\n> - [x] b <!--t:2026-01-01T10:00:00 d:2026-01-02T10:00:00-->\n- [ ]\n"
-	got := mdtext.ToggleNthCheckbox(text, 1, true, now())
+	got := toggleNthCheckbox(text, 1, true, now())
 	if !strings.Contains(got, "> - [ ] b <!--t:2026-01-01T10:00:00-->\n") {
 		t.Errorf("untick: %q", got)
 	}
-	got = mdtext.ToggleNthCheckbox(text, 0, true, now())
-	if !strings.Contains(got, "- [x] a <!--d:") || mdtext.ToggleNthCheckbox(text, 2, true, now()) != text {
+	got = toggleNthCheckbox(text, 0, true, now())
+	if !strings.Contains(got, "- [x] a <!--d:") || toggleNthCheckbox(text, 2, true, now()) != text {
 		t.Errorf("tick: %q", got)
 	}
 }

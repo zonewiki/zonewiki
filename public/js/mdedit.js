@@ -1,6 +1,5 @@
 import { closeOnBackdropClick, continueList, localDate, pasteUrlAsLink } from './util.js';
 import { linkAutocomplete } from './completion.js';
-import { taskCheckboxOffsets } from './mdtext.js';
 
 // ── Markdown textarea ─────────────────────────────────────────────────────────
 // What makes a textarea Zone's markdown editor, shared by the page editor
@@ -487,13 +486,12 @@ function expandSnippet(textarea) {
   return false;
 }
 
-// A click on the Nth checkbox of a preview ticks the Nth item in the
-// textarea. Through execCommand, so it lands on the undo stack and fires
-// `input` (preview, unsaved dot, auto-save) like any other edit.
-export function toggleCheckboxInTextarea(textarea, idx, frontmatter = true) {
-  const offsets = taskCheckboxOffsets(textarea.value, frontmatter);
-  if (idx >= offsets.length) return;
-  const at = offsets[idx];
+// A click on a checkbox of the preview ticks its item in the textarea, at
+// the mark the server said it is at (`at`: the preview's marks). Through
+// execCommand, so it lands on the undo stack and fires `input` (preview,
+// unsaved dot, auto-save) like any other edit.
+export function toggleCheckboxInTextarea(textarea, at) {
+  if (at === undefined || !' xX'.includes(textarea.value[at] || '!')) return;
   const newChar = textarea.value[at] === ' ' ? 'x' : ' ';
   const { selectionStart, selectionEnd, scrollTop } = textarea;
   textarea.focus({ preventScroll: true });

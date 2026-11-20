@@ -302,7 +302,7 @@ func groupNameTaken(s *Settings, name, as string) bool {
 	// folder's history under it, whether the history holds a page yet or
 	// not: else a group renamed before it had one would leave the name to
 	// the next group, and take it back with that group's past once that one
-	// moved on. And two that went by it (a wiki from before) take it back
+	// moved on. And two that went by it (written so by hand) take it back
 	// neither: its history is no one group's.
 	for g, was := range s.Was {
 		if g != as && slices.Contains(was, name) {

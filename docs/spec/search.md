@@ -507,7 +507,7 @@ Targets that name nothing in the wiki (a typo, a renamed page) are listed before
 
 `./run.sh eval [FILE]` (a path in the wiki, extra args go to `zonewiki eval`, e.g. `--k 5`) builds the app image with semantic search as `ZONE_SEMANTIC_SEARCH` says, as `up` does, and mounts the wiki read-only.
 Without a container: `ZONE_DATA=~/zonewiki go/zonewiki eval FILE` (hybrid only with onnxruntime's library on the loader's path).
-Tasks are results as in `search_wiki` (the Python tool, until 2026-10, left them out by mistake: numbers from then are higher than now for the same ranking).
+Tasks are results as in `search_wiki`.
 
 ### The report
 
