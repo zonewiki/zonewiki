@@ -186,6 +186,38 @@ func TestQueryLogMovesAsideWhenFull(t *testing.T) {
 	}
 }
 
+// Zone's own state that holds users' words is its owner's alone to read on
+// the host, as the settings file is: the query log (every user's queries,
+// and the private pages they found), a task archive's records (private
+// tasks' titles), what a user has seen, the semantic cache's pages.
+func TestStateWithUsersWordsIsOwnerOnly(t *testing.T) {
+	testWiki(t, map[string]string{"golf": "# Golf\n"})
+	settings().QueryLog = true
+	old := filepath.Join(filepath.Dir(queryLogPath()), "queries.jsonl")
+	if err := os.MkdirAll(filepath.Dir(old), 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(old, []byte("{}\n"), 0o644); err != nil { // a log from before
+		t.Fatal(err)
+	}
+	logQuery("golf", "", nil)
+	archive := filepath.Join(cfg.Data, "private/alice/_tasks/closed-2001-01.json")
+	saveArchiveDocs(archive, "stamp", nil)
+	seen := seenPath("alice")
+	if err := os.MkdirAll(filepath.Dir(seen), 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(seen, []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	markSeen("alice", &Task{ID: "t1"})
+	for _, path := range []string{queryLogPath(), archiveDocsPath(archive), seen} {
+		if st, err := os.Stat(path); err != nil || st.Mode().Perm()&0o077 != 0 {
+			t.Errorf("%s: %v %v", path, st.Mode(), err)
+		}
+	}
+}
+
 // A pattern that backtracks for ages in Python (Python ran it in a process
 // of its own, killed after a timeout) is linear in RE2.
 func TestCatastrophicRegexIsFast(t *testing.T) {

@@ -46,3 +46,19 @@ func TestAtomicWriteModesAndLinks(t *testing.T) {
 		t.Errorf("left over: %v", entries)
 	}
 }
+
+// WriteOwnerOnly: the file is its owner's alone, a new one and an old one
+// that others could read.
+func TestWriteOwnerOnly(t *testing.T) {
+	dir := t.TempDir()
+	fresh, old := filepath.Join(dir, "new.json"), filepath.Join(dir, "old.json")
+	_ = os.WriteFile(old, []byte("{}\n"), 0o644)
+	for _, p := range []string{fresh, old} {
+		if err := WriteOwnerOnly(p, "{}\n"); err != nil {
+			t.Fatal(err)
+		}
+		if st, _ := os.Stat(p); st.Mode().Perm() != 0o600 {
+			t.Errorf("%s: %o", p, st.Mode().Perm())
+		}
+	}
+}

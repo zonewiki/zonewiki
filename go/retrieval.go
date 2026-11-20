@@ -742,7 +742,7 @@ func saveArchiveDocs(path, stamp string, docs []*SearchDoc) {
 		return
 	}
 	if err := os.MkdirAll(filepath.Dir(file), 0o777); err == nil {
-		_ = atomicfile.Write(file, b.String())
+		_ = atomicfile.WriteOwnerOnly(file, b.String()) // private tasks' records too
 	}
 }
 
@@ -1987,10 +1987,13 @@ func logQuery(raw, under string, hits []*SearchDoc) {
 	}
 	var f *os.File
 	if err == nil {
-		f, err = os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o666)
+		// Owner-only: every user's queries, and what of theirs they found.
+		f, err = os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	}
 	if err == nil {
-		_, err = f.WriteString(jsonobj.Text(entry) + "\n")
+		if err = f.Chmod(0o600); err == nil { // a log from before
+			_, err = f.WriteString(jsonobj.Text(entry) + "\n")
+		}
 		if cerr := f.Close(); err == nil {
 			err = cerr
 		}

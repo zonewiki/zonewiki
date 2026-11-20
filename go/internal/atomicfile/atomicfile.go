@@ -10,7 +10,16 @@ import (
 // the whole old file or the whole new one, never a half-written one, and a
 // crash in the middle leaves the old one. The file keeps its permissions
 // (a new one: 0666 less the umask), a link stays a link.
-func Write(path, text string) error {
+func Write(path, text string) error { return write(path, text, 0) }
+
+// WriteOwnerOnly: Write for a file only its owner reads, whatever mode it
+// had (0600): Zone's own state that holds users' words (what they searched,
+// what they saw, their tasks' records), which other accounts on the host
+// have no business reading, as they have none reading the settings file.
+func WriteOwnerOnly(path, text string) error { return write(path, text, 0o600) }
+
+// write: Write, the file's mode mode (0: as it was, or a new file's).
+func write(path, text string, mode os.FileMode) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil { // _tasks/ in a new wiki
 		return err
 	}
@@ -29,7 +38,9 @@ func Write(path, text string) error {
 	if err != nil {
 		return err
 	}
-	mode := st.Mode().Perm()
+	if mode == 0 {
+		mode = st.Mode().Perm()
+	}
 	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp-*")
 	if err != nil {
 		return err

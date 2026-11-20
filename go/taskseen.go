@@ -170,7 +170,7 @@ func markSeen(user string, t *Task) {
 	text, err := json.MarshalIndent(seen, "", "  ")
 	seenStore.Unlock()
 	if err == nil {
-		err = atomicfile.Write(path, string(text)+"\n")
+		err = atomicfile.WriteOwnerOnly(path, string(text)+"\n")
 	}
 	if err != nil {
 		logf("tasks: what %s has seen could not be written: %v", user, err)

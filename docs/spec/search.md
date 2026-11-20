@@ -482,7 +482,7 @@ Then the questions not ranked first in every mode, with their rank per mode (`-`
 
 With `query-log = yes` in the settings file (off by default), `search_wiki` appends each query to `.zone/queries.jsonl` (`logQuery`),
 one JSON line: `at` (local time), `q`, `under` when given, and `results`, what it found as targets (`slug#anchor`, `task:<id>`, `resultTarget`).
-In `.zone/`, so never in git; past 1 MB (`queryLogMax`) the file moves to `queries.1.jsonl`, replacing the one before.
+In `.zone/`, so never in git, and readable by Zone's user alone (0600); past 1 MB (`queryLogMax`) the file moves to `queries.1.jsonl`, replacing the one before.
 A write that fails is logged (`[queries] …`) and doesn't fail the search.
 Only `search_wiki`: the browser's search runs as you type, so its queries are fragments.
 

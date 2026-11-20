@@ -616,7 +616,7 @@ func (x *semanticIndex) saveCache() {
 	}
 	if err == nil {
 		tmp := strings.TrimSuffix(x.cachePath, filepath.Ext(x.cachePath)) + "." + strconv.Itoa(os.Getpid()) + ".tmp"
-		if err = os.WriteFile(tmp, b, 0o666); err == nil {
+		if err = os.WriteFile(tmp, b, 0o600); err == nil { // owner-only: every page's slug, private ones too
 			err = os.Rename(tmp, x.cachePath)
 		}
 	}

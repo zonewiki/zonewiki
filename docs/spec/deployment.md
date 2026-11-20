@@ -578,6 +578,9 @@ Zone's own state, none of it in git (`.git/info/exclude` has `/.zone/*`, `exclud
 - `queries.jsonl` — the query log, only with `query-log = yes`
 - `tasks-checked`, `views-named` — marks that a start has checked the task files, and rewritten the views' old names in the pages, so later starts skip it
 
+What holds users' words or secrets is written readable by Zone's user alone (0600), whatever the umask: `config`, `secret_key`, `signed-out`, `links`, `grants`, `seen/`, `drafts/`, the index files, `index/tasks/` (private tasks' titles among them), `embeddings.json` (every page's slug) and `queries.jsonl` (every user's queries and what they found) (`atomicfile.WriteOwnerOnly`; a file from before is made so at its next write).
+The pages themselves, in the wiki, keep the umask's mode, as a file made in an editor does.
+
 ### A git remote
 
 Optional: `./run.sh config set git-remote git@github.com:user/wiki.git`.
