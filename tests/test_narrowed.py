@@ -265,6 +265,20 @@ def test_without_the_group_a_list_for_it_is_no_list(client, list_wiki):
     assert L.SECRET in call(client, named, "search_tasks", list=L.LIST)
 
 
+def test_without_the_group_her_private_page_names_no_task_of_its_list(client, list_wiki):
+    """carol's private page refers to a task of hiring, which she sees by her
+    group: search reads a page with its references as the tasks' titles, and
+    her connection without the group read the title in search_wiki's
+    passage, where read_page and search_tasks hid the task."""
+    (list_wiki / "private/carol").mkdir(parents=True, exist_ok=True)
+    (list_wiki / "private/carol/notes.md").write_text(f"# Notes\n\nThe quokkaflute plan: [[task:{L.IDS['open'][:8]}]]\n")
+    narrowed = connect(client, "carol", "carol-pw", see=["private"])
+    for query in ("quokkaflute", L.SECRET):
+        out = call(client, narrowed, "search_wiki", query=query)
+        assert not any(m in out for m in L.MARKS) and L.SECRET not in out, out
+    assert "private/carol/notes" in call(client, narrowed, "search_wiki", query="quokkaflute")
+
+
 # ── The question and the page ───────────────────────────────────────────────
 
 def test_the_question_offers_the_places_and_the_page_says_what_was_given(client, group_wiki):

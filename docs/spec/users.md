@@ -1276,7 +1276,7 @@ The tasks' undo of an edit doesn't put a task that was private back in its list,
 **Another user's private task is no task**: by id the routes answer 404 as for an id no task has (`DELETE /api/tasks/<id>` of an unknown id stays a 204, as before);
 lists, counts, Closed and its years, the due count, Linked tasks and the section chips leave it out;
 a `[[task:…]]` to it renders as for a deleted task.
-A shared page that refers to a private task doesn't carry its title into the search index (`taskRefsAsTitles` resolves a page's references as its owner, or for a shared page as no one).
+A shared page that refers to a private task doesn't carry its title into the search index (`taskRefsAsTitles` resolves a page's references as its owner, or for a shared page as no one, and in neither case by way of a group: a task in a list for a group isn't in any page's search text, which an assistant's connection given the private pages but not that group would read in `search_wiki`).
 
 **Another user's private list is no list**: it is in no switcher, no List field and no answer; its name on a shared page (`[[tasks: list=gifts]]`) is the shared list of that name or none ("There is no list #gifts"), to its owner too, so a shared page shows everyone the same.
 A name means the same registry for one user only: two users can each have a private `gifts`, and a shared one can exist beside them; whoever has both names the shared one `shared/gifts` (List names in `docs/spec/tasks.md`).

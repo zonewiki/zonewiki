@@ -385,7 +385,11 @@ func (c *textCache) squashed(d *SearchDoc) string {
 // replaced by its task's title, what the reader sees there and what search
 // should match; only tasks everyone who sees the page sees (a private
 // page's owner's own, else shared ones), so the index can't carry a
-// private task's title into a shared page.
+// private task's title into a shared page. Not by way of a group: a
+// connection of the owner's may see their private pages but not a group's
+// list for some (asker.OnlyGroups), and the text is made once for all its
+// readers, and kept while the task files are the same, whoever joins or
+// leaves a group meanwhile.
 func taskRefsAsTitles(slug, content string) string {
 	ms := taskRefRE.FindAllStringSubmatch(content, -1)
 	if ms == nil {
@@ -395,7 +399,7 @@ func taskRefsAsTitles(slug, content string) string {
 	for i, m := range ms {
 		refs[i] = strings.ToLower(m[1])
 	}
-	tasks := resolveTaskRefs(asUser(placeOf(slug).user()), refs)
+	tasks := resolveTaskRefs(asUser(placeOf(slug).user()).WithGroups(nil), refs)
 	return taskRefRE.ReplaceAllStringFunc(content, func(s string) string {
 		if t := tasks[strings.ToLower(taskRefRE.FindStringSubmatch(s)[1])]; t != nil {
 			return mdtext.PlainTaskTitle(t.Title)

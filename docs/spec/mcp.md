@@ -129,6 +129,7 @@ All groups ticked means every group of the user's, also one they join later; oth
 
 A place that wasn't given is, to that connection, what another user's private folder or a group they aren't in is to anyone: no page, task, list, upload, search result, count, version or commit message names it, at any tool or route its token reaches.
 It holds because the limit is in the questions everything asks (`place.sees`, `canSeeTask`, `canSeeList`, `inGroup` in `go/access.go`; the task store reads no private file for it), not in the tools.
+What is made once for all of a page's readers asks for the least of them: search reads a page with its `[[task:…]]` as the tasks' titles, and names there no task of a list for a group (`taskRefsAsTitles`), else a private page that refers to one would give its title to a connection given the private place but not the group.
 
 **Without the private place** it makes nothing private either, since it couldn't see it again: a note, a page under `private/`, a private list, a task without a list (which would go to the Inbox) and a move into the Inbox are refused, saying so ("This connection wasn't given your private pages, notes and tasks …: use a shared page or a shared list").
 A list it makes isn't pinned (pins are kept with the user's own lists), and My tasks' own order and settings aren't read.
