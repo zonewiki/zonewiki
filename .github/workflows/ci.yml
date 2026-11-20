@@ -3,7 +3,8 @@
 # container registry as ghcr.io/<owner>/zonewiki, which compose.nas.yaml
 # pulls. On a v* tag the release binaries are attached to its GitHub release.
 #
-# The same checks as .forgejo/workflows/ci.yml, on GitHub's runners. No
+# The same checks as .forgejo/workflows/ci.yml, on GitHub's runners (not
+# the bench: Forgejo runs it, The bench in docs/spec/testing.md). No
 # secrets to set up: the image and release jobs use the workflow's GITHUB_TOKEN.
 # A new package on ghcr.io starts private; make it public once (the package's
 # settings on GitHub) so a NAS can pull it without logging in.
@@ -47,20 +48,6 @@ jobs:
           fetch-depth: ${{ matrix.check == 'leaks' && '0' || '1' }}
       - name: ./run.sh ${{ matrix.check }}
         run: ./run.sh ${{ matrix.check }}
-
-  bench:
-    # The tasks at a team's size against their budgets, then under the race
-    # detector (./run.sh bench; The bench in docs/spec/testing.md). A job of
-    # its own, which the image doesn't wait for: a slow runner fails it, and
-    # that is looked at, not a release held up. Three times the time budgets:
-    # the runners are slower and noisier than the machine they were set on.
-    runs-on: ubuntu-26.04
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - name: ./run.sh bench
-        env:
-          ZONE_BENCH_SLACK: 3
-        run: ./run.sh bench
 
   retrieval:
     # Search's quality against its floor (./run.sh retrieval; Measuring

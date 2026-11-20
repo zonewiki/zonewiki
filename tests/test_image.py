@@ -168,6 +168,15 @@ def test_forgejo_runs_no_forks_code():
             assert "needs: [checks]" in job, name
 
 
+def test_only_forgejo_runs_the_bench():
+    # The bench measures time against budgets: on Forgejo's runner, the same
+    # machine every run. GitHub gets only what passed there, and its shared
+    # runners would fail it for their neighbours, on the public main.
+    assert "\n  bench:\n" in (REPO / ".forgejo" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    github = (REPO / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    assert "\n  bench:\n" not in github and "./run.sh bench" not in github
+
+
 def test_a_tag_releases_the_binaries():
     # On a v* tag, once the checks pass, GitHub's CI builds the binaries with
     # run.sh (in the tools image, whose Go is the image's: above) and attaches

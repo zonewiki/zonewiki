@@ -388,7 +388,8 @@ Only **leaks** and **github** fetch the full history; the others check out the l
 It waits for the checks because the jobs share the host's engine:
 beside test's worker per CPU and e2e's browsers, the bench's clients at once measured the CPU they waited for
 (a page beside thirty searches seven times slower than alone, where the slack allows three).
-GitHub's workflow has the same job, beside the checks, since each of its jobs has a machine of its own.
+GitHub's workflow has no bench: what reaches GitHub has passed Forgejo's run (a fork's pull request runs no bench anywhere),
+and GitHub's shared runners would measure their neighbours more than Zone, a red mark on the public main that says nothing.
 
 **retrieval** measures search's quality on the sample wiki against its floor (Measuring retrieval in `docs/spec/search.md`).
 It builds the app's image with the model, under a tag of its own (`zonewiki-retrieval`), from the engine's cache unless the code or the model changed.
@@ -472,7 +473,6 @@ Tests: `tests/test_image.py` (the job's shape: after the checks, a push only, ne
 | Job | Runs | When |
 |-----|------|------|
 | **test**, **e2e**, **leaks** | The checks, as on Forgejo | Every run |
-| **bench** | `./run.sh bench` | Beside the checks |
 | **image** | Builds the `Containerfile` once per architecture, pushes it by digest | Not a pull request's run, once the checks pass |
 | **manifest** | Joins the two digests under the tags | After **image** |
 | **release** | `./run.sh binaries`, the files attached to the tag's GitHub release (Release binaries) | A `v*` tag, once the checks pass |

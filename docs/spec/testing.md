@@ -327,7 +327,7 @@ It is several times slower, so it is no part of a plain run: run it with the ben
 
 ### The bench
 
-`tests/bench_tasks.py` measures the tasks at a team's size and is no part of the suites (its name is no test module's): `./run.sh bench`, which is also a job of CI's (or `./run.sh test tests/bench_tasks.py -n 0 -s` for the table alone).
+`tests/bench_tasks.py` measures the tasks at a team's size and is no part of the suites (its name is no test module's): `./run.sh bench`, which is also a job of Forgejo's CI, not GitHub's (or `./run.sh test tests/bench_tasks.py -n 0 -s` for the table alone).
 `./run.sh bench` runs it twice: with its budgets, and then against a server built with the race detector (`ZONE_TEST_RACE=1`, without budgets), which is the only run of several clients at once on the real server under the detector.
 `ZONE_BENCH_SIZE=small|team` picks the wiki's size (team by default).
 It prints the table and fails where a number is over its budget (`BUDGETS`): run it before and after a change to how tasks are read, written or sent.
@@ -358,7 +358,8 @@ Its parts:
 
 ### CI
 
-Forgejo and GitHub run the same `run.sh` commands in the image `Containerfile.tools` builds (CI in `docs/spec/deployment.md`): the checks (`test`, `e2e`, `leaks`), the bench (`./run.sh bench` with `ZONE_BENCH_SLACK=3`), the retrieval floor (`./run.sh retrieval`), and the image.
+Forgejo and GitHub run the same `run.sh` commands in the image `Containerfile.tools` builds (CI in `docs/spec/deployment.md`): the checks (`test`, `e2e`, `leaks`), the retrieval floor (`./run.sh retrieval`), and the image;
+the bench (`./run.sh bench` with `ZONE_BENCH_SLACK=3`) only Forgejo, on the same runner every time (Forgejo's jobs in `docs/spec/deployment.md`).
 A dependency or a test command changes in one place, `run.sh` or the tools image.
 
 ## Secret scanning
