@@ -213,11 +213,12 @@ With Go 1.27 or newer, a C compiler (for semantic search; `CGO_ENABLED=0` builds
 
 ```bash
 (cd go && go build -o zonewiki .)
-ZONE_DATA=~/zonewiki go/zonewiki
+go/zonewiki                          # the wiki in ~/zonewiki; ZONE_DATA=/path/to/wiki go/zonewiki for another
 ```
 
 In Windows PowerShell: `cd go; go build -o zonewiki.exe .; cd ..`, then `$env:ZONE_DATA="$HOME\zonewiki"; go\zonewiki.exe`.
 For semantic search, onnxruntime's library must be where the loader finds it (`docs/spec/search.md`).
+A port another program has stops Zone with what to do (`portTaken` in `go/server.go`): on a Mac, AirPlay Receiver listens on 5000, so `--addr :5001`.
 `zonewiki --help` lists the flags, the commands (`user`, `group`, `config`, `eval`, `health`, `manual`, `licenses`; each takes `--help` too) and the environment.
 
 ### What the binary holds
@@ -565,8 +566,16 @@ iOS Safari is more lenient.
 
 Set `ZONE_DATA` in `.env` to any host path (default: `~/zonewiki`).
 `run.sh` expands a leading `~` to your home directory before starting the container.
-The folder must exist: neither `run.sh up` nor Zone creates it (`loadConfig` exits with "no wiki at …"), so a mistyped path can't start an empty wiki somewhere else.
-Started without the container, Zone needs `ZONE_DATA` set (there is no default; unset or empty, it exits with "ZONE_DATA isn't set"), and the folder must exist too.
+A folder that `ZONE_DATA` names must exist: neither `run.sh up` nor Zone creates it (`loadConfig` exits with "no wiki at …"), so a mistyped path can't start an empty wiki somewhere else.
+
+Zone started with `ZONE_DATA` unset (or empty), as the binary is on a desktop, takes `~/zonewiki` (`defaultData` in `go/config.go`: `$HOME/zonewiki`),
+and makes that one folder at the first start, saying so in its log ("ZONE_DATA isn't set: made a new wiki at …");
+the commands (`zonewiki user …`, `config …`) do the same, so a password can be set before the first start.
+It makes nothing else: without a home folder, or with a file at `~/zonewiki`, it exits and says to set `ZONE_DATA`.
+At start it prints where to open it and where the wiki is, under the line it listens on:
+`Open http://localhost:5000 in a browser. The wiki is /home/anna/zonewiki`
+(`base-url` when it is set; no such line on a socket or behind compose, whose port mapping Zone doesn't know: `ZONE_BIND` set).
+
 In an existing wiki folder Zone creates what it needs (`_assets/`, `_tasks/`, `index.md`):
 
 ```

@@ -55,10 +55,11 @@ With Go 1.27 or newer, a C compiler and git:
 
 ```bash
 (cd go && go build -o zonewiki .)
-ZONE_DATA=~/zonewiki go/zonewiki
+go/zonewiki
 ```
 
-The commands are then `zonewiki user …`, `zonewiki group …` and `zonewiki config …`, with `ZONE_DATA` set.
+The wiki is then the folder `zonewiki` in your home folder, made at the first start; set `ZONE_DATA` to use another (`ZONE_DATA=/path/to/wiki go/zonewiki`).
+The commands are `zonewiki user …`, `zonewiki group …` and `zonewiki config …`, on the same wiki.
 `zonewiki --help` lists them all.
 Run by hand, Zone listens on every interface, so set a login before other machines can reach it.
 See [Without a container](../spec/deployment.md#without-a-container), and for a Unix socket or systemd, [A Unix socket](../spec/deployment.md#a-unix-socket).

@@ -139,14 +139,14 @@ It lives in the host directory pointed to by `ZONE_DATA` (default: `~/zonewiki`)
 
 Zone is at **http://localhost:5000**.
 The deployment's settings are in `.env` (gitignored; `ZONE_DATA`, `ZONE_ALLOW_REMOTE`, `TZ` …, read once into `cfg`); the wiki's own (users, password, MCP token, hosts, locale …) are in the wiki's settings file `.zone/config`, kept out of git and reloaded when it changes (`settings()`).
-The wiki lives outside the repo, in `ZONE_DATA` (default `~/zonewiki`), which must exist: pages at its root and in folders, uploads in `_assets/`, tasks and their lists in `_tasks/`, the settings file, the search index files, the semantic cache and session key in `.zone/`.
+The wiki lives outside the repo, in `ZONE_DATA` (default `~/zonewiki`), which must exist (unset, the binary makes `~/zonewiki`): pages at its root and in folders, uploads in `_assets/`, tasks and their lists in `_tasks/`, the settings file, the search index files, the semantic cache and session key in `.zone/`.
 Details: `docs/spec/deployment.md`.
 
 Without the container (Go 1.27 and a C compiler; `CGO_ENABLED=0` builds one without semantic search):
 
 ```bash
 (cd go && go build -o zonewiki .)
-ZONE_DATA=~/zonewiki go/zonewiki                 # http://localhost:5000 (serves the checkout's public/ and docs/)
+go/zonewiki                                      # http://localhost:5000, the wiki in ~/zonewiki (ZONE_DATA=… for another), the checkout's public/ and docs/
 ZONE_DATA=~/zonewiki go/zonewiki eval FILE       # measure retrieval
 ```
 

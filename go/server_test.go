@@ -226,3 +226,102 @@ func TestIdleLongEnough(t *testing.T) {
 		t.Error("not idle after the pack ended")
 	}
 }
+
+// ZONE_DATA unset: the wiki is ~/zonewiki, made at the first start (and
+// said so), taken as it is after; one that is set must exist, and nothing
+// is made for it.
+func TestTheWikiByDefault(t *testing.T) {
+	home := t.TempDir()
+	env := func(kv ...string) func(string) string {
+		m := map[string]string{"HOME": home}
+		for i := 0; i+1 < len(kv); i += 2 {
+			m[kv[i]] = kv[i+1]
+		}
+		return func(k string) string { return m[k] }
+	}
+	c, err := loadWiki(env())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want, _ := filepath.EvalSymlinks(home); c.Data != filepath.Join(want, "zonewiki") || !isDir(c.Uploads) {
+		t.Fatalf("the wiki is %s", c.Data)
+	}
+	os.WriteFile(filepath.Join(c.Data, "index.md"), []byte("# Mine\n"), 0o666)
+	if c2, err := loadWiki(env("ZONE_DATA", "")); err != nil || c2.Data != c.Data {
+		t.Fatalf("again: %v %v", c2, err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(c.Data, "index.md")); string(b) != "# Mine\n" {
+		t.Errorf("the wiki changed: %q", b)
+	}
+	// A ZONE_DATA that is set and missing: refused, not made.
+	missing := filepath.Join(home, "wkii")
+	if _, err := loadWiki(env("ZONE_DATA", missing)); err == nil || !strings.Contains(err.Error(), "no wiki at "+missing) || exists(missing) {
+		t.Errorf("a mistyped ZONE_DATA: %v", err)
+	}
+	// No home folder to put it in, or a file where it would go: refused.
+	if _, err := loadWiki(func(string) string { return "" }); err == nil || !strings.Contains(err.Error(), "ZONE_DATA isn't set") {
+		t.Errorf("no HOME: %v", err)
+	}
+	other := t.TempDir()
+	os.WriteFile(filepath.Join(other, "zonewiki"), nil, 0o666)
+	if _, err := loadWiki(func(k string) string { return map[string]string{"HOME": other}[k] }); err == nil ||
+		!strings.Contains(err.Error(), "is a file") {
+		t.Errorf("a file at ~/zonewiki: %v", err)
+	}
+	if _, err := loadWiki(func(k string) string { return map[string]string{"HOME": filepath.Join(other, "none")}[k] }); err == nil {
+		t.Error("a home folder that isn't there: made")
+	}
+}
+
+// The line at start says where to open Zone: base-url, else localhost at
+// its port; nothing on a socket or behind compose's port mapping.
+func TestOpenURL(t *testing.T) {
+	testWiki(t, nil)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	port := strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
+	if got := openURL(ln, ""); got != "http://localhost:"+port {
+		t.Errorf("%q", got)
+	}
+	if got := openURL(ln, "https://wiki.example.org"); got != "https://wiki.example.org" {
+		t.Errorf("base-url: %q", got)
+	}
+	cfg.PortMapped = true
+	if got := openURL(ln, ""); got != "" {
+		t.Errorf("behind compose: %q", got)
+	}
+	cfg.PortMapped = false
+	sock, err := net.Listen("unix", filepath.Join(t.TempDir(), "z.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sock.Close()
+	if got := openURL(sock, ""); got != "" {
+		t.Errorf("a socket: %q", got)
+	}
+	for bind, mapped := range map[string]bool{"": false, "127.0.0.1": true, "0.0.0.0": true} {
+		c, err := loadWiki(func(k string) string { return map[string]string{"ZONE_DATA": cfg.Data, "ZONE_BIND": bind}[k] })
+		if err != nil || c.PortMapped != mapped {
+			t.Errorf("ZONE_BIND=%s: %v %v", bind, c, err)
+		}
+	}
+}
+
+// A port another program has: the error says to start Zone on another one.
+func TestPortTaken(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	_, err = listen(ln.Addr().String())
+	if err == nil || !strings.Contains(portTaken(err).Error(), "zonewiki --addr :5001") {
+		t.Errorf("%v", portTaken(err))
+	}
+	if other := os.ErrNotExist; portTaken(other) != other {
+		t.Error("another error changed")
+	}
+}

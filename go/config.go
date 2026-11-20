@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -35,6 +36,10 @@ type Config struct {
 	HostData    string // the wiki folder as the host sees it
 	AllowRemote bool   // listen on the LAN: no Host check unless Hosts is set
 	Published   bool   // the container's port is open to the network (ZONE_BIND, from compose)
+	// PortMapped: compose publishes Zone's port (ZONE_BIND is set), maybe
+	// as another one (compose.nas.yaml: 5080), so the address Zone listens
+	// on isn't the one to open it at (openURL).
+	PortMapped bool
 	// IdleExit: Zone exits after this long without a request, when it
 	// listens on a socket it was handed (--addr fd:3), which whoever
 	// handed it starts Zone on again; 0: never (ZONE_IDLE_EXIT).
@@ -127,17 +132,20 @@ func loadWiki(getenv func(string) string) (*Config, error) {
 		HostData:    strings.TrimRight(strings.TrimSpace(getenv("ZONE_HOST_DATA")), "/"),
 		AllowRemote: truthy(getenv("ZONE_ALLOW_REMOTE")),
 		Published:   published(getenv("ZONE_BIND")),
+		PortMapped:  strings.TrimSpace(getenv("ZONE_BIND")) != "",
 	}
 	if c.Build == "" {
 		c.Build = sourceBuild()
 	}
-	// Required, no default, and it must exist: Zone doesn't make a wiki
-	// where a mistyped ZONE_DATA points.
-	c.Data = getenv("ZONE_DATA")
-	if c.Data == "" {
-		return nil, fmt.Errorf("ZONE_DATA isn't set. Set it to your wiki's folder, e.g. ZONE_DATA=~/zonewiki zonewiki")
-	}
-	if st, err := os.Stat(c.Data); err != nil || !st.IsDir() {
+	// A ZONE_DATA that is set must exist: Zone doesn't make a wiki where a
+	// mistyped one points. Unset, the wiki is ~/zonewiki, made if need be.
+	if c.Data = getenv("ZONE_DATA"); c.Data == "" {
+		data, err := defaultData(getenv)
+		if err != nil {
+			return nil, err
+		}
+		c.Data = data
+	} else if st, err := os.Stat(c.Data); err != nil || !st.IsDir() {
 		return nil, fmt.Errorf("no wiki at %s. Create the folder, or set ZONE_DATA to your wiki.", c.Data)
 	}
 	c.Data, _ = filepath.Abs(c.Data)
@@ -170,6 +178,39 @@ func loadWiki(getenv func(string) string) (*Config, error) {
 			"set ZONE_SMTP_HOST and ZONE_MAIL_FROM (see .env.example)")
 	}
 	return c, nil
+}
+
+// defaultDataName: the wiki's folder in the home folder, where ZONE_DATA
+// isn't set.
+const defaultDataName = "zonewiki"
+
+// defaultData: the wiki where ZONE_DATA isn't set, ~/zonewiki, made when it
+// isn't there (and said so), so that a binary started with nothing set up
+// is a wiki at once. Only this one folder is made: the home folder must be
+// there, and a ZONE_DATA that names a missing folder is still refused.
+func defaultData(getenv func(string) string) (string, error) {
+	home := getenv("HOME")
+	if home == "" && runtime.GOOS == "windows" {
+		home = getenv("USERPROFILE")
+	}
+	if home == "" {
+		return "", fmt.Errorf("ZONE_DATA isn't set, and there is no home folder (HOME) for its default ~/%s. "+
+			"Set ZONE_DATA to your wiki's folder.", defaultDataName)
+	}
+	data := filepath.Join(home, defaultDataName)
+	if st, err := os.Stat(data); err == nil {
+		if !st.IsDir() {
+			return "", fmt.Errorf("ZONE_DATA isn't set, and its default %s is a file, not a folder. "+
+				"Set ZONE_DATA to your wiki's folder.", data)
+		}
+		return data, nil
+	}
+	if err := os.Mkdir(data, 0o777); err != nil {
+		return "", fmt.Errorf("ZONE_DATA isn't set, and its default %s can't be made: %v. "+
+			"Set ZONE_DATA to your wiki's folder.", data, err)
+	}
+	logf("ZONE_DATA isn't set: made a new wiki at %s", data)
+	return data, nil
 }
 
 // published: ZONE_BIND, the address compose publishes Zone's port on

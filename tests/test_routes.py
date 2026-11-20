@@ -2503,34 +2503,50 @@ class TestVersion:
         assert "· &lt;b&gt;</p>" in body
 
     @staticmethod
-    def _start(wiki: Path | str | None) -> subprocess.CompletedProcess:
-        """Start Zone with ZONE_DATA=wiki (None: unset) until it listens."""
+    def _start(wiki: Path | str | None, home: Path | None = None) -> subprocess.CompletedProcess:
+        """Start Zone with ZONE_DATA=wiki (None: unset), and HOME=home if given, until it listens."""
         env = {k: v for k, v in os.environ.items() if not k.startswith("ZONE_")}
         if wiki is not None:
             env["ZONE_DATA"] = str(wiki)
+        if home is not None:
+            env["HOME"] = str(home)
         proc = subprocess.Popen([str(binary()), "--addr", "127.0.0.1:0"], env=env, text=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out = proc.stdout.readline()
         if " listening on " in out:
             proc.terminate()
-        _out, err = proc.communicate(timeout=60)
+        # Read through the same buffer as readline (communicate would skip
+        # what it read ahead: the lines after the first).
+        with proc.stdout, proc.stderr:
+            out += proc.stdout.read()
+            err = proc.stderr.read()
+        proc.wait(timeout=60)
         return subprocess.CompletedProcess(proc.args, 0 if " listening on " in out else proc.returncode,
                                            out, err)
 
     @pytest.mark.parametrize("wiki", [None, ""])
-    def test_refuses_to_start_without_leaf_data(self, wiki):
-        # No default wiki (there was src/data, a folder in the checkout).
-        r = self._start(wiki)
-        assert r.returncode != 0
-        assert "ZONE_DATA isn't set" in r.stderr
+    def test_without_zone_data_the_wiki_is_in_the_home_folder(self, wiki, tmp_path):
+        # A binary started with nothing set up is a wiki at once: ~/zonewiki,
+        # made and said so, and where to open it.
+        home = Path(os.path.realpath(tmp_path))
+        r = self._start(wiki, home)
+        assert r.returncode == 0, r.stderr
+        made = home / "zonewiki"
+        assert f"ZONE_DATA isn't set: made a new wiki at {made}" in r.stderr
+        assert (made / "index.md").exists() and (made / "_assets").is_dir()
+        assert re.search(rf"^Open http://localhost:\d+ in a browser\. The wiki is {re.escape(str(made))}$", r.stdout, re.M)
+        (made / "notes.md").write_text("# Notes\n", encoding="utf-8")
+        r = self._start(wiki, home)     # the next start: the same wiki, as it is
+        assert r.returncode == 0, r.stderr
+        assert "made a new wiki" not in r.stderr and (made / "notes.md").exists()
 
     def test_refuses_a_missing_wiki_folder(self, tmp_path):
-        # Zone never makes the wiki itself, so a mistyped ZONE_DATA can't
-        # start an empty wiki somewhere else.
-        r = self._start(tmp_path / "nowhere")
+        # Zone never makes a wiki that ZONE_DATA names, so a mistyped one
+        # can't start an empty wiki somewhere else (the default is made).
+        r = self._start(tmp_path / "nowhere", home=tmp_path)
         assert r.returncode != 0
         assert f"no wiki at {tmp_path / 'nowhere'}" in r.stderr
-        assert not (tmp_path / "nowhere").exists()
+        assert not (tmp_path / "nowhere").exists() and not (tmp_path / "zonewiki").exists()
 
     def test_starts_with_an_empty_wiki_folder(self, tmp_path):
         r = self._start(tmp_path)

@@ -1,5 +1,6 @@
 // Zone's web server: one process, its request checks and routes.
-// Run: ZONE_DATA=~/zonewiki zonewiki [--addr :5000] [--public dir]. Also: zonewiki eval
+// Run: zonewiki [--addr :5000] [--public dir], the wiki in ZONE_DATA
+// (default ~/zonewiki). Also: zonewiki eval
 // measures retrieval (eval.go), zonewiki health asks a running Zone whether
 // it answers (the container's healthcheck), zonewiki user and zonewiki config edit
 // and check the settings file (commands.go).
@@ -23,6 +24,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -50,7 +52,8 @@ Commands:
   help                       this text; zonewiki COMMAND --help a command's
 
 Environment:
-  ZONE_DATA                  the wiki's folder (required; it must exist)
+  ZONE_DATA                  the wiki's folder (default ~/zonewiki, made at the first start; a folder
+                             that is set must exist)
   ZONE_ALLOW_REMOTE          1: answer to every host name, not only localhost (unless hosts is set)
   ZONE_BIND                  the address the container's port is published on (compose sets it): not
                              localhost's, and no login yet, Zone asks for a password in the browser first
@@ -208,7 +211,7 @@ func main() {
 	// DNS-rebinding defence. Or a Unix socket, for a reverse proxy.
 	ln, err := listen(*addr)
 	if err != nil {
-		fatal(err)
+		fatal(portTaken(err))
 	}
 	srv := &http.Server{
 		Handler: countRequests(newHandler()),
@@ -218,7 +221,11 @@ func main() {
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
-	fmt.Printf("Zone %s (%s) listening on %s\n", version, cfg.Build, listenName(ln))
+	started := fmt.Sprintf("Zone %s (%s) listening on %s\n", version, cfg.Build, listenName(ln))
+	if u := openURL(ln, s.BaseURL); u != "" {
+		started += fmt.Sprintf("Open %s in a browser. The wiki is %s\n", u, cfg.Data)
+	}
+	fmt.Print(started) // one write: whoever reads the first line has the second
 	switch {
 	case cfg.IdleExit == 0:
 	case !handedSocket:
@@ -236,6 +243,36 @@ func main() {
 		select {} // exitWhenIdle is ending Zone, once what still runs is answered
 	}
 	fatal(err)
+}
+
+// openURL: where to open Zone, for the line at start: base-url (the
+// settings file's), else the port Zone listens on at localhost (at the
+// address it listens on, when that is one of the machine's others); "" on
+// a socket, and behind compose's port mapping, whose host port Zone
+// doesn't know (cfg.PortMapped).
+func openURL(ln net.Listener, baseURL string) string {
+	if baseURL != "" {
+		return baseURL
+	}
+	addr, ok := ln.Addr().(*net.TCPAddr)
+	if !ok || cfg.PortMapped {
+		return ""
+	}
+	host := "localhost"
+	if !addr.IP.IsUnspecified() && !addr.IP.IsLoopback() {
+		host = addr.IP.String()
+	}
+	return "http://" + net.JoinHostPort(host, strconv.Itoa(addr.Port))
+}
+
+// portTaken: a listen error, with what to do when another program has the
+// port: on a Mac, AirPlay Receiver listens on 5000, Zone's default.
+func portTaken(err error) error {
+	if errors.Is(err, syscall.EADDRINUSE) {
+		return fmt.Errorf("%w. Another program has that port (on a Mac, AirPlay Receiver has 5000): "+
+			"start Zone on another one, as zonewiki --addr :5001", err)
+	}
+	return err
 }
 
 // socketPrefix: an --addr that names a Unix socket's path, not a TCP address.

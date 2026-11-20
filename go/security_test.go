@@ -363,10 +363,8 @@ func TestLoadConfig(t *testing.T) {
 		}
 	}
 	file("")
-	for _, bad := range [][]string{{"ZONE_DATA", ""}, {"ZONE_DATA", filepath.Join(wiki, "missing")}} {
-		if _, _, err := loadConfig(env(bad...)); err == nil {
-			t.Errorf("%v: no error", bad)
-		}
+	if _, _, err := loadConfig(env("ZONE_DATA", filepath.Join(wiki, "missing"))); err == nil || isDir(filepath.Join(wiki, "missing")) {
+		t.Errorf("a missing ZONE_DATA: %v", err)
 	}
 	file("locale =  de-AT \ndate-format = ISO\nsemantic-min-score = 0.42\n")
 	if _, s, err := loadConfig(env()); err != nil || s.Locale != "de-AT" || s.DateFormat != "iso" ||
