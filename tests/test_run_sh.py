@@ -379,3 +379,25 @@ def test_pre_push_runs_the_clones_own_hook(worktree):
     assert first == f"out {remote}" and f"refs/heads/feature {head} refs/heads/feature" in refs
     assert _git(tree, "push", "-q", "out", "feature", env=env).returncode == 0
     assert _git(remote, "rev-parse", "feature").stdout.strip() == head
+
+
+def test_the_other_own_hooks_run_too(worktree):
+    """post-commit and post-rewrite are delegated the same way: a commit runs
+    the clone's own post-commit, an amend its post-rewrite (the kind as its
+    argument); a hook of the clone that isn't executable is skipped."""
+    repo, tree, env, log = worktree
+    for name in ("pre-push", "post-commit", "post-rewrite"):
+        assert (REPO / ".githooks" / name).read_bytes() == (REPO / ".githooks" / "pre-push").read_bytes()
+        shutil.copy(REPO / ".githooks" / name, tree / ".githooks" / name)
+        (tree / ".githooks" / name).chmod(0o755)
+    seen = repo.parent / "seen"
+    for name in ("post-commit", "post-rewrite"):
+        own = repo / ".git" / "hooks" / name
+        own.write_text(f'#!/bin/sh\n{{ echo "$@"; cat; }} >> "{seen}-{name}"\n')
+    (repo / ".git" / "hooks" / "post-commit").chmod(0o755)   # post-rewrite stays unexecutable
+    (tree / "notes.txt").write_text("changed\n")
+    assert _git(tree, "commit", "-q", "--no-verify", "-am", "more", env=env).returncode == 0
+    assert (repo.parent / "seen-post-commit").exists() and not (repo.parent / "seen-post-rewrite").exists()
+    (repo / ".git" / "hooks" / "post-rewrite").chmod(0o755)
+    assert _git(tree, "commit", "-q", "--no-verify", "--amend", "-m", "again", env=env).returncode == 0
+    assert (repo.parent / "seen-post-rewrite").read_text().split("\n")[0] == "amend"

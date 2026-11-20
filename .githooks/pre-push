@@ -1,11 +1,13 @@
 #!/bin/sh
-# Runs the clone's own pre-push hook, .git/hooks/pre-push, when it has one.
-# core.hooksPath (see pre-commit) points git at this folder instead of
-# .git/hooks, so a check that is one person's, not the project's, would
+# Runs the clone's own hook of the same name from .git/hooks/, when it has
+# one. core.hooksPath (see pre-commit) points git at this folder instead of
+# .git/hooks, so a hook that is one person's, not the project's, would
 # otherwise never run; kept in .git/hooks it stays out of the repo and
-# applies to every worktree of the clone. Its refusal refuses the push.
-# Skip it once: git push --no-verify.
+# applies to every worktree of the clone. Its exit status is the hook's:
+# a pre-push that refuses refuses the push. The same file serves as
+# post-commit and post-rewrite (copies by name; keep them equal).
+# Skip a push check once: git push --no-verify.
 
-own="$(git rev-parse --git-common-dir)/hooks/pre-push"
+own="$(git rev-parse --git-common-dir)/hooks/$(basename "$0")"
 [ -x "$own" ] || exit 0
 exec "$own" "$@"
