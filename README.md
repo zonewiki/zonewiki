@@ -38,13 +38,17 @@ Present a page as slides, or print it.
 
 **Tasks.** A start date and a deadline, kept apart.
 A Today view, and a plan board where you drag tasks onto days.
-Lists, repeating tasks, quick-add (`Call Bob tomorrow #work due:fri`), Markdown descriptions and comments.
+Lists, repeating tasks, quick-add (`Call Bob tomorrow #work due:fri`), Markdown descriptions, comments and files.
+Assignees, followers and `@mentions`, with news by mail if you want it.
 Embed a task list or a single task in any page.
 
 **Search.** Full-text search across pages and tasks (Ctrl+P): typo tolerance, `"phrases"`, `#tags` and dates.
-Optionally semantic search with a local model (currently paused, see [deployment](docs/spec/deployment.md)).
 
-**Teams.** Optionally several users with their own logins, private pages and tasks, group folders, assigned tasks and roles (admin, editor, viewer).
+**Assistants.** Over MCP, an assistant searches, reads and writes pages, notes and tasks, as you.
+History shows which changes it made ("Anna through Claude"), and you undo them one at a time or all at once.
+Connect one that only reads, or keep it out of your private pages; a `wiki-guide` page tells every assistant your conventions.
+
+**Teams.** Optionally several users with their own logins, private pages and tasks, group folders and roles (admin, editor, viewer); invite people with a link, or let them sign up.
 Changes are committed in each user's name.
 A wiki can also be public, to read or to edit.
 
