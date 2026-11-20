@@ -198,7 +198,7 @@ class TestSignup:
         assert make(client, link, "de").status_code == 303      # a name only like one is free
 
     def test_a_removed_users_name_stays_taken_by_what_names_them(self, client, signup, git_wiki_dir, monkeypatch):
-        """bob was a member of alice's list secret and carol had a task, and
+        """bob was an owner of alice's list secret and carol had a task, and
         neither wrote anything: no folder, no commit. Taken out of the
         settings file by hand, their names are still on the list and the
         task, which a stranger signing up as them would get. dora, removed
@@ -207,7 +207,10 @@ class TestSignup:
         monkeypatch.setattr(settings, "USERS", users)
         login = lambda name: client.post("/login", data={"username": name, "password": users[name][0]}, headers=HOST)
         assert login("alice").status_code == 302
-        assert client.post("/tasks/new-list", data={"name": "secret", "for": "alice, bob"}, headers=HOST).status_code == 302
+        assert client.post("/tasks/new-list", data={"name": "secret"}, headers=HOST).status_code == 302
+        registry = git_wiki_dir / "_tasks/lists.json"     # an owner added by hand: bob wrote nothing
+        registry.write_text(registry.read_text().replace('"name": "secret", "owners": ["alice"]', '"name": "secret", "owners": ["alice", "bob"]'))
+        assert '"owners": ["alice", "bob"]' in registry.read_text()
         assert client.post("/api/tasks", json={"list": "secret", "title": "Layoffs zebrafinch"}, headers=HOST).status_code in (200, 201)
         assert client.post("/tasks/new-list", data={"name": "team"}, headers=HOST).status_code == 302
         resp = client.post("/api/tasks", json={"list": "team", "title": "Call the bank", "assignee": "carol"}, headers=HOST)

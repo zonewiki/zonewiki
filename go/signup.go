@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 	"zonewiki/internal/settingsfile"
+	"zonewiki/internal/taskfiles"
 )
 
 // How long a sign-up link works.
@@ -264,17 +265,24 @@ func userNameHasHistory(name string) bool {
 		strings.TrimSpace(runGit("log", "-1", "--format=%H", "--fixed-strings", "--author=<"+name+"@zone>").Stdout) != ""
 }
 
-// namedInTasks: a shared list names name among its members or owners (what
-// a deleted or renamed list left in its folder too), or a task as its
-// assignee or a follower: what a user is named in that others wrote.
+// namedInTasks: a shared or a group's list names name among its owners, a
+// former list for some among whom it was for (what its old folder keeps), or
+// a task as its assignee or a follower: what a user is named in that others
+// wrote.
 func namedInTasks(name string) bool {
-	for _, l := range taskFiles.ReadLists("").Lists {
-		if slices.Contains(l.For(), name) || slices.Contains(l.Owners(), name) {
-			return true
+	owners := []string{""}
+	for _, g := range knownGroups(settings()) {
+		owners = append(owners, taskfiles.GroupOwner(g))
+	}
+	for _, o := range owners {
+		for _, l := range taskFiles.ReadLists(o).Lists {
+			if slices.Contains(l.Owners(), name) {
+				return true
+			}
 		}
 	}
-	for _, list := range taskFiles.ForSome() {
-		if slices.Contains(taskFiles.ForOfList(list), name) {
+	for _, list := range formerListNames() {
+		if slices.Contains(formerListFor(list), name) {
 			return true
 		}
 	}
