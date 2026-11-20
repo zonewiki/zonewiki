@@ -24,7 +24,7 @@ One Go binary, no database, no frontend build, no cloud.
 - **Pages, notes and tasks in one place**, sharing links, search and history.
 - **Nothing gets lost.** Every version of every page, one-click restore, deleted pages brought back, and links that follow a rename.
 - **Any browser, laptop or phone.** Nothing to install on the client.
-- **Small enough to read.** One process, no plugins, no npm.
+- **Simple to run.** One binary, one process, no database, no plugins, no npm.
 
 ## Features
 
