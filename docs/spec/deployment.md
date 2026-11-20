@@ -377,8 +377,9 @@ so CI keeps no package lists or test commands of its own.
 | **bench** | `./run.sh bench` with `ZONE_BENCH_SLACK=3` | After the checks |
 | **retrieval** | `./run.sh retrieval` | After the checks (skipped for now: Semantic search paused) |
 | **image** | Builds the `Containerfile` and pushes it to the Forgejo registry | Not a pull request's run, once the three checks pass |
+| **github** | Pushes main's commit or the tag to another repository, as it is (Publishing to GitHub, below) | A push, with `PUBLISH_REPO` set, once the three checks pass |
 
-Only **leaks** fetches the full history; the others check out the last commit.
+Only **leaks** and **github** fetch the full history; the others check out the last commit.
 
 **bench** (The bench in `docs/spec/testing.md`): the image job doesn't wait for it, so a slow runner fails a job that is looked at and holds up no image.
 It waits for the checks because the jobs share the host's engine:
@@ -426,6 +427,37 @@ Repo settings:
 | `REGISTRY` | Variable | The registry host; required for the image |
 | `REGISTRY_TOKEN` | Secret | A token with package write scope |
 | `REGISTRY_USER` | Variable, optional | Default: the repo owner |
+| `PUBLISH_REPO` | Variable | `owner/name` of the repository to publish to (GitHub); without it the **github** job is skipped |
+| `PUBLISH_KEY` | Secret | A private ssh key that may push there (a deploy key with write access); without it the job publishes nothing |
+| `PUBLISH_CHECK` | Secret, optional | A shell script that refuses a push by failing (Publishing to GitHub, below) |
+
+### Publishing to GitHub
+
+Forgejo is where the work happens; the **github** job makes a copy elsewhere (GitHub) only when the checks have passed, and nothing is pushed by hand.
+It pushes what Forgejo has, as it is: main's commit (`<sha>:refs/heads/main`) or the `v*` tag, never forced, so every commit there has the hash it has here.
+A commit made later is a fast-forward on both sides, and the hashes stay the same.
+GitHub's own workflow (CI (GitHub Actions), below) then runs there as for any push, and on a tag builds the release.
+
+To set it up once:
+
+1. Make a key for this alone: `ssh-keygen -t ed25519 -N "" -C "forgejo to github" -f KEY`.
+2. In the other repository: Settings → Deploy keys → Add deploy key, with `KEY.pub` and **Allow write access**. A deploy key reaches that one repository only.
+3. In this repository: variable `PUBLISH_REPO` (`owner/name`) and secret `PUBLISH_KEY` (the private key's text); then delete the key files.
+4. The other repository should be empty (no README or license made with it): the first push puts main there, and a repository with history of its own refuses it.
+
+What the job does, in order:
+
+1. Does nothing without `PUBLISH_KEY` (a clone without the setting just tests).
+2. Takes GitHub's host key with `ssh-keyscan` and checks it against the fingerprint GitHub publishes for it (written in the workflow); another key stops the job, so the key is never offered to an impostor.
+3. For main: skips a commit the other repository has, and refuses (never forces) one whose history doesn't continue the other's main.
+   A tag may name a commit the other repository has already, so it is pushed all the same.
+4. Runs `PUBLISH_CHECK` if there is one: a script of the operator's own that gets `BASE` (the other repository's main, empty when it has none) and `HEAD` (the commit pushed) and refuses the push by failing.
+   It is a secret so that a rule that is one person's business stays out of the repository.
+5. Pushes.
+
+The jobs of one repository publish one at a time (`concurrency: publish`, none cancelled), so two runs don't race for main.
+A pull request runs nothing of this: only a push to this repository starts the job, and secrets don't reach other repositories' pull requests.
+Tests: `tests/test_image.py` (the job's shape: after the checks, a push only, never forced, the host key's fingerprint).
 
 ## CI (GitHub Actions)
 

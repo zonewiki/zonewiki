@@ -8,6 +8,11 @@
 #                            public address); without it no image is built
 #   secret   REGISTRY_TOKEN  access token with package write scope
 #   variable REGISTRY_USER   (optional) its owner, default: the repo owner
+# To publish main and the v* tags to another repository (GitHub) after the checks:
+#   variable PUBLISH_REPO    owner/name there; without it nothing is published
+#   secret   PUBLISH_KEY     a private ssh key that may push there (a deploy key
+#                            with write access); without it nothing is published
+#   secret   PUBLISH_CHECK   (optional) a shell script that refuses a push by failing
 name: CI
 
 on:
@@ -163,3 +168,83 @@ jobs:
       - name: Push
         run: |
           for t in ${{ steps.meta.outputs.tags }}; do docker push "$t"; done
+
+  github:
+    # Publishes what this Forgejo has to a repository elsewhere (GitHub), once
+    # the checks pass: main's commit, or the tag, pushed as it is, never
+    # forced, so its commits keep their hashes there (Publishing to GitHub in
+    # docs/spec/deployment.md). Only a push to this repository runs it, so no
+    # stranger's code sees the key.
+    needs: [checks]
+    if: github.event_name == 'push' && vars.PUBLISH_REPO != ''
+    runs-on: docker
+    container:
+      image: docker:29.9.3-cli@sha256:2357639ad1ea7d0194134bf3292622fd4e562483966ed674e5d7c945b5f3b28d
+    concurrency:
+      group: publish
+      cancel-in-progress: false
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Install system packages
+        # Alpine: nodejs runs actions/checkout, bash the step below, openssh the push.
+        shell: sh
+        run: apk add --no-cache nodejs git bash openssh-client
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - name: Push to the other repository
+        env:
+          PUBLISH_REPO: ${{ vars.PUBLISH_REPO }}
+          PUBLISH_KEY: ${{ secrets.PUBLISH_KEY }}
+          PUBLISH_CHECK: ${{ secrets.PUBLISH_CHECK }}
+        run: |
+          set -euo pipefail
+          if [ -z "$PUBLISH_KEY" ]; then
+            echo "PUBLISH_KEY is not set: nothing is published."
+            exit 0
+          fi
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$PUBLISH_KEY" > ~/.ssh/publish_key
+          # GitHub's host key, by the fingerprint it publishes for it
+          # (docs.github.com, "GitHub's SSH key fingerprints"): a changed one stops the job.
+          ssh-keyscan -t ed25519 github.com > ~/.ssh/known_hosts 2>/dev/null
+          fp=$(ssh-keygen -lf ~/.ssh/known_hosts | awk '{print $2}')
+          if [ "$fp" != "SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU" ]; then
+            echo "GitHub's host key is not the published one ($fp): nothing is pushed." >&2
+            exit 1
+          fi
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/publish_key -o IdentitiesOnly=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts -o BatchMode=yes"
+          git remote add publish "git@github.com:$PUBLISH_REPO.git"
+          # The commits there already (an empty repository has no main yet).
+          base=""
+          if [ -n "$(git ls-remote publish refs/heads/main)" ]; then
+            git fetch -q publish '+refs/heads/main:refs/remotes/publish/main'
+            base=$(git rev-parse refs/remotes/publish/main)
+          fi
+          sha=$(git rev-parse HEAD)
+          # main only moves forward there; a tag may name a commit it has already.
+          if [ -n "$base" ] && [ "$GITHUB_REF" = refs/heads/main ]; then
+            if git merge-base --is-ancestor "$sha" "$base"; then
+              echo "The other repository has $sha already."
+              exit 0
+            fi
+            if ! git merge-base --is-ancestor "$base" "$sha"; then
+              echo "The other repository's main ($base) is not an ancestor of $sha: not forcing it." >&2
+              exit 1
+            fi
+          fi
+          # An optional check of one's own, kept in a secret: it gets BASE
+          # (what the other repository has, maybe empty) and HEAD (what is
+          # pushed) and refuses the push by failing.
+          if [ -n "$PUBLISH_CHECK" ]; then
+            printf '%s\n' "$PUBLISH_CHECK" > "$HOME/publish-check.sh"
+            BASE="$base" HEAD="$sha" sh "$HOME/publish-check.sh"
+          fi
+          case "$GITHUB_REF" in
+            refs/heads/main) git push publish "$sha:refs/heads/main" ;;
+            refs/tags/v*)    git push publish "$GITHUB_REF" ;;
+          esac
+          rm -f ~/.ssh/publish_key "$HOME/publish-check.sh"

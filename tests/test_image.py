@@ -156,7 +156,7 @@ def test_forgejo_runs_no_forks_code():
     for no pull request (docs/spec/security.md, CI runs no stranger's code)."""
     ci = (REPO / ".forgejo" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     jobs = re.split(r"\n  (?=[a-z]+:\n)", "\n" + ci.split("\njobs:\n", 1)[1])[1:]
-    assert [j.split(":", 1)[0] for j in jobs] == ["checks", "bench", "retrieval", "image"]
+    assert [j.split(":", 1)[0] for j in jobs] == ["checks", "bench", "retrieval", "image", "github"]
     for job in jobs:
         name = job.split(":", 1)[0]
         if name == "checks":
@@ -184,3 +184,23 @@ def test_a_tag_releases_the_binaries():
     assert "cp LICENSE THIRD_PARTY_LICENSES dist/" in binaries
     assert "sha256sum zonewiki-* LICENSE THIRD_PARTY_LICENSES > SHA256SUMS" in binaries
     assert "/dist/" in (REPO / ".gitignore").read_text(encoding="utf-8").splitlines()
+
+
+def test_forgejo_publishes_to_the_other_repository_only_as_it_is():
+    """The github job pushes main's commit or a tag to the other repository
+    after the checks, never forced (so the hashes there are Forgejo's), only
+    for a push, with GitHub's host key held to its published fingerprint and
+    nothing sent without the key (docs/spec/deployment.md, Publishing to GitHub)."""
+    ci = (REPO / ".forgejo" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    job = ci[ci.index("\n  github:\n"):]
+    for line in ("    needs: [checks]\n", "    if: github.event_name == 'push' && vars.PUBLISH_REPO != ''\n",
+                 "          fetch-depth: 0\n", "SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU",
+                 'if [ -z "$PUBLISH_KEY" ]; then', 'git push publish "$sha:refs/heads/main"',
+                 'git push publish "$GITHUB_REF"', "-o BatchMode=yes"):
+        assert line in job, line
+    assert "--force" not in job and "git push -f" not in job and ' "+' not in job
+    assert "StrictHostKeyChecking" not in job
+    # The key and the check come from secrets, the repository from a variable.
+    for name in ("PUBLISH_KEY", "PUBLISH_CHECK"):
+        assert f"{name}: ${{{{ secrets.{name} }}}}" in job
+    assert "PUBLISH_REPO: ${{ vars.PUBLISH_REPO }}" in job
