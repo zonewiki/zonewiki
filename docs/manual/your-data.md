@@ -159,7 +159,7 @@ See [Storage limit](../spec/users.md#storage-limit).
 
 ## How big a wiki can be
 
-A personal wiki or a small team's is far below any limit you'd notice.
+A personal wiki or a team's is far below any limit you'd notice.
 Zone stays quick up to several thousand pages and open tasks; past some ten thousand of either, every page view takes noticeably longer, and a NAS's slower disk and processor bring that point closer.
 Closed tasks cost nothing until you look at them.
 Page saves are committed one at a time, so a wiki isn't made for many people saving at the same moment.
