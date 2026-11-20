@@ -103,6 +103,10 @@ A task has two independent dates; changing one never moves the other.
 
 A past start date is not overdue, it means "available since" (cards show "since Sep 21").
 
+**A date is kept as `YYYY-MM-DD`**, its month and day zero-padded (`due_date`, `start_date`, `last_done`): every comparison of dates, in the server and in the browser, compares the text, so `2026-1-5` would sort after `2026-10-01` and be on no day's tab.
+The API reads a month or a day of one digit and keeps it padded (`cleanDay` in `go/tasks.go`; Task API in `docs/spec/routes.md`), and so does an import or an undo that brings a task back (`sanitizeSnapshot`); quick-add and an assistant's `due`/`start` take `YYYY-MM-DD` with two digits each, or a date word.
+Dates stored unpadded by the API before 2026-11-20 aren't rewritten at start: only a client sending such a date by hand could have made one (the browser and the MCP tools always sent two digits), and setting the date again mends it.
+
 The edit modal's "Days before due" is just another way to enter the start date (`start = due − N`) and is not stored; the dialog shows it once asked for ("+ Days before due", with a due date).
 
 ### A start after the deadline
@@ -613,6 +617,7 @@ The notice says what happened ("Imported 12 tasks; 3 already here.") and has **U
 One commit, "Import N tasks".
 
 A file that isn't an export (no `tasks` list, or a task without a title) is refused whole (the server's reason shows in the dialog), as is one with more than 10,000 tasks (`importMax`); a bare JSON list of tasks is taken too, so a file written by hand or by a script needs only `[{"title": "…"}]`.
+A task's dates come in as the API keeps them (`YYYY-MM-DD`, a month or day of one digit padded: Dates); one that is no day comes in as none.
 Closed tasks arrive closed.
 
 #### Where imported tasks go

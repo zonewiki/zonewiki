@@ -1893,6 +1893,9 @@ class TestCreateTask:
         text, err = call(client, "create_task", title="x", due="next week")
         assert err and "YYYY-MM-DD, today, tomorrow" in text
         assert call(client, "create_task", title="x", due="2026-02-30")[1]
+        # A day of one digit is no date here, as in quick-add: nothing is kept as typed (no task, below).
+        text, err = call(client, "create_task", title="x", due="2026-1-5")
+        assert err and "YYYY-MM-DD" in text
         text, err = call(client, "create_task", title="  ")
         assert err and "title" in text
         text, err = call(client, "create_task", title="x", repeat="hourly")

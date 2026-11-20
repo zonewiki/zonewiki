@@ -100,28 +100,38 @@ func idList(data jsonObj) ([]string, error) {
 // strptime's %Y-%m-%d: four digits, then a month and a day of one or two.
 var strptimeDayRE = regexp.MustCompile(`^(\d{4})-(1[0-2]|0[1-9]|[1-9])-(3[01]|[12]\d|0[1-9]|[1-9]| [1-9])$`)
 
-// validateDate: raw as a date field: null or "" is none (""), else a
-// valid YYYY-MM-DD.
-func validateDate(raw json.RawMessage) (string, error) {
-	s, ok := jsonobj.As[string](raw)
-	if jsonobj.IsNull(raw) || ok && s == "" {
-		return "", nil
-	}
-	bad := refuse("Invalid date format, expected YYYY-MM-DD")
-	if !ok {
-		return "", bad
-	}
+// cleanDay: s as a task's date is kept, YYYY-MM-DD with its month and day
+// zero-padded; ok false when it is no day. Read as strptime's %Y-%m-%d (a
+// month and a day of one or two digits, a space before a day of one), so a
+// date the API took before is still one; kept padded, since every date is
+// compared as text, here and in the browser (2026-1-5 would sort after
+// 2026-10-01).
+func cleanDay(s string) (string, bool) {
 	m := strptimeDayRE.FindStringSubmatch(s)
 	if m == nil {
-		return "", bad
+		return "", false
 	}
 	y, _ := strconv.Atoi(m[1])
 	mo, _ := strconv.Atoi(m[2])
 	d, _ := strconv.Atoi(strings.TrimSpace(m[3]))
 	if d > taskmodel.DaysIn(y, time.Month(mo)) {
-		return "", bad
+		return "", false
 	}
-	return s, nil
+	return fmt.Sprintf("%s-%02d-%02d", m[1], mo, d), true
+}
+
+// validateDate: raw as a date field: null or "" is none (""), else a
+// valid date, as YYYY-MM-DD (cleanDay).
+func validateDate(raw json.RawMessage) (string, error) {
+	s, ok := jsonobj.As[string](raw)
+	if jsonobj.IsNull(raw) || ok && s == "" {
+		return "", nil
+	}
+	day, valid := cleanDay(s)
+	if !ok || !valid {
+		return "", refuse("Invalid date format, expected YYYY-MM-DD")
+	}
+	return day, nil
 }
 
 // commentText: a comment's text, stripped and capped; empty is refused.

@@ -290,7 +290,7 @@ Comments, Keep tasks and Sections, which the rows and sections here name, are in
 - `skip: true` archives the occurrence as won't-do **and** spawns the next instance.
 - `completed: true` on a keep task does not archive it (see Keep tasks).
 - `completed`, `wont_do`, `skip` and `keep` are `true` or `false`, anything else is refused (400, "completed must be true or false").
-- A date is `YYYY-MM-DD`, `null` or `""` (none).
+- A date is `YYYY-MM-DD`, `null` or `""` (none); a month or a day of one digit (`2026-1-5`, and the space before a day of one that strptime's `%Y-%m-%d` takes) is read too and kept padded (`2026-01-05`; `cleanDay`), since every date is compared as text; anything that is no day is refused (400, "Invalid date format, expected YYYY-MM-DD").
 - `position` gives the task its place in the manual order in the same commit: `"top"`, `"bottom"`, `{after: id}` or `{before: id}` (A position in the order in `docs/spec/tasks.md`); `POST /api/tasks` takes it too, and without it a new task is unranked.
   Only an open task has one, and the task named must be open and ranked; anything else is refused (400) with nothing written.
 

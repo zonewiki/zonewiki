@@ -919,10 +919,12 @@ func sanitizeSnapshot(snap jsonObj) *Task {
 	if s, ok := jsonobj.As[string](snap["assignee"]); ok && settings().assignable(taskmodel.CleanAssignee(s)) {
 		t.Assignee = taskmodel.CleanAssignee(s)
 	}
+	// Dates as a write keeps them (cleanDay): one of one digit, as the API
+	// kept them before 2026-11-20, comes in padded.
 	for f, field := range map[string]*string{"due_date": &t.DueDate, "start_date": &t.StartDate, "last_done": &t.LastDone} {
 		if s, ok := jsonobj.As[string](snap[f]); ok {
-			if _, ok := parseDay(s); ok {
-				*field = s
+			if day, ok := cleanDay(s); ok {
+				*field = day
 			}
 		}
 	}

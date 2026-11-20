@@ -125,6 +125,26 @@ class TestValidation:
         resp = client.put(f"/api/tasks/{task['id']}", json={"due_date": ""})
         assert resp.get_json()["due_date"] is None
 
+    def test_a_date_is_kept_zero_padded(self, client, wiki_dir):
+        """A month or a day of one digit (and the space before a day that
+        strptime takes) is read, and kept as YYYY-MM-DD: every date is
+        compared as text, here and in the browser, so 2026-1-5 kept as typed
+        would sort after 2026-10-01 and be on no day's tab."""
+        resp = create_task(client, title="Padded", due_date="2026-1-5", start_date="2026-1- 3")
+        assert resp.status_code == 201, resp.get_data(as_text=True)
+        task = resp.get_json()
+        assert (task["due_date"], task["start_date"]) == ("2026-01-05", "2026-01-03")
+        task = client.put(f"/api/tasks/{task['id']}", json={"due_date": "2026-2-9", "last_done": "2025-12-1"}).get_json()
+        assert (task["due_date"], task["last_done"]) == ("2026-02-09", "2025-12-01")
+        assert [e["to"] for e in task["history"] if e["event"] == "due"][-1] == "2026-02-09"
+        out = client.post("/api/tasks/batch-update", json={"tasks": [{"id": task["id"], "start_date": "2026-2-1"}]})
+        assert out.get_json()[0]["start_date"] == "2026-02-01"
+        stored = (wiki_dir / "_tasks/tasks.json").read_text()
+        assert '"2026-02-09"' in stored and '"2026-02-01"' in stored and "2026-2-" not in stored and "2026-1-" not in stored
+        # What is no day stays refused.
+        for bad in ("2026-2-30", "2026-13-1", "2026-0-5", "26-1-5", "2026-001-05", "2026-1-5 ", "2026-1-  5"):
+            assert client.put(f"/api/tasks/{task['id']}", json={"due_date": bad}).status_code == 400, bad
+
     def test_status_and_keep_are_true_or_false(self, client):
         """1, "yes" or null is no bool: refused, the task as it was."""
         task = create_task(client, title="Task").get_json()

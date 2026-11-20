@@ -98,6 +98,17 @@ def test_import_into_another_list_puts_the_tasks_there(client, wiki_dir):
     assert tasks["Tea"]["list"] == "groceries" and "list" not in tasks["Soap"]
 
 
+def test_import_keeps_dates_zero_padded(client, wiki_dir):
+    """A date of one digit in a file (as the API kept one before 2026-11-20)
+    comes in as YYYY-MM-DD; what is no day comes in as none."""
+    file = [{"title": "Old", "due_date": "2026-1-5", "start_date": "2026-1-3", "last_done": "2025-12-1"},
+            {"title": "Bad", "due_date": "2026-2-30", "start_date": "soon"}]
+    assert imp(client, file).get_json()["added"] == 2
+    tasks = {t["title"]: t for t in client.get("/api/tasks", headers=HOST).get_json()}
+    assert (tasks["Old"]["due_date"], tasks["Old"]["start_date"], tasks["Old"]["last_done"]) == ("2026-01-05", "2026-01-03", "2025-12-01")
+    assert tasks["Bad"]["due_date"] is None and tasks["Bad"]["start_date"] is None
+
+
 def test_import_refuses_what_is_no_export(client, wiki_dir):
     for file in ("text", 3, None, {"pages": []}, {"tasks": "x"}, {"tasks": [{"title": "ok"}, {"no": "title"}]}, [7]):
         resp = imp(client, file)
