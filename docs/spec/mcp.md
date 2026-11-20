@@ -182,6 +182,7 @@ Matching tasks are results too, ranked with the sections (Retrieval, under How i
 - `under` restricts it to a folder: pages whose slug is that prefix or below it (`inFolder`, case ignored; `tickets`, `tickets/` and `/page/tickets` alike, `cleanFolder`), and no tasks.
   A folder without pages is a tool error, so the model corrects it.
 - `notes` restricts it to notes (`retrieve(…, quicknote=true)`), no tasks either: "what did I jot down about X".
+- `query` is at most 500 characters, a few words (A query is a few words in `search.md`); a longer one is a tool error (`queryArg`), as for `search_tasks`.
 
 With `query-log = yes` in the settings file each query is logged (Measuring retrieval in `search.md`).
 
@@ -198,7 +199,7 @@ Tasks filtered by these, separate lists included:
 
 With `status="updated"` a task's line of facts says what is new, "update: bob commented (2026-03-12 09:30)"; an assistant reading a task doesn't see it for the user: no tool logs `seen`.
 
-With a query, ranked by BM25 within the filter (fused with semantic hits: Retrieval).
+With a query (at most 500 characters, as `search_wiki`'s), ranked by BM25 within the filter (fused with semantic hits: Retrieval).
 Without, open tasks by deadline, then start date, then title, done ones newest first.
 `order="manual"` lists the open ones in the user's own order instead (`sort_order`, the Open view's Sorted section, top first: their priority), the tasks not yet ranked after them, newest first (`manualBefore`; the Open view shows those above, as they wait to be ranked).
 What the user ranked in My tasks (My tasks' own order in `docs/spec/tasks.md`) comes first, as it stands there; with `list`, the list's order alone, as its view shows it, so what `update_task`'s `position` did reads back.

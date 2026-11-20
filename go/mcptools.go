@@ -610,9 +610,9 @@ func zoneHelp(args jsonObj, base string, user asker) (string, error) {
 }
 
 func searchWiki(args jsonObj, base string, user asker) (string, error) {
-	query, ok := jsonobj.As[string](args["query"])
-	if !ok || strings.TrimSpace(query) == "" {
-		return "", toolErr("query must be a non-empty string")
+	query, err := queryArg(args, true)
+	if err != nil {
+		return "", err
 	}
 	under, err := underArg(args)
 	if err != nil {

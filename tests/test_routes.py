@@ -1245,6 +1245,16 @@ class TestSearch:
         assert resp.status_code == 200
         assert resp.get_json() == []
 
+    def test_a_query_is_a_few_words(self, client, wiki_dir):
+        """A query is cut at 500 characters (each word that matches nothing
+        is looked for among all the index's words as a typo, so a query as
+        long as a URL may be kept a processor busy for hours)."""
+        write_page(wiki_dir, "zoo", "# Zoo\n\nThe zebracorn lives here.\n")
+        assert client.get("/api/search?q=zebracorn", headers=HOST).get_json()
+        long = "word " * 120 + "zebracorn"
+        assert client.get("/api/search", query_string={"q": long}, headers=HOST).get_json() == []
+        assert 'href="/page/zoo' not in client.get("/search", query_string={"q": long}, headers=HOST).get_data(as_text=True)
+
     def test_api_search_title_match_ranked_higher(self, client, wiki_dir):
         write_page(wiki_dir, "title-match", "# uniquetoken\n\nbody\n")
         write_page(wiki_dir, "body-only", "# Other\n\nuniquetoken appears once\n")

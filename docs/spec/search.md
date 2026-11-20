@@ -31,6 +31,12 @@ A query is words, and what filters them (`Query`, the same in `/api/search`, `/s
 
 An unclosed quote, a lone `-` or `#`, or an invalid date (`edited:soon`) stay text.
 
+### A query is a few words
+
+A query is at most 500 characters (`MaxQueryChars`): a longer one is cut at its last space before that (`cutQuery` in `ParseQuery`; the browser's title filter likewise), and the assistants' `search_wiki` and `search_tasks` refuse it, saying so.
+It ranks by its distinct words, each once and at most 32 of them (`queryWords`), and only the first 8 of those that match no word of the index are looked for as typos (`fuzzyWords`, How words match).
+Each such word is compared with every word of the index, so before these limits a query as long as an address may be (a megabyte, the search modal's GET or a public wiki's visitor's) kept a processor busy for hours.
+
 ### Date filters
 
 A page's date is its last edit, a task's its last activity (`lastActivity`: the latest of completion, history events, comments and creation).
@@ -62,7 +68,7 @@ Excerpts don't mark them either; a phrase match still marks the whole phrase.
 - **Words in any script**: `Tokenize` splits on runs of letters/digits (`[^\W_]+`), so "Müller" is one word,
   and folds case and accents (`fold`: ü→u, é→e, ß→ss), so `muller`, `MÜLLER` and `Müller` match each other.
 - **Stemming** (`stem`) collapses inflections (run/runs/running, database/databases) so word variations match.
-- **Partial words** match via prefix expansion; **typos** match via an edit-distance fuzzy fallback (`difflib`) only when a term has no exact/prefix hit.
+- **Partial words** match via prefix expansion; **typos** match via an edit-distance fuzzy fallback (`difflib`) only when a term has no exact/prefix hit, for the first 8 such terms of a query (A query is a few words).
 - **Title boost**: title tokens are folded into the document token bag `TitleWeight` (3) extra times, so title matches rank higher.
 - **File and folder names**: a page's slug words are in its token bag once (pages and sections alike),
   so `robin` finds `messages/2026-06-18_roof-update-alex-robin` even when the text never says it;
@@ -315,7 +321,7 @@ A missing library, a bad setting or a failing model is logged (`[semantic] …`)
 ### The model
 
 It is the only model: `onnxEmbedder` runs it on onnxruntime (`go/embed_onnx.go`, through onnxruntime_go, which loads `libonnxruntime.so` when the model is first used; a binary built without cgo has no semantic search)
-with its tokenizer in Go (`go/internal/tokenizer`, the model's `tokenizer.json`),
+with its tokenizer in Go (`go/internal/tokenizer`, the model's `tokenizer.json`; it encodes a text's pieces only until it has 512 tokens, merges a piece's pairs from a heap, in n log n of its length, so a long unbroken word costs little, and keeps the tokens of at most 100,000 short pieces),
 with its recipe (at most 512 tokens, the token vectors averaged where the attention mask is set, normalised, no query or passage prefixes),
 and another model may need another recipe,
 so there is no setting for one.

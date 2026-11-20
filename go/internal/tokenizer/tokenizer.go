@@ -7,6 +7,7 @@
 package tokenizer
 
 import (
+	"container/heap"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -100,20 +101,27 @@ func Load(path string, maxLen int) (*Tokenizer, error) {
 	return t, nil
 }
 
-// Encode: the ids of <s> text </s>, the text cut to fit maxLen.
+// Encode: the ids of <s> text </s>, the text cut to fit maxLen: its pieces
+// are encoded until there are enough, so a long text (a query as long as a
+// URL may be) costs what its first maxLen tokens do.
 func (t *Tokenizer) Encode(text string) []int {
-	ids := []int{t.cls}
+	ids, want := []int{t.cls}, t.maxLen-1
 	for _, seg := range t.splitAdded(text) {
 		if seg.id >= 0 {
 			ids = append(ids, seg.id)
 			continue
 		}
-		for _, piece := range preTokenize(seg.text) {
-			ids = append(ids, t.bpe(piece)...)
+		for i := 0; i < len(seg.text) && len(ids) < want; {
+			n := gpt2Piece(seg.text[i:])
+			ids = append(ids, t.bpe(byteLevel(seg.text[i:i+n]))...)
+			i += n
+		}
+		if len(ids) >= want {
+			break
 		}
 	}
-	if len(ids) > t.maxLen-1 {
-		ids = ids[:t.maxLen-1]
+	if len(ids) > want {
+		ids = ids[:want]
 	}
 	return append(ids, t.sep)
 }
@@ -157,19 +165,10 @@ func (t *Tokenizer) splitAdded(text string) []segment {
 	return out
 }
 
-// preTokenize is ByteLevel's split, GPT-2's pattern
+// gpt2Piece is ByteLevel's split, GPT-2's pattern
 // 's|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+
-// (a lookahead RE2 lacks, so a scanner), each piece's bytes as GPT-2's
-// printable characters.
-func preTokenize(text string) []string {
-	var pieces []string
-	for i := 0; i < len(text); {
-		n := gpt2Piece(text[i:])
-		pieces = append(pieces, byteLevel(text[i:i+n]))
-		i += n
-	}
-	return pieces
-}
+// (a lookahead RE2 lacks, so a scanner), a piece at a time; Encode takes
+// each piece's bytes as GPT-2's printable characters (byteLevel).
 
 func isOther(r rune) bool { return !unicode.IsSpace(r) && !unicode.IsLetter(r) && !unicode.IsNumber(r) }
 
@@ -241,8 +240,19 @@ func byteLevel(s string) string {
 	return b.String()
 }
 
+// cacheMax: how many pieces the cache keeps (then it starts over), and
+// cachedMax: how long a piece it keeps, in bytes (a word, not a blob): it
+// was kept for ever, so distinct words sent in queries grew it without end.
+const (
+	cacheMax  = 100_000
+	cachedMax = 64
+)
+
 // bpe: a piece's ids, merging the adjacent pair of lowest rank (leftmost
-// first) until none merges.
+// first) until none merges. The pairs wait in a heap, by rank and place,
+// so a piece costs n log n in its length: the loop that looked through
+// every pair for each merge took n² (a word of 20,000 letters 2 s, one of
+// a megabyte hours).
 func (t *Tokenizer) bpe(piece string) []int {
 	t.mu.Lock()
 	ids, ok := t.cache[piece]
@@ -250,33 +260,84 @@ func (t *Tokenizer) bpe(piece string) []int {
 	if ok {
 		return ids
 	}
-	var syms []string
-	for _, r := range piece {
-		syms = append(syms, string(r))
+	// The symbols, linked to their neighbours; a merged one's text is "".
+	type symbol struct {
+		text       string
+		prev, next int
 	}
-	for len(syms) > 1 {
-		best, at := -1, -1
-		for i := 0; i+1 < len(syms); i++ {
-			if r, ok := t.ranks[[2]string{syms[i], syms[i+1]}]; ok && (best < 0 || r < best) {
-				best, at = r, i
+	var syms []symbol
+	for _, r := range piece {
+		syms = append(syms, symbol{string(r), len(syms) - 1, len(syms) + 1})
+	}
+	if len(syms) > 0 {
+		syms[len(syms)-1].next = -1
+	}
+	pairs := &pairHeap{}
+	push := func(i int) { // the pair that starts at symbol i, if it merges
+		if j := syms[i].next; j >= 0 {
+			if r, ok := t.ranks[[2]string{syms[i].text, syms[j].text}]; ok {
+				heap.Push(pairs, pair{r, i, syms[i].text, syms[j].text})
 			}
 		}
-		if at < 0 {
-			break
+	}
+	for i := range syms {
+		push(i)
+	}
+	for pairs.Len() > 0 {
+		p := heap.Pop(pairs).(pair)
+		i := p.at
+		j := syms[i].next
+		if syms[i].text != p.left || j < 0 || syms[j].text != p.right {
+			continue // a pair that is no longer there
 		}
-		merged := syms[at] + syms[at+1]
-		syms = append(syms[:at], append([]string{merged}, syms[at+2:]...)...)
+		syms[i].text += syms[j].text
+		syms[j].text = ""
+		syms[i].next = syms[j].next
+		if n := syms[i].next; n >= 0 {
+			syms[n].prev = i
+		}
+		if prev := syms[i].prev; prev >= 0 {
+			push(prev)
+		}
+		push(i)
 	}
 	ids = make([]int, 0, len(syms))
-	for _, s := range syms {
-		if id, ok := t.vocab[s]; ok {
+	for i := 0; len(syms) > 0 && i >= 0; i = syms[i].next {
+		if id, ok := t.vocab[syms[i].text]; ok {
 			ids = append(ids, id)
 		}
 	}
-	t.mu.Lock()
-	t.cache[piece] = ids
-	t.mu.Unlock()
+	if len(piece) <= cachedMax {
+		t.mu.Lock()
+		if len(t.cache) >= cacheMax {
+			clear(t.cache)
+		}
+		t.cache[piece] = ids
+		t.mu.Unlock()
+	}
 	return ids
+}
+
+// pair: two neighbouring symbols that merge, the left one at at, with the
+// merge's rank; pairHeap: the lowest rank first, then the leftmost.
+type pair struct {
+	rank, at    int
+	left, right string
+}
+
+type pairHeap []pair
+
+func (h pairHeap) Len() int { return len(h) }
+func (h pairHeap) Less(a, b int) bool {
+	return h[a].rank < h[b].rank || h[a].rank == h[b].rank && h[a].at < h[b].at
+}
+func (h pairHeap) Swap(a, b int) { h[a], h[b] = h[b], h[a] }
+func (h *pairHeap) Push(x any)   { *h = append(*h, x.(pair)) }
+func (h *pairHeap) Pop() any {
+	old := *h
+	x := old[len(old)-1]
+	*h = old[:len(old)-1]
+	return x
 }
 
 // ID: a token's id in the vocabulary ("<pad>"), false if it has none.

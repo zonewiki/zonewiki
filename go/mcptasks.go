@@ -169,6 +169,9 @@ func searchTasks(args jsonObj, base string, user asker) (string, error) {
 	if err1 != nil || err2 != nil || err3 != nil || err4 != nil {
 		return "", toolErr("query, tag, list and assignee must be strings")
 	}
+	if _, err := queryArg(args, false); err != nil {
+		return "", err
+	}
 	lists := taskLists(user)
 	scope := ""
 	if list = cleanList(strings.TrimLeft(strings.TrimSpace(list), "#")); list != "" {

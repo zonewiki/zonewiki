@@ -326,6 +326,15 @@ class TestFolders:
         assert set(slugs) == {"tickets/BUG-1_push", "tickets/old/BUG-0"}  # not ticketsarchive
         assert "Task:" not in text
 
+    def test_a_query_is_a_few_words(self, client, tree):
+        """The search tools take a query of at most 500 characters, as search
+        cuts one (textsearch.MaxQueryChars), and say so."""
+        for tool in ("search_wiki", "search_tasks"):
+            text, err = call(client, tool, query="git " * 130)
+            assert err and "at most 500 characters" in text, (tool, text)
+            text, err = call(client, tool, query="git " * 120)
+            assert not err, (tool, text)
+
     @pytest.mark.parametrize("under", ["tickets/", "/page/tickets", "TICKETS", "tickets/old"])
     def test_folder_spellings(self, client, tree, under):
         text, err = call(client, "search_wiki", query="git", under=under)

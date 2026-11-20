@@ -637,3 +637,46 @@ func expectNot(t *testing.T, html string, unwanted ...string) {
 		}
 	}
 }
+
+// A query costs what a few words do: it is cut at MaxQueryChars (at a
+// space), ranks by its distinct words, at most maxQueryWords, and only
+// fuzzyWords of those that match nothing are looked for as typos, each
+// among every term of the index.
+func TestAQueryIsAFewWords(t *testing.T) {
+	long := strings.Repeat("word ", 300) + "zebracorn"
+	if q := ParseQuery(long); RuneLen(q.Text) > MaxQueryChars || strings.Contains(q.Text, "zebracorn") || strings.HasSuffix(q.Text, "wor") {
+		t.Errorf("cut: %d characters, %q…", RuneLen(q.Text), q.Text[len(q.Text)-10:])
+	}
+	if q := ParseQuery(strings.Repeat("ä", 2*MaxQueryChars)); RuneLen(q.Text) != MaxQueryChars {
+		t.Errorf("one long word: %d characters", RuneLen(q.Text))
+	}
+	if ws := queryWords("b a b a c"); !reflect.DeepEqual(ws, []string{"b", "c"}) && !reflect.DeepEqual(ws, []string{"b", "a", "c"}) {
+		t.Errorf("each once: %q", ws)
+	}
+	var many []string
+	for i := range 3 * maxQueryWords {
+		many = append(many, fmt.Sprintf("w%d", i))
+	}
+	if ws := queryWords(strings.Join(many, " ")); len(ws) != maxQueryWords || ws[0] != "w0" {
+		t.Errorf("%d words", len(ws))
+	}
+	// Twelve typos, each of a term of its own: the first fuzzyWords find theirs.
+	var terms, typos []string
+	for i := range 12 {
+		w := "kangaroo" + string(rune('a'+i))
+		terms, typos = append(terms, w), append(typos, "kangarxo"+string(rune('a'+i)))
+	}
+	ix := NewIndex([][]string{terms})
+	var found []string
+	for _, tw := range ix.expand(typos, fuzzyWords) {
+		found = append(found, tw.term)
+	}
+	if len(found) == 0 || len(found) > 3*fuzzyWords {
+		t.Errorf("typos found: %q", found)
+	}
+	for _, f := range found {
+		if f[len(f)-1] >= byte('a'+fuzzyWords) {
+			t.Errorf("a typo after the first %d was looked up: %q", fuzzyWords, f)
+		}
+	}
+}

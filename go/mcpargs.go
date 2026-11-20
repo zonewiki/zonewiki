@@ -74,6 +74,16 @@ func strArg(args jsonObj, name string, required bool) (string, error) {
 	return s, nil
 }
 
+// queryArg: a search's query, at most textsearch.MaxQueryChars long (a
+// search is a few words; textsearch says what a longer one costs).
+func queryArg(args jsonObj, required bool) (string, error) {
+	q, err := strArg(args, "query", required)
+	if err == nil && textsearch.RuneLen(q) > textsearch.MaxQueryChars {
+		err = toolErr("query must be at most " + strconv.Itoa(textsearch.MaxQueryChars) + " characters: search with a few words")
+	}
+	return q, err
+}
+
 // boolArg: true or false; missing or null is false.
 func boolArg(args jsonObj, name string) (bool, error) {
 	b, ok := jsonobj.As[bool](args[name])

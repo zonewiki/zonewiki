@@ -60,12 +60,27 @@ export function wikilinkHref(inner) {
 // The words of a search query, textsearch.ParseQuery's Text: phrases lose
 // their quotes; -word, -"phrase", #tag, -#tag and the date filters (edited:,
 // after:, before:) are filters on content, which a title can't be checked
-// against, so the title filter leaves them out.
+// against, so the title filter leaves them out. Of the query's first 500
+// characters, as the server takes it (cutQuery).
 export function queryWords(raw) {
-  return [...raw.matchAll(/(-?)(?:"([^"]+)"|(\S+))/g)]
+  return [...cutQuery(raw).matchAll(/(-?)(?:"([^"]+)"|(\S+))/g)]
     .filter(m => !m[1] && !(m[3] && m[3].startsWith('#') && m[3].replace(/^#+|#+$/g, '') !== '')
                  && !(m[3] && /^(edited|after|before):\d{4}(-\d\d(-\d\d)?)?$/i.test(m[3])))
     .map(m => m[2] ?? m[3]).join(' ').trim();
+}
+
+// textsearch.MaxQueryChars: how long a query is; a longer one is cut there,
+// at its last space before that when it has one (textsearch's cutQuery).
+const MAX_QUERY_CHARS = 500;
+
+function cutQuery(raw) {
+  const chars = [...raw];
+  if (chars.length <= MAX_QUERY_CHARS) return raw;
+  const cut = chars.slice(0, MAX_QUERY_CHARS);
+  for (let j = cut.length - 1; j > 0; j--) {
+    if (/\p{White_Space}/u.test(cut[j])) return cut.slice(0, j).join('');
+  }
+  return cut.join('');
 }
 
 // ── Display math and code fences ─────────────────────────────────────────────

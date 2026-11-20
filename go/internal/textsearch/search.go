@@ -33,6 +33,21 @@ const (
 	fuzzyWeight  = 0.5
 )
 
+// What a query may cost: a search is a few words, and each word that
+// matches nothing is looked for among every word of the index as a close
+// typo, so a query as long as a URL may be (a megabyte) kept a processor
+// busy for hours, a visitor's on a public wiki too.
+const (
+	// MaxQueryChars: how long a query is; ParseQuery cuts it there (at a
+	// space, so no word is cut), an assistant's tools refuse a longer one.
+	MaxQueryChars = 500
+	// maxQueryWords: the distinct words a query ranks by (queryWords).
+	maxQueryWords = 32
+	// fuzzyWords: how many of a query's words that match nothing are looked
+	// for as close typos (expand).
+	fuzzyWords = 8
+)
+
 // ---- Characters ----
 
 // WordRune: a letter or a number, any script (a word's character, not _).
@@ -167,19 +182,42 @@ wo zu zum zur`) {
 }
 
 // queryWords: the folded words of a query but the stopwords, unless that
-// leaves none.
+// leaves none; each once, at most maxQueryWords.
 func queryWords(query string) []string {
 	ws, _ := words(fold(query))
-	var kept []string
+	var kept, all []string
+	seen := map[string]bool{}
 	for _, w := range ws {
+		if seen[w] {
+			continue
+		}
+		seen[w] = true
+		all = append(all, w)
 		if !stopwords[w] {
 			kept = append(kept, w)
 		}
 	}
 	if kept == nil {
-		return ws
+		kept = all
 	}
-	return kept
+	return kept[:min(len(kept), maxQueryWords)]
+}
+
+// cutQuery: raw, at most MaxQueryChars long, cut at a space when it is
+// longer.
+func cutQuery(raw string) string {
+	n := 0
+	for i := range raw {
+		if n == MaxQueryChars {
+			raw = raw[:i]
+			if j := strings.LastIndexFunc(raw, unicode.IsSpace); j > 0 {
+				raw = raw[:j]
+			}
+			return raw
+		}
+		n++
+	}
+	return raw
 }
 
 // ---- the query syntax: "phrase", -word, -"phrase", #tag, -#tag, dates ----
@@ -206,7 +244,9 @@ type Query struct {
 	Dates          []dateFilter `json:"dates"`
 }
 
+// ParseQuery: the query raw says, of its first MaxQueryChars (cutQuery).
 func ParseQuery(raw string) *Query {
+	raw = cutQuery(raw)
 	q := &Query{}
 	var ws, phrases []string
 	excl, tags, extags := map[string]bool{}, map[string]bool{}, map[string]bool{}
@@ -719,9 +759,10 @@ func (ix *Index) fuzzyTerms() iter.Seq[string] {
 }
 
 // expand: query tokens as (term, weight): exact 1.0, prefix 0.8, and when
-// neither hits, close typos 0.5; the best weight per term, in the order
-// terms were first found.
-func (ix *Index) expand(qTokens []string) []weighted {
+// neither hits, close typos 0.5 (for the first fuzzy such tokens: each
+// looks through every term); the best weight per term, in the order terms
+// were first found.
+func (ix *Index) expand(qTokens []string, fuzzy int) []weighted {
 	var out []weighted
 	at := map[string]int{}
 	bump := func(term string, w float64) {
@@ -769,7 +810,8 @@ func (ix *Index) expand(qTokens []string) []weighted {
 				}
 			}
 		}
-		if !matched && RuneLen(t) >= 4 {
+		if !matched && RuneLen(t) >= 4 && fuzzy > 0 {
+			fuzzy--
 			for _, c := range closeMatchesIn(t, ix.fuzzyTerms(), 3, 0.8) {
 				bump(c, fuzzyWeight)
 			}
@@ -815,7 +857,9 @@ func (ix *Index) topHits(hits []Hit, limit int) []Hit {
 func (ix *Index) SearchWhere(query string, limit int, accept func(doc int) bool) []Hit {
 	var qTokens []string
 	for _, w := range queryWords(query) {
-		qTokens = append(qTokens, stem(w))
+		if t := stem(w); !slices.Contains(qTokens, t) {
+			qTokens = append(qTokens, t)
+		}
 	}
 	if len(qTokens) == 0 || ix.docCount() == 0 {
 		return nil
@@ -825,7 +869,7 @@ func (ix *Index) SearchWhere(query string, limit int, accept func(doc int) bool)
 		asked = make([]int8, ix.numbers())
 	}
 	scores := map[int]float64{}
-	for _, tw := range ix.expand(qTokens) {
+	for _, tw := range ix.expand(qTokens, fuzzyWords) {
 		idf := ix.idfOf(tw.term)
 		// first: the number of the postings' document 0 (a layer's; the
 		// index's own, which may be left out, are numbered from 0).
@@ -898,8 +942,8 @@ func (ix *Index) HaveAll(query string, docs []int) map[int]bool {
 				}
 			}
 		}
-		for _, tw := range ix.expand([]string{t}) {
-			if tw.weight <= fuzzyWeight { // a typo's guess, not the word
+		for _, tw := range ix.expand([]string{t}, 0) { // a typo's guess is not the word
+			if tw.weight <= fuzzyWeight {
 				continue
 			}
 			mark(ix.base.postings(tw.term), 0)

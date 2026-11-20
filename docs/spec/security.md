@@ -443,6 +443,12 @@ A body over it is refused with 413 (`Too large: at most 16 MB`, the size as `for
 one sent without a length (chunked) is cut at the limit (`http.MaxBytesReader`, `tooLarge`), and the routes that read whole bodies (the page writes, `/mcp`, the preview, the tasks API) answer that with 413 too.
 Without the cap, one request could fill the server's memory or disk; what the whole wiki may hold is `storage-max` (Storage limit in `docs/spec/users.md`).
 
+### Search queries
+
+A search costs what a few words do (A query is a few words in `docs/spec/search.md`): a query is cut at 500 characters, ranks by at most 32 distinct words, and only 8 of those that match nothing are looked for as typos, each among every word of the index;
+with semantic search the tokenizer stops at the model's 512 tokens and costs n log n in a word's length.
+Before, one GET of `/api/search` as long as an address may be (a megabyte; a public wiki's visitor reaches it) kept a processor busy for hours: there is no limit on the time a route takes (Slow clients, below).
+
 ### Slow clients
 
 A client that stands still doesn't hold a connection (`noStalls` in `go/stalls.go`, around every route): Zone serves at most 100 connections at a time (`limitListener`),
