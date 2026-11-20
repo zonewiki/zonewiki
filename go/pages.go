@@ -1046,14 +1046,19 @@ func mayNarrow(user asker, old, newSlug string) bool {
 	return settings().isAdmin(user.Name) || tookBack(user, old, newSlug)
 }
 
-// tookBackMost: how far back tookBack reads a page's commits.
-const tookBackMost = 50
+// tookBackFirst: how many of a page's commits tookBack reads first; only
+// when those are all the user's, and none of them moved the page, does it
+// read the rest.
+const tookBackFirst = 50
 
 // tookBack: the page old is user's to take back to newSlug: every commit of
 // it since it came to where it is (the move that shared it, or its first
 // commit) is theirs, nothing of anyone else's is in it uncommitted, and
 // newSlug's place is the one it came from or wider: the mistake of a
-// minute ago is undone, and nobody's work is taken from them.
+// minute ago is undone, and nobody's work is taken from them. The commits
+// are read back to that move or that first commit, however many there are:
+// a stretch of the user's own commits, however long, proves nothing about
+// those before it (fifty edits of their own would make anyone's page theirs).
 func tookBack(user asker, old, newSlug string) bool {
 	path := safePath(old)
 	if path == "" || !cfg.GitEnabled {
@@ -1063,20 +1068,36 @@ func tookBack(user asker, old, newSlug string) bool {
 	if draft != "" && draft != user.Name {
 		return false
 	}
-	entries := gitLog(path, tookBackMost)
+	entries := gitLog(path, tookBackFirst)
 	if len(entries) == 0 {
 		return draft == user.Name // not in git yet: theirs if they are who wrote it
 	}
+	if len(entries) == tookBackFirst {
+		if ours, decided := tookBackFrom(user, entries, newSlug); decided {
+			return ours
+		}
+		entries = gitLog(path, 0) // all theirs so far: the rest decides
+	}
+	ours, _ := tookBackFrom(user, entries, newSlug)
+	return ours
+}
+
+// tookBackFrom: tookBack's answer from a page's commits, newest first, as
+// far as they go: decided false when one isn't user's or the move here
+// isn't one to take back to newSlug, true for that move; undecided when
+// every commit is user's and none moved the page, which is theirs only if
+// these are all its commits (made here by them, and theirs alone since).
+func tookBackFrom(user asker, entries []GitEntry, newSlug string) (ours, decided bool) {
 	for i, e := range entries {
 		if e.Author != user.Name {
-			return false
+			return false, true
 		}
 		if i+1 < len(entries) && entries[i+1].Path != e.Path {
 			// This commit moved it here, from there.
-			return placeOf(strings.TrimSuffix(entries[i+1].Path, ".md")).within(placeOf(newSlug))
+			return placeOf(strings.TrimSuffix(entries[i+1].Path, ".md")).within(placeOf(newSlug)), true
 		}
 	}
-	return true // made here by them, and theirs alone since
+	return true, false
 }
 
 // placeSeers: the users who see what is kept at p, A–Z (who can sign in).

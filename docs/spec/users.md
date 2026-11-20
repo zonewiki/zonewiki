@@ -1225,7 +1225,9 @@ Where nobody who sees the page now would lose it (the same people see both place
 **Whoever shared a page takes it back while nobody else has changed it**: every commit of the page since it came to where it is (the move that shared it, or its first save) is theirs, nothing of anyone else's is in it uncommitted, and it goes back to where it came from or to a place at least that wide.
 A page they made where it is, theirs alone since, is theirs to move anywhere, as is one not in git yet that they wrote.
 Asked first, as an admin is.
-Zone reads at most 50 of the page's commits for it (`tookBackMost`), and without git nobody takes a page back.
+Zone reads the page's commits back to that move or its first commit, however many there are (the newest 50 first, `tookBackFirst`, and the rest only when those are all theirs):
+a long run of one's own edits says nothing of whose the page was before it, so fifty edits don't make someone else's page yours.
+Without git nobody takes a page back.
 
 **Anyone else is refused**, and told whose move it is: "“groups/dev/plans” is seen by fewer people than “plans” is now (bob, erin would no longer see it). A page goes to fewer people by an admin, or by whoever shared it while nobody else has changed it. Ask an admin."
 In the browser the rename dialog (and the editor's rename bar) comes back with the name typed and that message.

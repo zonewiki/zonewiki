@@ -136,6 +136,30 @@ def test_who_shared_a_page_takes_it_back_while_nobody_else_changed_it(client, wi
     assert "Ask an admin" in refused(rename(client, "plans", "private/bob/plans", confirmed="private/bob/plans"))
 
 
+def commit_as(wiki, who, path, text, message):
+    (wiki / path).write_text(text)
+    git(wiki, "add", path)
+    git(wiki, "-c", f"user.name={who}", "-c", f"user.email={who}@example.com", "commit", "-qm", message)
+
+
+def test_a_long_run_of_ones_own_edits_doesnt_make_a_page_yours(client, wiki):
+    """Who took a page back is read from all its commits since it came where
+    it is, not from the newest fifty: bob editing plans fifty-one times
+    doesn't make it his to take from the others."""
+    for i in range(51):
+        commit_as(wiki, "bob", "plans.md", f"# Plans\n\nbob's edit {i}\n", "Update plans")
+    sign_in(client, "bob")
+    assert "Ask an admin" in refused(rename(client, "plans", "private/bob/plans", confirmed="private/bob/plans"))
+    out = mcp(client, "bob", "rename_page", slug="plans", new_slug="private/bob/plans", narrow=True)
+    assert "Not renamed" in out and "Ask an admin" in out
+    assert (wiki / "plans.md").exists() and not (wiki / "private/bob/plans.md").exists()
+    # A page he made himself and only he changed since, however often, is his.
+    for i in range(51):
+        commit_as(wiki, "bob", "notes/mine.md", f"# Mine\n\nEdit {i}\n", "Update notes/mine")
+    resp = rename(client, "notes/mine", "private/bob/mine", confirmed="private/bob/mine")
+    assert resp.headers["Location"] == "/page/private/bob/mine"
+
+
 def test_what_those_left_out_keep(client, wiki):
     """The question says they keep the page's versions up to now: they do
     (its history is read by its path), and nothing of what comes after."""
