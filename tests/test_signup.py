@@ -228,6 +228,19 @@ class TestSignup:
         resp = client.post("/admin/users/invite", data={"name": "dora", "role": "editor"}, headers=HOST)
         assert resp.status_code == 200 and "/welcome/" in resp.data.decode()
 
+    def test_names_tried_on_the_link_are_throttled(self, client, signup, wiki_dir):
+        """A link that works passes its own check every time: the names its
+        form refuses count apart, so it is no way to try every name and
+        learn which are taken."""
+        ask(client, "eve@example.org")
+        link = signup.link()
+        for _ in range(5):
+            assert "The user name alice is taken" in make(client, link, "alice").data.decode()
+        resp = make(client, link, "eve")
+        assert resp.status_code == 429 and "Try again in 1 minute" in resp.data.decode()
+        assert section(wiki_dir, "eve") is None
+        assert client.get(link, headers=HOST).status_code == 200       # the link itself still works
+
     def test_an_address_with_an_account_gets_its_name(self, client, signup, wiki_dir):
         resp = ask(client, "alice@example.org")
         assert resp.status_code == 200 and "Check your mail" in resp.data.decode()   # the same answer

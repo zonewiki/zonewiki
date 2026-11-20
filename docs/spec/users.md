@@ -813,7 +813,8 @@ The login page links to it ("No account yet? Sign up"), and the admin page's Use
 `/signup` (signed out; someone signed in is sent home) asks for a mail address, nothing else.
 It must be a bare address (`name@example.org`: no display name, no spaces or commas, a domain with a dot; `validEmail`; else 400 "That isn't a mail address. Write it as name@example.org."), at one of `signup-domains` if there are any (refused on the form, 400, naming them: "This wiki takes sign-ups only with an address at …").
 Zone then mails the address a link, and the page says "Check your mail".
-The name and password are chosen only after the address is confirmed, so the form tells no one which names exist.
+The name and password are chosen only after the address is confirmed, so this form tells no one which names exist.
+The link's page does say that a name is taken (The sign-up link, below), as a person choosing one must be told, but only to whoever confirmed an address, and slowly: each refusal there counts as a wrong try.
 An address that has an account gets a mail with its user name instead of a link, and the form says the same "Check your mail": the page tells no one who has an account.
 
 ### The sign-up link
@@ -825,6 +826,7 @@ A sign-up link stops working when sign-up is turned off.
 
 Its page (`/welcome/<token>`) says the address is confirmed and asks for a user name (as everywhere: lowercase letters, digits and inner hyphens) and a password twice (at least 8 characters).
 A name that is taken, by a user or an open invite, is refused there ("The user name alice is taken: choose another.") and the link stays good, as for any other mistake on the form.
+**Each name refused counts as a wrong try** (`welcomeThrottle`, under the link, apart from the check of the link itself, which a link that works passes): after 5 in a row the page waits a minute, doubling up to an hour (429, "Too many wrong attempts …"), and the client's total over every link and every wrong one bounds the rest (Throttling in `docs/spec/security.md`), so a link is no way to try every name to learn which are taken.
 So is the name of a user who was removed (`userNameHasHistory`):
 Zone noted them removed (`.zone/removed-users`, written by the Users tab's Remove and by `zonewiki user remove`),
 their private folder is there or in the history, a commit names them as its author,

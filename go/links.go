@@ -285,7 +285,7 @@ func welcomeRoute(w http.ResponseWriter, r *http.Request) {
 		dead(http.StatusNotFound, "")
 		return
 	}
-	v := &welcomeView{User: link.User, Kind: link.Kind, Email: link.Email}
+	v, status := &welcomeView{User: link.User, Kind: link.Kind, Email: link.Email}, http.StatusOK
 	if r.Method == http.MethodPost {
 		password := r.PostFormValue("password")
 		if link.Kind == "signup" {
@@ -299,7 +299,21 @@ func welcomeRoute(w http.ResponseWriter, r *http.Request) {
 		case password != r.PostFormValue("again"):
 			v.Error = "The passwords differ."
 		case link.Kind == "signup":
-			hash, pending, err := useSignup(link, v.User, password)
+			// A name refused (taken, or none) counts as a wrong try, under
+			// the link and apart from its own check, which a link that
+			// works passes: else one sign-up link tried every name, as
+			// fast as the form is sent, to learn which are taken.
+			var hash string
+			var pending bool
+			var err error
+			_, wait := welcomeThrottle.try(key, "names "+link.Hash, func() bool {
+				hash, pending, err = useSignup(link, v.User, password)
+				return err == nil
+			})
+			if wait > 0 {
+				v.Error, status = waitMessage(wait), http.StatusTooManyRequests
+				break
+			}
 			if err != nil {
 				v.Error = err.Error()
 				break
@@ -329,7 +343,7 @@ func welcomeRoute(w http.ResponseWriter, r *http.Request) {
 	case "signup":
 		title = "Sign up"
 	}
-	page(w, rq, http.StatusOK, "welcome.html", title, shell{noActions: true}, v)
+	page(w, rq, status, "welcome.html", title, shell{noActions: true}, v)
 }
 
 // useLink: the link's change (the user added, or their new password) in
