@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"slices"
 	"strings"
-	"zonewiki/internal/atomicfile"
 	"zonewiki/internal/mdtext"
 	"zonewiki/internal/taskfiles"
 )
@@ -120,7 +119,8 @@ func renameViewsInText(text string) string {
 // Zone starts, after the lists' migrations and under their locks (pagesMu,
 // the task files' lock); one commit, "Name the tasks' views Today and Open".
 // Once: the shared registry says version 3 afterwards, and so does each
-// user's; a wiki without one keeps a mark in Zone's folder.
+// user's; a wiki without one, .zone-format (noteWikiFormat), which a start
+// writes after this.
 //
 // The registries' settings (each list's, My tasks', All tasks') and every
 // page's [[tasks: …]] embeds are rewritten (oldViewNames); what a view
@@ -133,12 +133,6 @@ func migrateViewsLocked() error {
 		return err
 	}
 	if shared.Version >= taskfiles.ListsVersion {
-		return nil
-	}
-	// A wiki without a shared registry (no list was ever made: its first
-	// list writes one, at this version) says in Zone's folder that it was
-	// looked through.
-	if !exists(taskFiles.ListsPath("")) && exists(viewsNamedPath()) {
 		return nil
 	}
 	var written []string
@@ -194,7 +188,6 @@ func migrateViewsLocked() error {
 			written = append(written, path)
 		}
 	}
-	_ = atomicfile.Write(viewsNamedPath(), "1\n")
 	if written = nonEmpty(written); len(written) == 0 {
 		return nil
 	}
@@ -203,7 +196,3 @@ func migrateViewsLocked() error {
 	_ = gitCommit("", "Name the tasks' views Today and Open", written...)
 	return nil
 }
-
-// viewsNamedPath: the mark, in Zone's folder, that the wiki's pages were
-// looked through for the views' old names (migrateViewsLocked).
-func viewsNamedPath() string { return statePath("views-named") }

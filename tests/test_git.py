@@ -14,7 +14,8 @@ from pathlib import Path
 import pytest
 
 from tests import settings
-from tests.conftest import HOST, git_setup
+from tests.conftest import HOST, git_setup, write_page
+from tests.goserver import GoServer, _flags, _settings
 
 pytestmark = pytest.mark.skipif(not settings.GIT_ENABLED, reason="git not installed")
 
@@ -70,13 +71,26 @@ class TestGitSetup:
     def test_initializes_repo_and_imports_existing_files(self, wiki_dir):
         assert (wiki_dir / ".git").is_dir()
         assert (wiki_dir / ".gitignore").exists()
-        assert commit_messages(wiki_dir) == ["Initial import"]
-        assert "index.md" in git(wiki_dir, "ls-files").splitlines()
+        assert commit_messages(wiki_dir) == ["Note the format of the wiki's files", "Initial import"]
+        assert {"index.md", ".zone-format"} <= set(git(wiki_dir, "ls-files").splitlines())
+        assert (wiki_dir / ".zone-format").read_text() == "1\n"
         assert is_clean(wiki_dir)
 
     def test_rerun_is_idempotent(self, wiki_dir, tmp_path_factory):
         git_setup(tmp_path_factory)
-        assert commit_messages(wiki_dir) == ["Initial import"]
+        assert commit_messages(wiki_dir) == ["Note the format of the wiki's files", "Initial import"]
+
+    def test_a_wiki_a_newer_zone_wrote_is_refused(self, wiki_dir, tmp_path_factory):
+        """A Zone that knows an older format than .zone-format says doesn't
+        start, and changes nothing (The data format in deployment.md)."""
+        (wiki_dir / ".zone-format").write_text("99\n")
+        write_page(wiki_dir, "later", "# Later\n")
+        head = head_sha(wiki_dir)
+        log = tmp_path_factory.mktemp("go") / "refused.log"
+        with pytest.raises(RuntimeError):
+            GoServer(_settings(), log, flags=_flags())
+        assert "the wiki's files are in format 99 (.zone-format), which a newer Zone wrote" in log.read_text()
+        assert head_sha(wiki_dir) == head and (wiki_dir / ".zone-format").read_text() == "99\n"
 
     def test_rerun_restores_missing_identity(self, wiki_dir, tmp_path_factory):
         git(wiki_dir, "config", "--unset", "user.name")

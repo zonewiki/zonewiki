@@ -68,14 +68,14 @@ def task(id, title, tags):
 @pytest.fixture()
 def wiki(git_wiki_dir, monkeypatch):
     """A wiki with users: shared pages (one with a task list and a task
-    reference, an old top-level note), an upload, a shared task and a list;
-    alice's private page and private task."""
+    reference, an old top-level note), an upload, a shared task in a pinned
+    list; alice's private page and private task."""
     monkeypatch.setattr(settings, "USERS", dict(USERS))
     monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}})
     w = git_wiki_dir
     (w / "index.md").write_text("# Home\n\nWelcome. See [[garden]].\n")
     (w / "garden.md").write_text(
-        f"# Garden\n\nBeds and paths.\n\n- [ ] water\n\n[[tasks: list=shop pin=1]]\n\nSee [[task:{TASK_ID[:8]}]] and "
+        f"# Garden\n\nBeds and paths.\n\n- [ ] water\n\n[[tasks: list=shop]]\n\nSee [[task:{TASK_ID[:8]}]] and "
         "[[private/alice/diary]].\n\n## Later\n\nMore.\n")
     (w / "2026-01-01_10-00-00_old-note.md").write_text("# Old note\n\nFrom before users.\n")
     (w / "wiki-guide.md").write_text("# Guide\n\nHow this wiki is kept.\n")
@@ -85,7 +85,10 @@ def wiki(git_wiki_dir, monkeypatch):
     (w / "private/alice/diary.md").write_text(f"# Diary {SECRET}\n\n{SECRET} about the [[garden]].\n")
     (w / "private/alice/_tasks").mkdir()
     (w / "private/alice/_tasks/tasks.json").write_text(json.dumps([task(MINE_ID, f"Mine {SECRET}", ["shop"])]) + "\n")
-    (w / "_tasks/tasks.json").write_text(json.dumps([task(TASK_ID, f"Buy {TASKWORD}", ["shop", TASKWORD])]) + "\n")
+    (w / "_tasks/lists.json").write_text('{"version": 3, "lists": [{"name": "shop"}], "pinned": ["shop"]}\n')
+    (w / "_tasks/lists/shop").mkdir(parents=True)
+    (w / "_tasks/lists/shop/tasks.json").write_text(
+        json.dumps([{**task(TASK_ID, f"Buy {TASKWORD}", [TASKWORD]), "list": "shop"}]) + "\n")
     git(w, "add", "-A")
     git(w, "commit", "-q", "-m", "A wiki")
     return w

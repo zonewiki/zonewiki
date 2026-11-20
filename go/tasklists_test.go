@@ -83,7 +83,7 @@ func TestListsTakenOverFromPages(t *testing.T) {
 	if err := os.WriteFile(oldAllTasksFile(), []byte(`{"all": {"view": "open", "limit": "5"}}`), 0o666); err != nil {
 		t.Fatal(err)
 	}
-	migrateLists(false)
+	migrateLists(false, 0)
 	if listsUnmigrated {
 		t.Fatal("the migration failed")
 	}
@@ -147,7 +147,7 @@ func TestListsTakenOverFromPages(t *testing.T) {
 	// Run again (the next start): nothing changes.
 	before := fileText(t, taskFiles.OpenPath("")) + fileText(t, taskFiles.ListsPath(""))
 	putPage(t, "later", "# Later\n\n[[tasks: list=typed-later pin=1]]\n")
-	migrateLists(false)
+	migrateLists(false, 0)
 	if after := fileText(t, taskFiles.OpenPath("")) + fileText(t, taskFiles.ListsPath("")); after != before {
 		t.Errorf("a second run changed the files:\n%s", after)
 	}
@@ -176,7 +176,7 @@ func TestListsTakenOverPerUser(t *testing.T) {
 	writeTasks(t, "", oldTask("s1", "Scarf", "gifts"), oldTask("s2", "Hers, shared", "secret"))
 	writeTasks(t, "alice", oldTask("a1", "Cake", "Gifts"), oldTask("a2", "Loose"), oldTask("a3", "Hidden", "secret"))
 	writeTasks(t, "bob", oldTask("b1", "Bob's", "gifts"))
-	migrateLists(false)
+	migrateLists(false, 0)
 	if listsUnmigrated {
 		t.Fatal("the migration failed")
 	}
@@ -242,7 +242,7 @@ func TestListsTakenOverPerUser(t *testing.T) {
 		return out
 	}
 	before := files()
-	migrateLists(false)
+	migrateLists(false, 0)
 	if files() != before || listsUnmigrated {
 		t.Errorf("a second start changed the files:\n%s", files())
 	}
@@ -269,7 +269,7 @@ func TestNothingToTakeOver(t *testing.T) {
 	testWiki(t, map[string]string{"index": "# Home\n\n[[tasks:]]\n"})
 	writeTasks(t, "", oldTask("1", "Plain", "work"))
 	before := fileText(t, taskFiles.OpenPath(""))
-	migrateLists(false)
+	migrateLists(false, 0)
 	if _, err := os.Stat(taskFiles.ListsPath("")); err == nil || fileText(t, taskFiles.OpenPath("")) != before || listsUnmigrated {
 		t.Error("a wiki without lists was changed")
 	}
@@ -290,7 +290,7 @@ func TestListsNotTakenOverFromABrokenWiki(t *testing.T) {
 	if err := os.WriteFile(taskFiles.OpenPath(""), []byte("[ half"), 0o666); err != nil {
 		t.Fatal(err)
 	}
-	migrateLists(false)
+	migrateLists(false, 0)
 	if !listsUnmigrated {
 		t.Fatal("migrated over a file that can't be read")
 	}
@@ -1205,7 +1205,7 @@ func TestInbox(t *testing.T) {
 	if got := openByID("bob")[loose.ID]; got == nil || got.Owner != "" || got.List != "" {
 		t.Errorf("the task from before: %+v", got)
 	}
-	migrateLists(false)
+	migrateLists(false, 0)
 	if got := openByID("bob")[loose.ID]; got == nil || got.Owner != "" || got.List != generalListName || listsUnmigrated {
 		t.Errorf("the task from before, after a start: %+v", got)
 	}
@@ -1237,7 +1237,7 @@ func taskFilesText(t *testing.T) string {
 func startAgain(t *testing.T) {
 	t.Helper()
 	before := taskFilesText(t)
-	migrateLists(false)
+	migrateLists(false, 0)
 	if after := taskFilesText(t); after != before || listsUnmigrated {
 		t.Errorf("a second start changed the files:\n%s", after)
 	}
@@ -1261,7 +1261,7 @@ func TestInboxMigrationRenamesListsCalledInbox(t *testing.T) {
 	writeRegistry(t, "bob", `{"version": 1, "lists": [], "pinned": ["work", "inbox"]}`)
 	writeTasks(t, "", inList("inbox", oldTask("s1", "Shared"))[0], inList("work", oldTask("s2", "Work"))[0])
 	writeTasks(t, "alice", inList("inbox", oldTask("a1", "Hers"))[0])
-	migrateLists(false)
+	migrateLists(false, 0)
 	if listsUnmigrated {
 		t.Fatal("the migration failed")
 	}
@@ -1323,7 +1323,7 @@ func TestInboxMigrationTurnsThePrivateListIntoTheInbox(t *testing.T) {
 	for _, u := range []string{"bob", "carl", "dora"} {
 		writeTasks(t, u, inList("private", oldTask(u+"1", u+"'s"))[0])
 	}
-	migrateLists(false)
+	migrateLists(false, 0)
 	if listsUnmigrated {
 		t.Fatal("the migration failed")
 	}
@@ -1383,7 +1383,7 @@ func TestInboxMigrationOfAUserWhoPinnedNothing(t *testing.T) {
 	writeRegistry(t, "", `{"version": 1, "lists": []}`)
 	writeRegistry(t, "erin", `{"version": 1, "lists": [{"name": "private"}]}`)
 	writeTasks(t, "erin", inList("private", oldTask("e1", "Hers"))[0])
-	migrateLists(false)
+	migrateLists(false, 0)
 	if got := openByID("erin")["e1"]; got == nil || got.List != "" || got.Owner != "erin" || len(taskLists(asUser("erin"))) != 0 || listsUnmigrated {
 		t.Errorf("erin's task %+v, lists %v", got, sortedKeys(taskLists(asUser("erin"))))
 	}
@@ -1401,7 +1401,7 @@ func TestInboxMigrationWithoutASharedRegistry(t *testing.T) {
 	writeRegistry(t, "finn", `{"version": 1, "lists": [{"name": "inbox"}], "pinned": ["inbox"]}`)
 	writeTasks(t, "erin", inList("private", oldTask("e1", "Hers"))[0], inList("someday", oldTask("e2", "Later"))[0])
 	writeTasks(t, "finn", inList("inbox", oldTask("f1", "His"))[0])
-	migrateLists(false)
+	migrateLists(false, 0)
 	if got := openByID("erin")["e1"]; got == nil || got.List != "" || got.Owner != "erin" || listsUnmigrated {
 		t.Errorf("erin's task %+v", got)
 	}
@@ -1430,7 +1430,7 @@ func TestInboxMigrationLeavesOutWhatWasNotPinned(t *testing.T) {
 	writeRegistry(t, "", `{"version": 1, "lists": [{"name": "work"}, {"name": "someday", "limit": "3"}, {"name": "shop"}], "pinned": ["shop", "work"], "all": {"view": "open"}}`)
 	writeTasks(t, "", oldTask("1", "Loose"), inList("work", oldTask("2", "Report"))[0], inList("someday", oldTask("3", "Maybe"))[0])
 	before := fileText(t, taskFiles.OpenPath(""))
-	migrateLists(false)
+	migrateLists(false, 0)
 	if listsUnmigrated {
 		t.Fatal("the migration failed")
 	}
@@ -1460,7 +1460,7 @@ func TestInboxMigrationLeavesOutWhatWasNotPinned(t *testing.T) {
 	if err := pinListOp(asker{}, "work", "0"); err != nil {
 		t.Fatal(err)
 	}
-	migrateLists(false)
+	migrateLists(false, 0)
 	if taskLists(asker{})["work"].LeftOut() {
 		t.Error("a list unpinned later was left out")
 	}
@@ -1479,7 +1479,7 @@ func TestSharedTasksWithoutAListGoToGeneral(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Without users: nothing moves, and no list is made.
-	migrateLists(false)
+	migrateLists(false, 0)
 	if got := openByID("")["1"]; got.List != "" || len(taskLists(asker{})) != 1 || listsUnmigrated {
 		t.Fatalf("without users: %+v, lists %v", got, sortedKeys(taskLists(asker{})))
 	}
@@ -1487,7 +1487,7 @@ func TestSharedTasksWithoutAListGoToGeneral(t *testing.T) {
 	// Users are turned on: the next start files them.
 	withUsers(t, "alice", "bob")
 	writeTasks(t, "alice", oldTask("a1", "Hers"))
-	migrateLists(false)
+	migrateLists(false, 0)
 	if listsUnmigrated {
 		t.Fatal("the migration failed")
 	}
@@ -1511,7 +1511,7 @@ func TestSharedTasksWithoutAListGoToGeneral(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeTasks(t, "", append(taskFiles.Open(asker{}), oldTask("9", "Stray"))...)
-	migrateLists(false)
+	migrateLists(false, 0)
 	if got := openByID("bob")["9"]; got == nil || got.List != generalListName {
 		t.Errorf("the stray: %+v", got)
 	}
@@ -1530,7 +1530,7 @@ func TestGeneralInAWikiWithoutARegistry(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeTasks(t, "", oldTask("1", "Loose"))
-	migrateLists(false)
+	migrateLists(false, 0)
 	if got := openByID("alice")["1"]; got == nil || got.List != generalListName || got.Owner != "" || listsUnmigrated {
 		t.Errorf("the task: %+v", got)
 	}
@@ -1574,7 +1574,7 @@ func TestAStartReadsTheArchivesWhenItMust(t *testing.T) {
 	start := func() (parsed int64, readArchive bool) {
 		taskfiles.ForgetParsed()
 		before := taskfiles.Parsed()
-		setUpTasks()
+		setUpTasks(0)
 		return taskfiles.Parsed() - before, taskfiles.KeepsParsed(archive)
 	}
 	if tasksChecked() {

@@ -166,7 +166,7 @@ def test_the_file_is_kept_out_of_git_and_never_shown(client, git_wiki_dir, monke
     login(client, "alice", "alice-pw")
     config = git_wiki_dir / ".zone" / "config"
     files = git(git_wiki_dir, "ls-files")
-    assert ".zone" not in files and git(git_wiki_dir, "log", "--all", "--format=%H", "--", ".zone/config") == ""
+    assert ".zone/" not in files and git(git_wiki_dir, "log", "--all", "--format=%H", "--", ".zone/config") == ""
     write(config, config.read_text() + user("carol", "carol-pw", "carol-token"))
     client.get("/page/index", headers=HOST)
     assert until(lambda: "Change settings: add user carol" in client.live.log.read_text())
@@ -208,4 +208,4 @@ def test_a_new_wikis_first_commit_has_no_secret_key(client, wiki_dir, monkeypatc
     monkeypatch.setattr(settings, "CONFIG_FILE", "locale = de-AT\n")
     client.get("/page/index", headers=HOST)
     files = git(wiki_dir, "ls-files")
-    assert "index.md" in files and ".zone" not in files
+    assert "index.md" in files and ".zone/" not in files

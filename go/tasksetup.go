@@ -20,12 +20,13 @@ import (
 // it, not at every start: when the task files are as a start left them
 // (tasksChecked) only what a month's end leaves to file is done
 // (taskFiles.Unfiled), and the lists' migrations look at their registries.
-func setUpTasks() {
+// format: the wiki's (.zone-format), which says which of those it needs.
+func setUpTasks(format int) {
 	checked := tasksChecked()
 	if !checked || taskFiles.Unfiled() {
 		taskFiles.ArchiveOldClosed()
 	}
-	migrateLists(checked)
+	migrateLists(checked, format)
 	if !checked {
 		taskFiles.FileByList()
 	}

@@ -185,6 +185,7 @@ def test_a_wiki_from_before_is_taken_over_to_the_views_names(git_wiki_dir, tmp_p
         '{"version": 2, "lists": [{"name": "shop", "view": "plan", "plan": "on"}, {"name": "b", "view": "focus"}],'
         ' "mine": {"view": "open"}, "all": {"plan": "off"}}')
     git = lambda *args: subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, check=True, env=settings.GIT_ENV).stdout
+    (root / ".zone-format").unlink()   # a wiki from before has none (The data format in deployment.md)
     git("add", "-A")
     git("commit", "-q", "-m", "Before")
     with GoClient(tmp_path_factory.mktemp("go") / "server.log") as c:
@@ -196,7 +197,8 @@ def test_a_wiki_from_before_is_taken_over_to_the_views_names(git_wiki_dir, tmp_p
         assert '"version": 3' in registry and '{"name": "shop", "view": "open", "group": "day"}' in registry
         assert '{"name": "b", "view": "today"}' in registry
         assert '"mine": {"view": "open", "group": "none"}' in registry and '"all": {"group": "none"}' in registry
-        assert git("log", "-1", "--format=%s").strip() == "Name the tasks' views Today and Open"
+        assert git("log", "-2", "--format=%s").splitlines() == [
+            "Note the format of the wiki's files", "Name the tasks' views Today and Open"]
         html = c.get("/page/home", headers=HOST).get_data(as_text=True)
         assert 'data-init-view="today"' in html and 'data-init-view="open" data-init-group="day"' in html
     # A second start changes nothing; neither does a view=open written since.
@@ -204,4 +206,4 @@ def test_a_wiki_from_before_is_taken_over_to_the_views_names(git_wiki_dir, tmp_p
     with GoClient(tmp_path_factory.mktemp("go") / "server.log") as c:
         c.live.ensure()
         assert (root / "later.md").read_text() == "[[tasks: view=open]]\n"
-        assert git("log", "-1", "--format=%s").strip() == "Name the tasks' views Today and Open"
+        assert git("log", "-1", "--format=%s").strip() == "Note the format of the wiki's files"

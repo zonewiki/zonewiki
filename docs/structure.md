@@ -76,6 +76,7 @@ What each file and folder of the repository is for.
 │   ├── tasklists.go        # Task lists: the lists a user sees (taskLists, refs), their pins, My tasks (the home view's rule, mineFilter, and its settings), and the list operations (make, rename, delete, share, pin, settings)
 │   ├── listsmigrate.go     # The lists' migration at start: lists that pages declared and pins in embeds, taken over into the registries, once
 │   ├── viewsmigrate.go     # The views' names of 2026-11 (view=today|open|closed, group=): embeds and registries from before rewritten at start, once
+│   ├── wikiformat.go       # The format of the wiki's files, .zone-format at its root (in git): read at start, a newer one refused, the steps from before it left out once it is written
 │   ├── tasksapi.go         # The /api/tasks routes
 │   ├── tasksembed.go       # The [[tasks:]] embed: its HTML, its settings dialog, the counts the Tasks links show
 │   ├── tasklogic.go        # What Zone does with tasks beyond keeping them: a series' next occurrence, completing, history, comments, backlinks, [[task:…]] references; taskFiles, the store, wired to the wiki here

@@ -10,7 +10,7 @@ from io import BytesIO
 import pytest
 
 from tests import settings
-from tests.conftest import HOST, content_hash
+from tests.conftest import HOST, content_hash, make_list
 
 USERS = {"alice": ("alice-pw", "alice-token"), "bob": ("bob-pw", "")}
 
@@ -434,12 +434,14 @@ class TestModuleMenu:
         assert 'Signed in as <strong>alice</strong>' in menu and 'action="/logout"' in menu and ">Sign out</button>" in menu
 
     def test_a_private_list_is_in_its_users_switcher_alone(self, client, wiki_dir, users):
-        # The task list switcher lists a list declared in your folder with a
-        # lock; another user doesn't see it at all.
+        # The task list switcher lists a private list of yours with a lock;
+        # another user doesn't see it at all.
         (wiki_dir / "shop.md").write_text("# Shop\n\n[[tasks: list=shop]]\n", encoding="utf-8")
         (wiki_dir / "private/alice").mkdir(parents=True)
         (wiki_dir / "private/alice/gifts.md").write_text("# Gifts\n\n[[tasks: list=gifts]]\n", encoding="utf-8")
         login(client, "alice", "alice-pw")
+        make_list(client, "shop", headers=HOST)
+        make_list(client, "gifts", private=True, headers=HOST)
         nav = client.get("/tasks", headers=HOST).data.decode().split('<nav class="tasks-places"', 1)[1].split("</nav>", 1)[0]
         entries = dict(re.findall(r'data-place="([^"]+)"(.*?)</a>', nav, re.S))
         assert list(entries) == ["mine", "inbox", "list:gifts", "list:shop"]   # My tasks, her Inbox; neither list pinned: under More

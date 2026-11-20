@@ -139,6 +139,10 @@ func main() {
 	}
 	cfg = c
 	startSettings(s)
+	format, err := checkWikiFormat() // a wiki a newer Zone wrote isn't touched (wikiformat.go)
+	if err != nil {
+		fatal(err)
+	}
 	if publicDir = *public; publicDir == "" {
 		publicDir = findPublic()
 	}
@@ -182,7 +186,8 @@ func main() {
 	noDeltaForUploads(cfg.Data)
 	ensureHomePage()
 	cleanLeftDrafts()
-	setUpTasks()  // the task files as this Zone keeps them (tasksetup.go)
+	setUpTasks(format) // the task files as this Zone keeps them (tasksetup.go)
+	noteWikiFormat(format)
 	packAtStart() // the repository's loose objects, in the background (gitstore.go)
 	// The semantic index's worker reads tasks: after the task files are set up.
 	if *semanticTest != "" {

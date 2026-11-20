@@ -5,7 +5,7 @@ Part of Zone's spec (see `AGENTS.md` for the index).
 How Zone is built and run: the files that deploy it (`Containerfile`, the compose files, `run.sh`, `.env`), the commands,
 running it without `run.sh` or without a container, on a NAS or server, CI on Forgejo and GitHub,
 network access (a Unix socket, systemd), mail, phone access, the version string, the home-screen app,
-the data directory and its backups, how Zone packs the wiki's git repository, how big a wiki can be, and moving from Zone 1.
+the data directory (its data format) and its backups, how Zone packs the wiki's git repository, how big a wiki can be, and moving from Zone 1.
 
 ## Files
 
@@ -557,7 +557,8 @@ Inside the container it is always mounted at `/wiki-data`.
 - `$ZONE_DATA/_tasks/` — the tasks (`tasks.json`, `closed.json`, `closed-YYYY-MM.json`, each list's in `lists/<name>/`, and `lists.json`, the lists' registry, with the settings of All tasks; see Storage in `docs/spec/tasks.md`);
   each user's private tasks in `private/<user>/_tasks/`
 - `$ZONE_DATA/.git/` — the wiki's history: Zone makes the folder a git repository at its first start (`gitSetup`) and commits every change made through it (Packing the repository, below)
-- `$ZONE_DATA/.zone/` — Zone's own state (What is in .zone/, below)
+- `$ZONE_DATA/.zone-format` — the format the wiki's files are in, a number, in git (The data format, below)
+- `$ZONE_DATA/.zone/` — Zone's own state, out of git (What is in .zone/, below)
 
 Uploaded image URLs use `/_assets/<filename>` (served by `serveUpload` from `cfg.Uploads`), not the static file path.
 
@@ -576,7 +577,35 @@ Zone's own state, none of it in git (`.git/info/exclude` has `/.zone/*`, `exclud
 - `tmp/` — a three-way merge's scratch files, removed after each merge
 - `index/` — search's files: `pages.idx` and `sections.idx` (the BM25 indexes), `tasks/<hash>.gob` (each closed tasks' archive's search docs) and `embeddings.json` (the semantic search cache) (`docs/spec/search.md`)
 - `queries.jsonl` — the query log, only with `query-log = yes`
-- `tasks-checked`, `views-named` — marks that a start has checked the task files, and rewritten the views' old names in the pages, so later starts skip it
+- `tasks-checked` — the mark that a start has checked the task files, so later starts skip it while git says they haven't changed (Storage in `docs/spec/tasks.md`)
+
+### The data format
+
+`.zone-format` at the wiki's root says which format the wiki's files are in: a number and a newline (`1`).
+Zone writes it at the first start that took the wiki over, in a commit of its own ("Note the format of the wiki's files");
+a wiki without it is from before it (or new), and its start runs every step that takes an older wiki over (Migrations at start in `docs/spec/tasks.md`) before it writes the file.
+
+| The file says | Zone |
+|---------------|------|
+| Nothing (no file) | Runs the steps from before the file, which look at the files for what they need, then writes it |
+| Its own format | Runs none of those steps |
+| An older format | Runs the steps from that format on, each writing its number in its own commit |
+| A newer format | Doesn't start: "the wiki's files are in format 2 (.zone-format), which a newer Zone wrote" |
+| Anything but a number | Doesn't start, and says how to mend it |
+
+**Why it is refused**: a newer Zone changed files in ways this one would misread and then write over (an image rolled back after an upgrade).
+Start the newer Zone again, or go back: revert, newest first, the commits that raised the number (`git log -- .zone-format`), and with them the steps they wrote.
+
+**Why it is in git, not in `.zone/`**: it speaks for the files in git, so it has to move with them.
+A revert of a step's commit takes back the files and the number together, and so do a `git pull` and a checkout of an older commit;
+a number in `.zone/` would still say the newer format, so the older Zone would refuse the wiki, and the newer one would skip the step the revert took back.
+A backup or a copy of the folder has the file either way, and a clone of the remote has it too.
+No route or tool reads or writes it (`safePath` takes only a page's `.md`).
+
+**How it works** (`go/wikiformat.go`): `checkWikiFormat` reads the file before anything at start writes, `setUpTasks` runs the steps the format needs, and `noteWikiFormat` writes the first number after the steps from before the file (not while the lists couldn't be set up, `listsUnmigrated`: the next start runs them again).
+A change to what Zone keeps in git that an older Zone would misread raises `wikiFormat`, with a step at start that takes a wiki of the format before over and writes the new number into the same commit (`writeWikiFormat`).
+Readers stay lenient all the same: the number says which steps Zone ran, not that every file is as Zone wrote it (a file edited by hand or pulled from elsewhere is read as before).
+The settings file and the rest of `.zone/` aren't covered: they are no wiki data (What is in .zone/, above).
 
 What holds users' words or secrets is written readable by Zone's user alone (0600), whatever the umask: `config`, `secret_key`, `signed-out`, `links`, `grants`, `seen/`, `drafts/`, the index files, `index/tasks/` (private tasks' titles among them), `embeddings.json` (every page's slug) and `queries.jsonl` (every user's queries and what they found) (`atomicfile.WriteOwnerOnly`; a file from before is made so at its next write).
 The pages themselves, in the wiki, keep the umask's mode, as a file made in an editor does.
@@ -604,7 +633,7 @@ Zone writes each file whole (a reader never sees half of one), but a copy taken 
   Back these up with the folder; where the git remote is the only copy, keep a copy of `.zone/` beside it.
   They hold password and token hashes and keys: keep the backup as confidential as the wiki (Before you open it up in `docs/spec/security.md`).
 - **What can be rebuilt, and needn't be backed up**: `.zone/index/` (Zone builds the search indexes again when they are first needed, which takes a while on a big wiki, and with semantic search embeds every section and task again in the background, which takes longer),
-  `.zone/tmp/`, the lock files and the marks `tasks-checked` and `views-named` (a start without them looks the files through again and changes nothing that is right).
+  `.zone/tmp/`, the lock files and the mark `tasks-checked` (a start without it looks the task files through again and changes nothing that is right).
   Lost, `seen/` shows each user the tasks' news again, `drafts/` loses only a text left in a conflict, and `queries.jsonl` is a log.
 - **Restoring**: put the folder back where `ZONE_DATA` points and start Zone;
   the files must belong to the user Zone runs as, and `.zone/config` and `secret_key` should stay readable by it alone (0600: Zone warns in its log when others may read the settings file).

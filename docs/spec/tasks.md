@@ -1961,7 +1961,7 @@ So a list can be added or changed by hand in one line, and a commit shows the li
 
 | Key | Holds |
 |-----|-------|
-| `version` | That the wiki's lists are kept here: none, a wiki to take over (The lists' migration); `1`, a wiki from before the Inbox (The Inbox's migration); the current one is 3 |
+| `version` | That the wiki's lists are kept here: none, a wiki to take over (The lists' migration); `1`, a wiki from before the Inbox (The Inbox's migration); the current one is 3. Read only in a wiki without `.zone-format` |
 | `lists` | The lists, a line each |
 | `pinned` | A user's pins in theirs; without users the wiki's in the shared one (Pins) |
 | `mine` | The settings of My tasks (a user's own; without users the shared one's) |
@@ -2070,7 +2070,12 @@ Reads clean the tags (`jsonobj.TextList`, `taskmodel.CleanTags`), since a file e
 ### Migrations at start
 
 A wiki from an older Zone is taken over when Zone starts, once, each step in a commit of its own; a second start changes nothing.
-Going back to the older Zone means reverting that commit in the wiki's repository.
+These steps are from before `.zone-format`, the file that says which format the wiki's files are in (The data format in `docs/spec/deployment.md`):
+the first three, the task files', run whenever the task files may have changed (`tasks-checked`), since a file edited by hand or pulled from elsewhere can need them at any time;
+the last three, the lists' and the views', run for a wiki without that file, each looking at the registries for whether it is needed, and a start writes the file after them, so a wiki that has it is past them.
+A step after them raises the number in `.zone-format`, in its own commit.
+Going back to the older Zone means reverting the step's commit in the wiki's repository;
+going back to a Zone from before `.zone-format`, revert the commit that wrote it too ("Note the format of the wiki's files"), or a later start finds it and leaves out the step the revert took back.
 
 | Step | Takes over | Commit |
 |------|------------|--------|
@@ -2098,7 +2103,7 @@ A month that ends is rolled into its archive the same way at the next start with
 
 #### The lists' migration
 
-When Zone starts and no registry, the shared one or a user's, has a `version` (`migrateLists` in `go/listsmigrate.go`), a wiki from before lists were places is taken over, in one commit ("Make task lists their own"), under the page and task locks.
+When Zone starts on a wiki without `.zone-format` and no registry, the shared one or a user's, has a `version` (`migrateLists` in `go/listsmigrate.go`), a wiki from before lists were places is taken over, in one commit ("Make task lists their own"), under the page and task locks.
 There a list was a tag a page declared with `[[tasks: list=<tag>]]`: a task could be in two, a list ended with its page, and a task moved by a change of its tags.
 It changes nobody's view of who sees what: no task changes its file.
 
@@ -2126,7 +2131,7 @@ Going back to an older Zone: revert that commit in the wiki's repository; withou
 
 #### The Inbox's migration
 
-After the lists' migration and under its locks (`migrateInboxLocked` in `go/listsmigrate.go`; one commit, "Give every task a list: the Inbox"), once for each registry that says `version` 1 (lists as places, from before the Inbox), the shared one and each user's own, which then says the current version (each for itself: a wiki whose users have lists and that never had a shared one has no shared registry).
+After the lists' migration and under its locks (`migrateInboxLocked` in `go/listsmigrate.go`; one commit, "Give every task a list: the Inbox"), in a wiki without `.zone-format`, once for each registry that says `version` 1 (lists as places, from before the Inbox), the shared one and each user's own, which then says the current version (each for itself: a wiki whose users have lists and that never had a shared one has no shared registry).
 Before the Inbox a task could be in no list, which with users was everyone's; a pin also put a list's tasks in My tasks, and the first pinned list took new tasks (with nothing pinned they went to a private list `private`, which counted as pinned).
 
 1. A list called `inbox` is called `inbox-list` (its tasks and pins follow; embeds that name it show the Inbox from then on).
@@ -2148,7 +2153,7 @@ A wiki from then is taken over once, when Zone starts (`migrateViewsLocked` in `
 `plan=on|off` is `group=day|none`;
 of three `labels` the first and the last stay),
 and the registries say `version` 3;
-a wiki without a registry keeps a mark in Zone's folder.
+a wiki without a registry has `.zone-format` to say it, which the start writes after this step.
 From then on the old names are no view's: a link with `view=focus` or `view=plan` opens the default tab.
 
 #### Older formats

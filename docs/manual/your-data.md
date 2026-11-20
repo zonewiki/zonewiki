@@ -19,6 +19,7 @@ In it:
 | Uploads | `_assets/` at the top (a private page's in `private/<you>/_assets/`, a group's in `groups/<name>/_assets/`) | The files as uploaded |
 | Tasks | `_tasks/` (your private ones in `private/<you>/_tasks/`) | JSON |
 | History | `.git/` | A git repository |
+| The data format | `.zone-format` | A number, in git |
 | Zone's own state | `.zone/` | Settings and indexes, kept out of git |
 
 ### Pages and uploads
@@ -48,6 +49,16 @@ They are plain text, in git like the pages, and readable by any script.
 Zone never shows this folder in the browser, in history or to an assistant.
 It holds password hashes and keys, so treat it as confidential.
 The full list is in [What is in .zone/](../spec/deployment.md#what-is-in-zone).
+
+### The format file
+
+`.zone-format` holds one number: the format the wiki's files are in.
+Zone reads it when it starts, to know whether the files still need bringing up to date from an older Zone.
+It is committed with the files, so going back in the history takes it back with them.
+Leave it as it is.
+
+If Zone won't start and says the files are in a format a newer Zone wrote, the wiki was last run by a newer Zone than this one: start the newer one again.
+Going back is in [The data format](../spec/deployment.md#the-data-format).
 
 ## Every change is a commit
 

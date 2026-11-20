@@ -173,6 +173,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `go/tasksettings_test.go` | tasks.md | An embed's parameters set by the settings dialog, the views' old names |
 | `go/users_test.go` | users.md | The hash format, `authenticate` |
 | `go/views_test.go` | routes.md | A page view and a search walk the wiki once |
+| `go/wikiformat_test.go` | deployment.md, tasks.md | `.zone-format`: what it may say, a newer format refused, written once after the steps from before it, which a wiki with it leaves out |
 | `go/internal/atomicfile/atomicfile_unix_test.go` | tasks.md | The atomic write: a new file's mode, an old one's kept, a link written through |
 | `go/internal/gitrepo/gitrepo_test.go` | rendering.md | Git's time limit and context, no pack inside a commit, Pack, Prune, Join, Drop, when to join |
 | `go/internal/jsonobj/jsonobj_test.go` | mcp.md, tasks.md | JSON objects read a member at a time |

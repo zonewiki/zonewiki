@@ -304,6 +304,8 @@ and commit the new pins.
   Task reads don't take the task files' lock: they wait only while a write replaces its files (`taskFiles.Hold` … `Release`, Storage in `docs/spec/tasks.md`), so code that writes a task file itself calls `taskFiles.Hold()` first, and a section under `taskFiles.Lock` calls only the store's `…Locked` readers.
   Pages are written atomically (`writeText` → `atomicfile.Write`: a link written through, a new file 0666 less the umask).
   `gitCommit` commits only the paths it is given (not what `.gitignore` leaves out) and returns an error, which a write returns (`notCommitted`; a `keepPending` that fails stops the write); links a move couldn't re-point are no failure (`linksLeft`: logged, the MCP tools say so).
+- **The wiki's files have a format**, the number in `.zone-format` at the wiki's root, in git (The data format in `docs/spec/deployment.md`): Zone refuses a wiki of a newer format than its `wikiFormat` (`go/wikiformat.go`).
+  A change to what Zone keeps in git that an older Zone would misread raises `wikiFormat`, with a step at start that takes the format before over and writes the new number into its own commit (`writeWikiFormat`), so a revert takes back both; readers stay lenient all the same.
 - `index.md` is the home page and must always exist (Zone creates it at startup when missing).
   It can't be deleted or renamed via the UI or MCP.
 - A rename re-points every link to the page, on pages and in tasks, in one commit (Rename in `docs/spec/editor.md`).

@@ -208,8 +208,8 @@ class TestChanges:
                 break
             time.sleep(.05)
         assert "Change settings: bob's role (by alice)" in client.live.log.read_text()
-        assert ".zone" not in subprocess.run(["git", "ls-files"], cwd=git_wiki_dir, capture_output=True,
-                                             text=True, env=settings.GIT_ENV).stdout
+        assert ".zone/" not in subprocess.run(["git", "ls-files"], cwd=git_wiki_dir, capture_output=True,
+                                              text=True, env=settings.GIT_ENV).stdout
 
     def test_the_change_applies_at_once(self, admin, client, git_wiki_dir):
         post(admin, "/admin/users/carol/role", role="admin")

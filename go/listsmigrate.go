@@ -149,16 +149,25 @@ func listSettingsOf(p TasksParams, noshare bool) map[string]string {
 // done (migrateListsLocked). A failure is logged and stops every change to
 // lists until a start succeeds (listsUnmigrated): the tasks stay as they
 // are, and nothing is half taken over.
-func migrateLists(checked bool) {
+//
+// Those steps are from before .zone-format: they run for a wiki without
+// it (format 0), each looking at the registries' versions for whether it
+// is done; a wiki that has it is past them (firstFormat). What the Inbox's
+// step does at every start with users runs either way.
+func migrateLists(checked bool, format int) {
 	pagesMu.Lock()
 	defer pagesMu.Unlock()
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
-	err := migrateListsLocked()
-	if err == nil {
-		err = migrateInboxLocked(checked)
+	before := format < firstFormat
+	var err error
+	if before {
+		err = migrateListsLocked()
 	}
 	if err == nil {
+		err = migrateInboxLocked(checked, before)
+	}
+	if err == nil && before {
 		err = migrateViewsLocked()
 	}
 	if err != nil {
@@ -485,7 +494,9 @@ const inboxListName = "inbox-list"
 // shared list "general", made for it and pinned for the wiki: a shared task
 // is always in a list. That takes over the tasks that were in no list, and
 // a wiki whose users were turned on later.
-func migrateInboxLocked(checked bool) error {
+//
+// before: a wiki from before .zone-format, whose registries may say 1.
+func migrateInboxLocked(checked, before bool) error {
 	shared, err := taskFiles.ReadListsStrict("")
 	if err != nil {
 		return err
@@ -507,7 +518,7 @@ func migrateInboxLocked(checked bool) error {
 	// with users on (checked: tasksChecked), where there can be none.
 	any := users && !checked
 	for _, o := range owners {
-		first[o] = regs[o].Version == 1
+		first[o] = before && regs[o].Version == 1
 		any = any || first[o]
 	}
 	if !any {

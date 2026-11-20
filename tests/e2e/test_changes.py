@@ -39,7 +39,7 @@ def test_fits_a_phone(new_page, wiki):
     _commits(wiki)
     pg = new_page(viewport=PHONE)
     pg.goto("/changes")
-    expect(pg.locator(".changes-row")).to_have_count(4)   # and the wiki's first commit
+    expect(pg.locator(".changes-row")).to_have_count(5)   # and the wiki's first two (its files, .zone-format)
     assert horizontal_overflow(pg) <= 0
     pg.screenshot(path=str(SCREENSHOT_DIR / "changes-phone.png"))
 
