@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta
 import pytest
 from playwright.sync_api import expect
 
-from conftest import list_page, make_list, more_menu, open_tab, pick_date, still, wait_until
+from conftest import list_page, make_list, more_menu, open_tab, pick_date, settle, still, wait_until
 from tests import settings
 
 
@@ -1957,6 +1957,24 @@ def test_a_task_is_closed_undone_never_deleted(page, wiki):
     modal = open_edit(page, "Bolts")
     expect(modal.get_by_role("button", name="Won't do")).to_be_hidden()
     assert closed_titles(page) == ["Bolts", "Glue", "Nuts"]
+
+
+def test_ctrl_delete_is_the_pages_not_the_selected_tasks(page, wiki):
+    # Delete closes the selected tasks as won't do; Ctrl+Delete is the
+    # page's Delete page, and only that: it once did both.
+    page.request.post("/api/tasks", data={"title": "Keep me"})
+    wiki.write("tasks", "# Tasks\n\n[[tasks: view=open group=none]]\n")
+    page.goto("/page/tasks")
+    card(page, "Keep me").locator(".task-title").click()
+    assert selected_titles(page) == ["Keep me"]
+    page.keyboard.press("Control+Delete")
+    dialog = page.locator("#page-delete-dialog")
+    expect(dialog).to_be_visible()
+    dialog.get_by_role("button", name="Cancel").click()
+    settle(page)
+    expect(card(page, "Keep me")).to_be_visible()
+    expect(page.get_by_text("Marked won't do")).to_have_count(0)
+    assert closed_titles(page) == []
 
 
 def test_main_task_counts_list_tasks_as_completed(page, wiki):

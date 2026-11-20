@@ -213,9 +213,10 @@ document.addEventListener('keydown', async e => {
   } else if (e.key === 'Enter' && st.selectedId) {
     e.preventDefault();
     app.openEditModal(st.selectedId);
-  } else if (e.key === 'Delete' && st.selectedIds.size) {
+  } else if (e.key === 'Delete' && !e.ctrlKey && !e.metaKey && !e.altKey && st.selectedIds.size) {
     // Delete closes the selected open tasks undone (won't do); a task is
-    // never deleted. Closed ones stay as they are.
+    // never deleted. Closed ones stay as they are. (Ctrl/Cmd+Delete is the
+    // page's: Delete page, js/shortcuts.js.)
     e.preventDefault();
     const ids = [...st.selectedIds].filter(id => !st.tasks.find(t => t.id === id)?.closed_at);
     if (!ids.length) return;

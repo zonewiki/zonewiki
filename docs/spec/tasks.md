@@ -1849,7 +1849,7 @@ Under `(pointer: coarse)` cards have `touch-action: pan-y`; `.tasks-list` has `o
 | **Esc** | Collapse the expanded task first, then clear the selection (in selection mode: end it, Touch) |
 | **Enter** | Edit the selected task |
 | **Space** | Complete it, or reopen a closed one (on several selected, all of them) |
-| **Delete** | Close the selected open tasks as won't do (a task is never deleted) |
+| **Delete** | Close the selected open tasks as won't do (a task is never deleted); with Ctrl/⌘ it is the page's Delete page, and the tasks stay as they are |
 | **→** / **l**, **←** / **h** | With one task selected that has a description or comments: open / close them; open, they stay open as j/k move on (Expanding a task) |
 | **f** / **F** | Start the selected tasks today / tomorrow, on every tab |
 | **1**–**7**, **0** | Start them on that day of the Plan board (1 today, 2 tomorrow …), unplan them; on every tab |
