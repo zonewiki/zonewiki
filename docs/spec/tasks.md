@@ -819,7 +819,7 @@ A toast shown while a modal dialog is open goes into the dialog (`placeToast`), 
 
 **One undo at a time** (`showUndo`): only the latest action's undo is live,
 from its toast's Undo or Ctrl+Z.
-An action that saves first and arms its undo when the server answers (bulk start with **0**–**7**, Done/Reopen on a selection, bulk tags, Won't do on a selection, Move deadline, completing a keep task, deleting a comment) drops the previous undo as it starts saving (`dismissUndo`),
+An action that saves first and arms its undo when the server answers (bulk start with **0**–**7**, Done/Reopen on a selection, bulk tags, Won't do on a selection, Move deadline, completing a keep task, deleting a comment, importance) drops the previous undo as it starts saving (`dismissUndo`),
 so a quick Ctrl+Z in between does nothing instead of undoing the action before.
 An undo leaves no trace in the task's history (History).
 
@@ -1316,6 +1316,8 @@ The manual order is where a task's rank is; importance says what must not be for
 | The filter | `!high` (or `!`) and `!low` |
 | The API | `importance` in `POST`/`PUT /api/tasks` and `batch-update`: `"high"`, `"low"`, or `"normal"`, `""` or `null` for normal; anything else is 400 "importance must be high, normal or low" |
 | Assistants (MCP) | `create_task` and `update_task` take `importance`, and a task's line of facts says "importance: high" (or low) |
+
+The ⋯ menu and **i** come with one undo, as every quick action does (Notices and undo): the toast ("High importance", "3 tasks of low importance") and Ctrl+Z give each task its importance back; tasks of that importance already are left alone.
 
 A file edited by hand is read leniently (`CleanImportance`: case and spaces aside, anything else is normal).
 A recurring task's next occurrence keeps it; so does an export.

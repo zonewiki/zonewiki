@@ -4359,6 +4359,40 @@ def test_importance_shows_before_the_title_and_is_set_four_ways(page, wiki):
         "Tax return": "high", "Sort photos": "high", "Water plants": "high"}
 
 
+def test_importance_has_an_undo(page, wiki):
+    # As every quick action: the toast's Undo and Ctrl+Z give each task its
+    # own importance back.
+    page.request.post("/api/tasks", data={"title": "Tax return", "importance": "low"})
+    page.request.post("/api/tasks", data={"title": "Water plants"})
+    page.goto("/tasks?view=open&group=none")
+    mark = lambda title: card(page, title).locator(".task-importance")  # noqa: E731
+    card(page, "Water plants").locator(".task-title").click(button="right")
+    page.get_by_role("menuitem", name="Importance…").click()
+    page.get_by_role("menuitem", name="High").click()
+    toast = page.locator(".task-undo-toast")
+    expect(toast).to_contain_text("High importance")
+    wait_for_field(page, "Water plants", "importance", "high")
+    toast.locator(".task-undo-btn").click()
+    expect(mark("Water plants")).to_have_count(0)
+    wait_for_field(page, "Water plants", "importance", None)
+    # Several by the key, each back to its own with Ctrl+Z.
+    card(page, "Water plants").locator(".task-title").click(button="right")
+    page.get_by_role("menuitem", name="Importance…").click()
+    page.get_by_role("menuitem", name="High").click()
+    expect(mark("Water plants")).to_have_text("!")
+    card(page, "Water plants").locator(".task-title").click()
+    card(page, "Tax return").locator(".task-title").click(modifiers=["Shift"])
+    page.keyboard.press("i")                         # what follows Tax return's low: normal, for both
+    expect(toast).to_contain_text("2 tasks of normal importance")
+    expect(page.locator(".task-importance")).to_have_count(0)
+    wait_for_field(page, "Water plants", "importance", None)
+    page.keyboard.press("Control+z")
+    expect(mark("Tax return")).to_have_text("↓")
+    expect(mark("Water plants")).to_have_text("!")
+    wait_for_field(page, "Tax return", "importance", "low")
+    wait_for_field(page, "Water plants", "importance", "high")
+
+
 def test_importance_in_quick_add_and_the_filter(page, wiki):
     page.request.post("/api/tasks", data={"title": "Plain one"})
     page.goto("/tasks?view=open&group=none")

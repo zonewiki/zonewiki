@@ -563,10 +563,22 @@ async function batchUpdate(changes) {
 }
 
 // The importance of the tasks `ids`: 'high', 'normal' or 'low' (the ⋯ menu,
-// the i key).
+// the i key), with one undo that gives each its own back, as every quick
+// action has (no history to put back: importance isn't logged). Those
+// of that importance already are left alone. True when they are now.
 async function setImportance(ids, level) {
-  if (ids.length === 1) await app.updateTask(ids[0], { importance: level });
-  else if (ids.length) await batchUpdate(ids.map(id => ({ id, importance: level })));
+  const idSet = new Set(ids);
+  const changing = st.tasks.filter(t => idSet.has(t.id) && (t.importance || 'normal') !== level);
+  if (!changing.length) return true;
+  app.dismissUndo();
+  const ok = changing.length === 1 ? !!await app.updateTask(changing[0].id, { importance: level })
+    : await batchUpdate(changing.map(t => ({ id: t.id, importance: level })));
+  if (!ok) return false;
+  const name = level[0].toUpperCase() + level.slice(1);
+  app.showUndo(changing.length === 1 ? `${name} importance` : `${changing.length} tasks of ${level} importance`, () =>
+    changing.length === 1 ? app.updateTask(changing[0].id, { importance: changing[0].importance || 'normal' })
+      : batchUpdate(changing.map(t => ({ id: t.id, importance: t.importance || 'normal' }))));
+  return true;
 }
 
 // Start the open tasks among `ids` today (those not starting today
