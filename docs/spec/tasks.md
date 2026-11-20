@@ -1752,7 +1752,10 @@ Without users a task's file goes to `_assets/` like any other.
 A file attached before task files were kept apart (in `_assets/`, or in `private/<you>/_assets/` for a private task) stays where it is.
 
 The dialog sends the task's id with an upload (`task`, `markdownEditor`'s `task` option); for a new task it makes one up (a version 4 UUID) and creates the task with it (`id` in `POST /api/tasks`: only an id of that form that no task has), so the files pasted before the first Save are the task's from the start.
-Until there is a task of that id (the dialog is open), and once there is none (deleted for good; the files stay, for the undo), its files open for whoever signed in knows the id, which is 122 random bits said only to the task's readers; never for a visitor.
+Until there is a task of that id (the dialog is open), its files are who put the first one there's alone, as their private place is (`claimUnsaved`, `unsavedBy`: a record in `.zone/unsaved-files.json`, out of git, forgotten after 30 days, as of a dialog closed without a Save): nobody else opens them, adds a file or replaces one, and the history names them to nobody else.
+Made, the task's readers see them; created with an id whose folder is another's, or a deleted task's, the task is refused ("There is a task with this id already").
+Once there is no task of that id any more (deleted for good; the files stay, for the undo), they are no one's, its maker's neither, until the undo brings the task back.
+Never a visitor's.
 An assistant's `upload_file` takes a task's id as `page`.
 A file's history is its task's readers' (`canSeePath`).
 

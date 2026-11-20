@@ -286,6 +286,7 @@ A repeating task's history runs across the series; each occurrence keeps its own
 
 Paste, drop or attach a file in a task's description or a comment, and it is uploaded with the task.
 With several users the file belongs to the task: whoever sees the task sees the file, and nobody else.
+A file pasted in a new task's dialog is yours alone until you save the task, and a task deleted for good takes its files with it out of everyone's sight (**Undo** brings them back).
 It stays with the task when the task moves to another list.
 
 ## Tasks on a page

@@ -653,6 +653,7 @@ Zone's own state, none of it in git (`.git/info/exclude` has `/.zone/*`, `exclud
 - `grants` — the assistants' OAuth connections, their tokens as hashes (`docs/spec/mcp.md`)
 - `config.lock`, `links.lock`, `grants.lock` — empty files the writers of those three lock (`lockFile`, flock), so two writers take turns
 - `seen/<user>.json` — what each user has seen of the tasks' news (What you have seen, under News on your tasks in `docs/spec/tasks.md`)
+- `unsaved-files.json` — who pasted the first file for a task not made yet (a new task's dialog before its first Save), whose those files are until then (A task's files in `docs/spec/tasks.md`)
 - `drafts/<user>/` — an editor's text left in a conflict when its tab closed, for its user's next edit, 30 days at most (`docs/spec/editor.md`)
 - `tmp/` — a three-way merge's scratch files, removed after each merge
 - `index/` — search's files: `pages.idx` and `sections.idx` (the BM25 indexes), `tasks/<hash>.gob` (each closed tasks' archive's search docs) and `embeddings.json` (the semantic search cache) (`docs/spec/search.md`)
@@ -714,7 +715,7 @@ Zone writes each file whole (a reader never sees half of one), but a copy taken 
   They hold password and token hashes and keys: keep the backup as confidential as the wiki (Before you open it up in `docs/spec/security.md`).
 - **What can be rebuilt, and needn't be backed up**: `.zone/index/` (Zone builds the search indexes again when they are first needed, which takes a while on a big wiki, and with semantic search embeds every section and task again in the background, which takes longer),
   `.zone/tmp/`, the lock files and the mark `tasks-checked` (a start without it looks the task files through again and changes nothing that is right).
-  Lost, `seen/` shows each user the tasks' news again, `drafts/` loses only a text left in a conflict, and `queries.jsonl` is a log.
+  Lost, `seen/` shows each user the tasks' news again, `drafts/` loses only a text left in a conflict, `unsaved-files.json` the files pasted in a dialog not saved yet to their uploader (no one opens them), and `queries.jsonl` is a log.
 - **Restoring**: put the folder back where `ZONE_DATA` points and start Zone;
   the files must belong to the user Zone runs as, and `.zone/config` and `secret_key` should stay readable by it alone (0600: Zone warns in its log when others may read the settings file).
 

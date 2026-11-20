@@ -8,6 +8,8 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -155,7 +157,8 @@ func createTask(user asker, data jsonObj, message string) (*Task, error) {
 	t := newTask()
 	// id: the id its dialog made up, so that the files pasted there before
 	// it was saved are its files (taskUploadPlace). One of Zone's form, that
-	// no task has.
+	// no task has, and whose folder, if it has one, is user's: the files
+	// they pasted (seesTaskFiles), not another's nor a deleted task's.
 	if data.Has("id") && !data.Null("id") {
 		id, err := asStr(data["id"], "id")
 		if err != nil {
@@ -164,7 +167,8 @@ func createTask(user asker, data jsonObj, message string) (*Task, error) {
 		if !uuid4RE.MatchString(id) {
 			return nil, refuse("id must be a new task's id as Zone makes them (a version 4 UUID); leave it out")
 		}
-		if taskFiles.IDsLocked()[id] {
+		_, err = os.Stat(filepath.Join(cfg.Data, filepath.FromSlash(taskFilesDir), id))
+		if taskFiles.IDsLocked()[id] || err == nil && !seesTaskFiles(user, id) {
 			return nil, refuseAs(refusedExists, "There is a task with this id already")
 		}
 		t.ID = id
@@ -193,6 +197,7 @@ func createTask(user asker, data jsonObj, message string) (*Task, error) {
 	if err := taskFiles.WriteOpenLocked(user, active, message); err != nil {
 		return t, err
 	}
+	dropUnsaved(t.ID) // its files, if any were pasted before, are its readers' now
 	tellAssigned(user.Name, nil, t)
 	tellMentioned(user.Name, t, named)
 	return t, nil

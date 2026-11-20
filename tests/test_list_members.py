@@ -644,6 +644,56 @@ def test_a_new_tasks_files_are_its_own_from_the_first(client, wiki):
         assert upload(client, task=bad).status_code == 404
 
 
+def test_a_new_tasks_files_are_its_uploaders_until_it_is_made(client, wiki):
+    """Before its first Save a new task's files are who pasted them's alone:
+    no one else opens them, adds to them, replaces them or reads their names
+    in the history; made, they are its readers'."""
+    sign_in(client, "alice")
+    id = "0a1b2c3d-0000-4000-8000-00000000beef"
+    url = upload(client, task=id, filename="contract.png").get_json()["url"]
+    assert client.get(url, headers=HOST).data == PNG
+    assert f"_tasks/files/{id}/_assets/contract.png" in client.get("/changes", headers=HOST).get_data(as_text=True)
+    for who in ("carol", "bob", "dana"):              # carol: a member of the list it will be in
+        sign_in(client, who)
+        assert client.get(url, headers=HOST).status_code == 404
+        assert upload(client, task=id, filename="contract.png", overwrite="1").status_code == 404
+        assert upload(client, task=id, filename="mine.png").status_code == 404
+        changes = client.get("/changes", headers=HOST).get_data(as_text=True)
+        assert id not in changes and "contract.png" not in changes
+        out = mcp(client, who, "history")
+        assert id not in out and "contract.png" not in out
+        assert client.post("/api/tasks", json={"title": "Taken", "id": id}, headers=HOST).status_code in (400, 409)
+    assert (wiki / url[1:]).read_bytes() == PNG and not (wiki / f"_tasks/files/{id}/_assets/mine.png").exists()
+    sign_in(client, "alice")
+    assert client.post("/api/tasks", json={"title": "Lease", "list": LIST, "id": id}, headers=HOST).status_code == 201
+    assert sign_in(client, "carol").get(url, headers=HOST).data == PNG
+    assert f"_tasks/files/{id}/_assets/contract.png" in client.get("/changes", headers=HOST).get_data(as_text=True)
+    assert sign_in(client, "bob").get(url, headers=HOST).status_code == 404
+
+
+def test_a_deleted_tasks_files_are_no_ones(client, wiki):
+    """A task deleted for good leaves its files for the undo, to no one:
+    its id and its files' names don't come to light in anyone's history."""
+    sign_in(client, "alice")
+    own = client.post("/api/tasks", json={"title": "Renew passport"}, headers=HOST).get_json()
+    url = upload(client, task=own["id"], filename="passport.png").get_json()["url"]
+    assert client.get(url, headers=HOST).data == PNG
+    assert client.delete(f"/api/tasks/{own['id']}", headers=HOST).status_code == 204
+    for who in ("alice", "bob", "carol"):
+        sign_in(client, who)
+        assert client.get(url, headers=HOST).status_code == 404
+        assert upload(client, task=own["id"], filename="passport.png", overwrite="1").status_code == 404
+        changes = client.get("/changes", headers=HOST).get_data(as_text=True)
+        assert who == "alice" or (own["id"] not in changes and "passport.png" not in changes)
+        assert who == "alice" or own["id"] not in mcp(client, who, "history")
+        assert client.post("/api/tasks", json={"title": "Taken", "id": own["id"]}, headers=HOST).status_code in (400, 409)
+    assert (wiki / url[1:]).read_bytes() == PNG
+    # The undo brings the task back, and its files with it.
+    sign_in(client, "alice")
+    assert client.post("/api/tasks/restore", json={"tasks": [own]}, headers=HOST).status_code == 201
+    assert client.get(url, headers=HOST).data == PNG
+
+
 def test_without_users_a_tasks_file_is_with_the_others(client, git_wiki_dir):
     made = client.post("/api/tasks", json={"title": "Alone"}, headers=HOST).get_json()
     assert upload(client, task=made["id"]).get_json()["url"] == "/_assets/offer.png"

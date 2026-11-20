@@ -112,23 +112,39 @@ var taskFolderRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
 // taskPlace: the place of the files of the task id.
 func taskPlace(id string) place { return place{ofTask, id} }
 
-// seesTaskFiles: user sees the files of the task id: who sees the task. A
-// task there isn't (yet: its dialog is open and its first file is pasted;
-// or no more: deleted) has files only who knows its id finds, and no
-// visitor: an id is 122 random bits, said to nobody but the task's readers.
+// seesTaskFiles: user sees the files of the task id: who sees the task.
+// Before there is a task of that id (its dialog is open and a file is
+// pasted for the id it made up) they are who put the first one there's
+// alone (unsavedBy), as theirs as their private place is; once there is
+// none any more (deleted for good: the files stay, for the undo) no one's.
+// Without users everyone's, as everything is.
 func seesTaskFiles(user asker, id string) bool {
 	if user.Name == visitor || !taskFolderRE.MatchString(id) {
 		return false
 	}
-	if s := settings(); s.Users != nil {
-		if u := s.Users[user.Name]; u == nil || u.Disabled {
-			return false
-		}
+	s := settings()
+	if s.Users == nil {
+		return true
+	}
+	if u := s.Users[user.Name]; u == nil || u.Disabled {
+		return false
 	}
 	if t := taskFiles.Find(id); t != nil {
 		return canSeeTask(user, t)
 	}
-	return true
+	return unsavedBy(id) == user.Name && user.HasPrivate()
+}
+
+// keepsUnsaved: user may put the first file in the folder of a task no one
+// has made yet (claimUnsaved): a user of the wiki who may write, whose
+// private place is there for them, as such files are theirs alone until
+// the task is made.
+func keepsUnsaved(user asker) bool {
+	if privateFolder(user) == "" || !user.HasPrivate() || changesNothing(user) {
+		return false
+	}
+	u := settings().Users[user.Name]
+	return u != nil && !u.Disabled
 }
 
 // placeOf: the place of the page slug, or of the file rel (slash-separated,
@@ -765,10 +781,12 @@ func seenFolders(user asker) []string {
 // privateNameRE: a page's or file's path in private/ as a commit message
 // names it ("Move private/alice/2026-…_idea into the wiki as ideas/x"), at
 // the start of a path, not inside one ("notprivate/x", "notes/private/x"):
-// group 2, after group 1. Its letters are any script's ("Gehälter").
+// group 2, after group 1. Its letters are any script's ("Gehälter"). A
+// group's and a task's files likewise ("Upload
+// _tasks/files/<id>/_assets/scan.png": the task's id and the file's name).
 // In any case: placeOf judges a path in lower case, so "Private/alice/x" (a
 // folder made by hand) is alice's too, and is named to no one else either.
-var privateNameRE = regexp.MustCompile(`(?i)(^|[^` + nameClass + `./-])((?:` + keptDirs + `)/[` + nameClass + `./-]*[` + nameClass + `/])`)
+var privateNameRE = regexp.MustCompile(`(?i)(^|[^` + nameClass + `./-])((?:` + keptDirs + `|` + taskFilesDir + `)/[` + nameClass + `./-]*[` + nameClass + `/])`)
 
 // nameClass: the letters, digits and marks of a path's name in a commit
 // message (inside a regex's brackets), with "_".
@@ -795,27 +813,36 @@ func pathRune(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsNumber(r) || unicode.IsMark(r) || strings.ContainsRune("_./-", r)
 }
 
-// namesKeptDir: msg may name a path in a private or a group's folder.
+// namesKeptDir: msg may name a path in a private or a group's folder, or a
+// task's file.
 func namesKeptDir(msg string) bool {
 	low := strings.ToLower(msg)
-	return strings.Contains(low, privateDir+"/") || strings.Contains(low, groupsDir+"/")
+	return strings.Contains(low, privateDir+"/") || strings.Contains(low, groupsDir+"/") || strings.Contains(low, taskFilesDir+"/")
 }
+
+// taskFile: rel is a task's file (_tasks/files/<id>/…), whose place is the
+// task's (seesTaskFiles), not the folder's.
+func taskFile(rel string) bool { return strings.HasPrefix(strings.ToLower(rel), taskFilesDir+"/") }
 
 // hiddenAs: what a commit message says for a path user may not see.
 func hiddenAs(name string) string {
-	if strings.HasPrefix(strings.ToLower(name), groupsDir+"/") {
+	switch {
+	case strings.HasPrefix(strings.ToLower(name), groupsDir+"/"):
 		return "a group's page"
+	case taskFile(name):
+		return "a task's file"
 	}
 	return "a private page"
 }
 
 // hideNames: a commit message for user, the paths in it user may not see
-// as "a private page": a commit that moved a page out of a private folder,
-// or rewrote links in one, is in the shared page's history too. hidden: the
-// names of the commit's files user may not see (canSeePath), as git gives
-// them, which are taken out whole whatever they hold (a space, a comma, a
-// parenthesis); then any other path in a private or a group's folder
-// (privateNameRE, its name going on past a space as nameGoesOn says).
+// as "a private page" ("a group's page", "a task's file"): a commit that
+// moved a page out of a private folder, or rewrote links in one, is in the
+// shared page's history too. hidden: the names of the commit's files user
+// may not see (canSeePath), as git gives them, which are taken out whole
+// whatever they hold (a space, a comma, a parenthesis); then any other path
+// in a private or a group's folder, or of a task's files (privateNameRE,
+// its name going on past a space as nameGoesOn says).
 //
 // Nor does it name a list for some to who is none of its members: a commit
 // that narrowed one ("List #hiring is for @hiring, anna"), pinned it for
@@ -839,7 +866,7 @@ func hideNames(user asker, msg string, hidden []string) string {
 	hidden = slices.Clone(hidden)
 	slices.SortFunc(hidden, func(a, b string) int { return len(b) - len(a) })
 	for _, f := range hidden {
-		if !placeOf(f).shared() {
+		if !placeOf(f).shared() || taskFile(f) {
 			for _, name := range []string{f, strings.TrimSuffix(f, ".md")} {
 				msg = replaceName(msg, name, hiddenAs(f))
 			}

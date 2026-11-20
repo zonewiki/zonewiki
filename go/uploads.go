@@ -7,6 +7,8 @@ package main
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"io"
 	"io/fs"
 	"mime"
@@ -18,6 +20,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
+	"zonewiki/internal/atomicfile"
 	"zonewiki/internal/mdtext"
 )
 
@@ -61,17 +65,139 @@ func uploadPlace(user asker, page string) (place, bool) {
 
 // taskUploadPlace: where a file that user uploads for the task id is kept:
 // with the task (taskPlace), when the wiki has users and they see it (a new
-// task's id is the one its dialog made up, which the task then gets);
+// task's id is the one its dialog made up, which the task then gets: the
+// first file for it makes the folder theirs until then, claimUnsaved);
 // without users with the shared ones, as nothing is anyone's. ok false: not
-// a task's id, or a task they don't see.
+// a task's id, or a task they don't see, or a folder that is another's or
+// no one's (a task deleted for good).
 func taskUploadPlace(user asker, id string) (p place, ok bool) {
-	if !taskFolderRE.MatchString(id) || !seesTaskFiles(user, id) {
+	if !taskFolderRE.MatchString(id) {
 		return place{}, false
 	}
 	if settings().Users == nil {
 		return place{}, true
 	}
+	if !seesTaskFiles(user, id) && !claimUnsaved(user, id) {
+		return place{}, false
+	}
 	return taskPlace(id), true
+}
+
+// unsavedFiles: the task folders that got their first file before any task
+// had their id (a new task's dialog pastes a file for the id it made up,
+// before its first Save), by id: who put it there, and when. Until a task
+// has the id its files are theirs alone (seesTaskFiles); the record goes
+// when the task is made (createTask), so the files are its readers' from
+// then on, and a task deleted for good leaves them to no one (until an
+// undo brings the task back). Kept in Zone's folder, out of git
+// (.zone/unsaved-files.json); one older than unsavedKept is forgotten (a
+// dialog closed without a Save), and its files are no one's.
+var unsavedFiles = struct {
+	sync.Mutex
+	path string // the file the records were read from (a test's wiki is another)
+	by   map[string]unsavedFile
+}{}
+
+type unsavedFile struct {
+	By string `json:"by"`
+	At string `json:"at"`
+}
+
+// unsavedKept: how long a folder stays its uploader's without a task.
+const unsavedKept = 30 * 24 * time.Hour
+
+// loadUnsaved: the records, read once for a wiki's folder (unsavedFiles
+// locked). A file that can't be read is no records: the folders are no
+// one's.
+func loadUnsaved() {
+	path := statePath("unsaved-files.json")
+	if unsavedFiles.by != nil && unsavedFiles.path == path {
+		return
+	}
+	unsavedFiles.path, unsavedFiles.by = path, map[string]unsavedFile{}
+	if raw, err := os.ReadFile(path); err == nil {
+		if json.Unmarshal(raw, &unsavedFiles.by) != nil || unsavedFiles.by == nil {
+			unsavedFiles.by = map[string]unsavedFile{}
+		}
+	}
+}
+
+// unsavedRecord: the record of the folder of the task id (unsavedFiles
+// locked), ok false when there is none or it is too old.
+func unsavedRecord(id string) (unsavedFile, bool) {
+	u, ok := unsavedFiles.by[id]
+	if at, err := time.ParseInLocation("2006-01-02T15:04", u.At, time.Local); !ok || err != nil || now().Sub(at) > unsavedKept {
+		return unsavedFile{}, false
+	}
+	return u, true
+}
+
+// unsavedBy: who put the first file in the folder of the task id while no
+// task had it, "" for none (also once a task was made with it).
+func unsavedBy(id string) string {
+	unsavedFiles.Lock()
+	defer unsavedFiles.Unlock()
+	loadUnsaved()
+	u, _ := unsavedRecord(id)
+	return u.By
+}
+
+// writeUnsaved writes the records, those too old left out (unsavedFiles
+// locked).
+func writeUnsaved() error {
+	for id := range unsavedFiles.by {
+		if _, ok := unsavedRecord(id); !ok {
+			delete(unsavedFiles.by, id)
+		}
+	}
+	text, err := json.MarshalIndent(unsavedFiles.by, "", "  ")
+	if err != nil {
+		return err
+	}
+	return atomicfile.Write(unsavedFiles.path, string(text)+"\n")
+}
+
+// claimUnsaved: user puts the first file in the folder of the task id,
+// which no task has (in any case of the id: Find) and nothing is in yet
+// (also as the file system spells it), and which nobody claimed: it is
+// theirs from now on, until a task has the id. False for anything else: a
+// task's folder (seesTaskFiles answers for it), another's, or one with
+// files and no record (a task deleted for good, a record forgotten), and
+// for an asker that may keep no such folder (keepsUnsaved).
+func claimUnsaved(user asker, id string) bool {
+	if !keepsUnsaved(user) || taskFiles.Find(id) != nil {
+		return false
+	}
+	unsavedFiles.Lock()
+	defer unsavedFiles.Unlock()
+	loadUnsaved()
+	if _, ok := unsavedRecord(id); ok {
+		return false
+	}
+	if _, err := os.Stat(filepath.Join(cfg.Data, filepath.FromSlash(taskFilesDir), id)); !errors.Is(err, os.ErrNotExist) {
+		return false
+	}
+	unsavedFiles.by[id] = unsavedFile{By: user.Name, At: now().Format("2006-01-02T15:04")}
+	if err := writeUnsaved(); err != nil {
+		logf("%s: %v", unsavedFiles.path, err)
+		delete(unsavedFiles.by, id)
+		return false
+	}
+	return true
+}
+
+// dropUnsaved: a task has the id now: its files are its readers'.
+func dropUnsaved(id string) {
+	unsavedFiles.Lock()
+	defer unsavedFiles.Unlock()
+	loadUnsaved()
+	if _, ok := unsavedFiles.by[id]; !ok {
+		return
+	}
+	delete(unsavedFiles.by, id)
+	if err := writeUnsaved(); err != nil {
+		logf("%s: %v", unsavedFiles.path, err)
+	}
 }
 
 // uploadRel: file in a place's uploads, as its path in the wiki

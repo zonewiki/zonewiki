@@ -167,6 +167,10 @@ func TestHideNames(t *testing.T) {
 		"Upload private/alice/_assets/Arztbrief März.pdf (MCP)": "Upload a private page (MCP)",
 		"Move private/alice/a b/ to private/alice/c d/":         "Move a private page to a private page",
 		"Rename private/alice/a to notes, then private/bob/b":   "Rename a private page to notes, then private/bob/b",
+		// A task's file, of a task no one has (made yet, or any more): its
+		// id and its name are no one's to read.
+		"Upload _tasks/files/0a1b2c3d-0000-4000-8000-00000000abcd/_assets/scan.png": "Upload a task's file",
+		"Upload x_tasks/files/0a1b/_assets/scan.png":                                "Upload x_tasks/files/0a1b/_assets/scan.png",
 	} {
 		if got := hideNames(asUser("bob"), msg, nil); got != want {
 			t.Errorf("%q: %q", msg, got)
