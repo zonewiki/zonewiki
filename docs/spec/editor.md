@@ -191,10 +191,11 @@ The formatting bar's Task list shows **List settings**, the dialog a list's ⋯ 
 #### How a tick is saved
 
 A click POSTs to `POST /api/toggle-checkbox/<path:slug>` with `idx` (0-based checkbox index), which toggles the mark and answers the file's new hash (`{file_hash}`) (400 for a missing/non-integer/negative idx).
+The tick is written to the file as an auto-save is, and not committed (`writeDraft`): it stays among the page's uncommitted changes until the next commit of the page (Done in the editor, or any other write that commits it), so a burst of ticks is no burst of commits.
 The toggle requests are chained (`toggleCheckboxOnServer`), so an undo can never overtake the toggle it reverts.
 
 **A page changed since the view loaded** (someone added an item above, an edit elsewhere):
-the article carries a key per checkbox line (`data-task-keys`: `mdtext.TaskLineKeys`, the line without its mark and the tick's stamps, so it stays the same once ticked),
+the article carries a key per checkbox (`data-task-keys`: `taskLineKeys`, its line without the mark and the tick's stamps, so it stays the same once ticked),
 and a toggle sends its index and its key;
 the server ticks the item at that index if its line has that key, else the one item whose line has it (the page changed since the view loaded),
 and if none or several do, answers 409 and the toast says "The page changed: reload to tick this" with a Reload button (the checkbox goes back).
@@ -443,8 +444,10 @@ and ticking a preview's checkbox (`toggleCheckboxInTextarea`).
 
 ### Checkbox index mapping
 
-**Index mapping must match the renderer.**
-Only task-list items count: a list marker (`-`/`*`/`+`/`1.`/`1)`, optionally inside `>` blockquotes) followed by `[ ]`/`[x]`, whitespace and text.
-Fenced code and a leading frontmatter block are skipped; brackets in prose or later on the same line are not checkboxes.
-Server: `taskItemRE` / `mdtext.TaskItemLines()`; client: `taskCheckboxOffsets()` in `js/mdtext.js`.
-Keep the two in sync.
+**The server ticks the boxes the page shows, by construction.**
+Only task-list items get a box: a list item whose first paragraph starts with `[ ]`/`[x]`, whitespace and text (`taskTransformer`); brackets in prose or later on the same line are not checkboxes.
+The server finds them in the parse the page renders from, as `go/sections.go` finds headings (`taskItems` in `go/checkboxes.go`: the parser's `checkbox` nodes, each mapped back to its mark in the file), and numbers, keys (`taskLineKeys`) and ticks (`toggleNthCheckbox`) by that, for a page view and a task's notes alike.
+So a `- [ ]` line the page shows no box for (in an HTML comment, raw HTML, indented code, a fence inside a quote or a list item, as well as fenced code, display math and the frontmatter) shifts no number: the first ones once did, when the server counted lines, and a tick went to the hidden line before the box ticked.
+
+The editor's preview, and a task's description preview, tick the textarea in the browser by `taskCheckboxOffsets()` in `js/mdtext.js`, which counts lines as `mdtext.TaskItemLines()` (`taskItemRE`) does: fenced code, display math and a leading frontmatter block skipped, but not a comment, raw HTML, indented code or a fence in a quote.
+Keep those two in sync (the golden cases compare them); in the editor such a line still shifts the preview's numbers.

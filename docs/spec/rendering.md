@@ -556,9 +556,9 @@ not by regexes over the HTML (`go/markdown.go`):
 - the `heading` render function wraps each `##`/`###` directly in the page (not one in a quote, a list or a footnote: `sectionHeading`) in `.section-header` with its ✎ link when `renderMd` gets `EditSlug` (the page view;
   numbered as `pageSections` in `go/sections.go` cuts sections, from the same parser),
   and adds the `☑ N` chip from `SectionTasks` to any `##`/`###`;
-- `taskDates` turns the task-date comments (`<!--t:… d:…-->`, written by `mdtext.ToggleNthCheckbox`) into chips;
+- `taskDates` turns the task-date comments (`<!--t:… d:…-->`, written by `mdtext.ToggleCheckbox`) into chips;
 - `zoneTransformer` handles image widths and `img-block` paragraphs;
-- `taskTransformer` gives exactly the lines `mdtext.ToggleNthCheckbox` counts a checkbox.
+- `taskTransformer` gives a list item starting `[ ]`/`[x]` a checkbox; the server ticks the boxes it made, found in the same parse (`taskItems` in `go/checkboxes.go`, Checkbox index mapping in `docs/spec/editor.md`).
 
 ### Templates
 

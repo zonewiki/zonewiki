@@ -104,10 +104,12 @@ export function opensCodeFence(t) {
 // ── Checkboxes ───────────────────────────────────────────────────────────────
 
 // Character offsets of the mark inside each task-list checkbox ("[ ]"/"[x]"),
-// in rendered order: mdtext.TaskItemLines (and its taskItemRE). Only list
-// items whose text starts with the box produce a checkbox; fenced code,
+// in rendered order, by lines as mdtext.TaskItemLines (and its taskItemRE)
+// counts them: only list items whose text starts with the box; fenced code,
 // display math and (in a page, `frontmatter`) a leading frontmatter block
-// are skipped. So the Nth rendered checkbox is the Nth offset here.
+// are skipped. The editor's previews tick by it. The server ticks the boxes
+// its parser finds (go/checkboxes.go), which also leaves out a line in a
+// comment, raw HTML, indented code or a fence in a quote.
 const TASK_ITEM_RE = /^([ \t]*(?:>[ \t]?)*[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+\[)([ xX])\](?=[ \t]+\S)/;
 
 export function taskCheckboxOffsets(text, frontmatter = true) {

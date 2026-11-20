@@ -17,7 +17,6 @@ import (
 	"sync"
 	"time"
 	"zonewiki/internal/jsonobj"
-	"zonewiki/internal/mdtext"
 	"zonewiki/internal/taskmodel"
 )
 
@@ -869,7 +868,7 @@ func toggleNoteCheck(user asker, id string, idx int) (*Task, error) {
 		return nil, err
 	}
 	text := t.Description
-	toggled := mdtext.ToggleNthCheckbox(text, idx, false, now())
+	toggled := toggleNthCheckbox(text, idx, false, now())
 	if toggled == text {
 		return t, nil
 	}

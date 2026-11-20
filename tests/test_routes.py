@@ -1496,6 +1496,31 @@ class TestApiToggleCheckbox:
         resp = client.post("/api/toggle-checkbox/bad-idx", data={"idx": idx}, headers=HOST)
         assert resp.status_code == 400
 
+    @pytest.mark.parametrize("hidden", [
+        "<!--\n- [ ] hidden\n-->\n",           # in an HTML comment
+        "Text.\n\n    - [ ] hidden\n",          # an indented code block
+        "> ```\n> - [ ] hidden\n> ```\n",       # a fence in a quote
+        "<div>\n- [ ] hidden\n</div>\n",       # raw HTML
+        "- a\n\n      - [ ] hidden\n",          # code in a list item
+    ])
+    def test_a_tick_goes_to_the_box_the_page_shows(self, client, wiki_dir, hidden):
+        """The page counts the boxes the markdown renders; the server counts
+        them the same way, by the parser: a "- [ ]" line that is no box
+        (code, a comment, raw HTML) shifts no number, so ticking the box
+        shown ticks it, not the hidden line before it."""
+        path = write_page(wiki_dir, "hidden", "# CB\n\n" + hidden + "\n- [ ] shown\n")
+        body = client.get("/page/hidden", headers=HOST).get_data(as_text=True)
+        assert body.count('class="task-list-item-checkbox"') == 1
+        keys = self.view(client, "hidden")
+        assert len(keys) == 1
+        resp = client.post("/api/toggle-checkbox/hidden", data={"idx": "0", "key": keys[0]}, headers=HOST)
+        assert resp.status_code == 200
+        text = path.read_text()
+        assert "- [ ] hidden" in text and re.search(r"- \[x\] shown <!--d:", text)
+        # Without a key (a view from before keys) the number alone does the same.
+        client.post("/api/toggle-checkbox/hidden", data={"idx": "0"}, headers=HOST)
+        assert path.read_text() == "# CB\n\n" + hidden + "\n- [ ] shown\n"
+
 
 # ===========================================================================
 # api_upload

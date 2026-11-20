@@ -445,11 +445,13 @@ func closingRun(s string, from, n int) int {
 
 // ---- checkboxes ----
 
-// A task-list item as rendered: a list marker (maybe inside blockquotes),
-// then "[ ]"/"[x]" followed by whitespace and text. Only these lines get a
-// checkbox, so the Nth rendered checkbox is the Nth match here (render.go
-// counts the same; js/page.js taskCheckboxOffsets mirrors it). The
-// lookahead (?=[ \t]+\S) is checked after the match.
+// A task-list item by its line: a list marker (maybe inside blockquotes),
+// then "[ ]"/"[x]" followed by whitespace and text. The editor in the
+// browser counts checkboxes so (js/mdtext.js taskCheckboxOffsets mirrors
+// it); the server ticks the boxes the parser finds (taskItems in
+// go/checkboxes.go), which knows what a line can't tell: a comment, raw
+// HTML, indented code, a fence in a quote. The lookahead (?=[ \t]+\S) is
+// checked after the match.
 var taskItemRE = regexp.MustCompile(`^[ \t]*(?:>[ \t]?)*[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+\[([ xX])\]`)
 
 // taskItem: the byte range of the line's [ ]/[x] mark, when it is a task item.
@@ -490,14 +492,15 @@ func TaskItemLines(lines []string, frontmatter bool) []TaskLine {
 	return found
 }
 
-// TaskLineKeys: a key per task-list item of a page, in rendered order:
-// its line without the checkbox's mark and the tick's stamps, hashed
-// short. A tick from a page view loaded before the page changed finds its
-// item by it (apiToggleCheckbox), also once it has been ticked.
-func TaskLineKeys(content string) []string {
+// TaskLineKeys: a key per task-list item of a page (items: where they are,
+// in rendered order): its line without the checkbox's mark and the tick's
+// stamps, hashed short. A tick from a page view loaded before the page
+// changed finds its item by it (apiToggleCheckbox), also once it has been
+// ticked.
+func TaskLineKeys(content string, items []TaskLine) []string {
 	lines := SplitLines(content)
 	var keys []string
-	for _, it := range TaskItemLines(lines, true) {
+	for _, it := range items {
 		body := strings.TrimRight(lines[it.Index], "\n")
 		body = body[:it.Start] + " " + body[it.End:]
 		body = TaskDoneOnlyRE.ReplaceAllString(TaskMetaSrcRE.ReplaceAllString(body, ""), "")
@@ -510,12 +513,17 @@ func TaskLineKeys(content string) []string {
 // order), recording when it was done (at). A task's notes have no
 // frontmatter (frontmatter false): a leading --- block there is text.
 func ToggleNthCheckbox(content string, idx int, frontmatter bool, at time.Time) string {
-	lines := SplitLines(content)
-	items := TaskItemLines(lines, frontmatter)
+	items := TaskItemLines(SplitLines(content), frontmatter)
 	if idx >= len(items) {
 		return content
 	}
-	it := items[idx]
+	return ToggleCheckbox(content, items[idx], at)
+}
+
+// ToggleCheckbox ticks or unticks the checkbox it (of TaskItemLines, or
+// of the parser's), recording when it was done (at).
+func ToggleCheckbox(content string, it TaskLine, at time.Time) string {
+	lines := SplitLines(content)
 	line := lines[it.Index]
 	body := strings.TrimRight(line, "\n")
 	eol := line[len(body):]

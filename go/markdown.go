@@ -182,9 +182,9 @@ func (alertTransformer) Transform(p *ast.Paragraph, reader text.Reader, pc parse
 }
 
 // taskTransformer: a list item whose first paragraph starts "[ ]", "[x]" or
-// "[X]" and then whitespace and text gets a checkbox. Exactly the lines
-// mdtext.TaskItemLines counts: ticking the Nth checkbox toggles the Nth
-// match in the file. (goldmark's tasklist also takes "- [ ]" alone.)
+// "[X]" and then whitespace and text gets a checkbox; ticking the Nth
+// toggles the Nth box the parser finds (taskItems in checkboxes.go).
+// (goldmark's tasklist also takes "- [ ]" alone.)
 type taskTransformer struct{}
 
 func (taskTransformer) Transform(p *ast.Paragraph, reader text.Reader, pc parser.Context) {

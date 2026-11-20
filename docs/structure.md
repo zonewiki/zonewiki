@@ -70,6 +70,7 @@ What each file and folder of the repository is for.
 │   ├── markdown.go         # Markdown → HTML on goldmark, with Zone's rules (checkboxes, callouts, heading ids …)
 │   ├── math.go             # $…$ and $$…$$ math kept as TeX for KaTeX (a goldmark extension)
 │   ├── sections.go         # Headings and sections as the parser finds them, for the ✎s, the editor, the MCP tools and search (pageHeadings, pageSections, findSection)
+│   ├── checkboxes.go       # Checkboxes as the parser finds them, so a tick goes to the box the page shows (taskItems, taskLineKeys, toggleNthCheckbox)
 │   ├── render.go           # A page's render: wikilinks, [[tasks:]], [[task:…]], frontmatter, sources
 │   ├── gitstore.go         # Git: setup, commits, moves, grep over pages, a page's log, versions, diffs, deleted pages
 │   ├── history.go          # History, revisions, diffs, restore, deleted pages, uncommitted changes

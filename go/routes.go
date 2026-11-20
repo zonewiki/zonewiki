@@ -245,7 +245,7 @@ func viewPage(w http.ResponseWriter, r *http.Request) {
 		newFor = "private"
 	}
 	page(w, rq, http.StatusOK, "view.html", title, shell{wide: true}, &pageView{Title: title, Slug: slug, NewPageFor: newFor,
-		FromUncommitted: fromUncommitted, Private: placeOf(slug).user() != "", Group: placeOf(slug).group(), GroupTitle: groupTitle(slug), ReadOnly: readOnly(rq.user, slug), TaskKeys: strings.Join(mdtext.TaskLineKeys(content), ","),
+		FromUncommitted: fromUncommitted, Private: placeOf(slug).user() != "", Group: placeOf(slug).group(), GroupTitle: groupTitle(slug), ReadOnly: readOnly(rq.user, slug), TaskKeys: strings.Join(taskLineKeys(content), ","),
 		BreadcrumbHTML: bc, DeleteDialogHTML: buildDeleteDialog(slug, title), RailTocHTML: railToc(toc),
 		MetaRowHTML: metaRow, ArticleHTML: article, LinkSections: sections, Outlinks: outlinks(rq, slug, path), Menu: menu})
 }
@@ -259,7 +259,7 @@ type pageView struct {
 	Group, GroupTitle                                                       string // in a group's folder: the group, and what its mark says (who sees the page)
 	NewPageFor                                                              string // a place's home: what /new's For starts at for its New page button ("group:<name>", "private"), else ""
 	ReadOnly                                                                bool   // a viewer's view of a shared page: no Edit, ✎ or ticks
-	TaskKeys                                                                string // a key per checkbox line (mdtext.TaskLineKeys), comma-separated
+	TaskKeys                                                                string // a key per checkbox (taskLineKeys), comma-separated
 	BreadcrumbHTML, DeleteDialogHTML, RailTocHTML, MetaRowHTML, ArticleHTML template.HTML
 	LinkSections                                                            []linkSection // Backlinks, Linked tasks, Related (linkSections)
 	Outlinks                                                                []pageLink    // the right column's Links to
@@ -1314,7 +1314,7 @@ func apiToggleCheckbox(w http.ResponseWriter, r *http.Request) {
 	// there once. Checked on every tick: a view that ticked an item found
 	// elsewhere still counts its items as it did.
 	if key := r.PostFormValue("key"); key != "" {
-		keys := mdtext.TaskLineKeys(content)
+		keys := taskLineKeys(content)
 		if idx >= len(keys) || keys[idx] != key {
 			idx = -1
 			for i, k := range keys {
@@ -1332,7 +1332,7 @@ func apiToggleCheckbox(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	toggled := mdtext.ToggleNthCheckbox(content, idx, true, now())
+	toggled := toggleNthCheckbox(content, idx, true, now())
 	if err := writeDraft(userOf(r), r.PathValue("slug"), path, &content, toggled, false); err != nil {
 		pageFailed(w, r, err)
 		return

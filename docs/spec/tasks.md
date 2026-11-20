@@ -858,7 +858,7 @@ A recurring task makes its next occurrence (Repeating tasks), a keep task goes b
 ### Checklists and subtasks
 
 A checklist item in the description (`- [ ] item`, as on a page) is a real checkbox in the card's description.
-Ticking it works as on a page: `POST /api/tasks/<id>/toggle-check` with `{ idx }` flips the Nth box (`mdtext.ToggleNthCheckbox`, numbered as `renderNotes` renders them; a description has no frontmatter, so a leading `---` block is text and its boxes count) and records when,
+Ticking it works as on a page: `POST /api/tasks/<id>/toggle-check` with `{ idx }` flips the Nth box (`toggleNthCheckbox`, numbered as `renderNotes` renders them, from the same parse: Checkbox index mapping in `docs/spec/editor.md`; a description has no frontmatter, so a leading `---` block is text and its boxes count) and records when,
 `<!--d:YYYY-MM-DDTHH:MM:SS-->`,
 shown as a date chip;
 unticking takes the date out.
