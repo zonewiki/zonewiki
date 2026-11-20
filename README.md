@@ -96,6 +96,7 @@ All of these are described in [Running Zone yourself](docs/manual/self-hosting.m
 **By signing in** (a wiki with a login): give your assistant the address `https://your-wiki.example/mcp`.
 In Claude, add it as a custom connector. In Claude Code, run `claude mcp add --transport http zone <address>`.
 You sign in, click **Allow**, and it is connected as you.
+Claude.ai and ChatGPT connect from their makers' servers, so they need a wiki on the internet over https; Claude Code reaches any wiki your computer does.
 
 **With a token** (any wiki, any client): open **Connect an assistant** in the browser, or run `./run.sh config token` (`./run.sh user token NAME` with users).
 Then add an MCP server at `http://localhost:5000/mcp` with the header `Authorization: Bearer <token>`.
@@ -107,9 +108,10 @@ Details: [AI assistants](docs/manual/assistants.md) in the manual.
 ## Security
 
 Out of the box Zone listens on localhost only, with no login.
-Anything reachable from elsewhere belongs behind HTTPS with a login (`./run.sh config passwd`, or users).
-A page's HTML runs no script and loads nothing from other sites, so text an assistant copied from a malicious mail can't take over your wiki.
-Read [Before you open it up](docs/spec/security.md#before-you-open-it-up) before you expose Zone, and see [SECURITY.md](SECURITY.md) to report a vulnerability.
+`ZONE_ALLOW_REMOTE=1` opens it to the network, and it then asks for a login before it shows anything.
+Anything reachable from elsewhere belongs behind HTTPS with a login (`./zonewiki config passwd` or `./run.sh config passwd`, or users).
+HTML written in a page runs no script and loads nothing from other sites, so text an assistant copied from a malicious mail can't take over your wiki.
+Read [Before you open it up](docs/manual/self-hosting.md#before-you-open-it-up) before you expose Zone, and see [SECURITY.md](SECURITY.md) to report a vulnerability.
 
 ## Documentation
 
