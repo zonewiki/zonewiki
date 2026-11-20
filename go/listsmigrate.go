@@ -129,11 +129,21 @@ func tagsToLists(text string, isList func(string) bool) string {
 
 // listSettingsOf: an embed's params as a list's settings: those a list
 // has, each as List settings… would take it (one that it wouldn't is left
-// out); noshare: its page is not for sharing.
+// out); noshare: its page is not for sharing. The views' names of before
+// 2026-11 (view=focus, view=plan, plan=, three labels) are read as the
+// views' migration reads them (oldViewNames): the page was written then,
+// and a list takes over what its embed showed.
 func listSettingsOf(p TasksParams, noshare bool) map[string]string {
+	renamed := oldViewNames(func(key string) (string, bool) { return p.Get(key), p.Has(key) })
+	get := func(k string) string {
+		if v, ok := renamed[k]; ok {
+			return v
+		}
+		return p.Get(k)
+	}
 	out := map[string]string{}
 	for _, k := range listSettingKeys {
-		if v := strings.TrimSpace(p.Get(k)); v != "" {
+		if v := strings.TrimSpace(get(k)); v != "" {
 			if set, err := checkEmbedSettings(map[string]string{k: v}, listSettingKeys); err == nil && set[k] != "" {
 				out[k] = set[k]
 			}
@@ -476,11 +486,18 @@ func migrateListsLocked() error {
 // which keeps that name.
 const inboxListName = "inbox-list"
 
+// inboxListsVersion: what a registry says once the Inbox's migration took it
+// over: the views' names come next (migrateViewsLocked), which take it to
+// taskfiles.ListsVersion. (Until 2026-11-20 this wrote that version itself,
+// so the views' migration skipped the wiki: it mends that, too.)
+const inboxListsVersion = 2
+
 // migrateInboxLocked takes a wiki over to the Inbox, when Zone starts,
 // after migrateListsLocked and under its locks; one commit.
 //
 // Once for each registry that says version 1 (lists as places, from before
-// the Inbox; it says 2 afterwards), the shared one and each user's own:
+// the Inbox; it says 2 afterwards, inboxListsVersion), the shared one and
+// each user's own:
 //  1. A list called "inbox" is called "inbox-list": the name is the Inbox's.
 //  2. With users, a user's list "private" that has no settings and was
 //     where their new tasks went (pinned by them, or they pinned nothing)
@@ -616,7 +633,7 @@ func migrateInboxLocked(checked, before bool) error {
 		}
 		for _, o := range owners {
 			if first[o] {
-				regs[o].Version, regChanged[o] = taskfiles.ListsVersion, true
+				regs[o].Version, regChanged[o] = inboxListsVersion, true
 			}
 		}
 	}

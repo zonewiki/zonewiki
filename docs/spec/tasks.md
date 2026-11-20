@@ -1963,7 +1963,7 @@ So a list can be added or changed by hand in one line, and a commit shows the li
 
 | Key | Holds |
 |-----|-------|
-| `version` | That the wiki's lists are kept here: none, a wiki to take over (The lists' migration); `1`, a wiki from before the Inbox (The Inbox's migration); the current one is 3. Read only in a wiki without `.zone-format` |
+| `version` | That the wiki's lists are kept here: none, a wiki to take over (The lists' migration); `1`, a wiki from before the Inbox (The Inbox's migration); `2`, from before the views' names of 2026-11 (The views' names); the current one is 3. Read only in a wiki without `.zone-format` |
 | `lists` | The lists, a line each |
 | `pinned` | A user's pins in theirs; without users the wiki's in the shared one (Pins) |
 | `mine` | The settings of My tasks (a user's own; without users the shared one's) |
@@ -2111,6 +2111,7 @@ There a list was a tag a page declared with `[[tasks: list=<tag>]]`: a task coul
 It changes nobody's view of who sees what: no task changes its file.
 
 1. **The lists**: each name a shared page declared (`[[tasks: list=<name>]]` outside code) becomes a shared list, with its first page's (A–Z) params as its settings (the list settings: `view`, `group`, `limit`, `labels`, `new`, `keep`, `home`; `noshare` when that page was not for sharing).
+   The page was written with the views' old names, so they are read as The views' names rewrites them (`listSettingsOf` asks `oldViewNames`: `view=focus` is `view=today`, `view=plan` is `view=open group=day`, `view=open` is `view=open group=none`, `plan=on|off` is `group=day|none`, of three `labels` the first and the last): the list shows what the embed showed, and nothing of it is dropped.
    A name a user's private page declared becomes a private list of theirs, unless a shared page declares it too and they have no private task with that tag: their embed then shows the shared list.
    Another page's embed that set a list's settings differently loses that difference: the params stay in its text and mean nothing.
 2. **The tasks**, in every file of every owner (open, closed, archived): the first A–Z of a task's tags that names a list of its own kind (a shared task: the shared lists; a private task: its user's) becomes its `list`, and that tag goes.
@@ -2134,7 +2135,7 @@ Going back to an older Zone: revert that commit in the wiki's repository; withou
 
 #### The Inbox's migration
 
-After the lists' migration and under its locks (`migrateInboxLocked` in `go/listsmigrate.go`; one commit, "Give every task a list: the Inbox"), in a wiki without `.zone-format`, once for each registry that says `version` 1 (lists as places, from before the Inbox), the shared one and each user's own, which then says the current version (each for itself: a wiki whose users have lists and that never had a shared one has no shared registry).
+After the lists' migration and under its locks (`migrateInboxLocked` in `go/listsmigrate.go`; one commit, "Give every task a list: the Inbox"), in a wiki without `.zone-format`, once for each registry that says `version` 1 (lists as places, from before the Inbox), the shared one and each user's own, which then says 2 (`inboxListsVersion`; The views' names takes it to 3 in the same start; each for itself: a wiki whose users have lists and that never had a shared one has no shared registry).
 Before the Inbox a task could be in no list, which with users was everyone's; a pin also put a list's tasks in My tasks, and the first pinned list took new tasks (with nothing pinned they went to a private list `private`, which counted as pinned).
 
 1. A list called `inbox` is called `inbox-list` (its tasks and pins follow; embeds that name it show the Inbox from then on).
@@ -2158,6 +2159,12 @@ of three `labels` the first and the last stay),
 and the registries say `version` 3;
 a wiki without a registry has `.zone-format` to say it, which the start writes after this step.
 From then on the old names are no view's: a link with `view=focus` or `view=plan` opens the default tab.
+
+Until 2026-11-20 the Inbox's migration wrote version 3 itself, so a wiki that went from before the Inbox straight to a Zone with these names was taken for renamed: its registries kept the old names, and its pages too.
+Such a wiki (a shared registry at version 3, and no `.zone-format` yet: the step runs only then) is looked through once more, at its next start, in the same commit's name: **a registry or a page is rewritten only when it says a name only the old Zone wrote** (`view=focus`, `view=plan`, or `plan=` at all: `oldOnlyViewName`), and then wholly, as above.
+One at version 3 without such a name comes through as it is, since it may be by today's names (a fresh registry, one made by hand, a page written since), where `view=open` alone is the Open tab as the view's group says, not the one list: a list of then whose only old word was `view=open` keeps the board.
+A wiki that a Zone with `.zone-format` but without this mend started on is past the step, and keeps its old names.
+The lists such a start took over from pages (The lists' migration) dropped `view=focus`, `view=plan` and `plan=` from their settings then; the settings can't be told from the pages afterwards, and stay as they are.
 
 #### Older formats
 

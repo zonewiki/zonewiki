@@ -74,6 +74,60 @@ func oldViewNames(get func(key string) (string, bool)) map[string]string {
 	return set
 }
 
+// oldOnlyViewName: a view's settings (get) say a name only Zone before
+// 2026-11 wrote: view=focus, view=plan, or plan= at all. Proof that they
+// were never renamed (view=open alone, or three labels, could be today's).
+func oldOnlyViewName(get func(key string) (string, bool)) bool {
+	view, _ := get("view")
+	view = strings.ToLower(strings.TrimSpace(view))
+	_, plan := get("plan")
+	return view == "focus" || view == "plan" || plan
+}
+
+// registryHasOldViews: a registry whose settings (a list's, My tasks', All
+// tasks') say a name only the old Zone wrote (oldOnlyViewName).
+func registryHasOldViews(reg *taskfiles.Registry) bool {
+	in := func(m map[string]string) func(string) (string, bool) {
+		return func(k string) (string, bool) { v, ok := m[k]; return v, ok }
+	}
+	for _, l := range reg.Lists {
+		if _, ok := l.Extra["plan"]; ok || oldOnlyViewName(in(l.Settings)) {
+			return true
+		}
+	}
+	return oldOnlyViewName(in(reg.Mine)) || oldOnlyViewName(in(reg.All))
+}
+
+// textHasOldViews: a page's [[tasks: …]] embeds (code aside) say a name
+// only the old Zone wrote (oldOnlyViewName).
+func textHasOldViews(text string) bool {
+	if !strings.Contains(strings.ToLower(text), "[[tasks:") {
+		return false
+	}
+	masked, _ := mdtext.MaskCode(text)
+	for _, m := range tasksRE.FindAllStringSubmatch(masked, -1) {
+		params := embedParams(m[1])
+		if oldOnlyViewName(func(key string) (string, bool) { v, ok := params[key]; return v, ok }) {
+			return true
+		}
+	}
+	return false
+}
+
+// embedParams: an embed's args as key → value, lowercase keys, the first of
+// a key written twice.
+func embedParams(args string) map[string]string {
+	params := map[string]string{}
+	for _, word := range strings.Fields(args) {
+		if k, v, ok := strings.Cut(word, "="); ok {
+			if _, twice := params[strings.ToLower(k)]; !twice {
+				params[strings.ToLower(k)] = v
+			}
+		}
+	}
+	return params
+}
+
 // renameViewsInSettings changes a registry's settings of a view (a list's,
 // My tasks', All tasks') to the names of 2026-11; true when it did.
 func renameViewsInSettings(settings map[string]string) bool {
@@ -98,14 +152,7 @@ func renameViewsInText(text string) string {
 	masked = tasksRE.ReplaceAllStringFunc(masked, func(m string) string {
 		at := tasksRE.FindStringSubmatchIndex(m) // at[2:4]: the args
 		args := m[at[2]:at[3]]
-		params := map[string]string{}
-		for _, word := range strings.Fields(args) {
-			if k, v, ok := strings.Cut(word, "="); ok {
-				if _, twice := params[strings.ToLower(k)]; !twice {
-					params[strings.ToLower(k)] = v
-				}
-			}
-		}
+		params := embedParams(args)
 		set := oldViewNames(func(key string) (string, bool) { v, ok := params[key]; return v, ok })
 		if set == nil {
 			return m
@@ -127,14 +174,21 @@ func renameViewsInText(text string) string {
 // shows stays what it was. Links (/tasks?view=plan) stay as written: the
 // old names are unknown from now on, and such a link opens the view's
 // default tab.
+//
+// Until 2026-11-20 the Inbox's migration wrote version 3 itself, so a wiki
+// that went from before the Inbox straight to these names was taken for
+// renamed. Such a wiki (a shared registry at this version, and no
+// .zone-format yet: this runs only then) is looked through once more, and
+// only a registry or a page that says a name only the old Zone wrote is
+// rewritten (oldOnlyViewName): one at this version may as well be by
+// today's names (a fresh registry, one made by hand), where view=open alone
+// is the board.
 func migrateViewsLocked() error {
 	shared, err := taskFiles.ReadListsStrict("")
 	if err != nil {
 		return err
 	}
-	if shared.Version >= taskfiles.ListsVersion {
-		return nil
-	}
+	mend := shared.Version >= taskfiles.ListsVersion
 	var written []string
 	for _, o := range slices.Backward(taskFiles.EveryOwner()) { // the shared one, whose version says "done", last
 		if !exists(taskFiles.ListsPath(o)) {
@@ -145,6 +199,9 @@ func migrateViewsLocked() error {
 			if reg, err = taskFiles.ReadListsStrict(o); err != nil {
 				return err
 			}
+		}
+		if mend && !registryHasOldViews(reg) {
+			continue
 		}
 		for _, l := range reg.Lists {
 			// plan= is no setting of a list anymore: the registry read it as
@@ -172,6 +229,9 @@ func migrateViewsLocked() error {
 	for _, p := range sortedPages() {
 		text, err := readText(p.Path)
 		if err != nil {
+			continue
+		}
+		if mend && !textHasOldViews(text) {
 			continue
 		}
 		if n := renameViewsInText(text); n != text {

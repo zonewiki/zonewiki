@@ -67,9 +67,9 @@ func TestListsTakenOverFromPages(t *testing.T) {
 		"shop":        "# Shop\n\n[[tasks: list=Groceries keep=1 labels=Catalogue,,Shopping limit=8 tag=weekly pin=1]]\n",
 		"a-list":      "# A\n\n[[tasks: list=groceries view=open]]\n", // first A–Z: its settings count
 		"code":        "# Code\n\n`[[tasks: list=nope]]`\n\n```\n[[tasks: list=nada pin=1]]\n```\n",
-		"home":        "# Home\n\n[[tasks: list=chores pin=default]]\n",
-		"secret/plan": "# Plan\n\n[[tasks: list=plans]]\n", // a page not for sharing
-		"me":          "# Me\n\n[[tasks: tag=me pin=1]]\n", // a pinned view that is no list
+		"home":        "# Home\n\n[[tasks: list=chores pin=default view=plan]]\n", // a view's name of before 2026-11
+		"secret/plan": "# Plan\n\n[[tasks: list=plans]]\n",                        // a page not for sharing
+		"me":          "# Me\n\n[[tasks: tag=me pin=1]]\n",                        // a pinned view that is no list
 		// Views by a list's tag, which its tasks lose: they show the list.
 		"views": "# Views\n\n[[tasks: tag=Groceries]]\n\n[[tasks: tag=weekly,#groceries view=open]]\n\n" +
 			"[[tasks: tag=-chores]] [[tasks: tag=chores|work]] [[tasks: tag=work]] `[[tasks: tag=chores]]`\n\n" +
@@ -92,8 +92,12 @@ func TestListsTakenOverFromPages(t *testing.T) {
 		t.Fatalf("lists %v", got)
 	}
 	g := lists["groceries"].Params
-	if g.Get("view") != "open" || g.Get("keep") != "" || g.Get("limit") != "" || g.Get("list") != "groceries" {
-		t.Errorf("groceries has %v: the first page A–Z is a-list", g.m)
+	if g.Get("view") != "open" || g.Get("group") != "none" || g.Get("keep") != "" || g.Get("limit") != "" || g.Get("list") != "groceries" {
+		t.Errorf("groceries has %v: the first page A–Z is a-list, whose view=open was the one list", g.m)
+	}
+	// A view's old name is taken as the views' migration reads it, not dropped.
+	if c := lists["chores"].Params; c.Get("view") != "open" || c.Get("group") != "day" {
+		t.Errorf("chores has %v: view=plan was the Open tab as the board", c.m)
 	}
 	if !lists["plans"].NoShare || lists["chores"].NoShare {
 		t.Error("noshare: a list whose page was not for sharing stays out of sharing mode")
@@ -116,17 +120,21 @@ func TestListsTakenOverFromPages(t *testing.T) {
 	if text, _ := readText(safePath("code")); !strings.Contains(text, "list=nada pin=1") {
 		t.Error("code was rewritten")
 	}
-	if text, _ := readText(safePath("shop")); !strings.Contains(text, "[[tasks: list=Groceries keep=1 labels=Catalogue,,Shopping limit=8 tag=weekly]]") {
+	// The views' migration ran in the same start: the pages' old names are rewritten too.
+	if text, _ := readText(safePath("shop")); !strings.Contains(text, "[[tasks: list=Groceries keep=1 labels=Catalogue,Shopping limit=8 tag=weekly]]") {
 		t.Errorf("shop: %q", text)
 	}
-	wantViews := "# Views\n\n[[tasks: list=groceries]]\n\n[[tasks: list=groceries tag=weekly view=open]]\n\n" +
+	if text, _ := readText(safePath("home")); !strings.Contains(text, "[[tasks: list=chores view=open group=day]]") {
+		t.Errorf("home: %q", text)
+	}
+	wantViews := "# Views\n\n[[tasks: list=groceries]]\n\n[[tasks: list=groceries tag=weekly view=open group=none]]\n\n" +
 		"[[tasks: tag=-chores]] [[tasks: tag=chores|work]] [[tasks: tag=work]] `[[tasks: tag=chores]]`\n\n" +
 		"[Chores](/tasks?list=chores&view=open), [both](/tasks?list=chores&tag=work), [work](/tasks?tag=work), [set](/tasks?list=plans&tag=chores)\n"
 	if text, _ := readText(safePath("views")); text != wantViews {
 		t.Errorf("views: %q", text)
 	}
 	// All tasks' settings moved into the registry.
-	if p := allTasksParams(); p.Get("view") != "open" || p.Get("limit") != "5" {
+	if p := allTasksParams(); p.Get("view") != "open" || p.Get("group") != "none" || p.Get("limit") != "5" {
 		t.Errorf("All tasks: %v", p.m)
 	}
 	if _, err := os.Stat(oldAllTasksFile()); err == nil {
@@ -1452,7 +1460,8 @@ func TestInboxMigrationLeavesOutWhatWasNotPinned(t *testing.T) {
 		t.Error("the tasks were rewritten")
 	}
 	text := fileText(t, taskFiles.ListsPath(""))
-	if !strings.Contains(text, `"version": 3`) || !strings.Contains(text, `{"name": "someday", "limit": "3", "home": "off"}`) || !strings.Contains(text, `"all": {"view": "open"}`) {
+	// The views' migration ran after it: view=open, from when it was the one list, says so.
+	if !strings.Contains(text, `"version": 3`) || !strings.Contains(text, `{"name": "someday", "limit": "3", "home": "off"}`) || !strings.Contains(text, `"all": {"view": "open", "group": "none"}`) {
 		t.Errorf("the registry:\n%s", text)
 	}
 	startAgain(t)
@@ -1463,6 +1472,103 @@ func TestInboxMigrationLeavesOutWhatWasNotPinned(t *testing.T) {
 	migrateLists(false, 0)
 	if taskLists(asker{})["work"].LeftOut() {
 		t.Error("a list unpinned later was left out")
+	}
+}
+
+// A wiki from before the Inbox is taken over to the views' names of 2026-11
+// in the same start: the Inbox's migration says version 2, the views'
+// migration then rewrites the registries (each user's too) and the pages,
+// and says 3.
+func TestTheViewsAreRenamedAfterTheInbox(t *testing.T) {
+	testWiki(t, map[string]string{"home": "# Home\n\n[[tasks: view=focus]]\n\n[[tasks: list=shop view=open]]\n"})
+	withUsers(t, "alice")
+	writeRegistry(t, "", `{"version": 1, "lists": [{"name": "shop", "view": "plan", "plan": "on"}, {"name": "b", "view": "focus", "labels": "A,B,C"}], "pinned": ["shop", "b"], "all": {"plan": "off"}}`)
+	writeRegistry(t, "alice", `{"version": 1, "lists": [{"name": "diary", "view": "open"}], "pinned": ["diary"], "mine": {"view": "focus"}}`)
+	migrateLists(true, 0)
+	if listsUnmigrated {
+		t.Fatal("the migration failed")
+	}
+	shared := fileText(t, taskFiles.ListsPath(""))
+	for _, want := range []string{`"version": 3`, `{"name": "shop", "view": "open", "group": "day"}`, `{"name": "b", "view": "today", "labels": "A,C"}`, `"all": {"group": "none"}`} {
+		if !strings.Contains(shared, want) {
+			t.Errorf("the shared registry lacks %s:\n%s", want, shared)
+		}
+	}
+	own := fileText(t, taskFiles.ListsPath("alice"))
+	for _, want := range []string{`"version": 3`, `{"name": "diary", "view": "open", "group": "none"}`, `"mine": {"view": "today"}`} {
+		if !strings.Contains(own, want) {
+			t.Errorf("alice's registry lacks %s:\n%s", want, own)
+		}
+	}
+	if text, _ := readText(safePath("home")); text != "# Home\n\n[[tasks: view=today]]\n\n[[tasks: list=shop view=open group=none]]\n" {
+		t.Errorf("home: %q", text)
+	}
+	startAgain(t)
+}
+
+// Until 2026-11-20 the Inbox's migration wrote version 3 itself, and the
+// views' migration took such a wiki for renamed. A registry at version 3
+// that still has a name only the old Zone wrote (view=focus, view=plan,
+// plan=), in a wiki without .zone-format (where the step runs), is
+// rewritten once, and so is a page that has one; what has none comes
+// through as it is, since view=open alone means the board now, and a
+// fresh registry is by today's names.
+func TestTheViewsAreRenamedWhereTheInboxSkippedThem(t *testing.T) {
+	testWiki(t, map[string]string{
+		"old":   "# Old\n\n[[tasks: view=focus]]\n\n[[tasks: list=shop view=open]]\n",
+		"fresh": "# Fresh\n\n[[tasks: list=shop view=open]]\n",
+	})
+	withUsers(t, "alice", "bob")
+	writeRegistry(t, "", `{"version": 3, "lists": [{"name": "shop", "view": "plan", "plan": "on"}, {"name": "list", "view": "open"}], "pinned": ["shop"], "all": {"plan": "off"}}`)
+	writeRegistry(t, "alice", `{"version": 3, "lists": [{"name": "diary", "labels": "A,B,C"}], "mine": {"view": "focus"}}`)
+	fresh := `{"version": 3, "lists": [{"name": "board", "view": "open"}], "mine": {"view": "open"}}`
+	writeRegistry(t, "bob", fresh)
+	migrateLists(true, 0)
+	if listsUnmigrated {
+		t.Fatal("the migration failed")
+	}
+	shared := fileText(t, taskFiles.ListsPath(""))
+	for _, want := range []string{`{"name": "shop", "view": "open", "group": "day"}`, `{"name": "list", "view": "open", "group": "none"}`, `"all": {"group": "none"}`} {
+		if !strings.Contains(shared, want) {
+			t.Errorf("the shared registry lacks %s:\n%s", want, shared)
+		}
+	}
+	if own := fileText(t, taskFiles.ListsPath("alice")); !strings.Contains(own, `{"name": "diary", "labels": "A,C"}`) || !strings.Contains(own, `"mine": {"view": "today"}`) {
+		t.Errorf("alice's registry:\n%s", own)
+	}
+	if got := fileText(t, taskFiles.ListsPath("bob")); got != fresh {
+		t.Errorf("bob's registry, by today's names, was rewritten:\n%s", got)
+	}
+	if text, _ := readText(safePath("old")); text != "# Old\n\n[[tasks: view=today]]\n\n[[tasks: list=shop view=open group=none]]\n" {
+		t.Errorf("old: %q", text)
+	}
+	if text, _ := readText(safePath("fresh")); text != "# Fresh\n\n[[tasks: list=shop view=open]]\n" {
+		t.Errorf("fresh: %q", text)
+	}
+	startAgain(t)
+	// Once: a start that has .zone-format (which this one writes after it)
+	// leaves a name of then written by hand later as it is.
+	late := `{"version": 3, "lists": [{"name": "board", "view": "focus"}]}`
+	writeRegistry(t, "bob", late)
+	migrateLists(true, firstFormat)
+	if got := fileText(t, taskFiles.ListsPath("bob")); got != late {
+		t.Errorf("a wiki past the step was looked through again:\n%s", got)
+	}
+}
+
+// A wiki without .zone-format whose registries are by today's names (a
+// fresh one, one written by hand or a script) comes through a start as it
+// is.
+func TestAFreshRegistryIsNoOldOne(t *testing.T) {
+	testWiki(t, map[string]string{"page": "# Page\n\n[[tasks: list=shop view=open]] [[tasks: view=today labels=A,B,C]]\n"})
+	reg := `{"version": 3, "lists": [{"name": "shop", "view": "open", "labels": "A,B,C"}], "all": {"view": "open"}}`
+	writeRegistry(t, "", reg)
+	migrateLists(false, 0)
+	if got := fileText(t, taskFiles.ListsPath("")); got != reg || listsUnmigrated {
+		t.Errorf("the registry:\n%s", got)
+	}
+	if text, _ := readText(safePath("page")); text != "# Page\n\n[[tasks: list=shop view=open]] [[tasks: view=today labels=A,B,C]]\n" {
+		t.Errorf("page: %q", text)
 	}
 }
 
