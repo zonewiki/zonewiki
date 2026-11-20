@@ -9,10 +9,12 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/mail"
+	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -240,13 +242,19 @@ func orList(items []string) string {
 }
 
 // userNameHasHistory: a user went by name in this wiki before (one removed,
-// whose private folder, tasks and history Zone keeps): their private folder
-// is there, or was (in git), or a commit names them as its author. A
-// stranger who signs up never takes such a name: it would hand them the
-// removed user's private pages, tasks and lists, and their comments to
-// change. An admin may still give it again (user add, an invite).
+// whose private folder, tasks, lists and history Zone keeps): Zone noted
+// them removed (.zone/removed-users), their private folder is there or was
+// (in git), a commit names them as its author, Zone keeps a draft or the
+// news they had seen under the name, or a list or task names them (a
+// list's members or owners, also what a deleted list left; a task's
+// assignee or follower), all of which a member who only read leaves, and
+// none of which went with them. A stranger who signs up never takes such
+// a name: it would hand them the removed user's private pages, tasks and
+// lists, and their comments to change. An admin may still give it again
+// (user add, an invite).
 func userNameHasHistory(name string) bool {
-	if exists(filepath.Join(cfg.Data, privateDir, name)) {
+	if wasRemoved(name) || exists(filepath.Join(cfg.Data, privateDir, name)) ||
+		exists(filepath.Join(leftDraftsDir(), name)) || exists(seenPath(name)) || namedInTasks(name) {
 		return true
 	}
 	if !cfg.GitEnabled {
@@ -254,6 +262,91 @@ func userNameHasHistory(name string) bool {
 	}
 	return strings.TrimSpace(runGit("log", "-1", "--format=%H", "--", privateDir+"/"+name).Stdout) != "" ||
 		strings.TrimSpace(runGit("log", "-1", "--format=%H", "--fixed-strings", "--author=<"+name+"@zone>").Stdout) != ""
+}
+
+// namedInTasks: a shared list names name among its members or owners (what
+// a deleted or renamed list left in its folder too), or a task as its
+// assignee or a follower: what a user is named in that others wrote.
+func namedInTasks(name string) bool {
+	for _, l := range taskFiles.ReadLists("").Lists {
+		if slices.Contains(l.For(), name) || slices.Contains(l.Owners(), name) {
+			return true
+		}
+	}
+	for _, list := range taskFiles.ForSome() {
+		if slices.Contains(taskFiles.ForOfList(list), name) {
+			return true
+		}
+	}
+	for _, t := range taskFiles.Every() {
+		if t.Assignee == name || slices.Contains(t.Followers, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// The names of the users removed (.zone/removed-users, a JSON list, owner
+// only and not committed, as all account data): written as a user is
+// removed, on the Users tab or by zonewiki user remove, for sign-up
+// (userNameHasHistory), so what of theirs Zone keeps under the name no
+// stranger gets, whatever it is.
+func removedUsersPath() string { return statePath("removed-users") }
+
+// removedMu with the file lock: one change of the file at a time, the
+// server's and a command's.
+var removedMu sync.Mutex
+
+// noteRemoved adds name to the removed users' names.
+func noteRemoved(name string) error {
+	removedMu.Lock()
+	defer removedMu.Unlock()
+	if err := os.MkdirAll(filepath.Dir(removedUsersPath()), 0o777); err != nil {
+		return err
+	}
+	unlock, err := lockFile(removedUsersPath() + ".lock")
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	names, err := removedUsers()
+	if err != nil {
+		return err
+	}
+	if slices.Contains(names, name) {
+		return nil
+	}
+	names = append(names, name)
+	slices.Sort(names)
+	b, _ := json.MarshalIndent(names, "", "  ")
+	return settingsfile.Write(removedUsersPath(), string(b)+"\n")
+}
+
+// removedUsers: the names in .zone/removed-users (none without the file).
+func removedUsers() ([]string, error) {
+	b, err := os.ReadFile(removedUsersPath())
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	var names []string
+	if err == nil {
+		err = json.Unmarshal(b, &names)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%s/removed-users: %w", filepath.Base(stateDirIn(cfg.Data)), err)
+	}
+	return names, nil
+}
+
+// wasRemoved: name is among the removed users' names; a file Zone can't
+// read counts as naming everyone (a sign-up waits for it to be fixed).
+func wasRemoved(name string) bool {
+	names, err := removedUsers()
+	if err != nil {
+		logf("%v", err)
+		return true
+	}
+	return slices.Contains(names, name)
 }
 
 // useSignup: the account a sign-up link makes, named name with password,

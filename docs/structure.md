@@ -50,7 +50,7 @@ What each file and folder of the repository is for.
 │   ├── groups.go           # Groups in the browser (/groups): a group made by whoever may write, who owns it; its owners say who is in it (written on the users, as an admin's change), a member leaves by themselves; a group renamed, its folder, the lists for it and the settings along; an admin's every group there, what each includes (groups made of groups), the folders no one sees; a group ended, its pages moved to the wiki or deleted
 │   ├── admin.go            # The admin page (/admin, admins), its Users tab: roles, each user's groups (of those there are; groups themselves are on /groups), disable, remove, writing the settings file as the commands do
 │   ├── links.go            # Invite and reset links: .zone/links, /welcome/<token>
-│   ├── signup.go           # Sign-up: /signup, the mail with its link, the account a sign-up link makes
+│   ├── signup.go           # Sign-up: /signup, the mail with its link, the account a sign-up link makes, the names it may not take (.zone/removed-users)
 │   ├── mail.go             # Mail through the deployment's SMTP server (ZONE_SMTP_*), for sign-up and assigned tasks
 │   ├── notify.go           # A task given to a user is told to them: the mail (tellAssigned, called by the task writes), who gets one
 │   ├── assistant.go        # Connect an assistant (/assistant): your MCP token made and revoked in the browser, with your password again

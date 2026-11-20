@@ -345,6 +345,9 @@ func userRemoveRoute(w http.ResponseWriter, r *http.Request) {
 	if _, err := revokeLink(u.Name); err != nil { // a reset link of theirs
 		logf("removing %s's link: %v", u.Name, err)
 	}
+	if err := noteRemoved(u.Name); err != nil { // no stranger signs up as them
+		logf("noting %s removed: %v", u.Name, err)
+	}
 	revokeGrantsOf(u.Name) // their assistants' connections
 	afterChange(w, r, "remove", u.Name)
 }

@@ -825,7 +825,11 @@ A sign-up link stops working when sign-up is turned off.
 
 Its page (`/welcome/<token>`) says the address is confirmed and asks for a user name (as everywhere: lowercase letters, digits and inner hyphens) and a password twice (at least 8 characters).
 A name that is taken, by a user or an open invite, is refused there ("The user name alice is taken: choose another.") and the link stays good, as for any other mistake on the form.
-So is the name of a user who was removed (`userNameHasHistory`): their private folder is there or in the history, or a commit names them as its author.
+So is the name of a user who was removed (`userNameHasHistory`):
+Zone noted them removed (`.zone/removed-users`, written by the Users tab's Remove and by `zonewiki user remove`),
+their private folder is there or in the history, a commit names them as its author,
+Zone keeps a draft of theirs or what news they had seen (`.zone/drafts/<name>/`, `.zone/seen/<name>.json`),
+or a list or a task names them: a list's members or owners (also what a deleted list left in its folder), a task's assignee or follower, which is all a member who only read leaves.
 An address that got an account meanwhile is refused too ("There is an account with your address already: sign in with it.").
 Removing a user keeps their private pages, tasks and lists, and their comments and history, so a stranger signing up under the name would get all of it; an admin may still give the name again (`user add`, an invite).
 Then the account is made in the settings file, as theirs in the log: their password's hash, `role` (`signup-role`; nothing for an editor, the default), `email` and, with `signup-approval`, `pending = yes`.

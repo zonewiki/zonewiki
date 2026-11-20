@@ -328,6 +328,10 @@ func TestUserCommands(t *testing.T) {
 		!strings.Contains(out, "private/bob/") {
 		t.Errorf("remove: %d %q", code, out)
 	}
+	// Noted removed: no stranger signs up by the name (userNameHasHistory).
+	if b, err := os.ReadFile(filepath.Join(wiki, ".zone", "removed-users")); err != nil || string(b) != "[\n  \"bob\"\n]\n" {
+		t.Errorf("removed-users: %q %v", b, err)
+	}
 	before := read().Text()
 	for _, c := range []struct {
 		input string

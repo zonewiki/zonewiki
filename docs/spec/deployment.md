@@ -650,8 +650,9 @@ Zone's own state, none of it in git (`.git/info/exclude` has `/.zone/*`, `exclud
 - `secret_key` — the key that signs the session cookies (0600; `secretKey`)
 - `signed-out` — the ids of sessions signed out, until their cookies expire (`docs/spec/security.md`)
 - `links` — the open invite, reset and sign-up links, their tokens as hashes (`docs/spec/users.md`)
+- `removed-users` — the names of the users removed, which no one takes by signing up (Sign-up in `docs/spec/users.md`)
 - `grants` — the assistants' OAuth connections, their tokens as hashes (`docs/spec/mcp.md`)
-- `config.lock`, `links.lock`, `grants.lock` — empty files the writers of those three lock (`lockFile`, flock), so two writers take turns
+- `config.lock`, `links.lock`, `grants.lock`, `removed-users.lock` — empty files the writers of those four lock (`lockFile`, flock), so two writers take turns
 - `seen/<user>.json` — what each user has seen of the tasks' news (What you have seen, under News on your tasks in `docs/spec/tasks.md`)
 - `unsaved-files.json` — who pasted the first file for a task not made yet (a new task's dialog before its first Save), whose those files are until then (A task's files in `docs/spec/tasks.md`)
 - `drafts/<user>/` — an editor's text left in a conflict when its tab closed, for its user's next edit, 30 days at most (`docs/spec/editor.md`)
@@ -710,7 +711,8 @@ Zone writes each file whole (a reader never sees half of one), but a copy taken 
   `secret_key` (without it everyone signs in again),
   `grants` (without it every assistant connected through OAuth connects again),
   `links` (without it the open invite and reset links stop working)
-  and `signed-out` (without it a copy of a cookie signed out works again, until it expires).
+  `signed-out` (without it a copy of a cookie signed out works again, until it expires)
+  and `removed-users` (without it a stranger could sign up under the name of a user removed whose trace is only there).
   Back these up with the folder; where the git remote is the only copy, keep a copy of `.zone/` beside it.
   They hold password and token hashes and keys: keep the backup as confidential as the wiki (Before you open it up in `docs/spec/security.md`).
 - **What can be rebuilt, and needn't be backed up**: `.zone/index/` (Zone builds the search indexes again when they are first needed, which takes a while on a big wiki, and with semantic search embeds every section and task again in the background, which takes longer),

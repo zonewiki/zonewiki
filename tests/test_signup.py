@@ -3,6 +3,7 @@ server in the deployment, users and base-url in the settings, anyone asks
 for an account at /signup; Zone mails a link, on whose page they choose a
 name and password."""
 
+import json
 import re
 import socket
 import socketserver
@@ -195,6 +196,37 @@ class TestSignup:
             assert f"The user name {name} is taken" in make(client, link, name).data.decode(), name
             assert section(w, name) is None
         assert make(client, link, "de").status_code == 303      # a name only like one is free
+
+    def test_a_removed_users_name_stays_taken_by_what_names_them(self, client, signup, git_wiki_dir, monkeypatch):
+        """bob was a member of alice's list secret and carol had a task, and
+        neither wrote anything: no folder, no commit. Taken out of the
+        settings file by hand, their names are still on the list and the
+        task, which a stranger signing up as them would get. dora, removed
+        on the Users tab with nothing of hers anywhere, is noted removed."""
+        users = {**USERS, "bob": ("bob-pw", ""), "carol": ("carol-pw", ""), "dora": ("dora-pw", "")}
+        monkeypatch.setattr(settings, "USERS", users)
+        login = lambda name: client.post("/login", data={"username": name, "password": users[name][0]}, headers=HOST)
+        assert login("alice").status_code == 302
+        assert client.post("/tasks/new-list", data={"name": "secret", "for": "alice, bob"}, headers=HOST).status_code == 302
+        assert client.post("/api/tasks", json={"list": "secret", "title": "Layoffs zebrafinch"}, headers=HOST).status_code in (200, 201)
+        assert client.post("/tasks/new-list", data={"name": "team"}, headers=HOST).status_code == 302
+        resp = client.post("/api/tasks", json={"list": "team", "title": "Call the bank", "assignee": "carol"}, headers=HOST)
+        assert resp.status_code in (200, 201), resp.data
+        assert client.post("/admin/users/dora/remove", headers=HOST).status_code == 303
+        assert json.loads((git_wiki_dir / ".zone/removed-users").read_text()) == ["dora"]
+        monkeypatch.setattr(settings, "USERS", {**USERS})       # bob and carol gone by hand
+        client.cookies.clear()
+        ask(client, "eve@example.org")
+        link = signup.link()
+        for name in ("bob", "carol", "dora"):
+            assert f"The user name {name} is taken" in make(client, link, name).data.decode(), name
+            assert section(git_wiki_dir, name) is None
+        assert make(client, link, "bobby").status_code == 303
+        # An admin may still give such a name again.
+        client.cookies.clear()
+        assert login("alice").status_code == 302
+        resp = client.post("/admin/users/invite", data={"name": "dora", "role": "editor"}, headers=HOST)
+        assert resp.status_code == 200 and "/welcome/" in resp.data.decode()
 
     def test_an_address_with_an_account_gets_its_name(self, client, signup, wiki_dir):
         resp = ask(client, "alice@example.org")

@@ -699,6 +699,11 @@ func (c *userCommand) remove() int {
 	if _, err := revokeLink(c.name); err != nil {
 		fmt.Fprintf(c.stderr, "%s's open link couldn't be removed: %v\n", c.name, err)
 	}
+	// Nor does a stranger who signs up by that name get what Zone keeps
+	// of theirs (userNameHasHistory).
+	if err := noteRemoved(c.name); err != nil {
+		fmt.Fprintf(c.stderr, "%s couldn't be noted as removed in %s/removed-users: %v\n", c.name, stateDirName, err)
+	}
 	switch {
 	case c.openFlag:
 		fmt.Fprintln(c.stdout, "No users and no password now: the wiki has no login, and private/ is an "+
