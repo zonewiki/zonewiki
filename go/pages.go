@@ -19,6 +19,7 @@ import (
 	"time"
 	"zonewiki/internal/atomicfile"
 	"zonewiki/internal/mdtext"
+	"zonewiki/internal/taskfiles"
 )
 
 // Req is what a response depends on besides the wiki: the request (its
@@ -910,8 +911,16 @@ func relPath(target, start string) string {
 // at that heading of newSlug (a note appended to a page is that
 // section now). Wikilinks and markdown links (relative, .md, /page/) keep
 // their style, anchor and title; relative hrefs are recomputed from
-// source's folder. Code is left alone.
+// source's folder. Code is left alone. A wikilink that names its page
+// keeps its words where not every reader of source sees newSlug
+// (keepWords).
 func rewritePageLinks(text, oldSlug, newSlug, source, section string) string {
+	return rewriteLinksSeenBy(text, oldSlug, newSlug, source, section, placeOf(source))
+}
+
+// rewriteLinksSeenBy: rewritePageLinks for a text that those who see
+// readers' place read, which needn't be source's: a task's (taskReaders).
+func rewriteLinksSeenBy(text, oldSlug, newSlug, source, section string, readers place) string {
 	text, stash := mdtext.MaskCode(text)
 	text = mdtext.WikilinkRE.ReplaceAllStringFunc(text, func(m string) string {
 		l := parseWikilink(m)
@@ -922,7 +931,7 @@ func rewritePageLinks(text, oldSlug, newSlug, source, section string) string {
 		if !l.hasSection && section != "" {
 			l.section, l.hasSection = section, true
 		}
-		return l.String()
+		return keepWords(l, m, readers).String()
 	})
 	sourceDir := posixDir(source)
 	anchor := ""
@@ -969,10 +978,36 @@ func updateReferences(oldSlug, newSlug, section string) ([]string, error) {
 			}
 		}
 	}
-	changed, err := renamePageRefs(func(_, text string) string {
-		return rewritePageLinks(text, oldSlug, newSlug, "", section)
+	changed, err := renamePageRefs(func(owner, text string) string {
+		return rewriteLinksSeenBy(text, oldSlug, newSlug, "", section, taskReaders(owner))
 	})
 	return append(modified, changed...), linkErrors(append(errs, err))
+}
+
+// keepWords: l, a wikilink m re-pointed, with the words m showed as its
+// label when it has none and not everyone who sees readers' place (where
+// the link is written) sees its new page: to them a link to a page they
+// don't see is plain text (wikilinker), which would otherwise be its new
+// path, a page's name in a place they don't see (a page moved into a
+// group's folder, or renamed there).
+func keepWords(l wikilink, m string, readers place) wikilink {
+	if l.hasLabel || readers.within(placeOf(l.page)) {
+		return l
+	}
+	_, _, words := mdtext.SplitWikilink(m[2 : len(m)-2])
+	l.label, l.hasLabel = words, true
+	return l
+}
+
+// taskReaders: the place of those who see the tasks of owner's files (a
+// user's private ones, or the shared ones: everyone's, which a list for
+// some is narrower than, so a link there keeps its words as on a shared
+// page).
+func taskReaders(owner string) place {
+	if owner == "" {
+		return place{}
+	}
+	return placeOf(privateDir + "/" + owner + "/" + taskfiles.DirName)
 }
 
 // linkErrors: what failed while links were re-pointed (nil: nothing), as
@@ -987,21 +1022,33 @@ func linkErrors(errs []error) error {
 
 // linksLeft: a move is done, but not every link to it could be re-pointed
 // (a page that can't be read or written). Not a failure: the routes go on
-// as after a move (it is logged), the MCP tools say so (partly).
+// as after a move (it is logged), the MCP tools say so (partly). What it
+// says names no file: the page that kept its link may be one its reader
+// doesn't see (another user's private page), so which it is, and why, is
+// for Zone's log alone (errDetail).
 type linksLeft struct{ err error }
 
 func (e *linksLeft) Error() string {
-	return "not every link to it could be re-pointed (check_links finds them): " + e.err.Error()
+	return "not every link to it could be re-pointed (check_links finds them)"
 }
 
 func (e *linksLeft) Unwrap() error { return e.err }
+
+// errDetail: err as the log says it: links left with what failed and
+// where, anything else as it says itself.
+func errDetail(err error) string {
+	if l := (*linksLeft)(nil); errors.As(err, &l) {
+		return l.Error() + ": " + l.err.Error()
+	}
+	return err.Error()
+}
 
 // partly: err without the links a move left (logged, and said in note);
 // the error it is otherwise.
 func partly(err error) (note string, _ error) {
 	var l *linksLeft
 	if errors.As(err, &l) {
-		logf("%v", l)
+		logf("%s", errDetail(l))
 		return "\nNote: " + l.Error() + ".", nil
 	}
 	return "", err
@@ -1246,7 +1293,7 @@ func rebaseLinks(text, source, newSource string, moves map[string]string) string
 			return m
 		}
 		l.page = moves[old]
-		return l.String()
+		return keepWords(l, m, placeOf(newSource)).String()
 	})
 	sourceDir := posixDir(newSource)
 	text = replaceMdLinks(text, func(m mdLinkMatch) string {
@@ -1308,9 +1355,9 @@ func rewriteMovedLinks(moves map[string]string) ([]string, error) {
 			}
 		}
 	}
-	changed, err := renamePageRefs(func(_, text string) string {
+	changed, err := renamePageRefs(func(owner, text string) string {
 		for _, o := range sortedKeys(moves) {
-			text = rewritePageLinks(text, o, moves[o], "", "")
+			text = rewriteLinksSeenBy(text, o, moves[o], "", "", taskReaders(owner))
 		}
 		return text
 	})

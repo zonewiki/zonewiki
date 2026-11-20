@@ -80,7 +80,7 @@ def test_an_admin_moves_a_page_to_fewer_people_and_is_asked_first(client, wiki):
     resp = rename(client, "plans", "groups/dev/plans", confirmed="groups/dev/plans")
     assert resp.headers["Location"] == "/page/groups/dev/plans"
     assert (wiki / "groups/dev/plans.md").exists() and not (wiki / "plans.md").exists()
-    assert "[[groups/dev/plans]]" in (wiki / "notes/b.md").read_text()                   # links follow
+    assert "[[groups/dev/plans|plans]]" in (wiki / "notes/b.md").read_text()             # links follow, in their words
     # Into her own folder too, from the group's.
     assert "alice, carol will no longer see" in asked(rename(client, "groups/dev/plans", "private/dana/plans"))
     assert rename(client, "groups/dev/plans", "private/dana/plans", confirmed="private/dana/plans").headers["Location"] == "/page/private/dana/plans"
@@ -173,8 +173,10 @@ def test_what_those_left_out_keep(client, wiki):
     for path in ("/history/plans", "/page/plans", "/page/_deleted", "/api/search?q=reads", f"/revision/groups/dev/plans/{first}"):
         body = client.get(path, headers=HOST, follow_redirects=True).get_data(as_text=True)
         assert "Only dev reads this now" not in body, path
-    assert "[[groups/dev/plans]]" in (wiki / "notes/b.md").read_text()
-    assert 'class="wikilink-hidden"' in client.get("/page/notes/b", headers=HOST).get_data(as_text=True)   # the link is words to him
+    # The link keeps its words, which are all he reads of it: not the page's path in a folder he doesn't see.
+    assert "[[groups/dev/plans|plans]]" in (wiki / "notes/b.md").read_text()
+    body = client.get("/page/notes/b", headers=HOST).get_data(as_text=True)
+    assert '<span class="wikilink-hidden">plans</span>' in body and "groups/dev/plans" not in body
 
 
 def test_an_admins_assistant_is_asked_too(client, wiki):

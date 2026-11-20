@@ -714,7 +714,7 @@ func removeGroupOp(user asker, group, pages, folderText string) (folder string, 
 					return "", err // nothing moved
 				}
 				uncommitted = err
-				logf("removing the group %s: %v", group, err)
+				logf("removing the group %s: %s", group, errDetail(err))
 			}
 		}
 		// What no page shows goes with the folder (it stays in git).
@@ -872,7 +872,7 @@ func moveGroupFolder(user asker, old, name string) error {
 			// The pages moved: the rest of the folder follows them, and what
 			// went wrong (a link, the commit) is said after.
 			after = err
-			logf("renaming the group %s to %s: %v", old, name, err)
+			logf("renaming the group %s to %s: %s", old, name, errDetail(err))
 		}
 	}
 	// What no page shows stays with the group: the rest of the folder.

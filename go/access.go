@@ -142,10 +142,11 @@ func seesTaskFiles(user asker, id string) bool {
 // "Private/alice" is private/alice, and so is "PRIVATE" or "groupſ" (ſ is
 // an s to a case-insensitive volume, which folds case as EqualFold does).
 func placeOf(rel string) place {
-	users := settings().Users
-	if users == nil {
+	s := settings()
+	if s == nil || s.Users == nil { // no settings yet: a text function's test
 		return place{}
 	}
+	users := s.Users
 	dir, rest, found := strings.Cut(path.Clean(rel), "/")
 	switch {
 	case !found:

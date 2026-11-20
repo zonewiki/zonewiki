@@ -253,7 +253,8 @@ def test_a_rename_takes_what_is_the_groups_along(client, wiki, apollo):
     assert sorted(p.relative_to(wiki / "groups/artemis").as_posix() for p in (wiki / "groups/artemis").rglob("*") if p.is_file()) == [
         "_assets/plan.png", "_assets/spare.png", "index.md", "notes.md", "roadmap.md"]
     assert (wiki / "groups/artemis/roadmap.md").read_text() == "# Roadmap\n\n![plan](/groups/artemis/_assets/plan.png) [[groups/artemis/notes]]\n"
-    assert (wiki / "plans.md").read_text() == "# Plans\n\nSee [[groups/artemis/roadmap]].\n"
+    # A shared page's link keeps its words: those not in the group read them, not the new path.
+    assert (wiki / "plans.md").read_text() == "# Plans\n\nSee [[groups/artemis/roadmap|groups/apollo/roadmap]].\n"
     assert (wiki / "groups/artemis/index.md").read_text().startswith("# artemis\n") and "@artemis" in (wiki / "groups/artemis/index.md").read_text()
     assert git(wiki, "status", "--porcelain") == ""                      # all of it committed
     assert {line.split("|")[0] for line in git(wiki, "log", "-n3", "--format=%an|%s").splitlines()} == {"alice"}
@@ -264,7 +265,7 @@ def test_a_rename_takes_what_is_the_groups_along(client, wiki, apollo):
         assert client.get("/groups/artemis/_assets/plan.png", headers=HOST).data == b"plan"
         assert "For @artemis" in page(client, "/tasks?list=launch")
         task = next(t for t in client.get("/api/tasks?list=launch", headers=HOST).get_json() if t["id"] == apollo)
-        assert task["title"] == "Read [[groups/artemis/roadmap]]"
+        assert task["title"] == "Read [[groups/artemis/roadmap|groups/apollo/roadmap]]"
         assert client.get("/page/groups/apollo/roadmap", headers=HOST).status_code == 404
         assert "The group is called artemis now" in page(client, "/groups?done=renamed&group=artemis")
     # And nobody else, as before.
@@ -401,7 +402,7 @@ def test_a_rename_whose_commit_fails_is_made_all_the_same(client, wiki, apollo):
     assert resp.status_code == 500 and "The group is called artemis now" in body and "written but not committed" in body
     assert section(wiki, "user bob") == ["groups = artemis"] and section(wiki, "group artemis") == ["owners = alice", "was = apollo"]
     assert not (wiki / "groups/apollo").exists() and (wiki / "groups/artemis/roadmap.md").exists()
-    assert (wiki / "plans.md").read_text() == "# Plans\n\nSee [[groups/artemis/roadmap]].\n"
+    assert (wiki / "plans.md").read_text() == "# Plans\n\nSee [[groups/artemis/roadmap|groups/apollo/roadmap]].\n"
     assert "groups/artemis/roadmap.md" in git(wiki, "status", "--porcelain")     # in the Uncommitted list
     for who in ("alice", "bob"):                                         # its people see all of it, under the new name
         sign_in(client, who)

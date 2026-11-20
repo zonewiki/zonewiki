@@ -177,6 +177,7 @@ A plain rename into a wider place works too: Zone says who will see the page and
 
 **To fewer people** only an admin may move a page, or whoever shared it as long as nobody else has changed it since (to undo a mistake of a minute ago).
 Anyone else is told to ask an admin.
+Links to it on pages others read keep the words they showed, which is all that those who no longer see the page read of them ([Links](../spec/editor.md#links)).
 
 Why the difference: a move to fewer people takes the page away from people who had it, and they wouldn't see it go or be able to undo it.
 Those left out keep the versions up to the move in the history, and links to it become plain text for them.

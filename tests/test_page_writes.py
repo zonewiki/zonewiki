@@ -404,6 +404,7 @@ class TestCommits:
         else:
             text, err = mcp(client, "rename_page", slug="p", new_slug="q")
             assert not err and "not every link" in text, text
+            assert "broken" not in text      # which page kept its link is for the log: it may be one they don't see
         assert (wiki / "q.md").exists() and "[[q]]" in (wiki / "ref.md").read_text()
         assert subjects(wiki)[0].startswith("Rename p to q")
 

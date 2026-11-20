@@ -255,12 +255,15 @@ and text the page held that wasn't committed yet is committed first (`Save <slug
 When a page is renamed, every link to it is re-pointed (`rewritePageLinks()` via `updateReferences()`), so nothing that backlinks count is left broken:
 
 - `[[Old Name]]` / `[[Old Name|Label]]` — matched by comparing the raw or slugified page name to the old slug; only the page-name part is replaced, the `|Label` is kept.
+- **A link keeps its words where not all its readers see the page** (`keepWords`): `[[Old Name]]` on a page whose readers don't all see where the page is now (a shared page linking to one moved into a group's folder or renamed there, or to someone's private page) becomes `[[groups/dev/new-name|Old Name]]`,
+  since those who don't see the target read the link as plain text (Wikilinks in `docs/spec/rendering.md`), which would otherwise be the new path of a page in a place they don't see.
+  A task's links count as a shared page's, a private task's as its user's.
 - Markdown links in the forms backlinks recognise: relative (`old`, `../dir/old`, `old.md`) and absolute (`/page/old`).
   Each keeps its style, `#anchor` and title; relative hrefs are recomputed from the linking page's directory.
   Images are never touched.
 - Links inside fenced code and inline code are left alone (`mdtext.MaskCode`).
 - A page that can't be read or written keeps its links: the rename is done and committed all the same
-  (`linksLeft`; the browser goes on to the new page, Zone's log names the page, the MCP tools add a note; `check_links` finds what is left).
+  (`linksLeft`; the browser goes on to the new page, Zone's log names the page and why, the MCP tools add a note that names neither, as the page may be one the user doesn't see; `check_links` finds what is left).
 - **Moved pages keep their own links.** A page that moves into another folder (a rename into a folder, a folder move, a note promoted into a folder) has its relative links re-based,
   through `rewriteMovedLinks()` (`rebaseLinks()` per page): each still reaches the same page or file from where the page is now,
   including links to other pages that moved too.

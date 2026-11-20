@@ -41,7 +41,8 @@ def test_share_a_private_page_with_a_group(alice, wiki):
     alice.get_by_role("menuitem", name="Share…").click()
     dialog.get_by_role("button", name="Share").click()
     alice.wait_for_url("**/page/groups/dev/ideas")
-    assert "[[groups/dev/ideas]]" in wiki.read("plans")
+    # plans is everyone's, the page now @dev's: the link keeps its words.
+    assert "[[groups/dev/ideas|private/alice/ideas]]" in wiki.read("plans")
     # From the group's folder it can still go on to everyone.
     alice.locator(".page-menu-btn").first.click()
     alice.get_by_role("menuitem", name="Share…").click()
