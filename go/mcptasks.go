@@ -31,7 +31,7 @@ func mcpTaskText(t *Task, base string, user asker) string {
 		fact += " " + runePrefix(t.ClosedAt, 10)
 	}
 	facts := []string{fact}
-	if t.Owner != "" {
+	if t.Private() {
 		facts = append(facts, "private")
 	}
 	if len(t.Tags) > 0 {
@@ -947,7 +947,8 @@ func renameTaskListTool(args jsonObj, base string, user asker) (string, error) {
 	return out + ".\n" + base + listHref(done.Ref), nil
 }
 
-// createTaskListTool: a new task list, shared or (private) the user's own.
+// createTaskListTool: a new task list, shared (everyone's or a group's) or
+// (private) the user's own.
 func createTaskListTool(args jsonObj, base string, user asker) (string, error) {
 	name, err := strArg(args, "name", true)
 	if err != nil {
@@ -957,7 +958,7 @@ func createTaskListTool(args jsonObj, base string, user asker) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	who, err := strArg(args, "for", false)
+	group, err := strArg(args, "group", false)
 	if err != nil {
 		return "", err
 	}
@@ -965,13 +966,13 @@ func createTaskListTool(args jsonObj, base string, user asker) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	ref, err := createListOp(user, name, private, true, who, suffix)
+	ref, err := createListOp(user, name, private, true, group, suffix)
 	if err != nil {
 		return "", err
 	}
 	kind := "shared: everyone who uses the wiki sees it and its tasks"
-	if l, ok := resolveList(ref, taskLists(user)); ok && len(l.For) > 0 {
-		kind = "for " + forWords(l.For) + ": only they see it and its tasks, and its tasks are given only to them"
+	if l, ok := resolveList(ref, taskLists(user)); ok && l.Group() != "" {
+		kind = "the group " + l.Group() + "'s: only its members see it and its tasks, and its tasks are given only to them"
 	}
 	if private {
 		kind = "private: only the user sees it and its tasks"

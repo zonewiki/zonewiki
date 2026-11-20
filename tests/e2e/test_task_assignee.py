@@ -914,12 +914,12 @@ def test_today_is_open_with_a_filter_and_groups_as_open_does(alice):
 
 # ── Lists for some ───────────────────────────────────────────────────────────
 
-def test_a_list_for_some_is_made_and_its_tasks_go_to_its_members(page, wiki, monkeypatch):
-    """New list… says whom a shared list is for; the heading says it, Who it
-    is for… changes it, and Assign…, the Assignee field and the title's @name
-    offer its members only."""
+def test_a_groups_list_is_made_and_its_tasks_go_to_its_members(page, wiki, monkeypatch):
+    """New list… makes a group's list (For: a group she is in); the heading
+    says it, Who sees it… changes it, and Assign…, the Assignee field and the
+    title's @name offer the group's members only."""
     monkeypatch.setattr(settings, "USERS", {name: ("pw", "") for name in ("alice", "bob", "carol", "dave")})
-    monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}, "carol": {"groups": "hiring"}})
+    monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin", "groups": "hiring"}, "carol": {"groups": "hiring"}})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
     make_list(page, "team")
     page.goto("/tasks")
@@ -927,26 +927,23 @@ def test_a_list_for_some_is_made_and_its_tasks_go_to_its_members(page, wiki, mon
     page.locator("#list-new-btn").click()
     dialog = page.locator("#list-new-dialog")
     dialog.locator("input[name=name]").fill("hiring")
-    assert "@hiring" in dialog.locator("#list-for-words option").evaluate_all("os => os.map(o => o.value)")
-    dialog.locator("#list-new-for").fill("@hiring")           # she is none of them: she wouldn't see it
-    dialog.locator("#list-new-submit").click()
-    expect(dialog.locator(".rename-error")).to_contain_text("You wouldn't see the list yourself")
-    dialog.locator("input[name=name]").fill("hiring")
-    dialog.locator("#list-new-for").fill("@hiring, alice")
+    field = dialog.locator("#list-new-for")
+    expect(field.locator("option")).to_have_text(["Everyone who uses this wiki", "@hiring: its members see it", "Only you"])
+    field.select_option("group:hiring")
     dialog.locator("#list-new-submit").click()
     page.wait_for_url(re.compile(r"/tasks\?list=hiring$"))
     lock = page.locator("h1 .list-for")
-    expect(lock).to_have_attribute("title", "For @hiring, alice: only they see this list and its tasks (alice, carol)")
+    expect(lock).to_have_attribute("title", "The group hiring's list: only its members see it and its tasks (alice, carol)")
 
     # A task there: the title's @name and the Assignee field know its members.
     page.locator("#task-add-btn").click()
     modal = page.locator("#task-edit-modal")
     # The line under the title says who sees it: not everyone.
-    expect(modal.locator("#task-edit-target")).to_have_text("Adds to the list hiring: only alice, carol see it.")
+    expect(modal.locator("#task-edit-target")).to_have_text("Adds to the list hiring: only the group hiring sees it.")
     title = modal.locator("#task-edit-title")
     title.type("Call Zed @")
     expect(modal.locator(".tag-ac-item")).to_have_text(["@alice", "@carol"])
-    title.fill("Call Zed @bob")                               # none of them: text
+    title.fill("Call Zed @bob")                               # not in the group: text
     expect(modal.locator("#task-edit-quick")).to_be_hidden()
     title.fill("Call Zed @carol")
     expect(modal.locator(".task-field-assignee .tag-chip-label")).to_have_text(["@carol"])
@@ -960,12 +957,12 @@ def test_a_list_for_some_is_made_and_its_tasks_go_to_its_members(page, wiki, mon
     rows.first.click()
     wait_for_assignee(page, "Call Zed", "alice")
 
-    # Who it is for…: everyone again.
+    # Who sees it…: everyone.
     page.locator(".page-menu-btn").click()
     page.locator("#list-for-btn").click()
     who = page.locator("#list-for-dialog")
-    expect(who.locator("#list-for-input")).to_have_value("@hiring, alice")
-    who.locator("#list-for-input").fill("")
+    expect(who.locator("#list-for-input")).to_have_value("group:hiring")
+    who.locator("#list-for-input").select_option("")
     who.locator("#list-for-submit").click()
     page.wait_for_url(re.compile(r"/tasks\?list=hiring$"))
     expect(page.locator("h1 .list-for")).to_have_count(0)
@@ -995,32 +992,15 @@ def test_many_people_are_found_by_typing(page, wiki, monkeypatch):
     wait_for_assignee(page, "Hand me on", "zoe")
 
 
-def test_a_task_leaving_a_list_for_some_says_who_will_see_it(page, wiki, monkeypatch):
-    """Out of a list for some into one for everyone: the move dialog's row
+def test_a_task_leaving_a_groups_list_says_who_will_see_it(page, wiki, monkeypatch):
+    """Out of a group's list into one for everyone: the move dialog's row
     and the edit dialog's line say it, and a drop asks, as sharing a private
-    task does. The For field completes groups and people, word by word."""
+    task does."""
     monkeypatch.setattr(settings, "USERS", {name: ("pw", "") for name in ("alice", "bob", "carol")})
-    monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}, "carol": {"groups": "hiring"}})
+    monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin", "groups": "hiring"}, "carol": {"groups": "hiring"}})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
     make_list(page, "team")
-    page.goto("/tasks")
-    page.locator(".page-menu-btn").click()
-    page.locator("#list-new-btn").click()
-    dialog = page.locator("#list-new-dialog")
-    dialog.locator("input[name=name]").fill("hiring")
-    field = dialog.locator("#list-new-for")
-    offered = lambda: page.locator("#list-for-words option").evaluate_all("os => os.map(o => o.value)")
-    field.type("@h")
-    assert offered() == ["@hiring"]
-    field.fill("")
-    field.type("@hiring, c")                                  # the next word: people too, what is named left out
-    assert offered() == ["@hiring, carol"]
-    field.fill("")
-    field.type("alice ")
-    assert offered() == ["alice @hiring", "alice bob", "alice carol"]
-    field.fill("@hiring, alice")
-    dialog.locator("#list-new-submit").click()
-    page.wait_for_url(re.compile(r"/tasks\?list=hiring$"))
+    assert page.request.post("/tasks/new-list", form={"name": "hiring", "for": "group:hiring"}).ok
     new(page, "Offer", list="hiring")
     new(page, "Other", list="hiring")
     new(page, "Chairs")                                       # in team: By list has its section
@@ -1037,7 +1017,7 @@ def test_a_task_leaving_a_list_for_some_says_who_will_see_it(page, wiki, monkeyp
     note = modal.locator("#task-edit-list-note")
     expect(note).to_be_hidden()
     modal.locator("#task-edit-list").select_option("team")
-    expect(note).to_have_text("Everyone who uses the wiki will see and change this task. Now only those the list hiring is for do.")
+    expect(note).to_have_text("Everyone who uses the wiki will see and change this task. Now only the members of the group hiring do.")
     modal.locator("#task-edit-list").select_option("hiring")
     expect(note).to_be_hidden()
     page.keyboard.press("Escape")
@@ -1046,7 +1026,7 @@ def test_a_task_leaving_a_list_for_some_says_who_will_see_it(page, wiki, monkeyp
     page.goto("/tasks?view=open&group=list")
     card(page, "Other").drag_to(section(page, "l:team"))
     ask = page.locator("#task-share-modal")
-    expect(ask).to_contain_text("everyone who uses the wiki will see and change it. Now only those the list “hiring” is for do.")
+    expect(ask).to_contain_text("everyone who uses the wiki will see and change it. Now only the members of the group of the list “hiring” do.")
     ask.locator("#task-share-cancel").click()
     assert task(page, "Other")["list"] == "hiring"
     card(page, "Other").drag_to(section(page, "l:team"))
@@ -1055,16 +1035,16 @@ def test_a_task_leaving_a_list_for_some_says_who_will_see_it(page, wiki, monkeyp
 
 
 def test_who_no_longer_sees_a_list_no_longer_has_its_tasks(page, wiki, monkeypatch):
-    """A list narrowed: the task of someone who is none of its members now
-    keeps the name, struck through, and counts as no one's (the filter's
-    @none, By person's Unassigned), so it is found and handed on."""
+    """A list moved to a group: the task of someone not in it keeps the name,
+    struck through, and counts as no one's (the filter's @none, By person's
+    Unassigned), so it is found and handed on."""
     monkeypatch.setattr(settings, "USERS", {name: ("pw", "") for name in ("alice", "bob", "carol")})
-    monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}})
+    monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin", "groups": "hiring"}, "carol": {"groups": "hiring"}})
     page.request.post("/login", form={"username": "alice", "password": "pw"})
     make_list(page, "team")
     new(page, "Bob's", assignee="bob")
     new(page, "Carol's", assignee="carol")
-    assert page.request.post("/tasks/list-for", form={"list": "team", "for": "alice, carol", "confirm": "1"}).ok
+    assert page.request.post("/tasks/list-for", form={"list": "team", "for": "group:hiring", "confirm": "1"}).ok
     page.goto("/tasks?list=team&view=open&group=none")
     name = card(page, "Bob's").locator(".task-assignee")
     expect(name).to_have_class(re.compile(r"\btask-assignee-former\b"))
@@ -1084,7 +1064,7 @@ def test_who_no_longer_sees_a_list_no_longer_has_its_tasks(page, wiki, monkeypat
     modal = open_edit(page, "Bob's")
     chip = modal.locator(".task-field-assignee .tag-chip")
     expect(chip).to_have_class(re.compile(r"\btag-chip-former\b"))
-    expect(chip).to_have_attribute("title", "bob isn’t one of those the list team is for: the task counts as no one’s")
+    expect(chip).to_have_attribute("title", "bob isn’t in the group hiring, whose list it is: the task counts as no one’s")
     page.keyboard.press("Escape")
     card(page, "Bob's").locator(".task-title").click(button="right")
     page.get_by_role("menuitem", name="Assign…").click()

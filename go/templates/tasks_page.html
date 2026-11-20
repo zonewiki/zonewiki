@@ -4,8 +4,8 @@
     heading: the places (taskPlaces), each with its counts (js/chrome.js
     refreshes them), pinned lists with a pin, the current one aria-current.
     Beside the heading the ⋯ menu: List settings…, New list…; on a list
-    Rename…, its pin (the user's own), Make shared… (a private one), Who it
-    is for… (a shared one, with users) and Delete…; on a tag Rename tag…; then Mark all read,
+    Rename…, its pin (the user's own), Make shared… (a private one), Who
+    sees it… (a shared one: everyone's or a group's, with users) and Delete…; on a tag Rename tag…; then Mark all read,
     Export tasks and Import tasks…. An item ending in … opens a dialog
     with a form (js/pagemenu.js opens the one a menu item names with
     data-dialog; a refusal comes back with data-open). A list's Backlinks
@@ -52,8 +52,8 @@
 </nav>{{end}}
 {{- end}}
 {{- /* A list's line: a pin's has data-place's counts (lists-rail-place); any other has data-list, for the find field. */}}
-{{define "lists_rail_item"}}<a href="{{.Href}}" class="lists-rail-item{{if .Pinned}} lists-rail-place{{end}}"{{if not .Pinned}} data-list="{{.Label}}"{{end}} data-place="{{.Key}}" title="{{.Title}}{{if .Private}} (only you see it){{end}}{{with .For}} (for {{.}}){{end}}"{{if .Current}} aria-current="page"{{end}}><span class="lists-rail-name">{{.Label}}</span>
-{{- if .Private}}<span class="lists-rail-mark" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}{{if .For}}<span class="lists-rail-mark" aria-hidden="true">{{template "icon_people"}}</span>{{end}}
+{{define "lists_rail_item"}}<a href="{{.Href}}" class="lists-rail-item{{if .Pinned}} lists-rail-place{{end}}"{{if not .Pinned}} data-list="{{.Label}}"{{end}} data-place="{{.Key}}" title="{{.Title}}{{if .Private}} (only you see it){{end}}{{with .Group}} (the group {{.}}'s: only its members see it){{end}}"{{if .Current}} aria-current="page"{{end}}><span class="lists-rail-name">{{.Label}}</span>
+{{- if .Private}}<span class="lists-rail-mark" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}{{if .Group}}<span class="lists-rail-mark" aria-hidden="true">{{template "icon_people"}}</span>{{end}}
 {{- if .Pinned}}{{template "module_counts" .Counts}}{{end}}</a>
 {{- end}}
 
@@ -69,10 +69,10 @@
     js/listsrow.js, which also closes More, filters it and marks lists new
     to this browser). */}}
 {{- if .More}}<nav class="tasks-places" aria-label="Task lists"{{if and .Menu .Write}} data-reorder{{end}}><div class="tasks-places-group">
-{{- range .Places}}<a href="{{.Href}}" class="tasks-place" data-place="{{.Key}}" title="{{.Title}}{{if .Private}} (only you see it){{end}}{{with .For}} (for {{.}}){{end}}"{{if .Current}} aria-current="page"{{end}}>
+{{- range .Places}}<a href="{{.Href}}" class="tasks-place" data-place="{{.Key}}" title="{{.Title}}{{if .Private}} (only you see it){{end}}{{with .Group}} (the group {{.}}'s: only its members see it){{end}}"{{if .Current}} aria-current="page"{{end}}>
 {{- if .Pinned}}<span class="tasks-place-pin" aria-hidden="true">{{template "icon_pin"}}</span>{{end}}
 {{- /* Whose it is, as on a page: a lock for what is yours alone, people for what is some's. */}}
-{{- if .Private}}<span class="tasks-place-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}{{if .For}}<span class="tasks-place-lock tasks-place-for" aria-hidden="true">{{template "icon_people"}}</span>{{end}}<span class="tasks-place-label">{{.Label}}</span>{{template "module_counts" .Counts}}</a>
+{{- if .Private}}<span class="tasks-place-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}{{if .Group}}<span class="tasks-place-lock tasks-place-for" aria-hidden="true">{{template "icon_people"}}</span>{{end}}<span class="tasks-place-label">{{.Label}}</span>{{template "module_counts" .Counts}}</a>
 {{- end}}
 {{- with .More}}<details class="lists-more"><summary class="tasks-place lists-more-btn" title="{{if .Current}}{{.Label}}: one of the lists you haven't pinned and all tasks{{else}}The lists you haven't pinned, and all tasks{{end}}"{{if .Current}} aria-current="page"{{end}}><span class="tasks-place-label">{{.Label}}</span><span class="lists-more-caret" aria-hidden="true">▾</span></summary>
 <div class="lists-more-panel">
@@ -85,7 +85,7 @@
 {{- if or .Lists .Others}}<hr class="lists-more-rule">{{end}}
 <a href="/tasks" class="lists-more-item lists-more-all" title="Every task you see, in whatever list"{{if .All}} aria-current="page"{{end}}><span class="lists-more-name">All tasks</span></a>
 </div></details>{{end}}</div></nav>{{end}}
-<header class="page-header"><h1>{{.Heading}}{{with .List}}{{if .Private}} <span class="lock" title="A private list: only you see it and its tasks">🔒</span>{{end}}{{if .For}} <span class="lock list-for" title="For {{$.ForNow}}: only they see this list and its tasks ({{range $i, $m := $.Members}}{{if $i}}, {{end}}{{$m}}{{end}})">👥</span>{{end}}{{end}}{{if .InboxPrivate}} <span class="lock" title="Your Inbox: only you see its tasks">🔒</span>{{end}}</h1>
+<header class="page-header"><h1>{{.Heading}}{{with .List}}{{if .Private}} <span class="lock" title="A private list: only you see it and its tasks">🔒</span>{{end}}{{with .Group}} <span class="lock list-for" title="The group {{.}}'s list: only its members see it and its tasks ({{range $i, $m := $.Members}}{{if $i}}, {{end}}{{$m}}{{end}})">👥</span>{{end}}{{end}}{{if .InboxPrivate}} <span class="lock" title="Your Inbox: only you see its tasks">🔒</span>{{end}}</h1>
 {{- if .Menu}}<div class="page-header-actions"><button type="button" class="btn page-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="page-menu" title="More: settings, new list{{if .List}}, rename, pin, delete{{end}}{{if .Tag}}, rename the tag{{end}}, export, import" aria-label="More actions">⋯</button></div>{{end}}</header>
 {{- if .Menu}}
 <div class="page-menu-backdrop" hidden></div><div class="page-menu" id="page-menu" role="menu" aria-label="Task list actions" hidden>
@@ -100,7 +100,7 @@
 {{- if not $.Pin}}<button type="submit" role="menuitem" name="pin" value="1" id="list-pin-btn">Pin</button>{{end}}
 {{- if $.Pin}}<button type="submit" role="menuitem" name="pin" value="0" id="list-unpin-btn">Unpin</button>{{end}}</form>{{end}}
 {{- if and $.Write .Private}}<button type="button" role="menuitem" data-dialog="list-share-dialog" id="list-share-btn">Make shared…</button>{{end}}
-{{- if and $.Manage $.Users (not .Private)}}<button type="button" role="menuitem" data-dialog="list-for-dialog" id="list-for-btn">Who it is for…</button>{{end}}
+{{- if and $.Manage $.Users (not .Private) (or $.Groups .Group)}}<button type="button" role="menuitem" data-dialog="list-for-dialog" id="list-for-btn">Who sees it…</button>{{end}}
 {{if $.Manage}}<button type="button" role="menuitem" data-dialog="list-delete-dialog" id="list-delete-btn">Delete…</button>{{end}}
 {{- end}}
 {{- if and .Write .Tag}}<button type="button" role="menuitem" data-dialog="tag-rename-dialog" id="tag-rename-btn">Rename tag…</button>{{end -}}
@@ -110,8 +110,7 @@
 </div>
 {{- /* New list…: a place for tasks (POST /tasks/new-list). */}}
 <dialog id="list-new-dialog" class="modal" data-params="newlist_error newlist_name newlist_for"{{if or .NewListError .NewListFor}} data-open{{end}}><p class="modal-label">New list</p><p class="modal-desc">A list is a place for tasks, with an entry of its own in the row above them. A task is in one list; a new one starts in {{if .Users}}your{{else}}the{{end}} Inbox.</p><form method="post" action="/tasks/new-list"><input type="text" name="name" id="list-new-input" value="{{.NewListName}}" placeholder="Its name, e.g. shop" aria-label="The list's name" autocomplete="off" spellcheck="false" required>
-{{- if .Users}}<label class="promote-check" title="The list and the tasks in it are yours alone: no one else sees them, not even in search"><input type="checkbox" name="private" id="list-new-private" value="1"> Private: only you see it and its tasks</label>{{end}}
-{{- if .Users}}<label class="list-for-field" for="list-new-for">For <input type="text" name="for" id="list-new-for" value="{{.NewListFor}}" list="list-for-words" placeholder="everyone" autocomplete="off" spellcheck="false" title="Who sees a shared list and its tasks: groups (@dev) and people (anna), you among them. Empty: everyone"></label>{{template "list_for_words" .}}{{end}}
+{{- if .Users}}<label class="list-for-field" for="list-new-for">For {{template "list_for_select" (dict "Name" "for" "ID" "list-new-for" "Groups" .Groups "Value" .NewListFor "Private" true)}}</label>{{end}}
 {{- template "error" (dict "message" .NewListError)}}<div class="modal-actions"><button type="submit" class="btn btn-primary" id="list-new-submit">Create</button><button type="button" class="btn" data-close id="list-new-cancel">Cancel</button></div></form></dialog>
 {{- with .List}}
 {{- /* Rename…: the list's name, on its tasks, in the pins and where pages name it. */}}
@@ -122,12 +121,12 @@
 {{- if $.OpenInList}}<label class="promote-check" title="They go to Closed as won't do, and can be reopened from there"><input type="checkbox" name="close" id="list-delete-close" value="1"> Close its {{if eq $.OpenInList 1}}open task{{else}}{{$.OpenInList}} open tasks{{end}} as won't do</label>{{end}}
 {{- template "error" (dict "message" $.DeleteError)}}<div class="modal-actions"><button type="submit" class="btn btn-danger" id="list-delete-submit">Delete</button><button type="button" class="btn" data-close id="list-delete-cancel">Cancel</button></div></form></dialog>
 {{- if and $.Manage $.Users (not .Private)}}
-{{- /* Who it is for…: a shared list for everyone, or for the groups and people it names (POST /tasks/list-for). */}}
-<dialog id="list-for-dialog" class="modal" data-params="for_error for_words for_confirm"{{if $.ForError}} data-open{{end}}><p class="modal-label">Who #{{.Name}} is for</p><p class="modal-desc">Everyone, or the groups (<code>@dev</code>) and people (<code>anna</code>) you name: only they see the list and its tasks, and its tasks are given only to them. To anyone else it is no list. Its tasks stay as they are.</p><form method="post" action="/tasks/list-for"><input type="hidden" name="list" value="{{.Ref}}">{{if $.ForConfirm}}<input type="hidden" name="confirm" value="1">{{end}}<input type="text" name="for" id="list-for-input" value="{{$.ForWords}}" list="list-for-words" placeholder="everyone" autocomplete="off" spellcheck="false" aria-label="Who the list is for">{{template "error" (dict "message" $.ForError)}}<div class="modal-actions"><button type="submit" class="btn btn-primary" id="list-for-submit">Save</button><button type="button" class="btn" data-close id="list-for-cancel">Cancel</button></div></form></dialog>
+{{- /* Who sees it…: a shared list is everyone's or a group's, kept in its folder, as a page is (POST /tasks/list-for). */}}
+<dialog id="list-for-dialog" class="modal" data-params="for_error for_confirm"{{if $.ForError}} data-open{{end}}><p class="modal-label">Who sees #{{.Name}}</p><p class="modal-desc">Everyone who uses the wiki, or the members of one of your groups: only they see the list and its tasks, and its tasks are given only to them. Its tasks move with it.</p><form method="post" action="/tasks/list-for"><input type="hidden" name="list" value="{{.Ref}}">{{if $.ForConfirm}}<input type="hidden" name="confirm" value="1">{{end}}{{template "list_for_select" (dict "Name" "for" "ID" "list-for-input" "Groups" $.Groups "Value" (print "group:" .Group))}}{{template "error" (dict "message" $.ForError)}}<div class="modal-actions"><button type="submit" class="btn btn-primary" id="list-for-submit">Save</button><button type="button" class="btn" data-close id="list-for-cancel">Cancel</button></div></form></dialog>
 {{- end}}
 {{- if .Private}}
-{{- /* Make shared…: a private list and its tasks, for everyone from then on. */}}
-<dialog id="list-share-dialog" class="modal" data-params="share_error"{{if $.ShareError}} data-open{{end}}><p class="modal-label">Make #{{.Name}} shared</p><p class="modal-desc">Everyone who uses the wiki will see this list and its tasks, and change them. A shared list can't be made private again.</p><form method="post" action="/tasks/share-list"><input type="hidden" name="list" value="{{.Ref}}">{{template "error" (dict "message" $.ShareError)}}<div class="modal-actions"><button type="submit" class="btn btn-primary" id="list-share-submit">Make shared</button><button type="button" class="btn" data-close id="list-share-cancel">Cancel</button></div></form></dialog>
+{{- /* Make shared…: a private list and its tasks, for everyone or a group of the user's from then on. */}}
+<dialog id="list-share-dialog" class="modal" data-params="share_error"{{if $.ShareError}} data-open{{end}}><p class="modal-label">Make #{{.Name}} shared</p><p class="modal-desc">Who you choose will see this list and its tasks, and change them. A shared list can't be made private again.</p><form method="post" action="/tasks/share-list"><input type="hidden" name="list" value="{{.Ref}}">{{if $.Groups}}<label class="list-for-field" for="list-share-for">For {{template "list_for_select" (dict "Name" "for" "ID" "list-share-for" "Groups" $.Groups "Value" "")}}</label>{{end}}{{template "error" (dict "message" $.ShareError)}}<div class="modal-actions"><button type="submit" class="btn btn-primary" id="list-share-submit">Make shared</button><button type="button" class="btn" data-close id="list-share-cancel">Cancel</button></div></form></dialog>
 {{- end}}
 {{- end}}
 {{- /* Rename tag…: the tag on tasks, and in the embeds and links that filter by it. */}}
@@ -145,7 +144,11 @@
 {{.TasksHTML}}</article>
 </div>
 {{- end}}
-{{- /* What a For field completes from: the groups there are. */}}
-{{define "list_for_words"}}<datalist id="list-for-words" data-words="{{range .Groups}}@{{.}} {{end}}{{range .People}}{{.}} {{end}}">{{range .Groups}}<option value="@{{.}}">{{end}}</datalist>{{end}}
-{{define "lists_more_item"}}<a href="{{.Href}}" class="lists-more-item" data-list="{{.Label}}" data-place="{{.Key}}" title="{{.Title}}{{if .Private}} (only you see it){{end}}{{with .For}} (for {{.}}){{end}}"{{if .Current}} aria-current="page"{{end}}>
-{{- if .Private}}<span class="tasks-place-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}{{if .For}}<span class="tasks-place-lock tasks-place-for" aria-hidden="true">{{template "icon_people"}}</span>{{end}}<span class="lists-more-name">{{.Label}}</span></a>{{end}}
+{{- /* A list's For, as a new page's: everyone, a group the user is in (its folder: groups/<g>/), only you (Private). */}}
+{{define "list_for_select"}}<select name="{{.Name}}" id="{{.ID}}" title="Who sees the list and its tasks: where it is kept, as for a page">
+<option value="">Everyone who uses this wiki</option>
+{{- range .Groups}}<option value="group:{{.}}"{{if eq $.Value (print "group:" .)}} selected{{end}}>@{{.}}: its members see it</option>{{end}}
+{{- if .Private}}<option value="private"{{if eq .Value "private"}} selected{{end}}>Only you</option>{{end}}
+</select>{{end}}
+{{define "lists_more_item"}}<a href="{{.Href}}" class="lists-more-item" data-list="{{.Label}}" data-place="{{.Key}}" title="{{.Title}}{{if .Private}} (only you see it){{end}}{{with .Group}} (the group {{.}}'s: only its members see it){{end}}"{{if .Current}} aria-current="page"{{end}}>
+{{- if .Private}}<span class="tasks-place-lock" aria-hidden="true">{{template "icon_lock"}}</span>{{end}}{{if .Group}}<span class="tasks-place-lock tasks-place-for" aria-hidden="true">{{template "icon_people"}}</span>{{end}}<span class="lists-more-name">{{.Label}}</span></a>{{end}}

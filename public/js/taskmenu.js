@@ -224,11 +224,11 @@ function confirmDeadlineMove(task, day) {
 // A private task dropped on a shared list's section (By list): everyone
 // would see it from then on, and that can't be taken back, so it asks, as
 // the move dialog's row says it.
-// from: the task leaves a list for some (its name) for one that is for
-// everyone: the same question, of a task that only its list's members saw.
+// from: the task leaves a group's list (its name) for one that is
+// everyone's: the same question, of a task that only the group saw.
 function confirmShare(task, listName, from = '') {
   document.getElementById('task-share-text' + app.sfx).textContent = from
-    ? `“${plainTitle(task.title)}” goes to the list “${listName}”: everyone who uses the wiki will see and change it. Now only those the list “${from}” is for do.`
+    ? `“${plainTitle(task.title)}” goes to the list “${listName}”: everyone who uses the wiki will see and change it. Now only the members of the group of the list “${from}” do.`
     : `“${plainTitle(task.title)}” goes to the list “${listName}”: everyone who uses the wiki will see and change it. It can’t be made private again.`;
   return confirmModal(document.getElementById('task-share-modal' + app.sfx),
     document.getElementById('task-share-confirm' + app.sfx),

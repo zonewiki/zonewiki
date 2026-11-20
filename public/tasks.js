@@ -142,7 +142,7 @@ const app = {
   boardDivider, clearBoardDropOver, dropOnBucket, dropWrite, planOnDay,
   taskList,
   filterTasks, boardBuckets,
-  refreshOtherInstances, listTooltip, listMembers, assignableIn, widens, narrows, mayNarrow, inScope, listName, editPrivate, newTaskList,
+  refreshOtherInstances, listTooltip, listMembers, listGroup, assignableIn, widens, narrows, mayNarrow, inScope, listName, editPrivate, newTaskList,
 
   flashTask,
 
@@ -424,7 +424,7 @@ const inboxPrivate = appEl?.dataset.inboxPrivate === '1';
 let listChoices = [];
 try { listChoices = JSON.parse(appEl?.dataset.lists || '[]'); } catch (_) {}
 const listSet = new Set(listChoices.map(l => l.ref));
-// The members of the lists for some, where the rules ask who has a task
+// The members of the groups' lists, where the rules ask who has a task
 // (TasksCore.assigneeGone): the page's lists are every task app's.
 people.members = { ...people.members, ...Object.fromEntries(listChoices.filter(l => l.members).map(l => [l.ref, l.members])) };
 const privateLists = new Set(listChoices.filter(l => l.private).map(l => l.ref));
@@ -439,15 +439,17 @@ document.addEventListener('zone:list-made', e => {
   listSet.add(ref);
   if (isPrivate) privateLists.add(ref);
 });
-// A list for some: its members, who its tasks can be given to (a Set of
-// names); null for a list that is for everyone, where that is whoever can
-// be given tasks (people.users).
+// A group's list: its members, who its tasks can be given to (a Set of
+// names); null for a list that is everyone's, where that is whoever can be
+// given tasks (people.users).
 function listMembers(ref) {
   const members = listChoices.find(l => l.ref === ref)?.members;
   return members ? new Set(members) : null;
 }
-// The task would leave a list for some for a shared list that is for
-// everyone: more people see it than now (the dialogs say so, a drop asks).
+// The group whose list ref is ('' for any other).
+function listGroup(ref) { return listChoices.find(l => l.ref === ref)?.group || ''; }
+// The task would leave a group's list for a list that is everyone's: more
+// people see it than now (the dialogs say so, a drop asks).
 function widens(task, ref) {
   return !task.private && !!listMembers(taskList(task) || '') && !isPrivateList(ref) && !listMembers(ref);
 }
@@ -470,7 +472,7 @@ function listName(ref) { return String(ref).replace(/^shared\//, ''); }
 function listTooltip(ref) {
   const r = String(ref).replace(/^-?list:/, '').toLowerCase();
   if ((r === 'inbox' || r === 'none') && !listSet.has(r)) return inboxPrivate ? 'In your Inbox: only you see it' : 'In the Inbox: in no list';
-  if (listMembers(r)) return `List for some: only ${[...listMembers(r)].join(', ')} see it and its tasks`;
+  if (listGroup(r)) return `The group ${listGroup(r)}'s list: only its members (${[...(listMembers(r) || [])].join(', ')}) see it and its tasks`;
   return privateLists.has(r) ? 'List (private: only you see it)' : 'List';
 }
 // The tabs' names: Open/Plan/Focus, or an embed's own (`labels=`, rendered

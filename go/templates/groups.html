@@ -54,7 +54,7 @@
         <p class="users-help">Its pages move to the folder of the new name, links to them follow, and the lists that are for it are for the new name.</p>
       </form>
       {{- /* Remove: the group ends. Its pages can't stay where no one would see them: they go to the wiki, or are
-          deleted, as who removes it says. A list that is for it keeps it. */}}
+          deleted, as who removes it says. A task list of its own keeps it: its owners move or delete it first. */}}
       <div class="group-remove">
       {{- if .G.KeptBy}}
       <p class="users-help" role="note"><strong>Remove the group:</strong> {{.G.KeptBy}}</p>
@@ -113,7 +113,7 @@
   <input type="text" name="includes" placeholder="everyone in: dev, design" required list="all-groups" data-pick="groups" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="The groups it includes">
   <button type="submit" class="btn">Make a group of groups</button>
 </form>
-<p class="users-help">Whoever is in one of its groups is in it, so a task list for two teams is for one group, and who joins a team later is in it at once. Taking a group out takes what is for the larger group from its people.</p>
+<p class="users-help">Whoever is in one of its groups is in it, so a task list of two teams is one group's, and who joins a team later is in it at once. Taking a group out takes what is the larger group's from its people.</p>
 <datalist id="all-groups">{{range .AllGroups}}<option value="{{.}}">{{end}}</datalist>
 {{- with .Stray}}
 <p class="users-help groups-stray" role="note"><strong>Seen by no one:</strong> {{range $i, $p := .}}{{if $i}}, {{end}}<code>{{$p}}</code>{{end}}. A folder in <code>groups/</code> is for the group of its name: put someone in that group (their Groups field on the <a href="/admin/users">admin page</a>), or move the folder on the host.</p>

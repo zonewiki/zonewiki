@@ -172,16 +172,15 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, p
 	type listChoice struct {
 		Ref     string `json:"ref"`
 		Private bool   `json:"private"`
-		// A list for some: its members, who its tasks can be given to.
+		// A group's list: the group, and its members, who its tasks can be
+		// given to.
+		Group   string   `json:"group,omitempty"`
 		Members []string `json:"members,omitempty"`
 	}
 	choices := []listChoice{}
 	for _, ref := range sortedKeys(lists) {
-		c := listChoice{Ref: ref, Private: lists[ref].Private()}
-		if len(lists[ref].For) > 0 {
-			c.Members = listMembers(lists[ref].For)
-		}
-		choices = append(choices, c)
+		l := lists[ref]
+		choices = append(choices, listChoice{Ref: ref, Private: l.Private(), Group: l.Group(), Members: listMembers(l)})
 	}
 	scope := paramsScope(params)
 	sfx := ""
@@ -726,7 +725,7 @@ func taskOverdue(t *Task, day string) bool { return t.DueDate != "" && t.DueDate
 type TaskPlace struct {
 	Key, Label, Title, Href  string
 	Pinned, Private, Current bool
-	For                      string // a list for some: whom it is for ("@dev, anna"), for its 👥 and tooltip
+	Group                    string // a group's list: the group, for its 👥 and tooltip
 	Counts                   TaskCounts
 }
 
@@ -755,7 +754,7 @@ func (rq *Req) taskPlaces() []TaskPlace {
 			continue
 		}
 		out = append(out, TaskPlace{Key: "list:" + l.Ref, Label: l.Name, Title: "Pinned list #" + l.Name, Href: listHref(l.Ref),
-			Pinned: true, Private: l.Private(), For: forWords(l.For),
+			Pinned: true, Private: l.Private(), Group: l.Group(),
 			Counts: rq.keptCounts("list:"+l.Ref, func() TaskCounts { return countTasks(user, rq.openTasks(), lists, l.Params) })})
 	}
 	return out
@@ -822,18 +821,18 @@ func (rq *Req) taskMore(place string) *TasksMore {
 	if privateFolder(user) != "" {
 		has = map[string]bool{}
 		for _, t := range rq.openTasks() {
-			if t.Owner == "" && t.Assignee == user.Name {
+			if !privateOwner(t.Owner) && t.Assignee == user.Name {
 				has[taskList(t, lists)] = true
 			}
 		}
 	}
 	for _, l := range rest {
 		p := TaskPlace{Key: "list:" + l.Ref, Label: l.Name, Title: "List #" + l.Name, Href: listHref(l.Ref),
-			Private: l.Private(), For: forWords(l.For), Current: place == "list:"+l.Ref}
+			Private: l.Private(), Group: l.Group(), Current: place == "list:"+l.Ref}
 		if p.Current {
 			more.Label, more.Current = l.Name, true
 		}
-		if has == nil || l.Private() || len(l.For) > 0 || has[l.Ref] {
+		if has == nil || l.Private() || l.Group() != "" || has[l.Ref] {
 			more.Lists = append(more.Lists, p)
 		} else {
 			more.Others = append(more.Others, p)

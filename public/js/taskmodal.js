@@ -214,8 +214,8 @@ function userNamed(typed) {
   const name = cleanName(typed) === 'me' ? people.me : cleanName(typed);
   return people.users?.has(name) && assignableHere().has(name) ? name : '';
 }
-// Who the task can be given to where the List field has it: a list for
-// some's members, else whoever can be given tasks.
+// Who the task can be given to where the List field has it: a group's
+// list's members, else whoever can be given tasks.
 const assignableHere = () => app.assignableIn(app.listSelect?.value || '');
 const assigneeChip = assigneeInput && app.chipField(assigneeInput, {
   onChange: () => { byHand('assignee'); syncTarget(); },   // the chip taken off
@@ -226,7 +226,7 @@ const assigneeChip = assigneeInput && app.chipField(assigneeInput, {
     const list = app.listSelect?.value || '';
     if (people.users.has(n) && assignableHere().has(n)) return;
     chip.classList.add('tag-chip-former');
-    chip.title = people.users.has(n) ? `${n} isn’t one of those the list ${app.listName(list)} is for: the task counts as no one’s`
+    chip.title = people.users.has(n) ? `${n} isn’t in the group ${app.listGroup(list)}, whose list it is: the task counts as no one’s`
       : `${n} can no longer be given tasks`;
   },
 });
@@ -323,7 +323,7 @@ if (assigneeInput) {
 function refuseAssignee() {
   const typed = cleanName(assigneeInput.value), list = app.listSelect?.value || '';
   assigneeInput.setCustomValidity(people.users?.has(typed) && app.listMembers(list)
-    ? `${typed} isn’t one of those the list ${app.listName(list)} is for`
+    ? `${typed} isn’t in the group ${app.listGroup(list)}, whose list ${app.listName(list)} is`
     : `“${assigneeInput.value.trim()}” is no user a task can be assigned to`);
   assigneeInput.reportValidity();
 }
@@ -373,7 +373,7 @@ function quickParse() {
 // without users.
 const quickPeople = () => {
   if (!assigning()) return null;
-  // (In a list for some, only its members: anyone else's name is text.)
+  // (In a group's list, only its members: anyone else's name is text.)
   const members = app.listMembers(app.listSelect?.value || '');
   return members && people.users ? { me: people.me, users: new Set([...people.users].filter(n => members.has(n))) } : people;
 };
@@ -642,8 +642,8 @@ function namesOr(names) {
 // A task moved to a list fewer people see: who loses it, and whose move it is.
 const lostNote = (lost, may) => {
   const who = namesOr(lost);
-  return may ? `${who} will no longer see this task: the list is for fewer people.`
-    : `${who} would no longer see this task: only who made it, or an admin, moves it to a list for fewer people.`;
+  return may ? `${who} will no longer see this task: fewer people see that list.`
+    : `${who} would no longer see this task: only who made it, or an admin, moves it to a list fewer people see.`;
 };
 function syncListNote() {
   if (!app.listNote) return;
@@ -654,7 +654,7 @@ function syncListNote() {
   const text = isNew ? '' : isPrivate ? 'Private: only you see this task.'
     : privateWas ? 'Everyone who uses the wiki will see and change this task. It can’t be made private again.'
     : listTask && app.widens(listTask, app.listSelect.value)
-      ? `Everyone who uses the wiki will see and change this task. Now only those the list ${app.listName(app.taskList(listTask))} is for do.`
+      ? `Everyone who uses the wiki will see and change this task. Now only the members of the group ${app.listGroup(app.taskList(listTask))} do.`
     : listTask && app.narrows(listTask, app.listSelect.value)
       ? lostNote(app.narrows(listTask, app.listSelect.value), app.mayNarrow(listTask)) : '';
   app.listNote.hidden = !users || !text;
@@ -678,7 +678,7 @@ function syncTarget() {
   const where = ref ? `Adds to the list ${app.listName(ref)}` : users ? 'Adds to your Inbox' : 'Adds to the Inbox';
   const members = users && !app.isPrivateList(ref) && app.listMembers(ref);
   const who = !users ? '' : app.isPrivateList(ref) ? ': only you see it'
-    : members ? `: only ${namesOr([...members])} see it` : ': everyone sees it';
+    : app.listGroup(ref) ? `: only the group ${app.listGroup(ref)} sees it` : ': everyone sees it';
   targetEl.textContent = where + who + '.';
   // A task for someone, still in the Inbox nobody chose: it needs a shared
   // list. (In the Inbox the user chose, as in a private list, there is no

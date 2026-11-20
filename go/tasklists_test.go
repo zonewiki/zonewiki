@@ -629,13 +629,13 @@ func TestShareList(t *testing.T) {
 	mustList(t, "alice", "gifts", true)
 	mustList(t, "alice", "shop", false)
 	cake := newTestTask(t, "alice", "Cake", false, "list", "gifts")
-	if _, err := shareListOp(asUser("alice"), "shop", ""); !refusedWith(err, refusedUnchanged) {
+	if _, err := shareListOp(asUser("alice"), "shop", "", ""); !refusedWith(err, refusedUnchanged) {
 		t.Errorf("a shared list shared: %v", err)
 	}
-	if _, err := shareListOp(asUser("bob"), "gifts", ""); !refusedWith(err, refusedNotFound) {
+	if _, err := shareListOp(asUser("bob"), "gifts", "", ""); !refusedWith(err, refusedNotFound) {
 		t.Errorf("bob shared alice's list: %v", err)
 	}
-	if _, err := shareListOp(asUser("alice"), "gifts", ""); err != nil {
+	if _, err := shareListOp(asUser("alice"), "gifts", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	if l, ok := taskLists(asUser("bob"))["gifts"]; !ok || l.Private() {
@@ -647,7 +647,7 @@ func TestShareList(t *testing.T) {
 	// A name a shared list has already: hers stays hers.
 	mustList(t, "alice", "wishes", true)
 	mustList(t, "bob", "wishes", false)
-	if _, err := shareListOp(asUser("alice"), "wishes", ""); !refusedWith(err, refusedExists) {
+	if _, err := shareListOp(asUser("alice"), "wishes", "", ""); !refusedWith(err, refusedExists) {
 		t.Errorf("shared onto a shared list's name: %v", err)
 	}
 }

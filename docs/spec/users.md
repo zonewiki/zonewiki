@@ -509,7 +509,7 @@ Who may write makes one there too; on the host anyone with access makes a group 
 
 A group is for what is for some and not for all.
 `memberOf(user, group)` asks; a disabled user is a member of none.
-A task list can be for groups (`"for": ["@hiring"]`: Lists for some, in `docs/spec/tasks.md`), and a user put in a group or taken out sees its lists, or no longer, at their next request; likewise the group's pages (Group pages, below).
+A task list can be a group's, kept in its folder (A group's lists, in `docs/spec/tasks.md`), and a user put in a group or taken out sees its lists, or no longer, at their next request; likewise the group's pages (Group pages, below).
 
 **A role is not a group**: an admin is in no group by being admin, and sees nothing of a group they are not in.
 They may put themselves in one, which the log of the settings shows ("alice's groups").
@@ -524,8 +524,8 @@ Give the larger group a section that says which groups it is made of:
 includes = dev, design
 ```
 
-Whoever is in `dev` or in `design` is in `product`, at once and for as long as they are, so someone who joins `dev` next month has what is for `@product` without anyone thinking of it.
-A list for both teams is then for one group (`"for": ["@product"]`).
+Whoever is in `dev` or in `design` is in `product`, at once and for as long as they are, so someone who joins `dev` next month has what is `product`'s without anyone thinking of it.
+A list for both teams is then one group's, `product`'s.
 
 It goes through: `company` may include `product`, and whoever is in `dev` is in all three.
 Who has `product` named on them (`groups = product`) is in it as before, and not thereby in `dev`.
@@ -534,7 +534,7 @@ Set it with `zonewiki group includes product +dev +design` (`-dev` takes one out
 Taking the last group out removes the key, and the section when it says nothing else (`setGroupKey`).
 The settings' log says it ("product includes design, dev").
 
-**Taking a group out is a narrowing**, like taking a user out of a group: its people no longer see what is for the larger group at their next request, and their tasks in its lists count as no one's (Lists for some in `docs/spec/tasks.md`).
+**Taking a group out is a narrowing**, like taking a user out of a group: its people no longer see what is for the larger group at their next request, and their tasks in its lists count as no one's (Assigning in a group's list in `docs/spec/tasks.md`).
 The command and the page say who that was (the command "No longer in product: bob. What is for @product they no longer see.", the page "No longer in it: bob. …"); putting the group back gives it all back.
 
 A group that includes itself, directly or by way of others, is an error of the file naming its line ("[group a] includes itself, by way of b: a group is made of other groups."; `includesItself` in `go/configfile.go`), as is a word in `includes` that isn't a group's name.
@@ -588,14 +588,13 @@ and not for who manages it (Manage… is their way, where a group keeps an owner
 
 ### A name that is taken
 
-A new group's name is refused when it is taken (`groupNameTaken`): a group there is, a name a group is said to include, a folder in `groups/` (a group nobody is in keeps its folder, and a new group of that name would get its pages), or a name a task list is for.
-A list is for no group there isn't (Saying whom a list is for in `docs/spec/tasks.md`), so a list takes no name nobody has.
-**And a name a group went by before**: the history of `groups/<name>/` (the versions and deleted pages of a group renamed since, which are read under that path by who is in a group of that name) and a deleted list that was for it stay its former group's, so a new group of the name would be shown them: the name stays taken.
+A new group's name is refused when it is taken (`groupNameTaken`): a group there is, a name a group is said to include, or a folder in `groups/` (a group nobody is in keeps its folder, and a new group of that name would get its pages and its task lists).
+**And a name a group went by before**: the history of `groups/<name>/` (the versions and deleted pages and tasks of a group renamed since, which are read under that path by who is in a group of that name), and a former list for some that was for it (Lists for some, until 2026-11-20 in `docs/spec/tasks.md`), stay its former group's, so a new group of the name would be shown them: the name stays taken.
 The group that went by it takes it back (`was = apollo` in its section, which a rename writes: the names it had), so a rename can be undone.
 **A name in a group's `was` is taken for every other group**, whether its folder has a history yet or not: a group renamed before it had a page would otherwise leave the name to the next group, and take it back, with that group's past, once that one moved on.
 Two groups that went by one name (a wiki from before this rule) take it back neither.
 On the host nobody is asked: `zonewiki user group` and a hand edit of the file make a group of any name.
-The groups' names are no secret among a wiki's users (a list's Who it is for… completes from them), so "taken" tells nothing new.
+The groups' names are no secret among a wiki's users (the users' Groups field and Groups list them), so "taken" tells nothing new.
 
 ### An admin on Groups
 
@@ -625,16 +624,15 @@ The new name must be free, as a new group's, or one the group went by before (`w
 There is no command for it: a rename writes pages and task files, which only the running server does (One process, in `AGENTS.md`).
 
 What is the group's by its name goes along, so nobody loses anything:
-the lists that are for `@old` are for `@new`;
-the folder `groups/old/` becomes `groups/new/`, every link to its pages re-pointed on pages and in tasks, the files its pages show and those no page shows along, and a home that still says what Zone wrote says the new name;
+the folder `groups/old/` becomes `groups/new/`, every link to its pages re-pointed on pages and in tasks, the files its pages show and those no page shows along (its task lists and their tasks among them, in `_tasks/`, moved under the task store's lock), and a home that still says what Zone wrote says the new name;
 then the settings name it anew, on the users, in the groups that include it and its own section.
-It is up to three commits (the lists, the folder with its links, the files no page shows), by whoever renamed it; an admin who is not in the group moves its pages without seeing any.
+It is up to two commits (the folder with its links, the files no page shows), by whoever renamed it; an admin who is not in the group moves its pages without seeing any.
 Who manages a group moves its pages whoever wrote them, so where they come from isn't asked, but where they land is, as for any move: a page that would land where a shared guide pulls a page in (Guides, above), or where `safePath` opens no page, stops the rename before anything changes (`groupMoveRefused`).
 
 #### How a rename is ordered
 
 The order is that one: until the settings change nobody is in the new name's group, so what has moved is seen by no one for that moment and never by more.
-**A step that fails** puts the ones before it back and the rename stops, everything as it was (a page of the group with text not in git yet that can't be committed first: the lists, which were for the new name already, are for the old one again).
+**A step that fails** puts the ones before it back and the rename stops, everything as it was (a page of the group with text not in git yet that can't be committed first: nothing has moved).
 **A step that is made but for its commit** counts as made (`writtenAnyway`): the rename goes on to the settings, or the group's pages were in a folder no group is named as, seen by no one.
 The page then says both, that the group has its new name and that the change is written but not committed (500), and the files are in the Uncommitted list, as after any write whose commit failed.
 
@@ -660,7 +658,7 @@ Links to them are links to pages there aren't.
 
 #### What stops a group's end
 
-**A task list that is for the group keeps it** (`groupKept`): a list has its own owners and its own For, so the page names the lists (those you see; the others counted) and says to change whom they are for, or delete them, first.
+**A task list of the group keeps it** (`groupKept`): a list has its own owners, so the page names the lists (those you see; the others counted) and says to move them to everyone (Who sees it…), or delete them, first.
 **A group that another is made of** is an admin's to remove (what a group is made of is an admin's): an owner is told so.
 **No page becomes a guide by the move** (`groupMoveRefused`, as for a rename): a page that would land where a shared guide pulls a page in, which only an admin writes (Guides, above), stops the move with nothing moved (403), and the page asks for another folder or an admin; a guide of the group's own (its `AGENTS.md`) goes along, as it was an admin's already.
 
@@ -1191,7 +1189,7 @@ A page that leaves the folder takes the uploads it shows with it (`shareUploads`
 
 **Search**: a group's pages are searched by its members and nobody else, as a user's private pages are by them, and a group's words take part in no one else's ranking (Who searches what in `docs/spec/search.md`).
 **Guides**: a group's guides are an admin's who is in the group (`adminsOnly`): `groups/dev/AGENTS.md` and what it pulls in steer the assistant of everyone in dev, so the others in the group read them and don't change them (Guides in private and group folders, above).
-**Tasks are not kept there**: a group's tasks are a list for the group (`"for": ["@dev"]`, Lists for some in `docs/spec/tasks.md`), which a page in the folder can show (`[[tasks: list=dev]]`).
+**Its task lists are kept there too**: a group's lists and their tasks are in `groups/<group>/_tasks/` (A group's lists in `docs/spec/tasks.md`), which a page anywhere can show (`[[tasks: list=dev]]`, to who sees the list).
 A `[[task:…]]` on a group's page counts as its title in search only for a task everyone sees, as on a shared page.
 
 ### A group's pages and assistants
@@ -1273,7 +1271,7 @@ The dialog says under its fields who sees the task ("Private: only you see this 
 Cards of private tasks show 🔒 (`.task-private`).
 
 **A new task is private until it is filed**: from New task, `c t` or an assistant's `create_task` without a list it is in its maker's Inbox (The Inbox in `docs/spec/tasks.md`).
-The dialog says so under the title: "Adds to your Inbox: only you see it.", for a shared list "Adds to the list team: everyone sees it.", and for a list for some "Adds to the list hiring: only alice, carol see it." (its members)
+The dialog says so under the title: "Adds to your Inbox: only you see it.", for a shared list "Adds to the list team: everyone sees it.", and for a group's list "Adds to the list hiring: only the group hiring sees it."
 
 **A shared task can't be made private**: your private lists and your Inbox are off in its List field, and the API and `update_task` answer 400, "A shared task stays shared" for a private list, "A shared task is always in a list: move it to another shared list" for the Inbox (`errSharedListed`).
 **A tag never moves a task**: adding a tag with a private list's name to a task, in the modal, a batch or `update_task`, leaves it where it is; such a tag on a shared task shows to everyone, as any tag.
@@ -1386,7 +1384,7 @@ The Open tab's control, on a shared list and All tasks (Views in `docs/spec/task
 ### Several at once
 
 `openBulkAssignModal` in `js/taskselect.js`: **Assign…** in the selection bar and in the menu of a selected card, or **a** on the selected tasks (one is enough).
-The dialog lists the users who can be assigned in every selected task's list (a list for some narrows it), yourself first, then **No one**, with a field to find a person when there are many; the row of who has them all is ticked, one who has some says "1 of 4".
+The dialog lists the users who can be assigned in every selected task's list (a group's list narrows it to its members), yourself first, then **No one**, with a field to find a person when there are many; the row of who has them all is ticked, one who has some says "1 of 4".
 A selection of private tasks alone says "A private task has no assignee".
 A click (or ↑/↓ and Enter) assigns them in one `batch-update`, and the toast ("3 tasks assigned to bob") has one Undo for all, which leaves no trace in their histories.
 Private tasks among the selection are left alone.

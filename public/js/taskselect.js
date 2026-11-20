@@ -324,7 +324,7 @@ function openBulkAssignModal(ids) {
   const chosen = st.tasks.filter(t => idSet.has(t.id) && !t.private);
   if (!chosen.length) { if (ids.length) showNotice('A private task has no assignee'); return; }
   const count = chosen.length;
-  // Who every chosen task can be given to: in a list for some its members
+  // Who every chosen task can be given to: in a group's list its members
   // (the server refuses anyone else), yourself first.
   const allowed = name => chosen.every(t => app.assignableIn(app.taskList(t) || '').has(name));
   const names = [...people.users].filter(allowed).sort((a, b) => (b === people.me) - (a === people.me) || a.localeCompare(b));

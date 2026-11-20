@@ -67,8 +67,6 @@
    you). The Focus count is the Tasks link's: the day's load. */
 .tasks-place .module-focus { display: none; }
 .tasks-place-lock, .tasks-place-pin { display: inline-flex; }
-/* New list…: Private and For exclude each other (js/listsrow.js). */
-.field-off { opacity: .5; }
 /* More: a details whose summary is the row's last pill and whose panel hangs
    under it: links, a line each; a filter field over them when there are many
    (js/listsrow.js). On a narrow screen the panel is as wide as the row. */

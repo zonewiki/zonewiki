@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 	"zonewiki/internal/jsonobj"
+	"zonewiki/internal/taskfiles"
 	"zonewiki/internal/taskmodel"
 )
 
@@ -396,24 +397,26 @@ func applyList(user asker, t *Task, data jsonObj, fresh bool) error {
 	if !fresh && name == t.List && owner == t.Owner {
 		return nil
 	}
-	if owner != "" && lacksPrivate(user) {
+	if privateOwner(owner) && lacksPrivate(user) {
 		return refuse(noPrivateMsg) // into the Inbox: the lists it sees are shared ones
 	}
+	// A shared task is everyone's or a group's (the place of its list).
+	toPrivate, fromPrivate := privateOwner(owner), privateOwner(t.Owner)
 	switch {
 	case fresh:
-	case owner != "" && t.Owner == "" && name == "":
+	case toPrivate && !fromPrivate && name == "":
 		return errSharedListed
-	case owner != "" && t.Owner == "":
+	case toPrivate && !fromPrivate:
 		return errSharedStays
-	case owner == "" && t.Owner != "" && !share:
+	case !toPrivate && fromPrivate && !share:
 		return shareNeeded("The task")
-	case owner == "" && t.Owner != "":
+	case !toPrivate && fromPrivate:
 		t.Owner = owner
 		sharedBy(t, user.Name, !data.Has("assignee"))
-	case owner == "":
+	case !toPrivate:
 		// Between shared lists: to a list fewer people see only by who made
 		// the task or an admin, as a page goes to fewer people (checkReaders).
-		if lost := taskLosers(t.List, name); len(lost) > 0 && !mayNarrowTask(user, t) {
+		if lost := taskLosers(t.Owner, owner); len(lost) > 0 && !mayNarrowTask(user, t) {
 			return refuseAs(refusedReadOnly, namesOr(lost, 3, "")+" would no longer see the task: #"+name+" is for fewer people than it is seen by now. "+
 				"Only who made a task, or an admin, moves it there")
 		}
@@ -422,17 +425,18 @@ func applyList(user asker, t *Task, data jsonObj, fresh bool) error {
 	return nil
 }
 
-// taskLosers: who sees a shared task in the list from and wouldn't in the
-// list to (a list for some that they are none of), A–Z; none without
-// users, and when to is for everyone.
+// taskLosers: who sees a shared task kept by from (an owner: everyone's or
+// a group's place) and wouldn't in to's (a group they are none of), A–Z;
+// none without users, and when to is everyone's.
 func taskLosers(from, to string) []string {
 	s := settings()
-	if s.Users == nil || len(taskFiles.ForOfList(to)) == 0 {
+	fp, tp := ownerPlace(from), ownerPlace(to)
+	if s.Users == nil || tp.shared() {
 		return nil
 	}
 	var out []string
 	for _, name := range sortedKeys(s.Users) {
-		if !s.Users[name].Disabled && taskFiles.SeesList(asUser(name), from) && !taskFiles.SeesList(asUser(name), to) {
+		if u := asUser(name); !s.Users[name].Disabled && fp.sees(u) && !tp.sees(u) {
 			out = append(out, name)
 		}
 	}
@@ -492,14 +496,15 @@ func applyAssignee(user asker, t *Task, data jsonObj) error {
 	case name == "":
 	case s.Users == nil:
 		return refuse("This wiki has no users to assign a task to")
-	case t.Owner != "":
+	case privateOwner(t.Owner):
 		return refuse("A private task is yours alone. Put it in a shared list to assign it (list)")
 	case !s.assignable(name) && !hadAssignee(t, name):
 		return refuse(s.notAssignable(name))
-	case !taskFiles.SeesList(asUser(name), t.List) && !hadAssignee(t, name):
-		// A list for some: a task there is given only to one of them (anyone
-		// else wouldn't see it).
-		return refuse(name + " isn't one of those the list #" + t.List + " is for: a task there is given to one of them")
+	case !ownerPlace(t.Owner).sees(asUser(name)) && !hadAssignee(t, name):
+		// A group's list: a task there is given only to one of its members
+		// (anyone else wouldn't see it).
+		g, _ := taskfiles.GroupOf(t.Owner)
+		return refuse(name + " isn't in the group " + g + ": a task of its list #" + t.List + " is given to one of its members")
 	}
 	logEvent(t, user.Name, "assigned", t.Assignee, name)
 	t.Assignee = name
@@ -535,7 +540,7 @@ func applyFollow(user asker, t *Task, data jsonObj) error {
 		}
 	case settings().Users == nil || user.Name == "":
 		return refuse("This wiki has no users, so nobody follows a task")
-	case t.Owner != "":
+	case privateOwner(t.Owner):
 		return refuse("A private task is yours alone: there is no one else's news to follow. Put it in a shared list first (list)")
 	default:
 		t.Followers = append(slices.Clone(t.Followers), user.Name)
@@ -963,7 +968,7 @@ func noteBrought(user string, ids []string) {
 // someone else made is closed (Won't do), not deleted: others have seen it.
 func mayDeleteTask(user asker, t *Task) bool {
 	s := settings()
-	if s.Users == nil || t.Owner != "" || t.Maker() == user.Name || t.Maker() == "" || s.isAdmin(user.Name) {
+	if s.Users == nil || privateOwner(t.Owner) || t.Maker() == user.Name || t.Maker() == "" || s.isAdmin(user.Name) {
 		return true
 	}
 	brought.Lock()

@@ -106,7 +106,7 @@ Under each result's title is a short line telling similar results apart:
 
 In a wiki with users, the line also says whose a result is:
 a 🔒 for your private pages and tasks (`🔒 Private/ideas · …`, `🔒 Tasks › …`),
-a 👥 and the group's name for a group's pages (`👥 dev · …`) and for the tasks of a list that is for some people only.
+a 👥 and the group's name for a group's pages (`👥 dev · …`) and for the tasks of a group's list.
 What everyone sees has no sign.
 
 ### Open a page result

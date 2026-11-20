@@ -78,7 +78,7 @@ func tellMentioned(by string, t *Task, named []string, text ...string) {
 // who it names.
 func tellComment(by string, t *Task, text string, named []string) {
 	s := settings()
-	if by == "" || s.Users == nil || cfg.Mail.Host == "" || t.Owner != "" {
+	if by == "" || s.Users == nil || cfg.Mail.Host == "" || t.Private() {
 		return
 	}
 	tellMentioned(by, t, named, text)
@@ -107,7 +107,7 @@ func tellAssigned(by string, before assignedBefore, tasks ...*Task) {
 	}
 	given := map[string][]*Task{}
 	for _, t := range tasks {
-		if to := t.Assignee; to != "" && to != by && to != before[t.ID] && t.IsOpen() && t.Owner == "" && canSeeTask(asUser(to), t) {
+		if to := t.Assignee; to != "" && to != by && to != before[t.ID] && t.IsOpen() && !t.Private() && canSeeTask(asUser(to), t) {
 			given[to] = append(given[to], t)
 		}
 	}

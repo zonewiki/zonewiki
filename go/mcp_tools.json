@@ -875,9 +875,9 @@
      "type": "boolean",
      "description": "With users: only the user sees it and its tasks."
     },
-    "for": {
+    "group": {
      "type": "string",
-     "description": "With users: the groups (@name) and users a shared list is for, e.g. \"@hiring, anna\", the user among them. Only they see it and its tasks. Omit: everyone."
+     "description": "With users: a group the user is in whose list it is, e.g. \"hiring\": only its members see it and its tasks (kept in groups/<group>/). Omit: everyone."
     },
     "summary": {
      "type": "string"

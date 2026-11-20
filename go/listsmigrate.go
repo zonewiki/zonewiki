@@ -10,13 +10,16 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
+	"zonewiki/internal/jsonobj"
 	"zonewiki/internal/mdtext"
+	"zonewiki/internal/settingsfile"
 	"zonewiki/internal/taskfiles"
 )
 
@@ -180,6 +183,9 @@ func migrateLists(checked bool, format int) {
 	if err == nil && before {
 		err = migrateViewsLocked()
 	}
+	if err == nil {
+		err = migrateListsForSomeLocked()
+	}
 	if err != nil {
 		listsUnmigrated = true
 		logf("The task lists couldn't be set up (lists stay as they were, and can't be changed, until Zone starts with this mended): %v", err)
@@ -228,12 +234,12 @@ func migrateListsLocked() error {
 			return errors.New(f.Path + ": " + err.Error())
 		}
 		files = append(files, &taskFile{File: f, tasks: tasks})
-		if f.Owner != "" && privateTags[f.Owner] == nil {
+		if privateOwner(f.Owner) && privateTags[f.Owner] == nil {
 			privateTags[f.Owner] = map[string]bool{}
 		}
 		for _, t := range tasks {
 			for tag := range taskTagsLower(t) {
-				if f.Owner != "" {
+				if privateOwner(f.Owner) {
 					privateTags[f.Owner][tag] = true
 				}
 			}
@@ -675,4 +681,204 @@ func migrateInboxLocked(checked, before bool) error {
 		inboxed, general, generalListName, leftOut, renamed, inboxListName)
 	_ = gitCommit("", "Give every task a list: the Inbox", written...)
 	return nil
+}
+
+// ---- Lists for some (until 2026-11-20) ----
+//
+// A shared list could be for some: "for": ["@hiring", "anna"] in its entry,
+// which was kept in the list's folder (_tasks/lists/<name>/list.json) and
+// said to every read whom its tasks were for. A list is now in a place as a
+// page is, a group's in the group's folder, so a start moves each such list
+// with its tasks into a group's folder: the one group it was for, or one
+// made for it of the groups and people it named, its owners the list's. The
+// old folder keeps its list.json, marked gone (taskfiles.FormerListFile):
+// git keeps the list's history at the old paths, which stays its members'
+// (formerListFor in canSeePath), and no list or group takes its name.
+
+// formerListFor: whom the shared list name's old folder was for, as its
+// list.json says; none: a folder that was everyone's.
+func formerListFor(name string) []string {
+	if name == "" || strings.ContainsAny(name, "/\\") || strings.HasPrefix(name, ".") {
+		return nil
+	}
+	raw, err := os.ReadFile(filepath.Join(taskFiles.Dir(""), taskfiles.ListsDirName, name, taskfiles.FormerListFile))
+	if err != nil {
+		return nil
+	}
+	r, ok := taskfiles.ParseRegistry([]byte(`{"lists": [` + string(raw) + `]}`))
+	if !ok || len(r.Lists) != 1 {
+		return nil
+	}
+	return jsonobj.TextList(r.Lists[0].Extra["for"])
+}
+
+// formerListNames: the old folders of lists that were for some.
+func formerListNames() []string {
+	var out []string
+	entries, _ := os.ReadDir(filepath.Join(taskFiles.Dir(""), taskfiles.ListsDirName))
+	for _, e := range entries {
+		if e.IsDir() && len(formerListFor(e.Name())) > 0 {
+			out = append(out, e.Name())
+		}
+	}
+	return out
+}
+
+// formerMember: user was one of who, whom a former list for some was for
+// (@group: its members now, a user by name): who may read its old folder's
+// history. Without users anyone.
+func formerMember(user asker, who []string) bool {
+	s := settings()
+	if s.Users == nil {
+		return true
+	}
+	if u := s.Users[user.Name]; u == nil || u.Disabled {
+		return false
+	}
+	for _, w := range who {
+		if g, ok := strings.CutPrefix(w, "@"); ok && inGroup(user, g) || w == user.Name {
+			return true
+		}
+	}
+	return false
+}
+
+// migrateListsForSomeLocked moves every list for some (its list.json not
+// gone) into a group's folder, in a commit by Zone. Without users nothing
+// is anyone's: it waits until there are users again (and the store reads no
+// such folder meanwhile).
+func migrateListsForSomeLocked() error {
+	if settings().Users == nil {
+		return nil
+	}
+	base := filepath.Join(taskFiles.Dir(""), taskfiles.ListsDirName)
+	entries, _ := os.ReadDir(base)
+	for _, e := range entries {
+		dir := filepath.Join(base, e.Name())
+		raw, err := os.ReadFile(filepath.Join(dir, taskfiles.FormerListFile))
+		if !e.IsDir() || err != nil {
+			continue
+		}
+		r, ok := taskfiles.ParseRegistry([]byte(`{"lists": [` + string(raw) + `]}`))
+		if !ok || len(r.Lists) != 1 {
+			continue
+		}
+		l := r.Lists[0]
+		who := jsonobj.TextList(l.Extra["for"])
+		if _, gone := l.Extra["gone"]; gone || len(who) == 0 || l.Name != e.Name() {
+			continue
+		}
+		if err := moveListForSome(dir, l, who); err != nil {
+			return fmt.Errorf("moving the list for some #%s into a group's folder: %w", l.Name, err)
+		}
+	}
+	return nil
+}
+
+// moveListForSome moves the list for some l (in its folder dir, for who)
+// into a group's folder: its files, and its entry into the group's
+// registry; its old list.json stays, marked gone.
+func moveListForSome(dir string, l *taskfiles.List, who []string) error {
+	g, err := groupForFormer(l, who)
+	if err != nil {
+		return err
+	}
+	owner := taskfiles.GroupOwner(g)
+	to := filepath.Join(taskFiles.Dir(owner), taskfiles.ListsDirName, l.Name)
+	if exists(to) {
+		return errors.New(to + " is there already")
+	}
+	reg, err := taskFiles.ReadListsStrict(owner)
+	if err != nil {
+		return err
+	}
+	if reg.Find(l.Name) != nil {
+		return errors.New("the group " + g + " has a list #" + l.Name + " already")
+	}
+	taskFiles.Hold()
+	var paths []string
+	files, _ := os.ReadDir(dir)
+	for _, f := range files {
+		if f.IsDir() || f.Name() == taskfiles.FormerListFile {
+			continue
+		}
+		from := filepath.Join(dir, f.Name())
+		if err := os.MkdirAll(to, 0o777); err != nil {
+			return err
+		}
+		if err := os.Rename(from, filepath.Join(to, f.Name())); err != nil {
+			return err
+		}
+		paths = append(paths, from, filepath.Join(to, f.Name()))
+	}
+	entry := &taskfiles.List{Name: l.Name, Settings: l.Settings, Owner: owner}
+	entry.SetOwners(l.Owners())
+	reg.Lists = append(reg.Lists, entry)
+	written, err := taskFiles.WriteListsOf(owner, reg)
+	if err != nil {
+		return err
+	}
+	paths = append(paths, written...)
+	gone, _ := json.Marshal(struct {
+		Name  string   `json:"name"`
+		For   []string `json:"for"`
+		Gone  bool     `json:"gone"`
+		Group string   `json:"group"`
+	}{l.Name, who, true, g})
+	mark := filepath.Join(dir, taskfiles.FormerListFile)
+	if err := writeText(mark, string(gone)+"\n"); err != nil {
+		return err
+	}
+	paths = append(paths, mark)
+	taskfiles.ForgetParsed()
+	logf("lists: the list for some #%s is the group %s's now (groups/%s/)", l.Name, g, g)
+	return commitLists(asker{}, "Move the list for some #"+l.Name+" to the group "+g, paths)
+}
+
+// groupForFormer: the group a list for some goes to: the one group it was
+// for, or a group made for it (named after the list, its owners the list's),
+// of the groups and people it named.
+func groupForFormer(l *taskfiles.List, who []string) (string, error) {
+	s := settings()
+	if len(who) == 1 {
+		if g, ok := strings.CutPrefix(who[0], "@"); ok && slices.Contains(knownGroups(s), g) {
+			return g, nil
+		}
+	}
+	var members, includes []string
+	for _, w := range who {
+		if g, ok := strings.CutPrefix(w, "@"); ok {
+			if slices.Contains(knownGroups(s), g) {
+				includes = append(includes, g)
+			}
+		} else if s.Users[w] != nil {
+			members = append(members, w)
+		}
+	}
+	base := strings.ToLower(l.Name)
+	if !groupNameRE.MatchString(base) {
+		base = "list"
+	}
+	name := base
+	for i := 2; groupNameTaken(s, name, ""); i++ {
+		name = fmt.Sprintf("%s-%d", base, i)
+	}
+	var owners []string
+	for _, o := range l.Owners() {
+		if s.Users[o] != nil {
+			owners = append(owners, o)
+		}
+	}
+	err := changeSettings("", func(f *settingsfile.File) error {
+		now := settingsOf(f.Text())
+		setMembers(f, now, name, members)
+		if len(includes) > 0 {
+			setIncludes(f, name, includes)
+		}
+		if len(owners) > 0 {
+			setOwners(f, name, owners)
+		}
+		return nil
+	})
+	return name, err
 }

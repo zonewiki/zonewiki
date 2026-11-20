@@ -433,7 +433,7 @@ Without it git quotes a name with a letter outside ASCII, a quote, a backslash o
 What isn't a clean path is no one's to see (`cleanPath` in `canSeePath`: relative, no part empty, `.` or `..`, no control character or backslash, not starting with a double quote), so a slip in reading git's output hides a file rather than showing it.
 A commit starts in that output only after a NUL, which no message holds, so a subject can't start another commit in the list.
 A commit message names a file its reader may not see as "a private page" or "a group's page", whole (`hideNames`): the commit's own such files by their names, whatever those hold (a space, a comma, a parenthesis), and any other path in such a folder in any script's letters, its name going on past a space until a word that goes on with the message (` to `, ` (MCP)` …).
-`tests/test_privacy.py`, `tests/test_group_pages.py` and `tests/test_list_members.py` hold such names in what they probe.
+`tests/test_privacy.py`, `tests/test_group_pages.py` and `tests/test_group_lists.py` hold such names in what they probe.
 
 ### A task snapshot's ids and times
 

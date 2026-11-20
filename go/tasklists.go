@@ -15,7 +15,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"unicode"
 	"zonewiki/internal/mdtext"
 	"zonewiki/internal/taskfiles"
 
@@ -41,15 +40,20 @@ const generalListName = "general"
 type ListInfo struct {
 	Ref     string      // how this user names it: its name, or shared/<name>
 	Name    string      // as its registry has it
-	Owner   string      // whose private list; "" a shared one
+	Owner   string      // whose it is, its place (ownerPlace): "" everyone's, a user's name their private list, "@<group>" a group's
 	Params  TasksParams // its settings as an embed's params, with list=<Ref>
 	NoShare bool        // left out in sharing mode
-	Owners  []string    // a shared list's owners (canManageList); none: a list from before owners
-	For     []string    // who a shared list is for (@group, a user's name); none: everyone
+	Owners  []string    // a shared or group's list's owners (canManageList); none: a list from before owners
 }
 
 // Private: only its owner sees the list and the tasks in it.
-func (l ListInfo) Private() bool { return l.Owner != "" }
+func (l ListInfo) Private() bool { return privateOwner(l.Owner) }
+
+// Group: the group whose list it is (its members see it), "" for any other.
+func (l ListInfo) Group() string {
+	g, _ := taskfiles.GroupOf(l.Owner)
+	return g
+}
 
 // LeftOut: the list's tasks are left out of My tasks (its setting home=off):
 // a catalogue, a someday list. It counts for a list that is its user's own
@@ -70,41 +74,70 @@ func listInfo(l *taskfiles.List, ref string) ListInfo {
 		}
 	}
 	return ListInfo{Ref: ref, Name: l.Name, Owner: l.Owner, Params: parseTasksParams(strings.Join(args, " ")),
-		NoShare: isTrue(l.Settings["noshare"]), Owners: l.Owners(), For: l.For()}
+		NoShare: isTrue(l.Settings["noshare"]), Owners: l.Owners()}
 }
 
-// listRegistries: the registries user reads: the shared one and, with
-// users, their own (nil without). A visitor sees no list.
-func listRegistries(user asker) (shared, own *taskfiles.Registry) {
+// listRegistries: the registries user reads: the shared one, with users
+// their own (nil without), and those of the groups they are in (groupsFor).
+// A visitor sees no list.
+func listRegistries(user asker) (shared, own *taskfiles.Registry, groups []*taskfiles.Registry) {
 	if user.Name == visitor {
-		return &taskfiles.Registry{}, nil
+		return &taskfiles.Registry{}, nil, nil
 	}
 	shared = taskFiles.ReadLists("")
 	if privateFolder(user) != "" && user.HasPrivate() {
 		own = taskFiles.ReadLists(user.Name)
 	}
-	return shared, own
+	if settings().Users != nil {
+		for _, g := range groupsFor(user) {
+			groups = append(groups, taskFiles.ReadLists(taskfiles.GroupOwner(g)))
+		}
+	}
+	return shared, own, groups
 }
 
 // taskLists: the lists user sees, by how they name them (ListInfo.Ref):
-// their private lists by name, the shared ones by name too, but for one
-// whose name a private list of theirs has (shared/<name>).
+// their private lists by name, the shared ones and their groups' by name
+// too, but for one whose name a private list of theirs has (shared/<name>).
+// A shared list's name is no other shared or group's list's (sharedNameTaken).
 func taskLists(user asker) map[string]ListInfo {
-	shared, own := listRegistries(user)
+	shared, own, groups := listRegistries(user)
 	out := map[string]ListInfo{}
 	if own != nil {
 		for _, l := range own.Lists {
 			out[l.Name] = listInfo(l, l.Name)
 		}
 	}
-	for _, l := range shared.Lists {
-		ref := l.Name
-		if _, twin := out[ref]; twin {
-			ref = sharedRef + l.Name
+	// A group's lists before the shared ones: of a name kept twice (a merge,
+	// a hand edit; no door makes one) its members see their group's.
+	for _, reg := range append(groups, shared) {
+		for _, l := range reg.Lists {
+			ref := l.Name
+			if have, twin := out[ref]; twin {
+				if !have.Private() {
+					continue // a name kept twice (a merge, a hand edit): the first counts
+				}
+				ref = sharedRef + l.Name
+			}
+			if info := listInfo(l, ref); canSeeList(user, info) {
+				out[ref] = info
+			}
 		}
-		// A list for some is no list to anyone else.
-		if info := listInfo(l, ref); canSeeList(user, info) {
-			out[ref] = info
+	}
+	return out
+}
+
+// groupListNames: the names of every group's lists, and whose: what a list
+// made, renamed or moved can't be called, and what a commit message names
+// only to its group (hideNames).
+func groupListNames() map[string]string {
+	out := map[string]string{}
+	if settings().Users == nil {
+		return out
+	}
+	for _, g := range knownGroups(settings()) {
+		for _, l := range taskFiles.ReadLists(taskfiles.GroupOwner(g)).Lists {
+			out[l.Name] = g
 		}
 	}
 	return out
@@ -256,7 +289,7 @@ func mineFilter(user asker, lists map[string]ListInfo) func(*Task) bool {
 // inMine: mineFilter's rule for one task: out, its list is left out of My
 // tasks; assigns, assignment counts for user (mineAssigns).
 func inMine(t *Task, out bool, user asker, assigns bool) bool {
-	if assigns && t.Owner == "" {
+	if assigns && !t.Private() {
 		return t.Assignee == user.Name
 	}
 	return !out
@@ -502,19 +535,25 @@ func regTaken(reg *taskfiles.Registry, name string, except ...string) bool {
 	})
 }
 
-// sharedNameTaken: a shared list for who (none: everyone) can't be called
-// name: a shared list has the name (reg: the shared registry, the lists for
-// some among them), or a list for some had it, deleted or renamed since,
-// whose folder keeps whom its history is for (forOf: its file marked gone),
-// and a list made there would be for them too, its tasks out of everyone
-// else's sight. A list for the very same people takes it back.
-func sharedNameTaken(reg *taskfiles.Registry, name string, who []string, except ...string) bool {
-	if regTaken(reg, name, except...) {
+// sharedNameTaken: a shared or a group's list can't be called name: a list
+// of the shared registry or of any group's has it, or a name that looks the
+// same (listNameKey), but except. So a list's name names one list to all who
+// see it, whichever groups they are in: that a name is taken is all anyone
+// else learns of a group's list.
+func sharedNameTaken(name string, except ...string) bool {
+	if regTaken(taskFiles.ReadLists(""), name, except...) {
 		return true
 	}
 	key := listNameKey(name)
-	for _, folder := range taskFiles.ForSome() { // what the folders say, of lists gone too
-		if listNameKey(folder) == key && !slices.Contains(except, folder) && !slices.Equal(taskFiles.ForOfList(folder), who) {
+	for other := range groupListNames() {
+		if listNameKey(other) == key && !slices.Contains(except, other) {
+			return true
+		}
+	}
+	// A former list for some's old folder keeps its name: its history is
+	// its members' (formerListFor), a new list's would be too.
+	for _, other := range formerListNames() {
+		if listNameKey(other) == key && !slices.Contains(except, other) {
 			return true
 		}
 	}
@@ -546,54 +585,31 @@ func pinOwner(user asker) string {
 	return ""
 }
 
-// cleanFor: who a shared list is for, as a "for" names them (words apart
-// by commas or spaces: @group, a user's name; "everyone" or nothing: no one
-// in particular), groups first, each once; or why that can't be. Whoever
-// sets it is one of them: a list they wouldn't see is one they couldn't
-// widen again.
-func cleanFor(user asker, text string) ([]string, error) {
-	s := settings()
-	var groups, names []string
-	for _, w := range strings.FieldsFunc(strings.ToLower(text), func(r rune) bool { return r == ',' || unicode.IsSpace(r) }) {
-		switch group, isGroup := strings.CutPrefix(w, "@"); {
-		case w == "everyone":
-		case s.Users == nil:
-			return nil, refuse("A list for some needs users: this wiki has none")
-		case isGroup && groupNameRE.MatchString(group) && s.isGroup(group):
-			if !slices.Contains(groups, w) {
-				groups = append(groups, w)
-			}
-		case isGroup && groupNameRE.MatchString(group):
-			// A name no group has: the list would take it for good (groupNameTaken).
-			return nil, refuse("There is no group " + strconv.Quote(w) + " (a user is named without @)")
-		case isGroup:
-			return nil, refuse(strconv.Quote(w) + " is no group's name")
-		case s.Users[w] == nil:
-			return nil, refuse("There is no user " + strconv.Quote(w) + " (a group is @name)")
-		default:
-			if !slices.Contains(names, w) {
-				names = append(names, w)
-			}
-		}
+// cleanGroup: the group a list is to be of, as it is named ("dev" or "@dev";
+// "" or "everyone": none, a shared list), or why that can't be: a group's
+// list is its members', so it is one of a group user is in (groupsFor), or
+// a list they would no longer see.
+func cleanGroup(user asker, text string) (string, error) {
+	g := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(text)), "@")
+	switch {
+	case g == "" || g == "everyone":
+		return "", nil
+	case settings().Users == nil:
+		return "", refuse("A group's list needs users: this wiki has none")
+	case !groupNameRE.MatchString(g) || !slices.Contains(knownGroups(settings()), g):
+		return "", refuse(strconv.Quote(g) + " is no group's name")
+	case !inGroup(user, g):
+		return "", refuse("You aren't in the group " + g + ": a group's list is its members', and you wouldn't see it")
 	}
-	slices.Sort(groups)
-	slices.Sort(names)
-	who := append(groups, names...)
-	if len(who) > 0 && !listMember(user, who) {
-		return nil, refuse("You wouldn't see the list yourself: add your name, or a group you are in")
-	}
-	return who, nil
+	return g, nil
 }
-
-// forWords: who a list is for, as it is said: "@dev, anna"; "" everyone.
-func forWords(who []string) string { return strings.Join(who, ", ") }
 
 // createListOp makes a list called name, shared or (private) user's own;
 // returns how user names it. A name of a list they see is refused. pin:
 // the new list is pinned for user, last (it would else be out of sight
-// under More), in the same commit. who: whom a shared list is for (cleanFor;
-// "": everyone).
-func createListOp(user asker, name string, private, pin bool, who, suffix string) (string, error) {
+// under More), in the same commit. group: a group user is in whose list it
+// is (cleanGroup; "": a shared list, for everyone), kept in its folder.
+func createListOp(user asker, name string, private, pin bool, group, suffix string) (string, error) {
 	if listsUnmigrated {
 		return "", errListsUnmigrated
 	}
@@ -604,17 +620,20 @@ func createListOp(user asker, name string, private, pin bool, who, suffix string
 	if err != nil {
 		return "", err
 	}
-	listFor, err := cleanFor(user, who)
+	g, err := cleanGroup(user, group)
 	if err != nil {
 		return "", err
 	}
 	owner := ""
+	if g != "" {
+		owner = taskfiles.GroupOwner(g)
+	}
 	if private {
 		if privateFolder(user) == "" {
 			return "", refuse("A private list needs users: this wiki has none")
 		}
-		if len(listFor) > 0 {
-			return "", refuse("A private list is yours alone: a list for some is a shared one")
+		if g != "" {
+			return "", refuse("A private list is yours alone: a group's list is its members'")
 		}
 		if lacksPrivate(user) {
 			return "", refuse(noPrivateMsg)
@@ -634,15 +653,14 @@ func createListOp(user asker, name string, private, pin bool, who, suffix string
 	if err != nil {
 		return "", err
 	}
-	if regTaken(reg, list) || owner == "" && sharedNameTaken(reg, list, listFor) {
+	if regTaken(reg, list) || !privateOwner(owner) && sharedNameTaken(list) {
 		return "", refuseAs(refusedExists, "There is a list #"+list+" already")
 	}
 	made := &taskfiles.List{Name: list, Settings: map[string]string{}, Owner: owner}
-	// A shared list belongs to who made it (with users).
-	if owner == "" && privateFolder(user) != "" {
+	// A shared or group's list belongs to who made it (with users).
+	if !privateOwner(owner) && privateFolder(user) != "" {
 		made.SetOwners([]string{user.Name})
 	}
-	made.SetFor(listFor)
 	reg.Lists = append(reg.Lists, made)
 	// The pin is in the user's registry, which is the list's own unless the
 	// list is shared and the wiki has users.
@@ -796,7 +814,7 @@ func renameListOp(user asker, ref, newName, suffix string, check ...func(pages [
 	if entry == nil || regs[l.Owner].Find(name) != nil {
 		return nil, refuseAs(refusedConflict, "The lists have changed since. Reload and try again.")
 	}
-	if !l.Private() && sharedNameTaken(regs[l.Owner], name, l.For, l.Name) || l.Private() && regTaken(regs[l.Owner], name, l.Name) {
+	if !l.Private() && sharedNameTaken(name, l.Name) || l.Private() && regTaken(regs[l.Owner], name, l.Name) {
 		return nil, refuseAs(refusedExists, "There is a list #"+name+" already")
 	}
 	// How the text of owner o (their pages, their tasks; "" the shared
@@ -949,8 +967,10 @@ func moveListTasks(user asker, tasks []*Task, from ListInfo, to *ListInfo) int {
 			t.List, owner = to.Name, to.Owner
 		}
 		if t.Owner != owner {
+			if privateOwner(t.Owner) && !privateOwner(owner) {
+				sharedBy(t, user.Name, true)
+			}
 			t.Owner = owner
-			sharedBy(t, user.Name, true)
 		}
 	}
 	return n
@@ -1009,13 +1029,13 @@ func deleteListOp(user asker, ref, to string, share, wontDo, confirmed bool, suf
 		target = &ListInfo{Ref: generalListName, Name: generalListName}
 	}
 	if has && target != nil && !l.Private() && !target.Private() {
-		if lost := taskLosers(l.Name, target.Name); len(lost) > 0 {
+		if lost := taskLosers(l.Owner, target.Owner); len(lost) > 0 {
 			moving, _ := selectTasks(slices.Concat(active, closed), func(t *Task) bool { return t.List == l.Name && t.Owner == l.Owner })
 			if slices.ContainsFunc(moving, func(t *Task) bool { return !mayNarrowTask(user, t) }) {
 				return 0, refuse(namesOr(lost, 3, "") + " would no longer see the tasks of #" + l.Name + ": #" + target.Name +
 					" is for fewer people. Only who made a task, or an admin, moves it there: move them to a list as wide")
 			}
-			if n, names := assignedOutside(moving, taskFiles.ForOfList(target.Name)); n > 0 && !wontDo && !confirmed {
+			if n, names := assignedOutside(moving, target.Owner); n > 0 && !wontDo && !confirmed {
 				who := ", who don't see #"
 				if len(names) == 1 {
 					who = ", who doesn't see #"
@@ -1073,8 +1093,17 @@ func deleteListOp(user asker, ref, to string, share, wontDo, confirmed bool, suf
 }
 
 // shareListOp makes user's private list ref a shared one, its tasks with
-// it: everyone who uses the wiki then sees them. Never the other way.
-func shareListOp(user asker, ref, suffix string) (string, error) {
+// it: everyone who uses the wiki then sees them, or the members of group
+// (cleanGroup: one user is in; "": everyone). Never the other way.
+func shareListOp(user asker, ref, group, suffix string) (string, error) {
+	g, err := cleanGroup(user, group)
+	if err != nil {
+		return "", err
+	}
+	to := ""
+	if g != "" {
+		to = taskfiles.GroupOwner(g)
+	}
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
 	lists := taskLists(user)
@@ -1089,7 +1118,7 @@ func shareListOp(user asker, ref, suffix string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	shared, err := taskFiles.ReadListsStrict("")
+	shared, err := taskFiles.ReadListsStrict(to)
 	if err != nil {
 		return "", err
 	}
@@ -1097,7 +1126,7 @@ func shareListOp(user asker, ref, suffix string) (string, error) {
 	if entry == nil {
 		return "", refuseAs(refusedConflict, "The lists have changed since. Reload and try again.")
 	}
-	if sharedNameTaken(shared, l.Name, nil) {
+	if sharedNameTaken(l.Name) {
 		return "", refuseAs(refusedExists, "There is a shared list #"+l.Name+" already: rename yours first, or delete it and move its tasks there")
 	}
 	active, closed, err := taskFiles.ReadForWriteLocked(user)
@@ -1105,13 +1134,13 @@ func shareListOp(user asker, ref, suffix string) (string, error) {
 		return "", err
 	}
 	own.Lists = slices.DeleteFunc(own.Lists, func(x *taskfiles.List) bool { return x.Name == l.Name })
-	entry.Owner = ""
+	entry.Owner = to
 	entry.SetOwners([]string{user.Name}) // shared now, and theirs to manage
 	shared.Lists = append(shared.Lists, entry)
-	dest := ListInfo{Name: l.Name}
+	dest := ListInfo{Name: l.Name, Owner: to}
 	moveListTasks(user, slices.Concat(active, closed), l, &dest)
 	var paths []string
-	for o, reg := range map[string]*taskfiles.Registry{"": shared, user.Name: own} {
+	for o, reg := range map[string]*taskfiles.Registry{to: shared, user.Name: own} {
 		path, err := taskFiles.WriteListsLocked(user, o, reg)
 		if err != nil {
 			return "", err
@@ -1119,7 +1148,11 @@ func shareListOp(user asker, ref, suffix string) (string, error) {
 		paths = append(paths, path...)
 	}
 	slices.Sort(paths)
-	return l.Name, taskFiles.WriteBothLocked(user, active, closed, "Share list #"+l.Name+suffix, paths...)
+	msg := "Share list #" + l.Name
+	if g != "" {
+		msg += " with the group " + g
+	}
+	return l.Name, taskFiles.WriteBothLocked(user, active, closed, msg+suffix, paths...)
 }
 
 // pinListOp pins the list user names ref ("1": last), makes it their first
@@ -1215,13 +1248,23 @@ func pinOrderOp(user asker, refs []string) error {
 	return commitLists(user, "Reorder the pinned lists", path)
 }
 
-// setListForOp says whom the shared list user names ref is for (cleanFor;
-// "": everyone), for its owners. Its tasks stay where they are and as they
-// are: narrowed, they are its members' to see from then on, and one given
-// to someone who is none of them keeps the name and counts as no one's
-// (assigneeGone; to them it is gone, as the list is): when there are such open tasks the change asks first (askError,
-// which says how many and whose), and goes through once confirmed.
-func setListForOp(user asker, ref, who string, confirmed bool) error {
+// placeWords: a list's place as a commit or a message says it: "everyone",
+// "the group dev".
+func placeWords(owner string) string {
+	if g, ok := taskfiles.GroupOf(owner); ok {
+		return "the group " + g
+	}
+	return "everyone"
+}
+
+// setListPlaceOp moves the shared or group's list user names ref, with its
+// tasks, to the place group says (cleanGroup: a group user is in; "":
+// everyone's), for who manages it (canManageList): its entry goes to that
+// place's registry and its tasks' files to that place's folder, in one
+// commit. To fewer people it asks first when open tasks there are given to
+// someone who would no longer see them (askError; confirmed: asked and said
+// yes): they keep their names and count as no one's (assigneeGone).
+func setListPlaceOp(user asker, ref, group string, confirmed bool) error {
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
 	l, err := listForManage(user, ref, taskLists(user))
@@ -1229,56 +1272,69 @@ func setListForOp(user asker, ref, who string, confirmed bool) error {
 		return err
 	}
 	if l.Private() {
-		return refuse("#" + l.Name + " is private, yours alone: make it shared first")
+		return refuse("#" + l.Name + " is private, yours alone: Make shared… gives it to everyone or to a group")
 	}
-	listFor, err := cleanFor(user, who)
+	g, err := cleanGroup(user, group)
 	if err != nil {
 		return err
 	}
-	if slices.Equal(listFor, l.For) {
-		return refuseAs(refusedUnchanged, "#"+l.Name+" is for them already")
+	to := ""
+	if g != "" {
+		to = taskfiles.GroupOwner(g)
 	}
-	if len(listFor) > 0 && !confirmed {
-		open, err := taskFiles.ReadOpenStrict(user)
+	if to == l.Owner {
+		return refuseAs(refusedUnchanged, "#"+l.Name+" is "+placeWords(to)+"'s already")
+	}
+	active, closed, err := taskFiles.ReadForWriteLocked(user)
+	if err != nil {
+		return err
+	}
+	if !confirmed {
+		mine, _ := selectTasks(active, func(t *Task) bool { return t.Owner == l.Owner && t.List == l.Name })
+		if n, names := assignedOutside(mine, to); n > 0 {
+			return &askError{outsideTasks(n, "here") + " assigned to " + strings.Join(names, ", ") + ", who will no longer see the list. " +
+				"The tasks keep their names and count as unassigned here, to hand on; in the group again, they are theirs as before. Save again to go on."}
+		}
+	}
+	from, err := taskFiles.ReadListsStrict(l.Owner)
+	if err != nil {
+		return err
+	}
+	dest, err := taskFiles.ReadListsStrict(to)
+	if err != nil {
+		return err
+	}
+	entry := from.Find(l.Name)
+	if entry == nil || dest.Find(l.Name) != nil {
+		return refuseAs(refusedConflict, "The lists have changed since. Reload and try again.")
+	}
+	from.Lists = slices.DeleteFunc(from.Lists, func(x *taskfiles.List) bool { return x.Name == l.Name })
+	entry.Owner = to
+	dest.Lists = append(dest.Lists, entry)
+	moveListTasks(user, slices.Concat(active, closed), l, &ListInfo{Name: l.Name, Owner: to})
+	var paths []string
+	for _, o := range []string{l.Owner, to} {
+		reg := map[string]*taskfiles.Registry{l.Owner: from, to: dest}[o]
+		path, err := taskFiles.WriteListsLocked(user, o, reg)
 		if err != nil {
 			return err
 		}
-		mine, _ := selectTasks(open, func(t *Task) bool { return t.Owner == "" && t.List == l.Name })
-		if n, names := assignedOutside(mine, listFor); n > 0 {
-			return &askError{outsideTasks(n, "here") + " assigned to " + strings.Join(names, ", ") + ", who will no longer see the list. " +
-				"The tasks keep their names and count as unassigned here, to hand on; for them again, they are theirs as before. Save again to go on."}
-		}
+		paths = append(paths, path...)
 	}
-	reg, err := taskFiles.ReadListsStrict("")
-	if err != nil {
-		return err
-	}
-	entry := reg.Find(l.Name)
-	if entry == nil {
-		return refuseAs(refusedConflict, "The lists have changed since. Reload and try again.")
-	}
-	entry.SetFor(listFor)
-	paths, err := taskFiles.WriteListsLocked(user, "", reg)
-	if err != nil {
-		return err
-	}
-	msg := "List #" + l.Name + " is for everyone"
-	if len(listFor) > 0 {
-		msg = "List #" + l.Name + " is for " + forWords(listFor)
-	}
-	return commitLists(user, msg, paths)
+	return taskFiles.WriteBothLocked(user, active, closed, "Move list #"+l.Name+" to "+placeWords(to), paths...)
 }
 
-// assignedOutside: of tasks, how many are open and given to someone who is
-// none of who (whom a list for some is for; none: everyone), and those
-// people, A–Z: what a list narrowed to who, or tasks moved into such a
-// list, would leave counting as no one's (assigneeGone).
-func assignedOutside(tasks []*Task, who []string) (n int, names []string) {
-	if len(who) == 0 {
+// assignedOutside: of tasks, how many are open and given to someone who
+// doesn't see the place to (an owner, ownerPlace), and those people, A–Z:
+// what a list moved there, or tasks moved into a list there, would leave
+// counting as no one's (assigneeGone).
+func assignedOutside(tasks []*Task, to string) (n int, names []string) {
+	p := ownerPlace(to)
+	if p.shared() {
 		return 0, nil
 	}
 	for _, t := range tasks {
-		if t.IsOpen() && t.Owner == "" && t.Assignee != "" && !listMember(asUser(t.Assignee), who) {
+		if t.IsOpen() && !privateOwner(t.Owner) && t.Assignee != "" && !p.sees(asUser(t.Assignee)) {
 			if n++; !slices.Contains(names, t.Assignee) {
 				names = append(names, t.Assignee)
 			}

@@ -1,7 +1,7 @@
 """A connection given less than its user sees (docs/spec/mcp.md, Connections
 given less): not their private place, or only some of their groups. The
 leak tests' probes (test_privacy.py, test_group_pages.py,
-test_list_members.py), which hold a secret word in each kind of place and
+test_group_lists.py), which hold a secret word in each kind of place and
 ask every tool for it as someone else, are asked here as the owner
 themselves, through a connection that wasn't given the place: the answers
 must be a stranger's.
@@ -13,7 +13,7 @@ from urllib.parse import urlencode
 
 import pytest
 
-from tests import settings, test_group_pages, test_list_members, test_oauth, test_privacy
+from tests import settings, test_group_lists, test_group_pages, test_oauth, test_privacy
 from tests.conftest import HOST
 from tests.test_oauth import asking, allow, exchange, register
 
@@ -232,9 +232,9 @@ def test_given_the_group_it_reads_it_and_is_told_of_no_other(client, group_wiki,
     assert "quollfeather" in call(client, every, "search_wiki", query="quollfeather")
 
 
-# ── A list for a group ──────────────────────────────────────────────────────
+# ── A group's list ──────────────────────────────────────────────────────────
 
-L = test_list_members
+L = test_group_lists
 
 
 @pytest.fixture()
@@ -242,7 +242,7 @@ def list_wiki(client, git_wiki_dir, monkeypatch):
     return L.wiki.__wrapped__(client, git_wiki_dir, monkeypatch)
 
 
-def test_without_the_group_a_list_for_it_is_no_list(client, list_wiki):
+def test_without_the_group_its_list_is_no_list(client, list_wiki):
     """carol sees the list hiring by her group; her connection without the group doesn't."""
     narrowed = connect(client, "carol", "carol-pw", see=["private"])
     for tool, args in [("search_tasks", {"query": L.SECRET}), ("search_tasks", {"list": L.LIST}), ("search_wiki", {"query": L.SECRET}),
@@ -260,9 +260,9 @@ def test_without_the_group_a_list_for_it_is_no_list(client, list_wiki):
         assert L._its_files(list_wiki) == before, tool
     given = connect(client, "carol", "carol-pw", see=["private", "group:hiring"])
     assert L.SECRET in call(client, given, "search_tasks", query=L.SECRET)
-    # alice is named on the list herself: hers whatever groups her connection has.
-    named = connect(client, "alice", "alice-pw", see=[])
-    assert L.SECRET in call(client, named, "search_tasks", list=L.LIST)
+    # alice is in the group too: without it, none of hers either.
+    without = connect(client, "alice", "alice-pw", see=[])
+    assert L.SECRET not in call(client, without, "search_tasks", query=L.SECRET)
 
 
 def test_without_the_group_her_private_page_names_no_task_of_its_list(client, list_wiki):

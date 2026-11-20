@@ -998,7 +998,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	v := &tasksPageView{Heading: heading, Missing: missing,
 		Menu: !rq.sharing && !listsUnmigrated && (missing == "" || mayWriteTasks(rq.who()) == nil), Write: mayWriteTasks(rq.who()) == nil, Users: privateFolder(rq.user) != "",
 		Mine: mine, MineAssigns: mine && mineAssigns(rq.who()), Inbox: inbox, InboxPrivate: inbox && inboxOwner(rq.who()) != "",
-		Groups: settings().groups(), People: settings().assignableUsers(), NewListName: q.Get("newlist_name"), NewListError: q.Get("newlist_error"), NewListFor: q.Get("newlist_for"),
+		Groups: groupsFor(rq.who()), NewListName: q.Get("newlist_name"), NewListError: q.Get("newlist_error"), NewListFor: forValue(q.Get("newlist_for")),
 		Places: places, More: more, TasksHTML: htmlOf(tasksHTML), LinkSections: sections,
 		BreadcrumbHTML: breadcrumb(rq, crumbs, key, true, title, chip)}
 	if mine {
@@ -1010,8 +1010,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	if list != nil {
 		v.List = list
 		v.Manage = canManageList(rq.who(), *list)
-		v.ForWords, v.ForError = firstNonEmpty(q.Get("for_words"), forWords(list.For)), q.Get("for_error")
-		v.Members, v.ForNow = listMembers(list.For), forWords(list.For)
+		v.ForError, v.Members = q.Get("for_error"), listMembers(*list)
 		v.ForConfirm = q.Get("for_confirm") != "" && v.ForError != ""
 		v.ListRenameName, v.ListRenameError = firstNonEmpty(q.Get("rename_name"), list.Name), q.Get("rename_error")
 		v.DeleteError, v.ShareError = q.Get("delete_error"), q.Get("share_error")
@@ -1125,7 +1124,8 @@ func listRefused(w http.ResponseWriter, r *http.Request, err error, ref, param s
 func newListRoute(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.PostFormValue("name"))
 	user := userOf(r)
-	ref, err := createListOp(user, name, r.PostFormValue("private") != "", r.PostFormValue("pin") != "0", r.PostFormValue("for"), "")
+	private, group := placeField(r.PostFormValue("for"))
+	ref, err := createListOp(user, name, private || r.PostFormValue("private") != "", r.PostFormValue("pin") != "0", group, "")
 	if err != nil {
 		if pe, ok := refusalOf(err); ok && (pe.kind == refusedInvalid || pe.kind == refusedExists) {
 			http.Redirect(w, r, "/tasks?newlist_name="+url.QueryEscape(name)+"&newlist_error="+url.QueryEscape(pe.msg), http.StatusFound)
@@ -1187,26 +1187,56 @@ func deleteListRoute(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/tasks", http.StatusFound)
 }
 
-// listForRoute: a shared list's Who it is for… dialog (its owners').
+// placeField: a list's place as a dialog's For says it, as the New page's
+// does: "private" (only you), "group:<g>" (a group's members; "@<g>" too),
+// anything else everyone.
+func placeField(v string) (private bool, group string) {
+	switch v = strings.TrimSpace(v); {
+	case v == "private":
+		return true, ""
+	case strings.HasPrefix(v, "group:"):
+		return false, strings.TrimPrefix(v, "group:")
+	case strings.HasPrefix(v, "@"):
+		return false, strings.TrimPrefix(v, "@")
+	}
+	return false, ""
+}
+
+// forValue: a For as the dialog's select names it ("group:dev"), from a
+// link's (?newlist_for=@dev: New list on a group's entry of Groups).
+func forValue(v string) string {
+	if private, g := placeField(v); private {
+		return "private"
+	} else if g != "" {
+		return "group:" + g
+	}
+	return ""
+}
+
+// listForRoute: a shared or group's list's Who sees it… dialog (its
+// owners'): for everyone, or for a group of theirs (for: "group:<g>").
 func listForRoute(w http.ResponseWriter, r *http.Request) {
 	ref := cleanList(r.PostFormValue("list"))
-	err := setListForOp(userOf(r), ref, r.PostFormValue("for"), r.PostFormValue("confirm") != "")
+	_, group := placeField(r.PostFormValue("for"))
+	err := setListPlaceOp(userOf(r), ref, group, r.PostFormValue("confirm") != "")
 	if ask := (*askError)(nil); errors.As(err, &ask) {
 		// What it would take out of others' sight, said in the dialog: Save again goes on.
-		listBack(w, r, ref, "for_error", ask.msg, "for_words", r.PostFormValue("for"), "for_confirm", "1")
+		listBack(w, r, ref, "for_error", ask.msg, "for_confirm", "1")
 		return
 	}
 	if err != nil {
-		listRefused(w, r, err, ref, "for_error", "for_words", r.PostFormValue("for"))
+		listRefused(w, r, err, ref, "for_error")
 		return
 	}
 	http.Redirect(w, r, listHref(ref), http.StatusFound)
 }
 
-// shareListRoute: a private list's Make shared… dialog.
+// shareListRoute: a private list's Make shared… dialog: for everyone, or for
+// a group of theirs (for: "group:<g>").
 func shareListRoute(w http.ResponseWriter, r *http.Request) {
 	ref := cleanList(r.PostFormValue("list"))
-	name, err := shareListOp(userOf(r), ref, "")
+	_, group := placeField(r.PostFormValue("for"))
+	name, err := shareListOp(userOf(r), ref, group, "")
 	if err != nil {
 		listRefused(w, r, err, ref, "share_error")
 		return
@@ -1256,19 +1286,15 @@ type tasksPageView struct {
 	DeleteTo                        string // the list a delete asks about (its tasks to someone who doesn't see it): the dialog's yes
 	Menu, Write, Users              bool
 	Manage                          bool // the list is the user's to rename, delete and set (canManageList)
-	// A shared list for some: whom it is for as the dialog's field says it
-	// ("@dev, anna"; a refused one as it was typed), why the dialog came
-	// back, and its members by name; Groups: the groups there are, to
-	// complete from.
-	ForWords, ForError string
-	ForNow             string // whom it is for now, "@dev, anna"
-	ForConfirm         bool   // the dialog is back to ask: Save again goes on (confirm)
-	// People: who a For field can name, beside the groups.
-	People                    []string
+	// Who sees it… (a shared or group's list's, for its owners): why the
+	// dialog came back; Members: a group's list's members by name; Groups:
+	// the groups the user is in, the places a For offers besides everyone.
+	ForError                  string
+	ForConfirm                bool // the dialog is back to ask: Save again goes on (confirm)
 	Members, Groups           []string
 	Mine, MineAssigns         bool
 	NewListName, NewListError string
-	NewListFor                string // what New list…'s For starts with, the dialog open (?newlist_for=@dev: New list on a group's entry of Groups)
+	NewListFor                string // what New list…'s For starts with ("group:dev"), the dialog open (?newlist_for=@dev: New list on a group's entry of Groups)
 	Places                    []TaskPlace
 	More                      *TasksMore
 	Inbox, InboxPrivate       bool

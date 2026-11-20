@@ -136,17 +136,12 @@ def test_groups_is_where_an_admin_manages_every_group(client, wiki):
     ("product", "", "is taken"),          # one made of groups
     ("design", "", "is taken"),           # one a group is said to include, though nobody is in it
     ("ghosts", "", "is taken"),           # a folder in groups/ nobody sees: it would be the new group's
-    ("hiring", "", "is taken"),           # a list is for it
     ("Bad Name", "", "a group's name"),
     ("_assets", "", "a group's name"),
     ("fine", "nobody-here", "not a user"),
     ("fine", "bob, x!y", "not a user"),
 ])
 def test_a_group_is_not_made_of_a_name_that_is_taken(client, wiki, name, people, says):
-    # A list for a group nobody is in (one that ended, or named before such a
-    # name was refused) keeps the name.
-    (wiki / "_tasks/lists/hires").mkdir(parents=True)
-    (wiki / "_tasks/lists/hires/list.json").write_text('{"name": "hires", "for": ["@hiring", "dana"]}\n')
     sign_in(client, "alice")
     before = config(wiki)
     resp = make(client, name, people)
@@ -243,8 +238,8 @@ def test_a_removed_user_owns_nothing(client, wiki):
 def apollo(client, wiki):
     """alice's group apollo with bob in it: a roadmap that shows a file and
     links to a page beside it, a file no page shows, a shared page and a
-    task that link to the roadmap, a list for the group, and a group made
-    of it."""
+    task that link to the roadmap, the group's list, and a group made of
+    it."""
     sign_in(client, "alice")
     make(client, "apollo", "bob")
     assert until(lambda: client.get("/groups/apollo", headers=HOST).status_code == 302)      # its home, as Zone writes it
@@ -255,7 +250,7 @@ def apollo(client, wiki):
     (wiki / "groups/apollo/_assets/plan.png").write_bytes(b"plan")
     (wiki / "groups/apollo/_assets/spare.png").write_bytes(b"spare")
     assert save("plans", "# Plans\n\nSee [[groups/apollo/roadmap]].\n").status_code == 200
-    assert client.post("/tasks/new-list", data={"name": "launch", "for": "@apollo"}, headers=HOST).status_code == 302
+    assert client.post("/tasks/new-list", data={"name": "launch", "for": "group:apollo"}, headers=HOST).status_code == 302
     task = client.post("/api/tasks", json={"title": "Read [[groups/apollo/roadmap]]", "list": "launch"}, headers=HOST).get_json()
     sign_in(client, "dana")
     assert client.post("/groups/includes", data={"group": "program", "includes": "apollo"}, headers=HOST).status_code == 303
@@ -272,22 +267,23 @@ def test_a_rename_takes_what_is_the_groups_along(client, wiki, apollo):
     assert section(wiki, "user alice") == ["groups = artemis"] and section(wiki, "user bob") == ["groups = artemis"]
     assert section(wiki, "group artemis") == ["owners = alice", "was = apollo"] and "[group apollo]" not in config(wiki)
     assert section(wiki, "group program") == ["includes = artemis"]
-    # The folder, with the file its page shows and the one none shows; the links.
+    # The folder, with the file its page shows and the one none shows, its list
+    # and the list's tasks; the links.
     assert not (wiki / "groups/apollo").exists(), sorted(p.as_posix() for p in (wiki / "groups").rglob("*"))
     assert sorted(p.relative_to(wiki / "groups/artemis").as_posix() for p in (wiki / "groups/artemis").rglob("*") if p.is_file()) == [
-        "_assets/plan.png", "_assets/spare.png", "index.md", "notes.md", "roadmap.md"]
+        "_assets/plan.png", "_assets/spare.png", "_tasks/lists.json", "_tasks/lists/launch/tasks.json", "index.md", "notes.md", "roadmap.md"]
     assert (wiki / "groups/artemis/roadmap.md").read_text() == "# Roadmap\n\n![plan](/groups/artemis/_assets/plan.png) [[groups/artemis/notes]]\n"
     # A shared page's link keeps its words: those not in the group read them, not the new path.
     assert (wiki / "plans.md").read_text() == "# Plans\n\nSee [[groups/artemis/roadmap|groups/apollo/roadmap]].\n"
     assert (wiki / "groups/artemis/index.md").read_text().startswith("# artemis\n") and "@artemis" in (wiki / "groups/artemis/index.md").read_text()
     assert git(wiki, "status", "--porcelain") == ""                      # all of it committed
-    assert {line.split("|")[0] for line in git(wiki, "log", "-n3", "--format=%an|%s").splitlines()} == {"alice"}
+    assert {line.split("|")[0] for line in git(wiki, "log", "-n2", "--format=%an|%s").splitlines()} == {"alice"}   # the pages, the rest
     # Its people see it as before, under the new name: the pages, the file, the list and its task.
     for who in ("alice", "bob"):
         sign_in(client, who)
         assert until(lambda: client.get("/page/groups/artemis/roadmap", headers=HOST).status_code == 200)
         assert client.get("/groups/artemis/_assets/plan.png", headers=HOST).data == b"plan"
-        assert "For @artemis" in page(client, "/tasks?list=launch")
+        assert "The group artemis's list" in page(client, "/tasks?list=launch")
         task = next(t for t in client.get("/api/tasks?list=launch", headers=HOST).get_json() if t["id"] == apollo)
         assert task["title"] == "Read [[groups/artemis/roadmap|groups/apollo/roadmap]]"
         assert client.get("/page/groups/apollo/roadmap", headers=HOST).status_code == 404
@@ -296,7 +292,7 @@ def test_a_rename_takes_what_is_the_groups_along(client, wiki, apollo):
     sign_in(client, "carol")
     assert client.get("/page/groups/artemis/roadmap", headers=HOST).status_code == 404
     assert client.get("/groups/artemis/_assets/plan.png", headers=HOST).status_code == 404
-    assert client.get("/tasks?list=launch", headers=HOST).status_code in (302, 404) or "For @artemis" not in page(client, "/tasks?list=launch")
+    assert client.get("/tasks?list=launch", headers=HOST).status_code in (302, 404) or "The group artemis's list" not in page(client, "/tasks?list=launch")
     # The old name stays the group's: its folder's history is read under it, by who is in a group of that
     # name, so nobody else makes one (they would be shown the pages as they were) ...
     resp = make(client, "apollo")
@@ -432,7 +428,7 @@ def test_a_rename_whose_commit_fails_is_made_all_the_same(client, wiki, apollo):
         sign_in(client, who)
         assert until(lambda: client.get("/page/groups/artemis/roadmap", headers=HOST).status_code == 200)
         assert client.get("/groups/artemis/_assets/spare.png", headers=HOST).data == b"spare"
-        assert "For @artemis" in page(client, "/tasks?list=launch")
+        assert "The group artemis's list" in page(client, "/tasks?list=launch")
     sign_in(client, "carol")
     assert client.get("/page/groups/artemis/roadmap", headers=HOST).status_code == 404
     # Once git works again the next write there commits it.
@@ -444,10 +440,10 @@ def test_a_rename_whose_commit_fails_is_made_all_the_same(client, wiki, apollo):
     assert git(wiki, "status", "--porcelain") == ""
 
 
-def test_a_rename_that_cannot_move_the_folder_puts_the_lists_back(client, wiki, apollo):
+def test_a_rename_that_cannot_move_the_folder_changes_nothing(client, wiki, apollo):
     """A page of the group has text not in git yet, and git doesn't take it:
-    nothing may move. The lists, which were for the new name already, are
-    for the old one again, and everything is as it was."""
+    nothing may move, its lists (in its folder) neither, and everything is
+    as it was."""
     (wiki / "groups/apollo/notes.md").write_text("# Notes\n\nnot in git yet\n")
     no_commits_of_the_groups_pages(wiki)
     before = config(wiki)
@@ -457,12 +453,10 @@ def test_a_rename_that_cannot_move_the_folder_puts_the_lists_back(client, wiki, 
     assert (wiki / "groups/apollo/roadmap.md").exists() and not (wiki / "groups/artemis").exists()
     assert (wiki / "groups/apollo/notes.md").read_text() == "# Notes\n\nnot in git yet\n"
     assert (wiki / "plans.md").read_text() == "# Plans\n\nSee [[groups/apollo/roadmap]].\n"
-    # The lists went there and back: two commits, and they are for @apollo.
-    assert [s for s in git(wiki, "log", "-n2", "--format=%s").splitlines()] == [
-        "The group artemis is called apollo: the lists for it", "The group apollo is called artemis: the lists for it"]
+    assert git(wiki, "log", "-1", "--format=%s").strip() == "The group's files"
     for who in ("alice", "bob"):
         sign_in(client, who)
-        assert "For @apollo" in page(client, "/tasks?list=launch")
+        assert "The group apollo's list" in page(client, "/tasks?list=launch")
         assert client.get("/page/groups/apollo/roadmap", headers=HOST).status_code == 200
 
 
@@ -476,13 +470,13 @@ def said(resp):
     return html.unescape(resp.get_data(as_text=True))
 
 
-def test_a_list_for_the_group_keeps_it(client, wiki, apollo):
-    """A list has its own owners and its own For: the group isn't removed
-    while one is for it, and nothing changes."""
+def test_a_list_of_the_group_keeps_it(client, wiki, apollo):
+    """A list has its own owners: the group isn't removed while it has one,
+    and nothing changes."""
     before, head = config(wiki), git(wiki, "rev-parse", "HEAD")
     resp = remove(client, "apollo", pages="delete")
-    assert resp.status_code == 409 and "A task list is for @apollo (#launch)" in said(resp)
-    assert "A task list is for @apollo (#launch)" in page(client)          # said under Manage… too
+    assert resp.status_code == 409 and "The group has a task list (#launch)" in said(resp)
+    assert "The group has a task list (#launch)" in page(client)          # said under Manage… too
     assert config(wiki) == before and git(wiki, "rev-parse", "HEAD") == head and (wiki / "groups/apollo/roadmap.md").exists()
 
 

@@ -1,7 +1,7 @@
 """Changes (/changes): the wiki's commits in the browser, as the MCP tool
 history lists them: by day, who and whether through an assistant, what
 each changed, the filters, sharing mode. What a user may not see of them
-is probed in test_privacy.py, test_group_pages.py and test_list_members.py.
+is probed in test_privacy.py, test_group_pages.py and test_group_lists.py.
 """
 
 import html

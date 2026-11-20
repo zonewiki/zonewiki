@@ -113,7 +113,7 @@ Tests that fail when a change forgets a step elsewhere: a new route, tool, setti
 | `test_every_route_is_covered` (`tests/test_privacy.py`) | Every route Zone registers is probed for leaks of another user's private page and tasks, or exempt | Add a probe to `READS` or `WRITES` (or, with a reason, to `EXEMPT`) |
 | `test_every_tool_is_covered` (`tests/test_privacy.py`) | Every MCP tool is probed the same way | Add a probe to `MCP_READS` or `MCP_WRITES` |
 | `tests/test_group_pages.py` | The privacy probes, aimed at a group's folder, run as an editor and an admin outside the group | Nothing to add: it takes `test_privacy.py`'s probes; fix the leak |
-| `tests/test_list_members.py` | A list for some leaks nothing to non-members on the routes that show or write tasks and lists | No completeness check: add a probe to `READS`/`WRITES` for a new task or list route by hand |
+| `tests/test_group_lists.py` | A group's list leaks nothing to non-members on the routes that show or write tasks and lists | No completeness check: add a probe to `READS`/`WRITES` for a new task or list route by hand |
 | `tests/test_narrowed.py` | The MCP probes of the three modules above, asked by the owner through a connection without the place, answer as to a stranger | Fix the door that asks a name instead of the asker (`go/access.go`) |
 | `test_every_write_route_is_probed` (`tests/test_roles.py`) | Every write route is refused to a viewer with nothing changed or committed | Add it to `WRITES` (or `EXEMPT`); a viewer's write goes in `viewerWrites` |
 | `test_every_write_tool_is_probed` (`tests/test_roles.py`) | Every writing MCP tool is refused to a viewer | Add it to `MCP_WRITES` |
@@ -163,7 +163,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `go/merge_test.go` | editor.md | `mergeText` and the bases kept |
 | `go/oauth_test.go` | security.md | OAuth's signed client ids, redirect URIs, PKCE, codes |
 | `go/pages_test.go` | editor.md, tasks.md | Links re-pointed on a rename, folder moves, tags and lists renamed in text, `iterPages` |
-| `go/retrieval_test.go` | search.md | Search's index: chunks, the cache by place (`TestIndexCacheStaysAsIfBuiltAfresh`), the index file at start, a group's and a list-for-some's docs in members' views alone |
+| `go/retrieval_test.go` | search.md | Search's index: chunks, the cache by place (`TestIndexCacheStaysAsIfBuiltAfresh`), the index file at start, a group's pages and tasks in members' views alone |
 | `go/sections_test.go` | editor.md, mcp.md | Sections as the parser finds them: ✎s, `findSection`, MCP sections and search chunks, CRLF |
 | `go/security_test.go` | security.md | Throttles, client key, host names, the session key, signing out, the session's user |
 | `go/server_test.go` | deployment.md | Healthcheck address, Unix and handed sockets, idle exit |
@@ -182,7 +182,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `go/internal/settingsfile/settingsfile_test.go` | users.md | The settings file parsed, edited keeping comments, written owner-only, group sections |
 | `go/internal/taskfiles/concurrent_test.go` | tasks.md | `TestReadersBesideWriters`, the store under the race detector |
 | `go/internal/taskfiles/lists_test.go` | tasks.md | The registry file: format, version, lenient reads, owners, who may write |
-| `go/internal/taskfiles/members_test.go` | tasks.md | A list for some in the store: readers leave its folder out, others' writes refused |
+| `go/internal/taskfiles/members_test.go` | tasks.md | A group's tasks in the store: in its folder, read by its members only, others' writes refused; a former list for some's folder read by no one |
 | `go/internal/taskfiles/taskfiles_test.go` | tasks.md | Task files on disk: filing by owner, list and month, commits, corrupt files, parsed-once reads, `TestHolds` |
 | `go/internal/taskmodel/task_test.go` | tasks.md | A task read leniently and written in key order, assignees, `TestSame`, `TestKnownKeysWrittenOnce` |
 | `go/internal/textsearch/search_test.go` | search.md | BM25, stemming, fuzzy, query syntax, excerpts, an index's views and layers |
@@ -202,7 +202,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `tests/test_group_pages.py` | users.md | A group's pages: the privacy probes, members, moves, Share…, its home |
 | `tests/test_groups_own.py` | users.md | Groups made in the browser: names, owners, leaving, ending, renaming |
 | `tests/test_image.py` | deployment.md, security.md | Guard (above) |
-| `tests/test_list_members.py` | tasks.md | Lists for some: the leak probes, members, narrowing, the task's files |
+| `tests/test_group_lists.py` | tasks.md | A group's lists: the leak probes, members, moving a list to or from a group, the task's files, the migration of lists for some |
 | `tests/test_list_owners.py` | tasks.md | A shared list's owners and what a member who is none may do |
 | `tests/test_math.py` | rendering.md | Math over HTTP, section editing below a `$$` block |
 | `tests/test_mcp.py` | mcp.md | The MCP tools over HTTP: files, guides, reading and writing tools, `zone_help` |
@@ -262,7 +262,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `test_sharing.py` | navigation.md | Sharing mode |
 | `test_shortcuts.py` | navigation.md | The shortcuts dialog: fits a desktop screen, scrolls inside a phone's, names every key the code answers |
 | `test_tables.py` | rendering.md | Sortable tables |
-| `test_task_assignee.py` | tasks.md | Assignees, My tasks, news and following, lists for some's dialogs |
+| `test_task_assignee.py` | tasks.md | Assignees, My tasks, news and following, a group's list's dialogs |
 | `test_task_inbox.py` | tasks.md | Filing Inbox tasks, Leave out of My tasks, where Delete… sends tasks |
 | `test_task_refs.py` | tasks.md | Ticking task chips, completion, Make task |
 | `test_tasks.py` | tasks.md | The task app: views, boards, selection, drag, lists' dialogs and pills, long lists |

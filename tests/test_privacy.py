@@ -1036,7 +1036,7 @@ def test_a_private_new_list_is_its_makers_alone(alice, client, wiki):
     assert '{"name": "gifts"}' in (wiki / "private/alice/_tasks/lists.json").read_text()
     assert not (wiki / "private/alice/lists").exists() and "gifts" not in (wiki / "_tasks/lists.json").read_text()
     page = alice.get("/tasks", headers=HOST).get_data(as_text=True)
-    assert 'data-place="list:gifts"' in page and 'id="list-new-private"' in page
+    assert 'data-place="list:gifts"' in page and '<option value="private">Only you</option>' in page
     assert alice.post("/tasks/new-list", data={"name": "gifts"}, headers=HOST).headers["Location"].startswith("/tasks?newlist_name=")
     sign_in(client, "bob")
     assert 'data-place="list:gifts"' not in client.get("/tasks", headers=HOST).get_data(as_text=True)

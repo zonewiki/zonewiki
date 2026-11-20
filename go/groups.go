@@ -22,6 +22,7 @@ import (
 	"strings"
 	"zonewiki/internal/mdtext"
 	"zonewiki/internal/settingsfile"
+	"zonewiki/internal/taskfiles"
 )
 
 func groupsRoutes(mux *http.ServeMux) {
@@ -312,8 +313,10 @@ func groupNameTaken(s *Settings, name, as string) bool {
 	if as != "" && slices.Contains(s.Was[as], name) {
 		return false
 	}
-	for _, list := range taskFiles.ForSome() { // also the folders deleted and renamed lists left
-		if slices.Contains(taskFiles.ForOfList(list), "@"+name) {
+	// A former list for some that was for the group (its old folder's
+	// history is the group's members').
+	for _, list := range formerListNames() {
+		if slices.Contains(formerListFor(list), "@"+name) {
 			return true
 		}
 	}
@@ -328,11 +331,6 @@ func groupNameUsed(s *Settings, name string) bool {
 	entries, _ := os.ReadDir(filepath.Join(cfg.Data, groupsDir))
 	for _, e := range entries {
 		if strings.ToLower(e.Name()) == name {
-			return true
-		}
-	}
-	for _, l := range taskFiles.ReadLists("").Lists {
-		if slices.Contains(l.For(), "@"+name) {
 			return true
 		}
 	}
@@ -568,21 +566,14 @@ func renameGroupOp(user asker, old, nameText string) (string, error) {
 	// made but for its commit (writtenAnyway) is made: the rename goes on,
 	// since stopping there would leave the group's lists or pages under a
 	// name the settings don't know, seen by no one, and says so at the end.
+	// The group's lists and tasks are in its folder (groups/<group>/_tasks/),
+	// so they go along with it.
 	var uncommitted error
-	if err := renameGroupInLists(user, old, name); err != nil {
+	if err := moveGroupFolder(user, old, name); err != nil {
 		if !writtenAnyway(err) {
 			return "", err
 		}
 		uncommitted = err
-	}
-	if err := moveGroupFolder(user, old, name); err != nil {
-		if !writtenAnyway(err) {
-			if back := renameGroupInLists(user, name, old); back != nil && !writtenAnyway(back) {
-				logf("renaming the group %s to %s failed (%v), and its lists are for @%s still: %v", old, name, err, name, back)
-			}
-			return "", err
-		}
-		uncommitted = errOr(uncommitted, err)
 	}
 	err = changeSettings(user.Name, func(f *settingsfile.File) error {
 		renameGroupInFile(f, settingsOf(f.Text()), old, name)
@@ -591,9 +582,6 @@ func renameGroupOp(user asker, old, nameText string) (string, error) {
 	if err != nil {
 		if back := moveGroupFolder(user, name, old); back != nil && !writtenAnyway(back) {
 			logf("renaming the group %s to %s failed (%v), and its pages are in %s/%s still: %v", old, name, err, groupsDir, name, back)
-		}
-		if back := renameGroupInLists(user, name, old); back != nil && !writtenAnyway(back) {
-			logf("renaming the group %s to %s failed (%v), and its lists are for @%s still: %v", old, name, err, name, back)
 		}
 		return "", err
 	}
@@ -626,19 +614,16 @@ func groupMoveRefused(user asker, from, to string) error {
 	return nil
 }
 
-// groupKept: why the group can't be removed by user yet (nil: it can): a
-// task list is for it (a list has its own owners and its own For: theirs to
-// change or delete first), or another group includes it and user is no
-// admin (what a group is made of is an admin's). The lists user doesn't see
-// are counted, not named.
+// groupKept: why the group can't be removed by user yet (nil: it can): it
+// has task lists (a list has its own owners: theirs to move or delete
+// first), or another group includes it and user is no admin (what a group
+// is made of is an admin's). The lists user doesn't see are counted, not
+// named.
 func groupKept(s *Settings, user asker, group string) error {
 	var named []string
 	hidden := 0
-	for _, l := range taskFiles.ReadLists("").Lists {
-		if !slices.Contains(l.For(), "@"+group) {
-			continue
-		}
-		if taskFiles.SeesList(user, l.Name) {
+	for _, l := range taskFiles.ReadLists(taskfiles.GroupOwner(group)).Lists {
+		if inGroup(user, group) {
 			named = append(named, "#"+l.Name)
 		} else {
 			hidden++
@@ -651,7 +636,7 @@ func groupKept(s *Settings, user asker, group string) error {
 		} else if hidden > 0 {
 			what = itoa(hidden) + " you don't see"
 		}
-		return refuseAs(refusedConflict, "A task list is for @"+group+" ("+what+"): its owners say whom it is for instead, or delete it, first.")
+		return refuseAs(refusedConflict, "The group has a task list ("+what+"): its owners move it to everyone (Who sees it…), or delete it, first.")
 	}
 	if s.isAdmin(user.Name) {
 		return nil
@@ -849,38 +834,6 @@ func errOr(err, other error) error {
 	return other
 }
 
-// renameGroupInLists: the shared lists that are for @old are for @name,
-// whoever sees them (the one who renames a group may be in none of them: it
-// is the group's name that changes, not who a list is for).
-func renameGroupInLists(user asker, old, name string) error {
-	if err := mayWriteTasks(user); err != nil {
-		return err
-	}
-	taskFiles.Lock()
-	defer taskFiles.Unlock()
-	reg, err := taskFiles.ReadListsStrict("")
-	if err != nil {
-		return err
-	}
-	changed := false
-	for _, l := range reg.Lists {
-		who := l.For()
-		if i := slices.Index(who, "@"+old); i >= 0 {
-			who[i] = "@" + name
-			l.SetFor(who)
-			changed = true
-		}
-	}
-	if !changed {
-		return nil
-	}
-	paths, err := taskFiles.WriteListsOf("", reg)
-	if err != nil {
-		return err
-	}
-	return commitLists(user, "The group "+old+" is called "+name+": the lists for it", paths)
-}
-
 // moveGroupFolder moves the folder of the group old to that of the group
 // name: its pages with every link to them re-pointed and the files they
 // show (moveFolder), then what else lies there (a file no page shows), and
@@ -914,9 +867,14 @@ func moveGroupFolder(user asker, old, name string) error {
 			logf("renaming the group %s to %s: %s", old, name, errDetail(err))
 		}
 	}
-	// What no page shows stays with the group: the rest of the folder.
+	// What no page shows stays with the group: the rest of the folder, its
+	// task lists and tasks among it (_tasks/): no task is written meanwhile,
+	// and no reader reads between the two folders.
 	var rest, dirs []string
 	var moveErr error
+	taskFiles.Lock()
+	defer taskFiles.Unlock()
+	taskFiles.Hold()
 	_ = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -959,6 +917,7 @@ func moveGroupFolder(user asker, old, name string) error {
 			}
 		}
 	}
+	taskFiles.Release()
 	if len(rest) > 0 {
 		if err := notCommitted(gitCommit(user.Name, what+": the files in "+newFolder+"/", rest...)); err != nil {
 			return err

@@ -399,7 +399,7 @@ The **Inbox** is always there, first; a list without tasks in the view has no se
 A drop moves the task (`moveTasks`, the function Move to list… uses, with its undo).
 A private task dropped on a shared list asks first ("Share this task?", `#task-share-modal`, `confirmShare`: everyone will see it, and it can't be made private again), and is then assigned to you, as the move dialog does it;
 a shared task is never taken by a private list or, with users, the Inbox ("A shared task stays shared": the section doesn't light up, `refusesDrop`);
-a task leaving a list for some for one more people see asks the same (Moving a task to fewer or more people).
+a task leaving a group's list for one more people see asks the same (Moving a task to fewer or more people).
 A card there has no list chip.
 
 ### Today
@@ -745,7 +745,7 @@ A name that won't do is said in that dialog; Cancel or Esc leaves the field as i
 A new task starts in the list of the view it was made in, else in the Inbox (Where a new task goes); choosing another moves the task.
 
 A task is as private as its list (Private lists): for a shared task your private lists are off.
-Under the fields a line says who will see the task when that changes or is private (`syncListNote`): "Private: only you see this task." for a task in a private list or your Inbox (a new task says who sees it under its title instead), "Everyone who uses the wiki will see and change this task. It can’t be made private again." for a private task about to leave for a shared list (Save then sends `share`), and the lines of a task leaving a list for some (Moving a task to fewer or more people).
+Under the fields a line says who will see the task when that changes or is private (`syncListNote`): "Private: only you see this task." for a task in a private list or your Inbox (a new task says who sees it under its title instead), "Everyone who uses the wiki will see and change this task. It can’t be made private again." for a private task about to leave for a shared list (Save then sends `share`), and the lines of a task leaving a group's list (Moving a task to fewer or more people).
 A shared list for a task of yours also puts your name in Assignee, once (`sharedByEdit`): it stays in your My tasks unless you take the name off.
 
 #### Tab order in the dialog
@@ -1261,7 +1261,7 @@ A click goes to My tasks, whose Today tab lists them under **Updates** (Updates)
 
 `@name` in a comment or a description, of a user who can be given tasks (not in code, not the `@` of a mail address), is logged in the task's history as `mentioned` (`mentionsOf`, `logMentions`), with who was named, by who wrote it; it is news to them, on a task they have nothing else to do with too.
 A description logs only the names it didn't have before.
-In a list for some only its members are mentioned (Assigning in a list for some).
+In a group's list only its members are mentioned (Assigning in a group's list).
 Not built: the name as a chip in the text, and completing it while typing.
 
 ### Mail
@@ -1329,14 +1329,14 @@ Keep and Repeat both say what happens after done, so they exclude each other: `k
 Five sentences say all of it:
 
 1. A task is in one list.
-2. A list is **for** someone: you alone (private), a group, or everyone (shared); everyone has one list built in, the **Inbox**, where a new task goes unless it is made in a list or names one.
-3. A shared task can be assigned to one person, a member of its list.
+2. A list is in a place, as a page is: yours alone (private), a group's, or everyone's (shared); everyone has one list built in, the **Inbox**, where a new task goes unless it is made in a list or names one.
+3. A shared task can be assigned to one person who sees it.
 4. **My tasks** is what is yours: the tasks in your own lists, and the shared tasks assigned to you.
 5. A pin is a shortcut: a pill in your list switcher.
 
 Without users there is one person, and every list is theirs: the Inbox is the tasks without a list, and My tasks is every task.
 
-A list has a name, an entry in the list switcher with its counts (below), settings of its own (the tab it opens on, a WIP limit, tab names, whether new tasks are keep tasks …), and it is shared or private: a private list and the tasks in it are yours alone.
+A list has a name, an entry in the list switcher with its counts (below), settings of its own (the tab it opens on, a WIP limit, tab names, whether new tasks are keep tasks …), and a place: a private list and the tasks in it are yours alone, a group's its members', a shared one everyone's.
 You make one with **New list…** on the Tasks page (or in the dialog that moves tasks to a list, or in a task's List field), put a task in it with the **List** field of its dialog (or **Move to list…**), and show it on any page with `[[tasks: list=<name>]]`.
 A page shows a list; it doesn't make one: editing the embed away, or deleting the page, changes nothing of the list, and a list is deleted only by **Delete…**, which asks where its tasks go.
 Tags go across lists: `[[tasks: tag=sam]]` on Sam's page shows every task tagged so, whatever list it is in.
@@ -1347,7 +1347,7 @@ A wiki from before lists were places, or from before the Inbox, is taken over on
 **New list…** (`#list-new-dialog`; `POST /tasks/new-list`, `createListOp` in `go/tasklists.go`) asks for the list's name and makes it: an entry in the registry, in one commit (`Create list #shop`).
 A name can't hold `[ ] , | = / "`, a backslash or a control character (`checkListName`; a space or line break becomes `-`).
 No page is written.
-With users the dialog has **Private: only you see it and its tasks**, which makes it a private list of yours, and **For** (Lists for some).
+With users the dialog has **For**, as New page has (`list_for_select`): **Everyone who uses this wiki**, each group you are in ("@dev: its members see it": A group's lists), or **Only you** (a private list).
 Then the list opens (`/tasks?list=<name>`).
 Nothing else changes by it: new tasks still go to the Inbox, and the tasks there stay.
 
@@ -1364,7 +1364,8 @@ Under an embed of a list that isn't there, **Create the list #<name>** does the 
 A list's name (`cleanList`, `checkListName`) is one word, lowercase, spaces `-`, a leading `#` dropped, at most 60 bytes, none of `[ ] , | = / "`, a backtick or a line break (they mean something in an embed or a ref).
 No list can be called `inbox` or `none`: they name the Inbox (below).
 A new name is kept composed (NFC: `café` typed with a combining accent is the `café` of a keyboard that has é).
-A name is unique among the shared lists and among one user's private lists, and so is its look: names that are one in their compatibility form, in lower case (NFKC, `listNameKey`: a full-width `ｔｅａｍ` is `team`, `ﬁ` is `fi`), are one name, so New list…, a rename or Make shared… refuses a name that looks like a list's there ("There is a list #team already"), also of a list for some that whoever asks doesn't see.
+A name is unique among the shared lists and among one user's private lists, and so is its look: names that are one in their compatibility form, in lower case (NFKC, `listNameKey`: a full-width `ｔｅａｍ` is `team`, `ﬁ` is `fi`), are one name, so New list…, a rename or Make shared… refuses a name that looks like a list's there ("There is a list #team already").
+A shared list's name is no group's list's either, and no group's list's another's (`sharedNameTaken`): a name names one list to all who see it, whatever groups they are in, so it is refused to who doesn't see the list too; that a name is taken is all anyone else learns of it.
 A user can't make a list by a name of one they see ("There is a list #shop already"), private or shared; they can still end up with a private and a shared list of one name (the migration, or someone making the shared one later, who doesn't see theirs).
 For them the plain name is their own list and the shared one is **`shared/<name>`**: that is a **ref**, how a list is named to one user (`ListInfo.Ref`, `taskLists(user)`, `resolveList`): in URLs (`/tasks?list=shared/gifts`), in pins, in the API's and the tools' `list`, in the browser.
 On a page, `[[tasks: list=gifts]]` is the shared list unless the page is in your private folder (`listOnPage`), so a shared page shows everyone the same list.
@@ -1377,88 +1378,81 @@ Nothing else on the page changes.
 
 ### Private lists
 
-With users a list is private (yours alone), for everyone, or for some: whoever sees a list sees its tasks.
-**Private and shared are said of lists, not of tasks** (Private tasks in `docs/spec/users.md`): a task in a private list, or in your Inbox, is yours alone and is kept in your files; a task in a shared list is shared.
+With users a list is private (yours alone), a group's, or everyone's: whoever sees a list sees its tasks.
+**Private and shared are said of lists, not of tasks** (Private tasks in `docs/spec/users.md`): a task in a private list, or in your Inbox, is yours alone and is kept in your files; a task in a group's list or an everyone's one is shared.
 **With users a shared task is always in a list**: there is no place that is everyone's and nobody's.
 A new task may start in any list.
 
 **A shared task never goes into a private list nor into an Inbox** ("A shared task stays shared": others have seen it), by any route or tool.
-**A private task leaves for a shared list** only when the write says `share`, which the browser sends after telling you that everyone will see it; its History then says `shared`.
+**A private task leaves for a shared list** only when the write says `share`, which the browser sends after telling you who will see it; its History then says `shared`.
 Out of a private list into your Inbox, or the other way, it stays private, and nothing is asked.
 A private list can be made shared with **Make shared…** (Making a list shared), its tasks with it; a shared one never private.
 
 Every reader asks `canSeeList` (through `taskLists(user)`, which gives only the lists a user sees), every write to a list or to a task in it `canWriteList` (`go/access.go`): whoever sees a list and may write tasks changes its tasks, and the list itself (its name, its settings, deleting it) is its owners' and the admins' (`canManageList`; Who manages a list).
 
-### Lists for some
+### A group's lists
 
-With users a shared list is for everyone, or for the groups and users it names, its **members** (`"for": ["@hiring", "anna"]` in its entry: `@name` a group, which may be one made of other groups, `@product` for who is in dev or in design (Groups in `docs/spec/users.md`); a bare name a user; `List.For`, `ListInfo.For`, `listMember` in `go/access.go`).
+With users a shared list is everyone's or a group's, as a page is (Group pages in `docs/spec/users.md`): **a group's list is kept in the group's folder** (`groups/<group>/_tasks/`: its registry `lists.json` and a folder per list, as `_tasks/` holds the shared ones), so who sees it and its tasks is who is in the group, by the one rule for places (`ownerPlace`, `place.sees` in `go/access.go`): a group made of groups (`@product` for who is in dev or in design: Groups in `docs/spec/users.md`) counts as it does for pages.
 
-Members see the list and its tasks, and change them.
+Its members see the list and its tasks, and change them.
 To anyone else it is no list, as another user's private list is: no pill, no entry under More, no task of it in All tasks, My tasks, a tag's view, the counts, search, Linked tasks, a `[[task:…]]` chip, an export, the history, or an assistant's answers; its address (`/tasks?list=<name>`) and an embed of it say what they say of a name no list has, and a write that names it or one of its tasks finds nothing.
 An admin is no member by being admin, as an admin sees no private page; they can put themselves in a group, which the settings' log shows.
-Without users nothing is anyone's: a list for some left from when the wiki had users is everyone's (`listMember`), as a group's folder is an ordinary folder then.
+Without users nothing is anyone's: a group's folder is an ordinary folder then, and its lists are read by no one but who has users again.
 
-#### Saying whom a list is for
+#### Making a group's list
 
-You say whom it is for when you make it (**New list…**: the **For** field, "everyone" when empty, completing the groups there are; an assistant's `create_task_list` with `for`), and its owners change it with **Who it is for…** in its ⋯ menu (`#list-for-dialog`, `POST /tasks/list-for`, `setListForOp`; a commit "List #hiring is for @hiring, anna" or "… is for everyone").
-The words are groups and users, commas or spaces between them (`cleanFor`): a name that is no user is refused, and so is a group there isn't ("There is no group \"@nosuch\""; a group is one someone is in, one the settings file has a section for, or one a group is said to include: `isGroup`), since the list would take its name for good (a group of that name would be shown the list: `groupNameTaken` in `docs/spec/users.md`); and **you are one of them**: "You wouldn't see the list yourself: add your name, or a group you are in".
-A private list is for one; a list for some is a shared one: in New list… ticking Private turns For off, and a For that names someone turns Private off (`js/listsrow.js`), as the server refuses both together.
+You make one with **New list…** (For: a group you are in; an assistant's `create_task_list` with `group`), and its owners move it with **Who sees it…** in its ⋯ menu (`#list-for-dialog`, `POST /tasks/list-for` with `for`: `group:<g>` or empty for everyone; `setListPlaceOp`): to everyone, or to another group of theirs, its entry to that place's registry and its tasks' files to that place's folder, in one commit ("Move list #hiring to the group hiring", "… to everyone").
+A group is offered only to who is in it (`cleanGroup`): a list they moved elsewhere they wouldn't see.
+A private list goes to a group with **Make shared…**, whose For offers your groups beside everyone (`shareListOp`), never through everyone on the way.
 
-The For field completes word by word (`js/listsrow.js`, the words in `data-words` of `#list-for-words`): the groups and the people who can be given tasks, those already named left out; the browser's own datalist would take the whole field for one word.
-Without the script it offers the groups for the first word.
-
-Its name is taken for everyone: two shared lists can't have one folder, so New list… with that name says "There is a list #hiring already" to who doesn't see it.
-It stays taken once the list is deleted or renamed (`sharedNameTaken` in `go/tasklists.go`): its folder keeps whom its history is for, and a shared list made there, by New list…, a rename or Make shared…, would be for them too, its tasks out of everyone else's sight; only a list for the very same people takes the name back (the list renamed back, or one made for them again).
-That a name is taken is the one thing anyone else can learn.
-
-#### Narrowing a list
-
-Narrowing asks when it takes tasks out of someone's sight (`askError` from `setListForOp`): with open tasks there assigned to people who would be no members, the dialog comes back saying so, "3 open tasks here are assigned to bob, dana, who will no longer see the list. The tasks keep their names and count as unassigned here, to hand on; for them again, they are theirs as before. Save again to go on." (`for_confirm`, a hidden `confirm` in the form); Save again narrows it.
+A move to fewer people asks when it takes tasks out of someone's sight (`askError` from `setListPlaceOp`): with open tasks there assigned to people not in the group, the dialog comes back saying so, "3 open tasks here are assigned to bob, dana, who will no longer see the list. The tasks keep their names and count as unassigned here, to hand on; in the group again, they are theirs as before. Save again to go on." (`for_confirm`, a hidden `confirm` in the form); Save again moves it.
 With nobody's task at stake it asks nothing.
 
-#### Assigning in a list for some
+#### Assigning in a group's list
 
-Its tasks are given only to its members (`applyAssignee`: "bob isn't one of those the list #hiring is for"): Assign…, the Assignee field and the title's `@name` offer them (`members` in the lists a page carries, `assignableIn` in `tasks.js`), and a mention of anyone else is text: no news, no mail.
+Its tasks are given only to the group's members (`applyAssignee`: "bob isn't in the group hiring: a task of its list #hiring is given to one of its members"): Assign…, the Assignee field and the title's `@name` offer them (`members` in the lists a page carries, `listMembers`, `assignableIn` in `tasks.js`), and a mention of anyone else is text: no news, no mail.
 
-Who no longer sees the list no longer has its tasks (`assigneeGone` in `go/tasksyntax.go`, `TasksCore.assigneeGone` with `people.members`): a list narrowed, a group someone left.
+Who no longer sees the list no longer has its tasks (`assigneeGone` in `go/tasksyntax.go`, `TasksCore.assigneeGone` with `people.members`): someone who left the group, a list moved to a group they aren't in.
 The task keeps the name and **counts as no one's**, as the task of someone who can no longer be given tasks does: the name struck through on the card ("Assigned to bob, who doesn't see this list anymore: it counts as no one's") and in the dialog, under Unassigned By person, in the list's "N unassigned", found by `@none` and still by `@bob`, said so to an assistant; so it comes up where the team looks for what nobody has, and is handed on.
-Nobody is unassigned by it: among the list's members again, their tasks are theirs as before.
+Nobody is unassigned by it: back in the group, their tasks are theirs as before.
 (A name kept on a task its bearer can't see, and shown as theirs, would be a task that looks taken care of and isn't.)
 
 #### Moving a task to fewer or more people
 
-A task that leaves a list for some for a list for everyone says who will see it (`widens` in `tasks.js`), as sharing a private task does: the move dialog's row reads "everyone will see it", the edit dialog's line "Everyone who uses the wiki will see and change this task. Now only those the list hiring is for do.", and a drop on the other list's section (By list) asks first (`confirmShare` with the list it leaves).
+A task that leaves a group's list for an everyone's one says who will see it (`widens` in `tasks.js`), as sharing a private task does: the move dialog's row reads "everyone will see it", the edit dialog's line "Everyone who uses the wiki will see and change this task. Now only the members of the group hiring do.", and a drop on the other list's section (By list) asks first (`confirmShare` with the list it leaves).
 
-Into a list fewer people see it goes only by who made it, or an admin (`taskLosers`, `mayNarrowTask` in `go/tasks.go`), as a page goes to fewer people: a list for some that someone who sees the task now is none of.
-The edit dialog's line names them ("bob, dana will no longer see this task: the list is for fewer people."; for anyone else "… would no longer see this task: only who made it, or an admin, moves it to a list for fewer people."), the move dialog's row reads "fewer people will see it" (`narrows` in `tasks.js`), and the server refuses anyone else (403).
+Into a list fewer people see it goes only by who made it, or an admin (`taskLosers`, `mayNarrowTask` in `go/tasks.go`), as a page goes to fewer people: a group's list that someone who sees the task now is not in.
+The edit dialog's line names them ("bob, dana will no longer see this task: fewer people see that list."; for anyone else "… would no longer see this task: only who made it, or an admin, moves it to a list fewer people see."), the move dialog's row reads "fewer people will see it" (`narrows` in `tasks.js`), and the server refuses anyone else (403).
 Between lists the same people see it moves without a word.
 
-#### How a list for some shows
+#### How a group's list shows
 
-The heading says it: 👥 beside the list's name, "For @hiring, anna: only they see this list and its tasks (anna, bo, …)", the sign a group's page has (🔒 is what is yours alone: a private list).
-Its pill and its entry under More carry the people icon and say whom it is for (`TaskPlace.For`; their tooltips add "(for @hiring, anna)"), a task's list chip on a card reads "👥 hiring", and its tooltip names its members.
+The heading says it: 👥 beside the list's name, "The group hiring's list: only its members see it and its tasks (anna, bo, …)", the sign a group's page has (🔒 is what is yours alone: a private list).
+Its pill and its entry under More carry the people icon and say whose it is (`TaskPlace.Group`; their tooltips add "(the group hiring's: only its members see it)"), a task's list chip on a card reads "👥 hiring", and its tooltip names its members.
 
 It is pinned like any other list: for who made it, and for anyone else once they pin it; until then it is first under More and in the left column, among **Your lists**.
 
-#### Where a list for some is kept
+#### How a group's list is kept
 
-Who sees a task is decided by where it is kept (Storage): the list's entry is not in `_tasks/lists.json`, which everyone reads, but in the list's own folder, `_tasks/lists/<name>/list.json` (one entry, as a line of the registry is), and that file is what tells every read of the tasks there whom they are for.
-The store leaves the folder out for anyone else (`Store.dirs(who, owner)`, `Member`): every reader of a user's tasks, and every write, which therefore never touches the files of a list its user doesn't see (a task that names such a list is refused by the store itself, `byOwner`).
-What holds every user's tasks (the search index, a task found by its id) asks `canSeeTask`, which asks the same file (`taskFiles.SeesList`); `canSeePath` hides the folder's files in the history.
-An entry of its name in the registry as well (a merge, a hand edit) doesn't make it everyone's list: the folder's file says whom it is for (`withListFiles`).
-A task that names the list but lies in another folder (a file moved by hand, a merge; the next write files it) is left out for anyone else too, by every read that shows tasks (`Store.shows`: open and closed, a year's closed, their count, the years, the news, the export): the folder and the task's own `list` never disagree about who sees it.
-A list narrowed gets its file before it leaves the registry; one for everyone again loses the file and is back in the registry.
-Renamed or deleted, its old folder keeps the file, marked gone (`{"name": "hiring", "for": […], "gone": true}`): no list anymore, and the folder's history is still only its members' to see, so its name is no other shared list's (Saying whom a list is for).
+Who sees a task is decided by where it is kept (Storage): a group's lists and tasks are the task store's owner `@<group>` (`taskfiles.GroupOwner`, `Store.Dir`), whose files are in the group's folder, and the store reads and writes a user's groups' files with theirs (`Store.Owners`, through `Groups`: `taskGroups`, the groups the asker is in, `groupsFor`), so a reader never sees, and a write never touches, the files of a group its user isn't in (a task of such a group in a write is refused by the store itself, `byOwner`).
+What holds every user's tasks (the search index, a task found by its id) asks `canSeeTask`, which asks the task's place (`ownerPlace`); `canSeePath` hides the group's folder in the history, as it hides its pages.
+Renamed with its group, the folder moves with its lists and tasks (`moveGroupFolder`, under the task store's lock); a group that has lists isn't removed until its owners move or delete them (`groupKept`).
 
-In search its tasks are a layer of their own, as a group's pages are (`docShared`, `placeOfDoc`, `listsForSome` in `go/retrieval.go`; Who searches what in `docs/spec/search.md`): they are in no index but its members', so their words, counts and lengths take part in no one else's ranking and a typo of a word only the list has suggests nothing to anyone else.
-A list narrowed or widened splits the index again, though no task changed (the lists that are for some are part of what the split goes by, read from their folders at each search: a look per list).
+In search its tasks are the group's layer, as its pages are (`docShared`, `placeOfDoc` in `go/retrieval.go`; Who searches what in `docs/spec/search.md`): they are in no index but its members', so their words, counts and lengths take part in no one else's ranking and a typo of a word only the group has suggests nothing to anyone else.
 
-A commit about it names it to its members only (`hideNames` in `go/access.go`): narrowing it ("List #hiring is for @hiring, anna"), pinning it for everyone and renaming it write the registry everyone reads, so the commit is in everyone's history; to anyone else it reads "A list for some changed".
+A commit about it that writes what everyone sees too (a list moved into the group writes the shared registry; a rename the pages that show it) names it to its members only (`hideNames` in `go/access.go`): to anyone else it reads "A group's list changed".
 The tasks' word leaves it out for anyone else (`Store.Word(who, …)`): a write to it doesn't make their browser load its lists again.
+
+#### Lists for some, until 2026-11-20
+
+A shared list could say whom it was for, groups and people (`"for": ["@hiring", "anna"]`), its entry in its folder's `list.json`.
+A start moves each such list into a group's folder (`migrateListsForSomeLocked` in `go/listsmigrate.go`, a commit by Zone "Move the list for some #hiring to the group hiring"): the one group it was for, or a group made for it, named after the list, of the groups (`includes`) and people it named, its owners the list's.
+Its old folder keeps its `list.json`, marked gone (`{"name": …, "for": […], "gone": true, "group": …}`: `taskfiles.FormerListFile`): the store reads no folder that has one (a list a start couldn't move is out of everyone's sight, not in it), git's history of the old paths stays whom it was for (`formerListFor` in `canSeePath`), and no list or group takes its name (`sharedNameTaken`, `groupNameTaken`).
+Without users it waits for users.
 
 ### Who manages a list
 
-**A shared list has owners** (with users; `"owners": ["anna"]` in its entry, `List.Owners` in package `taskfiles`, `ListInfo.Owners`): who made it, with **New list…** or by making a private list shared.
+**A shared list has owners** (with users, everyone's or a group's; `"owners": ["anna"]` in its entry, `List.Owners` in package `taskfiles`, `ListInfo.Owners`): who made it, with **New list…** or by making a private list shared.
 **Owners and admins manage the list**: rename it, delete it, set its settings (`canManageList` in `go/access.go`; `listForManage` in the operations).
 **Everyone else who may write tasks changes its tasks and leaves the list as it is** (`canWriteList`): its ⋯ menu has no Rename…, Delete… or List settings… for them, and the routes and tools answer 403, "#ops is bob's list: its tasks are yours to change, the list itself (its name, its settings, deleting it) is theirs and an admin's."
 Among a hundred people a list isn't everyone's to rename or delete.
@@ -1467,12 +1461,12 @@ A private list is its user's.
 
 | Action | Who may | In the browser | Route | MCP tool |
 |--------|---------|----------------|-------|----------|
-| Make a list | whoever may write tasks | New list… (the Tasks page's ⋯ menu, the List field, the move dialog), Create the list #<name> | `POST /tasks/new-list`; `POST /api/tasks/lists` (the List field and the move dialog) | `create_task_list` (with `private`, `for`) |
+| Make a list | whoever may write tasks | New list… (the Tasks page's ⋯ menu, the List field, the move dialog), Create the list #<name> | `POST /tasks/new-list`; `POST /api/tasks/lists` (the List field and the move dialog) | `create_task_list` (with `private`, `group`) |
 | Rename it | its owners and admins (a private list: its user) | Rename… | `POST /tasks/rename-list` | `rename_task_list` |
 | Delete it | its owners and admins (a private list: its user) | Delete… | `POST /tasks/delete-list` | — |
 | Change its settings | its owners and admins (a private list: its user) | List settings… | `POST /api/tasks/settings` (`{list, set}`) | — |
-| Say whom it is for | a shared list's owners and admins | Who it is for… | `POST /tasks/list-for` | `create_task_list` with `for`, as it is made |
-| Make it shared | a private list's user | Make shared… | `POST /tasks/share-list` | — |
+| Move it to everyone or a group | a shared list's owners and admins in that group | Who sees it… | `POST /tasks/list-for` | `create_task_list` with `group`, as it is made |
+| Make it shared | a private list's user | Make shared… (everyone, or a group of theirs) | `POST /tasks/share-list` | — |
 | Pin or unpin it, for yourself | whoever sees it and may write tasks | Pin, Unpin | `POST /tasks/pin-list` (`pin`: `1`, `first`, `0`) | — (`create_task_list` pins the list it makes) |
 | Reorder the pins | whoever may write tasks | dragging the pills | `POST /tasks/pin-order` | — |
 | Change its tasks | whoever sees it and may write tasks (`canWriteList`) | the task app | `/api/tasks…` | `create_task`, `update_task` |
@@ -1491,7 +1485,7 @@ The ⋯ beside the heading of `/tasks` (`.page-menu-btn`, on every view of it; t
 | **Rename…** | a list, for who manages it |
 | **Pin** / **Unpin** | a list, for who may write tasks |
 | **Make shared…** | a private list, for who may write tasks |
-| **Who it is for…** | with users, a shared list, for who manages it |
+| **Who sees it…** | with users, a shared list, for who manages it, where they are in a group (or it is a group's) |
 | **Delete…** | a list, for who manages it |
 | **Rename tag…** | a tag's view, `/tasks?tag=<tag>` (Renaming a tag), for who may write tasks |
 | **Mark all read** | My tasks, while a task has news for you |
@@ -1522,7 +1516,7 @@ The dialog offers those first: "Your Inbox", "#general", "The Inbox (no list)", 
 **Close its N open tasks as won't do** (`#list-delete-close`, `close=1`; offered while the list has open tasks, not ticked): for a list that is over, its open tasks are closed undone in the same commit, as Won't do closes one (Closed shows them with "✗ won't do", and they can be reopened from there), so they aren't left open in another list or in none.
 No task is deleted by it.
 A shared list's tasks can't go into a private one, and a private list's go to a shared list only with `share` (the dialog's box: "Share its tasks if they go to a shared list").
-Into a list fewer people see (a list for some that someone who sees them now is none of) they go as any task goes there (Moving a task to fewer or more people): only when who deletes it made each of them, or is an admin, else the dialog says so ("bob, dana would no longer see the tasks of #ops: #hiring is for fewer people. Only who made a task, or an admin, moves it there: move them to a list as wide").
+Into a list fewer people see (a group's list that someone who sees them now is not in) they go as any task goes there (Moving a task to fewer or more people): only when who deletes it made each of them, or is an admin, else the dialog says so ("bob, dana would no longer see the tasks of #ops: #hiring is for fewer people. Only who made a task, or an admin, moves it there: move them to a list as wide").
 And as narrowing a list does, it asks first when open tasks there would be with someone who doesn't see that list ("1 open task of #solo is assigned to bob, who doesn't see #hiring. … Delete again to go on."; `askError`, `assignedOutside`; `delete_to` and a hidden `confirm` naming that list, so a yes counts for it alone), unless they are closed on the way.
 Pins of it go; pages keep their embeds of it, which then say that there is no such list.
 
@@ -1632,7 +1626,7 @@ the current one is shaded (`aria-current`): My tasks on `?mine=1`, the Inbox on 
 
 **More** (`.lists-more`, a `<details>`; its pill is the summary, `.lists-more-btn`) opens on a click a panel under it (`.lists-more-panel`) of links, a line each:
 **each list you see and haven't pinned**, A–Z by name (your own before the shared one of that name), a private one with a lock,
-with users in two groups, each under its word when there are both (`TasksMore.Lists` and `Others`, `.lists-more-head`): **Your lists** (your private ones, the lists for some that you are one of, and the lists for everyone that hold an open task assigned to you), then **Other lists** (for everyone, the rest): among forty lists of a company the few that are yours come first, and the find field goes over both (a group's word goes with its last list);
+with users in two groups, each under its word when there are both (`TasksMore.Lists` and `Others`, `.lists-more-head`): **Your lists** (your private ones, your groups' lists, and the lists for everyone that hold an open task assigned to you), then **Other lists** (for everyone, the rest): among forty lists of a company the few that are yours come first, and the find field goes over both (a group's word goes with its last list);
 then **All tasks** (`/tasks`: every task you see, in whatever list).
 No counts on the lists in it, and **no number on the pill**: what is yours to do is in My tasks.
 Escape and a click elsewhere close it.
@@ -1687,7 +1681,7 @@ A registry that names a `default` list reads as that list pinned first (`ParseRe
 
 ### Where a new task goes
 
-The edit dialog of a new task says it under the title (`.task-edit-target`, `syncTarget` in `js/taskmodal.js`), and with users who sees it: "Adds to your Inbox: only you see it.", "Adds to the list team: everyone sees it.", "Adds to the list hiring: only alice, carol see it." (a list for some: its members, the first three and "and N others"), "Adds to the list diary: only you see it."; without users "Adds to the Inbox." or "Adds to the list shop.".
+The edit dialog of a new task says it under the title (`.task-edit-target`, `syncTarget` in `js/taskmodal.js`), and with users who sees it: "Adds to your Inbox: only you see it.", "Adds to the list team: everyone sees it.", "Adds to the list hiring: only the group hiring sees it." (a group's list), "Adds to the list diary: only you see it."; without users "Adds to the Inbox." or "Adds to the list shop.".
 It follows the List field, and a `#word` in the title that names a list (Quick-add: `#shop` puts the task in the list shop, the first such word; the others are tags).
 Hidden when editing a task and for several titles at once.
 
@@ -1726,7 +1720,7 @@ The toast says "3 tasks moved to the new list “shop”"; its undo takes the ta
 
 ### A list on screen
 
-A list is marked as one wherever it shows: a list icon (an SVG mask in CSS `::before`, `--list-icon`, in the accent colour), a faint blue tint and a tooltip (`listTooltip`: "List", "List (private: only you see it)", "List for some: only … see it and its tasks"; the Inbox's "In your Inbox: only you see it", without users "In the Inbox: in no list").
+A list is marked as one wherever it shows: a list icon (an SVG mask in CSS `::before`, `--list-icon`, in the accent colour), a faint blue tint and a tooltip (`listTooltip`: "List", "List (private: only you see it)", "The group hiring's list: only its members (…) see it and its tasks"; the Inbox's "In your Inbox: only you see it", without users "In the Inbox: in no list").
 A card shows its list as such a chip before its tags (`.task-tag-list`), but in a view of that one list and By list, where the section says it.
 In a list's view the filter field holds a chip without × for it (`list:<name>`, shown as its name; `chipField`'s `locked`, `.tag-chip-locked`; Backspace skips it), so the page always shows what it says; an embed's `tag=` and `assignee=` words are locked the same way, and a URL `?tag=` stays removable.
 
@@ -1942,7 +1936,7 @@ The due count is My tasks'.
 ### The registry
 
 The lists are in `lists.json` beside the task files (`go/internal/taskfiles/lists.go`; `ListsName`), the shared ones in `_tasks/lists.json`, a user's private ones in `private/<user>/_tasks/lists.json`, read and written under the task files' lock, atomically, committed to git.
-A list for some has its entry in its own folder instead (Where a list for some is kept).
+A group's lists are in its folder's own registry, `groups/<group>/_tasks/lists.json` (How a group's list is kept).
 
 ```json
 {
@@ -1958,7 +1952,7 @@ A list for some has its entry in its own folder instead (Where a list for some i
 }
 ```
 
-Each list is one line: its name and its settings (`view`, `limit`, `group`, `keep`, `labels`, `new`, `noshare`, `home`), with `owners` where it has them (a list for some's `for` is in its own folder), their values text as an embed writes them, a setting that isn't set no key.
+Each list is one line: its name and its settings (`view`, `limit`, `group`, `keep`, `labels`, `new`, `noshare`, `home`), with `owners` where it has them, their values text as an embed writes them, a setting that isn't set no key.
 So a list can be added or changed by hand in one line, and a commit shows the list that changed.
 
 | Key | Holds |
@@ -1981,8 +1975,8 @@ The tasks are plain JSON files in the wiki, committed to git; this is where they
 
 #### The task files
 
-- `_tasks/lists.json` is the lists' registry: the shared lists with their settings, the pins (without users) and the settings of All tasks; with users each user's own in `private/<user>/_tasks/lists.json` (their private lists, their pins, their settings of My tasks). It is no tasks file (The registry).
-- The tasks' files live in the `_tasks/` folder (with users each user's private tasks in `private/<user>/_tasks/`, the same files: Private tasks' files, below): open tasks in `tasks.json`,
+- `_tasks/lists.json` is the lists' registry: the shared lists with their settings, the pins (without users) and the settings of All tasks; with users each user's own in `private/<user>/_tasks/lists.json` (their private lists, their pins, their settings of My tasks), and each group's in `groups/<group>/_tasks/lists.json` (its lists). It is no tasks file (The registry).
+- The tasks' files live in the `_tasks/` folder (with users each user's private tasks in `private/<user>/_tasks/`, and a group's lists' tasks in `groups/<group>/_tasks/`, the same files: Private tasks' files, below): open tasks in `tasks.json`,
   closed ones in `closed.json` (flat JSON arrays, committed to git on change).
 - **Each list has its files in a folder of its own**, `lists/<name>/` in its owner's `_tasks/` (`_tasks/lists/shop/tasks.json`, `closed.json`, `closed-YYYY-MM.json`; `dirOf` in `go/internal/taskfiles`); the tasks in no list (an Inbox's) are in `_tasks/` itself.
   A file is written whole and kept whole in git at every change, so a write costs what its list weighs, not what the wiki weighs (the bench, `tests/bench_tasks.py`: The bench in `docs/spec/testing.md`, measures it at a team's size; Packing the repository in `docs/spec/deployment.md` keeps the repository small).
@@ -2014,7 +2008,7 @@ So a change doesn't read and copy every closed task of the wiki's years, and an 
 While closed tasks wait to be filed (a month has ended, a year's file from before the months: `unfiled`), a write reads every closed file (`readClosedAllStrict`) and files them.
 What needs every task reads everything still: an import and the undo of a delete (for the ids there are), an export, a list's rename or delete, a private list shared.
 
-**A write asks once per list whether its user sees it** (`byOwner` in `go/internal/taskfiles`): a write hands over every open task its user sees, and whom a list is for is a look at its folder (`SeesList`, `forOf`: a stat), so the answer is kept for the write.
+**A write writes only its user's places** (`byOwner` in `go/internal/taskfiles`): a write hands over every open task its user sees, each with its owner, and one of an owner that isn't the user's (`Store.Owners`: the shared files, their own, their groups') is refused: no question per list.
 
 **A file whose tasks a write didn't touch costs a comparison** (`holds` in `go/internal/taskfiles`): the store knows each file's tasks as it parsed or wrote them (`writeTasks`), and a write compares what it would write with that (`Task.Same`) before it reads or encodes anything.
 Changing an open task doesn't read or encode the closed files.

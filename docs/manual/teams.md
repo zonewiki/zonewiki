@@ -88,9 +88,9 @@ A group's pages show **👥 dev** beside their title, and files you upload to th
 Tasks follow the same idea, by list rather than folder:
 
 - A new task starts in your **Inbox**, where only you see it.
-- A list is private, shared with everyone, or for some groups and people.
-  You choose when you make it with **New list…**: the **Private** box, or the **For** field.
-  Its owners change it later with **Who it is for…** in the list's ⋯ menu.
+- A list is private, a group's, or shared with everyone, as a page is: a group's list is kept in the group's folder.
+  You choose when you make it with **New list…**'s **For**: everyone, one of your groups, or only you.
+  Its owners move it later with **Who sees it…** in the list's ⋯ menu.
 - Moving a task into a shared list shares it, and Zone asks first.
   A task you share is assigned to you, unless you say who has it.
 - A shared task can't be made private again: others have seen it.
@@ -138,7 +138,7 @@ You stop seeing its pages and lists at once; its owners can put you back.
 ### Renaming a group
 
 Under **Manage…**, change **Name** and click **Rename**.
-The group's pages move to the new folder, every link to them follows, and the task lists for the old name are for the new one.
+The group's pages and task lists move to the new folder, and every link to them follows.
 The old name stays reserved for this group, so a rename can be undone.
 
 ### Ending a group

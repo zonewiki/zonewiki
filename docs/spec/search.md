@@ -106,7 +106,7 @@ a task's list and status (`Tasks › zoo · done 2026-05-01`).
 
 **It says whose a result is, by sign and name, not by path**: a page of a group of yours reads `👥 dev · edited …` (`👥 dev/specs` in a folder there),
 one of your private pages `🔒 Private/notes · …`,
-a task of a list for some `👥 Tasks › hiring · open`,
+a task of a group's list `👥 Tasks › hiring · open`,
 a private task `🔒 Tasks › …`;
 what is everyone's has no sign.
 
@@ -176,7 +176,7 @@ With users, a search finds what its user may see and nothing else, and what they
   nor in the vocabulary that prefix and typo matching draw on (else a typo that stops matching would tell that a word is in a private page).
 - **A group's pages** are one layer: the keyword index of the shared pages has nothing of a group's;
   its pages are searched along with the shared ones by its members and nobody else, as a user's private pages are by them
-  (`docShared`, `docPlace`, `Index.View`; a list for some's tasks likewise, Lists for some in `docs/spec/tasks.md`),
+  (`docShared`, `docPlace`, `Index.View`; with the group's lists' tasks, A group's lists in `docs/spec/tasks.md`),
   so a group's words, counts and lengths take part in no one else's ranking, and a typo of a word only the group has suggests nothing to anyone else.
   The layer is made when a member first searches after a change in the folder, for all of them, and every further member's search finds it there
   (`TestAMembersIndexOfALargeGroup`; `TestAGroupsPagesAreInItsMembersIndexAlone` in `go/retrieval_test.go`).
@@ -187,7 +187,7 @@ With users, a search finds what its user may see and nothing else, and what they
 
 ### Nothing is kept per viewer
 
-The docs that aren't everyone's are kept by their place (`indexCache.get`, `arrange`; `docPlace`: a user's private pages, a user's private tasks, a group's folder, no one's, the tasks of a shared list that is for some),
+The docs that aren't everyone's are kept by their place (`indexCache.get`, `arrange`; `docPlace`: a user's private pages, a user's private tasks, a group's folder and its lists' tasks, no one's),
 each place's as one layer (`textsearch.Layer`: its docs' lengths and postings, numbered among themselves),
 made when someone who sees the place first searches and kept until one of its docs changes.
 Who sees one doc of a place sees them all (`canSee` asks the place alone, `canSeeTask` of a private task its owner and of a shared one its list), so a search asks once per place.

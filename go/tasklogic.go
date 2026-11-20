@@ -34,10 +34,24 @@ func init() {
 		Private:    func(user asker) bool { return privateFolder(user) != "" && user.HasPrivate() },
 		NoTasks:    func(user asker) bool { return user.Name == visitor },
 		MayWrite:   mayWriteTasks,
-		Member:     listMember,
+		GroupsDir:  groupsDir,
+		Groups:     taskGroups,
 		Commit:     gitCommit,
 		Now:        func() time.Time { return now() },
 	}
+}
+
+// taskGroups: the groups whose lists and tasks user reads and writes (the
+// task store's Groups): those whose places are theirs (groupsFor), every
+// group for Zone itself (taskfiles.Everyone); none without users.
+func taskGroups(user asker) []string {
+	if settings().Users == nil {
+		return nil
+	}
+	if user.Name == taskfiles.Everyone.Name {
+		return knownGroups(settings())
+	}
+	return groupsFor(user)
 }
 
 // closedYearsIn: the years with closed tasks in scope (a list, or ""
@@ -133,7 +147,7 @@ func placeSnapshot(user asker, t *Task, snap jsonObj, lists map[string]ListInfo)
 	case settings().Users != nil:
 		t.List, general = generalListName, true
 	}
-	if t.Owner != "" {
+	if t.Private() {
 		t.Assignee = ""
 	}
 	return general
@@ -145,7 +159,7 @@ func placeSnapshot(user asker, t *Task, snap jsonObj, lists map[string]ListInfo)
 func givenToOthers(user asker, open []*Task) int {
 	n := 0
 	for _, t := range open {
-		if t.Owner == "" && t.Assignee != "" && t.Assignee != user.Name && t.Maker() == user.Name {
+		if !t.Private() && t.Assignee != "" && t.Assignee != user.Name && t.Maker() == user.Name {
 			n++
 		}
 	}
@@ -201,7 +215,7 @@ const (
 // by the minute. The browser has the same rule
 // (TasksCore.newsFor; go/testdata/news_cases.json runs through both).
 func newsFor(t *Task, user asker) News {
-	if user.Name == "" || t.Owner != "" {
+	if user.Name == "" || t.Private() {
 		return News{}
 	}
 	minute := func(at string) string { return runePrefix(at, 16) }
@@ -354,15 +368,15 @@ func mentionsOf(text string) []string {
 // shared task: it is news to them (newsFor), and whoever turned it on is
 // mailed (tellMentioned). Not for naming oneself. Returns who was named.
 func logMentions(t *Task, user asker, before, text string) []string {
-	if t.Owner != "" || user.Name == "" {
+	if privateOwner(t.Owner) || user.Name == "" {
 		return nil
 	}
 	had := mentionsOf(before)
 	var named []string
 	for _, name := range mentionsOf(text) {
-		// (In a list for some, a name that is none of them is text: they
-		// don't see the task.)
-		if name != user.Name && !slices.Contains(had, name) && taskFiles.SeesList(asUser(name), t.List) {
+		// (In a group's list, a name of someone not in the group is text:
+		// they don't see the task.)
+		if name != user.Name && !slices.Contains(had, name) && ownerPlace(t.Owner).sees(asUser(name)) {
 			logEvent(t, user.Name, "mentioned", "", name)
 			named = append(named, name)
 		}

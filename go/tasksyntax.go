@@ -413,11 +413,11 @@ func tagParamMatches(t *Task, raw string) bool {
 
 // assigneeGone: the shared task's assignee no longer has it
 // (TasksCore.assigneeGone): someone who can no longer be given tasks, or
-// who is none of those its list is for (a list narrowed since, a group
-// they left) and so doesn't see it. The name stays on the task: back among
-// them, it is theirs as before; until then it counts as no one's.
+// who doesn't see it (a group's list, of a group they left, or that the
+// list moved to since). The name stays on the task: back in the group, it is
+// theirs as before; until then it counts as no one's.
 func assigneeGone(t *Task) bool {
-	return t.Assignee != "" && (!settings().assignable(t.Assignee) || !taskFiles.SeesList(asUser(t.Assignee), t.List))
+	return t.Assignee != "" && (!settings().assignable(t.Assignee) || !ownerPlace(t.Owner).sees(asUser(t.Assignee)))
 }
 
 // assigneeIs: t's assignee is what word names, for user: a user's name,
@@ -427,7 +427,7 @@ func assigneeGone(t *Task) bool {
 func assigneeIs(t *Task, word string, user asker) bool {
 	switch word {
 	case "none":
-		return t.Owner == "" && (t.Assignee == "" || assigneeGone(t))
+		return !t.Private() && (t.Assignee == "" || assigneeGone(t))
 	case "me":
 		return user.Name != "" && (t.Assignee == user.Name || t.Owner == user.Name)
 	}
@@ -680,7 +680,7 @@ func (f taskFilter) matches(t *Task, user asker) bool {
 	}
 	// Who made it: a private task is its user's own making.
 	maker := t.Maker()
-	if maker == "" && t.Owner != "" {
+	if maker == "" && t.Private() {
 		maker = user.Name
 	}
 	by := func(w string) bool {

@@ -538,9 +538,9 @@ func checkTagRename(user asker, tag, newName string, merge bool) (*tagPlan, erro
 	for _, f := range files {
 		for _, t := range f.tasks {
 			// By the file's owner (a task read from its file doesn't say whose it is).
-			tags, visible := taskTagsLower(t), ownsTasks(user, f.owner) || f.owner == "" && taskFiles.SeesList(user, t.List)
+			tags, visible := taskTagsLower(t), ownerPlace(f.owner).sees(user)
 			seen = seen || visible && tags[old]
-			shared = shared || f.owner == "" && tags[old]
+			shared = shared || !privateOwner(f.owner) && tags[old]
 			taken = taken || visible && tags[strings.ToLower(name)]
 		}
 	}

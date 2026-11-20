@@ -631,12 +631,16 @@ func taskSearchDocs() []*SearchDoc {
 	return docs
 }
 
-// ownerRank: the shared tasks before a user's own, as the store reads them.
+// ownerRank: the shared tasks before a group's and a user's own, as the
+// store reads them (Store.Owners).
 func ownerRank(owner string) int {
-	if owner == "" {
+	switch {
+	case owner == "":
 		return 0
+	case privateOwner(owner):
+		return 1
 	}
-	return 1
+	return 2
 }
 
 // taskDoc: the search doc of the task t (only read here), which is in the
@@ -930,23 +934,18 @@ type indexCache struct {
 }
 
 // docPlace: whose docs that aren't everyone's are: the place of a page
-// (a user's private folder, a group's, no one's), a user's private tasks,
-// or the tasks of a shared list that is for some (list). Who sees one doc
-// of a place sees them all (canSee asks the place alone, canSeeTask of a
-// private task its owner and of a shared one its list), so a place's docs
-// are indexed together and searched by whoever sees the place.
+// (a user's private folder, a group's, no one's) or of a task (ownerPlace:
+// a user's private tasks, a group's). Who sees one doc of a place sees them
+// all (canSee and canSeeTask ask the place alone), so a place's docs are
+// indexed together and searched by whoever sees the place.
 type docPlace struct {
 	place
 	tasks bool
-	list  string
 }
 
 func placeOfDoc(d *SearchDoc) docPlace {
-	if d.isTask() && d.Task.Owner == "" {
-		return docPlace{tasks: true, list: d.Task.List}
-	}
 	if d.isTask() {
-		return docPlace{place: place{ofUser, d.Task.Owner}, tasks: true}
+		return docPlace{place: ownerPlace(d.Task.Owner), tasks: true}
 	}
 	return docPlace{place: placeOf(d.Slug)}
 }
@@ -973,22 +972,12 @@ func (l *docLayer) index() *textsearch.Layer {
 func maxChanges(n int) int { return max(32, n/50) }
 
 // docShared: d is everyone's: a page in no private or group's folder, a
-// task that is not private and in no list for some (forSome: those lists'
-// names, listsForSome). Always, without users.
-func docShared(d *SearchDoc, forSome []string) bool {
+// task kept in the shared files. Always, without users.
+func docShared(d *SearchDoc) bool {
 	if d.isTask() {
-		return d.Task.Owner == "" && !slices.Contains(forSome, d.Task.List)
+		return ownerPlace(d.Task.Owner).shared()
 	}
 	return placeOf(d.Slug).shared()
-}
-
-// listsForSome: the shared lists that are for some now (none without
-// users): their tasks are their members', in search as everywhere.
-func listsForSome() []string {
-	if settings().Users == nil {
-		return nil
-	}
-	return taskFiles.ForSome()
 }
 
 // usersKey: which users there are; what is private depends on it (nothing is
@@ -1008,16 +997,15 @@ func usersKey() string {
 func (c *indexCache) get(rq *Req, docs []*SearchDoc) *docIndex {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// Who the docs are split for: the users, and the lists that are for
-	// some (a list narrowed or widened changes no task, so no doc).
-	forSome := listsForSome()
-	key := usersKey() + "\x00" + strings.Join(forSome, "\x00")
+	// Who the docs are split for: the users (a list moved to another place
+	// moves its tasks' files, so its docs are other ones).
+	key := usersKey()
 	usersChanged := c.base == nil || key != c.users
 	if usersChanged || !slices.Equal(c.all, docs) {
 		c.users, c.all = key, slices.Clone(docs)
 		var shared []*SearchDoc
 		for _, d := range docs {
-			if docShared(d, forSome) {
+			if docShared(d) {
 				shared = append(shared, d)
 			}
 		}
@@ -1612,23 +1600,19 @@ func hiddenDoc(rq *Req, d *SearchDoc) bool {
 	return hiddenPage(rq, d.Slug) || visitorSkips(rq, d.Slug)
 }
 
-// docHider: hiddenDoc for the docs of one search, asking about each list
-// once. Who sees a task depends on its owner and its list alone
-// (canSeeTask), and a shared list's answer looks at its folder (forOf: a
-// stat of its list.json under a lock all share); asked per task it was half
-// of a search's time at a team's size, and searches at once queued on it.
-// Not for more than one search: a list narrowed meanwhile counts from the
-// next. Not safe for use by several goroutines.
+// docHider: hiddenDoc for the docs of one search, asking about each task
+// owner once: who sees a task depends on its place alone (canSeeTask), and
+// a group's place asks the settings. Not safe for use by several goroutines.
 func docHider(rq *Req) func(*SearchDoc) bool {
-	byList := map[string]bool{} // a shared task's list: hidden
+	byOwner := map[string]bool{} // a task's owner: hidden
 	return func(d *SearchDoc) bool {
-		if !d.isTask() || rq == nil || d.Task.Owner != "" {
-			return hiddenDoc(rq, d) // a page, or a private task: no folder looked at
+		if !d.isTask() || rq == nil {
+			return hiddenDoc(rq, d)
 		}
-		hidden, ok := byList[d.Task.List]
+		hidden, ok := byOwner[d.Task.Owner]
 		if !ok {
 			hidden = hiddenDoc(rq, d)
-			byList[d.Task.List] = hidden
+			byOwner[d.Task.Owner] = hidden
 		}
 		return hidden
 	}
@@ -1667,16 +1651,15 @@ func resultMeta(d *SearchDoc, names map[string]ListInfo) string {
 			status += " " + runePrefix(d.Task.ClosedAt, 10)
 		}
 		// Whose it is, as on its card and its list: 🔒 the user's own, 👥 a
-		// list for some's (no result shows a task of anyone else's).
+		// group's (no result shows a task of anyone else's).
 		where := "Tasks"
-		l := taskList(d.Task, names)
-		if l != "" {
+		if l := taskList(d.Task, names); l != "" {
 			where += " › " + l
 		}
-		switch {
-		case d.Task.Owner != "":
+		switch p := ownerPlace(d.Task.Owner); p.kind {
+		case ofUser:
 			where = "🔒 " + where
-		case len(names[l].For) > 0:
+		case ofGroup:
 			where = "👥 " + where
 		}
 		return where + " · " + status

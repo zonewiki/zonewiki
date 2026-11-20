@@ -203,7 +203,7 @@ func canHaveNews(user string) map[string]bool {
 // task's file still has (from before the looks were kept apart) stays
 // unless its user has looked since.
 func historyWithSeen(t *Task) []HistoryEntry {
-	if t.Owner != "" {
+	if t.Private() {
 		return t.History
 	}
 	seen := seenOf(t.ID)

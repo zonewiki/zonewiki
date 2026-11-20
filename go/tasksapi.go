@@ -435,7 +435,7 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 		general = placeSnapshot(user, t, snap, lists) || general
 		// Its assignee as any write takes one: one of its list's members,
 		// unless it comes back as Zone had it (the undo of a delete).
-		if !known && t.Owner == "" && assigneeGone(t) {
+		if !known && !t.Private() && assigneeGone(t) {
 			t.Assignee = ""
 		}
 		existing[strings.ToLower(t.ID)] = true
@@ -606,7 +606,7 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 		}
 		// Its assignee as any write takes one: one of its list's members,
 		// unless it comes back as Zone had it.
-		if !known && t.Owner == "" && assigneeGone(t) {
+		if !known && !t.Private() && assigneeGone(t) {
 			t.Assignee, lost = "", true
 		}
 		if lost {

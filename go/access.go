@@ -450,62 +450,58 @@ const readOnlyMsg = "You can read this wiki but not change it: you are a viewer.
 // errReadOnly: a viewer's change to something shared, refused.
 var errReadOnly = refuseAs(refusedReadOnly, readOnlyMsg)
 
-// canSeeTask: user may see the task t: one of their own private ones, or a
-// shared one, unless its list is for some and they are none of them (the
-// list's folder says for whom: taskFiles.SeesList, which the store's own
-// readers ask too; this is for what holds every user's tasks, the search
-// index and a task found by its id).
-// A visitor sees no task.
-func canSeeTask(user asker, t *Task) bool {
-	if user.Name == visitor {
-		return false
+// ownerPlace: the place of the tasks and lists of owner, as the task store
+// files them (Store.Dir): "" everyone's, a user's name their private place,
+// "@<group>" (taskfiles.GroupOwner) the group's: where a task is kept is
+// who sees it, as for a page (placeOf). Without users nothing is anyone's.
+func ownerPlace(owner string) place {
+	if settings().Users == nil || owner == "" {
+		return place{}
 	}
-	if t.Owner != "" {
-		return t.Owner == user.Name && user.HasPrivate()
-	}
-	return taskFiles.SeesList(user, t.List)
-}
-
-// canSeeList: user may see the list l and the tasks in it: their own
-// private one, or a shared list, unless it is for some (ListInfo.For) and
-// they are none of them: to anyone else such a list is no list, as another
-// user's private one. A visitor sees no list. What lists, counts or names a
-// list asks (taskLists gives only these).
-func canSeeList(user asker, l ListInfo) bool {
-	if user.Name == visitor {
-		return false
-	}
-	if l.Owner != "" {
-		return l.Owner == user.Name && user.HasPrivate()
-	}
-	return len(l.For) == 0 || listMember(user, l.For)
-}
-
-// listMember: user is one of those a list is for: named, or in a group it
-// names (@dev: Groups in docs/spec/users.md). A user who can't use the
-// wiki (disabled, removed) is none; nor is an admin by being admin, as an
-// admin sees no private page.
-func listMember(user asker, who []string) bool {
-	s := settings()
-	if s.Users == nil {
-		return true // without users everyone sees everything: a list for some from when there were users, too
-	}
-	if u := s.Users[user.Name]; u == nil || u.Disabled {
-		return false
-	}
-	for _, w := range who {
-		if group, ok := strings.CutPrefix(w, "@"); ok && inGroup(user, group) || w == user.Name {
-			return true
+	if g, ok := taskfiles.GroupOf(owner); ok {
+		if groupNameRE.MatchString(g) {
+			return place{ofGroup, g}
 		}
+		return place{kind: ofNoOne}
 	}
-	return false
+	return place{ofUser, owner}
 }
 
-// listMembers: the users a list for who is for, A–Z.
-func listMembers(who []string) []string {
+// privateOwner: owner is a user's: their tasks and lists are theirs alone
+// (a group's are shared, with its members).
+func privateOwner(owner string) bool {
+	_, group := taskfiles.GroupOf(owner)
+	return owner != "" && !group
+}
+
+// canSeeTask: user may see the task t: who sees its place (ownerPlace):
+// everyone a shared one, a user their own, a group's members the group's
+// (an admin who is none of them doesn't, as an admin sees no private page).
+// The store reads only the places a user sees (Store.Owners); this is for
+// what holds every user's tasks, the search index and a task found by its
+// id. A visitor sees no task.
+func canSeeTask(user asker, t *Task) bool {
+	return user.Name != visitor && ownerPlace(t.Owner).sees(user)
+}
+
+// canSeeList: user may see the list l and the tasks in it: who sees its
+// place, as for its tasks. To anyone else it is no list. A visitor sees no
+// list. What lists, counts or names a list asks (taskLists gives only these).
+func canSeeList(user asker, l ListInfo) bool {
+	return user.Name != visitor && ownerPlace(l.Owner).sees(user)
+}
+
+// listMembers: the users who see a group's list l and can be given its
+// tasks, A–Z: the group's members; none for any other list (a shared one is
+// everyone's, a private one its user's alone).
+func listMembers(l ListInfo) []string {
+	g := l.Group()
+	if g == "" {
+		return nil
+	}
 	var out []string
 	for _, name := range sortedKeys(settings().Users) {
-		if listMember(asUser(name), who) {
+		if u := settings().Users[name]; !u.Disabled && inGroup(asUser(name), g) {
 			out = append(out, name)
 		}
 	}
@@ -608,11 +604,13 @@ func canSeePath(user asker, rel string) bool {
 	if p := placeOf(rel); !p.shared() {
 		return p.sees(user)
 	}
-	// A list for some: its folder's files (the tasks, the list's entry) are
-	// its members', also what it left there when it was deleted or renamed.
+	// A former list for some's old folder (its history, which git keeps at
+	// the old paths): its members' (formerListFor).
 	if rest, ok := strings.CutPrefix(rel, taskfiles.DirName+"/"+taskfiles.ListsDirName+"/"); ok {
-		if name, _, inFolder := strings.Cut(rest, "/"); inFolder && !taskFiles.SeesList(user, name) {
-			return false
+		if name, _, inFolder := strings.Cut(rest, "/"); inFolder {
+			if who := formerListFor(name); len(who) > 0 && !formerMember(user, who) {
+				return false
+			}
 		}
 	}
 	// A task's files: who sees the task.
@@ -846,18 +844,18 @@ func hiddenAs(name string) string {
 // in a private or a group's folder, or of a task's files (privateNameRE,
 // its name going on past a space as nameGoesOn says).
 //
-// Nor does it name a list for some to who is none of its members: a commit
-// that narrowed one ("List #hiring is for @hiring, anna"), pinned it for
-// everyone or renamed it writes the registry everyone reads, so it is in
-// everyone's history; to anyone else it says only that a list changed.
+// Nor does it name a group's list to who is none of the group: a commit
+// about one that writes something everyone sees too (a list moved to the
+// group, renamed in the pages that show it) is in everyone's history; to
+// anyone else it says only that a group's list changed.
 func hideNames(user asker, msg string, hidden []string) string {
 	if settings().Users == nil {
 		return msg
 	}
 	if strings.Contains(msg, "#") {
-		for _, name := range taskFiles.ForSome() {
-			if namesList(msg, name) && !taskFiles.SeesList(user, name) {
-				return "A list for some changed"
+		for name, group := range groupListNames() {
+			if namesList(msg, name) && !inGroup(user, group) {
+				return "A group's list changed"
 			}
 		}
 	}

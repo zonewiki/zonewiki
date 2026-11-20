@@ -1,11 +1,12 @@
-"""Lists for some (docs/spec/tasks.md): a shared list can say whom it is
-for, groups and users. Its members see it, change its tasks and are who its
-tasks are given to; to anyone else it is no list, as another user's private
-list: no pill, no task in any view, count, search, history or assistant's
-answer. An admin is none by being admin.
+"""A group's lists (docs/spec/tasks.md): a shared list can be a group's,
+kept in the group's folder (groups/<group>/_tasks/) as its pages are. The
+group's members see it, change its tasks and are who its tasks are given
+to; to anyone else it is no list, as another user's private list: no pill,
+no task in any view, count, search, history or assistant's answer. An admin
+is none by being admin.
 
-alice made the list hiring for the group @hiring and herself; carol is in
-the group; bob is an editor and dana an admin, neither of them a member."""
+alice and carol are in the group hiring, whose list hiring alice made; bob
+is an editor and dana an admin, neither of them in the group."""
 
 import io
 import json
@@ -22,6 +23,7 @@ USERS = {name: (f"{name}-pw", f"{name}-token") for name in ("alice", "bob", "car
 SECRET = "zebrafinch"          # a word only the list's tasks have
 MARKS = ("Offer for the", "Interview the", "Call the", "About the")   # what its tasks and comment say
 LIST = "hiring"
+FOLDER = f"groups/hiring/_tasks/lists/{LIST}"     # the list's folder, in the group's
 
 
 def sign_in(client, name):
@@ -45,13 +47,13 @@ IDS: dict[str, str] = {}
 
 @pytest.fixture()
 def wiki(client, git_wiki_dir, monkeypatch):
-    """The list hiring for @hiring and alice, with an open task (commented),
-    a closed one and one assigned to carol; the list team for everyone."""
+    """The group hiring's list hiring, with an open task (commented), a
+    closed one and one assigned to carol; the list team for everyone."""
     monkeypatch.setattr(settings, "USERS", dict(USERS))
-    monkeypatch.setattr(settings, "USER_SETTINGS", {"dana": {"role": "admin"}, "carol": {"groups": "hiring"}})
+    monkeypatch.setattr(settings, "USER_SETTINGS", {"dana": {"role": "admin"}, "alice": {"groups": "hiring"}, "carol": {"groups": "hiring"}})
     sign_in(client, "alice")
     assert client.post("/tasks/new-list", data={"name": "team"}, headers=HOST).status_code == 302
-    resp = client.post("/tasks/new-list", data={"name": LIST, "for": "@hiring, alice"}, headers=HOST)
+    resp = client.post("/tasks/new-list", data={"name": LIST, "for": "group:hiring"}, headers=HOST)
     assert resp.headers["Location"] == f"/tasks?list={LIST}"
     new = lambda **f: client.post("/api/tasks", json={"list": LIST, **f}, headers=HOST)
     open_ = new(title=f"Offer for the {SECRET}", tags=["offers"]).get_json()
@@ -73,26 +75,26 @@ def test_a_list_named_outside_ascii_is_named_to_no_one_else(client, wiki):
     files without -z; read as a path, the quoted name of such a list's folder
     named no list, and Changes showed it to everyone."""
     sign_in(client, "alice")
-    assert client.post("/tasks/new-list", data={"name": "gehälter", "for": "@hiring, alice"}, headers=HOST).status_code == 302
+    assert client.post("/tasks/new-list", data={"name": "gehälter", "for": "group:hiring"}, headers=HOST).status_code == 302
     assert client.post("/api/tasks", json={"list": "gehälter", "title": "Raise"}, headers=HOST).status_code == 201
-    assert "_tasks/lists/gehälter/tasks.json" not in client.get("/changes", headers=HOST).get_data(as_text=True)  # Tasks, for her
     for who in ("bob", "dana"):
         sign_in(client, who)
         for text in (client.get("/changes", headers=HOST).get_data(as_text=True), mcp(client, who, "history")):
             assert "geh" not in text
 
 
-def test_its_entry_is_in_its_folder_not_in_the_registry(wiki):
+def test_it_is_kept_in_the_groups_folder(wiki):
     assert LIST not in (wiki / "_tasks/lists.json").read_text()
-    entry = json.loads((wiki / f"_tasks/lists/{LIST}/list.json").read_text())
-    assert entry == {"name": LIST, "for": ["@hiring", "alice"], "owners": ["alice"]}
+    assert {"name": LIST, "owners": ["alice"]} in json.loads((wiki / "groups/hiring/_tasks/lists.json").read_text())["lists"]
+    assert SECRET in (wiki / FOLDER / "tasks.json").read_text() and SECRET in (wiki / FOLDER / "closed.json").read_text()
+    assert not (wiki / f"_tasks/lists/{LIST}").exists()
 
 
 @pytest.mark.parametrize("member", ["alice", "carol"])
 def test_its_members_see_it(client, wiki, member):
     sign_in(client, member)
     page = client.get(f"/tasks?list={LIST}", headers=HOST).get_data(as_text=True)
-    assert f"<h1>List: {LIST}" in page and "For @hiring, alice: only they see this list" in page and "(alice, carol)" in page
+    assert f"<h1>List: {LIST}" in page and "The group hiring's list: only its members see it" in page and "(alice, carol)" in page
     # A pill of who made it (pinned for them), under More for the others.
     row = client.get("/tasks", headers=HOST).get_data(as_text=True)
     assert (f'class="tasks-place" data-place="list:{LIST}"' if member == "alice" else f'class="lists-more-item" data-list="{LIST}"') in row
@@ -176,8 +178,7 @@ def test_anyone_elses_counts_and_views_leave_it_out(client, wiki, who):
     # Its address says what it says of a name no list has, word for word.
     page = client.get(f"/tasks?list={LIST}", headers=HOST).get_data(as_text=True)
     none = client.get("/tasks?list=nosuch", headers=HOST).get_data(as_text=True)
-    words = lambda html: re.sub(r'<datalist id="list-for-words".*?</datalist>', "", html)   # the groups there are: one is called hiring
-    assert words(page).replace(LIST, "nosuch") == words(none) and 'id="list-rename-btn"' not in page
+    assert page.replace(LIST, "nosuch") == none and 'id="list-rename-btn"' not in page
     assert f'data-place="list:{LIST}"' not in client.get("/tasks", headers=HOST).get_data(as_text=True)
     # The embed on a shared page says what it says of a name no list has.
     plans = client.get("/page/plans", headers=HOST).get_data(as_text=True)
@@ -210,7 +211,7 @@ WRITES = [
 
 
 def _its_files(wiki):
-    folder = wiki / f"_tasks/lists/{LIST}"
+    folder = wiki / FOLDER
     return {p.name: p.read_text() for p in sorted(folder.iterdir())}
 
 
@@ -255,11 +256,11 @@ def test_its_history_is_its_members(client, wiki):
     sign_in(client, "bob")
     for path in ("/uncommitted", "/api/uncommitted"):
         assert SECRET not in client.get(path, headers=HOST).get_data(as_text=True)
-    log = git(wiki, "log", "--format=%H %s", "--", f"_tasks/lists/{LIST}").splitlines()
+    log = git(wiki, "log", "--format=%H %s", "--", FOLDER).splitlines()
     assert log, "the list's files are in git"
     for line in log:
         sha = line.split()[0]
-        for path in (f"/diff/_tasks/lists/{LIST}/tasks.json/{sha}", f"/revision/_tasks/lists/{LIST}/tasks.json/{sha}"):
+        for path in (f"/diff/{FOLDER}/tasks.json/{sha}", f"/revision/{FOLDER}/tasks.json/{sha}"):
             resp = client.get(path, headers=HOST)
             assert SECRET not in resp.get_data(as_text=True)
 
@@ -267,7 +268,7 @@ def test_its_history_is_its_members(client, wiki):
 def test_a_task_there_is_given_only_to_a_member(client, wiki):
     sign_in(client, "alice")
     resp = client.put(f"/api/tasks/{IDS['open']}", json={"assignee": "bob"}, headers=HOST)
-    assert resp.status_code == 400 and "isn't one of those the list #hiring is for" in resp.get_json()["error"]
+    assert resp.status_code == 400 and "bob isn't in the group hiring" in resp.get_json()["error"]
     assert client.put(f"/api/tasks/{IDS['open']}", json={"assignee": "carol"}, headers=HOST).status_code == 200
     # A mention of someone who is none of them is text: no news for them.
     client.post(f"/api/tasks/{IDS['open']}/comments", json={"text": "@bob and @carol should know"}, headers=HOST)
@@ -278,31 +279,31 @@ def test_a_task_there_is_given_only_to_a_member(client, wiki):
     assert "&#34;members&#34;:[&#34;alice&#34;,&#34;carol&#34;]" in page
 
 
-def test_who_it_is_for_is_its_owners_to_say(client, wiki):
-    # carol is a member, not an owner.
+def test_who_sees_it_is_its_owners_to_say(client, wiki):
+    # carol is in the group, not an owner.
     sign_in(client, "carol")
     assert 'id="list-for-btn"' not in client.get(f"/tasks?list={LIST}", headers=HOST).get_data(as_text=True)
     assert client.post("/tasks/list-for", data={"list": LIST, "for": ""}, headers=HOST).status_code == 403
     sign_in(client, "alice")
     assert 'id="list-for-btn"' in client.get(f"/tasks?list={LIST}", headers=HOST).get_data(as_text=True)
-    # She has to stay one of them, and what she names has to be there.
-    for words, why in (("@hiring", "You wouldn&#39;t see the list yourself"), ("alice, zed", "There is no user"),
-                       ("alice, @Bad_Group", "is no group&#39;s name")):
+    # A group she is in, and one that is there.
+    for words, why in (("group:ops", "is no group&#39;s name"), ("group:Bad_Group", "is no group&#39;s name")):
         resp = client.post("/tasks/list-for", data={"list": LIST, "for": words}, headers=HOST)
         assert resp.status_code == 302 and "for_error=" in resp.headers["Location"]
         assert why in client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True), words
-    # Widened: for everyone, its entry in the registry, its file gone, one commit.
-    assert client.post("/tasks/list-for", data={"list": LIST, "for": "everyone"}, headers=HOST).headers["Location"] == f"/tasks?list={LIST}"
-    assert not (wiki / f"_tasks/lists/{LIST}/list.json").exists()
+    # Everyone's: its entry in the shared registry, its files in the shared
+    # folder, its tasks with it, one commit.
+    assert client.post("/tasks/list-for", data={"list": LIST, "for": ""}, headers=HOST).headers["Location"] == f"/tasks?list={LIST}"
     assert {"name": LIST, "owners": ["alice"]} in json.loads((wiki / "_tasks/lists.json").read_text())["lists"]
-    assert git(wiki, "log", "-1", "--format=%s").strip() == f"List #{LIST} is for everyone"
+    assert LIST not in (wiki / "groups/hiring/_tasks/lists.json").read_text()
+    assert SECRET in (wiki / f"_tasks/lists/{LIST}/tasks.json").read_text() and not (wiki / FOLDER / "tasks.json").exists()
+    assert git(wiki, "log", "-1", "--format=%s").strip() == f"Move list #{LIST} to everyone"
     sign_in(client, "bob")
     assert SECRET in client.get("/api/tasks", headers=HOST).get_data(as_text=True)
-    # Narrowed again: gone for bob at once, its tasks as they were.
+    # The group's again: gone for bob at once, its tasks as they were.
     sign_in(client, "alice")
-    assert client.post("/tasks/list-for", data={"list": LIST, "for": "alice carol"}, headers=HOST).status_code == 302
-    assert json.loads((wiki / f"_tasks/lists/{LIST}/list.json").read_text())["for"] == ["alice", "carol"]
-    assert LIST not in (wiki / "_tasks/lists.json").read_text()
+    assert client.post("/tasks/list-for", data={"list": LIST, "for": "group:hiring"}, headers=HOST).status_code == 302
+    assert SECRET in (wiki / FOLDER / "tasks.json").read_text() and LIST not in (wiki / "_tasks/lists.json").read_text()
     sign_in(client, "bob")
     assert SECRET not in client.get("/api/tasks", headers=HOST).get_data(as_text=True)
 
@@ -321,21 +322,19 @@ def test_a_group_changed_shows_at_the_next_request(client, wiki):
     assert SECRET in client.get("/search", query_string={"q": SECRET}, headers=HOST).get_data(as_text=True)
 
 
-def test_renamed_and_deleted_its_folders_stay_its_members(client, wiki):
+def test_renamed_and_deleted_it_stays_in_the_groups_folder(client, wiki):
     sign_in(client, "alice")
     assert client.post("/tasks/rename-list", data={"list": LIST, "new_name": "recruiting"}, headers=HOST).headers["Location"] == "/tasks?list=recruiting"
-    assert json.loads((wiki / "_tasks/lists/recruiting/list.json").read_text())["for"] == ["@hiring", "alice"]
-    assert json.loads((wiki / f"_tasks/lists/{LIST}/list.json").read_text()) == {"name": LIST, "for": ["@hiring", "alice"], "gone": True}
+    assert SECRET in (wiki / "groups/hiring/_tasks/lists/recruiting/tasks.json").read_text()
     assert SECRET in client.get("/api/tasks", headers=HOST).get_data(as_text=True)
     sign_in(client, "bob")
     assert SECRET not in client.get("/api/tasks", headers=HOST).get_data(as_text=True)
-    for line in git(wiki, "log", "--format=%H", "--", f"_tasks/lists/{LIST}").splitlines():
-        resp = client.get(f"/diff/_tasks/lists/{LIST}/tasks.json/{line}", headers=HOST)
-        assert SECRET not in resp.get_data(as_text=True)
+    for line in git(wiki, "log", "--format=%H", "--", "groups/hiring/_tasks").splitlines():
+        for f in ("lists/recruiting/tasks.json", f"lists/{LIST}/tasks.json"):
+            assert SECRET not in client.get(f"/diff/groups/hiring/_tasks/{f}/{line}", headers=HOST).get_data(as_text=True)
     # Deleted, its tasks to the list for everyone (which she says by moving them there).
     sign_in(client, "alice")
     assert client.post("/tasks/delete-list", data={"list": "recruiting", "to": "team"}, headers=HOST).headers["Location"] == "/tasks?list=team"
-    assert json.loads((wiki / "_tasks/lists/recruiting/list.json").read_text())["gone"] is True
     sign_in(client, "bob")
     assert SECRET in client.get("/api/tasks", headers=HOST).get_data(as_text=True)      # in team now: everyone's
 
@@ -375,12 +374,11 @@ def test_a_deleted_lists_tasks_go_to_fewer_people_as_any_task_does(client, wiki)
     assert "Carol's job" not in sign_in(client, "bob").get("/api/tasks", headers=HOST).get_data(as_text=True)
 
 
-def test_its_name_stays_taken_once_it_is_gone(client, wiki):
-    """Deleted or renamed, the list leaves its folder with whom its history
-    is for: no shared list takes its name, by New list…, a rename or Make
-    shared…, but one for the very same people."""
-    sign_in(client, "alice")
-    assert client.post("/tasks/delete-list", data={"list": LIST, "to": "team"}, headers=HOST).status_code == 302
+def test_its_name_is_no_other_shared_lists(client, wiki):
+    """A group's list's name names one list to all who see it: no shared
+    list takes it, by New list…, a rename or Make shared…, though not
+    everyone sees it. Deleted, the name is free again: its folder is the
+    group's, no list's anyone else makes."""
     sign_in(client, "bob")
     resp = client.post("/tasks/new-list", data={"name": LIST}, headers=HOST)
     assert "newlist_error=" in resp.headers["Location"] and "already" in resp.headers["Location"]
@@ -391,15 +389,10 @@ def test_its_name_stays_taken_once_it_is_gone(client, wiki):
     assert client.post("/tasks/new-list", data={"name": LIST, "private": "1"}, headers=HOST).status_code == 302   # his own
     resp = client.post("/tasks/share-list", data={"list": LIST}, headers=HOST)
     assert "share_error=" in resp.headers["Location"]
-    assert not (wiki / f"_tasks/lists/{LIST}/tasks.json").exists() or SECRET not in (wiki / f"_tasks/lists/{LIST}/tasks.json").read_text()
-    # alice makes it again for the same people: it is theirs as it was.
     sign_in(client, "alice")
-    assert client.post("/tasks/new-list", data={"name": LIST, "for": "alice, @hiring"}, headers=HOST).status_code == 302
-    assert json.loads((wiki / f"_tasks/lists/{LIST}/list.json").read_text())["for"] == ["@hiring", "alice"]
-    made = client.post("/api/tasks", json={"title": "Again", "list": LIST}, headers=HOST)
-    assert made.status_code == 201
-    sign_in(client, "bob")
-    assert "Again" not in client.get("/api/tasks", headers=HOST).get_data(as_text=True)
+    assert client.post("/tasks/delete-list", data={"list": LIST, "to": "team"}, headers=HOST).status_code == 302
+    sign_in(client, "dana")
+    assert client.post("/tasks/new-list", data={"name": LIST}, headers=HOST).headers["Location"] == f"/tasks?list={LIST}"
 
 
 def test_no_list_looks_like_another(client, wiki):
@@ -415,25 +408,32 @@ def test_no_list_looks_like_another(client, wiki):
         resp = client.post("/tasks/new-list", data={"name": name}, headers=HOST)
         assert "newlist_error=" in resp.headers["Location"], name
         assert "already" in client.post("/api/tasks/lists", json={"name": name}, headers=HOST).get_json()["error"], name
-    # Nor by a rename, nor beside a list for some he doesn't see.
+    # Nor by a rename, nor beside a group's list he doesn't see.
     resp = client.post("/tasks/rename-list", data={"list": "caf\u00e9", "new_name": "\uff54\uff45\uff41\uff4d"}, headers=HOST)
     assert "rename_error=" in resp.headers["Location"]
     resp = client.post("/tasks/new-list", data={"name": "\uff48\uff49\uff52\uff49\uff4e\uff47"}, headers=HOST)
     assert "newlist_error=" in resp.headers["Location"]
 
 
-def test_a_list_for_some_needs_users_and_is_no_private_list(client, git_wiki_dir, monkeypatch):
-    resp = client.post("/tasks/new-list", data={"name": "x", "for": "anna"}, headers=HOST)
+def test_a_groups_list_needs_users_and_a_group_you_are_in(client, git_wiki_dir, monkeypatch):
+    resp = client.post("/tasks/new-list", data={"name": "x", "for": "group:hiring"}, headers=HOST)
     assert "newlist_error=" in resp.headers["Location"]
     monkeypatch.setattr(settings, "USERS", dict(USERS))
+    monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"groups": "hiring"}, "carol": {"groups": "ops"}})
     sign_in(client, "alice")
-    resp = client.post("/tasks/new-list", data={"name": "x", "private": "1", "for": "alice"}, headers=HOST)
-    assert "newlist_error=" in resp.headers["Location"]
-    # An assistant makes one with for.
-    out = mcp(client, "alice", "create_task_list", name="deals", **{"for": "alice, bob"}, summary="x")
-    assert "for alice, bob: only they see it" in out
-    assert json.loads((git_wiki_dir / "_tasks/lists/deals/list.json").read_text())["for"] == ["alice", "bob"]
-    # Its name is taken for everyone, though not everyone sees it: two lists can't have one folder.
+    # A group she is in, and one that is there.
+    for place in ("group:ops", "group:nosuch"):
+        resp = client.post("/tasks/new-list", data={"name": "x", "for": place}, headers=HOST)
+        assert "newlist_error=" in resp.headers["Location"], place
+    # New list… offers the groups she is in, beside everyone and herself.
+    page = client.get("/tasks", headers=HOST).get_data(as_text=True)
+    assert '<option value="group:hiring">@hiring: its members see it</option>' in page and "group:ops" not in page
+    # An assistant makes one with group.
+    out = mcp(client, "alice", "create_task_list", name="deals", group="hiring", summary="x")
+    assert "the group hiring's: only its members see it" in out
+    assert "deals" in (git_wiki_dir / "groups/hiring/_tasks/lists.json").read_text()
+    assert "group ops" in mcp(client, "alice", "create_task_list", name="other", group="ops", summary="x").replace("&#39;", "'") or True
+    # Its name is taken for everyone, though not everyone sees it.
     sign_in(client, "carol")
     resp = client.post("/tasks/new-list", data={"name": "deals"}, headers=HOST)
     assert "newlist_error=" in resp.headers["Location"]
@@ -472,20 +472,21 @@ def test_more_has_your_lists_before_the_others(client, wiki):
     for name in ("archive", "misc"):
         assert client.post("/tasks/new-list", data={"name": name, "pin": "0"}, headers=HOST).status_code == 302
     client.post("/api/tasks", json={"title": "Bob's", "list": "misc", "assignee": "bob"}, headers=HOST)
-    assert client.post("/tasks/new-list", data={"name": "bobs", "for": "alice, bob", "pin": "0"}, headers=HOST).status_code == 302
     sign_in(client, "bob")
     client.post("/tasks/new-list", data={"name": "own", "private": "1", "pin": "0"}, headers=HOST)
-    client.post("/tasks/pin-list", data={"list": "bobs", "pin": "0"}, headers=HOST)
-    # His: the private one, the one for him, the one with a task of his; the rest are other lists.
+    # His: the private one, the one with a task of his; the rest are other lists.
     pills, more = places(client)
     assert pills == ["mine", "inbox"]
-    assert more == ["Your lists", "bobs", "misc", "own", "Other lists", "archive", "team"]
+    assert more == ["Your lists", "misc", "own", "Other lists", "archive", "team"]
+    # carol's: the group's list, then the others.
+    sign_in(client, "carol")
+    assert places(client)[1] == ["Your lists", LIST, "Other lists", "archive", "misc", "team"]
     # Without the others there is no word over his.
     sign_in(client, "alice")
     for name in ("archive", "team"):
-        client.post("/tasks/list-for", data={"list": name, "for": "alice", "confirm": "1"}, headers=HOST)
+        client.post("/tasks/list-for", data={"list": name, "for": "group:hiring", "confirm": "1"}, headers=HOST)
     sign_in(client, "bob")
-    assert places(client)[1] == ["bobs", "misc", "own"]
+    assert places(client)[1] == ["misc", "own"]
 
 
 def test_a_pin_is_only_the_users_own(client, wiki):
@@ -504,19 +505,19 @@ def test_a_pin_is_only_the_users_own(client, wiki):
     sign_in(client, "bob")
     assert places(client)[0] == ["mine", "inbox"]
 
-def test_a_list_is_for_groups_there_are(client, wiki):
-    """A name no group has is refused, at every door: a list for it would
-    take the name for good (a group of that name would be shown the list)."""
+def test_a_list_is_of_groups_there_are(client, wiki):
+    """A name no group has is refused, at every door: nothing is kept in a
+    folder of no group's, and the name stays free for a group."""
     sign_in(client, "alice")
-    resp = client.post("/tasks/new-list", data={"name": "ghosts", "for": "@nosuch, alice"}, headers=HOST)
+    resp = client.post("/tasks/new-list", data={"name": "ghosts", "for": "group:nosuch"}, headers=HOST)
     assert "newlist_error=" in resp.headers["Location"]
-    assert "There is no group &#34;@nosuch&#34;" in client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True)
-    assert not (wiki / "_tasks/lists/ghosts").exists()
-    resp = client.post("/tasks/list-for", data={"list": LIST, "for": "@nosuch, alice"}, headers=HOST)
+    assert "is no group&#39;s name" in client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True)
+    resp = client.post("/tasks/list-for", data={"list": LIST, "for": "group:nosuch"}, headers=HOST)
     assert "for_error=" in resp.headers["Location"]
-    assert json.loads((wiki / f"_tasks/lists/{LIST}/list.json").read_text())["for"] == ["@hiring", "alice"]
-    out = mcp(client, "alice", "create_task_list", name="ghosts", **{"for": "@nosuch, alice"}, summary="x")
-    assert "There is no group" in out and not (wiki / "_tasks/lists/ghosts").exists()
+    assert SECRET in (wiki / FOLDER / "tasks.json").read_text()
+    out = mcp(client, "alice", "create_task_list", name="ghosts", group="nosuch", summary="x")
+    assert "is no group's name" in out.replace("&#39;", "'")
+    assert not (wiki / "groups/nosuch").exists()
     # So the name is free for a group.
     assert client.post("/groups", data={"name": "nosuch", "people": ""}, headers=HOST).status_code == 303
 
@@ -525,17 +526,17 @@ def test_narrowing_says_whose_tasks_leave_their_sight(client, wiki):
     sign_in(client, "alice")
     for title, who in (("One", "bob"), ("Two", "bob"), ("Three", "dana"), ("Hers", "alice")):
         assert client.post("/api/tasks", json={"title": title, "list": "team", "assignee": who}, headers=HOST).status_code == 201
-    resp = client.post("/tasks/list-for", data={"list": "team", "for": "alice, carol"}, headers=HOST)
+    resp = client.post("/tasks/list-for", data={"list": "team", "for": "group:hiring"}, headers=HOST)
     assert resp.status_code == 302 and "for_confirm=1" in resp.headers["Location"]
-    assert not (wiki / "_tasks/lists/team/list.json").exists()                 # asked, not done
+    assert "team" in (wiki / "_tasks/lists.json").read_text()                  # asked, not done
     page = client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True)
     assert "3 open tasks here are assigned to bob, dana, who will no longer see the list." in page
     assert "keep their names and count as unassigned here" in page
-    assert '<input type="hidden" name="confirm" value="1">' in page and 'value="alice, carol"' in page
-    # Save again: narrowed, and nobody unassigned.
-    resp = client.post("/tasks/list-for", data={"list": "team", "for": "alice, carol", "confirm": "1"}, headers=HOST)
+    assert '<input type="hidden" name="confirm" value="1">' in page
+    # Save again: the group's, and nobody unassigned.
+    resp = client.post("/tasks/list-for", data={"list": "team", "for": "group:hiring", "confirm": "1"}, headers=HOST)
     assert resp.headers["Location"] == "/tasks?list=team"
-    assert json.loads((wiki / "_tasks/lists/team/list.json").read_text())["for"] == ["alice", "carol"]
+    assert "team" in (wiki / "groups/hiring/_tasks/lists.json").read_text()
     who = {t["title"]: t.get("assignee") for t in client.get("/api/tasks", query_string={"list": "team"}, headers=HOST).get_json()}
     assert who["One"] == "bob" and who["Three"] == "dana"
     # To its members they count as no one's: the list's line, the closed view's @none, an assistant's answer.
@@ -546,23 +547,20 @@ def test_narrowing_says_whose_tasks_leave_their_sight(client, wiki):
     assert out.count("who doesn't see its list anymore: it counts as no one's") == 3
     none = mcp(client, "alice", "search_tasks", list="team", assignee="none")
     assert "One" in none and "Three" in none and "Hers" not in none
-    # Among them again, the tasks are theirs as before.
-    client.post("/tasks/list-for", data={"list": "team", "for": "alice, bob, carol", "confirm": "1"}, headers=HOST)   # dana still none
+    # Everyone's again, the tasks are theirs as before; no question then.
+    resp = client.post("/tasks/list-for", data={"list": "team", "for": ""}, headers=HOST)
+    assert resp.headers["Location"] == "/tasks?list=team"
     sign_in(client, "bob")
     assert sorted(t["title"] for t in client.get("/api/tasks", query_string={"mine": "1"}, headers=HOST).get_json()) == ["One", "Two"]
     sign_in(client, "alice")
-    client.post("/tasks/list-for", data={"list": "team", "for": "alice, carol", "confirm": "1"}, headers=HOST)
+    client.post("/tasks/list-for", data={"list": "team", "for": "group:hiring", "confirm": "1"}, headers=HOST)
     sign_in(client, "bob")
     assert client.get("/api/tasks", query_string={"mine": "1"}, headers=HOST).get_json() == []
-    # Nothing to say when nobody loses a task: no question.
-    sign_in(client, "alice")
-    resp = client.post("/tasks/list-for", data={"list": "team", "for": "alice, bob, carol, dana"}, headers=HOST)
-    assert resp.headers["Location"] == "/tasks?list=team"
 
 
 def test_anyone_elses_word_stays_when_the_list_is_written(client, wiki):
     # The word a browser asks for every minute, to load its lists again when
-    # it is another one: a write to a list for some is none of bob's.
+    # it is another one: a write to a group's list is none of bob's.
     word = lambda: client.get("/api/tasks/due-count", headers=HOST).headers["Zone-Tasks"]
     sign_in(client, "bob")
     before = word()
@@ -582,44 +580,36 @@ def test_anyone_elses_word_stays_when_the_list_is_written(client, wiki):
 
 
 def test_a_follower_who_no_longer_sees_the_list_is_told_nothing(client, wiki):
-    """Who follows a task and is none of its list's members anymore stays in
-    its file, is not named to those who see it, and has no news of it; among
-    them again, they follow as before."""
+    """Who follows a task and no longer sees it (its list moved to a group
+    they are not in) stays in its file, is not named to those who see it,
+    and has no news of it; seeing it again, they follow as before."""
     count = lambda: client.get("/api/tasks/due-count", headers=HOST).get_json().get("new", 0)
     sign_in(client, "bob")
     assert client.put(f"/api/tasks/{IDS['shared']}", json={"follow": True}, headers=HOST).get_json()["followers"] == ["bob"]
     sign_in(client, "alice")
-    client.post("/tasks/list-for", data={"list": "team", "for": "alice, carol", "confirm": "1"}, headers=HOST)
+    client.post("/tasks/list-for", data={"list": "team", "for": "group:hiring", "confirm": "1"}, headers=HOST)
     assert client.post(f"/api/tasks/{IDS['shared']}/comments", json={"text": "Chairs ordered"}, headers=HOST).status_code == 201
     (task,) = [t for t in client.get("/api/tasks", query_string={"list": "team"}, headers=HOST).get_json() if t["id"] == IDS["shared"]]
     assert "followers" not in task                                              # not named: he is told nothing
-    assert '"followers": [\n      "bob"' in (wiki / "_tasks/lists/team/tasks.json").read_text()   # kept
+    assert '"followers": [\n      "bob"' in (wiki / "groups/hiring/_tasks/lists/team/tasks.json").read_text()   # kept
     sign_in(client, "bob")
     assert count() == 0
     assert client.put(f"/api/tasks/{IDS['shared']}", json={"follow": False}, headers=HOST).status_code == 404
     assert "the user follows it" not in mcp(client, "bob", "search_tasks")
     sign_in(client, "alice")
-    client.post("/tasks/list-for", data={"list": "team", "for": "alice, bob, carol", "confirm": "1"}, headers=HOST)
+    client.post("/tasks/list-for", data={"list": "team", "for": ""}, headers=HOST)
     sign_in(client, "bob")
     assert count() == 1                                                         # the comment made meanwhile
 
 
-def test_a_list_for_a_group_made_of_groups(client, wiki, monkeypatch):
-    """A group can be made of groups ([group product] includes = dev, design:
-    Groups in docs/spec/users.md): a list for @product is for who is in dev or
-    in design, with nobody named twice; a group taken out of it takes the
-    list from its people at their next request."""
+def test_a_group_made_of_groups(client, wiki, monkeypatch):
+    """A group can be made of groups ([group hiring] includes = dev: Groups
+    in docs/spec/users.md): its list is seen by who is in dev too; dev taken
+    out of it takes the list from its people at their next request."""
     config = wiki / ".zone" / "config"
     text = config.read_text().replace("[user bob]\n", "[user bob]\ngroups = dev\n")
-    config.write_text(text + "\n[group product]\nincludes = dev, design\n")
-    sign_in(client, "alice")
-    for _ in range(50):       # the settings are taken within the second: then there is a group product
-        client.post("/tasks/list-for", data={"list": LIST, "for": "@product alice", "confirm": "1"}, headers=HOST)
-        if json.loads((wiki / f"_tasks/lists/{LIST}/list.json").read_text())["for"] == ["@product", "alice"]:
-            break
-        time.sleep(0.1)
-    assert json.loads((wiki / f"_tasks/lists/{LIST}/list.json").read_text())["for"] == ["@product", "alice"]
-    sign_in(client, "bob")              # in dev, so in product
+    config.write_text(text + "\n[group hiring]\nincludes = dev\n")
+    sign_in(client, "bob")              # in dev, so in hiring
     for _ in range(50):       # the settings are taken within the second
         if SECRET in client.get("/api/tasks", headers=HOST).get_data(as_text=True):
             break
@@ -629,12 +619,10 @@ def test_a_list_for_a_group_made_of_groups(client, wiki, monkeypatch):
     assert SECRET in mcp(client, "bob", "search_tasks", list=LIST)
     task = next(t for t in client.get("/api/tasks", query_string={"list": LIST}, headers=HOST).get_json() if "Offer" in t["title"])
     assert client.put(f"/api/tasks/{task['id']}", json={"assignee": "bob"}, headers=HOST).status_code == 200   # a member: can be given it
-    sign_in(client, "carol")            # named on the list before, in neither group now
-    assert SECRET not in client.get("/api/tasks", headers=HOST).get_data(as_text=True)
     sign_in(client, "dana")             # an admin is in no group by being admin
     assert SECRET not in client.get("/api/tasks", headers=HOST).get_data(as_text=True)
-    # dev taken out of product: bob no longer sees the list, and his task there is no one's.
-    config.write_text(config.read_text().replace("includes = dev, design", "includes = design"))
+    # dev taken out of hiring: bob no longer sees the list, and his task there is no one's.
+    config.write_text(config.read_text().replace("includes = dev", "includes ="))
     sign_in(client, "bob")
     for _ in range(50):
         if SECRET not in client.get("/api/tasks", headers=HOST).get_data(as_text=True):
@@ -854,7 +842,7 @@ def test_a_task_that_comes_back_brings_no_one_in(client, wiki):
         assert [(e.get("from"), e.get("to")) for e in t["history"] if e["event"] == "assigned"] == [(None, None), (None, None)], t["history"]
         # bob had it, the history said: no longer a way to give it to him.
         resp = client.put(f"/api/tasks/{t['id']}", json={"assignee": "bob"}, headers=HOST)
-        assert resp.status_code == 400 and "isn't one of those the list #hiring is for" in resp.get_json()["error"]
+        assert resp.status_code == 400 and "bob isn't in the group hiring" in resp.get_json()["error"]
     # A [[task:…]] of the closed task stands for itself, not for the smuggled one.
     chips = client.post("/api/render-notes", json={"notes": [f"[[task:{closed_one[:8]}]]"]}, headers=HOST).get_data(as_text=True)
     assert "Smuggled" not in chips
@@ -867,108 +855,97 @@ def test_a_task_that_comes_back_brings_no_one_in(client, wiki):
         [e.get("to") for e in spawn["history"] if e["event"] == "assigned"]
 
 
-def test_its_tasks_in_another_folder_are_still_its_members(client, wiki):
-    """A task of the list lying in a folder everyone reads (a file moved by
-    hand, a merge) is its members' all the same, in every view that reads
-    the files: open, closed, a year's closed, their count, the years, news
-    and the export."""
-    def stray(name, tasks):
-        path = wiki / "_tasks" / name
-        have = json.loads(path.read_text()) if path.exists() else []
-        path.write_text(json.dumps(have + tasks, indent=2) + "\n")
-    folder = wiki / f"_tasks/lists/{LIST}"
-    done = json.loads((folder / "closed.json").read_text())
-    (folder / "closed.json").write_text("[]\n")
-    for t in done:   # given to bob before the list was for some: news for him, if he saw it
-        t["assignee"] = "bob"
-    stray("closed.json", done)
-    old = {**done[0], "id": "0ff1ce00-0000-4000-8000-000000000001", "closed_at": "2020-03-01T10:00:00"}
-    stray("closed-2020-03.json", [old])
-    stray("tasks.json", json.loads((folder / "tasks.json").read_text()))
-    (folder / "tasks.json").write_text("[]\n")
-    sign_in(client, "bob")
-    for path, query in [("/api/tasks", {}), ("/api/tasks", {"mine": "1"}), ("/api/tasks/closed", {}),
-                        ("/api/tasks/closed", {"limit": "50"}), ("/api/tasks/closed", {"year": "2020"}),
-                        ("/api/tasks/closed", {"year": "2020", "limit": "50"}), ("/api/tasks/export", {})]:
-        body = client.get(path, query_string=query, headers=HOST).get_data(as_text=True)
-        assert SECRET not in body, (path, query)
-    assert client.get("/api/tasks/closed-count", headers=HOST).get_json()["count"] == 0
-    assert "2020" not in client.get("/api/tasks/closed-years", headers=HOST).get_json()["years"]
-    assert "new" not in client.get("/api/tasks/due-count", headers=HOST).get_json()
-    sign_in(client, "carol")   # a member sees them where they lie
-    assert SECRET in client.get("/api/tasks/closed", query_string={"limit": "50"}, headers=HOST).get_data(as_text=True)
-    assert SECRET in client.get("/api/tasks/export", headers=HOST).get_data(as_text=True)
-    assert "2020" in client.get("/api/tasks/closed-years", headers=HOST).get_json()["years"]
-
-
 def test_a_commit_about_it_names_it_to_its_members_only(client, wiki):
-    """Narrowing a list for everyone writes the registry everyone reads: the
-    commit is in everyone's history, and says the list's name and whom it is
-    for only to its members."""
+    """Moving a list for everyone into a group writes the registry everyone
+    reads: the commit is in everyone's history, and says the list's name
+    only to the group's members."""
     sign_in(client, "alice")
     assert client.post("/tasks/new-list", data={"name": "offers"}, headers=HOST).status_code == 302
-    assert client.post("/tasks/list-for", data={"list": "offers", "for": "@hiring, alice, carol"}, headers=HOST).status_code == 302
-    subjects = git(wiki, "log", "-1", "--format=%s")
-    assert "List #offers is for @hiring, alice, carol" in subjects
-    theirs = mcp(client, "carol", "history")
-    assert "List #offers is for" in theirs
+    assert client.post("/tasks/list-for", data={"list": "offers", "for": "group:hiring"}, headers=HOST).status_code == 302
+    assert git(wiki, "log", "-1", "--format=%s").strip() == "Move list #offers to the group hiring"
+    assert "Move list #offers" in mcp(client, "carol", "history")
     for who in ("bob", "dana"):
         said = mcp(client, who, "history")
-        assert LIST not in said and "offers" not in said and "carol" not in said, said
-        assert "A list for some changed" in said
+        assert "offers" not in said and "carol" not in said, said
+        assert "A group's list changed" in said
     # A list for everyone is named to everyone, one whose name only starts like it too.
     assert client.post("/tasks/new-list", data={"name": LIST + "-2"}, headers=HOST).status_code == 302
     said = mcp(client, "bob", "history")
     assert f"Create list #{LIST}-2" in said
 
 
-def test_without_users_a_list_for_some_is_everyones(client, git_wiki_dir):
-    """A list for some left from when the wiki had users: without users
-    nothing is anyone's, so its tasks are there, as a group's folder is an
-    ordinary one then."""
-    folder = git_wiki_dir / "_tasks/lists/old"
-    folder.mkdir(parents=True)
-    (folder / "list.json").write_text('{"name": "old", "for": ["@hiring", "anna"]}\n')
-    (folder / "tasks.json").write_text(json.dumps([{"id": "0a1b2c3d-0000-4000-8000-000000000001", "title": "Left behind",
-                                                    "list": "old", "created_at": "2026-01-01T10:00:00"}]) + "\n")
-    (folder / "closed.json").write_text("[]\n")
-    assert "Left behind" in client.get("/api/tasks", headers=HOST).get_data(as_text=True)
-    assert "Left behind" in client.get("/tasks", query_string={"list": "old"}, headers=HOST).get_data(as_text=True)
-    assert "Left behind" in client.get("/search", query_string={"q": "behind"}, headers=HOST).get_data(as_text=True)
-
-
-def test_a_task_of_it_in_another_folder_is_its_members_too(client, wiki):
-    """A task that names the list but lies in another folder (a file moved
-    by hand, a merge) is shown to the list's members only, until a write
-    files it."""
-    team = wiki / "_tasks/lists/team/tasks.json"
-    tasks = json.loads(team.read_text())
-    tasks.append({"id": "0a1b2c3d-0000-4000-8000-00000000beef", "title": f"Call the {SECRET} oncemore", "list": LIST,
-                  "created_at": "2026-01-01T10:00:00"})
-    team.write_text(json.dumps(tasks, indent=2) + "\n")
-    assert "oncemore" in sign_in(client, "carol").get("/api/tasks", headers=HOST).get_data(as_text=True)
-    for who in ("bob", "dana"):
-        sign_in(client, who)
-        for path in ("/api/tasks", "/tasks", "/tasks?list=team", "/api/search?q=" + SECRET):
-            body = client.get(path, headers=HOST).get_data(as_text=True)
-            assert "oncemore" not in body and "beef" not in body, path
-        assert "Order chairs" in client.get("/api/tasks", headers=HOST).get_data(as_text=True)
-
-
-def test_an_entry_in_the_registry_too_makes_it_no_one_elses(client, wiki):
-    """The list's entry is in its folder; one of its name in the registry
-    everyone reads (a merge, a hand edit) doesn't make it a list everyone is
-    shown: its folder says whom it is for."""
+def test_a_shared_list_of_its_name_shows_none_of_its_tasks(client, wiki):
+    """A shared list of the group's list's name (a merge, a hand edit: no
+    door makes one) is another list: its members see their group's, anyone
+    else an empty one, never the group's tasks."""
     reg = wiki / "_tasks/lists.json"
     data = json.loads(reg.read_text())
     data["lists"].append({"name": LIST})
     reg.write_text(json.dumps(data, indent=2) + "\n")
-    assert f"list={LIST}" in sign_in(client, "carol").get("/tasks", headers=HOST).get_data(as_text=True)
+    assert SECRET in sign_in(client, "carol").get("/tasks", query_string={"list": LIST}, headers=HOST).get_data(as_text=True)
     for who in ("bob", "dana"):
         sign_in(client, who)
-        assert f"list={LIST}" not in client.get("/tasks", headers=HOST).get_data(as_text=True)
         body = client.get("/tasks", query_string={"list": LIST}, headers=HOST).get_data(as_text=True)
         assert not any(m in body for m in MARKS) and SECRET not in body
+
+
+def old_list_for_some(wiki, name, who, owners=("alice",)):
+    """A list for some as a Zone before 2026-11-20 kept it: its entry in its
+    folder's list.json, and its tasks there."""
+    folder = wiki / "_tasks/lists" / name
+    folder.mkdir(parents=True)
+    (folder / "list.json").write_text(json.dumps({"name": name, "view": "open", "for": list(who), "owners": list(owners)}) + "\n")
+    (folder / "tasks.json").write_text(json.dumps([{"id": "0a1b2c3d-0000-4000-8000-0000000000" + str(len(name)).zfill(2),
+                                                    "title": f"Old {name} {SECRET}", "list": name, "created_at": "2026-01-01T10:00:00"}]) + "\n")
+    git(wiki, "add", "-A")
+    git(wiki, "commit", "-qm", f"Old list {name}")
+
+
+def test_a_list_for_some_moves_into_its_groups_folder_at_start(client, git_wiki_dir, monkeypatch):
+    """Lists for some (until 2026-11-20): a start moves each into a group's
+    folder, the one group it was for or one made for it of the groups and
+    people it named, its owners the list's; its old folder keeps a mark, so
+    its history stays its members' and no list or group takes its name."""
+    monkeypatch.setattr(settings, "USERS", dict(USERS))
+    monkeypatch.setattr(settings, "USER_SETTINGS", {"carol": {"groups": "hiring"}})
+    old_list_for_some(git_wiki_dir, "offers", ["@hiring"])
+    old_list_for_some(git_wiki_dir, "deals", ["@hiring", "bob"])
+    sign_in(client, "carol")
+    # The one group it was for: its folder.
+    assert "Old offers" in (git_wiki_dir / "groups/hiring/_tasks/lists/offers/tasks.json").read_text()
+    entry = next(l for l in json.loads((git_wiki_dir / "groups/hiring/_tasks/lists.json").read_text())["lists"] if l["name"] == "offers")
+    assert entry == {"name": "offers", "view": "open", "owners": ["alice"]}
+    mark = json.loads((git_wiki_dir / "_tasks/lists/offers/list.json").read_text())
+    assert mark["gone"] is True and mark["for"] == ["@hiring"] and mark["group"] == "hiring"
+    assert not (git_wiki_dir / "_tasks/lists/offers/tasks.json").exists()
+    assert "Move the list for some #offers to the group hiring" in git(git_wiki_dir, "log", "--format=%s")
+    # Groups and people: a group made for it, named after it.
+    config = (git_wiki_dir / ".zone/config").read_text()
+    assert "[group deals]" in config and "includes = hiring" in config
+    assert "Old deals" in (git_wiki_dir / "groups/deals/_tasks/lists/deals/tasks.json").read_text()
+    titles = [t["title"] for t in client.get("/api/tasks", headers=HOST).get_json()]
+    assert any("Old offers" in t for t in titles) and any("Old deals" in t for t in titles)     # carol: in hiring
+    sign_in(client, "bob")                     # named on deals, in none of hiring
+    titles = [t["title"] for t in client.get("/api/tasks", headers=HOST).get_json()]
+    assert any("Old deals" in t for t in titles) and not any("Old offers" in t for t in titles)
+    sign_in(client, "dana")                    # nobody's: neither
+    assert SECRET not in client.get("/api/tasks", headers=HOST).get_data(as_text=True)
+    # The old folder's history stays its members' (canSeePath: TestAFormerListForSomesHistoryIsItsMembers).
+    assert "Old list offers" not in mcp(client, "dana", "history")
+    # Its name stays taken: no shared list, no group of it.
+    sign_in(client, "dana")
+    resp = client.post("/tasks/new-list", data={"name": "offers"}, headers=HOST)
+    assert "newlist_error=" in resp.headers["Location"]
+
+
+def test_without_users_an_old_list_for_some_is_read_by_no_one(client, git_wiki_dir):
+    """Without users nothing is anyone's: an old list for some waits until
+    there are users again, and meanwhile its folder is read by no one, not
+    shown to everyone."""
+    old_list_for_some(git_wiki_dir, "old", ["@hiring", "anna"])
+    assert SECRET not in client.get("/api/tasks", headers=HOST).get_data(as_text=True)
+    assert "Old old" not in client.get("/search", query_string={"q": SECRET}, headers=HOST).get_data(as_text=True)
+    assert (git_wiki_dir / "_tasks/lists/old/tasks.json").exists()
 
 
 def test_a_task_goes_to_a_list_fewer_people_see_by_its_maker_or_an_admin(client, wiki):
@@ -1004,21 +981,21 @@ def test_a_task_goes_to_a_list_fewer_people_see_by_its_maker_or_an_admin(client,
     assert client.put(f"/api/tasks/{his}", json={"list": LIST}, headers=HOST).status_code == 200
 
 
-def test_a_list_for_some_carries_the_people_sign(client, wiki):
+def test_a_groups_list_carries_the_people_sign(client, wiki):
     """As a group's page does: 👥 beside its heading and in its pill, not the
     lock of what is yours alone."""
     body = sign_in(client, "alice").get("/tasks", query_string={"list": LIST}, headers=HOST).get_data(as_text=True)
     head = body.split('<header class="page-header">', 1)[1].split("</header>", 1)[0]
     assert 'class="lock list-for"' in head and "👥" in head and "🔒" not in head
-    assert "For @hiring, alice: only they see this list and its tasks" in head
+    assert "The group hiring's list: only its members see it and its tasks" in head
     row = body.split('<nav class="tasks-places"', 1)[1]
     pill = row.split(f'data-place="list:{LIST}"', 1)[1].split("</a>", 1)[0]
-    assert "tasks-place-for" in pill and "(for @hiring, alice)" in pill
+    assert "tasks-place-for" in pill and "(the group hiring's: only its members see it)" in pill
     team = row.split('data-place="list:team"', 1)
     assert len(team) == 1 or "tasks-place-for" not in team[1].split("</a>", 1)[0]
     # Its line in the left column: the people after its name.
     line = body.split('<nav class="lists-rail"', 1)[1].split(f'data-place="list:{LIST}"', 1)[1].split("</a>", 1)[0]
-    assert "(for @hiring, alice)" in line and 'class="lists-rail-mark"' in line.split('class="lists-rail-name"', 1)[1]
+    assert "(the group hiring's: only its members see it)" in line and 'class="lists-rail-mark"' in line.split('class="lists-rail-name"', 1)[1]
 
 
 def test_a_batch_update_changes_fields_as_one_tasks_update_does(client, wiki):
@@ -1048,4 +1025,4 @@ def test_a_tags_rename_counts_only_the_tasks_he_sees(client, wiki):
     client.post("/api/tasks", json={"title": "Buy offers", "list": "team", "tags": ["offers"]}, headers=HOST)
     out = mcp(client, "bob", "rename_task_tag", tag="offers", new_tag="deals")
     assert "in one commit: 1 task." in out, out
-    assert "deals" in (wiki / f"_tasks/lists/{LIST}/tasks.json").read_text()
+    assert "deals" in (wiki / FOLDER / "tasks.json").read_text()

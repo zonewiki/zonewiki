@@ -317,7 +317,7 @@ func (t *Task) JSON(private bool) ([]byte, error) {
 		jsonobj.Nullable(t.CreatedAt), jsonobj.Nullable(t.ClosedAt), t.WontDo, t.Keep, t.Importance, jsonobj.Nullable(t.LastDone),
 		t.SortOrder, t.Recurrence, jsonobj.Nullable(t.SpawnedFrom), history, comments})
 	if err == nil && private {
-		b = append(b[:len(b)-1], `,"private":`+strconv.FormatBool(t.Owner != "")+"}"...)
+		b = append(b[:len(b)-1], `,"private":`+strconv.FormatBool(t.Private())+"}"...)
 	}
 	if err != nil || len(t.Extra) == 0 {
 		return b, err
@@ -349,6 +349,10 @@ func Encode(tasks []*Task) (string, error) {
 
 // IsOpen: not closed (neither done nor won't do).
 func (t *Task) IsOpen() bool { return t.ClosedAt == "" }
+
+// Private: the task is a user's own (Owner their name), not a shared one:
+// everyone's ("") or a group's ("@<group>").
+func (t *Task) Private() bool { return t.Owner != "" && !strings.HasPrefix(t.Owner, "@") }
 
 // Parse: a task list file's tasks; ok false when it isn't a list. An item
 // that isn't an object is left out.

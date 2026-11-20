@@ -192,19 +192,20 @@ Moving a task out of your Inbox into a list is called filing it.
 
 ### Who sees a list
 
-With several users, a list is one of three kinds:
+With several users, a list is in a place, as a page is, and **For** in **New list…** chooses it:
 
-| Kind | Who sees it and its tasks | Made with |
-|------|---------------------------|-----------|
-| Private (🔒) | you alone | **New list…** with **Private: only you see it and its tasks** ticked |
-| For some (👥) | the groups and people it names | the **For** field in **New list…**: groups there are (`@dev`) and people's names |
-| Shared | everyone who uses the wiki | **New list…** with neither |
+| For | Who sees it and its tasks |
+|-----|---------------------------|
+| **Everyone who uses this wiki** | everyone |
+| **@dev: its members see it** (one of your groups, 👥) | the group's members; the list is kept in the group's folder |
+| **Only you** (🔒) | you alone |
 
 Whoever sees a list sees and changes its tasks.
 A task is as private as its list: moving a private task to a shared list asks first, because it can't be made private again.
-**Make shared…** in a private list's ⋯ menu shares the list with its tasks; there is no way back.
+**Make shared…** in a private list's ⋯ menu shares the list with its tasks, with everyone or one of your groups; there is no way back.
+**Who sees it…** moves a shared list to everyone or to one of your groups, its tasks with it.
 Moving a task to a list that fewer people see is only for who made it or an admin.
-The full rules are in [Private lists](../spec/tasks.md#private-lists), [Lists for some](../spec/tasks.md#lists-for-some) and [Teams](teams.md).
+The full rules are in [Private lists](../spec/tasks.md#private-lists), [A group's lists](../spec/tasks.md#a-groups-lists) and [Teams](teams.md).
 
 ### The Inbox
 
@@ -240,7 +241,7 @@ Pins are your own: a list you make is pinned for you, and a list someone else ma
 
 Only the first two show at first; the others are offered as "+ WIP limit" and so on.
 On a wiki page that shows the list, **Opens on**, **The Open tab shows** and the filters are that page's own, written into its `[[tasks: …]]`; the rest is the list's wherever it shows.
-The same menu has **Rename…**, **Who it is for…** and **Delete…**, for the list's owners (who made it) and admins.
+The same menu has **Rename…**, **Who sees it…** and **Delete…**, for the list's owners (who made it) and admins.
 Deleting a list keeps its tasks: the dialog asks which list they go to, or offers to close the open ones as won't do.
 
 ## Assigning tasks

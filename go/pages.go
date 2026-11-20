@@ -19,7 +19,6 @@ import (
 	"time"
 	"zonewiki/internal/atomicfile"
 	"zonewiki/internal/mdtext"
-	"zonewiki/internal/taskfiles"
 )
 
 // Req is what a response depends on besides the wiki: the request (its
@@ -999,16 +998,10 @@ func keepWords(l wikilink, m string, readers place) wikilink {
 	return l
 }
 
-// taskReaders: the place of those who see the tasks of owner's files (a
-// user's private ones, or the shared ones: everyone's, which a list for
-// some is narrower than, so a link there keeps its words as on a shared
-// page).
-func taskReaders(owner string) place {
-	if owner == "" {
-		return place{}
-	}
-	return placeOf(privateDir + "/" + owner + "/" + taskfiles.DirName)
-}
+// taskReaders: the place of those who see the tasks of owner's files: a
+// user's private ones, a group's, or the shared ones (everyone's)
+// (ownerPlace).
+func taskReaders(owner string) place { return ownerPlace(owner) }
 
 // linkErrors: what failed while links were re-pointed (nil: nothing), as
 // linksLeft: the move itself is done and committed with the links that

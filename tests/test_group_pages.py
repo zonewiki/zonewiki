@@ -811,7 +811,7 @@ def test_a_group_has_ways_to_start_a_page_and_a_list(client, wiki):
     groups = client.get("/groups", headers=HOST).get_data(as_text=True)
     assert 'href="/new?for=group:dev"' in groups and 'href="/tasks?newlist_for=@dev"' in groups
     tasks = client.get("/tasks?newlist_for=@dev", headers=HOST).get_data(as_text=True)
-    assert 'data-params="newlist_error newlist_name newlist_for" data-open' in tasks and 'id="list-new-for" value="@dev"' in tasks
+    assert 'data-params="newlist_error newlist_name newlist_for" data-open' in tasks and '<option value="group:dev" selected>' in tasks
     # Her private home starts a private page.
     client.get("/private", headers=HOST)
     assert 'href="/new?for=private"' in client.get("/page/private/alice/index", headers=HOST).get_data(as_text=True)

@@ -9,14 +9,14 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 	"zonewiki/internal/asker"
 	"zonewiki/internal/atomicfile"
 	"zonewiki/internal/jsonobj"
 )
 
 // The lists: lists.json beside the task files, the shared lists in _tasks/,
-// a user's private ones in private/<user>/_tasks/. A list is a name and its
+// a user's private ones in private/<user>/_tasks/, a group's in
+// groups/<group>/_tasks/. A list is a name and its
 // settings; a task is in one by naming it (Task.List), and a task's file
 // says which registry that name is in. A registry also holds whose pins it
 // is (pinned, default: a user's own in their file, the wiki's in the shared
@@ -76,120 +76,6 @@ func (l *List) SetOwners(names []string) {
 		l.Extra = map[string]json.RawMessage{}
 	}
 	l.Extra["owners"] = json.RawMessage(strings.ReplaceAll(jsonobj.Text(names), ",", ", "))
-}
-
-// For: who a shared list is for ("for": ["@hiring", "anna"] in its entry:
-// a group's members, a user); none: everyone. A list for some is kept apart
-// from the registry everyone reads: its entry is the file list.json in its
-// own folder (ListFileName), which is also what says, to every read of the
-// tasks there, whom they are for.
-func (l *List) For() []string { return jsonobj.TextList(l.Extra["for"]) }
-
-// SetFor: who the list is for from now (none: everyone, no key).
-func (l *List) SetFor(who []string) {
-	if len(who) == 0 {
-		delete(l.Extra, "for")
-		return
-	}
-	if l.Extra == nil {
-		l.Extra = map[string]json.RawMessage{}
-	}
-	l.Extra["for"] = json.RawMessage(strings.ReplaceAll(jsonobj.Text(who), ",", ", "))
-}
-
-// Gone: the entry is what a list for some left in its folder when it was
-// deleted or renamed ("gone": true): no list anymore, but the folder's
-// history is still only its members' to see (forOf).
-func (l *List) Gone() bool { _, gone := l.Extra["gone"]; return gone }
-
-// ListFileName: the entry of a list for some, in the list's folder.
-const ListFileName = "list.json"
-
-// listFile: the entry in dir's list.json, nil when there is none (or it is
-// no entry: such a folder is everyone's, as one without the file).
-func listFile(dir string) *List {
-	raw, err := os.ReadFile(filepath.Join(dir, ListFileName))
-	if err != nil {
-		return nil
-	}
-	r, ok := ParseRegistry([]byte(`{"lists": [` + string(raw) + `]}`))
-	if !ok || len(r.Lists) != 1 {
-		return nil
-	}
-	return r.Lists[0]
-}
-
-// What each folder's list.json said when it was last read, by its time and
-// size: every read of a user's tasks asks whom each list's folder is for.
-var forKept = struct {
-	sync.Mutex
-	of map[string]forEntry
-}{of: map[string]forEntry{}}
-
-type forEntry struct {
-	mod  int64
-	size int64
-	who  []string
-}
-
-// forOf: whom the list's folder dir is for; none: everyone (no list.json).
-func forOf(dir string) []string {
-	path := filepath.Join(dir, ListFileName)
-	info, err := os.Stat(path)
-	forKept.Lock()
-	defer forKept.Unlock()
-	if err != nil {
-		delete(forKept.of, path)
-		return nil
-	}
-	if e, ok := forKept.of[path]; ok && e.mod == info.ModTime().UnixNano() && e.size == info.Size() {
-		return e.who
-	}
-	var who []string
-	if l := listFile(dir); l != nil {
-		who = l.For()
-	}
-	forKept.of[path] = forEntry{info.ModTime().UnixNano(), info.Size(), who}
-	return who
-}
-
-// seesDir: user sees the tasks in the shared list's folder dir: a list for
-// everyone, or one they are among those it is for.
-func (s *Store) seesDir(user asker.Asker, dir string) bool {
-	who := forOf(dir)
-	return len(who) == 0 || s.Member != nil && s.Member(user, who)
-}
-
-// SeesList: user sees the shared list named name and its tasks (seesDir);
-// the tasks in no list, and a name that has no folder, are everyone's.
-func (s *Store) SeesList(user asker.Asker, name string) bool {
-	if user == Everyone || name == "" || !listDirRE.MatchString(name) {
-		return true
-	}
-	return s.seesDir(user, s.dirOf("", name))
-}
-
-// ForOfList: whom the shared list named name is for, as its folder says
-// (also what a list for some left there when it went); none: everyone.
-func (s *Store) ForOfList(name string) []string {
-	if name == "" || !listDirRE.MatchString(name) {
-		return nil
-	}
-	return forOf(s.dirOf("", name))
-}
-
-// ForSome: the names of the shared lists whose folders are for some now,
-// A–Z: a look at each list's folder (forOf keeps what it read), no read of
-// a task.
-func (s *Store) ForSome() []string {
-	var names []string
-	entries, _ := os.ReadDir(filepath.Join(s.Dir(""), ListsDirName))
-	for _, e := range entries {
-		if e.IsDir() && len(forOf(filepath.Join(s.Dir(""), ListsDirName, e.Name()))) > 0 {
-			names = append(names, e.Name())
-		}
-	}
-	return names
 }
 
 // Find: the list named name (as the file has it), nil when there is none.
@@ -341,11 +227,6 @@ func (r *Registry) Encode() string {
 	b.WriteString(",\n  \"lists\": [")
 	n := 0
 	for _, l := range r.Lists {
-		// A list for some is not named in the file everyone reads: its entry
-		// is in its own folder (WriteListsOf).
-		if len(l.For()) > 0 {
-			continue
-		}
 		if n++; n > 1 {
 			b.WriteByte(',')
 		}
@@ -389,91 +270,6 @@ func (r *Registry) Encode() string {
 // encode: a list's entry, on one line.
 func (l *List) encode() []byte { return textObject(ListSettings, l.Settings, l.Extra, "name", l.Name) }
 
-// withListFiles adds to the shared registry r the lists for some, each
-// from its folder's list.json (what one left there when it went is no
-// list), A–Z after the others.
-func (s *Store) withListFiles(r *Registry) *Registry {
-	entries, _ := os.ReadDir(filepath.Join(s.Dir(""), ListsDirName))
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		l := listFile(filepath.Join(s.Dir(""), ListsDirName, e.Name()))
-		if l == nil || l.Gone() || l.Name != e.Name() || len(l.For()) == 0 {
-			continue
-		}
-		// The registry has an entry of that name too (a merge, a file edited
-		// by hand): the folder's file is what the reads of its tasks go by,
-		// so the list is for whom it says: never a list everyone is shown
-		// whose tasks only some see.
-		if have := r.Find(l.Name); have != nil {
-			if len(have.For()) == 0 {
-				have.SetFor(l.For())
-			}
-			continue
-		}
-		r.Lists = append(r.Lists, l)
-	}
-	return r
-}
-
-// writeListFiles writes the entries of the shared registry's lists for some
-// into their folders, and mends the folders whose list.json no longer says
-// what r does: a list that is for everyone again loses the file (its entry
-// is in lists.json); one that is gone (deleted, renamed) keeps it, marked
-// gone, so the folder's history stays its members'. Returns the paths
-// written and removed.
-func (s *Store) writeListFiles(r *Registry) ([]string, error) {
-	var paths []string
-	write := func(dir string, l *List) error {
-		path, text := filepath.Join(dir, ListFileName), string(l.encode())+"\n"
-		if raw, err := os.ReadFile(path); err == nil && string(raw) == text {
-			return nil
-		}
-		if err := os.MkdirAll(dir, 0o777); err != nil {
-			return err
-		}
-		if err := atomicfile.Write(path, text); err != nil {
-			return err
-		}
-		paths = append(paths, path)
-		return nil
-	}
-	base := filepath.Join(s.Dir(""), ListsDirName)
-	for _, l := range r.Lists {
-		if len(l.For()) > 0 && listDirRE.MatchString(l.Name) {
-			if err := write(filepath.Join(base, l.Name), l); err != nil {
-				return paths, err
-			}
-		}
-	}
-	entries, _ := os.ReadDir(base)
-	for _, e := range entries {
-		dir := filepath.Join(base, e.Name())
-		was := listFile(dir)
-		if !e.IsDir() || was == nil || was.Gone() {
-			continue
-		}
-		switch now := r.Find(e.Name()); {
-		case now != nil && len(now.For()) > 0:
-		case now != nil: // for everyone again
-			if os.Remove(filepath.Join(dir, ListFileName)) == nil {
-				paths = append(paths, filepath.Join(dir, ListFileName))
-			}
-		default: // gone: the folder's history stays its members'
-			gone := &List{Name: was.Name, Settings: map[string]string{}, Extra: map[string]json.RawMessage{"gone": json.RawMessage("true")}}
-			gone.SetFor(was.For())
-			if err := write(dir, gone); err != nil {
-				return paths, err
-			}
-		}
-	}
-	for _, p := range paths {
-		changed(p)
-	}
-	return paths, nil
-}
-
 // ListsPath: owner's registry.
 func (s *Store) ListsPath(owner string) string { return filepath.Join(s.Dir(owner), ListsName) }
 
@@ -494,9 +290,6 @@ func (s *Store) ReadLists(owner string) *Registry {
 			r = parsed
 		}
 	}
-	if owner == "" {
-		s.withListFiles(r)
-	}
 	return r.own(owner)
 }
 
@@ -516,9 +309,6 @@ func (s *Store) ReadListsStrict(owner string) (*Registry, error) {
 			return nil, ErrCorrupt
 		}
 	}
-	if owner == "" {
-		s.withListFiles(r)
-	}
 	return r.own(owner), nil
 }
 
@@ -536,26 +326,20 @@ func (s *Store) WriteListsLocked(user asker.Asker, owner string, r *Registry) ([
 }
 
 // WriteListsOf writes owner's registry, whoever asks: for what Zone does
-// over every owner's files (a migration at start). The shared one's lists
-// for some go into their folders (writeListFiles), before the registry: a
-// list narrowed is hidden before it leaves the file everyone reads. Returns
-// the paths of the files that changed.
+// over every owner's files (a migration at start). Returns the paths of the
+// files that changed.
 func (s *Store) WriteListsOf(owner string, r *Registry) ([]string, error) {
 	s.Hold()
-	var paths []string
-	if owner == "" {
-		var err error
-		if paths, err = s.writeListFiles(r); err != nil {
-			return paths, err
-		}
-	}
 	path, text := s.ListsPath(owner), r.Encode()
 	if raw, err := os.ReadFile(path); err == nil && string(raw) == text {
-		return paths, nil
+		return nil, nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
+		return nil, err
 	}
 	if err := atomicfile.Write(path, text); err != nil {
-		return paths, err
+		return nil, err
 	}
 	changed(path)
-	return append(paths, path), nil
+	return []string{path}, nil
 }

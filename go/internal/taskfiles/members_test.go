@@ -1,247 +1,127 @@
 package taskfiles
 
 import (
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"zonewiki/internal/asker"
 )
 
-// membersStore: alice, bob and carol; the shared list hiring is for alice
-// and the group @ops (carol's), with an open task, one closed this month
-// and one archived; the list team is for everyone, with a task; one task in
-// no list.
-func membersStore(t *testing.T) *fixture {
+// groupsStore: alice, bob and carol; alice and carol are in the group ops,
+// whose list hiring (in groups/ops/_tasks/) has an open task, one closed
+// this month and one archived; the shared list team has a task; one task is
+// in no list.
+func groupsStore(t *testing.T) *fixture {
 	t.Helper()
 	f := newStore(t, "alice", "bob", "carol")
-	f.Member = func(asks asker.Asker, who []string) bool {
-		user := asks.Name
-		return slices.Contains(who, user) || user == "carol" && slices.Contains(who, "@ops")
+	f.GroupsDir = "groups"
+	f.Groups = func(asks asker.Asker) []string {
+		if asks == Everyone || asks.Name == "alice" || asks.Name == "carol" {
+			return []string{"ops"}
+		}
+		return nil
+	}
+	ops := GroupOwner("ops")
+	f.Lock()
+	if _, err := f.WriteListsLocked(asker.User("alice"), "", &Registry{Lists: []*List{{Name: "team"}}}); err != nil {
+		t.Fatal(err)
 	}
 	hiring := &List{Name: "hiring", Settings: map[string]string{"view": "open"}}
-	hiring.SetFor([]string{"@ops", "alice"})
 	hiring.SetOwners([]string{"alice"})
-	f.Lock()
-	if _, err := f.WriteListsLocked(asker.User("alice"), "", &Registry{Lists: []*List{{Name: "team"}, hiring}}); err != nil {
+	if _, err := f.WriteListsLocked(asker.User("alice"), ops, &Registry{Lists: []*List{hiring}}); err != nil {
 		t.Fatal(err)
 	}
 	f.Unlock()
-	in := func(id, list, closedAt string) *Task { x := task(id, "", closedAt); x.List = list; return x }
-	f.write(t, "alice", []*Task{in("h1", "hiring", ""), in("t1", "team", ""), in("n1", "", "")},
-		[]*Task{in("h2", "hiring", "2026-06-01T10:00"), in("h3", "hiring", "2026-03-02T10:00")}, "Set up")
+	in := func(id, owner, list, closedAt string) *Task { x := task(id, owner, closedAt); x.List = list; return x }
+	f.write(t, "alice", []*Task{in("h1", ops, "hiring", ""), in("t1", "", "team", ""), in("n1", "", "", "")},
+		[]*Task{in("h2", ops, "hiring", "2026-06-01T10:00"), in("h3", ops, "hiring", "2026-03-02T10:00")}, "Set up")
 	return f
 }
 
-// The list's entry is in its own folder, not in the file everyone reads;
-// the registry read back has it, with whom it is for.
-func TestAListForSomeIsKeptInItsFolder(t *testing.T) {
-	f := membersStore(t)
-	if text := f.text(t, "_tasks/lists.json"); strings.Contains(text, "hiring") || !strings.Contains(text, `{"name": "team"}`) {
-		t.Errorf("lists.json: %s", text)
+// A group's lists and tasks are kept in its folder, as its pages are, and
+// read as an owner of their own: "@ops".
+func TestAGroupsTasksAreKeptInItsFolder(t *testing.T) {
+	f := groupsStore(t)
+	if g, ok := GroupOf("@ops"); !ok || g != "ops" {
+		t.Errorf("GroupOf: %q %v", g, ok)
 	}
-	if text := f.text(t, "_tasks/lists/hiring/list.json"); text != `{"name": "hiring", "view": "open", "for": ["@ops", "alice"], "owners": ["alice"]}`+"\n" {
-		t.Errorf("list.json: %q", text)
+	if _, ok := GroupOf(""); ok {
+		t.Error("the shared files are a group's")
 	}
-	l := f.ReadLists("").Find("hiring")
-	if l == nil || !slices.Equal(l.For(), []string{"@ops", "alice"}) || !slices.Equal(l.Owners(), []string{"alice"}) || l.Settings["view"] != "open" {
-		t.Errorf("read back: %+v", l)
+	if g, ok := GroupOf("alice"); ok || g != "" {
+		t.Error("a user's files are a group's")
 	}
-	if !slices.Equal(f.ForOfList("hiring"), []string{"@ops", "alice"}) || f.ForOfList("team") != nil || f.ForOfList("") != nil {
-		t.Error("ForOfList")
+	if !strings.Contains(f.text(t, "groups/ops/_tasks/lists.json"), `{"name": "hiring", "view": "open", "owners": ["alice"]}`) {
+		t.Errorf("the group's registry: %s", f.text(t, "groups/ops/_tasks/lists.json"))
 	}
-	// Written again as read: nothing to commit.
+	if strings.Contains(f.text(t, "_tasks/lists.json"), "hiring") {
+		t.Error("the group's list is in the registry everyone reads")
+	}
+	if got := f.ids(t, "groups/ops/_tasks/lists/hiring/tasks.json"); !slices.Equal(got, []string{"h1"}) {
+		t.Errorf("its open tasks: %v", got)
+	}
+	if got := f.ids(t, "groups/ops/_tasks/lists/hiring/closed-2026-03.json"); !slices.Equal(got, []string{"h3"}) {
+		t.Errorf("its archive: %v", got)
+	}
+	if got := f.ReadLists(GroupOwner("ops")).Find("hiring"); got == nil || got.Owner != "@ops" {
+		t.Errorf("read back: %+v", got)
+	}
+}
+
+// Who reads and writes a group's files is who is in it (Owners): every
+// read of a user's leaves the others' groups out, and a write never touches
+// them.
+func TestOnlyAGroupsMembersReadItsTasks(t *testing.T) {
+	f := groupsStore(t)
+	if got := f.Owners(asker.User("carol")); !slices.Equal(got, []string{"", "carol", "@ops"}) {
+		t.Errorf("carol's owners: %v", got)
+	}
+	if got := f.Owners(asker.User("bob")); !slices.Equal(got, []string{"", "bob"}) {
+		t.Errorf("bob's owners: %v", got)
+	}
+	if got := f.EveryOwner(); !slices.Equal(got, []string{"", "alice", "bob", "carol", "@ops"}) {
+		t.Errorf("every owner: %v", got)
+	}
+	open := func(user string) []string {
+		out := []string{}
+		for _, t := range f.Open(asker.User(user)) {
+			out = append(out, t.ID+":"+t.Owner)
+		}
+		slices.Sort(out)
+		return out
+	}
+	if got := open("carol"); !slices.Equal(got, []string{"h1:@ops", "n1:", "t1:"}) {
+		t.Errorf("carol reads %v", got)
+	}
+	if got := open("bob"); !slices.Equal(got, []string{"n1:", "t1:"}) {
+		t.Errorf("bob reads %v", got)
+	}
+	// A task of the group in a write of bob's is refused, nothing written.
 	f.Lock()
 	defer f.Unlock()
-	r, err := f.ReadListsStrict("")
-	if err != nil {
-		t.Fatal(err)
+	err := f.WriteOpenLocked(asker.User("bob"), []*Task{{ID: "x", Title: "X", Owner: "@ops", List: "hiring"}}, "Sneak")
+	if err == nil {
+		t.Error("bob wrote into the group's folder")
 	}
-	if p, err := f.WriteListsLocked(asker.User("bob"), "", r); len(p) != 0 || err != nil {
-		t.Errorf("an unchanged registry written: %q, %v", p, err)
-	}
-}
-
-// Who sees a task is decided by where it is kept: every reader of a user's
-// leaves out the folder of a list they are none of.
-func TestOnlyItsMembersReadAListForSome(t *testing.T) {
-	f := membersStore(t)
-	any := func(*Task) bool { return true }
-	for user, sees := range map[string]bool{"alice": true, "carol": true, "bob": false} {
-		has := func(what string, tasks []*Task, id string) {
-			t.Helper()
-			if slices.Contains(ids(tasks), id) != sees {
-				t.Errorf("%s, %s: %s there: %v", user, what, id, !sees)
-			}
-		}
-		has("Open", f.Open(asker.User(user)), "h1")
-		all := f.All(asker.User(user))
-		has("All", all, "h1")
-		has("All", all, "h2")
-		has("All", all, "h3")
-		has("RecentClosed", f.RecentClosed(asker.User(user), any), "h2")
-		has("ClosedInYear", f.ClosedInYear(asker.User(user), "2026"), "h3")
-		page, total := f.ClosedPage(asker.User(user), "2026", any, 50, "")
-		has("ClosedPage", page, "h2")
-		if n := f.CountClosedInYear(asker.User(user), "2026", any); n != total || (n == 2) != sees {
-			t.Errorf("%s counts %d closed (the page %d)", user, n, total)
-		}
-		open, done := f.Snapshot(asker.User(user))
-		has("Snapshot", append(open, done...), "h3")
-		if f.SeesList(asker.User(user), "hiring") != sees || !f.SeesList(asker.User(user), "team") || !f.SeesList(asker.User(user), "") {
-			t.Errorf("SeesList for %s", user)
-		}
-		// What is for everyone is everyone's.
-		if got := ids(f.Open(asker.User(user))); !slices.Contains(got, "t1") || !slices.Contains(got, "n1") {
-			t.Errorf("%s misses the shared tasks: %v", user, got)
-		}
-	}
-	// Zone itself reads all of them (the search index, which filters later).
-	if got := ids(f.Every()); !slices.Contains(got, "h1") || !slices.Contains(got, "h3") {
-		t.Errorf("Every: %v", got)
-	}
-	// The counts' stamp of someone who is none of them doesn't move with the list.
-	before, alices := f.Stamp(asker.User("bob")), f.Stamp(asker.User("alice"))
-	f.one(t, "alice", "h1", "Change", func(active, closed []*Task) ([]*Task, []*Task) {
-		for _, x := range active {
-			if x.ID == "h1" {
-				x.Title = "Changed"
-			}
-		}
-		return active, closed
-	})
-	if f.Stamp(asker.User("alice")) == alices {
-		t.Error("alice's stamp stayed")
-	}
-	if strings.Split(f.Stamp(asker.User("bob")), " ")[0] != strings.Split(before, " ")[0] || strings.Contains(before, "hiring") {
-		t.Errorf("bob's stamp names or follows the list: %q", before)
+	if got := f.ids(t, "groups/ops/_tasks/lists/hiring/tasks.json"); !slices.Equal(got, []string{"h1"}) {
+		t.Errorf("the group's tasks after: %v", got)
 	}
 }
 
-// A write by someone who is none of them leaves the list's files as they
-// are: it didn't read them, so it must not write them.
-func TestAWriteByAnyoneElseLeavesAListForSomeAlone(t *testing.T) {
-	f := membersStore(t)
-	files := []string{"_tasks/lists/hiring/tasks.json", "_tasks/lists/hiring/closed.json",
-		"_tasks/lists/hiring/closed-2026-03.json", "_tasks/lists/hiring/list.json"}
-	before := map[string]string{}
-	for _, p := range files {
-		if before[p] = f.text(t, p); before[p] == "" {
-			t.Fatalf("%s isn't there", p)
+// A former list for some's old folder (until 2026-11-20: its list.json said
+// whom it was for) is read by no one: what a start couldn't move into a
+// group's folder is out of everyone's sight, not in it.
+func TestAFormerListForSomesFolderIsReadByNoOne(t *testing.T) {
+	f := groupsStore(t)
+	f.put(t, "_tasks/lists/old/list.json", `{"name": "old", "for": ["@ops"]}`+"\n")
+	f.put(t, "_tasks/lists/old/tasks.json", `[{"id": "o1", "title": "Old", "list": "old", "created_at": "2026-01-01T10:00:00"}]`+"\n")
+	forgetAll()
+	for _, user := range []string{"alice", "bob"} {
+		if slices.ContainsFunc(f.Open(asker.User(user)), func(t *Task) bool { return t.ID == "o1" }) {
+			t.Errorf("%s reads the old folder's task", user)
 		}
 	}
-	same := func(what string) {
-		t.Helper()
-		for _, p := range files {
-			if f.text(t, p) != before[p] {
-				t.Errorf("%s changed %s", what, p)
-			}
-		}
-	}
-	// Everything bob sees read and written (a batch, a delete, an import).
-	f.rewrite(t, "bob", "Complete", func(active, closed []*Task) ([]*Task, []*Task) {
-		for _, x := range active {
-			if x.ID == "t1" {
-				x.ClosedAt = "2026-06-01T11:00"
-				return slices.DeleteFunc(active, func(y *Task) bool { return y.ID == "t1" }), append(closed, x)
-			}
-		}
-		t.Fatal("no t1")
-		return nil, nil
-	})
-	same("a write of everything bob sees")
-	// One task changed.
-	f.one(t, "bob", "n1", "Change", func(active, closed []*Task) ([]*Task, []*Task) {
-		active[0].Title = "Changed"
-		return active, closed
-	})
-	same("a write of one task")
-	// A task of bob's that names the list (it can't have been read for him): refused, nothing written.
-	f.Lock()
-	active, err := f.ReadOpenStrict(asker.User("bob"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	smuggled := task("x1", "", "")
-	smuggled.List = "hiring"
-	if err := f.WriteOpenLocked(asker.User("bob"), append(active, smuggled), "Smuggle"); err == nil {
-		t.Error("a task written into a list its writer doesn't see")
-	}
-	f.Unlock()
-	same("a refused write")
-	// A member's write reaches them.
-	f.one(t, "carol", "h1", "Change", func(active, closed []*Task) ([]*Task, []*Task) {
-		for _, x := range active {
-			if x.ID == "h1" {
-				x.Title = "Carol's"
-			}
-		}
-		return active, closed
-	})
-	if !strings.Contains(f.text(t, "_tasks/lists/hiring/tasks.json"), "Carol's") {
-		t.Error("a member's write didn't reach the list")
-	}
-	// A start's filing (Zone itself) keeps them where they are.
-	f.ArchiveOldClosed()
-	f.FileByList()
-	if got := f.ids(t, "_tasks/lists/hiring/closed-2026-03.json"); !slices.Equal(got, []string{"h3"}) {
-		t.Errorf("after a start: %v", got)
-	}
-}
-
-// For everyone again: the entry is back in the registry and the file is
-// gone. Deleted: the folder keeps what says whose its history is.
-func TestAListForSomeWidenedAndGone(t *testing.T) {
-	f := membersStore(t)
-	change := func(edit func(r *Registry)) []string {
-		t.Helper()
-		f.Lock()
-		defer f.Unlock()
-		r, err := f.ReadListsStrict("")
-		if err != nil {
-			t.Fatal(err)
-		}
-		edit(r)
-		paths, err := f.WriteListsLocked(asker.User("alice"), "", r)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var rel []string
-		for _, p := range paths {
-			x, _ := filepath.Rel(f.root, p)
-			rel = append(rel, filepath.ToSlash(x))
-		}
-		return rel
-	}
-	// Narrowing team: its folder says so before the registry stops naming it.
-	if got := change(func(r *Registry) { r.Find("team").SetFor([]string{"alice"}) }); !slices.Equal(got, []string{"_tasks/lists/team/list.json", "_tasks/lists.json"}) {
-		t.Errorf("narrowing wrote %v", got)
-	}
-	if slices.Contains(ids(f.Open(asker.User("bob"))), "t1") || !slices.Contains(ids(f.Open(asker.User("alice"))), "t1") {
-		t.Error("a narrowed list's tasks")
-	}
-	// And for everyone again.
-	if got := change(func(r *Registry) { r.Find("team").SetFor(nil) }); !slices.Equal(got, []string{"_tasks/lists/team/list.json", "_tasks/lists.json"}) {
-		t.Errorf("widening wrote %v", got)
-	}
-	if _, err := os.Stat(filepath.Join(f.root, "_tasks/lists/team/list.json")); err == nil || !strings.Contains(f.text(t, "_tasks/lists.json"), `{"name": "team"}`) {
-		t.Error("a widened list keeps its file, or isn't in the registry")
-	}
-	if !slices.Contains(ids(f.Open(asker.User("bob"))), "t1") {
-		t.Error("a widened list's tasks")
-	}
-	// Gone: no list anymore, and its folder still its members'.
-	change(func(r *Registry) {
-		r.Lists = slices.DeleteFunc(r.Lists, func(l *List) bool { return l.Name == "hiring" })
-	})
-	if f.ReadLists("").Find("hiring") != nil {
-		t.Error("a deleted list is still one")
-	}
-	if text := f.text(t, "_tasks/lists/hiring/list.json"); text != `{"name": "hiring", "for": ["@ops", "alice"], "gone": true}`+"\n" {
-		t.Errorf("what it left: %q", text)
-	}
-	if !slices.Equal(f.ForOfList("hiring"), []string{"@ops", "alice"}) || f.SeesList(asker.User("bob"), "hiring") || slices.Contains(ids(f.Open(asker.User("bob"))), "h1") {
-		t.Error("a deleted list's folder is everyone's")
+	if slices.ContainsFunc(f.Every(), func(t *Task) bool { return t.ID == "o1" }) {
+		t.Error("Zone reads the old folder's task")
 	}
 }

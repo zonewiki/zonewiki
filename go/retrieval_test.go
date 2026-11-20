@@ -734,29 +734,21 @@ func TestAGroupsPagesAreInItsMembersIndexAlone(t *testing.T) {
 	}
 }
 
-// A list for some is a place too: its tasks are in its members' index alone,
-// and a list narrowed or widened splits the docs again though no task
-// changed.
-func TestAListForSomesTasksAreInItsMembersIndexAlone(t *testing.T) {
+// A group's tasks are a place too, as its pages are: they are in its
+// members' index alone, and a member who leaves the group no longer has
+// them, though no task changed.
+func TestAGroupsTasksAreInItsMembersIndexAlone(t *testing.T) {
 	testWiki(t, nil)
 	withGroups(t, nil, "alice:hiring", "bob", "carol:hiring")
-	dir := filepath.Join(cfg.Data, "_tasks", "lists", "hiring")
-	entry := filepath.Join(dir, "list.json")
-	if err := os.MkdirAll(dir, 0o777); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(entry, []byte(`{"name": "hiring", "for": ["@hiring"]}`), 0o666); err != nil {
-		t.Fatal(err)
-	}
-	task := func(id, list string, words ...string) *SearchDoc {
-		return &SearchDoc{Slug: "task:" + id, Task: &Task{ID: id, List: list}, Tokens: fixedTokens(words...)}
+	task := func(id, owner string, words ...string) *SearchDoc {
+		return &SearchDoc{Slug: "task:" + id, Task: &Task{ID: id, Owner: owner, List: "x"}, Tokens: fixedTokens(words...)}
 	}
 	shared := []*SearchDoc{
-		{Slug: "p1", Tokens: fixedTokens("apple", "pear")}, task("t1", "team", "pear", "plum"),
+		{Slug: "p1", Tokens: fixedTokens("apple", "pear")}, task("t1", "", "pear", "plum"),
 		{Slug: "p3", Tokens: fixedTokens("apple", "ocelotharq")},
 	}
 	theirs := []*SearchDoc{
-		task("h1", "hiring", "ocelotharp", "apple", "apple"), task("h2", "hiring", "ocelotharp", "pear", "pear", "pear"),
+		task("h1", "@hiring", "ocelotharp", "apple", "apple"), task("h2", "@hiring", "ocelotharp", "pear", "pear", "pear"),
 	}
 	docs := slices.Concat(shared[:2], theirs, shared[2:])
 	var c indexCache
@@ -765,56 +757,40 @@ func TestAListForSomesTasksAreInItsMembersIndexAlone(t *testing.T) {
 		t.Fatalf("bob's index has %d docs, want the %d shared ones", bob.count(), len(shared))
 	}
 	if alice.count() != 5 || !slices.Equal(docsOf(alice), docsOf(c.get(&Req{user: asUser("carol")}, docs))) {
-		t.Errorf("alice's index has %d docs, want the shared ones and the list's two", alice.count())
+		t.Errorf("alice's index has %d docs, want the shared ones and the group's two", alice.count())
 	}
 	without := newDocIndex(shared)
 	for _, q := range []string{"apple", "pear", "plum", "ocelotharp", "ocelothar", "ocelotharq", "apple pear"} {
 		if got, want := bob.search(q, 10), without.search(q, 10); !slices.Equal(got, want) {
-			t.Errorf("%q for bob: %d hits, in a wiki without the list %d", q, len(got), len(want))
+			t.Errorf("%q for bob: %d hits, in a wiki without the group's tasks %d", q, len(got), len(want))
 		}
 	}
 	if hits := bob.search("ocelotharp", 10); len(hits) != 1 || hits[0].Slug != "p3" {
-		t.Errorf("bob's search for the list's word: %d hits, want his own page by the typo", len(hits))
+		t.Errorf("bob's search for the group's word: %d hits, want his own page by the typo", len(hits))
 	}
 	if hits := alice.search("ocelotharp", 10); len(hits) != 2 {
-		t.Errorf("alice's search for the list's word: %d hits, want the list's two", len(hits))
+		t.Errorf("alice's search for the group's word: %d hits, want the group's two", len(hits))
 	}
-	// Widened, with no task changed: everyone's.
-	if err := os.Remove(entry); err != nil {
-		t.Fatal(err)
-	}
-	if bob := c.get(&Req{user: asUser("bob")}, docs); bob.count() != 5 || len(bob.search("ocelotharp", 10)) != 2 {
-		t.Errorf("the list widened: bob's index has %d docs", bob.count())
-	}
-	// And narrowed again.
-	if err := os.WriteFile(entry, []byte(`{"name": "hiring", "for": ["alice"]}`), 0o666); err != nil {
-		t.Fatal(err)
-	}
-	if bob, carol := c.get(&Req{user: asUser("bob")}, docs), c.get(&Req{user: asUser("carol")}, docs); bob.count() != 3 || carol.count() != 3 {
-		t.Errorf("the list narrowed to alice: bob's index has %d docs, carol's %d", bob.count(), carol.count())
+	// Carol leaves the group: her next search has none of its tasks.
+	withGroups(t, nil, "alice:hiring", "bob", "carol")
+	if carol := c.get(&Req{user: asUser("carol")}, docs); carol.count() != 3 {
+		t.Errorf("carol out of the group: her index has %d docs", carol.count())
 	}
 }
 
-// A search asks about each list once (docHider) and leaves out what
-// hiddenDoc does, for each user: a list for some's tasks to who is none of
-// them, another's private task and pages; and the next search sees a list
-// narrowed in the meantime.
+// A search asks about each task owner once (docHider) and leaves out what
+// hiddenDoc does, for each user: a group's tasks to who is none of it,
+// another's private task and pages; and the next search sees a change of
+// the group.
 func TestASearchHidesWhatHiddenDocDoes(t *testing.T) {
 	testWiki(t, nil)
 	withGroups(t, nil, "alice:hiring", "bob", "carol:hiring")
-	dir := filepath.Join(cfg.Data, "_tasks", "lists", "hiring")
-	if err := os.MkdirAll(dir, 0o777); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "list.json"), []byte(`{"name": "hiring", "for": ["@hiring"]}`), 0o666); err != nil {
-		t.Fatal(err)
-	}
 	task := func(id, owner, list string) *SearchDoc {
 		return &SearchDoc{Slug: "task:" + id, Task: &Task{ID: id, Owner: owner, List: list}}
 	}
 	docs := []*SearchDoc{
-		task("t1", "", ""), task("t2", "", "team"), task("h1", "", "hiring"), task("t3", "", "team"),
-		task("h2", "", "hiring"), task("a1", "alice", ""), task("b1", "bob", "mine"),
+		task("t1", "", ""), task("t2", "", "team"), task("h1", "@hiring", "hiring"), task("t3", "", "team"),
+		task("h2", "@hiring", "hiring"), task("a1", "alice", ""), task("b1", "bob", "mine"),
 		{Slug: "p1"}, {Slug: "private/alice/notes"}, {Slug: "groups/hiring/plan"},
 	}
 	for _, rq := range []*Req{nil, {user: asUser("alice")}, {user: asUser("bob")}, {user: asUser("carol")}, {user: asUser(visitor)}} {
@@ -826,13 +802,11 @@ func TestASearchHidesWhatHiddenDocDoes(t *testing.T) {
 		}
 	}
 	if hidden := docHider(&Req{user: asUser("bob")}); !hidden(docs[2]) || hidden(docs[1]) {
-		t.Errorf("bob sees the list for @hiring's task, or not the team's")
+		t.Errorf("bob sees the group's task, or not the team's")
 	}
-	if err := os.WriteFile(filepath.Join(dir, "list.json"), []byte(`{"name": "hiring", "for": ["alice"]}`), 0o666); err != nil {
-		t.Fatal(err)
-	}
+	withGroups(t, nil, "alice:hiring", "bob", "carol")
 	if hidden := docHider(&Req{user: asUser("carol")}); !hidden(docs[2]) {
-		t.Errorf("the list narrowed to alice: carol's next search still has its task")
+		t.Errorf("carol out of the group: her next search still has its task")
 	}
 }
 

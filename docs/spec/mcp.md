@@ -123,7 +123,7 @@ Not yet: a token that only reads.
 ### Connections given less to see
 
 With users, a connection can be given only some of its user's places (`less` on the grant: `no_private`, `groups` in `.zone/grants`; `asker.NoPrivate`, `asker.OnlyGroups`).
-The places are the ones the wiki has: **the shared wiki** (always: the pages and tasks everyone sees), **the user's private place** (their private pages, notes, private lists and the Inbox), and **each group** they are in (its pages, and the lists for it).
+The places are the ones the wiki has: **the shared wiki** (always: the pages and tasks everyone sees), **the user's private place** (their private pages, notes, private lists and the Inbox), and **each group** they are in (its pages, and its lists).
 The question asks **What may it see?**, a box each, all ticked; what is unticked isn't there for the assistant.
 All groups ticked means every group of the user's, also one they join later; otherwise the ticked ones, and never a group the user isn't in (or has left).
 
@@ -319,7 +319,7 @@ The token `/mcp` requires (Auth) guards writes as it guards reads, and git keeps
 | `delete_page(slug, summary)` | Deletes and commits (restorable from Deleted Pages); names the pages that still link to it. Not the home page. |
 | `undo_changes(versions, summary)` | Takes back changes named by their versions, as Undo on Changes. |
 | `restore_page(slug, version, summary)` | Writes a version's text back; brings back a deleted page. |
-| `create_task_list(name, private, for, summary)` | A new task list: shared, for some, or private. |
+| `create_task_list(name, private, group, summary)` | A new task list: everyone's, a group's, or private. |
 | `rename_task_list(list, new_name, summary)` | A task list's name, on its tasks, in pins and on pages. |
 | `create_task(title, description, tags, list, assignee, importance, due, start, repeat, repeat_every, repeat_from, keep, position, after, before, summary, source)` | A task, as `POST /api/tasks` makes it, where it goes in the manual order. |
 | `update_task(id, …same fields…, share, follow, add_tags, remove_tags, comment, status, ids, summary, source)` | Every change to existing tasks: fields, tags, a comment, status, its place in the manual order, several tasks' tags and order at once. |
@@ -433,7 +433,7 @@ The delete commit itself has no text (an error pointing at the version before it
 A new task list (`createListOp`, as New list… on the Tasks page: pinned for the user, last, so it is a pill of their list switcher):
 
 - shared;
-- with `for` (with users: groups `@name` and users, the user among them) a shared list for some, which only they see (Lists for some in `docs/spec/tasks.md`);
+- with `group` (with users: a group the user is in) the group's, kept in its folder, which only its members see (A group's lists in `docs/spec/tasks.md`);
 - or with `private` (with users) the user's own, whose tasks only they see.
 
 The name is cleaned as a list's is (one word); a name of a list the user sees is a tool error.

@@ -126,7 +126,7 @@ Version history is in `docs/spec/rendering.md`.
 | POST   | `/groups`             | Makes a group (`name`, `people`): you are in it and own it; refused for a name that is taken, 403 for a viewer |
 | POST   | `/groups/includes`    | What a group includes (`group`, `includes`: groups there are; a new `group` makes a group of groups); admins only, 404 for anyone else |
 | POST   | `/groups/<group>/people` | Who is in the group by name, and its owners (`people`, `owners`), for its owners and admins; 404 for anyone else |
-| POST   | `/groups/<group>/rename` | The group's new name (`name`): its folder, the links to its pages, the lists for it and the settings follow; for its owners and admins, 404 for anyone else |
+| POST   | `/groups/<group>/rename` | The group's new name (`name`): its folder (its pages and task lists), the links to its pages and the settings follow; for its owners and admins, 404 for anyone else |
 | POST   | `/groups/<group>/remove` | Ends the group, for its owners and an admin, its pages moved or deleted (below); refused while a task list is for it (A group ended in `docs/spec/users.md`) |
 | POST   | `/groups/<group>/leave` | Whoever asks is no longer in the group: its name goes from their groups (a group named on them that has owners and that they don't manage; 404 otherwise) |
 | GET    | `/groups/<group>`     | A group's home `groups/<group>/index` (made on the first visit of someone in the group who may write); 404 for anyone not in it |
@@ -200,11 +200,11 @@ A change users see updates its manual page in the same commit, as it updates the
 |--------|-----------------------|-------------------------------------------------|
 | GET    | `/tasks`              | The built-in tasks page (`tasksPage()`): every open task, or a list, the Inbox or My tasks; see The tasks page, below |
 | POST   | `/tasks/rename`       | Rename a task tag (fields `tag`, `new_name`, `merge`; the Rename tag… dialog of `/tasks?tag=<tag>`, Renaming a tag in `docs/spec/tasks.md`); see below |
-| POST   | `/tasks/new-list`     | Make a task list, pinned for who makes it (fields `name`, `private`, `pin`: `0` leaves it unpinned); see below |
+| POST   | `/tasks/new-list`     | Make a task list, pinned for who makes it (fields `name`, `for`: empty for everyone, `group:<g>` for a group of theirs, `private`; `pin`: `0` leaves it unpinned); see below |
 | POST   | `/tasks/rename-list`  | Rename a list (fields `list`, `new_name`; its Rename… dialog): its tasks, the pins and the pages' embeds and links follow; see below |
 | POST   | `/tasks/delete-list`  | Delete a list (fields `list`, `to`, `share`, `close`, `confirm`; its Delete… dialog); see below |
-| POST   | `/tasks/share-list`   | Make a private list shared, its tasks with it (field `list`; its Make shared… dialog); a refusal back to the dialog (`&share_error=…`) |
-| POST   | `/tasks/list-for`     | Say whom a shared list is for (fields `list`, `for`; its Who it is for… dialog, its owners'; Lists for some in `docs/spec/tasks.md`); see below |
+| POST   | `/tasks/share-list`   | Make a private list shared, its tasks with it (fields `list`, `for`: empty for everyone, `group:<g>` for a group of theirs; its Make shared… dialog); a refusal back to the dialog (`&share_error=…`) |
+| POST   | `/tasks/list-for`     | Move a shared list to everyone or to a group (fields `list`, `for`; its Who sees it… dialog, its owners'; A group's lists in `docs/spec/tasks.md`); see below |
 | POST   | `/tasks/pin-list`     | Pin a list for the user (last), put its pill first, or unpin it (fields `list`, `pin`: `1`, `first`, `0`); see below |
 | POST   | `/tasks/pin-order`    | The user's pinned lists in another order (the list switcher's pills, dragged); 204 |
 
@@ -233,8 +233,8 @@ Each form goes back to its dialog when it refuses, with the dialog's fields and 
   It makes an entry in the lists' registry, then redirects to `/tasks?list=<name>`; a name that won't do goes back to the dialog (`/tasks?newlist_name=…&newlist_error=…`).
 - `/tasks/rename-list` redirects to the list by its new name, a refusal back to the dialog (`?list=…&rename_name=…&rename_error=…`).
 - `/tasks/delete-list`: the list's tasks go to the list `to` names or to none, its open ones closed as won't do with `close`; it redirects there, a refusal back to the dialog (`&delete_error=…`), a question too (`&delete_to=<list>`: open tasks there would be with someone who doesn't see it; `confirm=<list>` goes on).
-- `/tasks/list-for`: `for` takes groups `@name` and users, empty or `everyone` for all.
-  A refusal goes back to the dialog (`&for_error=…&for_words=…`), and so does a narrowing that would take open tasks out of their assignees' sight, which goes through with `confirm=1` (`&for_confirm=1`); who is no owner gets 403.
+- `/tasks/list-for`: `for` is `group:<g>` (a group of theirs) or empty for everyone; the list's entry and its tasks' files go to that place.
+  A refusal goes back to the dialog (`&for_error=…`), and so does a move that would take open tasks out of their assignees' sight, which goes through with `confirm=1` (`&for_confirm=1`); who is no owner gets 403.
 - `/tasks/pin-list` pins or unpins a list for whoever asks (`pin`: `1`, `first`, `0`), in their own registry; it redirects to the list.
 - `/tasks/pin-order` takes every field `list` a ref, in the order wanted; the pinned ones among them come first, the rest stay as they were, nothing is pinned or unpinned.
 

@@ -165,7 +165,7 @@ function filterActive(f) {
 
 // The task's assignee no longer has it: someone who can no longer be given
 // tasks (disabled, removed, a viewer now), or who is none of those its list
-// is for (people.members: a list for some's members by the list's ref; a
+// is in (people.members: a group's list's members by the list's ref; a
 // list narrowed since, a group they left): they don't see the task. The
 // name stays on it, so when they are back it is theirs as before.
 function assigneeGone(t, people) {
