@@ -188,6 +188,23 @@ so nothing tells what is in someone's folder.
 The rules are `go/access.go` alone (`canSee`, `canWrite`, `canSeePath`, `canSeeTask`); `tests/test_privacy.py` probes every route and MCP tool for leaks, and fails for a new one that isn't probed.
 Private is hidden inside Zone, not encrypted: the files, git history and a git remote hold everything.
 
+### Who asks is an asker
+
+A function that answers who may see or change something, or reads for someone, takes an **asker** (`asker` in `go/access.go`, package `internal/asker`), not a name:
+a request's is `userOf(r)` / `rq.user`, the user with what an assistant's connection was given less (not their private place, `asker.NoPrivate`; only some groups, `asker.OnlyGroups`; nothing written, `asker.ReadOnly`).
+A function that only needs to know who someone is takes `asker.Name`: a commit's author, whose folder, a settings lookup;
+and where a name is written (JSON, a file, a message) it is the `Name`, never the asker.
+`asUser(name)` is the person with all they may, for what Zone asks about a user it knows by name (whom a task is given to, who gets a mail), never for a request: `TestAskersAreMadeInFewPlaces` lists the functions that may call it and fails for `asUser(user.Name)`.
+
+Whose a private thing is and who is in a group are asked in `go/access.go` alone: `place.own`/`sees`, `canSeeTask`, `canSeeList`, `inGroup`, `groupsFor`, and `lacksPrivate` where something private would be made.
+Code elsewhere never compares an owner with `user.Name` or asks the settings for an asker's groups (`TestWhatIsTheirsIsAskedInOnePlace`, a narrow regex: Guards in `docs/spec/testing.md`).
+A shared task is everyone's or a group's, so "is it private" is `Task.Private()`/`privateOwner`, never `Owner == ""`.
+Task reads take the asker (`taskFiles.Open(user)` …, `Store.Owners`: the shared files, their own and their groups'); `taskfiles.Everyone` is only for what Zone does over all tasks and filters later (the search index, with `canSeeTask`).
+
+A write asks `canWrite`/`mayWriteTasks`, which ask `changesNothing` (a viewer, or a connection that only reads), never `isViewer` alone; the doors an assistant comes in by ask first, for the message (`noChangeMsg`: `callMCPTool`, the upload with a token).
+A token becomes an asker in one place (`mcpAuthorized`); a new door for a token takes it from there with `withAsker`.
+A connection is only ever made narrower without the password.
+
 ### Guides are an admin's to write
 
 Guides are an admin's to write, with users (`adminsOnly` in `go/access.go`, Guides in `docs/spec/users.md`): `wiki-guide`,

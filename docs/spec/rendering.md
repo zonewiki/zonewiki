@@ -445,6 +445,23 @@ Every save of a page is a git commit, so each page has a history of versions, an
 - Pages are written atomically (a temp file renamed into place, the file's permissions kept), and writes to pages run one at a time (`pagesMu`, from the reads a write decides on to its commit: two writes at once, say an assistant's `append_to_page` and a ticked checkbox, both keep their change).
 - SHA values are validated with `shaRE` (`^[0-9a-f]{7,40}$`) before use.
 - Git's own maintenance runs in the foreground and Zone packs the repository itself, in the background: Packing the repository in `docs/spec/deployment.md`.
+- Git calls time out after `gitTimeout` (60s, `runGit`): a hung git counts as failed (exit code 124).
+
+### How a page write is made
+
+Every page write is an operation in `go/pageops.go`: delete, rename, restore, create, a save, Keep mine and Set aside after a conflict, a replace across pages, a link pointed at a new page's folder, a task tag's rename, an undo from Changes;
+a note's move and append are in `go/quicknotes.go`, and a list's rename (`renameListOp` in `go/tasklists.go`) writes pages too, the embeds and links that name the list.
+An operation checks access itself and keeps text not yet in git: `keepPending` before a write that replaces or removes a page's text, `commitOthersDraft` before one that continues it.
+The routes and MCP tools only parse their input and turn the result or the refusal into their answer, so a new write is a new operation, with a test through each door in `tests/test_page_writes.py`.
+That is a convention, not a guard: nothing fails when a write has no such test.
+
+Page writes run one at a time (`pagesMu`), from the reads they decide on to their commit.
+The doors take it, not the operations: a route that writes pages is registered as `writesPages(handler)`, an MCP tool that does says `toolWritesPages` in `mcpToolTable`, and code under it never takes it again.
+The lock order is `pagesMu`, then the task files' lock (`taskFiles.Lock`), then `commitMu`.
+Task reads don't take the task files' lock: they wait only while a write replaces its files (`taskFiles.Hold` … `Release`, Storage in `docs/spec/tasks.md`), so code that writes a task file itself calls `taskFiles.Hold()` first, and a section under `taskFiles.Lock` calls only the store's `…Locked` readers.
+
+A page is written with `writeText` (UTF-8, through `atomicfile.Write`: a link written through, a new file 0666 less the umask), after `safePath()` and `os.MkdirAll` for its folder.
+`gitCommit` returns an error, which the write returns (`notCommitted`); links a move couldn't re-point are no failure (`linksLeft`: logged, and the MCP tools say so).
 
 ### A page's history (`/history`)
 
