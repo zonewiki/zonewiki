@@ -2,11 +2,15 @@
 history lists them: by day, who and whether through an assistant, what
 each changed, the filters, sharing mode. What a user may not see of them
 is probed in test_privacy.py, test_group_pages.py and test_group_lists.py.
+And who changed a page last, as a search result says it (what a public
+wiki's visitor is told of it is in test_public.py).
 """
 
 import html
+import os
 import re
 import subprocess
+import time
 
 import pytest
 
@@ -372,3 +376,72 @@ def test_no_name_starts_a_commit_messages_next_line(client, wiki_dir):
     assert "newlist_error" in resp.headers["Location"]
     assert git(wiki_dir, "log", "--format=%B", f"{head}..HEAD").count("Assistant") == 0
     assert not (wiki_dir / forged).with_suffix(".md").exists() and "through Claude" not in client.get("/changes", headers=HOST).get_data(as_text=True)
+
+
+# ── Who changed a page last, in search ──────────────────────────────────────
+
+def metas(client, q):
+    """The line under each page result of /api/search, by slug."""
+    return {r["slug"]: r["meta"] for r in client.get("/api/search", query_string={"q": q}, headers=HOST).get_json()
+            if r.get("type") != "task"}
+
+
+def by_hand(wiki_dir, slug, text, author):
+    """A page written and committed in a terminal, not by Zone."""
+    (wiki_dir / f"{slug}.md").write_text(text)
+    git(wiki_dir, "add", f"{slug}.md")
+    git(wiki_dir, "-c", f"user.name={author}", "-c", f"user.email={author}@x", "commit", "-q", "-m", f"Add {slug}")
+
+
+EDITED = r"edited \d{4}-\d\d-\d\d"
+
+
+def test_a_search_result_says_who_changed_its_page_last(client, wiki_dir, connected):
+    """A page result says who made its last change: a user, a user's
+    assistant (and which, where its connection named one), whoever committed
+    in a terminal, before Zone's first search or after it; nobody for a
+    page changed since its last commit. In the search dialog's results,
+    on /search and in search_wiki."""
+    by_hand(wiki_dir, "old-notes", "# Old notes\n\nwombat\n", "carol")       # before the first search
+    save(client, "garden", "# Garden\n\nwombat beds\n")
+    tool(client, "write_page", token=connected, slug="shed", content="# Shed\n\nwombat tools\n")
+    tool(client, "write_page", token="alice-token", slug="pond", content="# Pond\n\nwombat fish\n")
+    meta = metas(client, "wombat")
+    assert re.fullmatch(EDITED + " by alice", meta["garden"]), meta
+    assert re.fullmatch(EDITED + r" by alice through Claude", meta["shed"]), meta
+    assert re.fullmatch(EDITED + " by alice's assistant", meta["pond"]), meta
+    assert re.fullmatch(EDITED + " by carol", meta["old-notes"]), meta
+    by_hand(wiki_dir, "new-notes", "# New notes\n\nwombat\n", "dave")        # after it
+    assert metas(client, "wombat")["new-notes"].endswith(" by dave")
+    page = client.get("/search", query_string={"q": "wombat"}, headers=HOST).get_data(as_text=True)
+    assert re.search(r'<span class="result-meta">' + EDITED + ' by alice</span>', page)
+    found = tool(client, "search_wiki", token="alice-token", query="wombat tools")
+    assert re.search(r"slug: shed\nedited: \d{4}-\d\d-\d\d by alice through Claude\n", found), found
+    # Changed on disk since its commit: whose that change is isn't known.
+    (wiki_dir / "garden.md").write_text("# Garden\n\nwombat beds, and a path\n")
+    later = time.time() + 5
+    os.utime(wiki_dir / "garden.md", (later, later))
+    assert re.fullmatch(EDITED, metas(client, "wombat")["garden"])
+
+
+def test_without_users_only_whether_an_assistant_did(client, wiki_dir):
+    save(client, "garden", "# Garden\n\nwombat\n")
+    tool(client, "write_page", slug="shed", content="# Shed\n\nwombat\n")
+    by_hand(wiki_dir, "notes", "# Notes\n\nwombat\n", "carol")
+    meta = metas(client, "wombat")
+    assert re.fullmatch(EDITED, meta["garden"]) and re.fullmatch(EDITED, meta["notes"]), meta
+    assert re.fullmatch(EDITED + " by an assistant", meta["shed"]), meta
+    assert "by an assistant" in tool(client, "search_wiki", query="wombat")
+
+
+def test_sharing_mode_says_who_as_changes_does(client, wiki_dir, monkeypatch):
+    """Sharing mode leaves out the pages not for sharing, and names who
+    changed the others, as Changes and a page's history do."""
+    monkeypatch.setattr(settings, "MCP_TOKEN", "")
+    monkeypatch.setattr(settings, "USERS", {"alice": ("alice-pw", "")})
+    client.post("/login", data={"username": "alice", "password": "alice-pw"}, headers=HOST)
+    save(client, "garden", "# Garden\n\nwombat\n")
+    save(client, "pay", "---\ntags: [noshare]\n---\n# Pay\n\nwombat\n")
+    client.set_cookie("zone-sharing", "1")
+    meta = metas(client, "wombat")
+    assert "pay" not in meta and meta["garden"].endswith(" by alice")

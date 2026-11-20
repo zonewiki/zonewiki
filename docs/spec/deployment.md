@@ -812,6 +812,17 @@ Measured through the real handlers (`go/bench_test.go`; `go test -run '^$' -benc
 | The page list | 20,000 pages | 92 ms |
 
 A personal or a small team's wiki is far below where this is felt; past some ten thousand pages or open tasks every view pays for it, and a NAS's disk and CPU bring that point closer.
+
+Who changed a page last, which a search result says (Who changed a page last in `docs/spec/search.md`), measured the same way (`BenchmarkWhoChanged`, its function rather than a route):
+
+| What | Wiki | Time |
+|------|------|------|
+| The scan of the history, at a run's first search | 1,000 pages, 5,000 commits | 42 ms |
+| The same | 20,000 pages, 100,000 commits | 2.2 s (git's log alone: 2.1 s) |
+| A search after a commit | 20,000 pages, 100,000 commits | 1.6 ms |
+| A search when nothing moved | 20,000 pages | 7 µs |
+
+The pages' last commits take some 160 bytes a page in memory.
 Page writes run one at a time (`pagesMu`), each with its git commit (a few git processes), so a wiki is not for many people saving at once.
 Closed tasks cost nothing until they are looked at: a page view doesn't read their files.
 What would lift the ceiling, when it is needed: the pages' mtimes taken from the walk instead of a `stat` each (`pageStats`).

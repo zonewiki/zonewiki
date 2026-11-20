@@ -155,6 +155,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `go/files_test.go` | deployment.md | The binary's own files: all of `public/` in it, served as the folder serves it (type, `Last-Modified`, gzip, 404s, no way out), a folder winning, the built-in docs for Help and `zone_help`, `public/` found only with `zonewiki.js`, `zonewiki licenses` |
 | `go/gitstore_test.go` | rendering.md, users.md | Git helpers: commits, log, diffs, hung git, `TestLastChangedAsksGitOnce`, packing's schedule, drafts committed, `TestMissingUsers` |
 | `go/golden_test.go` | rendering.md | The text functions against `golden.json.gz` |
+| `go/lastchange_test.go` | search.md | Who changed a page last: a user, an assistant, a terminal, a visitor, a file changed since; the scan read only as far as needed, git asked again only when the repository moved, a reset |
 | `go/mail_test.go` | users.md, deployment.md | The SMTP client, mail settings, `validEmail`, sign-up keys, `pending` |
 | `go/markdown_test.go` | rendering.md | The renderer: checkboxes, callouts, heading ids, images, links, raw HTML defused, concurrent renders |
 | `go/math_test.go` | rendering.md | The math parser and the source side agreeing with it |
@@ -176,7 +177,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `go/views_test.go` | routes.md | A page view and a search walk the wiki once |
 | `go/wikiformat_test.go` | deployment.md, tasks.md | `.zone-format`: what it may say, a newer format refused, written once into a new wiki, which a start takes nothing over in |
 | `go/internal/atomicfile/atomicfile_unix_test.go` | tasks.md | The atomic write: a new file's mode, an old one's kept, a link written through |
-| `go/internal/gitrepo/gitrepo_test.go` | rendering.md | Git's time limit and context, no pack inside a commit, Pack, Prune, Join, Drop, when to join |
+| `go/internal/gitrepo/gitrepo_test.go` | rendering.md | Git's time limit and context, its output streamed and stopped early, no pack inside a commit, Pack, Prune, Join, Drop, when to join |
 | `go/internal/jsonobj/jsonobj_test.go` | mcp.md, tasks.md | JSON objects read a member at a time |
 | `go/internal/mdtext/mdtext_test.go`, `text_test.go`, `sections_test.go` | rendering.md, editor.md | Frontmatter, lines, slugs, titles, wikilinks' parts, a section's splice |
 | `go/internal/settingsfile/settingsfile_test.go` | users.md | The settings file parsed, edited keeping comments, written owner-only, group sections |
@@ -195,7 +196,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 |--------|------|--------|
 | `tests/test_admin.py` | users.md | The admin page's Users tab, groups of groups, invite and reset links |
 | `tests/test_assistant.py` | mcp.md, security.md | Connect an assistant (`/assistant`): a token with the password, revoking |
-| `tests/test_changes.py` | rendering.md | Changes (`/changes`): filters, which assistant, `source`, what it offers to undo |
+| `tests/test_changes.py` | rendering.md, search.md | Changes (`/changes`): filters, which assistant, `source`, what it offers to undo; who changed a page last in search results |
 | `tests/test_config.py` | users.md | The settings file through the server: reloads, a broken file, kept out of git |
 | `tests/test_env_example.py` | deployment.md | Guard (above) |
 | `tests/test_git.py` | rendering.md | Every git path: commit on write, history, diffs, restore, deleted pages, uncommitted, no git |
@@ -349,7 +350,7 @@ Its parts:
 
 ### Go benchmarks
 
-`go/bench_test.go` holds the benchmarks behind How big a wiki can be in `docs/spec/deployment.md` (a page view, with tasks, `GET /api/tasks`, the page list).
+`go/bench_test.go` holds the benchmarks behind How big a wiki can be in `docs/spec/deployment.md` (a page view, with tasks, `GET /api/tasks`, the page list, who changed a page last).
 **Nothing runs them**, neither `./run.sh test` (`go test` runs no benchmark without `-bench`) nor CI, so their numbers are as old as that table: `go test -run '^$' -bench . -benchtime 20x` in `go/`.
 
 ### CI

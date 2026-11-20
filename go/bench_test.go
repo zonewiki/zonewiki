@@ -5,8 +5,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
+	"time"
+	"zonewiki/internal/settingsfile"
 	"zonewiki/internal/taskmodel"
 )
 
@@ -109,5 +114,128 @@ func BenchmarkPageList(b *testing.B) {
 		b.Run(fmt.Sprintf("pages=%d", pages), func(b *testing.B) {
 			benchGet(b, benchWiki(b, pages, 500, 2000), "/api/pages-list")
 		})
+	}
+}
+
+// BenchmarkWhoChanged: what saying who changed a page last costs a search
+// (lastchange.go): the scan of the history that the first search starts
+// (a history whose pages weren't all changed since its first commit, so
+// read to its start), the commits since that a search after a commit asks
+// git for, and a search when nothing moved; and git's log alone, which is
+// most of the scan. Also the memory the pages' last commits take.
+func BenchmarkWhoChanged(b *testing.B) {
+	for _, size := range [][2]int{{1000, 5000}, {20000, 100000}} {
+		pages, commits := size[0], size[1]
+		b.Run(fmt.Sprintf("pages=%d,commits=%d", pages, commits), func(b *testing.B) {
+			benchHistory(b, pages, commits)
+			rq := func() *Req { return &Req{user: asUser("alice")} }
+			old := lastCommitWait
+			lastCommitWait = time.Hour
+			b.Cleanup(func() { lastCommitWait = old })
+			b.Run("scan", func(b *testing.B) {
+				var before, after runtime.MemStats
+				for range b.N {
+					lastCommits.Lock()
+					lastCommits.wiki, lastCommits.pages = "", nil
+					lastCommits.Unlock()
+					runtime.GC()
+					runtime.ReadMemStats(&before)
+					if whoChanged(rq()) == nil {
+						b.Fatal("not known")
+					}
+					runtime.GC()
+					runtime.ReadMemStats(&after)
+				}
+				b.ReportMetric(float64(after.HeapAlloc-min(before.HeapAlloc, after.HeapAlloc))/float64(pages), "heap-bytes/page")
+			})
+			b.Run("git-log-alone", func(b *testing.B) { // what of the scan is git's
+				for range b.N {
+					runGit("log", "-z", "--name-status", "--no-renames", lastCommitFormat, "HEAD", "--")
+				}
+			})
+			b.Run("after-a-commit", func(b *testing.B) {
+				for i := range b.N {
+					b.StopTimer()
+					path := filepath.Join(cfg.Data, fmt.Sprintf("f%d/page-%d.md", i%50, i))
+					_ = os.WriteFile(path, []byte(fmt.Sprintf("# Page\n\nChange %d\n", i)), 0o666)
+					if err := gitCommit("alice", "Update", path); err != nil {
+						b.Fatal(err)
+					}
+					b.StartTimer()
+					if whoChanged(rq()) == nil {
+						b.Fatal("not known")
+					}
+				}
+			})
+			b.Run("nothing-moved", func(b *testing.B) {
+				for range b.N {
+					if whoChanged(rq()) == nil {
+						b.Fatal("not known")
+					}
+				}
+			})
+		})
+	}
+}
+
+// benchHistory: a wiki in git of n pages, all made by one commit, and then
+// commits more of a page each (by alice, bob or carol, every fifth by an
+// assistant), most of them to a fifth of the pages; its files as old as
+// that, and the users.
+func benchHistory(b *testing.B, pages, commits int) {
+	b.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		b.Skip("no git")
+	}
+	testWiki(b, nil)
+	if err := settingsfile.Write(configPath(), "[user alice]\n[user bob]\n[user carol]\n"); err != nil {
+		b.Fatal(err)
+	}
+	if f, err := readConfigFile(configPath()); err == nil {
+		if s, err := loadSettings(f); err == nil {
+			current.Store(s)
+		}
+	}
+	cfg.GitEnabled = true
+	if r := runGit("init", "-q", "-b", "main"); r.Code != 0 {
+		b.Fatal(r.Stderr)
+	}
+	name := func(i int) string { return fmt.Sprintf("f%d/page-%d.md", i%50, i) }
+	var stream strings.Builder
+	at := time.Now().Add(-time.Duration(commits+1) * time.Minute).Unix()
+	data := func(s string) { fmt.Fprintf(&stream, "data %d\n%s\n", len(s), s) }
+	fmt.Fprintf(&stream, "commit refs/heads/main\nauthor Zone <zone@localhost> %d +0000\ncommitter Zone <zone@localhost> %d +0000\n", at, at)
+	data("Initial import")
+	for i := range pages {
+		fmt.Fprintf(&stream, "M 100644 inline %s\n", name(i))
+		data(fmt.Sprintf("# Page %d\n\nSome text.\n", i))
+	}
+	users := []string{"alice", "bob", "carol"}
+	for c := range commits {
+		at += 60
+		page := (c * 7919) % (pages / 5)
+		if c%5 == 4 {
+			page = (c * 104729) % pages
+		}
+		msg := "Update " + name(page)
+		if c%5 == 0 {
+			msg += " (MCP)" + commitTrailers("Claude", "")
+		}
+		u := users[c%3]
+		fmt.Fprintf(&stream, "commit refs/heads/main\nauthor %s <%s@zone> %d +0000\ncommitter Zone <zone@localhost> %d +0000\n", u, u, at, at)
+		data(msg)
+		fmt.Fprintf(&stream, "M 100644 inline %s\n", name(page))
+		data(fmt.Sprintf("# Page %d\n\nChange %d.\n", page, c))
+	}
+	if r := runGitInput(stream.String(), "fast-import", "--quiet"); r.Code != 0 {
+		b.Fatal(r.Stderr)
+	}
+	if r := runGit("checkout", "-q", "-f", "main"); r.Code != 0 {
+		b.Fatal(r.Stderr)
+	}
+	setCommitter()
+	past := time.Unix(at-3600*24*365, 0)
+	for i := range pages {
+		_ = os.Chtimes(filepath.Join(cfg.Data, name(i)), past, past)
 	}
 }

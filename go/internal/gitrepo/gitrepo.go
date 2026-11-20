@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -251,6 +252,54 @@ func (r Repo) Run(ctx context.Context, call Call, args ...string) Result {
 		return Result{1, "", err.Error()}
 	}
 	return Result{code, newlines(stdout.String()), newlines(stderr.String())}
+}
+
+// Stream runs git as Run does, but hands its output to read as it comes
+// instead of keeping it: for an answer too long to hold (the history from
+// its start). When read returns true it has what it wanted, and git is
+// stopped, which is no failure; Stdout is empty either way.
+func (r Repo) Stream(ctx context.Context, call Call, read func(io.Reader) bool, args ...string) Result {
+	ctx, cancel := context.WithTimeout(ctx, call.Timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir, cmd.Env = r.Dir, append(slices.Clone(baseEnv), call.Env...)
+	if call.Input != "" {
+		cmd.Stdin = strings.NewReader(call.Input)
+	}
+	cmd.WaitDelay = time.Second
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.StdoutPipe()
+	if err == nil {
+		err = cmd.Start()
+	}
+	if err != nil {
+		return Result{1, "", err.Error()}
+	}
+	enough := read(out)
+	if enough {
+		_ = cmd.Process.Kill()
+	} else {
+		_, _ = io.Copy(io.Discard, out) // what read left, so that git ends
+	}
+	err = cmd.Wait()
+	switch ctx.Err() {
+	case context.DeadlineExceeded:
+		return Result{TimedOut, "", fmt.Sprintf("git timed out after %ds", int(call.Timeout.Seconds()))}
+	case context.Canceled:
+		return Result{TimedOut, "", "git was stopped: the request ended"}
+	}
+	if enough {
+		return Result{0, "", newlines(stderr.String())}
+	}
+	code := 0
+	var exit *exec.ExitError
+	if errors.As(err, &exit) {
+		code = exit.ExitCode()
+	} else if err != nil {
+		return Result{1, "", err.Error()}
+	}
+	return Result{code, "", newlines(stderr.String())}
 }
 
 // newlines: s with "\n" for every line end.

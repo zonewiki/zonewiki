@@ -325,6 +325,28 @@ def test_a_visitor_learns_no_users_name(client, wiki, edit):
     assert "anonymous" in text(client.get("/history/garden", headers=HOST))
 
 
+def test_a_visitors_search_names_no_user_either(client, wiki, edit):
+    """A search result says who changed its page last, and to a visitor as
+    a page's history does: that an assistant did, or a visitor, but no
+    user's name."""
+    def meta(slug):
+        return {r["slug"]: r["meta"] for r in client.get("/api/search?q=wormery", headers=HOST).get_json()}[slug]
+    client.post("/login", data={"username": "bob", "password": "bob-pw"}, headers=HOST)
+    client.post("/edit/compost", data={"content": "# Compost\n\nThe wormery.\n"}, headers=HOST)
+    assert meta("compost").endswith(" by bob")
+    client.post("/logout", headers=HOST)
+    assert re.fullmatch(r"edited \d{4}-\d\d-\d\d", meta("compost"))
+    def write_pond(**guides):
+        return client.post("/mcp", headers={**HOST, "Authorization": "Bearer alice-token"}, json={
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "write_page", "arguments": {
+                "slug": "pond", "content": "# Pond\n\nBy the wormery.\n", **guides}}}).get_json()["result"]
+    refused = write_pond()["content"][0]["text"]       # the wiki's guide first
+    assert not write_pond(guides=re.findall(r"wiki-guide:[0-9a-f]{8}", refused)[:1])["isError"]
+    assert meta("pond").endswith(" by an assistant")
+    client.post("/edit/compost", data={"content": "# Compost\n\nThe wormery, turned.\n"}, headers=HOST)
+    assert meta("compost").endswith(" by anonymous")
+
+
 def test_no_draft_is_kept_for_a_visitor(client, wiki, edit):
     """Every visitor is the same one: a draft left for "them" would be the
     next visitor's, and would fill Zone's folder."""

@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"zonewiki/internal/jsonobj"
 	"zonewiki/internal/mdtext"
 	"zonewiki/internal/taskfiles"
@@ -630,10 +631,16 @@ func searchWiki(args jsonObj, base string, user asker) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	hits := retrieve(&Req{user: user}, query, limit, under, quicknote)
+	rq := &Req{user: user}
+	lastCommitsSoon(rq) // who changed the pages last, while the search ranks (whoChanged)
+	hits := retrieve(rq, query, limit, under, quicknote)
 	logQuery(query, under, hits)
 	if len(hits) == 0 {
 		return "No matching sections or tasks. Try other words, or list_pages to browse.", nil
+	}
+	var by func(string, time.Time) string
+	if slices.ContainsFunc(hits, func(d *SearchDoc) bool { return !d.isTask() }) {
+		by = whoChanged(rq)
 	}
 	var out []string
 	for i, d := range hits {
@@ -650,7 +657,7 @@ func searchWiki(args jsonObj, base string, user asker) (string, error) {
 			where += " › " + path
 		}
 		out = append(out, fmt.Sprintf("[%d] %s\nslug: %s\nedited: %s\nurl: %s%s%s\nfile: %s\n\n%s", i+1, where, d.Slug,
-			fmtDate(d.Mtime), base, pathURL("page", d.Slug), d.anchor(), hostFile(d.Slug), body))
+			lastEdit(d, by), base, pathURL("page", d.Slug), d.anchor(), hostFile(d.Slug), body))
 	}
 	return strings.Join(out, "\n\n---\n\n"), nil
 }

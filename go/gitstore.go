@@ -3,8 +3,11 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -545,16 +548,57 @@ func logRecords(out string) []logRecord {
 		return nil
 	}
 	for _, record := range strings.Split(out[1:], "\x00\x1e") {
-		head, rest, _ := strings.Cut(record, "\x00")
-		rest = strings.TrimPrefix(rest, "\n")
-		var fields []string
-		if rest != "" {
-			fields = strings.Split(strings.TrimSuffix(rest, "\x00"), "\x00")
-		}
-		records = append(records, logRecord{head, fields})
+		records = append(records, logRecordOf(record))
 	}
 	return records
 }
+
+// logRecordOf: one commit of git log -z's output, without the \x1e that
+// starts it.
+func logRecordOf(record string) logRecord {
+	head, rest, _ := strings.Cut(record, "\x00")
+	rest = strings.TrimPrefix(rest, "\n")
+	var fields []string
+	if rest != "" {
+		fields = strings.Split(strings.TrimSuffix(rest, "\x00"), "\x00")
+	}
+	return logRecord{head, fields}
+}
+
+// eachLogRecord streams git log -z's output (a format that starts with
+// \x1e) to each, a commit at a time, until each returns true (it has what
+// it wanted) or the output ends; as logRecords, a commit starts only after
+// a NUL. False when it ended before each had enough.
+func eachLogRecord(out io.Reader, each func(logRecord) bool) bool {
+	sc := bufio.NewScanner(out)
+	sc.Buffer(make([]byte, 0, 64*1024), logRecordMax)
+	sc.Split(func(data []byte, atEOF bool) (int, []byte, error) {
+		if i := bytes.Index(data, []byte("\x00\x1e")); i >= 0 {
+			return i + 2, data[:i+1], nil // the NUL ends its file names
+		}
+		if atEOF && len(data) > 0 {
+			return len(data), data, nil
+		}
+		return 0, nil, nil
+	})
+	for first := true; sc.Scan(); first = false {
+		record := sc.Text()
+		if first {
+			var ok bool
+			if record, ok = strings.CutPrefix(record, "\x1e"); !ok {
+				return false // not a log of records
+			}
+		}
+		if each(logRecordOf(record)) {
+			return true
+		}
+	}
+	return false
+}
+
+// logRecordMax: the longest commit eachLogRecord reads (its file names: an
+// import of a large wiki is one commit of every page).
+const logRecordMax = 256 << 20
 
 // viaFormat: a commit's Assistant trailer in a git log format: its value
 // alone, on one line (the first, should a commit have several).

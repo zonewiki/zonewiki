@@ -1642,9 +1642,10 @@ func taskStatus(t *Task) string {
 }
 
 // resultMeta: the small line under a result's title, telling apart
-// results whose titles look alike: a page's folder and last edit, a task's
-// list and status ("Tasks · done 2026-05-01").
-func resultMeta(d *SearchDoc, names map[string]ListInfo) string {
+// results whose titles look alike: a page's folder and last edit, and who
+// made it when that is known (by, whoChanged; nil: not), a task's list and
+// status ("Tasks · done 2026-05-01").
+func resultMeta(d *SearchDoc, names map[string]ListInfo, by func(slug string, mtime time.Time) string) string {
 	if d.isTask() {
 		status := taskStatus(d.Task)
 		if status != "open" {
@@ -1664,7 +1665,7 @@ func resultMeta(d *SearchDoc, names map[string]ListInfo) string {
 		}
 		return where + " · " + status
 	}
-	edited := "edited " + fmtDate(d.Mtime)
+	edited := "edited " + lastEdit(d, by)
 	dir := ""
 	if i := strings.LastIndex(d.Slug, "/"); i >= 0 {
 		dir = d.Slug[:i]
@@ -1684,6 +1685,18 @@ func resultMeta(d *SearchDoc, names map[string]ListInfo) string {
 	return edited
 }
 
+// lastEdit: a page result's last change, its day and who made it when by
+// knows ("2026-10-02 by anna"), in the browser's results and search_wiki's.
+func lastEdit(d *SearchDoc, by func(slug string, mtime time.Time) string) string {
+	day := fmtDate(d.Mtime)
+	if by != nil {
+		if who := by(d.Slug, d.Mtime); who != "" {
+			return day + " " + who
+		}
+	}
+	return day
+}
+
 const (
 	searchLimit      = 15   // results in the search modal (/api/search default)
 	searchPageLimit  = 50   // results on the /search page ("All results")
@@ -1701,6 +1714,7 @@ func doSearch(rq *Req, raw string, unlinked bool, limit int, quicknote bool) []M
 	}
 	q := textsearch.ParseQuery(raw)
 	text := q.RankingText() // what excerpts mark: the words, without operators
+	lastCommitsSoon(rq)     // who changed the pages last, while the search ranks (whoChanged)
 	var tests []func(*SearchDoc) bool
 	if unlinked {
 		linked := map[string]bool{}
@@ -1738,6 +1752,10 @@ func doSearch(rq *Req, raw string, unlinked bool, limit int, quicknote bool) []M
 	}
 	sections := bestSections(rq, q, slugs)
 	names := rq.taskLists()
+	var by func(string, time.Time) string
+	if len(slugs) > 0 {
+		by = whoChanged(rq)
+	}
 	for _, d := range docs {
 		var section *SearchDoc
 		body, ok := d.body()
@@ -1752,7 +1770,7 @@ func doSearch(rq *Req, raw string, unlinked bool, limit int, quicknote bool) []M
 			}
 		}
 		r := M{"slug": d.Slug, "title": d.Title, "excerpt": htmlOf(textsearch.Excerpt(excerptOf, text)),
-			"meta": resultMeta(d, names)}
+			"meta": resultMeta(d, names, by)}
 		if d.isTask() {
 			r["type"], r["task_id"], r["status"] = "task", d.taskID(), d.taskStatus()
 			if d.taskYear() != "" {

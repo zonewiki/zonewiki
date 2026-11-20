@@ -101,8 +101,12 @@ Under each result's title is a short line telling similar results apart:
 
 | Result | The line says | Example |
 |--------|---------------|---------|
-| A page | Its folder and when it was last edited | `projects/garden · edited 2026-10-02` |
+| A page | Its folder, when it was last edited and by whom | `projects/garden · edited 2026-10-02 by anna` |
 | A task | Its list and its status | `Tasks › shopping · done 2026-05-01` |
+
+When an AI assistant made a page's last change, the line says so: `by anna through Claude`, with the assistant's name as it gave it, `by anna's assistant` where it gave none, or `by an assistant` in a wiki without users.
+The line names nobody for a change that isn't committed yet (see [History and undo](history.md#every-change-is-a-commit)), nor in a wiki without users for what people changed.
+On a public wiki, visitors see whether an assistant or a visitor made the change, but no one's name.
 
 In a wiki with users, the line also says whose a result is:
 a 🔒 for your private pages and tasks (`🔒 Private/ideas · …`, `🔒 Tasks › …`),

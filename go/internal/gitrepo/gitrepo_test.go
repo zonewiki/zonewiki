@@ -1,9 +1,11 @@
 package gitrepo
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -70,6 +72,43 @@ func TestRunStops(t *testing.T) {
 	res = r.Run(ctx, Call{Timeout: time.Minute}, "-c", "alias.hang=!sleep 5", "hang")
 	if res.Code != TimedOut || !strings.Contains(res.Stderr, "stopped") || time.Since(start) > 3*time.Second {
 		t.Errorf("cancelled: %+v after %s", res, time.Since(start))
+	}
+}
+
+// Stream hands git's output over as it comes: read to its end, git's exit
+// is Run's; read stopped early, git is stopped, and that is no failure.
+func TestStream(t *testing.T) {
+	r := repo(t)
+	for i := range 3 {
+		commitFiles(t, r, Call{}, i, 1)
+	}
+	call := Call{Timeout: time.Minute}
+	var all []byte
+	res := r.Stream(context.Background(), call, func(out io.Reader) bool {
+		all, _ = io.ReadAll(out)
+		return false
+	}, "log", "--format=%s")
+	if res.Code != 0 || string(all) != "Files from 2\nFiles from 1\nFiles from 0\n" {
+		t.Errorf("to its end: %+v %q", res, all)
+	}
+	var first string
+	res = r.Stream(context.Background(), call, func(out io.Reader) bool {
+		first, _ = bufio.NewReader(out).ReadString('\n')
+		return true
+	}, "-c", "alias.slow=!git log --format=%s; sleep 5", "slow")
+	if res.Code != 0 || first != "Files from 2\n" {
+		t.Errorf("stopped early: %+v %q", res, first)
+	}
+	res = r.Stream(context.Background(), call, func(out io.Reader) bool { return false }, "no-such-command")
+	if res.Code == 0 || res.Stderr == "" {
+		t.Errorf("an unknown command: %+v", res)
+	}
+	res = r.Stream(context.Background(), Call{Timeout: 50 * time.Millisecond}, func(out io.Reader) bool {
+		_, _ = io.ReadAll(out)
+		return false
+	}, "-c", "alias.hang=!sleep 5", "hang")
+	if res.Code != TimedOut {
+		t.Errorf("timeout: %+v", res)
 	}
 }
 

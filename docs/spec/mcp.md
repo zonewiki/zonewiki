@@ -192,7 +192,7 @@ Annotated `readOnlyHint`.
 
 #### `search_wiki`
 
-The most relevant **sections**, full text, best first, each with title › heading, slug, the page's last edit date (`edited:`, so the model can tell current notes from stale ones), a URL with the heading anchor and the page's file on the host (`file:`, see Links and file paths).
+The most relevant **sections**, full text, best first, each with title › heading, slug, the page's last edit date and who made it (`edited: 2026-10-02 by alice through Claude`, so the model can tell current notes from stale ones, and the user's own words from an assistant's: Who changed a page last in `search.md`), a URL with the heading anchor and the page's file on the host (`file:`, see Links and file paths).
 Up to three may come from one page (`sectionsPerPage` in `search.md`).
 Matching tasks are results too, ranked with the sections (Retrieval, under How it works).
 
@@ -600,7 +600,7 @@ Every write tool takes an optional `summary`; the commit message is the action, 
 A write through a connection (OAuth, Connections above) names it in a trailer after that line, `Assistant: Claude` (`mcpMark`, `viaTrailerKey`): the name its client gave when the user let it in, one line.
 `callMCPTool` hands it to the tool with its arguments (`viaArg`, a name no client can send: what one sends there is dropped), and a summary is one line, so neither names an assistant.
 A write with an MCP token has no trailer: a token names no client.
-The history shows it beside who the commit is by, as the client's claim it is: "alice through Claude" on Changes and a page's History, `(by alice through Claude)` in the tool `history` (`viaOfCommit`: only for a commit whose first line ends in `(MCP)`, so a trailer typed by hand says nothing).
+The history shows it beside who the commit is by, as the client's claim it is: "alice through Claude" on Changes and a page's History, `(by alice through Claude)` in the tool `history`, "by alice through Claude" under a search result whose page it changed last (Who changed a page last in `search.md`) (`viaOfCommit`: only for a commit whose first line ends in `(MCP)`, so a trailer typed by hand says nothing).
 
 ### Where the text is from
 

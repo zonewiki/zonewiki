@@ -101,7 +101,7 @@ which lists up to 50 (`searchPageLimit`) under a count ("17 results", "The first
 ### The line under a result
 
 `meta` (`resultMeta`) is the small line under a result's title in the modal and on `/search`, telling alike titles apart:
-a page's folder and last edit (`conversations/2026-07-08_alex-sam-debrief · edited 2026-10-02`),
+a page's folder and last edit (`conversations/2026-07-08_alex-sam-debrief · edited 2026-10-02`), and who made that edit where git says (`· edited 2026-10-02 by anna`: Who changed a page last, below),
 a task's list and status (`Tasks › zoo · done 2026-05-01`).
 
 **It says whose a result is, by sign and name, not by path**: a page of a group of yours reads `👥 dev · edited …` (`👥 dev/specs` in a folder there),
@@ -109,6 +109,43 @@ one of your private pages `🔒 Private/notes · …`,
 a task of a group's list `👥 Tasks › hiring · open`,
 a private task `🔒 Tasks › …`;
 what is everyone's has no sign.
+
+### Who changed a page last
+
+A page result says who made its last change, after its date: in the search dialog, on `/search` and in `search_wiki` (`edited: 2026-10-02 by anna`).
+
+| The last change was | The line says |
+|---|---|
+| A user's, in the browser or committed in a terminal | `by anna` (with users: the commit's author) |
+| A user's assistant's | `by anna through Claude` where its connection named it, as Changes says it (Which assistant in `docs/spec/mcp.md`), else `by anna's assistant` |
+| An assistant's, in a wiki without users | `by an assistant`, `by an assistant through Claude` |
+| A public wiki's visitor's | `by anonymous` |
+| Zone's own (a page made at start, a migration), or a person's in a wiki without users | nothing more |
+| Not committed yet, or the file changed on disk or was checked out after its last commit | nothing more: whose that change is isn't known |
+
+The date is the file's (Date filters, above); the name is its last commit's, and is said only while the file is no newer than that commit (to the second git keeps),
+so a draft auto-saved and not committed,
+an edit on disk or a checkout is never put in the name of whoever committed before.
+A rename is a change: a page's last commit is then its rename.
+Whether an assistant made it, and which, is asked of the commit as everywhere else (`byAssistant`, `viaOfCommit`), and the name is the one a page's history shows (`commitAuthor`: nobody without users, and not Zone).
+
+**Who learns it**: whoever finds the result, which shows only to who may see the page.
+A public wiki's visitor learns no user's name, as in a page's history (`pageLog`): an assistant's change says `by an assistant through Claude`, a visitor's `by anonymous`, a user's nothing more.
+Sharing mode names them, as Changes and a page's history do; it leaves out the pages not for sharing, as for every result.
+
+#### How who changed a page is known
+
+**Each page's last commit is kept in memory** by the page's path (`lastCommits` in `go/lastchange.go`: its author, its time, whether an assistant made it and which), so a search asks git nothing per result:
+
+- **The first search scans the history** (`scanLastCommits`): one `git log --name-status` from the newest commit back, read as git writes it and stopped once every page on disk is seen (so to the history's start when a page was never committed or not changed since the first commit).
+  The search starts it before it ranks (`lastCommitsSoon`), and it runs on beside it; a search waits for it until a second after it started (`lastCommitWait`), and until it is done results go without names.
+- **After that, a search looks at the reflog** (`.git/logs/HEAD`, its time and size: one `stat`), which every commit, reset, checkout and pull writes, Zone's and a terminal's alike.
+  When it moved, git is asked for the commits since (`lastCommitsSince`: `rev-parse`, `merge-base --is-ancestor`, then `log` of those alone): a page they changed takes the newest, a page they deleted has none.
+  When the commit it knew is no longer in the history (a reset, a rewrite), the history is scanned again.
+- **Nothing of it is on disk**: each start scans at its first search.
+  A scan that fails (past `scanTimeout`, ten minutes) is logged, and results go without names until Zone starts again.
+
+What it costs (the scan, a search after a commit, a search when nothing moved, the memory) is measured by `BenchmarkWhoChanged` in `go/bench_test.go`; the numbers are in How big a wiki can be in `docs/spec/deployment.md`.
 
 ### Results open the matching section
 

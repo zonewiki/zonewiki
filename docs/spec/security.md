@@ -225,7 +225,7 @@ The checks give a request without a session the user `visitor` (`_visitor`, whic
 The rules in `go/access.go` then answer for it as for a stranger: no private page (`canSee`), no private folder (`privateFolder`), no task at all (`canSeeTask`, and the task store's `NoTasks`, which every read of the task files asks: `Owners`), no task write (`mayWriteTasks`).
 With `view` a visitor is a viewer (`isViewer`), so every rule that keeps a viewer from changing anything holds for them too; with `edit` they write the shared pages as an editor does, but never a guide (`adminsOnly`).
 
-- **No user's name**: a page's history shows a visitor when it changed and what, not who (`pageLog`; a visitor's own changes say "anonymous"), and a merge names no one (`otherAuthor`). Names in a page's text are the page's.
+- **No user's name**: a page's history shows a visitor when it changed and what, not who (`pageLog`; a visitor's own changes say "anonymous"), a search result whether an assistant made the last change but not for whom (`changedBy`; Who changed a page last in `docs/spec/search.md`), and a merge names no one (`otherAuthor`). Names in a page's text are the page's.
 
 ### What is public
 
