@@ -811,7 +811,7 @@ Measured through the real handlers (`go/bench_test.go`; `go test -run '^$' -benc
 | The page list (`/api/pages-list`) | 1,000 pages | 3 ms |
 | The page list | 20,000 pages | 92 ms |
 
-A personal or a small team's wiki is far below where this is felt; past some ten thousand pages or open tasks every view pays for it, and a NAS's disk and CPU bring that point closer.
+A personal wiki or a team's is far below where this is felt; past some ten thousand pages or open tasks every view pays for it, and a NAS's disk and CPU bring that point closer.
 
 Who changed a page last, which a search result says (Who changed a page last in `docs/spec/search.md`), measured the same way (`BenchmarkWhoChanged`, its function rather than a route):
 
