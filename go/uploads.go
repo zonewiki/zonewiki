@@ -159,9 +159,25 @@ func serveTaskUpload(w http.ResponseWriter, r *http.Request) {
 	serveUploadFile(w, r, p, r.PathValue("file"))
 }
 
+// inlineTypes: the media types an upload is shown inline as, what a page's
+// <img>, <audio>, <video> and <iframe> show (pictures, sound, film, PDF,
+// text). Any other is a download, whatever the host's mime table calls it:
+// an odd type there (image/svg+xml-compressed for .svgz, image/x-xbitmap …)
+// is no picture a browser shows, but may be a document it reads its own way.
+var inlineTypes = map[string]bool{}
+
+func init() {
+	for _, t := range strings.Fields(`image/png image/jpeg image/gif image/webp image/avif image/svg+xml
+		image/bmp image/vnd.microsoft.icon image/x-icon image/tiff image/heic
+		audio/mpeg audio/mp4 audio/ogg audio/opus audio/wav audio/x-wav audio/flac audio/aac audio/webm
+		video/mp4 video/webm video/ogg video/quicktime video/x-matroska
+		application/pdf text/plain`) {
+		inlineTypes[t] = true
+	}
+}
+
 // serveUploadFile: filename in the uploads of p (uploadPath: no other
-// file, 404 for a name that is none there), inline only when the browser
-// treats it as passive content.
+// file, 404 for a name that is none there), inline only as one of inlineTypes.
 func serveUploadFile(w http.ResponseWriter, r *http.Request, p place, filename string) {
 	path, ok := uploadPath(p, filename)
 	if !ok {
@@ -169,11 +185,13 @@ func serveUploadFile(w http.ResponseWriter, r *http.Request, p place, filename s
 		return
 	}
 	mimeType := mediaType(filename)
-	inline := strings.HasPrefix(mimeType, "image/") || strings.HasPrefix(mimeType, "audio/") ||
-		strings.HasPrefix(mimeType, "video/") || mimeType == "application/pdf" || mimeType == "text/plain"
+	inline := inlineTypes[mimeType]
 	disposition := ""
 	if inline {
-		w.Header().Set("Content-Type", mime.TypeByExtension(filepath.Ext(filename)))
+		if mimeType == "text/plain" {
+			mimeType += "; charset=utf-8"
+		}
+		w.Header().Set("Content-Type", mimeType)
 	} else {
 		// A download keeps its name but not its type: an uploaded .js served
 		// as text/javascript would run from <script src=…> (a download

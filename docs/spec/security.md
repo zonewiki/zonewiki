@@ -329,6 +329,7 @@ rewrite or send away the whole wiki.
 Under `script-src 'self'` without `'unsafe-inline'`/`'unsafe-eval'` only Zone's own script files run (Zone has no inline scripts, `on…=` handlers or `eval`; the browser tests fail on any CSP violation of Zone's own pages, see `docs/spec/testing.md`);
 this holds in the editor preview and the search preview too, which insert rendered HTML with `innerHTML`.
 `X-Content-Type-Options: nosniff` on every response, so no JSON or text response runs as a script, and uploads not shown inline go out as `application/octet-stream` (`serveUpload`), so an uploaded `.js` can't be loaded by `<script src>` either, as `script-src 'self'` trusts Zone's own origin.
+An upload is shown inline only as a type on a list (`inlineTypes` in `go/uploads.go`: the common pictures, sound and film, PDF, plain text; an SVG with a sandbox policy of its own, which runs none of its scripts), never as whatever else the host's mime table names (`image/svg+xml-compressed` for `.svgz`): that is a download.
 
 ### No form in a page posts to Zone
 

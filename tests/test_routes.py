@@ -1620,6 +1620,24 @@ class TestServeUpload:
         assert "attachment" not in resp.headers.get("Content-Disposition", "")
         assert resp.headers["Content-Security-Policy"].startswith("sandbox")
 
+    @pytest.mark.parametrize("name, inline", [
+        ("pic.png", "image/png"), ("pic.JPG", "image/jpeg"), ("anim.gif", "image/gif"), ("pic.webp", "image/webp"),
+        ("draw.svg", "image/svg+xml"), ("song.mp3", "audio/mpeg"), ("clip.mp4", "video/mp4"),
+        ("doc.pdf", "application/pdf"), ("notes.txt", "text/plain; charset=utf-8"),
+        # Not on the list, whatever the host's mime table calls them (the
+        # tools image's says image/svg+xml-compressed, image/x-xbitmap …):
+        # a download.
+        ("draw.svgz", None), ("pic.xbm", None), ("page.xhtml", None), ("data.xml", None), ("notes.md", None)])
+    def test_inline_only_as_a_type_on_the_list(self, client, wiki_dir, name, inline):
+        resp = client.get(self.put(wiki_dir, name, b"<svg xmlns='http://www.w3.org/2000/svg'/>"), headers=HOST)
+        if inline:
+            assert resp.headers["Content-Type"] == inline
+            assert "Content-Disposition" not in resp.headers
+        else:
+            assert resp.headers["Content-Type"] == "application/octet-stream"
+            assert resp.headers["Content-Disposition"].startswith("attachment")
+        assert resp.headers["X-Content-Type-Options"] == "nosniff"
+
     def test_upload_rejects_dot_names(self, client, wiki_dir):
         from io import BytesIO
         for name in ("..", ".git", ".hidden"):
