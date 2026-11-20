@@ -96,3 +96,40 @@ def test_what_a_reorder_refuses(client):
     assert client.post("/api/tasks/reorder", json={"moves": "x"}).status_code == 400
     assert client.post("/api/tasks/reorder", json={"moves": ["x"]}).status_code == 400
     assert client.post("/api/tasks/reorder", json={}).status_code == 400
+
+
+def test_a_new_or_changed_task_takes_a_position(client):
+    """position on POST and PUT /api/tasks: the task at the top or the
+    bottom of the manual order, or right after or before a task, in the
+    write's own commit (the MCP tools' create_task and update_task send it)."""
+    ids = _setup(client, "A", "B")
+    made = lambda title, position: create_task(client, title=title, position=position)
+    assert made("Last", "bottom").status_code == 201
+    assert made("First", "top").status_code == 201
+    assert made("Middle", {"after": ids["A"]}).get_json()["sort_order"] is not None
+    assert _ranked(client) == ["First", "A", "Middle", "B", "Last"]
+    last = _tasks(client)["Last"]["id"]
+    resp = client.put(f"/api/tasks/{last}", json={"title": "Now second", "position": {"before": ids["A"]}})
+    assert resp.status_code == 200 and resp.get_json()["title"] == "Now second"
+    assert _ranked(client) == ["First", "Now second", "A", "Middle", "B"]
+
+
+def test_what_a_position_refuses(client):
+    """Refused with nothing written: what isn't a position, a task to put it
+    by that is closed or not there (in the same words: it may be another
+    user's), one that isn't ranked yet, and a task closed by the write."""
+    ids = _setup(client, "A", "B")
+    loose = create_task(client, title="Loose").get_json()["id"]
+    done = create_task(client, title="Done").get_json()["id"]
+    assert client.put(f"/api/tasks/{done}", json={"completed": True}).status_code == 200
+    before = {t: v["sort_order"] for t, v in _tasks(client).items()}
+    for position in ("middle", 3, {"after": ids["A"], "before": ids["B"]}, {"next": ids["A"]}, {"after": ""}):
+        resp = create_task(client, title="New", position=position)
+        assert resp.status_code == 400 and "position must be" in resp.get_json()["error"], position
+    gone = create_task(client, title="New", position={"after": done}).get_json()["error"]
+    assert gone == create_task(client, title="New", position={"after": "no-such-task"}).get_json()["error"]
+    assert "closed or not there" in gone
+    assert "isn't in the manual order yet" in create_task(client, title="New", position={"after": loose}).get_json()["error"]
+    resp = client.put(f"/api/tasks/{ids['A']}", json={"completed": True, "position": "top"})
+    assert resp.status_code == 400 and "Only an open task" in resp.get_json()["error"]
+    assert {t: v["sort_order"] for t, v in _tasks(client).items()} == before

@@ -3,6 +3,7 @@
 package main
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -266,9 +267,10 @@ func searchTasks(args jsonObj, base string, user asker) (string, error) {
 		if order == "manual" {
 			// What the user ranked in My tasks is their own order, across
 			// lists (mineOrder): those first, as they stand there; then by
-			// the lists' order.
+			// the lists' order. One list's tasks are in its order, as its
+			// view shows them (and update_task's position moves them).
 			own := map[string]int{}
-			if reg := mineRegistry(user); reg.OrderSet {
+			if reg := mineRegistry(user); reg.OrderSet && scope == "" {
 				for i, id := range reg.Order {
 					own[id] = i + 1
 				}
@@ -602,6 +604,15 @@ func createTaskTool(args jsonObj, base string, user asker) (string, error) {
 			return "", toolErr("A task assigned to someone has to be in a shared list (without one it is in the user's Inbox, which only they see). Pass list: " + strings.Join(shared, ", "))
 		}
 	}
+	// A position in the manual order, in the same commit; without, it is
+	// unranked, on top as a new task is.
+	pos, err := positionArg(args, user)
+	if err != nil {
+		return "", err
+	}
+	if pos != nil {
+		data.Set("position", pos.field())
+	}
 	msg, err := commitMsg("Create task", args)
 	if err != nil {
 		return "", err
@@ -610,7 +621,80 @@ func createTaskTool(args jsonObj, base string, user asker) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return "Created (today is " + isoDay(today()) + ").\n\n" + mcpTaskText(task, base, user) + tagHints(task, user), nil
+	head := "Created (today is " + isoDay(today()) + ")."
+	if pos != nil {
+		head += " " + positionText(task, user)
+	}
+	return head + "\n\n" + mcpTaskText(task, base, user) + tagHints(task, user), nil
+}
+
+// positionArg: the position in the manual order that position, after or
+// before gives (one of them), as the tasks API takes it (positionField);
+// nil for none. after and before name a task as findTask finds it: one the
+// user sees, so one they don't is no task here either.
+func positionArg(args jsonObj, user asker) (*orderPos, error) {
+	var given []string
+	for _, k := range []string{"position", "after", "before"} {
+		if args.Has(k) && !args.Null(k) {
+			given = append(given, k)
+		}
+	}
+	if len(given) == 0 {
+		return nil, nil
+	}
+	if len(given) > 1 {
+		return nil, toolErr("Give one of position, after and before, not " + strings.Join(given, " and "))
+	}
+	s, err := strArg(args, given[0], true)
+	if err != nil {
+		return nil, err
+	}
+	if given[0] == "position" {
+		if s = strings.ToLower(strings.TrimSpace(s)); s != "top" && s != "bottom" {
+			return nil, toolErr("position must be top or bottom")
+		}
+		return &orderPos{At: s}, nil
+	}
+	by, err := findTask(s, user)
+	if err != nil {
+		return nil, err
+	}
+	if !by.IsOpen() {
+		return nil, toolErr("“" + by.Title + "” is closed: only open tasks have a position in the manual order")
+	}
+	return &orderPos{At: given[0], Task: by.ID}, nil
+}
+
+// positionText: where task is now in its list's manual order, as the
+// list's view shows it: between which of the list's ranked tasks.
+func positionText(task *Task, user asker) string {
+	var ranked []*Task
+	for _, t := range taskFiles.Open(user) {
+		if t.SortOrder != nil && t.List == task.List && t.Owner == task.Owner {
+			ranked = append(ranked, t)
+		}
+	}
+	slices.SortStableFunc(ranked, func(a, b *Task) int { return cmp.Compare(*a.SortOrder, *b.SortOrder) })
+	i := slices.IndexFunc(ranked, func(t *Task) bool { return t.ID == task.ID })
+	if i < 0 {
+		return ""
+	}
+	where := "the Inbox"
+	if list := taskList(task, taskLists(user)); list != "" {
+		where = "#" + list
+	}
+	text := "In the manual order of " + where + " it comes "
+	switch {
+	case len(ranked) == 1:
+		return "It is the only ranked task of " + where + "."
+	case i == 0:
+		text += "first, before “" + ranked[1].Title + "”"
+	case i == len(ranked)-1:
+		text += "last, after “" + ranked[i-1].Title + "”"
+	default:
+		text += "after “" + ranked[i-1].Title + "” and before “" + ranked[i+1].Title + "”"
+	}
+	return text + "."
 }
 
 // taskStatusFields: a status as the tasks API's field and its value.
@@ -632,19 +716,19 @@ func otherArgs(args jsonObj, allowed ...string) []string {
 	return other
 }
 
-// updateTaskTool: one task's fields, status and comment; ids instead of id
-// tags several tasks (tagTasksTool). A task is never deleted: wont_do
-// closes one undone.
+// updateTaskTool: one task's fields, status, comment and position in the
+// manual order; ids instead of id tags and moves several tasks
+// (tasksBatchTool). A task is never deleted: wont_do closes one undone.
 func updateTaskTool(args jsonObj, base string, user asker) (string, error) {
 	if args.Has("ids") {
 		if args.Has("id") {
 			return "", toolErr("Give id or ids, not both")
 		}
-		if other := otherArgs(args, "ids", "add_tags", "remove_tags", "summary"); len(other) > 0 {
-			return "", toolErr("With ids only add_tags and remove_tags work, not " + strings.Join(other, ", ") +
+		if other := otherArgs(args, "ids", "add_tags", "remove_tags", "position", "after", "before", "summary"); len(other) > 0 {
+			return "", toolErr("With ids only add_tags, remove_tags and a position (position, after, before) work, not " + strings.Join(other, ", ") +
 				"; change the rest one task (id) at a time")
 		}
-		return tagTasksTool(args, user)
+		return tasksBatchTool(args, user)
 	}
 	raw, err := strArg(args, "id", true)
 	if err != nil {
@@ -674,28 +758,53 @@ func updateTaskTool(args jsonObj, base string, user asker) (string, error) {
 		}
 		data.Set(f.field, f.value)
 	}
-	if len(data) == 0 && comment == nil {
-		return "", toolErr("Nothing to change: give the fields to set, a status or a comment")
+	pos, err := positionArg(args, user)
+	if err != nil {
+		return "", err
+	}
+	if len(data) == 0 && comment == nil && pos == nil {
+		return "", toolErr("Nothing to change: give the fields to set, a status, a comment or a position")
 	}
 	suffix, err := msgSuffix(args)
 	if err != nil {
 		return "", err
 	}
-	if len(data) > 0 {
+	// A position goes with the fields, in their commit; alone it is a move
+	// in the manual order, as a drop in a list's view is.
+	switch {
+	case len(data) > 0:
+		if pos != nil {
+			data.Set("position", pos.field())
+		}
 		if task, err = updateTask(user, task.ID, data, suffix); err != nil {
 			return "", err
 		}
+	case pos != nil:
+		moved, err := reorderTasks(user, []string{task.ID}, *pos, "Reorder tasks"+suffix)
+		if err != nil {
+			return "", err
+		}
+		task = moved[0]
 	}
 	if comment != nil {
 		if task, err = addComment(user, task.ID, *comment, "Comment on task"+suffix); err != nil {
 			return "", err
 		}
 	}
-	head := "Comment added."
-	if len(data) > 0 && comment != nil {
-		head = "Updated, comment added."
-	} else if len(data) > 0 {
-		head = "Updated."
+	var did []string
+	switch {
+	case len(data) > 0:
+		did = append(did, "Updated")
+	case pos != nil:
+		did = append(did, "Moved")
+	}
+	if comment != nil {
+		did = append(did, "comment added")
+	}
+	head := strings.Join(did, ", ")
+	head = strings.ToUpper(head[:1]) + head[1:] + "."
+	if pos != nil {
+		head += " " + positionText(task, user)
 	}
 	out := head + "\n\n" + mcpTaskText(task, base, user)
 	if status == "done" || status == "skip" {
@@ -712,7 +821,11 @@ func updateTaskTool(args jsonObj, base string, user asker) (string, error) {
 // More ids than this in one call is likely a mistake (a whole tasks retagged).
 const tagTasksMax = 200
 
-func tagTasksTool(args jsonObj, user asker) (string, error) {
+// tasksBatchTool: update_task with ids: tags added and taken off, and a
+// position in the manual order for them all, in their order (reorderTasks:
+// the first at the position, each next one after it), each in its commit,
+// the move first; every id and the position are checked before.
+func tasksBatchTool(args jsonObj, user asker) (string, error) {
 	ids, ok := jsonobj.As[[]json.RawMessage](args["ids"])
 	if !ok || len(ids) == 0 {
 		return "", toolErr("ids must be a non-empty list of task ids")
@@ -733,8 +846,12 @@ func tagTasksTool(args jsonObj, user asker) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if len(add) == 0 && len(remove) == 0 {
-		return "", toolErr("Give add_tags or remove_tags")
+	pos, err := positionArg(args, user)
+	if err != nil {
+		return "", err
+	}
+	if len(add) == 0 && len(remove) == 0 && pos == nil {
+		return "", toolErr("Give add_tags, remove_tags or a position (position, after or before)")
 	}
 	var found []string
 	before := map[string][]string{}
@@ -744,10 +861,32 @@ func tagTasksTool(args jsonObj, user asker) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		if pos != nil && !t.IsOpen() {
+			return "", toolErr("“" + t.Title + "” is closed: only open tasks have a position in the manual order")
+		}
 		if _, ok := before[t.ID]; !ok {
 			found = append(found, t.ID)
 			before[t.ID] = append([]string{}, t.Tags...)
 		}
+	}
+	var out []string
+	if pos != nil {
+		msg, err := commitMsg("Reorder tasks", args)
+		if err != nil {
+			return "", err
+		}
+		moved, err := reorderTasks(user, found, *pos, msg)
+		if err != nil {
+			return "", err
+		}
+		lines := []string{fmt.Sprintf("Moved %d %s in the manual order, now in this order:", len(moved), plural(len(moved), "task"))}
+		for _, t := range moved {
+			lines = append(lines, "- "+t.Title+" ("+shortID(t.ID)+")")
+		}
+		out = append(out, strings.Join(lines, "\n"))
+	}
+	if len(add) == 0 && len(remove) == 0 {
+		return out[0], nil
 	}
 	msg, err := commitMsg("Tag tasks", args)
 	if err != nil {
@@ -778,7 +917,7 @@ func tagTasksTool(args jsonObj, user asker) (string, error) {
 	if changed < len(tasks) {
 		head += " (the others had them so already)"
 	}
-	return head + ".\n\n" + strings.Join(lines, "\n"), nil
+	return strings.Join(append(out, head+".\n\n"+strings.Join(lines, "\n")), "\n\n"), nil
 }
 
 // renameTaskListTool: a list renamed, with its tasks, the pins, and the

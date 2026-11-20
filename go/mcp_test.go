@@ -120,9 +120,11 @@ func TestMCPToolDefinitions(t *testing.T) {
 	// a page from readers wants its own yes; from 34200 for undo_changes
 	// (2026-11): what the browser's Changes undoes an assistant undoes too.
 	// From 35100 for source on the tools that write text (2026-11): where an
-	// assistant's words are from, when not from its user.
+	// assistant's words are from, when not from its user. From 35800 for
+	// a task's place in the manual order (2026-11): what a drop in a list
+	// does, an assistant does too.
 	// tests/test_mcp.py caps what is served (the same list, compact).
-	if len(mcpToolsJSON) > 35800 {
+	if len(mcpToolsJSON) > 36600 {
 		t.Errorf("the definitions grew to %d bytes: every session loads them", len(mcpToolsJSON))
 	}
 }

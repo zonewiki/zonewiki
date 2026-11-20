@@ -1,13 +1,13 @@
 // The tasks API: the /api/tasks routes. Each reads its request and answers.
 // The writes of one task (create, change, comment, tag, delete) are in
-// tasks.go, which the MCP tools share; the routes that write several at
-// once and have no tool (batch complete, batch update, reorder, import,
-// restore, a comment's edit) put theirs together here from the same parts
-// (changeTaskFields, completeTask, keepDone, uncompleteTask …).
+// tasks.go, which the MCP tools share, and so are moves in the manual order
+// (placeTasks); the routes that write several at once and have no tool
+// (batch complete, batch update, import, restore, a comment's edit) put
+// theirs together here from the same parts (changeTaskFields, completeTask,
+// keepDone, uncompleteTask …).
 package main
 
 import (
-	"cmp"
 	"encoding/json"
 	"errors"
 	"io"
@@ -789,75 +789,20 @@ func apiReorder(w http.ResponseWriter, r *http.Request) error {
 			t.SortOrder = &f
 		}
 	}
-	// moves: [{id, after, before}], each task placed between the task that
-	// is now before it and the next one after it, in the order the server
-	// has: what a list sends (js/taskorder.js saveOrder), so that one that
-	// is stale in its browser doesn't put an old order back.
-	for _, m := range moves {
-		id, _ := jsonobj.As[string](m["id"])
-		after, _ := jsonobj.As[string](m["after"])
-		before, _ := jsonobj.As[string](m["before"])
-		if t := byID[id]; t != nil {
-			placeBetween(active, t, byID[after], byID[before])
-		}
+	// moves: [{id, after, before}], as a list sends them (js/taskorder.js
+	// saveOrder): placeTasks, which the tools' positions come to as well.
+	placed := make([]taskMove, len(moves))
+	for i, m := range moves {
+		placed[i].ID, _ = jsonobj.As[string](m["id"])
+		placed[i].After, _ = jsonobj.As[string](m["after"])
+		placed[i].Before, _ = jsonobj.As[string](m["before"])
 	}
+	placeTasks(active, placed)
 	if err := taskFiles.WriteOpenLocked(userOf(r), active, "Reorder tasks"); err != nil {
 		return err
 	}
 	w.WriteHeader(http.StatusNoContent)
 	return nil
-}
-
-// placeBetween gives t the place in the manual order between the tasks
-// after (the one before it; nil: none) and before (the one that follows;
-// nil: none): a number between theirs (Task.SortOrder), so no other task
-// is written. A neighbour that is in no order (anymore) counts as none, and
-// two that are not in that order (the other way round, or one number: a
-// list in a browser that was stale, lists numbered apart) leave after to
-// say where. When the numbers between two are used up, the tasks' order is
-// numbered anew, as it stands, and the place taken then.
-func placeBetween(tasks []*Task, t, after, before *Task) {
-	val := func(n *Task) (float64, bool) {
-		if n == nil || n == t || n.SortOrder == nil {
-			return 0, false
-		}
-		return *n.SortOrder, true
-	}
-	place := func() (float64, bool) {
-		lo, hasLo := val(after)
-		hi, hasHi := val(before)
-		if hasLo && hasHi && hi <= lo {
-			hasHi = false
-		}
-		switch {
-		case hasLo && hasHi:
-			mid := lo + (hi-lo)/2
-			return mid, mid > lo && mid < hi && hi-lo > 1e-6
-		case hasLo:
-			return lo + 1, true
-		case hasHi:
-			return hi - 1, true
-		}
-		return 0, true
-	}
-	f, ok := place()
-	if !ok {
-		// No room left between them: every ranked task numbered 0, 1, 2 … in
-		// the order they are in.
-		var ranked []*Task
-		for _, x := range tasks {
-			if x.SortOrder != nil && x != t {
-				ranked = append(ranked, x)
-			}
-		}
-		slices.SortStableFunc(ranked, func(a, b *Task) int { return cmp.Compare(*a.SortOrder, *b.SortOrder) })
-		for i, x := range ranked {
-			n := float64(i)
-			x.SortOrder = &n
-		}
-		f, _ = place()
-	}
-	t.SortOrder = &f
 }
 
 // apiBatchUpdate changes fields of several tasks in one commit: tasks is a

@@ -973,6 +973,10 @@ WRITES = [
     ("POST /api/tasks/batch-tag", "POST", "/api/tasks/batch-tag", {"json": {"ids": [TASK_ID], "add": ["bob"]}}),
     ("POST /api/tasks/batch-update", "POST", "/api/tasks/batch-update", {"json": {"tasks": [{"id": TASK_ID, "title": "Bob"}]}}),
     ("POST /api/tasks/reorder", "POST", "/api/tasks/reorder", {"json": {"order": [TASK_ID], "updates": [{"id": TASK_ID, "sort_order": 1}]}}),
+    ("POST /api/tasks/reorder", "POST", "/api/tasks/reorder", {"json": {"moves": [{"id": TASK_ID, "after": INBOX_ID, "before": ""}]}}),
+    # A position in the manual order: hers, and his by hers.
+    ("PUT /api/tasks/{id}", "PUT", f"/api/tasks/{TASK_ID}", {"json": {"position": "top"}}),
+    ("POST /api/tasks", "POST", "/api/tasks", {"json": {"title": "Bob's", "list": "team", "position": {"after": TASK_ID}}}),
     ("POST /api/tasks/restore", "POST", "/api/tasks/restore", {"json": {"tasks": [{"id": TASK_ID, "title": "Bob's"}]}}),
     ("POST /api/tasks/import", "POST", "/api/tasks/import", {"json": {"file": {"tasks": [{"id": TASK_ID, "title": "Bob's"}]}}}),
 ]
@@ -1049,6 +1053,10 @@ MCP_WRITES = [
     ("update_task", {"id": TASK_ID, "status": "wont_do"}),
     ("update_task", {"id": DONE_ID, "status": "open", "comment": "Bob's"}),
     ("update_task", {"ids": [TASK_ID, OLD_ID], "add_tags": ["bob"]}),
+    ("update_task", {"id": TASK_ID, "position": "top"}),
+    ("update_task", {"ids": [INBOX_ID, TASK_ID], "position": "bottom"}),
+    ("create_task", {"title": "Bob's", "list": "team", "after": TASK_ID}),
+    ("create_task", {"title": "Bob's", "list": "team", "before": INBOX_ID[:8]}),
     ("upload_file", {"filename": "bobs.txt", "text": "Bob was here", "page": DIARY}),          # not into her folder
     ("upload_file", {"filename": "../private/alice/_assets/photo.png", "text": "Bob was here"}),
 ]
@@ -1142,6 +1150,19 @@ def test_moving_the_private_folder_is_refused(client, wiki):
     before = _alices_files(wiki)
     assert "Nothing was moved" in mcp(client, "rename_page", slug="private/", new_slug="stolen")
     assert _alices_files(wiki) == before and not (wiki / "stolen").exists()
+
+
+def test_a_position_by_her_task_is_told_as_by_no_task(bob, wiki):
+    """bob's task put after alice's private one: refused in the words a
+    task that isn't there gets, through the API and his assistant alike,
+    and nothing is made."""
+    nosuch = "deadbeef-0000-4000-8000-000000000000"
+    said = [bob.post("/api/tasks", json={"title": "Bob's", "list": "team", "position": {"after": id}}, headers=HOST)
+            for id in (TASK_ID, nosuch)]
+    assert [r.status_code for r in said] == [400, 400] and said[0].get_json() == said[1].get_json()
+    told = [mcp(bob, "create_task", title="Bob's", list="team", after=id) for id in (TASK_ID, nosuch)]
+    assert told[0].replace(TASK_ID, "X") == told[1].replace(nosuch, "X") and "No task with id" in told[0]
+    assert "Bob's" not in shared_tasks(wiki)
 
 
 def test_every_tool_is_covered():

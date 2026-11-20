@@ -289,6 +289,8 @@ Comments, Keep tasks and Sections, which the rows and sections here name, are in
 - `completed: true` on a keep task does not archive it (see Keep tasks).
 - `completed`, `wont_do`, `skip` and `keep` are `true` or `false`, anything else is refused (400, "completed must be true or false").
 - A date is `YYYY-MM-DD`, `null` or `""` (none).
+- `position` gives the task its place in the manual order in the same commit: `"top"`, `"bottom"`, `{after: id}` or `{before: id}` (A position in the order in `docs/spec/tasks.md`); `POST /api/tasks` takes it too, and without it a new task is unranked.
+  Only an open task has one, and the task named must be open and ranked; anything else is refused (400) with nothing written.
 
 ### Several tasks at once
 

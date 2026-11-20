@@ -71,8 +71,9 @@ class TestToolDefinitions:
         # Every session loads them all. Parameters many tools share keep
         # short descriptions; read_guides explains the gate once.
         tools = {t["name"]: t for t in self.tools(client)}
-        # (29250 until rename_page got narrow, 29400 until undo_changes, 30200 until source; go/mcp_test.go caps the file.)
-        assert len(json.dumps(list(tools.values()))) < 30750
+        # (29250 until rename_page got narrow, 29400 until undo_changes, 30200 until source,
+        # 30750 until a task's place; go/mcp_test.go caps the file.)
+        assert len(json.dumps(list(tools.values()))) < 31400
         props = tools["write_page"]["inputSchema"]["properties"]
         assert len(props["summary"]["description"]) < 100 and len(props["guides"]["description"]) < 100
         assert "refused until its id" in tools["read_guides"]["description"]
@@ -1990,7 +1991,7 @@ class TestTagTasks:
         text, err = call(client, "update_task", ids=[a, "deadbeef"], add_tags=["x"])
         assert err and "No task with id" in text
         assert self._tasks(client)["A"]["tags"] == []
-        assert "Give add_tags or remove_tags" in call(client, "update_task", ids=[a])[0]
+        assert "Give add_tags, remove_tags or a position" in call(client, "update_task", ids=[a])[0]
         assert "ids must be" in call(client, "update_task", ids=[], add_tags=["x"])[0]
         assert "ids must be" in call(client, "update_task", ids=a, add_tags=["x"])[0]
         assert "add_tags must be" in call(client, "update_task", ids=[a], add_tags=[3])[0]
@@ -2001,8 +2002,143 @@ class TestTagTasks:
         text, err = call(client, "update_task", id=a, ids=[a], add_tags=["x"])
         assert err and "Give id or ids, not both" in text
         text, err = call(client, "update_task", ids=[a], add_tags=["x"], status="done", due="today")
-        assert err and "only add_tags and remove_tags work, not due, status" in text
+        assert err and "only add_tags, remove_tags and a position (position, after, before) work, not due, status" in text
         assert self._tasks(client)["A"]["tags"] == [] and not self._tasks(client)["A"]["due_date"]
+
+
+class TestTaskPosition:
+    """create_task's and update_task's position, after and before: a task's
+    place in the manual order, as a drop in a list's view gives it (the
+    moves of POST /api/tasks/reorder: placeTasks)."""
+
+    def _order(self, client, list_=None):
+        """The open tasks' titles in search_tasks' manual order."""
+        text, err = call(client, "search_tasks", order="manual", **({"list": list_} if list_ else {}))
+        assert not err, text
+        return [e.removeprefix("Task: ") for e in entries(text.split(":\n\n", 1)[1])]
+
+    def _tasks(self, client):
+        return {t["title"]: t for t in client.get("/api/tasks", headers=HOST).get_json()}
+
+    def _ranked(self, client, *titles):
+        """Tasks in the Inbox, in this manual order (the browser's reorder)."""
+        for title in titles:
+            task(client, title=title)
+        ids = {t: v["id"] for t, v in self._tasks(client).items()}
+        assert client.post("/api/tasks/reorder", json={"order": [ids[t] for t in titles]}, headers=HOST).status_code == 204
+        return ids
+
+    def test_bottom_keeps_tasks_in_the_order_made(self, client, git_wiki_dir):
+        """The assistant that made a list most important first: without a
+        position each new task is unranked, newest on top, so the list came
+        out the wrong way round."""
+        make_list(client, "plan", headers=HOST)
+        before = len(self_log(git_wiki_dir))
+        for title in ("First", "Second", "Third"):
+            text, err = call(client, "create_task", title=title, list="plan", position="bottom")
+            assert not err, text
+        assert text.startswith("Created (today is ") and \
+            "). In the manual order of #plan it comes last, after “Second”.\n\nTask: Third" in text
+        assert self._order(client, "plan") == ["First", "Second", "Third"]
+        log = self_log(git_wiki_dir)
+        assert len(log) == before + 3 and log[0] == "Create task (MCP)"   # one commit each, as without
+        call(client, "create_task", title="Unranked", list="plan")
+        tasks = self._tasks(client)
+        assert tasks["Unranked"]["sort_order"] is None
+        text, _ = call(client, "create_task", title="Zeroth", list="plan", position="top")
+        assert "it comes first, before “First”." in text
+        call(client, "create_task", title="After first", list="plan", after=tasks["First"]["id"][:8])
+        call(client, "create_task", title="Before third", list="plan", before=f"[[task:{tasks['Third']['id'][:8]}]]")
+        assert self._order(client, "plan") == ["Zeroth", "First", "After first", "Second", "Before third", "Third", "Unranked"]
+
+    def test_update_task_moves_one_as_a_drop_does(self, client, git_wiki_dir):
+        ids = self._ranked(client, "A", "B", "C", "D")
+        before = {t: v["sort_order"] for t, v in self._tasks(client).items()}
+        text, err = call(client, "update_task", id=ids["D"][:8], after=ids["A"][:8], summary="D next")
+        assert not err, text
+        assert text.startswith("Moved. In the manual order of the Inbox it comes after “A” and before “B”.\n\nTask: D")
+        assert self_log(git_wiki_dir)[0] == "Reorder tasks: D next (MCP)"
+        # The number between its two that the browser's move gives it; no other task written.
+        after = {t: v["sort_order"] for t, v in self._tasks(client).items()}
+        assert after["D"] == 0.5 and {t for t in after if after[t] != before[t]} == {"D"}
+        assert self._order(client) == ["A", "D", "B", "C"]
+        call(client, "update_task", id=ids["A"], position="bottom")
+        assert self._order(client) == ["D", "B", "C", "A"]
+        call(client, "update_task", id=ids["A"], before=ids["B"])
+        assert self._order(client) == ["D", "A", "B", "C"]
+        text, _ = call(client, "update_task", id=ids["C"], position="top")
+        assert "it comes first, before “D”." in text
+        assert self._order(client) == ["C", "D", "A", "B"]
+        # With fields, in their commit; with a comment, that one after.
+        n = len(self_log(git_wiki_dir))
+        text, err = call(client, "update_task", id=ids["B"], title="Bee", after=ids["C"], comment="first things first")
+        assert not err and text.startswith("Updated, comment added. In the manual order of the Inbox it comes after “C” and before “D”.")
+        assert self_log(git_wiki_dir)[:2] == ["Comment on task (MCP)", "Update task (MCP)"] and len(self_log(git_wiki_dir)) == n + 2
+        assert self._order(client) == ["C", "Bee", "D", "A"]
+        # Reopened by the same change, a task has its place again.
+        call(client, "update_task", id=ids["A"], status="done")
+        text, err = call(client, "update_task", id=ids["A"], status="open", position="top")
+        assert not err and self._order(client)[0] == "A"
+
+    def test_several_take_their_order(self, client, git_wiki_dir):
+        """ids with a position: the tasks one after the other, as given, in
+        one commit: a whole list ordered by one call."""
+        titles = [f"Step {i}" for i in range(1, 7)]
+        made = [_task_id(call(client, "create_task", title=t)[0]) for t in titles]
+        before = len(self_log(git_wiki_dir))
+        text, err = call(client, "update_task", ids=made + [made[0]], position="top", summary="in order")
+        assert not err, text
+        assert text == "Moved 6 tasks in the manual order, now in this order:\n" + \
+            "\n".join(f"- {t} ({i})" for t, i in zip(titles, made))
+        assert self._order(client) == titles
+        assert self_log(git_wiki_dir)[0] == "Reorder tasks: in order (MCP)" and len(self_log(git_wiki_dir)) == before + 1
+        # After one: between it and the next, in the order given.
+        call(client, "update_task", ids=[made[5], made[4]], after=made[0])
+        assert self._order(client) == ["Step 1", "Step 6", "Step 5", "Step 2", "Step 3", "Step 4"]
+        call(client, "update_task", ids=[made[1], made[2]], before=made[5])
+        assert self._order(client) == ["Step 1", "Step 2", "Step 3", "Step 6", "Step 5", "Step 4"]
+        # With tags: the move, then the tags, each in its commit.
+        text, err = call(client, "update_task", ids=[made[3], made[4]], position="bottom", add_tags=["late"])
+        assert not err and text.startswith("Moved 2 tasks in the manual order, now in this order:\n- Step 4")
+        assert "\n\nTags changed on 2 of 2 tasks." in text
+        assert self._order(client)[-2:] == ["Step 4", "Step 5"] and self._tasks(client)["Step 4"]["tags"] == ["late"]
+        assert self_log(git_wiki_dir)[:2] == ["Tag tasks (MCP)", "Reorder tasks (MCP)"]
+
+    def test_my_tasks_own_order_stays_and_a_list_reads_back(self, client, wiki_dir):
+        """A position is in the shared manual order, as a drop in a list's
+        view; what the user ranked in My tasks stays as it is, and
+        search_tasks with the list reads back the list's order."""
+        ids = self._ranked(client, "A", "B", "C", "D")
+        assert client.post("/api/tasks/reorder", json={"mine": True, "order": [ids["C"], ids["A"]]}, headers=HOST).status_code == 204
+        call(client, "update_task", id=ids["D"], position="top")
+        assert client.get("/api/tasks?with=order", headers=HOST).get_json()["order"] == [ids["C"], ids["A"]]
+        assert self._order(client, "inbox") == ["D", "A", "B", "C"]
+        assert self._order(client) == ["C", "A", "D", "B"]      # My tasks' own first, then the lists'
+
+    def test_what_is_refused_changes_nothing(self, client, git_wiki_dir):
+        ids = self._ranked(client, "A", "B")
+        loose = task(client, title="Loose")["id"]
+        done = task(client, title="Done")["id"]
+        close(client, done, completed=True)
+        state = lambda: ({t: v["sort_order"] for t, v in self._tasks(client).items()}, len(self_log(git_wiki_dir)))
+        before = state()
+        for args, says in (
+            ({"id": ids["A"], "after": ids["B"], "before": ids["B"]}, "Give one of position, after and before, not after and before"),
+            ({"id": ids["A"], "position": "middle"}, "position must be top or bottom"),
+            ({"id": ids["A"], "after": "deadbeef"}, 'No task with id "deadbeef"'),
+            ({"id": ids["A"], "after": done}, "“Done” is closed: only open tasks have a position"),
+            ({"id": ids["A"], "after": loose}, "“Loose” isn't in the manual order yet"),
+            ({"id": ids["A"], "after": ids["A"]}, "A task can't be put after or before itself"),
+            ({"id": done, "position": "top"}, "Only an open task has a position in the manual order"),
+            ({"id": done, "title": "Done!", "position": "top"}, "Only an open task has a position in the manual order"),
+            ({"ids": [ids["A"], done], "position": "top", "add_tags": ["x"]}, "“Done” is closed"),
+            ({"ids": [ids["A"], ids["B"]], "after": ids["B"], "add_tags": ["x"]}, "A task can't be put after or before itself"),
+            ({"title": "New", "after": loose}, "“Loose” isn't in the manual order yet"),
+        ):
+            text, err = call(client, "create_task" if "title" in args and "id" not in args else "update_task", **args)
+            assert err and says in text, (args, text)
+            assert state() == before, args
+        assert self._tasks(client)["A"]["tags"] == [] and "New" not in self._tasks(client)
 
 
 class TestCommentAndDeleteTask:

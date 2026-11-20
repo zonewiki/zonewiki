@@ -492,9 +492,17 @@ So on Today, sorting in one item never shuffles the catalogue around it.
 
 #### A move is saved as a move
 
-A list tells the server each moved task with the task now before it and the next one after it that didn't move (`TasksCore.orderMoves`, `saveOrder` in `js/taskorder.js`; `POST /api/tasks/reorder` with `moves: [{id, after, before}]`), and the server gives the task a number between those two's as it has them by then (`placeBetween` in `go/tasksapi.go`; `sort_order` is a number, not a count), writing no other task.
+A list tells the server each moved task with the task now before it and the next one after it that didn't move (`TasksCore.orderMoves`, `saveOrder` in `js/taskorder.js`; `POST /api/tasks/reorder` with `moves: [{id, after, before}]`), and the server gives the task a number between those two's as it has them by then (`placeTasks`, `placeBetween` in `go/tasks.go`; `sort_order` is a number, not a count), writing no other task.
 So a list that is stale in someone's browser doesn't put its old order back over what a colleague ranked meanwhile; neighbours that are no longer in that order leave `after` to say where, and when the numbers between two tasks are used up the order is numbered anew as it stands.
 My tasks' order, which is one user's own, is sent whole (My tasks' own order).
+
+#### A position in the order
+
+A task can also be given its place by naming it: `position` on `POST /api/tasks` and `PUT /api/tasks/<id>` (Updating a task in `docs/spec/routes.md`), and an assistant's `create_task` and `update_task` (`position`, `after`, `before`; `create_task` in `docs/spec/mcp.md`).
+`top` puts the task above the first ranked task, `bottom` below the last, `{after: id}` and `{before: id}` right next to that task: the server finds the neighbour on the other side in the order it has, and the task gets the number between the two as a drop does (`movesTo`, then `placeTasks`), in the write's own commit.
+Several tasks given one position (an assistant's `update_task` with `ids`) go there one after the other, in the order given, as a drop of several selected tasks.
+The task to put it by must be open and ranked, and one the user sees: one they don't is refused in the words for a task that isn't there.
+The order is one for all tasks, so the place holds in every view that shows both tasks; My tasks' own order is left as it is, as a drop in a list's view leaves it.
 
 ### Long sections
 
@@ -1592,6 +1600,7 @@ My tasks' manual order is its own, and yours (`mineOrder`, `setMineOrder` in `go
 It is kept as task ids in your registry (`"order"`; without users the wiki's), written by `POST /api/tasks/reorder` with `mine: true` in a commit "Reorder My tasks": no task is written.
 The view lays it over its own copies of the tasks (a task's place in it stands for its `sort_order` there, a task not in it is Unsorted), so Unsorted and Sorted, Today and the Plan board's sections work in My tasks as everywhere; it comes with the page's tasks (`"order"` in `tasksInitial`) and with `GET /api/tasks?with=order`.
 A task new to My tasks (one just given to you, a capture) is Unsorted, at the top, until you place it.
+An assistant's position (A position in the order) is in the lists' order, not in this one.
 Until you rank something there it is the lists' order of your tasks, so nothing moves on the day; ids of tasks that are closed or gone drop out at the next move.
 
 #### One rule in server and browser

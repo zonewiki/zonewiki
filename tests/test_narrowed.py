@@ -236,6 +236,8 @@ def test_without_the_group_a_list_for_it_is_no_list(client, list_wiki):
                        ("update_task", {"id": L.IDS["open"], "title": "Taken", "summary": "x"}),
                        ("update_task", {"id": L.IDS["shared"], "list": L.LIST, "summary": "x"}),
                        ("create_task", {"title": "Smuggled", "list": L.LIST, "summary": "x"}),
+                       ("update_task", {"id": L.IDS["shared"], "after": L.IDS["open"], "summary": "x"}),
+                       ("create_task", {"title": "Smuggled", "list": "team", "before": L.IDS["open"], "summary": "x"}),
                        ("rename_task_list", {"list": L.LIST, "new_name": "taken", "summary": "x"})]:
         before = L._its_files(list_wiki)
         out = call(client, narrowed, tool, **args)

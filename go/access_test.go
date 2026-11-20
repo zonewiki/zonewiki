@@ -397,6 +397,9 @@ func TestAReadOnlyAskerChangesNothing(t *testing.T) {
 	if _, err := createTask(reading, jsonObj{"title": json.RawMessage(`"x"`)}, "Create task"); err == nil {
 		t.Error("a task made by an asker that only reads")
 	}
+	if _, err := reorderTasks(reading, nil, orderPos{At: "top"}, "Reorder tasks"); !refusedWith(err, refusedReadOnly) {
+		t.Errorf("tasks moved in the manual order by an asker that only reads: %v", err)
+	}
 	for _, tool := range toolList(reading) {
 		if name := tool["name"].(string); writeTool(name) {
 			t.Errorf("an asker that only reads is given %s", name)

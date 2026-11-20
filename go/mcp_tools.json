@@ -1005,6 +1005,22 @@
      "type": "string",
      "description": "The list it goes in (list_tags shows them). Default: the user's Inbox, which only they see. With an assignee: a shared list."
     },
+    "position": {
+     "type": "string",
+     "enum": [
+      "top",
+      "bottom"
+     ],
+     "description": "Its place in the manual order (search_tasks order=manual). Without: unranked, newest on top; bottom keeps several in the order made."
+    },
+    "after": {
+     "type": "string",
+     "description": "Instead: right after this task (its id)."
+    },
+    "before": {
+     "type": "string",
+     "description": "Instead: right before this task."
+    },
     "summary": {
      "type": "string",
      "description": "The git commit message, a few words ('add findings from BUG-1234')."
@@ -1028,7 +1044,7 @@
  {
   "name": "update_task",
   "title": "Update or comment on tasks",
-  "description": "Change a task: only the fields given change. status: done (a repeating task gets its next occurrence), wont_do (close it undone: abandoned, or made by mistake; a task can't be deleted), skip (won't do this occurrence, the series goes on), open (reopen). comment adds a dated status line. With ids instead of id: add_tags/remove_tags on several tasks in one change. Case is ignored; list_tags shows the tags in use: reuse those.",
+  "description": "Change a task: only the fields given change. status: done (a repeating task gets its next occurrence), wont_do (close it undone: abandoned, or made by mistake; a task can't be deleted), skip (won't do this occurrence, the series goes on), open (reopen). comment adds a dated status line. With ids instead of id: add_tags/remove_tags or a position for several tasks. Case is ignored; list_tags shows the tags in use: reuse those.",
   "inputSchema": {
    "type": "object",
    "properties": {
@@ -1041,7 +1057,7 @@
      "items": {
       "type": "string"
      },
-     "description": "Several tasks instead of id (ids or 8-character prefixes), for add_tags/remove_tags only."
+     "description": "Several tasks instead of id (ids or 8-character prefixes), for add_tags/remove_tags and a position only."
     },
     "title": {
      "type": "string"
@@ -1113,6 +1129,22 @@
     "share": {
      "type": "boolean",
      "description": "true: the move may take it out of a private list, for everyone to see."
+    },
+    "position": {
+     "type": "string",
+     "enum": [
+      "top",
+      "bottom"
+     ],
+     "description": "As create_task's; with ids, in their order."
+    },
+    "after": {
+     "type": "string",
+     "description": "As create_task's."
+    },
+    "before": {
+     "type": "string",
+     "description": "As create_task's."
     },
     "follow": {
      "type": "boolean",

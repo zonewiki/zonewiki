@@ -72,7 +72,7 @@ What each file and folder of the repository is for.
 │   ├── changes.go          # Changes (/changes): the wiki's commits as their reader may see them (wikiChanges, which the MCP tool history lists too), by day, filtered by user, assistant, folder and day; which assistant a commit names (its trailer); what a row offers to undo (undoOffers) and the route that does (undoChangesOp in pageops.go)
 │   ├── quicknotes.go       # Notes: create, Move to wiki, Append to page (the routes and MCP share it)
 │   ├── merge.go            # Several editors on one page: drafts' authors, the bases, the three-way merge, texts left in conflict
-│   ├── tasks.go            # Task writes (create, change, comment, tag, delete), as functions the routes and the MCP tools share
+│   ├── tasks.go            # Task writes (create, change, comment, tag, move in the manual order, delete), as functions the routes and the MCP tools share
 │   ├── tasklists.go        # Task lists: the lists a user sees (taskLists, refs), their pins, My tasks (the home view's rule, mineFilter, and its settings), and the list operations (make, rename, delete, share, pin, settings)
 │   ├── listsmigrate.go     # The lists' migration at start: lists that pages declared and pins in embeds, taken over into the registries, once
 │   ├── viewsmigrate.go     # The views' names of 2026-11 (view=today|open|closed, group=): embeds and registries from before rewritten at start, once

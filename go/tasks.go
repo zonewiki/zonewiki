@@ -1,9 +1,11 @@
-// Task writes: creating, changing, commenting on, tagging and deleting
-// tasks, as functions the /api/tasks routes (tasksapi.go) and the MCP tools
-// (mcptasks.go) share, and the reading of the values a write is given.
+// Task writes: creating, changing, commenting on, tagging, moving in the
+// manual order and deleting tasks, as functions the /api/tasks routes
+// (tasksapi.go) and the MCP tools (mcptasks.go) share, and the reading of
+// the values a write is given.
 package main
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -144,6 +146,10 @@ func createTask(user asker, data jsonObj, message string) (*Task, error) {
 	if strings.TrimSpace(title) == "" {
 		return nil, refuse("Title cannot be empty")
 	}
+	pos, positioned, err := positionField(data)
+	if err != nil {
+		return nil, err
+	}
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
 	t := newTask()
@@ -176,7 +182,15 @@ func createTask(user asker, data jsonObj, message string) (*Task, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := taskFiles.WriteOpenLocked(user, append(active, t), message); err != nil {
+	active = append(active, t)
+	// position: where it goes in the manual order; without, it is
+	// unranked, on top of its list as a new task is.
+	if positioned {
+		if err := moveTo(active, []string{t.ID}, pos); err != nil {
+			return nil, err
+		}
+	}
+	if err := taskFiles.WriteOpenLocked(user, active, message); err != nil {
 		return t, err
 	}
 	tellAssigned(user.Name, nil, t)
@@ -714,6 +728,10 @@ func updateTaskLocked(user asker, id string, data jsonObj, suffix string) (*Task
 		}
 	}
 	skip, wontDo, done := status[0], status[1], status[2]
+	pos, positioned, err := positionField(data)
+	if err != nil {
+		return nil, err
+	}
 	active, closed, t, err := findForWriteLocked(user, id)
 	if err != nil {
 		return nil, err
@@ -779,6 +797,13 @@ func updateTaskLocked(user asker, id string, data jsonObj, suffix string) (*Task
 			active = uncompleteTask(user, t, active, nil)
 			closed = without(closed, id)
 			active = append(active, t)
+		}
+	}
+	// position: its place in the manual order, which only an open task has
+	// (still, or reopened by this write).
+	if positioned {
+		if err := moveTo(active, []string{t.ID}, pos); err != nil {
+			return nil, err
 		}
 	}
 	sentBack(user, t, data)
@@ -996,4 +1021,243 @@ func tagTasks(user asker, ids, add, remove []string, message string) ([]*Task, e
 		updated = append(updated, t)
 	}
 	return updated, taskFiles.WriteBothLocked(user, active, closed, message)
+}
+
+// ---- the manual order ----
+
+// taskMove: a task given its place in the manual order between two tasks,
+// named by their ids: After, the one now before it ("": none), and Before,
+// the next one after it that doesn't move ("": none). What a list sends
+// for a drop (TasksCore.orderMoves), and what a position comes to
+// (movesTo).
+type taskMove struct{ ID, After, Before string }
+
+// placeTasks gives each moved task of active (the open tasks a write has)
+// its place between its two (placeBetween), one after the other, in the
+// order the server has by then: so a list that is stale in a browser
+// doesn't put its old order back over what someone ranked meanwhile. A
+// task or neighbour that isn't among active counts as none.
+func placeTasks(active []*Task, moves []taskMove) {
+	byID := make(map[string]*Task, len(active))
+	for _, t := range active {
+		byID[t.ID] = t
+	}
+	for _, m := range moves {
+		if t := byID[m.ID]; t != nil {
+			placeBetween(active, t, byID[m.After], byID[m.Before])
+		}
+	}
+}
+
+// placeBetween gives t the place in the manual order between the tasks
+// after (the one before it; nil: none) and before (the one that follows;
+// nil: none): a number between theirs (Task.SortOrder), so no other task
+// is written. A neighbour that is in no order (anymore) counts as none, and
+// two that are not in that order (the other way round, or one number: a
+// list in a browser that was stale, lists numbered apart) leave after to
+// say where. When the numbers between two are used up, the tasks' order is
+// numbered anew, as it stands, and the place taken then.
+func placeBetween(tasks []*Task, t, after, before *Task) {
+	val := func(n *Task) (float64, bool) {
+		if n == nil || n == t || n.SortOrder == nil {
+			return 0, false
+		}
+		return *n.SortOrder, true
+	}
+	place := func() (float64, bool) {
+		lo, hasLo := val(after)
+		hi, hasHi := val(before)
+		if hasLo && hasHi && hi <= lo {
+			hasHi = false
+		}
+		switch {
+		case hasLo && hasHi:
+			mid := lo + (hi-lo)/2
+			return mid, mid > lo && mid < hi && hi-lo > 1e-6
+		case hasLo:
+			return lo + 1, true
+		case hasHi:
+			return hi - 1, true
+		}
+		return 0, true
+	}
+	f, ok := place()
+	if !ok {
+		// No room left between them: every ranked task numbered 0, 1, 2 … in
+		// the order they are in.
+		var ranked []*Task
+		for _, x := range tasks {
+			if x.SortOrder != nil && x != t {
+				ranked = append(ranked, x)
+			}
+		}
+		slices.SortStableFunc(ranked, func(a, b *Task) int { return cmp.Compare(*a.SortOrder, *b.SortOrder) })
+		for i, x := range ranked {
+			n := float64(i)
+			x.SortOrder = &n
+		}
+		f, _ = place()
+	}
+	t.SortOrder = &f
+}
+
+// orderPos: a position in the manual order that a write puts tasks at: At
+// "top" or "bottom", or "after" or "before" the task Task (its id).
+type orderPos struct{ At, Task string }
+
+// field: pos as a write's position (positionField).
+func (pos orderPos) field() any {
+	if pos.Task == "" {
+		return pos.At
+	}
+	return map[string]string{pos.At: pos.Task}
+}
+
+// positionField: a write's position in the manual order, data's
+// "position": "top", "bottom", {"after": id} or {"before": id}; has is
+// false without one.
+func positionField(data jsonObj) (pos orderPos, has bool, err error) {
+	if !data.Has("position") || data.Null("position") {
+		return pos, false, nil
+	}
+	bad := refuse(`position must be "top", "bottom", {"after": id} or {"before": id}`)
+	if s, ok := jsonobj.As[string](data["position"]); ok {
+		if s != "top" && s != "bottom" {
+			return pos, false, bad
+		}
+		return orderPos{At: s}, true, nil
+	}
+	o, ok := jsonobj.As[jsonObj](data["position"])
+	if !ok || len(o) != 1 {
+		return pos, false, bad
+	}
+	for _, at := range []string{"after", "before"} {
+		if id, ok := jsonobj.As[string](o[at]); ok && id != "" {
+			return orderPos{At: at, Task: id}, true, nil
+		}
+	}
+	return pos, false, bad
+}
+
+// movesTo: the moves (placeTasks) that put the tasks ids, in that order, at
+// pos in the manual order of active, the open tasks the user sees: the
+// first right after pos's task, right before it, above the first ranked
+// task or below the last; each next one right after the one before it.
+// The manual order is one for all tasks (sort_order), so a position
+// between two tasks there is between them in every view that shows both:
+// their list's, All tasks, search_tasks'. My tasks' own order, the user's
+// alone once they rank there (mineOrder), is another: as a move in a
+// list's view does, this leaves it as it is. A task that is closed, or
+// that the user doesn't see, is none of active: refused in the same words
+// either way.
+func movesTo(active []*Task, ids []string, pos orderPos) ([]taskMove, error) {
+	byID := make(map[string]*Task, len(active))
+	for _, t := range active {
+		byID[t.ID] = t
+	}
+	moving := idSet(ids)
+	for _, id := range ids {
+		if byID[id] == nil {
+			return nil, refuse("Only an open task has a position in the manual order")
+		}
+	}
+	// The ranked tasks that stay where they are, top first.
+	var ranked []*Task
+	for _, t := range active {
+		if t.SortOrder != nil && !moving[t.ID] {
+			ranked = append(ranked, t)
+		}
+	}
+	slices.SortStableFunc(ranked, func(a, b *Task) int { return cmp.Compare(*a.SortOrder, *b.SortOrder) })
+	var after, before string // the first task's neighbours
+	switch pos.At {
+	case "top":
+		if len(ranked) > 0 {
+			before = ranked[0].ID
+		}
+	case "bottom":
+		if len(ranked) > 0 {
+			after = ranked[len(ranked)-1].ID
+		}
+	case "after", "before":
+		by := byID[pos.Task]
+		switch {
+		case by == nil:
+			return nil, refuse("The task to put it after or before is closed or not there: only open tasks have a position in the manual order")
+		case moving[by.ID]:
+			return nil, refuse("A task can't be put after or before itself")
+		case by.SortOrder == nil:
+			return nil, refuse("“" + by.Title + "” isn't in the manual order yet (unranked, as a new task is): give it a position first, top or bottom")
+		}
+		// Its neighbour on that side: the nearest task with another number
+		// (there is no number between two of the same).
+		i := slices.Index(ranked, by)
+		if pos.At == "after" {
+			after = by.ID
+			for _, t := range ranked[i+1:] {
+				if *t.SortOrder > *by.SortOrder {
+					before = t.ID
+					break
+				}
+			}
+		} else {
+			before = by.ID
+			for j := i - 1; j >= 0; j-- {
+				if *ranked[j].SortOrder < *by.SortOrder {
+					after = ranked[j].ID
+					break
+				}
+			}
+		}
+	default:
+		return nil, refuse("A position is top, bottom, after or before a task")
+	}
+	moves := make([]taskMove, 0, len(ids))
+	for _, id := range ids {
+		if !slices.ContainsFunc(moves, func(m taskMove) bool { return m.ID == id }) {
+			moves = append(moves, taskMove{ID: id, After: after, Before: before})
+			after = id
+		}
+	}
+	return moves, nil
+}
+
+// moveTo puts the tasks ids, in that order, at pos in the manual order of
+// active (movesTo, placeTasks), or refuses with nothing changed.
+func moveTo(active []*Task, ids []string, pos orderPos) error {
+	moves, err := movesTo(active, ids, pos)
+	if err == nil {
+		placeTasks(active, moves)
+	}
+	return err
+}
+
+// reorderTasks puts the open tasks ids, in that order, at pos in the manual
+// order (moveTo: what a move in a list's view does, POST
+// /api/tasks/reorder's moves), in one commit by user; the MCP tools'
+// update_task. Returns those tasks, as written, in that order.
+func reorderTasks(user asker, ids []string, pos orderPos, message string) ([]*Task, error) {
+	if err := mayWriteTasks(user); err != nil {
+		return nil, err
+	}
+	taskFiles.Lock()
+	defer taskFiles.Unlock()
+	active, err := taskFiles.ReadOpenStrict(user)
+	if err != nil {
+		return nil, err
+	}
+	if err := moveTo(active, ids, pos); err != nil {
+		return nil, err
+	}
+	byID := make(map[string]*Task, len(active))
+	for _, t := range active {
+		byID[t.ID] = t
+	}
+	moved := make([]*Task, 0, len(ids))
+	for _, id := range ids {
+		if t := byID[id]; !slices.Contains(moved, t) {
+			moved = append(moved, t)
+		}
+	}
+	return moved, taskFiles.WriteOpenLocked(user, active, message)
 }

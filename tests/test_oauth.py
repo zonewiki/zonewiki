@@ -364,7 +364,7 @@ class TestTokens:
         assert "One" in text and "Two" in text, text
         # Anything else the client sends with ids is still refused.
         status, text = mcp(bob, access, "update_task", ids=ids, add_tags=["x"], title="No")
-        assert "With ids only add_tags and remove_tags work, not title" in text, text
+        assert "With ids only add_tags, remove_tags and a position (position, after, before) work, not title" in text, text
 
     def test_the_token_call_needs_no_session_and_no_origin(self, bob):
         client_id = register(bob)

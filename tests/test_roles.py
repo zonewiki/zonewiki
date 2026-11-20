@@ -144,6 +144,8 @@ WRITES = [
     ("POST /api/tasks/batch-tag", "POST", "/api/tasks/batch-tag", {"json": {"ids": ["{task}"], "add": ["c"]}}),
     ("POST /api/tasks/batch-update", "POST", "/api/tasks/batch-update", {"json": {"tasks": [{"id": "{task}", "title": "C"}]}}),
     ("POST /api/tasks/reorder", "POST", "/api/tasks/reorder", {"json": {"order": ["{task}"], "updates": [{"id": "{task}", "sort_order": 9}]}}),
+    ("POST /api/tasks/reorder", "POST", "/api/tasks/reorder", {"json": {"moves": [{"id": "{task}", "after": "", "before": ""}]}}),
+    ("PUT /api/tasks/{id}", "PUT", "/api/tasks/{task}", {"json": {"position": "top"}}),
     ("POST /api/tasks/import", "POST", "/api/tasks/import", {"json": {"file": {"tasks": [{"title": "Imported"}]}}}),
     ("POST /api/tasks/restore", "POST", "/api/tasks/restore", {"json": {"tasks": [{"id": "new-id-1", "title": "Restored"}]}}),
     # Her own things, from when she was an editor, and new ones: refused too.
@@ -230,6 +232,9 @@ MCP_WRITES = [
     ("update_task", {"id": "{task}", "status": "wont_do"}),
     ("update_task", {"id": "{done}", "status": "open", "comment": "Carol's"}),
     ("update_task", {"ids": ["{task}"], "add_tags": ["c"]}),
+    ("update_task", {"id": "{task}", "position": "top"}),
+    ("update_task", {"ids": ["{task}"], "position": "bottom"}),
+    ("create_task", {"title": "Carol's", "list": "team", "position": "top"}),
     ("write_page", {"slug": "private/carol/x", "content": "# X\n"}),
     ("write_page", {"note": True, "slug": "Mine", "content": "Mine\n"}),
     ("create_task", {"title": "Mine", "list": "carols-own"}),

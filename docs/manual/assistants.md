@@ -135,7 +135,7 @@ An assistant has a set of tools, which it picks by itself from what you ask.
 |------|--------|
 | Read and search | Search the wiki and the tasks, find every place exact text occurs, read a page or one section, list pages and folders, list tags and task lists, find broken links. |
 | Write pages | Create a page, edit or append to one, find and replace across pages (showing a preview first), rename or move a page or folder with links following, delete a page. |
-| Tasks | Find tasks by tag, list, person or status; add a task; change one (dates, tags, list, assignee, done, a comment); make and rename lists and tags. |
+| Tasks | Find tasks by tag, list, person or status; add a task; change one (dates, tags, list, assignee, done, a comment); put tasks in order; make and rename lists and tags. |
 | Notes | Write a note, find notes, file a note into the wiki or onto a page. |
 | Files | Look at an uploaded image or text file, upload a file. |
 | History | See recent changes or a page's versions, restore an old version or a deleted page, undo changes. |
@@ -150,6 +150,7 @@ It can't delete tasks (it closes them as won't do, as you would), change setting
 What did I write down about the garden irrigation?
 Summarise my notes from this week and file each into the right page.
 Add a task for Anna to send the Q3 plan by Friday, in the team list.
+Put the tasks of the move list in the order we just talked about.
 Which of my #work tasks are overdue?
 Rename the page "Meeting notes" to "Meetings" and keep the links working.
 What changed in the wiki since Monday?

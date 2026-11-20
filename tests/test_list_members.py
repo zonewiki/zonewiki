@@ -183,6 +183,8 @@ WRITES = [
     ("POST", "/api/tasks/reorder", {"json": {"moves": [{"id": "{open}", "after": "", "before": ""}]}}),
     ("POST", "/api/tasks", {"json": {"title": "Smuggled", "list": LIST}}),
     ("PUT", "/api/tasks/{shared}", {"json": {"list": LIST}}),
+    ("PUT", "/api/tasks/{shared}", {"json": {"position": {"after": "{open}"}}}),
+    ("POST", "/api/tasks", {"json": {"title": "Smuggled", "list": "team", "position": {"before": "{open}"}}}),
     ("POST", "/api/tasks/batch-update", {"json": {"tasks": [{"id": "{shared}", "list": LIST}]}}),
     ("POST", "/tasks/rename-list", {"data": {"list": LIST, "new_name": "taken"}}),
     ("POST", "/tasks/delete-list", {"data": {"list": LIST, "to": ""}}),
@@ -224,6 +226,8 @@ def test_anyone_elses_assistant_sees_and_changes_nothing_of_it(client, wiki):
                        ("update_task", {"id": IDS["open"], "title": "Taken", "summary": "x"}),
                        ("update_task", {"id": IDS["shared"], "list": LIST, "summary": "x"}),
                        ("create_task", {"title": "Smuggled", "list": LIST, "summary": "x"}),
+                       ("update_task", {"id": IDS["shared"], "after": IDS["open"], "summary": "x"}),
+                       ("create_task", {"title": "Smuggled", "list": "team", "before": IDS["open"], "summary": "x"}),
                        ("rename_task_list", {"list": LIST, "new_name": "taken", "summary": "x"})]:
         before = _its_files(wiki)
         out = mcp(client, "bob", tool, **args)

@@ -161,7 +161,7 @@ Annotated `readOnlyHint`.
 | Tool | Does |
 |------|------|
 | `search_wiki(query, limit=8, under, notes)` | The most relevant **sections** of pages, full text, best first, and matching tasks; `under` a folder, `notes` only notes. |
-| `search_tasks(tag, list, assignee, status="open", query, order="deadline", limit=50)` | Tasks filtered by tag, list, assignee and status, ranked by a query or listed by deadline or the user's own order. |
+| `search_tasks(tag, list, assignee, status="open", query, order="deadline", limit=50)` | Tasks filtered by tag, list, assignee and status, ranked by a query or listed by deadline or the manual order. |
 | `read_page(slug, heading)` | A page's raw markdown with its facts (URL, file, hash), its task references and its place in the link graph; `heading` one section. |
 | `grep_wiki(pattern, ignore_case=false, under, limit=50)` | Every line of every page matching a regex. |
 | `list_pages(limit=100, under, orphans=false, notes=false)` | Pages, most recently edited first, with how many link to each; one folder, orphans or notes only. |
@@ -200,6 +200,7 @@ With `status="updated"` a task's line of facts says what is new, "update: bob co
 With a query, ranked by BM25 within the filter (fused with semantic hits: Retrieval).
 Without, open tasks by deadline, then start date, then title, done ones newest first.
 `order="manual"` lists the open ones in the user's own order instead (`sort_order`, the Open view's Sorted section, top first: their priority), the tasks not yet ranked after them, newest first (`manualBefore`; the Open view shows those above, as they wait to be ranked).
+What the user ranked in My tasks (My tasks' own order in `docs/spec/tasks.md`) comes first, as it stands there; with `list`, the list's order alone, as its view shows it, so what `update_task`'s `position` did reads back.
 The result starts with "Today is …" so the model can tell overdue from upcoming.
 
 #### `read_page`
@@ -311,8 +312,8 @@ The token `/mcp` requires (Auth) guards writes as it guards reads, and git keeps
 | `restore_page(slug, version, summary)` | Writes a version's text back; brings back a deleted page. |
 | `create_task_list(name, private, for, summary)` | A new task list: shared, for some, or private. |
 | `rename_task_list(list, new_name, summary)` | A task list's name, on its tasks, in pins and on pages. |
-| `create_task(title, description, tags, list, assignee, importance, due, start, repeat, repeat_every, repeat_from, keep, summary, source)` | A task, as `POST /api/tasks` makes it. |
-| `update_task(id, …same fields…, share, follow, add_tags, remove_tags, comment, status, ids, summary, source)` | Every change to existing tasks: fields, tags, a comment, status, several tasks' tags at once. |
+| `create_task(title, description, tags, list, assignee, importance, due, start, repeat, repeat_every, repeat_from, keep, position, after, before, summary, source)` | A task, as `POST /api/tasks` makes it, where it goes in the manual order. |
+| `update_task(id, …same fields…, share, follow, add_tags, remove_tags, comment, status, ids, summary, source)` | Every change to existing tasks: fields, tags, a comment, status, its place in the manual order, several tasks' tags and order at once. |
 
 #### `write_page`
 
@@ -445,6 +446,7 @@ A task through `createTask`, the same code as `POST /api/tasks`.
 | `list` | The list the task goes in, by its name as `list_tags` gives it, `""` or `inbox` for the Inbox (`update_task` takes it too). |
 | `due`, `start` | The deadline and the start: `YYYY-MM-DD` or a date word (Dates, below). |
 | `repeat` | daily/weekly/monthly/yearly/none; `repeat_every` 1–999. |
+| `position`, `after`, `before` | Its place in the manual order: `top` or `bottom`, or right after or before a task (its id), one of the three (A task's place in the order, below; `update_task` takes them too). |
 
 **Assignee**: the description sends "Anna should …" there rather than to a tag.
 A name that can't be assigned is a tool error saying why.
@@ -455,6 +457,16 @@ A task in the user's Inbox or one of their private lists is theirs alone (Privat
 A name no list has is a tool error.
 `update_task` moves a task with `list`: never a shared task into a private list, and a private one to a shared place only with `share: true`.
 `private` is no argument anymore: given, the tool says to give `list`.
+
+**A task's place in the order**: without `position`, `after` or `before` a new task is unranked, as one made in the browser is: on top of its list's view, newest first (Sections in `docs/spec/tasks.md`).
+So tasks made one after the other came out the wrong way round there, the last one first; `position: "bottom"` on each keeps them in the order they were made, and the description says so.
+The place is the `position` field of the write (`positionField`, `moveTo` in `go/tasks.go`), in its commit, and the same operation as a drop in a list's view (`placeTasks`, the moves of `POST /api/tasks/reorder`):
+
+- `top` puts the task above the first ranked task, `bottom` below the last, `after`/`before` right next to that task, between it and its neighbour (`movesTo`): a number between theirs (`sort_order`), so no other task is written.
+- The manual order is one for all tasks, so a place between two tasks is between them in every view that shows both: their list's, All tasks, `search_tasks` with `order="manual"`.
+  My tasks' own order, the user's alone once they rank there (My tasks' own order in `docs/spec/tasks.md`), is another one: a position leaves it as it is, as a drop in a list's view does.
+- The task to put it by is one the user sees (`findTask`: a task they don't see is "No task with id …", word for word as one that isn't there), open, and ranked; a closed one, an unranked one ("isn't in the manual order yet": give it a position first) and the task itself are tool errors, with nothing written.
+- The result says where the task is now in its list's order: "In the manual order of #plan it comes after “A” and before “B”." (`positionText`).
 
 **A date is the deadline**: the field descriptions send a date the user gives the task ("tomorrow", "by Friday") to `due`, and `start` only to a stated start ("start Monday", "work on it tomorrow"); the model had put "for tomorrow" in start.
 
@@ -478,10 +490,11 @@ It takes `create_task`'s fields, and:
 | `add_tags`, `remove_tags` | Work on the current tags (case ignored). |
 | `repeat_every`, `repeat_from` | Alone, keep the task's repeat type. |
 | `list`, `share` | Move the task to another list (`create_task`, Lists). |
+| `position`, `after`, `before` | Its place in the manual order (`create_task`, A task's place in the order). |
 | `follow` | `true`, `false`: the user follows the shared task, or no longer (Following a task in `docs/spec/tasks.md`); only the user themselves, the tool names no one. |
 | `status` | `done`, `wont_do`, `skip`, `open` (below). |
 | `comment` | A comment (below). |
-| `ids` | Several tasks' tags at once, instead of `id` (below). |
+| `ids` | Several tasks' tags and place at once, instead of `id` (below). |
 
 **`status`**:
 
@@ -494,12 +507,16 @@ There is no `deleted`: a task made by mistake is closed with `wont_do`, as in th
 
 **`comment`**: `addComment`, a dated status line, its own commit "Comment on task" after the fields' (checked before anything is written, so an empty one changes nothing).
 
-**`ids`** instead of `id`: `tagTasks`, the function the `batch-tag` route uses, adds and removes tags on several tasks (open, closed, archived) in one commit, "Tag tasks".
+**A place alone** (`position`, `after` or `before` and no field) is a move in the manual order, as a drop in a list's view: `reorderTasks`, a commit "Reorder tasks", the result starting "Moved."; with fields it goes into their commit ("Update task"), and a reopened task (`status: "open"`) takes it at once.
 
-- Only `add_tags`, `remove_tags` and `summary` go with it, anything else is refused.
+**`ids`** instead of `id`: `tagTasks`, the function the `batch-tag` route uses, adds and removes tags on several tasks (open, closed, archived) in one commit, "Tag tasks".
+With a position the tasks are moved too, **in the order given**: the first at the position, each next one right after the one before (`reorderTasks`, as a drop of several selected tasks), in a commit "Reorder tasks" before the tags'.
+So one call puts a whole list in order (`ids` in that order, `position: "top"`); every task must be open, and an id given twice counts once.
+
+- Only `add_tags`, `remove_tags`, `position`, `after`, `before` and `summary` go with it, anything else is refused.
 - Case is ignored; a tag a task has keeps its spelling; a leading `#` is dropped.
 - An unknown or ambiguous id fails the whole call, before anything is written; at most 200 per call.
-- The result says on how many tasks the tags changed (and that the others had them so already) and lists each task's tags.
+- The result says on how many tasks the tags changed (and that the others had them so already) and lists each task's tags; a move lists the tasks in their new order.
 
 Runs under the tasks lock, so add/remove tags see the current tags.
 Annotated destructive, as it changes and deletes.
@@ -669,7 +686,7 @@ so text is said once: the parameters many tools share (`summary`, `guides`) have
 `read_guides` explains the guide gate,
 and `update_task`'s `due`/`start` refer to `create_task`'s,
 which carry the date rules.
-Tests keep the total under 30,750 characters as a client gets it (`test_they_stay_small`) and the file under 35,800 bytes (`TestMCPToolDefinitions`): a new parameter raises them by what it costs, not more.
+Tests keep the total under 31,400 characters as a client gets it (`test_they_stay_small`) and the file under 36,600 bytes (`TestMCPToolDefinitions`): a new parameter raises them by what it costs, not more.
 
 ### Retrieval
 
