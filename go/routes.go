@@ -996,7 +996,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	v := &tasksPageView{Heading: heading, Missing: missing,
-		Menu: !rq.sharing && !listsUnmigrated && mayWriteTasks(rq.who()) == nil, Users: privateFolder(rq.user) != "",
+		Menu: !rq.sharing && !listsUnmigrated && (missing == "" || mayWriteTasks(rq.who()) == nil), Write: mayWriteTasks(rq.who()) == nil, Users: privateFolder(rq.user) != "",
 		Mine: mine, MineAssigns: mine && mineAssigns(rq.who()), Inbox: inbox, InboxPrivate: inbox && inboxOwner(rq.who()) != "",
 		Groups: settings().groups(), People: settings().assignableUsers(), NewListName: q.Get("newlist_name"), NewListError: q.Get("newlist_error"), NewListFor: q.Get("newlist_for"),
 		Places: places, More: more, TasksHTML: htmlOf(tasksHTML), LinkSections: sections,
@@ -1236,9 +1236,9 @@ func pinListRoute(w http.ResponseWriter, r *http.Request) {
 // LeftOut: the list is left out of the user's My tasks; DeleteToGeneral: a
 // deleted shared list's tasks go to #general when no list is named;
 // LinkSections: a list's Backlinks (with them the page has a page view's
-// columns). Menu: the ⋯ menu (New list…; a list's Rename…,
-// its pin, Make shared…, Delete…; a tag's Rename tag…), for who may change
-// tasks; Users: with users, so New list… has its Private box. Pin: how the
+// columns). Menu: the ⋯ menu (Export tasks; with Write, for who may change
+// tasks, New list…, a list's pin, Make shared…, a tag's Rename tag…, the
+// pills' order; with Manage a list's Rename…, Delete…); Users: with users, so New list… has its Private box. Pin: how the
 // user pinned List ("", "1", "first": their first pinned list); MoveTo: where its tasks can go
 // when it is deleted. The …Name and …Error fields: a dialog back from a
 // refusal.
@@ -1254,7 +1254,7 @@ type tasksPageView struct {
 	ListRenameName, ListRenameError string
 	DeleteError, ShareError         string
 	DeleteTo                        string // the list a delete asks about (its tasks to someone who doesn't see it): the dialog's yes
-	Menu, Users                     bool
+	Menu, Write, Users              bool
 	Manage                          bool // the list is the user's to rename, delete and set (canManageList)
 	// A shared list for some: whom it is for as the dialog's field says it
 	// ("@dev, anna"; a refused one as it was typed), why the dialog came

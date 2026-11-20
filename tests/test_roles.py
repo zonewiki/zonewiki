@@ -358,6 +358,22 @@ class TestTheInterface:
         assert "read_page" in names and "search_wiki" in names
         assert not names & {"write_page", "edit_page", "create_task", "update_task", "file_note"}
 
+    def test_she_exports_what_she_sees_and_nothing_else(self, client, wiki):
+        # The ⋯ menu of a list, for Export tasks: not New list…, a pin,
+        # Import… or the pills' order, which write.
+        html = client.get("/tasks?list=team", headers=HOST).data.decode()
+        assert 'class="btn page-menu-btn"' in html and 'data-tasks-action="export"' in html and 'id="task-more-btn"' in html
+        for writes in ('id="list-new-btn"', 'id="list-pin-btn"', 'id="list-unpin-btn"', "data-reorder", 'data-writes="1"',
+                       'id="task-import-modal"', "data-settings-"):
+            assert writes not in html, writes
+        (wiki / "team-page.md").write_text("# Team\n\n[[tasks: list=team]]\n")
+        html = client.get("/page/team-page", headers=HOST).data.decode()
+        assert 'id="task-more-btn"' in html and 'data-writes="1"' not in html and "task-import" not in html
+        out = client.get("/api/tasks/export?list=team", headers=HOST)
+        assert out.status_code == 200 and {t["title"] for t in out.get_json()["tasks"]} == {"Shared task", "Done task"}
+        # A name no list has: nothing to export, no menu.
+        assert "page-menu-btn" not in client.get("/tasks?list=nolist", headers=HOST).data.decode()
+
     def test_an_editor_sees_it_all(self, client, wiki):
         login(client, "alice")
         body = client.get("/page/plans", headers=HOST).data.decode()

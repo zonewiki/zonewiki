@@ -42,7 +42,9 @@ type tasksEmbedView struct {
 	PrivateFolder string           // the user's private folder: where a private task's pasted files go
 	ListsJSON     string           // the lists the user sees, [{ref, private}], as JSON: the List field's choices
 	InboxPrivate  bool             // with users: a task without a list is in the user's Inbox, private
-	Settings      *embedSettingsAt // where the settings dialog writes; nil: no dialog (the ⋯ menu)
+	Settings      *embedSettingsAt // where the settings dialog writes; nil: no dialog (List settings… in the ⋯ menu)
+	Menu          bool             // the ⋯ menu: Export tasks for whoever sees them, the rest as Writes and Settings say
+	Writes        bool             // the user may write tasks here (data-writes): the menu's Import tasks… and Mark all read
 	Data          template.HTML    // the page's data block of tasks (tasksInitial), as the first list's first child; "" none
 }
 
@@ -108,7 +110,8 @@ func paramsScope(p TasksParams) string {
 // for an embed of one). page: the page whose text holds the embed's params
 // (params.src), "" for none. It has the settings dialog (the ⋯ menu) where
 // something can be written: the page's embed, the list it shows, the
-// settings of All tasks; not for a viewer nor in sharing mode.
+// settings of All tasks; not for a viewer nor in sharing mode. The ⋯ menu
+// itself is for whoever sees the tasks (Export tasks), not in sharing mode.
 func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, page, data string) string {
 	user := rq.who()
 	lists := rq.taskLists()
@@ -200,7 +203,14 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, p
 		ListsJSON:     jsonobj.Text(choices),
 		InboxPrivate:  inboxOwner(user) != "",
 		Data:          template.HTML(data),
+		// The ⋯ menu where there are settings, or where the tasks are shown
+		// for themselves: on /tasks, or an embed on its page's own view, not
+		// in a preview or an old version (page "": params of a page's text).
+		Menu: settingsAt != nil || !headless && rq != nil && !rq.sharing && (page != "" || params.src == nil || params.src.index < 0),
 	}
+	// Import into a list is for who may write its tasks (canWriteList: a
+	// list shown is one the user sees), as apiImport asks.
+	v.Writes = v.Menu && mayWriteTasks(user) == nil
 	// What is yours to do opens on Today: My tasks, a list of your own, a
 	// view of every task where that is the Tasks links' (a wiki without
 	// lists) or a page's. A place you look into opens on Open: a shared list

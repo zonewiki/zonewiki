@@ -7,9 +7,10 @@
 // those of All tasks and My tasks in the registry too. The pin is the user's own. The
 // server names the places in data-settings-* (tasksembed.go
 // buildTasksEmbed) and writes them (POST /api/tasks/settings, POST
-// /tasks/pin-list); without them there is no ⋯ menu.
+// /tasks/pin-list); without them the ⋯ menu has no List settings….
 // Only what was changed is sent, so the other settings stay as written.
-// The menu's other items: the list's tasks as a file, Export and Import….
+// The menu's other items: the list's tasks as a file, Export (for whoever
+// sees them) and Import… (for who may write them: data-writes).
 import { closeOnBackdropClick } from './util.js';
 import { cleanList as listName } from './mdtext.js';
 import { showNotice } from './taskutil.js';
@@ -225,9 +226,13 @@ export function settingsForm(form, tabLabel = v => (v === 'open' ? 'Open' : 'Tod
 export function initTaskSettings(app) {
   const { appEl, sfx } = app;
   const moreBtn = document.getElementById('task-more-btn' + sfx);
+  if (!moreBtn) return {};   // no ⋯ menu: sharing mode, the headless app
   const dialog = document.getElementById('task-settings-modal' + sfx);
   const form = document.getElementById('task-settings-form' + sfx);
-  if (!moreBtn || !dialog || !form || appEl.dataset.settingsIndex === undefined) return {};
+  // List settings… where the server says where they go; Import… and Mark
+  // all read where the user may write tasks.
+  const hasSettings = !!(dialog && form) && appEl.dataset.settingsIndex !== undefined;
+  const writes = appEl.dataset.writes === '1';
   const page = appEl.dataset.settingsPage || '';
   const index = parseInt(appEl.dataset.settingsIndex, 10);
   const raw = appEl.dataset.settingsRaw || '';
@@ -249,7 +254,7 @@ export function initTaskSettings(app) {
     : { ...listSet, ...(embed ? Object.fromEntries(PAGE_KEYS.filter(k => k in written).map(k => [k, written[k]])) : {}) };
   const errorEl = document.getElementById('task-settings-error' + sfx);
   const whereEl = document.getElementById('task-settings-where' + sfx);
-  const { read, fill } = settingsForm(form, app.tabLabel);
+  const { read, fill } = hasSettings ? settingsForm(form, app.tabLabel) : {};
   let was = null;
 
   function open() {
@@ -321,10 +326,10 @@ export function initTaskSettings(app) {
   // What the menu offers: List settings…, Mark all read (My tasks, while a
   // task has news for the user: all of them seen), Export, Import.
   const actions = () => [
-    ['settings', 'List settings…'],
-    ...(app.initMine && app.updatesNow().length ? [['read', 'Mark all read']] : []),
+    ...(hasSettings ? [['settings', 'List settings…']] : []),
+    ...(writes && app.initMine && app.updatesNow().length ? [['read', 'Mark all read']] : []),
     ['export', 'Export tasks'],
-    ['import', 'Import tasks…'],
+    ...(writes ? [['import', 'Import tasks…']] : []),
   ];
   function run(action) {
     if (action === 'settings') { open(); return; }
@@ -357,7 +362,7 @@ export function initTaskSettings(app) {
   }
 
   // A file is picked: what it holds, and a tag of your own for its tasks.
-  importFile.addEventListener('change', async () => {
+  importFile?.addEventListener('change', async () => {
     const chosen = importFile.files[0];
     importFile.value = '';   // the same file can be picked again
     if (!chosen) return;
@@ -408,10 +413,11 @@ export function initTaskSettings(app) {
     importError.textContent = message;
     importError.hidden = false;
   }
-  document.getElementById('task-import-form' + sfx).addEventListener('submit', e => { e.preventDefault(); runImport(); });
-  document.getElementById('task-import-cancel' + sfx).addEventListener('click', () => importDialog.close());
+  document.getElementById('task-import-form' + sfx)?.addEventListener('submit', e => { e.preventDefault(); runImport(); });
+  document.getElementById('task-import-cancel' + sfx)?.addEventListener('click', () => importDialog.close());
   closeOnBackdropClick(importDialog);
 
+  if (!hasSettings) return {};
   form.addEventListener('submit', e => { e.preventDefault(); save(); });
   document.getElementById('task-settings-cancel' + sfx).addEventListener('click', () => dialog.close());
   closeOnBackdropClick(dialog);

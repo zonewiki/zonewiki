@@ -553,7 +553,8 @@ Another name there would show another list, which reads like a rename and isn't 
 
 ### Where there are no settings
 
-No ⋯ menu, so no settings: the editor's preview, an old version, a page from the uncommitted list (only a page view renders its own file: `RenderOpts.EditSlug`) unless it shows a list you may change, a name no list has, the headless app, a viewer, sharing mode.
+No List settings…: the editor's preview, an old version, a page from the uncommitted list (only a page view renders its own file: `RenderOpts.EditSlug`) unless it shows a list you may change, a name no list has, the headless app, a viewer, sharing mode.
+Of those, a viewer's list on `/tasks` or on a page view keeps its ⋯ menu, with Export tasks (Export and import); the preview, an old version, the headless app and sharing mode have none.
 
 ### Where settings are kept
 
@@ -601,7 +602,9 @@ After a save the page reloads, and what the browser tab remembered (the active t
 
 A list's tasks can be saved as a file, to keep a copy, move a list to another wiki or hand it to someone.
 **Export tasks** and **Import tasks…** are in the list's **⋯ menu** in the toolbar, under List settings… (`#task-more-btn`, `.tasks-more-btn`; the cards' menu, `showMenu` in `js/taskmenu.js`, a bottom sheet on phones; the code in `js/tasksettings.js`).
-The ⋯ menu is there where a list has settings (Where there are no settings: not for a viewer, nor for a name no list has).
+The ⋯ menu is there for whoever sees the tasks, not only where a list has settings (`Menu` in `buildTasksEmbed`): not in sharing mode, nor in the headless app or for a name no list has.
+**Export tasks** is in it for whoever sees the tasks, a viewer and a list's member who doesn't manage it too (the route answers what they see);
+**Import tasks…** (and Mark all read) for who may write the tasks (`data-writes`: not a viewer), as the route asks: `mayWriteTasks`, and `canWriteList` for the list imported into.
 
 ### Export tasks
 
@@ -1498,19 +1501,19 @@ The ⋯ beside the heading of `/tasks` (`.page-menu-btn`, on every view of it; t
 | Item | Where |
 |------|-------|
 | **List settings…** | first, where the view has settings (Settings) |
-| **New list…** | every view |
+| **New list…** | every view, for who may write tasks |
 | **Rename…** | a list, for who manages it |
-| **Pin** / **Unpin** | a list |
-| **Make shared…** | a private list |
+| **Pin** / **Unpin** | a list, for who may write tasks |
+| **Make shared…** | a private list, for who may write tasks |
 | **Who it is for…** | with users, a shared list, for who manages it |
 | **Delete…** | a list, for who manages it |
-| **Rename tag…** | a tag's view, `/tasks?tag=<tag>` (Renaming a tag) |
+| **Rename tag…** | a tag's view, `/tasks?tag=<tag>` (Renaming a tag), for who may write tasks |
 | **Mark all read** | My tasks, while a task has news for you |
-| **Export tasks**, **Import tasks…** | last, where the view has settings (Export and import) |
+| **Export tasks**, **Import tasks…** | last: Export for whoever sees the tasks, Import for who may write them (Export and import) |
 
 The view's own actions (`[data-tasks-action]`) are shown and run by `js/tasksettings.js` where the view has them.
 Each but the pins is a dialog with a form the server answers (`data-dialog` on the menu item; a refusal comes back with the message in the dialog).
-Not for a viewer, nor in sharing mode.
+Not in sharing mode; a viewer's has Export tasks alone (`Menu`, `Write` in `tasksPageView`; none for a name no list has), and the pills don't reorder for them.
 The ⋯ of an embed on a wiki page offers the view's own actions only: List settings…, Mark all read, Export tasks and Import tasks….
 
 #### Renaming a list

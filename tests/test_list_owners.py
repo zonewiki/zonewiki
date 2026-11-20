@@ -89,6 +89,19 @@ def test_its_owner_and_an_admin_manage_it(client, wiki, who):
     assert all(l["name"] != "operations" for l in registry(wiki)["lists"])
 
 
+def test_a_member_exports_and_imports_the_lists_tasks(client, wiki):
+    # Export and Import… are no list settings: dave, who doesn't manage
+    # the list, has them in the ⋯ menu (on /tasks the page's) all the same.
+    client.post("/api/tasks", json={"title": "Rotate the keys", "list": "ops"}, headers=HOST)
+    login(client, "dave")
+    html = page(client, "ops")
+    assert 'id="task-more-btn"' in html and 'data-writes="1"' in html and 'id="task-import-modal"' in html
+    assert 'data-tasks-action="export"' in html and 'data-tasks-action="import"' in html
+    assert "data-settings-" not in html                               # no List settings…
+    out = client.get("/api/tasks/export?list=ops", headers=HOST).get_json()
+    assert [t["title"] for t in out["tasks"]] == ["Rotate the keys"]
+
+
 def test_a_list_from_before_owners_is_its_admins(client, wiki):
     reg = registry(wiki)
     reg["lists"].append({"name": "old"})

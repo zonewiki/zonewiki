@@ -336,8 +336,8 @@ Renaming to a tag that already exists merges the two, after asking.
 
 ## Export and import
 
-**Export tasks** in a list's ⋯ menu downloads its tasks as a JSON file, open and closed, with descriptions, comments and history.
-**Import tasks…** reads such a file into the list you are in; you can give the imported tasks a tag of your own, to find them again.
+**Export tasks** in a list's ⋯ menu downloads its tasks as a JSON file, open and closed, with descriptions, comments and history; it is there for everyone who sees the list, a viewer too.
+**Import tasks…** reads such a file into the list you are in, if you may add tasks to it; you can give the imported tasks a tag of your own, to find them again.
 A task already in the wiki is skipped, so importing twice adds nothing, and the notice has **Undo**.
 A plain JSON list such as `[{"title": "Buy seeds"}]` works too.
 See [Export and import](../spec/tasks.md#export-and-import) and [Your data](your-data.md).

@@ -2,6 +2,7 @@
 the modal's Assignee field, @name in a new task's title, the name on the
 card, and the filter's @name, @me and @none."""
 
+import json
 import re
 from datetime import date
 
@@ -332,6 +333,36 @@ def test_the_settings_dialog_sets_whose_tasks_a_list_shows(alice, wiki):
     more_menu(alice)
     alice.get_by_role("menuitem", name="List settings…").click()
     expect(dialog.locator("[name=assignee]")).to_have_value("bob")
+
+
+def sign_in(page, name):
+    page.request.post("/logout")
+    page.request.post("/login", form={"username": name, "password": "pw"})
+
+
+def test_whoever_sees_a_list_exports_it(alice, wiki):
+    # Export tasks is no list setting: a member who doesn't manage the list
+    # has it, and Import…; a viewer has Export alone.
+    new(alice, "Ship it")
+    sign_in(alice, "bob")
+    alice.goto("/tasks?list=team")
+    more_menu(alice)
+    expect(alice.locator("#page-menu [role=menuitem]:visible")).to_have_text(["New list…", "Pin", "Export tasks", "Import tasks…"])
+    alice.keyboard.press("Escape")
+    sign_in(alice, "carol")
+    alice.goto("/tasks?list=team")
+    expect(card(alice, "Ship it")).to_be_visible()
+    more_menu(alice)
+    expect(alice.locator("#page-menu [role=menuitem]:visible")).to_have_text(["Export tasks"])
+    with alice.expect_download() as download:
+        alice.locator("#page-menu").get_by_role("menuitem", name="Export tasks").click()
+    assert download.value.suggested_filename.startswith("zone-tasks-team-")
+    assert [t["title"] for t in json.loads(open(download.value.path()).read())["tasks"]] == ["Ship it"]
+    # On a page, the embed's ⋯ the same.
+    wiki.write("team-page", "# Team\n\n[[tasks: list=team]]\n")
+    alice.goto("/page/team-page")
+    more_menu(alice)
+    expect(alice.get_by_role("menuitem")).to_have_text(["Export tasks"])
 
 
 def test_several_selected_tasks_are_assigned_at_once(alice):
