@@ -189,7 +189,8 @@ func TestQueryLogMovesAsideWhenFull(t *testing.T) {
 // Zone's own state that holds users' words is its owner's alone to read on
 // the host, as the settings file is: the query log (every user's queries,
 // and the private pages they found), a task archive's records (private
-// tasks' titles), what a user has seen, the semantic cache's pages.
+// tasks' titles), what a user has seen, the semantic cache's pages, who
+// pasted a file for a task not made yet.
 func TestStateWithUsersWordsIsOwnerOnly(t *testing.T) {
 	testWiki(t, map[string]string{"golf": "# Golf\n"})
 	settings().QueryLog = true
@@ -211,7 +212,11 @@ func TestStateWithUsersWordsIsOwnerOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	markSeen("alice", &Task{ID: "t1"})
-	for _, path := range []string{queryLogPath(), archiveDocsPath(archive), seen} {
+	withUsers(t, "alice")
+	if !claimUnsaved(asUser("alice"), "0a1b2c3d-0000-4000-8000-00000000abcd") {
+		t.Fatal("no claim")
+	}
+	for _, path := range []string{queryLogPath(), archiveDocsPath(archive), seen, statePath("unsaved-files.json")} {
 		if st, err := os.Stat(path); err != nil || st.Mode().Perm()&0o077 != 0 {
 			t.Errorf("%s: %v %v", path, st.Mode(), err)
 		}

@@ -154,7 +154,7 @@ func writeUnsaved() error {
 	if err != nil {
 		return err
 	}
-	return atomicfile.Write(unsavedFiles.path, string(text)+"\n")
+	return atomicfile.WriteOwnerOnly(unsavedFiles.path, string(text)+"\n") // users' names and their tasks' ids
 }
 
 // claimUnsaved: user puts the first file in the folder of the task id,

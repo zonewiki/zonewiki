@@ -688,7 +688,7 @@ A change to what Zone keeps in git that an older Zone would misread raises `wiki
 Readers stay lenient all the same: the number says which steps Zone ran, not that every file is as Zone wrote it (a file edited by hand or pulled from elsewhere is read as before).
 The settings file and the rest of `.zone/` aren't covered: they are no wiki data (What is in .zone/, above).
 
-What holds users' words or secrets is written readable by Zone's user alone (0600), whatever the umask: `config`, `secret_key`, `signed-out`, `links`, `grants`, `seen/`, `drafts/`, the index files, `index/tasks/` (private tasks' titles among them), `embeddings.json` (every page's slug) and `queries.jsonl` (every user's queries and what they found) (`atomicfile.WriteOwnerOnly`; a file from before is made so at its next write).
+What holds users' words or secrets is written readable by Zone's user alone (0600), whatever the umask: `config`, `secret_key`, `signed-out`, `links`, `grants`, `seen/`, `unsaved-files.json`, `drafts/`, the index files, `index/tasks/` (private tasks' titles among them), `embeddings.json` (every page's slug) and `queries.jsonl` (every user's queries and what they found) (`atomicfile.WriteOwnerOnly`; a file from before is made so at its next write).
 The pages themselves, in the wiki, keep the umask's mode, as a file made in an editor does.
 
 ### A git remote
