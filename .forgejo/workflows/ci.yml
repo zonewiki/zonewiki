@@ -31,6 +31,12 @@ jobs:
     # so layers come from its cache unless the dependencies changed.
     # ZONE_COPY_REPO: the checkout lives in this job container, not on the
     # host, so run.sh copies it into the container instead of mounting it.
+    # Not for a pull request from another repository (a fork): the job
+    # containers get the host engine's socket, which is root on the host,
+    # so its code could take over the runner, the layer cache the image is
+    # built from and the registry token of the next image job. bench and
+    # retrieval need the checks, so they are skipped with them.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     strategy:
       fail-fast: false
       matrix:

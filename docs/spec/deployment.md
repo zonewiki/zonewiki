@@ -300,9 +300,9 @@ so CI keeps no package lists or test commands of its own.
 
 | Job | Runs | When |
 |-----|------|------|
-| **test** | gofmt, go vet, go test, the unit/API tests (`./run.sh test`) | Every run |
-| **e2e** | The browser and Node tasks-core tests (`./run.sh e2e`) | Every run |
-| **leaks** | gitleaks over every commit (`./run.sh leaks`) | Every run |
+| **test** | gofmt, go vet, go test, the unit/API tests (`./run.sh test`) | Every run but a pull request from another repository (Forgejo's runner, below) |
+| **e2e** | The browser and Node tasks-core tests (`./run.sh e2e`) | The same |
+| **leaks** | gitleaks over every commit (`./run.sh leaks`) | The same |
 | **bench** | `./run.sh bench` with `ZONE_BENCH_SLACK=3` | After the checks |
 | **retrieval** | `./run.sh retrieval` | After the checks (skipped for now: Semantic search paused) |
 | **image** | Builds the `Containerfile` and pushes it to the Forgejo registry | Not a pull request's run, once the three checks pass |
@@ -342,6 +342,9 @@ so layers are cached between runs.
 They reach it through the socket mounted into job containers:
 
 - runner label `docker`, runner config `container.docker_host: automount`;
+- so a job runs with root on the host: the engine's socket lets it start any container, with the host's disk mounted.
+  A pull request from another repository (a fork) runs nothing there (the checks' `if:`, on `github.event.pull_request.head.repo.full_name`; bench and retrieval need the checks, the image runs for no pull request), since its code would take the runner, the layer cache the image is built from, and the registry token of the next image job;
+  its checks run on GitHub (CI (GitHub Actions), below), or by hand after a look, or once it is pushed as a branch of this repository;
 - the host's engine trusts the internal certificate via `/etc/docker/certs.d/<REGISTRY>/ca.crt`, which the runner also mounts read-only into job containers via `container.options`;
 - checkout goes over the runner's internal `http://web:3000`, so no job needs a `ca-certificates` package.
 

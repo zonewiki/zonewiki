@@ -471,6 +471,13 @@ Tests: `go/stalls_test.go`.
 `.env` (tokens, password) is gitignored.
 A pre-commit hook (`.githooks/pre-commit`, gitleaks) refuses a commit with a secret in it, and CI's **leaks** job scans every commit (`./run.sh leaks`): Secret scanning in `docs/spec/testing.md`.
 
+### CI runs no stranger's code with the host's engine
+
+Forgejo's runner gives its jobs the host engine's socket (Forgejo's runner in `docs/spec/deployment.md`), which is root on the host, and the image job pushes with the registry's token from there.
+So a pull request from another repository (a fork) runs no job there: the checks run only for a push, a run started by hand, or a pull request from a branch of the repository itself (`if:` in `.forgejo/workflows/ci.yml`), and the jobs after them need them.
+GitHub's runners are machines of their own per job, a pull request's job gets no secret and a token that only reads, so the same checks run there for every pull request.
+`test_forgejo_runs_no_forks_code` in `tests/test_image.py`.
+
 ### What builds Zone is named by hash
 
 The base images by digest (`ARG UBUNTU=ubuntu:26.04@sha256:…` in the `Containerfile`, used by its three stages; the Playwright image in `Containerfile.tools`; the job container `docker:…-cli@sha256:…` in `.forgejo/workflows/ci.yml`),

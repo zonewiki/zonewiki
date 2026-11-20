@@ -128,3 +128,21 @@ def test_ci_publishes_no_onnxruntime_while_it_is_paused():
         job = ci[ci.index("\n  retrieval:\n"):]
         job = job[:job.index("\n  image:\n")]
         assert "\n    if: false\n" in job, path
+
+
+def test_forgejo_runs_no_forks_code():
+    """Forgejo's jobs get the host engine's socket (root on the host, and the
+    registry token's next image job): a pull request from another repository
+    runs no job there. The checks say so; every other job needs them or runs
+    for no pull request (docs/spec/security.md, CI runs no stranger's code)."""
+    ci = (REPO / ".forgejo" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    jobs = re.split(r"\n  (?=[a-z]+:\n)", "\n" + ci.split("\njobs:\n", 1)[1])[1:]
+    assert [j.split(":", 1)[0] for j in jobs] == ["checks", "bench", "retrieval", "image"]
+    for job in jobs:
+        name = job.split(":", 1)[0]
+        if name == "checks":
+            assert "\n    if: github.event_name != 'pull_request' || " \
+                   "github.event.pull_request.head.repo.full_name == github.repository\n" in job
+        else:
+            assert "needs: [checks]" in job, name
+
