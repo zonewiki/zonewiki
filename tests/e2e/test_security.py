@@ -227,3 +227,48 @@ def test_a_pages_ids_stand_in_for_none_of_zones(page, wiki):
     page.goto("/page/index")
     page.goto("/page/ids#note")
     wait_until(page, in_view)
+
+
+def test_a_click_submits_only_a_form_zone_put_there(page, wiki):
+    # A page's own <style> could show the page's closed Delete dialog and lay
+    # its button over the whole page, transparent: the reader's next click
+    # anywhere deleted the page. A submit from a dialog that isn't open is
+    # cancelled (CSS can't open one), and so is one from a form in what Zone
+    # renders from text, however it got there; Zone's own forms work.
+    wiki.write("plans", "# Plans\n\nRead me.\n\n"
+               "<style>#page-delete-dialog { display: block !important; position: fixed !important;"
+               " inset: 0 !important; opacity: 0 !important; z-index: 2147483647 !important;"
+               " margin: 0 !important; max-width: none !important; max-height: none !important;"
+               " width: 100vw !important; height: 100vh !important }"
+               " #page-delete-dialog .btn-danger { position: fixed !important; inset: 0 !important;"
+               " width: 100vw !important; height: 100vh !important }</style>\n\n"
+               "[[tasks: list=shopping]]\n")
+    page.goto("/page/plans")
+    posts = []
+    page.on("request", lambda r: posts.append(r.url) if r.method == "POST" else None)
+    page.mouse.click(400, 500)
+    page.wait_for_timeout(500)
+    assert (wiki.root / "plans.md").exists() and posts == []
+    page.evaluate("() => document.querySelector('article.page-content style').remove()")
+    # A form that got into the article some other way.
+    page.evaluate("""() => {
+      const f = document.createElement('form');
+      f.method = 'post'; f.action = '/delete/plans';
+      f.innerHTML = '<button id="sneaky">Go</button>';
+      document.querySelector('article.page-content p').append(f);
+    }""")
+    page.locator("#sneaky").click()
+    page.wait_for_timeout(500)
+    assert (wiki.root / "plans.md").exists() and posts == []
+    expect(page).to_have_url(re.compile(r"/page/plans$"))
+    # Zone's own: the embed's "Create the list", and the page's Delete opened
+    # from its menu.
+    page.locator("#tasks-no-list button[type=submit]").click()
+    expect(page).to_have_url(re.compile(r"/tasks\?list=shopping"))
+    page.goto("/page/plans")
+    page.evaluate("() => document.querySelector('article.page-content style').remove()")
+    page.locator(".page-menu-btn").first.click()
+    page.locator("#page-menu [data-action=delete]").click()
+    page.locator("#page-delete-dialog .btn-danger").click()
+    expect(page).to_have_url(re.compile(r"/page/index$"))
+    assert not (wiki.root / "plans.md").exists()

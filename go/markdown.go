@@ -46,6 +46,11 @@ type Env struct {
 	// TOC: where the render puts the ## and ### headings it parses, for
 	// the side column's "On this page" (railToc); nil: nowhere.
 	TOC *[]tocEntry
+	// NoStyle: a <style> in the raw HTML shows as text (a task's notes and
+	// comments, renderNotes: they go with the task onto every page that
+	// shows its list, the reader's own among them, where a <style> would
+	// restyle Zone's own controls).
+	NoStyle bool
 }
 
 // tocEntry: a ## or ### heading as the side column lists it: its level,
@@ -669,6 +674,18 @@ var (
 	urlRefRE  = regexp.MustCompile(`(?i)(url\([\t\n\f\r ]*["']?#)`)
 )
 
+// styleTagRE: a <style>'s start or end, for Env.NoStyle.
+var styleTagRE = regexp.MustCompile(`(?i)<(/?style(?:[\s/>]|$))`)
+
+// defuse: defuseHTML, and a <style> as text where the render says so.
+func (r *zoneRenderer) defuse(raw []byte) []byte {
+	raw = defuseHTML(raw)
+	if r.env != nil && r.env.NoStyle {
+		raw = styleTagRE.ReplaceAll(raw, []byte("&lt;$1"))
+	}
+	return raw
+}
+
 // defuseHTML: raw HTML with defusedTagRE's tags as text, no srcdoc or
 // ping, and its ids and names its own (user-content-…).
 func defuseHTML(raw []byte) []byte {
@@ -689,7 +706,7 @@ func (r *zoneRenderer) rawHTML(w util.BufWriter, source []byte, node ast.Node, e
 			seg := segs.At(i)
 			raw = append(raw, seg.Value(source)...)
 		}
-		_, _ = w.Write(defuseHTML(raw))
+		_, _ = w.Write(r.defuse(raw))
 	}
 	return ast.WalkSkipChildren, nil
 }
@@ -709,7 +726,7 @@ func (r *zoneRenderer) htmlBlock(w util.BufWriter, source []byte, node ast.Node,
 	if n.HasClosure() {
 		raw = append(raw, n.ClosureLine.Value(source)...)
 	}
-	_, _ = w.Write(r.wikilinksInHTML(defuseHTML(raw)))
+	_, _ = w.Write(r.wikilinksInHTML(r.defuse(raw)))
 	return ast.WalkContinue, nil
 }
 

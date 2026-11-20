@@ -12,7 +12,7 @@
 <div class="page-grid">
 {{template "rail_toc" .RailTocHTML}}
 <div class="page-col read-only">
-<article class="page-content help-content">
+<article class="page-content help-content" data-rendered>
   {{.ArticleHTML}}
 </article>
 {{- if or .Prev .Next}}

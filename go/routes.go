@@ -981,7 +981,7 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 	}
 	var tasksHTML string
 	if missing != "" {
-		tasksHTML = noListHTML(rq, missing)
+		tasksHTML = noListHTML(rq, missing, 0)
 	} else {
 		tasksHTML = buildTasksEmbed(rq, params, 0, false, "", tasksInitial(rq, paramsScope(params)))
 	}

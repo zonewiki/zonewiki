@@ -42,7 +42,7 @@ def test_every_link_in_the_manual_leads_somewhere(client):
         path = "/help/" + name if name else "/help"
         status, text = get(path)
         assert status == 200, path
-        article = text.split('<article class="page-content help-content">', 1)[1].split("</article>", 1)[0]
+        article = text.split('<article class="page-content help-content" data-rendered>', 1)[1].split("</article>", 1)[0]
         for attr, link in re.findall(r'\b(href|src)="([^"]+)"', article):
             link = html.unescape(link)
             if re.match(r"[a-z]+:", link) or link.startswith("//"):

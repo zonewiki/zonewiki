@@ -190,7 +190,7 @@ function taskHTML(task, draggable = !!app.SECTIONS[st.activeView], extraClass = 
   const commentsReady = latest.every(c => have('comments', c.text));
   const lazy = ready => ready ? '' : ' data-lazy';
   const descHtml = task.description
-    ? `<div class="task-desc page-content"${lazy(descReady)}>${descReady || detailsShown ? htmlOf('notes', task.description) : ''}</div>` : '';
+    ? `<div class="task-desc page-content" data-rendered${lazy(descReady)}>${descReady || detailsShown ? htmlOf('notes', task.description) : ''}</div>` : '';
   // The latest comments, newest first: shown only while the task's details
   // are open (the line has the 💬 count; the modal has them all).
   const earlier = comments.length - 3;

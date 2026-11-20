@@ -146,6 +146,7 @@ Custom titles (`> [!TIP] My title`) are not supported; that stays a plain quote.
 ### Task descriptions and comments
 
 **Task descriptions and comments** render with the same markdown (`renderNotes`, `POST /api/render-notes`): wikilinks, `[[task:…]]` chips, task-date chips, without what only a page has (frontmatter, `[[tasks:]]`, ✎ per section, heading ids).
+A `<style>` in them shows as text (inline `style=` stays): a task's text goes with it onto every page that shows its list (A task's text has no `<style>` in `docs/spec/security.md`).
 See Description in `docs/spec/tasks.md`.
 
 ### Since the Go server (2026-10)
@@ -574,7 +575,8 @@ They share code by `import`, not through `window`:
 
 | Module | Does |
 |---|---|
-| `js/util.js` | Small shared helpers: `he`, `localDate`, `pasteUrlAsLink`, `continueList`, `showToast`, `putTask`, … |
+| `js/forms.js` | Imported first: a submit only from a form where Zone puts one (`submitAllowed`: not from a closed `<dialog>`, nor from a form in rendered text, `[data-rendered]`, but Zone's own task lists'; A click submits only a form Zone put there in `docs/spec/security.md`) |
+| `js/util.js` | Small shared helpers: `he`, `localDate`, `pasteUrlAsLink`, `continueList`, `showToast`, `putTask`, `hashTarget`, … |
 | `js/mdtext.js` | The text functions the browser shares with the server (Shared text functions, below) |
 | `js/completion.js` | `linkAutocomplete`: `[[`, `[[task:` and `[text](` completion (editor and the task app's task fields) |
 | `js/chrome.js` | Around the page: navigation trail, backlinks chip, side columns, the Tasks links' counts (`refreshDueBadge`), the user menu (with users) |

@@ -22,6 +22,7 @@ import { HIGHLIGHT_CODE, renderFigures } from './figures.js';
     // Open first slide with the page H1 — intro slide has no specific section
     let current = document.createElement('div');
     current.className = 'slide-body page-content';
+    current.dataset.rendered = '';
     current.dataset.editHref = '';
     const pageH1 = document.querySelector('.page-header h1');
     if (pageH1) {
@@ -42,6 +43,7 @@ import { HIGHLIGHT_CODE, renderFigures } from './figures.js';
         if (current.children.length) groups.push(current);
         current = document.createElement('div');
         current.className = 'slide-body page-content';
+        current.dataset.rendered = '';
         // The slide's edit button is the section's ✎
         const editLink = node.querySelector('.section-edit-btn');
         current.dataset.editHref = editLink ? editLink.getAttribute('href') : '';

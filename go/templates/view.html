@@ -29,7 +29,7 @@
 {{.MetaRowHTML}}
 {{- /* A key per checkbox line: a tick from this view finds its item even
     after the page changed (apiToggleCheckbox). */}}
-<article class="page-content" data-task-keys="{{.TaskKeys}}">
+<article class="page-content" data-task-keys="{{.TaskKeys}}" data-rendered>
   {{.ArticleHTML}}
 </article>
 <div class="page-foot">{{template "link_sections" (dict "sections" .LinkSections)}}</div>

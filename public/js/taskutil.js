@@ -301,7 +301,7 @@ export function commentCardHtml(stamp, html) {
   const one = ONE_PARAGRAPH.exec(html);
   return one
     ? `<p class="task-card-comment">${when} ${one[1]}</p>`
-    : `<div class="task-card-comment">${when}<div class="task-comment-body page-content">${html}</div></div>`;
+    : `<div class="task-card-comment">${when}<div class="task-comment-body page-content" data-rendered>${html}</div></div>`;
 }
 
 // Relative-date helpers (used by card rendering and focus defaults).

@@ -796,7 +796,7 @@ function renderComments(task) {
   const own = c => !users || !c.by || c.by === people.me;
   commentList.innerHTML = comments.slice().reverse().map(c =>
     `<li data-comment="${esc(c.id)}"><span class="task-history-at">${esc(commentStamp(c))}</span>` +
-    `<div class="task-comment-text task-comment-body page-content">${app.htmlOf('comments', c.text)}</div>` +
+    `<div class="task-comment-text task-comment-body page-content" data-rendered>${app.htmlOf('comments', c.text)}</div>` +
     (own(c) ? `<button type="button" class="task-comment-btn" data-comment-action="edit" tabindex="-1" title="Edit" aria-label="Edit comment">✎</button>` : '') +
     (own(c) || document.body.dataset.admin === '1' ? `<button type="button" class="task-comment-btn" data-comment-action="delete" tabindex="-1" title="Delete" aria-label="Delete comment">×</button>` : '') +
     '</li>').join('');

@@ -143,8 +143,9 @@ func requestHost(rq *Req) string {
 	return rq.r.Host
 }
 
-// renderNotes renders task notes or comments as a page is, without what only a page has (frontmatter, [[tasks:]], ✎) and
-// without heading ids, which would clash with the page's own. With
+// renderNotes renders task notes or comments as a page is, without what only a page has (frontmatter, [[tasks:]], ✎),
+// without heading ids, which would clash with the page's own, and with a
+// <style> as text (Env.NoStyle). With
 // lineBreaks (comments) each line of a paragraph is a line, as it was typed.
 func renderNotes(rq *Req, texts []string, lineBreaks bool) []string {
 	links := wikilinker(rq, nil, "")
@@ -153,7 +154,7 @@ func renderNotes(rq *Req, texts []string, lineBreaks bool) []string {
 		text, stash := mdtext.MaskCode(text)
 		text, refs := maskTaskRefs(text)
 		text = mdtext.UnmaskCode(escapeWikilinkPipes(text), stash)
-		result := markdown(text, &Env{Host: requestHost(rq), HeadingIDs: headingNoID, Wikilink: links, LineBreaks: lineBreaks}, false)
+		result := markdown(text, &Env{Host: requestHost(rq), HeadingIDs: headingNoID, Wikilink: links, LineBreaks: lineBreaks, NoStyle: true}, false)
 		out[i] = injectTaskRefs(rq, result, refs)
 	}
 	return out

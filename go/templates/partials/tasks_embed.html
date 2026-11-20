@@ -87,7 +87,7 @@
         </span>
       </div>
       <textarea id="task-edit-desc{{.Sfx}}" name="description" rows="2" placeholder=" "></textarea>
-      <div class="task-notes-preview page-content" id="task-edit-preview{{.Sfx}}" tabindex="-1" aria-label="Preview of the description" hidden></div>
+      <div class="task-notes-preview page-content" data-rendered id="task-edit-preview{{.Sfx}}" tabindex="-1" aria-label="Preview of the description" hidden></div>
     </div>
     <div class="task-field">
       <label for="task-edit-tags{{.Sfx}}">Tags <span class="field-hint">(Tab completes; comma, space or Enter adds)</span></label>
@@ -356,6 +356,6 @@
     noListHTML): what is missing, and for who may make lists a button that
     makes it (POST /tasks/new-list). */}}
 {{define "tasks_no_list" -}}
-<div class="tasks-no-list"><p>There is no list <code>#{{.Name}}</code>.{{if not .Create}} A task list is made on the Tasks page (New list…).{{end}}</p>
+<div class="tasks-no-list" id="tasks-no-list{{.Sfx}}"><p>There is no list <code>#{{.Name}}</code>.{{if not .Create}} A task list is made on the Tasks page (New list…).{{end}}</p>
 {{- if .Create}}<form method="post" action="/tasks/new-list"><input type="hidden" name="name" value="{{.Name}}"><button type="submit" class="btn">Create the list #{{.Name}}</button> <a href="/tasks?tag={{.Name}}">Tasks tagged #{{.Name}}</a></form>{{end}}</div>
 {{- end}}

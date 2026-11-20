@@ -355,6 +355,13 @@ The rest of a page's HTML (images, links, iframes, styles) stays allowed, as far
   Mermaid's labels are HTML, which its `strict` level cleans with DOMPurify's defaults, and those keep `form`, `input`, `button` and `action`:
   a label `<form method='post' action='/delete/…'>` posted to Zone with one click, in a page, a preview, a task's notes or comments.
   So the labels are cleaned without form controls, `meta`, `base`, `link`, `script`, frames, `style`, ids and names (`dompurifyConfig` in `js/figures.js`, kept from a diagram's own settings by `secure`), and what of it the drawn SVG has anyway is taken out before it goes into the page (`defuseDiagram`).
+- **A click submits only a form Zone put there** (`js/forms.js`, before any of Zone's own handlers, in the capture phase): the line behind the ones above.
+  A submit is cancelled from a `<dialog>` that isn't open
+  (a page's own `<style>` could show the page's closed Delete dialog and lay its button over the whole page, transparent, so the reader's next click anywhere deleted the page: CSS can show a dialog but not open it),
+  and from a form inside what Zone renders from text (`[data-rendered]`: a page's article, the editor's and search's previews, a task's notes and comments, a slide; a diagram, the side column's headings),
+  unless the form is one of Zone's own task lists' there (in the list's own elements, the list, its dialogs, its no-list line: an id starting `tasks-app`, `task-` or `tasks-no-list`, which a page's ids can't, below, nor a diagram's).
+- **A task's text has no `<style>`.**
+  A page's `<style>` styles that page; a task's notes and comments go with the task onto every page that shows its list, the reader's own among them, so a `<style>` there shows as text (`Env.NoStyle`, `renderNotes`). Inline `style=` stays.
 - **A page's ids and names are its own.**
   Zone's scripts find their elements by id (`getElementById`) and the browser makes globals of names (`window.katex`), so an element of a page that came first with one of Zone's ids stood in for Zone's: a `<data id="task-edit-id" value="…">` aimed the task dialog's save at another task.
   So in a page's raw HTML,
@@ -388,6 +395,7 @@ Inline styles stay (a page's own `style=`, KaTeX's, Mermaid's): a `url()` in one
 
 Clickjacking: `frame-ancestors 'none'` in that policy (added to an existing one) and `X-Frame-Options: DENY` (`contentPolicy`), so nothing frames a view of Zone's: not another site, and not one of Zone's own pages, whose raw HTML may hold an `<iframe>` and inline styles (a transparent `/admin` or `/changes`, where one click removes a user or undoes a change, laid over a decoy).
 Uploads are the exception (`frameableBySelf`, in `serveUploadFile`): a page may show a PDF, a picture or a text file in an `<iframe>`, so an upload's response has `frame-ancestors 'self'` and `X-Frame-Options: SAMEORIGIN` (an SVG's sandbox policy gets the same added).
+The same trick without a frame, a page's `<style>` laying one of Zone's own dialogs (closed, in the same page) over a decoy, finds its submit cancelled (A click submits only a form Zone put there, above).
 
 ## Untrusted input
 

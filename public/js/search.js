@@ -132,6 +132,7 @@ async function showModalPreview(item) {
   title.textContent = data.title;
   const body = document.createElement('div');
   body.className = 'page-content';
+  body.dataset.rendered = '';
   body.innerHTML = data.html;
   localizeDates(body);
   modalPreview.replaceChildren(title, body);

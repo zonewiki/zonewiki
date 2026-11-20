@@ -20,7 +20,7 @@
   </div>
   {{- if .HasI}}{{template "version_nav" (dict "slug" .Slug "entries" .Entries "i" .I "current" .Current "kind" "revision")}}{{end}}
 </div>
-<article class="page-content">
+<article class="page-content" data-rendered>
   {{.ArticleHTML}}
 </article>
 </div>

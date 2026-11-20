@@ -240,11 +240,16 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, p
 
 // noListHTML: what stands in the place of an embed whose list=<name> no
 // list has (for whoever looks): a line that says so, and for who may make
-// lists a button that makes it.
-func noListHTML(rq *Req, name string) string {
+// lists a button that makes it; instance: which embed of the page (its
+// id, by which js/forms.js knows its form is Zone's).
+func noListHTML(rq *Req, name string, instance int) string {
+	sfx := ""
+	if instance > 0 {
+		sfx = "-" + strconv.Itoa(instance)
+	}
 	var b bytes.Buffer
 	err := partials.ExecuteTemplate(&b, "tasks_no_list", map[string]any{
-		"Name": name, "Create": rq != nil && !rq.sharing && !listsUnmigrated && mayWriteTasks(rq.who()) == nil})
+		"Name": name, "Sfx": sfx, "Create": rq != nil && !rq.sharing && !listsUnmigrated && mayWriteTasks(rq.who()) == nil})
 	if err != nil {
 		logf("task list embed: %v", err)
 	}
@@ -422,7 +427,7 @@ func processTasksEmbeds(rq *Req, text, page string, settings bool) (string, []ta
 		data = tasksInitial(rq, scopes...)
 	}
 	for i, e := range found {
-		html := noListHTML(rq, e.missing)
+		html := noListHTML(rq, e.missing, i)
 		if e.missing == "" {
 			html = buildTasksEmbed(rq, e.params, i, false, at, data)
 			data = ""

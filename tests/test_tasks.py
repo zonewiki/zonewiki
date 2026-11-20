@@ -10,7 +10,7 @@ from datetime import date, timedelta
 import pytest
 
 from tests import settings
-from tests.conftest import create_task, git_setup, list_page, make_list
+from tests.conftest import create_task, git_setup, list_page, make_list, preview
 
 
 # ---------- CRUD Basics ----------
@@ -2843,6 +2843,19 @@ class TestComments:
         out = client.post("/api/render-notes", json={"comments": ["one\ntwo"], "notes": ["one\ntwo"]}).get_json()
         assert out["comments"][0].strip() == "<p>one<br />\ntwo</p>"
         assert out["notes"][0].strip() == "<p>one\ntwo</p>"
+
+    def test_a_style_in_a_tasks_text_is_text(self, client):
+        # A task's notes and comments go with it onto every page that shows
+        # its list, the reader's own among them: a <style> there could lay
+        # Zone's own (closed) dialogs over the page. It shows as text; a
+        # page's own <style> stays (it styles that page only), as do inline
+        # styles.
+        style = '<style>#page-delete-dialog { display: block }</style>\n\n<span style="color: red">red</span>'
+        out = client.post("/api/render-notes", json={"notes": [style], "comments": ["a <STYLE>b</STYLE>"]}).get_json()
+        assert "<style" not in out["notes"][0].lower() and "&lt;style>#page-delete-dialog" in out["notes"][0]
+        assert '<span style="color: red">red</span>' in out["notes"][0]
+        assert "<style" not in out["comments"][0].lower() and "&lt;STYLE>b&lt;/STYLE>" in out["comments"][0]
+        assert "<style>#page-delete-dialog" in preview(client, style)
 
     def test_on_a_completed_task(self, client):
         tid = create_task(client).get_json()["id"]
