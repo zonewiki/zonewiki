@@ -1263,6 +1263,33 @@ def test_a_filter_does_not_load_the_closed_tasks(page, wiki):
     expect(link).to_have_text("Closed (2) →")
 
 
+def test_a_lists_closed_link_counts_its_closed_tasks(page, wiki):
+    # A list's view (and the Inbox's) has its list as a locked chip in the
+    # filter: that is no filter, the count is of the list already. (It
+    # took the number away on every list.)
+    make_list(page, "groceries")
+    for title, lst, done in (("Milk", "groceries", False), ("Bread", "groceries", True), ("Eggs", "groceries", True),
+                             ("Loose end", None, False), ("Done loose", None, True)):
+        tid = page.request.post("/api/tasks", data={"title": title, **({"list": lst} if lst else {})}).json()["id"]
+        if done:
+            page.request.put(f"/api/tasks/{tid}", data={"completed": True})
+    page.goto("/tasks?list=groceries")
+    link = page.locator("#task-closed-link")
+    expect(page.locator(".tasks-toolbar .tag-chip")).to_have_text(["groceries"])
+    expect(link).to_have_text("Closed (2) →")
+    page.locator("#task-filter-search").fill("milk")       # a word of the viewer's is a filter
+    expect(link).to_have_text("Closed →")
+    page.locator("#task-filter-search").fill("")
+    expect(link).to_have_text("Closed (2) →")
+    page.goto("/tasks?list=inbox")
+    expect(page.locator(".tasks-toolbar .tag-chip")).to_have_text(["Inbox"])
+    expect(page.locator("#task-closed-link")).to_have_text("Closed (1) →")
+    # A page's embed of the list too.
+    wiki.write("shop", "# Shop\n\n[[tasks: list=groceries]]\n")
+    page.goto("/page/shop")
+    expect(page.locator("#task-closed-link")).to_have_text("Closed (2) →")
+
+
 def test_new_task_on_default_focus_starts_today(page, wiki):
     # A plain tasks opens on Focus; a task added there starts today, so it
     # stays in the view instead of vanishing on save.

@@ -448,6 +448,7 @@ That is its name everywhere: where people read it (the link, the view's heading,
 A wiki whose files still have the older name is renamed at start (Closed tasks' old name, under Migrations at start); nothing else is kept of that name: a page's `view=completed`, a link with it and a client asking the old routes get what an unknown view or route gets.
 
 While the filter has any word (`TasksCore.filterActive`: text, a tag, a name, `list:`, `from:`, `!`, `is:updated`, `is:following`) or the embed a tag, the link has no number (`Closed →`): the total would read as what the filter leaves, and counting the matches would take every closed task of the year to the browser for a number.
+The view's own list, the locked `list:` chip of a list's view, of a page's embed of it or of the Inbox, is no such word: the count is of that list already (`scopeQuery`), so the link has its number (`scopeWord` in `js/tasktabs.js`).
 The filter carries over into Closed, so a click shows the closed tasks it matches.
 
 **Closed shows a page, which the server answers** (`GET /api/tasks/closed?limit=`, `Store.ClosedPage`, `loadClosed` in `js/taskdata.js`): of the year's closed tasks of the list's scope that the filter field's words take, the latest closed first, the first 50, and how many there are (`{tasks, total}`).

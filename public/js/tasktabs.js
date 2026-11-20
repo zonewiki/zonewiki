@@ -35,10 +35,13 @@ st.lastTab = 'focus';
 // carries over into Closed, which shows them.
 // The view is called Closed: it holds what is done and what was closed
 // undone (won't do). So are its param (view=closed), routes and files.
+const scopeWord = app.initList ? ('list:' + app.listName(app.initList)).toLowerCase() : '';
 function syncClosedLink() {
   if (!app.closedLink) return;
-  // Any word of the filter: list:, from:, ! and is:updated too.
-  const filtering = TasksCore.filterActive(parseFilter(filterQuery(), people));
+  // Any word of the filter: list:, from:, ! and is:updated too; but not the
+  // view's own list (a list's or the Inbox's locked list: chip): the count
+  // is of that list already (scopeQuery).
+  const filtering = TasksCore.filterActive(parseFilter(filterQuery(scopeWord), people));
   app.closedLink.textContent = st.activeView === 'closed' ? `← Back to ${app.tabLabel(st.lastTab)}`
     : filtering ? 'Closed →'
     : `Closed${st.closedCount != null ? ` (${st.closedCount})` : ''} →`;
@@ -112,8 +115,9 @@ const filterChips = app.filterSearch && app.chipField(app.filterSearch, {
   onChange: () => app.render(), locked: embedFilterWords,
   label: w => app.inboxView && /^list:inbox$/i.test(w) ? 'Inbox' : /^list:/i.test(w) ? w.slice(5) : w,
   listWord: w => /^list:./i.test(w) });
-function filterQuery() {
-  return [...(filterChips?.words() || []), app.filterSearch?.value || ''].join(' ').trim();
+// but: a chip word left out (lower case).
+function filterQuery(but = '') {
+  return [...(filterChips?.words() || []).filter(w => !but || w.toLowerCase() !== but), app.filterSearch?.value || ''].join(' ').trim();
 }
 // Whether the viewer filters: words beyond the embed's locked ones (a
 // list= tasks always has its list's tag in the field, and isn't filtered).
