@@ -149,9 +149,14 @@ func loopbackHost(name string) bool {
 	return name == "localhost" || name == "127.0.0.1" || name == "::1"
 }
 
+// The host is ASCII (an international name as its punycode, xn--…), as the
+// question and Connect an assistant show it: a name in other letters that
+// look like Latin ones ("clаude.ai" with a Cyrillic а) can't pass there for
+// the name it copies.
 func validRedirect(uri string) bool {
 	u, err := url.Parse(uri)
-	if err != nil || len(uri) > 1000 || u.Fragment != "" || u.User != nil || u.Hostname() == "" {
+	if err != nil || len(uri) > 1000 || u.Fragment != "" || u.User != nil || u.Hostname() == "" ||
+		strings.IndexFunc(u.Host, func(r rune) bool { return r >= utf8.RuneSelf }) >= 0 {
 		return false
 	}
 	return u.Scheme == "https" || u.Scheme == "http" && loopbackHost(u.Hostname())
@@ -211,7 +216,7 @@ func oauthRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(req.Redirects) == 0 || len(req.Redirects) > 10 || !allOf(req.Redirects, validRedirect) {
 		oauthError(w, http.StatusBadRequest, "invalid_redirect_uri",
-			"Give one to ten redirect_uris, each https, or http on localhost or 127.0.0.1.")
+			"Give one to ten redirect_uris, each https, or http on localhost or 127.0.0.1, its host in ASCII (punycode for an international name).")
 		return
 	}
 	c := oauthClient{Name: clientName(req.Name), Redirects: req.Redirects}

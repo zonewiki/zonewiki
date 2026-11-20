@@ -740,7 +740,8 @@ The addresses are on `base-url`, else on the address the request came in on (`si
 `POST /oauth/register` (RFC 7591; no login, any origin): a client sends its `client_name` and `redirect_uris` and gets a `client_id`.
 Public clients only: there is no secret.
 Zone keeps nothing: the client id *is* the name and the redirect URIs, signed with Zone's key (`.zone/secret_key`; `oauthClient.id`, `clientOf`), so strangers calling the endpoint leave nothing behind, and a client id Zone didn't sign is no client.
-A redirect URI is `https`, or `http` on `localhost`, `127.0.0.1` or `[::1]` (a program on the user's computer, RFC 8252), without a fragment or a user; one to ten of them (**400** `invalid_redirect_uri`).
+A redirect URI is `https`, or `http` on `localhost`, `127.0.0.1` or `[::1]` (a program on the user's computer, RFC 8252), without a fragment or a user, its host in ASCII (an international name as its punycode, `xn--…`, also when sent percent-encoded); one to ten of them (**400** `invalid_redirect_uri`).
+So the question and Connect an assistant show every host as it is spelled: a name in letters that look like Latin ones (`clаude.ai` with a Cyrillic а) can't pass there for the name it copies.
 Other schemes (`cursor://` …) are refused for now.
 Client ID Metadata Documents aren't offered yet (the metadata doesn't advertise them, so clients register): they would have Zone fetch an address a stranger names.
 

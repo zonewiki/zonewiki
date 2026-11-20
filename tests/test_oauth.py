@@ -197,10 +197,20 @@ class TestRegister:
     @pytest.mark.parametrize("redirects", [
         [], ["http://evil.example/cb"], ["https://claude.ai/cb#frag"], ["javascript:alert(1)"], ["cursor://x/cb"],
         ["https://user:pw@claude.ai/cb"], [CALLBACK, "ftp://x/y"], ["https://a.example/" + str(i) for i in range(11)],
+        ["https://cl\u0430ude.ai/cb"], ["https://cl%D0%B0ude.ai/cb"],     # a look-alike name (a Cyrillic а), also escaped
     ])
     def test_where_answers_may_go(self, client, users, redirects):
         resp = client.post("/oauth/register", headers=HOST, json={"client_name": "X", "redirect_uris": redirects})
         assert resp.status_code == 400 and resp.get_json()["error"] == "invalid_redirect_uri"
+
+    def test_an_international_name_is_shown_as_it_is_spelled(self, bob):
+        """A host that isn't ASCII is refused (above), so the question and
+        Connect an assistant show every name as punycode: a look-alike can't
+        pass for the name it copies."""
+        redirect = "https://xn--clude-0ve.ai/cb"
+        client_id = register(bob, [redirect])
+        page = bob.get("/oauth/authorize?" + urlencode(asking(client_id, redirect)), headers=HOST).data.decode()
+        assert '<strong class="oauth-host">xn--clude-0ve.ai</strong>' in page
 
     def test_a_body_that_is_no_metadata(self, client, users):
         resp = client.post("/oauth/register", headers=HOST, data="client_name=x")
