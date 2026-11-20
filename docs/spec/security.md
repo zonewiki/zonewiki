@@ -486,5 +486,7 @@ and every CI action by its commit (`uses: actions/checkout@<40 hex> # v4.4.0`, b
 One thing is not: on GitHub `docker/setup-buildx-action` (pinned by its commit) starts BuildKit from the `moby/buildkit` image by its tag (`buildx-stable-1`, its default), so the builder of the published image is named by tag, not by hash.
 A tag is a name its publisher, or whoever took over their account, can move to other content; the CI that follows it builds and pushes the image every NAS pulls, with the registry's token.
 Go, gitleaks, onnxruntime and the model were pinned and checked already.
+The release binaries are built in the tools image with its pinned Go (Release binaries in `docs/spec/deployment.md`), and their sums published beside them (`SHA256SUMS`);
+the job attaches them with the runner's own `gh`, GitHub's tool on GitHub's runner image, which no workflow pins, rather than with another party's action.
 A pin doesn't follow updates: bump the base images' digests now and then (the `Docker-Content-Digest` of the registry's manifest for the tag, or `skopeo inspect`), and an action's commit with its version comment.
 `test_base_images_and_ci_actions_are_pinned_by_hash` in `tests/test_image.py`.

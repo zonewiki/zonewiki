@@ -3,7 +3,7 @@
 Part of Zone's spec (see `AGENTS.md` for the index).
 
 How Zone is built and run: the files that deploy it (`Containerfile`, the compose files, `run.sh`, `.env`), the commands,
-running it without `run.sh` or without a container, on a NAS or server, CI on Forgejo and GitHub,
+running it without `run.sh` or without a container, the release binaries, on a NAS or server, CI on Forgejo and GitHub,
 network access (a Unix socket, systemd), mail, phone access, the version string, the home-screen app,
 the data directory (its data format) and its backups, how Zone packs the wiki's git repository, how big a wiki can be, and moving from Zone 1.
 
@@ -172,6 +172,7 @@ edited by hand or with `./run.sh user …`/`./run.sh group …`/`./run.sh config
 | `./run.sh e2e` | The browser tests and the tasks-core.js (Node) tests, in the tools image |
 | `./run.sh bench` | The tasks at a team's size against their budgets, then against a race build |
 | `./run.sh retrieval` | Search on the sample wiki (`tests/retrieval`) against its floor |
+| `./run.sh binaries` | The release binaries into `dist/`, in the tools image (Release binaries, below) |
 | `./run.sh leaks` | Scan the git history for secrets with gitleaks, in the tools image |
 | `./run.sh screenshots` | Redo the README's screenshots from a sample wiki, in the tools image |
 | `./run.sh eval [FILE]` | Measure retrieval on your wiki, in the app image |
@@ -184,6 +185,7 @@ edited by hand or with `./run.sh user …`/`./run.sh group …`/`./run.sh config
 - `bench`: `tests/bench_tasks.py`, then once more against a server built with the race detector;
   `ZONE_BENCH_SLACK=3` allows three times the time budgets (The bench in `docs/spec/testing.md`).
 - `retrieval`: by keywords and by meaning, in the app's image with the model.
+- `binaries`: Linux and macOS, amd64 and arm64, with `SHA256SUMS`, `LICENSE` and `THIRD_PARTY_LICENSES`; CI's release job runs it on a `v*` tag.
 - `leaks`: extra args go to `gitleaks git`; a leak exits with 3.
 - `screenshots`: `docs/screenshots/*.png`, compressed with pngquant (the README shows phone.png at 640px).
 - `eval`: see Measuring retrieval in `docs/spec/search.md`; with semantic search as `ZONE_SEMANTIC_SEARCH` says.
@@ -247,6 +249,47 @@ The files are built in by `go:embed` in `zonefiles.go` at the repository's root,
 `go:embed` reaches only files below its package's folder, and the server's module is `go/`.
 The root is a module of its own (`go.mod` there, `module zonefiles`), which `go/go.mod` requires and takes from `../` (`replace zonefiles => ../`),
 so `go build` in `go/` from a fresh clone builds it in, with no step before it.
+
+## Release binaries
+
+Each `v*` tag's GitHub release carries Zone as one file per platform, for a desktop or a server without Docker:
+
+| File | For |
+|------|-----|
+| `zonewiki-linux-amd64` | Linux on a PC or server (x86-64) |
+| `zonewiki-linux-arm64` | Linux on ARM (64-bit: a Raspberry Pi 4 or 5, an ARM server) |
+| `zonewiki-macos-arm64` | A Mac with Apple silicon |
+| `zonewiki-macos-amd64` | A Mac with an Intel processor |
+| `SHA256SUMS` | The files' SHA-256 sums (`sha256sum -c SHA256SUMS --ignore-missing`; on a Mac `shasum -a 256 -c`) |
+| `LICENSE`, `THIRD_PARTY_LICENSES` | Zone's license and the notices of what the binaries hold |
+
+How to use one is in the manual (Download the binary in `docs/manual/self-hosting.md`): download, `chmod +x`, run, open `http://localhost:5000`.
+
+### What a release binary is
+
+- Zone's server with its own files built in (What the binary holds, above): the browser code, Help's docs, the licenses (`zonewiki licenses`).
+- Built without cgo (`CGO_ENABLED=0`), so statically linked on Linux and without semantic search: it searches by keywords (`go/embed_nocgo.go`), as the images CI publishes do for now (Semantic search paused, below).
+- 22 to 24 MB each (`-trimpath -ldflags="-s -w"`); the build string is the tagged commit and its date, from `go build`'s own record of the checkout (`sourceBuild`, Version below).
+- It needs git at run time, for the wiki's history: Zone looks for it on `PATH` at start (`exec.LookPath`) and without it runs with no history, versions or undo.
+- Started with nothing set, the wiki is `~/zonewiki`, made at the first start (Data directory, below), and it listens on port 5000, printing where to open it.
+  On localhost it needs no login; reached from other devices it shows only its first-run page until one is set, as ever (First run in `docs/spec/security.md`).
+- It isn't signed or notarized: macOS keeps a downloaded one from starting until the quarantine mark is taken off (`xattr -d com.apple.quarantine zonewiki`).
+  The arm64 Mac binary carries the ad-hoc signature Go's linker gives every darwin/arm64 binary, which Apple silicon requires to run code at all.
+- No Windows binary yet: a slug would take Windows' `\` from a page's path.
+
+### How CI builds them
+
+`./run.sh binaries` builds the four in the tools image, with its Go (pinned and checked against its checksum, the same as the `Containerfile`'s: `tests/test_image.py`),
+`GOOS`/`GOARCH` set for each (Go cross-compiles without cgo), into `dist/` (gitignored), then copies `LICENSE` and `THIRD_PARTY_LICENSES` beside them and writes `SHA256SUMS` for all six.
+It passes git `safe.directory`, so the build string comes from the checkout even when the repo's owner isn't the container's user.
+Run in a git worktree, the container can't reach the repository's own `.git`, and the build string is `unknown`.
+
+GitHub's **release** job (CI (GitHub Actions), below) runs on a `v*` tag once the checks pass:
+it runs `./run.sh binaries`, makes the tag's release when it has none (`gh release create --verify-tag`, titled `Zone <version>`, with GitHub's generated notes)
+and attaches `dist/*` to it (`gh release upload --clobber`, so a run again replaces them),
+with `gh`, which GitHub's runners have, and the workflow's token (`contents: write`): no action of a third party, no secret.
+A release already made for the tag (by hand, with notes of its own) is kept, and gets the files.
+Forgejo's workflow builds no binaries.
 
 ## On a NAS or server
 
@@ -397,6 +440,7 @@ Repo settings:
 | **bench** | `./run.sh bench` | Beside the checks |
 | **image** | Builds the `Containerfile` once per architecture, pushes it by digest | Not a pull request's run, once the checks pass |
 | **manifest** | Joins the two digests under the tags | After **image** |
+| **release** | `./run.sh binaries`, the files attached to the tag's GitHub release (Release binaries) | A `v*` tag, once the checks pass |
 
 GitHub publishes the image `compose.nas.yaml` runs.
 **image** builds the `Containerfile` (`ZONE_SEMANTIC_SEARCH=off`, the `ZONE_BUILD` string) once per architecture,

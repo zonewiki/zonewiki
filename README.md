@@ -50,7 +50,17 @@ A wiki can also be public, to read or to edit.
 
 ## Quick start
 
-You need Docker with Compose, or Podman with `podman-compose`.
+**Download** the file for your computer (Linux or macOS, amd64 or arm64) from the [latest release](https://github.com/zonewiki/zonewiki/releases/latest) and run it; it needs git:
+
+```bash
+mv zonewiki-macos-arm64 zonewiki && chmod +x zonewiki
+./zonewiki                            # your wiki: ~/zonewiki
+```
+
+Open <http://localhost:5000>.
+On a Mac, see [Download the binary](docs/manual/self-hosting.md#download-the-binary) first: the binary isn't signed.
+
+**With Docker** or Podman and Compose, from the repository.
 It is tested on Linux, and should work on macOS and in WSL2.
 
 ```bash
@@ -64,8 +74,8 @@ Open <http://localhost:5000>.
 Point `ZONE_DATA` at an existing folder of Markdown notes to use those.
 
 **On a NAS or server** (Synology, a Raspberry Pi, …) you don't need the repository: `compose.nas.yaml` runs the prebuilt image `ghcr.io/zonewiki/zonewiki` (amd64 and arm64).
-**Without a container**, build the Go binary.
-Both are described in [Running Zone yourself](docs/manual/self-hosting.md).
+**Without a container**, build the Go binary yourself.
+All of these are described in [Running Zone yourself](docs/manual/self-hosting.md).
 
 Settings live in two places: `.env` for how Zone runs, and the wiki's `.zone/config` for users, the login and everything else (`./run.sh config check` shows what is in effect).
 See [`docs/spec/users.md`](docs/spec/users.md).

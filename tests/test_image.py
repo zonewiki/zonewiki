@@ -165,3 +165,22 @@ def test_forgejo_runs_no_forks_code():
         else:
             assert "needs: [checks]" in job, name
 
+
+def test_a_tag_releases_the_binaries():
+    # On a v* tag, once the checks pass, GitHub's CI builds the binaries with
+    # run.sh (in the tools image, whose Go is the image's: above) and attaches
+    # them, their sums and the licenses to the tag's release with gh.
+    ci = (REPO / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    job = ci[ci.index("\n  release:\n"):]
+    for line in ("    needs: [checks]\n", "    if: startsWith(github.ref, 'refs/tags/v')\n", "      contents: write\n",
+                 "        run: ./run.sh binaries\n", 'gh release upload "$TAG" dist/* --clobber\n'):
+        assert line in job, line
+    run_sh = (REPO / "run.sh").read_text(encoding="utf-8")
+    binaries = run_sh[run_sh.index("\n  binaries)\n"):]
+    binaries = binaries[:binaries.index("\n    ;;\n")]
+    assert "build_image zonewiki-tools -f Containerfile.tools" in binaries
+    assert "for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do" in binaries
+    assert 'CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags="-s -w"' in binaries
+    assert "cp LICENSE THIRD_PARTY_LICENSES dist/" in binaries
+    assert "sha256sum zonewiki-* LICENSE THIRD_PARTY_LICENSES > SHA256SUMS" in binaries
+    assert "/dist/" in (REPO / ".gitignore").read_text(encoding="utf-8").splitlines()

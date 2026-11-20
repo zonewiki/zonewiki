@@ -23,14 +23,15 @@ What each file and folder of the repository is for.
 ├── compose.podman.yaml     # Rootless podman only: userns keep-id (run.sh adds it)
 ├── compose.nas.yaml        # NAS/server: runs the prebuilt ghcr.io image, no build (see docs/spec/deployment.md)
 ├── Containerfile.tools     # Tools image: Go (and gcc, for its race detector), Playwright + Chromium, the tests' Python packages, Node for tasks-core tests, gitleaks, git, pngquant
-├── run.sh                  # Helper script: build/up/down/logs, user/config (via compose), test/e2e/bench/retrieval/leaks (CI runs these too); bash 3.2-compatible (macOS)
+├── run.sh                  # Helper script: build/up/down/logs, user/config (via compose), test/e2e/bench/retrieval/binaries/leaks (CI runs these too); bash 3.2-compatible (macOS)
 ├── .githooks/pre-commit    # Refuses a commit with a secret in it (gitleaks); on with git config core.hooksPath .githooks
 ├── .gitleaks.toml          # gitleaks: the default rules; the generic key rule skips public/vendor/ (minified names)
 ├── .gitattributes          # LF line endings for *.sh and .githooks/* (Windows checkouts)
 ├── .env.example            # Template for .env: every setting, commented
 ├── .env                    # Your settings (gitignored; copy of .env.example)
+├── dist/                   # The release binaries ./run.sh binaries builds, with SHA256SUMS (gitignored)
 ├── .forgejo/workflows/ci.yml  # Forgejo Actions: checks (run.sh test, e2e, leaks), the bench (run.sh bench), search's floor (run.sh retrieval), build + push the image
-├── .github/workflows/ci.yml   # GitHub Actions: the same checks, the image for amd64 + arm64 to ghcr.io
+├── .github/workflows/ci.yml   # GitHub Actions: the same checks, the image for amd64 + arm64 to ghcr.io, a v* tag's release binaries
 ├── .forgejo/issue_template/   # Issue templates: bug.md, feature.md
 ├── .github/ISSUE_TEMPLATE/    # The same two for GitHub, and config.yml (a security problem goes to a private report)
 ├── go/                     # The server: package main, a file per area; pure code without Zone's state in go/internal/

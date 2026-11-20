@@ -4,7 +4,51 @@ This page is for whoever installs and runs a Zone: on a laptop, a home server or
 It covers installing Zone, where its settings live, setting a login, reaching it from other devices, and what to do before you open it to the internet.
 The full details are in [the deployment spec](../spec/deployment.md) and [the security spec](../spec/security.md).
 
-## Quick start
+## Download the binary
+
+The quickest way to run Zone on your own computer, on Linux or a Mac: one file, nothing to build.
+Zone needs git, for the wiki's history.
+On a Mac, `xcode-select --install` installs it (or `brew install git`); on Linux, your package manager does (`sudo apt install git`).
+
+1. Download the file for your computer from the [latest release](https://github.com/zonewiki/zonewiki/releases/latest):
+
+   | Your computer | The file |
+   |---------------|----------|
+   | A Mac with Apple silicon (M1 or later) | `zonewiki-macos-arm64` |
+   | A Mac with an Intel processor | `zonewiki-macos-amd64` |
+   | Linux on a PC | `zonewiki-linux-amd64` |
+   | Linux on ARM, such as a Raspberry Pi 4 or 5 (64-bit) | `zonewiki-linux-arm64` |
+
+2. In a terminal, name it `zonewiki`, make it a program, and start it:
+
+   ```bash
+   cd ~/Downloads
+   mv zonewiki-macos-arm64 zonewiki      # the file you downloaded
+   chmod +x zonewiki
+   ./zonewiki
+   ```
+
+3. Open <http://localhost:5000>.
+
+Your wiki is the folder `zonewiki` in your home folder, made at the first start; the terminal says where.
+To keep it elsewhere, or to use a folder of Markdown notes you already have, start Zone with that folder: `ZONE_DATA=~/Documents/notes ./zonewiki`.
+Zone runs as long as the terminal is open; `Ctrl+C` stops it, and your wiki stays as it is.
+
+On a Mac, the binary isn't signed, so macOS won't open a downloaded one ("Apple could not verify…").
+Take the download mark off it once, then start it again:
+
+```bash
+xattr -d com.apple.quarantine zonewiki
+```
+
+If port 5000 is taken, Zone says so and stops; on a Mac, AirPlay Receiver often has it.
+Start Zone on another port, `./zonewiki --addr :5001`, and open <http://localhost:5001>.
+
+The commands this page shows as `./run.sh …` are `./zonewiki …` here (`./zonewiki config passwd`, `./zonewiki user add anna`), and the `.env` settings are environment variables you set when you start it (`ZONE_ALLOW_REMOTE=1 ./zonewiki`).
+`./zonewiki --help` lists them all.
+The binary searches by keywords, not by meaning; how it is built is in [Release binaries](../spec/deployment.md#release-binaries).
+
+## With Docker
 
 You need Docker with Compose, or Podman with `podman-compose`.
 Zone is tested on Linux, and should work on macOS and in WSL2 on Windows.
@@ -68,7 +112,7 @@ See [Without a container](../spec/deployment.md#without-a-container), and for a 
 
 Settings live in two places:
 
-- **`.env`**, beside `run.sh` or the compose file: how Zone runs.
+- **`.env`**, beside `run.sh` or the compose file: how Zone runs (with the downloaded binary, environment variables you start it with).
   The wiki folder, the timezone, network access, mail, a public wiki.
   A change takes effect at the next `./run.sh up`.
 - **`.zone/config`**, in the wiki folder: the wiki itself.
@@ -226,7 +270,8 @@ Your wiki is never touched by an update: it lives in its own folder.
 |----------------|-----------|
 | The repository and `./run.sh` | `git pull && ./run.sh up` |
 | `compose.nas.yaml` | `docker compose -f compose.nas.yaml pull`, then `docker compose -f compose.nas.yaml up -d` |
-| The binary | `git pull`, build again and restart |
+| The downloaded binary | Download the new one, put it in place of the old file (`mv` and `chmod +x` as before), and start it again |
+| A binary you built | `git pull`, build again and restart |
 
 The version is shown in the shortcuts list (press `?`).
 

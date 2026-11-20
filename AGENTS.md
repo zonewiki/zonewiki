@@ -129,6 +129,7 @@ It lives in the host directory pointed to by `ZONE_DATA` (default: `~/zonewiki`)
 ./run.sh e2e        # browser tests + tasks-core.js (Node) tests in the tools image
 ./run.sh bench      # the tasks at a team's size against their budgets, then under the race detector (CI's bench job)
 ./run.sh retrieval  # search on the sample wiki (tests/retrieval) against its floor, by keywords and by meaning (CI's retrieval job)
+./run.sh binaries   # the release binaries (Linux, macOS; amd64, arm64) into dist/, with SHA256SUMS (CI's release job, on a v* tag)
 ./run.sh leaks      # scan the git history for secrets (gitleaks, in the tools image)
 ./run.sh screenshots  # redo the README's screenshots from a sample wiki
 ./run.sh eval [FILE]  # measure retrieval on your wiki (questions in FILE, default _eval/retrieval.json in the wiki)

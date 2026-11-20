@@ -206,6 +206,29 @@ case "${1:-up}" in
     in_image "$image" -e ZONE_DATA=/repo/tests/retrieval/wiki -e ZONE_SEMANTIC_SEARCH=on -- \
       /app/zonewiki eval --floor /repo/tests/retrieval/floors.json /repo/tests/retrieval/questions.json "${@:2}"
     ;;
+  binaries)
+    # The release binaries (Release binaries in docs/spec/deployment.md):
+    # zonewiki for Linux and macOS, amd64 and arm64, without cgo (keyword
+    # search), the browser code and the docs built in (zonefiles.go), into
+    # dist/ with LICENSE, THIRD_PARTY_LICENSES and SHA256SUMS; in the tools
+    # image, with its pinned Go (the image's). CI's release job attaches them
+    # to a v* tag's GitHub release. The build string is git's, as for any go
+    # build (safe.directory: the repo is the host user's, not the container's).
+    image=$(build_image zonewiki-tools -f Containerfile.tools)
+    in_image "$image" -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0='*' -- sh -c \
+      'set -e
+       rm -rf dist
+       mkdir dist
+       for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+         os=${target%/*} arch=${target#*/}
+         name=zonewiki-$(echo "$os" | sed s/darwin/macos/)-$arch
+         (cd go && CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags="-s -w" -o "../dist/$name" .)
+       done
+       cp LICENSE THIRD_PARTY_LICENSES dist/
+       cd dist
+       sha256sum zonewiki-* LICENSE THIRD_PARTY_LICENSES > SHA256SUMS
+       ls -l'
+    ;;
   leaks)
     # Secrets in the git history (gitleaks, in the tools image); extra args
     # go to `gitleaks git`, e.g. --pre-commit --staged for staged changes
@@ -288,7 +311,7 @@ case "${1:-up}" in
     compose run --rm --no-deps "${tty[@]}" zonewiki /app/zonewiki "$@"
     ;;
   *)
-    echo "Usage: $0 [build|up|down|logs|test|e2e|bench|retrieval|leaks|screenshots|eval|user|group|config]"
+    echo "Usage: $0 [build|up|down|logs|test|e2e|bench|retrieval|binaries|leaks|screenshots|eval|user|group|config]"
     echo "  build  - build the container image only"
     echo "  up     - build and start Zone (default)"
     echo "  down   - stop Zone"
@@ -297,6 +320,7 @@ case "${1:-up}" in
     echo "  e2e    - run browser and tasks-core tests in the tools image (extra args go to pytest)"
     echo "  bench  - measure the tasks at a team's size against their budgets, then under the race detector"
     echo "  retrieval - measure search on the sample wiki (tests/retrieval) against its floor, by keywords and by meaning"
+    echo "  binaries - build the release binaries (Linux and macOS, amd64 and arm64) into dist/, with SHA256SUMS"
     echo "  leaks  - scan the git history for secrets (extra args go to gitleaks git)"
     echo "  screenshots - redo the README's screenshots (docs/screenshots/)"
     echo "  eval [FILE] - measure search on your wiki against questions in FILE (in the wiki)"
