@@ -302,10 +302,13 @@ func shareUploads(oldSlug, newSlug, newPath string) []string {
 			return m
 		}
 		file, err := url.PathUnescape(sub[3]) // the link has the name percent-encoded (uploadURL)
-		if err != nil || strings.ContainsAny(file, `/\`) {
+		if err != nil {
 			return m
 		}
-		src := filepath.Join(uploadDir(from), file)
+		src, ok := uploadPath(from, file)
+		if !ok {
+			return m // no upload of the place's: a link there, a name no upload has
+		}
 		data, err := os.ReadFile(src)
 		if err != nil {
 			return m
@@ -314,12 +317,15 @@ func shareUploads(oldSlug, newSlug, newPath string) []string {
 		if i := strings.LastIndex(name, "."); i > 0 {
 			name, ext = name[:i], name[i:]
 		}
-		dest := filepath.Join(uploadDir(to), file)
-		for n := 2; ; n++ {
+		dest, ok := uploadPath(to, file)
+		for n := 2; ok; n++ {
 			if have, err := os.ReadFile(dest); err != nil || bytes.Equal(have, data) {
 				break
 			}
-			dest = filepath.Join(uploadDir(to), name+"-"+strconv.Itoa(n)+ext)
+			dest, ok = uploadPath(to, name+"-"+strconv.Itoa(n)+ext)
+		}
+		if !ok {
+			return m // a link where it would go: it stays where it is
 		}
 		if !exists(dest) {
 			if os.MkdirAll(filepath.Dir(dest), 0o777) != nil || os.WriteFile(dest, data, 0o666) != nil {

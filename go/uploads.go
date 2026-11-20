@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"io"
+	"io/fs"
 	"mime"
 	"net/http"
 	"net/url"
@@ -122,12 +123,7 @@ func encodeUploadLinks(text string) string {
 
 // serveUpload: a shared upload, a file straight in _assets/.
 func serveUpload(w http.ResponseWriter, r *http.Request) {
-	filename := r.PathValue("path")
-	if strings.Contains(filename, "/") {
-		http.NotFound(w, r)
-		return
-	}
-	serveUploadFile(w, r, cfg.Uploads, filename)
+	serveUploadFile(w, r, place{}, r.PathValue("path"))
 }
 
 // servePrivateUpload: a user's private upload, to that user only (404 for
@@ -138,7 +134,7 @@ func servePrivateUpload(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	serveUploadFile(w, r, uploadDir(place{ofUser, owner}), r.PathValue("file"))
+	serveUploadFile(w, r, place{ofUser, owner}, r.PathValue("file"))
 }
 
 // serveGroupUpload: a group's upload, to its members only (404 for anyone
@@ -149,7 +145,7 @@ func serveGroupUpload(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	serveUploadFile(w, r, uploadDir(p), r.PathValue("file"))
+	serveUploadFile(w, r, p, r.PathValue("file"))
 }
 
 // serveTaskUpload: a task's file, to who sees the task (404 for anyone
@@ -160,12 +156,18 @@ func serveTaskUpload(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	serveUploadFile(w, r, uploadDir(p), r.PathValue("file"))
+	serveUploadFile(w, r, p, r.PathValue("file"))
 }
 
-// serveUploadFile: filename in dir, inline only when the browser treats it
-// as passive content.
-func serveUploadFile(w http.ResponseWriter, r *http.Request, dir, filename string) {
+// serveUploadFile: filename in the uploads of p (uploadPath: no other
+// file, 404 for a name that is none there), inline only when the browser
+// treats it as passive content.
+func serveUploadFile(w http.ResponseWriter, r *http.Request, p place, filename string) {
+	path, ok := uploadPath(p, filename)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
 	mimeType := mediaType(filename)
 	inline := strings.HasPrefix(mimeType, "image/") || strings.HasPrefix(mimeType, "audio/") ||
 		strings.HasPrefix(mimeType, "video/") || mimeType == "application/pdf" || mimeType == "text/plain"
@@ -183,7 +185,31 @@ func serveUploadFile(w http.ResponseWriter, r *http.Request, dir, filename strin
 		w.Header().Set("Content-Security-Policy", svgCSP)
 	}
 	frameableBySelf(w.Header()) // a page may show it in an <iframe>
-	serveFile(w, r, dir, filename, disposition)
+	servePath(w, r, path, filename, disposition)
+}
+
+// uploadPath: the file name is in the uploads of p (uploadDir), and ok
+// false for a name that is no file of theirs: every door to an upload asks
+// here, the routes that serve one and write one, an assistant's read_file
+// and upload_file, a page's files taken along when it moves (shareUploads).
+// A name is one plain part: no '/' nor '\' (a folder's end on Windows,
+// which would lead out of the folder), not a dot file ("..", ".git"), no
+// end in '.' or ' ' (which Windows drops: pagePart). And the file is the
+// one the name says, as a page is (safePath): nothing on the way to it is
+// a symlink, so a link made on the host, to another user's upload or out of
+// the wiki, is no upload and nothing is written through it.
+func uploadPath(p place, name string) (string, bool) {
+	if !uploadNamed(name) {
+		return "", false
+	}
+	path := filepath.Join(wikiRoot(), filepath.FromSlash(uploadRel(p, name)))
+	if resolvePath(path) != path {
+		return "", false
+	}
+	if st, err := os.Lstat(path); err == nil && st.Mode()&fs.ModeSymlink != 0 {
+		return "", false // a link that leads nowhere: a write would go through it
+	}
+	return path, true
 }
 
 // mediaType is a file name's media type without parameters
@@ -295,7 +321,11 @@ func apiUpload(w http.ResponseWriter, r *http.Request) {
 	if byToken(r) {
 		filename = freeUploadName(owner, filename)
 	}
-	dest := filepath.Join(uploadDir(owner), filename)
+	dest, ok := uploadPath(owner, filename)
+	if !ok {
+		http.Error(w, "Bad Request", http.StatusBadRequest) // a link there, or no name an upload can have
+		return
+	}
 	if _, err := os.Stat(dest); err == nil && r.FormValue("overwrite") != "1" {
 		writeJSON(w, http.StatusConflict, map[string]any{"conflict": true, "filename": filename})
 		return
@@ -328,7 +358,10 @@ func saveUpload(w http.ResponseWriter, r *http.Request, src io.ReadSeeker, owner
 // it as user, the commit's message ending with via (" (MCP)" for a tool's).
 // A wiki with no room for it refuses (checkRoom).
 func storeUpload(user asker, owner place, filename string, src io.ReadSeeker, via string) error {
-	dest := filepath.Join(uploadDir(owner), filename)
+	dest, ok := uploadPath(owner, filename)
+	if !ok {
+		return refuse(strconv.Quote(filename) + " can't be an upload's name there")
+	}
 	uploadMu.Lock()
 	defer uploadMu.Unlock()
 	// What it adds: its size, less the file's it replaces.
@@ -379,13 +412,22 @@ func freeUploadName(owner place, filename string) string {
 }
 
 // uploadName: the name an upload is kept under, from the one it came with:
-// its last part, and not a dot file ("..", ".git" and friends). "" for none.
+// its last part, if it is a name an upload can have (uploadNamed). "" for
+// none.
 func uploadName(name string) string {
-	name = baseName(strings.TrimSpace(name))
-	if strings.HasPrefix(name, ".") || strings.ContainsFunc(name, mdtext.BadNameRune) {
-		return "" // a hidden file; a name with a line break, as a page's (safePath)
+	if name = baseName(strings.TrimSpace(name)); !uploadNamed(name) {
+		return ""
 	}
 	return name
+}
+
+// uploadNamed: name is one an upload can have (uploadPath): one plain
+// part, no '/' nor '\\' nor NUL, no line break or other control
+// character (as a page's name: safePath), not a dot file ("..", ".git"
+// and friends), no end in '.' or ' ' (pagePart).
+func uploadNamed(name string) bool {
+	return name != "" && !strings.ContainsAny(name, "/\\\x00") && !strings.ContainsFunc(name, mdtext.BadNameRune) &&
+		!strings.HasPrefix(name, ".") && pagePart(name)
 }
 
 // baseName is a slash-separated path's last part ("" for ".").

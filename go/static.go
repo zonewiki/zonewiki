@@ -97,10 +97,11 @@ func serveGzipped(w http.ResponseWriter, r *http.Request, files fs.FS, name stri
 }
 
 // validName: name (slash-separated) is a path inside a folder: false for
-// one that could reach outside it (.., an empty part, a NUL).
+// one that could reach outside it (.., an empty part, a NUL, a '\\', which
+// Windows reads as a folder's end).
 func validName(name string) bool {
 	for _, part := range strings.Split(name, "/") {
-		if part == "" || part == "." || part == ".." || strings.ContainsRune(part, 0) {
+		if part == "" || part == "." || part == ".." || strings.ContainsAny(part, "\\\x00") {
 			return false
 		}
 	}
@@ -125,6 +126,23 @@ func serveFS(w http.ResponseWriter, r *http.Request, files fs.FS, name, disposit
 		http.NotFound(w, r)
 		return
 	}
+	serveOpened(w, r, f, name, disposition)
+}
+
+// servePath serves the file at path (one its caller found: uploadPath), by
+// name, as serveFS does.
+func servePath(w http.ResponseWriter, r *http.Request, path, name, disposition string) {
+	f, err := os.Open(path)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	serveOpened(w, r, f, name, disposition)
+}
+
+// serveOpened serves the open file f by name and closes it (a folder is
+// none: 404).
+func serveOpened(w http.ResponseWriter, r *http.Request, f fs.File, name, disposition string) {
 	defer f.Close()
 	st, err := f.Stat()
 	content, seeks := f.(io.ReadSeeker) // a folder's files and the binary's all do

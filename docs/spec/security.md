@@ -165,6 +165,7 @@ Reloading in `docs/spec/users.md`.
 `_tasks/` and every other folder starting with `_` or `.` hold no pages,
 and `safePath()` refuses slugs in them,
 so no page route reads or writes there (Routes in `docs/spec/routes.md`).
+Uploads are served only from `_assets/` by name (`/_assets/<filename>`, `/private/<user>/_assets/<filename>` to that user only, `/groups/<group>/_assets/<filename>` to the group's members only, and `/_tasks/files/<task id>/_assets/<filename>` to who sees the task), the client code only from `public/`.
 
 ### A page is the file its name says
 
@@ -173,7 +174,8 @@ What a route or tool opens for a page is the file its slug names and no other, s
 and a name the file system would read as another is refused: a `\` (a folder's end on Windows), a folder or page name ending in `.` or a space (which Windows drops), and a short 8.3 name or a case that the file system would find another folder by (the path it resolves is not the path asked for).
 `private/` and `groups/` are judged in any case, as a case-insensitive volume folds them (`PRIVATE/alice/x` and `groupſ/dev/x` are alice's and dev's).
 The wiki's own folder may be a symlink: Zone follows it once, at start.
-Uploads are served only from `_assets/` by name (`/_assets/<filename>`, `/private/<user>/_assets/<filename>` to that user only, `/groups/<group>/_assets/<filename>` to the group's members only, and `/_tasks/files/<task id>/_assets/<filename>` to who sees the task), the client code only from `public/`.
+**An upload likewise** (`uploadPath`, which every door to an upload asks: the routes that serve and write one, `read_file` and `upload_file`, a page's files taken along when it moves): its name is one plain part (no `/`, no `\`, which leads out of the folder on Windows, no dot file, no end in `.` or a space), and its file is the one the name says,
+so an upload reached through a symlink (the file, or the `_assets/` folder) is none: no door serves it, reads it or writes through it.
 
 ## The permission model
 

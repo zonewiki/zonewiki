@@ -504,6 +504,29 @@ def test_assets_in_other_folders_are_not_served(alice, wiki):
         assert alice.get(path, headers=HOST).status_code == 404, path
 
 
+def test_a_link_among_the_uploads_is_no_upload(alice, client, wiki):
+    """A symlink made on the host among the uploads leads nowhere (uploadPath,
+    as safePath for pages): a shared upload that links to alice's private
+    one, bob's uploads folder that links to hers. Nothing is served or read
+    through them, nothing written through them, and a name with a '\\'
+    (out of the folder on Windows) is no upload's name."""
+    (wiki / "_assets/leak.png").symlink_to(wiki / "private/alice/_assets/photo.png")
+    (wiki / "private/bob").mkdir(parents=True, exist_ok=True)
+    (wiki / "private/bob/_assets").symlink_to(wiki / "private/alice/_assets")
+    sign_in(alice, "bob")
+    bob = alice
+    for path in ("/_assets/leak.png", "/private/bob/_assets/photo.png", "/private/bob/_assets/..%5Calice%5C_assets%5Cphoto.png"):
+        resp = bob.get(path, headers=HOST)
+        assert resp.status_code == 404 and SECRET.encode() not in resp.data, path
+    for url in ("/_assets/leak.png", "/private/bob/_assets/photo.png"):
+        assert SECRET not in mcp(client, "read_file", url=url)
+    # Nor written through: an upload by that name, replacing it, or one into the linked folder.
+    assert upload(bob, "", "leak.png", overwrite="1").status_code == 400
+    assert upload(bob, "private/bob/x", "photo.png", overwrite="1").status_code == 400
+    assert upload(bob, "", r"a\..\..\private\alice\_assets\photo.png", overwrite="1").status_code == 400
+    assert (wiki / "private/alice/_assets/photo.png").read_bytes() == SECRET.encode()
+
+
 def test_new_private_page(alice, wiki):
     assert 'name="private"' in alice.get("/new", headers=HOST).data.decode()
     resp = alice.post("/new", data={"slug": "Gift ideas", "private": "1"}, headers=HOST)

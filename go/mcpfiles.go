@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"unicode/utf8"
@@ -166,10 +165,10 @@ func uploadFile(target string, user asker) (path, name string, ok bool) {
 			owner, name = p, m[2]
 		}
 	}
-	if name == "" || strings.HasPrefix(name, ".") {
+	path, ok = uploadPath(owner, name)
+	if !ok {
 		return "", "", false
 	}
-	path = filepath.Join(uploadDir(owner), name)
 	if st, err := os.Stat(path); err != nil || !st.Mode().IsRegular() {
 		return "", "", false
 	}

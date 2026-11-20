@@ -573,3 +573,56 @@ func TestSafePathOpensWhatPlaceOfJudged(t *testing.T) {
 		}
 	}
 }
+
+// What uploadPath gives, for every door to an upload, is the file the name
+// says in the place's uploads: no '\' (which leads out of the folder on
+// Windows) or other name safePath refuses, no file or folder reached
+// through a symlink; validName refuses a '\' too.
+func TestUploadPathIsTheNamesOwnFile(t *testing.T) {
+	testWiki(t, nil)
+	withUsers(t, "alice", "bob")
+	root := cfg.Data
+	for _, dir := range []string{"_assets", "private/alice/_assets", "private/bob"} {
+		if err := os.MkdirAll(filepath.Join(root, dir), 0o777); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "private/alice/_assets/photo.png"), []byte("hers"), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	for link, target := range map[string]string{
+		"_assets/leak.png":    filepath.Join(root, "private/alice/_assets/photo.png"),
+		"_assets/passwd.txt":  "/etc/passwd",
+		"_assets/gone.png":    filepath.Join(root, "nowhere.png"),
+		"private/bob/_assets": filepath.Join(root, "private/alice/_assets"),
+	} {
+		if err := os.Symlink(target, filepath.Join(root, link)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	bob, alice := place{ofUser, "bob"}, place{ofUser, "alice"}
+	for _, c := range []struct {
+		p    place
+		name string
+	}{
+		{place{}, "leak.png"}, {place{}, "passwd.txt"}, {place{}, "gone.png"}, {bob, "photo.png"}, {bob, "new.png"},
+		{bob, `..\alice\_assets\photo.png`}, {place{}, `a\..\..\private\alice\_assets\photo.png`},
+		{place{}, ".."}, {place{}, ".git"}, {place{}, "a/b.png"}, {place{}, "pic."}, {place{}, "pic "}, {place{}, ""},
+	} {
+		if p, ok := uploadPath(c.p, c.name); ok {
+			t.Errorf("uploadPath(%v, %q) = %s", c.p, c.name, p)
+		}
+	}
+	if p, ok := uploadPath(alice, "photo.png"); !ok || p != filepath.Join(root, "private/alice/_assets/photo.png") {
+		t.Errorf("her own upload: %q %v", p, ok)
+	}
+	if p, ok := uploadPath(place{}, "new.png"); !ok || p != filepath.Join(root, "_assets/new.png") {
+		t.Errorf("a new shared upload: %q %v", p, ok)
+	}
+	if uploadName(`C:\Users\bob\pic.png`) != "" || uploadName("pic.") != "" || uploadName("dir/pic.png") != "pic.png" {
+		t.Error("uploadName")
+	}
+	if validName(`..\..\etc\passwd`) {
+		t.Error(`validName takes a '\'`)
+	}
+}
