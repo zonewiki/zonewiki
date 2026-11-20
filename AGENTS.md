@@ -1,6 +1,6 @@
 # Zone
 
-A self-hosted, browser-based wiki with built-in tasks and quick notes, for one person, a small team and their AI assistants.
+A self-hosted, browser-based wiki with built-in tasks and quick notes, for one person or a team of up to a hundred, and their AI assistants.
 Markdown files are served and rendered at runtime by a Go server (one binary).
 Pages can be edited directly on disk or via an in-browser editor.
 Full-text search runs server-side.
