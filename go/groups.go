@@ -1052,18 +1052,19 @@ func groupIncludesRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	before := latestSettings()
+	known := slices.Contains(knownGroups(before), group)
 	// new: the form that makes a group of groups. It makes one, and never
-	// changes what a group there is includes (Manage… does), nor takes a
-	// name something goes by, as no new group does.
-	if r.PostFormValue("new") == "1" {
-		if slices.Contains(knownGroups(before), group) {
-			refuseGroups(w, r, refuseAs(refusedExists, "There is a group "+group+" already. What it includes is under its Manage…."), "", "")
-			return
-		}
-		if groupNameTaken(before, group, "") {
-			refuseGroups(w, r, refuseAs(refusedExists, groupTakenMsg(group)), "", "")
-			return
-		}
+	// changes what a group there is includes (Manage… does).
+	if r.PostFormValue("new") == "1" && known {
+		refuseGroups(w, r, refuseAs(refusedExists, "There is a group "+group+" already. What it includes is under its Manage…."), "", "")
+		return
+	}
+	// A group that isn't there is made, by either form (Manage… of one that
+	// went meanwhile too), and takes no name something goes by, as no new
+	// group does.
+	if !known && groupNameTaken(before, group, "") {
+		refuseGroups(w, r, refuseAs(refusedExists, groupTakenMsg(group)), "", "")
+		return
 	}
 	includes, err := groupsNamed(r.PostFormValue("includes"), knownGroups(before))
 	if err != nil {

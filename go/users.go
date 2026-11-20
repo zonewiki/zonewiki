@@ -242,10 +242,13 @@ func (s *Settings) isViewer(name string) bool {
 // Assigning tasks). The settings file is refused with one (fileUsers); the
 // doors that take a new name say so before they write (zonewiki user add,
 // an invite, a sign-up, the first-run page).
-var reservedNames = map[string]bool{"me": true, "none": true}
+var reservedNames = map[string]bool{"me": true, "none": true, visitorAuthor: true}
 
 // reservedNameMsg: why name can't be a user's.
 func reservedNameMsg(name string) string {
+	if name == visitorAuthor {
+		return `"` + name + `" can't be a user name: a public wiki's visitors change pages as "` + visitorAuthor + `", and a user's changes would look like theirs. Choose another.`
+	}
 	return `"` + name + `" can't be a user name: for a task's assignee, "me" means whoever is signed in and "none" no one. Choose another.`
 }
 

@@ -95,7 +95,7 @@ Edit it by hand or with the commands (Commands, below); a running Zone takes eac
 
 ### A user's keys
 
-A user's section, `[user NAME]` (the name: lowercase letters, digits and inner hyphens, `userNameRE`; not `me` or `none`: User names, below), takes these keys (`userKeys`, checked in `fileUsers`):
+A user's section, `[user NAME]` (the name: lowercase letters, digits and inner hyphens, `userNameRE`; not `me`, `none` or `anonymous`: User names, below), takes these keys (`userKeys`, checked in `fileUsers`):
 
 | Key | Does | Values | Default |
 |-----|------|--------|---------|
@@ -296,7 +296,8 @@ An edit by hand isn't checked: it stays the way out.
 #### User names
 
 Lowercase letters, digits and inner hyphens (`userNameRE`), since a name becomes a folder name.
-`me` and `none` are reserved (`reservedNames`): no user is called one.
+`me`, `none` and `anonymous` are reserved (`reservedNames`): no user is called one.
+`me` and `none` are the words for whoever is signed in and for no one (Assigning tasks, below), and `anonymous` is who a public wiki's visitors change pages as (`visitorAuthor`; Visitors, below), so a user of that name would look like them in a page's history.
 The settings file is refused with such a section, naming its line (`fileUsers`), and `user add`, an invite, sign-up and the first-run page say so before they write (Assigning tasks, below).
 A user's MCP token is optional: without one they have no MCP access.
 
@@ -610,7 +611,8 @@ The groups' names are no secret among a wiki's users (a list's Who it is for… 
 The admin sees who is in the other groups, not their pages: there is no link to a group's home they aren't in.
 
 **Everyone in** saves with `POST /groups/includes` (`group`, `includes`; `groupIncludesRoute`, admins only, 404 for anyone else), **Make a group of groups** with the same route and `new=1`.
-It makes a group and changes none: a name a group has is refused ("There is a group product already. What it includes is under its Manage…."), as is one that is taken (`groupNameTaken`).
+It makes a group and changes none: a name a group has is refused ("There is a group product already. What it includes is under its Manage….").
+Either form that would make a group (`new=1`, or **Everyone in** for a group that went meanwhile) refuses a name that is taken (`groupNameTaken`), as every new group does.
 A group that would include itself, or a name that is no group's, is refused and nothing changes.
 Done, the page says who is in the group now, and who no longer is (`?done=includes&group=…&left=…`, of which it says only users' names).
 
@@ -1401,8 +1403,8 @@ A removed user's open link (an invite not taken, a reset) goes with them, by the
 `assignable` in `go/users.go`, `applyAssignee` in `go/tasks.go`: a user who is not disabled, not waiting for approval and not a viewer (who couldn't complete the task or comment on it), and, for a task in a list for some, one of those it is for (anyone else wouldn't see the task; Lists for some in `docs/spec/tasks.md`).
 Any other name is refused with a 400 that says why (`notAssignable`: "… is not a user of this wiki", "…'s account is waiting for an admin's approval", "…'s account is disabled", "… is a viewer, and a viewer can't change tasks"; "… isn't one of those the list #… is for"), and nothing of the write is kept.
 
-**`me` and `none` are reserved names**, since they are the words for whoever is signed in and for no one.
-No user has one: `zonewiki user add`, an invite, sign-up and the first-run page refuse it ("… can't be a user name"), and a settings file that has a `[user me]` or `[user none]` (written by hand) is refused like any other mistake in it: Zone doesn't start with it, and a running Zone keeps the settings it had.
+**`me` and `none` are reserved names**, since they are the words for whoever is signed in and for no one (and `anonymous` too: User names, above).
+No user has one: `zonewiki user add`, an invite, sign-up and the first-run page refuse it ("… can't be a user name"), and a settings file that has a `[user me]`, `[user none]` or `[user anonymous]` (written by hand) is refused like any other mistake in it: Zone doesn't start with it, and a running Zone keeps the settings it had.
 
 **A private task has no assignee**: it is its owner's, and nobody else sees it.
 `assignee` on a private task is a 400 ("A private task is yours alone. Put it in a shared list to assign it"); a write that shares a task (`list` with `share`) can assign it at once.

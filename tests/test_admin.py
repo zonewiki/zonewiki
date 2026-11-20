@@ -172,6 +172,9 @@ class TestChanges:
         (git_wiki_dir / "groups/ghosts/x.md").write_text("# X\n")
         resp = post(admin, "/groups/includes", group="ghosts", includes="dev", new="1")
         assert resp.status_code in (400, 409) and "is taken" in resp.data.decode() and config(git_wiki_dir) == before
+        # Nor does the form without new (Manage…'s), which would make a group that isn't there all the same.
+        resp = post(admin, "/groups/includes", group="ghosts", includes="dev")
+        assert resp.status_code in (400, 409) and "is taken" in resp.data.decode() and config(git_wiki_dir) == before
         assert 'name="new" value="1"' in admin.get("/groups", headers=HOST).data.decode()
         # Taking a group out says whom that takes the larger group from; with
         # nothing left the section goes.

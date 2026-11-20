@@ -30,7 +30,8 @@ func TestAssignable(t *testing.T) {
 	}
 }
 
-// No new user is called me or none: zonewiki user add and an invite refuse.
+// No new user is called me, none or anonymous: zonewiki user add and an
+// invite refuse.
 func TestReservedUserNames(t *testing.T) {
 	wiki := t.TempDir()
 	env := map[string]string{"ZONE_DATA": wiki}
@@ -44,7 +45,7 @@ func TestReservedUserNames(t *testing.T) {
 	if code, errs := run("password\npassword\n", "add", "alice"); code != 0 {
 		t.Fatalf("add alice: %d %q", code, errs)
 	}
-	for _, name := range []string{"me", "none"} {
+	for _, name := range []string{"me", "none", "anonymous"} {
 		if code, errs := run("password\npassword\n", "add", name); code == 0 || !strings.Contains(errs, "can't be a user name") {
 			t.Errorf("add %s: %d %q", name, code, errs)
 		}
@@ -57,7 +58,7 @@ func TestReservedUserNames(t *testing.T) {
 	}
 	// Nor does a settings file written by hand have one: it is refused, naming the line.
 	hash := hashPassword("p")
-	for _, name := range []string{"me", "none"} {
+	for _, name := range []string{"me", "none", "anonymous"} {
 		f, err := parseConfig("[user alice]\npassword = " + hash + "\n\n[user " + name + "]\npassword = " + hash + "\n")
 		if err != nil {
 			t.Fatal(err)

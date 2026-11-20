@@ -112,7 +112,7 @@ Beside each are **New page** and **New list**, for a page or task list only that
 ### Making a group
 
 Anyone who may write can make a group, without waiting for an admin.
-Under **Make a group**, type a name (lowercase letters, digits and hyphens), pick the other people, and click **Make the group**.
+Under **Make a group**, type a name (lowercase letters, digits and hyphens, at most 40), pick the other people, and click **Make the group**.
 
 You are in the group and are its **owner**, so you say who else is in it.
 A name that is taken can't be used again, including the former name of a renamed group.
