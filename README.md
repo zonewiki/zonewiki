@@ -1,6 +1,6 @@
 # Zone
 
-**What you, your team and your AI assistants know, in one place you own: a wiki with notes and tasks.**
+**One memory for you, your team and your AI assistants, in plain files you own.**
 
 Zone is a self-hosted wiki with built-in tasks and quick notes.
 Your pages are plain Markdown files in a folder you choose, and every change is a git commit.
