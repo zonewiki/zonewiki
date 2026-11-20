@@ -150,7 +150,7 @@ How it works: `tasksPage` sets the cookie `zone-tasks-place` (`rememberTasksPlac
 The cookie holds nothing but that key, and `placeHref` asks each time whether the user sees the view now (`resolveList` on the lists they see, `listHidden`, `hasInbox`), so a cookie that names a list someone else's, or one gone, links nothing.
 A cookie, not the browser's storage: the server draws the link, so it is right at first paint and in a browser without JavaScript.
 A new task goes to the **Inbox** (with users your own, private; The Inbox in `docs/spec/tasks.md`).
-The lists you pinned are pills of the list switcher, and nothing else (Pins in `docs/spec/tasks.md`; `pinnedLists`, from your pins in the lists' registry, the wiki's when you have set none, in their order; `rq.pinnedLists()` looks them up once per request).
+The lists you pinned are pills of the list switcher, and nothing else (Pins in `docs/spec/tasks.md`; `pinnedLists`, from your pins in your lists' registry (without users the wiki's), in their order; `rq.pinnedLists()` looks them up once per request).
 Your other lists and all tasks are one click from there, in the task app's **list switcher** (Lists in `docs/spec/tasks.md`).
 `/tasks` stays the view of every task that search results, task links and `g a` open.
 

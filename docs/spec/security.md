@@ -227,7 +227,7 @@ There is no public part of a wiki yet: keep what isn't for everyone in a private
 A visitor's edits are committed as **anonymous** (`visitorAuthor`), and every visitor is the same one to Zone: two of them on one page merge as one user's two tabs do. `storage-max` bounds what they can add.
 No draft is kept for a visitor who leaves a page in conflict (`leaveDraft`): it would be shown to the next one. A user called `anonymous` can't be told from them in the history (Zone says so at start).
 A user whose session ends is a visitor from then on: where visitors edit, an editor left open saves as anonymous.
-What `edit` takes on: a page then holds whatever a stranger wrote, so an assistant that reads the wiki reads that too (the guides stay an admin's, and a page's scripts never run: `pageCSP`), a `[[tasks: … pin=1]]` a visitor writes is a pinned list for the users, and nothing throttles saves (each Done is a commit): put a rate limit in the reverse proxy in front of a wiki strangers can write.
+What `edit` takes on: a page then holds whatever a stranger wrote, so an assistant that reads the wiki reads that too (the guides stay an admin's, and a page's scripts never run: `pageCSP`), and nothing throttles saves (each Done is a commit): put a rate limit in the reverse proxy in front of a wiki strangers can write.
 
 ## MCP and OAuth
 

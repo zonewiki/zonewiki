@@ -1353,7 +1353,7 @@ With users the dialog has **Private: only you see it and its tasks**, which make
 Then the list opens (`/tasks?list=<name>`).
 Nothing else changes by it: new tasks still go to the Inbox, and the tasks there stay.
 
-**The new list is pinned for you**, last, in the same commit (a shared list with users: the shared registry and your own), so it is a pill at once and not out of sight under More; one who had set no pins starts from the wiki's, as with **Pin**.
+**The new list is pinned for you**, last, in the same commit (a shared list with users: the list in the shared registry, the pin in your own), so it is a pill at once and not out of sight under More.
 (`pin=0` in the form leaves the list unpinned; no dialog sends it.)
 An assistant makes a list with `create_task_list`, the same operation: the list is pinned for its user, last (not for a connection that isn't given its user's private place: the pin is kept with their own lists).
 
@@ -1438,8 +1438,7 @@ Between lists the same people see it moves without a word.
 The heading says it: 👥 beside the list's name, "For @hiring, anna: only they see this list and its tasks (anna, bo, …)", the sign a group's page has (🔒 is what is yours alone: a private list).
 Its pill and its entry under More carry the people icon and say whom it is for (`TaskPlace.For`; their tooltips add "(for @hiring, anna)"), a task's list chip on a card reads "👥 hiring", and its tooltip names its members.
 
-It is a pill of its members without a pin (`pinnedLists`): after your pins, A–Z, until you unpin it, which your registry keeps (`"unpinned": ["hiring"]`, following a rename, gone with the list); pinned again it is a pin like any other.
-A list made for you is in your row the day it is made: under More nobody would look for it.
+It is pinned like any other list: for who made it, and for anyone else once they pin it; until then it is first under More and in the left column, among **Your lists**.
 
 #### Where a list for some is kept
 
@@ -1475,7 +1474,6 @@ A private list is its user's.
 | Say whom it is for | a shared list's owners and admins | Who it is for… | `POST /tasks/list-for` | `create_task_list` with `for`, as it is made |
 | Make it shared | a private list's user | Make shared… | `POST /tasks/share-list` | — |
 | Pin or unpin it, for yourself | whoever sees it and may write tasks | Pin, Unpin | `POST /tasks/pin-list` (`pin`: `1`, `first`, `0`) | — (`create_task_list` pins the list it makes) |
-| Pin it for everyone | a shared list's owners and admins | Pin for everyone, Unpin for everyone | `POST /tasks/pin-list` with `everyone=1` | — |
 | Reorder the pins | whoever may write tasks | dragging the pills | `POST /tasks/pin-order` | — |
 | Change its tasks | whoever sees it and may write tasks (`canWriteList`) | the task app | `/api/tasks…` | `create_task`, `update_task` |
 
@@ -1492,7 +1490,6 @@ The ⋯ beside the heading of `/tasks` (`.page-menu-btn`, on every view of it; t
 | **New list…** | every view |
 | **Rename…** | a list, for who manages it |
 | **Pin** / **Unpin** | a list |
-| **Pin for everyone** / **Unpin for everyone** | with users, a shared list, for who manages it |
 | **Make shared…** | a private list |
 | **Who it is for…** | with users, a shared list, for who manages it |
 | **Delete…** | a list, for who manages it |
@@ -1679,9 +1676,10 @@ It doesn't say what is in My tasks (that is whose a task is), nor where a new ta
 You pin and unpin in a list's ⋯ menu on `/tasks?list=`: **Pin** puts it last, **Unpin** takes it out; the pills can be dragged too (Dragging the pills); `pin=first` puts it first ("Pin list #shop first"), which no menu sends.
 **A list you make starts pinned**, last, wherever it is made: New list…, the List field, the move dialog, an assistant's `create_task_list`.
 
-**Pins are the user's own**: in their registry (`pinned`, in order); a user who has set none has the wiki's (the shared registry's, which are everyone's without users), and starts from those with their first pin.
-One who unpinned everything has none (`"pinned": []`), not the wiki's again.
-**Pin for everyone** / **Unpin for everyone** (with users, in a shared list's ⋯ menu, for who manages it: `canManageList`; `POST /tasks/pin-list` with `everyone=1`, a commit "Pin list #team for everyone") sets the wiki's pins: the pills of everyone who has pinned nothing themselves.
+**Pins are the user's own**: in their registry (`pinned`, in order); without users the wiki's, in the shared registry.
+With users nobody pins for anyone else: a user who has pinned nothing has no pins, and finds their lists under More (Your lists first) or in the left column.
+A connection not given its user's private place pins nothing (its user's pins are kept with their own lists).
+Pins in the shared registry from before the wiki had users (or from an older Zone's "Pin for everyone") are no one's: no user reads them.
 A registry that names a `default` list reads as that list pinned first (`ParseRegistry`), and is written without the key.
 
 ### Where a new task goes
@@ -1959,8 +1957,7 @@ So a list can be added or changed by hand in one line, and a commit shows the li
 |-----|-------|
 | `version` | That the wiki's lists are kept here: none, a wiki to take over (The lists' migration); `1`, a wiki from before the Inbox (The Inbox's migration); the current one is 3 |
 | `lists` | The lists, a line each |
-| `pinned` | Whose registry it is says whose pins: a user's own in theirs, the wiki's in the shared one (Pins) |
-| `unpinned` | A user's lists for some that they took out of their row |
+| `pinned` | A user's pins in theirs; without users the wiki's in the shared one (Pins) |
 | `mine` | The settings of My tasks (a user's own; without users the shared one's) |
 | `all` | The settings of All tasks (the shared one) |
 | `order` | The manual order of My tasks, as task ids (the same owner as `mine`) |
@@ -1975,7 +1972,7 @@ The tasks are plain JSON files in the wiki, committed to git; this is where they
 
 #### The task files
 
-- `_tasks/lists.json` is the lists' registry: the shared lists with their settings, the wiki's pins and the settings of All tasks; with users each user's own in `private/<user>/_tasks/lists.json` (their private lists, their pins, their settings of My tasks). It is no tasks file (The registry).
+- `_tasks/lists.json` is the lists' registry: the shared lists with their settings, the pins (without users) and the settings of All tasks; with users each user's own in `private/<user>/_tasks/lists.json` (their private lists, their pins, their settings of My tasks). It is no tasks file (The registry).
 - The tasks' files live in the `_tasks/` folder (with users each user's private tasks in `private/<user>/_tasks/`, the same files: Private tasks' files, below): open tasks in `tasks.json`,
   closed ones in `closed.json` (flat JSON arrays, committed to git on change).
 - **Each list has its files in a folder of its own**, `lists/<name>/` in its owner's `_tasks/` (`_tasks/lists/shop/tasks.json`, `closed.json`, `closed-YYYY-MM.json`; `dirOf` in `go/internal/taskfiles`); the tasks in no list (an Inbox's) are in `_tasks/` itself.

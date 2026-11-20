@@ -233,7 +233,7 @@ Each form goes back to its dialog when it refuses, with the dialog's fields and 
 - `/tasks/delete-list`: the list's tasks go to the list `to` names or to none, its open ones closed as won't do with `close`; it redirects there, a refusal back to the dialog (`&delete_error=…`).
 - `/tasks/list-for`: `for` takes groups `@name` and users, empty or `everyone` for all.
   A refusal goes back to the dialog (`&for_error=…&for_words=…`), and so does a narrowing that would take open tasks out of their assignees' sight, which goes through with `confirm=1` (`&for_confirm=1`); who is no owner gets 403.
-- `/tasks/pin-list` with `everyone=1` (with users, who manages the list) sets the wiki's pins instead, what a user who has pinned nothing has; it redirects to the list.
+- `/tasks/pin-list` pins or unpins a list for whoever asks (`pin`: `1`, `first`, `0`), in their own registry; it redirects to the list.
 - `/tasks/pin-order` takes every field `list` a ref, in the order wanted; the pinned ones among them come first, the rest stay as they were, nothing is pinned or unpinned.
 
 ## Task API

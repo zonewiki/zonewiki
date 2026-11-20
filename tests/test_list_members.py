@@ -79,7 +79,9 @@ def test_its_members_see_it(client, wiki, member):
     sign_in(client, member)
     page = client.get(f"/tasks?list={LIST}", headers=HOST).get_data(as_text=True)
     assert f"<h1>List: {LIST}" in page and "For @hiring, alice: only they see this list" in page and "(alice, carol)" in page
-    assert f'class="tasks-place" data-place="list:{LIST}"' in client.get("/tasks", headers=HOST).get_data(as_text=True)   # a pill
+    # A pill of who made it (pinned for them), under More for the others.
+    row = client.get("/tasks", headers=HOST).get_data(as_text=True)
+    assert (f'class="tasks-place" data-place="list:{LIST}"' if member == "alice" else f'class="lists-more-item" data-list="{LIST}"') in row
     titles = [t["title"] for t in client.get("/api/tasks", headers=HOST).get_json()]
     assert f"Offer for the {SECRET}" in titles and "Order chairs" in titles
     assert SECRET in client.get("/search", query_string={"q": SECRET}, headers=HOST).get_data(as_text=True)
@@ -345,31 +347,24 @@ def places(client):
     return pills, [head or name for head, name in more]
 
 
-def test_a_list_you_are_one_of_is_a_pill_until_you_unpin_it(client, wiki):
-    # carol pinned nothing: the list made for her group is in her row all the
-    # same (under More nobody would find it), until she takes it out.
+def test_a_list_you_are_one_of_is_under_your_lists_until_you_pin_it(client, wiki):
+    # carol pinned nothing: the list made for her group is under More, first
+    # among her lists, and a pill once she pins it.
     sign_in(client, "carol")
     pills, more = places(client)
-    assert pills == ["mine", "inbox", f"list:{LIST}"] and more == ["team"]
-    page = client.get(f"/tasks?list={LIST}", headers=HOST).get_data(as_text=True)
-    assert 'id="list-unpin-btn"' in page and 'id="list-pin-btn"' not in page
-    assert client.post("/tasks/pin-list", data={"list": LIST, "pin": "0"}, headers=HOST).status_code == 302
-    own = json.loads((wiki / "private/carol/_tasks/lists.json").read_text())
-    assert own["unpinned"] == [LIST] and own["pinned"] == []
-    pills, more = places(client)
     assert pills == ["mine", "inbox"] and more == ["Your lists", LIST, "Other lists", "team"]
-    # Pinned again, it is a pin like any other.
+    page = client.get(f"/tasks?list={LIST}", headers=HOST).get_data(as_text=True)
+    assert 'id="list-pin-btn"' in page and 'id="list-unpin-btn"' not in page
     assert client.post("/tasks/pin-list", data={"list": LIST, "pin": "1"}, headers=HOST).status_code == 302
     own = json.loads((wiki / "private/carol/_tasks/lists.json").read_text())
-    assert "unpinned" not in own and own["pinned"] == [LIST]
+    assert own["pinned"] == [LIST]
     assert places(client)[0] == ["mine", "inbox", f"list:{LIST}"]
-    # Renamed, what she unpinned stays unpinned under its new name.
-    client.post("/tasks/pin-list", data={"list": LIST, "pin": "0"}, headers=HOST)
+    # Renamed, her pin follows it.
     sign_in(client, "alice")
     assert client.post("/tasks/rename-list", data={"list": LIST, "new_name": "recruiting"}, headers=HOST).status_code == 302
     sign_in(client, "carol")
-    assert json.loads((wiki / "private/carol/_tasks/lists.json").read_text())["unpinned"] == ["recruiting"]
-    assert places(client)[0] == ["mine", "inbox"]
+    assert json.loads((wiki / "private/carol/_tasks/lists.json").read_text())["pinned"] == ["recruiting"]
+    assert places(client)[0] == ["mine", "inbox", "list:recruiting"]
 
 
 def test_more_has_your_lists_before_the_others(client, wiki):
@@ -393,29 +388,21 @@ def test_more_has_your_lists_before_the_others(client, wiki):
     assert places(client)[1] == ["bobs", "misc", "own"]
 
 
-def test_pin_for_everyone_sets_the_wikis_pins(client, wiki):
-    # What a user who has pinned nothing has: an owner's to set, in the list's menu.
-    sign_in(client, "bob")
-    assert places(client)[0] == ["mine", "inbox"]
-    assert 'id="list-pin-all-btn"' not in client.get("/tasks?list=team", headers=HOST).get_data(as_text=True)
+def test_a_pin_is_only_the_users_own(client, wiki):
+    # There are no pins for everyone: who manages a list pins it for
+    # themselves, and the shared registry is not written (an old form's
+    # everyone=1 changes nothing).
+    sign_in(client, "alice")
+    assert client.post("/tasks/pin-list", data={"list": "team", "pin": "0"}, headers=HOST).status_code == 302
+    page = client.get("/tasks?list=team", headers=HOST).get_data(as_text=True)
+    assert 'name="everyone"' not in page and 'id="list-pin-btn"' in page
     before = (wiki / "_tasks/lists.json").read_text()
-    assert client.post("/tasks/pin-list", data={"list": "team", "pin": "1", "everyone": "1"}, headers=HOST).status_code == 403
-    assert (wiki / "_tasks/lists.json").read_text() == before
-    sign_in(client, "alice")
-    assert 'id="list-pin-all-btn"' in client.get("/tasks?list=team", headers=HOST).get_data(as_text=True)
     assert client.post("/tasks/pin-list", data={"list": "team", "pin": "1", "everyone": "1"}, headers=HOST).status_code == 302
-    assert json.loads((wiki / "_tasks/lists.json").read_text())["pinned"] == ["team"]
-    assert git(wiki, "log", "-1", "--format=%s").strip() == "Pin list #team for everyone"
-    assert 'id="list-unpin-all-btn"' in client.get("/tasks?list=team", headers=HOST).get_data(as_text=True)
-    sign_in(client, "bob")
-    assert places(client)[0] == ["mine", "inbox", "list:team"]
-    # And taken back.
-    sign_in(client, "alice")
-    assert client.post("/tasks/pin-list", data={"list": "team", "pin": "0", "everyone": "1"}, headers=HOST).status_code == 302
-    assert "pinned" not in json.loads((wiki / "_tasks/lists.json").read_text()) or json.loads((wiki / "_tasks/lists.json").read_text())["pinned"] == []
+    assert (wiki / "_tasks/lists.json").read_text() == before
+    assert json.loads((wiki / "private/alice/_tasks/lists.json").read_text())["pinned"][-1] == "team"
+    assert git(wiki, "log", "-1", "--format=%s").strip() == "Pin list #team"
     sign_in(client, "bob")
     assert places(client)[0] == ["mine", "inbox"]
-
 
 def test_narrowing_says_whose_tasks_leave_their_sight(client, wiki):
     sign_in(client, "alice")
@@ -658,25 +645,24 @@ def test_its_words_suggest_nothing_to_anyone_else(client, wiki):
 
 
 def test_a_commit_about_it_names_it_to_its_members_only(client, wiki):
-    """Narrowing a list, pinning it for everyone and renaming it write the
-    registry everyone reads: the commit is in everyone's history, and says
-    the list's name and whom it is for only to its members."""
+    """Narrowing a list for everyone writes the registry everyone reads: the
+    commit is in everyone's history, and says the list's name and whom it is
+    for only to its members."""
     sign_in(client, "alice")
-    assert client.post("/tasks/list-for", data={"list": LIST, "for": "@hiring, alice, carol"}, headers=HOST).status_code == 302
-    assert client.post("/tasks/pin-list", data={"list": LIST, "pin": "1", "everyone": "1"}, headers=HOST).status_code == 302
-    subjects = git(wiki, "log", "-2", "--format=%s")
-    assert f"List #{LIST} is for @hiring, alice, carol" in subjects and f"Pin list #{LIST} for everyone" in subjects
+    assert client.post("/tasks/new-list", data={"name": "offers"}, headers=HOST).status_code == 302
+    assert client.post("/tasks/list-for", data={"list": "offers", "for": "@hiring, alice, carol"}, headers=HOST).status_code == 302
+    subjects = git(wiki, "log", "-1", "--format=%s")
+    assert "List #offers is for @hiring, alice, carol" in subjects
     theirs = mcp(client, "carol", "history")
-    assert f"List #{LIST} is for" in theirs and f"Pin list #{LIST}" in theirs
+    assert "List #offers is for" in theirs
     for who in ("bob", "dana"):
         said = mcp(client, who, "history")
-        assert LIST not in said and "carol" not in said, said
+        assert LIST not in said and "offers" not in said and "carol" not in said, said
         assert "A list for some changed" in said
     # A list for everyone is named to everyone, one whose name only starts like it too.
     assert client.post("/tasks/new-list", data={"name": LIST + "-2"}, headers=HOST).status_code == 302
-    assert client.post("/tasks/pin-list", data={"list": "team", "pin": "1", "everyone": "1"}, headers=HOST).status_code == 302
     said = mcp(client, "bob", "history")
-    assert "Pin list #team for everyone" in said
+    assert f"Create list #{LIST}-2" in said
 
 
 def test_without_users_a_list_for_some_is_everyones(client, git_wiki_dir):

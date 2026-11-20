@@ -213,17 +213,17 @@ func TestListsTakenOverPerUser(t *testing.T) {
 	if strings.Contains(fileText(t, taskFiles.OpenPath("")), "Cake") || strings.Contains(fileText(t, taskFiles.OpenPath("alice")), "Scarf") {
 		t.Error("a task moved between files")
 	}
-	// Alice's own pins first, then the wiki's. Bob had none and has the
-	// wiki's, #general with them. The lists "private" and their pins are gone; #general is
-	// pinned for the wiki.
+	// Alice's own pins first, then the wiki's. Bob had none and has none:
+	// pins are a user's own. The lists "private" and their pins are gone;
+	// #general is pinned in the shared registry, which no user reads pins from.
 	if got := refsOf(pinnedLists(asUser("alice"), alice)); !slices.Equal(got, []string{"secret", "shared/gifts"}) {
 		t.Errorf("alice's pins %v", got)
 	}
-	if got := refsOf(pinnedLists(asUser("bob"), bob)); !slices.Equal(got, []string{"gifts", "general"}) {
+	if got := refsOf(pinnedLists(asUser("bob"), bob)); len(got) != 0 {
 		t.Errorf("bob's pins %v", got)
 	}
-	if got := refsOf(pinnedLists(asker{}, taskLists(asker{}))); !slices.Equal(got, []string{"gifts", "general"}) {
-		t.Errorf("the wiki's pins %v", got)
+	if got := taskFiles.ReadLists("").Pinned; !slices.Equal(got, []string{"gifts", "general"}) {
+		t.Errorf("the shared registry's pins %v", got)
 	}
 	// Her private list she hadn't pinned stays out of her My tasks; a shared
 	// list is never left out (a shared task is in My tasks by its assignee).
@@ -303,7 +303,7 @@ func TestListsNotTakenOverFromABrokenWiki(t *testing.T) {
 	if _, err := createListOp(asker{}, "x", false, false, "", ""); err == nil {
 		t.Error("a list made in a wiki not taken over")
 	}
-	if err := pinListOp(asker{}, "shop", "1", false); err == nil {
+	if err := pinListOp(asker{}, "shop", "1"); err == nil {
 		t.Error("a pin set in a wiki not taken over")
 	}
 }
@@ -445,11 +445,11 @@ func TestRenameList(t *testing.T) {
 	cake := newTestTask(t, "alice", "Cake", false, "list", "gifts")
 	bobs := newTestTask(t, "bob", "Bob's", false, "list", "gifts")
 	for _, u := range []string{"alice", "bob"} {
-		if err := pinListOp(asUser(u), "shop", "first", false); err != nil {
+		if err := pinListOp(asUser(u), "shop", "first"); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := pinListOp(asUser("alice"), "gifts", "1", false); err != nil {
+	if err := pinListOp(asUser("alice"), "gifts", "1"); err != nil {
 		t.Fatal(err)
 	}
 	pagesMu.Lock()
@@ -518,7 +518,7 @@ func TestDeleteList(t *testing.T) {
 	}
 	milk := newTestTask(t, "alice", "Milk", false, "list", "shop")
 	cake := newTestTask(t, "alice", "Cake", false, "list", "gifts")
-	if err := pinListOp(asUser("bob"), "shop", "1", false); err != nil {
+	if err := pinListOp(asUser("bob"), "shop", "1"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := deleteListOp(asUser("alice"), "shop", "gifts", false, false, ""); err == nil {
@@ -644,48 +644,57 @@ func TestShareList(t *testing.T) {
 	}
 }
 
-// Pins are the user's own; one who set none has the wiki's, and starts
-// from them.
+// Pins are the user's own (without users the wiki's): one who set none has
+// none, whatever anyone else pinned.
 func TestPins(t *testing.T) {
 	testWiki(t, nil)
 	mustList(t, "", "shop", false)
 	mustList(t, "", "work", false)
-	if err := pinListOp(asker{}, "shop", "1", false); err != nil {
+	if err := pinListOp(asker{}, "shop", "1"); err != nil {
 		t.Fatal(err)
 	}
-	if err := pinListOp(asker{}, "work", "1", false); err != nil {
+	if err := pinListOp(asker{}, "work", "1"); err != nil {
 		t.Fatal(err)
+	}
+	if got := refsOf(pinnedLists(asker{}, taskLists(asker{}))); !slices.Equal(got, []string{"shop", "work"}) {
+		t.Errorf("without users: %v", got)
 	}
 	withUsers(t, "alice", "bob")
 	mustList(t, "alice", "gifts", true)
 	pins := func(u string) []string { return refsOf(pinnedLists(asUser(u), taskLists(asUser(u)))) }
-	if got := pins("bob"); !slices.Equal(got, []string{"shop", "work"}) {
-		t.Errorf("bob has the wiki's pins: %v", got)
+	if got := pins("bob"); len(got) != 0 {
+		t.Errorf("bob has pins he didn't set: %v", got)
 	}
-	if err := pinListOp(asUser("alice"), "gifts", "first", false); err != nil {
+	if err := pinListOp(asUser("alice"), "gifts", "1"); err != nil {
 		t.Fatal(err)
 	}
-	if got := pins("alice"); !slices.Equal(got, []string{"gifts", "shop", "work"}) {
+	if err := pinListOp(asUser("alice"), "shop", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := pinListOp(asUser("alice"), "work", "first"); err != nil {
+		t.Fatal(err)
+	}
+	if got := pins("alice"); !slices.Equal(got, []string{"work", "gifts", "shop"}) {
 		t.Errorf("alice's pins %v", got)
 	}
-	if err := pinListOp(asUser("alice"), "shop", "0", false); err != nil {
+	if err := pinListOp(asUser("alice"), "shop", "0"); err != nil {
 		t.Fatal(err)
 	}
-	if got := pins("alice"); !slices.Equal(got, []string{"gifts", "work"}) || !slices.Equal(pins("bob"), []string{"shop", "work"}) {
+	if got := pins("alice"); !slices.Equal(got, []string{"work", "gifts"}) || len(pins("bob")) != 0 {
 		t.Errorf("after her unpin: alice %v, bob %v", got, pins("bob"))
 	}
 	for _, r := range []string{"gifts", "work"} {
-		if err := pinListOp(asUser("alice"), r, "0", false); err != nil {
+		if err := pinListOp(asUser("alice"), r, "0"); err != nil {
 			t.Fatal(err)
 		}
 	}
 	if got := pins("alice"); len(got) != 0 {
 		t.Errorf("she unpinned everything, and has %v", got)
 	}
-	if err := pinListOp(asUser("bob"), "gifts", "1", false); !refusedWith(err, refusedNotFound) {
+	if err := pinListOp(asUser("bob"), "gifts", "1"); !refusedWith(err, refusedNotFound) {
 		t.Errorf("bob pinned alice's list: %v", err)
 	}
-	if err := pinListOp(asUser("alice"), "work", "maybe", false); !refusedWith(err, refusedInvalid) {
+	if err := pinListOp(asUser("alice"), "work", "maybe"); !refusedWith(err, refusedInvalid) {
 		t.Errorf("pin=maybe: %v", err)
 	}
 }
@@ -817,7 +826,7 @@ func TestMyTasks(t *testing.T) {
 	if got := all(""); !slices.Equal(got, []string{"Loose", "Milk", "Report"}) {
 		t.Errorf("nothing pinned: %v", got)
 	}
-	if err := pinListOp(asker{}, "work", "1", false); err != nil {
+	if err := pinListOp(asker{}, "work", "1"); err != nil {
 		t.Fatal(err)
 	}
 	if got := all(""); !slices.Equal(got, []string{"Loose", "Milk", "Report"}) {
@@ -865,7 +874,7 @@ func TestMyTasks(t *testing.T) {
 	// Pins change nothing.
 	for _, pin := range []string{"1", "0"} {
 		for _, ref := range []string{"diary", "someday", "shop"} {
-			if err := pinListOp(asUser("alice"), ref, pin, false); err != nil {
+			if err := pinListOp(asUser("alice"), ref, pin); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1014,7 +1023,7 @@ func TestPlaceSnapshot(t *testing.T) {
 }
 
 // A new list is pinned for who made it, last (createListOp's pin): in their
-// own registry, started from the wiki's pins when they had set none.
+// own registry; nobody else's.
 func TestANewListIsPinnedForWhoMadeIt(t *testing.T) {
 	testWiki(t, nil)
 	pins := func(u string) []string { return refsOf(pinnedLists(asUser(u), taskLists(asUser(u)))) }
@@ -1036,11 +1045,11 @@ func TestANewListIsPinnedForWhoMadeIt(t *testing.T) {
 	withUsers(t, "alice", "bob")
 	make("alice", "team", false)
 	make("alice", "gifts", true)
-	if got := pins("alice"); !slices.Equal(got, []string{"shop", "work", "team", "gifts"}) {
-		t.Errorf("alice: the wiki's, then hers: %v", got)
+	if got := pins("alice"); !slices.Equal(got, []string{"team", "gifts"}) {
+		t.Errorf("alice: %v", got)
 	}
-	if got := pins("bob"); !slices.Equal(got, []string{"shop", "work"}) {
-		t.Errorf("bob has the wiki's pins still: %v", got)
+	if got := pins("bob"); len(got) != 0 {
+		t.Errorf("bob has pins he didn't set: %v", got)
 	}
 }
 
@@ -1063,12 +1072,17 @@ func TestPinOrder(t *testing.T) {
 	if err := pinOrderOp(asker{}, []string{"c", "a"}); err != nil {
 		t.Errorf("the same order: %v", err)
 	}
-	// With users the order is the user's own, started from the wiki's.
+	// With users the order is the user's own.
 	withUsers(t, "alice", "bob", "vera")
-	if err := pinOrderOp(asUser("alice"), []string{"b"}); err != nil {
+	for _, n := range []string{"a", "b", "c"} {
+		if err := pinListOp(asUser("alice"), n, "1"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := pinOrderOp(asUser("alice"), []string{"c"}); err != nil {
 		t.Fatal(err)
 	}
-	if got := pins("alice"); !slices.Equal(got, []string{"b", "c", "a"}) || !slices.Equal(pins("bob"), []string{"c", "a", "b"}) {
+	if got := pins("alice"); !slices.Equal(got, []string{"c", "a", "b"}) || len(pins("bob")) != 0 {
 		t.Errorf("alice %v, bob %v", got, pins("bob"))
 	}
 }
@@ -1274,8 +1288,8 @@ func TestInboxMigrationRenamesListsCalledInbox(t *testing.T) {
 	if got := refsOf(pinnedLists(asUser("bob"), bob)); !slices.Equal(got, []string{"work", "inbox-list"}) {
 		t.Errorf("bob's pins %v", got)
 	}
-	if got := refsOf(pinnedLists(asker{}, taskLists(asker{}))); !slices.Equal(got, []string{"inbox-list", "work"}) {
-		t.Errorf("the wiki's pins %v", got)
+	if got := taskFiles.ReadLists("").Pinned; !slices.Equal(got, []string{"inbox-list", "work"}) {
+		t.Errorf("the shared registry's pins %v", got)
 	}
 	// The name is the Inbox's now.
 	if !isInbox("inbox", alice) || !isInbox("inbox", bob) {
@@ -1443,7 +1457,7 @@ func TestInboxMigrationLeavesOutWhatWasNotPinned(t *testing.T) {
 	}
 	startAgain(t)
 	// Unpinned after the migration: not left out by the next start.
-	if err := pinListOp(asker{}, "work", "0", false); err != nil {
+	if err := pinListOp(asker{}, "work", "0"); err != nil {
 		t.Fatal(err)
 	}
 	migrateLists(false)
@@ -1487,13 +1501,13 @@ func TestSharedTasksWithoutAListGoToGeneral(t *testing.T) {
 	if l, ok := taskLists(asUser("bob"))[generalListName]; !ok || l.Private() || l.LeftOut() {
 		t.Errorf("#general: %+v", l)
 	}
-	if got := refsOf(pinnedLists(asUser("bob"), taskLists(asUser("bob")))); !slices.Equal(got, []string{"work", generalListName}) {
-		t.Errorf("the wiki's pins %v", got)
+	if got := taskFiles.ReadLists("").Pinned; !slices.Equal(got, []string{"work", generalListName}) {
+		t.Errorf("the shared registry's pins %v", got)
 	}
 	startAgain(t)
 	// A stray that turns up later (a file edited by hand, an older Zone)
 	// goes there too; the list is there, and an unpin of it stays.
-	if err := pinListOp(asker{}, generalListName, "0", false); err != nil {
+	if err := pinListOp(asker{}, generalListName, "0"); err != nil {
 		t.Fatal(err)
 	}
 	writeTasks(t, "", append(taskFiles.Open(asker{}), oldTask("9", "Stray"))...)
@@ -1501,7 +1515,7 @@ func TestSharedTasksWithoutAListGoToGeneral(t *testing.T) {
 	if got := openByID("bob")["9"]; got == nil || got.List != generalListName {
 		t.Errorf("the stray: %+v", got)
 	}
-	if got := refsOf(pinnedLists(asker{}, taskLists(asker{}))); !slices.Equal(got, []string{"work"}) {
+	if got := taskFiles.ReadLists("").Pinned; !slices.Equal(got, []string{"work"}) {
 		t.Errorf("#general was pinned again: %v", got)
 	}
 	startAgain(t)

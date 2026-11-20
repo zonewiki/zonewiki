@@ -1012,13 +1012,6 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 		v.ForWords, v.ForError = firstNonEmpty(q.Get("for_words"), forWords(list.For)), q.Get("for_error")
 		v.Members, v.ForNow = listMembers(list.For), forWords(list.For)
 		v.ForConfirm = q.Get("for_confirm") != "" && v.ForError != ""
-		// The wiki's pins (Pin for everyone): what a user who has set none has.
-		if !list.Private() && privateFolder(rq.user) != "" {
-			v.WikiPins = true
-			for _, name := range taskFiles.ReadLists("").Pinned {
-				v.WikiPinned = v.WikiPinned || name == list.Name
-			}
-		}
 		v.ListRenameName, v.ListRenameError = firstNonEmpty(q.Get("rename_name"), list.Name), q.Get("rename_error")
 		v.DeleteError, v.ShareError = q.Get("delete_error"), q.Get("share_error")
 		for i, p := range rq.pinnedLists() {
@@ -1208,12 +1201,11 @@ func shareListRoute(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, listHref(name), http.StatusFound)
 }
 
-// pinListRoute: a list's Pin and Unpin, and Pin or Unpin for everyone
-// (everyone=1), in its ⋯ menu: pin is 1, first (its pill first) or 0.
-// Back to the list.
+// pinListRoute: a list's Pin and Unpin, in its ⋯ menu: pin is 1, first
+// (its pill first) or 0. Back to the list.
 func pinListRoute(w http.ResponseWriter, r *http.Request) {
 	ref := cleanList(r.PostFormValue("list"))
-	if err := pinListOp(userOf(r), ref, r.PostFormValue("pin"), r.PostFormValue("everyone") != ""); err != nil {
+	if err := pinListOp(userOf(r), ref, r.PostFormValue("pin")); err != nil {
 		pageFailed(w, r, err)
 		return
 	}
@@ -1257,10 +1249,7 @@ type tasksPageView struct {
 	ForWords, ForError string
 	ForNow             string // whom it is for now, "@dev, anna"
 	ForConfirm         bool   // the dialog is back to ask: Save again goes on (confirm)
-	// WikiPins: the list can be pinned for everyone (a shared one, with
-	// users), by who manages it; WikiPinned: it is. People: who a For field
-	// can name, beside the groups.
-	WikiPins, WikiPinned      bool
+	// People: who a For field can name, beside the groups.
 	People                    []string
 	Members, Groups           []string
 	Mine, MineAssigns         bool

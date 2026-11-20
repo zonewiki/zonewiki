@@ -372,7 +372,7 @@ What an admin may do beyond an editor, each where it is described (the role is a
 | Groups | manage every group, owned or not (who is in it, its owners, its name, removing it, also one that others are made of), make a group of groups and say what a group includes, see the folders of groups nobody is in (An admin on Groups, below) |
 | Guides | write `wiki-guide`, a folder's `AGENTS.md`/`CLAUDE.md` and what they pull in (`adminsOnly`); a group's guide only an admin who is in the group (Guides, below) |
 | Moves to fewer people | move a shared page to where fewer people see it, into a group they are in or their private folder (`mayNarrow` in `go/pages.go`), and a shared task into a list fewer people see (`mayNarrowTask` in `go/tasks.go`); anyone else only a page they shared themselves while nobody else has changed it, or a task they made (Who may move a page to other readers, below) |
-| Task lists | rename, delete, set the settings of, say whom it is for and pin for everyone any shared list they see, not only one they own (`canManageList` in `go/access.go`, Who manages a list in `docs/spec/tasks.md`) |
+| Task lists | rename, delete, set the settings of, and say whom it is for any shared list they see, not only one they own (`canManageList` in `go/access.go`, Who manages a list in `docs/spec/tasks.md`) |
 | Tasks | delete any task for good (`mayDeleteTask`) and anyone's comment (`mayChangeComment`), and import a file with its comments' and history's names as they are (`checkBy` is skipped: a wiki moved, a backup put back; Deleting a task for good, Who may change a comment and Names in comments and history in `docs/spec/tasks.md`) |
 | Undo on Changes | undo a change to a guide, which others don't |
 
@@ -1280,7 +1280,7 @@ A shared page that refers to a private task doesn't carry its title into the sea
 A name means the same registry for one user only: two users can each have a private `gifts`, and a shared one can exist beside them; whoever has both names the shared one `shared/gifts` (List names in `docs/spec/tasks.md`).
 Renaming, deleting, sharing, pinning or setting another user's list is refused as for a list that isn't there (404).
 
-**Pins are per user** (`pinned` in their registry): which lists are pills of their list switcher; one who has set none has the wiki's.
+**Pins are per user** (`pinned` in their registry): which lists are pills of their list switcher; one who has set none has none.
 A pin decides nothing about who sees a task or whose it is.
 
 ### How private tasks are kept

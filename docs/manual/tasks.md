@@ -222,7 +222,7 @@ What you rank in My tasks is your own order and changes nothing in the lists.
 ### Pins and list settings
 
 A pin only makes a list a pill: **Pin** and **Unpin** are in the list's ⋯ menu, and you drag pills to reorder them.
-Who manages a shared list can also **Pin for everyone**, for people who haven't chosen their own pins.
+Pins are your own: a list you make is pinned for you, and a list someone else made is under **More** (your lists first) until you pin it.
 
 **List settings…**, first in the ⋯ menu, sets how a list behaves for everyone who looks at it:
 
