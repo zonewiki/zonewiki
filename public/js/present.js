@@ -85,6 +85,9 @@ import { HIGHLIGHT_CODE, renderFigures } from './figures.js';
   }
 
   function openPresentation(startAt) {
+    // One at a time: p while presenting (or Present in the menu) opened a
+    // second overlay over the first, and Esc closed only that one.
+    if (overlay) return;
     slides = buildSlides();
     if (!slides.length) return;
 

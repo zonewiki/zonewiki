@@ -189,6 +189,22 @@ def test_presentation_and_print_show_folded_sections(page, wiki):
     expect(page.get_by_text("First text.")).to_be_hidden()
 
 
+def test_p_while_presenting_opens_no_second_presentation(page, wiki):
+    # p (or Present) while one shows opened another over it, and Esc then
+    # left the first one on the screen, with no key to close it.
+    wiki.write("folds", FOLDS)
+    page.goto("/page/folds")
+    page.keyboard.press("p")
+    overlay = page.locator(".presentation-overlay")
+    expect(overlay).to_have_count(1)
+    page.keyboard.press("ArrowRight")
+    page.keyboard.press("p")
+    expect(overlay).to_have_count(1)
+    expect(overlay.locator(".slide-counter")).to_have_text(re.compile(r"^2 / "))    # where it was
+    page.keyboard.press("Escape")
+    expect(overlay).to_have_count(0)
+
+
 def test_chevron_sits_in_the_margin_and_the_link_icon_after_the_heading(page, wiki):
     wiki.write("folds", FOLDS)
     page.goto("/page/folds")

@@ -499,6 +499,7 @@ The slide counter (`1 / N`) and a progress bar are shown in the control bar.
 | **Esc** | exit |
 
 There are no Prev/Next buttons.
+One presentation shows at a time: **p** (or Present) while one shows opens no second over it, so one Esc ends it (`openPresentation`).
 A reload reopens the presentation at the slide it was on (`localStorage` `zone_pres`, for that page only; Esc forgets it).
 
 ### How slides are drawn
