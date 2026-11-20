@@ -230,6 +230,16 @@ func TestClientKey(t *testing.T) {
 		{"127.0.0.1:1234", "1.1.1.1, 9.9.9.9", "9.9.9.9"}, // a proxy: the last entry is the one it added
 		{"127.0.0.1:1234", "", "127.0.0.1"},
 		{"[::1]:1234", "203.0.113.9", "203.0.113.9"},
+		// An entry with a port is its address: the port would make each
+		// connection a client of its own.
+		{"127.0.0.1:1234", "203.0.113.9:4711", "203.0.113.9"},
+		{"127.0.0.1:1234", "[2001:db8:1:2::9]:4711", "2001:db8:1:2::/64"},
+		{"127.0.0.1:1234", "[2001:db8:1:2::9]", "2001:db8:1:2::/64"},
+		{"127.0.0.1:1234", "::ffff:203.0.113.9", "203.0.113.9"},
+		// One that is no address is the hop's that appended it, not the
+		// next one to the left, which the client wrote.
+		{"127.0.0.1:1234", "203.0.113.9, unknown", "127.0.0.1"},
+		{"127.0.0.1:1234", "made-up-" + itoa(int(time.Now().UnixNano())), "127.0.0.1"},
 	} {
 		r := httptest.NewRequest("GET", "/", nil)
 		r.RemoteAddr = c.remote
@@ -245,6 +255,7 @@ func TestClientKey(t *testing.T) {
 	for _, c := range []struct{ remote, forwarded, want string }{
 		{"172.17.0.1:1234", "203.0.113.9", "203.0.113.9"},
 		{"172.17.0.1:1234", "6.6.6.6, 203.0.113.9, 192.168.1.5", "203.0.113.9"},
+		{"172.17.0.1:1234", "6.6.6.6, unknown, 192.168.1.5", "192.168.1.5"},
 		{"127.0.0.1:1234", "203.0.113.9", "127.0.0.1"}, // loopback isn't trusted once the setting is
 		{"10.0.0.2:1234", "1.1.1.1", "10.0.0.2"},
 	} {

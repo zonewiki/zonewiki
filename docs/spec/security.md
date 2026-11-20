@@ -476,7 +476,8 @@ Secrets are compared as bytes (`sameSecret`), so non-ASCII passwords work.
   an IPv6 address by its /64 (`network`: a client has that whole network to take addresses from, and each would have tries of its own),
   or,
   when that is a trusted proxy (`trusted-proxies` in the settings file; unset: loopback),
-  the last `X-Forwarded-For` entry that isn't itself a trusted proxy (the one the proxy appended; entries before it are the client's to make up).
+  the last `X-Forwarded-For` entry that isn't itself a trusted proxy (the one the proxy appended; entries before it are the client's to make up),
+  by its address alone: a port with it (`203.0.113.9:4711`, `[2001:db8::1]:4711`) is dropped, as it would make each connection a client of its own, and an entry that is no address (`unknown`) counts as the hop that appended it, not as the entry before it, which the client wrote (`forwardedAddr`).
   Anyone else's `X-Forwarded-For` is ignored: a client on the LAN, which reaches Zone without a proxy, could otherwise send a new one with every guess and never be throttled.
   On a Unix socket (`--addr unix:PATH`, A Unix socket in `docs/spec/deployment.md`) the peer is the proxy whatever `trusted-proxies` says (`onSocket`): it has no address for the setting to name, and only what is on the machine and may reach the socket's path connects there; without the header it counts as `127.0.0.1`.
   A peer on a private network that sends the header without being trusted (likely a proxy in a container network, `172.17.0.1`) is named once in the log with the `config set trusted-proxies` that trusts it; until then its clients count as one.

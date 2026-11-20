@@ -424,7 +424,9 @@ func sameSecret(given, secret string) bool {
 // Behind a reverse proxy every request comes from the proxy, so a trusted
 // one (trusted-proxies in the settings file; unset: loopback) names the
 // client in X-Forwarded-For: the last entry not itself a trusted proxy,
-// which a proxy appended (entries before it are the client's to make up).
+// which a proxy appended (entries before it are the client's to make up),
+// its address without a port; an entry that is no address counts as the
+// hop that appended it.
 // Anyone else's X-Forwarded-For is ignored: a client on the LAN could
 // otherwise send a new one with every guess and never be throttled.
 // On a Unix socket (--addr unix:PATH) the peer is the proxy, whatever
@@ -470,12 +472,33 @@ func clientAddr(r *http.Request) string {
 		if a == "" {
 			continue
 		}
-		key = a
-		if addr, err := netip.ParseAddr(a); err != nil || !trustedProxy(addr) {
+		addr, ok := forwardedAddr(a)
+		if !ok {
+			// No address ("unknown", a name): the hop before couldn't say
+			// who its client was, and what is left of the header is the
+			// client's to make up. Counted as that hop.
+			break
+		}
+		key = addr.String()
+		if !trustedProxy(addr) {
 			break
 		}
 	}
 	return key
+}
+
+// forwardedAddr: the address an X-Forwarded-For entry names, with or
+// without a port ("203.0.113.9:4711", "[2001:db8::1]:4711"): a port would
+// make each connection a client of its own. ok false for what is no
+// address.
+func forwardedAddr(entry string) (netip.Addr, bool) {
+	if addr, err := netip.ParseAddr(strings.TrimSuffix(strings.TrimPrefix(entry, "["), "]")); err == nil {
+		return addr.WithZone("").Unmap(), true
+	}
+	if ap, err := netip.ParseAddrPort(entry); err == nil {
+		return ap.Addr().WithZone("").Unmap(), true
+	}
+	return netip.Addr{}, false
 }
 
 // trustedProxy: addr is a proxy whose X-Forwarded-For counts.
