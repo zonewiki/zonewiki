@@ -753,6 +753,11 @@ class TestInitialTasks:
         assert titles("/page/two") == ["Milk", "Report"]
         write_page(wiki_dir, "mixed", "[[tasks: list=shop]]\n\n[[tasks: tag=x]]\n")
         assert titles("/page/mixed") == ["Later", "Loose", "Milk", "Report"]
+        # lists= is no embed's (until 2026-11 the Pinned view's params said it):
+        # several lists as one are a request's, ?lists= below.
+        write_page(wiki_dir, "several", "[[tasks: lists=shop|work]]\n")
+        assert titles("/page/several") == ["Later", "Loose", "Milk", "Report"]
+        assert "data-init-lists" not in client.get("/page/several", headers=HOST).get_data(as_text=True)
         # The route a list loads from later.
         api = lambda q: sorted(t["title"] for t in client.get("/api/tasks" + q, headers=HOST).get_json())
         assert api("?list=shop") == ["Milk"] and api("?list=inbox") == ["Loose"] and api("?lists=shop|work") == ["Milk", "Report"]

@@ -317,7 +317,7 @@ export function initTaskSettings(app) {
   const importTag = document.getElementById('task-import-tag' + sfx);
   const importError = document.getElementById('task-import-error' + sfx);
   const scope = { list: appEl.dataset.initList || '',
-                  ...(appEl.dataset.initMine ? { mine: '1' } : appEl.dataset.initLists ? { lists: appEl.dataset.initLists } : {}),
+                  ...(appEl.dataset.initMine ? { mine: '1' } : {}),
                   tag: appEl.dataset.initTag || '',
                   ...(appEl.dataset.initAssignee ? { assignee: appEl.dataset.initAssignee } : {}) };
   const n = count => `${count} task${count === 1 ? '' : 's'}`;

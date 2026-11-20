@@ -25,7 +25,6 @@ type tasksEmbedView struct {
 	Tag, View     string
 	DefaultView   string           // the tab the view opens on when nothing says: "open", "" Today
 	List          string           // the list it shows, as the user names it (a ref); "" none
-	Lists         string           // several lists as one (lists=): their refs, "|" between
 	Out           string           // My tasks: the lists left out of it, their refs, "|" between
 	Mine          string           // My tasks (mine=1): "assign" where assignment counts for the user, else "lists"
 	Group         string           // none, day, person, list (tasksGroups) or "": the embed doesn't say
@@ -91,14 +90,11 @@ func onPage(shown, embed TasksParams) TasksParams {
 }
 
 // paramsScope: which tasks a view with these params shows: My tasks
-// (mine=1: mineScope), one list's ref, several joined by "|" (lists=), or
-// "" for every task.
+// (mine=1: mineScope), one list's ref, or "" for every task. (Several
+// lists as one are a request's, ?lists=: queryScope.)
 func paramsScope(p TasksParams) string {
 	if isTrue(p.Get("mine")) {
 		return mineScope
-	}
-	if s := strings.TrimSpace(p.Get("lists")); s != "" {
-		return strings.ToLower(s)
 	}
 	return cleanList(p.Get("list"))
 }
@@ -233,8 +229,6 @@ func buildTasksEmbed(rq *Req, params TasksParams, instance int, headless bool, p
 		if mineAssigns(user) {
 			v.Mine = "assign"
 		}
-	} else if strings.Contains(scope, "|") {
-		v.Lists = scope
 	} else if shown {
 		v.List = list.Ref
 	} else if isInbox(scope, lists) {

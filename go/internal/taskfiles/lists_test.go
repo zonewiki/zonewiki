@@ -59,58 +59,28 @@ func TestRegistryHasNoVersion(t *testing.T) {
 	}
 }
 
-// "mine" was true, until 2026-11, for a user whose Pinned showed only their
-// own tasks: that reads as no settings of My tasks, and isn't written back.
-func TestRegistryMineWasAFlag(t *testing.T) {
-	r, ok := ParseRegistry([]byte(`{"pinned": ["a"], "mine": true}`))
-	if !ok || len(r.Mine) != 0 {
-		t.Fatalf("read as %v (ok %v)", r.Mine, ok)
-	}
-	if got := r.Encode(); strings.Contains(got, "mine") {
-		t.Errorf("written with the key:\n%s", got)
-	}
-}
-
-// A registry from before the first pinned list took the new tasks names
-// that list in "default", whatever the order of its pins: it is read as
-// the first pin, and written without the key.
-func TestRegistryDefaultIsTheFirstPin(t *testing.T) {
-	for text, want := range map[string][]string{
-		`{"pinned": ["a", "b"], "default": "b"}`: {"b", "a"},
-		`{"pinned": ["a", "b"], "default": "a"}`: {"a", "b"},
-		`{"pinned": ["a"], "default": "C"}`:      {"c", "a"},
-		`{"default": "b"}`:                       {"b"},
-		`{"pinned": ["a", "b"]}`:                 {"a", "b"},
-	} {
-		r, ok := ParseRegistry([]byte(text))
-		if !ok || !reflect.DeepEqual(r.Pinned, want) || !r.PinsSet {
-			t.Errorf("%s: pins %v (set %v), want %v", text, r.Pinned, r.PinsSet, want)
-		}
-		if got := r.Encode(); strings.Contains(got, "default") {
-			t.Errorf("%s: written with the key:\n%s", text, got)
-		}
-	}
-	if r, _ := ParseRegistry([]byte(`{"lists": []}`)); r.PinsSet || len(r.Pinned) != 0 {
-		t.Errorf("no pins read as set: %+v", r)
-	}
-}
-
 // A file edited by hand still reads: values of another kind as text, a
-// list without a name left out, a name twice once, unknown keys kept.
+// list without a name left out, a name twice once, unknown keys kept. Of
+// what Zones before 2026-11 wrote, "default" (the list new tasks went to)
+// is a key Zone doesn't know, and "mine": true no settings of My tasks.
 func TestRegistryReadLeniently(t *testing.T) {
 	r, ok := ParseRegistry([]byte(`{"lists": [
 		{"name": " Shop ", "limit": 8, "keep": true, "colour": "red", "view": ["x"]},
 		{"limit": "3"}, "junk", {"name": "shop", "view": "open"}, {"name": "b"}],
-		"pinned": ["Shop", "shop", 7], "default": 3, "all": "no", "theme": {"dark": true}}`))
+		"pinned": ["Shop", "shop", 7], "default": "b", "mine": true, "all": "no", "theme": {"dark": true}}`))
 	if !ok {
 		t.Fatal("not read")
+	}
+	if !reflect.DeepEqual(r.Pinned, []string{"shop", "7"}) || len(r.Mine) != 0 {
+		t.Errorf("pins %v, mine %v", r.Pinned, r.Mine)
 	}
 	want := `{
   "lists": [
     {"name": "shop", "limit": "8", "keep": "true", "colour": "red"},
     {"name": "b"}
   ],
-  "pinned": ["3", "shop", "7"],
+  "pinned": ["shop", "7"],
+  "default": "b",
   "theme": {"dark": true}
 }
 `
@@ -121,6 +91,9 @@ func TestRegistryReadLeniently(t *testing.T) {
 		if _, ok := ParseRegistry([]byte(bad)); ok {
 			t.Errorf("%q read as a registry", bad)
 		}
+	}
+	if r, _ := ParseRegistry([]byte(`{"lists": []}`)); r.PinsSet || len(r.Pinned) != 0 {
+		t.Errorf("no pins read as set: %+v", r)
 	}
 }
 

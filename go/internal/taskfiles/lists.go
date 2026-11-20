@@ -18,9 +18,10 @@ import (
 // a user's private ones in private/<user>/_tasks/, a group's in
 // groups/<group>/_tasks/. A list is a name and its
 // settings; a task is in one by naming it (Task.List), and a task's file
-// says which registry that name is in. A registry also holds whose pins it
-// is (pinned, default: a user's own in their file, the wiki's in the shared
-// one; mine: a user sees only their own tasks in Pinned) and, the shared one, the settings of All tasks.
+// says which registry that name is in. A registry also holds the pins
+// (pinned: a user's own in their file, the wiki's in the shared one), the
+// settings and the order of My tasks (mine, order) and, the shared one, the
+// settings of All tasks.
 
 // ListsName: the registry's file in a tasks folder.
 const ListsName = "lists.json"
@@ -81,13 +82,10 @@ func (r *Registry) Find(name string) *List {
 	return nil
 }
 
-// registryKeys: the keys Zone reads. "default" (until 2026-11 the list a new
-// task goes to, now the first pinned one) is read and no longer written;
-// "version" (until 2026-11-20 the registry's format, which .zone-format
-// says now) is no longer read or written.
-// "mine" holds the settings of My tasks; until 2026-11 it was true for a
-// user whose Pinned showed only their own tasks, which reads as no settings.
-var registryKeys = map[string]bool{"version": true, "lists": true, "pinned": true, "default": true, "mine": true, "all": true, "order": true}
+// registryKeys: the keys Zone reads; any other is kept as it is. "version"
+// (until 2026-11-20 the registry's format, which .zone-format says now) is
+// no longer read or written.
+var registryKeys = map[string]bool{"version": true, "lists": true, "pinned": true, "mine": true, "all": true, "order": true}
 
 // textMap: an object's members that are text, a number or a bool, as text.
 func textMap(raw json.RawMessage) map[string]string {
@@ -137,11 +135,6 @@ func ParseRegistry(raw []byte) (*Registry, bool) {
 			}
 		}
 		r.Lists = append(r.Lists, l)
-	}
-	// A registry from before the first pinned list was the default one names
-	// it in "default", whatever the order of its pins: it goes first.
-	if first := listName(o.Str("default")); first != "" {
-		r.Pinned, r.PinsSet = []string{first}, true
 	}
 	for _, name := range jsonobj.TextList(o["pinned"]) {
 		if name = listName(name); name != "" && !slices.Contains(r.Pinned, name) {

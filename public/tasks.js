@@ -400,7 +400,6 @@ const LIMIT = parseInt(appEl?.dataset.initLimit, 10) || null;
 // that name; data-lists has those the user sees, with which are private
 // (theirs alone, and so are the tasks in them).
 const initList = cleanList(appEl?.dataset.initList);
-const initLists = (appEl?.dataset.initLists || '').split('|').filter(Boolean);
 // My tasks: 'assign' where assignment counts for the user, else 'lists';
 // and the lists left out of it.
 const initMine = appEl?.dataset.initMine || '';
@@ -501,15 +500,12 @@ function inScope(t) {
   if (initMine) {
     return TasksCore.inMine(t, initOut.includes(taskList(t)), { me: people.me, assigns: initMine === 'assign' });
   }
-  if (initLists.length) return initLists.includes(taskList(t));
   if (inboxView) return !t.list;
   return !initList || taskList(t) === initList;
 }
 // The scope of the server's closed counts, matching inScope.
 function scopeQuery() {
-  return initMine ? '?mine=1'
-    : initLists.length ? `?lists=${encodeURIComponent(initLists.join('|'))}`
-    : initList ? `?list=${encodeURIComponent(initList)}` : '';
+  return initMine ? '?mine=1' : initList ? `?list=${encodeURIComponent(initList)}` : '';
 }
 // The list a new task starts in here: the view's own, else none: the Inbox.
 function newTaskList() { return inboxView ? '' : initList; }

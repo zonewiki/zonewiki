@@ -857,23 +857,6 @@ def test_rename_tag_under_a_guide_needs_its_id(client, shop):
     assert err and text.startswith("Nothing was written") and tasks_file(shop)[0]["tags"][0] == "shop"
 
 
-
-def test_a_registry_naming_its_default_list_keeps_it_first(client, shop):
-    """Until 2026-11 "default" named the list a new task goes to, whatever
-    the order of the pins: it reads as the first pin (which takes no new
-    task any more: it is the first pill), and the next write drops the key
-    and keeps the order."""
-    assert client.post("/tasks/new-list", data={"name": "work"}, headers=HOST).status_code == 302
-    registry = shop / "_tasks/lists.json"
-    registry.write_text(registry.read_text().replace("\n}\n", ',\n  "pinned": ["shop", "work"],\n  "default": "work"\n}\n'))
-    html = client.get("/tasks", headers=HOST).get_data(as_text=True)
-    assert "data-tasks-list" not in html
-    assert html.index('data-place="list:work"') < html.index('data-place="list:shop"')
-    assert client.post("/tasks/new-list", data={"name": "home"}, headers=HOST).status_code == 302
-    text = registry.read_text()
-    assert '"pinned": ["work", "shop", "home"]' in text and "default" not in text   # the new list pinned, last
-
-
 # ── Undo: changes of pages taken back whole (undoChangesOp) ─────────────────
 
 def undo(client, door, *shas, token=TOKEN):

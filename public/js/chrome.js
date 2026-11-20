@@ -277,12 +277,12 @@ function showCount(el, n) {
 // note of the word.
 // What the page's task lists hold, for the word: their lists' refs, ","
 // between; '' when one of them holds more than a list (My tasks, All tasks,
-// a tag's view, several lists as one): then any write the user sees counts.
+// a tag's view): then any write the user sees counts.
 export function pageScopes() {
   const scopes = [];
   for (const app of document.querySelectorAll('.tasks-app:not([data-headless])')) {
     const d = app.dataset;
-    if (d.initMine || d.initLists || !d.initList) return '';
+    if (d.initMine || !d.initList) return '';
     scopes.push(d.initList);
   }
   return scopes.join(',');
