@@ -881,7 +881,8 @@ class TestDeletePage:
         resp = client.post("/delete/gone", data={"next": "/page/gone"}, headers=HOST)
         assert resp.headers["Location"] == "/page/index"
 
-    @pytest.mark.parametrize("target", ["//evil.example", "/\\evil.example", "https://evil.example"])
+    @pytest.mark.parametrize("target", ["//evil.example", "/\\evil.example", "https://evil.example",
+                                        "/\t/evil.example", "/\n/evil.example", "/ /evil.example", "/x\\..\\evil"])
     def test_delete_next_rejects_offsite_redirect(self, client, wiki_dir, target):
         # Regression: "//host" and "/\\host" start with "/" but browsers
         # resolve them to another origin (open redirect).
@@ -1717,9 +1718,12 @@ class TestAuth:
                                 data={"password": "testpassword"}, headers=HOST)
         assert resp.headers["Location"] == "/page/foo"
 
-    @pytest.mark.parametrize("target", ["//evil.example", "/\\evil.example", "https://evil.example"])
+    @pytest.mark.parametrize("target", ["//evil.example", "/\\evil.example", "https://evil.example",
+                                        "/\t/evil.example", "/\n/evil.example", "/ /evil.example", "/x\\..\\evil"])
     def test_login_next_rejects_offsite_redirect(self, auth_client, target):
-        # Regression: open redirect via protocol-relative next URL.
+        # Regression: open redirect via protocol-relative next URL, and one a
+        # browser makes of it: it drops tabs and line breaks ("/\t/evil" is
+        # "//evil") and reads a backslash as a slash.
         resp = auth_client.post("/login", query_string={"next": target},
                                 data={"password": "testpassword"}, headers=HOST)
         assert resp.headers["Location"] == "/"

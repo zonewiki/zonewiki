@@ -402,6 +402,13 @@ The same trick without a frame, a page's `<style>` laying one of Zone's own dial
 
 ## Untrusted input
 
+### A redirect goes only to Zone's own paths
+
+Where a request says where to go after (the login's `?next=`, Delete's `next`), Zone goes there only when it is a path of its own (`isLocalPath`): it starts with one `/`, and has no control character, whitespace or backslash anywhere.
+A browser reads `//elsewhere.example` as another site, drops tabs and line breaks from an address (`/<tab>/elsewhere.example` is `//elsewhere.example`) and reads `\` as `/`, so a link to the login page with such a `next` would send whoever signs in on to a page that only looks like Zone's.
+Anything else goes to `/` (Delete's to the home page).
+The other redirects build their target from a page's or a list's name (`pathURL`, `listHref`), and OAuth's answer goes only to a redirect URI its client registered (OAuth for `/mcp`, above).
+
 ### A page's name is never a pattern to git
 
 A page may be called anything a file may (`*`,

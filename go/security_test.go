@@ -204,6 +204,24 @@ func TestGuessesInADay(t *testing.T) {
 	}
 }
 
+// A redirect goes only to a path of Zone's own (the login's next,
+// Delete's): not to one a browser reads as another site's, after it drops
+// tabs and line breaks from the address and reads a backslash as a slash.
+func TestIsLocalPath(t *testing.T) {
+	for _, u := range []string{"/", "/page/foo", "/page/a-b?x=1#h", "/oauth/authorize?client_id=x&state=%20"} {
+		if !isLocalPath(u) {
+			t.Errorf("%q isn't local", u)
+		}
+	}
+	for _, u := range []string{"", "page/foo", "//evil.example", "/\\evil.example", "https://evil.example",
+		"/\t/evil.example", "/\n/evil.example", "/\r/evil.example", "/ /evil.example", "/\u00a0/evil.example",
+		"/x\\..\\evil", "/\x7f/evil.example", "/\x00"} {
+		if isLocalPath(u) {
+			t.Errorf("%q is local", u)
+		}
+	}
+}
+
 func TestClientKey(t *testing.T) {
 	configWiki(t, "")
 	for _, c := range []struct{ remote, forwarded, want string }{

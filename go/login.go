@@ -6,12 +6,18 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"unicode"
 )
 
-// isLocalPath: url is a same-origin path. "//host" and "/\host" start with
-// "/" but browsers resolve them to another origin, so they don't count.
+// isLocalPath: url is a same-origin path, where a redirect to it may go
+// (the login's next, Delete's). "//host" starts with "/" but browsers
+// resolve it to another origin, so it doesn't count; nor does a path with
+// a control character, whitespace or a backslash anywhere: a browser drops
+// tabs and line breaks from an address ("/\t/host" is "//host") and reads
+// "\" as "/" ("/\host").
 func isLocalPath(u string) bool {
-	return strings.HasPrefix(u, "/") && !strings.HasPrefix(u, "//") && !strings.HasPrefix(u, "/\\")
+	return strings.HasPrefix(u, "/") && !strings.HasPrefix(u, "//") &&
+		!strings.ContainsFunc(u, func(c rune) bool { return c < 0x20 || c == 0x7f || c == '\\' || unicode.IsSpace(c) })
 }
 
 func login(w http.ResponseWriter, r *http.Request) {

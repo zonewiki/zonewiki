@@ -139,7 +139,7 @@ For an admin `/groups` also lists every other group, what each includes, the for
 
 | Method | Path                  | Description                                     |
 |--------|-----------------------|-------------------------------------------------|
-| GET, POST | `/login`           | The login page and its form (`username` with users, `password`); `?next=` the local path to go to after; wrong passwords are throttled (429); without a login a redirect to `/` |
+| GET, POST | `/login`           | The login page and its form (`username` with users, `password`); `?next=` the local path to go to after (A redirect goes only to Zone's own paths in `docs/spec/security.md`); wrong passwords are throttled (429); without a login a redirect to `/` |
 | POST   | `/logout`             | Sign out: the session ends wherever a copy of its cookie is (`.zone/signed-out`); redirects to `/login` |
 | GET, POST | `/setup`           | First run: a wiki other devices reach with no login sets one here, then is signed in (First run in `docs/spec/security.md`); once there is a login, a redirect to `/` |
 | GET, POST | `/signup`          | Sign-up (`email`): mails a link that makes the account (Sign-up in `docs/spec/users.md`); 404 while sign-up is off, a redirect to `/` for whoever is signed in |
