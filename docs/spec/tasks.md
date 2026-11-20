@@ -1759,6 +1759,7 @@ Until there is a task of that id (the dialog is open), its files are who put the
 Made, the task's readers see them; created with an id whose folder is another's, or a deleted task's, the task is refused ("There is a task with this id already").
 Once there is no task of that id any more (deleted for good; the files stay, for the undo), they are no one's, its maker's neither, until the undo brings the task back.
 Never a visitor's.
+A task's id in another case is no task's (`Find` matches it, `seesTaskFiles` refuses it): on a file system that ignores case (macOS, Windows) it would name the task's folder, so nobody reads or puts a file by it, and no task restored or imported takes an id another task has in any case (`IDsLocked`).
 An assistant's `upload_file` takes a task's id as `page`.
 A file's history is its task's readers' (`canSeePath`).
 

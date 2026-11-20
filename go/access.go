@@ -130,7 +130,9 @@ func seesTaskFiles(user asker, id string) bool {
 		return false
 	}
 	if t := taskFiles.Find(id); t != nil {
-		return canSeeTask(user, t)
+		// An id in another case is no task's (its folder is another, or on a
+		// file system that ignores case the task's: no way in either way).
+		return t.ID == id && canSeeTask(user, t)
 	}
 	return unsavedBy(id) == user.Name && user.HasPrivate()
 }

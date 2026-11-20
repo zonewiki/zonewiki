@@ -428,12 +428,12 @@ func apiRestore(w http.ResponseWriter, r *http.Request) error {
 			continue
 		}
 		t := sanitizeSnapshot(snap)
-		if t == nil || existing[t.ID] {
+		if t == nil || existing[strings.ToLower(t.ID)] {
 			continue
 		}
 		checkArrived(user.Name, t)
 		general = placeSnapshot(user, t, snap, lists) || general
-		existing[t.ID] = true
+		existing[strings.ToLower(t.ID)] = true
 		if !t.IsOpen() {
 			closed = append(closed, t)
 		} else {
@@ -569,7 +569,7 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 		if id, _ := jsonobj.As[string](snap["id"]); !importIDRE.MatchString(id) {
 			t.ID = uuid4()
 		}
-		if existing[t.ID] {
+		if existing[strings.ToLower(t.ID)] {
 			skipped++
 			continue
 		}
@@ -578,7 +578,7 @@ func apiImport(w http.ResponseWriter, r *http.Request) error {
 		if !settings().isAdmin(user.Name) {
 			checkArrived(user.Name, t)
 		}
-		existing[t.ID] = true
+		existing[strings.ToLower(t.ID)] = true
 		if lost {
 			unassigned++
 		}

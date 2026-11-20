@@ -756,6 +756,25 @@ def test_a_deleted_tasks_files_are_no_ones(client, wiki):
     assert client.get(url, headers=HOST).data == PNG
 
 
+def test_a_tasks_id_in_another_case_is_no_way_in(client, wiki):
+    """On a file system that ignores case, a task's id in capitals names its
+    files' folder: it is no task's id, so nobody puts a file there or reads
+    one by it, and no task restored or imported takes it."""
+    upper = IDS["open"].upper()
+    sign_in(client, "alice")
+    assert upload(client, task=IDS["open"]).status_code == 200
+    for who in ("alice", "bob"):
+        sign_in(client, who)
+        assert upload(client, task=upper, filename="x.png").status_code == 404, who
+        assert client.get(f"/_tasks/files/{upper}/_assets/offer.png", headers=HOST).status_code == 404
+    assert not (wiki / f"_tasks/files/{upper}").exists()
+    sign_in(client, "alice")
+    [restored] = client.post("/api/tasks/restore", json={"tasks": [{"title": "Twin", "id": upper}]}, headers=HOST).get_json() or [None]
+    assert restored is None
+    out = client.post("/api/tasks/import", json={"file": [{"title": "Twin", "id": upper}], "list": "team"}, headers=HOST).get_json()
+    assert out["added"] == 0 and out["skipped"] == 1
+
+
 def test_without_users_a_tasks_file_is_with_the_others(client, git_wiki_dir):
     made = client.post("/api/tasks", json={"title": "Alone"}, headers=HOST).get_json()
     assert upload(client, task=made["id"]).get_json()["url"] == "/_assets/offer.png"

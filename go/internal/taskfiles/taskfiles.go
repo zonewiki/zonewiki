@@ -783,11 +783,15 @@ func (s *Store) EveryLocked() []*Task {
 
 // Find: the task id among every owner's (Task.Owner says whose; the caller
 // asks who may see it), nil for none: the open and this month's closed ones
-// first, the archives only for one that isn't there.
+// first, the archives only for one that isn't there. Without one of that id
+// as it is, one whose id is it in another case: a folder named by the id is
+// that task's on a file system that ignores case (macOS, Windows), so who
+// asks by it is asked about that task.
 func (s *Store) Find(id string) *Task {
 	s.view.RLock()
 	defer s.view.RUnlock()
 	owners := s.EveryOwner()
+	var folded *Task
 	for _, read := range []func() []*Task{
 		func() []*Task { return eachOwner(owners, s.lenient(Everyone, s.openOf)) },
 		func() []*Task { return eachOwner(owners, s.lenient(Everyone, s.closedOf)) },
@@ -797,17 +801,22 @@ func (s *Store) Find(id string) *Task {
 			if t.ID == id {
 				return t
 			}
+			if folded == nil && strings.EqualFold(t.ID, id) {
+				folded = t
+			}
 		}
 	}
-	return nil
+	return folded
 }
 
-// IDsLocked: the ids of every owner's tasks, so a restored task never takes
-// one another file has.
+// IDsLocked: the ids of every owner's tasks, in lower case, so a restored
+// or imported task never takes one another file has, in any case (their
+// files' folders would be one on a file system that ignores case): look an
+// id up in lower case.
 func (s *Store) IDsLocked() map[string]bool {
 	ids := map[string]bool{}
 	for _, t := range s.EveryLocked() {
-		ids[t.ID] = true
+		ids[strings.ToLower(t.ID)] = true
 	}
 	return ids
 }
