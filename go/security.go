@@ -203,6 +203,11 @@ func contentPolicy(h http.Header) {
 	if h.Get("Referrer-Policy") == "" {
 		h.Set("Referrer-Policy", "same-origin")
 	}
+	// Nor does the browser look up the host names a page links to before
+	// they are followed (Chromium may, on plain http): the name asked for
+	// can carry what the page's writer wants sent, as <link
+	// rel=dns-prefetch> could (defusedTagRE).
+	h.Set("X-DNS-Prefetch-Control", "off")
 	if strings.Contains(h.Get("Content-Type"), "text/html") {
 		h.Set("Cache-Control", "no-store")
 	}

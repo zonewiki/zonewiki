@@ -316,6 +316,7 @@ Every response carries these headers:
 | `X-Frame-Options` | `DENY` (an upload: `SAMEORIGIN`) | The same, for browsers without CSP |
 | `X-Content-Type-Options` | `nosniff` | A JSON or text response run as a script |
 | `Referrer-Policy` | `same-origin` | Another site told the page's address |
+| `X-DNS-Prefetch-Control` | `off` | The browser looking up the host names a page links to before they are followed (Chromium may on plain `http://`), a name that can carry what the page's writer wants sent |
 | `Cache-Control` (HTML) | `no-store` | A page kept by the browser |
 
 Don't add a source to the policy.
@@ -386,6 +387,7 @@ Inline styles stay (a page's own `style=`, KaTeX's, Mermaid's): a `url()` in one
 
 - **A markdown image on another host is shown as a link to it** (`blockedImage` in `go/markdown.go`: `<a class="external-image">` with the alt text, or the address), not as a broken image; raw HTML naming another host is just not loaded.
 - `<link>` in a page's raw HTML shows as text (`defusedTagRE`): `rel=dns-prefetch` makes the browser look a host name up, which no policy stops.
+  And every response says `X-DNS-Prefetch-Control: off`, so the browser doesn't look up the hosts of a page's links on its own either.
 - `Referrer-Policy: same-origin` on every response: what a page does load from elsewhere isn't told which page asked.
 - **`external-content`** (the settings file) names hosts images, media and frames may come from all the same: `upload.wikimedia.org, *.example.org`, or `*` for any, which is how Zone was before (`externalRE`: host names only, so the setting can't add a rule to the policy; `Settings.loadsFrom`).
   Scripts, styles and fonts never come from elsewhere.

@@ -2038,6 +2038,11 @@ class TestProduction:
         assert rules["frame-src"] == "'self'" and rules["font-src"] == "'self' data:"
         assert rules["style-src"] == "'self' 'unsafe-inline'"
         assert resp.headers["Referrer-Policy"] == "same-origin"
+        # Nor does a browser look up the host names a page links to before
+        # they are followed (Chromium may on plain http): the name asked
+        # for can carry what the page's writer wants sent.
+        for path in ("/page/index", "/tasks", "/api/tasks", "/login", "/public/zonewiki.js", "/_assets/nope.png"):
+            assert client.get(path, headers=HOST).headers["X-DNS-Prefetch-Control"] == "off", path
         # A markdown image elsewhere is a link to it; Zone's own and pasted ones stay images.
         html = preview(client, "![A cat|200](https://elsewhere.example/cat.png?q=1) ![](//elsewhere.example/x.png) "
                                "![mine](/_assets/x.png) ![rel](pic.png) ![pasted](data:image/png;base64,AA)")
