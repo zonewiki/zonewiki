@@ -273,7 +273,7 @@ A page that isn't there (deleted) is named as `read_guides` names a page not yet
 
 Zone's own documentation (`go/manual.go`), so the model answers how-to questions about Zone (how to rename a task list's tabs, a setting, the query syntax) from the docs instead of guessing.
 The docs are the manual, `docs/manual/*.md` (topic `manual` for its contents, `README.md`, and `manual/<page>` for a page, in reading order: Help in `docs/spec/routes.md`), `README.md` (topic `readme`) and `docs/spec/*.md` (topic = file name), all but `testing.md`;
-the `Containerfile` copies them next to the browser code (`/app/public`), and `docsRoot` finds them there or in the checkout; without them the tool errors.
+the binary carries them, and `docsRoot` takes a checkout's instead (What the binary holds in `docs/spec/deployment.md`); with `--docs` naming a folder without them, the tool errors.
 
 - With `query`, the best passages by BM25 (`manualFind`: sections split by `chunkSections` into pieces of at most `manualChunkChars`, 1500, the doc's title, topic and heading weighted like a page title; the index is rebuilt when a doc file changes), each as `Title › heading` with its `topic:` and `heading:`.
   The manual's best passages take the first half of the places (rounded up), the README's and the spec's the rest, each filling what the other leaves: the manual answers in a user's words, the spec has every rule.

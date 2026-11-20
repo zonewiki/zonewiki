@@ -1,10 +1,13 @@
 // Files served as they are: the browser code in public/ (gzipped and kept
-// by the browser where they don't change), and a file sent with its type.
+// by the browser where they don't change), from a folder or the copy built
+// into the binary (files.go), and a file sent with its type.
 package main
 
 import (
 	"bytes"
 	"compress/gzip"
+	"io"
+	"io/fs"
 	"mime"
 	"net/http"
 	"os"
@@ -21,16 +24,17 @@ import (
 // 5.5 MB, 1.5 MB gzipped).
 func servePublic(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("path")
+	files := publicFiles()
 	if strings.HasPrefix(name, "vendor/") {
 		w.Header().Set("Cache-Control", "public, max-age=86400")
 		if ext := filepath.Ext(name); ext == ".js" || ext == ".css" {
 			w.Header().Set("Vary", "Accept-Encoding")
-			if acceptsGzip(r) && serveGzipped(w, r, publicDir, name) {
+			if acceptsGzip(r) && serveGzipped(w, r, files, name) {
 				return
 			}
 		}
 	}
-	serveFile(w, r, publicDir, name, "")
+	serveFS(w, r, files, name, "")
 }
 
 // acceptsGzip: the request's Accept-Encoding takes gzip (not with q=0).
@@ -45,7 +49,8 @@ func acceptsGzip(r *http.Request) bool {
 	return false
 }
 
-// gzipped: files gzipped once, by path, until the file changes.
+// gzipped: the browser code's files gzipped once, by name, until the file
+// changes (its time or size).
 var gzipped = struct {
 	sync.Mutex
 	m map[string]gzipEntry
@@ -53,25 +58,26 @@ var gzipped = struct {
 
 type gzipEntry struct {
 	mtime time.Time
+	size  int64
 	data  []byte
 }
 
-// serveGzipped serves name from dir gzipped (as serveFile, a file inside
-// dir); false when there is no such file, for serveFile to answer.
-func serveGzipped(w http.ResponseWriter, r *http.Request, dir, name string) bool {
-	path, ok := fileIn(dir, name)
-	if !ok {
+// serveGzipped serves name from files gzipped (as serveFS, a file inside
+// them); false when there is no such file, for serveFS to answer.
+func serveGzipped(w http.ResponseWriter, r *http.Request, files fs.FS, name string) bool {
+	if !validName(name) {
 		return false
 	}
-	st, err := os.Stat(path)
+	st, err := fs.Stat(files, name)
 	if err != nil || st.IsDir() {
 		return false
 	}
+	mtime := modTime(st)
 	gzipped.Lock()
-	e, ok := gzipped.m[path]
+	e, ok := gzipped.m[name]
 	gzipped.Unlock()
-	if !ok || !e.mtime.Equal(st.ModTime()) {
-		raw, err := os.ReadFile(path)
+	if !ok || !e.mtime.Equal(mtime) || e.size != st.Size() {
+		raw, err := fs.ReadFile(files, name)
 		if err != nil {
 			return false
 		}
@@ -79,9 +85,9 @@ func serveGzipped(w http.ResponseWriter, r *http.Request, dir, name string) bool
 		zw, _ := gzip.NewWriterLevel(&buf, gzip.BestCompression)
 		zw.Write(raw)
 		zw.Close()
-		e = gzipEntry{st.ModTime(), buf.Bytes()}
+		e = gzipEntry{mtime, st.Size(), buf.Bytes()}
 		gzipped.Lock()
-		gzipped.m[path] = e
+		gzipped.m[name] = e
 		gzipped.Unlock()
 	}
 	w.Header().Set("Content-Type", mime.TypeByExtension(filepath.Ext(name)))
@@ -90,33 +96,39 @@ func serveGzipped(w http.ResponseWriter, r *http.Request, dir, name string) bool
 	return true
 }
 
-// fileIn: the path of name (slash-separated) inside dir; false for a name
-// that could reach outside it (.., an empty part, a NUL).
-func fileIn(dir, name string) (string, bool) {
+// validName: name (slash-separated) is a path inside a folder: false for
+// one that could reach outside it (.., an empty part, a NUL).
+func validName(name string) bool {
 	for _, part := range strings.Split(name, "/") {
 		if part == "" || part == "." || part == ".." || strings.ContainsRune(part, 0) {
-			return "", false
+			return false
 		}
 	}
-	return filepath.Join(dir, filepath.FromSlash(name)), true
+	return true
 }
 
 // serveFile serves name from dir (a file, never a folder or anything
 // outside dir); a disposition ("attachment") makes it a download.
 func serveFile(w http.ResponseWriter, r *http.Request, dir, name, disposition string) {
-	path, ok := fileIn(dir, name)
-	if !ok {
+	serveFS(w, r, os.DirFS(dir), name, disposition)
+}
+
+// serveFS serves name from files, a folder's (os.DirFS) or the binary's,
+// as serveFile does.
+func serveFS(w http.ResponseWriter, r *http.Request, files fs.FS, name, disposition string) {
+	if !validName(name) {
 		http.NotFound(w, r)
 		return
 	}
-	f, err := os.Open(path)
+	f, err := files.Open(name)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
 	defer f.Close()
 	st, err := f.Stat()
-	if err != nil || st.IsDir() {
+	content, seeks := f.(io.ReadSeeker) // a folder's files and the binary's all do
+	if err != nil || st.IsDir() || !seeks {
 		http.NotFound(w, r)
 		return
 	}
@@ -124,5 +136,5 @@ func serveFile(w http.ResponseWriter, r *http.Request, dir, name, disposition st
 		w.Header().Set("Content-Disposition",
 			mime.FormatMediaType(disposition, map[string]string{"filename": filepath.Base(name)}))
 	}
-	http.ServeContent(w, r, name, st.ModTime(), f)
+	http.ServeContent(w, r, name, modTime(st), content)
 }

@@ -166,7 +166,7 @@ For an admin `/groups` also lists every other group, what each includes, the for
 
 | Method | Path                  | Description                                     |
 |--------|-----------------------|-------------------------------------------------|
-| GET    | `/public/<file>`      | Zone's browser code, styles and vendored libraries, as they are in `public/` (no login needed) |
+| GET    | `/public/<file>`      | Zone's browser code, styles and vendored libraries, as they are in `public/` or the binary's copy of it (What the binary holds in `docs/spec/deployment.md`; no login needed) |
 | GET    | `/api/version`        | `{ version, build }`: Zone's version and build (see Version in `docs/spec/deployment.md`) |
 | GET    | `/api/health`         | `{ ok: true }`, or 503 `{ error }` while the settings file's last change wasn't taken (Reloading in `docs/spec/users.md`); no login needed, for `zonewiki health` |
 | GET    | `/help`               | Help: Zone's manual, its contents first (see Help below) |
@@ -184,7 +184,8 @@ The reading order is the contents' (`docs/manual/README.md`): the pages in the o
 Links between the docs are written for the files (`tasks.md#views`, `../spec/users.md`, `../screenshots/page.png`, as they read on GitHub) and pointed at `/help/…` when shown.
 It is linked from the user menu, the search modal's page list (Help, beside Tasks and Notes) and the shortcuts dialog (`?`).
 Everyone who reaches the wiki reaches it, a public wiki's visitors too: it holds nothing of the wiki's.
-Without the docs (a binary run on its own), `/help` says so.
+The docs are the checkout's, or the binary's own copy of them (What the binary holds in `docs/spec/deployment.md`), so a binary run on its own has Help too;
+with `--docs` naming a folder without them, `/help` says they aren't installed.
 
 `zonewiki manual DIR` writes the same documents out as HTML fragments for a website (zonewiki.com's `/docs`): each document's body without a page around it, the links between them relative, the screenshots, and `pages.json` listing them with their titles in reading order.
 The manual is also what `zone_help` searches first (`zone_help` in `docs/spec/mcp.md`).

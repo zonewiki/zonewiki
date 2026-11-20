@@ -161,7 +161,7 @@ case "${1:-up}" in
     # ZONE_TEST_RACE=1: the server the API tests start is built with the race
     # detector too (tests/goserver.py); several times slower.
     in_image "$image" ${ZONE_TEST_RACE:+-e ZONE_TEST_RACE=1} -- sh -c \
-      '(cd go && f=$(gofmt -l .) && if [ -n "$f" ]; then echo "Not gofmt-formatted (gofmt -w them):" $f >&2; exit 1; fi &&
+      '(cd go && f=$(gofmt -l . ../zonefiles.go) && if [ -n "$f" ]; then echo "Not gofmt-formatted (gofmt -w them):" $f >&2; exit 1; fi &&
          go vet ./... && CGO_ENABLED=1 go test -race ./...) || exit 1
        for a in "$@"; do case "$a" in tests*) paths=1;; esac; done
        [ -n "$paths" ] || set -- tests --ignore=tests/e2e --ignore=tests/test_tasks_core.py "$@"

@@ -1,7 +1,7 @@
-# Zone's image: the server (one Go binary), the browser code it serves, and
-# with ZONE_SEMANTIC_SEARCH=on the model and onnxruntime that run semantic
-# search. Three stages, so a change to the code rebuilds neither the model
-# layer nor the toolchain's.
+# Zone's image: the server (one Go binary, with the browser code and the docs
+# it serves built in), and with ZONE_SEMANTIC_SEARCH=on the model and
+# onnxruntime that run semantic search. Three stages, so a change to the code
+# rebuilds neither the model layer nor the toolchain's.
 
 # The base image, by digest (the tag's multi-arch index): a tag can be moved
 # to other content, a digest can't. It doesn't follow the tag's updates, so
@@ -12,7 +12,8 @@ ARG UBUNTU=ubuntu:26.04@sha256:065aa8626841f16057b78b027b464cd59c4fac36c204c72dc
 
 # ── Build: the server from go/ ───────────────────────────────────────────────
 # With cgo (a C compiler): semantic search loads onnxruntime with dlopen, so
-# the binary links only libc either way.
+# the binary links only libc either way. Zone's own files (zonefiles.go at the
+# repository's root: the browser code, the docs, the licenses) are built in.
 FROM ${UBUNTU} AS build
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -37,10 +38,19 @@ RUN case "$TARGETARCH" in \
  && rm /tmp/go.tgz
 ENV PATH=/usr/local/go/bin:$PATH GOTOOLCHAIN=local CGO_ENABLED=1
 
-WORKDIR /src
-# The modules first (go.sum checks them), so a code change doesn't fetch them again.
+WORKDIR /src/go
+# The modules first (go.sum checks them), so a code change doesn't fetch them
+# again; with the root's go.mod, the module of Zone's own files, which
+# go/go.mod takes from ../.
+COPY go.mod /src/
 COPY go/go.mod go/go.sum ./
 RUN go mod download
+# What zonefiles.go builds into the binary (its go:embed line).
+COPY zonefiles.go README.md LICENSE THIRD_PARTY_LICENSES /src/
+COPY public/ /src/public/
+COPY docs/manual/ /src/docs/manual/
+COPY docs/spec/ /src/docs/spec/
+COPY docs/screenshots/*.png /src/docs/screenshots/
 COPY go/ ./
 RUN go build -trimpath -ldflags="-s -w" -o /zonewiki .
 
@@ -106,13 +116,9 @@ RUN ldconfig
 ENV ZONE_MODEL_DIR=/opt/zonewiki-model
 
 WORKDIR /app
-COPY public/ public/
-# Zone's documentation, for Help (/help) and the MCP tool zone_help (found next to public/).
-COPY README.md ./
-COPY docs/manual/ docs/manual/
-COPY docs/spec/ docs/spec/
-COPY docs/screenshots/*.png docs/screenshots/
-# The licenses of what the image holds (public/vendor/ has the rest).
+# The browser code and the docs (Help, zone_help) are the binary's own copies:
+# no public/ beside it. The licenses of what the image holds, to read
+# (zonewiki licenses prints them, the vendored libraries' too).
 COPY LICENSE THIRD_PARTY_LICENSES ./
 COPY --from=semantic /opt/onnxruntime-licenses/ licenses/onnxruntime/
 COPY --from=build /zonewiki ./zonewiki

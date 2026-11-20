@@ -112,4 +112,4 @@ Found a bug or have an idea? Open an issue; there are templates for both.
 Copyright (C) 2026 Gernot Klingler.
 Zone is free software under the [GNU Affero General Public License](LICENSE), version 3 or later (`AGPL-3.0-or-later`).
 Using it, also in a company, asks nothing of you. If you change it and others use your version over a network, offer them its source (point `sourceURL` in `go/config.go` at your copy).
-Third-party components keep their own licenses: see [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES) and the license files in `public/vendor/`.
+Third-party components keep their own licenses: see [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES) and the license files in `public/vendor/` (`zonewiki licenses` prints them all).

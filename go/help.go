@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path"
@@ -39,25 +40,25 @@ var helpNameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 // any it doesn't link, by name.
 func manualPages() []helpDoc {
 	root := docsRoot()
-	if root == "" {
+	if root == nil {
 		return nil
 	}
-	dir := filepath.Join(root, "docs", "manual")
-	readme := filepath.Join(dir, "README.md")
-	if !exists(readme) {
+	dir := "docs/manual"
+	readme := path.Join(dir, "README.md")
+	if !fsExists(root, readme) {
 		return nil
 	}
 	out := []helpDoc{{"", readme}}
 	seen := map[string]bool{}
-	text, _ := readText(readme)
+	text, _ := readDoc(readme)
 	for _, m := range manualLinkRE.FindAllStringSubmatch(text, -1) {
 		name := m[1]
-		if p := filepath.Join(dir, name+".md"); !seen[name] && exists(p) {
+		if p := path.Join(dir, name+".md"); !seen[name] && fsExists(root, p) {
 			seen[name] = true
 			out = append(out, helpDoc{name, p})
 		}
 	}
-	paths, _ := filepath.Glob(filepath.Join(dir, "*.md"))
+	paths, _ := fs.Glob(root, path.Join(dir, "*.md"))
 	sort.Strings(paths)
 	for _, p := range paths {
 		name := strings.TrimSuffix(filepath.Base(p), ".md")
@@ -73,10 +74,10 @@ var manualLinkRE = regexp.MustCompile(`\]\(([a-z0-9][a-z0-9-]*)\.md(?:#[^)]*)?\)
 // specDocs: the spec's files, by name.
 func specDocs() []helpDoc {
 	root := docsRoot()
-	if root == "" {
+	if root == nil {
 		return nil
 	}
-	paths, _ := filepath.Glob(filepath.Join(root, "docs", "spec", "*.md"))
+	paths, _ := fs.Glob(root, "docs/spec/*.md")
 	sort.Strings(paths)
 	var out []helpDoc
 	for _, p := range paths {
@@ -108,13 +109,13 @@ func findHelpDoc(name string) (helpDoc, bool) {
 // titles.
 func helpText(d helpDoc) (string, error) {
 	if d.path != "" {
-		return readText(d.path)
+		return readDoc(d.path)
 	}
 	var b strings.Builder
 	b.WriteString("# Zone's spec\n\nHow each feature of Zone behaves, in detail, written for whoever builds Zone.\n" +
 		"The [manual](../manual/README.md) says how to use it.\n\n")
 	for _, s := range specDocs() {
-		text, err := readText(s.path)
+		text, err := readDoc(s.path)
 		if err != nil {
 			continue
 		}
@@ -203,8 +204,8 @@ func helpPage(w http.ResponseWriter, r *http.Request) {
 	rq := newReq(r)
 	name := strings.Trim(r.PathValue("name"), "/")
 	if shot, ok := strings.CutPrefix(name, "screenshots/"); ok {
-		if root := docsRoot(); root != "" && strings.HasSuffix(shot, ".png") && !strings.Contains(shot, "/") {
-			serveFile(w, r, filepath.Join(root, "docs", "screenshots"), shot, "")
+		if root := docsRoot(); root != nil && strings.HasSuffix(shot, ".png") && !strings.Contains(shot, "/") {
+			serveFS(w, r, root, "docs/screenshots/"+shot, "")
 			return
 		}
 		http.NotFound(w, r)
@@ -253,7 +254,7 @@ func manualNeighbours(name string, href func(string) string) (prev, next *crumb)
 			continue
 		}
 		link := func(d helpDoc) *crumb {
-			text, _ := readText(d.path)
+			text, _ := readDoc(d.path)
 			label := manualTitle(d.name, text)
 			if d.name == "" {
 				label = "Contents"
@@ -359,9 +360,9 @@ func manualMain(args []string, stdout, stderr io.Writer) int {
 		}
 		list = append(list, entry{d.name, file, manualTitle(d.name, text), helpFolder(d) == "manual"})
 	}
-	shots, _ := filepath.Glob(filepath.Join(docsRoot(), "docs", "screenshots", "*.png"))
+	shots, _ := fs.Glob(docsRoot(), "docs/screenshots/*.png")
 	for _, s := range shots {
-		data, err := os.ReadFile(s)
+		data, err := fs.ReadFile(docsRoot(), s)
 		if err == nil {
 			err = writeOut(filepath.Join(out, "screenshots", filepath.Base(s)), data)
 		}

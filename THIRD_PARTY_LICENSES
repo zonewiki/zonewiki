@@ -4,7 +4,8 @@ under its own.
 Compiled into the zonewiki binary, or in the image, and listed in this file:
 Go, the Go modules and the embedding model.
 
-Elsewhere, with their licenses next to them:
+In the browser code (public/, also built into the zonewiki binary), with their
+licenses next to them (zonewiki licenses prints this file and all of these):
   public/vendor/highlight/LICENSE              highlight.js (BSD-3-Clause)
   public/vendor/katex/LICENSE                  KaTeX (MIT)
   public/vendor/gemoji/LICENSE                 gemoji (MIT)
@@ -12,7 +13,9 @@ Elsewhere, with their licenses next to them:
   public/vendor/source-serif/LICENSE           Source Serif 4, the headings' font (OFL-1.1)
   public/vendor/mermaid/THIRD_PARTY_LICENSES   what mermaid.min.js bundles, including
                                                elkjs (EPL-2.0) and how to get its source
-  licenses/onnxruntime/ (in the image)         onnxruntime (MIT) and its third-party
+
+In the image only, beside the binary:
+  licenses/onnxruntime/                        onnxruntime (MIT) and its third-party
                                                notices, when built with ZONE_SEMANTIC_SEARCH=on
 
 

@@ -104,6 +104,7 @@ Links are written for the files (`tasks.md#lists`, `../screenshots/page.png`), a
 | Tests               | `go test` for the server's internals; pytest over HTTP against the server, Playwright in a browser |
 
 No build step for the browser code (no bundler: the server serves `public/` as it is).
+The binary carries `public/` and the docs too (`go:embed` in `zonefiles.go` at the root, a module `go/go.mod` takes from `../`), but a checkout's folders win, so an edit there needs no rebuild (What the binary holds in `docs/spec/deployment.md`).
 No database.
 Auth is optional (a password, or users; see Key Constraints).
 
@@ -145,7 +146,7 @@ Without the container (Go 1.27 and a C compiler; `CGO_ENABLED=0` builds one with
 
 ```bash
 (cd go && go build -o zonewiki .)
-ZONE_DATA=~/zonewiki go/zonewiki                 # http://localhost:5000 (finds public/ from the binary)
+ZONE_DATA=~/zonewiki go/zonewiki                 # http://localhost:5000 (serves the checkout's public/ and docs/)
 ZONE_DATA=~/zonewiki go/zonewiki eval FILE       # measure retrieval
 ```
 
@@ -212,6 +213,7 @@ raise a version,
 run `./run.sh test` and `./run.sh e2e`,
 and commit the new pins.
 **What Zone ships keeps its license notices**: a new or updated Go module, Go release or model changes `THIRD_PARTY_LICENSES`, a new vendored library brings its `LICENSE`; `tests/test_image.py` checks.
+The binary carries them all (`zonewiki licenses` prints them).
 
 - **One process.** The binary serves with `net/http` (at most 100 connections, idle ones closed after 60s).
   Zone must stay a single process: the page and task locks (`pagesMu`, `taskFiles`' lock), the page/search caches, the throttles and the semantic-search worker live in its memory, so several processes on one wiki would lose page and task writes.

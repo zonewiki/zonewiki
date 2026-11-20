@@ -26,7 +26,8 @@ import (
 	"time"
 )
 
-// publicDir holds the browser code and styles (public/), served as is.
+// publicDir holds the browser code and styles (public/), served as is;
+// "": the copy built into the binary (publicFiles).
 var publicDir string
 
 func logf(format string, args ...any) {
@@ -45,6 +46,7 @@ Commands:
   eval [--k N] [--new] FILE  measure search_wiki's retrieval against the questions in FILE
   health [ADDR]              whether a Zone running here answers (the container's healthcheck)
   manual DIR                 write the manual and the spec to DIR as HTML fragments, for a website
+  licenses                   the licenses of what this binary holds (Zone's, Go's, the libraries')
   help                       this text; zonewiki COMMAND --help a command's
 
 Environment:
@@ -98,8 +100,8 @@ func isHelp(arg string) bool {
 
 func main() {
 	addr := flag.String("addr", ":5000", "the `address` to listen on (127.0.0.1:0: a free port; unix:PATH: a Unix socket; fd:3: the socket systemd hands over)")
-	public := flag.String("public", "", "the `folder` of the browser code (default: public/, found from the binary)")
-	flag.StringVar(&docsDir, "docs", "", "the `folder` of README.md and docs/ (the manual, the spec), for /help and zone_help (default: found from --public)")
+	public := flag.String("public", "", "the `folder` of the browser code (default: public/ next to the binary or in its checkout, else the copy built into it)")
+	flag.StringVar(&docsDir, "docs", "", "the `folder` of README.md and docs/ (the manual, the spec), for /help and zone_help (default: beside the browser code's folder, else the copy built into the binary)")
 	semanticTest := flag.String("semantic-test", "", "the tests' embedder and index state, as `JSON` (embedtest.go)")
 	flag.Usage = printUsage
 	if len(os.Args) > 1 {
@@ -112,6 +114,8 @@ func main() {
 			os.Exit(evalMain(os.Args[2:], os.Stdout, os.Stderr))
 		case "manual":
 			os.Exit(manualMain(os.Args[2:], os.Stdout, os.Stderr))
+		case "licenses":
+			os.Exit(licensesMain(os.Args[2:], os.Stdout, os.Stderr))
 		case "health":
 			if len(os.Args) > 2 && isHelp(os.Args[2]) {
 				fmt.Println(healthUsage)
@@ -442,22 +446,6 @@ func health(client *http.Client, url string) int {
 		return 1
 	}
 	return 0
-}
-
-// findPublic finds public/ from the binary: next to it (the image) or in
-// the checkout it was built in (go/zonewiki → public/).
-func findPublic() string {
-	exe, err := os.Executable()
-	if err != nil {
-		return "public"
-	}
-	dir := filepath.Dir(exe)
-	for _, p := range []string{filepath.Join(dir, "public"), filepath.Join(dir, "..", "public")} {
-		if isDir(p) {
-			return p
-		}
-	}
-	return filepath.Join(dir, "public")
 }
 
 // ensureHomePage gives a wiki without index.md (a new one) its home page,

@@ -55,15 +55,34 @@ def test_base_images_and_ci_actions_are_pinned_by_hash():
 def test_both_images_build_with_the_same_go():
     for key in ("GO_VERSION", "GO_SHA256_AMD64", "GO_SHA256_ARM64"):
         assert args(stage("build"))[key] == args(TOOLS)[key], key
-    assert f"go {args(TOOLS)['GO_VERSION']}" in (REPO / "go" / "go.mod").read_text(encoding="utf-8")
+    for gomod in (REPO / "go" / "go.mod", REPO / "go.mod"):
+        assert f"\ngo {args(TOOLS)['GO_VERSION']}\n" in gomod.read_text(encoding="utf-8"), gomod
 
 
-def test_the_image_ships_the_docs_and_the_browser_code():
-    # Help and zone_help find README.md, docs/manual/, docs/spec/ and the screenshots next to public/.
+def test_the_binary_is_built_with_zones_own_files():
+    # zonefiles.go builds the browser code, the docs (Help, zone_help) and the
+    # licenses into the binary: the build stage copies what its go:embed line
+    # names, and the image serves the binary's copies, with none beside it.
+    embed = re.search(r"^//go:embed (.+)$", (REPO / "zonefiles.go").read_text(encoding="utf-8"), re.M).group(1).split()
+    assert embed == ["public", "README.md", "docs/manual/*.md", "docs/spec/*.md", "docs/screenshots/*.png",
+                     "LICENSE", "THIRD_PARTY_LICENSES"]
+    build = stage("build")
+    for line in ("COPY zonefiles.go README.md LICENSE THIRD_PARTY_LICENSES /src/", "COPY public/ /src/public/",
+                 "COPY docs/manual/ /src/docs/manual/", "COPY docs/spec/ /src/docs/spec/",
+                 "COPY docs/screenshots/*.png /src/docs/screenshots/"):
+        assert line in build, line
     final = CONTAINERFILE[CONTAINERFILE.rindex("\nFROM "):]
-    for line in ("COPY public/ public/", "COPY README.md ./", "COPY docs/manual/ docs/manual/",
-                 "COPY docs/spec/ docs/spec/", "COPY docs/screenshots/*.png docs/screenshots/"):
-        assert line in final
+    assert "COPY public/" not in final and "COPY docs/" not in final
+
+
+def test_the_root_module_is_there_for_go_mod_download():
+    # go/go.mod takes the module of Zone's own files from ../ (replace): both
+    # images fetch the modules with the root's go.mod beside go/.
+    assert "require zonefiles v0.0.0\n\nreplace zonefiles => ../\n" in (REPO / "go" / "go.mod").read_text(encoding="utf-8")
+    assert re.search(r"^module zonefiles$", (REPO / "go.mod").read_text(encoding="utf-8"), re.M)
+    build = stage("build")
+    assert build.index("COPY go.mod /src/") < build.index("RUN go mod download") < build.index("COPY go/ ./")
+    assert "COPY go.mod /tmp/gomod/\nCOPY go/go.mod go/go.sum /tmp/gomod/go/\nRUN cd /tmp/gomod/go && go mod download" in TOOLS
 
 
 def test_the_image_ships_the_licenses():

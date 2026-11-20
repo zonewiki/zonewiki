@@ -11,12 +11,14 @@ What each file and folder of the repository is for.
 ├── SECURITY.md             # How to report a vulnerability (privately, GitHub's advisories), what counts
 ├── LICENSE                 # AGPL-3.0-or-later
 ├── THIRD_PARTY_LICENSES    # Licenses of Go, the Go modules and the embedding model (the vendored libraries' are next to them)
+├── zonefiles.go            # Package zonefiles: Zone's own files built into the binary (go:embed): public/, README.md, the manual, the spec, the screenshots, the licenses
+├── go.mod                  # Module zonefiles, the root's: go:embed reaches only below its package's folder, so go/go.mod takes it from ../ (replace)
 ├── docs/manual/            # The manual, for users (see Manual in AGENTS.md); /help shows it
 ├── docs/spec/              # The feature spec, one file per area (see Spec in AGENTS.md)
 ├── docs/structure.md       # This file
 ├── docs/licenses/mermaid_notices.py  # Writes public/vendor/mermaid/THIRD_PARTY_LICENSES from the bundle's source map
 ├── docs/screenshots/       # The README's and the manual's screenshots + make_screenshots.py (./run.sh screenshots)
-├── Containerfile           # The image: a Go build stage, onnxruntime + the model (opt-in), an Ubuntu 26.04 LTS runtime (also ships README.md, docs/manual/, docs/spec/ and the screenshots for Help and zone_help)
+├── Containerfile           # The image: a Go build stage (Zone's own files built in), onnxruntime + the model (opt-in), an Ubuntu 26.04 LTS runtime with the binary and the licenses
 ├── compose.yaml            # Builds and runs the image (run.sh drives it)
 ├── compose.podman.yaml     # Rootless podman only: userns keep-id (run.sh adds it)
 ├── compose.nas.yaml        # NAS/server: runs the prebuilt ghcr.io image, no build (see docs/spec/deployment.md)
@@ -32,10 +34,11 @@ What each file and folder of the repository is for.
 ├── .forgejo/issue_template/   # Issue templates: bug.md, feature.md
 ├── .github/ISSUE_TEMPLATE/    # The same two for GitHub, and config.yml (a security problem goes to a private report)
 ├── go/                     # The server: package main, a file per area; pure code without Zone's state in go/internal/
-│   ├── go.mod, go.sum      # Go modules, exact versions (goldmark, x/text, onnxruntime_go)
-│   ├── server.go           # main: flags, start-up, the routes' mux, the request checks around them; zonewiki eval, zonewiki health, zonewiki manual, zonewiki user, zonewiki group, zonewiki config
+│   ├── go.mod, go.sum      # Go modules, exact versions (goldmark, x/text, onnxruntime_go), and zonefiles from ../
+│   ├── server.go           # main: flags, start-up, the routes' mux, the request checks around them; zonewiki eval, zonewiki health, zonewiki manual, zonewiki licenses, zonewiki user, zonewiki group, zonewiki config
 │   ├── login.go            # The login gate's routes: /login, /logout
-│   ├── static.go           # public/ served as it is (gzipped, kept by the browser), a file sent with its type
+│   ├── static.go           # public/ served as it is (gzipped, kept by the browser), from the folder or the binary's copy; a file sent with its type
+│   ├── files.go            # Zone's own files: public/ and the docs from a folder on disk (--public, --docs, found from the binary) or the binary's copies (zonefiles); zonewiki licenses
 │   ├── uploads.go          # Uploads: _assets/ served (a private page's and a group's from their folders, a task's from _tasks/files/<id>/), POST /api/upload
 │   ├── config.go           # What is fixed for the process, from the environment (read once into cfg)
 │   ├── configfile.go       # The settings file .zone/config: its keys, Settings (settings(), reloaded when the file changes), the line edits
@@ -105,7 +108,7 @@ What each file and folder of the repository is for.
 │   ├── embedtest.go        # The tests' fake embedder (--semantic-test)
 │   └── *_test.go, testdata/  # Go tests (go test ./...)
 ├── tests/                  # pytest over HTTP against the server (conftest.py, goserver.py, settings.py); e2e/ in a browser; bench_tasks.py measures the tasks at a team's size (not in the suites: ./run.sh bench, a job of CI's); retrieval/ a sample wiki, questions and the least search must find for them (its README.md)
-└── public/                 # The browser code, served as it is
+└── public/                 # The browser code, served as it is (and built into the binary)
     ├── style.css           # The styling: the look's tokens (:root), pages, the editor, search, dialogs, phones
     ├── tasks.css           # The task app's styling, loaded after style.css
     ├── zonewiki.js             # The entry ES module every page loads; imports the modules below

@@ -26,11 +26,13 @@ Three stages:
 
 | Stage | What it does |
 |-------|--------------|
-| `build` | Go (a pinned release, checked against its checksum) builds the server from `go/` with cgo |
+| `build` | Go (a pinned release, checked against its checksum) builds the server from `go/` with cgo, Zone's own files built in |
 | `semantic` | With `ZONE_SEMANTIC_SEARCH=on`, onnxruntime's library and the model's files; off, three empty folders |
 | the image | Ubuntu 26.04 LTS with what the two stages made |
 
-`build` runs `go mod download` first, so a code change doesn't fetch the modules again.
+`build` runs `go mod download` first, so a code change doesn't fetch the modules again;
+it copies the root's `go.mod` beside `go/` for it, the module of Zone's own files (What the binary holds, below).
+Then it copies what `zonefiles.go` builds in (the browser code, the docs, the licenses) and the server's code, and builds.
 
 `semantic` fetches onnxruntime's shared library (1.31.0, its GitHub release for the image's architecture) and the model's files (a fixed revision),
 each checked against its SHA-256,
@@ -42,12 +44,10 @@ The image has:
 - git, `tzdata` and CA certificates via `apt`;
 - `libonnxruntime.so` in `/usr/local/lib` (`ldconfig`);
 - the model in `/opt/zonewiki-model` (`ZONE_MODEL_DIR`);
-- the binary as `/app/zonewiki`;
-- the browser code as `/app/public`;
-- `README.md` plus `docs/spec/` next to it (Zone's documentation, for the MCP tool `zone_help`);
+- the binary as `/app/zonewiki`, with the browser code and the docs built in (no `public/` beside it: it serves its own copies);
 - the licenses as `/app/LICENSE`,
   `/app/THIRD_PARTY_LICENSES` (Go, the Go modules, the model) and `/app/licenses/onnxruntime/`
-  (the vendored libraries' are in `/app/public/vendor/`;
+  (the vendored libraries' are in the binary, with its copy of `public/vendor/`: `zonewiki licenses` prints them all;
   Mermaid's bundled packages in `public/vendor/mermaid/THIRD_PARTY_LICENSES`, written by `docs/licenses/mermaid_notices.py`);
 - `HOME=/tmp` (Zone may run as a UID without an account).
 
@@ -218,7 +218,34 @@ ZONE_DATA=~/zonewiki go/zonewiki
 
 In Windows PowerShell: `cd go; go build -o zonewiki.exe .; cd ..`, then `$env:ZONE_DATA="$HOME\zonewiki"; go\zonewiki.exe`.
 For semantic search, onnxruntime's library must be where the loader finds it (`docs/spec/search.md`).
-`zonewiki --help` lists the flags, the commands (`user`, `group`, `config`, `eval`, `health`; each takes `--help` too) and the environment.
+`zonewiki --help` lists the flags, the commands (`user`, `group`, `config`, `eval`, `health`, `manual`, `licenses`; each takes `--help` too) and the environment.
+
+### What the binary holds
+
+The binary carries Zone's own files, so it is all a machine needs besides git:
+the browser code (`public/`), the docs Help and `zone_help` show (`README.md`, `docs/manual/*.md`, `docs/spec/*.md`, `docs/screenshots/*.png`)
+and the licenses (`LICENSE`, `THIRD_PARTY_LICENSES`; the vendored libraries' are in `public/vendor/`).
+`zonewiki licenses` prints every license file it holds, each under its path, so a binary passed on alone still carries them.
+
+A folder on disk wins over the copy built in, so a checkout serves its files as they are edited, without a rebuild (`go/files.go`):
+
+| Files | From the first of |
+|-------|-------------------|
+| The browser code | `--public FOLDER`; `public/` beside the binary, or in the checkout it was built in (`go/zonewiki` → `public/`); the binary's copy |
+| The docs | `--docs FOLDER` (a folder without them: none, and Help says so); the folder the browser code's folder is in, when `docs/spec/` is there; the binary's copy |
+
+A `public/` found from the binary counts only when it holds Zone's entry module, `zonewiki.js`:
+on a Mac's case-insensitive disk, `../public` of a binary in `~/Downloads` is `~/Public`, which Zone would otherwise serve.
+
+Both are served alike (`go/static.go`): a file's type by its extension, `Last-Modified` (for the binary's copies, which have no time of their own, the time of the binary's file, so a browser asks again after an update),
+`/public/vendor/` scripts and styles gzipped,
+a folder or a missing file a 404,
+and a name with `..`, an empty part or a NUL refused before it is looked up.
+
+The files are built in by `go:embed` in `zonefiles.go` at the repository's root, package `zonefiles`:
+`go:embed` reaches only files below its package's folder, and the server's module is `go/`.
+The root is a module of its own (`go.mod` there, `module zonefiles`), which `go/go.mod` requires and takes from `../` (`replace zonefiles => ../`),
+so `go build` in `go/` from a fresh clone builds it in, with no step before it.
 
 ## On a NAS or server
 

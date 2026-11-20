@@ -2553,14 +2553,14 @@ class TestUsage:
         r = self._run(arg)
         assert r.returncode == 0, r.stderr
         out = r.stdout + r.stderr
-        for word in ("Usage: zonewiki", "user COMMAND", "config COMMAND", "eval ", "health ",
+        for word in ("Usage: zonewiki", "user COMMAND", "config COMMAND", "eval ", "health ", "licenses ",
                      "ZONE_DATA", "ZONE_ALLOW_REMOTE", "ZONE_SEMANTIC_SEARCH",
                      "--addr ADDRESS", "--public FOLDER", "--docs FOLDER", "--semantic-test JSON",
                      "(default :5000)"):
             assert word in out, word
         assert not re.search(r"^ +-[a-z]", out, re.M)   # flags shown with two dashes
 
-    @pytest.mark.parametrize("command", ["user", "config", "eval", "health"])
+    @pytest.mark.parametrize("command", ["user", "config", "eval", "health", "licenses"])
     @pytest.mark.parametrize("arg", ["--help", "-h"])
     def test_command(self, command, arg):
         r = self._run(command, arg)
@@ -2568,6 +2568,55 @@ class TestUsage:
         assert f"zonewiki {command}" in r.stdout + r.stderr
         assert "ZONE_DATA isn't set" not in r.stderr
         assert not re.search(r"^ +-[a-z]", r.stdout + r.stderr, re.M)
+
+    def test_licenses(self):
+        # The binary carries the licenses of what it holds, also when passed on alone.
+        r = self._run("licenses")
+        assert r.returncode == 0, r.stderr
+        assert r.stdout.startswith("==> LICENSE <==\n\n                    GNU AFFERO GENERAL PUBLIC LICENSE")
+        for name in ("THIRD_PARTY_LICENSES", "public/vendor/katex/LICENSE", "public/vendor/mermaid/COPYING.GPL-3.0"):
+            assert f"==> {name} <==" in r.stdout, name
+
+
+class TestTheBinaryAlone:
+    """The binary is all a machine needs: with no public/ and no docs beside it
+    (the tests' binary is built into a folder of its own), it serves the browser
+    code and Help from the copies built into it (files.go)."""
+
+    def test_serves_its_own_browser_code_and_help(self, tmp_path):
+        assert not (binary().parent / "public").exists() and not (binary().parent.parent / "public").exists()
+        env = {k: v for k, v in os.environ.items() if not k.startswith("ZONE_")}
+        env["ZONE_DATA"] = str(tmp_path)
+        proc = subprocess.Popen([str(binary()), "--addr", "127.0.0.1:0"], env=env, text=True,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            line = proc.stdout.readline()
+            assert " listening on " in line, line
+            host, port = line.rsplit(" ", 1)[1].strip().rsplit(":", 1)
+            conn = http.client.HTTPConnection(host, int(port), timeout=30)
+
+            def get(path, **headers):
+                conn.request("GET", path, headers={"Host": "localhost", **headers})
+                resp = conn.getresponse()
+                return resp, resp.read()
+
+            public = settings.REPO / "public"
+            resp, body = get("/public/style.css")
+            assert resp.status == 200 and resp.getheader("Content-Type").startswith("text/css")
+            assert body == (public / "style.css").read_bytes()
+            resp, body = get("/public/vendor/katex/katex.min.css", **{"Accept-Encoding": "gzip"})
+            assert resp.status == 200 and resp.getheader("Content-Encoding") == "gzip"
+            assert gzip.decompress(body) == (public / "vendor" / "katex" / "katex.min.css").read_bytes()
+            assert get("/public/vendor/")[0].status == 404
+            resp, body = get("/help")
+            assert resp.status == 200 and b"Zone&#39;s manual" in body
+            resp, body = get("/help/screenshots/page.png")
+            assert resp.status == 200 and resp.getheader("Content-Type") == "image/png"
+            resp, body = get("/page/index")
+            assert resp.status == 200 and b'href="/public/style.css"' in body
+        finally:
+            proc.terminate()
+            proc.communicate(timeout=30)
 
 
 class TestLocale:

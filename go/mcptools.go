@@ -554,7 +554,7 @@ func zoneHelp(args jsonObj, base string, user asker) (string, error) {
 		if !ok {
 			return "", toolErr("No topic " + strconv.Quote(topic) + ". Topics: " + strings.Join(names, ", ") + ".")
 		}
-		text, err := readText(path)
+		text, err := readDoc(path)
 		if err != nil {
 			return "", err
 		}
@@ -593,7 +593,7 @@ func zoneHelp(args jsonObj, base string, user asker) (string, error) {
 	out := []string{"Zone's documentation: the README (what Zone is, its features, setup) and the spec, " +
 		"one doc per area. Read one with topic, a section with topic and heading."}
 	for _, d := range docs {
-		text, _ := readText(d.path)
+		text, _ := readDoc(d.path)
 		found := manualHeadings(text)
 		title := d.name
 		if len(found) > 0 {

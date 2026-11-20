@@ -127,7 +127,7 @@ Tests that fail when a change forgets a step elsewhere: a new route, tool, setti
 | `TestGolden` (`go/golden_test.go`) | The Go text functions give `go/testdata/golden.json.gz`'s answers | After a deliberate change, update the file (Shared case files) |
 | `tests/test_text_parity.py` | The browser's copies in `public/js/mdtext.js` give the same answers | Change the JavaScript along with the Go |
 | `*_cases.json` runners (Shared case files) | The server's and the browser's task rules agree on one table | Change both sides, add the case to the table |
-| `tests/test_image.py` | Base images and CI actions pinned by hash; the model's revision and hashes are `go/embed.go`'s; both images build with the same Go; the image ships the browser code, docs and licenses; `THIRD_PARTY_LICENSES` names what is pinned; every `public/vendor/` library has a `LICENSE`; Mermaid's notices match the vendored bundle | Update the pin, hash or notice that drifted (Dependencies in `AGENTS.md`; for Mermaid `python3 docs/licenses/mermaid_notices.py VERSION`) |
+| `tests/test_image.py` | Base images and CI actions pinned by hash; the model's revision and hashes are `go/embed.go`'s; both images build with the same Go and fetch the modules with the root's `go.mod`; the build stage copies what `zonefiles.go` builds in, and the image no copy beside the binary; the image ships the licenses; `THIRD_PARTY_LICENSES` names what is pinned; every `public/vendor/` library has a `LICENSE`; Mermaid's notices match the vendored bundle | Update the pin, hash or notice that drifted (Dependencies in `AGENTS.md`; for Mermaid `python3 docs/licenses/mermaid_notices.py VERSION`) |
 | `tests/test_env_example.py` | `.env.example` lists every setting the source, `run.sh` and `compose.yaml` read, and nothing else | Add the new variable to `.env.example`, or to `INTERNAL` if no user sets it (run, build, test or bench only) |
 | `TestUsage` (`tests/test_routes.py`) | `zonewiki --help` names its commands, environment and flags (with two dashes); each command answers `--help` with exit 0 and without a wiki | Fix the usage text; a new command goes in the test's list |
 | Browser harness (`tests/e2e/conftest.py`) | No request to another host, no uncaught JS error, no CSP violation | Load from `public/vendor/`, fix the error, move inline script into Zone's script files |
@@ -152,6 +152,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `go/configfile_test.go` | users.md | The settings file: parser errors, keys and checks, reload, line edits, 0600 write, `zonewiki user`/`group`/`config` on a temp wiki, roles and links |
 | `go/embed_test.go` | search.md | The semantic index: chunking, its cache, failure fallback, the worker, rank fusion, the model's download |
 | `go/eval_test.go` | search.md | `zonewiki eval`, its report and `--new`; the retrieval floor (`TestEvalFloors`, `TestEvalCommandHoldsAFloor`, `TestRetrievalHoldsItsFloor`) |
+| `go/files_test.go` | deployment.md | The binary's own files: all of `public/` in it, served as the folder serves it (type, `Last-Modified`, gzip, 404s, no way out), a folder winning, the built-in docs for Help and `zone_help`, `public/` found only with `zonewiki.js`, `zonewiki licenses` |
 | `go/gitstore_test.go` | rendering.md, users.md | Git helpers: commits, log, diffs, hung git, `TestLastChangedAsksGitOnce`, packing's schedule, drafts committed, `TestMissingUsers` |
 | `go/golden_test.go` | rendering.md | The text functions against `golden.json.gz` |
 | `go/mail_test.go` | users.md, deployment.md | The SMTP client, mail settings, `validEmail`, sign-up keys, `pending` |
@@ -214,7 +215,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `tests/test_public.py` | security.md | Public wikis (`ZONE_PUBLIC`): what a visitor reads and writes |
 | `tests/test_rendering.py` | rendering.md | Rendering through the server: wikilinks, image widths, callouts, autolinks, a heading's id and its link's anchor |
 | `tests/test_roles.py` | users.md | Viewers: every write refused, the interface; guides written by admins only |
-| `tests/test_routes.py` | routes.md, editor.md, security.md | The wiki's routes: pages, save and merge, uploads, search, Host and Origin checks, body limits, `TestUsage` |
+| `tests/test_routes.py` | routes.md, editor.md, security.md, deployment.md | The wiki's routes: pages, save and merge, uploads, search, Host and Origin checks, body limits, `TestUsage`, the binary started on its own (`TestTheBinaryAlone`) |
 | `tests/test_run_sh.py` | deployment.md | `run.sh`'s container calls and the pre-commit hook against a stub engine |
 | `tests/test_section_editing.py` | editor.md | Section editing over HTTP: a stale ✎, Keep mine |
 | `tests/test_semantic.py` | search.md | Semantic search through the server with the fake embedder |

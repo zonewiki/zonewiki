@@ -7,7 +7,7 @@
 package main
 
 import (
-	"os"
+	"io/fs"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -16,8 +16,8 @@ import (
 )
 
 // docsDir holds README.md and docs/spec/ (the --docs flag); "" finds them
-// next to the browser code's folder (public/): in the checkout and in the
-// image alike.
+// next to the browser code's folder (public/) in a checkout, else takes the
+// binary's copy (docsRoot in files.go).
 var docsDir string
 
 // How Zone is tested: nothing a user asks about.
@@ -28,19 +28,6 @@ var manualSkip = map[string]bool{"testing": true}
 // whole long section.
 const manualChunkChars = 1500
 
-func docsRoot() string {
-	candidates := []string{docsDir}
-	if docsDir == "" {
-		candidates = []string{filepath.Dir(publicDir)}
-	}
-	for _, root := range candidates {
-		if isDir(filepath.Join(root, "docs", "spec")) {
-			return root
-		}
-	}
-	return ""
-}
-
 type manualTopic struct{ name, path string }
 
 // manualTopics: the docs by topic name: the manual ("manual", its
@@ -48,7 +35,7 @@ type manualTopic struct{ name, path string }
 // spec file's name ("tasks", "editor", …), in that order.
 func manualTopics() []manualTopic {
 	root := docsRoot()
-	if root == "" {
+	if root == nil {
 		return nil
 	}
 	var found []manualTopic
@@ -59,10 +46,10 @@ func manualTopics() []manualTopic {
 		}
 		found = append(found, manualTopic{name, d.path})
 	}
-	if readme := filepath.Join(root, "README.md"); exists(readme) {
-		found = append(found, manualTopic{"readme", readme})
+	if fsExists(root, "README.md") {
+		found = append(found, manualTopic{"readme", "README.md"})
 	}
-	paths, _ := filepath.Glob(filepath.Join(root, "docs", "spec", "*.md"))
+	paths, _ := fs.Glob(root, "docs/spec/*.md")
 	sort.Strings(paths)
 	for _, p := range paths {
 		if name := strings.TrimSuffix(filepath.Base(p), ".md"); !manualSkip[name] {
@@ -107,10 +94,10 @@ var manualIndex struct {
 // manualFind: the passages most relevant to the query, best first. The
 // BM25 index over every doc's sections is rebuilt when a doc file changes.
 func manualFind(query string, limit int) []manualDoc {
-	topics := manualTopics()
+	topics, root := manualTopics(), docsRoot()
 	var key strings.Builder
 	for _, t := range topics {
-		if st, err := os.Stat(t.path); err == nil {
+		if st, err := fs.Stat(root, t.path); err == nil {
 			key.WriteString(t.path + "\x00" + st.ModTime().String() + "\x00")
 		}
 	}
@@ -120,7 +107,7 @@ func manualFind(query string, limit int) []manualDoc {
 		var docs []manualDoc
 		var tokens [][]string
 		for _, t := range topics {
-			text, err := readText(t.path)
+			text, err := readDoc(t.path)
 			if err != nil {
 				continue
 			}
