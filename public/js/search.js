@@ -1,4 +1,4 @@
-import { closeOnBackdropClick, he, localizeDates } from './util.js';
+import { closeOnBackdropClick, hashTarget, he, localizeDates } from './util.js';
 import { sharingOn } from './actions.js';
 import { revealElement } from './fold.js';
 import { renderFigures } from './figures.js';
@@ -545,7 +545,7 @@ function searchHighlightBar(article, params, marks, terms) {
 
   // Start at the first match in the section the link opened (the browser has
   // already scrolled there), else at the first match, scrolled into view.
-  const target = location.hash && document.getElementById(decodeURIComponent(location.hash.slice(1)));
+  const target = hashTarget(location.hash);
   const inSection = target
     ? marks.findIndex(m => target.compareDocumentPosition(m) & Node.DOCUMENT_POSITION_FOLLOWING) : -1;
   show(inSection >= 0 ? inSection : 0, inSection < 0);

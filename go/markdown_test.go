@@ -222,6 +222,31 @@ func TestRawHTMLDefused(t *testing.T) {
 	}
 }
 
+// A page's raw HTML gives no element one of Zone's ids or names (its
+// scripts find elements by id, the browser by name: window.x): theirs get
+// "user-content-" in front, however written, and an SVG's url(#…) follows;
+// a longer name ending in "id", a URL's "?id=" and Zone's own ids stay.
+func TestRawHTMLIDsAreItsOwn(t *testing.T) {
+	for src, want := range map[string]string{
+		`<data id="task-edit-id" value="x">a</data>`:                                         `<data id="user-content-task-edit-id" value="x">a</data>`,
+		"<div>\n<a ID = 'tasks-app' NAME=note>a</a>\n</div>\n":                               `<a ID = 'user-content-tasks-app' NAME=user-content-note>a</a>`,
+		"<div>\n<img/id=katex src=/x.png>\n</div>\n":                                         `<img/id=user-content-katex src=/x.png>`,
+		"<div>\n<a href=\"/x\"name=\"hljs\">a</a>\n</div>\n":                                 `<a href="/x"name="user-content-hljs">a</a>`,
+		"<a href=/x\nid\n=\"y\">a</a>":                                                       "<a href=/x\nid\n=\"user-content-y\">a</a>",
+		`<svg><linearGradient id="g"/><rect fill="url(#g)" style="fill: url( '#g')"/></svg>`: `<svg><linearGradient id="user-content-g"/><rect fill="url(#user-content-g)" style="fill: url( '#user-content-g')"/></svg>`,
+		`<span data-id="a" grid="b"><a href="/page/x?id=5&amp;name=n">a</a></span>`:          `<span data-id="a" grid="b"><a href="/page/x?id=5&amp;name=n">a</a></span>`,
+		"<div>\n\n## Zone's heading\n\n</div>\n":                                             `<h2 id="zones-heading">`,
+	} {
+		if got := markdown(src, &Env{HeadingIDs: headingAsID}, false); !strings.Contains(got, want) {
+			t.Errorf("%s:\n%s", src, got)
+		}
+	}
+	// The name ends the raw HTML, the "=" is the text after it.
+	if got := markdown("- <pre></pre><a id\n  =x>a</a>\n", &Env{}, false); regexp.MustCompile(`<a id\s*=`).MatchString(got) {
+		t.Errorf("at the end: %s", got)
+	}
+}
+
 // Renders at once each keep their own Env and section numbers, though
 // they share pooled goldmark instances.
 func TestConcurrentRendersKeepTheirEnv(t *testing.T) {

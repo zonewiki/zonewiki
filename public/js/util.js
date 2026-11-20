@@ -30,6 +30,18 @@ export function closeOnBackdropClick(dialog) {
 // the task app's t (tag the selected tasks).
 export const keyPrefix = { key: null, timer: null };
 
+// The element a #hash names: one of Zone's (a heading's id), else one a
+// page's raw HTML gave that id or name, which carries "user-content-" in
+// front (go/markdown.go defuseHTML: so it can't stand in for one of Zone's
+// elements), as GitHub's do. null for none.
+export function hashTarget(hash) {
+  if (!hash || hash.length < 2) return null;
+  let id = hash.slice(1);
+  try { id = decodeURIComponent(id); } catch (_) { /* as written */ }
+  return document.getElementById(id) || document.getElementById('user-content-' + id)
+    || document.getElementsByName('user-content-' + id)[0] || null;
+}
+
 export function he(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }

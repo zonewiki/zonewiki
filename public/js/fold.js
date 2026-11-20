@@ -13,6 +13,8 @@
 // unfolds it with revealElement(). Printing and presentation mode show
 // everything.
 
+import { hashTarget } from './util.js';
+
 const CHEVRON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>';
 
 // The sections, in page order: { header, level, body, folded, button }.
@@ -84,10 +86,7 @@ export function revealElement(el) {
 }
 
 function revealHash(hash) {
-  if (!hash || hash.length < 2) return;
-  let id = hash.slice(1);
-  try { id = decodeURIComponent(id); } catch (_) { /* as written */ }
-  revealElement(document.getElementById(id));
+  revealElement(hashTarget(hash));
 }
 
 (function () {

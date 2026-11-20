@@ -113,6 +113,9 @@ Pages are markdown as goldmark reads it (GFM), with Zone's additions: the sectio
 Raw HTML in a page is rendered as written (goldmark's `WithUnsafe`), but no script in it runs: the Content-Security-Policy allows only Zone's own script files (Scripts in pages don't run, `docs/spec/security.md`);
 nor does a form, an iframe's `srcdoc` or a link's `ping` (No form in a page posts to Zone either, there), and an `<iframe>` shows an upload but no view of Zone's (Framing, there).
 Form controls, `<meta>`, `<base>`, `<link>` and `<script>` in it show as text (`defuseHTML`: a form in a page could post to Zone as the viewer; a `<script type="application/json">` would be data Zone's own scripts read).
+Its ids and names get `user-content-` in front (`<a name="note">` is `user-content-note`, as on GitHub), so none stands in for one of Zone's elements;
+a link to it works as written (`[see](#note)`: `hashTarget` in `js/util.js` finds it, and `js/page.js` scrolls there), and an SVG's `url(#g)` is pointed at its gradient's new id too;
+a page's own `<style>` selects such an element as `#user-content-…`.
 
 ### Autolinks and external links
 

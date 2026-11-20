@@ -1,4 +1,4 @@
-import { copyText, localizeDates, putTask, showToast } from './util.js';
+import { copyText, hashTarget, localizeDates, putTask, showToast } from './util.js';
 import { toggleCheckboxInTextarea } from './mdedit.js';
 import { HIGHLIGHT_CODE, renderFigures } from './figures.js';
 
@@ -9,11 +9,28 @@ document.addEventListener('DOMContentLoaded', () => {
   // What the reader was sent to stays where it is while figures above it render.
   const target = () => {
     const mark = document.querySelector('mark.search-hl.current');
-    try { return mark || (location.hash && document.getElementById(decodeURIComponent(location.hash.slice(1)))); }
-    catch (_) { return null; }   // a hash that isn't URI-encoded
+    return mark || hashTarget(location.hash);
   };
   for (const root of document.querySelectorAll('article.page-content, .rail-toc')) renderFigures(root, target);
+  scrollToRawAnchor();
 });
+
+// ── Anchors of a page's raw HTML ──────────────────────────────────────────────
+
+// An id or name a page's raw HTML gives has "user-content-" in front
+// (go/markdown.go defuseHTML: so it can't stand in for one of Zone's
+// elements), so for #note the browser finds no element and stays where it is:
+// this goes there instead, on opening the page and when a link changes the
+// hash (fold.js has unfolded its section by then).
+function scrollToRawAnchor() {
+  let id = location.hash.slice(1);
+  if (!id) return;
+  try { id = decodeURIComponent(id); } catch (_) { /* as written */ }
+  if (document.getElementById(id) || document.getElementsByName(id).length) return;
+  const el = hashTarget(location.hash);
+  if (el) requestAnimationFrame(() => el.scrollIntoView());
+}
+window.addEventListener('hashchange', scrollToRawAnchor);
 
 // ── Dates ─────────────────────────────────────────────────────────────────────
 

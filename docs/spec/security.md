@@ -355,6 +355,12 @@ The rest of a page's HTML (images, links, iframes, styles) stays allowed, as far
   Mermaid's labels are HTML, which its `strict` level cleans with DOMPurify's defaults, and those keep `form`, `input`, `button` and `action`:
   a label `<form method='post' action='/delete/…'>` posted to Zone with one click, in a page, a preview, a task's notes or comments.
   So the labels are cleaned without form controls, `meta`, `base`, `link`, `script`, frames, `style`, ids and names (`dompurifyConfig` in `js/figures.js`, kept from a diagram's own settings by `secure`), and what of it the drawn SVG has anyway is taken out before it goes into the page (`defuseDiagram`).
+- **A page's ids and names are its own.**
+  Zone's scripts find their elements by id (`getElementById`) and the browser makes globals of names (`window.katex`), so an element of a page that came first with one of Zone's ids stood in for Zone's: a `<data id="task-edit-id" value="…">` aimed the task dialog's save at another task.
+  So in a page's raw HTML,
+  and in task descriptions and comments,
+  every `id` and `name` gets `user-content-` in front (`idRE` in `go/markdown.go`), wherever the name stands on its own before `=` (after HTML's whitespace, a `/` or a quote, so not `?id=` in a URL or `data-id=`), as `ping` is found; a diagram's labels have none (`dompurifyConfig`, below).
+  A `#link` to one finds it all the same (`hashTarget` in `js/util.js`).
 - **Nothing takes the rendered HTML apart and puts it together again.**
   The defusing holds for the HTML as it is rendered; taking a tag out of it joins what was on either side, which the defusing never saw.
   So the side column's table of contents is made from the parsed headings (`tocLabel`, Left: On this page in `docs/spec/routes.md`): cut out of the article with its links taken out by a pattern, `<<a>form` came out a form, `src<a>doc=` an `srcdoc`, `<<a>meta` a refresh to another site.

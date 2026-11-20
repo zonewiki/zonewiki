@@ -786,7 +786,7 @@ class TestInitialTasks:
         assert html.count("<script") == html.count("</script>") and len(initial_tasks(html)) == 1
         assert re.search(r'<div class="tasks-app" id="tasks-app-1"[^>]*><script type="application/json" '
                          r'class="tasks-initial">', html)
-        assert '&lt;script type="application/json" id="tasks-initial">{"tasks": []}&lt;/script>' in html
+        assert '&lt;script type="application/json" id="user-content-tasks-initial">{"tasks": []}&lt;/script>' in html
         page_html = html.split('<article', 1)[1].split("</article>", 1)[0]
         assert len(re.findall(r"<script\b", page_html)) == 1
         tasks = client.get("/tasks", headers=HOST).get_data(as_text=True)

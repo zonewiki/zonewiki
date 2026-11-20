@@ -648,17 +648,35 @@ var defusedTagRE = regexp.MustCompile(`(?i)<(/?(?:form|input|button|select|texta
 // with the viewer's cookie, so <a ping="/delete/plans"> would delete a
 // page with the click that reads on (the request checks refuse a ping
 // too: notPing).
+//
+// idRE: an id or name attribute's value, wherever "id" or "name" is a name
+// of its own followed by "=" (after what can end an attribute before it:
+// HTML's whitespace, "/", a quote; not "?id=" in a URL, "data-id="). A
+// page's element must not stand in for one of Zone's, which its scripts
+// find by id (getElementById: a <data id="task-edit-id" value=…> ahead of
+// the task dialog's field would aim its save at another task) and the
+// browser by name (window.x, document.x). So the value gets
+// "user-content-" in front, as GitHub's do; a #link to it finds it all the
+// same (js/util.js hashTarget), and an SVG's url(#…) is pointed there too
+// (urlRefRE). idEndRE: such a name where the raw HTML ends, renamed (what
+// is rendered next may start with its "=").
 var (
 	htmlTagRE = regexp.MustCompile(`<[A-Za-z](?:[^>"']|"[^"]*"|'[^']*')*`)
 	srcdocRE  = regexp.MustCompile(`(?i)srcdoc([\t\n\f\r ]*(?:=|$))`)
 	pingRE    = regexp.MustCompile(`(?i)(^|[^A-Za-z0-9_-])(ping[\t\n\f\r ]*(?:=|$))`)
+	idRE      = regexp.MustCompile(`(?i)(^|[\t\n\f\r /"'])((?:id|name)[\t\n\f\r ]*=[\t\n\f\r ]*["']?)`)
+	idEndRE   = regexp.MustCompile(`(?i)(^|[\t\n\f\r /"'])((?:id|name)[\t\n\f\r ]*)$`)
+	urlRefRE  = regexp.MustCompile(`(?i)(url\([\t\n\f\r ]*["']?#)`)
 )
 
-// defuseHTML: raw HTML with defusedTagRE's tags as text and no srcdoc or
-// ping.
+// defuseHTML: raw HTML with defusedTagRE's tags as text, no srcdoc or
+// ping, and its ids and names its own (user-content-…).
 func defuseHTML(raw []byte) []byte {
 	raw = srcdocRE.ReplaceAll(raw, []byte("data-defused-srcdoc$1"))
 	raw = pingRE.ReplaceAll(raw, []byte("${1}data-defused-$2"))
+	raw = idRE.ReplaceAll(raw, []byte("${1}${2}user-content-"))
+	raw = idEndRE.ReplaceAll(raw, []byte("${1}data-defused-$2"))
+	raw = urlRefRE.ReplaceAll(raw, []byte("${1}user-content-"))
 	return defusedTagRE.ReplaceAll(raw, []byte("&lt;$1"))
 }
 

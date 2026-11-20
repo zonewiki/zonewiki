@@ -6,6 +6,8 @@ import re
 
 from playwright.sync_api import expect
 
+from tests.e2e.conftest import wait_until
+
 ATTACKS = (
     "<script>window.pwned = 'script'</script>\n\n"
     "<img id=\"bad-img\" src=\"/nope.png\" onerror=\"window.pwned = 'onerror'\">\n\n"
@@ -18,8 +20,8 @@ def test_raw_html_in_a_page_runs_no_script(page, wiki):
     page.goto("/page/evil")
     # Zone's own scripts still run: the code block is highlighted.
     expect(page.locator("article.page-content pre code.hljs")).to_have_count(1)
-    expect(page.locator("#bad-img")).to_have_count(1)
-    page.locator("#bad-link").click()
+    expect(page.locator("#user-content-bad-img")).to_have_count(1)
+    page.locator("#user-content-bad-link").click()
     page.wait_for_timeout(300)
     assert page.evaluate("window.pwned") is None
     # The browser blocked them, which the harness would count against Zone.
@@ -33,7 +35,7 @@ def test_editor_preview_runs_no_handler(page, wiki):
     page.goto("/edit/preview-evil")
     page.keyboard.press("Control+End")
     page.keyboard.type('<img id="bad-img" src="/nope.png" onerror="window.pwned = 1">')
-    expect(page.locator("#editor-preview #bad-img")).to_have_count(1)
+    expect(page.locator("#editor-preview #user-content-bad-img")).to_have_count(1)
     page.wait_for_timeout(300)
     assert page.evaluate("window.pwned") is None
     assert page.csp_violations
@@ -95,8 +97,8 @@ def test_a_page_frames_no_form(page, wiki):
     page.goto("/page/framed")
     expect(page.locator("article.page-content iframe")).to_have_count(3)
     for frame in ("f1", "f2", "f3"):
-        assert page.locator(f"#{frame}").get_attribute("srcdoc") is None
-        expect(page.frame_locator(f"#{frame}").locator("form")).to_have_count(0)
+        assert page.locator(f"#user-content-{frame}").get_attribute("srcdoc") is None
+        expect(page.frame_locator(f"#user-content-{frame}").locator("form")).to_have_count(0)
 
 
 def test_a_links_ping_posts_nothing(page, wiki):
@@ -108,9 +110,9 @@ def test_a_links_ping_posts_nothing(page, wiki):
                '<a id="go" href="/page/index" ping="/delete/victim">Read on</a>\n\n'
                'Inline <a id="go2" href="/page/index" PING = "/delete/victim">too</a>.\n')
     page.goto("/page/pinger")
-    assert page.locator("#go").get_attribute("ping") is None
-    assert page.locator("#go2").get_attribute("ping") is None
-    page.locator("#go").click()
+    assert page.locator("#user-content-go").get_attribute("ping") is None
+    assert page.locator("#user-content-go2").get_attribute("ping") is None
+    page.locator("#user-content-go").click()
     expect(page).to_have_url(re.compile(r"/page/index$"))
     page.wait_for_timeout(500)
     assert (wiki.root / "victim.md").exists()
@@ -127,10 +129,10 @@ def test_a_page_frames_no_page_of_zones(page, wiki):
                '<iframe id="tasks" src="/tasks"></iframe>\n\n'
                '<iframe id="upload" src="/_assets/note.txt"></iframe>\n')
     page.goto("/page/decoy")
-    expect(page.frame_locator("#upload").locator("body")).to_contain_text("framed upload")
+    expect(page.frame_locator("#user-content-upload").locator("body")).to_contain_text("framed upload")
     page.wait_for_timeout(300)
     for frame in ("zone", "tasks"):
-        expect(page.frame_locator(f"#{frame}").locator("article, .tasks-app, nav")).to_have_count(0)
+        expect(page.frame_locator(f"#user-content-{frame}").locator("article, .tasks-app, nav")).to_have_count(0)
     page.csp_violations.clear()
     page.js_errors.clear()
 
@@ -200,3 +202,28 @@ def test_a_wiki_without_a_login_asks_for_one_first(page, wiki, monkeypatch):
     page.goto("/page/plans")
     expect(page.locator("article.page-content")).to_contain_text("secret words")
     expect(page.locator("#logout-form, .logout-btn, form[action='/logout']").first).to_be_attached()
+
+
+def test_a_pages_ids_stand_in_for_none_of_zones(page, wiki):
+    # Zone's scripts find their elements by id, the browser globals by name:
+    # a page's <data id="task-edit-id" value=…> came first and would aim the
+    # task dialog's save at another task, an <a name="katex"> was
+    # window.katex. A page's ids and names have "user-content-" in front, and
+    # a #link to one still goes there.
+    wiki.write("ids", "# Ids\n\n"
+               '<data id="task-edit-id" value="other-task">x</data> <a name="katex"></a>\n\n'
+               "[to the note](#note)\n\n" + "Filler.\n\n" * 80 +
+               '<a name="note"></a>The note.\n\n[[tasks:]]\n')
+    page.goto("/page/ids")
+    assert page.evaluate("document.getElementById('task-edit-id').tagName") == "INPUT"
+    assert page.evaluate("typeof window.katex") == "undefined"
+    expect(page.locator("data#user-content-task-edit-id")).to_have_count(1)
+    def in_view():
+        return page.evaluate("document.getElementsByName('user-content-note')[0].getBoundingClientRect().top"
+                             " < innerHeight")
+    assert not in_view()
+    page.locator("a[href='#note']").click()
+    wait_until(page, in_view)
+    page.goto("/page/index")
+    page.goto("/page/ids#note")
+    wait_until(page, in_view)
