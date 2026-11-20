@@ -12,13 +12,27 @@ export const plainHtml = text => String(text).replace(/&/g, '&amp;').replace(/</
   .replace(/>/g, '&gt;').replace(/\n/g, '<br>');
 // Math and diagrams are not kept rendered: renderFigures draws them in
 // the live list after each draw (from its caches, so without a flash), and
-// a library that failed to load is tried again then.
-export function highlightCode(html) {
-  if (!window.hljs || !html.includes('<pre')) return html;
-  const tpl = document.createElement('template');
-  tpl.innerHTML = html;
-  tpl.content.querySelectorAll(HIGHLIGHT_CODE).forEach(el => hljs.highlightElement(el));
-  return tpl.innerHTML;
+// a library that failed to load is tried again then. Code likewise
+// (highlightIn): the HTML kept is the server's as it came, never put
+// through a <template> and back into a string, a parse and a serialization
+// a browser needn't agree on (the HTML the second parse makes may not be
+// the HTML the server sent, nor what its defusing held for).
+const highlighted = new Map();   // a block's class and text → hljs's class and HTML of it
+export function highlightIn(root) {
+  if (!window.hljs) return;
+  root.querySelectorAll(HIGHLIGHT_CODE).forEach(el => {
+    if (el.classList.contains('hljs')) return;
+    const key = el.className + '\n' + el.textContent;
+    const done = highlighted.get(key);
+    if (done) {
+      el.innerHTML = done.html;   // hljs's own, its text escaped
+      el.className = done.cls;
+      return;
+    }
+    hljs.highlightElement(el);
+    if (highlighted.size > 200) highlighted.delete(highlighted.keys().next().value);
+    highlighted.set(key, { html: el.innerHTML, cls: el.className });
+  });
 }
 // The notes and comments of `taskList`, for renderTexts.
 export function textsOf(taskList) {
@@ -33,7 +47,7 @@ export function keepRendered(texts, html) {
   for (const kind in renderedHtml) {
     const list = texts[kind] || [], out = html[kind];
     if (!Array.isArray(out) || out.length !== list.length) continue;
-    list.forEach((t, i) => { if (!renderedHtml[kind].has(t)) renderedHtml[kind].set(t, highlightCode(String(out[i]))); });
+    list.forEach((t, i) => { if (!renderedHtml[kind].has(t)) renderedHtml[kind].set(t, String(out[i])); });
   }
 }
 // Fetch the HTML of the texts not rendered yet; true when there is new.
@@ -60,7 +74,7 @@ export async function renderTexts({ notes = [], comments = [] }) {
         });
         if (!res.ok) return false;
         const out = await res.json();
-        for (const kind in want) want[kind].forEach((t, i) => renderedHtml[kind].set(t, highlightCode(out[kind][i])));
+        for (const kind in want) want[kind].forEach((t, i) => renderedHtml[kind].set(t, String(out[kind][i])));
         return true;
       } catch (_) {
         return false;

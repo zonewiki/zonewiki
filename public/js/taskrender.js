@@ -7,7 +7,7 @@ import TasksCore from '../tasks-core.js';
 import { renderFigures } from './figures.js';
 import { openDatePicker } from './datepicker.js';
 import { commentCardHtml, commentStamp, importanceMark, subtaskCounts, dueDateClass, esc, formatDate, linkifyTitle, people, plainTitle, shortDate, startsAfterDeadline, todayStr, urgencyClass } from './taskutil.js';
-import { plainHtml, renderedHtml, renderTexts } from './tasktexts.js';
+import { highlightIn, plainHtml, renderedHtml, renderTexts } from './tasktexts.js';
 
 const { byOpenOrder, SORTS } = TasksCore;
 
@@ -517,6 +517,7 @@ function render() {
     return;
   }
   app.listEl.innerHTML = st.activeView === 'plan' ? planHTML(filtered) : listHTML(orderedTasks, newTasks, updates);
+  highlightIn(app.listEl);
   renderFigures(app.listEl);
   wireListHandlers();
 }

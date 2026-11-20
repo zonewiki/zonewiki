@@ -11,7 +11,7 @@ import { toggleCheckboxText } from './mdtext.js';
 import { renderFigures } from './figures.js';
 import { openDatePicker } from './datepicker.js';
 import { IMPORTANCE, attachTagAc, commentStamp, dateOffset, esc, formatDate, hashWordAtCaret, insertHashTag, loadPeople, noticeFromResponse, people, shortDate, tagWordOf, todayStr } from './taskutil.js';
-import { highlightCode, renderTexts, textsOf } from './tasktexts.js';
+import { highlightIn, renderTexts, textsOf } from './tasktexts.js';
 
 const { addDays, tagCounts, rankTags, parseQuickAdd } = TasksCore;
 
@@ -35,7 +35,8 @@ async function fetchNotesPreview() {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes: [text] }),
     });
     if (res.ok && app.descTextarea.value.trim() === text) {
-      notesPreview.innerHTML = highlightCode((await res.json()).notes[0]);
+      notesPreview.innerHTML = (await res.json()).notes[0];
+      highlightIn(notesPreview);
       renderFigures(notesPreview);
     }
   } catch (_) { notesPreview.textContent = 'Could not render the preview'; }
@@ -802,6 +803,7 @@ function renderComments(task) {
     '</li>').join('');
   // What the comments hold (links, checkboxes) is no stop for Tab either.
   commentList.querySelectorAll('a, input, summary').forEach(el => { el.tabIndex = -1; });
+  highlightIn(commentList);
   renderFigures(commentList);
   if (!commentBox.hidden) {
     placeCommentBox();

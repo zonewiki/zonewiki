@@ -3268,7 +3268,7 @@ def test_notes_and_comments_render_as_on_a_page(page, wiki):
     # Comments too.
     tid = page.request.post("/api/tasks", data={"title": "Fence", "description":
         "## Steps\nsand\nprime\n\n| coat | days |\n|---|---|\n| 1 | 2 |\n\n```python\nx = 1\n```\n\n_soft_ wood"}).json()["id"]
-    page.request.post(f"/api/tasks/{tid}/comments", data={"text": "**primed** today"})
+    page.request.post(f"/api/tasks/{tid}/comments", data={"text": "**primed** today\n\n```js\nlet y = 2\n```"})
     page.goto("/tasks?view=open&group=none")
     desc = card(page, "Fence").locator(".task-desc")
     expect(desc.locator("h2")).to_have_text("Steps")
@@ -3277,8 +3277,14 @@ def test_notes_and_comments_render_as_on_a_page(page, wiki):
     expect(desc.locator("pre code.hljs")).to_have_count(1)
     expect(desc.locator("em")).to_have_text("soft")
     expect(card(page, "Fence").locator(".task-card-comments strong")).to_have_text("primed")
+    # Highlighted where it is drawn (js/tasktexts.js highlightIn), again
+    # after the list is drawn anew.
+    page.locator("#task-filter-search").fill("fence")
+    expect(card(page, "Fence").locator(".task-desc pre code.hljs .hljs-number")).to_have_text("1")
+    page.locator("#task-filter-search").fill("")
     card(page, "Fence").dblclick()
     expect(page.locator("#task-edit-comment-list strong")).to_have_text("primed")
+    expect(page.locator("#task-edit-comment-list pre code.hljs .hljs-number")).to_have_text("2")
 
 
 def test_a_comment_keeps_its_lines(page, wiki):
