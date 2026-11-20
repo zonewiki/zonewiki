@@ -29,24 +29,24 @@ func TestWrongPasswordsSlowTheGuesserDown(t *testing.T) {
 	at := clock(t, time.Unix(1_000_000, 0))
 	th := newThrottle()
 	for range 5 {
-		if th.wait("x") != 0 {
+		if th.wait("x", "alice") != 0 {
 			t.Fatal("waits before 5 failures")
 		}
-		th.failed("x")
+		th.failed("x", "alice")
 	}
-	if w := th.wait("x"); w != time.Minute || waitMessage(w) != "Too many wrong attempts. Try again in 1 minute." {
+	if w := th.wait("x", "alice"); w != time.Minute || waitMessage(w) != "Too many wrong attempts. Try again in 1 minute." {
 		t.Fatalf("wait %v", w)
 	}
 	*at = at.Add(61 * time.Second)
-	if th.wait("x") != 0 {
+	if th.wait("x", "alice") != 0 {
 		t.Fatal("still waits after a minute")
 	}
-	th.failed("x") // the 6th: 2 minutes now
-	if w := th.wait("x"); w != 2*time.Minute || !strings.Contains(waitMessage(w), "2 minutes") {
+	th.failed("x", "alice") // the 6th: 2 minutes now
+	if w := th.wait("x", "alice"); w != 2*time.Minute || !strings.Contains(waitMessage(w), "2 minutes") {
 		t.Fatalf("wait %v", w)
 	}
-	th.succeeded("x") // a success forgets the failures
-	if th.wait("x") != 0 {
+	th.succeeded("x", "alice") // a success forgets the failures
+	if th.wait("x", "alice") != 0 {
 		t.Fatal("a success didn't clear")
 	}
 }
@@ -61,7 +61,7 @@ func TestTriesAtOnceAreCountedOneByOne(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			th.try("x", func() bool {
+			th.try("x", "alice", func() bool {
 				checked.Add(1)
 				time.Sleep(time.Millisecond)
 				return false
@@ -76,9 +76,9 @@ func TestTriesAtOnceAreCountedOneByOne(t *testing.T) {
 		t.Fatalf("locks left: %d", len(th.trying))
 	}
 	// Another client isn't held up, and a right try clears its failures.
-	th.failed("y")
-	if ok, wait := th.try("y", func() bool { return true }); !ok || wait != 0 || th.fails["y"].count != 0 {
-		t.Fatalf("y: %v %v %v", ok, wait, th.fails["y"])
+	th.failed("y", "bob")
+	if ok, wait := th.try("y", "bob", func() bool { return true }); !ok || wait != 0 || th.fails[pairKey("y", "bob")].count != 0 {
+		t.Fatalf("y: %v %v %v", ok, wait, th.fails[pairKey("y", "bob")])
 	}
 }
 
@@ -96,9 +96,9 @@ func TestNetwork(t *testing.T) {
 func TestLongestWaitIsAnHour(t *testing.T) {
 	th := newThrottle()
 	for range 30 {
-		th.failed("x")
+		th.failed("x", "alice")
 	}
-	if w := th.wait("x"); w <= 3500*time.Second || w > time.Hour {
+	if w := th.wait("x", "alice"); w <= 3500*time.Second || w > time.Hour {
 		t.Fatalf("wait %v", w)
 	}
 }
@@ -106,11 +106,101 @@ func TestLongestWaitIsAnHour(t *testing.T) {
 func TestQuietClientsAreForgotten(t *testing.T) {
 	at := clock(t, time.Unix(1_000_000, 0))
 	th := newThrottle()
-	th.failed("old")
+	th.failed("old", "alice")
 	*at = at.Add(25 * time.Hour)
-	th.failed("new")
-	if _, ok := th.fails["old"]; ok {
+	th.failed("new", "alice")
+	if _, ok := th.fails[pairKey("old", "alice")]; ok {
 		t.Fatal("a client quiet for a day is kept")
+	}
+	if _, ok := th.totals["old"]; ok {
+		t.Fatal("a client's total is kept after it dropped to none")
+	}
+}
+
+// A right try clears its own account's count and nothing else: signing in
+// as oneself between guesses at someone else's password forgets none of
+// them (it used to clear the client: unlimited guesses for any user).
+func TestARightTryClearsOnlyItsAccount(t *testing.T) {
+	clock(t, time.Unix(1_000_000, 0))
+	th := newThrottle()
+	guesses := 0
+	for range 10 {
+		for range 4 {
+			if ok, wait := th.try("x", "alice", func() bool { return false }); !ok && wait == 0 {
+				guesses++
+			}
+		}
+		if ok, _ := th.try("x", "mallory", func() bool { return true }); !ok {
+			t.Fatal("mallory's own password refused")
+		}
+	}
+	if guesses != 5 {
+		t.Fatalf("%d guesses at alice's password checked, want 5", guesses)
+	}
+	// alice herself, elsewhere, isn't held up by it.
+	if wait := th.wait("y", "alice"); wait != 0 {
+		t.Fatalf("another client waits %v for alice", wait)
+	}
+}
+
+// Guesses sprayed over many names count together: past the client's total
+// every try of it waits, whatever name it is for, and a right one doesn't
+// clear the total.
+func TestNamesSprayedCountTogether(t *testing.T) {
+	at := clock(t, time.Unix(1_000_000, 0))
+	th := newThrottle()
+	for i := range 20 {
+		if ok, wait := th.try("x", "user"+itoa(i), func() bool { return false }); ok || wait != 0 {
+			t.Fatalf("try %d: %v %v", i, ok, wait)
+		}
+	}
+	if ok, _ := th.try("x", "mallory", func() bool { return true }); ok {
+		t.Fatal("a try past the client's total was checked")
+	}
+	if wait := th.wait("x", "someone-new"); wait != time.Minute {
+		t.Fatalf("a new name waits %v, want a minute", wait)
+	}
+	if wait := th.wait("y", "someone-new"); wait != 0 {
+		t.Fatalf("another client waits %v", wait)
+	}
+	*at = at.Add(time.Minute)
+	if ok, _ := th.try("x", "mallory", func() bool { return true }); !ok {
+		t.Fatal("refused after the wait")
+	}
+	if th.total("x", now()) < 19.9 {
+		t.Fatalf("a right try lowered the total to %v", th.total("x", now()))
+	}
+	// The total drops by one an hour: a day later the client is free again.
+	*at = at.Add(21 * time.Hour)
+	if wait := th.wait("x", "someone-new"); wait != 0 {
+		t.Fatalf("waits %v a day later", wait)
+	}
+}
+
+// What docs/spec/security.md says a guesser gets in its first day, trying
+// whenever it may: for one account, and over ever new names (or signing in
+// as itself between guesses, which the account's count ignores).
+func TestGuessesInADay(t *testing.T) {
+	count := func(next func(i int) string) int {
+		at := clock(t, time.Unix(1_000_000, 0))
+		th := newThrottle()
+		end, n := at.Add(24*time.Hour), 0
+		for at.Before(end) {
+			account := next(n)
+			if wait := th.wait("x", account); wait > 0 {
+				*at = at.Add(wait)
+				continue
+			}
+			th.failed("x", account)
+			n++
+		}
+		return n
+	}
+	one := count(func(int) string { return "alice" })
+	many := count(func(i int) string { return "user" + itoa(i) })
+	t.Logf("guesses in a day: %d for one account, %d over many", one, many)
+	if one != 33 || many != 49 {
+		t.Fatalf("one account %d (want 33), many names %d (want 49): update docs/spec/security.md, Throttling", one, many)
 	}
 }
 

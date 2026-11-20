@@ -273,7 +273,7 @@ func welcomeRoute(w http.ResponseWriter, r *http.Request) {
 		page(w, rq, status, "welcome.html", "Link", shell{noActions: true}, &welcomeView{Dead: true, Error: msg})
 	}
 	var link *welcomeLink
-	ok, wait := welcomeThrottle.try(key, func() bool {
+	ok, wait := welcomeThrottle.try(key, "", func() bool {
 		link = findLink(r.PathValue("token"))
 		return link != nil && settings().Users != nil && (link.Kind != "signup" || signupOn(settings()))
 	})

@@ -451,17 +451,21 @@ Nor can they read what their asker may not see: whether a regex matches, fails o
 
 ## Throttling
 
-Wrong passwords and wrong MCP tokens are throttled per client (`Throttle`, `loginThrottle`/`mcpThrottle`, in memory): after 5 failures in a row each try waits 1 minute, doubling up to an hour, refused unchecked (429, the login page says how long; `/mcp` sends `Retry-After`);
-a success clears the client.
-So a client that keeps guessing has 5 tries, then one after 1 minute, after 2, 4, 8, 16, 32, and from then on one an hour: about 35 guesses in the first day.
-A client's wrong tries are forgotten a day after its last one (`Throttle.failed` sweeps them), and a restart forgets them all.
+Wrong passwords and wrong MCP tokens are throttled per client (`Throttle`, `loginThrottle`/`mcpThrottle`, in memory), counted for each account a try was for: the user name the login form names, or whose password Change password, Connect an assistant and OAuth's Allow ask for (`""` for what names no one: the wiki's one password, a token, a code, a link).
+After 5 failures in a row for an account each further try for it waits 1 minute, doubling up to an hour, refused unchecked (429, the login page says how long; `/mcp` sends `Retry-After`);
+a success clears that account's count and no other, so signing in as oneself between guesses at someone else's password forgets none of them.
+So a client that keeps guessing one account has 5 tries, then one after 1 minute, after 2, 4, 8, 16, 32, and from then on one an hour: 33 guesses in the first day (`TestGuessesInADay` counts them).
+**The client's total**: beside the accounts' counts, every wrong try of a client counts in its total, which no success clears and which drops by one an hour; past 20, every try of the client waits as above, whatever account it is for.
+So a client that sprays guesses over many names has 49 in the first day, and one an hour after that.
+There is no count of an account over all clients: anyone anywhere could then lock its user out, an admin too.
+An account's wrong tries are forgotten a day after its last one, a client's total once it has dropped to none (`Throttle.failed` sweeps them), and a restart forgets them all.
 Secrets are compared as bytes (`sameSecret`), so non-ASCII passwords work.
 
 - **Three counts** (`newThrottle`, the same numbers each): the password's (`loginThrottle`: the login page, Change password, a token made on Connect an assistant, Allow on OAuth's consent page), the token's (`mcpThrottle`: `/mcp`, the file routes with a token, OAuth's `/oauth/token`), so an assistant's mistakes don't lock its user's browser out, and the welcome links' (`welcomeThrottle`: a link that doesn't work, `/welcome/<token>`).
   Sign-up has caps of its own (5 mails a client and 50 in all an hour; Sign-up in `docs/spec/users.md`).
 - **One try at a time**: a client's tries are checked one at a time (`Throttle.try`: the wait, the check and the count as one step), so tries sent at once aren't all let in before the first counts as a failure (a hundred connections were a hundred guesses per wait).
 - **The client** (`clientKey`) is the remote address,
-  an IPv6 address by its /64 (`network`: a client has that whole network to take addresses from, and each would have five tries of its own),
+  an IPv6 address by its /64 (`network`: a client has that whole network to take addresses from, and each would have tries of its own),
   or,
   when that is a trusted proxy (`trusted-proxies` in the settings file; unset: loopback),
   the last `X-Forwarded-For` entry that isn't itself a trusted proxy (the one the proxy appended; entries before it are the client's to make up).

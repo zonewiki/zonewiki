@@ -303,7 +303,7 @@ func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, via := asker{}, ""
-	ok, wait := mcpThrottle.try(clientKey(r), func() (ok bool) {
+	ok, wait := mcpThrottle.try(clientKey(r), "", func() (ok bool) { // a token names no account
 		user, via, ok = mcpAuthorized(r)
 		return ok
 	})

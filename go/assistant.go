@@ -135,7 +135,7 @@ func assistantTokenRoute(w http.ResponseWriter, r *http.Request) {
 		if s.Users != nil {
 			hash = s.Users[name].PasswordHash
 		}
-		right, wait := loginThrottle.try(clientKey(r), func() bool {
+		right, wait := loginThrottle.try(clientKey(r), name, func() bool {
 			return checkPassword(r.PostFormValue("password"), hash)
 		})
 		if wait > 0 || !right {

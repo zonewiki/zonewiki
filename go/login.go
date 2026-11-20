@@ -25,7 +25,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 		// Refused unchecked while the client must wait, even the right
 		// password: guessing doesn't go on in the meantime.
 		user := ""
-		ok, wait := loginThrottle.try(clientKey(r), func() (ok bool) {
+		ok, wait := loginThrottle.try(clientKey(r), loginAccount(r), func() (ok bool) {
 			user, ok = checkLogin(r)
 			return ok
 		})
@@ -79,6 +79,20 @@ func checkLogin(r *http.Request) (user string, ok bool) {
 		return u.Name, true
 	}
 	return "", false
+}
+
+// loginAccount: whose password the login form tries, for the throttle: the
+// user it names (with users), as a name is compared; "?" for what is no
+// user's name, so made-up ones count together; "" for the wiki's password.
+func loginAccount(r *http.Request) string {
+	if settings().Users == nil {
+		return ""
+	}
+	name := strings.ToLower(strings.TrimSpace(r.PostFormValue("username")))
+	if len(name) > 64 || !userNameRE.MatchString(name) {
+		return "?"
+	}
+	return name
 }
 
 // disabledLogin: the disabled user the login form names, with their

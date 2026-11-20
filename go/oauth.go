@@ -394,7 +394,7 @@ func oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 	if s.Users != nil {
 		hash = s.Users[user.Name].PasswordHash
 	}
-	right, wait := loginThrottle.try(clientKey(r), func() bool {
+	right, wait := loginThrottle.try(clientKey(r), user.Name, func() bool {
 		return checkPassword(r.PostFormValue("password"), hash)
 	})
 	if wait > 0 || !right {
@@ -540,7 +540,7 @@ func oauthToken(w http.ResponseWriter, r *http.Request) {
 	}
 	var tokens grantTokens
 	var err error
-	_, wait := mcpThrottle.try(clientKey(r), func() bool {
+	_, wait := mcpThrottle.try(clientKey(r), "", func() bool { // a code or refresh token names no account
 		tokens, err = grantTokensFor(r)
 		return err == nil
 	})

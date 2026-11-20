@@ -74,7 +74,7 @@ func passwordRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v := &passwordView{User: name}
-	right, wait := loginThrottle.try(clientKey(r), func() bool {
+	right, wait := loginThrottle.try(clientKey(r), name, func() bool {
 		return checkPassword(r.PostFormValue("current"), old)
 	})
 	if wait > 0 {

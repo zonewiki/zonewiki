@@ -264,7 +264,7 @@ func byToken(r *http.Request) bool {
 // ok false: answered.
 func tokenRequest(w http.ResponseWriter, r *http.Request) (*http.Request, bool) {
 	user, via := asker{}, ""
-	ok, wait := mcpThrottle.try(clientKey(r), func() (ok bool) {
+	ok, wait := mcpThrottle.try(clientKey(r), "", func() (ok bool) {
 		user, via, ok = mcpAuthorized(r)
 		return ok
 	})

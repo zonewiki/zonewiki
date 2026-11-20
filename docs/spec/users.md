@@ -852,7 +852,7 @@ The login page asks for the user name and the password (`login.html`; the name f
 The name is compared in lower case, without surrounding spaces.
 A wrong name or password says "Incorrect user name or password." (not which one; without users "Incorrect password."), keeps the name typed, and costs the same time either way: an unknown name is checked against a dummy hash (`authenticate`), so timing doesn't tell which names exist.
 The dummy hash has a real one's iterations but zeros for salt and key (`dummyHash`), so Zone doesn't spend the 600,000 rounds making it at every start.
-Wrong tries are throttled per client as with the wiki's one password (`loginThrottle`, Throttling in `docs/spec/security.md`); not per user name, which would let anyone lock a user out.
+Wrong tries are throttled per client and the user name it tries, with a total for the client over every name (`loginThrottle`, Throttling in `docs/spec/security.md`): signing in as oneself clears only one's own count, not the guesses at someone else's password; there is no count for a name over all clients, which would let anyone lock a user out.
 
 ### Who is signed in
 

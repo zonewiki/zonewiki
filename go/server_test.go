@@ -195,7 +195,7 @@ func TestIdleLongEnough(t *testing.T) {
 		t.Error("idle while a request runs")
 	}
 	idle.busy.Add(-1)
-	loginThrottle.failed("203.0.113.9")
+	loginThrottle.failed("203.0.113.9", "alice")
 	*at = at.Add(23 * time.Hour)
 	if idleLongEnough(after) {
 		t.Error("idle while the throttle remembers a wrong password")
@@ -204,11 +204,11 @@ func TestIdleLongEnough(t *testing.T) {
 	if !idleLongEnough(after) {
 		t.Error("not idle a day after the wrong password")
 	}
-	loginThrottle.failed("203.0.113.9")
-	loginThrottle.succeeded("203.0.113.9")
+	loginThrottle.failed("203.0.113.9", "alice")
+	loginThrottle.succeeded("203.0.113.9", "alice")
 	*at = at.Add(after)
 	if !idleLongEnough(after) {
-		t.Error("not idle after the right password cleared the client")
+		t.Error("not idle after the right password cleared the account")
 	}
 	// Nor while the repository is packed: a join stopped halfway starts anew.
 	setPacking := func(on bool) {

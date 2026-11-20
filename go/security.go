@@ -513,22 +513,32 @@ func untrustedForwarder(peer netip.Addr) {
 		"when wrong passwords are throttled", peer, peer, configName(), peer)
 }
 
-// Throttle slows a guesser of passwords (and MCP tokens) down: after free
-// failures in a row from one client, each further try waits, 1 minute,
-// then doubling up to an hour. A success clears the client; a client quiet
-// for a day is forgotten. Per client, so a guesser elsewhere doesn't lock
-// the owner out. In memory: a restart forgets.
+// Throttle slows a guesser of passwords (and MCP tokens) down. It counts
+// a client's wrong tries for each account they were for (a user's name;
+// "" for what names none: the wiki's one password, a token, a link): after
+// free failures in a row for one account, each further try for it waits,
+// 1 minute, then doubling up to an hour, and a right try clears that
+// account's count, no other: signing in as oneself between guesses at
+// someone else's password forgets none of them. Beside it the client's
+// total over every account, which a right try doesn't clear and which
+// drops by one in each leak of time: past totalFree, every try of the
+// client waits as above, so guesses sprayed over many names are slowed
+// down too. There is no count of an account over all clients: a guesser
+// anywhere could lock its owner out. A client quiet for a day is
+// forgotten. In memory: a restart forgets.
 //
 // A try is checked through try, one at a time per client: tries sent at
 // once would otherwise all be let in before the first of them counts as a
 // failure (a hundred connections, a hundred guesses per wait).
 type Throttle struct {
-	free           int
-	first, longest time.Duration
-	mu             sync.Mutex
-	fails          map[string]failures
-	trying         map[string]*clientLock
-	swept          time.Time // when the quiet clients were last forgotten
+	free, totalFree int
+	first, longest  time.Duration
+	leak            time.Duration // the time in which a client's total drops by one
+	mu              sync.Mutex
+	fails           map[string]failures // by client and account (pairKey)
+	totals          map[string]level    // by client
+	trying          map[string]*clientLock
+	swept           time.Time // when the quiet clients were last forgotten
 }
 
 // clientLock: one client's tries, one at a time; n: how many hold or wait
@@ -538,18 +548,19 @@ type clientLock struct {
 	n int
 }
 
-// try checks one try of key's with check (is the password right?): refused
-// unchecked while key must wait (how long: wait), else counted as a
-// failure or, right, clearing key. key's tries run one after another.
-func (t *Throttle) try(key string, check func() bool) (ok bool, wait time.Duration) {
+// try checks one try of client's for account with check (is the password
+// right?): refused unchecked while client must wait for that account (how
+// long: wait), else counted as a failure or, right, clearing the
+// account's count. client's tries run one after another.
+func (t *Throttle) try(client, account string, check func() bool) (ok bool, wait time.Duration) {
 	t.mu.Lock()
 	if t.trying == nil {
 		t.trying = map[string]*clientLock{}
 	}
-	l := t.trying[key]
+	l := t.trying[client]
 	if l == nil {
 		l = &clientLock{}
-		t.trying[key] = l
+		t.trying[client] = l
 	}
 	l.n++
 	t.mu.Unlock()
@@ -558,18 +569,18 @@ func (t *Throttle) try(key string, check func() bool) (ok bool, wait time.Durati
 		l.Unlock()
 		t.mu.Lock()
 		if l.n--; l.n == 0 {
-			delete(t.trying, key)
+			delete(t.trying, client)
 		}
 		t.mu.Unlock()
 	}()
-	if wait := t.wait(key); wait > 0 {
+	if wait := t.wait(client, account); wait > 0 {
 		return false, wait
 	}
 	if check() {
-		t.succeeded(key)
+		t.succeeded(client, account)
 		return true, 0
 	}
-	t.failed(key)
+	t.failed(client, account)
 	return false, 0
 }
 
@@ -578,23 +589,48 @@ type failures struct {
 	last  time.Time
 }
 
-func newThrottle() *Throttle {
-	return &Throttle{free: 5, first: time.Minute, longest: time.Hour, fails: map[string]failures{}}
+// level: a client's total of wrong tries as it was at its last one (n),
+// which drops by one in each leak since (Throttle.total).
+type level struct {
+	n    float64
+	last time.Time
 }
 
-// wait is how long key must wait before it may try again (0: now).
-func (t *Throttle) wait(key string) time.Duration {
+func newThrottle() *Throttle {
+	return &Throttle{free: 5, totalFree: 20, first: time.Minute, longest: time.Hour, leak: time.Hour,
+		fails: map[string]failures{}, totals: map[string]level{}}
+}
+
+// pairKey: a client's count for account.
+func pairKey(client, account string) string { return client + "\x00" + account }
+
+// wait is how long client must wait before it may try account again (0:
+// now): for the account's count, or for the client's total.
+func (t *Throttle) wait(client, account string) time.Duration {
 	t.mu.Lock()
-	f := t.fails[key]
+	f, total := t.fails[pairKey(client, account)], t.totals[client]
 	t.mu.Unlock()
-	if f.count < t.free {
+	// The total as whole tries: one less for each full leak (19.98 is 20).
+	return max(t.delay(f.count, t.free, f.last), t.delay(int(math.Ceil(total.n)), t.totalFree, total.last))
+}
+
+// delay: the wait after count failures, the last at last, past free.
+func (t *Throttle) delay(count, free int, last time.Time) time.Duration {
+	if count < free {
 		return 0
 	}
-	delay := time.Duration(math.Min(float64(t.first)*math.Pow(2, float64(f.count-t.free)), float64(t.longest)))
-	return max(0, f.last.Add(delay).Sub(now()))
+	d := time.Duration(math.Min(float64(t.first)*math.Pow(2, float64(count-free)), float64(t.longest)))
+	return max(0, last.Add(d).Sub(now()))
 }
 
-func (t *Throttle) failed(key string) {
+// total: client's total at, dropped by one for each leak since its last
+// wrong try. The caller holds mu.
+func (t *Throttle) total(client string, at time.Time) float64 {
+	l := t.totals[client]
+	return max(0, l.n-float64(at.Sub(l.last))/float64(t.leak))
+}
+
+func (t *Throttle) failed(client, account string) {
 	n := now()
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -607,12 +643,21 @@ func (t *Throttle) failed(key string) {
 				delete(t.fails, k)
 			}
 		}
+		for c := range t.totals {
+			if t.total(c, n) == 0 {
+				delete(t.totals, c)
+			}
+		}
 	}
+	key := pairKey(client, account)
 	t.fails[key] = failures{t.fails[key].count + 1, n}
+	t.totals[client] = level{t.total(client, n) + 1, n}
 }
 
 // remembers: some client's wrong tries are still counted (for a day after
-// its last one).
+// its last one). An account's count is enough to ask: a client's total
+// holds no wrong try whose account's count is gone but those a right try
+// for that account cleared, its owner's slips, which an exit may forget.
 func (t *Throttle) remembers() bool {
 	n := now()
 	t.mu.Lock()
@@ -625,9 +670,11 @@ func (t *Throttle) remembers() bool {
 	return false
 }
 
-func (t *Throttle) succeeded(key string) {
+// succeeded: a right try for account clears client's count for it; the
+// client's total stays.
+func (t *Throttle) succeeded(client, account string) {
 	t.mu.Lock()
-	delete(t.fails, key)
+	delete(t.fails, pairKey(client, account))
 	t.mu.Unlock()
 }
 

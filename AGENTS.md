@@ -287,7 +287,7 @@ The binary carries them all (`zonewiki licenses` prints them).
   - Request bodies are capped in the checks (16 MB, an upload 100 MB or the settings' `upload-max`; 413 above).
     What the wiki may hold is `storage-max` (`go/storage.go`): past it nothing new is made (uploads, new pages and notes: 507), but an edit, a delete or a rename always goes through.
     The settings change only while no request runs (`betweenRequests`; requests don't wait for it), so a request's session check and access checks see the same users.
-  - The session cookie is `Secure` over HTTPS (also behind a proxy's `X-Forwarded-Proto`); wrong passwords and MCP tokens are throttled per client.
+  - The session cookie is `Secure` over HTTPS (also behind a proxy's `X-Forwarded-Proto`); wrong passwords and MCP tokens are throttled per client and account (a right try clears only its own account), with a total per client that no success clears.
 - `ZONE_ALLOW_REMOTE` is the single knob for network access with `run.sh`: unset, the port is bound to loopback only.
 - **Git calls time out** after `gitTimeout` (60s, `runGit`): a hung git counts as failed (exit code 124).
 - Slugs are file paths relative to `ZONE_DATA` without `.md`: `journal/my-page.md` → `journal/my-page`; URL-safe (lowercase, hyphens, `/`).

@@ -71,6 +71,36 @@ class TestLogin:
         resp = login(client, "alice", "alice-pw")
         assert resp.status_code == 429 and "Try again in" in resp.data.decode()
 
+    def test_signing_in_as_oneself_doesnt_clear_guesses_at_another(self, client, users):
+        # bob guesses alice's password and signs in as himself between the
+        # guesses: his success clears only his own count (it used to clear
+        # the client, so a user had unlimited guesses at the admin's).
+        statuses = []
+        for round_ in range(4):
+            for i in range(4):
+                statuses.append(login(client, "alice", f"guess-{round_}-{i}").status_code)
+            assert login(client, "bob", "bob-pw").status_code == 302
+            client.post("/logout", headers=HOST)
+        assert statuses[:5] == [200] * 5 and set(statuses[5:]) == {429}
+        assert login(client, "alice", "alice-pw").status_code == 429   # even the right one, for now
+        # ... and so is a right current password on Change password, which
+        # changes nothing when the new one is refused.
+        assert login(client, "bob", "bob-pw").status_code == 302
+        resp = client.post("/password", data={"current": "bob-pw", "password": "x", "again": "x"}, headers=HOST)
+        assert resp.status_code == 403 and "at least 8" in resp.data.decode()
+        client.post("/logout", headers=HOST)
+        assert login(client, "alice", "guess").status_code == 429
+
+    def test_guesses_over_many_names_count_together(self, client, users):
+        # One client's wrong tries over every name it tries: past 20, every
+        # try of it waits, a right one for an account it hasn't tried too.
+        for i in range(20):
+            assert login(client, f"user{i}", "guess").status_code == 200
+        assert login(client, "bob", "bob-pw").status_code == 429
+        resp = client.post("/login", data={"username": "bob", "password": "bob-pw"},
+                           headers={**HOST, "X-Forwarded-For": "203.0.113.9"})
+        assert resp.status_code == 302                                     # another client isn't held up
+
     def test_logins_sent_at_once_are_counted_one_by_one(self, client, users):
         # Not all let in before the first counts as a failure: five are
         # checked, the rest wait.
