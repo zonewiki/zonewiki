@@ -630,3 +630,31 @@ func TestUploadPathIsTheNamesOwnFile(t *testing.T) {
 		t.Error(`validName takes a '\'`)
 	}
 }
+
+// A name a group went by is its own to take back, and no other group's: not
+// a new group's, nor another's renamed, though the name's folder has no
+// history yet. A group that went by a name and was renamed before it had a
+// page left the name free, and took it back with the next group's past
+// once that one had moved on. Two groups that went by one name (a wiki
+// from before) take it back neither.
+func TestANameAGroupWentByIsTakenForOthers(t *testing.T) {
+	testWiki(t, nil)
+	s := settings()
+	s.Was = map[string][]string{"zzz": {"finance"}}
+	if !groupNameTaken(s, "finance", "") {
+		t.Error("a new group takes a name zzz went by")
+	}
+	if !groupNameTaken(s, "finance", "people") {
+		t.Error("another group's rename takes a name zzz went by")
+	}
+	if groupNameTaken(s, "finance", "zzz") {
+		t.Error("zzz can't take its own name back")
+	}
+	if groupNameTaken(s, "fresh", "") {
+		t.Error("a name nothing went by is taken")
+	}
+	s.Was["people"] = []string{"finance"}
+	if !groupNameTaken(s, "finance", "zzz") || !groupNameTaken(s, "finance", "people") {
+		t.Error("one of two groups that went by a name takes it back")
+	}
+}

@@ -154,6 +154,28 @@ def test_a_group_is_not_made_of_a_name_that_is_taken(client, wiki, name, people,
     assert config(wiki) == before
 
 
+def test_a_name_a_group_went_by_is_taken_for_any_other(client, wiki):
+    """bob makes finance, with no page yet, and renames it zzz: finance is
+    zzz's to take back, and nobody else's, or alice could make her own
+    finance, write in it and rename it, and bob would take finance back
+    with the history of her pages."""
+    sign_in(client, "bob")
+    assert make(client, "finance").status_code == 303
+    assert client.post("/groups/finance/rename", data={"name": "zzz"}, headers=HOST).status_code == 303
+    assert section(wiki, "group zzz") == ["owners = bob", "was = finance"]
+    sign_in(client, "alice")
+    before = config(wiki)
+    resp = make(client, "finance")
+    assert resp.status_code in (400, 409) and "is taken" in html.unescape(resp.get_data(as_text=True))
+    assert config(wiki) == before
+    assert make(client, "budget").status_code == 303
+    resp = client.post("/groups/budget/rename", data={"name": "finance"}, headers=HOST)
+    assert resp.status_code in (400, 409) and "is taken" in html.unescape(resp.get_data(as_text=True))
+    sign_in(client, "bob")
+    assert until(lambda: client.post("/groups/zzz/rename", data={"name": "finance"}, headers=HOST).status_code == 303)
+    assert section(wiki, "group finance") == ["owners = bob", "was = zzz"]
+
+
 def test_a_viewer_makes_no_group_and_a_wiki_without_users_has_none(client, wiki, monkeypatch):
     sign_in(client, "vera")
     before = config(wiki)

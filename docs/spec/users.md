@@ -591,6 +591,8 @@ A new group's name is refused when it is taken (`groupNameTaken`): a group there
 A list is for no group there isn't (Saying whom a list is for in `docs/spec/tasks.md`), so a list takes no name nobody has.
 **And a name a group went by before**: the history of `groups/<name>/` (the versions and deleted pages of a group renamed since, which are read under that path by who is in a group of that name) and a deleted list that was for it stay its former group's, so a new group of the name would be shown them: the name stays taken.
 The group that went by it takes it back (`was = apollo` in its section, which a rename writes: the names it had), so a rename can be undone.
+**A name in a group's `was` is taken for every other group**, whether its folder has a history yet or not: a group renamed before it had a page would otherwise leave the name to the next group, and take it back, with that group's past, once that one moved on.
+Two groups that went by one name (a wiki from before this rule) take it back neither.
 On the host nobody is asked: `zonewiki user group` and a hand edit of the file make a group of any name.
 The groups' names are no secret among a wiki's users (a list's Who it is for… completes from them), so "taken" tells nothing new.
 

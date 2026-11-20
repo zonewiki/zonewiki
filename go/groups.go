@@ -292,10 +292,22 @@ func mayMakeGroup(s *Settings, user asker) bool {
 // (whose folder's history is its members'). A new group of the name would
 // be shown both, so the name stays taken; but for the group that went by it
 // (as: the group being renamed, whose was names it), which takes its own
-// name back.
+// name back, and which alone does: a name in any group's was is taken for
+// every other.
 func groupNameTaken(s *Settings, name, as string) bool {
 	if groupNameUsed(s, name) {
 		return true
+	}
+	// A name another group went by is that group's to take back, with its
+	// folder's history under it, whether the history holds a page yet or
+	// not: else a group renamed before it had one would leave the name to
+	// the next group, and take it back with that group's past once that one
+	// moved on. And two that went by it (a wiki from before) take it back
+	// neither: its history is no one group's.
+	for g, was := range s.Was {
+		if g != as && slices.Contains(was, name) {
+			return true
+		}
 	}
 	if as != "" && slices.Contains(s.Was[as], name) {
 		return false
