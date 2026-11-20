@@ -659,30 +659,12 @@ class TestReadOnly:
         assert mcp_error(bob, fresh["access_token"], "write_page", slug="x", content="x")[1]
         assert "write_page" not in tool_names(bob, fresh["access_token"])
 
-    def test_the_page_says_what_each_may_do_and_narrows_one(self, bob, wiki_dir):
-        _, full = connect(bob, "bob-pw", name="Writer")
+    def test_the_page_says_what_each_may_do(self, bob, wiki_dir):
+        connect(bob, "bob-pw", name="Writer")
         connect_to_read(bob, "bob-pw", name="Reader")
         body = bob.get("/assistant", headers=HOST).data.decode()
         rows = re.findall(r'<td>([^<]*)</td><td>[^<]*</td><td class="assistant-may">([^<]*)</td>', body)
         assert rows == [("Reader", "Only read"), ("Writer", "Read and change")]
-        ids = re.findall(r'action="/assistant/connections/([0-9a-f]{16})/read-only"', body)
-        assert len(ids) == 1                                       # only the one that writes is offered it
-        resp = bob.post(f"/assistant/connections/{ids[0]}/read-only", headers=HOST)
-        assert resp.status_code == 303 and resp.headers["Location"] == "/assistant?done=read-only"
-        body = bob.get(resp.headers["Location"], headers=HOST).data.decode()
-        assert "only reads from now on" in body and "/read-only" not in body
-        text, refused = mcp_error(bob, full["access_token"], "write_page", slug="x", content="x")
-        assert refused and "only reads" in text and not (wiki_dir / "x.md").exists()
-        assert mcp(bob, full["access_token"], "read_page", slug="index")[0] == 200
-
-    def test_only_ones_own_is_narrowed(self, client, users, wiki_dir):
-        _, tokens = connect(login(client, "bob"), "bob-pw")
-        gid = grants(wiki_dir)[0]["id"]
-        login(client, "alice")
-        assert client.post(f"/assistant/connections/{gid}/read-only", headers=HOST).status_code == 404
-        assert client.post("/assistant/connections/nope/read-only", headers=HOST).status_code == 404
-        assert grants(wiki_dir)[0]["read_only"] is False
-        assert not mcp_error(client, tokens["access_token"], "write_page", slug="bobs", content="x")[1]
 
     def test_a_connection_from_before_writes(self, bob, wiki_dir):
         """A connection kept without the field (made before there was one) is as it was."""
@@ -692,3 +674,160 @@ class TestReadOnly:
             del g["read_only"]
         (wiki_dir / ".zone" / "grants").write_text(json.dumps(all))
         assert not mcp_error(bob, tokens["access_token"], "write_page", slug="x", content="x")[1]
+
+
+def change(client, gid, may="write", see=None, password=None):
+    """Change… of the connection gid: what it may do (may) and see (see:
+    "private", "group:dev"; None sends no choice of places), and the
+    password when given."""
+    form = {"may": may}
+    if see is not None:
+        form.update(choose="1", see=see)
+    if password is not None:
+        form["password"] = password
+    return client.post(f"/assistant/connections/{gid}/change", headers=HOST, data=form)
+
+
+def reach(wiki, gid):
+    """What the connection gid has: (read_only, no_private, groups)."""
+    g = next(g for g in grants(wiki) if g["id"] == gid)
+    return g.get("read_only", False), g.get("no_private", False), g.get("groups")
+
+
+class TestChange:
+    """Change… on Connect an assistant: what a connection may do and see,
+    the choices of Allow, taken away without the password and given back
+    only with it, through the tokens it has."""
+
+    def test_the_page_offers_allows_choices_as_they_are(self, bob, wiki_dir):
+        connect(bob, "bob-pw", name="Writer")
+        connect_to_read(bob, "bob-pw", name="Reader")
+        body = bob.get("/assistant", headers=HOST).data.decode()
+        forms = re.findall(r'<form method="post" action="/assistant/connections/([0-9a-f]{16})/change"(.*?)</form>', body, re.S)
+        assert [gid for gid, _ in forms] == [g["id"] for g in reversed(grants(wiki_dir))]   # newest first
+        reader, writer = forms[0][1], forms[1][1]
+        assert 'data-client="Reader"' in reader and 'data-client="Writer"' in writer
+        for form in (reader, writer):
+            assert "What may it do?" in form and "What may it see?" in form and 'name="choose" value="1"' in form
+            assert 'name="see" value="private" checked data-had' in form and 'name="password"' in form
+        # What it has now is ticked, and marked as had: the page asks for the password only to give more.
+        assert 'name="may" value="read" checked' in reader and 'name="may" value="write">' in reader
+        assert 'name="may" value="write" checked data-had' in writer
+        assert "/read-only" not in body and "Make read-only" not in body
+
+    def test_taking_away_needs_no_password_and_holds_for_its_tokens(self, bob, wiki_dir):
+        (wiki_dir / "private/bob").mkdir(parents=True)
+        (wiki_dir / "private/bob/diary.md").write_text("# Diary\n\nquillwort\n")
+        client_id, tokens = connect(bob, "bob-pw")
+        gid = grants(wiki_dir)[0]["id"]
+        access = tokens["access_token"]
+        assert "quillwort" in mcp(bob, access, "read_page", slug="private/bob/diary")[1]
+        resp = change(bob, gid, may="read", see=[])
+        assert resp.status_code == 303 and resp.headers["Location"] == "/assistant?done=change"
+        assert "Changed what that assistant may do and see" in bob.get(resp.headers["Location"], headers=HOST).data.decode()
+        assert reach(wiki_dir, gid) == (True, True, None)
+        # The token it has is asked with what was chosen, from its next call.
+        text, refused = mcp_error(bob, access, "write_page", slug="x", content="x")
+        assert refused and "only reads" in text and not (wiki_dir / "x.md").exists()
+        assert "quillwort" not in mcp(bob, access, "read_page", slug="private/bob/diary")[1]
+        assert "write_page" not in tool_names(bob, access)
+        # And so is every refresh.
+        fresh = token(bob, grant_type="refresh_token", refresh_token=tokens["refresh_token"], client_id=client_id).get_json()
+        assert mcp_error(bob, fresh["access_token"], "write_page", slug="x", content="x")[1]
+        assert grants(wiki_dir)[0]["id"] == gid and len(grants(wiki_dir)) == 1
+
+    def test_giving_more_takes_the_password(self, bob, wiki_dir):
+        _, tokens = connect_to_read(bob, "bob-pw")
+        gid = grants(wiki_dir)[0]["id"]
+        for password, says in ((None, "enter your password"), ("", "enter your password"),
+                               ("wrong", "Incorrect password: nothing was changed."),
+                               ("alice-pw", "Incorrect password: nothing was changed.")):
+            resp = change(bob, gid, may="write", see=["private"], password=password)
+            body = resp.data.decode()
+            assert resp.status_code == 403 and says in body, (password, body[:300])
+            # The form comes back open, as chosen, with why.
+            assert '<details class="assistant-change" open>' in body and 'name="may" value="write" checked' in body
+            assert reach(wiki_dir, gid) == (True, False, None)
+        assert mcp_error(bob, tokens["access_token"], "write_page", slug="x", content="x")[1]
+        resp = change(bob, gid, may="write", see=["private"], password="bob-pw")
+        assert resp.status_code == 303 and reach(wiki_dir, gid) == (False, False, None)
+        text, refused = mcp_error(bob, tokens["access_token"], "write_page", slug="x", content="# X\n")
+        assert not refused and (wiki_dir / "x.md").exists(), text
+
+    def test_a_mixed_change_counts_as_giving_more(self, bob, wiki_dir):
+        client_id = register(bob)
+        resp, code = allow(bob, {**asking(client_id), "choose": "1", "see": []}, "bob-pw")
+        exchange(bob, client_id, code)
+        gid = grants(wiki_dir)[0]["id"]
+        assert reach(wiki_dir, gid) == (False, True, None)
+        # Only read (less), with the private place (more): the password.
+        assert change(bob, gid, may="read", see=["private"]).status_code == 403
+        assert reach(wiki_dir, gid) == (False, True, None)
+        assert change(bob, gid, may="read", see=["private"], password="bob-pw").status_code == 303
+        assert reach(wiki_dir, gid) == (True, False, None)
+
+    def test_wrong_passwords_are_throttled_as_at_the_login(self, bob, wiki_dir):
+        connect_to_read(bob, "bob-pw")
+        gid = grants(wiki_dir)[0]["id"]
+        for _ in range(5):
+            assert change(bob, gid, see=["private"], password="wrong").status_code == 403
+        resp = change(bob, gid, see=["private"], password="bob-pw")
+        assert resp.status_code == 429 and "Try again in" in resp.data.decode()
+        assert reach(wiki_dir, gid)[0] is True
+        # Taking away asks no password, so nothing to wait for.
+        assert change(bob, gid, may="read", see=[]).status_code == 303
+
+    def test_only_ones_own(self, client, users, wiki_dir):
+        _, tokens = connect(login(client, "bob"), "bob-pw")
+        gid = grants(wiki_dir)[0]["id"]
+        login(client, "alice")
+        assert change(client, gid, may="read").status_code == 404
+        assert change(client, gid, may="write", password="alice-pw").status_code == 404
+        assert change(client, "nope", may="read").status_code == 404
+        assert reach(wiki_dir, gid) == (False, False, None)
+        assert not mcp_error(client, tokens["access_token"], "write_page", slug="bobs", content="x")[1]
+
+    def test_a_viewers_stays_read_only(self, client, users, wiki_dir, monkeypatch):
+        login(client, "carol")
+        client_id = register(client)
+        body = client.get("/oauth/authorize?" + urlencode(asking(client_id)), headers=HOST).data.decode()
+        assert "What may it do?" not in body and "What may it see?" in body     # what it sees is hers to choose
+        _, code = allow(client, {**asking(client_id), "choose": "1", "see": []}, "carol-pw")
+        tokens = exchange(client, client_id, code).get_json()
+        gid = grants(wiki_dir)[0]["id"]
+        assert reach(wiki_dir, gid) == (True, True, None)
+        page = client.get("/assistant", headers=HOST).data.decode()
+        assert "What may it see?" in page and "What may it do?" not in page
+        # Read and change, with her password: still only reads; the private place she may give back.
+        assert change(client, gid, may="write", see=["private"], password="carol-pw").status_code == 303
+        assert reach(wiki_dir, gid) == (True, False, None)
+        assert mcp_error(client, tokens["access_token"], "write_page", slug="carols", content="x")[1]
+        # Made an editor, she may give it more, with her password.
+        monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"role": "admin"}})
+        login(client, "carol")
+        assert change(client, gid, may="write", see=["private"]).status_code == 403
+        assert change(client, gid, may="write", see=["private"], password="carol-pw").status_code == 303
+        assert reach(wiki_dir, gid) == (False, False, None)
+
+    def test_it_is_judged_by_what_it_has_when_posted(self, bob, wiki_dir):
+        """Two tabs: one makes it read-only; the other, still showing Read
+        and change, takes the private place away and leaves Read and change
+        ticked: that gives it more than it has now, so it takes the password."""
+        connect(bob, "bob-pw")
+        gid = grants(wiki_dir)[0]["id"]
+        assert change(bob, gid, may="read", see=["private"]).status_code == 303
+        assert change(bob, gid, may="write", see=[]).status_code == 403
+        assert reach(wiki_dir, gid) == (True, False, None)
+
+    def test_without_users_only_what_it_does(self, client, wiki_dir, monkeypatch):
+        monkeypatch.setattr(settings, "PASSWORD", "one password")
+        client.post("/login", data={"password": "one password"}, headers=HOST)
+        _, tokens = connect(client, "one password")
+        gid = grants(wiki_dir)[0]["id"]
+        page = client.get("/assistant", headers=HOST).data.decode()
+        assert "What may it do?" in page and "What may it see?" not in page
+        assert change(client, gid, may="read").status_code == 303
+        assert mcp_error(client, tokens["access_token"], "write_page", slug="x", content="x")[1]
+        assert change(client, gid, may="write", password="wrong").status_code == 403
+        assert change(client, gid, may="write", password="one password").status_code == 303
+        assert not mcp_error(client, tokens["access_token"], "write_page", slug="x", content="# X\n")[1]

@@ -102,16 +102,20 @@ A group you untick is, for that assistant, like a group you aren't in.
 
 Use this for an assistant you try out, one that answers questions for you in another tool, or one you want to keep away from your private notes.
 Your password is asked again on **Allow**, so a browser left signed in isn't enough to connect one.
+You can change your answers later, without connecting again ([See, change and end connections](#see-change-and-end-connections)).
 
-## See and end connections
+## See, change and end connections
 
 **Connect an assistant** lists, under **Connections**, the assistants you allowed: the name each gave, where its answers go, what it **May** do (with "Sees only: …" when you gave it less), since when, and when it was last used.
 
-- **Make read-only**: from now on it only reads.
+- **Change…**: the two questions of **Allow** again, ticked as the connection has them now.
+  Pick what it may do and see, and click **Save**: it holds from the assistant's next call, nothing to do there.
 - **End**: it is refused from then on.
   It can ask again, and you decide again.
 
-To let a read-only assistant write again, or see more, end its connection and connect it once more.
+Taking something away (**Only read**, unticking your private place or a group) needs no password.
+Giving something back or more (**Read and change**, your private place, a group) asks for your password, as **Allow** does; the field shows when you tick such a choice.
+If you are a viewer, you are asked only what it may see: it only reads ([more](../spec/mcp.md#change-what-a-connection-may-do-and-see)).
 A connection also ends when it goes unused for 90 days, or when you set a new password through a reset link.
 
 ## An assistant's changes

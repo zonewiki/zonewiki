@@ -18,6 +18,7 @@ import './js/present.js';     // presentation mode
 import './js/admin.js';       // the admin page: the Remove dialog, Save shown once a field is edited
 import './js/namepick.js';    // fields that take users or groups: those there are, as pills (Groups, the admin page)
 import './js/copyline.js';    // lines to copy: their Copy buttons
+import './js/assistant.js';   // Connect an assistant: a connection's Change… in a dialog, the password only to give more
 import './tasks.js';           // tasks apps on the page
 
 // Every module above has wired up what it found on the page: from here on

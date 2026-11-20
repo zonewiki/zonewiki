@@ -17,7 +17,7 @@
   <div class="login-form oauth-form" role="status">
     {{- if .Allowed}}
     <h2>Connected</h2>
-    <p><strong>{{.Client}}</strong> may now {{if .ReadOnly}}read{{else}}use{{end}} this wiki{{if .User}} as <strong>{{.User}}</strong>{{end}}{{if .ReadOnly}}: it changes nothing{{end}}. You are being sent back to it.</p>
+    <p><strong>{{.Client}}</strong> may now {{if .Reach.ReadOnly}}read{{else}}use{{end}} this wiki{{if .User}} as <strong>{{.User}}</strong>{{end}}{{if .Reach.ReadOnly}}: it changes nothing{{end}}. You are being sent back to it.</p>
     {{- with .Sees}}<p class="welcome-note">It sees only: {{.}}.</p>{{end}}
     {{- else}}
     <h2>Not connected</h2>
@@ -28,25 +28,8 @@
   {{- else}}
   <form class="login-form oauth-form" method="post" action="/oauth/authorize">
     <h2>Connect an assistant?</h2>
-    <p><strong class="oauth-client">{{.Client}}</strong> asks to use this wiki{{if .User}} as you, <strong>{{.User}}</strong>{{end}}.{{if .Viewer}} You are a viewer: it reads what you see, and changes nothing.{{end}}</p>
-    {{- if not .Viewer}}
-    <fieldset class="oauth-may">
-      <legend>What may it do?</legend>
-      <label><input type="radio" name="may" value="write"{{if not .ReadOnly}} checked{{end}}> <span><strong>Read and change</strong>: {{if .User}}it sees and changes what you do, no more{{else}}it searches, reads and writes the pages and tasks{{end}}. What it changes is listed under Changes, where you can undo it.</span></label>
-      <label><input type="radio" name="may" value="read"{{if .ReadOnly}} checked{{end}}> <span><strong>Only read</strong>: it searches and reads {{if .User}}what you see{{else}}the pages and tasks{{end}}, and changes nothing.</span></label>
-    </fieldset>
-    {{- if .Choose}}
-    <fieldset class="oauth-may oauth-sees">
-      <legend>What may it see?</legend>
-      <input type="hidden" name="choose" value="1">
-      <label><input type="checkbox" checked disabled> <span><strong>The shared wiki</strong>: the pages and tasks everyone here sees.</span></label>
-      <label><input type="checkbox" name="see" value="private"{{if .Private}} checked{{end}}> <span><strong>Your private pages, notes and tasks</strong>, your Inbox among them.</span></label>
-      {{- range .Groups}}
-      <label><input type="checkbox" name="see" value="group:{{.Name}}"{{if .Given}} checked{{end}}> <span>The group <strong>{{.Name}}</strong>: its pages and its lists.</span></label>
-      {{- end}}
-    </fieldset>
-    {{- end}}
-    {{- end}}
+    <p><strong class="oauth-client">{{.Client}}</strong> asks to use this wiki{{if .User}} as you, <strong>{{.User}}</strong>{{end}}.{{if .Reach.Viewer}} You are a viewer: it reads what you see, and changes nothing.{{end}}</p>
+    {{- template "reach" .Reach}}
     <p class="welcome-note">That is the name it gave. Its answer goes to <strong class="oauth-host">{{.Host}}</strong>: allow it only if you just asked your assistant to connect, and that is where it lives.</p>
     {{- if .Loopback}}
     <p class="welcome-note">That is a program on this computer; any program on it could ask in this name.</p>
@@ -67,7 +50,7 @@
       <button type="submit" name="answer" value="allow" class="btn btn-primary">Allow</button>
       <button type="submit" name="answer" value="deny" class="btn">Deny</button>
     </div>
-    <p class="welcome-note">You can end the connection, or make it read only, any time on Connect an assistant.</p>
+    <p class="welcome-note">You can change what it may do and see, or end the connection, any time on Connect an assistant.</p>
   </form>
   {{- end}}
 </div>

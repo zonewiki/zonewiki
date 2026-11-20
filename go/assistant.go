@@ -8,12 +8,15 @@
 //
 // With OAuth (oauth.go) an assistant needs no token copied: it is given
 // the address and its user allows it in the browser. The page lists those
-// connections (grants.go), each to be ended on its own.
+// connections (grants.go), each to be changed (what it may do and see, the
+// choices Allow offered) or ended on its own.
 package main
 
 import (
+	"errors"
 	"html/template"
 	"net/http"
+	"time"
 	"zonewiki/internal/settingsfile"
 )
 
@@ -22,7 +25,7 @@ func assistantRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /assistant/token", assistantTokenRoute)
 	mux.HandleFunc("POST /assistant/revoke", assistantRevokeRoute)
 	mux.HandleFunc("POST /assistant/connections/{id}/revoke", assistantDisconnectRoute)
-	mux.HandleFunc("POST /assistant/connections/{id}/read-only", assistantNarrowRoute)
+	mux.HandleFunc("POST /assistant/connections/{id}/change", assistantChangeRoute)
 }
 
 // assistantView: the page (assistant.html).
@@ -77,6 +80,11 @@ func assistantData(r *http.Request) *assistantView {
 	v := &assistantView{URL: siteURL(s.BaseURL, r, "/mcp"), User: name, Has: kept != "",
 		AskPassword: s.authOn(), Viewer: s.isViewer(name), OAuth: oauthOn(s), Connections: grantsOf(name),
 		BreadcrumbHTML: breadcrumb(newReq(r), []crumb{{"Assistant", ""}}, "", false, "", "")}
+	for i := range v.Connections {
+		c := &v.Connections[i]
+		c.Reach, _ = chooseReach(s, userOf(r), c.had, nil)
+		c.Reach.Change = true
+	}
 	if cfg.GitEnabled {
 		v.Changes = changesURL(changesOf{By: name, Assistant: true}, 0)
 	}
@@ -102,10 +110,29 @@ func assistantPage(w http.ResponseWriter, r *http.Request) {
 		v.Done = "Revoked the token: an assistant using it is refused from now on."
 	case done == "disconnect":
 		v.Done = "Ended the connection: that assistant is refused from now on."
-	case done == "read-only":
-		v.Done = "That assistant only reads from now on: what it tries to change is refused."
+	case done == "change":
+		v.Done = "Changed what that assistant may do and see, from its next call on."
 	}
 	showAssistant(w, r, http.StatusOK, v)
+}
+
+// passwordAgain: the form's password is the user name's (with no users
+// the wiki's), as making a token, allowing an assistant and giving a
+// connection more ask: each outlasts the session, so a session someone
+// else got hold of mustn't be enough. A wrong one counts against the
+// client like a wrong login, so these pages guess a password no faster
+// than the login page does; wait > 0: it must wait first (right false).
+func passwordAgain(r *http.Request, s *Settings, name string) (right bool, wait time.Duration) {
+	hash := s.PasswordHash
+	if s.Users != nil {
+		hash = ""
+		if u := s.Users[name]; u != nil {
+			hash = u.PasswordHash
+		}
+	}
+	return loginThrottle.try(clientKey(r), name, func() bool {
+		return checkPassword(r.PostFormValue("password"), hash)
+	})
 }
 
 // setToken writes the owner's token (hash; "": none) to the settings file.
@@ -131,13 +158,7 @@ func assistantTokenRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.authOn() {
-		hash := s.PasswordHash
-		if s.Users != nil {
-			hash = s.Users[name].PasswordHash
-		}
-		right, wait := loginThrottle.try(clientKey(r), name, func() bool {
-			return checkPassword(r.PostFormValue("password"), hash)
-		})
+		right, wait := passwordAgain(r, s, name)
 		if wait > 0 || !right {
 			v, status := assistantData(r), http.StatusForbidden
 			v.Error = "Incorrect password: no token was made."
@@ -199,23 +220,69 @@ func assistantDisconnectRoute(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/assistant?done=disconnect", http.StatusSeeOther)
 }
 
-// assistantNarrowRoute: POST /assistant/connections/{id}/read-only makes
-// one of the owner's connections read-only (no other's: 404). No password:
-// it only takes access away; the way back is to end it and connect again.
-func assistantNarrowRoute(w http.ResponseWriter, r *http.Request) {
-	_, name, _, ok := tokenOwner(r)
+// assistantChangeRoute: POST /assistant/connections/{id}/change sets what
+// one of the owner's connections may do and see (no other's: 404), from
+// the choices Allow offered (chooseReach), which go no further than the
+// user. What only takes away needs no password; what gives anything back
+// or more, a mixed change too, takes it again, as Allow does (refused: the
+// page with the form open as chosen, and why). Its tokens stay, and the
+// next call with them is asked with what was chosen.
+func assistantChangeRoute(w http.ResponseWriter, r *http.Request) {
+	s, name, _, ok := tokenOwner(r)
 	if !ok {
 		http.NotFound(w, r)
 		return
 	}
-	found, err := narrowGrant(name, r.PathValue("id"))
-	if err != nil {
-		serverError(w, r, err)
-		return
-	}
+	id := r.PathValue("id")
+	g, found := userGrant(name, id)
 	if !found {
 		http.NotFound(w, r)
 		return
 	}
-	http.Redirect(w, r, "/assistant?done=read-only", http.StatusSeeOther)
+	if r.ParseForm() != nil {
+		http.Error(w, "The form can't be read.", http.StatusBadRequest)
+		return
+	}
+	chosen, to := chooseReach(s, userOf(r), g.less, r.PostForm)
+	chosen.Change = true
+	// refuse: the page, with the connection's form open and why (kept: as
+	// chosen, else as it is now).
+	refuse := func(status int, why string, kept bool) {
+		v := assistantData(r)
+		for i := range v.Connections {
+			if c := &v.Connections[i]; c.ID == id {
+				c.Open, c.Error = true, why
+				if kept {
+					c.Reach = chosen
+				}
+			}
+		}
+		showAssistant(w, r, status, v)
+	}
+	if to.beyond(g.less) {
+		if r.PostFormValue("password") == "" { // no guess: not counted
+			refuse(http.StatusForbidden, "That gives it more than it has: enter your password. Nothing was changed.", true)
+			return
+		}
+		if right, wait := passwordAgain(r, s, name); wait > 0 {
+			refuse(http.StatusTooManyRequests, waitMessage(wait), true)
+			return
+		} else if !right {
+			refuse(http.StatusForbidden, "Incorrect password: nothing was changed.", true)
+			return
+		}
+	}
+	found, err := reachGrant(name, id, g.less, to)
+	switch {
+	case errors.Is(err, errGrantChanged):
+		refuse(http.StatusConflict, err.Error(), false)
+		return
+	case err != nil:
+		serverError(w, r, err)
+		return
+	case !found:
+		http.NotFound(w, r)
+		return
+	}
+	http.Redirect(w, r, "/assistant?done=change", http.StatusSeeOther)
 }

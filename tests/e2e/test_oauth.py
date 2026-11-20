@@ -125,7 +125,7 @@ def test_only_read_is_chosen_on_the_question_and_said_on_the_page(page, wiki, mo
     page.goto("/assistant")
     row = page.locator(".assistant-connections tbody tr")
     expect(row.locator(".assistant-may")).to_have_text("Only read")
-    expect(row.get_by_role("button", name="Make read-only")).to_have_count(0)
+    expect(row.locator(".assistant-change > summary")).to_have_text("Change…")
     page.screenshot(path=str(SCREENSHOT_DIR / "assistant-may.png"))
     assert page.csp_violations == []
 
@@ -170,3 +170,85 @@ def test_what_it_sees_is_chosen_on_the_question(page, wiki, monkeypatch):
     page.set_viewport_size({"width": 375, "height": 700})
     assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
     assert page.csp_violations == []
+
+
+def connected(page, address, client_id):
+    """Allow as whoever is signed in: the new connection's access token."""
+    page.goto(address)
+    page.get_by_label("Password").fill("pw")
+    page.get_by_role("button", name="Allow").click()
+    page.wait_for_url(re.compile(r"^https://client\.example/callback\?"))
+    code = parse_qs(urlsplit(page.url).query)["code"][0]
+    return page.request.post("/oauth/token", form={
+        "grant_type": "authorization_code", "code": code, "client_id": client_id, "redirect_uri": CALLBACK,
+        "code_verifier": VERIFIER}).json()["access_token"]
+
+
+def test_change_opens_in_a_dialog_and_asks_the_password_only_to_give_more(page, wiki, monkeypatch):
+    from tests.e2e.conftest import SCREENSHOT_DIR
+    monkeypatch.setattr(settings, "USERS", {"alice": ("pw", "")})
+    monkeypatch.setattr(settings, "USER_SETTINGS", {"alice": {"groups": "dev"}})
+    client_side(page)
+    page.request.post("/login", form={"username": "alice", "password": "pw"})
+    client_id, address = ask(page)
+    access = connected(page, address, client_id)
+
+    def writes():
+        return not page.request.post("/mcp", headers={"Authorization": f"Bearer {access}"}, data={
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": "write_page", "arguments": {"slug": "x", "content": "x"}}}).json()["result"]["isError"]
+
+    page.goto("/assistant")
+    row = page.locator(".assistant-connections tbody tr")
+    dialog = page.locator("#connection-change-dialog")
+    password = dialog.get_by_label("Password")
+    expect(row.locator(".assistant-change-form")).to_be_hidden()
+    row.locator(".assistant-change > summary").click()
+    expect(dialog).to_be_visible()
+    expect(dialog.locator(".modal-label")).to_have_text("Change Claude")
+    # What it has now is ticked; taking away asks no password.
+    expect(dialog.get_by_label("Read and change")).to_be_checked()
+    for place in ("Your private pages, notes and tasks", "The group dev"):
+        expect(dialog.get_by_label(place)).to_be_checked()
+    expect(password).to_be_hidden()
+    dialog.get_by_label("Only read").check()
+    dialog.get_by_label("The group dev").uncheck()
+    expect(password).to_be_hidden()
+    page.set_viewport_size({"width": 375, "height": 700})
+    assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+    page.set_viewport_size({"width": 1280, "height": 800})
+    dialog.screenshot(path=str(SCREENSHOT_DIR / "assistant-change.png"))
+    dialog.get_by_role("button", name="Save").click()
+    page.wait_for_url(re.compile(r"/assistant\?done=change$"))
+    expect(page.get_by_role("status")).to_contain_text("Changed what that assistant may do and see")
+    expect(row.locator(".assistant-may")).to_contain_text("Only read")
+    expect(row.locator(".assistant-sees")).to_have_text("Sees only: the shared wiki; your private pages, notes and tasks")
+    assert not writes()                                   # its token, from its next call
+
+    # Cancel keeps nothing of what was ticked.
+    row.locator(".assistant-change > summary").click()
+    dialog.get_by_label("The group dev").check()
+    expect(password).to_be_visible()
+    dialog.get_by_role("button", name="Cancel").click()
+    expect(dialog).to_be_hidden()
+    row.locator(".assistant-change > summary").click()
+    expect(dialog.get_by_label("The group dev")).not_to_be_checked()
+    expect(password).to_be_hidden()
+
+    # Giving more shows the password field; a wrong one comes back open, as chosen.
+    dialog.get_by_label("Read and change").check()
+    expect(password).to_be_visible()
+    dialog.get_by_role("button", name="Save").click()       # required: the browser asks, nothing is sent
+    expect(dialog).to_be_visible()
+    password.fill("wrong")
+    dialog.get_by_role("button", name="Save").click()
+    page.wait_for_url(re.compile(r"/change$"))
+    expect(dialog).to_be_visible()
+    expect(dialog.get_by_role("alert")).to_have_text("Incorrect password: nothing was changed.")
+    expect(dialog.get_by_label("Read and change")).to_be_checked()
+    expect(password).to_be_visible()
+    password.fill("pw")
+    dialog.get_by_role("button", name="Save").click()
+    page.wait_for_url(re.compile(r"/assistant\?done=change$"))
+    expect(row.locator(".assistant-may")).to_contain_text("Read and change")
+    assert writes()

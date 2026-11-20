@@ -1779,6 +1779,22 @@ kbd {
 .assistant-sees { display: block; font-size: .8rem; color: var(--muted); }
 .assistant-conn-actions { white-space: nowrap; }
 .assistant-conn-actions form { display: inline-block; }
+/* A connection's Change…: the choices Allow offered (partials/reach.html), in
+   a dialog (js/assistant.js); without JavaScript they unfold in the row. */
+.assistant-change { display: inline-block; vertical-align: top; }
+.assistant-change > summary { list-style: none; }
+.assistant-change > summary::-webkit-details-marker { display: none; }
+.assistant-conn-actions .assistant-change-form { display: flex; flex-direction: column; gap: .75rem; margin: .5rem 0; text-align: left; white-space: normal; min-width: min(20rem, 80vw); }
+/* Taller than most dialogs (a group a line): it scrolls inside the screen. */
+.assistant-change-dialog { width: min(440px, 92vw); max-height: calc(100dvh - 2rem); margin: 12vh auto auto; overflow-y: auto; overscroll-behavior: contain; }
+@media (max-height: 760px) { .assistant-change-dialog { margin: auto; } }
+.assistant .assistant-change-dialog .modal-label { margin: 0; }
+.assistant .assistant-change-form p { margin: 0; }
+.assistant-change-form .oauth-may input { flex: none; width: auto; margin: 0; padding: 0; border: 0; accent-color: var(--accent); }
+.assistant-change-password { display: flex; flex-direction: column; gap: .4rem; }
+.assistant-change-password[hidden] { display: none; }
+.assistant-change-password input { font: inherit; font-size: .9rem; padding: .4rem .6rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--fg); }
+.assistant-change-password input:focus { border-color: var(--link); outline: none; }
 /* The token: what there is and what to do about it, a row each, the action on the right. */
 .assistant-rows { margin: 1rem 0 0; border: 1px solid var(--border); border-radius: 10px; }
 .assistant-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1.5rem; padding: .75rem 1rem; }

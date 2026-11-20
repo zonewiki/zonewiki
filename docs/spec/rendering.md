@@ -597,6 +597,7 @@ They share code by `import`, not through `window`:
 | `js/admin.js` | The admin page's Remove dialog, its Save shown once a field is edited (Managing users in `users.md`) |
 | `js/namepick.js` | Fields that take users or groups (`data-pick`): those there are, as pills (A group of your own in `users.md`) |
 | `js/copyline.js` | Lines to copy (`.copy-line`: Connect an assistant's address, token and commands): shows each one's Copy button and copies its text (`copyText`) |
+| `js/assistant.js` | Connect an assistant: a connection's Change… in a dialog (the row's `<details>` without JavaScript), its password field shown only while a choice gives the connection more (Change what a connection may do and see in `mcp.md`) |
 | `js/taskutil.js` | What `tasks.js`'s task apps use that holds no state of an app's own (The task app's helpers, below) |
 | `js/tasktexts.js` | Task descriptions and comments rendered as pages are, for every task app on the page (`renderTexts`, `renderedHtml`, `textsOf`; `highlightIn`: their code highlighted in place, the server's HTML kept as it came) |
 | `tasks.js`, `tasks-core.js` | The task app (exports `initTaskApps`, `openTasksEdit`) and its pure logic (`TasksCore`; The task app's modules, below) |

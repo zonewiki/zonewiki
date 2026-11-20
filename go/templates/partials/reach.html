@@ -1,0 +1,27 @@
+{{- /* What an assistant's connection may do and see (docs/spec/mcp.md):
+    the choices of the question on Allow (oauth.html) and of a connection's
+    Change… on Connect an assistant (assistant.html), one template for both,
+    from a reach (oauth.go chooseReach). A viewer isn't asked what it may
+    do: theirs only reads. On Change… data-had marks a choice the connection
+    has now, so the page knows which choice gives it more and asks for the
+    password only then (js/assistant.js); the server decides all the same. */ -}}
+{{define "reach"}}
+{{- if not .Viewer}}
+<fieldset class="oauth-may">
+  <legend>What may it do?</legend>
+  <label><input type="radio" name="may" value="write"{{if not .ReadOnly}} checked{{end}}{{if and .Change .HadWrite}} data-had{{end}}> <span><strong>Read and change</strong>: {{if .Users}}it sees and changes what you do, no more{{else}}it searches, reads and writes the pages and tasks{{end}}. What it changes is listed under Changes, where you can undo it.</span></label>
+  <label><input type="radio" name="may" value="read"{{if .ReadOnly}} checked{{end}}> <span><strong>Only read</strong>: it searches and reads {{if .Users}}what you see{{else}}the pages and tasks{{end}}, and changes nothing.</span></label>
+</fieldset>
+{{- end}}
+{{- if .Users}}
+<fieldset class="oauth-may oauth-sees">
+  <legend>What may it see?</legend>
+  <input type="hidden" name="choose" value="1">
+  <label><input type="checkbox" checked disabled> <span><strong>The shared wiki</strong>: the pages and tasks everyone here sees.</span></label>
+  <label><input type="checkbox" name="see" value="private"{{if .Private}} checked{{end}}{{if and .Change .HadOwn}} data-had{{end}}> <span><strong>Your private pages, notes and tasks</strong>, your Inbox among them.</span></label>
+  {{- range .Groups}}
+  <label><input type="checkbox" name="see" value="group:{{.Name}}"{{if .Given}} checked{{end}}{{if and $.Change .Had}} data-had{{end}}> <span>The group <strong>{{.Name}}</strong>: its pages and its lists.</span></label>
+  {{- end}}
+</fieldset>
+{{- end}}
+{{- end}}

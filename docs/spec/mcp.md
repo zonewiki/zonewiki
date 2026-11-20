@@ -60,11 +60,10 @@ A wrong password is a 403 ("Incorrect password: no token was made."), and counts
 
 #### Connections
 
-With OAuth, the page says how an assistant signs in (the address to paste; the line for Claude Code, `claude mcp add --transport http zone <url>`), and lists the assistants its user allowed: the name each gave, the host its answer went to, what it may do (Read and change, or Only read), since when, the day it was last used, newest first.
+With OAuth, the page says how an assistant signs in (the address to paste; the line for Claude Code, `claude mcp add --transport http zone <url>`), and lists the assistants its user allowed: the name each gave, the host its answer went to, what it may do (Read and change, or Only read) and, when that is less than its user, what it sees ("Sees only: …"), since when, the day it was last used, newest first.
 
+- **Change…** sets what one may do and see, with the choices its user had on Allow (Change what a connection may do and see, below).
 - **End** (`POST /assistant/connections/<id>/revoke`, no password) ends one: its tokens are refused from then on (`?done=disconnect`); another user's is a 404.
-- **Make read-only** (`POST /assistant/connections/<id>/read-only`, no password: it only takes access away; `?done=read-only`), on a connection that reads and changes: from then on it only reads (Read-only connections, below).
-  There is no way back but to end it and connect the assistant again, which takes the password.
 
 ### Connecting with OAuth
 
@@ -91,7 +90,8 @@ The question (`GET /oauth/authorize`, signed in: anyone else goes through the lo
 - **What may it see?** (`see` in the form, with `choose`; Connections given less to see, below): the shared wiki (always), the user's private pages, notes and tasks, and each group they are in, all ticked.
   Not asked in a wiki without users.
 - **What may it do?** (`may` in the form; Read-only connections, below): **Read and change** (the default: "it sees and changes what you do, no more") or **Only read** ("it searches and reads what you see, and changes nothing").
-  A viewer isn't asked: theirs reads only, and is kept as a connection that only reads, so it stays one if they are made an editor later.
+  A viewer isn't asked: theirs reads only, and is kept as a connection that only reads, so it stays one if they are made an editor later (then they may give it more on Connect an assistant, with their password).
+- The two questions are a template of their own (`partials/reach.html`), which Change… on Connect an assistant shows too.
 - **Allow takes the password again** (`POST /oauth/authorize`), as making a token does and for the same reason: a connection outlasts the session, so a session someone else got hold of mustn't be enough.
   A wrong one is a 403 ("Incorrect password: nothing was allowed.") and counts against the client as a wrong login (`loginThrottle`: 429).
 - After Allow the page says "Connected" and the browser goes on to the client; Deny goes back to it too (The answer is a page, under How OAuth works).
@@ -109,13 +109,13 @@ Tested against real clients so far: Claude.
 
 ### Read-only connections
 
-A connection given less than its user, chosen on the question or made so later (`ReadOnly` on the grant, `read_only` in `.zone/grants`; `asker.ReadOnly` of who asks with its token, `changesNothing` in `go/access.go`).
+A connection given less than its user, chosen on the question or with Change… on Connect an assistant (`ReadOnly` on the grant, `read_only` in `.zone/grants`; `asker.ReadOnly` of who asks with its token, `changesNothing` in `go/access.go`).
 The permission model refuses it every write, as it refuses a viewer's (`canWrite`, `mayWriteTasks`), whichever tool or route asks; the doors below ask first, for an answer that says why.
 It reads as its user does, and changes nothing:
 `tools/list` gives it the tools that write nothing (as a viewer's),
 a writing tool called all the same is refused before it runs (`callMCPTool`, by the table every tool's writing is in: "This connection only reads: whoever connected you chose that. Nothing was changed. …", so the assistant says what it would have written),
 and an upload with its token is 403.
-It stays read-only through every refresh of its tokens.
+It stays read-only through every refresh of its tokens, until its user lets it read and change again with Change…, with their password (a viewer's can't be: Change what a connection may do and see).
 The same user's other connections, and their MCP token, are as they were.
 A connection kept from before there was a choice reads and changes, as it did.
 Not yet: a token that only reads.
@@ -135,12 +135,29 @@ What is made once for all of a page's readers asks for the least of them: search
 A list it makes isn't pinned (pins are kept with the user's own lists), and My tasks' own order and settings aren't read.
 
 A list that names the user themselves (`for = alice`) is theirs whatever groups the connection has; one for `@dev` goes with the group dev.
-Connect an assistant says what such a connection sees ("Sees only: the shared wiki; the group dev").
-It is changed by ending the connection and connecting again.
+Connect an assistant says what such a connection sees ("Sees only: the shared wiki; the group dev"), and its Change… gives it less without the password and more with it (Change what a connection may do and see).
 
 Not offered: a connection without the shared wiki, or with one folder or list of it.
 A shared folder is no place: commit messages, links and counts name shared pages to everyone who sees any; a folder or list for an assistant alone is made a group's.
 The static token is one per user and stays so: several assistants are several connections.
+
+### Change what a connection may do and see
+
+**Change…** on a connection's row opens a dialog with the questions of Allow (The question, above), **What may it do?** and **What may it see?**, ticked as the connection has them now, and **Save** (`POST /assistant/connections/<id>/change`, `?done=change`: "Changed what that assistant may do and see, from its next call on.").
+It is the same form as Allow's, from the same code: the template `partials/reach.html`, and `chooseReach` in `go/oauth.go`, which reads the choices (`may`, `see` with `choose`) and makes what the connection is given less than its user (`less`).
+Without JavaScript the row's `<details>` unfolds the form instead of the dialog (`js/assistant.js` moves it into the dialog).
+
+- **Taking away needs no password**: to only read, without the private place, without a group.
+- **Giving anything back or more takes the password again**, as Allow does: read and change where it only read, the private place where it had none, a group it didn't have; a change that takes one thing away and gives another counts as giving more (`less.beyond` in `go/grants.go`).
+  The dialog shows the password field only while a choice gives more (a choice it has now is marked `data-had`); the server decides all the same.
+  None is a 403 ("That gives it more than it has: enter your password.") and no guess; a wrong one a 403 ("Incorrect password: nothing was changed.") counted against the client as a wrong login (`loginThrottle`: 429 with the wait).
+  Refused, the page comes back with the dialog open as chosen and why.
+- **It goes no further than its user**: a viewer isn't asked what it may do (theirs only reads, whatever is posted); only the groups its user is in now are offered and taken (a group named in the form that isn't theirs is given no one).
+  Every group ticked is every group of theirs, also one they join later, as on Allow, unless the connection had only some and none is new: then it keeps those it has, so ticking nothing new never hands it the groups its user joins later.
+- **What it has is what the change is judged by**, when it is posted, not what the page showed: a second tab that still shows Read and change can't give it back to a connection the first made read-only without the password.
+  A change made meanwhile between that read and the write is a 409 (`errGrantChanged`).
+- **It holds for the tokens it has**, from their next call: the asker of a connection's call is made from its grant at every call (`connectionUser` in `go/mcp.go`), and a refresh keeps what it was given.
+- Only the user's own: another user's connection, or one that isn't there, is a 404.
 
 ## Tools
 
@@ -788,4 +805,4 @@ Not in the settings file: tokens change by the hour, and a change there is a cha
 
 #### OAuth's tests
 
-`tests/test_oauth.py` plays the client over HTTP; `tests/e2e/test_oauth.py` holds that Allow and Deny get the browser back to the client under the page policy.
+`tests/test_oauth.py` plays the client over HTTP (`TestChange`: Change… through the tokens a connection has); `tests/e2e/test_oauth.py` holds that Allow and Deny get the browser back to the client under the page policy, and that Change… opens in its dialog and asks for the password only to give more.

@@ -260,11 +260,7 @@ type consentView struct {
 	Client   string // the client's name, as it gave it
 	Host     string // where the answer goes
 	Loopback bool   // to this machine: any program on it can ask
-	Viewer   bool
-	ReadOnly bool // chosen: it reads and changes nothing
-	Choose   bool // there is something to choose of what it sees (users)
-	Private  bool // chosen: the user's private place
-	Groups   []consentGroup
+	Reach    reach  // what it may do and see, as chosen
 	Sees     string // after Allow: what it sees, when that is less than the user does
 	Error    string // the password was wrong
 	Problem  string // the request can't be answered
@@ -272,11 +268,74 @@ type consentView struct {
 	Allowed  bool
 }
 
-// consentGroup: one of the user's groups on the question, and whether its
-// place is given.
-type consentGroup struct {
-	Name  string
-	Given bool
+// reach: what a connection may do and see, as the question on Allow and
+// Change… on Connect an assistant offer it (partials/reach.html, one
+// template for both): the choices, ticked as chosen, and on Change… what
+// the connection has now, so the page knows which choice gives it more.
+type reach struct {
+	Users    bool // the wiki has users: there are places to choose
+	Viewer   bool // its user is a viewer: it only reads, which isn't asked
+	ReadOnly bool // chosen: it reads and changes nothing
+	Private  bool // chosen: the user's private place
+	Groups   []reachGroup
+	Change   bool // Change…: the Had fields say what it has now
+	HadWrite bool // it reads and changes now
+	HadOwn   bool // it has the user's private place now
+}
+
+// reachGroup: one of the user's groups on the form: whether its place is
+// chosen, and whether the connection has it now.
+type reachGroup struct {
+	Name       string
+	Given, Had bool
+}
+
+// chooseReach: what a connection of user's may do and see. had is what it
+// has (on Allow, before it has anything: everything, less{}); form, when
+// there is one, the choices posted (may, see with choose), else had stays.
+// It never goes further than the user: a viewer's only reads, and only the
+// groups they are in now are offered, or taken from the form. Every group
+// ticked is every group of theirs, also one they join later, unless that
+// would give a connection that had some of them a group it didn't have:
+// then it keeps the ones it has.
+func chooseReach(s *Settings, user asker, had less, form url.Values) (reach, less) {
+	f := reach{Users: s.Users != nil, Viewer: s.isViewer(user.Name), ReadOnly: had.ReadOnly, Private: !had.NoPrivate,
+		HadWrite: !had.ReadOnly, HadOwn: !had.NoPrivate}
+	if form != nil {
+		f.ReadOnly = form.Get("may") == "read"
+	}
+	// A viewer's reads only, and is kept so (the question says it changes
+	// nothing): made an editor later, they don't find it writing.
+	f.ReadOnly = f.ReadOnly || f.Viewer
+	chosen := f.Users && form != nil && form.Get("choose") != ""
+	if chosen {
+		f.Private = slices.Contains(form["see"], "private")
+	}
+	var groups []string
+	gained := false
+	for _, g := range groupsFor(user) {
+		has := had.Groups == nil || slices.Contains(*had.Groups, g)
+		in := has
+		if chosen {
+			in = slices.Contains(form["see"], "group:"+g)
+		}
+		f.Groups = append(f.Groups, reachGroup{Name: g, Given: in, Had: has})
+		if in {
+			groups = append(groups, g)
+			gained = gained || !has
+		}
+	}
+	given := less{ReadOnly: f.ReadOnly}
+	if f.Users {
+		given.NoPrivate = !f.Private
+		if len(groups) < len(f.Groups) || had.Groups != nil && !gained {
+			if groups == nil {
+				groups = []string{}
+			}
+			given.Groups = &groups
+		}
+	}
+	return f, given
 }
 
 // oauthAuthorize: GET /oauth/authorize asks whoever is signed in (the
@@ -349,34 +408,16 @@ func oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	v.User, v.Viewer = user.Name, s.isViewer(user.Name)
-	// A viewer's reads only, and is kept so (the question says it changes
-	// nothing): made an editor later, they don't find it writing.
-	v.ReadOnly = v.Viewer || r.Method == http.MethodPost && r.PostFormValue("may") == "read"
-	// What it sees of the user's places (with users: without, all is
-	// shared): everything, unless the form came with its choices (choose)
-	// and one is left out. The shared wiki is always there.
-	given := less{ReadOnly: v.ReadOnly}
-	chosen := r.Method == http.MethodPost && r.PostFormValue("choose") != ""
-	v.Choose, v.Private = s.Users != nil, true
-	var groups []string
-	for _, g := range groupsFor(user) {
-		in := !chosen || slices.Contains(r.PostForm["see"], "group:"+g)
-		v.Groups = append(v.Groups, consentGroup{g, in})
-		if in {
-			groups = append(groups, g)
-		}
+	v.User = user.Name
+	// What it may do and see: everything the user may (with users: of
+	// their places, the shared wiki always), unless the form came with
+	// its choices and one is left out.
+	var form url.Values
+	if r.Method == http.MethodPost {
+		form = r.PostForm
 	}
-	if chosen && v.Choose {
-		v.Private = slices.Contains(r.PostForm["see"], "private")
-		given.NoPrivate = !v.Private
-		if len(groups) != len(v.Groups) {
-			if groups == nil {
-				groups = []string{}
-			}
-			given.Groups = &groups
-		}
-	}
+	var given less
+	v.Reach, given = chooseReach(s, user, less{}, form)
 	if r.Method != http.MethodPost {
 		show(http.StatusOK)
 		return
@@ -390,13 +431,7 @@ func oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 	// The password again, as for a token made on Connect an assistant: a
 	// connection outlasts the session, so a session someone else got hold
 	// of mustn't be enough to make one.
-	hash := s.PasswordHash
-	if s.Users != nil {
-		hash = s.Users[user.Name].PasswordHash
-	}
-	right, wait := loginThrottle.try(clientKey(r), user.Name, func() bool {
-		return checkPassword(r.PostFormValue("password"), hash)
-	})
+	right, wait := passwordAgain(r, s, user.Name)
 	if wait > 0 || !right {
 		status := http.StatusForbidden
 		v.Error = "Incorrect password: nothing was allowed."

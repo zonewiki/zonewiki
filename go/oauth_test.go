@@ -3,6 +3,8 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/base64"
+	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -121,5 +123,75 @@ func TestAuthCodes(t *testing.T) {
 	}
 	if _, ok, _ := takeCode(""); ok {
 		t.Error("no code is a code")
+	}
+}
+
+// What a connection may do and see, as the form on Allow and Change… sets
+// it (chooseReach), and which change gives it more (beyond): what its user
+// may take away without the password and give only with it.
+func TestAConnectionsReach(t *testing.T) {
+	testWiki(t, nil)
+	withUsers(t, "alice", "carol")
+	settings().Users["alice"].In = []string{"dev", "ops"}
+	settings().Users["carol"].Role = roleViewer
+	alice := asUser("alice")
+	groups := func(g ...string) *[]string {
+		g = append([]string{}, g...)
+		return &g
+	}
+	form := func(may string, see ...string) url.Values {
+		return url.Values{"may": {may}, "choose": {"1"}, "see": see}
+	}
+	everything := less{}
+	for _, c := range []struct {
+		name string
+		had  less
+		form url.Values
+		want less
+	}{
+		{"nothing posted: as it is", less{ReadOnly: true, Groups: groups("dev")}, nil, less{ReadOnly: true, Groups: groups("dev")}},
+		{"all ticked on Allow: every group, also later", everything, form("write", "private", "group:dev", "group:ops"), everything},
+		{"one left out", everything, form("write", "private", "group:dev"), less{Groups: groups("dev")}},
+		{"none", everything, form("read"), less{ReadOnly: true, NoPrivate: true, Groups: groups()}},
+		{"a group she isn't in is no group", everything, form("write", "private", "group:dev", "group:hr"), less{Groups: groups("dev")}},
+		{"the one it lacked ticked again: every group", less{Groups: groups("dev")}, form("write", "private", "group:dev", "group:ops"), everything},
+		// It had both of hers (and one she has left): all ticked, nothing
+		// new, so it isn't handed the groups she joins later.
+		{"all ticked, none new", less{Groups: groups("dev", "ops", "qa")}, form("write", "private", "group:dev", "group:ops"), less{Groups: groups("dev", "ops")}},
+	} {
+		_, got := chooseReach(settings(), alice, c.had, c.form)
+		if !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%s: %+v, want %+v", c.name, got, c.want)
+		}
+	}
+	// A viewer's only reads, whatever the form says.
+	if f, got := chooseReach(settings(), asUser("carol"), everything, form("write", "private")); !got.ReadOnly || !f.Viewer || !f.ReadOnly {
+		t.Errorf("a viewer's connection: %+v", got)
+	}
+	// Without users only what it may do is asked.
+	settings().Users = nil
+	if f, got := chooseReach(settings(), asker{}, everything, url.Values{"may": {"read"}, "see": {"private"}}); f.Users || got != (less{ReadOnly: true}) {
+		t.Errorf("without users: %+v %+v", f, got)
+	}
+
+	for _, c := range []struct {
+		name    string
+		had, to less
+		gives   bool
+	}{
+		{"the same", less{Groups: groups("dev")}, less{Groups: groups("dev")}, false},
+		{"to only read", everything, less{ReadOnly: true}, false},
+		{"read and change again", less{ReadOnly: true}, everything, true},
+		{"without the private place", everything, less{NoPrivate: true}, false},
+		{"the private place again", less{NoPrivate: true}, everything, true},
+		{"fewer groups", everything, less{Groups: groups("dev")}, false},
+		{"no group", less{Groups: groups("dev")}, less{Groups: groups()}, false},
+		{"a group it hadn't", less{Groups: groups("dev")}, less{Groups: groups("dev", "ops")}, true},
+		{"every group, where it had some", less{Groups: groups("dev", "ops")}, everything, true},
+		{"mixed: only read, with the private place", less{NoPrivate: true}, less{ReadOnly: true}, true},
+	} {
+		if got := c.to.beyond(c.had); got != c.gives {
+			t.Errorf("%s: beyond %v, want %v", c.name, got, c.gives)
+		}
 	}
 }

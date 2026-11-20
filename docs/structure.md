@@ -53,7 +53,7 @@ What each file and folder of the repository is for.
 │   ├── signup.go           # Sign-up: /signup, the mail with its link, the account a sign-up link makes, the names it may not take (.zone/removed-users)
 │   ├── mail.go             # Mail through the deployment's SMTP server (ZONE_SMTP_*), for sign-up and assigned tasks
 │   ├── notify.go           # A task given to a user is told to them: the mail (tellAssigned, called by the task writes), who gets one
-│   ├── assistant.go        # Connect an assistant (/assistant): your MCP token made and revoked in the browser, with your password again
+│   ├── assistant.go        # Connect an assistant (/assistant): your MCP token made and revoked in the browser, with your password again; your assistants' connections changed (less without the password, more with it) or ended
 │   ├── oauth.go            # OAuth for /mcp: the metadata, client registration (nothing kept), the consent page /oauth/authorize, /oauth/token
 │   ├── grants.go           # Connections: the assistants users let in through OAuth, their token hashes in .zone/grants
 │   ├── password.go         # Change password (/password): your password changed in the browser, with the one you have
@@ -114,7 +114,7 @@ What each file and folder of the repository is for.
     ├── tasks.css           # The task app's styling, loaded after style.css
     ├── zonewiki.js             # The entry ES module every page loads; imports the modules below
     ├── js/                 # ES modules: forms (a submit only from a form where Zone puts one), chrome, git, util, completion, search, actions, pagemenu, listsrow,
-    │                       #   shortcuts, mdedit, mdtext (the text functions shared with the server), editor, tasklist (its Task list button), page, figures, fold, present, copyline (Copy buttons), namepick (users and groups as pills); the task app's parts
+    │                       #   shortcuts, mdedit, mdtext (the text functions shared with the server), editor, tasklist (its Task list button), page, figures, fold, present, copyline (Copy buttons), assistant (a connection's Change… dialog), namepick (users and groups as pills); the task app's parts
     │                       #   taskdata, taskview, taskorder, tasktabs, taskchips, taskrender, taskmodal, taskselect, taskmenu, taskkeys, taskdnd, tasktouch, tasksettings; tasktexts, taskutil, datepicker (see Client code in `docs/spec/rendering.md`)
     ├── tasks-core.js       # Pure task logic (no DOM), an ES module — shared by tasks.js, the editor and Node-run tests
     ├── tasks.js            # The task app, an ES module zonewiki.js imports; initTaskApps() starts each .tasks-app: it puts one together and starts its parts in js/task*.js (app, app.st; tests/test_task_app_wiring.py checks what they use of each other)

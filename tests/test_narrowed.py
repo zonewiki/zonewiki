@@ -307,6 +307,36 @@ def test_the_question_offers_the_places_and_the_page_says_what_was_given(client,
     assert test_oauth.grants(group_wiki)[-1]["groups"] is None and forged
 
 
+def test_change_gives_a_group_only_hers_and_only_with_her_password(client, group_wiki, monkeypatch):
+    """Change… on Connect an assistant: a group taken away needs no
+    password, one given back takes it; a group she isn't in is given no
+    one; and the token the connection has is asked with it from its next
+    call."""
+    monkeypatch.setattr(settings, "USER_SETTINGS", {**settings.USER_SETTINGS, "alice": {"groups": "dev, ops"}})
+    (group_wiki / "groups/ops").mkdir(parents=True)
+    (group_wiki / "groups/ops/runbook.md").write_text("# Runbook quollfeather\n")
+    access = connect(client, "alice", "alice-pw")                    # everything: every group, also later ones
+    client.post("/login", data={"username": "alice", "password": "alice-pw"}, headers=HOST)
+    gid = test_oauth.grants(group_wiki)[-1]["id"]
+    page = client.get("/assistant", headers=HOST).data.decode()
+    assert 'value="group:dev" checked data-had' in page and 'value="group:ops" checked data-had' in page
+    assert G.SECRET in call(client, access, "read_page", slug=G.DIARY)
+    # Taken away: no password, and the token sees it no more.
+    resp = test_oauth.change(client, gid, see=["private", "group:ops"])
+    assert resp.status_code == 303 and test_oauth.reach(group_wiki, gid) == (False, False, ["ops"])
+    assert G.SECRET not in call(client, access, "read_page", slug=G.DIARY)
+    assert "quollfeather" in call(client, access, "search_wiki", query="quollfeather")
+    page = client.get("/assistant", headers=HOST).data.decode()
+    assert 'value="group:dev">' in page and 'value="group:ops" checked data-had' in page
+    # Given back: her password; a group she isn't in (hr) is given no one.
+    assert test_oauth.change(client, gid, see=["private", "group:dev", "group:ops"]).status_code == 403
+    assert test_oauth.change(client, gid, see=["private", "group:ops", "group:hr"], password="alice-pw").status_code == 303
+    assert test_oauth.reach(group_wiki, gid) == (False, False, ["ops"])
+    resp = test_oauth.change(client, gid, see=["private", "group:dev", "group:ops", "group:hr"], password="alice-pw")
+    assert resp.status_code == 303 and test_oauth.reach(group_wiki, gid) == (False, False, None)   # all of hers again
+    assert G.SECRET in call(client, access, "read_page", slug=G.DIARY)
+
+
 def test_without_users_there_is_nothing_to_choose(client, git_wiki_dir, monkeypatch):
     monkeypatch.setattr(settings, "PASSWORD", "one password")
     client.post("/login", data={"password": "one password"}, headers=HOST)

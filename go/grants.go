@@ -86,6 +86,27 @@ func (l less) sees() string {
 	return strings.Join(parts, "; ")
 }
 
+// beyond: l gives something had doesn't: it changes where had only reads,
+// has the private place had hadn't, or a group had hadn't (every group,
+// also one joined later, where had named some). What its user may take
+// away without the password, and give only with it.
+func (l less) beyond(had less) bool {
+	switch {
+	case had.ReadOnly && !l.ReadOnly, had.NoPrivate && !l.NoPrivate:
+		return true
+	case had.Groups == nil:
+		return false
+	case l.Groups == nil:
+		return true
+	}
+	for _, g := range *l.Groups {
+		if !slices.Contains(*had.Groups, g) {
+			return true
+		}
+	}
+	return false
+}
+
 func grantsPath() string { return statePath("grants") }
 
 // grantsCache: the connections as the file at path had them when it was
@@ -304,20 +325,54 @@ type grantRow struct {
 	ID, Client, Redirect, Made, Used string
 	ReadOnly                         bool
 	Sees                             string // what it sees, when that is less than its user does ("": all of it; less.sees)
+	had                              less   // what it was given less than its user has
+	Reach                            reach  // Change…'s choices (assistantData)
+	Open                             bool   // Change… comes back open: a change was refused (Error)
+	Error                            string // why
 }
 
-// narrowGrant makes the connection id of user's read-only; false: none such.
-// Only ever narrower: one that only reads is made to write by ending it
-// and connecting again, which takes the password.
-func narrowGrant(user, id string) (found bool, err error) {
+// userGrant: the connection id of user's, if there is one.
+func userGrant(user, id string) (grant, bool) {
+	grants, err := readGrants()
+	if err != nil {
+		logf("%v", err)
+	}
+	for _, g := range grants {
+		if g.ID == id && g.User == user {
+			return g, true
+		}
+	}
+	return grant{}, false
+}
+
+// errGrantChanged: a connection isn't as it was when its user chose what
+// to change (another tab changed it meanwhile).
+var errGrantChanged = errors.New("that connection was changed meanwhile: look at what it has now, and choose again")
+
+// reachGrant gives the connection id of user's what to says it is given
+// less than its user has, if it still has had (as its user saw it when
+// they chose: else errGrantChanged); found false: none such. Its tokens
+// stay; the next call with them is asked with the new reach
+// (connectionUser), as is every refresh. Whether the change may be made
+// (beyond, and the password) is for the caller to have asked.
+func reachGrant(user, id string, had, to less) (found bool, err error) {
 	err = changeGrants(func(grants []grant) ([]grant, error) {
 		for i := range grants {
-			if grants[i].ID == id && grants[i].User == user {
-				grants[i].ReadOnly, found = true, true
+			g := &grants[i]
+			if g.ID != id || g.User != user {
+				continue
 			}
+			if g.less.beyond(had) || had.beyond(g.less) {
+				return nil, errGrantChanged
+			}
+			g.less, found = to, true
+			return grants, nil
 		}
-		return grants, nil
+		return nil, errNoGrant
 	})
+	if errors.Is(err, errNoGrant) {
+		return false, nil
+	}
 	return found, err
 }
 
@@ -335,7 +390,7 @@ func grantsOf(user string) []grantRow {
 				used = day.Format("2 Jan 2006")
 			}
 			rows = append(rows, grantRow{ID: g.ID, Client: g.Client, Redirect: g.Redirect,
-				Made: g.Made.Local().Format("2 Jan 2006"), Used: used, ReadOnly: g.ReadOnly, Sees: g.sees()})
+				Made: g.Made.Local().Format("2 Jan 2006"), Used: used, ReadOnly: g.ReadOnly, Sees: g.sees(), had: g.less})
 		}
 	}
 	return rows

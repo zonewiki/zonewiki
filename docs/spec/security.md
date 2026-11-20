@@ -262,7 +262,11 @@ What keeps it safe, and isn't to be weakened:
 
 `/oauth/token`, `/oauth/register` and the metadata under `/.well-known/oauth-*` need no session and skip the Origin check (`oauthOpen`): a client's server calls them, and they act on nothing a cookie gives.
 Registration keeps nothing (the client id is signed), so strangers can't fill the wiki.
-**Least privilege for a connection**: its user can give it only some of their places (not their private pages and tasks, only some of their groups; Connections given less to see in `docs/spec/mcp.md`), and can let it only read (chosen on the consent page, or later on Connect an assistant, where a connection is only ever made narrower without the password); such a connection is refused every write by the permission model (`changesNothing` in `go/access.go`; Read-only connections in `docs/spec/mcp.md`).
+**Least privilege for a connection**: its user can give it only some of their places (not their private pages and tasks, only some of their groups; Connections given less to see in `docs/spec/mcp.md`), and can let it only read (chosen on the consent page, or later with Change… on Connect an assistant); such a connection is refused every write by the permission model (`changesNothing` in `go/access.go`; Read-only connections in `docs/spec/mcp.md`).
+A connection is only ever made narrower without the password:
+Change… gives anything back or more (read and change, the private place, a group), a change that also takes away included, only with the password again, throttled as a login,
+and never more than its user has then (a viewer's only reads; only the groups they are in);
+what it has when the change is posted is what it is judged by (Change what a connection may do and see in `docs/spec/mcp.md`).
 The page policy is unchanged: `form-action 'self'` stays, and the answer after Allow is a page with a `Refresh` header instead of a redirect.
 None of it answers during first run.
 

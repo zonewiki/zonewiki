@@ -445,7 +445,7 @@ Uploads and tag renames (`renameTagOp`) are refused too.
 
 **The gate** (`viewerGate` in `go/server.go`): a viewer's POST, PUT, PATCH or DELETE to a route not listed in `viewerWrites` is refused (403) before the route runs, whatever it names (another user's folder answers as anywhere else).
 Listed are only those that change nothing of the wiki: sign in and out, the welcome link, the previews, `/mcp` (which refuses a viewer's writing tools itself),
-and what is the viewer's own: their password (`/password`), their MCP token (`/assistant/token`, `/assistant/revoke`) and their assistants' connections (OAuth's `/oauth/authorize`, `/oauth/token`, `/oauth/register`; End and Make read-only on Connect an assistant), whose writing tools are refused all the same.
+and what is the viewer's own: their password (`/password`), their MCP token (`/assistant/token`, `/assistant/revoke`) and their assistants' connections (OAuth's `/oauth/authorize`, `/oauth/token`, `/oauth/register`; End and Change… on Connect an assistant), whose writing tools are refused all the same.
 A new write route is so closed to viewers until it is listed.
 
 **MCP**: a viewer's token works for reading: `tools/list` leaves out the tools that write (`writeTool`: those that write pages or tasks in `mcpToolTable`), and calling one answers with the message (`callMCPTool`).

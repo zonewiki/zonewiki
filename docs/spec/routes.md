@@ -158,7 +158,7 @@ For an admin `/groups` also lists every other group, what each includes, the for
 | GET    | `/assistant`          | Connect an assistant: the MCP token of whoever is signed in (without users, the wiki's), made and revoked in the browser (`docs/spec/mcp.md`) |
 | POST   | `/assistant/token`, `/assistant/revoke` | Make a new token (with the password again; shown once) or take it away |
 | POST   | `/assistant/connections/<id>/revoke` | End one of your assistants' connections (OAuth) |
-| POST   | `/assistant/connections/<id>/read-only` | Make one of them read-only: from then on it changes nothing |
+| POST   | `/assistant/connections/<id>/change` | Change what one of them may do and see (Allow's choices): less without the password, more only with it |
 | GET    | `/.well-known/oauth-protected-resource`, `/.well-known/oauth-protected-resource/mcp`, `/.well-known/oauth-authorization-server` | OAuth metadata for MCP clients (no login; 404 without a login or with `mcp-oauth = no`; Connecting with OAuth in `docs/spec/mcp.md`) |
 | POST   | `/oauth/register`, `/oauth/token` | An MCP client registers, and turns a code or a refresh token into tokens (no login, any origin) |
 | GET, POST | `/oauth/authorize` | An assistant asks to connect: whoever is signed in allows it, with their password, or denies it |

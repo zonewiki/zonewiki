@@ -161,7 +161,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `go/mcp_test.go` | mcp.md | The protocol (versions, notifications, errors), tool definitions, cut answers, grep's timeouts, replace templates |
 | `go/mdtext_test.go`, `go/text_test.go` | rendering.md | Wikilinks, code masked, task lines, checkbox numbering, frontmatter and tags, section links |
 | `go/merge_test.go` | editor.md | `mergeText` and the bases kept |
-| `go/oauth_test.go` | security.md | OAuth's signed client ids, redirect URIs, PKCE, codes |
+| `go/oauth_test.go` | security.md, mcp.md | OAuth's signed client ids, redirect URIs, PKCE, codes; what Allow's and Change…'s choices give a connection (`chooseReach`) and which change gives it more (`less.beyond`) |
 | `go/pages_test.go` | editor.md, tasks.md | Links re-pointed on a rename, folder moves, tags and lists renamed in text, `iterPages` |
 | `go/retrieval_test.go` | search.md | Search's index: chunks, the cache by place (`TestIndexCacheStaysAsIfBuiltAfresh`), the index file at start, a group's pages and tasks in members' views alone |
 | `go/sections_test.go` | editor.md, mcp.md | Sections as the parser finds them: ✎s, `findSection`, MCP sections and search chunks, CRLF |
@@ -207,8 +207,8 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `tests/test_math.py` | rendering.md | Math over HTTP, section editing below a `$$` block |
 | `tests/test_mcp.py` | mcp.md | The MCP tools over HTTP: files, guides, reading and writing tools, `zone_help` |
 | `tests/test_narrow.py` | users.md | Who may move a page to fewer readers, asked first |
-| `tests/test_narrowed.py` | mcp.md | Connections given less to see: the leak probes again, the consent page's boxes |
-| `tests/test_oauth.py` | mcp.md, security.md | OAuth as a client plays it: registration, consent, tokens, connections, `TestReadOnly` |
+| `tests/test_narrowed.py` | mcp.md | Connections given less to see: the leak probes again, the consent page's boxes, a group taken away and given back with Change… |
+| `tests/test_oauth.py` | mcp.md, security.md | OAuth as a client plays it: registration, consent, tokens, connections, `TestReadOnly`, `TestChange` (Change…: less without the password, more with it, through the tokens it has) |
 | `tests/test_page_writes.py` | editor.md, mcp.md | Each page write through both doors, Undo, tag and list renames |
 | `tests/test_password.py` | users.md | Change password (`/password`) |
 | `tests/test_privacy.py` | users.md | Private pages and tasks: the leak probes on every route and tool |
@@ -252,7 +252,7 @@ Prefer an API test when the behaviour shows through a route, a Go test when it d
 | `test_layout.py` | routes.md | Side columns, no horizontal scroll at phone width, copy-link icons |
 | `test_merge.py` | editor.md | Two editors on one page: merges and the conflict banner |
 | `test_mobile_nav.py` | navigation.md | Modules, the tab bar, top actions, the account menu on a phone |
-| `test_oauth.py` | mcp.md | OAuth from login to Allow under the page policy |
+| `test_oauth.py` | mcp.md | OAuth from login to Allow under the page policy; Change…'s dialog and its password field |
 | `test_print.py` | rendering.md | Printing and PDF |
 | `test_private.py` | users.md, mcp.md | The user menu, private home, Make shared, Change password, Connect an assistant |
 | `test_public.py` | security.md | A public wiki in the browser |

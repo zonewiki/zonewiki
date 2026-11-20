@@ -1,8 +1,11 @@
 {{- /* /assistant: Connect an assistant (assistant.go, docs/spec/mcp.md).
-    Whoever is signed in makes or revokes their MCP token. Plain forms: each
-    change is a POST; a new token is shown once, in the answer to the POST.
-    A .copy-line is a line to copy: a click selects it, and its Copy button
-    (hidden without JavaScript, js/copyline.js) copies it. */ -}}
+    Whoever is signed in makes or revokes their MCP token, and changes or
+    ends their assistants' connections. Plain forms: each change is a POST;
+    a new token is shown once, in the answer to the POST. A connection's
+    Change… is a <details> holding its form (partials/reach.html), which
+    js/assistant.js opens in the dialog instead. A .copy-line is a line to
+    copy: a click selects it, and its Copy button (hidden without
+    JavaScript, js/copyline.js) copies it. */ -}}
 {{define "copy"}}<button type="button" class="btn btn-sm copy-btn" hidden>Copy</button>{{end}}
 {{define "body"}}
 {{.BreadcrumbHTML}}
@@ -57,12 +60,30 @@
   {{- range .Connections}}
   <tr>
     <td>{{.Client}}</td><td>{{.Redirect}}</td><td class="assistant-may">{{if or .ReadOnly $.Viewer}}Only read{{else}}Read and change{{end}}{{with .Sees}}<span class="assistant-sees">Sees only: {{.}}</span>{{end}}</td><td>{{.Made}}</td><td>{{.Used}}</td>
-    <td class="assistant-conn-actions">{{if not (or .ReadOnly $.Viewer)}}<form method="post" action="/assistant/connections/{{.ID}}/read-only"><button type="submit" class="btn" title="From now on it reads and changes nothing">Make read-only</button></form> {{end}}<form method="post" action="/assistant/connections/{{.ID}}/revoke"><button type="submit" class="btn">End</button></form></td>
+    <td class="assistant-conn-actions">
+      <details class="assistant-change"{{if .Open}} open{{end}}>
+        <summary class="btn" title="What it may do and see">Change…</summary>
+        <form method="post" action="/assistant/connections/{{.ID}}/change" class="assistant-change-form" data-client="{{.Client}}">
+          {{- template "reach" .Reach}}
+          <div class="assistant-change-password">
+            <p class="users-help">Giving it more than it has takes your password again, as Allow did; taking away doesn't.</p>
+            {{- with $.User}}<input type="text" name="username" value="{{.}}" autocomplete="username" hidden>{{end}}
+            <input type="password" name="password" placeholder="{{if $.User}}Your password{{else}}The wiki's password{{end}}" autocomplete="current-password" aria-label="Password">
+          </div>
+          {{- with .Error}}
+          <p class="login-error" role="alert">{{.}}</p>
+          {{- end}}
+          <div class="modal-actions"><button type="button" class="btn" data-close hidden>Cancel</button><button type="submit" class="btn btn-primary">Save</button></div>
+        </form>
+      </details>
+      <form method="post" action="/assistant/connections/{{.ID}}/revoke"><button type="submit" class="btn">End</button></form>
+    </td>
   </tr>
   {{- end}}
   </tbody>
 </table>
-<p class="users-help">An assistant whose connection is ended is refused from then on; it can ask again, and you allow it again. One that only reads is refused what it tries to change; to let it write again, or see more, end its connection and connect it once more.</p>
+<dialog id="connection-change-dialog" class="modal assistant-change-dialog" aria-labelledby="connection-change-label"><p class="modal-label" id="connection-change-label">Change</p></dialog>
+<p class="users-help">Change… sets what an assistant may do and see, with the choices you had on Allow, from its next call on: taking something away needs no password, giving it more takes yours again. An assistant whose connection is ended is refused from then on; it can ask again, and you allow it again.</p>
 {{- else}}
 <p class="assistant-none">{{if .User}}No assistant is connected as you this way{{else}}No assistant is connected this way{{end}}.</p>
 {{- end}}
