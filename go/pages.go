@@ -189,27 +189,64 @@ func isProtected(slug string) bool {
 
 // safePath is the page's file when it is inside the wiki and not in a
 // folder iterPages skips (_assets, _tasks, .leaf, .git …: no pages there,
-// so no route reads or writes a .md file there); "" otherwise. Nor for a
-// name with a control character or a backslash (mdtext.BadNameRune) or a
-// double quote at its start: a line break in a name started a commit
-// message's next line, where git reads trailers ("Assistant: Claude"), and
-// git quotes such a name where it lists files (cleanPath hides it).
+// so no route reads or writes a .md file there); "" otherwise.
+//
+// It is the file the slug names and no other, so that what a route opens
+// is what placeOf judged (the slug, cleaned): nothing on the way to it is
+// a symlink (a link would take a shared page's name to another user's
+// page, or out of the wiki: a link is no page, as iterPages skips it), and
+// the file system reads the name as it is written: no '\', which Windows
+// takes for a folder's end, no name ending in '.' or ' ', which it drops
+// (pagePart), and no short 8.3 name or other case that it would find
+// another folder by (the path resolved is the path asked for).
+//
+// Nor for a name with a control character or a backslash
+// (mdtext.BadNameRune) or a double quote at its start: a line break in a
+// name started a commit message's next line, where git reads trailers
+// ("Assistant: Claude"), and git quotes such a name where it lists files
+// (cleanPath hides it).
 func safePath(slug string) string {
 	if strings.HasPrefix(slug, "/") || strings.HasPrefix(slug, `"`) || strings.ContainsFunc(slug, mdtext.BadNameRune) {
 		return ""
 	}
-	target := resolvePath(filepath.Join(cfg.Data, filepath.FromSlash(slug+".md")))
-	rel, ok := relInside(cfg.Data, target)
-	if !ok {
-		return ""
-	}
-	parts := strings.Split(filepath.ToSlash(rel), "/")
-	for _, part := range parts[:len(parts)-1] {
-		if strings.HasPrefix(part, "_") || strings.HasPrefix(part, ".") {
+	clean := path.Clean(slug)
+	parts := strings.Split(clean, "/")
+	for i, part := range parts {
+		if part == ".." || !pagePart(part) || i < len(parts)-1 && (strings.HasPrefix(part, "_") || strings.HasPrefix(part, ".")) {
 			return ""
 		}
 	}
+	target := filepath.Join(wikiRoot(), filepath.FromSlash(clean+".md"))
+	if resolvePath(target) != target {
+		return ""
+	}
+	// A link that leads nowhere resolves to itself: a write would go through it.
+	if st, err := os.Lstat(target); err == nil && st.Mode()&fs.ModeSymlink != 0 {
+		return ""
+	}
 	return target
+}
+
+// pagePart: name can be a folder's or a page's in a slug: the file system
+// reads it as written (safePath), on every system Zone runs on.
+func pagePart(name string) bool {
+	return !strings.ContainsRune(name, '\\') && !strings.HasSuffix(name, ".") && !strings.HasSuffix(name, " ")
+}
+
+// wikiRoot: the wiki's folder, its symlinks followed (cfg.Data is so from
+// the start, but a test may set another), which safePath finds pages in.
+var wikiRoots struct {
+	sync.Mutex
+	data, root string
+}
+
+func wikiRoot() string {
+	wikiRoots.Lock()
+	defer wikiRoots.Unlock()
+	if wikiRoots.data != cfg.Data || wikiRoots.root == "" {
+		wikiRoots.data, wikiRoots.root = cfg.Data, resolvePath(cfg.Data)
+	}
+	return wikiRoots.root
 }
 
 // relInside: p relative to root, ok false when p is outside root.
@@ -270,22 +307,24 @@ type PageFile struct{ Path, Slug string }
 var pageWalks atomic.Int64
 
 // iterPages lists every page, skipping _* folders (assets, the tasks) and
-// hidden ones (.zone, .git), which it doesn't walk into.
+// hidden ones (.zone, .git), which it doesn't walk into, and what safePath
+// opens no page by: a symlink (to a file or a folder; whoever reads the
+// list reads its files), a name the file system wouldn't read as written.
 func iterPages() []PageFile {
 	pageWalks.Add(1)
 	var out []PageFile
 	root := cfg.Data
 	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
+		if err != nil || p != root && d.Type()&fs.ModeSymlink != 0 {
 			return nil
 		}
 		if d.IsDir() {
-			if p != root && (strings.HasPrefix(d.Name(), "_") || strings.HasPrefix(d.Name(), ".")) {
+			if p != root && (strings.HasPrefix(d.Name(), "_") || strings.HasPrefix(d.Name(), ".") || !pagePart(d.Name())) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if strings.HasSuffix(d.Name(), ".md") {
+		if strings.HasSuffix(d.Name(), ".md") && pagePart(strings.TrimSuffix(d.Name(), ".md")) {
 			rel, _ := filepath.Rel(root, p)
 			out = append(out, PageFile{p, strings.TrimSuffix(filepath.ToSlash(rel), ".md")})
 		}
@@ -341,8 +380,8 @@ func listQuicknote(rq *Req) []Quicknote {
 		entries, _ := os.ReadDir(filepath.Join(cfg.Data, filepath.FromSlash(folder)))
 		for _, e := range entries {
 			name := e.Name()
-			if e.IsDir() || !strings.HasSuffix(name, ".md") {
-				continue
+			if e.IsDir() || !strings.HasSuffix(name, ".md") || e.Type()&fs.ModeSymlink != 0 {
+				continue // a link is no note, as it is no page (safePath)
 			}
 			slug := prefix + strings.TrimSuffix(name, ".md")
 			m := quicknoteRE.FindStringSubmatch(slug)

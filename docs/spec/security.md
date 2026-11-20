@@ -165,6 +165,14 @@ Reloading in `docs/spec/users.md`.
 `_tasks/` and every other folder starting with `_` or `.` hold no pages,
 and `safePath()` refuses slugs in them,
 so no page route reads or writes there (Routes in `docs/spec/routes.md`).
+
+### A page is the file its name says
+
+What a route or tool opens for a page is the file its slug names and no other, so the place that was judged (`placeOf`: whose it is) is the place of the file that is read or written (`safePath`):
+**a symlink is no page**: a link made on the host, to a file or a folder, inside the wiki or out of it, is left out of every list and of search (`iterPages`, which the search, the backlinks and the page lists read), opens nothing and is written through by nothing (400), so a shared name linking to another user's private page, or to a file outside the wiki, shows nothing of it;
+and a name the file system would read as another is refused: a `\` (a folder's end on Windows), a folder or page name ending in `.` or a space (which Windows drops), and a short 8.3 name or a case that the file system would find another folder by (the path it resolves is not the path asked for).
+`private/` and `groups/` are judged in any case, as a case-insensitive volume folds them (`PRIVATE/alice/x` and `groupſ/dev/x` are alice's and dev's).
+The wiki's own folder may be a symlink: Zone follows it once, at start.
 Uploads are served only from `_assets/` by name (`/_assets/<filename>`, `/private/<user>/_assets/<filename>` to that user only, `/groups/<group>/_assets/<filename>` to the group's members only, and `/_tasks/files/<task id>/_assets/<filename>` to who sees the task), the client code only from `public/`.
 
 ## The permission model

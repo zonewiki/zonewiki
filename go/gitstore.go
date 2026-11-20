@@ -998,7 +998,11 @@ func uncommittedEntries() []UncommittedFile {
 	for i, f := range files {
 		if strings.HasSuffix(f.Filepath, ".md") && !strings.HasPrefix(f.Filepath, "_assets") {
 			f.Slug = strings.TrimSuffix(f.Filepath, ".md")
-			if text, err := readText(filepath.Join(cfg.Data, f.Filepath)); err == nil {
+			// Its title from the page safePath opens: not through a symlink,
+			// whose target may be a page the list's reader doesn't see.
+			if p := safePath(f.Slug); p == "" {
+				f.Title = mdtext.SlugDisplayName(f.Slug)
+			} else if text, err := readText(p); err == nil {
 				f.Title = mdtext.PageTitle(text, f.Slug)
 			} else {
 				f.Title = mdtext.SlugDisplayName(f.Slug)

@@ -513,3 +513,63 @@ func TestANarrowedAskerSeesLess(t *testing.T) {
 		t.Error("a private task for an asker without the private place")
 	}
 }
+
+// What safePath opens is the file the slug names, which placeOf judged: no
+// symlink on the way to it (a shared name linking to a private page, a
+// folder linking to a private folder, a link out of the wiki), no name a
+// file system reads as another (Windows' '\', its dropped trailing '.' and
+// ' '); iterPages lists none of those; and placeOf folds the case of
+// private/ and groups/ as a case-insensitive volume does.
+func TestSafePathOpensWhatPlaceOfJudged(t *testing.T) {
+	testWiki(t, map[string]string{"notes/a": "# A\n", "private/alice/diary": "# Diary\n", "odd./x": "# Odd\n", "dots.": "# Dots\n"})
+	withUsers(t, "alice", "bob")
+	root := cfg.Data
+	for link, target := range map[string]string{
+		"leak.md": filepath.Join(root, "private/alice/diary.md"), "peek": filepath.Join(root, "private/alice"),
+		"notes/passwd.md": "/etc/passwd", "state": filepath.Join(root, ".zone"), "dangling.md": filepath.Join(root, "nowhere.md"),
+	} {
+		if err := os.Symlink(target, filepath.Join(root, link)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, slug := range []string{"leak", "peek/diary", "peek/new", "notes/passwd", "state/config", "dangling",
+		`private\alice\diary`, "private./alice/diary", "private /alice/diary", "odd./x", "dots.", "notes/a ",
+		"", ".", "..", "../x", "notes/../../x", "/etc/passwd"} {
+		if p := safePath(slug); p != "" {
+			t.Errorf("safePath(%q) = %s", slug, p)
+		}
+	}
+	for slug, file := range map[string]string{"notes/a": "notes/a.md", "notes/new": "notes/new.md", "notes/": "notes.md",
+		"notes//a": "notes/a.md", "private/alice/./diary": "private/alice/diary.md", "private/alice/..": "private.md"} {
+		if p := safePath(slug); p != filepath.Join(root, filepath.FromSlash(file)) {
+			t.Errorf("safePath(%q) = %q, want %s", slug, p, file)
+		}
+	}
+	// What a slug ending in .. opens (private.md, beside the folders) is what it is judged as.
+	if !placeOf("private/alice/..").shared() {
+		t.Error("private/alice/.. is judged other than the page it opens")
+	}
+	var slugs []string
+	for _, p := range iterPages() {
+		slugs = append(slugs, p.Slug)
+	}
+	if slices.Sort(slugs); !slices.Equal(slugs, []string{"notes/a", "private/alice/diary"}) {
+		t.Errorf("iterPages: %q", slugs)
+	}
+	// A wiki whose folder is a symlink finds its pages all the same.
+	link := filepath.Join(t.TempDir(), "wiki")
+	if err := os.Symlink(root, link); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Data = link
+	if p := safePath("notes/a"); p != filepath.Join(root, "notes/a.md") {
+		t.Errorf("through a linked wiki folder: %q", p)
+	}
+	cfg.Data = root
+	for rel, want := range map[string]place{"PRIVATE/alice/x": {ofUser, "alice"}, "Private/Alice/x": {ofUser, "alice"},
+		"Groups/Dev/x": {ofGroup, "dev"}, "groupſ/dev/x": {ofGroup, "dev"}, "privateſ/alice/x": {}} {
+		if p := placeOf(rel); p != want {
+			t.Errorf("placeOf(%q) = %+v, want %+v", rel, p, want)
+		}
+	}
+}

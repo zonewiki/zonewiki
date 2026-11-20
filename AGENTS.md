@@ -293,7 +293,7 @@ The binary carries them all (`zonewiki licenses` prints them).
 - Slugs are file paths relative to `ZONE_DATA` without `.md`: `journal/my-page.md` → `journal/my-page`; URL-safe (lowercase, hyphens, `/`).
   Subdirectories are supported; `mdtext.ToSlug()` keeps `/` and slugifies each part; `iterPages()` skips `_*` and hidden folders.
   Routes take the rest of the path as the slug (`{slug...}`).
-- **Writes stay inside the wiki**: resolve the path and check it with `safePath()` (inside the wiki; it also refuses folders starting with `_` or `.`, so nothing reads or writes pages in `.zone/`, `.git/`, `_tasks/` …, and a name with a control character or a backslash, which would put a line break into a commit message: A name holds no line break in `docs/spec/security.md`) before reading or writing;
+- **Writes stay inside the wiki**: resolve the path and check it with `safePath()` (inside the wiki; it also refuses folders starting with `_` or `.`, so nothing reads or writes pages in `.zone/`, `.git/`, `_tasks/` …; any path through a symlink or by a name the file system reads as another, so the file opened is the one whose place was judged; and a name with a control character or a backslash, which would put a line break into a commit message: A name holds no line break in `docs/spec/security.md`) before reading or writing;
   create parent folders (`os.MkdirAll`);
   write UTF-8 (`writeText`).
 - **A page write is an operation in `go/pageops.go`** (delete, rename, restore, create, a save, Keep mine and Set aside after a conflict, a replace across pages, a link pointed at a new page's folder, a task tag's rename;

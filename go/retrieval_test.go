@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math/rand"
+	"net"
 	"os"
 	"path/filepath"
 	"slices"
@@ -20,12 +21,15 @@ import (
 // left out of the search, not a failed search.
 func TestUnreadablePagesAreSkipped(t *testing.T) {
 	testWiki(t, map[string]string{"fine": "# Fine\n\nzzqword here\n"})
-	// A dangling link fails the stat, a link to a folder the read.
-	if err := os.Symlink(filepath.Join(cfg.Data, "nowhere.md"), filepath.Join(cfg.Data, "gone.md")); err != nil {
+	// A socket by a page's name can't be read (a link is no page at all:
+	// iterPages skips it).
+	l, err := net.ListenUnix("unix", &net.UnixAddr{Name: filepath.Join(cfg.Data, "unread.md"), Net: "unix"})
+	if err != nil {
 		t.Fatal(err)
 	}
-	_ = os.Mkdir(filepath.Join(cfg.Data, "folder"), 0o777)
-	if err := os.Symlink(filepath.Join(cfg.Data, "folder"), filepath.Join(cfg.Data, "unread.md")); err != nil {
+	l.SetUnlinkOnClose(false)
+	l.Close()
+	if err := os.Symlink(filepath.Join(cfg.Data, "nowhere.md"), filepath.Join(cfg.Data, "gone.md")); err != nil {
 		t.Fatal(err)
 	}
 	var slugs []string

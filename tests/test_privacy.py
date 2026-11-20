@@ -241,6 +241,35 @@ def test_bob_reads_nothing_of_alices(bob, wiki, method, path, kwargs):
 
 
 
+def test_a_link_in_the_wiki_is_no_page(bob, client, wiki):
+    """A symlink made on the host is no page (safePath, iterPages): a shared
+    name that links to alice's diary, a folder that links to her folder and
+    a link to Zone's settings file lead to nothing by any door, search
+    reads none of them, and nothing is written through them."""
+    (wiki / "leak.md").symlink_to(wiki / f"{DIARY}.md")
+    (wiki / "peek").symlink_to(wiki / "private/alice")
+    (wiki / "settings.md").symlink_to(wiki / ".zone/config")
+    for path in ("/page/leak", "/page/peek/diary", "/page/settings", "/edit/leak", "/edit/peek/diary",
+                 "/history/leak", "/api/page-preview/leak", "/api/page-preview/peek/diary"):
+        resp = bob.get(path, headers=HOST)
+        body = resp.get_data(as_text=True)
+        assert resp.status_code in (400, 404) and SECRET not in body and "[user " not in body, (path, resp.status_code)
+    for path, kwargs in (("/api/pages", {}), ("/api/pages-list", {}), ("/api/search", {"query_string": {"q": QUERY}}),
+                         ("/search", {"query_string": {"q": QUERY}})):
+        body = bob.get(path, headers=HOST, **kwargs).get_data(as_text=True)
+        assert SECRET not in body and "leak" not in body and "peek" not in body, path
+    # The links are files git doesn't have yet, listed by their own names, not by what they lead to.
+    assert SECRET not in bob.get("/uncommitted", headers=HOST).get_data(as_text=True)
+    for tool, args in (("read_page", {"slug": "leak"}), ("read_page", {"slug": "peek/diary"}),
+                       ("search_wiki", {"query": QUERY}), ("list_pages", {})):
+        text = mcp(client, tool, **args)
+        assert SECRET not in text and "peek/diary" not in text.replace(args.get("slug", "\0"), ""), (tool, text)
+    diary = (wiki / f"{DIARY}.md").read_text()
+    for slug in ("leak", "peek/diary", "peek/new"):
+        assert bob.post(f"/api/save/{slug}", data={"content": "# Planted\n"}, headers=HOST).status_code == 400, slug
+    assert (wiki / f"{DIARY}.md").read_text() == diary and not (wiki / "private/alice/new.md").exists()
+
+
 def test_her_archives_by_month_are_hers(client, wiki, tmp_path_factory):
     """A year's file of hers from before the months, and a shared one: a
     start files both by month in one commit of Zone's. Bob sees the shared

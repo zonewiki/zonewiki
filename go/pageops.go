@@ -420,7 +420,11 @@ func checkFolderMove(user asker, folder, newFolder string, sure moveSure) ([]str
 			return nil, refuse("Nothing was moved: " + folder + "/ holds pages that aren't yours to move, " +
 				"or they would land in a private folder not yours, or in the folder of a group you aren't in. Move the pages one by one.")
 		}
-		if np := safePath(n); np != "" && exists(np) {
+		np := safePath(n)
+		if np == "" {
+			return nil, refuse("Nothing was moved: " + n + " can't be a page (a folder on the way is a link, or a name the files can't have)")
+		}
+		if exists(np) {
 			taken = append(taken, n)
 		}
 		paths = append(paths, p.Path)

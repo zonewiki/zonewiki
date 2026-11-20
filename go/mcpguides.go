@@ -105,11 +105,14 @@ func folderGuides(slug string, user asker) []guide {
 		}
 		for _, e := range entries {
 			p := filepath.Join(folder, e.Name())
-			if st, err := os.Stat(p); err == nil && st.Mode().IsRegular() && guideFiles[strings.ToLower(e.Name())] {
+			if st, err := os.Lstat(p); err == nil && st.Mode().IsRegular() && guideFiles[strings.ToLower(e.Name())] {
 				files = append(files, p)
 			}
 		}
 		for _, p := range files {
+			if st, err := os.Lstat(p); err == nil && !st.Mode().IsRegular() {
+				continue // a symlink is no guide, as it is no page (safePath)
+			}
 			p = resolvePath(p)
 			rel, ok := relInside(root, p)
 			if !ok {

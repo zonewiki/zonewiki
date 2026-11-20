@@ -1048,7 +1048,8 @@ Without users nothing is private, and `private/` is an ordinary folder.
 `canSee(user, slug)`,
 `canWrite(user, slug)` (the same pages: everything shared is editable),
 `canSeePath(user, rel)` for files as git names them (pages, a user's uploads and tasks in `private/<user>/_assets/` and `_tasks/`, which the private folder covers, and a group's pages and uploads in `groups/<group>/`: Group pages, below).
-Names compare in lower case, and a path is judged as it is opened, cleaned (`private/bob/../alice/x` is alice's).
+Names compare in lower case (`private/` and `groups/` in any case, as a case-insensitive volume folds them), and a path is judged as it is opened, cleaned (`private/bob/../alice/x` is alice's):
+a page is opened only by the path it was judged by, never through a symlink nor by a name the file system reads as another (A page is the file its name says in `docs/spec/security.md`).
 
 **No one's pages**: anything under `private/` outside a user's folder (a page in `private/` itself, `private/alice.md` beside the folder, the folder of a user no longer there) is seen by no one;
 Zone logs each such entry when it starts (`strayPrivate`), and the admin page's Users tab names them (Managing users, above), so the admin can move them.

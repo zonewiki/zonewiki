@@ -138,17 +138,26 @@ func seesTaskFiles(user asker, id string) bool {
 // the group: so what is shared never depends on who is in which group, and
 // emptying a group publishes nothing. Without users nothing is private. It
 // is judged as safePath opens it, cleaned ("private/bob/../alice/x" is
-// alice's), and in lower case.
+// alice's), and in any case: where file names don't tell case apart,
+// "Private/alice" is private/alice, and so is "PRIVATE" or "groupſ" (ſ is
+// an s to a case-insensitive volume, which folds case as EqualFold does).
 func placeOf(rel string) place {
 	users := settings().Users
 	if users == nil {
 		return place{}
 	}
-	dir, rest, found := strings.Cut(strings.ToLower(path.Clean(rel)), "/")
-	if !found || dir != privateDir && dir != groupsDir {
+	dir, rest, found := strings.Cut(path.Clean(rel), "/")
+	switch {
+	case !found:
+		return place{}
+	case strings.EqualFold(dir, privateDir):
+		dir = privateDir
+	case strings.EqualFold(dir, groupsDir):
+		dir = groupsDir
+	default:
 		return place{}
 	}
-	name, _, inside := strings.Cut(rest, "/")
+	name, _, inside := strings.Cut(strings.ToLower(rest), "/")
 	switch {
 	case !inside:
 		return place{kind: ofNoOne}

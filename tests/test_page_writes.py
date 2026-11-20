@@ -4,6 +4,7 @@ yet in git, whichever door it came through (go/pageops.go)."""
 
 import json
 import re
+import socket
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qs, urlparse
@@ -390,11 +391,13 @@ class TestCommits:
 
     @pytest.mark.parametrize("door", DOORS)
     def test_a_rename_with_links_left_is_done(self, client, wiki, door):
-        """A page that can't be read (a dangling link) keeps its links, and the
-        rename is done: no error, the MCP tool says what was left."""
+        """A page that can't be read (a socket by a page's name, which no one
+        opens) keeps its links, and the rename is done: no error, the MCP tool
+        says what was left."""
         commit(wiki, "p", "# P\n")
         commit(wiki, "ref", "# Ref\n\n[[p]]\n")
-        (wiki / "broken.md").symlink_to(wiki / "nowhere.md")
+        with socket.socket(socket.AF_UNIX) as broken:
+            broken.bind(str(wiki / "broken.md"))
         if door == "browser":
             resp = client.post("/rename/p", data={"new_name": "q"}, headers=HOST)
             assert resp.status_code == 302 and resp.headers["Location"] == "/page/q"
