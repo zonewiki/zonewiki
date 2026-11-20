@@ -269,6 +269,12 @@ func mcpOn() bool {
 	return false
 }
 
+// mcpBatchMost: how many messages a batch may hold. Its calls run one after
+// another in one request, a grep for up to its timeout and a write holding
+// the page lock, so one POST mustn't queue thousands of them; a client sends
+// a few at most (initialize and its notification).
+const mcpBatchMost = 20
+
 // mcpEndpoint: MCP over HTTP, one JSON-RPC message (or a batch) per POST,
 // answered with JSON. GET (a server-sent event stream) and DELETE (ending
 // a session) aren't offered: there are no notifications and no sessions.
@@ -328,6 +334,10 @@ func mcpEndpoint(w http.ResponseWriter, r *http.Request) {
 	}
 	call := func(name string, args jsonObj) ([]toolContent, error) { return callMCPTool(r, name, args) }
 	if batch, ok := jsonobj.As[[]json.RawMessage](body); ok { // a batch (protocol 2025-03-26)
+		if len(batch) > mcpBatchMost {
+			writeJSON(w, http.StatusBadRequest, rpcError(nil, -32600, "Invalid Request: a batch holds at most "+itoa(mcpBatchMost)+" messages"))
+			return
+		}
 		replies := []*rpcResponse{}
 		for _, m := range batch {
 			reply, err := handleMCP(m, user, call)

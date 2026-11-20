@@ -112,6 +112,15 @@ class TestEndpoint:
         ])
         assert resp.get_json() == [{"jsonrpc": "2.0", "id": 1, "result": {}}]
 
+    def test_a_batch_holds_at_most_twenty(self, client):
+        """Each call in a batch runs in turn in one request (a grep up to its
+        timeout, a write holding the page lock): a batch is capped."""
+        pings = lambda n: [{"jsonrpc": "2.0", "id": i, "method": "ping"} for i in range(n)]
+        assert len(client.post("/mcp", headers={**HOST, **AUTH}, json=pings(20)).get_json()) == 20
+        resp = client.post("/mcp", headers={**HOST, **AUTH}, json=pings(21))
+        assert resp.status_code == 400 and resp.get_json()["error"]["code"] == -32600
+        assert "at most 20" in resp.get_json()["error"]["message"]
+
     def test_parse_error(self, client):
         resp = client.post("/mcp", data="{nope", content_type="application/json", headers={**HOST, **AUTH})
         assert resp.status_code == 400
