@@ -189,9 +189,13 @@ func isProtected(slug string) bool {
 
 // safePath is the page's file when it is inside the wiki and not in a
 // folder iterPages skips (_assets, _tasks, .leaf, .git …: no pages there,
-// so no route reads or writes a .md file there); "" otherwise.
+// so no route reads or writes a .md file there); "" otherwise. Nor for a
+// name with a control character or a backslash (mdtext.BadNameRune) or a
+// double quote at its start: a line break in a name started a commit
+// message's next line, where git reads trailers ("Assistant: Claude"), and
+// git quotes such a name where it lists files (cleanPath hides it).
 func safePath(slug string) string {
-	if strings.HasPrefix(slug, "/") || strings.ContainsRune(slug, 0) {
+	if strings.HasPrefix(slug, "/") || strings.HasPrefix(slug, `"`) || strings.ContainsFunc(slug, mdtext.BadNameRune) {
 		return ""
 	}
 	target := resolvePath(filepath.Join(cfg.Data, filepath.FromSlash(slug+".md")))

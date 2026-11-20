@@ -112,7 +112,7 @@ Version history is in `docs/spec/rendering.md`.
 - `page`: the page it is for (a private page's are kept in `private/<user>/_assets/`, a group's in its folder's);
 - `task`: the task it is for, by its id (kept in `_tasks/files/<id>/_assets/`; 404 for a task the user doesn't see);
 - `unique=1`: a random name (a pasted screenshot);
-- `filename`: the name to keep it under; a name already taken answers 409 `{ conflict: true, filename }` unless `overwrite=1` (an MCP token's upload gets a free name instead).
+- `filename`: the name to keep it under; a name already taken answers 409 `{ conflict: true, filename }` unless `overwrite=1` (an MCP token's upload gets a free name instead); a name starting with `.` or holding a control character or a backslash is refused (400).
 
 `POST /api/upload` and the four file routes also take an MCP token as a bearer token in place of a session (Files in `docs/spec/mcp.md`).
 

@@ -382,8 +382,8 @@ func freeUploadName(owner place, filename string) string {
 // its last part, and not a dot file ("..", ".git" and friends). "" for none.
 func uploadName(name string) string {
 	name = baseName(strings.TrimSpace(name))
-	if strings.HasPrefix(name, ".") {
-		return ""
+	if strings.HasPrefix(name, ".") || strings.ContainsFunc(name, mdtext.BadNameRune) {
+		return "" // a hidden file; a name with a line break, as a page's (safePath)
 	}
 	return name
 }

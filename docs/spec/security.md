@@ -371,10 +371,18 @@ Uploads are the exception (`frameableBySelf`, in `serveUploadFile`): a page may 
 
 A page may be called anything a file may (`*`,
 `p?`,
-`:(glob)**/x`: the editor's routes take the slug as it is), and git reads a path it is handed as a pathspec, where such a name matches other files: `git show <sha> -- '*.md'` is every page's diff, another user's private pages among them, and likewise a page's log, its uncommitted changes and the commit that deleted it.
+`:(glob)**/x`: the editor's routes take the slug as it is; but no line break: A name holds no line break, below), and git reads a path it is handed as a pathspec, where such a name matches other files: `git show <sha> -- '*.md'` is every page's diff, another user's private pages among them, and likewise a page's log, its uncommitted changes and the commit that deleted it.
 So every git Zone runs has `GIT_LITERAL_PATHSPECS=1` (git's `--literal-pathspecs`, in the environment `go/internal/gitrepo` gives it): a path names that one file.
 Two calls turn it off: `grepPages`, whose `*.md` is Zone's own pattern, and `check-ignore`, which takes names as they are and refuses the setting.
 `tests/test_privacy.py` asks for the history, versions, changes and deleted page of names that match alice's files.
+
+### A name holds no line break
+
+A page's name may hold anything a file's may but a control character or a backslash, and doesn't start with a double quote (`safePath` refuses it to every route and tool, `mdtext.BadNameRune`); nor does an upload's name (`uploadName`) or a list's (`checkListName`).
+A name goes into a commit message as it is ("Update <slug>"), and a line break in it started the message's next lines, where git reads trailers: a page saved as `notes (MCP)⏎⏎Assistant: Claude` showed in Changes as an assistant's work through Claude.
+And git quotes such a name where it lists files, which the history's readers hide (Git's lists of files are read as they are, below).
+A page so named on disk, made by hand, isn't opened by Zone.
+`test_no_name_starts_a_commit_messages_next_line` in `tests/test_changes.py`.
 
 ### Git's lists of files are read as they are
 

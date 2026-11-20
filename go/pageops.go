@@ -405,6 +405,8 @@ func checkFolderMove(user asker, folder, newFolder string, sure moveSure) ([]str
 		return nil, refuse(folder + "/ can't move into a folder inside itself")
 	case safePath(newFolder+"/page") == "":
 		return nil, refuse(strconv.Quote(newFolder) + ": pages can't go in folders starting with '_' or '.'")
+	case safePath(folder+"/page") == "":
+		return nil, refuseAs(refusedNotFound, "No folder "+strconv.Quote(folder)) // a name with a line break, as safePath
 	}
 	var paths, taken []string
 	moved := map[string]string{}

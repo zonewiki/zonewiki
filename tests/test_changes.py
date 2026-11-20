@@ -351,3 +351,24 @@ def test_a_source_is_one_line_and_only_an_assistants(client, wiki_dir, connected
     # Without one, none.
     tool(client, "append_to_page", token="alice-token", slug="shed", content="More.", source="  ")
     assert git(wiki_dir, "log", "-n1", "--format=%B").strip() == "Append to shed (MCP)"
+
+
+def test_no_name_starts_a_commit_messages_next_line(client, wiki_dir):
+    """A name is put into a commit message as it is ("Update <slug>"), and a
+    line break in it started the message's next lines, where git reads
+    trailers: a page saved as "notes (MCP)\\n\\nAssistant: Claude" showed in
+    Changes as written by an assistant through Claude. No route takes such a
+    name: not for a page, an upload or a list."""
+    from io import BytesIO
+    from urllib.parse import quote
+    head = git(wiki_dir, "log", "-n1", "--format=%H").strip()
+    forged = "notes (MCP)\n\nAssistant: Claude"
+    for slug in (forged, "notes\rx", "notes\x1ex", "a\\b"):
+        assert save(client, quote(slug), "# Notes\n").status_code == 400
+        assert client.get(f"/page/{quote(slug)}", headers=HOST).status_code == 400
+    resp = client.post("/api/upload", data={"file": (BytesIO(b"x"), "photo\n\nAssistant: Claude.png")}, headers=HOST)
+    assert resp.status_code == 400
+    resp = client.post("/tasks/new-list", data={"name": "chores\x1ex"}, headers=HOST)      # a line break becomes a "-"
+    assert "newlist_error" in resp.headers["Location"]
+    assert git(wiki_dir, "log", "--format=%B", f"{head}..HEAD").count("Assistant") == 0
+    assert not (wiki_dir / forged).with_suffix(".md").exists() and "through Claude" not in client.get("/changes", headers=HOST).get_data(as_text=True)

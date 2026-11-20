@@ -1352,6 +1352,7 @@ A wiki from before lists were places, or from before the Inbox, is taken over on
 ### Making a list
 
 **New list…** (`#list-new-dialog`; `POST /tasks/new-list`, `createListOp` in `go/tasklists.go`) asks for the list's name and makes it: an entry in the registry, in one commit (`Create list #shop`).
+A name can't hold `[ ] , | = / "`, a backslash or a control character (`checkListName`; a space or line break becomes `-`).
 No page is written.
 With users the dialog has **Private: only you see it and its tasks**, which makes it a private list of yours, and **For** (Lists for some).
 Then the list opens (`/tasks?list=<name>`).

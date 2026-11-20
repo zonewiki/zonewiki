@@ -425,8 +425,8 @@ func checkListName(name string) (string, error) {
 	switch {
 	case list == "":
 		return "", refuse("A list needs a name")
-	case strings.ContainsAny(list, "[],|=\"/`\n"):
-		return "", refuse(strconv.Quote(list) + ": a list's name can't contain [ ] , | = / or \"")
+	case strings.ContainsAny(list, "[],|=\"/`\n"), strings.ContainsFunc(list, mdtext.BadNameRune):
+		return "", refuse(strconv.Quote(list) + ": a list's name can't contain [ ] , | = / \" \\ or a line break")
 	case len(list) > 60:
 		return "", refuse("A list's name has at most 60 characters")
 	case list == inboxRef || list == "none":
