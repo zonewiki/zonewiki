@@ -310,13 +310,8 @@ func groupNameTaken(s *Settings, name, as string) bool {
 
 // groupNameUsed: something goes by the name now (groupNameTaken).
 func groupNameUsed(s *Settings, name string) bool {
-	if slices.Contains(s.groups(), name) {
+	if s.isGroup(name) {
 		return true
-	}
-	for _, in := range s.Includes {
-		if slices.Contains(in, name) {
-			return true
-		}
 	}
 	entries, _ := os.ReadDir(filepath.Join(cfg.Data, groupsDir))
 	for _, e := range entries {

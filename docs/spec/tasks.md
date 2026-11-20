@@ -1401,7 +1401,7 @@ Without users nothing is anyone's: a list for some left from when the wiki had u
 #### Saying whom a list is for
 
 You say whom it is for when you make it (**New list…**: the **For** field, "everyone" when empty, completing the groups there are; an assistant's `create_task_list` with `for`), and its owners change it with **Who it is for…** in its ⋯ menu (`#list-for-dialog`, `POST /tasks/list-for`, `setListForOp`; a commit "List #hiring is for @hiring, anna" or "… is for everyone").
-The words are groups and users, commas or spaces between them (`cleanFor`): a name that is no user, or no group's name, is refused, and **you are one of them**: "You wouldn't see the list yourself: add your name, or a group you are in".
+The words are groups and users, commas or spaces between them (`cleanFor`): a name that is no user is refused, and so is a group there isn't ("There is no group \"@nosuch\""; a group is one someone is in, one the settings file has a section for, or one a group is said to include: `isGroup`), since the list would take its name for good (a group of that name would be shown the list: `groupNameTaken` in `docs/spec/users.md`); and **you are one of them**: "You wouldn't see the list yourself: add your name, or a group you are in".
 A private list is for one; a list for some is a shared one: in New list… ticking Private turns For off, and a For that names someone turns Private off (`js/listsrow.js`), as the server refuses both together.
 
 The For field completes word by word (`js/listsrow.js`, the words in `data-words` of `#list-for-words`): the groups and the people who can be given tasks, those already named left out; the browser's own datalist would take the whole field for one word.
@@ -1687,7 +1687,7 @@ A registry that names a `default` list reads as that list pinned first (`ParseRe
 
 ### Where a new task goes
 
-The edit dialog of a new task says it under the title (`.task-edit-target`, `syncTarget` in `js/taskmodal.js`), and with users who sees it: "Adds to your Inbox: only you see it.", "Adds to the list team: everyone sees it.", "Adds to the list hiring: only those it is for see it." (a list for some), "Adds to the list diary: only you see it."; without users "Adds to the Inbox." or "Adds to the list shop.".
+The edit dialog of a new task says it under the title (`.task-edit-target`, `syncTarget` in `js/taskmodal.js`), and with users who sees it: "Adds to your Inbox: only you see it.", "Adds to the list team: everyone sees it.", "Adds to the list hiring: only alice, carol see it." (a list for some: its members, the first three and "and N others"), "Adds to the list diary: only you see it."; without users "Adds to the Inbox." or "Adds to the list shop.".
 It follows the List field, and a `#word` in the title that names a list (Quick-add: `#shop` puts the task in the list shop, the first such word; the others are tags).
 Hidden when editing a task and for several titles at once.
 

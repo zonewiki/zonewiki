@@ -588,6 +588,7 @@ and not for who manages it (Manage… is their way, where a group keeps an owner
 ### A name that is taken
 
 A new group's name is refused when it is taken (`groupNameTaken`): a group there is, a name a group is said to include, a folder in `groups/` (a group nobody is in keeps its folder, and a new group of that name would get its pages), or a name a task list is for.
+A list is for no group there isn't (Saying whom a list is for in `docs/spec/tasks.md`), so a list takes no name nobody has.
 **And a name a group went by before**: the history of `groups/<name>/` (the versions and deleted pages of a group renamed since, which are read under that path by who is in a group of that name) and a deleted list that was for it stay its former group's, so a new group of the name would be shown them: the name stays taken.
 The group that went by it takes it back (`was = apollo` in its section, which a rename writes: the names it had), so a rename can be undone.
 On the host nobody is asked: `zonewiki user group` and a hand edit of the file make a group of any name.
@@ -1259,7 +1260,7 @@ The dialog says under its fields who sees the task ("Private: only you see this 
 Cards of private tasks show 🔒 (`.task-private`).
 
 **A new task is private until it is filed**: from New task, `c t` or an assistant's `create_task` without a list it is in its maker's Inbox (The Inbox in `docs/spec/tasks.md`).
-The dialog says so under the title: "Adds to your Inbox: only you see it.", for a shared list "Adds to the list team: everyone sees it.", and for a list for some "Adds to the list hiring: only those it is for see it."
+The dialog says so under the title: "Adds to your Inbox: only you see it.", for a shared list "Adds to the list team: everyone sees it.", and for a list for some "Adds to the list hiring: only alice, carol see it." (its members)
 
 **A shared task can't be made private**: your private lists and your Inbox are off in its List field, and the API and `update_task` answer 400, "A shared task stays shared" for a private list, "A shared task is always in a list: move it to another shared list" for the Inbox (`errSharedListed`).
 **A tag never moves a task**: adding a tag with a private list's name to a task, in the modal, a batch or `update_task`, leaves it where it is; such a tag on a shared task shows to everyone, as any tag.

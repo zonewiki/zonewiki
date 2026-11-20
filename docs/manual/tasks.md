@@ -197,7 +197,7 @@ With several users, a list is one of three kinds:
 | Kind | Who sees it and its tasks | Made with |
 |------|---------------------------|-----------|
 | Private (🔒) | you alone | **New list…** with **Private: only you see it and its tasks** ticked |
-| For some (👥) | the groups and people it names | the **For** field in **New list…** |
+| For some (👥) | the groups and people it names | the **For** field in **New list…**: groups there are (`@dev`) and people's names |
 | Shared | everyone who uses the wiki | **New list…** with neither |
 
 Whoever sees a list sees and changes its tasks.

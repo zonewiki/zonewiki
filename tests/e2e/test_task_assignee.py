@@ -942,7 +942,7 @@ def test_a_list_for_some_is_made_and_its_tasks_go_to_its_members(page, wiki, mon
     page.locator("#task-add-btn").click()
     modal = page.locator("#task-edit-modal")
     # The line under the title says who sees it: not everyone.
-    expect(modal.locator("#task-edit-target")).to_have_text("Adds to the list hiring: only those it is for see it.")
+    expect(modal.locator("#task-edit-target")).to_have_text("Adds to the list hiring: only alice, carol see it.")
     title = modal.locator("#task-edit-title")
     title.type("Call Zed @")
     expect(modal.locator(".tag-ac-item")).to_have_text(["@alice", "@carol"])

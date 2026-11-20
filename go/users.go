@@ -182,6 +182,21 @@ func (s *Settings) groups() []string {
 	return out
 }
 
+// isGroup: name is a group there is (groups), or one a group is said to
+// include: what a list's For may name (a name no group has would be taken
+// for good by the list, groupNameTaken).
+func (s *Settings) isGroup(name string) bool {
+	if slices.Contains(s.groups(), name) {
+		return true
+	}
+	for _, in := range s.Includes {
+		if slices.Contains(in, name) {
+			return true
+		}
+	}
+	return false
+}
+
 // groupMembers: the users in group who can use the wiki, A–Z.
 func (s *Settings) groupMembers(group string) []string {
 	var out []string

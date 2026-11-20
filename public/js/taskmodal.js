@@ -635,9 +635,13 @@ app.listSelect?.addEventListener('change', () => {
   syncMore();   // the field shows now: no "+ Assignee" beside it
 });
 app.listSelect?.addEventListener('change', () => app.listSelect.setCustomValidity(''));
+// Names as a line says them: the first three, and how many others.
+function namesOr(names) {
+  return names.length > 3 ? `${names.slice(0, 3).join(', ')} and ${names.length - 3} others` : names.join(', ');
+}
 // A task moved to a list fewer people see: who loses it, and whose move it is.
 const lostNote = (lost, may) => {
-  const who = lost.length > 3 ? `${lost.slice(0, 3).join(', ')} and ${lost.length - 3} others` : lost.join(', ');
+  const who = namesOr(lost);
   return may ? `${who} will no longer see this task: the list is for fewer people.`
     : `${who} would no longer see this task: only who made it, or an admin, moves it to a list for fewer people.`;
 };
@@ -672,8 +676,9 @@ function syncTarget() {
   // private later.
   const users = document.body.dataset.users === '1';
   const where = ref ? `Adds to the list ${app.listName(ref)}` : users ? 'Adds to your Inbox' : 'Adds to the Inbox';
+  const members = users && !app.isPrivateList(ref) && app.listMembers(ref);
   const who = !users ? '' : app.isPrivateList(ref) ? ': only you see it'
-    : app.listMembers(ref) ? ': only those it is for see it' : ': everyone sees it';
+    : members ? `: only ${namesOr([...members])} see it` : ': everyone sees it';
   targetEl.textContent = where + who + '.';
   // A task for someone, still in the Inbox nobody chose: it needs a shared
   // list. (In the Inbox the user chose, as in a private list, there is no

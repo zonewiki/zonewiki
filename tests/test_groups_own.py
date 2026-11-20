@@ -143,8 +143,10 @@ def test_groups_is_where_an_admin_manages_every_group(client, wiki):
     ("fine", "bob, x!y", "not a user"),
 ])
 def test_a_group_is_not_made_of_a_name_that_is_taken(client, wiki, name, people, says):
-    sign_in(client, "dana")
-    assert client.post("/tasks/new-list", data={"name": "hires", "for": "@hiring, dana"}, headers=HOST).status_code == 302
+    # A list for a group nobody is in (one that ended, or named before such a
+    # name was refused) keeps the name.
+    (wiki / "_tasks/lists/hires").mkdir(parents=True)
+    (wiki / "_tasks/lists/hires/list.json").write_text('{"name": "hires", "for": ["@hiring", "dana"]}\n')
     sign_in(client, "alice")
     before = config(wiki)
     resp = make(client, name, people)

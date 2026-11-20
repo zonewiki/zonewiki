@@ -504,6 +504,23 @@ def test_a_pin_is_only_the_users_own(client, wiki):
     sign_in(client, "bob")
     assert places(client)[0] == ["mine", "inbox"]
 
+def test_a_list_is_for_groups_there_are(client, wiki):
+    """A name no group has is refused, at every door: a list for it would
+    take the name for good (a group of that name would be shown the list)."""
+    sign_in(client, "alice")
+    resp = client.post("/tasks/new-list", data={"name": "ghosts", "for": "@nosuch, alice"}, headers=HOST)
+    assert "newlist_error=" in resp.headers["Location"]
+    assert "There is no group &#34;@nosuch&#34;" in client.get(resp.headers["Location"], headers=HOST).get_data(as_text=True)
+    assert not (wiki / "_tasks/lists/ghosts").exists()
+    resp = client.post("/tasks/list-for", data={"list": LIST, "for": "@nosuch, alice"}, headers=HOST)
+    assert "for_error=" in resp.headers["Location"]
+    assert json.loads((wiki / f"_tasks/lists/{LIST}/list.json").read_text())["for"] == ["@hiring", "alice"]
+    out = mcp(client, "alice", "create_task_list", name="ghosts", **{"for": "@nosuch, alice"}, summary="x")
+    assert "There is no group" in out and not (wiki / "_tasks/lists/ghosts").exists()
+    # So the name is free for a group.
+    assert client.post("/groups", data={"name": "nosuch", "people": ""}, headers=HOST).status_code == 303
+
+
 def test_narrowing_says_whose_tasks_leave_their_sight(client, wiki):
     sign_in(client, "alice")
     for title, who in (("One", "bob"), ("Two", "bob"), ("Three", "dana"), ("Hers", "alice")):
@@ -596,7 +613,11 @@ def test_a_list_for_a_group_made_of_groups(client, wiki, monkeypatch):
     text = config.read_text().replace("[user bob]\n", "[user bob]\ngroups = dev\n")
     config.write_text(text + "\n[group product]\nincludes = dev, design\n")
     sign_in(client, "alice")
-    client.post("/tasks/list-for", data={"list": LIST, "for": "@product alice", "confirm": "1"}, headers=HOST)
+    for _ in range(50):       # the settings are taken within the second: then there is a group product
+        client.post("/tasks/list-for", data={"list": LIST, "for": "@product alice", "confirm": "1"}, headers=HOST)
+        if json.loads((wiki / f"_tasks/lists/{LIST}/list.json").read_text())["for"] == ["@product", "alice"]:
+            break
+        time.sleep(0.1)
     assert json.loads((wiki / f"_tasks/lists/{LIST}/list.json").read_text())["for"] == ["@product", "alice"]
     sign_in(client, "bob")              # in dev, so in product
     for _ in range(50):       # the settings are taken within the second

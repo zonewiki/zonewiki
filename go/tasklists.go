@@ -559,10 +559,13 @@ func cleanFor(user asker, text string) ([]string, error) {
 		case w == "everyone":
 		case s.Users == nil:
 			return nil, refuse("A list for some needs users: this wiki has none")
-		case isGroup && groupNameRE.MatchString(group):
+		case isGroup && groupNameRE.MatchString(group) && s.isGroup(group):
 			if !slices.Contains(groups, w) {
 				groups = append(groups, w)
 			}
+		case isGroup && groupNameRE.MatchString(group):
+			// A name no group has: the list would take it for good (groupNameTaken).
+			return nil, refuse("There is no group " + strconv.Quote(w) + " (a user is named without @)")
 		case isGroup:
 			return nil, refuse(strconv.Quote(w) + " is no group's name")
 		case s.Users[w] == nil:
