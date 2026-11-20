@@ -1371,7 +1371,8 @@ Under an embed of a list that isn't there, **Create the list #<name>** does the 
 
 A list's name (`cleanList`, `checkListName`) is one word, lowercase, spaces `-`, a leading `#` dropped, at most 60 bytes, none of `[ ] , | = / "`, a backtick or a line break (they mean something in an embed or a ref).
 No list can be called `inbox` or `none`: they name the Inbox (below).
-A name is unique among the shared lists and among one user's private lists.
+A new name is kept composed (NFC: `café` typed with a combining accent is the `café` of a keyboard that has é).
+A name is unique among the shared lists and among one user's private lists, and so is its look: names that are one in their compatibility form, in lower case (NFKC, `listNameKey`: a full-width `ｔｅａｍ` is `team`, `ﬁ` is `fi`), are one name, so New list…, a rename or Make shared… refuses a name that looks like a list's there ("There is a list #team already"), also of a list for some that whoever asks doesn't see.
 A user can't make a list by a name of one they see ("There is a list #shop already"), private or shared; they can still end up with a private and a shared list of one name (the migration, or someone making the shared one later, who doesn't see theirs).
 For them the plain name is their own list and the shared one is **`shared/<name>`**: that is a **ref**, how a list is named to one user (`ListInfo.Ref`, `taskLists(user)`, `resolveList`): in URLs (`/tasks?list=shared/gifts`), in pins, in the API's and the tools' `list`, in the browser.
 On a page, `[[tasks: list=gifts]]` is the shared list unless the page is in your private folder (`listOnPage`), so a shared page shows everyone the same list.

@@ -18,6 +18,8 @@ import (
 	"unicode"
 	"zonewiki/internal/mdtext"
 	"zonewiki/internal/taskfiles"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 // sharedRef: how a user names a shared list when they have a private list
@@ -421,7 +423,9 @@ var errSharedStays = refuse("A shared task stays shared: others have seen it. Ma
 // checkListName: a list's name as it is kept (cleanList), or why it can't
 // be one.
 func checkListName(name string) (string, error) {
-	list := cleanList(strings.TrimLeft(strings.TrimSpace(name), "#"))
+	// In its composed form (NFC): "café" typed with a combining accent is
+	// the café of a keyboard that has é, as a file system may give either.
+	list := norm.NFC.String(cleanList(strings.TrimLeft(strings.TrimSpace(name), "#")))
 	switch {
 	case list == "":
 		return "", refuse("A list needs a name")
@@ -472,11 +476,33 @@ func notOwnerMsg(l ListInfo) string {
 	return "#" + l.Name + " is " + strings.Join(l.Owners, "'s and ") + "'s list: its tasks are yours to change, the list itself (its name, its settings, deleting it) is theirs and an admin's."
 }
 
-// nameTaken: user sees a list called name.
-func nameTaken(name string, lists map[string]ListInfo) bool {
-	_, own := lists[name]
-	_, twin := lists[sharedRef+name]
-	return own || twin
+// listNameKey: what tells list names apart to who reads them: their
+// compatibility form (NFKC: "ﬁ" is "fi", a full-width "ｔｅａｍ" is "team",
+// a combining accent its letter's) in lower case. Two names with one key
+// look alike, so one list's name is taken for the other (nameTaken,
+// regTaken, sharedNameTaken): no list sits beside another of the same
+// look to take its tasks.
+func listNameKey(name string) string { return strings.ToLower(norm.NFKC.String(name)) }
+
+// nameTaken: user sees a list called name, or by a name that looks the same
+// (listNameKey), but for the list except names (its own name, for a rename).
+func nameTaken(name string, lists map[string]ListInfo, except ...string) bool {
+	key := listNameKey(name)
+	for ref, l := range lists {
+		if listNameKey(l.Name) == key && !slices.Contains(except, ref) {
+			return true
+		}
+	}
+	return false
+}
+
+// regTaken: the registry reg has a list called name, or by a name that
+// looks the same (listNameKey), but except.
+func regTaken(reg *taskfiles.Registry, name string, except ...string) bool {
+	key := listNameKey(name)
+	return slices.ContainsFunc(reg.Lists, func(l *taskfiles.List) bool {
+		return listNameKey(l.Name) == key && !slices.Contains(except, l.Name)
+	})
 }
 
 // sharedNameTaken: a shared list for who (none: everyone) can't be called
@@ -485,12 +511,17 @@ func nameTaken(name string, lists map[string]ListInfo) bool {
 // whose folder keeps whom its history is for (forOf: its file marked gone),
 // and a list made there would be for them too, its tasks out of everyone
 // else's sight. A list for the very same people takes it back.
-func sharedNameTaken(reg *taskfiles.Registry, name string, who []string) bool {
-	if reg.Find(name) != nil {
+func sharedNameTaken(reg *taskfiles.Registry, name string, who []string, except ...string) bool {
+	if regTaken(reg, name, except...) {
 		return true
 	}
-	kept := taskFiles.ForOfList(name)
-	return len(kept) > 0 && !slices.Equal(kept, who)
+	key := listNameKey(name)
+	for _, folder := range taskFiles.ForSome() { // what the folders say, of lists gone too
+		if listNameKey(folder) == key && !slices.Contains(except, folder) && !slices.Equal(taskFiles.ForOfList(folder), who) {
+			return true
+		}
+	}
+	return false
 }
 
 // nonEmpty: paths without the empty ones (a file that didn't change).
@@ -603,7 +634,7 @@ func createListOp(user asker, name string, private, pin bool, who, suffix string
 	if err != nil {
 		return "", err
 	}
-	if reg.Find(list) != nil || owner == "" && sharedNameTaken(reg, list, listFor) {
+	if regTaken(reg, list) || owner == "" && sharedNameTaken(reg, list, listFor) {
 		return "", refuseAs(refusedExists, "There is a list #"+list+" already")
 	}
 	made := &taskfiles.List{Name: list, Settings: map[string]string{}, Owner: owner}
@@ -744,7 +775,7 @@ func renameListOp(user asker, ref, newName, suffix string, check ...func(pages [
 	if name == l.Name {
 		return nil, refuseAs(refusedUnchanged, "The list is already called #"+name)
 	}
-	if nameTaken(name, lists) {
+	if nameTaken(name, lists, l.Ref) {
 		return nil, refuseAs(refusedExists, "There is a list #"+name+" already. To make the two one, delete #"+l.Name+" and move its tasks there.")
 	}
 	taskFiles.Lock()
@@ -765,7 +796,7 @@ func renameListOp(user asker, ref, newName, suffix string, check ...func(pages [
 	if entry == nil || regs[l.Owner].Find(name) != nil {
 		return nil, refuseAs(refusedConflict, "The lists have changed since. Reload and try again.")
 	}
-	if !l.Private() && sharedNameTaken(regs[l.Owner], name, l.For) {
+	if !l.Private() && sharedNameTaken(regs[l.Owner], name, l.For, l.Name) || l.Private() && regTaken(regs[l.Owner], name, l.Name) {
 		return nil, refuseAs(refusedExists, "There is a list #"+name+" already")
 	}
 	// How the text of owner o (their pages, their tasks; "" the shared

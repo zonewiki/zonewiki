@@ -402,6 +402,26 @@ def test_its_name_stays_taken_once_it_is_gone(client, wiki):
     assert "Again" not in client.get("/api/tasks", headers=HOST).get_data(as_text=True)
 
 
+def test_no_list_looks_like_another(client, wiki):
+    """A list's name is kept composed (NFC), and a name that looks like a
+    list's (a combining accent, full-width letters) is that list's: no list
+    sits beside another of the same look."""
+    sign_in(client, "bob")
+    decomposed = "cafe\u0301"
+    assert client.post("/tasks/new-list", data={"name": decomposed}, headers=HOST).headers["Location"] == "/tasks?list=caf%C3%A9"
+    registry = (wiki / "_tasks/lists.json").read_text()
+    assert "caf\u00e9" in registry and decomposed not in registry
+    for name in ("caf\u00e9", decomposed, "\uff54\uff45\uff41\uff4d", "CAF\u00c9"):   # cafe twice, full-width team, capitals
+        resp = client.post("/tasks/new-list", data={"name": name}, headers=HOST)
+        assert "newlist_error=" in resp.headers["Location"], name
+        assert "already" in client.post("/api/tasks/lists", json={"name": name}, headers=HOST).get_json()["error"], name
+    # Nor by a rename, nor beside a list for some he doesn't see.
+    resp = client.post("/tasks/rename-list", data={"list": "caf\u00e9", "new_name": "\uff54\uff45\uff41\uff4d"}, headers=HOST)
+    assert "rename_error=" in resp.headers["Location"]
+    resp = client.post("/tasks/new-list", data={"name": "\uff48\uff49\uff52\uff49\uff4e\uff47"}, headers=HOST)
+    assert "newlist_error=" in resp.headers["Location"]
+
+
 def test_a_list_for_some_needs_users_and_is_no_private_list(client, git_wiki_dir, monkeypatch):
     resp = client.post("/tasks/new-list", data={"name": "x", "for": "anna"}, headers=HOST)
     assert "newlist_error=" in resp.headers["Location"]
