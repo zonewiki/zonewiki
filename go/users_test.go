@@ -1,8 +1,10 @@
 package main
 
 import (
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestPasswordHash(t *testing.T) {
@@ -35,6 +37,37 @@ func TestAuthenticate(t *testing.T) {
 	}
 	if authenticate("alice", "nope") != nil || authenticate("bob", "pw") != nil || authenticate("", "") != nil {
 		t.Error("let in")
+	}
+}
+
+// Key derivations run in a few slots at once, wiki-wide: with every slot
+// taken a check waits, and goes on once one is free (not refused).
+func TestKeyDerivationsWaitForASlot(t *testing.T) {
+	hash := hashPassword("pw")
+	for range cap(keySlots) {
+		keySlots <- struct{}{}
+	}
+	done := make(chan bool, 1)
+	go func() { done <- checkPassword("pw", hash) }()
+	select {
+	case <-done:
+		t.Fatal("a check ran with every slot taken")
+	case <-time.After(200 * time.Millisecond):
+	}
+	<-keySlots
+	select {
+	case ok := <-done:
+		if !ok {
+			t.Error("the right password, checked once a slot was free, is wrong")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the check still waits with a slot free")
+	}
+	for range cap(keySlots) - 1 {
+		<-keySlots
+	}
+	if cap(keySlots) > max(1, runtime.NumCPU()/2) {
+		t.Errorf("%d slots on %d cores", cap(keySlots), runtime.NumCPU())
 	}
 }
 

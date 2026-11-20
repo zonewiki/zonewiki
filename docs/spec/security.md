@@ -463,6 +463,7 @@ Secrets are compared as bytes (`sameSecret`), so non-ASCII passwords work.
 
 - **Three counts** (`newThrottle`, the same numbers each): the password's (`loginThrottle`: the login page, Change password, a token made on Connect an assistant, Allow on OAuth's consent page), the token's (`mcpThrottle`: `/mcp`, the file routes with a token, OAuth's `/oauth/token`), so an assistant's mistakes don't lock its user's browser out, and the welcome links' (`welcomeThrottle`: a link that doesn't work, `/welcome/<token>`).
   Sign-up has caps of its own (5 mails a client and 50 in all an hour; Sign-up in `docs/spec/users.md`).
+- **A few password checks at a time, wiki-wide**: a check (and a new password's hash) is 600,000 rounds of PBKDF2 on a core, and they run in at most half the cores at once (`keySlots`, at least one): clients guessing from many addresses, each with its free tries, can't keep every core busy, and a try past the bound waits its turn, briefly, rather than fail.
 - **One try at a time**: a client's tries are checked one at a time (`Throttle.try`: the wait, the check and the count as one step), so tries sent at once aren't all let in before the first counts as a failure (a hundred connections were a hundred guesses per wait).
 - **The client** (`clientKey`) is the remote address,
   an IPv6 address by its /64 (`network`: a client has that whole network to take addresses from, and each would have tries of its own),

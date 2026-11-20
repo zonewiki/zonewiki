@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -315,10 +316,24 @@ const (
 	hashLen        = 32
 )
 
+// keySlots bounds the PBKDF2 derivations running at once, wiki-wide (a
+// check and a new hash alike): each takes a core for its 600,000 rounds,
+// and clients guessing from many addresses, each with its free tries,
+// could otherwise keep every core busy. Half the cores, at least one: a
+// try past them waits its turn, briefly, rather than fail.
+var keySlots = make(chan struct{}, max(1, runtime.NumCPU()/2))
+
+// deriveKey: pbkdf2.Key with SHA-256, in one of the keySlots.
+func deriveKey(password string, salt []byte, iterations, length int) ([]byte, error) {
+	keySlots <- struct{}{}
+	defer func() { <-keySlots }()
+	return pbkdf2.Key(sha256.New, password, salt, iterations, length)
+}
+
 func hashPassword(password string) string {
 	salt := make([]byte, 16)
 	_, _ = rand.Read(salt)
-	key, _ := pbkdf2.Key(sha256.New, password, salt, hashIterations, hashLen)
+	key, _ := deriveKey(password, salt, hashIterations, hashLen)
 	b64 := base64.RawStdEncoding.EncodeToString
 	return fmt.Sprintf("%s:%d:%s:%s", hashScheme, hashIterations, b64(salt), b64(key))
 }
@@ -345,7 +360,7 @@ func checkPassword(password, hash string) bool {
 	if err != nil {
 		return false
 	}
-	got, err := pbkdf2.Key(sha256.New, password, salt, iterations, len(key))
+	got, err := deriveKey(password, salt, iterations, len(key))
 	return err == nil && subtle.ConstantTimeCompare(got, key) == 1
 }
 
