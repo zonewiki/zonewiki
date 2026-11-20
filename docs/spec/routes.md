@@ -202,7 +202,7 @@ A change users see updates its manual page in the same commit, as it updates the
 | POST   | `/tasks/rename`       | Rename a task tag (fields `tag`, `new_name`, `merge`; the Rename tag… dialog of `/tasks?tag=<tag>`, Renaming a tag in `docs/spec/tasks.md`); see below |
 | POST   | `/tasks/new-list`     | Make a task list, pinned for who makes it (fields `name`, `private`, `pin`: `0` leaves it unpinned); see below |
 | POST   | `/tasks/rename-list`  | Rename a list (fields `list`, `new_name`; its Rename… dialog): its tasks, the pins and the pages' embeds and links follow; see below |
-| POST   | `/tasks/delete-list`  | Delete a list (fields `list`, `to`, `share`, `close`; its Delete… dialog); see below |
+| POST   | `/tasks/delete-list`  | Delete a list (fields `list`, `to`, `share`, `close`, `confirm`; its Delete… dialog); see below |
 | POST   | `/tasks/share-list`   | Make a private list shared, its tasks with it (field `list`; its Make shared… dialog); a refusal back to the dialog (`&share_error=…`) |
 | POST   | `/tasks/list-for`     | Say whom a shared list is for (fields `list`, `for`; its Who it is for… dialog, its owners'; Lists for some in `docs/spec/tasks.md`); see below |
 | POST   | `/tasks/pin-list`     | Pin a list for the user (last), put its pill first, or unpin it (fields `list`, `pin`: `1`, `first`, `0`); see below |
@@ -232,7 +232,7 @@ Each form goes back to its dialog when it refuses, with the dialog's fields and 
 - `/tasks/new-list` comes from the New list… dialog of `/tasks`, and from Create under an embed of a list that isn't there (Lists in `docs/spec/tasks.md`).
   It makes an entry in the lists' registry, then redirects to `/tasks?list=<name>`; a name that won't do goes back to the dialog (`/tasks?newlist_name=…&newlist_error=…`).
 - `/tasks/rename-list` redirects to the list by its new name, a refusal back to the dialog (`?list=…&rename_name=…&rename_error=…`).
-- `/tasks/delete-list`: the list's tasks go to the list `to` names or to none, its open ones closed as won't do with `close`; it redirects there, a refusal back to the dialog (`&delete_error=…`).
+- `/tasks/delete-list`: the list's tasks go to the list `to` names or to none, its open ones closed as won't do with `close`; it redirects there, a refusal back to the dialog (`&delete_error=…`), a question too (`&delete_to=<list>`: open tasks there would be with someone who doesn't see it; `confirm=<list>` goes on).
 - `/tasks/list-for`: `for` takes groups `@name` and users, empty or `everyone` for all.
   A refusal goes back to the dialog (`&for_error=…&for_words=…`), and so does a narrowing that would take open tasks out of their assignees' sight, which goes through with `confirm=1` (`&for_confirm=1`); who is no owner gets 403.
 - `/tasks/pin-list` pins or unpins a list for whoever asks (`pin`: `1`, `first`, `0`), in their own registry; it redirects to the list.

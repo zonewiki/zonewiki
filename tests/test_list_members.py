@@ -340,6 +340,41 @@ def test_renamed_and_deleted_its_folders_stay_its_members(client, wiki):
     assert SECRET in client.get("/api/tasks", headers=HOST).get_data(as_text=True)      # in team now: everyone's
 
 
+def test_a_deleted_lists_tasks_go_to_fewer_people_as_any_task_does(client, wiki):
+    """Deleted into a list fewer people see, a list's tasks go there as any
+    task does: only those who deletes it made, or any by an admin; and the
+    dialog asks first when open tasks would be with someone who doesn't see
+    that list."""
+    sign_in(client, "carol")                          # a member of hiring, not an admin
+    assert client.post("/tasks/new-list", data={"name": "ops"}, headers=HOST).status_code == 302
+    sign_in(client, "alice")
+    assert client.post("/api/tasks", json={"title": "Alice's job", "list": "ops"}, headers=HOST).status_code == 201
+    sign_in(client, "carol")
+    resp = client.post("/tasks/delete-list", data={"list": "ops", "to": LIST}, headers=HOST)
+    assert "delete_error=" in resp.headers["Location"] and "Only+who+made+a+task" in resp.headers["Location"]
+    assert "Alice's job" in sign_in(client, "bob").get("/api/tasks", headers=HOST).get_data(as_text=True)
+    # Her own tasks, one given to bob: asked first, then moved.
+    sign_in(client, "carol")
+    assert client.post("/tasks/new-list", data={"name": "solo"}, headers=HOST).status_code == 302
+    client.post("/api/tasks", json={"title": "Carol's job", "list": "solo"}, headers=HOST)
+    client.post("/api/tasks", json={"title": "Bob's errand", "list": "solo", "assignee": "bob"}, headers=HOST)
+    asked = client.post("/tasks/delete-list", data={"list": "solo", "to": LIST}, headers=HOST).headers["Location"]
+    assert "delete_error=" in asked and f"delete_to={LIST}" in asked
+    page = client.get(asked, headers=HOST).get_data(as_text=True)
+    assert "1 open task of #solo is assigned to bob" in page.replace("&#39;", "'")
+    assert f'<input type="hidden" name="confirm" value="{LIST}">' in page
+    assert "Carol's job" in sign_in(client, "bob").get("/api/tasks", headers=HOST).get_data(as_text=True)
+    sign_in(client, "carol")
+    # A yes for another list is none.
+    again = client.post("/tasks/delete-list", data={"list": "solo", "to": LIST, "confirm": "team"}, headers=HOST)
+    assert "delete_error=" in again.headers["Location"]
+    done = client.post("/tasks/delete-list", data={"list": "solo", "to": LIST, "confirm": LIST}, headers=HOST)
+    assert done.headers["Location"] == f"/tasks?list={LIST}"
+    titles = [t["title"] for t in client.get("/api/tasks", query_string={"list": LIST}, headers=HOST).get_json()]
+    assert "Carol's job" in titles and "Bob's errand" in titles
+    assert "Carol's job" not in sign_in(client, "bob").get("/api/tasks", headers=HOST).get_data(as_text=True)
+
+
 def test_a_list_for_some_needs_users_and_is_no_private_list(client, git_wiki_dir, monkeypatch):
     resp = client.post("/tasks/new-list", data={"name": "x", "for": "anna"}, headers=HOST)
     assert "newlist_error=" in resp.headers["Location"]

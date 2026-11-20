@@ -521,16 +521,16 @@ func TestDeleteList(t *testing.T) {
 	if err := pinListOp(asUser("bob"), "shop", "1"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := deleteListOp(asUser("alice"), "shop", "gifts", false, false, ""); err == nil {
+	if _, err := deleteListOp(asUser("alice"), "shop", "gifts", false, false, false, ""); err == nil {
 		t.Error("shared tasks moved into a private list")
 	}
-	if _, err := deleteListOp(asUser("alice"), "shop", "shop", false, false, ""); err == nil {
+	if _, err := deleteListOp(asUser("alice"), "shop", "shop", false, false, false, ""); err == nil {
 		t.Error("moved into itself")
 	}
-	if _, err := deleteListOp(asUser("bob"), "gifts", "", true, false, ""); !refusedWith(err, refusedNotFound) {
+	if _, err := deleteListOp(asUser("bob"), "gifts", "", true, false, false, ""); !refusedWith(err, refusedNotFound) {
 		t.Errorf("bob deleted alice's list: %v", err)
 	}
-	if n, err := deleteListOp(asUser("alice"), "shop", "market", false, false, ""); err != nil || n != 1 {
+	if n, err := deleteListOp(asUser("alice"), "shop", "market", false, false, false, ""); err != nil || n != 1 {
 		t.Fatalf("delete: %d, %v", n, err)
 	}
 	if _, ok := taskLists(asUser("alice"))["shop"]; ok || openByID("bob")[milk.ID].List != "market" {
@@ -540,14 +540,14 @@ func TestDeleteList(t *testing.T) {
 		t.Errorf("bob still pins it: %v", refsOf(got))
 	}
 	// Her private list: to another of hers, no question.
-	if _, err := deleteListOp(asUser("alice"), "gifts", "wishes", false, false, ""); err != nil {
+	if _, err := deleteListOp(asUser("alice"), "gifts", "wishes", false, false, false, ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := openByID("alice")[cake.ID]; got.List != "wishes" || got.Owner != "alice" {
 		t.Errorf("cake %+v", got)
 	}
 	// To no list: her Inbox. Its tasks stay hers alone, share or not.
-	if _, err := deleteListOp(asUser("alice"), "wishes", "", false, false, ""); err != nil {
+	if _, err := deleteListOp(asUser("alice"), "wishes", "", false, false, false, ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := openByID("alice")[cake.ID]; got == nil || got.List != "" || got.Owner != "alice" || openByID("bob")[cake.ID] != nil {
@@ -562,17 +562,17 @@ func TestDeleteList(t *testing.T) {
 	// A private list's tasks into a shared one: only when the delete says share.
 	mustList(t, "alice", "plans", true)
 	plan := newTestTask(t, "alice", "Plan", false, "list", "plans")
-	if _, err := deleteListOp(asUser("alice"), "plans", "market", false, false, ""); err == nil {
+	if _, err := deleteListOp(asUser("alice"), "plans", "market", false, false, false, ""); err == nil {
 		t.Fatal("private tasks shared without saying so")
 	}
-	if _, err := deleteListOp(asUser("alice"), "plans", "market", true, false, ""); err != nil {
+	if _, err := deleteListOp(asUser("alice"), "plans", "market", true, false, false, ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := openByID("bob")[plan.ID]; got == nil || got.List != "market" || got.Owner != "" || got.History[len(got.History)-2].Event != "shared" || got.Assignee != "alice" {
 		t.Errorf("plan after the delete: %+v", got)
 	}
 	// A shared list with no list named: its tasks go to #general, made for them.
-	if n, err := deleteListOp(asUser("bob"), "market", "", false, false, ""); err != nil || n != 2 {
+	if n, err := deleteListOp(asUser("bob"), "market", "", false, false, false, ""); err != nil || n != 2 {
 		t.Fatalf("delete market: %d, %v", n, err)
 	}
 	if l, ok := taskLists(asUser("alice"))[generalListName]; !ok || l.Private() {
@@ -584,11 +584,11 @@ func TestDeleteList(t *testing.T) {
 		}
 	}
 	// #general itself, while it has tasks, needs a list named; another takes them.
-	if _, err := deleteListOp(asUser("alice"), generalListName, "", false, false, ""); !refusedWith(err, refusedInvalid) {
+	if _, err := deleteListOp(asUser("alice"), generalListName, "", false, false, false, ""); !refusedWith(err, refusedInvalid) {
 		t.Errorf("#general deleted into itself: %v", err)
 	}
 	mustList(t, "alice", "team", false)
-	if _, err := deleteListOp(asUser("alice"), generalListName, "team", false, false, ""); err != nil {
+	if _, err := deleteListOp(asUser("alice"), generalListName, "team", false, false, false, ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := openByID("bob")[milk.ID]; got.List != "team" {
@@ -596,7 +596,7 @@ func TestDeleteList(t *testing.T) {
 	}
 	// An empty #general goes without a list named.
 	mustList(t, "alice", generalListName, false)
-	if _, err := deleteListOp(asUser("alice"), generalListName, "", false, false, ""); err != nil {
+	if _, err := deleteListOp(asUser("alice"), generalListName, "", false, false, false, ""); err != nil {
 		t.Errorf("an empty #general: %v", err)
 	}
 }
@@ -606,7 +606,7 @@ func TestDeleteListWithoutUsers(t *testing.T) {
 	testWiki(t, nil)
 	mustList(t, "", "shop", false)
 	milk := newTestTask(t, "", "Milk", false, "list", "shop")
-	if n, err := deleteListOp(asker{}, "shop", "", false, false, ""); err != nil || n != 1 {
+	if n, err := deleteListOp(asker{}, "shop", "", false, false, false, ""); err != nil || n != 1 {
 		t.Fatalf("delete: %d, %v", n, err)
 	}
 	if got := openByID("")[milk.ID]; got == nil || got.List != "" || got.Owner != "" || len(taskLists(asker{})) != 0 {

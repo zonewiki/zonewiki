@@ -918,7 +918,13 @@ func moveListTasks(user asker, tasks []*Task, from ListInfo, to *ListInfo) int {
 // task too), so a list that is over leaves no open tasks behind; they can
 // be reopened from Closed. Pins of it go; embeds that name it stay, and say
 // that there is no such list.
-func deleteListOp(user asker, ref, to string, share, wontDo bool, suffix string) (int, error) {
+//
+// Into a list fewer people see (a list for some that someone who sees its
+// tasks now is none of) its tasks go as any task goes there: only those
+// user made, or any by an admin (mayNarrowTask); and, as narrowing a list
+// does, it asks first (askError; confirmed: asked and said yes) when open
+// tasks would be with someone who doesn't see that list.
+func deleteListOp(user asker, ref, to string, share, wontDo, confirmed bool, suffix string) (int, error) {
 	taskFiles.Lock()
 	defer taskFiles.Unlock()
 	lists := taskLists(user)
@@ -951,6 +957,26 @@ func deleteListOp(user asker, ref, to string, share, wontDo bool, suffix string)
 		return 0, refuse("With users a shared task is always in a list: name the list the tasks of #" + l.Name + " go to")
 	}
 	toGeneral := has && !l.Private() && target == nil && settings().Users != nil
+	if toGeneral {
+		target = &ListInfo{Ref: generalListName, Name: generalListName}
+	}
+	if has && target != nil && !l.Private() && !target.Private() {
+		if lost := taskLosers(l.Name, target.Name); len(lost) > 0 {
+			moving, _ := selectTasks(slices.Concat(active, closed), func(t *Task) bool { return t.List == l.Name && t.Owner == l.Owner })
+			if slices.ContainsFunc(moving, func(t *Task) bool { return !mayNarrowTask(user, t) }) {
+				return 0, refuse(namesOr(lost, 3, "") + " would no longer see the tasks of #" + l.Name + ": #" + target.Name +
+					" is for fewer people. Only who made a task, or an admin, moves it there: move them to a list as wide")
+			}
+			if n, names := assignedOutside(moving, taskFiles.ForOfList(target.Name)); n > 0 && !wontDo && !confirmed {
+				who := ", who don't see #"
+				if len(names) == 1 {
+					who = ", who doesn't see #"
+				}
+				return 0, &askError{outsideTasks(n, "of #"+l.Name) + " assigned to " + strings.Join(names, ", ") + who + target.Name + ". " +
+					"The tasks keep their names and count as unassigned there, to hand on; for them again, they are theirs as before. Delete again to go on."}
+			}
+		}
+	}
 	owners := []string{l.Owner}
 	if !l.Private() {
 		owners = taskFiles.EveryOwner()
@@ -963,11 +989,8 @@ func deleteListOp(user asker, ref, to string, share, wontDo bool, suffix string)
 	}
 	reg := regs[l.Owner]
 	reg.Lists = slices.DeleteFunc(reg.Lists, func(x *taskfiles.List) bool { return x.Name == l.Name })
-	if toGeneral {
-		if reg.Find(generalListName) == nil {
-			reg.Lists = append(reg.Lists, &taskfiles.List{Name: generalListName, Settings: map[string]string{}})
-		}
-		target = &ListInfo{Ref: generalListName, Name: generalListName}
+	if toGeneral && reg.Find(generalListName) == nil {
+		reg.Lists = append(reg.Lists, &taskfiles.List{Name: generalListName, Settings: map[string]string{}})
 	}
 	if wontDo {
 		stamp := timestamp()
@@ -1172,21 +1195,9 @@ func setListForOp(user asker, ref, who string, confirmed bool) error {
 		if err != nil {
 			return err
 		}
-		n, names := 0, []string{}
-		for _, t := range open {
-			if t.Owner == "" && t.List == l.Name && t.Assignee != "" && !listMember(asUser(t.Assignee), listFor) {
-				if n++; !slices.Contains(names, t.Assignee) {
-					names = append(names, t.Assignee)
-				}
-			}
-		}
-		if n > 0 {
-			slices.Sort(names)
-			tasks := strconv.Itoa(n) + " open tasks here are"
-			if n == 1 {
-				tasks = "1 open task here is"
-			}
-			return &askError{tasks + " assigned to " + strings.Join(names, ", ") + ", who will no longer see the list. " +
+		mine, _ := selectTasks(open, func(t *Task) bool { return t.Owner == "" && t.List == l.Name })
+		if n, names := assignedOutside(mine, listFor); n > 0 {
+			return &askError{outsideTasks(n, "here") + " assigned to " + strings.Join(names, ", ") + ", who will no longer see the list. " +
 				"The tasks keep their names and count as unassigned here, to hand on; for them again, they are theirs as before. Save again to go on."}
 		}
 	}
@@ -1208,6 +1219,33 @@ func setListForOp(user asker, ref, who string, confirmed bool) error {
 		msg = "List #" + l.Name + " is for " + forWords(listFor)
 	}
 	return commitLists(user, msg, paths)
+}
+
+// assignedOutside: of tasks, how many are open and given to someone who is
+// none of who (whom a list for some is for; none: everyone), and those
+// people, A–Z: what a list narrowed to who, or tasks moved into such a
+// list, would leave counting as no one's (assigneeGone).
+func assignedOutside(tasks []*Task, who []string) (n int, names []string) {
+	if len(who) == 0 {
+		return 0, nil
+	}
+	for _, t := range tasks {
+		if t.IsOpen() && t.Owner == "" && t.Assignee != "" && !listMember(asUser(t.Assignee), who) {
+			if n++; !slices.Contains(names, t.Assignee) {
+				names = append(names, t.Assignee)
+			}
+		}
+	}
+	slices.Sort(names)
+	return n, names
+}
+
+// outsideTasks: "3 open tasks <where> are", for assignedOutside's question.
+func outsideTasks(n int, where string) string {
+	if n == 1 {
+		return "1 open task " + where + " is"
+	}
+	return strconv.Itoa(n) + " open tasks " + where + " are"
 }
 
 // askError: an operation that wants a yes first: what it would do, said;

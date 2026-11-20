@@ -1519,7 +1519,7 @@ Text not yet in git is committed first (`keepPendingPages`).
 
 #### Deleting a list
 
-**Delete…** (`#list-delete-dialog`; `POST /tasks/delete-list` with `list`, `to`, `share` and `close`; `deleteListOp`): the list goes, in one commit (`Delete list #shop`); **its tasks stay**, open and closed ones, in the list `to` names.
+**Delete…** (`#list-delete-dialog`; `POST /tasks/delete-list` with `list`, `to`, `share`, `close` and `confirm`; `deleteListOp`): the list goes, in one commit (`Delete list #shop`); **its tasks stay**, open and closed ones, in the list `to` names.
 With none named, a private list's go to your Inbox (they stay private); a shared list's, with users, to the shared list `general`, made for them when there is none (a shared task is always in a list); without users to the Inbox.
 The dialog offers those first: "Your Inbox", "#general", "The Inbox (no list)", then the other lists ("#name (private)", or "(shared)" when deleting a private list).
 `general` itself with tasks in it is deleted only with another list named for them ("With users a shared task is always in a list: name the list the tasks of #general go to"); with no other shared list the dialog says "No other shared list".
@@ -1527,6 +1527,8 @@ The dialog offers those first: "Your Inbox", "#general", "The Inbox (no list)", 
 **Close its N open tasks as won't do** (`#list-delete-close`, `close=1`; offered while the list has open tasks, not ticked): for a list that is over, its open tasks are closed undone in the same commit, as Won't do closes one (Closed shows them with "✗ won't do", and they can be reopened from there), so they aren't left open in another list or in none.
 No task is deleted by it.
 A shared list's tasks can't go into a private one, and a private list's go to a shared list only with `share` (the dialog's box: "Share its tasks if they go to a shared list").
+Into a list fewer people see (a list for some that someone who sees them now is none of) they go as any task goes there (Moving a task to fewer or more people): only when who deletes it made each of them, or is an admin, else the dialog says so ("bob, dana would no longer see the tasks of #ops: #hiring is for fewer people. Only who made a task, or an admin, moves it there: move them to a list as wide").
+And as narrowing a list does, it asks first when open tasks there would be with someone who doesn't see that list ("1 open task of #solo is assigned to bob, who doesn't see #hiring. … Delete again to go on."; `askError`, `assignedOutside`; `delete_to` and a hidden `confirm` naming that list, so a yes counts for it alone), unless they are closed on the way.
 Pins of it go; pages keep their embeds of it, which then say that there is no such list.
 
 #### Making a list shared

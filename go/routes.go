@@ -1015,6 +1015,9 @@ func tasksPage(w http.ResponseWriter, r *http.Request) {
 		v.ForConfirm = q.Get("for_confirm") != "" && v.ForError != ""
 		v.ListRenameName, v.ListRenameError = firstNonEmpty(q.Get("rename_name"), list.Name), q.Get("rename_error")
 		v.DeleteError, v.ShareError = q.Get("delete_error"), q.Get("share_error")
+		if v.DeleteError != "" {
+			v.DeleteTo = q.Get("delete_to") // the list the dialog asks about: Delete again goes on
+		}
 		for i, p := range rq.pinnedLists() {
 			if p.Ref == list.Ref {
 				v.Pin = map[bool]string{true: "first", false: "1"}[i == 0]
@@ -1164,7 +1167,16 @@ func renameListRoute(w http.ResponseWriter, r *http.Request) {
 // close: its open tasks are closed as won't do.
 func deleteListRoute(w http.ResponseWriter, r *http.Request) {
 	ref, to := cleanList(r.PostFormValue("list")), cleanList(r.PostFormValue("to"))
-	if _, err := deleteListOp(userOf(r), ref, to, r.PostFormValue("share") != "", r.PostFormValue("close") != "", ""); err != nil {
+	// confirm: the list the dialog asked about (its tasks to someone who
+	// doesn't see it), said yes to; a yes for another list is none.
+	confirmed := r.PostFormValue("confirm") != "" && cleanList(r.PostFormValue("confirm")) == cmp.Or(to, generalListName)
+	_, err := deleteListOp(userOf(r), ref, to, r.PostFormValue("share") != "", r.PostFormValue("close") != "", confirmed, "")
+	if ask := (*askError)(nil); errors.As(err, &ask) {
+		// Who wouldn't see the tasks they have, said in the dialog: Delete again goes on.
+		listBack(w, r, ref, "delete_error", ask.msg, "delete_to", cmp.Or(to, generalListName))
+		return
+	}
+	if err != nil {
 		listRefused(w, r, err, ref, "delete_error")
 		return
 	}
@@ -1241,6 +1253,7 @@ type tasksPageView struct {
 	RenameMerge                     bool
 	ListRenameName, ListRenameError string
 	DeleteError, ShareError         string
+	DeleteTo                        string // the list a delete asks about (its tasks to someone who doesn't see it): the dialog's yes
 	Menu, Users                     bool
 	Manage                          bool // the list is the user's to rename, delete and set (canManageList)
 	// A shared list for some: whom it is for as the dialog's field says it
