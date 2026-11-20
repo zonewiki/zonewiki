@@ -247,7 +247,7 @@ What keeps it safe, and isn't to be weakened:
 
 - the answer (the code) goes only to a redirect URI the client registered, https or this computer, and an unknown client or URI gets a page, never a redirect;
 - PKCE (S256) is required, so a code is no use without its verifier;
-- codes last a minute and work once; tokens are kept as hashes; a refresh token works once, and one seen twice ends the connection;
+- codes last a minute and work once, and one seen twice ends the connection made with it; tokens are kept as hashes; a refresh token works once, and one seen twice ends the connection;
 - Allow takes the password again and is behind the Origin check; the consent page names the client only as a claim and shows where the answer goes, a host in ASCII (punycode), so a look-alike name can't pass for another.
 
 `/oauth/token`, `/oauth/register` and the metadata under `/.well-known/oauth-*` need no session and skip the Origin check (`oauthOpen`): a client's server calls them, and they act on nothing a cookie gives.

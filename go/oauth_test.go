@@ -93,18 +93,33 @@ func TestAuthCodes(t *testing.T) {
 	now = func() time.Time { return at }
 	defer func() { now = old }()
 	code := newCode(authCode{user: "alice"})
-	if c, ok := takeCode(code); !ok || c.user != "alice" {
+	if c, ok, _ := takeCode(code); !ok || c.user != "alice" {
 		t.Fatalf("takeCode = %+v, %v", c, ok)
 	}
-	if _, ok := takeCode(code); ok {
+	// Used again while its connection is made: spendCode says so.
+	if _, ok, copied := takeCode(code); ok || copied != "" {
 		t.Error("a code works twice")
+	}
+	if spendCode(code, "g1") {
+		t.Error("a code used again while its connection was made isn't told")
+	}
+	// Used again after: the connection made with it, for the caller to end,
+	// also after the code's minute.
+	other := newCode(authCode{user: "alice"})
+	takeCode(other)
+	if !spendCode(other, "g2") {
+		t.Error("a code used once is told as copied")
+	}
+	at = at.Add(codeLifetime)
+	if _, ok, copied := takeCode(other); ok || copied != "g2" {
+		t.Errorf("a code used again gives %q", copied)
 	}
 	late := newCode(authCode{user: "alice"})
 	at = at.Add(codeLifetime)
-	if _, ok := takeCode(late); ok {
+	if _, ok, _ := takeCode(late); ok {
 		t.Error("a code works after a minute")
 	}
-	if _, ok := takeCode(""); ok {
+	if _, ok, _ := takeCode(""); ok {
 		t.Error("no code is a code")
 	}
 }

@@ -758,6 +758,7 @@ What The question (above) checks before and after the user answers:
   The page policy lets a form lead only to Zone itself (`form-action 'self'`), and browsers hold a form's redirects to that, so a redirect would be blocked; this way the policy stays as it is.
   Deny goes back the same way with `error=access_denied`.
 - The code is 32 random bytes, kept in memory as its hash for a minute, for one use (`authCodes`; a restart drops the few that are open).
+  Used, it is remembered for ten minutes (`spentFor`) with the connection made with it: one used again was copied (the client, or whoever read it on the way, has the tokens), so that connection is ended and the log says so (RFC 6749, 4.1.2), also when the second use came while the first was still being answered.
 
 #### Tokens
 

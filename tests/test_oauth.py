@@ -408,12 +408,18 @@ class TestTokens:
         assert exchange(bob, client_id, code).status_code == 400   # and it is used up
 
     def test_a_code_works_once(self, bob, wiki_dir):
+        """A code used a second time was copied (RFC 6749, 4.1.2): the
+        connection made with it is ended."""
         client_id = register(bob)
         _, code = allow(bob, asking(client_id), "bob-pw")
-        assert exchange(bob, client_id, code).status_code == 200
+        first = exchange(bob, client_id, code)
+        assert first.status_code == 200 and len(grants(wiki_dir)) == 1
+        assert mcp(bob, first.get_json()["access_token"])[0] == 200
         resp = exchange(bob, client_id, code)
         assert resp.status_code == 400 and resp.get_json()["error"] == "invalid_grant"
-        assert len(grants(wiki_dir)) == 1
+        assert grants(wiki_dir) == [] and mcp(bob, first.get_json()["access_token"])[0] == 401
+        resp = token(bob, grant_type="refresh_token", client_id=client_id, refresh_token=first.get_json()["refresh_token"])
+        assert resp.get_json()["error"] == "invalid_grant"
 
     def test_failures_are_throttled(self, bob):
         client_id = register(bob)

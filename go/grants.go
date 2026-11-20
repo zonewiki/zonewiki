@@ -191,13 +191,14 @@ func (g *grant) renew() grantTokens {
 }
 
 // newGrant: a connection of user's for the client (its name, the hash of
-// its id, the host its answer goes to; l: what it is given less than user has), and its first tokens.
-func newGrant(user, client, clientHash, redirect string, l less) (grantTokens, error) {
+// its id, the host its answer goes to; l: what it is given less than user
+// has), its first tokens, and its id.
+func newGrant(user, client, clientHash, redirect string, l less) (grantTokens, string, error) {
 	g := grant{ID: newToken()[:16], User: user, Client: client, ClientHash: clientHash, Redirect: redirect, less: l,
 		Made: now().UTC().Truncate(time.Second)}
 	t := g.renew()
 	g.PrevRefresh = ""
-	return t, changeGrants(func(grants []grant) ([]grant, error) { return append(grants, g), nil })
+	return t, g.ID, changeGrants(func(grants []grant) ([]grant, error) { return append(grants, g), nil })
 }
 
 // refreshGrant: the connection's next pair of tokens for the refresh token

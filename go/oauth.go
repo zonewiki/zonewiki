@@ -436,14 +436,22 @@ func validGrantUser(s *Settings, user string) bool {
 // ── Codes and tokens ─────────────────────────────────────────────────────────
 
 // authCode: an authorization code, for a minute and one use, in memory (a
-// restart drops the few that are open).
+// restart drops the few that are open). Used, it is remembered a while
+// longer (spentFor), with the connection made with it: one used again was
+// copied, and the connection is ended (RFC 6749, 4.1.2).
 type authCode struct {
 	user, client, clientHash, redirectURI, redirectHost, challenge string
 	less                                                           less // what was allowed less than the user has
 	expires                                                        time.Time
+	taken                                                          bool   // used once: no code any more
+	grant                                                          string // the connection made with it ("" while it is made, or none was)
+	again                                                          bool   // used again while its connection was made
 }
 
-const codeLifetime = time.Minute
+const (
+	codeLifetime = time.Minute
+	spentFor     = 10 * time.Minute
+)
 
 var authCodes = struct {
 	sync.Mutex
@@ -464,14 +472,49 @@ func newCode(c authCode) string {
 	return code
 }
 
-// takeCode: the code's request, once.
-func takeCode(code string) (authCode, bool) {
+// takeCode: the code's request, once. A code used before is none, and
+// copied: copied is the connection made with it, which the caller ends
+// ("" when that is still being made: spendCode ends it then).
+func takeCode(code string) (c authCode, ok bool, copied string) {
 	authCodes.Lock()
 	defer authCodes.Unlock()
 	hash := hashToken(code)
 	c, found := authCodes.byHash[hash]
-	delete(authCodes.byHash, hash)
-	return c, found && now().Before(c.expires)
+	switch {
+	case !found || !now().Before(c.expires):
+		return c, false, ""
+	case c.taken:
+		c.again = true
+		authCodes.byHash[hash] = c
+		return c, false, c.grant
+	}
+	c.taken, c.expires = true, now().Add(spentFor)
+	authCodes.byHash[hash] = c
+	return c, true, ""
+}
+
+// spendCode: the connection id was made with the code; false when the code
+// was used again meanwhile (copied: the caller ends the connection).
+func spendCode(code, id string) bool {
+	authCodes.Lock()
+	defer authCodes.Unlock()
+	hash := hashToken(code)
+	c, found := authCodes.byHash[hash]
+	if !found {
+		return true
+	}
+	c.grant = id
+	authCodes.byHash[hash] = c
+	return !c.again
+}
+
+// endCopied ends the connection id, made with a code that was used again.
+func endCopied(id string) {
+	if n, err := revokeGrants(func(g grant) bool { return g.ID == id }); err != nil {
+		logf("ending connection %s: %v", id, err)
+	} else if n > 0 {
+		logf("connection %s: its authorization code was used twice; the connection is ended", id)
+	}
 }
 
 // pkceMatches: verifier is the one the challenge was made from (S256).
@@ -535,8 +578,12 @@ func grantTokensFor(r *http.Request) (grantTokens, error) {
 	}
 	switch r.PostFormValue("grant_type") {
 	case "authorization_code":
-		c, found := takeCode(r.PostFormValue("code"))
+		code := r.PostFormValue("code")
+		c, found, copied := takeCode(code)
 		switch {
+		case copied != "":
+			endCopied(copied)
+			fallthrough
 		case !found:
 			return none, &tokenRefusal{"invalid_grant", "The code is wrong, used or older than a minute."}
 		case !sameHash(c.clientHash, hashToken(clientID)) || c.redirectURI != r.PostFormValue("redirect_uri"):
@@ -546,7 +593,12 @@ func grantTokensFor(r *http.Request) (grantTokens, error) {
 		case !validGrantUser(s, c.user):
 			return none, &tokenRefusal{"invalid_grant", "Whoever allowed this can't sign in any more."}
 		}
-		return newGrant(c.user, c.client, c.clientHash, c.redirectHost, c.less)
+		tokens, id, err := newGrant(c.user, c.client, c.clientHash, c.redirectHost, c.less)
+		if err == nil && !spendCode(code, id) {
+			endCopied(id)
+			return none, &tokenRefusal{"invalid_grant", "The code is wrong, used or older than a minute."}
+		}
+		return tokens, err
 	case "refresh_token":
 		tokens, _, err := refreshGrant(r.PostFormValue("refresh_token"), hashToken(clientID),
 			func(user string) bool { return validGrantUser(s, user) })
